@@ -1,0 +1,9 @@
+.vagrant/
+CMakeFiles/
+Testing/
+
+CMakeCache.txt
+Makefile
+
+
+*.cmake

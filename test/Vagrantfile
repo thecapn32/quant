@@ -1,0 +1,25 @@
+
+Vagrant.configure("2") do |config|
+  config.vm.box = "ubuntu/xenial64"
+
+  config.vm.provider "virtualbox" do |vb|
+    vb.gui = false
+    vb.memory = "512"
+    vb.cpus = 2
+    vb.linked_clone = true
+  end
+
+  config.vm.provision "shell", inline: <<-SHELL
+    # fix "mesg: ttyname failed: Inappropriate ioctl for device"; see
+    # https://github.com/mitchellh/vagrant/issues/1673
+    sed -i 's/^mesg n/tty -s \\&\\& mesg n/g' /root/.profile
+
+    # fix exmpty resolv.conf issue in the current ubuntu/xenial64 box; see
+    # https://bugs.launchpad.net/cloud-images/+bug/1621393/comments/5
+    ln -nsf ../run/resolvconf/resolv.conf /etc/resolv.conf
+
+    # update the box
+    apt-get update
+    apt-get -y dist-upgrade
+  SHELL
+end
