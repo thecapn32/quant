@@ -1,3 +1,2 @@
-Makefile
 proto-quic/
-*console.log
+quic_server.log

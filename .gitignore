@@ -5,5 +5,5 @@ Testing/
 CMakeCache.txt
 Makefile
 
-
 *.cmake
+*console.log
