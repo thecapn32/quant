@@ -6,4 +6,4 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
 elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
 endif()
 
-add_executable(quickie_client quickie_client.c)
+add_executable(quickie_client quickie_client.c debug.c)
