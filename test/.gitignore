@@ -1,2 +1,5 @@
+proto-quic-stamp/
+proto-quic-tmp/
 proto-quic/
+
 quic_server.log

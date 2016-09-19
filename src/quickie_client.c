@@ -3,6 +3,7 @@
 #include <poll.h>
 
 #include "debug.h"
+#include "quic.h"
 
 
 static void
@@ -68,6 +69,8 @@ main(int argc, char *argv[])
 		die("could not connect");
 	}
 
+	// struct public_hdr hdr { .version = ""; }
+
 	char msg[1024] = "Hello, quic_server!";
 	warn(debug, "sending");
 	ssize_t n = send(s, msg, strlen(msg), 0);
@@ -88,7 +91,11 @@ main(int argc, char *argv[])
 	if (n < 0)
 		die("recv");
 
+	struct public_hdr hdr;
+	parse_public_hdr(msg, &hdr);
 	warn(info, "%s", msg);
+
+	hexdump(msg, 128);
 
 	close(s);
 	return 0;

@@ -1,9 +1,6 @@
 .vagrant/
 CMakeFiles/
-Testing/
-
-CMakeCache.txt
-Makefile
 
 *.cmake
-*console.log
+CMakeCache.txt
+Makefile

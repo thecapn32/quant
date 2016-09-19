@@ -7,6 +7,9 @@ Vagrant.configure("2") do |config|
   # OS to use for the VM
   config.vm.box = "ubuntu/xenial64"
 
+  # don't always check for box updates
+  config.vm.box_check_update = false
+
   # hardware configuration of the VM
   config.vm.provider "virtualbox" do |vb|
     vb.gui = false
