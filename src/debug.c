@@ -24,7 +24,7 @@ static void __attribute__ ((destructor)) postmain()
 
 
 // Print a hexdump of the given block
-void hexdump(const void * const ptr, const unsigned len)
+void hexdump(const void * const ptr, const unsigned long len)
 {
 	const char * const buf = (const char * const)ptr;
 	for (unsigned i = 0; i < len; i += 16) {

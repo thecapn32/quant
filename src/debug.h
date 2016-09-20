@@ -98,6 +98,6 @@ extern regex_t _comp;
 
 #pragma GCC diagnostic pop
 
-extern void hexdump(const void * const ptr, const unsigned len);
+extern void hexdump(const void * const ptr, const unsigned long len);
 
 #endif

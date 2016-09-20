@@ -1,6 +1,5 @@
 #include <getopt.h>
 #include <netdb.h>
-#include <poll.h>
 
 #include "debug.h"
 #include "quic.h"
@@ -71,35 +70,6 @@ main(int argc, char *argv[])
 
 	q_connect(s);
 
-	// struct public_hdr hdr = {
-	// 	.flags = flag_version|flag_conn_id,
-	// 	.version = quic_version,
-	// 	.conn_id = 0,
-	// 	.pkt_nr = 0
-	// };
-	// char msg[1024];
-	// const uint16_t len = make_public_hdr(&hdr, msg, 1024);
-
-	// warn(debug, "sending");
-	// hexdump(msg, len);
-	// ssize_t n = send(s, msg, len, 0);
-	// if (n < 0)
-	// 	die("send");
-
-	// struct pollfd fds = { .fd = s, .events = POLLIN };
-	// do {
-	// 	n = poll(&fds, 1, 1000);
-	// 	if (n < 0)
-	// 		die("poll");
-	// } while (n == 0);
-
-	// warn(debug, "receiving");
-	// n = recv(s, msg, 1024, 0);
-	// if (n < 0)
-	// 	die("recv");
-	// hexdump(msg, n);
-
-	// parse_public_hdr(msg, &hdr, n);
 
 	close(s);
 	return 0;

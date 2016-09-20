@@ -1,6 +1,6 @@
 include_directories(${quickie_SOURCE_DIR}/include)
 
-add_compile_options(-std=gnu11 -Wall -Wextra -Weverything -pedantic)
+add_compile_options(-std=gnu11 -Wall -Wextra -Weverything -pedantic -Wno-padded)
 # if("${CMAKE_C_COMPILER_ID}" STREQUAL "Clang")
 # elseif("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
 # endif()
