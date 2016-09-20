@@ -69,33 +69,37 @@ main(int argc, char *argv[])
 		die("could not connect");
 	}
 
-	// struct public_hdr hdr { .version = ""; }
+	q_connect(s);
 
-	char msg[1024] = "Hello, quic_server!";
-	warn(debug, "sending");
-	ssize_t n = send(s, msg, strlen(msg), 0);
-	if (n < 0)
-		die("send");
+	// struct public_hdr hdr = {
+	// 	.flags = flag_version|flag_conn_id,
+	// 	.version = quic_version,
+	// 	.conn_id = 0,
+	// 	.pkt_nr = 0
+	// };
+	// char msg[1024];
+	// const uint16_t len = make_public_hdr(&hdr, msg, 1024);
 
+	// warn(debug, "sending");
+	// hexdump(msg, len);
+	// ssize_t n = send(s, msg, len, 0);
+	// if (n < 0)
+	// 	die("send");
 
-	struct pollfd fds = { .fd = s, .events = POLLIN };
-	do {
-		warn(debug, "polling");
-		n = poll(&fds, 1, 1000);
-		if (n < 0)
-			die("poll");
-	} while (n == 0);
+	// struct pollfd fds = { .fd = s, .events = POLLIN };
+	// do {
+	// 	n = poll(&fds, 1, 1000);
+	// 	if (n < 0)
+	// 		die("poll");
+	// } while (n == 0);
 
-	warn(debug, "receiving");
-	n = recv(s, msg, 1024, 0);
-	if (n < 0)
-		die("recv");
+	// warn(debug, "receiving");
+	// n = recv(s, msg, 1024, 0);
+	// if (n < 0)
+	// 	die("recv");
+	// hexdump(msg, n);
 
-	struct public_hdr hdr;
-	parse_public_hdr(msg, &hdr);
-	warn(info, "%s", msg);
-
-	hexdump(msg, 128);
+	// parse_public_hdr(msg, &hdr, n);
 
 	close(s);
 	return 0;

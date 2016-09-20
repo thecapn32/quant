@@ -1,0 +1,5 @@
+.vagrant/
+proto-quic-prefix/
+tommyds-prefix/
+
+*.log
