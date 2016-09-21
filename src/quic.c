@@ -1,6 +1,7 @@
 #include <poll.h>
 #include <sys/param.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
 
 #include "debug.h"
 #include "quic.h"
@@ -51,7 +52,7 @@ q_connect(const int s)
 
 	struct pollfd fds = { .fd = s, .events = POLLIN };
 	do {
-		n = poll(&fds, 1, 100);
+		n = poll(&fds, 1, 1000);
 		if (n < 0)
 			die("poll");
 	} while (n == 0);
@@ -66,6 +67,33 @@ q_connect(const int s)
 	if (hdr.flags & flag_version)
 		die("server didn't accept our version %s",
 		    TOSTRING(quic_version));
+
+}
+
+void
+q_serve(const int s)
+{
+	if (qs)
+		die("can only handle a single connection");
+
+	qs = (uint32_t)s;
+
+	struct pollfd fds = { .fd = s, .events = POLLIN };
+	ssize_t n;
+	do {
+		n = poll(&fds, 1, 1000);
+		if (n < 0)
+			die("poll");
+	} while (n == 0);
+
+	warn(debug, "receiving");
+	uint8_t msg[1024];
+	n = recv(s, msg, 1024, 0);
+	if (n < 0)
+		die("recv");
+
+	struct public_hdr hdr;
+	parse_public_hdr(msg, &hdr, (uint16_t)n);
 
 }
 

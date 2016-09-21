@@ -23,6 +23,7 @@ add_dependencies(tommy tommyds)
 
 
 add_custom_target(vagrant-up ${VAGRANT} up)
+add_custom_target(vagrant-down ${VAGRANT} halt)
 
 # location of proto-quic sources inside the VM
 set(QUIC /vagrant/proto-quic-prefix/src/proto-quic)
@@ -30,7 +31,8 @@ set(QUIC /vagrant/proto-quic-prefix/src/proto-quic)
 # some convenience paths under ${QUIC}
 set(QUIC_CERTS ${QUIC}/src/net/tools/quic/certs)
 set(QUIC_CERTS ${QUIC_CERTS} PARENT_SCOPE)
-set(QUIC_BIN ${QUIC}/src/out/Debug PARENT_SCOPE)
+set(QUIC_BIN ${QUIC}/src/out/Debug)
+set(QUIC_BIN ${QUIC_BIN} PARENT_SCOPE)
 
 externalproject_add(proto-quic
   UPDATE_COMMAND ""
@@ -53,4 +55,39 @@ externalproject_add(proto-quic
     cd ${QUIC}/src && ninja -v -C out/Debug quic_client quic_server \
   "
   INSTALL_COMMAND ""
+)
+
+add_custom_target(quic-server
+  COMMAND
+    ${VAGRANT} ssh -c "\
+      pkill quic_server ; \
+      /usr/bin/nohup ${QUIC_BIN}/quic_server --port=6121 \
+        --certificate_file=${QUIC_CERTS}/out/leaf_cert.pem \
+        --key_file=${QUIC_CERTS}/out/leaf_cert.pkcs8 \
+        > /vagrant/quic_server.log 2>&1 & \
+      sleep 1 \
+  "
+  DEPENDS proto-quic
+  VERBATIM
+)
+
+add_custom_target(kill-quic-server
+  COMMAND ${VAGRANT} ssh -c "pkill quic_server"
+  DEPENDS vagrant-up
+  VERBATIM
+)
+
+find_program(DAEMONIZE daemonize)
+find_program(PKILL pkill)
+add_custom_target(test-quickie-server
+  COMMAND
+    ${PKILL} quickie_server || true &&
+    ${DAEMONIZE} -e ${CMAKE_BINARY_DIR}/src/quickie_server.log ${CMAKE_BINARY_DIR}/src/quickie_server &&
+    ${VAGRANT} ssh -c "\
+      host=`ip route show | grep -i 'default via' | cut -d' ' -f3` ; \
+      ${QUIC_BIN}/quic_client --host=$host --port=8443 http://example.com/ \
+    " &&
+    ${PKILL} quickie_server
+  DEPENDS quickie_server vagrant-up
+  VERBATIM
 )

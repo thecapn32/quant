@@ -60,6 +60,10 @@ void
 q_connect(const int s);
 
 void
+q_serve(const int s);
+
+
+void
 parse_public_hdr(const uint8_t * const msg,
                  struct public_hdr * const hdr,
                  const uint16_t len);

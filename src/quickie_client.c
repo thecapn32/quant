@@ -18,7 +18,7 @@ int
 main(int argc, char *argv[])
 {
         char *dest = "127.0.0.1";
-        char *port = "6121";
+        char *port = "443";
         int ch;
 
         while ((ch = getopt(argc, argv, "hd:p:")) != -1) {
@@ -57,6 +57,7 @@ main(int argc, char *argv[])
 	        if (connect(s, res->ai_addr, res->ai_addrlen) < 0) {
 	        	close(s);
 	        	warn(err, "connect");
+                        s = -1;
 	        	continue;
 	        }
 
