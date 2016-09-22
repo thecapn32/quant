@@ -77,17 +77,36 @@ add_custom_target(kill-quic-server
   VERBATIM
 )
 
-find_program(DAEMONIZE daemonize)
-find_program(PKILL pkill)
+foreach(PROG daemonize pkill tcpdump tshark)
+  string(TOUPPER ${PROG} VARNAME)
+  find_program(${VARNAME} ${PROG})
+  if (NOT ${VARNAME})
+    message(FATAL_ERROR "${PROG} not found; please install it")
+  endif()
+endforeach(PROG)
+
+# find_program() for sudo is unlikely to work, hence the special case; see
+# https://cmake.org/pipermail/cmake/2010-September/039520.html
+find_program(SUDO sudo)
+if (NOT SUDO)
+  set(SUDO /usr/bin/sudo)
+endif()
+
+set(DIR ${CMAKE_BINARY_DIR}/src)
+set(QS quickie_server)
+set(PORT 8443)
 add_custom_target(test-quickie-server
   COMMAND
-    ${PKILL} quickie_server || true &&
-    ${DAEMONIZE} -e ${CMAKE_BINARY_DIR}/src/quickie_server.log ${CMAKE_BINARY_DIR}/src/quickie_server &&
+    ${SUDO} ${PKILL} ${QS} sudo || true &&
+    ${DAEMONIZE} -e ${DIR}/${QS}.log ${DIR}/${QS} &&
+    ${DAEMONIZE} ${SUDO} ${TCPDUMP} -i lo0 -w ${DIR}/${QS}.pcap port ${PORT} &&
     ${VAGRANT} ssh -c "\
       host=`ip route show | grep -i 'default via' | cut -d' ' -f3` ; \
-      ${QUIC_BIN}/quic_client --host=$host --port=8443 http://example.com/ \
-    " &&
-    ${PKILL} quickie_server
+      ${QUIC_BIN}/quic_client --host=$host --port=${PORT} http://example.com/ \
+    " || true &&
+    ${SUDO} ${PKILL} ${QS} sudo || true &&
+    ${CAT} ${DIR}/${QS}.log &&
+    ${TSHARK} -V -2 -d udp.port==${PORT},quic -r ${DIR}/${QS}.pcap
   DEPENDS quickie_server vagrant-up
   VERBATIM
 )
