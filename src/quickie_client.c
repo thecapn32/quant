@@ -18,7 +18,7 @@ int
 main(int argc, char *argv[])
 {
         char *dest = "127.0.0.1";
-        char *port = "443";
+        char *port = "6121";
         int ch;
 
         while ((ch = getopt(argc, argv, "hd:p:")) != -1) {
