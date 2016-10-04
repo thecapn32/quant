@@ -1,15 +1,5 @@
 configure_file(version.h.in version.h)
 
-add_compile_options(-std=c11 -Wall -Wextra -Weverything -Wpedantic)
-# if("${CMAKE_C_COMPILER_ID}" STREQUAL "Clang")
-# elseif("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
-# endif()
-
-# find_library(NSS_LIB nss HINTS /usr/local/opt/nss/lib)
-# if(NOT NSS_LIB)
-#   message(FATAL_ERROR "nss library not found")
-# endif()
-
 find_package(PkgConfig)
 # XXX the path below is only valid when nss was installed via homebrew
 set(NSS_PKG_PATH /usr/local/opt/nss/lib/pkgconfig)
