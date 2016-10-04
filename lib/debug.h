@@ -1,5 +1,4 @@
-#ifndef _debug_h_
-#define _debug_h_
+#pragma once
 
 #include <stdlib.h>
 #include <errno.h>
@@ -99,5 +98,3 @@ extern regex_t _comp;
 #pragma GCC diagnostic pop
 
 extern void hexdump(const void * const ptr, const unsigned long len);
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef _quic_h_
-#define _quic_h_
+#pragma once
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -95,5 +94,3 @@ q_connect(const int s);
 
 void
 q_serve(const int s);
-
-#endif

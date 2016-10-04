@@ -1,5 +1,4 @@
-#ifndef _tommy_h_
-#define _tommy_h_
+#pragma once
 
 // there are some warnings in the tommyds code that I can't do anything about,
 // other than suppress them
@@ -26,5 +25,3 @@
 #define hash_t			tommy_hash_t
 #define hash_u32		tommy_hash_u32
 #define node			tommy_node
-
-#endif
