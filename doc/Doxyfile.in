@@ -5,8 +5,8 @@ PROJECT_NUMBER         = @VERSION_MAJOR@.@VERSION_MINOR@.@VERSION_PATCH@
 STRIP_FROM_PATH        = @PROJECT_SOURCE_DIR@ \
                          @PROJECT_BINARY_DIR@
 INPUT                  = @doxy_main_page@ \
-                         @PROJECT_SOURCE_DIR@/src \
-                         @PROJECT_BINARY_DIR@/src
+                         @PROJECT_SOURCE_DIR@/lib \
+                         @PROJECT_BINARY_DIR@/lib
 FILE_PATTERNS          = *.h \
                          *.c
 RECURSIVE              = YES

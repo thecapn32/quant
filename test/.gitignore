@@ -1,7 +1,5 @@
-libquickie.a
 quickie_client
 quickie_server
-version.h
 
 *.log
 *.pcap
