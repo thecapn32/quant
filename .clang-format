@@ -1,0 +1,8 @@
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
+BasedOnStyle: llvm
+BinPackParameters: false
+BreakBeforeBraces: Linux
+IndentWidth: 4
+MaxEmptyLinesToKeep: 2
+PointerAlignment: Middle
