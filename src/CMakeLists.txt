@@ -1,4 +1,4 @@
-include_directories(${quickie_SOURCE_DIR}/include)
+configure_file(version.h.in version.h)
 
 add_compile_options(-std=gnu11 -Wall -Wextra -Weverything -pedantic -Wno-padded)
 # if("${CMAKE_C_COMPILER_ID}" STREQUAL "Clang")
@@ -17,7 +17,6 @@ set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:${NSS_PKG_PATH}")
 pkg_check_modules(NSS nss)
 find_path(NSS_INCLUDE_DIR NAMES nss.h PATHS ${NSS_INCLUDE_DIRS})
 find_library(NSS_LIBRARY NAMES nss PATHS ${NSS_LIBRARY_DIRS})
-message(STATUS "${NSS_INCLUDE_DIRS} ${NSS_LIBRARY_DIRS}")
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(nss DEFAULT_MSG NSS_LIBRARY NSS_INCLUDE_DIR)
 mark_as_advanced(NSS_INCLUDE_DIR NSS_LIBRARY)

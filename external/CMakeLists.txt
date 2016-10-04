@@ -1,6 +1,20 @@
 include(externalproject)
 
-find_program(SED sed)
+foreach(PROG daemonize pkill tcpdump tshark sed make)
+  string(TOUPPER ${PROG} VARNAME)
+  find_program(${VARNAME} ${PROG})
+  if (NOT ${VARNAME})
+    message(FATAL_ERROR "${PROG} not found; please install it")
+  endif()
+endforeach(PROG)
+
+# find_program() for sudo is unlikely to work, hence the special case; see
+# https://cmake.org/pipermail/cmake/2010-September/039520.html
+find_program(SUDO sudo)
+if (NOT SUDO)
+  set(SUDO /usr/bin/sudo)
+endif()
+
 externalproject_add(tommyds
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/amadvance/tommyds.git
@@ -76,21 +90,6 @@ add_custom_target(kill-quic-server
   DEPENDS vagrant-up
   VERBATIM
 )
-
-foreach(PROG daemonize pkill tcpdump tshark)
-  string(TOUPPER ${PROG} VARNAME)
-  find_program(${VARNAME} ${PROG})
-  if (NOT ${VARNAME})
-    message(FATAL_ERROR "${PROG} not found; please install it")
-  endif()
-endforeach(PROG)
-
-# find_program() for sudo is unlikely to work, hence the special case; see
-# https://cmake.org/pipermail/cmake/2010-September/039520.html
-find_program(SUDO sudo)
-if (NOT SUDO)
-  set(SUDO /usr/bin/sudo)
-endif()
 
 set(DIR ${CMAKE_BINARY_DIR}/src)
 set(QS quickie_server)

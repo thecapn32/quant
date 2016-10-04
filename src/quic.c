@@ -5,6 +5,7 @@
 
 #include "debug.h"
 #include "quic.h"
+#include "version.h"
 
 
 #define MAX_PKT_LEN	2048

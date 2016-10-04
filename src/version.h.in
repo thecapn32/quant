@@ -1,0 +1,8 @@
+#pragma once
+
+#define QUICKIE_VERSION_MAJOR @VERSION_MAJOR@
+#define QUICKIE_VERSION_MINOR @VERSION_MINOR@
+#define QUICKIE_VERSION_PATCH @VERSION_PATCH@
+
+static const char quickie_version[] =
+    "@VERSION_MAJOR@.@VERSION_MINOR@.@VERSION_PATCH@";
