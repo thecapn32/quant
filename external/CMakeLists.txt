@@ -1,20 +1,5 @@
 include(externalproject)
 
-foreach(PROG daemonize pkill tcpdump tshark sed make)
-  string(TOUPPER ${PROG} VARNAME)
-  find_program(${VARNAME} ${PROG})
-  if(NOT ${VARNAME})
-    message(FATAL_ERROR "${PROG} not found; please install it")
-  endif()
-endforeach()
-
-# find_program() for sudo is unlikely to work, hence the special case; see
-# https://cmake.org/pipermail/cmake/2010-September/039520.html
-find_program(SUDO sudo)
-if(NOT SUDO)
-  set(SUDO /usr/bin/sudo)
-endif()
-
 externalproject_add(tommyds
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/amadvance/tommyds.git
