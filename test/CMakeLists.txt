@@ -12,7 +12,7 @@ add_custom_target(test-quickie-client
     ${SUDO} ${PKILL} ${QC} sudo || true &&
     ${DAEMONIZE} ${SUDO} ${TCPDUMP} -i lo0 -w ${DIR}/${QC}.pcap port ${PORT} &&
     ${SLEEP} 1 &&
-    ${DIR}/${QC} &&
+    ${ENV} LLVM_PROFILE_FILE=${QC}.profraw ${DIR}/${QC} &&
     ${SUDO} ${PKILL} ${QC} sudo || true &&
     ${TSHARK} -V -2 -n -d udp.port==${PORT},quic
       -r ${DIR}/${QC}.pcap

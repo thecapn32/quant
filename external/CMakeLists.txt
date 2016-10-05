@@ -82,7 +82,8 @@ set(PORT 8443)
 add_custom_target(test-quickie-server
   COMMAND
     ${SUDO} ${PKILL} ${QS} sudo || true &&
-    ${DAEMONIZE} -e ${DIR}/${QS}.log ${DIR}/${QS} &&
+    ${DAEMONIZE} -E LLVM_PROFILE_FILE=${QS}.profraw -c ${DIR} -e ${QS}.log
+      ${DIR}/${QS} &&
     ${DAEMONIZE} ${SUDO} ${TCPDUMP} -i lo0 -w ${DIR}/${QS}.pcap port ${PORT} &&
     ${VAGRANT} ssh -c "\
       host=`ip route show | grep -i 'default via' | cut -d' ' -f3` ; \
