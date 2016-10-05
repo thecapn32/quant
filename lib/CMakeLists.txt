@@ -13,7 +13,7 @@ mark_as_advanced(NSS_INCLUDE_DIR NSS_LIBRARY)
 set(NSS_LIBRARIES ${NSS_LIBRARY})
 set(NSS_INCLUDE_DIRS ${NSS_INCLUDE_DIR})
 
-add_library(quickie debug.c fnv_1a.c quic.c)
+add_library(quickie debug.c fnv_1a.c pkt.c quic.c)
 target_include_directories(quickie PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${NSS_INCLUDE_DIRS})
 target_link_libraries(quickie tommy ${NSS_LIBRARIES})

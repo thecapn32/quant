@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <sys/queue.h>
 
@@ -82,3 +83,13 @@ struct q_pkt {
     {                                                                          \
         ((v) >> 24) & 0xFF, ((v) >> 16) & 0xFF, ((v) >> 8) & 0xFF, (v)&0xFF, 0 \
     }
+
+
+uint8_t decode_nr_len(const uint8_t flags) __attribute__((const));
+uint8_t encode_nr_len(const uint8_t n) __attribute__((const));
+uint8_t decode_sid_len(const uint8_t flags) __attribute__((const));
+uint8_t decode_stream_off_len(const uint8_t flags) __attribute__((const));
+
+uint16_t decode_public_hdr(struct q_pkt * const p, const bool is_initial);
+uint16_t encode_public_hdr(struct q_pkt * const p);
+uint16_t decode_frames(struct q_pkt * const p, const uint16_t pos);
