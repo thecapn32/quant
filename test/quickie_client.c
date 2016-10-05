@@ -67,6 +67,7 @@ int main(int argc, char * argv[])
         die("could not connect");
     }
 
+    warn(debug, "%s connecting to %s:%s", argv[0], dest, port);
     q_connect(s);
 
     close(s);
