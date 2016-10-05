@@ -1,4 +1,3 @@
-AlignConsecutiveAssignments: true
 AlignConsecutiveDeclarations: true
 BasedOnStyle: llvm
 BinPackParameters: false
