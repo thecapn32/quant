@@ -67,7 +67,7 @@ extern regex_t _comp;
         struct timeval _rts;                                                   \
         gettimeofday(&_rts, 0);                                                \
         if (_rt0 != _rts.tv_sec) {                                             \
-            _rt0  = _rts.tv_sec;                                               \
+            _rt0 = _rts.tv_sec;                                                \
             _rcnt = 0;                                                         \
         }                                                                      \
         if (_rcnt++ < lps)                                                     \
@@ -90,9 +90,10 @@ extern regex_t _comp;
         const int      _e = errno;                                             \
         struct timeval _lt0;                                                   \
         gettimeofday(&_lt0, 0);                                                \
-        fprintf(stderr, BLD "%03ld.%03ld %s [%d] abort: " NRM fmt " [%s]\n",   \
+        fprintf(stderr, BLD "%03ld.%03ld" RED " %s:%d " fmt " %c%s%c\n" NRM,   \
                 (long)(_lt0.tv_sec % 1000), (long)(_lt0.tv_usec / 1000),       \
-                __func__, __LINE__, ##__VA_ARGS__, (_e ? strerror(_e) : ""));  \
+                __func__, __LINE__, ##__VA_ARGS__, (_e ? '[' : ' '),           \
+                (_e ? strerror(_e) : ""), (_e ? '[' : ' '));                   \
         abort();                                                               \
     } while (0)
 
