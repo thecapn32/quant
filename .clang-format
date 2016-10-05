@@ -1,4 +1,5 @@
 AlignConsecutiveDeclarations: true
+AllowShortFunctionsOnASingleLine: Empty
 BasedOnStyle: llvm
 BinPackParameters: false
 BreakBeforeBraces: WebKit
