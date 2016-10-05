@@ -26,16 +26,16 @@ static void __attribute__((destructor)) postmain() { regfree(&_comp); }
 void hexdump(const void * const ptr, const size_t len)
 {
     const uint8_t * const buf = ptr;
-    for (uint8_t i = 0; i < len; i += 16) {
-        fprintf(stderr, "%06x: ", i);
-        for (uint8_t j = 0; j < 16; j++) {
+    for (size_t i = 0; i < len; i += 16) {
+        fprintf(stderr, "%06lx: ", i);
+        for (size_t j = 0; j < 16; j++) {
             if (i + j < len)
                 fprintf(stderr, "%02hhx ", buf[i + j]);
             else
                 fprintf(stderr, "   ");
             fprintf(stderr, " ");
         }
-        for (uint8_t j = 0; j < 16; j++) {
+        for (size_t j = 0; j < 16; j++) {
             if (i + j < len)
                 fprintf(stderr, "%c", isprint(buf[i + j]) ? buf[i + j] : '.');
         }
