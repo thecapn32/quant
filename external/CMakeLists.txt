@@ -81,8 +81,9 @@ set(QS quickie_server)
 set(PORT 8443)
 add_custom_target(test-quickie-server
   COMMAND
+    ${RM} ${DIR}/${QS}.log || true &&
     ${SUDO} ${PKILL} ${QS} sudo || true &&
-    ${DAEMONIZE} -E LLVM_PROFILE_FILE=${QS}.profraw -c ${DIR} -e ${QS}.log
+    ${DAEMONIZE} -E LLVM_PROFILE_FILE=${QS}.profraw -c ${DIR} -e ${DIR}/${QS}.log
       ${DIR}/${QS} &&
     ${DAEMONIZE} ${SUDO} ${TCPDUMP} -i lo0 -w ${DIR}/${QS}.pcap port ${PORT} &&
     ${VAGRANT} ssh -c "\
@@ -90,7 +91,7 @@ add_custom_target(test-quickie-server
       ${QUIC_BIN}/quic_client --host=$host --port=${PORT} http://example.com/ \
     " || true &&
     ${SUDO} ${PKILL} ${QS} sudo || true &&
-    ${CAT} ${DIR}/${QS}.log &&
+    ${CAT} ${DIR}/${QS}.log || true &&
     ${TSHARK} -V -2 -n -d udp.port==${PORT},quic -R frame.number==1
       -r ${DIR}/${QS}.pcap
   # DEPENDS quickie_server vagrant-up # XXX this speeds up the test-* targets but is risky
