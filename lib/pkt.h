@@ -43,26 +43,21 @@ struct q_frame {
     };
 };
 
-#ifndef _UINT128_T
-typedef unsigned __int128 uint128_t;
-#endif
-
 #define MAX_PKT_LEN 1350
 #define MAX_NONCE_LEN 32
 #define HASH_LEN 12
 
 //! A QUIC packet.
 struct q_pkt {
-    uint16_t  len; //!< Total length of the message.
-    uint8_t   flags;
-    uint8_t   nonce_len;
-    uint32_t  vers;
-    uint64_t  cid;
-    uint8_t   nonce[32];
-    uint128_t hash;
-    uint64_t  nr;
-    uint8_t   buf[MAX_PKT_LEN]; //!< Payload bytes of the message.
-    uint16_t  _unused;
+    uint16_t len; //!< Total length of the message.
+    uint8_t  flags;
+    uint8_t  nonce_len;
+    uint32_t vers; //!< In network-byte order, to be printable as a string.
+    uint64_t cid;
+    uint8_t  nonce[32];
+    uint64_t nr;
+    uint8_t  buf[MAX_PKT_LEN]; //!< Payload bytes of the message.
+    uint16_t _unused;
     SLIST_HEAD(fh, q_frame) fl;
     uint8_t _unused2[8];
 };
@@ -76,20 +71,11 @@ struct q_pkt {
 #define F_UNUSED 0x80    // reserved (must be 0)
 
 
-// #define quic_vers 0x51303235 // "Q025"
-#define quic_vers 0x51303336 // "Q036"
+uint8_t dec_nr_len(const uint8_t flags) __attribute__((const));
+uint8_t enc_nr_len(const uint8_t n) __attribute__((const));
+uint8_t dec_sid_len(const uint8_t flags) __attribute__((const));
+uint8_t dec_stream_off_len(const uint8_t flags) __attribute__((const));
 
-#define vers_to_ascii(v)                                                       \
-    {                                                                          \
-        ((v) >> 24) & 0xFF, ((v) >> 16) & 0xFF, ((v) >> 8) & 0xFF, (v)&0xFF, 0 \
-    }
-
-
-uint8_t decode_nr_len(const uint8_t flags) __attribute__((const));
-uint8_t encode_nr_len(const uint8_t n) __attribute__((const));
-uint8_t decode_sid_len(const uint8_t flags) __attribute__((const));
-uint8_t decode_stream_off_len(const uint8_t flags) __attribute__((const));
-
-uint16_t decode_public_hdr(struct q_pkt * const p, const bool is_initial);
-uint16_t encode_public_hdr(struct q_pkt * const p);
-uint16_t decode_frames(struct q_pkt * const p, const uint16_t pos);
+uint16_t dec_pub_hdr(struct q_pkt * const p, const bool is_initial);
+uint16_t enc_pub_hdr(struct q_pkt * const p);
+uint16_t dec_frames(struct q_pkt * const p, const uint16_t pos);

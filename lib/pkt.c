@@ -7,7 +7,7 @@
 
 
 // Convert pkt nr length encoded in flags to bytes
-uint8_t decode_nr_len(const uint8_t flags)
+uint8_t dec_nr_len(const uint8_t flags)
 {
     const uint8_t l = (flags & 0x30) >> 4;
     return l ? 2 * l : 1;
@@ -15,58 +15,57 @@ uint8_t decode_nr_len(const uint8_t flags)
 
 
 // Convert pkt nr length in bytes into flags
-uint8_t encode_nr_len(const uint8_t n)
+uint8_t enc_nr_len(const uint8_t n)
 {
     return (uint8_t)((n >> 1) << 4);
 }
 
 
 // Convert stream ID length encoded in flags to bytes
-uint8_t decode_sid_len(const uint8_t flags)
+uint8_t dec_sid_len(const uint8_t flags)
 {
     return (flags & 0x03) + 1;
 }
 
 
 // Convert stream offset length encoded in flags to bytes
-uint8_t decode_stream_off_len(const uint8_t flags)
+uint8_t dec_stream_off_len(const uint8_t flags)
 {
     const uint8_t l = (flags & 0x1C) >> 2;
     return l == 0 ? 0 : l + 1;
 }
 
 
-uint16_t decode_public_hdr(struct q_pkt * const p, const bool is_initial)
+uint16_t dec_pub_hdr(struct q_pkt * const p, const bool is_initial)
 {
     uint16_t i = 0;
 
     p->flags = p->buf[i++];
     warn(debug, "flags 0x%02x", p->flags);
 
-    if (i >= p->len)
+    if (i > p->len)
         die("public header length only %d", p->len);
 
     if (p->flags & F_CID) {
         p->cid = (*(uint64_t *)(void *)&p->buf[i]); // ntohll
         i += sizeof(p->cid);
         warn(debug, "cid %" PRIu64, p->cid);
-        if (i >= p->len)
+        if (i > p->len)
             die("public header length only %d", p->len);
     }
 
     if (p->flags & F_VERS) {
-        p->vers = ntohl(*(uint32_t *)(void *)&p->buf[i]);
+        p->vers = *(uint32_t *)(void *)&p->buf[i];
         i += sizeof(p->vers);
-        const uint8_t v[5] = vers_to_ascii(p->vers);
-        warn(debug, "vers 0x%08x %s", p->vers, v);
-        if (i >= p->len)
+        warn(debug, "vers 0x%08x %.4s", p->vers, (char *)&p->vers);
+        if (i > p->len)
             die("public header length only %d", p->len);
     }
 
     if (p->flags & F_NONCE) {
         p->nonce_len = (uint8_t)MIN(p->len - i, MAX_NONCE_LEN);
-        warn(debug, "nonce len %d", p->nonce_len);
-        hexdump(&p->buf[i], p->nonce_len);
+        warn(debug, "nonce len %d %.*s", p->nonce_len, p->nonce_len,
+             (char *)&p->buf[i]);
 
         if (p->flags & F_PUB_RST) {
             warn(err, "public reset");
@@ -87,64 +86,55 @@ uint16_t decode_public_hdr(struct q_pkt * const p, const bool is_initial)
 
             } else
                 die("cannot parse PRST");
-            // return i;
         }
 
         i += p->nonce_len;
-        if (i >= p->len)
+        if (i > p->len)
             die("public header length only %d", p->len);
     }
 
-    const uint8_t nr_len = decode_nr_len(p->flags);
+    const uint8_t nr_len = dec_nr_len(p->flags);
     warn(debug, "nr_len %d", nr_len);
 
     memcpy(&p->nr, &p->buf[i], nr_len);
     warn(debug, "nr %" PRIu64, p->nr);
     i += nr_len;
-    if (i >= p->len)
-        die("public header length only %d", p->len);
 
-    if (p->flags & F_MULTIPATH)
-        warn(warn, "flag multipath");
+    if (p->flags & (F_MULTIPATH | F_UNUSED))
+        warn(warn, "unsupported flag encountered");
 
-    if (p->flags & F_UNUSED)
-        warn(err, "flag unused");
-
-    warn(debug, "i %d, len %d", i, p->len);
-    // hexdump(p->buf, p->len);
     if (is_initial && (p->flags & F_PUB_RST) == 0) {
-        p->hash = fnv_1a(p, i, HASH_LEN);
-        if (memcmp(&p->buf[i], &p->hash, HASH_LEN)) {
+        const uint128_t hash = fnv_1a(p->buf, p->len, i, HASH_LEN);
+        if (memcmp(&p->buf[i], &hash, HASH_LEN))
             die("hash mismatch");
-        }
+        i += HASH_LEN;
     }
 
     return i;
 }
 
 
-uint16_t encode_public_hdr(struct q_pkt * const p)
+uint16_t enc_pub_hdr(struct q_pkt * const p)
 {
     uint16_t i = 0;
 
     p->buf[i++] = p->flags;
 
     if (p->flags & F_CID) {
-        *(uint64_t *)((void *)&p->buf[i]) = htonll(p->cid);
+        *(uint64_t *)(void *)&p->buf[i] = htonll(p->cid);
         warn(debug, "cid %" PRIu64, p->cid);
         i += sizeof(p->cid);
     }
 
     if (p->flags & F_VERS) {
-        *(uint32_t *)((void *)&p->buf[i]) = htonl(p->vers);
-        const uint8_t v[5] = vers_to_ascii(p->vers);
-        warn(debug, "vers 0x%08x %s", p->vers, v);
+        *(uint32_t *)(void *)&p->buf[i] = p->vers;
+        warn(debug, "vers 0x%08x %.4s", p->vers, (const char *)&p->vers);
         i += sizeof(p->vers);
     }
 
     const uint8_t nr_len = 1;
     *(uint8_t *)((void *)&p->buf[i]) = (uint8_t)p->nr;
-    p->buf[0] |= encode_nr_len(nr_len);
+    p->buf[0] |= enc_nr_len(nr_len);
     warn(debug, "%d-byte nr %d", nr_len, (uint8_t)p->nr);
     i += sizeof(uint8_t);
 
@@ -152,7 +142,7 @@ uint16_t encode_public_hdr(struct q_pkt * const p)
 }
 
 
-// static uint16_t encode_stream_frame(const uint32_t id,
+// static uint16_t enc_stream_frame(const uint32_t id,
 //                                     const uint64_t off,
 //                                     const uint16_t data_len,
 //                                     struct q_pkt * const p)
@@ -163,7 +153,7 @@ uint16_t encode_public_hdr(struct q_pkt * const p)
 //     if (p->len - i - sizeof(uint32_t) > 0) {
 //         *(uint32_t *)((void *)&p[i]) = htonl(id);
 //         warn(debug, "4-byte id %d", id);
-//         p->buf[0] |= encode_sid_len_flags(4);
+//         p->buf[0] |= enc_sid_len_flags(4);
 //         i += sizeof(uint32_t);
 //     } else
 //         die("cannot encode id");
@@ -171,7 +161,7 @@ uint16_t encode_public_hdr(struct q_pkt * const p)
 //     if (p->len - i - sizeof(uint64_t) > 0) {
 //         *(uint64_t *)((void *)&p[i]) = htonl(off);
 //         warn(debug, "8-byte off %"PRIu64, off);
-//         p->buf[0] |= encode_stream_off_len_flags(8);
+//         p->buf[0] |= enc_stream_off_len_flags(8);
 //         i += sizeof(uint64_t);
 //     } else
 //         die("cannot encode off");
@@ -190,7 +180,7 @@ uint16_t encode_public_hdr(struct q_pkt * const p)
 // }
 
 
-static uint16_t decode_stream_frame(struct q_pkt * const p, const uint16_t pos)
+static uint16_t dec_stream_frame(struct q_pkt * const p, const uint16_t pos)
 {
     uint16_t i = pos;
 
@@ -199,14 +189,14 @@ static uint16_t decode_stream_frame(struct q_pkt * const p, const uint16_t pos)
 
     warn(debug, "stream type %02x", f->type);
 
-    const uint8_t slen = decode_sid_len(f->type);
+    const uint8_t slen = dec_sid_len(f->type);
     if (slen) {
         memcpy(&f->sid, &p->buf[i], slen);
         i += slen;
         warn(debug, "%d-byte sid %d", slen, f->sid);
     }
 
-    const uint8_t off_len = decode_stream_off_len(f->type);
+    const uint8_t off_len = dec_stream_off_len(f->type);
     if (off_len) {
         memcpy(&f->off, &p->buf[i], off_len);
         i += off_len;
@@ -232,16 +222,15 @@ static uint16_t decode_stream_frame(struct q_pkt * const p, const uint16_t pos)
 }
 
 
-static uint16_t decode_ack_frame(const struct q_pkt * const p,
-                                 const uint16_t             pos)
+static uint16_t dec_ack_frame(const struct q_pkt * const p, const uint16_t pos)
 {
     warn(debug, "here at %d", pos);
     return p->len;
 }
 
 
-static uint16_t decode_regular_frame(const struct q_pkt * const p,
-                                     const uint16_t             pos)
+static uint16_t dec_regular_frame(const struct q_pkt * const p,
+                                  const uint16_t             pos)
 {
     uint16_t i = pos;
 
@@ -269,7 +258,7 @@ static uint16_t decode_regular_frame(const struct q_pkt * const p,
 
     case T_STOP_WAITING: {
         uint64_t      delta = 0;
-        const uint8_t nr_len = decode_nr_len(p->flags);
+        const uint8_t nr_len = dec_nr_len(p->flags);
         memcpy(&delta, &p->buf[i], nr_len);
         warn(debug, "stop_waiting frame, delta %" PRIu64, p->nr - delta);
         i += nr_len;
@@ -282,20 +271,22 @@ static uint16_t decode_regular_frame(const struct q_pkt * const p,
     default:
         die("unknown frame type 0x%02x", p->buf[0]);
     }
+
     return i;
 }
 
 
-uint16_t decode_frames(struct q_pkt * const p, const uint16_t pos)
+uint16_t dec_frames(struct q_pkt * const p, const uint16_t pos)
 {
     uint16_t i = pos;
     SLIST_INIT(&p->fl);
     while (i < p->len)
         if (p->flags & F_STREAM)
-            i += decode_stream_frame(p, i);
+            i += dec_stream_frame(p, i);
         else if (p->buf[0] & (!F_STREAM | F_ACK))
-            i += decode_ack_frame(p, i);
+            i += dec_ack_frame(p, i);
         else
-            i += decode_regular_frame(p, i);
+            i += dec_regular_frame(p, i);
+
     return i;
 }
