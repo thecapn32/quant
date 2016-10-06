@@ -66,11 +66,11 @@ extern int timeval_subtract(struct timeval * const result,
         struct timeval _now, _elapsed;                                         \
         gettimeofday(&_now, 0);                                                \
         timeval_subtract(&_elapsed, &_now, &_epoch);                           \
-        fprintf(stderr,                                                        \
-                "% 2ld.%04ld%s " MAG "%s" BLK "@" GRN "%s:%d " NRM fmt "\n",   \
-                (long)(_elapsed.tv_sec % 1000),                                \
-                (long)(_elapsed.tv_usec / 1000), col[DLEVEL], __func__,        \
-                BASE(__FILE__), __LINE__, ##__VA_ARGS__);                      \
+        fprintf(stderr, REV "%s " NRM "% 2ld.%04ld" MAG " %s" BLK "@" BLU      \
+                            "%s:%d " NRM fmt "\n",                             \
+                col[dlevel], (long)(_elapsed.tv_sec % 1000),                   \
+                (long)(_elapsed.tv_usec / 1000), __func__, BASE(__FILE__),     \
+                __LINE__, ##__VA_ARGS__);                                      \
         fflush(stderr);                                                        \
     }
 
@@ -105,8 +105,8 @@ extern int timeval_subtract(struct timeval * const result,
         struct timeval _now, _elapsed;                                         \
         gettimeofday(&_now, 0);                                                \
         timeval_subtract(&_elapsed, &_now, &_epoch);                           \
-        fprintf(stderr,                                                        \
-                BLD RED "% 2ld.%04ld %s@%s:%d ABORT: " fmt " %c%s%c\n" NRM,    \
+        fprintf(stderr, RED BLD REV "% 2ld.%04ld  %s@%s:%d ABORT: " fmt        \
+                                    " %c%s%c\n" NRM,                           \
                 (long)(_elapsed.tv_sec % 1000),                                \
                 (long)(_elapsed.tv_usec / 1000), __func__, BASE(__FILE__),     \
                 __LINE__, ##__VA_ARGS__, (_e ? '[' : ' '),                     \
