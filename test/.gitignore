@@ -3,3 +3,4 @@ quickie_server
 
 *.log
 *.pcap
+*.profraw
