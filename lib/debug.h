@@ -49,14 +49,23 @@ extern const char * const col[];
 
 extern regex_t _comp;
 
+extern struct timeval _epoch;
+
+extern int timeval_subtract(struct timeval * const result,
+                            struct timeval * const x,
+                            struct timeval * const y);
+
+
 // These macros are based on the "D" ones defined by netmap
 #define warn(dlevel, fmt, ...)                                                 \
     if (DLEVEL >= dlevel && !regexec(&_comp, __FILE__, 0, 0, 0)) {             \
-        struct timeval _lt0;                                                   \
-        gettimeofday(&_lt0, 0);                                                \
-        fprintf(stderr, "%s%03ld.%03ld" NRM " %s:%d " fmt "\n", col[DLEVEL],   \
-                (long)(_lt0.tv_sec % 1000), (long)(_lt0.tv_usec / 1000),       \
-                __func__, __LINE__, ##__VA_ARGS__);                            \
+        struct timeval _now, _elapsed;                                         \
+        gettimeofday(&_now, 0);                                                \
+        timeval_subtract(&_elapsed, &_now, &_epoch);                           \
+        fprintf(stderr, "% 2ld.%04ld%s %s:%d " NRM fmt "\n",                   \
+                (long)(_elapsed.tv_sec % 1000),                                \
+                (long)(_elapsed.tv_usec / 1000), col[DLEVEL], __func__,        \
+                __LINE__, ##__VA_ARGS__);                                      \
         fflush(stderr);                                                        \
     }
 
@@ -88,12 +97,14 @@ extern regex_t _comp;
 #define die(fmt, ...)                                                          \
     do {                                                                       \
         const int      _e = errno;                                             \
-        struct timeval _lt0;                                                   \
-        gettimeofday(&_lt0, 0);                                                \
-        fprintf(stderr, BLD "%03ld.%03ld" RED " %s:%d " fmt " %c%s%c\n" NRM,   \
-                (long)(_lt0.tv_sec % 1000), (long)(_lt0.tv_usec / 1000),       \
-                __func__, __LINE__, ##__VA_ARGS__, (_e ? '[' : ' '),           \
-                (_e ? strerror(_e) : ""), (_e ? '[' : ' '));                   \
+        struct timeval _now, _elapsed;                                         \
+        gettimeofday(&_now, 0);                                                \
+        timeval_subtract(&_elapsed, &_now, &_epoch);                           \
+        fprintf(                                                               \
+            stderr, BLD RED "% 2ld.%04ld %s:%d ABORT: " fmt " %c%s%c\n" NRM,   \
+            (long)(_elapsed.tv_sec % 1000), (long)(_elapsed.tv_usec / 1000),   \
+            __func__, __LINE__, ##__VA_ARGS__, (_e ? '[' : ' '),               \
+            (_e ? strerror(_e) : ""), (_e ? '[' : ' '));                       \
         abort();                                                               \
     } while (0)
 
