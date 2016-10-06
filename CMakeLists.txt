@@ -25,6 +25,10 @@ if("${CMAKE_C_COMPILER_ID}" MATCHES "Clang")
 elseif("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
 endif()
 
+# Extract compile options into variable, for doxygen's CLANG_ASSISTED_PARSING
+get_property(COMPILE_OPTIONS DIRECTORY PROPERTY COMPILE_OPTIONS)
+string(REPLACE ";" " " COMPILE_OPTIONS "${COMPILE_OPTIONS}")
+
 # Set linker options that are valid for all linkers
 set(CMAKE_SHARED_LINKER_FLAGS "-flto -fprofile-instr-generate")
 set(CMAKE_EXE_LINKER_FLAGS "-flto -fprofile-instr-generate")
