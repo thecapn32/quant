@@ -57,7 +57,7 @@ extern int timeval_subtract(struct timeval * const result,
 
 
 // Trim the path from the given file name (to be used with __FILE__)
-#define BASE(f) (strrchr((f), '/') ? strrchr((f), '/') + 1 : (f))
+#define BASENAME(f) (strrchr((f), '/') ? strrchr((f), '/') + 1 : (f))
 
 
 // These macros are based on the "D" ones defined by netmap
@@ -69,7 +69,7 @@ extern int timeval_subtract(struct timeval * const result,
         fprintf(stderr, REV "%s " NRM "% 2ld.%04ld" MAG " %s" BLK "@" BLU      \
                             "%s:%d " NRM fmt "\n",                             \
                 col[dlevel], (long)(_elapsed.tv_sec % 1000),                   \
-                (long)(_elapsed.tv_usec / 1000), __func__, BASE(__FILE__),     \
+                (long)(_elapsed.tv_usec / 1000), __func__, BASENAME(__FILE__), \
                 __LINE__, ##__VA_ARGS__);                                      \
         fflush(stderr);                                                        \
     }
@@ -108,7 +108,7 @@ extern int timeval_subtract(struct timeval * const result,
         fprintf(stderr, RED BLD REV "% 2ld.%04ld  %s@%s:%d ABORT: " fmt        \
                                     " %c%s%c\n" NRM,                           \
                 (long)(_elapsed.tv_sec % 1000),                                \
-                (long)(_elapsed.tv_usec / 1000), __func__, BASE(__FILE__),     \
+                (long)(_elapsed.tv_usec / 1000), __func__, BASENAME(__FILE__), \
                 __LINE__, ##__VA_ARGS__, (_e ? '[' : ' '),                     \
                 (_e ? strerror(_e) : ""), (_e ? '[' : ' '));                   \
         abort();                                                               \

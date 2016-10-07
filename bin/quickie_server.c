@@ -69,7 +69,7 @@ int main(int argc, char * argv[])
         die("could not bind");
     }
 
-    warn(debug, "%s ready on %s:%s", argv[0], ip, port);
+    warn(debug, "%s ready on %s:%s", BASENAME(argv[0]), ip, port);
     q_serve(s);
 
     close(s);
