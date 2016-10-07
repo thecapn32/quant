@@ -29,6 +29,8 @@
 
 #ifndef NDEBUG
 
+#include <regex.h>
+
 enum dlevel { crit = 0, err = 1, warn = 2, notice = 3, info = 4, debug = 5 };
 
 // Set DLEVEL to the level of debug output you want to see in the Makefile
@@ -42,22 +44,17 @@ enum dlevel { crit = 0, err = 1, warn = 2, notice = 3, info = 4, debug = 5 };
 #define DCOMPONENT ".*"
 #endif
 
+// Trim the path from the given file name (to be used with __FILE__)
+#define BASENAME(f) (strrchr((f), '/') ? strrchr((f), '/') + 1 : (f))
+
+
 extern const char * const col[];
-
-#include <regex.h>
-#include <sys/time.h>
-
-extern regex_t _comp;
-
-extern struct timeval _epoch;
+extern regex_t            _comp;
+extern struct timeval     _epoch;
 
 extern int timeval_subtract(struct timeval * const result,
                             struct timeval * const x,
                             struct timeval * const y);
-
-
-// Trim the path from the given file name (to be used with __FILE__)
-#define BASENAME(f) (strrchr((f), '/') ? strrchr((f), '/') + 1 : (f))
 
 
 // These macros are based on the "D" ones defined by netmap
@@ -99,20 +96,32 @@ extern int timeval_subtract(struct timeval * const result,
 
 #endif
 
+// Abort execution with a message
 #define die(fmt, ...)                                                          \
     do {                                                                       \
         const int      _e = errno;                                             \
         struct timeval _now, _elapsed;                                         \
         gettimeofday(&_now, 0);                                                \
         timeval_subtract(&_elapsed, &_now, &_epoch);                           \
-        fprintf(stderr, RED BLD REV "% 2ld.%04ld  %s@%s:%d ABORT: " fmt        \
+        fprintf(stderr, RED BLD REV " % 2ld.%04ld %s@%s:%d ABORT: " fmt        \
                                     " %c%s%c\n" NRM,                           \
                 (long)(_elapsed.tv_sec % 1000),                                \
                 (long)(_elapsed.tv_usec / 1000), __func__, BASENAME(__FILE__), \
-                __LINE__, ##__VA_ARGS__, (_e ? '[' : ' '),                     \
-                (_e ? strerror(_e) : ""), (_e ? '[' : ' '));                   \
+                __LINE__, ##__VA_ARGS__, (_e ? '[' : 0),                       \
+                (_e ? strerror(_e) : ""), (_e ? '[' : 0));                     \
         abort();                                                               \
     } while (0)
+
+// A version of the assert() macro that isn't disabled by NDEBUG and that uses
+// our other debug functions
+#define assert(e, fmt, ...)                                                    \
+    do {                                                                       \
+        if (!(e)) {                                                            \
+            die("assertion failed \n         " #e " \n         " fmt,          \
+                ##__VA_ARGS__);                                                \
+        }                                                                      \
+    } while (0)
+
 
 #pragma GCC diagnostic pop
 
