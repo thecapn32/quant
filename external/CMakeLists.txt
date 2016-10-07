@@ -76,7 +76,7 @@ add_custom_target(kill-quic-server
   VERBATIM
 )
 
-set(DIR ${CMAKE_BINARY_DIR}/test)
+set(DIR ${CMAKE_BINARY_DIR}/bin)
 set(QS quickie_server)
 set(PORT 8443)
 add_custom_target(test-quickie-server

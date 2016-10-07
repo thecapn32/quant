@@ -49,10 +49,10 @@ if(NOT SUDO)
   set(SUDO /usr/bin/sudo)
 endif()
 
+add_subdirectory(bin)
 add_subdirectory(doc)
 add_subdirectory(external)
 add_subdirectory(lib)
-add_subdirectory(test)
 
 # Add a "distclean" target; see http://stackoverflow.com/a/12055610/1437081
 add_custom_target(distclean
