@@ -36,26 +36,27 @@ uint8_t dec_stream_off_len(const uint8_t flags)
 }
 
 
-uint16_t dec_pub_hdr(struct q_pkt * const p, const bool is_initial)
+uint16_t dec_pub_hdr(const struct q_conn * const qc, struct q_pkt * const p)
 {
     uint16_t i = 0;
+    // assert(i <= p->len);
 
     p->flags = p->buf[i++];
     warn(debug, "flags 0x%02x", p->flags);
-    assert(i <= p->len, "public header length only %d", p->len);
+    assert(i <= p->len, "pub hdr only %d bytes; truncated?", p->len);
 
     if (p->flags & F_CID) {
         p->cid = (*(uint64_t *)(void *)&p->buf[i]); // ntohll
         i += sizeof(p->cid);
         warn(debug, "cid %" PRIu64, p->cid);
-        assert(i <= p->len, "public header length only %d", p->len);
+        assert(i <= p->len, "pub hdr only %d bytes; truncated?", p->len);
     }
 
     if (p->flags & F_VERS) {
         p->vers = *(uint32_t *)(void *)&p->buf[i];
         i += sizeof(p->vers);
         warn(debug, "vers 0x%08x %.4s", p->vers, (char *)&p->vers);
-        assert(i <= p->len, "public header length only %d", p->len);
+        assert(i <= p->len, "pub hdr only %d bytes; truncated?", p->len);
     }
 
     if (p->flags & F_NONCE) {
@@ -85,7 +86,7 @@ uint16_t dec_pub_hdr(struct q_pkt * const p, const bool is_initial)
         }
 
         i += p->nonce_len;
-        assert(i <= p->len, "public header length only %d", p->len);
+        assert(i <= p->len, "pub hdr only %d bytes; truncated?", p->len);
     }
 
     const uint8_t nr_len = dec_nr_len(p->flags);
@@ -98,18 +99,22 @@ uint16_t dec_pub_hdr(struct q_pkt * const p, const bool is_initial)
     if (p->flags & (F_MULTIPATH | F_UNUSED))
         warn(warn, "unsupported flag encountered");
 
-    if (is_initial && (p->flags & F_PUB_RST) == 0) {
+    // Version negotiation from a server don't have a hash, nor do public reset
+    // packets
+    if (!(qc->r_nr == 0 && p->flags & F_VERS) && (p->flags & F_PUB_RST) == 0) {
         const uint128_t hash = fnv_1a(p->buf, p->len, i, HASH_LEN);
         if (memcmp(&p->buf[i], &hash, HASH_LEN))
             die("hash mismatch");
         i += HASH_LEN;
+        assert(i <= p->len, "pub hdr only %d bytes; truncated?", p->len);
     }
 
     return i;
 }
 
 
-uint16_t enc_pub_hdr(struct q_pkt * const p)
+uint16_t enc_pub_hdr(const struct q_conn * const qc __unused,
+                     struct q_pkt * const           p)
 {
     uint16_t i = 0;
 
@@ -206,7 +211,7 @@ static uint16_t dec_stream_frame(struct q_pkt * const p, const uint16_t pos)
         f->data = &p->buf[i];
 
         // TODO check that FIN is 0
-        /// XXX skipping content
+        // XXX skipping content
 
         i += f->dlen;
     }
@@ -271,7 +276,9 @@ static uint16_t dec_regular_frame(const struct q_pkt * const p,
 }
 
 
-uint16_t dec_frames(struct q_pkt * const p, const uint16_t pos)
+uint16_t dec_frames(const struct q_conn * const qc __unused,
+                    struct q_pkt * const           p,
+                    const uint16_t                 pos)
 {
     uint16_t i = pos;
     SLIST_INIT(&p->fl);

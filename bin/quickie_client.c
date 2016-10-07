@@ -63,9 +63,13 @@ int main(int argc, char * argv[])
     assert(s >= 0, "could not connect");
     freeaddrinfo(res0);
 
-    warn(debug, "%s connecting to %s:%s", BASENAME(argv[0]), dest, port);
-    q_connect(s);
+    // start some connections
+    for (int n = 0; n < 3; n++) {
+        warn(info, "%s starting connection %d to %s:%s", BASENAME(argv[0]), n,
+             dest, port);
+        q_connect(s);
+    }
 
-    close(s);
+    // TODO: cleanup
     return 0;
 }

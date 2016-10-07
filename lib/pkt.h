@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <sys/queue.h>
 
+#include "quic.h"
+
 
 #define F_STREAM 0x01
 #define F_STREAM_FIN 0x02
@@ -47,16 +49,16 @@ struct q_frame {
 #define MAX_NONCE_LEN 32
 #define HASH_LEN 12
 
-//! A QUIC packet.
+/// A QUIC packet.
 struct q_pkt {
-    uint16_t len; //!< Total length of the message.
+    uint16_t len; ///< Total length of the message.
     uint8_t  flags;
     uint8_t  nonce_len;
-    uint32_t vers; //!< In network-byte order, to be printable as a string.
+    uint32_t vers; ///< In network-byte order, to be printable as a string.
     uint64_t cid;
     uint8_t  nonce[32];
     uint64_t nr;
-    uint8_t  buf[MAX_PKT_LEN]; //!< Payload bytes of the message.
+    uint8_t  buf[MAX_PKT_LEN]; ///< Payload bytes of the message.
     uint16_t _unused;
     SLIST_HEAD(fh, q_frame) fl;
     uint8_t _unused2[8];
@@ -76,6 +78,8 @@ uint8_t enc_nr_len(const uint8_t n) __attribute__((const));
 uint8_t dec_sid_len(const uint8_t flags) __attribute__((const));
 uint8_t dec_stream_off_len(const uint8_t flags) __attribute__((const));
 
-uint16_t dec_pub_hdr(struct q_pkt * const p, const bool is_initial);
-uint16_t enc_pub_hdr(struct q_pkt * const p);
-uint16_t dec_frames(struct q_pkt * const p, const uint16_t pos);
+uint16_t dec_pub_hdr(const struct q_conn * const qc, struct q_pkt * const p);
+uint16_t enc_pub_hdr(const struct q_conn * const qc, struct q_pkt * const p);
+uint16_t dec_frames(const struct q_conn * const qc,
+                    struct q_pkt * const        p,
+                    const uint16_t              pos);
