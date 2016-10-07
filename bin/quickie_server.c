@@ -42,8 +42,7 @@ int main(int argc, char * argv[])
                              .ai_protocol = IPPROTO_UDP,
                              .ai_flags    = AI_PASSIVE};
     const int err = getaddrinfo(ip, port, &hints, &res0);
-    if (err)
-        die("getaddrinfo: %s", gai_strerror(err));
+    assert(err == 0, "getaddrinfo: %s", gai_strerror(err));
 
     int s = -1;
     for (res = res0; res; res = res->ai_next) {
@@ -62,12 +61,8 @@ int main(int argc, char * argv[])
 
         break;
     }
-
+    assert(s >= 0, "could not bind");
     freeaddrinfo(res);
-
-    if (s < 0) {
-        die("could not bind");
-    }
 
     warn(debug, "%s ready on %s:%s", BASENAME(argv[0]), ip, port);
     q_serve(s);

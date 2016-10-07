@@ -19,8 +19,7 @@ static void q_pollin(const int s)
 {
     struct pollfd fds = {.fd = s, .events = POLLIN};
     const int     n = poll(&fds, 1, Q_TIMEOUT);
-    if (n <= 0)
-        die("poll timeout");
+    assert(n > 0, "poll timeout");
 }
 
 
@@ -29,8 +28,7 @@ static void q_send(const int s, struct q_pkt * const p, const uint16_t hash_pos)
     const uint128_t hash = fnv_1a(p->buf, p->len, hash_pos, HASH_LEN);
     memcpy(&p->buf[hash_pos], &hash, HASH_LEN);
     const ssize_t n = send(s, p->buf, p->len, 0);
-    if (n < 0)
-        die("send");
+    assert(n > 0, "send error");
     warn(debug, "sent %ld bytes", n);
 }
 
@@ -38,8 +36,7 @@ static void q_send(const int s, struct q_pkt * const p, const uint16_t hash_pos)
 static void q_recv(const int s, struct q_pkt * const p)
 {
     p->len = (uint16_t)recv(s, p->buf, MAX_PKT_LEN, 0);
-    if (p->len < 0)
-        die("recv");
+    assert(p->len >=0, "recvfrom error");
     warn(debug, "received %d bytes, decoding", p->len);
     uint16_t pos = dec_pub_hdr(p, true);
     dec_frames(p, pos);

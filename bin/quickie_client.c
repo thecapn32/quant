@@ -37,12 +37,11 @@ int main(int argc, char * argv[])
     }
 
     struct addrinfo *res, *res0;
-    struct addrinfo  hints = {.ai_family  = PF_INET,
+    struct addrinfo  hints = {.ai_family = PF_INET,
                              .ai_socktype = SOCK_DGRAM,
                              .ai_protocol = IPPROTO_UDP};
     const int err = getaddrinfo(dest, port, &hints, &res0);
-    if (err)
-        die("getaddrinfo: %s", gai_strerror(err));
+    assert(err == 0, "getaddrinfo: %s", gai_strerror(err));
 
     int s = -1;
     for (res = res0; res; res = res->ai_next) {
@@ -61,11 +60,8 @@ int main(int argc, char * argv[])
 
         break;
     }
+    assert(s >= 0, "could not connect");
     freeaddrinfo(res0);
-
-    if (s < 0) {
-        die("could not connect");
-    }
 
     warn(debug, "%s connecting to %s:%s", BASENAME(argv[0]), dest, port);
     q_connect(s);

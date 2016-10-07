@@ -42,24 +42,20 @@ uint16_t dec_pub_hdr(struct q_pkt * const p, const bool is_initial)
 
     p->flags = p->buf[i++];
     warn(debug, "flags 0x%02x", p->flags);
-
-    if (i > p->len)
-        die("public header length only %d", p->len);
+    assert(i <= p->len, "public header length only %d", p->len);
 
     if (p->flags & F_CID) {
         p->cid = (*(uint64_t *)(void *)&p->buf[i]); // ntohll
         i += sizeof(p->cid);
         warn(debug, "cid %" PRIu64, p->cid);
-        if (i > p->len)
-            die("public header length only %d", p->len);
+        assert(i <= p->len, "public header length only %d", p->len);
     }
 
     if (p->flags & F_VERS) {
         p->vers = *(uint32_t *)(void *)&p->buf[i];
         i += sizeof(p->vers);
         warn(debug, "vers 0x%08x %.4s", p->vers, (char *)&p->vers);
-        if (i > p->len)
-            die("public header length only %d", p->len);
+        assert(i <= p->len, "public header length only %d", p->len);
     }
 
     if (p->flags & F_NONCE) {
@@ -89,8 +85,7 @@ uint16_t dec_pub_hdr(struct q_pkt * const p, const bool is_initial)
         }
 
         i += p->nonce_len;
-        if (i > p->len)
-            die("public header length only %d", p->len);
+        assert(i <= p->len, "public header length only %d", p->len);
     }
 
     const uint8_t nr_len = dec_nr_len(p->flags);

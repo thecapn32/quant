@@ -90,6 +90,7 @@ extern int timeval_subtract(struct timeval * const result,
 #define warn(fmt, ...)                                                         \
     do {                                                                       \
     } while (0)
+
 #define rwarn(fmt, ...)                                                        \
     do {                                                                       \
     } while (0)
@@ -112,8 +113,11 @@ extern int timeval_subtract(struct timeval * const result,
         abort();                                                               \
     } while (0)
 
+
+#ifndef NNDEBUG
+
 // A version of the assert() macro that isn't disabled by NDEBUG and that uses
-// our other debug functions
+// our other debug functions (but that *can* still be disabled by NNDEBUG)
 #define assert(e, fmt, ...)                                                    \
     do {                                                                       \
         if (!(e)) {                                                            \
@@ -121,6 +125,14 @@ extern int timeval_subtract(struct timeval * const result,
                 ##__VA_ARGS__);                                                \
         }                                                                      \
     } while (0)
+
+#else
+
+#define assert(fmt, ...)                                                       \
+    do {                                                                       \
+    } while (0)
+
+#endif
 
 
 #pragma GCC diagnostic pop
