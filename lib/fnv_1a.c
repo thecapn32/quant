@@ -1,13 +1,13 @@
-#include <assert.h>
-
 #include "fnv_1a.h"
+#include "debug.h"
 
 uint128_t fnv_1a(const void * restrict const buf,
                  const size_t                len,
                  const size_t                skip_pos,
                  const size_t                skip_len)
 {
-    assert((skip_pos <= len) && (skip_pos + skip_len <= len));
+    assert((skip_pos <= len) && (skip_pos + skip_len <= len),
+           "len %zu, skip_pos %zu, skip_len %zu", len, skip_pos, skip_len);
 
     static const uint128_t prime =
         (((uint128_t)0x0000000001000000) << 64) | 0x000000000000013B;
