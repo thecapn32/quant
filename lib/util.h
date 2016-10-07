@@ -23,6 +23,13 @@
 #define CYN "\x1B[36m" // cyan
 #define WHT "\x1B[37m" // white
 
+
+// A few shortcuts for C function attributes and compiler built-ins, which are
+// otherwise pretty unwieldly
+#define likely(x) __builtin_expect((x), 1)
+#define unlikely(x) __builtin_expect((x), 0)
+
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunknown-pragmas"
 #pragma GCC diagnostic ignored "-Wpedantic"
@@ -120,7 +127,7 @@ extern int timeval_subtract(struct timeval * const result,
 // our other debug functions (but that *can* still be disabled by NNDEBUG)
 #define assert(e, fmt, ...)                                                    \
     do {                                                                       \
-        if (!(e)) {                                                            \
+        if (unlikely(!(e))) {                                                            \
             die("assertion failed \n         " #e " \n         " fmt,          \
                 ##__VA_ARGS__);                                                \
         }                                                                      \
@@ -138,3 +145,5 @@ extern int timeval_subtract(struct timeval * const result,
 #pragma GCC diagnostic pop
 
 extern void hexdump(const void * const ptr, const size_t len);
+
+

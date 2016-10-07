@@ -1,8 +1,8 @@
 #include <getopt.h>
 #include <netdb.h>
 
-#include "debug.h"
 #include "quic.h"
+#include "util.h"
 
 
 static void
@@ -16,7 +16,7 @@ usage(const char * const name, const char * const ip, const char * const port)
 
 int main(int argc, char * argv[])
 {
-    char * ip   = "127.0.0.1";
+    char * ip = "127.0.0.1";
     char * port = "8443";
     int    ch;
 
@@ -37,10 +37,10 @@ int main(int argc, char * argv[])
     }
 
     struct addrinfo *res, *res0;
-    struct addrinfo  hints = {.ai_family  = PF_INET,
+    struct addrinfo  hints = {.ai_family = PF_INET,
                              .ai_socktype = SOCK_DGRAM,
                              .ai_protocol = IPPROTO_UDP,
-                             .ai_flags    = AI_PASSIVE};
+                             .ai_flags = AI_PASSIVE};
     const int err = getaddrinfo(ip, port, &hints, &res0);
     assert(err == 0, "getaddrinfo: %s", gai_strerror(err));
 

@@ -3,10 +3,10 @@
 #include <sys/queue.h>
 #include <sys/socket.h>
 
-#include "debug.h"
 #include "fnv_1a.h"
 #include "pkt.h"
 #include "quic.h"
+#include "util.h"
 
 
 #define Q_TIMEOUT 3000

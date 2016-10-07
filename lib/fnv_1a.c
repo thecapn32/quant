@@ -1,5 +1,5 @@
 #include "fnv_1a.h"
-#include "debug.h"
+#include "util.h"
 
 uint128_t fnv_1a(const void * restrict const buf,
                  const size_t                len,

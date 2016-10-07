@@ -1,9 +1,9 @@
 #include <inttypes.h>
 #include <sys/param.h>
 
-#include "debug.h"
 #include "fnv_1a.h"
 #include "pkt.h"
+#include "util.h"
 
 
 // Convert pkt nr length encoded in flags to bytes

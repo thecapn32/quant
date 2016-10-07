@@ -1,7 +1,7 @@
 #include <ctype.h>
 #include <stdio.h>
 
-#include "debug.h"
+#include "util.h"
 
 #ifndef NDEBUG
 

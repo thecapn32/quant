@@ -1,8 +1,8 @@
 #include <getopt.h>
 #include <netdb.h>
 
-#include "debug.h"
 #include "quic.h"
+#include "util.h"
 
 
 static void
