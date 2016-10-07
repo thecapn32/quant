@@ -93,7 +93,7 @@ add_custom_target(test-quickie-server
     ${SUDO} ${PKILL} ${QS} sudo || true &&
     ${CAT} ${DIR}/${QS}.log || true &&
     ${TSHARK} -V -2 -n -d udp.port==${PORT},quic -R frame.number==1
-      -r ${DIR}/${QS}.pcap
+      -O quic -r ${DIR}/${QS}.pcap
   # DEPENDS quickie_server vagrant-up # XXX this speeds up the test-* targets but is risky
   DEPENDS quickie_server
   VERBATIM
