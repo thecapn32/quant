@@ -129,6 +129,7 @@ extern int timeval_subtract(struct timeval * const result,
 
 // A version of the assert() macro that isn't disabled by NDEBUG and that uses
 // our other debug functions (but that *can* still be disabled by NNDEBUG)
+#undef assert
 #define assert(e, fmt, ...)                                                    \
     do {                                                                       \
         if (unlikely(!(e))) {                                                  \
