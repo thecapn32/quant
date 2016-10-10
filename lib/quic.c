@@ -15,7 +15,7 @@
 
 static SLIST_HEAD(qc, q_conn) q_conns = SLIST_HEAD_INITIALIZER(q_conns);
 
-const char * const q_vers[] = {"Q025", "Q036", 0};
+const char * const q_vers[] = {"Q025", "Q036", 0}; // "Q025" is draft-hamilton
 
 
 static void q_pollin(const struct q_conn * const qc)
@@ -50,8 +50,6 @@ static void q_recv(const struct q_conn * const qc, struct q_pkt * const p)
 
 void q_connect(const int s)
 {
-    uint8_t i = 0;
-
     // Create the new QUIC connection
     struct q_conn * qc = calloc(1, sizeof(struct q_conn));
     qc->sock = s;
@@ -60,7 +58,7 @@ void q_connect(const int s)
     SLIST_INSERT_HEAD(&q_conns, qc, next);
 
     // Try to connect with the versions of QUIC we support
-    while (q_vers[i]) {
+    for (uint8_t i = 0; q_vers[i]; i++) {
         struct q_pkt p = {.flags = F_VERS | F_CID,
                           .vers = VERS_UINT32_T(q_vers[i]),
                           .cid = qc->id,
@@ -108,6 +106,18 @@ void q_serve(const int s)
     q_pollin(&qc);
 
     // read it
-    struct q_pkt p;
+    struct q_pkt p = {0};
     q_recv(&qc, &p);
+
+    // check that we support the desired QUIC version
+    for (uint8_t i = 0; q_vers[i]; i++) {
+        if (p.vers != VERS_UINT32_T(q_vers[i]))
+            warn(debug, "client-requested version %.4s, we support %.4s",
+                 (char *)&p.vers, q_vers[i]);
+        else
+            warn(debug, "client-requested version matches our version %.4s",
+                 q_vers[i]);
+    }
+    // assert(q_vers[i], "client-requested version %.4s not supported", (char
+    // *)&p.vers);
 }
