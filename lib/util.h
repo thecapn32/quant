@@ -66,31 +66,35 @@ extern int timeval_subtract(struct timeval * const result,
 
 // These macros are based on the "D" ones defined by netmap
 #define warn(dlevel, fmt, ...)                                                 \
-    if (DLEVEL >= dlevel && !regexec(&_comp, __FILE__, 0, 0, 0)) {             \
-        struct timeval _now, _elapsed;                                         \
-        gettimeofday(&_now, 0);                                                \
-        timeval_subtract(&_elapsed, &_now, &_epoch);                           \
-        fprintf(stderr, REV "%s " NRM "% 2ld.%04ld" MAG " %s" BLK "@" BLU      \
-                            "%s:%d " NRM fmt "\n",                             \
-                col[dlevel], (long)(_elapsed.tv_sec % 1000),                   \
-                (long)(_elapsed.tv_usec / 1000), __func__, BASENAME(__FILE__), \
-                __LINE__, ##__VA_ARGS__);                                      \
-        fflush(stderr);                                                        \
-    }
+    do {                                                                       \
+        if (DLEVEL >= dlevel && !regexec(&_comp, __FILE__, 0, 0, 0)) {         \
+            struct timeval _now, _elapsed;                                     \
+            gettimeofday(&_now, 0);                                            \
+            timeval_subtract(&_elapsed, &_now, &_epoch);                       \
+            fprintf(stderr, REV "%s " NRM "% 2ld.%04ld" MAG " %s" BLK "@" BLU  \
+                                "%s:%d " NRM fmt "\n",                         \
+                    col[dlevel], (long)(_elapsed.tv_sec % 1000),               \
+                    (long)(_elapsed.tv_usec / 1000), __func__,                 \
+                    BASENAME(__FILE__), __LINE__, ##__VA_ARGS__);              \
+            fflush(stderr);                                                    \
+        }                                                                      \
+    } while (0)
 
 // Rate limited version of "log", lps indicates how many per second
 #define rwarn(dlevel, lps, format, ...)                                        \
-    if (DLEVEL >= dlevel && !regexec(&_comp, __FILE__, 0, 0, 0)) {             \
-        static time_t  _rt0, _rcnt;                                            \
-        struct timeval _rts;                                                   \
-        gettimeofday(&_rts, 0);                                                \
-        if (_rt0 != _rts.tv_sec) {                                             \
-            _rt0 = _rts.tv_sec;                                                \
-            _rcnt = 0;                                                         \
+    do {                                                                       \
+        if (DLEVEL >= dlevel && !regexec(&_comp, __FILE__, 0, 0, 0)) {         \
+            static time_t  _rt0, _rcnt;                                        \
+            struct timeval _rts;                                               \
+            gettimeofday(&_rts, 0);                                            \
+            if (_rt0 != _rts.tv_sec) {                                         \
+                _rt0 = _rts.tv_sec;                                            \
+                _rcnt = 0;                                                     \
+            }                                                                  \
+            if (_rcnt++ < lps)                                                 \
+                warn(dlevel, format, ##__VA_ARGS__);                           \
         }                                                                      \
-        if (_rcnt++ < lps)                                                     \
-            warn(dlevel, format, ##__VA_ARGS__);                               \
-    }
+    } while (0)
 
 #else
 
@@ -127,7 +131,7 @@ extern int timeval_subtract(struct timeval * const result,
 // our other debug functions (but that *can* still be disabled by NNDEBUG)
 #define assert(e, fmt, ...)                                                    \
     do {                                                                       \
-        if (unlikely(!(e))) {                                                            \
+        if (unlikely(!(e))) {                                                  \
             die("assertion failed \n         " #e " \n         " fmt,          \
                 ##__VA_ARGS__);                                                \
         }                                                                      \
@@ -145,5 +149,3 @@ extern int timeval_subtract(struct timeval * const result,
 #pragma GCC diagnostic pop
 
 extern void hexdump(const void * const ptr, const size_t len);
-
-
