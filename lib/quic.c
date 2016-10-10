@@ -1,123 +1,140 @@
+#include <ev.h>
+#include <inttypes.h>
 #include <netinet/in.h>
 #include <poll.h>
-#include <sys/queue.h>
 #include <sys/socket.h>
 
 #include "fnv_1a.h"
 #include "pkt.h"
 #include "quic.h"
+#include "tommy.h"
 #include "util.h"
 
 
-#define Q_TIMEOUT 3000
+// Convenience macro, in case the "loop" parameter defined by EV_P_ is unused
+#define EV_PU_ struct ev_loop *loop __unused,
 
-#define VERS_UINT32_T(v) (*(const uint32_t *)(const void *)(v))
-
-static SLIST_HEAD(qc, q_conn) q_conns = SLIST_HEAD_INITIALIZER(q_conns);
-
+/// QUIC version supported by this implementation.
 const char * const q_vers[] = {"Q025", "Q036", 0}; // "Q025" is draft-hamilton
 
+/// Macro to interpret a @p q_vers[] string as a @p uint32_t.
+#define VERS_UINT32_T(v) (*(const uint32_t *)(const void *)(v))
 
-static void q_pollin(const struct q_conn * const qc)
+/// All open QUIC connections.
+static hash qc;
+
+
+static int q_conn_cmp(const void * const arg, const void * const obj)
 {
-    struct pollfd fds = {.fd = qc->sock, .events = POLLIN};
-    const int     n = poll(&fds, 1, Q_TIMEOUT);
-    assert(n > 0, "poll timeout");
+    return *(const int *)arg != ((const struct q_conn *)obj)->sock;
 }
 
 
-static void q_send(const struct q_conn * const qc,
-                   struct q_pkt * const        p,
-                   const uint16_t              hash_pos)
+static void quic_rx(EV_PU_ ev_io * w, int revents __unused)
 {
-    const uint128_t hash = fnv_1a(p->buf, p->len, hash_pos, HASH_LEN);
-    memcpy(&p->buf[hash_pos], &hash, HASH_LEN);
-    const ssize_t n = send(qc->sock, p->buf, p->len, 0);
-    assert(n > 0, "send error");
-    warn(debug, "sent %zd bytes", n);
+    warn(info, "entering %s for desc %d", __func__, w->fd);
+
+    struct q_pkt p = {0};
+    p.len = (uint16_t)recvfrom(w->fd, p.buf, MAX_PKT_LEN, 0, 0, 0);
+    assert(p.len >= 0, "recvfrom error");
+    warn(debug, "received %d bytes, decoding", p.len);
+    const uint16_t pos = dec_pub_hdr(&p);
+    dec_frames(&p, pos);
+
+    struct q_conn * c = hash_search(&qc, q_conn_cmp, &w->fd, hash_u32(w->fd));
+    if (c == 0) {
+        // this is a packet for a new connection, allocate it
+        c = calloc(1, sizeof(*c));
+        c->sock = w->fd;
+        c->nr = 1;
+        c->r_nr = p.nr;
+        c->id = p.cid;
+        warn(debug, "created new connection %" PRIu64 " for packet", c->id);
+    } else
+        warn(debug, "packet is for connection %" PRIu64, c->id);
+
+    // // check that we support the desired QUIC version
+    // warn(debug, "client-requested version %.4s", (char *)&p.vers);
+    // uint8_t i = 0;
+    // while (q_vers[i]) {
+    //     if (p.vers == VERS_UINT32_T(q_vers[i])) {
+    //         warn(debug,
+    //              "supporting client-requested version %.4s with preference
+    //              %d",
+    //              (char *)&p.vers, i);
+    //         break;
+    //     }
+    //     i++;
+    // }
+    // assert(q_vers[i], "client-requested version %.4s not supported",
+    //        (char *)&p.vers);
 }
 
 
-static void q_recv(const struct q_conn * const qc, struct q_pkt * const p)
+static void quic_tx(EV_P_ ev_io * w, int revents __unused)
 {
-    p->len = (uint16_t)recvfrom(qc->sock, p->buf, MAX_PKT_LEN, 0, 0, 0);
-    assert(p->len >= 0, "recvfrom error");
-    warn(debug, "received %d bytes, decoding", p->len);
-    const uint16_t pos = dec_pub_hdr(qc, p);
-    dec_frames(qc, p, pos);
-}
+    warn(info, "entering %s for desc %d", __func__, w->fd);
 
-
-void q_connect(const int s)
-{
-    // Create the new QUIC connection
-    struct q_conn * qc = calloc(1, sizeof(struct q_conn));
-    qc->sock = s;
-    qc->nr = 1;
-    arc4random_buf(&qc->id, sizeof(uint64_t));
-    SLIST_INSERT_HEAD(&q_conns, qc, next);
+    struct q_conn * c = hash_search(&qc, q_conn_cmp, &w->fd, hash_u32(w->fd));
+    if (c == 0) {
+        // this is a packet for a new connection, allocate it
+        c = calloc(1, sizeof(*c));
+        c->sock = w->fd;
+        c->nr = 1;
+        arc4random_buf(&c->id, sizeof(uint64_t));
+        hash_insert(&qc, &c->node, c, hash_u32(w->fd));
+        warn(debug, "created new connection %" PRIu64 " for packet", c->id);
+    } else
+        warn(debug, "packet is for connection %" PRIu64, c->id);
 
     // Try to connect with the versions of QUIC we support
-    for (uint8_t i = 0; q_vers[i]; i++) {
-        struct q_pkt p = {.flags = F_VERS | F_CID,
-                          .vers = VERS_UINT32_T(q_vers[i]),
-                          .cid = qc->id,
-                          .nr = qc->nr};
-        p.len = enc_pub_hdr(qc, &p);
+    struct q_pkt p = {.flags = F_VERS | F_CID,
+                      .vers = VERS_UINT32_T(q_vers[c->vers_idx]),
+                      .cid = c->id,
+                      .nr = c->nr};
+    p.len = enc_pub_hdr(&p);
 
-        // leave space for hash
-        const uint16_t hash_pos = p.len;
-        p.len += HASH_LEN;
+    // leave space for hash
+    const uint16_t hash_pos = p.len;
+    p.len += HASH_LEN;
 
-        // char data[] = "GET /";
-        // p.len += encode_stream_frame(1, 0, (uint16_t)strlen(data), p + len,
-        //                                 MAX_PKT_LEN - len);
-        // memcpy(p + len, "GET /", strlen(data));
-        // len += strlen(data);
+    // TODO: add payload data
 
-        warn(info, "trying to connect with vers 0x%08x %4s",
-             VERS_UINT32_T(q_vers[i]), q_vers[i]);
-        q_send(qc, &p, hash_pos);
+    // send
+    const uint128_t hash = fnv_1a(p.buf, p.len, hash_pos, HASH_LEN);
+    memcpy(&p.buf[hash_pos], &hash, HASH_LEN);
+    const ssize_t n = send(c->sock, p.buf, p.len, 0);
+    assert(n > 0, "send error");
+    warn(debug, "sent %zd bytes", n);
 
-        // wait for response and read it
-        q_pollin(qc);
-        q_recv(qc, &p);
+    ev_io_stop(loop, w);
 
-        if (p.flags & F_VERS) {
-            warn(warn, "server didn't accept our vers 0x%08x %4s",
-                 VERS_UINT32_T(q_vers[i]), q_vers[i]);
-            // TODO: we should check which versions the server supports and pick
-            // a common one
-            i++;
-        } else {
-            qc->r_nr = p.nr;
-            return;
-        }
-    }
-
-    die("server didn't accept any of our versions");
+    // handle responses
+    ev_io * rw = calloc(1, sizeof(*rw));
+    ev_io_init(rw, quic_rx, w->fd, EV_READ);
+    ev_io_start(loop, rw);
 }
 
 
-void q_serve(const int s)
+void q_connect(EV_P_ const int s)
 {
-    struct q_conn qc = {.sock = s};
-    // wait for incoming packet
-    q_pollin(&qc);
+    // warn(info, "entering %s", __func__);
+    ev_io * ww = calloc(1, sizeof(*ww));
+    ev_io_init(ww, quic_tx, s, EV_WRITE);
+    ev_io_start(loop, ww);
+}
 
-    // read it
-    struct q_pkt p = {0};
-    q_recv(&qc, &p);
 
-    // check that we support the desired QUIC version
-    for (uint8_t i = 0; q_vers[i]; i++) {
-        if (p.vers != VERS_UINT32_T(q_vers[i]))
-            warn(debug, "client-requested version %.4s, we support %.4s",
-                 (char *)&p.vers, q_vers[i]);
-        else
-            warn(debug, "client-requested version matches our version %.4s",
-                 q_vers[i]);
-    }
-    // assert(q_vers[i], "client-requested version %.4s not supported", (char
-    // *)&p.vers);
+void q_serve(EV_P_ const int s)
+{
+    // warn(info, "entering %s", __func__);
+    ev_io * rw = calloc(1, sizeof(*rw));
+    ev_io_init(rw, quic_rx, s, EV_READ);
+    ev_io_start(loop, rw);
+}
+
+
+void q_init(void)
+{
+    hash_init(&qc);
 }

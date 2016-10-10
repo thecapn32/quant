@@ -78,8 +78,6 @@ uint8_t enc_nr_len(const uint8_t n) __attribute__((const));
 uint8_t dec_sid_len(const uint8_t flags) __attribute__((const));
 uint8_t dec_stream_off_len(const uint8_t flags) __attribute__((const));
 
-uint16_t dec_pub_hdr(const struct q_conn * const qc, struct q_pkt * const p);
-uint16_t enc_pub_hdr(const struct q_conn * const qc, struct q_pkt * const p);
-uint16_t dec_frames(const struct q_conn * const qc,
-                    struct q_pkt * const        p,
-                    const uint16_t              pos);
+uint16_t dec_pub_hdr(struct q_pkt * const p);
+uint16_t enc_pub_hdr(struct q_pkt * const p);
+uint16_t dec_frames(struct q_pkt * const p, const uint16_t pos);

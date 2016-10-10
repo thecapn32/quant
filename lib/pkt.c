@@ -36,7 +36,7 @@ uint8_t dec_stream_off_len(const uint8_t flags)
 }
 
 
-uint16_t dec_pub_hdr(const struct q_conn * const qc, struct q_pkt * const p)
+uint16_t dec_pub_hdr(struct q_pkt * const p)
 {
     uint16_t i = 0;
     // assert(i <= p->len);
@@ -101,20 +101,20 @@ uint16_t dec_pub_hdr(const struct q_conn * const qc, struct q_pkt * const p)
 
     // Version negotiation from a server don't have a hash, nor do public reset
     // packets
-    if (!(qc->r_nr == 0 && p->flags & F_VERS) && (p->flags & F_PUB_RST) == 0) {
-        const uint128_t hash = fnv_1a(p->buf, p->len, i, HASH_LEN);
-        if (memcmp(&p->buf[i], &hash, HASH_LEN))
-            die("hash mismatch");
-        i += HASH_LEN;
-        assert(i <= p->len, "pub hdr only %d bytes; truncated?", p->len);
-    }
+    // if (!(qc->r_nr == 0 && p->flags & F_VERS) && (p->flags & F_PUB_RST) == 0)
+    // {
+    //     const uint128_t hash = fnv_1a(p->buf, p->len, i, HASH_LEN);
+    //     if (memcmp(&p->buf[i], &hash, HASH_LEN))
+    //         die("hash mismatch");
+    //     i += HASH_LEN;
+    //     assert(i <= p->len, "pub hdr only %d bytes; truncated?", p->len);
+    // }
 
     return i;
 }
 
 
-uint16_t enc_pub_hdr(const struct q_conn * const qc __unused,
-                     struct q_pkt * const           p)
+uint16_t enc_pub_hdr(struct q_pkt * const p)
 {
     uint16_t i = 0;
 
@@ -184,7 +184,7 @@ static uint16_t dec_stream_frame(struct q_pkt * const p, const uint16_t pos)
 {
     uint16_t i = pos;
 
-    struct q_stream_frame * f = calloc(1, sizeof(struct q_stream_frame));
+    struct q_stream_frame * f = calloc(1, sizeof(*f));
     f->type = p->buf[i++];
 
     warn(debug, "stream type %02x", f->type);
@@ -276,9 +276,7 @@ static uint16_t dec_regular_frame(const struct q_pkt * const p,
 }
 
 
-uint16_t dec_frames(const struct q_conn * const qc __unused,
-                    struct q_pkt * const           p,
-                    const uint16_t                 pos)
+uint16_t dec_frames(struct q_pkt * const p, const uint16_t pos)
 {
     uint16_t i = pos;
     SLIST_INIT(&p->fl);

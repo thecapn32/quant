@@ -13,7 +13,11 @@ mark_as_advanced(NSS_INCLUDE_DIR NSS_LIBRARY)
 set(NSS_LIBRARIES ${NSS_LIBRARY})
 set(NSS_INCLUDE_DIRS ${NSS_INCLUDE_DIR})
 
+find_library(LIBEV_LIB NAMES ev)
+find_path(LIBEV_INCLUDE ev.h PATH_SUFFIXES include/ev include)
+find_package_handle_standard_args(libev DEFAULT_MSG LIBEV_LIB LIBEV_INCLUDE)
+
 add_library(quickie util.c fnv_1a.c pkt.c quic.c)
 target_include_directories(quickie PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${NSS_INCLUDE_DIRS})
-target_link_libraries(quickie tommy ${NSS_LIBRARIES})
+target_link_libraries(quickie tommy ${NSS_LIBRARIES} ${LIBEV_LIB})

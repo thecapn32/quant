@@ -1,3 +1,4 @@
+#include <ev.h>
 #include <getopt.h>
 #include <netdb.h>
 
@@ -64,8 +65,11 @@ int main(int argc, char * argv[])
     assert(s >= 0, "could not bind");
     freeaddrinfo(res);
 
+    struct ev_loop * loop = ev_default_loop(0);
+    q_init();
+    q_serve(loop, s);
     warn(debug, "%s ready on %s:%s", BASENAME(argv[0]), ip, port);
-    q_serve(s);
+    ev_loop(loop, 0);
 
     close(s);
     return 0;

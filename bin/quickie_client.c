@@ -1,3 +1,4 @@
+#include <ev.h>
 #include <getopt.h>
 #include <netdb.h>
 
@@ -61,14 +62,25 @@ int main(int argc, char * argv[])
         break;
     }
     assert(s >= 0, "could not connect");
-    freeaddrinfo(res0);
 
     // start some connections
+    q_init();
+    struct ev_loop * loop = ev_default_loop(0);
     for (int n = 0; n < 3; n++) {
-        warn(info, "%s starting connection %d to %s:%s", BASENAME(argv[0]), n,
-             dest, port);
-        q_connect(s);
+        // the first socket was created and connected above, but we need to
+        // still create and connect the additional ones
+        if (n != 0) {
+            s = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+            assert(s >= 0, "socket");
+            assert(connect(s, res->ai_addr, res->ai_addrlen) >= 0, "connect");
+        }
+        warn(info, "%s starting connection %d (desc %d) to %s:%s",
+             BASENAME(argv[0]), n, s, dest, port);
+        q_connect(loop, s);
     }
+
+    freeaddrinfo(res0);
+    ev_loop(loop, 0);
 
     // TODO: cleanup
     return 0;
