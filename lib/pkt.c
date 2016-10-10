@@ -46,7 +46,7 @@ uint16_t dec_pub_hdr(const struct q_conn * const qc, struct q_pkt * const p)
     assert(i <= p->len, "pub hdr only %d bytes; truncated?", p->len);
 
     if (p->flags & F_CID) {
-        p->cid = (*(uint64_t *)(void *)&p->buf[i]); // ntohll
+        p->cid = (*(uint64_t *)(void *)&p->buf[i]); // XXX: no ntohll()?
         i += sizeof(p->cid);
         warn(debug, "cid %" PRIu64, p->cid);
         assert(i <= p->len, "pub hdr only %d bytes; truncated?", p->len);
@@ -92,7 +92,7 @@ uint16_t dec_pub_hdr(const struct q_conn * const qc, struct q_pkt * const p)
     const uint8_t nr_len = dec_nr_len(p->flags);
     warn(debug, "nr_len %d", nr_len);
 
-    memcpy(&p->nr, &p->buf[i], nr_len);
+    memcpy(&p->nr, &p->buf[i], nr_len); // XXX: no ntohll()?
     warn(debug, "nr %" PRIu64, p->nr);
     i += nr_len;
 
@@ -121,7 +121,7 @@ uint16_t enc_pub_hdr(const struct q_conn * const qc __unused,
     p->buf[i++] = p->flags;
 
     if (p->flags & F_CID) {
-        *(uint64_t *)(void *)&p->buf[i] = htonll(p->cid);
+        *(uint64_t *)(void *)&p->buf[i] = p->cid; // XXX: no htonll()?
         warn(debug, "cid %" PRIu64, p->cid);
         i += sizeof(p->cid);
     }
