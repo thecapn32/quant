@@ -17,3 +17,11 @@ So you need to install some dependencies. On the Mac, the easiest way is via [Ho
 brew install cmake daemonize libev nss
 brew cask install vagrant
 ```
+
+After that, you should be able to build:
+```
+cmake .
+make
+```
+
+The `libquickie` library will be in `lib`. There are `quickie_client` and `quickie_server` examples in `bin`.
