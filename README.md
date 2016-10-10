@@ -10,7 +10,7 @@ We use [`libev`](http://software.schmorp.de/pkg/libev.html) as a basis for the e
 
 We use [`TommyDS`](http://www.tommyds.it/) for a number of internal datatypes.
 
-We *plan* to use [NSS](https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSS) for its [TLS 1.3](https://datatracker.ietf.org/doc/draft-ietf-tls-tls13/) implementation.
+We *plan* to use [`NSS`](https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSS) for its [TLS 1.3](https://datatracker.ietf.org/doc/draft-ietf-tls-tls13/) implementation.
 
 So you need to install some dependencies. On the Mac, the easiest way is via [Homebrew](http://brew.sh/), so install that first. Then, do
 ```
@@ -18,10 +18,13 @@ brew install cmake daemonize libev nss
 brew cask install vagrant
 ```
 
+## Building
 After that, you should be able to build:
 ```
 cmake .
 make
 ```
+
+## Testing
 
 The `libquickie` library will be in `lib`. There are `quickie_client` and `quickie_server` examples in `bin`.
