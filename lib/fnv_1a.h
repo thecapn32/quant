@@ -6,8 +6,7 @@
 
 #ifndef _UINT128_T
 /// If @p stdint.h doesn't define @p uint128_t, define it for ourselves.
-///
-typedef unsigned __int128 uint128_t;
+__extension__ typedef unsigned __int128 uint128_t;
 #endif
 
 ///
