@@ -1,6 +1,4 @@
-cmake_minimum_required(VERSION 3.6)
-
-include(externalproject)
+include(ExternalProject)
 
 externalproject_add(tommyds
   UPDATE_COMMAND ""
