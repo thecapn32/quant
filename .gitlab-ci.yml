@@ -1,5 +1,6 @@
 variables:
   DEBIAN_FRONTEND: noninteractive
+  CMAKE_MODULE_PATH: ~/share/cmake-3.6/Modules
 
 before_script:
   # install cmake (not available via apt)
