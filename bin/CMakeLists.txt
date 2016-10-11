@@ -10,7 +10,7 @@ set(PORT 6121)
 add_custom_target(test-quickie-client
   COMMAND
     ${SUDO} ${PKILL} ${QC} sudo || true &&
-    ${DAEMONIZE} ${SUDO} ${TCPDUMP} -i lo0 -w ${DIR}/${QC}.pcap port ${PORT} &&
+    ${DAEMON} ${SUDO} ${TCPDUMP} -i lo0 -w ${DIR}/${QC}.pcap port ${PORT} &&
     ${SLEEP} 1 &&
     ${ENV} LLVM_PROFILE_FILE=${QC}.profraw ${DIR}/${QC} || true &&
     ${SUDO} ${PKILL} ${QC} sudo || true &&

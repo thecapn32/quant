@@ -14,7 +14,7 @@ We *plan* to use [`NSS`](https://developer.mozilla.org/en-US/docs/Mozilla/Projec
 
 So you need to install some dependencies. On the Mac, the easiest way is via [Homebrew](http://brew.sh/), so install that first. Then, do
 ```
-brew install cmake daemonize libev nss
+brew install cmake daemon libev nss
 brew cask install vagrant
 ```
 

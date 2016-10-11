@@ -83,9 +83,9 @@ add_custom_target(test-quickie-server
   COMMAND
     ${RM} ${DIR}/${QS}.log || true &&
     ${SUDO} ${PKILL} ${QS} sudo || true &&
-    ${DAEMONIZE} -E LLVM_PROFILE_FILE=${QS}.profraw -c ${DIR} -e ${DIR}/${QS}.log
+    ${DAEMON} -e LLVM_PROFILE_FILE=${QS}.profraw -D ${DIR} -E ${DIR}/${QS}.log
       ${DIR}/${QS} &&
-    ${DAEMONIZE} ${SUDO} ${TCPDUMP} -i lo0 -w ${DIR}/${QS}.pcap port ${PORT} &&
+    ${DAEMON} ${SUDO} ${TCPDUMP} -i lo0 -w ${DIR}/${QS}.pcap port ${PORT} &&
     ${VAGRANT} ssh -c "\
       host=`ip route show | grep -i 'default via' | cut -d' ' -f3` ; \
       ${QUIC_BIN}/quic_client --host=$host --port=${PORT} http://example.com/ \

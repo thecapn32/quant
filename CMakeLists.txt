@@ -34,7 +34,7 @@ set(CMAKE_SHARED_LINKER_FLAGS "-flto -fprofile-instr-generate")
 set(CMAKE_EXE_LINKER_FLAGS "-flto -fprofile-instr-generate")
 
 # Make sure that a bunch of programs we depend on are installed
-foreach(PROG daemonize pkill tcpdump tshark sed make sleep rm)
+foreach(PROG daemon pkill tcpdump tshark sed make sleep rm)
   string(TOUPPER ${PROG} VARNAME)
   find_program(${VARNAME} ${PROG})
   if(NOT ${VARNAME})
