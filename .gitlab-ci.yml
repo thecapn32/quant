@@ -13,9 +13,6 @@ before_script:
 compile:
   stage: build
   script:
-  - ~/bin/cmake --system-information
-  - ~/bin/cmake -L
-  - ~/bin/cmake environment
   - ~/bin/cmake .
   - make
 
