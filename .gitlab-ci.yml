@@ -3,8 +3,8 @@ before_script:
   - curl -sSL https://cmake.org/files/v3.6/cmake-3.6.2-Linux-x86_64.tar.gz | tar -xzC ~ --strip 1
   # install other dependencies
   - apt-get update -y -qq
-  - apt-get dist-upgrade-y  -qq
-  - apt-get install -y -qq daemon tcpdump tshark
+  - apt-get dist-upgrade -y -qq
+  - apt-get install -y -qq daemon tcpdump tshark vagrant
 
 compile:
   stage: build
