@@ -7,12 +7,12 @@ before_script:
   # install other dependencies
   - apt-get update -y -qq
   - apt-get dist-upgrade -y -qq
-  - apt-get install -y -qq daemon tcpdump tshark vagrant doxygen
+  - apt-get install -y -qq daemon tcpdump tshark vagrant doxygen libnss3 libev
 
 compile:
   stage: build
   script:
-  - ~/bin/cmake . || cat /builds/larseggert/quickie/CMakeFiles/CMakeOutput.log
+  - ~/bin/cmake .
   - make
 
 run:
