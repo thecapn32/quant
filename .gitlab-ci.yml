@@ -12,6 +12,7 @@ before_script:
 compile:
   stage: build
   script:
+  - find ~ -ls
   - ~/bin/cmake .
   - make
 
