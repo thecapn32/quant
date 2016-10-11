@@ -1,5 +1,5 @@
 before_script:
-  - apt install cmake
+  - curl -sSL https://cmake.org/files/v3.6/cmake-3.6.2-Linux-x86_64.tar.gz | tar -xzC /opt
 
 build:
   script:
