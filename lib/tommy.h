@@ -3,11 +3,11 @@
 // there are some warnings in the tommyds code that I can't do anything about,
 // other than suppress them
 #pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunknown-pragmas"
 #pragma GCC diagnostic ignored "-Wdocumentation-unknown-command"
 #pragma GCC diagnostic ignored "-Wpadded"
 #pragma GCC diagnostic ignored "-Wreserved-id-macro"
 #pragma GCC diagnostic ignored "-Wsign-conversion"
-#pragma GCC diagnostic ignored "-Wunknown-pragmas"
 #include <tommyds/tommy.h>
 #pragma GCC diagnostic pop
 
