@@ -10,18 +10,22 @@ set(VERSION_PATCH 1)
 add_compile_options(-std=c11)
 
 # Warn about everything
-add_compile_options(-Wall -Wextra -Weverything -Wpedantic -Werror)
+add_compile_options(-Wall -Wextra -Wpedantic -Werror)
 
 # Optimize
 add_compile_options(-flto -march=native -Ofast -pipe)
 
 # Debug
-add_compile_options(-g -fprofile-instr-generate)
+add_compile_options(-g)
 
 # Set additional options that are compiler-specific
 if("${CMAKE_C_COMPILER_ID}" MATCHES "Clang")
   # see https://llvm.org/bugs/show_bug.cgi?id=21689
   add_compile_options(-Wno-missing-field-initializers)
+  # Even more warnings for clang
+  add_compile_options(-Weverything)
+  # Generate profiling output
+  add_compile_options(-fprofile-instr-generate)
 elseif("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
 endif()
 

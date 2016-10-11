@@ -1,7 +1,7 @@
 configure_file(version.h.in version.h)
 
-find_library(LIBNSS_LIB NAMES nss3)
-find_path(LIBNSS_INCLUDE ev.h PATH_SUFFIXES include/nss include)
+find_library(LIBNSS_LIB NAMES nss nss3 PATHS /usr/local/opt/nss/lib)
+find_path(LIBNSS_INCLUDE nss.h PATH_SUFFIXES include/nss include)
 find_package_handle_standard_args(libnss DEFAULT_MSG LIBNSS_LIB LIBNSS_INCLUDE)
 
 find_library(LIBEV_LIB NAMES ev)

@@ -11,7 +11,7 @@ before_script:
   - apt-get dist-upgrade -y -qq
   - apt-cache search gcc
   -
-    apt-get install -y -qq daemon tcpdump tshark vagrant doxygen cmake gcc-5
+    apt-get install -y -qq daemon tcpdump tshark vagrant doxygen cmake
       libnss3-dev libev-dev
 
 compile:
