@@ -13,7 +13,9 @@ before_script:
 compile:
   stage: build
   script:
-  - find ~ -ls
+  - ~/bin/cmake --system-information
+  - ~/bin/cmake -L
+  - ~/bin/cmake environment
   - ~/bin/cmake .
   - make
 
