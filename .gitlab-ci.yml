@@ -3,5 +3,5 @@ before_script:
 
 build:
   script:
-    cmake .
+    /op/bin/cmake .
     make
