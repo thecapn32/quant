@@ -13,7 +13,7 @@ configure_file(version.h.in version.h)
 # set(NSS_LIBRARIES ${NSS_LIBRARY})
 # set(NSS_INCLUDE_DIRS ${NSS_INCLUDE_DIR})
 
-find_library(LIBNSS_LIB NAMES nss)
+find_library(LIBNSS_LIB NAMES nss3)
 find_path(LIBNSS_INCLUDE ev.h PATH_SUFFIXES include/nss include)
 find_package_handle_standard_args(libnss DEFAULT_MSG LIBNSS_LIB LIBNSS_INCLUDE)
 
