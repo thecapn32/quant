@@ -10,7 +10,7 @@ before_script:
   - apt-get update -y -qq
   - apt-get dist-upgrade -y -qq
   -
-    apt-get install -y -qq daemon tcpdump tshark vagrant doxygen cmake
+    apt-get install -y -qq daemon tcpdump tshark vagrant doxygen cmake gcc-5
       libnss3-dev libev-dev
 
 compile:
