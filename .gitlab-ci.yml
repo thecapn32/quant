@@ -8,10 +8,6 @@ before_script:
   - apt-get update -qq
   - apt-get install -y -qq daemon
 
-stages:
-  - build
-  - test
-
 compile:
   stage: build
   script:
