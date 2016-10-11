@@ -7,7 +7,7 @@ before_script:
   # install other dependencies
   - apt-get update -y -qq
   - apt-get dist-upgrade -y -qq
-  - apt-get install -y -qq daemon tcpdump tshark vagrant
+  - apt-get install -y -qq daemon tcpdump tshark vagrant doxygen
 
 compile:
   stage: build
