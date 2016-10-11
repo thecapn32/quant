@@ -3,7 +3,7 @@ include(ExternalProject)
 externalproject_add(tommyds
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/amadvance/tommyds.git
-  GIT_SHALLOW 1
+  # GIT_SHALLOW 1 # not supported in cmake 3.0
   PATCH_COMMAND ${SED} -i.orig -e "s/-Wpadded// $<SEMICOLON> s/-Wcast-align// \
                   $<SEMICOLON> s/objdump/echo/" Makefile
   CONFIGURE_COMMAND ""
@@ -38,7 +38,7 @@ externalproject_add(proto-quic
   EXCLUDE_FROM_ALL 1
   # DEPENDS vagrant-up # XXX this speeds up the test-* targets but is risky
   GIT_REPOSITORY https://github.com/google/proto-quic.git
-  GIT_SHALLOW 1
+  # GIT_SHALLOW 1 # not supported in cmake 3.0
   CONFIGURE_COMMAND ${VAGRANT} ssh -c "\
     echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula \
       select true | sudo debconf-set-selections && \
