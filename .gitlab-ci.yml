@@ -1,5 +1,5 @@
 before_script:
-  apt install cmake
+  - apt install cmake
 
 build:
   script:
