@@ -17,7 +17,7 @@ compile:
   script:
   - cmake .
   - make
-  - make doc
+  # - make doc
 
 # run:
 #   stage: test
