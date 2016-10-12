@@ -4,6 +4,7 @@
 #include <poll.h>
 #include <stdlib.h>
 #include <sys/socket.h>
+#include <time.h>
 
 #include "fnv_1a.h"
 #include "pkt.h"
@@ -165,6 +166,6 @@ void q_serve(EV_P_ const int s)
 
 void q_init(void)
 {
-    srandomdev();
+    srandom(time(0));
     hash_init(&qc);
 }
