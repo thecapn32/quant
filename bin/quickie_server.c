@@ -1,6 +1,7 @@
 #include <ev.h>
 #include <getopt.h>
 #include <netdb.h>
+#include <unistd.h>
 
 #include "quic.h"
 #include "util.h"
