@@ -9,8 +9,9 @@ set(QC quickie_client)
 set(PORT 6121)
 add_custom_target(test-quickie-client
   COMMAND
+    ${RM} -f ${DIR}/${QC}.profraw ${DIR}/${QC}.pcap ${DIR}/${QC}.core || true &&
     ${SUDO} ${PKILL} ${QC} sudo || true &&
-    ${DAEMON} ${SUDO} ${TCPDUMP} -i lo0 -w ${DIR}/${QC}.pcap port ${PORT} &&
+    ${DAEMON} -- ${SUDO} ${TCPDUMP} -i lo0 -w ${DIR}/${QC}.pcap port ${PORT} &&
     ${SLEEP} 1 &&
     ${ENV} LLVM_PROFILE_FILE=${QC}.profraw ${DIR}/${QC} || true &&
     ${SUDO} ${PKILL} ${QC} sudo || true &&

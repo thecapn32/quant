@@ -86,11 +86,12 @@ set(QS quickie_server)
 set(PORT 8443)
 add_custom_target(test-quickie-server
   COMMAND
-    ${RM} ${DIR}/${QS}.log || true &&
+    ${RM} -f ${DIR}/${QS}.log ${DIR}/${QS}.pcap ${DIR}/${QS}.core
+      ${DIR}/${QS}.profraw || true &&
     ${SUDO} ${PKILL} ${QS} sudo || true &&
     ${DAEMON} -e LLVM_PROFILE_FILE=${QS}.profraw -D ${DIR} -E ${DIR}/${QS}.log
-      ${DIR}/${QS} &&
-    ${DAEMON} ${SUDO} ${TCPDUMP} -i lo0 -w ${DIR}/${QS}.pcap port ${PORT} &&
+      -- ${DIR}/${QS} &&
+    ${DAEMON} -- ${SUDO} ${TCPDUMP} -i lo0 -w ${DIR}/${QS}.pcap port ${PORT} &&
     ${VAGRANT} ssh -c "\
       host=`ip route show | grep -i 'default via' | cut -d' ' -f3` ; \
       ${QUIC_BIN}/quic_client --host=$host --port=${PORT} http://example.com/ \
