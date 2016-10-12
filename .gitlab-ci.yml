@@ -10,7 +10,7 @@ before_script:
   - apt-get update -y -qq
   -
     apt-get install -y -qq daemon tcpdump tshark vagrant doxygen cmake
-      libnss3-dev libev-dev virtualbox
+      libnss3-dev libev-dev virtualbox virtualbox-dkms
   - VBoxManage --version
 
 compile:
