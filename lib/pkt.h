@@ -73,10 +73,10 @@ struct q_pkt {
 #define F_UNUSED 0x80    // reserved (must be 0)
 
 
-uint8_t dec_nr_len(const uint8_t flags) __attribute__((const));
-uint8_t enc_nr_len(const uint8_t n) __attribute__((const));
-uint8_t dec_sid_len(const uint8_t flags) __attribute__((const));
-uint8_t dec_stream_off_len(const uint8_t flags) __attribute__((const));
+uint8_t dec_nr_len(const uint8_t flags);
+uint8_t enc_nr_len(const uint8_t n);
+uint8_t dec_sid_len(const uint8_t flags);
+uint8_t dec_stream_off_len(const uint8_t flags);
 
 uint16_t dec_pub_hdr(struct q_pkt * const p);
 uint16_t enc_pub_hdr(struct q_pkt * const p);

@@ -30,9 +30,9 @@ static void __attribute__((destructor)) postmain()
 }
 
 
-int timeval_subtract(struct timeval * const result,
-                     struct timeval * const x,
-                     struct timeval * const y)
+int __attribute__((nonnull)) timeval_subtract(struct timeval * const result,
+                                              struct timeval * const x,
+                                              struct timeval * const y)
 {
     // Perform the carry for the later subtraction by updating y.
     if (x->tv_usec < y->tv_usec) {
@@ -58,7 +58,7 @@ int timeval_subtract(struct timeval * const result,
 
 
 // Print a hexdump of the given block
-void hexdump(const void * const ptr, const size_t len)
+void __attribute__((nonnull)) hexdump(const void * const ptr, const size_t len)
 {
     const uint8_t * const buf = ptr;
     for (size_t i = 0; i < len; i += 16) {

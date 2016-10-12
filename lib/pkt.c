@@ -7,7 +7,7 @@
 
 
 // Convert pkt nr length encoded in flags to bytes
-uint8_t dec_nr_len(const uint8_t flags)
+uint8_t __attribute__((const)) dec_nr_len(const uint8_t flags)
 {
     const uint8_t l = (flags & 0x30) >> 4;
     return l ? 2 * l : 1;
@@ -15,28 +15,28 @@ uint8_t dec_nr_len(const uint8_t flags)
 
 
 // Convert pkt nr length in bytes into flags
-uint8_t enc_nr_len(const uint8_t n)
+uint8_t __attribute__((const)) enc_nr_len(const uint8_t n)
 {
     return (uint8_t)((n >> 1) << 4);
 }
 
 
 // Convert stream ID length encoded in flags to bytes
-uint8_t dec_sid_len(const uint8_t flags)
+uint8_t __attribute__((const)) dec_sid_len(const uint8_t flags)
 {
     return (flags & 0x03) + 1;
 }
 
 
 // Convert stream offset length encoded in flags to bytes
-uint8_t dec_stream_off_len(const uint8_t flags)
+uint8_t __attribute__((const)) dec_stream_off_len(const uint8_t flags)
 {
     const uint8_t l = (flags & 0x1C) >> 2;
     return l == 0 ? 0 : l + 1;
 }
 
 
-uint16_t dec_pub_hdr(struct q_pkt * const p)
+uint16_t __attribute__((nonnull)) dec_pub_hdr(struct q_pkt * const p)
 {
     uint16_t i = 0;
     // assert(i <= p->len);
@@ -114,7 +114,7 @@ uint16_t dec_pub_hdr(struct q_pkt * const p)
 }
 
 
-uint16_t enc_pub_hdr(struct q_pkt * const p)
+uint16_t __attribute__((nonnull)) enc_pub_hdr(struct q_pkt * const p)
 {
     uint16_t i = 0;
 
@@ -180,7 +180,8 @@ uint16_t enc_pub_hdr(struct q_pkt * const p)
 // }
 
 
-static uint16_t dec_stream_frame(struct q_pkt * const p, const uint16_t pos)
+static uint16_t __attribute__((nonnull))
+dec_stream_frame(struct q_pkt * const p, const uint16_t pos)
 {
     uint16_t i = pos;
 
@@ -223,15 +224,16 @@ static uint16_t dec_stream_frame(struct q_pkt * const p, const uint16_t pos)
 }
 
 
-static uint16_t dec_ack_frame(const struct q_pkt * const p, const uint16_t pos)
+static uint16_t __attribute__((nonnull))
+dec_ack_frame(const struct q_pkt * const p, const uint16_t pos)
 {
     warn(debug, "here at %d", pos);
     return p->len;
 }
 
 
-static uint16_t dec_regular_frame(const struct q_pkt * const p,
-                                  const uint16_t             pos)
+static uint16_t __attribute__((nonnull))
+dec_regular_frame(const struct q_pkt * const p, const uint16_t pos)
 {
     uint16_t i = pos;
 
@@ -277,7 +279,8 @@ static uint16_t dec_regular_frame(const struct q_pkt * const p,
 }
 
 
-uint16_t dec_frames(struct q_pkt * const p, const uint16_t pos)
+uint16_t __attribute__((nonnull))
+dec_frames(struct q_pkt * const p, const uint16_t pos)
 {
     uint16_t i = pos;
     SLIST_INIT(&p->fl);

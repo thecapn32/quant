@@ -3,6 +3,7 @@
 #include <netinet/in.h>
 #include <poll.h>
 #include <sys/socket.h>
+#include <time.h>
 
 #include "fnv_1a.h"
 #include "pkt.h"
@@ -21,13 +22,15 @@ const char * const q_vers[] = {"Q025", 0}; // "Q025" is draft-hamilton
 static hash qc;
 
 
-static int q_conn_cmp(const void * const arg, const void * const obj)
+static int __attribute__((nonnull))
+q_conn_cmp(const void * const arg, const void * const obj)
 {
     return *(const int *)arg != ((const struct q_conn *)obj)->s;
 }
 
 
-static void quic_rx(EV_PU_ ev_io * w, int revents __attribute__((unused)))
+static void __attribute__((nonnull))
+quic_rx(EV_PU_ ev_io * w, int revents __attribute__((unused)))
 {
     warn(info, "entering %s for desc %d", __func__, w->fd);
 
@@ -90,7 +93,8 @@ static void quic_rx(EV_PU_ ev_io * w, int revents __attribute__((unused)))
 }
 
 
-static void quic_tx(EV_P_ ev_io * w, int revents __attribute__((unused)))
+static void __attribute__((nonnull))
+quic_tx(EV_P_ ev_io * w, int revents __attribute__((unused)))
 {
     warn(info, "entering %s for desc %d", __func__, w->fd);
 
@@ -142,7 +146,7 @@ static void quic_tx(EV_P_ ev_io * w, int revents __attribute__((unused)))
 }
 
 
-void q_connect(EV_P_ const int s)
+void __attribute__((nonnull)) q_connect(EV_P_ const int s)
 {
     // warn(info, "entering %s", __func__);
     ev_io * ww = calloc(1, sizeof(*ww));
@@ -152,7 +156,7 @@ void q_connect(EV_P_ const int s)
 }
 
 
-void q_serve(EV_P_ const int s)
+void __attribute__((nonnull)) q_serve(EV_P_ const int s)
 {
     // warn(info, "entering %s", __func__);
     ev_io * rw = calloc(1, sizeof(*rw));
