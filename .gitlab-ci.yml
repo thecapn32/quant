@@ -3,6 +3,7 @@ variables:
 
 before_script:
   # install dependencies
+  - cat /etc/apt/sources.list
   - apt-get update -y -qq
   -
     apt-get install -y -qq daemon tcpdump tshark vagrant doxygen cmake
