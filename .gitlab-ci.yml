@@ -11,6 +11,7 @@ before_script:
   -
     apt-get install -y -qq daemon tcpdump tshark vagrant doxygen cmake
       libnss3-dev libev-dev virtualbox
+  - VBoxManage --version
 
 compile:
   stage: build
