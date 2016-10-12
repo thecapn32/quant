@@ -24,16 +24,6 @@
 #define WHT "\x1B[37m" // white
 
 
-// A few shortcuts for C function attributes and compiler built-ins, which are
-// otherwise pretty unwieldly
-#define likely(x) __builtin_expect((x), 1)
-#define unlikely(x) __builtin_expect((x), 0)
-
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunknown-pragmas"
-#pragma GCC diagnostic ignored "-Wpedantic"
-
 #ifndef NDEBUG
 
 #include <regex.h>
@@ -65,23 +55,25 @@ extern int timeval_subtract(struct timeval * const result,
 
 
 // These macros are based on the "D" ones defined by netmap
-#define warn(dlevel, fmt, ...)                                                 \
+#define warn(dlevel, ...)                                                      \
     do {                                                                       \
         if (DLEVEL >= dlevel && !regexec(&_comp, __FILE__, 0, 0, 0)) {         \
             struct timeval _now, _elapsed;                                     \
             gettimeofday(&_now, 0);                                            \
             timeval_subtract(&_elapsed, &_now, &_epoch);                       \
             fprintf(stderr, REV "%s " NRM "% 2ld.%04ld" MAG " %s" BLK "@" BLU  \
-                                "%s:%d " NRM fmt "\n",                         \
+                                "%s:%d " NRM,                                  \
                     col[dlevel], (long)(_elapsed.tv_sec % 1000),               \
                     (long)(_elapsed.tv_usec / 1000), __func__,                 \
-                    BASENAME(__FILE__), __LINE__, ##__VA_ARGS__);              \
+                    BASENAME(__FILE__), __LINE__);                             \
+            fprintf(stderr, __VA_ARGS__);                                      \
+            fprintf(stderr, "\n");                                             \
             fflush(stderr);                                                    \
         }                                                                      \
     } while (0)
 
 // Rate limited version of "log", lps indicates how many per second
-#define rwarn(dlevel, lps, format, ...)                                        \
+#define rwarn(dlevel, lps, ...)                                                \
     do {                                                                       \
         if (DLEVEL >= dlevel && !regexec(&_comp, __FILE__, 0, 0, 0)) {         \
             static time_t  _rt0, _rcnt;                                        \
@@ -92,35 +84,37 @@ extern int timeval_subtract(struct timeval * const result,
                 _rcnt = 0;                                                     \
             }                                                                  \
             if (_rcnt++ < lps)                                                 \
-                warn(dlevel, format, ##__VA_ARGS__);                           \
+                warn(dlevel, __VA_ARGS__);                                     \
         }                                                                      \
     } while (0)
 
 #else
 
-#define warn(fmt, ...)                                                         \
+#define warn(...)                                                              \
     do {                                                                       \
     } while (0)
 
-#define rwarn(fmt, ...)                                                        \
+#define rwarn(...)                                                             \
     do {                                                                       \
     } while (0)
 
 #endif
 
 // Abort execution with a message
-#define die(fmt, ...)                                                          \
+#define die(...)                                                               \
     do {                                                                       \
         const int      _e = errno;                                             \
         struct timeval _now, _elapsed;                                         \
         gettimeofday(&_now, 0);                                                \
         timeval_subtract(&_elapsed, &_now, &_epoch);                           \
-        fprintf(stderr, RED BLD REV " % 2ld.%04ld %s@%s:%d ABORT: " fmt        \
-                                    " %c%s%c\n" NRM,                           \
+        fprintf(stderr, RED BLD REV " % 2ld.%04ld %s@%s:%d ABORT: ",           \
                 (long)(_elapsed.tv_sec % 1000),                                \
                 (long)(_elapsed.tv_usec / 1000), __func__, BASENAME(__FILE__), \
-                __LINE__, ##__VA_ARGS__, (_e ? '[' : 0),                       \
+                __LINE__);                                                     \
+        fprintf(stderr, __VA_ARGS__);                                          \
+        fprintf(stderr, " %c%s%c\n" NRM, (_e ? '[' : 0),                       \
                 (_e ? strerror(_e) : ""), (_e ? '[' : 0));                     \
+        fflush(stderr);                                                        \
         abort();                                                               \
     } while (0)
 
@@ -130,23 +124,19 @@ extern int timeval_subtract(struct timeval * const result,
 // A version of the assert() macro that isn't disabled by NDEBUG and that uses
 // our other debug functions (but that *can* still be disabled by NNDEBUG)
 #undef assert
-#define assert(e, fmt, ...)                                                    \
+#define assert(e, ...)                                                         \
     do {                                                                       \
-        if (unlikely(!(e))) {                                                  \
-            die("assertion failed \n         " #e " \n         " fmt,          \
-                ##__VA_ARGS__);                                                \
-        }                                                                      \
+        if (__builtin_expect(!(e), 0))                                         \
+            die("assertion failed \n         " #e " \n         " __VA_ARGS__); \
     } while (0)
 
 #else
 
-#define assert(fmt, ...)                                                       \
+#define assert(...)                                                            \
     do {                                                                       \
     } while (0)
 
 #endif
 
-
-#pragma GCC diagnostic pop
 
 extern void hexdump(const void * const ptr, const size_t len);
