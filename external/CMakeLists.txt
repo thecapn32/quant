@@ -33,7 +33,7 @@ set(QUIC_BIN ${QUIC_BIN} PARENT_SCOPE)
 
 externalproject_add(proto-quic
   UPDATE_COMMAND ""
-  EXCLUDE_FROM_ALL 1
+  # EXCLUDE_FROM_ALL 1 # not supported in cmake 3.0
   # DEPENDS vagrant-up # XXX this speeds up the test-* targets but is risky
   GIT_REPOSITORY https://github.com/google/proto-quic.git
   # GIT_SHALLOW 1 # not supported in cmake 3.0
