@@ -13,6 +13,8 @@ add_compile_options(-flto -march=native -Ofast -pipe)
 # Debug
 add_compile_options(-g)
 
+add_compile_options(-D _DEFAULT_SOURCE)
+
 # Set additional options that are compiler-specific
 if("${CMAKE_C_COMPILER_ID}" MATCHES "Clang")
   # see https://llvm.org/bugs/show_bug.cgi?id=21689

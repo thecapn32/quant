@@ -2,9 +2,7 @@
 #include <inttypes.h>
 #include <netinet/in.h>
 #include <poll.h>
-#include <stdlib.h>
 #include <sys/socket.h>
-#include <time.h>
 
 #include "fnv_1a.h"
 #include "pkt.h"
