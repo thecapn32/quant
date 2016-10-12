@@ -23,8 +23,10 @@ if("${CMAKE_C_COMPILER_ID}" MATCHES "Clang")
 
   # Generate profiling output
   add_compile_options(-fprofile-instr-generate)
-  set(CMAKE_SHARED_LINKER_FLAGS "-fprofile-instr-generate")
-  set(CMAKE_EXE_LINKER_FLAGS "-fprofile-instr-generate")
+  set(CMAKE_SHARED_LINKER_FLAGS
+    "-fprofile-instr-generate ${CMAKE_SHARED_LINKER_FLAGS}")
+  set(CMAKE_EXE_LINKER_FLAGS
+    "-fprofile-instr-generate ${CMAKE_EXE_LINKER_FLAGS}")
 
 elseif("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
 endif()
@@ -34,7 +36,8 @@ get_property(COMPILE_OPTIONS DIRECTORY PROPERTY COMPILE_OPTIONS)
 string(REPLACE ";" " " COMPILE_OPTIONS "${COMPILE_OPTIONS}")
 
 # Set linker options that are valid for all linkers
-set(CMAKE_EXE_LINKER_FLAGS "-flto")
+set(CMAKE_SHARED_LINKER_FLAGS "-flto ${CMAKE_SHARED_LINKER_FLAGS}")
+set(CMAKE_EXE_LINKER_FLAGS "-flto ${CMAKE_EXE_LINKER_FLAGS}")
 
 # Make sure that a bunch of programs we depend on are installed
 foreach(PROG daemon pkill tcpdump tshark sed make sleep rm)
