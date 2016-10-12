@@ -168,6 +168,6 @@ void __attribute__((nonnull)) q_serve(EV_P_ const int s)
 
 void q_init(void)
 {
-    srandom(time(0));
+    srandom((unsigned)time(0));
     hash_init(&qc);
 }
