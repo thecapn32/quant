@@ -1,10 +1,5 @@
 cmake_minimum_required(VERSION 3.0)
-project(quickie)
-enable_language(C)
-
-set(VERSION_MAJOR 0)
-set(VERSION_MINOR 0)
-set(VERSION_PATCH 1)
+project(quickie VERSION 0.0.1 LANGUAGES C)
 
 # Force C11
 add_compile_options(-std=c11)
@@ -22,10 +17,15 @@ add_compile_options(-g)
 if("${CMAKE_C_COMPILER_ID}" MATCHES "Clang")
   # see https://llvm.org/bugs/show_bug.cgi?id=21689
   add_compile_options(-Wno-missing-field-initializers)
+
   # Even more warnings for clang
   add_compile_options(-Weverything)
+
   # Generate profiling output
   add_compile_options(-fprofile-instr-generate)
+  set(CMAKE_SHARED_LINKER_FLAGS "-fprofile-instr-generate")
+  set(CMAKE_EXE_LINKER_FLAGS "-fprofile-instr-generate")
+
 elseif("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
 endif()
 
@@ -34,8 +34,7 @@ get_property(COMPILE_OPTIONS DIRECTORY PROPERTY COMPILE_OPTIONS)
 string(REPLACE ";" " " COMPILE_OPTIONS "${COMPILE_OPTIONS}")
 
 # Set linker options that are valid for all linkers
-set(CMAKE_SHARED_LINKER_FLAGS "-flto -fprofile-instr-generate")
-set(CMAKE_EXE_LINKER_FLAGS "-flto -fprofile-instr-generate")
+set(CMAKE_EXE_LINKER_FLAGS "-flto")
 
 # Make sure that a bunch of programs we depend on are installed
 foreach(PROG daemon pkill tcpdump tshark sed make sleep rm)

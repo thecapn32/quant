@@ -46,14 +46,14 @@ uint16_t dec_pub_hdr(struct q_pkt * const p)
     assert(i <= p->len, "pub hdr only %d bytes; truncated?", p->len);
 
     if (p->flags & F_CID) {
-        p->cid = (*(uint64_t *)(void *)&p->buf[i]); // XXX: no ntohll()?
+        memcpy(&p->cid, &p->buf[i], sizeof(p->cid)); // XXX: no ntohll()?
         i += sizeof(p->cid);
         warn(debug, "cid %" PRIu64, p->cid);
         assert(i <= p->len, "pub hdr only %d bytes; truncated?", p->len);
     }
 
     if (p->flags & F_VERS) {
-        p->vers = *(uint32_t *)(void *)&p->buf[i];
+        memcpy(&p->vers, &p->buf[i], sizeof(p->vers)); // no need for ntohl()
         i += sizeof(p->vers);
         warn(debug, "vers 0x%08x %.4s", p->vers, (char *)&p->vers);
         assert(i <= p->len, "pub hdr only %d bytes; truncated?", p->len);
@@ -121,19 +121,19 @@ uint16_t enc_pub_hdr(struct q_pkt * const p)
     p->buf[i++] = p->flags;
 
     if (p->flags & F_CID) {
-        *(uint64_t *)(void *)&p->buf[i] = p->cid; // XXX: no htonll()?
+        memcpy(&p->buf[i], &p->cid, sizeof(p->cid)); // XXX: no htonll()?
         warn(debug, "cid %" PRIu64, p->cid);
         i += sizeof(p->cid);
     }
 
     if (p->flags & F_VERS) {
-        *(uint32_t *)(void *)&p->buf[i] = p->vers;
+        memcpy(&p->buf[i], &p->vers, sizeof(p->vers));
         warn(debug, "vers 0x%08x %.4s", p->vers, (const char *)&p->vers);
         i += sizeof(p->vers);
     }
 
     const uint8_t nr_len = 1;
-    *(uint8_t *)((void *)&p->buf[i]) = (uint8_t)p->nr;
+    p->buf[i] = (uint8_t)p->nr;
     p->buf[0] |= enc_nr_len(nr_len);
     warn(debug, "%d-byte nr %d", nr_len, (uint8_t)p->nr);
     i += sizeof(uint8_t);
@@ -185,6 +185,7 @@ static uint16_t dec_stream_frame(struct q_pkt * const p, const uint16_t pos)
     uint16_t i = pos;
 
     struct q_stream_frame * f = calloc(1, sizeof(*f));
+    assert(f, "could not calloc");
     f->type = p->buf[i++];
 
     warn(debug, "stream type %02x", f->type);
@@ -204,7 +205,7 @@ static uint16_t dec_stream_frame(struct q_pkt * const p, const uint16_t pos)
     }
 
     if (f->type & F_STREAM_DATA_LEN) {
-        f->dlen = *(const uint16_t *)(const void *)&p->buf[i];
+        memcpy(&f->dlen, &p->buf[i], sizeof(f->dlen));
         i += sizeof(f->dlen);
         warn(debug, "dlen %d", f->dlen);
         // keep a pointer to the frame data around
@@ -283,7 +284,7 @@ uint16_t dec_frames(struct q_pkt * const p, const uint16_t pos)
     while (i < p->len)
         if (p->flags & F_STREAM)
             i += dec_stream_frame(p, i);
-        else if (p->buf[0] & (!F_STREAM | F_ACK))
+        else if (p->buf[0] & ((!F_STREAM) | F_ACK))
             i += dec_ack_frame(p, i);
         else
             i += dec_regular_frame(p, i);

@@ -4,8 +4,6 @@ externalproject_add(tommyds
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/amadvance/tommyds.git
   # GIT_SHALLOW 1 # not supported in cmake 3.0
-  PATCH_COMMAND ${SED} -i.orig -e "s/-Wpadded// $<SEMICOLON> s/-Wcast-align// \
-                  $<SEMICOLON> s/objdump/echo/" Makefile
   CONFIGURE_COMMAND ""
   BUILD_IN_SOURCE 1
   BUILD_COMMAND ${MAKE}
