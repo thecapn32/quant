@@ -2,6 +2,7 @@
 #include <inttypes.h>
 #include <netinet/in.h>
 #include <poll.h>
+#include <stdlib.h>
 #include <sys/socket.h>
 
 #include "fnv_1a.h"
@@ -31,7 +32,7 @@ static void quic_rx(EV_PU_ ev_io * w, int revents __attribute__((unused)))
 {
     warn(info, "entering %s for desc %d", __func__, w->fd);
 
-    struct q_pkt p = {0};
+    struct q_pkt  p = {0};
     const ssize_t len = recvfrom(w->fd, p.buf, MAX_PKT_LEN, 0, 0, 0);
     assert(len >= 0, "recvfrom error");
     p.len = (uint16_t)len;
