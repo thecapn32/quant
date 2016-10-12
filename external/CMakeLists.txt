@@ -3,7 +3,10 @@ include(ExternalProject)
 externalproject_add(tommyds
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/amadvance/tommyds.git
+  GIT_TAG 5821a27984ae7c4e0e43eff84c37d58effe06454
   # GIT_SHALLOW 1 # not supported in cmake 3.0
+  PATCH_COMMAND ${SED} -i.orig -e "s/-Wpadded// $<SEMICOLON> s/-Wcast-align// \
+                  $<SEMICOLON> s/objdump/echo/" Makefile
   CONFIGURE_COMMAND ""
   BUILD_IN_SOURCE 1
   BUILD_COMMAND ${MAKE}
@@ -33,26 +36,30 @@ set(QUIC_BIN ${QUIC_BIN} PARENT_SCOPE)
 
 externalproject_add(proto-quic
   UPDATE_COMMAND ""
-  # EXCLUDE_FROM_ALL 1 # not supported in cmake 3.0
-  DEPENDS vagrant-up # XXX commenting this speeds test targets but is risky
+  # EXCLUDE_FROM_ALL 1 # not supported in cmake 3.0, see below
+  DEPENDS vagrant-up
   GIT_REPOSITORY https://github.com/google/proto-quic.git
+  GIT_TAG 17db47fb4265d45430ca5a3b4180ed52dfedf817
   # GIT_SHALLOW 1 # not supported in cmake 3.0
   CONFIGURE_COMMAND ${VAGRANT} ssh -c "\
     echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula \
       select true | sudo debconf-set-selections && \
+    export PATH=$PATH:${QUIC}/depot_tools && \
     ${QUIC}/src/build/install-build-deps.sh --no-syms --no-arm \
       --no-chromeos-fonts --no-nacl --no-prompt && \
-    export PATH=$PATH:${QUIC}/depot_tools && \
-    cd ${QUIC}/src && gclient runhooks && \
+    ${QUIC}/src/third_party/binutils/download.py && \
     cd ${QUIC_CERTS} && ./generate-certs.sh \
   "
   BUILD_IN_SOURCE 1
   BUILD_COMMAND ${VAGRANT} ssh -c "\
     export PATH=$PATH:${QUIC}/depot_tools && \
-    cd ${QUIC}/src && ninja -v -C out/Debug quic_client quic_server \
+    cd ${QUIC}/src && gn gen out/Debug && ninja -v -C out/Debug quic_client quic_server \
   "
   INSTALL_COMMAND ""
 )
+
+# EXCLUDE_FROM_ALL workaround for older cmake
+set_target_properties(proto-quic PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 add_custom_target(quic-server
   COMMAND
@@ -70,7 +77,7 @@ add_custom_target(quic-server
 
 add_custom_target(kill-quic-server
   COMMAND ${VAGRANT} ssh -c "pkill quic_server"
-  DEPENDS vagrant-up # XXX commenting this speeds test targets but is risky
+  DEPENDS vagrant-up
   VERBATIM
 )
 
@@ -93,6 +100,5 @@ add_custom_target(test-quickie-server
     ${TSHARK} -V -2 -n -d udp.port==${PORT},quic -R frame.number==1
       -O quic -r ${DIR}/${QS}.pcap
   DEPENDS quickie_server vagrant-up
-  # DEPENDS quickie_server # XXX this speeds test targets but is risky
   VERBATIM
 )
