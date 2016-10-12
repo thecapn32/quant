@@ -3,7 +3,6 @@ variables:
 
 before_script:
   # install dependencies
-  - lsb_release -a
   -
     echo "deb http://httpredir.debian.org/debian/ jessie main contrib" >
       /etc/apt/sources.list
