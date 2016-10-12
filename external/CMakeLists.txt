@@ -19,8 +19,8 @@ set_target_properties(tommy
 add_dependencies(tommy tommyds)
 
 
-# add_custom_target(vagrant-up ${VAGRANT} up)
-# add_custom_target(vagrant-down ${VAGRANT} halt)
+add_custom_target(vagrant-up ${VAGRANT} up)
+add_custom_target(vagrant-down ${VAGRANT} halt)
 
 # location of proto-quic sources inside the VM
 set(QUIC /vagrant/proto-quic-prefix/src/proto-quic)
@@ -34,7 +34,7 @@ set(QUIC_BIN ${QUIC_BIN} PARENT_SCOPE)
 externalproject_add(proto-quic
   UPDATE_COMMAND ""
   # EXCLUDE_FROM_ALL 1 # not supported in cmake 3.0
-  # DEPENDS vagrant-up # XXX this speeds up the test-* targets but is risky
+  DEPENDS vagrant-up # XXX commenting this speeds test targets but is risky
   GIT_REPOSITORY https://github.com/google/proto-quic.git
   # GIT_SHALLOW 1 # not supported in cmake 3.0
   CONFIGURE_COMMAND ${VAGRANT} ssh -c "\
@@ -70,7 +70,7 @@ add_custom_target(quic-server
 
 add_custom_target(kill-quic-server
   COMMAND ${VAGRANT} ssh -c "pkill quic_server"
-  # DEPENDS vagrant-up # XXX this speeds up the test-* targets but is risky
+  DEPENDS vagrant-up # XXX commenting this speeds test targets but is risky
   VERBATIM
 )
 
@@ -92,7 +92,7 @@ add_custom_target(test-quickie-server
     ${CAT} ${DIR}/${QS}.log || true &&
     ${TSHARK} -V -2 -n -d udp.port==${PORT},quic -R frame.number==1
       -O quic -r ${DIR}/${QS}.pcap
-  # DEPENDS quickie_server vagrant-up # XXX this speeds up the test-* targets but is risky
-  DEPENDS quickie_server
+  DEPENDS quickie_server vagrant-up
+  # DEPENDS quickie_server # XXX this speeds test targets but is risky
   VERBATIM
 )
