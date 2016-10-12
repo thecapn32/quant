@@ -6,6 +6,7 @@
 Vagrant.configure("2") do |config|
   # OS to use for the VM
   config.vm.box = "ubuntu/xenial64"
+  config.vm.box_version = "20160930.0.0"
 
   # don't always check for box updates
   config.vm.box_check_update = false
