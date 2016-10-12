@@ -2,14 +2,15 @@ variables:
   DEBIAN_FRONTEND: noninteractive
 
 before_script:
-  # install dependencies
-  -
-    echo "deb http://httpredir.debian.org/debian/ jessie main contrib" >
-      /etc/apt/sources.list
+  # -
+  #   echo "deb http://httpredir.debian.org/debian/ jessie main contrib" >
+  #     /etc/apt/sources.list
   - cat /etc/apt/sources.list
   - apt-get update -y -qq
-  - apt-get install -y -qq doxygen cmake libnss3-dev libev-dev
-    # virtualbox vagrant daemon tcpdump tshark
+  -
+    apt-get install -y -qq doxygen cmake libnss3-dev libev-dev
+      vagrant daemon tcpdump tshark
+      # virtualbox
 
 compile:
   stage: build
