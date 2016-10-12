@@ -32,8 +32,9 @@ static void quic_rx(EV_PU_ ev_io * w, int revents __attribute__((unused)))
     warn(info, "entering %s for desc %d", __func__, w->fd);
 
     struct q_pkt p = {0};
-    p.len = (uint16_t)recvfrom(w->fd, p.buf, MAX_PKT_LEN, 0, 0, 0);
-    assert(p.len >= 0, "recvfrom error");
+    const ssize_t len = recvfrom(w->fd, p.buf, MAX_PKT_LEN, 0, 0, 0);
+    assert(len >= 0, "recvfrom error");
+    p.len = (uint16_t)len;
     warn(debug, "received %d bytes, decoding", p.len);
     const uint16_t pos = dec_pub_hdr(&p);
     dec_frames(&p, pos);
@@ -99,7 +100,7 @@ static void quic_tx(EV_P_ ev_io * w, int revents __attribute__((unused)))
         c = calloc(1, sizeof(*c));
         assert(c, "could not calloc");
         c->s = w->fd;
-        arc4random_buf(&c->id, sizeof(uint64_t));
+        c->id = (((uint64_t)random()) << 32) | (uint64_t)random();
         hash_insert(&qc, &c->node, c, hash_u32(w->fd));
         warn(debug, "created new connection %" PRIu64 " for packet", c->id);
     } else
@@ -163,5 +164,6 @@ void q_serve(EV_P_ const int s)
 
 void q_init(void)
 {
+    srandomdev();
     hash_init(&qc);
 }
