@@ -12,7 +12,7 @@
 
 
 // Convenience macro, in case the "loop" parameter defined by EV_P_ is unused
-#define EV_PU_ struct ev_loop *loop __unused,
+#define EV_PU_ struct ev_loop *loop __attribute__((unused)),
 
 /// QUIC version supported by this implementation in order of preference.
 const char * const q_vers[] = {"Q025", 0}; // "Q025" is draft-hamilton
@@ -27,7 +27,7 @@ static int q_conn_cmp(const void * const arg, const void * const obj)
 }
 
 
-static void quic_rx(EV_PU_ ev_io * w, int revents __unused)
+static void quic_rx(EV_PU_ ev_io * w, int revents __attribute__((unused)))
 {
     warn(info, "entering %s for desc %d", __func__, w->fd);
 
@@ -89,7 +89,7 @@ static void quic_rx(EV_PU_ ev_io * w, int revents __unused)
 }
 
 
-static void quic_tx(EV_P_ ev_io * w, int revents __unused)
+static void quic_tx(EV_P_ ev_io * w, int revents __attribute__((unused)))
 {
     warn(info, "entering %s for desc %d", __func__, w->fd);
 
