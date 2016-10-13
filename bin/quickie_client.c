@@ -7,12 +7,16 @@
 #include "util.h"
 
 
-static void
-usage(const char * const name, const char * const dest, const char * const port)
+static void usage(const char * const name,
+                  const char * const dest,
+                  const char * const port,
+                  const long         conns)
 {
     printf("%s\n", name);
-    printf("\t[-d destination]    destination; default %s\n", dest);
-    printf("\t[-p port]           destination port; default %s\n", port);
+    printf("\t[-d destination]\tdestination; default %s\n", dest);
+    printf("\t[-p port]\t\tdestination port; default %s\n", port);
+    printf("\t[-n connections]\tnumber of connections to start; default %ld\n",
+           conns);
 }
 
 
@@ -20,7 +24,8 @@ int main(int argc, char * argv[])
 {
     char * dest = "127.0.0.1";
     char * port = "6121";
-    int    ch;
+    long conns = 1;
+    int ch;
 
     while ((ch = getopt(argc, argv, "hd:p:")) != -1) {
         switch (ch) {
@@ -30,10 +35,14 @@ int main(int argc, char * argv[])
         case 'p':
             port = optarg;
             break;
+        case 'n':
+            conns = strtol(optarg, 0, 10);
+            assert(errno != EINVAL, "could not convert to integer");
+            break;
         case 'h':
         case '?':
         default:
-            usage(argv[0], dest, port);
+            usage(argv[0], dest, port, conns);
             return 0;
         }
     }
@@ -67,7 +76,7 @@ int main(int argc, char * argv[])
     // start some connections
     q_init();
     struct ev_loop * loop = ev_default_loop(0);
-    for (int n = 0; n < 3; n++) {
+    for (int n = 0; n < conns; n++) {
         // the first socket was created and connected above, but we need to
         // still create and connect the additional ones
         if (n != 0) {
