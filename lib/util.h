@@ -46,8 +46,8 @@ enum dlevel { crit = 0, err = 1, warn = 2, notice = 3, info = 4, debug = 5 };
 
 
 extern const char * const col[];
-extern regex_t            _comp;
-extern struct timeval     _epoch;
+extern regex_t _comp;
+extern struct timeval _epoch;
 
 extern int timeval_subtract(struct timeval * const result,
                             struct timeval * const x,
@@ -76,7 +76,7 @@ extern int timeval_subtract(struct timeval * const result,
 #define rwarn(dlevel, lps, ...)                                                \
     do {                                                                       \
         if (DLEVEL >= dlevel && !regexec(&_comp, __FILE__, 0, 0, 0)) {         \
-            static time_t  _rt0, _rcnt;                                        \
+            static time_t _rt0, _rcnt;                                         \
             struct timeval _rts;                                               \
             gettimeofday(&_rts, 0);                                            \
             if (_rt0 != _rts.tv_sec) {                                         \
@@ -103,7 +103,7 @@ extern int timeval_subtract(struct timeval * const result,
 // Abort execution with a message
 #define die(...)                                                               \
     do {                                                                       \
-        const int      _e = errno;                                             \
+        const int _e = errno;                                                  \
         struct timeval _now, _elapsed;                                         \
         gettimeofday(&_now, 0);                                                \
         timeval_subtract(&_elapsed, &_now, &_epoch);                           \

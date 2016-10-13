@@ -2,9 +2,9 @@
 #include "util.h"
 
 uint128_t __attribute__((nonnull)) fnv_1a(const void * restrict const buf,
-                                          const size_t                len,
-                                          const size_t                skip_pos,
-                                          const size_t                skip_len)
+                                          const size_t len,
+                                          const size_t skip_pos,
+                                          const size_t skip_len)
 {
     assert((skip_pos <= len) && (skip_pos + skip_len <= len),
            "len %zu, skip_pos %zu, skip_len %zu", len, skip_pos, skip_len);

@@ -20,7 +20,7 @@ int main(int argc, char * argv[])
 {
     char * ip = "127.0.0.1";
     char * port = "8443";
-    int    ch;
+    int ch;
 
     while ((ch = getopt(argc, argv, "hi:p:")) != -1) {
         switch (ch) {
@@ -39,7 +39,7 @@ int main(int argc, char * argv[])
     }
 
     struct addrinfo *res, *res0;
-    struct addrinfo  hints = {.ai_family = PF_INET,
+    struct addrinfo hints = {.ai_family = PF_INET,
                              .ai_socktype = SOCK_DGRAM,
                              .ai_protocol = IPPROTO_UDP,
                              .ai_flags = AI_PASSIVE};
@@ -67,7 +67,7 @@ int main(int argc, char * argv[])
     freeaddrinfo(res);
 
     struct ev_loop * loop = ev_default_loop(0);
-    q_init();
+    q_init(loop);
     q_serve(loop, s);
     warn(debug, "%s ready on %s:%s", BASENAME(argv[0]), ip, port);
     ev_loop(loop, 0);

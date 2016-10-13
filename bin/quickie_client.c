@@ -10,7 +10,7 @@
 static void usage(const char * const name,
                   const char * const dest,
                   const char * const port,
-                  const long         conns)
+                  const long conns)
 {
     printf("%s\n", name);
     printf("\t[-d destination]\tdestination; default %s\n", dest);
@@ -48,7 +48,7 @@ int main(int argc, char * argv[])
     }
 
     struct addrinfo *res, *res0;
-    struct addrinfo  hints = {.ai_family = PF_INET,
+    struct addrinfo hints = {.ai_family = PF_INET,
                              .ai_socktype = SOCK_DGRAM,
                              .ai_protocol = IPPROTO_UDP};
     const int err = getaddrinfo(dest, port, &hints, &res0);
@@ -74,8 +74,8 @@ int main(int argc, char * argv[])
     assert(s >= 0, "could not connect");
 
     // start some connections
-    q_init();
     struct ev_loop * loop = ev_default_loop(0);
+    q_init(loop);
     for (int n = 0; n < conns; n++) {
         // the first socket was created and connected above, but we need to
         // still create and connect the additional ones
@@ -93,5 +93,6 @@ int main(int argc, char * argv[])
     ev_loop(loop, 0);
 
     // TODO: cleanup
+    warn(info, "%s exiting", BASENAME(argv[0]));
     return 0;
 }

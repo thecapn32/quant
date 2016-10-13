@@ -7,7 +7,7 @@
 
 
 // Convert pkt nr length encoded in flags to bytes
-uint8_t __attribute__((const)) dec_nr_len(const uint8_t flags)
+static uint8_t __attribute__((const)) dec_nr_len(const uint8_t flags)
 {
     const uint8_t l = (flags & 0x30) >> 4;
     return l ? 2 * l : 1;
@@ -15,84 +15,89 @@ uint8_t __attribute__((const)) dec_nr_len(const uint8_t flags)
 
 
 // Convert pkt nr length in bytes into flags
-uint8_t __attribute__((const)) enc_nr_len(const uint8_t n)
+static uint8_t __attribute__((const)) enc_nr_len(const uint8_t n)
 {
     return (uint8_t)((n >> 1) << 4);
 }
 
 
-// Convert stream ID length encoded in flags to bytes
-uint8_t __attribute__((const)) dec_sid_len(const uint8_t flags)
-{
-    return (flags & 0x03) + 1;
-}
+// // Convert stream ID length encoded in flags to bytes
+// static uint8_t __attribute__((const)) dec_sid_len(const uint8_t flags)
+// {
+//     return (flags & 0x03) + 1;
+// }
 
 
-// Convert stream offset length encoded in flags to bytes
-uint8_t __attribute__((const)) dec_stream_off_len(const uint8_t flags)
-{
-    const uint8_t l = (flags & 0x1C) >> 2;
-    return l == 0 ? 0 : l + 1;
-}
+// // Convert stream offset length encoded in flags to bytes
+// static uint8_t __attribute__((const)) dec_stream_off_len(const uint8_t flags)
+// {
+//     const uint8_t l = (flags & 0x1C) >> 2;
+//     return l == 0 ? 0 : l + 1;
+// }
 
 
-uint16_t __attribute__((nonnull)) dec_pub_hdr(struct q_pkt * const p)
+uint16_t __attribute__((nonnull))
+dec_pub_hdr(struct q_pkt * restrict const p,
+            const uint8_t * restrict const buf,
+            const uint16_t len)
 {
     uint16_t i = 0;
-    // assert(i <= p->len);
 
-    p->flags = p->buf[i++];
+    p->flags = buf[i++];
     warn(debug, "flags 0x%02x", p->flags);
-    assert(i <= p->len, "pub hdr only %d bytes; truncated?", p->len);
+    assert(i <= len, "pub hdr only %d bytes; truncated?", len);
 
     if (p->flags & F_CID) {
-        memcpy(&p->cid, &p->buf[i], sizeof(p->cid)); // XXX: no ntohll()?
+        memcpy(&p->cid, &buf[i], sizeof(p->cid)); // XXX: no ntohll()?
         i += sizeof(p->cid);
         warn(debug, "cid %" PRIu64, p->cid);
-        assert(i <= p->len, "pub hdr only %d bytes; truncated?", p->len);
+        assert(i <= len, "pub hdr only %d bytes; truncated?", len);
     }
 
     if (p->flags & F_VERS) {
-        memcpy(&p->vers, &p->buf[i], sizeof(p->vers)); // no need for ntohl()
+        memcpy(&p->vers.as_int, &buf[i],
+               sizeof(p->vers.as_int)); // no need for ntohl()
+        p->vers.as_str[4] = 0;
         i += sizeof(p->vers);
-        warn(debug, "vers 0x%08x %.4s", p->vers, (char *)&p->vers);
-        assert(i <= p->len, "pub hdr only %d bytes; truncated?", p->len);
+        warn(debug, "vers 0x%08x %s", p->vers.as_int, p->vers.as_str);
+        assert(i <= len, "pub hdr only %d bytes; truncated?", len);
     }
 
     if (p->flags & F_NONCE) {
-        p->nonce_len = (uint8_t)MIN(p->len - i, MAX_NONCE_LEN);
+        p->nonce_len = (uint8_t)MIN(len - i, MAX_NONCE_LEN);
         warn(debug, "nonce len %d %.*s", p->nonce_len, p->nonce_len,
-             (char *)&p->buf[i]);
+             (char *)&buf[i]);
+        memcpy(p->nonce, &buf[i], p->nonce_len);
 
         if (p->flags & F_PUB_RST) {
             warn(err, "public reset");
             // interpret public reset packet
-            if (memcmp("PRST", &p->buf[i], 4) == 0) {
-                const uint32_t tag_len = *&p->buf[i + 4];
-                warn(debug, "PRST with %d tags", tag_len);
-                i += 8;
+            // if (memcmp("PRST", &buf[i], 4) == 0) {
+            //     const uint32_t tag_len = *&buf[i + 4];
+            //     warn(debug, "PRST with %d tags", tag_len);
+            //     i += 8;
 
-                for (uint32_t t = 0; t < tag_len; t++) {
-                    char tag[5];
-                    memcpy(tag, &p->buf[i], 4);
-                    tag[4] = 0;
-                    uint64_t value = *&p->buf[i + 4];
-                    i += 8;
-                    warn(debug, "%s = %" PRIu64, tag, value);
-                }
+            //     for (uint32_t t = 0; t < tag_len; t++) {
+            //         char tag[5];
+            //         memcpy(tag, &buf[i], 4);
+            //         tag[4] = 0;
+            //         uint64_t value = *&buf[i + 4];
+            //         i += 8;
+            //         warn(debug, "%s = %" PRIu64, tag, value);
+            //     }
 
-            } else
-                die("cannot parse PRST");
+            // } else
+            //     die("cannot parse PRST");
         }
 
         i += p->nonce_len;
-        assert(i <= p->len, "pub hdr only %d bytes; truncated?", p->len);
+        assert(i <= len, "pub hdr only %d bytes; truncated?", len);
     }
 
     const uint8_t nr_len = dec_nr_len(p->flags);
     warn(debug, "nr_len %d", nr_len);
 
-    memcpy(&p->nr, &p->buf[i], nr_len); // XXX: no ntohll()?
+    memcpy(&p->nr, &buf[i], nr_len); // XXX: no ntohll()?
     warn(debug, "nr %" PRIu64, p->nr);
     i += nr_len;
 
@@ -103,40 +108,12 @@ uint16_t __attribute__((nonnull)) dec_pub_hdr(struct q_pkt * const p)
     // packets
     // if (!(qc->r_nr == 0 && p->flags & F_VERS) && (p->flags & F_PUB_RST) == 0)
     // {
-    //     const uint128_t hash = fnv_1a(p->buf, p->len, i, HASH_LEN);
-    //     if (memcmp(&p->buf[i], &hash, HASH_LEN))
+    //     const uint128_t hash = fnv_1a(buf, len, i, HASH_LEN);
+    //     if (memcmp(&buf[i], &hash, HASH_LEN))
     //         die("hash mismatch");
     //     i += HASH_LEN;
     //     assert(i <= p->len, "pub hdr only %d bytes; truncated?", p->len);
     // }
-
-    return i;
-}
-
-
-uint16_t __attribute__((nonnull)) enc_pub_hdr(struct q_pkt * const p)
-{
-    uint16_t i = 0;
-
-    p->buf[i++] = p->flags;
-
-    if (p->flags & F_CID) {
-        memcpy(&p->buf[i], &p->cid, sizeof(p->cid)); // XXX: no htonll()?
-        warn(debug, "cid %" PRIu64, p->cid);
-        i += sizeof(p->cid);
-    }
-
-    if (p->flags & F_VERS) {
-        memcpy(&p->buf[i], &p->vers, sizeof(p->vers));
-        warn(debug, "vers 0x%08x %.4s", p->vers, (const char *)&p->vers);
-        i += sizeof(p->vers);
-    }
-
-    const uint8_t nr_len = 1;
-    p->buf[i] = (uint8_t)p->nr;
-    p->buf[0] |= enc_nr_len(nr_len);
-    warn(debug, "%d-byte nr %d", nr_len, (uint8_t)p->nr);
-    i += sizeof(uint8_t);
 
     return i;
 }
@@ -180,117 +157,154 @@ uint16_t __attribute__((nonnull)) enc_pub_hdr(struct q_pkt * const p)
 // }
 
 
-static uint16_t __attribute__((nonnull))
-dec_stream_frame(struct q_pkt * const p, const uint16_t pos)
-{
-    uint16_t i = pos;
+// static uint16_t __attribute__((nonnull))
+// dec_stream_frame(struct q_pkt * const p, const uint16_t pos)
+// {
+//     uint16_t i = pos;
 
-    struct q_stream_frame * f = calloc(1, sizeof(*f));
-    assert(f, "could not calloc");
-    f->type = p->buf[i++];
+//     struct q_stream_frame * f = calloc(1, sizeof(*f));
+//     assert(f, "could not calloc");
+//     f->type = p->buf[i++];
 
-    warn(debug, "stream type %02x", f->type);
+//     warn(debug, "stream type %02x", f->type);
 
-    const uint8_t slen = dec_sid_len(f->type);
-    if (slen) {
-        memcpy(&f->sid, &p->buf[i], slen);
-        i += slen;
-        warn(debug, "%d-byte sid %d", slen, f->sid);
-    }
+//     const uint8_t slen = dec_sid_len(f->type);
+//     if (slen) {
+//         memcpy(&f->sid, &p->buf[i], slen);
+//         i += slen;
+//         warn(debug, "%d-byte sid %d", slen, f->sid);
+//     }
 
-    const uint8_t off_len = dec_stream_off_len(f->type);
-    if (off_len) {
-        memcpy(&f->off, &p->buf[i], off_len);
-        i += off_len;
-        warn(debug, "%d-byte off %" PRIu64, off_len, f->off);
-    }
+//     const uint8_t off_len = dec_stream_off_len(f->type);
+//     if (off_len) {
+//         memcpy(&f->off, &p->buf[i], off_len);
+//         i += off_len;
+//         warn(debug, "%d-byte off %" PRIu64, off_len, f->off);
+//     }
 
-    if (f->type & F_STREAM_DATA_LEN) {
-        memcpy(&f->dlen, &p->buf[i], sizeof(f->dlen));
-        i += sizeof(f->dlen);
-        warn(debug, "dlen %d", f->dlen);
-        // keep a pointer to the frame data around
-        f->data = &p->buf[i];
+//     if (f->type & F_STREAM_DATA_LEN) {
+//         memcpy(&f->dlen, &p->buf[i], sizeof(f->dlen));
+//         i += sizeof(f->dlen);
+//         warn(debug, "dlen %d", f->dlen);
+//         // keep a pointer to the frame data around
+//         f->data = &p->buf[i];
 
-        // TODO check that FIN is 0
-        // XXX skipping content
+//         // TODO check that FIN is 0
+//         // XXX skipping content
 
-        i += f->dlen;
-    }
+//         i += f->dlen;
+//     }
 
-    // add this frame to the packet's list of frames
-    SLIST_INSERT_HEAD(&p->fl, (struct q_frame *)f, next);
-    return i;
-}
-
-
-static uint16_t __attribute__((nonnull))
-dec_ack_frame(const struct q_pkt * const p, const uint16_t pos)
-{
-    warn(debug, "here at %d", pos);
-    return p->len;
-}
+//     // add this frame to the packet's list of frames
+//     // SLIST_INSERT_HEAD(&p->fl, (struct q_frame *)f, next);
+//     return i;
+// }
 
 
-static uint16_t __attribute__((nonnull))
-dec_regular_frame(const struct q_pkt * const p, const uint16_t pos)
-{
-    uint16_t i = pos;
+// static uint16_t __attribute__((nonnull))
+// dec_ack_frame(const struct q_pkt * const p, const uint16_t pos)
+// {
+//     warn(debug, "here at %d", pos);
+//     return p->len;
+// }
 
-    warn(debug, "here at %d", i);
 
-    switch (p->buf[i]) {
-    case T_PADDING:
-        warn(debug, "padding frame");
-        break;
-    case T_RST_STREAM:
-        warn(debug, "rst_stream frame");
-        break;
-    case T_CONNECTION_CLOSE:
-        warn(debug, "connection_close frame");
-        break;
-    case T_GOAWAY:
-        warn(debug, "goaway frame");
-        break;
-    case T_WINDOW_UPDATE:
-        warn(debug, "window_update frame");
-        break;
-    case T_BLOCKED:
-        warn(debug, "blocked frame");
-        break;
+// static uint16_t __attribute__((nonnull))
+// dec_regular_frame(const struct q_pkt * const p, const uint16_t pos)
+// {
+//     uint16_t i = pos;
 
-    case T_STOP_WAITING: {
-        uint64_t      delta = 0;
-        const uint8_t nr_len = dec_nr_len(p->flags);
-        memcpy(&delta, &p->buf[i], nr_len);
-        warn(debug, "stop_waiting frame, delta %" PRIu64, p->nr - delta);
-        i += nr_len;
-        break;
-    }
+//     warn(debug, "here at %d", i);
 
-    case T_PING:
-        warn(debug, "ping frame");
-        break;
-    default:
-        die("unknown frame type 0x%02x", p->buf[0]);
-    }
+//     switch (p->buf[i]) {
+//     case T_PADDING:
+//         warn(debug, "padding frame");
+//         break;
+//     case T_RST_STREAM:
+//         warn(debug, "rst_stream frame");
+//         break;
+//     case T_CONNECTION_CLOSE:
+//         warn(debug, "connection_close frame");
+//         break;
+//     case T_GOAWAY:
+//         warn(debug, "goaway frame");
+//         break;
+//     case T_WINDOW_UPDATE:
+//         warn(debug, "window_update frame");
+//         break;
+//     case T_BLOCKED:
+//         warn(debug, "blocked frame");
+//         break;
 
-    return i;
-}
+//     case T_STOP_WAITING: {
+//         uint64_t delta = 0;
+//         const uint8_t nr_len = dec_nr_len(p->flags);
+//         memcpy(&delta, &p->buf[i], nr_len);
+//         warn(debug, "stop_waiting frame, delta %" PRIu64, p->nr - delta);
+//         i += nr_len;
+//         break;
+//     }
+
+//     case T_PING:
+//         warn(debug, "ping frame");
+//         break;
+//     default:
+//         die("unknown frame type 0x%02x", p->buf[0]);
+//     }
+
+//     return i;
+// }
+
+
+// uint16_t __attribute__((nonnull))
+// dec_frames(struct q_pkt * const p, const uint16_t pos)
+// {
+//     uint16_t i = pos;
+//     // SLIST_INIT(&p->fl);
+//     while (i < p->len)
+//         if (p->flags & F_STREAM)
+//             i += dec_stream_frame(p, i);
+//         else if (p->buf[0] & ((!F_STREAM) | F_ACK))
+//             i += dec_ack_frame(p, i);
+//         else
+//             i += dec_regular_frame(p, i);
+
+//     return i;
+// }
 
 
 uint16_t __attribute__((nonnull))
-dec_frames(struct q_pkt * const p, const uint16_t pos)
+enc_init_pkt(const struct q_conn * restrict const c,
+             uint8_t * restrict const buf,
+             const uint16_t len)
 {
-    uint16_t i = pos;
-    SLIST_INIT(&p->fl);
-    while (i < p->len)
-        if (p->flags & F_STREAM)
-            i += dec_stream_frame(p, i);
-        else if (p->buf[0] & ((!F_STREAM) | F_ACK))
-            i += dec_ack_frame(p, i);
-        else
-            i += dec_regular_frame(p, i);
+    buf[0] = F_CID;
+    uint16_t i = 1;
+    memcpy(&buf[i], &c->id, sizeof(c->id)); // XXX: no htonll()?
+    warn(debug, "cid %" PRIu64, c->id);
+    i += sizeof(c->id);
+    assert(i < len, "buf too short");
+
+    if (vers[c->vers].as_int) {
+        buf[0] |= F_VERS;
+        memcpy(&buf[i], &vers[c->vers].as_int, sizeof(vers[c->vers].as_int));
+        warn(debug, "vers 0x%08x %s", vers[c->vers].as_int,
+             vers[c->vers].as_str);
+        i += sizeof(vers[c->vers].as_int);
+        assert(i < len, "buf too short");
+    }
+
+    buf[0] |= enc_nr_len(sizeof(uint8_t));
+    buf[i] = (uint8_t)c->out;
+    warn(debug, "%zu-byte nr %d", sizeof(uint8_t), (uint8_t)c->out);
+    i += sizeof(uint8_t);
+    assert(i < len, "buf too short");
+
+    const uint128_t hash = fnv_1a(buf, i + HASH_LEN, i, HASH_LEN);
+    warn(debug, "inserting %d-byte hash at pos %d", HASH_LEN, i);
+    memcpy(&buf[i], &hash, HASH_LEN);
+    i += HASH_LEN;
+    assert(i < len, "buf too short");
 
     return i;
 }
