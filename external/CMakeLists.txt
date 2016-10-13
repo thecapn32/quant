@@ -37,7 +37,7 @@ set(QUIC_BIN ${QUIC_BIN} PARENT_SCOPE)
 externalproject_add(proto-quic
   UPDATE_COMMAND ""
   # EXCLUDE_FROM_ALL 1 # not supported in cmake 3.0, see below
-  DEPENDS vagrant-up
+  # DEPENDS vagrant-up
   GIT_REPOSITORY https://github.com/google/proto-quic.git
   GIT_TAG 17db47fb4265d45430ca5a3b4180ed52dfedf817
   # GIT_SHALLOW 1 # not supported in cmake 3.0
@@ -64,20 +64,20 @@ set_target_properties(proto-quic PROPERTIES EXCLUDE_FROM_ALL TRUE)
 add_custom_target(quic-server
   COMMAND
     ${VAGRANT} ssh -c "\
-      pkill quic_server ; \
+      pgrep quic_server > /dev/null || \
       /usr/bin/nohup ${QUIC_BIN}/quic_server --port=6121 \
         --certificate_file=${QUIC_CERTS}/out/leaf_cert.pem \
         --key_file=${QUIC_CERTS}/out/leaf_cert.pkcs8 \
         > /vagrant/quic_server.log 2>&1 & \
-      sleep 1 \
-  "
+      ${SLEEP} 1 \
+  " 2> /dev/null
   DEPENDS proto-quic
   VERBATIM
 )
 
 add_custom_target(kill-quic-server
   COMMAND ${VAGRANT} ssh -c "pkill quic_server"
-  DEPENDS vagrant-up
+  # DEPENDS vagrant-up
   VERBATIM
 )
 
@@ -100,6 +100,6 @@ add_custom_target(test-quickie-server
     ${CAT} ${DIR}/${QS}.log || true &&
     ${TSHARK} -V -2 -n -d udp.port==${PORT},quic -R frame.number==1
       -O quic -r ${DIR}/${QS}.pcap
-  DEPENDS quickie_server vagrant-up
+  DEPENDS quickie_server #vagrant-up
   VERBATIM
 )
