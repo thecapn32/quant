@@ -66,10 +66,10 @@ add_custom_target(quic-server
   COMMAND
     test -f ${QSP} ||
     ${VAGRANT} ssh -c "\
-      daemon -F /vagrant/${QSP} -- ${QUIC_BIN}/quic_server --port=6121 \
+      daemon -F /vagrant/${QSP} -o /vagrant/quic_server.log -- \
+        ${QUIC_BIN}/quic_server --port=6121 \
         --certificate_file=${QUIC_CERTS}/out/leaf_cert.pem \
-        --key_file=${QUIC_CERTS}/out/leaf_cert.pkcs8 \
-        > /vagrant/quic_server.log 2>&1 & \
+        --key_file=${QUIC_CERTS}/out/leaf_cert.pkcs8 --v=9 & \
       sleep 1 \
   " 2> /dev/null
   DEPENDS proto-quic
@@ -92,12 +92,13 @@ add_custom_target(test-quickie-server
     ${RM} -f ${DIR}/${QS}.log ${DIR}/${QS}.pcap ${DIR}/${QS}.core
       ${DIR}/${QS}.profraw || true &&
     ${SUDO} ${PKILL} ${QS} sudo || true &&
-    ${DAEMON} -e LLVM_PROFILE_FILE=${QS}.profraw -D ${DIR} -E ${DIR}/${QS}.log
+    ${DAEMON} -e LLVM_PROFILE_FILE=${QS}.profraw -D ${DIR} -o ${DIR}/${QS}.log
       -- ${DIR}/${QS} &&
     ${DAEMON} -- ${SUDO} ${TCPDUMP} -i lo0 -w ${DIR}/${QS}.pcap port ${PORT} &&
     ${VAGRANT} ssh -c "\
       host=`ip route show | grep -i 'default via' | cut -d' ' -f3` ; \
-      ${QUIC_BIN}/quic_client --host=$host --port=${PORT} http://example.com/ \
+      ${QUIC_BIN}/quic_client --host=$host --port=${PORT} --v=1 \
+        http://example.com/ \
     " 2> /dev/null || true &&
     ${SUDO} ${PKILL} ${QS} sudo || true &&
     ${CAT} ${DIR}/${QS}.log || true &&
