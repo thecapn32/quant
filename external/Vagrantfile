@@ -28,7 +28,7 @@ Vagrant.configure("2") do |config|
     # apt-get update
     # apt-get -y dist-upgrade
 
-    # install some tools I often use
-    apt-get -y install htop silversearcher-ag
+    # install some tools that are needed for the tests, or that I often use
+    apt-get -y install htop silversearcher-ag daemon
   SHELL
 end

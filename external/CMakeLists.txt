@@ -61,22 +61,25 @@ externalproject_add(proto-quic
 # EXCLUDE_FROM_ALL workaround for older cmake
 set_target_properties(proto-quic PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
+set(QSP quic_server.pid)
 add_custom_target(quic-server
   COMMAND
+    test -f ${QSP} ||
     ${VAGRANT} ssh -c "\
-      pgrep quic_server > /dev/null || \
-      /usr/bin/nohup ${QUIC_BIN}/quic_server --port=6121 \
+      daemon -F /vagrant/${QSP} -- ${QUIC_BIN}/quic_server --port=6121 \
         --certificate_file=${QUIC_CERTS}/out/leaf_cert.pem \
         --key_file=${QUIC_CERTS}/out/leaf_cert.pkcs8 \
         > /vagrant/quic_server.log 2>&1 & \
-      ${SLEEP} 1 \
+      sleep 1 \
   " 2> /dev/null
   DEPENDS proto-quic
   VERBATIM
 )
 
 add_custom_target(kill-quic-server
-  COMMAND ${VAGRANT} ssh -c "pkill quic_server"
+  COMMAND
+    ${VAGRANT} ssh -c "pkill quic_server" 2> /dev/null &&
+    ${RM} -f ${QSP} || true
   # DEPENDS vagrant-up
   VERBATIM
 )
@@ -95,7 +98,7 @@ add_custom_target(test-quickie-server
     ${VAGRANT} ssh -c "\
       host=`ip route show | grep -i 'default via' | cut -d' ' -f3` ; \
       ${QUIC_BIN}/quic_client --host=$host --port=${PORT} http://example.com/ \
-    " || true &&
+    " 2> /dev/null || true &&
     ${SUDO} ${PKILL} ${QS} sudo || true &&
     ${CAT} ${DIR}/${QS}.log || true &&
     ${TSHARK} -V -2 -n -d udp.port==${PORT},quic -R frame.number==1
