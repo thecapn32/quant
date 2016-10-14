@@ -56,17 +56,16 @@ dec_pub_hdr(struct q_pkt * restrict const p,
 
     if (p->flags & F_VERS) {
         memcpy(&p->vers.as_int, &buf[i],
-               sizeof(p->vers.as_int)); // no need for ntohl()
-        p->vers.as_str[4] = 0;
+               sizeof(p->vers)); // no need for ntohl()
         i += sizeof(p->vers);
-        warn(debug, "vers 0x%08x %s", p->vers.as_int, p->vers.as_str);
+        warn(debug, "vers 0x%08x %.4s", p->vers.as_int, p->vers.as_str);
         assert(i <= len, "pub hdr only %d bytes; truncated?", len);
     }
 
     if (p->flags & F_NONCE) {
         p->nonce_len = (uint8_t)MIN(len - i, MAX_NONCE_LEN);
         warn(debug, "nonce len %d %.*s", p->nonce_len, p->nonce_len,
-             (char *)&buf[i]);
+             (const char *)&buf[i]);
         memcpy(p->nonce, &buf[i], p->nonce_len);
 
         if (p->flags & F_PUB_RST) {
@@ -104,17 +103,16 @@ dec_pub_hdr(struct q_pkt * restrict const p,
     if (p->flags & (F_MULTIPATH | F_UNUSED))
         warn(warn, "unsupported flag encountered");
 
-    // Version negotiation from a server don't have a hash, nor do public reset
-    // packets
-    // if (!(qc->r_nr == 0 && p->flags & F_VERS) && (p->flags & F_PUB_RST) == 0)
-    // {
-    //     const uint128_t hash = fnv_1a(buf, len, i, HASH_LEN);
-    //     if (memcmp(&buf[i], &hash, HASH_LEN))
-    //         die("hash mismatch");
-    //     i += HASH_LEN;
-    //     assert(i <= p->len, "pub hdr only %d bytes; truncated?", p->len);
-    // }
-
+    if (i <= len) {
+        // if there are bytes left in the packet, there must be a hash to verify
+        const uint128_t hash = fnv_1a(buf, len, i, HASH_LEN);
+        if (memcmp(&buf[i], &hash, HASH_LEN))
+            die("hash mismatch");
+        else
+            warn(debug, "hash OK");
+        i += HASH_LEN;
+        assert(i <= len, "pub hdr only %d bytes; truncated?", len);
+    }
     return i;
 }
 
@@ -285,12 +283,12 @@ enc_init_pkt(const struct q_conn * restrict const c,
     i += sizeof(c->id);
     assert(i < len, "buf too short");
 
-    if (vers[c->vers].as_int) {
+    if (vers[c->vers].as_int || c->state == VERS_RECV) {
         buf[0] |= F_VERS;
-        memcpy(&buf[i], &vers[c->vers].as_int, sizeof(vers[c->vers].as_int));
-        warn(debug, "vers 0x%08x %s", vers[c->vers].as_int,
-             vers[c->vers].as_str);
-        i += sizeof(vers[c->vers].as_int);
+        const uint8_t v = vers[c->vers].as_int ? c->vers : 0;
+        memcpy(&buf[i], &vers[v].as_int, sizeof(vers[v]));
+        warn(debug, "vers 0x%08x %.4s", vers[v].as_int, vers[v].as_str);
+        i += sizeof(vers[v]);
         assert(i < len, "buf too short");
     }
 
@@ -299,6 +297,17 @@ enc_init_pkt(const struct q_conn * restrict const c,
     warn(debug, "%zu-byte nr %d", sizeof(uint8_t), (uint8_t)c->out);
     i += sizeof(uint8_t);
     assert(i < len, "buf too short");
+
+    if (vers[c->vers].as_int == 0 && c->state == VERS_RECV &&
+        sizeof(vers) / sizeof(vers[0]) > 0) {
+        const uint8_t l = sizeof(vers) - sizeof(vers[0].as_int);
+        warn(debug, "nonce len %d %.*s", l, l, (const char *)&vers[1].as_int);
+        memcpy(&buf[i], &vers[1].as_int, l);
+        i += l;
+        assert(i < len, "buf too short");
+        // version negotiation response ends here (no hash)
+        return i;
+    }
 
     const uint128_t hash = fnv_1a(buf, i + HASH_LEN, i, HASH_LEN);
     warn(debug, "inserting %d-byte hash at pos %d", HASH_LEN, i);

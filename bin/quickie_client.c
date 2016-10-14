@@ -47,49 +47,26 @@ int main(int argc, char * argv[])
         }
     }
 
-    struct addrinfo *res, *res0;
+    struct addrinfo *res;
     struct addrinfo hints = {.ai_family = PF_INET,
                              .ai_socktype = SOCK_DGRAM,
                              .ai_protocol = IPPROTO_UDP};
-    const int err = getaddrinfo(dest, port, &hints, &res0);
+    const int err = getaddrinfo(dest, port, &hints, &res);
     assert(err == 0, "getaddrinfo: %s", gai_strerror(err));
-
-    int s = -1;
-    for (res = res0; res; res = res->ai_next) {
-        s = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-        if (s < 0) {
-            warn(err, "socket");
-            continue;
-        }
-
-        if (connect(s, res->ai_addr, res->ai_addrlen) < 0) {
-            close(s);
-            warn(err, "connect");
-            s = -1;
-            continue;
-        }
-
-        break;
-    }
-    assert(s >= 0, "could not connect");
+    assert(res->ai_next == 0, "multiple addresses not supported");
 
     // start some connections
     struct ev_loop * loop = ev_default_loop(0);
     q_init(loop);
     for (int n = 0; n < conns; n++) {
-        // the first socket was created and connected above, but we need to
-        // still create and connect the additional ones
-        if (n != 0) {
-            s = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-            assert(s >= 0, "socket");
-            assert(connect(s, res->ai_addr, res->ai_addrlen) >= 0, "connect");
-        }
+        int s = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+        assert(s >= 0, "socket");
         warn(info, "%s starting connection %d (desc %d) to %s:%s",
              BASENAME(argv[0]), n, s, dest, port);
-        q_connect(loop, s);
+        q_connect(loop, s, res->ai_addr, res->ai_addrlen);
     }
 
-    freeaddrinfo(res0);
+    freeaddrinfo(res);
     ev_loop(loop, 0);
 
     // TODO: cleanup

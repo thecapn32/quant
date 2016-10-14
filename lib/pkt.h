@@ -52,10 +52,11 @@
 struct q_pkt {
     uint8_t flags;
     uint8_t nonce_len;
+    uint8_t _unused[2];
     union q_vers vers;
     uint64_t cid;
-    uint8_t nonce[32];
     uint64_t nr;
+    uint8_t nonce[32];
 };
 
 
