@@ -13,7 +13,7 @@
 
 /// QUIC version supported by this implementation in order of preference.
 const union q_vers vers[3] = {{.as_str = "Q025"}, // "Q025" is draft-hamilton
-                              {.as_str = "Q026"},
+                              {.as_str = "Q036"},
                               {.as_int = 0}};
 
 
@@ -216,8 +216,6 @@ void __attribute__((nonnull)) q_connect(struct ev_loop * const loop,
                                         const struct sockaddr * const peer,
                                         const socklen_t plen)
 {
-    warn(info, "entering %s", __func__);
-
     // initialize the RX and TX watchers
     ev_io * const r = &rx_w; // works around a strict-aliasing bug in gcc 6.2
     ev_io * const t = &tx_w; // works around a strict-aliasing bug in gcc 6.2
@@ -236,8 +234,6 @@ void __attribute__((nonnull)) q_connect(struct ev_loop * const loop,
 
 void __attribute__((nonnull)) q_serve(struct ev_loop * const loop, const int s)
 {
-    warn(info, "entering %s", __func__);
-
     // initialize the RX and TX watchers
     ev_io *r = &rx_w, *t = &tx_w;
     ev_io_init(r, quic_rx, s, EV_READ);

@@ -21,19 +21,135 @@ static uint8_t __attribute__((const)) enc_nr_len(const uint8_t n)
 }
 
 
-// // Convert stream ID length encoded in flags to bytes
-// static uint8_t __attribute__((const)) dec_sid_len(const uint8_t flags)
-// {
-//     return (flags & 0x03) + 1;
-// }
+// Convert stream ID length encoded in flags to bytes
+static uint8_t __attribute__((const)) dec_sid_len(const uint8_t flags)
+{
+    return ((flags & 0x06) >> 1) + 1;
+}
 
 
-// // Convert stream offset length encoded in flags to bytes
-// static uint8_t __attribute__((const)) dec_stream_off_len(const uint8_t flags)
-// {
-//     const uint8_t l = (flags & 0x1C) >> 2;
-//     return l == 0 ? 0 : l + 1;
-// }
+// Convert stream offset length encoded in flags to bytes
+static uint8_t __attribute__((const)) dec_stream_off_len(const uint8_t flags)
+{
+    const uint8_t l = (flags & 0x1C) >> 2;
+    return l == 0 ? 0 : l + 1;
+}
+
+
+static uint16_t __attribute__((nonnull))
+dec_stream_frame(struct q_pkt * const p __attribute__((unused)),
+                 const uint8_t * restrict const buf,
+                 const uint16_t len __attribute__((unused)))
+{
+    uint16_t i = 1;
+
+    struct q_stream_frame * f = calloc(1, sizeof(*f));
+    assert(f, "could not calloc");
+    f->type = buf[0];
+
+    warn(debug, "stream type %02x", f->type);
+
+    warn(debug, "fin %d", f->type & F_STREAM_FIN);
+
+    const uint8_t slen = dec_sid_len(f->type);
+    if (slen) {
+        memcpy(&f->sid, &buf[i], slen);
+        i += slen;
+        warn(debug, "%d-byte sid %d", slen, f->sid);
+    }
+
+    const uint8_t off_len = dec_stream_off_len(f->type);
+    if (off_len) {
+        memcpy(&f->off, &buf[i], off_len);
+        i += off_len;
+        warn(debug, "%d-byte off %" PRIu64, off_len, f->off);
+    }
+
+    if (f->type & F_STREAM_DATA_LEN) {
+        memcpy(&f->dlen, &buf[i], sizeof(f->dlen));
+        i += sizeof(f->dlen);
+        warn(debug, "dlen %d", f->dlen);
+        // keep a pointer to the frame data around
+        f->data = &buf[i];
+
+        // TODO check that FIN is 0
+        // XXX skipping content
+
+        i += f->dlen;
+    }
+
+    // add this frame to the packet's list of frames
+    // SLIST_INSERT_HEAD(&p->fl, (struct q_frame *)f, next);
+    return i;
+}
+
+
+static uint16_t __attribute__((nonnull))
+dec_ack_frame(const struct q_pkt * const p __attribute__((unused)),
+              const uint8_t * restrict const buf __attribute__((unused)),
+              const uint16_t len)
+{
+    die("here at %d", len);
+    return len;
+}
+
+
+static uint16_t __attribute__((nonnull))
+dec_frames(struct q_pkt * const p,
+           const uint8_t * restrict const buf,
+           const uint16_t len)
+{
+    uint16_t i = 0;
+    // SLIST_INIT(&p->fl);
+
+    while (i < len) {
+        const uint8_t flags = buf[i];
+        warn(debug, "frame 0x%02x, %d %d", flags, i, len);
+        if (flags & F_STREAM) {
+            i += dec_stream_frame(p, &buf[i], len - i);
+            continue;
+        }
+        if (flags & ((!F_STREAM) | F_ACK)) {
+            i += dec_ack_frame(p, &buf[i], len - i);
+            continue;
+        }
+
+        switch (flags) {
+        case T_PADDING:
+            warn(debug, "%d-byte padding frame", len - i);
+            static const uint8_t zero[MAX_PKT_LEN] = {0};
+            assert(memcmp(&buf[i], zero, len - i) == 0,
+                   "%d-byte padding not zero", len - i);
+            i = len;
+            break;
+
+        case T_RST_STREAM:
+            die("rst_stream frame");
+            break;
+        case T_CONNECTION_CLOSE:
+            die("connection_close frame");
+            break;
+        case T_GOAWAY:
+            die("goaway frame");
+            break;
+        case T_WINDOW_UPDATE:
+            die("window_update frame");
+            break;
+        case T_BLOCKED:
+            die("blocked frame");
+            break;
+        case T_STOP_WAITING:
+            die("stop_waiting frame");
+            break;
+        case T_PING:
+            die("ping frame");
+            break;
+        default:
+            die("unknown frame type 0x%02x", buf[0]);
+        }
+    }
+    return i;
+}
 
 
 uint16_t __attribute__((nonnull))
@@ -67,31 +183,12 @@ dec_pub_hdr(struct q_pkt * restrict const p,
         warn(debug, "nonce len %d %.*s", p->nonce_len, p->nonce_len,
              (const char *)&buf[i]);
         memcpy(p->nonce, &buf[i], p->nonce_len);
-
-        if (p->flags & F_PUB_RST) {
-            warn(err, "public reset");
-            // interpret public reset packet
-            // if (memcmp("PRST", &buf[i], 4) == 0) {
-            //     const uint32_t tag_len = *&buf[i + 4];
-            //     warn(debug, "PRST with %d tags", tag_len);
-            //     i += 8;
-
-            //     for (uint32_t t = 0; t < tag_len; t++) {
-            //         char tag[5];
-            //         memcpy(tag, &buf[i], 4);
-            //         tag[4] = 0;
-            //         uint64_t value = *&buf[i + 4];
-            //         i += 8;
-            //         warn(debug, "%s = %" PRIu64, tag, value);
-            //     }
-
-            // } else
-            //     die("cannot parse PRST");
-        }
-
         i += p->nonce_len;
         assert(i <= len, "pub hdr only %d bytes; truncated?", len);
     }
+
+    if (p->flags & F_PUB_RST)
+        warn(err, "public reset");
 
     const uint8_t nr_len = dec_nr_len(p->flags);
     warn(debug, "nr_len %d", nr_len);
@@ -104,7 +201,8 @@ dec_pub_hdr(struct q_pkt * restrict const p,
         warn(warn, "unsupported flag encountered");
 
     if (i <= len) {
-        // if there are bytes left in the packet, there must be a hash to verify
+        // if there are bytes left in the packet, there must be a hash to
+        // verify
         const uint128_t hash = fnv_1a(buf, len, i, HASH_LEN);
         if (memcmp(&buf[i], &hash, HASH_LEN))
             die("hash mismatch");
@@ -113,6 +211,13 @@ dec_pub_hdr(struct q_pkt * restrict const p,
         i += HASH_LEN;
         assert(i <= len, "pub hdr only %d bytes; truncated?", len);
     }
+
+    if (i <= len) {
+        warn(debug, "frames frames frames");
+        // if there are still bytes left, we have frames
+        i += dec_frames(p, &buf[i], len - i);
+    }
+
     return i;
 }
 
@@ -150,122 +255,6 @@ dec_pub_hdr(struct q_pkt * restrict const p,
 //         die("cannot encode data_len");
 
 //     // XXX FIN bit
-
-//     return i;
-// }
-
-
-// static uint16_t __attribute__((nonnull))
-// dec_stream_frame(struct q_pkt * const p, const uint16_t pos)
-// {
-//     uint16_t i = pos;
-
-//     struct q_stream_frame * f = calloc(1, sizeof(*f));
-//     assert(f, "could not calloc");
-//     f->type = p->buf[i++];
-
-//     warn(debug, "stream type %02x", f->type);
-
-//     const uint8_t slen = dec_sid_len(f->type);
-//     if (slen) {
-//         memcpy(&f->sid, &p->buf[i], slen);
-//         i += slen;
-//         warn(debug, "%d-byte sid %d", slen, f->sid);
-//     }
-
-//     const uint8_t off_len = dec_stream_off_len(f->type);
-//     if (off_len) {
-//         memcpy(&f->off, &p->buf[i], off_len);
-//         i += off_len;
-//         warn(debug, "%d-byte off %" PRIu64, off_len, f->off);
-//     }
-
-//     if (f->type & F_STREAM_DATA_LEN) {
-//         memcpy(&f->dlen, &p->buf[i], sizeof(f->dlen));
-//         i += sizeof(f->dlen);
-//         warn(debug, "dlen %d", f->dlen);
-//         // keep a pointer to the frame data around
-//         f->data = &p->buf[i];
-
-//         // TODO check that FIN is 0
-//         // XXX skipping content
-
-//         i += f->dlen;
-//     }
-
-//     // add this frame to the packet's list of frames
-//     // SLIST_INSERT_HEAD(&p->fl, (struct q_frame *)f, next);
-//     return i;
-// }
-
-
-// static uint16_t __attribute__((nonnull))
-// dec_ack_frame(const struct q_pkt * const p, const uint16_t pos)
-// {
-//     warn(debug, "here at %d", pos);
-//     return p->len;
-// }
-
-
-// static uint16_t __attribute__((nonnull))
-// dec_regular_frame(const struct q_pkt * const p, const uint16_t pos)
-// {
-//     uint16_t i = pos;
-
-//     warn(debug, "here at %d", i);
-
-//     switch (p->buf[i]) {
-//     case T_PADDING:
-//         warn(debug, "padding frame");
-//         break;
-//     case T_RST_STREAM:
-//         warn(debug, "rst_stream frame");
-//         break;
-//     case T_CONNECTION_CLOSE:
-//         warn(debug, "connection_close frame");
-//         break;
-//     case T_GOAWAY:
-//         warn(debug, "goaway frame");
-//         break;
-//     case T_WINDOW_UPDATE:
-//         warn(debug, "window_update frame");
-//         break;
-//     case T_BLOCKED:
-//         warn(debug, "blocked frame");
-//         break;
-
-//     case T_STOP_WAITING: {
-//         uint64_t delta = 0;
-//         const uint8_t nr_len = dec_nr_len(p->flags);
-//         memcpy(&delta, &p->buf[i], nr_len);
-//         warn(debug, "stop_waiting frame, delta %" PRIu64, p->nr - delta);
-//         i += nr_len;
-//         break;
-//     }
-
-//     case T_PING:
-//         warn(debug, "ping frame");
-//         break;
-//     default:
-//         die("unknown frame type 0x%02x", p->buf[0]);
-//     }
-
-//     return i;
-// }
-
-
-// uint16_t __attribute__((nonnull))
-// dec_frames(struct q_pkt * const p, const uint16_t pos)
-// {
-//     uint16_t i = pos;
-//     // SLIST_INIT(&p->fl);
-//     while (i < p->len)
-//         if (p->flags & F_STREAM)
-//             i += dec_stream_frame(p, i);
-//         else if (p->buf[0] & ((!F_STREAM) | F_ACK))
-//             i += dec_ack_frame(p, i);
-//         else
-//             i += dec_regular_frame(p, i);
 
 //     return i;
 // }
