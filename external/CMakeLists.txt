@@ -100,6 +100,7 @@ add_custom_target(test-quickie-server
       ${QUIC_BIN}/quic_client --host=$host --port=${PORT} --v=1 \
         http://example.com/ \
     " 2> /dev/null || true &&
+    ${SLEEP} 1 &&
     ${SUDO} ${PKILL} ${QS} sudo || true &&
     ${CAT} ${DIR}/${QS}.log || true &&
     ${TSHARK} -V -2 -n -d udp.port==${PORT},quic -O quic -r ${DIR}/${QS}.pcap
