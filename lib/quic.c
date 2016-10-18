@@ -12,8 +12,7 @@
 
 
 /// QUIC version supported by this implementation in order of preference.
-const union q_vers vers[3] = {{.as_str = "Q025"}, // "Q025" is draft-hamilton
-                              {.as_str = "Q036"},
+const union q_vers vers[3] = {{.as_str = "Q036"}, // "Q025" is draft-hamilton
                               {.as_int = 0}};
 
 
@@ -217,8 +216,8 @@ void __attribute__((nonnull)) q_connect(struct ev_loop * const loop,
                                         const socklen_t plen)
 {
     // initialize the RX and TX watchers
-    ev_io * const r = &rx_w; // works around a strict-aliasing bug in gcc 6.2
-    ev_io * const t = &tx_w; // works around a strict-aliasing bug in gcc 6.2
+    ev_io * const r = &rx_w; // suppress erroneous aliasing warning in gcc 6.2
+    ev_io * const t = &tx_w; // suppress erroneous aliasing warning in gcc 6.2
     ev_io_init(r, quic_rx, s, EV_READ);
     ev_io_init(t, quic_tx, s, EV_WRITE);
 
@@ -235,7 +234,8 @@ void __attribute__((nonnull)) q_connect(struct ev_loop * const loop,
 void __attribute__((nonnull)) q_serve(struct ev_loop * const loop, const int s)
 {
     // initialize the RX and TX watchers
-    ev_io *r = &rx_w, *t = &tx_w;
+    ev_io * const r = &rx_w; // suppress erroneous aliasing warning in gcc 6.2
+    ev_io * const t = &tx_w; // suppress erroneous aliasing warning in gcc 6.2
     ev_io_init(r, quic_rx, s, EV_READ);
     ev_io_init(t, quic_tx, s, EV_WRITE);
 
@@ -260,7 +260,8 @@ void q_init(struct ev_loop * const loop)
     hash_init(&qc);
 
     // during development, abort the event loop after some seconds of inactivity
-    ev_timer * const t = &to_w; // works around a strict-aliasing bug in gcc 6.2
+    ev_timer * const t =
+        &to_w; // suppress erroneous aliasing warning in gcc 6.2
     ev_timer_init(t, timeout_cb, 5, 0);
     ev_timer_start(loop, &to_w);
 }
