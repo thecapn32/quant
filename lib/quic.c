@@ -12,8 +12,10 @@
 
 
 /// QUIC version supported by this implementation in order of preference.
-const union q_vers vers[3] = {{.as_str = "Q036"}, // "Q025" is draft-hamilton
-                              {.as_int = 0}};
+const union q_vers vers[] = {{.as_str = "Q026"}, // "Q025" is draft-hamilton
+                             {.as_int = 0}};
+
+const size_t vers_len = sizeof(vers);
 
 
 /// All open QUIC connections.
@@ -28,14 +30,14 @@ static void quic_rx(struct ev_loop * const loop, ev_io * const w, int revents);
 
 
 static int __attribute__((nonnull))
-q_conn_cmp(const void * const arg, const void * const obj)
+q_conn_cmp(const void * restrict const arg, const void * restrict const obj)
 {
     return *(const uint64_t *)arg != ((const struct q_conn *)obj)->id;
 }
 
 
 static uint8_t __attribute__((nonnull))
-pick_vers(const struct q_pkt * const restrict p)
+pick_vers(const struct q_pkt * restrict const p)
 {
     uint8_t i = 0;
     while (vers[i].as_int) {
@@ -47,30 +49,32 @@ pick_vers(const struct q_pkt * const restrict p)
 }
 
 
-static struct q_conn * new_conn(const uint64_t id,
-                                const struct sockaddr * const peer,
-                                const socklen_t plen)
+static struct q_conn * __attribute__((nonnull))
+new_conn(const uint64_t id,
+         const struct sockaddr * restrict const peer,
+         const socklen_t plen)
 {
     struct q_conn * const c = calloc(1, sizeof(*c));
     assert(c, "could not calloc");
     c->id = id;
+    c->out = 1;
+    hash_insert(&qc, &c->node, c, (uint32_t)c->id);
+
     char host[NI_MAXHOST] = "";
     char port[NI_MAXSERV] = "";
-    if (peer) {
-        getnameinfo((const struct sockaddr *)peer, plen, host, sizeof(host),
-                    port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
-        c->peer = *peer;
-        c->plen = plen;
-    }
-    hash_insert(&qc, &c->node, c, (uint32_t)c->id);
-    warn(debug, "created new connection %" PRIu64 " to %s:%s", c->id, host,
-         port);
+    getnameinfo((const struct sockaddr *)peer, plen, host, sizeof(host), port,
+                sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
+    c->peer = *peer;
+    c->plen = plen;
+    warn(debug, "created new connection %" PRIu64 " with peer %s:%s", c->id,
+         host, port);
+
     return c;
 }
 
 
 static uint8_t __attribute__((nonnull))
-pick_server_vers(const struct q_pkt * const restrict p)
+pick_server_vers(const struct q_pkt * restrict const p)
 {
     // first, check if the version in the public header is acceptable to us
     for (uint8_t i = 0; vers[i].as_int; i++) {
@@ -85,9 +89,9 @@ pick_server_vers(const struct q_pkt * const restrict p)
         for (uint8_t j = 0; j < p->nonce_len; j += sizeof(uint32_t)) {
             union q_vers v;
             memcpy(&v.as_int, &p->nonce[j], sizeof(v));
-            warn(debug, "checking servers nonce pos %d = %.4s against our prio "
+            warn(debug, "checking server nonce pos %ld = %.4s against our prio "
                         "%d = %.4s",
-                 j, v.as_str, i, vers[i].as_str);
+                 j / sizeof(uint32_t), v.as_str, i, vers[i].as_str);
             if (vers[i].as_int == v.as_int)
                 return i;
         }
@@ -98,8 +102,8 @@ pick_server_vers(const struct q_pkt * const restrict p)
 
 
 static void __attribute__((nonnull))
-quic_rx(struct ev_loop * const loop,
-        ev_io * const w,
+quic_rx(struct ev_loop * restrict const loop,
+        ev_io * restrict const w,
         int revents __attribute__((unused)))
 {
     warn(info, "entering %s for desc %d", __func__, w->fd);
@@ -113,10 +117,8 @@ quic_rx(struct ev_loop * const loop,
     const uint16_t len = (uint16_t)rlen;
     warn(debug, "received %d bytes, decoding", len);
 
-    // const uint16_t pos =
     struct q_pkt p = {0};
     dec_pub_hdr(&p, buf, len);
-    // dec_frames(&p, pos);
 
     struct q_conn * c = hash_search(&qc, q_conn_cmp, &p.cid, (uint32_t)p.cid);
     if (c == 0) {
@@ -137,7 +139,6 @@ quic_rx(struct ev_loop * const loop,
             warn(debug, "supporting client-requested version %.4s with "
                         "preference %d ",
                  p.vers.as_str, c->vers);
-        // TODO: respond
         else
             warn(info, "client-requested version %.4s not supported",
                  p.vers.as_str);
@@ -170,8 +171,8 @@ respond:
 
 
 static void __attribute__((nonnull))
-quic_tx(struct ev_loop * const loop,
-        ev_io * const w,
+quic_tx(struct ev_loop * restrict const loop,
+        ev_io * restrict const w,
         int revents __attribute__((unused)))
 {
     struct q_conn * c = w->data;
@@ -210,10 +211,11 @@ quic_tx(struct ev_loop * const loop,
 }
 
 
-void __attribute__((nonnull)) q_connect(struct ev_loop * const loop,
-                                        const int s,
-                                        const struct sockaddr * const peer,
-                                        const socklen_t plen)
+void __attribute__((nonnull))
+q_connect(struct ev_loop * restrict const loop,
+          const int s,
+          const struct sockaddr * restrict const peer,
+          const socklen_t plen)
 {
     // initialize the RX and TX watchers
     ev_io * const r = &rx_w; // suppress erroneous aliasing warning in gcc 6.2
@@ -231,7 +233,8 @@ void __attribute__((nonnull)) q_connect(struct ev_loop * const loop,
 }
 
 
-void __attribute__((nonnull)) q_serve(struct ev_loop * const loop, const int s)
+void __attribute__((nonnull))
+q_serve(struct ev_loop * restrict const loop, const int s)
 {
     // initialize the RX and TX watchers
     ev_io * const r = &rx_w; // suppress erroneous aliasing warning in gcc 6.2
@@ -244,8 +247,8 @@ void __attribute__((nonnull)) q_serve(struct ev_loop * const loop, const int s)
 }
 
 
-static void timeout_cb(struct ev_loop * const loop,
-                       ev_timer * w __attribute__((unused)),
+static void timeout_cb(struct ev_loop * restrict const loop,
+                       ev_timer * restrict const w __attribute__((unused)),
                        int revents __attribute__((unused)))
 {
     warn(info, "event loop timeout");
@@ -253,7 +256,7 @@ static void timeout_cb(struct ev_loop * const loop,
 }
 
 
-void q_init(struct ev_loop * const loop)
+void q_init(struct ev_loop * restrict const loop)
 {
     warn(info, "have libev %d.%d", ev_version_major(), ev_version_minor());
     srandom((unsigned)time(0));

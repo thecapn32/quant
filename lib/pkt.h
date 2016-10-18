@@ -1,10 +1,6 @@
 #pragma once
 
-// #include <stdbool.h>
-// #include <stdint.h>
-
 #include "quic.h"
-
 
 #define MAX_PKT_LEN 1350
 #define MAX_NONCE_LEN 32
@@ -14,7 +10,8 @@
 struct q_pkt {
     uint8_t flags;
     uint8_t nonce_len;
-    uint8_t _unused[2];
+    uint8_t nr_len;
+    uint8_t _unused;
     union q_vers vers;
     uint64_t cid;
     uint64_t nr;
