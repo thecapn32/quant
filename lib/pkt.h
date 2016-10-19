@@ -27,6 +27,20 @@ struct q_pkt {
 #define F_UNUSED 0x80    // reserved (must be 0)
 
 
+#define decode(dst, buf, buf_len, pos, len, fmt)                               \
+    do {                                                                       \
+        const size_t __len = len ? len : sizeof(dst);                          \
+        assert(pos + __len <= buf_len,                                         \
+               "attempting to decode %zu byte%c starting at " #buf "["         \
+               "%d], which is past " #buf_len " = %d",                         \
+               __len, __len == 1 ? 0 : 's', pos, buf_len);                     \
+        memcpy(&dst, &buf[pos], __len);                                        \
+        warn(debug, #dst " = " fmt " (%zu byte%c from pos %d)", dst, __len,    \
+             __len == 1 ? 0 : 's', pos);                                       \
+        pos += __len;                                                          \
+    } while (0)
+
+
 uint16_t dec_pub_hdr(struct q_pkt * const p,
                      const uint8_t * restrict const buf,
                      const uint16_t len);

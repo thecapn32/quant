@@ -76,31 +76,18 @@ dec_stream_frame(struct q_pkt * restrict const p __attribute__((unused)),
     assert(f, "could not calloc");
     f->type = buf[0];
 
-    warn(debug, "stream type %02x", f->type);
+    warn(debug, "fin = %d", f->type & F_STREAM_FIN);
 
-    warn(debug, "fin %d", f->type & F_STREAM_FIN);
-
-    const uint8_t slen = dec_sid_len(f->type);
-    if (slen) {
-        memcpy(&f->sid, &buf[i], slen);
-        i += slen;
-        warn(debug, "%d-byte sid %d", slen, f->sid);
-        assert(i < len, "buf too short");
-    }
+    const uint8_t sid_len = dec_sid_len(f->type);
+    if (sid_len)
+        decode(f->sid, buf, len, i, sid_len, "%d");
 
     const uint8_t off_len = dec_off_len(f->type);
-    if (off_len) {
-        memcpy(&f->off, &buf[i], off_len);
-        i += off_len;
-        warn(debug, "%d-byte off %" PRIu64, off_len, f->off);
-        assert(i < len, "buf too short");
-    }
+    if (off_len)
+        decode(f->off, buf, len, i, off_len, "%" PRIu64);
 
     if (f->type & F_STREAM_DATA_LEN) {
-        memcpy(&f->dlen, &buf[i], sizeof(f->dlen));
-        i += sizeof(f->dlen);
-        warn(debug, "dlen %d", f->dlen);
-        assert(i < len, "buf too short");
+        decode(f->dlen, buf, len, i, 0, "%d");
 
         // keep a pointer to the frame data around
         f->data = &buf[i];
@@ -127,43 +114,32 @@ dec_ack_frame(const struct q_pkt * restrict const p __attribute__((unused)),
     assert(f, "could not calloc");
     f->type = buf[0];
 
-    warn(debug, "stream type %02x", f->type);
     assert((f->type & F_ACK_UNUSED) == 0, "unused ACK frame bit set");
 
     const uint8_t lg_ack_len = dec_lg_ack_len(f->type);
-    memcpy(&f->lg_ack, &buf[i], lg_ack_len);
-    warn(debug, "%d-byte largest ACK %" PRIu64, lg_ack_len, f->lg_ack);
-    i += sizeof(lg_ack_len);
-    assert(i < len, "buf too short");
+    decode(f->lg_ack, buf, len, i, lg_ack_len, "%" PRIu64);
 
     // TODO: support the weird float format they've defined
-    memcpy(&f->lg_ack_delta_t, &buf[i], sizeof(f->lg_ack_delta_t));
-    warn(debug, "largest ACK delta t %d", f->lg_ack_delta_t);
-    i += sizeof(f->lg_ack_delta_t);
-    assert(i < len, "buf too short");
+    decode(f->lg_ack_delta_t, buf, len, i, 0, "%d");
 
     const uint8_t ack_block_len = dec_ack_block_len(f->type);
     warn(debug, "%d-byte ACK block length", ack_block_len);
 
     if (f->type & F_ACK_N) {
-        memcpy(&f->ack_blocks, &buf[i], sizeof(f->ack_blocks));
-        warn(debug, "%d (+1) ACK blocks present", f->ack_blocks);
-        i += sizeof(f->ack_blocks);
+        decode(f->ack_blocks, buf, len, i, 0, "%d");
+        f->ack_blocks++; // NOTE: draft-hamilton says +1
     } else {
         f->ack_blocks = 1;
         warn(debug, "F_ACK_N unset; one ACK block present");
     }
 
     for (uint8_t b = 0; b < f->ack_blocks; b++) {
+        // TODO: create structure for this in q_pkt
         warn(debug, "decoding ACK block #%d", b);
         uint64_t l = 0;
-        memcpy(&l, &buf[i], ack_block_len);
-        warn(debug, "ACK block length %" PRIu64, l);
-        i += ack_block_len;
+        decode(l, buf, len, i, ack_block_len, "%" PRIu64);
         uint8_t gap;
-        memcpy(&gap, &buf[i], sizeof(gap));
-        warn(debug, "gap to next ACK block %d", gap);
-        i += sizeof(gap);
+        decode(gap, buf, len, i, 0, "%d");
     }
 
     // memcpy(&f->ts_blocks, &buf[i], sizeof(f->ts_blocks));
@@ -199,13 +175,7 @@ dec_stop_waiting_frame(const struct q_pkt * restrict const p,
     assert(f, "could not calloc");
     f->type = buf[0];
 
-    warn(debug, "stream type %02x", f->type);
-
-    memcpy(&f->lst_unacked, &buf[i], p->nr_len);
-    warn(debug, "%d-byte largest ACK %" PRIu64, p->nr_len, f->lst_unacked);
-    i += p->nr_len;
-    assert(i < len, "buf too short");
-
+    decode(f->lst_unacked, buf, len, i, p->nr_len, "%" PRIu64);
     return i;
 }
 
@@ -223,21 +193,14 @@ dec_conn_close_frame(const struct q_pkt * restrict const p
     assert(f, "could not calloc");
     f->type = buf[0];
 
-    warn(debug, "stream type %02x", f->type);
-
-    memcpy(&f->err, &buf[i], sizeof(f->err));
-    warn(debug, "error %d", f->err);
-    i += sizeof(f->err);
-
-    memcpy(&f->reason_len, &buf[i], sizeof(f->reason_len));
-    warn(debug, "reason_len %d", f->reason_len);
-    i += sizeof(f->reason_len);
+    decode(f->err, buf, len, i, 0, "%d");
+    decode(f->reason_len, buf, len, i, 0, "%d");
 
     if (f->reason_len) {
         f->reason = calloc(1, f->reason_len);
-        memcpy(f->reason, &buf[i], f->reason_len);
-        warn(debug, "reason: %.*s", f->reason_len, f->reason);
-        i += f->reason_len;
+        assert(f->reason, "could not calloc");
+        decode(*f->reason, buf, len, i, f->reason_len, "%d"); // XXX: ugly
+        warn(err, "%s", f->reason);
     }
 
     return i;
@@ -252,7 +215,7 @@ uint16_t __attribute__((nonnull)) dec_frames(struct q_pkt * restrict const p,
 
     while (i < len) {
         const uint8_t flags = buf[i];
-        warn(debug, "frame 0x%02x, %d %d", flags, i, len);
+        warn(debug, "frame type 0x%02x, start pos %d", flags, i);
         if (flags & F_STREAM) {
             i += dec_stream_frame(p, &buf[i], len - i);
             continue;

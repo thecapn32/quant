@@ -1,4 +1,5 @@
 #include <inttypes.h>
+#include <stdbool.h>
 #include <sys/param.h>
 
 #include "fnv_1a.h"
@@ -33,48 +34,34 @@ dec_pub_hdr(struct q_pkt * restrict const p,
             const uint8_t * restrict const buf,
             const uint16_t len)
 {
-    uint16_t i = 0;
+    p->flags = buf[0];
+    warn(debug, "p->flags = 0x%02x", p->flags);
+    uint16_t i = 1;
 
-    p->flags = buf[i++];
-    warn(debug, "flags 0x%02x", p->flags);
-    assert(i <= len, "pub hdr only %d bytes; truncated?", len);
+    if (p->flags & F_CID)
+        decode(p->cid, buf, len, i, 0, "%" PRIu64); // XXX: no ntohll()?
 
-    if (p->flags & F_CID) {
-        memcpy(&p->cid, &buf[i], sizeof(p->cid)); // XXX: no ntohll()?
-        i += sizeof(p->cid);
-        warn(debug, "cid %" PRIu64, p->cid);
-        assert(i <= len, "pub hdr only %d bytes; truncated?", len);
-    }
-
-    if (p->flags & F_VERS) {
-        memcpy(&p->vers.as_int, &buf[i],
-               sizeof(p->vers)); // no need for ntohl()
-        i += sizeof(p->vers);
-        warn(debug, "vers 0x%08x %.4s", p->vers.as_int, p->vers.as_str);
-        assert(i <= len, "pub hdr only %d bytes; truncated?", len);
-    }
+    if (p->flags & F_VERS)
+        decode(p->vers.as_int, buf, len, i, 0, "0x%08x");
 
     if (p->flags & F_NONCE) {
         p->nonce_len = (uint8_t)MIN(len - i, MAX_NONCE_LEN);
-        warn(debug, "nonce len %d %.*s", p->nonce_len, p->nonce_len,
-             (const char *)&buf[i]);
-        memcpy(p->nonce, &buf[i], p->nonce_len);
-        i += p->nonce_len;
+        decode(p->nonce, buf, len, i, p->nonce_len, "%s");
         assert(i <= len, "pub hdr only %d bytes; truncated?", len);
     }
 
     if (p->flags & F_PUB_RST)
         warn(err, "public reset");
 
-    p->nr_len = dec_pkt_nr_len(p->flags);
-    warn(debug, "nr_len %d", p->nr_len);
+    if (p->flags & F_VERS && i == len)
+        // this is a version negotiation packet from the server
+        return i;
 
-    memcpy(&p->nr, &buf[i], p->nr_len); // XXX: no ntohll()?
-    warn(debug, "nr %" PRIu64, p->nr);
-    i += p->nr_len;
+    p->nr_len = dec_pkt_nr_len(p->flags);
+    decode(p->nr, buf, len, i, p->nr_len, "%" PRIu64); // XXX: no ntohll()?
 
     if (p->flags & (F_MULTIPATH | F_UNUSED))
-        warn(warn, "unsupported flag encountered");
+        die("unsupported flag set");
 
     if (i <= len) {
         // if there are bytes left in the packet, there must be a hash to
@@ -116,14 +103,17 @@ enc_init_pkt(const struct q_conn * restrict const c,
         warn(debug, "vers 0x%08x %.4s", vers[v].as_int, vers[v].as_str);
         i += sizeof(vers[v]);
         assert(i <= len, "buf len %d, consumed %d", len, i);
-        // TODO: omit version included in the version field above from the nonce
-        warn(debug, "nonce len %zu %.*s", vers_len, (int)vers_len,
-             (const char *)&vers[0].as_int);
-        memcpy(&buf[i], &vers[0].as_int, vers_len);
-        i += vers_len;
-        assert(i <= len, "buf len %d, consumed %d", len, i);
-        // version negotiation response ends here (no hash)
-        return i;
+        if (c->state == VERS_RECV) {
+            // TODO: omit version included in the version field above from the
+            // nonce
+            warn(debug, "nonce len %zu %.*s", vers_len, (int)vers_len,
+                 (const char *)&vers[0].as_int);
+            memcpy(&buf[i], &vers[0].as_int, vers_len);
+            i += vers_len;
+            assert(i <= len, "buf len %d, consumed %d", len, i);
+            // version negotiation response ends here (no hash)
+            return i;
+        }
     }
 
     buf[0] |= enc_pkt_nr_len(sizeof(uint8_t));
