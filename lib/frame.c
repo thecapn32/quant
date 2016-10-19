@@ -10,7 +10,7 @@
 static uint8_t __attribute__((const)) dec_sid_len(const uint8_t flags)
 {
     const uint8_t l = flags & 0x03;
-    assert(l >= 0 && l <= 3, "cannot decode stream ID length %d", l);
+    assert(/*l >= 0 && */ l <= 3, "cannot decode stream ID length %d", l);
     static const uint8_t dec[] = {1, 2, 3, 4};
     return dec[l];
 }
@@ -29,7 +29,7 @@ static uint8_t __attribute__((const)) enc_sid_len(const uint8_t n)
 static uint8_t __attribute__((const)) dec_off_len(const uint8_t flags)
 {
     const uint8_t l = (flags & 0x1C) >> 2;
-    assert(l >= 0 && l <= 7, "cannot decode stream offset length %d", l);
+    assert(/* l >= 0 && */ l <= 7, "cannot decode stream offset length %d", l);
     static const uint8_t dec[] = {0, 2, 3, 4, 5, 6, 7, 8};
     return dec[l];
 }
@@ -48,7 +48,7 @@ static uint8_t __attribute__((const)) enc_off_len(const uint8_t n)
 static uint8_t __attribute__((const)) dec_lg_ack_len(const uint8_t flags)
 {
     const uint8_t l = (flags & 0x0C) >> 2;
-    assert(l >= 0 && l <= 3, "cannot decode largest ACK length %d", l);
+    assert(/* l >= 0 && */ l <= 3, "cannot decode largest ACK length %d", l);
     static const uint8_t dec[] = {1, 2, 3, 4};
     return dec[l];
 }
@@ -58,7 +58,7 @@ static uint8_t __attribute__((const)) dec_lg_ack_len(const uint8_t flags)
 static uint8_t __attribute__((const)) dec_ack_block_len(const uint8_t flags)
 {
     const uint8_t l = flags & 0x03;
-    assert(l >= 0 && l <= 3, "cannot decode largest ACK length %d", l);
+    assert(/*l >= 0 && */ l <= 3, "cannot decode largest ACK length %d", l);
     static const uint8_t dec[] = {1, 2, 4, 6};
     return dec[l];
 }

@@ -12,7 +12,7 @@
 static uint8_t __attribute__((const)) dec_pkt_nr_len(const uint8_t flags)
 {
     const uint8_t l = (flags & 0x30) >> 4;
-    assert(l >= 0 && l <= 3, "cannot decode packet number length %d", l);
+    assert(/* l >= 0 && */ l <= 3, "cannot decode packet number length %d", l);
     const uint8_t dec[] = {1, 2, 3, 6};
     return dec[l];
 }
