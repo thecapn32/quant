@@ -79,7 +79,7 @@ add_custom_target(quic-server
 add_custom_target(kill-quic-server
   COMMAND
     ${VAGRANT} ssh -c "pkill quic_server" 2> /dev/null &&
-    ${RM} -f ${QSP} || true
+    ${RM} -f ${QSP} quic_server.log || true
   # DEPENDS vagrant-up
   VERBATIM
 )
