@@ -12,9 +12,9 @@
 
 
 /// QUIC version supported by this implementation in order of preference.
-const union q_vers vers[] = {{.as_str = "Q026"}, // "Q025" is draft-hamilton
-                             // {.as_str = "Q036"},
-                             {.as_int = 0}};
+const q_tag vers[] = {{.as_str = "Q026"}, // "Q025" is draft-hamilton
+                      {.as_str = "Q036"},
+                      {.as_int = 0}};
 
 const size_t vers_len = sizeof(vers);
 
@@ -86,7 +86,7 @@ pick_server_vers(const struct q_pkt * restrict const p)
     // if that didn't work, then we need to check the numbers in the nonce
     for (uint8_t i = 0; vers[i].as_int; i++)
         for (uint8_t j = 0; j < p->nonce_len; j += sizeof(uint32_t)) {
-            union q_vers v;
+            q_tag v;
             memcpy(&v.as_int, &p->nonce[j], sizeof(v));
             warn(debug, "checking server nonce pos %ld = %.4s against our prio "
                         "%d = %.4s",

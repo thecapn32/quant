@@ -12,7 +12,7 @@ struct q_pkt {
     uint8_t nonce_len;
     uint8_t nr_len;
     uint8_t _unused;
-    union q_vers vers;
+    q_tag vers;
     uint64_t cid;
     uint64_t nr;
     uint8_t nonce[32];
