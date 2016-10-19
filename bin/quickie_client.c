@@ -27,7 +27,7 @@ int main(int argc, char * argv[])
     long conns = 1;
     int ch;
 
-    while ((ch = getopt(argc, argv, "hd:p:")) != -1) {
+    while ((ch = getopt(argc, argv, "hd:p:n:")) != -1) {
         switch (ch) {
         case 'd':
             dest = optarg;
