@@ -34,8 +34,10 @@ struct q_conn {
     uint8_t vers;  ///< QUIC version in use for this connection. (Index into
                    ///@p q_vers[].)
     uint8_t _unused;
+    int fd;
     socklen_t plen;
     struct sockaddr peer;
+    uint8_t _unused2[4];
 };
 
 #define CLOSED 0
