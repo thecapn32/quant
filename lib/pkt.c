@@ -91,36 +91,22 @@ enc_init_pkt(const struct q_conn * restrict const c,
 {
     buf[0] = F_CID;
     uint16_t i = 1;
-    memcpy(&buf[i], &c->id, sizeof(c->id)); // XXX: no htonll()?
-    warn(debug, "cid %" PRIu64, c->id);
-    i += sizeof(c->id);
-    assert(i <= len, "buf len %d, consumed %d", len, i);
+    encode(buf, len, i, c->id, 0, "%" PRIu64); // XXX: no htonll()?
 
     if (vers[c->vers].as_int || c->state == VERS_RECV) {
         buf[0] |= F_VERS;
         const uint8_t v = vers[c->vers].as_int ? c->vers : 0;
-        memcpy(&buf[i], &vers[v].as_int, sizeof(vers[v]));
-        warn(debug, "vers 0x%08x %.4s", vers[v].as_int, vers[v].as_str);
-        i += sizeof(vers[v]);
-        assert(i <= len, "buf len %d, consumed %d", len, i);
+        encode(buf, len, i, vers[v].as_int, 0, "0x%08x");
+
         if (c->state == VERS_RECV) {
-            // TODO: omit version included in the version field above from the
-            // nonce
-            warn(debug, "nonce len %zu %.*s", vers_len, (int)vers_len,
-                 (const char *)&vers[0].as_int);
-            memcpy(&buf[i], &vers[0].as_int, vers_len);
-            i += vers_len;
-            assert(i <= len, "buf len %d, consumed %d", len, i);
+            encode(buf, len, i, vers[0].as_int, vers_len, "0x%08x"); // XXX
             // version negotiation response ends here (no hash)
             return i;
         }
     }
 
     buf[0] |= enc_pkt_nr_len(sizeof(uint8_t));
-    buf[i] = (uint8_t)c->out;
-    warn(debug, "%zu-byte nr %d", sizeof(uint8_t), (uint8_t)c->out);
-    i += sizeof(uint8_t);
-    assert(i <= len, "buf len %d, consumed %d", len, i);
+    encode(buf, len, i, c->out, 0, "%" PRIu64);
 
     const uint16_t hash_pos = i;
     i += HASH_LEN;
