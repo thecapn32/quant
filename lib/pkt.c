@@ -8,6 +8,9 @@
 #include "quic.h"
 #include "util.h"
 
+static const q_tag prst = {.as_str = "PRST"}, rnon = {.as_str = "RNON"},
+                   rseq = {.as_str = "RSEQ"}, cadr = {.as_str = "CADR"};
+
 
 // Convert packet number length encoded in flags to bytes
 static uint8_t __attribute__((const)) dec_pkt_nr_len(const uint8_t flags)
@@ -44,14 +47,42 @@ dec_pub_hdr(struct q_pkt * restrict const p,
     if (p->flags & F_VERS)
         decode(p->vers.as_int, buf, len, i, 0, "0x%08x");
 
+    if (p->flags & F_PUB_RST) {
+        warn(err, "public reset");
+        uint32_t tag;
+        decode(tag, buf, len, i, 0, "0x%04x");
+        assert(tag == prst.as_int, "PRST tag mismatch 0x%04x != 0x%04x", tag,
+               prst.as_int);
+
+        uint8_t n;
+        decode(n, buf, len, i, 0, "%d");
+        assert(n == 3, "got %d tags in PRST", n);
+        i += n; // XXX: undocumented in draft-hamilton
+
+        decode(tag, buf, len, i, 0, "0x%04x");
+        assert(tag == rnon.as_int, "RNON tag mismatch 0x%04x != 0x%04x", tag,
+               rnon.as_int);
+        uint64_t val;
+        decode(val, buf, len, i, 0, "0x%" PRIx64);
+
+        decode(tag, buf, len, i, 0, "0x%04x");
+        assert(tag == rseq.as_int, "RSEQ tag mismatch 0x%04x != 0x%04x", tag,
+               rseq.as_int);
+        decode(val, buf, len, i, 0, "0x%" PRIx64);
+
+        decode(tag, buf, len, i, 0, "0x%04x");
+        assert(tag == cadr.as_int, "CADR tag mismatch 0x%04x != 0x%04x", tag,
+               cadr.as_int);
+        // decode(val, buf, len, i, 0, "0x%" PRIx64);
+
+        return i;
+    }
+
     if (p->flags & F_NONCE) {
         p->nonce_len = (uint8_t)MIN(len - i, MAX_NONCE_LEN);
         decode(p->nonce, buf, len, i, p->nonce_len, "%s");
         assert(i <= len, "pub hdr only %d bytes; truncated?", len);
     }
-
-    if (p->flags & F_PUB_RST)
-        warn(err, "public reset");
 
     if (p->flags & F_VERS && i == len)
         // this is a version negotiation packet from the server
@@ -71,7 +102,6 @@ dec_pub_hdr(struct q_pkt * restrict const p,
             die("hash mismatch");
         else
             warn(debug, "hash OK");
-        hexdump(&buf[i], HASH_LEN);
         i += HASH_LEN;
         assert(i <= len, "pub hdr only %d bytes; truncated?", len);
     }
@@ -93,16 +123,17 @@ enc_init_pkt(const struct q_conn * restrict const c,
     uint16_t i = 1;
     encode(buf, len, i, c->id, 0, "%" PRIu64); // XXX: no htonll()?
 
-    if (vers[c->vers].as_int || c->state == VERS_RECV) {
+    // XXX: omit version to force a PRST
+    if (c->state == CLOSED || vers[c->vers].as_int == 0) {
         buf[0] |= F_VERS;
-        const uint8_t v = vers[c->vers].as_int ? c->vers : 0;
-        encode(buf, len, i, vers[v].as_int, 0, "0x%08x");
+        encode(buf, len, i, vers[c->vers].as_int, 0, "0x%08x");
+    } else
+        warn(info, "skipping version");
 
-        if (c->state == VERS_RECV) {
-            encode(buf, len, i, vers[0].as_int, vers_len, "0x%08x"); // XXX
-            // version negotiation response ends here (no hash)
-            return i;
-        }
+    if (vers[c->vers].as_int == 0) {
+        warn(info, "sending version negotiation server response");
+        encode(buf, len, i, vers[0].as_int, vers_len, "0x%08x"); // XXX
+        return i;
     }
 
     buf[0] |= enc_pkt_nr_len(sizeof(uint8_t));
@@ -118,7 +149,6 @@ enc_init_pkt(const struct q_conn * restrict const c,
 
     const uint128_t hash = fnv_1a(buf, i, hash_pos, HASH_LEN);
     warn(debug, "inserting %d-byte hash at pos %d", HASH_LEN, hash_pos);
-    hexdump(&hash, HASH_LEN);
     memcpy(&buf[hash_pos], &hash, HASH_LEN);
 
     return i;
