@@ -136,7 +136,7 @@ enc_init_pkt(const struct q_conn * restrict const c,
     }
 
     buf[0] |= enc_pkt_nr_len(sizeof(uint8_t));
-    encode(buf, len, i, c->out, 0, "%" PRIu64);
+    encode(buf, len, i, c->out, sizeof(uint8_t), "%" PRIu64);
 
     const uint16_t hash_pos = i;
     i += HASH_LEN;
