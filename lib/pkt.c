@@ -152,3 +152,19 @@ enc_init_pkt(const struct q_conn * restrict const c,
 
     return i;
 }
+
+
+void free_pkt(struct q_pkt * restrict const p)
+{
+    node * i = list_head(&p->frames);
+    while (i) {
+        struct q_frame * restrict const f = i->data;
+        switch (f->type) {
+        case T_CONNECTION_CLOSE:
+            free(f->ccf.reason);
+            break;
+        }
+        free(f);
+        i = i->next;
+    }
+}

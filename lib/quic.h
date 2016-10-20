@@ -23,21 +23,27 @@ extern const q_tag vers[];
 extern const size_t vers_len;
 
 
+struct q_stream {
+    uint64_t id;
+};
+
+
 /// A QUIC connection.
 struct q_conn {
-    uint64_t id;  ///< Connection ID
-    uint64_t out; ///< The highest packet number sent on this connection
-    uint64_t in;  ///< The highest packet number received on this connection
     node node;
-    uint8_t flags;
+
+    uint64_t id;   ///< Connection ID
+    uint64_t out;  ///< The highest packet number sent on this connection
+    uint64_t in;   ///< The highest packet number received on this connection
     uint8_t state; ///< State of the connection.
     uint8_t vers;  ///< QUIC version in use for this connection. (Index into
-                   ///@p vers[].)
-    uint8_t _unused;
-    int fd;
-    socklen_t plen;
-    struct sockaddr peer;
-    uint8_t _unused2[4];
+                   ///< @p vers[].)
+    uint8_t _unused[2]; ///< Unused.
+    int fd;             ///< File descriptor (socket) for the connection.
+    hash streams;
+    struct sockaddr peer; ///< Address of our peer.
+    socklen_t plen;       ///< Length of @p peer.
+    uint8_t _unused2[4];  ///< Unused.
 };
 
 #define CLOSED 0

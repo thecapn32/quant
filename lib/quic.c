@@ -18,14 +18,14 @@ const size_t vers_len = sizeof(vers);
 
 
 /// All open QUIC connections.
-static hash qc;
+static hash conns;
 
 static ev_io rx_w;
 static ev_timer to_w;
 
 
 static int __attribute__((nonnull))
-q_conn_cmp(const void * restrict const arg, const void * restrict const obj)
+cmp_q_conn(const void * restrict const arg, const void * restrict const obj)
 {
     return *(const uint64_t *)arg != ((const struct q_conn *)obj)->id;
 }
@@ -55,7 +55,8 @@ new_conn(const uint64_t id,
     c->id = id;
     c->out = 1;
     c->fd = fd;
-    hash_insert(&qc, &c->node, c, (uint32_t)c->id);
+    hash_init(&c->streams);
+    hash_insert(&conns, &c->node, c, (uint32_t)c->id);
 
     char host[NI_MAXHOST] = "";
     char port[NI_MAXSERV] = "";
@@ -150,10 +151,11 @@ q_rx(struct ev_loop * restrict const loop __attribute__((unused)),
     const uint16_t len = (uint16_t)rlen;
     warn(debug, "received %d bytes", len);
 
-    struct q_pkt p = {0};
+    struct q_pkt p = {0}; // TODO: might be better to allocate dynamically
     dec_pub_hdr(&p, buf, len);
 
-    struct q_conn * c = hash_search(&qc, q_conn_cmp, &p.cid, (uint32_t)p.cid);
+    struct q_conn * c =
+        hash_search(&conns, cmp_q_conn, &p.cid, (uint32_t)p.cid);
     if (c == 0) {
         // this is a packet for a new connection, create it
         assert(p.flags & F_CID, "no connection ID in initial packet");
@@ -195,9 +197,10 @@ q_rx(struct ev_loop * restrict const loop __attribute__((unused)),
     default:
         die("TODO: state %d", c->state);
     }
-    die("unreachable");
+    assert(0, "unreachable");
 
 respond:
+    free_pkt(&p);
     q_tx(c);
 }
 
@@ -245,7 +248,7 @@ void q_init(struct ev_loop * restrict const loop)
 {
     warn(info, "have libev %d.%d", ev_version_major(), ev_version_minor());
     srandom((unsigned)time(0));
-    hash_init(&qc);
+    hash_init(&conns);
 
     // during development, abort the event loop after some seconds of inactivity
     ev_timer * const t =

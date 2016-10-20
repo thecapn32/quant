@@ -1,5 +1,7 @@
 #pragma once
 
+#include "tommy.h"
+
 #define F_STREAM 0x80
 #define F_STREAM_FIN 0x40
 #define F_STREAM_DATA_LEN 0x20
@@ -19,9 +21,6 @@
 
 
 struct q_stream_frame {
-    uint8_t type;
-    uint8_t _unused[7];
-
     uint64_t off;
     uint32_t sid;
     uint16_t dlen;
@@ -31,9 +30,6 @@ struct q_stream_frame {
 
 
 struct q_ack_frame {
-    uint8_t type;
-    uint8_t _unused[7];
-
     uint64_t lg_ack;
     uint16_t lg_ack_delta_t;
     uint8_t ack_blocks;
@@ -45,17 +41,11 @@ struct q_ack_frame {
 
 
 struct q_stop_waiting_frame {
-    uint8_t type;
-    uint8_t _unused[7];
-
     uint64_t lst_unacked;
 };
 
 
 struct q_conn_close_frame {
-    uint8_t type;
-    uint8_t _unused[7];
-
     uint32_t err;
     uint16_t reason_len;
     uint8_t _unused2[2];
@@ -63,14 +53,19 @@ struct q_conn_close_frame {
 };
 
 
-// struct q_frame {
-//     uint8_t type;
-//     uint8_t _unused[7];
+struct q_frame {
+    node node;
+    uint8_t type;
+    uint8_t _unused[7];
 
-//     union {
-//         struct q_stream_frame sf;
-//     };
-// };
+    union {
+        struct q_stream_frame sf;
+        struct q_ack_frame af;
+        struct q_stop_waiting_frame swf;
+        struct q_conn_close_frame ccf;
+    };
+};
+
 
 struct q_pkt;
 

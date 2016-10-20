@@ -66,36 +66,33 @@ static uint8_t __attribute__((const)) dec_ack_block_len(const uint8_t flags)
 
 static uint16_t __attribute__((nonnull))
 dec_stream_frame(struct q_pkt * restrict const p __attribute__((unused)),
+                 struct q_frame * restrict const f,
                  const uint8_t * restrict const buf,
                  const uint16_t len)
 {
     uint16_t i = 1;
     assert(i < len, "buf too short");
 
-    struct q_stream_frame * f = calloc(1, sizeof(*f));
-    assert(f, "could not calloc");
-    f->type = buf[0];
-
     warn(debug, "fin = %d", f->type & F_STREAM_FIN);
 
     const uint8_t sid_len = dec_sid_len(f->type);
     if (sid_len)
-        decode(f->sid, buf, len, i, sid_len, "%d");
+        decode(f->sf.sid, buf, len, i, sid_len, "%d");
 
     const uint8_t off_len = dec_off_len(f->type);
     if (off_len)
-        decode(f->off, buf, len, i, off_len, "%" PRIu64);
+        decode(f->sf.off, buf, len, i, off_len, "%" PRIu64);
 
     if (f->type & F_STREAM_DATA_LEN) {
-        decode(f->dlen, buf, len, i, 0, "%d");
+        decode(f->sf.dlen, buf, len, i, 0, "%d");
 
         // keep a pointer to the frame data around
-        f->data = &buf[i];
+        f->sf.data = &buf[i];
 
         // TODO check that FIN is 0
         // XXX skipping content
 
-        i += f->dlen;
+        i += f->sf.dlen;
     }
 
     return i;
@@ -103,37 +100,34 @@ dec_stream_frame(struct q_pkt * restrict const p __attribute__((unused)),
 
 
 static uint16_t __attribute__((nonnull))
-dec_ack_frame(const struct q_pkt * restrict const p __attribute__((unused)),
+dec_ack_frame(struct q_pkt * restrict const p __attribute__((unused)),
+              struct q_frame * restrict const f,
               const uint8_t * restrict const buf,
               const uint16_t len)
 {
     uint16_t i = 1;
     assert(i < len, "buf too short");
 
-    struct q_ack_frame * f = calloc(1, sizeof(*f));
-    assert(f, "could not calloc");
-    f->type = buf[0];
-
     assert((f->type & F_ACK_UNUSED) == 0, "unused ACK frame bit set");
 
     const uint8_t lg_ack_len = dec_lg_ack_len(f->type);
-    decode(f->lg_ack, buf, len, i, lg_ack_len, "%" PRIu64);
+    decode(f->af.lg_ack, buf, len, i, lg_ack_len, "%" PRIu64);
 
     // TODO: support the weird float format they've defined
-    decode(f->lg_ack_delta_t, buf, len, i, 0, "%d");
+    decode(f->af.lg_ack_delta_t, buf, len, i, 0, "%d");
 
     const uint8_t ack_block_len = dec_ack_block_len(f->type);
     warn(debug, "%d-byte ACK block length", ack_block_len);
 
     if (f->type & F_ACK_N) {
-        decode(f->ack_blocks, buf, len, i, 0, "%d");
-        f->ack_blocks++; // NOTE: draft-hamilton says +1
+        decode(f->af.ack_blocks, buf, len, i, 0, "%d");
+        f->af.ack_blocks++; // NOTE: draft-hamilton says +1
     } else {
-        f->ack_blocks = 1;
+        f->af.ack_blocks = 1;
         warn(debug, "F_ACK_N unset; one ACK block present");
     }
 
-    for (uint8_t b = 0; b < f->ack_blocks; b++) {
+    for (uint8_t b = 0; b < f->af.ack_blocks; b++) {
         // TODO: create structure for this in q_pkt
         warn(debug, "decoding ACK block #%d", b);
         uint64_t l = 0;
@@ -158,49 +152,42 @@ dec_ack_frame(const struct q_pkt * restrict const p __attribute__((unused)),
     //     i += sizeof(ts);
     // }
 
-
     return i;
 }
 
 
 static uint16_t __attribute__((nonnull))
-dec_stop_waiting_frame(const struct q_pkt * restrict const p,
+dec_stop_waiting_frame(struct q_pkt * restrict const p,
+                       struct q_frame * restrict const f,
                        const uint8_t * restrict const buf,
                        const uint16_t len)
 {
     uint16_t i = 1;
     assert(i < len, "buf too short");
 
-    struct q_stop_waiting_frame * f = calloc(1, sizeof(*f));
-    assert(f, "could not calloc");
-    f->type = buf[0];
-
-    decode(f->lst_unacked, buf, len, i, p->nr_len, "%" PRIu64);
+    decode(f->swf.lst_unacked, buf, len, i, p->nr_len, "%" PRIu64);
     return i;
 }
 
 
 static uint16_t __attribute__((nonnull))
-dec_conn_close_frame(const struct q_pkt * restrict const p
-                     __attribute__((unused)),
+dec_conn_close_frame(struct q_pkt * restrict const p __attribute__((unused)),
+                     struct q_frame * restrict const f,
                      const uint8_t * restrict const buf,
                      const uint16_t len)
 {
     uint16_t i = 1;
     assert(i < len, "buf too short");
 
-    struct q_conn_close_frame * f = calloc(1, sizeof(*f));
-    assert(f, "could not calloc");
-    f->type = buf[0];
+    decode(f->ccf.err, buf, len, i, 0, "%d");
+    decode(f->ccf.reason_len, buf, len, i, 0, "%d");
 
-    decode(f->err, buf, len, i, 0, "%d");
-    decode(f->reason_len, buf, len, i, 0, "%d");
-
-    if (f->reason_len) {
-        f->reason = calloc(1, f->reason_len);
-        assert(f->reason, "could not calloc");
-        decode(*f->reason, buf, len, i, f->reason_len, "%d"); // XXX: ugly
-        warn(err, "%s", f->reason);
+    if (f->ccf.reason_len) {
+        f->ccf.reason = calloc(1, f->ccf.reason_len);
+        assert(f->ccf.reason, "could not calloc");
+        decode(*f->ccf.reason, buf, len, i, f->ccf.reason_len,
+               "%d"); // XXX: ugly
+        warn(err, "%s", f->ccf.reason);
     }
 
     return i;
@@ -216,12 +203,18 @@ uint16_t __attribute__((nonnull)) dec_frames(struct q_pkt * restrict const p,
     while (i < len) {
         const uint8_t flags = buf[i];
         warn(debug, "frame type 0x%02x, start pos %d", flags, i);
+
+        struct q_frame * restrict const f = calloc(1, sizeof(*f));
+        assert(f, "could not calloc");
+        f->type = buf[0];
+        list_insert_tail(&p->frames, &f->node, f);
+
         if (flags & F_STREAM) {
-            i += dec_stream_frame(p, &buf[i], len - i);
+            i += dec_stream_frame(p, f, &buf[i], len - i);
             continue;
         }
         if (flags & F_ACK) {
-            i += dec_ack_frame(p, &buf[i], len - i);
+            i += dec_ack_frame(p, f, &buf[i], len - i);
             continue;
         }
 
@@ -238,7 +231,7 @@ uint16_t __attribute__((nonnull)) dec_frames(struct q_pkt * restrict const p,
             die("rst_stream frame");
             break;
         case T_CONNECTION_CLOSE:
-            i += dec_conn_close_frame(p, &buf[i], len - i);
+            i += dec_conn_close_frame(p, f, &buf[i], len - i);
             break;
         case T_GOAWAY:
             die("goaway frame");
@@ -250,7 +243,7 @@ uint16_t __attribute__((nonnull)) dec_frames(struct q_pkt * restrict const p,
             die("blocked frame");
             break;
         case T_STOP_WAITING:
-            i += dec_stop_waiting_frame(p, &buf[i], len - i);
+            i += dec_stop_waiting_frame(p, f, &buf[i], len - i);
             break;
         case T_PING:
             die("ping frame");

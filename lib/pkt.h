@@ -16,6 +16,7 @@ struct q_pkt {
     uint64_t cid;
     uint64_t nr;
     uint8_t nonce[32];
+    list frames;
 };
 
 
@@ -62,3 +63,5 @@ uint16_t dec_pub_hdr(struct q_pkt * const p,
 uint16_t enc_init_pkt(const struct q_conn * const c,
                       uint8_t * restrict const buf,
                       const uint16_t len);
+
+void free_pkt(struct q_pkt * restrict const p);
