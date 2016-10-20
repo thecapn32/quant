@@ -7,11 +7,9 @@ before_script:
   #     /etc/apt/sources.list
   - cat /etc/apt/sources.list
   - apt-get update -y -qq
-  - apt-cache search gcc
-  - apt-cache search clang
   -
     apt-get install -y -qq doxygen cmake libnss3-dev libev-dev
-      vagrant daemon tcpdump tshark clang gcc
+      vagrant daemon tcpdump tshark
       # virtualbox
 
 compile:
