@@ -113,8 +113,11 @@ dec_ack_frame(struct q_pkt * restrict const p __attribute__((unused)),
     const uint8_t lg_ack_len = dec_lg_ack_len(f->type);
     decode(f->af.lg_ack, buf, len, i, lg_ack_len, "%" PRIu64);
 
-    // TODO: support the weird float format they've defined
-    decode(f->af.lg_ack_delta_t, buf, len, i, 0, "%d");
+    // TODO: check that the F16C stuff does what is needed here
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdouble-promotion"
+    decode(f->af.lg_ack_delta_t, buf, len, i, 0, "%lf");
+#pragma GCC diagnostic pop
 
     const uint8_t ack_block_len = dec_ack_block_len(f->type);
     warn(debug, "%d-byte ACK block length", ack_block_len);

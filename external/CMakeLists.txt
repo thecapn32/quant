@@ -1,5 +1,36 @@
 include(ExternalProject)
 
+# externalproject_add(softfloat-3b-download
+#   PREFIX softfloat-3b-prefix
+#   SOURCE_DIR "softfloat-3b-prefix/src/softfloat-3b"
+#   URL "http://www.jhauser.us/arithmetic/SoftFloat-3b.zip"
+#   URL_HASH MD5=31c1f4a7ab0e9fb58bb9f7a29ff60e96
+#   DOWNLOAD_NO_PROGRESS 1
+#   CONFIGURE_COMMAND ""
+#   BUILD_COMMAND ""
+#   INSTALL_COMMAND ""
+# )
+
+# externalproject_add(softfloat-3b
+#   PREFIX softfloat-3b-prefix
+#   SOURCE_DIR "softfloat-3b-prefix/src/softfloat-3b/build/Linux-x86_64-GCC"
+#   DOWNLOAD_COMMAND ""
+#   CONFIGURE_COMMAND ""
+#   BUILD_COMMAND ${MAKE}
+#   BUILD_IN_SOURCE 1
+#   INSTALL_COMMAND ""
+# )
+
+# add_dependencies(softfloat-3b softfloat-3b-download)
+# externalproject_get_property(softfloat-3b SOURCE_DIR)
+# add_library(softfloat STATIC IMPORTED GLOBAL)
+# set_target_properties(softfloat PROPERTIES IMPORTED_LOCATION ${SOURCE_DIR}/softfloat.a)
+# set_target_properties(softfloat
+#   PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${SOURCE_DIR}/../../source/include
+# )
+# add_dependencies(softfloat softfloat-3b)
+
+
 externalproject_add(tommyds
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/amadvance/tommyds.git

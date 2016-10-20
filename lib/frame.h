@@ -29,9 +29,13 @@ struct q_stream_frame {
 };
 
 
+/// Define an IEEE-754 16-bt floating type (backed by gcc/clang F16C)
+typedef __fp16 float16_t;
+
+
 struct q_ack_frame {
     uint64_t lg_ack;
-    uint16_t lg_ack_delta_t;
+    float16_t lg_ack_delta_t;
     uint8_t ack_blocks;
     uint8_t ts_blocks;
 
