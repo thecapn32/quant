@@ -120,9 +120,9 @@ enc_init_pkt(const struct q_conn * restrict const c,
 {
     buf[0] = F_CID;
     uint16_t i = 1;
+    // XXX: omit cid to force a PRST
     encode(buf, len, i, c->id, 0, "%" PRIu64); // XXX: no htonll()?
 
-    // XXX: omit version to force a PRST
     if (c->state == CLOSED || vers[c->vers].as_int == 0) {
         buf[0] |= F_VERS;
         encode(buf, len, i, vers[c->vers].as_int, 0, "0x%08x");
