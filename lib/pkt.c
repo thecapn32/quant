@@ -150,6 +150,8 @@ enc_init_pkt(const struct q_conn * restrict const c,
     warn(debug, "inserting %d-byte hash at pos %d", HASH_LEN, hash_pos);
     memcpy(&buf[hash_pos], &hash, HASH_LEN);
 
+    warn(debug, "p->flags = 0x%02x", buf[0]);
+
     return i;
 }
 
