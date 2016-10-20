@@ -7,12 +7,16 @@
 #include "util.h"
 
 
-static void
-usage(const char * const name, const char * const ip, const char * const port)
+static void usage(const char * const name,
+                  const char * const ip,
+                  const char * const port,
+                  const long timeout)
 {
     printf("%s\n", name);
-    printf("\t[-i IP]       IP address to bind to; default %s\n", ip);
-    printf("\t[-p port]     destination port; default %s\n", port);
+    printf("\t[-i IP]\t\tIP address to bind to; default %s\n", ip);
+    printf("\t[-p port]\tdestination port; default %s\n", port);
+    printf("\t[-t sec]\texit after some seconds (0 to disable); default %ld\n",
+           timeout);
 }
 
 
@@ -20,20 +24,25 @@ int main(int argc, char * argv[])
 {
     char * ip = "127.0.0.1";
     char * port = "8443";
+    long timeout = 5;
     int ch;
 
-    while ((ch = getopt(argc, argv, "hi:p:")) != -1) {
+    while ((ch = getopt(argc, argv, "hi:p:t:")) != -1) {
         switch (ch) {
-        case 'd':
+        case 'i':
             ip = optarg;
             break;
         case 'p':
             port = optarg;
             break;
+        case 't':
+            timeout = strtol(optarg, 0, 10);
+            assert(errno != EINVAL, "could not convert to integer");
+            break;
         case 'h':
         case '?':
         default:
-            usage(argv[0], ip, port);
+            usage(BASENAME(argv[0]), ip, port, timeout);
             return 0;
         }
     }
@@ -67,7 +76,7 @@ int main(int argc, char * argv[])
     freeaddrinfo(res);
 
     struct ev_loop * loop = ev_default_loop(0);
-    q_init(loop);
+    q_init(loop, timeout);
     warn(debug, "%s ready on %s:%s", BASENAME(argv[0]), ip, port);
     q_serve(loop, s);
     ev_loop(loop, 0);

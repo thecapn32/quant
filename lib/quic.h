@@ -52,7 +52,7 @@ struct q_conn {
 #define ESTABLISHED 3
 
 
-void q_init(struct ev_loop * restrict const reloop);
+void q_init(struct ev_loop * restrict const reloop, const long timeout);
 
 void q_connect(struct ev_loop * restrict const loop,
                const int s,

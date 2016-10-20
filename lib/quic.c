@@ -10,7 +10,7 @@
 
 
 /// QUIC version supported by this implementation in order of preference.
-const q_tag vers[] = {{.as_str = "Q026"}, // "Q025" is draft-hamilton
+const q_tag vers[] = {{.as_str = "Q025"}, // "Q025" is draft-hamilton
                       {.as_str = "Q036"},
                       {.as_int = 0}};
 
@@ -175,8 +175,7 @@ q_rx(struct ev_loop * restrict const loop __attribute__((unused)),
                         "preference %d ",
                  p.vers.as_str, c->vers);
         else
-            warn(info, "client-requested version %.4s not supported",
-                 p.vers.as_str);
+            die("client-requested version %.4s not supported", p.vers.as_str);
         goto respond;
 
     case VERS_SENT:
@@ -212,7 +211,7 @@ q_connect(struct ev_loop * restrict const loop,
           const socklen_t plen)
 {
     // initialize the RX watcher
-    ev_io * const r = &rx_w; // suppress erroneous aliasing warning in gcc 6.2
+    ev_io * const r = &rx_w; // suppress erroneous warning in gcc 6.2
     ev_io_init(r, q_rx, s, EV_READ);
     ev_io_start(loop, &rx_w);
 
@@ -229,7 +228,7 @@ void __attribute__((nonnull))
 q_serve(struct ev_loop * restrict const loop, const int s)
 {
     // initialize the RX watcher
-    ev_io * const r = &rx_w; // suppress erroneous aliasing warning in gcc 6.2
+    ev_io * const r = &rx_w; // suppress erroneous warning in gcc 6.2
     ev_io_init(r, q_rx, s, EV_READ);
     ev_io_start(loop, &rx_w);
 }
@@ -244,15 +243,16 @@ static void timeout_cb(struct ev_loop * restrict const loop,
 }
 
 
-void q_init(struct ev_loop * restrict const loop)
+void q_init(struct ev_loop * restrict const loop, const long timeout)
 {
     warn(info, "have libev %d.%d", ev_version_major(), ev_version_minor());
     srandom((unsigned)time(0));
     hash_init(&conns);
 
-    // during development, abort the event loop after some seconds of inactivity
-    ev_timer * const t =
-        &to_w; // suppress erroneous aliasing warning in gcc 6.2
-    ev_timer_init(t, timeout_cb, 5, 0);
-    ev_timer_start(loop, &to_w);
+    if (timeout) {
+        // during development, abort event loop after some inactivity
+        ev_timer * const t = &to_w; // suppress erroneous warning in gcc 6.2
+        ev_timer_init(t, timeout_cb, timeout, 0);
+        ev_timer_start(loop, &to_w);
+    }
 }
