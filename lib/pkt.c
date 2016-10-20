@@ -1,5 +1,4 @@
 #include <inttypes.h>
-#include <stdbool.h>
 #include <sys/param.h>
 
 #include "fnv_1a.h"

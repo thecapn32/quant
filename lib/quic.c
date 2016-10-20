@@ -6,8 +6,6 @@
 #include <time.h>
 
 #include "pkt.h"
-#include "quic.h"
-#include "tommy.h"
 #include "util.h"
 
 
