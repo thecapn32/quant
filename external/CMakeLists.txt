@@ -84,7 +84,8 @@ externalproject_add(proto-quic
   BUILD_IN_SOURCE 1
   BUILD_COMMAND ${VAGRANT} ssh -c "\
     export PATH=$PATH:${QUIC}/depot_tools && \
-    cd ${QUIC}/src && gn gen out/Debug && ninja -v -C out/Debug quic_client quic_server \
+    cd ${QUIC}/src && gn gen out/Debug && \
+    ninja -v -C out/Debug quic_client quic_server \
   "
   INSTALL_COMMAND ""
 )
