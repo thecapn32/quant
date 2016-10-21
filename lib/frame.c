@@ -113,7 +113,7 @@ dec_ack_frame(struct q_pkt * restrict const p __attribute__((unused)),
     const uint8_t lg_ack_len = dec_lg_ack_len(f->type);
     decode(f->af.lg_ack, buf, len, i, lg_ack_len, "%" PRIu64);
 
-    // TODO: check that the F16C stuff does what is needed here
+// TODO: check that the F16C stuff does what is needed here
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdouble-promotion"
     // decode(f->af.lg_ack_delta_t, buf, len, i, 0, "%lf");
@@ -252,6 +252,21 @@ uint16_t __attribute__((nonnull)) dec_frames(struct q_pkt * restrict const p,
             die("unknown frame type 0x%02x", buf[0]);
         }
     }
+    return i;
+}
+
+
+uint16_t __attribute__((nonnull))
+enc_conn_close_frame(uint8_t * restrict const buf, const uint16_t len)
+{
+    uint16_t i = 0;
+    static const uint8_t type = T_CONNECTION_CLOSE;
+    encode(buf, len, i, type, 0, "%d");
+    static const uint32_t err = QUIC_INVALID_VERSION;
+    encode(buf, len, i, err, 0, "%d");
+    static const char reason[] = "Because I don't like you.";
+    static const uint16_t reason_len = sizeof(reason);
+    encode(buf, len, i, reason, reason_len, "%s");
     return i;
 }
 

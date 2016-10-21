@@ -19,6 +19,8 @@
 #define T_STOP_WAITING 0x06
 #define T_PING 0x07
 
+#define QUIC_INTERNAL_ERROR 1
+#define QUIC_INVALID_VERSION 20
 
 struct q_stream_frame {
     uint64_t off;
@@ -74,13 +76,12 @@ struct q_frame {
 
 struct q_pkt;
 
-uint16_t __attribute__((nonnull))
-dec_frames(struct q_pkt * const p __attribute__((unused)),
-           const uint8_t * restrict const buf,
-           const uint16_t len __attribute__((unused)));
+uint16_t dec_frames(struct q_pkt * const p,
+                    const uint8_t * restrict const buf,
+                    const uint16_t len);
 
-uint16_t __attribute__((nonnull))
-enc_stream_frame(uint8_t * restrict const buf, const uint16_t len);
+uint16_t enc_stream_frame(uint8_t * restrict const buf, const uint16_t len);
 
-uint16_t __attribute__((nonnull))
-enc_padding_frame(uint8_t * restrict const buf, const uint16_t len);
+uint16_t enc_padding_frame(uint8_t * restrict const buf, const uint16_t len);
+
+uint16_t enc_conn_close_frame(uint8_t * restrict const buf, const uint16_t len);

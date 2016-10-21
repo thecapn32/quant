@@ -2,6 +2,7 @@
 
 #include "quic.h"
 
+
 #define MAX_PKT_LEN 1350
 #define MAX_NONCE_LEN 32
 #define HASH_LEN 12
@@ -60,8 +61,8 @@ uint16_t dec_pub_hdr(struct q_pkt * const p,
                      const uint8_t * restrict const buf,
                      const uint16_t len);
 
-uint16_t enc_init_pkt(const struct q_conn * const c,
-                      uint8_t * restrict const buf,
-                      const uint16_t len);
+uint16_t enc_pkt(const struct q_conn * const c,
+                 uint8_t * restrict const buf,
+                 const uint16_t len);
 
 void free_pkt(struct q_pkt * restrict const p);

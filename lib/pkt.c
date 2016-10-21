@@ -7,6 +7,7 @@
 #include "quic.h"
 #include "util.h"
 
+
 static const q_tag prst = {.as_str = "PRST"}, rnon = {.as_str = "RNON"},
                    rseq = {.as_str = "RSEQ"}, cadr = {.as_str = "CADR"};
 
@@ -114,16 +115,16 @@ dec_pub_hdr(struct q_pkt * restrict const p,
 
 
 uint16_t __attribute__((nonnull))
-enc_init_pkt(const struct q_conn * restrict const c,
-             uint8_t * restrict const buf,
-             const uint16_t len)
+enc_pkt(const struct q_conn * restrict const c,
+        uint8_t * restrict const buf,
+        const uint16_t len)
 {
     buf[0] = F_CID;
     uint16_t i = 1;
     // XXX: omit cid to force a PRST
     encode(buf, len, i, c->id, 0, "%" PRIu64); // XXX: no htonll()?
 
-    if (c->state < ESTABLISHED) {
+    if (c->state < ESTABLISHED || c->state == FIN_WAIT) {
         buf[0] |= F_VERS;
         if (vers[c->vers].as_int)
             encode(buf, len, i, vers[c->vers].as_int, 0, "0x%08x");
@@ -142,10 +143,14 @@ enc_init_pkt(const struct q_conn * restrict const c,
     const uint16_t hash_pos = i;
     i += HASH_LEN;
     assert(i <= len, "buf len %d, consumed %d", len, i);
+
+    if (c->state == FIN_WAIT)
+        i += enc_conn_close_frame(&buf[i], len - i);
+
     // i += enc_stream_frame(&buf[i], len - i);
     // assert(=i < len, "buf len %d, consumed %d", len, i);
-    i += enc_padding_frame(&buf[i], len - i);
-    assert(i <= len, "buf len %d, consumed %d", len, i);
+    // i += enc_padding_frame(&buf[i], len - i);
+    // assert(i <= len, "buf len %d, consumed %d", len, i);
 
     const uint128_t hash = fnv_1a(buf, i, hash_pos, HASH_LEN);
     warn(debug, "inserting %d-byte hash at pos %d", HASH_LEN, hash_pos);

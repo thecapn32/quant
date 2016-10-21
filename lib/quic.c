@@ -2,6 +2,7 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <netdb.h>
+#include <time.h>
 
 #include "pkt.h"
 #include "util.h"
@@ -16,7 +17,7 @@ const q_tag vers[] = {{.as_str = "Q025"}, // "Q025" is draft-hamilton
 const size_t vers_len = sizeof(vers);
 
 
-/// All open QUIC connections.
+// All open QUIC connections.
 static hash conns;
 
 static ev_io rx_w;
@@ -27,19 +28,6 @@ static int __attribute__((nonnull))
 cmp_q_conn(const void * restrict const arg, const void * restrict const obj)
 {
     return *(const uint64_t *)arg != ((const struct q_conn *)obj)->id;
-}
-
-
-static uint8_t __attribute__((nonnull))
-pick_vers(const struct q_pkt * restrict const p)
-{
-    uint8_t i = 0;
-    while (vers[i].as_int) {
-        if (p->vers.as_int == vers[i].as_int)
-            return i;
-        i++;
-    }
-    return i;
 }
 
 
@@ -71,6 +59,19 @@ new_conn(const uint64_t id,
 
 
 static uint8_t __attribute__((nonnull))
+pick_vers(const struct q_pkt * restrict const p)
+{
+    for (uint8_t i = 0; vers[i].as_int; i++)
+        if (p->vers.as_int == vers[i].as_int)
+            return i;
+
+    // we're out of matching candidates, return index of final "zero" version
+    warn(info, "no version in common with client");
+    return vers_len / sizeof(vers[0]) - 1;
+}
+
+
+static uint8_t __attribute__((nonnull))
 pick_server_vers(const struct q_pkt * restrict const p)
 {
     // first, check if the version in the public header is acceptable to us
@@ -93,8 +94,9 @@ pick_server_vers(const struct q_pkt * restrict const p)
                 return i;
         }
 
-    // if we get here, we're out of matching candidates
-    return 0;
+    // we're out of matching candidates, return index of final "zero" version
+    warn(info, "no version in common with server");
+    return vers_len / sizeof(vers[0]) - 1;
 }
 
 
@@ -108,14 +110,18 @@ static void __attribute__((nonnull)) q_tx(struct q_conn * restrict const c)
     switch (c->state) {
     case CLOSED:
     case VERS_SENT:
-        len = enc_init_pkt(c, buf, MAX_PKT_LEN);
+        len = enc_pkt(c, buf, MAX_PKT_LEN);
         // TODO: add payload data
         c->state = VERS_SENT;
         break;
 
     case VERS_RECV:
         // send a version-negotiation response from the server
-        len = enc_init_pkt(c, buf, MAX_PKT_LEN);
+        len = enc_pkt(c, buf, MAX_PKT_LEN);
+        break;
+
+    case FIN_WAIT:
+        len = enc_pkt(c, buf, MAX_PKT_LEN);
         break;
 
     default:
@@ -183,9 +189,13 @@ q_rx(struct ev_loop * restrict const loop __attribute__((unused)),
             warn(info, "server didn't like our version %.4s",
                  vers[c->vers].as_str);
             c->vers = pick_server_vers(&p);
-            assert(c->vers,
-                   "no version in common with server"); // TODO: send RST
-            warn(info, "retrying with version %.4s", vers[c->vers].as_str);
+            if (vers[c->vers].as_int)
+                warn(info, "retrying with version %.4s", vers[c->vers].as_str);
+            else {
+                warn(info, "no version in common with server, closing");
+                c->vers = 0; // send closing packets with our preferred version
+                c->state = FIN_WAIT;
+            }
         } else {
             warn(info, "server accepted version %.4s", vers[c->vers].as_str);
             c->state = ESTABLISHED;

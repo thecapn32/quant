@@ -50,6 +50,7 @@ struct q_conn {
 #define VERS_SENT 1
 #define VERS_RECV 2
 #define ESTABLISHED 3
+#define FIN_WAIT 99 // TODO: renumber
 
 
 void q_init(struct ev_loop * restrict const reloop, const long timeout);
