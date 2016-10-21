@@ -7,11 +7,12 @@
 
 #include "pkt.h"
 #include "util.h"
+#include "version.h"
 
 
 /// QUIC version supported by this implementation in order of preference.
 const q_tag vers[] = {{.as_str = "Q025"}, // "Q025" is draft-hamilton
-                      {.as_str = "Q036"},
+                      // {.as_str = "Q036"},
                       {.as_int = 0}};
 
 const size_t vers_len = sizeof(vers);
@@ -87,7 +88,7 @@ pick_server_vers(const struct q_pkt * restrict const p)
         for (uint8_t j = 0; j < p->nonce_len; j += sizeof(uint32_t)) {
             q_tag v;
             memcpy(&v.as_int, &p->nonce[j], sizeof(v));
-            warn(debug, "checking server nonce pos %ld = %.4s against our prio "
+            warn(debug, "checking server vers prio %ld = %.4s against our prio "
                         "%d = %.4s",
                  j / sizeof(uint32_t), v.as_str, i, vers[i].as_str);
             if (vers[i].as_int == v.as_int)
@@ -109,7 +110,6 @@ static void __attribute__((nonnull)) q_tx(struct q_conn * restrict const c)
     switch (c->state) {
     case CLOSED:
     case VERS_SENT:
-        // send (or re-send) the initial version negotiation packet
         len = enc_init_pkt(c, buf, MAX_PKT_LEN);
         // TODO: add payload data
         c->state = VERS_SENT;
@@ -170,23 +170,24 @@ q_rx(struct ev_loop * restrict const loop __attribute__((unused)),
 
         // respond to the initial version negotiation packet
         c->vers = pick_vers(&p);
-        if (vers[c->vers].as_int)
+        if (vers[c->vers].as_int) {
             warn(debug, "supporting client-requested version %.4s with "
                         "preference %d ",
                  p.vers.as_str, c->vers);
-        else
-            die("client-requested version %.4s not supported", p.vers.as_str);
+            c->state = ESTABLISHED;
+        } else
+            warn(warn, "client-requested version %.4s not supported",
+                 p.vers.as_str);
         goto respond;
 
     case VERS_SENT:
         if (p.flags & F_VERS) {
             warn(info, "server didn't like our version %.4s",
                  vers[c->vers].as_str);
-            const uint8_t v = pick_server_vers(&p);
-            assert(v, "no version in common with server"); // TODO: send RST
-            warn(info, "retrying with version %.4s", vers[v].as_str);
-            c->vers = v;
-            c->state = CLOSED;
+            c->vers = pick_server_vers(&p);
+            assert(c->vers,
+                   "no version in common with server"); // TODO: send RST
+            warn(info, "retrying with version %.4s", vers[c->vers].as_str);
         } else {
             warn(info, "server accepted version %.4s", vers[c->vers].as_str);
             c->state = ESTABLISHED;
@@ -245,7 +246,8 @@ static void timeout_cb(struct ev_loop * restrict const loop,
 
 void q_init(struct ev_loop * restrict const loop, const long timeout)
 {
-    warn(info, "have libev %d.%d", ev_version_major(), ev_version_minor());
+    warn(info, "%s %s with libev %d.%d", quickie_name, quickie_version,
+         ev_version_major(), ev_version_minor());
     srandom((unsigned)time(0));
     hash_init(&conns);
 

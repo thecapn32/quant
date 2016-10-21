@@ -123,17 +123,18 @@ enc_init_pkt(const struct q_conn * restrict const c,
     // XXX: omit cid to force a PRST
     encode(buf, len, i, c->id, 0, "%" PRIu64); // XXX: no htonll()?
 
-    if (c->state == CLOSED || vers[c->vers].as_int == 0) {
+    if (c->state < ESTABLISHED) {
         buf[0] |= F_VERS;
-        encode(buf, len, i, vers[c->vers].as_int, 0, "0x%08x");
+        if (vers[c->vers].as_int)
+            encode(buf, len, i, vers[c->vers].as_int, 0, "0x%08x");
+        else {
+            warn(info, "sending version negotiation server response");
+            encode(buf, len, i, vers[0].as_int, vers_len, "0x%08x");
+            return i;
+        }
     } else
-        warn(info, "skipping version");
-
-    if (vers[c->vers].as_int == 0) {
-        warn(info, "sending version negotiation server response");
-        encode(buf, len, i, vers[0].as_int, vers_len, "0x%08x"); // XXX
-        return i;
-    }
+        warn(info, "not including negotiated version %.4s",
+             vers[c->vers].as_str);
 
     buf[0] |= enc_pkt_nr_len(sizeof(uint8_t));
     encode(buf, len, i, c->out, sizeof(uint8_t), "%" PRIu64);
