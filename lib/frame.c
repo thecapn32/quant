@@ -136,25 +136,21 @@ dec_ack_frame(struct q_pkt * restrict const p __attribute__((unused)),
         warn(debug, "decoding ACK block #%d", b);
         uint64_t l = 0;
         decode(l, buf, len, i, ack_block_len, "%" PRIu64);
-        uint8_t gap;
-        decode(gap, buf, len, i, 0, "%d");
+        // XXX: assume that the gap is not present for the very last ACK block
+        if (b < f->af.ack_blocks - 1) {
+            uint8_t gap;
+            decode(gap, buf, len, i, 0, "%d");
+        }
     }
 
-    // memcpy(&f->ts_blocks, &buf[i], sizeof(f->ts_blocks));
-    // warn(debug, "%d timestamp blocks", f->ts_blocks);
-    // i += sizeof(f->ts_blocks);
-    // for (uint8_t b = 0; b < f->ts_blocks; b++) {
-    //     warn(debug, "decoding timestamp block #%d", b);
-    //     uint8_t delta_lg_obs;
-    //     memcpy(&delta_lg_obs, &buf[i], sizeof(delta_lg_obs));
-    //     warn(debug, "delta_lg_obs %d", delta_lg_obs);
-    //     i += sizeof(delta_lg_obs);
-
-    //     uint32_t ts;
-    //     memcpy(&ts, &buf[i], sizeof(ts));
-    //     warn(debug, "ts %d", ts);
-    //     i += sizeof(ts);
-    // }
+    decode(f->af.ts_blocks, buf, len, i, 0, "%d");
+    for (uint8_t b = 0; b < f->af.ts_blocks; b++) {
+        warn(debug, "decoding timestamp block #%d", b);
+        uint8_t delta_lg_obs;
+        decode(delta_lg_obs, buf, len, i, 0, "%d");
+        uint32_t ts;
+        decode(ts, buf, len, i, 0, "%d");
+    }
 
     return i;
 }
