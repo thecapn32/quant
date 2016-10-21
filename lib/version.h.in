@@ -1,9 +1,11 @@
 #pragma once
 
-#define QUICKIE_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
-#define QUICKIE_VERSION_MINOR @PROJECT_VERSION_MINOR@
-#define QUICKIE_VERSION_PATCH @PROJECT_VERSION_PATCH@
-#define QUICKIE_VERSION_TWEAK @PROJECT_VERSION_TWEAK@
+#define @PROJECT_NAME_UC@_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
+#define @PROJECT_NAME_UC@_VERSION_MINOR @PROJECT_VERSION_MINOR@
+#define @PROJECT_NAME_UC@_VERSION_PATCH @PROJECT_VERSION_PATCH@
+
+/// The name of this library.
+extern const char @PROJECT_NAME@_name[];
 
 /// The version of this library.
-static const char quickie_version[] = "@PROJECT_VERSION@";
+extern const char @PROJECT_NAME@_version[];
