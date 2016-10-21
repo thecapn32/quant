@@ -1,9 +1,7 @@
 #include <ev.h>
+#include <fcntl.h>
 #include <inttypes.h>
 #include <netdb.h>
-#include <netinet/in.h>
-#include <poll.h>
-#include <time.h>
 
 #include "pkt.h"
 #include "util.h"
@@ -126,7 +124,7 @@ static void __attribute__((nonnull)) q_tx(struct q_conn * restrict const c)
 
     const ssize_t n =
         sendto(c->fd, buf, len, 0, (struct sockaddr *)&c->peer, c->plen);
-    assert(n > 0, "sendto error");
+    assert(n > 0, "sendto error"); // TODO: handle EAGAIN
     warn(debug, "sent %zd bytes", n);
     c->out++;
 }
@@ -211,6 +209,9 @@ q_connect(struct ev_loop * restrict const loop,
           const struct sockaddr * restrict const peer,
           const socklen_t plen)
 {
+    // put the socket into non-blocking mode
+    assert(fcntl(s, O_NONBLOCK) >= 0, "fcntl");
+
     // initialize the RX watcher
     ev_io * const r = &rx_w; // suppress erroneous warning in gcc 6.2
     ev_io_init(r, q_rx, s, EV_READ);
@@ -228,6 +229,9 @@ q_connect(struct ev_loop * restrict const loop,
 void __attribute__((nonnull))
 q_serve(struct ev_loop * restrict const loop, const int s)
 {
+    // put the socket into non-blocking mode
+    assert(fcntl(s, O_NONBLOCK) >= 0, "fcntl");
+
     // initialize the RX watcher
     ev_io * const r = &rx_w; // suppress erroneous warning in gcc 6.2
     ev_io_init(r, q_rx, s, EV_READ);
