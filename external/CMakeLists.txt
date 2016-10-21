@@ -133,8 +133,13 @@ add_custom_target(test-quickie-server
     " 2> /dev/null || true &&
     ${SLEEP} 1 &&
     ${SUDO} ${PKILL} ${QS} sudo || true &&
-    ${CAT} ${DIR}/${QS}.log || true &&
-    ${TSHARK} -V -2 -n -d udp.port==${PORT},quic -O quic -r ${DIR}/${QS}.pcap
+    ${CAT} ${DIR}/${QS}.log || true
   DEPENDS quickie_server #vagrant-up
+  VERBATIM
+)
+
+add_custom_target(tshark-quickie-server-pcap
+  COMMAND
+    ${TSHARK} -V -2 -n -d udp.port==${PORT},quic -O quic -r ${DIR}/${QS}.pcap
   VERBATIM
 )

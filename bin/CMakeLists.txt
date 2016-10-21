@@ -15,8 +15,13 @@ add_custom_target(test-quickie-client
     ${SLEEP} 1 &&
     ${ENV} LLVM_PROFILE_FILE=${QC}.profraw ${DIR}/${QC} || true &&
     ${SUDO} ${PKILL} ${QC} sudo || true &&
-    ${TSHARK} -V -2 -n -d udp.port==${PORT},quic -O quic -r ${DIR}/${QC}.pcap &&
     ${TAIL} ${DIR}/../external/quic_server.log || true
   DEPENDS quic-server quickie_client
+  VERBATIM
+)
+
+add_custom_target(tshark-quickie-client-pcap
+  COMMAND
+    ${TSHARK} -V -2 -n -d udp.port==${PORT},quic -O quic -r ${DIR}/${QC}.pcap
   VERBATIM
 )
