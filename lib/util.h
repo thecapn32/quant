@@ -6,6 +6,7 @@
 #include <string.h>
 #include <sys/time.h>
 
+
 // ANSI escape sequences (color, etc.)
 #define NRM "\x1B[0m"  // reset all to normal
 #define BLD "\x1B[1m"  // bold
@@ -22,6 +23,10 @@
 #define MAG "\x1B[35m" // magenta
 #define CYN "\x1B[36m" // cyan
 #define WHT "\x1B[37m" // white
+
+
+// Trim the path from the given file name (to be used with __FILE__)
+#define BASENAME(f) (strrchr((f), '/') ? strrchr((f), '/') + 1 : (f))
 
 
 #ifndef NDEBUG
@@ -41,18 +46,8 @@ enum dlevel { crit = 0, err = 1, warn = 2, notice = 3, info = 4, debug = 5 };
 #define DCOMPONENT ".*"
 #endif
 
-// Trim the path from the given file name (to be used with __FILE__)
-#define BASENAME(f) (strrchr((f), '/') ? strrchr((f), '/') + 1 : (f))
-
-
 extern const char * const col[];
 extern regex_t _comp;
-extern struct timeval _epoch;
-
-extern int timeval_subtract(struct timeval * const result,
-                            struct timeval * const x,
-                            struct timeval * const y);
-
 
 // These macros are based on the "D" ones defined by netmap
 #define warn(dlevel, ...)                                                      \
@@ -138,5 +133,9 @@ extern int timeval_subtract(struct timeval * const result,
 
 #endif
 
+extern struct timeval _epoch;
+extern int timeval_subtract(struct timeval * const result,
+                            struct timeval * const x,
+                            struct timeval * const y);
 
 extern void hexdump(const void * const ptr, const size_t len);

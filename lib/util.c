@@ -10,8 +10,6 @@ const char * const col[] = {MAG, RED, YEL, CYN, BLU, GRN};
 
 regex_t _comp;
 
-struct timeval _epoch;
-
 static void __attribute__((constructor)) premain()
 {
     // Initialize the regular expression used for restricting debug output
@@ -29,6 +27,10 @@ static void __attribute__((destructor)) postmain()
     regfree(&_comp);
 }
 
+#endif
+
+
+struct timeval _epoch;
 
 int __attribute__((nonnull)) timeval_subtract(struct timeval * const result,
                                               struct timeval * const x,
@@ -53,8 +55,6 @@ int __attribute__((nonnull)) timeval_subtract(struct timeval * const result,
     // /* Return 1 if result is negative.
     return x->tv_sec < y->tv_sec;
 }
-
-#endif
 
 
 // Print a hexdump of the given block
