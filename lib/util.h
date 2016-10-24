@@ -108,7 +108,7 @@ extern regex_t _comp;
                 __LINE__);                                                     \
         fprintf(stderr, __VA_ARGS__);                                          \
         fprintf(stderr, " %c%s%c\n" NRM, (_e ? '[' : 0),                       \
-                (_e ? strerror(_e) : ""), (_e ? '[' : 0));                     \
+                (_e ? strerror(_e) : ""), (_e ? ']' : 0));                     \
         fflush(stderr);                                                        \
         abort();                                                               \
     } while (0)
