@@ -32,6 +32,19 @@ static uint8_t __attribute__((const)) enc_pkt_nr_len(const uint8_t n)
 }
 
 
+// Calculate the minimum number of bytes needed to encode the packet number
+static uint8_t __attribute__((const)) calc_req_pkt_nr_len(const uint64_t n)
+{
+    if (n < UINT8_MAX)
+        return 1;
+    if (n < UINT16_MAX)
+        return 2;
+    if (n < UINT32_MAX)
+        return 4;
+    return 6;
+}
+
+
 uint16_t __attribute__((nonnull))
 dec_pub_hdr(struct q_pkt * restrict const p,
             const uint8_t * restrict const buf,
@@ -137,8 +150,9 @@ enc_pkt(const struct q_conn * restrict const c,
         warn(info, "not including negotiated version %.4s",
              vers[c->vers].as_str);
 
-    buf[0] |= enc_pkt_nr_len(sizeof(uint8_t));
-    encode(buf, len, i, c->out, sizeof(uint8_t), "%" PRIu64);
+    const uint8_t req_pkt_nr_len = calc_req_pkt_nr_len(c->out);
+    buf[0] |= enc_pkt_nr_len(req_pkt_nr_len);
+    encode(buf, len, i, c->out, req_pkt_nr_len, "%" PRIu64);
 
     const uint16_t hash_pos = i;
     i += HASH_LEN;
