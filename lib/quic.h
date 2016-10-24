@@ -24,6 +24,8 @@ extern const size_t vers_len;
 
 
 struct q_stream {
+    node node;
+
     uint64_t id;
 };
 

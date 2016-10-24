@@ -22,61 +22,15 @@
 #define QUIC_INTERNAL_ERROR 1
 #define QUIC_INVALID_VERSION 20
 
-struct q_stream_frame {
-    uint64_t off;
-    uint32_t sid;
-    uint16_t dlen;
-    uint8_t _unused2[2];
-    const uint8_t * data;
-};
-
-
 /// Define an IEEE-754 16-bt floating type (backed by gcc/clang F16C)
 // typedef __fp16 float16_t;
 
 
-struct q_ack_frame {
-    uint64_t lg_ack;
-    // float16_t lg_ack_delta_t;
-    uint16_t lg_ack_delta_t;
-    uint8_t ack_blocks;
-    uint8_t ts_blocks;
+struct q_pub_hdr;
+struct q_conn;
 
-    uint8_t _unused2[4];
-    const uint8_t * data;
-};
-
-
-struct q_stop_waiting_frame {
-    uint64_t lst_unacked;
-};
-
-
-struct q_conn_close_frame {
-    uint32_t err;
-    uint16_t reason_len;
-    uint8_t _unused2[2];
-    uint8_t * reason;
-};
-
-
-struct q_frame {
-    node node;
-    uint8_t type;
-    uint8_t _unused[7];
-
-    union {
-        struct q_stream_frame sf;
-        struct q_ack_frame af;
-        struct q_stop_waiting_frame swf;
-        struct q_conn_close_frame ccf;
-    };
-};
-
-
-struct q_pkt;
-
-uint16_t dec_frames(struct q_pkt * const p,
+uint16_t dec_frames(struct q_conn * restrict const c,
+                    const struct q_pub_hdr * restrict const p,
                     const uint8_t * restrict const buf,
                     const uint16_t len);
 
@@ -85,3 +39,5 @@ uint16_t enc_stream_frame(uint8_t * restrict const buf, const uint16_t len);
 uint16_t enc_padding_frame(uint8_t * restrict const buf, const uint16_t len);
 
 uint16_t enc_conn_close_frame(uint8_t * restrict const buf, const uint16_t len);
+
+uint16_t enc_ack_frame(uint8_t * restrict const buf, const uint16_t len);

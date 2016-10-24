@@ -7,8 +7,8 @@
 #define MAX_NONCE_LEN 32
 #define HASH_LEN 12
 
-/// A QUIC packet.
-struct q_pkt {
+/// A QUIC public header.
+struct q_pub_hdr {
     uint8_t flags;
     uint8_t nonce_len;
     uint8_t nr_len;
@@ -17,7 +17,6 @@ struct q_pkt {
     uint64_t cid;
     uint64_t nr;
     uint8_t nonce[32];
-    list frames;
 };
 
 
@@ -57,12 +56,10 @@ struct q_pkt {
     } while (0)
 
 
-uint16_t dec_pub_hdr(struct q_pkt * const p,
+uint16_t dec_pub_hdr(struct q_pub_hdr * const ph,
                      const uint8_t * restrict const buf,
                      const uint16_t len);
 
 uint16_t enc_pkt(const struct q_conn * const c,
                  uint8_t * restrict const buf,
                  const uint16_t len);
-
-void free_pkt(struct q_pkt * restrict const p);

@@ -64,35 +64,46 @@ static uint8_t __attribute__((const)) dec_ack_block_len(const uint8_t flags)
 }
 
 
+static int __attribute__((nonnull))
+cmp_q_stream(const void * restrict const arg, const void * restrict const obj)
+{
+    return *(const uint64_t *)arg != ((const struct q_stream *)obj)->id;
+}
+
+
 static uint16_t __attribute__((nonnull))
-dec_stream_frame(struct q_pkt * restrict const p __attribute__((unused)),
-                 struct q_frame * restrict const f,
+dec_stream_frame(struct q_conn * restrict const c,
                  const uint8_t * restrict const buf,
                  const uint16_t len)
 {
-    uint16_t i = 1;
-    assert(i < len, "buf too short");
+    uint16_t i = 0;
+    uint8_t type;
+    decode(type, buf, len, i, 0, "0x%02x");
+    warn(debug, "fin = %d", type & F_STREAM_FIN);
 
-    warn(debug, "fin = %d", f->type & F_STREAM_FIN);
+    const uint8_t sid_len = dec_sid_len(type);
+    uint32_t sid = 0;
+    decode(sid, buf, len, i, sid_len, "%d");
+    struct q_stream * restrict s =
+        hash_search(&c->streams, cmp_q_stream, &sid, sid);
+    if (s == 0) {
+        s = calloc(1, sizeof(*s));
+        s->id = sid;
+        hash_insert(&c->streams, &s->node, s, s->id);
+        warn(info, "new stream %" PRIu64 " on connection %" PRIu64, s->id,
+             c->id);
+    }
 
-    const uint8_t sid_len = dec_sid_len(f->type);
-    if (sid_len)
-        decode(f->sf.sid, buf, len, i, sid_len, "%d");
-
-    const uint8_t off_len = dec_off_len(f->type);
+    const uint8_t off_len = dec_off_len(type);
+    uint64_t off = 0;
     if (off_len)
-        decode(f->sf.off, buf, len, i, off_len, "%" PRIu64);
+        decode(off, buf, len, i, off_len, "%" PRIu64);
 
-    if (f->type & F_STREAM_DATA_LEN) {
-        decode(f->sf.dlen, buf, len, i, 0, "%d");
-
-        // keep a pointer to the frame data around
-        f->sf.data = &buf[i];
-
-        // TODO check that FIN is 0
-        // XXX skipping content
-
-        i += f->sf.dlen;
+    if (type & F_STREAM_DATA_LEN) {
+        uint16_t dlen = 0;
+        decode(dlen, buf, len, i, 0, "%d");
+        // TODO: handle data
+        i += dlen;
     }
 
     return i;
@@ -100,51 +111,49 @@ dec_stream_frame(struct q_pkt * restrict const p __attribute__((unused)),
 
 
 static uint16_t __attribute__((nonnull))
-dec_ack_frame(struct q_pkt * restrict const p __attribute__((unused)),
-              struct q_frame * restrict const f,
+dec_ack_frame(struct q_conn * restrict const c __attribute__((unused)),
               const uint8_t * restrict const buf,
               const uint16_t len)
 {
-    uint16_t i = 1;
-    assert(i < len, "buf too short");
+    uint16_t i = 0;
+    uint8_t type;
+    decode(type, buf, len, i, 0, "0x%02x");
 
-    assert((f->type & F_ACK_UNUSED) == 0, "unused ACK frame bit set");
+    assert((type & F_ACK_UNUSED) == 0, "unused ACK frame bit set");
 
-    const uint8_t lg_ack_len = dec_lg_ack_len(f->type);
-    decode(f->af.lg_ack, buf, len, i, lg_ack_len, "%" PRIu64);
+    const uint8_t lg_ack_len = dec_lg_ack_len(type);
+    uint64_t lg_ack = 0;
+    decode(lg_ack, buf, len, i, lg_ack_len, "%" PRIu64);
 
-// TODO: check that the F16C stuff does what is needed here
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdouble-promotion"
-    // decode(f->af.lg_ack_delta_t, buf, len, i, 0, "%lf");
-    decode(f->af.lg_ack_delta_t, buf, len, i, 0, "%d");
-#pragma GCC diagnostic pop
+    uint16_t lg_ack_delta_t;
+    decode(lg_ack_delta_t, buf, len, i, 0, "%d");
 
-    const uint8_t ack_block_len = dec_ack_block_len(f->type);
+    const uint8_t ack_block_len = dec_ack_block_len(type);
     warn(debug, "%d-byte ACK block length", ack_block_len);
 
-    if (f->type & F_ACK_N) {
-        decode(f->af.ack_blocks, buf, len, i, 0, "%d");
-        f->af.ack_blocks++; // NOTE: draft-hamilton says +1
+    uint8_t ack_blocks;
+    if (type & F_ACK_N) {
+        decode(ack_blocks, buf, len, i, 0, "%d");
+        ack_blocks++; // NOTE: draft-hamilton says +1
     } else {
-        f->af.ack_blocks = 1;
+        ack_blocks = 1;
         warn(debug, "F_ACK_N unset; one ACK block present");
     }
 
-    for (uint8_t b = 0; b < f->af.ack_blocks; b++) {
-        // TODO: create structure for this in q_pkt
+    for (uint8_t b = 0; b < ack_blocks; b++) {
         warn(debug, "decoding ACK block #%d", b);
         uint64_t l = 0;
         decode(l, buf, len, i, ack_block_len, "%" PRIu64);
         // XXX: assume that the gap is not present for the very last ACK block
-        if (b < f->af.ack_blocks - 1) {
+        if (b < ack_blocks - 1) {
             uint8_t gap;
             decode(gap, buf, len, i, 0, "%d");
         }
     }
 
-    decode(f->af.ts_blocks, buf, len, i, 0, "%d");
-    for (uint8_t b = 0; b < f->af.ts_blocks; b++) {
+    uint8_t ts_blocks;
+    decode(ts_blocks, buf, len, i, 0, "%d");
+    for (uint8_t b = 0; b < ts_blocks; b++) {
         warn(debug, "decoding timestamp block #%d", b);
         uint8_t delta_lg_obs;
         decode(delta_lg_obs, buf, len, i, 0, "%d");
@@ -157,46 +166,51 @@ dec_ack_frame(struct q_pkt * restrict const p __attribute__((unused)),
 
 
 static uint16_t __attribute__((nonnull))
-dec_stop_waiting_frame(struct q_pkt * restrict const p,
-                       struct q_frame * restrict const f,
+dec_stop_waiting_frame(struct q_conn * restrict const c __attribute__((unused)),
+                       const struct q_pub_hdr * restrict const p,
                        const uint8_t * restrict const buf,
                        const uint16_t len)
 {
-    uint16_t i = 1;
-    assert(i < len, "buf too short");
+    uint16_t i = 0;
+    uint8_t type;
+    decode(type, buf, len, i, 0, "0x%02x");
 
-    decode(f->swf.lst_unacked, buf, len, i, p->nr_len, "%" PRIu64);
+    uint64_t lst_unacked = 0;
+    decode(lst_unacked, buf, len, i, p->nr_len, "%" PRIu64);
     return i;
 }
 
 
 static uint16_t __attribute__((nonnull))
-dec_conn_close_frame(struct q_pkt * restrict const p __attribute__((unused)),
-                     struct q_frame * restrict const f,
+dec_conn_close_frame(struct q_conn * restrict const c __attribute__((unused)),
                      const uint8_t * restrict const buf,
                      const uint16_t len)
 {
-    uint16_t i = 1;
-    assert(i < len, "buf too short");
+    uint16_t i = 0;
+    uint8_t type;
+    decode(type, buf, len, i, 0, "0x%02x");
 
-    decode(f->ccf.err, buf, len, i, 0, "%d");
-    decode(f->ccf.reason_len, buf, len, i, 0, "%d");
+    uint32_t err;
+    decode(err, buf, len, i, 0, "%d");
 
-    if (f->ccf.reason_len) {
-        f->ccf.reason = calloc(1, f->ccf.reason_len);
-        assert(f->ccf.reason, "could not calloc");
-        decode(*f->ccf.reason, buf, len, i, f->ccf.reason_len,
-               "%d"); // XXX: ugly
-        warn(err, "%s", f->ccf.reason);
+    uint16_t reason_len;
+    decode(reason_len, buf, len, i, 0, "%d");
+
+    if (reason_len) {
+        uint8_t * reason = 0;
+        decode(*reason, buf, len, i, reason_len, "%d"); // XXX: ugly
+        warn(err, "%s", reason);
     }
 
     return i;
 }
 
 
-uint16_t __attribute__((nonnull)) dec_frames(struct q_pkt * restrict const p,
-                                             const uint8_t * restrict const buf,
-                                             const uint16_t len)
+uint16_t __attribute__((nonnull))
+dec_frames(struct q_conn * restrict const c,
+           const struct q_pub_hdr * restrict const p,
+           const uint8_t * restrict const buf,
+           const uint16_t len)
 {
     uint16_t i = 0;
 
@@ -204,17 +218,12 @@ uint16_t __attribute__((nonnull)) dec_frames(struct q_pkt * restrict const p,
         const uint8_t flags = buf[i];
         warn(debug, "frame type 0x%02x, start pos %d", flags, i);
 
-        struct q_frame * restrict const f = calloc(1, sizeof(*f));
-        assert(f, "could not calloc");
-        f->type = buf[0];
-        list_insert_tail(&p->frames, &f->node, f);
-
         if (flags & F_STREAM) {
-            i += dec_stream_frame(p, f, &buf[i], len - i);
+            i += dec_stream_frame(c, &buf[i], len - i);
             continue;
         }
         if (flags & F_ACK) {
-            i += dec_ack_frame(p, f, &buf[i], len - i);
+            i += dec_ack_frame(c, &buf[i], len - i);
             continue;
         }
 
@@ -231,7 +240,7 @@ uint16_t __attribute__((nonnull)) dec_frames(struct q_pkt * restrict const p,
             die("rst_stream frame");
             break;
         case T_CONNECTION_CLOSE:
-            i += dec_conn_close_frame(p, f, &buf[i], len - i);
+            i += dec_conn_close_frame(c, &buf[i], len - i);
             break;
         case T_GOAWAY:
             die("goaway frame");
@@ -243,7 +252,7 @@ uint16_t __attribute__((nonnull)) dec_frames(struct q_pkt * restrict const p,
             die("blocked frame");
             break;
         case T_STOP_WAITING:
-            i += dec_stop_waiting_frame(p, f, &buf[i], len - i);
+            i += dec_stop_waiting_frame(c, p, &buf[i], len - i);
             break;
         case T_PING:
             die("ping frame");
@@ -252,6 +261,16 @@ uint16_t __attribute__((nonnull)) dec_frames(struct q_pkt * restrict const p,
             die("unknown frame type 0x%02x", buf[0]);
         }
     }
+    return i;
+}
+
+
+uint16_t __attribute__((nonnull))
+enc_ack_frame(uint8_t * restrict const buf, const uint16_t len)
+{
+    uint16_t i = 0;
+    static const uint8_t type = F_ACK;
+    encode(buf, len, i, type, 0, "%d");
     return i;
 }
 

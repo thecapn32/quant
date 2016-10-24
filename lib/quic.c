@@ -4,6 +4,7 @@
 #include <netdb.h>
 #include <time.h>
 
+#include "frame.h"
 #include "pkt.h"
 #include "util.h"
 #include "version.h"
@@ -59,7 +60,7 @@ new_conn(const uint64_t id,
 
 
 static uint8_t __attribute__((nonnull))
-pick_vers(const struct q_pkt * restrict const p)
+pick_vers(const struct q_pub_hdr * restrict const p)
 {
     for (uint8_t i = 0; vers[i].as_int; i++)
         if (p->vers.as_int == vers[i].as_int)
@@ -72,7 +73,7 @@ pick_vers(const struct q_pkt * restrict const p)
 
 
 static uint8_t __attribute__((nonnull))
-pick_server_vers(const struct q_pkt * restrict const p)
+pick_server_vers(const struct q_pub_hdr * restrict const p)
 {
     // first, check if the version in the public header is acceptable to us
     for (uint8_t i = 0; vers[i].as_int; i++) {
@@ -155,8 +156,8 @@ q_rx(struct ev_loop * restrict const loop __attribute__((unused)),
     const uint16_t len = (uint16_t)rlen;
     warn(debug, "received %d bytes", len);
 
-    struct q_pkt p = {0}; // TODO: might be better to allocate dynamically
-    dec_pub_hdr(&p, buf, len);
+    struct q_pub_hdr p = {0};
+    uint16_t i = dec_pub_hdr(&p, buf, len);
 
     struct q_conn * c =
         hash_search(&conns, cmp_q_conn, &p.cid, (uint32_t)p.cid);
@@ -166,6 +167,10 @@ q_rx(struct ev_loop * restrict const loop __attribute__((unused)),
         c = new_conn(p.cid, &peer, plen, w->fd);
         c->in = p.nr;
     }
+
+    if (i <= len)
+        // if there are bytes after the public header, we have frames
+        i += dec_frames(c, &p, &buf[i], len - i);
 
     switch (c->state) {
     case CLOSED:
@@ -208,7 +213,6 @@ q_rx(struct ev_loop * restrict const loop __attribute__((unused)),
     assert(0, "unreachable");
 
 respond:
-    free_pkt(&p);
     q_tx(c);
 }
 

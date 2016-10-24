@@ -46,21 +46,21 @@ static uint8_t __attribute__((const)) calc_req_pkt_nr_len(const uint64_t n)
 
 
 uint16_t __attribute__((nonnull))
-dec_pub_hdr(struct q_pkt * restrict const p,
+dec_pub_hdr(struct q_pub_hdr * restrict const ph,
             const uint8_t * restrict const buf,
             const uint16_t len)
 {
-    p->flags = buf[0];
-    warn(debug, "p->flags = 0x%02x", p->flags);
+    ph->flags = buf[0];
+    warn(debug, "ph->flags = 0x%02x", ph->flags);
     uint16_t i = 1;
 
-    if (p->flags & F_CID)
-        decode(p->cid, buf, len, i, 0, "%" PRIu64); // XXX: no ntohll()?
+    if (ph->flags & F_CID)
+        decode(ph->cid, buf, len, i, 0, "%" PRIu64); // XXX: no ntohll()?
 
-    if (p->flags & F_VERS)
-        decode(p->vers.as_int, buf, len, i, 0, "0x%08x");
+    if (ph->flags & F_VERS)
+        decode(ph->vers.as_int, buf, len, i, 0, "0x%08x");
 
-    if (p->flags & F_PUB_RST) {
+    if (ph->flags & F_PUB_RST) {
         warn(err, "public reset");
         uint32_t tag;
         decode(tag, buf, len, i, 0, "0x%04x");
@@ -91,25 +91,24 @@ dec_pub_hdr(struct q_pkt * restrict const p,
         return i;
     }
 
-    if (p->flags & F_NONCE) {
-        p->nonce_len = (uint8_t)MIN(len - i, MAX_NONCE_LEN);
-        decode(p->nonce, buf, len, i, p->nonce_len, "%s");
+    if (ph->flags & F_NONCE) {
+        ph->nonce_len = (uint8_t)MIN(len - i, MAX_NONCE_LEN);
+        decode(ph->nonce, buf, len, i, ph->nonce_len, "%s");
         assert(i <= len, "pub hdr only %d bytes; truncated?", len);
     }
 
-    if (p->flags & F_VERS && i == len)
+    if (ph->flags & F_VERS && i == len)
         // this is a version negotiation packet from the server
         return i;
 
-    p->nr_len = dec_pkt_nr_len(p->flags);
-    decode(p->nr, buf, len, i, p->nr_len, "%" PRIu64); // XXX: no ntohll()?
+    ph->nr_len = dec_pkt_nr_len(ph->flags);
+    decode(ph->nr, buf, len, i, ph->nr_len, "%" PRIu64); // XXX: no ntohll()?
 
-    if (p->flags & (F_MULTIPATH | F_UNUSED))
+    if (ph->flags & (F_MULTIPATH | F_UNUSED))
         die("unsupported flag set");
 
     if (i <= len) {
-        // if there are bytes left in the packet, there must be a hash to
-        // verify
+        // if there are bytes left, there must be a hash to verify
         const uint128_t hash = fnv_1a(buf, len, i, HASH_LEN);
         if (memcmp(&buf[i], &hash, HASH_LEN))
             die("hash mismatch");
@@ -118,10 +117,6 @@ dec_pub_hdr(struct q_pkt * restrict const p,
         i += HASH_LEN;
         assert(i <= len, "pub hdr only %d bytes; truncated?", len);
     }
-
-    if (i <= len)
-        // if there are still bytes left, we have frames
-        i += dec_frames(p, &buf[i], len - i);
 
     return i;
 }
@@ -161,32 +156,11 @@ enc_pkt(const struct q_conn * restrict const c,
     if (c->state == FIN_WAIT)
         i += enc_conn_close_frame(&buf[i], len - i);
 
-    // i += enc_stream_frame(&buf[i], len - i);
-    // assert(=i < len, "buf len %d, consumed %d", len, i);
-    // i += enc_padding_frame(&buf[i], len - i);
-    // assert(i <= len, "buf len %d, consumed %d", len, i);
-
     const uint128_t hash = fnv_1a(buf, i, hash_pos, HASH_LEN);
     warn(debug, "inserting %d-byte hash at pos %d", HASH_LEN, hash_pos);
     memcpy(&buf[hash_pos], &hash, HASH_LEN);
 
-    warn(debug, "p->flags = 0x%02x", buf[0]);
+    warn(debug, "ph->flags = 0x%02x", buf[0]);
 
     return i;
-}
-
-
-void free_pkt(struct q_pkt * restrict const p)
-{
-    node * i = list_head(&p->frames);
-    while (i) {
-        struct q_frame * restrict const f = i->data;
-        switch (f->type) {
-        case T_CONNECTION_CLOSE:
-            free(f->ccf.reason);
-            break;
-        }
-        free(f);
-        i = i->next;
-    }
 }
