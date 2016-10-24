@@ -42,7 +42,8 @@ get_property(COMPILE_OPTIONS DIRECTORY PROPERTY COMPILE_OPTIONS)
 string(REPLACE ";" " " COMPILE_OPTIONS "${COMPILE_OPTIONS}")
 
 # Make sure that a bunch of programs we depend on are installed
-foreach(PROG daemon pkill tcpdump tshark sed make sleep rm vagrant cat tail)
+foreach(PROG daemon pkill tcpdump tshark sed make sleep rm
+        vagrant cat tail tmux)
   string(TOUPPER ${PROG} VARNAME)
   find_program(${VARNAME} ${PROG})
   if(NOT ${VARNAME})

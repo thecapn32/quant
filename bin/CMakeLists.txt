@@ -25,3 +25,14 @@ add_custom_target(tshark-quickie-client-pcap
     ${TSHARK} -V -2 -n -d udp.port==${PORT},quic -O quic -r ${DIR}/${QC}.pcap
   VERBATIM
 )
+
+# allow a target called "test"
+cmake_policy(SET CMP0037 OLD)
+add_custom_target(test
+  COMMAND
+    ${TMUX} new-session -d "${DIR}/quickie_server" \;
+      split-window "${SLEEP} 1 ; ${DIR}/quickie_client -p 8443" \;
+      set remain-on-exit on \; attach
+  DEPENDS quickie_server quickie_client
+  VERBATIM
+)
