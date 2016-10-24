@@ -67,7 +67,8 @@ add_subdirectory(lib)
 # Add a "distclean" target; see http://stackoverflow.com/a/12055610/1437081
 add_custom_target(distclean
   COMMAND
-    find . \\\( -name Makefile -or -iwholename '*cmake*' \\\)
+    find . \\\( -name Makefile -or -iwholename '*cmake*' -or
+                -iwholename '*.core' -or -iwholename '*.profraw' \\\)
       -not -name CMakeLists.txt -and
       -not -path '*external/*-prefix/*' -delete
 )
