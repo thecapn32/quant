@@ -34,24 +34,24 @@ struct q_pub_hdr {
         assert(pos + __len <= buf_len,                                         \
                "attempting to decode %zu byte%c starting at " #buf "["         \
                "%d], which is past " #buf_len " = %d",                         \
-               __len, __len == 1 ? 0 : 's', pos, buf_len);                     \
+               __len, plural(__len), pos, buf_len);                            \
         memcpy(&dst, &buf[pos], __len);                                        \
         warn(debug, "decoding %zu byte%c from pos %d into " #dst " = " fmt,    \
-             __len, __len == 1 ? 0 : 's', pos, dst);                           \
+             __len, plural(__len), pos, dst);                                  \
         pos += __len;                                                          \
     } while (0)
 
 
 #define encode(buf, buf_len, pos, src, src_len, fmt)                           \
     do {                                                                       \
-        const size_t __len = src_len ? src_len : sizeof(src);                  \
+        const size_t __len = src_len ? src_len : sizeof(*src);                 \
         assert(pos + __len <= buf_len,                                         \
                "attempting to encode %zu byte%c starting at " #buf "["         \
                "%d], which is past " #buf_len " = %d",                         \
-               __len, __len == 1 ? 0 : 's', pos, buf_len);                     \
-        memcpy(&buf[pos], &src, __len);                                        \
+               __len, plural(__len), pos, buf_len);                            \
+        memcpy(&buf[pos], src, __len);                                         \
         warn(debug, "encoding " #src " = " fmt " into %zu byte%c from pos %d", \
-             src, __len, __len == 1 ? 0 : 's', pos);                           \
+             *src, __len, plural(__len), pos);                                 \
         pos += __len;                                                          \
     } while (0)
 

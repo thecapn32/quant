@@ -103,19 +103,28 @@ dec_stream_frame(struct q_conn * restrict const c,
     decode(sid, buf, len, i, sid_len, "%d");
     struct q_stream * restrict s = get_stream(c, sid);
     if (s == 0)
-        new_stream(c, sid);
+        s = new_stream(c, sid);
 
     const uint8_t off_len = dec_off_len(type);
     uint64_t off = 0;
     if (off_len)
         decode(off, buf, len, i, off_len, "%" PRIu64);
 
-    if (type & F_STREAM_DATA_LEN) {
-        uint16_t data_len = 0;
+    uint16_t data_len = 0;
+    if (type & F_STREAM_DATA_LEN)
         decode(data_len, buf, len, i, 0, "%d");
-        // TODO: handle data
-        i += data_len;
-    }
+    else
+        data_len = len - i;
+
+    // append data; TODO: handle offsets
+    warn(debug, "data: %s", &buf[i]);
+    s->in = realloc(s->in, s->in_len + data_len);
+    assert(s->in, "realloc");
+    decode(s->in[s->in_len], buf, len, i, data_len, "%d");
+    s->in_len += data_len;
+
+    // TODO: notify app
+    ev_feed_event(q_loop, &q_async, EV_READ);
 
     return i;
 }
@@ -281,7 +290,7 @@ enc_ack_frame(uint8_t * restrict const buf, const uint16_t len)
 {
     uint16_t i = 0;
     static const uint8_t type = F_ACK;
-    encode(buf, len, i, type, 0, "%d");
+    encode(buf, len, i, &type, 0, "%d");
     return i;
 }
 
@@ -291,12 +300,12 @@ enc_conn_close_frame(uint8_t * restrict const buf, const uint16_t len)
 {
     uint16_t i = 0;
     static const uint8_t type = T_CONNECTION_CLOSE;
-    encode(buf, len, i, type, 0, "%d");
+    encode(buf, len, i, &type, 0, "%d");
     static const uint32_t err = QUIC_INVALID_VERSION;
-    encode(buf, len, i, err, 0, "%d");
+    encode(buf, len, i, &err, 0, "%d");
     static const char reason[] = "Because I don't like you.";
     static const uint16_t reason_len = sizeof(reason);
-    encode(buf, len, i, reason, reason_len, "%s");
+    encode(buf, len, i, &reason, reason_len, "%s");
     return i;
 }
 
@@ -308,26 +317,26 @@ enc_stream_frame(struct q_stream * restrict const s,
 {
     uint16_t i = 0;
     static const uint8_t type = F_STREAM;
-    encode(buf, len, i, type, 0, "%d");
+    encode(buf, len, i, &type, 0, "%d");
 
     const uint8_t sid_len = calc_sid_len(s->id);
     buf[0] |= enc_sid_len(sid_len);
-    encode(buf, len, i, s->id, sid_len, "%d");
+    encode(buf, len, i, &s->id, sid_len, "%d");
 
     const uint8_t off_len = calc_off_len(s->out_off);
     if (off_len) {
         buf[0] |= enc_off_len(off_len);
-        encode(buf, len, i, s->out_off, off_len, "%" PRIu64);
+        encode(buf, len, i, &s->out_off, off_len, "%" PRIu64);
     }
 
     if (s->out_len <= len) {
         // this stream frame will not extend to the end of the packet
         buf[0] |= F_STREAM_DATA_LEN;
         const uint16_t out_len = (uint16_t)s->out_len;
-        encode(buf, len, i, out_len, 0, "%d");
+        encode(buf, len, i, &out_len, 0, "%d");
     }
 
-    encode(buf, len, i, s->out, MIN(s->out_len, len), "%s");
+    encode(buf, len, i, s->out, MIN(s->out_len, len), "%d");
 
     // buf[0] |= F_STREAM_FIN;
 

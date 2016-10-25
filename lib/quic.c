@@ -21,7 +21,8 @@ const size_t vers_len = sizeof(vers);
 
 static ev_io rx_w;
 static ev_timer to_w;
-static struct ev_loop * loop;
+ev_async q_async;
+struct ev_loop * q_loop;
 
 
 static uint8_t __attribute__((nonnull))
@@ -66,7 +67,7 @@ pick_server_vers(const struct q_pub_hdr * restrict const p)
 }
 
 
-static void __attribute__((nonnull)) q_tx(struct q_conn * restrict const c)
+static void __attribute__((nonnull)) tx(struct q_conn * restrict const c)
 {
     warn(info, "entering %s for conn %" PRIu64, __func__, c->id);
 
@@ -96,14 +97,15 @@ static void __attribute__((nonnull)) q_tx(struct q_conn * restrict const c)
         sendto(c->fd, buf, len, 0, (struct sockaddr *)&c->peer, c->peer_len);
     assert(n > 0, "sendto error"); // TODO: handle EAGAIN
     warn(debug, "sent %zd bytes", n);
+    hexdump(buf, len);
     c->out++;
 }
 
 
 static void __attribute__((nonnull))
-q_rx(struct ev_loop * restrict const l __attribute__((unused)),
-     ev_io * restrict const w,
-     int revents __attribute__((unused)))
+rx(struct ev_loop * restrict const loop __attribute__((unused)),
+   ev_io * restrict const w,
+   int revents __attribute__((unused)))
 {
     warn(info, "entering %s for desc %d", __func__, w->fd);
 
@@ -118,6 +120,7 @@ q_rx(struct ev_loop * restrict const l __attribute__((unused)),
            MAX_PKT_LEN);
     const uint16_t len = (uint16_t)n;
     warn(debug, "received %d bytes", len);
+    hexdump(buf, len);
 
     struct q_pub_hdr p = {0};
     uint16_t i = dec_pub_hdr(&p, buf, len);
@@ -182,7 +185,7 @@ q_rx(struct ev_loop * restrict const l __attribute__((unused)),
     assert(0, "unreachable");
 
 respond:
-    q_tx(c);
+    tx(c);
 }
 
 
@@ -195,16 +198,13 @@ uint64_t q_connect(const int s,
 
     // initialize the RX watcher
     ev_io * const r = &rx_w; // suppress erroneous warning in gcc 6.2
-    ev_io_init(r, q_rx, s, EV_READ);
-    ev_io_start(loop, &rx_w);
+    ev_io_init(r, rx, s, EV_READ);
+    ev_io_start(q_loop, &rx_w);
 
     // make new connection
     const uint64_t id = (((uint64_t)random()) << 32) | (uint64_t)random();
     struct q_conn * restrict const c = new_conn(id, peer, peer_len, s);
     c->flags |= CONN_FLAG_CLNT;
-
-    // send
-    // q_tx(c);
     return id;
 }
 
@@ -214,10 +214,6 @@ void q_write(const uint64_t cid,
              const void * restrict const buf,
              const size_t len)
 {
-    warn(info, "%s %zu bytes on stream %d on conn %" PRIu64, __func__, len, sid,
-         cid);
-    assert(sid >= 2, "cannot write on reserved stream %d", sid); // XXX needed?
-
     struct q_conn * restrict const c = get_conn(cid);
     assert(c, "conn %" PRIu64 " does not exist", cid);
 
@@ -225,27 +221,29 @@ void q_write(const uint64_t cid,
     assert(s, "stream %d on conn %" PRIu64 " does not exist", sid, cid);
 
     // append data
-    warn(debug, "appending data");
+    warn(info, "%zu bytes on stream %d on conn %" PRIu64, len, sid, cid);
     s->out = realloc(s->out, s->out_len + len);
     assert(s->out, "realloc");
     memcpy(&s->out[s->out_len], buf, len);
     s->out_len += len;
 
-    q_tx(c);
+    // send
+    tx(c);
 }
 
 
-void q_serve(const int s)
+void q_serve(const int s, void (*cb)(struct ev_loop *, struct ev_async *, int))
 {
     // put the socket into non-blocking mode
     assert(fcntl(s, O_NONBLOCK) >= 0, "fcntl");
 
     // initialize the RX watcher
     ev_io * const r = &rx_w; // suppress erroneous warning in gcc 6.2
-    ev_io_init(r, q_rx, s, EV_READ);
-    ev_io_start(loop, &rx_w);
+    ev_io_init(r, rx, s, EV_READ);
+    ev_io_start(q_loop, &rx_w);
 
-    warn(info, "%s returning", __func__);
+    // initialize the app callback
+    ev_async_init(&q_async, cb);
 }
 
 
@@ -272,13 +270,13 @@ q_init(struct ev_loop * restrict const l, const long timeout)
     warn(info, "%s %s with libev %d.%d", quickie_name, quickie_version,
          ev_version_major(), ev_version_minor());
     srandom((unsigned)time(0));
-    hash_init(&conns);
-    loop = l;
+    hash_init(&q_conns);
+    q_loop = l;
 
     if (timeout) {
         // during development, abort event loop after some inactivity
         ev_timer * const t = &to_w; // suppress erroneous warning in gcc 6.2
         ev_timer_init(t, timeout_cb, timeout, 0);
-        ev_timer_start(loop, &to_w);
+        ev_timer_start(q_loop, &to_w);
     }
 }

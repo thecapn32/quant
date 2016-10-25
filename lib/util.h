@@ -49,6 +49,9 @@ enum dlevel { crit = 0, err = 1, warn = 2, notice = 3, info = 4, debug = 5 };
 extern const char * const col[];
 extern regex_t _comp;
 
+#define plural(w) ((w) == 1 ? 0 : 's')
+
+
 // These macros are based on the "D" ones defined by netmap
 #define warn(dlevel, ...)                                                      \
     do {                                                                       \

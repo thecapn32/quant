@@ -2,11 +2,12 @@
 #include <netdb.h>
 
 #include "conn.h"
+#include "quic.h"
 #include "util.h"
 
 
 // All open QUIC connections.
-hash conns;
+hash q_conns;
 
 
 static int __attribute__((nonnull))
@@ -18,7 +19,7 @@ cmp_q_conn(const void * restrict const arg, const void * restrict const obj)
 
 struct q_conn * get_conn(const uint64_t id)
 {
-    return hash_search(&conns, cmp_q_conn, &id, (uint32_t)id);
+    return hash_search(&q_conns, cmp_q_conn, &id, (uint32_t)id);
 }
 
 
@@ -36,7 +37,7 @@ new_conn(const uint64_t id,
     c->out = 1;
     c->fd = fd;
     hash_init(&c->streams);
-    hash_insert(&conns, &c->conn_node, c, (uint32_t)c->id);
+    hash_insert(&q_conns, &c->conn_node, c, (uint32_t)c->id);
 
     char host[NI_MAXHOST] = "";
     char port[NI_MAXSERV] = "";

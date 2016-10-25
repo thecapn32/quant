@@ -131,17 +131,17 @@ uint16_t __attribute__((nonnull)) enc_pkt(struct q_conn * restrict const c,
 
     // XXX: omit cid to force a PRST
     const uint8_t flags = F_CID;
-    encode(buf, len, i, flags, 0, "0x%02x");
+    encode(buf, len, i, &flags, 0, "0x%02x");
 
-    encode(buf, len, i, c->id, 0, "%" PRIu64); // XXX: no htonll()?
+    encode(buf, len, i, &c->id, 0, "%" PRIu64); // XXX: no htonll()?
 
     if (c->state < CONN_ESTB || c->state == CONN_FINW) {
         buf[0] |= F_VERS;
         if (vers[c->vers].as_int)
-            encode(buf, len, i, vers[c->vers].as_int, 0, "0x%08x");
+            encode(buf, len, i, &vers[c->vers].as_int, 0, "0x%08x");
         else {
             warn(info, "sending version negotiation server response");
-            encode(buf, len, i, vers[0].as_int, vers_len, "0x%08x");
+            encode(buf, len, i, &vers[0].as_int, vers_len, "0x%08x");
             return i;
         }
     } else
@@ -150,11 +150,10 @@ uint16_t __attribute__((nonnull)) enc_pkt(struct q_conn * restrict const c,
 
     const uint8_t req_pkt_nr_len = calc_req_pkt_nr_len(c->out);
     buf[0] |= enc_pkt_nr_len(req_pkt_nr_len);
-    encode(buf, len, i, c->out, req_pkt_nr_len, "%" PRIu64);
+    encode(buf, len, i, &c->out, req_pkt_nr_len, "%" PRIu64);
 
     const uint16_t hash_pos = i;
     i += HASH_LEN;
-    assert(i <= len, "buf len %d, consumed %d", len, i);
 
     if (c->state == CONN_FINW)
         i += enc_conn_close_frame(&buf[i], len - i);

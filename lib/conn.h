@@ -6,7 +6,7 @@
 #include "tommy.h"
 
 // All open QUIC connections.
-extern hash conns;
+extern hash q_conns;
 
 
 /// A QUIC connection.
