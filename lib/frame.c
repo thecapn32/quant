@@ -116,14 +116,14 @@ dec_stream_frame(struct q_conn * restrict const c,
     else
         data_len = len - i;
 
-    // append data; TODO: handle offsets
-    warn(debug, "data: %s", &buf[i]);
+    // append data
     s->in = realloc(s->in, s->in_len + data_len);
     assert(s->in, "realloc");
     decode(s->in[s->in_len], buf, len, i, data_len, "%d");
     s->in_len += data_len;
+    s->in_off += data_len;
 
-    // TODO: notify app
+    // notify app
     ev_feed_event(q_loop, &q_async, EV_READ);
 
     return i;

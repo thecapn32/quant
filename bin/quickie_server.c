@@ -25,10 +25,15 @@ static void check_stream(void * arg, void * obj)
 {
     struct q_conn * c = arg;
     struct q_stream * s = obj;
-    if (s->in_len)
+    if (s->in_len) {
         warn(info,
              "received %" PRIu64 " byte%c on stream %d on conn %" PRIu64 ": %s",
              s->in_len, plural(s->in_len), s->id, c->id, s->in);
+        // we have consumed the data
+        free(s->in);
+        s->in = 0;
+        s->in_len = 0;
+    }
 }
 
 

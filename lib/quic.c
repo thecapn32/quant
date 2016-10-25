@@ -97,7 +97,7 @@ static void __attribute__((nonnull)) tx(struct q_conn * restrict const c)
         sendto(c->fd, buf, len, 0, (struct sockaddr *)&c->peer, c->peer_len);
     assert(n > 0, "sendto error"); // TODO: handle EAGAIN
     warn(debug, "sent %zd bytes", n);
-    hexdump(buf, len);
+    // hexdump(buf, len);
     c->out++;
 }
 
@@ -120,7 +120,7 @@ rx(struct ev_loop * restrict const loop __attribute__((unused)),
            MAX_PKT_LEN);
     const uint16_t len = (uint16_t)n;
     warn(debug, "received %d bytes", len);
-    hexdump(buf, len);
+    // hexdump(buf, len);
 
     struct q_pub_hdr p = {0};
     uint16_t i = dec_pub_hdr(&p, buf, len);
@@ -168,7 +168,7 @@ rx(struct ev_loop * restrict const loop __attribute__((unused)),
                 warn(info, "retrying with version %.4s", vers[c->vers].as_str);
             else {
                 warn(info, "no version in common with server, closing");
-                c->vers = 0; // send closing packets with our preferred version
+                c->vers = 0; // send closing packet with our preferred version
                 c->state = CONN_FINW;
                 warn(info, "conn %" PRIu64 " now in CONN_FINW", c->id);
             }
@@ -178,6 +178,9 @@ rx(struct ev_loop * restrict const loop __attribute__((unused)),
             warn(info, "conn %" PRIu64 " now in CONN_ESTB", c->id);
         }
         goto respond;
+
+    case CONN_ESTB:
+        return; // TODO: respond with ACK
 
     default:
         die("TODO: state %d", c->state);

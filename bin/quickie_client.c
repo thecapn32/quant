@@ -1,5 +1,6 @@
 #include <ev.h>
 #include <getopt.h>
+#include <inttypes.h>
 #include <netdb.h>
 #include <unistd.h>
 
@@ -72,15 +73,24 @@ int main(int argc, char * argv[])
     uint64_t cid[MAX_CONNS];
     struct ev_loop * loop = ev_default_loop(0);
     q_init(loop, timeout);
-    static const char * msg = "Hello, world!";
+
+    char msg[1024];
+    const size_t msg_len = sizeof(msg);
     for (int n = 0; n < conns; n++) {
         int s = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
         assert(s >= 0, "socket");
         warn(info, "%s starting connection #%d (desc %d) to %s:%s",
              BASENAME(argv[0]), n, s, dest, port);
         cid[n] = q_connect(s, res->ai_addr, res->ai_addrlen);
-        const uint32_t sid = q_rsv_stream(cid[n]);
-        q_write(cid[n], sid, msg, strlen(msg));
+
+        for (int i = 0; i < 2; i++) {
+            const uint32_t sid = q_rsv_stream(cid[n]);
+            snprintf(msg, msg_len,
+                     "Hello, stream %d on connection %" PRIu64 "!", sid,
+                     cid[n]);
+            warn(info, "writing: %s", msg);
+            q_write(cid[n], sid, msg, strlen(msg));
+        }
     }
 
     freeaddrinfo(res);

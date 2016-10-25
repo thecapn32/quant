@@ -19,12 +19,15 @@ struct q_stream {
     uint64_t in_off;
 };
 
-#define STRM_IDLE 0
-#define STRM_RESV 1
-#define STRM_OPEN 2
-#define STRM_HFCL_REM 3
-#define STRM_HFCL_LOC 4
-#define STRM_CLSD 5
+// SND_UNA
+
+
+// #define STRM_IDLE 0
+// #define STRM_RESV 1
+// #define STRM_OPEN 2
+// #define STRM_HFCL_REM 3
+// #define STRM_HFCL_LOC 4
+// #define STRM_CLSD 5
 
 
 struct q_conn;
