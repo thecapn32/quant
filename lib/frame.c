@@ -1,8 +1,10 @@
 #include <inttypes.h>
 #include <sys/param.h>
 
+#include "conn.h"
 #include "frame.h"
 #include "pkt.h"
+#include "stream.h"
 #include "util.h"
 
 
@@ -25,6 +27,16 @@ static uint8_t __attribute__((const)) enc_sid_len(const uint8_t n)
 }
 
 
+// Calculate the minimum number of bytes needed to encode the stream ID
+static uint8_t __attribute__((const)) calc_req_sid_len(const uint64_t n)
+{
+    for (uint8_t shift = 1; shift < 4; shift++)
+        if (n >> shift == 0)
+            return shift;
+    return 4;
+}
+
+
 // Convert stream offset length encoded in flags to bytes
 static uint8_t __attribute__((const)) dec_off_len(const uint8_t flags)
 {
@@ -41,6 +53,18 @@ static uint8_t __attribute__((const)) enc_off_len(const uint8_t n)
     assert(n != 1 && n <= 8, "cannot stream encode offset length %d", n);
     static const uint8_t enc[] = {0, 0xFF, 1, 2, 3, 4, 5, 6, 7}; // 0xFF invalid
     return (uint8_t)(enc[n] << 2);
+}
+
+
+// Calculate the minimum number of bytes needed to encode the stream ID
+static uint8_t __attribute__((const)) calc_req_off_len(const uint64_t n)
+{
+    if (n == 0)
+        return 0;
+    for (uint8_t shift = 2; shift < 8; shift++)
+        if (n >> shift == 0)
+            return shift;
+    return 8;
 }
 
 
@@ -64,13 +88,6 @@ static uint8_t __attribute__((const)) dec_ack_block_len(const uint8_t flags)
 }
 
 
-static int __attribute__((nonnull))
-cmp_q_stream(const void * restrict const arg, const void * restrict const obj)
-{
-    return *(const uint64_t *)arg != ((const struct q_stream *)obj)->id;
-}
-
-
 static uint16_t __attribute__((nonnull))
 dec_stream_frame(struct q_conn * restrict const c,
                  const uint8_t * restrict const buf,
@@ -84,15 +101,9 @@ dec_stream_frame(struct q_conn * restrict const c,
     const uint8_t sid_len = dec_sid_len(type);
     uint32_t sid = 0;
     decode(sid, buf, len, i, sid_len, "%d");
-    struct q_stream * restrict s =
-        hash_search(&c->streams, cmp_q_stream, &sid, sid);
-    if (s == 0) {
-        s = calloc(1, sizeof(*s));
-        s->id = sid;
-        hash_insert(&c->streams, &s->node, s, s->id);
-        warn(info, "new stream %" PRIu64 " on connection %" PRIu64, s->id,
-             c->id);
-    }
+    struct q_stream * restrict s = get_stream(c, sid);
+    if (s == 0)
+        new_stream(c, sid);
 
     const uint8_t off_len = dec_off_len(type);
     uint64_t off = 0;
@@ -291,38 +302,34 @@ enc_conn_close_frame(uint8_t * restrict const buf, const uint16_t len)
 
 
 uint16_t __attribute__((nonnull))
-enc_stream_frame(uint8_t * restrict const buf, const uint16_t len)
+enc_stream_frame(struct q_stream * restrict const s,
+                 uint8_t * restrict const buf,
+                 const uint16_t len)
 {
-    buf[0] = F_STREAM;
-    uint16_t i = 1;
-    assert(i < len, "buf too short");
+    uint16_t i = 0;
+    static const uint8_t type = F_STREAM;
+    encode(buf, len, i, type, 0, "%d");
 
-    const uint32_t dummy_id = 1;
-    memcpy(&buf[i], &dummy_id, sizeof(dummy_id));
-    warn(debug, "%zu-byte id %d", sizeof(dummy_id), dummy_id);
-    buf[0] |= enc_sid_len(sizeof(dummy_id));
-    i += sizeof(dummy_id);
-    assert(i < len, "buf too short");
+    const uint8_t sid_len = calc_req_sid_len(s->id);
+    buf[0] |= enc_sid_len(sid_len);
+    encode(buf, len, i, s->id, sid_len, "%d");
 
-    const uint16_t dummy_dl = 0;
-    memcpy(&buf[i], &dummy_dl, sizeof(dummy_dl));
-    warn(debug, "%zu-byte dl %d", sizeof(dummy_dl), dummy_dl);
-    buf[0] |= F_STREAM_DATA_LEN;
-    i += sizeof(dummy_dl);
-    assert(i < len, "buf too short");
+    const uint8_t off_len = calc_req_off_len(s->out_off);
+    if (off_len) {
+        buf[0] |= enc_off_len(off_len);
+        encode(buf, len, i, s->out_off, off_len, "%" PRIu64);
+    }
 
-    const uint64_t dummy_off = 0;
-    memcpy(&buf[i], &dummy_off, sizeof(dummy_off));
-    const uint8_t off_len = enc_off_len(sizeof(dummy_off));
-    warn(debug, "%zu-byte off %" PRIu64 " encoded as 0x%0x", sizeof(dummy_off),
-         dummy_off, off_len);
-    buf[0] |= off_len;
-    i += sizeof(dummy_off);
-    assert(i < len, "buf too short");
+    if (s->out_len <= len) {
+        // this stream frame will not extend to the end of the packet
+        buf[0] |= F_STREAM_DATA_LEN;
+        const uint16_t out_len = (uint16_t)s->out_len;
+        encode(buf, len, i, out_len, 0, "%d");
+    }
 
-    buf[0] |= F_STREAM_FIN;
+    encode(buf, len, i, s->out, MIN(s->out_len, len), "%s");
 
-    // TODO: FIN bit and offset
+    // buf[0] |= F_STREAM_FIN;
 
     return i;
 }

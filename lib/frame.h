@@ -28,13 +28,16 @@
 
 struct q_pub_hdr;
 struct q_conn;
+struct q_stream;
 
 uint16_t dec_frames(struct q_conn * restrict const c,
                     const struct q_pub_hdr * restrict const p,
                     const uint8_t * restrict const buf,
                     const uint16_t len);
 
-uint16_t enc_stream_frame(uint8_t * restrict const buf, const uint16_t len);
+uint16_t enc_stream_frame(struct q_stream * restrict const s,
+                          uint8_t * restrict const buf,
+                          const uint16_t len);
 
 uint16_t enc_padding_frame(uint8_t * restrict const buf, const uint16_t len);
 

@@ -1,10 +1,11 @@
 #include <inttypes.h>
 #include <sys/param.h>
 
+#include "conn.h"
 #include "fnv_1a.h"
 #include "frame.h"
 #include "pkt.h"
-#include "quic.h"
+#include "stream.h"
 #include "util.h"
 
 
@@ -122,17 +123,19 @@ dec_pub_hdr(struct q_pub_hdr * restrict const ph,
 }
 
 
-uint16_t __attribute__((nonnull))
-enc_pkt(const struct q_conn * restrict const c,
-        uint8_t * restrict const buf,
-        const uint16_t len)
+uint16_t __attribute__((nonnull)) enc_pkt(struct q_conn * restrict const c,
+                                          uint8_t * restrict const buf,
+                                          const uint16_t len)
 {
-    buf[0] = F_CID;
-    uint16_t i = 1;
+    uint16_t i = 0;
+
     // XXX: omit cid to force a PRST
+    const uint8_t flags = F_CID;
+    encode(buf, len, i, flags, 0, "0x%02x");
+
     encode(buf, len, i, c->id, 0, "%" PRIu64); // XXX: no htonll()?
 
-    if (c->state < ESTABLISHED || c->state == FIN_WAIT) {
+    if (c->state < CONN_ESTB || c->state == CONN_FINW) {
         buf[0] |= F_VERS;
         if (vers[c->vers].as_int)
             encode(buf, len, i, vers[c->vers].as_int, 0, "0x%08x");
@@ -153,8 +156,11 @@ enc_pkt(const struct q_conn * restrict const c,
     i += HASH_LEN;
     assert(i <= len, "buf len %d, consumed %d", len, i);
 
-    if (c->state == FIN_WAIT)
+    if (c->state == CONN_FINW)
         i += enc_conn_close_frame(&buf[i], len - i);
+
+    // stream frames must be last, because they can extend to end of packet
+    i += enc_stream_frames(c, &buf[i], len - i);
 
     const uint128_t hash = fnv_1a(buf, i, hash_pos, HASH_LEN);
     warn(debug, "inserting %d-byte hash at pos %d", HASH_LEN, hash_pos);

@@ -1,11 +1,5 @@
 #pragma once
 
-#include <ev.h>
-#include <sys/socket.h>
-
-#include "tommy.h"
-
-
 /// Represent QUIC tags in a way that lets them be used as integers or
 /// printed as strings. These strings are not null-terminated, and therefore
 /// need to be printed as @p %.4s with @p printf() or similar.
@@ -22,44 +16,20 @@ extern const q_tag vers[];
 /// elements.
 extern const size_t vers_len;
 
+struct q_conn;
 
-struct q_stream {
-    node node;
+void q_init(struct ev_loop * restrict const loop, const long timeout);
 
-    uint64_t id;
-};
+uint64_t q_connect(const int s,
+                   const struct sockaddr * restrict const peer,
+                   const socklen_t plen);
 
+void q_serve(const int s);
 
-/// A QUIC connection.
-struct q_conn {
-    node node;
+void q_write(const uint64_t cid,
+             const uint32_t sid,
+             const void * restrict const buf,
+             const size_t len);
 
-    uint64_t id;   ///< Connection ID
-    uint64_t out;  ///< The highest packet number sent on this connection
-    uint64_t in;   ///< The highest packet number received on this connection
-    uint8_t state; ///< State of the connection.
-    uint8_t vers;  ///< QUIC version in use for this connection. (Index into
-                   ///< @p vers[].)
-    uint8_t _unused[2]; ///< Unused.
-    int fd;             ///< File descriptor (socket) for the connection.
-    hash streams;
-    struct sockaddr peer; ///< Address of our peer.
-    socklen_t plen;       ///< Length of @p peer.
-    uint8_t _unused2[4];  ///< Unused.
-};
+uint32_t q_rsv_stream(const uint64_t cid);
 
-#define CLOSED 0
-#define VERS_SENT 1
-#define VERS_RECV 2
-#define ESTABLISHED 3
-#define FIN_WAIT 99 // TODO: renumber
-
-
-void q_init(struct ev_loop * restrict const reloop, const long timeout);
-
-void q_connect(struct ev_loop * restrict const loop,
-               const int s,
-               const struct sockaddr * restrict const peer,
-               const socklen_t plen);
-
-void q_serve(struct ev_loop * restrict const loop, const int s);

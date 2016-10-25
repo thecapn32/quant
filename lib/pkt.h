@@ -60,6 +60,6 @@ uint16_t dec_pub_hdr(struct q_pub_hdr * const ph,
                      const uint8_t * restrict const buf,
                      const uint16_t len);
 
-uint16_t enc_pkt(const struct q_conn * const c,
+uint16_t enc_pkt(struct q_conn * const c,
                  uint8_t * restrict const buf,
                  const uint16_t len);

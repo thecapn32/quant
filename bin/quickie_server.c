@@ -78,7 +78,7 @@ int main(int argc, char * argv[])
     struct ev_loop * loop = ev_default_loop(0);
     q_init(loop, timeout);
     warn(debug, "%s ready on %s:%s", BASENAME(argv[0]), ip, port);
-    q_serve(loop, s);
+    q_serve(s);
     ev_loop(loop, 0);
 
     close(s);
