@@ -9,7 +9,7 @@ before_script:
   - apt-get update -y -qq
   -
     apt-get install -y -qq doxygen cmake libnss3-dev libev-dev
-      vagrant daemon tcpdump tshark
+      vagrant daemon tcpdump tshark tmux
       # virtualbox
 
 compile:
