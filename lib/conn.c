@@ -25,7 +25,7 @@ struct q_conn * get_conn(const uint64_t id)
 struct q_conn * __attribute__((nonnull))
 new_conn(const uint64_t id,
          const struct sockaddr * restrict const peer,
-         const socklen_t plen,
+         const socklen_t peer_len,
          const int fd)
 {
     assert(get_conn(id) == 0, "conn %" PRIu64 " already exists", id);
@@ -40,10 +40,10 @@ new_conn(const uint64_t id,
 
     char host[NI_MAXHOST] = "";
     char port[NI_MAXSERV] = "";
-    getnameinfo((const struct sockaddr *)peer, plen, host, sizeof(host), port,
-                sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
+    getnameinfo((const struct sockaddr *)peer, peer_len, host, sizeof(host),
+                port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
     c->peer = *peer;
-    c->plen = plen;
+    c->peer_len = peer_len;
     warn(info, "created new conn %" PRIu64 " with peer %s:%s", c->id, host,
          port);
 

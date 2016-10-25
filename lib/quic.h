@@ -22,7 +22,7 @@ void q_init(struct ev_loop * restrict const loop, const long timeout);
 
 uint64_t q_connect(const int s,
                    const struct sockaddr * restrict const peer,
-                   const socklen_t plen);
+                   const socklen_t peer_len);
 
 void q_serve(const int s);
 

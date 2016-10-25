@@ -28,7 +28,7 @@ static uint8_t __attribute__((const)) enc_sid_len(const uint8_t n)
 
 
 // Calculate the minimum number of bytes needed to encode the stream ID
-static uint8_t __attribute__((const)) calc_req_sid_len(const uint64_t n)
+static uint8_t __attribute__((const)) calc_sid_len(const uint64_t n)
 {
     for (uint8_t shift = 1; shift < 4; shift++)
         if (n >> shift == 0)
@@ -57,7 +57,7 @@ static uint8_t __attribute__((const)) enc_off_len(const uint8_t n)
 
 
 // Calculate the minimum number of bytes needed to encode the stream ID
-static uint8_t __attribute__((const)) calc_req_off_len(const uint64_t n)
+static uint8_t __attribute__((const)) calc_off_len(const uint64_t n)
 {
     if (n == 0)
         return 0;
@@ -111,10 +111,10 @@ dec_stream_frame(struct q_conn * restrict const c,
         decode(off, buf, len, i, off_len, "%" PRIu64);
 
     if (type & F_STREAM_DATA_LEN) {
-        uint16_t dlen = 0;
-        decode(dlen, buf, len, i, 0, "%d");
+        uint16_t data_len = 0;
+        decode(data_len, buf, len, i, 0, "%d");
         // TODO: handle data
-        i += dlen;
+        i += data_len;
     }
 
     return i;
@@ -310,11 +310,11 @@ enc_stream_frame(struct q_stream * restrict const s,
     static const uint8_t type = F_STREAM;
     encode(buf, len, i, type, 0, "%d");
 
-    const uint8_t sid_len = calc_req_sid_len(s->id);
+    const uint8_t sid_len = calc_sid_len(s->id);
     buf[0] |= enc_sid_len(sid_len);
     encode(buf, len, i, s->id, sid_len, "%d");
 
-    const uint8_t off_len = calc_req_off_len(s->out_off);
+    const uint8_t off_len = calc_off_len(s->out_off);
     if (off_len) {
         buf[0] |= enc_off_len(off_len);
         encode(buf, len, i, s->out_off, off_len, "%" PRIu64);

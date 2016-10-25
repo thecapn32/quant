@@ -93,7 +93,7 @@ static void __attribute__((nonnull)) q_tx(struct q_conn * restrict const c)
     }
 
     const ssize_t n =
-        sendto(c->fd, buf, len, 0, (struct sockaddr *)&c->peer, c->plen);
+        sendto(c->fd, buf, len, 0, (struct sockaddr *)&c->peer, c->peer_len);
     assert(n > 0, "sendto error"); // TODO: handle EAGAIN
     warn(debug, "sent %zd bytes", n);
     c->out++;
@@ -109,14 +109,14 @@ q_rx(struct ev_loop * restrict const l __attribute__((unused)),
 
     uint8_t buf[UINT16_MAX];
     struct sockaddr peer;
-    socklen_t plen = sizeof(peer);
-    const ssize_t rlen =
-        recvfrom(w->fd, buf, UINT16_MAX, 0, (struct sockaddr *)&peer, &plen);
-    assert(rlen >= 0, "recvfrom error");
-    assert(rlen <= MAX_PKT_LEN,
-           "received %zu-byte packet, larger than MAX_PKT_LEN of %d", rlen,
+    socklen_t peer_len = sizeof(peer);
+    const ssize_t n = recvfrom(w->fd, buf, UINT16_MAX, 0,
+                               (struct sockaddr *)&peer, &peer_len);
+    assert(n >= 0, "recvfrom error");
+    assert(n <= MAX_PKT_LEN,
+           "received %zu-byte packet, larger than MAX_PKT_LEN of %d", n,
            MAX_PKT_LEN);
-    const uint16_t len = (uint16_t)rlen;
+    const uint16_t len = (uint16_t)n;
     warn(debug, "received %d bytes", len);
 
     struct q_pub_hdr p = {0};
@@ -126,7 +126,7 @@ q_rx(struct ev_loop * restrict const l __attribute__((unused)),
     if (c == 0) {
         // this is a packet for a new connection, create it
         assert(p.flags & F_CID, "no conn ID in initial packet");
-        c = new_conn(p.cid, &peer, plen, w->fd);
+        c = new_conn(p.cid, &peer, peer_len, w->fd);
         c->in = p.nr;
         // if it gets created here, this is a server connection, so no need to
         // change c->flags
@@ -188,7 +188,7 @@ respond:
 
 uint64_t q_connect(const int s,
                    const struct sockaddr * restrict const peer,
-                   const socklen_t plen)
+                   const socklen_t peer_len)
 {
     // put the socket into non-blocking mode
     assert(fcntl(s, O_NONBLOCK) >= 0, "fcntl");
@@ -200,7 +200,7 @@ uint64_t q_connect(const int s,
 
     // make new connection
     const uint64_t id = (((uint64_t)random()) << 32) | (uint64_t)random();
-    struct q_conn * restrict const c = new_conn(id, peer, plen, s);
+    struct q_conn * restrict const c = new_conn(id, peer, peer_len, s);
     c->flags |= CONN_FLAG_CLNT;
 
     // send

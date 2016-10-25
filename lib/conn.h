@@ -24,7 +24,7 @@ struct q_conn {
     int fd;          ///< File descriptor (socket) for the connection.
     hash streams;
     struct sockaddr peer; ///< Address of our peer.
-    socklen_t plen;       ///< Length of @p peer.
+    socklen_t peer_len;   ///< Length of @p peer.
     uint8_t _unused2[4];  ///< Unused.
 };
 
@@ -41,5 +41,5 @@ struct q_conn * get_conn(const uint64_t id);
 
 struct q_conn * new_conn(const uint64_t id,
                          const struct sockaddr * restrict const peer,
-                         const socklen_t plen,
+                         const socklen_t peer_len,
                          const int fd);
