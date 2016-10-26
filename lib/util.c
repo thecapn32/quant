@@ -4,11 +4,15 @@
 
 #include "util.h"
 
+pthread_mutex_t _lock;
+
+
 #ifndef NDEBUG
 
-const char * const col[] = {MAG, RED, YEL, CYN, BLU, GRN};
+const char * const _col[] = {MAG, RED, YEL, CYN, BLU, GRN};
 
 regex_t _comp;
+
 
 static void __attribute__((constructor)) premain()
 {
@@ -18,6 +22,10 @@ static void __attribute__((constructor)) premain()
 
     // Get the current time
     gettimeofday(&_epoch, 0);
+
+    // Initialize lock
+    if (pthread_mutex_init(&_lock, 0))
+        die("could not initialize mutex");
 }
 
 
@@ -25,6 +33,10 @@ static void __attribute__((destructor)) postmain()
 {
     // Free the regular expression used for restricting debug output
     regfree(&_comp);
+
+    // Free the lock
+    if (pthread_mutex_destroy(&_lock))
+        die("could not destroy mutex");
 }
 
 #endif

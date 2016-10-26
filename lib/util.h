@@ -1,6 +1,7 @@
 #pragma once
 
 #include <errno.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,7 +27,34 @@
 
 
 // Trim the path from the given file name (to be used with __FILE__)
-#define BASENAME(f) (strrchr((f), '/') ? strrchr((f), '/') + 1 : (f))
+#define basename(f) (strrchr((f), '/') ? strrchr((f), '/') + 1 : (f))
+
+
+#define plural(w) ((w) == 1 ? 0 : 's')
+
+
+extern pthread_mutex_t _lock;
+
+// Abort execution with a message
+#define die(...)                                                               \
+    do {                                                                       \
+        const int _e = errno;                                                  \
+        struct timeval _now, _elapsed;                                         \
+        gettimeofday(&_now, 0);                                                \
+        timeval_subtract(&_elapsed, &_now, &_epoch);                           \
+        if (pthread_mutex_lock(&_lock))                                        \
+            abort();                                                           \
+        fprintf(stderr, RED BLD REV " % 2ld.%04ld %s@%s:%d ABORT: ",           \
+                (long)(_elapsed.tv_sec % 1000),                                \
+                (long)(_elapsed.tv_usec / 1000), __func__, basename(__FILE__), \
+                __LINE__);                                                     \
+        fprintf(stderr, __VA_ARGS__);                                          \
+        fprintf(stderr, " %c%s%c\n" NRM, (_e ? '[' : 0),                       \
+                (_e ? strerror(_e) : ""), (_e ? ']' : 0));                     \
+        fflush(stderr);                                                        \
+        pthread_mutex_unlock(&_lock);                                          \
+        abort();                                                               \
+    } while (0)
 
 
 #ifndef NDEBUG
@@ -46,10 +74,8 @@ enum dlevel { crit = 0, err = 1, warn = 2, notice = 3, info = 4, debug = 5 };
 #define DCOMPONENT ".*"
 #endif
 
-extern const char * const col[];
+extern const char * const _col[];
 extern regex_t _comp;
-
-#define plural(w) ((w) == 1 ? 0 : 's')
 
 
 // These macros are based on the "D" ones defined by netmap
@@ -59,14 +85,18 @@ extern regex_t _comp;
             struct timeval _now, _elapsed;                                     \
             gettimeofday(&_now, 0);                                            \
             timeval_subtract(&_elapsed, &_now, &_epoch);                       \
+            if (pthread_mutex_lock(&_lock))                                    \
+                abort();                                                       \
             fprintf(stderr, REV "%s " NRM "% 2ld.%04ld" MAG " %s" BLK "@" BLU  \
                                 "%s:%d " NRM,                                  \
-                    col[dlevel], (long)(_elapsed.tv_sec % 1000),               \
+                    _col[dlevel], (long)(_elapsed.tv_sec % 1000),              \
                     (long)(_elapsed.tv_usec / 1000), __func__,                 \
-                    BASENAME(__FILE__), __LINE__);                             \
+                    basename(__FILE__), __LINE__);                             \
             fprintf(stderr, __VA_ARGS__);                                      \
             fprintf(stderr, "\n");                                             \
             fflush(stderr);                                                    \
+            if (pthread_mutex_unlock(&_lock))                                  \
+                abort();                                                       \
         }                                                                      \
     } while (0)
 
@@ -98,29 +128,9 @@ extern regex_t _comp;
 
 #endif
 
-// Abort execution with a message
-#define die(...)                                                               \
-    do {                                                                       \
-        const int _e = errno;                                                  \
-        struct timeval _now, _elapsed;                                         \
-        gettimeofday(&_now, 0);                                                \
-        timeval_subtract(&_elapsed, &_now, &_epoch);                           \
-        fprintf(stderr, RED BLD REV " % 2ld.%04ld %s@%s:%d ABORT: ",           \
-                (long)(_elapsed.tv_sec % 1000),                                \
-                (long)(_elapsed.tv_usec / 1000), __func__, BASENAME(__FILE__), \
-                __LINE__);                                                     \
-        fprintf(stderr, __VA_ARGS__);                                          \
-        fprintf(stderr, " %c%s%c\n" NRM, (_e ? '[' : 0),                       \
-                (_e ? strerror(_e) : ""), (_e ? ']' : 0));                     \
-        fflush(stderr);                                                        \
-        abort();                                                               \
-    } while (0)
-
-
-#ifndef NNDEBUG
 
 // A version of the assert() macro that isn't disabled by NDEBUG and that uses
-// our other debug functions (but that *can* still be disabled by NNDEBUG)
+// our other debug functions
 #undef assert
 #define assert(e, ...)                                                         \
     do {                                                                       \
@@ -128,13 +138,6 @@ extern regex_t _comp;
             die("assertion failed \n         " #e " \n         " __VA_ARGS__); \
     } while (0)
 
-#else
-
-#define assert(...)                                                            \
-    do {                                                                       \
-    } while (0)
-
-#endif
 
 extern struct timeval _epoch;
 extern int timeval_subtract(struct timeval * const result,
