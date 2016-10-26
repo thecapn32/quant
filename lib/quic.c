@@ -200,7 +200,7 @@ uint64_t q_connect(const int s,
     assert(fcntl(s, O_NONBLOCK) >= 0, "fcntl");
 
     // initialize the RX watcher
-    ev_io * const r = &rx_w; // suppress erroneous warning in gcc 6.2
+    ev_io * restrict const r = &rx_w; // suppress erroneous warning in gcc 6.2
     ev_io_init(r, rx, s, EV_READ);
     ev_io_start(q_loop, &rx_w);
 
@@ -241,12 +241,14 @@ void q_serve(const int s, void (*cb)(struct ev_loop *, struct ev_async *, int))
     assert(fcntl(s, O_NONBLOCK) >= 0, "fcntl");
 
     // initialize the RX watcher
-    ev_io * const r = &rx_w; // suppress erroneous warning in gcc 6.2
+    ev_io * restrict const r = &rx_w; // suppress erroneous warning in gcc 6.2
     ev_io_init(r, rx, s, EV_READ);
     ev_io_start(q_loop, &rx_w);
 
     // initialize the app callback
-    ev_async_init(&q_async, cb);
+    ev_async * restrict const a =
+        &q_async; // suppress erroneous warning in gcc 6.2
+    ev_async_init(a, cb);
 }
 
 
@@ -278,7 +280,8 @@ q_init(struct ev_loop * restrict const l, const long timeout)
 
     if (timeout) {
         // during development, abort event loop after some inactivity
-        ev_timer * const t = &to_w; // suppress erroneous warning in gcc 6.2
+        ev_timer * restrict const t =
+            &to_w; // suppress erroneous warning in gcc 6.2
         ev_timer_init(t, timeout_cb, timeout, 0);
         ev_timer_start(q_loop, &to_w);
     }
