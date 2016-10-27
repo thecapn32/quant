@@ -13,4 +13,6 @@ find_package_handle_standard_args(libev DEFAULT_MSG LIBEV_LIB LIBEV_INCLUDE)
 add_library(quickie
   util.c fnv_1a.c pkt.c frame.c quic.c version.c stream.c conn.c)
 target_include_directories(quickie PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(quickie tommy ${NSS_LIB} ${LIBEV_LIB})
+find_package (Threads)
+target_link_libraries(quickie tommy ${NSS_LIB} ${LIBEV_LIB} ${CMAKE_THREAD_LIBS_INIT})
+
