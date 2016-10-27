@@ -34,17 +34,21 @@
 
 
 extern pthread_mutex_t _lock;
+extern pthread_t _master;
+
 
 // Abort execution with a message
 #define die(...)                                                               \
     do {                                                                       \
+        if (pthread_mutex_lock(&_lock))                                        \
+            abort();                                                           \
         const int _e = errno;                                                  \
         struct timeval _now, _elapsed;                                         \
         gettimeofday(&_now, 0);                                                \
         timeval_subtract(&_elapsed, &_now, &_epoch);                           \
-        if (pthread_mutex_lock(&_lock))                                        \
-            abort();                                                           \
-        fprintf(stderr, RED BLD REV " % 2ld.%04ld %s@%s:%d ABORT: ",           \
+        fprintf(stderr,                                                        \
+                REV "%s " NRM RED BLD REV "% 2ld.%04ld   %s %s:%d ABORT: ",    \
+                (pthread_self() == _master ? BLK : WHT),                       \
                 (long)(_elapsed.tv_sec % 1000),                                \
                 (long)(_elapsed.tv_usec / 1000), __func__, basename(__FILE__), \
                 __LINE__);                                                     \
@@ -82,15 +86,16 @@ extern regex_t _comp;
 #define warn(dlevel, ...)                                                      \
     do {                                                                       \
         if (DLEVEL >= dlevel && !regexec(&_comp, __FILE__, 0, 0, 0)) {         \
+            if (pthread_mutex_lock(&_lock))                                    \
+                abort();                                                       \
             struct timeval _now, _elapsed;                                     \
             gettimeofday(&_now, 0);                                            \
             timeval_subtract(&_elapsed, &_now, &_epoch);                       \
-            if (pthread_mutex_lock(&_lock))                                    \
-                abort();                                                       \
-            fprintf(stderr, REV "%s " NRM "% 2ld.%04ld" MAG " %s" BLK "@" BLU  \
-                                "%s:%d " NRM,                                  \
-                    _col[dlevel], (long)(_elapsed.tv_sec % 1000),              \
-                    (long)(_elapsed.tv_usec / 1000), __func__,                 \
+            fprintf(stderr, REV "%s " NRM "% 2ld.%04ld " REV "%s " NRM MAG     \
+                                " %s" BLK " " BLU "%s:%d " NRM,                \
+                    (pthread_self() == _master ? BLK : WHT),                   \
+                    (long)(_elapsed.tv_sec % 1000),                            \
+                    (long)(_elapsed.tv_usec / 1000), _col[dlevel], __func__,   \
                     basename(__FILE__), __LINE__);                             \
             fprintf(stderr, __VA_ARGS__);                                      \
             fprintf(stderr, "\n");                                             \
@@ -135,7 +140,8 @@ extern regex_t _comp;
 #define assert(e, ...)                                                         \
     do {                                                                       \
         if (__builtin_expect(!(e), 0))                                         \
-            die("assertion failed \n         " #e " \n         " __VA_ARGS__); \
+            die("assertion failed \n           " #e                            \
+                " \n           " __VA_ARGS__);                                 \
     } while (0)
 
 
