@@ -32,9 +32,10 @@ Vagrant.configure("2") do |config|
   # apply some fixes to the VM OS, update it, and install some tools
   config.vm.provision "shell", inline: <<-SHELL
     export DEBIAN_FRONTEND=noninteractive
+
     # update the box
-    # apt-get update
-    # apt-get -y dist-upgrade
+    apt-get update
+    apt-get -y dist-upgrade
 
     # install some tools that are needed for the tests, or that I often use
     apt-get -y install htop silversearcher-ag daemon cmake libnss3-dev libev-dev
