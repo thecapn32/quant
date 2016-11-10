@@ -49,7 +49,8 @@ static uint8_t __attribute__((const)) calc_req_pkt_nr_len(const uint64_t n)
 uint16_t __attribute__((nonnull))
 dec_pub_hdr(struct q_pub_hdr * restrict const ph,
             const uint8_t * restrict const buf,
-            const uint16_t len)
+            const uint16_t len,
+            struct q_conn ** c)
 {
     ph->flags = buf[0];
     warn(debug, "ph->flags = 0x%02x", ph->flags);
@@ -57,6 +58,7 @@ dec_pub_hdr(struct q_pub_hdr * restrict const ph,
 
     if (ph->flags & F_CID)
         decode(ph->cid, buf, len, i, 0, "%" PRIu64); // XXX: no ntohll()?
+    *c = get_conn(ph->cid);
 
     if (ph->flags & F_VERS)
         decode(ph->vers.as_int, buf, len, i, 0, "0x%08x");
@@ -92,7 +94,7 @@ dec_pub_hdr(struct q_pub_hdr * restrict const ph,
         return i;
     }
 
-    if (ph->flags & F_NONCE) {
+    if ((ph->flags & F_NONCE) && *c) {
         ph->nonce_len = (uint8_t)MIN(len - i, MAX_NONCE_LEN);
         decode(ph->nonce, buf, len, i, ph->nonce_len, "%s");
         assert(i <= len, "pub hdr only %d bytes; truncated?", len);

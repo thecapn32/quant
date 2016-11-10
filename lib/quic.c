@@ -135,9 +135,9 @@ rx(struct ev_loop * restrict const l __attribute__((unused)),
     // hexdump(buf, len);
 
     struct q_pub_hdr p = {0};
-    uint16_t i = dec_pub_hdr(&p, buf, len);
+    struct q_conn * c = 0;
+    uint16_t i = dec_pub_hdr(&p, buf, len, &c);
 
-    struct q_conn * c = get_conn(p.cid);
     if (c == 0) {
         // this is a packet for a new connection, create it
         assert(p.flags & F_CID, "no conn ID in initial packet");
@@ -326,12 +326,10 @@ size_t __attribute__((nonnull)) q_read(const uint64_t cid,
     }
 
     // append data
-    warn(info, "%" PRIu64 " bytes on stream %d on conn %" PRIu64 ": %s",
-         s->in_len, *sid, cid, s->in);
     const size_t data_len = MIN(len, s->in_len);
     memcpy(buf, s->in, data_len);
     warn(info, "%" PRIu64 " bytes on stream %d on conn %" PRIu64 ": %s",
-         s->in_len, *sid, cid, buf);
+         s->in_len, *sid, cid, (char*)buf);
     // TODO: proper buffer handling
     memmove(buf, &((uint8_t *)(buf))[data_len], data_len);
     s->in_len -= data_len;
