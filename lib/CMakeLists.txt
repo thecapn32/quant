@@ -4,11 +4,12 @@ configure_file(version.c.in version.c)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_INCLUDE_CURRENT_DIR_IN_INTERFACE ON)
 
-find_library(LIBNSS_LIB NAMES nss nss3 PATHS /usr/local/opt/nss/lib)
-find_path(LIBNSS_INCLUDE nss.h
-          PATH_SUFFIXES include/nss include PATHS /usr/local/opt/nss)
-find_package_handle_standard_args(libnss DEFAULT_MSG LIBNSS_LIB LIBNSS_INCLUDE)
-include_directories(${LIBNSS_INCLUDE})
+# find_library(LIBNSS_LIB NAMES nss nss3 PATHS /usr/local/opt/nss/lib)
+# find_path(LIBNSS_INCLUDE nss.h
+#   PATH_SUFFIXES include/nss include PATHS /usr/local/opt/nss)
+# find_package_handle_standard_args(libnss
+#   DEFAULT_MSG LIBNSS_LIB LIBNSS_INCLUDE)
+# include_directories(${LIBNSS_INCLUDE})
 
 find_library(LIBEV_LIB NAMES ev)
 find_path(LIBEV_INCLUDE ev.h PATH_SUFFIXES include/ev include)
@@ -23,5 +24,5 @@ target_include_directories(quickie PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 find_package(Threads)
 target_link_libraries(quickie
-  tommy ${NSS_LIB} ${LIBEV_LIB} ${CMAKE_THREAD_LIBS_INIT})
+  tommy ${LIBEV_LIB} ${CMAKE_THREAD_LIBS_INIT}) # ${NSS_LIB}
 
