@@ -4,6 +4,7 @@
 #include "conn.h"
 #include "frame.h"
 #include "pkt.h"
+#include "quic_internal.h"
 #include "stream.h"
 #include "util.h"
 
@@ -117,14 +118,16 @@ dec_stream_frame(struct q_conn * restrict const c,
         data_len = len - i;
 
     // append data
+    warn(info, "got data: %s", &buf[i]);
     s->in = realloc(s->in, s->in_len + data_len);
     assert(s->in, "realloc");
     decode(s->in[s->in_len], buf, len, i, data_len, "%d");
     s->in_len += data_len;
     s->in_off += data_len;
 
-    // notify app
-    ev_feed_event(q_loop, &q_async, EV_READ);
+    pthread_mutex_lock(&lock);
+    pthread_cond_signal(&read_cv);
+    pthread_mutex_unlock(&lock);
 
     return i;
 }
@@ -332,13 +335,19 @@ enc_stream_frame(struct q_stream * restrict const s,
     if (s->out_len <= len) {
         // this stream frame will not extend to the end of the packet
         buf[0] |= F_STREAM_DATA_LEN;
+        buf[0] |= F_STREAM_FIN;
         const uint16_t out_len = (uint16_t)s->out_len;
         encode(buf, len, i, &out_len, 0, "%d");
     }
 
-    encode(buf, len, i, s->out, MIN(s->out_len, len), "%d");
+    const uint16_t data_len = MIN((uint16_t)s->out_len, len);
+    encode(buf, len, i, s->out, data_len, "%d");
 
-    // buf[0] |= F_STREAM_FIN;
+    // TODO: handle the buffer properly in case of loss
+    warn(debug, "buffer has %" PRIu64 " bytes left", s->out_len - data_len);
+    memmove(buf, &buf[i], s->out_len - data_len);
+    s->out_len -= data_len;
+    s->out_off += data_len;
 
     return i;
 }

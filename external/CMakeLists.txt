@@ -57,20 +57,21 @@ add_custom_target(vagrant-up ${VAGRANT} up)
 add_custom_target(vagrant-down ${VAGRANT} halt)
 
 # location of proto-quic sources inside the VM
-set(QUIC /vagrant/proto-quic-prefix/src/proto-quic)
+string(REPLACE
+  ${CMAKE_SOURCE_DIR} /vagrant
+  QUIC ${CMAKE_CURRENT_BINARY_DIR}/proto-quic-prefix/src/proto-quic)
 
 # some convenience paths under ${QUIC}
 set(QUIC_CERTS ${QUIC}/src/net/tools/quic/certs)
 set(QUIC_CERTS ${QUIC_CERTS} PARENT_SCOPE)
 set(QUIC_BIN ${QUIC}/src/out/Debug)
 set(QUIC_BIN ${QUIC_BIN} PARENT_SCOPE)
-
 externalproject_add(proto-quic
   UPDATE_COMMAND ""
   # EXCLUDE_FROM_ALL 1 # not supported in cmake 3.0, see below
   # DEPENDS vagrant-up
   GIT_REPOSITORY https://github.com/google/proto-quic.git
-  GIT_TAG 17db47fb4265d45430ca5a3b4180ed52dfedf817
+  GIT_TAG 0db5f234b86699c182394bb261ee226ab800b60f
   # GIT_SHALLOW 1 # not supported in cmake 3.0
   CONFIGURE_COMMAND ${VAGRANT} ssh -c "\
     echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula \
@@ -94,11 +95,14 @@ externalproject_add(proto-quic
 set_target_properties(proto-quic PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 set(QSP quic_server.pid)
+string(REPLACE
+  ${CMAKE_SOURCE_DIR} /vagrant
+  EXTDIR ${CMAKE_CURRENT_BINARY_DIR})
 add_custom_target(quic-server
   COMMAND
-    test -f ${QSP} ||
+    test -f ${CMAKE_CURRENT_BINARY_DIR}/${QSP} ||
     ${VAGRANT} ssh -c "\
-      daemon -F /vagrant/${QSP} -o /vagrant/quic_server.log -- \
+      daemon -F ${EXTDIR}/${QSP} -o ${EXTDIR}/quic_server.log -- \
         ${QUIC_BIN}/quic_server --port=6121 \
         --certificate_file=${QUIC_CERTS}/out/leaf_cert.pem \
         --key_file=${QUIC_CERTS}/out/leaf_cert.pkcs8 --v=9 & \
@@ -116,7 +120,9 @@ add_custom_target(kill-quic-server
   VERBATIM
 )
 
-set(DIR ${CMAKE_BINARY_DIR}/bin)
+string(REPLACE
+  ${CMAKE_SOURCE_DIR} /vagrant
+  DIR ${CMAKE_CURRENT_BINARY_DIR}/bin)
 set(QS quickie_server)
 set(PORT 8443)
 add_custom_target(test-quickie-server

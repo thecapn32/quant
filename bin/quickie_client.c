@@ -1,4 +1,3 @@
-#include <ev.h>
 #include <getopt.h>
 #include <inttypes.h>
 #include <netdb.h>
@@ -32,7 +31,7 @@ int main(int argc, char * argv[])
     char * dest = "127.0.0.1";
     char * port = "6121";
     long conns = 1;
-    long timeout = 5;
+    long timeout = 3;
     int ch;
 
     while ((ch = getopt(argc, argv, "hd:p:n:t:")) != -1) {
@@ -56,7 +55,7 @@ int main(int argc, char * argv[])
         case 'h':
         case '?':
         default:
-            usage(BASENAME(argv[0]), dest, port, conns, timeout);
+            usage(basename(argv[0]), dest, port, conns, timeout);
             return 0;
         }
     }
@@ -70,17 +69,16 @@ int main(int argc, char * argv[])
     assert(res->ai_next == 0, "multiple addresses not supported");
 
     // start some connections
-    uint64_t cid[MAX_CONNS];
-    struct ev_loop * loop = ev_default_loop(0);
-    q_init(loop, timeout);
+    q_init(timeout);
 
+    uint64_t cid[MAX_CONNS];
     char msg[1024];
     const size_t msg_len = sizeof(msg);
     for (int n = 0; n < conns; n++) {
         int s = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
         assert(s >= 0, "socket");
         warn(info, "%s starting connection #%d (desc %d) to %s:%s",
-             BASENAME(argv[0]), n, s, dest, port);
+             basename(argv[0]), n, s, dest, port);
         cid[n] = q_connect(s, res->ai_addr, res->ai_addrlen);
 
         for (int i = 0; i < 2; i++) {
@@ -91,13 +89,10 @@ int main(int argc, char * argv[])
             warn(info, "writing: %s", msg);
             q_write(cid[n], sid, msg, strlen(msg));
         }
+        q_close(cid[n]);
     }
 
     freeaddrinfo(res);
-    warn(debug, "event looping");
-    ev_loop(loop, 0);
-
-    // TODO: cleanup
-    warn(info, "%s exiting", BASENAME(argv[0]));
+    q_cleanup();
     return 0;
 }

@@ -31,7 +31,7 @@ cmake_policy(SET CMP0037 OLD)
 add_custom_target(test
   COMMAND
     ${TMUX} new-session -d "${DIR}/quickie_server" \;
-      split-window -h "${SLEEP} 1 ; ${DIR}/quickie_client -p 8443" \;
+      split-window "${SLEEP} 1 ; ${DIR}/quickie_client -p 8443" \;
       set remain-on-exit on \; attach
   DEPENDS quickie_server quickie_client
   VERBATIM

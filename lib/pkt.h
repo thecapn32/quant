@@ -1,6 +1,6 @@
 #pragma once
 
-#include "quic.h"
+#include "quic_internal.h"
 
 
 #define MAX_PKT_LEN 1350

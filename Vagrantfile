@@ -4,6 +4,8 @@
 # to test our implementation against.
 
 Vagrant.configure("2") do |config|
+  config.vm.hostname = "proto-quic"
+
   # OS to use for the VM
   config.vm.box = "ubuntu/xenial64"
   config.vm.box_version = "20160930.0.0"
@@ -17,10 +19,18 @@ Vagrant.configure("2") do |config|
     vb.memory = "1024"
     vb.cpus = 1
     vb.linked_clone = true
-    vb.customize [ # better clock synchronization
-      "guestproperty", "set", :id,
-      "/VirtualBox/GuestAdd/VBoxService/--timesync-set-threshold", 10000
-    ]
+    vb.name = config.vm.hostname
+
+    # use virtio for uplink, in case there is an issue with netmap's e1000
+    vb.customize ["modifyvm", :id, "--nictype1", "virtio"]
+
+    # per-VM serial log
+    vb.customize ["modifyvm", :id, "--uartmode1", "file",
+      File.join(Dir.pwd, "%s-console.log" % config.vm.hostname)]
+
+    # better clock synchronization (to within 100ms)
+    vb.customize [ "guestproperty", "set", :id,
+      "/VirtualBox/GuestAdd/VBoxService/--timesync-set-threshold", 100 ]
  end
 
   # mount the main quickie directory as well
@@ -36,8 +46,21 @@ Vagrant.configure("2") do |config|
     # update the box
     apt-get update
     apt-get -y dist-upgrade
+    apt-get -y autoremove
+    apt-get -y autoclean
+
+    # install some tools that are needed
+    apt-get -y install cmake cmake-curses-gui git doxygen graphviz
+
+    # and some that I often use
+    apt-get -y install htop silversearcher-ag linux-tools-common \
+      linux-tools-generic gdb nmap fish dwarves
 
     # install some tools that are needed for the tests, or that I often use
-    apt-get -y install htop silversearcher-ag daemon cmake libnss3-dev libev-dev
+    apt-get -y install htop silversearcher-ag daemon cmake cmake-curses-gui \
+      git libnss3-dev libev-dev doxygen graphviz
+
+    # change shell to fish
+    chsh -s /usr/bin/fish ubuntu
   SHELL
 end
