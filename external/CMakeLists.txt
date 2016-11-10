@@ -59,7 +59,7 @@ add_custom_target(vagrant-down ${VAGRANT} halt)
 # location of proto-quic sources inside the VM
 string(REPLACE
   ${CMAKE_SOURCE_DIR} /vagrant
-  QUIC ${CMAKE_CURRENT_BINARY_DIR}/proto-quic-prefix/src/proto-quic)
+  QUIC ${PROJECT_SOURCE_DIR}/external/proto-quic/src/proto-quic)
 
 # some convenience paths under ${QUIC}
 set(QUIC_CERTS ${QUIC}/src/net/tools/quic/certs)
@@ -67,6 +67,7 @@ set(QUIC_CERTS ${QUIC_CERTS} PARENT_SCOPE)
 set(QUIC_BIN ${QUIC}/src/out/Debug)
 set(QUIC_BIN ${QUIC_BIN} PARENT_SCOPE)
 externalproject_add(proto-quic
+  PREFIX ${PROJECT_SOURCE_DIR}/external/proto-quic
   UPDATE_COMMAND ""
   # EXCLUDE_FROM_ALL 1 # not supported in cmake 3.0, see below
   # DEPENDS vagrant-up
@@ -97,10 +98,10 @@ set_target_properties(proto-quic PROPERTIES EXCLUDE_FROM_ALL TRUE)
 set(QSP quic_server.pid)
 string(REPLACE
   ${CMAKE_SOURCE_DIR} /vagrant
-  EXTDIR ${CMAKE_CURRENT_BINARY_DIR})
+  EXTDIR ${PROJECT_SOURCE_DIR})
 add_custom_target(quic-server
   COMMAND
-    test -f ${CMAKE_CURRENT_BINARY_DIR}/${QSP} ||
+    test -f ${PROJECT_SOURCE_DIR}/${QSP} ||
     ${VAGRANT} ssh -c "\
       daemon -F ${EXTDIR}/${QSP} -o ${EXTDIR}/quic_server.log -- \
         ${QUIC_BIN}/quic_server --port=6121 \
