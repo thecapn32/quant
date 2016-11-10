@@ -120,9 +120,7 @@ add_custom_target(kill-quic-server
   VERBATIM
 )
 
-string(REPLACE
-  ${CMAKE_SOURCE_DIR} /vagrant
-  DIR ${CMAKE_CURRENT_BINARY_DIR}/bin)
+set(DIR ${CMAKE_BINARY_DIR}/bin)
 set(QS quickie_server)
 set(PORT 8443)
 add_custom_target(test-quickie-server
@@ -132,7 +130,8 @@ add_custom_target(test-quickie-server
     ${SUDO} ${PKILL} ${QS} sudo || true &&
     ${DAEMON} -e LLVM_PROFILE_FILE=${QS}.profraw -D ${DIR} -o ${DIR}/${QS}.log
       -- ${DIR}/${QS} &&
-    ${DAEMON} -- ${SUDO} ${TCPDUMP} -i lo0 -w ${DIR}/${QS}.pcap port ${PORT} &&
+    ${DAEMON} -D ${DIR} --
+      ${SUDO} ${TCPDUMP} -i lo0 -w ${DIR}/${QS}.pcap port ${PORT} &&
     ${VAGRANT} ssh -c "\
       host=`ip route show | grep -i 'default via' | cut -d' ' -f3` ; \
       ${QUIC_BIN}/quic_client --host=$host --port=${PORT} --v=1 \
