@@ -9,8 +9,7 @@
 static void out_pending(void * arg, void * obj)
 {
     const struct q_stream * restrict const s = obj;
-    const struct q_stream ** restrict const which =
-        (const struct q_stream ** const)arg;
+    const struct q_stream ** restrict const which = arg;
     if (*which == 0 && s->out_len)
         *which = s;
 }
@@ -19,7 +18,8 @@ static void out_pending(void * arg, void * obj)
 static int __attribute__((nonnull))
 cmp_q_stream(const void * restrict const arg, const void * restrict const obj)
 {
-    return *(const uint32_t *)arg != ((const struct q_stream *)obj)->id;
+    return *(const uint32_t * restrict const)arg !=
+           ((const struct q_stream * restrict const)obj)->id;
 }
 
 
@@ -51,7 +51,7 @@ struct q_stream * get_stream(struct q_conn * restrict const c,
 struct q_stream * new_stream(struct q_conn * restrict const c,
                              const uint32_t id)
 {
-    struct q_stream * const restrict s = calloc(1, sizeof(*s));
+    struct q_stream * restrict const s = calloc(1, sizeof(*s));
     assert(c, "could not calloc");
 
     if (id) {

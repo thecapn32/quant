@@ -223,7 +223,7 @@ q_connect(const int s,
     c->flags |= CONN_FLAG_CLNT;
 
     // initialize the RX watcher
-    ev_io * const r = &rx_w; // suppress erroneous warning in gcc 6.2
+    ev_io * restrict const r = &rx_w; // suppress erroneous warning in gcc 6.2
     ev_io_init(r, rx, s, EV_READ);
 
     pthread_mutex_lock(&lock);
@@ -329,7 +329,7 @@ size_t __attribute__((nonnull)) q_read(const uint64_t cid,
     const size_t data_len = MIN(len, s->in_len);
     memcpy(buf, s->in, data_len);
     warn(info, "%" PRIu64 " bytes on stream %d on conn %" PRIu64 ": %s",
-         s->in_len, *sid, cid, (char*)buf);
+         s->in_len, *sid, cid, (char *)buf);
     // TODO: proper buffer handling
     memmove(buf, &((uint8_t *)(buf))[data_len], data_len);
     s->in_len -= data_len;
@@ -345,7 +345,7 @@ uint64_t q_accept(const int s)
     assert(fcntl(s, O_NONBLOCK) >= 0, "fcntl");
 
     // initialize the RX watcher
-    ev_io * const r = &rx_w; // suppress erroneous warning in gcc 6.2
+    ev_io * restrict const r = &rx_w; // suppress erroneous warning in gcc 6.2
     ev_io_init(r, rx, s, EV_READ);
 
     pthread_mutex_lock(&lock);
@@ -370,8 +370,8 @@ uint32_t q_rsv_stream(const uint64_t cid)
 
 
 static void __attribute__((nonnull))
-timeout_cb(struct ev_loop * const l,
-           ev_timer * const w __attribute__((unused)),
+timeout_cb(struct ev_loop * restrict const l,
+           ev_timer * restrict const w __attribute__((unused)),
            int e __attribute__((unused)))
 {
     warn(warn, "event loop timeout");
@@ -379,7 +379,7 @@ timeout_cb(struct ev_loop * const l,
 }
 
 
-static void * __attribute__((nonnull)) l_run(void * const arg)
+static void * __attribute__((nonnull)) l_run(void * restrict const arg)
 {
     struct ev_loop * l = (struct ev_loop *)arg;
     assert(pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, 0) == 0,
@@ -421,7 +421,8 @@ void q_init(const long timeout)
     // during development, abort event loop after some time
     if (timeout) {
         warn(debug, "setting %ld sec timeout", timeout);
-        ev_timer * const t = &to_w; // suppress erroneous warning in gcc 6.2
+        ev_timer * restrict const t =
+            &to_w; // suppress erroneous warning in gcc 6.2
         ev_timer_init(t, timeout_cb, timeout, 0);
         ev_timer_start(loop, &to_w);
     }

@@ -31,7 +31,7 @@ new_conn(const uint64_t id,
 {
     assert(get_conn(id) == 0, "conn %" PRIu64 " already exists", id);
 
-    struct q_conn * const c = calloc(1, sizeof(*c));
+    struct q_conn * restrict const c = calloc(1, sizeof(*c));
     assert(c, "could not calloc");
     c->id = id;
     c->out = 1;

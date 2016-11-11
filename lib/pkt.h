@@ -56,11 +56,11 @@ struct q_pub_hdr {
     } while (0)
 
 
-uint16_t dec_pub_hdr(struct q_pub_hdr * const ph,
+uint16_t dec_pub_hdr(struct q_pub_hdr * restrict const ph,
                      const uint8_t * restrict const buf,
                      const uint16_t len,
-                     struct q_conn ** c);
+                     struct q_conn ** restrict const c);
 
-uint16_t enc_pkt(struct q_conn * const c,
+uint16_t enc_pkt(struct q_conn * restrict const c,
                  uint8_t * restrict const buf,
                  const uint16_t len);

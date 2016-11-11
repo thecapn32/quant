@@ -2,8 +2,8 @@
 
 #include <pthread.h>
 
-#include "quic.h"
 #include "conn.h"
+#include "quic.h"
 #include "stream.h"
 
 
@@ -26,5 +26,3 @@ extern const q_tag vers[];
 /// The length of @p vers[] in bytes. Divide by @p sizeof(vers[0]) for number of
 /// elements.
 extern const size_t vers_len;
-
-
