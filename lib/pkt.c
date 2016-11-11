@@ -13,8 +13,14 @@ static const q_tag prst = {.as_str = "PRST"}, rnon = {.as_str = "RNON"},
                    rseq = {.as_str = "RSEQ"}, cadr = {.as_str = "CADR"};
 
 
-// Convert packet number length encoded in flags to bytes
-static uint8_t __attribute__((const)) dec_pkt_nr_len(const uint8_t flags)
+/// Decode the packet number length information in the flags field of the public
+/// header.
+///
+/// @param[in]  flags  The flags in a public header
+///
+/// @return     Length of the packet number field in bytes.
+///
+inline static uint8_t __attribute__((const)) dec_pkt_nr_len(const uint8_t flags)
 {
     const uint8_t l = (flags & 0x30) >> 4;
     assert(/* l >= 0 && */ l <= 3, "cannot decode packet number length %d", l);
@@ -22,9 +28,15 @@ static uint8_t __attribute__((const)) dec_pkt_nr_len(const uint8_t flags)
     return dec[l];
 }
 
-
-// Convert packet number length in bytes into flags
-static uint8_t __attribute__((const)) enc_pkt_nr_len(const uint8_t n)
+/// Encode a byte length @p n into a representation that can be or'ed into the
+/// public header flags.
+///
+/// @param[in]  n     Byte length to encode.
+///
+/// @return     Encoded byte length suitable for or'ing into the public header
+///             flags.
+///
+inline static uint8_t __attribute__((const)) enc_pkt_nr_len(const uint8_t n)
 {
     assert(n == 1 || n == 2 || n == 4 || n == 6,
            "cannot encode packet number length %d", n);
@@ -33,8 +45,14 @@ static uint8_t __attribute__((const)) enc_pkt_nr_len(const uint8_t n)
 }
 
 
-// Calculate the minimum number of bytes needed to encode the packet number
-static uint8_t __attribute__((const)) calc_req_pkt_nr_len(const uint64_t n)
+/// Calculate the minimum number of bytes needed to encode packet number @p n.
+///
+/// @param[in]  n     A packet number.
+///
+/// @return     The minimum number of bytes needed to encode @p n.
+///
+inline static uint8_t __attribute__((const))
+calc_req_pkt_nr_len(const uint64_t n)
 {
     if (n < UINT8_MAX)
         return 1;
@@ -50,7 +68,7 @@ uint16_t __attribute__((nonnull))
 dec_pub_hdr(struct q_pub_hdr * restrict const ph,
             const uint8_t * restrict const buf,
             const uint16_t len,
-            struct q_conn ** c)
+            struct q_conn ** restrict const c)
 {
     ph->flags = buf[0];
     warn(debug, "ph->flags = 0x%02x", ph->flags);
