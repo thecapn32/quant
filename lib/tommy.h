@@ -1,6 +1,6 @@
 #pragma once
 
-#include <tommyds/tommy.h>
+#include "tommyds/tommy.h"
 
 // The tommy identifiers are quite long, shorten them a bit.
 // This also lets us more easily switch between different tommy data structures.

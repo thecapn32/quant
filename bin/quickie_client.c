@@ -4,7 +4,8 @@
 #include <unistd.h>
 
 #include "quic.h"
-#include "util.h"
+
+#include <util.h> // during debugging
 
 #define MAX_CONNS 10
 

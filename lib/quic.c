@@ -77,11 +77,10 @@ pick_server_vers(const struct q_pub_hdr * const p)
 static void __attribute__((nonnull)) tx(struct q_conn * const c)
 {
     // warn(info, "entering %s for conn %" PRIu64, __func__, c->id);
+    struct warpcore * const w = w_engine(c->s);
+    struct w_iov * const v = w_alloc(w, MAX_PKT_LEN);
 
-    uint8_t buf[MAX_PKT_LEN];
-    uint16_t len = 0;
-
-    len = enc_pkt(c, buf, MAX_PKT_LEN);
+    const uint16_t len = enc_pkt(c, v->buf, MAX_PKT_LEN);
     switch (c->state) {
     case CONN_CLSD:
     case CONN_VERS_SENT:
@@ -100,12 +99,11 @@ static void __attribute__((nonnull)) tx(struct q_conn * const c)
         die("TODO: state %d", c->state);
     }
 
-    // XXX
-    // const ssize_t n =
-    //     sendto(c->fd, buf, len, 0, (struct sockaddr *)&c->peer, c->peer_len);
-    // assert(n > 0, "sendto error"); // TODO: handle EAGAIN
-    // warn(debug, "sent %zd bytes", n);
-    // hexdump(buf, len);
+    w_tx(c->s, v);
+    w_nic_tx(w);
+    hexdump(v->buf, len);
+    w_free(w, v);
+
     c->out++;
 
     pthread_mutex_lock(&lock);
