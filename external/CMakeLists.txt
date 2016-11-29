@@ -53,6 +53,22 @@ set_target_properties(tommy
 add_dependencies(tommy tommyds)
 
 
+externalproject_add(warpcore
+  UPDATE_COMMAND ""
+  GIT_REPOSITORY git@github.com:NTAP/warpcore.git
+  CMAKE_ARGS -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}
+    -DBUILD_DOCUMENTATION=FALSE
+)
+
+# externalproject_get_property(warpcore SOURCE_DIR)
+# add_library(tommy STATIC IMPORTED GLOBAL)
+# set_target_properties(tommy PROPERTIES IMPORTED_LOCATION ${SOURCE_DIR}/tommy.o)
+# set_target_properties(tommy
+#   PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${SOURCE_DIR}
+# )
+# add_dependencies(tommy warpcore)
+
+
 add_custom_target(vagrant-up ${VAGRANT} up)
 add_custom_target(vagrant-down ${VAGRANT} halt)
 
