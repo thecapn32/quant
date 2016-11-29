@@ -77,28 +77,23 @@ int main(int argc, char * argv[])
     // start some connections
     void * const q = q_init(ifname, timeout);
 
-    // uint64_t cid[MAX_CONNS];
-    // char msg[1024];
-    // const size_t msg_len = sizeof(msg);
+    uint64_t cid[MAX_CONNS];
+    char msg[1024];
+    const size_t msg_len = sizeof(msg);
     for (int n = 0; n < conns; n++) {
-        q_connect(q, peer->ai_addr, peer->ai_addrlen);
+        warn(info, "%s starting connection #%d to %s:%s", basename(argv[0]), n,
+             dest, port);
+        cid[n] = q_connect(q, peer->ai_addr, peer->ai_addrlen);
 
-        //     int s = socket(peer->ai_family, peer->ai_socktype,
-        //     peer->ai_protocol);
-        //     assert(s >= 0, "socket");
-        //     warn(info, "%s starting connection #%d (desc %d) to %s:%s",
-        //          basename(argv[0]), n, s, dest, port);
-        //     cid[n] = q_connect(s, peer->ai_addr, peer->ai_addrlen);
-
-        //     for (int i = 0; i < 2; i++) {
-        //         const uint32_t sid = q_rsv_stream(cid[n]);
-        //         snprintf(msg, msg_len,
-        //                  "Hello, stream %d on connection %" PRIu64 "!", sid,
-        //                  cid[n]);
-        //         warn(info, "writing: %s", msg);
-        //         q_write(cid[n], sid, msg, strlen(msg));
-        //     }
-        //     q_close(cid[n]);
+        for (int i = 0; i < 2; i++) {
+            const uint32_t sid = q_rsv_stream(cid[n]);
+            snprintf(msg, msg_len,
+                     "Hello, stream %d on connection %" PRIu64 "!", sid,
+                     cid[n]);
+            warn(info, "writing: %s", msg);
+            q_write(cid[n], sid, msg, strlen(msg));
+        }
+        q_close(cid[n]);
     }
 
     freeaddrinfo(peer);

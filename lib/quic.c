@@ -1,9 +1,8 @@
-#include <fcntl.h>
+// #include <fcntl.h>
 #include <inttypes.h>
 #include <netinet/in.h>
 #include <sys/param.h>
-#include <time.h>
-
+// #include <time.h>
 
 #include "frame.h"
 #include "pkt.h"
@@ -342,7 +341,7 @@ size_t __attribute__((nonnull)) q_read(const uint64_t cid,
 
 uint64_t q_bind(void * const q, const uint16_t port)
 {
-    // warn(debug, "enter");
+    warn(debug, "enter");
 
     // put the socket into non-blocking mode
     // assert(fcntl(s, O_NONBLOCK) >= 0, "fcntl");
@@ -357,6 +356,7 @@ uint64_t q_bind(void * const q, const uint16_t port)
     ev_async_send(loop, &async_w);
     warn(warn, "waiting for incoming connection");
     pthread_cond_wait(&accept_cv, &lock);
+    warn(warn, "COND waiting for incoming connection");
     const uint64_t cid = accept_queue;
     accept_queue = 0;
     pthread_mutex_unlock(&lock);
@@ -389,6 +389,7 @@ static void * __attribute__((nonnull)) l_run(void * restrict const arg)
     assert(pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, 0) == 0,
            "pthread_setcanceltype");
     ev_run(l, 0);
+    warn(warn, "event loop ended");
     return 0;
 }
 
@@ -441,18 +442,18 @@ void * q_init(const char * const ifname, const long timeout)
 
 void q_close(const uint64_t cid)
 {
-    // warn(debug, "enter");
+    warn(debug, "enter");
     struct q_conn * restrict const c = get_conn(cid);
     assert(c, "conn %" PRIu64 " does not exist", cid);
     // TODO: block until done
     w_close(c->s);
-    // warn(debug, "leave");
+    warn(debug, "leave");
 }
 
 
 void q_cleanup(void * const q)
 {
-    // warn(debug, "enter");
+    warn(debug, "enter");
 
     // wait for the quickie thread to end and destroy lock
     assert(pthread_join(tid, 0) == 0, "pthread_join");
@@ -462,5 +463,5 @@ void q_cleanup(void * const q)
     assert(pthread_cond_destroy(&accept_cv) == 0, "pthread_cond_destroy");
 
     w_cleanup(q);
-    // warn(debug, "leave");
+    warn(debug, "leave");
 }

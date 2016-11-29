@@ -9,11 +9,13 @@
 #include <warpcore.h>
 
 
-static void
-usage(const char * const name, const uint16_t port, const long timeout)
+static void usage(const char * const name,
+                  const char * const ifname,
+                  const uint16_t port,
+                  const long timeout)
 {
     printf("%s\n", name);
-    printf("\t -i interface\t\tinterface to run over\n");
+    printf("\t[-i interface]\t\tinterface to run over; default %s\n", ifname);
     printf("\t[-p port]\tdestination port; default %d\n", port);
     printf("\t[-t sec]\texit after some seconds (0 to disable); default %ld\n",
            timeout);
@@ -56,7 +58,7 @@ usage(const char * const name, const uint16_t port, const long timeout)
 
 int main(int argc, char * argv[])
 {
-    const char * ifname = 0;
+    char * ifname = "lo0";
     uint16_t port = 8443;
     long timeout = 3;
     int ch;
@@ -76,14 +78,9 @@ int main(int argc, char * argv[])
         case 'h':
         case '?':
         default:
-            usage(basename(argv[0]), port, timeout);
+            usage(basename(argv[0]), ifname, port, timeout);
             return 0;
         }
-    }
-
-    if (ifname == 0) {
-        usage(basename(argv[0]), port, timeout);
-        return 0;
     }
 
     void * const q = q_init(ifname, timeout);
