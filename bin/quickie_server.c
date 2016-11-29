@@ -46,9 +46,9 @@ static void usage(const char * const name,
 // }
 
 
-// static void read_cb(struct ev_loop * restrict const loop
+// static void read_cb(struct ev_loop * const loop
 //                     __attribute__((unused)),
-//                     ev_async * restrict const w __attribute__((unused)),
+//                     ev_async * const w __attribute__((unused)),
 //                     int e)
 // {
 //     assert(e = EV_READ, "unknown event %d", e);

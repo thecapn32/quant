@@ -32,12 +32,10 @@ struct q_stream {
 
 struct q_conn;
 
-uint16_t enc_stream_frames(struct q_conn * restrict const c,
-                           uint8_t * restrict const buf,
+uint16_t enc_stream_frames(struct q_conn * const c,
+                           uint8_t * const buf,
                            const uint16_t len);
 
-struct q_stream * get_stream(struct q_conn * restrict const c,
-                             const uint32_t id);
+struct q_stream * get_stream(struct q_conn * const c, const uint32_t id);
 
-struct q_stream * new_stream(struct q_conn * restrict const c,
-                             const uint32_t id);
+struct q_stream * new_stream(struct q_conn * const c, const uint32_t id);

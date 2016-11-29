@@ -62,11 +62,10 @@ calc_req_pkt_nr_len(const uint64_t n)
 }
 
 
-uint16_t __attribute__((nonnull))
-dec_pub_hdr(struct q_pub_hdr * restrict const ph,
-            const uint8_t * restrict const buf,
-            const uint16_t len,
-            struct q_conn ** restrict const c)
+uint16_t __attribute__((nonnull)) dec_pub_hdr(struct q_pub_hdr * const ph,
+                                              const uint8_t * const buf,
+                                              const uint16_t len,
+                                              struct q_conn ** const c)
 {
     ph->flags = buf[0];
     warn(debug, "ph->flags = 0x%02x", ph->flags);
@@ -141,9 +140,8 @@ dec_pub_hdr(struct q_pub_hdr * restrict const ph,
 }
 
 
-uint16_t __attribute__((nonnull)) enc_pkt(struct q_conn * restrict const c,
-                                          uint8_t * restrict const buf,
-                                          const uint16_t len)
+uint16_t __attribute__((nonnull))
+enc_pkt(struct q_conn * const c, uint8_t * const buf, const uint16_t len)
 {
     uint16_t i = 0;
 

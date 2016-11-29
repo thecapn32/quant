@@ -87,8 +87,8 @@ static uint8_t __attribute__((const)) dec_ack_block_len(const uint8_t flags)
 
 
 static uint16_t __attribute__((nonnull))
-dec_stream_frame(struct q_conn * restrict const c,
-                 const uint8_t * restrict const buf,
+dec_stream_frame(struct q_conn * const c,
+                 const uint8_t * const buf,
                  const uint16_t len)
 {
     uint16_t i = 0;
@@ -99,7 +99,7 @@ dec_stream_frame(struct q_conn * restrict const c,
     const uint8_t sid_len = dec_sid_len(type);
     uint32_t sid = 0;
     decode(sid, buf, len, i, sid_len, "%d");
-    struct q_stream * restrict s = get_stream(c, sid);
+    struct q_stream * s = get_stream(c, sid);
     if (s == 0)
         s = new_stream(c, sid);
 
@@ -131,8 +131,8 @@ dec_stream_frame(struct q_conn * restrict const c,
 
 
 static uint16_t __attribute__((nonnull))
-dec_ack_frame(struct q_conn * restrict const c __attribute__((unused)),
-              const uint8_t * restrict const buf,
+dec_ack_frame(struct q_conn * const c __attribute__((unused)),
+              const uint8_t * const buf,
               const uint16_t len)
 {
     uint16_t i = 0;
@@ -186,9 +186,9 @@ dec_ack_frame(struct q_conn * restrict const c __attribute__((unused)),
 
 
 static uint16_t __attribute__((nonnull))
-dec_stop_waiting_frame(struct q_conn * restrict const c __attribute__((unused)),
-                       const struct q_pub_hdr * restrict const p,
-                       const uint8_t * restrict const buf,
+dec_stop_waiting_frame(struct q_conn * const c __attribute__((unused)),
+                       const struct q_pub_hdr * const p,
+                       const uint8_t * const buf,
                        const uint16_t len)
 {
     uint16_t i = 0;
@@ -202,8 +202,8 @@ dec_stop_waiting_frame(struct q_conn * restrict const c __attribute__((unused)),
 
 
 static uint16_t __attribute__((nonnull))
-dec_conn_close_frame(struct q_conn * restrict const c __attribute__((unused)),
-                     const uint8_t * restrict const buf,
+dec_conn_close_frame(struct q_conn * const c __attribute__((unused)),
+                     const uint8_t * const buf,
                      const uint16_t len)
 {
     uint16_t i = 0;
@@ -226,11 +226,10 @@ dec_conn_close_frame(struct q_conn * restrict const c __attribute__((unused)),
 }
 
 
-uint16_t __attribute__((nonnull))
-dec_frames(struct q_conn * restrict const c,
-           const struct q_pub_hdr * restrict const p,
-           const uint8_t * restrict const buf,
-           const uint16_t len)
+uint16_t __attribute__((nonnull)) dec_frames(struct q_conn * const c,
+                                             const struct q_pub_hdr * const p,
+                                             const uint8_t * const buf,
+                                             const uint16_t len)
 {
     uint16_t i = 0;
 
@@ -286,7 +285,7 @@ dec_frames(struct q_conn * restrict const c,
 
 
 uint16_t __attribute__((nonnull))
-enc_ack_frame(uint8_t * restrict const buf, const uint16_t len)
+enc_ack_frame(uint8_t * const buf, const uint16_t len)
 {
     uint16_t i = 0;
     static const uint8_t type = F_ACK;
@@ -296,7 +295,7 @@ enc_ack_frame(uint8_t * restrict const buf, const uint16_t len)
 
 
 uint16_t __attribute__((nonnull))
-enc_conn_close_frame(uint8_t * restrict const buf, const uint16_t len)
+enc_conn_close_frame(uint8_t * const buf, const uint16_t len)
 {
     uint16_t i = 0;
     static const uint8_t type = T_CONNECTION_CLOSE;
@@ -310,10 +309,9 @@ enc_conn_close_frame(uint8_t * restrict const buf, const uint16_t len)
 }
 
 
-uint16_t __attribute__((nonnull))
-enc_stream_frame(struct q_stream * restrict const s,
-                 uint8_t * restrict const buf,
-                 const uint16_t len)
+uint16_t __attribute__((nonnull)) enc_stream_frame(struct q_stream * const s,
+                                                   uint8_t * const buf,
+                                                   const uint16_t len)
 {
     uint16_t i = 0;
     static const uint8_t type = F_STREAM;
@@ -351,7 +349,7 @@ enc_stream_frame(struct q_stream * restrict const s,
 
 
 uint16_t __attribute__((nonnull))
-enc_padding_frame(uint8_t * restrict const buf, const uint16_t len)
+enc_padding_frame(uint8_t * const buf, const uint16_t len)
 {
     buf[0] = T_PADDING;
     memset(&buf[1], 0, len - 1);

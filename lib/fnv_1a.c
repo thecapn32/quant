@@ -1,7 +1,7 @@
 #include "fnv_1a.h"
 #include "util.h"
 
-uint128_t __attribute__((nonnull)) fnv_1a(const void * restrict const buf,
+uint128_t __attribute__((nonnull)) fnv_1a(const void * const buf,
                                           const size_t len,
                                           const size_t skip_pos,
                                           const size_t skip_len)
@@ -15,7 +15,7 @@ uint128_t __attribute__((nonnull)) fnv_1a(const void * restrict const buf,
         (((uint128_t)0x6C62272E07BB0142) << 64) | 0x62B821756295C58D;
 
     // two consecutive loops should be faster than one loop with an "if"
-    const uint8_t * restrict const bytes = buf;
+    const uint8_t * const bytes = buf;
     for (size_t i = 0; i < skip_pos; i++) {
         hash ^= bytes[i];
         hash *= prime;

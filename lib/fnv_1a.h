@@ -24,7 +24,7 @@ __extension__ typedef unsigned __int128 uint128_t;
 ///
 /// @return     The FNV-1a 128-bit hash of @p buffer, excluding the skip region.
 ///
-uint128_t fnv_1a(const void * restrict const buf,
+uint128_t fnv_1a(const void * const buf,
                  const size_t len,
                  const size_t skip_pos,
                  const size_t skip_len);

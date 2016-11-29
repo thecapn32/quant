@@ -8,23 +8,23 @@
 
 static void out_pending(void * arg, void * obj)
 {
-    const struct q_stream * restrict const s = obj;
-    const struct q_stream ** restrict const which = arg;
+    const struct q_stream * const s = obj;
+    const struct q_stream ** const which = arg;
     if (*which == 0 && s->out_len)
         *which = s;
 }
 
 
 static int __attribute__((nonnull))
-cmp_q_stream(const void * restrict const arg, const void * restrict const obj)
+cmp_q_stream(const void * const arg, const void * const obj)
 {
-    return *(const uint32_t * restrict const)arg !=
-           ((const struct q_stream * restrict const)obj)->id;
+    return *(const uint32_t * const)arg !=
+           ((const struct q_stream * const)obj)->id;
 }
 
 
-uint16_t enc_stream_frames(struct q_conn * restrict const c,
-                           uint8_t * restrict const buf,
+uint16_t enc_stream_frames(struct q_conn * const c,
+                           uint8_t * const buf,
                            const uint16_t len)
 {
     uint16_t i = 0;
@@ -41,17 +41,15 @@ uint16_t enc_stream_frames(struct q_conn * restrict const c,
     return i;
 }
 
-struct q_stream * get_stream(struct q_conn * restrict const c,
-                             const uint32_t id)
+struct q_stream * get_stream(struct q_conn * const c, const uint32_t id)
 {
     return hash_search(&c->streams, cmp_q_stream, &id, id);
 }
 
 
-struct q_stream * new_stream(struct q_conn * restrict const c,
-                             const uint32_t id)
+struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
 {
-    struct q_stream * restrict const s = calloc(1, sizeof(*s));
+    struct q_stream * const s = calloc(1, sizeof(*s));
     assert(c, "could not calloc");
 
     if (id) {

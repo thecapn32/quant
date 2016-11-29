@@ -33,7 +33,7 @@ static uint64_t accept_queue;
 
 
 static uint8_t __attribute__((nonnull))
-pick_vers(const struct q_pub_hdr * restrict const p)
+pick_vers(const struct q_pub_hdr * const p)
 {
     for (uint8_t i = 0; vers[i].as_int; i++)
         if (p->vers.as_int == vers[i].as_int)
@@ -46,7 +46,7 @@ pick_vers(const struct q_pub_hdr * restrict const p)
 
 
 static uint8_t __attribute__((nonnull))
-pick_server_vers(const struct q_pub_hdr * restrict const p)
+pick_server_vers(const struct q_pub_hdr * const p)
 {
     // first, check if the version in the public header is acceptable to us
     for (uint8_t i = 0; vers[i].as_int; i++) {
@@ -74,7 +74,7 @@ pick_server_vers(const struct q_pub_hdr * restrict const p)
 }
 
 
-static void __attribute__((nonnull)) tx(struct q_conn * restrict const c)
+static void __attribute__((nonnull)) tx(struct q_conn * const c)
 {
     // warn(info, "entering %s for conn %" PRIu64, __func__, c->id);
 
@@ -115,8 +115,8 @@ static void __attribute__((nonnull)) tx(struct q_conn * restrict const c)
 
 
 static void __attribute__((nonnull))
-rx(struct ev_loop * restrict const l __attribute__((unused)),
-   ev_io * restrict const w,
+rx(struct ev_loop * const l __attribute__((unused)),
+   ev_io * const w,
    int e __attribute__((unused)))
 {
     // warn(info, "entering %s for desc %d", __func__, w->fd);
@@ -209,14 +209,13 @@ respond:
 }
 
 
-uint64_t __attribute__((nonnull))
-q_connect(void * const q,
-          const struct sockaddr * restrict const peer,
-          const socklen_t peer_len)
+uint64_t __attribute__((nonnull)) q_connect(void * const q,
+                                            const struct sockaddr * const peer,
+                                            const socklen_t peer_len)
 {
     // make new connection
     const uint64_t id = (((uint64_t)random()) << 32) | (uint64_t)random();
-    struct q_conn * restrict const c = new_conn(id, peer, peer_len);
+    struct q_conn * const c = new_conn(id, peer, peer_len);
     c->flags |= CONN_FLAG_CLNT;
 
     c->s = w_bind(q, (uint16_t)random());
@@ -225,7 +224,7 @@ q_connect(void * const q,
               ((const struct sockaddr_in *)(const void *)peer)->sin_port);
 
     // initialize the RX watcher
-    ev_io * restrict const r = &rx_w; // suppress erroneous warning in gcc 6.2
+    ev_io * const r = &rx_w; // suppress erroneous warning in gcc 6.2
     ev_io_init(r, rx, w_fd(c->s), EV_READ);
 
     pthread_mutex_lock(&lock);
@@ -260,12 +259,12 @@ static void check_conn(void * obj)
 
 void __attribute__((nonnull)) q_write(const uint64_t cid,
                                       const uint32_t sid,
-                                      const void * restrict const buf,
+                                      const void * const buf,
                                       const size_t len)
 {
-    struct q_conn * restrict const c = get_conn(cid);
+    struct q_conn * const c = get_conn(cid);
     assert(c, "conn %" PRIu64 " does not exist", cid);
-    struct q_stream * restrict s = get_stream(c, sid);
+    struct q_stream * s = get_stream(c, sid);
     assert(s, "stream %d on conn %" PRIu64 " does not exist", sid, cid);
 
     // append data
@@ -299,11 +298,11 @@ static void find_stream_with_data(void * arg, void * obj)
 
 
 size_t __attribute__((nonnull)) q_read(const uint64_t cid,
-                                       uint32_t * restrict const sid,
-                                       void * restrict const buf,
+                                       uint32_t * const sid,
+                                       void * const buf,
                                        const size_t len)
 {
-    struct q_conn * restrict const c = get_conn(cid);
+    struct q_conn * const c = get_conn(cid);
     assert(c, "conn %" PRIu64 " does not exist", cid);
 
     pthread_mutex_lock(&lock);
@@ -314,7 +313,7 @@ size_t __attribute__((nonnull)) q_read(const uint64_t cid,
 
     *sid = 0;
     hash_foreach_arg(&c->streams, &find_stream_with_data, sid);
-    struct q_stream * restrict s = get_stream(c, *sid);
+    struct q_stream * s = get_stream(c, *sid);
     assert(s, "stream %d on conn %" PRIu64 " does not exist", *sid, cid);
 
     if (s->in_len == 0) {
@@ -348,7 +347,7 @@ uint64_t q_bind(void * const q, const uint16_t port)
     struct w_sock * s = w_bind(q, ntohs(port));
 
     // initialize the RX watcher
-    ev_io * restrict const r = &rx_w; // suppress erroneous warning in gcc 6.2
+    ev_io * const r = &rx_w; // suppress erroneous warning in gcc 6.2
     ev_io_init(r, rx, w_fd(s), EV_READ);
 
     pthread_mutex_lock(&lock);
@@ -367,15 +366,15 @@ uint64_t q_bind(void * const q, const uint16_t port)
 
 uint32_t q_rsv_stream(const uint64_t cid)
 {
-    struct q_conn * restrict const c = get_conn(cid);
+    struct q_conn * const c = get_conn(cid);
     assert(c, "conn %" PRIu64 " does not exist", cid);
     return new_stream(c, 0)->id;
 }
 
 
 static void __attribute__((nonnull))
-timeout_cb(struct ev_loop * restrict const l,
-           ev_timer * restrict const w __attribute__((unused)),
+timeout_cb(struct ev_loop * const l,
+           ev_timer * const w __attribute__((unused)),
            int e __attribute__((unused)))
 {
     warn(warn, "event loop timeout");
@@ -383,7 +382,7 @@ timeout_cb(struct ev_loop * restrict const l,
 }
 
 
-static void * __attribute__((nonnull)) l_run(void * restrict const arg)
+static void * __attribute__((nonnull)) l_run(void * const arg)
 {
     struct ev_loop * l = (struct ev_loop *)arg;
     assert(pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, 0) == 0,
@@ -395,8 +394,8 @@ static void * __attribute__((nonnull)) l_run(void * restrict const arg)
 
 
 static void __attribute__((nonnull))
-async_cb(struct ev_loop * restrict const l __attribute__((unused)),
-         ev_async * restrict const w __attribute__((unused)),
+async_cb(struct ev_loop * const l __attribute__((unused)),
+         ev_async * const w __attribute__((unused)),
          int e __attribute__((unused)))
 {
     // check if we need to send any data
@@ -427,8 +426,7 @@ void * q_init(const char * const ifname, const long timeout)
     // during development, abort event loop after some time
     if (timeout) {
         warn(debug, "setting %ld sec timeout", timeout);
-        ev_timer * restrict const t =
-            &to_w; // suppress erroneous warning in gcc 6.2
+        ev_timer * const t = &to_w; // suppress erroneous warning in gcc 6.2
         ev_timer_init(t, timeout_cb, timeout, 0);
         ev_timer_start(loop, &to_w);
     }
@@ -443,7 +441,7 @@ void * q_init(const char * const ifname, const long timeout)
 void q_close(const uint64_t cid)
 {
     warn(debug, "enter");
-    struct q_conn * restrict const c = get_conn(cid);
+    struct q_conn * const c = get_conn(cid);
     assert(c, "conn %" PRIu64 " does not exist", cid);
     // TODO: block until done
     w_close(c->s);

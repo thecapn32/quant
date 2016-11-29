@@ -11,7 +11,7 @@ hash q_conns;
 
 
 static int __attribute__((nonnull))
-cmp_q_conn(const void * restrict const arg, const void * restrict const obj)
+cmp_q_conn(const void * const arg, const void * const obj)
 {
     return *(const uint64_t *)arg != ((const struct q_conn *)obj)->id;
 }
@@ -25,12 +25,12 @@ struct q_conn * get_conn(const uint64_t id)
 
 struct q_conn * __attribute__((nonnull))
 new_conn(const uint64_t id,
-         const struct sockaddr * restrict const peer,
+         const struct sockaddr * const peer,
          const socklen_t peer_len)
 {
     assert(get_conn(id) == 0, "conn %" PRIu64 " already exists", id);
 
-    struct q_conn * restrict const c = calloc(1, sizeof(*c));
+    struct q_conn * const c = calloc(1, sizeof(*c));
     assert(c, "could not calloc");
     c->id = id;
     c->out = 1;

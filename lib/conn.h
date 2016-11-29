@@ -45,5 +45,5 @@ struct q_conn {
 struct q_conn * get_conn(const uint64_t id);
 
 struct q_conn * new_conn(const uint64_t id,
-                         const struct sockaddr * restrict const peer,
+                         const struct sockaddr * const peer,
                          const socklen_t peer_len);
