@@ -6,7 +6,7 @@
 #include "util.h"
 
 
-static void out_pending(void * arg, void * obj)
+static void __attribute__((nonnull)) out_pending(void * arg, void * obj)
 {
     const struct q_stream * const s = obj;
     const struct q_stream ** const which = arg;

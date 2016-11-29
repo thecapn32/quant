@@ -30,17 +30,22 @@ struct q_pub_hdr;
 struct q_conn;
 struct q_stream;
 
-uint16_t dec_frames(struct q_conn * const c,
-                    const struct q_pub_hdr * const p,
-                    const uint8_t * const buf,
-                    const uint16_t len);
+extern uint16_t __attribute__((nonnull))
+dec_frames(struct q_conn * const c,
+           const struct q_pub_hdr * const p,
+           const uint8_t * const buf,
+           const uint16_t len);
 
-uint16_t enc_stream_frame(struct q_stream * const s,
-                          uint8_t * const buf,
-                          const uint16_t len);
+extern uint16_t __attribute__((nonnull))
+enc_stream_frame(struct q_stream * const s,
+                 uint8_t * const buf,
+                 const uint16_t len);
 
-uint16_t enc_padding_frame(uint8_t * const buf, const uint16_t len);
+extern uint16_t __attribute__((nonnull))
+enc_padding_frame(uint8_t * const buf, const uint16_t len);
 
-uint16_t enc_conn_close_frame(uint8_t * const buf, const uint16_t len);
+extern uint16_t __attribute__((nonnull))
+enc_conn_close_frame(uint8_t * const buf, const uint16_t len);
 
-uint16_t enc_ack_frame(uint8_t * const buf, const uint16_t len);
+extern uint16_t __attribute__((nonnull))
+enc_ack_frame(uint8_t * const buf, const uint16_t len);

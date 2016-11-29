@@ -209,9 +209,9 @@ respond:
 }
 
 
-uint64_t __attribute__((nonnull)) q_connect(void * const q,
-                                            const struct sockaddr * const peer,
-                                            const socklen_t peer_len)
+uint64_t q_connect(void * const q,
+                   const struct sockaddr * const peer,
+                   const socklen_t peer_len)
 {
     // make new connection
     const uint64_t id = (((uint64_t)random()) << 32) | (uint64_t)random();
@@ -236,7 +236,7 @@ uint64_t __attribute__((nonnull)) q_connect(void * const q,
 }
 
 
-static void check_stream(void * arg, void * obj)
+static void __attribute__((nonnull)) check_stream(void * arg, void * obj)
 {
     struct q_conn * c = arg;
     struct q_stream * s = obj;
@@ -250,17 +250,17 @@ static void check_stream(void * arg, void * obj)
 }
 
 
-static void check_conn(void * obj)
+static void __attribute__((nonnull)) check_conn(void * obj)
 {
     struct q_conn * c = obj;
     hash_foreach_arg(&c->streams, &check_stream, c);
 }
 
 
-void __attribute__((nonnull)) q_write(const uint64_t cid,
-                                      const uint32_t sid,
-                                      const void * const buf,
-                                      const size_t len)
+void q_write(const uint64_t cid,
+             const uint32_t sid,
+             const void * const buf,
+             const size_t len)
 {
     struct q_conn * const c = get_conn(cid);
     assert(c, "conn %" PRIu64 " does not exist", cid);
@@ -284,7 +284,8 @@ void __attribute__((nonnull)) q_write(const uint64_t cid,
 }
 
 
-static void find_stream_with_data(void * arg, void * obj)
+static void __attribute__((nonnull))
+find_stream_with_data(void * arg, void * obj)
 {
     uint32_t * sid = arg;
     struct q_stream * s = obj;
@@ -297,10 +298,10 @@ static void find_stream_with_data(void * arg, void * obj)
 }
 
 
-size_t __attribute__((nonnull)) q_read(const uint64_t cid,
-                                       uint32_t * const sid,
-                                       void * const buf,
-                                       const size_t len)
+size_t q_read(const uint64_t cid,
+              uint32_t * const sid,
+              void * const buf,
+              const size_t len)
 {
     struct q_conn * const c = get_conn(cid);
     assert(c, "conn %" PRIu64 " does not exist", cid);

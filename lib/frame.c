@@ -226,10 +226,10 @@ dec_conn_close_frame(struct q_conn * const c __attribute__((unused)),
 }
 
 
-uint16_t __attribute__((nonnull)) dec_frames(struct q_conn * const c,
-                                             const struct q_pub_hdr * const p,
-                                             const uint8_t * const buf,
-                                             const uint16_t len)
+uint16_t dec_frames(struct q_conn * const c,
+                    const struct q_pub_hdr * const p,
+                    const uint8_t * const buf,
+                    const uint16_t len)
 {
     uint16_t i = 0;
 
@@ -309,9 +309,9 @@ enc_conn_close_frame(uint8_t * const buf, const uint16_t len)
 }
 
 
-uint16_t __attribute__((nonnull)) enc_stream_frame(struct q_stream * const s,
-                                                   uint8_t * const buf,
-                                                   const uint16_t len)
+uint16_t enc_stream_frame(struct q_stream * const s,
+                          uint8_t * const buf,
+                          const uint16_t len)
 {
     uint16_t i = 0;
     static const uint8_t type = F_STREAM;

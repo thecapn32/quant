@@ -42,8 +42,9 @@ struct q_conn {
 #define CONN_FLAG_CLNT 0x01
 
 
-struct q_conn * get_conn(const uint64_t id);
+extern struct q_conn * get_conn(const uint64_t id);
 
-struct q_conn * new_conn(const uint64_t id,
-                         const struct sockaddr * const peer,
-                         const socklen_t peer_len);
+extern struct q_conn * __attribute__((nonnull))
+new_conn(const uint64_t id,
+         const struct sockaddr * const peer,
+         const socklen_t peer_len);

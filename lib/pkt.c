@@ -62,10 +62,10 @@ calc_req_pkt_nr_len(const uint64_t n)
 }
 
 
-uint16_t __attribute__((nonnull)) dec_pub_hdr(struct q_pub_hdr * const ph,
-                                              const uint8_t * const buf,
-                                              const uint16_t len,
-                                              struct q_conn ** const c)
+uint16_t dec_pub_hdr(struct q_pub_hdr * const ph,
+                     const uint8_t * const buf,
+                     const uint16_t len,
+                     struct q_conn ** const c)
 {
     ph->flags = buf[0];
     warn(debug, "ph->flags = 0x%02x", ph->flags);

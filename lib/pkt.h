@@ -56,10 +56,11 @@ struct q_pub_hdr {
     } while (0)
 
 
-uint16_t dec_pub_hdr(struct q_pub_hdr * const ph,
-                     const uint8_t * const buf,
-                     const uint16_t len,
-                     struct q_conn ** const c);
+extern uint16_t __attribute__((nonnull))
+dec_pub_hdr(struct q_pub_hdr * const ph,
+            const uint8_t * const buf,
+            const uint16_t len,
+            struct q_conn ** const c);
 
-uint16_t
+extern uint16_t __attribute__((nonnull))
 enc_pkt(struct q_conn * const c, uint8_t * const buf, const uint16_t len);
