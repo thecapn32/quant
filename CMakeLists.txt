@@ -1,13 +1,30 @@
 cmake_minimum_required(VERSION 3.0)
 
-# we use some custom compiler flags
-set(CMAKE_USER_MAKE_RULES_OVERRIDE "CMakeInit.txt")
-
 project(quickie VERSION 0.0.1 LANGUAGES C)
+
+# Set general compile flags, if they are supported
+include(CheckCCompilerFlag)
+foreach(FLAG -std=c11 -march=native -Wextra -Wpedantic -Weverything -Werror
+        -Wno-missing-field-initializers -Wno-missing-braces)
+  string(REGEX REPLACE "[-=]" "" F ${FLAG})
+  check_c_compiler_flag(${FLAG} ${F})
+  if(${F})
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${FLAG}")
+  endif()
+endforeach()
+
+# flags for "Debug" and "None" builds
+set(CMAKE_C_FLAGS_DEBUG "-O0 -g")
+
+# flags for "Release" builds
+set(CMAKE_C_FLAGS_RELEASE "-DNDEBUG -Ofast")
+
+# flags for "RelWithDebInfo" builds
+set(CMAKE_C_FLAGS_RELWITHDEBINFO "-DNDEBUG -Ofast -g")
 
 # Check if _GNU_SOURCE is available.
 include(CheckSymbolExists)
-CHECK_SYMBOL_EXISTS(__GNU_LIBRARY__ "features.h" _GNU_SOURCE)
+check_symbol_exists(__GNU_LIBRARY__ "features.h" _GNU_SOURCE)
 if(_GNU_SOURCE)
   add_definitions(-D_GNU_SOURCE)
 endif()
@@ -46,4 +63,5 @@ add_subdirectory(doc)
 add_subdirectory(external)
 add_subdirectory(lib)
 
+# Add a "distclean" target; see http://stackoverflow.com/a/12055610/1437081
 add_custom_target(distclean COMMAND git clean -f -x)
