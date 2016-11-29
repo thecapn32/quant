@@ -1,20 +1,20 @@
 #include <getopt.h>
 #include <inttypes.h>
 #include <netdb.h>
+#include <sys/param.h>
 #include <unistd.h>
 
 #include "quic.h"
-#include "util.h"
+
+#include <warpcore.h>
 
 
-static void usage(const char * const name,
-                  const char * const ip,
-                  const char * const port,
-                  const long timeout)
+static void
+usage(const char * const name, const uint16_t port, const long timeout)
 {
     printf("%s\n", name);
-    printf("\t[-i IP]\t\tIP address to bind to; default %s\n", ip);
-    printf("\t[-p port]\tdestination port; default %s\n", port);
+    printf("\t -i interface\t\tinterface to run over\n");
+    printf("\t[-p port]\tdestination port; default %d\n", port);
     printf("\t[-t sec]\texit after some seconds (0 to disable); default %ld\n",
            timeout);
 }
@@ -56,18 +56,18 @@ static void usage(const char * const name,
 
 int main(int argc, char * argv[])
 {
-    char * ip = "127.0.0.1";
-    char * port = "8443";
+    const char * ifname = 0;
+    uint16_t port = 8443;
     long timeout = 3;
     int ch;
 
     while ((ch = getopt(argc, argv, "hi:p:t:")) != -1) {
         switch (ch) {
         case 'i':
-            ip = optarg;
+            ifname = optarg;
             break;
         case 'p':
-            port = optarg;
+            port = MIN(UINT16_MAX, MAX(port, (uint16_t)strtol(optarg, 0, 10)));
             break;
         case 't':
             timeout = strtol(optarg, 0, 10);
@@ -76,55 +76,33 @@ int main(int argc, char * argv[])
         case 'h':
         case '?':
         default:
-            usage(basename(argv[0]), ip, port, timeout);
+            usage(basename(argv[0]), port, timeout);
             return 0;
         }
     }
 
-    struct addrinfo *res, *res0;
-    struct addrinfo hints = {.ai_family = PF_INET,
-                             .ai_socktype = SOCK_DGRAM,
-                             .ai_protocol = IPPROTO_UDP,
-                             .ai_flags = AI_PASSIVE};
-    const int err = getaddrinfo(ip, port, &hints, &res0);
-    assert(err == 0, "getaddrinfo: %s", gai_strerror(err));
-
-    int s = -1;
-    for (res = res0; res; res = res->ai_next) {
-        s = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-        if (s < 0) {
-            warn(err, "socket");
-            continue;
-        }
-
-        if (bind(s, res->ai_addr, res->ai_addrlen) < 0) {
-            close(s);
-            warn(err, "bind");
-            s = -1;
-            continue;
-        }
-
-        break;
+    if (ifname == 0) {
+        usage(basename(argv[0]), port, timeout);
+        return 0;
     }
-    assert(s >= 0, "could not bind");
-    freeaddrinfo(res);
 
-    q_init(timeout);
-    warn(debug, "%s ready on %s:%s", basename(argv[0]), ip, port);
-    const uint64_t c = q_accept(s);
-    char msg[1024];
-    const size_t msg_len = sizeof(msg);
-    uint32_t sid;
+    void * const q = q_init(ifname, timeout);
+    warn(debug, "%s ready on %s port %d", basename(argv[0]), ifname, port);
 
-#ifndef NDEBUG
-    const size_t len =
-#endif
-        q_read(c, &sid, msg, msg_len);
-    warn(info, "received %zu bytes on stream %d on conn %" PRIu64 ": %s", len,
-         sid, c, msg);
+    const uint64_t c = q_bind(q, port);
+    //     char msg[1024];
+    //     const size_t msg_len = sizeof(msg);
+    //     uint32_t sid;
+
+    // #ifndef NDEBUG
+    //     const size_t len =
+    // #endif
+    //         q_read(c, &sid, msg, msg_len);
+    //     warn(info, "received %zu bytes on stream %d on conn %" PRIu64 ": %s",
+    //     len,
+    //          sid, c, msg);
     q_close(c);
-    q_cleanup();
+    q_cleanup(q);
 
-    close(s);
     return 0;
 }

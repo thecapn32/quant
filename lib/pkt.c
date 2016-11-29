@@ -1,11 +1,9 @@
 #include <inttypes.h>
 #include <sys/param.h>
 
-#include "conn.h"
 #include "fnv_1a.h"
 #include "frame.h"
 #include "pkt.h"
-#include "stream.h"
 #include "util.h"
 
 

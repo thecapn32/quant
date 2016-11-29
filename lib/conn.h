@@ -5,6 +5,8 @@
 
 #include "tommy.h"
 
+struct w_sock;
+
 // All open QUIC connections.
 extern hash q_conns;
 
@@ -20,12 +22,15 @@ struct q_conn {
     uint8_t vers;  ///< QUIC version in use for this connection. (Index into
                    ///< @p vers[].)
     uint8_t flags;
-    uint8_t _unused; ///< Unused.
-    int fd;          ///< File descriptor (socket) for the connection.
-    hash streams;
-    struct sockaddr peer; ///< Address of our peer.
+
+    /// @cond
+    uint8_t _unused; ///< @internal Padding.
+    /// @endcond
+
     socklen_t peer_len;   ///< Length of @p peer.
-    uint8_t _unused2[4];  ///< Unused.
+    struct sockaddr peer; ///< Address of our peer.
+    hash streams;
+    struct w_sock * s; ///< File descriptor (socket) for the connection.
 };
 
 #define CONN_CLSD 0
@@ -41,5 +46,4 @@ struct q_conn * get_conn(const uint64_t id);
 
 struct q_conn * new_conn(const uint64_t id,
                          const struct sockaddr * restrict const peer,
-                         const socklen_t peer_len,
-                         const int fd);
+                         const socklen_t peer_len);

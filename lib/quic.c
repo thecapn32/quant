@@ -1,15 +1,15 @@
-#include <ev.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <netinet/in.h>
 #include <sys/param.h>
 #include <time.h>
 
-#include "conn.h"
+
 #include "frame.h"
 #include "pkt.h"
-#include "stream.h"
-#include "util.h"
 #include "version.h"
+
+#include <warpcore.h>
 
 
 /// QUIC version supported by this implementation in order of preference.
@@ -101,10 +101,11 @@ static void __attribute__((nonnull)) tx(struct q_conn * restrict const c)
         die("TODO: state %d", c->state);
     }
 
-    const ssize_t n =
-        sendto(c->fd, buf, len, 0, (struct sockaddr *)&c->peer, c->peer_len);
-    assert(n > 0, "sendto error"); // TODO: handle EAGAIN
-    warn(debug, "sent %zd bytes", n);
+    // XXX
+    // const ssize_t n =
+    //     sendto(c->fd, buf, len, 0, (struct sockaddr *)&c->peer, c->peer_len);
+    // assert(n > 0, "sendto error"); // TODO: handle EAGAIN
+    // warn(debug, "sent %zd bytes", n);
     // hexdump(buf, len);
     c->out++;
 
@@ -141,7 +142,7 @@ rx(struct ev_loop * restrict const l __attribute__((unused)),
     if (c == 0) {
         // this is a packet for a new connection, create it
         assert(p.flags & F_CID, "no conn ID in initial packet");
-        c = new_conn(p.cid, &peer, peer_len, w->fd);
+        c = new_conn(p.cid, &peer, peer_len);
         c->in = p.nr;
         // if it gets created here, this is a server connection, so no need to
         // change c->flags
@@ -210,21 +211,23 @@ respond:
 
 
 uint64_t __attribute__((nonnull))
-q_connect(const int s,
+q_connect(void * const q,
           const struct sockaddr * restrict const peer,
           const socklen_t peer_len)
 {
-    // put the socket into non-blocking mode
-    assert(fcntl(s, O_NONBLOCK) >= 0, "fcntl");
-
     // make new connection
     const uint64_t id = (((uint64_t)random()) << 32) | (uint64_t)random();
-    struct q_conn * restrict const c = new_conn(id, peer, peer_len, s);
+    struct q_conn * restrict const c = new_conn(id, peer, peer_len);
     c->flags |= CONN_FLAG_CLNT;
+
+    c->s = w_bind(q, (uint16_t)random());
+    w_connect(c->s,
+              ((const struct sockaddr_in *)(const void *)peer)->sin_addr.s_addr,
+              ((const struct sockaddr_in *)(const void *)peer)->sin_port);
 
     // initialize the RX watcher
     ev_io * restrict const r = &rx_w; // suppress erroneous warning in gcc 6.2
-    ev_io_init(r, rx, s, EV_READ);
+    ev_io_init(r, rx, w_fd(c->s), EV_READ);
 
     pthread_mutex_lock(&lock);
     ev_io_start(loop, &rx_w);
@@ -337,16 +340,17 @@ size_t __attribute__((nonnull)) q_read(const uint64_t cid,
 }
 
 
-uint64_t q_accept(const int s)
+uint64_t q_bind(void * const q, const uint16_t port)
 {
     // warn(debug, "enter");
 
     // put the socket into non-blocking mode
-    assert(fcntl(s, O_NONBLOCK) >= 0, "fcntl");
+    // assert(fcntl(s, O_NONBLOCK) >= 0, "fcntl");
+    struct w_sock * s = w_bind(q, ntohs(port));
 
     // initialize the RX watcher
     ev_io * restrict const r = &rx_w; // suppress erroneous warning in gcc 6.2
-    ev_io_init(r, rx, s, EV_READ);
+    ev_io_init(r, rx, w_fd(s), EV_READ);
 
     pthread_mutex_lock(&lock);
     ev_io_start(loop, &rx_w);
@@ -399,8 +403,9 @@ async_cb(struct ev_loop * restrict const l __attribute__((unused)),
 }
 
 
-void q_init(const long timeout)
+void * q_init(const char * const ifname, const long timeout)
 {
+    void * const w = w_init(ifname, 0);
 
     warn(info, "threaded %s %s with libev %d.%d ready", quickie_name,
          quickie_version, ev_version_major(), ev_version_minor());
@@ -429,6 +434,8 @@ void q_init(const long timeout)
 
     // create the thread running ev_run
     pthread_create(&tid, 0, l_run, loop);
+
+    return w;
 }
 
 
@@ -438,11 +445,12 @@ void q_close(const uint64_t cid)
     struct q_conn * restrict const c = get_conn(cid);
     assert(c, "conn %" PRIu64 " does not exist", cid);
     // TODO: block until done
+    w_close(c->s);
     // warn(debug, "leave");
 }
 
 
-void q_cleanup(void)
+void q_cleanup(void * const q)
 {
     // warn(debug, "enter");
 
@@ -453,5 +461,6 @@ void q_cleanup(void)
     assert(pthread_cond_destroy(&write_cv) == 0, "pthread_cond_destroy");
     assert(pthread_cond_destroy(&accept_cv) == 0, "pthread_cond_destroy");
 
+    w_cleanup(q);
     // warn(debug, "leave");
 }

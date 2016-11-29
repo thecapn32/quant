@@ -26,8 +26,7 @@ struct q_conn * get_conn(const uint64_t id)
 struct q_conn * __attribute__((nonnull))
 new_conn(const uint64_t id,
          const struct sockaddr * restrict const peer,
-         const socklen_t peer_len,
-         const int fd)
+         const socklen_t peer_len)
 {
     assert(get_conn(id) == 0, "conn %" PRIu64 " already exists", id);
 
@@ -35,7 +34,6 @@ new_conn(const uint64_t id,
     assert(c, "could not calloc");
     c->id = id;
     c->out = 1;
-    c->fd = fd;
     hash_init(&c->streams);
     hash_insert(&q_conns, &c->conn_node, c, (uint32_t)c->id);
 
