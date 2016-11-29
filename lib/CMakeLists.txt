@@ -2,7 +2,6 @@ string(TOUPPER ${PROJECT_NAME} PROJECT_NAME_UC)
 configure_file(version.h.in version.h)
 configure_file(version.c.in version.c)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
-set(CMAKE_INCLUDE_CURRENT_DIR_IN_INTERFACE ON)
 
 # find_library(LIBNSS_LIB NAMES nss nss3 PATHS /usr/local/opt/nss/lib)
 # find_path(LIBNSS_INCLUDE nss.h
@@ -14,15 +13,15 @@ set(CMAKE_INCLUDE_CURRENT_DIR_IN_INTERFACE ON)
 find_library(LIBEV_LIB NAMES ev)
 find_path(LIBEV_INCLUDE ev.h PATH_SUFFIXES include/ev include)
 find_package_handle_standard_args(libev DEFAULT_MSG LIBEV_LIB LIBEV_INCLUDE)
-include_directories(${LIBEV_INCLUDE})
+# include_directories(${LIBEV_INCLUDE})
 
 set(quickie_sources
-  util.c fnv_1a.c pkt.c frame.c quic.c stream.c conn.c
+  fnv_1a.c pkt.c frame.c quic.c stream.c conn.c
   ${CMAKE_CURRENT_BINARY_DIR}/version.c)
 add_library(quickie STATIC ${quickie_sources})
 target_include_directories(quickie PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 find_package(Threads)
 target_link_libraries(quickie
-  tommy ${LIBEV_LIB} ${CMAKE_THREAD_LIBS_INIT}) # ${NSS_LIB}
+  warpcore tommy ${LIBEV_LIB} ${CMAKE_THREAD_LIBS_INIT}) # ${NSS_LIB}
 

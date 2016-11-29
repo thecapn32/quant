@@ -53,20 +53,24 @@ set_target_properties(tommy
 add_dependencies(tommy tommyds)
 
 
-externalproject_add(warpcore
+externalproject_add(warp
   UPDATE_COMMAND ""
   GIT_REPOSITORY git@github.com:NTAP/warpcore.git
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}
     -DBUILD_DOCUMENTATION=FALSE
 )
 
-# externalproject_get_property(warpcore SOURCE_DIR)
-# add_library(tommy STATIC IMPORTED GLOBAL)
-# set_target_properties(tommy PROPERTIES IMPORTED_LOCATION ${SOURCE_DIR}/tommy.o)
-# set_target_properties(tommy
-#   PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${SOURCE_DIR}
-# )
-# add_dependencies(tommy warpcore)
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include)
+add_library(warpcore STATIC IMPORTED GLOBAL)
+set(WARP ${CMAKE_CURRENT_BINARY_DIR}/lib/libwarpcore.a)
+if(NOT EXISTS(${WARP}))
+  set(WARP ${CMAKE_CURRENT_BINARY_DIR}/lib/libshimcore.a)
+endif()
+set_target_properties(warpcore PROPERTIES IMPORTED_LOCATION ${WARP})
+set_target_properties(warpcore
+  PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_BINARY_DIR}/include
+)
+add_dependencies(warpcore warp)
 
 
 add_custom_target(vagrant-up ${VAGRANT} up)
