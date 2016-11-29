@@ -28,3 +28,12 @@ make
 ## Testing
 
 The `libquickie` library will be in `lib`. There are `quickie_client` and `quickie_server` examples in `bin`.
+
+
+## Copyright
+
+Copyright (C) 2016 NetApp, Inc.
+All rights reserved.
+
+[//]: # (@example quickie_client.c)
+[//]: # (@example quickie_server.c)
