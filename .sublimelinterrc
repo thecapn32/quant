@@ -5,8 +5,12 @@
                 "/usr/local/include",
                 "lib",
                 "external/tommyds-prefix/src/tommyds",
+                "external/include",
                 "../lib",
-                "../external/tommyds-prefix/src/tommyds"
+                "../external/tommyds-prefix/src/tommyds",
+                "../external/include",
+                "Debug/external/include",
+                "../Debug/external/include"
             ]
         }
     }
