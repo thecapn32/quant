@@ -12,13 +12,12 @@ before_script:
       vagrant daemon tcpdump tshark tmux
       # virtualbox
 
-compile:
-  stage: build
-  script:
-  - true
-  - cmake .
-  # - make
-  # - make doc
+# compile:
+#   stage: build
+#   script:
+#   # - cmake .
+#   # - make
+#   # - make doc
 
 # run:
 #   stage: test
