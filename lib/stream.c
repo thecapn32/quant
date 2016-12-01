@@ -32,8 +32,8 @@ uint16_t enc_stream_frames(struct q_conn * const c,
     struct q_stream * s = 0;
     hash_foreach_arg(&c->streams, out_pending, &s);
     if (s) {
-        warn(debug, "stream %d has %" PRIu64 " pending data", s->id,
-             s->out_len);
+        warn(debug, "str %d has %" PRIu64 " byte%c pending data", s->id,
+             s->out_len, plural(s->out_len));
         i += enc_stream_frame(s, &buf[i], len - i);
     }
     // TODO: we may be able to include some a frame for some other stream here
@@ -71,7 +71,7 @@ struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
            c->flags & CONN_FLAG_CLNT ? "odd" : "even", s->id);
 
     hash_insert(&c->streams, &s->stream_node, s, s->id);
-    warn(info, "reserved new stream %d on conn %" PRIu64 " as %s", s->id, c->id,
+    warn(info, "reserved new str %d on conn %" PRIu64 " as %s", s->id, c->id,
          c->flags & CONN_FLAG_CLNT ? "client" : "server");
     return s;
 }

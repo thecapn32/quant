@@ -15,7 +15,7 @@ static void usage(const char * const name,
                   const long timeout)
 {
     printf("%s\n", name);
-    printf("\t[-i interface]\t\tinterface to run over; default %s\n", ifname);
+    printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
     printf("\t[-p port]\tdestination port; default %d\n", port);
     printf("\t[-t sec]\texit after some seconds (0 to disable); default %ld\n",
            timeout);
@@ -87,19 +87,19 @@ int main(int argc, char * argv[])
     warn(debug, "%s ready on %s port %d", basename(argv[0]), ifname, port);
 
     const uint64_t c = q_bind(q, port);
-    //     char msg[1024];
-    //     const size_t msg_len = sizeof(msg);
-    //     uint32_t sid;
+    if (c) {
+        size_t len = 0;
+        do {
+            char msg[1024];
+            const size_t msg_len = sizeof(msg);
+            uint32_t sid;
+            len = q_read(c, &sid, msg, msg_len);
+            warn(info, "rx %zu byte%c on str %d on conn %" PRIu64 ": %s",
+                 len, plural(len), sid, c, msg);
+        } while (len != 0);
+        q_close(c);
+    }
 
-    // #ifndef NDEBUG
-    //     const size_t len =
-    // #endif
-    //         q_read(c, &sid, msg, msg_len);
-    //     warn(info, "received %zu bytes on stream %d on conn %" PRIu64 ": %s",
-    //     len,
-    //          sid, c, msg);
-    q_close(c);
     q_cleanup(q);
-
     return 0;
 }

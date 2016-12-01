@@ -31,6 +31,7 @@ struct q_conn {
     struct sockaddr peer; ///< Address of our peer.
     hash streams;
     struct w_sock * s; ///< File descriptor (socket) for the connection.
+    ev_io * rx_w;      ///< RX watcher.
 };
 
 #define CONN_CLSD 0

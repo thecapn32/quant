@@ -1,8 +1,6 @@
-// #include <fcntl.h>
 #include <inttypes.h>
 #include <netinet/in.h>
 #include <sys/param.h>
-// #include <time.h>
 
 #include "frame.h"
 #include "pkt.h"
@@ -19,8 +17,6 @@ const q_tag vers[] = {{.as_str = "Q025"}, // "Q025" is draft-hamilton
 const size_t vers_len = sizeof(vers);
 
 static struct ev_loop * loop;
-static ev_io rx_w;
-static ev_timer to_w;
 static ev_async async_w;
 static pthread_t tid;
 static pthread_cond_t write_cv;
@@ -80,7 +76,7 @@ static void __attribute__((nonnull)) tx(struct q_conn * const c)
     struct warpcore * const w = w_engine(c->s);
     struct w_iov * const v = w_alloc(w, MAX_PKT_LEN);
 
-    const uint16_t len = enc_pkt(c, v->buf, MAX_PKT_LEN);
+    v->len = enc_pkt(c, v->buf, MAX_PKT_LEN);
     switch (c->state) {
     case CONN_CLSD:
     case CONN_VERS_SENT:
@@ -101,7 +97,8 @@ static void __attribute__((nonnull)) tx(struct q_conn * const c)
 
     w_tx(c->s, v);
     w_nic_tx(w);
-    hexdump(v->buf, len);
+    warn(debug, "sent %d byte%c", v->len, plural(v->len));
+    // hexdump(v->buf, v->len);
     w_free(w, v);
 
     c->out++;
@@ -119,27 +116,26 @@ rx(struct ev_loop * const l __attribute__((unused)),
 {
     // warn(info, "entering %s for desc %d", __func__, w->fd);
 
-    uint8_t buf[UINT16_MAX];
-    struct sockaddr peer;
-    socklen_t peer_len = sizeof(peer);
-    const ssize_t n = recvfrom(w->fd, buf, UINT16_MAX, 0,
-                               (struct sockaddr *)&peer, &peer_len);
-    assert(n >= 0, "recvfrom error");
-    assert(n <= MAX_PKT_LEN,
-           "received %zu-byte packet, larger than MAX_PKT_LEN of %d", n,
+    struct w_iov * const v = w_rx(w->data);
+    assert(v != 0, "no data received for this socket");
+    assert(v->len <= MAX_PKT_LEN,
+           "received %u-byte packet, larger than MAX_PKT_LEN of %d", v->len,
            MAX_PKT_LEN);
-    const uint16_t len = (uint16_t)n;
-    warn(debug, "received %d bytes", len);
-    // hexdump(buf, len);
+    warn(debug, "received %d byte%c", v->len, plural(v->len));
+    // hexdump(v->buf, v->len);
 
     struct q_pub_hdr p = {0};
     struct q_conn * c = 0;
-    uint16_t i = dec_pub_hdr(&p, buf, len, &c);
+    uint16_t i = dec_pub_hdr(&p, v->buf, v->len, &c);
 
     if (c == 0) {
         // this is a packet for a new connection, create it
         assert(p.flags & F_CID, "no conn ID in initial packet");
-        c = new_conn(p.cid, &peer, peer_len);
+        const struct sockaddr_in peer = {.sin_family = AF_INET,
+                                         .sin_port = v->port,
+                                         .sin_addr = {.s_addr = v->ip}};
+        socklen_t peer_len = sizeof(peer);
+        c = new_conn(p.cid, (const struct sockaddr *)&peer, peer_len);
         c->in = p.nr;
         // if it gets created here, this is a server connection, so no need to
         // change c->flags
@@ -150,9 +146,9 @@ rx(struct ev_loop * const l __attribute__((unused)),
         pthread_mutex_unlock(&lock);
     }
 
-    if (i <= len)
+    if (i <= v->len)
         // if there are bytes after the public header, we have frames
-        i += dec_frames(c, &p, &buf[i], len - i);
+        i += dec_frames(c, &p, &((uint8_t *)(v->buf))[i], v->len - i);
 
     switch (c->state) {
     case CONN_CLSD:
@@ -222,11 +218,12 @@ uint64_t q_connect(void * const q,
               ((const struct sockaddr_in *)(const void *)peer)->sin_port);
 
     // initialize the RX watcher
-    ev_io * const r = &rx_w; // suppress erroneous warning in gcc 6.2
-    ev_io_init(r, rx, w_fd(c->s), EV_READ);
+    c->rx_w = calloc(1, sizeof(*c->rx_w));
+    c->rx_w->data = c->s;
+    ev_io_init(c->rx_w, rx, w_fd(c->s), EV_READ);
 
     pthread_mutex_lock(&lock);
-    ev_io_start(loop, &rx_w);
+    ev_io_start(loop, c->rx_w);
     ev_async_send(loop, &async_w);
     pthread_mutex_unlock(&lock);
 
@@ -266,14 +263,15 @@ void q_write(const uint64_t cid,
     assert(s, "stream %d on conn %" PRIu64 " does not exist", sid, cid);
 
     // append data
-    warn(info, "%zu bytes on stream %d on conn %" PRIu64, len, sid, cid);
+    warn(info, "%zu byte%c on str %d on conn %" PRIu64, len, plural(len), sid,
+         cid);
     s->out = realloc(s->out, s->out_len + len);
     assert(s->out, "realloc");
     memcpy(&s->out[s->out_len], buf, len);
     s->out_len += len;
 
     pthread_mutex_lock(&lock);
-    ev_io_start(loop, &rx_w);
+    ev_io_start(loop, c->rx_w);
     ev_async_send(loop, &async_w);
     warn(warn, "waiting for write to complete");
     pthread_cond_wait(&write_cv, &lock);
@@ -308,16 +306,20 @@ size_t q_read(const uint64_t cid,
     warn(warn, "waiting for data");
     pthread_cond_wait(&read_cv, &lock);
     pthread_mutex_unlock(&lock);
-    warn(warn, "got data");
 
     *sid = 0;
     hash_foreach_arg(&c->streams, &find_stream_with_data, sid);
+    if (*sid == 0)
+        // No stream seems to have new data, which can happen if the timeout
+        // fired. In that case, return 0.
+        return 0;
+
     struct q_stream * s = get_stream(c, *sid);
     assert(s, "stream %d on conn %" PRIu64 " does not exist", *sid, cid);
 
     if (s->in_len == 0) {
         pthread_mutex_lock(&lock);
-        // ev_io_start(loop, &rx_w);
+        // ev_io_start(loop, &c->rx_w);
         // ev_async_send(loop, &async_w);
         warn(warn, "read waiting for data");
         pthread_cond_wait(&read_cv, &lock);
@@ -328,8 +330,8 @@ size_t q_read(const uint64_t cid,
     // append data
     const size_t data_len = MIN(len, s->in_len);
     memcpy(buf, s->in, data_len);
-    warn(info, "%" PRIu64 " bytes on stream %d on conn %" PRIu64 ": %s",
-         s->in_len, *sid, cid, (char *)buf);
+    warn(info, "%" PRIu64 " byte%c on stream %d on conn %" PRIu64 ": %s",
+         s->in_len, plural(s->in_len), *sid, cid, (char *)buf);
     // TODO: proper buffer handling
     memmove(buf, &((uint8_t *)(buf))[data_len], data_len);
     s->in_len -= data_len;
@@ -339,26 +341,38 @@ size_t q_read(const uint64_t cid,
 
 uint64_t q_bind(void * const q, const uint16_t port)
 {
-    warn(debug, "enter");
+    // warn(debug, "enter");
 
-    // put the socket into non-blocking mode
-    // assert(fcntl(s, O_NONBLOCK) >= 0, "fcntl");
-    struct w_sock * s = w_bind(q, ntohs(port));
+    // bind socket
+    struct w_sock * const s = w_bind(q, ntohs(port));
 
-    // initialize the RX watcher
-    ev_io * const r = &rx_w; // suppress erroneous warning in gcc 6.2
-    ev_io_init(r, rx, w_fd(s), EV_READ);
+    // allocate and initialize an RX watcher
+    ev_io * rx_w = calloc(1, sizeof(*rx_w));
+    rx_w->data = s;
+    ev_io_init(rx_w, rx, w_fd(s), EV_READ);
 
     pthread_mutex_lock(&lock);
-    ev_io_start(loop, &rx_w);
+
+    // start the RX watcher
+    ev_io_start(loop, rx_w);
     ev_async_send(loop, &async_w);
-    warn(warn, "waiting for incoming connection");
+    warn(warn, "waiting for new inbound conn");
     pthread_cond_wait(&accept_cv, &lock);
-    warn(warn, "COND waiting for incoming connection");
+
+    // take new connection from "accept queue"; will be zero if interrupted
     const uint64_t cid = accept_queue;
-    accept_queue = 0;
+    if (cid) {
+        accept_queue = 0;
+
+        // store the RX watcher with the connection
+        struct q_conn * const c = get_conn(cid);
+        assert(c, "conn %" PRIu64 " does not exist", cid);
+        c->rx_w = rx_w;
+        c->s = s;
+        warn(warn, "got conn %" PRIu64, cid);
+    }
+
     pthread_mutex_unlock(&lock);
-    warn(warn, "got connection %" PRIu64, cid);
     return cid;
 }
 
@@ -376,7 +390,6 @@ timeout_cb(struct ev_loop * const l,
            ev_timer * const w __attribute__((unused)),
            int e __attribute__((unused)))
 {
-    warn(warn, "event loop timeout");
     ev_break(l, EVBREAK_ALL);
 }
 
@@ -388,6 +401,14 @@ static void * __attribute__((nonnull)) l_run(void * const arg)
            "pthread_setcanceltype");
     ev_run(l, 0);
     warn(warn, "event loop ended");
+
+    // signal the main thread, which may be blocked on these conditions
+    pthread_mutex_lock(&lock);
+    pthread_cond_signal(&read_cv);
+    pthread_cond_signal(&write_cv);
+    pthread_cond_signal(&accept_cv);
+    pthread_mutex_unlock(&lock);
+
     return 0;
 }
 
@@ -424,9 +445,9 @@ void * q_init(const char * const ifname, const long timeout)
 
     // during development, abort event loop after some time
     if (timeout) {
+        static ev_timer to_w;
         warn(debug, "setting %ld sec timeout", timeout);
-        ev_timer * const t = &to_w; // suppress erroneous warning in gcc 6.2
-        ev_timer_init(t, timeout_cb, timeout, 0);
+        ev_timer_init(&to_w, timeout_cb, timeout, 0);
         ev_timer_start(loop, &to_w);
     }
 
@@ -439,12 +460,15 @@ void * q_init(const char * const ifname, const long timeout)
 
 void q_close(const uint64_t cid)
 {
-    warn(debug, "enter");
+    // warn(debug, "enter");
     struct q_conn * const c = get_conn(cid);
     assert(c, "conn %" PRIu64 " does not exist", cid);
-    // TODO: block until done
     w_close(c->s);
-    warn(debug, "leave");
+    hash_foreach(&c->streams, free);
+    hash_done(&c->streams);
+    hash_remove(&q_conns, &c->conn_node);
+    free(c);
+    // warn(debug, "leave");
 }
 
 
@@ -460,5 +484,7 @@ void q_cleanup(void * const q)
     assert(pthread_cond_destroy(&accept_cv) == 0, "pthread_cond_destroy");
 
     w_cleanup(q);
+    hash_foreach(&q_conns, free);
+    hash_done(&q_conns);
     warn(debug, "leave");
 }

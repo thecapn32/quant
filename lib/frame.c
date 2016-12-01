@@ -339,7 +339,8 @@ uint16_t enc_stream_frame(struct q_stream * const s,
     encode(buf, len, i, s->out, data_len, "%d");
 
     // TODO: handle the buffer properly in case of loss
-    warn(debug, "buffer has %" PRIu64 " bytes left", s->out_len - data_len);
+    warn(debug, "buffer has %" PRIu64 " byte%c left", s->out_len - data_len,
+         plural(s->out_len - data_len));
     memmove(buf, &buf[i], s->out_len - data_len);
     s->out_len -= data_len;
     s->out_off += data_len;
@@ -353,6 +354,7 @@ enc_padding_frame(uint8_t * const buf, const uint16_t len)
 {
     buf[0] = T_PADDING;
     memset(&buf[1], 0, len - 1);
-    warn(debug, "inserting %d bytes of zero padding", len - 1);
+    warn(debug, "inserting %d byte%c of zero padding", len - 1,
+         plural(len - 1));
     return len;
 }
