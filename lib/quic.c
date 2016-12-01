@@ -390,6 +390,17 @@ timeout_cb(struct ev_loop * const l,
            ev_timer * const w __attribute__((unused)),
            int e __attribute__((unused)))
 {
+    warn(warn, "timeout");
+    ev_break(l, EVBREAK_ALL);
+}
+
+
+static void __attribute__((nonnull))
+signal_cb(struct ev_loop * const l,
+          ev_signal * const w,
+          int e __attribute__((unused)))
+{
+    warn(err, "%s", strsignal(w->signum));
     ev_break(l, EVBREAK_ALL);
 }
 
@@ -399,10 +410,20 @@ static void * __attribute__((nonnull)) l_run(void * const arg)
     struct ev_loop * l = (struct ev_loop *)arg;
     assert(pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, 0) == 0,
            "pthread_setcanceltype");
-    ev_run(l, 0);
-    warn(warn, "event loop ended");
 
-    // signal the main thread, which may be blocked on these conditions
+    // set up signal handler
+    static ev_signal sigint_w, sigquit_w, sigterm_w;
+    ev_signal_init(&sigint_w, signal_cb, SIGINT);
+    ev_signal_init(&sigquit_w, signal_cb, SIGQUIT);
+    ev_signal_init(&sigterm_w, signal_cb, SIGTERM);
+    ev_signal_start(loop, &sigint_w);
+    ev_signal_start(loop, &sigquit_w);
+    ev_signal_start(loop, &sigterm_w);
+
+    // start the event loop (will be stopped by timeout_cb or signal_cb)
+    ev_run(l, 0);
+
+    // notify the main thread, which may be blocked on these conditions
     pthread_mutex_lock(&lock);
     pthread_cond_signal(&read_cv);
     pthread_cond_signal(&write_cv);
@@ -425,21 +446,19 @@ async_cb(struct ev_loop * const l __attribute__((unused)),
 
 void * q_init(const char * const ifname, const long timeout)
 {
+    // initialize warpcore, the PRNG, and local state
     void * const w = w_init(ifname, 0);
-
-    warn(info, "threaded %s %s with libev %d.%d ready", quickie_name,
-         quickie_version, ev_version_major(), ev_version_minor());
-
-    // initialize some things
     srandom((unsigned)time(0));
     hash_init(&q_conns);
 
-    // initialize the event loop, synchronization helpers and async call handler
-    loop = ev_default_loop(0);
+    // initialize synchronization helpers
     pthread_mutex_init(&lock, 0);
     pthread_cond_init(&read_cv, 0);
     pthread_cond_init(&write_cv, 0);
     pthread_cond_init(&accept_cv, 0);
+
+    // initialize the event loop and async call handler
+    loop = ev_default_loop(0);
     ev_async_init(&async_w, async_cb);
     ev_async_start(loop, &async_w);
 
@@ -453,6 +472,17 @@ void * q_init(const char * const ifname, const long timeout)
 
     // create the thread running ev_run
     pthread_create(&tid, 0, l_run, loop);
+
+    // block those signals that we'll let the event loop handle
+    sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, SIGINT);
+    sigaddset(&set, SIGQUIT);
+    sigaddset(&set, SIGTERM);
+    assert(pthread_sigmask(SIG_BLOCK, &set, NULL) == 0, "pthread_sigmask");
+
+    warn(info, "threaded %s %s with libev %d.%d ready", quickie_name,
+         quickie_version, ev_version_major(), ev_version_minor());
 
     return w;
 }
