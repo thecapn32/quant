@@ -16,6 +16,7 @@ compile:
   stage: build
   script:
   # disabled until warpcore is available
+  - true
   # - cmake .
   # - make
   # - make doc
