@@ -327,23 +327,25 @@ uint16_t enc_stream_frame(struct q_stream * const s,
         encode(buf, len, i, &s->out_off, off_len, "%" PRIu64);
     }
 
-    if (s->out_len <= len) {
-        // this stream frame will not extend to the end of the packet
-        buf[0] |= F_STREAM_DATA_LEN;
-        buf[0] |= F_STREAM_FIN;
-        const uint16_t out_len = (uint16_t)s->out_len;
-        encode(buf, len, i, &out_len, 0, "%d");
-    }
+    die("TODO");
 
-    const uint16_t data_len = MIN((uint16_t)s->out_len, len);
-    encode(buf, len, i, s->out, data_len, "%d");
+    // if (s->out_len <= len) {
+    //     // this stream frame will not extend to the end of the packet
+    //     buf[0] |= F_STREAM_DATA_LEN;
+    //     buf[0] |= F_STREAM_FIN;
+    //     const uint16_t out_len = (uint16_t)s->out_len;
+    //     encode(buf, len, i, &out_len, 0, "%d");
+    // }
 
-    // TODO: handle the buffer properly in case of loss
-    warn(debug, "buffer has %" PRIu64 " byte%c left", s->out_len - data_len,
-         plural(s->out_len - data_len));
-    memmove(buf, &buf[i], s->out_len - data_len);
-    s->out_len -= data_len;
-    s->out_off += data_len;
+    // const uint16_t data_len = MIN((uint16_t)s->out_len, len);
+    // encode(buf, len, i, s->out, data_len, "%d");
+
+    // // TODO: handle the buffer properly in case of loss
+    // warn(debug, "buffer has %" PRIu64 " byte%c left", s->out_len - data_len,
+    //      plural(s->out_len - data_len));
+    // memmove(buf, &buf[i], s->out_len - data_len);
+    // s->out_len -= data_len;
+    // s->out_off += data_len;
 
     return i;
 }

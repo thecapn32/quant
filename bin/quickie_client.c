@@ -1,11 +1,10 @@
 #include <getopt.h>
 #include <inttypes.h>
-#include <netdb.h>
-#include <unistd.h>
 
 #include "quic.h"
 
 #include <util.h> // during debugging
+#include <warpcore.h>
 
 #define MAX_CONNS 10
 
@@ -79,8 +78,8 @@ int main(int argc, char * argv[])
     void * const q = q_init(ifname, timeout);
 
     uint64_t cid[MAX_CONNS];
-    char msg[1024];
-    const size_t msg_len = sizeof(msg);
+    // char msg[1024];
+    // const size_t msg_len = sizeof(msg);
     for (int n = 0; n < conns; n++) {
         warn(info, "%s starting conn #%d to %s:%s", basename(argv[0]), n, dest,
              port);
@@ -88,10 +87,16 @@ int main(int argc, char * argv[])
 
         for (int i = 0; i < 2; i++) {
             const uint32_t sid = q_rsv_stream(cid[n]);
-            snprintf(msg, msg_len, "***HELLO, STR %d ON CONN %" PRIu64 "!***",
-                     sid, cid[n]);
-            warn(info, "writing: %s", msg);
-            q_write(cid[n], sid, msg, strlen(msg) + 1);
+            struct w_iov * v = q_alloc(q, 1024);
+            v->len = (uint16_t)snprintf(
+                v->buf, 1024, "***HELLO, STR %d ON CONN %" PRIu64 "!***", sid,
+                cid[n]);
+            assert(v->len < 1024, "buffer overrun");
+            warn(info, "writing: %s", v->buf);
+            // q_write(cid[n], sid, v->buf, strlen(v->buf) + 1);
+            q_write(cid[n], sid, v);
+
+            q_free(q, v);
         }
         q_close(cid[n]);
     }

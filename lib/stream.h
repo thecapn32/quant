@@ -1,17 +1,21 @@
 #pragma once
 
+#include <sys/queue.h>
+
 #include "tommy.h"
 
 
 struct q_stream {
     node stream_node;
+    struct q_conn * c;
 
     uint32_t id;
     uint8_t state;
     uint8_t _unused[3];
 
-    uint8_t * out;
-    uint64_t out_len;
+    // uint8_t * out;
+    // uint64_t out_len;
+    STAILQ_HEAD(ovh, w_iov) ov; ///< w_iov containing outbound data.
     uint64_t out_off;
 
     uint8_t * in;

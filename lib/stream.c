@@ -5,12 +5,13 @@
 #include "stream.h"
 #include "util.h"
 
+#include <warpcore.h>
 
 static void __attribute__((nonnull)) out_pending(void * arg, void * obj)
 {
     const struct q_stream * const s = obj;
     const struct q_stream ** const which = arg;
-    if (*which == 0 && s->out_len)
+    if (*which == 0 && !STAILQ_EMPTY(&s->ov))
         *which = s;
 }
 
@@ -32,8 +33,8 @@ uint16_t enc_stream_frames(struct q_conn * const c,
     struct q_stream * s = 0;
     hash_foreach_arg(&c->streams, out_pending, &s);
     if (s) {
-        warn(debug, "str %d has %" PRIu64 " byte%c pending data", s->id,
-             s->out_len, plural(s->out_len));
+        const uint32_t l = w_iov_len(STAILQ_FIRST(&s->ov));
+        warn(debug, "str %d has %d byte%c pending data", s->id, l, plural(l));
         i += enc_stream_frame(s, &buf[i], len - i);
     }
     // TODO: we may be able to include some a frame for some other stream here
@@ -51,6 +52,8 @@ struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
 {
     struct q_stream * const s = calloc(1, sizeof(*s));
     assert(c, "could not calloc");
+    s->c = c;
+    STAILQ_INIT(&s->ov);
 
     if (id) {
         // the peer has initiated this stream

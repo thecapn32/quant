@@ -1,6 +1,5 @@
 #include <getopt.h>
 #include <inttypes.h>
-#include <netdb.h>
 #include <sys/param.h>
 #include <unistd.h>
 
@@ -94,8 +93,8 @@ int main(int argc, char * argv[])
             const size_t msg_len = sizeof(msg);
             uint32_t sid;
             len = q_read(c, &sid, msg, msg_len);
-            warn(info, "rx %zu byte%c on str %d on conn %" PRIu64 ": %s",
-                 len, plural(len), sid, c, msg);
+            warn(info, "rx %zu byte%c on str %d on conn %" PRIu64 ": %s", len,
+                 plural(len), sid, c, msg);
         } while (len != 0);
         q_close(c);
     }
