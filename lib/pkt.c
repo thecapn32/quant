@@ -1,11 +1,34 @@
+// Copyright (c) 2016, NetApp, Inc.
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//
+// 1. Redistributions of source code must retain the above copyright notice,
+//    this list of conditions and the following disclaimer.
+//
+// 2. Redistributions in binary form must reproduce the above copyright notice,
+//    this list of conditions and the following disclaimer in the documentation
+//    and/or other materials provided with the distribution.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+// POSSIBILITY OF SUCH DAMAGE.
+
 #include <inttypes.h>
 #include <sys/param.h>
 
-#include "conn.h"
 #include "fnv_1a.h"
 #include "frame.h"
 #include "pkt.h"
-#include "stream.h"
 #include "util.h"
 
 
@@ -13,8 +36,14 @@ static const q_tag prst = {.as_str = "PRST"}, rnon = {.as_str = "RNON"},
                    rseq = {.as_str = "RSEQ"}, cadr = {.as_str = "CADR"};
 
 
-// Convert packet number length encoded in flags to bytes
-static uint8_t __attribute__((const)) dec_pkt_nr_len(const uint8_t flags)
+/// Decode the packet number length information in the flags field of the public
+/// header.
+///
+/// @param[in]  flags  The flags in a public header
+///
+/// @return     Length of the packet number field in bytes.
+///
+inline static uint8_t __attribute__((const)) dec_pkt_nr_len(const uint8_t flags)
 {
     const uint8_t l = (flags & 0x30) >> 4;
     assert(/* l >= 0 && */ l <= 3, "cannot decode packet number length %d", l);
@@ -22,9 +51,15 @@ static uint8_t __attribute__((const)) dec_pkt_nr_len(const uint8_t flags)
     return dec[l];
 }
 
-
-// Convert packet number length in bytes into flags
-static uint8_t __attribute__((const)) enc_pkt_nr_len(const uint8_t n)
+/// Encode a byte length @p n into a representation that can be or'ed into the
+/// public header flags.
+///
+/// @param[in]  n     Byte length to encode.
+///
+/// @return     Encoded byte length suitable for or'ing into the public header
+///             flags.
+///
+inline static uint8_t __attribute__((const)) enc_pkt_nr_len(const uint8_t n)
 {
     assert(n == 1 || n == 2 || n == 4 || n == 6,
            "cannot encode packet number length %d", n);
@@ -33,8 +68,14 @@ static uint8_t __attribute__((const)) enc_pkt_nr_len(const uint8_t n)
 }
 
 
-// Calculate the minimum number of bytes needed to encode the packet number
-static uint8_t __attribute__((const)) calc_req_pkt_nr_len(const uint64_t n)
+/// Calculate the minimum number of bytes needed to encode packet number @p n.
+///
+/// @param[in]  n     A packet number.
+///
+/// @return     The minimum number of bytes needed to encode @p n.
+///
+inline static uint8_t __attribute__((const))
+calc_req_pkt_nr_len(const uint64_t n)
 {
     if (n < UINT8_MAX)
         return 1;
@@ -46,10 +87,10 @@ static uint8_t __attribute__((const)) calc_req_pkt_nr_len(const uint64_t n)
 }
 
 
-uint16_t __attribute__((nonnull))
-dec_pub_hdr(struct q_pub_hdr * restrict const ph,
-            const uint8_t * restrict const buf,
-            const uint16_t len)
+uint16_t dec_pub_hdr(struct q_pub_hdr * const ph,
+                     const uint8_t * const buf,
+                     const uint16_t len,
+                     struct q_conn ** const c)
 {
     ph->flags = buf[0];
     warn(debug, "ph->flags = 0x%02x", ph->flags);
@@ -57,6 +98,7 @@ dec_pub_hdr(struct q_pub_hdr * restrict const ph,
 
     if (ph->flags & F_CID)
         decode(ph->cid, buf, len, i, 0, "%" PRIu64); // XXX: no ntohll()?
+    *c = get_conn(ph->cid);
 
     if (ph->flags & F_VERS)
         decode(ph->vers.as_int, buf, len, i, 0, "0x%08x");
@@ -92,7 +134,7 @@ dec_pub_hdr(struct q_pub_hdr * restrict const ph,
         return i;
     }
 
-    if (ph->flags & F_NONCE) {
+    if ((ph->flags & F_NONCE) && *c) {
         ph->nonce_len = (uint8_t)MIN(len - i, MAX_NONCE_LEN);
         decode(ph->nonce, buf, len, i, ph->nonce_len, "%s");
         assert(i <= len, "pub hdr only %d bytes; truncated?", len);
@@ -123,9 +165,8 @@ dec_pub_hdr(struct q_pub_hdr * restrict const ph,
 }
 
 
-uint16_t __attribute__((nonnull)) enc_pkt(struct q_conn * restrict const c,
-                                          uint8_t * restrict const buf,
-                                          const uint16_t len)
+uint16_t __attribute__((nonnull))
+enc_pkt(struct q_conn * const c, uint8_t * const buf, const uint16_t len)
 {
     uint16_t i = 0;
 

@@ -1,73 +1,99 @@
-#include <ev.h>
+// Copyright (c) 2016, NetApp, Inc.
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//
+// 1. Redistributions of source code must retain the above copyright notice,
+//    this list of conditions and the following disclaimer.
+//
+// 2. Redistributions in binary form must reproduce the above copyright notice,
+//    this list of conditions and the following disclaimer in the documentation
+//    and/or other materials provided with the distribution.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+// POSSIBILITY OF SUCH DAMAGE.
+
 #include <getopt.h>
 #include <inttypes.h>
-#include <netdb.h>
+#include <sys/param.h>
 #include <unistd.h>
 
 #include "quic.h"
-#include "util.h"
+
+#include <warpcore.h>
 
 
 static void usage(const char * const name,
-                  const char * const ip,
-                  const char * const port,
+                  const char * const ifname,
+                  const uint16_t port,
                   const long timeout)
 {
     printf("%s\n", name);
-    printf("\t[-i IP]\t\tIP address to bind to; default %s\n", ip);
-    printf("\t[-p port]\tdestination port; default %s\n", port);
+    printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
+    printf("\t[-p port]\tdestination port; default %d\n", port);
     printf("\t[-t sec]\texit after some seconds (0 to disable); default %ld\n",
            timeout);
 }
 
 
-static void check_stream(void * arg, void * obj)
-{
-    struct q_conn * c = arg;
-    struct q_stream * s = obj;
-    if (s->in_len) {
-        warn(info,
-             "received %" PRIu64 " byte%c on stream %d on conn %" PRIu64 ": %s",
-             s->in_len, plural(s->in_len), s->id, c->id, s->in);
-        // we have consumed the data
-        free(s->in);
-        s->in = 0;
-        s->in_len = 0;
-    }
-}
+// static void check_stream(void * arg, void * obj)
+// {
+//     struct q_conn * c = arg;
+//     struct q_stream * s = obj;
+//     if (s->in_len) {
+//         warn(info,
+//              "received %" PRIu64 " byte%c on stream %d on conn %" PRIu64 ":
+//              %s",
+//              s->in_len, plural(s->in_len), s->id, c->id, s->in);
+//         // we have consumed the data
+//         free(s->in);
+//         s->in = 0;
+//         s->in_len = 0;
+//     }
+// }
 
 
-static void check_conn(void * obj)
-{
-    struct q_conn * c = obj;
-    hash_foreach_arg(&c->streams, &check_stream, c);
-}
+// static void check_conn(void * obj)
+// {
+//     struct q_conn * c = obj;
+//     hash_foreach_arg(&c->streams, &check_stream, c);
+// }
 
 
-static void read_cb(struct ev_loop * restrict const loop
-                    __attribute__((unused)),
-                    ev_async * restrict const w __attribute__((unused)),
-                    int revents)
-{
-    assert(revents = EV_READ, "unknown event %d", revents);
-    hash_foreach(&q_conns, &check_conn);
-}
+// static void read_cb(struct ev_loop * const loop
+//                     __attribute__((unused)),
+//                     ev_async * const w __attribute__((unused)),
+//                     int e)
+// {
+//     assert(e = EV_READ, "unknown event %d", e);
+//     hash_foreach(&q_conns, &check_conn);
+// }
 
 
 int main(int argc, char * argv[])
 {
-    char * ip = "127.0.0.1";
-    char * port = "8443";
-    long timeout = 5;
+    char * ifname = "lo0";
+    uint16_t port = 8443;
+    long timeout = 3;
     int ch;
 
     while ((ch = getopt(argc, argv, "hi:p:t:")) != -1) {
         switch (ch) {
         case 'i':
-            ip = optarg;
+            ifname = optarg;
             break;
         case 'p':
-            port = optarg;
+            port = MIN(UINT16_MAX, MAX(port, (uint16_t)strtol(optarg, 0, 10)));
             break;
         case 't':
             timeout = strtol(optarg, 0, 10);
@@ -76,45 +102,28 @@ int main(int argc, char * argv[])
         case 'h':
         case '?':
         default:
-            usage(BASENAME(argv[0]), ip, port, timeout);
+            usage(basename(argv[0]), ifname, port, timeout);
             return 0;
         }
     }
 
-    struct addrinfo *res, *res0;
-    struct addrinfo hints = {.ai_family = PF_INET,
-                             .ai_socktype = SOCK_DGRAM,
-                             .ai_protocol = IPPROTO_UDP,
-                             .ai_flags = AI_PASSIVE};
-    const int err = getaddrinfo(ip, port, &hints, &res0);
-    assert(err == 0, "getaddrinfo: %s", gai_strerror(err));
+    void * const q = q_init(ifname, timeout);
+    warn(debug, "%s ready on %s port %d", basename(argv[0]), ifname, port);
 
-    int s = -1;
-    for (res = res0; res; res = res->ai_next) {
-        s = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-        if (s < 0) {
-            warn(err, "socket");
-            continue;
-        }
-
-        if (bind(s, res->ai_addr, res->ai_addrlen) < 0) {
-            close(s);
-            warn(err, "bind");
-            s = -1;
-            continue;
-        }
-
-        break;
+    const uint64_t c = q_bind(q, port);
+    if (c) {
+        size_t len = 0;
+        do {
+            char msg[1024];
+            const size_t msg_len = sizeof(msg);
+            uint32_t sid;
+            len = q_read(c, &sid, msg, msg_len);
+            warn(info, "rx %zu byte%c on str %d on conn %" PRIu64 ": %s", len,
+                 plural(len), sid, c, msg);
+        } while (len != 0);
+        q_close(c);
     }
-    assert(s >= 0, "could not bind");
-    freeaddrinfo(res);
 
-    struct ev_loop * loop = ev_default_loop(0);
-    q_init(loop, timeout);
-    warn(debug, "%s ready on %s:%s", BASENAME(argv[0]), ip, port);
-    q_serve(s, &read_cb);
-    ev_loop(loop, 0);
-
-    close(s);
+    q_cleanup(q);
     return 0;
 }

@@ -1,10 +1,33 @@
+// Copyright (c) 2016, NetApp, Inc.
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//
+// 1. Redistributions of source code must retain the above copyright notice,
+//    this list of conditions and the following disclaimer.
+//
+// 2. Redistributions in binary form must reproduce the above copyright notice,
+//    this list of conditions and the following disclaimer in the documentation
+//    and/or other materials provided with the distribution.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+// POSSIBILITY OF SUCH DAMAGE.
+
 #include <inttypes.h>
 #include <sys/param.h>
 
-#include "conn.h"
 #include "frame.h"
 #include "pkt.h"
-#include "stream.h"
 #include "util.h"
 
 
@@ -89,8 +112,8 @@ static uint8_t __attribute__((const)) dec_ack_block_len(const uint8_t flags)
 
 
 static uint16_t __attribute__((nonnull))
-dec_stream_frame(struct q_conn * restrict const c,
-                 const uint8_t * restrict const buf,
+dec_stream_frame(struct q_conn * const c,
+                 const uint8_t * const buf,
                  const uint16_t len)
 {
     uint16_t i = 0;
@@ -101,7 +124,7 @@ dec_stream_frame(struct q_conn * restrict const c,
     const uint8_t sid_len = dec_sid_len(type);
     uint32_t sid = 0;
     decode(sid, buf, len, i, sid_len, "%d");
-    struct q_stream * restrict s = get_stream(c, sid);
+    struct q_stream * s = get_stream(c, sid);
     if (s == 0)
         s = new_stream(c, sid);
 
@@ -117,22 +140,24 @@ dec_stream_frame(struct q_conn * restrict const c,
         data_len = len - i;
 
     // append data
+    warn(info, "got data: %s", &buf[i]);
     s->in = realloc(s->in, s->in_len + data_len);
     assert(s->in, "realloc");
     decode(s->in[s->in_len], buf, len, i, data_len, "%d");
     s->in_len += data_len;
     s->in_off += data_len;
 
-    // notify app
-    ev_feed_event(q_loop, &q_async, EV_READ);
+    pthread_mutex_lock(&lock);
+    pthread_cond_signal(&read_cv);
+    pthread_mutex_unlock(&lock);
 
     return i;
 }
 
 
 static uint16_t __attribute__((nonnull))
-dec_ack_frame(struct q_conn * restrict const c __attribute__((unused)),
-              const uint8_t * restrict const buf,
+dec_ack_frame(struct q_conn * const c __attribute__((unused)),
+              const uint8_t * const buf,
               const uint16_t len)
 {
     uint16_t i = 0;
@@ -186,9 +211,9 @@ dec_ack_frame(struct q_conn * restrict const c __attribute__((unused)),
 
 
 static uint16_t __attribute__((nonnull))
-dec_stop_waiting_frame(struct q_conn * restrict const c __attribute__((unused)),
-                       const struct q_pub_hdr * restrict const p,
-                       const uint8_t * restrict const buf,
+dec_stop_waiting_frame(struct q_conn * const c __attribute__((unused)),
+                       const struct q_pub_hdr * const p,
+                       const uint8_t * const buf,
                        const uint16_t len)
 {
     uint16_t i = 0;
@@ -202,8 +227,8 @@ dec_stop_waiting_frame(struct q_conn * restrict const c __attribute__((unused)),
 
 
 static uint16_t __attribute__((nonnull))
-dec_conn_close_frame(struct q_conn * restrict const c __attribute__((unused)),
-                     const uint8_t * restrict const buf,
+dec_conn_close_frame(struct q_conn * const c __attribute__((unused)),
+                     const uint8_t * const buf,
                      const uint16_t len)
 {
     uint16_t i = 0;
@@ -226,11 +251,10 @@ dec_conn_close_frame(struct q_conn * restrict const c __attribute__((unused)),
 }
 
 
-uint16_t __attribute__((nonnull))
-dec_frames(struct q_conn * restrict const c,
-           const struct q_pub_hdr * restrict const p,
-           const uint8_t * restrict const buf,
-           const uint16_t len)
+uint16_t dec_frames(struct q_conn * const c,
+                    const struct q_pub_hdr * const p,
+                    const uint8_t * const buf,
+                    const uint16_t len)
 {
     uint16_t i = 0;
 
@@ -286,7 +310,7 @@ dec_frames(struct q_conn * restrict const c,
 
 
 uint16_t __attribute__((nonnull))
-enc_ack_frame(uint8_t * restrict const buf, const uint16_t len)
+enc_ack_frame(uint8_t * const buf, const uint16_t len)
 {
     uint16_t i = 0;
     static const uint8_t type = F_ACK;
@@ -296,7 +320,7 @@ enc_ack_frame(uint8_t * restrict const buf, const uint16_t len)
 
 
 uint16_t __attribute__((nonnull))
-enc_conn_close_frame(uint8_t * restrict const buf, const uint16_t len)
+enc_conn_close_frame(uint8_t * const buf, const uint16_t len)
 {
     uint16_t i = 0;
     static const uint8_t type = T_CONNECTION_CLOSE;
@@ -310,10 +334,9 @@ enc_conn_close_frame(uint8_t * restrict const buf, const uint16_t len)
 }
 
 
-uint16_t __attribute__((nonnull))
-enc_stream_frame(struct q_stream * restrict const s,
-                 uint8_t * restrict const buf,
-                 const uint16_t len)
+uint16_t enc_stream_frame(struct q_stream * const s,
+                          uint8_t * const buf,
+                          const uint16_t len)
 {
     uint16_t i = 0;
     static const uint8_t type = F_STREAM;
@@ -329,26 +352,36 @@ enc_stream_frame(struct q_stream * restrict const s,
         encode(buf, len, i, &s->out_off, off_len, "%" PRIu64);
     }
 
-    if (s->out_len <= len) {
-        // this stream frame will not extend to the end of the packet
-        buf[0] |= F_STREAM_DATA_LEN;
-        const uint16_t out_len = (uint16_t)s->out_len;
-        encode(buf, len, i, &out_len, 0, "%d");
-    }
+    die("TODO");
 
-    encode(buf, len, i, s->out, MIN(s->out_len, len), "%d");
+    // if (s->out_len <= len) {
+    //     // this stream frame will not extend to the end of the packet
+    //     buf[0] |= F_STREAM_DATA_LEN;
+    //     buf[0] |= F_STREAM_FIN;
+    //     const uint16_t out_len = (uint16_t)s->out_len;
+    //     encode(buf, len, i, &out_len, 0, "%d");
+    // }
 
-    // buf[0] |= F_STREAM_FIN;
+    // const uint16_t data_len = MIN((uint16_t)s->out_len, len);
+    // encode(buf, len, i, s->out, data_len, "%d");
+
+    // // TODO: handle the buffer properly in case of loss
+    // warn(debug, "buffer has %" PRIu64 " byte%c left", s->out_len - data_len,
+    //      plural(s->out_len - data_len));
+    // memmove(buf, &buf[i], s->out_len - data_len);
+    // s->out_len -= data_len;
+    // s->out_off += data_len;
 
     return i;
 }
 
 
 uint16_t __attribute__((nonnull))
-enc_padding_frame(uint8_t * restrict const buf, const uint16_t len)
+enc_padding_frame(uint8_t * const buf, const uint16_t len)
 {
     buf[0] = T_PADDING;
     memset(&buf[1], 0, len - 1);
-    warn(debug, "inserting %d bytes of zero padding", len - 1);
+    warn(debug, "inserting %d byte%c of zero padding", len - 1,
+         plural(len - 1));
     return len;
 }

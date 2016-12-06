@@ -1,6 +1,1 @@
-.vagrant/
-proto-quic-prefix/
-tommyds-prefix/
-
-*.log
-*.pid
+proto-quic/

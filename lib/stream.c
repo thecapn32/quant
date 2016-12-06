@@ -1,3 +1,28 @@
+// Copyright (c) 2016, NetApp, Inc.
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//
+// 1. Redistributions of source code must retain the above copyright notice,
+//    this list of conditions and the following disclaimer.
+//
+// 2. Redistributions in binary form must reproduce the above copyright notice,
+//    this list of conditions and the following disclaimer in the documentation
+//    and/or other materials provided with the distribution.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+// POSSIBILITY OF SUCH DAMAGE.
+
 #include <inttypes.h>
 
 #include "conn.h"
@@ -5,26 +30,27 @@
 #include "stream.h"
 #include "util.h"
 
+#include <warpcore.h>
 
-static void out_pending(void * arg, void * obj)
+static void __attribute__((nonnull)) out_pending(void * arg, void * obj)
 {
-    const struct q_stream * restrict const s = obj;
-    const struct q_stream ** restrict const which =
-        (const struct q_stream ** const)arg;
-    if (*which == 0 && s->out_len)
+    const struct q_stream * const s = obj;
+    const struct q_stream ** const which = arg;
+    if (*which == 0 && !STAILQ_EMPTY(&s->ov))
         *which = s;
 }
 
 
 static int __attribute__((nonnull))
-cmp_q_stream(const void * restrict const arg, const void * restrict const obj)
+cmp_q_stream(const void * const arg, const void * const obj)
 {
-    return *(const uint32_t *)arg != ((const struct q_stream *)obj)->id;
+    return *(const uint32_t * const)arg !=
+           ((const struct q_stream * const)obj)->id;
 }
 
 
-uint16_t enc_stream_frames(struct q_conn * restrict const c,
-                           uint8_t * restrict const buf,
+uint16_t enc_stream_frames(struct q_conn * const c,
+                           uint8_t * const buf,
                            const uint16_t len)
 {
     uint16_t i = 0;
@@ -32,8 +58,8 @@ uint16_t enc_stream_frames(struct q_conn * restrict const c,
     struct q_stream * s = 0;
     hash_foreach_arg(&c->streams, out_pending, &s);
     if (s) {
-        warn(debug, "stream %d has %" PRIu64 " pending data", s->id,
-             s->out_len);
+        const uint32_t l = w_iov_len(STAILQ_FIRST(&s->ov));
+        warn(debug, "str %d has %d byte%c pending data", s->id, l, plural(l));
         i += enc_stream_frame(s, &buf[i], len - i);
     }
     // TODO: we may be able to include some a frame for some other stream here
@@ -41,18 +67,18 @@ uint16_t enc_stream_frames(struct q_conn * restrict const c,
     return i;
 }
 
-struct q_stream * get_stream(struct q_conn * restrict const c,
-                             const uint32_t id)
+struct q_stream * get_stream(struct q_conn * const c, const uint32_t id)
 {
     return hash_search(&c->streams, cmp_q_stream, &id, id);
 }
 
 
-struct q_stream * new_stream(struct q_conn * restrict const c,
-                             const uint32_t id)
+struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
 {
-    struct q_stream * const restrict s = calloc(1, sizeof(*s));
+    struct q_stream * const s = calloc(1, sizeof(*s));
     assert(c, "could not calloc");
+    s->c = c;
+    STAILQ_INIT(&s->ov);
 
     if (id) {
         // the peer has initiated this stream
@@ -73,7 +99,7 @@ struct q_stream * new_stream(struct q_conn * restrict const c,
            c->flags & CONN_FLAG_CLNT ? "odd" : "even", s->id);
 
     hash_insert(&c->streams, &s->stream_node, s, s->id);
-    warn(info, "reserved new stream %d on conn %" PRIu64 " as %s", s->id, c->id,
+    warn(info, "reserved new str %d on conn %" PRIu64 " as %s", s->id, c->id,
          c->flags & CONN_FLAG_CLNT ? "client" : "server");
     return s;
 }

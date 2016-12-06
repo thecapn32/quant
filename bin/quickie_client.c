@@ -1,22 +1,48 @@
-#include <ev.h>
+// Copyright (c) 2016, NetApp, Inc.
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//
+// 1. Redistributions of source code must retain the above copyright notice,
+//    this list of conditions and the following disclaimer.
+//
+// 2. Redistributions in binary form must reproduce the above copyright notice,
+//    this list of conditions and the following disclaimer in the documentation
+//    and/or other materials provided with the distribution.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+// POSSIBILITY OF SUCH DAMAGE.
+
 #include <getopt.h>
 #include <inttypes.h>
-#include <netdb.h>
-#include <unistd.h>
 
 #include "quic.h"
-#include "util.h"
+
+#include <util.h> // during debugging
+#include <warpcore.h>
 
 #define MAX_CONNS 10
 
 
 static void usage(const char * const name,
+                  const char * const ifname,
                   const char * const dest,
                   const char * const port,
                   const long conns,
                   const long timeout)
 {
     printf("%s\n", name);
+    printf("\t[-i interface]\t\tinterface to run over; default %s\n", ifname);
     printf("\t[-d destination]\tdestination; default %s\n", dest);
     printf("\t[-n connections]\tnumber of connections to start; default %ld\n",
            conns);
@@ -29,14 +55,18 @@ static void usage(const char * const name,
 
 int main(int argc, char * argv[])
 {
+    char * ifname = "lo0";
     char * dest = "127.0.0.1";
     char * port = "6121";
     long conns = 1;
-    long timeout = 5;
+    long timeout = 3;
     int ch;
 
-    while ((ch = getopt(argc, argv, "hd:p:n:t:")) != -1) {
+    while ((ch = getopt(argc, argv, "hi:d:p:n:t:")) != -1) {
         switch (ch) {
+        case 'i':
+            ifname = optarg;
+            break;
         case 'd':
             dest = optarg;
             break;
@@ -56,48 +86,47 @@ int main(int argc, char * argv[])
         case 'h':
         case '?':
         default:
-            usage(BASENAME(argv[0]), dest, port, conns, timeout);
+            usage(basename(argv[0]), ifname, dest, port, conns, timeout);
             return 0;
         }
     }
 
-    struct addrinfo * res;
-    struct addrinfo hints = {.ai_family = PF_INET,
-                             .ai_socktype = SOCK_DGRAM,
-                             .ai_protocol = IPPROTO_UDP};
-    const int err = getaddrinfo(dest, port, &hints, &res);
+    struct addrinfo * peer;
+    const struct addrinfo hints = {.ai_family = PF_INET,
+                                   .ai_socktype = SOCK_DGRAM,
+                                   .ai_protocol = IPPROTO_UDP};
+    const int err = getaddrinfo(dest, port, &hints, &peer);
     assert(err == 0, "getaddrinfo: %s", gai_strerror(err));
-    assert(res->ai_next == 0, "multiple addresses not supported");
+    assert(peer->ai_next == 0, "multiple addresses not supported");
 
     // start some connections
-    uint64_t cid[MAX_CONNS];
-    struct ev_loop * loop = ev_default_loop(0);
-    q_init(loop, timeout);
+    void * const q = q_init(ifname, timeout);
 
-    char msg[1024];
-    const size_t msg_len = sizeof(msg);
+    uint64_t cid[MAX_CONNS];
+    // char msg[1024];
+    // const size_t msg_len = sizeof(msg);
     for (int n = 0; n < conns; n++) {
-        int s = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-        assert(s >= 0, "socket");
-        warn(info, "%s starting connection #%d (desc %d) to %s:%s",
-             BASENAME(argv[0]), n, s, dest, port);
-        cid[n] = q_connect(s, res->ai_addr, res->ai_addrlen);
+        warn(info, "%s starting conn #%d to %s:%s", basename(argv[0]), n, dest,
+             port);
+        cid[n] = q_connect(q, peer->ai_addr, peer->ai_addrlen);
 
         for (int i = 0; i < 2; i++) {
             const uint32_t sid = q_rsv_stream(cid[n]);
-            snprintf(msg, msg_len,
-                     "Hello, stream %d on connection %" PRIu64 "!", sid,
-                     cid[n]);
-            warn(info, "writing: %s", msg);
-            q_write(cid[n], sid, msg, strlen(msg));
+            struct w_iov * v = q_alloc(q, 1024);
+            v->len = (uint16_t)snprintf(
+                v->buf, 1024, "***HELLO, STR %d ON CONN %" PRIu64 "!***", sid,
+                cid[n]);
+            assert(v->len < 1024, "buffer overrun");
+            warn(info, "writing: %s", v->buf);
+            // q_write(cid[n], sid, v->buf, strlen(v->buf) + 1);
+            q_write(cid[n], sid, v);
+
+            q_free(q, v);
         }
+        q_close(cid[n]);
     }
 
-    freeaddrinfo(res);
-    warn(debug, "event looping");
-    ev_loop(loop, 0);
-
-    // TODO: cleanup
-    warn(info, "%s exiting", BASENAME(argv[0]));
+    freeaddrinfo(peer);
+    q_cleanup(q);
     return 0;
 }

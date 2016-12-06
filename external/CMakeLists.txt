@@ -53,24 +53,46 @@ set_target_properties(tommy
 add_dependencies(tommy tommyds)
 
 
+externalproject_add(warp
+  # UPDATE_COMMAND ""
+  GIT_REPOSITORY git@github.com:NTAP/warpcore.git
+  CMAKE_ARGS -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}
+    -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DBUILD_DOCUMENTATION=FALSE
+)
+
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include)
+add_library(warpcore STATIC IMPORTED GLOBAL)
+set(WARP ${CMAKE_CURRENT_BINARY_DIR}/lib/libwarpcore.a)
+if(NOT EXISTS(${WARP}))
+  set(WARP ${CMAKE_CURRENT_BINARY_DIR}/lib/libshimcore.a)
+endif()
+set_target_properties(warpcore PROPERTIES IMPORTED_LOCATION ${WARP})
+set_target_properties(warpcore
+  PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_BINARY_DIR}/include
+)
+add_dependencies(warpcore warp)
+
+
 add_custom_target(vagrant-up ${VAGRANT} up)
 add_custom_target(vagrant-down ${VAGRANT} halt)
 
 # location of proto-quic sources inside the VM
-set(QUIC /vagrant/proto-quic-prefix/src/proto-quic)
+string(REPLACE
+  ${CMAKE_SOURCE_DIR} /vagrant
+  QUIC ${PROJECT_SOURCE_DIR}/external/proto-quic/src/proto-quic)
 
 # some convenience paths under ${QUIC}
 set(QUIC_CERTS ${QUIC}/src/net/tools/quic/certs)
 set(QUIC_CERTS ${QUIC_CERTS} PARENT_SCOPE)
 set(QUIC_BIN ${QUIC}/src/out/Debug)
 set(QUIC_BIN ${QUIC_BIN} PARENT_SCOPE)
-
 externalproject_add(proto-quic
+  PREFIX ${PROJECT_SOURCE_DIR}/external/proto-quic
   UPDATE_COMMAND ""
   # EXCLUDE_FROM_ALL 1 # not supported in cmake 3.0, see below
   # DEPENDS vagrant-up
   GIT_REPOSITORY https://github.com/google/proto-quic.git
-  GIT_TAG 17db47fb4265d45430ca5a3b4180ed52dfedf817
+  GIT_TAG 0db5f234b86699c182394bb261ee226ab800b60f
   # GIT_SHALLOW 1 # not supported in cmake 3.0
   CONFIGURE_COMMAND ${VAGRANT} ssh -c "\
     echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula \
@@ -94,11 +116,14 @@ externalproject_add(proto-quic
 set_target_properties(proto-quic PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 set(QSP quic_server.pid)
+string(REPLACE
+  ${CMAKE_SOURCE_DIR} /vagrant
+  EXTDIR ${PROJECT_SOURCE_DIR})
 add_custom_target(quic-server
   COMMAND
-    test -f ${QSP} ||
+    test -f ${PROJECT_SOURCE_DIR}/${QSP} ||
     ${VAGRANT} ssh -c "\
-      daemon -F /vagrant/${QSP} -o /vagrant/quic_server.log -- \
+      daemon -F ${EXTDIR}/${QSP} -o ${EXTDIR}/quic_server.log -- \
         ${QUIC_BIN}/quic_server --port=6121 \
         --certificate_file=${QUIC_CERTS}/out/leaf_cert.pem \
         --key_file=${QUIC_CERTS}/out/leaf_cert.pkcs8 --v=9 & \
@@ -126,7 +151,8 @@ add_custom_target(test-quickie-server
     ${SUDO} ${PKILL} ${QS} sudo || true &&
     ${DAEMON} -e LLVM_PROFILE_FILE=${QS}.profraw -D ${DIR} -o ${DIR}/${QS}.log
       -- ${DIR}/${QS} &&
-    ${DAEMON} -- ${SUDO} ${TCPDUMP} -i lo0 -w ${DIR}/${QS}.pcap port ${PORT} &&
+    ${DAEMON} -D ${DIR} --
+      ${SUDO} ${TCPDUMP} -i lo0 -w ${DIR}/${QS}.pcap port ${PORT} &&
     ${VAGRANT} ssh -c "\
       host=`ip route show | grep -i 'default via' | cut -d' ' -f3` ; \
       ${QUIC_BIN}/quic_client --host=$host --port=${PORT} --v=1 \
