@@ -7,8 +7,10 @@ Vagrant.configure("2") do |config|
   config.vm.hostname = "proto-quic"
 
   # OS to use for the VM
-  config.vm.box = "ubuntu/xenial64"
-  config.vm.box_version = "20160930.0.0"
+  # config.vm.box = "ubuntu/xenial64"
+  # config.vm.box_version = "20160930.0.0"
+  config.vm.box = "netmap"
+  # config.vm.box_version = "20160930.0.0"
 
   # don't always check for box updates
   config.vm.box_check_update = false
@@ -20,6 +22,8 @@ Vagrant.configure("2") do |config|
     vb.cpus = 1
     vb.linked_clone = true
     vb.name = config.vm.hostname
+
+    config.ssh.username = "ubuntu"
 
     # use virtio for uplink, in case there is an issue with netmap's e1000
     vb.customize ["modifyvm", :id, "--nictype1", "virtio"]
@@ -44,8 +48,8 @@ Vagrant.configure("2") do |config|
     export DEBIAN_FRONTEND=noninteractive
 
     # update the box
-    apt-get update
-    apt-get -y dist-upgrade
+    # apt-get update
+    # apt-get -y dist-upgrade
     apt-get -y autoremove
     apt-get -y autoclean
 
