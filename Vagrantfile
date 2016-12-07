@@ -37,9 +37,6 @@ Vagrant.configure("2") do |config|
       "/VirtualBox/GuestAdd/VBoxService/--timesync-set-threshold", 100 ]
  end
 
-  # mount the main quickie directory as well
-  config.vm.synced_folder "..", "/quickie"
-
   # quic_server will listen on 127.0.0.1:6121 inside the VM
   config.vm.network "forwarded_port", guest: 6121, host: 6121, protocol: "udp"
 

@@ -1,4 +1,4 @@
-# QUICKIE -- QUIC Kickstarter for Implementation Experience
+# QUANT -- QUIC Userspace Accelerated Network Transfers
 
 This will eventually be an independent C implementation of
 [QUIC](https://www.chromium.org/quic), the Google-originated proposal for a new
@@ -41,7 +41,8 @@ make
 
 ## Testing
 
-The `libquickie` library will be in `lib`. There are `quickie_client` and `quickie_server` examples in `bin`.
+The `libquant` library will be in `lib`. There are `client` and `server`
+examples in `bin`.
 
 
 ## Copyright
@@ -71,5 +72,5 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-[//]: # (@example quickie_client.c)
-[//]: # (@example quickie_server.c)
+[//]: # (@example client.c)
+[//]: # (@example server.c)

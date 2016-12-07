@@ -547,8 +547,8 @@ void * q_init(const char * const ifname, const long timeout)
     sigaddset(&set, SIGTERM);
     assert(pthread_sigmask(SIG_BLOCK, &set, NULL) == 0, "pthread_sigmask");
 
-    warn(info, "threaded %s %s with libev %d.%d ready", quickie_name,
-         quickie_version, ev_version_major(), ev_version_minor());
+    warn(info, "threaded %s %s with libev %d.%d ready", quant_name,
+         quant_version, ev_version_major(), ev_version_minor());
 
     return w;
 }
@@ -572,7 +572,7 @@ void q_cleanup(void * const q)
 {
     warn(debug, "enter");
 
-    // wait for the quickie thread to end and destroy lock
+    // wait for the quant thread to end and destroy lock
     assert(pthread_join(tid, 0) == 0, "pthread_join");
     assert(pthread_mutex_destroy(&lock) == 0, "pthread_mutex_init");
     assert(pthread_cond_destroy(&read_cv) == 0, "pthread_cond_destroy");

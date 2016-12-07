@@ -15,13 +15,13 @@ find_path(LIBEV_INCLUDE ev.h PATH_SUFFIXES include/ev include)
 find_package_handle_standard_args(libev DEFAULT_MSG LIBEV_LIB LIBEV_INCLUDE)
 # include_directories(${LIBEV_INCLUDE})
 
-set(quickie_sources
+set(${PROJECT_NAME}_sources
   fnv_1a.c pkt.c frame.c quic.c stream.c conn.c
   ${CMAKE_CURRENT_BINARY_DIR}/version.c)
-add_library(quickie STATIC ${quickie_sources})
-target_include_directories(quickie PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+add_library(${PROJECT_NAME} STATIC ${${PROJECT_NAME}_sources})
+target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 find_package(Threads)
-target_link_libraries(quickie
+target_link_libraries(${PROJECT_NAME}
   warpcore tommy ${LIBEV_LIB} ${CMAKE_THREAD_LIBS_INIT}) # ${NSS_LIB}
 

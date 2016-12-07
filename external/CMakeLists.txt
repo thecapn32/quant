@@ -142,9 +142,9 @@ add_custom_target(kill-quic-server
 )
 
 set(DIR ${CMAKE_BINARY_DIR}/bin)
-set(QS quickie_server)
+set(QS ${PROJECT_NAME}_server)
 set(PORT 8443)
-add_custom_target(test-quickie-server
+add_custom_target(test-${PROJECT_NAME}-server
   COMMAND
     ${RM} -f ${DIR}/${QS}.log ${DIR}/${QS}.pcap ${DIR}/${QS}.core
       ${DIR}/${QS}.profraw || true &&
@@ -161,11 +161,11 @@ add_custom_target(test-quickie-server
     ${SLEEP} 1 &&
     ${SUDO} ${PKILL} ${QS} sudo || true &&
     ${CAT} ${DIR}/${QS}.log || true
-  DEPENDS quickie_server #vagrant-up
+  DEPENDS ${PROJECT_NAME}_server #vagrant-up
   VERBATIM
 )
 
-add_custom_target(tshark-quickie-server-pcap
+add_custom_target(tshark-${PROJECT_NAME}-server-pcap
   COMMAND
     ${TSHARK} -V -2 -n -d udp.port==${PORT},quic -O quic -r ${DIR}/${QS}.pcap
   VERBATIM

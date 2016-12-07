@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.0)
 
-project(quickie VERSION 0.0.1 LANGUAGES C)
+project(quant VERSION 0.0.1 LANGUAGES C)
 
 # Set general compile flags, if they are supported
 include(CheckCCompilerFlag)

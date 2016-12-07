@@ -1,13 +1,13 @@
-add_executable(quickie_client quickie_client.c)
-target_link_libraries(quickie_client quickie)
+add_executable(client client.c)
+target_link_libraries(client ${PROJECT_NAME})
 
-add_executable(quickie_server quickie_server.c)
-target_link_libraries(quickie_server quickie)
+add_executable(server server.c)
+target_link_libraries(server ${PROJECT_NAME})
 
-set(QC quickie_client)
-set(QS quickie_server)
+set(QC client)
+set(QS server)
 set(PORT 6121)
-add_custom_target(test-quickie-client
+add_custom_target(test-${PROJECT_NAME}-client
   COMMAND
     ${RM} -f ${QC}.profraw ${QC}.pcap ${QC}.core || true &&
     ${SUDO} ${PKILL} ${QC} sudo || true &&
@@ -16,12 +16,12 @@ add_custom_target(test-quickie-client
     ${ENV} LLVM_PROFILE_FILE=${QC}.profraw ${QC} || true &&
     ${SUDO} ${PKILL} ${QC} sudo || true &&
     ${TAIL} ../external/quic_server.log || true
-  DEPENDS quic-server quickie_client
+  DEPENDS quic-server client
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   VERBATIM
 )
 
-add_custom_target(tshark-quickie-client-pcap
+add_custom_target(tshark-${PROJECT_NAME}-client-pcap
   COMMAND
     ${TSHARK} -V -2 -n -d udp.port==${PORT},quic -O quic -r ${QC}.pcap
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
@@ -34,10 +34,10 @@ add_custom_target(test
   COMMAND
     ${RM} -f ${QC}.profraw ${QC}.pcap ${QC}.core
       ${QS}.profraw ${QS}.pcap ${QS}.core || true &&
-    ${TMUX} new-session -d "./quickie_server" \;
-      split-window "${SLEEP} 1 ; ./quickie_client -p 8443" \;
+    ${TMUX} new-session -d "./server" \;
+      split-window "${SLEEP} 1 ; ./client -p 8443" \;
       set remain-on-exit on \; attach
-  DEPENDS quickie_server quickie_client
+  DEPENDS server client
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   VERBATIM
 )
