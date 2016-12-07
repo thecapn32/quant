@@ -1,41 +1,10 @@
 include(ExternalProject)
 
-# externalproject_add(softfloat-3b-download
-#   PREFIX softfloat-3b-prefix
-#   SOURCE_DIR "softfloat-3b-prefix/src/softfloat-3b"
-#   URL "http://www.jhauser.us/arithmetic/SoftFloat-3b.zip"
-#   URL_HASH MD5=31c1f4a7ab0e9fb58bb9f7a29ff60e96
-#   DOWNLOAD_NO_PROGRESS 1
-#   CONFIGURE_COMMAND ""
-#   BUILD_COMMAND ""
-#   INSTALL_COMMAND ""
-# )
-
-# externalproject_add(softfloat-3b
-#   PREFIX softfloat-3b-prefix
-#   SOURCE_DIR "softfloat-3b-prefix/src/softfloat-3b/build/Linux-x86_64-GCC"
-#   DOWNLOAD_COMMAND ""
-#   CONFIGURE_COMMAND ""
-#   BUILD_COMMAND ${MAKE}
-#   BUILD_IN_SOURCE 1
-#   INSTALL_COMMAND ""
-# )
-
-# add_dependencies(softfloat-3b softfloat-3b-download)
-# externalproject_get_property(softfloat-3b SOURCE_DIR)
-# add_library(softfloat STATIC IMPORTED GLOBAL)
-# set_target_properties(softfloat PROPERTIES IMPORTED_LOCATION ${SOURCE_DIR}/softfloat.a)
-# set_target_properties(softfloat
-#   PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${SOURCE_DIR}/../../source/include
-# )
-# add_dependencies(softfloat softfloat-3b)
-
-
 externalproject_add(tommyds
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/amadvance/tommyds.git
-  GIT_TAG 5821a27984ae7c4e0e43eff84c37d58effe06454
-  # GIT_SHALLOW 1 # not supported in cmake 3.0
+  # GIT_TAG 5821a27984ae7c4e0e43eff84c37d58effe06454
+  GIT_SHALLOW 1 # not supported in cmake 3.0
   PATCH_COMMAND ${SED} -i.orig -e "s/-Wpadded// $<SEMICOLON> s/-Wcast-align// \
                   $<SEMICOLON> s/objdump/echo/" Makefile
   CONFIGURE_COMMAND ""
@@ -90,10 +59,10 @@ externalproject_add(proto-quic
   PREFIX ${PROJECT_SOURCE_DIR}/external/proto-quic
   UPDATE_COMMAND ""
   # EXCLUDE_FROM_ALL 1 # not supported in cmake 3.0, see below
-  # DEPENDS vagrant-up
+  DEPENDS vagrant-up
   GIT_REPOSITORY https://github.com/google/proto-quic.git
-  GIT_TAG 0db5f234b86699c182394bb261ee226ab800b60f
-  # GIT_SHALLOW 1 # not supported in cmake 3.0
+  # GIT_TAG 0db5f234b86699c182394bb261ee226ab800b60f
+  GIT_SHALLOW 1 # not supported in cmake 3.0
   CONFIGURE_COMMAND ${VAGRANT} ssh -c "\
     echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula \
       select true | sudo debconf-set-selections && \
@@ -137,36 +106,35 @@ add_custom_target(kill-quic-server
   COMMAND
     ${VAGRANT} ssh -c "pkill quic_server" 2> /dev/null &&
     ${RM} -f ${QSP} quic_server.log || true
-  # DEPENDS vagrant-up
+  DEPENDS vagrant-up
   VERBATIM
 )
 
-set(DIR ${CMAKE_BINARY_DIR}/bin)
-set(QS ${PROJECT_NAME}_server)
 set(PORT 8443)
 add_custom_target(test-${PROJECT_NAME}-server
   COMMAND
-    ${RM} -f ${DIR}/${QS}.log ${DIR}/${QS}.pcap ${DIR}/${QS}.core
-      ${DIR}/${QS}.profraw || true &&
-    ${SUDO} ${PKILL} ${QS} sudo || true &&
-    ${DAEMON} -e LLVM_PROFILE_FILE=${QS}.profraw -D ${DIR} -o ${DIR}/${QS}.log
-      -- ${DIR}/${QS} &&
-    ${DAEMON} -D ${DIR} --
-      ${SUDO} ${TCPDUMP} -i lo0 -w ${DIR}/${QS}.pcap port ${PORT} &&
+    ${RM} -f server.log server.pcap server.core server.profraw || true &&
+    ${SUDO} ${PKILL} server sudo || true &&
+    ${DAEMON} -e LLVM_PROFILE_FILE=server.profraw -D ${CMAKE_BINARY_DIR}/bin
+      -o server.log -- ./server &&
+    ${DAEMON} -D ${CMAKE_BINARY_DIR}/bin --
+      ${SUDO} ${TCPDUMP} -i lo0 -w server.pcap port ${PORT} &&
     ${VAGRANT} ssh -c "\
       host=`ip route show | grep -i 'default via' | cut -d' ' -f3` ; \
       ${QUIC_BIN}/quic_client --host=$host --port=${PORT} --v=1 \
         http://example.com/ \
     " 2> /dev/null || true &&
     ${SLEEP} 1 &&
-    ${SUDO} ${PKILL} ${QS} sudo || true &&
-    ${CAT} ${DIR}/${QS}.log || true
-  DEPENDS ${PROJECT_NAME}_server #vagrant-up
+    ${SUDO} ${PKILL} server sudo || true &&
+    ${CAT} server.log || true
+  DEPENDS server vagrant-up
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
   VERBATIM
 )
 
 add_custom_target(tshark-${PROJECT_NAME}-server-pcap
   COMMAND
-    ${TSHARK} -V -2 -n -d udp.port==${PORT},quic -O quic -r ${DIR}/${QS}.pcap
+    ${TSHARK} -V -2 -n -d udp.port==${PORT},quic -O quic -r server.pcap
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
   VERBATIM
 )
