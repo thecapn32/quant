@@ -25,9 +25,12 @@
 
 #include <inttypes.h>
 #include <netdb.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <sys/socket.h>
 
 #include "conn.h"
-#include "quic.h"
+#include "tommy.h"
 #include "util.h"
 
 
@@ -53,10 +56,10 @@ new_conn(const uint64_t id,
          const struct sockaddr * const peer,
          const socklen_t peer_len)
 {
-    assert(get_conn(id) == 0, "conn %" PRIu64 " already exists", id);
+    ensure(get_conn(id) == 0, "conn %" PRIu64 " already exists", id);
 
     struct q_conn * const c = calloc(1, sizeof(*c));
-    assert(c, "could not calloc");
+    ensure(c, "could not calloc");
     // c->rx_w will be allocated and initialized when a w_sock exists
     c->id = id;
     c->out = 1;

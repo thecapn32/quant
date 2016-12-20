@@ -30,7 +30,7 @@
 
 
 struct q_conn;
-struct w_iov;
+struct w_iov_chain;
 
 extern void * __attribute__((nonnull))
 q_init(const char * const ifname, const long timeout);
@@ -52,8 +52,9 @@ q_bind(void * const q, const uint16_t port);
 //                                              const void * const buf,
 //                                              const size_t len);
 
-extern void __attribute__((nonnull))
-q_write(const uint64_t cid, const uint32_t sid, struct w_iov * const buf);
+extern void __attribute__((nonnull)) q_write(const uint64_t cid,
+                                             const uint32_t sid,
+                                             struct w_iov_chain * const chain);
 
 extern size_t __attribute__((nonnull)) q_read(const uint64_t cid,
                                               uint32_t * const sid,
@@ -62,7 +63,7 @@ extern size_t __attribute__((nonnull)) q_read(const uint64_t cid,
 
 extern uint32_t q_rsv_stream(const uint64_t cid);
 
-extern struct w_iov * __attribute__((nonnull))
+extern struct w_iov_chain * __attribute__((nonnull))
 q_alloc(void * const w, const uint32_t len);
 
-extern void q_free(void * const w, struct w_iov * v);
+extern void q_free(void * const w, struct w_iov_chain * const c);

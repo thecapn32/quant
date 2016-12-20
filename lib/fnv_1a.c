@@ -23,15 +23,19 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "fnv_1a.h"
 #include "util.h"
+
 
 uint128_t fnv_1a(const void * const buf,
                  const size_t len,
                  const size_t skip_pos,
                  const size_t skip_len)
 {
-    assert((skip_pos <= len) && (skip_pos + skip_len <= len),
+    ensure((skip_pos <= len) && (skip_pos + skip_len <= len),
            "len %zu, skip_pos %zu, skip_len %zu", len, skip_pos, skip_len);
 
     static const uint128_t prime =

@@ -45,7 +45,7 @@ Vagrant.configure("2") do |config|
     export DEBIAN_FRONTEND=noninteractive
 
     # update the box
-    # apt-get update
+    apt-get update
     # apt-get -y dist-upgrade
     apt-get -y autoremove
     apt-get -y autoclean

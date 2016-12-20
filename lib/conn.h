@@ -26,6 +26,7 @@
 #pragma once
 
 #include <ev.h>
+#undef assert
 #include <sys/socket.h>
 
 #include "tommy.h"

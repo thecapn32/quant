@@ -3,14 +3,15 @@ include(ExternalProject)
 externalproject_add(tommyds
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/amadvance/tommyds.git
-  # GIT_TAG 5821a27984ae7c4e0e43eff84c37d58effe06454
-  GIT_SHALLOW 1 # not supported in cmake 3.0
+  GIT_SHALLOW 1
   PATCH_COMMAND ${SED} -i.orig -e "s/-Wpadded// $<SEMICOLON> s/-Wcast-align// \
                   $<SEMICOLON> s/objdump/echo/" Makefile
   CONFIGURE_COMMAND ""
   BUILD_IN_SOURCE 1
   BUILD_COMMAND ${MAKE}
   INSTALL_COMMAND ""
+  BUILD_BYPRODUCTS
+    ${CMAKE_CURRENT_BINARY_DIR}/tommyds-prefix/src/tommyds/tommy.o
 )
 
 externalproject_get_property(tommyds SOURCE_DIR)
@@ -23,10 +24,14 @@ add_dependencies(tommy tommyds)
 
 
 externalproject_add(warp
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   GIT_REPOSITORY git@github.com:NTAP/warpcore.git
+  GIT_SHALLOW 1
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}
     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DBUILD_DOCUMENTATION=FALSE
+  BUILD_BYPRODUCTS
+    ${CMAKE_CURRENT_BINARY_DIR}/lib/libshimcore.a
+    ${CMAKE_CURRENT_BINARY_DIR}/lib/libwarpcore.a
 )
 
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include)

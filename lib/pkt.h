@@ -56,12 +56,12 @@ struct q_pub_hdr {
 #define decode(dst, buf, buf_len, pos, len, fmt)                               \
     do {                                                                       \
         const size_t __len = len ? len : sizeof(dst);                          \
-        assert(pos + __len <= buf_len,                                         \
-               "attempting to decode %zu byte%c starting at " #buf "["         \
+        ensure(pos + __len <= buf_len,                                         \
+               "attempting to decode %zu byte%s starting at " #buf "["         \
                "%d], which is past " #buf_len " = %d",                         \
                __len, plural(__len), pos, buf_len);                            \
         memcpy(&dst, &buf[pos], __len);                                        \
-        warn(debug, "decoding %zu byte%c from pos %d into " #dst " = " fmt,    \
+        warn(debug, "decoding %zu byte%s from pos %d into " #dst " = " fmt,    \
              __len, plural(__len), pos, dst);                                  \
         pos += __len;                                                          \
     } while (0)
@@ -70,12 +70,12 @@ struct q_pub_hdr {
 #define encode(buf, buf_len, pos, src, src_len, fmt)                           \
     do {                                                                       \
         const size_t __len = src_len ? src_len : sizeof(*src);                 \
-        assert(pos + __len <= buf_len,                                         \
-               "attempting to encode %zu byte%c starting at " #buf "["         \
+        ensure(pos + __len <= buf_len,                                         \
+               "attempting to encode %zu byte%s starting at " #buf "["         \
                "%d], which is past " #buf_len " = %d",                         \
                __len, plural(__len), pos, buf_len);                            \
         memcpy(&buf[pos], src, __len);                                         \
-        warn(debug, "encoding " #src " = " fmt " into %zu byte%c from pos %d", \
+        warn(debug, "encoding " #src " = " fmt " into %zu byte%s from pos %d", \
              *src, __len, plural(__len), pos);                                 \
         pos += __len;                                                          \
     } while (0)

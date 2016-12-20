@@ -23,14 +23,17 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <errno.h>
 #include <getopt.h>
 #include <inttypes.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/param.h>
-#include <unistd.h>
+#include <util.h>
 
 #include "quic.h"
-
-#include <warpcore.h>
 
 
 static void usage(const char * const name,
@@ -52,7 +55,7 @@ static void usage(const char * const name,
 //     struct q_stream * s = obj;
 //     if (s->in_len) {
 //         warn(info,
-//              "received %" PRIu64 " byte%c on stream %d on conn %" PRIu64 ":
+//              "received %" PRIu64 " byte%s on stream %d on conn %" PRIu64 ":
 //              %s",
 //              s->in_len, plural(s->in_len), s->id, c->id, s->in);
 //         // we have consumed the data
@@ -75,7 +78,7 @@ static void usage(const char * const name,
 //                     ev_async * const w __attribute__((unused)),
 //                     int e)
 // {
-//     assert(e = EV_READ, "unknown event %d", e);
+//     ensure(e = EV_READ, "unknown event %d", e);
 //     hash_foreach(&q_conns, &check_conn);
 // }
 
@@ -97,7 +100,7 @@ int main(int argc, char * argv[])
             break;
         case 't':
             timeout = strtol(optarg, 0, 10);
-            assert(errno != EINVAL, "could not convert to integer");
+            ensure(errno != EINVAL, "could not convert to integer");
             break;
         case 'h':
         case '?':
@@ -118,7 +121,7 @@ int main(int argc, char * argv[])
             const size_t msg_len = sizeof(msg);
             uint32_t sid;
             len = q_read(c, &sid, msg, msg_len);
-            warn(info, "rx %zu byte%c on str %d on conn %" PRIu64 ": %s", len,
+            warn(info, "rx %zu byte%s on str %d on conn %" PRIu64 ": %s", len,
                  plural(len), sid, c, msg);
         } while (len != 0);
         q_close(c);

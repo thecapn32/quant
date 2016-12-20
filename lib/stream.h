@@ -40,7 +40,7 @@ struct q_stream {
 
     // uint8_t * out;
     // uint64_t out_len;
-    STAILQ_HEAD(ovh, w_iov) ov; ///< w_iov containing outbound data.
+    struct w_iov_chain * ov; ///< w_chain containing outbound data.
     uint64_t out_off;
 
     uint8_t * in;

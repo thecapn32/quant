@@ -25,7 +25,7 @@
 
 #pragma once
 
-#include <pthread.h>
+// #include <pthread.h>
 
 #include "conn.h"
 #include "quic.h"

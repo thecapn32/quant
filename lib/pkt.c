@@ -24,11 +24,17 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <inttypes.h>
+#include <stdint.h>
+#include <string.h>
 #include <sys/param.h>
 
+#include "conn.h"
 #include "fnv_1a.h"
 #include "frame.h"
 #include "pkt.h"
+#include "quic_internal.h"
+#include "stream.h"
+#include "tommy.h"
 #include "util.h"
 
 
@@ -46,7 +52,7 @@ static const q_tag prst = {.as_str = "PRST"}, rnon = {.as_str = "RNON"},
 inline static uint8_t __attribute__((const)) dec_pkt_nr_len(const uint8_t flags)
 {
     const uint8_t l = (flags & 0x30) >> 4;
-    assert(/* l >= 0 && */ l <= 3, "cannot decode packet number length %d", l);
+    ensure(/* l >= 0 && */ l <= 3, "cannot decode packet number length %d", l);
     const uint8_t dec[] = {1, 2, 3, 6};
     return dec[l];
 }
@@ -61,7 +67,7 @@ inline static uint8_t __attribute__((const)) dec_pkt_nr_len(const uint8_t flags)
 ///
 inline static uint8_t __attribute__((const)) enc_pkt_nr_len(const uint8_t n)
 {
-    assert(n == 1 || n == 2 || n == 4 || n == 6,
+    ensure(n == 1 || n == 2 || n == 4 || n == 6,
            "cannot encode packet number length %d", n);
     static const uint8_t enc[] = {0xFF, 0, 1, 0xFF, 3, 0xFF, 4}; // 0xFF invalid
     return enc[n];
@@ -107,27 +113,27 @@ uint16_t dec_pub_hdr(struct q_pub_hdr * const ph,
         warn(err, "public reset");
         uint32_t tag;
         decode(tag, buf, len, i, 0, "0x%04x");
-        assert(tag == prst.as_int, "PRST tag mismatch 0x%04x != 0x%04x", tag,
+        ensure(tag == prst.as_int, "PRST tag mismatch 0x%04x != 0x%04x", tag,
                prst.as_int);
 
         uint8_t n;
         decode(n, buf, len, i, 0, "%d");
-        assert(n == 3, "got %d tags in PRST", n);
+        ensure(n == 3, "got %d tags in PRST", n);
         i += n; // XXX: undocumented in draft-hamilton
 
         decode(tag, buf, len, i, 0, "0x%04x");
-        assert(tag == rnon.as_int, "RNON tag mismatch 0x%04x != 0x%04x", tag,
+        ensure(tag == rnon.as_int, "RNON tag mismatch 0x%04x != 0x%04x", tag,
                rnon.as_int);
         uint64_t val;
         decode(val, buf, len, i, 0, "0x%" PRIx64);
 
         decode(tag, buf, len, i, 0, "0x%04x");
-        assert(tag == rseq.as_int, "RSEQ tag mismatch 0x%04x != 0x%04x", tag,
+        ensure(tag == rseq.as_int, "RSEQ tag mismatch 0x%04x != 0x%04x", tag,
                rseq.as_int);
         decode(val, buf, len, i, 0, "0x%" PRIx64);
 
         decode(tag, buf, len, i, 0, "0x%04x");
-        assert(tag == cadr.as_int, "CADR tag mismatch 0x%04x != 0x%04x", tag,
+        ensure(tag == cadr.as_int, "CADR tag mismatch 0x%04x != 0x%04x", tag,
                cadr.as_int);
         // decode(val, buf, len, i, 0, "0x%" PRIx64);
 
@@ -137,7 +143,7 @@ uint16_t dec_pub_hdr(struct q_pub_hdr * const ph,
     if ((ph->flags & F_NONCE) && *c) {
         ph->nonce_len = (uint8_t)MIN(len - i, MAX_NONCE_LEN);
         decode(ph->nonce, buf, len, i, ph->nonce_len, "%s");
-        assert(i <= len, "pub hdr only %d bytes; truncated?", len);
+        ensure(i <= len, "pub hdr only %d bytes; truncated?", len);
     }
 
     if (ph->flags & F_VERS && i == len)
@@ -158,7 +164,7 @@ uint16_t dec_pub_hdr(struct q_pub_hdr * const ph,
         else
             warn(debug, "hash OK");
         i += HASH_LEN;
-        assert(i <= len, "pub hdr only %d bytes; truncated?", len);
+        ensure(i <= len, "pub hdr only %d bytes; truncated?", len);
     }
 
     return i;

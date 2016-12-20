@@ -26,7 +26,6 @@
 #pragma once
 
 #include <stddef.h>
-#include <stdint.h>
 
 
 #ifndef _UINT128_T

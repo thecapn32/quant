@@ -23,13 +23,22 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <errno.h>
 #include <getopt.h>
 #include <inttypes.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/queue.h>
+#include <sys/socket.h>
+#include <util.h>
+#include <warpcore.h>
 
 #include "quic.h"
 
-#include <util.h> // during debugging
-#include <warpcore.h>
 
 #define MAX_CONNS 10
 
@@ -75,13 +84,13 @@ int main(int argc, char * argv[])
             break;
         case 'n':
             conns = strtol(optarg, 0, 10);
-            assert(errno != EINVAL, "could not convert to integer");
-            assert(conns <= MAX_CONNS, "only support up to %d connections",
+            ensure(errno != EINVAL, "could not convert to integer");
+            ensure(conns <= MAX_CONNS, "only support up to %d connections",
                    MAX_CONNS);
             break;
         case 't':
             timeout = strtol(optarg, 0, 10);
-            assert(errno != EINVAL, "could not convert to integer");
+            ensure(errno != EINVAL, "could not convert to integer");
             break;
         case 'h':
         case '?':
@@ -96,36 +105,47 @@ int main(int argc, char * argv[])
                                    .ai_socktype = SOCK_DGRAM,
                                    .ai_protocol = IPPROTO_UDP};
     const int err = getaddrinfo(dest, port, &hints, &peer);
-    assert(err == 0, "getaddrinfo: %s", gai_strerror(err));
-    assert(peer->ai_next == 0, "multiple addresses not supported");
+    ensure(err == 0, "getaddrinfo: %s", gai_strerror(err));
+    ensure(peer->ai_next == 0, "multiple addresses not supported");
 
     // start some connections
     void * const q = q_init(ifname, timeout);
 
     uint64_t cid[MAX_CONNS];
-    // char msg[1024];
-    // const size_t msg_len = sizeof(msg);
     for (int n = 0; n < conns; n++) {
         warn(info, "%s starting conn #%d to %s:%s", basename(argv[0]), n, dest,
              port);
         cid[n] = q_connect(q, peer->ai_addr, peer->ai_addrlen);
 
         for (int i = 0; i < 2; i++) {
+            // reserve a new stream
             const uint32_t sid = q_rsv_stream(cid[n]);
-            struct w_iov * v = q_alloc(q, 1024);
+
+            // allocate buffers to transmit a packet
+            struct w_iov_chain * const c = q_alloc(q, 1024);
+            struct w_iov * const v = STAILQ_FIRST(c);
+            ensure(STAILQ_NEXT(v, next) == 0, "w_iov_chain too long");
+
+            // add some payload data
             v->len = (uint16_t)snprintf(
                 v->buf, 1024, "***HELLO, STR %d ON CONN %" PRIu64 "!***", sid,
                 cid[n]);
-            assert(v->len < 1024, "buffer overrun");
+            ensure(v->len < 1024, "buffer overrun");
+
+            // send the data
             warn(info, "writing: %s", v->buf);
             // q_write(cid[n], sid, v->buf, strlen(v->buf) + 1);
-            q_write(cid[n], sid, v);
+            q_write(cid[n], sid, c);
 
-            q_free(q, v);
+            // return the buffer
+            q_free(q, c);
         }
+
+        // close the QUIC connection
         q_close(cid[n]);
     }
 
+    // clean up
     freeaddrinfo(peer);
     q_cleanup(q);
     return 0;

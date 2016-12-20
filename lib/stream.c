@@ -24,19 +24,25 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <inttypes.h>
+#include <plat.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <sys/queue.h>
+#include <util.h>
+#include <warpcore.h>
 
 #include "conn.h"
 #include "frame.h"
 #include "stream.h"
-#include "util.h"
+#include "tommy.h"
 
-#include <warpcore.h>
 
-static void __attribute__((nonnull)) out_pending(void * arg, void * obj)
+static void __attribute__((nonnull))
+out_pending(void * const arg, void * const obj)
 {
     const struct q_stream * const s = obj;
     const struct q_stream ** const which = arg;
-    if (*which == 0 && !STAILQ_EMPTY(&s->ov))
+    if (*which == 0 && !STAILQ_EMPTY(s->ov))
         *which = s;
 }
 
@@ -58,8 +64,8 @@ uint16_t enc_stream_frames(struct q_conn * const c,
     struct q_stream * s = 0;
     hash_foreach_arg(&c->streams, out_pending, &s);
     if (s) {
-        const uint32_t l = w_iov_len(STAILQ_FIRST(&s->ov));
-        warn(debug, "str %d has %d byte%c pending data", s->id, l, plural(l));
+        const uint32_t l = w_iov_chain_len(s->ov);
+        warn(debug, "str %d has %d byte%s pending data", s->id, l, plural(l));
         i += enc_stream_frame(s, &buf[i], len - i);
     }
     // TODO: we may be able to include some a frame for some other stream here
@@ -76,24 +82,26 @@ struct q_stream * get_stream(struct q_conn * const c, const uint32_t id)
 struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
 {
     struct q_stream * const s = calloc(1, sizeof(*s));
-    assert(c, "could not calloc");
+    ensure(c, "could not calloc q_stream");
     s->c = c;
-    STAILQ_INIT(&s->ov);
+    s->ov = calloc(1, sizeof(*s->ov));
+    ensure(s->ov, "could not calloc w_chain");
+    STAILQ_INIT(s->ov);
 
-    if (id) {
+    if (id)
         // the peer has initiated this stream
         s->id = id;
-    } else {
+    else {
         // we are initiating this stream
-        s->id = (uint32_t)random() + 1;
+        s->id = (uint32_t)plat_random() + 1;
         if ((c->flags & CONN_FLAG_CLNT) != (s->id % 2))
             // need to make this odd
             s->id++;
     }
-    assert(get_stream(c, s->id) == 0, "stream %d already exists", s->id);
+    ensure(get_stream(c, s->id) == 0, "stream %d already exists", s->id);
 
     const uint8_t odd = s->id % 2; // NOTE: % in assert confuses printf
-    assert((c->flags & CONN_FLAG_CLNT) == (id ? !odd : odd),
+    ensure((c->flags & CONN_FLAG_CLNT) == (id ? !odd : odd),
            "am %s, expected %s connection stream ID, got %d",
            c->flags & CONN_FLAG_CLNT ? "client" : "server",
            c->flags & CONN_FLAG_CLNT ? "odd" : "even", s->id);

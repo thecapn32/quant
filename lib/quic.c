@@ -23,15 +23,32 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <netinet/in.h>
-#include <sys/param.h>
+#include <arpa/inet.h>
+#include <ev.h>
 #include <inttypes.h>
+#include <netinet/in.h>
+#include <plat.h>
+#include <pthread.h>
+#include <signal.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/param.h>
+#include <sys/queue.h>
+#include <sys/socket.h>
+#include <time.h>
+#include <util.h>
+#include <warpcore.h>
 
+#include "conn.h"
 #include "frame.h"
 #include "pkt.h"
+#include "quic_internal.h"
+#include "stream.h"
+#include "tommy.h"
 #include "version.h"
 
-#include <warpcore.h>
+struct ev_loop;
 
 
 /// QUIC version supported by this implementation in order of preference.
@@ -100,16 +117,18 @@ static void tx(struct q_conn * const c __attribute__((nonnull)),
 {
     // warn(info, "entering %s for conn %" PRIu64, __func__, c->id);
     struct warpcore * const w = w_engine(c->sock);
-    struct w_iov * v = 0;
+    // struct w_iov_chain * o = 0;
 
     if (s == 0) {
         s = new_stream(c, 1);
-        v = w_alloc(w, MAX_PKT_LEN, 0);
-        assert(v, "could not calloc");
-        STAILQ_INSERT_TAIL(&s->ov, v, next);
+        // o = w_alloc(w, MAX_PKT_LEN, 0);
+        // ensure(o, "could not calloc");
+        // STAILQ_CONCAT(s->ov, o);
+        // w_free(w, o);
     }
 
-    STAILQ_FOREACH (v, &s->ov, next) {
+    struct w_iov * v;
+    STAILQ_FOREACH (v, s->ov, next) {
         switch (c->state) {
         case CONN_CLSD:
         case CONN_VERS_SENT:
@@ -131,10 +150,8 @@ static void tx(struct q_conn * const c __attribute__((nonnull)),
         c->out++;
     }
 
-    w_tx(c->sock, STAILQ_FIRST(&s->ov));
+    w_tx(c->sock, s->ov);
     w_nic_tx(w);
-    w_free(w, STAILQ_FIRST(&s->ov));
-    STAILQ_INIT(&s->ov);
 
     pthread_mutex_lock(&lock);
     pthread_cond_signal(&write_cv);
@@ -148,103 +165,106 @@ rx(struct ev_loop * const l __attribute__((unused)),
    int e __attribute__((unused)))
 {
     // warn(info, "entering %s for desc %d", __func__, w->fd);
+    struct w_iov * v;
+    STAILQ_FOREACH (v, w_rx(w->data), next) {
+        ensure(v != 0, "no data received for this socket");
+        ensure(v->len <= MAX_PKT_LEN,
+               "received %u-byte packet, larger than MAX_PKT_LEN of %d", v->len,
+               MAX_PKT_LEN);
+        warn(debug, "received %d byte%s", v->len, plural(v->len));
+        // hexdump(v->buf, v->len);
 
-    struct w_iov * const v = w_rx(w->data);
-    assert(v != 0, "no data received for this socket");
-    assert(v->len <= MAX_PKT_LEN,
-           "received %u-byte packet, larger than MAX_PKT_LEN of %d", v->len,
-           MAX_PKT_LEN);
-    warn(debug, "received %d byte%c", v->len, plural(v->len));
-    // hexdump(v->buf, v->len);
+        struct q_pub_hdr p = {0};
+        struct q_conn * c = 0;
+        uint16_t i = dec_pub_hdr(&p, v->buf, v->len, &c);
 
-    struct q_pub_hdr p = {0};
-    struct q_conn * c = 0;
-    uint16_t i = dec_pub_hdr(&p, v->buf, v->len, &c);
-
-    if (c == 0) {
-        // this is a packet for a new connection, create it
-        assert(p.flags & F_CID, "no conn ID in initial packet");
-        const struct sockaddr_in peer = {.sin_family = AF_INET,
-                                         .sin_port = v->port,
-                                         .sin_addr = {.s_addr = v->ip}};
-        socklen_t peer_len = sizeof(peer);
-        c = new_conn(p.cid, (const struct sockaddr *)&peer, peer_len);
-        c->in = p.nr;
-        // if it gets created here, this is a server connection, so no need to
-        // change c->flags
-        // XXX
-        accept_queue = p.cid;
-        pthread_mutex_lock(&lock);
-        pthread_cond_signal(&accept_cv);
-        pthread_mutex_unlock(&lock);
-    }
-
-    if (i <= v->len)
-        // if there are bytes after the public header, we have frames
-        i += dec_frames(c, &p, &((uint8_t *)(v->buf))[i], v->len - i);
-
-    switch (c->state) {
-    case CONN_CLSD:
-        assert(p.flags & F_VERS, "no version in initial packet");
-        c->state = CONN_VERS_RECV;
-        warn(info, "conn %" PRIu64 " now in CONN_VERS_RECV", c->id);
-
-        // respond to the initial version negotiation packet
-        c->vers = pick_vers(&p);
-        if (vers[c->vers].as_int) {
-            warn(debug, "supporting client-requested version %.4s with "
-                        "preference %d ",
-                 p.vers.as_str, c->vers);
-            c->state = CONN_ESTB;
-            warn(info, "conn %" PRIu64 " now in CONN_ESTB", c->id);
-            return;
-        } else
-            warn(warn, "client-requested version %.4s not supported",
-                 p.vers.as_str);
-        goto respond;
-
-    case CONN_VERS_SENT:
-        if (p.flags & F_VERS) {
-            warn(info, "server didn't like our version %.4s",
-                 vers[c->vers].as_str);
-            c->vers = pick_server_vers(&p);
-            if (vers[c->vers].as_int)
-                warn(info, "retrying with version %.4s", vers[c->vers].as_str);
-            else {
-                warn(info, "no version in common with server, closing");
-                c->vers = 0; // send closing packet with our preferred version
-                c->state = CONN_FINW;
-                warn(info, "conn %" PRIu64 " now in CONN_FINW", c->id);
-            }
-        } else {
-            warn(info, "server accepted version %.4s", vers[c->vers].as_str);
-            c->state = CONN_ESTB;
-            warn(info, "conn %" PRIu64 " now in CONN_ESTB", c->id);
+        if (c == 0) {
+            // this is a packet for a new connection, create it
+            ensure(p.flags & F_CID, "no conn ID in initial packet");
+            const struct sockaddr_in peer = {.sin_family = AF_INET,
+                                             .sin_port = v->port,
+                                             .sin_addr = {.s_addr = v->ip}};
+            socklen_t peer_len = sizeof(peer);
+            c = new_conn(p.cid, (const struct sockaddr *)&peer, peer_len);
+            c->in = p.nr;
+            // if it gets created here, this is a server connection, so no need
+            // to
+            // change c->flags
+            // XXX
+            accept_queue = p.cid;
+            pthread_mutex_lock(&lock);
+            pthread_cond_signal(&accept_cv);
+            pthread_mutex_unlock(&lock);
         }
-        goto respond;
 
-    case CONN_ESTB:
-        return; // TODO: respond with ACK
+        if (i <= v->len)
+            // if there are bytes after the public header, we have frames
+            i += dec_frames(c, &p, &((uint8_t *)(v->buf))[i], v->len - i);
 
-    default:
-        die("TODO: state %d", c->state);
+        switch (c->state) {
+        case CONN_CLSD:
+            ensure(p.flags & F_VERS, "no version in initial packet");
+            c->state = CONN_VERS_RECV;
+            warn(info, "conn %" PRIu64 " now in CONN_VERS_RECV", c->id);
+
+            // respond to the initial version negotiation packet
+            c->vers = pick_vers(&p);
+            if (vers[c->vers].as_int) {
+                warn(debug, "supporting client-requested version %.4s with "
+                            "preference %d ",
+                     p.vers.as_str, c->vers);
+                c->state = CONN_ESTB;
+                warn(info, "conn %" PRIu64 " now in CONN_ESTB", c->id);
+                return;
+            } else
+                warn(warn, "client-requested version %.4s not supported",
+                     p.vers.as_str);
+            tx(c, 0);
+            break;
+
+        case CONN_VERS_SENT:
+            if (p.flags & F_VERS) {
+                warn(info, "server didn't like our version %.4s",
+                     vers[c->vers].as_str);
+                c->vers = pick_server_vers(&p);
+                if (vers[c->vers].as_int)
+                    warn(info, "retrying with version %.4s",
+                         vers[c->vers].as_str);
+                else {
+                    warn(info, "no version in common with server, closing");
+                    c->vers =
+                        0; // send closing packet with our preferred version
+                    c->state = CONN_FINW;
+                    warn(info, "conn %" PRIu64 " now in CONN_FINW", c->id);
+                }
+            } else {
+                warn(info, "server accepted version %.4s",
+                     vers[c->vers].as_str);
+                c->state = CONN_ESTB;
+                warn(info, "conn %" PRIu64 " now in CONN_ESTB", c->id);
+            }
+            tx(c, 0);
+            break;
+
+        case CONN_ESTB:
+            return; // TODO: respond with ACK
+
+        default:
+            die("TODO: state %d", c->state);
+        }
     }
-    assert(0, "unreachable");
-
-respond:
-    tx(c, 0);
 }
 
 
-struct w_iov * q_alloc(void * const w, const uint32_t len)
+struct w_iov_chain * q_alloc(void * const w, const uint32_t len)
 {
     return w_alloc(w, len, 100); /// XXX rethink QUIC header offset
 }
 
 
-void q_free(void * const w, struct w_iov * v)
+void q_free(void * const w, struct w_iov_chain * const c)
 {
-    w_free(w, v);
+    w_free(w, c);
 }
 
 
@@ -253,11 +273,12 @@ uint64_t q_connect(void * const q,
                    const socklen_t peer_len)
 {
     // make new connection
-    const uint64_t id = (((uint64_t)random()) << 32) | (uint64_t)random();
+    const uint64_t id =
+        (((uint64_t)plat_random()) << 32) | (uint64_t)plat_random();
     struct q_conn * const c = new_conn(id, peer, peer_len);
     c->flags |= CONN_FLAG_CLNT;
 
-    c->sock = w_bind(q, (uint16_t)random());
+    c->sock = w_bind(q, (uint16_t)plat_random());
     w_connect(c->sock,
               ((const struct sockaddr_in *)(const void *)peer)->sin_addr.s_addr,
               ((const struct sockaddr_in *)(const void *)peer)->sin_port);
@@ -280,8 +301,8 @@ static void __attribute__((nonnull)) check_stream(void * arg, void * obj)
 {
     struct q_conn * c = arg;
     struct q_stream * s = obj;
-    if (!STAILQ_EMPTY(&s->ov)) {
-        // warn(info, "buffered %" PRIu64 " byte%c on stream %d on conn %"
+    if (!STAILQ_EMPTY(s->ov)) {
+        // warn(info, "buffered %" PRIu64 " byte%s on stream %d on conn %"
         // PRIu64
         //            ": %s ",
         //      s->out_len, plural(s->out_len), s->id, c->id, s->out);
@@ -303,16 +324,16 @@ static void __attribute__((nonnull)) check_conn(void * obj)
 //              const size_t len)
 // {
 //     struct q_conn * const c = get_conn(cid);
-//     assert(c, "conn %" PRIu64 " does not exist", cid);
+//     ensure(c, "conn %" PRIu64 " does not exist", cid);
 //     struct q_stream * s = get_stream(c, sid);
-//     assert(s, "stream %d on conn %" PRIu64 " does not exist", sid, cid);
+//     ensure(s, "stream %d on conn %" PRIu64 " does not exist", sid, cid);
 
 //     // // append data
-//     // warn(info, "%zu byte%c on str %d on conn %" PRIu64, len, plural(len),
+//     // warn(info, "%zu byte%s on str %d on conn %" PRIu64, len, plural(len),
 //     sid,
 //     //      cid);
 //     // s->out = realloc(s->out, s->out_len + len);
-//     // assert(s->out, "realloc");
+//     // ensure(s->out, "realloc");
 //     // memcpy(&s->out[s->out_len], buf, len);
 //     // s->out_len += len;
 
@@ -328,19 +349,27 @@ static void __attribute__((nonnull)) check_conn(void * obj)
 // }
 
 
-void q_write(const uint64_t cid, const uint32_t sid, struct w_iov * v)
+void q_write(const uint64_t cid,
+             const uint32_t sid,
+             struct w_iov_chain * const chain)
 {
     struct q_conn * const c = get_conn(cid);
-    assert(c, "conn %" PRIu64 " does not exist", cid);
+    ensure(c, "conn %" PRIu64 " does not exist", cid);
     struct q_stream * s = get_stream(c, sid);
-    assert(s, "stream %d on conn %" PRIu64 " does not exist", sid, cid);
+    ensure(s, "stream %d on conn %" PRIu64 " does not exist", sid, cid);
 
     pthread_mutex_lock(&lock);
-    STAILQ_INSERT_TAIL(&s->ov, v, next);
+    STAILQ_CONCAT(s->ov, chain);
     ev_io_start(loop, c->rx_w);
     ev_async_send(loop, &tx_w);
     warn(warn, "waiting for write to complete");
     pthread_cond_wait(&write_cv, &lock);
+
+    // w_free(s->w, s->ov);
+    // s->ov = calloc(1, sizeof(*s->ov));
+    // ensure(s->ov, "could not calloc w_iov_chain");
+    // STAILQ_INIT(s->ov);
+
     pthread_mutex_unlock(&lock);
     warn(warn, "write done");
 }
@@ -351,7 +380,7 @@ find_stream_with_data(void * arg, void * obj)
     uint32_t * sid = arg;
     struct q_stream * s = obj;
     if (s->in_len && *sid == 0) {
-        // warn(info, "buffered %" PRIu64 " byte%c on stream %d: %s ",
+        // warn(info, "buffered %" PRIu64 " byte%s on stream %d: %s ",
         // s->in_len,
         //      plural(s->in_len), s->id, s->in);
         *sid = s->id;
@@ -365,7 +394,7 @@ size_t q_read(const uint64_t cid,
               const size_t len)
 {
     struct q_conn * const c = get_conn(cid);
-    assert(c, "conn %" PRIu64 " does not exist", cid);
+    ensure(c, "conn %" PRIu64 " does not exist", cid);
 
     pthread_mutex_lock(&lock);
     warn(warn, "waiting for data");
@@ -380,7 +409,7 @@ size_t q_read(const uint64_t cid,
         return 0;
 
     struct q_stream * s = get_stream(c, *sid);
-    assert(s, "stream %d on conn %" PRIu64 " does not exist", *sid, cid);
+    ensure(s, "stream %d on conn %" PRIu64 " does not exist", *sid, cid);
 
     if (s->in_len == 0) {
         pthread_mutex_lock(&lock);
@@ -396,7 +425,7 @@ size_t q_read(const uint64_t cid,
     // append data
     const size_t data_len = MIN(len, s->in_len);
     memcpy(buf, s->in, data_len);
-    warn(info, "%" PRIu64 " byte%c on stream %d on conn %" PRIu64 ": %s",
+    warn(info, "%" PRIu64 " byte%s on stream %d on conn %" PRIu64 ": %s",
          s->in_len, plural(s->in_len), *sid, cid, (char *)buf);
     // TODO: proper buffer handling
     memmove(buf, &((uint8_t *)(buf))[data_len], data_len);
@@ -433,7 +462,7 @@ uint64_t q_bind(void * const q, const uint16_t port)
 
         // store the RX watcher with the connection
         struct q_conn * const c = get_conn(cid);
-        assert(c, "conn %" PRIu64 " does not exist", cid);
+        ensure(c, "conn %" PRIu64 " does not exist", cid);
         c->rx_w = rx_w;
         c->sock = s;
         warn(warn, "got conn %" PRIu64, cid);
@@ -447,7 +476,7 @@ uint64_t q_bind(void * const q, const uint16_t port)
 uint32_t q_rsv_stream(const uint64_t cid)
 {
     struct q_conn * const c = get_conn(cid);
-    assert(c, "conn %" PRIu64 " does not exist", cid);
+    ensure(c, "conn %" PRIu64 " does not exist", cid);
     return new_stream(c, 0)->id;
 }
 
@@ -474,7 +503,7 @@ static void __attribute__((nonnull)) signal_cb(struct ev_loop * const l,
 static void * __attribute__((nonnull)) l_run(void * const arg)
 {
     struct ev_loop * l = (struct ev_loop *)arg;
-    assert(pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, 0) == 0,
+    ensure(pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, 0) == 0,
            "pthread_setcanceltype");
 
     // set up signal handler
@@ -545,7 +574,7 @@ void * q_init(const char * const ifname, const long timeout)
     sigaddset(&set, SIGINT);
     sigaddset(&set, SIGQUIT);
     sigaddset(&set, SIGTERM);
-    assert(pthread_sigmask(SIG_BLOCK, &set, NULL) == 0, "pthread_sigmask");
+    ensure(pthread_sigmask(SIG_BLOCK, &set, NULL) == 0, "pthread_sigmask");
 
     warn(info, "threaded %s %s with libev %d.%d ready", quant_name,
          quant_version, ev_version_major(), ev_version_minor());
@@ -558,7 +587,7 @@ void q_close(const uint64_t cid)
 {
     // warn(debug, "enter");
     struct q_conn * const c = get_conn(cid);
-    assert(c, "conn %" PRIu64 " does not exist", cid);
+    ensure(c, "conn %" PRIu64 " does not exist", cid);
     w_close(c->sock);
     hash_foreach(&c->streams, free);
     hash_done(&c->streams);
@@ -573,11 +602,11 @@ void q_cleanup(void * const q)
     warn(debug, "enter");
 
     // wait for the quant thread to end and destroy lock
-    assert(pthread_join(tid, 0) == 0, "pthread_join");
-    assert(pthread_mutex_destroy(&lock) == 0, "pthread_mutex_init");
-    assert(pthread_cond_destroy(&read_cv) == 0, "pthread_cond_destroy");
-    assert(pthread_cond_destroy(&write_cv) == 0, "pthread_cond_destroy");
-    assert(pthread_cond_destroy(&accept_cv) == 0, "pthread_cond_destroy");
+    ensure(pthread_join(tid, 0) == 0, "pthread_join");
+    ensure(pthread_mutex_destroy(&lock) == 0, "pthread_mutex_init");
+    ensure(pthread_cond_destroy(&read_cv) == 0, "pthread_cond_destroy");
+    ensure(pthread_cond_destroy(&write_cv) == 0, "pthread_cond_destroy");
+    ensure(pthread_cond_destroy(&accept_cv) == 0, "pthread_cond_destroy");
 
     w_cleanup(q);
     hash_foreach(&q_conns, free);

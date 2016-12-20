@@ -24,18 +24,25 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <inttypes.h>
-#include <sys/param.h>
+#include <pthread.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "frame.h"
 #include "pkt.h"
+#include "quic_internal.h"
+#include "stream.h"
 #include "util.h"
+
+struct q_conn;
 
 
 // Convert stream ID length encoded in flags to bytes
 static uint8_t __attribute__((const)) dec_sid_len(const uint8_t flags)
 {
     const uint8_t l = flags & 0x03;
-    assert(/*l >= 0 && */ l <= 3, "cannot decode stream ID length %d", l);
+    ensure(/*l >= 0 && */ l <= 3, "cannot decode stream ID length %d", l);
     static const uint8_t dec[] = {1, 2, 3, 4};
     return dec[l];
 }
@@ -44,7 +51,7 @@ static uint8_t __attribute__((const)) dec_sid_len(const uint8_t flags)
 // Convert stream ID length encoded in bytes to flags
 static uint8_t __attribute__((const)) enc_sid_len(const uint8_t n)
 {
-    assert(n >= 1 && n <= 4, "cannot decode stream ID length %d", n);
+    ensure(n >= 1 && n <= 4, "cannot decode stream ID length %d", n);
     static const uint8_t enc[] = {0xFF, 0, 1, 2, 3}; // 0xFF invalid
     return enc[n];
 }
@@ -64,7 +71,7 @@ static uint8_t __attribute__((const)) calc_sid_len(const uint64_t n)
 static uint8_t __attribute__((const)) dec_off_len(const uint8_t flags)
 {
     const uint8_t l = (flags & 0x1C) >> 2;
-    assert(/* l >= 0 && */ l <= 7, "cannot decode stream offset length %d", l);
+    ensure(/* l >= 0 && */ l <= 7, "cannot decode stream offset length %d", l);
     static const uint8_t dec[] = {0, 2, 3, 4, 5, 6, 7, 8};
     return dec[l];
 }
@@ -73,7 +80,7 @@ static uint8_t __attribute__((const)) dec_off_len(const uint8_t flags)
 // Convert stream offset length encoded in bytes to flags
 static uint8_t __attribute__((const)) enc_off_len(const uint8_t n)
 {
-    assert(n != 1 && n <= 8, "cannot stream encode offset length %d", n);
+    ensure(n != 1 && n <= 8, "cannot stream encode offset length %d", n);
     static const uint8_t enc[] = {0, 0xFF, 1, 2, 3, 4, 5, 6, 7}; // 0xFF invalid
     return (uint8_t)(enc[n] << 2);
 }
@@ -95,7 +102,7 @@ static uint8_t __attribute__((const)) calc_off_len(const uint64_t n)
 static uint8_t __attribute__((const)) dec_lg_ack_len(const uint8_t flags)
 {
     const uint8_t l = (flags & 0x0C) >> 2;
-    assert(/* l >= 0 && */ l <= 3, "cannot decode largest ACK length %d", l);
+    ensure(/* l >= 0 && */ l <= 3, "cannot decode largest ACK length %d", l);
     static const uint8_t dec[] = {1, 2, 3, 4};
     return dec[l];
 }
@@ -105,7 +112,7 @@ static uint8_t __attribute__((const)) dec_lg_ack_len(const uint8_t flags)
 static uint8_t __attribute__((const)) dec_ack_block_len(const uint8_t flags)
 {
     const uint8_t l = flags & 0x03;
-    assert(/*l >= 0 && */ l <= 3, "cannot decode largest ACK length %d", l);
+    ensure(/*l >= 0 && */ l <= 3, "cannot decode largest ACK length %d", l);
     static const uint8_t dec[] = {1, 2, 4, 6};
     return dec[l];
 }
@@ -142,7 +149,7 @@ dec_stream_frame(struct q_conn * const c,
     // append data
     warn(info, "got data: %s", &buf[i]);
     s->in = realloc(s->in, s->in_len + data_len);
-    assert(s->in, "realloc");
+    ensure(s->in, "realloc");
     decode(s->in[s->in_len], buf, len, i, data_len, "%d");
     s->in_len += data_len;
     s->in_off += data_len;
@@ -164,7 +171,7 @@ dec_ack_frame(struct q_conn * const c __attribute__((unused)),
     uint8_t type;
     decode(type, buf, len, i, 0, "0x%02x");
 
-    assert((type & F_ACK_UNUSED) == 0, "unused ACK frame bit set");
+    ensure((type & F_ACK_UNUSED) == 0, "unused ACK frame bit set");
 
     const uint8_t lg_ack_len = dec_lg_ack_len(type);
     uint64_t lg_ack = 0;
@@ -275,7 +282,7 @@ uint16_t dec_frames(struct q_conn * const c,
         case T_PADDING:
             warn(debug, "%d-byte padding frame", len - i);
             static const uint8_t zero[MAX_PKT_LEN] = {0};
-            assert(memcmp(&buf[i], zero, len - i) == 0,
+            ensure(memcmp(&buf[i], zero, len - i) == 0,
                    "%d-byte padding not zero", len - i);
             i = len;
             break;
@@ -366,7 +373,7 @@ uint16_t enc_stream_frame(struct q_stream * const s,
     // encode(buf, len, i, s->out, data_len, "%d");
 
     // // TODO: handle the buffer properly in case of loss
-    // warn(debug, "buffer has %" PRIu64 " byte%c left", s->out_len - data_len,
+    // warn(debug, "buffer has %" PRIu64 " byte%s left", s->out_len - data_len,
     //      plural(s->out_len - data_len));
     // memmove(buf, &buf[i], s->out_len - data_len);
     // s->out_len -= data_len;
@@ -381,7 +388,7 @@ enc_padding_frame(uint8_t * const buf, const uint16_t len)
 {
     buf[0] = T_PADDING;
     memset(&buf[1], 0, len - 1);
-    warn(debug, "inserting %d byte%c of zero padding", len - 1,
+    warn(debug, "inserting %d byte%s of zero padding", len - 1,
          plural(len - 1));
     return len;
 }
