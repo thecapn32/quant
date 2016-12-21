@@ -27,7 +27,6 @@
 #include <ev.h>
 #include <inttypes.h>
 #include <netinet/in.h>
-#include <plat.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdint.h>
@@ -37,7 +36,7 @@
 #include <sys/queue.h>
 #include <sys/socket.h>
 #include <time.h>
-#include <util.h>
+
 #include <warpcore.h>
 
 #include "conn.h"

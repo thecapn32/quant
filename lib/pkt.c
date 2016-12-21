@@ -28,6 +28,8 @@
 #include <string.h>
 #include <sys/param.h>
 
+#include <warpcore.h>
+
 #include "conn.h"
 #include "fnv_1a.h"
 #include "frame.h"
@@ -35,7 +37,6 @@
 #include "quic_internal.h"
 #include "stream.h"
 #include "tommy.h"
-#include "util.h"
 
 
 static const q_tag prst = {.as_str = "PRST"}, rnon = {.as_str = "RNON"},

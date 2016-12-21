@@ -24,11 +24,10 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <inttypes.h>
-#include <plat.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/queue.h>
-#include <util.h>
+
 #include <warpcore.h>
 
 #include "conn.h"

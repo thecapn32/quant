@@ -29,11 +29,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <warpcore.h>
+
 #include "frame.h"
 #include "pkt.h"
 #include "quic_internal.h"
 #include "stream.h"
-#include "util.h"
 
 struct q_conn;
 

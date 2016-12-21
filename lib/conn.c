@@ -29,9 +29,10 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 
+#include <warpcore.h>
+
 #include "conn.h"
 #include "tommy.h"
-#include "util.h"
 
 
 // All open QUIC connections.

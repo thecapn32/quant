@@ -26,8 +26,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <warpcore.h>
+
 #include "fnv_1a.h"
-#include "util.h"
 
 
 uint128_t fnv_1a(const void * const buf,
