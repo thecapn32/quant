@@ -198,7 +198,8 @@ rx(struct ev_loop * const l __attribute__((unused)),
 
         if (i <= v->len)
             // if there are bytes after the public header, we have frames
-            i += dec_frames(c, &p, &((uint8_t *)(v->buf))[i], v->len - i);
+            // i +=
+            dec_frames(c, &p, &((uint8_t *)(v->buf))[i], v->len - i);
 
         switch (c->state) {
         case CONN_CLSD:

@@ -160,7 +160,7 @@ uint16_t dec_pub_hdr(struct q_pub_hdr * const ph,
     if (i <= len) {
         // if there are bytes left, there must be a hash to verify
         const uint128_t hash = fnv_1a(buf, len, i, HASH_LEN);
-        if (memcmp(&buf[i], &hash, HASH_LEN))
+        if (memcmp(&buf[i], &hash, HASH_LEN) != 0)
             die("hash mismatch");
         else
             warn(debug, "hash OK");

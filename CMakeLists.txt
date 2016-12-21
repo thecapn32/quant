@@ -11,7 +11,7 @@ endif()
 # Set general compile flags, if they are supported
 include(CheckCCompilerFlag)
 foreach(FLAG -std=c11 -march=native -Wextra -Wpedantic -Weverything -Werror
-        -Wno-missing-field-initializers -Wno-missing-braces)
+        -Wno-missing-field-initializers -Wno-missing-braces -fcolor-diagnostics)
   string(REGEX REPLACE "[-=]" "" F ${FLAG})
   check_c_compiler_flag(${FLAG} ${F})
   if(${F})
@@ -114,7 +114,11 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
         -google-readability-function-size
         -readability-function-size
         -google-readability-todo
-        -readability-else-after-return)
+        -readability-else-after-return
+        -readability-avoid-const-params-in-decls
+        -clang-analyzer-alpha.deadcode.UnreachableCode
+        -clang-analyzer-alpha.core.CastToStruct
+        -clang-analyzer-alpha.core.CastSize)
     string(REPLACE ";" "," CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS}")
     set(CMAKE_C_CLANG_TIDY ${CLANGTIDY} -checks=${CLANG_TIDY_CHECKS})
   endif()

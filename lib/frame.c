@@ -237,7 +237,7 @@ dec_stop_waiting_frame(struct q_conn * const c __attribute__((unused)),
 static uint16_t __attribute__((nonnull))
 dec_conn_close_frame(struct q_conn * const c __attribute__((unused)),
                      const uint8_t * const buf,
-                     const uint16_t len)
+                     uint16_t len)
 {
     uint16_t i = 0;
     uint8_t type;
@@ -250,9 +250,9 @@ dec_conn_close_frame(struct q_conn * const c __attribute__((unused)),
     decode(reason_len, buf, len, i, 0, "%d");
 
     if (reason_len) {
-        uint8_t * reason = 0;
-        decode(*reason, buf, len, i, reason_len, "%d"); // XXX: ugly
-        warn(err, "%s", reason);
+        // uint8_t * reason = calloc(1, reason_len);
+        // decode(*reason, buf, len, i, reason_len, "%d"); // XXX: ugly
+        warn(err, "%s", buf);
     }
 
     return i;

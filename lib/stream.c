@@ -92,7 +92,7 @@ struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
         s->id = id;
     else {
         // we are initiating this stream
-        s->id = (uint32_t)plat_random() + 1;
+        s->id = plat_random() + 1;
         if ((c->flags & CONN_FLAG_CLNT) != (s->id % 2))
             // need to make this odd
             s->id++;
