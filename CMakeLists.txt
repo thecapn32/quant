@@ -29,8 +29,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
   if(NOT CMAKE_SYSTEM_NAME MATCHES FreeBSD)
     # -fsanitize=leak does not work on FreeBSD
     set(FLAGS ${FLAGS} -fsanitize=leak)
-  elseif(NOT CMAKE_SYSTEM_NAME MATCHES Darwin)
-    # -fsanitize=undefined -fno-sanitize=alignment does not work on Darwin
+  elseif(NOT CMAKE_C_COMPILER_ID MATCHES MATCHES AppleClang)
+    # -fsanitize=undefined -fno-sanitize=alignment does not work on Apple
     set(FLAGS ${FLAGS} -fsanitize=undefined -fno-sanitize=alignment)
   endif()
   foreach(FLAG ${FLAGS})
@@ -108,7 +108,15 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
   find_program(CLANGTIDY NAMES clang-tidy)
   if(CLANGTIDY)
     message(STATUS "Found clang-tidy: ${CLANGTIDY}")
-    set(CMAKE_C_CLANG_TIDY ${CLANGTIDY})
+    set(CLANG_TIDY_CHECKS *
+        -google-readability-braces-around-statements
+        -readability-braces-around-statements
+        -google-readability-function-size
+        -readability-function-size
+        -google-readability-todo
+        -readability-else-after-return)
+    string(REPLACE ";" "," CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS}")
+    set(CMAKE_C_CLANG_TIDY ${CLANGTIDY} -checks=${CLANG_TIDY_CHECKS})
   endif()
 endif()
 

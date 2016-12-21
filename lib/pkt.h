@@ -64,7 +64,7 @@ struct q_pub_hdr {
         warn(debug, "decoding %zu byte%s from pos %d into " #dst " = " fmt,    \
              __len, plural(__len), pos, dst);                                  \
         pos += __len;                                                          \
-    } while (0)
+    } while (0) // NOLINT
 
 
 #define encode(buf, buf_len, pos, src, src_len, fmt)                           \
@@ -78,7 +78,7 @@ struct q_pub_hdr {
         warn(debug, "encoding " #src " = " fmt " into %zu byte%s from pos %d", \
              *src, __len, plural(__len), pos);                                 \
         pos += __len;                                                          \
-    } while (0)
+    } while (0) // NOLINT
 
 
 extern uint16_t __attribute__((nonnull))
