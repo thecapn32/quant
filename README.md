@@ -67,7 +67,7 @@ examples in `bin`.
 
 ## Copyright
 
-Copyright (c) 2016, NetApp, Inc.
+Copyright (c) 2016-2017, NetApp, Inc.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
