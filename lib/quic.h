@@ -25,12 +25,12 @@
 
 #pragma once
 
-#include <netdb.h>
+#include <stddef.h>
 #include <stdint.h>
+#include <sys/socket.h>
 
-
-struct q_conn;
 struct w_iov_chain;
+
 
 extern void * __attribute__((nonnull))
 q_init(const char * const ifname, const long timeout);
@@ -46,11 +46,6 @@ extern void q_close(const uint64_t cid);
 
 extern uint64_t __attribute__((nonnull))
 q_bind(void * const q, const uint16_t port);
-
-// extern void __attribute__((nonnull)) q_write(const uint64_t cid,
-//                                              const uint32_t sid,
-//                                              const void * const buf,
-//                                              const size_t len);
 
 extern void __attribute__((nonnull)) q_write(const uint64_t cid,
                                              const uint32_t sid,

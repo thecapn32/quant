@@ -32,6 +32,9 @@
 #include "stream.h"
 
 
+#define Q_OFFSET 96
+
+
 extern pthread_mutex_t lock;
 extern pthread_cond_t read_cv;
 

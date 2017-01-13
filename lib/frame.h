@@ -25,7 +25,7 @@
 
 #pragma once
 
-#include "tommy.h"
+#include <stdint.h>
 
 #define F_STREAM 0x80
 #define F_STREAM_FIN 0x40
@@ -51,20 +51,22 @@
 // typedef __fp16 float16_t;
 
 
-struct q_pub_hdr;
+struct q_cmn_hdr;
 struct q_conn;
 struct q_stream;
 
 extern uint16_t __attribute__((nonnull))
 dec_frames(struct q_conn * const c,
-           const struct q_pub_hdr * const p,
+           const struct q_cmn_hdr * const p,
            const uint8_t * const buf,
            const uint16_t len);
 
 extern uint16_t __attribute__((nonnull))
 enc_stream_frame(struct q_stream * const s,
                  uint8_t * const buf,
-                 const uint16_t len);
+                 const uint16_t pos,
+                 const uint16_t len,
+                 const uint16_t max_len);
 
 extern uint16_t __attribute__((nonnull))
 enc_padding_frame(uint8_t * const buf, const uint16_t len);

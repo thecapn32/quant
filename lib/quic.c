@@ -42,6 +42,7 @@
 #include "conn.h"
 #include "frame.h"
 #include "pkt.h"
+#include "quic.h"
 #include "quic_internal.h"
 #include "stream.h"
 #include "tommy.h"
@@ -70,7 +71,7 @@ static uint64_t accept_queue;
 
 
 static uint8_t __attribute__((nonnull))
-pick_vers(const struct q_pub_hdr * const p)
+pick_vers(const struct q_cmn_hdr * const p)
 {
     for (uint8_t i = 0; vers[i].as_int; i++)
         if (p->vers.as_int == vers[i].as_int)
@@ -83,27 +84,28 @@ pick_vers(const struct q_pub_hdr * const p)
 
 
 static uint8_t __attribute__((nonnull))
-pick_server_vers(const struct q_pub_hdr * const p)
+pick_server_vers(const struct q_cmn_hdr * const p)
 {
     // first, check if the version in the public header is acceptable to us
     for (uint8_t i = 0; vers[i].as_int; i++) {
-        warn(debug, "checking server vers %.4s against our prio %d = %.4s",
+        warn(debug, "checking server vers %.4s against our prio %u = %.4s",
              p->vers.as_str, i, vers[i].as_str);
         if (vers[i].as_int == p->vers.as_int)
             return i;
     }
 
     // if that didn't work, then we need to check the numbers in the nonce
-    for (uint8_t i = 0; vers[i].as_int; i++)
-        for (uint8_t j = 0; j < p->nonce_len; j += sizeof(uint32_t)) {
-            q_tag v;
-            memcpy(&v.as_int, &p->nonce[j], sizeof(v));
-            warn(debug, "checking server vers prio %ld = %.4s against our prio "
-                        "%d = %.4s",
-                 j / sizeof(uint32_t), v.as_str, i, vers[i].as_str);
-            if (vers[i].as_int == v.as_int)
-                return i;
-        }
+    // for (uint8_t i = 0; vers[i].as_int; i++)
+    //     for (uint8_t j = 0; j < p->nonce_len; j += sizeof(uint32_t)) {
+    //         q_tag v;
+    //         memcpy(&v.as_int, &p->nonce[j], sizeof(v));
+    //         warn(debug, "checking server vers prio %ld = %.4s against our
+    //         prio "
+    //                     "%u = %.4s",
+    //              j / sizeof(uint32_t), v.as_str, i, vers[i].as_str);
+    //         if (vers[i].as_int == v.as_int)
+    //             return i;
+    //     }
 
     // we're out of matching candidates, return index of final "zero" version
     warn(info, "no version in common with server");
@@ -111,20 +113,14 @@ pick_server_vers(const struct q_pub_hdr * const p)
 }
 
 
-static void tx(struct q_conn * const c __attribute__((nonnull)),
-               struct q_stream * s)
+static void tx(struct q_conn * const c, struct q_stream * s)
 {
     // warn(info, "entering %s for conn %" PRIu64, __func__, c->id);
     struct warpcore * const w = w_engine(c->sock);
     // struct w_iov_chain * o = 0;
 
-    if (s == 0) {
+    if (s == 0)
         s = new_stream(c, 1);
-        // o = w_alloc(w, MAX_PKT_LEN, 0);
-        // ensure(o, "could not calloc");
-        // STAILQ_CONCAT(s->ov, o);
-        // w_free(w, o);
-    }
 
     struct w_iov * v;
     STAILQ_FOREACH (v, s->ov, next) {
@@ -143,10 +139,13 @@ static void tx(struct q_conn * const c __attribute__((nonnull)),
             break;
 
         default:
-            die("TODO: state %d", c->state);
+            die("TODO: state %u", c->state);
         }
-        v->len = enc_pkt(c, v->buf, v->len);
+        v->buf = (uint8_t *)v->buf - Q_OFFSET;
+        v->len += Q_OFFSET;
+        enc_pkt(c, v->buf, v->len, w_iov_max_len(w));
         c->out++;
+        hexdump(v->buf, v->len);
     }
 
     w_tx(c->sock, s->ov);
@@ -163,19 +162,20 @@ rx(struct ev_loop * const l __attribute__((unused)),
    ev_io * const w,
    int e __attribute__((unused)))
 {
-    // warn(info, "entering %s for desc %d", __func__, w->fd);
+    // warn(info, "entering %s for desc %u", __func__, w->fd);
+    w_nic_rx(w_engine(w->data));
     struct w_iov * v;
     STAILQ_FOREACH (v, w_rx(w->data), next) {
         ensure(v != 0, "no data received for this socket");
         ensure(v->len <= MAX_PKT_LEN,
-               "received %u-byte packet, larger than MAX_PKT_LEN of %d", v->len,
+               "received %u-byte packet, larger than MAX_PKT_LEN of %u", v->len,
                MAX_PKT_LEN);
-        warn(debug, "received %d byte%s", v->len, plural(v->len));
-        // hexdump(v->buf, v->len);
+        warn(debug, "received %u byte%s", v->len, plural(v->len));
+        hexdump(v->buf, v->len);
 
-        struct q_pub_hdr p = {0};
+        struct q_cmn_hdr p = {0};
         struct q_conn * c = 0;
-        uint16_t i = dec_pub_hdr(&p, v->buf, v->len, &c);
+        uint16_t i = dec_cmn_hdr(&p, v->buf, v->len, &c);
 
         if (c == 0) {
             // this is a packet for a new connection, create it
@@ -211,7 +211,7 @@ rx(struct ev_loop * const l __attribute__((unused)),
             c->vers = pick_vers(&p);
             if (vers[c->vers].as_int) {
                 warn(debug, "supporting client-requested version %.4s with "
-                            "preference %d ",
+                            "preference %u ",
                      p.vers.as_str, c->vers);
                 c->state = CONN_ESTB;
                 warn(info, "conn %" PRIu64 " now in CONN_ESTB", c->id);
@@ -250,7 +250,7 @@ rx(struct ev_loop * const l __attribute__((unused)),
             return; // TODO: respond with ACK
 
         default:
-            die("TODO: state %d", c->state);
+            die("TODO: state %u", c->state);
         }
     }
 }
@@ -258,7 +258,7 @@ rx(struct ev_loop * const l __attribute__((unused)),
 
 struct w_iov_chain * q_alloc(void * const w, const uint32_t len)
 {
-    return w_alloc(w, len, 100); /// XXX rethink QUIC header offset
+    return w_alloc(w, len, Q_OFFSET); /// XXX rethink QUIC header offset
 }
 
 
@@ -302,7 +302,7 @@ static void __attribute__((nonnull)) check_stream(void * arg, void * obj)
     struct q_conn * c = arg;
     struct q_stream * s = obj;
     if (!STAILQ_EMPTY(s->ov)) {
-        // warn(info, "buffered %" PRIu64 " byte%s on stream %d on conn %"
+        // warn(info, "buffered %" PRIu64 " byte%s on stream %u on conn %"
         // PRIu64
         //            ": %s ",
         //      s->out_len, plural(s->out_len), s->id, c->id, s->out);
@@ -318,37 +318,6 @@ static void __attribute__((nonnull)) check_conn(void * obj)
 }
 
 
-// void q_write(const uint64_t cid,
-//              const uint32_t sid,
-//              const void * const buf,
-//              const size_t len)
-// {
-//     struct q_conn * const c = get_conn(cid);
-//     ensure(c, "conn %" PRIu64 " does not exist", cid);
-//     struct q_stream * s = get_stream(c, sid);
-//     ensure(s, "stream %d on conn %" PRIu64 " does not exist", sid, cid);
-
-//     // // append data
-//     // warn(info, "%zu byte%s on str %d on conn %" PRIu64, len, plural(len),
-//     sid,
-//     //      cid);
-//     // s->out = realloc(s->out, s->out_len + len);
-//     // ensure(s->out, "realloc");
-//     // memcpy(&s->out[s->out_len], buf, len);
-//     // s->out_len += len;
-
-//     pthread_mutex_lock(&lock);
-
-
-//     ev_io_start(loop, c->rx_w);
-//     ev_async_send(loop, &tx_w);
-//     warn(warn, "waiting for write to complete");
-//     pthread_cond_wait(&write_cv, &lock);
-//     pthread_mutex_unlock(&lock);
-//     warn(warn, "write done");
-// }
-
-
 void q_write(const uint64_t cid,
              const uint32_t sid,
              struct w_iov_chain * const chain)
@@ -356,7 +325,7 @@ void q_write(const uint64_t cid,
     struct q_conn * const c = get_conn(cid);
     ensure(c, "conn %" PRIu64 " does not exist", cid);
     struct q_stream * s = get_stream(c, sid);
-    ensure(s, "stream %d on conn %" PRIu64 " does not exist", sid, cid);
+    ensure(s, "stream %u on conn %" PRIu64 " does not exist", sid, cid);
 
     pthread_mutex_lock(&lock);
     STAILQ_CONCAT(s->ov, chain);
@@ -365,10 +334,8 @@ void q_write(const uint64_t cid,
     warn(warn, "waiting for write to complete");
     pthread_cond_wait(&write_cv, &lock);
 
-    // w_free(s->w, s->ov);
-    // s->ov = calloc(1, sizeof(*s->ov));
-    // ensure(s->ov, "could not calloc w_iov_chain");
-    // STAILQ_INIT(s->ov);
+    // XXX instead of assuming all data was received, we need to do rtx handling
+    STAILQ_INIT(s->ov);
 
     pthread_mutex_unlock(&lock);
     warn(warn, "write done");
@@ -380,7 +347,7 @@ find_stream_with_data(void * arg, void * obj)
     uint32_t * sid = arg;
     struct q_stream * s = obj;
     if (s->in_len && *sid == 0) {
-        // warn(info, "buffered %" PRIu64 " byte%s on stream %d: %s ",
+        // warn(info, "buffered %" PRIu64 " byte%s on stream %u: %s ",
         // s->in_len,
         //      plural(s->in_len), s->id, s->in);
         *sid = s->id;
@@ -409,7 +376,7 @@ size_t q_read(const uint64_t cid,
         return 0;
 
     struct q_stream * s = get_stream(c, *sid);
-    ensure(s, "stream %d on conn %" PRIu64 " does not exist", *sid, cid);
+    ensure(s, "stream %u on conn %" PRIu64 " does not exist", *sid, cid);
 
     if (s->in_len == 0) {
         pthread_mutex_lock(&lock);
@@ -425,7 +392,7 @@ size_t q_read(const uint64_t cid,
     // append data
     const size_t data_len = MIN(len, s->in_len);
     memcpy(buf, s->in, data_len);
-    warn(info, "%" PRIu64 " byte%s on stream %d on conn %" PRIu64 ": %s",
+    warn(info, "%" PRIu64 " byte%s on stream %u on conn %" PRIu64 ": %s",
          s->in_len, plural(s->in_len), *sid, cid, (char *)buf);
     // TODO: proper buffer handling
     memmove(buf, &((uint8_t *)(buf))[data_len], data_len);
@@ -450,8 +417,7 @@ uint64_t q_bind(void * const q, const uint16_t port)
 
     // start the RX watcher
     ev_io_start(loop, rx_w);
-    // not needed it seems
-    // ev_async_send(loop, &tx_w);
+    ev_async_send(loop, &tx_w); // XXX may not be needed
     warn(warn, "waiting for new inbound conn");
     pthread_cond_wait(&accept_cv, &lock);
 
@@ -576,7 +542,7 @@ void * q_init(const char * const ifname, const long timeout)
     sigaddset(&set, SIGTERM);
     ensure(pthread_sigmask(SIG_BLOCK, &set, NULL) == 0, "pthread_sigmask");
 
-    warn(info, "threaded %s %s with libev %d.%d ready", quant_name,
+    warn(info, "threaded %s %s with libev %u.%u ready", quant_name,
          quant_version, ev_version_major(), ev_version_minor());
 
     return w;

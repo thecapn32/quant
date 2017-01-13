@@ -128,13 +128,13 @@ int main(int argc, char * argv[])
 
             // add some payload data
             v->len = (uint16_t)snprintf(
-                v->buf, 1024, "***HELLO, STR %d ON CONN %" PRIu64 "!***", sid,
+                v->buf, 1024, "***HELLO, STR %u ON CONN %" PRIu64 "!***", sid,
                 cid[n]);
             ensure(v->len < 1024, "buffer overrun");
+            warn(info, "payload len %u", v->len);
 
             // send the data
             warn(info, "writing: %s", v->buf);
-            // q_write(cid[n], sid, v->buf, strlen(v->buf) + 1);
             q_write(cid[n], sid, c);
 
             // return the buffer

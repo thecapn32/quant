@@ -26,12 +26,11 @@
 #pragma once
 
 #include <ev.h>
-#undef assert
+#include <stdint.h>
 #include <sys/socket.h>
 
 #include "tommy.h"
 
-struct w_sock;
 
 // All open QUIC connections.
 extern hash q_conns;

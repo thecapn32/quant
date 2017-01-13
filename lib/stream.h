@@ -25,7 +25,7 @@
 
 #pragma once
 
-#include <sys/queue.h>
+#include <stdint.h>
 
 #include "tommy.h"
 
@@ -38,8 +38,6 @@ struct q_stream {
     uint8_t state;
     uint8_t _unused[3];
 
-    // uint8_t * out;
-    // uint64_t out_len;
     struct w_iov_chain * ov; ///< w_chain containing outbound data.
     uint64_t out_off;
 
@@ -64,7 +62,9 @@ struct q_conn;
 extern uint16_t __attribute__((nonnull))
 enc_stream_frames(struct q_conn * const c,
                   uint8_t * const buf,
-                  const uint16_t len);
+                  const uint16_t pos,
+                  const uint16_t len,
+                  const uint16_t max_len);
 
 extern struct q_stream * __attribute__((nonnull))
 get_stream(struct q_conn * const c, const uint32_t id);
