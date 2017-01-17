@@ -1,8 +1,11 @@
 # QUANT – QUIC Userspace Accelerated Network Transfers
 
-This will eventually be an independent C implementation of
+These are the beginnings of a BSD-licensed C11 implementation of
 [QUIC](https://www.chromium.org/quic), the Google-originated proposal for a new
-HTTP/2 transport over UDP.
+HTTP/2 transport over UDP. QUANT uses the
+[warpcore](https://github.com/NTAP/warpcore) zero-copy  userspace UDP/IPv4 stack
+on top of the [netmap](http://info.iet.unipi.it/~luigi/netmap/) packet I/O
+framework.
 
 The quant repository is [on GitHub](https://github.com/NTAP/quant), as is
 the [documentation](https://ntap.github.io/quant/).
