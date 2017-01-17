@@ -1,28 +1,32 @@
-# QUANT -- QUIC Userspace Accelerated Network Transfers
+# QUANT – QUIC Userspace Accelerated Network Transfers
 
 This will eventually be an independent C implementation of
 [QUIC](https://www.chromium.org/quic), the Google-originated proposal for a new
 HTTP/2 transport over UDP.
 
+The quant repository is [on GitHub](https://github.com/NTAP/quant), as is
+the [documentation](https://ntap.github.io/quant/).
+
 
 ## Prerequisites
 
-We use the [`cmake`](https://cmake.org/) build system,
-[`vagrant`](https://www.vagrantup.com/) for testing against Google's
-[`proto-quic`](https://github.com/google/proto-quic) implementation, as well as
+We use the `[cmake](https://cmake.org/)` build system,
+`[vagrant](https://www.vagrantup.com/)` for testing against Google's
+`[proto-quic](https://github.com/google/proto-quic)` implementation, as well as
 some other assorted tools. (Note that the [IETF flavor of
 QUIC](https://datatracker.ietf.org/wg/quic/charter/), which this implementation
 will track, is not expected to interoperate anymore with Google-QUIC.)
 
-We use [`libev`](http://software.schmorp.de/pkg/libev.html) as a basis for the
+We use `[libev](http://software.schmorp.de/pkg/libev.html)` as a basis for the
 event loop that underlies this implementation. The intent is that it will in the
-end resemble something like what [`libebb`](http://tinyclouds.org/libebb/)
-offers for HTTP/1.1 and TLS.
+end resemble something like what `[libebb](http://tinyclouds.org/libebb/) offers
+for HTTP/1.1 and TLS.
 
-We use [`TommyDS`](http://www.tommyds.it/) for a number of internal datatypes.
+We currently use `[TommyDS](http://www.tommyds.it/)` for a number of internal
+datatypes. This may change.
 
 We *plan* to use
-[`NSS`](https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSS) for its
+`[NSS](https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSS)` for its
 [TLS 1.3](https://datatracker.ietf.org/doc/draft-ietf-tls-tls13/)
 implementation. Another alternative might be [ARM
 mbed](https://www.mbed.com/en/), once it supports TLS 1.3.
@@ -30,33 +34,21 @@ mbed](https://www.mbed.com/en/), once it supports TLS 1.3.
 So you need to install some dependencies. On the Mac, the easiest way is via
 [Homebrew](http://brew.sh/), so install that first. Then, do
 
-```
-brew install cmake daemon libev nss tcpdump wireshark doxygen
-brew cask install vagrant
-```
+    brew install cmake daemon libev nss tcpdump wireshark doxygen brew cask
+    install vagrant
 
 
 ## Building
-Warpcore uses [cmake](https://cmake.org/) as a build system. To do an
+Warpcore uses `[cmake](https://cmake.org/)` as a build system. To do an
 out-of-source build of warpcore (best practice with `cmake`), do the following
 to build with `make` as a generator:
 
-```
-mkdir Debug
-cd Debug
-cmake ..
-make
-```
+    mkdir Debug cd Debug cmake .. make
 
 The default build (per above) is without optimizations and with extensive debug
 logging enabled. In order to build an optimized build, do this:
 
-```
-mkdir Release
-cd Release
-cmake -DCMAKE_BUILD_TYPE=Release ..
-make
-```
+    mkdir Release cd Release cmake -DCMAKE_BUILD_TYPE=Release .. make
 
 
 ## Testing
@@ -67,8 +59,7 @@ examples in `bin`.
 
 ## Copyright
 
-Copyright (c) 2016-2017, NetApp, Inc.
-All rights reserved.
+Copyright (c) 2016-2017, NetApp, Inc. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
 are permitted provided that the following conditions are met:
@@ -95,9 +86,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ## Acknowledgement
 
 This software has received funding from the European Union's Horizon 2020
-research and innovation program 2014-2018 under grant agreement No. 644866
-("SSICLOPS"). The European Commission is not responsible for any use that may be
-made of this software.
+research and innovation program 2014-2018 under grant agreement 644866
+(["SSICLOPS"](https://ssiclops.eu/)). The European Commission is not responsible
+for any use that may be made of this software.
 
 
 [//]: # (@example client.c)
