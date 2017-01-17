@@ -16,7 +16,7 @@ addons:
     packages:
       - doxygen
       - graphviz
-      - libev
+      - libev-dev
 
 script:
   - cmake .
