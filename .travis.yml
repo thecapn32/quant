@@ -20,6 +20,18 @@ script:
   - cmake .
   - git clone -b gh-pages https://git@github.com/NTAP/quant.git gh-pages
   - cd gh-pages
+  - git config --global push.default simple
+  - git config user.name "Travis CI"
+  - git config user.email "travis@travis-ci.org"
   - rm -rf ./*
   - touch .nojekyll
-  - doxygen $TRAVIS_BUILD_DIR/doc/Doxyfile
+  - doxygen $TRAVIS_BUILD_DIR/doc/Doxyfile 2>&1 | tee doxygen.log
+  - |
+    if [ -d "html" ] && [ -f "html/index.html" ]; then
+        mv html/* .
+        git add --all
+        git commit -m "Update doxygen documentation on branch gh-pages." \
+            -m "Travis CI build ${TRAVIS_BUILD_NUMBER}." \
+            -m "Commit: ${TRAVIS_COMMIT}."
+        # git push --force "https://${GH_REPO_TOKEN}@${GH_REPO_REF}" > /dev/null 2>&1
+
