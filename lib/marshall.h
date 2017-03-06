@@ -23,6 +23,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <arpa/inet.h>
 #include <stdint.h>
 
 #include "util.h"
@@ -36,10 +37,10 @@
 /// @return     String containing the type of @p x.
 ///
 // clang-format off
-#define type_str(x)                                                              \
+#define type_str(x)                                                            \
     _Generic((x),                                                              \
             uint8_t     : "uint8_t",                                           \
-            uint16_t    : "uint16_t",                                          \
+            uint16_t    : "uint 16_t",                                         \
             uint32_t    : "uint32_t",                                          \
             uint64_t    : "uint64_t")
 // clang-format on
@@ -77,7 +78,7 @@
         }                                                                      \
         warn(debug, "decoded %zu byte%s from " #buf "[%u..%zu] into %s " #dst  \
                     " = " fmt,                                                 \
-             __len, plural(__len), pos, pos + __len, type_str(dst), dst);        \
+             __len, plural(__len), pos, pos + __len, type_str(dst), dst);      \
         pos += __len;                                                          \
     } while (0)
 
@@ -114,6 +115,6 @@
         }                                                                      \
         warn(debug, "encoded %s " #src " = " fmt " into %zu byte%s at " #buf   \
                     "[%u..%zu]",                                               \
-             type_str(*src), *src, __len, plural(__len), pos, pos + __len);      \
+             type_str(*src), *src, __len, plural(__len), pos, pos + __len);    \
         pos += __len;                                                          \
     } while (0)

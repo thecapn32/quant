@@ -43,9 +43,9 @@ static const q_tag prst = {.as_str = "PRST"}, rnon = {.as_str = "RNON"},
                    rseq = {.as_str = "RSEQ"}, cadr = {.as_str = "CADR"};
 
 
-extern uint8_t __attribute__((const)) dec_pkt_nr_len(const uint8_t flags);
-extern uint8_t __attribute__((const)) enc_pkt_nr_len(const uint8_t n);
-extern uint8_t __attribute__((const)) calc_req_pkt_nr_len(const uint64_t n);
+extern uint8_t __attribute__((const)) dec_pkt_nr_len(uint8_t flags);
+extern uint8_t __attribute__((const)) enc_pkt_nr_len(uint8_t n);
+extern uint8_t __attribute__((const)) calc_req_pkt_nr_len(uint64_t n);
 
 
 uint16_t dec_cmn_hdr(struct q_cmn_hdr * const ph,

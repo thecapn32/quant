@@ -42,7 +42,6 @@
 #include "conn.h"
 #include "frame.h"
 #include "pkt.h"
-#include "quic.h"
 #include "quic_internal.h"
 #include "stream.h"
 #include "tommy.h"
@@ -216,9 +215,9 @@ rx(struct ev_loop * const l __attribute__((unused)),
                 c->state = CONN_ESTB;
                 warn(info, "conn %" PRIu64 " now in CONN_ESTB", c->id);
                 return;
-            } else
-                warn(warn, "client-requested version %.4s not supported",
-                     p.vers.as_str);
+            }
+            warn(warn, "client-requested version %.4s not supported",
+                 p.vers.as_str);
             tx(c, 0);
             break;
 
