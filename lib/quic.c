@@ -143,7 +143,7 @@ static void tx(struct q_conn * const c, struct q_stream * s)
         }
         v->buf = (uint8_t *)v->buf - Q_OFFSET;
         v->len += Q_OFFSET;
-        enc_pkt(c, v->buf, v->len, w_iov_max_len(w));
+        enc_pkt(c, v->buf, v->len, w_iov_max_len(w, v));
         c->out++;
         hexdump(v->buf, v->len);
     }
@@ -258,7 +258,7 @@ rx(struct ev_loop * const l __attribute__((unused)),
 
 struct w_iov_chain * q_alloc(void * const w, const uint32_t len)
 {
-    return w_alloc(w, len, Q_OFFSET); /// XXX rethink QUIC header offset
+    return w_alloc_size(w, len, Q_OFFSET); /// XXX rethink QUIC header offset
 }
 
 
@@ -278,7 +278,7 @@ uint64_t q_connect(void * const q,
     struct q_conn * const c = new_conn(id, peer, peer_len);
     c->flags |= CONN_FLAG_CLNT;
 
-    c->sock = w_bind(q, (uint16_t)plat_random());
+    c->sock = w_bind(q, (uint16_t)plat_random(), 0);
     w_connect(c->sock,
               ((const struct sockaddr_in *)(const void *)peer)->sin_addr.s_addr,
               ((const struct sockaddr_in *)(const void *)peer)->sin_port);
@@ -406,7 +406,7 @@ uint64_t q_bind(void * const q, const uint16_t port)
     // warn(debug, "enter");
 
     // bind socket
-    struct w_sock * const s = w_bind(q, ntohs(port));
+    struct w_sock * const s = w_bind(q, ntohs(port), 0);
 
     // allocate and initialize an RX watcher
     ev_io * rx_w = calloc(1, sizeof(*rx_w));
