@@ -1,5 +1,5 @@
 # This is a config file for vagrant (https://www.vagrantup.com/),
-# which will install an ubuntu/xenial64 VM, inside which we'll build
+# which will install an ubuntu/yakkety64 VM, inside which we'll build
 # and run the proto-quic quic_server (https://github.com/google/proto-quic)
 # to test our implementation against.
 
