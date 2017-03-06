@@ -3,7 +3,6 @@ include(ExternalProject)
 externalproject_add(tommyds
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/amadvance/tommyds.git
-  GIT_SHALLOW 1
   PATCH_COMMAND sed -i "" -e "s/-Wpadded// $<SEMICOLON> s/-Wcast-align// \
                   $<SEMICOLON> s/objdump/echo/" Makefile
   CONFIGURE_COMMAND ""
@@ -26,7 +25,6 @@ add_dependencies(tommy tommyds)
 externalproject_add(warp
   UPDATE_COMMAND ""
   GIT_REPOSITORY git@github.com:NTAP/warpcore.git
-  GIT_SHALLOW 1
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DBUILD_DOCUMENTATION=FALSE
@@ -68,7 +66,6 @@ externalproject_add(proto-quic
   DEPENDS vagrant-up
   GIT_REPOSITORY https://github.com/google/proto-quic.git
   # GIT_TAG 0db5f234b86699c182394bb261ee226ab800b60f
-  GIT_SHALLOW 1 # not supported in cmake 3.0
   CONFIGURE_COMMAND vagrant ssh -c "\
     echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula \
       select true | sudo debconf-set-selections && \
