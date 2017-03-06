@@ -36,7 +36,7 @@
 /// @return     String containing the type of @p x.
 ///
 // clang-format off
-#define typeof(x)                                                              \
+#define type_str(x)                                                              \
     _Generic((x),                                                              \
             uint8_t     : "uint8_t",                                           \
             uint16_t    : "uint16_t",                                          \
@@ -77,7 +77,7 @@
         }                                                                      \
         warn(debug, "decoded %zu byte%s from " #buf "[%u..%zu] into %s " #dst  \
                     " = " fmt,                                                 \
-             __len, plural(__len), pos, pos + __len, typeof(dst), dst);        \
+             __len, plural(__len), pos, pos + __len, type_str(dst), dst);        \
         pos += __len;                                                          \
     } while (0)
 
@@ -114,6 +114,6 @@
         }                                                                      \
         warn(debug, "encoded %s " #src " = " fmt " into %zu byte%s at " #buf   \
                     "[%u..%zu]",                                               \
-             typeof(*src), *src, __len, plural(__len), pos, pos + __len);      \
+             type_str(*src), *src, __len, plural(__len), pos, pos + __len);      \
         pos += __len;                                                          \
     } while (0)
