@@ -2,7 +2,6 @@
 [
         { include: ["<i386/_types.h>", "private", "<stdint.h>", "public"] },
         { include: ["<net/if_var.h>", "private", "<net/if.h>", "public"] },
-        { include: ["<secure/_stdio.h>", "private", "<stdio.h>", "public"] },
         { include: ["<secure/_string.h>", "private", "<string.h>", "public"] },
         { include: ["<sys/_endian.h>", "private", "<arpa/inet.h>", "public"] },
         { include: ["<sys/_types/_time_t.h>", "private", "<time.h>", "public"] },
@@ -14,6 +13,7 @@
         { include: ["@<_types/_uint.*>", "private", "<stdint.h>", "public"] },
         { include: ["@<sys/_pthread/.*>", "private", "<pthread.h>", "public"] },
         { include: ["@<sys/_types/_int.*>", "private", "<stdint.h>", "public"] },
+        { include: ["@<sys/_types/_iovec_t.*>", "private", "<sys/uio.h>", "public"] },
 
         { symbol: ["_OSSwapInt16", "private", "<arpa/inet.h>", "public"] },
 ]
