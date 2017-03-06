@@ -4,11 +4,11 @@ externalproject_add(tommyds
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/amadvance/tommyds.git
   GIT_SHALLOW 1
-  PATCH_COMMAND ${SED} -i .orig -e "s/-Wpadded// $<SEMICOLON> s/-Wcast-align// \
+  PATCH_COMMAND sed -i "" -e "s/-Wpadded// $<SEMICOLON> s/-Wcast-align// \
                   $<SEMICOLON> s/objdump/echo/" Makefile
   CONFIGURE_COMMAND ""
   BUILD_IN_SOURCE 1
-  BUILD_COMMAND ${MAKE}
+  BUILD_COMMAND make
   INSTALL_COMMAND ""
   BUILD_BYPRODUCTS
     ${CMAKE_CURRENT_BINARY_DIR}/tommyds-prefix/src/tommyds/tommy.o
@@ -48,8 +48,8 @@ set_target_properties(warpcore
 add_dependencies(warpcore warp)
 
 
-add_custom_target(vagrant-up ${VAGRANT} up)
-add_custom_target(vagrant-down ${VAGRANT} halt)
+add_custom_target(vagrant-up vagrant up)
+add_custom_target(vagrant-down vagrant halt)
 
 # location of proto-quic sources inside the VM
 string(REPLACE
@@ -69,7 +69,7 @@ externalproject_add(proto-quic
   GIT_REPOSITORY https://github.com/google/proto-quic.git
   # GIT_TAG 0db5f234b86699c182394bb261ee226ab800b60f
   GIT_SHALLOW 1 # not supported in cmake 3.0
-  CONFIGURE_COMMAND ${VAGRANT} ssh -c "\
+  CONFIGURE_COMMAND vagrant ssh -c "\
     echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula \
       select true | sudo debconf-set-selections && \
     export PATH=$PATH:${QUIC}/depot_tools && \
@@ -79,7 +79,7 @@ externalproject_add(proto-quic
     cd ${QUIC_CERTS} && ./generate-certs.sh \
   "
   BUILD_IN_SOURCE 1
-  BUILD_COMMAND ${VAGRANT} ssh -c "\
+  BUILD_COMMAND vagrant ssh -c "\
     export PATH=$PATH:${QUIC}/depot_tools && \
     cd ${QUIC}/src && gn gen out/Debug && \
     ninja -v -C out/Debug quic_client quic_server \
@@ -97,7 +97,7 @@ string(REPLACE
 add_custom_target(quic-server
   COMMAND
     test -f ${PROJECT_SOURCE_DIR}/${QSP} ||
-    ${VAGRANT} ssh -c "\
+    vagrant ssh -c "\
       daemon -F ${EXTDIR}/${QSP} -o ${EXTDIR}/quic_server.log -- \
         ${QUIC_BIN}/quic_server --port=6121 \
         --certificate_file=${QUIC_CERTS}/out/leaf_cert.pem \
@@ -110,8 +110,8 @@ add_custom_target(quic-server
 
 add_custom_target(kill-quic-server
   COMMAND
-    ${VAGRANT} ssh -c "pkill quic_server" 2> /dev/null &&
-    ${RM} -f ${QSP} quic_server.log || true
+    vagrant ssh -c "pkill quic_server" 2> /dev/null &&
+    rm -f ${QSP} quic_server.log || true
   DEPENDS vagrant-up
   VERBATIM
 )
@@ -119,20 +119,20 @@ add_custom_target(kill-quic-server
 set(PORT 8443)
 add_custom_target(test-${PROJECT_NAME}-server
   COMMAND
-    ${RM} -f server.log server.pcap server.core server.profraw || true &&
-    ${SUDO} ${PKILL} server sudo || true &&
-    ${DAEMON} -e LLVM_PROFILE_FILE=server.profraw -D ${CMAKE_BINARY_DIR}/bin
+    rm -f server.log server.pcap server.core server.profraw || true &&
+    sudo pkill server sudo || true &&
+    daemon -e LLVM_PROFILE_FILE=server.profraw -D ${CMAKE_BINARY_DIR}/bin
       -o server.log -- ./server &&
-    ${DAEMON} -D ${CMAKE_BINARY_DIR}/bin --
-      ${SUDO} ${TCPDUMP} -i lo0 -w server.pcap port ${PORT} &&
-    ${VAGRANT} ssh -c "\
+    daemon -D ${CMAKE_BINARY_DIR}/bin --
+      sudo tcpdump -i lo0 -w server.pcap port ${PORT} &&
+    vagrant ssh -c "\
       host=`ip route show | grep -i 'default via' | cut -d' ' -f3` ; \
       ${QUIC_BIN}/quic_client --host=$host --port=${PORT} --v=1 \
         http://example.com/ \
     " 2> /dev/null || true &&
-    ${SLEEP} 1 &&
-    ${SUDO} ${PKILL} server sudo || true &&
-    ${CAT} server.log || true
+    sleep 1 &&
+    sudo pkill server sudo || true &&
+    cat server.log || true
   DEPENDS server vagrant-up
   WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
   VERBATIM
@@ -140,7 +140,7 @@ add_custom_target(test-${PROJECT_NAME}-server
 
 add_custom_target(tshark-${PROJECT_NAME}-server-pcap
   COMMAND
-    ${TSHARK} -V -2 -n -d udp.port==${PORT},quic -O quic -r server.pcap
+    tshark -V -2 -n -d udp.port==${PORT},quic -O quic -r server.pcap
   WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
   VERBATIM
 )

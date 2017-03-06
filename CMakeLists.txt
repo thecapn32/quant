@@ -147,28 +147,3 @@ add_subdirectory(bin)
 add_subdirectory(doc)
 add_subdirectory(external)
 add_subdirectory(lib)
-
-# Make sure that a bunch of programs we depend on are installed
-include(FindPackageHandleStandardArgs)
-foreach(PROG daemon pkill tcpdump tshark sed make sleep rm
-        vagrant cat tail tmux)
-  string(TOUPPER ${PROG} VARNAME)
-  find_program(${VARNAME} ${PROG})
-  mark_as_advanced(${VARNAME})
-  find_package_handle_standard_args(${PROG} DEFAULT_MSG ${VARNAME})
-endforeach()
-
-# find_program() for sudo is unlikely to work, hence the special case; see
-# https://cmake.org/pipermail/cmake/2010-September/039520.html
-find_program(SUDO sudo)
-if(NOT SUDO)
-  set(SUDO /usr/bin/sudo)
-endif()
-mark_as_advanced(SUDO)
-find_package_handle_standard_args(sudo DEFAULT_MSG SUDO)
-
-
-
-
-# Add a "distclean" target; see http://stackoverflow.com/a/12055610/1437081
-add_custom_target(distclean COMMAND git clean -f -x)
