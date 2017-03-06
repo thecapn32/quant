@@ -1,6 +1,15 @@
 cmake_minimum_required(VERSION 3.0)
 
-project(quant VERSION 0.0.1 LANGUAGES C)
+project(quant VERSION 0.0.1 LANGUAGES C CXX)
+
+# Check for dependencies before mucking with the compiler flags
+
+# Check if _GNU_SOURCE is available.
+include(CheckSymbolExists)
+check_symbol_exists(__GNU_LIBRARY__ "features.h" _GNU_SOURCE)
+if(_GNU_SOURCE)
+  add_definitions(-D_GNU_SOURCE)
+endif()
 
 # Build "Debug" type by default
 if(NOT CMAKE_BUILD_TYPE)
@@ -8,11 +17,35 @@ if(NOT CMAKE_BUILD_TYPE)
         CACHE STRING "Set build type (default Debug)" FORCE)
 endif()
 
+# Use modern C and C++
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_C_STANDARD 11)
+
 # Set general compile flags, if they are supported
 include(CheckCCompilerFlag)
-foreach(FLAG -std=c11 -march=native -Wextra -Wpedantic -Weverything -Werror
-        -Wno-missing-field-initializers -Wno-missing-braces -fcolor-diagnostics)
-  string(REGEX REPLACE "[-=]" "" F ${FLAG})
+include(CheckCXXCompilerFlag)
+foreach(FLAG -march=native -Wextra -Wpedantic -Weverything -Werror
+        -fcolor-diagnostics)
+  string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
+  check_cxx_compiler_flag(${FLAG} ${F})
+  if(${F})
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${FLAG}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${FLAG}")
+  endif()
+endforeach()
+
+# Set CXX flags
+foreach(FLAG -Wno-c++11-extensions -Wno-c++98-compat -Wno-global-constructors)
+  string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
+  check_cxx_compiler_flag(${FLAG} ${F})
+  if(${F})
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${FLAG}")
+  endif()
+endforeach()
+
+# Set C flags
+foreach(FLAG -Wno-missing-field-initializers -Wno-missing-braces)
+  string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
   check_c_compiler_flag(${FLAG} ${F})
   if(${F})
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${FLAG}")
@@ -21,31 +54,44 @@ endforeach()
 
 # flags for "Debug" and "None" builds
 set(CMAKE_C_FLAGS_DEBUG "-O0 -g")
+set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
+  # Default debug logging level
+  if(NOT DEFINED DLEVEL)
+    set(DLEVEL "debug")
+  endif()
+
   # Set some additional flags for Debug builds
   set(FLAGS -fsanitize=address -fsanitize=memory -fsanitize-memory-track-origins
           -fsanitize=thread -fno-omit-frame-pointer)
   if(NOT CMAKE_SYSTEM_NAME MATCHES FreeBSD)
     # -fsanitize=leak does not work on FreeBSD
     set(FLAGS ${FLAGS} -fsanitize=leak)
-  elseif(NOT CMAKE_C_COMPILER_ID MATCHES MATCHES AppleClang)
-    # -fsanitize=undefined -fno-sanitize=alignment does not work on Apple
+  elseif(NOT CMAKE_SYSTEM_NAME MATCHES Darwin)
+    # -fsanitize=undefined -fno-sanitize=alignment does not work on Darwin
     set(FLAGS ${FLAGS} -fsanitize=undefined -fno-sanitize=alignment)
   endif()
   foreach(FLAG ${FLAGS})
-    string(REGEX REPLACE "[-=]" "" F ${FLAG})
+    string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
     check_c_compiler_flag(${FLAG} ${F})
     if(${F})
       set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${FLAG}")
+      set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${FLAG}")
     endif()
   endforeach()
 else()
+  # Default logging level
+  if(NOT DEFINED DLEVEL)
+    set(DLEVEL "notice")
+  endif()
+
   # See if we can use LTO
   check_c_compiler_flag(-flto LTO)
   if(${LTO})
     # Turn LTO on
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -flto")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto")
     # Use the correct toolchain for LTO, if enabled
     if(CMAKE_C_COMPILER_ID MATCHES "Clang")
       set(CMAKE_AR llvm-ar)
@@ -55,24 +101,52 @@ else()
       set(CMAKE_RANLIB gcc-ranlib)
     endif()
   endif()
+
+  # Use include-what-you-use to check #includes, if it's installed
+  find_program(IWYU NAMES include-what-you-use iwyu)
+  if(IWYU)
+    message(STATUS "Found include-what-you-use: ${IWYU}")
+    string(TOLOWER ${CMAKE_SYSTEM_NAME} CMAKE_SYSTEM_NAME_LC)
+    set(CMAKE_C_INCLUDE_WHAT_YOU_USE
+        ${IWYU} -Xiwyu
+        --mapping_file=${PROJECT_SOURCE_DIR}/misc/${CMAKE_SYSTEM_NAME_LC}.imp)
+    set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE ${CMAKE_C_INCLUDE_WHAT_YOU_USE})
+  endif()
+
+  # Use clang-tidy for extra warnings, if it's installed
+  find_program(CLANGTIDY NAMES clang-tidy)
+  if(CLANGTIDY)
+    message(STATUS "Found clang-tidy: ${CLANGTIDY}")
+    set(CLANG_TIDY_CHECKS *
+        -google-readability-braces-around-statements
+        -readability-braces-around-statements
+        -google-runtime-references
+        -clang-analyzer-alpha.deadcode.UnreachableCode
+    )
+    string(REPLACE ";" "," CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS}")
+    set(CMAKE_C_CLANG_TIDY ${CLANGTIDY} -checks=${CLANG_TIDY_CHECKS})
+    set(CMAKE_CXX_CLANG_TIDY ${CMAKE_C_CLANG_TIDY})
+  endif()
 endif()
 
 # flags for "Release" builds
 set(CMAKE_C_FLAGS_RELEASE "-DNDEBUG -Ofast")
+set(CMAKE_CXX_FLAGS_RELEASE "-DNDEBUG -Ofast")
 
 # flags for "RelWithDebInfo" builds
-set(CMAKE_C_FLAGS_RELWITHDEBINFO "-DNDEBUG -Ofast -g")
-
-# Check if _GNU_SOURCE is available.
-include(CheckSymbolExists)
-check_symbol_exists(__GNU_LIBRARY__ "features.h" _GNU_SOURCE)
-if(_GNU_SOURCE)
-  add_definitions(-D_GNU_SOURCE)
-endif()
+set(CMAKE_C_FLAGS_RELWITHDEBINFO "-Ofast -g")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-Ofast -g")
 
 # Extract compile options into variable, for doxygen's CLANG_ASSISTED_PARSING
 get_property(COMPILE_OPTIONS DIRECTORY PROPERTY COMPILE_OPTIONS)
 string(REPLACE ";" " " COMPILE_OPTIONS "${COMPILE_OPTIONS}")
+
+add_definitions(-DDLEVEL=${DLEVEL})
+
+add_subdirectory(bin)
+add_subdirectory(doc)
+add_subdirectory(external)
+add_subdirectory(lib)
 
 # Make sure that a bunch of programs we depend on are installed
 include(FindPackageHandleStandardArgs)
@@ -93,44 +167,8 @@ endif()
 mark_as_advanced(SUDO)
 find_package_handle_standard_args(sudo DEFAULT_MSG SUDO)
 
-string(TOLOWER ${CMAKE_SYSTEM_NAME} CMAKE_SYSTEM_NAME_LC)
-if(CMAKE_BUILD_TYPE MATCHES Debug)
-  # Use include-what-you-use to check #includes, if it's installed
-  find_program(IWYU NAMES include-what-you-use iwyu)
-  if(IWYU)
-    message(STATUS "Found include-what-you-use: ${IWYU}")
-    set(CMAKE_C_INCLUDE_WHAT_YOU_USE
-        ${IWYU} -Xiwyu --no_comments -Xiwyu
-        --mapping_file=${PROJECT_SOURCE_DIR}/misc/${CMAKE_SYSTEM_NAME_LC}.imp)
-  endif()
 
-  # Use clang-tidy for extra warnings, if it's installed
-  find_program(CLANGTIDY NAMES clang-tidy)
-  if(CLANGTIDY)
-    message(STATUS "Found clang-tidy: ${CLANGTIDY}")
-    set(CLANG_TIDY_CHECKS *
-        -google-readability-braces-around-statements
-        -readability-braces-around-statements
-        -google-readability-function-size
-        -readability-function-size
-        -google-readability-todo
-        -readability-else-after-return
-        -readability-avoid-const-params-in-decls
-        -clang-analyzer-alpha.deadcode.UnreachableCode
-        -clang-analyzer-alpha.core.CastToStruct
-        -clang-analyzer-alpha.core.CastSize)
-    string(REPLACE ";" "," CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS}")
-    set(CMAKE_C_CLANG_TIDY ${CLANGTIDY} -checks=${CLANG_TIDY_CHECKS})
-  endif()
-endif()
 
-# add_definitions(-DDLEVEL=info)
-# add_definitions(-DDCOMPONENT="warp")
-
-add_subdirectory(bin)
-add_subdirectory(doc)
-add_subdirectory(external)
-add_subdirectory(lib)
 
 # Add a "distclean" target; see http://stackoverflow.com/a/12055610/1437081
 add_custom_target(distclean COMMAND git clean -f -x)
