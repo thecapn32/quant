@@ -27,6 +27,10 @@
 #include <stdint.h>
 #include <string.h>
 
+#ifdef __linux__
+#include <byteswap.h>
+#endif
+
 #include <warpcore.h>
 
 #include "conn.h"
