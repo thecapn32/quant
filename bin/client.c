@@ -134,7 +134,7 @@ int main(int argc, char * argv[])
             warn(info, "payload len %u", v->len);
 
             // send the data
-            warn(info, "writing: %s", v->buf);
+            warn(info, "writing: %s", (char *)v->buf);
             q_write(cid[n], sid, c);
 
             // return the buffer
