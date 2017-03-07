@@ -26,6 +26,18 @@
 #include <arpa/inet.h>
 #include <stdint.h>
 
+#if defined(HAVE_ENDIAN_H)
+// e.g., Linux
+#include <endian.h>
+#define ntohll be64toh
+#define htonll htobe64
+#elif defined(HAVE_SYS_ENDIAN_H)
+// e.g., FreeBSD
+#include <sys/endian.h>
+#define ntohll be64toh
+#define htonll htobe64
+#endif
+
 #include "util.h"
 
 

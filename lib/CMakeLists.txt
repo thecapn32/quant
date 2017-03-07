@@ -1,6 +1,9 @@
+check_symbol_exists(htobe64 endian.h HAVE_ENDIAN_H)
+check_symbol_exists(htobe64 sys/endian.h HAVE_SYS_ENDIAN_H)
+
 string(TOUPPER ${PROJECT_NAME} PROJECT_NAME_UC)
-configure_file(version.h.in version.h)
-configure_file(version.c.in version.c)
+configure_file(config.h.in config.h)
+configure_file(config.c.in config.c)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 # find_library(LIBNSS_LIB NAMES nss nss3 PATHS /usr/local/opt/nss/lib)
@@ -17,7 +20,7 @@ find_package_handle_standard_args(libev DEFAULT_MSG LIBEV_LIB LIBEV_INCLUDE)
 
 set(${PROJECT_NAME}_sources
   fnv_1a.c pkt.c frame.c quic.c stream.c conn.c
-  ${CMAKE_CURRENT_BINARY_DIR}/version.c)
+  ${CMAKE_CURRENT_BINARY_DIR}/config.c)
 add_library(${PROJECT_NAME} STATIC ${${PROJECT_NAME}_sources})
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
