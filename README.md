@@ -13,12 +13,7 @@ the [documentation](https://ntap.github.io/quant/).
 
 ## Prerequisites
 
-We use the [cmake](https://cmake.org/) build system,
-[vagrant](https://www.vagrantup.com/) for testing against Google's
-[proto-quic](https://github.com/google/proto-quic) implementation, as well as
-some other assorted tools. (Note that the [IETF flavor of
-QUIC](https://datatracker.ietf.org/wg/quic/charter/), which this implementation
-will track, is not expected to interoperate anymore with Google-QUIC.)
+We use the [cmake](https://cmake.org/) build system.
 
 We use [libev](http://software.schmorp.de/pkg/libev.html) as a basis for the
 event loop that underlies this implementation. The intent is that it will in the
@@ -37,8 +32,7 @@ mbed](https://www.mbed.com/en/), once it supports TLS 1.3.
 So you need to install some dependencies. On the Mac, the easiest way is via
 [Homebrew](http://brew.sh/), so install that first. Then, do
 
-    brew install cmake daemon libev nss tcpdump wireshark doxygen
-    brew cask install vagrant
+    brew install cmake libev nss doxygen
 
 
 ## Building
