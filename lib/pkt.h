@@ -27,8 +27,6 @@
 
 #include <stdint.h>
 
-#include <warpcore.h>
-
 #include "quic_internal.h"
 
 struct q_conn;
@@ -56,55 +54,11 @@ struct q_cmn_hdr {
 #define F_UNUSED 0x80    // reserved (must be 0)
 
 
-/// Decode the packet number length information in the flags field of the
-/// public
-/// header.
-///
-/// @param[in]  flags  The flags in a public header
-///
-/// @return     Length of the packet number field in bytes.
-///
-inline uint8_t __attribute__((const)) dec_pkt_nr_len(const uint8_t flags)
-{
-    const uint8_t l = (flags & 0x30) >> 4;
-    ensure(/* l >= 0 && */ l <= 3, "cannot decode packet number length %u", l);
-    const uint8_t dec[] = {1, 2, 3, 6};
-    return dec[l];
-}
+extern uint8_t __attribute__((const)) dec_pkt_nr_len(const uint8_t flags);
 
-/// Encode a byte length @p n into a representation that can be or'ed into the
-/// public header flags.
-///
-/// @param[in]  n     Byte length to encode.
-///
-/// @return     Encoded byte length suitable for or'ing into the public header
-///             flags.
-///
-inline uint8_t __attribute__((const)) enc_pkt_nr_len(const uint8_t n)
-{
-    ensure(n == 1 || n == 2 || n == 4 || n == 6,
-           "cannot encode packet number length %u", n);
-    const uint8_t enc[] = {0xFF, 0, 1, 0xFF, 3, 0xFF, 4}; // 0xFF invalid
-    return enc[n];
-}
+extern uint8_t __attribute__((const)) enc_pkt_nr_len(const uint8_t n);
 
-
-/// Calculate the minimum number of bytes needed to encode packet number @p n.
-///
-/// @param[in]  n     A packet number.
-///
-/// @return     The minimum number of bytes needed to encode @p n.
-///
-inline uint8_t __attribute__((const)) calc_req_pkt_nr_len(const uint64_t n)
-{
-    if (n < UINT8_MAX)
-        return 1;
-    if (n < UINT16_MAX)
-        return 2;
-    if (n < UINT32_MAX)
-        return 4;
-    return 6;
-}
+extern uint8_t __attribute__((const)) calc_req_pkt_nr_len(const uint64_t n);
 
 extern uint16_t __attribute__((nonnull))
 dec_cmn_hdr(struct q_cmn_hdr * const ph,
