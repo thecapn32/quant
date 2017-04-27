@@ -50,8 +50,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 
   # Set some additional flags for Debug builds
   set(FLAGS -fsanitize=address -fsanitize=memory
-          # -fsanitize-memory-track-origins
-          -fsanitize=thread -fno-omit-frame-pointer)
+            # -fsanitize-memory-track-origins
+            -fsanitize=thread -fno-omit-frame-pointer)
   if(NOT CMAKE_SYSTEM_NAME MATCHES FreeBSD)
     # -fsanitize=leak does not work on FreeBSD
     set(FLAGS ${FLAGS} -fsanitize=leak)
@@ -78,7 +78,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
   endif()
 
   # Use clang-tidy for extra warnings, if it's installed
-  find_program(CLANGTIDY NAMES clang-tidy)
+  find_program(CLANGTIDY NAMES clang-tidy clang-tidy40 clang-tidy39
++              clang-tidy38 clang-tidy37)
   if(CLANGTIDY)
     message(STATUS "Found clang-tidy: ${CLANGTIDY}")
     set(CLANG_TIDY_CHECKS *
@@ -86,6 +87,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
         -readability-braces-around-statements
         -google-runtime-references
         -clang-analyzer-alpha.deadcode.UnreachableCode
+        -cert-err58-cpp
         -google-readability-todo
         -google-readability-function-size
         -readability-function-size
