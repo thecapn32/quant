@@ -66,7 +66,7 @@ uint16_t enc_stream_frames(struct q_conn * const c,
     struct q_stream * s = 0;
     hash_foreach_arg(&c->streams, out_pending, &s);
     if (s) {
-        const uint32_t l = w_iov_chain_len(s->ov, Q_OFFSET);
+        const uint32_t l = w_iov_stailq_len(s->ov, Q_OFFSET);
         warn(debug, "str %u has %u byte%s pending payload data", s->id, l,
              plural(l));
         i = enc_stream_frame(s, buf, i, len, max_len);

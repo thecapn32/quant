@@ -38,7 +38,7 @@ struct q_stream {
     uint8_t state;
     uint8_t _unused[3];
 
-    struct w_iov_chain * ov; ///< w_chain containing outbound data.
+    struct w_iov_stailq * ov; ///< tail queue containing outbound data.
     uint64_t out_off;
 
     uint8_t * in;

@@ -115,8 +115,7 @@ pick_server_vers(const struct q_cmn_hdr * const p)
 static void tx(struct q_conn * const c, struct q_stream * s)
 {
     // warn(info, "entering %s for conn %" PRIu64, __func__, c->id);
-    struct warpcore * const w = w_engine(c->sock);
-    // struct w_iov_chain * o = 0;
+    struct w_engine * const w = w_engine(c->sock);
 
     if (s == 0)
         s = new_stream(c, 1);
@@ -163,8 +162,10 @@ rx(struct ev_loop * const l __attribute__((unused)),
 {
     // warn(info, "entering %s for desc %u", __func__, w->fd);
     w_nic_rx(w_engine(w->data));
+    struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
+    w_rx(w->data, &i);
     struct w_iov * v;
-    STAILQ_FOREACH (v, w_rx(w->data), next) {
+    STAILQ_FOREACH (v, &i, next) {
         ensure(v != 0, "no data received for this socket");
         ensure(v->len <= MAX_PKT_LEN,
                "received %u-byte packet, larger than MAX_PKT_LEN of %u", v->len,
@@ -255,15 +256,15 @@ rx(struct ev_loop * const l __attribute__((unused)),
 }
 
 
-struct w_iov_chain * q_alloc(void * const w, const uint32_t len)
+void q_alloc(void * const w, struct w_iov_stailq * const q, const uint32_t len)
 {
-    return w_alloc_size(w, len, Q_OFFSET); /// XXX rethink QUIC header offset
+    w_alloc_len(w, q, len, Q_OFFSET); /// XXX rethink QUIC header offset
 }
 
 
-void q_free(void * const w, struct w_iov_chain * const c)
+void q_free(void * const w, struct w_iov_stailq * const q)
 {
-    w_free(w, c);
+    w_free(w, q);
 }
 
 
@@ -319,7 +320,7 @@ static void __attribute__((nonnull)) check_conn(void * obj)
 
 void q_write(const uint64_t cid,
              const uint32_t sid,
-             struct w_iov_chain * const chain)
+             struct w_iov_stailq * const q)
 {
     struct q_conn * const c = get_conn(cid);
     ensure(c, "conn %" PRIu64 " does not exist", cid);
@@ -327,7 +328,7 @@ void q_write(const uint64_t cid,
     ensure(s, "stream %u on conn %" PRIu64 " does not exist", sid, cid);
 
     pthread_mutex_lock(&lock);
-    STAILQ_CONCAT(s->ov, chain);
+    STAILQ_CONCAT(s->ov, q);
     ev_io_start(loop, c->rx_w);
     ev_async_send(loop, &tx_w);
     warn(warn, "waiting for write to complete");

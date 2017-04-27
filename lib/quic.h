@@ -29,7 +29,7 @@
 #include <stdint.h>
 #include <sys/socket.h>
 
-struct w_iov_chain;
+struct w_iov_stailq;
 
 
 extern void * __attribute__((nonnull))
@@ -49,7 +49,7 @@ q_bind(void * const q, const uint16_t port);
 
 extern void __attribute__((nonnull)) q_write(const uint64_t cid,
                                              const uint32_t sid,
-                                             struct w_iov_chain * const chain);
+                                             struct w_iov_stailq * const q);
 
 extern size_t __attribute__((nonnull)) q_read(const uint64_t cid,
                                               uint32_t * const sid,
@@ -58,7 +58,7 @@ extern size_t __attribute__((nonnull)) q_read(const uint64_t cid,
 
 extern uint32_t q_rsv_stream(const uint64_t cid);
 
-extern struct w_iov_chain * __attribute__((nonnull))
-q_alloc(void * const w, const uint32_t len);
+extern void __attribute__((nonnull))
+q_alloc(void * const w, struct w_iov_stailq * const q, const uint32_t len);
 
-extern void q_free(void * const w, struct w_iov_chain * const c);
+extern void q_free(void * const w, struct w_iov_stailq * const q);

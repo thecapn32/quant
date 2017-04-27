@@ -66,7 +66,7 @@ int main(int argc, char * argv[])
 {
     char * ifname = "lo0";
     char * dest = "127.0.0.1";
-    char * port = "6121";
+    char * port = "8443";
     long conns = 1;
     long timeout = 3;
     int ch;
@@ -122,9 +122,10 @@ int main(int argc, char * argv[])
             const uint32_t sid = q_rsv_stream(cid[n]);
 
             // allocate buffers to transmit a packet
-            struct w_iov_chain * const c = q_alloc(q, 1024);
-            struct w_iov * const v = STAILQ_FIRST(c);
-            ensure(STAILQ_NEXT(v, next) == 0, "w_iov_chain too long");
+            struct w_iov_stailq o = STAILQ_HEAD_INITIALIZER(o);
+            q_alloc(q, &o, 1024);
+            struct w_iov * const v = STAILQ_FIRST(&o);
+            ensure(STAILQ_NEXT(v, next) == 0, "w_iov_stailq too long");
 
             // add some payload data
             v->len = (uint16_t)snprintf(
@@ -135,10 +136,10 @@ int main(int argc, char * argv[])
 
             // send the data
             warn(info, "writing: %s", (char *)v->buf);
-            q_write(cid[n], sid, c);
+            q_write(cid[n], sid, &o);
 
             // return the buffer
-            q_free(q, c);
+            q_free(q, &o);
         }
 
         // close the QUIC connection
