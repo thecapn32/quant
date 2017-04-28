@@ -33,7 +33,7 @@
 #include <byteswap.h>
 #endif
 
-#include <warpcore.h>
+#include <warpcore/warpcore.h>
 
 #include "frame.h"
 #include "marshall.h"

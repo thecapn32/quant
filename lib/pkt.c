@@ -31,7 +31,7 @@
 #include <byteswap.h>
 #endif
 
-#include <warpcore.h>
+#include <warpcore/warpcore.h>
 
 #include "conn.h"
 #include "fnv_1a.h"

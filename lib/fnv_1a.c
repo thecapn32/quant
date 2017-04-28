@@ -26,7 +26,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <warpcore.h>
+#include <warpcore/warpcore.h>
 
 #include "fnv_1a.h"
 

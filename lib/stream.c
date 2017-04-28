@@ -28,7 +28,7 @@
 #include <stdlib.h>
 #include <sys/queue.h>
 
-#include <warpcore.h>
+#include <warpcore/warpcore.h>
 
 #include "conn.h"
 #include "frame.h"

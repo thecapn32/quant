@@ -37,7 +37,7 @@
 #include <sys/socket.h>
 #include <time.h>
 
-#include <warpcore.h>
+#include <warpcore/warpcore.h>
 
 #include "config.h"
 #include "conn.h"
@@ -507,6 +507,11 @@ tx_cb(struct ev_loop * const l __attribute__((unused)),
 
 void * q_init(const char * const ifname, const long timeout)
 {
+    // check versions
+    ensure(WARPCORE_VERSION_MAJOR == 0 && WARPCORE_VERSION_MINOR == 4,
+           "%s version %s not compatible with %s version %s", quant_name,
+           quant_version, warpcore_name, warpcore_version);
+
     // initialize warpcore, the PRNG, and local state
     void * const w = w_init(ifname, 0);
     srandom((unsigned)time(0));
