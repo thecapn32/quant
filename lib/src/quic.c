@@ -39,10 +39,10 @@
 
 #include <warpcore/warpcore.h>
 
-#include "config.h"
 #include "conn.h"
 #include "frame.h"
 #include "pkt.h"
+#include "quic/config.h"
 #include "quic_internal.h"
 #include "stream.h"
 #include "tommy.h"

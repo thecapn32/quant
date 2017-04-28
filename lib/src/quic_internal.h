@@ -27,8 +27,9 @@
 
 // #include <pthread.h>
 
+#include <quic/quic.h>
+
 #include "conn.h"
-#include "quic.h"
 #include "stream.h"
 
 

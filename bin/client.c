@@ -35,9 +35,8 @@
 #include <sys/queue.h>
 #include <sys/socket.h>
 
+#include <quic/quic.h>
 #include <warpcore/warpcore.h>
-
-#include "quic.h"
 
 
 #define MAX_CONNS 10

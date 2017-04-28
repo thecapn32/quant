@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.0)
 
-project(quant VERSION 0.0.1 LANGUAGES C)
+project(quant VERSION 0.0.2 LANGUAGES C)
 
 # Check for dependencies before mucking with the compiler flags
 

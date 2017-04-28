@@ -32,9 +32,8 @@
 #include <string.h>
 #include <sys/param.h>
 
+#include <quic/quic.h>
 #include <warpcore/warpcore.h>
-
-#include "quic.h"
 
 
 static void usage(const char * const name,
