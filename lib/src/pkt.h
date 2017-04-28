@@ -27,7 +27,7 @@
 
 #include <stdint.h>
 
-#include "quic_internal.h"
+#include "quic.h"
 
 struct q_conn;
 

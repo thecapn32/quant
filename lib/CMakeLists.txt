@@ -2,7 +2,7 @@ check_symbol_exists(htobe64 endian.h HAVE_ENDIAN_H)
 check_symbol_exists(htobe64 sys/endian.h HAVE_SYS_ENDIAN_H)
 
 string(TOUPPER ${PROJECT_NAME} PROJECT_NAME_UC)
-configure_file(include/quic/config.h.in include/quic/config.h)
+configure_file(include/${PROJECT_NAME}/config.h.in include/${PROJECT_NAME}/config.h)
 configure_file(src/config.c.in src/config.c)
 
 include(GNUInstallDirs)
@@ -53,6 +53,7 @@ add_library(${PROJECT_NAME}
 set_target_properties(${PROJECT_NAME}
                       PROPERTIES
                         INTERPROCEDURAL_OPTIMIZATION True
+                        OUTPUT_NAME ${PROJECT_NAME}
                         VERSION ${PROJECT_VERSION}
                         SOVERSION ${PROJECT_VERSION_MAJOR})
 
@@ -68,12 +69,12 @@ install(TARGETS ${PROJECT_NAME} EXPORT ${PROJECT_NAME}_config
         LIBRARY  DESTINATION ${CMAKE_INSTALL_LIBDIR}
         RUNTIME  DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-install(DIRECTORY include/quic
+install(DIRECTORY include/${PROJECT_NAME}
         DESTINATION include
         FILES_MATCHING PATTERN "*.h")
 
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/include/quic/config.h
-        DESTINATION include/quic)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/include/${PROJECT_NAME}/config.h
+        DESTINATION include/${PROJECT_NAME})
 
 find_package(Threads)
 

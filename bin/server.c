@@ -32,7 +32,7 @@
 #include <string.h>
 #include <sys/param.h>
 
-#include <quic/quic.h>
+#include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
 

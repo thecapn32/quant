@@ -32,7 +32,7 @@
 
 #include "conn.h"
 #include "frame.h"
-#include "quic_internal.h"
+#include "quic.h"
 #include "stream.h"
 #include "tommy.h"
 

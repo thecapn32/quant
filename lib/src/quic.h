@@ -25,16 +25,11 @@
 
 #pragma once
 
-// #include <pthread.h>
-
-#include <quic/quic.h>
-
-#include "conn.h"
-#include "stream.h"
-
+#include <pthread.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #define Q_OFFSET 96
-
 
 extern pthread_mutex_t lock;
 extern pthread_cond_t read_cv;

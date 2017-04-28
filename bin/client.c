@@ -35,7 +35,7 @@
 #include <sys/queue.h>
 #include <sys/socket.h>
 
-#include <quic/quic.h>
+#include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
 

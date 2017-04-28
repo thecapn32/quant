@@ -29,6 +29,8 @@
 #include <stdint.h>
 #include <sys/socket.h>
 
+#include <quant/config.h> // IWYU pragma: export
+
 struct w_iov_stailq;
 
 
@@ -47,9 +49,8 @@ extern void q_close(const uint64_t cid);
 extern uint64_t __attribute__((nonnull))
 q_bind(void * const q, const uint16_t port);
 
-extern void __attribute__((nonnull)) q_write(const uint64_t cid,
-                                             const uint32_t sid,
-                                             struct w_iov_stailq * const q);
+extern void __attribute__((nonnull))
+q_write(const uint64_t cid, const uint32_t sid, struct w_iov_stailq * const q);
 
 extern size_t __attribute__((nonnull)) q_read(const uint64_t cid,
                                               uint32_t * const sid,

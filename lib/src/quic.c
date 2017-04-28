@@ -37,13 +37,13 @@
 #include <sys/socket.h>
 #include <time.h>
 
+#include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
 #include "frame.h"
 #include "pkt.h"
-#include "quic/config.h"
-#include "quic_internal.h"
+#include "quic.h"
 #include "stream.h"
 #include "tommy.h"
 

@@ -38,7 +38,7 @@
 #include "frame.h"
 #include "marshall.h"
 #include "pkt.h"
-#include "quic_internal.h"
+#include "quic.h"
 #include "stream.h"
 #include "tommy.h"
 

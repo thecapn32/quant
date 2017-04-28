@@ -1,4 +1,4 @@
-#include "quic/config.h"
+#include "@PROJECT_NAME@/config.h"
 
 /// The name of this library.
 const char @PROJECT_NAME@_name[] = "@PROJECT_NAME@";
