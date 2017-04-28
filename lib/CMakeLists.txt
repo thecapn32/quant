@@ -29,11 +29,9 @@ add_library(${PROJECT_NAME}_static
             STATIC ${${PROJECT_NAME}_sources})
 
 set_target_properties(${PROJECT_NAME}_static
-                      PROPERTIES OUTPUT_NAME ${PROJECT_NAME})
-
-set_target_properties(${PROJECT_NAME}_static
                       PROPERTIES
                         INTERPROCEDURAL_OPTIMIZATION True
+                        OUTPUT_NAME ${PROJECT_NAME}
                         VERSION ${PROJECT_VERSION}
                         SOVERSION ${PROJECT_VERSION_MAJOR})
 
@@ -69,6 +67,13 @@ install(TARGETS ${PROJECT_NAME} EXPORT ${PROJECT_NAME}_config
         ARCHIVE  DESTINATION ${CMAKE_INSTALL_LIBDIR}
         LIBRARY  DESTINATION ${CMAKE_INSTALL_LIBDIR}
         RUNTIME  DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+install(DIRECTORY include/quic
+        DESTINATION include
+        FILES_MATCHING PATTERN "*.h")
+
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/include/quic/config.h
+        DESTINATION include/quic)
 
 find_package(Threads)
 
