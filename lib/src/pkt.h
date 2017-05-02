@@ -36,37 +36,27 @@ struct q_conn;
 #define MAX_NONCE_LEN 32
 #define HASH_LEN 12
 
-/// A QUIC public header.
-struct q_cmn_hdr {
-    uint8_t flags;
-    uint64_t cid;
-    q_tag vers;
-    uint64_t nr;
-    uint8_t aead[];
-} __attribute__((packed));
+#define F_LONG_HDR 0x80
 
+#define F_LH_TYPE_VERS_NEG 0x01
 
-#define F_VERS 0x01
-#define F_PUB_RST 0x02
-#define F_KEY_PHS 0x04
-#define F_CID 0x08
-#define F_MULTIPATH 0x40 // reserved
-#define F_UNUSED 0x80    // reserved (must be 0)
+#define F_SH_CID 0x40
+#define F_SH_KEY_PHASE 0x20
 
-
-extern uint8_t __attribute__((const)) dec_pkt_nr_len(const uint8_t flags);
-
-extern uint8_t __attribute__((const)) enc_pkt_nr_len(const uint8_t n);
-
-extern uint8_t __attribute__((const)) calc_req_pkt_nr_len(const uint64_t n);
-
-extern uint16_t __attribute__((nonnull))
-dec_cmn_hdr(struct q_cmn_hdr * const ph,
-            const uint8_t * const buf,
-            const uint16_t len,
-            struct q_conn ** const c);
 
 extern uint16_t __attribute__((nonnull)) enc_pkt(struct q_conn * const c,
                                                  uint8_t * const buf,
                                                  const uint16_t len,
                                                  const uint16_t max_len);
+
+extern uint8_t __attribute__((nonnull))
+dec_flags(const void * const buf, const uint16_t len);
+
+extern uint64_t __attribute__((nonnull))
+dec_cid(const void * const buf, const uint16_t len);
+
+extern uint64_t __attribute__((nonnull))
+dec_nr(const void * const buf, const uint16_t len);
+
+extern q_tag __attribute__((nonnull))
+dec_vers(const void * const buf, const uint16_t len);

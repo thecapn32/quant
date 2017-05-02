@@ -41,7 +41,7 @@
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
-#include "frame.h"
+// #include "frame.h"
 #include "pkt.h"
 #include "quic.h"
 #include "stream.h"
@@ -52,7 +52,7 @@ struct ev_loop;
 
 /// QUIC version supported by this implementation in order of preference.
 const q_tag vers[] = {{.as_str = "Q025"}, // "Q025" is draft-hamilton
-                      // {.as_str = "Q036"},
+                      {.as_str = "Q036"},
                       {.as_int = 0}};
 
 const size_t vers_len = sizeof(vers);
@@ -69,11 +69,10 @@ pthread_cond_t read_cv;
 static uint64_t accept_queue;
 
 
-static uint8_t __attribute__((nonnull))
-pick_vers(const struct q_cmn_hdr * const p)
+static uint8_t __attribute__((const)) pick_vers(const q_tag v)
 {
     for (uint8_t i = 0; vers[i].as_int; i++)
-        if (p->vers.as_int == vers[i].as_int)
+        if (v.as_int == vers[i].as_int)
             return i;
 
     // we're out of matching candidates, return index of final "zero" version
@@ -82,14 +81,13 @@ pick_vers(const struct q_cmn_hdr * const p)
 }
 
 
-static uint8_t __attribute__((nonnull))
-pick_server_vers(const struct q_cmn_hdr * const p)
+static uint8_t __attribute__((const)) pick_server_vers(const q_tag v)
 {
     // first, check if the version in the public header is acceptable to us
     for (uint8_t i = 0; vers[i].as_int; i++) {
         warn(debug, "checking server vers %.4s against our prio %u = %.4s",
-             p->vers.as_str, i, vers[i].as_str);
-        if (vers[i].as_int == p->vers.as_int)
+             v.as_str, i, vers[i].as_str);
+        if (vers[i].as_int == v.as_int)
             return i;
     }
 
@@ -173,60 +171,55 @@ rx(struct ev_loop * const l __attribute__((unused)),
         warn(debug, "received %u byte%s", v->len, plural(v->len));
         hexdump(v->buf, v->len);
 
-        struct q_cmn_hdr p = {0};
-        struct q_conn * c = 0;
-        uint16_t i = dec_cmn_hdr(&p, v->buf, v->len, &c);
-
+        const uint64_t cid = dec_cid(v->buf, v->len);
+        struct q_conn * c = get_conn(cid);
         if (c == 0) {
             // this is a packet for a new connection, create it
-            ensure(p.flags & F_CID, "no conn ID in initial packet");
             const struct sockaddr_in peer = {.sin_family = AF_INET,
                                              .sin_port = v->port,
                                              .sin_addr = {.s_addr = v->ip}};
             socklen_t peer_len = sizeof(peer);
-            c = new_conn(p.cid, (const struct sockaddr *)&peer, peer_len);
-            c->in = p.nr;
-            // if it gets created here, this is a server connection, so no need
-            // to
-            // change c->flags
-            // XXX
-            accept_queue = p.cid;
+            c = new_conn(cid, (const struct sockaddr *)&peer, peer_len);
+            c->in = dec_nr(v->buf, v->len);
+            accept_queue = cid;
             pthread_mutex_lock(&lock);
             pthread_cond_signal(&accept_cv);
             pthread_mutex_unlock(&lock);
         }
 
-        if (i <= v->len)
-            // if there are bytes after the public header, we have frames
-            // i +=
-            dec_frames(c, &p, &((uint8_t *)(v->buf))[i], v->len - i);
+        // if (i <= v->len)
+        // if there are bytes after the public header, we have frames
+        // i +=
+        // dec_frames(c, &p, &((uint8_t *)(v->buf))[i], v->len - i);
 
         switch (c->state) {
         case CONN_CLSD:
-            ensure(p.flags & F_VERS, "no version in initial packet");
+            ensure(dec_flags(v->buf, v->len) & F_LONG_HDR, "short header");
             c->state = CONN_VERS_RECV;
             warn(info, "conn %" PRIu64 " now in CONN_VERS_RECV", c->id);
 
             // respond to the initial version negotiation packet
-            c->vers = pick_vers(&p);
+            const q_tag pv = dec_vers(v->buf, v->len);
+            c->vers = pick_vers(pv);
             if (vers[c->vers].as_int) {
                 warn(debug, "supporting client-requested version %.4s with "
                             "preference %u ",
-                     p.vers.as_str, c->vers);
+                     pv.as_str, c->vers);
                 c->state = CONN_ESTB;
                 warn(info, "conn %" PRIu64 " now in CONN_ESTB", c->id);
                 return;
             }
             warn(warn, "client-requested version %.4s not supported",
-                 p.vers.as_str);
+                 pv.as_str);
             tx(c, 0);
             break;
 
         case CONN_VERS_SENT:
-            if (p.flags & F_VERS) {
+            if (dec_flags(v->buf, v->len) & F_LONG_HDR) {
                 warn(info, "server didn't like our version %.4s",
                      vers[c->vers].as_str);
-                c->vers = pick_server_vers(&p);
+                const q_tag pv = dec_vers(v->buf, v->len);
+                c->vers = pick_server_vers(pv);
                 if (vers[c->vers].as_int)
                     warn(info, "retrying with version %.4s",
                          vers[c->vers].as_str);

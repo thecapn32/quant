@@ -41,7 +41,6 @@
 #define T_GOAWAY 0x03
 #define T_WINDOW_UPDATE 0x04
 #define T_BLOCKED 0x05
-#define T_STOP_WAITING 0x06
 #define T_PING 0x07
 
 #define QUIC_INTERNAL_ERROR 1
@@ -51,13 +50,11 @@
 // typedef __fp16 float16_t;
 
 
-struct q_cmn_hdr;
 struct q_conn;
 struct q_stream;
 
 extern uint16_t __attribute__((nonnull))
 dec_frames(struct q_conn * const c,
-           const struct q_cmn_hdr * const p,
            const uint8_t * const buf,
            const uint16_t len);
 

@@ -224,23 +224,6 @@ dec_ack_frame(struct q_conn * const c __attribute__((unused)),
 
 
 static uint16_t __attribute__((nonnull))
-dec_stop_waiting_frame(struct q_conn * const c __attribute__((unused)),
-                       const struct q_cmn_hdr * const p,
-                       const uint8_t * const buf,
-                       const uint16_t len)
-{
-    uint16_t i = 0;
-    uint8_t type = 0;
-    dec(type, buf, len, i, 0, "0x%02x");
-
-    uint64_t lst_unacked = 0;
-    const uint8_t nr_len = dec_pkt_nr_len(p->flags);
-    dec(lst_unacked, buf, len, i, nr_len, "%" PRIu64);
-    return i;
-}
-
-
-static uint16_t __attribute__((nonnull))
 dec_conn_close_frame(struct q_conn * const c __attribute__((unused)),
                      const uint8_t * const buf,
                      uint16_t len)
@@ -266,7 +249,6 @@ dec_conn_close_frame(struct q_conn * const c __attribute__((unused)),
 
 
 uint16_t dec_frames(struct q_conn * const c,
-                    const struct q_cmn_hdr * const p,
                     const uint8_t * const buf,
                     const uint16_t len)
 {
@@ -308,9 +290,6 @@ uint16_t dec_frames(struct q_conn * const c,
             break;
         case T_BLOCKED:
             die("blocked frame");
-            break;
-        case T_STOP_WAITING:
-            i += dec_stop_waiting_frame(c, p, &buf[i], len - i);
             break;
         case T_PING:
             die("ping frame");

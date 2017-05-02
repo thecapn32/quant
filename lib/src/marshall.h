@@ -52,7 +52,7 @@
 #define type_str(x)                                                            \
     _Generic((x),                                                              \
             uint8_t     : "uint8_t",                                           \
-            uint16_t    : "uint 16_t",                                         \
+            uint16_t    : "uint16_t",                                         \
             uint32_t    : "uint32_t",                                          \
             uint64_t    : "uint64_t")
 // clang-format on
@@ -91,7 +91,6 @@
         warn(debug, "decoded %zu byte%s from " #buf "[%u..%zu] into %s " #dst  \
                     " = " fmt,                                                 \
              __len, plural(__len), pos, pos + __len, type_str(dst), dst);      \
-        pos += __len;                                                          \
     } while (0)
 
 
