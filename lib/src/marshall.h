@@ -85,12 +85,12 @@
         case 1:                                                                \
             break;                                                             \
         default:                                                               \
-            die("unhandled field length %zu", __len);                          \
+            die("cannot unmarshall field length %zu", __len);                  \
             break;                                                             \
         }                                                                      \
         warn(debug, "decoded %zu byte%s from " #buf "[%u..%zu] into %s " #dst  \
                     " = " fmt,                                                 \
-             __len, plural(__len), pos, pos + __len, type_str(dst), dst);      \
+             __len, plural(__len), pos, pos + __len - 1, type_str(dst), dst);  \
     } while (0)
 
 
@@ -121,11 +121,12 @@
         case 1:                                                                \
             break;                                                             \
         default:                                                               \
-            die("unhandled field length %zu", __len);                          \
+            die("cannot marshall field length %zu", __len);                    \
             break;                                                             \
         }                                                                      \
         warn(debug, "encoded %s " #src " = " fmt " into %zu byte%s at " #buf   \
                     "[%u..%zu]",                                               \
-             type_str(*src), *src, __len, plural(__len), pos, pos + __len);    \
+             type_str(*src), *src, __len, plural(__len), pos,                  \
+             pos + __len - 1);                                                 \
         pos += __len;                                                          \
     } while (0)
