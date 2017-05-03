@@ -26,7 +26,6 @@
 #pragma once
 
 #include <pthread.h>
-#include <stddef.h>
 #include <stdint.h>
 
 #define Q_OFFSET 96
@@ -45,8 +44,8 @@ typedef union {
 
 
 /// The versions of QUIC supported by this implementation
-extern const q_tag vers[];
+extern const q_tag ok_vers[];
 
-/// The length of @p vers[] in bytes. Divide by @p sizeof(vers[0]) for number of
-/// elements.
-extern const size_t vers_len;
+
+/// The "invalid version" version.
+extern const q_tag no_vers;

@@ -29,6 +29,7 @@
 #include <stdint.h>
 #include <sys/socket.h>
 
+#include "quic.h"
 #include "tommy.h"
 
 
@@ -44,8 +45,7 @@ struct q_conn {
     uint64_t out;  ///< The highest packet number sent on this connection
     uint64_t in;   ///< The highest packet number received on this connection
     uint8_t state; ///< State of the connection.
-    uint8_t vers;  ///< QUIC version in use for this connection. (Index into
-                   ///< @p vers[].)
+    q_tag vers;    ///< QUIC version in use for this connection.
     uint8_t flags;
 
     /// @cond

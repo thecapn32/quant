@@ -75,7 +75,7 @@ q_tag dec_vers(const void * const buf, const uint16_t len)
 {
     const uint8_t flags = dec_flags(buf, len);
     ensure(flags & F_LONG_HDR, "short header");
-    q_tag vers = {0};
+    q_tag vers = no_vers;
     dec(vers.as_int, buf, len, 13, 0, "0x%08x");
     return vers;
 }
@@ -97,13 +97,13 @@ uint16_t __attribute__((nonnull)) enc_pkt(struct q_conn * const c,
         enc(buf, len, i, &c->id, 0, "%" PRIu64);
 
     if (flags & F_LONG_HDR) {
-        const uint32_t nr = (uint32_t)c->out;
+        const uint32_t nr = c->state == CONN_VERS_RECV ? c->in : c->out;
         enc(buf, len, i, &nr, 0, "%u");
-        if (vers[c->vers].as_int)
-            enc(buf, len, i, &vers[c->vers].as_int, 0, "0x%08x");
-        else {
+        enc(buf, len, i, &c->vers.as_int, 0, "0x%08x");
+        if (c->state == CONN_VERS_RECV) {
             warn(info, "sending version negotiation server response");
-            enc(buf, len, i, &vers[0].as_int, vers_len, "0x%08x");
+            for (uint8_t j = 0; ok_vers[j].as_int; j++)
+                enc(buf, len, i, &ok_vers[j].as_int, 0, "0x%08x");
             return i;
         }
     }
