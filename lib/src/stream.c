@@ -42,7 +42,7 @@ out_pending(void * const arg, void * const obj)
 {
     const struct q_stream * const s = obj;
     const struct q_stream ** const which = arg;
-    if (*which == 0 && !STAILQ_EMPTY(s->ov))
+    if (*which == 0 && !STAILQ_EMPTY(&s->ov))
         *which = s;
 }
 
@@ -66,7 +66,7 @@ uint16_t enc_stream_frames(struct q_conn * const c,
     struct q_stream * s = 0;
     hash_foreach_arg(&c->streams, out_pending, &s);
     if (s) {
-        const uint32_t l = w_iov_stailq_len(s->ov, Q_OFFSET);
+        const uint32_t l = w_iov_stailq_len(&s->ov, Q_OFFSET);
         warn(debug, "str %u has %u byte%s pending payload data", s->id, l,
              plural(l));
         i = enc_stream_frame(s, buf, i, len, max_len);
@@ -87,9 +87,7 @@ struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
     struct q_stream * const s = calloc(1, sizeof(*s));
     ensure(c, "could not calloc q_stream");
     s->c = c;
-    s->ov = calloc(1, sizeof(*s->ov));
-    ensure(s->ov, "could not calloc w_chain");
-    STAILQ_INIT(s->ov);
+    STAILQ_INIT(&s->ov);
 
     if (id)
         // the peer has initiated this stream
