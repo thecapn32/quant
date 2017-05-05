@@ -25,6 +25,7 @@ include(CheckCCompilerFlag)
 foreach(FLAG -march=native -Wextra -Wpedantic -Weverything -Werror
         -fcolor-diagnostics)
   string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
+  check_c_compiler_flag(${FLAG} ${F})
   if(${F})
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${FLAG}")
   endif()
