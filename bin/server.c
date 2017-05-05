@@ -85,7 +85,7 @@ int main(int argc, char * argv[])
     struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
     q_read(c, &sid, &i);
     const uint32_t len = w_iov_stailq_len(&i);
-    warn(info, "rx %u byte%s on str %d on conn %" PRIu64, len, plural(len), sid,
+    warn(info, "rx %u byte%s on str %d on conn %" PRIx64, len, plural(len), sid,
          c);
     struct w_iov * v;
     STAILQ_FOREACH (v, &i, next)

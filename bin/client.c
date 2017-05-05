@@ -128,7 +128,7 @@ int main(int argc, char * argv[])
 
             // add some payload data
             v->len = (uint16_t)snprintf(
-                v->buf, 1024, "***HELLO, STR %u ON CONN %" PRIu64 "!***", sid,
+                v->buf, 1024, "***HELLO, STR %u ON CONN %" PRIx64 "!***", sid,
                 cid[n]);
             ensure(v->len < 1024, "buffer overrun");
 

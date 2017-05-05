@@ -57,13 +57,13 @@ new_conn(const uint64_t id,
          const struct sockaddr * const peer,
          const socklen_t peer_len)
 {
-    ensure(get_conn(id) == 0, "conn %" PRIu64 " already exists", id);
+    ensure(get_conn(id) == 0, "conn %" PRIx64 " already exists", id);
 
     struct q_conn * const c = calloc(1, sizeof(*c));
     ensure(c, "could not calloc");
     // c->rx_w will be allocated and initialized when a w_sock exists
     c->id = id;
-    c->out = 1;
+    c->out = 0;
     hash_init(&c->streams);
     hash_insert(&q_conns, &c->conn_node, c, (uint32_t)c->id);
 
@@ -73,7 +73,7 @@ new_conn(const uint64_t id,
                 port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
     c->peer = *peer;
     c->peer_len = peer_len;
-    warn(info, "created new conn %" PRIu64 " with peer %s:%s", c->id, host,
+    warn(info, "created new conn %" PRIx64 " with peer %s:%s", c->id, host,
          port);
 
     return c;

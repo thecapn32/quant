@@ -75,7 +75,7 @@ struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
            c->flags & CONN_FLAG_CLNT ? "odd" : "even", s->id);
 
     hash_insert(&c->streams, &s->stream_node, s, s->id);
-    warn(info, "reserved new str %u on conn %" PRIu64 " as %s", s->id, c->id,
+    warn(info, "reserved new str %u on conn %" PRIx64 " as %s", s->id, c->id,
          c->flags & CONN_FLAG_CLNT ? "client" : "server");
     return s;
 }
