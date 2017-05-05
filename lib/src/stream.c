@@ -31,8 +31,6 @@
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
-#include "frame.h"
-#include "quic.h"
 #include "stream.h"
 #include "tommy.h"
 
@@ -55,27 +53,6 @@ cmp_q_stream(const void * const arg, const void * const obj)
 }
 
 
-uint16_t enc_stream_frames(struct q_conn * const c,
-                           uint8_t * const buf,
-                           const uint16_t pos,
-                           const uint16_t len,
-                           const uint16_t max_len)
-{
-    uint16_t i = pos;
-
-    struct q_stream * s = 0;
-    hash_foreach_arg(&c->streams, out_pending, &s);
-    if (s) {
-        const uint32_t l = w_iov_stailq_len(&s->ov, Q_OFFSET);
-        warn(debug, "str %u has %u byte%s pending payload data", s->id, l,
-             plural(l));
-        i = enc_stream_frame(s, buf, i, len, max_len);
-    }
-    // TODO: we may be able to include a frame for some other stream here
-
-    return i;
-}
-
 struct q_stream * get_stream(struct q_conn * const c, const uint32_t id)
 {
     return hash_search(&c->streams, cmp_q_stream, &id, id);
@@ -94,7 +71,7 @@ struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
         s->id = id;
     else {
         // we are initiating this stream
-        s->id = plat_random() + 1;
+        s->id = c->next_sid++;
         if ((c->flags & CONN_FLAG_CLNT) != (s->id % 2))
             // need to make this odd
             s->id++;

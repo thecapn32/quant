@@ -27,24 +27,19 @@
 
 #include <stdint.h>
 
-#define F_STREAM 0x80
-#define F_STREAM_FIN 0x40
-#define F_STREAM_DATA_LEN 0x20
+#define bitmask_match(val, mask) (((val) & (mask)) == (mask))
 
-#define F_ACK 0x40
-#define F_ACK_N 0x20
-#define F_ACK_UNUSED 0x10
 
 #define T_PADDING 0x00
-#define T_RST_STREAM 0x01
-#define T_CONNECTION_CLOSE 0x02
-#define T_GOAWAY 0x03
-#define T_WINDOW_UPDATE 0x04
-#define T_BLOCKED 0x05
-#define T_PING 0x07
+#define T_STREAM 0xC0
+#define T_ACK 0xA0
 
-#define QUIC_INTERNAL_ERROR 1
-#define QUIC_INVALID_VERSION 20
+// #define T_RST_STREAM 0x01
+// #define T_CONNECTION_CLOSE 0x02
+// #define T_GOAWAY 0x03
+// #define T_WINDOW_UPDATE 0x04
+// #define T_BLOCKED 0x05
+// #define T_PING 0x07
 
 /// Define an IEEE-754 16-bt floating type (backed by gcc/clang F16C)
 // typedef __fp16 float16_t;
@@ -53,23 +48,34 @@
 struct q_conn;
 struct q_stream;
 
+#if 0
+
 extern uint16_t __attribute__((nonnull))
-dec_frames(struct q_conn * const c,
-           const uint8_t * const buf,
-           const uint16_t len);
+enc_padding_frame(void * const buf, const uint16_t len);
+
+extern uint16_t __attribute__((nonnull))
+enc_conn_close_frame(void * const buf, const uint16_t len);
+
+extern uint16_t __attribute__((nonnull))
+enc_ack_frame(void * const buf, const uint16_t len);
+
+#endif
+
+extern uint16_t __attribute__((nonnull))
+dec_frames(struct q_conn * const c, const void * const buf, const uint16_t len);
+
+extern uint16_t __attribute__((nonnull))
+enc_padding_frame(void * const buf, const uint16_t pos, const uint16_t len);
+
+extern uint16_t __attribute__((nonnull))
+enc_ack_frame(const struct q_conn * const c,
+              void * const buf,
+              const uint16_t len,
+              const uint16_t pos);
 
 extern uint16_t __attribute__((nonnull))
 enc_stream_frame(struct q_stream * const s,
-                 uint8_t * const buf,
+                 void * const buf,
                  const uint16_t pos,
                  const uint16_t len,
                  const uint16_t max_len);
-
-extern uint16_t __attribute__((nonnull))
-enc_padding_frame(uint8_t * const buf, const uint16_t len);
-
-extern uint16_t __attribute__((nonnull))
-enc_conn_close_frame(uint8_t * const buf, const uint16_t len);
-
-extern uint16_t __attribute__((nonnull))
-enc_ack_frame(uint8_t * const buf, const uint16_t len);

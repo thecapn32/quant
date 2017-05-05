@@ -33,7 +33,11 @@
 __extension__ typedef unsigned __int128 uint128_t;
 #endif
 
-///
+
+/// Hash length in packet.
+#define HASH_LEN 12
+
+
 /// Compute an [FNV-1a 128-bit
 /// hash](http://www.isthe.com/chongo/tech/comp/fnv/index.html) over the given
 /// buffer. A region of the buffer can be excluded from the hash, by specifying

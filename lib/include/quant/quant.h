@@ -52,10 +52,8 @@ q_bind(void * const q, const uint16_t port);
 extern void __attribute__((nonnull))
 q_write(const uint64_t cid, const uint32_t sid, struct w_iov_stailq * const q);
 
-extern size_t __attribute__((nonnull)) q_read(const uint64_t cid,
-                                              uint32_t * const sid,
-                                              void * const buf,
-                                              const size_t len);
+extern void __attribute__((nonnull))
+q_read(const uint64_t cid, uint32_t * const sid, struct w_iov_stailq * const i);
 
 extern uint32_t q_rsv_stream(const uint64_t cid);
 

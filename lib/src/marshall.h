@@ -52,38 +52,40 @@
 #define type_str(x)                                                            \
     _Generic((x),                                                              \
             uint8_t     : "uint8_t",                                           \
-            uint16_t    : "uint16_t",                                         \
+            uint16_t    : "uint16_t",                                          \
             uint32_t    : "uint32_t",                                          \
             uint64_t    : "uint64_t")
 // clang-format on
 
 
 #define dec(dst, buf, buf_len, pos, len, fmt)                                  \
-    do {                                                                       \
+    ({                                                                         \
         const size_t __len = len ? len : sizeof(dst);                          \
         ensure(pos + __len <= buf_len,                                         \
                "attempting to decode %zu byte%s starting at " #buf "["         \
                "%u], which is past " #buf_len " = %u",                         \
-               __len, plural(__len), pos, buf_len);                            \
-        memcpy(&dst, &buf[pos], __len);                                        \
+               __len, plural(__len), pos, buf_len - 1);                        \
         switch (__len) {                                                       \
         case 8: {                                                              \
             uint64_t * const __dst = (void * const) & dst;                     \
-            *__dst = ntohll(*__dst);                                           \
+            *__dst = ntohll(*(uint64_t * const) & buf[pos]);                   \
             break;                                                             \
         }                                                                      \
         case 4: {                                                              \
             uint32_t * const __dst = (void * const) & dst;                     \
-            *__dst = ntohl(*__dst);                                            \
+            *__dst = ntohl(*(uint32_t * const) & buf[pos]);                    \
             break;                                                             \
         }                                                                      \
         case 2: {                                                              \
             uint16_t * const __dst = (void * const) & dst;                     \
-            *__dst = ntohs(*__dst);                                            \
+            *__dst = ntohs(*(uint16_t * const) & buf[pos]);                    \
             break;                                                             \
         }                                                                      \
-        case 1:                                                                \
+        case 1: {                                                              \
+            uint8_t * const __dst = (void * const) & dst;                      \
+            *__dst = *(uint8_t * const) & buf[pos];                            \
             break;                                                             \
+        }                                                                      \
         default:                                                               \
             die("cannot unmarshall field length %zu", __len);                  \
             break;                                                             \
@@ -91,35 +93,38 @@
         warn(debug, "decoded %zu byte%s from " #buf "[%u..%zu] into %s " #dst  \
                     " = " fmt,                                                 \
              __len, plural(__len), pos, pos + __len - 1, type_str(dst), dst);  \
-    } while (0)
+        __len;                                                                 \
+    })
 
 
 #define enc(buf, buf_len, pos, src, src_len, fmt)                              \
-    do {                                                                       \
+    ({                                                                         \
         const size_t __len = src_len ? src_len : sizeof(*src);                 \
         ensure(pos + __len <= buf_len,                                         \
                "attempting to encode %zu byte%s into " #buf                    \
                "[%u..%zu], which is past end of " #buf_len " = %u",            \
-               __len, plural(__len), pos, pos + __len, buf_len);               \
-        memcpy(&buf[pos], src, __len);                                         \
+               __len, plural(__len), pos, pos + __len, buf_len - 1);           \
         switch (__len) {                                                       \
         case 8: {                                                              \
             uint64_t * const __dst = (void * const) & buf[pos];                \
-            *__dst = htonll(*__dst);                                           \
+            *__dst = htonll(*src);                                             \
             break;                                                             \
         }                                                                      \
         case 4: {                                                              \
             uint32_t * const __dst = (void * const) & buf[pos];                \
-            *__dst = htonl(*__dst);                                            \
+            *__dst = htonl(*src);                                              \
             break;                                                             \
         }                                                                      \
         case 2: {                                                              \
             uint16_t * const __dst = (void * const) & buf[pos];                \
-            *__dst = htons(*__dst);                                            \
+            *__dst = htons(*src);                                              \
             break;                                                             \
         }                                                                      \
-        case 1:                                                                \
+        case 1: {                                                              \
+            uint8_t * const __dst = (void * const) & buf[pos];                 \
+            *__dst = *src;                                                     \
             break;                                                             \
+        }                                                                      \
         default:                                                               \
             die("cannot marshall field length %zu", __len);                    \
             break;                                                             \
@@ -128,5 +133,5 @@
                     "[%u..%zu]",                                               \
              type_str(*src), *src, __len, plural(__len), pos,                  \
              pos + __len - 1);                                                 \
-        pos += __len;                                                          \
-    } while (0)
+        __len;                                                                 \
+    })

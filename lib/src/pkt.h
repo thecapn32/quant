@@ -27,36 +27,41 @@
 
 #include <stdint.h>
 
-#include "quic.h"
-
 struct q_conn;
+struct q_stream;
 
 
 #define MAX_PKT_LEN 1350
-#define MAX_NONCE_LEN 32
-#define HASH_LEN 12
 
 #define F_LONG_HDR 0x80
-
 #define F_LH_TYPE_VERS_NEG 0x01
-
 #define F_SH_CID 0x40
 #define F_SH_KEY_PHASE 0x20
 
 
-extern uint16_t __attribute__((nonnull)) enc_pkt(struct q_conn * const c,
-                                                 uint8_t * const buf,
-                                                 const uint16_t len,
-                                                 const uint16_t max_len);
+#define pkt_flags(buf) (*(const uint8_t * const)(buf))
 
-extern uint8_t __attribute__((nonnull))
-dec_flags(const void * const buf, const uint16_t len);
+#define pkt_type(buf)                                                          \
+    ({                                                                         \
+        const uint8_t __f = pkt_flags(buf);                                    \
+        __f & F_LONG_HDR ? __f & ~0x80 : __f & ~0xe0;                          \
+    })
 
-extern uint64_t __attribute__((nonnull))
-dec_cid(const void * const buf, const uint16_t len);
 
 extern uint64_t __attribute__((nonnull))
-dec_nr(const void * const buf, const uint16_t len);
+pkt_cid(const void * const buf, const uint16_t len);
 
-extern q_tag __attribute__((nonnull))
-dec_vers(const void * const buf, const uint16_t len);
+extern uint64_t __attribute__((nonnull))
+pkt_nr(const void * const buf, const uint16_t len);
+
+extern uint32_t __attribute__((nonnull))
+pkt_vers(const void * const buf, const uint16_t len);
+
+extern uint16_t __attribute__((nonnull))
+pkt_hdr_len(const void * const buf, const uint16_t len);
+
+extern uint16_t enc_pkt(struct q_conn * const c __attribute__((nonnull)),
+                        struct q_stream * const s,
+                        uint8_t * const buf __attribute__((nonnull)),
+                        const uint16_t len,
+                        const uint16_t max_len);

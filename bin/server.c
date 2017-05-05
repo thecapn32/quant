@@ -31,6 +31,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/param.h>
+#include <sys/queue.h>
 
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
@@ -47,40 +48,6 @@ static void usage(const char * const name,
     printf("\t[-t sec]\texit after some seconds (0 to disable); default %ld\n",
            timeout);
 }
-
-
-// static void check_stream(void * arg, void * obj)
-// {
-//     struct q_conn * c = arg;
-//     struct q_stream * s = obj;
-//     if (s->in_len) {
-//         warn(info,
-//              "received %" PRIu64 " byte%s on stream %d on conn %" PRIu64 ":
-//              %s",
-//              s->in_len, plural(s->in_len), s->id, c->id, s->in);
-//         // we have consumed the data
-//         free(s->in);
-//         s->in = 0;
-//         s->in_len = 0;
-//     }
-// }
-
-
-// static void check_conn(void * obj)
-// {
-//     struct q_conn * c = obj;
-//     hash_foreach_arg(&c->streams, &check_stream, c);
-// }
-
-
-// static void read_cb(struct ev_loop * const loop
-//                     __attribute__((unused)),
-//                     ev_async * const w __attribute__((unused)),
-//                     int e)
-// {
-//     ensure(e = EV_READ, "unknown event %d", e);
-//     hash_foreach(&q_conns, &check_conn);
-// }
 
 
 int main(int argc, char * argv[])
@@ -115,16 +82,18 @@ int main(int argc, char * argv[])
 
     const uint64_t c = q_bind(q, port);
     if (c) {
-        size_t len = 0;
-        do {
-            char msg[1024];
-            const size_t msg_len = sizeof(msg);
+        while (1) {
             uint32_t sid;
-            len = q_read(c, &sid, msg, msg_len);
-            warn(info, "rx %zu byte%s on str %d on conn %" PRIu64 ": %s", len,
-                 plural(len), sid, c, msg);
-        } while (len != 0);
-        q_close(c);
+            struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
+            q_read(c, &sid, &i);
+            const uint32_t len = w_iov_stailq_len(&i);
+            warn(info, "rx %u byte%s on str %d on conn %" PRIu64, len,
+                 plural(len), sid, c);
+            struct w_iov * v;
+            STAILQ_FOREACH (v, &i, next)
+                warn(info, "%s", v->buf);
+            q_close(c);
+        }
     }
 
     q_cleanup(q);

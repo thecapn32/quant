@@ -35,97 +35,122 @@
 
 #include "conn.h"
 #include "fnv_1a.h"
+#include "frame.h"
 #include "marshall.h"
 #include "pkt.h"
 #include "quic.h"
-#include "stream.h"
 #include "tommy.h"
 
 
-static const q_tag prst = {.as_str = "PRST"}, rnon = {.as_str = "RNON"},
-                   rseq = {.as_str = "RSEQ"}, cadr = {.as_str = "CADR"};
+/// Packet number lengths for different short-header packet types
+const uint8_t pkt_nr_len[] = {0, 1, 2, 4};
 
 
-uint8_t dec_flags(const void * const buf, const uint16_t len)
+uint16_t pkt_hdr_len(const void * const buf, const uint16_t len)
 {
-    ensure(len, "len zero");
-    return *(const uint8_t * const)buf;
+    const uint8_t flags = pkt_flags(buf);
+    uint16_t pos = 0;
+    if (flags & F_LONG_HDR)
+        pos = 17;
+    else
+        pos = 1 + (flags & F_SH_CID ? 8 : 0) + pkt_nr_len[pkt_type(buf)];
+    ensure(pos <= len, "payload position %u after end pf packet %u", pos, len);
+    return pos;
 }
 
 
-uint64_t dec_cid(const void * const buf, const uint16_t len)
+uint64_t pkt_cid(const void * const buf, const uint16_t len)
 {
-    const uint8_t flags = dec_flags(buf, len);
+    const uint8_t flags = pkt_flags(buf);
     uint64_t cid = 0;
     if (flags & F_LONG_HDR || flags & F_SH_CID)
         dec(cid, buf, len, 1, 0, "%" PRIu64);
+    else
+        die("no connection ID in header");
     return cid;
 }
 
 
-uint64_t dec_nr(const void * const buf, const uint16_t len)
+uint64_t pkt_nr(const void * const buf, const uint16_t len)
 {
+    const uint8_t flags = pkt_flags(buf);
     uint64_t nr = 0;
-    dec(nr, buf, len, 9, sizeof(uint32_t), "%" PRIu64);
+    dec(nr, buf, len, 9, flags & F_LONG_HDR ? 4 : pkt_nr_len[pkt_type(buf)],
+        "%" PRIu64);
     return nr;
 }
 
 
-q_tag dec_vers(const void * const buf, const uint16_t len)
+uint32_t pkt_vers(const void * const buf, const uint16_t len)
 {
-    const uint8_t flags = dec_flags(buf, len);
-    ensure(flags & F_LONG_HDR, "short header");
-    q_tag vers = no_vers;
-    dec(vers.as_int, buf, len, 13, 0, "0x%08x");
+    ensure(pkt_flags(buf) & F_LONG_HDR, "short header");
+    uint32_t vers = 0;
+    dec(vers, buf, len, 13, 0, "0x%08x");
     return vers;
 }
 
 
-uint16_t __attribute__((nonnull)) enc_pkt(struct q_conn * const c,
-                                          uint8_t * const buf,
-                                          const uint16_t len,
-                                          const uint16_t max_len)
+const uint8_t enc_pkt_nr_len[] = {0, 0x01, 0x02, 0, 0x03};
+
+static uint8_t __attribute__((const)) needed_pkt_nr_len(const uint64_t n)
+{
+    if (n < UINT8_MAX)
+        return 1;
+    if (n < UINT16_MAX)
+        return 2;
+    return 4;
+}
+
+
+uint16_t enc_pkt(struct q_conn * const c,
+                 struct q_stream * const s,
+                 uint8_t * const buf,
+                 const uint16_t len,
+                 const uint16_t max_len)
 {
     uint16_t i = 0;
-
     uint8_t flags = 0;
     if (c->state < CONN_ESTB)
         flags |= F_LONG_HDR | F_LH_TYPE_VERS_NEG;
-    enc(buf, len, i, &flags, 0, "0x%02x");
+    else {
+        flags |= enc_pkt_nr_len[needed_pkt_nr_len(c->out)];
+        flags |= F_SH_CID; // TODO: support short headers w/o cid
+    }
+    i += enc(buf, len, i, &flags, 0, "0x%02x");
 
     if (flags & F_LONG_HDR || flags & F_SH_CID)
-        enc(buf, len, i, &c->id, 0, "%" PRIu64);
+        i += enc(buf, len, i, &c->id, 0, "%" PRIu64);
 
     if (flags & F_LONG_HDR) {
         const uint32_t nr = c->state == CONN_VERS_RECV ? c->in : c->out;
-        enc(buf, len, i, &nr, 0, "%u");
-        enc(buf, len, i, &c->vers.as_int, 0, "0x%08x");
+        i += enc(buf, len, i, &nr, 0, "%u");
+        i += enc(buf, len, i, &c->vers, 0, "0x%08x");
         if (c->state == CONN_VERS_RECV) {
             warn(info, "sending version negotiation server response");
-            for (uint8_t j = 0; ok_vers[j].as_int; j++)
-                enc(buf, len, i, &ok_vers[j].as_int, 0, "0x%08x");
+            for (uint8_t j = 0; j < ok_vers_len; j++)
+                i += enc(buf, len, i, &ok_vers[j], 0, "0x%08x");
             return i;
         }
-    }
+    } else
+        i += enc(buf, len, i, &c->out, needed_pkt_nr_len(c->out), "%" PRIu64);
 
     const uint16_t hash_pos = i;
     i += HASH_LEN;
     ensure(i < Q_OFFSET, "Q_OFFSET is too small");
-    warn(debug, "skipping %u..%u to leave room for hash", hash_pos, i);
+    warn(debug, "skipping [%u..%u] to leave room for hash", hash_pos, i - 1);
 
-    // fill remainder of offset with padding
-    //
-    // TODO find a way to not zero where the stream frame header will go (just
-    // before Q_OFFSET)
-    warn(debug, "zeroing %u..%u", hash_pos + HASH_LEN, Q_OFFSET);
-    memset(&buf[hash_pos + HASH_LEN], 0, Q_OFFSET - i);
+    if (c->in)
+        i += enc_ack_frame(c, buf, len, i);
 
-    // stream frames must be last, because they can extend to end of packet.
-    i = enc_stream_frames(c, buf, i, len, max_len);
+    if (c->state >= CONN_ESTB && s) {
+        // stream frames must be last, because they can extend to end of packet.
+        i += enc_padding_frame(buf, i, Q_OFFSET - i);
+        i = enc_stream_frame(s, buf, i, len, max_len);
+    }
 
     const uint128_t hash = fnv_1a(buf, i, hash_pos, HASH_LEN);
-    warn(debug, "inserting %u-byte hash over range 0..%u (w/o %u..%u)",
-         HASH_LEN, i, hash_pos, hash_pos + HASH_LEN);
+    warn(debug, "inserting %u-byte hash over range [0..%u] into [%u..%u]",
+         HASH_LEN, i - 1, hash_pos, hash_pos + HASH_LEN - 1);
     memcpy(&buf[hash_pos], &hash, HASH_LEN);
 
     return i;

@@ -116,7 +116,7 @@ int main(int argc, char * argv[])
              port);
         cid[n] = q_connect(q, peer->ai_addr, peer->ai_addrlen);
 
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < 1; i++) {
             // reserve a new stream
             const uint32_t sid = q_rsv_stream(cid[n]);
 
@@ -131,10 +131,10 @@ int main(int argc, char * argv[])
                 v->buf, 1024, "***HELLO, STR %u ON CONN %" PRIu64 "!***", sid,
                 cid[n]);
             ensure(v->len < 1024, "buffer overrun");
-            warn(info, "payload len %u", v->len);
 
             // send the data
-            warn(info, "writing: %s", (char *)v->buf);
+            warn(info, "writing %u byte%s: %s", v->len, plural(v->len),
+                 (char *)v->buf);
             q_write(cid[n], sid, &o);
 
             // return the buffer

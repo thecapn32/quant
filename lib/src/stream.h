@@ -39,22 +39,15 @@ struct q_stream {
     uint8_t state;
     uint8_t _unused[3];
 
-    struct w_iov_stailq ov; ///< tail queue containing outbound data.
+    struct w_iov_stailq ov; ///< tail queue containing outbound data
     uint64_t out_off;
 
-    uint8_t * in;
-    uint64_t in_len;
+    struct w_iov_stailq iv; ///< tail queue containing inbound data
     uint64_t in_off;
 };
 
 struct q_conn;
 
-extern uint16_t __attribute__((nonnull))
-enc_stream_frames(struct q_conn * const c,
-                  uint8_t * const buf,
-                  const uint16_t pos,
-                  const uint16_t len,
-                  const uint16_t max_len);
 
 extern struct q_stream * __attribute__((nonnull))
 get_stream(struct q_conn * const c, const uint32_t id);
