@@ -44,3 +44,17 @@ set_target_properties(warpcore
   PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_BINARY_DIR}/include
 )
 add_dependencies(warpcore warp)
+
+
+# Use quic-go for testing against, rather than proto-quic monster
+set(GOPATH ${CMAKE_CURRENT_BINARY_DIR}/go)
+set(QUICGO github.com/lucas-clemente/quic-go)
+externalproject_add(quic-go
+  DOWNLOAD_COMMAND env GOPATH=${GOPATH} go get ${QUICGO}
+  CONFIGURE_COMMAND ""
+  BUILD_COMMAND cd ${GOPATH}/src/${QUICGO} && env GOPATH=${GOPATH} go get -t -u ./...
+  INSTALL_COMMAND ""
+)
+
+# EXCLUDE_FROM_ALL workaround for older cmake
+set_target_properties(quic-go PROPERTIES EXCLUDE_FROM_ALL TRUE)
