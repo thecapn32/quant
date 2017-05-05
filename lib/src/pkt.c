@@ -43,7 +43,7 @@
 
 
 /// Packet number lengths for different short-header packet types
-const uint8_t pkt_nr_len[] = {0, 1, 2, 4};
+static const uint8_t pkt_nr_len[] = {0, 1, 2, 4};
 
 
 uint16_t pkt_hdr_len(const void * const buf, const uint16_t len)
@@ -63,9 +63,10 @@ uint64_t pkt_cid(const void * const buf, const uint16_t len)
 {
     const uint8_t flags = pkt_flags(buf);
     uint64_t cid = 0;
-    if (flags & F_LONG_HDR || flags & F_SH_CID)
-        dec(cid, buf, len, 1, 0, "%" PRIu64);
-    else
+    if (flags & F_LONG_HDR || flags & F_SH_CID) {
+        uint16_t i = 1;
+        dec(cid, buf, len, i, 0, "%" PRIu64);
+    } else
         die("no connection ID in header");
     return cid;
 }
@@ -75,7 +76,8 @@ uint64_t pkt_nr(const void * const buf, const uint16_t len)
 {
     const uint8_t flags = pkt_flags(buf);
     uint64_t nr = 0;
-    dec(nr, buf, len, 9, flags & F_LONG_HDR ? 4 : pkt_nr_len[pkt_type(buf)],
+    uint16_t i = 9;
+    dec(nr, buf, len, i, flags & F_LONG_HDR ? 4 : pkt_nr_len[pkt_type(buf)],
         "%" PRIu64);
     return nr;
 }
@@ -85,12 +87,13 @@ uint32_t pkt_vers(const void * const buf, const uint16_t len)
 {
     ensure(pkt_flags(buf) & F_LONG_HDR, "short header");
     uint32_t vers = 0;
-    dec(vers, buf, len, 13, 0, "0x%08x");
+    uint16_t i = 13;
+    dec(vers, buf, len, i, 0, "0x%08x");
     return vers;
 }
 
 
-const uint8_t enc_pkt_nr_len[] = {0, 0x01, 0x02, 0, 0x03};
+static const uint8_t enc_pkt_nr_len[] = {0, 0x01, 0x02, 0, 0x03};
 
 static uint8_t __attribute__((const)) needed_pkt_nr_len(const uint64_t n)
 {
@@ -116,23 +119,24 @@ uint16_t enc_pkt(struct q_conn * const c,
         flags |= enc_pkt_nr_len[needed_pkt_nr_len(c->out)];
         flags |= F_SH_CID; // TODO: support short headers w/o cid
     }
-    i += enc(buf, len, i, &flags, 0, "0x%02x");
+    enc(buf, len, i, &flags, 0, "0x%02x");
 
     if (flags & F_LONG_HDR || flags & F_SH_CID)
-        i += enc(buf, len, i, &c->id, 0, "%" PRIu64);
+        enc(buf, len, i, &c->id, 0, "%" PRIu64);
 
     if (flags & F_LONG_HDR) {
-        const uint32_t nr = c->state == CONN_VERS_RECV ? c->in : c->out;
-        i += enc(buf, len, i, &nr, 0, "%u");
-        i += enc(buf, len, i, &c->vers, 0, "0x%08x");
+        const uint32_t nr =
+            (const uint32_t)(c->state == CONN_VERS_RECV ? c->in : c->out);
+        enc(buf, len, i, &nr, 0, "%u");
+        enc(buf, len, i, &c->vers, 0, "0x%08x");
         if (c->state == CONN_VERS_RECV) {
             warn(info, "sending version negotiation server response");
             for (uint8_t j = 0; j < ok_vers_len; j++)
-                i += enc(buf, len, i, &ok_vers[j], 0, "0x%08x");
+                enc(buf, len, i, &ok_vers[j], 0, "0x%08x");
             return i;
         }
     } else
-        i += enc(buf, len, i, &c->out, needed_pkt_nr_len(c->out), "%" PRIu64);
+        enc(buf, len, i, &c->out, needed_pkt_nr_len(c->out), "%" PRIu64);
 
     const uint16_t hash_pos = i;
     i += HASH_LEN;

@@ -35,16 +35,6 @@
 #include "tommy.h"
 
 
-static void __attribute__((nonnull))
-out_pending(void * const arg, void * const obj)
-{
-    const struct q_stream * const s = obj;
-    const struct q_stream ** const which = arg;
-    if (*which == 0 && !STAILQ_EMPTY(&s->ov))
-        *which = s;
-}
-
-
 static int __attribute__((nonnull))
 cmp_q_stream(const void * const arg, const void * const obj)
 {

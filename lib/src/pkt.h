@@ -42,10 +42,8 @@ struct q_stream;
 #define pkt_flags(buf) (*(const uint8_t * const)(buf))
 
 #define pkt_type(buf)                                                          \
-    ({                                                                         \
-        const uint8_t __f = pkt_flags(buf);                                    \
-        __f & F_LONG_HDR ? __f & ~0x80 : __f & ~0xe0;                          \
-    })
+    (pkt_flags(buf) & F_LONG_HDR ? pkt_flags(buf) & ~0x80                      \
+                                 : pkt_flags(buf) & ~0xe0)
 
 
 extern uint64_t __attribute__((nonnull))

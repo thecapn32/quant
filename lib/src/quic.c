@@ -97,7 +97,8 @@ pick_from_server_vers(const void * const buf, const uint16_t len)
     for (uint8_t i = 0; i < ok_vers_len; i++)
         for (uint8_t j = 0; j < len - pos; j += sizeof(uint32_t)) {
             uint32_t vers = 0;
-            dec(vers, buf, len, j + pos, 0, "0x%08x");
+            uint16_t x = j + pos;
+            dec(vers, buf, len, x, 0, "0x%08x");
             warn(debug, "server prio %ld = 0x%08x; our prio %u = 0x%08x",
                  j / sizeof(uint32_t), vers, i, ok_vers[i]);
             if (ok_vers[i] == vers)
@@ -125,8 +126,8 @@ static void tx(struct w_sock * const ws __attribute__((nonnull)),
         STAILQ_INIT(o);
         w_alloc_cnt(w, o, 1, Q_OFFSET);
         v = STAILQ_FIRST(o);
-        v->ip = ((struct sockaddr_in *)&c->peer)->sin_addr.s_addr;
-        v->port = ((struct sockaddr_in *)&c->peer)->sin_port;
+        v->ip = ((struct sockaddr_in *)(void *)&c->peer)->sin_addr.s_addr;
+        v->port = ((struct sockaddr_in *)(void *)&c->peer)->sin_port;
     } else
         o = &s->ov;
 
@@ -162,6 +163,7 @@ static void tx(struct w_sock * const ws __attribute__((nonnull)),
         free(o);
     }
 
+    warn(info, "acked %" PRIu64 ", out %" PRIu64, c->acked, c->out);
     if (c->acked >= c->out) {
         pthread_mutex_lock(&lock);
         pthread_cond_signal(&write_cv);
@@ -196,7 +198,7 @@ rx(struct ev_loop * const l __attribute__((unused)),
             warn(debug, "verifying %u-byte hash at [%u..%u] over [0..%u]",
                  HASH_LEN, hdr_len, hdr_len + HASH_LEN - 1, v->len - 1);
             const uint128_t hash = fnv_1a(v->buf, v->len, hdr_len, HASH_LEN);
-            if (memcmp(&v->buf[hdr_len], &hash, HASH_LEN) != 0)
+            if (memcmp(&((uint8_t *)v->buf)[hdr_len], &hash, HASH_LEN) != 0)
                 die("hash mismatch");
         }
 
@@ -261,8 +263,8 @@ rx(struct ev_loop * const l __attribute__((unused)),
             break;
 
         case CONN_ESTB:
-        established:
             dec_frames(c, v->buf, v->len);
+            // tx(ws, c, 0);
             return; // TODO: respond with ACK
 
         default:
@@ -573,6 +575,7 @@ void q_close(const uint64_t cid)
     warn(debug, "enter");
     struct q_conn * const c = get_conn(cid);
     ensure(c, "conn %" PRIu64 " does not exist", cid);
+
     // TODO proper handling of close
     // w_close(c->sock);
     // hash_foreach(&c->streams, free);

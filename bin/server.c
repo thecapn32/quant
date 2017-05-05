@@ -81,20 +81,17 @@ int main(int argc, char * argv[])
     warn(debug, "%s ready on %s port %d", basename(argv[0]), ifname, port);
 
     const uint64_t c = q_bind(q, port);
-    if (c) {
-        while (1) {
-            uint32_t sid;
-            struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
-            q_read(c, &sid, &i);
-            const uint32_t len = w_iov_stailq_len(&i);
-            warn(info, "rx %u byte%s on str %d on conn %" PRIu64, len,
-                 plural(len), sid, c);
-            struct w_iov * v;
-            STAILQ_FOREACH (v, &i, next)
-                warn(info, "%s", v->buf);
-            q_close(c);
-        }
-    }
+    uint32_t sid;
+    struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
+    q_read(c, &sid, &i);
+    const uint32_t len = w_iov_stailq_len(&i);
+    warn(info, "rx %u byte%s on str %d on conn %" PRIu64, len, plural(len), sid,
+         c);
+    struct w_iov * v;
+    STAILQ_FOREACH (v, &i, next)
+        warn(info, "%s", v->buf);
+    q_free(q, &i);
+    q_close(c);
 
     q_cleanup(q);
     return 0;

@@ -76,12 +76,12 @@ dec_stream_frame(struct q_conn * const c,
 {
     uint16_t i = pos;
     uint8_t type = 0;
-    i += dec(type, buf, len, i, 0, "0x%02x");
+    dec(type, buf, len, i, 0, "0x%02x");
     warn(debug, "fin = %u", type & F_STREAM_FIN);
 
     const uint8_t sid_len = dec_sid_len(type);
     uint32_t sid = 0;
-    i += dec(sid, buf, len, i, sid_len, "%u");
+    dec(sid, buf, len, i, sid_len, "%u");
     struct q_stream * s = get_stream(c, sid);
     if (s == 0)
         s = new_stream(c, sid);
@@ -89,15 +89,15 @@ dec_stream_frame(struct q_conn * const c,
     const uint8_t off_len = dec_off_len(type);
     uint64_t off = 0;
     if (off_len)
-        i += dec(off, buf, len, i, off_len, "%" PRIu64);
+        dec(off, buf, len, i, off_len, "%" PRIu64);
 
     uint16_t data_len = 0;
     if (type & F_STREAM_DATA_LEN)
-        i += dec(data_len, buf, len, i, 0, "%u");
+        dec(data_len, buf, len, i, 0, "%u");
     else
         data_len = len - i;
 
-    warn(info, "got data: %s", &buf[i]);
+    warn(info, "got data: %s", &((const uint8_t *)buf)[i]);
     // TODO: check how app can get at data
     s->in_off += data_len;
 
@@ -139,11 +139,11 @@ dec_ack_frame(struct q_conn * const c __attribute__((unused)),
 {
     uint16_t i = pos;
     uint8_t type = 0;
-    i += dec(type, buf, len, i, 0, "0x%02x");
+    dec(type, buf, len, i, 0, "0x%02x");
 
     uint8_t num_blocks = 0;
     if (type & F_ACK_N) {
-        i += dec(num_blocks, buf, len, i, 0, "%u");
+        dec(num_blocks, buf, len, i, 0, "%u");
         num_blocks++;
     } else {
         num_blocks = 1;
@@ -151,14 +151,14 @@ dec_ack_frame(struct q_conn * const c __attribute__((unused)),
     }
 
     uint8_t ts_blocks = 0;
-    i += dec(ts_blocks, buf, len, i, 0, "%u");
+    dec(ts_blocks, buf, len, i, 0, "%u");
 
     const uint8_t lg_ack_len = dec_lg_ack_len(type);
     uint64_t lg_ack = 0;
-    i += dec(lg_ack, buf, len, i, lg_ack_len, "%" PRIu64);
+    dec(lg_ack, buf, len, i, lg_ack_len, "%" PRIu64);
 
     uint16_t lg_ack_delta_t = 0;
-    i += dec(lg_ack_delta_t, buf, len, i, 0, "%u");
+    dec(lg_ack_delta_t, buf, len, i, 0, "%u");
 
     const uint8_t ack_block_len = dec_ack_block_len(type);
     warn(debug, "%u-byte ACK block length", ack_block_len);
@@ -166,29 +166,28 @@ dec_ack_frame(struct q_conn * const c __attribute__((unused)),
     for (uint8_t b = 0; b < num_blocks; b++) {
         warn(debug, "decoding ACK block #%u", b);
         uint64_t l = 0;
-        i += dec(l, buf, len, i, ack_block_len, "%" PRIu64);
+        dec(l, buf, len, i, ack_block_len, "%" PRIu64);
         // XXX: assume that the gap is not present for the very last ACK block
         if (b < num_blocks - 1) {
             uint8_t gap = 0;
-            i += dec(gap, buf, len, i, 0, "%u");
+            dec(gap, buf, len, i, 0, "%u");
         }
     }
 
     for (uint8_t b = 0; b < ts_blocks; b++) {
         warn(debug, "decoding timestamp block #%u", b);
         uint8_t delta_lg_obs = 0;
-        i += dec(delta_lg_obs, buf, len, i, 0, "%u");
+        dec(delta_lg_obs, buf, len, i, 0, "%u");
         uint32_t ts = 0;
-        i += dec(ts, buf, len, i, 0, "%u");
+        dec(ts, buf, len, i, 0, "%u");
     }
 
     return i;
 }
 
 
-uint16_t dec_frames(struct q_conn * const c __attribute__((unused)),
-                    const void * const buf,
-                    const uint16_t len)
+uint16_t
+dec_frames(struct q_conn * const c, const void * const buf, const uint16_t len)
 {
     uint16_t i = pkt_hdr_len(buf, len) + HASH_LEN;
     uint16_t pad_start = 0;
@@ -247,14 +246,15 @@ uint16_t
 enc_padding_frame(void * const buf, const uint16_t pos, const uint16_t len)
 {
     warn(debug, "encoding padding frame into [%u..%u]", pos, pos + len - 1);
-    memset(&buf[pos], T_PADDING, len);
+    memset(&((uint8_t *)buf)[pos], T_PADDING, len);
     return len;
 }
 
 
-const uint8_t enc_lg_ack_len[] = {0xFF, 0x00, 0x01, 0xFF, 0x03}; // 0xFF invalid
+static const uint8_t enc_lg_ack_len[] = {0xFF, 0x00, 0x01, 0xFF,
+                                         0x03}; // 0xFF invalid
 
-static uint8_t __attribute__((const)) needed_lg_ack_len(const uint32_t n)
+static uint8_t __attribute__((const)) needed_lg_ack_len(const uint64_t n)
 {
     if (n < UINT8_MAX)
         return 1;
@@ -275,27 +275,28 @@ uint16_t enc_ack_frame(const struct q_conn * const c,
     // type |= 0x00; // TODO: support longer than 8-bit ACK Block lengths
 
     uint16_t i = pos;
-    i += enc(buf, len, i, &type, 0, "0x%02x");
+    enc(buf, len, i, &type, 0, "0x%02x");
 
     const uint8_t num_ts = 0;
-    i += enc(buf, len, i, &num_ts, 0, "%u");
+    enc(buf, len, i, &num_ts, 0, "%u");
 
-    i += enc(buf, len, i, &c->in, lg_ack_len, "%" PRIu64);
+    enc(buf, len, i, &c->in, lg_ack_len, "%" PRIu64);
 
     const uint16_t ack_delay = 0;
-    i += enc(buf, len, i, &ack_delay, 0, "%u");
+    enc(buf, len, i, &ack_delay, 0, "%u");
 
-    i += enc(buf, len, i, &ack_delay, 0, "%u");
+    enc(buf, len, i, &ack_delay, 0, "%u");
 
     // TODO: send actual information
     const uint8_t ack_block = 0;
-    i += enc(buf, len, i, &ack_block, 0, "%u");
+    enc(buf, len, i, &ack_block, 0, "%u");
 
     return i - pos;
 }
 
 
-const uint8_t enc_sid_len[] = {0xFF, 0x00, 0x01, 0xFF, 0x02}; // 0xFF invalid
+static const uint8_t enc_sid_len[] = {0xFF, 0x00, 0x01, 0xFF,
+                                      0x02}; // 0xFF invalid
 
 static uint8_t __attribute__((const)) needed_sid_len(const uint32_t n)
 {
@@ -307,9 +308,9 @@ static uint8_t __attribute__((const)) needed_sid_len(const uint32_t n)
 }
 
 
-const uint8_t enc_off_len[] = {
-    0x00, 0x01 << 2, 0xFF, 0xFF,     0x02 << 2,
-    0xFF, 0xFF,      0xFF, 0x03 << 2}; // 0xFF invalid
+static const uint8_t enc_off_len[] = {0x00,      0x01 << 2, 0xFF, 0xFF,
+                                      0x02 << 2, 0xFF,      0xFF, 0xFF,
+                                      0x03 << 2}; // 0xFF invalid
 
 static uint8_t __attribute__((const)) needed_off_len(const uint64_t n)
 {
@@ -341,8 +342,8 @@ uint16_t enc_stream_frame(struct q_stream * const s,
         type |= F_STREAM_FIN;
 
     // now that we know how long the stream frame header is, encode it
-    i += enc(buf, len, i, &type, 0, "0x%02x");
-    i += enc(buf, len, i, &s->id, sid_len, "%u");
+    enc(buf, len, i, &type, 0, "0x%02x");
+    enc(buf, len, i, &s->id, sid_len, "%u");
     if (off_len)
         enc(buf, len, i, &s->out_off, off_len, "%" PRIu64);
 
