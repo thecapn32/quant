@@ -25,6 +25,7 @@
 
 #include <inttypes.h>
 #include <pthread.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -191,6 +192,8 @@ uint16_t dec_frames(struct q_conn * const c __attribute__((unused)),
 {
     uint16_t i = pkt_hdr_len(buf, len) + HASH_LEN;
     uint16_t pad_start = 0;
+    bool got_stream_frame = false;
+
     while (i < len) {
         const uint8_t type = ((const uint8_t * const)(buf))[i];
         if (pad_start && (type != T_PADDING || i == len - 1)) {
@@ -200,7 +203,11 @@ uint16_t dec_frames(struct q_conn * const c __attribute__((unused)),
             warn(debug, "frame type 0x%02x, start pos %u", type, i);
 
         if (bitmask_match(type, T_STREAM)) {
+            // TODO: support multiple stream frames per packet (needs memcpy)
+            ensure(got_stream_frame == false,
+                   "can only handle one stream frame per packet");
             i += dec_stream_frame(c, buf, i, len);
+            got_stream_frame = true;
         } else if (bitmask_match(type, T_ACK)) {
             i += dec_ack_frame(c, buf, i, len);
         } else
