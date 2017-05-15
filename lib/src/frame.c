@@ -131,11 +131,10 @@ static uint8_t __attribute__((const)) dec_ack_block_len(const uint8_t flags)
 
 #define F_ACK_N 0x10
 
-static uint16_t __attribute__((nonnull))
-dec_ack_frame(struct q_conn * const c __attribute__((unused)),
-              const void * const buf,
-              const uint16_t pos,
-              const uint16_t len)
+static uint16_t __attribute__((nonnull)) dec_ack_frame(struct q_conn * const c,
+                                                       const void * const buf,
+                                                       const uint16_t pos,
+                                                       const uint16_t len)
 {
     uint16_t i = pos;
     uint8_t type = 0;
@@ -156,6 +155,10 @@ dec_ack_frame(struct q_conn * const c __attribute__((unused)),
     const uint8_t lg_ack_len = dec_lg_ack_len(type);
     uint64_t lg_ack = 0;
     dec(lg_ack, buf, len, i, lg_ack_len, "%" PRIu64);
+    if (lg_ack > c->out_ack) {
+        c->out_ack = lg_ack;
+        warn(notice, "out_ack now %" PRIu64, lg_ack);
+    }
 
     uint16_t lg_ack_delta_t = 0;
     dec(lg_ack_delta_t, buf, len, i, 0, "%u");
@@ -263,7 +266,7 @@ static uint8_t __attribute__((const)) needed_lg_ack_len(const uint64_t n)
     return 4;
 }
 
-uint16_t enc_ack_frame(const struct q_conn * const c,
+uint16_t enc_ack_frame(struct q_conn * const c,
                        void * const buf,
                        const uint16_t len,
                        const uint16_t pos)
@@ -281,6 +284,8 @@ uint16_t enc_ack_frame(const struct q_conn * const c,
     enc(buf, len, i, &num_ts, 0, "%u");
 
     enc(buf, len, i, &c->in, lg_ack_len, "%" PRIu64);
+    c->in_ack = c->in;
+    warn(info, "ACKing %" PRIu64, c->in);
 
     const uint16_t ack_delay = 0;
     enc(buf, len, i, &ack_delay, 0, "%u");

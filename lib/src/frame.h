@@ -67,11 +67,10 @@ dec_frames(struct q_conn * const c, const void * const buf, const uint16_t len);
 extern uint16_t __attribute__((nonnull))
 enc_padding_frame(void * const buf, const uint16_t pos, const uint16_t len);
 
-extern uint16_t __attribute__((nonnull))
-enc_ack_frame(const struct q_conn * const c,
-              void * const buf,
-              const uint16_t len,
-              const uint16_t pos);
+extern uint16_t __attribute__((nonnull)) enc_ack_frame(struct q_conn * const c,
+                                                       void * const buf,
+                                                       const uint16_t len,
+                                                       const uint16_t pos);
 
 extern uint16_t __attribute__((nonnull))
 enc_stream_frame(struct q_stream * const s,

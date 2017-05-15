@@ -40,14 +40,15 @@ extern hash q_conns;
 struct q_conn {
     node conn_node;
 
-    uint64_t id;    ///< Connection ID
-    uint64_t out;   ///< The highest packet number sent on this connection
-    uint64_t acked; ///< The highest sent packet number acked on this connection
-    uint64_t in;    ///< The highest packet number received on this connection
-    uint32_t vers;  ///< QUIC version in use for this connection.
+    uint64_t id;  ///< Connection ID
+    uint64_t out; ///< Highest packet number sent
+    uint64_t out_ack; ///< Highest sent packet number that was ACK'ed
+    uint64_t in;      ///< Highest packet number received
+    uint64_t in_ack;  ///< Highest packet number we've ACK'ed
+    uint32_t vers;    ///< QUIC version in use for this connection.
     uint32_t next_sid;
     uint8_t flags;
-    uint8_t state;  ///< State of the connection.
+    uint8_t state; ///< State of the connection.
 
     /// @cond
     uint8_t _unused[2]; ///< @internal Padding.

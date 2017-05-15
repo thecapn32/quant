@@ -36,6 +36,7 @@
 #include <sys/queue.h>
 #include <sys/socket.h>
 #include <time.h>
+#include <unistd.h>
 
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
@@ -136,7 +137,7 @@ static void tx(struct w_sock * const ws __attribute__((nonnull)),
         case CONN_CLSD:
         case CONN_VERS_SENT:
             c->state = CONN_VERS_SENT;
-            warn(info, "conn %" PRIu64 " now in CONN_VERS_SENT", c->id);
+            warn(info, "conn %" PRIx64 " now in CONN_VERS_SENT", c->id);
             break;
 
         case CONN_VERS_RECV:
@@ -149,9 +150,11 @@ static void tx(struct w_sock * const ws __attribute__((nonnull)),
         }
         v->buf = (uint8_t *)v->buf - Q_OFFSET;
         v->len += Q_OFFSET;
-        v->len = enc_pkt(c, s, v->buf, v->len, w_iov_max_len(w, v));
         c->out++;
-        hexdump(v->buf, v->len);
+        v->len = enc_pkt(c, s, v->buf, v->len, w_iov_max_len(w, v));
+        warn(notice, "sent pkt %" PRIu64, c->out);
+
+        // hexdump(v->buf, v->len);
     }
 
     w_tx(ws, o);
@@ -163,12 +166,7 @@ static void tx(struct w_sock * const ws __attribute__((nonnull)),
         free(o);
     }
 
-    warn(info, "acked %" PRIu64 ", out %" PRIu64, c->acked, c->out);
-    if (c->acked >= c->out) {
-        pthread_mutex_lock(&lock);
-        pthread_cond_signal(&write_cv);
-        pthread_mutex_unlock(&lock);
-    }
+    sleep(1);
 }
 
 
@@ -184,7 +182,7 @@ rx(struct ev_loop * const l __attribute__((unused)),
     w_rx(ws, &i);
     struct w_iov * v;
     STAILQ_FOREACH (v, &i, next) {
-        hexdump(v->buf, v->len);
+        // hexdump(v->buf, v->len);
         ensure(v->len <= MAX_PKT_LEN,
                "received %u-byte packet, larger than MAX_PKT_LEN of %u", v->len,
                MAX_PKT_LEN);
@@ -212,16 +210,20 @@ rx(struct ev_loop * const l __attribute__((unused)),
                                              .sin_addr = {.s_addr = v->ip}};
             socklen_t peer_len = sizeof(peer);
             c = new_conn(cid, (const struct sockaddr *)&peer, peer_len);
-            c->in = pkt_nr(v->buf, v->len);
             accept_queue = cid;
         }
+
+        const uint64_t nr = pkt_nr(v->buf, v->len);
+        warn(notice, "received pkt %" PRIu64, nr);
+        if (nr > c->in)
+            c->in = nr;
 
         switch (c->state) {
         case CONN_CLSD:
         case CONN_VERS_RECV:
             ensure(pkt_flags(v->buf) & F_LONG_HDR, "short header");
             c->state = CONN_VERS_RECV;
-            warn(info, "conn %" PRIu64 " now in CONN_VERS_RECV", c->id);
+            warn(info, "conn %" PRIx64 " now in CONN_VERS_RECV", c->id);
 
             // respond to the initial version negotiation packet
             c->vers = pkt_vers(v->buf, v->len);
@@ -229,7 +231,7 @@ rx(struct ev_loop * const l __attribute__((unused)),
                 warn(debug, "supporting client-requested version 0x%08x",
                      c->vers);
                 c->state = CONN_ESTB;
-                warn(info, "conn %" PRIu64 " now in CONN_ESTB", c->id);
+                warn(info, "conn %" PRIx64 " now in CONN_ESTB", c->id);
                 dec_frames(c, v->buf, v->len);
             } else
                 warn(warn, "client-requested version 0x%08x not supported",
@@ -249,13 +251,13 @@ rx(struct ev_loop * const l __attribute__((unused)),
                     warn(info, "no version in common with server, closing");
                     c->vers = 0;
                     c->state = CONN_FINW;
-                    warn(info, "conn %" PRIu64 " now in CONN_FINW", c->id);
+                    warn(info, "conn %" PRIx64 " now in CONN_FINW", c->id);
                 }
                 tx(ws, c, 0);
             } else {
                 warn(info, "server accepted version 0x%08x", c->vers);
                 c->state = CONN_ESTB;
-                warn(info, "conn %" PRIu64 " now in CONN_ESTB", c->id);
+                warn(info, "conn %" PRIx64 " now in CONN_ESTB", c->id);
                 dec_frames(c, v->buf, v->len);
                 // let's send some stream frames
                 check_conn(c);
@@ -264,8 +266,7 @@ rx(struct ev_loop * const l __attribute__((unused)),
 
         case CONN_ESTB:
             dec_frames(c, v->buf, v->len);
-            // tx(ws, c, 0);
-            return; // TODO: respond with ACK
+            break;
 
         default:
             die("TODO: state %u", c->state);
@@ -276,6 +277,19 @@ rx(struct ev_loop * const l __attribute__((unused)),
             pthread_mutex_lock(&lock);
             pthread_cond_signal(&accept_cv);
             pthread_mutex_unlock(&lock);
+        }
+
+        if (c->out_ack >= c->out) {
+            warn(info, "out %" PRIu64 ", out_ack %" PRIu64, c->out, c->out_ack);
+            pthread_mutex_lock(&lock);
+            pthread_cond_signal(&write_cv);
+            pthread_mutex_unlock(&lock);
+        }
+
+        warn(info, "in %" PRIu64 ", in_ack %" PRIu64, c->in, c->in_ack);
+        if (c->in_ack < c->in) {
+            warn(info, "sending ACK");
+            tx(ws, c, 0);
         }
     }
 }
@@ -330,10 +344,10 @@ static void __attribute__((nonnull)) check_stream(void * arg, void * obj)
     struct q_conn * c = arg;
     struct q_stream * s = obj;
     if (!STAILQ_EMPTY(&s->ov)) {
-        const uint32_t l = w_iov_stailq_len(&s->ov);
         warn(debug,
              "connection %" PRIu64 " stream %u has %u byte%s pending data",
-             c->id, s->id, l, plural(l));
+             c->id, s->id, w_iov_stailq_len(&s->ov),
+             plural(w_iov_stailq_len(&s->ov)));
         tx(c->sock, c, s);
     }
 }
@@ -351,9 +365,9 @@ void q_write(const uint64_t cid,
              struct w_iov_stailq * const q)
 {
     struct q_conn * const c = get_conn(cid);
-    ensure(c, "conn %" PRIu64 " does not exist", cid);
+    ensure(c, "conn %" PRIx64 " does not exist", cid);
     struct q_stream * s = get_stream(c, sid);
-    ensure(s, "stream %u on conn %" PRIu64 " does not exist", sid, cid);
+    ensure(s, "stream %u on conn %" PRIx64 " does not exist", sid, cid);
 
     pthread_mutex_lock(&lock);
     STAILQ_CONCAT(&s->ov, q);
@@ -388,7 +402,7 @@ void q_read(const uint64_t cid,
             struct w_iov_stailq * const i)
 {
     struct q_conn * const c = get_conn(cid);
-    ensure(c, "conn %" PRIu64 " does not exist", cid);
+    ensure(c, "conn %" PRIx64 " does not exist", cid);
 
     pthread_mutex_lock(&lock);
     warn(warn, "waiting for data");
@@ -402,7 +416,7 @@ void q_read(const uint64_t cid,
         return;
 
     struct q_stream * s = get_stream(c, *sid);
-    ensure(s, "stream %u on conn %" PRIu64 " does not exist", *sid, cid);
+    ensure(s, "stream %u on conn %" PRIx64 " does not exist", *sid, cid);
 
     if (STAILQ_EMPTY(&s->iv)) {
         pthread_mutex_lock(&lock);
@@ -444,10 +458,10 @@ uint64_t q_bind(void * const q, const uint16_t port)
 
         // store the RX watcher with the connection
         struct q_conn * const c = get_conn(cid);
-        ensure(c, "conn %" PRIu64 " does not exist", cid);
+        ensure(c, "conn %" PRIx64 " does not exist", cid);
         c->rx_w = rx_w;
         c->sock = ws;
-        warn(warn, "got conn %" PRIu64, cid);
+        warn(warn, "got conn %" PRIx64, cid);
     }
 
     pthread_mutex_unlock(&lock);
@@ -458,7 +472,7 @@ uint64_t q_bind(void * const q, const uint16_t port)
 uint32_t q_rsv_stream(const uint64_t cid)
 {
     struct q_conn * const c = get_conn(cid);
-    ensure(c, "conn %" PRIu64 " does not exist", cid);
+    ensure(c, "conn %" PRIx64 " does not exist", cid);
     return new_stream(c, 0)->id;
 }
 
@@ -574,7 +588,7 @@ void q_close(const uint64_t cid)
 {
     warn(debug, "enter");
     struct q_conn * const c = get_conn(cid);
-    ensure(c, "conn %" PRIu64 " does not exist", cid);
+    ensure(c, "conn %" PRIx64 " does not exist", cid);
 
     // TODO proper handling of close
     // w_close(c->sock);
