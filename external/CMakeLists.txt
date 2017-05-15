@@ -58,3 +58,11 @@ externalproject_add(quic-go
 
 # EXCLUDE_FROM_ALL workaround for older cmake
 set_target_properties(quic-go PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
+add_custom_target(go-client
+                  DEPENDS quic-go
+                  COMMAND ${GOPATH}/bin/client -v https://127.0.0.1:8443/)
+
+add_custom_target(go-server
+                  DEPENDS quic-go
+                  COMMAND ${GOPATH}/bin/example -v -bind 127.0.0.1:8443)
