@@ -33,7 +33,8 @@ externalproject_add(warp
     ${CMAKE_CURRENT_BINARY_DIR}/lib/libwarpcore.a
 )
 
-file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include)
+file(MAKE_DIRECTORY
+      ${CMAKE_CURRENT_BINARY_DIR}/include ${CMAKE_CURRENT_BINARY_DIR}/lib)
 add_library(warpcore STATIC IMPORTED GLOBAL)
 set(WARP ${CMAKE_CURRENT_BINARY_DIR}/lib/libwarpcore.a)
 if(NOT EXISTS(${WARP}))
@@ -46,13 +47,30 @@ set_target_properties(warpcore
 add_dependencies(warpcore warp)
 
 
+externalproject_add(picotls
+  UPDATE_COMMAND ""
+  GIT_REPOSITORY git@github.com:h2o/picotls.git
+  # GIT_TAG kazuho/quic <- this doesn't work, hack around it:
+  PATCH_COMMAND git checkout kazuho/quic
+  CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
+    -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -DOPENSSL_INCLUDE_DIR=/usr/include
+    -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+  INSTALL_COMMAND
+    cp -r ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls/include/
+      ${CMAKE_CURRENT_BINARY_DIR}/include &&
+    cp ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/libpicotls-minicrypto.a
+      ${CMAKE_CURRENT_BINARY_DIR}/lib
+)
+
+
 # Use quic-go for testing against, rather than proto-quic monster
 set(GOPATH ${CMAKE_CURRENT_BINARY_DIR}/go)
 set(QUICGO github.com/lucas-clemente/quic-go)
 externalproject_add(quic-go
   DOWNLOAD_COMMAND env GOPATH=${GOPATH} go get ${QUICGO}
   CONFIGURE_COMMAND ""
-  BUILD_COMMAND cd ${GOPATH}/src/${QUICGO} && env GOPATH=${GOPATH} go get -t -u ./...
+  BUILD_COMMAND
+    cd ${GOPATH}/src/${QUICGO} && env GOPATH=${GOPATH} go get -t -u ./...
   INSTALL_COMMAND ""
 )
 
