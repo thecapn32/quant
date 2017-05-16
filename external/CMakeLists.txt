@@ -1,7 +1,7 @@
 include(ExternalProject)
 
 externalproject_add(tommyds
-  UPDATE_COMMAND ""
+  # UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/amadvance/tommyds.git
   PATCH_COMMAND sed -i "" -e "s/-Wpadded// $<SEMICOLON> s/-Wcast-align// \
                   $<SEMICOLON> s/objdump/echo/" Makefile
@@ -23,7 +23,7 @@ add_dependencies(tommy tommyds)
 
 
 externalproject_add(warp
-  UPDATE_COMMAND ""
+  # UPDATE_COMMAND ""
   GIT_REPOSITORY git@github.com:NTAP/warpcore.git
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -DDLEVEL=notice
@@ -48,7 +48,7 @@ add_dependencies(warpcore warp)
 
 
 externalproject_add(picotls
-  UPDATE_COMMAND ""
+  # UPDATE_COMMAND ""
   GIT_REPOSITORY git@github.com:h2o/picotls.git
   # GIT_TAG kazuho/quic <- this doesn't work, hack around it:
   PATCH_COMMAND git checkout kazuho/quic
