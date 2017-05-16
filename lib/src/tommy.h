@@ -25,7 +25,10 @@
 
 #pragma once
 
-#include "tommyds/tommy.h"
+// IWYU pragma: begin_exports
+#include <tommyds/tommy.h>
+#include <tommyds/tommytypes.h>
+// IWYU pragma: end_exports
 
 // The tommy identifiers are quite long, shorten them a bit.
 // This also lets us more easily switch between different tommy data structures.
@@ -39,5 +42,6 @@
 #define hash_search tommy_hashlin_search
 #define list tommy_list
 #define list_head tommy_list_head
+#define list_init tommy_list_init
 #define list_insert_tail tommy_list_insert_tail
 #define node tommy_node
