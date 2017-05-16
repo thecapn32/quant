@@ -325,12 +325,11 @@ uint64_t q_connect(void * const q,
               ((const struct sockaddr_in *)(const void *)peer)->sin_port);
 
     // initialize the RX watcher
-    c->rx_w = calloc(1, sizeof(*c->rx_w));
-    c->rx_w->data = c->sock;
-    ev_io_init(c->rx_w, rx, w_fd(c->sock), EV_READ);
+    c->rx_w.data = c->sock;
+    ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
 
     pthread_mutex_lock(&lock);
-    ev_io_start(loop, c->rx_w);
+    ev_io_start(loop, &c->rx_w);
     ev_async_send(loop, &tx_w);
     pthread_mutex_unlock(&lock);
 
@@ -371,7 +370,7 @@ void q_write(const uint64_t cid,
 
     pthread_mutex_lock(&lock);
     STAILQ_CONCAT(&s->ov, q);
-    ev_io_start(loop, c->rx_w);
+    ev_io_start(loop, &c->rx_w);
     ev_async_send(loop, &tx_w);
     warn(warn, "waiting for write to complete");
     pthread_cond_wait(&write_cv, &lock);
@@ -436,18 +435,17 @@ uint64_t q_bind(void * const q, const uint16_t port)
     // bind socket
     struct w_sock * const ws = w_bind(q, ntohs(port), 0);
 
-    // allocate and initialize an RX watcher
-    ev_io * rx_w = calloc(1, sizeof(*rx_w));
-    rx_w->data = ws;
-    ev_io_init(rx_w, rx, w_fd(ws), EV_READ);
-
+    // initialize an RX watcher
+    ev_io rx_w = {.data = ws};
+    ev_io_init(&rx_w, rx, w_fd(ws), EV_READ);
     pthread_mutex_lock(&lock);
 
     // start the RX watcher
-    ev_io_start(loop, rx_w);
+    ev_io_start(loop, &rx_w);
     ev_async_send(loop, &tx_w);
     warn(warn, "waiting for new inbound conn");
     pthread_cond_wait(&accept_cv, &lock);
+    ev_io_stop(loop, &rx_w);
 
     // take new connection from "accept queue"; will be zero if interrupted
     const uint64_t cid = accept_queue;
@@ -456,8 +454,8 @@ uint64_t q_bind(void * const q, const uint16_t port)
 
         // store the RX watcher with the connection
         struct q_conn * const c = get_conn(cid);
-        ensure(c, "conn %" PRIx64 " does not exist", cid);
         c->rx_w = rx_w;
+        ev_io_start(loop, &c->rx_w);
         c->sock = ws;
         warn(warn, "got conn %" PRIx64, cid);
     }

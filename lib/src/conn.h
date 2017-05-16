@@ -40,8 +40,8 @@ extern hash q_conns;
 struct q_conn {
     node conn_node;
 
-    uint64_t id;  ///< Connection ID
-    uint64_t out; ///< Highest packet number sent
+    uint64_t id;      ///< Connection ID
+    uint64_t out;     ///< Highest packet number sent
     uint64_t out_ack; ///< Highest sent packet number that was ACK'ed
     uint64_t in;      ///< Highest packet number received
     uint64_t in_ack;  ///< Highest packet number we've ACK'ed
@@ -58,7 +58,7 @@ struct q_conn {
     struct sockaddr peer; ///< Address of our peer.
     hash streams;
     struct w_sock * sock; ///< File descriptor (socket) for the connection.
-    ev_io * rx_w;         ///< RX watcher.
+    ev_io rx_w;           ///< RX watcher.
 };
 
 #define CONN_CLSD 0

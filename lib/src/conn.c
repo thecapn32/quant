@@ -61,7 +61,6 @@ new_conn(const uint64_t id,
 
     struct q_conn * const c = calloc(1, sizeof(*c));
     ensure(c, "could not calloc");
-    // c->rx_w will be allocated and initialized when a w_sock exists
     c->id = id;
     c->out = 0;
     hash_init(&c->streams);
