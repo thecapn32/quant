@@ -433,8 +433,6 @@ void q_read(const uint64_t cid,
 
 uint64_t q_bind(void * const q, const uint16_t port)
 {
-    // warn(debug, "enter");
-
     // bind socket
     struct w_sock * const ws = w_bind(q, ntohs(port), 0);
 
@@ -586,7 +584,6 @@ void * q_init(const char * const ifname, const long timeout)
 
 void q_close(const uint64_t cid)
 {
-    warn(debug, "enter");
     struct q_conn * const c = get_conn(cid);
     ensure(c, "conn %" PRIx64 " does not exist", cid);
 
@@ -596,14 +593,11 @@ void q_close(const uint64_t cid)
     // hash_done(&c->streams);
     // hash_remove(&q_conns, &c->conn_node);
     // free(c);
-    warn(debug, "leave");
 }
 
 
 void q_cleanup(void * const q)
 {
-    warn(debug, "enter");
-
     // wait for the quant thread to end and destroy lock
     ensure(pthread_join(tid, 0) == 0, "pthread_join");
     ensure(pthread_mutex_destroy(&lock) == 0, "pthread_mutex_init");
@@ -612,9 +606,6 @@ void q_cleanup(void * const q)
     ensure(pthread_cond_destroy(&accept_cv) == 0, "pthread_cond_destroy");
 
     w_cleanup(q);
-    warn(debug, "1");
     hash_foreach(&q_conns, free);
-    warn(debug, "2");
     hash_done(&q_conns);
-    warn(debug, "leave");
 }
