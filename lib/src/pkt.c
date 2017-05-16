@@ -65,7 +65,7 @@ uint64_t pkt_cid(const void * const buf, const uint16_t len)
     uint64_t cid = 0;
     if (flags & F_LONG_HDR || flags & F_SH_CID) {
         uint16_t i = 1;
-        dec(cid, buf, len, i, 0, "%" PRIu64);
+        dec(cid, buf, len, i, 0, "%" PRIx64);
     } else
         die("no connection ID in header");
     return cid;
@@ -122,7 +122,7 @@ uint16_t enc_pkt(struct q_conn * const c,
     enc(buf, len, i, &flags, 0, "0x%02x");
 
     if (flags & F_LONG_HDR || flags & F_SH_CID)
-        enc(buf, len, i, &c->id, 0, "%" PRIu64);
+        enc(buf, len, i, &c->id, 0, "%" PRIx64);
 
     if (flags & F_LONG_HDR) {
         const uint32_t nr =
