@@ -25,10 +25,25 @@
 
 #pragma once
 
+#include <ev.h>
 #include <stdint.h>
+
+#include "tommy.h"
+
 
 struct q_conn;
 struct q_stream;
+
+
+struct pkt_info {
+    node node;
+
+    uint64_t nr;    ///< Packet number.
+    ev_tstamp tx_t; ///< Time packet was sent.
+    uint16_t len;   ///< Packet length;
+
+    uint8_t _unused[6];
+};
 
 
 #define MAX_PKT_LEN 1350

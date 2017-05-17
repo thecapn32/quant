@@ -24,14 +24,18 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <inttypes.h>
+#include <math.h>
 #include <netdb.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <sys/param.h>
 #include <sys/socket.h>
 
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
+#include "pkt.h"
+#include "quic.h"
 #include "tommy.h"
 
 
@@ -52,10 +56,9 @@ struct q_conn * get_conn(const uint64_t id)
 }
 
 
-struct q_conn * __attribute__((nonnull))
-new_conn(const uint64_t id,
-         const struct sockaddr * const peer,
-         const socklen_t peer_len)
+struct q_conn * new_conn(const uint64_t id,
+                         const struct sockaddr * const peer,
+                         const socklen_t peer_len)
 {
     ensure(get_conn(id) == 0, "conn %" PRIx64 " already exists", id);
 
@@ -63,6 +66,18 @@ new_conn(const uint64_t id,
     ensure(c, "could not calloc");
     c->id = id;
     c->out = 0;
+
+    // initialize LD state
+    // XXX: UsingTimeLossDetection not defined?
+    c->ld_alarm.data = c;
+    c->reorder_thresh = kReorderingThreshold;
+    c->reorder_fract = INFINITY;
+
+    // initialize CC state
+    c->cwnd = kInitialWindow;
+    c->ssthresh = UINT64_MAX;
+
+    list_init(&c->sent_pkts);
     hash_init(&c->streams);
     hash_insert(&q_conns, &c->conn_node, c, (uint32_t)c->id);
 
@@ -76,4 +91,49 @@ new_conn(const uint64_t id,
          port);
 
     return c;
+}
+
+
+void set_ld_alarm(struct q_conn * const c)
+{
+    // check if we sent at least one packet with a retransmittable frame
+    node * n = list_head(&c->sent_pkts);
+    while (n) {
+        const struct pkt_info * const pi = n->data;
+        if (pi->len) {
+            ev_timer_stop(loop, &c->ld_alarm);
+            warn(debug, "stopping LD alarm");
+            return;
+        }
+        n = n->next;
+    }
+
+    ev_tstamp dur = 0;
+    if (c->state < CONN_ESTB) {
+        // Handshake retransmission alarm
+        if (c->handshake_cnt == 0) // XXX: pseudo code checks srtt == 0
+            dur = 2 * kDefaultInitialRtt;
+        else
+            dur = 2 * c->srtt;
+        dur = MAX(dur, kMinTLPTimeout);
+        dur *= 2 ^ c->handshake_cnt; // XXX: pseudo code does <<
+        // else if (loss_time != 0):
+        //   // Early retransmit timer or time loss detection.
+        //   dur = loss_time - now
+        // else if (tlp_cnt < kMaxTLPs):
+        //   // Tail Loss Probe
+        //   if (retransmittable_packets_outstanding = 1):
+        //     dur = 1.5 * srtt + kDelayedAckTimeout
+        //   else:
+        //     dur = kMinTLPTimeout
+        //   dur = max(dur, 2 * srtt)
+        // else:
+        //   // RTO alarm
+        //   dur = srtt + 4 * rttvar
+        //   dur = max(dur, kMinRTOTimeout)
+        //   dur = dur << rto_cnt
+    }
+    c->ld_alarm.repeat = dur;
+    ev_timer_again(loop, &c->ld_alarm);
+    warn(debug, "LD alarm now %f", dur);
 }

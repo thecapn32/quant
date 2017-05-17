@@ -54,7 +54,8 @@ struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
     struct q_stream * const s = calloc(1, sizeof(*s));
     ensure(c, "could not calloc q_stream");
     s->c = c;
-    STAILQ_INIT(&s->ov);
+    STAILQ_INIT(&s->o);
+    STAILQ_INIT(&s->i);
 
     if (id)
         // the peer has initiated this stream
@@ -62,14 +63,14 @@ struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
     else {
         // we are initiating this stream
         s->id = c->next_sid++;
-        if ((c->flags & CONN_FLAG_CLNT) != (s->id % 2))
+        if ((c->flags & CONN_FLAG_CLNT) != (s->id % 2) && s->id)
             // need to make this odd
             s->id++;
     }
     ensure(get_stream(c, s->id) == 0, "stream %u already exists", s->id);
 
     const uint8_t odd = s->id % 2; // NOTE: % in assert confuses printf
-    ensure((c->flags & CONN_FLAG_CLNT) == (id ? !odd : odd),
+    ensure((c->flags & CONN_FLAG_CLNT) == (id ? !odd : odd) || s->id == 0,
            "am %s, expected %s connection stream ID, got %u",
            c->flags & CONN_FLAG_CLNT ? "client" : "server",
            c->flags & CONN_FLAG_CLNT ? "odd" : "even", s->id);

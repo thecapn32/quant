@@ -44,4 +44,5 @@
 #define list_head tommy_list_head
 #define list_init tommy_list_init
 #define list_insert_tail tommy_list_insert_tail
+#define list_remove tommy_list_remove_existing
 #define node tommy_node

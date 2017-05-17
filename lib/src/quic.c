@@ -36,7 +36,6 @@
 #include <sys/queue.h>
 #include <sys/socket.h>
 #include <time.h>
-#include <unistd.h>
 
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
@@ -63,11 +62,13 @@ const uint32_t ok_vers[] = {
 const uint8_t ok_vers_len = sizeof(ok_vers) / sizeof(ok_vers[0]);
 
 
-static struct ev_loop * loop;
+struct ev_loop * loop;
+
 static ev_async tx_w;
 static pthread_t tid;
 static pthread_cond_t write_cv;
 static pthread_cond_t accept_cv;
+static pthread_cond_t connect_cv;
 
 pthread_mutex_t lock;
 pthread_cond_t read_cv;
@@ -112,29 +113,57 @@ pick_from_server_vers(const void * const buf, const uint16_t len)
 }
 
 
+static void __attribute__((nonnull)) stream_write(struct q_stream * const s,
+                                                  const void * const data,
+                                                  const uint16_t len)
+{
+    warn(debug, "writing %u byte%s on str %u: %.*s", len, plural(len), s->id,
+         len, data);
+
+    // allocate a w_iov
+    struct w_iov_stailq o;
+    w_alloc_cnt(w_engine(s->c->sock), &o, 1, Q_OFFSET);
+    struct w_iov * const v = STAILQ_FIRST(&o);
+
+    // copy data
+    memcpy(v->buf, data, len);
+    v->len = len;
+
+    // enqueue for TX
+    v->ip = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_addr.s_addr;
+    v->port = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_port;
+    STAILQ_INSERT_TAIL(&s->o, v, next);
+}
+
+
+static void __attribute__((nonnull))
+ld_alarm_cb(struct ev_loop * l, ev_timer * w, int e);
+
+
 static void tx(struct w_sock * const ws __attribute__((nonnull)),
                struct q_conn * const c __attribute__((nonnull)),
                struct q_stream * s)
 {
     struct w_engine * const w = w_engine(ws);
-    struct w_iov_stailq * o;
     struct w_iov * v;
 
-    if (unlikely(s == 0 || c->state < CONN_ESTB)) {
-        warn(debug, "allocating tmp w_iov_stailq");
-        o = calloc(1, sizeof(*o));
-        ensure(o, "could not calloc w_iov_stailq");
-        STAILQ_INIT(o);
-        w_alloc_cnt(w, o, 1, Q_OFFSET);
-        v = STAILQ_FIRST(o);
-        v->ip = ((struct sockaddr_in *)(void *)&c->peer)->sin_addr.s_addr;
-        v->port = ((struct sockaddr_in *)(void *)&c->peer)->sin_port;
-    } else
-        o = &s->ov;
+    // if (unlikely(s == 0)) {
+    //     warn(debug, "allocating temp w_iov");
+    //     s = get_stream(c, 0);
+    //     w_alloc_cnt(w, &s->o, 1, Q_OFFSET);
+    //     v = STAILQ_FIRST(&s->o);
+    //     v->ip = ((struct sockaddr_in *)(void *)&c->peer)->sin_addr.s_addr;
+    //     v->port = ((struct sockaddr_in *)(void *)&c->peer)->sin_port;
+    //     v->len = 0;
+    // }
 
-    STAILQ_FOREACH (v, o, next) {
+    STAILQ_FOREACH (v, &s->o, next) {
         switch (c->state) {
         case CONN_CLSD:
+            // initialize loss detection alarm callback
+            ev_init(&c->ld_alarm, ld_alarm_cb);
+        // fall through:
+
         case CONN_VERS_SENT:
             c->state = CONN_VERS_SENT;
             warn(info, "conn %" PRIx64 " now in CONN_VERS_SENT", c->id);
@@ -152,21 +181,51 @@ static void tx(struct w_sock * const ws __attribute__((nonnull)),
         v->len += Q_OFFSET;
         c->out++;
         v->len = enc_pkt(c, s, v->buf, v->len, w_iov_max_len(w, v));
-        warn(notice, "sent pkt %" PRIu64, c->out);
+        warn(notice, "sending pkt %" PRIu64, c->out);
 
-        // hexdump(v->buf, v->len);
+        hexdump(v->buf, v->len);
     }
 
-    w_tx(ws, o);
+    w_tx(ws, &s->o);
     w_nic_tx(w);
+    // STAILQ_CONCAT(c->sent_pkts, &s->o);
 
-    if (unlikely(s == 0 || c->state < CONN_ESTB)) {
-        warn(debug, "freeing tmp w_iov_stailq");
-        w_free(w, o);
-        free(o);
+    // if (unlikely(s == 0)) {
+    //     warn(debug, "freeing temp w_iov");
+    //     w_free(w, &s->o);
+    // }
+}
+
+
+static void __attribute__((nonnull))
+ld_alarm_cb(struct ev_loop * const l __attribute__((unused)),
+            ev_timer * const w,
+            int e __attribute__((unused)))
+{
+    struct q_conn * const c = w->data;
+    warn(err, "loss detection alarm on conn %" PRIx64, c->id);
+
+    // see OnLossDetectionAlarm pseudo code
+    if (c->state < CONN_ESTB) {
+        // handshake retransmission alarm
+        // tx(c->sock, c, 0); // retransmit
+        // c->handshake_count++;
     }
+    //  else if (loss_time != 0):
+    //    // Early retransmit or Time Loss Detection
+    //    DetectLostPackets(largest_acked_packet)
+    //  else if (tlp_count < kMaxTLPs):
+    //    // Tail Loss Probe.
+    //    SendOnePacket()
+    //    tlp_count++
+    //  else:
+    //    // RTO.
+    //    if (rto_count == 0)
+    //      largest_sent_before_rto = largest_sent_packet
+    //    SendTwoPackets()
+    //    rto_count++
 
-    sleep(1);
+    set_ld_alarm(c);
 }
 
 
@@ -175,14 +234,16 @@ rx(struct ev_loop * const l __attribute__((unused)),
    ev_io * const rx_w,
    int e __attribute__((unused)))
 {
-    // warn(info, "entering %s for desc %u", __func__, rx_w->fd);
     struct w_sock * const ws = rx_w->data;
     w_nic_rx(w_engine(ws));
     struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
     w_rx(ws, &i);
-    struct w_iov * v;
-    STAILQ_FOREACH (v, &i, next) {
-        // hexdump(v->buf, v->len);
+
+    while (!STAILQ_EMPTY(&i)) {
+        struct w_iov * const v = STAILQ_FIRST(&i);
+        STAILQ_REMOVE_HEAD(&i, next);
+
+        hexdump(v->buf, v->len);
         ensure(v->len <= MAX_PKT_LEN,
                "received %u-byte packet, larger than MAX_PKT_LEN of %u", v->len,
                MAX_PKT_LEN);
@@ -212,6 +273,7 @@ rx(struct ev_loop * const l __attribute__((unused)),
             c = new_conn(cid, (const struct sockaddr *)&peer, peer_len);
             accept_queue = cid;
         }
+        struct q_stream * s = 0;
 
         const uint64_t nr = pkt_nr(v->buf, v->len);
         warn(notice, "received pkt %" PRIu64, nr);
@@ -221,6 +283,9 @@ rx(struct ev_loop * const l __attribute__((unused)),
         switch (c->state) {
         case CONN_CLSD:
         case CONN_VERS_RECV:
+            // store the socket with the connection
+            c->sock = ws;
+
             ensure(pkt_flags(v->buf) & F_LONG_HDR, "short header");
             c->state = CONN_VERS_RECV;
             warn(info, "conn %" PRIx64 " now in CONN_VERS_RECV", c->id);
@@ -232,11 +297,19 @@ rx(struct ev_loop * const l __attribute__((unused)),
                      c->vers);
                 c->state = CONN_ESTB;
                 warn(info, "conn %" PRIx64 " now in CONN_ESTB", c->id);
-                dec_frames(c, v->buf, v->len);
+                dec_frames(c, v);
+
+                // we should have received a ClientHello
+                s = get_stream(c, 0);
+                struct w_iov * const iv = STAILQ_FIRST(&s->i);
+                ensure(strcmp(iv->buf, "ClientHello") == 0, "no ClientHello");
+
+                // respond with ServerHello
+                stream_write(s, "ServerHello", strlen("ServerHello"));
             } else
                 warn(warn, "client-requested version 0x%08x not supported",
                      c->vers);
-            tx(ws, c, 0);
+            tx(ws, c, s);
             break;
 
         case CONN_VERS_SENT:
@@ -253,19 +326,25 @@ rx(struct ev_loop * const l __attribute__((unused)),
                     c->state = CONN_FINW;
                     warn(info, "conn %" PRIx64 " now in CONN_FINW", c->id);
                 }
-                tx(ws, c, 0);
+                tx(ws, c, s);
             } else {
                 warn(info, "server accepted version 0x%08x", c->vers);
                 c->state = CONN_ESTB;
                 warn(info, "conn %" PRIx64 " now in CONN_ESTB", c->id);
-                dec_frames(c, v->buf, v->len);
+                dec_frames(c, v);
+
+                // we should have received a ServerHello
+                s = get_stream(c, 0);
+                struct w_iov * const iv = STAILQ_FIRST(&s->i);
+                ensure(strcmp(iv->buf, "ServerHello") == 0, "no ServerHello");
+
                 // let's send some stream frames
                 check_conn(c);
             }
             break;
 
         case CONN_ESTB:
-            dec_frames(c, v->buf, v->len);
+            dec_frames(c, v);
             break;
 
         default:
@@ -279,18 +358,18 @@ rx(struct ev_loop * const l __attribute__((unused)),
             pthread_mutex_unlock(&lock);
         }
 
-        if (c->out_ack >= c->out) {
-            warn(info, "out %" PRIu64 ", out_ack %" PRIu64, c->out, c->out_ack);
-            pthread_mutex_lock(&lock);
-            pthread_cond_signal(&write_cv);
-            pthread_mutex_unlock(&lock);
-        }
+        // if (c->out_ack >= c->out) {
+        //     warn(info, "out %" PRIu64 ", out_ack %" PRIu64, c->out, c->out_ack);
+        //     pthread_mutex_lock(&lock);
+        //     pthread_cond_signal(&write_cv);
+        //     pthread_mutex_unlock(&lock);
+        // }
 
-        warn(info, "in %" PRIu64 ", in_ack %" PRIu64, c->in, c->in_ack);
-        if (c->in_ack < c->in) {
-            warn(info, "sending ACK");
-            tx(ws, c, 0);
-        }
+        // warn(info, "in %" PRIu64 ", in_ack %" PRIu64, c->in, c->in_ack);
+        // if (c->in_ack < c->in) {
+        //     warn(info, "sending ACK");
+        //     tx(ws, c, s);
+        // }
     }
 }
 
@@ -318,7 +397,6 @@ uint64_t q_connect(void * const q,
     c->flags |= CONN_FLAG_CLNT;
     // c->vers = 0xbabababa; // XXX reserved version to trigger negotiation
     c->vers = ok_vers[0];
-
     c->sock = w_bind(q, (uint16_t)plat_random(), 0);
     w_connect(c->sock,
               ((const struct sockaddr_in *)(const void *)peer)->sin_addr.s_addr,
@@ -328,12 +406,22 @@ uint64_t q_connect(void * const q,
     c->rx_w.data = c->sock;
     ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
 
+    // prepare ClientHello
+    struct q_stream * const s = new_stream(c, 0);
+    stream_write(s, "ClientHello", strlen("ClientHello"));
+
     pthread_mutex_lock(&lock);
     ev_io_start(loop, &c->rx_w);
     ev_async_send(loop, &tx_w);
+
+    warn(warn, "waiting for handshake to complete");
+    pthread_cond_wait(&connect_cv, &lock);
     pthread_mutex_unlock(&lock);
 
-    warn(info, "connection %" PRIu64 " connected", cid);
+    if (c->state != CONN_ESTB) {
+        warn(info, "conn %" PRIx64 " not connected", cid);
+        return 0;
+    }
     return cid;
 }
 
@@ -342,11 +430,9 @@ static void __attribute__((nonnull)) check_stream(void * arg, void * obj)
 {
     struct q_conn * c = arg;
     struct q_stream * s = obj;
-    if (!STAILQ_EMPTY(&s->ov)) {
-        warn(debug,
-             "connection %" PRIu64 " stream %u has %u byte%s pending data",
-             c->id, s->id, w_iov_stailq_len(&s->ov),
-             plural(w_iov_stailq_len(&s->ov)));
+    if (!STAILQ_EMPTY(&s->o)) {
+        warn(debug, "conn %" PRIx64 " str %u has %u byte%s pending data", c->id,
+             s->id, w_iov_stailq_len(&s->o), plural(w_iov_stailq_len(&s->o)));
         tx(c->sock, c, s);
     }
 }
@@ -366,17 +452,17 @@ void q_write(const uint64_t cid,
     struct q_conn * const c = get_conn(cid);
     ensure(c, "conn %" PRIx64 " does not exist", cid);
     struct q_stream * s = get_stream(c, sid);
-    ensure(s, "stream %u on conn %" PRIx64 " does not exist", sid, cid);
+    ensure(s, "str %u on conn %" PRIx64 " does not exist", sid, cid);
 
     pthread_mutex_lock(&lock);
-    STAILQ_CONCAT(&s->ov, q);
+    STAILQ_CONCAT(&s->o, q);
     ev_io_start(loop, &c->rx_w);
     ev_async_send(loop, &tx_w);
     warn(warn, "waiting for write to complete");
     pthread_cond_wait(&write_cv, &lock);
 
     // XXX instead of assuming all data was received, we need to do rtx handling
-    STAILQ_INIT(&s->ov);
+    STAILQ_INIT(&s->o);
 
     pthread_mutex_unlock(&lock);
     warn(warn, "write done");
@@ -387,9 +473,9 @@ find_stream_with_data(void * arg, void * obj)
 {
     uint32_t * sid = arg;
     struct q_stream * s = obj;
-    if (!STAILQ_EMPTY(&s->iv) && *sid == 0) {
-        const uint32_t in_len = w_iov_stailq_len(&s->iv);
-        warn(info, "buffered %u byte%s on stream %u", in_len, plural(in_len),
+    if (!STAILQ_EMPTY(&s->i) && *sid == 0) {
+        const uint32_t in_len = w_iov_stailq_len(&s->i);
+        warn(info, "buffered %u byte%s on str %u", in_len, plural(in_len),
              s->id);
         *sid = s->id;
     }
@@ -415,9 +501,9 @@ void q_read(const uint64_t cid,
         return;
 
     struct q_stream * s = get_stream(c, *sid);
-    ensure(s, "stream %u on conn %" PRIx64 " does not exist", *sid, cid);
+    ensure(s, "str %u on conn %" PRIx64 " does not exist", *sid, cid);
 
-    if (STAILQ_EMPTY(&s->iv)) {
+    if (STAILQ_EMPTY(&s->i)) {
         pthread_mutex_lock(&lock);
         warn(warn, "read waiting for data");
         pthread_cond_wait(&read_cv, &lock);
@@ -426,7 +512,7 @@ void q_read(const uint64_t cid,
     }
 
     // return data
-    STAILQ_CONCAT(i, &s->iv);
+    STAILQ_CONCAT(i, &s->i);
 }
 
 
@@ -456,7 +542,6 @@ uint64_t q_bind(void * const q, const uint16_t port)
         struct q_conn * const c = get_conn(cid);
         c->rx_w = rx_w;
         ev_io_start(loop, &c->rx_w);
-        c->sock = ws;
         warn(warn, "got conn %" PRIx64, cid);
     }
 
@@ -514,6 +599,7 @@ static void * __attribute__((nonnull)) l_run(void * const arg)
     pthread_mutex_lock(&lock);
     pthread_cond_signal(&read_cv);
     pthread_cond_signal(&write_cv);
+    pthread_cond_signal(&connect_cv);
     pthread_cond_signal(&accept_cv);
     pthread_mutex_unlock(&lock);
 
@@ -547,6 +633,7 @@ void * q_init(const char * const ifname, const long timeout)
     pthread_mutex_init(&lock, 0);
     pthread_cond_init(&read_cv, 0);
     pthread_cond_init(&write_cv, 0);
+    pthread_cond_init(&connect_cv, 0);
     pthread_cond_init(&accept_cv, 0);
 
     // initialize the event loop and async call handler
@@ -601,6 +688,7 @@ void q_cleanup(void * const q)
     ensure(pthread_mutex_destroy(&lock) == 0, "pthread_mutex_init");
     ensure(pthread_cond_destroy(&read_cv) == 0, "pthread_cond_destroy");
     ensure(pthread_cond_destroy(&write_cv) == 0, "pthread_cond_destroy");
+    ensure(pthread_cond_destroy(&connect_cv) == 0, "pthread_cond_destroy");
     ensure(pthread_cond_destroy(&accept_cv) == 0, "pthread_cond_destroy");
 
     w_cleanup(q);

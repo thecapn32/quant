@@ -40,25 +40,42 @@ extern hash q_conns;
 struct q_conn {
     node conn_node;
 
-    uint64_t id;      ///< Connection ID
-    uint64_t out;     ///< Highest packet number sent
-    uint64_t out_ack; ///< Highest sent packet number that was ACK'ed
-    uint64_t in;      ///< Highest packet number received
-    uint64_t in_ack;  ///< Highest packet number we've ACK'ed
-    uint32_t vers;    ///< QUIC version in use for this connection.
+    uint64_t id;  ///< Connection ID
+    uint64_t out; ///< Highest packet number sent
+    uint64_t in;  ///< Highest packet number received
+
+    uint32_t vers; ///< QUIC version in use for this connection.
     uint32_t next_sid;
     uint8_t flags;
     uint8_t state; ///< State of the connection.
 
-    /// @cond
-    uint8_t _unused[2]; ///< @internal Padding.
-    /// @endcond
-
+    uint8_t _unused[2];
     socklen_t peer_len;   ///< Length of @p peer.
     struct sockaddr peer; ///< Address of our peer.
     hash streams;
     struct w_sock * sock; ///< File descriptor (socket) for the connection.
     ev_io rx_w;           ///< RX watcher.
+
+    // LD state
+    ev_timer ld_alarm;    ///< Loss detection alarm.
+    uint8_t handshake_cnt;
+    uint8_t tlp_cnt;
+    uint8_t rto_cnt;
+    uint8_t _unused2;
+    float reorder_fract;
+    uint64_t lg_sent_before_rto;
+    ev_tstamp srtt;
+    ev_tstamp rttvar;
+    uint64_t reorder_thresh;
+    ev_tstamp loss_t;
+    list sent_pkts;
+    // struct w_iov_stailq sent_pkts;
+
+    // CC state
+    uint64_t cwnd;
+    uint64_t in_flight;
+    uint64_t end_of_recovery;
+    uint64_t ssthresh;
 };
 
 #define CONN_CLSD 0
@@ -76,3 +93,5 @@ extern struct q_conn * __attribute__((nonnull))
 new_conn(const uint64_t id,
          const struct sockaddr * const peer,
          const socklen_t peer_len);
+
+extern void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c);

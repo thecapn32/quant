@@ -34,35 +34,16 @@
 #define T_STREAM 0xC0
 #define T_ACK 0xA0
 
-// #define T_RST_STREAM 0x01
-// #define T_CONNECTION_CLOSE 0x02
-// #define T_GOAWAY 0x03
-// #define T_WINDOW_UPDATE 0x04
-// #define T_BLOCKED 0x05
-// #define T_PING 0x07
-
 /// Define an IEEE-754 16-bt floating type (backed by gcc/clang F16C)
 // typedef __fp16 float16_t;
 
 
 struct q_conn;
 struct q_stream;
-
-#if 0
-
-extern uint16_t __attribute__((nonnull))
-enc_padding_frame(void * const buf, const uint16_t len);
+struct w_iov;
 
 extern uint16_t __attribute__((nonnull))
-enc_conn_close_frame(void * const buf, const uint16_t len);
-
-extern uint16_t __attribute__((nonnull))
-enc_ack_frame(void * const buf, const uint16_t len);
-
-#endif
-
-extern uint16_t __attribute__((nonnull))
-dec_frames(struct q_conn * const c, const void * const buf, const uint16_t len);
+dec_frames(struct q_conn * const c, struct w_iov * const v);
 
 extern uint16_t __attribute__((nonnull))
 enc_padding_frame(void * const buf, const uint16_t pos, const uint16_t len);

@@ -32,8 +32,45 @@
 
 extern pthread_mutex_t lock;
 extern pthread_cond_t read_cv;
-
+extern struct ev_loop * loop;
 
 /// The versions of QUIC supported by this implementation
 extern const uint32_t ok_vers[];
 extern const uint8_t ok_vers_len;
+
+
+/// Maximum number of tail loss probes before an RTO fires.
+#define kMaxTLPs 2
+
+/// Maximum reordering in packet number space before FACK style loss detection
+/// considers a packet lost.
+#define kReorderingThreshold 3
+
+/// Maximum reordering in time space before time based loss detection considers
+/// a packet lost. In fraction of an RTT.
+#define kTimeReorderingFraction (1 / 8)
+
+/// Minimum time in the future a tail loss probe alarm may be set for (in sec).
+#define kMinTLPTimeout 0.01
+
+/// Minimum time in the future an RTO alarm may be set for (in sec).
+#define kMinRTOTimeout 0.2
+
+/// The length of the peer’s delayed ack timer (in sec).
+#define kDelayedAckTimeout 0.025
+
+/// The default RTT used before an RTT sample is taken (in sec).
+#define kDefaultInitialRtt 0.1
+
+/// The default max packet size used for calculating default and minimum
+/// congestion windows.
+#define kDefaultMss 1460
+
+/// Default limit on the amount of outstanding data in bytes.
+#define kInitialWindow 10 * kDefaultMss
+
+/// Default minimum congestion window.
+#define kMinimumWindow 2 * kDefaultMss
+
+/// Reduction in congestion window when a new loss event is detected.
+#define kLossReductionFactor 0.5

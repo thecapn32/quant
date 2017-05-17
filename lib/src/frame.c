@@ -23,11 +23,13 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <ev.h>
 #include <inttypes.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/queue.h>
 
 #ifdef __linux__
 #include <byteswap.h>
@@ -42,6 +44,7 @@
 #include "pkt.h"
 #include "quic.h"
 #include "stream.h"
+#include "tommy.h"
 
 
 // Convert stream ID length encoded in flags to bytes
@@ -70,36 +73,37 @@ static uint8_t __attribute__((const)) dec_off_len(const uint8_t flags)
 
 static uint16_t __attribute__((nonnull))
 dec_stream_frame(struct q_conn * const c,
-                 const void * const buf,
-                 const uint16_t pos,
-                 const uint16_t len)
+                 struct w_iov * const v,
+                 const uint16_t pos)
 {
     uint16_t i = pos;
     uint8_t type = 0;
-    dec(type, buf, len, i, 0, "0x%02x");
-    warn(debug, "fin = %u", type & F_STREAM_FIN);
+    dec(type, v->buf, v->len, i, 0, "0x%02x");
+
+    uint16_t data_len = 0;
+    if (type & F_STREAM_DATA_LEN)
+        dec(data_len, v->buf, v->len, i, 0, "%u");
+    ensure(type & F_STREAM_FIN || data_len, "FIN or data_len");
 
     const uint8_t sid_len = dec_sid_len(type);
     uint32_t sid = 0;
-    dec(sid, buf, len, i, sid_len, "%u");
+    dec(sid, v->buf, v->len, i, sid_len, "%u");
     struct q_stream * s = get_stream(c, sid);
     if (s == 0)
         s = new_stream(c, sid);
+    s->in_off += data_len;
 
     const uint8_t off_len = dec_off_len(type);
     uint64_t off = 0;
     if (off_len)
-        dec(off, buf, len, i, off_len, "%" PRIu64);
+        dec(off, v->buf, v->len, i, off_len, "%" PRIu64);
 
-    uint16_t data_len = 0;
-    if (type & F_STREAM_DATA_LEN)
-        dec(data_len, buf, len, i, 0, "%u");
-    else
-        data_len = len - i;
-
-    warn(info, "got data: %s", &((const uint8_t *)buf)[i]);
-    // TODO: check how app can get at data
-    s->in_off += data_len;
+    // deliver data on stream; set v-buf to start of stream data
+    // TODO: pay attention to offset and gaps
+    v->buf = &((uint8_t *)v->buf)[i];
+    warn(info, "%u byte%s on str %u: %.*s", data_len, plural(data_len), sid,
+         data_len, v->buf);
+    STAILQ_INSERT_TAIL(&s->i, v, next);
 
     pthread_mutex_lock(&lock);
     pthread_cond_signal(&read_cv);
@@ -131,18 +135,18 @@ static uint8_t __attribute__((const)) dec_ack_block_len(const uint8_t flags)
 
 #define F_ACK_N 0x10
 
-static uint16_t __attribute__((nonnull)) dec_ack_frame(struct q_conn * const c,
-                                                       const void * const buf,
-                                                       const uint16_t pos,
-                                                       const uint16_t len)
+static uint16_t __attribute__((nonnull))
+dec_ack_frame(struct q_conn * const c,
+              const struct w_iov * const v,
+              const uint16_t pos)
 {
     uint16_t i = pos;
     uint8_t type = 0;
-    dec(type, buf, len, i, 0, "0x%02x");
+    dec(type, v->buf, v->len, i, 0, "0x%02x");
 
     uint8_t num_blocks = 0;
     if (type & F_ACK_N) {
-        dec(num_blocks, buf, len, i, 0, "%u");
+        dec(num_blocks, v->buf, v->len, i, 0, "%u");
         num_blocks++;
     } else {
         num_blocks = 1;
@@ -150,55 +154,103 @@ static uint16_t __attribute__((nonnull)) dec_ack_frame(struct q_conn * const c,
     }
 
     uint8_t ts_blocks = 0;
-    dec(ts_blocks, buf, len, i, 0, "%u");
+    dec(ts_blocks, v->buf, v->len, i, 0, "%u");
 
     const uint8_t lg_ack_len = dec_lg_ack_len(type);
     uint64_t lg_ack = 0;
-    dec(lg_ack, buf, len, i, lg_ack_len, "%" PRIu64);
-    if (lg_ack > c->out_ack) {
-        c->out_ack = lg_ack;
-        warn(notice, "out_ack now %" PRIu64, lg_ack);
+    dec(lg_ack, v->buf, v->len, i, lg_ack_len, "%" PRIu64);
+
+    uint16_t ack_delay = 0;
+    dec(ack_delay, v->buf, v->len, i, 0, "%u");
+
+    // first clause from OnAckReceived pseudo code:
+    // if the largest acked is newly acked, update the RTT
+    node * n = list_head(&c->sent_pkts);
+    while (n) {
+        const struct pkt_info * const pi = n->data;
+        if (lg_ack == pi->nr) {
+            ev_tstamp rtt_sample = ev_now(loop) - pi->tx_t;
+            if (rtt_sample > ack_delay)
+                rtt_sample -= ack_delay;
+            if (c->handshake_cnt == 0) { // XXX: pseudo code checks srtt == 0
+                c->srtt = rtt_sample;
+                c->rttvar = rtt_sample / 2;
+            } else {
+                c->rttvar = .75 * c->rttvar + .25 * (c->srtt - rtt_sample);
+                c->srtt = .875 * c->srtt + .125 * rtt_sample;
+            }
+            warn(info, "conn %" PRIx64 " srtt = %f, rttvar = %f", c->id,
+                 c->srtt, c->rttvar);
+            break;
+        }
+        n = n->next;
     }
 
-    uint16_t lg_ack_delta_t = 0;
-    dec(lg_ack_delta_t, buf, len, i, 0, "%u");
+    // second clause from OnAckReceived pseudo code:
+    // the sender may skip packets for detecting optimistic ACKs
+    // TODO: if (packets acked that the sender skipped): abortConnection()
 
     const uint8_t ack_block_len = dec_ack_block_len(type);
-    warn(debug, "%u-byte ACK block length", ack_block_len);
+    warn(debug, "%u-byte ACK block len", ack_block_len);
 
+    uint64_t ack = lg_ack;
     for (uint8_t b = 0; b < num_blocks; b++) {
         warn(debug, "decoding ACK block #%u", b);
         uint64_t l = 0;
-        dec(l, buf, len, i, ack_block_len, "%" PRIu64);
+        dec(l, v->buf, v->len, i, ack_block_len, "%" PRIu64);
+
+        // third clause from OnAckReceived pseudo code:
+        // find all newly acked packets
+        while (ack >= lg_ack - l) {
+            warn(debug, "got ACK for %" PRIu64, ack);
+            // see OnPacketAcked pseudo code
+            // If a packet sent prior to RTO was acked, then the RTO
+            // was spurious.  Otherwise, inform congestion control.
+            if (c->rto_cnt > 0 && ack > c->lg_sent_before_rto)
+                c->cwnd = kMinimumWindow;
+            c->handshake_cnt = 0; // XXX: why?
+            c->tlp_cnt = 0;
+            c->rto_cnt = 0;
+            n = list_head(&c->sent_pkts);
+            while (n) {
+                const struct pkt_info * const pi = n->data;
+                if (ack == pi->nr) {
+                    list_remove(&c->sent_pkts, n);
+                    break;
+                }
+            }
+            ack--;
+        }
+
         // XXX: assume that the gap is not present for the very last ACK block
         if (b < num_blocks - 1) {
             uint8_t gap = 0;
-            dec(gap, buf, len, i, 0, "%u");
+            dec(gap, v->buf, v->len, i, 0, "%u");
+            ack -= gap;
         }
     }
 
     for (uint8_t b = 0; b < ts_blocks; b++) {
         warn(debug, "decoding timestamp block #%u", b);
         uint8_t delta_lg_obs = 0;
-        dec(delta_lg_obs, buf, len, i, 0, "%u");
+        dec(delta_lg_obs, v->buf, v->len, i, 0, "%u");
         uint32_t ts = 0;
-        dec(ts, buf, len, i, 0, "%u");
+        dec(ts, v->buf, v->len, i, 0, "%u");
     }
 
     return i;
 }
 
 
-uint16_t
-dec_frames(struct q_conn * const c, const void * const buf, const uint16_t len)
+uint16_t dec_frames(struct q_conn * const c, struct w_iov * const v)
 {
-    uint16_t i = pkt_hdr_len(buf, len) + HASH_LEN;
+    uint16_t i = pkt_hdr_len(v->buf, v->len) + HASH_LEN;
     uint16_t pad_start = 0;
     bool got_stream_frame = false;
 
-    while (i < len) {
-        const uint8_t type = ((const uint8_t * const)(buf))[i];
-        if (pad_start && (type != T_PADDING || i == len - 1)) {
+    while (i < v->len) {
+        const uint8_t type = ((const uint8_t * const)(v->buf))[i];
+        if (pad_start && (type != T_PADDING || i == v->len - 1)) {
             warn(debug, "skipped padding in [%u..%u]", pad_start, i);
             pad_start = 0;
         } else if (type != T_PADDING)
@@ -208,10 +260,10 @@ dec_frames(struct q_conn * const c, const void * const buf, const uint16_t len)
             // TODO: support multiple stream frames per packet (needs memcpy)
             ensure(got_stream_frame == false,
                    "can only handle one stream frame per packet");
-            i += dec_stream_frame(c, buf, i, len);
+            i += dec_stream_frame(c, v, i);
             got_stream_frame = true;
         } else if (bitmask_match(type, T_ACK)) {
-            i += dec_ack_frame(c, buf, i, len);
+            i += dec_ack_frame(c, v, i);
         } else
             switch (type) {
             case T_PADDING:
@@ -223,7 +275,7 @@ dec_frames(struct q_conn * const c, const void * const buf, const uint16_t len)
             //     die("rst_stream frame");
             //     break;
             // case T_CONNECTION_CLOSE:
-            //     i += dec_conn_close_frame(c, &buf[i], len - i);
+            //     i += dec_conn_close_frame(c, &v->buf[i], v->len - i);
             //     break;
             // case T_GOAWAY:
             //     die("goaway frame");
@@ -241,6 +293,16 @@ dec_frames(struct q_conn * const c, const void * const buf, const uint16_t len)
                 die("unknown frame type 0x%02x", type);
             }
     }
+
+    if (got_stream_frame == false) {
+        // if there was no stream frame present, we did not enqueue this w_iov
+        // into a stream, so free it here
+        warn(debug, "freeing w_iov w/o stream data");
+        struct w_iov_stailq q = STAILQ_HEAD_INITIALIZER(q);
+        STAILQ_INSERT_HEAD(&q, v, next);
+        w_free(w_engine(c->sock), &q);
+    }
+
     return i;
 }
 
@@ -255,7 +317,7 @@ enc_padding_frame(void * const buf, const uint16_t pos, const uint16_t len)
 
 
 static const uint8_t enc_lg_ack_len[] = {0xFF, 0x00, 0x01, 0xFF,
-                                         0x03}; // 0xFF invalid
+                                         0x03}; // 0xFF = invalid
 
 static uint8_t __attribute__((const)) needed_lg_ack_len(const uint64_t n)
 {
@@ -284,7 +346,6 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     enc(buf, len, i, &num_ts, 0, "%u");
 
     enc(buf, len, i, &c->in, lg_ack_len, "%" PRIu64);
-    c->in_ack = c->in;
     warn(info, "ACKing %" PRIu64, c->in);
 
     const uint16_t ack_delay = 0;
@@ -301,7 +362,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
 
 
 static const uint8_t enc_sid_len[] = {0xFF, 0x00, 0x01, 0xFF,
-                                      0x02}; // 0xFF invalid
+                                      0x02}; // 0xFF = invalid
 
 static uint8_t __attribute__((const)) needed_sid_len(const uint32_t n)
 {
@@ -315,7 +376,7 @@ static uint8_t __attribute__((const)) needed_sid_len(const uint32_t n)
 
 static const uint8_t enc_off_len[] = {0x00,      0x01 << 2, 0xFF, 0xFF,
                                       0x02 << 2, 0xFF,      0xFF, 0xFF,
-                                      0x03 << 2}; // 0xFF invalid
+                                      0x03 << 2}; // 0xFF = invalid
 
 static uint8_t __attribute__((const)) needed_off_len(const uint64_t n)
 {
@@ -333,24 +394,28 @@ uint16_t enc_stream_frame(struct q_stream * const s,
                           void * const buf,
                           const uint16_t pos __attribute__((unused)),
                           const uint16_t len,
-                          const uint16_t max_len)
+                          const uint16_t max_len __attribute__((unused)))
 {
-    // TODO: support multiple frames per packet? (needs memcpy!)
+    const uint16_t data_len = len - Q_OFFSET; // TODO: support FIN bit
+    if (data_len == 0)
+        // there might not be stream data, e.g., for pure ACKs
+        return len;
 
+    // there is stream data, so prepend a stream frame header
     const uint8_t off_len = needed_off_len(s->out_off);
     const uint8_t sid_len = needed_sid_len(s->id);
-    uint16_t i = Q_OFFSET - 1 - off_len - sid_len; // space for header
-
-    uint8_t type = T_STREAM | enc_off_len[off_len] | enc_sid_len[sid_len];
-    if (len < max_len)
-        // this stream frame will not extend to the end of the packet, add FIN
-        type |= F_STREAM_FIN;
+    const uint8_t type = T_STREAM | F_STREAM_DATA_LEN | enc_off_len[off_len] |
+                         enc_sid_len[sid_len];
+    uint16_t i = Q_OFFSET - 3 - off_len - sid_len; // space for header
 
     // now that we know how long the stream frame header is, encode it
     enc(buf, len, i, &type, 0, "0x%02x");
+    enc(buf, len, i, &data_len, 0, "%u");
     enc(buf, len, i, &s->id, sid_len, "%u");
     if (off_len)
         enc(buf, len, i, &s->out_off, off_len, "%" PRIu64);
+
+    // TODO: support multiple frames per packet? (needs memcpy!)
 
     return len;
 }

@@ -25,6 +25,7 @@
 
 #include <inttypes.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #ifdef __linux__
@@ -146,9 +147,14 @@ uint16_t enc_pkt(struct q_conn * const c,
     if (c->in)
         i += enc_ack_frame(c, buf, len, i);
 
-    if (c->state >= CONN_ESTB && s) {
-        // stream frames must be last, because they can extend to end of packet.
+    // remember buffer position - if we move past it, we have retransmittable
+    // frames present
+    const uint16_t mark = i;
+    warn(debug, "i %u max_len %u", i, max_len);
+    if (s && i < Q_OFFSET) {
         i += enc_padding_frame(buf, i, Q_OFFSET - i);
+
+        // stream frames must be last, because they can extend to end of packet
         i = enc_stream_frame(s, buf, i, len, max_len);
     }
 
@@ -156,6 +162,16 @@ uint16_t enc_pkt(struct q_conn * const c,
     warn(debug, "inserting %u-byte hash over range [0..%u] into [%u..%u]",
          HASH_LEN, i - 1, hash_pos, hash_pos + HASH_LEN - 1);
     memcpy(&buf[hash_pos], &hash, HASH_LEN);
+
+    // store packet info (see OnPacketSent pseudo code)
+    struct pkt_info * const pi = calloc(1, sizeof(*pi));
+    pi->nr = c->out;
+    pi->tx_t = ev_time();
+    if (i > mark) // retransmittable frames present
+        pi->len = i;
+    if (i > mark || c->state < CONN_ESTB)
+        set_ld_alarm(c);
+    list_insert_tail(&c->sent_pkts, &pi->node, pi);
 
     return i;
 }

@@ -39,10 +39,10 @@ struct q_stream {
     uint8_t state;
     uint8_t _unused[3];
 
-    struct w_iov_stailq ov; ///< tail queue containing outbound data
+    struct w_iov_stailq o; ///< tail queue containing outbound data
     uint64_t out_off;
 
-    struct w_iov_stailq iv; ///< tail queue containing inbound data
+    struct w_iov_stailq i; ///< tail queue containing inbound data
     uint64_t in_off;
 };
 
