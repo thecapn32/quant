@@ -57,5 +57,4 @@ extern uint16_t __attribute__((nonnull))
 enc_stream_frame(struct q_stream * const s,
                  void * const buf,
                  const uint16_t pos,
-                 const uint16_t len,
-                 const uint16_t max_len);
+                 const uint16_t len);

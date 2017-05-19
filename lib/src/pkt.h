@@ -28,24 +28,6 @@
 #include <ev.h>
 #include <stdint.h>
 
-#include "tommy.h"
-
-
-struct q_conn;
-struct q_stream;
-
-
-struct pkt_info {
-    node node;
-
-    uint64_t nr;    ///< Packet number.
-    ev_tstamp tx_t; ///< Time packet was sent.
-    uint16_t len;   ///< Packet length;
-
-    uint8_t _unused[6];
-};
-
-
 #define MAX_PKT_LEN 1350
 
 #define F_LONG_HDR 0x80
@@ -61,6 +43,18 @@ struct pkt_info {
                                  : pkt_flags(buf) & ~0xe0)
 
 
+/// Packet meta-data associated with w_iov buffers
+struct pkt_info {
+    ev_tstamp time;   ///< Transmission timestamp.
+    uint32_t ack_cnt; ///< Number of ACKs we have seen for this packet.
+    uint32_t ref_cnt; ///< Reference count. Increase on assign, free when zero.
+};
+
+
+struct q_conn;
+struct q_stream;
+struct w_iov;
+
 extern uint64_t __attribute__((nonnull))
 pkt_cid(const void * const buf, const uint16_t len);
 
@@ -73,8 +67,6 @@ pkt_vers(const void * const buf, const uint16_t len);
 extern uint16_t __attribute__((nonnull))
 pkt_hdr_len(const void * const buf, const uint16_t len);
 
-extern uint16_t enc_pkt(struct q_conn * const c __attribute__((nonnull)),
-                        struct q_stream * const s,
-                        uint8_t * const buf __attribute__((nonnull)),
-                        const uint16_t len,
-                        const uint16_t max_len);
+extern uint16_t __attribute__((nonnull)) enc_pkt(struct q_conn * const c,
+                                                 struct q_stream * const s,
+                                                 struct w_iov * const v);

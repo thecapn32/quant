@@ -29,6 +29,8 @@
 #include <stdint.h>
 #include <sys/socket.h>
 
+#include <warpcore/warpcore.h>
+
 #include "tommy.h"
 
 
@@ -40,9 +42,7 @@ extern hash q_conns;
 struct q_conn {
     node conn_node;
 
-    uint64_t id;  ///< Connection ID
-    uint64_t out; ///< Highest packet number sent
-    uint64_t in;  ///< Highest packet number received
+    uint64_t id; ///< Connection ID
 
     uint32_t vers; ///< QUIC version in use for this connection.
     uint32_t next_sid;
@@ -56,26 +56,32 @@ struct q_conn {
     struct w_sock * sock; ///< File descriptor (socket) for the connection.
     ev_io rx_w;           ///< RX watcher.
 
+    uint64_t lg_recv;       ///< Largest packet number received
+    uint64_t lg_recv_acked; ///< Largest packet which we ACKed
+
     // LD state
-    ev_timer ld_alarm;    ///< Loss detection alarm.
+    ev_timer ld_alarm; ///< Loss detection alarm.
     uint8_t handshake_cnt;
     uint8_t tlp_cnt;
     uint8_t rto_cnt;
-    uint8_t _unused2;
-    float reorder_fract;
+    uint8_t _unused2[5];
+    double reorder_fract;
     uint64_t lg_sent_before_rto;
     ev_tstamp srtt;
     ev_tstamp rttvar;
     uint64_t reorder_thresh;
     ev_tstamp loss_t;
-    list sent_pkts;
-    // struct w_iov_stailq sent_pkts;
+    struct w_iov_stailq sent_pkts;
+    uint64_t lg_sent;  ///< Largest packet number sent
+    uint64_t lg_acked; ///< Largest packet number for which an ACK was received
+    ev_tstamp latest_rtt;
 
     // CC state
     uint64_t cwnd;
     uint64_t in_flight;
-    uint64_t end_of_recovery;
+    uint64_t rec_end;
     uint64_t ssthresh;
+    ev_tstamp last_sent_t;
 };
 
 #define CONN_CLSD 0
@@ -87,11 +93,25 @@ struct q_conn {
 #define CONN_FLAG_CLNT 0x01
 
 
+struct q_stream;
+struct ev_loop;
+
 extern struct q_conn * get_conn(const uint64_t id);
+
+extern ev_tstamp __attribute__((nonnull))
+time_to_send(const struct q_conn * const c, const uint16_t len);
+
+extern void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c);
 
 extern struct q_conn * __attribute__((nonnull))
 new_conn(const uint64_t id,
          const struct sockaddr * const peer,
          const socklen_t peer_len);
+
+extern void __attribute__((nonnull))
+tx(struct w_sock * const ws, struct q_conn * const c, struct q_stream * s);
+
+extern void __attribute__((nonnull))
+rx(struct ev_loop * const l, ev_io * const rx_w, int e);
 
 extern void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c);

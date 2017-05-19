@@ -25,6 +25,7 @@
 
 #include <ev.h>
 #include <inttypes.h>
+#include <math.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -44,7 +45,6 @@
 #include "pkt.h"
 #include "quic.h"
 #include "stream.h"
-#include "tommy.h"
 
 
 // Convert stream ID length encoded in flags to bytes
@@ -100,7 +100,7 @@ dec_stream_frame(struct q_conn * const c,
 
     // deliver data on stream; set v-buf to start of stream data
     // TODO: pay attention to offset and gaps
-    v->buf = &((uint8_t *)v->buf)[i];
+    v->buf = &v->buf[i];
     warn(info, "%u byte%s on str %u: %.*s", data_len, plural(data_len), sid,
          data_len, v->buf);
     STAILQ_INSERT_TAIL(&s->i, v, next);
@@ -130,6 +130,18 @@ static uint8_t __attribute__((const)) dec_ack_block_len(const uint8_t flags)
     ensure(l >= 0 && l <= 3, "cannot decode largest ACK length %u", l);
     const uint8_t dec[] = {1, 2, 4, 6};
     return dec[l];
+}
+
+
+// TODO: should use a better data structure here
+static struct w_iov * __attribute__((nonnull))
+find_sent_pkt(const struct w_iov_stailq * const q, const uint64_t nr)
+{
+    struct w_iov * v;
+    STAILQ_FOREACH (v, q, next)
+        if (pkt_nr(v->buf, v->len) == nr)
+            return v;
+    die("sent packet %" PRIu64 " not found", nr);
 }
 
 
@@ -164,31 +176,29 @@ dec_ack_frame(struct q_conn * const c,
     dec(ack_delay, v->buf, v->len, i, 0, "%u");
 
     // first clause from OnAckReceived pseudo code:
-    // if the largest acked is newly acked, update the RTT
-    node * n = list_head(&c->sent_pkts);
-    while (n) {
-        const struct pkt_info * const pi = n->data;
-        if (lg_ack == pi->nr) {
-            ev_tstamp rtt_sample = ev_now(loop) - pi->tx_t;
-            if (rtt_sample > ack_delay)
-                rtt_sample -= ack_delay;
-            if (c->handshake_cnt == 0) { // XXX: pseudo code checks srtt == 0
-                c->srtt = rtt_sample;
-                c->rttvar = rtt_sample / 2;
-            } else {
-                c->rttvar = .75 * c->rttvar + .25 * (c->srtt - rtt_sample);
-                c->srtt = .875 * c->srtt + .125 * rtt_sample;
-            }
-            warn(info, "conn %" PRIx64 " srtt = %f, rttvar = %f", c->id,
-                 c->srtt, c->rttvar);
-            break;
+    struct w_iov * p = find_sent_pkt(&c->sent_pkts, lg_ack);
+    // if the largest ACKed is newly ACKed, update the RTT
+    if (((struct pkt_info *)p->data)->ack_cnt == 0) {
+        const ev_tstamp ts = ((const struct pkt_info * const)p->data)->time;
+        c->latest_rtt = ev_now(loop) - ts;
+        if (c->latest_rtt > ack_delay)
+            c->latest_rtt -= ack_delay;
+
+        // see UpdateRtt pseudo code:
+        if (fpclassify(c->srtt) == FP_ZERO) {
+            c->srtt = c->latest_rtt;
+            c->rttvar = c->latest_rtt / 2;
+        } else {
+            c->rttvar = .75 * c->rttvar + .25 * (c->srtt - c->latest_rtt);
+            c->srtt = .875 * c->srtt + .125 * c->latest_rtt;
         }
-        n = n->next;
+        warn(info, "conn %" PRIx64 " srtt = %f, rttvar = %f", c->id, c->srtt,
+             c->rttvar);
     }
 
     // second clause from OnAckReceived pseudo code:
     // the sender may skip packets for detecting optimistic ACKs
-    // TODO: if (packets acked that the sender skipped): abortConnection()
+    // TODO: if (packets ACKed that the sender skipped): abortConnection()
 
     const uint8_t ack_block_len = dec_ack_block_len(type);
     warn(debug, "%u-byte ACK block len", ack_block_len);
@@ -200,35 +210,51 @@ dec_ack_frame(struct q_conn * const c,
         dec(l, v->buf, v->len, i, ack_block_len, "%" PRIu64);
 
         // third clause from OnAckReceived pseudo code:
-        // find all newly acked packets
+
+        // find all newly ACKed packets
         while (ack >= lg_ack - l) {
             warn(debug, "got ACK for %" PRIu64, ack);
-            // see OnPacketAcked pseudo code
-            // If a packet sent prior to RTO was acked, then the RTO
-            // was spurious.  Otherwise, inform congestion control.
-            if (c->rto_cnt > 0 && ack > c->lg_sent_before_rto)
-                c->cwnd = kMinimumWindow;
-            c->handshake_cnt = 0; // XXX: why?
-            c->tlp_cnt = 0;
-            c->rto_cnt = 0;
-            n = list_head(&c->sent_pkts);
-            while (n) {
-                const struct pkt_info * const pi = n->data;
-                if (ack == pi->nr) {
-                    list_remove(&c->sent_pkts, n);
-                    break;
+            p = find_sent_pkt(&c->sent_pkts, ack);
+            struct pkt_info * const info = (struct pkt_info * const) p->data;
+            if (info->ack_cnt == 0) {
+                // this is a newly ACKed packet
+
+                // see OnPacketAcked pseudo code (for LD):
+
+                // If a packet sent prior to RTO was ACKed, then the RTO
+                // was spurious.  Otherwise, inform congestion control.
+                if (c->rto_cnt && ack > c->lg_sent_before_rto)
+                    // see OnRetransmissionTimeoutVerified pseudo code
+                    c->cwnd = kMinimumWindow;
+                c->handshake_cnt = c->tlp_cnt = c->rto_cnt = 0;
+                STAILQ_REMOVE(&c->sent_pkts, p, w_iov, next);
+
+                // see OnPacketAcked pseudo code (for CC):
+                if (ack >= c->rec_end) {
+                    if (c->cwnd < c->ssthresh)
+                        c->cwnd += p->len;
+                    else
+                        c->cwnd += p->len / c->cwnd;
+                    warn(debug, "cwnd now %" PRIu64, c->cwnd);
                 }
             }
+
+            // remember that we've seen an ACK for this packet
+            info->ack_cnt++;
+
             ack--;
         }
 
-        // XXX: assume that the gap is not present for the very last ACK block
+        // skip ACK gap (no gap after last ACK block)
         if (b < num_blocks - 1) {
             uint8_t gap = 0;
             dec(gap, v->buf, v->len, i, 0, "%u");
             ack -= gap;
         }
     }
+
+    // TODO: DetectLostPackets(ack.largest_acked_packet);
+    set_ld_alarm(c);
 
     for (uint8_t b = 0; b < ts_blocks; b++) {
         warn(debug, "decoding timestamp block #%u", b);
@@ -335,7 +361,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
 {
     uint8_t type = T_ACK;
     // type |= 0x00; // TODO: support Num Blocks > 0
-    const uint8_t lg_ack_len = needed_lg_ack_len(c->in);
+    const uint8_t lg_ack_len = needed_lg_ack_len(c->lg_recv);
     type |= enc_lg_ack_len[lg_ack_len];
     // type |= 0x00; // TODO: support longer than 8-bit ACK Block lengths
 
@@ -345,8 +371,8 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     const uint8_t num_ts = 0;
     enc(buf, len, i, &num_ts, 0, "%u");
 
-    enc(buf, len, i, &c->in, lg_ack_len, "%" PRIu64);
-    warn(info, "ACKing %" PRIu64, c->in);
+    enc(buf, len, i, &c->lg_recv, lg_ack_len, "%" PRIu64);
+    warn(info, "ACKing %" PRIu64, c->lg_recv);
 
     const uint16_t ack_delay = 0;
     enc(buf, len, i, &ack_delay, 0, "%u");
@@ -393,8 +419,7 @@ static uint8_t __attribute__((const)) needed_off_len(const uint64_t n)
 uint16_t enc_stream_frame(struct q_stream * const s,
                           void * const buf,
                           const uint16_t pos __attribute__((unused)),
-                          const uint16_t len,
-                          const uint16_t max_len __attribute__((unused)))
+                          const uint16_t len)
 {
     const uint16_t data_len = len - Q_OFFSET; // TODO: support FIN bit
     if (data_len == 0)

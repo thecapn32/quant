@@ -25,7 +25,6 @@
 
 #include <inttypes.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
 
 #ifdef __linux__
@@ -108,70 +107,61 @@ static uint8_t __attribute__((const)) needed_pkt_nr_len(const uint64_t n)
 
 uint16_t enc_pkt(struct q_conn * const c,
                  struct q_stream * const s,
-                 uint8_t * const buf,
-                 const uint16_t len,
-                 const uint16_t max_len)
+                 struct w_iov * const v)
 {
+    // prepend the header by adjusting the buffer offset
+    v->buf -= Q_OFFSET;
+    v->len += Q_OFFSET;
+
+
     uint16_t i = 0;
     uint8_t flags = 0;
+    c->lg_sent++;
     if (c->state < CONN_ESTB)
         flags |= F_LONG_HDR | F_LH_TYPE_VERS_NEG;
     else {
-        flags |= enc_pkt_nr_len[needed_pkt_nr_len(c->out)];
+        flags |= enc_pkt_nr_len[needed_pkt_nr_len(c->lg_sent)];
         flags |= F_SH_CID; // TODO: support short headers w/o cid
     }
-    enc(buf, len, i, &flags, 0, "0x%02x");
+    enc(v->buf, v->len, i, &flags, 0, "0x%02x");
 
     if (flags & F_LONG_HDR || flags & F_SH_CID)
-        enc(buf, len, i, &c->id, 0, "%" PRIx64);
+        enc(v->buf, v->len, i, &c->id, 0, "%" PRIx64);
 
     if (flags & F_LONG_HDR) {
-        const uint32_t nr =
-            (const uint32_t)(c->state == CONN_VERS_RECV ? c->in : c->out);
-        enc(buf, len, i, &nr, 0, "%u");
-        enc(buf, len, i, &c->vers, 0, "0x%08x");
+        const uint32_t nr = (const uint32_t)c->lg_sent;
+        enc(v->buf, v->len, i, &nr, 0, "%u");
+        enc(v->buf, v->len, i, &c->vers, 0, "0x%08x");
         if (c->state == CONN_VERS_RECV) {
             warn(info, "sending version negotiation server response");
             for (uint8_t j = 0; j < ok_vers_len; j++)
-                enc(buf, len, i, &ok_vers[j], 0, "0x%08x");
+                enc(v->buf, v->len, i, &ok_vers[j], 0, "0x%08x");
             return i;
         }
     } else
-        enc(buf, len, i, &c->out, needed_pkt_nr_len(c->out), "%" PRIu64);
+        enc(v->buf, v->len, i, &c->lg_sent, needed_pkt_nr_len(c->lg_sent),
+            "%" PRIu64);
 
     const uint16_t hash_pos = i;
     i += HASH_LEN;
     ensure(i < Q_OFFSET, "Q_OFFSET is too small");
     warn(debug, "skipping [%u..%u] to leave room for hash", hash_pos, i - 1);
 
-    if (c->in)
-        i += enc_ack_frame(c, buf, len, i);
+    // XXX lg_acked is the wrong variable here
+    // if (c->lg_acked)
+    //     i += enc_ack_frame(c, v->buf, v->len, i);
 
-    // remember buffer position - if we move past it, we have retransmittable
-    // frames present
-    const uint16_t mark = i;
-    warn(debug, "i %u max_len %u", i, max_len);
-    if (s && i < Q_OFFSET) {
-        i += enc_padding_frame(buf, i, Q_OFFSET - i);
+    if (i < Q_OFFSET) {
+        i += enc_padding_frame(v->buf, i, Q_OFFSET - i);
 
         // stream frames must be last, because they can extend to end of packet
-        i = enc_stream_frame(s, buf, i, len, max_len);
+        i = enc_stream_frame(s, v->buf, i, v->len);
     }
 
-    const uint128_t hash = fnv_1a(buf, i, hash_pos, HASH_LEN);
+    const uint128_t hash = fnv_1a(v->buf, i, hash_pos, HASH_LEN);
     warn(debug, "inserting %u-byte hash over range [0..%u] into [%u..%u]",
          HASH_LEN, i - 1, hash_pos, hash_pos + HASH_LEN - 1);
-    memcpy(&buf[hash_pos], &hash, HASH_LEN);
-
-    // store packet info (see OnPacketSent pseudo code)
-    struct pkt_info * const pi = calloc(1, sizeof(*pi));
-    pi->nr = c->out;
-    pi->tx_t = ev_time();
-    if (i > mark) // retransmittable frames present
-        pi->len = i;
-    if (i > mark || c->state < CONN_ESTB)
-        set_ld_alarm(c);
-    list_insert_tail(&c->sent_pkts, &pi->node, pi);
+    memcpy(&((uint8_t *)v->buf)[hash_pos], &hash, HASH_LEN);
 
     return i;
 }

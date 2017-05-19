@@ -24,13 +24,16 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <inttypes.h>
+#include <netinet/in.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/queue.h>
 
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
+#include "quic.h"
 #include "stream.h"
 #include "tommy.h"
 
@@ -79,4 +82,27 @@ struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
     warn(info, "reserved new str %u on conn %" PRIx64 " as %s", s->id, c->id,
          c->flags & CONN_FLAG_CLNT ? "client" : "server");
     return s;
+}
+
+
+void stream_write(struct q_stream * const s,
+                  const void * const data,
+                  const uint16_t len)
+{
+    warn(debug, "writing %u byte%s on str %u: %.*s", len, plural(len), s->id,
+         len, data);
+
+    // allocate a w_iov
+    struct w_iov_stailq o;
+    w_alloc_cnt(w_engine(s->c->sock), &o, 1, Q_OFFSET);
+    struct w_iov * const v = STAILQ_FIRST(&o);
+
+    // copy data
+    memcpy(v->buf, data, len);
+    v->len = len;
+
+    // enqueue for TX
+    v->ip = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_addr.s_addr;
+    v->port = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_port;
+    STAILQ_INSERT_TAIL(&s->o, v, next);
 }

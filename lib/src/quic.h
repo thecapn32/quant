@@ -31,12 +31,20 @@
 #define Q_OFFSET 64
 
 extern pthread_mutex_t lock;
+
 extern pthread_cond_t read_cv;
+extern pthread_cond_t write_cv;
+extern pthread_cond_t accept_cv;
+extern pthread_cond_t connect_cv;
+
 extern struct ev_loop * loop;
 
 /// The versions of QUIC supported by this implementation
 extern const uint32_t ok_vers[];
 extern const uint8_t ok_vers_len;
+
+
+extern uint64_t accept_queue;
 
 
 /// Maximum number of tail loss probes before an RTO fires.
