@@ -147,9 +147,8 @@ uint16_t enc_pkt(struct q_conn * const c,
     ensure(i < Q_OFFSET, "Q_OFFSET is too small");
     warn(debug, "skipping [%u..%u] to leave room for hash", hash_pos, i - 1);
 
-    // XXX lg_acked is the wrong variable here
-    // if (c->lg_acked)
-    //     i += enc_ack_frame(c, v->buf, v->len, i);
+    if (c->lg_recv > c->lg_recv_acked)
+        i += enc_ack_frame(c, v->buf, v->len, i);
 
     if (i < Q_OFFSET) {
         i += enc_padding_frame(v->buf, i, Q_OFFSET - i);

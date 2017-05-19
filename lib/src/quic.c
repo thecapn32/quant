@@ -107,6 +107,7 @@ uint64_t q_connect(void * const q,
 
     pthread_mutex_lock(&lock);
     ev_io_start(loop, &c->rx_w);
+    tx_w.data = c;
     ev_async_send(loop, &tx_w);
 
     warn(warn, "waiting for handshake to complete");
@@ -120,18 +121,6 @@ uint64_t q_connect(void * const q,
 
     warn(info, "conn %" PRIx64 " connected", cid);
     return cid;
-}
-
-
-static void __attribute__((nonnull)) check_stream(void * arg, void * obj)
-{
-    struct q_conn * c = arg;
-    struct q_stream * s = obj;
-    if (!STAILQ_EMPTY(&s->o)) {
-        warn(debug, "conn %" PRIx64 " str %u has %u byte%s pending data", c->id,
-             s->id, w_iov_stailq_len(&s->o), plural(w_iov_stailq_len(&s->o)));
-        tx(c->sock, c, s);
-    }
 }
 
 
@@ -163,7 +152,7 @@ find_stream_with_data(void * arg, void * obj)
 {
     uint32_t * sid = arg;
     struct q_stream * s = obj;
-    if (!STAILQ_EMPTY(&s->i) && *sid == 0) {
+    if (s->id && *sid == 0 && !STAILQ_EMPTY(&s->i)) {
         const uint32_t in_len = w_iov_stailq_len(&s->i);
         warn(info, "buffered %u byte%s on str %u", in_len, plural(in_len),
              s->id);
@@ -297,20 +286,14 @@ static void * __attribute__((nonnull)) l_run(void * const arg)
 }
 
 
-static void __attribute__((nonnull)) check_conn(void * obj)
-{
-    struct q_conn * c = obj;
-    hash_foreach_arg(&c->streams, &check_stream, c);
-}
-
-
 static void __attribute__((nonnull))
 tx_cb(struct ev_loop * const l __attribute__((unused)),
-      ev_async * const w __attribute__((unused)),
+      ev_async * const w,
       int e __attribute__((unused)))
 {
-    // check if we need to send any data
-    hash_foreach(&q_conns, &check_conn);
+    struct q_conn * const c = w->data;
+    if (c)
+        tx(c->sock, c);
 }
 
 

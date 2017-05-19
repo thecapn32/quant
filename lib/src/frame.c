@@ -141,7 +141,8 @@ find_sent_pkt(const struct w_iov_stailq * const q, const uint64_t nr)
     STAILQ_FOREACH (v, q, next)
         if (pkt_nr(v->buf, v->len) == nr)
             return v;
-    die("sent packet %" PRIu64 " not found", nr);
+    warn(err, "sent packet %" PRIu64 " not found", nr);
+    return 0;
 }
 
 
@@ -178,7 +179,7 @@ dec_ack_frame(struct q_conn * const c,
     // first clause from OnAckReceived pseudo code:
     struct w_iov * p = find_sent_pkt(&c->sent_pkts, lg_ack);
     // if the largest ACKed is newly ACKed, update the RTT
-    if (((struct pkt_info *)p->data)->ack_cnt == 0) {
+    if (p && ((struct pkt_info *)p->data)->ack_cnt == 0) {
         const ev_tstamp ts = ((const struct pkt_info * const)p->data)->time;
         c->latest_rtt = ev_now(loop) - ts;
         if (c->latest_rtt > ack_delay)
@@ -213,34 +214,37 @@ dec_ack_frame(struct q_conn * const c,
 
         // find all newly ACKed packets
         while (ack >= lg_ack - l) {
-            warn(debug, "got ACK for %" PRIu64, ack);
+            warn(notice, "got ACK for %" PRIu64, ack);
             p = find_sent_pkt(&c->sent_pkts, ack);
-            struct pkt_info * const info = (struct pkt_info * const) p->data;
-            if (info->ack_cnt == 0) {
-                // this is a newly ACKed packet
+            if (p) {
+                struct pkt_info * const info =
+                    (struct pkt_info * const) p->data;
+                if (info->ack_cnt == 0) {
+                    // this is a newly ACKed packet
 
-                // see OnPacketAcked pseudo code (for LD):
+                    // see OnPacketAcked pseudo code (for LD):
 
-                // If a packet sent prior to RTO was ACKed, then the RTO
-                // was spurious.  Otherwise, inform congestion control.
-                if (c->rto_cnt && ack > c->lg_sent_before_rto)
-                    // see OnRetransmissionTimeoutVerified pseudo code
-                    c->cwnd = kMinimumWindow;
-                c->handshake_cnt = c->tlp_cnt = c->rto_cnt = 0;
-                STAILQ_REMOVE(&c->sent_pkts, p, w_iov, next);
+                    // If a packet sent prior to RTO was ACKed, then the RTO
+                    // was spurious.  Otherwise, inform congestion control.
+                    if (c->rto_cnt && ack > c->lg_sent_before_rto)
+                        // see OnRetransmissionTimeoutVerified pseudo code
+                        c->cwnd = kMinimumWindow;
+                    c->handshake_cnt = c->tlp_cnt = c->rto_cnt = 0;
+                    STAILQ_REMOVE(&c->sent_pkts, p, w_iov, next);
 
-                // see OnPacketAcked pseudo code (for CC):
-                if (ack >= c->rec_end) {
-                    if (c->cwnd < c->ssthresh)
-                        c->cwnd += p->len;
-                    else
-                        c->cwnd += p->len / c->cwnd;
-                    warn(debug, "cwnd now %" PRIu64, c->cwnd);
+                    // see OnPacketAcked pseudo code (for CC):
+                    if (ack >= c->rec_end) {
+                        if (c->cwnd < c->ssthresh)
+                            c->cwnd += p->len;
+                        else
+                            c->cwnd += p->len / c->cwnd;
+                        warn(debug, "cwnd now %" PRIu64, c->cwnd);
+                    }
                 }
-            }
 
-            // remember that we've seen an ACK for this packet
-            info->ack_cnt++;
+                // remember that we've seen an ACK for this packet
+                info->ack_cnt++;
+            }
 
             ack--;
         }
@@ -253,7 +257,7 @@ dec_ack_frame(struct q_conn * const c,
         }
     }
 
-    // TODO: DetectLostPackets(ack.largest_acked_packet);
+    detect_lost_pkts(c);
     set_ld_alarm(c);
 
     for (uint8_t b = 0; b < ts_blocks; b++) {
@@ -268,7 +272,7 @@ dec_ack_frame(struct q_conn * const c,
 }
 
 
-uint16_t dec_frames(struct q_conn * const c, struct w_iov * const v)
+bool dec_frames(struct q_conn * const c, struct w_iov * const v)
 {
     uint16_t i = pkt_hdr_len(v->buf, v->len) + HASH_LEN;
     uint16_t pad_start = 0;
@@ -329,7 +333,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * const v)
         w_free(w_engine(c->sock), &q);
     }
 
-    return i;
+    return got_stream_frame;
 }
 
 
@@ -345,6 +349,7 @@ enc_padding_frame(void * const buf, const uint16_t pos, const uint16_t len)
 static const uint8_t enc_lg_ack_len[] = {0xFF, 0x00, 0x01, 0xFF,
                                          0x03}; // 0xFF = invalid
 
+
 static uint8_t __attribute__((const)) needed_lg_ack_len(const uint64_t n)
 {
     if (n < UINT8_MAX)
@@ -353,6 +358,23 @@ static uint8_t __attribute__((const)) needed_lg_ack_len(const uint64_t n)
         return 2;
     return 4;
 }
+
+
+static const uint8_t enc_ack_block_len[] = {0xFF, 0x00, 0x01, 0xFF,
+                                            0x03}; // 0xFF = invalid
+
+
+static uint8_t __attribute__((nonnull))
+needed_ack_block_len(const struct q_conn * const c)
+{
+    const uint64_t max_block = c->lg_recv - c->lg_recv_acked;
+    if (max_block < UINT8_MAX)
+        return 1;
+    if (max_block < UINT16_MAX)
+        return 2;
+    return 4;
+}
+
 
 uint16_t enc_ack_frame(struct q_conn * const c,
                        void * const buf,
@@ -363,7 +385,8 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     // type |= 0x00; // TODO: support Num Blocks > 0
     const uint8_t lg_ack_len = needed_lg_ack_len(c->lg_recv);
     type |= enc_lg_ack_len[lg_ack_len];
-    // type |= 0x00; // TODO: support longer than 8-bit ACK Block lengths
+    const uint8_t ack_block_len = needed_ack_block_len(c);
+    type |= enc_ack_block_len[ack_block_len];
 
     uint16_t i = pos;
     enc(buf, len, i, &type, 0, "0x%02x");
@@ -372,16 +395,15 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     enc(buf, len, i, &num_ts, 0, "%u");
 
     enc(buf, len, i, &c->lg_recv, lg_ack_len, "%" PRIu64);
-    warn(info, "ACKing %" PRIu64, c->lg_recv);
+    warn(notice, "ACKing %" PRIu64, c->lg_recv);
 
     const uint16_t ack_delay = 0;
     enc(buf, len, i, &ack_delay, 0, "%u");
 
-    enc(buf, len, i, &ack_delay, 0, "%u");
-
-    // TODO: send actual information
-    const uint8_t ack_block = 0;
-    enc(buf, len, i, &ack_block, 0, "%u");
+    // TODO: support Num Blocks > 0
+    const uint64_t ack_block = c->lg_recv - c->lg_recv_acked;
+    enc(buf, len, i, &ack_block, ack_block_len, "%" PRIu64);
+    c->lg_recv = c->lg_recv_acked;
 
     return i - pos;
 }

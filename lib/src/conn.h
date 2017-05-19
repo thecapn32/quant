@@ -81,7 +81,6 @@ struct q_conn {
     uint64_t in_flight;
     uint64_t rec_end;
     uint64_t ssthresh;
-    ev_tstamp last_sent_t;
 };
 
 #define CONN_CLSD 0
@@ -93,13 +92,9 @@ struct q_conn {
 #define CONN_FLAG_CLNT 0x01
 
 
-struct q_stream;
 struct ev_loop;
 
 extern struct q_conn * get_conn(const uint64_t id);
-
-extern ev_tstamp __attribute__((nonnull))
-time_to_send(const struct q_conn * const c, const uint16_t len);
 
 extern void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c);
 
@@ -109,7 +104,7 @@ new_conn(const uint64_t id,
          const socklen_t peer_len);
 
 extern void __attribute__((nonnull))
-tx(struct w_sock * const ws, struct q_conn * const c, struct q_stream * s);
+tx(struct w_sock * const ws, struct q_conn * const c);
 
 extern void __attribute__((nonnull))
 rx(struct ev_loop * const l, ev_io * const rx_w, int e);

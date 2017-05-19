@@ -102,13 +102,58 @@ struct q_conn * get_conn(const uint64_t id)
 }
 
 
-void tx(struct w_sock * const ws, struct q_conn * const c, struct q_stream * s)
+static void __attribute__((nonnull)) check_stream(void * arg, void * obj)
+{
+    struct q_stream ** ret = arg;
+    struct q_stream * s = obj;
+    if (*ret == 0 && !STAILQ_EMPTY(&s->o)) {
+        warn(debug, "conn %" PRIx64 " str %u has %u byte%s pending data",
+             s->c->id, s->id, w_iov_stailq_len(&s->o),
+             plural(w_iov_stailq_len(&s->o)));
+        *ret = s;
+    }
+}
+
+
+void tx(struct w_sock * const ws, struct q_conn * const c)
 {
     struct w_engine * const w = w_engine(ws);
-    struct w_iov * v;
 
-    // TODO: this must eventually respect c->cwnd
-    STAILQ_FOREACH (v, &s->o, next) {
+    // check if there is any stream with pending data
+    struct q_stream * s = 0;
+    hash_foreach_arg(&c->streams, &check_stream, &s);
+    if (s == 0) {
+        // don't have any stream data to piggyback on, so abuse stream zero by
+        // inserting an empty w_iov to carry the ACK frame
+        s = get_stream(c, 0);
+        stream_write(s, 0, 0);
+    }
+
+    struct w_iov_stailq q = STAILQ_HEAD_INITIALIZER(q);
+    const ev_tstamp now = ev_now(loop);
+    const struct w_iov * const last_sent =
+        STAILQ_LAST(&c->sent_pkts, w_iov, next);
+    const ev_tstamp last_sent_t =
+        last_sent ? ((struct pkt_info *)last_sent->data)->time : -HUGE_VAL;
+
+    while (!STAILQ_EMPTY(&s->o)) {
+        struct w_iov * v = STAILQ_FIRST(&s->o);
+
+        // see TimeToSend pseudo code
+        warn(debug, "in_flight %" PRIu64 " + v->len %u vs cwnd %" PRIu64,
+             c->in_flight, v->len, c->cwnd);
+        warn(debug, "last_sent_t %f + (v->len %u * srtt %f) / cwnd %" PRIu64,
+             last_sent_t - now, v->len, c->srtt, c->cwnd);
+        if (c->in_flight + v->len > c->cwnd ||
+            last_sent_t - now + (v->len * c->srtt) / c->cwnd > 0) {
+            warn(warn, "out of cwnd/pacing headroom");
+            break;
+        }
+
+        // move w_iov into outbound queue
+        STAILQ_REMOVE_HEAD(&s->o, next);
+        STAILQ_INSERT_TAIL(&q, v, next);
+
         switch (c->state) {
         case CONN_CLSD:
         case CONN_VERS_SENT:
@@ -125,34 +170,27 @@ void tx(struct w_sock * const ws, struct q_conn * const c, struct q_stream * s)
             die("TODO: state %u", c->state);
         }
         v->len = enc_pkt(c, s, v);
-        warn(notice, "sending pkt %" PRIu64, c->lg_sent);
 
+        // store packet info (see OnPacketSent pseudo code)
+        struct pkt_info * info = calloc(1, sizeof(*info));
+        info->time = now;
+        info->ref_cnt++;
+        v->data = info;
+
+        if (v->len > Q_OFFSET) {
+            // packet is retransmittable
+            c->in_flight += v->len;
+            set_ld_alarm(c);
+        }
+
+        warn(notice, "sending pkt %" PRIu64, c->lg_sent);
         hexdump(v->buf, v->len);
     }
 
     // transmit packets
-    w_tx(ws, &s->o);
+    w_tx(ws, &q);
     w_nic_tx(w);
-
-    // store packet info (see OnPacketSent pseudo code)
-    struct pkt_info * info = calloc(1, sizeof(*info));
-    info->time = ev_now(loop);
-
-    // we store the actual w_iov buffers here and not just data about them
-    // (except for the timestamp)
-    while (!STAILQ_EMPTY(&s->o)) {
-        v = STAILQ_FIRST(&s->o);
-        STAILQ_REMOVE_HEAD(&s->o, next);
-        STAILQ_INSERT_TAIL(&c->sent_pkts, v, next);
-        v->data = info;
-        info->ref_cnt++;
-        if (v->len > Q_OFFSET)
-            // packet is retransmittable
-            set_ld_alarm(c);
-    }
-
-    if (info->ref_cnt == 0)
-        free(info);
+    STAILQ_CONCAT(&c->sent_pkts, &q);
 }
 
 
@@ -165,6 +203,7 @@ void rx(struct ev_loop * const l __attribute__((unused)),
     struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
     w_rx(ws, &i);
 
+    bool tx_needed = false;
     while (!STAILQ_EMPTY(&i)) {
         struct w_iov * const v = STAILQ_FIRST(&i);
         STAILQ_REMOVE_HEAD(&i, next);
@@ -201,7 +240,9 @@ void rx(struct ev_loop * const l __attribute__((unused)),
         }
 
         const uint64_t nr = pkt_nr(v->buf, v->len);
-        warn(notice, "received pkt %" PRIu64, nr);
+        c->lg_recv = MAX(c->lg_recv, nr);
+        warn(notice, "received pkt %" PRIu64 " (max %" PRIu64 ")", nr,
+             c->lg_recv);
 
         switch (c->state) {
         case CONN_CLSD:
@@ -216,6 +257,7 @@ void rx(struct ev_loop * const l __attribute__((unused)),
             // respond to the initial version negotiation packet
             c->vers = pkt_vers(v->buf, v->len);
             struct q_stream * const s = new_stream(c, 0);
+            tx_needed = true;
             if (vers_supported(c->vers)) {
                 warn(debug, "supporting client-requested version 0x%08x",
                      c->vers);
@@ -239,12 +281,12 @@ void rx(struct ev_loop * const l __attribute__((unused)),
             } else
                 warn(warn, "client-requested version 0x%08x not supported",
                      c->vers);
-            tx(ws, c, s);
             break;
         }
 
         case CONN_VERS_SENT: {
             struct q_stream * const s = get_stream(c, 0);
+            tx_needed = true;
             if (pkt_flags(v->buf) & F_LONG_HDR) {
                 warn(info, "server didn't like our version 0x%08x", c->vers);
                 ensure(c->vers == pkt_vers(v->buf, v->len),
@@ -258,7 +300,7 @@ void rx(struct ev_loop * const l __attribute__((unused)),
                     c->state = CONN_FINW;
                     warn(info, "conn %" PRIx64 " now in CONN_FINW", c->id);
                 }
-                tx(ws, c, s);
+                tx(ws, c);
             } else {
                 warn(info, "server accepted version 0x%08x", c->vers);
                 c->state = CONN_ESTB;
@@ -279,11 +321,17 @@ void rx(struct ev_loop * const l __attribute__((unused)),
         }
 
         case CONN_ESTB:
-            dec_frames(c, v);
+            tx_needed |= dec_frames(c, v);
             break;
 
         default:
             die("TODO: state %u", c->state);
+        }
+
+        // TODO: would be better to kick each connection only once
+        if (tx_needed) {
+            warn(info, "triggering TX");
+            tx(ws, c);
         }
     }
 }
@@ -294,25 +342,24 @@ ld_alarm_cb(struct ev_loop * const l __attribute__((unused)),
             int e __attribute__((unused)))
 {
     struct q_conn * const c = w->data;
-    warn(err, "loss detection alarm on conn %" PRIx64, c->id);
 
     // see OnLossDetectionAlarm pseudo code
     if (c->state < CONN_ESTB) {
         warn(info, "handshake retransmission alarm");
-        tx(c->sock, c, get_stream(c, 0)); // retransmit
+        tx(c->sock, c);
         c->handshake_cnt++;
 
     } else if (fpclassify(c->loss_t) != FP_ZERO) {
-        warn(info, "Early retransmit or Time Loss Detection");
-        // TODO: DetectLostPackets(largest_acked_packet)
+        warn(info, "early retransmit or time loss detection alarm");
+        detect_lost_pkts(c);
 
     } else if (c->tlp_cnt < kMaxTLPs) {
-        warn(info, "Tail Loss Probe.");
+        warn(info, "TLP alarm");
         // TODO: SendOnePacket()
         c->tlp_cnt++;
 
     } else {
-        warn(info, "RTO");
+        warn(info, "RTO alarm");
         if (c->rto_cnt == 0)
             c->lg_sent_before_rto = c->lg_sent;
         // TODO: SendTwoPackets();
@@ -320,15 +367,6 @@ ld_alarm_cb(struct ev_loop * const l __attribute__((unused)),
     }
 
     set_ld_alarm(c);
-}
-
-
-ev_tstamp time_to_send(const struct q_conn * const c, const uint16_t len)
-{
-    // see TimeToSend pseudo code
-    if (c->in_flight + len > c->cwnd)
-        return HUGE_VAL;
-    return c->last_sent_t + (len * c->srtt) / c->cwnd;
 }
 
 
@@ -358,6 +396,11 @@ void detect_lost_pkts(struct q_conn * const c)
                 // lets it decide whether to retransmit immediately.
                 largest_lost_packet = MAX(largest_lost_packet, nr);
                 STAILQ_REMOVE(&c->sent_pkts, v, w_iov, next);
+
+                // if this packet was retransmittable, update in_flight
+                if (v->len > Q_OFFSET)
+                    c->in_flight -= v->len;
+
                 warn(info, "pkt %" PRIu64 " considered lost", nr);
             } else if (fpclassify(c->loss_t) == FP_ZERO &&
                        fpclassify(delay_until_lost) != FP_INFINITE)
@@ -420,15 +463,7 @@ void set_ld_alarm(struct q_conn * const c)
 {
     // see SetLossDetectionAlarm pseudo code
 
-    // check if we sent at least one packet with a retransmittable frame
-    struct w_iov * v;
-    bool outstanding_retransmittable_pkts = false;
-    STAILQ_FOREACH (v, &c->sent_pkts, next)
-        if (v->len > Q_OFFSET) {
-            outstanding_retransmittable_pkts = true;
-            break;
-        }
-    if (outstanding_retransmittable_pkts == false) {
+    if (c->in_flight == 0) {
         ev_timer_stop(loop, &c->ld_alarm);
         warn(debug, "no retransmittable pkts outstanding, stopping LD alarm");
         return;
@@ -437,34 +472,34 @@ void set_ld_alarm(struct q_conn * const c)
     ev_tstamp dur = 0;
     const ev_tstamp now = ev_now(loop);
     if (c->state < CONN_ESTB) {
-        warn(info, "handshake retransmission alarm");
         if (fpclassify(c->srtt) == FP_ZERO)
             dur = 2 * kDefaultInitialRtt;
         else
             dur = 2 * c->srtt;
         dur = MAX(dur, kMinTLPTimeout);
         dur *= 2 ^ c->handshake_cnt;
+        warn(info, "handshake retransmission alarm in %f sec", dur);
 
     } else if (fpclassify(c->loss_t) != FP_ZERO) {
-        warn(info, "early retransmit timer or time loss detection");
         dur = c->loss_t - now;
+        warn(info, "early retransmit or time loss detection alarm in %f sec",
+             dur);
 
     } else if (c->tlp_cnt < kMaxTLPs) {
-        warn(info, "tail loss probe");
-        if (outstanding_retransmittable_pkts)
+        if (c->in_flight)
             dur = 1.5 * c->srtt + kDelayedAckTimeout;
         else
             dur = kMinTLPTimeout;
         dur = MAX(dur, 2 * c->srtt);
+        warn(info, "TLP alarm in %f sec", dur);
 
     } else {
-        warn(info, "RTO alarm");
         dur = c->srtt + 4 * c->rttvar;
         dur = MAX(dur, kMinRTOTimeout);
         dur *= 2 ^ c->rto_cnt;
+        warn(info, "RTO alarm in %f sec", dur);
     }
 
     c->ld_alarm.repeat = dur;
     ev_timer_again(loop, &c->ld_alarm);
-    warn(debug, "LD alarm in %f", dur);
 }
