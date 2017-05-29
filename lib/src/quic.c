@@ -300,7 +300,7 @@ tx_cb(struct ev_loop * const l __attribute__((unused)),
 void * q_init(const char * const ifname, const long timeout)
 {
     // check versions
-    ensure(WARPCORE_VERSION_MAJOR == 0 && WARPCORE_VERSION_MINOR == 6,
+    ensure(WARPCORE_VERSION_MAJOR == 0 && WARPCORE_VERSION_MINOR == 7,
            "%s version %s not compatible with %s version %s", quant_name,
            quant_version, warpcore_name, warpcore_version);
 

@@ -199,7 +199,7 @@ void rx(struct ev_loop * const l __attribute__((unused)),
         int e __attribute__((unused)))
 {
     struct w_sock * const ws = rx_w->data;
-    w_nic_rx(w_engine(ws));
+    w_nic_rx(w_engine(ws), -1);
     struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
     w_rx(ws, &i);
 
