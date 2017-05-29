@@ -9,7 +9,7 @@ INPUT                  = @PROJECT_SOURCE_DIR@/lib \
 FILE_PATTERNS          = *.h \
                          *.c
 EXAMPLE_PATH           = @PROJECT_SOURCE_DIR@/bin
-#RECURSIVE              = YES
+RECURSIVE              = YES
 EXTRACT_ALL            = YES
 EXTRACT_STATIC         = YES
 OPTIMIZE_OUTPUT_FOR_C  = YES
