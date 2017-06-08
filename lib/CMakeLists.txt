@@ -1,6 +1,3 @@
-check_symbol_exists(htobe64 endian.h HAVE_ENDIAN_H)
-check_symbol_exists(htobe64 sys/endian.h HAVE_SYS_ENDIAN_H)
-
 string(TOUPPER ${PROJECT_NAME} PROJECT_NAME_UC)
 configure_file(include/${PROJECT_NAME}/config.h.in include/${PROJECT_NAME}/config.h)
 configure_file(src/config.c.in src/config.c)
@@ -15,11 +12,6 @@ SET(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 # find_package_handle_standard_args(libnss
 #   DEFAULT_MSG LIBNSS_LIB LIBNSS_INCLUDE)
 # include_directories(${LIBNSS_INCLUDE})
-
-find_library(LIBEV_LIB NAMES ev)
-find_path(LIBEV_INCLUDE ev.h PATH_SUFFIXES include/ev include)
-find_package_handle_standard_args(libev DEFAULT_MSG LIBEV_LIB LIBEV_INCLUDE)
-# include_directories(${LIBEV_INCLUDE})
 
 set(${PROJECT_NAME}_sources
   src/fnv_1a.c src/pkt.c src/frame.c src/quic.c src/stream.c src/conn.c
@@ -76,10 +68,8 @@ install(DIRECTORY include/${PROJECT_NAME}
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/include/${PROJECT_NAME}/config.h
         DESTINATION include/${PROJECT_NAME})
 
-find_package(Threads)
-
 target_link_libraries(${PROJECT_NAME}_static
-  warpcore tommy ${LIBEV_LIB} ${CMAKE_THREAD_LIBS_INIT}) # ${NSS_LIB}
+  warpcore tommy ${LIBEV_LIB} Threads::Threads) # ${NSS_LIB}
 
 target_link_libraries(${PROJECT_NAME}
-  warpcore tommy ${LIBEV_LIB} ${CMAKE_THREAD_LIBS_INIT}) # ${NSS_LIB}
+  warpcore tommy ${LIBEV_LIB} Threads::Threads) # ${NSS_LIB}

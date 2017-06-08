@@ -3,9 +3,21 @@ cmake_minimum_required(VERSION 3.0)
 project(quant VERSION 0.0.3 LANGUAGES C)
 
 # Check for dependencies before mucking with the compiler flags
+include(CheckSymbolExists)
+
+check_symbol_exists(htobe64 endian.h HAVE_ENDIAN_H)
+check_symbol_exists(htobe64 sys/endian.h HAVE_SYS_ENDIAN_H)
+find_package(Threads)
+
+find_library(LIBEV_LIB NAMES ev)
+if(NOT LIBEV_LIB)
+  message(FATAL_ERROR "libev not found")
+endif()
+find_path(LIBEV_INCLUDE ev.h PATH_SUFFIXES include/ev include)
+find_package_handle_standard_args(libev DEFAULT_MSG LIBEV_LIB LIBEV_INCLUDE)
+include_directories(${LIBEV_INCLUDE})
 
 # Check if _GNU_SOURCE is available.
-include(CheckSymbolExists)
 check_symbol_exists(__GNU_LIBRARY__ "features.h" _GNU_SOURCE)
 if(_GNU_SOURCE)
   add_definitions(-D_GNU_SOURCE)
