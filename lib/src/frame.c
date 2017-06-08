@@ -140,7 +140,7 @@ find_sent_pkt(const struct w_iov_stailq * const q, const uint64_t nr)
     STAILQ_FOREACH (v, q, next)
         if (pkt_nr(v->buf, v->len) == nr)
             return v;
-    warn(err, "sent packet %" PRIu64 " not found", nr);
+    die("sent packet %" PRIu64 " not found", nr);
     return 0;
 }
 
@@ -212,7 +212,7 @@ dec_ack_frame(struct q_conn * const c,
         // third clause from OnAckReceived pseudo code:
 
         // find all newly ACKed packets
-        while (ack >= lg_ack - l) {
+        while (ack > lg_ack - l) {
             warn(notice, "got ACK for %" PRIu64, ack);
             p = find_sent_pkt(&c->sent_pkts, ack);
             if (p) {
@@ -229,7 +229,9 @@ dec_ack_frame(struct q_conn * const c,
                         // see OnRetransmissionTimeoutVerified pseudo code
                         c->cwnd = kMinimumWindow;
                     c->handshake_cnt = c->tlp_cnt = c->rto_cnt = 0;
-                    STAILQ_REMOVE(&c->sent_pkts, p, w_iov, next);
+                    // TODO: pseudo code is wrong here - figure out when to
+                    // remove sent packets from data structure
+                    // STAILQ_REMOVE(&c->sent_pkts, p, w_iov, next);
 
                     // see OnPacketAcked pseudo code (for CC):
                     if (ack >= c->rec_end) {
