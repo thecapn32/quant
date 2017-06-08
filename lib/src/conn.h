@@ -31,16 +31,13 @@
 
 #include <warpcore/warpcore.h>
 
-#include "tommy.h"
-
 
 // All open QUIC connections.
-extern hash q_conns;
-
+extern SPLAY_HEAD(conn, q_conn) q_conns;
 
 /// A QUIC connection.
 struct q_conn {
-    node conn_node;
+    SPLAY_ENTRY(q_conn) next;
 
     uint64_t id; ///< Connection ID
 
@@ -52,7 +49,7 @@ struct q_conn {
     uint8_t _unused[2];
     socklen_t peer_len;   ///< Length of @p peer.
     struct sockaddr peer; ///< Address of our peer.
-    hash streams;
+    SPLAY_HEAD(stream, q_stream) streams;
     struct w_sock * sock; ///< File descriptor (socket) for the connection.
     ev_io rx_w;           ///< RX watcher.
 
@@ -82,6 +79,13 @@ struct q_conn {
     uint64_t rec_end;
     uint64_t ssthresh;
 };
+
+
+extern int64_t __attribute__((nonnull))
+conn_cmp(const struct q_conn * const a, const struct q_conn * const b);
+
+SPLAY_PROTOTYPE(conn, q_conn, next, conn_cmp)
+
 
 #define CONN_CLSD 0
 #define CONN_VERS_SENT 1

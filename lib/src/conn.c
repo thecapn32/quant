@@ -44,18 +44,19 @@
 #include "pkt.h"
 #include "quic.h"
 #include "stream.h"
-#include "tommy.h"
 
 
 // All open QUIC connections.
-hash q_conns;
+struct conn q_conns;
 
 
-static int __attribute__((nonnull))
-cmp_q_conn(const void * const arg, const void * const obj)
+int64_t conn_cmp(const struct q_conn * const a, const struct q_conn * const b)
 {
-    return *(const uint64_t *)arg != ((const struct q_conn *)obj)->id;
+    return (int64_t)a->id - (int64_t)b->id;
 }
+
+
+SPLAY_GENERATE(conn, q_conn, next, conn_cmp)
 
 
 static bool __attribute__((const)) vers_supported(const uint32_t v)
@@ -97,20 +98,8 @@ pick_from_server_vers(const void * const buf, const uint16_t len)
 
 struct q_conn * get_conn(const uint64_t id)
 {
-    return hash_search(&q_conns, cmp_q_conn, &id, (uint32_t)id);
-}
-
-
-static void __attribute__((nonnull)) check_stream(void * arg, void * obj)
-{
-    struct q_stream ** ret = arg;
-    struct q_stream * s = obj;
-    if (*ret == 0 && !STAILQ_EMPTY(&s->o)) {
-        warn(debug, "conn %" PRIx64 " str %u has %u byte%s pending data",
-             s->c->id, s->id, w_iov_stailq_len(&s->o),
-             plural(w_iov_stailq_len(&s->o)));
-        *ret = s;
-    }
+    struct q_conn which = {.id = id};
+    return SPLAY_FIND(conn, &q_conns, &which);
 }
 
 
@@ -120,7 +109,9 @@ void tx(struct w_sock * const ws, struct q_conn * const c)
 
     // check if there is any stream with pending data
     struct q_stream * s = 0;
-    hash_foreach_arg(&c->streams, &check_stream, &s);
+    SPLAY_FOREACH(s, stream, &c->streams)
+    if (!STAILQ_EMPTY(&s->o))
+        break;
     if (s == 0) {
         // don't have any stream data to piggyback on, so abuse stream zero by
         // inserting an empty w_iov to carry the ACK frame
@@ -442,8 +433,8 @@ struct q_conn * new_conn(const uint64_t id,
     c->ssthresh = UINT64_MAX;
 
     STAILQ_INIT(&c->sent_pkts);
-    hash_init(&c->streams);
-    hash_insert(&q_conns, &c->conn_node, c, (uint32_t)c->id);
+    SPLAY_INIT(&c->streams);
+    SPLAY_INSERT(conn, &q_conns, c);
 
     char host[NI_MAXHOST] = "";
     char port[NI_MAXSERV] = "";

@@ -28,11 +28,11 @@
 #include <stdint.h>
 #include <warpcore/warpcore.h>
 
-#include "tommy.h"
-
+struct q_conn;
+struct stream;
 
 struct q_stream {
-    node stream_node;
+    SPLAY_ENTRY(q_stream) next;
     struct q_conn * c;
 
     uint32_t id;
@@ -46,7 +46,11 @@ struct q_stream {
     uint64_t in_off;
 };
 
-struct q_conn;
+
+extern int64_t __attribute__((nonnull))
+stream_cmp(const struct q_stream * const a, const struct q_stream * const b);
+
+SPLAY_PROTOTYPE(stream, q_stream, next, stream_cmp)
 
 
 extern struct q_stream * __attribute__((nonnull))

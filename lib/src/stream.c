@@ -34,20 +34,22 @@
 #include "conn.h"
 #include "quic.h"
 #include "stream.h"
-#include "tommy.h"
 
 
-static int __attribute__((nonnull))
-cmp_q_stream(const void * const arg, const void * const obj)
+int64_t stream_cmp(const struct q_stream * const a,
+                   const struct q_stream * const b)
 {
-    return *(const uint32_t * const)arg !=
-           ((const struct q_stream * const)obj)->id;
+    return (int64_t)a->id - (int64_t)b->id;
 }
+
+
+SPLAY_GENERATE(stream, q_stream, next, stream_cmp)
 
 
 struct q_stream * get_stream(struct q_conn * const c, const uint32_t id)
 {
-    return hash_search(&c->streams, cmp_q_stream, &id, id);
+    struct q_stream which = {.id = id};
+    return SPLAY_FIND(stream, &c->streams, &which);
 }
 
 
@@ -77,7 +79,7 @@ struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
            c->flags & CONN_FLAG_CLNT ? "client" : "server",
            c->flags & CONN_FLAG_CLNT ? "odd" : "even", s->id);
 
-    hash_insert(&c->streams, &s->stream_node, s, s->id);
+    SPLAY_INSERT(stream, &c->streams, s);
     warn(info, "reserved new str %u on conn %" PRIx64 " as %s", s->id, c->id,
          c->flags & CONN_FLAG_CLNT ? "client" : "server");
     return s;

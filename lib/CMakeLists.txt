@@ -69,7 +69,7 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/include/${PROJECT_NAME}/config.h
         DESTINATION include/${PROJECT_NAME})
 
 target_link_libraries(${PROJECT_NAME}_static
-  warpcore tommy ${LIBEV_LIB} Threads::Threads) # ${NSS_LIB}
+  warpcore ${LIBEV_LIB} Threads::Threads) # ${NSS_LIB}
 
 target_link_libraries(${PROJECT_NAME}
-  warpcore tommy ${LIBEV_LIB} Threads::Threads) # ${NSS_LIB}
+  warpcore ${LIBEV_LIB} Threads::Threads) # ${NSS_LIB}

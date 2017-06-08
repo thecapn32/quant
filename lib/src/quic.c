@@ -40,7 +40,6 @@
 #include "conn.h"
 #include "quic.h"
 #include "stream.h"
-#include "tommy.h"
 
 struct ev_loop;
 struct sockaddr;
@@ -146,40 +145,45 @@ void q_write(const uint64_t cid,
     warn(warn, "write done");
 }
 
-static void __attribute__((nonnull))
-find_stream_with_data(void * arg, void * obj)
-{
-    uint32_t * sid = arg;
-    struct q_stream * s = obj;
-    if (s->id && *sid == 0 && !STAILQ_EMPTY(&s->i)) {
-        const uint32_t in_len = w_iov_stailq_len(&s->i);
-        warn(info, "buffered %u byte%s on str %u", in_len, plural(in_len),
-             s->id);
-        *sid = s->id;
-    }
-}
-
 
 void q_read(const uint64_t cid,
             uint32_t * const sid,
             struct w_iov_stailq * const i)
 {
-    struct q_conn * const c = get_conn(cid);
-    ensure(c, "conn %" PRIx64 " does not exist", cid);
+    *sid = 0;
+    struct q_conn which = {.id = cid};
+    struct q_conn * c = SPLAY_FIND(conn, &q_conns, &which);
+    if (c == 0)
+        return;
+
+    // struct q_conn * const c = get_conn(cid);
+    // ensure(c, "conn %" PRIx64 " does not exist", cid);
 
     pthread_mutex_lock(&lock);
     warn(warn, "waiting for data");
     pthread_cond_wait(&read_cv, &lock);
     pthread_mutex_unlock(&lock);
 
-    *sid = 0;
-    hash_foreach_arg(&c->streams, &find_stream_with_data, sid);
+    struct q_stream * s;
+    SPLAY_FOREACH(s, stream, &c->streams)
+    if (!STAILQ_EMPTY(&s->i)) {
+        const uint32_t in_len = w_iov_stailq_len(&s->i);
+        warn(info, "buffered %u byte%s on str %u", in_len, plural(in_len),
+             s->id);
+        *sid = s->id;
+        break;
+    }
     if (*sid == 0)
-        // no stream has new data, which can happen if the timeout fired
         return;
 
-    struct q_stream * s = get_stream(c, *sid);
-    ensure(s, "str %u on conn %" PRIx64 " does not exist", *sid, cid);
+    // *sid = 0;
+    // hash_foreach_arg(&c->streams, &find_stream_with_data, sid);
+    // if (*sid == 0)
+    //     // no stream has new data, which can happen if the timeout fired
+    //     return;
+
+    // struct q_stream * s = get_stream(c, *sid);
+    // ensure(s, "str %u on conn %" PRIx64 " does not exist", *sid, cid);
 
     if (STAILQ_EMPTY(&s->i)) {
         pthread_mutex_lock(&lock);
@@ -306,7 +310,7 @@ void * q_init(const char * const ifname, const long timeout)
     // initialize warpcore, the PRNG, and local state
     void * const w = w_init(ifname, 0);
     srandom((unsigned)time(0));
-    hash_init(&q_conns);
+    SPLAY_INIT(&q_conns);
 
     // initialize synchronization helpers
     pthread_mutex_init(&lock, 0);
@@ -371,6 +375,13 @@ void q_cleanup(void * const q)
     ensure(pthread_cond_destroy(&accept_cv) == 0, "pthread_cond_destroy");
 
     w_cleanup(q);
-    hash_foreach(&q_conns, free);
-    hash_done(&q_conns);
+    struct q_conn *c, *tmp;
+    for (c = SPLAY_MIN(conn, &q_conns); c != 0; c = tmp) {
+        tmp = SPLAY_NEXT(conn, &q_conns, c);
+        SPLAY_REMOVE(conn, &q_conns, c);
+        free(c);
+    }
+
+    // hash_foreach(&q_conns, free);
+    // hash_done(&q_conns);
 }

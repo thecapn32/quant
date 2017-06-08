@@ -1,27 +1,5 @@
 include(ExternalProject)
 
-externalproject_add(tommyds
-  # UPDATE_COMMAND ""
-  GIT_REPOSITORY https://github.com/amadvance/tommyds.git
-  PATCH_COMMAND sed -i "" -e "s/-Wpadded// $<SEMICOLON> s/-Wcast-align// \
-                  $<SEMICOLON> s/objdump/echo/" Makefile
-  CONFIGURE_COMMAND ""
-  BUILD_IN_SOURCE 1
-  BUILD_COMMAND make
-  INSTALL_COMMAND ""
-  BUILD_BYPRODUCTS
-    ${CMAKE_CURRENT_BINARY_DIR}/tommyds-prefix/src/tommyds/tommy.o
-)
-
-externalproject_get_property(tommyds SOURCE_DIR)
-add_library(tommy STATIC IMPORTED GLOBAL)
-set_target_properties(tommy PROPERTIES IMPORTED_LOCATION ${SOURCE_DIR}/tommy.o)
-set_target_properties(tommy
-  PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${SOURCE_DIR}
-)
-add_dependencies(tommy tommyds)
-
-
 externalproject_add(warp
   # UPDATE_COMMAND ""
   GIT_REPOSITORY git@github.com:NTAP/warpcore.git

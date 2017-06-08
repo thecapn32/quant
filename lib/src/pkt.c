@@ -39,7 +39,6 @@
 #include "marshall.h"
 #include "pkt.h"
 #include "quic.h"
-#include "tommy.h"
 
 
 /// Packet number lengths for different short-header packet types
