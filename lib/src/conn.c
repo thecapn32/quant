@@ -240,6 +240,10 @@ void rx(struct ev_loop * const l __attribute__((unused)),
             // store the socket with the connection
             c->sock = ws;
 
+            // validate minimum packet size
+            ensure(v->len >= MIN_IP4_INI_LEN, "initial packet len %u too short",
+                   v->len);
+
             ensure(pkt_flags(v->buf) & F_LONG_HDR, "short header");
             c->state = CONN_VERS_RECV;
             warn(info, "conn %" PRIx64 " now in CONN_VERS_RECV", c->id);

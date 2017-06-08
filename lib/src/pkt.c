@@ -156,6 +156,12 @@ uint16_t enc_pkt(struct q_conn * const c,
         i = enc_stream_frame(s, v->buf, i, v->len);
     }
 
+    if (c->state == CONN_VERS_SENT) {
+        memset(&v->buf[i], T_PADDING, MIN_IP4_INI_LEN - i);
+        warn(debug, "padding sending initial packet");
+        i = MIN_IP4_INI_LEN;
+    }
+
     const uint128_t hash = fnv_1a(v->buf, i, hash_pos, HASH_LEN);
     warn(debug, "inserting %u-byte hash over range [0..%u] into [%u..%u]",
          HASH_LEN, i - 1, hash_pos, hash_pos + HASH_LEN - 1);

@@ -29,6 +29,8 @@
 #include <stdint.h>
 
 #define MAX_PKT_LEN 1350
+#define MIN_IP4_INI_LEN 1252
+#define MIN_IP6_INI_LEN 1232
 
 #define F_LONG_HDR 0x80
 #define F_LH_TYPE_VERS_NEG 0x01
