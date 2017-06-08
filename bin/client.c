@@ -32,6 +32,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/param.h>
 #include <sys/socket.h>
 
 #include <quant/quant.h>
@@ -57,6 +58,8 @@ static void usage(const char * const name,
     printf("\t[-t sec]\t\texit after some seconds (0 to disable); "
            "default %ld\n",
            timeout);
+    printf("\t[-v verbosity]\t\tverbosity level (0-%u, default %u)\n", DLEVEL,
+           _dlevel);
 }
 
 
@@ -69,7 +72,7 @@ int main(int argc, char * argv[])
     long timeout = 3;
     int ch;
 
-    while ((ch = getopt(argc, argv, "hi:d:p:n:t:")) != -1) {
+    while ((ch = getopt(argc, argv, "hi:d:p:n:t:v:")) != -1) {
         switch (ch) {
         case 'i':
             ifname = optarg;
@@ -89,6 +92,9 @@ int main(int argc, char * argv[])
         case 't':
             timeout = strtol(optarg, 0, 10);
             ensure(errno != EINVAL, "could not convert to integer");
+            break;
+        case 'v':
+            _dlevel = MIN(DLEVEL, MAX(0, (uint32_t)strtoul(optarg, 0, 10)));
             break;
         case 'h':
         case '?':

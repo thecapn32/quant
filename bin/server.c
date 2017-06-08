@@ -46,6 +46,8 @@ static void usage(const char * const name,
     printf("\t[-p port]\tdestination port; default %d\n", port);
     printf("\t[-t sec]\texit after some seconds (0 to disable); default %ld\n",
            timeout);
+    printf("\t[-v verbosity]\t\tverbosity level (0-%u, default %u)\n", DLEVEL,
+           _dlevel);
 }
 
 
@@ -56,7 +58,7 @@ int main(int argc, char * argv[])
     long timeout = 3;
     int ch;
 
-    while ((ch = getopt(argc, argv, "hi:p:t:")) != -1) {
+    while ((ch = getopt(argc, argv, "hi:p:t:v:")) != -1) {
         switch (ch) {
         case 'i':
             ifname = optarg;
@@ -67,6 +69,9 @@ int main(int argc, char * argv[])
         case 't':
             timeout = strtol(optarg, 0, 10);
             ensure(errno != EINVAL, "could not convert to integer");
+            break;
+        case 'v':
+            _dlevel = MIN(DLEVEL, MAX(0, (uint32_t)strtoul(optarg, 0, 10)));
             break;
         case 'h':
         case '?':
