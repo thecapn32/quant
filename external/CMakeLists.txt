@@ -52,6 +52,7 @@ externalproject_add(picotls
   GIT_REPOSITORY git@github.com:h2o/picotls.git
   # GIT_TAG kazuho/quic <- this doesn't work, hack around it:
   PATCH_COMMAND git checkout kazuho/quic
+  UPDATE_COMMAND "" # <- workaround above causes git error without this
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -DOPENSSL_INCLUDE_DIR=/usr/include
     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
