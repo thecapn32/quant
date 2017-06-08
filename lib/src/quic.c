@@ -32,7 +32,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/queue.h>
 #include <time.h>
 
 #include <quant/quant.h>

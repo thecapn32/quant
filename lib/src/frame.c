@@ -30,7 +30,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
-#include <sys/queue.h>
 
 #ifdef __linux__
 #include <byteswap.h>

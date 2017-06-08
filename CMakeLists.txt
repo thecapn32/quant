@@ -44,7 +44,8 @@ foreach(FLAG -march=native -Wextra -Wpedantic -Weverything -Werror
 endforeach()
 
 # Set C flags
-foreach(FLAG -Wno-missing-field-initializers -Wno-missing-braces)
+foreach(FLAG -Wno-missing-field-initializers -Wno-missing-braces
+        -Wno-gnu-statement-expression -Wno-extended-offsetof)
   string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
   check_c_compiler_flag(${FLAG} ${F})
   if(${F})

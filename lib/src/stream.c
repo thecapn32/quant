@@ -28,7 +28,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/queue.h>
 
 #include <warpcore/warpcore.h>
 

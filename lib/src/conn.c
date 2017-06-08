@@ -33,7 +33,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/param.h>
-#include <sys/queue.h>
 #include <sys/socket.h>
 
 #include <warpcore/warpcore.h>
