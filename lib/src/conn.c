@@ -209,9 +209,9 @@ void rx(struct ev_loop * const l __attribute__((unused)),
 
         if (hdr_len + HASH_LEN < v->len) {
             // verify hash, if there seems to be one
-            warn(debug, "verifying %u-byte hash at [%u..%u] over [0..%u]",
+            warn(debug, "verifying %lu-byte hash at [%u..%lu] over [0..%u]",
                  HASH_LEN, hdr_len, hdr_len + HASH_LEN - 1, v->len - 1);
-            const uint128_t hash = fnv_1a(v->buf, v->len, hdr_len, HASH_LEN);
+            const uint64_t hash = fnv_1a(v->buf, v->len, hdr_len, HASH_LEN);
             if (memcmp(&v->buf[hdr_len], &hash, HASH_LEN) != 0)
                 die("hash mismatch");
         }

@@ -162,8 +162,8 @@ uint16_t enc_pkt(struct q_conn * const c,
         i = MIN_IP4_INI_LEN;
     }
 
-    const uint128_t hash = fnv_1a(v->buf, i, hash_pos, HASH_LEN);
-    warn(debug, "inserting %u-byte hash over range [0..%u] into [%u..%u]",
+    const uint64_t hash = fnv_1a(v->buf, i, hash_pos, HASH_LEN);
+    warn(debug, "inserting %lu-byte hash over range [0..%u] into [%u..%lu]",
          HASH_LEN, i - 1, hash_pos, hash_pos + HASH_LEN - 1);
     memcpy(&((uint8_t *)v->buf)[hash_pos], &hash, HASH_LEN);
 

@@ -31,18 +31,16 @@
 #include "fnv_1a.h"
 
 
-uint128_t fnv_1a(const void * const buf,
-                 const size_t len,
-                 const size_t skip_pos,
-                 const size_t skip_len)
+uint64_t fnv_1a(const void * const buf,
+                const size_t len,
+                const size_t skip_pos,
+                const size_t skip_len)
 {
     ensure((skip_pos <= len) && (skip_pos + skip_len <= len),
            "len %zu, skip_pos %zu, skip_len %zu", len, skip_pos, skip_len);
 
-    const uint128_t prime =
-        (((uint128_t)0x0000000001000000) << 64) | 0x000000000000013B;
-    uint128_t hash =
-        (((uint128_t)0x6C62272E07BB0142) << 64) | 0x62B821756295C58D;
+    const uint64_t prime = 0x100000001b3;
+    uint64_t hash = 0xcbf29ce484222325;
 
     // two consecutive loops should be faster than one loop with an "if"
     const uint8_t * const bytes = buf;
