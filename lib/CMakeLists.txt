@@ -6,13 +6,6 @@ include(GNUInstallDirs)
 set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}")
 SET(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 
-# find_library(LIBNSS_LIB NAMES nss nss3 PATHS /usr/local/opt/nss/lib)
-# find_path(LIBNSS_INCLUDE nss.h
-#   PATH_SUFFIXES include/nss include PATHS /usr/local/opt/nss)
-# find_package_handle_standard_args(libnss
-#   DEFAULT_MSG LIBNSS_LIB LIBNSS_INCLUDE)
-# include_directories(${LIBNSS_INCLUDE})
-
 set(${PROJECT_NAME}_sources
   src/fnv_1a.c src/pkt.c src/frame.c src/quic.c src/stream.c src/conn.c
   ${CMAKE_CURRENT_BINARY_DIR}/src/config.c)
@@ -69,7 +62,7 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/include/${PROJECT_NAME}/config.h
         DESTINATION include/${PROJECT_NAME})
 
 target_link_libraries(${PROJECT_NAME}_static
-  warpcore ${LIBEV_LIB} Threads::Threads) # ${NSS_LIB}
+  warpcore ptls-core ptls-minicrypto ${LIBEV_LIB} Threads::Threads)
 
 target_link_libraries(${PROJECT_NAME}
-  warpcore ${LIBEV_LIB} Threads::Threads) # ${NSS_LIB}
+  warpcore ptls-core ptls-minicrypto ${LIBEV_LIB} Threads::Threads)
