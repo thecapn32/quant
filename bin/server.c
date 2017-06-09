@@ -82,9 +82,8 @@ int main(int argc, char * argv[])
     }
 
     void * const q = q_init(ifname, timeout);
-    warn(debug, "%s ready on %s port %d", basename(argv[0]), ifname, port);
-
     const uint64_t c = q_bind(q, port);
+    warn(debug, "%s ready on %s port %d", basename(argv[0]), ifname, port);
     uint32_t sid;
     struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
     q_read(c, &sid, &i);
