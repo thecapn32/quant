@@ -58,8 +58,10 @@ static void usage(const char * const name,
     printf("\t[-t sec]\t\texit after some seconds (0 to disable); "
            "default %ld\n",
            timeout);
+#ifndef NDEBUG
     printf("\t[-v verbosity]\t\tverbosity level (0-%u, default %u)\n", DLEVEL,
            _dlevel);
+#endif
 }
 
 
@@ -72,7 +74,11 @@ int main(int argc, char * argv[])
     long timeout = 3;
     int ch;
 
-    while ((ch = getopt(argc, argv, "hi:d:p:n:t:v:")) != -1) {
+    while ((ch = getopt(argc, argv, "hi:d:p:n:t:"
+#ifndef NDEBUG
+                                    "v:"
+#endif
+                        )) != -1) {
         switch (ch) {
         case 'i':
             ifname = optarg;
@@ -93,9 +99,11 @@ int main(int argc, char * argv[])
             timeout = strtol(optarg, 0, 10);
             ensure(errno != EINVAL, "could not convert to integer");
             break;
+#ifndef NDEBUG
         case 'v':
             _dlevel = MIN(DLEVEL, MAX(0, (uint32_t)strtoul(optarg, 0, 10)));
             break;
+#endif
         case 'h':
         case '?':
         default:

@@ -167,9 +167,11 @@ void q_read(const uint64_t cid,
     struct q_stream * s;
     SPLAY_FOREACH(s, stream, &c->streams)
     if (!STAILQ_EMPTY(&s->i)) {
+#ifndef NDEBUG
         const uint32_t in_len = w_iov_stailq_len(&s->i);
         warn(info, "buffered %u byte%s on str %u", in_len, plural(in_len),
              s->id);
+#endif
         *sid = s->id;
         break;
     }
@@ -250,11 +252,11 @@ timeout_cb(struct ev_loop * const l,
 }
 
 
-static void __attribute__((nonnull)) signal_cb(struct ev_loop * const l,
-                                               ev_signal * const w,
-                                               int e __attribute__((unused)))
+static void __attribute__((nonnull))
+signal_cb(struct ev_loop * const l,
+          ev_signal * const w __attribute__((unused)),
+          int e __attribute__((unused)))
 {
-    warn(err, "%s", strsignal(w->signum));
     ev_break(l, EVBREAK_ALL);
 }
 

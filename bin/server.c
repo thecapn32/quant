@@ -46,8 +46,10 @@ static void usage(const char * const name,
     printf("\t[-p port]\tdestination port; default %d\n", port);
     printf("\t[-t sec]\texit after some seconds (0 to disable); default %ld\n",
            timeout);
+#ifndef NDEBUG
     printf("\t[-v verbosity]\t\tverbosity level (0-%u, default %u)\n", DLEVEL,
            _dlevel);
+#endif
 }
 
 
@@ -58,7 +60,11 @@ int main(int argc, char * argv[])
     long timeout = 3;
     int ch;
 
-    while ((ch = getopt(argc, argv, "hi:p:t:v:")) != -1) {
+    while ((ch = getopt(argc, argv, "hi:p:t:"
+#ifndef NDEBUG
+                                    "v:"
+#endif
+                        )) != -1) {
         switch (ch) {
         case 'i':
             ifname = optarg;
@@ -70,9 +76,11 @@ int main(int argc, char * argv[])
             timeout = strtol(optarg, 0, 10);
             ensure(errno != EINVAL, "could not convert to integer");
             break;
+#ifndef NDEBUG
         case 'v':
             _dlevel = MIN(DLEVEL, MAX(0, (uint32_t)strtoul(optarg, 0, 10)));
             break;
+#endif
         case 'h':
         case '?':
         default:
@@ -87,9 +95,11 @@ int main(int argc, char * argv[])
     uint32_t sid;
     struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
     q_read(c, &sid, &i);
+#ifndef NDEBUG
     const uint32_t len = w_iov_stailq_len(&i);
     warn(info, "rx %u byte%s on str %d on conn %" PRIx64, len, plural(len), sid,
          c);
+#endif
     struct w_iov * v;
     STAILQ_FOREACH (v, &i, next)
         warn(info, "%s", v->buf);
