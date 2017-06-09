@@ -90,7 +90,7 @@ uint64_t q_connect(void * const q,
     c->flags |= CONN_FLAG_CLNT;
     // c->vers = 0xbabababa; // XXX reserved version to trigger negotiation
     c->vers = ok_vers[0];
-    c->sock = w_bind(q, (uint16_t)plat_random(), 0);
+    c->sock = w_bind(q, 0, 0);
     w_connect(c->sock,
               ((const struct sockaddr_in *)(const void *)peer)->sin_addr.s_addr,
               ((const struct sockaddr_in *)(const void *)peer)->sin_port);
@@ -303,7 +303,7 @@ tx_cb(struct ev_loop * const l __attribute__((unused)),
 void * q_init(const char * const ifname, const long timeout)
 {
     // check versions
-    ensure(WARPCORE_VERSION_MAJOR == 0 && WARPCORE_VERSION_MINOR == 7,
+    ensure(WARPCORE_VERSION_MAJOR == 0 && WARPCORE_VERSION_MINOR == 8,
            "%s version %s not compatible with %s version %s", quant_name,
            quant_version, warpcore_name, warpcore_version);
 
