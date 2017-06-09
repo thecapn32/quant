@@ -27,6 +27,7 @@
 #include <ev.h>
 #include <inttypes.h>
 #include <netinet/in.h>
+#include <picotls/minicrypto.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdint.h>
@@ -37,6 +38,7 @@
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
+#include "cert.h"
 #include "conn.h"
 #include "quic.h"
 #include "stream.h"
@@ -53,7 +55,7 @@ const uint32_t ok_vers[] = {
 const uint8_t ok_vers_len = sizeof(ok_vers) / sizeof(ok_vers[0]);
 
 
-struct ev_loop * loop;
+struct ev_loop * loop = 0;
 
 static ev_async tx_w;
 static pthread_t tid;
@@ -65,6 +67,12 @@ pthread_mutex_t lock;
 pthread_cond_t read_cv;
 
 uint64_t accept_queue;
+
+
+ptls_context_t ctx = {0};
+
+static ptls_minicrypto_secp256r1sha256_sign_certificate_t sign_cert;
+static ptls_iovec_t tls_certs;
 
 
 void q_alloc(void * const w, struct w_iov_stailq * const q, const uint32_t len)
@@ -309,10 +317,28 @@ void * q_init(const char * const ifname, const long timeout)
            "%s version %s not compatible with %s version %s", quant_name,
            quant_version, warpcore_name, warpcore_version);
 
-    // initialize warpcore, the PRNG, and local state
+    // initialize warpcore on the given interface
     void * const w = w_init(ifname, 0);
+
+    // if the global quant state has been initialized before, return
+    if (loop)
+        return w;
+
+    // initialize PRNG
     srandom((unsigned)time(0));
-    SPLAY_INIT(&q_conns);
+
+    // initialize TLS context
+    ctx.random_bytes = ptls_minicrypto_random_bytes;
+    ctx.key_exchanges = ptls_minicrypto_key_exchanges;
+    ctx.cipher_suites = ptls_minicrypto_cipher_suites;
+
+    ptls_minicrypto_init_secp256r1sha256_sign_certificate(
+        &sign_cert, ptls_iovec_init(tls_key, tls_key_len));
+    ctx.sign_certificate = &sign_cert.super;
+
+    tls_certs = ptls_iovec_init(tls_cert, tls_cert_len);
+    ctx.certificates.list = &tls_certs;
+    ctx.certificates.count = 1;
 
     // initialize synchronization helpers
     pthread_mutex_init(&lock, 0);
