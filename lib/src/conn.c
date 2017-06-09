@@ -47,7 +47,7 @@
 
 
 // All open QUIC connections.
-struct conn q_conns;
+struct conn q_conns = SPLAY_INITIALIZER();
 
 
 int64_t conn_cmp(const struct q_conn * const a, const struct q_conn * const b)
