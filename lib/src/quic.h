@@ -49,7 +49,7 @@ extern const uint8_t ok_vers_len;
 extern uint64_t accept_queue;
 
 /// TLS context.
-extern ptls_context_t ctx;
+extern ptls_context_t tls_ctx;
 
 /// Maximum number of tail loss probes before an RTO fires.
 #define kMaxTLPs 2

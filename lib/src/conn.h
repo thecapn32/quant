@@ -26,8 +26,11 @@
 #pragma once
 
 #include <ev.h>
+#include <picotls.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <sys/socket.h>
+
 
 #include <warpcore/warpcore.h>
 
@@ -78,6 +81,9 @@ struct q_conn {
     uint64_t in_flight;
     uint64_t rec_end;
     uint64_t ssthresh;
+
+    // TLS state
+    ptls_t *tls;
 };
 
 
@@ -105,7 +111,8 @@ extern void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c);
 extern struct q_conn * __attribute__((nonnull))
 new_conn(const uint64_t id,
          const struct sockaddr * const peer,
-         const socklen_t peer_len);
+         const socklen_t peer_len,
+         const bool am_server);
 
 extern void __attribute__((nonnull))
 tx(struct w_sock * const ws, struct q_conn * const c);

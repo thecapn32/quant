@@ -225,7 +225,7 @@ void rx(struct ev_loop * const l __attribute__((unused)),
                                              .sin_port = v->port,
                                              .sin_addr = {.s_addr = v->ip}};
             socklen_t peer_len = sizeof(peer);
-            c = new_conn(cid, (const struct sockaddr *)&peer, peer_len);
+            c = new_conn(cid, (const struct sockaddr *)&peer, peer_len, true);
             accept_queue = cid;
         }
 
@@ -417,7 +417,8 @@ void detect_lost_pkts(struct q_conn * const c)
 
 struct q_conn * new_conn(const uint64_t id,
                          const struct sockaddr * const peer,
-                         const socklen_t peer_len)
+                         const socklen_t peer_len,
+                         const bool am_server)
 {
     ensure(get_conn(id) == 0, "conn %" PRIx64 " already exists", id);
 
@@ -436,6 +437,9 @@ struct q_conn * new_conn(const uint64_t id,
     c->cwnd = kInitialWindow;
     c->ssthresh = UINT64_MAX;
 
+    // initialize TLS state
+    ensure((c->tls = ptls_new(&tls_ctx, am_server)) != 0, "alloc TLS state");
+
     STAILQ_INIT(&c->sent_pkts);
     SPLAY_INIT(&c->streams);
     SPLAY_INSERT(conn, &q_conns, c);
@@ -446,8 +450,8 @@ struct q_conn * new_conn(const uint64_t id,
                 port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
     c->peer = *peer;
     c->peer_len = peer_len;
-    warn(info, "created new conn %" PRIx64 " with peer %s:%s", c->id, host,
-         port);
+    warn(info, "creating new conn %" PRIx64 " with %s %s:%s", c->id,
+         am_server ? "client" : "server", host, port);
 
     return c;
 }

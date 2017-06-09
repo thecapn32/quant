@@ -25,9 +25,10 @@
 
 #include <inttypes.h>
 #include <netinet/in.h>
+#include <stddef.h> // IWYU pragma: keep
+#include <picotls.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <string.h>
 
 #include <warpcore/warpcore.h>
 
@@ -98,9 +99,16 @@ void stream_write(struct q_stream * const s,
     w_alloc_cnt(w_engine(s->c->sock), &o, 1, Q_OFFSET);
     struct w_iov * const v = STAILQ_FIRST(&o);
 
+    ptls_buffer_t sendbuf;
+    ptls_buffer_init(&sendbuf, v->buf, v->len);
+    ensure(ptls_handshake(s->c->tls, &sendbuf, 0, 0, 0) ==
+               PTLS_ERROR_IN_PROGRESS,
+           "ptls_handshake");
+
+
     // copy data
-    memcpy(v->buf, data, len);
-    v->len = len;
+    // memcpy(v->buf, data, len);
+    // v->len = (uint16_t)ptls_get_record_overhead(s->c->tls);
 
     // enqueue for TX
     v->ip = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_addr.s_addr;

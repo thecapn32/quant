@@ -30,6 +30,7 @@
 #include <picotls/minicrypto.h>
 #include <pthread.h>
 #include <signal.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -69,10 +70,11 @@ pthread_cond_t read_cv;
 uint64_t accept_queue;
 
 
-ptls_context_t ctx = {0};
+ptls_context_t tls_ctx = {0};
 
 static ptls_minicrypto_secp256r1sha256_sign_certificate_t sign_cert;
 static ptls_iovec_t tls_certs;
+static ptls_verify_certificate_t verifier;
 
 
 void q_alloc(void * const w, struct w_iov_stailq * const q, const uint32_t len)
@@ -94,7 +96,7 @@ uint64_t q_connect(void * const q,
     // make new connection
     const uint64_t cid =
         (((uint64_t)plat_random()) << 32) | (uint64_t)plat_random();
-    struct q_conn * const c = new_conn(cid, peer, peer_len);
+    struct q_conn * const c = new_conn(cid, peer, peer_len, false);
     c->flags |= CONN_FLAG_CLNT;
     // c->vers = 0xbabababa; // XXX reserved version to trigger negotiation
     c->vers = ok_vers[0];
@@ -328,17 +330,21 @@ void * q_init(const char * const ifname, const long timeout)
     srandom((unsigned)time(0));
 
     // initialize TLS context
-    ctx.random_bytes = ptls_minicrypto_random_bytes;
-    ctx.key_exchanges = ptls_minicrypto_key_exchanges;
-    ctx.cipher_suites = ptls_minicrypto_cipher_suites;
+    tls_ctx.random_bytes = ptls_minicrypto_random_bytes;
+    tls_ctx.key_exchanges = ptls_minicrypto_key_exchanges;
+    tls_ctx.cipher_suites = ptls_minicrypto_cipher_suites;
 
     ptls_minicrypto_init_secp256r1sha256_sign_certificate(
         &sign_cert, ptls_iovec_init(tls_key, tls_key_len));
-    ctx.sign_certificate = &sign_cert.super;
+    tls_ctx.sign_certificate = &sign_cert.super;
 
     tls_certs = ptls_iovec_init(tls_cert, tls_cert_len);
-    ctx.certificates.list = &tls_certs;
-    ctx.certificates.count = 1;
+    tls_ctx.certificates.list = &tls_certs;
+    tls_ctx.certificates.count = 1;
+
+    // TODO: there doesn't yet seem to be a minicrypto version of this call:
+    // ptls_openssl_init_verify_certificate(&verifier, 0);
+    tls_ctx.verify_certificate = &verifier;
 
     // initialize synchronization helpers
     pthread_mutex_init(&lock, 0);
