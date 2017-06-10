@@ -2,20 +2,48 @@ string(TOUPPER ${PROJECT_NAME} PROJECT_NAME_UC)
 configure_file(include/${PROJECT_NAME}/config.h.in include/${PROJECT_NAME}/config.h)
 configure_file(src/config.c.in src/config.c)
 
-add_custom_command(
+add_custom_target(openssl-param
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/src
   COMMAND openssl ecparam -name prime256v1 -out prime256v1.param
+  BYPRODUCTS prime256v1.param
+)
+
+add_custom_target(openssl-req
+  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/src
   COMMAND
     openssl req -new -newkey ec:prime256v1.param -days 365 -nodes -x509
       -subj "/CN=localhost" -keyout key.pem -out cert.pem
+  DEPENDS openssl-param
+  BYPRODUCTS key.pem cert.pem
+)
+
+add_custom_target(tls-key
+  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/src
   COMMAND grep -v "EC PRIVATE KEY" key.pem | base64 -D > tls.key
+  DEPENDS openssl-req
+  BYPRODUCTS tls.key
+)
+
+add_custom_target(tls-cert
+  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/src
   COMMAND grep -v "CERTIFICATE" cert.pem | base64 -D > tls.cert
+  DEPENDS openssl-req
+  BYPRODUCTS tls.cert
+)
+
+add_custom_target(cert
+  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/src
   COMMAND echo "#include \"cert.h\"" > cert.c
   COMMAND xxd -i tls.key >> cert.c
   COMMAND xxd -i tls.cert >> cert.c
-  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src/cert.c
+  DEPENDS tls-key tls-cert
   VERBATIM
 )
+
+add_custom_command(
+  DEPENDS cert
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src/cert.c
+  )
 
 include(GNUInstallDirs)
 set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}")

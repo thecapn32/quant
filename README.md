@@ -10,6 +10,11 @@ framework.
 The quant repository is [on GitHub](https://github.com/NTAP/quant), as is
 the [documentation](https://ntap.github.io/quant/).
 
+We *plan* to use [picotls](https://github.com/h2o/picotls) for its [TLS
+1.3](https://datatracker.ietf.org/doc/draft-ietf-tls-tls13/) implementation.
+Another alternative might be [ARM mbed](https://www.mbed.com/en/), once it
+supports TLS 1.3. Picotls will be built automatically.
+
 
 ## Prerequisites
 
@@ -20,16 +25,14 @@ event loop that underlies this implementation. The intent is that it will in the
 end resemble something like what [libebb](http://tinyclouds.org/libebb/)
 offers for HTTP/1.1 and TLS.
 
-We *plan* to use
-[NSS](https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSS) for its
-[TLS 1.3](https://datatracker.ietf.org/doc/draft-ietf-tls-tls13/)
-implementation. Another alternative might be [ARM
-mbed](https://www.mbed.com/en/), once it supports TLS 1.3.
-
 So you need to install some dependencies. On the Mac, the easiest way is via
 [Homebrew](http://brew.sh/), so install that first. Then, do
 
-    brew install cmake libev nss doxygen
+    brew install cmake libev doxygen
+
+On Darwin, you *must* also install the Xcode command line tools first:
+
+    xcode-select --install
 
 
 ## Building
