@@ -2,7 +2,7 @@ include(ExternalProject)
 
 externalproject_add(warp
   # UPDATE_COMMAND ""
-  GIT_REPOSITORY git@github.com:NTAP/warpcore.git
+  GIT_REPOSITORY https://github.com/NTAP/warpcore.git
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -DDLEVEL=${DLEVEL}
     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DBUILD_DOCUMENTATION=FALSE
@@ -27,7 +27,7 @@ add_dependencies(warpcore warp)
 
 externalproject_add(picotls
   # UPDATE_COMMAND ""
-  GIT_REPOSITORY git@github.com:h2o/picotls.git
+  GIT_REPOSITORY https://github.com/h2o/picotls.git
   # GIT_TAG kazuho/quic <- this doesn't work, hack around it:
   PATCH_COMMAND git checkout kazuho/quic
   UPDATE_COMMAND "" # <- workaround above causes git error without this
@@ -53,7 +53,7 @@ set_target_properties(ptls-core
 set_target_properties(ptls-core
   PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_BINARY_DIR}/include
 )
-add_dependencies(picotls ptls-core)
+add_dependencies(ptls-core picotls)
 
 add_library(ptls-minicrypto STATIC IMPORTED GLOBAL)
 set_target_properties(ptls-minicrypto
@@ -63,7 +63,7 @@ set_target_properties(ptls-minicrypto
 set_target_properties(ptls-minicrypto
   PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_BINARY_DIR}/include
 )
-add_dependencies(picotls ptls-minicrypto)
+add_dependencies(ptls-minicrypto picotls)
 
 # Use quic-go for testing against, rather than proto-quic monster
 set(GOPATH ${CMAKE_CURRENT_BINARY_DIR}/go)
