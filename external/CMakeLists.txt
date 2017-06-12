@@ -1,14 +1,15 @@
 include(ExternalProject)
 
 externalproject_add(warp
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/NTAP/warpcore.git
+  GIT_SHALLOW 1
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -DDLEVEL=${DLEVEL}
     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DBUILD_DOCUMENTATION=FALSE
   BUILD_BYPRODUCTS
     ${CMAKE_CURRENT_BINARY_DIR}/lib/libsockcore.a
-    ${CMAKE_CURRENT_BINARY_DIR}/lib/libwarpcore.a
+    # ${CMAKE_CURRENT_BINARY_DIR}/lib/libwarpcore.a
 )
 
 file(MAKE_DIRECTORY
@@ -26,20 +27,22 @@ add_dependencies(warpcore warp)
 
 
 externalproject_add(picotls
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/h2o/picotls.git
-  # GIT_TAG kazuho/quic <- this doesn't work, hack around it:
-  PATCH_COMMAND git checkout kazuho/quic
-  UPDATE_COMMAND "" # <- workaround above causes git error without this
+  GIT_TAG kazuho/quic
+  GIT_SHALLOW 1
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
-    -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -DOPENSSL_INCLUDE_DIR=/usr/include
+    -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+    -DOPENSSL_INCLUDE_DIR=/usr/include
     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+    -DCMAKE_POSITION_INDEPENDENT_CODE=True
   INSTALL_COMMAND
-    cp -r ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls/include/
-      ${CMAKE_CURRENT_BINARY_DIR}/include &&
-    cp ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/libpicotls-minicrypto.a
+    cp -a ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls/include
+      ${CMAKE_CURRENT_BINARY_DIR} &&
+    cp -a ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/libpicotls-minicrypto.a
+      ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/libpicotls-openssl.a
       ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/libpicotls-core.a
-      ${CMAKE_CURRENT_BINARY_DIR}/lib
+      ${CMAKE_CURRENT_BINARY_DIR}/lib || true
   BUILD_BYPRODUCTS
     ${CMAKE_CURRENT_BINARY_DIR}/lib/libpicotls-minicrypto.a
     ${CMAKE_CURRENT_BINARY_DIR}/lib/libpicotls-core.a

@@ -28,7 +28,7 @@
 
 #include <warpcore/warpcore.h>
 
-#include "fnv_1a.h"
+#include "fnv_1a.h" // IWYU pragma: keep
 
 
 uint64_t fnv_1a(const void * const buf,

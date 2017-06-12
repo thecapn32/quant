@@ -25,12 +25,15 @@
 
 #pragma once
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wpadded"
 #include <ev.h>
+#pragma clang diagnostic pop
+
 #include <picotls.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <sys/socket.h>
-
 
 #include <warpcore/warpcore.h>
 

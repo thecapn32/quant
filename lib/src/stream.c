@@ -25,10 +25,12 @@
 
 #include <inttypes.h>
 #include <netinet/in.h>
-#include <stddef.h> // IWYU pragma: keep
-#include <picotls.h>
 #include <stdint.h>
 #include <stdlib.h>
+
+#include <stddef.h> // IWYU pragma: keep
+// picotls doesn't include stddef.h
+#include <picotls.h>
 
 #include <warpcore/warpcore.h>
 
@@ -92,7 +94,7 @@ void stream_write(struct q_stream * const s,
                   const uint16_t len)
 {
     warn(debug, "writing %u byte%s on str %u: %.*s", len, plural(len), s->id,
-         len, data);
+         len, (const char *)data);
 
     // allocate a w_iov
     struct w_iov_stailq o;

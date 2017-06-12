@@ -25,7 +25,6 @@
 
 #pragma once
 
-#include <ev.h>
 #include <stdint.h>
 
 #define MAX_PKT_LEN 1350
@@ -43,14 +42,6 @@
 #define pkt_type(buf)                                                          \
     (pkt_flags(buf) & F_LONG_HDR ? pkt_flags(buf) & ~0x80                      \
                                  : pkt_flags(buf) & ~0xe0)
-
-
-/// Packet meta-data associated with w_iov buffers
-struct pkt_info {
-    ev_tstamp time;   ///< Transmission timestamp.
-    uint32_t ack_cnt; ///< Number of ACKs we have seen for this packet.
-    uint32_t ref_cnt; ///< Reference count. Increase on assign, free when zero.
-};
 
 
 struct q_conn;

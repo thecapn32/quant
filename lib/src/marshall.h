@@ -25,6 +25,9 @@
 
 #include <arpa/inet.h>
 #include <stdint.h>
+#include <warpcore/warpcore.h>
+
+#include "quant/config.h"
 
 #if defined(HAVE_ENDIAN_H)
 // e.g., Linux
@@ -37,8 +40,6 @@
 #define ntohll be64toh
 #define htonll htobe64
 #endif
-
-#include "util.h"
 
 
 /// C generic returning the type of the passed expression @p x. Only contains

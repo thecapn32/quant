@@ -24,10 +24,8 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <arpa/inet.h>
-#include <ev.h>
 #include <inttypes.h>
 #include <netinet/in.h>
-#include <picotls/minicrypto.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdbool.h>
@@ -35,6 +33,16 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+
+#include <stddef.h> // IWYU pragma: keep
+
+#include <picotls.h>
+#include <picotls/minicrypto.h>
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wpadded"
+#include <ev.h>
+#pragma clang diagnostic pop
 
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
@@ -44,8 +52,16 @@
 #include "quic.h"
 #include "stream.h"
 
+
+// TODO: many of these globals should move to a per-engine struct
+
 struct ev_loop;
 struct sockaddr;
+
+
+/// Number of packet buffers to allocate.
+static const uint32_t nbufs = 100000;
+struct pkt_meta * q_pkt_meta;
 
 
 /// QUIC version supported by this implementation in order of preference.
@@ -315,12 +331,14 @@ tx_cb(struct ev_loop * const l __attribute__((unused)),
 void * q_init(const char * const ifname, const long timeout)
 {
     // check versions
-    ensure(WARPCORE_VERSION_MAJOR == 0 && WARPCORE_VERSION_MINOR == 8,
+    ensure(WARPCORE_VERSION_MAJOR == 0 && WARPCORE_VERSION_MINOR == 9,
            "%s version %s not compatible with %s version %s", quant_name,
            quant_version, warpcore_name, warpcore_version);
 
     // initialize warpcore on the given interface
-    void * const w = w_init(ifname, 0);
+    void * const w = w_init(ifname, 0, nbufs);
+    q_pkt_meta = calloc(nbufs, sizeof(*q_pkt_meta));
+    ensure(q_pkt_meta, "could not calloc");
 
     // if the global quant state has been initialized before, return
     if (loop)
@@ -418,4 +436,6 @@ void q_cleanup(void * const q)
 
     // hash_foreach(&q_conns, free);
     // hash_done(&q_conns);
+
+    free(q_pkt_meta);
 }

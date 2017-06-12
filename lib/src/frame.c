@@ -23,7 +23,11 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wpadded"
 #include <ev.h>
+#pragma clang diagnostic pop
+
 #include <inttypes.h>
 #include <math.h>
 #include <pthread.h>
@@ -50,7 +54,7 @@
 static uint8_t __attribute__((const)) dec_sid_len(const uint8_t flags)
 {
     const uint8_t l = flags & 0x03;
-    ensure(l >= 0 && l <= 2, "cannot decode stream ID length %u", l);
+    ensure(l <= 2, "cannot decode stream ID length %u", l);
     const uint8_t dec[] = {1, 2, 4};
     return dec[l];
 }
@@ -60,7 +64,7 @@ static uint8_t __attribute__((const)) dec_sid_len(const uint8_t flags)
 static uint8_t __attribute__((const)) dec_off_len(const uint8_t flags)
 {
     const uint8_t l = (flags & 0x0C) >> 2;
-    ensure(l >= 0 && l <= 3, "cannot decode stream offset length %u", l);
+    ensure(l <= 3, "cannot decode stream offset length %u", l);
     const uint8_t dec[] = {0, 2, 4, 8};
     return dec[l];
 }
@@ -116,7 +120,7 @@ dec_stream_frame(struct q_conn * const c,
 static uint8_t __attribute__((const)) dec_lg_ack_len(const uint8_t flags)
 {
     const uint8_t l = (flags & 0x0C) >> 2;
-    ensure(l >= 0 && l <= 3, "cannot decode largest ACK length %u", l);
+    ensure(l <= 3, "cannot decode largest ACK length %u", l);
     const uint8_t dec[] = {1, 2, 3, 6};
     return dec[l];
 }
@@ -126,7 +130,7 @@ static uint8_t __attribute__((const)) dec_lg_ack_len(const uint8_t flags)
 static uint8_t __attribute__((const)) dec_ack_block_len(const uint8_t flags)
 {
     const uint8_t l = flags & 0x03;
-    ensure(l >= 0 && l <= 3, "cannot decode largest ACK length %u", l);
+    ensure(l <= 3, "cannot decode largest ACK length %u", l);
     const uint8_t dec[] = {1, 2, 4, 6};
     return dec[l];
 }
@@ -178,9 +182,8 @@ dec_ack_frame(struct q_conn * const c,
     // first clause from OnAckReceived pseudo code:
     struct w_iov * p = find_sent_pkt(&c->sent_pkts, lg_ack);
     // if the largest ACKed is newly ACKed, update the RTT
-    if (p && ((struct pkt_info *)p->data)->ack_cnt == 0) {
-        const ev_tstamp ts = ((const struct pkt_info * const)p->data)->time;
-        c->latest_rtt = ev_now(loop) - ts;
+    if (p && q_pkt_meta[p->idx].ack_cnt == 0) {
+        c->latest_rtt = ev_now(loop) - q_pkt_meta[p->idx].time;
         if (c->latest_rtt > ack_delay)
             c->latest_rtt -= ack_delay;
 
@@ -216,9 +219,7 @@ dec_ack_frame(struct q_conn * const c,
             warn(notice, "got ACK for %" PRIu64, ack);
             p = find_sent_pkt(&c->sent_pkts, ack);
             if (p) {
-                struct pkt_info * const info =
-                    (struct pkt_info * const) p->data;
-                if (info->ack_cnt == 0) {
+                if (q_pkt_meta[p->idx].ack_cnt == 0) {
                     // this is a newly ACKed packet
 
                     // see OnPacketAcked pseudo code (for LD):
@@ -244,7 +245,7 @@ dec_ack_frame(struct q_conn * const c,
                 }
 
                 // remember that we've seen an ACK for this packet
-                info->ack_cnt++;
+                q_pkt_meta[p->idx].ack_cnt++;
             }
 
             ack--;

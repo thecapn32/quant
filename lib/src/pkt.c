@@ -40,6 +40,8 @@
 #include "pkt.h"
 #include "quic.h"
 
+struct q_stream;
+
 
 /// Packet number lengths for different short-header packet types
 static const uint8_t pkt_nr_len[] = {0, 1, 2, 4};
@@ -165,7 +167,7 @@ uint16_t enc_pkt(struct q_conn * const c,
     const uint64_t hash = fnv_1a(v->buf, i, hash_pos, HASH_LEN);
     warn(debug, "inserting %lu-byte hash over range [0..%u] into [%u..%lu]",
          HASH_LEN, i - 1, hash_pos, hash_pos + HASH_LEN - 1);
-    memcpy(&((uint8_t *)v->buf)[hash_pos], &hash, HASH_LEN);
+    memcpy(&v->buf[hash_pos], &hash, HASH_LEN);
 
     return i;
 }

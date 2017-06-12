@@ -25,9 +25,20 @@
 
 #pragma once
 
+#include <ev.h>
 #include <picotls.h>
 #include <pthread.h>
 #include <stdint.h>
+
+
+/// Packet meta-data associated with w_iov buffers
+struct pkt_meta {
+    ev_tstamp time;   ///< Transmission timestamp.
+    uint32_t ack_cnt; ///< Number of ACKs we have seen for this packet.
+    uint32_t ref_cnt; ///< Reference count. Increase on assign, free when zero.
+};
+
+extern struct pkt_meta * q_pkt_meta;
 
 #define Q_OFFSET 64
 

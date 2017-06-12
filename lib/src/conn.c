@@ -35,6 +35,15 @@
 #include <sys/param.h>
 #include <sys/socket.h>
 
+#include <stddef.h> // IWYU pragma: keep
+// picotls doesn't include stddef.h
+#include <picotls.h>
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wpadded"
+#include <ev.h>
+#pragma clang diagnostic pop
+
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
@@ -45,6 +54,7 @@
 #include "quic.h"
 #include "stream.h"
 
+struct ev_loop;
 
 // All open QUIC connections.
 struct conn q_conns = SPLAY_INITIALIZER();
@@ -124,7 +134,7 @@ void tx(struct w_sock * const ws, struct q_conn * const c)
     const struct w_iov * const last_sent =
         STAILQ_LAST(&c->sent_pkts, w_iov, next);
     const ev_tstamp last_sent_t =
-        last_sent ? ((struct pkt_info *)last_sent->data)->time : -HUGE_VAL;
+        last_sent ? q_pkt_meta[last_sent->idx].time : -HUGE_VAL;
 
     while (!STAILQ_EMPTY(&s->o)) {
         struct w_iov * v = STAILQ_FIRST(&s->o);
@@ -162,10 +172,8 @@ void tx(struct w_sock * const ws, struct q_conn * const c)
         v->len = enc_pkt(c, s, v);
 
         // store packet info (see OnPacketSent pseudo code)
-        struct pkt_info * info = calloc(1, sizeof(*info));
-        info->time = now;
-        info->ref_cnt++;
-        v->data = info;
+        q_pkt_meta[v->idx].time = now;
+        q_pkt_meta[v->idx].ref_cnt++;
 
         if (v->len > Q_OFFSET) {
             // packet is retransmittable
@@ -379,10 +387,9 @@ void detect_lost_pkts(struct q_conn * const c)
     uint64_t largest_lost_packet = 0;
     struct w_iov *v, *tmp;
     STAILQ_FOREACH_SAFE (v, &c->sent_pkts, next, tmp) {
-        const struct pkt_info * const pi = v->data;
         const uint64_t nr = pkt_nr(v->buf, v->len);
-        if (pi->ack_cnt == 0 && nr < c->lg_acked) {
-            const ev_tstamp time_since_sent = now - pi->time;
+        if (q_pkt_meta[v->idx].ack_cnt == 0 && nr < c->lg_acked) {
+            const ev_tstamp time_since_sent = now - q_pkt_meta[v->idx].time;
             const uint64_t packet_delta = c->lg_acked - nr;
             if (time_since_sent > delay_until_lost ||
                 packet_delta > c->reorder_thresh) {

@@ -19,14 +19,14 @@ add_custom_target(openssl-req
 
 add_custom_target(tls-key
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/src
-  COMMAND grep -v "EC PRIVATE KEY" key.pem | base64 -D > tls.key
+  COMMAND openssl enc -base64 -d -in key.pem -out tls.key
   DEPENDS openssl-req
   BYPRODUCTS tls.key
 )
 
 add_custom_target(tls-cert
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/src
-  COMMAND grep -v "CERTIFICATE" cert.pem | base64 -D > tls.cert
+  COMMAND openssl enc -base64 -d -in cert.pem -out tls.cert
   DEPENDS openssl-req
   BYPRODUCTS tls.cert
 )
@@ -59,6 +59,7 @@ add_library(${PROJECT_NAME}_static STATIC ${${PROJECT_NAME}_sources})
 
 set_target_properties(${PROJECT_NAME}_static
   PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
     INTERPROCEDURAL_OPTIMIZATION True
     OUTPUT_NAME ${PROJECT_NAME}
     VERSION ${PROJECT_VERSION}
@@ -84,6 +85,7 @@ add_library(${PROJECT_NAME} SHARED ${${PROJECT_NAME}_sources})
 
 set_target_properties(${PROJECT_NAME}
   PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
     INTERPROCEDURAL_OPTIMIZATION True
     OUTPUT_NAME ${PROJECT_NAME}
     VERSION ${PROJECT_VERSION}
