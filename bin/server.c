@@ -55,7 +55,11 @@ static void usage(const char * const name,
 
 int main(int argc, char * argv[])
 {
-    char * ifname = "lo0";
+    char * ifname = "lo"
+#ifndef __linux__
+                    "0"
+#endif
+        ;
     uint16_t port = 8443;
     long timeout = 3;
     int ch;

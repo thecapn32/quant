@@ -67,7 +67,11 @@ static void usage(const char * const name,
 
 int main(int argc, char * argv[])
 {
-    char * ifname = "lo0";
+    char * ifname = "lo"
+#ifndef __linux__
+                    "0"
+#endif
+        ;
     char * dest = "127.0.0.1";
     char * port = "8443";
     long conns = 1;
