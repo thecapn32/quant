@@ -59,6 +59,5 @@ get_stream(struct q_conn * const c, const uint32_t id);
 extern struct q_stream * __attribute__((nonnull))
 new_stream(struct q_conn * const c, const uint32_t id);
 
-extern void stream_write(struct q_stream * const s,
-                         const void * const data,
-                         const uint16_t len);
+extern void tls_handshake(struct q_stream * const s __attribute__((nonnull)),
+                          const struct w_iov * const i);

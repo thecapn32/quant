@@ -89,28 +89,20 @@ struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
 }
 
 
-void stream_write(struct q_stream * const s,
-                  const void * const data,
-                  const uint16_t len)
+void tls_handshake(struct q_stream * const s, const struct w_iov * const i)
 {
-    warn(debug, "writing %u byte%s on str %u: %.*s", len, plural(len), s->id,
-         len, (const char *)data);
-
     // allocate a w_iov
     struct w_iov_stailq o;
     w_alloc_cnt(w_engine(s->c->sock), &o, 1, Q_OFFSET);
     struct w_iov * const v = STAILQ_FIRST(&o);
 
-    ptls_buffer_t sendbuf;
-    ptls_buffer_init(&sendbuf, v->buf, v->len);
-    ensure(ptls_handshake(s->c->tls, &sendbuf, 0, 0, 0) ==
-               PTLS_ERROR_IN_PROGRESS,
+    ptls_buffer_init(&q_pkt_meta[v->idx].tb, v->buf, v->len);
+    size_t in_len = 0;
+    ensure(ptls_handshake(s->c->tls, &q_pkt_meta[v->idx].tb, i ? i->buf : 0,
+                          &in_len, 0) == PTLS_ERROR_IN_PROGRESS,
            "ptls_handshake");
-
-
-    // copy data
-    // memcpy(v->buf, data, len);
-    // v->len = (uint16_t)ptls_get_record_overhead(s->c->tls);
+    v->len = (uint16_t)q_pkt_meta[v->idx].tb.off;
+    // hexdump(v->buf, v->len);
 
     // enqueue for TX
     v->ip = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_addr.s_addr;

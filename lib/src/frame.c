@@ -112,7 +112,7 @@ dec_stream_frame(struct q_conn * const c,
     pthread_cond_signal(&read_cv);
     pthread_mutex_unlock(&lock);
 
-    return i;
+    return data_len;
 }
 
 

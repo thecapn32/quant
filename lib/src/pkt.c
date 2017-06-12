@@ -114,7 +114,6 @@ uint16_t enc_pkt(struct q_conn * const c,
     v->buf -= Q_OFFSET;
     v->len += Q_OFFSET;
 
-
     uint16_t i = 0;
     uint8_t flags = 0;
     c->lg_sent++;

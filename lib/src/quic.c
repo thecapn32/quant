@@ -31,7 +31,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <string.h>
 #include <time.h>
 
 #include <stddef.h> // IWYU pragma: keep
@@ -125,9 +124,8 @@ uint64_t q_connect(void * const q,
     c->rx_w.data = c->sock;
     ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
 
-    // prepare ClientHello
-    struct q_stream * const s = new_stream(c, 0);
-    stream_write(s, "ClientHello", strlen("ClientHello"));
+    // allocate stream zero
+    new_stream(c, 0);
 
     pthread_mutex_lock(&lock);
     ev_io_start(loop, &c->rx_w);
@@ -273,7 +271,7 @@ timeout_cb(struct ev_loop * const l,
            ev_timer * const w __attribute__((unused)),
            int e __attribute__((unused)))
 {
-    warn(warn, "timeout");
+    warn(warn, "development watchdog timeout");
     ev_break(l, EVBREAK_ALL);
 }
 

@@ -123,10 +123,10 @@ void tx(struct w_sock * const ws, struct q_conn * const c)
     if (!STAILQ_EMPTY(&s->o))
         break;
     if (s == 0) {
-        // don't have any stream data to piggyback on, so abuse stream zero by
-        // inserting an empty w_iov to carry the ACK frame
+        // don't have any stream data to piggyback on; this means we're
+        // sending a ClientHello
         s = get_stream(c, 0);
-        stream_write(s, 0, 0);
+        tls_handshake(s, 0);
     }
 
     struct w_iov_stailq q = STAILQ_HEAD_INITIALIZER(q);
@@ -188,6 +188,11 @@ void tx(struct w_sock * const ws, struct q_conn * const c)
     // transmit packets
     w_tx(ws, &q);
     w_nic_tx(w);
+
+    struct w_iov * v;
+    STAILQ_FOREACH (v, &q, next)
+        ptls_buffer_dispose(&q_pkt_meta[v->idx].tb);
+
     STAILQ_CONCAT(&c->sent_pkts, &q);
 }
 
@@ -269,11 +274,8 @@ void rx(struct ev_loop * const l __attribute__((unused)),
 
                 // we should have received a ClientHello
                 struct w_iov * const iv = STAILQ_FIRST(&s->i);
-                ensure(memcmp((char *)iv->buf, "ClientHello", 11) == 0,
-                       "no ClientHello");
-
-                // respond with ServerHello
-                stream_write(s, "ServerHello", strlen("ServerHello"));
+                tls_handshake(s, iv);
+                warn(debug, "here");
 
                 // this is a new connection we just accepted
                 pthread_mutex_lock(&lock);
@@ -311,8 +313,7 @@ void rx(struct ev_loop * const l __attribute__((unused)),
 
                 // we should have received a ServerHello
                 struct w_iov * const iv = STAILQ_FIRST(&s->i);
-                ensure(memcmp(iv->buf, "ServerHello", 11) == 0,
-                       "no ServerHello");
+                tls_handshake(s, iv);
 
                 // this is a new connection we just connected
                 pthread_mutex_lock(&lock);
@@ -349,9 +350,12 @@ ld_alarm_cb(struct ev_loop * const l __attribute__((unused)),
     if (c->state < CONN_ESTB) {
         warn(info, "handshake retransmission alarm");
         tx(c->sock, c);
+        // tx above already calls set_ld_alarm(c)
         c->handshake_cnt++;
+        return;
+    }
 
-    } else if (fpclassify(c->loss_t) != FP_ZERO) {
+    if (fpclassify(c->loss_t) != FP_ZERO) {
         warn(info, "early retransmit or time loss detection alarm");
         detect_lost_pkts(c);
 
@@ -367,7 +371,6 @@ ld_alarm_cb(struct ev_loop * const l __attribute__((unused)),
         // TODO: SendTwoPackets();
         c->rto_cnt++;
     }
-
     set_ld_alarm(c);
 }
 
@@ -477,12 +480,8 @@ void set_ld_alarm(struct q_conn * const c)
     ev_tstamp dur = 0;
     const ev_tstamp now = ev_now(loop);
     if (c->state < CONN_ESTB) {
-        if (fpclassify(c->srtt) == FP_ZERO)
-            dur = 2 * kDefaultInitialRtt;
-        else
-            dur = 2 * c->srtt;
-        dur = MAX(dur, kMinTLPTimeout);
-        dur *= 2 ^ c->handshake_cnt;
+        dur = fpclassify(c->srtt) == FP_ZERO ? kDefaultInitialRtt : c->srtt;
+        dur = MAX(2 * dur, kMinTLPTimeout) * (1 << c->handshake_cnt);
         warn(info, "handshake retransmission alarm in %f sec", dur);
 
     } else if (fpclassify(c->loss_t) != FP_ZERO) {
