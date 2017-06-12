@@ -128,6 +128,8 @@ int main(int argc, char * argv[])
         warn(info, "%s starting conn #%d to %s:%s", basename(argv[0]), n, dest,
              port);
         cid[n] = q_connect(q, peer->ai_addr, peer->ai_addrlen);
+        if (!cid[n])
+            break;
 
         for (int i = 0; i < 1; i++) {
             // reserve a new stream
