@@ -34,6 +34,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/param.h>
 
 #ifdef __linux__
 #include <byteswap.h>
@@ -194,6 +195,7 @@ dec_ack_frame(struct q_conn * const c,
     const uint8_t ack_block_len = dec_ack_block_len(type);
     warn(debug, "%u-byte ACK block len", ack_block_len);
 
+    uint64_t n = pkt_nr(v->buf, v->len);
     uint64_t ack = lg_ack;
     for (uint8_t b = 0; b < num_blocks; b++) {
         warn(debug, "decoding ACK block #%u", b);
@@ -204,38 +206,41 @@ dec_ack_frame(struct q_conn * const c,
 
         // find all newly ACKed packets
         while (ack > lg_ack - l) {
-            warn(notice, "got ACK for %" PRIu64, ack);
+            warn(notice, "pkt %" PRIu64 " had ACK for %" PRIu64, n, ack);
             p = find_sent_pkt(&c->sent_pkts, ack);
-            if (p) {
-                if (q_pkt_meta[p->idx].ack_cnt == 0) {
-                    // this is a newly ACKed packet
+            if (++q_pkt_meta[p->idx].ack_cnt == 1) {
+                // this is a newly ACKed packet
+                warn(crit, "first ACK for %" PRIu64, ack);
+                c->lg_acked = MAX(c->lg_acked, ack);
 
-                    // see OnPacketAcked pseudo code (for LD):
-
-                    // If a packet sent prior to RTO was ACKed, then the RTO
-                    // was spurious.  Otherwise, inform congestion control.
-                    if (c->rto_cnt && ack > c->lg_sent_before_rto)
-                        // see OnRetransmissionTimeoutVerified pseudo code
-                        c->cwnd = kMinimumWindow;
-                    c->handshake_cnt = c->tlp_cnt = c->rto_cnt = 0;
-                    // TODO: pseudo code is wrong here - figure out when to
-                    // remove sent packets from data structure
-                    // STAILQ_REMOVE(&c->sent_pkts, p, w_iov, next);
-
-                    // see OnPacketAcked pseudo code (for CC):
-                    if (ack >= c->rec_end) {
-                        if (c->cwnd < c->ssthresh)
-                            c->cwnd += p->len;
-                        else
-                            c->cwnd += p->len / c->cwnd;
-                        warn(debug, "cwnd now %" PRIu64, c->cwnd);
-                    }
+                // XXX: this is not quite the right condition (ignores gaps)
+                if (c->lg_acked == c->lg_sent) {
+                    pthread_mutex_lock(&lock);
+                    pthread_cond_signal(&write_cv);
+                    pthread_mutex_unlock(&lock);
                 }
 
-                // remember that we've seen an ACK for this packet
-                q_pkt_meta[p->idx].ack_cnt++;
-            }
+                // see OnPacketAcked pseudo code (for LD):
 
+                // If a packet sent prior to RTO was ACKed, then the RTO
+                // was spurious.  Otherwise, inform congestion control.
+                if (c->rto_cnt && ack > c->lg_sent_before_rto)
+                    // see OnRetransmissionTimeoutVerified pseudo code
+                    c->cwnd = kMinimumWindow;
+                c->handshake_cnt = c->tlp_cnt = c->rto_cnt = 0;
+                // TODO: pseudo code is wrong here - figure out when to
+                // remove sent packets from data structure
+                // STAILQ_REMOVE(&c->sent_pkts, p, w_iov, next);
+
+                // see OnPacketAcked pseudo code (for CC):
+                if (ack >= c->rec_end) {
+                    if (c->cwnd < c->ssthresh)
+                        c->cwnd += p->len;
+                    else
+                        c->cwnd += p->len / c->cwnd;
+                    warn(debug, "cwnd now %" PRIu64, c->cwnd);
+                }
+            }
             ack--;
         }
 
@@ -412,7 +417,6 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     enc(buf, len, i, &num_ts, 0, "%u");
 
     enc(buf, len, i, &c->lg_recv, lg_ack_len, "%" PRIu64);
-    warn(notice, "ACKing %" PRIu64, c->lg_recv);
 
     const uint16_t ack_delay = 0;
     enc(buf, len, i, &ack_delay, 0, "%u");
@@ -420,7 +424,8 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     // TODO: support Num Blocks > 0
     const uint64_t ack_block = c->lg_recv - c->lg_recv_acked;
     enc(buf, len, i, &ack_block, ack_block_len, "%" PRIu64);
-    c->lg_recv = c->lg_recv_acked;
+    warn(notice, "ACKing %" PRIu64 "-%" PRIu64, c->lg_recv_acked + 1,
+         c->lg_recv);
 
     return i - pos;
 }
