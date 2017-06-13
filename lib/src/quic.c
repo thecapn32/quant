@@ -65,7 +65,7 @@ struct pkt_meta * q_pkt_meta;
 
 /// QUIC version supported by this implementation in order of preference.
 const uint32_t ok_vers[] = {
-    0xff000002 // draft-ietf-quic-transport-02
+    0xff000004 // draft-ietf-quic-transport-04
 };
 
 const uint8_t ok_vers_len = sizeof(ok_vers) / sizeof(ok_vers[0]);
