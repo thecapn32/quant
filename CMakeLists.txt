@@ -54,7 +54,7 @@ foreach(FLAG -Wno-missing-field-initializers -Wno-missing-braces
 endforeach()
 
 # flags for "Debug" and "None" builds
-set(CMAKE_C_FLAGS_DEBUG "-O0 -g")
+set(CMAKE_C_FLAGS_DEBUG "-O0 -g3")
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   # Default debug logging level
@@ -90,7 +90,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 
   # Use clang-tidy for extra warnings, if it's installed
   find_program(CLANGTIDY NAMES clang-tidy clang-tidy40 clang-tidy39
-+              clang-tidy38 clang-tidy37)
+    clang-tidy38 clang-tidy37)
   if(CLANGTIDY)
     message(STATUS "Found clang-tidy: ${CLANGTIDY}")
     set(CLANG_TIDY_CHECKS *
@@ -134,10 +134,7 @@ set(CMAKE_C_FLAGS_RELEASE "-DNDEBUG -Ofast")
 # flags for "RelWithDebInfo" builds
 set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELEASE} -g3")
 
-# Extract compile options into variable, for doxygen's CLANG_ASSISTED_PARSING
-get_property(COMPILE_OPTIONS DIRECTORY PROPERTY COMPILE_OPTIONS)
-string(REPLACE ";" " " COMPILE_OPTIONS "${COMPILE_OPTIONS}")
-
+# set debug level
 add_definitions(-DDLEVEL=${DLEVEL})
 
 add_subdirectory(bin)
