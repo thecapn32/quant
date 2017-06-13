@@ -80,9 +80,9 @@ tls_handshake(struct q_stream * const s, const struct w_iov * const i)
     ptls_buffer_init(&q_pkt_meta[v->idx].tb, v->buf, v->len);
     size_t in_len = i ? i->len : 0;
     warn(crit, "TLS handshake: recv %u", i ? i->len : 0);
-    ensure(ptls_handshake(s->c->tls, &q_pkt_meta[v->idx].tb, i ? i->buf : 0,
-                          &in_len, 0) == PTLS_ERROR_IN_PROGRESS,
-           "ptls_handshake");
+    const int ret = ptls_handshake(s->c->tls, &q_pkt_meta[v->idx].tb,
+                                   i ? i->buf : 0, &in_len, 0);
+    ensure(ret == PTLS_ERROR_IN_PROGRESS, "ptls_handshake %u", ret);
     v->len = (uint16_t)q_pkt_meta[v->idx].tb.off;
     warn(crit, "TLS handshake: recv %u, gen %u", i ? i->len : 0, v->len);
     // hexdump(v->buf, v->len);
@@ -257,6 +257,7 @@ void rx(struct ev_loop * const l __attribute__((unused)),
         }
 
         // TODO: support short headers w/o cid
+        const uint64_t nr = pkt_nr(v->buf, v->len);
         const uint64_t cid = pkt_cid(v->buf, v->len);
         struct q_conn * c = get_conn(cid);
         if (c == 0) {
@@ -266,10 +267,11 @@ void rx(struct ev_loop * const l __attribute__((unused)),
                                              .sin_addr = {.s_addr = v->ip}};
             socklen_t peer_len = sizeof(peer);
             c = new_conn(cid, (const struct sockaddr *)&peer, peer_len, true);
+            c->lg_sent = nr - 1; // echo received packet number
+            // TODO: allow server to choose a different cid than the client did
             accept_queue = cid;
         }
 
-        const uint64_t nr = pkt_nr(v->buf, v->len);
         c->lg_recv = MAX(c->lg_recv, nr);
         warn(notice, "received pkt %" PRIu64 " (max %" PRIu64 ")", nr,
              c->lg_recv);
