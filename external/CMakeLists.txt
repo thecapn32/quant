@@ -26,13 +26,20 @@ set_target_properties(warpcore
 add_dependencies(warpcore warp)
 
 
+# build picotls with our CFLAGS, but without -Werror
+string(TOUPPER ${CMAKE_BUILD_TYPE} CMAKE_BUILD_TYPE_UC)
+set(PICOTLS_CFLAGS "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_${CMAKE_BUILD_TYPE_UC}}")
+string(REPLACE "-Werror " "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
+
 externalproject_add(picotls
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/h2o/picotls.git
   GIT_TAG kazuho/quic
   GIT_SHALLOW 1
+  PATCH_COMMAND sed -i '' -e "s/-std=c99 -Wall -O2 -g//" CMakeLists.txt
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+    -DCMAKE_C_FLAGS=${PICOTLS_CFLAGS}
     -DOPENSSL_INCLUDE_DIR=/usr/include
     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
     -DCMAKE_POSITION_INDEPENDENT_CODE=True
