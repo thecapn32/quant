@@ -23,7 +23,6 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <errno.h>
 #include <getopt.h>
 #include <inttypes.h>
 #include <stdint.h>
@@ -36,16 +35,12 @@
 #include <warpcore/warpcore.h>
 
 
-static void usage(const char * const name,
-                  const char * const ifname,
-                  const uint16_t port,
-                  const long timeout)
+static void
+usage(const char * const name, const char * const ifname, const uint16_t port)
 {
     printf("%s\n", name);
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
     printf("\t[-p port]\tdestination port; default %d\n", port);
-    printf("\t[-t sec]\texit after some seconds (0 to disable); default %ld\n",
-           timeout);
 #ifndef NDEBUG
     printf("\t[-v verbosity]\t\tverbosity level (0-%u, default %u)\n", DLEVEL,
            _dlevel);
@@ -61,7 +56,6 @@ int main(int argc, char * argv[])
 #endif
         ;
     uint16_t port = 8443;
-    long timeout = 3;
     int ch;
 
     while ((ch = getopt(argc, argv, "hi:p:t:"
@@ -76,10 +70,6 @@ int main(int argc, char * argv[])
         case 'p':
             port = MIN(UINT16_MAX, MAX(port, (uint16_t)strtol(optarg, 0, 10)));
             break;
-        case 't':
-            timeout = strtol(optarg, 0, 10);
-            ensure(errno != EINVAL, "could not convert to integer");
-            break;
 #ifndef NDEBUG
         case 'v':
             _dlevel = MIN(DLEVEL, MAX(0, (uint32_t)strtoul(optarg, 0, 10)));
@@ -88,12 +78,12 @@ int main(int argc, char * argv[])
         case 'h':
         case '?':
         default:
-            usage(basename(argv[0]), ifname, port, timeout);
+            usage(basename(argv[0]), ifname, port);
             return 0;
         }
     }
 
-    void * const q = q_init(ifname, timeout);
+    void * const q = q_init(ifname);
     const uint64_t c = q_bind(q, port);
     warn(debug, "%s ready on %s port %d", basename(argv[0]), ifname, port);
     uint32_t sid;

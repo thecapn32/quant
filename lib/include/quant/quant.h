@@ -34,8 +34,7 @@
 struct w_iov_stailq;
 
 
-extern void * __attribute__((nonnull))
-q_init(const char * const ifname, const long timeout);
+extern void * __attribute__((nonnull)) q_init(const char * const ifname);
 
 extern void __attribute__((nonnull)) q_cleanup(void * const q);
 

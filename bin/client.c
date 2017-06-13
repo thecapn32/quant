@@ -46,8 +46,7 @@ static void usage(const char * const name,
                   const char * const ifname,
                   const char * const dest,
                   const char * const port,
-                  const long conns,
-                  const long timeout)
+                  const long conns)
 {
     printf("%s\n", name);
     printf("\t[-i interface]\t\tinterface to run over; default %s\n", ifname);
@@ -55,9 +54,6 @@ static void usage(const char * const name,
     printf("\t[-n connections]\tnumber of connections to start; default %ld\n",
            conns);
     printf("\t[-p port]\t\tdestination port; default %s\n", port);
-    printf("\t[-t sec]\t\texit after some seconds (0 to disable); "
-           "default %ld\n",
-           timeout);
 #ifndef NDEBUG
     printf("\t[-v verbosity]\t\tverbosity level (0-%u, default %u)\n", DLEVEL,
            _dlevel);
@@ -75,7 +71,6 @@ int main(int argc, char * argv[])
     char * dest = "127.0.0.1";
     char * port = "8443";
     long conns = 1;
-    long timeout = 3;
     int ch;
 
     while ((ch = getopt(argc, argv, "hi:d:p:n:t:"
@@ -99,10 +94,6 @@ int main(int argc, char * argv[])
             ensure(conns <= MAX_CONNS, "only support up to %d connections",
                    MAX_CONNS);
             break;
-        case 't':
-            timeout = strtol(optarg, 0, 10);
-            ensure(errno != EINVAL, "could not convert to integer");
-            break;
 #ifndef NDEBUG
         case 'v':
             _dlevel = MIN(DLEVEL, MAX(0, (uint32_t)strtoul(optarg, 0, 10)));
@@ -111,7 +102,7 @@ int main(int argc, char * argv[])
         case 'h':
         case '?':
         default:
-            usage(basename(argv[0]), ifname, dest, port, conns, timeout);
+            usage(basename(argv[0]), ifname, dest, port, conns);
             return 0;
         }
     }
@@ -125,7 +116,7 @@ int main(int argc, char * argv[])
     ensure(peer->ai_next == 0, "multiple addresses not supported");
 
     // start some connections
-    void * const q = q_init(ifname, timeout);
+    void * const q = q_init(ifname);
 
     uint64_t cid[MAX_CONNS];
     for (int n = 0; n < conns; n++) {

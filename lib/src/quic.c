@@ -267,16 +267,6 @@ uint32_t q_rsv_stream(const uint64_t cid)
 
 
 static void __attribute__((nonnull))
-timeout_cb(struct ev_loop * const l,
-           ev_timer * const w __attribute__((unused)),
-           int e __attribute__((unused)))
-{
-    warn(warn, "development watchdog timeout");
-    ev_break(l, EVBREAK_ALL);
-}
-
-
-static void __attribute__((nonnull))
 signal_cb(struct ev_loop * const l,
           ev_signal * const w __attribute__((unused)),
           int e __attribute__((unused)))
@@ -300,7 +290,7 @@ static void * __attribute__((nonnull)) l_run(void * const arg)
     ev_signal_start(loop, &sigquit_w);
     ev_signal_start(loop, &sigterm_w);
 
-    // start the event loop (will be stopped by timeout_cb or signal_cb)
+    // start the event loop (will be stopped by signal_cb)
     ev_run(l, 0);
 
     // notify the main thread, which may be blocked on these conditions
@@ -326,7 +316,7 @@ tx_cb(struct ev_loop * const l __attribute__((unused)),
 }
 
 
-void * q_init(const char * const ifname, const long timeout)
+void * q_init(const char * const ifname)
 {
     // check versions
     ensure(WARPCORE_VERSION_MAJOR == 0 && WARPCORE_VERSION_MINOR == 9,
@@ -374,14 +364,6 @@ void * q_init(const char * const ifname, const long timeout)
     ev_async_init(&tx_w, tx_cb);
     ev_async_start(loop, &tx_w);
 
-    // during development, abort event loop after some time
-    if (timeout) {
-        static ev_timer to_w;
-        warn(debug, "setting %ld sec timeout", timeout);
-        ev_timer_init(&to_w, timeout_cb, timeout, 0);
-        ev_timer_start(loop, &to_w);
-    }
-
     // create the thread running ev_run
     pthread_create(&tid, 0, l_run, loop);
 
@@ -416,7 +398,7 @@ void q_close(const uint64_t cid)
 
 void q_cleanup(void * const q)
 {
-    // wait for the quant thread to end and destroy lock
+    pthread_kill(tid, SIGTERM);
     ensure(pthread_join(tid, 0) == 0, "pthread_join");
     ensure(pthread_mutex_destroy(&lock) == 0, "pthread_mutex_init");
     ensure(pthread_cond_destroy(&read_cv) == 0, "pthread_cond_destroy");
