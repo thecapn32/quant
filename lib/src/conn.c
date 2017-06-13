@@ -69,6 +69,31 @@ int64_t conn_cmp(const struct q_conn * const a, const struct q_conn * const b)
 SPLAY_GENERATE(conn, q_conn, next, conn_cmp)
 
 
+static void __attribute__((nonnull(1)))
+tls_handshake(struct q_stream * const s, const struct w_iov * const i)
+{
+    // allocate a w_iov
+    struct w_iov_stailq o;
+    w_alloc_cnt(w_engine(s->c->sock), &o, 1, Q_OFFSET);
+    struct w_iov * const v = STAILQ_FIRST(&o);
+
+    ptls_buffer_init(&q_pkt_meta[v->idx].tb, v->buf, v->len);
+    size_t in_len = i ? i->len : 0;
+    warn(crit, "TLS handshake: recv %u", i ? i->len : 0);
+    ensure(ptls_handshake(s->c->tls, &q_pkt_meta[v->idx].tb, i ? i->buf : 0,
+                          &in_len, 0) == PTLS_ERROR_IN_PROGRESS,
+           "ptls_handshake");
+    v->len = (uint16_t)q_pkt_meta[v->idx].tb.off;
+    warn(crit, "TLS handshake: recv %u, gen %u", i ? i->len : 0, v->len);
+    // hexdump(v->buf, v->len);
+
+    // enqueue for TX
+    v->ip = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_addr.s_addr;
+    v->port = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_port;
+    STAILQ_INSERT_TAIL(&s->o, v, next);
+}
+
+
 static bool __attribute__((const)) vers_supported(const uint32_t v)
 {
     // force version negotiation for values reserved for the purpose
@@ -182,7 +207,8 @@ void tx(struct w_sock * const ws, struct q_conn * const c)
         }
 
         warn(notice, "sending pkt %" PRIu64, c->lg_sent);
-        hexdump(v->buf, v->len);
+        if (_dlevel == debug)
+            hexdump(v->buf, v->len);
     }
 
     // transmit packets
@@ -211,7 +237,8 @@ void rx(struct ev_loop * const l __attribute__((unused)),
         struct w_iov * const v = STAILQ_FIRST(&i);
         STAILQ_REMOVE_HEAD(&i, next);
 
-        hexdump(v->buf, v->len);
+        if (_dlevel == debug)
+            hexdump(v->buf, v->len);
         ensure(v->len <= MAX_PKT_LEN,
                "received %u-byte packet, larger than MAX_PKT_LEN of %u", v->len,
                MAX_PKT_LEN);
@@ -273,9 +300,7 @@ void rx(struct ev_loop * const l __attribute__((unused)),
                 dec_frames(c, v);
 
                 // we should have received a ClientHello
-                struct w_iov * const iv = STAILQ_FIRST(&s->i);
-                tls_handshake(s, iv);
-                warn(debug, "here");
+                tls_handshake(s, v);
 
                 // this is a new connection we just accepted
                 pthread_mutex_lock(&lock);

@@ -58,6 +58,3 @@ get_stream(struct q_conn * const c, const uint32_t id);
 
 extern struct q_stream * __attribute__((nonnull))
 new_stream(struct q_conn * const c, const uint32_t id);
-
-extern void __attribute__((nonnull(1)))
-tls_handshake(struct q_stream * const s, const struct w_iov * const i);

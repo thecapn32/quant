@@ -24,18 +24,11 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <inttypes.h>
-#include <netinet/in.h>
-#include <stdint.h>
 #include <stdlib.h>
-
-#include <stddef.h> // IWYU pragma: keep
-// picotls doesn't include stddef.h
-#include <picotls.h>
 
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
-#include "quic.h"
 #include "stream.h"
 
 
@@ -86,26 +79,4 @@ struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
     warn(info, "reserved new str %u on conn %" PRIx64 " as %s", s->id, c->id,
          c->flags & CONN_FLAG_CLNT ? "client" : "server");
     return s;
-}
-
-
-void tls_handshake(struct q_stream * const s, const struct w_iov * const i)
-{
-    // allocate a w_iov
-    struct w_iov_stailq o;
-    w_alloc_cnt(w_engine(s->c->sock), &o, 1, Q_OFFSET);
-    struct w_iov * const v = STAILQ_FIRST(&o);
-
-    ptls_buffer_init(&q_pkt_meta[v->idx].tb, v->buf, v->len);
-    size_t in_len = 0;
-    ensure(ptls_handshake(s->c->tls, &q_pkt_meta[v->idx].tb, i ? i->buf : 0,
-                          &in_len, 0) == PTLS_ERROR_IN_PROGRESS,
-           "ptls_handshake");
-    v->len = (uint16_t)q_pkt_meta[v->idx].tb.off;
-    // hexdump(v->buf, v->len);
-
-    // enqueue for TX
-    v->ip = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_addr.s_addr;
-    v->port = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_port;
-    STAILQ_INSERT_TAIL(&s->o, v, next);
 }
