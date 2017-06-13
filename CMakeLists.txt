@@ -132,7 +132,7 @@ endif()
 set(CMAKE_C_FLAGS_RELEASE "-DNDEBUG -Ofast")
 
 # flags for "RelWithDebInfo" builds
-set(CMAKE_C_FLAGS_RELWITHDEBINFO "-Ofast -g")
+set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELEASE} -g3")
 
 # Extract compile options into variable, for doxygen's CLANG_ASSISTED_PARSING
 get_property(COMPILE_OPTIONS DIRECTORY PROPERTY COMPILE_OPTIONS)
