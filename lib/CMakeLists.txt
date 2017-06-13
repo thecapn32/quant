@@ -3,12 +3,12 @@ configure_file(include/${PROJECT_NAME}/config.h.in include/${PROJECT_NAME}/confi
 configure_file(src/config.c.in src/config.c)
 
 find_program(OPENSSL openssl)
-if (NOT OPENSSL)
+if(NOT OPENSSL)
   message(FATAL_ERROR "openssl not found")
 endif()
 
 find_program(XXD xxd)
-if (NOT XXD)
+if(NOT XXD)
   message(FATAL_ERROR "xxd not found")
 endif()
 
