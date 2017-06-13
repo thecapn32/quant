@@ -75,44 +75,31 @@ static uint8_t __attribute__((const)) dec_off_len(const uint8_t flags)
 
 
 static uint16_t __attribute__((nonnull))
-dec_stream_frame(struct q_conn * const c,
-                 struct w_iov * const v,
-                 const uint16_t pos)
+dec_stream_frame(struct w_iov * const v,
+                 const uint16_t pos,
+                 uint32_t * const sid,
+                 uint16_t * const data_start,
+                 uint16_t * const data_len)
 {
-    uint16_t i = pos;
+    *data_start = pos;
     uint8_t type = 0;
-    dec(type, v->buf, v->len, i, 0, "0x%02x");
+    dec(type, v->buf, v->len, *data_start, 0, "0x%02x");
 
-    uint16_t data_len = 0;
+    *data_len = 0;
     if (type & F_STREAM_DATA_LEN)
-        dec(data_len, v->buf, v->len, i, 0, "%u");
-    ensure(type & F_STREAM_FIN || data_len, "FIN or data_len");
+        dec(*data_len, v->buf, v->len, *data_start, 0, "%u");
+    ensure(type & F_STREAM_FIN || *data_len, "FIN or data_len");
 
+    *sid = 0;
     const uint8_t sid_len = dec_sid_len(type);
-    uint32_t sid = 0;
-    dec(sid, v->buf, v->len, i, sid_len, "%u");
-    struct q_stream * s = get_stream(c, sid);
-    if (s == 0)
-        s = new_stream(c, sid);
-    s->in_off += data_len;
+    dec(*sid, v->buf, v->len, *data_start, sid_len, "%u");
 
     const uint8_t off_len = dec_off_len(type);
     uint64_t off = 0;
     if (off_len)
-        dec(off, v->buf, v->len, i, off_len, "%" PRIu64);
+        dec(off, v->buf, v->len, *data_start, off_len, "%" PRIu64);
 
-    // deliver data on stream; set v-buf to start of stream data
-    // TODO: pay attention to offset and gaps
-    v->buf = &v->buf[i];
-    warn(info, "%u byte%s on str %u: %.*s", data_len, plural(data_len), sid,
-         data_len, v->buf);
-    STAILQ_INSERT_TAIL(&s->i, v, next);
-
-    pthread_mutex_lock(&lock);
-    pthread_cond_signal(&read_cv);
-    pthread_mutex_unlock(&lock);
-
-    return data_len;
+    return *data_start + *data_len;
 }
 
 
@@ -278,24 +265,28 @@ bool dec_frames(struct q_conn * const c, struct w_iov * const v)
 {
     uint16_t i = pkt_hdr_len(v->buf, v->len) + HASH_LEN;
     uint16_t pad_start = 0;
-    bool got_stream_frame = false;
+    uint16_t data_start = 0;
+    uint16_t data_len = 0;
+    uint32_t sid = 0;
 
     while (i < v->len) {
         const uint8_t type = ((const uint8_t * const)(v->buf))[i];
         if (pad_start && (type != T_PADDING || i == v->len - 1)) {
             warn(debug, "skipped padding in [%u..%u]", pad_start, i);
             pad_start = 0;
+
         } else if (type != T_PADDING)
             warn(debug, "frame type 0x%02x, start pos %u", type, i);
 
         if (bitmask_match(type, T_STREAM)) {
             // TODO: support multiple stream frames per packet (needs memcpy)
-            ensure(got_stream_frame == false,
+            ensure(data_len == 0,
                    "can only handle one stream frame per packet");
-            i += dec_stream_frame(c, v, i);
-            got_stream_frame = true;
+            i += dec_stream_frame(v, i, &sid, &data_start, &data_len);
+
         } else if (bitmask_match(type, T_ACK)) {
             i += dec_ack_frame(c, v, i);
+
         } else
             switch (type) {
             case T_PADDING:
@@ -326,16 +317,35 @@ bool dec_frames(struct q_conn * const c, struct w_iov * const v)
             }
     }
 
-    if (got_stream_frame == false) {
+    if (data_len == 0) {
         // if there was no stream frame present, we did not enqueue this w_iov
         // into a stream, so free it here
         warn(debug, "freeing w_iov w/o stream data");
         struct w_iov_stailq q = STAILQ_HEAD_INITIALIZER(q);
         STAILQ_INSERT_HEAD(&q, v, next);
         w_free(w_engine(c->sock), &q);
+
+    } else {
+        // adjust w_iov start and len to stream frame data
+        v->buf = &v->buf[data_start];
+        v->len = data_len;
+
+        // deliver data into stream
+        struct q_stream * s = get_stream(c, sid);
+        if (s == 0)
+            s = new_stream(c, sid);
+        warn(info, "%u byte%s on str %u: %.*s", data_len, plural(data_len), sid,
+             v->len, v->buf);
+        s->in_off += data_len;
+        STAILQ_INSERT_TAIL(&s->i, v, next);
+        if (s->id != 0) {
+            pthread_mutex_lock(&lock);
+            pthread_cond_signal(&read_cv);
+            pthread_mutex_unlock(&lock);
+        }
     }
 
-    return got_stream_frame;
+    return data_len;
 }
 
 
