@@ -53,9 +53,9 @@
 // Convert stream ID length encoded in flags to bytes
 static uint8_t __attribute__((const)) dec_sid_len(const uint8_t flags)
 {
-    const uint8_t l = flags & 0x03;
-    ensure(l <= 2, "cannot decode stream ID length %u", l);
-    const uint8_t dec[] = {1, 2, 4};
+    const uint8_t l = (flags & 0x18) >> 3;
+    ensure(l <= 3, "cannot decode stream ID length %u", l);
+    const uint8_t dec[] = {1, 2, 3, 4};
     return dec[l];
 }
 
@@ -63,7 +63,7 @@ static uint8_t __attribute__((const)) dec_sid_len(const uint8_t flags)
 // Convert stream offset length encoded in flags to bytes
 static uint8_t __attribute__((const)) dec_off_len(const uint8_t flags)
 {
-    const uint8_t l = (flags & 0x0C) >> 2;
+    const uint8_t l = (flags & 0x06) >> 1;
     ensure(l <= 3, "cannot decode stream offset length %u", l);
     const uint8_t dec[] = {0, 2, 4, 8};
     return dec[l];
@@ -71,7 +71,7 @@ static uint8_t __attribute__((const)) dec_off_len(const uint8_t flags)
 
 
 #define F_STREAM_FIN 0x20
-#define F_STREAM_DATA_LEN 0x10
+#define F_STREAM_DATA_LEN 0x01
 
 
 static uint16_t __attribute__((nonnull))
@@ -85,11 +85,6 @@ dec_stream_frame(struct w_iov * const v,
     uint8_t type = 0;
     dec(type, v->buf, v->len, *data_start, 0, "0x%02x");
 
-    *data_len = 0;
-    if (type & F_STREAM_DATA_LEN)
-        dec(*data_len, v->buf, v->len, *data_start, 0, "%u");
-    ensure(type & F_STREAM_FIN || *data_len, "FIN or data_len");
-
     *sid = 0;
     const uint8_t sid_len = dec_sid_len(type);
     dec(*sid, v->buf, v->len, *data_start, sid_len, "%u");
@@ -98,6 +93,12 @@ dec_stream_frame(struct w_iov * const v,
     uint64_t off = 0;
     if (off_len)
         dec(off, v->buf, v->len, *data_start, off_len, "%" PRIu64);
+    // TODO: pay attention to offset when delivering data to app
+
+    *data_len = 0;
+    if (type & F_STREAM_DATA_LEN)
+        dec(*data_len, v->buf, v->len, *data_start, 0, "%u");
+    ensure(type & F_STREAM_FIN || *data_len, "FIN or data_len");
 
     return *data_start + *data_len;
 }
@@ -108,7 +109,7 @@ static uint8_t __attribute__((const)) dec_lg_ack_len(const uint8_t flags)
 {
     const uint8_t l = (flags & 0x0C) >> 2;
     ensure(l <= 3, "cannot decode largest ACK length %u", l);
-    const uint8_t dec[] = {1, 2, 3, 6};
+    const uint8_t dec[] = {1, 2, 4, 6};
     return dec[l];
 }
 
@@ -359,7 +360,7 @@ enc_padding_frame(void * const buf, const uint16_t pos, const uint16_t len)
 
 
 static const uint8_t enc_lg_ack_len[] = {0xFF, 0x00, 0x01, 0xFF,
-                                         0x03}; // 0xFF = invalid
+                                         0x02, 0xFF, 0x03}; // 0xFF = invalid
 
 
 static uint8_t __attribute__((const)) needed_lg_ack_len(const uint64_t n)
@@ -368,12 +369,14 @@ static uint8_t __attribute__((const)) needed_lg_ack_len(const uint64_t n)
         return 1;
     if (n < UINT16_MAX)
         return 2;
-    return 4;
+    if (n < UINT32_MAX)
+        return 4;
+    return 6;
 }
 
 
 static const uint8_t enc_ack_block_len[] = {0xFF, 0x00, 0x01, 0xFF,
-                                            0x03}; // 0xFF = invalid
+                                            0x02, 0xFF, 0x03}; // 0xFF = invalid
 
 
 static uint8_t __attribute__((nonnull))
@@ -384,7 +387,9 @@ needed_ack_block_len(const struct q_conn * const c)
         return 1;
     if (max_block < UINT16_MAX)
         return 2;
-    return 4;
+    if (max_block < UINT32_MAX)
+        return 3;
+    return 6;
 }
 
 
@@ -421,8 +426,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
 }
 
 
-static const uint8_t enc_sid_len[] = {0xFF, 0x00, 0x01, 0xFF,
-                                      0x02}; // 0xFF = invalid
+static const uint8_t enc_sid_len[] = {0x00, 0x01, 002, 0x03}; // 0xFF = invalid
 
 static uint8_t __attribute__((const)) needed_sid_len(const uint32_t n)
 {
@@ -430,12 +434,14 @@ static uint8_t __attribute__((const)) needed_sid_len(const uint32_t n)
         return 1;
     if (n < UINT16_MAX)
         return 2;
+    if (n < 0x00FFFFFF) // UINT24_MAX :-)
+        return 3;
     return 4;
 }
 
 
-static const uint8_t enc_off_len[] = {0x00,      0x01 << 2, 0xFF, 0xFF,
-                                      0x02 << 2, 0xFF,      0xFF, 0xFF,
+static const uint8_t enc_off_len[] = {0x00,      0xFF, 0x01 << 2, 0xFF,
+                                      0x02 << 2, 0xFF, 0xFF,      0xFF,
                                       0x03 << 2}; // 0xFF = invalid
 
 static uint8_t __attribute__((const)) needed_off_len(const uint64_t n)
@@ -443,7 +449,7 @@ static uint8_t __attribute__((const)) needed_off_len(const uint64_t n)
     if (n == 0)
         return 0;
     if (n < UINT16_MAX)
-        return 1;
+        return 2;
     if (n < UINT32_MAX)
         return 4;
     return 8;
@@ -469,10 +475,10 @@ uint16_t enc_stream_frame(struct q_stream * const s,
 
     // now that we know how long the stream frame header is, encode it
     enc(buf, len, i, &type, 0, "0x%02x");
-    enc(buf, len, i, &data_len, 0, "%u");
     enc(buf, len, i, &s->id, sid_len, "%u");
     if (off_len)
         enc(buf, len, i, &s->out_off, off_len, "%" PRIu64);
+    enc(buf, len, i, &data_len, 0, "%u");
 
     // TODO: support multiple frames per packet? (needs memcpy!)
 
