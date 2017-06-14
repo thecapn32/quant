@@ -29,7 +29,10 @@ add_dependencies(warpcore warp)
 # build picotls with our CFLAGS, but without -Werror
 string(TOUPPER ${CMAKE_BUILD_TYPE} CMAKE_BUILD_TYPE_UC)
 set(PICOTLS_CFLAGS "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_${CMAKE_BUILD_TYPE_UC}}")
-string(REPLACE "-Werror " "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
+string(REPLACE "-Werror" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
+string(REPLACE "-Wextra" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
+string(REPLACE "-Wpedantic" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
+string(REPLACE "-Weverything" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
 
 externalproject_add(picotls
   UPDATE_COMMAND ""
