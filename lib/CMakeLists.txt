@@ -37,7 +37,7 @@ set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 
 set(${PROJECT_NAME}_sources
   src/fnv_1a.c src/pkt.c src/frame.c src/quic.c src/stream.c src/conn.c
-  ${CMAKE_CURRENT_BINARY_DIR}/src/config.c
+  src/diet.c ${CMAKE_CURRENT_BINARY_DIR}/src/config.c
   ${CMAKE_CURRENT_BINARY_DIR}/src/cert.c
 )
 
