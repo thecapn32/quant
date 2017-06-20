@@ -37,13 +37,15 @@ string(REPLACE "-Weverything" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
 externalproject_add(picotls
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/h2o/picotls.git
-  GIT_TAG kazuho/quic
+  # GIT_TAG kazuho/quic
   GIT_SHALLOW 1
   PATCH_COMMAND sed -i "" -e "s/-std=c99 -Wall -O2 -g//" CMakeLists.txt
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
     -DCMAKE_C_FLAGS=${PICOTLS_CFLAGS}
-    -DOPENSSL_INCLUDE_DIR=/usr/include
+    -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}
+    -DOPENSSL_LIBRARIES=${OPENSSL_ROOT_DIR}/lib
+    -DOPENSSL_INCLUDE_DIR=${OPENSSL_ROOT_DIR}/include
     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
     -DCMAKE_POSITION_INDEPENDENT_CODE=True
   INSTALL_COMMAND
@@ -55,6 +57,7 @@ externalproject_add(picotls
       ${CMAKE_CURRENT_BINARY_DIR}/lib || true
   BUILD_BYPRODUCTS
     ${CMAKE_CURRENT_BINARY_DIR}/lib/libpicotls-minicrypto.a
+    ${CMAKE_CURRENT_BINARY_DIR}/lib/libpicotls-openssl.a
     ${CMAKE_CURRENT_BINARY_DIR}/lib/libpicotls-core.a
 )
 
@@ -77,6 +80,16 @@ set_target_properties(ptls-minicrypto
   PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_BINARY_DIR}/include
 )
 add_dependencies(ptls-minicrypto picotls)
+
+add_library(ptls-openssl STATIC IMPORTED GLOBAL)
+set_target_properties(ptls-openssl
+  PROPERTIES IMPORTED_LOCATION
+    ${CMAKE_CURRENT_BINARY_DIR}/lib/libpicotls-openssl.a
+)
+set_target_properties(ptls-openssl
+  PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_BINARY_DIR}/include
+)
+add_dependencies(ptls-openssl picotls)
 
 # Use quic-go for testing against, rather than proto-quic monster
 set(GOPATH ${CMAKE_CURRENT_BINARY_DIR}/go)

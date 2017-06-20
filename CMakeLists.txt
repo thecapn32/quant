@@ -17,6 +17,18 @@ find_path(LIBEV_INCLUDE ev.h PATH_SUFFIXES include/ev include)
 find_package_handle_standard_args(libev DEFAULT_MSG LIBEV_LIB LIBEV_INCLUDE)
 include_directories(${LIBEV_INCLUDE})
 
+if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+  # on Darwin, try and pick up openssl from homebrew
+  set(CMAKE_PREFIX_PATH /usr/local/opt/openssl)
+endif()
+
+find_program(OPENSSL openssl)
+if(NOT OPENSSL)
+  message(FATAL_ERROR "openssl not found")
+else()
+  string(REGEX REPLACE "/bin/openssl$" "" OPENSSL_ROOT_DIR ${OPENSSL})
+endif()
+
 # Check if _GNU_SOURCE is available.
 check_symbol_exists(__GNU_LIBRARY__ "features.h" _GNU_SOURCE)
 if(_GNU_SOURCE)

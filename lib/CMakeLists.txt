@@ -2,11 +2,6 @@ string(TOUPPER ${PROJECT_NAME} PROJECT_NAME_UC)
 configure_file(include/${PROJECT_NAME}/config.h.in include/${PROJECT_NAME}/config.h)
 configure_file(src/config.c.in src/config.c)
 
-find_program(OPENSSL openssl)
-if(NOT OPENSSL)
-  message(FATAL_ERROR "openssl not found")
-endif()
-
 find_program(XXD xxd)
 if(NOT XXD)
   message(FATAL_ERROR "xxd not found")
@@ -101,7 +96,9 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/include/${PROJECT_NAME}/config.h
         DESTINATION include/${PROJECT_NAME})
 
 target_link_libraries(${PROJECT_NAME}_static
-  warpcore ptls-core ptls-minicrypto ${LIBEV_LIB} Threads::Threads)
+  warpcore ptls-core ptls-minicrypto ptls-openssl
+  ${LIBEV_LIB} Threads::Threads)
 
 target_link_libraries(${PROJECT_NAME}
-  warpcore ptls-core ptls-minicrypto ${LIBEV_LIB} Threads::Threads)
+  warpcore ptls-core ptls-minicrypto ptls-openssl
+  ${LIBEV_LIB} Threads::Threads)
