@@ -7,6 +7,7 @@ if(NOT XXD)
   message(FATAL_ERROR "xxd not found")
 endif()
 
+string(REGEX REPLACE "/include$" "/bin/openssl" OPENSSL ${OPENSSL_INCLUDE_DIR})
 add_custom_command(
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src/cert.c
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/src

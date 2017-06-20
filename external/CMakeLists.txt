@@ -19,9 +19,9 @@ set(WARP ${CMAKE_CURRENT_BINARY_DIR}/lib/libwarpcore.a)
 if(NOT EXISTS(${WARP}))
   set(WARP ${CMAKE_CURRENT_BINARY_DIR}/lib/libsockcore.a)
 endif()
-set_target_properties(warpcore PROPERTIES IMPORTED_LOCATION ${WARP})
-set_target_properties(warpcore
-  PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_BINARY_DIR}/include
+set_target_properties(warpcore PROPERTIES
+  IMPORTED_LOCATION ${WARP}
+  INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_BINARY_DIR}/include
 )
 add_dependencies(warpcore warp)
 
@@ -63,31 +63,31 @@ externalproject_add(picotls
 
 add_library(ptls-core STATIC IMPORTED GLOBAL)
 set_target_properties(ptls-core
-  PROPERTIES IMPORTED_LOCATION
-    ${CMAKE_CURRENT_BINARY_DIR}/lib/libpicotls-core.a
-)
-set_target_properties(ptls-core
-  PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_BINARY_DIR}/include
+  PROPERTIES
+    IMPORTED_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/lib/libpicotls-core.a
+    INTERFACE_INCLUDE_DIRECTORIES
+      "${CMAKE_CURRENT_BINARY_DIR}/include;${OPENSSL_ROOT_DIR}/include"
+    INTERFACE_LINK_LIBRARIES "${OPENSSL_LIBRARIES}"
 )
 add_dependencies(ptls-core picotls)
 
 add_library(ptls-minicrypto STATIC IMPORTED GLOBAL)
 set_target_properties(ptls-minicrypto
-  PROPERTIES IMPORTED_LOCATION
-    ${CMAKE_CURRENT_BINARY_DIR}/lib/libpicotls-minicrypto.a
-)
-set_target_properties(ptls-minicrypto
-  PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_BINARY_DIR}/include
+  PROPERTIES
+    IMPORTED_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/lib/libpicotls-minicrypto.a
+    INTERFACE_INCLUDE_DIRECTORIES
+      "${CMAKE_CURRENT_BINARY_DIR}/include;${OPENSSL_ROOT_DIR}/include"
+    INTERFACE_LINK_LIBRARIES "${OPENSSL_LIBRARIES}"
 )
 add_dependencies(ptls-minicrypto picotls)
 
 add_library(ptls-openssl STATIC IMPORTED GLOBAL)
 set_target_properties(ptls-openssl
-  PROPERTIES IMPORTED_LOCATION
-    ${CMAKE_CURRENT_BINARY_DIR}/lib/libpicotls-openssl.a
-)
-set_target_properties(ptls-openssl
-  PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_BINARY_DIR}/include
+  PROPERTIES
+    IMPORTED_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/lib/libpicotls-openssl.a
+    INTERFACE_INCLUDE_DIRECTORIES
+      "${CMAKE_CURRENT_BINARY_DIR}/include;${OPENSSL_ROOT_DIR}/include"
+    INTERFACE_LINK_LIBRARIES "${OPENSSL_LIBRARIES}"
 )
 add_dependencies(ptls-openssl picotls)
 

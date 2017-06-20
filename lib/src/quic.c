@@ -36,6 +36,7 @@
 
 #include <picotls.h>
 #include <picotls/minicrypto.h>
+#include <picotls/openssl.h>
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wpadded"
@@ -88,7 +89,7 @@ ptls_context_t tls_ctx = {0};
 
 static ptls_minicrypto_secp256r1sha256_sign_certificate_t sign_cert;
 static ptls_iovec_t tls_certs;
-static ptls_verify_certificate_t verifier;
+static ptls_openssl_verify_certificate_t verifier;
 
 
 void q_alloc(void * const w, struct w_iov_stailq * const q, const uint32_t len)
@@ -188,16 +189,16 @@ void q_read(const uint64_t cid,
     pthread_mutex_unlock(&lock);
 
     struct q_stream * s;
-    SPLAY_FOREACH(s, stream, &c->streams)
-    if (!STAILQ_EMPTY(&s->i)) {
+    SPLAY_FOREACH (s, stream, &c->streams)
+        if (!STAILQ_EMPTY(&s->i)) {
 #ifndef NDEBUG
-        const uint32_t in_len = w_iov_stailq_len(&s->i);
-        warn(info, "buffered %u byte%s on str %u", in_len, plural(in_len),
-             s->id);
+            const uint32_t in_len = w_iov_stailq_len(&s->i);
+            warn(info, "buffered %u byte%s on str %u", in_len, plural(in_len),
+                 s->id);
 #endif
-        *sid = s->id;
-        break;
-    }
+            *sid = s->id;
+            break;
+        }
     if (*sid == 0)
         return;
 
@@ -347,9 +348,8 @@ void * q_init(const char * const ifname)
     tls_ctx.certificates.list = &tls_certs;
     tls_ctx.certificates.count = 1;
 
-    // TODO: there doesn't yet seem to be a minicrypto version of this call:
-    // ptls_openssl_init_verify_certificate(&verifier, 0);
-    tls_ctx.verify_certificate = &verifier;
+    ptls_openssl_init_verify_certificate(&verifier, 0);
+    tls_ctx.verify_certificate = &verifier.super;
 
     // initialize synchronization helpers
     pthread_mutex_init(&lock, 0);

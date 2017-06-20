@@ -22,12 +22,8 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
   set(CMAKE_PREFIX_PATH /usr/local/opt/openssl)
 endif()
 
-find_program(OPENSSL openssl)
-if(NOT OPENSSL)
-  message(FATAL_ERROR "openssl not found")
-else()
-  string(REGEX REPLACE "/bin/openssl$" "" OPENSSL_ROOT_DIR ${OPENSSL})
-endif()
+find_package(OpenSSL REQUIRED)
+string(REGEX REPLACE "/include$" "" OPENSSL_ROOT_DIR ${OPENSSL_INCLUDE_DIR})
 
 # Check if _GNU_SOURCE is available.
 check_symbol_exists(__GNU_LIBRARY__ "features.h" _GNU_SOURCE)
