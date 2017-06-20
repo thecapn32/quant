@@ -24,6 +24,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <inttypes.h>
+#include <stdint.h>
 #include <stdlib.h>
 
 #include <warpcore/warpcore.h>
