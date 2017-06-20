@@ -31,7 +31,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <time.h>
 
 #include <stddef.h> // IWYU pragma: keep
 
@@ -333,7 +332,7 @@ void * q_init(const char * const ifname)
         return w;
 
     // initialize PRNG
-    srandom((unsigned)time(0));
+    plat_initrandom();
 
     // initialize TLS context
     tls_ctx.random_bytes = ptls_minicrypto_random_bytes;
