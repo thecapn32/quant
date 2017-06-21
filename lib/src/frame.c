@@ -340,8 +340,8 @@ bool dec_frames(struct q_conn * const c, struct w_iov * const v)
         struct q_stream * s = get_stream(c, sid);
         if (s == 0)
             s = new_stream(c, sid);
-        warn(info, "%u byte%s on str %u: %.*s", data_len, plural(data_len), sid,
-             v->len, v->buf);
+        warn(notice, "%u byte%s on str %u: %.*s", data_len, plural(data_len),
+             sid, v->len, v->buf);
         s->in_off += data_len;
         STAILQ_INSERT_TAIL(&s->i, v, next);
         if (s->id != 0) {
@@ -470,6 +470,9 @@ uint16_t enc_stream_frame(struct q_stream * const s,
     if (data_len == 0)
         // there might not be stream data, e.g., for pure ACKs
         return len;
+
+    warn(notice, "%u byte%s on str %u: %.*s", data_len, plural(data_len), s->id,
+         data_len, &((uint8_t *)buf)[Q_OFFSET]);
 
     // there is stream data, so prepend a stream frame header
     const uint8_t off_len = needed_off_len(s->out_off);

@@ -103,6 +103,7 @@ SPLAY_PROTOTYPE(conn, q_conn, next, conn_cmp)
 #define CONN_FINW 99 // TODO: renumber
 
 #define CONN_FLAG_CLNT 0x01
+#define CONN_FLAG_TLS_DONE 0x02
 
 
 struct ev_loop;

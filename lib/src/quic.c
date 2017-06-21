@@ -36,7 +36,7 @@
 
 #include <picotls.h>
 #include <picotls/minicrypto.h>
-#include <picotls/openssl.h>
+// #include <picotls/openssl.h>
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wpadded"
@@ -89,7 +89,7 @@ ptls_context_t tls_ctx = {0};
 
 static ptls_minicrypto_secp256r1sha256_sign_certificate_t sign_cert;
 static ptls_iovec_t tls_certs;
-static ptls_openssl_verify_certificate_t verifier;
+// static ptls_openssl_verify_certificate_t verifier;
 
 
 void q_alloc(void * const w, struct w_iov_stailq * const q, const uint32_t len)
@@ -351,9 +351,9 @@ void * q_init(const char * const ifname)
     tls_ctx.certificates.list = &tls_certs;
     tls_ctx.certificates.count = 1;
 
-    ensure(ptls_openssl_init_verify_certificate(&verifier, 0) == 0,
-           "ptls_openssl_init_verify_certificate");
-    tls_ctx.verify_certificate = &verifier.super;
+    // ensure(ptls_openssl_init_verify_certificate(&verifier, 0) == 0,
+    //        "ptls_openssl_init_verify_certificate");
+    // tls_ctx.verify_certificate = &verifier.super;
 
     // initialize synchronization helpers
     pthread_mutex_init(&lock, 0);

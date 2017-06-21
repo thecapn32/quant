@@ -35,7 +35,7 @@
 #include <sys/param.h>
 #include <sys/socket.h>
 
-#include <stddef.h> // IWYU pragma: keep
+// #include <stddef.h> // IWYU pragma: keep
 // picotls doesn't include stddef.h
 #include <picotls.h>
 
@@ -69,27 +69,50 @@ int64_t conn_cmp(const struct q_conn * const a, const struct q_conn * const b)
 SPLAY_GENERATE(conn, q_conn, next, conn_cmp)
 
 
-static void __attribute__((nonnull(1)))
-tls_handshake(struct q_stream * const s, const struct w_iov * const i)
+static void __attribute__((nonnull)) tls_handshake(struct q_stream * const s)
 {
     // allocate a w_iov
     struct w_iov_stailq o;
     w_alloc_cnt(w_engine(s->c->sock), &o, 1, Q_OFFSET);
-    struct w_iov * const v = STAILQ_FIRST(&o);
+    struct w_iov * const ov = STAILQ_FIRST(&o);
 
-    ptls_buffer_init(&q_pkt_meta[v->idx].tb, v->buf, v->len);
-    size_t in_len = i ? i->len : 0;
-    const int ret = ptls_handshake(s->c->tls, &q_pkt_meta[v->idx].tb,
-                                   i ? i->buf : 0, &in_len, 0);
-    if (ret != PTLS_ERROR_IN_PROGRESS)
-        warn(info, "ptls_handshake %u", ret);
-    v->len = (uint16_t)q_pkt_meta[v->idx].tb.off;
-    warn(crit, "TLS handshake: recv %u, gen %u", i ? i->len : 0, v->len);
+    // get pointer to any received handshake data
+    struct w_iov * const iv = STAILQ_FIRST(&s->i);
+    size_t in_len = iv ? iv->len : 0;
 
-    // enqueue for TX
-    v->ip = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_addr.s_addr;
-    v->port = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_port;
-    STAILQ_INSERT_TAIL(&s->o, v, next);
+    ptls_buffer_init(&q_pkt_meta[ov->idx].tb, ov->buf, ov->len);
+    const int ret = ptls_handshake(s->c->tls, &q_pkt_meta[ov->idx].tb,
+                                   iv ? iv->buf : 0, &in_len, 0);
+    ov->len = (uint16_t)q_pkt_meta[ov->idx].tb.off;
+    // warn(crit, "TLS handshake: recv %u, gen %u, in_len %lu, ret %u: %.*s",
+    //      iv ? iv->len : 0, ov->len, in_len, ret, ov->len, ov->buf);
+
+    ensure(ret == 0 || ret == PTLS_ERROR_IN_PROGRESS, "TLS handshake error");
+    ensure(iv == 0 || iv->len && iv->len == in_len, "TLS data remaining");
+
+    if (iv) {
+        STAILQ_REMOVE_HEAD(&s->i, next);
+        struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
+        STAILQ_INSERT_TAIL(&i, iv, next);
+        w_free(w_engine(s->c->sock), &i);
+    }
+
+    if ((ret == 0 || ret == PTLS_ERROR_IN_PROGRESS) && ov->len != 0) {
+        // warn(info, "TX enqueue");
+        // enqueue for TX
+        ov->ip = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_addr.s_addr;
+        ov->port = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_port;
+        STAILQ_INSERT_TAIL(&s->o, ov, next);
+    } else {
+        // warn(info, "NOOO TX enqueue");
+        // we are done with the handshake, no need to TX
+        w_free(w_engine(s->c->sock), &o);
+    }
+
+    if (ret == 0) {
+        warn(notice, "TLS handshake done");
+        s->c->flags |= CONN_FLAG_TLS_DONE;
+    }
 }
 
 
@@ -143,14 +166,16 @@ void tx(struct w_sock * const ws, struct q_conn * const c)
 
     // check if there is any stream with pending data
     struct q_stream * s = 0;
-    SPLAY_FOREACH(s, stream, &c->streams)
-    if (!STAILQ_EMPTY(&s->o))
-        break;
+    SPLAY_FOREACH (s, stream, &c->streams)
+        if (!STAILQ_EMPTY(&s->o))
+            break;
     if (s == 0) {
         // don't have any stream data to piggyback on; this means we're
-        // sending a ClientHello
+        // sending a ClientHello or a pure ACK
         s = get_stream(c, 0);
-        tls_handshake(s, 0);
+        if ((c->state & CONN_FLAG_TLS_DONE) == 0 || !STAILQ_EMPTY(&s->i))
+            // we're still in TLS handshake, or we got other data on stream 0
+            tls_handshake(s);
     }
 
     struct w_iov_stailq q = STAILQ_HEAD_INITIALIZER(q);
@@ -301,7 +326,7 @@ void rx(struct ev_loop * const l __attribute__((unused)),
                 dec_frames(c, v);
 
                 // we should have received a ClientHello
-                tls_handshake(s, v);
+                tls_handshake(s);
 
                 // this is a new connection we just accepted
                 pthread_mutex_lock(&lock);
@@ -338,8 +363,7 @@ void rx(struct ev_loop * const l __attribute__((unused)),
                 dec_frames(c, v);
 
                 // we should have received a ServerHello
-                struct w_iov * const iv = STAILQ_FIRST(&s->i);
-                tls_handshake(s, iv);
+                tls_handshake(s);
 
                 // this is a new connection we just connected
                 pthread_mutex_lock(&lock);
