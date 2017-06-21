@@ -215,9 +215,9 @@ dec_ack_frame(struct q_conn * const c,
 
                 // XXX: this is not quite the right condition (ignores gaps)
                 if (c->lg_acked == c->lg_sent) {
-                    pthread_mutex_lock(&lock);
-                    pthread_cond_signal(&write_cv);
-                    pthread_mutex_unlock(&lock);
+                    pthread_mutex_lock(&c->lock);
+                    pthread_cond_signal(&c->write_cv);
+                    pthread_mutex_unlock(&c->lock);
                 }
 
                 // see OnPacketAcked pseudo code (for LD):
@@ -345,9 +345,9 @@ bool dec_frames(struct q_conn * const c, struct w_iov * const v)
         s->in_off += data_len;
         STAILQ_INSERT_TAIL(&s->i, v, next);
         if (s->id != 0) {
-            pthread_mutex_lock(&lock);
-            pthread_cond_signal(&read_cv);
-            pthread_mutex_unlock(&lock);
+            pthread_mutex_lock(&c->lock);
+            pthread_cond_signal(&c->read_cv);
+            pthread_mutex_unlock(&c->lock);
         }
     }
 

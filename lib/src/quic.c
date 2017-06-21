@@ -75,12 +75,6 @@ struct ev_loop * loop = 0;
 
 static ev_async tx_w;
 static pthread_t tid;
-pthread_cond_t write_cv;
-pthread_cond_t accept_cv;
-pthread_cond_t connect_cv;
-
-pthread_mutex_t lock;
-pthread_cond_t read_cv;
 
 uint64_t accept_queue;
 
@@ -127,14 +121,14 @@ uint64_t q_connect(void * const q,
     // allocate stream zero
     new_stream(c, 0);
 
-    pthread_mutex_lock(&lock);
+    pthread_mutex_lock(&c->lock);
     ev_io_start(loop, &c->rx_w);
     tx_w.data = c;
     ev_async_send(loop, &tx_w);
 
     warn(warn, "waiting for handshake to complete");
-    pthread_cond_wait(&connect_cv, &lock);
-    pthread_mutex_unlock(&lock);
+    pthread_cond_wait(&c->connect_cv, &c->lock);
+    pthread_mutex_unlock(&c->lock);
 
     if (c->state != CONN_ESTB) {
         warn(info, "conn %" PRIx64 " not connected", cid);
@@ -155,17 +149,17 @@ void q_write(const uint64_t cid,
     struct q_stream * s = get_stream(c, sid);
     ensure(s, "str %u on conn %" PRIx64 " does not exist", sid, cid);
 
-    pthread_mutex_lock(&lock);
+    pthread_mutex_lock(&c->lock);
     STAILQ_CONCAT(&s->o, q);
     ev_io_start(loop, &c->rx_w);
     ev_async_send(loop, &tx_w);
     warn(warn, "waiting for write to complete");
-    pthread_cond_wait(&write_cv, &lock);
+    pthread_cond_wait(&c->write_cv, &c->lock);
 
     // XXX instead of assuming all data was received, we need to do rtx handling
     STAILQ_INIT(&s->o);
 
-    pthread_mutex_unlock(&lock);
+    pthread_mutex_unlock(&c->lock);
     warn(warn, "write done");
 }
 
@@ -175,18 +169,17 @@ void q_read(const uint64_t cid,
             struct w_iov_stailq * const i)
 {
     *sid = 0;
-    struct q_conn which = {.id = cid};
-    struct q_conn * c = SPLAY_FIND(conn, &q_conns, &which);
+    struct q_conn * c = get_conn(cid);
     if (c == 0)
         return;
 
     // struct q_conn * const c = get_conn(cid);
     // ensure(c, "conn %" PRIx64 " does not exist", cid);
 
-    pthread_mutex_lock(&lock);
+    pthread_mutex_lock(&c->lock);
     warn(warn, "waiting for data");
-    pthread_cond_wait(&read_cv, &lock);
-    pthread_mutex_unlock(&lock);
+    pthread_cond_wait(&c->read_cv, &c->lock);
+    pthread_mutex_unlock(&c->lock);
 
     struct q_stream * s;
     SPLAY_FOREACH (s, stream, &c->streams)
@@ -212,10 +205,10 @@ void q_read(const uint64_t cid,
     // ensure(s, "str %u on conn %" PRIx64 " does not exist", *sid, cid);
 
     if (STAILQ_EMPTY(&s->i)) {
-        pthread_mutex_lock(&lock);
+        pthread_mutex_lock(&c->lock);
         warn(warn, "read waiting for data");
-        pthread_cond_wait(&read_cv, &lock);
-        pthread_mutex_unlock(&lock);
+        pthread_cond_wait(&c->read_cv, &c->lock);
+        pthread_mutex_unlock(&c->lock);
         warn(warn, "read done");
     }
 
@@ -232,13 +225,13 @@ uint64_t q_bind(void * const q, const uint16_t port)
     // initialize an RX watcher
     ev_io rx_w = {.data = ws};
     ev_io_init(&rx_w, rx, w_fd(ws), EV_READ);
-    pthread_mutex_lock(&lock);
 
     // start the RX watcher
     ev_io_start(loop, &rx_w);
     ev_async_send(loop, &tx_w);
     warn(warn, "waiting for new inbound conn");
-    pthread_cond_wait(&accept_cv, &lock);
+    // pthread_mutex_lock(&c->lock);
+    // pthread_cond_wait(&c->accept_cv, &c->lock);
     ev_io_stop(loop, &rx_w);
 
     // take new connection from "accept queue"; will be zero if interrupted
@@ -253,7 +246,7 @@ uint64_t q_bind(void * const q, const uint16_t port)
         warn(warn, "got conn %" PRIx64, cid);
     }
 
-    pthread_mutex_unlock(&lock);
+    // pthread_mutex_unlock(&c->lock);
     return cid;
 }
 
@@ -294,12 +287,12 @@ static void * __attribute__((nonnull)) l_run(void * const arg)
     ev_run(l, 0);
 
     // notify the main thread, which may be blocked on these conditions
-    pthread_mutex_lock(&lock);
-    pthread_cond_signal(&read_cv);
-    pthread_cond_signal(&write_cv);
-    pthread_cond_signal(&connect_cv);
-    pthread_cond_signal(&accept_cv);
-    pthread_mutex_unlock(&lock);
+    // pthread_mutex_lock(&c->lock);
+    // pthread_cond_signal(&read_cv);
+    // pthread_cond_signal(&write_cv);
+    // pthread_cond_signal(&connect_cv);
+    // pthread_cond_signal(&accept_cv);
+    // pthread_mutex_unlock(&c->lock);
 
     return 0;
 }
@@ -355,13 +348,6 @@ void * q_init(const char * const ifname)
     //        "ptls_openssl_init_verify_certificate");
     // tls_ctx.verify_certificate = &verifier.super;
 
-    // initialize synchronization helpers
-    pthread_mutex_init(&lock, 0);
-    pthread_cond_init(&read_cv, 0);
-    pthread_cond_init(&write_cv, 0);
-    pthread_cond_init(&connect_cv, 0);
-    pthread_cond_init(&accept_cv, 0);
-
     // initialize the event loop and async call handler
     loop = ev_default_loop(0);
     ev_async_init(&tx_w, tx_cb);
@@ -394,8 +380,11 @@ void q_close(const uint64_t cid)
     // w_close(c->sock);
     // hash_foreach(&c->streams, free);
     // hash_done(&c->streams);
-    // hash_remove(&q_conns, &c->conn_node);
-    // free(c);
+
+    pthread_mutex_lock(&q_conns_lock);
+    SPLAY_REMOVE(conn, &q_conns, c);
+    pthread_mutex_unlock(&q_conns_lock);
+    free(c);
 }
 
 
@@ -403,22 +392,20 @@ void q_cleanup(void * const q)
 {
     pthread_kill(tid, SIGTERM);
     ensure(pthread_join(tid, 0) == 0, "pthread_join");
-    ensure(pthread_mutex_destroy(&lock) == 0, "pthread_mutex_init");
-    ensure(pthread_cond_destroy(&read_cv) == 0, "pthread_cond_destroy");
-    ensure(pthread_cond_destroy(&write_cv) == 0, "pthread_cond_destroy");
-    ensure(pthread_cond_destroy(&connect_cv) == 0, "pthread_cond_destroy");
-    ensure(pthread_cond_destroy(&accept_cv) == 0, "pthread_cond_destroy");
+    // ensure(pthread_mutex_destroy(&lock) == 0, "pthread_mutex_init");
+    // ensure(pthread_cond_destroy(&read_cv) == 0, "pthread_cond_destroy");
+    // ensure(pthread_cond_destroy(&write_cv) == 0, "pthread_cond_destroy");
+    // ensure(pthread_cond_destroy(&connect_cv) == 0, "pthread_cond_destroy");
+    // ensure(pthread_cond_destroy(&accept_cv) == 0, "pthread_cond_destroy");
 
     w_cleanup(q);
     struct q_conn *c, *tmp;
+    pthread_mutex_lock(&q_conns_lock);
     for (c = SPLAY_MIN(conn, &q_conns); c != 0; c = tmp) {
         tmp = SPLAY_NEXT(conn, &q_conns, c);
         SPLAY_REMOVE(conn, &q_conns, c);
         free(c);
     }
-
-    // hash_foreach(&q_conns, free);
-    // hash_done(&q_conns);
-
+    pthread_mutex_unlock(&q_conns_lock);
     free(q_pkt_meta);
 }

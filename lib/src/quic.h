@@ -43,13 +43,6 @@ extern struct pkt_meta * q_pkt_meta;
 
 #define Q_OFFSET 64
 
-extern pthread_mutex_t lock;
-
-extern pthread_cond_t read_cv;
-extern pthread_cond_t write_cv;
-extern pthread_cond_t accept_cv;
-extern pthread_cond_t connect_cv;
-
 extern struct ev_loop * loop;
 
 /// The versions of QUIC supported by this implementation

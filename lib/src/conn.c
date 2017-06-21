@@ -58,6 +58,7 @@ struct ev_loop;
 
 // All open QUIC connections.
 struct conn q_conns = SPLAY_INITIALIZER();
+pthread_mutex_t q_conns_lock;
 
 
 int64_t conn_cmp(const struct q_conn * const a, const struct q_conn * const b)
@@ -156,7 +157,10 @@ pick_from_server_vers(const void * const buf, const uint16_t len)
 struct q_conn * get_conn(const uint64_t id)
 {
     struct q_conn which = {.id = id};
-    return SPLAY_FIND(conn, &q_conns, &which);
+    pthread_mutex_lock(&q_conns_lock);
+    struct q_conn * const c = SPLAY_FIND(conn, &q_conns, &which);
+    pthread_mutex_unlock(&q_conns_lock);
+    return c;
 }
 
 
@@ -329,9 +333,9 @@ void rx(struct ev_loop * const l __attribute__((unused)),
                 tls_handshake(s);
 
                 // this is a new connection we just accepted
-                pthread_mutex_lock(&lock);
-                pthread_cond_signal(&accept_cv);
-                pthread_mutex_unlock(&lock);
+                pthread_mutex_lock(&c->lock);
+                pthread_cond_signal(&c->accept_cv);
+                pthread_mutex_unlock(&c->lock);
 
             } else
                 warn(warn, "client-requested version 0x%08x not supported",
@@ -366,9 +370,9 @@ void rx(struct ev_loop * const l __attribute__((unused)),
                 tls_handshake(s);
 
                 // this is a new connection we just connected
-                pthread_mutex_lock(&lock);
-                pthread_cond_signal(&connect_cv);
-                pthread_mutex_unlock(&lock);
+                pthread_mutex_lock(&c->lock);
+                pthread_cond_signal(&c->connect_cv);
+                pthread_mutex_unlock(&c->lock);
             }
             break;
         }
@@ -502,7 +506,6 @@ struct q_conn * new_conn(const uint64_t id,
 
     STAILQ_INIT(&c->sent_pkts);
     SPLAY_INIT(&c->streams);
-    SPLAY_INSERT(conn, &q_conns, c);
 
     char host[NI_MAXHOST] = "";
     char port[NI_MAXSERV] = "";
@@ -512,6 +515,18 @@ struct q_conn * new_conn(const uint64_t id,
     c->peer_len = peer_len;
     warn(info, "creating new conn %" PRIx64 " with %s %s:%s", c->id,
          am_server ? "client" : "server", host, port);
+
+    // initialize synchronization helpers
+    pthread_mutex_init(&c->lock, 0);
+    pthread_cond_init(&c->read_cv, 0);
+    pthread_cond_init(&c->write_cv, 0);
+    pthread_cond_init(&c->connect_cv, 0);
+    pthread_cond_init(&c->accept_cv, 0);
+
+    // add connection to global data structure
+    pthread_mutex_lock(&q_conns_lock);
+    SPLAY_INSERT(conn, &q_conns, c);
+    pthread_mutex_unlock(&q_conns_lock);
 
     return c;
 }

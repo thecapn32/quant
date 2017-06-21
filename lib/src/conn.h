@@ -31,6 +31,7 @@
 #pragma clang diagnostic pop
 
 #include <picotls.h>
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <sys/socket.h>
@@ -40,6 +41,8 @@
 
 // All open QUIC connections.
 extern SPLAY_HEAD(conn, q_conn) q_conns;
+extern pthread_mutex_t q_conns_lock;
+
 
 /// A QUIC connection.
 struct q_conn {
@@ -86,7 +89,14 @@ struct q_conn {
     uint64_t ssthresh;
 
     // TLS state
-    ptls_t *tls;
+    ptls_t * tls;
+
+    // lock and condition variables
+    pthread_mutex_t lock;
+    pthread_cond_t write_cv;
+    pthread_cond_t accept_cv;
+    pthread_cond_t connect_cv;
+    pthread_cond_t read_cv;
 };
 
 
