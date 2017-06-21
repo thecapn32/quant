@@ -336,19 +336,23 @@ void * q_init(const char * const ifname)
     plat_initrandom();
 
     // initialize TLS context
+    warn(debug, "TLS: key %u byte%s, cert %u byte%s", tls_key_len,
+         plural(tls_key_len), tls_cert_len, plural(tls_cert_len));
     tls_ctx.random_bytes = ptls_minicrypto_random_bytes;
     tls_ctx.key_exchanges = ptls_minicrypto_key_exchanges;
     tls_ctx.cipher_suites = ptls_minicrypto_cipher_suites;
 
-    ptls_minicrypto_init_secp256r1sha256_sign_certificate(
-        &sign_cert, ptls_iovec_init(tls_key, tls_key_len));
+    ensure(ptls_minicrypto_init_secp256r1sha256_sign_certificate(
+               &sign_cert, ptls_iovec_init(tls_key, tls_key_len)) == 0,
+           "ptls_minicrypto_init_secp256r1sha256_sign_certificate");
     tls_ctx.sign_certificate = &sign_cert.super;
 
     tls_certs = ptls_iovec_init(tls_cert, tls_cert_len);
     tls_ctx.certificates.list = &tls_certs;
     tls_ctx.certificates.count = 1;
 
-    ptls_openssl_init_verify_certificate(&verifier, 0);
+    ensure(ptls_openssl_init_verify_certificate(&verifier, 0) == 0,
+           "ptls_openssl_init_verify_certificate");
     tls_ctx.verify_certificate = &verifier.super;
 
     // initialize synchronization helpers

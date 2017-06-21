@@ -79,13 +79,12 @@ tls_handshake(struct q_stream * const s, const struct w_iov * const i)
 
     ptls_buffer_init(&q_pkt_meta[v->idx].tb, v->buf, v->len);
     size_t in_len = i ? i->len : 0;
-    warn(crit, "TLS handshake: recv %u", i ? i->len : 0);
     const int ret = ptls_handshake(s->c->tls, &q_pkt_meta[v->idx].tb,
                                    i ? i->buf : 0, &in_len, 0);
-    ensure(ret == PTLS_ERROR_IN_PROGRESS, "ptls_handshake %u", ret);
+    if (ret != PTLS_ERROR_IN_PROGRESS)
+        warn(info, "ptls_handshake %u", ret);
     v->len = (uint16_t)q_pkt_meta[v->idx].tb.off;
     warn(crit, "TLS handshake: recv %u, gen %u", i ? i->len : 0, v->len);
-    // hexdump(v->buf, v->len);
 
     // enqueue for TX
     v->ip = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_addr.s_addr;
