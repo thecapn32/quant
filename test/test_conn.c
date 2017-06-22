@@ -30,8 +30,12 @@
 
 int main()
 {
-    void * q = q_init("lo0");
-    uint64_t c = q_bind(q, 55555);
-    q_close(c);
+    void * q = q_init("lo"
+#ifndef __linux__
+                      "0"
+#endif
+                      );
+    // uint64_t c = q_bind(q, 55555);
+    // q_close(c);
     q_cleanup(q);
 }

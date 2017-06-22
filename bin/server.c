@@ -50,7 +50,7 @@ usage(const char * const name, const char * const ifname, const uint16_t port)
 
 int main(int argc, char * argv[])
 {
-    char * ifname = "lo"
+    char * ifname = (char *)"lo"
 #ifndef __linux__
                     "0"
 #endif
