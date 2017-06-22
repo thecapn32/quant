@@ -33,6 +33,8 @@ string(REPLACE "-Werror" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
 string(REPLACE "-Wextra" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
 string(REPLACE "-Wpedantic" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
 string(REPLACE "-Weverything" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
+string(REPLACE "-fsanitize=leak" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
+string(REPLACE "-fsanitize=undefined" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
 
 externalproject_add(picotls
   UPDATE_COMMAND ""
