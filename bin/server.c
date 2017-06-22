@@ -52,7 +52,7 @@ int main(int argc, char * argv[])
 {
     char * ifname = (char *)"lo"
 #ifndef __linux__
-                    "0"
+                            "0"
 #endif
         ;
     uint16_t port = 8443;
@@ -84,15 +84,15 @@ int main(int argc, char * argv[])
     }
 
     void * const q = q_init(ifname);
-    const uint64_t c = q_bind(q, port);
-    warn(debug, "%s ready on %s port %d", basename(argv[0]), ifname, port);
-    uint32_t sid;
+    struct q_conn * c = q_bind(q, port);
+    warn(debug, "%s waiting on %s port %d", basename(argv[0]), ifname, port);
+    q_accept(c);
     struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
-    q_read(c, &sid, &i);
+    struct q_stream * const s = q_read(c, &i);
 #ifndef NDEBUG
     const uint32_t len = w_iov_stailq_len(&i);
-    warn(info, "rx %u byte%s on str %d on conn %" PRIx64, len, plural(len), sid,
-         c);
+    warn(info, "rx %u byte%s on str %d on conn %" PRIx64, len, plural(len),
+         q_sid(s), q_cid(c));
 #endif
     struct w_iov * v;
     STAILQ_FOREACH (v, &i, next)

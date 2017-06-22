@@ -85,10 +85,11 @@ static void __attribute__((nonnull)) tls_handshake(struct q_stream * const s)
     const int ret = ptls_handshake(s->c->tls, &q_pkt_meta[ov->idx].tb,
                                    iv ? iv->buf : 0, &in_len, 0);
     ov->len = (uint16_t)q_pkt_meta[ov->idx].tb.off;
-    // warn(crit, "TLS handshake: recv %u, gen %u, in_len %lu, ret %u: %.*s",
-    //      iv ? iv->len : 0, ov->len, in_len, ret, ov->len, ov->buf);
+    warn(crit, "TLS handshake: recv %u, gen %u, in_len %lu, ret %u: %.*s",
+         iv ? iv->len : 0, ov->len, in_len, ret, ov->len, ov->buf);
 
-    ensure(ret == 0 || ret == PTLS_ERROR_IN_PROGRESS, "TLS handshake error");
+    ensure(ret == 0 || ret == PTLS_ERROR_IN_PROGRESS, "TLS handshake error: %u",
+           ret);
     ensure(iv == 0 || iv->len && iv->len == in_len, "TLS data remaining");
 
     if (iv) {
