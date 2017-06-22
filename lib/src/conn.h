@@ -122,11 +122,14 @@ extern struct q_conn * get_conn(const uint64_t id);
 
 extern void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c);
 
-extern struct q_conn * __attribute__((nonnull))
-new_conn(const uint64_t id,
-         const struct sockaddr * const peer,
-         const socklen_t peer_len,
-         const bool am_server);
+extern struct q_conn * new_conn(void);
+
+extern void __attribute__((nonnull))
+init_conn(struct q_conn * const c,
+          const uint64_t id,
+          const struct sockaddr * const peer,
+          const socklen_t peer_len,
+          const bool am_server);
 
 extern void __attribute__((nonnull))
 tx(struct w_sock * const ws, struct q_conn * const c);

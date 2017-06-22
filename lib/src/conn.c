@@ -294,10 +294,10 @@ void rx(struct ev_loop * const l __attribute__((unused)),
                                              .sin_port = v->port,
                                              .sin_addr = {.s_addr = v->ip}};
             socklen_t peer_len = sizeof(peer);
-            c = new_conn(cid, (const struct sockaddr *)&peer, peer_len, true);
+            c = get_conn(0); // connection with cid 0 is embryonic
+            init_conn(c, cid, (const struct sockaddr *)&peer, peer_len, true);
             c->lg_sent = nr - 1; // echo received packet number
             // TODO: allow server to choose a different cid than the client did
-            accept_queue = cid;
         }
 
         c->lg_recv = MAX(c->lg_recv, nr);
@@ -479,16 +479,10 @@ void detect_lost_pkts(struct q_conn * const c)
 }
 
 
-struct q_conn * new_conn(const uint64_t id,
-                         const struct sockaddr * const peer,
-                         const socklen_t peer_len,
-                         const bool am_server)
+struct q_conn * new_conn(void)
 {
-    ensure(get_conn(id) == 0, "conn %" PRIx64 " already exists", id);
-
     struct q_conn * const c = calloc(1, sizeof(*c));
     ensure(c, "could not calloc");
-    c->id = id;
 
     // initialize LD state
     // XXX: UsingTimeLossDetection not defined?
@@ -501,20 +495,8 @@ struct q_conn * new_conn(const uint64_t id,
     c->cwnd = kInitialWindow;
     c->ssthresh = UINT64_MAX;
 
-    // initialize TLS state
-    ensure((c->tls = ptls_new(&tls_ctx, am_server)) != 0, "alloc TLS state");
-
     STAILQ_INIT(&c->sent_pkts);
     SPLAY_INIT(&c->streams);
-
-    char host[NI_MAXHOST] = "";
-    char port[NI_MAXSERV] = "";
-    getnameinfo((const struct sockaddr *)peer, peer_len, host, sizeof(host),
-                port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
-    c->peer = *peer;
-    c->peer_len = peer_len;
-    warn(info, "creating new conn %" PRIx64 " with %s %s:%s", c->id,
-         am_server ? "client" : "server", host, port);
 
     // initialize synchronization helpers
     pthread_mutex_init(&c->lock, 0);
@@ -529,6 +511,29 @@ struct q_conn * new_conn(const uint64_t id,
     pthread_mutex_unlock(&q_conns_lock);
 
     return c;
+}
+
+
+void init_conn(struct q_conn * const c,
+               const uint64_t id,
+               const struct sockaddr * const peer,
+               const socklen_t peer_len,
+               const bool am_server)
+{
+    ensure(get_conn(id) == 0, "conn %" PRIx64 " already exists", id);
+    c->id = id;
+
+    // initialize TLS state
+    ensure((c->tls = ptls_new(&tls_ctx, am_server)) != 0, "alloc TLS state");
+
+    char host[NI_MAXHOST] = "";
+    char port[NI_MAXSERV] = "";
+    getnameinfo((const struct sockaddr *)peer, peer_len, host, sizeof(host),
+                port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
+    c->peer = *peer;
+    c->peer_len = peer_len;
+    warn(info, "creating new conn %" PRIx64 " with %s %s:%s", c->id,
+         am_server ? "client" : "server", host, port);
 }
 
 

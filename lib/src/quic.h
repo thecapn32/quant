@@ -27,7 +27,6 @@
 
 #include <ev.h>
 #include <picotls.h>
-#include <pthread.h>
 #include <stdint.h>
 
 
@@ -48,10 +47,6 @@ extern struct ev_loop * loop;
 /// The versions of QUIC supported by this implementation
 extern const uint32_t ok_vers[];
 extern const uint8_t ok_vers_len;
-
-
-/// The accept "queue" - currently one deep.
-extern uint64_t accept_queue;
 
 /// TLS context.
 extern ptls_context_t tls_ctx;
