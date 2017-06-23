@@ -95,9 +95,9 @@ void q_free(void * const w, struct w_iov_stailq * const q)
 }
 
 
-uint64_t q_connect(void * const q,
-                   const struct sockaddr * const peer,
-                   const socklen_t peer_len)
+struct q_conn * q_connect(void * const q,
+                          const struct sockaddr * const peer,
+                          const socklen_t peer_len)
 {
     // make new connection (connection ID must be > 0 for us)
     const uint64_t cid =
@@ -134,19 +134,14 @@ uint64_t q_connect(void * const q,
     }
 
     warn(info, "conn %" PRIx64 " connected", cid);
-    return cid;
+    return c;
 }
 
 
-void q_write(const uint64_t cid,
-             const uint32_t sid,
+void q_write(struct q_conn * const c,
+             struct q_stream * const s,
              struct w_iov_stailq * const q)
 {
-    struct q_conn * const c = get_conn(cid);
-    ensure(c, "conn %" PRIx64 " does not exist", cid);
-    struct q_stream * s = get_stream(c, sid);
-    ensure(s, "str %u on conn %" PRIx64 " does not exist", sid, cid);
-
     pthread_mutex_lock(&c->lock);
     STAILQ_CONCAT(&s->o, q);
     ev_io_start(loop, &c->rx_w);
@@ -162,24 +157,15 @@ void q_write(const uint64_t cid,
 }
 
 
-void q_read(const uint64_t cid,
-            uint32_t * const sid,
-            struct w_iov_stailq * const i)
+struct q_stream * q_read(struct q_conn * const c, struct w_iov_stailq * const i)
 {
-    *sid = 0;
-    struct q_conn * c = get_conn(cid);
-    if (c == 0)
-        return;
-
-    // struct q_conn * const c = get_conn(cid);
-    // ensure(c, "conn %" PRIx64 " does not exist", cid);
+    struct q_stream * s = 0;
 
     pthread_mutex_lock(&c->lock);
     warn(warn, "waiting for data");
     pthread_cond_wait(&c->read_cv, &c->lock);
     pthread_mutex_unlock(&c->lock);
 
-    struct q_stream * s;
     SPLAY_FOREACH (s, stream, &c->streams)
         if (!STAILQ_EMPTY(&s->i)) {
 #ifndef NDEBUG
@@ -187,20 +173,10 @@ void q_read(const uint64_t cid,
             warn(info, "buffered %u byte%s on str %u", in_len, plural(in_len),
                  s->id);
 #endif
-            *sid = s->id;
             break;
         }
-    if (*sid == 0)
-        return;
-
-    // *sid = 0;
-    // hash_foreach_arg(&c->streams, &find_stream_with_data, sid);
-    // if (*sid == 0)
-    //     // no stream has new data, which can happen if the timeout fired
-    //     return;
-
-    // struct q_stream * s = get_stream(c, *sid);
-    // ensure(s, "str %u on conn %" PRIx64 " does not exist", *sid, cid);
+    if (s == 0)
+        return 0;
 
     if (STAILQ_EMPTY(&s->i)) {
         pthread_mutex_lock(&c->lock);
@@ -212,10 +188,11 @@ void q_read(const uint64_t cid,
 
     // return data
     STAILQ_CONCAT(i, &s->i);
+    return s;
 }
 
 
-uint64_t q_bind(void * const q, const uint16_t port)
+struct q_conn * q_bind(void * const q, const uint16_t port)
 {
     // bind socket
     struct w_sock * const ws = w_bind(q, ntohs(port), 0);
@@ -230,8 +207,14 @@ uint64_t q_bind(void * const q, const uint16_t port)
     // start the RX watcher
     ev_io_start(loop, &c->rx_w);
     ev_async_send(loop, &tx_w);
-    warn(warn, "waiting for new inbound conn");
 
+    return c;
+}
+
+
+uint64_t q_accept(struct q_conn * const c)
+{
+    // wait for incoming connection
     pthread_mutex_lock(&c->lock);
     pthread_cond_wait(&c->accept_cv, &c->lock);
     pthread_mutex_unlock(&c->lock);
@@ -241,11 +224,9 @@ uint64_t q_bind(void * const q, const uint16_t port)
 }
 
 
-uint32_t q_rsv_stream(const uint64_t cid)
+struct q_stream * q_rsv_stream(struct q_conn * const c)
 {
-    struct q_conn * const c = get_conn(cid);
-    ensure(c, "conn %" PRIx64 " does not exist", cid);
-    return new_stream(c, 0)->id;
+    return new_stream(c, 0);
 }
 
 
@@ -377,11 +358,8 @@ void * q_init(const char * const ifname)
 }
 
 
-void q_close(const uint64_t cid)
+void q_close(struct q_conn * const c)
 {
-    struct q_conn * const c = get_conn(cid);
-    ensure(c, "conn %" PRIx64 " does not exist", cid);
-
     // TODO proper handling of close
     // w_close(c->sock);
     // hash_foreach(&c->streams, free);
@@ -427,4 +405,16 @@ void q_cleanup(void * const q)
     }
     pthread_mutex_unlock(&q_conns_lock);
     free(q_pkt_meta);
+}
+
+
+uint64_t q_cid(const struct q_conn * const c)
+{
+    return c->id;
+}
+
+
+uint32_t q_sid(const struct q_stream * const s)
+{
+    return s->id;
 }

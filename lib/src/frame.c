@@ -431,7 +431,8 @@ uint16_t enc_ack_frame(struct q_conn * const c,
 }
 
 
-static const uint8_t enc_sid_len[] = {0x00, 0x01, 002, 0x03}; // 0xFF = invalid
+static const uint8_t enc_sid_len[] = {0xFF, 0x00, 0x01, 002,
+                                      0x03}; // 0xFF = invalid
 
 static uint8_t __attribute__((const)) needed_sid_len(const uint32_t n)
 {

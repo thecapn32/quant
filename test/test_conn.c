@@ -23,15 +23,39 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <stdint.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
 
 #include <quant/quant.h>
+#include <warpcore/warpcore.h>
 
 
 int main()
 {
-    void * q = q_init("lo0");
-    uint64_t c = q_bind(q, 55555);
-    q_close(c);
+    _dlevel = info;
+
+    void * q = q_init("lo"
+#ifndef __linux__
+                      "0"
+#endif
+                      );
+
+    // bind server socket
+    struct q_conn * const sc = q_bind(q, 55555);
+
+    // connect to server
+    const struct sockaddr_in s = {.sin_family = AF_INET,
+                                  .sin_addr.s_addr = inet_addr("127.0.0.1"),
+                                  .sin_port = htons(55555)};
+    struct q_conn * const cc =
+        q_connect(q, (const struct sockaddr *)&s, sizeof(s));
+
+    // accept connection
+    q_accept(sc);
+
+    // close connections
+    q_close(sc);
+    q_close(cc);
     q_cleanup(q);
 }

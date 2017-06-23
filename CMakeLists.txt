@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.0)
 
-project(quant VERSION 0.0.3 LANGUAGES C)
+project(quant VERSION 0.0.4 LANGUAGES C)
 
 # Check for dependencies before mucking with the compiler flags
 include(CheckSymbolExists)
@@ -74,8 +74,12 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
   set(FLAGS -fno-omit-frame-pointer -fsanitize=leak -fsanitize=address
       -fsanitize=memory -fsanitize-memory-track-origins -fsanitize=thread
       -fsanitize=undefined -fno-sanitize=alignment)
+  if(CMAKE_C_COMPILER_ID MATCHES Clang)
+    # -fsanitize=undefined does not work on clang
+    list(REMOVE_ITEM FLAGS -fsanitize=undefined)
+  endif()
   if(CMAKE_SYSTEM_NAME MATCHES FreeBSD)
-    # -fsanitize=leak does not work on FreeBSD
+    # -fsanitize=leak does not work on clang
     list(REMOVE_ITEM FLAGS -fsanitize=leak)
   endif()
   foreach(FLAG ${FLAGS})

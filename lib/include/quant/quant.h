@@ -25,38 +25,47 @@
 
 #pragma once
 
-#include <stddef.h>
 #include <stdint.h>
 #include <sys/socket.h>
 
 #include <quant/config.h> // IWYU pragma: export
 
 struct w_iov_stailq;
+struct q_stream;
 
 
 extern void * __attribute__((nonnull)) q_init(const char * const ifname);
 
 extern void __attribute__((nonnull)) q_cleanup(void * const q);
 
-extern uint64_t __attribute__((nonnull))
+extern struct q_conn * __attribute__((nonnull))
 q_connect(void * const q,
           const struct sockaddr * const peer,
           const socklen_t peer_len);
 
-extern void q_close(const uint64_t cid);
+extern void __attribute__((nonnull)) q_close(struct q_conn * const c);
 
-extern uint64_t __attribute__((nonnull))
+extern struct q_conn * __attribute__((nonnull))
 q_bind(void * const q, const uint16_t port);
 
-extern void __attribute__((nonnull))
-q_write(const uint64_t cid, const uint32_t sid, struct w_iov_stailq * const q);
+extern uint64_t __attribute__((nonnull)) q_accept(struct q_conn * const c);
 
-extern void __attribute__((nonnull))
-q_read(const uint64_t cid, uint32_t * const sid, struct w_iov_stailq * const i);
+extern void __attribute__((nonnull)) q_write(struct q_conn * const c,
+                                             struct q_stream * const s,
+                                             struct w_iov_stailq * const q);
 
-extern uint32_t q_rsv_stream(const uint64_t cid);
+extern struct q_stream * __attribute__((nonnull))
+q_read(struct q_conn * const c, struct w_iov_stailq * const i);
+
+extern struct q_stream * __attribute__((nonnull))
+q_rsv_stream(struct q_conn * const c);
 
 extern void __attribute__((nonnull))
 q_alloc(void * const w, struct w_iov_stailq * const q, const uint32_t len);
 
-extern void q_free(void * const w, struct w_iov_stailq * const q);
+extern void __attribute__((nonnull))
+q_free(void * const w, struct w_iov_stailq * const q);
+
+extern uint64_t __attribute__((nonnull)) q_cid(const struct q_conn * const c);
+
+extern uint32_t __attribute__((nonnull)) q_sid(const struct q_stream * const s);

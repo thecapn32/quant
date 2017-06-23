@@ -52,10 +52,14 @@
 // clang-format off
 #define type_str(x)                                                            \
     _Generic((x),                                                              \
-            uint8_t     : "uint8_t",                                           \
-            uint16_t    : "uint16_t",                                          \
-            uint32_t    : "uint32_t",                                          \
-            uint64_t    : "uint64_t")
+            uint8_t           : "uint8_t",                                     \
+            const uint8_t     : "const uint8_t",                               \
+            uint16_t          : "uint16_t",                                    \
+            const uint16_t    : "const uint16_t",                              \
+            uint32_t          : "uint32_t",                                    \
+            const uint32_t    : "const uint32_t",                              \
+            uint64_t          : "uint64_t",                                    \
+            const uint64_t    : "const uint64_t")
 // clang-format on
 
 

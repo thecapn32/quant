@@ -38,6 +38,8 @@
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
+struct q_conn;
+
 
 #define MAX_CONNS 10
 
@@ -63,13 +65,13 @@ static void usage(const char * const name,
 
 int main(int argc, char * argv[])
 {
-    char * ifname = "lo"
+    char * ifname = (char *)"lo"
 #ifndef __linux__
-                    "0"
+                            "0"
 #endif
         ;
-    char * dest = "127.0.0.1";
-    char * port = "8443";
+    char * dest = (char *)"127.0.0.1";
+    char * port = (char *)"8443";
     long conns = 1;
     int ch;
 
@@ -118,17 +120,17 @@ int main(int argc, char * argv[])
     // start some connections
     void * const q = q_init(ifname);
 
-    uint64_t cid[MAX_CONNS];
+    struct q_conn * c[MAX_CONNS];
     for (int n = 0; n < conns; n++) {
         warn(info, "%s starting conn #%d to %s:%s", basename(argv[0]), n, dest,
              port);
-        cid[n] = q_connect(q, peer->ai_addr, peer->ai_addrlen);
-        if (!cid[n])
+        c[n] = q_connect(q, peer->ai_addr, peer->ai_addrlen);
+        if (!c[n])
             break;
 
         for (int i = 0; i < 1; i++) {
             // reserve a new stream
-            const uint32_t sid = q_rsv_stream(cid[n]);
+            struct q_stream * const s = q_rsv_stream(c[n]);
 
             // allocate buffers to transmit a packet
             struct w_iov_stailq o = STAILQ_HEAD_INITIALIZER(o);
@@ -137,22 +139,23 @@ int main(int argc, char * argv[])
             ensure(STAILQ_NEXT(v, next) == 0, "w_iov_stailq too long");
 
             // add some payload data
-            v->len = (uint16_t)snprintf(
-                (char *)v->buf, 1024,
-                "***HELLO, STR %u ON CONN %" PRIx64 "!***", sid, cid[n]);
+            v->len =
+                (uint16_t)snprintf((char *)v->buf, 1024,
+                                   "***HELLO, STR %u ON CONN %" PRIx64 "!***",
+                                   q_sid(s), q_cid(c[n]));
             ensure(v->len < 1024, "buffer overrun");
 
             // send the data
             warn(info, "writing %u byte%s: %s", v->len, plural(v->len),
                  (char *)v->buf);
-            q_write(cid[n], sid, &o);
+            q_write(c[n], s, &o);
 
             // return the buffer
             q_free(q, &o);
         }
 
         // close the QUIC connection
-        q_close(cid[n]);
+        q_close(c[n]);
     }
 
     // clean up
