@@ -30,7 +30,6 @@
 
 #include <inttypes.h>
 #include <math.h>
-#include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -49,6 +48,7 @@
 #include "pkt.h"
 #include "quic.h"
 #include "stream.h"
+#include "thread.h"
 
 
 // Convert stream ID length encoded in flags to bytes
@@ -215,9 +215,7 @@ dec_ack_frame(struct q_conn * const c,
 
                 // XXX: this is not quite the right condition (ignores gaps)
                 if (c->lg_acked == c->lg_sent) {
-                    pthread_mutex_lock(&c->lock);
-                    pthread_cond_signal(&c->write_cv);
-                    pthread_mutex_unlock(&c->lock);
+                    signal(&c->write_cv, &c->lock);
                 }
 
                 // see OnPacketAcked pseudo code (for LD):
@@ -344,11 +342,8 @@ bool dec_frames(struct q_conn * const c, struct w_iov * const v)
              sid, v->len, v->buf);
         s->in_off += data_len;
         STAILQ_INSERT_TAIL(&s->i, v, next);
-        if (s->id != 0) {
-            pthread_mutex_lock(&c->lock);
-            pthread_cond_signal(&c->read_cv);
-            pthread_mutex_unlock(&c->lock);
-        }
+        if (s->id != 0)
+            signal(&c->read_cv, &c->lock);
     }
 
     return data_len;

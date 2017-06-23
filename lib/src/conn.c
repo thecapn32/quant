@@ -53,8 +53,10 @@
 #include "pkt.h"
 #include "quic.h"
 #include "stream.h"
+#include "thread.h"
 
 struct ev_loop;
+
 
 // All open QUIC connections.
 struct conn q_conns = SPLAY_INITIALIZER();
@@ -158,9 +160,9 @@ pick_from_server_vers(const void * const buf, const uint16_t len)
 struct q_conn * get_conn(const uint64_t id)
 {
     struct q_conn which = {.id = id};
-    pthread_mutex_lock(&q_conns_lock);
+    lock(&q_conns_lock);
     struct q_conn * const c = SPLAY_FIND(conn, &q_conns, &which);
-    pthread_mutex_unlock(&q_conns_lock);
+    unlock(&q_conns_lock);
     return c;
 }
 
@@ -334,9 +336,7 @@ void rx(struct ev_loop * const l __attribute__((unused)),
                 tls_handshake(s);
 
                 // this is a new connection we just accepted
-                pthread_mutex_lock(&c->lock);
-                pthread_cond_signal(&c->accept_cv);
-                pthread_mutex_unlock(&c->lock);
+                signal(&c->accept_cv, &c->lock);
 
             } else
                 warn(warn, "client-requested version 0x%08x not supported",
@@ -371,9 +371,7 @@ void rx(struct ev_loop * const l __attribute__((unused)),
                 tls_handshake(s);
 
                 // this is a new connection we just connected
-                pthread_mutex_lock(&c->lock);
-                pthread_cond_signal(&c->connect_cv);
-                pthread_mutex_unlock(&c->lock);
+                signal(&c->connect_cv, &c->lock);
             }
             break;
         }
@@ -500,16 +498,17 @@ struct q_conn * new_conn(void)
     SPLAY_INIT(&c->streams);
 
     // initialize synchronization helpers
-    pthread_mutex_init(&c->lock, 0);
-    pthread_cond_init(&c->read_cv, 0);
-    pthread_cond_init(&c->write_cv, 0);
-    pthread_cond_init(&c->connect_cv, 0);
-    pthread_cond_init(&c->accept_cv, 0);
+    ensure(pthread_mutex_init(&c->lock, 0) == 0, "pthread_mutex_init");
+    ensure(pthread_cond_init(&c->read_cv, 0) == 0, "pthread_cond_init");
+    ensure(pthread_cond_init(&c->write_cv, 0) == 0, "pthread_cond_init");
+    ensure(pthread_cond_init(&c->connect_cv, 0) == 0, "pthread_cond_init");
+    ensure(pthread_cond_init(&c->accept_cv, 0) == 0, "pthread_cond_init");
 
     // add connection to global data structure
-    pthread_mutex_lock(&q_conns_lock);
+    ensure(get_conn(0) == 0, "embryonic conn already exists");
+    lock(&q_conns_lock);
     SPLAY_INSERT(conn, &q_conns, c);
-    pthread_mutex_unlock(&q_conns_lock);
+    unlock(&q_conns_lock);
 
     return c;
 }

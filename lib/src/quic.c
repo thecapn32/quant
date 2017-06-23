@@ -31,6 +31,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <stddef.h> // IWYU pragma: keep
 
@@ -50,6 +51,7 @@
 #include "conn.h"
 #include "quic.h"
 #include "stream.h"
+#include "thread.h"
 
 
 // TODO: many of these globals should move to a per-engine struct
@@ -118,15 +120,14 @@ struct q_conn * q_connect(void * const q,
 
     // allocate stream zero
     new_stream(c, 0);
-
-    pthread_mutex_lock(&c->lock);
+    lock(&c->lock);
     ev_io_start(loop, &c->rx_w);
     tx_w.data = c;
     ev_async_send(loop, &tx_w);
 
     warn(warn, "waiting for handshake to complete");
-    pthread_cond_wait(&c->connect_cv, &c->lock);
-    pthread_mutex_unlock(&c->lock);
+    wait(&c->connect_cv, &c->lock);
+    unlock(&c->lock);
 
     if (c->state != CONN_ESTB) {
         warn(info, "conn %" PRIx64 " not connected", cid);
@@ -142,17 +143,17 @@ void q_write(struct q_conn * const c,
              struct q_stream * const s,
              struct w_iov_stailq * const q)
 {
-    pthread_mutex_lock(&c->lock);
+    lock(&c->lock);
     STAILQ_CONCAT(&s->o, q);
     ev_io_start(loop, &c->rx_w);
     ev_async_send(loop, &tx_w);
     warn(warn, "waiting for write to complete");
-    pthread_cond_wait(&c->write_cv, &c->lock);
+    wait(&c->write_cv, &c->lock);
 
     // XXX instead of assuming all data was received, we need to do rtx handling
     STAILQ_INIT(&s->o);
 
-    pthread_mutex_unlock(&c->lock);
+    unlock(&c->lock);
     warn(warn, "write done");
 }
 
@@ -161,10 +162,10 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_stailq * const i)
 {
     struct q_stream * s = 0;
 
-    pthread_mutex_lock(&c->lock);
+    lock(&c->lock);
     warn(warn, "waiting for data");
-    pthread_cond_wait(&c->read_cv, &c->lock);
-    pthread_mutex_unlock(&c->lock);
+    wait(&c->read_cv, &c->lock);
+    unlock(&c->lock);
 
     SPLAY_FOREACH (s, stream, &c->streams)
         if (!STAILQ_EMPTY(&s->i)) {
@@ -179,10 +180,10 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_stailq * const i)
         return 0;
 
     if (STAILQ_EMPTY(&s->i)) {
-        pthread_mutex_lock(&c->lock);
+        lock(&c->lock);
         warn(warn, "read waiting for data");
-        pthread_cond_wait(&c->read_cv, &c->lock);
-        pthread_mutex_unlock(&c->lock);
+        wait(&c->read_cv, &c->lock);
+        unlock(&c->lock);
         warn(warn, "read done");
     }
 
@@ -215,9 +216,9 @@ struct q_conn * q_bind(void * const q, const uint16_t port)
 uint64_t q_accept(struct q_conn * const c)
 {
     // wait for incoming connection
-    pthread_mutex_lock(&c->lock);
-    pthread_cond_wait(&c->accept_cv, &c->lock);
-    pthread_mutex_unlock(&c->lock);
+    lock(&c->lock);
+    wait(&c->accept_cv, &c->lock);
+    unlock(&c->lock);
 
     warn(warn, "got conn %" PRIx64, c->id);
     return c->id;
@@ -273,18 +274,16 @@ static void * __attribute__((nonnull)) l_run(void * const arg)
     ev_signal_stop(loop, &sigterm_w);
 
     // unblock the main thread, by signaling all possible conditions
-    pthread_mutex_lock(&q_conns_lock);
+    lock(&q_conns_lock);
     struct q_conn * c;
     SPLAY_FOREACH (c, conn, &q_conns) {
         // XXX do we also need to stop the watchers here?
-        pthread_mutex_lock(&c->lock);
-        pthread_cond_signal(&c->read_cv);
-        pthread_cond_signal(&c->write_cv);
-        pthread_cond_signal(&c->connect_cv);
-        pthread_cond_signal(&c->accept_cv);
-        pthread_mutex_unlock(&c->lock);
+        signal(&c->read_cv, &c->lock);
+        signal(&c->write_cv, &c->lock);
+        signal(&c->connect_cv, &c->lock);
+        signal(&c->accept_cv, &c->lock);
     }
-    pthread_mutex_unlock(&q_conns_lock);
+    unlock(&q_conns_lock);
     return 0; // implicit pthread_exit()
 }
 
@@ -314,6 +313,9 @@ void * q_init(const char * const ifname)
 
     // initialize PRNG
     plat_initrandom();
+
+    // initialize mutexes, etc.
+    ensure(pthread_mutex_init(&q_conns_lock, 0) == 0, "pthread_mutex_init");
 
     // initialize TLS context
     warn(debug, "TLS: key %u byte%s, cert %u byte%s", tls_key_len,
@@ -349,7 +351,7 @@ void * q_init(const char * const ifname)
     ev_async_start(loop, &tx_w);
 
     // create the thread running ev_run
-    pthread_create(&tid, 0, l_run, loop);
+    ensure(pthread_create(&tid, 0, l_run, loop) == 0, "pthread_create");
 
     warn(info, "threaded %s %s with libev %u.%u ready", quant_name,
          quant_version, ev_version_major(), ev_version_minor());
@@ -372,9 +374,9 @@ void q_close(struct q_conn * const c)
     // ensure(pthread_cond_destroy(&accept_cv) == 0, "pthread_cond_destroy");
 
     // remove connection from global list
-    pthread_mutex_lock(&q_conns_lock);
+    lock(&q_conns_lock);
     SPLAY_REMOVE(conn, &q_conns, c);
-    pthread_mutex_unlock(&q_conns_lock);
+    unlock(&q_conns_lock);
     free(c);
 }
 
@@ -397,13 +399,13 @@ void q_cleanup(void * const q)
 
     w_cleanup(q);
     struct q_conn *c, *tmp;
-    pthread_mutex_lock(&q_conns_lock);
+    lock(&q_conns_lock);
     for (c = SPLAY_MIN(conn, &q_conns); c != 0; c = tmp) {
         tmp = SPLAY_NEXT(conn, &q_conns, c);
         SPLAY_REMOVE(conn, &q_conns, c);
         free(c);
     }
-    pthread_mutex_unlock(&q_conns_lock);
+    unlock(&q_conns_lock);
     free(q_pkt_meta);
 }
 
