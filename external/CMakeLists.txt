@@ -61,35 +61,19 @@ externalproject_add(picotls
     ${CMAKE_CURRENT_BINARY_DIR}/lib/libpicotls-core.a
 )
 
-add_library(ptls-core STATIC IMPORTED GLOBAL)
-set_target_properties(ptls-core
-  PROPERTIES
-    IMPORTED_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/lib/libpicotls-core.a
-    INTERFACE_INCLUDE_DIRECTORIES
-      "${CMAKE_CURRENT_BINARY_DIR}/include;${OPENSSL_ROOT_DIR}/include"
-    INTERFACE_LINK_LIBRARIES "${OPENSSL_LIBRARIES}"
-)
-add_dependencies(ptls-core picotls)
+foreach(TARGET ptls-core ptls-minicrypto ptls-openssl)
+  add_library(${TARGET} STATIC IMPORTED GLOBAL)
+  string(REGEX REPLACE "ptls" "picotls" LIBNAME ${TARGET})
+  set_target_properties(${TARGET}
+    PROPERTIES
+      IMPORTED_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/lib/lib${LIBNAME}.a
+      INTERFACE_INCLUDE_DIRECTORIES
+        "${CMAKE_CURRENT_BINARY_DIR}/include;${OPENSSL_ROOT_DIR}/include"
+      INTERFACE_LINK_LIBRARIES "${OPENSSL_LIBRARIES}"
+  )
+  add_dependencies(${TARGET} picotls)
+endforeach()
 
-add_library(ptls-minicrypto STATIC IMPORTED GLOBAL)
-set_target_properties(ptls-minicrypto
-  PROPERTIES
-    IMPORTED_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/lib/libpicotls-minicrypto.a
-    INTERFACE_INCLUDE_DIRECTORIES
-      "${CMAKE_CURRENT_BINARY_DIR}/include;${OPENSSL_ROOT_DIR}/include"
-    INTERFACE_LINK_LIBRARIES "${OPENSSL_LIBRARIES}"
-)
-add_dependencies(ptls-minicrypto picotls)
-
-add_library(ptls-openssl STATIC IMPORTED GLOBAL)
-set_target_properties(ptls-openssl
-  PROPERTIES
-    IMPORTED_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/lib/libpicotls-openssl.a
-    INTERFACE_INCLUDE_DIRECTORIES
-      "${CMAKE_CURRENT_BINARY_DIR}/include;${OPENSSL_ROOT_DIR}/include"
-    INTERFACE_LINK_LIBRARIES "${OPENSSL_LIBRARIES}"
-)
-add_dependencies(ptls-openssl picotls)
 
 # Use quic-go for testing against, rather than proto-quic monster
 set(GOPATH ${CMAKE_CURRENT_BINARY_DIR}/go)

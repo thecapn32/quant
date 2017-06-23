@@ -37,63 +37,18 @@ include(GNUInstallDirs)
 set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}")
 set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 
-set(${PROJECT_NAME}_sources
-  src/fnv_1a.c src/pkt.c src/frame.c src/quic.c src/stream.c src/conn.c
-  src/diet.c ${CMAKE_CURRENT_BINARY_DIR}/src/config.c
-  ${CMAKE_CURRENT_BINARY_DIR}/src/cert.c
+
+add_library(common
+  OBJECT
+    src/fnv_1a.c src/pkt.c src/frame.c src/quic.c src/stream.c src/conn.c
+    src/diet.c ${CMAKE_CURRENT_BINARY_DIR}/src/config.c
+    ${CMAKE_CURRENT_BINARY_DIR}/src/cert.c
 )
+add_dependencies(common warpcore ptls-core)
 
-add_library(${PROJECT_NAME}_static STATIC ${${PROJECT_NAME}_sources})
 
-set_target_properties(${PROJECT_NAME}_static
-  PROPERTIES
-    POSITION_INDEPENDENT_CODE ON
-    INTERPROCEDURAL_OPTIMIZATION True
-    OUTPUT_NAME ${PROJECT_NAME}
-    VERSION ${PROJECT_VERSION}
-    SOVERSION ${PROJECT_VERSION_MAJOR}
-)
-
-target_include_directories(${PROJECT_NAME}_static
-  PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
-    $<INSTALL_INTERFACE:include>
-  PRIVATE src external/include
-)
-
-install(TARGETS ${PROJECT_NAME}_static
-  EXPORT ${PROJECT_NAME}_static_config
-  ARCHIVE  DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  LIBRARY  DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  RUNTIME  DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
-
-add_library(${PROJECT_NAME} SHARED ${${PROJECT_NAME}_sources})
-
-set_target_properties(${PROJECT_NAME}
-  PROPERTIES
-    POSITION_INDEPENDENT_CODE ON
-    INTERPROCEDURAL_OPTIMIZATION True
-    OUTPUT_NAME ${PROJECT_NAME}
-    VERSION ${PROJECT_VERSION}
-    SOVERSION ${PROJECT_VERSION_MAJOR}
-)
-
-target_include_directories(${PROJECT_NAME}
-  PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
-    $<INSTALL_INTERFACE:include>
-  PRIVATE src external/include
-)
-
-install(TARGETS ${PROJECT_NAME}
-  EXPORT ${PROJECT_NAME}_config
-  ARCHIVE  DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  LIBRARY  DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  RUNTIME  DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
+add_library(${PROJECT_NAME}_stat STATIC $<TARGET_OBJECTS:common>)
+add_library(${PROJECT_NAME}_dyn SHARED $<TARGET_OBJECTS:common>)
 
 install(DIRECTORY include/${PROJECT_NAME}
         DESTINATION include
@@ -102,10 +57,37 @@ install(DIRECTORY include/${PROJECT_NAME}
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/include/${PROJECT_NAME}/config.h
         DESTINATION include/${PROJECT_NAME})
 
-target_link_libraries(${PROJECT_NAME}_static
-  warpcore ptls-core ptls-minicrypto ptls-openssl
-  ${LIBEV_LIB} Threads::Threads)
 
-target_link_libraries(${PROJECT_NAME}
-  warpcore ptls-core ptls-minicrypto ptls-openssl
-  ${LIBEV_LIB} Threads::Threads)
+set(TARGETS common ${PROJECT_NAME}_stat ${PROJECT_NAME}_dyn)
+foreach(TARGET ${TARGETS})
+  target_include_directories(${TARGET}
+    SYSTEM PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
+      $<INSTALL_INTERFACE:include>
+    PRIVATE src $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/external/include>
+  )
+
+  set_target_properties(${TARGET}
+    PROPERTIES
+      POSITION_INDEPENDENT_CODE ON
+      INTERPROCEDURAL_OPTIMIZATION True
+      OUTPUT_NAME ${PROJECT_NAME}
+      VERSION ${PROJECT_VERSION}
+      SOVERSION ${PROJECT_VERSION_MAJOR}
+  )
+
+  if(NOT ${TARGET} MATCHES "common")
+    target_link_libraries(${TARGET}
+      warpcore ptls-core ptls-minicrypto ptls-openssl
+      ${LIBEV_LIB} Threads::Threads)
+
+    install(TARGETS ${TARGET}
+      EXPORT ${TARGET}
+      ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+      LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+      RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
+  endif()
+endforeach()
+

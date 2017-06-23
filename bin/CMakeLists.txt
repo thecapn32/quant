@@ -12,9 +12,9 @@ if("${isSystemDir}" STREQUAL "-1")
 endif()
 
 add_executable(client client.c)
-target_link_libraries(client ${PROJECT_NAME})
+target_link_libraries(client ${PROJECT_NAME}_dyn)
 
 add_executable(server server.c)
-target_link_libraries(server ${PROJECT_NAME})
+target_link_libraries(server ${PROJECT_NAME}_dyn)
 
 install(TARGETS client server DESTINATION bin)
