@@ -175,8 +175,10 @@ static struct ival * make_ival(const uint64_t n)
 ///
 struct ival * diet_insert(struct diet * const t, const uint64_t n)
 {
-    if (SPLAY_EMPTY(t))
+    if (SPLAY_EMPTY(t)) {
+        t->cnt++;
         return SPLAY_ROOT(t) = make_ival(n);
+    }
 
     // rotate the interval that contains n or is closest to it to the top
     diet_find(t, n);
@@ -191,12 +193,14 @@ struct ival * diet_insert(struct diet * const t, const uint64_t n)
                     SPLAY_ROOT(t)->lo = max->lo;
                     SPLAY_LEFT(SPLAY_ROOT(t), node) = SPLAY_LEFT(max, node);
                     free(max);
+                    t->cnt--;
                 }
             }
             return SPLAY_ROOT(t);
         }
         struct ival * const i = make_ival(n);
         SPLAY_INSERT(diet, t, i);
+        t->cnt++;
         return i;
     }
 
@@ -210,12 +214,14 @@ struct ival * diet_insert(struct diet * const t, const uint64_t n)
                     SPLAY_ROOT(t)->hi = min->hi;
                     SPLAY_RIGHT(SPLAY_ROOT(t), node) = SPLAY_RIGHT(min, node);
                     free(min);
+                    t->cnt--;
                 }
             }
             return SPLAY_ROOT(t);
         }
         struct ival * const i = make_ival(n);
         SPLAY_INSERT(diet, t, i);
+        t->cnt++;
         return i;
     }
 
@@ -230,21 +236,16 @@ struct ival * diet_insert(struct diet * const t, const uint64_t n)
 ///
 void diet_remove(struct diet * const t, const uint64_t n)
 {
-    // warn(info, "removing %" PRIu64, n);
-
     // rotate the interval that contains n or is closest to it to the top
     diet_find(t, n);
 
     if (n < SPLAY_ROOT(t)->lo || n > SPLAY_ROOT(t)->hi)
         return;
 
-    // warn(warn, "root: %" PRIu64 "-%" PRIu64, SPLAY_ROOT(t)->lo,
-    //      SPLAY_ROOT(t)->hi);
-
     if (n == SPLAY_ROOT(t)->lo) {
         if (n == SPLAY_ROOT(t)->hi) {
-            // warn(debug, "delete single-element %" PRIu64, n);
             free(SPLAY_REMOVE(diet, t, SPLAY_ROOT(t)));
+            t->cnt--;
         } else
             // adjust lo bound
             SPLAY_ROOT(t)->lo++;
@@ -253,9 +254,8 @@ void diet_remove(struct diet * const t, const uint64_t n)
         SPLAY_ROOT(t)->hi--;
     } else {
         // split interval
-        // warn(debug, "split %" PRIu64 "-%" PRIu64 " at %" PRIu64,
-        //      SPLAY_ROOT(t)->lo, SPLAY_ROOT(t)->hi, n);
         struct ival * const i = make_ival(SPLAY_ROOT(t)->lo);
+        t->cnt++;
         i->hi = n - 1;
         SPLAY_ROOT(t)->lo = n + 1;
         SPLAY_LEFT(i, node) = SPLAY_LEFT(SPLAY_ROOT(t), node);

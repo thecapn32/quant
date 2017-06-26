@@ -49,7 +49,11 @@ struct ival {
 extern int64_t __attribute__((nonnull))
 ival_cmp(const struct ival * const a, const struct ival * const b);
 
-SPLAY_HEAD(diet, ival);
+struct diet {
+    SPLAY_HEAD(, ival); ///< Splay head.
+    uint64_t cnt;       ///< Number of nodes (intervals) in the diet tree.
+};
+
 SPLAY_PROTOTYPE(diet, ival, node, ival_cmp)
 
 extern struct ival * diet_find(struct diet * const t, const uint64_t n);
@@ -62,3 +66,7 @@ diet_remove(struct diet * const t, const uint64_t n);
 
 extern size_t __attribute__((nonnull))
 diet_to_str(char * const str, const size_t len, struct diet * const d);
+
+#define diet_max(t) (SPLAY_EMPTY(t) ? 0 : SPLAY_MAX(diet, (t))->hi)
+
+#define diet_min(t) (SPLAY_EMPTY(t) ? 0 : SPLAY_MIN(diet, (t))->lo)
