@@ -42,6 +42,7 @@
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
+#include "diet.h"
 #include "fnv_1a.h"
 #include "frame.h"
 #include "marshall.h"
@@ -71,7 +72,7 @@ static uint8_t __attribute__((const)) dec_off_len(const uint8_t flags)
 }
 
 
-#define F_STREAM_FIN 0x20
+// #define F_STREAM_FIN 0x20
 #define F_STREAM_DATA_LEN 0x01
 
 
@@ -97,9 +98,9 @@ dec_stream_frame(struct w_iov * const v,
     // TODO: pay attention to offset when delivering data to app
 
     *data_len = 0;
-    if (type & F_STREAM_DATA_LEN)
+    if (is_set(F_STREAM_DATA_LEN, type))
         dec(*data_len, v->buf, v->len, *data_start, 0, "%u");
-    ensure(type & F_STREAM_FIN || *data_len, "FIN or data_len");
+    ensure(is_set(F_STREAM_DATA_LEN, type) || *data_len, "FIN or data_len");
 
     return *data_start + *data_len;
 }
@@ -150,7 +151,7 @@ dec_ack_frame(struct q_conn * const c,
     dec(type, v->buf, v->len, i, 0, "0x%02x");
 
     uint8_t num_blocks = 0;
-    if (type & F_ACK_N) {
+    if (is_set(F_ACK_N, type)) {
         dec(num_blocks, v->buf, v->len, i, 0, "%u");
         num_blocks++;
     } else {
@@ -214,9 +215,8 @@ dec_ack_frame(struct q_conn * const c,
                 c->lg_acked = MAX(c->lg_acked, ack);
 
                 // XXX: this is not quite the right condition (ignores gaps)
-                if (c->lg_acked == c->lg_sent) {
+                if (c->lg_acked == c->lg_sent)
                     signal(&c->write_cv, &c->lock);
-                }
 
                 // see OnPacketAcked pseudo code (for LD):
 
@@ -380,9 +380,9 @@ static const uint8_t enc_ack_block_len[] = {0xFF, 0x00, 0x01, 0xFF,
 
 
 static uint8_t __attribute__((nonnull))
-needed_ack_block_len(const struct q_conn * const c)
+needed_ack_block_len(struct q_conn * const c)
 {
-    const uint64_t max_block = c->lg_recv - c->lg_recv_acked;
+    const uint64_t max_block = diet_max(&c->recv) - diet_max(&c->recv);
     if (max_block < UINT8_MAX)
         return 1;
     if (max_block < UINT16_MAX)
@@ -399,8 +399,13 @@ uint16_t enc_ack_frame(struct q_conn * const c,
                        const uint16_t pos)
 {
     uint8_t type = T_ACK;
-    // type |= 0x00; // TODO: support Num Blocks > 0
-    const uint8_t lg_ack_len = needed_lg_ack_len(c->lg_recv);
+
+    const uint8_t num_blocks = (uint8_t)MIN(c->recv.cnt, UINT8_MAX);
+    if (num_blocks > 1)
+        type |= F_ACK_N;
+
+    const uint64_t lg_recv = diet_max(&c->recv);
+    const uint8_t lg_ack_len = needed_lg_ack_len(lg_recv);
     type |= enc_lg_ack_len[lg_ack_len];
     const uint8_t ack_block_len = needed_ack_block_len(c);
     type |= enc_ack_block_len[ack_block_len];
@@ -408,20 +413,30 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     uint16_t i = pos;
     enc(buf, len, i, &type, 0, "0x%02x");
 
+    if (num_blocks > 1)
+        enc(buf, len, i, &num_blocks, 0, "%u");
+
     const uint8_t num_ts = 0;
     enc(buf, len, i, &num_ts, 0, "%u");
 
-    enc(buf, len, i, &c->lg_recv, lg_ack_len, "%" PRIu64);
+    enc(buf, len, i, &lg_recv, lg_ack_len, "%" PRIu64);
 
     const uint16_t ack_delay = 0;
     enc(buf, len, i, &ack_delay, 0, "%u");
 
-    // TODO: support Num Blocks > 0
-    const uint64_t ack_block = c->lg_recv - c->lg_recv_acked;
-    enc(buf, len, i, &ack_block, ack_block_len, "%" PRIu64);
-    warn(notice, "ACKing %" PRIu64 "-%" PRIu64, c->lg_recv_acked + 1,
-         c->lg_recv);
-
+    struct ival * b;
+    uint64_t lo = 0;
+    SPLAY_FOREACH_REV (b, diet, &c->recv) {
+        const uint64_t ack_block = lg_recv - (b->hi - b->lo);
+        enc(buf, len, i, &ack_block, ack_block_len, "%" PRIu64);
+        warn(notice, "ACKing %" PRIu64 "-%" PRIu64, b->lo, b->hi);
+        if (lo) {
+            const uint64_t gap = lo - b->hi;
+            ensure(gap <= UINT8_MAX, "TODO: handle larger ACK gaps");
+            enc(buf, len, i, &gap, ack_block_len, "%" PRIu64);
+        }
+        lo = b->lo;
+    }
     return i - pos;
 }
 

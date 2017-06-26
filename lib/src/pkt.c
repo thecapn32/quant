@@ -116,7 +116,7 @@ uint16_t enc_pkt(struct q_conn * const c,
 
     uint16_t i = 0;
     uint8_t flags = 0;
-    c->lg_sent++;
+    c->lg_sent++; // TODO: increase by random offset
     if (c->state < CONN_ESTB)
         flags |= F_LONG_HDR | F_LH_TYPE_VERS_NEG;
     else {
@@ -147,7 +147,7 @@ uint16_t enc_pkt(struct q_conn * const c,
     ensure(i < Q_OFFSET, "Q_OFFSET is too small");
     warn(debug, "skipping [%u..%u] to leave room for hash", hash_pos, i - 1);
 
-    if (c->lg_recv > c->lg_recv_acked)
+    if (!SPLAY_EMPTY(&c->recv))
         i += enc_ack_frame(c, v->buf, v->len, i);
 
     if (i < Q_OFFSET) {

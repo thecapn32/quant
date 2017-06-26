@@ -47,6 +47,7 @@
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
+#include "diet.h"
 #include "fnv_1a.h"
 #include "frame.h"
 #include "marshall.h"
@@ -54,6 +55,7 @@
 #include "quic.h"
 #include "stream.h"
 #include "thread.h"
+
 
 struct ev_loop;
 
@@ -189,12 +191,19 @@ void tx(struct w_sock * const ws, struct q_conn * const c)
         if (!STAILQ_EMPTY(&s->o))
             break;
     if (s == 0) {
-        // don't have any stream data to piggyback on; this means we're
-        // sending a ClientHello or a pure ACK
+        // don't have any stream data to piggyback on
         s = get_stream(c, 0);
         if (!is_set(CONN_FLAG_TLS_DONE, c->flags) || !STAILQ_EMPTY(&s->i))
             // we're still in TLS handshake, or we got other data on stream 0
             tls_handshake(s);
+        else {
+            // we need to send ACK frames
+            w_alloc_cnt(w, &s->o, 1, Q_OFFSET);
+            struct w_iov * const ov = STAILQ_FIRST(&s->o);
+            ov->ip = ((struct sockaddr_in *)(void *)&c->peer)->sin_addr.s_addr;
+            ov->port = ((struct sockaddr_in *)(void *)&c->peer)->sin_port;
+            ov->len = 0;
+        }
     }
 
     struct w_iov_stailq q = STAILQ_HEAD_INITIALIZER(q);
@@ -249,9 +258,9 @@ void tx(struct w_sock * const ws, struct q_conn * const c)
             set_ld_alarm(c);
         }
 
-        warn(notice, "sending pkt %" PRIu64, c->lg_sent);
-        if (_dlevel == debug)
-            hexdump(v->buf, v->len);
+        warn(notice, "sending pkt %" PRIu64 " (len %u)", c->lg_sent, v->len);
+        // if (_dlevel == debug)
+        //     hexdump(v->buf, v->len);
     }
 
     // transmit packets
@@ -280,8 +289,8 @@ void rx(struct ev_loop * const l __attribute__((unused)),
         struct w_iov * const v = STAILQ_FIRST(&i);
         STAILQ_REMOVE_HEAD(&i, next);
 
-        if (_dlevel == debug)
-            hexdump(v->buf, v->len);
+        // if (_dlevel == debug)
+        //     hexdump(v->buf, v->len);
         ensure(v->len <= MAX_PKT_LEN,
                "received %u-byte packet, larger than MAX_PKT_LEN of %u", v->len,
                MAX_PKT_LEN);
@@ -316,9 +325,10 @@ void rx(struct ev_loop * const l __attribute__((unused)),
             // TODO: allow server to choose a different cid than the client did
         }
 
-        c->lg_recv = MAX(c->lg_recv, nr);
-        warn(notice, "received pkt %" PRIu64 " (max %" PRIu64 ")", nr,
-             c->lg_recv);
+        diet_insert(&c->recv, nr);
+        char dstr[20];
+        diet_to_str(dstr, 20, &c->recv);
+        warn(notice, "received pkt %" PRIu64 " (len %u): %s", nr, v->len, dstr);
 
         switch (c->state) {
         case CONN_CLSD:

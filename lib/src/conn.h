@@ -37,6 +37,7 @@
 
 #include <warpcore/warpcore.h>
 
+#include "diet.h"
 
 // All open QUIC connections.
 extern SPLAY_HEAD(conn, q_conn) q_conns;
@@ -61,8 +62,7 @@ struct q_conn {
     struct w_sock * sock; ///< File descriptor (socket) for the connection.
     ev_io rx_w;           ///< RX watcher.
 
-    uint64_t lg_recv;       ///< Largest packet number received
-    uint64_t lg_recv_acked; ///< Largest packet which we ACKed
+    struct diet recv; ///< Received packet numbers still needing to be ACKed.
 
     // LD state
     ev_timer ld_alarm; ///< Loss detection alarm.
@@ -77,6 +77,7 @@ struct q_conn {
     uint64_t reorder_thresh;
     ev_tstamp loss_t;
     struct w_iov_stailq sent_pkts;
+
     uint64_t lg_sent;  ///< Largest packet number sent
     uint64_t lg_acked; ///< Largest packet number for which an ACK was received
     ev_tstamp latest_rtt;
