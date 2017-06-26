@@ -160,6 +160,8 @@ void q_write(struct q_conn * const c,
 struct q_stream * q_read(struct q_conn * const c, struct w_iov_stailq * const i)
 {
     struct q_stream * s = 0;
+    if(c->id == 0)
+        return s;
 
     lock(&c->lock);
     warn(warn, "waiting for data");

@@ -86,13 +86,22 @@ SPLAY_GENERATE(conn, q_conn, next, conn_cmp)
 
 static void __attribute__((nonnull)) tls_handshake(struct q_stream * const s)
 {
+    if (s->c->state <= CONN_VERS_RECV) {
+        // (re)initialize TLS state
+        if (s->c->tls)
+            ptls_free(s->c->tls);
+        ensure((s->c->tls = ptls_new(&tls_ctx,
+                                     is_set(CONN_FLAG_SERV, s->c->flags))) != 0,
+               "alloc TLS state");
+    }
+
     // allocate a w_iov
     struct w_iov_stailq o;
     w_alloc_cnt(w_engine(s->c->sock), &o, 1, Q_OFFSET);
     struct w_iov * const ov = STAILQ_FIRST(&o);
 
     // get pointer to any received handshake data
-    // XXX there is an assumption here that we only have one packet
+    // XXX there is an assumption here that we only have one inbound packet
     struct w_iov * const iv = STAILQ_FIRST(&s->i);
     size_t in_len = iv ? iv->len : 0;
 
@@ -118,11 +127,6 @@ static void __attribute__((nonnull)) tls_handshake(struct q_stream * const s)
         // we are done with the handshake, no need to TX after all
         ptls_buffer_dispose(&q_pkt_meta[ov->idx].tb);
         w_free(w_engine(s->c->sock), &o);
-    }
-
-    if (ret == 0) {
-        s->c->flags |= CONN_FLAG_TLS_DONE;
-        warn(debug, "conn %" PRIx64 " TLS handshake done", s->c->id);
     }
 }
 
@@ -193,7 +197,8 @@ void tx(struct w_sock * const ws, struct q_conn * const c)
     if (s == 0) {
         // don't have any stream data to piggyback on
         s = get_stream(c, 0);
-        if (!is_set(CONN_FLAG_TLS_DONE, c->flags) || !STAILQ_EMPTY(&s->i))
+        if ((c->tls && !ptls_handshake_is_complete(c->tls)) || !c->tls ||
+            !STAILQ_EMPTY(&s->i))
             // we're still in TLS handshake, or we got other data on stream 0
             tls_handshake(s);
         else {
@@ -351,12 +356,13 @@ void rx(struct ev_loop * const l __attribute__((unused)),
             if (vers_supported(c->vers)) {
                 warn(debug, "supporting client-requested version 0x%08x",
                      c->vers);
-                c->state = CONN_ESTB;
-                warn(info, "conn %" PRIx64 " now in CONN_ESTB", c->id);
-                dec_frames(c, v);
 
                 // we should have received a ClientHello
                 tls_handshake(s);
+
+                c->state = CONN_ESTB;
+                warn(info, "conn %" PRIx64 " now in CONN_ESTB", c->id);
+                dec_frames(c, v);
 
                 // this is a new connection we just accepted
                 signal(&c->accept_cv, &c->lock);
@@ -548,10 +554,6 @@ void init_conn(struct q_conn * const c,
                const socklen_t peer_len)
 {
     c->id = id;
-
-    // initialize TLS state
-    ensure((c->tls = ptls_new(&tls_ctx, is_set(CONN_FLAG_SERV, c->flags))) != 0,
-           "alloc TLS state");
 
     char host[NI_MAXHOST] = "";
     char port[NI_MAXSERV] = "";

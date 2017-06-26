@@ -114,7 +114,6 @@ SPLAY_PROTOTYPE(conn, q_conn, next, conn_cmp)
 
 #define CONN_FLAG_CLNT 0x01
 #define CONN_FLAG_SERV 0x02
-#define CONN_FLAG_TLS_DONE 0x04
 
 
 struct ev_loop;
