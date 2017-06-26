@@ -30,6 +30,7 @@
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
+#include "quic.h"
 #include "stream.h"
 
 
@@ -63,21 +64,22 @@ struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
         s->id = id;
     else {
         // we are initiating this stream
-        s->id = c->next_sid++;
-        if ((c->flags & CONN_FLAG_CLNT) != (s->id % 2) && s->id)
+        if (is_set(CONN_FLAG_CLNT, c->flags) && c->next_sid &&
+            c->next_sid % 2 == 0)
             // need to make this odd
-            s->id++;
+            s->c->next_sid++;
+        s->id = c->next_sid++;
     }
     ensure(get_stream(c, s->id) == 0, "stream %u already exists", s->id);
 
     const uint8_t odd = s->id % 2; // NOTE: % in assert confuses printf
-    ensure((c->flags & CONN_FLAG_CLNT) == (id ? !odd : odd) || s->id == 0,
+    ensure(is_set(CONN_FLAG_CLNT, c->flags) == (id ? !odd : odd) || s->id == 0,
            "am %s, expected %s connection stream ID, got %u",
-           c->flags & CONN_FLAG_CLNT ? "client" : "server",
-           c->flags & CONN_FLAG_CLNT ? "odd" : "even", s->id);
+           is_set(CONN_FLAG_CLNT, c->flags) ? "client" : "server",
+           is_set(CONN_FLAG_CLNT, c->flags) ? "odd" : "even", s->id);
 
     SPLAY_INSERT(stream, &c->streams, s);
     warn(info, "reserved new str %u on conn %" PRIx64 " as %s", s->id, c->id,
-         c->flags & CONN_FLAG_CLNT ? "client" : "server");
+         is_set(CONN_FLAG_CLNT, c->flags) ? "client" : "server");
     return s;
 }

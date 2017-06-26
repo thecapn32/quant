@@ -86,3 +86,13 @@ extern ptls_context_t tls_ctx;
 
 /// Reduction in congestion window when a new loss event is detected.
 #define kLossReductionFactor 0.5
+
+
+/// Is flag @p f set in flags variable @p v?
+///
+/// @param      f     Flag.
+/// @param      v     Variable.
+///
+/// @return     True if set, false otherwise.
+///
+#define is_set(f, v) (((v) & (f)) == (f))

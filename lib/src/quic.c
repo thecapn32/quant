@@ -28,7 +28,6 @@
 #include <netinet/in.h>
 #include <pthread.h>
 #include <signal.h>
-#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -104,8 +103,8 @@ struct q_conn * q_connect(void * const q,
     // make new connection (connection ID must be > 0 for us)
     const uint64_t cid =
         ((((uint64_t)plat_random()) << 32) | ((uint64_t)plat_random() - 1)) + 1;
-    struct q_conn * const c = new_conn();
-    init_conn(c, cid, peer, peer_len, false);
+    struct q_conn * const c = new_conn(CONN_FLAG_CLNT);
+    init_conn(c, cid, peer, peer_len);
     c->flags |= CONN_FLAG_CLNT;
     // c->vers = 0xbabababa; // XXX reserved version to trigger negotiation
     c->vers = ok_vers[0];
@@ -199,7 +198,7 @@ struct q_conn * q_bind(void * const q, const uint16_t port)
     struct w_sock * const ws = w_bind(q, ntohs(port), 0);
 
     // place new embryonic connection onto accept queue (cid = 0)
-    struct q_conn * const c = new_conn();
+    struct q_conn * const c = new_conn(CONN_FLAG_SERV);
 
     // initialize an RX watcher
     c->rx_w.data = ws;
@@ -302,7 +301,7 @@ tx_cb(struct ev_loop * const l __attribute__((unused)),
 void * q_init(const char * const ifname)
 {
     // check versions
-    ensure(WARPCORE_VERSION_MAJOR == 0 && WARPCORE_VERSION_MINOR == 9,
+    ensure(WARPCORE_VERSION_MAJOR == 0 && WARPCORE_VERSION_MINOR == 10,
            "%s version %s not compatible with %s version %s", quant_name,
            quant_version, warpcore_name, warpcore_version);
 

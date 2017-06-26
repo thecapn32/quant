@@ -65,7 +65,17 @@ pthread_mutex_t q_conns_lock;
 
 int64_t conn_cmp(const struct q_conn * const a, const struct q_conn * const b)
 {
-    return (int64_t)a->id - (int64_t)b->id;
+    const int64_t diff = (int64_t)a->id - (int64_t)b->id;
+    // warn(info, "comparing %" PRIx64 " and %" PRIx64, a->id, b->id);
+    if (diff == 0) {
+        const uint8_t a_type = a->flags & (CONN_FLAG_CLNT | CONN_FLAG_SERV);
+        const uint8_t b_type = b->flags & (CONN_FLAG_CLNT | CONN_FLAG_SERV);
+        // warn(info, "cid %" PRIx64 " found, a->type %u, b->type %u", a->id,
+        //      a_type, b_type);
+        if (a_type && b_type)
+            return a_type - b_type;
+    }
+    return diff;
 }
 
 
@@ -80,6 +90,7 @@ static void __attribute__((nonnull)) tls_handshake(struct q_stream * const s)
     struct w_iov * const ov = STAILQ_FIRST(&o);
 
     // get pointer to any received handshake data
+    // XXX there is an assumption here that we only have one packet
     struct w_iov * const iv = STAILQ_FIRST(&s->i);
     size_t in_len = iv ? iv->len : 0;
 
@@ -87,35 +98,29 @@ static void __attribute__((nonnull)) tls_handshake(struct q_stream * const s)
     const int ret = ptls_handshake(s->c->tls, &q_pkt_meta[ov->idx].tb,
                                    iv ? iv->buf : 0, &in_len, 0);
     ov->len = (uint16_t)q_pkt_meta[ov->idx].tb.off;
-    warn(crit, "TLS handshake: recv %u, gen %u, in_len %lu, ret %u: %.*s",
+    warn(debug, "TLS handshake: recv %u, gen %u, in_len %lu, ret %u: %.*s",
          iv ? iv->len : 0, ov->len, in_len, ret, ov->len, ov->buf);
-
-    ensure(ret == 0 || ret == PTLS_ERROR_IN_PROGRESS, "TLS handshake error: %u",
-           ret);
+    ensure(ret == 0 || ret == PTLS_ERROR_IN_PROGRESS, "TLS error: %u", ret);
     ensure(iv == 0 || iv->len && iv->len == in_len, "TLS data remaining");
 
-    if (iv) {
-        STAILQ_REMOVE_HEAD(&s->i, next);
-        struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
-        STAILQ_INSERT_TAIL(&i, iv, next);
-        w_free(w_engine(s->c->sock), &i);
-    }
+    if (iv)
+        // the assumption is that the code above has consumed all stream-0 data
+        w_free(w_engine(s->c->sock), &s->i);
 
     if ((ret == 0 || ret == PTLS_ERROR_IN_PROGRESS) && ov->len != 0) {
-        // warn(info, "TX enqueue");
         // enqueue for TX
         ov->ip = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_addr.s_addr;
         ov->port = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_port;
         STAILQ_INSERT_TAIL(&s->o, ov, next);
     } else {
-        // warn(info, "NOOO TX enqueue");
-        // we are done with the handshake, no need to TX
+        // we are done with the handshake, no need to TX after all
+        ptls_buffer_dispose(&q_pkt_meta[ov->idx].tb);
         w_free(w_engine(s->c->sock), &o);
     }
 
     if (ret == 0) {
-        warn(notice, "TLS handshake done");
         s->c->flags |= CONN_FLAG_TLS_DONE;
+        warn(debug, "conn %" PRIx64 " TLS handshake done", s->c->id);
     }
 }
 
@@ -157,10 +162,17 @@ pick_from_server_vers(const void * const buf, const uint16_t len)
 }
 
 
-struct q_conn * get_conn(const uint64_t id)
+static struct q_conn * get_conn(const uint64_t id, const uint8_t type)
 {
-    struct q_conn which = {.id = id};
+    struct q_conn which = {.id = id, .flags = type};
     lock(&q_conns_lock);
+    // struct q_conn * cc;
+    // SPLAY_FOREACH (cc, conn, &q_conns)
+    //     warn(info, "have %s conn %" PRIx64,
+    //          is_set(CONN_FLAG_CLNT, cc->flags)
+    //              ? "client"
+    //              : is_set(CONN_FLAG_SERV, cc->flags) ? "server" : "???",
+    //          cc->id);
     struct q_conn * const c = SPLAY_FIND(conn, &q_conns, &which);
     unlock(&q_conns_lock);
     return c;
@@ -180,7 +192,7 @@ void tx(struct w_sock * const ws, struct q_conn * const c)
         // don't have any stream data to piggyback on; this means we're
         // sending a ClientHello or a pure ACK
         s = get_stream(c, 0);
-        if ((c->state & CONN_FLAG_TLS_DONE) == 0 || !STAILQ_EMPTY(&s->i))
+        if (!is_set(CONN_FLAG_TLS_DONE, c->flags) || !STAILQ_EMPTY(&s->i))
             // we're still in TLS handshake, or we got other data on stream 0
             tls_handshake(s);
     }
@@ -290,15 +302,16 @@ void rx(struct ev_loop * const l __attribute__((unused)),
         // TODO: support short headers w/o cid
         const uint64_t nr = pkt_nr(v->buf, v->len);
         const uint64_t cid = pkt_cid(v->buf, v->len);
-        struct q_conn * c = get_conn(cid);
+        const uint8_t ctype = w_connected(ws) ? CONN_FLAG_CLNT : CONN_FLAG_SERV;
+        struct q_conn * c = get_conn(cid, ctype);
         if (c == 0) {
             // this is a packet for a new connection, create it
             const struct sockaddr_in peer = {.sin_family = AF_INET,
                                              .sin_port = v->port,
                                              .sin_addr = {.s_addr = v->ip}};
             socklen_t peer_len = sizeof(peer);
-            c = get_conn(0); // connection with cid 0 is embryonic
-            init_conn(c, cid, (const struct sockaddr *)&peer, peer_len, true);
+            c = get_conn(0, ctype); // connection cid 0 is embryonic
+            init_conn(c, cid, (const struct sockaddr *)&peer, peer_len);
             c->lg_sent = nr - 1; // echo received packet number
             // TODO: allow server to choose a different cid than the client did
         }
@@ -385,10 +398,8 @@ void rx(struct ev_loop * const l __attribute__((unused)),
         }
 
         // TODO: would be better to kick each connection only once
-        if (tx_needed) {
-            warn(info, "triggering TX");
+        if (tx_needed)
             tx(ws, c);
-        }
     }
 }
 
@@ -478,8 +489,13 @@ void detect_lost_pkts(struct q_conn * const c)
 }
 
 
-struct q_conn * new_conn(void)
+struct q_conn * new_conn(const uint8_t type)
 {
+
+    struct q_conn * const cc = get_conn(0, type);
+    ensure(cc == 0, "embryonic %s %u conn already exists",
+           is_set(CONN_FLAG_CLNT, type) ? "client" : "server", cc->flags);
+
     struct q_conn * const c = calloc(1, sizeof(*c));
     ensure(c, "could not calloc");
 
@@ -494,6 +510,7 @@ struct q_conn * new_conn(void)
     c->cwnd = kInitialWindow;
     c->ssthresh = UINT64_MAX;
 
+    c->flags = type;
     STAILQ_INIT(&c->sent_pkts);
     SPLAY_INIT(&c->streams);
 
@@ -505,11 +522,12 @@ struct q_conn * new_conn(void)
     ensure(pthread_cond_init(&c->accept_cv, 0) == 0, "pthread_cond_init");
 
     // add connection to global data structure
-    ensure(get_conn(0) == 0, "embryonic conn already exists");
     lock(&q_conns_lock);
     SPLAY_INSERT(conn, &q_conns, c);
     unlock(&q_conns_lock);
 
+    warn(debug, "embryonic %s conn created",
+         is_set(CONN_FLAG_CLNT, type) ? "client" : "server");
     return c;
 }
 
@@ -517,14 +535,13 @@ struct q_conn * new_conn(void)
 void init_conn(struct q_conn * const c,
                const uint64_t id,
                const struct sockaddr * const peer,
-               const socklen_t peer_len,
-               const bool am_server)
+               const socklen_t peer_len)
 {
-    ensure(get_conn(id) == 0, "conn %" PRIx64 " already exists", id);
     c->id = id;
 
     // initialize TLS state
-    ensure((c->tls = ptls_new(&tls_ctx, am_server)) != 0, "alloc TLS state");
+    ensure((c->tls = ptls_new(&tls_ctx, is_set(CONN_FLAG_SERV, c->flags))) != 0,
+           "alloc TLS state");
 
     char host[NI_MAXHOST] = "";
     char port[NI_MAXSERV] = "";
@@ -533,7 +550,7 @@ void init_conn(struct q_conn * const c,
     c->peer = *peer;
     c->peer_len = peer_len;
     warn(info, "creating new conn %" PRIx64 " with %s %s:%s", c->id,
-         am_server ? "client" : "server", host, port);
+         is_set(CONN_FLAG_SERV, c->flags) ? "client" : "server", host, port);
 }
 
 

@@ -32,7 +32,6 @@
 
 #include <picotls.h>
 #include <pthread.h>
-#include <stdbool.h>
 #include <stdint.h>
 #include <sys/socket.h>
 
@@ -113,23 +112,21 @@ SPLAY_PROTOTYPE(conn, q_conn, next, conn_cmp)
 #define CONN_FINW 99 // TODO: renumber
 
 #define CONN_FLAG_CLNT 0x01
-#define CONN_FLAG_TLS_DONE 0x02
+#define CONN_FLAG_SERV 0x02
+#define CONN_FLAG_TLS_DONE 0x04
 
 
 struct ev_loop;
 
-extern struct q_conn * get_conn(const uint64_t id);
-
 extern void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c);
 
-extern struct q_conn * new_conn(void);
+extern struct q_conn * new_conn(const uint8_t type);
 
 extern void __attribute__((nonnull))
 init_conn(struct q_conn * const c,
           const uint64_t id,
           const struct sockaddr * const peer,
-          const socklen_t peer_len,
-          const bool am_server);
+          const socklen_t peer_len);
 
 extern void __attribute__((nonnull))
 tx(struct w_sock * const ws, struct q_conn * const c);
