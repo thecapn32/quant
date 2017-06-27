@@ -86,19 +86,22 @@ int main(int argc, char * argv[])
     void * const q = q_init(ifname);
     struct q_conn * c = q_bind(q, port);
     warn(debug, "%s waiting on %s port %d", basename(argv[0]), ifname, port);
-    q_accept(c);
-    struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
-    struct q_stream * const s = q_read(c, &i);
+    if (q_accept(c)) {
+        struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
+        struct q_stream * const s = q_read(c, &i);
+        if (s) {
 #ifndef NDEBUG
-    const uint32_t len = w_iov_stailq_len(&i);
-    warn(info, "rx %u byte%s on str %d on conn %" PRIx64, len, plural(len),
-         q_sid(s), q_cid(c));
+            const uint32_t len = w_iov_stailq_len(&i);
+            warn(info, "rx %u byte%s on str %d on conn %" PRIx64, len,
+                 plural(len), q_sid(s), q_cid(c));
 #endif
-    struct w_iov * v;
-    STAILQ_FOREACH (v, &i, next)
-        warn(info, "%s", v->buf);
-    q_free(q, &i);
-    q_close(c);
+            struct w_iov * v;
+            STAILQ_FOREACH (v, &i, next)
+                warn(info, "%s", v->buf);
+            q_free(q, &i);
+        }
+        q_close(c);
+    }
 
     q_cleanup(q);
     return 0;

@@ -160,7 +160,7 @@ void q_write(struct q_conn * const c,
 struct q_stream * q_read(struct q_conn * const c, struct w_iov_stailq * const i)
 {
     struct q_stream * s = 0;
-    if(c->id == 0)
+    if (c->id == 0)
         return s;
 
     lock(&c->lock);
@@ -361,24 +361,41 @@ void * q_init(const char * const ifname)
 }
 
 
-void q_close(struct q_conn * const c)
+static void __attribute__((nonnull)) do_close(struct q_conn * const c)
 {
-    // TODO proper handling of close
-    // w_close(c->sock);
-    // hash_foreach(&c->streams, free);
-    // hash_done(&c->streams);
+    lock(&c->lock);
+    struct q_stream *s, *tmp;
+    for (s = SPLAY_MIN(stream, &c->streams); s; s = tmp) {
+        tmp = SPLAY_NEXT(stream, &c->streams, s);
+        w_free(w_engine(c->sock), &s->o);
+        w_free(w_engine(c->sock), &s->i);
+        free(s);
+    }
+    unlock(&c->lock);
 
-    // ensure(pthread_mutex_destroy(&lock) == 0, "pthread_mutex_init");
-    // ensure(pthread_cond_destroy(&read_cv) == 0, "pthread_cond_destroy");
-    // ensure(pthread_cond_destroy(&write_cv) == 0, "pthread_cond_destroy");
-    // ensure(pthread_cond_destroy(&connect_cv) == 0, "pthread_cond_destroy");
-    // ensure(pthread_cond_destroy(&accept_cv) == 0, "pthread_cond_destroy");
+    if (c->tls)
+        ptls_free(c->tls);
+
+    ensure(pthread_cond_destroy(&c->read_cv) == 0, "pthread_cond_destroy");
+    ensure(pthread_cond_destroy(&c->write_cv) == 0, "pthread_cond_destroy");
+    ensure(pthread_cond_destroy(&c->connect_cv) == 0, "pthread_cond_destroy");
+    ensure(pthread_cond_destroy(&c->accept_cv) == 0, "pthread_cond_destroy");
+    ensure(pthread_mutex_destroy(&c->lock) == 0, "pthread_mutex_init");
 
     // remove connection from global list
-    lock(&q_conns_lock);
     SPLAY_REMOVE(conn, &q_conns, c);
-    unlock(&q_conns_lock);
+
+    if (c->sock)
+        w_close(c->sock);
     free(c);
+}
+
+
+void q_close(struct q_conn * const c)
+{
+    lock(&q_conns_lock);
+    do_close(c);
+    unlock(&q_conns_lock);
 }
 
 
@@ -398,16 +415,16 @@ void q_cleanup(void * const q)
     // stop async call handler
     ev_async_stop(loop, &tx_w);
 
-    w_cleanup(q);
     struct q_conn *c, *tmp;
     lock(&q_conns_lock);
     for (c = SPLAY_MIN(conn, &q_conns); c != 0; c = tmp) {
         tmp = SPLAY_NEXT(conn, &q_conns, c);
-        SPLAY_REMOVE(conn, &q_conns, c);
-        free(c);
+        do_close(c);
     }
     unlock(&q_conns_lock);
+
     free(q_pkt_meta);
+    w_cleanup(q);
 }
 
 
