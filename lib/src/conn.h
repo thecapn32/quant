@@ -112,8 +112,8 @@ SPLAY_PROTOTYPE(conn, q_conn, next, conn_cmp)
 #define CONN_ESTB 3
 #define CONN_FINW 99 // TODO: renumber
 
-#define CONN_FLAG_CLNT 0x01
-#define CONN_FLAG_SERV 0x02
+#define CONN_FLAG_CLNT 0x01 ///< We are client on this connection (or server)
+#define CONN_FLAG_EMBR 0x02 ///< This is an embryonic connection
 
 
 struct ev_loop;

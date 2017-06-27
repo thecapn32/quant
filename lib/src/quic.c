@@ -100,10 +100,9 @@ struct q_conn * q_connect(void * const q,
 {
     // make new connection (connection ID must be > 0 for us)
     const uint64_t cid =
-        ((((uint64_t)plat_random()) << 32) | ((uint64_t)plat_random() - 1)) + 1;
+        ((((uint64_t)plat_random()) << 32) | ((uint64_t)plat_random()));
     struct q_conn * const c = new_conn(CONN_FLAG_CLNT);
     init_conn(c, cid, peer, peer_len);
-    c->flags |= CONN_FLAG_CLNT;
     // c->vers = 0xbabababa; // XXX reserved version to trigger negotiation
     c->vers = ok_vers[0];
     c->sock = w_bind(q, 0, 0);
@@ -140,16 +139,15 @@ void q_write(struct q_conn * const c,
              struct q_stream * const s,
              struct w_iov_stailq * const q)
 {
+    warn(warn, "waiting for write to complete");
     lock(&c->lock);
     STAILQ_CONCAT(&s->o, q);
     ev_io_start(loop, &c->rx_w);
     ev_async_send(loop, &tx_w);
-    warn(warn, "waiting for write to complete");
     wait(&c->write_cv, &c->lock);
 
     // XXX instead of assuming all data was received, we need to do rtx handling
     STAILQ_INIT(&s->o);
-
     unlock(&c->lock);
     warn(warn, "write done");
 }
@@ -158,11 +156,8 @@ void q_write(struct q_conn * const c,
 struct q_stream * q_read(struct q_conn * const c, struct w_iov_stailq * const i)
 {
     struct q_stream * s = 0;
-    if (c->id == 0)
-        return s;
-
-    lock(&c->lock);
     warn(warn, "waiting for data");
+    lock(&c->lock);
     wait(&c->read_cv, &c->lock);
     unlock(&c->lock);
 
@@ -178,33 +173,22 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_stailq * const i)
     if (s == 0)
         return 0;
 
-    if (STAILQ_EMPTY(&s->i)) {
-        lock(&c->lock);
-        warn(warn, "read waiting for data");
-        wait(&c->read_cv, &c->lock);
-        unlock(&c->lock);
-        warn(warn, "read done");
-    }
-
     // return data
     STAILQ_CONCAT(i, &s->i);
+    warn(warn, "read done");
     return s;
 }
 
 
 struct q_conn * q_bind(void * const q, const uint16_t port)
 {
-    // bind socket
+    // bind socket and create new embryonic server connection
     struct w_sock * const ws = w_bind(q, ntohs(port), 0);
+    struct q_conn * const c = new_conn(0);
 
-    // place new embryonic connection onto accept queue (cid = 0)
-    struct q_conn * const c = new_conn(CONN_FLAG_SERV);
-
-    // initialize an RX watcher
+    // initialize and start an RX watcher
     c->rx_w.data = ws;
     ev_io_init(&c->rx_w, rx, w_fd(ws), EV_READ);
-
-    // start the RX watcher
     ev_io_start(loop, &c->rx_w);
     ev_async_send(loop, &tx_w);
 
@@ -212,15 +196,17 @@ struct q_conn * q_bind(void * const q, const uint16_t port)
 }
 
 
-uint64_t q_accept(struct q_conn * const c)
+struct q_conn * q_accept(struct q_conn * const c)
 {
-    // wait for incoming connection
+    warn(warn, "waiting for handshake to complete");
     lock(&c->lock);
     wait(&c->accept_cv, &c->lock);
     unlock(&c->lock);
-
-    warn(warn, "got conn %" PRIx64, c->id);
-    return c->id;
+    if (c->state >= CONN_ESTB) {
+        warn(warn, "got conn %" PRIx64, c->id);
+        return c;
+    }
+    return 0;
 }
 
 
@@ -362,7 +348,9 @@ void * q_init(const char * const ifname)
 
 static void __attribute__((nonnull)) do_close(struct q_conn * const c)
 {
+    warn(warn, "closing conn %" PRIx64, c->id);
     lock(&c->lock);
+    ev_timer_stop(loop, &c->ld_alarm);
     struct q_stream *s, *tmp;
     for (s = SPLAY_MIN(stream, &c->streams); s; s = tmp) {
         tmp = SPLAY_NEXT(stream, &c->streams, s);

@@ -66,16 +66,10 @@ pthread_mutex_t q_conns_lock;
 int64_t conn_cmp(const struct q_conn * const a, const struct q_conn * const b)
 {
     const int64_t diff = (int64_t)a->id - (int64_t)b->id;
-    // warn(info, "comparing %" PRIx64 " and %" PRIx64, a->id, b->id);
-    if (diff == 0) {
-        const uint8_t a_type = a->flags & (CONN_FLAG_CLNT | CONN_FLAG_SERV);
-        const uint8_t b_type = b->flags & (CONN_FLAG_CLNT | CONN_FLAG_SERV);
-        // warn(info, "cid %" PRIx64 " found, a->type %u, b->type %u", a->id,
-        //      a_type, b_type);
-        if (a_type && b_type)
-            return a_type - b_type;
-    }
-    return diff;
+    if (likely(diff))
+        return diff;
+    // at the moment, all connection flags affect the comparison
+    return (int8_t)a->flags - (int8_t)b->flags;
 }
 
 
@@ -88,8 +82,8 @@ static void __attribute__((nonnull)) tls_handshake(struct q_stream * const s)
         // (re)initialize TLS state
         if (s->c->tls)
             ptls_free(s->c->tls);
-        ensure((s->c->tls = ptls_new(&tls_ctx,
-                                     is_set(CONN_FLAG_SERV, s->c->flags))) != 0,
+        ensure((s->c->tls = ptls_new(
+                    &tls_ctx, !is_set(CONN_FLAG_CLNT, s->c->flags))) != 0,
                "alloc TLS state");
     }
 
@@ -170,13 +164,6 @@ static struct q_conn * get_conn(const uint64_t id, const uint8_t type)
 {
     struct q_conn which = {.id = id, .flags = type};
     lock(&q_conns_lock);
-    // struct q_conn * cc;
-    // SPLAY_FOREACH (cc, conn, &q_conns)
-    //     warn(info, "have %s conn %" PRIx64,
-    //          is_set(CONN_FLAG_CLNT, cc->flags)
-    //              ? "client"
-    //              : is_set(CONN_FLAG_SERV, cc->flags) ? "server" : "???",
-    //          cc->id);
     struct q_conn * const c = SPLAY_FIND(conn, &q_conns, &which);
     unlock(&q_conns_lock);
     return c;
@@ -314,15 +301,15 @@ void rx(struct ev_loop * const l __attribute__((unused)),
         // TODO: support short headers w/o cid
         const uint64_t nr = pkt_nr(v->buf, v->len);
         const uint64_t cid = pkt_cid(v->buf, v->len);
-        const uint8_t ctype = w_connected(ws) ? CONN_FLAG_CLNT : CONN_FLAG_SERV;
-        struct q_conn * c = get_conn(cid, ctype);
+        const uint8_t type = w_connected(ws) ? CONN_FLAG_CLNT : 0;
+        struct q_conn * c = get_conn(cid, type);
         if (c == 0) {
             // this is a packet for a new connection, create it
             const struct sockaddr_in peer = {.sin_family = AF_INET,
                                              .sin_port = v->port,
                                              .sin_addr = {.s_addr = v->ip}};
             socklen_t peer_len = sizeof(peer);
-            c = get_conn(0, ctype); // connection cid 0 is embryonic
+            c = get_conn(0, type | CONN_FLAG_EMBR); // get embryonic conn
             init_conn(c, cid, (const struct sockaddr *)&peer, peer_len);
             c->lg_sent = nr - 1; // echo received packet number
             // TODO: allow server to choose a different cid than the client did
@@ -507,7 +494,7 @@ void detect_lost_pkts(struct q_conn * const c)
 struct q_conn * new_conn(const uint8_t type)
 {
 
-    struct q_conn * const cc = get_conn(0, type);
+    struct q_conn * const cc = get_conn(0, type | CONN_FLAG_EMBR);
     ensure(cc == 0, "embryonic %s %u conn already exists",
            is_set(CONN_FLAG_CLNT, type) ? "client" : "server", cc->flags);
 
@@ -525,7 +512,7 @@ struct q_conn * new_conn(const uint8_t type)
     c->cwnd = kInitialWindow;
     c->ssthresh = UINT64_MAX;
 
-    c->flags = type;
+    c->flags = type | CONN_FLAG_EMBR;
     STAILQ_INIT(&c->sent_pkts);
     SPLAY_INIT(&c->streams);
 
@@ -552,16 +539,16 @@ void init_conn(struct q_conn * const c,
                const struct sockaddr * const peer,
                const socklen_t peer_len)
 {
-    c->id = id;
-
     char host[NI_MAXHOST] = "";
     char port[NI_MAXSERV] = "";
     getnameinfo((const struct sockaddr *)peer, peer_len, host, sizeof(host),
                 port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
     c->peer = *peer;
     c->peer_len = peer_len;
+    c->id = id;
+    c->flags &= ~CONN_FLAG_EMBR;
     warn(info, "creating new conn %" PRIx64 " with %s %s:%s", c->id,
-         is_set(CONN_FLAG_SERV, c->flags) ? "client" : "server", host, port);
+         is_set(CONN_FLAG_CLNT, c->flags) ? "server" : "client", host, port);
 }
 
 

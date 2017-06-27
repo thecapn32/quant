@@ -48,7 +48,8 @@ extern void __attribute__((nonnull)) q_close(struct q_conn * const c);
 extern struct q_conn * __attribute__((nonnull))
 q_bind(void * const q, const uint16_t port);
 
-extern uint64_t __attribute__((nonnull)) q_accept(struct q_conn * const c);
+extern struct q_conn * __attribute__((nonnull))
+q_accept(struct q_conn * const c);
 
 extern void __attribute__((nonnull)) q_write(struct q_conn * const c,
                                              struct q_stream * const s,
