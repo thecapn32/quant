@@ -416,6 +416,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     if (num_blocks > 1)
         enc(buf, len, i, &num_blocks, 0, "%u");
 
+    // TODO: send timestamps in protected packets
     const uint8_t num_ts = 0;
     enc(buf, len, i, &num_ts, 0, "%u");
 
