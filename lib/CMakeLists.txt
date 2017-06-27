@@ -44,7 +44,7 @@ add_library(common
     src/diet.c ${CMAKE_CURRENT_BINARY_DIR}/src/config.c
     ${CMAKE_CURRENT_BINARY_DIR}/src/cert.c
 )
-add_dependencies(common warpcore ptls-core)
+add_dependencies(common warpcore ptls-core ptls-minicrypto ptls-openssl)
 
 
 add_library(${PROJECT_NAME}_stat STATIC $<TARGET_OBJECTS:common>)
@@ -65,7 +65,9 @@ foreach(TARGET ${TARGETS})
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
       $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
       $<INSTALL_INTERFACE:include>
-    PRIVATE src $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/external/include>
+    PRIVATE
+      src $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/external/include>
+      ${OPENSSL_ROOT_DIR}/include
   )
 
   set_target_properties(${TARGET}
@@ -75,6 +77,7 @@ foreach(TARGET ${TARGETS})
       OUTPUT_NAME ${PROJECT_NAME}
       VERSION ${PROJECT_VERSION}
       SOVERSION ${PROJECT_VERSION_MAJOR}
+      INTERFACE_POSITION_INDEPENDENT_CODE True
   )
 
   if(NOT ${TARGET} MATCHES "common")

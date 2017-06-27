@@ -72,6 +72,7 @@ foreach(TARGET ptls-core ptls-minicrypto ptls-openssl)
       INTERFACE_INCLUDE_DIRECTORIES
         "${CMAKE_CURRENT_BINARY_DIR}/include;${OPENSSL_ROOT_DIR}/include"
       INTERFACE_LINK_LIBRARIES "${OPENSSL_LIBRARIES}"
+      INTERFACE_POSITION_INDEPENDENT_CODE True
   )
   add_dependencies(${TARGET} picotls)
 endforeach()
