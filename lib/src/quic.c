@@ -32,11 +32,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <stddef.h> // IWYU pragma: keep
-
 #include <picotls.h>
 #include <picotls/minicrypto.h>
-// #include <picotls/openssl.h>
+#include <picotls/openssl.h>
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wpadded"
@@ -81,7 +79,7 @@ ptls_context_t tls_ctx = {0};
 
 static ptls_minicrypto_secp256r1sha256_sign_certificate_t sign_cert = {0};
 static ptls_iovec_t tls_certs = {0};
-// static ptls_openssl_verify_certificate_t verifier = {0};
+static ptls_openssl_verify_certificate_t verifier = {0};
 
 
 void q_alloc(void * const w, struct w_iov_stailq * const q, const uint32_t len)
@@ -258,12 +256,12 @@ static void * __attribute__((nonnull)) l_run(void * const arg)
     // unblock only those signals that we'll handle in the event loop
     sigset_t set;
     sigfillset(&set);
-    ensure(pthread_sigmask(SIG_BLOCK, &set, NULL) == 0, "pthread_sigmask");
+    ensure(pthread_sigmask(SIG_BLOCK, &set, 0) == 0, "pthread_sigmask");
     sigemptyset(&set);
     sigaddset(&set, SIGINT);
     sigaddset(&set, SIGQUIT);
     sigaddset(&set, SIGTERM);
-    ensure(pthread_sigmask(SIG_UNBLOCK, &set, NULL) == 0, "pthread_sigmask");
+    ensure(pthread_sigmask(SIG_UNBLOCK, &set, 0) == 0, "pthread_sigmask");
 
     // start the event loop (will be stopped by signal_cb)
     struct ev_loop * l = (struct ev_loop *)arg;
@@ -334,9 +332,9 @@ void * q_init(const char * const ifname)
     tls_ctx.certificates.list = &tls_certs;
     tls_ctx.certificates.count = 1;
 
-    // ensure(ptls_openssl_init_verify_certificate(&verifier, 0) == 0,
-    //        "ptls_openssl_init_verify_certificate");
-    // tls_ctx.verify_certificate = &verifier.super;
+    ensure(ptls_openssl_init_verify_certificate(&verifier, 0) == 0,
+           "ptls_openssl_init_verify_certificate");
+    tls_ctx.verify_certificate = &verifier.super;
 
     // block those signals that we'll let the event loop handle
     sigset_t set;
@@ -344,7 +342,7 @@ void * q_init(const char * const ifname)
     sigaddset(&set, SIGINT);
     sigaddset(&set, SIGQUIT);
     sigaddset(&set, SIGTERM);
-    ensure(pthread_sigmask(SIG_BLOCK, &set, NULL) == 0, "pthread_sigmask");
+    ensure(pthread_sigmask(SIG_BLOCK, &set, 0) == 0, "pthread_sigmask");
 
     // initialize the event loop and async call handler
     loop = ev_default_loop(0);
@@ -410,7 +408,7 @@ void q_cleanup(void * const q)
     // handle all signals in this thread again
     sigset_t set;
     sigfillset(&set);
-    ensure(pthread_sigmask(SIG_UNBLOCK, &set, NULL) == 0, "pthread_sigmask");
+    ensure(pthread_sigmask(SIG_UNBLOCK, &set, 0) == 0, "pthread_sigmask");
 
     // stop async call handler
     ev_async_stop(loop, &tx_w);

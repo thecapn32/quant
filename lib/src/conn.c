@@ -35,8 +35,6 @@
 #include <sys/param.h>
 #include <sys/socket.h>
 
-// #include <stddef.h> // IWYU pragma: keep
-// picotls doesn't include stddef.h
 #include <picotls.h>
 
 #pragma clang diagnostic push
