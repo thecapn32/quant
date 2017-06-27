@@ -334,7 +334,8 @@ void * q_init(const char * const ifname)
 
     ensure(ptls_openssl_init_verify_certificate(&verifier, 0) == 0,
            "ptls_openssl_init_verify_certificate");
-    tls_ctx.verify_certificate = &verifier.super;
+    // XXX setting this makes the TLS handshake fail on the client?
+    // tls_ctx.verify_certificate = &verifier.super;
 
     // block those signals that we'll let the event loop handle
     sigset_t set;

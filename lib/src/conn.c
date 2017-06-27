@@ -355,12 +355,13 @@ void rx(struct ev_loop * const l __attribute__((unused)),
                 warn(debug, "supporting client-requested version 0x%08x",
                      c->vers);
 
+                dec_frames(c, v);
+
                 // we should have received a ClientHello
                 tls_handshake(s);
 
                 c->state = CONN_ESTB;
                 warn(info, "conn %" PRIx64 " now in CONN_ESTB", c->id);
-                dec_frames(c, v);
 
                 // this is a new connection we just accepted
                 signal(&c->accept_cv, &c->lock);
