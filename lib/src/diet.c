@@ -266,6 +266,17 @@ void diet_remove(struct diet * const t, const uint64_t n)
 }
 
 
+void diet_free(struct diet * const t)
+{
+    struct ival *i, *next;
+    for (i = SPLAY_MIN(diet, t); i != 0; i = next) {
+        next = SPLAY_NEXT(diet, t, i);
+        SPLAY_REMOVE(diet, t, i);
+        free(i);
+    }
+}
+
+
 size_t diet_to_str(char * const str, const size_t len, struct diet * const d)
 {
     struct ival * i;

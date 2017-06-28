@@ -64,6 +64,8 @@ diet_insert(struct diet * const t, const uint64_t n);
 extern void __attribute__((nonnull))
 diet_remove(struct diet * const t, const uint64_t n);
 
+extern void __attribute__((nonnull)) diet_free(struct diet * const t);
+
 extern size_t __attribute__((nonnull))
 diet_to_str(char * const str, const size_t len, struct diet * const d);
 
