@@ -527,6 +527,5 @@ uint16_t enc_stream_frame(struct q_stream * const s,
     enc(buf, len, i, &dlen, 0, "%u");
 
     // TODO: support multiple frames per packet? (needs memcpy!)
-    warn(debug, "%u %u", len, dlen);
     return len;
 }
