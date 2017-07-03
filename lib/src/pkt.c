@@ -152,12 +152,16 @@ uint16_t enc_pkt(struct q_conn * const c,
     if (i < Q_OFFSET) {
         enc_padding_frame(v->buf, i, Q_OFFSET - i);
 
-        // stream frames must be last, because they can extend to end of packet
+        // for retransmissions, encode the original stream data offset
         pm[v->idx].data_off =
             pm[v->idx].data_off ? pm[v->idx].data_off : s->out_off;
+
+        // stream frames must be last, because they can extend to end of packet
         i = enc_stream_frame(s, v->buf, v->len, pm[v->idx].data_off);
+
+        // if this is not a retransmission, increase the stream data offset
         if (pm[v->idx].data_off == s->out_off)
-            s->out_off += i;
+            s->out_off += i - Q_OFFSET;
     }
 
     if (c->state == CONN_VERS_SENT) {
