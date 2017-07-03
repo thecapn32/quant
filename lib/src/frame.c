@@ -298,7 +298,7 @@ bool dec_frames(struct q_conn * const c, struct w_iov * const v)
             i += dec_stream_frame(v, i, &sid, &dstart, &dlen, &doff);
 
         } else if (bitmask_match(type, T_ACK)) {
-            i += dec_ack_frame(c, v, i);
+            i = dec_ack_frame(c, v, i);
 
         } else
             switch (type) {
@@ -484,9 +484,9 @@ static uint8_t __attribute__((const)) needed_sid_len(const uint32_t n)
 }
 
 
-static const uint8_t enc_off_len[] = {0x00,      0xFF, 0x01 << 2, 0xFF,
-                                      0x02 << 2, 0xFF, 0xFF,      0xFF,
-                                      0x03 << 2}; // 0xFF = invalid
+static const uint8_t enc_off_len[] = {0x00,      0xFF, 0x01 << 1, 0xFF,
+                                      0x02 << 1, 0xFF, 0xFF,      0xFF,
+                                      0x03 << 1}; // 0xFF = invalid
 
 static uint8_t __attribute__((const)) needed_off_len(const uint64_t n)
 {
