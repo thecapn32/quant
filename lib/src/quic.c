@@ -46,6 +46,7 @@
 
 #include "cert.h"
 #include "conn.h"
+#include "diet.h"
 #include "quic.h"
 #include "stream.h"
 #include "thread.h"
@@ -58,7 +59,7 @@ struct sockaddr;
 
 
 /// Number of packet buffers to allocate.
-static const uint32_t nbufs = 100000;
+static const uint32_t nbufs = 1000;
 struct pkt_meta * q_pkt_meta = 0;
 
 
@@ -90,7 +91,7 @@ void q_alloc(void * const w, struct w_iov_stailq * const q, const uint32_t len)
 
 void q_free(void * const w, struct w_iov_stailq * const q)
 {
-    w_free(w, q);
+    w_free((struct w_engine *)w, q);
 }
 
 
@@ -139,7 +140,8 @@ void q_write(struct q_conn * const c,
              struct q_stream * const s,
              struct w_iov_stailq * const q)
 {
-    warn(warn, "waiting for write to complete");
+    const uint32_t qlen = w_iov_stailq_len(q);
+    warn(warn, "waiting for %u-byte write to complete", qlen);
     lock(&c->lock);
     STAILQ_CONCAT(&s->o, q);
     ev_io_start(loop, &c->rx_w);
@@ -150,6 +152,7 @@ void q_write(struct q_conn * const c,
     STAILQ_INIT(&s->o);
     unlock(&c->lock);
     warn(warn, "write done");
+    ensure(w_iov_stailq_len(q) == qlen, "payload corrupted");
 }
 
 
@@ -287,9 +290,9 @@ tx_cb(struct ev_loop * const l __attribute__((unused)),
 void * q_init(const char * const ifname)
 {
     // check versions
-    ensure(WARPCORE_VERSION_MAJOR == 0 && WARPCORE_VERSION_MINOR == 10,
-           "%s version %s not compatible with %s version %s", quant_name,
-           quant_version, warpcore_name, warpcore_version);
+    // ensure(WARPCORE_VERSION_MAJOR == 0 && WARPCORE_VERSION_MINOR == 12,
+    //        "%s version %s not compatible with %s version %s", quant_name,
+    //        quant_version, warpcore_name, warpcore_version);
 
     // initialize warpcore on the given interface
     void * const w = w_init(ifname, 0, nbufs);
@@ -348,7 +351,8 @@ void * q_init(const char * const ifname)
 
 static void __attribute__((nonnull)) do_close(struct q_conn * const c)
 {
-    warn(warn, "closing conn %" PRIx64, c->id);
+    warn(warn, "closing %s conn %" PRIx64,
+         is_set(CONN_FLAG_CLNT, c->flags) ? "client" : "server", c->id);
     lock(&c->lock);
     ev_timer_stop(loop, &c->ld_alarm);
     struct q_stream *s, *tmp;
@@ -358,10 +362,12 @@ static void __attribute__((nonnull)) do_close(struct q_conn * const c)
         w_free(w_engine(c->sock), &s->i);
         free(s);
     }
+    diet_free(&c->acked_pkts);
+    diet_free(&c->recv);
+    ptls_free(c->tls);
+    if (c->sock)
+        w_close(c->sock);
     unlock(&c->lock);
-
-    if (c->tls)
-        ptls_free(c->tls);
 
     ensure(pthread_cond_destroy(&c->read_cv) == 0, "pthread_cond_destroy");
     ensure(pthread_cond_destroy(&c->write_cv) == 0, "pthread_cond_destroy");
@@ -372,8 +378,6 @@ static void __attribute__((nonnull)) do_close(struct q_conn * const c)
     // remove connection from global list
     SPLAY_REMOVE(conn, &q_conns, c);
 
-    if (c->sock)
-        w_close(c->sock);
     free(c);
 }
 
@@ -388,11 +392,8 @@ void q_close(struct q_conn * const c)
 
 void q_cleanup(void * const q)
 {
-    // terminate the thread, if it still exists
-    if (pthread_kill(tid, 0) == 0) {
-        ensure(pthread_kill(tid, SIGTERM) == 0, "pthread_kill");
-        ensure(pthread_join(tid, 0) == 0, " pthread_join");
-    }
+    // wait for engine thread
+    ensure(pthread_join(tid, 0) == 0, " pthread_join");
 
     // handle all signals in this thread again
     sigset_t set;
@@ -402,6 +403,7 @@ void q_cleanup(void * const q)
     // stop async call handler
     ev_async_stop(loop, &tx_w);
 
+    // close all connections
     struct q_conn *c, *tmp;
     lock(&q_conns_lock);
     for (c = SPLAY_MIN(conn, &q_conns); c != 0; c = tmp) {
@@ -409,6 +411,9 @@ void q_cleanup(void * const q)
         do_close(c);
     }
     unlock(&q_conns_lock);
+
+    // stop the event loop
+    ev_loop_destroy(loop);
 
     free(q_pkt_meta);
     w_cleanup(q);

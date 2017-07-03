@@ -80,29 +80,30 @@ static uint16_t __attribute__((nonnull))
 dec_stream_frame(struct w_iov * const v,
                  const uint16_t pos,
                  uint32_t * const sid,
-                 uint16_t * const data_start,
-                 uint16_t * const data_len)
+                 uint16_t * const start,
+                 uint16_t * const len,
+                 uint64_t * const off)
 {
-    *data_start = pos;
+    *start = pos;
     uint8_t type = 0;
-    dec(type, v->buf, v->len, *data_start, 0, "0x%02x");
+    dec(type, v->buf, v->len, *start, 0, "0x%02x");
 
     *sid = 0;
     const uint8_t sid_len = dec_sid_len(type);
-    dec(*sid, v->buf, v->len, *data_start, sid_len, "%u");
+    dec(*sid, v->buf, v->len, *start, sid_len, "%u");
 
     const uint8_t off_len = dec_off_len(type);
-    uint64_t off = 0;
+    *off = 0;
     if (off_len)
-        dec(off, v->buf, v->len, *data_start, off_len, "%" PRIu64);
+        dec(*off, v->buf, v->len, *start, off_len, "%" PRIu64);
     // TODO: pay attention to offset when delivering data to app
 
-    *data_len = 0;
+    *len = 0;
     if (is_set(F_STREAM_DATA_LEN, type))
-        dec(*data_len, v->buf, v->len, *data_start, 0, "%u");
-    ensure(is_set(F_STREAM_DATA_LEN, type) || *data_len, "FIN or data_len");
+        dec(*len, v->buf, v->len, *start, 0, "%u");
+    ensure(is_set(F_STREAM_DATA_LEN, type) || *len, "FIN or len");
 
-    return *data_start + *data_len;
+    return *start + *len;
 }
 
 
@@ -128,13 +129,19 @@ static uint8_t __attribute__((const)) dec_ack_block_len(const uint8_t flags)
 
 // TODO: should use a better data structure here
 static struct w_iov * __attribute__((nonnull))
-find_sent_pkt(const struct w_iov_stailq * const q, const uint64_t nr)
+find_sent_pkt(struct q_conn * const c, const uint64_t nr)
 {
+    // check if packed is in the unACKed queue
     struct w_iov * v;
-    STAILQ_FOREACH (v, q, next)
-        if (pkt_nr(v->buf, v->len) == nr)
+    STAILQ_FOREACH (v, &c->sent_pkts, next)
+        if (pkt_nr(v->buf - Q_OFFSET, v->len + Q_OFFSET) == nr)
             return v;
-    die("sent packet %" PRIu64 " not found", nr);
+
+    // check if packet was sent and already ACKed
+    if (diet_find(&c->acked_pkts, nr))
+        return 0;
+
+    die("we never sent packet %" PRIu64, nr);
     return 0;
 }
 
@@ -159,8 +166,8 @@ dec_ack_frame(struct q_conn * const c,
         warn(debug, "F_ACK_N unset; one ACK block present");
     }
 
-    uint8_t ts_blocks = 0;
-    dec(ts_blocks, v->buf, v->len, i, 0, "%u");
+    uint8_t num_ts = 0;
+    dec(num_ts, v->buf, v->len, i, 0, "%u");
 
     const uint8_t lg_ack_len = dec_lg_ack_len(type);
     uint64_t lg_ack = 0;
@@ -170,7 +177,7 @@ dec_ack_frame(struct q_conn * const c,
     dec(ack_delay, v->buf, v->len, i, 0, "%u");
 
     // first clause from OnAckReceived pseudo code:
-    struct w_iov * p = find_sent_pkt(&c->sent_pkts, lg_ack);
+    struct w_iov * p = find_sent_pkt(c, lg_ack);
     // if the largest ACKed is newly ACKed, update the RTT
     if (p && q_pkt_meta[p->idx].ack_cnt == 0) {
         c->latest_rtt = ev_now(loop) - q_pkt_meta[p->idx].time;
@@ -208,8 +215,8 @@ dec_ack_frame(struct q_conn * const c,
         // find all newly ACKed packets
         while (ack > lg_ack - l) {
             warn(notice, "pkt %" PRIu64 " had ACK for %" PRIu64, n, ack);
-            p = find_sent_pkt(&c->sent_pkts, ack);
-            if (++q_pkt_meta[p->idx].ack_cnt == 1) {
+            p = find_sent_pkt(c, ack);
+            if (p && ++q_pkt_meta[p->idx].ack_cnt == 1) {
                 // this is a newly ACKed packet
                 warn(crit, "first ACK for %" PRIu64, ack);
                 c->lg_acked = MAX(c->lg_acked, ack);
@@ -226,9 +233,11 @@ dec_ack_frame(struct q_conn * const c,
                     // see OnRetransmissionTimeoutVerified pseudo code
                     c->cwnd = kMinimumWindow;
                 c->handshake_cnt = c->tlp_cnt = c->rto_cnt = 0;
-                // TODO: pseudo code is wrong here - figure out when to
-                // remove sent packets from data structure
-                // STAILQ_REMOVE(&c->sent_pkts, p, w_iov, next);
+
+                // this packet is no no longer unACKed
+                diet_insert(&c->acked_pkts, ack);
+                STAILQ_REMOVE(&c->sent_pkts, p, w_iov, next);
+                // TODO: enqueue back into its stream s->o
 
                 // see OnPacketAcked pseudo code (for CC):
                 if (ack >= c->rec_end) {
@@ -253,7 +262,7 @@ dec_ack_frame(struct q_conn * const c,
     detect_lost_pkts(c);
     set_ld_alarm(c);
 
-    for (uint8_t b = 0; b < ts_blocks; b++) {
+    for (uint8_t b = 0; b < num_ts; b++) {
         warn(debug, "decoding timestamp block #%u", b);
         uint8_t delta_lg_obs = 0;
         dec(delta_lg_obs, v->buf, v->len, i, 0, "%u");
@@ -269,8 +278,9 @@ bool dec_frames(struct q_conn * const c, struct w_iov * const v)
 {
     uint16_t i = pkt_hdr_len(v->buf, v->len) + HASH_LEN;
     uint16_t pad_start = 0;
-    uint16_t data_start = 0;
-    uint16_t data_len = 0;
+    uint16_t dstart = 0;
+    uint16_t dlen = 0;
+    uint64_t doff = 0;
     uint32_t sid = 0;
 
     while (i < v->len) {
@@ -284,9 +294,8 @@ bool dec_frames(struct q_conn * const c, struct w_iov * const v)
 
         if (bitmask_match(type, T_STREAM)) {
             // TODO: support multiple stream frames per packet (needs memcpy)
-            ensure(data_len == 0,
-                   "can only handle one stream frame per packet");
-            i += dec_stream_frame(v, i, &sid, &data_start, &data_len);
+            ensure(dlen == 0, "can only handle one stream frame per packet");
+            i += dec_stream_frame(v, i, &sid, &dstart, &dlen, &doff);
 
         } else if (bitmask_match(type, T_ACK)) {
             i += dec_ack_frame(c, v, i);
@@ -321,32 +330,50 @@ bool dec_frames(struct q_conn * const c, struct w_iov * const v)
             }
     }
 
-    if (data_len == 0) {
-        // if there was no stream frame present, we did not enqueue this w_iov
+    if (dlen == 0) {
+        // if there is no stream frame, we do not need to enqueue this w_iov
         // into a stream, so free it here
         warn(debug, "freeing w_iov w/o stream data");
-        struct w_iov_stailq q = STAILQ_HEAD_INITIALIZER(q);
-        STAILQ_INSERT_HEAD(&q, v, next);
-        w_free(w_engine(c->sock), &q);
+        w_free_iov(w_engine(c->sock), v);
+        return 0;
+    }
 
-    } else {
-        // adjust w_iov start and len to stream frame data
-        v->buf = &v->buf[data_start];
-        v->len = data_len;
+    // adjust w_iov start and len to stream frame data
+    v->buf = &v->buf[dstart];
+    v->len = dlen;
 
-        // deliver data into stream
-        struct q_stream * s = get_stream(c, sid);
-        if (s == 0)
-            s = new_stream(c, sid);
-        warn(notice, "%u byte%s on str %u: %.*s", data_len, plural(data_len),
-             sid, v->len, v->buf);
-        s->in_off += data_len;
+    // deliver data into stream
+    struct q_stream * s = get_stream(c, sid);
+    if (s == 0)
+        s = new_stream(c, sid);
+
+    // best case: new in-order data
+    if (doff == s->in_off) {
+        warn(notice,
+             "%u byte%s new data (off %" PRIu64 "-%" PRIu64 ") on str %u: %.*s",
+             dlen, plural(dlen), doff, doff + dlen, sid, v->len, v->buf);
+
+        s->in_off += dlen;
         STAILQ_INSERT_TAIL(&s->i, v, next);
         if (s->id != 0)
             signal(&c->read_cv, &c->lock);
+        return dlen;
     }
 
-    return data_len;
+    // data is a complete duplicate
+    if (doff + dlen <= s->in_off) {
+        warn(notice,
+             "%u byte%s dup data (off %" PRIu64 "-%" PRIu64 ") on str %u: %.*s",
+             dlen, plural(dlen), doff, doff + dlen, sid, v->len, v->buf);
+        w_free_iov(w_engine(c->sock), v);
+        return dlen;
+    }
+
+    die("TODO: handle partially new or reordered data: %u byte%s data (off "
+        "%" PRIu64 "-%" PRIu64 ") on str %u: %.*s",
+        dlen, plural(dlen), doff, doff + dlen, sid, v->len, v->buf);
+
+    return dlen;
 }
 
 
@@ -475,16 +502,15 @@ static uint8_t __attribute__((const)) needed_off_len(const uint64_t n)
 
 uint16_t enc_stream_frame(struct q_stream * const s,
                           void * const buf,
-                          const uint16_t pos __attribute__((unused)),
-                          const uint16_t len)
+                          const uint16_t len,
+                          const uint64_t off)
 {
-    const uint16_t data_len = len - Q_OFFSET; // TODO: support FIN bit
-    if (data_len == 0)
-        // there might not be stream data, e.g., for pure ACKs
-        return len;
+    const uint16_t dlen = len - Q_OFFSET; // TODO: support FIN bit
+    ensure(dlen, "no stream data present");
 
-    warn(notice, "%u byte%s on str %u: %.*s", data_len, plural(data_len), s->id,
-         data_len, &((uint8_t *)buf)[Q_OFFSET]);
+    warn(notice, "%u byte%s at off %" PRIu64 "-%" PRIu64 " on str %u: %.*s",
+         dlen, plural(dlen), s->out_off, s->out_off + dlen, s->id, dlen,
+         &((uint8_t *)buf)[Q_OFFSET]);
 
     // there is stream data, so prepend a stream frame header
     const uint8_t off_len = needed_off_len(s->out_off);
@@ -496,11 +522,11 @@ uint16_t enc_stream_frame(struct q_stream * const s,
     // now that we know how long the stream frame header is, encode it
     enc(buf, len, i, &type, 0, "0x%02x");
     enc(buf, len, i, &s->id, sid_len, "%u");
-    if (off_len)
-        enc(buf, len, i, &s->out_off, off_len, "%" PRIu64);
-    enc(buf, len, i, &data_len, 0, "%u");
+    if (off)
+        enc(buf, len, i, &off, off_len, "%" PRIu64);
+    enc(buf, len, i, &dlen, 0, "%u");
 
     // TODO: support multiple frames per packet? (needs memcpy!)
-
+    warn(debug, "%u %u", len, dlen);
     return len;
 }

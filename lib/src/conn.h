@@ -39,6 +39,7 @@
 
 #include "diet.h"
 
+
 // All open QUIC connections.
 extern SPLAY_HEAD(conn, q_conn) q_conns;
 extern pthread_mutex_t q_conns_lock;
@@ -76,7 +77,12 @@ struct q_conn {
     ev_tstamp rttvar;
     uint64_t reorder_thresh;
     ev_tstamp loss_t;
+
+     /// Sent-but-unACKed packets. The @p buf and @len fields of the w_iov
+     /// structs are relative to any stream data.
+     ///
     struct w_iov_stailq sent_pkts;
+    struct diet acked_pkts;
 
     uint64_t lg_sent;  ///< Largest packet number sent
     uint64_t lg_acked; ///< Largest packet number for which an ACK was received

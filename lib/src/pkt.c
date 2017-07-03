@@ -39,8 +39,7 @@
 #include "marshall.h"
 #include "pkt.h"
 #include "quic.h"
-
-struct q_stream;
+#include "stream.h"
 
 
 /// Packet number lengths for different short-header packet types
@@ -151,15 +150,21 @@ uint16_t enc_pkt(struct q_conn * const c,
         i += enc_ack_frame(c, v->buf, v->len, i);
 
     if (i < Q_OFFSET) {
-        i += enc_padding_frame(v->buf, i, Q_OFFSET - i);
+        enc_padding_frame(v->buf, i, Q_OFFSET - i);
 
         // stream frames must be last, because they can extend to end of packet
-        i = enc_stream_frame(s, v->buf, i, v->len);
+        q_pkt_meta[v->idx].data_off = q_pkt_meta[v->idx].data_off
+                                          ? q_pkt_meta[v->idx].data_off
+                                          : s->out_off;
+        i = enc_stream_frame(s, v->buf, v->len, q_pkt_meta[v->idx].data_off);
+        if (q_pkt_meta[v->idx].data_off == s->out_off)
+            s->out_off += i;
     }
 
     if (c->state == CONN_VERS_SENT) {
-        memset(&v->buf[i], T_PADDING, MIN_IP4_INI_LEN - i);
-        warn(debug, "padding sending initial packet");
+        const uint16_t pad = MIN_IP4_INI_LEN - i;
+        memset(&v->buf[i], T_PADDING, pad);
+        warn(debug, "padding initial packet with %u byte%s", pad, plural(pad));
         i = MIN_IP4_INI_LEN;
     }
 
