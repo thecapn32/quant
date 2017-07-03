@@ -179,8 +179,8 @@ dec_ack_frame(struct q_conn * const c,
     // first clause from OnAckReceived pseudo code:
     struct w_iov * p = find_sent_pkt(c, lg_ack);
     // if the largest ACKed is newly ACKed, update the RTT
-    if (p && q_pkt_meta[p->idx].ack_cnt == 0) {
-        c->latest_rtt = ev_now(loop) - q_pkt_meta[p->idx].time;
+    if (p && pm[p->idx].ack_cnt == 0) {
+        c->latest_rtt = ev_now(loop) - pm[p->idx].time;
         if (c->latest_rtt > ack_delay)
             c->latest_rtt -= ack_delay;
 
@@ -216,7 +216,7 @@ dec_ack_frame(struct q_conn * const c,
         while (ack > lg_ack - l) {
             warn(notice, "pkt %" PRIu64 " had ACK for %" PRIu64, n, ack);
             p = find_sent_pkt(c, ack);
-            if (p && ++q_pkt_meta[p->idx].ack_cnt == 1) {
+            if (p && ++pm[p->idx].ack_cnt == 1) {
                 // this is a newly ACKed packet
                 warn(crit, "first ACK for %" PRIu64, ack);
                 c->lg_acked = MAX(c->lg_acked, ack);

@@ -103,10 +103,10 @@ static void __attribute__((nonnull)) tls_handshake(struct q_stream * const s)
     ov = w_alloc_iov(w_engine(s->c->sock), Q_OFFSET);
     warn(warn, "new TLS data %u idx %u", ov->len, ov->idx);
 
-    ptls_buffer_init(&q_pkt_meta[ov->idx].tb, ov->buf, ov->len);
-    const int ret = ptls_handshake(s->c->tls, &q_pkt_meta[ov->idx].tb,
-                                   iv ? iv->buf : 0, &in_len, 0);
-    ov->len = (uint16_t)q_pkt_meta[ov->idx].tb.off;
+    ptls_buffer_init(&pm[ov->idx].tb, ov->buf, ov->len);
+    const int ret = ptls_handshake(s->c->tls, &pm[ov->idx].tb, iv ? iv->buf : 0,
+                                   &in_len, 0);
+    ov->len = (uint16_t)pm[ov->idx].tb.off;
     warn(debug, "TLS handshake: recv %u, gen %u, in_len %lu, ret %u: %.*s",
          iv ? iv->len : 0, ov->len, in_len, ret, ov->len, ov->buf);
     ensure(ret == 0 || ret == PTLS_ERROR_IN_PROGRESS, "TLS error: %u", ret);
@@ -205,7 +205,7 @@ void tx(struct w_sock * const ws, struct q_conn * const c)
     const struct w_iov * const last_sent =
         STAILQ_LAST(&c->sent_pkts, w_iov, next);
     const ev_tstamp last_sent_t =
-        last_sent ? q_pkt_meta[last_sent->idx].time : -HUGE_VAL;
+        last_sent ? pm[last_sent->idx].time : -HUGE_VAL;
 
     while (!STAILQ_EMPTY(&s->o)) {
         struct w_iov * v = STAILQ_FIRST(&s->o);
@@ -242,9 +242,9 @@ void tx(struct w_sock * const ws, struct q_conn * const c)
         }
 
         // store packet info (see OnPacketSent pseudo code)
-        q_pkt_meta[v->idx].time = now;
-        q_pkt_meta[v->idx].ref_cnt++;
-        q_pkt_meta[v->idx].data_len = v->len;
+        pm[v->idx].time = now;
+        pm[v->idx].ref_cnt++;
+        pm[v->idx].data_len = v->len;
 
         v->len = enc_pkt(c, s, v);
         if (v->len > Q_OFFSET) {
@@ -267,7 +267,7 @@ void tx(struct w_sock * const ws, struct q_conn * const c)
     struct w_iov * v;
     STAILQ_FOREACH (v, &q, next) {
         // undo whatenc_pk() did to the buffer (reset buf and len to user data)
-        v->len = q_pkt_meta[v->idx].data_len;
+        v->len = pm[v->idx].data_len;
         v->buf += Q_OFFSET;
     }
 
@@ -468,8 +468,8 @@ void detect_lost_pkts(struct q_conn * const c)
     struct w_iov *v, *tmp;
     STAILQ_FOREACH_SAFE (v, &c->sent_pkts, next, tmp) {
         const uint64_t nr = pkt_nr(v->buf - Q_OFFSET, v->len + Q_OFFSET);
-        if (q_pkt_meta[v->idx].ack_cnt == 0 && nr < c->lg_acked) {
-            const ev_tstamp time_since_sent = now - q_pkt_meta[v->idx].time;
+        if (pm[v->idx].ack_cnt == 0 && nr < c->lg_acked) {
+            const ev_tstamp time_since_sent = now - pm[v->idx].time;
             const uint64_t packet_delta = c->lg_acked - nr;
             if (time_since_sent > delay_until_lost ||
                 packet_delta > c->reorder_thresh) {

@@ -41,7 +41,7 @@ struct pkt_meta {
     uint8_t _unused[6];
 };
 
-extern struct pkt_meta * q_pkt_meta;
+extern struct pkt_meta * pm;
 
 #define Q_OFFSET 64
 

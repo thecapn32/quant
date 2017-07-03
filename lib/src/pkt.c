@@ -153,11 +153,10 @@ uint16_t enc_pkt(struct q_conn * const c,
         enc_padding_frame(v->buf, i, Q_OFFSET - i);
 
         // stream frames must be last, because they can extend to end of packet
-        q_pkt_meta[v->idx].data_off = q_pkt_meta[v->idx].data_off
-                                          ? q_pkt_meta[v->idx].data_off
-                                          : s->out_off;
-        i = enc_stream_frame(s, v->buf, v->len, q_pkt_meta[v->idx].data_off);
-        if (q_pkt_meta[v->idx].data_off == s->out_off)
+        pm[v->idx].data_off =
+            pm[v->idx].data_off ? pm[v->idx].data_off : s->out_off;
+        i = enc_stream_frame(s, v->buf, v->len, pm[v->idx].data_off);
+        if (pm[v->idx].data_off == s->out_off)
             s->out_off += i;
     }
 

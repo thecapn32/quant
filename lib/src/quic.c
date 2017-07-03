@@ -60,7 +60,7 @@ struct sockaddr;
 
 /// Number of packet buffers to allocate.
 static const uint32_t nbufs = 1000;
-struct pkt_meta * q_pkt_meta = 0;
+struct pkt_meta * pm = 0;
 
 
 /// QUIC version supported by this implementation in order of preference.
@@ -296,8 +296,8 @@ void * q_init(const char * const ifname)
 
     // initialize warpcore on the given interface
     void * const w = w_init(ifname, 0, nbufs);
-    q_pkt_meta = calloc(nbufs, sizeof(*q_pkt_meta));
-    ensure(q_pkt_meta, "could not calloc");
+    pm = calloc(nbufs, sizeof(*pm));
+    ensure(pm, "could not calloc");
 
     // initialize PRNG
     plat_initrandom();
@@ -415,7 +415,7 @@ void q_cleanup(void * const q)
     // stop the event loop
     ev_loop_destroy(loop);
 
-    free(q_pkt_meta);
+    free(pm);
     w_cleanup(q);
 }
 
