@@ -134,7 +134,7 @@ find_sent_pkt(struct q_conn * const c, const uint64_t nr)
     // check if packed is in the unACKed queue
     struct w_iov * v;
     STAILQ_FOREACH (v, &c->sent_pkts, next)
-        if (pkt_nr(v->buf - Q_OFFSET, v->len + Q_OFFSET) == nr)
+        if (pm[v->idx].nr == nr)
             return v;
 
     // check if packet was sent and already ACKed
@@ -203,7 +203,7 @@ dec_ack_frame(struct q_conn * const c,
     const uint8_t ack_block_len = dec_ack_block_len(type);
     warn(debug, "%u-byte ACK block len", ack_block_len);
 
-    uint64_t n = pkt_nr(v->buf, v->len);
+    uint64_t n = pm[v->idx].nr;
     uint64_t ack = lg_ack;
     for (uint8_t b = 0; b < num_blocks; b++) {
         warn(debug, "decoding ACK block #%u", b);
@@ -378,7 +378,7 @@ bool dec_frames(struct q_conn * const c, struct w_iov * const v)
 
 
 uint16_t
-enc_padding_frame(void * const buf, const uint16_t pos, const uint16_t len)
+enc_padding_frame(uint8_t * const buf, const uint16_t pos, const uint16_t len)
 {
     warn(debug, "encoding padding frame into [%u..%u]", pos, pos + len - 1);
     memset(&((uint8_t *)buf)[pos], T_PADDING, len);
@@ -421,7 +421,7 @@ needed_ack_block_len(struct q_conn * const c)
 
 
 uint16_t enc_ack_frame(struct q_conn * const c,
-                       void * const buf,
+                       uint8_t * const buf,
                        const uint16_t len,
                        const uint16_t pos)
 {
@@ -501,9 +501,10 @@ static uint8_t __attribute__((const)) needed_off_len(const uint64_t n)
 
 
 uint16_t enc_stream_frame(struct q_stream * const s,
-                          void * const buf,
+                          uint8_t * const buf,
                           const uint16_t len,
-                          const uint64_t off)
+                          const uint64_t off,
+                          const uint32_t idx)
 {
     const uint16_t dlen = len - Q_OFFSET; // TODO: support FIN bit
     ensure(dlen, "no stream data present");
@@ -517,7 +518,7 @@ uint16_t enc_stream_frame(struct q_stream * const s,
     const uint8_t sid_len = needed_sid_len(s->id);
     const uint8_t type = T_STREAM | F_STREAM_DATA_LEN | enc_off_len[off_len] |
                          enc_sid_len[sid_len];
-    uint16_t i = Q_OFFSET - 3 - off_len - sid_len; // space for header
+    uint16_t i = pm[idx].head_start = Q_OFFSET - 3 - off_len - sid_len;
 
     // now that we know how long the stream frame header is, encode it
     enc(buf, len, i, &type, 0, "0x%02x");

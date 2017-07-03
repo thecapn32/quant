@@ -32,12 +32,15 @@
 
 /// Packet meta-data information associated with w_iov buffers
 struct pkt_meta {
-    ev_tstamp time;    ///< Transmission timestamp.
-    ptls_buffer_t tb;  ///< PicoTLS send buffer.
-    uint64_t data_off; ///< Stream offset of data in stream frame.
-    uint32_t ack_cnt;  ///< Number of ACKs we have seen for this packet.
-    uint16_t data_len; ///< Length of data in stream frame.
-    uint8_t _unused[2];
+    ev_tstamp time;      ///< Transmission timestamp.
+    ptls_buffer_t tb;    ///< PicoTLS send buffer.
+    uint64_t nr;         ///< Packet number.
+    uint64_t data_off;   ///< Stream offset of data in stream frame.
+    uint32_t ack_cnt;    ///< Number of ACKs we have seen for this packet.
+    uint16_t data_len;   ///< Length of data in stream frame.
+    uint16_t buf_len;    ///< Length of buffer after enc_pkt().
+    uint16_t head_start; ///< Offset of first byte of stream frame header.
+    uint8_t _unused[6];
 };
 
 extern struct pkt_meta * pm;

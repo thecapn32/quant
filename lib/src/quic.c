@@ -32,7 +32,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <picotls.h>
+#include <picotls.h> // IWYU pragma: keep
+// IWYU pragma: no_include <picotls/../picotls.h>
 #include <picotls/minicrypto.h>
 #include <picotls/openssl.h>
 
@@ -115,14 +116,17 @@ struct q_conn * q_connect(void * const q,
     c->rx_w.data = c->sock;
     ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
 
-    // allocate stream zero
-    new_stream(c, 0);
-    lock(&c->lock);
+    // allocate stream zero and start TLS handshake on stream 0
+    struct q_stream * const s = new_stream(c, 0);
+    tls_handshake(s);
+
+    // start watchers
     ev_io_start(loop, &c->rx_w);
     tx_w.data = c;
     ev_async_send(loop, &tx_w);
 
     warn(warn, "waiting for handshake to complete");
+    lock(&c->lock);
     wait(&c->connect_cv, &c->lock);
     unlock(&c->lock);
 
@@ -283,7 +287,7 @@ tx_cb(struct ev_loop * const l __attribute__((unused)),
 {
     struct q_conn * const c = w->data;
     if (c)
-        tx(c->sock, c);
+        tx(c);
 }
 
 

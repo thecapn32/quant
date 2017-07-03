@@ -30,6 +30,7 @@
 
 #define bitmask_match(val, mask) (((val) & (mask)) == (mask))
 
+#define STRM_HEAD_LEN
 
 #define T_PADDING 0x00
 #define T_STREAM 0xC0
@@ -47,15 +48,16 @@ extern bool __attribute__((nonnull))
 dec_frames(struct q_conn * const c, struct w_iov * const v);
 
 extern uint16_t __attribute__((nonnull))
-enc_padding_frame(void * const buf, const uint16_t pos, const uint16_t len);
+enc_padding_frame(uint8_t * const buf, const uint16_t pos, const uint16_t len);
 
 extern uint16_t __attribute__((nonnull)) enc_ack_frame(struct q_conn * const c,
-                                                       void * const buf,
+                                                       uint8_t * const buf,
                                                        const uint16_t len,
                                                        const uint16_t pos);
 
 extern uint16_t __attribute__((nonnull))
 enc_stream_frame(struct q_stream * const s,
-                 void * const buf,
+                 uint8_t * const buf,
                  const uint16_t len,
-                 const uint64_t off);
+                 const uint64_t off,
+                 const uint32_t idx);

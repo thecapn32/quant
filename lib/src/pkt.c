@@ -26,6 +26,7 @@
 #include <inttypes.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/param.h>
 
 #ifdef __linux__
 #include <byteswap.h>
@@ -46,7 +47,7 @@
 static const uint8_t pkt_nr_len[] = {0, 1, 2, 4};
 
 
-uint16_t pkt_hdr_len(const void * const buf, const uint16_t len)
+uint16_t pkt_hdr_len(const uint8_t * const buf, const uint16_t len)
 {
     const uint8_t flags = pkt_flags(buf);
     uint16_t pos = 0;
@@ -59,7 +60,7 @@ uint16_t pkt_hdr_len(const void * const buf, const uint16_t len)
 }
 
 
-uint64_t pkt_cid(const void * const buf, const uint16_t len)
+uint64_t pkt_cid(const uint8_t * const buf, const uint16_t len)
 {
     const uint8_t flags = pkt_flags(buf);
     uint64_t cid = 0;
@@ -72,7 +73,7 @@ uint64_t pkt_cid(const void * const buf, const uint16_t len)
 }
 
 
-uint64_t pkt_nr(const void * const buf, const uint16_t len)
+uint64_t pkt_nr(const uint8_t * const buf, const uint16_t len)
 {
     const uint8_t flags = pkt_flags(buf);
     uint64_t nr = 0;
@@ -83,7 +84,7 @@ uint64_t pkt_nr(const void * const buf, const uint16_t len)
 }
 
 
-uint32_t pkt_vers(const void * const buf, const uint16_t len)
+uint32_t pkt_vers(const uint8_t * const buf, const uint16_t len)
 {
     ensure(pkt_flags(buf) & F_LONG_HDR, "short header");
     uint32_t vers = 0;
@@ -127,6 +128,7 @@ uint16_t enc_pkt(struct q_conn * const c,
     if (flags & F_LONG_HDR || flags & F_SH_CID)
         enc(v->buf, v->len, i, &c->id, 0, "%" PRIx64);
 
+    pm[v->idx].nr = c->lg_sent;
     if (flags & F_LONG_HDR) {
         const uint32_t nr = (const uint32_t)c->lg_sent;
         enc(v->buf, v->len, i, &nr, 0, "%u");
@@ -149,30 +151,45 @@ uint16_t enc_pkt(struct q_conn * const c,
     if (!SPLAY_EMPTY(&c->recv))
         i += enc_ack_frame(c, v->buf, v->len, i);
 
-    // pad out the rest of Q_OFFSET
-    enc_padding_frame(v->buf, i, Q_OFFSET - i);
+    // if we've been passed a stream pointer, we need to prepend a stream frame
+    // header to the data (otherwise, it's an rtx)
+    if (s) {
+        // pad out the rest of Q_OFFSET
+        enc_padding_frame(v->buf, i, Q_OFFSET - i);
 
-    // encode any stream data present
-    if (v->len > Q_OFFSET) {
-        // for retransmissions, encode the original stream data offset
-        pm[v->idx].data_off =
-            pm[v->idx].data_off ? pm[v->idx].data_off : s->out_off;
+        // encode any stream data present
+        if (v->len > Q_OFFSET) {
+            // for retransmissions, encode the original stream data offset
+            pm[v->idx].data_off = MIN(pm[v->idx].data_off, s->out_off);
 
-        // stream frames must be last, because they can extend to end of packet
-        i = enc_stream_frame(s, v->buf, v->len, pm[v->idx].data_off);
+            // stream frames must be last, because they can extend to end of
+            // packet
+            i = enc_stream_frame(s, v->buf, v->len, pm[v->idx].data_off,
+                                 v->idx);
 
-        // if this is not a retransmission, increase the stream data offset
-        if (pm[v->idx].data_off == s->out_off)
-            s->out_off += i - Q_OFFSET;
+            // if this is not a retransmission, increase the stream data offset
+            if (pm[v->idx].data_off == s->out_off)
+                s->out_off += i - Q_OFFSET;
+        }
+
+        if (c->state == CONN_VERS_SENT) {
+            const uint16_t pad = MIN_IP4_INI_LEN - i;
+            memset(&v->buf[i], T_PADDING, pad);
+            warn(debug, "padding initial packet with %u byte%s", pad,
+                 plural(pad));
+            i = MIN_IP4_INI_LEN;
+        }
+
+        // store final packet length
+        pm[v->idx].buf_len = i;
+
+    } else {
+        // this is a retransmission, pad out until beginning of stream header
+        if (pm[v->idx].head_start)
+            enc_padding_frame(v->buf, i, pm[v->idx].head_start - i);
     }
 
-    if (c->state == CONN_VERS_SENT) {
-        const uint16_t pad = MIN_IP4_INI_LEN - i;
-        memset(&v->buf[i], T_PADDING, pad);
-        warn(debug, "padding initial packet with %u byte%s", pad, plural(pad));
-        i = MIN_IP4_INI_LEN;
-    }
-
+    i = pm[v->idx].buf_len;
     const uint64_t hash = fnv_1a(v->buf, i, hash_pos, HASH_LEN);
     warn(debug, "inserting %lu-byte hash over range [0..%u] into [%u..%lu]",
          HASH_LEN, i - 1, hash_pos, hash_pos + HASH_LEN - 1);

@@ -39,6 +39,7 @@
 
 #include "diet.h"
 
+struct q_stream;
 
 // All open QUIC connections.
 extern SPLAY_HEAD(conn, q_conn) q_conns;
@@ -47,7 +48,7 @@ extern pthread_mutex_t q_conns_lock;
 
 /// A QUIC connection.
 struct q_conn {
-    SPLAY_ENTRY(q_conn) next;
+    SPLAY_ENTRY(q_conn) node;
 
     uint64_t id; ///< Connection ID
 
@@ -78,9 +79,9 @@ struct q_conn {
     uint64_t reorder_thresh;
     ev_tstamp loss_t;
 
-     /// Sent-but-unACKed packets. The @p buf and @len fields of the w_iov
-     /// structs are relative to any stream data.
-     ///
+    /// Sent-but-unACKed packets. The @p buf and @len fields of the w_iov
+    /// structs are relative to any stream data.
+    ///
     struct w_iov_stailq sent_pkts;
     struct diet acked_pkts;
 
@@ -109,7 +110,7 @@ struct q_conn {
 extern int64_t __attribute__((nonnull))
 conn_cmp(const struct q_conn * const a, const struct q_conn * const b);
 
-SPLAY_PROTOTYPE(conn, q_conn, next, conn_cmp)
+SPLAY_PROTOTYPE(conn, q_conn, node, conn_cmp)
 
 
 #define CONN_CLSD 0
@@ -135,9 +136,11 @@ init_conn(struct q_conn * const c,
           const socklen_t peer_len);
 
 extern void __attribute__((nonnull))
-tx(struct w_sock * const ws, struct q_conn * const c);
+tx(struct q_conn * const c);
 
 extern void __attribute__((nonnull))
 rx(struct ev_loop * const l, ev_io * const rx_w, int e);
 
 extern void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c);
+
+extern void __attribute__((nonnull)) tls_handshake(struct q_stream * const s);
