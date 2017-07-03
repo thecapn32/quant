@@ -149,9 +149,11 @@ uint16_t enc_pkt(struct q_conn * const c,
     if (!SPLAY_EMPTY(&c->recv))
         i += enc_ack_frame(c, v->buf, v->len, i);
 
-    if (i < Q_OFFSET) {
-        enc_padding_frame(v->buf, i, Q_OFFSET - i);
+    // pad out the rest of Q_OFFSET
+    enc_padding_frame(v->buf, i, Q_OFFSET - i);
 
+    // encode any stream data present
+    if (v->len > Q_OFFSET) {
         // for retransmissions, encode the original stream data offset
         pm[v->idx].data_off =
             pm[v->idx].data_off ? pm[v->idx].data_off : s->out_off;
