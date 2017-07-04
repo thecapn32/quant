@@ -107,6 +107,7 @@ struct q_conn * q_connect(void * const q,
     init_conn(c, cid, peer, peer_len);
     // c->vers = 0xbabababa; // XXX reserved version to trigger negotiation
     c->vers = ok_vers[0];
+    c->next_sid = 1; // client initiates odd-numbered streams
     c->sock = w_bind(q, 0, 0);
     w_connect(c->sock,
               ((const struct sockaddr_in *)(const void *)peer)->sin_addr.s_addr,
@@ -116,7 +117,7 @@ struct q_conn * q_connect(void * const q,
     c->rx_w.data = c->sock;
     ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
 
-    // allocate stream zero and start TLS handshake on stream 0
+    // allocate stream zero (client case) and start TLS handshake on stream 0
     struct q_stream * const s = new_stream(c, 0);
     tls_handshake(s);
 
@@ -219,7 +220,13 @@ struct q_conn * q_accept(struct q_conn * const c)
 
 struct q_stream * q_rsv_stream(struct q_conn * const c)
 {
-    return new_stream(c, 0);
+
+    const uint8_t odd = c->next_sid % 2; // NOTE: % in assert confuses printf
+    ensure(is_set(CONN_FLAG_CLNT, c->flags) && odd,
+           "am %s, expected %s connection stream ID, got %u",
+           is_set(CONN_FLAG_CLNT, c->flags) ? "client" : "server",
+           is_set(CONN_FLAG_CLNT, c->flags) ? "odd" : "even", c->next_sid);
+    return new_stream(c, c->next_sid);
 }
 
 
@@ -358,6 +365,7 @@ static void __attribute__((nonnull)) do_close(struct q_conn * const c)
     warn(warn, "closing %s conn %" PRIx64,
          is_set(CONN_FLAG_CLNT, c->flags) ? "client" : "server", c->id);
     lock(&c->lock);
+    ev_io_stop(loop, &c->rx_w);
     ev_timer_stop(loop, &c->ld_alarm);
     struct q_stream *s, *tmp;
     for (s = SPLAY_MIN(stream, &c->streams); s; s = tmp) {

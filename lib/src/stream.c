@@ -53,33 +53,18 @@ struct q_stream * get_stream(struct q_conn * const c, const uint32_t id)
 
 struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
 {
+    ensure(get_stream(c, id) == 0, "stream already %u exists", id);
+
     struct q_stream * const s = calloc(1, sizeof(*s));
     ensure(c, "could not calloc q_stream");
     s->c = c;
     STAILQ_INIT(&s->o);
     STAILQ_INIT(&s->i);
-
+    s->id = id;
     if (id)
-        // the peer has initiated this stream
-        s->id = id;
-    else {
-        // we are initiating this stream
-        if (is_set(CONN_FLAG_CLNT, c->flags) && c->next_sid &&
-            c->next_sid % 2 == 0)
-            // need to make this odd
-            s->c->next_sid++;
-        s->id = c->next_sid++;
-    }
-    ensure(get_stream(c, s->id) == 0, "stream %u already exists", s->id);
-
-    const uint8_t odd = s->id % 2; // NOTE: % in assert confuses printf
-    ensure(is_set(CONN_FLAG_CLNT, c->flags) == (id ? !odd : odd) || s->id == 0,
-           "am %s, expected %s connection stream ID, got %u",
-           is_set(CONN_FLAG_CLNT, c->flags) ? "client" : "server",
-           is_set(CONN_FLAG_CLNT, c->flags) ? "odd" : "even", s->id);
-
+        c->next_sid += 2;
     SPLAY_INSERT(stream, &c->streams, s);
-    warn(info, "reserved new str %u on conn %" PRIx64 " as %s", s->id, c->id,
+    warn(info, "reserved new str %u on conn %" PRIx64 " as %s", id, c->id,
          is_set(CONN_FLAG_CLNT, c->flags) ? "client" : "server");
     return s;
 }

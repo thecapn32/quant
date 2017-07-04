@@ -307,6 +307,7 @@ void rx(struct ev_loop * const l __attribute__((unused)),
 
         switch (c->state) {
         case CONN_CLSD:
+            new_stream(c, 0); // create stream 0 (server case)
         case CONN_VERS_RECV: {
             // store the socket with the connection
             c->sock = ws;
@@ -321,7 +322,7 @@ void rx(struct ev_loop * const l __attribute__((unused)),
 
             // respond to the initial version negotiation packet
             c->vers = pkt_vers(v->buf, v->len);
-            struct q_stream * const s = new_stream(c, 0);
+            struct q_stream * const s = get_stream(c, 0);
             tx_needed = true;
             if (vers_supported(c->vers)) {
                 warn(debug, "supporting client-requested version 0x%08x",
@@ -361,7 +362,7 @@ void rx(struct ev_loop * const l __attribute__((unused)),
                     c->state = CONN_FINW;
                     warn(info, "conn %" PRIx64 " now in CONN_FINW", c->id);
                 }
-                tx(c);
+                rtx(c, UINT32_MAX); // retransmit the ClientHello
             } else {
                 warn(info, "server accepted version 0x%08x", c->vers);
                 c->state = CONN_ESTB;
