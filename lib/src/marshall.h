@@ -63,6 +63,36 @@
 // clang-format on
 
 
+/// printf pattern for to_bitstring
+#define bitstring_fmt "%c%c%c%c:%c%c%c%c"
+
+
+/// Convert @p byte into eight characters (0 or 1, respectively) for use with
+/// printf-style functions and @p bitstring_pattern.
+///
+/// @param      byte  The byte to convert.
+///
+/// @return     Sequence of eight characters.
+///
+#define to_bitstring(byte)                                                     \
+    (byte & 0x80 ? '1' : '0'), (byte & 0x40 ? '1' : '0'),                      \
+        (byte & 0x20 ? '1' : '0'), (byte & 0x10 ? '1' : '0'),                  \
+        (byte & 0x08 ? '1' : '0'), (byte & 0x04 ? '1' : '0'),                  \
+        (byte & 0x02 ? '1' : '0'), (byte & 0x01 ? '1' : '0')
+
+
+/// Decodes @p len bytes of network byte-order data starting at position @p pos
+/// of buffer @p buf (which has total length @p buf_len) info variable @p dst in
+/// host byte-order, using printf format string @p fmt to format the data for
+/// debug logging. Macro increases @p pos by @p len as a side effect.
+///
+/// @param      dst      Destination to decode into.
+/// @param      buf      Buffer to decode from.
+/// @param      buf_len  Buffer length.
+/// @param      pos      Buffer position to start decoding from.
+/// @param      len      Length to decode.
+/// @param      fmt      Printf format for debug logging.
+///
 #define dec(dst, buf, buf_len, pos, len, fmt)                                  \
     do {                                                                       \
         const size_t __len = len ? len : sizeof(dst);                          \
@@ -93,13 +123,34 @@
             die("cannot unmarshall field length %zu", __len);                  \
             break;                                                             \
         }                                                                      \
-        warn(debug, "decoded %zu byte%s from " #buf "[%u..%zu] into %s " #dst  \
-                    " = " fmt,                                                 \
-             __len, plural(__len), pos, pos + __len - 1, type_str(dst), dst);  \
+        if (__len == 1)                                                        \
+            warn(debug,                                                        \
+                 "decode %zu byte%s from " #buf "[%u..%zu] into %s " #dst      \
+                 " = " fmt " (" bitstring_fmt ")",                             \
+                 __len, plural(__len), pos, pos + __len - 1, type_str(dst),    \
+                 dst, to_bitstring(((const uint8_t *)buf)[pos]));              \
+        else                                                                   \
+            warn(debug, "decode %zu byte%s from " #buf                         \
+                        "[%u..%zu] into %s " #dst " = " fmt,                   \
+                 __len, plural(__len), pos, pos + __len - 1, type_str(dst),    \
+                 dst);                                                         \
         pos += __len;                                                          \
     } while (0)
 
 
+/// Encodes the lower @p src_len bytes of host byte-order data contained in @p
+/// src into network byte-order at at position @p pos of buffer @p buf (which
+/// has total length @p buf_len), using printf format string @p fmt to format
+/// the data for debug logging. Macro increases @p pos by @p len as a side
+/// effect.
+///
+/// @param      buf      Buffer to decode from.
+/// @param      buf_len  Buffer length.
+/// @param      pos      Buffer position to start encoding to.
+/// @param      src      Source data.
+/// @param      src_len  Length to encode.
+/// @param      fmt      Printf format for debug logging.
+///
 #define enc(buf, buf_len, pos, src, src_len, fmt)                              \
     do {                                                                       \
         const size_t __len = src_len ? src_len : sizeof(*src);                 \
@@ -133,9 +184,15 @@
             die("cannot marshall field length %zu", __len);                    \
             break;                                                             \
         }                                                                      \
-        warn(debug, "encoded %s " #src " = " fmt " into %zu byte%s at " #buf   \
-                    "[%u..%zu]",                                               \
-             type_str(*src), *src, __len, plural(__len), pos,                  \
-             pos + __len - 1);                                                 \
+        if (__len == 1)                                                        \
+            warn(debug, "encode %s " #src " = " fmt " (" bitstring_fmt ") "    \
+                        "into %zu byte%s at " #buf "[%u..%zu]",                \
+                 type_str(*src), *src, to_bitstring(*src), __len,              \
+                 plural(__len), pos, pos + __len - 1);                         \
+        else                                                                   \
+            warn(debug, "encode %s " #src " = " fmt                            \
+                        " into %zu byte%s at " #buf "[%u..%zu]",               \
+                 type_str(*src), *src, __len, plural(__len), pos,              \
+                 pos + __len - 1);                                             \
         pos += __len;                                                          \
     } while (0)
