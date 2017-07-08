@@ -63,6 +63,7 @@ struct q_conn {
     SPLAY_HEAD(stream, q_stream) streams;
     struct w_sock * sock; ///< File descriptor (socket) for the connection.
     ev_io rx_w;           ///< RX watcher.
+    ev_async tx_w;
 
     struct diet recv; ///< Received packet numbers still needing to be ACKed.
 
@@ -104,6 +105,7 @@ struct q_conn {
     pthread_cond_t accept_cv;
     pthread_cond_t connect_cv;
     pthread_cond_t read_cv;
+    pthread_cond_t close_cv;
 };
 
 
@@ -115,8 +117,9 @@ SPLAY_PROTOTYPE(conn, q_conn, node, conn_cmp)
 
 #define CONN_CLSD 0
 #define CONN_VERS_SENT 1
-#define CONN_VERS_RECV 2
-#define CONN_ESTB 3
+#define CONN_VERS_REJ 2
+#define CONN_VERS_OK 3
+#define CONN_ESTB 4
 #define CONN_FINW 99 // TODO: renumber
 
 #define CONN_FLAG_CLNT 0x01 ///< We are client on this connection (or server)
@@ -127,8 +130,6 @@ struct ev_loop;
 
 extern void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c);
 
-extern struct q_conn * new_conn(const uint8_t type);
-
 extern void __attribute__((nonnull))
 init_conn(struct q_conn * const c,
           const uint64_t id,
@@ -136,11 +137,22 @@ init_conn(struct q_conn * const c,
           const socklen_t peer_len);
 
 extern void __attribute__((nonnull))
-tx(struct q_conn * const c);
+ld_alarm(struct ev_loop * const l, ev_timer * const w, int e);
+
+extern void __attribute__((nonnull))
+tx(struct ev_loop * const l, ev_async * const w, int e);
+
+extern struct q_conn * get_conn(const uint64_t id, const uint8_t type);
 
 extern void __attribute__((nonnull))
 rx(struct ev_loop * const l, ev_io * const rx_w, int e);
 
 extern void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c);
 
-extern void __attribute__((nonnull)) tls_handshake(struct q_stream * const s);
+extern uint32_t __attribute__((nonnull))
+tls_handshake(struct q_stream * const s);
+
+extern void * __attribute__((nonnull)) loop_run(void * const arg);
+
+extern void __attribute__((nonnull))
+loop_update(struct ev_loop * const l, ev_async * const w, int e);

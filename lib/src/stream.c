@@ -34,14 +34,14 @@
 #include "stream.h"
 
 
-int64_t stream_cmp(const struct q_stream * const a,
+int32_t stream_cmp(const struct q_stream * const a,
                    const struct q_stream * const b)
 {
-    return (int64_t)a->id - (int64_t)b->id;
+    return (int32_t)a->id - (int32_t)b->id;
 }
 
 
-SPLAY_GENERATE(stream, q_stream, next, stream_cmp)
+SPLAY_GENERATE(stream, q_stream, node, stream_cmp)
 
 
 struct q_stream * get_stream(struct q_conn * const c, const uint32_t id)
@@ -60,6 +60,7 @@ struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
     s->c = c;
     STAILQ_INIT(&s->o);
     STAILQ_INIT(&s->i);
+    STAILQ_INIT(&s->r);
     s->id = id;
     if (id)
         c->next_sid += 2;

@@ -32,7 +32,16 @@
 #define MIN_IP6_INI_LEN 1232
 
 #define F_LONG_HDR 0x80
-#define F_LH_TYPE_VERS_NEG 0x01
+#define F_LH_TYPE_VNEG 0x01
+#define F_LH_CLNT_INIT 0x02
+#define F_LH_SERV_RTRY 0x03
+#define F_LH_SERV_CTXT 0x04
+#define F_LH_CLNT_CTXT 0x05
+#define F_LH_0RTT_PROT 0x06
+#define F_LH_1RTT_PRO0 0x07
+#define F_LH_1RTT_PRO1 0x08
+#define F_LH_PUBL_RSET 0x09
+
 #define F_SH_CID 0x40
 #define F_SH_KEY_PHASE 0x20
 

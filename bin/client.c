@@ -70,7 +70,7 @@ int main(int argc, char * argv[])
                             "0"
 #endif
         ;
-    char * dest = (char *)"127.0.0.1";
+    char * dest = (char *)"localhost";
     char * port = (char *)"8443";
     long conns = 1;
     int ch;
@@ -124,7 +124,7 @@ int main(int argc, char * argv[])
     for (int n = 0; n < conns; n++) {
         warn(info, "%s starting conn #%d to %s:%s", basename(argv[0]), n, dest,
              port);
-        c[n] = q_connect(q, peer->ai_addr, peer->ai_addrlen);
+        c[n] = q_connect(q, peer->ai_addr, peer->ai_addrlen, dest);
         if (!c[n])
             break;
 

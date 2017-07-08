@@ -32,12 +32,14 @@ struct q_conn;
 struct stream;
 
 struct q_stream {
-    SPLAY_ENTRY(q_stream) next;
+    SPLAY_ENTRY(q_stream) node;
     struct q_conn * c;
 
     uint32_t id;
     uint8_t state;
     uint8_t _unused[3];
+
+    struct w_iov_stailq r; ///< tail queue containing written data
 
     struct w_iov_stailq o; ///< tail queue containing outbound data
     uint64_t out_off;
@@ -46,11 +48,17 @@ struct q_stream {
     uint64_t in_off;
 };
 
+#define STRM_IDLE 0x00
+#define STRM_OPEN 0x01
+#define STRM_HCRM 0x02
+#define STRM_HCLO 0x03
+#define STRM_CLSD 0x04
 
-extern int64_t __attribute__((nonnull))
+
+extern int32_t __attribute__((nonnull))
 stream_cmp(const struct q_stream * const a, const struct q_stream * const b);
 
-SPLAY_PROTOTYPE(stream, q_stream, next, stream_cmp)
+SPLAY_PROTOTYPE(stream, q_stream, node, stream_cmp)
 
 
 extern struct q_stream * __attribute__((nonnull))

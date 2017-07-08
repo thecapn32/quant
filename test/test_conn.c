@@ -28,12 +28,11 @@
 #include <sys/socket.h>
 
 #include <quant/quant.h>
-#include <warpcore/warpcore.h>
 
 
 int main()
 {
-    _dlevel = info;
+    // _dlevel = info;
 
     void * q = q_init("lo"
 #ifndef __linux__
@@ -49,7 +48,7 @@ int main()
                                   .sin_addr.s_addr = inet_addr("127.0.0.1"),
                                   .sin_port = htons(55555)};
     struct q_conn * const cc =
-        q_connect(q, (const struct sockaddr *)&s, sizeof(s));
+        q_connect(q, (const struct sockaddr *)&s, sizeof(s), "localhost");
 
     // accept connection
     q_accept(sc);

@@ -26,7 +26,6 @@
 #include <inttypes.h>
 #include <stdint.h>
 #include <string.h>
-#include <sys/param.h>
 
 #ifdef __linux__
 #include <byteswap.h>
@@ -117,23 +116,40 @@ uint16_t enc_pkt(struct q_conn * const c,
     uint16_t i = 0;
     uint8_t flags = 0;
     c->lg_sent++; // TODO: increase by random offset
-    if (c->state < CONN_ESTB)
-        flags |= F_LONG_HDR | F_LH_TYPE_VERS_NEG;
-    else {
-        flags |= enc_pkt_nr_len[needed_pkt_nr_len(c->lg_sent)];
-        flags |= F_SH_CID; // TODO: support short headers w/o cid
+
+    warn(debug, "%s conn state 0x%02x",
+         is_set(CONN_FLAG_CLNT, c->flags) ? "client" : "server", c->state);
+    switch (c->state) {
+    case CONN_VERS_SENT:
+        flags |= F_LONG_HDR | F_LH_CLNT_INIT;
+        break;
+    case CONN_VERS_REJ:
+        flags |= F_LONG_HDR | F_LH_TYPE_VNEG;
+        break;
+    case CONN_VERS_OK:
+        flags |=
+            F_LONG_HDR | (is_set(CONN_FLAG_CLNT, c->flags) ? F_LH_CLNT_CTXT
+                                                           : F_LH_SERV_CTXT);
+        break;
+    case CONN_ESTB:
+        // TODO: support short headers w/o cid
+        flags |= F_SH_CID | enc_pkt_nr_len[needed_pkt_nr_len(c->lg_sent)];
+        break;
+    default:
+        die("unknown conn state %u", c->state);
+        break;
     }
     enc(v->buf, v->len, i, &flags, 0, "0x%02x");
 
-    if (flags & F_LONG_HDR || flags & F_SH_CID)
+    if (is_set(F_LONG_HDR, flags) || is_set(F_SH_CID, flags))
         enc(v->buf, v->len, i, &c->id, 0, "%" PRIx64);
 
     pm[v->idx].nr = c->lg_sent;
-    if (flags & F_LONG_HDR) {
+    if (is_set(F_LONG_HDR, flags)) {
         const uint32_t nr = (const uint32_t)c->lg_sent;
         enc(v->buf, v->len, i, &nr, 0, "%u");
         enc(v->buf, v->len, i, &c->vers, 0, "0x%08x");
-        if (c->state == CONN_VERS_RECV) {
+        if (c->state == CONN_VERS_REJ) {
             warn(info, "sending version negotiation server response");
             for (uint8_t j = 0; j < ok_vers_len; j++)
                 enc(v->buf, v->len, i, &ok_vers[j], 0, "0x%08x");
@@ -154,20 +170,25 @@ uint16_t enc_pkt(struct q_conn * const c,
     // if we've been passed a stream pointer, we need to prepend a stream frame
     // header to the data (otherwise, it's an rtx)
     if (s) {
+        warn(debug, "str state 0x%02x", s->state);
+
         // pad out the rest of Q_OFFSET
         enc_padding_frame(v->buf, i, Q_OFFSET - i);
 
         // encode any stream data present
-        if (v->len > Q_OFFSET) {
+        if (v->len > Q_OFFSET || s->state == STRM_HCLO ||
+            s->state == STRM_HCRM) {
             // for retransmissions, encode the original stream data offset
-            pm[v->idx].data_off = MIN(pm[v->idx].data_off, s->out_off);
+            pm[v->idx].data_off =
+                pm[v->idx].data_off ? pm[v->idx].data_off : s->out_off;
 
             // stream frames must be last, because they can extend to end of
             // packet
             i = enc_stream_frame(s, v->buf, v->len, pm[v->idx].data_off,
                                  v->idx);
 
-            // if this is not a retransmission, increase the stream data offset
+            // if this is not a retransmission, increase the stream data
+            // offset
             if (pm[v->idx].data_off == s->out_off)
                 s->out_off += i - Q_OFFSET;
         }
@@ -184,7 +205,8 @@ uint16_t enc_pkt(struct q_conn * const c,
         pm[v->idx].buf_len = i;
 
     } else {
-        // this is a retransmission, pad out until beginning of stream header
+        // this is a retransmission, pad out until beginning of stream
+        // header
         if (pm[v->idx].head_start)
             enc_padding_frame(v->buf, i, pm[v->idx].head_start - i);
     }

@@ -32,14 +32,15 @@
 
 /// Packet meta-data information associated with w_iov buffers
 struct pkt_meta {
-    ev_tstamp time;      ///< Transmission timestamp.
-    ptls_buffer_t tb;    ///< PicoTLS send buffer.
-    uint64_t nr;         ///< Packet number.
-    uint64_t data_off;   ///< Stream offset of data in stream frame.
-    uint32_t ack_cnt;    ///< Number of ACKs we have seen for this packet.
-    uint16_t data_len;   ///< Length of data in stream frame.
-    uint16_t buf_len;    ///< Length of buffer after enc_pkt().
-    uint16_t head_start; ///< Offset of first byte of stream frame header.
+    ev_tstamp time;        ///< Transmission timestamp.
+    ptls_buffer_t tb;      ///< PicoTLS send buffer.
+    uint64_t nr;           ///< Packet number.
+    uint64_t data_off;     ///< Stream offset of data in stream frame.
+    uint32_t ack_cnt;      ///< Number of ACKs we have seen for this packet.
+    uint16_t data_len;     ///< Length of data in stream frame.
+    uint16_t buf_len;      ///< Length of buffer after enc_pkt().
+    struct q_stream * str; ///< Stream this data was written on.
+    uint16_t head_start;   ///< Offset of first byte of stream frame header.
     uint8_t _unused[6];
 };
 
@@ -47,7 +48,7 @@ extern struct pkt_meta * pm;
 
 #define Q_OFFSET 64
 
-extern struct ev_loop * loop;
+// extern struct ev_loop * loop;
 
 /// The versions of QUIC supported by this implementation
 extern const uint32_t ok_vers[];

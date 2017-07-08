@@ -68,7 +68,7 @@
 
 
 /// Convert @p byte into eight characters (0 or 1, respectively) for use with
-/// printf-style functions and @p bitstring_pattern.
+/// printf-style functions and @p bitstring_fmt.
 ///
 /// @param      byte  The byte to convert.
 ///
