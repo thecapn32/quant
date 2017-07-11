@@ -104,5 +104,6 @@ int main(int argc, char * argv[])
     }
 
     q_cleanup(q);
+    warn(debug, "%s exiting", basename(argv[0]));
     return 0;
 }
