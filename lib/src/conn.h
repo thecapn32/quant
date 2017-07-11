@@ -105,7 +105,6 @@ struct q_conn {
     pthread_cond_t accept_cv;
     pthread_cond_t connect_cv;
     pthread_cond_t read_cv;
-    pthread_cond_t close_cv;
 };
 
 
@@ -124,6 +123,10 @@ SPLAY_PROTOTYPE(conn, q_conn, node, conn_cmp)
 
 #define CONN_FLAG_CLNT 0x01 ///< We are client on this connection (or server)
 #define CONN_FLAG_EMBR 0x02 ///< This is an embryonic connection
+#define CONN_WRIT_DONE 0x04
+#define CONN_ACPT_DONE 0x08
+#define CONN_CONN_DONE 0x10
+#define CONN_READ_DONE 0x20
 
 
 struct ev_loop;

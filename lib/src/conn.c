@@ -35,7 +35,6 @@
 #include <string.h>
 #include <sys/param.h>
 #include <sys/socket.h>
-// #include <unistd.h>
 
 #include <picotls.h>
 
@@ -179,14 +178,15 @@ static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
     struct w_iov * v;
     STAILQ_FOREACH (v, q, next) {
         // see TimeToSend pseudo code
-        // warn(debug, "in_flight %" PRIu64 " + v->len %u vs cwnd %" PRIu64,
-        //      c->in_flight, v->len, c->cwnd);
-        // warn(debug, "last_sent_t %f + (v->len %u * srtt %f) / cwnd %" PRIu64,
-        //      last_sent_t - now, v->len, c->srtt, c->cwnd);
         if (c->in_flight + v->len > c->cwnd ||
             last_sent_t - now + (v->len * c->srtt) / c->cwnd > 0) {
-            warn(warn, "out of cwnd/pacing headroom");
-            break;
+            // warn(debug, "in_flight %" PRIu64 " + v->len %u vs cwnd %" PRIu64,
+            //      c->in_flight, v->len, c->cwnd);
+            // warn(debug,
+            //      "last_sent_t - now %f + (v->len %u * srtt %f) / cwnd %"
+            //      PRIu64,
+            //      last_sent_t - now, v->len, c->srtt, c->cwnd);
+            warn(crit, "out of cwnd/pacing headroom, ignoring");
         }
 
         // store packet info (see OnPacketSent pseudo code)
@@ -199,11 +199,14 @@ static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
         else
             pm[v->idx].str = s;
 
-
         v->len = enc_pkt(c, s, v);
         if (v->len > Q_OFFSET) {
             // packet is retransmittable
-            c->in_flight += v->len;
+            if (s) {
+                c->in_flight += v->len;
+                // warn(notice, "in_flight now %" PRIu64 " (+%u)", c->in_flight,
+                //      v->len);
+            }
             set_ld_alarm(c);
         }
 
@@ -217,7 +220,6 @@ static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
     // transmit packets
     w_tx(c->sock, q);
     w_nic_tx(w_engine(c->sock));
-    // usleep(150000);
 
     STAILQ_FOREACH (v, q, next) {
         // undo what enc_pkt() did to buffer (reset buf and len to user data)
@@ -242,28 +244,52 @@ void loop_update(struct ev_loop * const l __attribute__((unused)),
 }
 
 
+static void synth_tx(struct q_stream * const s)
+{
+    struct w_iov * const ov = w_alloc_iov(w_engine(s->c->sock), Q_OFFSET);
+    ov->ip = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_addr.s_addr;
+    ov->port = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_port;
+    ov->len = 0;
+    STAILQ_INSERT_TAIL(&s->o, ov, next);
+    do_tx(s->c, s, &s->o);
+    STAILQ_CONCAT(&s->c->sent_pkts, &s->o);
+}
+
+
 void tx(struct ev_loop * const l __attribute__((unused)),
         ev_async * const w,
         int e __attribute__((unused)))
 {
     struct q_conn * const c = w->data;
-    // check if there is any stream with pending data
     struct q_stream * s = 0;
-    SPLAY_FOREACH (s, stream, &c->streams)
-        if (!STAILQ_EMPTY(&s->o))
-            break;
+    bool did_tx = false;
+    lock(&c->lock);
+    SPLAY_FOREACH (s, stream, &c->streams) {
+        lock(&s->lock);
+        if (!STAILQ_EMPTY(&s->o)) {
+            // warn(crit, "data TX needed on str %u", s->id);
+            do_tx(c, s, &s->o);
+            STAILQ_CONCAT(&c->sent_pkts, &s->o);
+            did_tx = true;
+        } else if (s->state == STRM_HCLO || s->state == STRM_CLSD) {
+            // warn(crit, "FIN needed on str %u", s->id);
+            synth_tx(s);
+            did_tx = true;
+        }
+        unlock(&s->lock);
+    }
 
-    if (s == 0) {
+    if (did_tx == false) {
         // need to send ACKs but don't have any stream data to piggyback on
         s = get_stream(c, s ? s->id : 0);
-        struct w_iov * const ov = w_alloc_iov(w_engine(c->sock), Q_OFFSET);
-        ov->ip = ((struct sockaddr_in *)(void *)&c->peer)->sin_addr.s_addr;
-        ov->port = ((struct sockaddr_in *)(void *)&c->peer)->sin_port;
-        ov->len = 0;
-        STAILQ_INSERT_TAIL(&s->o, ov, next);
+        if (s) {
+            // warn(crit, "synth TX on str %u", s->id);
+            lock(&s->lock);
+            synth_tx(s);
+            unlock(&s->lock);
+        }
     }
-    do_tx(c, s, &s->o);
-    STAILQ_CONCAT(&c->sent_pkts, &s->o);
+    unlock(&c->lock);
 }
 
 
@@ -272,12 +298,13 @@ void rx(struct ev_loop * const l,
         int e __attribute__((unused)))
 {
     struct w_sock * const ws = rx_w->data;
-    // usleep(150000);
     w_nic_rx(w_engine(ws), -1);
     struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
     w_rx(ws, &i);
 
     bool tx_needed = false;
+    struct q_conn * c = 0;
+
     while (!STAILQ_EMPTY(&i)) {
         struct w_iov * const v = STAILQ_FIRST(&i);
         STAILQ_REMOVE_HEAD(&i, next);
@@ -302,10 +329,10 @@ void rx(struct ev_loop * const l,
         }
 
         // TODO: support short headers w/o cid
-        const uint64_t nr = pkt_nr(v->buf, v->len);
+        const uint64_t nr = pm[v->idx].nr = pkt_nr(v->buf, v->len);
         const uint64_t cid = pkt_cid(v->buf, v->len);
         const uint8_t type = w_connected(ws) ? CONN_FLAG_CLNT : 0;
-        struct q_conn * c = get_conn(cid, type);
+        c = get_conn(cid, type);
         if (c == 0) {
             // this is a packet for a new connection, create it
             const struct sockaddr_in peer = {.sin_family = AF_INET,
@@ -387,9 +414,6 @@ void rx(struct ev_loop * const l,
                 ensure(!STAILQ_EMPTY(&s->i), "no ServerHello");
                 c->state = tls_handshake(s) ? CONN_VERS_OK : CONN_ESTB;
                 warn(info, "conn %" PRIx64 " now in state %u", c->id, c->state);
-
-                // this is a new connection we just connected
-                // signal(&c->connect_cv, &c->lock);
             }
             break;
         }
@@ -420,11 +444,12 @@ void rx(struct ev_loop * const l,
         default:
             die("TODO: state %u", c->state);
         }
+    }
 
-        // TODO: would be better to kick each connection only once
-        if (tx_needed)
-            ev_async_send(l, &c->tx_w);
-        // tx(l, c);
+    // TODO: would be better to kick each connection only once
+    if (tx_needed) {
+        // warn(crit, "TX needed");
+        tx(l, &c->tx_w, 0);
     }
 }
 
@@ -502,7 +527,8 @@ void set_ld_alarm(struct q_conn * const c)
 
     if (c->in_flight == 0) {
         ev_timer_stop(loop, &c->ld_alarm);
-        warn(debug, "no retransmittable pkts outstanding, stopping LD alarm");
+        // warn(debug, "no retransmittable pkts outstanding, stopping LD
+        // alarm");
         return;
     }
 
@@ -608,7 +634,7 @@ void * loop_run(void * const arg)
     // start the event loop (will be stopped by signal_cb)
     pthread_mutex_t * const loop_lock = ev_userdata(loop);
     lock(loop_lock);
-    ensure(pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, 0) == 0,
+    ensure(pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, 0) == 0,
            "pthread_setcanceltype");
     ev_run(loop, 0);
     unlock(loop_lock);
@@ -624,7 +650,6 @@ void * loop_run(void * const arg)
     struct q_conn * c;
     SPLAY_FOREACH (c, conn, &q_conns) {
         // XXX do we also need to stop the watchers here?
-        signal(&c->close_cv, &c->lock);
         signal(&c->read_cv, &c->lock);
         signal(&c->write_cv, &c->lock);
         signal(&c->connect_cv, &c->lock);

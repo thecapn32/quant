@@ -25,6 +25,31 @@
 
 #pragma once
 
+
+#ifndef NDEBUG
+#define PTHREAD_MUTEX_TYPE PTHREAD_MUTEX_ERRORCHECK
+#else
+#define PTHREAD_MUTEX_TYPE PTHREAD_MUTEX_DEFAULT
+#endif
+
+#define mutex_init(m)                                                          \
+    do {                                                                       \
+        pthread_mutexattr_t attr;                                              \
+        ensure(pthread_mutexattr_init(&attr) == 0, "pthread_mutexattr_init");  \
+        ensure(pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_TYPE) == 0,      \
+               "pthread_mutexattr_settype");                                   \
+        ensure(pthread_mutex_init(m, &attr) == 0, "pthread_mutex_init");       \
+        ensure(pthread_mutexattr_destroy(&attr) == 0,                          \
+               "pthread_mutexattr_destroy");                                   \
+    } while (0)
+
+
+#define mutex_destroy(m)                                                       \
+    do {                                                                       \
+        ensure(pthread_mutex_destroy(m) == 0, "pthread_mutex_destroy");        \
+    } while (0)
+
+
 #define lock(l)                                                                \
     do {                                                                       \
         const int ret_lock = pthread_mutex_lock(l);                            \
@@ -41,13 +66,23 @@
     } while (0)
 
 
+#define cond_init(c)                                                           \
+    do {                                                                       \
+        ensure(pthread_cond_init(c, 0) == 0, "pthread_cond_init");             \
+    } while (0)
+
+
+#define cond_destroy(c)                                                        \
+    do {                                                                       \
+        ensure(pthread_cond_destroy(c) == 0, "pthread_cond_destroy");          \
+    } while (0)
+
+
 #define signal(c, l)                                                           \
     do {                                                                       \
-        lock(l);                                                               \
         const int ret_cs = pthread_cond_signal(c);                             \
         ensure(ret_cs == 0, "pthread_cond_signal returned %d (%s)", ret_cs,    \
                strerror(ret_cs));                                              \
-        unlock(l);                                                             \
     } while (0)
 
 

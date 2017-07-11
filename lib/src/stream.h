@@ -25,7 +25,9 @@
 
 #pragma once
 
+#include <pthread.h>
 #include <stdint.h>
+
 #include <warpcore/warpcore.h>
 
 struct q_conn;
@@ -43,15 +45,19 @@ struct q_stream {
 
     struct w_iov_stailq o; ///< tail queue containing outbound data
     uint64_t out_off;
+    uint64_t out_nr; ///< highest packet number that had stream data
 
     struct w_iov_stailq i; ///< tail queue containing inbound data
     uint64_t in_off;
+
+    pthread_mutex_t lock;
+    pthread_cond_t close_cv;
 };
 
 #define STRM_IDLE 0x00
 #define STRM_OPEN 0x01
-#define STRM_HCRM 0x02
-#define STRM_HCLO 0x03
+#define STRM_HCRM 0x02 ///< "half closed remote"
+#define STRM_HCLO 0x03 ///< "half closed local"
 #define STRM_CLSD 0x04
 
 
@@ -66,3 +72,5 @@ get_stream(struct q_conn * const c, const uint32_t id);
 
 extern struct q_stream * __attribute__((nonnull))
 new_stream(struct q_conn * const c, const uint32_t id);
+
+extern void __attribute__((nonnull)) free_stream(struct q_stream * const s);

@@ -103,15 +103,15 @@ dec_stream_frame(struct q_conn * const c,
     if (is_set(F_STREAM_DATA_LEN, type))
         dec(*len, v->buf, v->len, i, 0, "%u");
 
-    ensure(*len || is_set(F_STREAM_FIN, type), "len > 0 or FIN");
-
-    // ensure(!is_set(F_STREAM_FIN, type) || *len == 0 && off == s->in_off + 1,
-    //        "zero-length FIN is at stream offset +1");
+    ensure(*len || is_set(F_STREAM_FIN, type), "len %u > 0 or FIN", *len);
 
     // deliver data into stream
     struct q_stream * s = get_stream(c, sid);
     if (s == 0)
         s = new_stream(c, sid);
+
+    ensure(!is_set(F_STREAM_FIN, type) || (*len == 0 && off == s->in_off + 1),
+           "zero-length FIN is at stream offset +1");
 
     // adjust w_iov start and len to stream frame data
     v->buf = &v->buf[i];
@@ -119,30 +119,6 @@ dec_stream_frame(struct q_conn * const c,
 
     // best case: new in-order data
     if (off == s->in_off) {
-        if (*len == 0) {
-            if (is_set(F_STREAM_FIN, type)) {
-                switch (s->state) {
-                case STRM_IDLE:
-                case STRM_OPEN:
-                    s->state = STRM_HCRM;
-                    break;
-                case STRM_HCLO:
-                case STRM_CLSD:
-                    warn(err, "stream %u closed", s->id);
-                    s->state = STRM_CLSD;
-                    break;
-                default:
-                    die("unknown stream state 0x%02x", s->state);
-                }
-                warn(crit, "got FIN");
-            } else
-                warn(warn, "zero-length stream frame w/o FIN");
-            warn(debug, "freeing w_iov w/o stream data");
-            w_free_iov(w_engine(c->sock), v);
-            *len = 1; // count FIN
-            return i;
-        }
-
         warn(notice,
              "%u byte%s new data (off %" PRIu64 "-%" PRIu64 ") on str %u: %.*s",
              *len, plural(*len), off, off + *len, sid, v->len, v->buf);
@@ -152,6 +128,21 @@ dec_stream_frame(struct q_conn * const c,
         s->state = STRM_OPEN;
         if (s->id != 0)
             signal(&c->read_cv, &c->lock);
+        return i + *len;
+    }
+
+    // standalone FIN
+    if (off == s->in_off + 1 && *len == 0 && is_set(F_STREAM_FIN, type)) {
+        warn(notice, "received FIN on str %u", s->id);
+        if (s->state <= STRM_OPEN)
+            s->state = STRM_HCRM;
+        else if (s->state >= STRM_HCLO) {
+            s->state = STRM_IDLE;
+            signal(&s->close_cv, &s->lock);
+        }
+
+        w_free_iov(w_engine(c->sock), v);
+        *len = 1; // count FIN
         return i + *len;
     }
 
@@ -165,8 +156,8 @@ dec_stream_frame(struct q_conn * const c,
     }
 
     die("TODO: handle partially new or reordered data: %u byte%s data (off "
-        "%" PRIu64 "-%" PRIu64 ") on str %u: %.*s",
-        *len, plural(*len), off, off + *len, sid, v->len, v->buf);
+        "%" PRIu64 "-%" PRIu64 "), expected %" PRIu64 " on str %u: %.*s",
+        *len, plural(*len), off, off + *len, s->in_off, sid, v->len, v->buf);
 
     return i + *len;
 }
@@ -223,13 +214,10 @@ dec_ack_frame(struct ev_loop * const loop,
     uint8_t type = 0;
     dec(type, v->buf, v->len, i, 0, "0x%02x");
 
-    uint8_t num_blocks = 0;
+    uint8_t num_blocks = 1;
     if (is_set(F_ACK_N, type)) {
         dec(num_blocks, v->buf, v->len, i, 0, "%u");
         num_blocks++;
-    } else {
-        num_blocks = 1;
-        warn(debug, "F_ACK_N unset; one ACK block present");
     }
 
     uint8_t num_ts = 0;
@@ -267,25 +255,29 @@ dec_ack_frame(struct ev_loop * const loop,
     // TODO: if (packets ACKed that the sender skipped): abortConnection()
 
     const uint8_t ack_block_len = dec_ack_block_len(type);
-    warn(debug, "%u-byte ACK block len", ack_block_len);
-
     uint64_t n = pm[v->idx].nr;
     uint64_t ack = lg_ack;
     for (uint8_t b = 0; b < num_blocks; b++) {
-        warn(debug, "decoding ACK block #%u", b);
         uint64_t l = 0;
         dec(l, v->buf, v->len, i, ack_block_len, "%" PRIu64);
 
         // third clause from OnAckReceived pseudo code:
 
         // find all newly ACKed packets
-        while (ack > lg_ack - l) {
+        while (ack >= lg_ack - l) {
             p = find_sent_pkt(c, ack);
             if (p && ++pm[p->idx].ack_cnt == 1) {
                 // this is a newly ACKed packet
                 warn(notice, "pkt %" PRIu64 " had first ACK for %" PRIu64, n,
                      ack);
                 c->lg_acked = MAX(c->lg_acked, ack);
+
+                // adjust in_flight
+                if (pm[p->idx].buf_len > Q_OFFSET) {
+                    c->in_flight -= pm[p->idx].buf_len;
+                    warn(notice, "in_flight now %" PRIu64 " (-%u)",
+                         c->in_flight, pm[p->idx].buf_len);
+                }
 
                 // see OnPacketAcked pseudo code (for LD):
 
@@ -301,7 +293,8 @@ dec_ack_frame(struct ev_loop * const loop,
 
                 // move the iov from sent_pkts back to user return stailq
                 STAILQ_REMOVE(&c->sent_pkts, p, w_iov, next);
-                STAILQ_INSERT_TAIL(&pm[p->idx].str->r, p, next);
+                struct q_stream * const s = pm[p->idx].str;
+                STAILQ_INSERT_TAIL(&s->r, p, next);
 
                 // see OnPacketAcked pseudo code (for CC):
                 if (ack >= c->rec_end) {
@@ -309,11 +302,11 @@ dec_ack_frame(struct ev_loop * const loop,
                         c->cwnd += p->len;
                     else
                         c->cwnd += p->len / c->cwnd;
-                    warn(debug, "cwnd now %" PRIu64, c->cwnd);
+                    // warn(debug, "cwnd now %" PRIu64, c->cwnd);
                 }
 
                 // XXX: this is not quite the right condition (ignores gaps)
-                if (c->lg_acked == c->lg_sent)
+                if (s->state == STRM_OPEN && c->lg_acked == c->lg_sent)
                     signal(&c->write_cv, &c->lock);
             }
             ack--;
@@ -478,17 +471,17 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     enc(buf, len, i, &ack_delay, 0, "%u");
 
     struct ival * b;
-    uint64_t lo = 0;
+    uint64_t prev_lo = 0;
     SPLAY_FOREACH_REV (b, diet, &c->recv) {
-        const uint64_t ack_block = lg_recv - (b->hi - b->lo);
-        enc(buf, len, i, &ack_block, ack_block_len, "%" PRIu64);
-        warn(notice, "ACKing %" PRIu64 "-%" PRIu64, b->lo, b->hi);
-        if (lo) {
-            const uint64_t gap = lo - b->hi;
+        if (prev_lo) {
+            const uint64_t gap = prev_lo - b->hi;
             ensure(gap <= UINT8_MAX, "TODO: handle larger ACK gaps");
-            enc(buf, len, i, &gap, ack_block_len, "%" PRIu64);
+            enc(buf, len, i, &gap, sizeof(uint8_t), "%" PRIu64);
         }
-        lo = b->lo;
+        prev_lo = b->lo;
+        const uint64_t ack_block = b->hi - b->lo;
+        warn(notice, "ACKing %" PRIu64 "-%" PRIu64, b->lo, b->hi);
+        enc(buf, len, i, &ack_block, ack_block_len, "%" PRIu64);
     }
     return i - pos;
 }
@@ -532,36 +525,42 @@ uint16_t enc_stream_frame(struct q_stream * const s,
                           const uint32_t idx)
 {
     const uint16_t dlen = len - Q_OFFSET; // TODO: support FIN bit
-    ensure(dlen || s->state >= STRM_HCRM, "no stream data or need to send FIN");
+    ensure(dlen || s->state > STRM_OPEN, "no stream data or need to send FIN");
 
     warn(notice, "%u byte%s at off %" PRIu64 "-%" PRIu64 " on str %u: %.*s",
          dlen, plural(dlen), off, off + dlen, s->id, dlen,
          &((uint8_t *)buf)[Q_OFFSET]);
 
-    // there is stream data, so prepend a stream frame header
-    const uint8_t off_len = needed_off_len(off);
+    uint64_t o = off;
     const uint8_t sid_len = needed_sid_len(s->id);
-    uint8_t type = T_STREAM | (dlen ? F_STREAM_DATA_LEN : 0) |
-                   enc_off_len[off_len] | enc_sid_len[sid_len];
+    uint8_t type =
+        T_STREAM | (dlen ? F_STREAM_DATA_LEN : 0) | enc_sid_len[sid_len];
 
-    warn(warn, "stream state 0x%02x", s->state);
-    if (s->state >= STRM_HCRM /*&& STAILQ_EMPTY(&s->o)*/) {
+    // if this stream was closed locally or remotely, and this is the last
+    // packet or we have no more packets, include a FIN
+    if (s->state == STRM_CLSD ||
+        (s->state == STRM_HCLO &&
+         (STAILQ_NEXT(STAILQ_FIRST(&s->o), next) == 0 ||
+          STAILQ_EMPTY(&s->o)))) {
+        warn(notice, "sending FIN on str %u", s->id);
         type |= F_STREAM_FIN;
-        if (s->state == STRM_HCRM) {
-            warn(err, "stream %u closed", s->id);
-            s->state = STRM_CLSD;
-            if (s->id != 0)
-                signal(&s->c->close_cv, &s->c->lock);
+        if (s->state == STRM_CLSD) {
+            warn(err, "str %u dead", s->id);
+            s->state = STRM_IDLE;
+            signal(&s->close_cv, &s->lock);
         }
+        o += dlen ? 0 : 1; // a standalone FIN consumes offset
     }
-
-    uint16_t i = pm[idx].head_start = Q_OFFSET - 3 - off_len - sid_len;
+    // prepend a stream frame header
+    const uint8_t off_len = needed_off_len(o);
+    type |= enc_off_len[off_len];
 
     // now that we know how long the stream frame header is, encode it
+    uint16_t i = pm[idx].head_start = Q_OFFSET - 3 - off_len - sid_len;
     enc(buf, len, i, &type, 0, "0x%02x");
     enc(buf, len, i, &s->id, sid_len, "%u");
     if (off_len)
-        enc(buf, len, i, &off, off_len, "%" PRIu64);
+        enc(buf, len, i, &o, off_len, "%" PRIu64);
     if (dlen)
         enc(buf, len, i, &dlen, 0, "%u");
 

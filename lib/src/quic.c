@@ -118,12 +118,11 @@ static struct q_conn * new_conn(struct w_engine * const w,
                "ptls_set_server_name");
 
     // initialize synchronization helpers
-    ensure(pthread_mutex_init(&c->lock, 0) == 0, "pthread_mutex_init");
-    ensure(pthread_cond_init(&c->close_cv, 0) == 0, "pthread_cond_init");
-    ensure(pthread_cond_init(&c->read_cv, 0) == 0, "pthread_cond_init");
-    ensure(pthread_cond_init(&c->write_cv, 0) == 0, "pthread_cond_init");
-    ensure(pthread_cond_init(&c->connect_cv, 0) == 0, "pthread_cond_init");
-    ensure(pthread_cond_init(&c->accept_cv, 0) == 0, "pthread_cond_init");
+    mutex_init(&c->lock);
+    cond_init(&c->read_cv);
+    cond_init(&c->write_cv);
+    cond_init(&c->connect_cv);
+    cond_init(&c->accept_cv);
 
     // initialize socket and start an RX/TX watchers
     ev_async_init(&c->tx_w, tx);
@@ -200,16 +199,21 @@ void q_write(struct q_conn * const c,
     const uint32_t qlen = w_iov_stailq_len(q);
     warn(warn, "waiting for %u-byte write to complete", qlen);
     lock(&c->lock);
+
+    lock(&s->lock);
     STAILQ_CONCAT(&s->o, q);
     s->state = STRM_OPEN;
+    unlock(&s->lock);
 
     // kick TX watcher
     ev_async_send(loop, &c->tx_w);
-
     wait(&c->write_cv, &c->lock);
 
     // return written data back to user stailq
+    lock(&s->lock);
     STAILQ_CONCAT(q, &s->r);
+    unlock(&s->lock);
+
     unlock(&c->lock);
     warn(warn, "write done");
     ensure(w_iov_stailq_len(q) == qlen, "payload corrupted");
@@ -222,9 +226,9 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_stailq * const i)
     warn(warn, "waiting for data");
     lock(&c->lock);
     wait(&c->read_cv, &c->lock);
-    unlock(&c->lock);
 
-    SPLAY_FOREACH (s, stream, &c->streams)
+    SPLAY_FOREACH (s, stream, &c->streams) {
+        lock(&s->lock);
         if (!STAILQ_EMPTY(&s->i)) {
 #ifndef NDEBUG
             const uint32_t in_len = w_iov_stailq_len(&s->i);
@@ -233,11 +237,16 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_stailq * const i)
 #endif
             break;
         }
+        unlock(&s->lock);
+    }
+    unlock(&c->lock);
+
     if (s == 0)
         return 0;
 
     // return data
     STAILQ_CONCAT(i, &s->i);
+    unlock(&s->lock);
     warn(warn, "read done");
     return s;
 }
@@ -317,7 +326,7 @@ void * q_init(const char * const ifname)
     plat_initrandom();
 
     // initialize mutexes, etc.
-    ensure(pthread_mutex_init(&q_conns_lock, 0) == 0, "pthread_mutex_init");
+    mutex_init(&q_conns_lock);
 
     // initialize TLS context
     warn(debug, "TLS: key %u byte%s, cert %u byte%s", tls_key_len,
@@ -350,7 +359,7 @@ void * q_init(const char * const ifname)
 
     // initialize the event loop
     loop = ev_default_loop(0);
-    ensure(pthread_mutex_init(&loop_lock, 0) == 0, "pthread_mutex_init");
+    mutex_init(&loop_lock);
     ev_set_userdata(loop, &loop_lock);
     ev_set_loop_release_cb(loop, l_release, l_acquire);
     ev_async_init(&loop_update_w, loop_update);
@@ -375,23 +384,39 @@ static void __attribute__((nonnull)) do_close(struct q_conn * const c)
     lock(&c->lock);
     struct q_stream * s;
     SPLAY_FOREACH (s, stream, &c->streams) {
-        warn(debug, "closing str %u on conn %" PRIx64, s->id, s->c->id);
-        s->state = STRM_HCLO;
+        lock(&s->lock);
+        if (s->state <= STRM_OPEN) {
+            warn(debug, "half-closing str %u on conn %" PRIx64, s->id,
+                 s->c->id);
+            s->state = STRM_HCLO;
+        } else {
+            warn(debug, "str %u on conn %" PRIx64 " already HCRM, now CLSD",
+                 s->id, s->c->id);
+            s->state = STRM_CLSD;
+        }
+        unlock(&s->lock);
     }
+    unlock(&c->lock);
+
     ev_async_send(loop, &c->tx_w);
 
     // wait until all streams are closed
-    while (SPLAY_ROOT(&c->streams)) {
-        wait(&c->close_cv, &c->lock);
-    }
-
     struct q_stream * tmp;
+    lock(&c->lock);
     for (s = SPLAY_MIN(stream, &c->streams); s; s = tmp) {
+        if (s->state != STRM_IDLE) {
+            unlock(&c->lock);
+            lock(&s->lock);
+            warn(warn, "waiting for close on str %u", s->id);
+            wait(&s->close_cv, &s->lock);
+            unlock(&s->lock);
+            lock(&c->lock);
+        }
+        warn(warn, "str %u is dead", s->id);
         tmp = SPLAY_NEXT(stream, &c->streams, s);
-        w_free(w_engine(c->sock), &s->o);
-        w_free(w_engine(c->sock), &s->i);
-        free(s);
+        free_stream(s);
     }
+    unlock(&c->lock);
 
     ev_io_stop(loop, &c->rx_w);
     ev_timer_stop(loop, &c->ld_alarm);
@@ -401,17 +426,17 @@ static void __attribute__((nonnull)) do_close(struct q_conn * const c)
     ptls_free(c->tls);
     if (c->sock)
         w_close(c->sock);
-    unlock(&c->lock);
 
-    ensure(pthread_cond_destroy(&c->close_cv) == 0, "pthread_cond_destroy");
-    ensure(pthread_cond_destroy(&c->read_cv) == 0, "pthread_cond_destroy");
-    ensure(pthread_cond_destroy(&c->write_cv) == 0, "pthread_cond_destroy");
-    ensure(pthread_cond_destroy(&c->connect_cv) == 0, "pthread_cond_destroy");
-    ensure(pthread_cond_destroy(&c->accept_cv) == 0, "pthread_cond_destroy");
-    ensure(pthread_mutex_destroy(&c->lock) == 0, "pthread_mutex_init");
+    cond_destroy(&c->read_cv);
+    cond_destroy(&c->write_cv);
+    cond_destroy(&c->connect_cv);
+    cond_destroy(&c->accept_cv);
+    mutex_destroy(&c->lock);
 
     // remove connection from global list
+    lock(&q_conns_lock);
     SPLAY_REMOVE(conn, &q_conns, c);
+    unlock(&q_conns_lock);
 
     free(c);
 }
@@ -419,16 +444,17 @@ static void __attribute__((nonnull)) do_close(struct q_conn * const c)
 
 void q_close(struct q_conn * const c)
 {
-    // lock(&q_conns_lock);
+    warn(warn, "conn %" PRIx64 " closing", c->id);
     do_close(c);
-    // unlock(&q_conns_lock);
+    warn(warn, "conn %" PRIx64 " closed", c->id);
 }
 
 
 void q_cleanup(void * const q)
 {
     // wait for engine thread
-    ensure(pthread_join(tid, 0) == 0, " pthread_join");
+    ensure(pthread_cancel(tid) == 0, "pthread_cancel");
+    ensure(pthread_join(tid, 0) == 0, "pthread_join");
 
     // handle all signals in this thread again
     sigset_t set;

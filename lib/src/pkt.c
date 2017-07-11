@@ -117,8 +117,8 @@ uint16_t enc_pkt(struct q_conn * const c,
     uint8_t flags = 0;
     c->lg_sent++; // TODO: increase by random offset
 
-    warn(debug, "%s conn state 0x%02x",
-         is_set(CONN_FLAG_CLNT, c->flags) ? "client" : "server", c->state);
+    // warn(debug, "%s conn state 0x%02x",
+    //      is_set(CONN_FLAG_CLNT, c->flags) ? "client" : "server", c->state);
     switch (c->state) {
     case CONN_VERS_SENT:
         flags |= F_LONG_HDR | F_LH_CLNT_INIT;
@@ -144,7 +144,6 @@ uint16_t enc_pkt(struct q_conn * const c,
     if (is_set(F_LONG_HDR, flags) || is_set(F_SH_CID, flags))
         enc(v->buf, v->len, i, &c->id, 0, "%" PRIx64);
 
-    pm[v->idx].nr = c->lg_sent;
     if (is_set(F_LONG_HDR, flags)) {
         const uint32_t nr = (const uint32_t)c->lg_sent;
         enc(v->buf, v->len, i, &nr, 0, "%u");
@@ -162,7 +161,7 @@ uint16_t enc_pkt(struct q_conn * const c,
     const uint16_t hash_pos = i;
     i += HASH_LEN;
     ensure(i < Q_OFFSET, "Q_OFFSET is too small");
-    warn(debug, "skipping [%u..%u] to leave room for hash", hash_pos, i - 1);
+    // warn(debug, "skipping [%u..%u] to leave room for hash", hash_pos, i - 1);
 
     if (!SPLAY_EMPTY(&c->recv))
         i += enc_ack_frame(c, v->buf, v->len, i);
@@ -170,14 +169,13 @@ uint16_t enc_pkt(struct q_conn * const c,
     // if we've been passed a stream pointer, we need to prepend a stream frame
     // header to the data (otherwise, it's an rtx)
     if (s) {
-        warn(debug, "str state 0x%02x", s->state);
+        pm[v->idx].nr = c->lg_sent;
 
         // pad out the rest of Q_OFFSET
         enc_padding_frame(v->buf, i, Q_OFFSET - i);
 
         // encode any stream data present
-        if (v->len > Q_OFFSET || s->state == STRM_HCLO ||
-            s->state == STRM_HCRM) {
+        if (v->len > Q_OFFSET || s->state >= STRM_HCLO) {
             // for retransmissions, encode the original stream data offset
             pm[v->idx].data_off =
                 pm[v->idx].data_off ? pm[v->idx].data_off : s->out_off;
@@ -186,6 +184,7 @@ uint16_t enc_pkt(struct q_conn * const c,
             // packet
             i = enc_stream_frame(s, v->buf, v->len, pm[v->idx].data_off,
                                  v->idx);
+            s->out_nr = c->lg_sent;
 
             // if this is not a retransmission, increase the stream data
             // offset
@@ -201,17 +200,15 @@ uint16_t enc_pkt(struct q_conn * const c,
             i = MIN_IP4_INI_LEN;
         }
 
-        // store final packet length
-        pm[v->idx].buf_len = i;
-
-    } else {
+    } else
         // this is a retransmission, pad out until beginning of stream
         // header
         if (pm[v->idx].head_start)
-            enc_padding_frame(v->buf, i, pm[v->idx].head_start - i);
-    }
+        enc_padding_frame(v->buf, i, pm[v->idx].head_start - i);
 
-    i = pm[v->idx].buf_len;
+    // store final packet length
+    pm[v->idx].buf_len = i;
+
     const uint64_t hash = fnv_1a(v->buf, i, hash_pos, HASH_LEN);
     warn(debug, "inserting %lu-byte hash over range [0..%u] into [%u..%lu]",
          HASH_LEN, i - 1, hash_pos, hash_pos + HASH_LEN - 1);
