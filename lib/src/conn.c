@@ -293,6 +293,17 @@ void tx(struct ev_loop * const l __attribute__((unused)),
 }
 
 
+static void maybe_signal_app(struct q_conn * const c,
+                             pthread_cond_t * const cv,
+                             const uint8_t flag)
+{
+    if (!is_set(flag, c->flags))
+        return;
+    c->flags &= ~flag; // clear the flag
+    signal(cv);
+}
+
+
 void rx(struct ev_loop * const l,
         ev_io * const rx_w,
         int e __attribute__((unused)))
@@ -300,10 +311,8 @@ void rx(struct ev_loop * const l,
     struct w_sock * const ws = rx_w->data;
     w_nic_rx(w_engine(ws), -1);
     struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
+    SLIST_HEAD(, q_conn) crx = SLIST_HEAD_INITIALIZER();
     w_rx(ws, &i);
-
-    bool tx_needed = false;
-    struct q_conn * c = 0;
 
     while (!STAILQ_EMPTY(&i)) {
         struct w_iov * const v = STAILQ_FIRST(&i);
@@ -332,7 +341,7 @@ void rx(struct ev_loop * const l,
         const uint64_t nr = pm[v->idx].nr = pkt_nr(v->buf, v->len);
         const uint64_t cid = pkt_cid(v->buf, v->len);
         const uint8_t type = w_connected(ws) ? CONN_FLAG_CLNT : 0;
-        c = get_conn(cid, type);
+        struct q_conn * c = get_conn(cid, type);
         if (c == 0) {
             // this is a packet for a new connection, create it
             const struct sockaddr_in peer = {.sin_family = AF_INET,
@@ -344,6 +353,12 @@ void rx(struct ev_loop * const l,
             init_conn(c, cid, (const struct sockaddr *)&peer, peer_len);
             c->lg_sent = nr - 1; // echo received packet number
             // TODO: allow server to choose a different cid than the client did
+        }
+
+        // remember that we had a RX event on this connection
+        if (!is_set(CONN_FLAG_RX, c->flags)) {
+            c->flags |= CONN_FLAG_RX;
+            SLIST_INSERT_HEAD(&crx, c, next);
         }
 
         diet_insert(&c->recv, nr);
@@ -369,7 +384,7 @@ void rx(struct ev_loop * const l,
             // respond to the version negotiation packet
             c->vers = pkt_vers(v->buf, v->len);
             struct q_stream * const s = get_stream(c, 0);
-            tx_needed = true;
+            c->flags |= CONN_FLAG_TX;
             if (vers_supported(c->vers)) {
                 warn(info, "supporting client-requested version 0x%08x",
                      c->vers);
@@ -395,7 +410,7 @@ void rx(struct ev_loop * const l,
 
         case CONN_STAT_VERS_SENT: {
             struct q_stream * const s = get_stream(c, 0);
-            tx_needed = true;
+            c->flags |= CONN_FLAG_TX;
             if (is_set(F_LH_TYPE_VNEG, pkt_flags(v->buf))) {
                 warn(info, "server didn't like our version 0x%08x", c->vers);
                 ensure(c->vers == pkt_vers(v->buf, v->len),
@@ -420,7 +435,7 @@ void rx(struct ev_loop * const l,
         }
 
         case CONN_STAT_VERS_OK:
-            tx_needed |= dec_frames(l, c, v);
+            c->flags |= dec_frames(l, c, v) ? CONN_FLAG_TX : 0;
 
             // pass any further data received on stream 0 to TLS and check
             // whether that completes the client handshake
@@ -430,15 +445,14 @@ void rx(struct ev_loop * const l,
                 c->state = CONN_STAT_ESTB;
                 warn(info, "conn %" PRIx64 " now in state %u", c->id, c->state);
                 // this is a new connection we just accepted or connected
-                if (is_set(CONN_FLAG_CLNT, c->flags))
-                    signal(&c->connect_cv, &c->lock);
-                else
-                    signal(&c->accept_cv, &c->lock);
+                c->flags |= is_set(CONN_FLAG_CLNT, c->flags)
+                                ? CONN_FLAG_CNCT_DONE
+                                : CONN_FLAG_ACPT_DONE;
             }
             break;
 
         case CONN_STAT_ESTB:
-            tx_needed |= dec_frames(l, c, v);
+            c->flags |= dec_frames(l, c, v) ? CONN_FLAG_TX : 0;
             break;
 
 
@@ -447,10 +461,22 @@ void rx(struct ev_loop * const l,
         }
     }
 
-    // TODO: would be better to kick each connection only once
-    if (tx_needed) {
-        // warn(crit, "TX needed");
-        tx(l, &c->tx_w, 0);
+    // for all connections that had RX events, check if we need to signal the
+    // app and/or need to do a TX
+    struct q_conn * c;
+    SLIST_FOREACH (c, &crx, next) {
+        // is a TX needed for this connection?
+        if (is_set(CONN_FLAG_TX, c->flags))
+            tx(l, &c->tx_w, 0);
+
+        // possibly signal the app
+        maybe_signal_app(c, &c->read_cv, CONN_FLAG_READ_DONE);
+        maybe_signal_app(c, &c->write_cv, CONN_FLAG_WRIT_DONE);
+        maybe_signal_app(c, &c->connect_cv, CONN_FLAG_CNCT_DONE);
+        maybe_signal_app(c, &c->accept_cv, CONN_FLAG_ACPT_DONE);
+
+        // clear the helper flags set above
+        c->flags &= ~(CONN_FLAG_RX | CONN_FLAG_TX);
     }
 }
 
@@ -651,10 +677,10 @@ void * loop_run(void * const arg)
     struct q_conn * c;
     SPLAY_FOREACH (c, conn, &q_conns) {
         // XXX do we also need to stop the watchers here?
-        signal(&c->read_cv, &c->lock);
-        signal(&c->write_cv, &c->lock);
-        signal(&c->connect_cv, &c->lock);
-        signal(&c->accept_cv, &c->lock);
+        signal(&c->read_cv);
+        signal(&c->write_cv);
+        signal(&c->connect_cv);
+        signal(&c->accept_cv);
     }
     unlock(&q_conns_lock);
     return 0; // implicit pthread_exit()

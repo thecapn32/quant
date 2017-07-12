@@ -49,7 +49,6 @@
 #include "pkt.h"
 #include "quic.h"
 #include "stream.h"
-#include "thread.h"
 
 struct ev_loop;
 
@@ -127,7 +126,7 @@ dec_stream_frame(struct q_conn * const c,
         STAILQ_INSERT_TAIL(&s->i, v, next);
         s->state = STRM_OPEN;
         if (s->id != 0)
-            signal(&c->read_cv, &c->lock);
+            c->flags |= CONN_FLAG_READ_DONE;
         return i + *len;
     }
 
@@ -136,10 +135,8 @@ dec_stream_frame(struct q_conn * const c,
         warn(notice, "received FIN on str %u", s->id);
         if (s->state <= STRM_OPEN)
             s->state = STRM_HCRM;
-        else if (s->state >= STRM_HCLO) {
+        else if (s->state >= STRM_HCLO)
             s->state = STRM_IDLE;
-            signal(&s->close_cv, &s->lock);
-        }
 
         w_free_iov(w_engine(c->sock), v);
         *len = 1; // count FIN
@@ -307,7 +304,7 @@ dec_ack_frame(struct ev_loop * const loop,
 
                 // XXX: this is not quite the right condition (ignores gaps)
                 if (s->state == STRM_OPEN && c->lg_acked == c->lg_sent)
-                    signal(&c->write_cv, &c->lock);
+                    c->flags |= CONN_FLAG_WRIT_DONE;
             }
             ack--;
         }
@@ -547,7 +544,6 @@ uint16_t enc_stream_frame(struct q_stream * const s,
         if (s->state == STRM_CLSD) {
             warn(err, "str %u dead", s->id);
             s->state = STRM_IDLE;
-            signal(&s->close_cv, &s->lock);
         }
         o += dlen ? 0 : 1; // a standalone FIN consumes offset
     }

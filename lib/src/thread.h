@@ -78,7 +78,7 @@
     } while (0)
 
 
-#define signal(c, l)                                                           \
+#define signal(c)                                                              \
     do {                                                                       \
         const int ret_cs = pthread_cond_signal(c);                             \
         ensure(ret_cs == 0, "pthread_cond_signal returned %d (%s)", ret_cs,    \
