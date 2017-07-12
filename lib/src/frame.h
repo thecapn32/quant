@@ -43,11 +43,9 @@
 struct q_conn;
 struct q_stream;
 struct w_iov;
-struct ev_loop;
 
-extern bool __attribute__((nonnull)) dec_frames(struct ev_loop * const loop,
-                                                struct q_conn * const c,
-                                                struct w_iov * const v);
+extern bool __attribute__((nonnull))
+dec_frames(struct q_conn * const c, struct w_iov * const v);
 
 extern uint16_t __attribute__((nonnull))
 enc_padding_frame(uint8_t * const buf, const uint16_t pos, const uint16_t len);

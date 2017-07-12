@@ -63,6 +63,9 @@ extern struct q_stream * __attribute__((nonnull))
 q_rsv_stream(struct q_conn * const c);
 
 extern void __attribute__((nonnull))
+q_close_stream(struct q_stream * const s);
+
+extern void __attribute__((nonnull))
 q_alloc(void * const w, struct w_iov_stailq * const q, const uint32_t len);
 
 extern void __attribute__((nonnull))

@@ -32,7 +32,6 @@
 #include "conn.h"
 #include "quic.h"
 #include "stream.h"
-#include "thread.h"
 
 
 int32_t stream_cmp(const struct q_stream * const a,
@@ -58,8 +57,6 @@ struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
 
     struct q_stream * const s = calloc(1, sizeof(*s));
     ensure(c, "could not calloc q_stream");
-    mutex_init(&s->lock);
-    cond_init(&s->close_cv);
     s->c = c;
     STAILQ_INIT(&s->o);
     STAILQ_INIT(&s->i);
@@ -78,9 +75,6 @@ void free_stream(struct q_stream * const s)
 {
     warn(info, "freeing str %u on conn %" PRIx64 " as %s", s->id, s->c->id,
          is_set(CONN_FLAG_CLNT, s->c->flags) ? "client" : "server");
-
-    mutex_destroy(&s->lock);
-    cond_destroy(&s->close_cv);
 
     w_free(w_engine(s->c->sock), &s->o);
     w_free(w_engine(s->c->sock), &s->i);

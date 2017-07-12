@@ -99,13 +99,6 @@ struct q_conn {
 
     // TLS state
     ptls_t * tls;
-
-    // lock and condition variables
-    pthread_mutex_t lock;
-    pthread_cond_t write_cv;
-    pthread_cond_t accept_cv;
-    pthread_cond_t connect_cv;
-    pthread_cond_t read_cv;
 };
 
 
@@ -126,10 +119,7 @@ SPLAY_PROTOTYPE(conn, q_conn, node, conn_cmp)
 #define CONN_FLAG_RX 0x04   ///< We had an RX event on this connection
 #define CONN_FLAG_TX 0x08   ///< We have a pending TX on this connection
 
-#define CONN_FLAG_WRIT_DONE 0x10 ///< q_write() completed
-#define CONN_FLAG_ACPT_DONE 0x20 ///< q_accept() completed
-#define CONN_FLAG_CNCT_DONE 0x40 ///< q_connect() completed
-#define CONN_FLAG_READ_DONE 0x80 ///< q_read() completed
+#define CONN_FLAG_CALL_DONE 0x80
 
 
 struct ev_loop;

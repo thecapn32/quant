@@ -27,8 +27,6 @@
 #include <math.h>
 #include <netdb.h>
 #include <netinet/in.h>
-#include <pthread.h>
-#include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -53,16 +51,10 @@
 #include "pkt.h"
 #include "quic.h"
 #include "stream.h"
-#include "thread.h"
 
-
-struct ev_loop;
-
-static struct ev_loop * loop = 0;
 
 // All open QUIC connections.
 struct conn q_conns = SPLAY_INITIALIZER();
-pthread_mutex_t q_conns_lock;
 
 
 int64_t conn_cmp(const struct q_conn * const a, const struct q_conn * const b)
@@ -70,8 +62,9 @@ int64_t conn_cmp(const struct q_conn * const a, const struct q_conn * const b)
     const int64_t diff = (int64_t)a->id - (int64_t)b->id;
     if (likely(diff))
         return diff;
-    // at the moment, all connection flags affect the comparison
-    return (int8_t)a->flags - (int8_t)b->flags;
+    // include only some flags in the comparison
+    return (int8_t)(a->flags & (CONN_FLAG_CLNT | CONN_FLAG_EMBR)) -
+           (int8_t)(b->flags & (CONN_FLAG_CLNT | CONN_FLAG_EMBR));
 }
 
 
@@ -158,9 +151,7 @@ pick_from_server_vers(const void * const buf, const uint16_t len)
 struct q_conn * get_conn(const uint64_t id, const uint8_t type)
 {
     struct q_conn which = {.id = id, .flags = type};
-    lock(&q_conns_lock);
     struct q_conn * const c = SPLAY_FIND(conn, &q_conns, &which);
-    unlock(&q_conns_lock);
     return c;
 }
 
@@ -177,6 +168,11 @@ static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
 
     struct w_iov * v;
     STAILQ_FOREACH (v, q, next) {
+        if (s == 0 && v->len < Q_OFFSET) {
+            // warn(debug, "ignoring non-retransmittable pkt");
+            continue;
+        }
+
         // see TimeToSend pseudo code
         if (c->in_flight + v->len > c->cwnd ||
             last_sent_t - now + (v->len * c->srtt) / c->cwnd > 0) {
@@ -237,13 +233,6 @@ rtx(struct q_conn * const c, const uint32_t __attribute__((unused)) n)
 }
 
 
-void loop_update(struct ev_loop * const l __attribute__((unused)),
-                 ev_async * const w __attribute__((unused)),
-                 int e __attribute__((unused)))
-{
-}
-
-
 static void synth_tx(struct q_stream * const s)
 {
     struct w_iov * const ov = w_alloc_iov(w_engine(s->c->sock), Q_OFFSET);
@@ -263,9 +252,7 @@ void tx(struct ev_loop * const l __attribute__((unused)),
     struct q_conn * const c = w->data;
     struct q_stream * s = 0;
     bool did_tx = false;
-    lock(&c->lock);
     SPLAY_FOREACH (s, stream, &c->streams) {
-        lock(&s->lock);
         if (!STAILQ_EMPTY(&s->o)) {
             // warn(crit, "data TX needed on str %u", s->id);
             do_tx(c, s, &s->o);
@@ -276,31 +263,14 @@ void tx(struct ev_loop * const l __attribute__((unused)),
             synth_tx(s);
             did_tx = true;
         }
-        unlock(&s->lock);
     }
 
     if (did_tx == false) {
         // need to send ACKs but don't have any stream data to piggyback on
         s = get_stream(c, s ? s->id : 0);
-        if (s) {
-            // warn(crit, "synth TX on str %u", s->id);
-            lock(&s->lock);
-            synth_tx(s);
-            unlock(&s->lock);
-        }
+        // warn(crit, "synth TX on str %u", s->id);
+        synth_tx(s);
     }
-    unlock(&c->lock);
-}
-
-
-static void maybe_signal_app(struct q_conn * const c,
-                             pthread_cond_t * const cv,
-                             const uint8_t flag)
-{
-    if (!is_set(flag, c->flags))
-        return;
-    c->flags &= ~flag; // clear the flag
-    signal(cv);
 }
 
 
@@ -318,8 +288,12 @@ void rx(struct ev_loop * const l,
         struct w_iov * const v = STAILQ_FIRST(&i);
         STAILQ_REMOVE_HEAD(&i, next);
 
-        // if (_dlevel == debug)
-        //     hexdump(v->buf, v->len);
+        if (_dlevel == debug)
+            hexdump(v->buf, v->len);
+        if (v->len == 0)
+            // TODO figure out why recvmmsg returns zero-length iovecs
+            continue;
+        warn(debug, "received %u-byte packet", v->len);
         ensure(v->len <= MAX_PKT_LEN,
                "received %u-byte packet, larger than MAX_PKT_LEN of %u", v->len,
                MAX_PKT_LEN);
@@ -389,7 +363,7 @@ void rx(struct ev_loop * const l,
                 warn(info, "supporting client-requested version 0x%08x",
                      c->vers);
 
-                dec_frames(l, c, v);
+                dec_frames(c, v);
 
                 // we should have received a ClientHello
                 ensure(!STAILQ_EMPTY(&s->i), "no ClientHello");
@@ -423,7 +397,7 @@ void rx(struct ev_loop * const l,
                 rtx(c, UINT32_MAX); // retransmit the ClientHello
             } else {
                 warn(info, "server accepted version 0x%08x", c->vers);
-                dec_frames(l, c, v);
+                dec_frames(c, v);
 
                 // we should have received a ServerHello
                 ensure(!STAILQ_EMPTY(&s->i), "no ServerHello");
@@ -435,7 +409,7 @@ void rx(struct ev_loop * const l,
         }
 
         case CONN_STAT_VERS_OK:
-            c->flags |= dec_frames(l, c, v) ? CONN_FLAG_TX : 0;
+            c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
 
             // pass any further data received on stream 0 to TLS and check
             // whether that completes the client handshake
@@ -445,14 +419,12 @@ void rx(struct ev_loop * const l,
                 c->state = CONN_STAT_ESTB;
                 warn(info, "conn %" PRIx64 " now in state %u", c->id, c->state);
                 // this is a new connection we just accepted or connected
-                c->flags |= is_set(CONN_FLAG_CLNT, c->flags)
-                                ? CONN_FLAG_CNCT_DONE
-                                : CONN_FLAG_ACPT_DONE;
+                c->flags |= CONN_FLAG_CALL_DONE;
             }
             break;
 
         case CONN_STAT_ESTB:
-            c->flags |= dec_frames(l, c, v) ? CONN_FLAG_TX : 0;
+            c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
             break;
 
 
@@ -463,22 +435,27 @@ void rx(struct ev_loop * const l,
 
     // for all connections that had RX events, check if we need to signal the
     // app and/or need to do a TX
-    struct q_conn * c;
+    struct q_conn *c, *sc = 0;
     SLIST_FOREACH (c, &crx, next) {
         // is a TX needed for this connection?
         if (is_set(CONN_FLAG_TX, c->flags))
             tx(l, &c->tx_w, 0);
 
         // possibly signal the app
-        maybe_signal_app(c, &c->read_cv, CONN_FLAG_READ_DONE);
-        maybe_signal_app(c, &c->write_cv, CONN_FLAG_WRIT_DONE);
-        maybe_signal_app(c, &c->connect_cv, CONN_FLAG_CNCT_DONE);
-        maybe_signal_app(c, &c->accept_cv, CONN_FLAG_ACPT_DONE);
+        if (is_set(CONN_FLAG_CALL_DONE, c->flags)) {
+            c->flags &= ~CONN_FLAG_CALL_DONE; // clear the flag
+            ensure(sc == 0, "have multiple connections that finished calls?");
+            sc = c;
+        }
 
         // clear the helper flags set above
         c->flags &= ~(CONN_FLAG_RX | CONN_FLAG_TX);
     }
+
+    if (sc)
+        ev_break(loop, EVBREAK_ALL);
 }
+
 
 void detect_lost_pkts(struct q_conn * const c)
 {
@@ -554,8 +531,7 @@ void set_ld_alarm(struct q_conn * const c)
 
     if (c->in_flight == 0) {
         ev_timer_stop(loop, &c->ld_alarm);
-        // warn(debug, "no retransmittable pkts outstanding, stopping LD
-        // alarm");
+        warn(debug, "no retransmittable pkts outstanding, stopping LD alarm");
         return;
     }
 
@@ -623,65 +599,4 @@ void ld_alarm(struct ev_loop * const l __attribute__((unused)),
         c->rto_cnt++;
     }
     set_ld_alarm(c);
-}
-
-
-static void __attribute__((nonnull))
-signal_cb(struct ev_loop * const l,
-          ev_signal * const w __attribute__((unused)),
-          int e __attribute__((unused)))
-{
-    ev_break(l, EVBREAK_ALL);
-}
-
-
-void * loop_run(void * const arg)
-{
-    loop = (struct ev_loop *)arg;
-
-    // set up signal handler
-    ev_signal sigint_w, sigquit_w, sigterm_w;
-    ev_signal_init(&sigint_w, signal_cb, SIGINT);
-    ev_signal_init(&sigquit_w, signal_cb, SIGQUIT);
-    ev_signal_init(&sigterm_w, signal_cb, SIGTERM);
-    ev_signal_start(loop, &sigint_w);
-    ev_signal_start(loop, &sigquit_w);
-    ev_signal_start(loop, &sigterm_w);
-
-    // unblock only those signals that we'll handle in the event loop
-    sigset_t set;
-    sigfillset(&set);
-    ensure(pthread_sigmask(SIG_BLOCK, &set, 0) == 0, "pthread_sigmask");
-    sigemptyset(&set);
-    sigaddset(&set, SIGINT);
-    sigaddset(&set, SIGQUIT);
-    sigaddset(&set, SIGTERM);
-    ensure(pthread_sigmask(SIG_UNBLOCK, &set, 0) == 0, "pthread_sigmask");
-
-    // start the event loop (will be stopped by signal_cb)
-    pthread_mutex_t * const loop_lock = ev_userdata(loop);
-    lock(loop_lock);
-    ensure(pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, 0) == 0,
-           "pthread_setcanceltype");
-    ev_run(loop, 0);
-    unlock(loop_lock);
-
-    // stop signal watchers
-    ev_signal_stop(loop, &sigint_w);
-    ev_signal_stop(loop, &sigquit_w);
-    ev_signal_stop(loop, &sigterm_w);
-
-    // unblock the main thread, by signaling all possible conditions on all
-    // connections
-    lock(&q_conns_lock);
-    struct q_conn * c;
-    SPLAY_FOREACH (c, conn, &q_conns) {
-        // XXX do we also need to stop the watchers here?
-        signal(&c->read_cv);
-        signal(&c->write_cv);
-        signal(&c->connect_cv);
-        signal(&c->accept_cv);
-    }
-    unlock(&q_conns_lock);
-    return 0; // implicit pthread_exit()
 }

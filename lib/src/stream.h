@@ -25,7 +25,6 @@
 
 #pragma once
 
-#include <pthread.h>
 #include <stdint.h>
 
 #include <warpcore/warpcore.h>
@@ -49,9 +48,6 @@ struct q_stream {
 
     struct w_iov_stailq i; ///< tail queue containing inbound data
     uint64_t in_off;
-
-    pthread_mutex_t lock;
-    pthread_cond_t close_cv;
 };
 
 #define STRM_IDLE 0x00

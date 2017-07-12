@@ -48,7 +48,7 @@ extern struct pkt_meta * pm;
 
 #define Q_OFFSET 64
 
-// extern struct ev_loop * loop;
+extern struct ev_loop * loop;
 
 /// The versions of QUIC supported by this implementation
 extern const uint32_t ok_vers[];

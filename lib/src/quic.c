@@ -27,8 +27,6 @@
 #include <inttypes.h>
 #include <math.h>
 #include <netinet/in.h>
-#include <pthread.h>
-#include <signal.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -51,18 +49,11 @@
 #include "diet.h"
 #include "quic.h"
 #include "stream.h"
-#include "thread.h"
+
+struct sockaddr;
 
 
 // TODO: many of these globals should move to a per-engine struct
-
-struct sockaddr;
-struct ev_loop;
-
-/// Number of packet buffers to allocate.
-static const uint32_t nbufs = 1000;
-struct pkt_meta * pm = 0;
-static ev_async loop_update_w;
 
 
 /// QUIC version supported by this implementation in order of preference.
@@ -70,14 +61,16 @@ const uint32_t ok_vers[] = {
     0xff000004 // draft-ietf-quic-transport-04
 };
 
+/// Length of the @p ok_vers array.
 const uint8_t ok_vers_len = sizeof(ok_vers) / sizeof(ok_vers[0]);
 
 
-static struct ev_loop * loop = 0;
-static pthread_mutex_t loop_lock;
-
-static pthread_t tid = {0};
+struct pkt_meta * pm = 0;
+struct ev_loop * loop = 0;
 ptls_context_t tls_ctx = {0};
+
+
+static const uint32_t nbufs = 1000; ///< Number of packet buffers to allocate.
 
 static ptls_minicrypto_secp256r1sha256_sign_certificate_t sign_cert = {0};
 static ptls_iovec_t tls_certs = {0};
@@ -117,13 +110,6 @@ static struct q_conn * new_conn(struct w_engine * const w,
         ensure(ptls_set_server_name(c->tls, peer_name, strlen(peer_name)) == 0,
                "ptls_set_server_name");
 
-    // initialize synchronization helpers
-    mutex_init(&c->lock);
-    cond_init(&c->read_cv);
-    cond_init(&c->write_cv);
-    cond_init(&c->connect_cv);
-    cond_init(&c->accept_cv);
-
     // initialize socket and start an RX/TX watchers
     ev_async_init(&c->tx_w, tx);
     c->tx_w.data = c;
@@ -134,9 +120,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
     ev_io_start(loop, &c->rx_w);
 
     // add connection to global data structure
-    lock(&q_conns_lock);
     SPLAY_INSERT(conn, &q_conns, c);
-    unlock(&q_conns_lock);
 
     warn(debug, "embryonic %s conn created", peer_name ? "client" : "server");
     return c;
@@ -178,9 +162,7 @@ struct q_conn * q_connect(void * const q,
     ev_async_send(loop, &c->tx_w);
 
     warn(warn, "waiting for connect to complete on conn %" PRIx64, c->id);
-    lock(&c->lock);
-    wait(&c->connect_cv, &c->lock);
-    unlock(&c->lock);
+    ev_run(loop, 0);
 
     if (c->state != CONN_STAT_ESTB) {
         warn(warn, "conn %" PRIx64 " not connected", cid);
@@ -192,29 +174,23 @@ struct q_conn * q_connect(void * const q,
 }
 
 
-void q_write(struct q_conn * const c,
+void q_write(struct q_conn * const c __attribute__((unused)),
              struct q_stream * const s,
              struct w_iov_stailq * const q)
 {
     const uint32_t qlen = w_iov_stailq_len(q);
     warn(warn, "waiting for %u-byte write to complete", qlen);
-    lock(&c->lock);
 
-    lock(&s->lock);
     STAILQ_CONCAT(&s->o, q);
     s->state = STRM_OPEN;
-    unlock(&s->lock);
 
     // kick TX watcher
-    ev_async_send(loop, &c->tx_w);
-    wait(&c->write_cv, &c->lock);
+    ev_async_send(loop, &s->c->tx_w);
+    ev_run(loop, 0);
 
     // return written data back to user stailq
-    lock(&s->lock);
     STAILQ_CONCAT(q, &s->r);
-    unlock(&s->lock);
 
-    unlock(&c->lock);
     warn(warn, "write done");
     ensure(w_iov_stailq_len(q) == qlen, "payload corrupted");
 }
@@ -224,11 +200,9 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_stailq * const i)
 {
     struct q_stream * s = 0;
     warn(warn, "waiting for data");
-    lock(&c->lock);
-    wait(&c->read_cv, &c->lock);
+    ev_run(loop, 0);
 
     SPLAY_FOREACH (s, stream, &c->streams) {
-        lock(&s->lock);
         if (!STAILQ_EMPTY(&s->i)) {
 #ifndef NDEBUG
             const uint32_t in_len = w_iov_stailq_len(&s->i);
@@ -237,16 +211,13 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_stailq * const i)
 #endif
             break;
         }
-        unlock(&s->lock);
     }
-    unlock(&c->lock);
 
     if (s == 0)
         return 0;
 
     // return data
     STAILQ_CONCAT(i, &s->i);
-    unlock(&s->lock);
     warn(warn, "read done");
     return s;
 }
@@ -270,11 +241,7 @@ struct q_conn * q_accept(struct q_conn * const c)
     }
 
     warn(warn, "waiting for accept to complete embryonic server conn");
-    ev_async_send(loop, &loop_update_w);
-    lock(&c->lock);
-    wait(&c->accept_cv, &c->lock);
-    unlock(&c->lock);
-
+    ev_run(loop, 0);
     if (c->id == 0) {
         warn(warn, "conn not accepted");
         // TODO free embryonic connection
@@ -298,18 +265,6 @@ struct q_stream * q_rsv_stream(struct q_conn * const c)
 }
 
 
-static void l_release(struct ev_loop * const l __attribute__((unused)))
-{
-    unlock(&loop_lock);
-}
-
-
-static void l_acquire(struct ev_loop * const l __attribute__((unused)))
-{
-    lock(&loop_lock);
-}
-
-
 void * q_init(const char * const ifname)
 {
     // check versions
@@ -324,9 +279,6 @@ void * q_init(const char * const ifname)
 
     // initialize PRNG
     plat_initrandom();
-
-    // initialize mutexes, etc.
-    mutex_init(&q_conns_lock);
 
     // initialize TLS context
     warn(debug, "TLS: key %u byte%s, cert %u byte%s", tls_key_len,
@@ -349,74 +301,50 @@ void * q_init(const char * const ifname)
     // XXX setting this makes the TLS handshake fail on the client?
     // tls_ctx.verify_certificate = &verifier.super;
 
-    // block those signals that we'll let the event loop handle
-    sigset_t set;
-    sigemptyset(&set);
-    sigaddset(&set, SIGINT);
-    sigaddset(&set, SIGQUIT);
-    sigaddset(&set, SIGTERM);
-    ensure(pthread_sigmask(SIG_BLOCK, &set, 0) == 0, "pthread_sigmask");
-
     // initialize the event loop
     loop = ev_default_loop(0);
-    mutex_init(&loop_lock);
-    ev_set_userdata(loop, &loop_lock);
-    ev_set_loop_release_cb(loop, l_release, l_acquire);
-    ev_async_init(&loop_update_w, loop_update);
-    ev_async_start(loop, &loop_update_w);
 
-    // create the thread running ev_run
-    ensure(pthread_create(&tid, 0, loop_run, loop) == 0, "pthread_create");
-
-    warn(info, "threaded %s %s with libev %u.%u ready", quant_name,
-         quant_version, ev_version_major(), ev_version_minor());
+    warn(info, "%s %s with libev %u.%u ready", quant_name, quant_version,
+         ev_version_major(), ev_version_minor());
 
     return w;
 }
 
 
-static void __attribute__((nonnull)) do_close(struct q_conn * const c)
+void q_close_stream(struct q_stream * const s)
+{
+    if (s->state <= STRM_OPEN) {
+        warn(debug, "half-closing str %u on conn %" PRIx64, s->id, s->c->id);
+        s->state = STRM_HCLO;
+    } else {
+        warn(debug, "str %u on conn %" PRIx64 " already HCRM, now CLSD", s->id,
+             s->c->id);
+        s->state = STRM_CLSD;
+    }
+
+    ev_async_send(loop, &s->c->tx_w);
+
+    if (s->state != STRM_IDLE) {
+        warn(warn, "waiting for close on str %u", s->id);
+        ev_run(loop, 0);
+    }
+
+    warn(warn, "str %u closed", s->id);
+    free_stream(s);
+}
+
+
+void q_close(struct q_conn * const c)
 {
     warn(warn, "closing %s conn %" PRIx64,
          is_set(CONN_FLAG_CLNT, c->flags) ? "client" : "server", c->id);
 
-    // start closing all streams
-    lock(&c->lock);
-    struct q_stream * s;
-    SPLAY_FOREACH (s, stream, &c->streams) {
-        lock(&s->lock);
-        if (s->state <= STRM_OPEN) {
-            warn(debug, "half-closing str %u on conn %" PRIx64, s->id,
-                 s->c->id);
-            s->state = STRM_HCLO;
-        } else {
-            warn(debug, "str %u on conn %" PRIx64 " already HCRM, now CLSD",
-                 s->id, s->c->id);
-            s->state = STRM_CLSD;
-        }
-        unlock(&s->lock);
+    // close all streams
+    struct q_stream *s, *tmp;
+    for (s = SPLAY_MAX(stream, &c->streams); s; s = tmp) {
+        tmp = SPLAY_PREV(stream, &c->streams, s);
+        q_close_stream(s);
     }
-    unlock(&c->lock);
-
-    ev_async_send(loop, &c->tx_w);
-
-    // wait until all streams are closed
-    struct q_stream * tmp;
-    lock(&c->lock);
-    for (s = SPLAY_MIN(stream, &c->streams); s; s = tmp) {
-        if (s->state != STRM_IDLE) {
-            unlock(&c->lock);
-            lock(&s->lock);
-            warn(warn, "waiting for close on str %u", s->id);
-            wait(&s->close_cv, &s->lock);
-            unlock(&s->lock);
-            lock(&c->lock);
-        }
-        warn(warn, "str %u is dead", s->id);
-        tmp = SPLAY_NEXT(stream, &c->streams, s);
-        free_stream(s);
-    }
-    unlock(&c->lock);
 
     ev_io_stop(loop, &c->rx_w);
     ev_timer_stop(loop, &c->ld_alarm);
@@ -427,48 +355,23 @@ static void __attribute__((nonnull)) do_close(struct q_conn * const c)
     if (c->sock)
         w_close(c->sock);
 
-    cond_destroy(&c->read_cv);
-    cond_destroy(&c->write_cv);
-    cond_destroy(&c->connect_cv);
-    cond_destroy(&c->accept_cv);
-    mutex_destroy(&c->lock);
-
     // remove connection from global list
-    lock(&q_conns_lock);
     SPLAY_REMOVE(conn, &q_conns, c);
-    unlock(&q_conns_lock);
 
+    warn(warn, "%s conn %" PRIx64 " closed",
+         is_set(CONN_FLAG_CLNT, c->flags) ? "client" : "server", c->id);
     free(c);
-}
-
-
-void q_close(struct q_conn * const c)
-{
-    warn(warn, "conn %" PRIx64 " closing", c->id);
-    do_close(c);
-    warn(warn, "conn %" PRIx64 " closed", c->id);
 }
 
 
 void q_cleanup(void * const q)
 {
-    // wait for engine thread
-    ensure(pthread_cancel(tid) == 0, "pthread_cancel");
-    ensure(pthread_join(tid, 0) == 0, "pthread_join");
-
-    // handle all signals in this thread again
-    sigset_t set;
-    sigfillset(&set);
-    ensure(pthread_sigmask(SIG_UNBLOCK, &set, 0) == 0, "pthread_sigmask");
-
     // close all connections
     struct q_conn *c, *tmp;
-    // lock(&q_conns_lock);
     for (c = SPLAY_MIN(conn, &q_conns); c != 0; c = tmp) {
         tmp = SPLAY_NEXT(conn, &q_conns, c);
-        // do_close(c);
+        q_close(c);
     }
-    // unlock(&q_conns_lock);
 
     // stop the event loop
     ev_loop_destroy(loop);

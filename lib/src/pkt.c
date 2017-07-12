@@ -54,7 +54,7 @@ uint16_t pkt_hdr_len(const uint8_t * const buf, const uint16_t len)
         pos = 17;
     else
         pos = 1 + (flags & F_SH_CID ? 8 : 0) + pkt_nr_len[pkt_type(buf)];
-    ensure(pos <= len, "payload position %u after end pf packet %u", pos, len);
+    ensure(pos <= len, "payload position %u after end of packet %u", pos, len);
     return pos;
 }
 
@@ -117,8 +117,8 @@ uint16_t enc_pkt(struct q_conn * const c,
     uint8_t flags = 0;
     c->lg_sent++; // TODO: increase by random offset
 
-    // warn(debug, "%s conn state 0x%02x",
-    //      is_set(CONN_FLAG_CLNT, c->flags) ? "client" : "server", c->state);
+    warn(debug, "%s conn state 0x%02x",
+         is_set(CONN_FLAG_CLNT, c->flags) ? "client" : "server", c->state);
     switch (c->state) {
     case CONN_STAT_VERS_SENT:
         flags |= F_LONG_HDR | F_LH_CLNT_INIT;
@@ -157,6 +157,7 @@ uint16_t enc_pkt(struct q_conn * const c,
     } else
         enc(v->buf, v->len, i, &c->lg_sent, needed_pkt_nr_len(c->lg_sent),
             "%" PRIu64);
+    pm[v->idx].nr = c->lg_sent;
 
     const uint16_t hash_pos = i;
     i += HASH_LEN;
@@ -167,47 +168,32 @@ uint16_t enc_pkt(struct q_conn * const c,
         i += enc_ack_frame(c, v->buf, v->len, i);
 
     // if we've been passed a stream pointer, we need to prepend a stream frame
-    // header to the data (otherwise, it's an rtx)
+    // header to the data (otherwise, it's an RTX)
     if (s) {
-        pm[v->idx].nr = c->lg_sent;
-
         // pad out the rest of Q_OFFSET
         enc_padding_frame(v->buf, i, Q_OFFSET - i);
 
         // encode any stream data present
         if (v->len > Q_OFFSET || s->state >= STRM_HCLO) {
-            // for retransmissions, encode the original stream data offset
-            pm[v->idx].data_off =
-                pm[v->idx].data_off ? pm[v->idx].data_off : s->out_off;
+            i = enc_stream_frame(s, v->buf, v->len, s->out_off, v->idx);
 
-            // stream frames must be last, because they can extend to end of
-            // packet
-            i = enc_stream_frame(s, v->buf, v->len, pm[v->idx].data_off,
-                                 v->idx);
+            // increase the stream data offset
             s->out_nr = c->lg_sent;
-
-            // if this is not a retransmission, increase the stream data
-            // offset
-            if (pm[v->idx].data_off == s->out_off)
-                s->out_off += i - Q_OFFSET;
+            s->out_off += i - Q_OFFSET;
         }
 
-        if (c->state == CONN_STAT_VERS_SENT) {
-            const uint16_t pad = MIN_IP4_INI_LEN - i;
-            memset(&v->buf[i], T_PADDING, pad);
-            warn(debug, "padding initial packet with %u byte%s", pad,
-                 plural(pad));
-            i = MIN_IP4_INI_LEN;
-        }
+        if (c->state == CONN_STAT_VERS_SENT)
+            i += enc_padding_frame(v->buf, i, MIN_IP4_INI_LEN - i);
 
-    } else
-        // this is a retransmission, pad out until beginning of stream
-        // header
-        if (pm[v->idx].head_start)
+        // store final packet length and number
+        pm[v->idx].buf_len = i;
+
+    } else {
+        // this is a RTX, pad out until beginning of stream header
         enc_padding_frame(v->buf, i, pm[v->idx].head_start - i);
-
-    // store final packet length
-    pm[v->idx].buf_len = i;
+        // skip over existing stream header and data
+        i = pm[v->idx].buf_len;
+    }
 
     const uint64_t hash = fnv_1a(v->buf, i, hash_pos, HASH_LEN);
     warn(debug, "inserting %lu-byte hash over range [0..%u] into [%u..%lu]",

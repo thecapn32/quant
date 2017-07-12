@@ -50,8 +50,6 @@
 #include "quic.h"
 #include "stream.h"
 
-struct ev_loop;
-
 
 // Convert stream ID length encoded in flags to bytes
 static uint8_t __attribute__((const)) dec_sid_len(const uint8_t flags)
@@ -126,20 +124,20 @@ dec_stream_frame(struct q_conn * const c,
         STAILQ_INSERT_TAIL(&s->i, v, next);
         s->state = STRM_OPEN;
         if (s->id != 0)
-            c->flags |= CONN_FLAG_READ_DONE;
+            c->flags |= CONN_FLAG_CALL_DONE; // q_read() done
         return i + *len;
     }
 
     // standalone FIN
     if (off == s->in_off + 1 && *len == 0 && is_set(F_STREAM_FIN, type)) {
-        warn(notice, "received FIN on str %u", s->id);
         if (s->state <= STRM_OPEN)
             s->state = STRM_HCRM;
-        else if (s->state >= STRM_HCLO)
+        else if (s->state >= STRM_HCLO) {
             s->state = STRM_IDLE;
-
+            s->c->flags |= CONN_FLAG_CALL_DONE; // do_close() done
+        }
+        warn(notice, "received FIN on str %u, state now %u", s->id, s->state);
         w_free_iov(w_engine(c->sock), v);
-        *len = 1; // count FIN
         return i + *len;
     }
 
@@ -202,8 +200,7 @@ find_sent_pkt(struct q_conn * const c, const uint64_t nr)
 #define F_ACK_N 0x10
 
 static uint16_t __attribute__((nonnull))
-dec_ack_frame(struct ev_loop * const loop,
-              struct q_conn * const c,
+dec_ack_frame(struct q_conn * const c,
               const struct w_iov * const v,
               const uint16_t pos)
 {
@@ -269,13 +266,6 @@ dec_ack_frame(struct ev_loop * const loop,
                      ack);
                 c->lg_acked = MAX(c->lg_acked, ack);
 
-                // adjust in_flight
-                if (pm[p->idx].buf_len > Q_OFFSET) {
-                    c->in_flight -= pm[p->idx].buf_len;
-                    warn(notice, "in_flight now %" PRIu64 " (-%u)",
-                         c->in_flight, pm[p->idx].buf_len);
-                }
-
                 // see OnPacketAcked pseudo code (for LD):
 
                 // If a packet sent prior to RTO was ACKed, then the RTO
@@ -288,23 +278,35 @@ dec_ack_frame(struct ev_loop * const loop,
                 // this packet is no no longer unACKed
                 diet_insert(&c->acked_pkts, ack);
 
-                // move the iov from sent_pkts back to user return stailq
-                STAILQ_REMOVE(&c->sent_pkts, p, w_iov, next);
-                struct q_stream * const s = pm[p->idx].str;
-                STAILQ_INSERT_TAIL(&s->r, p, next);
-
                 // see OnPacketAcked pseudo code (for CC):
                 if (ack >= c->rec_end) {
                     if (c->cwnd < c->ssthresh)
                         c->cwnd += p->len;
                     else
                         c->cwnd += p->len / c->cwnd;
-                    // warn(debug, "cwnd now %" PRIu64, c->cwnd);
+                    warn(debug, "cwnd now %" PRIu64, c->cwnd);
                 }
 
-                // XXX: this is not quite the right condition (ignores gaps)
-                if (s->state == STRM_OPEN && c->lg_acked == c->lg_sent)
-                    c->flags |= CONN_FLAG_WRIT_DONE;
+                STAILQ_REMOVE(&c->sent_pkts, p, w_iov, next);
+                if (pm[p->idx].buf_len > Q_OFFSET) {
+                    // move the iov from sent_pkts back to user return stailq
+                    struct q_stream * const s = pm[p->idx].str;
+                    STAILQ_INSERT_TAIL(&s->r, p, next);
+
+                    // adjust in_flight
+                    c->in_flight -= pm[p->idx].buf_len;
+                    warn(notice, "in_flight now %" PRIu64 " (-%u)",
+                         c->in_flight, pm[p->idx].buf_len);
+
+                    // XXX: this is not quite the right condition (ignores gaps)
+                    if (c->state == CONN_STAT_ESTB && s->state == STRM_OPEN &&
+                        c->lg_acked == c->lg_sent)
+                        c->flags |= CONN_FLAG_CALL_DONE; // q_write() done
+
+                } else {
+                    // this iov did not have user data
+                    w_free_iov(w_engine(c->sock), p);
+                }
             }
             ack--;
         }
@@ -332,9 +334,7 @@ dec_ack_frame(struct ev_loop * const loop,
 }
 
 
-bool dec_frames(struct ev_loop * const loop,
-                struct q_conn * const c,
-                struct w_iov * const v)
+bool dec_frames(struct q_conn * const c, struct w_iov * const v)
 {
     uint16_t i = pkt_hdr_len(v->buf, v->len) + HASH_LEN;
     uint16_t pad_start = 0;
@@ -356,7 +356,7 @@ bool dec_frames(struct ev_loop * const loop,
             i += dec_stream_frame(c, v, i, &dlen);
 
         } else if (bitmask_match(type, T_ACK)) {
-            i = dec_ack_frame(loop, c, v, i);
+            i = dec_ack_frame(c, v, i);
 
         } else
             switch (type) {
