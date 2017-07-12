@@ -100,7 +100,7 @@ uint32_t tls_handshake(struct q_stream * const s)
         // the assumption is that ptls_handshake has consumed all stream-0 data
         w_free(w_engine(s->c->sock), &s->i);
     else {
-        s->c->state = CONN_VERS_SENT;
+        s->c->state = CONN_STAT_VERS_SENT;
         warn(info, "conn %" PRIx64 " now in state %u", s->c->id, s->c->state);
     }
 
@@ -354,9 +354,9 @@ void rx(struct ev_loop * const l,
              nr, v->len, v->idx, v->buf[0], to_bitstring(v->buf[0]), dstr);
 
         switch (c->state) {
-        case CONN_CLSD:
+        case CONN_STAT_CLSD:
             new_stream(c, 0); // create stream 0 (server case)
-        case CONN_VERS_REJ: {
+        case CONN_STAT_VERS_REJ: {
             // store the socket with the connection
             c->sock = ws;
 
@@ -380,11 +380,11 @@ void rx(struct ev_loop * const l,
                 ensure(!STAILQ_EMPTY(&s->i), "no ClientHello");
                 tls_handshake(s);
 
-                c->state = CONN_VERS_OK;
+                c->state = CONN_STAT_VERS_OK;
                 warn(info, "conn %" PRIx64 " now in state %u", c->id, c->state);
 
             } else {
-                c->state = CONN_VERS_REJ;
+                c->state = CONN_STAT_VERS_REJ;
                 warn(info, "conn %" PRIx64 " now in state %u", c->id, c->state);
                 warn(warn, "conn %" PRIx64
                            " client-requested version 0x%08x not supported ",
@@ -393,7 +393,7 @@ void rx(struct ev_loop * const l,
             break;
         }
 
-        case CONN_VERS_SENT: {
+        case CONN_STAT_VERS_SENT: {
             struct q_stream * const s = get_stream(c, 0);
             tx_needed = true;
             if (is_set(F_LH_TYPE_VNEG, pkt_flags(v->buf))) {
@@ -412,13 +412,14 @@ void rx(struct ev_loop * const l,
 
                 // we should have received a ServerHello
                 ensure(!STAILQ_EMPTY(&s->i), "no ServerHello");
-                c->state = tls_handshake(s) ? CONN_VERS_OK : CONN_ESTB;
+                c->state =
+                    tls_handshake(s) ? CONN_STAT_VERS_OK : CONN_STAT_ESTB;
                 warn(info, "conn %" PRIx64 " now in state %u", c->id, c->state);
             }
             break;
         }
 
-        case CONN_VERS_OK:
+        case CONN_STAT_VERS_OK:
             tx_needed |= dec_frames(l, c, v);
 
             // pass any further data received on stream 0 to TLS and check
@@ -426,7 +427,7 @@ void rx(struct ev_loop * const l,
             struct q_stream * const s = get_stream(c, 0);
             if ((!STAILQ_EMPTY(&s->i) && tls_handshake(s) == 0) ||
                 !is_set(F_LONG_HDR, c->flags)) {
-                c->state = CONN_ESTB;
+                c->state = CONN_STAT_ESTB;
                 warn(info, "conn %" PRIx64 " now in state %u", c->id, c->state);
                 // this is a new connection we just accepted or connected
                 if (is_set(CONN_FLAG_CLNT, c->flags))
@@ -436,7 +437,7 @@ void rx(struct ev_loop * const l,
             }
             break;
 
-        case CONN_ESTB:
+        case CONN_STAT_ESTB:
             tx_needed |= dec_frames(l, c, v);
             break;
 
@@ -534,7 +535,7 @@ void set_ld_alarm(struct q_conn * const c)
 
     ev_tstamp dur = 0;
     const ev_tstamp now = ev_now(loop);
-    if (c->state < CONN_ESTB) {
+    if (c->state < CONN_STAT_ESTB) {
         dur = fpclassify(c->srtt) == FP_ZERO ? kDefaultInitialRtt : c->srtt;
         dur = MAX(2 * dur, kMinTLPTimeout) * (1 << c->handshake_cnt);
         warn(debug, "handshake retransmission alarm in %f sec", dur);
@@ -571,7 +572,7 @@ void ld_alarm(struct ev_loop * const l __attribute__((unused)),
     struct q_conn * const c = w->data;
 
     // see OnLossDetectionAlarm pseudo code
-    if (c->state < CONN_ESTB) {
+    if (c->state < CONN_STAT_ESTB) {
         warn(info, "handshake retransmission alarm");
         rtx(c, UINT32_MAX);
         // tx above already calls set_ld_alarm(c)

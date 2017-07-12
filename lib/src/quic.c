@@ -182,7 +182,7 @@ struct q_conn * q_connect(void * const q,
     wait(&c->connect_cv, &c->lock);
     unlock(&c->lock);
 
-    if (c->state != CONN_ESTB) {
+    if (c->state != CONN_STAT_ESTB) {
         warn(warn, "conn %" PRIx64 " not connected", cid);
         return 0;
     }
@@ -264,7 +264,7 @@ struct q_conn * q_bind(void * const q, const uint16_t port)
 
 struct q_conn * q_accept(struct q_conn * const c)
 {
-    if (c->state >= CONN_ESTB) {
+    if (c->state >= CONN_STAT_ESTB) {
         warn(warn, "got conn %" PRIx64, c->id);
         return c;
     }

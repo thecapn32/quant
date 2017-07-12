@@ -120,18 +120,18 @@ uint16_t enc_pkt(struct q_conn * const c,
     // warn(debug, "%s conn state 0x%02x",
     //      is_set(CONN_FLAG_CLNT, c->flags) ? "client" : "server", c->state);
     switch (c->state) {
-    case CONN_VERS_SENT:
+    case CONN_STAT_VERS_SENT:
         flags |= F_LONG_HDR | F_LH_CLNT_INIT;
         break;
-    case CONN_VERS_REJ:
+    case CONN_STAT_VERS_REJ:
         flags |= F_LONG_HDR | F_LH_TYPE_VNEG;
         break;
-    case CONN_VERS_OK:
+    case CONN_STAT_VERS_OK:
         flags |=
             F_LONG_HDR | (is_set(CONN_FLAG_CLNT, c->flags) ? F_LH_CLNT_CTXT
                                                            : F_LH_SERV_CTXT);
         break;
-    case CONN_ESTB:
+    case CONN_STAT_ESTB:
         // TODO: support short headers w/o cid
         flags |= F_SH_CID | enc_pkt_nr_len[needed_pkt_nr_len(c->lg_sent)];
         break;
@@ -148,7 +148,7 @@ uint16_t enc_pkt(struct q_conn * const c,
         const uint32_t nr = (const uint32_t)c->lg_sent;
         enc(v->buf, v->len, i, &nr, 0, "%u");
         enc(v->buf, v->len, i, &c->vers, 0, "0x%08x");
-        if (c->state == CONN_VERS_REJ) {
+        if (c->state == CONN_STAT_VERS_REJ) {
             warn(info, "sending version negotiation server response");
             for (uint8_t j = 0; j < ok_vers_len; j++)
                 enc(v->buf, v->len, i, &ok_vers[j], 0, "0x%08x");
@@ -192,7 +192,7 @@ uint16_t enc_pkt(struct q_conn * const c,
                 s->out_off += i - Q_OFFSET;
         }
 
-        if (c->state == CONN_VERS_SENT) {
+        if (c->state == CONN_STAT_VERS_SENT) {
             const uint16_t pad = MIN_IP4_INI_LEN - i;
             memset(&v->buf[i], T_PADDING, pad);
             warn(debug, "padding initial packet with %u byte%s", pad,

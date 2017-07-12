@@ -114,12 +114,11 @@ conn_cmp(const struct q_conn * const a, const struct q_conn * const b);
 SPLAY_PROTOTYPE(conn, q_conn, node, conn_cmp)
 
 
-#define CONN_CLSD 0
-#define CONN_VERS_SENT 1
-#define CONN_VERS_REJ 2
-#define CONN_VERS_OK 3
-#define CONN_ESTB 4
-#define CONN_FINW 99 // TODO: renumber
+#define CONN_STAT_CLSD 0
+#define CONN_STAT_VERS_SENT 1
+#define CONN_STAT_VERS_REJ 2
+#define CONN_STAT_VERS_OK 3
+#define CONN_STAT_ESTB 4
 
 #define CONN_FLAG_CLNT 0x01 ///< We are client on this connection (or server)
 #define CONN_FLAG_EMBR 0x02 ///< This is an embryonic connection
