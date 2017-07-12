@@ -122,10 +122,13 @@ SPLAY_PROTOTYPE(conn, q_conn, node, conn_cmp)
 
 #define CONN_FLAG_CLNT 0x01 ///< We are client on this connection (or server)
 #define CONN_FLAG_EMBR 0x02 ///< This is an embryonic connection
-#define CONN_WRIT_DONE 0x04
-#define CONN_ACPT_DONE 0x08
-#define CONN_CONN_DONE 0x10
-#define CONN_READ_DONE 0x20
+#define CONN_FLAG_RX 0x04   ///< We had an RX event on this connection
+#define CONN_FLAG_TX 0x08   ///< We have a pending TX on this connection
+
+#define CONN_FLAG_WRIT_DONE 0x10
+#define CONN_FLAG_ACPT_DONE 0x20
+#define CONN_FLAG_CNCT_DONE 0x40
+#define CONN_FLAG_READ_DONE 0x80
 
 
 struct ev_loop;
