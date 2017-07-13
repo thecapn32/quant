@@ -124,14 +124,13 @@
             break;                                                             \
         }                                                                      \
         if (__len == 1)                                                        \
-            warn(debug,                                                        \
-                 "decode %zu byte%s from " #buf "[%u..%zu] into %s " #dst      \
-                 " = " fmt " (" bitstring_fmt ")",                             \
+            warn(debug, "dec %zu byte%s from " #buf "[%u..%zu] into %s " #dst  \
+                        " = " fmt " (" bitstring_fmt ")",                      \
                  __len, plural(__len), pos, pos + __len - 1, type_str(dst),    \
                  dst, to_bitstring(((const uint8_t *)buf)[pos]));              \
         else                                                                   \
-            warn(debug, "decode %zu byte%s from " #buf                         \
-                        "[%u..%zu] into %s " #dst " = " fmt,                   \
+            warn(debug, "dec %zu byte%s from " #buf "[%u..%zu] into %s " #dst  \
+                        " = " fmt,                                             \
                  __len, plural(__len), pos, pos + __len - 1, type_str(dst),    \
                  dst);                                                         \
         pos += __len;                                                          \
@@ -184,15 +183,17 @@
             die("cannot marshall field length %zu", __len);                    \
             break;                                                             \
         }                                                                      \
+        const char __src[] = #src;                                             \
+        const char * const __offsrc = __src[0] == '&' ? &__src[1] : __src;     \
         if (__len == 1)                                                        \
-            warn(debug, "encode %s " #src " = " fmt " (" bitstring_fmt ") "    \
+            warn(debug, "enc %s %s = " fmt " (" bitstring_fmt ") "             \
                         "into %zu byte%s at " #buf "[%u..%zu]",                \
-                 type_str(*src), *src, to_bitstring(*src), __len,              \
+                 type_str(*src), __offsrc, *src, to_bitstring(*src), __len,    \
                  plural(__len), pos, pos + __len - 1);                         \
         else                                                                   \
-            warn(debug, "encode %s " #src " = " fmt                            \
-                        " into %zu byte%s at " #buf "[%u..%zu]",               \
-                 type_str(*src), *src, __len, plural(__len), pos,              \
+            warn(debug,                                                        \
+                 "enc %s %s = " fmt " into %zu byte%s at " #buf "[%u..%zu]",   \
+                 type_str(*src), __offsrc, *src, __len, plural(__len), pos,    \
                  pos + __len - 1);                                             \
         pos += __len;                                                          \
     } while (0)
