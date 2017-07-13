@@ -105,8 +105,14 @@ dec_stream_frame(struct q_conn * const c,
 
     // deliver data into stream
     struct q_stream * s = get_stream(c, sid);
-    if (s == 0)
+    if (s == 0) {
+        if (diet_find(&c->closed_streams, sid)) {
+            warn(warn, "ignoring frame for closed str %u on %s conn %" PRIx64,
+                 sid, conn_type(c), c->id);
+            return i + *len;
+        }
         s = new_stream(c, sid);
+    }
 
     ensure(!is_set(F_STREAM_FIN, type) || (*len == 0 && off == s->in_off + 1),
            "zero-length FIN is at stream offset +1");
@@ -132,14 +138,15 @@ dec_stream_frame(struct q_conn * const c,
 
     // standalone FIN
     if (off == s->in_off + 1 && *len == 0 && is_set(F_STREAM_FIN, type)) {
+        warn(notice, "received FIN on %s conn %" PRIx64 " str %u, state %u",
+             conn_type(c), c->id, s->id, s->state);
+
         if (s->state <= STRM_STATE_OPEN)
             s->state = is_set(STRM_FLAG_NOCL, s->flags) ? STRM_STATE_HCRM
                                                         : STRM_STATE_CLSD;
         else if (s->state >= STRM_STATE_HCLO)
             maybe_api_return(q_close_stream, s);
 
-        warn(notice, "received FIN on %s conn %" PRIx64 " str %u, state now %u",
-             conn_type(c), c->id, s->id, s->state);
         w_free_iov(w_engine(c->sock), v);
         *len = 1; // the FIN consumes stream offset space
         return i + *len;
@@ -360,6 +367,9 @@ bool dec_frames(struct q_conn * const c, struct w_iov * const v)
             // memcpy)
             ensure(dlen == 0, "can only handle one stream frame per packet");
             i += dec_stream_frame(c, v, i, &dlen);
+            if (dlen == 0)
+                // this was a frame for a stream that is closed
+                return 0;
 
         } else if (bitmask_match(type, T_ACK)) {
             i = dec_ack_frame(c, v, i);

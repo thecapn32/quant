@@ -30,6 +30,7 @@
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
+#include "diet.h"
 #include "stream.h"
 
 
@@ -73,6 +74,8 @@ void free_stream(struct q_stream * const s)
 {
     warn(info, "freeing str %u on %s conn %" PRIx64, s->id, conn_type(s->c),
          s->c->id);
+
+    diet_insert(&s->c->closed_streams, s->id);
 
     w_free(w_engine(s->c->sock), &s->o);
     w_free(w_engine(s->c->sock), &s->i);

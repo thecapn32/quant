@@ -117,6 +117,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
     c->flags = (peer_name ? CONN_FLAG_CLNT : 0) | CONN_FLAG_EMBR;
     STAILQ_INIT(&c->sent_pkts);
     SPLAY_INIT(&c->streams);
+    diet_init(&c->closed_streams);
     diet_init(&c->acked_pkts);
     diet_init(&c->recv);
 
@@ -339,8 +340,8 @@ void * q_init(const char * const ifname)
 
 void q_close_stream(struct q_stream * const s)
 {
-    warn(debug, "str %u on %s conn %" PRIx64 " state %u", s->id,
-         conn_type(s->c), s->c->id, s->state);
+    warn(warn, "closing str %u on %s conn %" PRIx64, s->id, conn_type(s->c),
+         s->c->id);
 
     if (s->state == STRM_STATE_IDLE) {
         warn(warn, "%s conn %" PRIx64 " str %u already closed", conn_type(s->c),
@@ -387,6 +388,7 @@ void q_close(struct q_conn * const c)
     ev_io_stop(loop, &c->rx_w);
     ev_timer_stop(loop, &c->ld_alarm);
 
+    diet_free(&c->closed_streams);
     diet_free(&c->acked_pkts);
     diet_free(&c->recv);
     ptls_free(c->tls);

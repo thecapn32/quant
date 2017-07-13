@@ -64,6 +64,7 @@ struct q_conn {
     socklen_t peer_len;   ///< Length of @p peer.
     struct sockaddr peer; ///< Address of our peer.
     SPLAY_HEAD(stream, q_stream) streams;
+    struct diet closed_streams;
     struct w_sock * sock; ///< File descriptor (socket) for the connection.
     ev_io rx_w;           ///< RX watcher.
     ev_async tx_w;
