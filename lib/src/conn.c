@@ -41,6 +41,7 @@
 #include <ev.h>
 #pragma clang diagnostic pop
 
+#include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
@@ -423,18 +424,13 @@ void rx(struct ev_loop * const l,
             // pass any further data received on stream 0 to TLS and check
             // whether that completes the client handshake
             struct q_stream * const s = get_stream(c, 0);
-            // warn(crit, "API call %u", act_api_call);
             if ((!STAILQ_EMPTY(&s->i) && tls_handshake(s) == 0) ||
                 !is_set(F_LONG_HDR, c->flags)) {
                 c->state = CONN_STAT_ESTB;
                 warn(info, "%s conn %" PRIx64 " now in state 0x%02x",
                      conn_type(c), c->id, c->state);
-                if ((act_api_call == API_CNCT && is_clnt(c)) ||
-                    (act_api_call == API_ACPT && is_serv(c))) {
-                    // this is a new connection we just accepted or connected
-                    c->flags |= CONN_FLAG_API; // q_accept or q_connect done
-                    warn(info, "q_accept or q_connect done");
-                }
+                maybe_api_return(q_connect, c);
+                maybe_api_return(q_accept, c);
             }
         }
         // fall-through
@@ -448,28 +444,15 @@ void rx(struct ev_loop * const l,
         }
     }
 
-    // for all connections that had RX events, check if we need to signal the
-    // app and/or need to do a TX
-    struct q_conn *c, *sc = 0;
+    // for all connections that had RX events, check if we need to do a TX
+    struct q_conn * c;
     SLIST_FOREACH (c, &crx, next) {
         // is a TX needed for this connection?
         if (is_set(CONN_FLAG_TX, c->flags))
             tx(l, &c->tx_w, 0);
 
-        // possibly signal the app
-        if (is_set(CONN_FLAG_API, c->flags)) {
-            c->flags &= ~CONN_FLAG_API; // clear the flag
-            ensure(sc == 0, "have multiple connections that finished calls?");
-            sc = c;
-        }
-
         // clear the helper flags set above
         c->flags &= ~(CONN_FLAG_RX | CONN_FLAG_TX);
-    }
-
-    if (sc) {
-        act_api_call = 0;
-        ev_break(loop, EVBREAK_ALL);
     }
 }
 
@@ -507,7 +490,7 @@ void detect_lost_pkts(struct q_conn * const c)
                          c->in_flight);
                 }
 
-                warn(info, "pkt %" PRIu64 " considered lost", nr);
+                warn(warn, "pkt %" PRIu64 " considered lost", nr);
             } else if (fpclassify(c->loss_t) == FP_ZERO &&
                        fpclassify(delay_until_lost) != FP_INFINITE)
                 c->loss_t = now + delay_until_lost - time_since_sent;

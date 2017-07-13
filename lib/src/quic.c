@@ -52,7 +52,6 @@
 
 struct sockaddr;
 
-
 // TODO: many of these globals should move to a per-engine struct
 
 
@@ -68,14 +67,29 @@ const uint8_t ok_vers_len = sizeof(ok_vers) / sizeof(ok_vers[0]);
 struct pkt_meta * pm = 0;
 struct ev_loop * loop = 0;
 ptls_context_t tls_ctx = {0};
-uint8_t act_api_call = 0;
 
+func_ptr api_func = 0;
+void * api_arg = 0;
 
 static const uint32_t nbufs = 1000; ///< Number of packet buffers to allocate.
 
 static ptls_minicrypto_secp256r1sha256_sign_certificate_t sign_cert = {0};
 static ptls_iovec_t tls_certs = {0};
 static ptls_openssl_verify_certificate_t verifier = {0};
+
+
+/// Run the event loop with the API function @p func and argument @p arg.
+///
+/// @param      func  The active API function.
+/// @param      arg   The argument of the currently active API function.
+///
+#define loop_run(func, arg)                                                    \
+    do {                                                                       \
+        api_func = (func_ptr)(&(func));                                        \
+        api_arg = (arg);                                                       \
+        warn(info, #func "(" #arg ") entering event loop");                    \
+        ev_run(loop, 0);                                                       \
+    } while (0)
 
 
 static struct q_conn * new_conn(struct w_engine * const w,
@@ -167,8 +181,7 @@ struct q_conn * q_connect(void * const q,
 
     warn(warn, "waiting for connect to complete on %s conn %" PRIx64,
          conn_type(c), c->id);
-    act_api_call = API_CNCT;
-    ev_run(loop, 0);
+    loop_run(q_connect, c);
 
     if (c->state != CONN_STAT_ESTB) {
         warn(warn, "%s conn %" PRIx64 " not connected, state 0x%02x",
@@ -192,8 +205,7 @@ void q_write(struct q_stream * const s, struct w_iov_stailq * const q)
 
     // kick TX watcher
     ev_async_send(loop, &s->c->tx_w);
-    act_api_call = API_WRIT;
-    ev_run(loop, 0);
+    loop_run(q_write, s);
 
     // return written data back to user stailq
     STAILQ_CONCAT(q, &s->r);
@@ -225,8 +237,7 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_stailq * const q)
             // no data queued on any non-zero stream, we need to wait
             warn(warn, "waiting for data on %s conn %" PRIx64, conn_type(c),
                  c->id);
-            act_api_call = API_READ;
-            ev_run(loop, 0);
+            loop_run(q_read, c);
         }
     }
 
@@ -257,8 +268,8 @@ struct q_conn * q_accept(struct q_conn * const c)
     }
 
     warn(warn, "waiting for accept on %s conn", conn_type(c));
-    act_api_call = API_ACPT;
-    ev_run(loop, 0);
+    loop_run(q_accept, c);
+
     if (c->id == 0) {
         warn(warn, "conn not accepted");
         // TODO free embryonic connection
@@ -332,8 +343,8 @@ void q_close_stream(struct q_stream * const s)
          conn_type(s->c), s->c->id, s->state);
 
     if (s->state == STRM_STATE_IDLE) {
-        warn(debug, "str %u on %s conn %" PRIx64 " already closed", s->id,
-             conn_type(s->c), s->c->id);
+        warn(warn, "%s conn %" PRIx64 " str %u already closed", conn_type(s->c),
+             s->c->id, s->id);
         free_stream(s);
         return;
     }
@@ -351,12 +362,13 @@ void q_close_stream(struct q_stream * const s)
     ev_async_send(loop, &s->c->tx_w);
 
     if (s->state != STRM_STATE_IDLE) {
-        warn(warn, "waiting for close on str %u", s->id);
-        act_api_call = API_CLSE_STRM;
-        ev_run(loop, 0);
+        warn(warn, "waiting for close on %s conn %" PRIx64 " str %u",
+             conn_type(s->c), s->c->id, s->id);
+        loop_run(q_close_stream, s);
     }
 
-    warn(warn, "str %u closed", s->id);
+    warn(warn, "%s conn %" PRIx64 " str %u closed", conn_type(s->c), s->c->id,
+         s->id);
     free_stream(s);
 }
 

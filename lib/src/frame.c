@@ -39,6 +39,7 @@
 #include <byteswap.h>
 #endif
 
+#include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
@@ -124,10 +125,8 @@ dec_stream_frame(struct q_conn * const c,
         s->in_off += *len;
         STAILQ_INSERT_TAIL(&s->i, v, next);
         s->state = STRM_STATE_OPEN;
-        if (act_api_call == API_READ && s->id != 0) {
-            c->flags |= CONN_FLAG_API; // q_read() done
-            warn(info, "q_read() done");
-        }
+        if (s->id != 0)
+            maybe_api_return(q_read, s->c);
         return i + *len;
     }
 
@@ -136,11 +135,9 @@ dec_stream_frame(struct q_conn * const c,
         if (s->state <= STRM_STATE_OPEN)
             s->state = is_set(STRM_FLAG_NOCL, s->flags) ? STRM_STATE_HCRM
                                                         : STRM_STATE_CLSD;
-        else if (act_api_call == API_CLSE_STRM && s->state >= STRM_STATE_HCLO) {
-            s->state = STRM_STATE_IDLE;
-            s->c->flags |= CONN_FLAG_API; // q_close_stream() done
-            warn(info, "q_close_stream() done");
-        }
+        else if (s->state >= STRM_STATE_HCLO)
+            maybe_api_return(q_close_stream, s);
+
         warn(notice, "received FIN on %s conn %" PRIx64 " str %u, state now %u",
              conn_type(c), c->id, s->id, s->state);
         w_free_iov(w_engine(c->sock), v);
@@ -195,15 +192,11 @@ find_sent_pkt(struct q_conn * const c, const uint64_t nr)
     // check if packed is in the unACKed queue
     struct w_iov * v;
     STAILQ_FOREACH (v, &c->sent_pkts, next) {
-        // warn(debug, "sent_pkts %" PRIu64, meta(v).nr);
         if (meta(v).nr == nr)
             return v;
     }
 
     // check if packet was sent and already ACKed
-    // char dstr[20];
-    // diet_to_str(dstr, 20, &c->recv);
-    // warn(debug, "diet %s", dstr);
     if (diet_find(&c->acked_pkts, nr))
         return 0;
 
@@ -313,14 +306,11 @@ dec_ack_frame(struct q_conn * const c,
                     warn(info, "in_flight +%u = %" PRIu64, meta(p).buf_len,
                          c->in_flight);
 
-                    // XXX: this is not quite the right condition (ignores gaps)
-                    if (act_api_call == API_WRIT &&
-                        c->state == CONN_STAT_ESTB &&
+                    if (c->state == CONN_STAT_ESTB &&
                         s->state == STRM_STATE_OPEN &&
-                        c->lg_acked == c->lg_sent) {
-                        c->flags |= CONN_FLAG_API; // q_write() done
-                        warn(info, "q_write() done");
-                    }
+                        c->lg_acked == c->lg_sent &&
+                        STAILQ_EMPTY(&c->sent_pkts))
+                        maybe_api_return(q_write, s);
 
                 } else
                     // this iov did not have user data

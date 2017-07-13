@@ -29,6 +29,8 @@
 #include <picotls.h>
 #include <stdint.h>
 
+#include <warpcore/warpcore.h>
+
 
 /// Packet meta-data information associated with w_iov buffers
 struct pkt_meta {
@@ -104,10 +106,22 @@ extern ptls_context_t tls_ctx;
 ///
 #define is_set(f, v) (((v) & (f)) == (f))
 
-extern uint8_t act_api_call;
 
-#define API_READ 1
-#define API_WRIT 2
-#define API_ACPT 3
-#define API_CNCT 4
-#define API_CLSE_STRM 5
+typedef void (*func_ptr)(void);
+extern func_ptr api_func;
+extern void * api_arg;
+
+
+/// If current API function and argument match @p func and @p arg, exit the
+/// event loop.
+///
+/// @param      func  The API function currently active.
+/// @param      arg   The API argument currently active.
+///
+#define maybe_api_return(func, arg)                                            \
+    do {                                                                       \
+        if (api_func == (func_ptr)(&(func)) && api_arg == (arg)) {             \
+            ev_break(loop, EVBREAK_ALL);                                       \
+            warn(info, #func "(" #arg ") done, exiting event loop");           \
+        }                                                                      \
+    } while (0)

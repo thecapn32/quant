@@ -121,8 +121,6 @@ SPLAY_PROTOTYPE(conn, q_conn, node, conn_cmp)
 #define CONN_FLAG_RX 0x04   ///< We had an RX event on this connection
 #define CONN_FLAG_TX 0x08   ///< We have a pending TX on this connection
 
-#define CONN_FLAG_API 0x80 ///< Exit event loop and return to app.
-
 #define is_clnt(c) (is_set(CONN_FLAG_CLNT, (c)->flags))
 #define is_serv(c) (!is_clnt(c))
 #define conn_type(c)                                                           \
