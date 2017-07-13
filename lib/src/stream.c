@@ -55,7 +55,7 @@ struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
     ensure(get_stream(c, id) == 0, "stream already %u exists", id);
 
     struct q_stream * const s = calloc(1, sizeof(*s));
-    ensure(c, "could not calloc q_stream");
+    ensure(s, "could not calloc q_stream");
     s->c = c;
     STAILQ_INIT(&s->o);
     STAILQ_INIT(&s->i);
