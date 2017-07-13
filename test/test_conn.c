@@ -24,16 +24,34 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <arpa/inet.h>
+#include <inttypes.h>
 #include <netinet/in.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 #include <sys/socket.h>
 
+#ifndef NDEBUG
+#include <getopt.h>
+#include <stdlib.h>
+#include <sys/param.h>
+#endif
+
+
 #include <quant/quant.h>
+#include <warpcore/warpcore.h>
 
 
-int main()
+int main(int argc, char * argv[])
 {
-    // _dlevel = info;
+#ifndef NDEBUG
+    int ch;
+    while ((ch = getopt(argc, argv, "v:")) != -1)
+        if (ch == 'v')
+            _dlevel = MIN(DLEVEL, MAX(0, (uint32_t)strtoul(optarg, 0, 10)));
+#endif
 
+    // init
     void * q = q_init("lo"
 #ifndef __linux__
                       "0"
@@ -44,17 +62,43 @@ int main()
     struct q_conn * const sc = q_bind(q, 55555);
 
     // connect to server
-    const struct sockaddr_in s = {.sin_family = AF_INET,
-                                  .sin_addr.s_addr = inet_addr("127.0.0.1"),
-                                  .sin_port = htons(55555)};
+    const struct sockaddr_in sip = {.sin_family = AF_INET,
+                                    .sin_addr.s_addr = inet_addr("127.0.0.1"),
+                                    .sin_port = htons(55555)};
     struct q_conn * const cc =
-        q_connect(q, (const struct sockaddr *)&s, sizeof(s), "localhost");
+        q_connect(q, (const struct sockaddr *)&sip, sizeof(sip), "localhost");
+    ensure(cc, "is zero");
 
     // accept connection
     q_accept(sc);
 
+    // reserve a new stream
+    struct q_stream * const s = q_rsv_stream(cc);
+
+    // allocate buffers to transmit a packet
+    struct w_iov_stailq o = STAILQ_HEAD_INITIALIZER(o);
+    q_alloc(q, &o, 1024);
+    struct w_iov * const ov = STAILQ_FIRST(&o);
+
+    // add some payload data
+    ov->len = (uint16_t)snprintf((char *)ov->buf, 1024,
+                                 "***HELLO, STR %u ON CONN %" PRIx64 "!***",
+                                 q_sid(s), q_cid(cc));
+
+    // send the data
+    warn(info, "writing %u byte%s: %s", ov->len, plural(ov->len),
+         (char *)ov->buf);
+    q_write(s, &o);
+
+    // read the data
+    struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
+    q_read(sc, &i);
+    struct w_iov * const iv = STAILQ_FIRST(&i);
+    ensure(strncmp((char *)ov->buf, (char *)iv->buf, ov->len) == 0,
+           "data mismatch");
+
     // close connections
-    q_close(sc);
     q_close(cc);
+    q_close(sc);
     q_cleanup(q);
 }

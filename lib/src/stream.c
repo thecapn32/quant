@@ -30,7 +30,6 @@
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
-#include "quic.h"
 #include "stream.h"
 
 
@@ -65,16 +64,15 @@ struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
     if (id)
         c->next_sid += 2;
     SPLAY_INSERT(stream, &c->streams, s);
-    warn(info, "reserved new str %u on conn %" PRIx64 " as %s", id, c->id,
-         is_set(CONN_FLAG_CLNT, c->flags) ? "client" : "server");
+    warn(info, "reserved str %u on %s conn %" PRIx64, id, conn_type(c), c->id);
     return s;
 }
 
 
 void free_stream(struct q_stream * const s)
 {
-    warn(info, "freeing str %u on conn %" PRIx64 " as %s", s->id, s->c->id,
-         is_set(CONN_FLAG_CLNT, s->c->flags) ? "client" : "server");
+    warn(info, "freeing str %u on %s conn %" PRIx64, s->id, conn_type(s->c),
+         s->c->id);
 
     w_free(w_engine(s->c->sock), &s->o);
     w_free(w_engine(s->c->sock), &s->i);

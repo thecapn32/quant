@@ -35,7 +35,6 @@ struct pkt_meta {
     ev_tstamp time;        ///< Transmission timestamp.
     ptls_buffer_t tb;      ///< PicoTLS send buffer.
     uint64_t nr;           ///< Packet number.
-    uint64_t data_off;     ///< Stream offset of data in stream frame.
     uint32_t ack_cnt;      ///< Number of ACKs we have seen for this packet.
     uint16_t data_len;     ///< Length of data in stream frame.
     uint16_t buf_len;      ///< Length of buffer after enc_pkt().
@@ -45,6 +44,8 @@ struct pkt_meta {
 };
 
 extern struct pkt_meta * pm;
+
+#define meta(v) pm[(v)->idx]
 
 #define Q_OFFSET 64
 
@@ -102,3 +103,11 @@ extern ptls_context_t tls_ctx;
 /// @return     True if set, false otherwise.
 ///
 #define is_set(f, v) (((v) & (f)) == (f))
+
+extern uint8_t act_api_call;
+
+#define API_READ 1
+#define API_WRIT 2
+#define API_ACPT 3
+#define API_CNCT 4
+#define API_CLSE_STRM 5

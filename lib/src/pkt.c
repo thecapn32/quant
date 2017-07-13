@@ -115,10 +115,9 @@ uint16_t enc_pkt(struct q_conn * const c,
 
     uint16_t i = 0;
     uint8_t flags = 0;
-    c->lg_sent++; // TODO: increase by random offset
+    meta(v).nr = ++c->lg_sent; // TODO: increase by random offset
 
-    warn(debug, "%s conn state 0x%02x",
-         is_set(CONN_FLAG_CLNT, c->flags) ? "client" : "server", c->state);
+    warn(debug, "%s conn state 0x%02x", conn_type(c), c->state);
     switch (c->state) {
     case CONN_STAT_VERS_SENT:
         flags |= F_LONG_HDR | F_LH_CLNT_INIT;
@@ -127,16 +126,14 @@ uint16_t enc_pkt(struct q_conn * const c,
         flags |= F_LONG_HDR | F_LH_TYPE_VNEG;
         break;
     case CONN_STAT_VERS_OK:
-        flags |=
-            F_LONG_HDR | (is_set(CONN_FLAG_CLNT, c->flags) ? F_LH_CLNT_CTXT
-                                                           : F_LH_SERV_CTXT);
+        flags |= F_LONG_HDR | (is_clnt(c) ? F_LH_CLNT_CTXT : F_LH_SERV_CTXT);
         break;
     case CONN_STAT_ESTB:
         // TODO: support short headers w/o cid
         flags |= F_SH_CID | enc_pkt_nr_len[needed_pkt_nr_len(c->lg_sent)];
         break;
     default:
-        die("unknown conn state %u", c->state);
+        die("unknown conn state 0x%02x", c->state);
         break;
     }
     enc(v->buf, v->len, i, &flags, 0, "0x%02x");
@@ -157,7 +154,6 @@ uint16_t enc_pkt(struct q_conn * const c,
     } else
         enc(v->buf, v->len, i, &c->lg_sent, needed_pkt_nr_len(c->lg_sent),
             "%" PRIu64);
-    pm[v->idx].nr = c->lg_sent;
 
     const uint16_t hash_pos = i;
     i += HASH_LEN;
@@ -174,8 +170,8 @@ uint16_t enc_pkt(struct q_conn * const c,
         enc_padding_frame(v->buf, i, Q_OFFSET - i);
 
         // encode any stream data present
-        if (v->len > Q_OFFSET || s->state >= STRM_HCLO) {
-            i = enc_stream_frame(s, v->buf, v->len, s->out_off, v->idx);
+        if (v->len > Q_OFFSET || s->state >= STRM_STATE_HCLO) {
+            i = enc_stream_frame(s, v, s->out_off);
 
             // increase the stream data offset
             s->out_nr = c->lg_sent;
@@ -186,13 +182,13 @@ uint16_t enc_pkt(struct q_conn * const c,
             i += enc_padding_frame(v->buf, i, MIN_IP4_INI_LEN - i);
 
         // store final packet length and number
-        pm[v->idx].buf_len = i;
+        meta(v).buf_len = i;
 
     } else {
         // this is a RTX, pad out until beginning of stream header
-        enc_padding_frame(v->buf, i, pm[v->idx].head_start - i);
+        enc_padding_frame(v->buf, i, meta(v).head_start - i);
         // skip over existing stream header and data
-        i = pm[v->idx].buf_len;
+        i = meta(v).buf_len;
     }
 
     const uint64_t hash = fnv_1a(v->buf, i, hash_pos, HASH_LEN);

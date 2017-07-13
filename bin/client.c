@@ -148,7 +148,7 @@ int main(int argc, char * argv[])
             // send the data
             warn(info, "writing %u byte%s: %s", v->len, plural(v->len),
                  (char *)v->buf);
-            q_write(c[n], s, &o);
+            q_write(s, &o);
 
             // return the buffer
             q_free(q, &o);

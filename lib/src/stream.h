@@ -38,7 +38,8 @@ struct q_stream {
 
     uint32_t id;
     uint8_t state;
-    uint8_t _unused[3];
+    uint8_t flags;
+    uint8_t _unused[2];
 
     struct w_iov_stailq r; ///< tail queue containing written data
 
@@ -50,11 +51,13 @@ struct q_stream {
     uint64_t in_off;
 };
 
-#define STRM_IDLE 0x00
-#define STRM_OPEN 0x01
-#define STRM_HCRM 0x02 ///< "half closed remote"
-#define STRM_HCLO 0x03 ///< "half closed local"
-#define STRM_CLSD 0x04
+#define STRM_STATE_IDLE 0
+#define STRM_STATE_OPEN 1
+#define STRM_STATE_HCRM 2 ///< "half closed remote"
+#define STRM_STATE_HCLO 3 ///< "half closed local"
+#define STRM_STATE_CLSD 4
+
+#define STRM_FLAG_NOCL 0x01 ///< close only on explicit q_close_stream()
 
 
 extern int32_t __attribute__((nonnull))

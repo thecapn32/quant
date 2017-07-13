@@ -38,6 +38,7 @@
 #include <warpcore/warpcore.h>
 
 #include "diet.h"
+#include "quic.h"
 
 struct q_stream;
 
@@ -53,12 +54,13 @@ struct q_conn {
 
     uint64_t id; ///< Connection ID
 
-    uint32_t vers; ///< QUIC version in use for this connection.
-    uint32_t next_sid;
-    uint8_t flags;
-    uint8_t state; ///< State of the connection.
+    uint32_t vers;     ///< QUIC version in use for this connection.
+    uint32_t next_sid; ///< Next stream ID to use on q_rsv_stream().
+    uint8_t flags;     ///< Connection flags.
+    uint8_t state;     ///< State of the connection.
 
     uint8_t _unused[2];
+
     socklen_t peer_len;   ///< Length of @p peer.
     struct sockaddr peer; ///< Address of our peer.
     SPLAY_HEAD(stream, q_stream) streams;
@@ -119,8 +121,14 @@ SPLAY_PROTOTYPE(conn, q_conn, node, conn_cmp)
 #define CONN_FLAG_RX 0x04   ///< We had an RX event on this connection
 #define CONN_FLAG_TX 0x08   ///< We have a pending TX on this connection
 
-#define CONN_FLAG_CALL_DONE 0x80
+#define CONN_FLAG_API 0x80 ///< Exit event loop and return to app.
 
+#define is_clnt(c) (is_set(CONN_FLAG_CLNT, (c)->flags))
+#define is_serv(c) (!is_clnt(c))
+#define conn_type(c)                                                           \
+    (is_set(CONN_FLAG_EMBR, (c)->flags)                                        \
+         ? (is_clnt(c) ? "embr clnt" : "embr serv")                            \
+         : (is_clnt(c) ? "clnt" : "serv"))
 
 struct ev_loop;
 

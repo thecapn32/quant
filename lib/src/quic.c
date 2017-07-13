@@ -68,6 +68,7 @@ const uint8_t ok_vers_len = sizeof(ok_vers) / sizeof(ok_vers[0]);
 struct pkt_meta * pm = 0;
 struct ev_loop * loop = 0;
 ptls_context_t tls_ctx = {0};
+uint8_t act_api_call = 0;
 
 
 static const uint32_t nbufs = 1000; ///< Number of packet buffers to allocate.
@@ -82,8 +83,8 @@ static struct q_conn * new_conn(struct w_engine * const w,
                                 const uint16_t port)
 {
     struct q_conn * c = get_conn(0, peer_name == 0);
-    ensure(c == 0, "embryonic %s conn %" PRIx64 " already exists",
-           peer_name ? "client" : "server", c->id);
+    ensure(c == 0, "%s conn %" PRIx64 " already exists",
+           peer_name ? "clnt" : "serv", c->id);
 
     c = calloc(1, sizeof(*c));
     ensure(c, "could not calloc");
@@ -122,7 +123,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
     // add connection to global data structure
     SPLAY_INSERT(conn, &q_conns, c);
 
-    warn(debug, "embryonic %s conn created", peer_name ? "client" : "server");
+    warn(debug, "%s conn created", conn_type(c));
     return c;
 }
 
@@ -147,78 +148,91 @@ struct q_conn * q_connect(void * const q,
     // make new connection (connection ID must be > 0 for us)
     const uint64_t cid =
         ((((uint64_t)plat_random()) << 32) | ((uint64_t)plat_random()));
+    warn(warn, "connecting embr clnt conn %" PRIx64, cid);
     struct q_conn * const c = new_conn(q, peer_name, 0);
-    init_conn(c, cid, peer, peer_len);
     // c->vers = 0xbabababa; // XXX reserved version to trigger negotiation
     c->vers = ok_vers[0];
     c->next_sid = 1; // client initiates odd-numbered streams
     w_connect(c->sock,
               ((const struct sockaddr_in *)(const void *)peer)->sin_addr.s_addr,
               ((const struct sockaddr_in *)(const void *)peer)->sin_port);
+    init_conn(c, cid, peer, peer_len);
 
     // allocate stream zero and start TLS handshake on stream 0
     struct q_stream * const s = new_stream(c, 0);
     tls_handshake(s);
     ev_async_send(loop, &c->tx_w);
 
-    warn(warn, "waiting for connect to complete on conn %" PRIx64, c->id);
+    warn(warn, "waiting for connect to complete on %s conn %" PRIx64,
+         conn_type(c), c->id);
+    act_api_call = API_CNCT;
     ev_run(loop, 0);
 
     if (c->state != CONN_STAT_ESTB) {
-        warn(warn, "conn %" PRIx64 " not connected", cid);
+        warn(warn, "%s conn %" PRIx64 " not connected, state 0x%02x",
+             conn_type(c), cid, c->state);
         return 0;
     }
 
-    warn(warn, "conn %" PRIx64 " connected", cid);
+    warn(warn, "%s conn %" PRIx64 " connected", conn_type(c), cid);
     return c;
 }
 
 
-void q_write(struct q_conn * const c __attribute__((unused)),
-             struct q_stream * const s,
-             struct w_iov_stailq * const q)
+void q_write(struct q_stream * const s, struct w_iov_stailq * const q)
 {
     const uint32_t qlen = w_iov_stailq_len(q);
-    warn(warn, "waiting for %u-byte write to complete", qlen);
+    warn(warn, "writing %u byte%s on %s conn %" PRIx64 " str %u", qlen,
+         plural(qlen), conn_type(s->c), s->c->id, s->id);
 
     STAILQ_CONCAT(&s->o, q);
-    s->state = STRM_OPEN;
+    s->state = STRM_STATE_OPEN;
 
     // kick TX watcher
     ev_async_send(loop, &s->c->tx_w);
+    act_api_call = API_WRIT;
     ev_run(loop, 0);
 
     // return written data back to user stailq
     STAILQ_CONCAT(q, &s->r);
 
-    warn(warn, "write done");
-    ensure(w_iov_stailq_len(q) == qlen, "payload corrupted");
+    warn(warn, "wrote %u byte%s on %s conn %" PRIx64 " str %u", qlen,
+         plural(qlen), conn_type(s->c), s->c->id, s->id);
+
+    ensure(w_iov_stailq_len(q) == qlen, "payload corrupted, %u != %u",
+           w_iov_stailq_len(q), qlen);
 }
 
 
-struct q_stream * q_read(struct q_conn * const c, struct w_iov_stailq * const i)
+struct q_stream * q_read(struct q_conn * const c, struct w_iov_stailq * const q)
 {
+    warn(warn, "reading on %s conn %" PRIx64, conn_type(c), c->id);
     struct q_stream * s = 0;
-    warn(warn, "waiting for data");
-    ev_run(loop, 0);
 
-    SPLAY_FOREACH (s, stream, &c->streams) {
-        if (!STAILQ_EMPTY(&s->i)) {
-#ifndef NDEBUG
-            const uint32_t in_len = w_iov_stailq_len(&s->i);
-            warn(info, "buffered %u byte%s on str %u", in_len, plural(in_len),
-                 s->id);
-#endif
-            break;
+    while (s == 0) {
+        SPLAY_FOREACH (s, stream, &c->streams) {
+            if (s->id == 0)
+                // don't deliver stream-zero data
+                continue;
+            if (!STAILQ_EMPTY(&s->i))
+                // we found a stream with queued data
+                break;
+        }
+
+        if (s == 0) {
+            // no data queued on any non-zero stream, we need to wait
+            warn(warn, "waiting for data on %s conn %" PRIx64, conn_type(c),
+                 c->id);
+            act_api_call = API_READ;
+            ev_run(loop, 0);
         }
     }
 
-    if (s == 0)
-        return 0;
-
     // return data
-    STAILQ_CONCAT(i, &s->i);
-    warn(warn, "read done");
+    const uint32_t qlen = w_iov_stailq_len(&s->i);
+    STAILQ_CONCAT(q, &s->i);
+    warn(warn, "read %u byte%s on %s conn %" PRIx64 " str %u", qlen,
+         plural(qlen), conn_type(s->c), s->c->id, s->id);
     return s;
 }
 
@@ -226,9 +240,9 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_stailq * const i)
 struct q_conn * q_bind(void * const q, const uint16_t port)
 {
     // bind socket and create new embryonic server connection
+    warn(warn, "binding serv socket on port %u", port);
     struct q_conn * const c = new_conn(q, 0, port);
-    warn(warn, "bound %s socket on port %u",
-         is_set(CONN_FLAG_CLNT, c->flags) ? "¯client" : "server", port);
+    warn(warn, "bound %s socket on port %u", conn_type(c), port);
     return c;
 }
 
@@ -236,11 +250,12 @@ struct q_conn * q_bind(void * const q, const uint16_t port)
 struct q_conn * q_accept(struct q_conn * const c)
 {
     if (c->state >= CONN_STAT_ESTB) {
-        warn(warn, "got conn %" PRIx64, c->id);
+        warn(warn, "got %s conn %" PRIx64, conn_type(c), c->id);
         return c;
     }
 
-    warn(warn, "waiting for accept to complete embryonic server conn");
+    warn(warn, "waiting for accept on %s conn", conn_type(c));
+    act_api_call = API_ACPT;
     ev_run(loop, 0);
     if (c->id == 0) {
         warn(warn, "conn not accepted");
@@ -248,7 +263,7 @@ struct q_conn * q_accept(struct q_conn * const c)
         return 0;
     }
 
-    warn(warn, "conn %" PRIx64 " connected", c->id);
+    warn(warn, "%s conn %" PRIx64 " connected", conn_type(c), c->id);
     return c;
 }
 
@@ -257,10 +272,8 @@ struct q_stream * q_rsv_stream(struct q_conn * const c)
 {
 
     const uint8_t odd = c->next_sid % 2; // NOTE: % in assert confuses printf
-    ensure(is_set(CONN_FLAG_CLNT, c->flags) && odd,
-           "am %s, expected %s connection stream ID, got %u",
-           is_set(CONN_FLAG_CLNT, c->flags) ? "client" : "server",
-           is_set(CONN_FLAG_CLNT, c->flags) ? "odd" : "even", c->next_sid);
+    ensure(is_clnt(c) && odd, "am %s, expected %s connection stream ID, got %u",
+           conn_type(c), is_clnt(c) ? "odd" : "even", c->next_sid);
     return new_stream(c, c->next_sid);
 }
 
@@ -281,8 +294,8 @@ void * q_init(const char * const ifname)
     plat_initrandom();
 
     // initialize TLS context
-    warn(debug, "TLS: key %u byte%s, cert %u byte%s", tls_key_len,
-         plural(tls_key_len), tls_cert_len, plural(tls_cert_len));
+    // warn(debug, "TLS: key %u byte%s, cert %u byte%s", tls_key_len,
+    //      plural(tls_key_len), tls_cert_len, plural(tls_cert_len));
     tls_ctx.random_bytes = ptls_minicrypto_random_bytes;
     tls_ctx.key_exchanges = ptls_minicrypto_key_exchanges;
     tls_ctx.cipher_suites = ptls_minicrypto_cipher_suites;
@@ -313,19 +326,30 @@ void * q_init(const char * const ifname)
 
 void q_close_stream(struct q_stream * const s)
 {
-    if (s->state <= STRM_OPEN) {
-        warn(debug, "half-closing str %u on conn %" PRIx64, s->id, s->c->id);
-        s->state = STRM_HCLO;
+    warn(debug, "str %u on %s conn %" PRIx64 " state %u", s->id,
+         conn_type(s->c), s->c->id, s->state);
+
+    if (s->state == STRM_STATE_IDLE) {
+        warn(debug, "str %u on %s conn %" PRIx64 " already closed", s->id,
+             conn_type(s->c), s->c->id);
+        return;
+    }
+
+    if (s->state <= STRM_STATE_OPEN) {
+        warn(debug, "half-closing str %u on %s conn %" PRIx64, s->id,
+             conn_type(s->c), s->c->id);
+        s->state = STRM_STATE_HCLO;
     } else {
-        warn(debug, "str %u on conn %" PRIx64 " already HCRM, now CLSD", s->id,
-             s->c->id);
-        s->state = STRM_CLSD;
+        warn(debug, "str %u on %s conn %" PRIx64 " already HCRM, now CLSD",
+             s->id, conn_type(s->c), s->c->id);
+        s->state = STRM_STATE_CLSD;
     }
 
     ev_async_send(loop, &s->c->tx_w);
 
-    if (s->state != STRM_IDLE) {
+    if (s->state != STRM_STATE_IDLE) {
         warn(warn, "waiting for close on str %u", s->id);
+        act_api_call = API_CLSE_STRM;
         ev_run(loop, 0);
     }
 
@@ -336,8 +360,7 @@ void q_close_stream(struct q_stream * const s)
 
 void q_close(struct q_conn * const c)
 {
-    warn(warn, "closing %s conn %" PRIx64,
-         is_set(CONN_FLAG_CLNT, c->flags) ? "client" : "server", c->id);
+    warn(warn, "closing %s conn %" PRIx64, conn_type(c), c->id);
 
     // close all streams
     struct q_stream *s, *tmp;
@@ -358,8 +381,7 @@ void q_close(struct q_conn * const c)
     // remove connection from global list
     SPLAY_REMOVE(conn, &q_conns, c);
 
-    warn(warn, "%s conn %" PRIx64 " closed",
-         is_set(CONN_FLAG_CLNT, c->flags) ? "client" : "server", c->id);
+    warn(warn, "%s conn %" PRIx64 " closed", conn_type(c), c->id);
     free(c);
 }
 

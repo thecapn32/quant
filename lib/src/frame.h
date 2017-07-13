@@ -57,7 +57,5 @@ extern uint16_t __attribute__((nonnull)) enc_ack_frame(struct q_conn * const c,
 
 extern uint16_t __attribute__((nonnull))
 enc_stream_frame(struct q_stream * const s,
-                 uint8_t * const buf,
-                 const uint16_t len,
-                 const uint64_t off,
-                 const uint32_t idx);
+                 struct w_iov * const v,
+                 const uint64_t off);

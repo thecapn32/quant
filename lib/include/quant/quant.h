@@ -52,18 +52,16 @@ q_bind(void * const q, const uint16_t port);
 extern struct q_conn * __attribute__((nonnull))
 q_accept(struct q_conn * const c);
 
-extern void __attribute__((nonnull)) q_write(struct q_conn * const c,
-                                             struct q_stream * const s,
-                                             struct w_iov_stailq * const q);
+extern void __attribute__((nonnull))
+q_write(struct q_stream * const s, struct w_iov_stailq * const q);
 
 extern struct q_stream * __attribute__((nonnull))
-q_read(struct q_conn * const c, struct w_iov_stailq * const i);
+q_read(struct q_conn * const c, struct w_iov_stailq * const q);
 
 extern struct q_stream * __attribute__((nonnull))
 q_rsv_stream(struct q_conn * const c);
 
-extern void __attribute__((nonnull))
-q_close_stream(struct q_stream * const s);
+extern void __attribute__((nonnull)) q_close_stream(struct q_stream * const s);
 
 extern void __attribute__((nonnull))
 q_alloc(void * const w, struct w_iov_stailq * const q, const uint32_t len);

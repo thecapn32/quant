@@ -80,11 +80,11 @@ uint32_t tls_handshake(struct q_stream * const s)
 
     // allocate a new w_iov
     struct w_iov * ov = w_alloc_iov(w_engine(s->c->sock), Q_OFFSET);
-    ptls_buffer_init(&pm[ov->idx].tb, ov->buf, ov->len);
-    const int ret = ptls_handshake(s->c->tls, &pm[ov->idx].tb, iv ? iv->buf : 0,
-                                   &in_len, 0);
-    ov->len = (uint16_t)pm[ov->idx].tb.off;
-    warn(notice, "TLS handshake: recv %u, gen %u, in_len %lu, ret %u: %.*s",
+    ptls_buffer_init(&meta(ov).tb, ov->buf, ov->len);
+    const int ret =
+        ptls_handshake(s->c->tls, &meta(ov).tb, iv ? iv->buf : 0, &in_len, 0);
+    ov->len = (uint16_t)meta(ov).tb.off;
+    warn(info, "TLS handshake: recv %u, gen %u, in_len %lu, ret %u: %.*s",
          iv ? iv->len : 0, ov->len, in_len, ret, ov->len, ov->buf);
     ensure(ret == 0 || ret == PTLS_ERROR_IN_PROGRESS, "TLS error: %u", ret);
     ensure(iv == 0 || iv->len && iv->len == in_len, "TLS data remaining");
@@ -94,7 +94,8 @@ uint32_t tls_handshake(struct q_stream * const s)
         w_free(w_engine(s->c->sock), &s->i);
     else {
         s->c->state = CONN_STAT_VERS_SENT;
-        warn(info, "conn %" PRIx64 " now in state %u", s->c->id, s->c->state);
+        warn(info, "%s conn %" PRIx64 " now in state 0x%02x", conn_type(s->c),
+             s->c->id, s->c->state);
     }
 
     if ((ret == 0 || ret == PTLS_ERROR_IN_PROGRESS) && ov->len != 0) {
@@ -161,54 +162,56 @@ static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
                                                  struct w_iov_stailq * const q)
 {
     const ev_tstamp now = ev_now(loop);
-    const struct w_iov * const last_sent =
+    const struct w_iov * const last_tx =
         STAILQ_LAST(&c->sent_pkts, w_iov, next);
-    const ev_tstamp last_sent_t =
-        last_sent ? pm[last_sent->idx].time : -HUGE_VAL;
+    const ev_tstamp last_tx_t = last_tx ? meta(last_tx).time : -HUGE_VAL;
 
     struct w_iov * v;
     STAILQ_FOREACH (v, q, next) {
-        if (s == 0 && v->len < Q_OFFSET) {
-            // warn(debug, "ignoring non-retransmittable pkt");
+        if (s == 0 && v->len == 0) {
+            warn(debug,
+                 "ignoring non-retransmittable pkt %" PRIu64 " (len %u %u)",
+                 meta(v).nr, v->len, meta(v).buf_len);
             continue;
         }
 
         // see TimeToSend pseudo code
         if (c->in_flight + v->len > c->cwnd ||
-            last_sent_t - now + (v->len * c->srtt) / c->cwnd > 0) {
+            last_tx_t - now + (v->len * c->srtt) / c->cwnd > 0) {
             // warn(debug, "in_flight %" PRIu64 " + v->len %u vs cwnd %" PRIu64,
             //      c->in_flight, v->len, c->cwnd);
             // warn(debug,
-            //      "last_sent_t - now %f + (v->len %u * srtt %f) / cwnd %"
+            //      "last_tx_t - now %f + (v->len %u * srtt %f) / cwnd %"
             //      PRIu64,
-            //      last_sent_t - now, v->len, c->srtt, c->cwnd);
+            //      last_tx_t - now, v->len, c->srtt, c->cwnd);
             warn(crit, "out of cwnd/pacing headroom, ignoring");
         }
 
         // store packet info (see OnPacketSent pseudo code)
-        pm[v->idx].time = now;
-        pm[v->idx].data_len = v->len;
+        meta(v).time = now;        // remember TX time
+        meta(v).data_len = v->len; // v->len is len of stream data here
 
         if (s == 0)
-            // this is an RTX, remember we sent original packet
-            diet_insert(&c->acked_pkts, pm[v->idx].nr);
+            // on RTX, remember original packet number (will be resent with new)
+            diet_insert(&c->acked_pkts, meta(v).nr);
         else
-            pm[v->idx].str = s;
+            meta(v).str = s; // remember stream this buf belongs to
 
-        v->len = enc_pkt(c, s, v);
+        v->len = enc_pkt(c, s, v); // enc_pkt() adjusts buf and len by Q_OFFSET
         if (v->len > Q_OFFSET) {
             // packet is retransmittable
             if (s) {
                 c->in_flight += v->len;
-                // warn(notice, "in_flight now %" PRIu64 " (+%u)", c->in_flight,
-                //      v->len);
+                warn(info, "in_flight +%u = %" PRIu64, v->len, c->in_flight);
             }
             set_ld_alarm(c);
         }
 
-        warn(notice, "sending pkt %" PRIu64
-                     " (len %u, idx %u, type 0x%02x = " bitstring_fmt ")",
-             c->lg_sent, v->len, v->idx, v->buf[0], to_bitstring(v->buf[0]));
+        warn(notice, "send pkt %" PRIu64
+                     " (len %u, idx %u, type 0x%02x = " bitstring_fmt
+                     ") on %s conn %" PRIx64,
+             c->lg_sent, v->len, v->idx, v->buf[0], to_bitstring(v->buf[0]),
+             conn_type(c), c->id);
         // if (_dlevel == debug)
         //     hexdump(v->buf, v->len);
     }
@@ -219,7 +222,7 @@ static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
 
     STAILQ_FOREACH (v, q, next) {
         // undo what enc_pkt() did to buffer (reset buf and len to user data)
-        v->len = pm[v->idx].data_len;
+        v->len = meta(v).data_len;
         v->buf += Q_OFFSET;
     }
 }
@@ -229,6 +232,7 @@ static __attribute__((nonnull)) void
 rtx(struct q_conn * const c, const uint32_t __attribute__((unused)) n)
 {
     // we simply retransmit *all* unACKed packets here
+    warn(crit, "RTX on %s conn %" PRIx64, conn_type(c), c->id);
     do_tx(c, 0, &c->sent_pkts);
 }
 
@@ -254,12 +258,14 @@ void tx(struct ev_loop * const l __attribute__((unused)),
     bool did_tx = false;
     SPLAY_FOREACH (s, stream, &c->streams) {
         if (!STAILQ_EMPTY(&s->o)) {
-            // warn(crit, "data TX needed on str %u", s->id);
+            warn(debug, "data TX needed on %s conn %" PRIx64 " str %u",
+                 conn_type(c), c->id, s->id);
             do_tx(c, s, &s->o);
             STAILQ_CONCAT(&c->sent_pkts, &s->o);
             did_tx = true;
-        } else if (s->state == STRM_HCLO || s->state == STRM_CLSD) {
-            // warn(crit, "FIN needed on str %u", s->id);
+        } else if (s->state == STRM_STATE_HCLO || s->state == STRM_STATE_CLSD) {
+            warn(debug, "FIN needed on %s conn %" PRIx64 " str %u",
+                 conn_type(c), c->id, s->id);
             synth_tx(s);
             did_tx = true;
         }
@@ -268,7 +274,7 @@ void tx(struct ev_loop * const l __attribute__((unused)),
     if (did_tx == false) {
         // need to send ACKs but don't have any stream data to piggyback on
         s = get_stream(c, s ? s->id : 0);
-        // warn(crit, "synth TX on str %u", s->id);
+        warn(debug, "ACK needed on %s conn %" PRIx64, conn_type(c), c->id);
         synth_tx(s);
     }
 }
@@ -288,12 +294,12 @@ void rx(struct ev_loop * const l,
         struct w_iov * const v = STAILQ_FIRST(&i);
         STAILQ_REMOVE_HEAD(&i, next);
 
-        if (_dlevel == debug)
-            hexdump(v->buf, v->len);
+        // if (_dlevel == debug)
+        //     hexdump(v->buf, v->len);
         if (v->len == 0)
             // TODO figure out why recvmmsg returns zero-length iovecs
             continue;
-        warn(debug, "received %u-byte packet", v->len);
+        warn(debug, "recv %u bytes", v->len);
         ensure(v->len <= MAX_PKT_LEN,
                "received %u-byte packet, larger than MAX_PKT_LEN of %u", v->len,
                MAX_PKT_LEN);
@@ -312,7 +318,7 @@ void rx(struct ev_loop * const l,
         }
 
         // TODO: support short headers w/o cid
-        const uint64_t nr = pm[v->idx].nr = pkt_nr(v->buf, v->len);
+        const uint64_t nr = meta(v).nr = pkt_nr(v->buf, v->len);
         const uint64_t cid = pkt_cid(v->buf, v->len);
         const uint8_t type = w_connected(ws) ? CONN_FLAG_CLNT : 0;
         struct q_conn * c = get_conn(cid, type);
@@ -336,15 +342,17 @@ void rx(struct ev_loop * const l,
         }
 
         diet_insert(&c->recv, nr);
-        char dstr[20];
-        diet_to_str(dstr, 20, &c->recv);
-        warn(notice, "received pkt %" PRIu64
-                     " (len %u, idx %u, type 0x%02x = " bitstring_fmt "): %s",
-             nr, v->len, v->idx, v->buf[0], to_bitstring(v->buf[0]), dstr);
+        warn(notice, "recv pkt %" PRIu64
+                     " (len %u, idx %u, type 0x%02x = " bitstring_fmt
+                     ") on %s conn %" PRIx64,
+             nr, v->len, v->idx, v->buf[0], to_bitstring(v->buf[0]),
+             conn_type(c), c->id);
 
         switch (c->state) {
         case CONN_STAT_CLSD:
             new_stream(c, 0); // create stream 0 (server case)
+        // fall-through
+
         case CONN_STAT_VERS_REJ: {
             // store the socket with the connection
             c->sock = ws;
@@ -370,14 +378,16 @@ void rx(struct ev_loop * const l,
                 tls_handshake(s);
 
                 c->state = CONN_STAT_VERS_OK;
-                warn(info, "conn %" PRIx64 " now in state %u", c->id, c->state);
+                warn(info, "%s conn %" PRIx64 " now in state 0x%02x",
+                     conn_type(c), c->id, c->state);
 
             } else {
                 c->state = CONN_STAT_VERS_REJ;
-                warn(info, "conn %" PRIx64 " now in state %u", c->id, c->state);
-                warn(warn, "conn %" PRIx64
+                warn(info, "%s conn %" PRIx64 " now in state 0x%02x",
+                     conn_type(c), c->id, c->state);
+                warn(warn, "%s conn %" PRIx64
                            " client-requested version 0x%08x not supported ",
-                     c->id, c->vers);
+                     conn_type(c), c->id, c->vers);
             }
             break;
         }
@@ -403,33 +413,38 @@ void rx(struct ev_loop * const l,
                 ensure(!STAILQ_EMPTY(&s->i), "no ServerHello");
                 c->state =
                     tls_handshake(s) ? CONN_STAT_VERS_OK : CONN_STAT_ESTB;
-                warn(info, "conn %" PRIx64 " now in state %u", c->id, c->state);
+                warn(info, "%s conn %" PRIx64 " now in state 0x%02x",
+                     conn_type(c), c->id, c->state);
             }
             break;
         }
 
-        case CONN_STAT_VERS_OK:
-            c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
-
+        case CONN_STAT_VERS_OK: {
             // pass any further data received on stream 0 to TLS and check
             // whether that completes the client handshake
             struct q_stream * const s = get_stream(c, 0);
+            // warn(crit, "API call %u", act_api_call);
             if ((!STAILQ_EMPTY(&s->i) && tls_handshake(s) == 0) ||
                 !is_set(F_LONG_HDR, c->flags)) {
                 c->state = CONN_STAT_ESTB;
-                warn(info, "conn %" PRIx64 " now in state %u", c->id, c->state);
-                // this is a new connection we just accepted or connected
-                c->flags |= CONN_FLAG_CALL_DONE;
+                warn(info, "%s conn %" PRIx64 " now in state 0x%02x",
+                     conn_type(c), c->id, c->state);
+                if ((act_api_call == API_CNCT && is_clnt(c)) ||
+                    (act_api_call == API_ACPT && is_serv(c))) {
+                    // this is a new connection we just accepted or connected
+                    c->flags |= CONN_FLAG_API; // q_accept or q_connect done
+                    warn(info, "q_accept or q_connect done");
+                }
             }
-            break;
+        }
+        // fall-through
 
         case CONN_STAT_ESTB:
             c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
             break;
 
-
         default:
-            die("TODO: state %u", c->state);
+            die("TODO: state 0x%02x", c->state);
         }
     }
 
@@ -442,8 +457,8 @@ void rx(struct ev_loop * const l,
             tx(l, &c->tx_w, 0);
 
         // possibly signal the app
-        if (is_set(CONN_FLAG_CALL_DONE, c->flags)) {
-            c->flags &= ~CONN_FLAG_CALL_DONE; // clear the flag
+        if (is_set(CONN_FLAG_API, c->flags)) {
+            c->flags &= ~CONN_FLAG_API; // clear the flag
             ensure(sc == 0, "have multiple connections that finished calls?");
             sc = c;
         }
@@ -452,8 +467,10 @@ void rx(struct ev_loop * const l,
         c->flags &= ~(CONN_FLAG_RX | CONN_FLAG_TX);
     }
 
-    if (sc)
+    if (sc) {
+        act_api_call = 0;
         ev_break(loop, EVBREAK_ALL);
+    }
 }
 
 
@@ -472,9 +489,9 @@ void detect_lost_pkts(struct q_conn * const c)
     uint64_t largest_lost_packet = 0;
     struct w_iov *v, *tmp;
     STAILQ_FOREACH_SAFE (v, &c->sent_pkts, next, tmp) {
-        const uint64_t nr = pm[v->idx].nr;
-        if (pm[v->idx].ack_cnt == 0 && nr < c->lg_acked) {
-            const ev_tstamp time_since_sent = now - pm[v->idx].time;
+        const uint64_t nr = meta(v).nr;
+        if (meta(v).ack_cnt == 0 && nr < c->lg_acked) {
+            const ev_tstamp time_since_sent = now - meta(v).time;
             const uint64_t packet_delta = c->lg_acked - nr;
             if (time_since_sent > delay_until_lost ||
                 packet_delta > c->reorder_thresh) {
@@ -484,8 +501,11 @@ void detect_lost_pkts(struct q_conn * const c)
                 STAILQ_REMOVE(&c->sent_pkts, v, w_iov, next);
 
                 // if this packet was retransmittable, update in_flight
-                if (v->len > Q_OFFSET)
+                if (v->len > Q_OFFSET) {
                     c->in_flight -= v->len;
+                    warn(info, "in_flight -%u = %" PRIu64, v->len,
+                         c->in_flight);
+                }
 
                 warn(info, "pkt %" PRIu64 " considered lost", nr);
             } else if (fpclassify(c->loss_t) == FP_ZERO &&
@@ -512,6 +532,8 @@ void init_conn(struct q_conn * const c,
                const struct sockaddr * const peer,
                const socklen_t peer_len)
 {
+    SPLAY_REMOVE(conn, &q_conns, c);
+
     char host[NI_MAXHOST] = "";
     char port[NI_MAXSERV] = "";
     getnameinfo((const struct sockaddr *)peer, peer_len, host, sizeof(host),
@@ -520,8 +542,11 @@ void init_conn(struct q_conn * const c,
     c->peer_len = peer_len;
     c->id = id; // XXX figure out if we need to remove & insert
     c->flags &= ~CONN_FLAG_EMBR;
-    warn(info, "creating new conn %" PRIx64 " with %s %s:%s", c->id,
-         is_set(CONN_FLAG_CLNT, c->flags) ? "server" : "client", host, port);
+
+    SPLAY_INSERT(conn, &q_conns, c);
+
+    warn(info, "creating new %s conn %" PRIx64 " with %s:%s", conn_type(c),
+         c->id, host, port);
 }
 
 
@@ -531,7 +556,7 @@ void set_ld_alarm(struct q_conn * const c)
 
     if (c->in_flight == 0) {
         ev_timer_stop(loop, &c->ld_alarm);
-        warn(debug, "no retransmittable pkts outstanding, stopping LD alarm");
+        warn(debug, "no RTX-able pkts outstanding, stopping LD alarm");
         return;
     }
 
@@ -540,12 +565,13 @@ void set_ld_alarm(struct q_conn * const c)
     if (c->state < CONN_STAT_ESTB) {
         dur = fpclassify(c->srtt) == FP_ZERO ? kDefaultInitialRtt : c->srtt;
         dur = MAX(2 * dur, kMinTLPTimeout) * (1 << c->handshake_cnt);
-        warn(debug, "handshake retransmission alarm in %f sec", dur);
+        warn(debug, "handshake RTX alarm in %f sec on %s conn %" PRIx64, dur,
+             conn_type(c), c->id);
 
     } else if (fpclassify(c->loss_t) != FP_ZERO) {
         dur = c->loss_t - now;
-        warn(debug, "early retransmit or time loss detection alarm in %f sec",
-             dur);
+        warn(debug, "early RTX or time LD alarm in %f sec on %s conn %" PRIx64,
+             dur, conn_type(c), c->id);
 
     } else if (c->tlp_cnt < kMaxTLPs) {
         if (c->in_flight)
@@ -553,13 +579,15 @@ void set_ld_alarm(struct q_conn * const c)
         else
             dur = kMinTLPTimeout;
         dur = MAX(dur, 2 * c->srtt);
-        warn(debug, "TLP alarm in %f sec", dur);
+        warn(debug, "TLP alarm in %f sec on %s conn %" PRIx64, dur,
+             conn_type(c), c->id);
 
     } else {
         dur = c->srtt + 4 * c->rttvar;
         dur = MAX(dur, kMinRTOTimeout);
         dur *= 2 ^ c->rto_cnt;
-        warn(debug, "RTO alarm in %f sec", dur);
+        warn(debug, "RTO alarm in %f sec on %s conn %" PRIx64, dur,
+             conn_type(c), c->id);
     }
 
     c->ld_alarm.repeat = dur;
@@ -575,7 +603,8 @@ void ld_alarm(struct ev_loop * const l __attribute__((unused)),
 
     // see OnLossDetectionAlarm pseudo code
     if (c->state < CONN_STAT_ESTB) {
-        warn(info, "handshake retransmission alarm");
+        warn(info, "handshake RTX alarm on %s conn %" PRIx64, conn_type(c),
+             c->id);
         rtx(c, UINT32_MAX);
         // tx above already calls set_ld_alarm(c)
         c->handshake_cnt++;
@@ -583,16 +612,17 @@ void ld_alarm(struct ev_loop * const l __attribute__((unused)),
     }
 
     if (fpclassify(c->loss_t) != FP_ZERO) {
-        warn(info, "early retransmit or time loss detection alarm");
+        warn(info, "early RTX or time loss detection alarm on %s conn %" PRIx64,
+             conn_type(c), c->id);
         detect_lost_pkts(c);
 
     } else if (c->tlp_cnt < kMaxTLPs) {
-        warn(info, "TLP alarm");
+        warn(info, "TLP alarm on %s conn %" PRIx64, conn_type(c), c->id);
         rtx(c, 1);
         c->tlp_cnt++;
 
     } else {
-        warn(info, "RTO alarm");
+        warn(info, "RTO alarm on %s conn %" PRIx64, conn_type(c), c->id);
         if (c->rto_cnt == 0)
             c->lg_sent_before_rto = c->lg_sent;
         rtx(c, 2);
