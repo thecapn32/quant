@@ -103,6 +103,8 @@ static struct q_conn * new_conn(struct w_engine * const w,
     c->flags = (peer_name ? CONN_FLAG_CLNT : 0) | CONN_FLAG_EMBR;
     STAILQ_INIT(&c->sent_pkts);
     SPLAY_INIT(&c->streams);
+    diet_init(&c->acked_pkts);
+    diet_init(&c->recv);
 
     // initialize TLS state
     ensure((c->tls = ptls_new(&tls_ctx, peer_name == 0)) != 0,
@@ -332,6 +334,7 @@ void q_close_stream(struct q_stream * const s)
     if (s->state == STRM_STATE_IDLE) {
         warn(debug, "str %u on %s conn %" PRIx64 " already closed", s->id,
              conn_type(s->c), s->c->id);
+        free_stream(s);
         return;
     }
 
