@@ -35,7 +35,7 @@ int main()
 {
     const uint64_t n = 20;
     char s[256];
-    struct diet t = SPLAY_INITIALIZER(diet);
+    struct diet t = diet_initializer(diet);
 
     plat_initrandom();
 

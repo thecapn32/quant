@@ -54,6 +54,20 @@ struct diet {
     uint64_t cnt;       ///< Number of nodes (intervals) in the diet tree.
 };
 
+
+#define diet_initializer(t)                                                    \
+    {                                                                          \
+        SPLAY_INITIALIZER(t), 0                                                \
+    }
+
+
+#define diet_init(t)                                                           \
+    do {                                                                       \
+        SPLAY_INIT(t);                                                         \
+        (t)->cnt = 0;                                                          \
+    } while (0)
+
+
 SPLAY_PROTOTYPE(diet, ival, node, ival_cmp)
 
 extern struct ival * diet_find(struct diet * const t, const uint64_t n);
@@ -67,7 +81,7 @@ diet_remove(struct diet * const t, const uint64_t n);
 extern void __attribute__((nonnull)) diet_free(struct diet * const t);
 
 extern size_t __attribute__((nonnull))
-diet_to_str(char * const str, const size_t len, struct diet * const d);
+diet_to_str(char * const str, const size_t len, struct diet * const t);
 
 #define diet_max(t) (SPLAY_EMPTY(t) ? 0 : SPLAY_MAX(diet, (t))->hi)
 
