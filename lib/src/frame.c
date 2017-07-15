@@ -316,10 +316,12 @@ dec_ack_frame(struct q_conn * const c,
                          c->in_flight);
 
                     // FIXME this is the wrong condition
+                    warn(debug, "cstate %u, sstate %u, lg_acked %" PRIu64
+                                " out_nr %" PRIu64,
+                         c->state, s->state, c->lg_acked, s->out_nr);
                     if (c->state == CONN_STAT_ESTB &&
                         s->state == STRM_STATE_OPEN &&
-                        c->lg_acked == c->lg_sent &&
-                        STAILQ_EMPTY(&c->sent_pkts))
+                        c->lg_acked == s->out_nr)
                         maybe_api_return(q_write, s);
 
                 } else
@@ -354,7 +356,7 @@ dec_ack_frame(struct q_conn * const c,
 
 bool dec_frames(struct q_conn * const c, struct w_iov * const v)
 {
-    uint16_t i = pkt_hdr_len(v->buf, v->len) + HASH_LEN;
+    uint16_t i = pkt_hdr_len(v->buf, v->len);
     uint16_t pad_start = 0;
     uint16_t dlen = 0;
 

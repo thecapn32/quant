@@ -23,13 +23,13 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <arpa/inet.h>
 #include <inttypes.h>
 #include <math.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -54,22 +54,37 @@
 #include "stream.h"
 
 
-// All open QUIC connections.
-struct conn q_conns = SPLAY_INITIALIZER();
+// Embryonic and established (actually, non-embryonic) QUIC connections.
+struct embr_conn embr_conns = SPLAY_INITIALIZER();
+struct estb_conn estb_conns = SPLAY_INITIALIZER();
 
 
-int64_t conn_cmp(const struct q_conn * const a, const struct q_conn * const b)
+int64_t embr_conn_cmp(const struct q_conn * const a,
+                      const struct q_conn * const b)
+{
+    const int diff = memcmp(&a->peer, &b->peer, MIN(a->peer_len, b->peer_len));
+    if (likely(diff))
+        return diff;
+    // include only the client flag in the comparison
+    return (int8_t)(a->flags & CONN_FLAG_CLNT) -
+           (int8_t)(b->flags & CONN_FLAG_CLNT);
+}
+
+
+int64_t estb_conn_cmp(const struct q_conn * const a,
+                      const struct q_conn * const b)
 {
     const int64_t diff = (int64_t)a->id - (int64_t)b->id;
     if (likely(diff))
         return diff;
-    // include only some flags in the comparison
-    return (int8_t)(a->flags & (CONN_FLAG_CLNT | CONN_FLAG_EMBR)) -
-           (int8_t)(b->flags & (CONN_FLAG_CLNT | CONN_FLAG_EMBR));
+    // include only the client flag in the comparison
+    return (int8_t)(a->flags & CONN_FLAG_CLNT) -
+           (int8_t)(b->flags & CONN_FLAG_CLNT);
 }
 
 
-SPLAY_GENERATE(conn, q_conn, node, conn_cmp)
+SPLAY_GENERATE(embr_conn, q_conn, node, embr_conn_cmp)
+SPLAY_GENERATE(estb_conn, q_conn, node, estb_conn_cmp)
 
 
 uint32_t tls_handshake(struct q_stream * const s)
@@ -109,7 +124,7 @@ uint32_t tls_handshake(struct q_stream * const s)
 
     // we are done with the handshake, no need to TX after all
     w_free_iov(w_engine(s->c->sock), ov);
-    return 0;
+    return (uint32_t)ret;
 }
 
 
@@ -150,10 +165,20 @@ pick_from_server_vers(const void * const buf, const uint16_t len)
 }
 
 
-struct q_conn * get_conn(const uint64_t id, const uint8_t type)
+struct q_conn * get_embr_conn(const uint8_t type,
+                              struct sockaddr * const peer,
+                              const socklen_t peer_len)
+{
+    struct q_conn which = {.peer = *peer, .peer_len = peer_len, .flags = type};
+    struct q_conn * const c = SPLAY_FIND(embr_conn, &embr_conns, &which);
+    return c;
+}
+
+
+struct q_conn * get_estb_conn(const uint64_t id, const uint8_t type)
 {
     struct q_conn which = {.id = id, .flags = type};
-    struct q_conn * const c = SPLAY_FIND(conn, &q_conns, &which);
+    struct q_conn * const c = SPLAY_FIND(estb_conn, &estb_conns, &which);
     return c;
 }
 
@@ -213,8 +238,8 @@ static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
                      ") on %s conn %" PRIx64,
              c->lg_sent, v->len, v->idx, v->buf[0], to_bitstring(v->buf[0]),
              conn_type(c), c->id);
-        // if (_dlevel == debug)
-        //     hexdump(v->buf, v->len);
+        if (_dlevel == debug)
+            hexdump(v->buf, v->len);
     }
 
     // transmit packets
@@ -247,8 +272,9 @@ static void tx_ack_or_fin(struct q_stream * const s)
     STAILQ_INSERT_TAIL(&s->o, ov, next);
     do_tx(s->c, s, &s->o);
     // ACKs and FINs are never RTXable
+    STAILQ_CONCAT(&s->c->sent_pkts, &s->o);
     diet_insert(&s->c->acked_pkts, meta(ov).nr);
-    w_free_iov(w_engine(s->c->sock), ov);
+    // w_free_iov(w_engine(s->c->sock), ov);
 }
 
 
@@ -297,12 +323,12 @@ void rx(struct ev_loop * const l,
         struct w_iov * const v = STAILQ_FIRST(&i);
         STAILQ_REMOVE_HEAD(&i, next);
 
-        // if (_dlevel == debug)
-        //     hexdump(v->buf, v->len);
+        if (_dlevel == debug)
+            hexdump(v->buf, v->len);
         if (v->len == 0)
             // TODO figure out why recvmmsg returns zero-length iovecs
             continue;
-        warn(debug, "recv %u bytes", v->len);
+        // warn(debug, "recv %u bytes", v->len);
         ensure(v->len <= MAX_PKT_LEN,
                "received %u-byte packet, larger than MAX_PKT_LEN of %u", v->len,
                MAX_PKT_LEN);
@@ -311,31 +337,35 @@ void rx(struct ev_loop * const l,
                "%u-byte packet not large enough for %u-byte header", v->len,
                hdr_len);
 
-        if (hdr_len + HASH_LEN < v->len) {
-            // verify hash, if there seems to be one
-            warn(debug, "verifying %lu-byte hash at [%u..%lu] over [0..%u]",
-                 HASH_LEN, hdr_len, hdr_len + HASH_LEN - 1, v->len - 1);
-            const uint64_t hash = fnv_1a(v->buf, v->len, hdr_len, HASH_LEN);
-            if (memcmp(&v->buf[hdr_len], &hash, HASH_LEN) != 0)
-                die("hash mismatch");
-        }
+        // verify hash, if there seems to be one
+        warn(debug, "verifying %lu-byte hash at [%lu..%u] over [0..%lu]",
+             HASH_LEN, v->len - HASH_LEN, v->len - 1, v->len - HASH_LEN - 1);
+        uint64_t hash_rx;
+        uint16_t ii = v->len - HASH_LEN;
+        dec(hash_rx, v->buf, v->len, ii, 0, "%" PRIx64);
+        const uint64_t hash_comp = fnv_1a(v->buf, v->len - HASH_LEN);
+        ensure(hash_rx == hash_comp,
+               "hash mismatch: computed %" PRIx64 " vs. %" PRIx64, hash_comp,
+               hash_rx);
+        v->len -= HASH_LEN;
 
         // TODO: support short headers w/o cid
         const uint64_t nr = meta(v).nr = pkt_nr(v->buf, v->len);
         const uint64_t cid = pkt_cid(v->buf, v->len);
         const uint8_t type = w_connected(ws) ? CONN_FLAG_CLNT : 0;
-        struct q_conn * c = get_conn(cid, type);
+        struct q_conn * c = get_estb_conn(cid, type);
         if (c == 0) {
             // this is a packet for a new connection, create it
-            const struct sockaddr_in peer = {.sin_family = AF_INET,
-                                             .sin_port = v->port,
-                                             .sin_addr = {.s_addr = v->ip}};
+            struct sockaddr_in peer = {.sin_family = AF_INET,
+                                       .sin_port = v->port,
+                                       .sin_addr = {.s_addr = v->ip}};
             socklen_t peer_len = sizeof(peer);
-            c = get_conn(0, type | CONN_FLAG_EMBR); // get embryonic conn
-            ensure(c, "have no embryonic conn");
-            init_conn(c, cid, (const struct sockaddr *)&peer, peer_len);
+            c = get_embr_conn(type, (struct sockaddr *)&peer, peer_len);
+            ensure(c, "don't have embr %s conn to %08x:%u",
+                   w_connected(ws) ? "clnt" : "serv", v->ip, ntohs(v->port));
+            estb_conn(c, (const struct sockaddr *)&peer, peer_len);
+            c->id = cid;         // remember client-chosen cid
             c->lg_sent = nr - 1; // echo received packet number
-            // TODO: allow server to choose a different cid than the client did
         }
 
         // remember that we had a RX event on this connection
@@ -425,6 +455,7 @@ void rx(struct ev_loop * const l,
         case CONN_STAT_VERS_OK: {
             // pass any further data received on stream 0 to TLS and check
             // whether that completes the client handshake
+            c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
             struct q_stream * const s = get_stream(c, 0);
             if ((!STAILQ_EMPTY(&s->i) && tls_handshake(s) == 0) ||
                 !is_set(F_LONG_HDR, c->flags)) {
@@ -435,7 +466,7 @@ void rx(struct ev_loop * const l,
                 maybe_api_return(q_accept, c);
             }
         }
-        // fall-through
+        break;
 
         case CONN_STAT_ESTB:
             c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
@@ -513,26 +544,23 @@ void detect_lost_pkts(struct q_conn * const c)
 }
 
 
-void init_conn(struct q_conn * const c,
-               const uint64_t id,
+void estb_conn(struct q_conn * const c,
                const struct sockaddr * const peer,
                const socklen_t peer_len)
 {
-    SPLAY_REMOVE(conn, &q_conns, c);
+    c->peer = *peer;
+    c->peer_len = peer_len;
+    SPLAY_REMOVE(embr_conn, &embr_conns, c);
+    SPLAY_INSERT(estb_conn, &estb_conns, c);
 
+#ifndef NDEBUG
     char host[NI_MAXHOST] = "";
     char port[NI_MAXSERV] = "";
     getnameinfo((const struct sockaddr *)peer, peer_len, host, sizeof(host),
                 port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
-    c->peer = *peer;
-    c->peer_len = peer_len;
-    c->id = id; // XXX figure out if we need to remove & insert
-    c->flags &= ~CONN_FLAG_EMBR;
-
-    SPLAY_INSERT(conn, &q_conns, c);
-
-    warn(info, "creating new %s conn %" PRIx64 " with %s:%s", conn_type(c),
-         c->id, host, port);
+    warn(info, "estab new %s conn %" PRIx64 " with %s:%s", conn_type(c), c->id,
+         host, port);
+#endif
 }
 
 

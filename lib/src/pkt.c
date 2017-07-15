@@ -25,7 +25,6 @@
 
 #include <inttypes.h>
 #include <stdint.h>
-#include <string.h>
 
 #ifdef __linux__
 #include <byteswap.h>
@@ -127,6 +126,14 @@ uint16_t enc_pkt(struct q_conn * const c,
         break;
     case CONN_STAT_VERS_OK:
         flags |= F_LONG_HDR | (is_clnt(c) ? F_LH_CLNT_CTXT : F_LH_SERV_CTXT);
+        if (!is_clnt(c)) {
+            // server picks a new random cid
+            const uint64_t scid =
+                ((((uint64_t)plat_random()) << 32) | ((uint64_t)plat_random()));
+            warn(notice, "%s picked new cid %" PRIx64 " for conn %" PRIx64,
+                 conn_type(c), scid, c->id);
+            c->id = scid;
+        }
         break;
     case CONN_STAT_ESTB:
         // TODO: support short headers w/o cid
@@ -155,11 +162,6 @@ uint16_t enc_pkt(struct q_conn * const c,
         enc(v->buf, v->len, i, &c->lg_sent, needed_pkt_nr_len(c->lg_sent),
             "%" PRIu64);
 
-    const uint16_t hash_pos = i;
-    i += HASH_LEN;
-    ensure(i < Q_OFFSET, "Q_OFFSET is too small");
-    // warn(debug, "skipping [%u..%u] to leave room for hash", hash_pos, i - 1);
-
     if (!SPLAY_EMPTY(&c->recv))
         i += enc_ack_frame(c, v->buf, v->len, i);
 
@@ -179,7 +181,7 @@ uint16_t enc_pkt(struct q_conn * const c,
         }
 
         if (c->state == CONN_STAT_VERS_SENT)
-            i += enc_padding_frame(v->buf, i, MIN_IP4_INI_LEN - i);
+            v->len = i += enc_padding_frame(v->buf, i, MIN_IP4_INI_LEN - i);
 
         // store final packet length and number
         meta(v).buf_len = i;
@@ -188,13 +190,15 @@ uint16_t enc_pkt(struct q_conn * const c,
         // this is a RTX, pad out until beginning of stream header
         enc_padding_frame(v->buf, i, meta(v).head_start - i);
         // skip over existing stream header and data
-        i = meta(v).buf_len;
+        v->len = i = meta(v).buf_len;
+        warn(debug, "RTX %u", i);
     }
 
-    const uint64_t hash = fnv_1a(v->buf, i, hash_pos, HASH_LEN);
+    const uint64_t hash = fnv_1a(v->buf, i);
     warn(debug, "inserting %lu-byte hash over range [0..%u] into [%u..%lu]",
-         HASH_LEN, i - 1, hash_pos, hash_pos + HASH_LEN - 1);
-    memcpy(&v->buf[hash_pos], &hash, HASH_LEN);
+         HASH_LEN, i - 1, i, i + HASH_LEN - 1);
+    v->len += HASH_LEN;
+    enc(v->buf, v->len, i, &hash, 0, "%" PRIx64);
 
     return i;
 }

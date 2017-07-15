@@ -57,7 +57,7 @@ struct sockaddr;
 
 /// QUIC version supported by this implementation in order of preference.
 const uint32_t ok_vers[] = {
-    0xff000004, // draft-ietf-quic-transport-04
+    // 0xff000004, // draft-ietf-quic-transport-04
     0xff000005, // draft-ietf-quic-transport-05
 };
 
@@ -97,11 +97,11 @@ static struct q_conn * new_conn(struct w_engine * const w,
                                 const char * const peer_name,
                                 const uint16_t port)
 {
-    struct q_conn * c = get_conn(0, peer_name == 0);
-    ensure(c == 0, "%s conn %" PRIx64 " already exists",
-           peer_name ? "clnt" : "serv", c->id);
+    // struct q_conn * c = get_conn(0, peer_name == 0);
+    // ensure(c == 0, "%s conn %" PRIx64 " already exists",
+    //        peer_name ? "clnt" : "serv", c->id);
 
-    c = calloc(1, sizeof(*c));
+    struct q_conn * const c = calloc(1, sizeof(*c));
     ensure(c, "could not calloc");
 
     // initialize LD state
@@ -115,7 +115,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
     c->cwnd = kInitialWindow;
     c->ssthresh = UINT64_MAX;
 
-    c->flags = (peer_name ? CONN_FLAG_CLNT : 0) | CONN_FLAG_EMBR;
+    c->flags = peer_name ? CONN_FLAG_CLNT : 0;
     STAILQ_INIT(&c->sent_pkts);
     SPLAY_INIT(&c->streams);
     diet_init(&c->closed_streams);
@@ -139,7 +139,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
     ev_io_start(loop, &c->rx_w);
 
     // add connection to global data structure
-    SPLAY_INSERT(conn, &q_conns, c);
+    SPLAY_INSERT(embr_conn, &embr_conns, c);
 
     warn(debug, "%s conn created", conn_type(c));
     return c;
@@ -160,10 +160,10 @@ void q_free(void * const w, struct w_iov_stailq * const q)
 
 struct q_conn * q_connect(void * const q,
                           const struct sockaddr * const peer,
-                          const socklen_t peer_len,
+                          const socklen_t peer_len __attribute__((unused)),
                           const char * const peer_name)
 {
-    // make new connection (connection ID must be > 0 for us)
+    // make new connection
     const uint64_t cid =
         ((((uint64_t)plat_random()) << 32) | ((uint64_t)plat_random()));
     warn(warn, "connecting embr clnt conn %" PRIx64, cid);
@@ -174,7 +174,8 @@ struct q_conn * q_connect(void * const q,
     w_connect(c->sock,
               ((const struct sockaddr_in *)(const void *)peer)->sin_addr.s_addr,
               ((const struct sockaddr_in *)(const void *)peer)->sin_port);
-    init_conn(c, cid, peer, peer_len);
+    c->id = cid;
+    // XXX do we not need this? estb_conn(c, peer, peer_len);
 
     // allocate stream zero and start TLS handshake on stream 0
     struct q_stream * const s = new_stream(c, 0);
@@ -396,8 +397,9 @@ void q_close(struct q_conn * const c)
     if (c->sock)
         w_close(c->sock);
 
-    // remove connection from global list
-    SPLAY_REMOVE(conn, &q_conns, c);
+    // remove connection from global lists
+    SPLAY_REMOVE(embr_conn, &embr_conns, c);
+    SPLAY_REMOVE(estb_conn, &estb_conns, c);
 
     warn(warn, "%s conn %" PRIx64 " closed", conn_type(c), c->id);
     free(c);
@@ -408,8 +410,12 @@ void q_cleanup(void * const q)
 {
     // close all connections
     struct q_conn *c, *tmp;
-    for (c = SPLAY_MIN(conn, &q_conns); c != 0; c = tmp) {
-        tmp = SPLAY_NEXT(conn, &q_conns, c);
+    for (c = SPLAY_MIN(embr_conn, &embr_conns); c != 0; c = tmp) {
+        tmp = SPLAY_NEXT(embr_conn, &embr_conns, c);
+        q_close(c);
+    }
+    for (c = SPLAY_MIN(estb_conn, &estb_conns); c != 0; c = tmp) {
+        tmp = SPLAY_NEXT(estb_conn, &estb_conns, c);
         q_close(c);
     }
 

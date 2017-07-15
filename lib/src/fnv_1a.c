@@ -26,29 +26,16 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <warpcore/warpcore.h>
-
 #include "fnv_1a.h" // IWYU pragma: keep
 
 
-uint64_t fnv_1a(const void * const buf,
-                const size_t len,
-                const size_t skip_pos,
-                const size_t skip_len)
+uint64_t fnv_1a(const void * const buf, const size_t len)
 {
-    ensure((skip_pos <= len) && (skip_pos + skip_len <= len),
-           "len %zu, skip_pos %zu, skip_len %zu", len, skip_pos, skip_len);
-
     const uint64_t prime = 0x100000001b3;
     uint64_t hash = 0xcbf29ce484222325;
 
-    // two consecutive loops should be faster than one loop with an "if"
     const uint8_t * const bytes = buf;
-    for (size_t i = 0; i < skip_pos; i++) {
-        hash ^= bytes[i];
-        hash *= prime;
-    }
-    for (size_t i = skip_pos + skip_len; i < len; i++) {
+    for (size_t i = 0; i < len; i++) {
         hash ^= bytes[i];
         hash *= prime;
     }

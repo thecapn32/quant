@@ -31,7 +31,6 @@
 #pragma clang diagnostic pop
 
 #include <picotls.h>
-#include <pthread.h>
 #include <stdint.h>
 #include <sys/socket.h>
 
@@ -42,9 +41,9 @@
 
 struct q_stream;
 
-// All open QUIC connections.
-extern SPLAY_HEAD(conn, q_conn) q_conns;
-extern pthread_mutex_t q_conns_lock;
+// Embryonic and established (actually, non-embryonic) QUIC connections.
+extern SPLAY_HEAD(embr_conn, q_conn) embr_conns;
+extern SPLAY_HEAD(estb_conn, q_conn) estb_conns;
 
 
 /// A QUIC connection.
@@ -106,9 +105,13 @@ struct q_conn {
 
 
 extern int64_t __attribute__((nonnull))
-conn_cmp(const struct q_conn * const a, const struct q_conn * const b);
+embr_conn_cmp(const struct q_conn * const a, const struct q_conn * const b);
 
-SPLAY_PROTOTYPE(conn, q_conn, node, conn_cmp)
+extern int64_t __attribute__((nonnull))
+estb_conn_cmp(const struct q_conn * const a, const struct q_conn * const b);
+
+SPLAY_PROTOTYPE(embr_conn, q_conn, node, embr_conn_cmp)
+SPLAY_PROTOTYPE(estb_conn, q_conn, node, estb_conn_cmp)
 
 
 #define CONN_STAT_CLSD 0
@@ -118,24 +121,19 @@ SPLAY_PROTOTYPE(conn, q_conn, node, conn_cmp)
 #define CONN_STAT_ESTB 4
 
 #define CONN_FLAG_CLNT 0x01 ///< We are client on this connection (or server)
-#define CONN_FLAG_EMBR 0x02 ///< This is an embryonic connection
 #define CONN_FLAG_RX 0x04   ///< We had an RX event on this connection
 #define CONN_FLAG_TX 0x08   ///< We have a pending TX on this connection
 
 #define is_clnt(c) (is_set(CONN_FLAG_CLNT, (c)->flags))
 #define is_serv(c) (!is_clnt(c))
-#define conn_type(c)                                                           \
-    (is_set(CONN_FLAG_EMBR, (c)->flags)                                        \
-         ? (is_clnt(c) ? "embr clnt" : "embr serv")                            \
-         : (is_clnt(c) ? "clnt" : "serv"))
+#define conn_type(c) (is_clnt(c) ? "clnt" : "serv")
 
 struct ev_loop;
 
 extern void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c);
 
 extern void __attribute__((nonnull))
-init_conn(struct q_conn * const c,
-          const uint64_t id,
+estb_conn(struct q_conn * const c,
           const struct sockaddr * const peer,
           const socklen_t peer_len);
 
@@ -145,10 +143,15 @@ ld_alarm(struct ev_loop * const l, ev_timer * const w, int e);
 extern void __attribute__((nonnull))
 tx(struct ev_loop * const l, ev_async * const w, int e);
 
-extern struct q_conn * get_conn(const uint64_t id, const uint8_t type);
-
 extern void __attribute__((nonnull))
 rx(struct ev_loop * const l, ev_io * const rx_w, int e);
+
+extern struct q_conn * __attribute__((nonnull))
+get_embr_conn(const uint8_t type,
+              struct sockaddr * const peer,
+              const socklen_t peer_len);
+
+extern struct q_conn * get_estb_conn(const uint64_t id, const uint8_t type);
 
 extern void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c);
 
