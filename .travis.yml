@@ -31,17 +31,17 @@ addons:
       name: "NTAP/quant"
       description: "Build submitted via Travis CI"
     notification_email: lars@netapp.com
-    build_command_prepend: "cd $TRAVIS_BUILD_DIR; mkdir build; cd build; cmake -GNinja ..; ninja clean"
+    build_command_prepend: "cd $TRAVIS_BUILD_DIR; rm -rf build; mkdir build; cd build; cmake -GNinja -DCMAKE_C_COMPILER=gcc-4.9 -DCMAKE_INSTALL_PREFIX:PATH=/tmp .."
     build_command: ninja
     branch_pattern: master
 
 script:
   - |
     cd $TRAVIS_BUILD_DIR
+    rm -rf build
     mkdir build
     cd build
     cmake -GNinja -DCMAKE_C_COMPILER=gcc-4.9 -DCMAKE_INSTALL_PREFIX:PATH=/tmp ..
-    ninja clean
     ninja
 
 after_success:
