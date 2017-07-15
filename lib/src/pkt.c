@@ -173,7 +173,7 @@ uint16_t enc_pkt(struct q_conn * const c,
         }
 
         if (c->state == CONN_STAT_VERS_SENT)
-            v->len = i += enc_padding_frame(v->buf, i, MIN_IP4_INI_LEN - i);
+            v->len = i += enc_padding_frame(v->buf, i, MIN_INI_LEN - i);
 
         // store final packet length and number
         meta(v).buf_len = i;

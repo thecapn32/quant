@@ -401,7 +401,7 @@ void rx(struct ev_loop * const l,
             c->sock = ws;
 
             // validate minimum packet size
-            ensure(v->len >= MIN_IP4_INI_LEN, "initial packet len %u too short",
+            ensure(v->len >= MIN_INI_LEN, "initial packet len %u too short",
                    v->len);
 
             ensure(pkt_flags(v->buf) & F_LONG_HDR, "short header");
