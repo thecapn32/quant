@@ -21,7 +21,7 @@ addons:
     sources:
       - ubuntu-toolchain-r-test
     packages:
-      - g++-4.9
+      - gcc-4.9
       - doxygen
       - graphviz
       - libev-dev
@@ -40,7 +40,7 @@ script:
     cd $TRAVIS_BUILD_DIR
     mkdir build
     cd build
-    cmake -GNinja -DCMAKE_C_COMPILER=gcc-4.9 -DCMAKE_CXX_COMPILER=g++-4.9 -DCMAKE_INSTALL_PREFIX:PATH=/tmp ..
+    cmake -GNinja -DCMAKE_C_COMPILER=gcc-4.9 -DCMAKE_INSTALL_PREFIX:PATH=/tmp ..
     ninja clean
     ninja
 
