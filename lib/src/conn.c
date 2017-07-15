@@ -110,7 +110,7 @@ uint32_t tls_handshake(struct q_stream * const s)
         w_free(w_engine(s->c->sock), &s->i);
     else {
         s->c->state = CONN_STAT_VERS_SENT;
-        warn(info, "%s conn %" PRIx64 " now in state 0x%02x", conn_type(s->c),
+        warn(info, "%s conn %" PRIx64 " now in state %u", conn_type(s->c),
              s->c->id, s->c->state);
     }
 
@@ -411,12 +411,12 @@ void rx(struct ev_loop * const l,
                 tls_handshake(s);
 
                 c->state = CONN_STAT_VERS_OK;
-                warn(info, "%s conn %" PRIx64 " now in state 0x%02x",
+                warn(info, "%s conn %" PRIx64 " now in state %u",
                      conn_type(c), c->id, c->state);
 
             } else {
                 c->state = CONN_STAT_VERS_REJ;
-                warn(info, "%s conn %" PRIx64 " now in state 0x%02x",
+                warn(info, "%s conn %" PRIx64 " now in state %u",
                      conn_type(c), c->id, c->state);
                 warn(warn, "%s conn %" PRIx64
                            " client-requested version 0x%08x not supported ",
@@ -446,7 +446,7 @@ void rx(struct ev_loop * const l,
                 ensure(!STAILQ_EMPTY(&s->i), "no ServerHello");
                 c->state =
                     tls_handshake(s) ? CONN_STAT_VERS_OK : CONN_STAT_ESTB;
-                warn(info, "%s conn %" PRIx64 " now in state 0x%02x",
+                warn(info, "%s conn %" PRIx64 " now in state %u",
                      conn_type(c), c->id, c->state);
             }
             break;
@@ -460,7 +460,7 @@ void rx(struct ev_loop * const l,
             if ((!STAILQ_EMPTY(&s->i) && tls_handshake(s) == 0) ||
                 !is_set(F_LONG_HDR, c->flags)) {
                 c->state = CONN_STAT_ESTB;
-                warn(info, "%s conn %" PRIx64 " now in state 0x%02x",
+                warn(info, "%s conn %" PRIx64 " now in state %u",
                      conn_type(c), c->id, c->state);
                 maybe_api_return(q_connect, c);
                 maybe_api_return(q_accept, c);
@@ -473,7 +473,7 @@ void rx(struct ev_loop * const l,
             break;
 
         default:
-            die("TODO: state 0x%02x", c->state);
+            die("TODO: state %u", c->state);
         }
     }
 
