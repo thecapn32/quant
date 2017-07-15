@@ -23,6 +23,12 @@ addons:
       - graphviz
       - libev-dev
       - ninja-build
+  # we need a newer gcc for _Generic
+  apt:
+    sources:
+      - ubuntu-toolchain-r-test
+    packages:
+      - g++-4.9
 
   coverity_scan:
     project:
@@ -38,16 +44,6 @@ addons:
         ninja clean
     build_command: ninja
     branch_pattern: master
-
-# before_install:
-#   # download netmap headers, to build the relevant backend
-#   - |
-#     cd $TRAVIS_BUILD_DIR
-#     mkdir -p lib/include/net
-#     cd lib/include/net
-#     wget \
-#       https://raw.githubusercontent.com/luigirizzo/netmap/master/sys/net/netmap.h \
-#       https://raw.githubusercontent.com/luigirizzo/netmap/master/sys/net/netmap_user.h
 
 script:
   - |
