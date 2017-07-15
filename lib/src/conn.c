@@ -238,7 +238,7 @@ rtx(struct q_conn * const c, const uint32_t __attribute__((unused)) n)
 }
 
 
-static void synth_tx(struct q_stream * const s)
+static void tx_ack_or_fin(struct q_stream * const s)
 {
     struct w_iov * const ov = w_alloc_iov(w_engine(s->c->sock), Q_OFFSET);
     ov->ip = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_addr.s_addr;
@@ -246,7 +246,9 @@ static void synth_tx(struct q_stream * const s)
     ov->len = 0;
     STAILQ_INSERT_TAIL(&s->o, ov, next);
     do_tx(s->c, s, &s->o);
-    STAILQ_CONCAT(&s->c->sent_pkts, &s->o);
+    // ACKs and FINs are never RTXable
+    diet_insert(&s->c->acked_pkts, meta(ov).nr);
+    w_free_iov(w_engine(s->c->sock), ov);
 }
 
 
@@ -267,7 +269,7 @@ void tx(struct ev_loop * const l __attribute__((unused)),
         } else if (s->state == STRM_STATE_HCLO || s->state == STRM_STATE_CLSD) {
             warn(debug, "FIN needed on %s conn %" PRIx64 " str %u",
                  conn_type(c), c->id, s->id);
-            synth_tx(s);
+            tx_ack_or_fin(s);
             did_tx = true;
         }
     }
@@ -276,7 +278,7 @@ void tx(struct ev_loop * const l __attribute__((unused)),
         // need to send ACKs but don't have any stream data to piggyback on
         s = get_stream(c, s ? s->id : 0);
         warn(debug, "ACK needed on %s conn %" PRIx64, conn_type(c), c->id);
-        synth_tx(s);
+        tx_ack_or_fin(s);
     }
 }
 
@@ -459,6 +461,7 @@ void rx(struct ev_loop * const l,
 
 void detect_lost_pkts(struct q_conn * const c)
 {
+    warn(crit, "detect_lost_pkts");
     // see DetectLostPackets pseudo code
     c->loss_t = 0;
     ev_tstamp delay_until_lost = HUGE_VAL;

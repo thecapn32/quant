@@ -196,9 +196,11 @@ static uint8_t __attribute__((const)) dec_ack_block_len(const uint8_t flags)
 static struct w_iov * __attribute__((nonnull))
 find_sent_pkt(struct q_conn * const c, const uint64_t nr)
 {
+    warn(debug, "find_sent_pkt %" PRIu64, nr);
     // check if packed is in the unACKed queue
     struct w_iov * v;
     STAILQ_FOREACH (v, &c->sent_pkts, next) {
+        warn(debug, "sent_pkts %" PRIu64, meta(v).nr);
         if (meta(v).nr == nr)
             return v;
     }
@@ -313,6 +315,7 @@ dec_ack_frame(struct q_conn * const c,
                     warn(info, "in_flight +%u = %" PRIu64, meta(p).buf_len,
                          c->in_flight);
 
+                    // FIXME this is the wrong condition
                     if (c->state == CONN_STAT_ESTB &&
                         s->state == STRM_STATE_OPEN &&
                         c->lg_acked == c->lg_sent &&
@@ -344,7 +347,7 @@ dec_ack_frame(struct q_conn * const c,
         uint32_t ts = 0;
         dec(ts, v->buf, v->len, i, 0, "%u");
     }
-
+    warn(debug, "done dec ACKs");
     return i;
 }
 

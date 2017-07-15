@@ -117,7 +117,7 @@ uint16_t enc_pkt(struct q_conn * const c,
     uint8_t flags = 0;
     meta(v).nr = ++c->lg_sent; // TODO: increase by random offset
 
-    warn(debug, "%s conn state 0x%02x", conn_type(c), c->state);
+    warn(debug, "%s conn state %u", conn_type(c), c->state);
     switch (c->state) {
     case CONN_STAT_VERS_SENT:
         flags |= F_LONG_HDR | F_LH_CLNT_INIT;
@@ -133,7 +133,7 @@ uint16_t enc_pkt(struct q_conn * const c,
         flags |= F_SH_CID | enc_pkt_nr_len[needed_pkt_nr_len(c->lg_sent)];
         break;
     default:
-        die("unknown conn state 0x%02x", c->state);
+        die("unknown conn state %u", c->state);
         break;
     }
     enc(v->buf, v->len, i, &flags, 0, "0x%02x");
