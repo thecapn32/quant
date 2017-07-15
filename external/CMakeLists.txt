@@ -3,7 +3,6 @@ include(ExternalProject)
 externalproject_add(warp
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/NTAP/warpcore.git
-  GIT_SHALLOW 1
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -DDLEVEL=${DLEVEL}
     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DBUILD_DOCUMENTATION=FALSE
@@ -40,7 +39,6 @@ externalproject_add(picotls
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/h2o/picotls.git
   # GIT_TAG kazuho/quic
-  GIT_SHALLOW 1
   PATCH_COMMAND sed -i "" -e "s/-std=c99 -Wall -O2 -g//" CMakeLists.txt
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
