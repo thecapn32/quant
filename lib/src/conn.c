@@ -501,7 +501,6 @@ void rx(struct ev_loop * const l,
 
 void detect_lost_pkts(struct q_conn * const c)
 {
-    warn(crit, "detect_lost_pkts");
     // see DetectLostPackets pseudo code
     c->loss_t = 0;
     ev_tstamp delay_until_lost = HUGE_VAL;
