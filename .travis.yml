@@ -40,7 +40,6 @@ script:
     cd $TRAVIS_BUILD_DIR
     mkdir build
     cd build
-    cat cov-int/scm_log.txt
     cmake -GNinja -DCMAKE_C_COMPILER=gcc-4.9 -DCMAKE_CXX_COMPILER=g++-4.9 -DCMAKE_INSTALL_PREFIX:PATH=/tmp ..
     ninja clean
     ninja
