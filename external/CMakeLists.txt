@@ -97,3 +97,27 @@ add_custom_target(go-client
 add_custom_target(go-server
                   DEPENDS quic-go
                   COMMAND ${GOPATH}/bin/example -v -bind 127.0.0.1:8443)
+
+
+# Use minq for testing against
+set(GOPATH ${CMAKE_CURRENT_BINARY_DIR}/go)
+set(MINQ github.com/ekr/minq)
+externalproject_add(minq
+  DOWNLOAD_COMMAND env GOPATH=${GOPATH} go get ${MINQ} || true
+  CONFIGURE_COMMAND cd ${GOPATH}/src/github.com/bifurcation/mint && git remote add ekr https://www.github.com/ekr/mint && git fetch ekr && git checkout minq_draft_21
+  BUILD_COMMAND
+    cd ${GOPATH}/src/${MINQ} && env GOPATH=${GOPATH} go test
+  INSTALL_COMMAND ""
+)
+
+# EXCLUDE_FROM_ALL workaround for older cmake
+set_target_properties(minq PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
+# add_custom_target(minq-client
+#                   DEPENDS minq
+#                   COMMAND ${GOPATH}/bin/client -v https://127.0.0.1:8443/)
+
+add_custom_target(minq-server
+                  DEPENDS minq
+                  COMMAND echo "pushd ${GOPATH}/src/${MINQ} ; env MINQ_LOG=connection GOPATH=${GOPATH} go run bin/server/main.go ; popd"
+                  VERBATIM)
