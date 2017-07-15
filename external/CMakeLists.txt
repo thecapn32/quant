@@ -38,7 +38,7 @@ string(REPLACE "-fsanitize=undefined" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
 externalproject_add(picotls
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/h2o/picotls.git
-  # GIT_TAG kazuho/quic
+  GIT_TAG kazuho/draft21
   PATCH_COMMAND sed -i "" -e "s/-std=c99 -Wall -O2 -g//" CMakeLists.txt
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
