@@ -119,5 +119,5 @@ set_target_properties(minq PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 add_custom_target(minq-server
                   DEPENDS minq
-                  COMMAND echo "pushd ${GOPATH}/src/${MINQ} ; env MINQ_LOG=connection GOPATH=${GOPATH} go run bin/server/main.go ; popd"
+                  COMMAND echo "pushd ${GOPATH}/src/${MINQ} ; env MINQ_LOG=\\* GOPATH=${GOPATH} go run bin/server/main.go ; popd"
                   VERBATIM)
