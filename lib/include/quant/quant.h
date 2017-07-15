@@ -40,8 +40,7 @@ extern void __attribute__((nonnull)) q_cleanup(void * const q);
 
 extern struct q_conn * __attribute__((nonnull))
 q_connect(void * const q,
-          const struct sockaddr * const peer,
-          const socklen_t peer_len,
+          const struct sockaddr_in * const peer,
           const char * const peer_name);
 
 extern void __attribute__((nonnull)) q_close(struct q_conn * const c);

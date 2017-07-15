@@ -126,14 +126,6 @@ uint16_t enc_pkt(struct q_conn * const c,
         break;
     case CONN_STAT_VERS_OK:
         flags |= F_LONG_HDR | (is_clnt(c) ? F_LH_CLNT_CTXT : F_LH_SERV_CTXT);
-        if (!is_clnt(c)) {
-            // server picks a new random cid
-            const uint64_t scid =
-                ((((uint64_t)plat_random()) << 32) | ((uint64_t)plat_random()));
-            warn(notice, "%s picked new cid %" PRIx64 " for conn %" PRIx64,
-                 conn_type(c), scid, c->id);
-            c->id = scid;
-        }
         break;
     case CONN_STAT_ESTB:
         // TODO: support short headers w/o cid

@@ -25,14 +25,15 @@
 
 #pragma once
 
+#include <netinet/in.h>
+#include <stdint.h>
+
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wpadded"
 #include <ev.h>
 #pragma clang diagnostic pop
 
 #include <picotls.h>
-#include <stdint.h>
-#include <sys/socket.h>
 
 #include <warpcore/warpcore.h>
 
@@ -42,13 +43,14 @@
 struct q_stream;
 
 // Embryonic and established (actually, non-embryonic) QUIC connections.
-extern SPLAY_HEAD(embr_conn, q_conn) embr_conns;
-extern SPLAY_HEAD(estb_conn, q_conn) estb_conns;
+extern SPLAY_HEAD(ipnp_splay, q_conn) conns_by_ipnp;
+extern SPLAY_HEAD(cid_splay, q_conn) conns_by_cid;
 
 
 /// A QUIC connection.
 struct q_conn {
-    SPLAY_ENTRY(q_conn) node;
+    SPLAY_ENTRY(q_conn) node_embr;
+    SPLAY_ENTRY(q_conn) node_estb;
     SLIST_ENTRY(q_conn) next;
 
     uint64_t id; ///< Connection ID
@@ -60,8 +62,10 @@ struct q_conn {
 
     uint8_t _unused[2];
 
-    socklen_t peer_len;   ///< Length of @p peer.
-    struct sockaddr peer; ///< Address of our peer.
+    struct sockaddr_in peer; ///< Address of our peer.
+
+    uint8_t _unused2[4];
+
     SPLAY_HEAD(stream, q_stream) streams;
     struct diet closed_streams;
     struct w_sock * sock; ///< File descriptor (socket) for the connection.
@@ -75,7 +79,9 @@ struct q_conn {
     uint8_t handshake_cnt;
     uint8_t tlp_cnt;
     uint8_t rto_cnt;
-    uint8_t _unused2[5];
+
+    uint8_t _unused3[5];
+
     double reorder_fract;
     uint64_t lg_sent_before_rto;
     ev_tstamp srtt;
@@ -105,13 +111,13 @@ struct q_conn {
 
 
 extern int64_t __attribute__((nonnull))
-embr_conn_cmp(const struct q_conn * const a, const struct q_conn * const b);
+ipnp_splay_cmp(const struct q_conn * const a, const struct q_conn * const b);
 
 extern int64_t __attribute__((nonnull))
-estb_conn_cmp(const struct q_conn * const a, const struct q_conn * const b);
+cid_splay_cmp(const struct q_conn * const a, const struct q_conn * const b);
 
-SPLAY_PROTOTYPE(embr_conn, q_conn, node, embr_conn_cmp)
-SPLAY_PROTOTYPE(estb_conn, q_conn, node, estb_conn_cmp)
+SPLAY_PROTOTYPE(ipnp_splay, q_conn, node_embr, ipnp_splay_cmp)
+SPLAY_PROTOTYPE(cid_splay, q_conn, node_estb, cid_splay_cmp)
 
 
 #define CONN_STAT_CLSD 0
@@ -133,9 +139,7 @@ struct ev_loop;
 extern void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c);
 
 extern void __attribute__((nonnull))
-estb_conn(struct q_conn * const c,
-          const struct sockaddr * const peer,
-          const socklen_t peer_len);
+cid_splay(struct q_conn * const c, const struct sockaddr_in * const peer);
 
 extern void __attribute__((nonnull))
 ld_alarm(struct ev_loop * const l, ev_timer * const w, int e);
@@ -147,11 +151,9 @@ extern void __attribute__((nonnull))
 rx(struct ev_loop * const l, ev_io * const rx_w, int e);
 
 extern struct q_conn * __attribute__((nonnull))
-get_embr_conn(const uint8_t type,
-              struct sockaddr * const peer,
-              const socklen_t peer_len);
+get_conn_by_ipnp(struct sockaddr_in * const peer, const uint8_t type);
 
-extern struct q_conn * get_estb_conn(const uint64_t id, const uint8_t type);
+extern struct q_conn * get_conn_by_cid(const uint64_t id, const uint8_t type);
 
 extern void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c);
 

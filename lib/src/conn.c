@@ -23,10 +23,8 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <arpa/inet.h>
 #include <inttypes.h>
 #include <math.h>
-#include <netdb.h>
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -55,14 +53,14 @@
 
 
 // Embryonic and established (actually, non-embryonic) QUIC connections.
-struct embr_conn embr_conns = SPLAY_INITIALIZER();
-struct estb_conn estb_conns = SPLAY_INITIALIZER();
+struct ipnp_splay conns_by_ipnp = SPLAY_INITIALIZER();
+struct cid_splay conns_by_cid = SPLAY_INITIALIZER();
 
 
-int64_t embr_conn_cmp(const struct q_conn * const a,
-                      const struct q_conn * const b)
+int64_t ipnp_splay_cmp(const struct q_conn * const a,
+                       const struct q_conn * const b)
 {
-    const int diff = memcmp(&a->peer, &b->peer, MIN(a->peer_len, b->peer_len));
+    const int diff = memcmp(&a->peer, &b->peer, sizeof(a->peer));
     if (likely(diff))
         return diff;
     // include only the client flag in the comparison
@@ -71,7 +69,7 @@ int64_t embr_conn_cmp(const struct q_conn * const a,
 }
 
 
-int64_t estb_conn_cmp(const struct q_conn * const a,
+int64_t cid_splay_cmp(const struct q_conn * const a,
                       const struct q_conn * const b)
 {
     const int64_t diff = (int64_t)a->id - (int64_t)b->id;
@@ -83,8 +81,8 @@ int64_t estb_conn_cmp(const struct q_conn * const a,
 }
 
 
-SPLAY_GENERATE(embr_conn, q_conn, node, embr_conn_cmp)
-SPLAY_GENERATE(estb_conn, q_conn, node, estb_conn_cmp)
+SPLAY_GENERATE(ipnp_splay, q_conn, node_embr, ipnp_splay_cmp)
+SPLAY_GENERATE(cid_splay, q_conn, node_estb, cid_splay_cmp)
 
 
 uint32_t tls_handshake(struct q_stream * const s)
@@ -165,20 +163,19 @@ pick_from_server_vers(const void * const buf, const uint16_t len)
 }
 
 
-struct q_conn * get_embr_conn(const uint8_t type,
-                              struct sockaddr * const peer,
-                              const socklen_t peer_len)
+struct q_conn * get_conn_by_ipnp(struct sockaddr_in * const peer,
+                                 const uint8_t type)
 {
-    struct q_conn which = {.peer = *peer, .peer_len = peer_len, .flags = type};
-    struct q_conn * const c = SPLAY_FIND(embr_conn, &embr_conns, &which);
+    struct q_conn which = {.peer = *peer, .flags = type};
+    struct q_conn * const c = SPLAY_FIND(ipnp_splay, &conns_by_ipnp, &which);
     return c;
 }
 
 
-struct q_conn * get_estb_conn(const uint64_t id, const uint8_t type)
+struct q_conn * get_conn_by_cid(const uint64_t id, const uint8_t type)
 {
     struct q_conn which = {.id = id, .flags = type};
-    struct q_conn * const c = SPLAY_FIND(estb_conn, &estb_conns, &which);
+    struct q_conn * const c = SPLAY_FIND(cid_splay, &conns_by_cid, &which);
     return c;
 }
 
@@ -353,19 +350,32 @@ void rx(struct ev_loop * const l,
         const uint64_t nr = meta(v).nr = pkt_nr(v->buf, v->len);
         const uint64_t cid = pkt_cid(v->buf, v->len);
         const uint8_t type = w_connected(ws) ? CONN_FLAG_CLNT : 0;
-        struct q_conn * c = get_estb_conn(cid, type);
+        struct q_conn * c = get_conn_by_cid(cid, type);
         if (c == 0) {
-            // this is a packet for a new connection, create it
-            struct sockaddr_in peer = {.sin_family = AF_INET,
-                                       .sin_port = v->port,
-                                       .sin_addr = {.s_addr = v->ip}};
-            socklen_t peer_len = sizeof(peer);
-            c = get_embr_conn(type, (struct sockaddr *)&peer, peer_len);
-            ensure(c, "don't have embr %s conn to %08x:%u",
-                   w_connected(ws) ? "clnt" : "serv", v->ip, ntohs(v->port));
-            estb_conn(c, (const struct sockaddr *)&peer, peer_len);
-            c->id = cid;         // remember client-chosen cid
-            c->lg_sent = nr - 1; // echo received packet number
+            // this might be the first packet for a new connection, or a dup CH
+            struct sockaddr_in none = {0};
+            c = get_conn_by_ipnp(&none, type);
+            if (c == 0) {
+                // this is a new connection; server picks a new random cid
+                c->id = ((((uint64_t)plat_random()) << 32) |
+                         ((uint64_t)plat_random()));
+                warn(notice, "%s picked new cid %" PRIx64 " for conn %" PRIx64,
+                     conn_type(c), c->id, cid);
+                c->lg_sent = nr - 1; // echo received packet number
+
+            } else {
+                // we have a connection from this peer
+                ensure(c->state < CONN_STAT_ESTB, "handshaking");
+                c->id = cid;
+            }
+            // update the conn in the global structs (TODO make less ugly)
+            c->peer = (struct sockaddr_in){.sin_family = AF_INET,
+                                           .sin_port = v->port,
+                                           .sin_addr = {.s_addr = v->ip}};
+            SPLAY_REMOVE(ipnp_splay, &conns_by_ipnp, c);
+            SPLAY_INSERT(ipnp_splay, &conns_by_ipnp, c);
+            SPLAY_REMOVE(cid_splay, &conns_by_cid, c);
+            SPLAY_INSERT(cid_splay, &conns_by_cid, c);
         }
 
         // remember that we had a RX event on this connection
@@ -411,13 +421,13 @@ void rx(struct ev_loop * const l,
                 tls_handshake(s);
 
                 c->state = CONN_STAT_VERS_OK;
-                warn(info, "%s conn %" PRIx64 " now in state %u",
-                     conn_type(c), c->id, c->state);
+                warn(info, "%s conn %" PRIx64 " now in state %u", conn_type(c),
+                     c->id, c->state);
 
             } else {
                 c->state = CONN_STAT_VERS_REJ;
-                warn(info, "%s conn %" PRIx64 " now in state %u",
-                     conn_type(c), c->id, c->state);
+                warn(info, "%s conn %" PRIx64 " now in state %u", conn_type(c),
+                     c->id, c->state);
                 warn(warn, "%s conn %" PRIx64
                            " client-requested version 0x%08x not supported ",
                      conn_type(c), c->id, c->vers);
@@ -446,8 +456,8 @@ void rx(struct ev_loop * const l,
                 ensure(!STAILQ_EMPTY(&s->i), "no ServerHello");
                 c->state =
                     tls_handshake(s) ? CONN_STAT_VERS_OK : CONN_STAT_ESTB;
-                warn(info, "%s conn %" PRIx64 " now in state %u",
-                     conn_type(c), c->id, c->state);
+                warn(info, "%s conn %" PRIx64 " now in state %u", conn_type(c),
+                     c->id, c->state);
             }
             break;
         }
@@ -460,13 +470,12 @@ void rx(struct ev_loop * const l,
             if ((!STAILQ_EMPTY(&s->i) && tls_handshake(s) == 0) ||
                 !is_set(F_LONG_HDR, c->flags)) {
                 c->state = CONN_STAT_ESTB;
-                warn(info, "%s conn %" PRIx64 " now in state %u",
-                     conn_type(c), c->id, c->state);
+                warn(info, "%s conn %" PRIx64 " now in state %u", conn_type(c),
+                     c->id, c->state);
                 maybe_api_return(q_connect, c);
                 maybe_api_return(q_accept, c);
             }
-        }
-        break;
+        } break;
 
         case CONN_STAT_ESTB:
             c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
@@ -541,26 +550,6 @@ void detect_lost_pkts(struct q_conn * const c)
         c->cwnd = MAX(c->cwnd, kMinimumWindow);
         c->ssthresh = c->cwnd;
     }
-}
-
-
-void estb_conn(struct q_conn * const c,
-               const struct sockaddr * const peer,
-               const socklen_t peer_len)
-{
-    c->peer = *peer;
-    c->peer_len = peer_len;
-    SPLAY_REMOVE(embr_conn, &embr_conns, c);
-    SPLAY_INSERT(estb_conn, &estb_conns, c);
-
-#ifndef NDEBUG
-    char host[NI_MAXHOST] = "";
-    char port[NI_MAXSERV] = "";
-    getnameinfo((const struct sockaddr *)peer, peer_len, host, sizeof(host),
-                port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
-    warn(info, "estab new %s conn %" PRIx64 " with %s:%s", conn_type(c), c->id,
-         host, port);
-#endif
 }
 
 

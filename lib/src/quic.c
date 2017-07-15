@@ -50,7 +50,6 @@
 #include "quic.h"
 #include "stream.h"
 
-struct sockaddr;
 
 // TODO: many of these globals should move to a per-engine struct
 
@@ -97,10 +96,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
                                 const char * const peer_name,
                                 const uint16_t port)
 {
-    // struct q_conn * c = get_conn(0, peer_name == 0);
-    // ensure(c == 0, "%s conn %" PRIx64 " already exists",
-    //        peer_name ? "clnt" : "serv", c->id);
-
+    // TODO: check if connection still exists
     struct q_conn * const c = calloc(1, sizeof(*c));
     ensure(c, "could not calloc");
 
@@ -138,8 +134,9 @@ static struct q_conn * new_conn(struct w_engine * const w,
     c->rx_w.data = c->sock;
     ev_io_start(loop, &c->rx_w);
 
-    // add connection to global data structure
-    SPLAY_INSERT(embr_conn, &embr_conns, c);
+    // add connection to global data structures
+    SPLAY_INSERT(ipnp_splay, &conns_by_ipnp, c);
+    SPLAY_INSERT(cid_splay, &conns_by_cid, c);
 
     warn(debug, "%s conn created", conn_type(c));
     return c;
@@ -159,8 +156,7 @@ void q_free(void * const w, struct w_iov_stailq * const q)
 
 
 struct q_conn * q_connect(void * const q,
-                          const struct sockaddr * const peer,
-                          const socklen_t peer_len __attribute__((unused)),
+                          const struct sockaddr_in * const peer,
                           const char * const peer_name)
 {
     // make new connection
@@ -175,7 +171,7 @@ struct q_conn * q_connect(void * const q,
               ((const struct sockaddr_in *)(const void *)peer)->sin_addr.s_addr,
               ((const struct sockaddr_in *)(const void *)peer)->sin_port);
     c->id = cid;
-    // XXX do we not need this? estb_conn(c, peer, peer_len);
+    c->peer = *peer;
 
     // allocate stream zero and start TLS handshake on stream 0
     struct q_stream * const s = new_stream(c, 0);
@@ -398,8 +394,8 @@ void q_close(struct q_conn * const c)
         w_close(c->sock);
 
     // remove connection from global lists
-    SPLAY_REMOVE(embr_conn, &embr_conns, c);
-    SPLAY_REMOVE(estb_conn, &estb_conns, c);
+    SPLAY_REMOVE(ipnp_splay, &conns_by_ipnp, c);
+    SPLAY_REMOVE(cid_splay, &conns_by_cid, c);
 
     warn(warn, "%s conn %" PRIx64 " closed", conn_type(c), c->id);
     free(c);
@@ -410,12 +406,12 @@ void q_cleanup(void * const q)
 {
     // close all connections
     struct q_conn *c, *tmp;
-    for (c = SPLAY_MIN(embr_conn, &embr_conns); c != 0; c = tmp) {
-        tmp = SPLAY_NEXT(embr_conn, &embr_conns, c);
+    for (c = SPLAY_MIN(ipnp_splay, &conns_by_ipnp); c != 0; c = tmp) {
+        tmp = SPLAY_NEXT(ipnp_splay, &conns_by_ipnp, c);
         q_close(c);
     }
-    for (c = SPLAY_MIN(estb_conn, &estb_conns); c != 0; c = tmp) {
-        tmp = SPLAY_NEXT(estb_conn, &estb_conns, c);
+    for (c = SPLAY_MIN(cid_splay, &conns_by_cid); c != 0; c = tmp) {
+        tmp = SPLAY_NEXT(cid_splay, &conns_by_cid, c);
         q_close(c);
     }
 

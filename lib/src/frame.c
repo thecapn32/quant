@@ -44,7 +44,6 @@
 
 #include "conn.h"
 #include "diet.h"
-#include "fnv_1a.h"
 #include "frame.h"
 #include "marshall.h"
 #include "pkt.h"
@@ -196,11 +195,11 @@ static uint8_t __attribute__((const)) dec_ack_block_len(const uint8_t flags)
 static struct w_iov * __attribute__((nonnull))
 find_sent_pkt(struct q_conn * const c, const uint64_t nr)
 {
-    warn(debug, "find_sent_pkt %" PRIu64, nr);
+    // warn(debug, "find_sent_pkt %" PRIu64, nr);
     // check if packed is in the unACKed queue
     struct w_iov * v;
     STAILQ_FOREACH (v, &c->sent_pkts, next) {
-        warn(debug, "sent_pkts %" PRIu64, meta(v).nr);
+        // warn(debug, "sent_pkts %" PRIu64, meta(v).nr);
         if (meta(v).nr == nr)
             return v;
     }
@@ -316,12 +315,11 @@ dec_ack_frame(struct q_conn * const c,
                          c->in_flight);
 
                     // FIXME this is the wrong condition
-                    warn(debug, "cstate %u, sstate %u, lg_acked %" PRIu64
-                                " out_nr %" PRIu64,
-                         c->state, s->state, c->lg_acked, s->out_nr);
+                    // warn(debug, "cstate %u, sstate %u, lg_acked %" PRIu64
+                    //             " out_nr %" PRIu64,
+                    //      c->state, s->state, c->lg_acked, s->out_nr);
                     if (c->state == CONN_STAT_ESTB &&
-                        s->state == STRM_STATE_OPEN &&
-                        c->lg_acked == s->out_nr)
+                        s->state == STRM_STATE_OPEN && c->lg_acked >= s->out_nr)
                         maybe_api_return(q_write, s);
 
                 } else

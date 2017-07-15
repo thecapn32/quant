@@ -124,7 +124,7 @@ int main(int argc, char * argv[])
     for (int n = 0; n < conns; n++) {
         warn(info, "%s starting conn #%d to %s:%s", basename(argv[0]), n, dest,
              port);
-        c[n] = q_connect(q, peer->ai_addr, peer->ai_addrlen, dest);
+        c[n] = q_connect(q, (struct sockaddr_in *)(void *)peer->ai_addr, dest);
         if (!c[n])
             break;
 
