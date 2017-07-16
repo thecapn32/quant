@@ -183,7 +183,7 @@ uint16_t enc_pkt(struct q_conn * const c,
         enc_padding_frame(v->buf, i, meta(v).head_start - i);
         // skip over existing stream header and data
         v->len = i = meta(v).buf_len;
-        warn(debug, "RTX %u", i);
+        // warn(debug, "RTX %u", i);
     }
 
     const uint64_t hash = fnv_1a(v->buf, i);
