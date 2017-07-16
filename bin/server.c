@@ -88,7 +88,7 @@ int main(int argc, char * argv[])
     warn(debug, "%s waiting on %s port %d", basename(argv[0]), ifname, port);
     if (q_accept(c)) {
         struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
-        struct q_stream * const s = q_read(c, &i);
+        struct q_stream * s = q_read(c, &i);
         if (s) {
 #ifndef NDEBUG
             const uint32_t len = w_iov_stailq_len(&i);
@@ -97,7 +97,11 @@ int main(int argc, char * argv[])
 #endif
             struct w_iov * v;
             STAILQ_FOREACH (v, &i, next)
-                warn(info, "%s", v->buf);
+                warn(info, "%.*s", v->len, v->buf);
+
+            s = q_rsv_stream(c);
+            q_write(s, &i);
+
             q_free(q, &i);
         }
         q_close(c);

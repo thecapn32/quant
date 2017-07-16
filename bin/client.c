@@ -128,14 +128,14 @@ int main(int argc, char * argv[])
         if (!c[n])
             break;
 
-        for (int i = 0; i < 1; i++) {
+        for (int j = 0; j < 1; j++) {
             // reserve a new stream
             struct q_stream * const s = q_rsv_stream(c[n]);
 
             // allocate buffers to transmit a packet
             struct w_iov_stailq o = STAILQ_HEAD_INITIALIZER(o);
             q_alloc(q, &o, 1024);
-            struct w_iov * const v = STAILQ_FIRST(&o);
+            struct w_iov * v = STAILQ_FIRST(&o);
             ensure(STAILQ_NEXT(v, next) == 0, "w_iov_stailq too long");
 
             // add some payload data
@@ -149,6 +149,12 @@ int main(int argc, char * argv[])
             warn(info, "writing %u byte%s: %s", v->len, plural(v->len),
                  (char *)v->buf);
             q_write(s, &o);
+
+            // read data
+            struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
+            q_read(c[n], &i);
+            STAILQ_FOREACH (v, &i, next)
+                warn(info, "%.*s", v->len, v->buf);
 
             // return the buffer
             q_free(q, &o);
