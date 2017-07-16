@@ -310,7 +310,12 @@ void * q_init(const char * const ifname)
     // warn(debug, "TLS: key %u byte%s, cert %u byte%s", tls_key_len,
     //      plural(tls_key_len), tls_cert_len, plural(tls_cert_len));
     tls_ctx.random_bytes = ptls_minicrypto_random_bytes;
-    tls_ctx.key_exchanges = ptls_minicrypto_key_exchanges;
+
+    // allow secp256r1 and x25519
+    static ptls_key_exchange_algorithm_t * my_own_key_exchanges[] = {
+        &ptls_minicrypto_secp256r1, &ptls_minicrypto_x25519, NULL};
+
+    tls_ctx.key_exchanges = my_own_key_exchanges;
     tls_ctx.cipher_suites = ptls_minicrypto_cipher_suites;
 
     ensure(ptls_minicrypto_init_secp256r1sha256_sign_certificate(

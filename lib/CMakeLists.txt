@@ -9,7 +9,7 @@ add_custom_command(
   COMMAND ${OPENSSL} ecparam -name prime256v1 -out prime256v1.param
   COMMAND
     ${OPENSSL} req -new -newkey ec:prime256v1.param -days 365 -nodes -x509
-      -subj "/CN=localhost" -keyout key.pem -noout
+      -subj "/CN=localhost" -keyout key.pem -out cert.pem
   COMMAND echo "#include \"cert.h\"" > cert.c
   COMMAND
     ${OPENSSL} ec -in key.pem -text |
@@ -21,12 +21,9 @@ add_custom_command(
     sed -E -e "s/pub:/};/" -e "s/([0-9a-f][0-9a-f]):?/0x\\1, /g"
            -e "s/priv:/unsigned char tls_key[] = {/" < key.txt
       >> cert.c
+  COMMAND echo "unsigned char tls_cert[] = {" >> cert.c
   COMMAND
-    ${OPENSSL} ec -in key.pem -text |
-      grep -A1000 pub: | grep -B1000 ASN1 | grep -v ASN1 |
-      sed -E -e "s/([0-9a-f][0-9a-f]):?/0x\\1, /g"
-             -e "s/pub:/unsigned char tls_cert[] = {/"
-      >> cert.c
+    ${OPENSSL} base64 -d -in cert.pem | xxd -i >> cert.c
   COMMAND echo "};" >> cert.c
   COMMAND echo "unsigned int tls_key_len = sizeof(tls_key) / sizeof(unsigned char);" >> cert.c
   COMMAND echo "unsigned int tls_cert_len = sizeof(tls_cert) / sizeof(unsigned char);" >> cert.c
