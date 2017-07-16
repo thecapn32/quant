@@ -573,7 +573,8 @@ uint16_t enc_stream_frame(struct q_stream * const s,
     type |= enc_off_len[off_len];
 
     // now that we know how long the stream frame header is, encode it
-    uint16_t i = meta(v).head_start = Q_OFFSET - 3 - off_len - sid_len;
+    uint16_t i = meta(v).head_start =
+        Q_OFFSET - 1 - (dlen ? 2 : 0) - off_len - sid_len;
     enc(v->buf, v->len, i, &type, 0, "0x%02x");
     enc(v->buf, v->len, i, &s->id, sid_len, "%u");
     if (off_len)
