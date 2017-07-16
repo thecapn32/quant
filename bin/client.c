@@ -98,7 +98,7 @@ int main(int argc, char * argv[])
             break;
 #ifndef NDEBUG
         case 'v':
-            _dlevel = MIN(DLEVEL, MAX(0, (uint32_t)strtoul(optarg, 0, 10)));
+            _dlevel = (uint32_t)MIN(DLEVEL, strtoul(optarg, 0, 10));
             break;
 #endif
         case 'h':
