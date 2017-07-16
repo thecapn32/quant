@@ -71,7 +71,7 @@ int main(int argc, char * argv[])
 #endif
         ;
     char * dest = (char *)"localhost";
-    char * port = (char *)"8443";
+    char * port = (char *)"4433";
     long conns = 1;
     int ch;
 

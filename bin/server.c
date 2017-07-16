@@ -55,7 +55,7 @@ int main(int argc, char * argv[])
                             "0"
 #endif
         ;
-    uint16_t port = 8443;
+    uint16_t port = 4433;
     int ch;
 
     while ((ch = getopt(argc, argv, "hi:p:t:"
