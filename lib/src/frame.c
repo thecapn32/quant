@@ -99,6 +99,9 @@ dec_stream_frame(struct q_conn * const c,
     *len = 0;
     if (is_set(F_STREAM_DATA_LEN, type))
         dec(*len, v->buf, v->len, i, 0, "%u");
+    else
+        // stream data extends to end of packet
+        *len = v->len - i;
 
     ensure(*len || is_set(F_STREAM_FIN, type), "len %u > 0 or FIN", *len);
 
