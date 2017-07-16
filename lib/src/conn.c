@@ -336,15 +336,16 @@ void rx(struct ev_loop * const l,
 
         // verify hash, if there seems to be one
         warn(debug, "verifying %lu-byte hash at [%lu..%u] over [0..%lu]",
-             HASH_LEN, v->len - HASH_LEN, v->len - 1, v->len - HASH_LEN - 1);
+             FNV_1A_LEN, v->len - FNV_1A_LEN, v->len - 1,
+             v->len - FNV_1A_LEN - 1);
         uint64_t hash_rx;
-        uint16_t ii = v->len - HASH_LEN;
+        uint16_t ii = v->len - FNV_1A_LEN;
         dec(hash_rx, v->buf, v->len, ii, 0, "%" PRIx64);
-        const uint64_t hash_comp = fnv_1a(v->buf, v->len - HASH_LEN);
+        const uint64_t hash_comp = fnv_1a(v->buf, v->len - FNV_1A_LEN);
         ensure(hash_rx == hash_comp,
                "hash mismatch: computed %" PRIx64 " vs. %" PRIx64, hash_comp,
                hash_rx);
-        v->len -= HASH_LEN;
+        v->len -= FNV_1A_LEN;
 
         // TODO: support short headers w/o cid
         const uint64_t nr = meta(v).nr = pkt_nr(v->buf, v->len);

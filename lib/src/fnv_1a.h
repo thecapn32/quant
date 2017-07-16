@@ -30,7 +30,7 @@
 
 
 /// Hash length in packet.
-#define HASH_LEN sizeof(uint64_t)
+#define FNV_1A_LEN sizeof(uint64_t)
 
 
 /// Compute an [FNV-1a 64-bit

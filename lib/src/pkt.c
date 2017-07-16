@@ -188,8 +188,8 @@ uint16_t enc_pkt(struct q_conn * const c,
 
     const uint64_t hash = fnv_1a(v->buf, i);
     warn(debug, "inserting %lu-byte hash over range [0..%u] into [%u..%lu]",
-         HASH_LEN, i - 1, i, i + HASH_LEN - 1);
-    v->len += HASH_LEN;
+         FNV_1A_LEN, i - 1, i, i + FNV_1A_LEN - 1);
+    v->len += FNV_1A_LEN;
     enc(v->buf, v->len, i, &hash, 0, "%" PRIx64);
 
     return i;
