@@ -420,8 +420,8 @@ enc_padding_frame(uint8_t * const buf, const uint16_t pos, const uint16_t len)
 }
 
 
-static const uint8_t enc_lg_ack_len[] = {0xFF, 0x00, 0x01, 0xFF,
-                                         0x02, 0xFF, 0x03}; // 0xFF = invalid
+static const uint8_t enc_lg_ack_len[] = {
+    0xFF, 0x00, 0x01 << 2, 0xFF, 0x02 << 2, 0xFF, 0x03 << 2}; // 0xFF = invalid
 
 
 static uint8_t __attribute__((const)) needed_lg_ack_len(const uint64_t n)
