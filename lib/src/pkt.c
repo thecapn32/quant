@@ -30,9 +30,13 @@
 #include <byteswap.h>
 #endif
 
+#include <stddef.h> // IWYU pragma: keep
+
+#include <picotls.h>
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
+#include "diet.h"
 #include "fnv_1a.h"
 #include "frame.h"
 #include "marshall.h"
@@ -114,7 +118,10 @@ uint16_t enc_pkt(struct q_conn * const c,
 
     uint16_t i = 0;
     uint8_t flags = 0;
-    meta(v).nr = ++c->lg_sent; // TODO: increase by random offset
+
+    meta(v).nr =
+        c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv) : c->lg_sent++;
+    // TODO: increase by random offset
 
     warn(debug, "%s conn state %u", conn_type(c), c->state);
     switch (c->state) {
@@ -129,7 +136,7 @@ uint16_t enc_pkt(struct q_conn * const c,
         break;
     case CONN_STAT_ESTB:
         // TODO: support short headers w/o cid
-        flags |= F_SH_CID | enc_pkt_nr_len[needed_pkt_nr_len(c->lg_sent)];
+        flags |= F_SH_CID | enc_pkt_nr_len[needed_pkt_nr_len(meta(v).nr)];
         break;
     default:
         die("unknown conn state %u", c->state);
@@ -141,7 +148,7 @@ uint16_t enc_pkt(struct q_conn * const c,
         enc(v->buf, v->len, i, &c->id, 0, "%" PRIx64);
 
     if (is_set(F_LONG_HDR, flags)) {
-        const uint32_t nr = (const uint32_t)c->lg_sent;
+        const uint32_t nr = (const uint32_t)meta(v).nr;
         enc(v->buf, v->len, i, &nr, 0, "%u");
         enc(v->buf, v->len, i, &c->vers, 0, "0x%08x");
         if (c->state == CONN_STAT_VERS_REJ) {
@@ -151,8 +158,10 @@ uint16_t enc_pkt(struct q_conn * const c,
             return i;
         }
     } else
-        enc(v->buf, v->len, i, &c->lg_sent, needed_pkt_nr_len(c->lg_sent),
+        enc(v->buf, v->len, i, &meta(v).nr, needed_pkt_nr_len(meta(v).nr),
             "%" PRIu64);
+
+    const uint16_t hdr_end = i;
 
     if (!SPLAY_EMPTY(&c->recv))
         i += enc_ack_frame(c, v->buf, v->len, i);
@@ -168,7 +177,7 @@ uint16_t enc_pkt(struct q_conn * const c,
             i = enc_stream_frame(s, v, s->out_off);
 
             // increase the stream data offset
-            s->out_nr = c->lg_sent;
+            s->out_nr = meta(v).nr;
             s->out_off += i - Q_OFFSET;
         }
 
@@ -186,11 +195,23 @@ uint16_t enc_pkt(struct q_conn * const c,
         // warn(debug, "RTX %u", i);
     }
 
-    const uint64_t hash = fnv_1a(v->buf, i);
-    warn(debug, "inserting %lu-byte hash over range [0..%u] into [%u..%lu]",
-         FNV_1A_LEN, i - 1, i, i + FNV_1A_LEN - 1);
-    v->len += FNV_1A_LEN;
-    enc(v->buf, v->len, i, &hash, 0, "%" PRIx64);
+    if (c->state < CONN_STAT_ESTB) {
+        const uint64_t hash = fnv_1a(v->buf, i);
+        warn(debug, "inserting %lu-byte hash over range [0..%u] into [%u..%lu]",
+             FNV_1A_LEN, i - 1, i, i + FNV_1A_LEN - 1);
+        v->len += FNV_1A_LEN;
+        enc(v->buf, v->len, i, &hash, 0, "%" PRIx64);
+        return i;
+    }
+
+    // let's encrypt some AEAD
+    // warn(debug, "before ptls_aead_encrypt: hdr_end %u, v->len %u, seq %" PRIu64,
+    //      hdr_end, v->len, meta(v).nr);
+    // hexdump(v->buf, v->len);
+    i = v->len = hdr_end + (uint16_t)ptls_aead_encrypt(
+                               c->out_kp0, &v->buf[hdr_end], &v->buf[hdr_end],
+                               v->len - hdr_end, meta(v).nr, v->buf, hdr_end);
+    // hexdump(v->buf, v->len);
 
     return i;
 }

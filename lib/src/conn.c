@@ -132,11 +132,10 @@ uint32_t tls_handshake(struct q_stream * const s)
         ov->ip = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_addr.s_addr;
         ov->port = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_port;
         STAILQ_INSERT_TAIL(&s->o, ov, next);
-        return ov->len;
-    }
+    } else
+        // we are done with the handshake, no need to TX after all
+        w_free_iov(w_engine(s->c->sock), ov);
 
-    // we are done with the handshake, no need to TX after all
-    w_free_iov(w_engine(s->c->sock), ov);
     return (uint32_t)ret;
 }
 
@@ -182,8 +181,8 @@ struct q_conn * get_conn_by_ipnp(const struct sockaddr_in * const peer,
                                  const uint8_t type)
 {
     struct q_conn which = {.peer = *peer, .flags = type};
-    warn(debug, "looking up conn to %s:%u", inet_ntoa(peer->sin_addr),
-         ntohs(peer->sin_port));
+    // warn(debug, "looking up conn to %s:%u", inet_ntoa(peer->sin_addr),
+    //      ntohs(peer->sin_port));
     return SPLAY_FIND(ipnp_splay, &conns_by_ipnp, &which);
 }
 
@@ -247,7 +246,7 @@ static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
         warn(notice, "send pkt %" PRIu64
                      " (len %u, idx %u, type 0x%02x = " bitstring_fmt
                      ") on %s conn %" PRIx64,
-             c->lg_sent, v->len, v->idx, v->buf[0], to_bitstring(v->buf[0]),
+             meta(v).nr, v->len, v->idx, v->buf[0], to_bitstring(v->buf[0]),
              conn_type(c), c->id);
 #ifndef NDEBUG
         if (_dlevel == debug)
@@ -322,6 +321,21 @@ void tx(struct ev_loop * const l __attribute__((unused)),
 }
 
 
+static bool verify_hash(const uint8_t * buf, const uint16_t len)
+{
+    warn(debug, "verifying %lu-byte hash at [%lu..%u] over [0..%lu]",
+         FNV_1A_LEN, len - FNV_1A_LEN, len - 1, len - FNV_1A_LEN - 1);
+    uint64_t hash_rx;
+    uint16_t ii = len - FNV_1A_LEN;
+    dec(hash_rx, buf, len, ii, 0, "%" PRIx64);
+    const uint64_t hash_comp = fnv_1a(buf, len - FNV_1A_LEN);
+    ensure(hash_rx == hash_comp,
+           "hash mismatch: computed %" PRIx64 " vs. %" PRIx64, hash_comp,
+           hash_rx);
+    return hash_rx == hash_comp;
+}
+
+
 void rx(struct ev_loop * const l,
         ev_io * const rx_w,
         int e __attribute__((unused)))
@@ -351,25 +365,17 @@ void rx(struct ev_loop * const l,
                "%u-byte packet not large enough for %u-byte header", v->len,
                hdr_len);
 
-        // verify hash, if there seems to be one
-        warn(debug, "verifying %lu-byte hash at [%lu..%u] over [0..%lu]",
-             FNV_1A_LEN, v->len - FNV_1A_LEN, v->len - 1,
-             v->len - FNV_1A_LEN - 1);
-        uint64_t hash_rx;
-        uint16_t ii = v->len - FNV_1A_LEN;
-        dec(hash_rx, v->buf, v->len, ii, 0, "%" PRIx64);
-        const uint64_t hash_comp = fnv_1a(v->buf, v->len - FNV_1A_LEN);
-        ensure(hash_rx == hash_comp,
-               "hash mismatch: computed %" PRIx64 " vs. %" PRIx64, hash_comp,
-               hash_rx);
-        v->len -= FNV_1A_LEN;
-
         // TODO: support short headers w/o cid
         const uint64_t nr = meta(v).nr = pkt_nr(v->buf, v->len);
         const uint64_t cid = pkt_cid(v->buf, v->len);
         const uint8_t type = w_connected(ws) ? CONN_FLAG_CLNT : 0;
         struct q_conn * c = get_conn_by_cid(cid, type);
         if (c == 0) {
+            if (is_set(F_LONG_HDR, v->buf[0])) {
+                verify_hash(v->buf, v->len);
+                v->len -= FNV_1A_LEN;
+            }
+
             // this might be the first packet for a new connection, or a dup CH
             warn(debug, "conn %" PRIx64 " may be new", cid);
             const struct sockaddr_in peer = {.sin_family = AF_INET,
@@ -390,7 +396,6 @@ void rx(struct ev_loop * const l,
                          ((uint64_t)plat_random()));
                 warn(notice, "%s picked new cid %" PRIx64 " for conn %" PRIx64,
                      conn_type(c), c->id, cid);
-                c->lg_sent = nr - 1; // echo received packet number
 
             } else {
                 // we have a connection from this peer
@@ -404,8 +409,25 @@ void rx(struct ev_loop * const l,
             SPLAY_INSERT(ipnp_splay, &conns_by_ipnp, c);
             SPLAY_REMOVE(cid_splay, &conns_by_cid, c);
             SPLAY_INSERT(cid_splay, &conns_by_cid, c);
-        } else
+        } else {
             warn(debug, "pkt on %s conn %" PRIx64, conn_type(c), c->id);
+
+            if (is_set(F_LONG_HDR, v->buf[0])) {
+                verify_hash(v->buf, v->len);
+                v->len -= FNV_1A_LEN;
+            } else {
+                // let's decrypt some AEAD
+                // warn(debug, "before ptls_aead_decrypt: hdr_len %u, v->len %u, "
+                //             "seq %" PRIu64,
+                //      hdr_len, v->len, meta(v).nr);
+                // hexdump(v->buf, v->len);
+                v->len = hdr_len + (uint16_t)ptls_aead_decrypt(
+                                       c->in_kp0, &v->buf[hdr_len],
+                                       &v->buf[hdr_len], v->len - hdr_len,
+                                       meta(v).nr, v->buf, hdr_len);
+                // hexdump(v->buf, v->len);
+            }
+        }
 
         // remember that we had a RX event on this connection
         if (!is_set(CONN_FLAG_RX, c->flags)) {
@@ -479,15 +501,14 @@ void rx(struct ev_loop * const l,
                     die("no version in common with server");
                 rtx(c, UINT32_MAX); // retransmit the ClientHello
             } else {
-                warn(info, "server accepted version 0x%08x", c->vers);
-                dec_frames(c, v);
-
                 // we should have received a ServerHello
+                c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
                 ensure(!STAILQ_EMPTY(&s->i), "no ServerHello");
-                c->state =
-                    tls_handshake(s) ? CONN_STAT_VERS_OK : CONN_STAT_ESTB;
-                warn(info, "%s conn %" PRIx64 " now in state %u", conn_type(c),
-                     c->id, c->state);
+                if (tls_handshake(s) == 0)
+                    maybe_api_return(q_connect, c);
+
+                warn(info, "server accepted version 0x%08x", c->vers);
+                c->state = CONN_STAT_VERS_OK;
             }
             break;
         }
@@ -497,11 +518,7 @@ void rx(struct ev_loop * const l,
             // whether that completes the client handshake
             c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
             struct q_stream * const s = get_stream(c, 0);
-            if ((!STAILQ_EMPTY(&s->i) && tls_handshake(s) == 0) ||
-                !is_set(F_LONG_HDR, c->flags)) {
-                c->state = CONN_STAT_ESTB;
-                warn(info, "%s conn %" PRIx64 " now in state %u", conn_type(c),
-                     c->id, c->state);
+            if ((!STAILQ_EMPTY(&s->i) && tls_handshake(s) == 0)) {
                 maybe_api_return(q_connect, c);
                 maybe_api_return(q_accept, c);
             }

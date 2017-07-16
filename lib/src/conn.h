@@ -107,6 +107,10 @@ struct q_conn {
 
     // TLS state
     ptls_t * tls;
+    uint8_t in_sec[PTLS_MAX_DIGEST_SIZE];
+    uint8_t out_sec[PTLS_MAX_DIGEST_SIZE];
+    ptls_aead_context_t * in_kp0;
+    ptls_aead_context_t * out_kp0;
 };
 
 

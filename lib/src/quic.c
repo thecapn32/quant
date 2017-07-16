@@ -92,6 +92,40 @@ static ptls_openssl_verify_certificate_t verifier = {0};
     } while (0)
 
 
+#define PTLS_CLNT_LABL "EXPORTER-QUIC client 1-RTT Secret"
+#define PTLS_SERV_LABL "EXPORTER-QUIC server 1-RTT Secret"
+
+
+static void conn_setup_1rtt_secret(struct q_conn * const c,
+                                   ptls_cipher_suite_t * const cipher,
+                                   ptls_aead_context_t ** aead,
+                                   uint8_t * const sec,
+                                   const char * const label,
+                                   uint8_t is_enc)
+{
+    int ret = ptls_export_secret(c->tls, sec, cipher->hash->digest_size, label,
+                                 ptls_iovec_init(0, 0));
+    ensure(ret == 0, "ptls_export_secret");
+    // hexdump(sec, PTLS_MAX_DIGEST_SIZE);
+    *aead = ptls_aead_new(cipher->aead, cipher->hash, is_enc, sec);
+    ensure(aead, "ptls_aead_new");
+}
+
+
+static void conn_setup_1rtt(struct q_conn * const c)
+{
+    ptls_cipher_suite_t * const cipher = ptls_get_cipher(c->tls);
+    conn_setup_1rtt_secret(c, cipher, &c->in_kp0, c->in_sec,
+                           is_clnt(c) ? PTLS_SERV_LABL : PTLS_CLNT_LABL, 0);
+    conn_setup_1rtt_secret(c, cipher, &c->out_kp0, c->out_sec,
+                           is_clnt(c) ? PTLS_CLNT_LABL : PTLS_SERV_LABL, 1);
+
+    c->state = CONN_STAT_ESTB;
+    warn(info, "%s conn %" PRIx64 " now in state %u", conn_type(c), c->id,
+         c->state);
+}
+
+
 static struct q_conn * new_conn(struct w_engine * const w,
                                 const uint64_t cid,
                                 const struct sockaddr_in * const peer,
@@ -112,7 +146,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
     ev_init(&c->ld_alarm, ld_alarm);
     c->reorder_thresh = kReorderingThreshold;
     c->reorder_fract = HUGE_VAL;
-    c->lg_sent = peer_name ? 8000 : 1000; // TODO: randomize initial pkt nr
+    c->lg_sent = peer_name ? 1000 : 8000; // TODO: randomize initial pkt nr
 
     // initialize CC state
     c->cwnd = kInitialWindow;
@@ -187,11 +221,12 @@ struct q_conn * q_connect(void * const q,
          conn_type(c), c->id);
     loop_run(q_connect, c);
 
-    if (c->state != CONN_STAT_ESTB) {
-        warn(warn, "%s conn %" PRIx64 " not connected, state 0x%02x",
-             conn_type(c), cid, c->state);
-        return 0;
-    }
+    // if (c->state != CONN_STAT_VERS_OK) {
+    //     warn(warn, "%s conn %" PRIx64 " not connected, state 0x%02x",
+    //          conn_type(c), cid, c->state);
+    //     return 0;
+    // }
+    conn_setup_1rtt(c);
 
     warn(warn, "%s conn %" PRIx64 " connected", conn_type(c), cid);
     return c;
@@ -280,6 +315,8 @@ struct q_conn * q_accept(struct q_conn * const c)
         return 0;
     }
 
+    conn_setup_1rtt(c);
+
     warn(warn, "%s conn %" PRIx64 " connected", conn_type(c), c->id);
     return c;
 }
@@ -289,8 +326,9 @@ struct q_stream * q_rsv_stream(struct q_conn * const c)
 {
 
     const uint8_t odd = c->next_sid % 2; // NOTE: % in assert confuses printf
-    ensure(is_clnt(c) == odd || !is_clnt(c) && !odd, "am %s, expected %s connection stream ID, got %u",
-           conn_type(c), is_clnt(c) ? "odd" : "even", c->next_sid);
+    ensure(is_clnt(c) == odd || !is_clnt(c) && !odd,
+           "am %s, expected %s connection stream ID, got %u", conn_type(c),
+           is_clnt(c) ? "odd" : "even", c->next_sid);
     return new_stream(c, c->next_sid);
 }
 
