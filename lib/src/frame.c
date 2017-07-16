@@ -265,7 +265,9 @@ dec_ack_frame(struct q_conn * const c,
     // TODO: if (packets ACKed that the sender skipped): abortConnection()
 
     const uint8_t ack_block_len = dec_ack_block_len(type);
+#ifndef NDEBUG
     uint64_t n = meta(v).nr;
+#endif
     uint64_t ack = lg_ack;
     for (uint8_t b = 0; b < num_blocks; b++) {
         uint64_t l = 0;

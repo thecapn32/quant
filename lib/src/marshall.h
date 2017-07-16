@@ -183,17 +183,16 @@
             die("cannot marshall field length %zu", __len);                    \
             break;                                                             \
         }                                                                      \
-        const char __src[] = #src;                                             \
-        const char * const __offsrc = __src[0] == '&' ? &__src[1] : __src;     \
         if (__len == 1)                                                        \
             warn(debug, "enc %s %s = " fmt " (" bitstring_fmt ") "             \
                         "into %zu byte%s at " #buf "[%u..%zu]",                \
-                 type_str(*src), __offsrc, *src, to_bitstring(*src), __len,    \
-                 plural(__len), pos, pos + __len - 1);                         \
+                 type_str(*src), (#src[0] == '&' ? &#src[1] : #src), *src,     \
+                 to_bitstring(*src), __len, plural(__len), pos,                \
+                 pos + __len - 1);                                             \
         else                                                                   \
             warn(debug,                                                        \
                  "enc %s %s = " fmt " into %zu byte%s at " #buf "[%u..%zu]",   \
-                 type_str(*src), __offsrc, *src, __len, plural(__len), pos,    \
-                 pos + __len - 1);                                             \
+                 type_str(*src), (#src[0] == '&' ? &#src[1] : #src), *src,     \
+                 __len, plural(__len), pos, pos + __len - 1);                  \
         pos += __len;                                                          \
     } while (0)

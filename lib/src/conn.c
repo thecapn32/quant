@@ -235,8 +235,10 @@ static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
                      ") on %s conn %" PRIx64,
              c->lg_sent, v->len, v->idx, v->buf[0], to_bitstring(v->buf[0]),
              conn_type(c), c->id);
+#ifndef NDEBUG
         if (_dlevel == debug)
             hexdump(v->buf, v->len);
+#endif
     }
 
     // transmit packets
@@ -319,9 +321,10 @@ void rx(struct ev_loop * const l,
     while (!STAILQ_EMPTY(&i)) {
         struct w_iov * const v = STAILQ_FIRST(&i);
         STAILQ_REMOVE_HEAD(&i, next);
-
+#ifndef NDEBUG
         if (_dlevel == debug)
             hexdump(v->buf, v->len);
+#endif
         if (v->len == 0)
             // TODO figure out why recvmmsg returns zero-length iovecs
             continue;
@@ -354,9 +357,11 @@ void rx(struct ev_loop * const l,
         struct q_conn * c = get_conn_by_cid(cid, type);
         if (c == 0) {
             // this might be the first packet for a new connection, or a dup CH
+            warn(debug, "conn %" PRIx64 " may be new", cid);
             struct sockaddr_in none = {0};
             c = get_conn_by_ipnp(&none, type);
             if (c == 0) {
+                warn(debug, "conn %" PRIx64 " definitely new", cid);
                 // this is a new connection; server picks a new random cid
                 c->id = ((((uint64_t)plat_random()) << 32) |
                          ((uint64_t)plat_random()));
@@ -366,6 +371,7 @@ void rx(struct ev_loop * const l,
 
             } else {
                 // we have a connection from this peer
+                warn(debug, "conn %" PRIx64 " is in %s handshake", cid, conn_type(c));
                 ensure(c->state < CONN_STAT_ESTB, "handshaking");
                 c->id = cid;
             }

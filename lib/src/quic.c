@@ -242,10 +242,10 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_stailq * const q)
     }
 
     // return data
-    const uint32_t qlen = w_iov_stailq_len(&s->i);
     STAILQ_CONCAT(q, &s->i);
-    warn(warn, "read %u byte%s on %s conn %" PRIx64 " str %u", qlen,
-         plural(qlen), conn_type(s->c), s->c->id, s->id);
+    warn(warn, "read %u byte%s on %s conn %" PRIx64 " str %u",
+         w_iov_stailq_len(&s->i), plural(w_iov_stailq_len(&s->i)),
+         conn_type(s->c), s->c->id, s->id);
     return s;
 }
 
