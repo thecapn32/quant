@@ -248,8 +248,8 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_stailq * const q)
     // return data
     STAILQ_CONCAT(q, &s->i);
     warn(warn, "read %u byte%s on %s conn %" PRIx64 " str %u",
-         w_iov_stailq_len(&s->i), plural(w_iov_stailq_len(&s->i)),
-         conn_type(s->c), s->c->id, s->id);
+         w_iov_stailq_len(q), plural(w_iov_stailq_len(q)), conn_type(s->c),
+         s->c->id, s->id);
     return s;
 }
 
@@ -289,7 +289,7 @@ struct q_stream * q_rsv_stream(struct q_conn * const c)
 {
 
     const uint8_t odd = c->next_sid % 2; // NOTE: % in assert confuses printf
-    ensure(is_clnt(c) && odd, "am %s, expected %s connection stream ID, got %u",
+    ensure(is_clnt(c) == odd || !is_clnt(c) && !odd, "am %s, expected %s connection stream ID, got %u",
            conn_type(c), is_clnt(c) ? "odd" : "even", c->next_sid);
     return new_stream(c, c->next_sid);
 }
