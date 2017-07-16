@@ -49,8 +49,8 @@ extern SPLAY_HEAD(cid_splay, q_conn) conns_by_cid;
 
 /// A QUIC connection.
 struct q_conn {
-    SPLAY_ENTRY(q_conn) node_embr;
-    SPLAY_ENTRY(q_conn) node_estb;
+    SPLAY_ENTRY(q_conn) node_ipnp;
+    SPLAY_ENTRY(q_conn) node_cid;
     SLIST_ENTRY(q_conn) next;
 
     uint64_t id; ///< Connection ID
@@ -116,8 +116,8 @@ ipnp_splay_cmp(const struct q_conn * const a, const struct q_conn * const b);
 extern int64_t __attribute__((nonnull))
 cid_splay_cmp(const struct q_conn * const a, const struct q_conn * const b);
 
-SPLAY_PROTOTYPE(ipnp_splay, q_conn, node_embr, ipnp_splay_cmp)
-SPLAY_PROTOTYPE(cid_splay, q_conn, node_estb, cid_splay_cmp)
+SPLAY_PROTOTYPE(ipnp_splay, q_conn, node_ipnp, ipnp_splay_cmp)
+SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 
 
 #define CONN_STAT_CLSD 0
@@ -127,12 +127,16 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_estb, cid_splay_cmp)
 #define CONN_STAT_ESTB 4
 
 #define CONN_FLAG_CLNT 0x01 ///< We are client on this connection (or server)
+#define CONN_FLAG_EMBR 0x02 ///< Connection is in handshake
 #define CONN_FLAG_RX 0x04   ///< We had an RX event on this connection
 #define CONN_FLAG_TX 0x08   ///< We have a pending TX on this connection
 
 #define is_clnt(c) (is_set(CONN_FLAG_CLNT, (c)->flags))
 #define is_serv(c) (!is_clnt(c))
-#define conn_type(c) (is_clnt(c) ? "clnt" : "serv")
+#define conn_type(c)                                                           \
+    (is_set(CONN_FLAG_EMBR, (c)->flags)                                        \
+         ? (is_clnt(c) ? "embr clnt" : "embr serv")                            \
+         : (is_clnt(c) ? "clnt" : "serv"))
 
 struct ev_loop;
 
@@ -151,7 +155,7 @@ extern void __attribute__((nonnull))
 rx(struct ev_loop * const l, ev_io * const rx_w, int e);
 
 extern struct q_conn * __attribute__((nonnull))
-get_conn_by_ipnp(struct sockaddr_in * const peer, const uint8_t type);
+get_conn_by_ipnp(const struct sockaddr_in * const peer, const uint8_t type);
 
 extern struct q_conn * get_conn_by_cid(const uint64_t id, const uint8_t type);
 

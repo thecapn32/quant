@@ -93,12 +93,18 @@ static ptls_openssl_verify_certificate_t verifier = {0};
 
 
 static struct q_conn * new_conn(struct w_engine * const w,
+                                const uint64_t cid,
+                                const struct sockaddr_in * const peer,
                                 const char * const peer_name,
                                 const uint16_t port)
 {
     // TODO: check if connection still exists
     struct q_conn * const c = calloc(1, sizeof(*c));
     ensure(c, "could not calloc");
+
+    if (peer)
+        c->peer = *peer;
+    c->id = cid;
 
     // initialize LD state
     // XXX: UsingTimeLossDetection not defined?
@@ -112,7 +118,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
     c->cwnd = kInitialWindow;
     c->ssthresh = UINT64_MAX;
 
-    c->flags = peer_name ? CONN_FLAG_CLNT : 0;
+    c->flags = CONN_FLAG_EMBR | (peer_name ? CONN_FLAG_CLNT : 0);
     STAILQ_INIT(&c->sent_pkts);
     SPLAY_INIT(&c->streams);
     diet_init(&c->closed_streams);
@@ -164,15 +170,13 @@ struct q_conn * q_connect(void * const q,
     const uint64_t cid =
         ((((uint64_t)plat_random()) << 32) | ((uint64_t)plat_random()));
     warn(warn, "connecting embr clnt conn %" PRIx64, cid);
-    struct q_conn * const c = new_conn(q, peer_name, 0);
+    struct q_conn * const c = new_conn(q, cid, peer, peer_name, 0);
     // c->vers = 0xbabababa; // XXX reserved version to trigger negotiation
     c->vers = ok_vers[0];
     c->next_sid = 1; // client initiates odd-numbered streams
     w_connect(c->sock,
               ((const struct sockaddr_in *)(const void *)peer)->sin_addr.s_addr,
               ((const struct sockaddr_in *)(const void *)peer)->sin_port);
-    c->id = cid;
-    c->peer = *peer;
 
     // allocate stream zero and start TLS handshake on stream 0
     struct q_stream * const s = new_stream(c, 0);
@@ -254,7 +258,7 @@ struct q_conn * q_bind(void * const q, const uint16_t port)
 {
     // bind socket and create new embryonic server connection
     warn(warn, "binding serv socket on port %u", port);
-    struct q_conn * const c = new_conn(q, 0, port);
+    struct q_conn * const c = new_conn(q, 0, 0, 0, port);
     warn(warn, "bound %s socket on port %u", conn_type(c), port);
     return c;
 }
@@ -297,6 +301,10 @@ void * q_init(const char * const ifname)
     // ensure(WARPCORE_VERSION_MAJOR == 0 && WARPCORE_VERSION_MINOR == 12,
     //        "%s version %s not compatible with %s version %s", quant_name,
     //        quant_version, warpcore_name, warpcore_version);
+
+    // init connection structures
+    SPLAY_INIT(&conns_by_ipnp);
+    SPLAY_INIT(&conns_by_cid);
 
     // initialize warpcore on the given interface
     void * const w = w_init(ifname, 0, nbufs);

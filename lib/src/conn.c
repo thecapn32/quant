@@ -23,6 +23,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <arpa/inet.h>
 #include <inttypes.h>
 #include <math.h>
 #include <netinet/in.h>
@@ -31,6 +32,7 @@
 #include <string.h>
 #include <sys/param.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 
 #include <picotls.h>
 
@@ -60,9 +62,22 @@ struct cid_splay conns_by_cid = SPLAY_INITIALIZER();
 int64_t ipnp_splay_cmp(const struct q_conn * const a,
                        const struct q_conn * const b)
 {
-    const int diff = memcmp(&a->peer, &b->peer, sizeof(a->peer));
+    // warn(debug, "%s conn %s:%u vs. %s conn %s:%u", conn_type(a),
+    //      inet_ntoa(a->peer.sin_addr), ntohs(a->peer.sin_port), conn_type(b),
+    //      inet_ntoa(b->peer.sin_addr), ntohs(b->peer.sin_port));
+    ensure((a->peer.sin_family == AF_INET || a->peer.sin_family == 0) &&
+               (b->peer.sin_family == AF_INET || b->peer.sin_family == 0),
+           "limited to AF_INET");
+
+    int diff = memcmp(&a->peer.sin_addr.s_addr, &b->peer.sin_addr.s_addr,
+                      sizeof(a->peer.sin_addr.s_addr));
     if (likely(diff))
         return diff;
+
+    diff = a->peer.sin_port - b->peer.sin_port;
+    if (likely(diff))
+        return diff;
+
     // include only the client flag in the comparison
     return (int8_t)(a->flags & CONN_FLAG_CLNT) -
            (int8_t)(b->flags & CONN_FLAG_CLNT);
@@ -75,14 +90,14 @@ int64_t cid_splay_cmp(const struct q_conn * const a,
     const int64_t diff = (int64_t)a->id - (int64_t)b->id;
     if (likely(diff))
         return diff;
-    // include only the client flag in the comparison
-    return (int8_t)(a->flags & CONN_FLAG_CLNT) -
-           (int8_t)(b->flags & CONN_FLAG_CLNT);
+    // include only the client and embryonic flags in the comparison
+    return (int8_t)(a->flags & (CONN_FLAG_CLNT | CONN_FLAG_EMBR)) -
+           (int8_t)(b->flags & (CONN_FLAG_CLNT | CONN_FLAG_EMBR));
 }
 
 
-SPLAY_GENERATE(ipnp_splay, q_conn, node_embr, ipnp_splay_cmp)
-SPLAY_GENERATE(cid_splay, q_conn, node_estb, cid_splay_cmp)
+SPLAY_GENERATE(ipnp_splay, q_conn, node_ipnp, ipnp_splay_cmp)
+SPLAY_GENERATE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 
 
 uint32_t tls_handshake(struct q_stream * const s)
@@ -163,20 +178,20 @@ pick_from_server_vers(const void * const buf, const uint16_t len)
 }
 
 
-struct q_conn * get_conn_by_ipnp(struct sockaddr_in * const peer,
+struct q_conn * get_conn_by_ipnp(const struct sockaddr_in * const peer,
                                  const uint8_t type)
 {
     struct q_conn which = {.peer = *peer, .flags = type};
-    struct q_conn * const c = SPLAY_FIND(ipnp_splay, &conns_by_ipnp, &which);
-    return c;
+    warn(debug, "looking up conn to %s:%u", inet_ntoa(peer->sin_addr),
+         ntohs(peer->sin_port));
+    return SPLAY_FIND(ipnp_splay, &conns_by_ipnp, &which);
 }
 
 
 struct q_conn * get_conn_by_cid(const uint64_t id, const uint8_t type)
 {
     struct q_conn which = {.id = id, .flags = type};
-    struct q_conn * const c = SPLAY_FIND(cid_splay, &conns_by_cid, &which);
-    return c;
+    return SPLAY_FIND(cid_splay, &conns_by_cid, &which);
 }
 
 
@@ -201,12 +216,11 @@ static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
         // see TimeToSend pseudo code
         if (c->in_flight + v->len > c->cwnd ||
             last_tx_t - now + (v->len * c->srtt) / c->cwnd > 0) {
-            // warn(debug, "in_flight %" PRIu64 " + v->len %u vs cwnd %" PRIu64,
-            //      c->in_flight, v->len, c->cwnd);
-            // warn(debug,
-            //      "last_tx_t - now %f + (v->len %u * srtt %f) / cwnd %"
-            //      PRIu64,
-            //      last_tx_t - now, v->len, c->srtt, c->cwnd);
+            warn(debug, "in_flight %" PRIu64 " + v->len %u vs cwnd %" PRIu64,
+                 c->in_flight, v->len, c->cwnd);
+            warn(debug,
+                 "last_tx_t - now %f + (v->len %u * srtt %f) / cwnd %" PRIu64,
+                 last_tx_t - now, v->len, c->srtt, c->cwnd);
             warn(crit, "out of cwnd/pacing headroom, ignoring");
         }
 
@@ -358,10 +372,19 @@ void rx(struct ev_loop * const l,
         if (c == 0) {
             // this might be the first packet for a new connection, or a dup CH
             warn(debug, "conn %" PRIx64 " may be new", cid);
-            struct sockaddr_in none = {0};
-            c = get_conn_by_ipnp(&none, type);
+            const struct sockaddr_in peer = {.sin_family = AF_INET,
+                                             .sin_port = v->port,
+                                             .sin_addr = {.s_addr = v->ip}};
+            c = get_conn_by_ipnp(&peer, type | CONN_FLAG_EMBR);
             if (c == 0) {
                 warn(debug, "conn %" PRIx64 " definitely new", cid);
+                struct sockaddr_in none = {0};
+                c = get_conn_by_ipnp(&none, type | CONN_FLAG_EMBR);
+                ensure(c, "no embr conn");
+                // update the conn in the global structs (TODO make less ugly)
+                c->peer = (struct sockaddr_in){.sin_family = AF_INET,
+                                               .sin_port = v->port,
+                                               .sin_addr = {.s_addr = v->ip}};
                 // this is a new connection; server picks a new random cid
                 c->id = ((((uint64_t)plat_random()) << 32) |
                          ((uint64_t)plat_random()));
@@ -371,19 +394,18 @@ void rx(struct ev_loop * const l,
 
             } else {
                 // we have a connection from this peer
-                warn(debug, "conn %" PRIx64 " is in %s handshake", cid, conn_type(c));
                 ensure(c->state < CONN_STAT_ESTB, "handshaking");
+                warn(debug, "%s conn %" PRIx64 " is in handshake", conn_type(c),
+                     cid);
                 c->id = cid;
+                c->flags &= ~CONN_FLAG_EMBR;
             }
-            // update the conn in the global structs (TODO make less ugly)
-            c->peer = (struct sockaddr_in){.sin_family = AF_INET,
-                                           .sin_port = v->port,
-                                           .sin_addr = {.s_addr = v->ip}};
             SPLAY_REMOVE(ipnp_splay, &conns_by_ipnp, c);
             SPLAY_INSERT(ipnp_splay, &conns_by_ipnp, c);
             SPLAY_REMOVE(cid_splay, &conns_by_cid, c);
             SPLAY_INSERT(cid_splay, &conns_by_cid, c);
-        }
+        } else
+            warn(debug, "pkt on %s conn %" PRIx64, conn_type(c), c->id);
 
         // remember that we had a RX event on this connection
         if (!is_set(CONN_FLAG_RX, c->flags)) {
@@ -394,9 +416,10 @@ void rx(struct ev_loop * const l,
         diet_insert(&c->recv, nr);
         warn(notice, "recv pkt %" PRIu64
                      " (len %u, idx %u, type 0x%02x = " bitstring_fmt
-                     ") on %s conn %" PRIx64,
+                     ") on %s conn %" PRIx64 " from %s:%u",
              nr, v->len, v->idx, v->buf[0], to_bitstring(v->buf[0]),
-             conn_type(c), c->id);
+             conn_type(c), c->id, inet_ntoa(c->peer.sin_addr),
+             ntohs(c->peer.sin_port));
 
         switch (c->state) {
         case CONN_STAT_CLSD:
