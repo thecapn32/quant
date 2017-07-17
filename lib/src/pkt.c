@@ -95,8 +95,9 @@ uint32_t pkt_vers(const uint8_t * const buf, const uint16_t len)
     return vers;
 }
 
-
+#ifdef DO_SHORT_HEADERS
 static const uint8_t enc_pkt_nr_len[] = {0, 0x01, 0x02, 0, 0x03};
+#endif
 
 static uint8_t __attribute__((const)) needed_pkt_nr_len(const uint64_t n)
 {
@@ -136,7 +137,9 @@ uint16_t enc_pkt(struct q_conn * const c,
         break;
     case CONN_STAT_ESTB:
         // TODO: support short headers w/o cid
-        flags |= F_SH_CID | enc_pkt_nr_len[needed_pkt_nr_len(meta(v).nr)];
+        // flags |= F_SH_CID | enc_pkt_nr_len[needed_pkt_nr_len(meta(v).nr)];
+        // XXX most other implementations don't do short headers yet, so:
+        flags |= F_LONG_HDR | F_LH_1RTT_KPH0;
         break;
     default:
         die("unknown conn state %u", c->state);
