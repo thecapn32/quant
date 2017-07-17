@@ -179,7 +179,7 @@ static uint8_t __attribute__((const)) dec_lg_ack_len(const uint8_t flags)
 {
     const uint8_t l = (flags & 0x0C) >> 2;
     ensure(l <= 3, "cannot decode largest ACK length %u", l);
-    const uint8_t dec[] = {1, 2, 4, 6};
+    const uint8_t dec[] = {1, 2, 4, 8};
     return dec[l];
 }
 
@@ -189,7 +189,7 @@ static uint8_t __attribute__((const)) dec_ack_block_len(const uint8_t flags)
 {
     const uint8_t l = flags & 0x03;
     ensure(l <= 3, "cannot decode largest ACK length %u", l);
-    const uint8_t dec[] = {1, 2, 4, 6};
+    const uint8_t dec[] = {1, 2, 4, 8};
     return dec[l];
 }
 
@@ -425,8 +425,9 @@ enc_padding_frame(uint8_t * const buf, const uint16_t pos, const uint16_t len)
 }
 
 
-static const uint8_t enc_lg_ack_len[] = {
-    0xFF, 0x00, 0x01 << 2, 0xFF, 0x02 << 2, 0xFF, 0x03 << 2}; // 0xFF = invalid
+static const uint8_t enc_lg_ack_len[] = {0xFF,      0x00, 0x01 << 2, 0xFF,
+                                         0x02 << 2, 0xFF, 0xFF,      0xFF,
+                                         0x03 << 2}; // 0xFF = invalid
 
 
 static uint8_t __attribute__((const)) needed_lg_ack_len(const uint64_t n)
@@ -437,12 +438,12 @@ static uint8_t __attribute__((const)) needed_lg_ack_len(const uint64_t n)
         return 2;
     if (n < UINT32_MAX)
         return 4;
-    return 6;
+    return 8;
 }
 
 
-static const uint8_t enc_ack_block_len[] = {0xFF, 0x00, 0x01, 0xFF,
-                                            0x02, 0xFF, 0x03}; // 0xFF = invalid
+static const uint8_t enc_ack_block_len[] = {
+    0xFF, 0x00, 0x01, 0xFF, 0x02, 0xFF, 0xFF, 0xFF, 0x03}; // 0xFF = invalid
 
 
 static uint8_t __attribute__((nonnull))
@@ -454,8 +455,8 @@ needed_ack_block_len(struct q_conn * const c)
     if (max_block < UINT16_MAX)
         return 2;
     if (max_block < UINT32_MAX)
-        return 3;
-    return 6;
+        return 4;
+    return 8;
 }
 
 
