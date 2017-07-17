@@ -100,6 +100,41 @@ SPLAY_GENERATE(ipnp_splay, q_conn, node_ipnp, ipnp_splay_cmp)
 SPLAY_GENERATE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 
 
+#define PTLS_CLNT_LABL "EXPORTER-QUIC client 1-RTT Secret"
+#define PTLS_SERV_LABL "EXPORTER-QUIC server 1-RTT Secret"
+
+
+static void __attribute__((nonnull))
+conn_setup_1rtt_secret(struct q_conn * const c,
+                       ptls_cipher_suite_t * const cipher,
+                       ptls_aead_context_t ** aead,
+                       uint8_t * const sec,
+                       const char * const label,
+                       uint8_t is_enc)
+{
+    int ret = ptls_export_secret(c->tls, sec, cipher->hash->digest_size, label,
+                                 ptls_iovec_init(0, 0));
+    ensure(ret == 0, "ptls_export_secret");
+    // hexdump(sec, PTLS_MAX_DIGEST_SIZE);
+    *aead = ptls_aead_new(cipher->aead, cipher->hash, is_enc, sec);
+    ensure(aead, "ptls_aead_new");
+}
+
+
+static void __attribute__((nonnull)) conn_setup_1rtt(struct q_conn * const c)
+{
+    ptls_cipher_suite_t * const cipher = ptls_get_cipher(c->tls);
+    conn_setup_1rtt_secret(c, cipher, &c->in_kp0, c->in_sec,
+                           is_clnt(c) ? PTLS_SERV_LABL : PTLS_CLNT_LABL, 0);
+    conn_setup_1rtt_secret(c, cipher, &c->out_kp0, c->out_sec,
+                           is_clnt(c) ? PTLS_CLNT_LABL : PTLS_SERV_LABL, 1);
+
+    c->state = CONN_STAT_ESTB;
+    warn(info, "%s conn %" PRIx64 " now in state %u", conn_type(c), c->id,
+         c->state);
+}
+
+
 uint32_t tls_handshake(struct q_stream * const s)
 {
     // get pointer to any received handshake data
@@ -135,6 +170,9 @@ uint32_t tls_handshake(struct q_stream * const s)
     } else
         // we are done with the handshake, no need to TX after all
         w_free_iov(w_engine(s->c->sock), ov);
+
+    if (ret == 0)
+        conn_setup_1rtt(s->c);
 
     return (uint32_t)ret;
 }
@@ -321,7 +359,8 @@ void tx(struct ev_loop * const l __attribute__((unused)),
 }
 
 
-static bool verify_hash(const uint8_t * buf, const uint16_t len)
+static bool __attribute__((nonnull))
+verify_hash(const uint8_t * buf, const uint16_t len)
 {
     warn(debug, "verifying %lu-byte hash at [%lu..%u] over [0..%lu]",
          FNV_1A_LEN, len - FNV_1A_LEN, len - 1, len - FNV_1A_LEN - 1);
@@ -333,6 +372,16 @@ static bool verify_hash(const uint8_t * buf, const uint16_t len)
            "hash mismatch: computed %" PRIx64 " vs. %" PRIx64, hash_comp,
            hash_rx);
     return hash_rx == hash_comp;
+}
+
+
+static uint16_t __attribute__((nonnull)) dec_aead(struct q_conn * const c,
+                                                  const struct w_iov * v,
+                                                  const uint16_t hdr_len)
+{
+    return hdr_len + (uint16_t)ptls_aead_decrypt(
+                         c->in_kp0, &v->buf[hdr_len], &v->buf[hdr_len],
+                         v->len - hdr_len, meta(v).nr, v->buf, hdr_len);
 }
 
 
@@ -370,10 +419,13 @@ void rx(struct ev_loop * const l,
         const uint64_t cid = pkt_cid(v->buf, v->len);
         const uint8_t type = w_connected(ws) ? CONN_FLAG_CLNT : 0;
         struct q_conn * c = get_conn_by_cid(cid, type);
+        bool prot_verified = false;
         if (c == 0) {
-            if (is_set(F_LONG_HDR, pkt_flags(v->buf))) {
+            if (is_set(F_LONG_HDR, pkt_flags(v->buf)) &&
+                pkt_type(v->buf) != F_LH_1RTT_KPH0) {
                 verify_hash(v->buf, v->len);
                 v->len -= FNV_1A_LEN;
+                prot_verified = true;
             }
 
             // this might be the first packet for a new connection, or a dup CH
@@ -409,27 +461,18 @@ void rx(struct ev_loop * const l,
             SPLAY_INSERT(ipnp_splay, &conns_by_ipnp, c);
             SPLAY_REMOVE(cid_splay, &conns_by_cid, c);
             SPLAY_INSERT(cid_splay, &conns_by_cid, c);
-        } else {
-            warn(debug, "pkt on %s conn %" PRIx64, conn_type(c), c->id);
+        }
+        warn(debug, "pkt on %s conn %" PRIx64, conn_type(c), c->id);
 
-            if (is_set(F_LONG_HDR, pkt_flags(v->buf)) &&
-                pkt_type(v->buf) != F_LH_1RTT_KPH0) {
+        if (is_set(F_LONG_HDR, pkt_flags(v->buf)) &&
+            pkt_type(v->buf) != F_LH_1RTT_KPH0) {
+            if (prot_verified == false) {
                 verify_hash(v->buf, v->len);
                 v->len -= FNV_1A_LEN;
-            } else {
-                // let's decrypt some AEAD
-                // warn(debug, "before ptls_aead_decrypt: hdr_len %u, v->len %u,
-                // "
-                //             "seq %" PRIu64,
-                //      hdr_len, v->len, meta(v).nr);
-                // hexdump(v->buf, v->len);
-                v->len = hdr_len + (uint16_t)ptls_aead_decrypt(
-                                       c->in_kp0, &v->buf[hdr_len],
-                                       &v->buf[hdr_len], v->len - hdr_len,
-                                       meta(v).nr, v->buf, hdr_len);
-                // hexdump(v->buf, v->len);
             }
-        }
+        } else
+            v->len = dec_aead(c, v, hdr_len);
+
 
         // remember that we had a RX event on this connection
         if (!is_set(CONN_FLAG_RX, c->flags)) {
@@ -503,14 +546,14 @@ void rx(struct ev_loop * const l,
                     die("no version in common with server");
                 rtx(c, UINT32_MAX); // retransmit the ClientHello
             } else {
+                warn(info, "server accepted version 0x%08x", c->vers);
+                c->state = CONN_STAT_VERS_OK;
+
                 // we should have received a ServerHello
                 c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
                 ensure(!STAILQ_EMPTY(&s->i), "no ServerHello");
                 if (tls_handshake(s) == 0)
                     maybe_api_return(q_connect, c);
-
-                warn(info, "server accepted version 0x%08x", c->vers);
-                c->state = CONN_STAT_VERS_OK;
             }
             break;
         }
@@ -520,10 +563,8 @@ void rx(struct ev_loop * const l,
             // whether that completes the client handshake
             c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
             struct q_stream * const s = get_stream(c, 0);
-            if ((!STAILQ_EMPTY(&s->i) && tls_handshake(s) == 0)) {
-                maybe_api_return(q_connect, c);
+            if (tls_handshake(s) == 0)
                 maybe_api_return(q_accept, c);
-            }
         } break;
 
         case CONN_STAT_ESTB:

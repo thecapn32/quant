@@ -92,40 +92,6 @@ static ptls_openssl_verify_certificate_t verifier = {0};
     } while (0)
 
 
-#define PTLS_CLNT_LABL "EXPORTER-QUIC client 1-RTT Secret"
-#define PTLS_SERV_LABL "EXPORTER-QUIC server 1-RTT Secret"
-
-
-static void conn_setup_1rtt_secret(struct q_conn * const c,
-                                   ptls_cipher_suite_t * const cipher,
-                                   ptls_aead_context_t ** aead,
-                                   uint8_t * const sec,
-                                   const char * const label,
-                                   uint8_t is_enc)
-{
-    int ret = ptls_export_secret(c->tls, sec, cipher->hash->digest_size, label,
-                                 ptls_iovec_init(0, 0));
-    ensure(ret == 0, "ptls_export_secret");
-    // hexdump(sec, PTLS_MAX_DIGEST_SIZE);
-    *aead = ptls_aead_new(cipher->aead, cipher->hash, is_enc, sec);
-    ensure(aead, "ptls_aead_new");
-}
-
-
-static void conn_setup_1rtt(struct q_conn * const c)
-{
-    ptls_cipher_suite_t * const cipher = ptls_get_cipher(c->tls);
-    conn_setup_1rtt_secret(c, cipher, &c->in_kp0, c->in_sec,
-                           is_clnt(c) ? PTLS_SERV_LABL : PTLS_CLNT_LABL, 0);
-    conn_setup_1rtt_secret(c, cipher, &c->out_kp0, c->out_sec,
-                           is_clnt(c) ? PTLS_CLNT_LABL : PTLS_SERV_LABL, 1);
-
-    c->state = CONN_STAT_ESTB;
-    warn(info, "%s conn %" PRIx64 " now in state %u", conn_type(c), c->id,
-         c->state);
-}
-
-
 static struct q_conn * new_conn(struct w_engine * const w,
                                 const uint64_t cid,
                                 const struct sockaddr_in * const peer,
@@ -226,8 +192,6 @@ struct q_conn * q_connect(void * const q,
     //          conn_type(c), cid, c->state);
     //     return 0;
     // }
-    conn_setup_1rtt(c);
-
     warn(warn, "%s conn %" PRIx64 " connected", conn_type(c), cid);
     return c;
 }
@@ -314,8 +278,6 @@ struct q_conn * q_accept(struct q_conn * const c)
         // TODO free embryonic connection
         return 0;
     }
-
-    conn_setup_1rtt(c);
 
     warn(warn, "%s conn %" PRIx64 " connected", conn_type(c), c->id);
     return c;
