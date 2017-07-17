@@ -109,6 +109,17 @@ static uint8_t __attribute__((const)) needed_pkt_nr_len(const uint64_t n)
 }
 
 
+#define CONN_CLOS_ERR_NO_ERROR 0x80000000
+// #define CONN_CLOS_ERR_INTERNAL_ERROR 0x80000001
+// #define CONN_CLOS_ERR_CANCELLED 0x80000002
+// #define CONN_CLOS_ERR_FLOW_CONTROL_ERROR 0x80000003
+// #define CONN_CLOS_ERR_STREAM_ID_ERROR 0x80000004
+// #define CONN_CLOS_ERR_STREAM_STATE_ERROR 0x80000005
+// #define CONN_CLOS_ERR_FINAL_OFFSET_ERROR 0x80000006
+// #define CONN_CLOS_ERR_FRAME_FORMAT_ERROR 0x80000007
+// #define CONN_CLOS_ERR_VERSION_NEGOTIATION_ERROR 0x80000009
+// #define CONN_CLOS_ERR_PROTOCOL_VIOLATION 0x8000000A
+
 uint16_t enc_pkt(struct q_conn * const c,
                  struct q_stream * const s,
                  struct w_iov * const v)
@@ -136,6 +147,7 @@ uint16_t enc_pkt(struct q_conn * const c,
         flags |= F_LONG_HDR | (is_clnt(c) ? F_LH_CLNT_CTXT : F_LH_SERV_CTXT);
         break;
     case CONN_STAT_ESTB:
+    case CONN_STAT_CLSD:
         // TODO: support short headers w/o cid
         // flags |= F_SH_CID | enc_pkt_nr_len[needed_pkt_nr_len(meta(v).nr)];
         // XXX most other implementations don't do short headers yet, so:
@@ -169,6 +181,23 @@ uint16_t enc_pkt(struct q_conn * const c,
     if (!SPLAY_EMPTY(&c->recv))
         i += enc_ack_frame(c, v->buf, v->len, i);
 
+    if (c->state == CONN_STAT_CLSD) {
+        const char reas[] = "As if that blind rage had washed me clean, rid me "
+                            "of hope; for the first time, in that night alive "
+                            "with signs and stars, I opened myself to the "
+                            "benign indifference of the world. Finding it so "
+                            "much like myself—so like a brother, really—I felt "
+                            "that I had been happy and that I was happy again. "
+                            "For everything to be consummated, for me to feel "
+                            "less alone, I had only to wish that there be a "
+                            "large crowd of spectators the day of my execution "
+                            "and that they greet me with cries of hate.";
+        v->len = i + 7 + sizeof(reas);
+        i += enc_conn_close_frame(c, v->buf, v->len, i, CONN_CLOS_ERR_NO_ERROR,
+                                  reas, sizeof(reas));
+        goto protect;
+    }
+
     // if we've been passed a stream pointer, we need to prepend a stream frame
     // header to the data (otherwise, it's an RTX)
     if (s) {
@@ -198,23 +227,21 @@ uint16_t enc_pkt(struct q_conn * const c,
         // warn(debug, "RTX %u", i);
     }
 
+protect:
+#ifndef NDEBUG
+    if (_dlevel == debug)
+        hexdump(v->buf, v->len);
+#endif
+
     if (c->state < CONN_STAT_ESTB) {
         const uint64_t hash = fnv_1a(v->buf, i);
         warn(debug, "inserting %lu-byte hash over range [0..%u] into [%u..%lu]",
              FNV_1A_LEN, i - 1, i, i + FNV_1A_LEN - 1);
         v->len += FNV_1A_LEN;
         enc(v->buf, v->len, i, &hash, 0, "%" PRIx64);
-        return i;
-    }
-
-#ifndef NDEBUG
-    if (_dlevel == debug)
-        hexdump(v->buf, v->len);
-#endif
-
-    v->len = hdr_end + (uint16_t)ptls_aead_encrypt(
-                           c->out_kp0, &v->buf[hdr_end], &v->buf[hdr_end],
-                           v->len - hdr_end, meta(v).nr, v->buf, hdr_end);
-
+    } else
+        v->len = hdr_end + (uint16_t)ptls_aead_encrypt(
+                               c->out_kp0, &v->buf[hdr_end], &v->buf[hdr_end],
+                               v->len - hdr_end, meta(v).nr, v->buf, hdr_end);
     return v->len;
 }

@@ -128,7 +128,7 @@ static void __attribute__((nonnull)) conn_setup_1rtt(struct q_conn * const c)
     conn_setup_1rtt_secret(c, cipher, &c->out_kp0, c->out_sec,
                            is_clnt(c) ? PTLS_CLNT_LABL : PTLS_SERV_LABL, 1);
 
-    c->state = CONN_STAT_ESTB;
+    c->state = CONN_STAT_VERS_OK;
     warn(info, "%s conn %" PRIx64 " now in state %u", conn_type(c), c->id,
          c->state);
 }
@@ -483,7 +483,7 @@ void rx(struct ev_loop * const l,
              inet_ntoa(c->peer.sin_addr), ntohs(c->peer.sin_port));
 
         switch (c->state) {
-        case CONN_STAT_CLSD:
+        case CONN_STAT_IDLE:
             new_stream(c, 0); // create stream 0 (server case)
         // fall-through
 
@@ -511,7 +511,6 @@ void rx(struct ev_loop * const l,
                 ensure(!STAILQ_EMPTY(&s->i), "no ClientHello");
                 tls_handshake(s);
 
-                c->state = CONN_STAT_VERS_OK;
                 warn(info, "%s conn %" PRIx64 " now in state %u", conn_type(c),
                      c->id, c->state);
 
@@ -546,8 +545,10 @@ void rx(struct ev_loop * const l,
                 // we should have received a ServerHello
                 c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
                 ensure(!STAILQ_EMPTY(&s->i), "no ServerHello");
-                if (tls_handshake(s) == 0)
+                if (tls_handshake(s) == 0) {
                     maybe_api_return(q_connect, c);
+                    c->state = CONN_STAT_ESTB;
+                }
             }
             break;
         }
@@ -557,11 +558,14 @@ void rx(struct ev_loop * const l,
             // whether that completes the client handshake
             c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
             struct q_stream * const s = get_stream(c, 0);
-            if (tls_handshake(s) == 0)
+            if (tls_handshake(s) == 0) {
                 maybe_api_return(q_accept, c);
+                c->state = CONN_STAT_ESTB;
+            }
         } break;
 
         case CONN_STAT_ESTB:
+        case CONN_STAT_CLSD:
             c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
             break;
 

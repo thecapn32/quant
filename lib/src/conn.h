@@ -124,11 +124,12 @@ SPLAY_PROTOTYPE(ipnp_splay, q_conn, node_ipnp, ipnp_splay_cmp)
 SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 
 
-#define CONN_STAT_CLSD 0
+#define CONN_STAT_IDLE 0
 #define CONN_STAT_VERS_SENT 1
 #define CONN_STAT_VERS_REJ 2
 #define CONN_STAT_VERS_OK 3
 #define CONN_STAT_ESTB 4
+#define CONN_STAT_CLSD 5
 
 #define CONN_FLAG_CLNT 0x01 ///< We are client on this connection (or server)
 #define CONN_FLAG_EMBR 0x02 ///< Connection is in handshake

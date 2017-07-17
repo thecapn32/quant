@@ -187,11 +187,12 @@ struct q_conn * q_connect(void * const q,
          conn_type(c), c->id);
     loop_run(q_connect, c);
 
-    // if (c->state != CONN_STAT_VERS_OK) {
-    //     warn(warn, "%s conn %" PRIx64 " not connected, state 0x%02x",
-    //          conn_type(c), cid, c->state);
-    //     return 0;
-    // }
+    if (c->state != CONN_STAT_ESTB) {
+        warn(warn, "%s conn %" PRIx64 " not connected, state 0x%02x",
+             conn_type(c), cid, c->state);
+        return 0;
+    }
+
     warn(warn, "%s conn %" PRIx64 " connected", conn_type(c), cid);
     return c;
 }
@@ -226,7 +227,7 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_stailq * const q)
     warn(warn, "reading on %s conn %" PRIx64, conn_type(c), c->id);
     struct q_stream * s = 0;
 
-    while (s == 0) {
+    while (c->state != CONN_STAT_IDLE && s == 0) {
         SPLAY_FOREACH (s, stream, &c->streams) {
             if (s->id == 0)
                 // don't deliver stream-zero data
@@ -236,13 +237,16 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_stailq * const q)
                 break;
         }
 
-        if (s == 0) {
+        if (c->state != CONN_STAT_IDLE && s == 0) {
             // no data queued on any non-zero stream, we need to wait
             warn(warn, "waiting for data on %s conn %" PRIx64, conn_type(c),
                  c->id);
             loop_run(q_read, c);
         }
     }
+
+    if (s == 0)
+        return 0;
 
     // return data
     STAILQ_CONCAT(q, &s->i);
@@ -388,13 +392,25 @@ void q_close_stream(struct q_stream * const s)
 
 void q_close(struct q_conn * const c)
 {
-    warn(warn, "closing %s conn %" PRIx64, conn_type(c), c->id);
+    if (c->state < CONN_STAT_CLSD) {
 
-    // close all streams
-    struct q_stream *s, *tmp;
-    for (s = SPLAY_MAX(stream, &c->streams); s; s = tmp) {
-        tmp = SPLAY_PREV(stream, &c->streams, s);
-        q_close_stream(s);
+        warn(warn, "closing %s conn %" PRIx64, conn_type(c), c->id);
+
+        // // close all streams
+        // struct q_stream *s, *tmp;
+        // for (s = SPLAY_MAX(stream, &c->streams); s; s = tmp) {
+        //     tmp = SPLAY_PREV(stream, &c->streams, s);
+        //     q_close_stream(s);
+        // }
+
+        c->state = CONN_STAT_CLSD;
+        ev_async_send(loop, &c->tx_w);
+
+        if (c->state != CONN_STAT_IDLE) {
+            warn(warn, "waiting for close on %s conn %" PRIx64, conn_type(c),
+                 c->id);
+            loop_run(q_close, c);
+        }
     }
 
     ev_io_stop(loop, &c->rx_w);

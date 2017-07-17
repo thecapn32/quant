@@ -364,7 +364,7 @@ dec_ack_frame(struct q_conn * const c,
 
 
 static uint16_t __attribute__((nonnull))
-dec_conn_close_frame(struct q_conn * const c __attribute__((unused)),
+dec_conn_close_frame(struct q_conn * const c,
                      const struct w_iov * const v,
                      const uint16_t pos)
 {
@@ -373,7 +373,7 @@ dec_conn_close_frame(struct q_conn * const c __attribute__((unused)),
     dec(type, v->buf, v->len, i, 0, "0x%02x");
 
     uint32_t err_code = 0;
-    dec(err_code, v->buf, v->len, i, 0, "0x%04x");
+    dec(err_code, v->buf, v->len, i, 0, "0x%08x");
 
     uint16_t reas_len = 0;
     dec(reas_len, v->buf, v->len, i, 0, "%u");
@@ -385,6 +385,9 @@ dec_conn_close_frame(struct q_conn * const c __attribute__((unused)),
         i += reas_len;
         warn(notice, "conn close reason: %.*s", reas_len, reas_phr);
     }
+
+    c->state = CONN_STAT_IDLE;
+    ev_break(loop, EVBREAK_ALL);
 
     return i;
 }
@@ -600,4 +603,28 @@ uint16_t enc_stream_frame(struct q_stream * const s,
 
     // TODO: support multiple frames per packet? (needs memcpy!)
     return v->len;
+}
+
+
+uint16_t enc_conn_close_frame(struct q_conn * const c __attribute__((unused)),
+                              uint8_t * const buf,
+                              const uint16_t len,
+                              const uint16_t pos,
+                              const uint32_t err_code,
+                              const char * const reas,
+                              const uint16_t reas_len)
+{
+    uint16_t i = pos;
+
+    const uint8_t type = FRAM_TYPE_CNCL;
+    enc(buf, len, i, &type, 0, "0x%02x");
+
+    enc(buf, len, i, &err_code, 0, "0x%08x");
+
+    const uint16_t rlen = MIN(reas_len, len - i);
+    enc(buf, len, i, &rlen, 0, "%u");
+
+    memcpy(&buf[i], reas, rlen);
+
+    return i + rlen - pos;
 }
