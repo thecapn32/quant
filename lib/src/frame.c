@@ -51,6 +51,12 @@
 #include "stream.h"
 
 
+#define FRAM_TYPE_PAD 0x00
+#define FRAM_TYPE_CNCL 0x02
+#define FRAM_TYPE_STRM 0xC0
+#define FRAM_TYPE_ACK 0xA0
+
+
 // Convert stream ID length encoded in flags to bytes
 static uint8_t __attribute__((const)) dec_sid_len(const uint8_t flags)
 {
@@ -357,6 +363,33 @@ dec_ack_frame(struct q_conn * const c,
 }
 
 
+static uint16_t __attribute__((nonnull))
+dec_conn_close_frame(struct q_conn * const c __attribute__((unused)),
+                     const struct w_iov * const v,
+                     const uint16_t pos)
+{
+    uint16_t i = pos;
+    uint8_t type = 0;
+    dec(type, v->buf, v->len, i, 0, "0x%02x");
+
+    uint32_t err_code = 0;
+    dec(err_code, v->buf, v->len, i, 0, "0x%04x");
+
+    uint16_t reas_len = 0;
+    dec(reas_len, v->buf, v->len, i, 0, "%u");
+    ensure(reas_len <= v->len - i, "reason_len invalid");
+
+    if (reas_len) {
+        char reas_phr[UINT16_MAX];
+        memcpy(reas_phr, &v->buf[i], reas_len);
+        i += reas_len;
+        warn(notice, "conn close reason: %.*s", reas_len, reas_phr);
+    }
+
+    return i;
+}
+
+
 bool dec_frames(struct q_conn * const c, struct w_iov * const v)
 {
     uint16_t i = pkt_hdr_len(v->buf, v->len);
@@ -365,48 +398,30 @@ bool dec_frames(struct q_conn * const c, struct w_iov * const v)
 
     while (i < v->len) {
         const uint8_t type = ((const uint8_t * const)(v->buf))[i];
-        if (pad_start && (type != T_PADDING || i == v->len - 1)) {
+        if (pad_start && (type != FRAM_TYPE_PAD || i == v->len - 1)) {
             warn(debug, "skipped padding in [%u..%u]", pad_start, i);
             pad_start = 0;
         }
 
-        if (bitmask_match(type, T_STREAM)) {
-            // TODO: support multiple stream frames per packet (needs
-            // memcpy)
+        if (is_set(FRAM_TYPE_STRM, type)) {
+            // TODO: support multiple stream frames per packet (needs memcpy)
             ensure(dlen == 0, "can only handle one stream frame per packet");
             i += dec_stream_frame(c, v, i, &dlen);
-            if (dlen == 0)
-                // this was a frame for a stream that is closed
-                return 0;
 
-        } else if (bitmask_match(type, T_ACK)) {
+        } else if (is_set(FRAM_TYPE_ACK, type)) {
             i = dec_ack_frame(c, v, i);
 
         } else
             switch (type) {
-            case T_PADDING:
+            case FRAM_TYPE_PAD:
                 pad_start = pad_start ? pad_start : i;
                 i++;
                 break;
 
-            // case T_RST_STREAM:
-            //     die("rst_stream frame");
-            //     break;
-            // case T_CONNECTION_CLOSE:
-            //     i += dec_conn_close_frame(c, &v->buf[i], v->len - i);
-            //     break;
-            // case T_GOAWAY:
-            //     die("goaway frame");
-            //     break;
-            // case T_WINDOW_UPDATE:
-            //     die("window_update frame");
-            //     break;
-            // case T_BLOCKED:
-            //     die("blocked frame");
-            //     break;
-            // case T_PING:
-            //     die("ping frame");
-            //     break;
+            case FRAM_TYPE_CNCL:
+                i += dec_conn_close_frame(c, v, i);
+                break;
+
             default:
                 die("unknown frame type 0x%02x", type);
             }
@@ -420,7 +435,7 @@ uint16_t
 enc_padding_frame(uint8_t * const buf, const uint16_t pos, const uint16_t len)
 {
     warn(debug, "encoding padding frame into [%u..%u]", pos, pos + len - 1);
-    memset(&((uint8_t *)buf)[pos], T_PADDING, len);
+    memset(&((uint8_t *)buf)[pos], FRAM_TYPE_PAD, len);
     return len;
 }
 
@@ -465,7 +480,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
                        const uint16_t len,
                        const uint16_t pos)
 {
-    uint8_t type = T_ACK;
+    uint8_t type = FRAM_TYPE_ACK;
 
     const uint8_t num_blocks = (uint8_t)MIN(c->recv.cnt, UINT8_MAX);
     if (num_blocks > 1)
@@ -554,7 +569,7 @@ uint16_t enc_stream_frame(struct q_stream * const s,
     uint64_t o = off;
     const uint8_t sid_len = needed_sid_len(s->id);
     uint8_t type =
-        T_STREAM | (dlen ? F_STREAM_DATA_LEN : 0) | enc_sid_len[sid_len];
+        FRAM_TYPE_STRM | (dlen ? F_STREAM_DATA_LEN : 0) | enc_sid_len[sid_len];
 
     // if this stream was closed locally or remotely, and this is the last
     // packet or we have no more packets, include a FIN

@@ -28,18 +28,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define bitmask_match(val, mask) (((val) & (mask)) == (mask))
-
-#define STRM_HEAD_LEN
-
-#define T_PADDING 0x00
-#define T_STREAM 0xC0
-#define T_ACK 0xA0
-
-/// Define an IEEE-754 16-bt floating type (backed by gcc/clang F16C)
-// typedef __fp16 float16_t;
-
-
 struct q_conn;
 struct q_stream;
 struct w_iov;
