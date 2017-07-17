@@ -103,6 +103,7 @@ add_custom_target(go-server
 set(MINQ github.com/ekr/minq)
 externalproject_add(minq
   DOWNLOAD_COMMAND env GOPATH=${GOPATH} go get ${MINQ} || true
+  # UPDATE_COMMAND cd ${GOPATH}/src/github.com/ekr/minq && git pull
   CONFIGURE_COMMAND cd ${GOPATH}/src/github.com/bifurcation/mint && git remote add ekr https://www.github.com/ekr/mint || true && git fetch ekr && git checkout minq_draft_21
   BUILD_COMMAND
     cd ${GOPATH}/src/${MINQ} && env GOPATH=${GOPATH} go test
