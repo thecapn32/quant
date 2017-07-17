@@ -39,8 +39,8 @@
 #define F_LH_SERV_CTXT 0x04
 #define F_LH_CLNT_CTXT 0x05
 #define F_LH_0RTT_PROT 0x06
-#define F_LH_1RTT_PRO0 0x07
-#define F_LH_1RTT_PRO1 0x08
+#define F_LH_1RTT_KPH0 0x07
+#define F_LH_1RTT_KPH1 0x08
 #define F_LH_PUBL_RSET 0x09
 
 #define F_SH_CID 0x40

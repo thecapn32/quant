@@ -246,8 +246,8 @@ static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
         warn(notice, "send pkt %" PRIu64
                      " (len %u, idx %u, type 0x%02x = " bitstring_fmt
                      ") on %s conn %" PRIx64,
-             meta(v).nr, v->len, v->idx, v->buf[0], to_bitstring(v->buf[0]),
-             conn_type(c), c->id);
+             meta(v).nr, v->len, v->idx, pkt_flags(v->buf),
+             to_bitstring(pkt_flags(v->buf)), conn_type(c), c->id);
 #ifndef NDEBUG
         if (_dlevel == debug)
             hexdump(v->buf, v->len);
@@ -371,7 +371,7 @@ void rx(struct ev_loop * const l,
         const uint8_t type = w_connected(ws) ? CONN_FLAG_CLNT : 0;
         struct q_conn * c = get_conn_by_cid(cid, type);
         if (c == 0) {
-            if (is_set(F_LONG_HDR, v->buf[0])) {
+            if (is_set(F_LONG_HDR, pkt_flags(v->buf))) {
                 verify_hash(v->buf, v->len);
                 v->len -= FNV_1A_LEN;
             }
@@ -412,12 +412,14 @@ void rx(struct ev_loop * const l,
         } else {
             warn(debug, "pkt on %s conn %" PRIx64, conn_type(c), c->id);
 
-            if (is_set(F_LONG_HDR, v->buf[0])) {
+            if (is_set(F_LONG_HDR, pkt_flags(v->buf)) &&
+                pkt_type(v->buf) != F_LH_1RTT_KPH0) {
                 verify_hash(v->buf, v->len);
                 v->len -= FNV_1A_LEN;
             } else {
                 // let's decrypt some AEAD
-                // warn(debug, "before ptls_aead_decrypt: hdr_len %u, v->len %u, "
+                // warn(debug, "before ptls_aead_decrypt: hdr_len %u, v->len %u,
+                // "
                 //             "seq %" PRIu64,
                 //      hdr_len, v->len, meta(v).nr);
                 // hexdump(v->buf, v->len);
@@ -439,9 +441,9 @@ void rx(struct ev_loop * const l,
         warn(notice, "recv pkt %" PRIu64
                      " (len %u, idx %u, type 0x%02x = " bitstring_fmt
                      ") on %s conn %" PRIx64 " from %s:%u",
-             nr, v->len, v->idx, v->buf[0], to_bitstring(v->buf[0]),
-             conn_type(c), c->id, inet_ntoa(c->peer.sin_addr),
-             ntohs(c->peer.sin_port));
+             nr, v->len, v->idx, pkt_flags(v->buf),
+             to_bitstring(pkt_flags(v->buf)), conn_type(c), c->id,
+             inet_ntoa(c->peer.sin_addr), ntohs(c->peer.sin_port));
 
         switch (c->state) {
         case CONN_STAT_CLSD:
@@ -456,7 +458,7 @@ void rx(struct ev_loop * const l,
             ensure(v->len >= MIN_INI_LEN, "initial packet len %u too short",
                    v->len);
 
-            ensure(pkt_flags(v->buf) & F_LONG_HDR, "short header");
+            ensure(is_set(F_LONG_HDR, pkt_flags(v->buf)), "short header");
 
             // respond to the version negotiation packet
             c->vers = pkt_vers(v->buf, v->len);
