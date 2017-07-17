@@ -207,14 +207,14 @@ uint16_t enc_pkt(struct q_conn * const c,
         return i;
     }
 
-    // let's encrypt some AEAD
-    // warn(debug, "before ptls_aead_encrypt: hdr_end %u, v->len %u, seq %" PRIu64,
-    //      hdr_end, v->len, meta(v).nr);
-    // hexdump(v->buf, v->len);
-    i = v->len = hdr_end + (uint16_t)ptls_aead_encrypt(
-                               c->out_kp0, &v->buf[hdr_end], &v->buf[hdr_end],
-                               v->len - hdr_end, meta(v).nr, v->buf, hdr_end);
-    // hexdump(v->buf, v->len);
+#ifndef NDEBUG
+    if (_dlevel == debug)
+        hexdump(v->buf, v->len);
+#endif
 
-    return i;
+    v->len = hdr_end + (uint16_t)ptls_aead_encrypt(
+                           c->out_kp0, &v->buf[hdr_end], &v->buf[hdr_end],
+                           v->len - hdr_end, meta(v).nr, v->buf, hdr_end);
+
+    return v->len;
 }

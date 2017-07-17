@@ -115,7 +115,6 @@ conn_setup_1rtt_secret(struct q_conn * const c,
     int ret = ptls_export_secret(c->tls, sec, cipher->hash->digest_size, label,
                                  ptls_iovec_init(0, 0));
     ensure(ret == 0, "ptls_export_secret");
-    // hexdump(sec, PTLS_MAX_DIGEST_SIZE);
     *aead = ptls_aead_new(cipher->aead, cipher->hash, is_enc, sec);
     ensure(aead, "ptls_aead_new");
 }
@@ -286,10 +285,6 @@ static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
                      ") on %s conn %" PRIx64,
              meta(v).nr, v->len, v->idx, pkt_flags(v->buf),
              to_bitstring(pkt_flags(v->buf)), conn_type(c), c->id);
-#ifndef NDEBUG
-        if (_dlevel == debug)
-            hexdump(v->buf, v->len);
-#endif
     }
 
     // transmit packets
@@ -398,10 +393,6 @@ void rx(struct ev_loop * const l,
     while (!STAILQ_EMPTY(&i)) {
         struct w_iov * const v = STAILQ_FIRST(&i);
         STAILQ_REMOVE_HEAD(&i, next);
-#ifndef NDEBUG
-        if (_dlevel == debug)
-            hexdump(v->buf, v->len);
-#endif
         if (v->len == 0)
             // TODO figure out why recvmmsg returns zero-length iovecs
             continue;
@@ -462,7 +453,6 @@ void rx(struct ev_loop * const l,
             SPLAY_REMOVE(cid_splay, &conns_by_cid, c);
             SPLAY_INSERT(cid_splay, &conns_by_cid, c);
         }
-        warn(debug, "pkt on %s conn %" PRIx64, conn_type(c), c->id);
 
         if (is_set(F_LONG_HDR, pkt_flags(v->buf)) &&
             pkt_type(v->buf) != F_LH_1RTT_KPH0) {
@@ -473,6 +463,10 @@ void rx(struct ev_loop * const l,
         } else
             v->len = dec_aead(c, v, hdr_len);
 
+#ifndef NDEBUG
+        if (_dlevel == debug)
+            hexdump(v->buf, v->len);
+#endif
 
         // remember that we had a RX event on this connection
         if (!is_set(CONN_FLAG_RX, c->flags)) {
