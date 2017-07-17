@@ -100,7 +100,6 @@ add_custom_target(go-server
 
 
 # Use minq for testing against
-set(GOPATH ${CMAKE_CURRENT_BINARY_DIR}/go)
 set(MINQ github.com/ekr/minq)
 externalproject_add(minq
   DOWNLOAD_COMMAND env GOPATH=${GOPATH} go get ${MINQ} || true
@@ -124,5 +123,36 @@ add_custom_target(minq-server
   DEPENDS minq
   COMMAND
     echo env MINQ_LOG=\\* GOPATH=${GOPATH} go run ${GOPATH}/src/${MINQ}/bin/server/main.go
+  VERBATIM
+)
+
+
+# Use quicly for testing against
+externalproject_add(quicly
+  UPDATE_COMMAND ""
+  GIT_REPOSITORY https://github.com/h2o/quicly.git
+  CONFIGURE_COMMAND ""
+  BUILD_IN_SOURCE 1
+  INSTALL_COMMAND xcodebuild -alltargets -configuration Debug install
+    "HEADER_SEARCH_PATHS=deps/picotls/include include ${OPENSSL_ROOT_DIR}/include"
+    LIBRARY_SEARCH_PATHS=${OPENSSL_ROOT_DIR}/lib
+    INSTALL_ROOT=${CMAKE_CURRENT_BINARY_DIR}
+  BUILD_COMMAND ""
+)
+
+# EXCLUDE_FROM_ALL workaround for older cmake
+set_target_properties(quicly PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
+add_custom_target(quicly-client
+  DEPENDS quicly
+  COMMAND
+    echo ${CMAKE_CURRENT_BINARY_DIR}/usr/local/bin/cli 127.0.0.1 4433
+  VERBATIM
+)
+
+add_custom_target(quicly-server
+  DEPENDS quicly
+  COMMAND
+    echo ${CMAKE_CURRENT_BINARY_DIR}/usr/local/bin/cli -k ${CMAKE_BINARY_DIR}/lib/src/key.pem -c ${CMAKE_BINARY_DIR}/lib/src/cert.pem 127.0.0.1 4433
   VERBATIM
 )
