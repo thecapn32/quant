@@ -1,7 +1,7 @@
 include(ExternalProject)
 
 externalproject_add(warp
-  UPDATE_COMMAND ""
+  # UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/NTAP/warpcore.git
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -DDLEVEL=${DLEVEL}
@@ -36,7 +36,7 @@ string(REPLACE "-fsanitize=leak" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
 string(REPLACE "-fsanitize=undefined" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
 
 externalproject_add(picotls
-  UPDATE_COMMAND ""
+  # UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/h2o/picotls.git
   GIT_TAG kazuho/draft21
   PATCH_COMMAND sed -i "" -e "s/-std=c99 -Wall -O2 -g//" CMakeLists.txt
@@ -103,7 +103,7 @@ add_custom_target(go-server
 set(MINQ github.com/ekr/minq)
 externalproject_add(minq
   DOWNLOAD_COMMAND env GOPATH=${GOPATH} go get ${MINQ} || true
-  # UPDATE_COMMAND cd ${GOPATH}/src/github.com/ekr/minq && git pull
+  UPDATE_COMMAND cd ${GOPATH}/src/github.com/ekr/minq && git pull
   CONFIGURE_COMMAND cd ${GOPATH}/src/github.com/bifurcation/mint && git remote add ekr https://www.github.com/ekr/mint || true && git fetch ekr && git checkout minq_draft_21
   BUILD_COMMAND
     cd ${GOPATH}/src/${MINQ} && env GOPATH=${GOPATH} go test
@@ -130,7 +130,7 @@ add_custom_target(minq-server
 
 # Use quicly for testing against
 externalproject_add(quicly
-  UPDATE_COMMAND ""
+  # UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/h2o/quicly.git
   CONFIGURE_COMMAND ""
   BUILD_IN_SOURCE 1
