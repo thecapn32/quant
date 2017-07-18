@@ -122,7 +122,8 @@ dec_stream_frame(struct q_conn * const c,
         s = new_stream(c, sid);
     }
 
-    ensure(!is_set(F_STREAM_FIN, type) || (*len == 0 && off == s->in_off + 1),
+    ensure(!is_set(F_STREAM_FIN, type) ||
+               (*len || (*len == 0 && off == s->in_off + 1)),
            "zero-length FIN is at stream offset +1");
 
     // adjust w_iov start and len to stream frame data
@@ -152,8 +153,10 @@ dec_stream_frame(struct q_conn * const c,
         if (s->state <= STRM_STATE_OPEN)
             s->state = is_set(STRM_FLAG_NOCL, s->flags) ? STRM_STATE_HCRM
                                                         : STRM_STATE_CLSD;
-        else if (s->state >= STRM_STATE_HCLO)
+        else if (s->state >= STRM_STATE_HCLO) {
             maybe_api_return(q_close_stream, s);
+        } else
+            s->state = STRM_STATE_HCRM; // XXX untested
 
         w_free_iov(w_engine(c->sock), v);
         *len = 1; // the FIN consumes stream offset space
@@ -353,7 +356,7 @@ dec_ack_frame(struct q_conn * const c,
         uint8_t delta_lg_obs = 0;
         dec(delta_lg_obs, v->buf, v->len, i, 0, "%u");
         uint32_t ts = 0;
-        dec(ts, v->buf, v->len, i, 0, "%u");
+        dec(ts, v->buf, v->len, i, b == 0 ? 4 : 2, "%u");
     }
     warn(debug, "done dec ACKs");
     return i;

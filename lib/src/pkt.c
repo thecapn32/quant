@@ -159,6 +159,14 @@ void enc_pkt(struct q_conn * const c,
         die("unknown conn state %u", c->state);
         break;
     }
+
+    if (s == 0 && flags != pkt_flags(v->buf)) {
+        warn(info,
+             "suppressing RTX of 0x%02x-type pkt; new type would be 0x%02x",
+             pkt_flags(v->buf), flags);
+        return;
+    }
+
     enc(v->buf, v->len, i, &flags, 0, "0x%02x");
 
     if (is_set(F_LONG_HDR, flags) || is_set(F_SH_CID, flags))
