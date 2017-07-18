@@ -187,11 +187,13 @@ struct q_conn * q_connect(void * const q,
          conn_type(c), c->id);
     loop_run(q_connect, c);
 
-    if (c->state != CONN_STAT_ESTB) {
+    if (c->state != CONN_STAT_VERS_OK) {
         warn(warn, "%s conn %" PRIx64 " not connected, state 0x%02x",
              conn_type(c), cid, c->state);
         return 0;
     }
+
+    c->state = CONN_STAT_ESTB;
 
     warn(warn, "%s conn %" PRIx64 " connected", conn_type(c), cid);
     return c;

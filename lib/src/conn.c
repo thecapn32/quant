@@ -545,10 +545,8 @@ void rx(struct ev_loop * const l,
                 // we should have received a ServerHello
                 c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
                 ensure(!STAILQ_EMPTY(&s->i), "no ServerHello");
-                if (tls_handshake(s) == 0) {
+                if (tls_handshake(s) == 0)
                     maybe_api_return(q_connect, c);
-                    c->state = CONN_STAT_ESTB;
-                }
             }
             break;
         }
@@ -558,9 +556,9 @@ void rx(struct ev_loop * const l,
             // whether that completes the client handshake
             c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
             struct q_stream * const s = get_stream(c, 0);
-            if (tls_handshake(s) == 0) {
+            if (!STAILQ_EMPTY(&s->i) && tls_handshake(s) == 0) {
                 maybe_api_return(q_accept, c);
-                c->state = CONN_STAT_ESTB;
+                maybe_api_return(q_connect, c);
             }
         } break;
 
