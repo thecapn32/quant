@@ -219,6 +219,10 @@ void q_write(struct q_stream * const s, struct w_iov_stailq * const q)
     warn(warn, "wrote %u byte%s on %s conn %" PRIx64 " str %u", qlen,
          plural(qlen), conn_type(s->c), s->c->id, s->id);
 
+    struct w_iov * v = STAILQ_FIRST(q);
+    if (v)
+        warn(crit, "%.*s", v->len, v->buf);
+
     ensure(w_iov_stailq_len(q) == qlen, "payload corrupted, %u != %u",
            w_iov_stailq_len(q), qlen);
 }
@@ -284,6 +288,7 @@ struct q_conn * q_accept(struct q_conn * const c)
         // TODO free embryonic connection
         return 0;
     }
+    c->state = CONN_STAT_ESTB;
 
     warn(warn, "%s conn %" PRIx64 " connected", conn_type(c), c->id);
     return c;

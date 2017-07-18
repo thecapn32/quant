@@ -241,6 +241,7 @@ static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
     const ev_tstamp last_tx_t = last_tx ? meta(last_tx).time : -HUGE_VAL;
 
     struct w_iov * v;
+    struct w_iov_stailq x = STAILQ_HEAD_INITIALIZER(x);
     STAILQ_FOREACH (v, q, next) {
         if (s == 0 && v->len == 0) {
             warn(debug,
@@ -264,38 +265,22 @@ static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
         meta(v).time = now;        // remember TX time
         meta(v).data_len = v->len; // v->len is len of stream data here
 
-        if (s == 0)
+        if (s == 0) {
+            warn(debug, "RTX pkt %" PRIu64 " (len %u %u)", meta(v).nr, v->len,
+                 meta(v).buf_len);
+
             // on RTX, remember original packet number (will be resent with new)
             diet_insert(&c->acked_pkts, meta(v).nr);
-        else
+        } else
             meta(v).str = s; // remember stream this buf belongs to
 
-        v->len = enc_pkt(c, s, v); // enc_pkt() adjusts buf and len by Q_OFFSET
-        if (v->len > Q_OFFSET) {
-            // packet is retransmittable
-            if (s) {
-                c->in_flight += v->len;
-                warn(info, "in_flight +%u = %" PRIu64, v->len, c->in_flight);
-            }
-            set_ld_alarm(c);
-        }
-
-        warn(notice, "send pkt %" PRIu64
-                     " (len %u, idx %u, type 0x%02x = " bitstring_fmt
-                     ") on %s conn %" PRIx64,
-             meta(v).nr, v->len, v->idx, pkt_flags(v->buf),
-             to_bitstring(pkt_flags(v->buf)), conn_type(c), c->id);
+        enc_pkt(c, s, v, &x);
     }
 
-    // transmit packets
-    w_tx(c->sock, q);
+    // transmit encrypted/protected packets and then free the chain
+    w_tx(c->sock, &x);
     w_nic_tx(w_engine(c->sock));
-
-    STAILQ_FOREACH (v, q, next) {
-        // undo what enc_pkt() did to buffer (reset buf and len to user data)
-        v->len = meta(v).data_len;
-        v->buf += Q_OFFSET;
-    }
+    w_free(w_engine(c->sock), &x);
 }
 
 
@@ -319,7 +304,6 @@ static void tx_ack_or_fin(struct q_stream * const s)
     // ACKs and FINs are never RTXable
     STAILQ_CONCAT(&s->c->sent_pkts, &s->o);
     diet_insert(&s->c->acked_pkts, meta(ov).nr);
-    // w_free_iov(w_engine(s->c->sock), ov);
 }
 
 
@@ -357,11 +341,12 @@ void tx(struct ev_loop * const l __attribute__((unused)),
 static bool __attribute__((nonnull))
 verify_hash(const uint8_t * buf, const uint16_t len)
 {
-    warn(debug, "verifying %lu-byte hash at [%lu..%u] over [0..%lu]",
-         FNV_1A_LEN, len - FNV_1A_LEN, len - 1, len - FNV_1A_LEN - 1);
+    uint16_t i = len - FNV_1A_LEN;
     uint64_t hash_rx;
-    uint16_t ii = len - FNV_1A_LEN;
-    dec(hash_rx, buf, len, ii, 0, "%" PRIx64);
+    dec(hash_rx, buf, len, i, 0, "%" PRIx64);
+    warn(debug,
+         "verifying %lu-byte hash %" PRIx64 " in [%lu..%u] over [0..%lu]",
+         FNV_1A_LEN, hash_rx, len - FNV_1A_LEN, len - 1, len - FNV_1A_LEN - 1);
     const uint64_t hash_comp = fnv_1a(buf, len - FNV_1A_LEN);
     ensure(hash_rx == hash_comp,
            "hash mismatch: computed %" PRIx64 " vs. %" PRIx64, hash_comp,
@@ -374,9 +359,12 @@ static uint16_t __attribute__((nonnull)) dec_aead(struct q_conn * const c,
                                                   const struct w_iov * v,
                                                   const uint16_t hdr_len)
 {
-    return hdr_len + (uint16_t)ptls_aead_decrypt(
-                         c->in_kp0, &v->buf[hdr_len], &v->buf[hdr_len],
-                         v->len - hdr_len, meta(v).nr, v->buf, hdr_len);
+    const uint16_t len = (uint16_t)ptls_aead_decrypt(
+        c->in_kp0, &v->buf[hdr_len], &v->buf[hdr_len], v->len - hdr_len,
+        meta(v).nr, v->buf, hdr_len);
+    warn(debug, "removing %u-byte AEAD over [0..%u]", v->len - len - hdr_len,
+         v->len - hdr_len);
+    return hdr_len + len;
 }
 
 
@@ -405,6 +393,10 @@ void rx(struct ev_loop * const l,
                "%u-byte packet not large enough for %u-byte header", v->len,
                hdr_len);
 
+        // #ifndef NDEBUG
+        //         if (_dlevel == debug)
+        //             hexdump(v->buf, v->len);
+        // #endif
         // TODO: support short headers w/o cid
         const uint64_t nr = meta(v).nr = pkt_nr(v->buf, v->len);
         const uint64_t cid = pkt_cid(v->buf, v->len);

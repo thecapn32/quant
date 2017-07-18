@@ -57,6 +57,7 @@
 struct q_conn;
 struct q_stream;
 struct w_iov;
+struct w_iov_stailq;
 
 extern uint64_t __attribute__((nonnull))
 pkt_cid(const uint8_t * const buf, const uint16_t len);
@@ -70,7 +71,8 @@ pkt_vers(const uint8_t * const buf, const uint16_t len);
 extern uint16_t __attribute__((nonnull))
 pkt_hdr_len(const uint8_t * const buf, const uint16_t len);
 
-extern uint16_t __attribute__((nonnull(1, 3)))
+extern void __attribute__((nonnull(1, 3)))
 enc_pkt(struct q_conn * const c,
         struct q_stream * const s,
-        struct w_iov * const v);
+        struct w_iov * const v,
+        struct w_iov_stailq * const q);

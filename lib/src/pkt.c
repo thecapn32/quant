@@ -25,6 +25,7 @@
 
 #include <inttypes.h>
 #include <stdint.h>
+#include <string.h>
 
 #ifdef __linux__
 #include <byteswap.h>
@@ -120,9 +121,10 @@ static uint8_t __attribute__((const)) needed_pkt_nr_len(const uint64_t n)
 // #define CONN_CLOS_ERR_VERSION_NEGOTIATION_ERROR 0x80000009
 // #define CONN_CLOS_ERR_PROTOCOL_VIOLATION 0x8000000A
 
-uint16_t enc_pkt(struct q_conn * const c,
-                 struct q_stream * const s,
-                 struct w_iov * const v)
+void enc_pkt(struct q_conn * const c,
+             struct q_stream * const s,
+             struct w_iov * const v,
+             struct w_iov_stailq * const q)
 {
     // prepend the header by adjusting the buffer offset
     v->buf -= Q_OFFSET;
@@ -170,13 +172,14 @@ uint16_t enc_pkt(struct q_conn * const c,
             warn(info, "sending version negotiation server response");
             for (uint8_t j = 0; j < ok_vers_len; j++)
                 enc(v->buf, v->len, i, &ok_vers[j], 0, "0x%08x");
-            return i;
+            v->len = i;
+            return;
         }
     } else
         enc(v->buf, v->len, i, &meta(v).nr, needed_pkt_nr_len(meta(v).nr),
             "%" PRIu64);
 
-    const uint16_t hdr_end = i;
+    const uint16_t hdr_len = i;
 
     if (!SPLAY_EMPTY(&c->recv))
         i += enc_ack_frame(c, v->buf, v->len, i);
@@ -228,20 +231,52 @@ uint16_t enc_pkt(struct q_conn * const c,
     }
 
 protect:
+
 #ifndef NDEBUG
     if (_dlevel == debug)
         hexdump(v->buf, v->len);
 #endif
 
+    // alloc a new buffer to encrypt/sign into for TX
+    struct w_iov * const x = w_alloc_iov(w_engine(c->sock), 0);
+    x->ip = v->ip;
+    x->port = v->port;
+    x->flags = v->flags;
+
     if (c->state < CONN_STAT_ESTB) {
-        const uint64_t hash = fnv_1a(v->buf, i);
-        warn(debug, "inserting %lu-byte hash over range [0..%u] into [%u..%lu]",
-             FNV_1A_LEN, i - 1, i, i + FNV_1A_LEN - 1);
-        v->len += FNV_1A_LEN;
-        enc(v->buf, v->len, i, &hash, 0, "%" PRIx64);
-    } else
-        v->len = hdr_end + (uint16_t)ptls_aead_encrypt(
-                               c->out_kp0, &v->buf[hdr_end], &v->buf[hdr_end],
-                               v->len - hdr_end, meta(v).nr, v->buf, hdr_end);
-    return v->len;
+        memcpy(x->buf, v->buf, v->len); // copy data
+        const uint64_t hash = fnv_1a(x->buf, v->len);
+        warn(debug,
+             "adding %lu-byte hash %" PRIx64 " over [0..%u] into [%u..%lu]",
+             FNV_1A_LEN, hash, v->len - 1, v->len, v->len + FNV_1A_LEN - 1);
+        x->len = v->len + FNV_1A_LEN;
+        enc(x->buf, x->len, v->len, &hash, 0, "%" PRIx64);
+
+    } else {
+        memcpy(x->buf, v->buf, hdr_len); // copy pkt header
+        x->len = hdr_len + (uint16_t)ptls_aead_encrypt(
+                               c->out_kp0, &x->buf[hdr_len], &v->buf[hdr_len],
+                               v->len - hdr_len, meta(v).nr, v->buf, hdr_len);
+        warn(debug, "adding %d-byte AEAD over [0..%u]", x->len - v->len, i - 1);
+    }
+
+    STAILQ_INSERT_TAIL(q, x, next);
+
+    if (v->len > Q_OFFSET) {
+        // FIXME packet is retransmittable (check incorrect)
+        if (s) {
+            c->in_flight += x->len;
+            warn(info, "in_flight +%u = %" PRIu64, x->len, c->in_flight);
+        }
+        set_ld_alarm(c);
+    }
+
+    warn(notice,
+         "send pkt %" PRIu64 " (len %u, idx %u, type 0x%02x = " bitstring_fmt
+         ") on %s conn %" PRIx64,
+         meta(v).nr, x->len, x->idx, pkt_flags(x->buf),
+         to_bitstring(pkt_flags(x->buf)), conn_type(c), c->id);
+
+    v->buf += Q_OFFSET;
+    v->len -= Q_OFFSET;
 }

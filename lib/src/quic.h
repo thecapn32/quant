@@ -39,7 +39,7 @@ struct pkt_meta {
     uint64_t nr;           ///< Packet number.
     uint32_t ack_cnt;      ///< Number of ACKs we have seen for this packet.
     uint16_t data_len;     ///< Length of data in stream frame.
-    uint16_t buf_len;      ///< Length of buffer after enc_pkt().
+    uint16_t buf_len;      ///< Length of unprotected/cleartext.
     struct q_stream * str; ///< Stream this data was written on.
     uint16_t head_start;   ///< Offset of first byte of stream frame header.
     uint8_t _unused[6];
