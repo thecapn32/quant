@@ -160,17 +160,23 @@ add_custom_target(quicly-server
 
 
 # Use ngtcp2 for testing against
+externalproject_add(openssl
+  UPDATE_COMMAND ""
+  GIT_REPOSITORY https://github.com/openssl/openssl.git
+  CONFIGURE_COMMAND ./config --prefix=${CMAKE_BINARY_DIR} enable-tls1_3
+  BUILD_IN_SOURCE 1
+  INSTALL_COMMAND make install_sw
+  BUILD_COMMAND make -j16
+)
+
 externalproject_add(ngtcp2
+  DEPENDS openssl
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/ngtcp2/ngtcp2.git
   PATCH_COMMAND autoreconf -i
-  CONFIGURE_COMMAND ./configure PKG_CONFIG_PATH=${OPENSSL_ROOT_DIR}/lib/pkgconfig --enable-werror --enable-debug
+  CONFIGURE_COMMAND env CFLAGS=-I${CMAKE_BINARY_DIR}/include CXXFLAGS=-I${CMAKE_BINARY_DIR}/include ./configure --enable-werror --enable-debug --prefix=${CMAKE_BINARY_DIR} --program-prefix=ngtcp2
   BUILD_IN_SOURCE 1
-  # INSTALL_COMMAND xcodebuild -alltargets -configuration Debug install
-  #   "HEADER_SEARCH_PATHS=deps/picotls/include include ${OPENSSL_ROOT_DIR}/include"
-  #   LIBRARY_SEARCH_PATHS=${OPENSSL_ROOT_DIR}/lib
-  #   INSTALL_ROOT=${CMAKE_CURRENT_BINARY_DIR}
-  # BUILD_COMMAND ""
+  BUILD_COMMAND make -j16
 )
 
 # EXCLUDE_FROM_ALL workaround for older cmake
@@ -179,13 +185,13 @@ set_target_properties(ngtcp2 PROPERTIES EXCLUDE_FROM_ALL TRUE)
 add_custom_target(ngtcp2-client
   DEPENDS ngtcp2
   COMMAND
-    echo ${CMAKE_CURRENT_BINARY_DIR}/usr/local/bin/cli 127.0.0.1 4433
+    echo ${CMAKE_CURRENT_BINARY_DIR}/ngtcp2-prefix/src/ngtcp2/examples/client 127.0.0.1 4433
   VERBATIM
 )
 
 add_custom_target(ngtcp2-server
   DEPENDS ngtcp2
   COMMAND
-    echo ${CMAKE_CURRENT_BINARY_DIR}/usr/local/bin/cli -k ${CMAKE_BINARY_DIR}/lib/src/key.pem -c ${CMAKE_BINARY_DIR}/lib/src/cert.pem 127.0.0.1 4433
+    echo ${CMAKE_CURRENT_BINARY_DIR}/ngtcp2-prefix/src/ngtcp2/examples/server 127.0.0.1 4433 ${CMAKE_BINARY_DIR}/lib/src/key.pem ${CMAKE_BINARY_DIR}/lib/src/cert.pem
   VERBATIM
 )
