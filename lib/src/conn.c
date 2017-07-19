@@ -55,8 +55,8 @@
 
 
 // Embryonic and established (actually, non-embryonic) QUIC connections.
-struct ipnp_splay conns_by_ipnp = SPLAY_INITIALIZER();
-struct cid_splay conns_by_cid = SPLAY_INITIALIZER();
+struct ipnp_splay conns_by_ipnp = SPLAY_INITIALIZER(&conns_by_ipnp);
+struct cid_splay conns_by_cid = SPLAY_INITIALIZER(&conns_by_cid);
 
 
 int64_t ipnp_splay_cmp(const struct q_conn * const a,

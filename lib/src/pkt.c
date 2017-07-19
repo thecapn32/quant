@@ -34,6 +34,7 @@
 #include <stddef.h> // IWYU pragma: keep
 
 #include <picotls.h>
+#include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
@@ -206,6 +207,7 @@ void enc_pkt(struct q_conn * const c,
         v->len = i + 7 + sizeof(reas);
         i += enc_conn_close_frame(c, v->buf, v->len, i, CONN_CLOS_ERR_NO_ERROR,
                                   reas, sizeof(reas));
+        maybe_api_return(q_close, c);
         goto protect;
     }
 

@@ -1,7 +1,7 @@
 include(ExternalProject)
 
 externalproject_add(warp
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/NTAP/warpcore.git
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -DDLEVEL=${DLEVEL}
@@ -36,7 +36,7 @@ string(REPLACE "-fsanitize=leak" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
 string(REPLACE "-fsanitize=undefined" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
 
 externalproject_add(picotls
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/h2o/picotls.git
   GIT_TAG kazuho/draft21
   PATCH_COMMAND sed -i "" -e "s/-std=c99 -Wall -O2 -g//" CMakeLists.txt
@@ -130,7 +130,7 @@ add_custom_target(minq-server
 
 # Use quicly for testing against
 externalproject_add(quicly
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/h2o/quicly.git
   CONFIGURE_COMMAND ""
   BUILD_IN_SOURCE 1
@@ -153,6 +153,38 @@ add_custom_target(quicly-client
 
 add_custom_target(quicly-server
   DEPENDS quicly
+  COMMAND
+    echo ${CMAKE_CURRENT_BINARY_DIR}/usr/local/bin/cli -k ${CMAKE_BINARY_DIR}/lib/src/key.pem -c ${CMAKE_BINARY_DIR}/lib/src/cert.pem 127.0.0.1 4433
+  VERBATIM
+)
+
+
+# Use ngtcp2 for testing against
+externalproject_add(ngtcp2
+  UPDATE_COMMAND ""
+  GIT_REPOSITORY https://github.com/ngtcp2/ngtcp2.git
+  PATCH_COMMAND autoreconf -i
+  CONFIGURE_COMMAND ./configure PKG_CONFIG_PATH=${OPENSSL_ROOT_DIR}/lib/pkgconfig --enable-werror --enable-debug
+  BUILD_IN_SOURCE 1
+  # INSTALL_COMMAND xcodebuild -alltargets -configuration Debug install
+  #   "HEADER_SEARCH_PATHS=deps/picotls/include include ${OPENSSL_ROOT_DIR}/include"
+  #   LIBRARY_SEARCH_PATHS=${OPENSSL_ROOT_DIR}/lib
+  #   INSTALL_ROOT=${CMAKE_CURRENT_BINARY_DIR}
+  # BUILD_COMMAND ""
+)
+
+# EXCLUDE_FROM_ALL workaround for older cmake
+set_target_properties(ngtcp2 PROPERTIES EXCLUDE_FROM_ALL TRUE)
+
+add_custom_target(ngtcp2-client
+  DEPENDS ngtcp2
+  COMMAND
+    echo ${CMAKE_CURRENT_BINARY_DIR}/usr/local/bin/cli 127.0.0.1 4433
+  VERBATIM
+)
+
+add_custom_target(ngtcp2-server
+  DEPENDS ngtcp2
   COMMAND
     echo ${CMAKE_CURRENT_BINARY_DIR}/usr/local/bin/cli -k ${CMAKE_BINARY_DIR}/lib/src/key.pem -c ${CMAKE_BINARY_DIR}/lib/src/cert.pem 127.0.0.1 4433
   VERBATIM

@@ -19,7 +19,7 @@ include_directories(${LIBEV_INCLUDE})
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
   # on Darwin, try and pick up openssl from homebrew
-  set(CMAKE_PREFIX_PATH /usr/local/opt/openssl)
+  set(CMAKE_PREFIX_PATH /usr/local/opt/openssl@1.1 /usr/local/opt/openssl)
 endif()
 
 find_package(OpenSSL REQUIRED)

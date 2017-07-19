@@ -85,10 +85,13 @@ static ptls_openssl_verify_certificate_t verifier = {0};
 ///
 #define loop_run(func, arg)                                                    \
     do {                                                                       \
+        ensure(api_func == 0 && api_arg == 0, "no API call active");           \
         api_func = (func_ptr)(&(func));                                        \
         api_arg = (arg);                                                       \
-        warn(info, #func "(" #arg ") entering event loop");                    \
+        warn(debug, #func "(" #arg ") entering event loop");                   \
         ev_run(loop, 0);                                                       \
+        api_func = 0;                                                          \
+        api_arg = 0;                                                           \
     } while (0)
 
 
@@ -400,7 +403,6 @@ void q_close_stream(struct q_stream * const s)
 void q_close(struct q_conn * const c)
 {
     if (c->state < CONN_STAT_CLSD) {
-
         warn(warn, "closing %s conn %" PRIx64, conn_type(c), c->id);
 
         // // close all streams
@@ -443,11 +445,8 @@ void q_cleanup(void * const q)
 {
     // close all connections
     struct q_conn *c, *tmp;
-    for (c = SPLAY_MIN(ipnp_splay, &conns_by_ipnp); c != 0; c = tmp) {
-        tmp = SPLAY_NEXT(ipnp_splay, &conns_by_ipnp, c);
-        q_close(c);
-    }
     for (c = SPLAY_MIN(cid_splay, &conns_by_cid); c != 0; c = tmp) {
+        warn(warn, "closing %s conn %" PRIx64, conn_type(c), c->id);
         tmp = SPLAY_NEXT(cid_splay, &conns_by_cid, c);
         q_close(c);
     }

@@ -120,8 +120,9 @@ extern void * api_arg;
 ///
 #define maybe_api_return(func, arg)                                            \
     do {                                                                       \
+        ensure(api_func && api_arg, "API call active");                        \
         if (api_func == (func_ptr)(&(func)) && api_arg == (arg)) {             \
             ev_break(loop, EVBREAK_ALL);                                       \
-            warn(info, #func "(" #arg ") done, exiting event loop");           \
+            warn(debug, #func "(" #arg ") done, exiting event loop");          \
         }                                                                      \
     } while (0)
