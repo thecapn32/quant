@@ -325,7 +325,7 @@ dec_ack_frame(struct q_conn * const c,
 
                     // adjust in_flight
                     c->in_flight -= meta(p).buf_len;
-                    warn(info, "in_flight +%u = %" PRIu64, meta(p).buf_len,
+                    warn(info, "in_flight -%u = %" PRIu64, meta(p).buf_len,
                          c->in_flight);
 
                     // FIXME this is the wrong condition
