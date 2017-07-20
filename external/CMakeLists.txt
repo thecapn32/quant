@@ -90,14 +90,6 @@ externalproject_add(quic-go
 # EXCLUDE_FROM_ALL workaround for older cmake
 set_target_properties(quic-go PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
-add_custom_target(go-client
-                  DEPENDS quic-go
-                  COMMAND ${GOPATH}/bin/client -v https://127.0.0.1:8443/)
-
-add_custom_target(go-server
-                  DEPENDS quic-go
-                  COMMAND ${GOPATH}/bin/example -v -bind 127.0.0.1:8443)
-
 
 # Use minq for testing against
 set(MINQ github.com/ekr/minq)
@@ -112,20 +104,6 @@ externalproject_add(minq
 
 # EXCLUDE_FROM_ALL workaround for older cmake
 set_target_properties(minq PROPERTIES EXCLUDE_FROM_ALL TRUE)
-
-add_custom_target(minq-client
-  DEPENDS minq
-  COMMAND
-    echo env MINQ_LOG=\\* GOPATH=${GOPATH} go run ${GOPATH}/src/${MINQ}/bin/client/main.go
-  VERBATIM
-)
-
-add_custom_target(minq-server
-  DEPENDS minq
-  COMMAND
-    echo env MINQ_LOG=\\* GOPATH=${GOPATH} go run ${GOPATH}/src/${MINQ}/bin/server/main.go
-  VERBATIM
-)
 
 
 # Use quicly for testing against
@@ -143,20 +121,6 @@ externalproject_add(quicly
 
 # EXCLUDE_FROM_ALL workaround for older cmake
 set_target_properties(quicly PROPERTIES EXCLUDE_FROM_ALL TRUE)
-
-add_custom_target(quicly-client
-  DEPENDS quicly
-  COMMAND
-    echo ${CMAKE_CURRENT_BINARY_DIR}/usr/local/bin/cli 127.0.0.1 4433
-  VERBATIM
-)
-
-add_custom_target(quicly-server
-  DEPENDS quicly
-  COMMAND
-    echo ${CMAKE_CURRENT_BINARY_DIR}/usr/local/bin/cli -k ${CMAKE_BINARY_DIR}/lib/src/key.pem -c ${CMAKE_BINARY_DIR}/lib/src/cert.pem 127.0.0.1 4433
-  VERBATIM
-)
 
 
 # Use ngtcp2 for testing against
@@ -182,16 +146,24 @@ externalproject_add(ngtcp2
 # EXCLUDE_FROM_ALL workaround for older cmake
 set_target_properties(ngtcp2 PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
-add_custom_target(ngtcp2-client
-  DEPENDS ngtcp2
-  COMMAND
-    echo ${CMAKE_CURRENT_BINARY_DIR}/ngtcp2-prefix/src/ngtcp2/examples/client 127.0.0.1 4433
-  VERBATIM
+
+# Use mozquic for testing against
+externalproject_add(nss
+  UPDATE_COMMAND ""
+  GIT_REPOSITORY https://github.com/nss-dev/nss.git
+  GIT_TAG NSS_TLS13_DRAFT19_BRANCH
+  CONFIGURE_COMMAND ./build.sh --disable-tests
+  BUILD_IN_SOURCE 1
 )
 
-add_custom_target(ngtcp2-server
-  DEPENDS ngtcp2
-  COMMAND
-    echo ${CMAKE_CURRENT_BINARY_DIR}/ngtcp2-prefix/src/ngtcp2/examples/server 127.0.0.1 4433 ${CMAKE_BINARY_DIR}/lib/src/key.pem ${CMAKE_BINARY_DIR}/lib/src/cert.pem
-  VERBATIM
+externalproject_add(mozquic
+  DEPENDS nss
+  UPDATE_COMMAND ""
+  GIT_REPOSITORY https://github.com/mcmanus/mozquic.git
+  CONFIGURE_COMMAND ""
+  BUILD_IN_SOURCE 1
+  BUILD_COMMAND make
 )
+
+# EXCLUDE_FROM_ALL workaround for older cmake
+set_target_properties(mozquic PROPERTIES EXCLUDE_FROM_ALL TRUE)
