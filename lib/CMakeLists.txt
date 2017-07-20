@@ -59,6 +59,10 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/include/${PROJECT_NAME}/config.h
         DESTINATION include/${PROJECT_NAME})
 
 
+# check for INTERPROCEDURAL_OPTIMIZATION support
+include(CheckIPOSupported)
+check_ipo_supported(RESULT IPO)
+
 set(TARGETS common ${PROJECT_NAME}_stat ${PROJECT_NAME}_dyn)
 foreach(TARGET ${TARGETS})
   target_include_directories(${TARGET}
@@ -74,12 +78,15 @@ foreach(TARGET ${TARGETS})
   set_target_properties(${TARGET}
     PROPERTIES
       POSITION_INDEPENDENT_CODE ON
-      INTERPROCEDURAL_OPTIMIZATION True
       OUTPUT_NAME ${PROJECT_NAME}
       VERSION ${PROJECT_VERSION}
       SOVERSION ${PROJECT_VERSION_MAJOR}
       INTERFACE_POSITION_INDEPENDENT_CODE True
   )
+
+  if (IPO)
+    set_property(TARGET ${TARGET} PROPERTY INTERPROCEDURAL_OPTIMIZATION True)
+  endif()
 
   if(NOT ${TARGET} MATCHES "common")
     target_link_libraries(${TARGET}
