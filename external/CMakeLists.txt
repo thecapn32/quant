@@ -3,6 +3,7 @@ include(ExternalProject)
 externalproject_add(warp
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/NTAP/warpcore.git
+  GIT_SHALLOW 1
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -DDLEVEL=${DLEVEL}
     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DBUILD_DOCUMENTATION=FALSE
@@ -38,6 +39,7 @@ string(REPLACE "-fsanitize=undefined" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
 externalproject_add(picotls
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/h2o/picotls.git
+  GIT_SHALLOW 1
   GIT_TAG kazuho/draft21
   PATCH_COMMAND sed -i "" -e "s/-std=c99 -Wall -O2 -g//" CMakeLists.txt
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
@@ -85,10 +87,8 @@ externalproject_add(quic-go
   BUILD_COMMAND
     cd ${GOPATH}/src/${QUICGO} && env GOPATH=${GOPATH} go get -t -u ./...
   INSTALL_COMMAND ""
+  EXCLUDE_FROM_ALL 1
 )
-
-# EXCLUDE_FROM_ALL workaround for older cmake
-set_target_properties(quic-go PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 
 # Use minq for testing against
@@ -100,16 +100,15 @@ externalproject_add(minq
   BUILD_COMMAND
     cd ${GOPATH}/src/${MINQ} && env GOPATH=${GOPATH} go test
   INSTALL_COMMAND ""
+  EXCLUDE_FROM_ALL 1
 )
-
-# EXCLUDE_FROM_ALL workaround for older cmake
-set_target_properties(minq PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 
 # Use quicly for testing against
 externalproject_add(quicly
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/h2o/quicly.git
+  GIT_SHALLOW 1
   CONFIGURE_COMMAND ""
   BUILD_IN_SOURCE 1
   INSTALL_COMMAND xcodebuild -alltargets -configuration Debug install
@@ -117,53 +116,67 @@ externalproject_add(quicly
     LIBRARY_SEARCH_PATHS=${OPENSSL_ROOT_DIR}/lib
     INSTALL_ROOT=${CMAKE_CURRENT_BINARY_DIR}
   BUILD_COMMAND ""
+  EXCLUDE_FROM_ALL 1
 )
-
-# EXCLUDE_FROM_ALL workaround for older cmake
-set_target_properties(quicly PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 
 # Use ngtcp2 for testing against
 externalproject_add(openssl
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/openssl/openssl.git
+  GIT_SHALLOW 1
   CONFIGURE_COMMAND ./config --prefix=${CMAKE_BINARY_DIR} enable-tls1_3
   BUILD_IN_SOURCE 1
   INSTALL_COMMAND make install_sw
   BUILD_COMMAND make -j16
+  EXCLUDE_FROM_ALL 1
 )
 
 externalproject_add(ngtcp2
   DEPENDS openssl
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/ngtcp2/ngtcp2.git
+  GIT_SHALLOW 1
   PATCH_COMMAND autoreconf -i
   CONFIGURE_COMMAND env CFLAGS=-I${CMAKE_BINARY_DIR}/include CXXFLAGS=-I${CMAKE_BINARY_DIR}/include ./configure --enable-werror --enable-debug --prefix=${CMAKE_BINARY_DIR} --program-prefix=ngtcp2
   BUILD_IN_SOURCE 1
   BUILD_COMMAND make -j16
+  EXCLUDE_FROM_ALL 1
 )
-
-# EXCLUDE_FROM_ALL workaround for older cmake
-set_target_properties(ngtcp2 PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
 
 # Use mozquic for testing against
+externalproject_add(nspr
+  UPDATE_COMMAND ""
+  SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/nss-prefix/src/nspr
+  CONFIGURE_COMMAND ""
+  HG_REPOSITORY https://hg.mozilla.org/projects/nspr
+  BUILD_COMMAND ""
+  INSTALL_COMMAND ""
+  EXCLUDE_FROM_ALL 1
+)
+
 externalproject_add(nss
+  DEPENDS nspr
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/nss-dev/nss.git
+  GIT_SHALLOW 1
   GIT_TAG NSS_TLS13_DRAFT19_BRANCH
-  CONFIGURE_COMMAND ./build.sh --disable-tests
+  CONFIGURE_COMMAND ""
+  BUILD_COMMAND env USE_64=1 make -j16 nss_build_all
   BUILD_IN_SOURCE 1
+  INSTALL_COMMAND env USE_64=1 make -j 16 install
+  EXCLUDE_FROM_ALL 1
 )
 
 externalproject_add(mozquic
   DEPENDS nss
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/mcmanus/mozquic.git
+  GIT_SHALLOW 1
   CONFIGURE_COMMAND ""
   BUILD_IN_SOURCE 1
-  BUILD_COMMAND make
+  BUILD_COMMAND env MOZQUIC_NSS_ROOT=${CMAKE_CURRENT_BINARY_DIR}/nss-prefix/src/ MOZQUIC_NSS_PLATFORM=Darwin16.6.0_cc_64_DBG.OBJ make -j16
+  INSTALL_COMMAND ""
+  EXCLUDE_FROM_ALL 1
 )
-
-# EXCLUDE_FROM_ALL workaround for older cmake
-set_target_properties(mozquic PROPERTIES EXCLUDE_FROM_ALL TRUE)
