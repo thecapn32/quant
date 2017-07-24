@@ -405,12 +405,13 @@ void q_close(struct q_conn * const c)
     if (c->state < CONN_STAT_CLSD) {
         warn(warn, "closing %s conn %" PRIx64, conn_type(c), c->id);
 
-        // // close all streams
-        // struct q_stream *s, *tmp;
-        // for (s = SPLAY_MAX(stream, &c->streams); s; s = tmp) {
-        //     tmp = SPLAY_PREV(stream, &c->streams, s);
-        //     q_close_stream(s);
-        // }
+        // close all streams
+        struct q_stream *s, *tmp;
+        for (s = SPLAY_MAX(stream, &c->streams); s; s = tmp) {
+            tmp = SPLAY_PREV(stream, &c->streams, s);
+            if (s->id != 0)
+                q_close_stream(s);
+        }
 
         c->state = CONN_STAT_CLSD;
         ev_async_send(loop, &c->tx_w);
