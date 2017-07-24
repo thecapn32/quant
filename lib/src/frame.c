@@ -122,10 +122,6 @@ dec_stream_frame(struct q_conn * const c,
         s = new_stream(c, sid);
     }
 
-    ensure(!is_set(F_STREAM_FIN, type) ||
-               (*len || (*len == 0 && off == s->in_off + 1)),
-           "zero-length FIN is at stream offset +1");
-
     // adjust w_iov start and len to stream frame data
     v->buf = &v->buf[i];
     v->len = *len;
@@ -136,30 +132,29 @@ dec_stream_frame(struct q_conn * const c,
                      ") on %s conn %" PRIx64 " str %u: %.*s",
              *len, plural(*len), off, off + *len, conn_type(c), c->id, sid,
              v->len, v->buf);
-
         s->in_off += *len;
-        STAILQ_INSERT_TAIL(&s->i, v, next);
-        s->state = STRM_STATE_OPEN;
+
+        if (is_set(F_STREAM_FIN, type)) {
+            warn(notice, "received FIN on %s conn %" PRIx64 " str %u, state %u",
+                 conn_type(c), c->id, s->id, s->state);
+
+            if (s->state <= STRM_STATE_OPEN)
+                s->state = is_set(STRM_FLAG_NOCL, s->flags) ? STRM_STATE_HCRM
+                                                            : STRM_STATE_CLSD;
+            else if (s->state >= STRM_STATE_HCLO) {
+                maybe_api_return(q_close_stream, s);
+            } else
+                s->state = STRM_STATE_HCRM; // XXX untested
+
+            w_free_iov(w_engine(c->sock), v);
+
+        } else {
+            STAILQ_INSERT_TAIL(&s->i, v, next);
+            s->state = STRM_STATE_OPEN;
+        }
+
         if (s->id != 0)
             maybe_api_return(q_read, s->c);
-        return i + *len;
-    }
-
-    // standalone FIN
-    if (off == s->in_off + 1 && *len == 0 && is_set(F_STREAM_FIN, type)) {
-        warn(notice, "received FIN on %s conn %" PRIx64 " str %u, state %u",
-             conn_type(c), c->id, s->id, s->state);
-
-        if (s->state <= STRM_STATE_OPEN)
-            s->state = is_set(STRM_FLAG_NOCL, s->flags) ? STRM_STATE_HCRM
-                                                        : STRM_STATE_CLSD;
-        else if (s->state >= STRM_STATE_HCLO) {
-            maybe_api_return(q_close_stream, s);
-        } else
-            s->state = STRM_STATE_HCRM; // XXX untested
-
-        w_free_iov(w_engine(c->sock), v);
-        *len = 1; // the FIN consumes stream offset space
         return i + *len;
     }
 
@@ -585,7 +580,6 @@ uint16_t enc_stream_frame(struct q_stream * const s,
         type |= F_STREAM_FIN;
         if (s->state == STRM_STATE_CLSD)
             s->state = STRM_STATE_IDLE;
-        o += dlen ? 0 : 1; // a standalone FIN consumes offset
     }
     // prepend a stream frame header
     const uint8_t off_len = needed_off_len(o);
