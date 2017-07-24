@@ -30,7 +30,7 @@
 #include "fnv_1a.h"
 
 #define MAX_PKT_LEN 1350
-#define MIN_INI_LEN 1200 - FNV_1A_LEN
+#define MIN_INI_LEN 1252 - FNV_1A_LEN
 
 #define F_LONG_HDR 0x80
 #define F_LH_TYPE_VNEG 0x01
