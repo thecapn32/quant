@@ -130,7 +130,7 @@ externalproject_add(openssl
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/openssl/openssl.git
   GIT_SHALLOW 1
-  CONFIGURE_COMMAND ./config --prefix=${CMAKE_BINARY_DIR} enable-tls1_3
+  CONFIGURE_COMMAND ./config --prefix=${CMAKE_CURRENT_BINARY_DIR} enable-tls1_3
   BUILD_IN_SOURCE 1
   INSTALL_COMMAND make install_sw
   BUILD_COMMAND make -j16
@@ -144,10 +144,9 @@ externalproject_add(ngtcp2
   GIT_SHALLOW 1
   PATCH_COMMAND autoreconf -i
   CONFIGURE_COMMAND
-    env CFLAGS=-I${CMAKE_BINARY_DIR}/include
-      CXXFLAGS=-I${CMAKE_BINARY_DIR}/include
-      ./configure --enable-werror --enable-debug --prefix=${CMAKE_BINARY_DIR}
-        --program-prefix=ngtcp2
+    ./configure PKG_CONFIG_PATH=${CMAKE_CURRENT_BINARY_DIR}/lib/pkgconfig
+      --enable-werror --enable-debug --prefix=${CMAKE_CURRENT_BINARY_DIR}
+      --program-prefix=ngtcp2
   BUILD_IN_SOURCE 1
   BUILD_COMMAND make -j16
   EXCLUDE_FROM_ALL 1
