@@ -17,4 +17,6 @@ target_link_libraries(client ${PROJECT_NAME}_dyn)
 add_executable(server server.c)
 target_link_libraries(server ${PROJECT_NAME}_dyn)
 
+add_custom_target(quant DEPENDS client server)
+
 install(TARGETS client server DESTINATION bin)
