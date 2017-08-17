@@ -94,9 +94,14 @@ externalproject_add(quic-go
 # Use minq for testing against
 set(MINQ github.com/ekr/minq)
 externalproject_add(minq
-  DOWNLOAD_COMMAND env GOPATH=${GOPATH} go get ${MINQ} || true
+  DOWNLOAD_COMMAND
+    env GOPATH=${GOPATH} go get ${MINQ} &&
+      env GOPATH=${GOPATH} go get github.com/cloudflare/cfssl/helpers || true
   UPDATE_COMMAND cd ${GOPATH}/src/github.com/ekr/minq && git pull
-  CONFIGURE_COMMAND cd ${GOPATH}/src/github.com/bifurcation/mint && git remote add ekr https://www.github.com/ekr/mint || true && git fetch ekr && git checkout minq_draft_21
+  CONFIGURE_COMMAND
+    cd ${GOPATH}/src/github.com/bifurcation/mint &&
+      git remote add ekr https://www.github.com/ekr/mint || true &&
+      git fetch ekr && git checkout minq_draft_21
   BUILD_COMMAND
     cd ${GOPATH}/src/${MINQ} && env GOPATH=${GOPATH} go test
   INSTALL_COMMAND ""
@@ -138,7 +143,11 @@ externalproject_add(ngtcp2
   GIT_REPOSITORY https://github.com/ngtcp2/ngtcp2.git
   GIT_SHALLOW 1
   PATCH_COMMAND autoreconf -i
-  CONFIGURE_COMMAND env CFLAGS=-I${CMAKE_BINARY_DIR}/include CXXFLAGS=-I${CMAKE_BINARY_DIR}/include ./configure --enable-werror --enable-debug --prefix=${CMAKE_BINARY_DIR} --program-prefix=ngtcp2
+  CONFIGURE_COMMAND
+    env CFLAGS=-I${CMAKE_BINARY_DIR}/include
+      CXXFLAGS=-I${CMAKE_BINARY_DIR}/include
+      ./configure --enable-werror --enable-debug --prefix=${CMAKE_BINARY_DIR}
+        --program-prefix=ngtcp2
   BUILD_IN_SOURCE 1
   BUILD_COMMAND make -j16
   EXCLUDE_FROM_ALL 1
@@ -163,9 +172,9 @@ externalproject_add(nss
   GIT_SHALLOW 1
   GIT_TAG NSS_TLS13_DRAFT19_BRANCH
   CONFIGURE_COMMAND ""
-  BUILD_COMMAND env USE_64=1 make -j16 nss_build_all
+  BUILD_COMMAND env USE_64=1 make nss_build_all
   BUILD_IN_SOURCE 1
-  INSTALL_COMMAND env USE_64=1 make -j 16 install
+  INSTALL_COMMAND env USE_64=1 make install
   EXCLUDE_FROM_ALL 1
 )
 
@@ -176,7 +185,8 @@ externalproject_add(mozquic
   GIT_SHALLOW 1
   CONFIGURE_COMMAND ""
   BUILD_IN_SOURCE 1
-  BUILD_COMMAND env MOZQUIC_NSS_ROOT=${CMAKE_CURRENT_BINARY_DIR}/nss-prefix/src/ MOZQUIC_NSS_PLATFORM=Darwin16.6.0_cc_64_DBG.OBJ make -j16
+  BUILD_COMMAND
+    env NSS_ROOT=${CMAKE_CURRENT_BINARY_DIR}/nss-prefix/src/nss make
   INSTALL_COMMAND ""
   EXCLUDE_FROM_ALL 1
 )
