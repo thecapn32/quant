@@ -59,10 +59,6 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/include/${PROJECT_NAME}/config.h
         DESTINATION include/${PROJECT_NAME})
 
 
-# check for INTERPROCEDURAL_OPTIMIZATION support
-include(CheckIPOSupported)
-check_ipo_supported(RESULT IPO)
-
 set(TARGETS common ${PROJECT_NAME}_stat ${PROJECT_NAME}_dyn)
 foreach(TARGET ${TARGETS})
   target_include_directories(${TARGET}
@@ -71,7 +67,8 @@ foreach(TARGET ${TARGETS})
       $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
       $<INSTALL_INTERFACE:include>
     PRIVATE
-      src $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/external/include>
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+      $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/external/include>
       ${OPENSSL_ROOT_DIR}/include
   )
 
@@ -82,11 +79,8 @@ foreach(TARGET ${TARGETS})
       VERSION ${PROJECT_VERSION}
       SOVERSION ${PROJECT_VERSION_MAJOR}
       INTERFACE_POSITION_INDEPENDENT_CODE True
+      INTERPROCEDURAL_OPTIMIZATION ${IPO}
   )
-
-  if (IPO)
-    set_property(TARGET ${TARGET} PROPERTY INTERPROCEDURAL_OPTIMIZATION True)
-  endif()
 
   if(NOT ${TARGET} MATCHES "common")
     target_link_libraries(${TARGET}

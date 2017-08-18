@@ -37,6 +37,9 @@ if(NOT CMAKE_BUILD_TYPE)
         CACHE STRING "Set build type (default Debug)" FORCE)
 endif()
 
+# Generate compile_commands.json for clang-tidy
+set(CMAKE_EXPORT_COMPILE_COMMANDS True)
+
 # Use modern C
 set(CMAKE_C_STANDARD 11)
 
@@ -64,31 +67,34 @@ endforeach()
 # flags for "Debug" and "None" builds
 set(CMAKE_C_FLAGS_DEBUG "-O0 -g3")
 
+# disable IPO by default
+set(IPO NO)
+
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   # Default debug logging level
   if(NOT DEFINED DLEVEL)
     set(DLEVEL "debug")
   endif()
 
-  # # Set some additional flags for Debug builds
-  # set(FLAGS -fno-omit-frame-pointer -fsanitize=leak -fsanitize=address
-  #     -fsanitize=memory -fsanitize-memory-track-origins -fsanitize=thread
-  #     -fsanitize=undefined -fno-sanitize=alignment)
-  # if(CMAKE_C_COMPILER_ID MATCHES Clang)
-  #   # -fsanitize=undefined does not work on clang
-  #   list(REMOVE_ITEM FLAGS -fsanitize=undefined)
-  # endif()
-  # if(CMAKE_SYSTEM_NAME MATCHES FreeBSD)
-  #   # -fsanitize=leak does not work on clang
-  #   list(REMOVE_ITEM FLAGS -fsanitize=leak)
-  # endif()
-  # foreach(FLAG ${FLAGS})
-  #   string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
-  #   check_c_compiler_flag(${FLAG} ${F})
-  #   if(${F})
-  #     set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${FLAG}")
-  #   endif()
-  # endforeach()
+  # See if we can use the address sanitizer
+  set(CMAKE_REQUIRED_FLAGS -fsanitize=address)
+  check_c_compiler_flag("" _fsanitize_address)
+  if(_fsanitize_address)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address")
+  endif()
+  unset(CMAKE_REQUIRED_FLAGS)
+
+  # Set some additional flags for Debug builds
+  set(FLAGS -fno-omit-frame-pointer -fsanitize-address-use-after-scope
+      -fsanitize=undefined -fsanitize=unsigned-integer-overflow -fno-common
+  )
+  foreach(FLAG ${FLAGS})
+    string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
+    check_c_compiler_flag(${FLAG} ${F})
+    if(${F})
+      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${FLAG}")
+    endif()
+  endforeach()
 
   # Use include-what-you-use to check #includes, if it's installed
   find_program(IWYU NAMES include-what-you-use iwyu)
@@ -102,7 +108,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 
   # Use clang-tidy for extra warnings, if it's installed
   find_program(CLANGTIDY NAMES clang-tidy clang-tidy40 clang-tidy39
-    clang-tidy38 clang-tidy37)
+               clang-tidy38 clang-tidy37)
   if(CLANGTIDY)
     message(STATUS "Found clang-tidy: ${CLANGTIDY}")
     set(CLANG_TIDY_CHECKS *
@@ -116,7 +122,10 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
         -readability-function-size
     )
     string(REPLACE ";" "," CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS}")
-    set(CMAKE_C_CLANG_TIDY ${CLANGTIDY} -checks=${CLANG_TIDY_CHECKS})
+    set(CMAKE_C_CLANG_TIDY ${CLANGTIDY}
+        -analyze-temporary-dtors -system-headers
+        -checks=${CLANG_TIDY_CHECKS}
+    )
   endif()
 else()
   # Default logging level
@@ -124,20 +133,9 @@ else()
     set(DLEVEL "notice")
   endif()
 
-  # See if we can use LTO
-  check_c_compiler_flag(-flto LTO)
-  if(${LTO})
-    # Turn LTO on
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -flto")
-    # Use the correct toolchain for LTO, if enabled
-    if(CMAKE_C_COMPILER_ID MATCHES "Clang")
-      set(CMAKE_AR llvm-ar)
-      set(CMAKE_RANLIB llvm-ranlib)
-    elseif("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
-      set(CMAKE_AR gcc-ar)
-      set(CMAKE_RANLIB gcc-ranlib)
-    endif()
-  endif()
+  # check for INTERPROCEDURAL_OPTIMIZATION support
+  include(CheckIPOSupported)
+  check_ipo_supported(RESULT IPO)
 endif()
 
 # flags for "Release" builds
