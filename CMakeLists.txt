@@ -86,8 +86,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 
   # Set some additional flags for Debug builds
   set(FLAGS -fno-omit-frame-pointer -fsanitize-address-use-after-scope
-      -fsanitize=undefined -fsanitize=unsigned-integer-overflow
-      -fno-sanitize=alignment -fno-common
+      -fsanitize=undefined -fno-sanitize=alignment -fno-common
   )
   foreach(FLAG ${FLAGS})
     string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
