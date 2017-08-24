@@ -103,6 +103,8 @@ idle_alarm(struct ev_loop * const l __attribute__((unused)),
            ev_timer * const w,
            int e __attribute__((unused)))
 {
+    warn(crit, "idle timeout; exiting");
+
     // stop the event loop
     ev_loop_destroy(loop);
 
@@ -382,6 +384,7 @@ void * q_init(const char * const ifname)
 
     warn(info, "%s %s with libev %u.%u ready", quant_name, quant_version,
          ev_version_major(), ev_version_minor());
+    warn(info, "submit bug reports at https://github.com/NTAP/quant/issues");
 
     return w;
 }
