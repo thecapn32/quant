@@ -564,9 +564,13 @@ void rx(struct ev_loop * const l,
         }
     }
 
-    // for all connections that had RX events, check if we need to do a TX
+    // for all connections that had RX events, reset idle timeout and check if
+    // we need to do a TX
     struct q_conn * c;
     SLIST_FOREACH (c, &crx, next) {
+        // reset idle timeout
+        ev_timer_again(loop, &c->idle_alarm);
+
         // is a TX needed for this connection?
         if (is_set(CONN_FLAG_TX, c->flags))
             tx(l, &c->tx_w, 0);

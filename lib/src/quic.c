@@ -50,6 +50,8 @@
 #include "quic.h"
 #include "stream.h"
 
+struct ev_loop;
+
 
 // TODO: many of these globals should move to a per-engine struct
 
@@ -95,6 +97,23 @@ static ptls_openssl_verify_certificate_t verifier = {0};
     } while (0)
 
 
+// TODO: for now, we just exit
+static void __attribute__((noreturn))
+idle_alarm(struct ev_loop * const l __attribute__((unused)),
+           ev_timer * const w,
+           int e __attribute__((unused)))
+{
+    // stop the event loop
+    ev_loop_destroy(loop);
+
+    free(pm);
+
+    struct q_conn * const c = w->data;
+    w_cleanup(w_engine(c->sock));
+    exit(0);
+}
+
+
 static struct q_conn * new_conn(struct w_engine * const w,
                                 const uint64_t cid,
                                 const struct sockaddr_in * const peer,
@@ -134,6 +153,11 @@ static struct q_conn * new_conn(struct w_engine * const w,
     if (peer_name)
         ensure(ptls_set_server_name(c->tls, peer_name, strlen(peer_name)) == 0,
                "ptls_set_server_name");
+
+    // initialize idle timeout
+    c->idle_alarm.data = c;
+    c->idle_alarm.repeat = kIdleTimeout;
+    ev_init(&c->idle_alarm, idle_alarm);
 
     // initialize socket and start an RX/TX watchers
     ev_async_init(&c->tx_w, tx);

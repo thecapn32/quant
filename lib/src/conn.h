@@ -76,6 +76,7 @@ struct q_conn {
 
     // LD state
     ev_timer ld_alarm; ///< Loss detection alarm.
+    ev_timer idle_alarm;
     uint8_t handshake_cnt;
     uint8_t tlp_cnt;
     uint8_t rto_cnt;

@@ -96,6 +96,9 @@ extern ptls_context_t tls_ctx;
 /// Reduction in congestion window when a new loss event is detected.
 #define kLossReductionFactor 0.5
 
+/// Default idle timeout.
+#define kIdleTimeout 10
+
 
 /// Is flag @p f set in flags variable @p v?
 ///
