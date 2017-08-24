@@ -452,6 +452,14 @@ void q_close(struct q_conn * const c)
     ev_io_stop(loop, &c->rx_w);
     ev_timer_stop(loop, &c->ld_alarm);
 
+    // just free stream 0 (no close handshake)
+    struct q_stream * const s = SPLAY_MIN(stream, &c->streams);
+    if (s)
+        free_stream(s);
+    ensure(SPLAY_EMPTY(&c->streams), "streams remain");
+
+    ptls_aead_free(c->in_kp0);
+    ptls_aead_free(c->out_kp0);
     diet_free(&c->closed_streams);
     diet_free(&c->acked_pkts);
     diet_free(&c->recv);
