@@ -1,5 +1,7 @@
 #! /usr/bin/env bash
 
+export PATH="$PATH:~/bin"
+
 mkdir -p ~/quant/Debug
 cd ~/quant/Debug || exit
 git pull
@@ -19,5 +21,6 @@ if [[ -e $path/$filename.$extension ]] ; then
     filename=$filename-$i
 fi
 mv "$name" "$path/$filename.$extension"
+mail -s "$path/$filename.$extension" lars@netapp.com -A "$path/$filename.$extension"
 
 bin/server -i eth0 2>&1 | aha > "$name"
