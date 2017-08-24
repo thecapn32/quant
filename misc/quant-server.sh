@@ -1,7 +1,7 @@
 #! /usr/bin/env bash
 
-mkdir -p ~quant/Debug
-cd ~quant/Debug || exit
+mkdir -p ~/quant/Debug
+cd ~/quant/Debug || exit
 git pull
 cmake -GNinja ..
 ninja
