@@ -1,9 +1,0 @@
-[Unit]
-Description=QUANT server
-
-[Service]
-ExecStart=/home/ubuntu/quant/misc/quant-server.sh
-Restart=always
-
-[Install]
-WantedBy=default.target

@@ -1,0 +1,11 @@
+# systemd unit file to keep quant server running
+
+[Unit]
+Description=Quant server
+
+[Service]
+ExecStart=@CMAKE_CURRENT_BINARY_DIR@/quant-server.sh
+Restart=always
+
+[Install]
+WantedBy=default.target

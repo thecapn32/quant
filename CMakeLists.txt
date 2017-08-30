@@ -151,6 +151,7 @@ add_subdirectory(bin)
 add_subdirectory(doc)
 add_subdirectory(external)
 add_subdirectory(lib)
+add_subdirectory(misc)
 
 enable_testing()
 add_subdirectory(test)

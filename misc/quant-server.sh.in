@@ -1,0 +1,33 @@
+#! /usr/bin/env bash
+
+function make_name() {
+        local path filename extension
+        path=$(dirname "$1")
+        filename=$(basename "$1")
+        extension="${filename##*.}"
+        filename="${filename%.*}"
+        if [[ -e $path/$filename.$extension ]] ; then
+            i=1
+            while [[ -e $path/$filename-$i.$extension ]] ; do
+                let i++
+            done
+            filename=$filename-$i
+        fi
+        echo "$path/$filename.$extension"
+}
+
+
+export PATH="$PATH:~/bin"
+
+mkdir -p @CMAKE_BINARY_DIR@
+cd @CMAKE_BINARY_DIR@ || exit
+git pull
+cmake -GNinja ..
+ninja
+
+name=/var/www/html/index.html
+new=$(make_name $name)
+mv "$name" "$new"
+mail -s "$new" lars@netapp.com -A "$new"
+
+@CMAKE_BINARY_DIR@/bin/server -i eth0 2>&1 | aha > "$name"
