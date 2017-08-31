@@ -319,7 +319,8 @@ struct q_conn * q_accept(struct q_conn * const c)
     }
     c->state = CONN_STAT_ESTB;
 
-    warn(warn, "%s conn %" PRIx64 " connected", conn_type(c), c->id);
+    warn(warn, "%s conn %" PRIx64 " connected to clnt %s:%u", conn_type(c),
+         c->id, inet_ntoa(c->peer.sin_addr), ntohs(c->peer.sin_port));
     return c;
 }
 
