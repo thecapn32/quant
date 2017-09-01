@@ -71,3 +71,11 @@ q_free(void * const w, struct w_iov_stailq * const q);
 extern uint64_t __attribute__((nonnull)) q_cid(const struct q_conn * const c);
 
 extern uint32_t __attribute__((nonnull)) q_sid(const struct q_stream * const s);
+
+extern void __attribute__((nonnull))
+q_write_str(void * const q, struct q_stream * const s, const char * const str);
+
+extern void __attribute__((nonnull)) q_write_file(void * const q,
+                                                  struct q_stream * const s,
+                                                  const int f,
+                                                  const uint32_t len);

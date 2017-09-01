@@ -212,8 +212,9 @@ struct q_conn * q_connect(void * const q,
     tls_handshake(s);
     ev_async_send(loop, &c->tx_w);
 
-    warn(warn, "waiting for connect to complete on %s conn %" PRIx64,
-         conn_type(c), c->id);
+    warn(warn,
+         "waiting for connect to complete on %s conn %" PRIx64 " to %s:%u",
+         conn_type(c), c->id, inet_ntoa(peer->sin_addr), ntohs(peer->sin_port));
     loop_run(q_connect, c);
 
     if (c->state != CONN_STAT_VERS_OK) {
@@ -247,10 +248,6 @@ void q_write(struct q_stream * const s, struct w_iov_stailq * const q)
 
     warn(warn, "wrote %u byte%s on %s conn %" PRIx64 " str %u", qlen,
          plural(qlen), conn_type(s->c), s->c->id, s->id);
-
-    struct w_iov * v = STAILQ_FIRST(q);
-    if (v)
-        warn(crit, "%.*s", v->len, v->buf);
 
     ensure(w_iov_stailq_len(q) == qlen, "payload corrupted, %u != %u",
            w_iov_stailq_len(q), qlen);
