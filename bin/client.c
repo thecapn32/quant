@@ -23,9 +23,10 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <errno.h>
+#include <warpcore/warpcore.h>
+
 #include <getopt.h>
-#include <inttypes.h>
+#include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <stdint.h>
@@ -35,66 +36,56 @@
 #include <sys/param.h>
 #include <sys/socket.h>
 
+#include <http_parser.h>
+
 #include <quant/quant.h>
-#include <warpcore/warpcore.h>
-
-struct q_conn;
 
 
-#define MAX_CONNS 10
-
-
-static void usage(const char * const name,
-                  const char * const ifname,
-                  const char * const dest,
-                  const char * const port,
-                  const long conns)
+static void __attribute__((noreturn))
+usage(const char * const name, const char * const ifname)
 {
-    printf("%s\n", name);
-    printf("\t[-i interface]\t\tinterface to run over; default %s\n", ifname);
-    printf("\t[-d destination]\tdestination; default %s\n", dest);
-    printf("\t[-n connections]\tnumber of connections to start; default %ld\n",
-           conns);
-    printf("\t[-p port]\t\tdestination port; default %s\n", port);
+    printf("%s [options] URL\n", name);
+    printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
 #ifndef NDEBUG
-    printf("\t[-v verbosity]\t\tverbosity level (0-%u, default %u)\n", DLEVEL,
+    printf("\t[-v verbosity]\tverbosity level (0-%u, default %u)\n", DLEVEL,
            _dlevel);
 #endif
+    exit(0);
+}
+
+
+static void set_from_url(char * const var,
+                         const size_t len,
+                         const char * const url,
+                         const struct http_parser_url * const u,
+                         const enum http_parser_url_fields f,
+                         const char * const def)
+{
+    if ((u->field_set & (1 << f)) == 0)
+        strncpy(var, def, len);
+    else
+        strncpy(var, &url[u->field_data[f].off], u->field_data[f].len);
+    var[len - 1] = 0;
 }
 
 
 int main(int argc, char * argv[])
 {
-    char * ifname = (char *)"lo"
+    char ifname[IFNAMSIZ] = "lo"
 #ifndef __linux__
                             "0"
 #endif
         ;
-    char * dest = (char *)"localhost";
-    char * port = (char *)"4433";
-    long conns = 1;
     int ch;
 
-    while ((ch = getopt(argc, argv, "hi:d:p:n:t:"
+    while ((ch = getopt(argc, argv, "hi:"
 #ifndef NDEBUG
                                     "v:"
 #endif
                         )) != -1) {
         switch (ch) {
         case 'i':
-            ifname = optarg;
-            break;
-        case 'd':
-            dest = optarg;
-            break;
-        case 'p':
-            port = optarg;
-            break;
-        case 'n':
-            conns = strtol(optarg, 0, 10);
-            ensure(errno != EINVAL, "could not convert to integer");
-            ensure(conns <= MAX_CONNS, "only support up to %d connections",
-                   MAX_CONNS);
+            strncpy(ifname, optarg, sizeof(ifname) - 1);
             break;
 #ifndef NDEBUG
         case 'v':
@@ -104,10 +95,25 @@ int main(int argc, char * argv[])
         case 'h':
         case '?':
         default:
-            usage(basename(argv[0]), ifname, dest, port, conns);
-            return 0;
+            usage(basename(argv[0]), ifname);
         }
     }
+
+    // parse and verify the URI passed on the command line
+    struct http_parser_url u;
+    http_parser_url_init(&u);
+    char * url = optind == argc ? "" : argv[optind];
+    http_parser_parse_url(url, strlen(url), 0, &u);
+    ensure((u.field_set & (1 << UF_USERINFO)) == 0 &&
+               (u.field_set & (1 << UF_QUERY)) == 0 &&
+               (u.field_set & (1 << UF_FRAGMENT)) == 0,
+           "unsupported URL components");
+
+    // extract relevant info from URL
+    char dest[1024], port[64], path[2048];
+    set_from_url(dest, sizeof(dest), url, &u, UF_HOST, "localhost");
+    set_from_url(port, sizeof(port), url, &u, UF_PORT, "4433");
+    set_from_url(path, sizeof(path), url, &u, UF_PATH, "/");
 
     struct addrinfo * peer;
     const struct addrinfo hints = {.ai_family = PF_INET,
@@ -117,56 +123,30 @@ int main(int argc, char * argv[])
     ensure(err == 0, "getaddrinfo: %s", gai_strerror(err));
     ensure(peer->ai_next == 0, "multiple addresses not supported");
 
-    // start some connections
+    warn(info, "%s retrieving %s", basename(argv[0]), url);
     void * const q = q_init(ifname);
+    struct q_conn * const c =
+        q_connect(q, (struct sockaddr_in *)(void *)peer->ai_addr, dest);
 
-    struct q_conn * c[MAX_CONNS];
-    for (int n = 0; n < conns; n++) {
-        warn(info, "%s starting conn #%d to %s:%s", basename(argv[0]), n, dest,
-             port);
-        c[n] = q_connect(q, (struct sockaddr_in *)(void *)peer->ai_addr, dest);
-        if (!c[n])
-            break;
+    // create an HTTP/0.9 request
+    char req[sizeof(path) + 6];
+    snprintf(req, sizeof(req), "GET %s\r\n", path);
+    struct q_stream * const s = q_rsv_stream(c);
+    q_write_str(q, s, req);
+    q_close_stream(s);
 
-        for (int j = 0; j < 1; j++) {
-            // reserve a new stream
-            struct q_stream * const s = q_rsv_stream(c[n]);
-
-            // allocate buffers to transmit a packet
-            struct w_iov_stailq o = STAILQ_HEAD_INITIALIZER(o);
-            q_alloc(q, &o, 1024);
-            struct w_iov * v = STAILQ_FIRST(&o);
-            ensure(STAILQ_NEXT(v, next) == 0, "w_iov_stailq too long");
-
-            // add some payload data
-            v->len =
-                (uint16_t)snprintf((char *)v->buf, 1024,
-                                   "***HELLO, STR %u ON CONN %" PRIx64 "!***",
-                                   q_sid(s), q_cid(c[n]));
-            ensure(v->len < 1024, "buffer overrun");
-
-            // send the data
-            warn(info, "writing %u byte%s: %s", v->len, plural(v->len),
-                 (char *)v->buf);
-            q_write(s, &o);
-
-            // read data
-            struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
-            q_read(c[n], &i);
-            STAILQ_FOREACH (v, &i, next)
-                warn(info, "%.*s", v->len, v->buf);
-
-            // return the buffer
-            q_free(q, &o);
-        }
-
-        // close the QUIC connection
-        q_close(c[n]);
-    }
+    // read HTTP/0.9 reply and dump it to stdout
+    struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
+    q_read(c, &i);
+    struct w_iov * v;
+    STAILQ_FOREACH (v, &i, next)
+        printf("%.*s", v->len, v->buf);
+    printf("\n");
 
     // clean up
-    freeaddrinfo(peer);
+    q_close(c);
     q_cleanup(q);
+    freeaddrinfo(peer);
     warn(debug, "%s exiting", basename(argv[0]));
     return 0;
 }

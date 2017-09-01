@@ -18,7 +18,7 @@ ninja "$c"
 # commands to run the different clients against 127.0.0.1:$port
 case $c in
         quant)
-                c="bin/client -p $port"
+                c="bin/client https://127.0.0.1:$port/"
                 ;;
         quicly)
                 c="external/usr/local/bin/cli 127.0.0.1 $port"

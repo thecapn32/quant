@@ -28,7 +28,7 @@ offers for HTTP/1.1 and TLS.
 So you need to install some dependencies. On the Mac, the easiest way is via
 [Homebrew](http://brew.sh/), so install that first. Then, do
 
-    brew install cmake libev doxygen
+    brew install cmake libev http-parser doxygen
 
 On Darwin, you *must* also install the Xcode command line tools first:
 

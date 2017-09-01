@@ -47,6 +47,7 @@
 #include "cert.h"
 #include "conn.h"
 #include "diet.h"
+#include "pkt.h"
 #include "quic.h"
 #include "stream.h"
 
@@ -181,7 +182,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
 
 void q_alloc(void * const w, struct w_iov_stailq * const q, const uint32_t len)
 {
-    w_alloc_len(w, q, len, Q_OFFSET);
+    w_alloc_len(w, q, len, MAX_PKT_LEN - AEAD_LEN, Q_OFFSET);
 }
 
 
@@ -203,9 +204,7 @@ struct q_conn * q_connect(void * const q,
     // c->vers = 0xbabababa; // XXX reserved version to trigger negotiation
     c->vers = ok_vers[0];
     c->next_sid = 1; // client initiates odd-numbered streams
-    w_connect(c->sock,
-              ((const struct sockaddr_in *)(const void *)peer)->sin_addr.s_addr,
-              ((const struct sockaddr_in *)(const void *)peer)->sin_port);
+    w_connect(c->sock, peer->sin_addr.s_addr, peer->sin_port);
 
     // allocate stream zero and start TLS handshake on stream 0
     struct q_stream * const s = new_stream(c, 0);

@@ -142,7 +142,8 @@ uint32_t tls_handshake(struct q_stream * const s)
     size_t in_len = iv ? iv->len : 0;
 
     // allocate a new w_iov
-    struct w_iov * ov = w_alloc_iov(w_engine(s->c->sock), Q_OFFSET);
+    struct w_iov * ov =
+        w_alloc_iov(w_engine(s->c->sock), MAX_PKT_LEN, Q_OFFSET);
     ptls_buffer_init(&meta(ov).tb, ov->buf, ov->len);
     const int ret =
         ptls_handshake(s->c->tls, &meta(ov).tb, iv ? iv->buf : 0, &in_len, 0);
@@ -161,12 +162,10 @@ uint32_t tls_handshake(struct q_stream * const s)
              s->c->id, s->c->state);
     }
 
-    if ((ret == 0 || ret == PTLS_ERROR_IN_PROGRESS) && ov->len != 0) {
+    if ((ret == 0 || ret == PTLS_ERROR_IN_PROGRESS) && ov->len != 0)
         // enqueue for TX
-        ov->ip = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_addr.s_addr;
-        ov->port = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_port;
         STAILQ_INSERT_TAIL(&s->o, ov, next);
-    } else
+    else
         // we are done with the handshake, no need to TX after all
         w_free_iov(w_engine(s->c->sock), ov);
 
@@ -278,8 +277,12 @@ static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
     }
 
     // transmit encrypted/protected packets and then free the chain
+    if (is_serv(c))
+        w_connect(c->sock, c->peer.sin_addr.s_addr, c->peer.sin_port);
     w_tx(c->sock, &x);
     w_nic_tx(w_engine(c->sock));
+    if (is_serv(c))
+        w_disconnect(c->sock);
     w_free(w_engine(c->sock), &x);
 }
 
@@ -295,9 +298,8 @@ rtx(struct q_conn * const c, const uint32_t __attribute__((unused)) n)
 
 static void tx_ack_or_fin(struct q_stream * const s)
 {
-    struct w_iov * const ov = w_alloc_iov(w_engine(s->c->sock), Q_OFFSET);
-    ov->ip = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_addr.s_addr;
-    ov->port = ((struct sockaddr_in *)(void *)&s->c->peer)->sin_port;
+    struct w_iov * const ov =
+        w_alloc_iov(w_engine(s->c->sock), MAX_PKT_LEN, Q_OFFSET);
     ov->len = 0;
     STAILQ_INSERT_TAIL(&s->o, ov, next);
     do_tx(s->c, s, &s->o);
@@ -385,9 +387,9 @@ void rx(struct ev_loop * const l,
             // TODO figure out why recvmmsg returns zero-length iovecs
             continue;
         // warn(debug, "recv %u bytes", v->len);
-        ensure(v->len <= MAX_PKT_LEN,
-               "received %u-byte packet, larger than MAX_PKT_LEN of %u", v->len,
-               MAX_PKT_LEN);
+        if (v->len > MAX_PKT_LEN)
+            warn(err, "received %u-byte packet (> %u max); accepting", v->len,
+                 MAX_PKT_LEN);
         const uint16_t hdr_len = pkt_hdr_len(v->buf, v->len);
         ensure(v->len >= hdr_len,
                "%u-byte packet not large enough for %u-byte header", v->len,
@@ -455,10 +457,10 @@ void rx(struct ev_loop * const l,
         } else
             v->len = dec_aead(c, v, hdr_len);
 
-#ifndef NDEBUG
-        if (_dlevel == debug)
-            hexdump(v->buf, v->len);
-#endif
+        // #ifndef NDEBUG
+        //         if (_dlevel == debug)
+        //             hexdump(v->buf, v->len);
+        // #endif
 
         // remember that we had a RX event on this connection
         if (!is_set(CONN_FLAG_RX, c->flags)) {

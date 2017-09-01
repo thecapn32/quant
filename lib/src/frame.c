@@ -135,16 +135,18 @@ dec_stream_frame(struct q_conn * const c,
         s->in_off += *len;
 
         if (is_set(F_STREAM_FIN, type)) {
-            warn(notice, "received FIN on %s conn %" PRIx64 " str %u, state %u",
-                 conn_type(c), c->id, s->id, s->state);
+            const uint8_t old_state = s->state;
 
             if (s->state <= STRM_STATE_OPEN)
-                s->state = is_set(STRM_FLAG_NOCL, s->flags) ? STRM_STATE_HCRM
-                                                            : STRM_STATE_CLSD;
-            else if (s->state >= STRM_STATE_HCLO) {
+                s->state = STRM_STATE_HCRM;
+            else if (s->state >= STRM_STATE_HCLO)
                 maybe_api_return(q_close_stream, s);
-            } else
+            else
                 s->state = STRM_STATE_HCRM; // XXX untested
+
+            warn(notice,
+                 "received FIN on %s conn %" PRIx64 " str %u, state %u -> %u",
+                 conn_type(c), c->id, s->id, old_state, s->state);
 
             w_free_iov(w_engine(c->sock), v);
 

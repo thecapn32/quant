@@ -23,49 +23,105 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <quant/quant.h>
+#include <warpcore/warpcore.h>
+
+#include <fcntl.h>
 #include <getopt.h>
 #include <inttypes.h>
+#include <net/if.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/param.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
-#include <quant/quant.h>
-#include <warpcore/warpcore.h>
+#include <http_parser.h>
 
 
-static void
-usage(const char * const name, const char * const ifname, const uint16_t port)
+static void __attribute__((noreturn)) usage(const char * const name,
+                                            const char * const ifname,
+                                            const uint16_t port,
+                                            const char * const dir)
 {
-    printf("%s\n", name);
+    printf("%s [options]\n", name);
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
     printf("\t[-p port]\tdestination port; default %d\n", port);
+    printf("\t[-d dir]\tserver root directory; default %s\n", dir);
 #ifndef NDEBUG
-    printf("\t[-v verbosity]\t\tverbosity level (0-%u, default %u)\n", DLEVEL,
+    printf("\t[-v verbosity]\tverbosity level (0-%u, default %u)\n", DLEVEL,
            _dlevel);
 #endif
+    exit(0);
+}
+
+
+struct cb_data {
+    struct q_stream * s;
+    struct q_conn * c;
+    void * q;
+    int dir;
+    uint32_t _dummy;
+};
+
+
+static int serve_cb(http_parser * parser, const char * at, size_t len)
+{
+    const struct cb_data * const d = parser->data;
+    warn(info, "conn %" PRIx64 " str %u serving URL %.*s", q_cid(d->c),
+         q_sid(d->s), (int)len, at);
+
+    char path[MAXPATHLEN] = ".";
+    strncpy(&path[*at == '/' ? 1 : 0], at, MIN(len, sizeof(path) - 1));
+
+    struct stat info;
+    int r = fstatat(d->dir, path, &info, 0);
+    ensure(r != -1, "could not stat");
+
+    // if this a directory, look up its index
+    if (info.st_mode & S_IFDIR) {
+        strncat(path, "/index.html", sizeof(path) - len - 1);
+        r = fstatat(d->dir, path, &info, 0);
+        ensure(r != -1, "could not stat");
+    }
+    ensure(info.st_mode & S_IFREG || info.st_mode & S_IFLNK, "%s is not a file",
+           path);
+    ensure(info.st_size < UINT32_MAX, "file %s too long", path);
+
+    const int f = openat(d->dir, path, O_RDONLY);
+    ensure(f != -1, "could not open %s", path);
+
+    q_write_file(d->q, d->s, f, (uint32_t)info.st_size);
+    q_close_stream(d->s);
+
+    return 0;
 }
 
 
 int main(int argc, char * argv[])
 {
-    char * ifname = (char *)"lo"
+    char ifname[IFNAMSIZ] = "lo"
 #ifndef __linux__
                             "0"
 #endif
         ;
+    char dir[MAXPATHLEN] = "/Users/lars/Sites/lars/output";
     uint16_t port = 4433;
     int ch;
 
-    while ((ch = getopt(argc, argv, "hi:p:t:"
+    while ((ch = getopt(argc, argv, "hi:p:d:"
 #ifndef NDEBUG
                                     "v:"
 #endif
                         )) != -1) {
         switch (ch) {
         case 'i':
-            ifname = optarg;
+            strncpy(ifname, optarg, sizeof(ifname) - 1);
+            break;
+        case 'd':
+            strncpy(dir, optarg, sizeof(dir) - 1);
             break;
         case 'p':
             port = (uint16_t)MIN(UINT16_MAX, strtol(optarg, 0, 10));
@@ -78,35 +134,41 @@ int main(int argc, char * argv[])
         case 'h':
         case '?':
         default:
-            usage(basename(argv[0]), ifname, port);
-            return 0;
+            usage(basename(argv[0]), ifname, port, dir);
         }
     }
+
+    const int dir_fd = open(dir, O_RDONLY);
+    ensure(dir_fd != -1, "%s does not exist", dir);
 
     void * const q = q_init(ifname);
     struct q_conn * c = q_bind(q, port);
     warn(debug, "%s waiting on %s port %d", basename(argv[0]), ifname, port);
-    if (q_accept(c)) {
-        struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
-        struct q_stream * s = q_read(c, &i);
-        if (s) {
-#ifndef NDEBUG
-            const uint32_t len = w_iov_stailq_len(&i);
-            warn(info, "rx %u byte%s on str %d on conn %" PRIx64, len,
-                 plural(len), q_sid(s), q_cid(c));
-#endif
-            struct w_iov * v;
-            STAILQ_FOREACH (v, &i, next)
-                warn(info, "%.*s", v->len, v->buf);
 
-            s = q_rsv_stream(c);
-            q_write(s, &i);
+    if (q_accept(c) == 0)
+        goto done;
 
-            q_free(q, &i);
-        }
-        q_close(c);
+    http_parser_settings settings = {.on_url = serve_cb};
+    struct cb_data d = {.c = c, .q = q, .dir = dir_fd};
+    http_parser parser = {.data = &d};
+    http_parser_init(&parser, HTTP_REQUEST);
+
+    struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
+    struct q_stream * s = q_read(c, &i);
+    d.s = s;
+
+    struct w_iov * v;
+    STAILQ_FOREACH (v, &i, next) {
+        // warn(info, "%.*s", v->len, v->buf);
+        const size_t parsed =
+            http_parser_execute(&parser, &settings, (char *)v->buf, v->len);
+        ensure(parsed == v->len, "HTTP parser error");
     }
 
+    q_free(q, &i);
+    q_close(c);
+
+done:
     q_cleanup(q);
     warn(debug, "%s exiting", basename(argv[0]));
     return 0;

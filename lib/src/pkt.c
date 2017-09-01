@@ -134,10 +134,6 @@ void enc_pkt(struct q_conn * const c,
     uint16_t i = 0;
     uint8_t flags = 0;
 
-    meta(v).nr =
-        c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv) : c->lg_sent++;
-    // TODO: increase by random offset
-
     warn(debug, "%s conn state %u", conn_type(c), c->state);
     switch (c->state) {
     case CONN_STAT_VERS_SENT:
@@ -167,6 +163,10 @@ void enc_pkt(struct q_conn * const c,
              pkt_flags(v->buf), flags);
         return;
     }
+
+    meta(v).nr =
+        c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv) : c->lg_sent++;
+    // TODO: increase by random offset
 
     enc(v->buf, v->len, i, &flags, 0, "0x%02x");
 
@@ -208,47 +208,46 @@ void enc_pkt(struct q_conn * const c,
         i += enc_conn_close_frame(c, v->buf, v->len, i, CONN_CLOS_ERR_NO_ERROR,
                                   reas, sizeof(reas));
         maybe_api_return(q_close, c);
-        goto protect;
-    }
-
-    // if we've been passed a stream pointer, we need to prepend a stream frame
-    // header to the data (otherwise, it's an RTX)
-    if (s) {
-        // pad out the rest of Q_OFFSET
-        enc_padding_frame(v->buf, i, Q_OFFSET - i);
-
-        // encode any stream data present
-        if (v->len > Q_OFFSET || s->state >= STRM_STATE_HCLO) {
-            i = enc_stream_frame(s, v, s->out_off);
-
-            // increase the stream data offset
-            s->out_nr = meta(v).nr;
-            s->out_off += i - Q_OFFSET;
-        }
-
-        if (c->state == CONN_STAT_VERS_SENT)
-            v->len = i += enc_padding_frame(v->buf, i, MIN_INI_LEN - i);
-
-        // store final packet length and number
-        meta(v).buf_len = i;
 
     } else {
-        // this is a RTX, pad out until beginning of stream header
-        enc_padding_frame(v->buf, i, meta(v).head_start - i);
-        // skip over existing stream header and data
-        v->len = i = meta(v).buf_len;
-        // warn(debug, "RTX %u", i);
+        // if we've been passed a stream pointer, we need to prepend a stream
+        // frame
+        // header to the data (otherwise, it's an RTX)
+        if (s) {
+            // pad out the rest of Q_OFFSET
+            enc_padding_frame(v->buf, i, Q_OFFSET - i);
+
+            // encode any stream data present
+            if (v->len > Q_OFFSET || s->state >= STRM_STATE_HCLO) {
+                i = enc_stream_frame(s, v, s->out_off);
+
+                // increase the stream data offset
+                s->out_nr = meta(v).nr;
+                s->out_off += i - Q_OFFSET;
+            }
+
+            if (c->state == CONN_STAT_VERS_SENT)
+                v->len = i += enc_padding_frame(v->buf, i, MIN_INI_LEN - i);
+
+            // store final packet length and number
+            meta(v).buf_len = i;
+
+        } else {
+            // this is a RTX, pad out until beginning of stream header
+            enc_padding_frame(v->buf, i, meta(v).head_start - i);
+            // skip over existing stream header and data
+            v->len = i = meta(v).buf_len;
+            // warn(debug, "RTX %u", i);
+        }
     }
 
-protect:
-
-#ifndef NDEBUG
-    if (_dlevel == debug)
-        hexdump(v->buf, v->len);
-#endif
+    // #ifndef NDEBUG
+    //     if (_dlevel == debug)
+    //         hexdump(v->buf, v->len);
+    // #endif
 
     // alloc a new buffer to encrypt/sign into for TX
-    struct w_iov * const x = w_alloc_iov(w_engine(c->sock), 0);
+    struct w_iov * const x = w_alloc_iov(w_engine(c->sock), MAX_PKT_LEN, 0);
     x->ip = v->ip;
     x->port = v->port;
     x->flags = v->flags;

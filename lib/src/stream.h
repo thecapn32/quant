@@ -57,7 +57,7 @@ struct q_stream {
 #define STRM_STATE_HCLO 3 ///< "half closed local"
 #define STRM_STATE_CLSD 4
 
-#define STRM_FLAG_NOCL 0x01 ///< close only on explicit q_close_stream()
+// #define STRM_FLAG_NOCL 0x01 ///< close only on explicit q_close_stream()
 
 
 extern int32_t __attribute__((nonnull))
