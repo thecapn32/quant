@@ -59,6 +59,15 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/include/${PROJECT_NAME}/config.h
         DESTINATION include/${PROJECT_NAME})
 
 
+find_library(LIBEV_LIB NAMES ev)
+if(NOT LIBEV_LIB)
+  message(FATAL_ERROR "libev not found")
+endif()
+find_path(LIBEV_INCLUDE ev.h PATH_SUFFIXES include/ev include)
+find_package_handle_standard_args(libev DEFAULT_MSG LIBEV_LIB LIBEV_INCLUDE)
+include_directories(${LIBEV_INCLUDE})
+
+
 set(TARGETS common ${PROJECT_NAME}_stat ${PROJECT_NAME}_dyn)
 foreach(TARGET ${TARGETS})
   target_include_directories(${TARGET}
@@ -84,8 +93,7 @@ foreach(TARGET ${TARGETS})
 
   if(NOT ${TARGET} MATCHES "common")
     target_link_libraries(${TARGET}
-      warpcore ptls-core ptls-minicrypto ptls-openssl
-      ${LIBEV_LIB} Threads::Threads)
+      warpcore ptls-core ptls-minicrypto ptls-openssl ${LIBEV_LIB})
 
     install(TARGETS ${TARGET}
       EXPORT ${TARGET}
