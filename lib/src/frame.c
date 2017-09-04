@@ -115,7 +115,7 @@ dec_stream_frame(struct q_conn * const c,
     struct q_stream * s = get_stream(c, sid);
     if (s == 0) {
         if (diet_find(&c->closed_streams, sid)) {
-            warn(warn, "ignoring frame for closed str %u on %s conn %" PRIx64,
+            warn(WRN, "ignoring frame for closed str %u on %s conn %" PRIx64,
                  sid, conn_type(c), c->id);
             return i + *len;
         }
@@ -128,10 +128,10 @@ dec_stream_frame(struct q_conn * const c,
 
     // best case: new in-order data
     if (off == s->in_off) {
-        warn(notice, "%u byte%s new data (off %" PRIu64 "-%" PRIu64
-                     ") on %s conn %" PRIx64 " str %u: %.*s",
-             *len, plural(*len), off, off + *len, conn_type(c), c->id, sid,
-             v->len, v->buf);
+        warn(NTE, "%u byte%s new data (off %" PRIu64 "-%" PRIu64
+                  ") on %s conn %" PRIx64 " str %u",
+             *len, plural(*len), off, off + *len, conn_type(c), c->id, sid);
+        warn(DBG, "%.*s", v->len, v->buf);
         s->in_off += *len;
 
         if (is_set(F_STREAM_FIN, type)) {
@@ -144,7 +144,7 @@ dec_stream_frame(struct q_conn * const c,
             else
                 s->state = STRM_STATE_HCRM; // XXX untested
 
-            warn(notice,
+            warn(NTE,
                  "received FIN on %s conn %" PRIx64 " str %u, state %u -> %u",
                  conn_type(c), c->id, s->id, old_state, s->state);
 
@@ -162,10 +162,10 @@ dec_stream_frame(struct q_conn * const c,
 
     // data is a complete duplicate
     if (off + *len <= s->in_off) {
-        warn(notice, "%u byte%s dup data (off %" PRIu64 "-%" PRIu64
-                     ") on %s conn %" PRIx64 " str %u: %.*s",
-             *len, plural(*len), off, off + *len, conn_type(c), c->id, sid,
-             v->len, v->buf);
+        warn(NTE, "%u byte%s dup data (off %" PRIu64 "-%" PRIu64
+                  ") on %s conn %" PRIx64 " str %u",
+             *len, plural(*len), off, off + *len, conn_type(c), c->id, sid);
+        warn(DBG, "%.*s", v->len, v->buf);
         w_free_iov(w_engine(c->sock), v);
         return i + *len;
     }
@@ -204,18 +204,20 @@ static uint8_t __attribute__((const)) dec_ack_block_len(const uint8_t flags)
 static struct w_iov * __attribute__((nonnull))
 find_sent_pkt(struct q_conn * const c, const uint64_t nr)
 {
-    // warn(debug, "find_sent_pkt %" PRIu64, nr);
+    // warn(DBG, "find_sent_pkt %" PRIu64, nr);
     // check if packed is in the unACKed queue
     struct w_iov * v;
     STAILQ_FOREACH (v, &c->sent_pkts, next) {
-        // warn(debug, "sent_pkts %" PRIu64, meta(v).nr);
+        // warn(DBG, "sent_pkts %" PRIu64, meta(v).nr);
         if (meta(v).nr == nr)
             return v;
     }
 
     // check if packet was sent and already ACKed
-    if (diet_find(&c->acked_pkts, nr))
+    if (diet_find(&c->acked_pkts, nr)) {
+        // warn(DBG, "pkt %" PRIu64 " already ACKed", nr);
         return 0;
+    }
 
     die("we never sent packet %" PRIu64, nr);
     return 0;
@@ -265,7 +267,7 @@ dec_ack_frame(struct q_conn * const c,
             c->rttvar = .75 * c->rttvar + .25 * (c->srtt - c->latest_rtt);
             c->srtt = .875 * c->srtt + .125 * c->latest_rtt;
         }
-        warn(debug, "%s conn %" PRIx64 " srtt = %f, rttvar = %f", conn_type(c),
+        warn(DBG, "%s conn %" PRIx64 " srtt = %f, rttvar = %f", conn_type(c),
              c->id, c->srtt, c->rttvar);
     }
 
@@ -286,11 +288,11 @@ dec_ack_frame(struct q_conn * const c,
 
         // find all newly ACKed packets
         while (ack >= lg_ack - l) {
+            warn(INF, "pkt %" PRIu64 " had ACK for %" PRIu64, n, ack);
             p = find_sent_pkt(c, ack);
             if (p && ++meta(p).ack_cnt == 1) {
                 // this is a newly ACKed packet
-                warn(notice, "pkt %" PRIu64 " had first ACK for %" PRIu64, n,
-                     ack);
+                warn(NTE, "pkt %" PRIu64 " had first ACK for %" PRIu64, n, ack);
                 c->lg_acked = MAX(c->lg_acked, ack);
 
                 // see OnPacketAcked pseudo code (for LD):
@@ -311,7 +313,7 @@ dec_ack_frame(struct q_conn * const c,
                         c->cwnd += p->len;
                     else
                         c->cwnd += p->len / c->cwnd;
-                    warn(info, "cwnd now %" PRIu64, c->cwnd);
+                    warn(INF, "cwnd now %" PRIu64, c->cwnd);
                 }
 
                 STAILQ_REMOVE(&c->sent_pkts, p, w_iov, next);
@@ -322,10 +324,12 @@ dec_ack_frame(struct q_conn * const c,
 
                     // adjust in_flight
                     c->in_flight -= meta(p).buf_len;
-                    warn(info, "in_flight -%u = %" PRIu64, meta(p).buf_len,
+                    warn(INF, "in_flight -%u = %" PRIu64, meta(p).buf_len,
                          c->in_flight);
 
                     // FIXME this is the wrong condition
+                    warn(CRT, "c->lg_acked %" PRIu64 ">= s->out_nr %" PRIu64,
+                         c->lg_acked, s->out_nr);
                     if (c->state == CONN_STAT_ESTB &&
                         s->state == STRM_STATE_OPEN && c->lg_acked >= s->out_nr)
                         maybe_api_return(q_write, s);
@@ -349,19 +353,19 @@ dec_ack_frame(struct q_conn * const c,
     set_ld_alarm(c);
 
     for (uint8_t b = 0; b < num_ts; b++) {
-        warn(debug, "decoding timestamp block #%u", b);
+        warn(DBG, "decoding timestamp block #%u", b);
         uint8_t delta_lg_obs = 0;
         dec(delta_lg_obs, v->buf, v->len, i, 0, "%u");
         uint32_t ts = 0;
         dec(ts, v->buf, v->len, i, b == 0 ? 4 : 2, "%u");
     }
-    warn(debug, "done dec ACKs");
+    warn(DBG, "done dec ACKs");
     return i;
 }
 
 
 static uint16_t __attribute__((nonnull))
-dec_conn_close_frame(struct q_conn * const c,
+dec_conn_close_frame(struct q_conn * const c __attribute__((unused)),
                      const struct w_iov * const v,
                      const uint16_t pos)
 {
@@ -380,11 +384,11 @@ dec_conn_close_frame(struct q_conn * const c,
         char reas_phr[UINT16_MAX];
         memcpy(reas_phr, &v->buf[i], reas_len);
         i += reas_len;
-        warn(notice, "conn close reason: %.*s", reas_len, reas_phr);
+        warn(NTE, "conn close reason: %.*s", reas_len, reas_phr);
     }
 
-    c->state = CONN_STAT_IDLE;
-    ev_break(loop, EVBREAK_ALL);
+    // c->state = CONN_STAT_IDLE;
+    // ev_break(loop, EVBREAK_ALL);
 
     return i;
 }
@@ -399,7 +403,7 @@ bool dec_frames(struct q_conn * const c, struct w_iov * const v)
     while (i < v->len) {
         const uint8_t type = ((const uint8_t * const)(v->buf))[i];
         if (pad_start && (type != FRAM_TYPE_PAD || i == v->len - 1)) {
-            warn(debug, "skipped padding in [%u..%u]", pad_start, i);
+            warn(DBG, "skipped padding in [%u..%u]", pad_start, i);
             pad_start = 0;
         }
 
@@ -434,7 +438,7 @@ bool dec_frames(struct q_conn * const c, struct w_iov * const v)
 uint16_t
 enc_padding_frame(uint8_t * const buf, const uint16_t pos, const uint16_t len)
 {
-    warn(debug, "encoding padding frame into [%u..%u]", pos, pos + len - 1);
+    warn(DBG, "encoding padding frame into [%u..%u]", pos, pos + len - 1);
     memset(&((uint8_t *)buf)[pos], FRAM_TYPE_PAD, len);
     return len;
 }
@@ -517,7 +521,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
         }
         prev_lo = b->lo;
         const uint64_t ack_block = b->hi - b->lo;
-        warn(notice, "ACKing %" PRIu64 "-%" PRIu64, b->lo, b->hi);
+        warn(NTE, "ACKing %" PRIu64 "-%" PRIu64, b->lo, b->hi);
         enc(buf, len, i, &ack_block, ack_block_len, "%" PRIu64);
     }
     return i - pos;
@@ -563,8 +567,9 @@ uint16_t enc_stream_frame(struct q_stream * const s,
     ensure(dlen || s->state > STRM_STATE_OPEN,
            "no stream data or need to send FIN");
 
-    warn(info, "%u byte%s at off %" PRIu64 "-%" PRIu64 " on str %u: %.*s", dlen,
-         plural(dlen), off, off + dlen, s->id, dlen, &v->buf[Q_OFFSET]);
+    warn(INF, "%u byte%s at off %" PRIu64 "-%" PRIu64 " on str %u", dlen,
+         plural(dlen), off, off + dlen, s->id);
+    warn(DBG, "%.*s", dlen, &v->buf[Q_OFFSET]);
 
     uint64_t o = off;
     const uint8_t sid_len = needed_sid_len(s->id);
@@ -577,7 +582,7 @@ uint16_t enc_stream_frame(struct q_stream * const s,
         (s->state == STRM_STATE_HCLO &&
          (STAILQ_NEXT(STAILQ_FIRST(&s->o), next) == 0 ||
           STAILQ_EMPTY(&s->o)))) {
-        warn(notice, "sending FIN on %s conn %" PRIx64 " str %u, state %u",
+        warn(NTE, "sending FIN on %s conn %" PRIx64 " str %u, state %u",
              conn_type(s->c), s->c->id, s->id, s->state);
         type |= F_STREAM_FIN;
         if (s->state == STRM_STATE_CLSD)

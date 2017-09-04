@@ -23,9 +23,6 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <quant/quant.h>
-#include <warpcore/warpcore.h>
-
 #include <fcntl.h>
 #include <getopt.h>
 #include <inttypes.h>
@@ -39,6 +36,10 @@
 #include <sys/types.h>
 
 #include <http_parser.h>
+
+#include <quant/quant.h>
+// IWYU pragma: no_include <sys/queue.h>
+#include <warpcore/warpcore.h>
 
 
 static void __attribute__((noreturn)) usage(const char * const name,
@@ -70,7 +71,7 @@ struct cb_data {
 static int serve_cb(http_parser * parser, const char * at, size_t len)
 {
     const struct cb_data * const d = parser->data;
-    warn(info, "conn %" PRIx64 " str %u serving URL %.*s", q_cid(d->c),
+    warn(INF, "conn %" PRIx64 " str %u serving URL %.*s", q_cid(d->c),
          q_sid(d->s), (int)len, at);
 
     char path[MAXPATHLEN] = ".";
@@ -102,6 +103,7 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
 
 int main(int argc, char * argv[])
 {
+    _dlevel = DLEVEL; // default to maximum compiled-in verbosity
     char ifname[IFNAMSIZ] = "lo"
 #ifndef __linux__
                             "0"
@@ -128,7 +130,7 @@ int main(int argc, char * argv[])
             break;
 #ifndef NDEBUG
         case 'v':
-            _dlevel = (uint32_t)MIN(DLEVEL, strtoul(optarg, 0, 10));
+            _dlevel = (short)MIN(DLEVEL, strtoul(optarg, 0, 10));
             break;
 #endif
         case 'h':
@@ -143,7 +145,7 @@ int main(int argc, char * argv[])
 
     void * const q = q_init(ifname);
     struct q_conn * c = q_bind(q, port);
-    warn(debug, "%s waiting on %s port %d", basename(argv[0]), ifname, port);
+    warn(DBG, "%s waiting on %s port %d", basename(argv[0]), ifname, port);
 
     if (q_accept(c) == 0)
         goto done;
@@ -159,7 +161,7 @@ int main(int argc, char * argv[])
 
     struct w_iov * v;
     STAILQ_FOREACH (v, &i, next) {
-        // warn(info, "%.*s", v->len, v->buf);
+        // warn(INF, "%.*s", v->len, v->buf);
         const size_t parsed =
             http_parser_execute(&parser, &settings, (char *)v->buf, v->len);
         ensure(parsed == v->len, "HTTP parser error");
@@ -170,6 +172,6 @@ int main(int argc, char * argv[])
 
 done:
     q_cleanup(q);
-    warn(debug, "%s exiting", basename(argv[0]));
+    warn(DBG, "%s exiting", basename(argv[0]));
     return 0;
 }

@@ -23,13 +23,10 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <warpcore/warpcore.h>
-
 #include <getopt.h>
 #include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,6 +36,8 @@
 #include <http_parser.h>
 
 #include <quant/quant.h>
+// IWYU pragma: no_include <sys/queue.h>
+#include <warpcore/warpcore.h>
 
 
 static void __attribute__((noreturn))
@@ -71,6 +70,7 @@ static void set_from_url(char * const var,
 
 int main(int argc, char * argv[])
 {
+    _dlevel = DLEVEL; // default to maximum compiled-in verbosity
     char ifname[IFNAMSIZ] = "lo"
 #ifndef __linux__
                             "0"
@@ -89,7 +89,7 @@ int main(int argc, char * argv[])
             break;
 #ifndef NDEBUG
         case 'v':
-            _dlevel = (uint32_t)MIN(DLEVEL, strtoul(optarg, 0, 10));
+            _dlevel = (short)MIN(DLEVEL, strtoul(optarg, 0, 10));
             break;
 #endif
         case 'h':
@@ -123,7 +123,7 @@ int main(int argc, char * argv[])
     ensure(err == 0, "getaddrinfo: %s", gai_strerror(err));
     ensure(peer->ai_next == 0, "multiple addresses not supported");
 
-    warn(info, "%s retrieving %s", basename(argv[0]), url);
+    warn(INF, "%s retrieving %s", basename(argv[0]), url);
     void * const q = q_init(ifname);
     struct q_conn * const c =
         q_connect(q, (struct sockaddr_in *)(void *)peer->ai_addr, dest);
@@ -147,6 +147,6 @@ int main(int argc, char * argv[])
     q_close(c);
     q_cleanup(q);
     freeaddrinfo(peer);
-    warn(debug, "%s exiting", basename(argv[0]));
+    warn(DBG, "%s exiting", basename(argv[0]));
     return 0;
 }

@@ -65,14 +65,14 @@ struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
     if (id)
         c->next_sid += 2;
     SPLAY_INSERT(stream, &c->streams, s);
-    warn(info, "reserved str %u on %s conn %" PRIx64, id, conn_type(c), c->id);
+    warn(INF, "reserved str %u on %s conn %" PRIx64, id, conn_type(c), c->id);
     return s;
 }
 
 
 void free_stream(struct q_stream * const s)
 {
-    warn(info, "freeing str %u on %s conn %" PRIx64, s->id, conn_type(s->c),
+    warn(INF, "freeing str %u on %s conn %" PRIx64, s->id, conn_type(s->c),
          s->c->id);
 
     diet_insert(&s->c->closed_streams, s->id);

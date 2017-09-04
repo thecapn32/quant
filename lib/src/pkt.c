@@ -134,7 +134,7 @@ void enc_pkt(struct q_conn * const c,
     uint16_t i = 0;
     uint8_t flags = 0;
 
-    warn(debug, "%s conn state %u", conn_type(c), c->state);
+    warn(DBG, "%s conn state %u", conn_type(c), c->state);
     switch (c->state) {
     case CONN_STAT_VERS_SENT:
         flags |= F_LONG_HDR | F_LH_CLNT_INIT;
@@ -158,7 +158,7 @@ void enc_pkt(struct q_conn * const c,
     }
 
     if (s == 0 && flags != pkt_flags(v->buf)) {
-        warn(info,
+        warn(INF,
              "suppressing RTX of 0x%02x-type pkt; new type would be 0x%02x",
              pkt_flags(v->buf), flags);
         return;
@@ -178,7 +178,7 @@ void enc_pkt(struct q_conn * const c,
         enc(v->buf, v->len, i, &nr, 0, "%u");
         enc(v->buf, v->len, i, &c->vers, 0, "0x%08x");
         if (c->state == CONN_STAT_VERS_REJ) {
-            warn(info, "sending version negotiation server response");
+            warn(INF, "sending version negotiation server response");
             for (uint8_t j = 0; j < ok_vers_len; j++)
                 enc(v->buf, v->len, i, &ok_vers[j], 0, "0x%08x");
             v->len = i;
@@ -237,7 +237,7 @@ void enc_pkt(struct q_conn * const c,
             enc_padding_frame(v->buf, i, meta(v).head_start - i);
             // skip over existing stream header and data
             v->len = i = meta(v).buf_len;
-            // warn(debug, "RTX %u", i);
+            // warn(DBG, "RTX %u", i);
         }
     }
 
@@ -255,7 +255,7 @@ void enc_pkt(struct q_conn * const c,
     if (c->state < CONN_STAT_ESTB) {
         memcpy(x->buf, v->buf, v->len); // copy data
         const uint64_t hash = fnv_1a(x->buf, v->len);
-        warn(debug,
+        warn(DBG,
              "adding %lu-byte hash %" PRIx64 " over [0..%u] into [%u..%lu]",
              FNV_1A_LEN, hash, v->len - 1, v->len, v->len + FNV_1A_LEN - 1);
         x->len = v->len + FNV_1A_LEN;
@@ -266,7 +266,7 @@ void enc_pkt(struct q_conn * const c,
         x->len = hdr_len + (uint16_t)ptls_aead_encrypt(
                                c->out_kp0, &x->buf[hdr_len], &v->buf[hdr_len],
                                v->len - hdr_len, meta(v).nr, v->buf, hdr_len);
-        warn(debug, "adding %d-byte AEAD over [0..%u]", x->len - v->len, i - 1);
+        warn(DBG, "adding %d-byte AEAD over [0..%u]", x->len - v->len, i - 1);
     }
 
     STAILQ_INSERT_TAIL(q, x, next);
@@ -275,12 +275,12 @@ void enc_pkt(struct q_conn * const c,
         // FIXME packet is retransmittable (check incorrect)
         if (s) {
             c->in_flight += x->len;
-            warn(info, "in_flight +%u = %" PRIu64, x->len, c->in_flight);
+            warn(INF, "in_flight +%u = %" PRIu64, x->len, c->in_flight);
         }
         set_ld_alarm(c);
     }
 
-    warn(notice,
+    warn(NTE,
          "send pkt %" PRIu64 " (len %u, idx %u, type 0x%02x = " bitstring_fmt
          ") on %s conn %" PRIx64,
          meta(v).nr, x->len, x->idx, pkt_flags(x->buf),

@@ -23,7 +23,6 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <arpa/inet.h>
 #include <inttypes.h>
 #include <math.h>
 #include <netinet/in.h>
@@ -62,7 +61,7 @@ struct cid_splay conns_by_cid = SPLAY_INITIALIZER(&conns_by_cid);
 int64_t ipnp_splay_cmp(const struct q_conn * const a,
                        const struct q_conn * const b)
 {
-    // warn(debug, "%s conn %s:%u vs. %s conn %s:%u", conn_type(a),
+    // warn(DBG, "%s conn %s:%u vs. %s conn %s:%u", conn_type(a),
     //      inet_ntoa(a->peer.sin_addr), ntohs(a->peer.sin_port), conn_type(b),
     //      inet_ntoa(b->peer.sin_addr), ntohs(b->peer.sin_port));
     ensure((a->peer.sin_family == AF_INET || a->peer.sin_family == 0) &&
@@ -129,7 +128,7 @@ static void __attribute__((nonnull)) conn_setup_1rtt(struct q_conn * const c)
                            is_clnt(c) ? PTLS_CLNT_LABL : PTLS_SERV_LABL, 1);
 
     c->state = CONN_STAT_VERS_OK;
-    warn(info, "%s conn %" PRIx64 " now in state %u", conn_type(c), c->id,
+    warn(INF, "%s conn %" PRIx64 " now in state %u", conn_type(c), c->id,
          c->state);
 }
 
@@ -148,7 +147,7 @@ uint32_t tls_handshake(struct q_stream * const s)
     const int ret =
         ptls_handshake(s->c->tls, &meta(ov).tb, iv ? iv->buf : 0, &in_len, 0);
     ov->len = (uint16_t)meta(ov).tb.off;
-    warn(info, "TLS handshake: recv %u, gen %u, in_len %lu, ret %u: %.*s",
+    warn(INF, "TLS handshake: recv %u, gen %u, in_len %lu, ret %u: %.*s",
          iv ? iv->len : 0, ov->len, in_len, ret, ov->len, ov->buf);
     ensure(ret == 0 || ret == PTLS_ERROR_IN_PROGRESS, "TLS error: %u", ret);
     ensure(iv == 0 || iv->len && iv->len == in_len, "TLS data remaining");
@@ -158,7 +157,7 @@ uint32_t tls_handshake(struct q_stream * const s)
         w_free(w_engine(s->c->sock), &s->i);
     else {
         s->c->state = CONN_STAT_VERS_SENT;
-        warn(info, "%s conn %" PRIx64 " now in state %u", conn_type(s->c),
+        warn(INF, "%s conn %" PRIx64 " now in state %u", conn_type(s->c),
              s->c->id, s->c->state);
     }
 
@@ -187,7 +186,7 @@ static bool __attribute__((const)) vers_supported(const uint32_t v)
             return true;
 
     // we're out of matching candidates
-    warn(info, "no version in common with client");
+    warn(INF, "no version in common with client");
     return false;
 }
 
@@ -201,14 +200,14 @@ pick_from_server_vers(const void * const buf, const uint16_t len)
             uint32_t vers = 0;
             uint16_t x = j + pos;
             dec(vers, buf, len, x, 0, "0x%08x");
-            warn(debug, "server prio %ld = 0x%08x; our prio %u = 0x%08x",
+            warn(DBG, "server prio %ld = 0x%08x; our prio %u = 0x%08x",
                  j / sizeof(uint32_t), vers, i, ok_vers[i]);
             if (ok_vers[i] == vers)
                 return vers;
         }
 
     // we're out of matching candidates
-    warn(info, "no version in common with server");
+    warn(INF, "no version in common with server");
     return 0;
 }
 
@@ -217,7 +216,7 @@ struct q_conn * get_conn_by_ipnp(const struct sockaddr_in * const peer,
                                  const uint8_t type)
 {
     struct q_conn which = {.peer = *peer, .flags = type};
-    // warn(debug, "looking up conn to %s:%u", inet_ntoa(peer->sin_addr),
+    // warn(DBG, "looking up conn to %s:%u", inet_ntoa(peer->sin_addr),
     //      ntohs(peer->sin_port));
     return SPLAY_FIND(ipnp_splay, &conns_by_ipnp, &which);
 }
@@ -243,7 +242,7 @@ static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
     struct w_iov_stailq x = STAILQ_HEAD_INITIALIZER(x);
     STAILQ_FOREACH (v, q, next) {
         if (s == 0 && v->len == 0) {
-            warn(debug,
+            warn(DBG,
                  "ignoring non-retransmittable pkt %" PRIu64 " (len %u %u)",
                  meta(v).nr, v->len, meta(v).buf_len);
             continue;
@@ -252,12 +251,12 @@ static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
         // see TimeToSend pseudo code
         if (c->in_flight + v->len > c->cwnd ||
             last_tx_t - now + (v->len * c->srtt) / c->cwnd > 0) {
-            warn(debug, "in_flight %" PRIu64 " + v->len %u vs cwnd %" PRIu64,
+            warn(DBG, "in_flight %" PRIu64 " + v->len %u vs cwnd %" PRIu64,
                  c->in_flight, v->len, c->cwnd);
-            warn(debug,
+            warn(DBG,
                  "last_tx_t - now %f + (v->len %u * srtt %f) / cwnd %" PRIu64,
                  last_tx_t - now, v->len, c->srtt, c->cwnd);
-            warn(crit, "out of cwnd/pacing headroom, ignoring");
+            warn(CRT, "out of cwnd/pacing headroom, ignoring");
         }
 
         // store packet info (see OnPacketSent pseudo code)
@@ -265,7 +264,7 @@ static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
         meta(v).data_len = v->len; // v->len is len of stream data here
 
         if (s == 0) {
-            warn(debug, "RTX pkt %" PRIu64 " (len %u %u)", meta(v).nr, v->len,
+            warn(DBG, "RTX pkt %" PRIu64 " (len %u %u)", meta(v).nr, v->len,
                  meta(v).buf_len);
 
             // on RTX, remember original packet number (will be resent with new)
@@ -291,7 +290,7 @@ static __attribute__((nonnull)) void
 rtx(struct q_conn * const c, const uint32_t __attribute__((unused)) n)
 {
     // we simply retransmit *all* unACKed packets here
-    warn(crit, "RTX on %s conn %" PRIx64, conn_type(c), c->id);
+    warn(CRT, "RTX on %s conn %" PRIx64, conn_type(c), c->id);
     do_tx(c, 0, &c->sent_pkts);
 }
 
@@ -318,14 +317,14 @@ void tx(struct ev_loop * const l __attribute__((unused)),
     bool did_tx = false;
     SPLAY_FOREACH (s, stream, &c->streams) {
         if (!STAILQ_EMPTY(&s->o)) {
-            warn(debug, "data TX needed on %s conn %" PRIx64 " str %u",
+            warn(DBG, "data TX needed on %s conn %" PRIx64 " str %u",
                  conn_type(c), c->id, s->id);
             do_tx(c, s, &s->o);
             STAILQ_CONCAT(&c->sent_pkts, &s->o);
             did_tx = true;
         } else if (s->state == STRM_STATE_HCLO || s->state == STRM_STATE_CLSD) {
-            warn(debug, "FIN needed on %s conn %" PRIx64 " str %u",
-                 conn_type(c), c->id, s->id);
+            warn(DBG, "FIN needed on %s conn %" PRIx64 " str %u", conn_type(c),
+                 c->id, s->id);
             tx_ack_or_fin(s);
             did_tx = true;
         }
@@ -334,7 +333,7 @@ void tx(struct ev_loop * const l __attribute__((unused)),
     if (did_tx == false) {
         // need to send ACKs but don't have any stream data to piggyback on
         s = get_stream(c, s ? s->id : 0);
-        warn(debug, "ACK needed on %s conn %" PRIx64, conn_type(c), c->id);
+        warn(DBG, "ACK needed on %s conn %" PRIx64, conn_type(c), c->id);
         tx_ack_or_fin(s);
     }
 }
@@ -346,8 +345,7 @@ verify_hash(const uint8_t * buf, const uint16_t len)
     uint16_t i = len - FNV_1A_LEN;
     uint64_t hash_rx;
     dec(hash_rx, buf, len, i, 0, "%" PRIx64);
-    warn(debug,
-         "verifying %lu-byte hash %" PRIx64 " in [%lu..%u] over [0..%lu]",
+    warn(DBG, "verifying %lu-byte hash %" PRIx64 " in [%lu..%u] over [0..%lu]",
          FNV_1A_LEN, hash_rx, len - FNV_1A_LEN, len - 1, len - FNV_1A_LEN - 1);
     const uint64_t hash_comp = fnv_1a(buf, len - FNV_1A_LEN);
     ensure(hash_rx == hash_comp,
@@ -364,7 +362,7 @@ static uint16_t __attribute__((nonnull)) dec_aead(struct q_conn * const c,
     const uint16_t len = (uint16_t)ptls_aead_decrypt(
         c->in_kp0, &v->buf[hdr_len], &v->buf[hdr_len], v->len - hdr_len,
         meta(v).nr, v->buf, hdr_len);
-    warn(debug, "removing %u-byte AEAD over [0..%u]", v->len - len - hdr_len,
+    warn(DBG, "removing %u-byte AEAD over [0..%u]", v->len - len - hdr_len,
          v->len - hdr_len);
     return hdr_len + len;
 }
@@ -386,9 +384,9 @@ void rx(struct ev_loop * const l,
         if (v->len == 0)
             // TODO figure out why recvmmsg returns zero-length iovecs
             continue;
-        // warn(debug, "recv %u bytes", v->len);
+        // warn(DBG, "recv %u bytes", v->len);
         if (v->len > MAX_PKT_LEN)
-            warn(err, "received %u-byte packet (> %u max); accepting", v->len,
+            warn(ERR, "received %u-byte packet (> %u max); accepting", v->len,
                  MAX_PKT_LEN);
         const uint16_t hdr_len = pkt_hdr_len(v->buf, v->len);
         ensure(v->len >= hdr_len,
@@ -414,13 +412,13 @@ void rx(struct ev_loop * const l,
             }
 
             // this might be the first packet for a new connection, or a dup CH
-            warn(debug, "conn %" PRIx64 " may be new", cid);
+            warn(DBG, "conn %" PRIx64 " may be new", cid);
             const struct sockaddr_in peer = {.sin_family = AF_INET,
                                              .sin_port = v->port,
                                              .sin_addr = {.s_addr = v->ip}};
             c = get_conn_by_ipnp(&peer, type | CONN_FLAG_EMBR);
             if (c == 0) {
-                warn(debug, "conn %" PRIx64 " definitely new", cid);
+                warn(DBG, "conn %" PRIx64 " definitely new", cid);
                 struct sockaddr_in none = {0};
                 c = get_conn_by_ipnp(&none, type | CONN_FLAG_EMBR);
                 ensure(c, "no embr conn");
@@ -431,13 +429,13 @@ void rx(struct ev_loop * const l,
                 // this is a new connection; server picks a new random cid
                 c->id = ((((uint64_t)plat_random()) << 32) |
                          ((uint64_t)plat_random()));
-                warn(notice, "%s picked new cid %" PRIx64 " for conn %" PRIx64,
+                warn(NTE, "%s picked new cid %" PRIx64 " for conn %" PRIx64,
                      conn_type(c), c->id, cid);
 
             } else {
                 // we have a connection from this peer
                 ensure(c->state < CONN_STAT_ESTB, "handshaking");
-                warn(debug, "%s conn %" PRIx64 " is in handshake", conn_type(c),
+                warn(DBG, "%s conn %" PRIx64 " is in handshake", conn_type(c),
                      cid);
                 c->id = cid;
                 c->flags &= ~CONN_FLAG_EMBR;
@@ -469,12 +467,11 @@ void rx(struct ev_loop * const l,
         }
 
         diet_insert(&c->recv, nr);
-        warn(notice, "recv pkt %" PRIu64
-                     " (len %u, idx %u, type 0x%02x = " bitstring_fmt
-                     ") on %s conn %" PRIx64 " from %s:%u",
+        warn(NTE, "recv pkt %" PRIu64
+                  " (len %u, idx %u, type 0x%02x = " bitstring_fmt
+                  ") on %s conn %" PRIx64,
              nr, v->len, v->idx, pkt_flags(v->buf),
-             to_bitstring(pkt_flags(v->buf)), conn_type(c), c->id,
-             inet_ntoa(c->peer.sin_addr), ntohs(c->peer.sin_port));
+             to_bitstring(pkt_flags(v->buf)), conn_type(c), c->id);
 
         switch (c->state) {
         case CONN_STAT_IDLE:
@@ -496,7 +493,7 @@ void rx(struct ev_loop * const l,
             struct q_stream * const s = get_stream(c, 0);
             c->flags |= CONN_FLAG_TX;
             if (vers_supported(c->vers)) {
-                warn(info, "supporting client-requested version 0x%08x",
+                warn(INF, "supporting client-requested version 0x%08x",
                      c->vers);
 
                 dec_frames(c, v);
@@ -505,15 +502,15 @@ void rx(struct ev_loop * const l,
                 ensure(!STAILQ_EMPTY(&s->i), "no ClientHello");
                 tls_handshake(s);
 
-                warn(info, "%s conn %" PRIx64 " now in state %u", conn_type(c),
+                warn(INF, "%s conn %" PRIx64 " now in state %u", conn_type(c),
                      c->id, c->state);
 
             } else {
                 c->state = CONN_STAT_VERS_REJ;
-                warn(info, "%s conn %" PRIx64 " now in state %u", conn_type(c),
+                warn(INF, "%s conn %" PRIx64 " now in state %u", conn_type(c),
                      c->id, c->state);
-                warn(warn, "%s conn %" PRIx64
-                           " client-requested version 0x%08x not supported ",
+                warn(WRN, "%s conn %" PRIx64
+                          " client-requested version 0x%08x not supported ",
                      conn_type(c), c->id, c->vers);
             }
             break;
@@ -523,17 +520,17 @@ void rx(struct ev_loop * const l,
             struct q_stream * const s = get_stream(c, 0);
             c->flags |= CONN_FLAG_TX;
             if (is_set(F_LH_TYPE_VNEG, pkt_flags(v->buf))) {
-                warn(info, "server didn't like our version 0x%08x", c->vers);
+                warn(INF, "server didn't like our version 0x%08x", c->vers);
                 ensure(c->vers == pkt_vers(v->buf, v->len),
                        "server did not echo our version back");
                 c->vers = pick_from_server_vers(v->buf, v->len);
                 if (c->vers)
-                    warn(info, "retrying with version 0x%08x", c->vers);
+                    warn(INF, "retrying with version 0x%08x", c->vers);
                 else
                     die("no version in common with server");
                 rtx(c, UINT32_MAX); // retransmit the ClientHello
             } else {
-                warn(info, "server accepted version 0x%08x", c->vers);
+                warn(INF, "server accepted version 0x%08x", c->vers);
                 c->state = CONN_STAT_VERS_OK;
 
                 // we should have received a ServerHello
@@ -612,11 +609,10 @@ void detect_lost_pkts(struct q_conn * const c)
                 // if this packet was retransmittable, update in_flight
                 if (v->len > Q_OFFSET) {
                     c->in_flight -= v->len;
-                    warn(info, "in_flight -%u = %" PRIu64, v->len,
-                         c->in_flight);
+                    warn(INF, "in_flight -%u = %" PRIu64, v->len, c->in_flight);
                 }
 
-                warn(warn, "pkt %" PRIu64 " considered lost", nr);
+                warn(WRN, "pkt %" PRIu64 " considered lost", nr);
             } else if (fpclassify(c->loss_t) == FP_ZERO &&
                        fpclassify(delay_until_lost) != FP_INFINITE)
                 c->loss_t = now + delay_until_lost - time_since_sent;
@@ -642,7 +638,7 @@ void set_ld_alarm(struct q_conn * const c)
 
     if (c->in_flight == 0) {
         ev_timer_stop(loop, &c->ld_alarm);
-        warn(debug, "no RTX-able pkts outstanding, stopping LD alarm");
+        warn(DBG, "no RTX-able pkts outstanding, stopping LD alarm");
         return;
     }
 
@@ -651,12 +647,12 @@ void set_ld_alarm(struct q_conn * const c)
     if (c->state < CONN_STAT_ESTB) {
         dur = fpclassify(c->srtt) == FP_ZERO ? kDefaultInitialRtt : c->srtt;
         dur = MAX(2 * dur, kMinTLPTimeout) * (1 << c->handshake_cnt);
-        warn(debug, "handshake RTX alarm in %f sec on %s conn %" PRIx64, dur,
+        warn(DBG, "handshake RTX alarm in %f sec on %s conn %" PRIx64, dur,
              conn_type(c), c->id);
 
     } else if (fpclassify(c->loss_t) != FP_ZERO) {
         dur = c->loss_t - now;
-        warn(debug, "early RTX or time LD alarm in %f sec on %s conn %" PRIx64,
+        warn(DBG, "early RTX or time LD alarm in %f sec on %s conn %" PRIx64,
              dur, conn_type(c), c->id);
 
     } else if (c->tlp_cnt < kMaxTLPs) {
@@ -665,15 +661,15 @@ void set_ld_alarm(struct q_conn * const c)
         else
             dur = kMinTLPTimeout;
         dur = MAX(dur, 2 * c->srtt);
-        warn(debug, "TLP alarm in %f sec on %s conn %" PRIx64, dur,
-             conn_type(c), c->id);
+        warn(DBG, "TLP alarm in %f sec on %s conn %" PRIx64, dur, conn_type(c),
+             c->id);
 
     } else {
         dur = c->srtt + 4 * c->rttvar;
         dur = MAX(dur, kMinRTOTimeout);
         dur *= 2 ^ c->rto_cnt;
-        warn(debug, "RTO alarm in %f sec on %s conn %" PRIx64, dur,
-             conn_type(c), c->id);
+        warn(DBG, "RTO alarm in %f sec on %s conn %" PRIx64, dur, conn_type(c),
+             c->id);
     }
 
     c->ld_alarm.repeat = dur;
@@ -689,7 +685,7 @@ void ld_alarm(struct ev_loop * const l __attribute__((unused)),
 
     // see OnLossDetectionAlarm pseudo code
     if (c->state < CONN_STAT_ESTB) {
-        warn(info, "handshake RTX alarm on %s conn %" PRIx64, conn_type(c),
+        warn(INF, "handshake RTX alarm on %s conn %" PRIx64, conn_type(c),
              c->id);
         rtx(c, UINT32_MAX);
         // tx above already calls set_ld_alarm(c)
@@ -698,17 +694,17 @@ void ld_alarm(struct ev_loop * const l __attribute__((unused)),
     }
 
     if (fpclassify(c->loss_t) != FP_ZERO) {
-        warn(info, "early RTX or time loss detection alarm on %s conn %" PRIx64,
+        warn(INF, "early RTX or time loss detection alarm on %s conn %" PRIx64,
              conn_type(c), c->id);
         detect_lost_pkts(c);
 
     } else if (c->tlp_cnt < kMaxTLPs) {
-        warn(info, "TLP alarm on %s conn %" PRIx64, conn_type(c), c->id);
+        warn(INF, "TLP alarm on %s conn %" PRIx64, conn_type(c), c->id);
         rtx(c, 1);
         c->tlp_cnt++;
 
     } else {
-        warn(info, "RTO alarm on %s conn %" PRIx64, conn_type(c), c->id);
+        warn(INF, "RTO alarm on %s conn %" PRIx64, conn_type(c), c->id);
         if (c->rto_cnt == 0)
             c->lg_sent_before_rto = c->lg_sent;
         rtx(c, 2);

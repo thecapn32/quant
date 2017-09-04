@@ -46,7 +46,7 @@ int main()
         if (diet_find(&t, x) == 0) {
             diet_insert(&t, x);
             diet_to_str(s, sizeof(s), &t);
-            warn(debug,
+            warn(DBG,
                  "[%03" PRIu64 "] ranges %03" PRIu64 ", ins %03" PRIu64 ": %s",
                  i, t.cnt, x, s);
             i++;
@@ -61,7 +61,7 @@ int main()
         if (diet_find(&t, x)) {
             diet_remove(&t, x);
             diet_to_str(s, sizeof(s), &t);
-            warn(debug,
+            warn(DBG,
                  "[%03" PRIu64 "] ranges %03" PRIu64 ", rem %03" PRIu64 ": %s",
                  i, t.cnt, x, s);
             i++;

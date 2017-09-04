@@ -124,12 +124,12 @@
             break;                                                             \
         }                                                                      \
         if (__len == 1)                                                        \
-            warn(debug, "dec %zu byte%s from " #buf "[%u..%zu] into %s " #dst  \
+            warn(DBG, "dec %zu byte%s from " #buf "[%u..%zu] into %s " #dst  \
                         " = " fmt " (" bitstring_fmt ")",                      \
                  __len, plural(__len), pos, pos + __len - 1, type_str(dst),    \
                  dst, to_bitstring(((const uint8_t *)buf)[pos]));              \
         else                                                                   \
-            warn(debug, "dec %zu byte%s from " #buf "[%u..%zu] into %s " #dst  \
+            warn(DBG, "dec %zu byte%s from " #buf "[%u..%zu] into %s " #dst  \
                         " = " fmt,                                             \
                  __len, plural(__len), pos, pos + __len - 1, type_str(dst),    \
                  dst);                                                         \
@@ -184,13 +184,13 @@
             break;                                                             \
         }                                                                      \
         if (__len == 1)                                                        \
-            warn(debug, "enc %s %s = " fmt " (" bitstring_fmt ") "             \
+            warn(DBG, "enc %s %s = " fmt " (" bitstring_fmt ") "             \
                         "into %zu byte%s at " #buf "[%u..%zu]",                \
                  type_str(*src), (#src[0] == '&' ? &#src[1] : #src), *src,     \
                  to_bitstring(*src), __len, plural(__len), pos,                \
                  pos + __len - 1);                                             \
         else                                                                   \
-            warn(debug,                                                        \
+            warn(DBG,                                                        \
                  "enc %s %s = " fmt " into %zu byte%s at " #buf "[%u..%zu]",   \
                  type_str(*src), (#src[0] == '&' ? &#src[1] : #src), *src,     \
                  __len, plural(__len), pos, pos + __len - 1);                  \

@@ -37,7 +37,6 @@
 #include <sys/param.h>
 #endif
 
-
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
@@ -48,7 +47,7 @@ int main(int argc, char * argv[])
     int ch;
     while ((ch = getopt(argc, argv, "v:")) != -1)
         if (ch == 'v')
-            _dlevel = MIN(DLEVEL, MAX(0, (uint32_t)strtoul(optarg, 0, 10)));
+            _dlevel = MIN(DLEVEL, MAX(0, (short)strtoul(optarg, 0, 10)));
 #endif
 
     // init
@@ -85,7 +84,7 @@ int main(int argc, char * argv[])
                                  q_sid(s), q_cid(cc));
 
     // send the data
-    warn(info, "writing %u byte%s: %s", ov->len, plural(ov->len),
+    warn(INF, "writing %u byte%s: %s", ov->len, plural(ov->len),
          (char *)ov->buf);
     q_write(s, &o);
 
