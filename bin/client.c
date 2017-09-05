@@ -100,8 +100,7 @@ int main(int argc, char * argv[])
     }
 
     // parse and verify the URI passed on the command line
-    struct http_parser_url u;
-    http_parser_url_init(&u);
+    struct http_parser_url u = {0};
     char * url = optind == argc ? "" : argv[optind];
     http_parser_parse_url(url, strlen(url), 0, &u);
     ensure((u.field_set & (1 << UF_USERINFO)) == 0 &&
