@@ -16,7 +16,7 @@ add_custom_command(
       grep -A1000 priv: | grep -B1000 pub: > key.txt
   COMMAND
     sed -n 4p key.txt | cut -d: -f3 > /dev/null && sed -n 2p key.txt |
-      grep 00 > /dev/null && sed -i "" s/00://1 key.txt || true
+      grep 00 > /dev/null && sed -i.orig s/00://1 key.txt || true
   COMMAND
     sed -E -e "s/pub:/};/" -e "s/([0-9a-f][0-9a-f]):?/0x\\1, /g"
            -e "s/priv:/unsigned char tls_key[] = {/" < key.txt
