@@ -390,6 +390,10 @@ void rx(struct ev_loop * const l,
         const uint16_t hdr_len = pkt_hdr_len(v->buf, v->len);
         if (v->len < hdr_len) {
             warn(ERR, "%u-byte pkt < %u-byte hdr; ignoring", v->len, hdr_len);
+#ifndef NDEBUG
+            if (_dlevel == DBG)
+                hexdump(v->buf, v->len);
+#endif
             w_free_iov(w_engine(ws), v);
             continue;
         }
@@ -406,6 +410,10 @@ void rx(struct ev_loop * const l,
                 pkt_type(flags) != F_LH_1RTT_KPH0) {
                 if (verify_hash(v->buf, v->len) == false) {
                     warn(ERR, "hash mismatch; ignoring pkt");
+#ifndef NDEBUG
+                    if (_dlevel == DBG)
+                        hexdump(v->buf, v->len);
+#endif
                     w_free_iov(w_engine(ws), v);
                     continue;
                 }
