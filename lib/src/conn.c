@@ -468,11 +468,6 @@ void rx(struct ev_loop * const l,
         } else
             v->len = dec_aead(c, v, hdr_len);
 
-        // #ifndef NDEBUG
-        //         if (_dlevel == DBG)
-        //             hexdump(v->buf, v->len);
-        // #endif
-
         // remember that we had a RX event on this connection
         if (!is_set(CONN_FLAG_RX, c->flags)) {
             c->flags |= CONN_FLAG_RX;
@@ -496,8 +491,16 @@ void rx(struct ev_loop * const l,
             c->sock = ws;
 
             // validate minimum packet size
-            ensure(v->len >= MIN_INI_LEN, "initial packet len %u too short",
-                   v->len);
+            if (v->len < MIN_INI_LEN) {
+                warn(ERR, "initial %u-byte pkt too short (< %lu)", v->len,
+                     MIN_INI_LEN);
+#ifndef NDEBUG
+                if (_dlevel == DBG)
+                    hexdump(v->buf, v->len);
+#endif
+                w_free_iov(w_engine(ws), v);
+                continue;
+            }
 
             ensure(is_set(F_LONG_HDR, flags), "short header");
 
