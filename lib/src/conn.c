@@ -381,10 +381,6 @@ void rx(struct ev_loop * const l,
     while (!STAILQ_EMPTY(&i)) {
         struct w_iov * const v = STAILQ_FIRST(&i);
         STAILQ_REMOVE_HEAD(&i, next);
-        // #ifndef NDEBUG
-        //         if (_dlevel == DBG)
-        //             hexdump(v->buf, v->len);
-        // #endif
         if (v->len > MAX_PKT_LEN)
             warn(WRN, "received %u-byte pkt (> %u max)", v->len, MAX_PKT_LEN);
         const uint16_t hdr_len = pkt_hdr_len(v->buf, v->len);
@@ -456,10 +452,17 @@ void rx(struct ev_loop * const l,
             SPLAY_INSERT(cid_splay, &conns_by_cid, c);
         }
 
-        if (is_set(F_LONG_HDR, pkt_flags(v->buf)) &&
-            pkt_type(flags) != F_LH_1RTT_KPH0) {
+        if (is_set(F_LONG_HDR, flags) && pkt_type(flags) != F_LH_1RTT_KPH0) {
             if (prot_verified == false) {
-                verify_hash(v->buf, v->len);
+                if (verify_hash(v->buf, v->len) == false) {
+                    warn(ERR, "hash mismatch; ignoring pkt");
+#ifndef NDEBUG
+                    if (_dlevel == DBG)
+                        hexdump(v->buf, v->len);
+#endif
+                    w_free_iov(w_engine(ws), v);
+                    continue;
+                }
                 v->len -= FNV_1A_LEN;
             }
         } else
@@ -480,8 +483,8 @@ void rx(struct ev_loop * const l,
         warn(NTE, "recv pkt %" PRIu64
                   " (len %u, idx %u, type 0x%02x = " bitstring_fmt
                   ") on %s conn %" PRIx64,
-             nr, v->len, v->idx, pkt_flags(v->buf),
-             to_bitstring(pkt_flags(v->buf)), conn_type(c), c->id);
+             nr, v->len, v->idx, flags, to_bitstring(flags), conn_type(c),
+             c->id);
 
         switch (c->state) {
         case CONN_STAT_IDLE:
@@ -496,7 +499,7 @@ void rx(struct ev_loop * const l,
             ensure(v->len >= MIN_INI_LEN, "initial packet len %u too short",
                    v->len);
 
-            ensure(is_set(F_LONG_HDR, pkt_flags(v->buf)), "short header");
+            ensure(is_set(F_LONG_HDR, flags), "short header");
 
             // respond to the version negotiation packet
             c->vers = pkt_vers(v->buf, v->len);
@@ -529,7 +532,7 @@ void rx(struct ev_loop * const l,
         case CONN_STAT_VERS_SENT: {
             struct q_stream * const s = get_stream(c, 0);
             c->flags |= CONN_FLAG_TX;
-            if (is_set(F_LH_TYPE_VNEG, pkt_flags(v->buf))) {
+            if (is_set(F_LH_TYPE_VNEG, flags)) {
                 warn(INF, "server didn't like our version 0x%08x", c->vers);
                 ensure(c->vers == pkt_vers(v->buf, v->len),
                        "server did not echo our version back");
