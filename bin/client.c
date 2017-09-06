@@ -112,7 +112,7 @@ int main(int argc, char * argv[])
     char dest[1024], port[64], path[2048];
     set_from_url(dest, sizeof(dest), url, &u, UF_HOST, "localhost");
     set_from_url(port, sizeof(port), url, &u, UF_PORT, "4433");
-    set_from_url(path, sizeof(path), url, &u, UF_PATH, "/");
+    set_from_url(path, sizeof(path), url, &u, UF_PATH, "");
 
     struct addrinfo * peer;
     const struct addrinfo hints = {.ai_family = PF_INET,
@@ -127,20 +127,22 @@ int main(int argc, char * argv[])
     struct q_conn * const c =
         q_connect(q, (struct sockaddr_in *)(void *)peer->ai_addr, dest);
 
-    // create an HTTP/0.9 request
-    char req[sizeof(path) + 6];
-    snprintf(req, sizeof(req), "GET %s\r\n", path);
-    struct q_stream * const s = q_rsv_stream(c);
-    q_write_str(q, s, req);
-    q_close_stream(s);
+    if (*path) {
+        // create an HTTP/0.9 request
+        char req[sizeof(path) + 6];
+        snprintf(req, sizeof(req), "GET %s\r\n", path);
+        struct q_stream * const s = q_rsv_stream(c);
+        q_write_str(q, s, req);
+        q_close_stream(s);
 
-    // read HTTP/0.9 reply and dump it to stdout
-    struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
-    q_read(c, &i);
-    struct w_iov * v;
-    STAILQ_FOREACH (v, &i, next)
-        printf("%.*s", v->len, v->buf);
-    printf("\n");
+        // read HTTP/0.9 reply and dump it to stdout
+        struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
+        q_read(c, &i);
+        struct w_iov * v;
+        STAILQ_FOREACH (v, &i, next)
+            printf("%.*s", v->len, v->buf);
+        printf("\n");
+    }
 
     // clean up
     q_close(c);
