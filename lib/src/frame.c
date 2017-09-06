@@ -365,7 +365,7 @@ dec_ack_frame(struct q_conn * const c,
 
 
 static uint16_t __attribute__((nonnull))
-dec_conn_close_frame(struct q_conn * const c __attribute__((unused)),
+dec_conn_close_frame(struct q_conn * const c,
                      const struct w_iov * const v,
                      const uint16_t pos)
 {
@@ -387,8 +387,8 @@ dec_conn_close_frame(struct q_conn * const c __attribute__((unused)),
         warn(NTE, "conn close reason: %.*s", reas_len, reas_phr);
     }
 
-    // c->state = CONN_STAT_IDLE;
-    // ev_break(loop, EVBREAK_ALL);
+    c->state = CONN_STAT_IDLE;
+    maybe_api_return(q_read, c);
 
     return i;
 }
