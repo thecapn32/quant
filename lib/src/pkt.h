@@ -51,7 +51,7 @@
 
 #define pkt_flags(buf) (*(const uint8_t * const)(buf))
 
-#define pkt_type(flags) (flags & (is_set(F_LONG_HDR, flags ? ~0x80 : ~0xe0)))
+#define pkt_type(flags) (flags & (is_set(F_LONG_HDR, flags) ? ~0x80 : ~0xe0))
 
 
 struct q_conn;
