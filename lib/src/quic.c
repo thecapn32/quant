@@ -453,7 +453,8 @@ void q_close(struct q_conn * const c)
     struct q_stream * const s = SPLAY_MIN(stream, &c->streams);
     if (s)
         free_stream(s);
-    ensure(SPLAY_EMPTY(&c->streams), "streams remain");
+    ensure(SPLAY_EMPTY(&c->streams), "streams remain, e.g., %u",
+           SPLAY_MIN(stream, &c->streams)->id);
 
     ptls_aead_free(c->in_kp0);
     ptls_aead_free(c->out_kp0);
