@@ -103,7 +103,9 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
 
 int main(int argc, char * argv[])
 {
+#ifndef NDEBUG
     _dlevel = DLEVEL; // default to maximum compiled-in verbosity
+#endif
     char ifname[IFNAMSIZ] = "lo"
 #ifndef __linux__
                             "0"

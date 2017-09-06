@@ -41,7 +41,16 @@
 #include <warpcore/warpcore.h>
 
 
-int main(int argc, char * argv[])
+int main(int argc
+#ifdef NDEBUG
+         __attribute__((unused))
+#endif
+         ,
+         char * argv[]
+#ifdef NDEBUG
+         __attribute__((unused))
+#endif
+         )
 {
 #ifndef NDEBUG
     int ch;

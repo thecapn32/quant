@@ -70,7 +70,9 @@ static void set_from_url(char * const var,
 
 int main(int argc, char * argv[])
 {
+#ifndef NDEBUG
     _dlevel = DLEVEL; // default to maximum compiled-in verbosity
+#endif
     char ifname[IFNAMSIZ] = "lo"
 #ifndef __linux__
                             "0"

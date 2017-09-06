@@ -135,8 +135,9 @@ dec_stream_frame(struct q_conn * const c,
         s->in_off += *len;
 
         if (is_set(F_STREAM_FIN, type)) {
+#ifndef NDEBUG
             const uint8_t old_state = s->state;
-
+#endif
             if (s->state <= STRM_STATE_OPEN)
                 s->state = STRM_STATE_HCRM;
             else if (s->state >= STRM_STATE_HCLO)
