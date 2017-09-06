@@ -28,6 +28,7 @@
 #include <stdint.h>
 
 #include "fnv_1a.h"
+#include "quic.h"
 
 #define MAX_PKT_LEN 1252
 #define MIN_INI_LEN 1200 - FNV_1A_LEN
@@ -50,9 +51,7 @@
 
 #define pkt_flags(buf) (*(const uint8_t * const)(buf))
 
-#define pkt_type(buf)                                                          \
-    (pkt_flags(buf) & F_LONG_HDR ? pkt_flags(buf) & ~0x80                      \
-                                 : pkt_flags(buf) & ~0xe0)
+#define pkt_type(flags) (flags & (is_set(F_LONG_HDR, flags ? ~0x80 : ~0xe0)))
 
 
 struct q_conn;

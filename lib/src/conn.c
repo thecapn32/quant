@@ -348,9 +348,9 @@ verify_hash(const uint8_t * buf, const uint16_t len)
     warn(DBG, "verifying %lu-byte hash %" PRIx64 " in [%lu..%u] over [0..%lu]",
          FNV_1A_LEN, hash_rx, len - FNV_1A_LEN, len - 1, len - FNV_1A_LEN - 1);
     const uint64_t hash_comp = fnv_1a(buf, len - FNV_1A_LEN);
-    ensure(hash_rx == hash_comp,
-           "hash mismatch: computed %" PRIx64 " vs. %" PRIx64, hash_comp,
-           hash_rx);
+    if (hash_rx != hash_comp)
+        warn(WRN, "hash mismatch: computed %" PRIx64 " vs. %" PRIx64, hash_comp,
+             hash_rx);
     return hash_rx == hash_comp;
 }
 
@@ -381,32 +381,34 @@ void rx(struct ev_loop * const l,
     while (!STAILQ_EMPTY(&i)) {
         struct w_iov * const v = STAILQ_FIRST(&i);
         STAILQ_REMOVE_HEAD(&i, next);
-        if (v->len == 0)
-            // TODO figure out why recvmmsg returns zero-length iovecs
-            continue;
-        // warn(DBG, "recv %u bytes", v->len);
-        if (v->len > MAX_PKT_LEN)
-            warn(ERR, "received %u-byte packet (> %u max); accepting", v->len,
-                 MAX_PKT_LEN);
-        const uint16_t hdr_len = pkt_hdr_len(v->buf, v->len);
-        ensure(v->len >= hdr_len,
-               "%u-byte packet not large enough for %u-byte header", v->len,
-               hdr_len);
-
         // #ifndef NDEBUG
-        //         if (_dlevel == debug)
+        //         if (_dlevel == DBG)
         //             hexdump(v->buf, v->len);
         // #endif
+        if (v->len > MAX_PKT_LEN)
+            warn(WRN, "received %u-byte pkt (> %u max)", v->len, MAX_PKT_LEN);
+        const uint16_t hdr_len = pkt_hdr_len(v->buf, v->len);
+        if (v->len < hdr_len) {
+            warn(ERR, "%u-byte pkt < %u-byte hdr; ignoring", v->len, hdr_len);
+            w_free_iov(w_engine(ws), v);
+            continue;
+        }
+
         // TODO: support short headers w/o cid
+        const uint8_t flags = pkt_flags(v->buf);
         const uint64_t nr = meta(v).nr = pkt_nr(v->buf, v->len);
         const uint64_t cid = pkt_cid(v->buf, v->len);
         const uint8_t type = w_connected(ws) ? CONN_FLAG_CLNT : 0;
         struct q_conn * c = get_conn_by_cid(cid, type);
         bool prot_verified = false;
         if (c == 0) {
-            if (is_set(F_LONG_HDR, pkt_flags(v->buf)) &&
-                pkt_type(v->buf) != F_LH_1RTT_KPH0) {
-                verify_hash(v->buf, v->len);
+            if (is_set(F_LONG_HDR, flags) &&
+                pkt_type(flags) != F_LH_1RTT_KPH0) {
+                if (verify_hash(v->buf, v->len) == false) {
+                    warn(ERR, "hash mismatch; ignoring pkt");
+                    w_free_iov(w_engine(ws), v);
+                    continue;
+                }
                 v->len -= FNV_1A_LEN;
                 prot_verified = true;
             }
@@ -447,7 +449,7 @@ void rx(struct ev_loop * const l,
         }
 
         if (is_set(F_LONG_HDR, pkt_flags(v->buf)) &&
-            pkt_type(v->buf) != F_LH_1RTT_KPH0) {
+            pkt_type(flags) != F_LH_1RTT_KPH0) {
             if (prot_verified == false) {
                 verify_hash(v->buf, v->len);
                 v->len -= FNV_1A_LEN;
@@ -456,7 +458,7 @@ void rx(struct ev_loop * const l,
             v->len = dec_aead(c, v, hdr_len);
 
         // #ifndef NDEBUG
-        //         if (_dlevel == debug)
+        //         if (_dlevel == DBG)
         //             hexdump(v->buf, v->len);
         // #endif
 

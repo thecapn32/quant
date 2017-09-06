@@ -48,17 +48,23 @@
 
 
 /// Packet number lengths for different short-header packet types
-static const uint8_t pkt_nr_len[] = {0, 1, 2, 4};
+static const uint8_t pkt_nr_len[] = {0xFF, 1, 2, 4};
 
 
 uint16_t pkt_hdr_len(const uint8_t * const buf, const uint16_t len)
 {
     const uint8_t flags = pkt_flags(buf);
     uint16_t pos = 0;
-    if (flags & F_LONG_HDR)
+    if (is_set(F_LONG_HDR, flags))
         pos = 17;
-    else
-        pos = 1 + (flags & F_SH_CID ? 8 : 0) + pkt_nr_len[pkt_type(buf)];
+    else {
+        const uint8_t type = pkt_type(flags);
+        if (type < 1 || type > 3) {
+            warn(ERR, "illegal pkt type %u", type);
+            return UINT16_MAX;
+        }
+        pos = 1 + (is_set(F_SH_CID, flags) ? 8 : 0) + pkt_nr_len[type];
+    }
     ensure(pos <= len, "payload position %u after end of packet %u", pos, len);
     return pos;
 }
@@ -82,7 +88,7 @@ uint64_t pkt_nr(const uint8_t * const buf, const uint16_t len)
     const uint8_t flags = pkt_flags(buf);
     uint64_t nr = 0;
     uint16_t i = 9;
-    dec(nr, buf, len, i, flags & F_LONG_HDR ? 4 : pkt_nr_len[pkt_type(buf)],
+    dec(nr, buf, len, i, flags & F_LONG_HDR ? 4 : pkt_nr_len[pkt_type(flags)],
         "%" PRIu64);
     return nr;
 }
