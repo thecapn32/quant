@@ -115,9 +115,10 @@ int main(int argc, char * argv[])
     uint16_t port = 4433;
     int ch;
 
-    while ((ch = getopt(argc, argv, "hi:p:d:"
+    while ((ch = getopt(argc, argv,
+                        "hi:p:d:"
 #ifndef NDEBUG
-                                    "v:"
+                        "v:"
 #endif
                         )) != -1) {
         switch (ch) {

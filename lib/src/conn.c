@@ -475,16 +475,17 @@ void rx(struct ev_loop * const l,
         }
 
         diet_insert(&c->recv, nr);
-        warn(NTE, "recv pkt %" PRIu64
-                  " (len %u, idx %u, type 0x%02x = " bitstring_fmt
-                  ") on %s conn %" PRIx64,
+        warn(NTE,
+             "recv pkt %" PRIu64
+             " (len %u, idx %u, type 0x%02x = " bitstring_fmt
+             ") on %s conn %" PRIx64,
              nr, v->len, v->idx, flags, to_bitstring(flags), conn_type(c),
              c->id);
 
         switch (c->state) {
         case CONN_STAT_IDLE:
             new_stream(c, 0); // create stream 0 (server case)
-        // fall-through
+            // fall-through
 
         case CONN_STAT_VERS_REJ: {
             // store the socket with the connection
@@ -525,8 +526,9 @@ void rx(struct ev_loop * const l,
                 c->state = CONN_STAT_VERS_REJ;
                 warn(INF, "%s conn %" PRIx64 " now in state %u", conn_type(c),
                      c->id, c->state);
-                warn(WRN, "%s conn %" PRIx64
-                          " client-requested version 0x%08x not supported ",
+                warn(WRN,
+                     "%s conn %" PRIx64
+                     " client-requested version 0x%08x not supported ",
                      conn_type(c), c->id, c->vers);
             }
             break;

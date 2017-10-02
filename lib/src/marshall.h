@@ -124,13 +124,15 @@
             break;                                                             \
         }                                                                      \
         if (__len == 1)                                                        \
-            warn(DBG, "dec %zu byte%s from " #buf "[%u..%zu] into %s " #dst  \
-                        " = " fmt " (" bitstring_fmt ")",                      \
+            warn(DBG,                                                          \
+                 "dec %zu byte%s from " #buf "[%u..%zu] into %s " #dst         \
+                 " = " fmt " (" bitstring_fmt ")",                             \
                  __len, plural(__len), pos, pos + __len - 1, type_str(dst),    \
                  dst, to_bitstring(((const uint8_t *)buf)[pos]));              \
         else                                                                   \
-            warn(DBG, "dec %zu byte%s from " #buf "[%u..%zu] into %s " #dst  \
-                        " = " fmt,                                             \
+            warn(DBG,                                                          \
+                 "dec %zu byte%s from " #buf "[%u..%zu] into %s " #dst         \
+                 " = " fmt,                                                    \
                  __len, plural(__len), pos, pos + __len - 1, type_str(dst),    \
                  dst);                                                         \
         pos += __len;                                                          \
@@ -157,23 +159,23 @@
                "attempting to encode %zu byte%s into " #buf                    \
                "[%u..%zu], which is past end of " #buf_len " = %u",            \
                __len, plural(__len), pos, pos + __len, buf_len - 1);           \
-        memcpy(&((uint8_t * const) buf)[pos], src, __len);                     \
+        memcpy(&((uint8_t * const)buf)[pos], src, __len);                      \
         switch (__len) {                                                       \
         case 8: {                                                              \
             uint64_t * const __dst =                                           \
-                (void * const) & ((uint8_t * const) buf)[pos];                 \
+                (void * const) & ((uint8_t * const)buf)[pos];                  \
             *__dst = htonll(*__dst);                                           \
             break;                                                             \
         }                                                                      \
         case 4: {                                                              \
             uint32_t * const __dst =                                           \
-                (void * const) & ((uint8_t * const) buf)[pos];                 \
+                (void * const) & ((uint8_t * const)buf)[pos];                  \
             *__dst = htonl(*__dst);                                            \
             break;                                                             \
         }                                                                      \
         case 2: {                                                              \
             uint16_t * const __dst =                                           \
-                (void * const) & ((uint8_t * const) buf)[pos];                 \
+                (void * const) & ((uint8_t * const)buf)[pos];                  \
             *__dst = htons(*__dst);                                            \
             break;                                                             \
         }                                                                      \
@@ -184,13 +186,14 @@
             break;                                                             \
         }                                                                      \
         if (__len == 1)                                                        \
-            warn(DBG, "enc %s %s = " fmt " (" bitstring_fmt ") "             \
-                        "into %zu byte%s at " #buf "[%u..%zu]",                \
+            warn(DBG,                                                          \
+                 "enc %s %s = " fmt " (" bitstring_fmt ") "                    \
+                 "into %zu byte%s at " #buf "[%u..%zu]",                       \
                  type_str(*src), (#src[0] == '&' ? &#src[1] : #src), *src,     \
                  to_bitstring(*src), __len, plural(__len), pos,                \
                  pos + __len - 1);                                             \
         else                                                                   \
-            warn(DBG,                                                        \
+            warn(DBG,                                                          \
                  "enc %s %s = " fmt " into %zu byte%s at " #buf "[%u..%zu]",   \
                  type_str(*src), (#src[0] == '&' ? &#src[1] : #src), *src,     \
                  __len, plural(__len), pos, pos + __len - 1);                  \

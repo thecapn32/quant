@@ -80,9 +80,10 @@ int main(int argc, char * argv[])
         ;
     int ch;
 
-    while ((ch = getopt(argc, argv, "hi:"
+    while ((ch = getopt(argc, argv,
+                        "hi:"
 #ifndef NDEBUG
-                                    "v:"
+                        "v:"
 #endif
                         )) != -1) {
         switch (ch) {

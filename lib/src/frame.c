@@ -128,8 +128,9 @@ dec_stream_frame(struct q_conn * const c,
 
     // best case: new in-order data
     if (off == s->in_off) {
-        warn(NTE, "%u byte%s new data (off %" PRIu64 "-%" PRIu64
-                  ") on %s conn %" PRIx64 " str %u",
+        warn(NTE,
+             "%u byte%s new data (off %" PRIu64 "-%" PRIu64
+             ") on %s conn %" PRIx64 " str %u",
              *len, plural(*len), off, off + *len, conn_type(c), c->id, sid);
         warn(DBG, "%.*s", v->len, v->buf);
         s->in_off += *len;
@@ -163,8 +164,9 @@ dec_stream_frame(struct q_conn * const c,
 
     // data is a complete duplicate
     if (off + *len <= s->in_off) {
-        warn(NTE, "%u byte%s dup data (off %" PRIu64 "-%" PRIu64
-                  ") on %s conn %" PRIx64 " str %u",
+        warn(NTE,
+             "%u byte%s dup data (off %" PRIu64 "-%" PRIu64
+             ") on %s conn %" PRIx64 " str %u",
              *len, plural(*len), off, off + *len, conn_type(c), c->id, sid);
         warn(DBG, "%.*s", v->len, v->buf);
         w_free_iov(w_engine(c->sock), v);

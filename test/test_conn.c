@@ -50,7 +50,7 @@ int main(int argc
 #ifdef NDEBUG
          __attribute__((unused))
 #endif
-         )
+)
 {
 #ifndef NDEBUG
     int ch;
@@ -64,7 +64,7 @@ int main(int argc
 #ifndef __linux__
                       "0"
 #endif
-                      );
+    );
 
     // bind server socket
     struct q_conn * const sc = q_bind(q, 55555);
