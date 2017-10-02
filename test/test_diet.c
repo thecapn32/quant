@@ -56,7 +56,7 @@ int main()
 
     // remove all items
     i = 1;
-    while (!SPLAY_EMPTY(&t)) {
+    while (!splay_empty(&t)) {
         const uint64_t x = plat_random() % n + 1;
         if (diet_find(&t, x)) {
             diet_remove(&t, x);

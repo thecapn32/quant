@@ -54,8 +54,8 @@
 
 
 // Embryonic and established (actually, non-embryonic) QUIC connections.
-struct ipnp_splay conns_by_ipnp = SPLAY_INITIALIZER(&conns_by_ipnp);
-struct cid_splay conns_by_cid = SPLAY_INITIALIZER(&conns_by_cid);
+struct ipnp_splay conns_by_ipnp = splay_initializer(&conns_by_ipnp);
+struct cid_splay conns_by_cid = splay_initializer(&conns_by_cid);
 
 
 int64_t ipnp_splay_cmp(const struct q_conn * const a,
@@ -218,14 +218,14 @@ struct q_conn * get_conn_by_ipnp(const struct sockaddr_in * const peer,
     struct q_conn which = {.peer = *peer, .flags = type};
     // warn(DBG, "looking up conn to %s:%u", inet_ntoa(peer->sin_addr),
     //      ntohs(peer->sin_port));
-    return SPLAY_FIND(ipnp_splay, &conns_by_ipnp, &which);
+    return splay_find(ipnp_splay, &conns_by_ipnp, &which);
 }
 
 
 struct q_conn * get_conn_by_cid(const uint64_t id, const uint8_t type)
 {
     struct q_conn which = {.id = id, .flags = type};
-    return SPLAY_FIND(cid_splay, &conns_by_cid, &which);
+    return splay_find(cid_splay, &conns_by_cid, &which);
 }
 
 
@@ -314,7 +314,7 @@ void tx(struct ev_loop * const l __attribute__((unused)),
     struct q_conn * const c = w->data;
     struct q_stream * s = 0;
     bool did_tx = false;
-    SPLAY_FOREACH (s, stream, &c->streams) {
+    splay_foreach (s, stream, &c->streams) {
         if (!sq_empty(&s->o)) {
             warn(DBG, "data TX needed on %s conn %" PRIx64 " str %u",
                  conn_type(c), c->id, s->id);
@@ -445,10 +445,10 @@ void rx(struct ev_loop * const l,
                 c->id = cid;
                 c->flags &= ~CONN_FLAG_EMBR;
             }
-            SPLAY_REMOVE(ipnp_splay, &conns_by_ipnp, c);
-            SPLAY_INSERT(ipnp_splay, &conns_by_ipnp, c);
-            SPLAY_REMOVE(cid_splay, &conns_by_cid, c);
-            SPLAY_INSERT(cid_splay, &conns_by_cid, c);
+            splay_remove(ipnp_splay, &conns_by_ipnp, c);
+            splay_insert(ipnp_splay, &conns_by_ipnp, c);
+            splay_remove(cid_splay, &conns_by_cid, c);
+            splay_insert(cid_splay, &conns_by_cid, c);
         }
 
         if (is_set(F_LONG_HDR, flags) && pkt_type(flags) != F_LH_1RTT_KPH0) {

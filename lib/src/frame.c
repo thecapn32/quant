@@ -516,8 +516,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
 
     struct ival * b;
     uint64_t prev_lo = 0;
-    SPLAY_FOREACH_REV(b, diet, &c->recv)
-    {
+    splay_foreach_rev (b, diet, &c->recv) {
         if (prev_lo) {
             const uint64_t gap = prev_lo - b->hi;
             ensure(gap <= UINT8_MAX, "TODO: handle larger ACK gaps");

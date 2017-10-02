@@ -42,7 +42,7 @@
 struct ival {
     uint64_t lo;            ///< Lower bound of the interval.
     uint64_t hi;            ///< Upper bound of the interval.
-    SPLAY_ENTRY(ival) node; ///< Splay tree node date.
+    splay_entry(ival) node; ///< Splay tree node date.
 };
 
 
@@ -50,20 +50,20 @@ extern int64_t __attribute__((nonnull))
 ival_cmp(const struct ival * const a, const struct ival * const b);
 
 struct diet {
-    SPLAY_HEAD(, ival); ///< Splay head.
+    splay_head(, ival); ///< Splay head.
     uint64_t cnt;       ///< Number of nodes (intervals) in the diet tree.
 };
 
 
 #define diet_initializer(t)                                                    \
     {                                                                          \
-        SPLAY_INITIALIZER(t), 0                                                \
+        splay_initializer(t), 0                                                \
     }
 
 
 #define diet_init(t)                                                           \
     do {                                                                       \
-        SPLAY_INIT(t);                                                         \
+        splay_init(t);                                                         \
         (t)->cnt = 0;                                                          \
     } while (0)
 
@@ -83,6 +83,6 @@ extern void __attribute__((nonnull)) diet_free(struct diet * const t);
 extern size_t __attribute__((nonnull))
 diet_to_str(char * const str, const size_t len, struct diet * const t);
 
-#define diet_max(t) (SPLAY_EMPTY(t) ? 0 : SPLAY_MAX(diet, (t))->hi)
+#define diet_max(t) (splay_empty(t) ? 0 : splay_max(diet, (t))->hi)
 
-#define diet_min(t) (SPLAY_EMPTY(t) ? 0 : SPLAY_MIN(diet, (t))->lo)
+#define diet_min(t) (splay_empty(t) ? 0 : splay_min(diet, (t))->lo)

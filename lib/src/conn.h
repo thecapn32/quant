@@ -43,14 +43,14 @@
 struct q_stream;
 
 // Embryonic and established (actually, non-embryonic) QUIC connections.
-extern SPLAY_HEAD(ipnp_splay, q_conn) conns_by_ipnp;
-extern SPLAY_HEAD(cid_splay, q_conn) conns_by_cid;
+extern splay_head(ipnp_splay, q_conn) conns_by_ipnp;
+extern splay_head(cid_splay, q_conn) conns_by_cid;
 
 
 /// A QUIC connection.
 struct q_conn {
-    SPLAY_ENTRY(q_conn) node_ipnp;
-    SPLAY_ENTRY(q_conn) node_cid;
+    splay_entry(q_conn) node_ipnp;
+    splay_entry(q_conn) node_cid;
     sl_entry(q_conn) next;
 
     uint64_t id; ///< Connection ID
@@ -66,7 +66,7 @@ struct q_conn {
 
     uint8_t _unused2[4];
 
-    SPLAY_HEAD(stream, q_stream) streams;
+    splay_head(stream, q_stream) streams;
     struct diet closed_streams;
     struct w_sock * sock; ///< File descriptor (socket) for the connection.
     ev_io rx_w;           ///< RX watcher.

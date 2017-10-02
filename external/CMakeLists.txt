@@ -1,7 +1,7 @@
 include(ExternalProject)
 
 externalproject_add(warp
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/NTAP/warpcore.git
   GIT_SHALLOW 1
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
@@ -37,7 +37,7 @@ string(REPLACE "-fsanitize=leak" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
 string(REPLACE "-fsanitize=undefined" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
 
 externalproject_add(picotls
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/h2o/picotls.git
   GIT_SHALLOW 1
   # GIT_TAG kazuho/draft21
@@ -111,7 +111,7 @@ externalproject_add(minq
 
 # Use quicly for testing against
 externalproject_add(quicly
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/h2o/quicly.git
   GIT_SHALLOW 1
   CONFIGURE_COMMAND ""
@@ -127,7 +127,7 @@ externalproject_add(quicly
 
 # Use ngtcp2 for testing against
 externalproject_add(openssl
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/openssl/openssl.git
   GIT_SHALLOW 1
   CONFIGURE_COMMAND ./config --prefix=${CMAKE_CURRENT_BINARY_DIR} enable-tls1_3
@@ -139,7 +139,7 @@ externalproject_add(openssl
 
 externalproject_add(ngtcp2
   DEPENDS openssl
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/ngtcp2/ngtcp2.git
   GIT_SHALLOW 1
   PATCH_COMMAND autoreconf -i
@@ -155,7 +155,7 @@ externalproject_add(ngtcp2
 
 # Use mozquic for testing against
 externalproject_add(nspr
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/nss-prefix/src/nspr
   CONFIGURE_COMMAND ""
   HG_REPOSITORY https://hg.mozilla.org/projects/nspr
@@ -166,7 +166,7 @@ externalproject_add(nspr
 
 externalproject_add(nss
   DEPENDS nspr
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/nss-dev/nss.git
   GIT_SHALLOW 1
   GIT_TAG NSS_TLS13_DRAFT19_BRANCH
@@ -179,7 +179,7 @@ externalproject_add(nss
 
 externalproject_add(mozquic
   DEPENDS nss
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/mcmanus/mozquic.git
   GIT_SHALLOW 1
   CONFIGURE_COMMAND ""

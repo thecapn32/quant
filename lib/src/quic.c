@@ -145,7 +145,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
 
     c->flags = CONN_FLAG_EMBR | (peer_name ? CONN_FLAG_CLNT : 0);
     sq_init(&c->sent_pkts);
-    SPLAY_INIT(&c->streams);
+    splay_init(&c->streams);
     diet_init(&c->closed_streams);
     diet_init(&c->acked_pkts);
     diet_init(&c->recv);
@@ -172,8 +172,8 @@ static struct q_conn * new_conn(struct w_engine * const w,
     ev_io_start(loop, &c->rx_w);
 
     // add connection to global data structures
-    SPLAY_INSERT(ipnp_splay, &conns_by_ipnp, c);
-    SPLAY_INSERT(cid_splay, &conns_by_cid, c);
+    splay_insert(ipnp_splay, &conns_by_ipnp, c);
+    splay_insert(cid_splay, &conns_by_cid, c);
 
     warn(DBG, "%s conn created", conn_type(c));
     return c;
@@ -259,7 +259,7 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_sq * const q)
     struct q_stream * s = 0;
 
     while (c->state != CONN_STAT_IDLE && s == 0) {
-        SPLAY_FOREACH (s, stream, &c->streams) {
+        splay_foreach (s, stream, &c->streams) {
             if (s->id == 0)
                 // don't deliver stream-zero data
                 continue;
@@ -339,8 +339,8 @@ void * q_init(const char * const ifname)
     //        quant_version, warpcore_name, warpcore_version);
 
     // init connection structures
-    SPLAY_INIT(&conns_by_ipnp);
-    SPLAY_INIT(&conns_by_cid);
+    splay_init(&conns_by_ipnp);
+    splay_init(&conns_by_cid);
 
     // initialize warpcore on the given interface
     void * const w = w_init(ifname, 0, nbufs);
@@ -429,8 +429,8 @@ void q_close(struct q_conn * const c)
 
         // close all streams
         struct q_stream *s, *tmp;
-        for (s = SPLAY_MAX(stream, &c->streams); s; s = tmp) {
-            tmp = SPLAY_PREV(stream, &c->streams, s);
+        for (s = splay_max(stream, &c->streams); s; s = tmp) {
+            tmp = splay_prev(stream, &c->streams, s);
             if (s->id != 0)
                 q_close_stream(s);
         }
@@ -449,11 +449,11 @@ void q_close(struct q_conn * const c)
     ev_timer_stop(loop, &c->ld_alarm);
 
     // just free stream 0 (no close handshake)
-    struct q_stream * const s = SPLAY_MIN(stream, &c->streams);
+    struct q_stream * const s = splay_min(stream, &c->streams);
     if (s)
         free_stream(s);
-    ensure(SPLAY_EMPTY(&c->streams), "streams remain, e.g., %u",
-           SPLAY_MIN(stream, &c->streams)->id);
+    ensure(splay_empty(&c->streams), "streams remain, e.g., %u",
+           splay_min(stream, &c->streams)->id);
 
     ptls_aead_free(c->in_kp0);
     ptls_aead_free(c->out_kp0);
@@ -465,8 +465,8 @@ void q_close(struct q_conn * const c)
         w_close(c->sock);
 
     // remove connection from global lists
-    SPLAY_REMOVE(ipnp_splay, &conns_by_ipnp, c);
-    SPLAY_REMOVE(cid_splay, &conns_by_cid, c);
+    splay_remove(ipnp_splay, &conns_by_ipnp, c);
+    splay_remove(cid_splay, &conns_by_cid, c);
 
     warn(WRN, "%s conn %" PRIx64 " closed", conn_type(c), c->id);
     free(c);
@@ -477,9 +477,9 @@ void q_cleanup(void * const q)
 {
     // close all connections
     struct q_conn *c, *tmp;
-    for (c = SPLAY_MIN(cid_splay, &conns_by_cid); c != 0; c = tmp) {
+    for (c = splay_min(cid_splay, &conns_by_cid); c != 0; c = tmp) {
         warn(WRN, "closing %s conn %" PRIx64, conn_type(c), c->id);
-        tmp = SPLAY_NEXT(cid_splay, &conns_by_cid, c);
+        tmp = splay_next(cid_splay, &conns_by_cid, c);
         q_close(c);
     }
 

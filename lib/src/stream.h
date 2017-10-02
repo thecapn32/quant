@@ -33,7 +33,7 @@ struct q_conn;
 struct stream;
 
 struct q_stream {
-    SPLAY_ENTRY(q_stream) node;
+    splay_entry(q_stream) node;
     struct q_conn * c;
 
     uint32_t id;

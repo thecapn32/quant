@@ -196,7 +196,7 @@ void enc_pkt(struct q_conn * const c,
 
     const uint16_t hdr_len = i;
 
-    if (!SPLAY_EMPTY(&c->recv))
+    if (!splay_empty(&c->recv))
         i += enc_ack_frame(c, v->buf, v->len, i);
 
     if (c->state == CONN_STAT_CLSD) {

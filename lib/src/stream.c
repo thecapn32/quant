@@ -47,7 +47,7 @@ SPLAY_GENERATE(stream, q_stream, node, stream_cmp)
 struct q_stream * get_stream(struct q_conn * const c, const uint32_t id)
 {
     struct q_stream which = {.id = id};
-    return SPLAY_FIND(stream, &c->streams, &which);
+    return splay_find(stream, &c->streams, &which);
 }
 
 
@@ -64,7 +64,7 @@ struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
     s->id = id;
     if (id)
         c->next_sid += 2;
-    SPLAY_INSERT(stream, &c->streams, s);
+    splay_insert(stream, &c->streams, s);
     warn(INF, "reserved str %u on %s conn %" PRIx64, id, conn_type(c), c->id);
     return s;
 }
@@ -81,6 +81,6 @@ void free_stream(struct q_stream * const s)
     w_free(w_engine(s->c->sock), &s->i);
     w_free(w_engine(s->c->sock), &s->r);
 
-    SPLAY_REMOVE(stream, &s->c->streams, s);
+    splay_remove(stream, &s->c->streams, s);
     free(s);
 }
