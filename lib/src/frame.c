@@ -442,7 +442,7 @@ uint16_t
 enc_padding_frame(uint8_t * const buf, const uint16_t pos, const uint16_t len)
 {
     warn(DBG, "encoding padding frame into [%u..%u]", pos, pos + len - 1);
-    memset(&((uint8_t *)buf)[pos], FRAM_TYPE_PAD, len);
+    memset(&buf[pos], FRAM_TYPE_PAD, len);
     return len;
 }
 

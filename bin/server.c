@@ -91,7 +91,7 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
            path);
     ensure(info.st_size < UINT32_MAX, "file %s too long", path);
 
-    const int f = openat(d->dir, path, O_RDONLY);
+    const int f = openat(d->dir, path, O_RDONLY | O_CLOEXEC);
     ensure(f != -1, "could not open %s", path);
 
     q_write_file(d->q, d->s, f, (uint32_t)info.st_size);
@@ -143,7 +143,7 @@ int main(int argc, char * argv[])
         }
     }
 
-    const int dir_fd = open(dir, O_RDONLY);
+    const int dir_fd = open(dir, O_RDONLY | O_CLOEXEC);
     ensure(dir_fd != -1, "%s does not exist", dir);
 
     void * const q = q_init(ifname);

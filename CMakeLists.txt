@@ -103,13 +103,15 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
   if(CLANGTIDY)
     message(STATUS "Found clang-tidy: ${CLANGTIDY}")
     set(CLANG_TIDY_CHECKS *
-        -google-readability-braces-around-statements
-        -readability-braces-around-statements
-        -google-runtime-references
-        -clang-analyzer-alpha.deadcode.UnreachableCode
         -cert-err58-cpp
-        -google-readability-todo
+        -clang-analyzer-alpha.deadcode.UnreachableCode
+        -clang-diagnostic-unused-command-line-argument
+        -google-readability-braces-around-statements
         -google-readability-function-size
+        -google-readability-todo
+        -google-runtime-references
+        -hicpp-function-size
+        -readability-braces-around-statements
         -readability-function-size
     )
     string(REPLACE ";" "," CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS}")
