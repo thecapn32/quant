@@ -137,7 +137,7 @@ uint32_t tls_handshake(struct q_stream * const s)
 {
     // get pointer to any received handshake data
     // XXX there is an assumption here that we only have one inbound packet
-    struct w_iov * const iv = STAILQ_FIRST(&s->i);
+    struct w_iov * const iv = sq_first(&s->i);
     size_t in_len = iv ? iv->len : 0;
 
     // allocate a new w_iov
@@ -163,7 +163,7 @@ uint32_t tls_handshake(struct q_stream * const s)
 
     if ((ret == 0 || ret == PTLS_ERROR_IN_PROGRESS) && ov->len != 0)
         // enqueue for TX
-        STAILQ_INSERT_TAIL(&s->o, ov, next);
+        sq_insert_tail(&s->o, ov, next);
     else
         // we are done with the handshake, no need to TX after all
         w_free_iov(w_engine(s->c->sock), ov);
@@ -231,16 +231,15 @@ struct q_conn * get_conn_by_cid(const uint64_t id, const uint8_t type)
 
 static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
                                                  struct q_stream * const s,
-                                                 struct w_iov_stailq * const q)
+                                                 struct w_iov_sq * const q)
 {
     const ev_tstamp now = ev_now(loop);
-    const struct w_iov * const last_tx =
-        STAILQ_LAST(&c->sent_pkts, w_iov, next);
+    const struct w_iov * const last_tx = sq_last(&c->sent_pkts, w_iov, next);
     const ev_tstamp last_tx_t = last_tx ? meta(last_tx).time : -HUGE_VAL;
 
     struct w_iov * v;
-    struct w_iov_stailq x = STAILQ_HEAD_INITIALIZER(x);
-    STAILQ_FOREACH (v, q, next) {
+    struct w_iov_sq x = sq_head_initializer(x);
+    sq_foreach (v, q, next) {
         if (s == 0 && v->len == 0) {
             warn(DBG,
                  "ignoring non-retransmittable pkt %" PRIu64 " (len %u %u)",
@@ -300,10 +299,10 @@ static void tx_ack_or_fin(struct q_stream * const s)
     struct w_iov * const ov =
         w_alloc_iov(w_engine(s->c->sock), MAX_PKT_LEN, Q_OFFSET);
     ov->len = 0;
-    STAILQ_INSERT_TAIL(&s->o, ov, next);
+    sq_insert_tail(&s->o, ov, next);
     do_tx(s->c, s, &s->o);
     // ACKs and FINs are never RTXable
-    STAILQ_CONCAT(&s->c->sent_pkts, &s->o);
+    sq_concat(&s->c->sent_pkts, &s->o);
     diet_insert(&s->c->acked_pkts, meta(ov).nr);
 }
 
@@ -316,11 +315,11 @@ void tx(struct ev_loop * const l __attribute__((unused)),
     struct q_stream * s = 0;
     bool did_tx = false;
     SPLAY_FOREACH (s, stream, &c->streams) {
-        if (!STAILQ_EMPTY(&s->o)) {
+        if (!sq_empty(&s->o)) {
             warn(DBG, "data TX needed on %s conn %" PRIx64 " str %u",
                  conn_type(c), c->id, s->id);
             do_tx(c, s, &s->o);
-            STAILQ_CONCAT(&c->sent_pkts, &s->o);
+            sq_concat(&c->sent_pkts, &s->o);
             did_tx = true;
         } else if (s->state == STRM_STATE_HCLO || s->state == STRM_STATE_CLSD) {
             warn(DBG, "FIN needed on %s conn %" PRIx64 " str %u", conn_type(c),
@@ -374,13 +373,13 @@ void rx(struct ev_loop * const l,
 {
     struct w_sock * const ws = rx_w->data;
     w_nic_rx(w_engine(ws), -1);
-    struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
-    SLIST_HEAD(, q_conn) crx = SLIST_HEAD_INITIALIZER();
+    struct w_iov_sq i = sq_head_initializer(i);
+    sl_head(, q_conn) crx = sl_head_initializer();
     w_rx(ws, &i);
 
-    while (!STAILQ_EMPTY(&i)) {
-        struct w_iov * const v = STAILQ_FIRST(&i);
-        STAILQ_REMOVE_HEAD(&i, next);
+    while (!sq_empty(&i)) {
+        struct w_iov * const v = sq_first(&i);
+        sq_remove_head(&i, next);
         if (v->len > MAX_PKT_LEN)
             warn(WRN, "received %u-byte pkt (> %u max)", v->len, MAX_PKT_LEN);
         const uint16_t hdr_len = pkt_hdr_len(v->buf, v->len);
@@ -471,7 +470,7 @@ void rx(struct ev_loop * const l,
         // remember that we had a RX event on this connection
         if (!is_set(CONN_FLAG_RX, c->flags)) {
             c->flags |= CONN_FLAG_RX;
-            SLIST_INSERT_HEAD(&crx, c, next);
+            sl_insert_head(&crx, c, next);
         }
 
         diet_insert(&c->recv, nr);
@@ -516,7 +515,7 @@ void rx(struct ev_loop * const l,
                 dec_frames(c, v);
 
                 // we should have received a ClientHello
-                ensure(!STAILQ_EMPTY(&s->i), "no ClientHello");
+                ensure(!sq_empty(&s->i), "no ClientHello");
                 tls_handshake(s);
 
                 warn(INF, "%s conn %" PRIx64 " now in state %u", conn_type(c),
@@ -553,7 +552,7 @@ void rx(struct ev_loop * const l,
 
                 // we should have received a ServerHello
                 c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
-                ensure(!STAILQ_EMPTY(&s->i), "no ServerHello");
+                ensure(!sq_empty(&s->i), "no ServerHello");
                 if (tls_handshake(s) == 0)
                     maybe_api_return(q_connect, c);
             }
@@ -565,7 +564,7 @@ void rx(struct ev_loop * const l,
             // whether that completes the client handshake
             c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
             struct q_stream * const s = get_stream(c, 0);
-            if (!STAILQ_EMPTY(&s->i) && tls_handshake(s) == 0) {
+            if (!sq_empty(&s->i) && tls_handshake(s) == 0) {
                 maybe_api_return(q_accept, c);
                 maybe_api_return(q_connect, c);
             }
@@ -584,7 +583,7 @@ void rx(struct ev_loop * const l,
     // for all connections that had RX events, reset idle timeout and check if
     // we need to do a TX
     struct q_conn * c;
-    SLIST_FOREACH (c, &crx, next) {
+    sl_foreach (c, &crx, next) {
         // reset idle timeout
         ev_timer_again(loop, &c->idle_alarm);
 
@@ -612,7 +611,7 @@ void detect_lost_pkts(struct q_conn * const c)
     const ev_tstamp now = ev_now(loop);
     uint64_t largest_lost_packet = 0;
     struct w_iov *v, *tmp;
-    STAILQ_FOREACH_SAFE (v, &c->sent_pkts, next, tmp) {
+    sq_foreach_safe (v, &c->sent_pkts, next, tmp) {
         const uint64_t nr = meta(v).nr;
         if (meta(v).ack_cnt == 0 && nr < c->lg_acked) {
             const ev_tstamp time_since_sent = now - meta(v).time;
@@ -622,7 +621,7 @@ void detect_lost_pkts(struct q_conn * const c)
                 // Inform the congestion controller of lost packets and
                 // lets it decide whether to retransmit immediately.
                 largest_lost_packet = MAX(largest_lost_packet, nr);
-                STAILQ_REMOVE(&c->sent_pkts, v, w_iov, next);
+                sq_remove(&c->sent_pkts, v, w_iov, next);
 
                 // if this packet was retransmittable, update in_flight
                 if (v->len > Q_OFFSET) {

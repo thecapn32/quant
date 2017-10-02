@@ -41,13 +41,13 @@ struct q_stream {
     uint8_t flags;
     uint8_t _unused[2];
 
-    struct w_iov_stailq r; ///< tail queue containing written data
+    struct w_iov_sq r; ///< tail queue containing written data
 
-    struct w_iov_stailq o; ///< tail queue containing outbound data
+    struct w_iov_sq o; ///< tail queue containing outbound data
     uint64_t out_off;
     uint64_t out_nr; ///< highest packet number that had stream data
 
-    struct w_iov_stailq i; ///< tail queue containing inbound data
+    struct w_iov_sq i; ///< tail queue containing inbound data
     uint64_t in_off;
 };
 

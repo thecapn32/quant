@@ -131,7 +131,7 @@ static uint8_t __attribute__((const)) needed_pkt_nr_len(const uint64_t n)
 void enc_pkt(struct q_conn * const c,
              struct q_stream * const s,
              struct w_iov * const v,
-             struct w_iov_stailq * const q)
+             struct w_iov_sq * const q)
 {
     // prepend the header by adjusting the buffer offset
     v->buf -= Q_OFFSET;
@@ -275,7 +275,7 @@ void enc_pkt(struct q_conn * const c,
         warn(DBG, "adding %d-byte AEAD over [0..%u]", x->len - v->len, i - 1);
     }
 
-    STAILQ_INSERT_TAIL(q, x, next);
+    sq_insert_tail(q, x, next);
 
     if (v->len > Q_OFFSET) {
         // FIXME packet is retransmittable (check incorrect)

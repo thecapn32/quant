@@ -153,7 +153,7 @@ dec_stream_frame(struct q_conn * const c,
             w_free_iov(w_engine(c->sock), v);
 
         } else {
-            STAILQ_INSERT_TAIL(&s->i, v, next);
+            sq_insert_tail(&s->i, v, next);
             s->state = STRM_STATE_OPEN;
         }
 
@@ -210,7 +210,7 @@ find_sent_pkt(struct q_conn * const c, const uint64_t nr)
     // warn(DBG, "find_sent_pkt %" PRIu64, nr);
     // check if packed is in the unACKed queue
     struct w_iov * v;
-    STAILQ_FOREACH (v, &c->sent_pkts, next) {
+    sq_foreach (v, &c->sent_pkts, next) {
         // warn(DBG, "sent_pkts %" PRIu64, meta(v).nr);
         if (meta(v).nr == nr)
             return v;
@@ -319,11 +319,11 @@ dec_ack_frame(struct q_conn * const c,
                     warn(INF, "cwnd now %" PRIu64, c->cwnd);
                 }
 
-                STAILQ_REMOVE(&c->sent_pkts, p, w_iov, next);
+                sq_remove(&c->sent_pkts, p, w_iov, next);
                 if (meta(p).buf_len > Q_OFFSET) {
                     // move the iov from sent_pkts back to user return stailq
                     struct q_stream * const s = meta(p).str;
-                    STAILQ_INSERT_TAIL(&s->r, p, next);
+                    sq_insert_tail(&s->r, p, next);
 
                     // adjust in_flight
                     c->in_flight -= meta(p).buf_len;
@@ -516,7 +516,8 @@ uint16_t enc_ack_frame(struct q_conn * const c,
 
     struct ival * b;
     uint64_t prev_lo = 0;
-    SPLAY_FOREACH_REV (b, diet, &c->recv) {
+    SPLAY_FOREACH_REV(b, diet, &c->recv)
+    {
         if (prev_lo) {
             const uint64_t gap = prev_lo - b->hi;
             ensure(gap <= UINT8_MAX, "TODO: handle larger ACK gaps");
@@ -583,8 +584,7 @@ uint16_t enc_stream_frame(struct q_stream * const s,
     // packet or we have no more packets, include a FIN
     if (s->state == STRM_STATE_CLSD ||
         (s->state == STRM_STATE_HCLO &&
-         (STAILQ_NEXT(STAILQ_FIRST(&s->o), next) == 0 ||
-          STAILQ_EMPTY(&s->o)))) {
+         (sq_next(sq_first(&s->o), next) == 0 || sq_empty(&s->o)))) {
         warn(NTE, "sending FIN on %s conn %" PRIx64 " str %u, state %u",
              conn_type(s->c), s->c->id, s->id, s->state);
         type |= F_STREAM_FIN;

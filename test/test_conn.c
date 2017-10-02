@@ -83,9 +83,9 @@ int main(int argc
     struct q_stream * const s = q_rsv_stream(cc);
 
     // allocate buffers to transmit a packet
-    struct w_iov_stailq o = STAILQ_HEAD_INITIALIZER(o);
+    struct w_iov_sq o = sq_head_initializer(o);
     q_alloc(q, &o, 1024);
-    struct w_iov * const ov = STAILQ_FIRST(&o);
+    struct w_iov * const ov = sq_first(&o);
 
     // add some payload data
     ov->len = (uint16_t)snprintf((char *)ov->buf, 1024,
@@ -98,9 +98,9 @@ int main(int argc
     q_write(s, &o);
 
     // read the data
-    struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
+    struct w_iov_sq i = sq_head_initializer(i);
     q_read(sc, &i);
-    struct w_iov * const iv = STAILQ_FIRST(&i);
+    struct w_iov * const iv = sq_first(&i);
     ensure(strncmp((char *)ov->buf, (char *)iv->buf, ov->len) == 0,
            "data mismatch");
 

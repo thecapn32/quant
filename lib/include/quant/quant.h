@@ -30,7 +30,7 @@
 
 #include <quant/config.h> // IWYU pragma: export
 
-struct w_iov_stailq;
+struct w_iov_sq;
 struct q_stream;
 
 
@@ -52,10 +52,10 @@ extern struct q_conn * __attribute__((nonnull))
 q_accept(struct q_conn * const c);
 
 extern void __attribute__((nonnull))
-q_write(struct q_stream * const s, struct w_iov_stailq * const q);
+q_write(struct q_stream * const s, struct w_iov_sq * const q);
 
 extern struct q_stream * __attribute__((nonnull))
-q_read(struct q_conn * const c, struct w_iov_stailq * const q);
+q_read(struct q_conn * const c, struct w_iov_sq * const q);
 
 extern struct q_stream * __attribute__((nonnull))
 q_rsv_stream(struct q_conn * const c);
@@ -63,10 +63,10 @@ q_rsv_stream(struct q_conn * const c);
 extern void __attribute__((nonnull)) q_close_stream(struct q_stream * const s);
 
 extern void __attribute__((nonnull))
-q_alloc(void * const w, struct w_iov_stailq * const q, const uint32_t len);
+q_alloc(void * const w, struct w_iov_sq * const q, const uint32_t len);
 
 extern void __attribute__((nonnull))
-q_free(void * const w, struct w_iov_stailq * const q);
+q_free(void * const w, struct w_iov_sq * const q);
 
 extern uint64_t __attribute__((nonnull)) q_cid(const struct q_conn * const c);
 

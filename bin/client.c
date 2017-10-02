@@ -36,7 +36,6 @@
 #include <http_parser.h>
 
 #include <quant/quant.h>
-// IWYU pragma: no_include <sys/queue.h>
 #include <warpcore/warpcore.h>
 
 
@@ -139,10 +138,10 @@ int main(int argc, char * argv[])
         q_close_stream(s);
 
         // read HTTP/0.9 reply and dump it to stdout
-        struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
+        struct w_iov_sq i = sq_head_initializer(i);
         q_read(c, &i);
         struct w_iov * v;
-        STAILQ_FOREACH (v, &i, next)
+        sq_foreach (v, &i, next)
             printf("%.*s", v->len, v->buf);
         printf("\n");
     }

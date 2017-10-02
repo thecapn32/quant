@@ -51,7 +51,7 @@ extern SPLAY_HEAD(cid_splay, q_conn) conns_by_cid;
 struct q_conn {
     SPLAY_ENTRY(q_conn) node_ipnp;
     SPLAY_ENTRY(q_conn) node_cid;
-    SLIST_ENTRY(q_conn) next;
+    sl_entry(q_conn) next;
 
     uint64_t id; ///< Connection ID
 
@@ -93,7 +93,7 @@ struct q_conn {
     /// Sent-but-unACKed packets. The @p buf and @len fields of the w_iov
     /// structs are relative to any stream data.
     ///
-    struct w_iov_stailq sent_pkts;
+    struct w_iov_sq sent_pkts;
     struct diet acked_pkts;
 
     uint64_t lg_sent;  ///< Largest packet number sent

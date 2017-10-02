@@ -40,13 +40,13 @@ void q_write_str(void * const q,
                  const char * const str)
 {
     // allocate tail queue
-    struct w_iov_stailq o = STAILQ_HEAD_INITIALIZER(o);
+    struct w_iov_sq o = sq_head_initializer(o);
     q_alloc(q, &o, (uint32_t)strlen(str));
 
     // chunk up string
     const char * i = str;
     struct w_iov * v;
-    STAILQ_FOREACH (v, &o, next) {
+    sq_foreach (v, &o, next) {
         strncpy((char *)v->buf, i, v->len);
         i += v->len;
     }
@@ -63,16 +63,16 @@ void q_write_file(void * const q,
                   const uint32_t len)
 {
     // allocate tail queue
-    struct w_iov_stailq o = STAILQ_HEAD_INITIALIZER(o);
+    struct w_iov_sq o = sq_head_initializer(o);
     q_alloc(q, &o, len);
-    const uint32_t n = w_iov_stailq_cnt(&o);
+    const uint64_t n = w_iov_sq_cnt(&o);
     struct iovec * const iov = calloc(n, sizeof(struct iovec));
     ensure(iov, "could not calloc");
 
     // prep iovec and read file
     uint32_t i = 0;
     struct w_iov * v;
-    STAILQ_FOREACH (v, &o, next)
+    sq_foreach (v, &o, next)
         iov[i++] = (struct iovec){.iov_base = v->buf, .iov_len = v->len};
     const ssize_t l = readv(f, iov, (int)n);
     ensure(len == l, "could not read file");

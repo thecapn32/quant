@@ -38,7 +38,6 @@
 #include <http_parser.h>
 
 #include <quant/quant.h>
-// IWYU pragma: no_include <sys/queue.h>
 #include <warpcore/warpcore.h>
 
 
@@ -158,12 +157,12 @@ int main(int argc, char * argv[])
     http_parser parser = {.data = &d};
     http_parser_init(&parser, HTTP_REQUEST);
 
-    struct w_iov_stailq i = STAILQ_HEAD_INITIALIZER(i);
+    struct w_iov_sq i = sq_head_initializer(i);
     struct q_stream * s = q_read(c, &i);
     d.s = s;
 
     struct w_iov * v;
-    STAILQ_FOREACH (v, &i, next) {
+    sq_foreach (v, &i, next) {
         // warn(INF, "%.*s", v->len, v->buf);
         const size_t parsed =
             http_parser_execute(&parser, &settings, (char *)v->buf, v->len);

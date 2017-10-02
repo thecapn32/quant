@@ -144,7 +144,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
     c->ssthresh = UINT64_MAX;
 
     c->flags = CONN_FLAG_EMBR | (peer_name ? CONN_FLAG_CLNT : 0);
-    STAILQ_INIT(&c->sent_pkts);
+    sq_init(&c->sent_pkts);
     SPLAY_INIT(&c->streams);
     diet_init(&c->closed_streams);
     diet_init(&c->acked_pkts);
@@ -180,13 +180,13 @@ static struct q_conn * new_conn(struct w_engine * const w,
 }
 
 
-void q_alloc(void * const w, struct w_iov_stailq * const q, const uint32_t len)
+void q_alloc(void * const w, struct w_iov_sq * const q, const uint32_t len)
 {
     w_alloc_len(w, q, len, MAX_PKT_LEN - AEAD_LEN, Q_OFFSET);
 }
 
 
-void q_free(void * const w, struct w_iov_stailq * const q)
+void q_free(void * const w, struct w_iov_sq * const q)
 {
     w_free((struct w_engine *)w, q);
 }
@@ -229,13 +229,13 @@ struct q_conn * q_connect(void * const q,
 }
 
 
-void q_write(struct q_stream * const s, struct w_iov_stailq * const q)
+void q_write(struct q_stream * const s, struct w_iov_sq * const q)
 {
-    const uint32_t qlen = w_iov_stailq_len(q);
+    const uint32_t qlen = w_iov_sq_len(q);
     warn(WRN, "writing %u byte%s on %s conn %" PRIx64 " str %u", qlen,
          plural(qlen), conn_type(s->c), s->c->id, s->id);
 
-    STAILQ_CONCAT(&s->o, q);
+    sq_concat(&s->o, q);
     s->state = STRM_STATE_OPEN;
 
     // kick TX watcher
@@ -243,17 +243,17 @@ void q_write(struct q_stream * const s, struct w_iov_stailq * const q)
     loop_run(q_write, s);
 
     // return written data back to user stailq
-    STAILQ_CONCAT(q, &s->r);
+    sq_concat(q, &s->r);
 
     warn(WRN, "wrote %u byte%s on %s conn %" PRIx64 " str %u", qlen,
          plural(qlen), conn_type(s->c), s->c->id, s->id);
 
-    ensure(w_iov_stailq_len(q) == qlen, "payload corrupted, %u != %u",
-           w_iov_stailq_len(q), qlen);
+    ensure(w_iov_sq_len(q) == qlen, "payload corrupted, %u != %u",
+           w_iov_sq_len(q), qlen);
 }
 
 
-struct q_stream * q_read(struct q_conn * const c, struct w_iov_stailq * const q)
+struct q_stream * q_read(struct q_conn * const c, struct w_iov_sq * const q)
 {
     warn(WRN, "reading on %s conn %" PRIx64, conn_type(c), c->id);
     struct q_stream * s = 0;
@@ -263,7 +263,7 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_stailq * const q)
             if (s->id == 0)
                 // don't deliver stream-zero data
                 continue;
-            if (!STAILQ_EMPTY(&s->i))
+            if (!sq_empty(&s->i))
                 // we found a stream with queued data
                 break;
         }
@@ -280,10 +280,9 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_stailq * const q)
         return 0;
 
     // return data
-    STAILQ_CONCAT(q, &s->i);
-    warn(WRN, "read %u byte%s on %s conn %" PRIx64 " str %u",
-         w_iov_stailq_len(q), plural(w_iov_stailq_len(q)), conn_type(s->c),
-         s->c->id, s->id);
+    sq_concat(q, &s->i);
+    warn(WRN, "read %u byte%s on %s conn %" PRIx64 " str %u", w_iov_sq_len(q),
+         plural(w_iov_sq_len(q)), conn_type(s->c), s->c->id, s->id);
     return s;
 }
 
