@@ -82,9 +82,15 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
 
     // if this a directory, look up its index
     if (info.st_mode & S_IFDIR) {
-        strncat(path, "/index.html", sizeof(path) - len - 1);
+        const size_t pos = sizeof(path) - len - 1;
+        strncat(path, "/index.html", pos);
         r = fstatat(d->dir, path, &info, 0);
-        ensure(r != -1, "could not stat");
+        // in case we are running local to the cmake build dir, pick something
+        if (r == -1) {
+            strncpy(path, "CMakeCache.txt", pos);
+            r = fstatat(d->dir, path, &info, 0);
+        }
+        ensure(r != -1, "could not stat %s", path);
     }
     ensure(info.st_mode & S_IFREG || info.st_mode & S_IFLNK, "%s is not a file",
            path);

@@ -41,7 +41,7 @@ esac
 # commands to run the different servers on  127.0.0.1:$port
 case $s in
         quant)
-                s="bin/server -p $port"
+                s="bin/server -p $port -d ."
                 ;;
         quicly)
                 s="external/usr/local/bin/cli -v -k lib/src/key.pem -c \
