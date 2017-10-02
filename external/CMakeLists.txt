@@ -26,7 +26,7 @@ set_target_properties(warpcore PROPERTIES
 add_dependencies(warpcore warp)
 
 
-# build picotls with our CFLAGS, but without -Werror
+# build picotls with most of our CFLAGS
 string(TOUPPER ${CMAKE_BUILD_TYPE} CMAKE_BUILD_TYPE_UC)
 set(PICOTLS_CFLAGS "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_${CMAKE_BUILD_TYPE_UC}}")
 string(REPLACE "-Werror" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
@@ -50,6 +50,7 @@ externalproject_add(picotls
     -DOPENSSL_INCLUDE_DIR=${OPENSSL_ROOT_DIR}/include
     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
     -DCMAKE_POSITION_INDEPENDENT_CODE=True
+    -DCMAKE_C_STANDARD=${CMAKE_C_STANDARD}
   INSTALL_COMMAND
     cp -a ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls/include
       ${CMAKE_CURRENT_BINARY_DIR} &&
