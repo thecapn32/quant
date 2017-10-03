@@ -42,10 +42,41 @@ Vagrant.configure("2") do |config|
       gdb valgrind mercurial libhttp-parser-dev
 
     # install recent cmake
-    wget -q https://cmake.org/files/v3.9/cmake-3.9.1-Linux-x86_64.sh
-    sh cmake-3.9.1-Linux-x86_64.sh --skip-license --prefix=/usr/local
+    wget -q https://cmake.org/files/v3.9/cmake-3.9.3-Linux-x86_64.sh
+    sh cmake-3.9.3-Linux-x86_64.sh --skip-license --prefix=/usr/local
 
     # change shell to fish
     chsh -s /usr/bin/fish ubuntu
+
+    # get Linux kernel sources, for building netmap
+    apt-get source linux-image-$(uname -r)
+
+    # compile and install netmap
+    git clone https://github.com/luigirizzo/netmap
+    cd /home/ubuntu/netmap
+    ./configure --driver-suffix=-netmap --no-ext-drivers \
+      --kernel-sources=/home/ubuntu/linux-$(uname -r | cut -d- -f1)
+    make
+    make install
+
+    # enable netmap at boot, and make sure the netmap e1000 driver is used
+    echo 'netmap' >> /etc/modules-load.d/modules.conf
+    echo 'e1000-netmap' >> /etc/modules-load.d/modules.conf
+    echo 'blacklist e1000' >> /etc/modprobe.d/blacklist-netmap.conf
+    # echo 'blacklist virtio' >> /etc/modprobe.d/blacklist-netmap.conf
+
+    # various changes to /etc to let normal users use netmap
+    echo 'KERNEL=="netmap", MODE="0666"' > /etc/udev/rules.d/netmap.rules
+    echo '*   soft  memlock   unlimited' >> /etc/security/limits.conf
+    echo '*   hard  memlock   unlimited' >> /etc/security/limits.conf
+    echo '*   soft  core      unlimited' >> /etc/security/limits.conf
+    echo '*   hard  core      unlimited' >> /etc/security/limits.conf
+
+    # build a new initrd
+    depmod -a
+    update-initramfs -u
+
+    # we need to restart via "vagrant up"
+    shutdown -P now
   SHELL
 end
