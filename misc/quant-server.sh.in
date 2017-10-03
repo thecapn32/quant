@@ -30,4 +30,4 @@ new=$(make_name $name)
 mv "$name" "$new"
 mail -s "$new" lars@netapp.com -A "$new" < /dev/null
 
-@CMAKE_BINARY_DIR@/bin/server -i eth0 -d /var/www/html 2>&1 | aha > "$name"
+@CMAKE_BINARY_DIR@/bin/server -i eth0 -d @PROJECT_SOURCE_DIR@ 2>&1 | aha > "$name"
