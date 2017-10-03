@@ -16,7 +16,7 @@ file(MAKE_DIRECTORY
       ${CMAKE_CURRENT_BINARY_DIR}/include ${CMAKE_CURRENT_BINARY_DIR}/lib)
 add_library(warpcore STATIC IMPORTED GLOBAL)
 set(WARP ${CMAKE_CURRENT_BINARY_DIR}/lib/libwarpcore.a)
-if(NOT EXISTS(${WARP}))
+if(NOT EXISTS ${WARP})
   set(WARP ${CMAKE_CURRENT_BINARY_DIR}/lib/libsockcore.a)
 endif()
 set_target_properties(warpcore PROPERTIES
