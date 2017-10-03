@@ -102,7 +102,7 @@ externalproject_add(minq
   CONFIGURE_COMMAND
     cd ${GOPATH}/src/github.com/bifurcation/mint &&
       git remote add ekr https://www.github.com/ekr/mint || true &&
-      git fetch ekr && git checkout minq_draft_21
+      git fetch ekr && git checkout master
   BUILD_COMMAND
     cd ${GOPATH}/src/${MINQ} && env GOPATH=${GOPATH} go test
   INSTALL_COMMAND ""
