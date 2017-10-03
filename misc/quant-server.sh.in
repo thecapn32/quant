@@ -30,4 +30,9 @@ new=$(make_name $name)
 mv "$name" "$new"
 mail -s "$new" lars@netapp.com -A "$new" < /dev/null
 
-@CMAKE_BINARY_DIR@/bin/server -i eth0 -d @PROJECT_SOURCE_DIR@ 2>&1 | aha > "$name"
+cat <<-EOF > /var/www/html/.htaccess
+RewriteEngine on
+RewriteRule ^last.html$ $new
+EOF
+
+@CMAKE_BINARY_DIR@/bin/server -i eth0 -d @PROJECT_SOURCE_DIR@ 2>&1 | tee "$name.txt" | aha -s > "$name"
