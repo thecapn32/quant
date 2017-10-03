@@ -19,19 +19,18 @@ function make_name() {
 
 export PATH="$PATH:~/bin"
 
-mkdir -p @CMAKE_BINARY_DIR@
-cd @CMAKE_BINARY_DIR@ || exit
-git pull
-cmake -GNinja ..
-ninja
-
 name=/var/www/html/index.html
 new=$(make_name $name)
 mv "$name" "$new"
 mail -s "$new" lars@netapp.com -A "$new" < /dev/null
 
 cat <<-EOF > /var/www/html/.htaccess
-RewriteRule ^last\.html$ $(basename "$new") [R]
+RewriteRule ^log$ /$(basename "$new") [R]
 EOF
 
-@CMAKE_BINARY_DIR@/bin/server -i eth0 -d @PROJECT_SOURCE_DIR@ 2>&1 | aha -s > "$name"
+mkdir -p @CMAKE_BINARY_DIR@
+cd @CMAKE_BINARY_DIR@ || exit
+git pull
+cmake -GNinja ..
+ninja
+bin/server -i eth0 -d @PROJECT_SOURCE_DIR@ 2>&1 | aha -s > "$name"
