@@ -21,7 +21,7 @@ case $c in
                 c="bin/client https://127.0.0.1:$port/"
                 ;;
         quicly)
-                c="external/usr/local/bin/cli 127.0.0.1 $port"
+                c="external/usr/local/bin/cli -vv -p / 127.0.0.1 $port"
                 ;;
         minq)
                 c="env MINQ_LOG=\* GOPATH=$(pwd)/external/go go run \
@@ -44,7 +44,7 @@ case $s in
                 s="bin/server -p $port -d .."
                 ;;
         quicly)
-                s="external/usr/local/bin/cli -v -k lib/src/key.pem -c \
+                s="external/usr/local/bin/cli -vv -k lib/src/key.pem -c \
                         lib/src/cert.pem 127.0.0.1 $port"
                 ;;
         minq)
