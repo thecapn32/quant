@@ -31,7 +31,7 @@ mv "$name" "$new"
 mail -s "$new" lars@netapp.com -A "$new" < /dev/null
 
 cat <<-EOF > /var/www/html/.htaccess
-RewriteRule ^last\.html$ $new [R]
+RewriteRule ^last\.html$ $(basename "$new") [R]
 EOF
 
-@CMAKE_BINARY_DIR@/bin/server -i eth0 -d @PROJECT_SOURCE_DIR@ 2>&1 | tee "$name.txt" | aha -s > "$name"
+@CMAKE_BINARY_DIR@/bin/server -i eth0 -d @PROJECT_SOURCE_DIR@ 2>&1 | aha -s > "$name"
