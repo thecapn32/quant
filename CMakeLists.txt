@@ -123,7 +123,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 else()
   # Default logging level
   if(NOT DEFINED DLEVEL)
-    set(DLEVEL "notice")
+    set(DLEVEL "NTE")
   endif()
 
   # check for INTERPROCEDURAL_OPTIMIZATION support
