@@ -358,12 +358,15 @@ static uint16_t __attribute__((nonnull)) dec_aead(struct q_conn * const c,
                                                   const struct w_iov * v,
                                                   const uint16_t hdr_len)
 {
-    const uint16_t len = (uint16_t)ptls_aead_decrypt(
+    const size_t len = (uint16_t)ptls_aead_decrypt(
         c->in_kp0, &v->buf[hdr_len], &v->buf[hdr_len], v->len - hdr_len,
         meta(v).nr, v->buf, hdr_len);
-    warn(DBG, "removing %u-byte AEAD over [0..%u]", v->len - len - hdr_len,
+    if (len == SIZE_MAX)
+        // AEAD decrypt error
+        return 0;
+    warn(DBG, "removing %lu-byte AEAD over [0..%u]", v->len - len - hdr_len,
          v->len - hdr_len);
-    return hdr_len + len;
+    return hdr_len + (uint16_t)len;
 }
 
 
@@ -453,19 +456,24 @@ void rx(struct ev_loop * const l,
 
         if (is_set(F_LONG_HDR, flags) && pkt_type(flags) != F_LH_1RTT_KPH0) {
             if (prot_verified == false) {
-                if (verify_hash(v->buf, v->len) == false) {
-                    warn(ERR, "hash mismatch; ignoring pkt");
-#ifndef NDEBUG
-                    if (_dlevel == DBG)
-                        hexdump(v->buf, v->len);
-#endif
-                    w_free_iov(w_engine(ws), v);
-                    continue;
-                }
+                prot_verified = verify_hash(v->buf, v->len);
                 v->len -= FNV_1A_LEN;
             }
-        } else
-            v->len = dec_aead(c, v, hdr_len);
+        } else {
+            const uint16_t len = dec_aead(c, v, hdr_len);
+            prot_verified = (len != 0);
+            v->len = len;
+        }
+
+        if (prot_verified == false) {
+            warn(ERR, "hash mismatch or AEAD decrypt error; ignoring pkt");
+#ifndef NDEBUG
+            if (_dlevel == DBG)
+                hexdump(v->buf, v->len);
+#endif
+            w_free_iov(w_engine(ws), v);
+            continue;
+        }
 
         // remember that we had a RX event on this connection
         if (!is_set(CONN_FLAG_RX, c->flags)) {
