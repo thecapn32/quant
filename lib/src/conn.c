@@ -491,9 +491,6 @@ void rx(struct ev_loop * const l,
 
         switch (c->state) {
         case CONN_STAT_IDLE:
-            new_stream(c, 0); // create stream 0 (server case)
-            // fall-through
-
         case CONN_STAT_VERS_REJ: {
             // store the socket with the connection
             c->sock = ws;
@@ -514,15 +511,13 @@ void rx(struct ev_loop * const l,
 
             // respond to the version negotiation packet
             c->vers = pkt_vers(v->buf, v->len);
-            struct q_stream * const s = get_stream(c, 0);
             c->flags |= CONN_FLAG_TX;
             if (vers_supported(c->vers)) {
                 warn(INF, "supporting client-requested version 0x%08x",
                      c->vers);
-
-                dec_frames(c, v);
-
                 // we should have received a ClientHello
+                dec_frames(c, v);
+                struct q_stream * const s = get_stream(c, 0);
                 ensure(!sq_empty(&s->i), "no ClientHello");
                 tls_handshake(s);
 
