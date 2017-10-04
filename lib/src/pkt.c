@@ -188,7 +188,6 @@ void enc_pkt(struct q_conn * const c,
             for (uint8_t j = 0; j < ok_vers_len; j++)
                 enc(v->buf, v->len, i, &ok_vers[j], 0, "0x%08x");
             v->len = i;
-            return;
         }
     } else
         enc(v->buf, v->len, i, &meta(v).nr, needed_pkt_nr_len(meta(v).nr),
@@ -196,7 +195,7 @@ void enc_pkt(struct q_conn * const c,
 
     const uint16_t hdr_len = i;
 
-    if (!splay_empty(&c->recv))
+    if (c->state != CONN_STAT_VERS_REJ && !splay_empty(&c->recv))
         i += enc_ack_frame(c, v->buf, v->len, i);
 
     if (c->state == CONN_STAT_CLSD) {

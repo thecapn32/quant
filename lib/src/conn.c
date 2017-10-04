@@ -332,7 +332,7 @@ void tx(struct ev_loop * const l __attribute__((unused)),
     if (did_tx == false) {
         // need to send ACKs but don't have any stream data to piggyback on
         s = get_stream(c, s ? s->id : 0);
-        warn(DBG, "ACK needed on %s conn %" PRIx64, conn_type(c), c->id);
+        warn(DBG, "TX needed on %s conn %" PRIx64, conn_type(c), c->id);
         tx_ack_or_fin(s);
     }
 }
@@ -530,6 +530,7 @@ void rx(struct ev_loop * const l,
                      "%s conn %" PRIx64
                      " clnt-requested vers 0x%08x not supported ",
                      conn_type(c), c->id, c->vers);
+                new_stream(c, 0);
             }
             break;
         }
