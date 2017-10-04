@@ -186,7 +186,7 @@ static bool __attribute__((const)) vers_supported(const uint32_t v)
             return true;
 
     // we're out of matching candidates
-    warn(INF, "no version in common with client");
+    warn(INF, "no vers in common with clnt");
     return false;
 }
 
@@ -207,7 +207,7 @@ pick_from_server_vers(const void * const buf, const uint16_t len)
         }
 
     // we're out of matching candidates
-    warn(INF, "no version in common with server");
+    warn(INF, "no vers in common with serv");
     return 0;
 }
 
@@ -513,14 +513,12 @@ void rx(struct ev_loop * const l,
             c->vers = pkt_vers(v->buf, v->len);
             c->flags |= CONN_FLAG_TX;
             if (vers_supported(c->vers)) {
-                warn(INF, "supporting client-requested version 0x%08x",
-                     c->vers);
+                warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
                 // we should have received a ClientHello
                 dec_frames(c, v);
                 struct q_stream * const s = get_stream(c, 0);
                 ensure(!sq_empty(&s->i), "no ClientHello");
                 tls_handshake(s);
-
                 warn(INF, "%s conn %" PRIx64 " now in state %u", conn_type(c),
                      c->id, c->state);
 
@@ -530,7 +528,7 @@ void rx(struct ev_loop * const l,
                      c->id, c->state);
                 warn(WRN,
                      "%s conn %" PRIx64
-                     " client-requested version 0x%08x not supported ",
+                     " clnt-requested vers 0x%08x not supported ",
                      conn_type(c), c->id, c->vers);
             }
             break;
@@ -540,17 +538,17 @@ void rx(struct ev_loop * const l,
             struct q_stream * const s = get_stream(c, 0);
             c->flags |= CONN_FLAG_TX;
             if (is_set(F_LH_TYPE_VNEG, flags)) {
-                warn(INF, "server didn't like our version 0x%08x", c->vers);
+                warn(INF, "server didn't like our vers 0x%08x", c->vers);
                 ensure(c->vers == pkt_vers(v->buf, v->len),
-                       "server did not echo our version back");
+                       "server did not echo our vers back");
                 c->vers = pick_from_server_vers(v->buf, v->len);
                 if (c->vers)
-                    warn(INF, "retrying with version 0x%08x", c->vers);
+                    warn(INF, "retrying with vers 0x%08x", c->vers);
                 else
-                    die("no version in common with server");
+                    die("no vers in common with server");
                 rtx(c, UINT32_MAX); // retransmit the ClientHello
             } else {
-                warn(INF, "server accepted version 0x%08x", c->vers);
+                warn(INF, "server accepted vers 0x%08x", c->vers);
                 c->state = CONN_STAT_VERS_OK;
 
                 // we should have received a ServerHello
