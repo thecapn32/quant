@@ -19,7 +19,7 @@ function make_name() {
 
 export PATH="$PATH:~/bin"
 
-name=/var/www/html/index.html
+name=/var/www/html/log.html
 new=$(make_name $name)
 mv "$name" "$new"
 mail -s "$new" lars@netapp.com -A "$new" < /dev/null
