@@ -34,7 +34,8 @@ case $c in
                         $addr $port"
                 ;;
         mozquic)
-                c="env MOZQUIC_NSS_CONFIG=external/mozquic-prefix/src/mozquic/sample/nss-config \
+                c="env MOZQUIC_LOG=all:9 \
+                        MOZQUIC_NSS_CONFIG=external/mozquic-prefix/src/mozquic/sample/nss-config \
                         DYLD_LIBRARY_PATH=external/nss-prefix/src/dist/$(cat external/nss-prefix/src/dist/latest)/lib \
                         external/mozquic-prefix/src/mozquic/client -peer $addr:$port"
                 ;;
@@ -58,7 +59,8 @@ case $s in
                         $addr $port lib/src/key.pem lib/src/cert.pem"
                 ;;
         mozquic)
-                s="env MOZQUIC_NSS_CONFIG=external/mozquic-prefix/src/mozquic/sample/nss-config \
+                s="env MOZQUIC_LOG=all:9 \
+                        MOZQUIC_NSS_CONFIG=external/mozquic-prefix/src/mozquic/sample/nss-config \
                         DYLD_LIBRARY_PATH=external/nss-prefix/src/dist/$(cat external/nss-prefix/src/dist/latest)/lib \
                         external/mozquic-prefix/src/mozquic/server -send-close"
                 ;;
