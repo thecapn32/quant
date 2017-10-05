@@ -63,7 +63,7 @@ extern uint64_t __attribute__((nonnull))
 pkt_cid(const uint8_t * const buf, const uint16_t len);
 
 extern uint64_t __attribute__((nonnull))
-pkt_nr(const uint8_t * const buf, const uint16_t len);
+pkt_nr(const uint8_t * const buf, const uint16_t len, struct q_conn * const c);
 
 extern uint32_t __attribute__((nonnull))
 pkt_vers(const uint8_t * const buf, const uint16_t len);

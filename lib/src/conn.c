@@ -86,7 +86,7 @@ int64_t ipnp_splay_cmp(const struct q_conn * const a,
 int64_t cid_splay_cmp(const struct q_conn * const a,
                       const struct q_conn * const b)
 {
-    const int64_t diff = (int64_t)a->id - (int64_t)b->id;
+    const int64_t diff = (int64_t)(a->id - b->id);
     if (likely(diff))
         return diff;
     // include only the client and embryonic flags in the comparison
@@ -358,12 +358,11 @@ static uint16_t __attribute__((nonnull)) dec_aead(struct q_conn * const c,
                                                   const struct w_iov * v,
                                                   const uint16_t hdr_len)
 {
-    const size_t len = (uint16_t)ptls_aead_decrypt(
-        c->in_kp0, &v->buf[hdr_len], &v->buf[hdr_len], v->len - hdr_len,
-        meta(v).nr, v->buf, hdr_len);
+    const size_t len =
+        ptls_aead_decrypt(c->in_kp0, &v->buf[hdr_len], &v->buf[hdr_len],
+                          v->len - hdr_len, meta(v).nr, v->buf, hdr_len);
     if (len == SIZE_MAX)
-        // AEAD decrypt error
-        return 0;
+        return 0; // AEAD decrypt error
     warn(DBG, "removing %lu-byte AEAD over [0..%u]", v->len - len - hdr_len,
          v->len - hdr_len);
     return hdr_len + (uint16_t)len;
@@ -398,7 +397,6 @@ void rx(struct ev_loop * const l,
 
         // TODO: support short headers w/o cid
         const uint8_t flags = pkt_flags(v->buf);
-        const uint64_t nr = meta(v).nr = pkt_nr(v->buf, v->len);
         const uint64_t cid = pkt_cid(v->buf, v->len);
         const uint8_t type = w_connected(ws) ? CONN_FLAG_CLNT : 0;
         struct q_conn * c = get_conn_by_cid(cid, type);
@@ -439,6 +437,7 @@ void rx(struct ev_loop * const l,
                          ((uint64_t)plat_random()));
                 warn(NTE, "%s picked new cid %" PRIx64 " for conn %" PRIx64,
                      conn_type(c), c->id, cid);
+                new_stream(c, 0);
 
             } else {
                 // we have a connection from this peer
@@ -454,6 +453,7 @@ void rx(struct ev_loop * const l,
             splay_insert(cid_splay, &conns_by_cid, c);
         }
 
+        meta(v).nr = pkt_nr(v->buf, v->len, c);
         if (is_set(F_LONG_HDR, flags) && pkt_type(flags) != F_LH_1RTT_KPH0) {
             if (prot_verified == false) {
                 prot_verified = verify_hash(v->buf, v->len);
@@ -481,13 +481,13 @@ void rx(struct ev_loop * const l,
             sl_insert_head(&crx, c, next);
         }
 
-        diet_insert(&c->recv, nr);
+        diet_insert(&c->recv, meta(v).nr);
         warn(NTE,
              "recv pkt %" PRIu64
              " (len %u, idx %u, type 0x%02x = " bitstring_fmt
              ") on %s conn %" PRIx64,
-             nr, v->len, v->idx, flags, to_bitstring(flags), conn_type(c),
-             c->id);
+             meta(v).nr, v->len, v->idx, flags, to_bitstring(flags),
+             conn_type(c), c->id);
 
         switch (c->state) {
         case CONN_STAT_IDLE:
@@ -530,7 +530,6 @@ void rx(struct ev_loop * const l,
                      "%s conn %" PRIx64
                      " clnt-requested vers 0x%08x not supported ",
                      conn_type(c), c->id, c->vers);
-                new_stream(c, 0);
             }
             break;
         }

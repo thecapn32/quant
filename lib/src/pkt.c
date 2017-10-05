@@ -74,7 +74,7 @@ uint64_t pkt_cid(const uint8_t * const buf, const uint16_t len)
 {
     const uint8_t flags = pkt_flags(buf);
     uint64_t cid = 0;
-    if (flags & F_LONG_HDR || flags & F_SH_CID) {
+    if (is_set(F_LONG_HDR, flags) || is_set(F_SH_CID, flags)) {
         uint16_t i = 1;
         dec(cid, buf, len, i, 0, "%" PRIx64);
     } else
@@ -83,12 +83,14 @@ uint64_t pkt_cid(const uint8_t * const buf, const uint16_t len)
 }
 
 
-uint64_t pkt_nr(const uint8_t * const buf, const uint16_t len)
+uint64_t
+pkt_nr(const uint8_t * const buf, const uint16_t len, struct q_conn * const c)
 {
     const uint8_t flags = pkt_flags(buf);
-    uint64_t nr = 0;
+    uint64_t nr = diet_max(&c->recv) + 1;
     uint16_t i = 9;
-    dec(nr, buf, len, i, flags & F_LONG_HDR ? 4 : pkt_nr_len[pkt_type(flags)],
+    dec(nr, buf, len, i,
+        is_set(F_LONG_HDR, flags) ? 4 : pkt_nr_len[pkt_type(flags)],
         "%" PRIu64);
     return nr;
 }
