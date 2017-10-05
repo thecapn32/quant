@@ -128,7 +128,7 @@ static void __attribute__((nonnull)) conn_setup_1rtt(struct q_conn * const c)
                            is_clnt(c) ? PTLS_CLNT_LABL : PTLS_SERV_LABL, 1);
 
     c->state = CONN_STAT_VERS_OK;
-    warn(INF, "%s conn %" PRIx64 " now in state %u", conn_type(c), c->id,
+    warn(DBG, "%s conn %" PRIx64 " now in state %u", conn_type(c), c->id,
          c->state);
 }
 
@@ -157,7 +157,7 @@ uint32_t tls_handshake(struct q_stream * const s)
         w_free(w_engine(s->c->sock), &s->i);
     else {
         s->c->state = CONN_STAT_VERS_SENT;
-        warn(INF, "%s conn %" PRIx64 " now in state %u", conn_type(s->c),
+        warn(DBG, "%s conn %" PRIx64 " now in state %u", conn_type(s->c),
              s->c->id, s->c->state);
     }
 
@@ -422,32 +422,24 @@ void rx(struct ev_loop * const l,
 
         if (c == 0) {
             // this might be the first packet for a new connection, or a dup CH
-            warn(DBG, "conn %" PRIx64 " may be new", cid);
             const struct sockaddr_in peer = {.sin_family = AF_INET,
                                              .sin_port = v->port,
                                              .sin_addr = {.s_addr = v->ip}};
             c = get_conn_by_ipnp(&peer, type | CONN_FLAG_EMBR);
             if (c == 0) {
-                warn(DBG, "conn %" PRIx64 " definitely new", cid);
                 struct sockaddr_in none = {0};
                 c = get_conn_by_ipnp(&none, type | CONN_FLAG_EMBR);
                 ensure(c, "no embr conn");
-                // update the conn in the global structs (TODO make less ugly)
                 c->peer = (struct sockaddr_in){.sin_family = AF_INET,
                                                .sin_port = v->port,
                                                .sin_addr = {.s_addr = v->ip}};
-                // this is a new connection; server picks a new random cid
-                c->id = ((((uint64_t)plat_random()) << 32) |
-                         ((uint64_t)plat_random()));
-                warn(NTE, "%s picked new cid %" PRIx64 " for conn %" PRIx64,
-                     conn_type(c), c->id, cid);
                 new_stream(c, 0);
-
             } else if (c->state < CONN_STAT_ESTB) {
                 if (is_clnt(c)) {
-                    // peer is proposing a different cid to use
-                    warn(DBG, "%s conn %" PRIx64 " was %" PRIx64, conn_type(c),
-                         cid, c->id);
+                    // server is proposing a different cid to use
+                    warn(DBG,
+                         "%s serv picked cid %" PRIx64 " for conn %" PRIx64,
+                         conn_type(c), cid, c->id);
                     splay_remove(ipnp_splay, &conns_by_ipnp, c);
                     splay_remove(cid_splay, &conns_by_cid, c);
                     c->id = cid;
@@ -470,7 +462,7 @@ void rx(struct ev_loop * const l,
              " (len %u, idx %u, type 0x%02x = " bitstring_fmt
              ") on %s conn %" PRIx64,
              meta(v).nr, v->len, v->idx, flags, to_bitstring(flags),
-             conn_type(c), c->id);
+             conn_type(c), cid);
         v->len -= prot_len;
 
         switch (c->state) {
@@ -498,17 +490,25 @@ void rx(struct ev_loop * const l,
             c->flags |= CONN_FLAG_TX;
             if (vers_supported(c->vers)) {
                 warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
+
+                // this is a new connection; server picks a new random cid
+                c->id = ((((uint64_t)plat_random()) << 32) |
+                         ((uint64_t)plat_random()));
+                warn(NTE, "%s picked new cid %" PRIx64 " for conn %" PRIx64,
+                     conn_type(c), c->id, cid);
+
                 // we should have received a ClientHello
                 dec_frames(c, v);
                 struct q_stream * const s = get_stream(c, 0);
                 ensure(!sq_empty(&s->i), "no ClientHello");
                 tls_handshake(s);
-                warn(INF, "%s conn %" PRIx64 " now in state %u", conn_type(c),
+                warn(DBG, "%s conn %" PRIx64 " now in state %u", conn_type(c),
                      c->id, c->state);
 
             } else {
                 c->state = CONN_STAT_VERS_REJ;
-                warn(INF, "%s conn %" PRIx64 " now in state %u", conn_type(c),
+                c->id = cid;
+                warn(DBG, "%s conn %" PRIx64 " now in state %u", conn_type(c),
                      c->id, c->state);
                 warn(WRN,
                      "%s conn %" PRIx64
