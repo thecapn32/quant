@@ -87,7 +87,7 @@ uint64_t
 pkt_nr(const uint8_t * const buf, const uint16_t len, struct q_conn * const c)
 {
     const uint8_t flags = pkt_flags(buf);
-    uint64_t nr = diet_max(&c->recv) + 1;
+    uint64_t nr = c ? diet_max(&c->recv) + 1 : 0;
     uint16_t i = 9;
     dec(nr, buf, len, i,
         is_set(F_LONG_HDR, flags) ? 4 : pkt_nr_len[pkt_type(flags)],

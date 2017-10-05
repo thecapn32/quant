@@ -400,23 +400,28 @@ void rx(struct ev_loop * const l,
         const uint64_t cid = pkt_cid(v->buf, v->len);
         const uint8_t type = w_connected(ws) ? CONN_FLAG_CLNT : 0;
         struct q_conn * c = get_conn_by_cid(cid, type);
-        bool prot_verified = false;
-        if (c == 0) {
-            if (is_set(F_LONG_HDR, flags) &&
-                pkt_type(flags) != F_LH_1RTT_KPH0) {
-                if (verify_hash(v->buf, v->len) == false) {
-                    warn(ERR, "hash mismatch; ignoring pkt");
-#ifndef NDEBUG
-                    if (_dlevel == DBG)
-                        hexdump(v->buf, v->len);
-#endif
-                    w_free_iov(w_engine(ws), v);
-                    continue;
-                }
-                v->len -= FNV_1A_LEN;
-                prot_verified = true;
-            }
+        meta(v).nr = pkt_nr(v->buf, v->len, c);
 
+        uint16_t prot_len = 0;
+        if (is_set(F_LONG_HDR, flags) && pkt_type(flags) != F_LH_1RTT_KPH0)
+            prot_len = verify_hash(v->buf, v->len) ? FNV_1A_LEN : 0;
+        else {
+            const uint16_t len = dec_aead(c, v, hdr_len);
+            prot_len = len != 0 ? v->len - len : 0;
+        }
+
+        if (prot_len == 0) {
+            warn(ERR, "hash mismatch or AEAD decrypt error; ignoring pkt");
+#ifndef NDEBUG
+            if (_dlevel == DBG)
+                hexdump(v->buf, v->len);
+#endif
+            w_free_iov(w_engine(ws), v);
+            continue;
+        }
+
+
+        if (c == 0) {
             // this might be the first packet for a new connection, or a dup CH
             warn(DBG, "conn %" PRIx64 " may be new", cid);
             const struct sockaddr_in peer = {.sin_family = AF_INET,
@@ -453,28 +458,6 @@ void rx(struct ev_loop * const l,
             splay_insert(cid_splay, &conns_by_cid, c);
         }
 
-        meta(v).nr = pkt_nr(v->buf, v->len, c);
-        if (is_set(F_LONG_HDR, flags) && pkt_type(flags) != F_LH_1RTT_KPH0) {
-            if (prot_verified == false) {
-                prot_verified = verify_hash(v->buf, v->len);
-                v->len -= FNV_1A_LEN;
-            }
-        } else {
-            const uint16_t len = dec_aead(c, v, hdr_len);
-            prot_verified = (len != 0);
-            v->len = len;
-        }
-
-        if (prot_verified == false) {
-            warn(ERR, "hash mismatch or AEAD decrypt error; ignoring pkt");
-#ifndef NDEBUG
-            if (_dlevel == DBG)
-                hexdump(v->buf, v->len);
-#endif
-            w_free_iov(w_engine(ws), v);
-            continue;
-        }
-
         // remember that we had a RX event on this connection
         if (!is_set(CONN_FLAG_RX, c->flags)) {
             c->flags |= CONN_FLAG_RX;
@@ -488,6 +471,7 @@ void rx(struct ev_loop * const l,
              ") on %s conn %" PRIx64,
              meta(v).nr, v->len, v->idx, flags, to_bitstring(flags),
              conn_type(c), c->id);
+        v->len -= prot_len;
 
         switch (c->state) {
         case CONN_STAT_IDLE:
@@ -496,9 +480,9 @@ void rx(struct ev_loop * const l,
             c->sock = ws;
 
             // validate minimum packet size
-            if (v->len < MIN_INI_LEN) {
-                warn(ERR, "initial %u-byte pkt too short (< %lu)", v->len,
-                     MIN_INI_LEN);
+            if (v->len + prot_len < MIN_INI_LEN) {
+                warn(ERR, "initial %u-byte pkt too short (< %u)",
+                     v->len + prot_len, MIN_INI_LEN);
 #ifndef NDEBUG
                 if (_dlevel == DBG)
                     hexdump(v->buf, v->len);

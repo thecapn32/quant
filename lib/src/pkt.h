@@ -27,11 +27,10 @@
 
 #include <stdint.h>
 
-#include "fnv_1a.h"
 #include "quic.h"
 
 #define MAX_PKT_LEN 1252
-#define MIN_INI_LEN 1200 - FNV_1A_LEN
+#define MIN_INI_LEN 1200
 #define AEAD_LEN 16 // XXX is this always 16?
 
 #define F_LONG_HDR 0x80
@@ -62,7 +61,7 @@ struct w_iov_sq;
 extern uint64_t __attribute__((nonnull))
 pkt_cid(const uint8_t * const buf, const uint16_t len);
 
-extern uint64_t __attribute__((nonnull))
+extern uint64_t __attribute__((nonnull(1)))
 pkt_nr(const uint8_t * const buf, const uint16_t len, struct q_conn * const c);
 
 extern uint32_t __attribute__((nonnull))
