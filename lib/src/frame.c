@@ -403,6 +403,7 @@ bool dec_frames(struct q_conn * const c, struct w_iov * const v)
     uint16_t i = pkt_hdr_len(v->buf, v->len);
     uint16_t pad_start = 0;
     uint16_t dlen = 0;
+    bool tx_needed = false;
 
     while (i < v->len) {
         const uint8_t type = ((const uint8_t * const)(v->buf))[i];
@@ -415,6 +416,7 @@ bool dec_frames(struct q_conn * const c, struct w_iov * const v)
             // TODO: support multiple stream frames per packet (needs memcpy)
             ensure(dlen == 0, "can only handle one stream frame per packet");
             i += dec_stream_frame(c, v, i, &dlen);
+            tx_needed = true;
 
         } else if (is_set(FRAM_TYPE_ACK, type)) {
             i = dec_ack_frame(c, v, i);
@@ -433,7 +435,7 @@ bool dec_frames(struct q_conn * const c, struct w_iov * const v)
             case FRAM_TYPE_PING:
                 warn(INF, "ping frame in [%u]", i);
                 i++;
-                // TODO: must ACK this
+                tx_needed = true;
                 break;
 
             default:
@@ -441,7 +443,7 @@ bool dec_frames(struct q_conn * const c, struct w_iov * const v)
             }
     }
 
-    return dlen;
+    return tx_needed;
 }
 
 
