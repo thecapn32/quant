@@ -36,7 +36,7 @@ case $c in
         mozquic)
                 c="env MOZQUIC_LOG=all:9 \
                         MOZQUIC_NSS_CONFIG=external/mozquic-prefix/src/mozquic/sample/nss-config \
-                        DYLD_LIBRARY_PATH=external/nss-prefix/src/dist/$(cat external/nss-prefix/src/dist/latest)/lib \
+                        DYLD_LIBRARY_PATH=external/mozquic-prefix/src/dist/$(cat external/mozquic-prefix/src/dist/latest)/lib \
                         external/mozquic-prefix/src/mozquic/client -peer $addr:$port"
                 ;;
 esac
@@ -61,7 +61,7 @@ case $s in
         mozquic)
                 s="env MOZQUIC_LOG=all:9 \
                         MOZQUIC_NSS_CONFIG=external/mozquic-prefix/src/mozquic/sample/nss-config \
-                        DYLD_LIBRARY_PATH=external/nss-prefix/src/dist/$(cat external/nss-prefix/src/dist/latest)/lib \
+                        DYLD_LIBRARY_PATH=external/mozquic-prefix/src/dist/$(cat external/mozquic-prefix/src/dist/latest)/lib \
                         external/mozquic-prefix/src/mozquic/server -send-close"
                 ;;
 esac
