@@ -53,6 +53,7 @@
 
 #define FRAM_TYPE_PAD 0x00
 #define FRAM_TYPE_CNCL 0x02
+#define FRAM_TYPE_PING 0x07
 #define FRAM_TYPE_STRM 0xC0
 #define FRAM_TYPE_ACK 0xA0
 
@@ -427,6 +428,12 @@ bool dec_frames(struct q_conn * const c, struct w_iov * const v)
 
             case FRAM_TYPE_CNCL:
                 i += dec_conn_close_frame(c, v, i);
+                break;
+
+            case FRAM_TYPE_PING:
+                warn(INF, "ping frame in [%u]", i);
+                i++;
+                // TODO: must ACK this
                 break;
 
             default:
