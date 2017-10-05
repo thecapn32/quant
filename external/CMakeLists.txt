@@ -172,9 +172,9 @@ externalproject_add(nss
   GIT_SHALLOW 1
   GIT_TAG NSS_TLS13_DRAFT19_BRANCH
   CONFIGURE_COMMAND ""
-  BUILD_COMMAND "" #env USE_64=1 make nss_build_all
+  BUILD_COMMAND ""
   BUILD_IN_SOURCE 1
-  INSTALL_COMMAND ./build.sh #env USE_64=1 make install
+  INSTALL_COMMAND ./build.sh
   EXCLUDE_FROM_ALL 1
 )
 
@@ -185,8 +185,7 @@ externalproject_add(mozquic
   GIT_SHALLOW 1
   CONFIGURE_COMMAND ""
   BUILD_IN_SOURCE 1
-  BUILD_COMMAND make
-    # env NSS_ROOT=${CMAKE_CURRENT_BINARY_DIR}/nss-prefix/src/nss make
+  BUILD_COMMAND make client
   INSTALL_COMMAND ""
   EXCLUDE_FROM_ALL 1
 )

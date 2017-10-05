@@ -36,7 +36,7 @@ case $c in
         mozquic)
                 c="env MOZQUIC_NSS_CONFIG=external/mozquic-prefix/src/mozquic/sample/nss-config \
                         DYLD_LIBRARY_PATH=external/nss-prefix/src/dist/$(cat external/nss-prefix/src/dist/latest)/lib \
-                        external/mozquic-prefix/src/mozquic/client -peer $addr"
+                        external/mozquic-prefix/src/mozquic/client -peer $addr:$port"
                 ;;
 esac
 
