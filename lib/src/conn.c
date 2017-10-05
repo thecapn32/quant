@@ -420,7 +420,6 @@ void rx(struct ev_loop * const l,
             continue;
         }
 
-
         if (c == 0) {
             // this might be the first packet for a new connection, or a dup CH
             warn(DBG, "conn %" PRIx64 " may be new", cid);
@@ -444,17 +443,18 @@ void rx(struct ev_loop * const l,
                      conn_type(c), c->id, cid);
                 new_stream(c, 0);
 
-            } else {
-                // we have a connection from this peer
-                ensure(c->state < CONN_STAT_ESTB, "handshaking");
-                warn(DBG, "%s conn %" PRIx64 " is in handshake", conn_type(c),
-                     cid);
-                c->id = cid;
+            } else if (c->state < CONN_STAT_ESTB) {
+                if (is_clnt(c)) {
+                    // peer is proposing a different cid to use
+                    warn(DBG, "%s conn %" PRIx64 " was %" PRIx64, conn_type(c),
+                         cid, c->id);
+                    splay_remove(ipnp_splay, &conns_by_ipnp, c);
+                    splay_remove(cid_splay, &conns_by_cid, c);
+                    c->id = cid;
+                }
                 c->flags &= ~CONN_FLAG_EMBR;
             }
-            splay_remove(ipnp_splay, &conns_by_ipnp, c);
             splay_insert(ipnp_splay, &conns_by_ipnp, c);
-            splay_remove(cid_splay, &conns_by_cid, c);
             splay_insert(cid_splay, &conns_by_cid, c);
         }
 
