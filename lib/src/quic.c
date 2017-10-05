@@ -202,8 +202,11 @@ struct q_conn * q_connect(void * const q,
     warn(WRN, "connecting embr clnt conn %" PRIx64 " to %s:%u", cid,
          inet_ntoa(peer->sin_addr), ntohs(peer->sin_port));
     struct q_conn * const c = new_conn(q, cid, peer, peer_name, 0);
-    // c->vers = 0xbabababa; // XXX reserved version to trigger negotiation
+#ifndef NDBUG
+    c->vers = 0xbabababa; // XXX reserved version to trigger negotiation
+#else
     c->vers = ok_vers[0];
+#endif
     c->next_sid = 1; // client initiates odd-numbered streams
     w_connect(c->sock, peer->sin_addr.s_addr, peer->sin_port);
 
