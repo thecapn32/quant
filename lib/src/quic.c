@@ -47,6 +47,7 @@
 #include "cert.h"
 #include "conn.h"
 #include "diet.h"
+#include "marshall.h"
 #include "pkt.h"
 #include "quic.h"
 #include "stream.h"
@@ -207,6 +208,17 @@ struct q_conn * q_connect(void * const q,
 #else
     c->vers = ok_vers[0];
 #endif
+
+    // ptls_raw_extension_t tp_ext[2];
+    ptls_buffer_t tp;
+    uint8_t buf[64];
+    uint16_t i = 0;
+    const uint16_t len = sizeof(buf);
+    ptls_buffer_init(&tp, &buf, len);
+
+    enc(buf, len, i, &c->vers, 0, "0x%08x");
+    enc(buf, len, i, &c->vers, 0, "0x%08x");
+
     c->next_sid = 1; // client initiates odd-numbered streams
     w_connect(c->sock, peer->sin_addr.s_addr, peer->sin_port);
 

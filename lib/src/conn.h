@@ -26,6 +26,7 @@
 #pragma once
 
 #include <netinet/in.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 #pragma clang diagnostic push
@@ -47,6 +48,15 @@ extern splay_head(ipnp_splay, q_conn) conns_by_ipnp;
 extern splay_head(cid_splay, q_conn) conns_by_cid;
 
 
+#define TP_INITIAL_MAX_STREAM_DATA 0x0000
+#define TP_INITIAL_MAX_DATA 0x0001
+#define TP_INITIAL_MAX_STREAM_ID 0x0002
+#define TP_IDLE_TIMEOUT 0x0003
+#define TP_STATELESS_RESET_TOKEN 0x0006
+#define TP_OMIT_CONNECTION_ID 0x0004
+#define TP_MAX_PACKET_SIZE 0x0005
+
+
 /// A QUIC connection.
 struct q_conn {
     splay_entry(q_conn) node_ipnp;
@@ -64,7 +74,13 @@ struct q_conn {
 
     struct sockaddr_in peer; ///< Address of our peer.
 
-    uint8_t _unused2[4];
+    // LD state
+    uint8_t handshake_cnt;
+    uint8_t tlp_cnt;
+    uint8_t rto_cnt;
+    uint8_t _unused2;
+    ev_timer ld_alarm; ///< Loss detection alarm.
+    ev_timer idle_alarm;
 
     splay_head(stream, q_stream) streams;
     struct diet closed_streams;
@@ -73,15 +89,6 @@ struct q_conn {
     ev_async tx_w;
 
     struct diet recv; ///< Received packet numbers still needing to be ACKed.
-
-    // LD state
-    ev_timer ld_alarm; ///< Loss detection alarm.
-    ev_timer idle_alarm;
-    uint8_t handshake_cnt;
-    uint8_t tlp_cnt;
-    uint8_t rto_cnt;
-
-    uint8_t _unused3[5];
 
     double reorder_fract;
     uint64_t lg_sent_before_rto;
@@ -112,6 +119,16 @@ struct q_conn {
     uint8_t out_sec[PTLS_MAX_DIGEST_SIZE];
     ptls_aead_context_t * in_kp0;
     ptls_aead_context_t * out_kp0;
+
+    uint32_t initial_max_stream_data;  // units of octets
+    uint32_t initial_max_data;         // units of 1024 octets
+    uint32_t initial_max_stream_id;    // as is
+    uint16_t idle_timeout;             // units of seconds (max 600 seconds)
+    uint8_t stateless_reset_token[16]; // 16 octets
+    uint16_t max_packet_size;          // between 1200-65527 (the default)
+    bool omit_connection_id;
+
+    uint8_t _unused3[7];
 };
 
 
