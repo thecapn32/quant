@@ -103,7 +103,6 @@ dec_stream_frame(struct q_conn * const c,
         dec(off, v->buf, v->len, i, off_len, "%" PRIu64);
     // TODO: pay attention to offset when delivering data to app
 
-    *len = 0;
     if (is_set(F_STREAM_DATA_LEN, type))
         dec(*len, v->buf, v->len, i, 0, "%u");
     else
@@ -118,14 +117,10 @@ dec_stream_frame(struct q_conn * const c,
         if (diet_find(&c->closed_streams, sid)) {
             warn(WRN, "ignoring frame for closed str %u on %s conn %" PRIx64,
                  sid, conn_type(c), c->id);
-            return i + *len;
+            return i;
         }
         s = new_stream(c, sid);
     }
-
-    // adjust w_iov start and len to stream frame data
-    v->buf = &v->buf[i];
-    v->len = *len;
 
     // best case: new in-order data
     if (off == s->in_off) {
@@ -133,7 +128,7 @@ dec_stream_frame(struct q_conn * const c,
              "%u byte%s new data (off %" PRIu64 "-%" PRIu64
              ") on %s conn %" PRIx64 " str %u",
              *len, plural(*len), off, off + *len, conn_type(c), c->id, sid);
-        warn(DBG, "%.*s", v->len, v->buf);
+        warn(DBG, "%.*s", *len, &v->buf[i]);
         s->in_off += *len;
 
         if (is_set(F_STREAM_FIN, type)) {
@@ -160,7 +155,7 @@ dec_stream_frame(struct q_conn * const c,
 
         if (s->id != 0)
             maybe_api_return(q_read, s->c);
-        return i + *len;
+        return i;
     }
 
     // data is a complete duplicate
@@ -169,18 +164,18 @@ dec_stream_frame(struct q_conn * const c,
              "%u byte%s dup data (off %" PRIu64 "-%" PRIu64
              ") on %s conn %" PRIx64 " str %u",
              *len, plural(*len), off, off + *len, conn_type(c), c->id, sid);
-        warn(DBG, "%.*s", v->len, v->buf);
+        warn(DBG, "%.*s", *len, &v->buf[i]);
         w_free_iov(w_engine(c->sock), v);
-        return i + *len;
+        return i;
     }
 
     die("TODO: handle partially new or reordered data: %u byte%s data (off "
         "%" PRIu64 "-%" PRIu64 "), expected %" PRIu64 " on %s conn %" PRIx64
         " str %u: %.*s",
         *len, plural(*len), off, off + *len, s->in_off, conn_type(c), c->id,
-        sid, v->len, v->buf);
+        sid, *len, &v->buf[i]);
 
-    return i + *len;
+    return i;
 }
 
 
@@ -402,6 +397,7 @@ bool dec_frames(struct q_conn * const c, struct w_iov * const v)
 {
     uint16_t i = pkt_hdr_len(v->buf, v->len);
     uint16_t pad_start = 0;
+    uint16_t dpos = 0;
     uint16_t dlen = 0;
     bool tx_needed = false;
 
@@ -415,7 +411,8 @@ bool dec_frames(struct q_conn * const c, struct w_iov * const v)
         if (is_set(FRAM_TYPE_STRM, type)) {
             // TODO: support multiple stream frames per packet (needs memcpy)
             ensure(dlen == 0, "can only handle one stream frame per packet");
-            i += dec_stream_frame(c, v, i, &dlen);
+            dpos = dec_stream_frame(c, v, i, &dlen);
+            i = dpos + dlen;
             tx_needed = true;
 
         } else if (is_set(FRAM_TYPE_ACK, type)) {
@@ -429,7 +426,7 @@ bool dec_frames(struct q_conn * const c, struct w_iov * const v)
                 break;
 
             case FRAM_TYPE_CNCL:
-                i += dec_conn_close_frame(c, v, i);
+                i = dec_conn_close_frame(c, v, i);
                 break;
 
             case FRAM_TYPE_PING:
@@ -441,6 +438,12 @@ bool dec_frames(struct q_conn * const c, struct w_iov * const v)
             default:
                 die("unknown frame type 0x%02x", type);
             }
+    }
+
+    if (dpos) {
+        // adjust w_iov start and len to stream frame data
+        v->buf = &v->buf[dpos];
+        v->len = dlen;
     }
 
     return tx_needed;
@@ -528,7 +531,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     splay_foreach_rev (b, diet, &c->recv) {
         if (prev_lo) {
             const uint64_t gap = prev_lo - b->hi;
-            ensure(gap <= UINT8_MAX, "TODO: handle larger ACK gaps");
+            ensure(gap <= UINT8_MAX, "TODO: gap %" PRIu64 " too large", gap);
             enc(buf, len, i, &gap, sizeof(uint8_t), "%" PRIu64);
         }
         prev_lo = b->lo;

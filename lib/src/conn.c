@@ -404,7 +404,11 @@ void rx(struct ev_loop * const l,
 
         uint16_t prot_len = 0;
         if (is_set(F_LONG_HDR, flags) && pkt_type(flags) != F_LH_1RTT_KPH0)
-            prot_len = verify_hash(v->buf, v->len) ? FNV_1A_LEN : 0;
+            if (pkt_type(flags) == F_LH_TYPE_VNEG)
+                // version negotiation responses do not carry a hash
+                prot_len = UINT16_MAX;
+            else
+                prot_len = verify_hash(v->buf, v->len) ? FNV_1A_LEN : 0;
         else {
             const uint16_t len = dec_aead(c, v, hdr_len);
             prot_len = len != 0 ? v->len - len : 0;
@@ -456,14 +460,13 @@ void rx(struct ev_loop * const l,
             sl_insert_head(&crx, c, next);
         }
 
-        diet_insert(&c->recv, meta(v).nr);
         warn(NTE,
              "recv pkt %" PRIu64
              " (len %u, idx %u, type 0x%02x = " bitstring_fmt
              ") on %s conn %" PRIx64,
              meta(v).nr, v->len, v->idx, flags, to_bitstring(flags),
              conn_type(c), cid);
-        v->len -= prot_len;
+        v->len -= prot_len == UINT16_MAX ? 0 : prot_len;
 
         switch (c->state) {
         case CONN_STAT_IDLE:
@@ -488,6 +491,7 @@ void rx(struct ev_loop * const l,
             // respond to the version negotiation packet
             c->vers = pkt_vers(v->buf, v->len);
             c->flags |= CONN_FLAG_TX;
+            diet_insert(&c->recv, meta(v).nr);
             if (vers_supported(c->vers)) {
                 warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
 
@@ -520,7 +524,6 @@ void rx(struct ev_loop * const l,
 
         case CONN_STAT_VERS_SENT: {
             struct q_stream * const s = get_stream(c, 0);
-            c->flags |= CONN_FLAG_TX;
             if (is_set(F_LH_TYPE_VNEG, flags)) {
                 warn(INF, "server didn't like our vers 0x%08x", c->vers);
                 ensure(c->vers == pkt_vers(v->buf, v->len),
@@ -533,6 +536,7 @@ void rx(struct ev_loop * const l,
                 rtx(c, UINT32_MAX); // retransmit the ClientHello
             } else {
                 warn(INF, "server accepted vers 0x%08x", c->vers);
+                diet_insert(&c->recv, meta(v).nr);
                 c->state = CONN_STAT_VERS_OK;
 
                 // we should have received a ServerHello
@@ -547,16 +551,19 @@ void rx(struct ev_loop * const l,
         case CONN_STAT_VERS_OK: {
             // pass any further data received on stream 0 to TLS and check
             // whether that completes the client handshake
+            diet_insert(&c->recv, meta(v).nr);
             c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
             struct q_stream * const s = get_stream(c, 0);
             if (!sq_empty(&s->i) && tls_handshake(s) == 0) {
                 maybe_api_return(q_accept, c);
                 maybe_api_return(q_connect, c);
             }
-        } break;
+            break;
+        }
 
         case CONN_STAT_ESTB:
         case CONN_STAT_CLSD:
+            diet_insert(&c->recv, meta(v).nr);
             c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
             break;
 

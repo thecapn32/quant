@@ -218,8 +218,7 @@ void enc_pkt(struct q_conn * const c,
 
     } else {
         // if we've been passed a stream pointer, we need to prepend a stream
-        // frame
-        // header to the data (otherwise, it's an RTX)
+        // frame header to the data (otherwise, it's an RTX)
         if (s) {
             // pad out the rest of Q_OFFSET
             enc_padding_frame(v->buf, i, Q_OFFSET - i);
@@ -244,7 +243,6 @@ void enc_pkt(struct q_conn * const c,
             enc_padding_frame(v->buf, i, meta(v).head_start - i);
             // skip over existing stream header and data
             v->len = i = meta(v).buf_len;
-            // warn(DBG, "RTX %u", i);
         }
     }
 
@@ -261,13 +259,16 @@ void enc_pkt(struct q_conn * const c,
 
     if (c->state < CONN_STAT_ESTB) {
         memcpy(x->buf, v->buf, v->len); // copy data
-        const uint64_t hash = fnv_1a(x->buf, v->len);
-        warn(DBG,
-             "adding %lu-byte hash %" PRIx64 " over [0..%u] into [%u..%lu]",
-             FNV_1A_LEN, hash, v->len - 1, v->len, v->len + FNV_1A_LEN - 1);
-        x->len = v->len + FNV_1A_LEN;
-        enc(x->buf, x->len, v->len, &hash, 0, "%" PRIx64);
-
+        x->len = v->len;
+        // version negotiation server responses do not carry a hash
+        if (c->state != CONN_STAT_VERS_REJ) {
+            const uint64_t hash = fnv_1a(x->buf, v->len);
+            warn(DBG,
+                 "adding %lu-byte hash %" PRIx64 " over [0..%u] into [%u..%lu]",
+                 FNV_1A_LEN, hash, v->len - 1, v->len, v->len + FNV_1A_LEN - 1);
+            x->len += FNV_1A_LEN;
+            enc(x->buf, x->len, v->len, &hash, 0, "%" PRIx64);
+        }
     } else {
         memcpy(x->buf, v->buf, hdr_len); // copy pkt header
         x->len = hdr_len + (uint16_t)ptls_aead_encrypt(
