@@ -186,7 +186,7 @@ externalproject_add(mozquic
   GIT_SHALLOW 1
   CONFIGURE_COMMAND ""
   BUILD_IN_SOURCE 1
-  BUILD_COMMAND make client
+  BUILD_COMMAND make
   INSTALL_COMMAND ""
   EXCLUDE_FROM_ALL 1
 )
