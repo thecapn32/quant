@@ -40,7 +40,6 @@
 #include <ev.h>
 #pragma clang diagnostic pop
 
-#include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
@@ -157,8 +156,8 @@ uint32_t tls_handshake(struct q_stream * const s)
         w_free(w_engine(s->c->sock), &s->i);
     else {
         s->c->state = CONN_STAT_VERS_SENT;
-        warn(DBG, "%s conn %" PRIx64 " now in state %u", conn_type(s->c),
-             s->c->id, s->c->state);
+        // warn(DBG, "%s conn %" PRIx64 " now in state %u", conn_type(s->c),
+        //      s->c->id, s->c->state);
     }
 
     if ((ret == 0 || ret == PTLS_ERROR_IN_PROGRESS) && ov->len != 0)
@@ -373,6 +372,7 @@ void rx(struct ev_loop * const l,
         ev_io * const rx_w,
         int e __attribute__((unused)))
 {
+    // read from NIC
     struct w_sock * const ws = rx_w->data;
     w_nic_rx(w_engine(ws), -1);
     struct w_iov_sq i = sq_head_initializer(i);
@@ -500,14 +500,7 @@ void rx(struct ev_loop * const l,
                          ((uint64_t)plat_random()));
                 warn(NTE, "%s picked new cid %" PRIx64 " for conn %" PRIx64,
                      conn_type(c), c->id, cid);
-
-                // we should have received a ClientHello
-                dec_frames(c, v);
-                struct q_stream * const s = get_stream(c, 0);
-                ensure(!sq_empty(&s->i), "no ClientHello");
-                tls_handshake(s);
-                warn(DBG, "%s conn %" PRIx64 " now in state %u", conn_type(c),
-                     c->id, c->state);
+                ensure(dec_frames(c, v), "got ClientHello");
 
             } else {
                 c->state = CONN_STAT_VERS_REJ;
@@ -523,7 +516,6 @@ void rx(struct ev_loop * const l,
         }
 
         case CONN_STAT_VERS_SENT: {
-            struct q_stream * const s = get_stream(c, 0);
             if (is_set(F_LH_TYPE_VNEG, flags)) {
                 warn(INF, "server didn't like our vers 0x%08x", c->vers);
                 ensure(c->vers == pkt_vers(v->buf, v->len),
@@ -538,12 +530,7 @@ void rx(struct ev_loop * const l,
                 warn(INF, "server accepted vers 0x%08x", c->vers);
                 diet_insert(&c->recv, meta(v).nr);
                 c->state = CONN_STAT_VERS_OK;
-
-                // we should have received a ServerHello
-                c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
-                ensure(!sq_empty(&s->i), "no ServerHello");
-                if (tls_handshake(s) == 0)
-                    maybe_api_return(q_connect, c);
+                ensure(dec_frames(c, v), "got ServerHello");
             }
             break;
         }
@@ -553,11 +540,6 @@ void rx(struct ev_loop * const l,
             // whether that completes the client handshake
             diet_insert(&c->recv, meta(v).nr);
             c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
-            struct q_stream * const s = get_stream(c, 0);
-            if (!sq_empty(&s->i) && tls_handshake(s) == 0) {
-                maybe_api_return(q_accept, c);
-                maybe_api_return(q_connect, c);
-            }
             break;
         }
 

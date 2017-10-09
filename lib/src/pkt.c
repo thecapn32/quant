@@ -142,7 +142,7 @@ void enc_pkt(struct q_conn * const c,
     uint16_t i = 0;
     uint8_t flags = 0;
 
-    warn(DBG, "%s conn state %u", conn_type(c), c->state);
+    // warn(DBG, "%s conn state %u", conn_type(c), c->state);
     switch (c->state) {
     case CONN_STAT_VERS_SENT:
         flags |= F_LONG_HDR | F_LH_CLNT_INIT;

@@ -128,7 +128,7 @@ dec_stream_frame(struct q_conn * const c,
              "%u byte%s new data (off %" PRIu64 "-%" PRIu64
              ") on %s conn %" PRIx64 " str %u",
              *len, plural(*len), off, off + *len, conn_type(c), c->id, sid);
-        warn(DBG, "%.*s", *len, &v->buf[i]);
+        // warn(DBG, "%.*s", *len, &v->buf[i]);
         s->in_off += *len;
 
         if (is_set(F_STREAM_FIN, type)) {
@@ -155,6 +155,20 @@ dec_stream_frame(struct q_conn * const c,
 
         if (s->id != 0)
             maybe_api_return(q_read, s->c);
+        else {
+            // adjust w_iov start and len to stream frame data for TLS handshake
+            uint8_t * const b = v->buf;
+            const uint16_t l = v->len;
+            v->buf = &v->buf[i];
+            v->len = *len;
+            if (tls_handshake(s) == 0) {
+                maybe_api_return(q_accept, c);
+                maybe_api_return(q_connect, c);
+            }
+            // undo adjust
+            v->buf = b;
+            v->len = l;
+        }
         return i;
     }
 
@@ -393,7 +407,7 @@ dec_conn_close_frame(struct q_conn * const c,
 }
 
 
-bool dec_frames(struct q_conn * const c, struct w_iov * const v)
+bool dec_frames(struct q_conn * const c, struct w_iov * v)
 {
     uint16_t i = pkt_hdr_len(v->buf, v->len);
     uint16_t pad_start = 0;
@@ -409,8 +423,23 @@ bool dec_frames(struct q_conn * const c, struct w_iov * const v)
         }
 
         if (is_set(FRAM_TYPE_STRM, type)) {
-            // TODO: support multiple stream frames per packet (needs memcpy)
-            ensure(dlen == 0, "can only handle one stream frame per packet");
+            if (dpos) {
+                // already had at least one stream frame in this packet,
+                // generate (another) copy
+                warn(INF, "more than one stream frame in pkt, copy");
+                struct w_iov * const vdup =
+                    w_alloc_iov(w_engine(c->sock), MAX_PKT_LEN, Q_OFFSET);
+                memcpy(vdup->buf, v->buf, v->len);
+                meta(vdup) = meta(v);
+                vdup->len = v->len;
+                // adjust w_iov start and len to stream frame data
+                v->buf = &v->buf[dpos];
+                v->len = dlen;
+                // continue parsing in the copied w_iov
+                v = vdup;
+            }
+
+            // this is the first stream frame in this packet
             dpos = dec_stream_frame(c, v, i, &dlen);
             i = dpos + dlen;
             tx_needed = true;
@@ -584,7 +613,7 @@ uint16_t enc_stream_frame(struct q_stream * const s,
 
     warn(INF, "%u byte%s at off %" PRIu64 "-%" PRIu64 " on str %u", dlen,
          plural(dlen), off, off + dlen, s->id);
-    warn(DBG, "%.*s", dlen, &v->buf[Q_OFFSET]);
+    // warn(DBG, "%.*s", dlen, &v->buf[Q_OFFSET]);
 
     uint64_t o = off;
     const uint8_t sid_len = needed_sid_len(s->id);
