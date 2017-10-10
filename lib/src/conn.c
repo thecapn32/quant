@@ -239,10 +239,9 @@ static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
     struct w_iov * v;
     struct w_iov_sq x = sq_head_initializer(x);
     sq_foreach (v, q, next) {
-        if (s == 0 && v->len == 0) {
-            warn(DBG,
-                 "ignoring non-retransmittable pkt %" PRIu64 " (len %u %u)",
-                 meta(v).nr, v->len, meta(v).buf_len);
+        if (s == 0 && v->len <= Q_OFFSET) {
+            warn(DBG, "ignoring non-retransmittable pkt %" PRIu64 " (len %u)",
+                 meta(v).nr, v->len);
             continue;
         }
 
@@ -254,11 +253,11 @@ static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
             warn(DBG,
                  "last_tx_t - now %f + (v->len %u * srtt %f) / cwnd %" PRIu64,
                  last_tx_t - now, v->len, c->srtt, c->cwnd);
-            warn(CRT, "out of cwnd/pacing headroom, ignoring");
+            // warn(CRT, "out of cwnd/pacing headroom, ignoring");
         }
 
         // store packet info (see OnPacketSent pseudo code)
-        meta(v).time = now;        // remember TX time
+        meta(v).time = now; // remember TX time
 
         if (s == 0 && meta(v).buf_len > Q_OFFSET) {
             warn(DBG, "possible RTX for pkt %" PRIu64 " (len %u %u)",
