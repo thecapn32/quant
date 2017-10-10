@@ -184,6 +184,7 @@ externalproject_add(mozquic
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/mcmanus/mozquic.git
   GIT_SHALLOW 1
+  PATCH_COMMAND sed -i "" -e "s/-Werror//g" Makefile
   CONFIGURE_COMMAND ""
   BUILD_IN_SOURCE 1
   BUILD_COMMAND make
