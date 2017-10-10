@@ -56,7 +56,7 @@ int main(int argc
     int ch;
     while ((ch = getopt(argc, argv, "v:")) != -1)
         if (ch == 'v')
-            _dlevel = MIN(DLEVEL, MAX(0, (short)strtoul(optarg, 0, 10)));
+            util_dlevel = MIN(DLEVEL, MAX(0, (short)strtoul(optarg, 0, 10)));
 #endif
 
     // init

@@ -387,7 +387,7 @@ void rx(struct ev_loop * const l,
         if (v->len < hdr_len) {
             warn(ERR, "%u-byte pkt < %u-byte hdr; ignoring", v->len, hdr_len);
 #ifndef NDEBUG
-            if (_dlevel == DBG)
+            if (util_dlevel == DBG)
                 hexdump(v->buf, v->len);
 #endif
             w_free_iov(w_engine(ws), v);
@@ -416,7 +416,7 @@ void rx(struct ev_loop * const l,
         if (prot_len == 0) {
             warn(ERR, "hash mismatch or AEAD decrypt error; ignoring pkt");
 #ifndef NDEBUG
-            if (_dlevel == DBG)
+            if (util_dlevel == DBG)
                 hexdump(v->buf, v->len);
 #endif
             w_free_iov(w_engine(ws), v);
@@ -478,7 +478,7 @@ void rx(struct ev_loop * const l,
                 warn(ERR, "initial %u-byte pkt too short (< %u)",
                      v->len + prot_len, MIN_INI_LEN);
 #ifndef NDEBUG
-                if (_dlevel == DBG)
+                if (util_dlevel == DBG)
                     hexdump(v->buf, v->len);
 #endif
                 w_free_iov(w_engine(ws), v);

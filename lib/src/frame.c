@@ -189,8 +189,6 @@ dec_stream_frame(struct q_conn * const c,
         " str %u: %.*s",
         *len, plural(*len), off, off + *len, s->in_off, conn_type(c), c->id,
         sid, *len, &v->buf[i]);
-
-    return i;
 }
 
 
@@ -234,7 +232,6 @@ find_sent_pkt(struct q_conn * const c, const uint64_t nr)
     }
 
     die("we never sent packet %" PRIu64, nr);
-    return 0;
 }
 
 

@@ -162,7 +162,6 @@ void enc_pkt(struct q_conn * const c,
         break;
     default:
         die("unknown conn state %u", c->state);
-        break;
     }
 
     meta(v).nr =

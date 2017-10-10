@@ -52,7 +52,7 @@ static void __attribute__((noreturn)) usage(const char * const name,
     printf("\t[-d dir]\tserver root directory; default %s\n", dir);
 #ifndef NDEBUG
     printf("\t[-v verbosity]\tverbosity level (0-%u, default %u)\n", DLEVEL,
-           _dlevel);
+           util_dlevel);
 #endif
     exit(0);
 }
@@ -103,7 +103,7 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
 int main(int argc, char * argv[])
 {
 #ifndef NDEBUG
-    _dlevel = DLEVEL; // default to maximum compiled-in verbosity
+    util_dlevel = DLEVEL; // default to maximum compiled-in verbosity
 #endif
     char ifname[IFNAMSIZ] = "lo"
 #ifndef __linux__
@@ -132,7 +132,7 @@ int main(int argc, char * argv[])
             break;
 #ifndef NDEBUG
         case 'v':
-            _dlevel = (short)MIN(DLEVEL, strtoul(optarg, 0, 10));
+            util_dlevel = (short)MIN(DLEVEL, strtoul(optarg, 0, 10));
             break;
 #endif
         case 'h':
