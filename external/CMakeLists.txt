@@ -1,23 +1,23 @@
 include(ExternalProject)
 
 externalproject_add(warp
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/NTAP/warpcore.git
   GIT_SHALLOW 1
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -DDLEVEL=WRN
     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DBUILD_DOCUMENTATION=FALSE
   BUILD_BYPRODUCTS
-    ${CMAKE_CURRENT_BINARY_DIR}/lib/libsockcore.a
-    # ${CMAKE_CURRENT_BINARY_DIR}/lib/libwarpcore.a
+    ${CMAKE_CURRENT_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}sockcore${CMAKE_STATIC_LIBRARY_SUFFIX}
+    ${CMAKE_CURRENT_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}warpcore${CMAKE_STATIC_LIBRARY_SUFFIX}
 )
 
 file(MAKE_DIRECTORY
       ${CMAKE_CURRENT_BINARY_DIR}/include ${CMAKE_CURRENT_BINARY_DIR}/lib)
 add_library(warpcore STATIC IMPORTED GLOBAL)
-set(WARP ${CMAKE_CURRENT_BINARY_DIR}/lib/libwarpcore.a)
+set(WARP ${CMAKE_CURRENT_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}warpcore${CMAKE_STATIC_LIBRARY_SUFFIX})
 if(NOT EXISTS ${WARP})
-  set(WARP ${CMAKE_CURRENT_BINARY_DIR}/lib/libsockcore.a)
+  set(WARP ${CMAKE_CURRENT_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}sockcore${CMAKE_STATIC_LIBRARY_SUFFIX})
 endif()
 set_target_properties(warpcore PROPERTIES
   IMPORTED_LOCATION ${WARP}
@@ -40,7 +40,6 @@ externalproject_add(picotls
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/h2o/picotls.git
   GIT_SHALLOW 1
-  # GIT_TAG kazuho/draft21
   PATCH_COMMAND sed -i "" -e "s/-std=c99 -Wall -O2 -g//" CMakeLists.txt
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
@@ -54,14 +53,14 @@ externalproject_add(picotls
   INSTALL_COMMAND
     cp -a ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls/include
       ${CMAKE_CURRENT_BINARY_DIR} &&
-    cp -a ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/libpicotls-minicrypto.a
-      ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/libpicotls-openssl.a
-      ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/libpicotls-core.a
+    cp -a ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/${CMAKE_STATIC_LIBRARY_PREFIX}picotls-minicrypto${CMAKE_STATIC_LIBRARY_SUFFIX}
+      ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/${CMAKE_STATIC_LIBRARY_PREFIX}picotls-openssl${CMAKE_STATIC_LIBRARY_SUFFIX}
+      ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/${CMAKE_STATIC_LIBRARY_PREFIX}picotls-core${CMAKE_STATIC_LIBRARY_SUFFIX}
       ${CMAKE_CURRENT_BINARY_DIR}/lib || true
   BUILD_BYPRODUCTS
-    ${CMAKE_CURRENT_BINARY_DIR}/lib/libpicotls-minicrypto.a
-    ${CMAKE_CURRENT_BINARY_DIR}/lib/libpicotls-openssl.a
-    ${CMAKE_CURRENT_BINARY_DIR}/lib/libpicotls-core.a
+    ${CMAKE_CURRENT_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}picotls-minicrypto${CMAKE_STATIC_LIBRARY_SUFFIX}
+    ${CMAKE_CURRENT_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}picotls-openssl${CMAKE_STATIC_LIBRARY_SUFFIX}
+    ${CMAKE_CURRENT_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}picotls-core${CMAKE_STATIC_LIBRARY_SUFFIX}
 )
 
 foreach(TARGET ptls-core ptls-minicrypto ptls-openssl)
@@ -69,7 +68,8 @@ foreach(TARGET ptls-core ptls-minicrypto ptls-openssl)
   string(REGEX REPLACE "ptls" "picotls" LIBNAME ${TARGET})
   set_target_properties(${TARGET}
     PROPERTIES
-      IMPORTED_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/lib/lib${LIBNAME}.a
+      IMPORTED_LOCATION
+        ${CMAKE_CURRENT_BINARY_DIR}/lib/lib${LIBNAME}${CMAKE_STATIC_LIBRARY_SUFFIX}
       INTERFACE_INCLUDE_DIRECTORIES
         "${CMAKE_CURRENT_BINARY_DIR}/include;${OPENSSL_ROOT_DIR}/include"
       INTERFACE_LINK_LIBRARIES "${OPENSSL_LIBRARIES}"
