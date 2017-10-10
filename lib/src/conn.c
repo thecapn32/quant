@@ -485,7 +485,7 @@ void rx(struct ev_loop * const l,
                 continue;
             }
 
-            ensure(is_set(F_LONG_HDR, flags), "short header");
+            ensure(is_set(F_LONG_HDR, flags), "have a long header");
 
             // respond to the version negotiation packet
             c->vers = pkt_vers(v->buf, v->len);
@@ -537,7 +537,8 @@ void rx(struct ev_loop * const l,
         case CONN_STAT_VERS_OK: {
             // pass any further data received on stream 0 to TLS and check
             // whether that completes the client handshake
-            if (pkt_type(flags) >= F_LH_CLNT_CTXT) {
+            if (!is_set(F_LONG_HDR, flags) ||
+                pkt_type(flags) >= F_LH_CLNT_CTXT) {
                 maybe_api_return(q_accept, c);
                 c->state = CONN_STAT_ESTB;
             }

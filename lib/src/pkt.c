@@ -98,16 +98,14 @@ pkt_nr(const uint8_t * const buf, const uint16_t len, struct q_conn * const c)
 
 uint32_t pkt_vers(const uint8_t * const buf, const uint16_t len)
 {
-    ensure(pkt_flags(buf) & F_LONG_HDR, "short header");
+    ensure(is_set(F_LONG_HDR, pkt_flags(buf)), "short header");
     uint32_t vers = 0;
     uint16_t i = 13;
     dec(vers, buf, len, i, 0, "0x%08x");
     return vers;
 }
 
-#ifdef DO_SHORT_HEADERS
-static const uint8_t enc_pkt_nr_len[] = {0, 0x01, 0x02, 0, 0x03};
-#endif
+static const uint8_t enc_pkt_nr_len[] = {0xFF, 1, 2, 0xFF, 3};
 
 static uint8_t __attribute__((const)) needed_pkt_nr_len(const uint64_t n)
 {
@@ -142,6 +140,10 @@ void enc_pkt(struct q_conn * const c,
     uint16_t i = 0;
     uint8_t flags = 0;
 
+    meta(v).nr =
+        c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv) : c->lg_sent++;
+    // TODO: increase by random offset
+
     // warn(DBG, "%s conn state %u", conn_type(c), c->state);
     switch (c->state) {
     case CONN_STAT_VERS_SENT:
@@ -156,17 +158,13 @@ void enc_pkt(struct q_conn * const c,
     case CONN_STAT_ESTB:
     case CONN_STAT_CLSD:
         // TODO: support short headers w/o cid
-        // flags |= F_SH_CID | enc_pkt_nr_len[needed_pkt_nr_len(meta(v).nr)];
-        // XXX most other implementations don't do short headers yet, so:
-        flags |= F_LONG_HDR | F_LH_1RTT_KPH0;
+        flags |= F_SH_CID | enc_pkt_nr_len[needed_pkt_nr_len(meta(v).nr)];
+        // XXX to always send long headers:
+        // flags |= F_LONG_HDR | F_LH_1RTT_KPH0;
         break;
     default:
         die("unknown conn state %u", c->state);
     }
-
-    meta(v).nr =
-        c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv) : c->lg_sent++;
-    // TODO: increase by random offset
 
     if (s == 0 && flags != pkt_flags(v->buf)) {
         warn(INF,
