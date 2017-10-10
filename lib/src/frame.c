@@ -130,6 +130,8 @@ dec_stream_frame(struct q_conn * const c,
              *len, plural(*len), off, off + *len, conn_type(c), c->id, sid);
         // warn(DBG, "%.*s", *len, &v->buf[i]);
         s->in_off += *len;
+        sq_insert_tail(&s->i, v, next);
+        s->state = STRM_STATE_OPEN;
 
         if (is_set(F_STREAM_FIN, type)) {
 #ifndef NDEBUG
@@ -149,9 +151,6 @@ dec_stream_frame(struct q_conn * const c,
             // XXX what if the FIN also has data?
             // w_free_iov(w_engine(c->sock), v);
 
-        } else {
-            sq_insert_tail(&s->i, v, next);
-            s->state = STRM_STATE_OPEN;
         }
 
         if (s->id != 0)
@@ -162,10 +161,8 @@ dec_stream_frame(struct q_conn * const c,
             const uint16_t l = v->len;
             v->buf = &v->buf[i];
             v->len = *len;
-            if (tls_handshake(s) == 0) {
-                maybe_api_return(q_accept, c);
+            if (tls_handshake(s) == 0)
                 maybe_api_return(q_connect, c);
-            }
             // undo adjust
             v->buf = b;
             v->len = l;

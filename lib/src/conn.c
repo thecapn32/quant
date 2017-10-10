@@ -40,6 +40,7 @@
 #include <ev.h>
 #pragma clang diagnostic pop
 
+#include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
@@ -536,6 +537,10 @@ void rx(struct ev_loop * const l,
         case CONN_STAT_VERS_OK: {
             // pass any further data received on stream 0 to TLS and check
             // whether that completes the client handshake
+            if (pkt_type(flags) >= F_LH_CLNT_CTXT) {
+                maybe_api_return(q_accept, c);
+                c->state = CONN_STAT_ESTB;
+            }
             diet_insert(&c->recv, meta(v).nr);
             c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
             break;

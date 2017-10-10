@@ -66,25 +66,25 @@ case $s in
                 ;;
 esac
 
-# if we are on MacOS X, configure the firewall to add delay and loss
-if [ -x /usr/sbin/dnctl ]; then
-        # create pipes to limit bandwidth and add loss
-        sudo dnctl pipe 1 config bw 64Kbit/s #delay 50 queue 10Kbytes #plr 0.25
-        sudo dnctl pipe 2 config bw 64Kbit/s #delay 50 queue 10Kbytes #plr 0.25
-        sudo pfctl -f - <<EOF
-                dummynet out proto udp from any to $addr port $port pipe 1
-                dummynet out proto udp from $addr port $port to any pipe 2
-EOF
-        # sudo pfctl -e || true
-fi
+# # if we are on MacOS X, configure the firewall to add delay and loss
+# if [ -x /usr/sbin/dnctl ]; then
+#         # create pipes to limit bandwidth and add loss
+#         # sudo dnctl pipe 1 config bw 64Kbit/s #delay 50 queue 10Kbytes #plr 0.25
+#         sudo dnctl pipe 2 config bw 64Kbit/s #delay 50 queue 10Kbytes #plr 0.25
+#         sudo pfctl -f - <<EOF
+#                 dummynet out proto udp from any to $addr port $port pipe 1
+#                 dummynet out proto udp from $addr port $port to any pipe 2
+# EOF
+#         # sudo pfctl -e || true
+# fi
 
 tmux -CC \
         new-session "sleep 0.1; $c" \; \
         split-window -h "$s" \; \
         set remain-on-exit on
 
-# if we are on MacOS X, unconfigure the firewall
-if [ -x /usr/sbin/dnctl ]; then
-        # sudo pfctl -d
-        sudo dnctl -f flush
-fi
+# # if we are on MacOS X, unconfigure the firewall
+# if [ -x /usr/sbin/dnctl ]; then
+#         # sudo pfctl -d
+#         sudo dnctl -f flush
+# fi
