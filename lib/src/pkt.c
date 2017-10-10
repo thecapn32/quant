@@ -165,16 +165,17 @@ void enc_pkt(struct q_conn * const c,
         break;
     }
 
-    if (s == 0 && flags != pkt_flags(v->buf)) {
-        warn(INF,
-             "suppressing RTX of 0x%02x-type pkt; new type would be 0x%02x",
-             pkt_flags(v->buf), flags);
-        return;
-    }
-
     meta(v).nr =
         c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv) : c->lg_sent++;
     // TODO: increase by random offset
+
+    if (s == 0 && flags != pkt_flags(v->buf)) {
+        warn(INF,
+             "suppressing RTX of 0x%02x-type pkt %" PRIu64
+             "; new type would be 0x%02x",
+             pkt_flags(v->buf), meta(v).nr, flags);
+        return;
+    }
 
     enc(v->buf, v->len, i, &flags, 0, "0x%02x");
 
@@ -190,6 +191,8 @@ void enc_pkt(struct q_conn * const c,
             for (uint8_t j = 0; j < ok_vers_len; j++)
                 enc(v->buf, v->len, i, &ok_vers[j], 0, "0x%08x");
             v->len = i;
+            // don't remember the failed client initial
+            diet_remove(&c->recv, meta(v).nr);
         }
     } else
         enc(v->buf, v->len, i, &meta(v).nr, needed_pkt_nr_len(meta(v).nr),
@@ -220,11 +223,12 @@ void enc_pkt(struct q_conn * const c,
         // if we've been passed a stream pointer, we need to prepend a stream
         // frame header to the data (otherwise, it's an RTX)
         if (s) {
-            // pad out the rest of Q_OFFSET
-            enc_padding_frame(v->buf, i, Q_OFFSET - i);
 
             // encode any stream data present
             if (v->len > Q_OFFSET || s->state >= STRM_STATE_HCLO) {
+                // pad out the rest of Q_OFFSET
+                enc_padding_frame(v->buf, i, Q_OFFSET - i);
+
                 i = enc_stream_frame(s, v, s->out_off);
 
                 // increase the stream data offset
@@ -236,14 +240,16 @@ void enc_pkt(struct q_conn * const c,
                 v->len = i += enc_padding_frame(v->buf, i, MIN_INI_LEN - i);
 
             // store final packet length and number
-            meta(v).buf_len = i;
+            v->len = meta(v).buf_len = i;
 
-        } else {
+        } else if (v->len > Q_OFFSET) {
             // this is a RTX, pad out until beginning of stream header
             enc_padding_frame(v->buf, i, meta(v).head_start - i);
             // skip over existing stream header and data
             v->len = i = meta(v).buf_len;
-        }
+
+        } else
+            warn(CRT, "%" PRIu64 " not retransmittable", meta(v).nr);
     }
 
     // #ifndef NDEBUG

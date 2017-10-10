@@ -146,7 +146,8 @@ dec_stream_frame(struct q_conn * const c,
                  "received FIN on %s conn %" PRIx64 " str %u, state %u -> %u",
                  conn_type(c), c->id, s->id, old_state, s->state);
 
-            w_free_iov(w_engine(c->sock), v);
+            // XXX what if the FIN also has data?
+            // w_free_iov(w_engine(c->sock), v);
 
         } else {
             sq_insert_tail(&s->i, v, next);
@@ -178,8 +179,8 @@ dec_stream_frame(struct q_conn * const c,
              "%u byte%s dup data (off %" PRIu64 "-%" PRIu64
              ") on %s conn %" PRIx64 " str %u",
              *len, plural(*len), off, off + *len, conn_type(c), c->id, sid);
-        warn(DBG, "%.*s", *len, &v->buf[i]);
-        w_free_iov(w_engine(c->sock), v);
+        // warn(DBG, "%.*s", *len, &v->buf[i]);
+        // w_free_iov(w_engine(c->sock), v);
         return i;
     }
 

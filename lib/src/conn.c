@@ -259,11 +259,10 @@ static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
 
         // store packet info (see OnPacketSent pseudo code)
         meta(v).time = now;        // remember TX time
-        meta(v).data_len = v->len; // v->len is len of stream data here
 
-        if (s == 0) {
-            warn(DBG, "RTX pkt %" PRIu64 " (len %u %u)", meta(v).nr, v->len,
-                 meta(v).buf_len);
+        if (s == 0 && meta(v).buf_len > Q_OFFSET) {
+            warn(DBG, "possible RTX for pkt %" PRIu64 " (len %u %u)",
+                 meta(v).nr, v->len, meta(v).buf_len);
 
             // on RTX, remember original packet number (will be resent with new)
             diet_insert(&c->acked_pkts, meta(v).nr);
