@@ -37,7 +37,10 @@ set(CMAKE_C_STANDARD 11)
 # Set general compile flags, if they are supported
 include(CheckCCompilerFlag)
 foreach(FLAG -march=native -Wextra -Wpedantic -Weverything -Werror
-        -fcolor-diagnostics)
+        -fcolor-diagnostics -fdiagnostics-color=always
+        # for older gcc:
+        -Wno-missing-field-initializers -Wno-disabled-macro-expansion
+        )
   string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
   check_c_compiler_flag(${FLAG} ${F})
   if(${F})
@@ -67,6 +70,9 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     set(DLEVEL "DBG")
   endif()
 
+  # Enable debug support in the queue.h macros
+  add_definitions(-DQUEUE_MACRO_DEBUG_TRASH)
+
   # See if we can use the address sanitizer
   set(CMAKE_REQUIRED_FLAGS -fsanitize=address)
   check_c_compiler_flag("" _fsanitize_address)
@@ -77,7 +83,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 
   # Set some additional flags for Debug builds
   set(FLAGS -fno-omit-frame-pointer -fsanitize-address-use-after-scope
-      -fsanitize=undefined -fno-sanitize=alignment -fno-common
+      -fsanitize=undefined -fsanitize=unsigned-integer-overflow
+      -fno-sanitize=alignment -fno-common
   )
   foreach(FLAG ${FLAGS})
     string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
