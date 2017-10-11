@@ -1,7 +1,7 @@
 dist: trusty
 sudo: false
 
-language: C
+language: cpp
 os:
   - linux
 
@@ -17,9 +17,10 @@ env:
   matrix:
     - BUILD_TYPE=Debug
     - BUILD_TYPE=Release
-    - BUILD_TYPE=RelWithDebInfo
-    - BUILD_TYPE=MinSizeRel
+    # - BUILD_TYPE=RelWithDebInfo
+    # - BUILD_TYPE=MinSizeRel
   global:
+    - PROJECT=quant
     - secure: "IHICwP4oMbC6yzx9G4YIthU6ujpt0bJ4jOElN7ujs8xGODB7YQFlxIaBwLvCf8APjczUuarN1r0Vc/Ekyp8LVBVdI6oEK0ZyHkvXOsydtYAtKrK60iEZXLoMzqTR/DeZaLkQb/hh4tYLAfrzNs9ZZA6vU1rJUJdaNmxluM9kcF253tfxKZ7rZ8dveD+gwmfJYH47sNwvFiGVTmU6c9fDVVfE/R3c0aX3A4pI3oOAUMH6Vs/76ZdRh2knzLLDgcNiIDapJd1xlw8HFSyEbsfEgTLPl+9qeXyh8fU6kwU7tGKetdr60klrXChIdwqStOxNwp4ylto727oYtztj7zJxYWQxbXQwehH66Xj44KEfW9MEuBEbGCmlR/74vCTNnKVU6D857ZU7r0L43GTD9KfAqqHWKtdQJpoRZMkhRcFrZkHCG8GJJo+3swwXFWnPbqPDuGWnLaeg4dsFpcAhq4ujSFheJbJ+ilERGio8ksv+FndlImSsQVEHtErPyJlizE3y2QfdWfASpn5HYVJ5la0Vy5Tea0rPRymdtLQm3lCMX+qcAg9EQLFHsc52LsFUwnHrNu5WqzfCmN0b7kfT4SlEHVXOXtC6k5PYxAUBaHfyeVFspc4UN5ZTUmSj9Y2h47Oa5KV/DJRaNKalve3TYgysEvlnTqv6qJfqnbHO2Swl+GE="
     # The next declaration is the encrypted COVERITY_SCAN_TOKEN, created
     # via the "travis encrypt" command using the project repo's public key
@@ -27,18 +28,15 @@ env:
 
 addons:
   apt:
-    sources:
-      - ubuntu-toolchain-r-test
     packages:
-      # - gcc-4.9
       - doxygen
       - graphviz
-      - libev-dev
       - ninja-build
+      - libev-dev
       - libhttp-parser-dev
   coverity_scan:
     project:
-      name: "NTAP/quant"
+      name: "NTAP/$PROJECT"
       description: "Build submitted via Travis CI"
     notification_email: lars@netapp.com
     build_command_prepend: |
@@ -46,7 +44,8 @@ addons:
       rm -rf build
       mkdir build
       cd build
-      ../bin/cmake -GNinja -DCMAKE_C_COMPILER=$CC -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DCMAKE_INSTALL_PREFIX:PATH=/tmp ..
+      ../bin/cmake -GNinja -DCMAKE_C_COMPILER=$CC -DCMAKE_CXX_COMPILER=$CXX \
+        -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DCMAKE_INSTALL_PREFIX:PATH=/tmp ..
     build_command: ninja
     branch_pattern: coverity
 
@@ -63,14 +62,15 @@ script:
     rm -rf build
     mkdir build
     cd build
-    ../bin/cmake -GNinja -DCMAKE_C_COMPILER=$CC -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DCMAKE_INSTALL_PREFIX:PATH=/tmp ..
+    ../bin/cmake -GNinja -DCMAKE_C_COMPILER=$CC -DCMAKE_CXX_COMPILER=$CXX \
+      -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DCMAKE_INSTALL_PREFIX:PATH=/tmp ..
     ninja
 
 after_success:
   # update the documentation
   - |
     cd $TRAVIS_BUILD_DIR/build
-    git clone -b gh-pages https://git@github.com/NTAP/quant.git gh-pages
+    git clone -b gh-pages https://git@github.com/NTAP/$PROJECT.git gh-pages
     cd gh-pages
     git config --global push.default simple
     git config user.name "Travis CI"
@@ -84,5 +84,6 @@ after_success:
         git commit -m "Update doxygen documentation on branch gh-pages." \
             -m "Travis CI build ${TRAVIS_BUILD_NUMBER}." \
             -m "Commit: ${TRAVIS_COMMIT}."
-        git push --force https://${GH_REPO_TOKEN}@github.com/NTAP/quant.git > /dev/null 2>&1
+        git push --force \
+          https://${GH_REPO_TOKEN}@github.com/NTAP/$PROJECT.git > /dev/null 2>&1
     fi
