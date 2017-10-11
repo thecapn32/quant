@@ -14,12 +14,13 @@ branches:
     - master
 
 env:
-  - BUILD_TYPE=Debug
-  - BUILD_TYPE=Release
-  # - BUILD_TYPE=RelWithDebInfo
-  # - BUILD_TYPE=MinSizeRel
-  - CC=gcc-7      CXX=g++-7
-  - CC=clang-5.0  CXX=clang++-5.0
+  matrix:
+    - BUILD_TYPE=Debug
+    - BUILD_TYPE=Release
+    # - BUILD_TYPE=RelWithDebInfo
+    # - BUILD_TYPE=MinSizeRel
+    - CC=gcc-7      CXX=g++-7
+    - CC=clang-5.0  CXX=clang++-5.0
 
 env:
   global:
