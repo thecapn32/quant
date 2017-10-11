@@ -104,24 +104,26 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
         --mapping_file=${PROJECT_SOURCE_DIR}/misc/${CMAKE_SYSTEM_NAME_LC}.imp)
   endif()
 
-  # Use clang-tidy for extra warnings, if it's installed
-  find_program(CLANGTIDY NAMES clang-tidy clang-tidy40 clang-tidy39
-               clang-tidy38 clang-tidy37)
-  if(CLANGTIDY)
-    message(STATUS "Found clang-tidy: ${CLANGTIDY}")
-    set(CLANG_TIDY_CHECKS *
-        -cert-err58-cpp
-        -clang-diagnostic-unused-command-line-argument
-        -google-readability-braces-around-statements
-        -google-readability-todo
-        -google-runtime-references
-        -readability-braces-around-statements
-    )
-    string(REPLACE ";" "," CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS}")
-    set(CMAKE_C_CLANG_TIDY ${CLANGTIDY}
-        -analyze-temporary-dtors -system-headers
-        -checks=${CLANG_TIDY_CHECKS}
-    )
+  if (CMAKE_C_COMPILER_ID MATCHES "Clang")
+    # Use clang-tidy for extra warnings, if it's installed
+    find_program(CLANGTIDY NAMES clang-tidy clang-tidy40 clang-tidy39
+                 clang-tidy38 clang-tidy37)
+    if(CLANGTIDY)
+      message(STATUS "Found clang-tidy: ${CLANGTIDY}")
+      set(CLANG_TIDY_CHECKS *
+          -cert-err58-cpp
+          -clang-diagnostic-unused-command-line-argument
+          -google-readability-braces-around-statements
+          -google-readability-todo
+          -google-runtime-references
+          -readability-braces-around-statements
+      )
+      string(REPLACE ";" "," CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS}")
+      set(CMAKE_C_CLANG_TIDY ${CLANGTIDY}
+          -analyze-temporary-dtors -system-headers
+          -checks=${CLANG_TIDY_CHECKS}
+      )
+    endif()
   endif()
 else()
   # Default logging level
