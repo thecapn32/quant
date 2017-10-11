@@ -5,6 +5,10 @@ language: C
 os:
   - linux
 
+compiler:
+  - clang
+  - gcc
+
 branches:
   only:
     - master
@@ -42,7 +46,7 @@ addons:
       rm -rf build
       mkdir build
       cd build
-      ../bin/cmake -GNinja -DCMAKE_C_COMPILER=gcc-4.9 -DCMAKE_INSTALL_PREFIX:PATH=/tmp ..
+      ../bin/cmake -GNinja -DCMAKE_C_COMPILER=$CC -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DCMAKE_INSTALL_PREFIX:PATH=/tmp ..
     build_command: ninja
     branch_pattern: master
 
@@ -54,11 +58,12 @@ before_install:
 
 script:
   - |
+    if [ "${COVERITY_SCAN_BRANCH}" = 1 ]; then exit 0 ; fi
     cd $TRAVIS_BUILD_DIR
     rm -rf build
     mkdir build
     cd build
-    ../bin/cmake -GNinja -DCMAKE_C_COMPILER=gcc-4.9 -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DCMAKE_INSTALL_PREFIX:PATH=/tmp ..
+    ../bin/cmake -GNinja -DCMAKE_C_COMPILER=$CC -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DCMAKE_INSTALL_PREFIX:PATH=/tmp ..
     ninja
 
 after_success:
