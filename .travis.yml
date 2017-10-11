@@ -28,7 +28,13 @@ env:
 
 addons:
   apt:
+    sources:
+      - ubuntu-toolchain-r-test
+      - llvm-toolchain-trusty-5.0
     packages:
+      # quant needs Generic macros, which aren't in 4.8
+      - g++-7
+      - clang-5.0
       - doxygen
       - graphviz
       - ninja-build
