@@ -42,7 +42,7 @@ int main()
     // insert some items
     uint64_t i = 1;
     while (i <= n) {
-        const uint64_t x = plat_random() % n + 1;
+        const uint64_t x = (uint64_t)plat_random() % n + 1;
         if (diet_find(&t, x) == 0) {
             diet_insert(&t, x);
             diet_to_str(s, sizeof(s), &t);
