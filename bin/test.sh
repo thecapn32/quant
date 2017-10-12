@@ -19,7 +19,7 @@ ninja "$c"
 # commands to run the different clients against $addr:$port
 case $c in
         quant)
-                c="bin/client https://$addr:$port/"
+                c="env UBSAN_OPTIONS=suppressions=../misc/ubsan.supp bin/client https://$addr:$port/"
                 ;;
         quicly)
                 c="external/usr/local/bin/cli -vv -p / $addr $port"
@@ -44,7 +44,7 @@ esac
 # commands to run the different servers on  $addr:$port
 case $s in
         quant)
-                s="bin/server -p $port -d .."
+                s="env UBSAN_OPTIONS=suppressions=../misc/ubsan.supp bin/server -p $port -d .."
                 ;;
         quicly)
                 s="external/usr/local/bin/cli -vv -k lib/src/key.pem -c \

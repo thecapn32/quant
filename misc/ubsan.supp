@@ -1,0 +1,3 @@
+unsigned-integer-overflow:sha256.c
+unsigned-integer-overflow:uECC.c
+unsigned-integer-overflow:curve-specific.inc
