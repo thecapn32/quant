@@ -27,7 +27,7 @@ case $c in
         minq)
                 c="env MINQ_LOG=\* GOPATH=$(pwd)/external/go go run \
                         external/go/src/github.com/ekr/minq/bin/client/main.go \
-                        -addr $addr:$port -http /"
+                        -addr $addr:$port -http /  2>&1 | grep -v 'Frame type byte 0'"
                 ;;
         ngtcp2)
                 c="external/ngtcp2-prefix/src/ngtcp2/examples/client \
@@ -52,7 +52,7 @@ case $s in
                 ;;
         minq)
                 s="env MINQ_LOG=\* GOPATH=$(pwd)/external/go go run \
-                        external/go/src/github.com/ekr/minq/bin/server/main.go"
+                        external/go/src/github.com/ekr/minq/bin/server/main.go 2>&1 | grep -v 'Frame type byte 0'"
                 ;;
         ngtcp2)
                 s="external/ngtcp2-prefix/src/ngtcp2/examples/server \
