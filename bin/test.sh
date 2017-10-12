@@ -9,7 +9,7 @@ c=${1:-quant}
 s=${2:-quant}
 
 # port to run servers on
-port=44333
+port=4433 # mozquic server can only run on 4433 at the moment
 addr=127.0.0.1
 
 # (re-)build the client (and possibly server) to test
