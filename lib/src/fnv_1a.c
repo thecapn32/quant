@@ -29,7 +29,11 @@
 #include "fnv_1a.h" // IWYU pragma: keep
 
 
-uint64_t fnv_1a(const void * const buf, const size_t len)
+uint64_t
+#if defined(__clang__)
+    __attribute__((no_sanitize("unsigned-integer-overflow")))
+#endif
+    fnv_1a(const void * const buf, const size_t len)
 {
     const uint64_t prime = 0x100000001b3;
     uint64_t hash = 0xcbf29ce484222325;
