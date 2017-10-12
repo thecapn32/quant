@@ -23,11 +23,6 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wpadded"
-#include <ev.h>
-#pragma clang diagnostic pop
-
 #include <inttypes.h>
 #include <math.h>
 #include <stdbool.h>
@@ -39,6 +34,7 @@
 #include <byteswap.h>
 #endif
 
+#include <ev.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
@@ -49,6 +45,7 @@
 #include "pkt.h"
 #include "quic.h"
 #include "stream.h"
+#include "tls.h"
 
 
 #define FRAM_TYPE_PAD 0x00
@@ -150,7 +147,6 @@ dec_stream_frame(struct q_conn * const c,
 
             // XXX what if the FIN also has data?
             // w_free_iov(w_engine(c->sock), v);
-
         }
 
         if (s->id != 0)

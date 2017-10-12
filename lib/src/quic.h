@@ -55,9 +55,6 @@ extern struct ev_loop * loop;
 extern const uint32_t ok_vers[];
 extern const uint8_t ok_vers_len;
 
-/// TLS context.
-extern ptls_context_t tls_ctx;
-
 /// Maximum number of tail loss probes before an RTO fires.
 #define kMaxTLPs 2
 

@@ -33,12 +33,8 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#include <picotls.h>
-
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wpadded"
 #include <ev.h>
-#pragma clang diagnostic pop
+#include <picotls.h>
 
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
@@ -51,6 +47,7 @@
 #include "pkt.h"
 #include "quic.h"
 #include "stream.h"
+// #include "tls.h"
 
 
 // Embryonic and established (actually, non-embryonic) QUIC connections.
@@ -86,7 +83,7 @@ int64_t ipnp_splay_cmp(const struct q_conn * const a,
 int64_t cid_splay_cmp(const struct q_conn * const a,
                       const struct q_conn * const b)
 {
-    const int64_t diff = (int64_t)(a->id - b->id);
+    const int64_t diff = (int64_t)a->id - (int64_t)b->id;
     if (likely(diff))
         return diff;
     // include only the client and embryonic flags in the comparison
@@ -97,82 +94,6 @@ int64_t cid_splay_cmp(const struct q_conn * const a,
 
 SPLAY_GENERATE(ipnp_splay, q_conn, node_ipnp, ipnp_splay_cmp)
 SPLAY_GENERATE(cid_splay, q_conn, node_cid, cid_splay_cmp)
-
-
-#define PTLS_CLNT_LABL "EXPORTER-QUIC client 1-RTT Secret"
-#define PTLS_SERV_LABL "EXPORTER-QUIC server 1-RTT Secret"
-
-
-static void __attribute__((nonnull))
-conn_setup_1rtt_secret(struct q_conn * const c,
-                       ptls_cipher_suite_t * const cipher,
-                       ptls_aead_context_t ** aead,
-                       uint8_t * const sec,
-                       const char * const label,
-                       uint8_t is_enc)
-{
-    int ret = ptls_export_secret(c->tls, sec, cipher->hash->digest_size, label,
-                                 ptls_iovec_init(0, 0));
-    ensure(ret == 0, "ptls_export_secret");
-    *aead = ptls_aead_new(cipher->aead, cipher->hash, is_enc, sec);
-    ensure(aead, "ptls_aead_new");
-}
-
-
-static void __attribute__((nonnull)) conn_setup_1rtt(struct q_conn * const c)
-{
-    ptls_cipher_suite_t * const cipher = ptls_get_cipher(c->tls);
-    conn_setup_1rtt_secret(c, cipher, &c->in_kp0, c->in_sec,
-                           is_clnt(c) ? PTLS_SERV_LABL : PTLS_CLNT_LABL, 0);
-    conn_setup_1rtt_secret(c, cipher, &c->out_kp0, c->out_sec,
-                           is_clnt(c) ? PTLS_CLNT_LABL : PTLS_SERV_LABL, 1);
-
-    c->state = CONN_STAT_VERS_OK;
-    warn(DBG, "%s conn %" PRIx64 " now in state %u", conn_type(c), c->id,
-         c->state);
-}
-
-
-uint32_t tls_handshake(struct q_stream * const s)
-{
-    // get pointer to any received handshake data
-    // XXX there is an assumption here that we only have one inbound packet
-    struct w_iov * const iv = sq_first(&s->i);
-    size_t in_len = iv ? iv->len : 0;
-
-    // allocate a new w_iov
-    struct w_iov * ov =
-        w_alloc_iov(w_engine(s->c->sock), MAX_PKT_LEN, Q_OFFSET);
-    ptls_buffer_init(&meta(ov).tb, ov->buf, ov->len);
-    const int ret =
-        ptls_handshake(s->c->tls, &meta(ov).tb, iv ? iv->buf : 0, &in_len, 0);
-    ov->len = (uint16_t)meta(ov).tb.off;
-    warn(INF, "TLS handshake: recv %u, gen %u, in_len %lu, ret %u: %.*s",
-         iv ? iv->len : 0, ov->len, in_len, ret, ov->len, ov->buf);
-    ensure(ret == 0 || ret == PTLS_ERROR_IN_PROGRESS, "TLS error: %u", ret);
-    ensure(iv == 0 || iv->len && iv->len == in_len, "TLS data remaining");
-
-    if (iv)
-        // the assumption is that ptls_handshake has consumed all stream-0 data
-        w_free(w_engine(s->c->sock), &s->i);
-    else {
-        s->c->state = CONN_STAT_VERS_SENT;
-        // warn(DBG, "%s conn %" PRIx64 " now in state %u", conn_type(s->c),
-        //      s->c->id, s->c->state);
-    }
-
-    if ((ret == 0 || ret == PTLS_ERROR_IN_PROGRESS) && ov->len != 0)
-        // enqueue for TX
-        sq_insert_tail(&s->o, ov, next);
-    else
-        // we are done with the handshake, no need to TX after all
-        w_free_iov(w_engine(s->c->sock), ov);
-
-    if (ret == 0)
-        conn_setup_1rtt(s->c);
-
-    return (uint32_t)ret;
-}
 
 
 static bool __attribute__((const)) vers_supported(const uint32_t v)
@@ -373,7 +294,8 @@ void rx(struct ev_loop * const l,
 {
     // read from NIC
     struct w_sock * const ws = rx_w->data;
-    w_nic_rx(w_engine(ws), -1);
+    struct w_engine * const w = w_engine(ws);
+    w_nic_rx(w, -1);
     struct w_iov_sq i = sq_head_initializer(i);
     sl_head(, q_conn) crx = sl_head_initializer();
     w_rx(ws, &i);
@@ -390,7 +312,7 @@ void rx(struct ev_loop * const l,
             if (util_dlevel == DBG)
                 hexdump(v->buf, v->len);
 #endif
-            w_free_iov(w_engine(ws), v);
+            w_free_iov(w, v);
             continue;
         }
 
@@ -419,7 +341,7 @@ void rx(struct ev_loop * const l,
             if (util_dlevel == DBG)
                 hexdump(v->buf, v->len);
 #endif
-            w_free_iov(w_engine(ws), v);
+            w_free_iov(w, v);
             continue;
         }
 
@@ -481,7 +403,7 @@ void rx(struct ev_loop * const l,
                 if (util_dlevel == DBG)
                     hexdump(v->buf, v->len);
 #endif
-                w_free_iov(w_engine(ws), v);
+                w_free_iov(w, v);
                 continue;
             }
 
@@ -519,6 +441,8 @@ void rx(struct ev_loop * const l,
                 warn(INF, "server didn't like our vers 0x%08x", c->vers);
                 ensure(c->vers == pkt_vers(v->buf, v->len),
                        "server did not echo our vers back");
+                if (c->vers_initial == 0)
+                    c->vers_initial = c->vers;
                 c->vers = pick_from_server_vers(v->buf, v->len);
                 if (c->vers)
                     warn(INF, "retrying with vers 0x%08x", c->vers);

@@ -29,28 +29,18 @@
 #include <netinet/in.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <string.h>
+#include <sys/types.h>
 
-#include <picotls.h> // IWYU pragma: keep
-// IWYU pragma: no_include <picotls/../picotls.h>
-#include <picotls/minicrypto.h>
-#include <picotls/openssl.h>
-
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wpadded"
 #include <ev.h>
-#pragma clang diagnostic pop
-
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
-#include "cert.h"
 #include "conn.h"
 #include "diet.h"
-#include "marshall.h"
 #include "pkt.h"
 #include "quic.h"
 #include "stream.h"
+#include "tls.h"
 
 struct ev_loop;
 
@@ -70,16 +60,11 @@ const uint8_t ok_vers_len = sizeof(ok_vers) / sizeof(ok_vers[0]);
 
 struct pkt_meta * pm = 0;
 struct ev_loop * loop = 0;
-ptls_context_t tls_ctx = {0};
 
 func_ptr api_func = 0;
 void * api_arg = 0;
 
 static const uint32_t nbufs = 1000; ///< Number of packet buffers to allocate.
-
-static ptls_minicrypto_secp256r1sha256_sign_certificate_t sign_cert = {0};
-static ptls_iovec_t tls_certs = {0};
-static ptls_openssl_verify_certificate_t verifier = {0};
 
 
 /// Run the event loop with the API function @p func and argument @p arg.
@@ -119,6 +104,7 @@ idle_alarm(struct ev_loop * const l __attribute__((unused)),
 
 
 static struct q_conn * new_conn(struct w_engine * const w,
+                                const uint32_t vers,
                                 const uint64_t cid,
                                 const struct sockaddr_in * const peer,
                                 const char * const peer_name,
@@ -131,6 +117,9 @@ static struct q_conn * new_conn(struct w_engine * const w,
     if (peer)
         c->peer = *peer;
     c->id = cid;
+    c->vers = c->vers_initial = vers;
+    tls_ctx.random_bytes(c->stateless_reset_token,
+                         sizeof(c->stateless_reset_token));
 
     // initialize LD state
     // XXX: UsingTimeLossDetection not defined?
@@ -152,11 +141,8 @@ static struct q_conn * new_conn(struct w_engine * const w,
     diet_init(&c->recv);
 
     // initialize TLS state
-    ensure((c->tls = ptls_new(&tls_ctx, peer_name == 0)) != 0,
-           "alloc TLS state");
-    if (peer_name)
-        ensure(ptls_set_server_name(c->tls, peer_name, strlen(peer_name)) == 0,
-               "ptls_set_server_name");
+    init_tls(c, peer_name);
+    init_tp(c);
 
     // initialize idle timeout
     c->idle_alarm.data = c;
@@ -198,26 +184,16 @@ struct q_conn * q_connect(void * const q,
                           const char * const peer_name)
 {
     // make new connection
-    const uint64_t cid =
-        ((((uint64_t)plat_random()) << 32) | ((uint64_t)plat_random()));
+    uint64_t cid;
+    tls_ctx.random_bytes(&cid, sizeof(cid));
     warn(WRN, "connecting embr clnt conn %" PRIx64 " to %s:%u", cid,
          inet_ntoa(peer->sin_addr), ntohs(peer->sin_port));
-    struct q_conn * const c = new_conn(q, cid, peer, peer_name, 0);
 #ifndef NDBUG
-    c->vers = 0xbabababa; // XXX reserved version to trigger negotiation
+    const uint vers = 0xbabababa; // XXX reserved version to trigger negotiation
 #else
-    c->vers = ok_vers[0];
+    const uint vers = ok_vers[0];
 #endif
-
-    // ptls_raw_extension_t tp_ext[2];
-    ptls_buffer_t tp;
-    uint8_t buf[64];
-    uint16_t i = 0;
-    const uint16_t len = sizeof(buf);
-    ptls_buffer_init(&tp, &buf, len);
-
-    enc(buf, len, i, &c->vers, 0, "0x%08x");
-    enc(buf, len, i, &c->vers, 0, "0x%08x");
+    struct q_conn * const c = new_conn(q, vers, cid, peer, peer_name, 0);
 
     c->next_sid = 1; // client initiates odd-numbered streams
     w_connect(c->sock, peer->sin_addr.s_addr, peer->sin_port);
@@ -306,7 +282,7 @@ struct q_conn * q_bind(void * const q, const uint16_t port)
 {
     // bind socket and create new embryonic server connection
     warn(WRN, "binding serv socket on port %u", port);
-    struct q_conn * const c = new_conn(q, 0, 0, 0, port);
+    struct q_conn * const c = new_conn(q, 0, 0, 0, 0, port);
     warn(WRN, "bound %s socket on port %u", conn_type(c), port);
     return c;
 }
@@ -366,29 +342,7 @@ void * q_init(const char * const ifname)
     plat_initrandom();
 
     // initialize TLS context
-    // warn(DBG, "TLS: key %u byte%s, cert %u byte%s", tls_key_len,
-    //      plural(tls_key_len), tls_cert_len, plural(tls_cert_len));
-    tls_ctx.random_bytes = ptls_minicrypto_random_bytes;
-
-    // allow secp256r1 and x25519
-    static ptls_key_exchange_algorithm_t * my_own_key_exchanges[] = {
-        &ptls_minicrypto_secp256r1, &ptls_minicrypto_x25519, NULL};
-
-    tls_ctx.key_exchanges = my_own_key_exchanges;
-    tls_ctx.cipher_suites = ptls_minicrypto_cipher_suites;
-
-    ensure(ptls_minicrypto_init_secp256r1sha256_sign_certificate(
-               &sign_cert, ptls_iovec_init(tls_key, tls_key_len)) == 0,
-           "ptls_minicrypto_init_secp256r1sha256_sign_certificate");
-    tls_ctx.sign_certificate = &sign_cert.super;
-
-    tls_certs = ptls_iovec_init(tls_cert, tls_cert_len);
-    tls_ctx.certificates.list = &tls_certs;
-    tls_ctx.certificates.count = 1;
-
-    ensure(ptls_openssl_init_verify_certificate(&verifier, 0) == 0,
-           "ptls_openssl_init_verify_certificate");
-    tls_ctx.verify_certificate = &verifier.super;
+    init_tls_ctx();
 
     // initialize the event loop
     loop = ev_default_loop(0);

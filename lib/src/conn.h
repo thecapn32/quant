@@ -26,22 +26,14 @@
 #pragma once
 
 #include <netinet/in.h>
-#include <stdbool.h>
 #include <stdint.h>
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wpadded"
 #include <ev.h>
-#pragma clang diagnostic pop
-
 #include <picotls.h>
-
 #include <warpcore/warpcore.h>
 
 #include "diet.h"
 #include "quic.h"
-
-struct q_stream;
 
 // Embryonic and established (actually, non-embryonic) QUIC connections.
 extern splay_head(ipnp_splay, q_conn) conns_by_ipnp;
@@ -52,9 +44,9 @@ extern splay_head(cid_splay, q_conn) conns_by_cid;
 #define TP_INITIAL_MAX_DATA 0x0001
 #define TP_INITIAL_MAX_STREAM_ID 0x0002
 #define TP_IDLE_TIMEOUT 0x0003
-#define TP_STATELESS_RESET_TOKEN 0x0006
 #define TP_OMIT_CONNECTION_ID 0x0004
 #define TP_MAX_PACKET_SIZE 0x0005
+#define TP_STATELESS_RESET_TOKEN 0x0006
 
 
 /// A QUIC connection.
@@ -65,22 +57,22 @@ struct q_conn {
 
     uint64_t id; ///< Connection ID
 
-    uint32_t vers;     ///< QUIC version in use for this connection.
-    uint32_t next_sid; ///< Next stream ID to use on q_rsv_stream().
-    uint8_t flags;     ///< Connection flags.
-    uint8_t state;     ///< State of the connection.
-
-    uint8_t _unused[2];
-
-    struct sockaddr_in peer; ///< Address of our peer.
+    uint32_t vers;         ///< QUIC version in use for this connection.
+    uint32_t vers_initial; ///< QUIC version first negotiated.
+    uint32_t next_sid;     ///< Next stream ID to use on q_rsv_stream().
+    uint8_t flags;         ///< Connection flags.
+    uint8_t state;         ///< State of the connection.
 
     // LD state
     uint8_t handshake_cnt;
     uint8_t tlp_cnt;
     uint8_t rto_cnt;
     uint8_t _unused2;
+    uint8_t _unused[6];
     ev_timer ld_alarm; ///< Loss detection alarm.
     ev_timer idle_alarm;
+
+    struct sockaddr_in peer; ///< Address of our peer.
 
     splay_head(stream, q_stream) streams;
     struct diet closed_streams;
@@ -120,15 +112,7 @@ struct q_conn {
     ptls_aead_context_t * in_kp0;
     ptls_aead_context_t * out_kp0;
 
-    uint32_t initial_max_stream_data;  // units of octets
-    uint32_t initial_max_data;         // units of 1024 octets
-    uint32_t initial_max_stream_id;    // as is
-    uint16_t idle_timeout;             // units of seconds (max 600 seconds)
     uint8_t stateless_reset_token[16]; // 16 octets
-    uint16_t max_packet_size;          // between 1200-65527 (the default)
-    bool omit_connection_id;
-
-    uint8_t _unused3[7];
 };
 
 
@@ -183,9 +167,6 @@ get_conn_by_ipnp(const struct sockaddr_in * const peer, const uint8_t type);
 extern struct q_conn * get_conn_by_cid(const uint64_t id, const uint8_t type);
 
 extern void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c);
-
-extern uint32_t __attribute__((nonnull))
-tls_handshake(struct q_stream * const s);
 
 extern void * __attribute__((nonnull)) loop_run(void * const arg);
 

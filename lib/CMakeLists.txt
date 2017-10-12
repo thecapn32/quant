@@ -42,7 +42,7 @@ set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 add_library(common
   OBJECT
     src/fnv_1a.c src/pkt.c src/frame.c src/quic.c src/stream.c src/conn.c
-    src/diet.c src/util.c ${CMAKE_CURRENT_BINARY_DIR}/src/config.c
+    src/diet.c src/util.c src/tls.c ${CMAKE_CURRENT_BINARY_DIR}/src/config.c
     ${CMAKE_CURRENT_BINARY_DIR}/src/cert.c
 )
 add_dependencies(common warpcore ptls-core ptls-minicrypto ptls-openssl)

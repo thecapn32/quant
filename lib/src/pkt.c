@@ -31,8 +31,6 @@
 #include <byteswap.h>
 #endif
 
-#include <stddef.h> // IWYU pragma: keep
-
 #include <picotls.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
