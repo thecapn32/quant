@@ -412,6 +412,8 @@ void rx(struct ev_loop * const l,
             c->vers = pkt_vers(v->buf, v->len);
             c->flags |= CONN_FLAG_TX;
             diet_insert(&c->recv, meta(v).nr);
+            if (c->vers_initial == 0)
+                c->vers_initial = c->vers;
             if (vers_supported(c->vers)) {
                 warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
 

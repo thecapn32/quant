@@ -53,6 +53,7 @@ struct ev_loop;
 const uint32_t ok_vers[] = {
     // 0xff000004, // draft-ietf-quic-transport-04
     0xff000005, // draft-ietf-quic-transport-05
+    // 0xff000007, // draft-ietf-quic-transport-07
 };
 
 /// Length of the @p ok_vers array.

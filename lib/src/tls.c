@@ -51,6 +51,14 @@ static ptls_openssl_verify_certificate_t verifier = {0};
 
 #define TLS_EXT_TYPE_TRANSPORT_PARAMETERS 26
 
+#define TP_INITIAL_MAX_STREAM_DATA 0x0000
+#define TP_INITIAL_MAX_DATA 0x0001
+#define TP_INITIAL_MAX_STREAM_ID 0x0002
+#define TP_IDLE_TIMEOUT 0x0003
+// #define TP_OMIT_CONNECTION_ID 0x0004
+// #define TP_MAX_PACKET_SIZE 0x0005
+#define TP_STATELESS_RESET_TOKEN 0x0006
+
 
 static int filter_tp(ptls_t * tls __attribute__((unused)),
                      struct st_ptls_handshake_properties_t * properties
@@ -61,33 +69,12 @@ static int filter_tp(ptls_t * tls __attribute__((unused)),
 }
 
 
-#define dec_tp(c, tp, var)                                                     \
-    do {                                                                       \
-        uint16_t p;                                                            \
-        dec(p, buf, len, i, 0, "%u");                                          \
-        ensure(p == (tp), "valid tp");                                         \
-        uint16_t l;                                                            \
-        dec(l, buf, len, i, 0, "%u");                                          \
-        ensure(l == sizeof(var), "valid len");                                 \
-        dec((var), buf, len, i, 0, "%u");                                      \
-    } while (0)
-
-
-static int chk_tp_clnt(ptls_t * tls __attribute__((unused)),
-                       ptls_handshake_properties_t * properties,
-                       ptls_raw_extension_t * slots)
+static uint16_t chk_tp_clnt(const struct q_conn * const c,
+                            const uint8_t * const buf,
+                            const uint16_t len,
+                            const uint16_t pos)
 {
-    ensure(slots[0].type == TLS_EXT_TYPE_TRANSPORT_PARAMETERS, "have tp");
-    ensure(slots[1].type == UINT16_MAX, "have end");
-
-    // get connection based on properties pointer
-    const struct q_conn * const c =
-        (void *)((char *)properties - offsetof(struct q_conn, tls_hshake_prop));
-
-    // set up parsing
-    const uint8_t * const buf = slots[0].data.base;
-    uint16_t len = (uint16_t)slots[0].data.len;
-    uint16_t i = 0;
+    uint16_t i = pos;
 
     // parse server versions
     uint8_t n;
@@ -102,32 +89,116 @@ static int chk_tp_clnt(ptls_t * tls __attribute__((unused)),
     ensure(found, "negotiated version found in transport parameters");
     // TODO: validate that version negotiation on these values has same result
 
+    return i;
+}
+
+
+static uint16_t chk_tp_serv(const struct q_conn * const c,
+                            const uint8_t * const buf,
+                            const uint16_t len,
+                            const uint16_t pos)
+{
+    uint16_t i = pos;
+
+    uint32_t vers;
+    dec(vers, buf, len, i, 0, "0x%08x");
+
+    uint32_t vers_initial;
+    dec(vers_initial, buf, len, i, 0, "0x%08x");
+
+    ensure(vers == c->vers, "vers 0x%08x found in tp", c->vers);
+    ensure(vers_initial == c->vers_initial, "vers_initial 0x%08x found in tp",
+           c->vers_initial);
+
+    return i;
+}
+
+
+#define dec_tp(c, var)                                                         \
+    do {                                                                       \
+        uint16_t l;                                                            \
+        dec(l, buf, len, i, 0, "%u");                                          \
+        ensure(l == sizeof(var), "valid len");                                 \
+        dec((var), buf, len, i, 0, "%u");                                      \
+    } while (0)
+
+
+static int chk_tp(ptls_t * tls __attribute__((unused)),
+                  ptls_handshake_properties_t * properties,
+                  ptls_raw_extension_t * slots)
+{
+    ensure(slots[0].type == TLS_EXT_TYPE_TRANSPORT_PARAMETERS, "have tp");
+    ensure(slots[1].type == UINT16_MAX, "have end");
+
+    // get connection based on properties pointer
+    const struct q_conn * const c =
+        (void *)((char *)properties - offsetof(struct q_conn, tls_hshake_prop));
+
+    // set up parsing
+    const uint8_t * const buf = slots[0].data.base;
+    uint16_t len = (uint16_t)slots[0].data.len;
+    uint16_t i = 0;
+
+    if (is_clnt(c))
+        i = chk_tp_clnt(c, buf, len, i);
+    else
+        i = chk_tp_serv(c, buf, len, i);
+
     uint16_t tpl;
     dec(tpl, buf, len, i, 0, "%u");
     ensure(tpl <= len - i, "tp len is reasonable");
+    len = i + tpl;
 
-    uint32_t initial_max_stream_data; // TODO: do something with this info
-    dec_tp(c, TP_INITIAL_MAX_STREAM_DATA, initial_max_stream_data);
+    while (i < len) {
+        uint16_t p;
+        dec(p, buf, len, i, 0, "%u");
+        switch (p) {
+        case TP_INITIAL_MAX_STREAM_DATA: {
+            uint32_t
+                initial_max_stream_data; // TODO: do something with this info
 
-    uint32_t initial_max_data; // TODO: do something with this info
-    dec_tp(c, TP_INITIAL_MAX_DATA, initial_max_data);
+            dec_tp(c, initial_max_stream_data);
+            break;
+        }
 
-    uint32_t initial_max_stream_id; // TODO: do something with this info
-    dec_tp(c, TP_INITIAL_MAX_STREAM_ID, initial_max_stream_id);
+        case TP_INITIAL_MAX_DATA: {
+            uint32_t initial_max_data; // TODO: do something with this info
 
-    uint16_t idle_timeout; // TODO: do something with this info
-    dec_tp(c, TP_IDLE_TIMEOUT, idle_timeout);
-    ensure(idle_timeout <= 600, "valid idle timeout");
+            dec_tp(c, initial_max_data);
+            break;
+        }
 
-    uint16_t p;
-    dec(p, buf, len, i, 0, "%u");
-    ensure(p == TP_STATELESS_RESET_TOKEN, "valid tp");
-    uint16_t l;
-    dec(l, buf, len, i, 0, "%u");
-    ensure(l == 16, "valid len");
-    uint8_t stateless_reset_token[16]; // TODO: do something with this info
-    memcpy(stateless_reset_token, &buf[i], 16);
-    i += 16;
+        case TP_INITIAL_MAX_STREAM_ID: {
+            uint32_t initial_max_stream_id; // TODO: do something with this info
+
+            dec_tp(c, initial_max_stream_id);
+            break;
+        }
+
+        case TP_IDLE_TIMEOUT: {
+            uint16_t idle_timeout; // TODO: do something with this info
+
+            dec_tp(c, idle_timeout);
+            ensure(idle_timeout <= 600, "valid idle timeout");
+            break;
+        }
+
+        case TP_STATELESS_RESET_TOKEN: {
+            ensure(is_clnt(c), "am client");
+            uint16_t l;
+            dec(l, buf, len, i, 0, "%u");
+            ensure(l == 16, "valid len");
+            uint8_t
+                stateless_reset_token[16]; // TODO: do something with this info
+            memcpy(stateless_reset_token, &buf[i], 16);
+            i += 16;
+            break;
+        }
+
+        default:
+            die("unsupported transport parameter 0x%04x", p);
+        }
+    }
 
     ensure(i == len, "out of parameters");
 
@@ -139,7 +210,7 @@ static int chk_tp_clnt(ptls_t * tls __attribute__((unused)),
     do {                                                                       \
         const uint16_t p = (tp);                                               \
         enc((c)->tp_buf, len, i, &p, 0, "%u");                                 \
-        l = sizeof(var);                                                       \
+        const uint16_t l = sizeof(var);                                        \
         enc((c)->tp_buf, len, i, &l, 0, "%u");                                 \
         enc((c)->tp_buf, len, i, &(var), 0, "%u");                             \
     } while (0)
@@ -150,21 +221,29 @@ static void init_tp(struct q_conn * const c)
     uint16_t i = 0;
     const uint16_t len = sizeof(c->tp_buf);
 
-    enc(c->tp_buf, len, i, &c->vers, 0, "0x%08x");
-    enc(c->tp_buf, len, i, &c->vers_initial, 0, "0x%08x");
+    if (is_clnt(c)) {
+        enc(c->tp_buf, len, i, &c->vers, 0, "0x%08x");
+        enc(c->tp_buf, len, i, &c->vers_initial, 0, "0x%08x");
+        const uint16_t l = 30; // size of rest of parameters
+        enc(c->tp_buf, len, i, &l, 2, "%u");
+    } else {
+        uint16_t l = ok_vers_len * sizeof(ok_vers[0]);
+        enc(c->tp_buf, len, i, &l, 1, "%u");
+        for (uint8_t n = 0; n < ok_vers_len; n++)
+            enc(c->tp_buf, len, i, &ok_vers[n], 4, "0x%08x");
+        l = 50; // size of rest of parameters
+        enc(c->tp_buf, len, i, &l, 2, "%u");
+    }
 
-    uint16_t l = is_serv(c) ? 50 : 30; // size of rest of parameters
-    enc(c->tp_buf, len, i, &l, 2, "%u");
-
-    enc_tp(c, TP_INITIAL_MAX_STREAM_DATA, c->initial_max_stream_data);
-    enc_tp(c, TP_INITIAL_MAX_DATA, c->initial_max_data);
-    enc_tp(c, TP_INITIAL_MAX_STREAM_ID, c->initial_max_stream_id);
     enc_tp(c, TP_IDLE_TIMEOUT, c->idle_timeout);
+    enc_tp(c, TP_INITIAL_MAX_DATA, c->initial_max_data);
+    enc_tp(c, TP_INITIAL_MAX_STREAM_DATA, c->initial_max_stream_data);
+    enc_tp(c, TP_INITIAL_MAX_STREAM_ID, c->initial_max_stream_id);
 
     if (is_serv(c)) {
         const uint16_t p = TP_STATELESS_RESET_TOKEN;
         enc(c->tp_buf, len, i, &p, 0, "%u");
-        l = 16;
+        const uint16_t l = 16;
         enc(c->tp_buf, len, i, &l, 0, "%u");
         memcpy(&c->tp_buf[i], c->stateless_reset_token, 16);
         i += 16;
@@ -177,7 +256,7 @@ static void init_tp(struct q_conn * const c)
     c->tls_hshake_prop =
         (ptls_handshake_properties_t){.additional_extensions = c->tp_ext,
                                       .collect_extension = filter_tp,
-                                      .collected_extensions = chk_tp_clnt};
+                                      .collected_extensions = chk_tp};
 }
 
 
@@ -248,7 +327,8 @@ uint32_t tls_handshake(struct q_stream * const s)
     ensure(iv == 0 || iv->len && iv->len == in_len, "TLS data remaining");
 
     if (iv)
-        // the assumption is that ptls_handshake has consumed all stream-0 data
+        // the assumption is that ptls_handshake has consumed all stream-0
+        // data
         w_free(w_engine(s->c->sock), &s->i);
     else {
         s->c->state = CONN_STAT_VERS_SENT;

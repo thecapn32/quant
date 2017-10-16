@@ -40,15 +40,6 @@ extern splay_head(ipnp_splay, q_conn) conns_by_ipnp;
 extern splay_head(cid_splay, q_conn) conns_by_cid;
 
 
-#define TP_INITIAL_MAX_STREAM_DATA 0x0000
-#define TP_INITIAL_MAX_DATA 0x0001
-#define TP_INITIAL_MAX_STREAM_ID 0x0002
-#define TP_IDLE_TIMEOUT 0x0003
-#define TP_OMIT_CONNECTION_ID 0x0004
-#define TP_MAX_PACKET_SIZE 0x0005
-#define TP_STATELESS_RESET_TOKEN 0x0006
-
-
 /// A QUIC connection.
 struct q_conn {
     splay_entry(q_conn) node_ipnp;
