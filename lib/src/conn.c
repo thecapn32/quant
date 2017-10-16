@@ -47,7 +47,7 @@
 #include "pkt.h"
 #include "quic.h"
 #include "stream.h"
-// #include "tls.h"
+#include "tls.h"
 
 
 // Embryonic and established (actually, non-embryonic) QUIC connections.
@@ -55,8 +55,7 @@ struct ipnp_splay conns_by_ipnp = splay_initializer(&conns_by_ipnp);
 struct cid_splay conns_by_cid = splay_initializer(&conns_by_cid);
 
 
-int64_t ipnp_splay_cmp(const struct q_conn * const a,
-                       const struct q_conn * const b)
+int ipnp_splay_cmp(const struct q_conn * const a, const struct q_conn * const b)
 {
     // warn(DBG, "%s conn %s:%u vs. %s conn %s:%u", conn_type(a),
     //      inet_ntoa(a->peer.sin_addr), ntohs(a->peer.sin_port), conn_type(b),
@@ -70,7 +69,8 @@ int64_t ipnp_splay_cmp(const struct q_conn * const a,
     if (likely(diff))
         return diff;
 
-    diff = a->peer.sin_port - b->peer.sin_port;
+    diff = (a->peer.sin_port > b->peer.sin_port) -
+           (a->peer.sin_port < b->peer.sin_port);
     if (likely(diff))
         return diff;
 
@@ -80,10 +80,9 @@ int64_t ipnp_splay_cmp(const struct q_conn * const a,
 }
 
 
-int64_t cid_splay_cmp(const struct q_conn * const a,
-                      const struct q_conn * const b)
+int cid_splay_cmp(const struct q_conn * const a, const struct q_conn * const b)
 {
-    const int64_t diff = (int64_t)a->id - (int64_t)b->id;
+    const int diff = (a->id > b->id) - (a->id < b->id);
     if (likely(diff))
         return diff;
     // include only the client and embryonic flags in the comparison
@@ -448,7 +447,18 @@ void rx(struct ev_loop * const l,
                     warn(INF, "retrying with vers 0x%08x", c->vers);
                 else
                     die("no vers in common with server");
-                rtx(c, UINT32_MAX); // retransmit the ClientHello
+
+                // retransmit the ClientHello
+                init_tls(c);
+                struct q_stream * s = get_stream(c, 0);
+                free_stream(s);
+                s = new_stream(c, 0);
+                // w_free(w, &s->c->sent_pkts);
+                // w_free(w, &s->o);
+                // w_free(w, &s->i);
+                tls_handshake(s);
+                c->flags |= CONN_FLAG_TX;
+
             } else {
                 warn(INF, "server accepted vers 0x%08x", c->vers);
                 diet_insert(&c->recv, meta(v).nr);

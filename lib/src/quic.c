@@ -29,6 +29,7 @@
 #include <netinet/in.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 
 #include <ev.h>
@@ -133,7 +134,12 @@ static struct q_conn * new_conn(struct w_engine * const w,
     c->cwnd = kInitialWindow;
     c->ssthresh = UINT64_MAX;
 
-    c->flags = CONN_FLAG_EMBR | (peer_name ? CONN_FLAG_CLNT : 0);
+    c->flags = CONN_FLAG_EMBR;
+    if (peer_name) {
+        c->flags |= CONN_FLAG_CLNT;
+        ensure(c->peer_name = strdup(peer_name), "could not du peer_name");
+    }
+
     sq_init(&c->sent_pkts);
     splay_init(&c->streams);
     diet_init(&c->closed_streams);
@@ -141,8 +147,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
     diet_init(&c->recv);
 
     // initialize TLS state
-    init_tls(c, peer_name);
-    init_tp(c);
+    init_tls(c);
 
     // initialize idle timeout
     c->idle_alarm.data = c;

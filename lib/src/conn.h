@@ -73,6 +73,7 @@ struct q_conn {
     ev_timer idle_alarm;
 
     struct sockaddr_in peer; ///< Address of our peer.
+    char * peer_name;
 
     splay_head(stream, q_stream) streams;
     struct diet closed_streams;
@@ -116,10 +117,10 @@ struct q_conn {
 };
 
 
-extern int64_t __attribute__((nonnull))
+extern int __attribute__((nonnull))
 ipnp_splay_cmp(const struct q_conn * const a, const struct q_conn * const b);
 
-extern int64_t __attribute__((nonnull))
+extern int __attribute__((nonnull))
 cid_splay_cmp(const struct q_conn * const a, const struct q_conn * const b);
 
 SPLAY_PROTOTYPE(ipnp_splay, q_conn, node_ipnp, ipnp_splay_cmp)

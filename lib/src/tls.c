@@ -63,37 +63,7 @@ static uint16_t idle_timeout = 595; // units of seconds (max 600 seconds)
 #define PTLS_SERV_LABL "EXPORTER-QUIC server 1-RTT Secret"
 
 
-static void __attribute__((nonnull))
-conn_setup_1rtt_secret(struct q_conn * const c,
-                       ptls_cipher_suite_t * const cipher,
-                       ptls_aead_context_t ** aead,
-                       uint8_t * const sec,
-                       const char * const label,
-                       uint8_t is_enc)
-{
-    int ret = ptls_export_secret(c->tls, sec, cipher->hash->digest_size, label,
-                                 ptls_iovec_init(0, 0));
-    ensure(ret == 0, "ptls_export_secret");
-    *aead = ptls_aead_new(cipher->aead, cipher->hash, is_enc, sec);
-    ensure(aead, "ptls_aead_new");
-}
-
-
-static void __attribute__((nonnull)) conn_setup_1rtt(struct q_conn * const c)
-{
-    ptls_cipher_suite_t * const cipher = ptls_get_cipher(c->tls);
-    conn_setup_1rtt_secret(c, cipher, &c->in_kp0, c->in_sec,
-                           is_clnt(c) ? PTLS_SERV_LABL : PTLS_CLNT_LABL, 0);
-    conn_setup_1rtt_secret(c, cipher, &c->out_kp0, c->out_sec,
-                           is_clnt(c) ? PTLS_CLNT_LABL : PTLS_SERV_LABL, 1);
-
-    c->state = CONN_STAT_VERS_OK;
-    warn(DBG, "%s conn %" PRIx64 " now in state %u", conn_type(c), c->id,
-         c->state);
-}
-
-
-void init_tp(struct q_conn * const c)
+static void init_tp(struct q_conn * const c)
 {
     uint16_t i = 0;
     const uint16_t len = sizeof(tp_buf);
@@ -133,7 +103,8 @@ void init_tp(struct q_conn * const c)
         enc(tp_buf, len, i, &p, 0, "%u");
         l = 16;
         enc(tp_buf, len, i, &l, 0, "%u");
-        enc(tp_buf, len, i, c->stateless_reset_token, 16, "");
+        memcpy(&tp_buf[i], c->stateless_reset_token, 16);
+        i += 16;
     }
 
     tp_ext[0] =
@@ -142,13 +113,47 @@ void init_tp(struct q_conn * const c)
 }
 
 
-void init_tls(struct q_conn * const c, const char * const peer_name)
+void init_tls(struct q_conn * const c)
 {
-    ensure((c->tls = ptls_new(&tls_ctx, peer_name == 0)) != 0,
-           "alloc TLS state");
-    if (peer_name)
-        ensure(ptls_set_server_name(c->tls, peer_name, strlen(peer_name)) == 0,
+    if (c->tls)
+        // we are re-initializing during version negotiation
+        ptls_free(c->tls);
+    ensure((c->tls = ptls_new(&tls_ctx, is_serv(c))) != 0, "alloc TLS state");
+    if (is_clnt(c))
+        ensure(ptls_set_server_name(c->tls, c->peer_name,
+                                    strlen(c->peer_name)) == 0,
                "ptls_set_server_name");
+    init_tp(c);
+}
+
+
+static void __attribute__((nonnull))
+conn_setup_1rtt_secret(struct q_conn * const c,
+                       ptls_cipher_suite_t * const cipher,
+                       ptls_aead_context_t ** aead,
+                       uint8_t * const sec,
+                       const char * const label,
+                       uint8_t is_enc)
+{
+    int ret = ptls_export_secret(c->tls, sec, cipher->hash->digest_size, label,
+                                 ptls_iovec_init(0, 0));
+    ensure(ret == 0, "ptls_export_secret");
+    *aead = ptls_aead_new(cipher->aead, cipher->hash, is_enc, sec);
+    ensure(aead, "ptls_aead_new");
+}
+
+
+static void __attribute__((nonnull)) conn_setup_1rtt(struct q_conn * const c)
+{
+    ptls_cipher_suite_t * const cipher = ptls_get_cipher(c->tls);
+    conn_setup_1rtt_secret(c, cipher, &c->in_kp0, c->in_sec,
+                           is_clnt(c) ? PTLS_SERV_LABL : PTLS_CLNT_LABL, 0);
+    conn_setup_1rtt_secret(c, cipher, &c->out_kp0, c->out_sec,
+                           is_clnt(c) ? PTLS_CLNT_LABL : PTLS_SERV_LABL, 1);
+
+    c->state = CONN_STAT_VERS_OK;
+    warn(DBG, "%s conn %" PRIx64 " now in state %u", conn_type(c), c->id,
+         c->state);
 }
 
 
