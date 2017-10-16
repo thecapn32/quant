@@ -22,7 +22,7 @@ case $c in
                 c="env UBSAN_OPTIONS=suppressions=../misc/ubsan.supp bin/client https://$addr:$port/"
                 ;;
         quicly)
-                c="external/usr/local/bin/cli -vv -p / $addr $port"
+                c="external/usr/local/bin/cli -vvvv -p / $addr $port"
                 ;;
         minq)
                 c="env MINQ_LOG=\* GOPATH=$(pwd)/external/go go run \
@@ -39,6 +39,10 @@ case $c in
                         DYLD_LIBRARY_PATH=external/mozquic-prefix/src/dist/$(cat external/mozquic-prefix/src/dist/latest)/lib \
                         external/mozquic-prefix/src/mozquic/client -peer $addr:$port -get / -send-close"
                 ;;
+        picoquic)
+                c="external/picoquic-prefix/src/picoquic/picoquicdemo \
+                        $addr $port"
+                ;;
 esac
 
 # commands to run the different servers on  $addr:$port
@@ -47,7 +51,7 @@ case $s in
                 s="env UBSAN_OPTIONS=suppressions=../misc/ubsan.supp bin/server -p $port -d .."
                 ;;
         quicly)
-                s="external/usr/local/bin/cli -vv -k lib/src/key.pem -c \
+                s="external/usr/local/bin/cli -vvvv -k lib/src/key.pem -c \
                         lib/src/cert.pem $addr $port"
                 ;;
         minq)
@@ -63,6 +67,10 @@ case $s in
                         MOZQUIC_NSS_CONFIG=external/mozquic-prefix/src/mozquic/sample/nss-config \
                         DYLD_LIBRARY_PATH=external/mozquic-prefix/src/dist/$(cat external/mozquic-prefix/src/dist/latest)/lib \
                         external/mozquic-prefix/src/mozquic/server -send-close"
+                ;;
+        picoquic)
+                s="external/picoquic-prefix/src/picoquic/picoquicdemo \
+                        -p $port -k lib/src/key.pem -c lib/src/cert.pem"
                 ;;
 esac
 
