@@ -128,7 +128,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
     ev_init(&c->ld_alarm, ld_alarm);
     c->reorder_thresh = kReorderingThreshold;
     c->reorder_fract = HUGE_VAL;
-    c->lg_sent = peer_name ? 1000 : 8000; // TODO: randomize initial pkt nr
+    c->lg_sent = peer_name ? 999 : 7999; // TODO: randomize initial pkt nr
 
     // initialize CC state
     c->cwnd = kInitialWindow;

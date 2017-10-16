@@ -439,7 +439,8 @@ void rx(struct ev_loop * const l,
             if (is_set(F_LH_TYPE_VNEG, flags)) {
                 warn(INF, "server didn't like our vers 0x%08x", c->vers);
                 ensure(c->vers == pkt_vers(v->buf, v->len),
-                       "server did not echo our vers back");
+                       "serv did not echo vers");
+                ensure(meta(v).nr == c->lg_sent, "serv did not echo pkt nr");
                 if (c->vers_initial == 0)
                     c->vers_initial = c->vers;
                 c->vers = pick_from_server_vers(v->buf, v->len);

@@ -139,7 +139,7 @@ void enc_pkt(struct q_conn * const c,
     uint8_t flags = 0;
 
     meta(v).nr =
-        c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv) : c->lg_sent++;
+        c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv) : ++c->lg_sent;
     // TODO: increase by random offset
 
     // warn(DBG, "%s conn state %u", conn_type(c), c->state);
