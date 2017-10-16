@@ -146,6 +146,11 @@ static struct q_conn * new_conn(struct w_engine * const w,
     diet_init(&c->acked_pkts);
     diet_init(&c->recv);
 
+    c->initial_max_stream_data = 1000001; // units of octets
+    c->initial_max_data = 2000002;        // units of 1024 octets
+    c->initial_max_stream_id = 3000003;   // as is
+    c->idle_timeout = 595;                // units of seconds (max 600 seconds)
+
     // initialize TLS state
     init_tls(c);
 

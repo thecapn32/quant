@@ -24,6 +24,8 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <inttypes.h>
+#include <stdbool.h>
+#include <stddef.h>
 #include <string.h>
 
 // IWYU pragma: no_include <picotls/../picotls.h>
@@ -48,68 +50,134 @@ static ptls_iovec_t tls_certs = {0};
 static ptls_openssl_verify_certificate_t verifier = {0};
 
 #define TLS_EXT_TYPE_TRANSPORT_PARAMETERS 26
-static uint8_t tp_buf[64];
-static ptls_raw_extension_t tp_ext[2];
-static ptls_handshake_properties_t tls_hshake_prop = {.additional_extensions =
-                                                          tp_ext};
-
-static uint32_t initial_max_stream_data = 1000001; // units of octets
-static uint32_t initial_max_data = 2000002;        // units of 1024 octets
-static uint32_t initial_max_stream_id = 3000003;   // as is
-static uint16_t idle_timeout = 595; // units of seconds (max 600 seconds)
 
 
-#define PTLS_CLNT_LABL "EXPORTER-QUIC client 1-RTT Secret"
-#define PTLS_SERV_LABL "EXPORTER-QUIC server 1-RTT Secret"
+static int filter_tp(ptls_t * tls __attribute__((unused)),
+                     struct st_ptls_handshake_properties_t * properties
+                     __attribute__((unused)),
+                     uint16_t type)
+{
+    return type == TLS_EXT_TYPE_TRANSPORT_PARAMETERS;
+}
+
+
+#define dec_tp(c, tp, var)                                                     \
+    do {                                                                       \
+        uint16_t p;                                                            \
+        dec(p, buf, len, i, 0, "%u");                                          \
+        ensure(p == (tp), "valid tp");                                         \
+        uint16_t l;                                                            \
+        dec(l, buf, len, i, 0, "%u");                                          \
+        ensure(l == sizeof(var), "valid len");                                 \
+        dec((var), buf, len, i, 0, "%u");                                      \
+    } while (0)
+
+
+static int chk_tp_clnt(ptls_t * tls __attribute__((unused)),
+                       ptls_handshake_properties_t * properties,
+                       ptls_raw_extension_t * slots)
+{
+    ensure(slots[0].type == TLS_EXT_TYPE_TRANSPORT_PARAMETERS, "have tp");
+    ensure(slots[1].type == UINT16_MAX, "have end");
+
+    // get connection based on properties pointer
+    const struct q_conn * const c =
+        (void *)((char *)properties - offsetof(struct q_conn, tls_hshake_prop));
+
+    // set up parsing
+    const uint8_t * const buf = slots[0].data.base;
+    uint16_t len = (uint16_t)slots[0].data.len;
+    uint16_t i = 0;
+
+    // parse server versions
+    uint8_t n;
+    dec(n, buf, len, i, 0, "%u");
+    bool found = false;
+    while (n > 0) {
+        uint32_t vers;
+        n -= sizeof(vers);
+        dec(vers, buf, len, i, 0, "0x%08x");
+        found = found ? found : vers == c->vers;
+    }
+    ensure(found, "negotiated version found in transport parameters");
+    // TODO: validate that version negotiation on these values has same result
+
+    uint16_t tpl;
+    dec(tpl, buf, len, i, 0, "%u");
+    ensure(tpl <= len - i, "tp len is reasonable");
+
+    uint32_t initial_max_stream_data; // TODO: do something with this info
+    dec_tp(c, TP_INITIAL_MAX_STREAM_DATA, initial_max_stream_data);
+
+    uint32_t initial_max_data; // TODO: do something with this info
+    dec_tp(c, TP_INITIAL_MAX_DATA, initial_max_data);
+
+    uint32_t initial_max_stream_id; // TODO: do something with this info
+    dec_tp(c, TP_INITIAL_MAX_STREAM_ID, initial_max_stream_id);
+
+    uint16_t idle_timeout; // TODO: do something with this info
+    dec_tp(c, TP_IDLE_TIMEOUT, idle_timeout);
+    ensure(idle_timeout <= 600, "valid idle timeout");
+
+    uint16_t p;
+    dec(p, buf, len, i, 0, "%u");
+    ensure(p == TP_STATELESS_RESET_TOKEN, "valid tp");
+    uint16_t l;
+    dec(l, buf, len, i, 0, "%u");
+    ensure(l == 16, "valid len");
+    uint8_t stateless_reset_token[16]; // TODO: do something with this info
+    memcpy(stateless_reset_token, &buf[i], 16);
+    i += 16;
+
+    ensure(i == len, "out of parameters");
+
+    return 0;
+}
+
+
+#define enc_tp(c, tp, var)                                                     \
+    do {                                                                       \
+        const uint16_t p = (tp);                                               \
+        enc((c)->tp_buf, len, i, &p, 0, "%u");                                 \
+        l = sizeof(var);                                                       \
+        enc((c)->tp_buf, len, i, &l, 0, "%u");                                 \
+        enc((c)->tp_buf, len, i, &(var), 0, "%u");                             \
+    } while (0)
 
 
 static void init_tp(struct q_conn * const c)
 {
     uint16_t i = 0;
-    const uint16_t len = sizeof(tp_buf);
+    const uint16_t len = sizeof(c->tp_buf);
 
-    enc(tp_buf, len, i, &c->vers, 0, "0x%08x");
-    enc(tp_buf, len, i, &c->vers_initial, 0, "0x%08x");
+    enc(c->tp_buf, len, i, &c->vers, 0, "0x%08x");
+    enc(c->tp_buf, len, i, &c->vers_initial, 0, "0x%08x");
 
     uint16_t l = is_serv(c) ? 50 : 30; // size of rest of parameters
-    enc(tp_buf, len, i, &l, 2, "%u");
+    enc(c->tp_buf, len, i, &l, 2, "%u");
 
-    uint16_t p = TP_INITIAL_MAX_STREAM_DATA;
-    enc(tp_buf, len, i, &p, 0, "%u");
-    l = 4;
-    enc(tp_buf, len, i, &l, 0, "%u");
-    enc(tp_buf, len, i, &initial_max_stream_data, 0, "%u");
-
-    p = TP_INITIAL_MAX_DATA;
-    enc(tp_buf, len, i, &p, 0, "%u");
-    l = 4;
-    enc(tp_buf, len, i, &l, 0, "%u");
-    enc(tp_buf, len, i, &initial_max_data, 0, "%u");
-
-    p = TP_INITIAL_MAX_STREAM_ID;
-    enc(tp_buf, len, i, &p, 0, "%u");
-    l = 4;
-    enc(tp_buf, len, i, &l, 0, "%u");
-    enc(tp_buf, len, i, &initial_max_stream_id, 0, "%u");
-
-    p = TP_IDLE_TIMEOUT;
-    enc(tp_buf, len, i, &p, 0, "%u");
-    l = 2;
-    enc(tp_buf, len, i, &l, 0, "%u");
-    enc(tp_buf, len, i, &idle_timeout, 0, "%u");
+    enc_tp(c, TP_INITIAL_MAX_STREAM_DATA, c->initial_max_stream_data);
+    enc_tp(c, TP_INITIAL_MAX_DATA, c->initial_max_data);
+    enc_tp(c, TP_INITIAL_MAX_STREAM_ID, c->initial_max_stream_id);
+    enc_tp(c, TP_IDLE_TIMEOUT, c->idle_timeout);
 
     if (is_serv(c)) {
-        p = TP_STATELESS_RESET_TOKEN;
-        enc(tp_buf, len, i, &p, 0, "%u");
+        const uint16_t p = TP_STATELESS_RESET_TOKEN;
+        enc(c->tp_buf, len, i, &p, 0, "%u");
         l = 16;
-        enc(tp_buf, len, i, &l, 0, "%u");
-        memcpy(&tp_buf[i], c->stateless_reset_token, 16);
+        enc(c->tp_buf, len, i, &l, 0, "%u");
+        memcpy(&c->tp_buf[i], c->stateless_reset_token, 16);
         i += 16;
     }
 
-    tp_ext[0] =
-        (ptls_raw_extension_t){TLS_EXT_TYPE_TRANSPORT_PARAMETERS, {tp_buf, i}};
-    tp_ext[1] = (ptls_raw_extension_t){UINT16_MAX};
+    c->tp_ext[0] = (ptls_raw_extension_t){TLS_EXT_TYPE_TRANSPORT_PARAMETERS,
+                                          {c->tp_buf, i}};
+    c->tp_ext[1] = (ptls_raw_extension_t){UINT16_MAX};
+
+    c->tls_hshake_prop =
+        (ptls_handshake_properties_t){.additional_extensions = c->tp_ext,
+                                      .collect_extension = filter_tp,
+                                      .collected_extensions = chk_tp_clnt};
 }
 
 
@@ -143,6 +211,9 @@ conn_setup_1rtt_secret(struct q_conn * const c,
 }
 
 
+#define PTLS_CLNT_LABL "EXPORTER-QUIC client 1-RTT Secret"
+#define PTLS_SERV_LABL "EXPORTER-QUIC server 1-RTT Secret"
+
 static void __attribute__((nonnull)) conn_setup_1rtt(struct q_conn * const c)
 {
     ptls_cipher_suite_t * const cipher = ptls_get_cipher(c->tls);
@@ -169,7 +240,7 @@ uint32_t tls_handshake(struct q_stream * const s)
         w_alloc_iov(w_engine(s->c->sock), MAX_PKT_LEN, Q_OFFSET);
     ptls_buffer_init(&meta(ov).tb, ov->buf, ov->len);
     const int ret = ptls_handshake(s->c->tls, &meta(ov).tb, iv ? iv->buf : 0,
-                                   &in_len, &tls_hshake_prop);
+                                   &in_len, &s->c->tls_hshake_prop);
     ov->len = (uint16_t)meta(ov).tb.off;
     warn(INF, "TLS handshake: recv %u, gen %u, in_len %lu, ret %u: %.*s",
          iv ? iv->len : 0, ov->len, in_len, ret, ov->len, ov->buf);

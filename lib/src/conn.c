@@ -454,9 +454,7 @@ void rx(struct ev_loop * const l,
                 struct q_stream * s = get_stream(c, 0);
                 free_stream(s);
                 s = new_stream(c, 0);
-                // w_free(w, &s->c->sent_pkts);
-                // w_free(w, &s->o);
-                // w_free(w, &s->i);
+                w_free(w, &s->c->sent_pkts);
                 tls_handshake(s);
                 c->flags |= CONN_FLAG_TX;
 

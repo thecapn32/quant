@@ -113,7 +113,16 @@ struct q_conn {
     ptls_aead_context_t * in_kp0;
     ptls_aead_context_t * out_kp0;
 
-    uint8_t stateless_reset_token[16]; // 16 octets
+    uint8_t tp_buf[64];
+    ptls_raw_extension_t tp_ext[2];
+    ptls_handshake_properties_t tls_hshake_prop;
+    uint8_t stateless_reset_token[16];
+    uint32_t initial_max_stream_data;
+    uint32_t initial_max_data;
+    uint32_t initial_max_stream_id;
+    uint16_t idle_timeout;
+
+    uint8_t _unused3[2];
 };
 
 
