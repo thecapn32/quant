@@ -118,8 +118,9 @@ static uint16_t chk_tp_serv(const struct q_conn * const c,
     do {                                                                       \
         uint16_t l;                                                            \
         dec(l, buf, len, i, 0, "%u");                                          \
-        ensure(l == (w) ? (w) : sizeof(var), "valid len");                     \
-        dec((var), buf, len, i, (w) ? (w) : 0, "%u");                          \
+        ensure(l == 0 || l == ((w) ? (w) : sizeof(var)), "invalid len %u", l); \
+        if (l)                                                                 \
+            dec((var), buf, len, i, (w) ? (w) : 0, "%u");                      \
     } while (0)
 
 
@@ -179,9 +180,12 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                    "max_packet_size %u invalid", c->max_packet_size);
             break;
 
-        case TP_OMIT_CONNECTION_ID:
+        case TP_OMIT_CONNECTION_ID: {
+            uint16_t dummy;
+            dec_tp(dummy, 0);
             c->flags |= CONN_FLAG_OMIT_CID;
             break;
+        }
 
         case TP_STATELESS_RESET_TOKEN:
             ensure(is_clnt(c), "am client");
