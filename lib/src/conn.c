@@ -55,6 +55,12 @@ struct ipnp_splay conns_by_ipnp = splay_initializer(&conns_by_ipnp);
 struct cid_splay conns_by_cid = splay_initializer(&conns_by_cid);
 
 
+uint16_t initial_idle_timeout = 600;
+uint64_t initial_max_data = 0xFFFF;        // <= uint32_t for trans param
+uint64_t initial_max_stream_data = 0x1000; // <= uint32_t for trans param
+uint32_t initial_max_stream_id = 0xFF;
+
+
 int ipnp_splay_cmp(const struct q_conn * const a, const struct q_conn * const b)
 {
     // warn(DBG, "%s conn %s:%u vs. %s conn %s:%u", conn_type(a),

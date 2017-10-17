@@ -108,13 +108,19 @@ struct q_conn {
     ptls_raw_extension_t tp_ext[2];
     ptls_handshake_properties_t tls_hshake_prop;
     uint8_t stateless_reset_token[16];
-    uint32_t initial_max_stream_data;
-    uint32_t initial_max_data;
-    uint32_t initial_max_stream_id;
+    uint64_t max_data;
+    uint64_t max_stream_data;
+    uint32_t max_stream_id;
     uint16_t idle_timeout;
 
     uint8_t _unused3[2];
 };
+
+
+extern uint16_t initial_idle_timeout;
+extern uint64_t initial_max_data;
+extern uint64_t initial_max_stream_data;
+extern uint32_t initial_max_stream_id;
 
 
 extern int __attribute__((nonnull))

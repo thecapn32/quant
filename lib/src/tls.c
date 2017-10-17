@@ -114,12 +114,12 @@ static uint16_t chk_tp_serv(const struct q_conn * const c,
 }
 
 
-#define dec_tp(c, var)                                                         \
+#define dec_tp(var, w)                                                         \
     do {                                                                       \
         uint16_t l;                                                            \
         dec(l, buf, len, i, 0, "%u");                                          \
-        ensure(l == sizeof(var), "valid len");                                 \
-        dec((var), buf, len, i, 0, "%u");                                      \
+        ensure(l == (w) ? (w) : sizeof(var), "valid len");                     \
+        dec((var), buf, len, i, (w) ? (w) : 0, "%u");                          \
     } while (0)
 
 
@@ -131,7 +131,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
     ensure(slots[1].type == UINT16_MAX, "have end");
 
     // get connection based on properties pointer
-    const struct q_conn * const c =
+    struct q_conn * const c =
         (void *)((char *)properties - offsetof(struct q_conn, tls_hshake_prop));
 
     // set up parsing
@@ -150,53 +150,43 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
     len = i + tpl;
 
     while (i < len) {
-        uint16_t p;
-        dec(p, buf, len, i, 0, "%u");
-        switch (p) {
-        case TP_INITIAL_MAX_STREAM_DATA: {
-            uint32_t
-                initial_max_stream_data; // TODO: do something with this info
-
-            dec_tp(c, initial_max_stream_data);
+        uint16_t tp;
+        dec(tp, buf, len, i, 0, "%u");
+        switch (tp) {
+        case TP_INITIAL_MAX_STREAM_DATA:
+            dec_tp(c->max_stream_data, sizeof(uint32_t));
             break;
-        }
 
         case TP_INITIAL_MAX_DATA: {
-            uint32_t initial_max_data; // TODO: do something with this info
-
-            dec_tp(c, initial_max_data);
+            uint64_t max_data_kb = 0;
+            dec_tp(max_data_kb, sizeof(uint32_t));
+            c->max_stream_data = max_data_kb << 10;
             break;
         }
 
-        case TP_INITIAL_MAX_STREAM_ID: {
-            uint32_t initial_max_stream_id; // TODO: do something with this info
-
-            dec_tp(c, initial_max_stream_id);
+        case TP_INITIAL_MAX_STREAM_ID:
+            dec_tp(c->max_stream_id, 0);
             break;
-        }
 
-        case TP_IDLE_TIMEOUT: {
-            uint16_t idle_timeout; // TODO: do something with this info
-
-            dec_tp(c, idle_timeout);
-            ensure(idle_timeout <= 600, "valid idle timeout");
+        case TP_IDLE_TIMEOUT:
+            dec_tp(c->idle_timeout, 0);
+            ensure(c->idle_timeout <= 600, "valid idle timeout");
             break;
-        }
 
-        case TP_STATELESS_RESET_TOKEN: {
+        case TP_STATELESS_RESET_TOKEN:
             ensure(is_clnt(c), "am client");
             uint16_t l;
             dec(l, buf, len, i, 0, "%u");
-            ensure(l == 16, "valid len");
-            uint8_t
-                stateless_reset_token[16]; // TODO: do something with this info
-            memcpy(stateless_reset_token, &buf[i], 16);
-            i += 16;
+            ensure(l == sizeof(c->stateless_reset_token), "valid len");
+            memcpy(c->stateless_reset_token, &buf[i],
+                   sizeof(c->stateless_reset_token));
+            warn(DBG, "dec %u byte%s from [%u..%u] into stateless_reset_token ",
+                 l, plural(l), i, i + l);
+            i += sizeof(c->stateless_reset_token);
             break;
-        }
 
         default:
-            die("unsupported transport parameter 0x%04x", p);
+            die("unsupported transport parameter 0x%04x", tp);
         }
     }
 
@@ -206,13 +196,13 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 }
 
 
-#define enc_tp(c, tp, var)                                                     \
+#define enc_tp(c, tp, var, w)                                                  \
     do {                                                                       \
         const uint16_t p = (tp);                                               \
         enc((c)->tp_buf, len, i, &p, 0, "%u");                                 \
-        const uint16_t l = sizeof(var);                                        \
+        const uint16_t l = (w) ? (w) : sizeof(var);                            \
         enc((c)->tp_buf, len, i, &l, 0, "%u");                                 \
-        enc((c)->tp_buf, len, i, &(var), 0, "%u");                             \
+        enc((c)->tp_buf, len, i, &(var), w, "%u");                             \
     } while (0)
 
 
@@ -235,18 +225,23 @@ static void init_tp(struct q_conn * const c)
         enc(c->tp_buf, len, i, &l, 2, "%u");
     }
 
-    enc_tp(c, TP_IDLE_TIMEOUT, c->idle_timeout);
-    enc_tp(c, TP_INITIAL_MAX_DATA, c->initial_max_data);
-    enc_tp(c, TP_INITIAL_MAX_STREAM_DATA, c->initial_max_stream_data);
-    enc_tp(c, TP_INITIAL_MAX_STREAM_ID, c->initial_max_stream_id);
+    enc_tp(c, TP_IDLE_TIMEOUT, initial_idle_timeout, 0);
+    enc_tp(c, TP_INITIAL_MAX_STREAM_ID, initial_max_stream_id, 0);
+    enc_tp(c, TP_INITIAL_MAX_STREAM_DATA, initial_max_stream_data,
+           sizeof(uint32_t));
+    const uint32_t initial_max_data_kb = (uint32_t)(initial_max_data >> 10);
+    enc_tp(c, TP_INITIAL_MAX_DATA, initial_max_data_kb, 0);
 
     if (is_serv(c)) {
         const uint16_t p = TP_STATELESS_RESET_TOKEN;
         enc(c->tp_buf, len, i, &p, 0, "%u");
-        const uint16_t l = 16;
+        const uint16_t l = sizeof(c->stateless_reset_token);
         enc(c->tp_buf, len, i, &l, 0, "%u");
-        memcpy(&c->tp_buf[i], c->stateless_reset_token, 16);
-        i += 16;
+        memcpy(&c->tp_buf[i], c->stateless_reset_token,
+               sizeof(c->stateless_reset_token));
+        warn(DBG, "enc %u byte%s stateless_reset_token at [%u..%u]", l,
+             plural(l), i, i + l);
+        i += sizeof(c->stateless_reset_token);
     }
 
     c->tp_ext[0] = (ptls_raw_extension_t){TLS_EXT_TYPE_TRANSPORT_PARAMETERS,

@@ -49,6 +49,8 @@ struct q_stream {
 
     struct w_iov_sq i; ///< tail queue containing inbound data
     uint64_t in_off;
+
+    uint64_t max_stream_data;
 };
 
 #define STRM_STATE_IDLE 0

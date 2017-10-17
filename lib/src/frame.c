@@ -50,7 +50,10 @@
 
 #define FRAM_TYPE_PAD 0x00
 #define FRAM_TYPE_CNCL 0x02
+#define FRAM_TYPE_MAX_DATA 0x04
+#define FRAM_TYPE_MAX_STRM_DATA 0x05
 #define FRAM_TYPE_PING 0x07
+#define FRAM_TYPE_STRM_BLCK 0x09
 #define FRAM_TYPE_STRM 0xC0
 #define FRAM_TYPE_ACK 0xA0
 
@@ -373,9 +376,7 @@ dec_conn_close_frame(struct q_conn * const c,
                      const struct w_iov * const v,
                      const uint16_t pos)
 {
-    uint16_t i = pos;
-    uint8_t type = 0;
-    dec(type, v->buf, v->len, i, 0, "0x%02x");
+    uint16_t i = pos + 1;
 
     uint32_t err_code = 0;
     dec(err_code, v->buf, v->len, i, 0, "0x%08x");
@@ -393,6 +394,52 @@ dec_conn_close_frame(struct q_conn * const c,
 
     c->state = CONN_STAT_IDLE;
     maybe_api_return(q_read, c);
+
+    return i;
+}
+
+
+static uint16_t __attribute__((nonnull))
+dec_max_stream_data_frame(struct q_conn * const c,
+                          const struct w_iov * const v,
+                          const uint16_t pos)
+{
+    uint16_t i = pos + 1;
+
+    uint32_t sid = 0;
+    dec(sid, v->buf, v->len, i, 0, "%u");
+    struct q_stream * const s = get_stream(c, sid);
+    ensure(s, "have stream %u", sid);
+    dec(s->max_stream_data, v->buf, v->len, i, 0, "%" PRIu64);
+
+    return i;
+}
+
+
+static uint16_t __attribute__((nonnull))
+dec_max_data_frame(struct q_conn * const c,
+                   const struct w_iov * const v,
+                   const uint16_t pos)
+{
+    uint16_t i = pos + 1;
+    dec(c->max_data, v->buf, v->len, i, 0, "%" PRIu64);
+    return i;
+}
+
+
+static uint16_t __attribute__((nonnull))
+dec_stream_blocked(struct q_conn * const c,
+                   const struct w_iov * const v,
+                   const uint16_t pos)
+{
+    uint16_t i = pos + 1;
+
+    uint32_t sid = 0;
+    dec(sid, v->buf, v->len, i, 0, "%u");
+    struct q_stream * const s = get_stream(c, sid);
+    ensure(s, "have stream %u", sid);
+
+    // TODO: handle this
 
     return i;
 }
@@ -453,6 +500,18 @@ bool dec_frames(struct q_conn * const c, struct w_iov * v)
                 warn(INF, "ping frame in [%u]", i);
                 i++;
                 tx_needed = true;
+                break;
+
+            case FRAM_TYPE_MAX_STRM_DATA:
+                i = dec_max_stream_data_frame(c, v, i);
+                break;
+
+            case FRAM_TYPE_MAX_DATA:
+                i = dec_max_data_frame(c, v, i);
+                break;
+
+            case FRAM_TYPE_STRM_BLCK:
+                i = dec_stream_blocked(c, v, i);
                 break;
 
             default:
