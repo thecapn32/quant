@@ -212,7 +212,7 @@ static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
 static __attribute__((nonnull)) void
 rtx(struct q_conn * const c, const uint32_t __attribute__((unused)) n)
 {
-    // we simply retransmit *all* unACKed packets here
+    // XXX: we simply retransmit *all* unACKed packets here
     warn(CRT, "RTX on %s conn %" PRIx64, conn_type(c), c->id);
     do_tx(c, 0, &c->sent_pkts);
 }
@@ -293,6 +293,18 @@ static uint16_t __attribute__((nonnull)) dec_aead(struct q_conn * const c,
 }
 
 
+static void __attribute__((nonnull))
+change_cid(struct q_conn * const c, const uint64_t cid)
+{
+    splay_remove(ipnp_splay, &conns_by_ipnp, c);
+    splay_remove(cid_splay, &conns_by_cid, c);
+    c->id = cid;
+    c->flags &= ~CONN_FLAG_EMBR;
+    splay_insert(ipnp_splay, &conns_by_ipnp, c);
+    splay_insert(cid_splay, &conns_by_cid, c);
+}
+
+
 void rx(struct ev_loop * const l,
         ev_io * const rx_w,
         int e __attribute__((unused)))
@@ -370,14 +382,9 @@ void rx(struct ev_loop * const l,
                     warn(DBG,
                          "%s serv picked cid %" PRIx64 " for conn %" PRIx64,
                          conn_type(c), cid, c->id);
-                    splay_remove(ipnp_splay, &conns_by_ipnp, c);
-                    splay_remove(cid_splay, &conns_by_cid, c);
-                    c->id = cid;
+                    change_cid(c, cid);
                 }
-                c->flags &= ~CONN_FLAG_EMBR;
             }
-            splay_insert(ipnp_splay, &conns_by_ipnp, c);
-            splay_insert(cid_splay, &conns_by_cid, c);
         }
 
         // remember that we had a RX event on this connection
@@ -424,10 +431,10 @@ void rx(struct ev_loop * const l,
                 warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
 
                 // this is a new connection; server picks a new random cid
-                c->id = ((((uint64_t)plat_random()) << 32) |
-                         ((uint64_t)plat_random()));
-                warn(NTE, "%s picked new cid %" PRIx64 " for conn %" PRIx64,
-                     conn_type(c), c->id, cid);
+                tls_ctx.random_bytes(&c->id, sizeof(c->id));
+                warn(NTE, "picked new cid %" PRIx64 " for %s conn %" PRIx64,
+                     c->id, conn_type(c), cid);
+                change_cid(c, c->id);
                 ensure(dec_frames(c, v), "got ClientHello");
 
             } else {

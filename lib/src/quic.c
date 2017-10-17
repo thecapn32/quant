@@ -192,14 +192,14 @@ struct q_conn * q_connect(void * const q,
     // make new connection
     uint64_t cid;
     tls_ctx.random_bytes(&cid, sizeof(cid));
-    warn(WRN, "connecting embr clnt conn %" PRIx64 " to %s:%u", cid,
-         inet_ntoa(peer->sin_addr), ntohs(peer->sin_port));
-// #ifndef NDBUG
-    // const uint vers = 0xbabababa; // XXX reserved version to trigger negotiation
-// #else
+#ifndef NDEBUG
+    const uint vers = 0xbabababa; // XXX reserved version to trigger negotiation
+#else
     const uint vers = ok_vers[0];
-// #endif
+#endif
     struct q_conn * const c = new_conn(q, vers, cid, peer, peer_name, 0);
+    warn(WRN, "connecting %s conn %" PRIx64 " to %s:%u", conn_type(c), cid,
+         inet_ntoa(peer->sin_addr), ntohs(peer->sin_port));
 
     c->next_sid = 1; // client initiates odd-numbered streams
     w_connect(c->sock, peer->sin_addr.s_addr, peer->sin_port);
@@ -343,9 +343,6 @@ void * q_init(const char * const ifname)
     void * const w = w_init(ifname, 0, nbufs);
     pm = calloc(nbufs, sizeof(*pm));
     ensure(pm, "could not calloc");
-
-    // initialize PRNG
-    plat_initrandom();
 
     // initialize TLS context
     init_tls_ctx();
