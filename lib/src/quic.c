@@ -147,9 +147,6 @@ static struct q_conn * new_conn(struct w_engine * const w,
     diet_init(&c->acked_pkts);
     diet_init(&c->recv);
 
-    // initialize TLS state
-    init_tls(c);
-
     // initialize idle timeout
     c->idle_alarm.data = c;
     c->idle_alarm.repeat = kIdleTimeout;
@@ -163,6 +160,9 @@ static struct q_conn * new_conn(struct w_engine * const w,
     ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
     c->rx_w.data = c->sock;
     ev_io_start(loop, &c->rx_w);
+
+    // initialize TLS state
+    init_tls(c);
 
     // add connection to global data structures
     splay_insert(ipnp_splay, &conns_by_ipnp, c);

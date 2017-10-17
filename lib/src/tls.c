@@ -56,7 +56,7 @@ static ptls_openssl_verify_certificate_t verifier = {0};
 #define TP_INITIAL_MAX_STREAM_ID 0x0002
 #define TP_IDLE_TIMEOUT 0x0003
 // #define TP_OMIT_CONNECTION_ID 0x0004
-// #define TP_MAX_PACKET_SIZE 0x0005
+#define TP_MAX_PACKET_SIZE 0x0005
 #define TP_STATELESS_RESET_TOKEN 0x0006
 
 
@@ -146,7 +146,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
     uint16_t tpl;
     dec(tpl, buf, len, i, 0, "%u");
-    ensure(tpl <= len - i, "tp len is reasonable");
+    ensure(tpl == len - i, "tp len %u is correct", tpl);
     len = i + tpl;
 
     while (i < len) {
@@ -171,6 +171,12 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         case TP_IDLE_TIMEOUT:
             dec_tp(c->idle_timeout, 0);
             ensure(c->idle_timeout <= 600, "valid idle timeout");
+            break;
+
+        case TP_MAX_PACKET_SIZE:
+            dec_tp(c->max_packet_size, 0);
+            ensure(c->max_packet_size >= 1200 && c->max_packet_size <= 65527,
+                   "max_packet_size %u invalid", c->max_packet_size);
             break;
 
         case TP_STATELESS_RESET_TOKEN:
@@ -198,11 +204,11 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
 #define enc_tp(c, tp, var, w)                                                  \
     do {                                                                       \
-        const uint16_t p = (tp);                                               \
-        enc((c)->tp_buf, len, i, &p, 0, "%u");                                 \
-        const uint16_t l = (w) ? (w) : sizeof(var);                            \
-        enc((c)->tp_buf, len, i, &l, 0, "%u");                                 \
-        enc((c)->tp_buf, len, i, &(var), w, "%u");                             \
+        const uint16_t param = (tp);                                           \
+        enc((c)->tp_buf, len, i, &param, 0, "%u");                             \
+        const uint16_t bytes = (w) ? (w) : sizeof(var);                        \
+        enc((c)->tp_buf, len, i, &bytes, 0, "%u");                             \
+        enc((c)->tp_buf, len, i, &(var), bytes, "%u");                         \
     } while (0)
 
 
@@ -214,16 +220,16 @@ static void init_tp(struct q_conn * const c)
     if (is_clnt(c)) {
         enc(c->tp_buf, len, i, &c->vers, 0, "0x%08x");
         enc(c->tp_buf, len, i, &c->vers_initial, 0, "0x%08x");
-        const uint16_t l = 30; // size of rest of parameters
-        enc(c->tp_buf, len, i, &l, 2, "%u");
     } else {
-        uint16_t l = ok_vers_len * sizeof(ok_vers[0]);
-        enc(c->tp_buf, len, i, &l, 1, "%u");
+        const uint16_t vl = ok_vers_len * sizeof(ok_vers[0]);
+        enc(c->tp_buf, len, i, &vl, 1, "%u");
         for (uint8_t n = 0; n < ok_vers_len; n++)
-            enc(c->tp_buf, len, i, &ok_vers[n], 4, "0x%08x");
-        l = 50; // size of rest of parameters
-        enc(c->tp_buf, len, i, &l, 2, "%u");
+            enc(c->tp_buf, len, i, &ok_vers[n], 0, "0x%08x");
     }
+
+    // keep track of encoded length
+    const uint16_t enc_len_pos = i;
+    i += sizeof(uint16_t);
 
     enc_tp(c, TP_IDLE_TIMEOUT, initial_idle_timeout, 0);
     enc_tp(c, TP_INITIAL_MAX_STREAM_ID, initial_max_stream_id, 0);
@@ -231,27 +237,29 @@ static void init_tp(struct q_conn * const c)
            sizeof(uint32_t));
     const uint32_t initial_max_data_kb = (uint32_t)(initial_max_data >> 10);
     enc_tp(c, TP_INITIAL_MAX_DATA, initial_max_data_kb, 0);
+    enc_tp(c, TP_MAX_PACKET_SIZE, w_mtu(w_engine(c->sock)), sizeof(uint16_t));
 
     if (is_serv(c)) {
         const uint16_t p = TP_STATELESS_RESET_TOKEN;
         enc(c->tp_buf, len, i, &p, 0, "%u");
-        const uint16_t l = sizeof(c->stateless_reset_token);
-        enc(c->tp_buf, len, i, &l, 0, "%u");
+        const uint16_t w = sizeof(c->stateless_reset_token);
+        enc(c->tp_buf, len, i, &w, 0, "%u");
         memcpy(&c->tp_buf[i], c->stateless_reset_token,
                sizeof(c->stateless_reset_token));
-        warn(DBG, "enc %u byte%s stateless_reset_token at [%u..%u]", l,
-             plural(l), i, i + l);
+        warn(DBG, "enc %u byte%s stateless_reset_token at [%u..%u]", w,
+             plural(w), i, i + w);
         i += sizeof(c->stateless_reset_token);
     }
 
-    c->tp_ext[0] = (ptls_raw_extension_t){TLS_EXT_TYPE_TRANSPORT_PARAMETERS,
-                                          {c->tp_buf, i}};
-    c->tp_ext[1] = (ptls_raw_extension_t){UINT16_MAX};
+    // encode length of all transport parameters
+    const uint16_t enc_len = i - enc_len_pos - sizeof(enc_len);
+    i = enc_len_pos;
+    enc(c->tp_buf, len, i, &enc_len, 0, "%u");
 
-    c->tls_hshake_prop =
-        (ptls_handshake_properties_t){.additional_extensions = c->tp_ext,
-                                      .collect_extension = filter_tp,
-                                      .collected_extensions = chk_tp};
+    c->tp_ext[0] = (ptls_raw_extension_t){
+        TLS_EXT_TYPE_TRANSPORT_PARAMETERS,
+        {c->tp_buf, enc_len + enc_len_pos + sizeof(enc_len)}};
+    c->tp_ext[1] = (ptls_raw_extension_t){UINT16_MAX};
 }
 
 
@@ -266,6 +274,10 @@ void init_tls(struct q_conn * const c)
                                     strlen(c->peer_name)) == 0,
                "ptls_set_server_name");
     init_tp(c);
+    c->tls_hshake_prop =
+        (ptls_handshake_properties_t){.additional_extensions = c->tp_ext,
+                                      .collect_extension = filter_tp,
+                                      .collected_extensions = chk_tp};
 }
 
 

@@ -112,8 +112,9 @@ struct q_conn {
     uint64_t max_stream_data;
     uint32_t max_stream_id;
     uint16_t idle_timeout;
+    uint16_t max_packet_size;
 
-    uint8_t _unused3[2];
+    // uint8_t _unused3[2];
 };
 
 
