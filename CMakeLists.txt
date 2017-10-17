@@ -117,6 +117,9 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
           -google-readability-todo
           -google-runtime-references
           -readability-braces-around-statements
+          -google-readability-function-size
+          -hicpp-function-size
+          -readability-function-size
       )
       string(REPLACE ";" "," CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS}")
       set(CMAKE_C_CLANG_TIDY ${CLANGTIDY}
