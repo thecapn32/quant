@@ -35,7 +35,6 @@
 #include "diet.h"
 #include "quic.h"
 
-// Embryonic and established (actually, non-embryonic) QUIC connections.
 extern splay_head(ipnp_splay, q_conn) conns_by_ipnp;
 extern splay_head(cid_splay, q_conn) conns_by_cid;
 
@@ -104,7 +103,7 @@ struct q_conn {
     ptls_aead_context_t * in_kp0;
     ptls_aead_context_t * out_kp0;
 
-    uint8_t tp_buf[64];
+    uint8_t tp_buf[96];
     ptls_raw_extension_t tp_ext[2];
     ptls_handshake_properties_t tls_hshake_prop;
     uint8_t stateless_reset_token[16];
@@ -142,16 +141,13 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 #define CONN_STAT_CLSD 5
 
 #define CONN_FLAG_CLNT 0x01 ///< We are client on this connection (or server)
-#define CONN_FLAG_EMBR 0x02 ///< Connection is in handshake
-#define CONN_FLAG_RX 0x04   ///< We had an RX event on this connection
-#define CONN_FLAG_TX 0x08   ///< We have a pending TX on this connection
+#define CONN_FLAG_OMIT_CID 0x02 ///< We can omit the CID on this connection
+#define CONN_FLAG_RX 0x04       ///< We had an RX event on this connection
+#define CONN_FLAG_TX 0x08       ///< We have a pending TX on this connection
 
 #define is_clnt(c) (is_set(CONN_FLAG_CLNT, (c)->flags))
 #define is_serv(c) (!is_clnt(c))
-#define conn_type(c)                                                           \
-    (is_set(CONN_FLAG_EMBR, (c)->flags)                                        \
-         ? (is_clnt(c) ? "embr clnt" : "embr serv")                            \
-         : (is_clnt(c) ? "clnt" : "serv"))
+#define conn_type(c) (is_clnt(c) ? "clnt" : "serv")
 
 struct ev_loop;
 

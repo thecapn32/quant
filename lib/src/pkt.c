@@ -86,7 +86,7 @@ pkt_nr(const uint8_t * const buf, const uint16_t len, struct q_conn * const c)
 {
     const uint8_t flags = pkt_flags(buf);
     uint64_t nr = c ? diet_max(&c->recv) + 1 : 0;
-    uint16_t i = 9;
+    uint16_t i = is_set(F_LONG_HDR, flags) || is_set(F_SH_CID, flags) ? 9 : 1;
     dec(nr, buf, len, i,
         is_set(F_LONG_HDR, flags) ? 4 : pkt_nr_len[pkt_type(flags)],
         "%" PRIu64);
@@ -155,11 +155,16 @@ void enc_pkt(struct q_conn * const c,
         break;
     case CONN_STAT_ESTB:
     case CONN_STAT_CLSD:
-        // TODO: support short headers w/o cid
-        flags |= F_SH_CID | enc_pkt_nr_len[needed_pkt_nr_len(meta(v).nr)];
-        // XXX to always send long headers:
-        // flags |= F_LONG_HDR | F_LH_1RTT_KPH0;
+        if (!is_set(CONN_FLAG_OMIT_CID, c->flags))
+            flags |= F_SH_CID;
+        flags |= enc_pkt_nr_len[needed_pkt_nr_len(meta(v).nr)];
         break;
+
+        // // TODO: support short headers w/o cid
+        // flags |= F_SH_CID | enc_pkt_nr_len[needed_pkt_nr_len(meta(v).nr)];
+        // // XXX to always send long headers:
+        // // flags |= F_LONG_HDR | F_LH_1RTT_KPH0;
+        // break;
     default:
         die("unknown conn state %u", c->state);
     }

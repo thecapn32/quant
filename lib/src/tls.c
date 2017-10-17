@@ -55,7 +55,7 @@ static ptls_openssl_verify_certificate_t verifier = {0};
 #define TP_INITIAL_MAX_DATA 0x0001
 #define TP_INITIAL_MAX_STREAM_ID 0x0002
 #define TP_IDLE_TIMEOUT 0x0003
-// #define TP_OMIT_CONNECTION_ID 0x0004
+#define TP_OMIT_CONNECTION_ID 0x0004
 #define TP_MAX_PACKET_SIZE 0x0005
 #define TP_STATELESS_RESET_TOKEN 0x0006
 
@@ -179,6 +179,10 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                    "max_packet_size %u invalid", c->max_packet_size);
             break;
 
+        case TP_OMIT_CONNECTION_ID:
+            c->flags |= CONN_FLAG_OMIT_CID;
+            break;
+
         case TP_STATELESS_RESET_TOKEN:
             ensure(is_clnt(c), "am client");
             uint16_t l;
@@ -239,11 +243,20 @@ static void init_tp(struct q_conn * const c)
     enc_tp(c, TP_INITIAL_MAX_DATA, initial_max_data_kb, 0);
     enc_tp(c, TP_MAX_PACKET_SIZE, w_mtu(w_engine(c->sock)), sizeof(uint16_t));
 
+    const struct q_conn * const other = get_conn_by_ipnp(&c->peer, 0);
+    if (!other || other->id == c->id) {
+        const uint16_t tp = TP_OMIT_CONNECTION_ID;
+        enc(c->tp_buf, len, i, &tp, 0, "%u");
+        const uint16_t bytes = 0;
+        enc(c->tp_buf, len, i, &bytes, 0, "%u");
+    }
+
     if (is_serv(c)) {
         const uint16_t p = TP_STATELESS_RESET_TOKEN;
         enc(c->tp_buf, len, i, &p, 0, "%u");
         const uint16_t w = sizeof(c->stateless_reset_token);
         enc(c->tp_buf, len, i, &w, 0, "%u");
+        ensure(i + sizeof(c->stateless_reset_token) < len, "tp_buf overrun");
         memcpy(&c->tp_buf[i], c->stateless_reset_token,
                sizeof(c->stateless_reset_token));
         warn(DBG, "enc %u byte%s stateless_reset_token at [%u..%u]", w,

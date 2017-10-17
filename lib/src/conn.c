@@ -50,7 +50,6 @@
 #include "tls.h"
 
 
-// Embryonic and established (actually, non-embryonic) QUIC connections.
 struct ipnp_splay conns_by_ipnp = splay_initializer(&conns_by_ipnp);
 struct cid_splay conns_by_cid = splay_initializer(&conns_by_cid);
 
@@ -81,8 +80,7 @@ int ipnp_splay_cmp(const struct q_conn * const a, const struct q_conn * const b)
         return diff;
 
     // include only the client flag in the comparison
-    return (int8_t)(a->flags & CONN_FLAG_CLNT) -
-           (int8_t)(b->flags & CONN_FLAG_CLNT);
+    return (a->flags & CONN_FLAG_CLNT) - (b->flags & CONN_FLAG_CLNT);
 }
 
 
@@ -91,9 +89,8 @@ int cid_splay_cmp(const struct q_conn * const a, const struct q_conn * const b)
     const int diff = (a->id > b->id) - (a->id < b->id);
     if (likely(diff))
         return diff;
-    // include only the client and embryonic flags in the comparison
-    return (int8_t)(a->flags & (CONN_FLAG_CLNT | CONN_FLAG_EMBR)) -
-           (int8_t)(b->flags & (CONN_FLAG_CLNT | CONN_FLAG_EMBR));
+    // include only the client flags in the comparison
+    return (a->flags & CONN_FLAG_CLNT) - (b->flags & CONN_FLAG_CLNT);
 }
 
 
@@ -294,14 +291,131 @@ static uint16_t __attribute__((nonnull)) dec_aead(struct q_conn * const c,
 
 
 static void __attribute__((nonnull))
-change_cid(struct q_conn * const c, const uint64_t cid)
+update_cid(struct q_conn * const c, const uint64_t cid)
 {
-    splay_remove(ipnp_splay, &conns_by_ipnp, c);
     splay_remove(cid_splay, &conns_by_cid, c);
     c->id = cid;
-    c->flags &= ~CONN_FLAG_EMBR;
-    splay_insert(ipnp_splay, &conns_by_ipnp, c);
     splay_insert(cid_splay, &conns_by_cid, c);
+}
+
+
+static void __attribute__((nonnull))
+update_ipnp(struct q_conn * const c, const struct sockaddr_in * const peer)
+{
+    splay_remove(ipnp_splay, &conns_by_ipnp, c);
+    c->peer = *peer;
+    splay_insert(ipnp_splay, &conns_by_ipnp, c);
+}
+
+
+static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
+                                                 struct w_iov * const v,
+                                                 const uint16_t prot_len)
+{
+    struct w_engine * const w = w_engine(c->sock);
+    const uint8_t flags = pkt_flags(v->buf);
+
+    switch (c->state) {
+    case CONN_STAT_IDLE:
+    case CONN_STAT_VERS_REJ: {
+        // validate minimum packet size
+        if (v->len + prot_len < MIN_INI_LEN) {
+            warn(ERR, "initial %u-byte pkt too short (< %u)", v->len + prot_len,
+                 MIN_INI_LEN);
+#ifndef NDEBUG
+            if (util_dlevel == DBG)
+                hexdump(v->buf, v->len);
+#endif
+            w_free_iov(w, v);
+            return;
+        }
+
+        ensure(is_set(F_LONG_HDR, flags), "have a long header");
+
+        // respond to the version negotiation packet
+        c->vers = pkt_vers(v->buf, v->len);
+        c->flags |= CONN_FLAG_TX;
+        diet_insert(&c->recv, meta(v).nr);
+        if (c->vers_initial == 0)
+            c->vers_initial = c->vers;
+        if (vers_supported(c->vers)) {
+            warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
+
+            // this is a new connection; server picks a new random cid
+            uint64_t cid;
+            tls_ctx.random_bytes(&cid, sizeof(cid));
+            warn(NTE, "picked new cid %" PRIx64 " for %s conn %" PRIx64, cid,
+                 conn_type(c), c->id);
+            update_cid(c, cid);
+            init_tls(c);
+            ensure(dec_frames(c, v), "got ClientHello");
+
+        } else {
+            c->state = CONN_STAT_VERS_REJ;
+            // c->id = cid;
+            warn(DBG, "%s conn %" PRIx64 " now in state %u", conn_type(c),
+                 c->id, c->state);
+            warn(WRN,
+                 "%s conn %" PRIx64
+                 " clnt-requested vers 0x%08x not supported ",
+                 conn_type(c), c->id, c->vers);
+        }
+        break;
+    }
+
+    case CONN_STAT_VERS_SENT: {
+        if (is_set(F_LH_TYPE_VNEG, flags)) {
+            warn(INF, "server didn't like our vers 0x%08x", c->vers);
+            ensure(c->vers == pkt_vers(v->buf, v->len),
+                   "serv did not echo vers");
+            ensure(meta(v).nr == c->lg_sent, "serv did not echo pkt nr");
+            if (c->vers_initial == 0)
+                c->vers_initial = c->vers;
+            c->vers = pick_from_server_vers(v->buf, v->len);
+            if (c->vers)
+                warn(INF, "retrying with vers 0x%08x", c->vers);
+            else
+                die("no vers in common with server");
+
+            // retransmit the ClientHello
+            init_tls(c);
+            struct q_stream * s = get_stream(c, 0);
+            free_stream(s);
+            s = new_stream(c, 0);
+            w_free(w, &s->c->sent_pkts);
+            tls_handshake(s);
+            c->flags |= CONN_FLAG_TX;
+
+        } else {
+            warn(INF, "server accepted vers 0x%08x", c->vers);
+            diet_insert(&c->recv, meta(v).nr);
+            c->state = CONN_STAT_VERS_OK;
+            ensure(dec_frames(c, v), "got ServerHello");
+        }
+        break;
+    }
+
+    case CONN_STAT_VERS_OK: {
+        // pass any further data received on stream 0 to TLS and check
+        // whether that completes the client handshake
+        if (!is_set(F_LONG_HDR, flags) || pkt_type(flags) >= F_LH_CLNT_CTXT) {
+            maybe_api_return(q_accept, c);
+            c->state = CONN_STAT_ESTB;
+        }
+        diet_insert(&c->recv, meta(v).nr);
+        c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
+        break;
+    }
+
+    case CONN_STAT_ESTB:
+    case CONN_STAT_CLSD:
+        diet_insert(&c->recv, meta(v).nr);
+        c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
+        break;
+
+    default:
+        die("TODO: state %u", c->state);
+    }
 }
 
 
@@ -333,13 +447,42 @@ void rx(struct ev_loop * const l,
             continue;
         }
 
-        // TODO: support short headers w/o cid
         const uint8_t flags = pkt_flags(v->buf);
-        const uint64_t cid = pkt_cid(v->buf, v->len);
         const uint8_t type = w_connected(ws) ? CONN_FLAG_CLNT : 0;
-        struct q_conn * c = get_conn_by_cid(cid, type);
-        meta(v).nr = pkt_nr(v->buf, v->len, c);
+        uint64_t cid = 0;
+        struct q_conn * c = 0;
 
+        if (is_set(F_LONG_HDR, flags) || is_set(F_SH_CID, flags)) {
+            cid = pkt_cid(v->buf, v->len);
+            c = get_conn_by_cid(cid, type);
+        }
+
+        if (c == 0) {
+            const struct sockaddr_in peer = {.sin_family = AF_INET,
+                                             .sin_port = v->port,
+                                             .sin_addr = {.s_addr = v->ip}};
+            if (is_set(F_LONG_HDR, flags)) {
+                if (type == CONN_FLAG_CLNT) {
+                    // server may have picked a new cid
+                    c = get_conn_by_ipnp(&peer, type);
+                    warn(DBG, "got new cid %" PRIx64 " for %s conn %" PRIx64,
+                         cid, conn_type(c), c->id);
+                    update_cid(c, cid);
+                } else {
+                    warn(CRT, "new serv conn");
+                    const struct sockaddr_in none = {0};
+                    c = get_conn_by_ipnp(&none, type);
+                    update_ipnp(c, &peer);
+                    update_cid(c, cid);
+                    new_stream(c, 0);
+                }
+
+            } else
+                c = get_conn_by_ipnp(&peer, type);
+        }
+        ensure(c, "managed to find conn");
+
+        meta(v).nr = pkt_nr(v->buf, v->len, c);
         uint16_t prot_len = 0;
         if (is_set(F_LONG_HDR, flags) && pkt_type(flags) != F_LH_1RTT_KPH0)
             if (pkt_type(flags) == F_LH_TYPE_VNEG)
@@ -362,31 +505,6 @@ void rx(struct ev_loop * const l,
             continue;
         }
 
-        if (c == 0) {
-            // this might be the first packet for a new connection, or a dup CH
-            const struct sockaddr_in peer = {.sin_family = AF_INET,
-                                             .sin_port = v->port,
-                                             .sin_addr = {.s_addr = v->ip}};
-            c = get_conn_by_ipnp(&peer, type | CONN_FLAG_EMBR);
-            if (c == 0) {
-                struct sockaddr_in none = {0};
-                c = get_conn_by_ipnp(&none, type | CONN_FLAG_EMBR);
-                ensure(c, "no embr conn");
-                c->peer = (struct sockaddr_in){.sin_family = AF_INET,
-                                               .sin_port = v->port,
-                                               .sin_addr = {.s_addr = v->ip}};
-                new_stream(c, 0);
-            } else if (c->state < CONN_STAT_ESTB) {
-                if (is_clnt(c)) {
-                    // server is proposing a different cid to use
-                    warn(DBG,
-                         "%s serv picked cid %" PRIx64 " for conn %" PRIx64,
-                         conn_type(c), cid, c->id);
-                    change_cid(c, cid);
-                }
-            }
-        }
-
         // remember that we had a RX event on this connection
         if (!is_set(CONN_FLAG_RX, c->flags)) {
             c->flags |= CONN_FLAG_RX;
@@ -401,109 +519,7 @@ void rx(struct ev_loop * const l,
              conn_type(c), cid);
         v->len -= prot_len == UINT16_MAX ? 0 : prot_len;
 
-        switch (c->state) {
-        case CONN_STAT_IDLE:
-        case CONN_STAT_VERS_REJ: {
-            // store the socket with the connection
-            c->sock = ws;
-
-            // validate minimum packet size
-            if (v->len + prot_len < MIN_INI_LEN) {
-                warn(ERR, "initial %u-byte pkt too short (< %u)",
-                     v->len + prot_len, MIN_INI_LEN);
-#ifndef NDEBUG
-                if (util_dlevel == DBG)
-                    hexdump(v->buf, v->len);
-#endif
-                w_free_iov(w, v);
-                continue;
-            }
-
-            ensure(is_set(F_LONG_HDR, flags), "have a long header");
-
-            // respond to the version negotiation packet
-            c->vers = pkt_vers(v->buf, v->len);
-            c->flags |= CONN_FLAG_TX;
-            diet_insert(&c->recv, meta(v).nr);
-            if (c->vers_initial == 0)
-                c->vers_initial = c->vers;
-            if (vers_supported(c->vers)) {
-                warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
-
-                // this is a new connection; server picks a new random cid
-                tls_ctx.random_bytes(&c->id, sizeof(c->id));
-                warn(NTE, "picked new cid %" PRIx64 " for %s conn %" PRIx64,
-                     c->id, conn_type(c), cid);
-                change_cid(c, c->id);
-                ensure(dec_frames(c, v), "got ClientHello");
-
-            } else {
-                c->state = CONN_STAT_VERS_REJ;
-                c->id = cid;
-                warn(DBG, "%s conn %" PRIx64 " now in state %u", conn_type(c),
-                     c->id, c->state);
-                warn(WRN,
-                     "%s conn %" PRIx64
-                     " clnt-requested vers 0x%08x not supported ",
-                     conn_type(c), c->id, c->vers);
-            }
-            break;
-        }
-
-        case CONN_STAT_VERS_SENT: {
-            if (is_set(F_LH_TYPE_VNEG, flags)) {
-                warn(INF, "server didn't like our vers 0x%08x", c->vers);
-                ensure(c->vers == pkt_vers(v->buf, v->len),
-                       "serv did not echo vers");
-                ensure(meta(v).nr == c->lg_sent, "serv did not echo pkt nr");
-                if (c->vers_initial == 0)
-                    c->vers_initial = c->vers;
-                c->vers = pick_from_server_vers(v->buf, v->len);
-                if (c->vers)
-                    warn(INF, "retrying with vers 0x%08x", c->vers);
-                else
-                    die("no vers in common with server");
-
-                // retransmit the ClientHello
-                init_tls(c);
-                struct q_stream * s = get_stream(c, 0);
-                free_stream(s);
-                s = new_stream(c, 0);
-                w_free(w, &s->c->sent_pkts);
-                tls_handshake(s);
-                c->flags |= CONN_FLAG_TX;
-
-            } else {
-                warn(INF, "server accepted vers 0x%08x", c->vers);
-                diet_insert(&c->recv, meta(v).nr);
-                c->state = CONN_STAT_VERS_OK;
-                ensure(dec_frames(c, v), "got ServerHello");
-            }
-            break;
-        }
-
-        case CONN_STAT_VERS_OK: {
-            // pass any further data received on stream 0 to TLS and check
-            // whether that completes the client handshake
-            if (!is_set(F_LONG_HDR, flags) ||
-                pkt_type(flags) >= F_LH_CLNT_CTXT) {
-                maybe_api_return(q_accept, c);
-                c->state = CONN_STAT_ESTB;
-            }
-            diet_insert(&c->recv, meta(v).nr);
-            c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
-            break;
-        }
-
-        case CONN_STAT_ESTB:
-        case CONN_STAT_CLSD:
-            diet_insert(&c->recv, meta(v).nr);
-            c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
-            break;
-
-        default:
-            die("TODO: state %u", c->state);
-        }
+        process_pkt(c, v, prot_len);
     }
 
     // for all connections that had RX events, reset idle timeout and check if

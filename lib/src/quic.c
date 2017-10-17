@@ -135,10 +135,10 @@ static struct q_conn * new_conn(struct w_engine * const w,
     c->cwnd = kInitialWindow;
     c->ssthresh = UINT64_MAX;
 
-    c->flags = CONN_FLAG_EMBR;
+    // c->flags = CONN_FLAG_EMBR;
     if (peer_name) {
         c->flags |= CONN_FLAG_CLNT;
-        ensure(c->peer_name = strdup(peer_name), "could not du peer_name");
+        ensure(c->peer_name = strdup(peer_name), "could not dup peer_name");
     }
 
     sq_init(&c->sent_pkts);
@@ -161,14 +161,12 @@ static struct q_conn * new_conn(struct w_engine * const w,
     c->rx_w.data = c->sock;
     ev_io_start(loop, &c->rx_w);
 
-    // initialize TLS state
-    init_tls(c);
-
     // add connection to global data structures
     splay_insert(ipnp_splay, &conns_by_ipnp, c);
-    splay_insert(cid_splay, &conns_by_cid, c);
+    if(c->id)
+        splay_insert(cid_splay, &conns_by_cid, c);
 
-    warn(DBG, "%s conn created", conn_type(c));
+    warn(DBG, "%s conn %" PRIx64 " created", conn_type(c), c->id);
     return c;
 }
 
@@ -206,6 +204,7 @@ struct q_conn * q_connect(void * const q,
 
     // allocate stream zero and start TLS handshake on stream 0
     struct q_stream * const s = new_stream(c, 0);
+    init_tls(c);
     tls_handshake(s);
     ev_async_send(loop, &c->tx_w);
 
@@ -215,13 +214,13 @@ struct q_conn * q_connect(void * const q,
 
     if (c->state != CONN_STAT_VERS_OK) {
         warn(WRN, "%s conn %" PRIx64 " not connected, state 0x%02x",
-             conn_type(c), cid, c->state);
+             conn_type(c), c->id, c->state);
         return 0;
     }
 
     c->state = CONN_STAT_ESTB;
 
-    warn(WRN, "%s conn %" PRIx64 " connected", conn_type(c), cid);
+    warn(WRN, "%s conn %" PRIx64 " connected", conn_type(c), c->id);
     return c;
 }
 
