@@ -1,7 +1,7 @@
 include(ExternalProject)
 
 externalproject_add(warp
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/NTAP/warpcore.git
   GIT_SHALLOW 1
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
@@ -79,17 +79,18 @@ foreach(TARGET ptls-core ptls-minicrypto ptls-openssl)
 endforeach()
 
 
-# Use quic-go for testing against, rather than proto-quic monster
 set(GOPATH ${CMAKE_CURRENT_BINARY_DIR}/go)
-set(QUICGO github.com/lucas-clemente/quic-go)
-externalproject_add(quic-go
-  DOWNLOAD_COMMAND env GOPATH=${GOPATH} go get ${QUICGO}
-  CONFIGURE_COMMAND ""
-  BUILD_COMMAND
-    cd ${GOPATH}/src/${QUICGO} && env GOPATH=${GOPATH} go get -t -u ./...
-  INSTALL_COMMAND ""
-  EXCLUDE_FROM_ALL 1
-)
+
+# # Use quic-go for testing against, rather than proto-quic monster
+# set(QUICGO github.com/lucas-clemente/quic-go)
+# externalproject_add(quic-go
+#   DOWNLOAD_COMMAND env GOPATH=${GOPATH} go get ${QUICGO}
+#   CONFIGURE_COMMAND ""
+#   BUILD_COMMAND
+#     cd ${GOPATH}/src/${QUICGO} && env GOPATH=${GOPATH} go get -t -u ./...
+#   INSTALL_COMMAND ""
+#   EXCLUDE_FROM_ALL 1
+# )
 
 
 # Use minq for testing against
@@ -98,7 +99,8 @@ externalproject_add(minq
   DOWNLOAD_COMMAND
     env GOPATH=${GOPATH} go get ${MINQ} &&
       env GOPATH=${GOPATH} go get github.com/cloudflare/cfssl/helpers || true
-  UPDATE_COMMAND "" #cd ${GOPATH}/src/github.com/ekr/minq && git pull
+  UPDATE_COMMAND ""
+  # UPDATE_COMMAND cd ${GOPATH}/src/github.com/ekr/minq && git pull
   CONFIGURE_COMMAND
     cd ${GOPATH}/src/github.com/bifurcation/mint &&
       git remote add ekr https://www.github.com/ekr/mint || true &&
@@ -128,7 +130,7 @@ externalproject_add(quicly
 
 # Use ngtcp2 for testing against
 externalproject_add(openssl
-  UPDATE_COMMAND ""
+  # UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/openssl/openssl.git
   GIT_SHALLOW 1
   CONFIGURE_COMMAND ./config --prefix=${CMAKE_CURRENT_BINARY_DIR} enable-tls1_3
@@ -140,7 +142,7 @@ externalproject_add(openssl
 
 externalproject_add(ngtcp2
   DEPENDS openssl
-  UPDATE_COMMAND ""
+  # UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/ngtcp2/ngtcp2.git
   GIT_SHALLOW 1
   PATCH_COMMAND autoreconf -i
@@ -196,7 +198,7 @@ externalproject_add(mozquic
 # Use picoquic for testing against
 externalproject_add(picoquic
   DEPENDS picotls
-  UPDATE_COMMAND ""
+  # UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/private-octopus/picoquic.git
   GIT_SHALLOW 1
   # PATCH_COMMAND sed -i "" -e "s/-Werror//g" Makefile
