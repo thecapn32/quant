@@ -1,7 +1,7 @@
 include(ExternalProject)
 
 externalproject_add(warp
-  UPDATE_COMMAND ""
+  # UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/NTAP/warpcore.git
   GIT_SHALLOW 1
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
@@ -198,7 +198,7 @@ externalproject_add(mozquic
 # Use picoquic for testing against
 externalproject_add(picoquic
   DEPENDS picotls
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/private-octopus/picoquic.git
   GIT_SHALLOW 1
   # PATCH_COMMAND sed -i "" -e "s/-Werror//g" Makefile
@@ -214,4 +214,6 @@ externalproject_add(picoquic
     -DCMAKE_POSITION_INDEPENDENT_CODE=True
     -DCMAKE_C_STANDARD=${CMAKE_C_STANDARD}
   EXCLUDE_FROM_ALL 1
+  BUILD_COMMAND ninja picoquicdemo
+  INSTALL_COMMAND ""
 )

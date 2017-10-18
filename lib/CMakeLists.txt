@@ -35,9 +35,6 @@ set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/src/cert.c
 )
 
 include(GNUInstallDirs)
-set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}")
-set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
-
 
 add_library(common
   OBJECT
