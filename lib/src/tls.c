@@ -23,7 +23,6 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <inttypes.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <string.h>
@@ -326,8 +325,8 @@ static void __attribute__((nonnull)) conn_setup_1rtt(struct q_conn * const c)
                            is_clnt(c) ? PTLS_CLNT_LABL : PTLS_SERV_LABL, 1);
 
     c->state = CONN_STAT_VERS_OK;
-    warn(DBG, "%s conn %" PRIx64 " now in state %u", conn_type(c), c->id,
-         c->state);
+    // warn(DBG, "%s conn %" PRIx64 " now in state %u", conn_type(c), c->id,
+    //      c->state);
 }
 
 
@@ -345,8 +344,8 @@ uint32_t tls_handshake(struct q_stream * const s)
     const int ret = ptls_handshake(s->c->tls, &meta(ov).tb, iv ? iv->buf : 0,
                                    &in_len, &s->c->tls_hshake_prop);
     ov->len = (uint16_t)meta(ov).tb.off;
-    warn(INF, "TLS handshake: recv %u, gen %u, in_len %lu, ret %u: %.*s",
-         iv ? iv->len : 0, ov->len, in_len, ret, ov->len, ov->buf);
+    warn(INF, "TLS handshake: recv %u, gen %u, in_len %lu, ret %u",
+         iv ? iv->len : 0, ov->len, in_len, ret);
     ensure(ret == 0 || ret == PTLS_ERROR_IN_PROGRESS, "TLS error: %u", ret);
     ensure(iv == 0 || iv->len && iv->len == in_len, "TLS data remaining");
 

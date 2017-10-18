@@ -34,18 +34,52 @@
 
 /// Packet meta-data information associated with w_iov buffers
 struct pkt_meta {
-    ev_tstamp time;        ///< Transmission timestamp.
-    ptls_buffer_t tb;      ///< PicoTLS send buffer.
-    uint64_t nr;           ///< Packet number.
-    uint32_t ack_cnt;      ///< Number of ACKs we have seen for this packet.
-    uint16_t buf_len;      ///< Length of unprotected/cleartext.
-    uint16_t head_start;   ///< Offset of first byte of stream frame header.
-    struct q_stream * str; ///< Stream this data was written on.
+    splay_entry(pkt_meta) node;
+    ev_tstamp time;             ///< Transmission timestamp.
+    ptls_buffer_t tb;           ///< PicoTLS send buffer.
+    uint64_t nr;                ///< Packet number.
+    uint32_t ack_cnt;           ///< Number of ACKs seen for this packet.
+    uint16_t stream_header_pos; ///< Offset of stream frame header.
+    uint16_t stream_data_end;   ///< Offset of last byte of stream frame data.
+    struct q_stream * str;      ///< Stream this data was written on.
+    uint16_t ack_header_pos;    ///< Offset of ACK frame header.
+    uint8_t unused[6];
 };
+
+
+extern int __attribute__((nonnull))
+pm_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b);
+
+splay_head(pm_splay, pkt_meta);
+
+SPLAY_PROTOTYPE(pm_splay, pkt_meta, node, pm_cmp)
+
 
 extern struct pkt_meta * pm;
 
+
+/// Return the pkt_meta entry for a given w_iov.
+///
+/// @param      v     Pointer to a w_iov.
+///
+/// @return     Pointer to the pkt_meta entry for the w_iov.
+///
 #define meta(v) pm[(v)->idx]
+
+
+/// Return the w_iov index of a given pkt_meta.
+///
+/// @param      m     Pointer to a pkt_meta entry.
+///
+/// @return     Index of the w_iov of the pkt_meta.
+///
+#define w_iov_idx(m) ((m)-pm)
+
+#define is_rtxable(m) ((m)->stream_header_pos) // TODO: also PING frames
+
+#define stream_data_len(m)                                                     \
+    ((m)->stream_header_pos ? (m)->stream_data_end - Q_OFFSET : 0)
+
 
 #define Q_OFFSET 64
 

@@ -23,6 +23,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <arpa/inet.h>
 #include <inttypes.h>
 #include <math.h>
 #include <netinet/in.h>
@@ -62,9 +63,6 @@ uint32_t initial_max_stream_id = 0xFF;
 
 int ipnp_splay_cmp(const struct q_conn * const a, const struct q_conn * const b)
 {
-    // warn(DBG, "%s conn %s:%u vs. %s conn %s:%u", conn_type(a),
-    //      inet_ntoa(a->peer.sin_addr), ntohs(a->peer.sin_port), conn_type(b),
-    //      inet_ntoa(b->peer.sin_addr), ntohs(b->peer.sin_port));
     ensure((a->peer.sin_family == AF_INET || a->peer.sin_family == 0) &&
                (b->peer.sin_family == AF_INET || b->peer.sin_family == 0),
            "limited to AF_INET");
@@ -139,8 +137,6 @@ struct q_conn * get_conn_by_ipnp(const struct sockaddr_in * const peer,
                                  const uint8_t type)
 {
     struct q_conn which = {.peer = *peer, .flags = type};
-    // warn(DBG, "looking up conn to %s:%u", inet_ntoa(peer->sin_addr),
-    //      ntohs(peer->sin_port));
     return splay_find(ipnp_splay, &conns_by_ipnp, &which);
 }
 
@@ -157,8 +153,9 @@ static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
                                                  struct w_iov_sq * const q)
 {
     const ev_tstamp now = ev_now(loop);
-    const struct w_iov * const last_tx = sq_last(&c->sent_pkts, w_iov, next);
-    const ev_tstamp last_tx_t = last_tx ? meta(last_tx).time : -HUGE_VAL;
+    const struct pkt_meta * const last_tx =
+        splay_max(pm_splay, &c->unacked_pkts);
+    const ev_tstamp last_tx_t = last_tx ? last_tx->time : -HUGE_VAL;
 
     struct w_iov * v;
     struct w_iov_sq x = sq_head_initializer(x);
@@ -183,16 +180,18 @@ static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
         // store packet info (see OnPacketSent pseudo code)
         meta(v).time = now; // remember TX time
 
-        if (s == 0 && meta(v).buf_len > Q_OFFSET) {
+        if (s == 0 && meta(v).stream_data_end > Q_OFFSET) {
             warn(DBG, "possible RTX for pkt %" PRIu64 " (len %u %u)",
-                 meta(v).nr, v->len, meta(v).buf_len);
+                 meta(v).nr, v->len, meta(v).stream_data_end);
 
             // on RTX, remember original packet number (will be resent with new)
             diet_insert(&c->acked_pkts, meta(v).nr);
+            splay_remove(pm_splay, &s->c->unacked_pkts, &meta(v));
         } else
             meta(v).str = s; // remember stream this buf belongs to
 
         enc_pkt(c, s, v, &x);
+        splay_insert(pm_splay, &s->c->unacked_pkts, &meta(v));
     }
 
     // transmit encrypted/protected packets and then free the chain
@@ -211,20 +210,20 @@ rtx(struct q_conn * const c, const uint32_t __attribute__((unused)) n)
 {
     // XXX: we simply retransmit *all* unACKed packets here
     warn(CRT, "RTX on %s conn %" PRIx64, conn_type(c), c->id);
-    do_tx(c, 0, &c->sent_pkts);
+    // XXX do_tx(c, 0, &c->unacked_pkts);
 }
 
 
 static void tx_ack_or_fin(struct q_stream * const s)
 {
+    // ACKs and FINs are never RTXable
     struct w_iov * const ov =
         w_alloc_iov(w_engine(s->c->sock), MAX_PKT_LEN, Q_OFFSET);
     ov->len = 0;
-    sq_insert_tail(&s->o, ov, next);
-    do_tx(s->c, s, &s->o);
-    // ACKs and FINs are never RTXable
-    sq_concat(&s->c->sent_pkts, &s->o);
-    diet_insert(&s->c->acked_pkts, meta(ov).nr);
+    struct w_iov_sq o = sq_head_initializer(o);
+    sq_insert_tail(&o, ov, next);
+    do_tx(s->c, s, &o);
+    w_free(w_engine(s->c->sock), &o);
 }
 
 
@@ -240,7 +239,7 @@ void tx(struct ev_loop * const l __attribute__((unused)),
             warn(DBG, "data TX needed on %s conn %" PRIx64 " str %u",
                  conn_type(c), c->id, s->id);
             do_tx(c, s, &s->o);
-            sq_concat(&c->sent_pkts, &s->o);
+            sq_concat(&s->r, &s->o);
             did_tx = true;
         } else if (s->state == STRM_STATE_HCLO || s->state == STRM_STATE_CLSD) {
             warn(DBG, "FIN needed on %s conn %" PRIx64 " str %u", conn_type(c),
@@ -352,7 +351,6 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
 
         } else {
             c->state = CONN_STAT_VERS_REJ;
-            // c->id = cid;
             warn(DBG, "%s conn %" PRIx64 " now in state %u", conn_type(c),
                  c->id, c->state);
             warn(WRN,
@@ -382,7 +380,7 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
             struct q_stream * s = get_stream(c, 0);
             free_stream(s);
             s = new_stream(c, 0);
-            w_free(w, &s->c->sent_pkts);
+            splay_init(&c->unacked_pkts);
             tls_handshake(s);
             c->flags |= CONN_FLAG_TX;
 
@@ -469,7 +467,8 @@ void rx(struct ev_loop * const l,
                          cid, conn_type(c), c->id);
                     update_cid(c, cid);
                 } else {
-                    warn(CRT, "new serv conn");
+                    warn(CRT, "new serv conn from %s:%u",
+                         inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
                     const struct sockaddr_in none = {0};
                     c = get_conn_by_ipnp(&none, type);
                     update_ipnp(c, &peer);
@@ -552,26 +551,30 @@ void detect_lost_pkts(struct q_conn * const c)
 
     const ev_tstamp now = ev_now(loop);
     uint64_t largest_lost_packet = 0;
-    struct w_iov *v, *tmp;
-    sq_foreach_safe (v, &c->sent_pkts, next, tmp) {
-        const uint64_t nr = meta(v).nr;
-        if (meta(v).ack_cnt == 0 && nr < c->lg_acked) {
-            const ev_tstamp time_since_sent = now - meta(v).time;
-            const uint64_t packet_delta = c->lg_acked - nr;
+    struct pkt_meta *p, *nxt;
+
+    for (p = splay_min(pm_splay, &c->unacked_pkts); p; p = nxt) {
+        nxt = splay_next(pm_splay, &c->unacked_pkts, p);
+
+        if (p->ack_cnt == 0 && p->nr < c->lg_acked) {
+            const ev_tstamp time_since_sent = now - p->time;
+            const uint64_t packet_delta = c->lg_acked - p->nr;
             if (time_since_sent > delay_until_lost ||
                 packet_delta > c->reorder_thresh) {
                 // Inform the congestion controller of lost packets and
                 // lets it decide whether to retransmit immediately.
-                largest_lost_packet = MAX(largest_lost_packet, nr);
-                sq_remove(&c->sent_pkts, v, w_iov, next);
+                largest_lost_packet = MAX(largest_lost_packet, p->nr);
+                splay_remove(pm_splay, &c->unacked_pkts, p);
+                diet_insert(&c->acked_pkts, p->nr);
 
                 // if this packet was retransmittable, update in_flight
-                if (v->len > Q_OFFSET) {
-                    c->in_flight -= v->len;
-                    warn(INF, "in_flight -%u = %" PRIu64, v->len, c->in_flight);
+                if (is_rtxable(p)) {
+                    c->in_flight -= stream_data_len(p);
+                    warn(INF, "in_flight -%u = %" PRIu64, stream_data_len(p),
+                         c->in_flight);
                 }
 
-                warn(WRN, "pkt %" PRIu64 " considered lost", nr);
+                warn(WRN, "pkt %" PRIu64 " considered lost", p->nr);
             } else if (fpclassify(c->loss_t) == FP_ZERO &&
                        fpclassify(delay_until_lost) != FP_INFINITE)
                 c->loss_t = now + delay_until_lost - time_since_sent;

@@ -142,7 +142,6 @@ void enc_pkt(struct q_conn * const c,
         c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv) : ++c->lg_sent;
     // TODO: increase by random offset
 
-    // warn(DBG, "%s conn state %u", conn_type(c), c->state);
     switch (c->state) {
     case CONN_STAT_VERS_SENT:
         flags |= F_LONG_HDR | F_LH_CLNT_INIT;
@@ -159,12 +158,6 @@ void enc_pkt(struct q_conn * const c,
             flags |= F_SH_CID;
         flags |= enc_pkt_nr_len[needed_pkt_nr_len(meta(v).nr)];
         break;
-
-        // // TODO: support short headers w/o cid
-        // flags |= F_SH_CID | enc_pkt_nr_len[needed_pkt_nr_len(meta(v).nr)];
-        // // XXX to always send long headers:
-        // // flags |= F_LONG_HDR | F_LH_1RTT_KPH0;
-        // break;
     default:
         die("unknown conn state %u", c->state);
     }
@@ -200,8 +193,10 @@ void enc_pkt(struct q_conn * const c,
 
     const uint16_t hdr_len = i;
 
-    if (c->state != CONN_STAT_VERS_REJ && !splay_empty(&c->recv))
+    if (c->state != CONN_STAT_VERS_REJ && !splay_empty(&c->recv)) {
+        meta(v).ack_header_pos = i;
         i += enc_ack_frame(c, v->buf, v->len, i);
+    }
 
     if (c->state == CONN_STAT_CLSD) {
         const char reas[] = "As if that blind rage had washed me clean, rid me "
@@ -236,17 +231,18 @@ void enc_pkt(struct q_conn * const c,
                 s->out_off += i - Q_OFFSET;
             }
 
+            meta(v).stream_data_end = i;
             if (c->state == CONN_STAT_VERS_SENT)
-                v->len = i += enc_padding_frame(v->buf, i, MIN_INI_LEN - i);
+                i += enc_padding_frame(v->buf, i, MIN_INI_LEN - i);
 
             // store final packet length and number
-            v->len = meta(v).buf_len = i;
+            v->len = i;
 
         } else if (v->len > Q_OFFSET) {
             // this is a RTX, pad out until beginning of stream header
-            enc_padding_frame(v->buf, i, meta(v).head_start - i);
+            enc_padding_frame(v->buf, i, meta(v).stream_header_pos - i);
             // skip over existing stream header and data
-            v->len = i = meta(v).buf_len;
+            v->len = i = meta(v).stream_data_end;
 
         } else
             warn(CRT, "%" PRIu64 " not retransmittable", meta(v).nr);
@@ -284,6 +280,10 @@ void enc_pkt(struct q_conn * const c,
     }
 
     sq_insert_tail(q, x, next);
+
+    if (c->state == CONN_STAT_VERS_SENT)
+        // adjust v->len to end of stream data (excl. padding)
+        v->len = meta(v).stream_data_end;
 
     if (v->len > Q_OFFSET) {
         // FIXME packet is retransmittable (check incorrect)

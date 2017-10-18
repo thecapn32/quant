@@ -45,6 +45,7 @@
 
 struct ev_loop;
 
+SPLAY_GENERATE(pm_splay, pkt_meta, node, pm_cmp)
 
 // TODO: many of these globals should move to a per-engine struct
 
@@ -84,6 +85,13 @@ static const uint32_t nbufs = 1000; ///< Number of packet buffers to allocate.
         api_func = 0;                                                          \
         api_arg = 0;                                                           \
     } while (0)
+
+
+extern int __attribute__((nonnull))
+pm_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
+{
+    return (a->nr > b->nr) - (a->nr < b->nr);
+}
 
 
 // TODO: for now, we just exit
@@ -141,10 +149,10 @@ static struct q_conn * new_conn(struct w_engine * const w,
         ensure(c->peer_name = strdup(peer_name), "could not dup peer_name");
     }
 
-    sq_init(&c->sent_pkts);
     splay_init(&c->streams);
     diet_init(&c->closed_streams);
     diet_init(&c->acked_pkts);
+    splay_init(&c->unacked_pkts);
     diet_init(&c->recv);
 
     // initialize idle timeout
@@ -163,7 +171,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
 
     // add connection to global data structures
     splay_insert(ipnp_splay, &conns_by_ipnp, c);
-    if(c->id)
+    if (c->id)
         splay_insert(cid_splay, &conns_by_cid, c);
 
     warn(DBG, "%s conn %" PRIx64 " created", conn_type(c), c->id);

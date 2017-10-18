@@ -83,7 +83,7 @@ struct q_conn {
     /// Sent-but-unACKed packets. The @p buf and @len fields of the w_iov
     /// structs are relative to any stream data.
     ///
-    struct w_iov_sq sent_pkts;
+    struct pm_splay unacked_pkts;
     struct diet acked_pkts;
 
     uint64_t lg_sent;  ///< Largest packet number sent
