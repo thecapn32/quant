@@ -25,6 +25,7 @@
 
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "quic.h"
@@ -70,7 +71,7 @@ pkt_vers(const uint8_t * const buf, const uint16_t len);
 extern uint16_t __attribute__((nonnull))
 pkt_hdr_len(const uint8_t * const buf, const uint16_t len);
 
-extern void __attribute__((nonnull(1, 3))) enc_pkt(struct q_conn * const c,
-                                                   struct q_stream * const s,
-                                                   struct w_iov * const v,
-                                                   struct w_iov_sq * const q);
+extern void __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
+                                             const bool rtx,
+                                             struct w_iov * const v,
+                                             struct w_iov_sq * const q);

@@ -26,6 +26,7 @@
 #pragma once
 
 #include <netinet/in.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 #include <ev.h>
@@ -51,10 +52,17 @@ struct q_conn {
     uint32_t vers_initial; ///< QUIC version first negotiated.
     uint32_t next_sid;     ///< Next stream ID to use on q_rsv_stream().
     uint8_t flags;         ///< Connection flags.
-    uint8_t state;         ///< State of the connection.
+
+    // uint8_t is_clnt : 1;
+    // uint8_t omit_cid : 1;
+    // uint8_t had_rx : 1;
+    // uint8_t needs_tx : 1;
+    // uint8_t : 4;
+
+    uint8_t state; ///< State of the connection.
 
     // LD state
-    uint8_t handshake_cnt;
+    uint8_t hshake_cnt;
     uint8_t tlp_cnt;
     uint8_t rto_cnt;
     uint8_t _unused2;
@@ -148,6 +156,7 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 #define is_clnt(c) (is_set(CONN_FLAG_CLNT, (c)->flags))
 #define is_serv(c) (!is_clnt(c))
 #define conn_type(c) (is_clnt(c) ? "clnt" : "serv")
+#define is_force_neg_vers(vers) (((vers)&0x0f0f0f0f) == 0x0a0a0a0a)
 
 struct ev_loop;
 
@@ -160,7 +169,7 @@ extern void __attribute__((nonnull))
 ld_alarm(struct ev_loop * const l, ev_timer * const w, int e);
 
 extern void __attribute__((nonnull))
-tx(struct ev_loop * const l, ev_async * const w, int e);
+tx_w(struct ev_loop * const l, ev_async * const w, int e);
 
 extern void __attribute__((nonnull))
 rx(struct ev_loop * const l, ev_io * const rx_w, int e);
@@ -176,3 +185,6 @@ extern void * __attribute__((nonnull)) loop_run(void * const arg);
 
 extern void __attribute__((nonnull))
 loop_update(struct ev_loop * const l, ev_async * const w, int e);
+
+extern bool __attribute__((nonnull(1)))
+find_sent_pkt(struct q_conn * const c, const uint64_t nr, struct w_iov ** v);

@@ -60,7 +60,6 @@ struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
     s->c = c;
     sq_init(&s->o);
     sq_init(&s->i);
-    sq_init(&s->r);
     s->id = id;
     ensure(s->id <= c->max_stream_id, "sid %u <= max %u", s->id,
            c->max_stream_id);
@@ -82,7 +81,6 @@ void free_stream(struct q_stream * const s)
 
     w_free(w_engine(s->c->sock), &s->o);
     w_free(w_engine(s->c->sock), &s->i);
-    w_free(w_engine(s->c->sock), &s->r);
 
     splay_remove(stream, &s->c->streams, s);
     free(s);

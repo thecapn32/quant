@@ -98,10 +98,6 @@ SPLAY_GENERATE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 
 static bool __attribute__((const)) vers_supported(const uint32_t v)
 {
-    // force version negotiation for values reserved for the purpose
-    if ((v & 0x0f0f0f0f) == 0x0a0a0a0a)
-        return false;
-
     for (uint8_t i = 0; i < ok_vers_len; i++)
         if (v == ok_vers[i])
             return true;
@@ -148,50 +144,61 @@ struct q_conn * get_conn_by_cid(const uint64_t id, const uint8_t type)
 }
 
 
-static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
-                                                 struct q_stream * const s,
-                                                 struct w_iov_sq * const q)
+static void tx_stream(struct q_stream * const s,
+                      const bool rtx,
+                      const uint8_t limit __attribute__((unused)))
 {
+    struct q_conn * const c = s->c;
     const ev_tstamp now = ev_now(loop);
-    const struct pkt_meta * const last_tx =
-        splay_max(pm_splay, &c->unacked_pkts);
-    const ev_tstamp last_tx_t = last_tx ? last_tx->time : -HUGE_VAL;
+    // const struct pkt_meta * const last_tx =
+    //     splay_max(pm_splay, &c->unacked_pkts);
+    // const ev_tstamp last_tx_t = last_tx ? last_tx->time : -HUGE_VAL;
 
     struct w_iov * v;
     struct w_iov_sq x = sq_head_initializer(x);
-    sq_foreach (v, q, next) {
-        if (s == 0 && v->len <= Q_OFFSET) {
-            warn(DBG, "ignoring non-retransmittable pkt %" PRIu64 " (len %u)",
-                 meta(v).nr, v->len);
+    sq_foreach (v, &s->o, next) {
+        if (meta(v).ack_cnt) {
+            warn(DBG, "skipping ACKed pkt %" PRIu64, meta(v).nr);
             continue;
         }
 
-        // see TimeToSend pseudo code
-        if (c->in_flight + v->len > c->cwnd ||
-            last_tx_t - now + (v->len * c->srtt) / c->cwnd > 0) {
-            warn(DBG, "in_flight %" PRIu64 " + v->len %u vs cwnd %" PRIu64,
-                 c->in_flight, v->len, c->cwnd);
-            warn(DBG,
-                 "last_tx_t - now %f + (v->len %u * srtt %f) / cwnd %" PRIu64,
-                 last_tx_t - now, v->len, c->srtt, c->cwnd);
-            // warn(CRT, "out of cwnd/pacing headroom, ignoring");
+        if (rtx != (meta(v).tx_cnt > 0)) {
+            warn(DBG, "skipping %s pkt %" PRIu64 " during %s",
+                 meta(v).tx_cnt ? "already-tx'ed" : "fresh", meta(v).nr,
+                 rtx ? "RTX" : "TX");
+            continue;
         }
+
+        // // see TimeToSend pseudo code
+        // if (c->in_flight + v->len > c->cwnd ||
+        //     last_tx_t - now + (v->len * c->srtt) / c->cwnd > 0) {
+        //     warn(DBG, "in_flight %" PRIu64 " + v->len %u vs cwnd %" PRIu64,
+        //          c->in_flight, v->len, c->cwnd);
+        //     warn(DBG,
+        //          "last_tx_t - now %f + (v->len %u * srtt %f) / cwnd %"
+        //          PRIu64, last_tx_t - now, v->len, c->srtt, c->cwnd);
+        //     // warn(CRT, "out of cwnd/pacing headroom, ignoring");
+        // }
 
         // store packet info (see OnPacketSent pseudo code)
         meta(v).time = now; // remember TX time
 
-        if (s == 0 && meta(v).stream_data_end > Q_OFFSET) {
-            warn(DBG, "possible RTX for pkt %" PRIu64 " (len %u %u)",
-                 meta(v).nr, v->len, meta(v).stream_data_end);
-
-            // on RTX, remember original packet number (will be resent with new)
+        meta(v).str = s; // remember stream this buf belongs to
+        if (rtx)
+            // on RTX, remember orig pkt number (enc_pkt overwrites with new)
             diet_insert(&c->acked_pkts, meta(v).nr);
-            splay_remove(pm_splay, &s->c->unacked_pkts, &meta(v));
-        } else
-            meta(v).str = s; // remember stream this buf belongs to
 
-        enc_pkt(c, s, v, &x);
-        splay_insert(pm_splay, &s->c->unacked_pkts, &meta(v));
+        enc_pkt(s, rtx, v, &x);
+        if (!rtx)
+            splay_insert(pm_splay, &c->unacked_pkts, &meta(v));
+
+        struct pkt_meta * p;
+        splay_foreach (p, pm_splay, &c->unacked_pkts)
+            warn(DBG, "unacked: %" PRIu64, p->nr);
+
+        char buf[1024];
+        diet_to_str(buf, sizeof(buf), &c->acked_pkts);
+        warn(DBG, "acked: %s", buf);
     }
 
     // transmit encrypted/protected packets and then free the chain
@@ -205,68 +212,62 @@ static void __attribute__((nonnull(1, 3))) do_tx(struct q_conn * const c,
 }
 
 
-static __attribute__((nonnull)) void
-rtx(struct q_conn * const c, const uint32_t __attribute__((unused)) n)
+static void tx(struct q_conn * const c, const bool rtx, const uint8_t limit)
 {
-    // XXX: we simply retransmit *all* unACKed packets here
-    warn(CRT, "RTX on %s conn %" PRIx64, conn_type(c), c->id);
-    // XXX do_tx(c, 0, &c->unacked_pkts);
-}
-
-
-static void tx_ack_or_fin(struct q_stream * const s)
-{
-    // ACKs and FINs are never RTXable
-    struct w_iov * const ov =
-        w_alloc_iov(w_engine(s->c->sock), MAX_PKT_LEN, Q_OFFSET);
-    ov->len = 0;
-    struct w_iov_sq o = sq_head_initializer(o);
-    sq_insert_tail(&o, ov, next);
-    do_tx(s->c, s, &o);
-    w_free(w_engine(s->c->sock), &o);
-}
-
-
-void tx(struct ev_loop * const l __attribute__((unused)),
-        ev_async * const w,
-        int e __attribute__((unused)))
-{
-    struct q_conn * const c = w->data;
-    struct q_stream * s = 0;
     bool did_tx = false;
+    struct q_stream * s;
     splay_foreach (s, stream, &c->streams) {
         if (!sq_empty(&s->o)) {
-            warn(DBG, "data TX needed on %s conn %" PRIx64 " str %u",
-                 conn_type(c), c->id, s->id);
-            do_tx(c, s, &s->o);
-            sq_concat(&s->r, &s->o);
+            warn(DBG,
+                 "data %s on %s conn %" PRIx64 " str %u w/%" PRIu64
+                 " pkt%s in queue",
+                 rtx ? "RTX" : "TX", conn_type(c), c->id, s->id, sq_len(&s->o),
+                 plural(sq_len(&s->o)));
+            tx_stream(s, rtx, limit);
             did_tx = true;
-        } else if (s->state == STRM_STATE_HCLO || s->state == STRM_STATE_CLSD) {
-            warn(DBG, "FIN needed on %s conn %" PRIx64 " str %u", conn_type(c),
-                 c->id, s->id);
-            tx_ack_or_fin(s);
-            did_tx = true;
+            // } else if (s->state == STRM_STATE_HCLO || s->state ==
+            // STRM_STATE_CLSD) {
+            //     warn(DBG, "FIN needed on %s conn %" PRIx64 " str %u",
+            //     conn_type(c),
+            //          c->id, s->id);
+            //     tx_ack_or_fin(s);
+            //     did_tx = true;
         }
     }
 
     if (did_tx == false) {
-        // need to send ACKs but don't have any stream data to piggyback on
-        s = get_stream(c, s ? s->id : 0);
-        warn(DBG, "TX needed on %s conn %" PRIx64, conn_type(c), c->id);
-        tx_ack_or_fin(s);
+        warn(DBG, "other %s on %s conn %" PRIx64, rtx ? "RTX" : "TX",
+             conn_type(c), c->id);
+        // need to send control info, but no stream data to piggyback on, so
+        // temporarily put a (by definition non-rtxable) w_iov on stream 0
+        struct w_iov * const v = w_alloc_iov(w_engine(c->sock), 0, Q_OFFSET);
+        s = get_stream(c, 0);
+        sq_insert_head(&s->o, v, next);
+        tx_stream(s, rtx, limit);
+        sq_remove_head(&s->o, next);
+        w_free_iov(w_engine(c->sock), v);
     }
+}
+
+
+void tx_w(struct ev_loop * const l __attribute__((unused)),
+          ev_async * const w,
+          int e __attribute__((unused)))
+{
+    tx(w->data, false, 0);
 }
 
 
 static bool __attribute__((nonnull))
 verify_hash(const uint8_t * buf, const uint16_t len)
 {
-    uint16_t i = len - FNV_1A_LEN;
     uint64_t hash_rx;
+    uint16_t i = len - sizeof(hash_rx);
     dec(hash_rx, buf, len, i, 0, "%" PRIx64);
     warn(DBG, "verifying %lu-byte hash %" PRIx64 " in [%lu..%u] over [0..%lu]",
-         FNV_1A_LEN, hash_rx, len - FNV_1A_LEN, len - 1, len - FNV_1A_LEN - 1);
-    const uint64_t hash_comp = fnv_1a(buf, len - FNV_1A_LEN);
+         sizeof(hash_rx), hash_rx, len - sizeof(hash_rx), len - 1,
+         len - sizeof(hash_rx) - 1);
+    const uint64_t hash_comp = fnv_1a(buf, len - sizeof(hash_rx));
     if (hash_rx != hash_comp)
         warn(WRN, "hash mismatch: computed %" PRIx64 " vs. %" PRIx64, hash_comp,
              hash_rx);
@@ -337,7 +338,7 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
         diet_insert(&c->recv, meta(v).nr);
         if (c->vers_initial == 0)
             c->vers_initial = c->vers;
-        if (vers_supported(c->vers)) {
+        if (vers_supported(c->vers) && !is_force_neg_vers(c->vers)) {
             warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
 
             // this is a new connection; server picks a new random cid
@@ -351,8 +352,6 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
 
         } else {
             c->state = CONN_STAT_VERS_REJ;
-            warn(DBG, "%s conn %" PRIx64 " now in state %u", conn_type(c),
-                 c->id, c->state);
             warn(WRN,
                  "%s conn %" PRIx64
                  " clnt-requested vers 0x%08x not supported ",
@@ -363,10 +362,19 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
 
     case CONN_STAT_VERS_SENT: {
         if (is_set(F_LH_TYPE_VNEG, flags)) {
-            warn(INF, "server didn't like our vers 0x%08x", c->vers);
-            ensure(c->vers == pkt_vers(v->buf, v->len),
-                   "serv did not echo vers");
-            ensure(meta(v).nr == c->lg_sent, "serv did not echo pkt nr");
+            const uint32_t vers = pkt_vers(v->buf, v->len);
+            if (c->vers != vers) {
+                warn(NTE,
+                     "ignoring vers neg response for 0x%08x "
+                     "since we're trying 0x%08x",
+                     vers, c->vers);
+                break;
+            }
+
+            warn(INF, "server didn't like our vers 0x%08x", vers);
+            ensure(vers_supported(vers), "vers 0x%08x not one of ours", vers);
+            ensure(find_sent_pkt(c, meta(v).nr, 0), "did not send pkt %" PRIu64,
+                   meta(v).nr);
             if (c->vers_initial == 0)
                 c->vers_initial = c->vers;
             c->vers = pick_from_server_vers(v->buf, v->len);
@@ -378,9 +386,13 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
             // retransmit the ClientHello
             init_tls(c);
             struct q_stream * s = get_stream(c, 0);
-            free_stream(s);
-            s = new_stream(c, 0);
-            splay_init(&c->unacked_pkts);
+            // free the previous ClientHello
+            struct w_iov * ch;
+            sq_foreach (ch, &s->o, next) {
+                splay_remove(pm_splay, &c->unacked_pkts, &meta(ch));
+                diet_insert(&c->acked_pkts, meta(ch).nr);
+            }
+            w_free(w_engine(c->sock), &s->o);
             tls_handshake(s);
             c->flags |= CONN_FLAG_TX;
 
@@ -471,6 +483,11 @@ void rx(struct ev_loop * const l,
                          inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
                     const struct sockaddr_in none = {0};
                     c = get_conn_by_ipnp(&none, type);
+                    if (c == 0) {
+                        // TODO: maintain accept queue
+                        warn(CRT, "app is not in q_accept(), ignoring");
+                        continue;
+                    }
                     update_ipnp(c, &peer);
                     update_cid(c, cid);
                     new_stream(c, 0);
@@ -488,7 +505,7 @@ void rx(struct ev_loop * const l,
                 // version negotiation responses do not carry a hash
                 prot_len = UINT16_MAX;
             else
-                prot_len = verify_hash(v->buf, v->len) ? FNV_1A_LEN : 0;
+                prot_len = verify_hash(v->buf, v->len) ? sizeof(uint64_t) : 0;
         else {
             const uint16_t len = dec_aead(c, v, hdr_len);
             prot_len = len != 0 ? v->len - len : 0;
@@ -526,11 +543,11 @@ void rx(struct ev_loop * const l,
     struct q_conn * c;
     sl_foreach (c, &crx, next) {
         // reset idle timeout
-        ev_timer_again(loop, &c->idle_alarm);
+        ev_timer_again(l, &c->idle_alarm);
 
         // is a TX needed for this connection?
         if (is_set(CONN_FLAG_TX, c->flags))
-            tx(l, &c->tx_w, 0);
+            tx(c, false, 0);
 
         // clear the helper flags set above
         c->flags &= ~(CONN_FLAG_RX | CONN_FLAG_TX);
@@ -608,7 +625,7 @@ void set_ld_alarm(struct q_conn * const c)
     const ev_tstamp now = ev_now(loop);
     if (c->state < CONN_STAT_ESTB) {
         dur = fpclassify(c->srtt) == FP_ZERO ? kDefaultInitialRtt : c->srtt;
-        dur = MAX(2 * dur, kMinTLPTimeout) * (1 << c->handshake_cnt);
+        dur = MAX(2 * dur, kMinTLPTimeout) * (1 << c->hshake_cnt);
         warn(DBG, "handshake RTX alarm in %f sec on %s conn %" PRIx64, dur,
              conn_type(c), c->id);
 
@@ -644,14 +661,14 @@ void ld_alarm(struct ev_loop * const l __attribute__((unused)),
               int e __attribute__((unused)))
 {
     struct q_conn * const c = w->data;
+    // XXX: we simply retransmit *all* unACKed packets here
 
     // see OnLossDetectionAlarm pseudo code
     if (c->state < CONN_STAT_ESTB) {
-        warn(INF, "handshake RTX alarm on %s conn %" PRIx64, conn_type(c),
-             c->id);
-        rtx(c, UINT32_MAX);
-        // tx above already calls set_ld_alarm(c)
-        c->handshake_cnt++;
+        c->hshake_cnt++;
+        warn(INF, "handshake RTX #%u on %s conn %" PRIx64, c->hshake_cnt,
+             conn_type(c), c->id);
+        tx(c, true, 0);
         return;
     }
 
@@ -661,16 +678,42 @@ void ld_alarm(struct ev_loop * const l __attribute__((unused)),
         detect_lost_pkts(c);
 
     } else if (c->tlp_cnt < kMaxTLPs) {
-        warn(INF, "TLP alarm on %s conn %" PRIx64, conn_type(c), c->id);
-        rtx(c, 1);
         c->tlp_cnt++;
+        warn(INF, "TLP alarm #%u on %s conn %" PRIx64, c->tlp_cnt, conn_type(c),
+             c->id);
+        tx(c, true, 1);
 
     } else {
-        warn(INF, "RTO alarm on %s conn %" PRIx64, conn_type(c), c->id);
         if (c->rto_cnt == 0)
             c->lg_sent_before_rto = c->lg_sent;
-        rtx(c, 2);
         c->rto_cnt++;
+        warn(INF, "RTO alarm #%u on %s conn %" PRIx64, c->rto_cnt, conn_type(c),
+             c->id);
+        tx(c, true, 2);
     }
     set_ld_alarm(c);
+}
+
+
+bool find_sent_pkt(struct q_conn * const c,
+                   const uint64_t nr,
+                   struct w_iov ** v)
+{
+    struct pkt_meta which = {.nr = nr};
+    const struct pkt_meta * const p =
+        splay_find(pm_splay, &c->unacked_pkts, &which);
+    if (p) {
+        ensure(p && p->nr == nr, "found pkt");
+        struct w_iov * const f = w_iov(w_engine(c->sock), w_iov_idx(p));
+        // warn(DBG, "found pkt %" PRIu64 " in idx %u len %u", nr, w_iov_idx(p),
+        //      f->len);
+        if (v)
+            *v = f;
+        return true;
+    }
+
+    // check if packet was sent and already ACKed
+    if (v)
+        *v = 0;
+    return diet_find(&c->acked_pkts, nr);
 }

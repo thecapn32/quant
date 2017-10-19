@@ -126,17 +126,24 @@ static uint8_t __attribute__((const)) needed_pkt_nr_len(const uint64_t n)
 // #define CONN_CLOS_ERR_VERSION_NEGOTIATION_ERROR 0x80000009
 // #define CONN_CLOS_ERR_PROTOCOL_VIOLATION 0x8000000A
 
-void enc_pkt(struct q_conn * const c,
-             struct q_stream * const s,
+void enc_pkt(struct q_stream * const s,
+             const bool rtx,
              struct w_iov * const v,
              struct w_iov_sq * const q)
 {
+    struct q_conn * const c = s->c;
+
     // prepend the header by adjusting the buffer offset
     v->buf -= Q_OFFSET;
     v->len += Q_OFFSET;
 
     uint16_t i = 0;
     uint8_t flags = 0;
+
+    if (rtx)
+        warn(DBG, "enc RTX %" PRIu64 " as %" PRIu64, meta(v).nr,
+             c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv)
+                                            : c->lg_sent + 1);
 
     meta(v).nr =
         c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv) : ++c->lg_sent;
@@ -162,13 +169,13 @@ void enc_pkt(struct q_conn * const c,
         die("unknown conn state %u", c->state);
     }
 
-    if (s == 0 && flags != pkt_flags(v->buf)) {
-        warn(INF,
-             "suppressing RTX of 0x%02x-type pkt %" PRIu64
-             "; new type would be 0x%02x",
-             pkt_flags(v->buf), meta(v).nr, flags);
-        return;
-    }
+    // if (s == 0 && flags != pkt_flags(v->buf)) {
+    //     warn(INF,
+    //          "suppressing RTX of 0x%02x-type pkt %" PRIu64
+    //          "; new type would be 0x%02x",
+    //          pkt_flags(v->buf), meta(v).nr, flags);
+    //     return;
+    // }
 
     enc(v->buf, v->len, i, &flags, 0, "0x%02x");
 
@@ -176,13 +183,13 @@ void enc_pkt(struct q_conn * const c,
         enc(v->buf, v->len, i, &c->id, 0, "%" PRIx64);
 
     if (is_set(F_LONG_HDR, flags)) {
-        const uint32_t nr = (const uint32_t)meta(v).nr;
-        enc(v->buf, v->len, i, &nr, 0, "%u");
+        enc(v->buf, v->len, i, &meta(v).nr, sizeof(uint32_t), "%u");
         enc(v->buf, v->len, i, &c->vers, 0, "0x%08x");
         if (c->state == CONN_STAT_VERS_REJ) {
             warn(INF, "sending version negotiation server response");
             for (uint8_t j = 0; j < ok_vers_len; j++)
-                enc(v->buf, v->len, i, &ok_vers[j], 0, "0x%08x");
+                if (!is_force_neg_vers(ok_vers[j]))
+                    enc(v->buf, v->len, i, &ok_vers[j], 0, "0x%08x");
             v->len = i;
             // don't remember the failed client initial
             diet_remove(&c->recv, meta(v).nr);
@@ -196,7 +203,8 @@ void enc_pkt(struct q_conn * const c,
     if (c->state != CONN_STAT_VERS_REJ && !splay_empty(&c->recv)) {
         meta(v).ack_header_pos = i;
         i += enc_ack_frame(c, v->buf, v->len, i);
-    }
+    } else
+        meta(v).ack_header_pos = 0;
 
     if (c->state == CONN_STAT_CLSD) {
         const char reas[] = "As if that blind rage had washed me clean, rid me "
@@ -215,39 +223,28 @@ void enc_pkt(struct q_conn * const c,
         maybe_api_return(q_close, c);
 
     } else {
-        // if we've been passed a stream pointer, we need to prepend a stream
-        // frame header to the data (otherwise, it's an RTX)
-        if (s) {
 
-            // encode any stream data present
-            if (v->len > Q_OFFSET || s->state >= STRM_STATE_HCLO) {
-                // pad out the rest of Q_OFFSET
-                enc_padding_frame(v->buf, i, Q_OFFSET - i);
+        if (rtx) {
+            ensure(is_rtxable(&meta(v)), "is rtxable");
 
-                i = enc_stream_frame(s, v, s->out_off);
-
-                // increase the stream data offset
-                s->out_nr = meta(v).nr;
-                s->out_off += i - Q_OFFSET;
-            }
-
-            meta(v).stream_data_end = i;
-            if (c->state == CONN_STAT_VERS_SENT)
-                i += enc_padding_frame(v->buf, i, MIN_INI_LEN - i);
-
-            // store final packet length and number
-            v->len = i;
-
-        } else if (v->len > Q_OFFSET) {
             // this is a RTX, pad out until beginning of stream header
             enc_padding_frame(v->buf, i, meta(v).stream_header_pos - i);
-            // skip over existing stream header and data
-            v->len = i = meta(v).stream_data_end;
+            i = meta(v).stream_data_end;
 
-        } else
-            warn(CRT, "%" PRIu64 " not retransmittable", meta(v).nr);
+        } else {
+            // this is a fresh packet
+            if (v->len > Q_OFFSET) {
+                // add a stream frame header, after padding out rest of Q_OFFSET
+                enc_padding_frame(v->buf, i, Q_OFFSET - i);
+                meta(v).stream_data_end = i =
+                    enc_stream_frame(s, v, s->out_off);
+            }
+        }
+
+        if (c->state == CONN_STAT_VERS_SENT)
+            i += enc_padding_frame(v->buf, i, MIN_INI_LEN - i);
+        v->len = i;
     }
-
     // #ifndef NDEBUG
     //     if (_dlevel == debug)
     //         hexdump(v->buf, v->len);
@@ -264,12 +261,14 @@ void enc_pkt(struct q_conn * const c,
         x->len = v->len;
         // version negotiation server responses do not carry a hash
         if (c->state != CONN_STAT_VERS_REJ) {
-            const uint64_t hash = fnv_1a(x->buf, v->len);
+            const uint64_t hash = fnv_1a(x->buf, x->len);
             warn(DBG,
                  "adding %lu-byte hash %" PRIx64 " over [0..%u] into [%u..%lu]",
-                 FNV_1A_LEN, hash, v->len - 1, v->len, v->len + FNV_1A_LEN - 1);
-            x->len += FNV_1A_LEN;
-            enc(x->buf, x->len, v->len, &hash, 0, "%" PRIx64);
+                 sizeof(hash), hash, x->len - 1, x->len,
+                 x->len + sizeof(hash) - 1);
+            uint64_t hash_pos = x->len;
+            x->len += sizeof(hash);
+            enc(x->buf, x->len, hash_pos, &hash, 0, "%" PRIx64);
         }
     } else {
         memcpy(x->buf, v->buf, hdr_len); // copy pkt header
@@ -281,13 +280,11 @@ void enc_pkt(struct q_conn * const c,
 
     sq_insert_tail(q, x, next);
 
-    if (c->state == CONN_STAT_VERS_SENT)
-        // adjust v->len to end of stream data (excl. padding)
-        v->len = meta(v).stream_data_end;
+    meta(v).tx_cnt++;
 
     if (v->len > Q_OFFSET) {
         // FIXME packet is retransmittable (check incorrect)
-        if (s) {
+        if (!rtx) {
             c->in_flight += x->len;
             warn(INF, "in_flight +%u = %" PRIu64, x->len, c->in_flight);
         }
@@ -295,10 +292,15 @@ void enc_pkt(struct q_conn * const c,
     }
 
     warn(NTE,
-         "send pkt %" PRIu64 " (len %u, idx %u, type 0x%02x = " bitstring_fmt
+         "enc pkt %" PRIu64
+         " (len %u+%u, idx %u+%u, type 0x%02x = " bitstring_fmt
          ") on %s conn %" PRIx64,
-         meta(v).nr, x->len, x->idx, pkt_flags(x->buf),
-         to_bitstring(pkt_flags(x->buf)), conn_type(c), c->id);
+         meta(v).nr, v->len, x->len - v->len, v->idx, x->idx, pkt_flags(v->buf),
+         to_bitstring(pkt_flags(v->buf)), conn_type(c), c->id);
+
+    if (c->state == CONN_STAT_VERS_SENT)
+        // adjust v->len to end of stream data (excl. padding)
+        v->len = meta(v).stream_data_end;
 
     v->buf += Q_OFFSET;
     v->len -= Q_OFFSET;

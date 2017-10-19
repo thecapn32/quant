@@ -41,8 +41,6 @@ struct q_stream {
     uint8_t flags;
     uint8_t _unused[2];
 
-    struct w_iov_sq r; ///< tail queue containing written data
-
     struct w_iov_sq o; ///< tail queue containing outbound data
     uint64_t out_off;
     uint64_t out_nr; ///< highest sent packet number that had stream data

@@ -37,13 +37,14 @@ struct pkt_meta {
     splay_entry(pkt_meta) node;
     ev_tstamp time;             ///< Transmission timestamp.
     ptls_buffer_t tb;           ///< PicoTLS send buffer.
+    struct q_stream * str;      ///< Stream this data was written on.
     uint64_t nr;                ///< Packet number.
     uint32_t ack_cnt;           ///< Number of ACKs seen for this packet.
+    uint32_t tx_cnt;            ///< Number of times this packet was tx'ed.
     uint16_t stream_header_pos; ///< Offset of stream frame header.
     uint16_t stream_data_end;   ///< Offset of last byte of stream frame data.
-    struct q_stream * str;      ///< Stream this data was written on.
     uint16_t ack_header_pos;    ///< Offset of ACK frame header.
-    uint8_t unused[6];
+    uint8_t unused[2];
 };
 
 

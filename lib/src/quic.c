@@ -52,7 +52,9 @@ SPLAY_GENERATE(pm_splay, pkt_meta, node, pm_cmp)
 
 /// QUIC version supported by this implementation in order of preference.
 const uint32_t ok_vers[] = {
-    // 0xff000004, // draft-ietf-quic-transport-04
+#ifndef NDEBUG
+    0xbabababa, // XXX reserved version to trigger negotiation
+#endif
     0xff000005, // draft-ietf-quic-transport-05
     // 0xff000007, // draft-ietf-quic-transport-07
 };
@@ -161,7 +163,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
     ev_init(&c->idle_alarm, idle_alarm);
 
     // initialize socket and start an RX/TX watchers
-    ev_async_init(&c->tx_w, tx);
+    ev_async_init(&c->tx_w, tx_w);
     c->tx_w.data = c;
     ev_async_start(loop, &c->tx_w);
     c->sock = w_bind(w, htons(port), 0);
@@ -198,11 +200,7 @@ struct q_conn * q_connect(void * const q,
     // make new connection
     uint64_t cid;
     tls_ctx.random_bytes(&cid, sizeof(cid));
-#ifndef NDEBUG
-    const uint vers = 0xbabababa; // XXX reserved version to trigger negotiation
-#else
     const uint vers = ok_vers[0];
-#endif
     struct q_conn * const c = new_conn(q, vers, cid, peer, peer_name, 0);
     warn(WRN, "connecting %s conn %" PRIx64 " to %s:%u", conn_type(c), cid,
          inet_ntoa(peer->sin_addr), ntohs(peer->sin_port));
@@ -247,7 +245,7 @@ void q_write(struct q_stream * const s, struct w_iov_sq * const q)
     loop_run(q_write, s);
 
     // return written data back to user stailq
-    sq_concat(q, &s->r);
+    sq_concat(q, &s->o);
 
     warn(WRN, "wrote %u byte%s on %s conn %" PRIx64 " str %u", qlen,
          plural(qlen), conn_type(s->c), s->c->id, s->id);

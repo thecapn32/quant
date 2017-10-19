@@ -208,30 +208,6 @@ static uint8_t __attribute__((const)) dec_ack_block_len(const uint8_t flags)
 }
 
 
-// TODO: should use a better data structure here
-static struct w_iov * __attribute__((nonnull))
-find_sent_pkt(struct q_conn * const c, const uint64_t nr)
-{
-    struct pkt_meta which = {.nr = nr};
-    const struct pkt_meta * const p =
-        splay_find(pm_splay, &c->unacked_pkts, &which);
-    if (p) {
-        ensure(p && p->nr == nr, "found pkt");
-        struct w_iov * const v = w_iov(w_engine(c->sock), w_iov_idx(p));
-        warn(DBG, "found pkt %" PRIu64 " in idx %u len %u", nr, w_iov_idx(p),
-             v->len);
-        return v;
-    }
-
-    // check if packet was sent and already ACKed
-    if (diet_find(&c->acked_pkts, nr)) {
-        return 0;
-    }
-
-    die("we never sent packet %" PRIu64, nr);
-}
-
-
 #define F_ACK_N 0x10
 #define PN_GEQ(a, b) (((int64_t)(a) - (int64_t)(b)) >= 0)
 
@@ -273,7 +249,7 @@ dec_ack_frame(struct q_conn * const c,
         dec(l, v->buf, v->len, i, ack_block_len, "%" PRIu64);
 
         while (PN_GEQ(ack, lg_ack - l)) {
-            warn(INF, "pkt %" PRIu64 " had ACK for %" PRIu64, meta(v).nr, ack);
+            // warn(INF, "pkt %" PRIu64 " had ACK for %" PRIu64, meta(v).nr, ack);
             op(c, ack, lg_ack, ack_delay);
             ack--;
         }
@@ -282,7 +258,7 @@ dec_ack_frame(struct q_conn * const c,
         if (b < num_blocks - 1) {
             uint8_t gap = 0;
             dec(gap, v->buf, v->len, i, 0, "%u");
-            ack -= gap;
+            lg_ack = ack -= gap - 1;
         }
     }
 
@@ -303,7 +279,7 @@ track_acked_pkts(struct q_conn * const c,
                  const uint64_t lg_ack __attribute__((unused)),
                  const uint16_t ack_delay __attribute__((unused)))
 {
-    warn(CRT, "no longer need to ACK pkt %" PRIu64, ack);
+    // warn(DBG, "no longer need to ACK pkt %" PRIu64, ack);
     diet_remove(&c->recv, ack);
 }
 
@@ -313,9 +289,14 @@ static void __attribute__((nonnull)) process_ack(struct q_conn * const c,
                                                  const uint64_t lg_ack,
                                                  const uint16_t ack_delay)
 {
-    struct w_iov * const p = find_sent_pkt(c, ack);
+    struct w_iov * p;
+    const bool found = find_sent_pkt(c, ack, &p);
+    if (!found) {
+        warn(CRT, "got ACK for pkt %" PRIu64 " which we never sent", ack);
+        return;
+    }
     if (p == 0) {
-        warn(DBG, "pkt %" PRIu64 " was already previously ACKed", ack);
+        // warn(DBG, "pkt %" PRIu64 " was already previously ACKed", ack);
         // we already had a previous ACK for this packet
         return;
     }
@@ -359,7 +340,7 @@ static void __attribute__((nonnull)) process_ack(struct q_conn * const c,
     if (c->rto_cnt && ack > c->lg_sent_before_rto)
         // see OnRetransmissionTimeoutVerified pseudo code
         c->cwnd = kMinimumWindow;
-    c->handshake_cnt = c->tlp_cnt = c->rto_cnt = 0;
+    c->hshake_cnt = c->tlp_cnt = c->rto_cnt = 0;
 
     // this packet is no no longer unACKed
     splay_remove(pm_splay, &c->unacked_pkts, &meta(p));
@@ -615,9 +596,11 @@ uint16_t enc_ack_frame(struct q_conn * const c,
 {
     uint8_t type = FRAM_TYPE_ACK;
 
-    const uint8_t num_blocks = (uint8_t)MIN(c->recv.cnt, UINT8_MAX);
-    if (num_blocks > 1)
+    uint8_t num_blocks = (uint8_t)MIN(c->recv.cnt, UINT8_MAX);
+    if (num_blocks > 1) {
+        num_blocks--;
         type |= F_ACK_N;
+    }
 
     const uint64_t lg_recv = diet_max(&c->recv);
     const uint8_t lg_ack_len = needed_lg_ack_len(lg_recv);
@@ -628,7 +611,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     uint16_t i = pos;
     enc(buf, len, i, &type, 0, "0x%02x");
 
-    if (num_blocks > 1)
+    if (num_blocks)
         enc(buf, len, i, &num_blocks, 0, "%u");
 
     // TODO: send timestamps in protected packets
@@ -720,13 +703,18 @@ uint16_t enc_stream_frame(struct q_stream * const s,
     type |= enc_off_len[off_len];
 
     // now that we know how long the stream frame header is, encode it
-    uint16_t i = Q_OFFSET - 1 - (dlen ? 2 : 0) - off_len - sid_len;
+    uint16_t i = meta(v).stream_header_pos =
+        Q_OFFSET - 1 - (dlen ? 2 : 0) - off_len - sid_len;
     enc(v->buf, v->len, i, &type, 0, "0x%02x");
     enc(v->buf, v->len, i, &s->id, sid_len, "%u");
     if (off_len)
         enc(v->buf, v->len, i, &o, off_len, "%" PRIu64);
     if (dlen)
         enc(v->buf, v->len, i, &dlen, 0, "%u");
+
+    // increase the stream data offset
+    s->out_nr = meta(v).nr;
+    s->out_off += i - Q_OFFSET;
 
     // TODO: support multiple frames per packet? (needs memcpy!)
     return v->len;

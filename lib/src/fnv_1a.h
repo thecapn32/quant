@@ -29,10 +29,6 @@
 #include <stdint.h>
 
 
-/// Hash length in packet.
-#define FNV_1A_LEN sizeof(uint64_t)
-
-
 /// Compute an [FNV-1a 64-bit
 /// hash](http://www.isthe.com/chongo/tech/comp/fnv/index.html) over the given
 /// buffer.
