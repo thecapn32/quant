@@ -308,6 +308,9 @@ conn_setup_1rtt_secret(struct q_conn * const c,
     int ret = ptls_export_secret(c->tls, sec, cipher->hash->digest_size, label,
                                  ptls_iovec_init(0, 0));
     ensure(ret == 0, "ptls_export_secret");
+    if (*aead)
+        // tls_handshake() is called multiple times when generating CHs
+        ptls_aead_free(*aead);
     *aead = ptls_aead_new(cipher->aead, cipher->hash, is_enc, sec);
     ensure(aead, "ptls_aead_new");
 }
@@ -325,8 +328,6 @@ static void __attribute__((nonnull)) conn_setup_1rtt(struct q_conn * const c)
                            is_clnt(c) ? PTLS_CLNT_LABL : PTLS_SERV_LABL, 1);
 
     c->state = CONN_STAT_VERS_OK;
-    // warn(DBG, "%s conn %" PRIx64 " now in state %u", conn_type(c), c->id,
-    //      c->state);
 }
 
 
@@ -334,7 +335,7 @@ uint32_t tls_handshake(struct q_stream * const s)
 {
     // get pointer to any received handshake data
     // XXX there is an assumption here that we only have one inbound packet
-    struct w_iov * const iv = sq_first(&s->i);
+    struct w_iov * const iv = sq_first(&s->in);
     size_t in_len = iv ? iv->len : 0;
 
     // allocate a new w_iov
@@ -352,7 +353,7 @@ uint32_t tls_handshake(struct q_stream * const s)
     if (iv)
         // the assumption is that ptls_handshake has consumed all stream-0
         // data
-        w_free(w_engine(s->c->sock), &s->i);
+        w_free(w_engine(s->c->sock), &s->in);
     else {
         s->c->state = CONN_STAT_VERS_SENT;
         // warn(DBG, "%s conn %" PRIx64 " now in state %u", conn_type(s->c),
@@ -361,10 +362,10 @@ uint32_t tls_handshake(struct q_stream * const s)
 
     if ((ret == 0 || ret == PTLS_ERROR_IN_PROGRESS) && ov->len != 0)
         // enqueue for TX
-        sq_insert_tail(&s->o, ov, next);
+        sq_insert_tail(&s->out, ov, next);
     else
         // we are done with the handshake, no need to TX after all
-        w_free_iov(w_engine(s->c->sock), ov);
+        q_free_iov(w_engine(s->c->sock), ov);
 
     if (ret == 0)
         conn_setup_1rtt(s->c);

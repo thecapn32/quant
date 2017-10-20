@@ -36,28 +36,27 @@ struct q_stream {
     splay_entry(q_stream) node;
     struct q_conn * c;
 
-    uint32_t id;
-    uint8_t state;
-    uint8_t flags;
-    uint8_t _unused[2];
+    struct w_iov_sq out;  ///< Tail queue containing outbound data.
+    uint64_t out_ack_cnt; ///< Number of unique ACKs received for pkts in o.
+    uint64_t out_off;     ///< Current stream offset.
 
-    struct w_iov_sq o; ///< tail queue containing outbound data
-    uint64_t out_off;
-    uint64_t out_nr; ///< highest sent packet number that had stream data
-
-    struct w_iov_sq i; ///< tail queue containing inbound data
+    struct w_iov_sq in; ///< tail queue containing inbound data
     uint64_t in_off;
 
     uint64_t max_stream_data;
+
+    uint32_t id;
+    uint8_t state;
+    uint8_t fin_sent : 1;
+    uint8_t : 7;
+    uint8_t _unused[2];
 };
 
-#define STRM_STATE_IDLE 0
-#define STRM_STATE_OPEN 1
-#define STRM_STATE_HCRM 2 ///< "half closed remote"
-#define STRM_STATE_HCLO 3 ///< "half closed local"
-#define STRM_STATE_CLSD 4
-
-// #define STRM_FLAG_NOCL 0x01 ///< close only on explicit q_close_stream()
+#define STRM_STAT_IDLE 0
+#define STRM_STAT_OPEN 1
+#define STRM_STAT_HCRM 2 ///< half-closed remote
+#define STRM_STAT_HCLO 3 ///< half-closed local
+#define STRM_STAT_CLSD 4
 
 
 extern int32_t __attribute__((nonnull))

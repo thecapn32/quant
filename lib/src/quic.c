@@ -189,6 +189,9 @@ void q_alloc(void * const w, struct w_iov_sq * const q, const uint32_t len)
 
 void q_free(void * const w, struct w_iov_sq * const q)
 {
+    struct w_iov * v;
+    sq_foreach (v, q, next)
+        meta(v) = (struct pkt_meta){0};
     w_free((struct w_engine *)w, q);
 }
 
@@ -234,18 +237,24 @@ struct q_conn * q_connect(void * const q,
 void q_write(struct q_stream * const s, struct w_iov_sq * const q)
 {
     const uint32_t qlen = w_iov_sq_len(q);
-    warn(WRN, "writing %u byte%s on %s conn %" PRIx64 " str %u", qlen,
-         plural(qlen), conn_type(s->c), s->c->id, s->id);
+    warn(WRN, "writing %u byte%s in %u bufs on %s conn %" PRIx64 " str %u",
+         qlen, plural(qlen), w_iov_sq_cnt(q), conn_type(s->c), s->c->id, s->id);
 
-    sq_concat(&s->o, q);
-    s->state = STRM_STATE_OPEN;
+    if (s->state >= STRM_STAT_HCLO) {
+        warn(ERR, "%s conn %" PRIx64 " str %u is in state %u", conn_type(s->c),
+             s->c->id, s->id, s->state);
+        return;
+    }
+
+    sq_concat(&s->out, q);
+    s->state = STRM_STAT_OPEN;
 
     // kick TX watcher
     ev_async_send(loop, &s->c->tx_w);
     loop_run(q_write, s);
 
     // return written data back to user stailq
-    sq_concat(q, &s->o);
+    sq_concat(q, &s->out);
 
     warn(WRN, "wrote %u byte%s on %s conn %" PRIx64 " str %u", qlen,
          plural(qlen), conn_type(s->c), s->c->id, s->id);
@@ -260,29 +269,22 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_sq * const q)
     warn(WRN, "reading on %s conn %" PRIx64, conn_type(c), c->id);
     struct q_stream * s = 0;
 
-    while (c->state != CONN_STAT_IDLE && s == 0) {
-        splay_foreach (s, stream, &c->streams) {
-            if (s->id == 0)
-                // don't deliver stream-zero data
-                continue;
-            if (!sq_empty(&s->i))
+    while (s == 0) {
+        splay_foreach (s, stream, &c->streams)
+            if (!sq_empty(&s->in))
                 // we found a stream with queued data
                 break;
-        }
 
-        if (c->state != CONN_STAT_IDLE && s == 0) {
+        if (s == 0) {
             // no data queued on any non-zero stream, we need to wait
-            warn(WRN, "waiting for data on %s conn %" PRIx64, conn_type(c),
-                 c->id);
+            warn(WRN, "waiting for data on any stream on %s conn %" PRIx64,
+                 conn_type(c), c->id);
             loop_run(q_read, c);
         }
     }
 
-    if (s == 0)
-        return 0;
-
     // return data
-    sq_concat(q, &s->i);
+    sq_concat(q, &s->in);
     warn(WRN, "read %u byte%s on %s conn %" PRIx64 " str %u", w_iov_sq_len(q),
          plural(w_iov_sq_len(q)), conn_type(s->c), s->c->id, s->id);
     return s;
@@ -365,72 +367,42 @@ void * q_init(const char * const ifname)
 
 void q_close_stream(struct q_stream * const s)
 {
-    warn(WRN, "closing str %u on %s conn %" PRIx64, s->id, conn_type(s->c),
-         s->c->id);
-
-    if (s->state == STRM_STATE_IDLE) {
-        warn(WRN, "%s conn %" PRIx64 " str %u already closed", conn_type(s->c),
-             s->c->id, s->id);
-        free_stream(s);
+    if (s->state == STRM_STAT_HCLO || s->state == STRM_STAT_CLSD)
         return;
-    }
 
-    if (s->state <= STRM_STATE_OPEN) {
-        warn(DBG, "half-closing str %u on %s conn %" PRIx64, s->id,
-             conn_type(s->c), s->c->id);
-        s->state = STRM_STATE_HCLO;
-    } else {
-        warn(DBG, "str %u on %s conn %" PRIx64 " already HCRM, now CLSD", s->id,
-             conn_type(s->c), s->c->id);
-        s->state = STRM_STATE_CLSD;
-    }
-
+    warn(WRN, "closing str %u state %u on %s conn %" PRIx64, s->id, s->state,
+         conn_type(s->c), s->c->id);
+    s->state = s->state == STRM_STAT_HCRM ? STRM_STAT_CLSD : STRM_STAT_HCLO;
+    warn(WRN, "new state %u", s->state);
     ev_async_send(loop, &s->c->tx_w);
-
-    // if (s->state != STRM_STATE_IDLE) {
-    //     warn(WRN, "waiting for close on %s conn %" PRIx64 " str %u",
-    //          conn_type(s->c), s->c->id, s->id);
-    //     loop_run(q_close_stream, s);
-    // }
-
-    // warn(WRN, "%s conn %" PRIx64 " str %u closed", conn_type(s->c), s->c->id,
-    //      s->id);
-    // free_stream(s);
+    loop_run(q_close_stream, s);
 }
 
 
 void q_close(struct q_conn * const c)
 {
-    if (c->state < CONN_STAT_CLSD) {
-        warn(WRN, "closing %s conn %" PRIx64, conn_type(c), c->id);
+    if (c->state == CONN_STAT_CLSD)
+        return;
 
-        // close all streams
-        struct q_stream *s, *tmp;
-        for (s = splay_max(stream, &c->streams); s; s = tmp) {
-            tmp = splay_prev(stream, &c->streams, s);
-            if (s->id != 0)
-                q_close_stream(s);
-        }
+    warn(WRN, "closing %s conn %" PRIx64, conn_type(c), c->id);
 
-        c->state = CONN_STAT_CLSD;
-        ev_async_send(loop, &c->tx_w);
+    // close all streams
+    struct q_stream * s;
+    splay_foreach (s, stream, &c->streams)
+        if (s->id != 0)
+            q_close_stream(s);
 
-        if (c->state != CONN_STAT_IDLE) {
-            warn(WRN, "waiting for close on %s conn %" PRIx64, conn_type(c),
-                 c->id);
-            loop_run(q_close, c);
-        }
-    }
+    c->state = CONN_STAT_CLSD;
+    ev_async_send(loop, &c->tx_w);
 
     ev_io_stop(loop, &c->rx_w);
     ev_timer_stop(loop, &c->ld_alarm);
 
-    // just free stream 0 (no close handshake)
-    struct q_stream * const s = splay_min(stream, &c->streams);
-    if (s)
+    struct q_stream * nxt;
+    for (s = splay_min(stream, &c->streams); s; s = nxt) {
+        nxt = splay_next(stream, &c->streams, s);
         free_stream(s);
-    ensure(splay_empty(&c->streams), "streams remain, e.g., %u",
-           splay_min(stream, &c->streams)->id);
+    }
 
     ptls_aead_free(c->in_kp0);
     ptls_aead_free(c->out_kp0);
@@ -438,6 +410,7 @@ void q_close(struct q_conn * const c)
     diet_free(&c->acked_pkts);
     diet_free(&c->recv);
     ptls_free(c->tls);
+    free(c->peer_name);
     if (c->sock)
         w_close(c->sock);
 
@@ -457,6 +430,11 @@ void q_cleanup(void * const q)
     for (c = splay_min(cid_splay, &conns_by_cid); c != 0; c = tmp) {
         warn(WRN, "closing %s conn %" PRIx64, conn_type(c), c->id);
         tmp = splay_next(cid_splay, &conns_by_cid, c);
+        q_close(c);
+    }
+    for (c = splay_min(ipnp_splay, &conns_by_ipnp); c != 0; c = tmp) {
+        warn(WRN, "closing %s conn %" PRIx64, conn_type(c), c->id);
+        tmp = splay_next(ipnp_splay, &conns_by_ipnp, c);
         q_close(c);
     }
 

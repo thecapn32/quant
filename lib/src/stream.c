@@ -58,8 +58,8 @@ struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
     struct q_stream * const s = calloc(1, sizeof(*s));
     ensure(s, "could not calloc q_stream");
     s->c = c;
-    sq_init(&s->o);
-    sq_init(&s->i);
+    sq_init(&s->out);
+    sq_init(&s->in);
     s->id = id;
     ensure(s->id <= c->max_stream_id, "sid %u <= max %u", s->id,
            c->max_stream_id);
@@ -79,8 +79,8 @@ void free_stream(struct q_stream * const s)
 
     diet_insert(&s->c->closed_streams, s->id);
 
-    w_free(w_engine(s->c->sock), &s->o);
-    w_free(w_engine(s->c->sock), &s->i);
+    w_free(w_engine(s->c->sock), &s->out);
+    w_free(w_engine(s->c->sock), &s->in);
 
     splay_remove(stream, &s->c->streams, s);
     free(s);

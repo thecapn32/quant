@@ -144,19 +144,20 @@ struct q_conn * get_conn_by_cid(const uint64_t id, const uint8_t type)
 }
 
 
-static void tx_stream(struct q_stream * const s,
+static bool tx_stream(struct q_stream * const s,
                       const bool rtx,
                       const uint8_t limit __attribute__((unused)))
 {
     struct q_conn * const c = s->c;
     const ev_tstamp now = ev_now(loop);
-    // const struct pkt_meta * const last_tx =
-    //     splay_max(pm_splay, &c->unacked_pkts);
-    // const ev_tstamp last_tx_t = last_tx ? last_tx->time : -HUGE_VAL;
+    const struct pkt_meta * const last_tx =
+        splay_max(pm_splay, &c->unacked_pkts);
+    const ev_tstamp last_tx_t = last_tx ? last_tx->time : -HUGE_VAL;
 
-    struct w_iov * v;
     struct w_iov_sq x = sq_head_initializer(x);
-    sq_foreach (v, &s->o, next) {
+    bool did_enc = false;
+    struct w_iov * v;
+    sq_foreach (v, &s->out, next) {
         if (meta(v).ack_cnt) {
             warn(DBG, "skipping ACKed pkt %" PRIu64, meta(v).nr);
             continue;
@@ -169,46 +170,83 @@ static void tx_stream(struct q_stream * const s,
             continue;
         }
 
-        // // see TimeToSend pseudo code
-        // if (c->in_flight + v->len > c->cwnd ||
-        //     last_tx_t - now + (v->len * c->srtt) / c->cwnd > 0) {
-        //     warn(DBG, "in_flight %" PRIu64 " + v->len %u vs cwnd %" PRIu64,
-        //          c->in_flight, v->len, c->cwnd);
-        //     warn(DBG,
-        //          "last_tx_t - now %f + (v->len %u * srtt %f) / cwnd %"
-        //          PRIu64, last_tx_t - now, v->len, c->srtt, c->cwnd);
-        //     // warn(CRT, "out of cwnd/pacing headroom, ignoring");
-        // }
+        // see TimeToSend pseudo code
+        if (c->in_flight + v->len > c->cwnd ||
+            last_tx_t - now + (v->len * c->srtt) / c->cwnd > 0) {
+            warn(DBG, "in_flight %" PRIu64 " + v->len %u vs cwnd %" PRIu64,
+                 c->in_flight, v->len, c->cwnd);
+            warn(DBG,
+                 "last_tx_t - now %f + (v->len %u * srtt %f) / cwnd "
+                 "%" PRIu64,
+                 last_tx_t - now, v->len, c->srtt, c->cwnd);
+            // warn(CRT, "out of cwnd/pacing headroom, ignoring");
+        }
 
         // store packet info (see OnPacketSent pseudo code)
         meta(v).time = now; // remember TX time
 
-        meta(v).str = s; // remember stream this buf belongs to
-        if (rtx)
+        if (rtx) {
             // on RTX, remember orig pkt number (enc_pkt overwrites with new)
             diet_insert(&c->acked_pkts, meta(v).nr);
+            splay_remove(pm_splay, &c->unacked_pkts, &meta(v));
+        }
 
         enc_pkt(s, rtx, v, &x);
-        if (!rtx)
+        did_enc = true;
+        if (is_rtxable(&meta(v)))
             splay_insert(pm_splay, &c->unacked_pkts, &meta(v));
-
-        struct pkt_meta * p;
-        splay_foreach (p, pm_splay, &c->unacked_pkts)
-            warn(DBG, "unacked: %" PRIu64, p->nr);
+        else
+            diet_insert(&c->acked_pkts, meta(v).nr);
 
         char buf[1024];
         diet_to_str(buf, sizeof(buf), &c->acked_pkts);
-        warn(DBG, "acked: %s", buf);
+        if (!splay_empty(&c->unacked_pkts))
+            warn(DBG, "unacked: %" PRIu64 "-%" PRIu64 ", acked: %s",
+                 splay_min(pm_splay, &c->unacked_pkts)->nr,
+                 splay_max(pm_splay, &c->unacked_pkts)->nr, buf);
+        else
+            warn(DBG, "unacked: -, acked: %s", buf);
     }
 
-    // transmit encrypted/protected packets and then free the chain
-    if (is_serv(c))
-        w_connect(c->sock, c->peer.sin_addr.s_addr, c->peer.sin_port);
-    w_tx(c->sock, &x);
-    w_nic_tx(w_engine(c->sock));
-    if (is_serv(c))
-        w_disconnect(c->sock);
-    w_free(w_engine(c->sock), &x);
+    if (did_enc) {
+        // transmit encrypted/protected packets and then free the chain
+        if (is_serv(c))
+            w_connect(c->sock, c->peer.sin_addr.s_addr, c->peer.sin_port);
+        w_tx(c->sock, &x);
+        w_nic_tx(w_engine(c->sock));
+        if (is_serv(c))
+            w_disconnect(c->sock);
+        // since we never touched the meta-data for x, no need for q_free()
+        w_free(w_engine(c->sock), &x);
+    }
+    return did_enc;
+}
+
+
+static bool
+tx_other(struct q_stream * const s, const bool rtx, const uint8_t limit)
+{
+    warn(DBG,
+         "other %s on %s conn %" PRIx64 " str %u w/%" PRIu64 " pkt%s in queue",
+         rtx ? "RTX" : "TX", conn_type(s->c), s->c->id, s->id, sq_len(&s->out),
+         plural(sq_len(&s->out)));
+
+    struct w_iov * const v =
+        w_alloc_iov(w_engine(s->c->sock), Q_OFFSET, Q_OFFSET);
+    struct w_iov * const last = sq_last(&s->out, w_iov, next);
+    sq_insert_tail(&s->out, v, next);
+    const bool did_tx = tx_stream(s, rtx, limit);
+    ensure(sq_last(&s->out, w_iov, next) == v, "queue mixed up");
+
+    // pure FINs are rtxable
+    if (!is_rtxable(&meta(v))) {
+        if (last)
+            sq_remove_after(&s->out, last, next);
+        else
+            sq_remove_head(&s->out, next);
+        q_free_iov(w_engine(s->c->sock), v);
+    }
+    return did_tx;
 }
 
 
@@ -217,35 +255,24 @@ static void tx(struct q_conn * const c, const bool rtx, const uint8_t limit)
     bool did_tx = false;
     struct q_stream * s;
     splay_foreach (s, stream, &c->streams) {
-        if (!sq_empty(&s->o)) {
+        if (s->state != STRM_STAT_CLSD && !sq_empty(&s->out) &&
+            sq_len(&s->out) > s->out_ack_cnt) {
             warn(DBG,
                  "data %s on %s conn %" PRIx64 " str %u w/%" PRIu64
                  " pkt%s in queue",
-                 rtx ? "RTX" : "TX", conn_type(c), c->id, s->id, sq_len(&s->o),
-                 plural(sq_len(&s->o)));
-            tx_stream(s, rtx, limit);
-            did_tx = true;
-            // } else if (s->state == STRM_STATE_HCLO || s->state ==
-            // STRM_STATE_CLSD) {
-            //     warn(DBG, "FIN needed on %s conn %" PRIx64 " str %u",
-            //     conn_type(c),
-            //          c->id, s->id);
-            //     tx_ack_or_fin(s);
-            //     did_tx = true;
-        }
+                 rtx ? "RTX" : "TX", conn_type(c), c->id, s->id,
+                 sq_len(&s->out), plural(sq_len(&s->out)));
+            did_tx |= tx_stream(s, rtx, limit);
+        } else if ((s->state == STRM_STAT_HCLO || s->state == STRM_STAT_CLSD) &&
+                   !s->fin_sent)
+            did_tx |= tx_other(s, rtx, limit);
     }
 
     if (did_tx == false) {
-        warn(DBG, "other %s on %s conn %" PRIx64, rtx ? "RTX" : "TX",
-             conn_type(c), c->id);
-        // need to send control info, but no stream data to piggyback on, so
-        // temporarily put a (by definition non-rtxable) w_iov on stream 0
-        struct w_iov * const v = w_alloc_iov(w_engine(c->sock), 0, Q_OFFSET);
+        // need to ACK w/o any stream data to piggyback on, so abuse stream 0
         s = get_stream(c, 0);
-        sq_insert_head(&s->o, v, next);
-        tx_stream(s, rtx, limit);
-        sq_remove_head(&s->o, next);
-        w_free_iov(w_engine(c->sock), v);
+        ensure(s, "no stream 0");
+        tx_other(s, rtx, limit);
     }
 }
 
@@ -284,8 +311,9 @@ static uint16_t __attribute__((nonnull)) dec_aead(struct q_conn * const c,
                           v->len - hdr_len, meta(v).nr, v->buf, hdr_len);
     if (len == SIZE_MAX)
         return 0; // AEAD decrypt error
-    warn(DBG, "removing %lu-byte AEAD over [0..%u]", v->len - len - hdr_len,
-         v->len - hdr_len);
+    warn(DBG, "verifying %lu-byte AEAD over [0..%u] in [%u..%u]",
+         v->len - len - hdr_len, v->len - (v->len - len - hdr_len) - 1,
+         v->len - (v->len - len - hdr_len), v->len - 1);
     return hdr_len + (uint16_t)len;
 }
 
@@ -326,7 +354,7 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
             if (util_dlevel == DBG)
                 hexdump(v->buf, v->len);
 #endif
-            w_free_iov(w, v);
+            q_free_iov(w, v);
             return;
         }
 
@@ -388,11 +416,12 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
             struct q_stream * s = get_stream(c, 0);
             // free the previous ClientHello
             struct w_iov * ch;
-            sq_foreach (ch, &s->o, next) {
+            sq_foreach (ch, &s->out, next) {
                 splay_remove(pm_splay, &c->unacked_pkts, &meta(ch));
                 diet_insert(&c->acked_pkts, meta(ch).nr);
             }
-            w_free(w_engine(c->sock), &s->o);
+            q_free(w_engine(c->sock), &s->out);
+            s->out_off = 0;
             tls_handshake(s);
             c->flags |= CONN_FLAG_TX;
 
@@ -453,7 +482,7 @@ void rx(struct ev_loop * const l,
             if (util_dlevel == DBG)
                 hexdump(v->buf, v->len);
 #endif
-            w_free_iov(w, v);
+            q_free_iov(w, v);
             continue;
         }
 
@@ -517,7 +546,7 @@ void rx(struct ev_loop * const l,
             if (util_dlevel == DBG)
                 hexdump(v->buf, v->len);
 #endif
-            w_free_iov(w, v);
+            q_free_iov(w, v);
             continue;
         }
 
@@ -554,7 +583,7 @@ void rx(struct ev_loop * const l,
     }
 }
 
-
+#if 0
 void detect_lost_pkts(struct q_conn * const c)
 {
     // see DetectLostPackets pseudo code
@@ -609,7 +638,7 @@ void detect_lost_pkts(struct q_conn * const c)
         c->ssthresh = c->cwnd;
     }
 }
-
+#endif
 
 void set_ld_alarm(struct q_conn * const c)
 {
@@ -675,7 +704,7 @@ void ld_alarm(struct ev_loop * const l __attribute__((unused)),
     if (fpclassify(c->loss_t) != FP_ZERO) {
         warn(INF, "early RTX or time loss detection alarm on %s conn %" PRIx64,
              conn_type(c), c->id);
-        detect_lost_pkts(c);
+        // detect_lost_pkts(c);
 
     } else if (c->tlp_cnt < kMaxTLPs) {
         c->tlp_cnt++;

@@ -169,13 +169,13 @@ void enc_pkt(struct q_stream * const s,
         die("unknown conn state %u", c->state);
     }
 
-    // if (s == 0 && flags != pkt_flags(v->buf)) {
-    //     warn(INF,
-    //          "suppressing RTX of 0x%02x-type pkt %" PRIu64
-    //          "; new type would be 0x%02x",
-    //          pkt_flags(v->buf), meta(v).nr, flags);
-    //     return;
-    // }
+    if (rtx && flags != pkt_flags(v->buf)) {
+        warn(INF,
+             "RTX of 0x%02x-type pkt %" PRIu64
+             " prevented; new type would be 0x%02x",
+             pkt_flags(v->buf), meta(v).nr, flags);
+        return;
+    }
 
     enc(v->buf, v->len, i, &flags, 0, "0x%02x");
 
@@ -232,12 +232,12 @@ void enc_pkt(struct q_stream * const s,
             i = meta(v).stream_data_end;
 
         } else {
-            // this is a fresh packet
-            if (v->len > Q_OFFSET) {
+            // this is a fresh data or pure FIN packet
+            if (v->len > Q_OFFSET || s->state == STRM_STAT_HCLO ||
+                s->state == STRM_STAT_CLSD) {
                 // add a stream frame header, after padding out rest of Q_OFFSET
                 enc_padding_frame(v->buf, i, Q_OFFSET - i);
-                meta(v).stream_data_end = i =
-                    enc_stream_frame(s, v, s->out_off);
+                meta(v).stream_data_end = i = enc_stream_frame(s, v);
             }
         }
 
@@ -275,7 +275,8 @@ void enc_pkt(struct q_stream * const s,
         x->len = hdr_len + (uint16_t)ptls_aead_encrypt(
                                c->out_kp0, &x->buf[hdr_len], &v->buf[hdr_len],
                                v->len - hdr_len, meta(v).nr, v->buf, hdr_len);
-        warn(DBG, "adding %d-byte AEAD over [0..%u]", x->len - v->len, i - 1);
+        warn(DBG, "adding %d-byte AEAD over [0..%u] into [%u..%u]",
+             x->len - v->len, i - 1, i, x->len - 1);
     }
 
     sq_insert_tail(q, x, next);

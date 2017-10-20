@@ -159,3 +159,10 @@ extern void * api_arg;
             warn(DBG, #func "(" #arg ") done, exiting event loop");            \
         }                                                                      \
     } while (0)
+
+
+#define q_free_iov(w, v)                                                       \
+    do {                                                                       \
+        w_free_iov((w), (v));                                                  \
+        meta(v) = (struct pkt_meta){0};                                        \
+    } while (0)
