@@ -65,6 +65,12 @@ find_package_handle_standard_args(libev DEFAULT_MSG LIBEV_LIB LIBEV_INCLUDE)
 include_directories(${LIBEV_INCLUDE})
 
 
+if (DSYMUTIL)
+  add_custom_command (TARGET ${PROJECT_NAME}_dyn POST_BUILD
+    COMMAND ${DSYMUTIL} ARGS *${CMAKE_SHARED_LIBRARY_SUFFIX}
+  )
+endif()
+
 set(TARGETS common ${PROJECT_NAME}_stat ${PROJECT_NAME}_dyn)
 foreach(TARGET ${TARGETS})
   target_include_directories(${TARGET}

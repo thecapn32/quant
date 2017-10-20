@@ -95,6 +95,10 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     endif()
   endforeach()
 
+  if (APPLE)
+    find_program (DSYMUTIL dsymutil)
+  endif()
+
   # Use include-what-you-use to check #includes, if it's installed
   find_program(IWYU NAMES include-what-you-use iwyu)
   if(IWYU)

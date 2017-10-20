@@ -27,3 +27,11 @@ target_link_libraries(server ${PROJECT_NAME}_dyn ${HTTP_PARSER_LIB})
 add_custom_target(quant DEPENDS client server)
 
 install(TARGETS client server DESTINATION bin)
+
+if (DSYMUTIL)
+  foreach (TARGET client server)
+    add_custom_command (TARGET ${TARGET} POST_BUILD
+      COMMAND ${DSYMUTIL} ARGS $<TARGET_FILE:${TARGET}>
+    )
+  endforeach()
+endif()
