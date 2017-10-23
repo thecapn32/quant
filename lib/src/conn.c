@@ -79,7 +79,7 @@ int ipnp_splay_cmp(const struct q_conn * const a, const struct q_conn * const b)
         return diff;
 
     // include only the client flag in the comparison
-    return (a->flags & CONN_FLAG_CLNT) - (b->flags & CONN_FLAG_CLNT);
+    return a->is_clnt - b->is_clnt;
 }
 
 
@@ -89,7 +89,7 @@ int cid_splay_cmp(const struct q_conn * const a, const struct q_conn * const b)
     if (likely(diff))
         return diff;
     // include only the client flags in the comparison
-    return (a->flags & CONN_FLAG_CLNT) - (b->flags & CONN_FLAG_CLNT);
+    return a->is_clnt - b->is_clnt;
 }
 
 
@@ -131,16 +131,16 @@ pick_from_server_vers(const void * const buf, const uint16_t len)
 
 
 struct q_conn * get_conn_by_ipnp(const struct sockaddr_in * const peer,
-                                 const uint8_t type)
+                                 const bool is_clnt)
 {
-    struct q_conn which = {.peer = *peer, .flags = type};
+    struct q_conn which = {.peer = *peer, .is_clnt = is_clnt};
     return splay_find(ipnp_splay, &conns_by_ipnp, &which);
 }
 
 
-struct q_conn * get_conn_by_cid(const uint64_t id, const uint8_t type)
+struct q_conn * get_conn_by_cid(const uint64_t id, const bool is_clnt)
 {
-    struct q_conn which = {.id = id, .flags = type};
+    struct q_conn which = {.id = id, .is_clnt = is_clnt};
     return splay_find(cid_splay, &conns_by_cid, &which);
 }
 
@@ -213,11 +213,11 @@ static bool tx_stream(struct q_stream * const s,
 
     if (did_enc) {
         // transmit encrypted/protected packets and then free the chain
-        if (is_serv(c))
+        if (!c->is_clnt)
             w_connect(c->sock, c->peer.sin_addr.s_addr, c->peer.sin_port);
         w_tx(c->sock, &x);
         w_nic_tx(w_engine(c->sock));
-        if (is_serv(c))
+        if (!c->is_clnt)
             w_disconnect(c->sock);
         // since we never touched the meta-data for x, no need for q_free()
         w_free(w_engine(c->sock), &x);
@@ -365,7 +365,7 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
 
         // respond to the version negotiation packet
         c->vers = pkt_vers(v->buf, v->len);
-        c->flags |= CONN_FLAG_TX;
+        c->needs_tx = true;
         diet_insert(&c->recv, meta(v).nr);
         if (c->vers_initial == 0)
             c->vers_initial = c->vers;
@@ -379,7 +379,7 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
                  conn_type(c), c->id);
             update_cid(c, cid);
             init_tls(c);
-            ensure(dec_frames(c, v), "got ClientHello");
+            dec_frames(c, v);
 
         } else {
             c->state = CONN_STAT_VERS_REJ;
@@ -426,13 +426,13 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
             q_free(w_engine(c->sock), &s->out);
             s->out_off = 0;
             tls_handshake(s);
-            c->flags |= CONN_FLAG_TX;
+            c->needs_tx = true;
 
         } else {
             warn(INF, "server accepted vers 0x%08x", c->vers);
             diet_insert(&c->recv, meta(v).nr);
             c->state = CONN_STAT_VERS_OK;
-            ensure(dec_frames(c, v), "got ServerHello");
+            dec_frames(c, v);
         }
         break;
     }
@@ -445,14 +445,14 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
             c->state = CONN_STAT_ESTB;
         }
         diet_insert(&c->recv, meta(v).nr);
-        c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
+        dec_frames(c, v);
         break;
     }
 
     case CONN_STAT_ESTB:
     case CONN_STAT_CLSD:
         diet_insert(&c->recv, meta(v).nr);
-        c->flags |= dec_frames(c, v) ? CONN_FLAG_TX : 0;
+        dec_frames(c, v);
         break;
 
     default:
@@ -490,13 +490,13 @@ void rx(struct ev_loop * const l,
         }
 
         const uint8_t flags = pkt_flags(v->buf);
-        const uint8_t type = w_connected(ws) ? CONN_FLAG_CLNT : 0;
+        const bool is_clnt = w_connected(ws);
         uint64_t cid = 0;
         struct q_conn * c = 0;
 
         if (is_set(F_LONG_HDR, flags) || is_set(F_SH_CID, flags)) {
             cid = pkt_cid(v->buf, v->len);
-            c = get_conn_by_cid(cid, type);
+            c = get_conn_by_cid(cid, is_clnt);
         }
 
         if (c == 0) {
@@ -504,9 +504,9 @@ void rx(struct ev_loop * const l,
                                              .sin_port = v->port,
                                              .sin_addr = {.s_addr = v->ip}};
             if (is_set(F_LONG_HDR, flags)) {
-                if (type == CONN_FLAG_CLNT) {
+                if (is_clnt) {
                     // server may have picked a new cid
-                    c = get_conn_by_ipnp(&peer, type);
+                    c = get_conn_by_ipnp(&peer, is_clnt);
                     warn(DBG, "got new cid %" PRIx64 " for %s conn %" PRIx64,
                          cid, conn_type(c), c->id);
                     update_cid(c, cid);
@@ -514,7 +514,7 @@ void rx(struct ev_loop * const l,
                     warn(CRT, "new serv conn from %s:%u",
                          inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
                     const struct sockaddr_in none = {0};
-                    c = get_conn_by_ipnp(&none, type);
+                    c = get_conn_by_ipnp(&none, is_clnt);
                     if (c == 0) {
                         // TODO: maintain accept queue
                         warn(CRT, "app is not in q_accept(), ignoring");
@@ -526,7 +526,7 @@ void rx(struct ev_loop * const l,
                 }
 
             } else
-                c = get_conn_by_ipnp(&peer, type);
+                c = get_conn_by_ipnp(&peer, is_clnt);
         }
         ensure(c, "managed to find conn");
 
@@ -554,8 +554,8 @@ void rx(struct ev_loop * const l,
         }
 
         // remember that we had a RX event on this connection
-        if (!is_set(CONN_FLAG_RX, c->flags)) {
-            c->flags |= CONN_FLAG_RX;
+        if (!c->had_rx) {
+            c->had_rx = true;
             sl_insert_head(&crx, c, next);
         }
 
@@ -578,11 +578,11 @@ void rx(struct ev_loop * const l,
         ev_timer_again(l, &c->idle_alarm);
 
         // is a TX needed for this connection?
-        if (is_set(CONN_FLAG_TX, c->flags))
+        if (c->needs_tx)
             tx(c, false, 0);
 
         // clear the helper flags set above
-        c->flags &= ~(CONN_FLAG_RX | CONN_FLAG_TX);
+        c->needs_tx = c->had_rx = false;
     }
 }
 

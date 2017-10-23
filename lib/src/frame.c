@@ -86,8 +86,7 @@ static uint16_t __attribute__((nonnull))
 dec_stream_frame(struct q_conn * const c,
                  struct w_iov * const v,
                  const uint16_t pos,
-                 uint16_t * const len,
-                 bool * const new_data)
+                 uint16_t * const len)
 {
     uint16_t i = pos;
 
@@ -118,7 +117,6 @@ dec_stream_frame(struct q_conn * const c,
         if (diet_find(&c->closed_streams, sid)) {
             warn(WRN, "ignoring frame for closed str %u on %s conn %" PRIx64,
                  sid, conn_type(c), c->id);
-            *new_data = false;
             return i;
         }
         s = new_stream(c, sid);
@@ -161,7 +159,7 @@ dec_stream_frame(struct q_conn * const c,
             v->buf = b;
             v->len = l;
         }
-        *new_data = true;
+        c->needs_tx = true;
         return i;
     }
 
@@ -172,7 +170,6 @@ dec_stream_frame(struct q_conn * const c,
              ") on %s conn %" PRIx64 " str %u",
              *len, plural(*len), off, off + *len, conn_type(c), c->id, sid);
         q_free_iov(w_engine(c->sock), v);
-        *new_data = false;
         return i;
     }
 
@@ -400,7 +397,7 @@ static void __attribute__((nonnull)) process_ack(struct q_conn * const c,
 
 
 static uint16_t __attribute__((nonnull))
-dec_conn_close_frame(struct q_conn * const c __attribute__((unused)),
+dec_conn_close_frame(struct q_conn * const c,
                      const struct w_iov * const v,
                      const uint16_t pos)
 {
@@ -423,6 +420,7 @@ dec_conn_close_frame(struct q_conn * const c __attribute__((unused)),
 
     // maybe_api_return(q_read, c);
 
+    c->needs_tx = true;
     return i;
 }
 
@@ -473,13 +471,12 @@ dec_stream_blocked(struct q_conn * const c,
 }
 
 
-bool dec_frames(struct q_conn * const c, struct w_iov * v)
+void dec_frames(struct q_conn * const c, struct w_iov * v)
 {
     uint16_t i = pkt_hdr_len(v->buf, v->len);
     uint16_t pad_start = 0;
     uint16_t dpos = 0;
     uint16_t dlen = 0;
-    bool tx_needed = false;
 
     while (i < v->len) {
         const uint8_t type = ((const uint8_t * const)(v->buf))[i];
@@ -506,7 +503,7 @@ bool dec_frames(struct q_conn * const c, struct w_iov * v)
             }
 
             // this is the first stream frame in this packet
-            dpos = dec_stream_frame(c, v, i, &dlen, &tx_needed);
+            dpos = dec_stream_frame(c, v, i, &dlen);
             i = dpos + dlen;
 
         } else if (is_set(FRAM_TYPE_ACK, type)) {
@@ -521,13 +518,12 @@ bool dec_frames(struct q_conn * const c, struct w_iov * v)
 
             case FRAM_TYPE_CNCL:
                 i = dec_conn_close_frame(c, v, i);
-                tx_needed = true;
                 break;
 
             case FRAM_TYPE_PING:
                 warn(INF, "ping frame in [%u]", i);
                 i++;
-                tx_needed = true;
+                c->needs_tx = true;
                 break;
 
             case FRAM_TYPE_MAX_STRM_DATA:
@@ -552,8 +548,6 @@ bool dec_frames(struct q_conn * const c, struct w_iov * v)
         v->buf = &v->buf[dpos];
         v->len = dlen;
     }
-
-    return tx_needed;
 }
 
 

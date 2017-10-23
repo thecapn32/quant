@@ -139,7 +139,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
     uint16_t len = (uint16_t)slots[0].data.len;
     uint16_t i = 0;
 
-    if (is_clnt(c))
+    if (c->is_clnt)
         i = chk_tp_clnt(c, buf, len, i);
     else
         i = chk_tp_serv(c, buf, len, i);
@@ -182,12 +182,12 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         case TP_OMIT_CONNECTION_ID: {
             uint16_t dummy;
             dec_tp(dummy, 0);
-            c->flags |= CONN_FLAG_OMIT_CID;
+            c->omit_cid = true;
             break;
         }
 
         case TP_STATELESS_RESET_TOKEN:
-            ensure(is_clnt(c), "am client");
+            ensure(c->is_clnt, "am client");
             uint16_t l;
             dec(l, buf, len, i, 0, "%u");
             ensure(l == sizeof(c->stateless_reset_token), "valid len");
@@ -224,7 +224,7 @@ static void init_tp(struct q_conn * const c)
     uint16_t i = 0;
     const uint16_t len = sizeof(c->tp_buf);
 
-    if (is_clnt(c)) {
+    if (c->is_clnt) {
         enc(c->tp_buf, len, i, &c->vers, 0, "0x%08x");
         enc(c->tp_buf, len, i, &c->vers_initial, 0, "0x%08x");
     } else {
@@ -254,7 +254,7 @@ static void init_tp(struct q_conn * const c)
         enc(c->tp_buf, len, i, &bytes, 0, "%u");
     }
 
-    if (is_serv(c)) {
+    if (!c->is_clnt) {
         const uint16_t p = TP_STATELESS_RESET_TOKEN;
         enc(c->tp_buf, len, i, &p, 0, "%u");
         const uint16_t w = sizeof(c->stateless_reset_token);
@@ -284,8 +284,8 @@ void init_tls(struct q_conn * const c)
     if (c->tls)
         // we are re-initializing during version negotiation
         ptls_free(c->tls);
-    ensure((c->tls = ptls_new(&tls_ctx, is_serv(c))) != 0, "alloc TLS state");
-    if (is_clnt(c))
+    ensure((c->tls = ptls_new(&tls_ctx, !c->is_clnt)) != 0, "alloc TLS state");
+    if (c->is_clnt)
         ensure(ptls_set_server_name(c->tls, c->peer_name,
                                     strlen(c->peer_name)) == 0,
                "ptls_set_server_name");
@@ -323,9 +323,9 @@ static void __attribute__((nonnull)) conn_setup_1rtt(struct q_conn * const c)
 {
     ptls_cipher_suite_t * const cipher = ptls_get_cipher(c->tls);
     conn_setup_1rtt_secret(c, cipher, &c->in_kp0, c->in_sec,
-                           is_clnt(c) ? PTLS_SERV_LABL : PTLS_CLNT_LABL, 0);
+                           c->is_clnt ? PTLS_SERV_LABL : PTLS_CLNT_LABL, 0);
     conn_setup_1rtt_secret(c, cipher, &c->out_kp0, c->out_sec,
-                           is_clnt(c) ? PTLS_CLNT_LABL : PTLS_SERV_LABL, 1);
+                           c->is_clnt ? PTLS_CLNT_LABL : PTLS_SERV_LABL, 1);
 
     c->state = CONN_STAT_VERS_OK;
 }

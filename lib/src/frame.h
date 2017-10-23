@@ -25,14 +25,13 @@
 
 #pragma once
 
-#include <stdbool.h>
 #include <stdint.h>
 
 struct q_conn;
 struct q_stream;
 struct w_iov;
 
-extern bool __attribute__((nonnull))
+extern void __attribute__((nonnull))
 dec_frames(struct q_conn * const c, struct w_iov * v);
 
 extern uint16_t __attribute__((nonnull))

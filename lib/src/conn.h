@@ -51,13 +51,12 @@ struct q_conn {
     uint32_t vers;         ///< QUIC version in use for this connection.
     uint32_t vers_initial; ///< QUIC version first negotiated.
     uint32_t next_sid;     ///< Next stream ID to use on q_rsv_stream().
-    uint8_t flags;         ///< Connection flags.
 
-    // uint8_t is_clnt : 1;
-    // uint8_t omit_cid : 1;
-    // uint8_t had_rx : 1;
-    // uint8_t needs_tx : 1;
-    // uint8_t : 4;
+    uint8_t is_clnt : 1;  ///< We are the client on this connection.
+    uint8_t omit_cid : 1; ///< We can omit the CID during TX on this connection.
+    uint8_t had_rx : 1;   ///< We had an RX event on this connection.
+    uint8_t needs_tx : 1; ///< We have a pending TX on this connection.
+    uint8_t : 4;
 
     uint8_t state; ///< State of the connection.
 
@@ -148,14 +147,7 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 #define CONN_STAT_ESTB 4
 #define CONN_STAT_CLSD 5
 
-#define CONN_FLAG_CLNT 0x01 ///< We are client on this connection (or server)
-#define CONN_FLAG_OMIT_CID 0x02 ///< We can omit the CID on this connection
-#define CONN_FLAG_RX 0x04       ///< We had an RX event on this connection
-#define CONN_FLAG_TX 0x08       ///< We have a pending TX on this connection
-
-#define is_clnt(c) (is_set(CONN_FLAG_CLNT, (c)->flags))
-#define is_serv(c) (!is_clnt(c))
-#define conn_type(c) (is_clnt(c) ? "clnt" : "serv")
+#define conn_type(c) (c->is_clnt ? "clnt" : "serv")
 #define is_force_neg_vers(vers) (((vers)&0x0f0f0f0f) == 0x0a0a0a0a)
 
 struct ev_loop;
@@ -175,9 +167,9 @@ extern void __attribute__((nonnull))
 rx(struct ev_loop * const l, ev_io * const rx_w, int e);
 
 extern struct q_conn * __attribute__((nonnull))
-get_conn_by_ipnp(const struct sockaddr_in * const peer, const uint8_t type);
+get_conn_by_ipnp(const struct sockaddr_in * const peer, const bool is_clnt);
 
-extern struct q_conn * get_conn_by_cid(const uint64_t id, const uint8_t type);
+extern struct q_conn * get_conn_by_cid(const uint64_t id, const bool is_clnt);
 
 extern void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c);
 

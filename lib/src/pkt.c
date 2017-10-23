@@ -157,11 +157,11 @@ void enc_pkt(struct q_stream * const s,
         flags |= F_LONG_HDR | F_LH_TYPE_VNEG;
         break;
     case CONN_STAT_VERS_OK:
-        flags |= F_LONG_HDR | (is_clnt(c) ? F_LH_CLNT_CTXT : F_LH_SERV_CTXT);
+        flags |= F_LONG_HDR | (c->is_clnt ? F_LH_CLNT_CTXT : F_LH_SERV_CTXT);
         break;
     case CONN_STAT_ESTB:
     case CONN_STAT_CLSD:
-        if (!is_set(CONN_FLAG_OMIT_CID, c->flags))
+        if (!c->omit_cid)
             flags |= F_SH_CID;
         flags |= enc_pkt_nr_len[needed_pkt_nr_len(meta(v).nr)];
         break;

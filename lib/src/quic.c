@@ -146,9 +146,8 @@ static struct q_conn * new_conn(struct w_engine * const w,
     c->cwnd = kInitialWindow;
     c->ssthresh = UINT64_MAX;
 
-    // c->flags = CONN_FLAG_EMBR;
     if (peer_name) {
-        c->flags |= CONN_FLAG_CLNT;
+        c->is_clnt = true;
         ensure(c->peer_name = strdup(peer_name), "could not dup peer_name");
     }
 
@@ -362,9 +361,9 @@ struct q_stream * q_rsv_stream(struct q_conn * const c)
 {
 
     const uint8_t odd = c->next_sid % 2; // NOTE: % in assert confuses printf
-    ensure(is_clnt(c) == odd || !is_clnt(c) && !odd,
+    ensure(c->is_clnt == odd || !c->is_clnt && !odd,
            "am %s, expected %s connection stream ID, got %u", conn_type(c),
-           is_clnt(c) ? "odd" : "even", c->next_sid);
+           c->is_clnt ? "odd" : "even", c->next_sid);
     return new_stream(c, c->next_sid);
 }
 
@@ -440,7 +439,7 @@ void q_close(struct q_conn * const c)
             warn(CRT, "waiting to send ACKs");
             ev_async_send(loop, &c->tx_w);
         }
-            loop_run(q_close, c);
+        loop_run(q_close, c);
     } while (done == false);
 
     // we're done
