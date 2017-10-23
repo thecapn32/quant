@@ -32,7 +32,7 @@
 #endif
 
 #include <picotls.h>
-#include <quant/quant.h>
+// #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
@@ -218,9 +218,9 @@ void enc_pkt(struct q_stream * const s,
                             "large crowd of spectators the day of my execution "
                             "and that they greet me with cries of hate.";
         v->len = i + 7 + sizeof(reas);
-        i += enc_conn_close_frame(c, v->buf, v->len, i, CONN_CLOS_ERR_NO_ERROR,
-                                  reas, sizeof(reas));
-        maybe_api_return(q_close, c);
+        i += enc_conn_close_frame(v, i, CONN_CLOS_ERR_NO_ERROR, reas,
+                                  sizeof(reas));
+        // maybe_api_return(q_close, c);
 
     } else {
 

@@ -143,8 +143,8 @@ dec_stream_frame(struct q_conn * const c,
             warn(NTE,
                  "received FIN on %s conn %" PRIx64 " str %u, state %u -> %u",
                  conn_type(c), c->id, s->id, old_state, s->state);
-            if (s->state == STRM_STAT_CLSD)
-                maybe_api_return(q_close_stream, s);
+            // if (s->state == STRM_STAT_CLSD)
+            //     maybe_api_return(q_close_stream, s);
         }
 
         if (s->id != 0)
@@ -292,9 +292,11 @@ static void __attribute__((nonnull)) process_ack(struct q_conn * const c,
         warn(CRT, "got ACK for pkt %" PRIu64 " that we never sent", ack);
         return;
     }
-    if (p == 0)
+    if (p == 0) {
         // we already had a previous ACK for this packet
+        warn(INF, "already have ACK for pkt %" PRIu64, ack);
         return;
+    }
 
     // only act on first-time ACKs
     if (meta(p).ack_cnt)
@@ -341,6 +343,8 @@ static void __attribute__((nonnull)) process_ack(struct q_conn * const c,
     // this packet is no no longer unACKed
     splay_remove(pm_splay, &c->unacked_pkts, &meta(p));
     diet_insert(&c->acked_pkts, ack);
+    if (splay_empty(&c->unacked_pkts))
+        maybe_api_return(q_close, c);
 
     // stop ACKing packets that were contained in the ACK frame of this packet
     if (meta(p).ack_header_pos) {
@@ -371,7 +375,7 @@ static void __attribute__((nonnull)) process_ack(struct q_conn * const c,
 
         // check if a q_write is done
         struct q_stream * const s = meta(p).str;
-        if (++s->out_ack_cnt == sq_len(&s->out))
+        if (s && ++s->out_ack_cnt == sq_len(&s->out))
             // all packets are ACKed
             maybe_api_return(q_write, s);
 
@@ -396,7 +400,7 @@ static void __attribute__((nonnull)) process_ack(struct q_conn * const c,
 
 
 static uint16_t __attribute__((nonnull))
-dec_conn_close_frame(struct q_conn * const c,
+dec_conn_close_frame(struct q_conn * const c __attribute__((unused)),
                      const struct w_iov * const v,
                      const uint16_t pos)
 {
@@ -413,11 +417,11 @@ dec_conn_close_frame(struct q_conn * const c,
         char reas_phr[UINT16_MAX];
         memcpy(reas_phr, &v->buf[i], reas_len);
         i += reas_len;
-        warn(NTE, "conn close reason: %.*s", reas_len, reas_phr);
+        warn(NTE, "%u-byte conn close reason: %.*s", reas_len, reas_len,
+             reas_phr);
     }
 
-    c->state = CONN_STAT_IDLE;
-    maybe_api_return(q_read, c);
+    // maybe_api_return(q_read, c);
 
     return i;
 }
@@ -517,6 +521,7 @@ bool dec_frames(struct q_conn * const c, struct w_iov * v)
 
             case FRAM_TYPE_CNCL:
                 i = dec_conn_close_frame(c, v, i);
+                tx_needed = true;
                 break;
 
             case FRAM_TYPE_PING:
@@ -699,7 +704,7 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
              dlen ? "" : "pure", conn_type(s->c), s->c->id, s->id, s->state);
         type |= F_STREAM_FIN;
         s->fin_sent = 1;
-        maybe_api_return(q_close_stream, s);
+        // maybe_api_return(q_close_stream, s);
     }
 
     // prepend a stream frame header
@@ -723,25 +728,24 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
 }
 
 
-uint16_t enc_conn_close_frame(struct q_conn * const c __attribute__((unused)),
-                              uint8_t * const buf,
-                              const uint16_t len,
+uint16_t enc_conn_close_frame(struct w_iov * const v,
                               const uint16_t pos,
                               const uint32_t err_code,
                               const char * const reas,
                               const uint16_t reas_len)
 {
-    uint16_t i = pos;
+    uint16_t i = meta(v).cc_header_pos = pos;
 
     const uint8_t type = FRAM_TYPE_CNCL;
-    enc(buf, len, i, &type, 0, "0x%02x");
+    enc(v->buf, v->len, i, &type, 0, "0x%02x");
 
-    enc(buf, len, i, &err_code, 0, "0x%08x");
+    enc(v->buf, v->len, i, &err_code, 0, "0x%08x");
 
-    const uint16_t rlen = MIN(reas_len, len - i);
-    enc(buf, len, i, &rlen, 0, "%u");
+    const uint16_t rlen = MIN(reas_len, v->len - i);
+    enc(v->buf, v->len, i, &rlen, 0, "%u");
 
-    memcpy(&buf[i], reas, rlen);
+    memcpy(&v->buf[i], reas, rlen);
+    warn(DBG, "enc %u-byte reason phrase into [%u..%u]", rlen, i, i + rlen - 1);
 
     return i + rlen - pos;
 }

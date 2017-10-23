@@ -29,6 +29,7 @@
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -198,14 +199,16 @@ static bool tx_stream(struct q_stream * const s,
         else
             diet_insert(&c->acked_pkts, meta(v).nr);
 
-        char buf[1024];
-        diet_to_str(buf, sizeof(buf), &c->acked_pkts);
-        if (!splay_empty(&c->unacked_pkts))
-            warn(DBG, "unacked: %" PRIu64 "-%" PRIu64 ", acked: %s",
-                 splay_min(pm_splay, &c->unacked_pkts)->nr,
-                 splay_max(pm_splay, &c->unacked_pkts)->nr, buf);
-        else
-            warn(DBG, "unacked: -, acked: %s", buf);
+        char a_buf[1024];
+        char ua_buf[1024];
+        diet_to_str(a_buf, sizeof(a_buf), &c->acked_pkts);
+        for (struct pkt_meta * p = splay_min(pm_splay, &c->unacked_pkts); p;
+             p = splay_next(pm_splay, &c->unacked_pkts, p)) {
+            char tmp[1024];
+            snprintf(tmp, sizeof(tmp), "%" PRIu64 ", ", p->nr);
+            strncat(ua_buf, tmp, sizeof(ua_buf) - strlen(ua_buf) - 1);
+        }
+        warn(CRT, "unacked: %sacked: %s", ua_buf, a_buf);
     }
 
     if (did_enc) {

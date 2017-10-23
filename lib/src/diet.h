@@ -86,3 +86,5 @@ diet_to_str(char * const str, const size_t len, struct diet * const t);
 #define diet_max(t) (splay_empty(t) ? 0 : splay_max(diet, (t))->hi)
 
 #define diet_min(t) (splay_empty(t) ? 0 : splay_min(diet, (t))->lo)
+
+#define diet_empty(t) splay_empty(t)

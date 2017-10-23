@@ -27,6 +27,7 @@
 #include <inttypes.h>
 #include <math.h>
 #include <netinet/in.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -237,8 +238,11 @@ struct q_conn * q_connect(void * const q,
 void q_write(struct q_stream * const s, struct w_iov_sq * const q)
 {
     const uint32_t qlen = w_iov_sq_len(q);
-    warn(WRN, "writing %u byte%s in %u bufs on %s conn %" PRIx64 " str %u",
-         qlen, plural(qlen), w_iov_sq_cnt(q), conn_type(s->c), s->c->id, s->id);
+    const uint64_t qcnt = w_iov_sq_cnt(q);
+    warn(WRN,
+         "writing %u byte%s in %" PRIu64 " buf%s on %s conn %" PRIx64 " str %u",
+         qlen, plural(qlen), qcnt, plural(qcnt), conn_type(s->c), s->c->id,
+         s->id);
 
     if (s->state >= STRM_STAT_HCLO) {
         warn(ERR, "%s conn %" PRIx64 " str %u is in state %u", conn_type(s->c),
@@ -261,6 +265,8 @@ void q_write(struct q_stream * const s, struct w_iov_sq * const q)
 
     ensure(w_iov_sq_len(q) == qlen, "payload corrupted, %u != %u",
            w_iov_sq_len(q), qlen);
+    ensure(w_iov_sq_cnt(q) == qcnt, "payload corrupted, %u != %u",
+           w_iov_sq_cnt(q), qcnt);
 }
 
 
@@ -289,6 +295,34 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_sq * const q)
          plural(w_iov_sq_len(q)), conn_type(s->c), s->c->id, s->id);
     return s;
 }
+
+
+// void q_read_str(struct q_stream * const c, struct w_iov_sq * const q)
+// {
+//     warn(WRN, "reading on %s conn %" PRIx64 " str %u", conn_type(s->c),
+//          s->c->id, s->id);
+
+//     while (s == 0) {
+//         splay_foreach (s, stream, &c->streams)
+//             if (!sq_empty(&s->in))
+//                 // we found a stream with queued data
+//                 break;
+
+//         if (s == 0) {
+//             // no data queued on any non-zero stream, we need to wait
+//             warn(WRN, "waiting for data on any stream on %s conn %" PRIx64,
+//                  conn_type(c), c->id);
+//             loop_run(q_read, c);
+//         }
+//     }
+
+//     // return data
+//     sq_concat(q, &s->in);
+//     warn(WRN, "read %u byte%s on %s conn %" PRIx64 " str %u",
+//     w_iov_sq_len(q),
+//          plural(w_iov_sq_len(q)), conn_type(s->c), s->c->id, s->id);
+//     return s;
+// }
 
 
 struct q_conn * q_bind(void * const q, const uint16_t port)
@@ -375,7 +409,7 @@ void q_close_stream(struct q_stream * const s)
     s->state = s->state == STRM_STAT_HCRM ? STRM_STAT_CLSD : STRM_STAT_HCLO;
     warn(WRN, "new state %u", s->state);
     ev_async_send(loop, &s->c->tx_w);
-    loop_run(q_close_stream, s);
+    // loop_run(q_close_stream, s);
 }
 
 
@@ -392,9 +426,24 @@ void q_close(struct q_conn * const c)
         if (s->id != 0)
             q_close_stream(s);
 
+    // send connection close frame
     c->state = CONN_STAT_CLSD;
     ev_async_send(loop, &c->tx_w);
 
+    // wait until everything is ACKed
+    bool done = false;
+    do {
+        if (done != !splay_empty(&c->unacked_pkts)) {
+            warn(CRT, "waiting for ACKs");
+        }
+        if (done != !diet_empty(&c->recv)) {
+            warn(CRT, "waiting to send ACKs");
+            ev_async_send(loop, &c->tx_w);
+        }
+            loop_run(q_close, c);
+    } while (done == false);
+
+    // we're done
     ev_io_stop(loop, &c->rx_w);
     ev_timer_stop(loop, &c->ld_alarm);
 

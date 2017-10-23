@@ -47,9 +47,7 @@ extern uint16_t __attribute__((nonnull))
 enc_stream_frame(struct q_stream * const s, struct w_iov * const v);
 
 extern uint16_t __attribute__((nonnull))
-enc_conn_close_frame(struct q_conn * const c,
-                     uint8_t * const buf,
-                     const uint16_t len,
+enc_conn_close_frame(struct w_iov * const v,
                      const uint16_t pos,
                      const uint32_t err_code,
                      const char * const reas,
