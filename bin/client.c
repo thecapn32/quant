@@ -59,11 +59,13 @@ static void set_from_url(char * const var,
                          const enum http_parser_url_fields f,
                          const char * const def)
 {
-    if ((u->field_set & (1 << f)) == 0)
+    if ((u->field_set & (1 << f)) == 0) {
         strncpy(var, def, len);
-    else
+        var[len - 1] = 0;
+    } else {
         strncpy(var, &url[u->field_data[f].off], u->field_data[f].len);
-    var[len - 1] = 0;
+        var[u->field_data[f].len] = 0;
+    }
 }
 
 
