@@ -243,7 +243,7 @@ void enc_pkt(struct q_stream * const s,
         }
 
         if (c->state == CONN_STAT_VERS_SENT)
-            i += enc_padding_frame(v, i, MIN_INI_LEN - i);
+            i += enc_padding_frame(v, i, MIN_INI_LEN - i - sizeof(uint64_t));
         v->len = i;
     }
 
