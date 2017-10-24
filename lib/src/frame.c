@@ -137,12 +137,10 @@ dec_stream_frame(struct q_conn * const c,
             const uint8_t old_state = s->state;
 #endif
             s->state =
-                s->state == STRM_STAT_OPEN ? STRM_STAT_HCRM : STRM_STAT_CLSD;
+                s->state <= STRM_STAT_OPEN ? STRM_STAT_HCRM : STRM_STAT_CLSD;
             warn(NTE,
                  "received FIN on %s conn %" PRIx64 " str %u, state %u -> %u",
                  conn_type(c), c->id, s->id, old_state, s->state);
-            // if (s->state == STRM_STAT_CLSD)
-            //     maybe_api_return(q_close_stream, s);
         }
 
         if (s->id != 0)
@@ -242,6 +240,8 @@ dec_ack_frame(struct q_conn * const c,
     for (uint8_t b = 0; b < num_blocks; b++) {
         uint64_t l = 0;
         dec(l, v->buf, v->len, i, ack_block_len, "%" PRIu64);
+        if (b)
+            l--;
 
         while (PN_GEQ(ack, lg_ack - l)) {
             // NOTE: op() must be called with ACKs in decreasing order
@@ -255,7 +255,7 @@ dec_ack_frame(struct q_conn * const c,
         if (b < num_blocks - 1) {
             uint8_t gap = 0;
             dec(gap, v->buf, v->len, i, 0, "%u");
-            lg_ack = ack -= gap - 1;
+            lg_ack = ack -= gap;
         }
     }
 
@@ -692,7 +692,7 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
              dlen ? "" : "pure", conn_type(s->c), s->c->id, s->id, s->state);
         type |= F_STREAM_FIN;
         s->fin_sent = 1;
-        // maybe_api_return(q_close_stream, s);
+        maybe_api_return(q_close_stream, s);
     }
 
     // prepend a stream frame header
@@ -736,6 +736,6 @@ uint16_t enc_conn_close_frame(struct w_iov * const v,
     memcpy(&v->buf[i], reas, rlen);
     warn(DBG, "enc %u-byte reason phrase into [%u..%u]", rlen, i, i + rlen - 1);
 
-    meta(v).is_rtxable = true;
+    // meta(v).is_rtxable = true;
     return i + rlen - pos;
 }

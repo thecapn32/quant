@@ -22,7 +22,7 @@ export UBSAN_OPTIONS=suppressions=../misc/ubsan.supp:print_stacktrace=1
 # commands to run the different clients against $addr:$port
 case $c in
         quant)
-                c="bin/client https://$addr:$port/"
+                c="bin/client -v5 https://$addr:$port/"
                 ;;
         quicly)
                 c="external/usr/local/bin/cli -vvvv -p / $addr $port"
@@ -30,7 +30,7 @@ case $c in
         minq)
                 c="env MINQ_LOG=\* GOPATH=$(pwd)/external/go go run \
                         external/go/src/github.com/ekr/minq/bin/client/main.go \
-                        -addr $addr:$port -http /  2>&1 | grep -v 'Frame type byte 0'"
+                        -addr $addr:$port -http /  2>&1 | grep -v -E 'Frame type (byte )?0'"
                 ;;
         ngtcp2)
                 c="external/ngtcp2-prefix/src/ngtcp2/examples/client \
@@ -51,7 +51,7 @@ esac
 # commands to run the different servers on  $addr:$port
 case $s in
         quant)
-                s="bin/server -p $port -d .."
+                s="bin/server -v5 -p $port -d .."
                 ;;
         quicly)
                 s="external/usr/local/bin/cli -vvvv -k lib/src/key.pem -c \
@@ -62,7 +62,7 @@ case $s in
                         external/go/src/github.com/ekr/minq/bin/server/main.go \
                         -addr $addr:$port -http -key lib/src/key.pem \
                         -cert lib/src/cert.pem 2>&1 \
-                        | grep -v 'Frame type byte 0'"
+                        | grep -v -E 'Frame type (byte )?0'"
                 ;;
         ngtcp2)
                 s="external/ngtcp2-prefix/src/ngtcp2/examples/server \
@@ -80,25 +80,25 @@ case $s in
                 ;;
 esac
 
-# if we are on MacOS X, configure the firewall to add delay and loss
-if [ -x /usr/sbin/dnctl ]; then
-        # create pipes to limit bandwidth and add loss
-        sudo dnctl pipe 1 config bw 64Kbit/s delay 500 queue 10Kbytes #plr 0.25
-        sudo dnctl pipe 2 config bw 64Kbit/s delay 500 queue 10Kbytes #plr 0.25
-        sudo pfctl -f - <<EOF
-                dummynet out proto udp from any to $addr port $port pipe 1
-                dummynet out proto udp from $addr port $port to any pipe 2
-EOF
-        sudo pfctl -e || true
-fi
+# # if we are on MacOS X, configure the firewall to add delay and loss
+# if [ -x /usr/sbin/dnctl ]; then
+#         # create pipes to limit bandwidth and add loss
+#         sudo dnctl pipe 1 config bw 64Kbit/s delay 500 queue 10Kbytes #plr 0.25
+#         sudo dnctl pipe 2 config bw 64Kbit/s delay 500 queue 10Kbytes #plr 0.25
+#         sudo pfctl -f - <<EOF
+#                 dummynet out proto udp from any to $addr port $port pipe 1
+#                 dummynet out proto udp from $addr port $port to any pipe 2
+# EOF
+#         sudo pfctl -e || true
+# fi
 
 tmux -CC \
         new-session "sleep 0.1; $c" \; \
         split-window -h "$s" \; \
         set remain-on-exit on
 
-# if we are on MacOS X, unconfigure the firewall
-if [ -x /usr/sbin/dnctl ]; then
-        sudo pfctl -d
-        sudo dnctl -f flush
-fi
+# # if we are on MacOS X, unconfigure the firewall
+# if [ -x /usr/sbin/dnctl ]; then
+#         sudo pfctl -d
+#         sudo dnctl -f flush
+# fi

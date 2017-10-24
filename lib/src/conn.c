@@ -150,9 +150,11 @@ tx_stream(struct q_stream * const s, const bool rtx, const uint32_t limit)
 {
     struct q_conn * const c = s->c;
     const ev_tstamp now = ev_now(loop);
+#if 0
     const struct pkt_meta * const last_tx =
         splay_max(pm_splay, &c->unacked_pkts);
     const ev_tstamp last_tx_t = last_tx ? last_tx->time : -HUGE_VAL;
+#endif
 
     struct w_iov_sq x = sq_head_initializer(x);
     uint32_t encoded = 0;
@@ -170,6 +172,7 @@ tx_stream(struct q_stream * const s, const bool rtx, const uint32_t limit)
             continue;
         }
 
+#if 0
         // see TimeToSend pseudo code
         if (c->in_flight + v->len > c->cwnd ||
             last_tx_t - now + (v->len * c->srtt) / c->cwnd > 0) {
@@ -181,6 +184,7 @@ tx_stream(struct q_stream * const s, const bool rtx, const uint32_t limit)
                  last_tx_t - now, v->len, c->srtt, c->cwnd);
             warn(CRT, "out of cwnd/pacing headroom, ignoring");
         }
+#endif
 
         // store packet info (see OnPacketSent pseudo code)
         meta(v).time = now; // remember TX time
@@ -192,8 +196,11 @@ tx_stream(struct q_stream * const s, const bool rtx, const uint32_t limit)
         enc_pkt(s, rtx, v, &x);
         if (meta(v).is_rtxable) {
             splay_insert(pm_splay, &c->unacked_pkts, &meta(v));
-            c->in_flight += meta(v).tx_len;
-            warn(INF, "in_flight +%u = %" PRIu64, meta(v).tx_len, c->in_flight);
+            if (!rtx) {
+                c->in_flight += meta(v).tx_len;
+                warn(INF, "in_flight +%u = %" PRIu64, meta(v).tx_len,
+                     c->in_flight);
+            }
         } else
             diet_insert(&c->acked_pkts, meta(v).nr);
 

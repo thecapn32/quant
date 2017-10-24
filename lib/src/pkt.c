@@ -207,7 +207,7 @@ void enc_pkt(struct q_stream * const s,
     } else
         meta(v).ack_header_pos = 0;
 
-    if (c->state == CONN_STAT_CLSD && !c->cc_sent) {
+    if (c->state == CONN_STAT_CLSD /*&& !c->cc_sent*/) {
         const char reas[] = "As if that blind rage had washed me clean, rid me "
                             "of hope; for the first time, in that night alive "
                             "with signs and stars, I opened myself to the "
@@ -221,7 +221,7 @@ void enc_pkt(struct q_stream * const s,
         v->len = i + 7 + sizeof(reas);
         i += enc_conn_close_frame(v, i, CONN_CLOS_ERR_NO_ERROR, reas,
                                   sizeof(reas));
-        c->cc_sent= 1;
+        // c->cc_sent= 1;
 
     } else {
 
@@ -246,10 +246,6 @@ void enc_pkt(struct q_stream * const s,
             i += enc_padding_frame(v, i, MIN_INI_LEN - i);
         v->len = i;
     }
-    // #ifndef NDEBUG
-    //     if (_dlevel == debug)
-    //         hexdump(v->buf, v->len);
-    // #endif
 
     // alloc a new buffer to encrypt/sign into for TX
     struct w_iov * const x = w_alloc_iov(w_engine(c->sock), MAX_PKT_LEN, 0);

@@ -253,9 +253,7 @@ void q_write(struct q_stream * const s, struct w_iov_sq * const q)
              s->c->id, s->id, s->state);
         return;
     }
-
     sq_concat(&s->out, q);
-    s->state = STRM_STAT_OPEN;
 
     // kick TX watcher
     ev_async_send(loop, &s->c->tx_w);
@@ -299,34 +297,6 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_sq * const q)
          plural(w_iov_sq_len(q)), conn_type(s->c), s->c->id, s->id);
     return s;
 }
-
-
-// void q_read_str(struct q_stream * const c, struct w_iov_sq * const q)
-// {
-//     warn(WRN, "reading on %s conn %" PRIx64 " str %u", conn_type(s->c),
-//          s->c->id, s->id);
-
-//     while (s == 0) {
-//         splay_foreach (s, stream, &c->streams)
-//             if (!sq_empty(&s->in))
-//                 // we found a stream with queued data
-//                 break;
-
-//         if (s == 0) {
-//             // no data queued on any non-zero stream, we need to wait
-//             warn(WRN, "waiting for data on any stream on %s conn %" PRIx64,
-//                  conn_type(c), c->id);
-//             loop_run(q_read, c);
-//         }
-//     }
-
-//     // return data
-//     sq_concat(q, &s->in);
-//     warn(WRN, "read %u byte%s on %s conn %" PRIx64 " str %u",
-//     w_iov_sq_len(q),
-//          plural(w_iov_sq_len(q)), conn_type(s->c), s->c->id, s->id);
-//     return s;
-// }
 
 
 struct q_conn * q_bind(void * const q, const uint16_t port)
@@ -413,7 +383,7 @@ void q_close_stream(struct q_stream * const s)
     s->state = s->state == STRM_STAT_HCRM ? STRM_STAT_CLSD : STRM_STAT_HCLO;
     warn(WRN, "new state %u", s->state);
     ev_async_send(loop, &s->c->tx_w);
-    // loop_run(q_close_stream, s);
+    loop_run(q_close_stream, s);
 }
 
 
@@ -508,4 +478,10 @@ uint64_t q_cid(const struct q_conn * const c)
 uint32_t q_sid(const struct q_stream * const s)
 {
     return s->id;
+}
+
+
+bool q_is_str_closed(struct q_stream * const s)
+{
+    return s->state == STRM_STAT_CLSD;
 }

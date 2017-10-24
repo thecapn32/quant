@@ -69,6 +69,7 @@ struct cb_data {
 
 static int serve_cb(http_parser * parser, const char * at, size_t len)
 {
+    (void)parser;
     const struct cb_data * const d = parser->data;
     warn(INF, "conn %" PRIx64 " str %u serving URL %.*s", q_cid(d->c),
          q_sid(d->s), (int)len, at);
@@ -163,10 +164,11 @@ int main(int argc, char * argv[])
 
     struct w_iov * v;
     sq_foreach (v, &i, next) {
-        // warn(INF, "%.*s", v->len, v->buf);
         const size_t parsed =
             http_parser_execute(&parser, &settings, (char *)v->buf, v->len);
         ensure(parsed == v->len, "HTTP parser error");
+        if(q_is_str_closed(s))
+            break;
     }
 
     q_free(q, &i);

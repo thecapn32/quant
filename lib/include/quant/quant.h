@@ -25,6 +25,7 @@
 
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <sys/socket.h>
 
@@ -79,3 +80,5 @@ extern void __attribute__((nonnull)) q_write_file(void * const q,
                                                   struct q_stream * const s,
                                                   const int f,
                                                   const uint32_t len);
+
+extern bool __attribute__((nonnull)) q_is_str_closed(struct q_stream * const s);

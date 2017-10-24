@@ -1,7 +1,7 @@
 include(ExternalProject)
 
 externalproject_add(warp
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/NTAP/warpcore.git
   GIT_SHALLOW 1
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
@@ -99,7 +99,7 @@ externalproject_add(minq
   DOWNLOAD_COMMAND
     env GOPATH=${GOPATH} go get ${MINQ} &&
       env GOPATH=${GOPATH} go get github.com/cloudflare/cfssl/helpers || true
-  UPDATE_COMMAND ""
+  # UPDATE_COMMAND ""
   # UPDATE_COMMAND cd ${GOPATH}/src/github.com/ekr/minq && git pull
   CONFIGURE_COMMAND
     cd ${GOPATH}/src/github.com/bifurcation/mint &&
@@ -130,7 +130,7 @@ externalproject_add(quicly
 
 # Use ngtcp2 for testing against
 externalproject_add(openssl
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/openssl/openssl.git
   GIT_SHALLOW 1
   CONFIGURE_COMMAND ./config --prefix=${CMAKE_CURRENT_BINARY_DIR} enable-tls1_3
@@ -142,7 +142,7 @@ externalproject_add(openssl
 
 externalproject_add(ngtcp2
   DEPENDS openssl
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/ngtcp2/ngtcp2.git
   GIT_SHALLOW 1
   PATCH_COMMAND autoreconf -i
@@ -183,7 +183,7 @@ externalproject_add(nss
 
 externalproject_add(mozquic
   DEPENDS nss
-  UPDATE_COMMAND ""
+  # UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/mcmanus/mozquic.git
   GIT_SHALLOW 1
   PATCH_COMMAND sed -i "" -e "s/-Werror//g" Makefile
@@ -198,7 +198,7 @@ externalproject_add(mozquic
 # Use picoquic for testing against
 externalproject_add(picoquic
   DEPENDS picotls
-  UPDATE_COMMAND ""
+  # UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/private-octopus/picoquic.git
   GIT_SHALLOW 1
   # PATCH_COMMAND sed -i "" -e "s/-Werror//g" Makefile
@@ -214,6 +214,6 @@ externalproject_add(picoquic
     -DCMAKE_POSITION_INDEPENDENT_CODE=True
     -DCMAKE_C_STANDARD=${CMAKE_C_STANDARD}
   EXCLUDE_FROM_ALL 1
-  BUILD_COMMAND ninja picoquicdemo
+  # BUILD_COMMAND ninja picoquicdemo
   INSTALL_COMMAND ""
 )
