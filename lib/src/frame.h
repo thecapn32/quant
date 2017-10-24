@@ -35,11 +35,12 @@ extern void __attribute__((nonnull))
 dec_frames(struct q_conn * const c, struct w_iov * v);
 
 extern uint16_t __attribute__((nonnull))
-enc_padding_frame(uint8_t * const buf, const uint16_t pos, const uint16_t len);
+enc_padding_frame(struct w_iov * const v,
+                  const uint16_t pos,
+                  const uint16_t len);
 
 extern uint16_t __attribute__((nonnull)) enc_ack_frame(struct q_conn * const c,
-                                                       uint8_t * const buf,
-                                                       const uint16_t len,
+                                                       struct w_iov * const v,
                                                        const uint16_t pos);
 
 extern uint16_t __attribute__((nonnull))

@@ -44,8 +44,10 @@ struct pkt_meta {
     uint16_t stream_header_pos; ///< Offset of stream frame header.
     uint16_t stream_data_end;   ///< Offset of last byte of stream frame data.
     uint16_t ack_header_pos;    ///< Offset of ACK frame header.
-    uint16_t cc_header_pos;     ///< Offset of connection-close frame header.
-    // uint8_t unused[2];
+    uint16_t tx_len;            ///< Length of protected packet at TX.
+    uint8_t is_rtxable : 1;     ///< Is this packet retransmittable?
+    uint8_t : 7;
+    uint8_t _unused[7];
 };
 
 
@@ -76,12 +78,6 @@ extern struct pkt_meta * pm;
 /// @return     Index of the w_iov of the pkt_meta.
 ///
 #define w_iov_idx(m) ((m)-pm)
-
-#define is_rtxable(m)                                                          \
-    ((m)->stream_header_pos || (m)->cc_header_pos) // TODO: also PING frames
-
-#define stream_data_len(m)                                                     \
-    ((m)->stream_header_pos ? (m)->stream_data_end - Q_OFFSET : 0)
 
 
 #define Q_OFFSET 64

@@ -170,6 +170,7 @@ dec_stream_frame(struct q_conn * const c,
              ") on %s conn %" PRIx64 " str %u",
              *len, plural(*len), off, off + *len, conn_type(c), c->id, sid);
         q_free_iov(w_engine(c->sock), v);
+        c->needs_tx = true;
         return i;
     }
 
@@ -210,8 +211,9 @@ dec_ack_frame(struct q_conn * const c,
               const uint16_t pos,
               void (*op)(struct q_conn * const,
                          const uint64_t,
-                         const uint64_t,
-                         const uint16_t)
+                         const uint16_t,
+                         const bool,
+                         const bool)
 
 )
 {
@@ -242,9 +244,10 @@ dec_ack_frame(struct q_conn * const c,
         dec(l, v->buf, v->len, i, ack_block_len, "%" PRIu64);
 
         while (PN_GEQ(ack, lg_ack - l)) {
-            // warn(INF, "pkt %" PRIu64 " had ACK for %" PRIu64, meta(v).nr,
-            // ack);
-            op(c, ack, lg_ack, ack_delay);
+            // NOTE: op() must be called with ACKs in decreasing order
+            const bool is_lg_ack = (b == 0 && ack == lg_ack);
+            const bool is_sm_ack = (b == num_blocks - 1 && ack == lg_ack - l);
+            op(c, ack, ack_delay, is_lg_ack, is_sm_ack);
             ack--;
         }
 
@@ -270,29 +273,33 @@ dec_ack_frame(struct q_conn * const c,
 static void __attribute__((nonnull))
 track_acked_pkts(struct q_conn * const c,
                  const uint64_t ack,
-                 const uint64_t lg_ack __attribute__((unused)),
-                 const uint16_t ack_delay __attribute__((unused)))
+                 const uint16_t ack_delay __attribute__((unused)),
+                 const bool is_lg_ack __attribute__((unused)),
+                 const bool is_sm_ack __attribute__((unused)))
 {
-    // warn(DBG, "no longer need to ACK pkt %" PRIu64, ack);
     diet_remove(&c->recv, ack);
 }
 
 
 static void __attribute__((nonnull)) process_ack(struct q_conn * const c,
                                                  const uint64_t ack,
-                                                 const uint64_t lg_ack,
-                                                 const uint16_t ack_delay)
+                                                 const uint16_t ack_delay,
+                                                 const bool is_lg_ack,
+                                                 const bool is_sm_ack)
 {
     struct w_iov * p;
     const bool found = find_sent_pkt(c, ack, &p);
     if (!found) {
+        // second clause from OnAckReceived pseudo code:
+        // the sender may skip packets for detecting optimistic ACKs
         warn(CRT, "got ACK for pkt %" PRIu64 " that we never sent", ack);
         return;
     }
+
     if (p == 0) {
         // we already had a previous ACK for this packet
-        warn(INF, "already have ACK for pkt %" PRIu64, ack);
-        return;
+        warn(DBG, "already have ACK for pkt %" PRIu64, ack);
+        goto ld;
     }
 
     // only act on first-time ACKs
@@ -302,39 +309,37 @@ static void __attribute__((nonnull)) process_ack(struct q_conn * const c,
     meta(p).ack_cnt++;
     warn(NTE, "first ACK for %" PRIu64, ack);
 
-    // first clause from OnAckReceived pseudo code:
-    // if the largest ACKed is newly ACKed, update the RTT
-    if (ack == lg_ack) {
+    if (is_lg_ack) {
+        // first clause from OnAckReceived pseudo code:
+        // if the largest ACKed is newly ACKed, update the RTT
         c->lg_acked = MAX(c->lg_acked, ack);
 
         c->latest_rtt = ev_now(loop) - meta(p).time;
         if (c->latest_rtt > ack_delay)
             c->latest_rtt -= ack_delay;
+        warn(INF, "latest_rtt %f", c->latest_rtt);
 
         // see UpdateRtt pseudo code:
         if (fpclassify(c->srtt) == FP_ZERO) {
             c->srtt = c->latest_rtt;
             c->rttvar = c->latest_rtt / 2;
         } else {
-            c->rttvar = .75 * c->rttvar + .25 * (c->srtt - c->latest_rtt);
+            c->rttvar = .75 * c->rttvar + .25 * fabs(c->srtt - c->latest_rtt);
             c->srtt = .875 * c->srtt + .125 * c->latest_rtt;
         }
-        warn(DBG, "%s conn %" PRIx64 " srtt = %f, rttvar = %f", conn_type(c),
-             c->id, c->srtt, c->rttvar);
+        warn(INF, "srtt = %f, rttvar = %f on %s conn %" PRIx64, c->srtt,
+             c->rttvar, conn_type(c), c->id);
     }
-
-    // second clause from OnAckReceived pseudo code:
-    // the sender may skip packets for detecting optimistic ACKs
-    // TODO: if (packets ACKed that the sender skipped): abortConnection()
-
 
     // see OnPacketAcked pseudo code (for LD):
 
     // If a packet sent prior to RTO was ACKed, then the RTO
     // was spurious.  Otherwise, inform congestion control.
-    if (c->rto_cnt && ack > c->lg_sent_before_rto)
+    if (c->rto_cnt && ack > c->lg_sent_before_rto) {
         // see OnRetransmissionTimeoutVerified pseudo code
         c->cwnd = kMinimumWindow;
+        warn(INF, "cwnd %u", c->cwnd);
+    }
     c->hshake_cnt = c->tlp_cnt = c->rto_cnt = 0;
 
     // this packet is no no longer unACKed
@@ -358,39 +363,27 @@ static void __attribute__((nonnull)) process_ack(struct q_conn * const c,
     // see OnPacketAcked pseudo code (for CC):
     if (ack >= c->rec_end) {
         if (c->cwnd < c->ssthresh)
-            c->cwnd += p->len;
+            c->cwnd += meta(p).tx_len;
         else
-            c->cwnd += p->len / c->cwnd;
-        warn(INF, "cwnd now %" PRIu64, c->cwnd);
+            c->cwnd += kDefaultMss * meta(p).tx_len / c->cwnd;
+        warn(INF, "cwnd %" PRIu64, c->cwnd);
     }
 
-    if (is_rtxable(&meta(p))) {
+    if (meta(p).is_rtxable) {
         // adjust in_flight
-        c->in_flight -= meta(p).stream_data_end;
-        warn(INF, "in_flight -%u = %" PRIu64, meta(p).stream_data_end,
-             c->in_flight);
+        c->in_flight -= meta(p).tx_len;
+        warn(INF, "in_flight -%u = %" PRIu64, meta(p).tx_len, c->in_flight);
 
         // check if a q_write is done
         struct q_stream * const s = meta(p).str;
         if (s && ++s->out_ack_cnt == sq_len(&s->out))
             // all packets are ACKed
             maybe_api_return(q_write, s);
-
-        // // check if a q_close_stream is done
-        // p->buf -= Q_OFFSET;
-        // p->len += Q_OFFSET;
-        // if (is_set(F_STREAM_FIN, p->buf[meta(p).stream_header_pos])) {
-        //     // our FIN got ACKed
-        //     s->state = s->state == STRM_STAT_HCLO ? STRM_STAT_CLSD :
-        //     s->state; warn(CRT, "ACK of FIN, state now %u", s->state);
-        //     maybe_api_return(q_close, s);
-        // }
-        // p->buf += Q_OFFSET;
-        // p->len -= Q_OFFSET;
     }
 
-    if (ack == lg_ack) {
-        // detect_lost_pkts(c);
+ld:
+    if (is_sm_ack) {
+        detect_lost_pkts(c);
         set_ld_alarm(c);
     }
 }
@@ -551,11 +544,13 @@ void dec_frames(struct q_conn * const c, struct w_iov * v)
 }
 
 
-uint16_t
-enc_padding_frame(uint8_t * const buf, const uint16_t pos, const uint16_t len)
+uint16_t enc_padding_frame(struct w_iov * const v,
+                           const uint16_t pos,
+                           const uint16_t len)
 {
     warn(DBG, "encoding padding frame into [%u..%u]", pos, pos + len - 1);
-    memset(&buf[pos], FRAM_TYPE_PAD, len);
+    memset(&v->buf[pos], FRAM_TYPE_PAD, len);
+    meta(v).is_rtxable = true;
     return len;
 }
 
@@ -596,8 +591,7 @@ needed_ack_block_len(struct q_conn * const c)
 
 
 uint16_t enc_ack_frame(struct q_conn * const c,
-                       uint8_t * const buf,
-                       const uint16_t len,
+                       struct w_iov * const v,
                        const uint16_t pos)
 {
     uint8_t type = FRAM_TYPE_ACK;
@@ -615,19 +609,19 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     type |= enc_ack_block_len[ack_block_len];
 
     uint16_t i = pos;
-    enc(buf, len, i, &type, 0, "0x%02x");
+    enc(v->buf, v->len, i, &type, 0, "0x%02x");
 
     if (is_set(F_ACK_N, type))
-        enc(buf, len, i, &num_blocks, 0, "%u");
+        enc(v->buf, v->len, i, &num_blocks, 0, "%u");
 
     // TODO: send timestamps in protected packets
     const uint8_t num_ts = 0;
-    enc(buf, len, i, &num_ts, 0, "%u");
+    enc(v->buf, v->len, i, &num_ts, 0, "%u");
 
-    enc(buf, len, i, &lg_recv, lg_ack_len, "%" PRIu64);
+    enc(v->buf, v->len, i, &lg_recv, lg_ack_len, "%" PRIu64);
 
     const uint16_t ack_delay = 0;
-    enc(buf, len, i, &ack_delay, 0, "%u");
+    enc(v->buf, v->len, i, &ack_delay, 0, "%u");
 
     struct ival * b;
     uint64_t prev_lo = 0;
@@ -635,12 +629,12 @@ uint16_t enc_ack_frame(struct q_conn * const c,
         if (prev_lo) {
             const uint64_t gap = prev_lo - b->hi;
             ensure(gap <= UINT8_MAX, "TODO: gap %" PRIu64 " too large", gap);
-            enc(buf, len, i, &gap, sizeof(uint8_t), "%" PRIu64);
+            enc(v->buf, v->len, i, &gap, sizeof(uint8_t), "%" PRIu64);
         }
         prev_lo = b->lo;
         const uint64_t ack_block = b->hi - b->lo;
         warn(NTE, "ACKing %" PRIu64 "-%" PRIu64, b->lo, b->hi);
-        enc(buf, len, i, &ack_block, ack_block_len, "%" PRIu64);
+        enc(v->buf, v->len, i, &ack_block, ack_block_len, "%" PRIu64);
     }
     return i - pos;
 }
@@ -717,6 +711,7 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
 
     s->out_off += dlen; // increase the stream data offset
     meta(v).str = s;    // remember stream this buf belongs to
+    meta(v).is_rtxable = true;
 
     return v->len;
 }
@@ -728,7 +723,7 @@ uint16_t enc_conn_close_frame(struct w_iov * const v,
                               const char * const reas,
                               const uint16_t reas_len)
 {
-    uint16_t i = meta(v).cc_header_pos = pos;
+    uint16_t i = pos;
 
     const uint8_t type = FRAM_TYPE_CNCL;
     enc(v->buf, v->len, i, &type, 0, "0x%02x");
@@ -741,5 +736,6 @@ uint16_t enc_conn_close_frame(struct w_iov * const v,
     memcpy(&v->buf[i], reas, rlen);
     warn(DBG, "enc %u-byte reason phrase into [%u..%u]", rlen, i, i + rlen - 1);
 
+    meta(v).is_rtxable = true;
     return i + rlen - pos;
 }

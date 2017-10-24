@@ -32,7 +32,6 @@
 #endif
 
 #include <picotls.h>
-// #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
@@ -138,17 +137,19 @@ void enc_pkt(struct q_stream * const s,
     v->len += Q_OFFSET;
 
     uint16_t i = 0;
-    uint8_t flags = 0;
-
-    if (rtx)
-        warn(DBG, "enc RTX %" PRIu64 " as %" PRIu64, meta(v).nr,
+    uint64_t prev_nr = 0;
+    if (rtx) {
+        prev_nr = meta(v).nr;
+        warn(DBG, "enc RTX %" PRIu64 " as %" PRIu64, prev_nr,
              c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv)
                                             : c->lg_sent + 1);
+    }
 
     meta(v).nr =
         c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv) : ++c->lg_sent;
     // TODO: increase by random offset
 
+    uint8_t flags = 0;
     switch (c->state) {
     case CONN_STAT_VERS_SENT:
         flags |= F_LONG_HDR | F_LH_CLNT_INIT;
@@ -202,11 +203,11 @@ void enc_pkt(struct q_stream * const s,
 
     if (c->state != CONN_STAT_VERS_REJ && !splay_empty(&c->recv)) {
         meta(v).ack_header_pos = i;
-        i += enc_ack_frame(c, v->buf, v->len, i);
+        i += enc_ack_frame(c, v, i);
     } else
         meta(v).ack_header_pos = 0;
 
-    if (c->state == CONN_STAT_CLSD) {
+    if (c->state == CONN_STAT_CLSD && !c->cc_sent) {
         const char reas[] = "As if that blind rage had washed me clean, rid me "
                             "of hope; for the first time, in that night alive "
                             "with signs and stars, I opened myself to the "
@@ -220,15 +221,15 @@ void enc_pkt(struct q_stream * const s,
         v->len = i + 7 + sizeof(reas);
         i += enc_conn_close_frame(v, i, CONN_CLOS_ERR_NO_ERROR, reas,
                                   sizeof(reas));
-        // maybe_api_return(q_close, c);
+        c->cc_sent= 1;
 
     } else {
 
         if (rtx) {
-            ensure(is_rtxable(&meta(v)), "is rtxable");
+            ensure(meta(v).is_rtxable, "is rtxable");
 
             // this is a RTX, pad out until beginning of stream header
-            enc_padding_frame(v->buf, i, meta(v).stream_header_pos - i);
+            enc_padding_frame(v, i, meta(v).stream_header_pos - i);
             i = meta(v).stream_data_end;
 
         } else {
@@ -236,13 +237,13 @@ void enc_pkt(struct q_stream * const s,
             if (v->len > Q_OFFSET || s->state == STRM_STAT_HCLO ||
                 s->state == STRM_STAT_CLSD) {
                 // add a stream frame header, after padding out rest of Q_OFFSET
-                enc_padding_frame(v->buf, i, Q_OFFSET - i);
+                enc_padding_frame(v, i, Q_OFFSET - i);
                 meta(v).stream_data_end = i = enc_stream_frame(s, v);
             }
         }
 
         if (c->state == CONN_STAT_VERS_SENT)
-            i += enc_padding_frame(v->buf, i, MIN_INI_LEN - i);
+            i += enc_padding_frame(v, i, MIN_INI_LEN - i);
         v->len = i;
     }
     // #ifndef NDEBUG
@@ -275,29 +276,22 @@ void enc_pkt(struct q_stream * const s,
         x->len = hdr_len + (uint16_t)ptls_aead_encrypt(
                                c->out_kp0, &x->buf[hdr_len], &v->buf[hdr_len],
                                v->len - hdr_len, meta(v).nr, v->buf, hdr_len);
-        warn(DBG, "adding %d-byte AEAD over [0..%u] into [%u..%u]",
+        warn(DBG, "added %d-byte AEAD over [0..%u] into [%u..%u]",
              x->len - v->len, i - 1, i, x->len - 1);
     }
 
     sq_insert_tail(q, x, next);
 
     meta(v).tx_cnt++;
-
-    if (v->len > Q_OFFSET) {
-        // FIXME packet is retransmittable (check incorrect)
-        if (!rtx) {
-            c->in_flight += x->len;
-            warn(INF, "in_flight +%u = %" PRIu64, x->len, c->in_flight);
-        }
-        set_ld_alarm(c);
-    }
+    meta(v).tx_len = x->len;
 
     warn(NTE,
          "enc pkt %" PRIu64
          " (len %u+%u, idx %u+%u, type 0x%02x = " bitstring_fmt
          ") on %s conn %" PRIx64,
-         meta(v).nr, v->len, x->len - v->len, v->idx, x->idx, pkt_flags(v->buf),
-         to_bitstring(pkt_flags(v->buf)), conn_type(c), c->id);
+         meta(v).nr, v->len, meta(v).tx_len - v->len, v->idx, x->idx,
+         pkt_flags(v->buf), to_bitstring(pkt_flags(v->buf)), conn_type(c),
+         c->id);
 
     if (c->state == CONN_STAT_VERS_SENT)
         // adjust v->len to end of stream data (excl. padding)

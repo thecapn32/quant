@@ -118,7 +118,7 @@ pick_from_server_vers(const void * const buf, const uint16_t len)
             uint32_t vers = 0;
             uint16_t x = j + pos;
             dec(vers, buf, len, x, 0, "0x%08x");
-            warn(DBG, "server prio %ld = 0x%08x; our prio %u = 0x%08x",
+            warn(DBG, "serv prio %ld = 0x%08x; our prio %u = 0x%08x",
                  j / sizeof(uint32_t), vers, i, ok_vers[i]);
             if (ok_vers[i] == vers)
                 return vers;
@@ -145,9 +145,8 @@ struct q_conn * get_conn_by_cid(const uint64_t id, const bool is_clnt)
 }
 
 
-static bool tx_stream(struct q_stream * const s,
-                      const bool rtx,
-                      const uint8_t limit __attribute__((unused)))
+static uint32_t
+tx_stream(struct q_stream * const s, const bool rtx, const uint32_t limit)
 {
     struct q_conn * const c = s->c;
     const ev_tstamp now = ev_now(loop);
@@ -156,7 +155,7 @@ static bool tx_stream(struct q_stream * const s,
     const ev_tstamp last_tx_t = last_tx ? last_tx->time : -HUGE_VAL;
 
     struct w_iov_sq x = sq_head_initializer(x);
-    bool did_enc = false;
+    uint32_t encoded = 0;
     struct w_iov * v;
     sq_foreach (v, &s->out, next) {
         if (meta(v).ack_cnt) {
@@ -174,44 +173,50 @@ static bool tx_stream(struct q_stream * const s,
         // see TimeToSend pseudo code
         if (c->in_flight + v->len > c->cwnd ||
             last_tx_t - now + (v->len * c->srtt) / c->cwnd > 0) {
-            warn(DBG, "in_flight %" PRIu64 " + v->len %u vs cwnd %" PRIu64,
+            warn(INF, "in_flight %" PRIu64 " + v->len %u vs cwnd %" PRIu64,
                  c->in_flight, v->len, c->cwnd);
-            warn(DBG,
+            warn(INF,
                  "last_tx_t - now %f + (v->len %u * srtt %f) / cwnd "
                  "%" PRIu64,
                  last_tx_t - now, v->len, c->srtt, c->cwnd);
-            // warn(CRT, "out of cwnd/pacing headroom, ignoring");
+            warn(CRT, "out of cwnd/pacing headroom, ignoring");
         }
 
         // store packet info (see OnPacketSent pseudo code)
         meta(v).time = now; // remember TX time
 
-        if (rtx) {
+        if (rtx)
             // on RTX, remember orig pkt number (enc_pkt overwrites with new)
-            diet_insert(&c->acked_pkts, meta(v).nr);
             splay_remove(pm_splay, &c->unacked_pkts, &meta(v));
-        }
 
         enc_pkt(s, rtx, v, &x);
-        did_enc = true;
-        if (is_rtxable(&meta(v)))
+        if (meta(v).is_rtxable) {
             splay_insert(pm_splay, &c->unacked_pkts, &meta(v));
-        else
+            c->in_flight += meta(v).tx_len;
+            warn(INF, "in_flight +%u = %" PRIu64, meta(v).tx_len, c->in_flight);
+        } else
             diet_insert(&c->acked_pkts, meta(v).nr);
 
-        char a_buf[1024];
-        char ua_buf[1024];
+        char a_buf[1024] = "";
+        char ua_buf[1024] = "";
         diet_to_str(a_buf, sizeof(a_buf), &c->acked_pkts);
         for (struct pkt_meta * p = splay_min(pm_splay, &c->unacked_pkts); p;
              p = splay_next(pm_splay, &c->unacked_pkts, p)) {
-            char tmp[1024];
+            char tmp[1024] = "";
             snprintf(tmp, sizeof(tmp), "%" PRIu64 ", ", p->nr);
             strncat(ua_buf, tmp, sizeof(ua_buf) - strlen(ua_buf) - 1);
         }
         warn(CRT, "unacked: %sacked: %s", ua_buf, a_buf);
+
+        encoded++;
+        if (limit && encoded == limit) {
+            warn(NTE, "tx limit %u reached", limit);
+            break;
+        }
     }
 
-    if (did_enc) {
+    if (encoded) {
+        set_ld_alarm(c);
         // transmit encrypted/protected packets and then free the chain
         if (!c->is_clnt)
             w_connect(c->sock, c->peer.sin_addr.s_addr, c->peer.sin_port);
@@ -222,12 +227,12 @@ static bool tx_stream(struct q_stream * const s,
         // since we never touched the meta-data for x, no need for q_free()
         w_free(w_engine(c->sock), &x);
     }
-    return did_enc;
+    return encoded;
 }
 
 
-static bool
-tx_other(struct q_stream * const s, const bool rtx, const uint8_t limit)
+static uint32_t
+tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
 {
     warn(DBG,
          "other %s on %s conn %" PRIx64 " str %u w/%" PRIu64 " pkt%s in queue",
@@ -242,7 +247,7 @@ tx_other(struct q_stream * const s, const bool rtx, const uint8_t limit)
     ensure(sq_last(&s->out, w_iov, next) == v, "queue mixed up");
 
     // pure FINs are rtxable
-    if (!is_rtxable(&meta(v))) {
+    if (!meta(v).is_rtxable) {
         if (last)
             sq_remove_after(&s->out, last, next);
         else
@@ -253,7 +258,7 @@ tx_other(struct q_stream * const s, const bool rtx, const uint8_t limit)
 }
 
 
-static void tx(struct q_conn * const c, const bool rtx, const uint8_t limit)
+static void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
 {
     bool did_tx = false;
     struct q_stream * s;
@@ -402,7 +407,7 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
                 break;
             }
 
-            warn(INF, "server didn't like our vers 0x%08x", vers);
+            warn(INF, "serv didn't like our vers 0x%08x", vers);
             ensure(vers_supported(vers), "vers 0x%08x not one of ours", vers);
             ensure(find_sent_pkt(c, meta(v).nr, 0), "did not send pkt %" PRIu64,
                    meta(v).nr);
@@ -412,9 +417,10 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
             if (c->vers)
                 warn(INF, "retrying with vers 0x%08x", c->vers);
             else
-                die("no vers in common with server");
+                die("no vers in common with serv");
 
             // retransmit the ClientHello
+            c->in_flight = 0;
             init_tls(c);
             struct q_stream * s = get_stream(c, 0);
             // free the previous ClientHello
@@ -429,7 +435,7 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
             c->needs_tx = true;
 
         } else {
-            warn(INF, "server accepted vers 0x%08x", c->vers);
+            warn(INF, "serv accepted vers 0x%08x", c->vers);
             diet_insert(&c->recv, meta(v).nr);
             c->state = CONN_STAT_VERS_OK;
             dec_frames(c, v);
@@ -560,8 +566,7 @@ void rx(struct ev_loop * const l,
         }
 
         warn(NTE,
-             "recv pkt %" PRIu64
-             " (len %u, idx %u, type 0x%02x = " bitstring_fmt
+             "rx pkt %" PRIu64 " (len %u, idx %u, type 0x%02x = " bitstring_fmt
              ") on %s conn %" PRIx64,
              meta(v).nr, v->len, v->idx, flags, to_bitstring(flags),
              conn_type(c), cid);
@@ -583,10 +588,21 @@ void rx(struct ev_loop * const l,
 
         // clear the helper flags set above
         c->needs_tx = c->had_rx = false;
+
+        char a_buf[1024] = "";
+        char ua_buf[1024] = "";
+        diet_to_str(a_buf, sizeof(a_buf), &c->acked_pkts);
+        for (struct pkt_meta * p = splay_min(pm_splay, &c->unacked_pkts); p;
+             p = splay_next(pm_splay, &c->unacked_pkts, p)) {
+            char tmp[1024] = "";
+            snprintf(tmp, sizeof(tmp), "%" PRIu64 ", ", p->nr);
+            strncat(ua_buf, tmp, sizeof(ua_buf) - strlen(ua_buf) - 1);
+        }
+        warn(CRT, "unacked: %sacked: %s", ua_buf, a_buf);
     }
 }
 
-#if 0
+
 void detect_lost_pkts(struct q_conn * const c)
 {
     // see DetectLostPackets pseudo code
@@ -602,32 +618,35 @@ void detect_lost_pkts(struct q_conn * const c)
     uint64_t largest_lost_packet = 0;
     struct pkt_meta *p, *nxt;
 
-    for (p = splay_min(pm_splay, &c->unacked_pkts); p; p = nxt) {
+    for (p = splay_min(pm_splay, &c->unacked_pkts); p && p->nr < c->lg_acked;
+         p = nxt) {
         nxt = splay_next(pm_splay, &c->unacked_pkts, p);
 
-        if (p->ack_cnt == 0 && p->nr < c->lg_acked) {
-            const ev_tstamp time_since_sent = now - p->time;
-            const uint64_t packet_delta = c->lg_acked - p->nr;
-            if (time_since_sent > delay_until_lost ||
-                packet_delta > c->reorder_thresh) {
-                // Inform the congestion controller of lost packets and
-                // lets it decide whether to retransmit immediately.
-                largest_lost_packet = MAX(largest_lost_packet, p->nr);
-                splay_remove(pm_splay, &c->unacked_pkts, p);
-                diet_insert(&c->acked_pkts, p->nr);
+        const ev_tstamp time_since_sent = now - p->time;
+        const uint64_t delta = c->lg_acked - p->nr;
+        warn(INF,
+             "pkt %" PRIu64
+             ": time_since_sent %f > delay_until_lost %f || delta %" PRIu64
+             " > c->reorder_thresh %" PRIu64,
+             p->nr, time_since_sent, delay_until_lost, delta,
+             c->reorder_thresh);
+        if (time_since_sent > delay_until_lost || delta > c->reorder_thresh) {
+            // Inform the congestion controller of lost packets and
+            // lets it decide whether to retransmit immediately.
+            largest_lost_packet = MAX(largest_lost_packet, p->nr);
+            splay_remove(pm_splay, &c->unacked_pkts, p);
+            diet_insert(&c->acked_pkts, p->nr);
 
-                // if this packet was retransmittable, update in_flight
-                if (is_rtxable(p)) {
-                    c->in_flight -= stream_data_len(p);
-                    warn(INF, "in_flight -%u = %" PRIu64, stream_data_len(p),
-                         c->in_flight);
-                }
+            // if this packet was retransmittable, update in_flight
+            if (p->is_rtxable) {
+                c->in_flight -= p->tx_len;
+                warn(INF, "in_flight -%u = %" PRIu64, p->tx_len, c->in_flight);
+            }
 
-                warn(WRN, "pkt %" PRIu64 " considered lost", p->nr);
-            } else if (fpclassify(c->loss_t) == FP_ZERO &&
-                       fpclassify(delay_until_lost) != FP_INFINITE)
-                c->loss_t = now + delay_until_lost - time_since_sent;
-        }
+            warn(WRN, "pkt %" PRIu64 " considered lost", p->nr);
+        } else if (fpclassify(c->loss_t) == FP_ZERO &&
+                   fpclassify(delay_until_lost) != FP_INFINITE)
+            c->loss_t = now + delay_until_lost - time_since_sent;
     }
 
     // see OnPacketsLost pseudo code
@@ -639,17 +658,20 @@ void detect_lost_pkts(struct q_conn * const c)
         c->cwnd *= kLossReductionFactor;
         c->cwnd = MAX(c->cwnd, kMinimumWindow);
         c->ssthresh = c->cwnd;
+        warn(INF, "cwnd %" PRIu64 ", ssthresh %" PRIu64, c->cwnd, c->ssthresh);
     }
 }
-#endif
+
 
 void set_ld_alarm(struct q_conn * const c)
 {
     // see SetLossDetectionAlarm pseudo code
 
-    if (c->in_flight == 0) {
-        ev_timer_stop(loop, &c->ld_alarm);
-        warn(DBG, "no RTX-able pkts outstanding, stopping LD alarm");
+    if (splay_empty(&c->unacked_pkts)) {
+        if (ev_is_active(&c->ld_alarm)) {
+            ev_timer_stop(loop, &c->ld_alarm);
+            warn(INF, "no RTX-able pkts outstanding, stopping LD alarm");
+        }
         return;
     }
 
@@ -658,28 +680,28 @@ void set_ld_alarm(struct q_conn * const c)
     if (c->state < CONN_STAT_ESTB) {
         dur = fpclassify(c->srtt) == FP_ZERO ? kDefaultInitialRtt : c->srtt;
         dur = MAX(2 * dur, kMinTLPTimeout) * (1 << c->hshake_cnt);
-        warn(DBG, "handshake RTX alarm in %f sec on %s conn %" PRIx64, dur,
+        warn(INF, "handshake RTX alarm in %f sec on %s conn %" PRIx64, dur,
              conn_type(c), c->id);
 
     } else if (fpclassify(c->loss_t) != FP_ZERO) {
         dur = c->loss_t - now;
-        warn(DBG, "early RTX or time LD alarm in %f sec on %s conn %" PRIx64,
+        warn(INF, "early RTX or time LD alarm in %f sec on %s conn %" PRIx64,
              dur, conn_type(c), c->id);
 
     } else if (c->tlp_cnt < kMaxTLPs) {
-        if (c->in_flight)
+        if (!splay_empty(&c->unacked_pkts))
             dur = 1.5 * c->srtt + kDelayedAckTimeout;
         else
             dur = kMinTLPTimeout;
         dur = MAX(dur, 2 * c->srtt);
-        warn(DBG, "TLP alarm in %f sec on %s conn %" PRIx64, dur, conn_type(c),
+        warn(INF, "TLP alarm in %f sec on %s conn %" PRIx64, dur, conn_type(c),
              c->id);
 
     } else {
         dur = c->srtt + 4 * c->rttvar;
         dur = MAX(dur, kMinRTOTimeout);
-        dur *= 2 ^ c->rto_cnt;
-        warn(DBG, "RTO alarm in %f sec on %s conn %" PRIx64, dur, conn_type(c),
+        dur *= (1 << c->rto_cnt);
+        warn(INF, "RTO alarm in %f sec on %s conn %" PRIx64, dur, conn_type(c),
              c->id);
     }
 
@@ -707,21 +729,21 @@ void ld_alarm(struct ev_loop * const l __attribute__((unused)),
     if (fpclassify(c->loss_t) != FP_ZERO) {
         warn(INF, "early RTX or time loss detection alarm on %s conn %" PRIx64,
              conn_type(c), c->id);
-        // detect_lost_pkts(c);
+        detect_lost_pkts(c);
 
     } else if (c->tlp_cnt < kMaxTLPs) {
-        c->tlp_cnt++;
         warn(INF, "TLP alarm #%u on %s conn %" PRIx64, c->tlp_cnt, conn_type(c),
              c->id);
         tx(c, true, 1);
+        c->tlp_cnt++;
 
     } else {
-        if (c->rto_cnt == 0)
-            c->lg_sent_before_rto = c->lg_sent;
-        c->rto_cnt++;
         warn(INF, "RTO alarm #%u on %s conn %" PRIx64, c->rto_cnt, conn_type(c),
              c->id);
+        if (c->rto_cnt == 0)
+            c->lg_sent_before_rto = c->lg_sent;
         tx(c, true, 2);
+        c->rto_cnt++;
     }
     set_ld_alarm(c);
 }
@@ -731,11 +753,11 @@ bool find_sent_pkt(struct q_conn * const c,
                    const uint64_t nr,
                    struct w_iov ** v)
 {
-    struct pkt_meta which = {.nr = nr};
+    struct pkt_meta which_meta = {.nr = nr};
     const struct pkt_meta * const p =
-        splay_find(pm_splay, &c->unacked_pkts, &which);
+        splay_find(pm_splay, &c->unacked_pkts, &which_meta);
     if (p) {
-        ensure(p && p->nr == nr, "found pkt");
+        ensure(p->nr == nr, "found pkt");
         struct w_iov * const f = w_iov(w_engine(c->sock), w_iov_idx(p));
         // warn(DBG, "found pkt %" PRIu64 " in idx %u len %u", nr, w_iov_idx(p),
         //      f->len);

@@ -90,8 +90,7 @@ static const uint32_t nbufs = 1000; ///< Number of packet buffers to allocate.
     } while (0)
 
 
-extern int __attribute__((nonnull))
-pm_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
+int pm_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
 {
     return (a->nr > b->nr) - (a->nr < b->nr);
 }
@@ -138,8 +137,13 @@ static struct q_conn * new_conn(struct w_engine * const w,
     // XXX: UsingTimeLossDetection not defined?
     c->ld_alarm.data = c;
     ev_init(&c->ld_alarm, ld_alarm);
-    c->reorder_thresh = kReorderingThreshold;
-    c->reorder_fract = HUGE_VAL;
+    if (c->use_time_loss_det) {
+        c->reorder_thresh = UINT64_MAX;
+        c->reorder_fract = kTimeReorderingFraction;
+    } else {
+        c->reorder_thresh = kReorderingThreshold;
+        c->reorder_fract = HUGE_VAL;
+    }
     c->lg_sent = peer_name ? 999 : 7999; // TODO: randomize initial pkt nr
 
     // initialize CC state
@@ -155,6 +159,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
     diet_init(&c->closed_streams);
     diet_init(&c->acked_pkts);
     splay_init(&c->unacked_pkts);
+    // splay_init(&c->rtx_pkts);
     diet_init(&c->recv);
 
     // initialize idle timeout
@@ -432,11 +437,11 @@ void q_close(struct q_conn * const c)
     // wait until everything is ACKed
     bool done = false;
     do {
-        if (done != !splay_empty(&c->unacked_pkts)) {
-            warn(CRT, "waiting for ACKs");
+        if ((done |= !splay_empty(&c->unacked_pkts))) {
+            warn(CRT, "waiting for ACKs %u", done);
         }
-        if (done != !diet_empty(&c->recv)) {
-            warn(CRT, "waiting to send ACKs");
+        if ((done |= !diet_empty(&c->recv))) {
+            warn(CRT, "waiting to send ACKs %u", done);
             ev_async_send(loop, &c->tx_w);
         }
         loop_run(q_close, c);

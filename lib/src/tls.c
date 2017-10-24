@@ -345,7 +345,7 @@ uint32_t tls_handshake(struct q_stream * const s)
     const int ret = ptls_handshake(s->c->tls, &meta(ov).tb, iv ? iv->buf : 0,
                                    &in_len, &s->c->tls_hshake_prop);
     ov->len = (uint16_t)meta(ov).tb.off;
-    warn(INF, "in %u, gen %u into idx %u, ret %u", iv ? iv->len : 0, ov->len,
+    warn(DBG, "in %u, gen %u into idx %u, ret %u", iv ? iv->len : 0, ov->len,
          ov->idx, ret);
     ensure(ret == 0 || ret == PTLS_ERROR_IN_PROGRESS, "TLS error: %u", ret);
     ensure(iv == 0 || iv->len && iv->len == in_len, "TLS data remaining");

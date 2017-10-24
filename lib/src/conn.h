@@ -56,50 +56,54 @@ struct q_conn {
     uint8_t omit_cid : 1; ///< We can omit the CID during TX on this connection.
     uint8_t had_rx : 1;   ///< We had an RX event on this connection.
     uint8_t needs_tx : 1; ///< We have a pending TX on this connection.
-    uint8_t : 4;
+    uint8_t use_time_loss_det : 1; ///< UsingTimeLossDetection()
+    uint8_t cc_sent : 1;           ///< Connection-close sent.
+    uint8_t : 2;
 
     uint8_t state; ///< State of the connection.
 
-    // LD state
-    uint8_t hshake_cnt;
-    uint8_t tlp_cnt;
-    uint8_t rto_cnt;
-    uint8_t _unused2;
-    uint8_t _unused[6];
-    ev_timer ld_alarm; ///< Loss detection alarm.
+    uint8_t _unused[2];
     ev_timer idle_alarm;
+
+    // LD state
+    ev_timer ld_alarm;           // loss_detection_alarm
+    uint16_t hshake_cnt;         // handshake_count
+    uint16_t tlp_cnt;            // tlp_count
+    uint16_t rto_cnt;            // rto_count
+    uint8_t _unused2[2];         //
+    uint64_t lg_sent_before_rto; // largest_sent_before_rto;
+    ev_tstamp last_sent_t;       // time_of_last_sent_packet
+    uint64_t lg_sent;            // largest_sent_packet
+    uint64_t lg_acked;           // largest_acked_packet
+    ev_tstamp latest_rtt;        // latest_rtt
+    ev_tstamp srtt;              // smoothed_rtt
+    ev_tstamp rttvar;            // rttvar
+    uint64_t reorder_thresh;     // reordering_threshold
+    double reorder_fract;        // time_reordering_fraction
+    ev_tstamp loss_t;            // loss_time
+
+    /// Sent-but-unACKed packets. The @p buf and @len fields of the w_iov
+    /// structs are relative to any stream data.
+    ///
+    struct pm_splay unacked_pkts; // sent_packets
+    struct diet acked_pkts;
+    // struct rtx_splay rtx_pkts;
+
+    struct diet recv; ///< Received packet numbers still needing to be ACKed.
 
     struct sockaddr_in peer; ///< Address of our peer.
     char * peer_name;
 
     splay_head(stream, q_stream) streams;
     struct diet closed_streams;
+
     struct w_sock * sock; ///< File descriptor (socket) for the connection.
     ev_io rx_w;           ///< RX watcher.
-    ev_async tx_w;
-
-    struct diet recv; ///< Received packet numbers still needing to be ACKed.
-
-    double reorder_fract;
-    uint64_t lg_sent_before_rto;
-    ev_tstamp srtt;
-    ev_tstamp rttvar;
-    uint64_t reorder_thresh;
-    ev_tstamp loss_t;
-
-    /// Sent-but-unACKed packets. The @p buf and @len fields of the w_iov
-    /// structs are relative to any stream data.
-    ///
-    struct pm_splay unacked_pkts;
-    struct diet acked_pkts;
-
-    uint64_t lg_sent;  ///< Largest packet number sent
-    uint64_t lg_acked; ///< Largest packet number for which an ACK was received
-    ev_tstamp latest_rtt;
+    ev_async tx_w;        ///< TX watcher.
 
     // CC state
-    uint64_t cwnd;
-    uint64_t in_flight;
+    uint64_t in_flight; // bytes_in_flight
+    uint64_t cwnd;      // congestion_window
     uint64_t rec_end;
     uint64_t ssthresh;
 
@@ -119,8 +123,6 @@ struct q_conn {
     uint32_t max_stream_id;
     uint16_t idle_timeout;
     uint16_t max_packet_size;
-
-    // uint8_t _unused3[2];
 };
 
 
