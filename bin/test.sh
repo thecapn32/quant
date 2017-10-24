@@ -25,7 +25,7 @@ case $c in
                 c="bin/client -v5 https://$addr:$port/"
                 ;;
         quicly)
-                c="external/usr/local/bin/cli -vvvv -p / $addr $port"
+                c="external/usr/local/bin/cli -l /tmp/quicly-c.log -v -p / $addr $port"
                 ;;
         minq)
                 c="env MINQ_LOG=\* GOPATH=$(pwd)/external/go go run \
@@ -54,7 +54,7 @@ case $s in
                 s="bin/server -v5 -p $port -d .."
                 ;;
         quicly)
-                s="external/usr/local/bin/cli -vvvv -k lib/src/key.pem -c \
+                s="external/usr/local/bin/cli -l /tmp/quicly-s.log -v -k lib/src/key.pem -c \
                         lib/src/cert.pem $addr $port"
                 ;;
         minq)
