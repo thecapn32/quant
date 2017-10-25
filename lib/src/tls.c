@@ -26,6 +26,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <string.h>
+#include <sys/param.h>
 
 // IWYU pragma: no_include <picotls/../picotls.h>
 #include <picotls/minicrypto.h>
@@ -47,6 +48,8 @@ ptls_context_t tls_ctx = {0};
 static ptls_minicrypto_secp256r1sha256_sign_certificate_t sign_cert = {0};
 static ptls_iovec_t tls_certs = {0};
 static ptls_openssl_verify_certificate_t verifier = {0};
+static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-05", 5}};
+static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 
 #define TLS_EXT_TYPE_TRANSPORT_PARAMETERS 26
 
@@ -57,6 +60,47 @@ static ptls_openssl_verify_certificate_t verifier = {0};
 #define TP_OMIT_CONNECTION_ID 0x0004
 #define TP_MAX_PACKET_SIZE 0x0005
 #define TP_STATELESS_RESET_TOKEN 0x0006
+
+
+static int __attribute__((nonnull))
+on_ch(ptls_on_client_hello_t * const self __attribute__((unused)),
+      ptls_t * const tls,
+      const ptls_iovec_t sni,
+      const ptls_iovec_t * const prot,
+      const size_t prot_cnt,
+      const uint16_t * const sig_alg __attribute__((unused)),
+      const size_t sig_alg_cnt __attribute__((unused)))
+{
+    if (sni.len) {
+        warn(INF, "using clnt-requested SNI %.*s", sni.len, sni.base);
+        ensure(ptls_set_server_name(tls, (const char *)sni.base, sni.len) == 0,
+               "ptls_set_server_name");
+    }
+
+    if (prot_cnt == 0) {
+        warn(WRN, "clnt requested no ALPN");
+        return 0;
+    }
+
+    size_t j;
+    for (j = 0; j < alpn_cnt; j++)
+        for (size_t i = 0; i < prot_cnt; i++)
+            if (memcmp(prot[i].base, alpn[j].base,
+                       MIN(prot[i].len, alpn[j].len)) == 0)
+                goto done;
+
+done:
+    if (j == prot_cnt)
+        die("no client-requested ALPN supported");
+
+    warn(INF, "supporting client-requested ALPN %.*s", alpn[j].len,
+         alpn[j].base);
+
+    return 0;
+}
+
+
+static ptls_on_client_hello_t cb = {on_ch};
 
 
 static int filter_tp(ptls_t * tls __attribute__((unused)),
@@ -290,10 +334,13 @@ void init_tls(struct q_conn * const c)
                                     strlen(c->peer_name)) == 0,
                "ptls_set_server_name");
     init_tp(c);
-    c->tls_hshake_prop =
-        (ptls_handshake_properties_t){.additional_extensions = c->tp_ext,
-                                      .collect_extension = filter_tp,
-                                      .collected_extensions = chk_tp};
+
+    c->tls_hshake_prop = (ptls_handshake_properties_t){
+        .additional_extensions = c->tp_ext,
+        .collect_extension = filter_tp,
+        .collected_extensions = chk_tp,
+        .client.negotiated_protocols.list = alpn,
+        .client.negotiated_protocols.count = alpn_cnt};
 }
 
 
@@ -386,6 +433,7 @@ void init_tls_ctx(void)
 
     tls_ctx.key_exchanges = my_own_key_exchanges;
     tls_ctx.cipher_suites = ptls_minicrypto_cipher_suites;
+    tls_ctx.on_client_hello = &cb;
 
     ensure(ptls_minicrypto_init_secp256r1sha256_sign_certificate(
                &sign_cert, ptls_iovec_init(tls_key, tls_key_len)) == 0,

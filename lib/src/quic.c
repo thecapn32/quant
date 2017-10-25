@@ -210,8 +210,8 @@ struct q_conn * q_connect(void * const q,
     tls_ctx.random_bytes(&cid, sizeof(cid));
     const uint vers = ok_vers[0];
     struct q_conn * const c = new_conn(q, vers, cid, peer, peer_name, 0);
-    warn(WRN, "connecting %s conn %" PRIx64 " to %s:%u", conn_type(c), cid,
-         inet_ntoa(peer->sin_addr), ntohs(peer->sin_port));
+    warn(WRN, "connecting %s conn %" PRIx64 " to %s:%u w/SNI %s", conn_type(c),
+         cid, inet_ntoa(peer->sin_addr), ntohs(peer->sin_port), peer_name);
 
     c->next_sid = 1; // client initiates odd-numbered streams
     w_connect(c->sock, peer->sin_addr.s_addr, peer->sin_port);
