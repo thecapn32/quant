@@ -130,7 +130,25 @@ dec_stream_frame(struct q_conn * const c,
              *len, plural(*len), off, off + *len, conn_type(c), c->id, sid);
         s->in_off += *len;
         sq_insert_tail(&s->in, v, next);
-        // s->state = STRM_STAT_OPEN;
+
+        // check if a hole has been filled that lets us dequeue ooo data
+        struct pkt_meta *p, *nxt;
+        for (p = splay_min(pm_off_splay, &s->in_ooo);
+             p && p->in_off == s->in_off; p = nxt) {
+            nxt = splay_next(pm_off_splay, &s->in_ooo, p);
+            const uint16_t sdl = p->stream_data_end;
+
+            warn(NTE,
+                 "can deliver %u byte%s ooo data (off %" PRIu64 "-%" PRIu64
+                 ") on %s conn %" PRIx64 " str %u",
+                 sdl, plural(sdl), p->in_off, p->in_off + sdl, conn_type(c),
+                 c->id, sid);
+
+            sq_insert_tail(&s->in, v, next);
+            splay_remove(pm_off_splay, &s->in_ooo, p);
+            s->in_off += sdl;
+        }
+
 
         if (is_set(F_STREAM_FIN, type)) {
 #ifndef NDEBUG
@@ -141,13 +159,13 @@ dec_stream_frame(struct q_conn * const c,
             warn(NTE,
                  "received FIN on %s conn %" PRIx64 " str %u, state %u -> %u",
                  conn_type(c), c->id, s->id, old_state, s->state);
+            if (s->id != 0 && splay_empty(&s->in_ooo))
+                maybe_api_return(q_readall_str, s);
         }
 
-        if (s->id != 0) {
+        if (s->id != 0)
             maybe_api_return(q_read, s->c);
-            // TODO: partial data
-            maybe_api_return(q_readall_str, s);
-        } else {
+        else {
             // adjust w_iov start and len to stream frame data for TLS handshake
             uint8_t * const b = v->buf;
             const uint16_t l = v->len;
@@ -174,10 +192,16 @@ dec_stream_frame(struct q_conn * const c,
         return i;
     }
 
-    die("partially new or reordered data: %u byte%s data (off %" PRIu64
-        "-%" PRIu64 "), expected %" PRIu64 " on %s conn %" PRIx64 " str %u",
-        *len, plural(*len), off, off + *len, s->in_off, conn_type(c), c->id,
-        sid);
+    // data is out of order
+    warn(NTE,
+         "reordered data: %u byte%s data (off %" PRIu64 "-%" PRIu64
+         "), expected %" PRIu64 " on %s conn %" PRIx64 " str %u",
+         *len, plural(*len), off, off + *len, s->in_off, conn_type(c), c->id,
+         sid);
+    meta(v).in_off = off;
+    meta(v).stream_data_end = *len;
+    splay_insert(pm_off_splay, &s->in_ooo, &meta(v));
+    return i;
 }
 
 
@@ -343,7 +367,7 @@ static void __attribute__((nonnull)) process_ack(struct q_conn * const c,
     c->hshake_cnt = c->tlp_cnt = c->rto_cnt = 0;
 
     // this packet is no no longer unACKed
-    splay_remove(pm_splay, &c->unacked_pkts, &meta(p));
+    splay_remove(pm_nr_splay, &c->unacked_pkts, &meta(p));
     diet_insert(&c->acked_pkts, ack);
     if (splay_empty(&c->unacked_pkts))
         maybe_api_return(q_close, c);

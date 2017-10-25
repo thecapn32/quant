@@ -167,7 +167,7 @@ int main(int argc, char * argv[])
         const size_t parsed =
             http_parser_execute(&parser, &settings, (char *)v->buf, v->len);
         ensure(parsed == v->len, "HTTP parser error");
-        if(q_is_str_closed(s))
+        if (q_is_str_closed(s))
             break;
     }
 

@@ -152,7 +152,7 @@ tx_stream(struct q_stream * const s, const bool rtx, const uint32_t limit)
     const ev_tstamp now = ev_now(loop);
 #if 0
     const struct pkt_meta * const last_tx =
-        splay_max(pm_splay, &c->unacked_pkts);
+        splay_max(pm_nr_splay, &c->unacked_pkts);
     const ev_tstamp last_tx_t = last_tx ? last_tx->time : -HUGE_VAL;
 #endif
 
@@ -191,13 +191,13 @@ tx_stream(struct q_stream * const s, const bool rtx, const uint32_t limit)
             // on RTX, remember orig pkt meta data
             struct w_iov * const r =
                 w_alloc_iov(w_engine(c->sock), Q_OFFSET, 0);
-            meta(r) = meta(v);                           // copy pkt meta data
+            pm_cpy(&meta(r), &meta(v));                  // copy pkt meta data
             memcpy(r->buf, v->buf - Q_OFFSET, Q_OFFSET); // copy pkt data
             meta(r).is_rtxed = true;
 
             // we reinsert meta(v) with its new pkt nr below
-            splay_remove(pm_splay, &c->unacked_pkts, &meta(v));
-            splay_insert(pm_splay, &c->unacked_pkts, &meta(r));
+            splay_remove(pm_nr_splay, &c->unacked_pkts, &meta(v));
+            splay_insert(pm_nr_splay, &c->unacked_pkts, &meta(r));
         }
 
         // store packet info (see OnPacketSent pseudo code)
@@ -205,7 +205,7 @@ tx_stream(struct q_stream * const s, const bool rtx, const uint32_t limit)
 
         enc_pkt(s, rtx, v, &x);
         if (meta(v).is_rtxable) {
-            splay_insert(pm_splay, &c->unacked_pkts, &meta(v));
+            splay_insert(pm_nr_splay, &c->unacked_pkts, &meta(v));
             c->in_flight += meta(v).tx_len;
             warn(INF, "in_flight +%u = %" PRIu64, meta(v).tx_len, c->in_flight);
         } else
@@ -214,8 +214,8 @@ tx_stream(struct q_stream * const s, const bool rtx, const uint32_t limit)
         char a_buf[1024] = "";
         char ua_buf[1024] = "";
         diet_to_str(a_buf, sizeof(a_buf), &c->acked_pkts);
-        for (struct pkt_meta * p = splay_min(pm_splay, &c->unacked_pkts); p;
-             p = splay_next(pm_splay, &c->unacked_pkts, p)) {
+        for (struct pkt_meta * p = splay_min(pm_nr_splay, &c->unacked_pkts); p;
+             p = splay_next(pm_nr_splay, &c->unacked_pkts, p)) {
             char tmp[1024] = "";
             snprintf(tmp, sizeof(tmp), "%" PRIu64 ", ", p->nr);
             strncat(ua_buf, tmp, sizeof(ua_buf) - strlen(ua_buf) - 1);
@@ -440,10 +440,10 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
             init_tls(c);
             // free the previous ClientHello
             struct pkt_meta *ch, *nxt;
-            for (ch = splay_min(pm_splay, &c->unacked_pkts); ch; ch = nxt) {
-                nxt = splay_next(pm_splay, &c->unacked_pkts, ch);
+            for (ch = splay_min(pm_nr_splay, &c->unacked_pkts); ch; ch = nxt) {
+                nxt = splay_next(pm_nr_splay, &c->unacked_pkts, ch);
                 c->in_flight -= ch->tx_len;
-                splay_remove(pm_splay, &c->unacked_pkts, ch);
+                splay_remove(pm_nr_splay, &c->unacked_pkts, ch);
                 diet_insert(&c->acked_pkts, ch->nr);
                 q_free_iov(w_engine(c->sock),
                            w_iov(w_engine(c->sock), w_iov_idx(ch)));
@@ -612,8 +612,8 @@ void rx(struct ev_loop * const l,
         char a_buf[1024] = "";
         char ua_buf[1024] = "";
         diet_to_str(a_buf, sizeof(a_buf), &c->acked_pkts);
-        for (struct pkt_meta * p = splay_min(pm_splay, &c->unacked_pkts); p;
-             p = splay_next(pm_splay, &c->unacked_pkts, p)) {
+        for (struct pkt_meta * p = splay_min(pm_nr_splay, &c->unacked_pkts); p;
+             p = splay_next(pm_nr_splay, &c->unacked_pkts, p)) {
             char tmp[1024] = "";
             snprintf(tmp, sizeof(tmp), "%" PRIu64 ", ", p->nr);
             strncat(ua_buf, tmp, sizeof(ua_buf) - strlen(ua_buf) - 1);
@@ -638,9 +638,9 @@ void detect_lost_pkts(struct q_conn * const c)
     uint64_t largest_lost_packet = 0;
     struct pkt_meta *p, *nxt;
 
-    for (p = splay_min(pm_splay, &c->unacked_pkts); p && p->nr < c->lg_acked;
+    for (p = splay_min(pm_nr_splay, &c->unacked_pkts); p && p->nr < c->lg_acked;
          p = nxt) {
-        nxt = splay_next(pm_splay, &c->unacked_pkts, p);
+        nxt = splay_next(pm_nr_splay, &c->unacked_pkts, p);
 
         const ev_tstamp time_since_sent = now - p->time;
         const uint64_t delta = c->lg_acked - p->nr;
@@ -654,14 +654,15 @@ void detect_lost_pkts(struct q_conn * const c)
             // Inform the congestion controller of lost packets and
             // lets it decide whether to retransmit immediately.
             largest_lost_packet = MAX(largest_lost_packet, p->nr);
-            splay_remove(pm_splay, &c->unacked_pkts, p);
-            diet_insert(&c->acked_pkts, p->nr);
+            // splay_remove(pm_nr_splay, &c->unacked_pkts, p);
+            // diet_insert(&c->acked_pkts, p->nr);
 
             // if this packet was retransmittable, update in_flight
-            if (p->is_rtxable) {
-                c->in_flight -= p->tx_len;
-                warn(INF, "in_flight -%u = %" PRIu64, p->tx_len, c->in_flight);
-            }
+            // if (p->is_rtxable) {
+            //     c->in_flight -= p->tx_len;
+            //     warn(INF, "in_flight -%u = %" PRIu64, p->tx_len,
+            //     c->in_flight);
+            // }
 
             warn(WRN, "pkt %" PRIu64 " considered lost", p->nr);
         } else if (fpclassify(c->loss_t) == FP_ZERO &&
@@ -775,7 +776,7 @@ bool find_sent_pkt(struct q_conn * const c,
 {
     struct pkt_meta which_meta = {.nr = nr};
     const struct pkt_meta * const p =
-        splay_find(pm_splay, &c->unacked_pkts, &which_meta);
+        splay_find(pm_nr_splay, &c->unacked_pkts, &which_meta);
     if (p) {
         *v = w_iov(w_engine(c->sock), w_iov_idx(p));
         return true;

@@ -85,9 +85,8 @@ struct q_conn {
     /// Sent-but-unACKed packets. The @p buf and @len fields of the w_iov
     /// structs are relative to any stream data.
     ///
-    struct pm_splay unacked_pkts; // sent_packets
+    struct pm_nr_splay unacked_pkts; // sent_packets
     struct diet acked_pkts;
-    // struct rtx_splay rtx_pkts;
 
     struct diet recv; ///< Received packet numbers still needing to be ACKed.
 

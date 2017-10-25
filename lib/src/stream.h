@@ -29,6 +29,9 @@
 
 #include <warpcore/warpcore.h>
 
+#include "quic.h"
+
+
 struct q_conn;
 struct stream;
 
@@ -40,7 +43,8 @@ struct q_stream {
     uint64_t out_ack_cnt; ///< Number of unique ACKs received for pkts in o.
     uint64_t out_off;     ///< Current stream offset.
 
-    struct w_iov_sq in; ///< tail queue containing inbound data
+    struct w_iov_sq in;         ///< Tail queue containing inbound data.
+    struct pm_off_splay in_ooo; ///< Out-of-order inbound data.
     uint64_t in_off;
 
     uint64_t max_stream_data;

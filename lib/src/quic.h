@@ -25,6 +25,7 @@
 
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include <ev.h>
@@ -33,8 +34,10 @@
 
 /// Packet meta-data information associated with w_iov buffers
 struct pkt_meta {
-    splay_entry(pkt_meta) node;
+    splay_entry(pkt_meta) nr_node;
+    splay_entry(pkt_meta) off_node;
     uint64_t nr;                ///< Packet number.
+    uint64_t in_off;            ///< Packet number.
     ev_tstamp time;             ///< Transmission timestamp.
     struct q_stream * str;      ///< Stream this data was written on.
     uint16_t stream_header_pos; ///< Offset of stream frame header.
@@ -51,11 +54,16 @@ struct pkt_meta {
 
 
 extern int __attribute__((nonnull))
-pm_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b);
+pm_nr_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b);
 
-splay_head(pm_splay, pkt_meta);
+extern int __attribute__((nonnull))
+pm_off_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b);
 
-SPLAY_PROTOTYPE(pm_splay, pkt_meta, node, pm_cmp)
+splay_head(pm_nr_splay, pkt_meta);
+splay_head(pm_off_splay, pkt_meta);
+
+SPLAY_PROTOTYPE(pm_nr_splay, pkt_meta, nr_node, pm_nr_cmp)
+SPLAY_PROTOTYPE(pm_off_splay, pkt_meta, off_node, pm_off_cmp)
 
 
 extern struct pkt_meta * pm;
@@ -78,6 +86,12 @@ extern struct pkt_meta * pm;
 ///
 #define w_iov_idx(m) ((m)-pm)
 
+
+#define pm_cpy(dst, src)                                                       \
+    memcpy((uint8_t *)(dst) + offsetof(struct pkt_meta, nr),                   \
+           (uint8_t *)(src) + offsetof(struct pkt_meta, nr),                   \
+           sizeof(struct pkt_meta) -                                           \
+               (sizeof(struct pkt_meta) - offsetof(struct pkt_meta, nr)))
 
 /// Offset of stream frame payload data in w_iov buffers.
 #define Q_OFFSET 64

@@ -47,7 +47,8 @@
 
 struct ev_loop;
 
-SPLAY_GENERATE(pm_splay, pkt_meta, node, pm_cmp)
+SPLAY_GENERATE(pm_nr_splay, pkt_meta, nr_node, pm_nr_cmp)
+SPLAY_GENERATE(pm_off_splay, pkt_meta, off_node, pm_off_cmp)
 
 // TODO: many of these globals should move to a per-engine struct
 
@@ -91,9 +92,15 @@ static const uint32_t nbufs = 1000; ///< Number of packet buffers to allocate.
     } while (0)
 
 
-int pm_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
+int pm_nr_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
 {
     return (a->nr > b->nr) - (a->nr < b->nr);
+}
+
+
+int pm_off_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
+{
+    return (a->in_off > b->in_off) - (a->in_off < b->in_off);
 }
 
 
