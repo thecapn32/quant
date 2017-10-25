@@ -34,6 +34,7 @@
 #include <sys/types.h>
 
 #include <ev.h>
+#include <picotls.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
@@ -296,6 +297,21 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_sq * const q)
     warn(WRN, "read %u byte%s on %s conn %" PRIx64 " str %u", w_iov_sq_len(q),
          plural(w_iov_sq_len(q)), conn_type(s->c), s->c->id, s->id);
     return s;
+}
+
+
+void q_readall_str(struct q_stream * const s, struct w_iov_sq * const q)
+{
+    warn(WRN, "reading all on %s conn %" PRIx64 " str %u", conn_type(s->c),
+         s->c->id, s->id);
+
+    while (s->state != STRM_STAT_HCRM && s->state != STRM_STAT_CLSD)
+        loop_run(q_readall_str, s);
+
+    // return data
+    sq_concat(q, &s->in);
+    warn(WRN, "read %u byte%s on %s conn %" PRIx64 " str %u", w_iov_sq_len(q),
+         plural(w_iov_sq_len(q)), conn_type(s->c), s->c->id, s->id);
 }
 
 

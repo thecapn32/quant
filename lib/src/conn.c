@@ -186,21 +186,28 @@ tx_stream(struct q_stream * const s, const bool rtx, const uint32_t limit)
         }
 #endif
 
+        if (rtx) {
+            ensure(meta(v).is_rtxed == false, "cannot RTX an RTX");
+            // on RTX, remember orig pkt meta data
+            struct w_iov * const r =
+                w_alloc_iov(w_engine(c->sock), Q_OFFSET, 0);
+            meta(r) = meta(v);                           // copy pkt meta data
+            memcpy(r->buf, v->buf - Q_OFFSET, Q_OFFSET); // copy pkt data
+            meta(r).is_rtxed = true;
+
+            // we reinsert meta(v) with its new pkt nr below
+            splay_remove(pm_splay, &c->unacked_pkts, &meta(v));
+            splay_insert(pm_splay, &c->unacked_pkts, &meta(r));
+        }
+
         // store packet info (see OnPacketSent pseudo code)
         meta(v).time = now; // remember TX time
-
-        if (rtx)
-            // on RTX, remember orig pkt number (enc_pkt overwrites with new)
-            splay_remove(pm_splay, &c->unacked_pkts, &meta(v));
 
         enc_pkt(s, rtx, v, &x);
         if (meta(v).is_rtxable) {
             splay_insert(pm_splay, &c->unacked_pkts, &meta(v));
-            if (!rtx) {
-                c->in_flight += meta(v).tx_len;
-                warn(INF, "in_flight +%u = %" PRIu64, meta(v).tx_len,
-                     c->in_flight);
-            }
+            c->in_flight += meta(v).tx_len;
+            warn(INF, "in_flight +%u = %" PRIu64, meta(v).tx_len, c->in_flight);
         } else
             diet_insert(&c->acked_pkts, meta(v).nr);
 
@@ -405,6 +412,10 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
 
     case CONN_STAT_VERS_SENT: {
         if (is_set(F_LH_TYPE_VNEG, flags)) {
+            struct w_iov * p;
+            ensure(find_sent_pkt(c, meta(v).nr, &p),
+                   "did not send pkt %" PRIu64, meta(v).nr);
+
             const uint32_t vers = pkt_vers(v->buf, v->len);
             if (c->vers != vers) {
                 warn(NTE,
@@ -416,8 +427,7 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
 
             warn(INF, "serv didn't like our vers 0x%08x", vers);
             ensure(vers_supported(vers), "vers 0x%08x not one of ours", vers);
-            ensure(find_sent_pkt(c, meta(v).nr, 0), "did not send pkt %" PRIu64,
-                   meta(v).nr);
+
             if (c->vers_initial == 0)
                 c->vers_initial = c->vers;
             c->vers = pick_from_server_vers(v->buf, v->len);
@@ -427,15 +437,18 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
                 die("no vers in common with serv");
 
             // retransmit the ClientHello
-            c->in_flight = 0;
             init_tls(c);
-            struct q_stream * s = get_stream(c, 0);
             // free the previous ClientHello
-            struct w_iov * ch;
-            sq_foreach (ch, &s->out, next) {
-                splay_remove(pm_splay, &c->unacked_pkts, &meta(ch));
-                diet_insert(&c->acked_pkts, meta(ch).nr);
+            struct pkt_meta *ch, *nxt;
+            for (ch = splay_min(pm_splay, &c->unacked_pkts); ch; ch = nxt) {
+                nxt = splay_next(pm_splay, &c->unacked_pkts, ch);
+                c->in_flight -= ch->tx_len;
+                splay_remove(pm_splay, &c->unacked_pkts, ch);
+                diet_insert(&c->acked_pkts, ch->nr);
+                q_free_iov(w_engine(c->sock),
+                           w_iov(w_engine(c->sock), w_iov_idx(ch)));
             }
+            struct q_stream * s = get_stream(c, 0);
             q_free(w_engine(c->sock), &s->out);
             s->out_off = 0;
             tls_handshake(s);
@@ -582,8 +595,8 @@ void rx(struct ev_loop * const l,
         process_pkt(c, v, prot_len);
     }
 
-    // for all connections that had RX events, reset idle timeout and check if
-    // we need to do a TX
+    // for all connections that had RX events, reset idle timeout and check
+    // if we need to do a TX
     struct q_conn * c;
     sl_foreach (c, &crx, next) {
         // reset idle timeout
@@ -764,17 +777,11 @@ bool find_sent_pkt(struct q_conn * const c,
     const struct pkt_meta * const p =
         splay_find(pm_splay, &c->unacked_pkts, &which_meta);
     if (p) {
-        ensure(p->nr == nr, "found pkt");
-        struct w_iov * const f = w_iov(w_engine(c->sock), w_iov_idx(p));
-        // warn(DBG, "found pkt %" PRIu64 " in idx %u len %u", nr, w_iov_idx(p),
-        //      f->len);
-        if (v)
-            *v = f;
+        *v = w_iov(w_engine(c->sock), w_iov_idx(p));
         return true;
     }
 
     // check if packet was sent and already ACKed
-    if (v)
-        *v = 0;
+    *v = 0;
     return diet_find(&c->acked_pkts, nr);
 }

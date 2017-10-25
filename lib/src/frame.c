@@ -143,9 +143,11 @@ dec_stream_frame(struct q_conn * const c,
                  conn_type(c), c->id, s->id, old_state, s->state);
         }
 
-        if (s->id != 0)
+        if (s->id != 0) {
             maybe_api_return(q_read, s->c);
-        else {
+            // TODO: partial data
+            maybe_api_return(q_readall_str, s);
+        } else {
             // adjust w_iov start and len to stream frame data for TLS handshake
             uint8_t * const b = v->buf;
             const uint16_t l = v->len;
@@ -172,11 +174,10 @@ dec_stream_frame(struct q_conn * const c,
         return i;
     }
 
-    die("TODO: handle partially new or reordered data: %u byte%s data (off "
-        "%" PRIu64 "-%" PRIu64 "), expected %" PRIu64 " on %s conn %" PRIx64
-        " str %u: %.*s",
+    die("partially new or reordered data: %u byte%s data (off %" PRIu64
+        "-%" PRIu64 "), expected %" PRIu64 " on %s conn %" PRIx64 " str %u",
         *len, plural(*len), off, off + *len, s->in_off, conn_type(c), c->id,
-        sid, *len, &v->buf[i]);
+        sid);
 }
 
 
@@ -240,8 +241,6 @@ dec_ack_frame(struct q_conn * const c,
     for (uint8_t b = 0; b < num_blocks; b++) {
         uint64_t l = 0;
         dec(l, v->buf, v->len, i, ack_block_len, "%" PRIu64);
-        if (b)
-            l--;
 
         while (PN_GEQ(ack, lg_ack - l)) {
             // NOTE: op() must be called with ACKs in decreasing order
@@ -255,6 +254,7 @@ dec_ack_frame(struct q_conn * const c,
         if (b < num_blocks - 1) {
             uint8_t gap = 0;
             dec(gap, v->buf, v->len, i, 0, "%u");
+            ack++;
             lg_ack = ack -= gap;
         }
     }

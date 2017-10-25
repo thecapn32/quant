@@ -116,7 +116,7 @@ int main(int argc, char * argv[])
     char dest[1024], port[64], path[2048];
     set_from_url(dest, sizeof(dest), url, &u, UF_HOST, "localhost");
     set_from_url(port, sizeof(port), url, &u, UF_PORT, "4433");
-    set_from_url(path, sizeof(path), url, &u, UF_PATH, "");
+    set_from_url(path, sizeof(path), url, &u, UF_PATH, "/index.html");
 
     struct addrinfo * peer;
     const struct addrinfo hints = {.ai_family = PF_INET,
@@ -141,7 +141,7 @@ int main(int argc, char * argv[])
 
         // read HTTP/0.9 reply and dump it to stdout
         struct w_iov_sq i = sq_head_initializer(i);
-        q_read(c, &i);
+        q_readall_str(s, &i);
         struct w_iov * v;
         sq_foreach (v, &i, next)
             printf("%.*s", v->len, v->buf);

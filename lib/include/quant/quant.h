@@ -82,3 +82,6 @@ extern void __attribute__((nonnull)) q_write_file(void * const q,
                                                   const uint32_t len);
 
 extern bool __attribute__((nonnull)) q_is_str_closed(struct q_stream * const s);
+
+extern void __attribute__((nonnull))
+q_readall_str(struct q_stream * const s, struct w_iov_sq * const q);

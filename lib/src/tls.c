@@ -388,10 +388,11 @@ uint32_t tls_handshake(struct q_stream * const s)
     // allocate a new w_iov
     struct w_iov * ov =
         w_alloc_iov(w_engine(s->c->sock), MAX_PKT_LEN, Q_OFFSET);
-    ptls_buffer_init(&meta(ov).tb, ov->buf, ov->len);
-    const int ret = ptls_handshake(s->c->tls, &meta(ov).tb, iv ? iv->buf : 0,
-                                   &in_len, &s->c->tls_hshake_prop);
-    ov->len = (uint16_t)meta(ov).tb.off;
+    ptls_buffer_t tb;
+    ptls_buffer_init(&tb, ov->buf, ov->len);
+    const int ret = ptls_handshake(s->c->tls, &tb, iv ? iv->buf : 0, &in_len,
+                                   &s->c->tls_hshake_prop);
+    ov->len = (uint16_t)tb.off;
     warn(DBG, "in %u, gen %u into idx %u, ret %u", iv ? iv->len : 0, ov->len,
          ov->idx, ret);
     ensure(ret == 0 || ret == PTLS_ERROR_IN_PROGRESS, "TLS error: %u", ret);

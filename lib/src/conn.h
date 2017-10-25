@@ -180,5 +180,5 @@ extern void * __attribute__((nonnull)) loop_run(void * const arg);
 extern void __attribute__((nonnull))
 loop_update(struct ev_loop * const l, ev_async * const w, int e);
 
-extern bool __attribute__((nonnull(1)))
+extern bool __attribute__((nonnull))
 find_sent_pkt(struct q_conn * const c, const uint64_t nr, struct w_iov ** v);

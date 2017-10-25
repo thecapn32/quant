@@ -25,29 +25,28 @@
 
 #pragma once
 
-#include <ev.h>
-#include <picotls.h>
 #include <stdint.h>
 
+#include <ev.h>
 #include <warpcore/warpcore.h>
 
 
 /// Packet meta-data information associated with w_iov buffers
 struct pkt_meta {
     splay_entry(pkt_meta) node;
-    ev_tstamp time;             ///< Transmission timestamp.
-    ptls_buffer_t tb;           ///< PicoTLS send buffer.
-    struct q_stream * str;      ///< Stream this data was written on.
     uint64_t nr;                ///< Packet number.
-    uint32_t ack_cnt;           ///< Number of ACKs seen for this packet.
-    uint32_t tx_cnt;            ///< Number of times this packet was tx'ed.
+    ev_tstamp time;             ///< Transmission timestamp.
+    struct q_stream * str;      ///< Stream this data was written on.
     uint16_t stream_header_pos; ///< Offset of stream frame header.
     uint16_t stream_data_end;   ///< Offset of last byte of stream frame data.
     uint16_t ack_header_pos;    ///< Offset of ACK frame header.
     uint16_t tx_len;            ///< Length of protected packet at TX.
+    uint16_t ack_cnt;           ///< Number of ACKs seen for this packet.
+    uint16_t tx_cnt;            ///< Number of times this packet was tx'ed.
     uint8_t is_rtxable : 1;     ///< Is this packet retransmittable?
-    uint8_t : 7;
-    uint8_t _unused[7];
+    uint8_t is_rtxed : 1;       ///< Does the w_iov hold truncated data?
+    uint8_t : 6;
+    uint8_t _unused[3];
 };
 
 
@@ -80,7 +79,9 @@ extern struct pkt_meta * pm;
 #define w_iov_idx(m) ((m)-pm)
 
 
+/// Offset of stream frame payload data in w_iov buffers.
 #define Q_OFFSET 64
+
 
 extern struct ev_loop * loop;
 
