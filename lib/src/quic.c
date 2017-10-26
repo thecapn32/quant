@@ -174,6 +174,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
     c->idle_alarm.data = c;
     c->idle_alarm.repeat = kIdleTimeout;
     ev_init(&c->idle_alarm, idle_alarm);
+    ev_timer_again(loop, &c->idle_alarm);
 
     // initialize socket and start an RX/TX watchers
     ev_async_init(&c->tx_w, tx_w);
