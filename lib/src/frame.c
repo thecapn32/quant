@@ -215,8 +215,8 @@ static uint8_t __attribute__((const)) dec_lg_ack_len(const uint8_t flags)
 }
 
 
-// Convert ACK block length encoded in flags to bytes
-static uint8_t __attribute__((const)) dec_ack_block_len(const uint8_t flags)
+// Convert length of ACK block length encoded in flags to bytes
+static uint8_t __attribute__((const)) dec_len_ack_block_len(const uint8_t flags)
 {
     const uint8_t l = flags & 0x03;
     ensure(l <= 3, "cannot decode largest ACK length %u", l);
@@ -226,7 +226,6 @@ static uint8_t __attribute__((const)) dec_ack_block_len(const uint8_t flags)
 
 
 #define F_ACK_N 0x10
-#define PN_GEQ(a, b) (((int64_t)(a) - (int64_t)(b)) >= 0)
 
 static uint16_t __attribute__((nonnull))
 dec_ack_frame(struct q_conn * const c,
@@ -244,11 +243,10 @@ dec_ack_frame(struct q_conn * const c,
     uint8_t type = 0;
     dec(type, v->buf, v->len, i, 0, "0x%02x");
 
-    uint8_t num_blocks = 1;
-    if (is_set(F_ACK_N, type)) {
-        dec(num_blocks, v->buf, v->len, i, 0, "%u");
-        num_blocks++;
-    }
+    uint16_t num_blocks = 0;
+    if (is_set(F_ACK_N, type))
+        dec(num_blocks, v->buf, v->len, i, sizeof(uint8_t), "%u");
+    num_blocks++;
 
     uint8_t num_ts = 0;
     dec(num_ts, v->buf, v->len, i, 0, "%u");
@@ -260,28 +258,35 @@ dec_ack_frame(struct q_conn * const c,
     uint16_t ack_delay = 0;
     dec(ack_delay, v->buf, v->len, i, 0, "%u");
 
-    const uint8_t ack_block_len = dec_ack_block_len(type);
-    uint64_t ack = lg_ack;
-    for (uint8_t b = 0; b < num_blocks; b++) {
-        uint64_t l = 0;
-        dec(l, v->buf, v->len, i, ack_block_len, "%" PRIu64);
+    const uint8_t len_ack_block_len = dec_len_ack_block_len(type);
 
-        while (PN_GEQ(ack, lg_ack - l)) {
-            // NOTE: op() must be called with ACKs in decreasing order
-            const bool is_lg_ack = (b == 0 && ack == lg_ack);
-            const bool is_sm_ack = (b == num_blocks - 1 && ack == lg_ack - l);
+    uint64_t lg_ack_in_block = lg_ack;
+    do {
+        // warn(CRT, "num_blocks %u", num_blocks);
+        uint64_t ack_block_len = 0;
+        dec(ack_block_len, v->buf, v->len, i, len_ack_block_len, "%" PRIu64);
+        if (lg_ack_in_block == lg_ack)
+            // this is the first ACK block
+            ack_block_len++;
+
+        uint64_t ack = lg_ack_in_block;
+        while (ack > lg_ack_in_block - ack_block_len) {
+            const bool is_lg_ack = (ack == lg_ack);
+            const bool is_sm_ack =
+                (num_blocks == 1 && ack == lg_ack_in_block - ack_block_len + 1);
+            // warn(CRT, "ack %" PRIu64 " is_lg_ack %u is_sm_ack %u", ack,
+            //      is_lg_ack, is_sm_ack);
             op(c, ack, ack_delay, is_lg_ack, is_sm_ack);
             ack--;
         }
 
-        // skip ACK gap (no gap after last ACK block)
-        if (b < num_blocks - 1) {
+        if (num_blocks > 1) {
             uint8_t gap = 0;
             dec(gap, v->buf, v->len, i, 0, "%u");
-            ack++;
-            lg_ack = ack -= gap;
+            lg_ack_in_block = ack - gap;
         }
-    }
+        num_blocks--;
+    } while (num_blocks);
 
     for (uint8_t b = 0; b < num_ts; b++) {
         warn(DBG, "decoding timestamp block #%u", b);
@@ -323,7 +328,7 @@ static void __attribute__((nonnull)) process_ack(struct q_conn * const c,
     if (p == 0) {
         // we already had a previous ACK for this packet
         warn(DBG, "already have ACK for pkt %" PRIu64, ack);
-        goto ld;
+        return;
     }
 
     // only act on first-time ACKs
@@ -355,6 +360,11 @@ static void __attribute__((nonnull)) process_ack(struct q_conn * const c,
              c->rttvar, conn_type(c), c->id);
     }
 
+    if (is_sm_ack) {
+        detect_lost_pkts(c);
+        set_ld_alarm(c);
+    }
+
     // see OnPacketAcked pseudo code (for LD):
 
     // If a packet sent prior to RTO was ACKed, then the RTO
@@ -381,6 +391,8 @@ static void __attribute__((nonnull)) process_ack(struct q_conn * const c,
         dec_ack_frame(c, p, meta(p).ack_header_pos, &track_acked_pkts);
         p->buf += Q_OFFSET;
         p->len -= Q_OFFSET;
+        warn(DBG, "done decoding ACK info from pkt %" PRIu64 " from pos %u",
+             ack, meta(p).ack_header_pos);
     } else
         warn(DBG, "pkt %" PRIu64 " did not contain an ACK frame", ack);
 
@@ -403,12 +415,6 @@ static void __attribute__((nonnull)) process_ack(struct q_conn * const c,
         if (s && ++s->out_ack_cnt == sq_len(&s->out))
             // all packets are ACKed
             maybe_api_return(q_write, s);
-    }
-
-ld:
-    if (is_sm_ack) {
-        detect_lost_pkts(c);
-        set_ld_alarm(c);
     }
 }
 
@@ -651,14 +657,14 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     uint64_t prev_lo = 0;
     splay_foreach_rev (b, diet, &c->recv) {
         if (prev_lo) {
-            const uint64_t gap = prev_lo - b->hi;
+            const uint64_t gap = prev_lo - b->hi - 1;
             ensure(gap <= UINT8_MAX, "TODO: gap %" PRIu64 " too large", gap);
             enc(v->buf, v->len, i, &gap, sizeof(uint8_t), "%" PRIu64);
         }
-        prev_lo = b->lo;
-        const uint64_t ack_block = b->hi - b->lo;
+        const uint64_t ack_block = b->hi - b->lo + (prev_lo ? 1 : 0);
         warn(NTE, "ACKing %" PRIu64 "-%" PRIu64, b->lo, b->hi);
         enc(v->buf, v->len, i, &ack_block, ack_block_len, "%" PRIu64);
+        prev_lo = b->lo;
     }
     return i - pos;
 }

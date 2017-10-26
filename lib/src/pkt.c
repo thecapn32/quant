@@ -140,7 +140,7 @@ void enc_pkt(struct q_stream * const s,
     uint64_t prev_nr = 0;
     if (rtx) {
         prev_nr = meta(v).nr;
-        warn(DBG, "enc RTX %" PRIu64 " as %" PRIu64, prev_nr,
+        warn(INF, "enc RTX %" PRIu64 " as %" PRIu64, prev_nr,
              c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv)
                                             : c->lg_sent + 1);
     }
