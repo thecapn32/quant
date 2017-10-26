@@ -145,8 +145,10 @@ struct q_conn * get_conn_by_cid(const uint64_t id, const bool is_clnt)
 }
 
 
-static uint32_t
-tx_stream(struct q_stream * const s, const bool rtx, const uint32_t limit)
+static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
+                                                      const bool rtx,
+                                                      const uint32_t limit,
+                                                      struct w_iov * const from)
 {
     struct q_conn * const c = s->c;
     const ev_tstamp now = ev_now(loop);
@@ -158,17 +160,20 @@ tx_stream(struct q_stream * const s, const bool rtx, const uint32_t limit)
 
     struct w_iov_sq x = sq_head_initializer(x);
     uint32_t encoded = 0;
-    struct w_iov * v;
-    sq_foreach (v, &s->out, next) {
+    struct w_iov * v = from;
+    sq_foreach_from(v, &s->out, next)
+    {
         if (meta(v).ack_cnt) {
-            warn(DBG, "skipping ACKed pkt %" PRIu64, meta(v).nr);
+            warn(DBG,
+                 "skipping ACKed pkt %" PRIu64 " idx %u on str %u during %s",
+                 meta(v).nr, v->idx, s->id, rtx ? "RTX" : "TX");
             continue;
         }
 
         if (rtx != (meta(v).tx_cnt > 0)) {
-            warn(DBG, "skipping %s pkt %" PRIu64 " during %s",
-                 meta(v).tx_cnt ? "already-tx'ed" : "fresh", meta(v).nr,
-                 rtx ? "RTX" : "TX");
+            warn(DBG, "skipping %s pkt %" PRIu64 " idx %u on str %u during %s",
+                 meta(v).tx_cnt ? "already-tx'ed" : "fresh", meta(v).nr, v->idx,
+                 s->id, rtx ? "RTX" : "TX");
             continue;
         }
 
@@ -253,21 +258,24 @@ tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
          rtx ? "RTX" : "TX", conn_type(s->c), s->c->id, s->id, sq_len(&s->out),
          plural(sq_len(&s->out)));
 
-    struct w_iov * const v =
-        w_alloc_iov(w_engine(s->c->sock), Q_OFFSET, Q_OFFSET);
-    struct w_iov * const last = sq_last(&s->out, w_iov, next);
-    sq_insert_tail(&s->out, v, next);
-    const bool did_tx = tx_stream(s, rtx, limit);
-    ensure(sq_last(&s->out, w_iov, next) == v, "queue mixed up");
+    struct w_iov *v = 0, *last = 0;
+    if (!rtx) {
+        v = w_alloc_iov(w_engine(s->c->sock), Q_OFFSET, Q_OFFSET);
+        last = sq_last(&s->out, w_iov, next);
+        sq_insert_tail(&s->out, v, next);
+    }
 
-    // pure FINs are rtxable
-    if (!meta(v).is_rtxable) {
+    const bool did_tx = tx_stream(s, rtx, limit, v);
+
+    if (!rtx && !meta(v).is_rtxable) {
+        ensure(sq_last(&s->out, w_iov, next) == v, "queue mixed up");
         if (last)
             sq_remove_after(&s->out, last, next);
         else
             sq_remove_head(&s->out, next);
-        q_free_iov(w_engine(s->c->sock), v);
+        q_free_iov(s->c, v);
     }
+
     return did_tx;
 }
 
@@ -284,7 +292,7 @@ static void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
                  " pkt%s in queue",
                  rtx ? "RTX" : "TX", conn_type(c), c->id, s->id,
                  sq_len(&s->out), plural(sq_len(&s->out)));
-            did_tx |= tx_stream(s, rtx, limit);
+            did_tx |= tx_stream(s, rtx, limit, 0);
         } else if ((s->state == STRM_STAT_HCLO || s->state == STRM_STAT_CLSD) &&
                    !s->fin_sent)
             did_tx |= tx_other(s, rtx, limit);
@@ -362,7 +370,6 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
                                                  struct w_iov * const v,
                                                  const uint16_t prot_len)
 {
-    struct w_engine * const w = w_engine(c->sock);
     const uint8_t flags = pkt_flags(v->buf);
 
     switch (c->state) {
@@ -376,7 +383,7 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
             if (util_dlevel == DBG)
                 hexdump(v->buf, v->len);
 #endif
-            q_free_iov(w, v);
+            q_free_iov(c, v);
             return;
         }
 
@@ -445,10 +452,9 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
                 c->in_flight -= ch->tx_len;
                 splay_remove(pm_nr_splay, &c->unacked_pkts, ch);
                 diet_insert(&c->acked_pkts, ch->nr);
-                q_free_iov(w_engine(c->sock),
-                           w_iov(w_engine(c->sock), w_iov_idx(ch)));
             }
             struct q_stream * s = get_stream(c, 0);
+            warn(DBG, "q_free s->out len %u", sq_len(&s->out));
             q_free(w_engine(c->sock), &s->out);
             s->out_off = 0;
             tls_handshake(s);
@@ -511,7 +517,7 @@ void rx(struct ev_loop * const l,
             if (util_dlevel == DBG)
                 hexdump(v->buf, v->len);
 #endif
-            q_free_iov(w, v);
+            w_free_iov(w, v); // OK to use w_free_iov here
             continue;
         }
 
@@ -544,6 +550,7 @@ void rx(struct ev_loop * const l,
                     if (c == 0) {
                         // TODO: maintain accept queue
                         warn(CRT, "app is not in q_accept(), ignoring");
+                        w_free_iov(w, v); // OK to use w_free_iov here
                         continue;
                     }
                     update_ipnp(c, &peer);
@@ -575,7 +582,7 @@ void rx(struct ev_loop * const l,
             if (util_dlevel == DBG)
                 hexdump(v->buf, v->len);
 #endif
-            q_free_iov(w, v);
+            w_free_iov(w, v); // OK to use w_free_iov here
             continue;
         }
 
@@ -597,8 +604,10 @@ void rx(struct ev_loop * const l,
 
     // for all connections that had RX events, reset idle timeout and check
     // if we need to do a TX
-    struct q_conn * c;
-    sl_foreach (c, &crx, next) {
+    while (!sl_empty(&crx)) {
+        struct q_conn * const c = sl_first(&crx);
+        sl_remove_head(&crx, next);
+
         // reset idle timeout
         ev_timer_again(l, &c->idle_alarm);
 
@@ -628,7 +637,7 @@ void detect_lost_pkts(struct q_conn * const c)
     // see DetectLostPackets pseudo code
     c->loss_t = 0;
     ev_tstamp delay_until_lost = HUGE_VAL;
-    if (fpclassify(c->reorder_fract) != FP_INFINITE)
+    if (!is_inf(c->reorder_fract))
         delay_until_lost = (1 + c->reorder_fract) * MAX(c->latest_rtt, c->srtt);
     else if (c->lg_acked == c->lg_sent)
         // Early retransmit alarm.
@@ -654,19 +663,17 @@ void detect_lost_pkts(struct q_conn * const c)
             // Inform the congestion controller of lost packets and
             // lets it decide whether to retransmit immediately.
             largest_lost_packet = MAX(largest_lost_packet, p->nr);
-            // splay_remove(pm_nr_splay, &c->unacked_pkts, p);
-            // diet_insert(&c->acked_pkts, p->nr);
+            splay_remove(pm_nr_splay, &c->unacked_pkts, p);
+            diet_insert(&c->acked_pkts, p->nr);
 
             // if this packet was retransmittable, update in_flight
-            // if (p->is_rtxable) {
-            //     c->in_flight -= p->tx_len;
-            //     warn(INF, "in_flight -%u = %" PRIu64, p->tx_len,
-            //     c->in_flight);
-            // }
+            if (p->is_rtxable) {
+                c->in_flight -= p->tx_len;
+                warn(INF, "in_flight -%u = %" PRIu64, p->tx_len, c->in_flight);
+            }
 
             warn(WRN, "pkt %" PRIu64 " considered lost", p->nr);
-        } else if (fpclassify(c->loss_t) == FP_ZERO &&
-                   fpclassify(delay_until_lost) != FP_INFINITE)
+        } else if (is_zero(c->loss_t) && !is_inf(delay_until_lost))
             c->loss_t = now + delay_until_lost - time_since_sent;
     }
 
@@ -699,18 +706,22 @@ void set_ld_alarm(struct q_conn * const c)
     ev_tstamp dur = 0;
     const ev_tstamp now = ev_now(loop);
     if (c->state < CONN_STAT_ESTB) {
-        dur = fpclassify(c->srtt) == FP_ZERO ? kDefaultInitialRtt : c->srtt;
+        dur = is_zero(c->srtt) ? kDefaultInitialRtt : c->srtt;
         dur = MAX(2 * dur, kMinTLPTimeout) * (1 << c->hshake_cnt);
         warn(INF, "handshake RTX alarm in %f sec on %s conn %" PRIx64, dur,
              conn_type(c), c->id);
 
-    } else if (fpclassify(c->loss_t) != FP_ZERO) {
+    } else if (!is_zero(c->loss_t)) {
         dur = c->loss_t - now;
         warn(INF, "early RTX or time LD alarm in %f sec on %s conn %" PRIx64,
              dur, conn_type(c), c->id);
 
     } else if (c->tlp_cnt < kMaxTLPs) {
-        if (!splay_empty(&c->unacked_pkts))
+        struct pkt_meta * p;
+        const bool one_rtxable_pkt_outstanding =
+            (p = splay_min(pm_nr_splay, &c->unacked_pkts)) &&
+            splay_next(pm_nr_splay, &c->unacked_pkts, p);
+        if (one_rtxable_pkt_outstanding)
             dur = 1.5 * c->srtt + kDelayedAckTimeout;
         else
             dur = kMinTLPTimeout;
@@ -736,7 +747,6 @@ void ld_alarm(struct ev_loop * const l __attribute__((unused)),
               int e __attribute__((unused)))
 {
     struct q_conn * const c = w->data;
-    // XXX: we simply retransmit *all* unACKed packets here
 
     // see OnLossDetectionAlarm pseudo code
     if (c->state < CONN_STAT_ESTB) {
@@ -744,10 +754,8 @@ void ld_alarm(struct ev_loop * const l __attribute__((unused)),
         warn(INF, "handshake RTX #%u on %s conn %" PRIx64, c->hshake_cnt,
              conn_type(c), c->id);
         tx(c, true, 0);
-        return;
-    }
 
-    if (fpclassify(c->loss_t) != FP_ZERO) {
+    } else if (!is_zero(c->loss_t)) {
         warn(INF, "early RTX or time loss detection alarm on %s conn %" PRIx64,
              conn_type(c), c->id);
         detect_lost_pkts(c);
@@ -755,7 +763,7 @@ void ld_alarm(struct ev_loop * const l __attribute__((unused)),
     } else if (c->tlp_cnt < kMaxTLPs) {
         warn(INF, "TLP alarm #%u on %s conn %" PRIx64, c->tlp_cnt, conn_type(c),
              c->id);
-        tx(c, true, 1);
+        tx(c, true, 1); // XXX is this an RTX or not?
         c->tlp_cnt++;
 
     } else {
@@ -764,8 +772,9 @@ void ld_alarm(struct ev_loop * const l __attribute__((unused)),
         if (c->rto_cnt == 0)
             c->lg_sent_before_rto = c->lg_sent;
         tx(c, true, 2);
-        c->rto_cnt++;
+        c->rto_cnt++; // XXX is this an RTX or not?
     }
+
     set_ld_alarm(c);
 }
 

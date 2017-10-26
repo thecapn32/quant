@@ -140,9 +140,9 @@ void enc_pkt(struct q_stream * const s,
     uint64_t prev_nr = 0;
     if (rtx) {
         prev_nr = meta(v).nr;
-        warn(INF, "enc RTX %" PRIu64 " as %" PRIu64, prev_nr,
+        warn(INF, "enc RTX %" PRIu64 " as %" PRIu64 " in idx %u", prev_nr,
              c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv)
-                                            : c->lg_sent + 1);
+                                            : c->lg_sent + 1, v->idx);
     }
 
     meta(v).nr =
@@ -207,7 +207,7 @@ void enc_pkt(struct q_stream * const s,
     } else
         meta(v).ack_header_pos = 0;
 
-    if (c->state == CONN_STAT_CLSD /*&& !c->cc_sent*/) {
+    if (c->state == CONN_STAT_CLSD) {
         const char reas[] = "As if that blind rage had washed me clean, rid me "
                             "of hope; for the first time, in that night alive "
                             "with signs and stars, I opened myself to the "
@@ -221,7 +221,6 @@ void enc_pkt(struct q_stream * const s,
         v->len = i + 7 + sizeof(reas);
         i += enc_conn_close_frame(v, i, CONN_CLOS_ERR_NO_ERROR, reas,
                                   sizeof(reas));
-        // c->cc_sent= 1;
 
     } else {
 

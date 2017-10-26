@@ -188,7 +188,7 @@ dec_stream_frame(struct q_conn * const c,
              "%u byte%s dup data (off %" PRIu64 "-%" PRIu64
              ") on %s conn %" PRIx64 " str %u",
              *len, plural(*len), off, off + *len, conn_type(c), c->id, sid);
-        q_free_iov(w_engine(c->sock), v);
+        q_free_iov(c, v);
         c->needs_tx = true;
         return i;
     }
@@ -350,7 +350,7 @@ static void __attribute__((nonnull)) process_ack(struct q_conn * const c,
         warn(INF, "latest_rtt %f", c->latest_rtt);
 
         // see UpdateRtt pseudo code:
-        if (fpclassify(c->srtt) == FP_ZERO) {
+        if (is_zero(c->srtt)) {
             c->srtt = c->latest_rtt;
             c->rttvar = c->latest_rtt / 2;
         } else {
@@ -767,6 +767,5 @@ uint16_t enc_conn_close_frame(struct w_iov * const v,
     memcpy(&v->buf[i], reas, rlen);
     warn(DBG, "enc %u-byte reason phrase into [%u..%u]", rlen, i, i + rlen - 1);
 
-    // meta(v).is_rtxable = true;
     return i + rlen - pos;
 }

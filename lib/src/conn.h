@@ -25,6 +25,7 @@
 
 #pragma once
 
+#include <math.h>
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -35,6 +36,7 @@
 
 #include "diet.h"
 #include "quic.h"
+
 
 extern splay_head(ipnp_splay, q_conn) conns_by_ipnp;
 extern splay_head(cid_splay, q_conn) conns_by_cid;
@@ -57,8 +59,7 @@ struct q_conn {
     uint8_t had_rx : 1;   ///< We had an RX event on this connection.
     uint8_t needs_tx : 1; ///< We have a pending TX on this connection.
     uint8_t use_time_loss_det : 1; ///< UsingTimeLossDetection()
-    uint8_t cc_sent : 1;           ///< Connection-close sent.
-    uint8_t : 2;
+    uint8_t : 3;
 
     uint8_t state; ///< State of the connection.
 
@@ -148,8 +149,18 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 #define CONN_STAT_ESTB 4
 #define CONN_STAT_CLSD 5
 
+
 #define conn_type(c) (c->is_clnt ? "clnt" : "serv")
+
+
 #define is_force_neg_vers(vers) (((vers)&0x0f0f0f0f) == 0x0a0a0a0a)
+
+
+#define is_zero(t) (fpclassify(t) == FP_ZERO)
+
+
+#define is_inf(t) (fpclassify(t) == FP_INFINITE)
+
 
 struct ev_loop;
 

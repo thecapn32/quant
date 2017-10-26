@@ -174,8 +174,8 @@ extern void * api_arg;
     } while (0)
 
 
-#define q_free_iov(w, v)                                                       \
+#define q_free_iov(c, v)                                                       \
     do {                                                                       \
-        w_free_iov((w), (v));                                                  \
+        w_free_iov(w_engine((c)->sock), (v));                                  \
         meta(v) = (struct pkt_meta){0};                                        \
     } while (0)
