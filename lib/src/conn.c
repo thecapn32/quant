@@ -775,7 +775,8 @@ void ld_alarm(struct ev_loop * const l __attribute__((unused)),
         c->rto_cnt++; // XXX is this an RTX or not?
     }
 
-    set_ld_alarm(c);
+    // TODO revamp recovery
+    // set_ld_alarm(c);
 }
 
 
