@@ -25,6 +25,7 @@
 
 #pragma once
 
+#include <sanitizer/asan_interface.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -191,4 +192,13 @@ extern void * api_arg;
     do {                                                                       \
         w_free_iov(w_engine((c)->sock), (v));                                  \
         meta(v) = (struct pkt_meta){0};                                        \
+        ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));                  \
     } while (0)
+
+
+#define q_alloc_iov(w, len, off)                                               \
+    ({                                                                         \
+        struct w_iov * __v = w_alloc_iov((w), (len), (off));                   \
+        ASAN_UNPOISON_MEMORY_REGION(&meta(__v), sizeof(meta(__v)));            \
+        __v;                                                                   \
+    })

@@ -26,6 +26,7 @@
 #include <arpa/inet.h>
 #include <inttypes.h>
 #include <netinet/in.h>
+#include <sanitizer/asan_interface.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -174,7 +175,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             ensure(meta(v).is_rtxed == false, "cannot RTX an RTX");
             // on RTX, remember orig pkt meta data
             struct w_iov * const r =
-                w_alloc_iov(w_engine(c->sock), Q_OFFSET, 0);
+                q_alloc_iov(w_engine(c->sock), Q_OFFSET, 0);
             pm_cpy(&meta(r), &meta(v));                  // copy pkt meta data
             memcpy(r->buf, v->buf - Q_OFFSET, Q_OFFSET); // copy pkt data
             meta(r).is_rtxed = true;
@@ -230,7 +231,7 @@ tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
 
     struct w_iov *v = 0, *last = 0;
     if (!rtx) {
-        v = w_alloc_iov(w_engine(s->c->sock), Q_OFFSET, Q_OFFSET);
+        v = q_alloc_iov(w_engine(s->c->sock), Q_OFFSET, Q_OFFSET);
         last = sq_last(&s->out, w_iov, next);
         sq_insert_tail(&s->out, v, next);
     }
@@ -474,6 +475,7 @@ void rx(struct ev_loop * const l,
 
     while (!sq_empty(&i)) {
         struct w_iov * const v = sq_first(&i);
+        ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         sq_remove_head(&i, next);
         if (v->len > MAX_PKT_LEN)
             warn(WRN, "received %u-byte pkt (> %u max)", v->len, MAX_PKT_LEN);
@@ -589,7 +591,7 @@ void rx(struct ev_loop * const l,
         for (struct pkt_meta * p = splay_min(pm_nr_splay, &c->rec.sent_pkts); p;
              p = splay_next(pm_nr_splay, &c->rec.sent_pkts, p)) {
             char tmp[1024] = "";
-            snprintf(tmp, sizeof(tmp), "%" PRIu64 ", ", p->nr);
+            snprintf(tmp, sizeof(tmp), "%" PRIu64 " ", p->nr);
             strncat(sent_pkts_buf, tmp,
                     sizeof(sent_pkts_buf) - strlen(sent_pkts_buf) - 1);
         }

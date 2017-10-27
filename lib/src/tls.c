@@ -32,6 +32,7 @@
 #include <picotls/minicrypto.h>
 #include <picotls/openssl.h>
 
+#include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
 #include "cert.h"
@@ -387,7 +388,7 @@ uint32_t tls_handshake(struct q_stream * const s)
 
     // allocate a new w_iov
     struct w_iov * ov =
-        w_alloc_iov(w_engine(s->c->sock), MAX_PKT_LEN, Q_OFFSET);
+        q_alloc_iov(w_engine(s->c->sock), MAX_PKT_LEN, Q_OFFSET);
     ptls_buffer_t tb;
     ptls_buffer_init(&tb, ov->buf, ov->len);
     const int ret = ptls_handshake(s->c->tls, &tb, iv ? iv->buf : 0, &in_len,
@@ -401,12 +402,9 @@ uint32_t tls_handshake(struct q_stream * const s)
     if (iv)
         // the assumption is that ptls_handshake has consumed all stream-0
         // data
-        w_free(w_engine(s->c->sock), &s->in);
-    else {
+        q_free(w_engine(s->c->sock), &s->in);
+    else
         s->c->state = CONN_STAT_VERS_SENT;
-        // warn(DBG, "%s conn %" PRIx64 " now in state %u", conn_type(s->c),
-        //      s->c->id, s->c->state);
-    }
 
     if ((ret == 0 || ret == PTLS_ERROR_IN_PROGRESS) && ov->len != 0)
         // enqueue for TX

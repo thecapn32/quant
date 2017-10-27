@@ -248,7 +248,7 @@ void enc_pkt(struct q_stream * const s,
     }
 
     // alloc a new buffer to encrypt/sign into for TX
-    struct w_iov * const x = w_alloc_iov(w_engine(c->sock), MAX_PKT_LEN, 0);
+    struct w_iov * const x = q_alloc_iov(w_engine(c->sock), MAX_PKT_LEN, 0);
     x->ip = v->ip;
     x->port = v->port;
     x->flags = v->flags;

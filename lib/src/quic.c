@@ -26,6 +26,7 @@
 #include <arpa/inet.h>
 #include <inttypes.h>
 #include <netinet/in.h>
+#include <sanitizer/asan_interface.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -181,14 +182,19 @@ static struct q_conn * new_conn(struct w_engine * const w,
 void q_alloc(void * const w, struct w_iov_sq * const q, const uint32_t len)
 {
     w_alloc_len(w, q, len, MAX_PKT_LEN - AEAD_LEN, Q_OFFSET);
+    struct w_iov * v;
+    sq_foreach (v, q, next)
+        ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
 }
 
 
 void q_free(void * const w, struct w_iov_sq * const q)
 {
     struct w_iov * v;
-    sq_foreach (v, q, next)
+    sq_foreach (v, q, next) {
         meta(v) = (struct pkt_meta){0};
+        ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
+    }
     w_free((struct w_engine *)w, q);
 }
 
@@ -365,6 +371,7 @@ void * q_init(const char * const ifname)
     void * const w = w_init(ifname, 0, nbufs);
     pm = calloc(nbufs, sizeof(*pm));
     ensure(pm, "could not calloc");
+    ASAN_POISON_MEMORY_REGION(pm, nbufs * sizeof(*pm));
 
     // initialize TLS context
     init_tls_ctx();

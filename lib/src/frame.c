@@ -396,7 +396,7 @@ void dec_frames(struct q_conn * const c, struct w_iov * v)
                 // generate (another) copy
                 warn(INF, "more than one stream frame in pkt, copy");
                 struct w_iov * const vdup =
-                    w_alloc_iov(w_engine(c->sock), MAX_PKT_LEN, Q_OFFSET);
+                    q_alloc_iov(w_engine(c->sock), MAX_PKT_LEN, Q_OFFSET);
                 memcpy(vdup->buf, v->buf, v->len);
                 meta(vdup) = meta(v);
                 vdup->len = v->len;
