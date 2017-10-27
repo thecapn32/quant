@@ -35,7 +35,7 @@
 #include <warpcore/warpcore.h>
 
 #include "diet.h"
-#include "quic.h"
+#include "recovery.h"
 
 
 extern splay_head(ipnp_splay, q_conn) conns_by_ipnp;
@@ -59,35 +59,13 @@ struct q_conn {
     uint8_t had_rx : 1;   ///< We had an RX event on this connection.
     uint8_t needs_tx : 1; ///< We have a pending TX on this connection.
     uint8_t use_time_loss_det : 1; ///< UsingTimeLossDetection()
-    uint8_t : 3;
+    uint8_t cc_sent : 1;           ///< Connection-close frame sent
+    uint8_t : 2;
 
     uint8_t state; ///< State of the connection.
 
     uint8_t _unused[2];
     ev_timer idle_alarm;
-
-    // LD state
-    ev_timer ld_alarm;           // loss_detection_alarm
-    uint16_t hshake_cnt;         // handshake_count
-    uint16_t tlp_cnt;            // tlp_count
-    uint16_t rto_cnt;            // rto_count
-    uint8_t _unused2[2];         //
-    uint64_t lg_sent_before_rto; // largest_sent_before_rto;
-    ev_tstamp last_sent_t;       // time_of_last_sent_packet
-    uint64_t lg_sent;            // largest_sent_packet
-    uint64_t lg_acked;           // largest_acked_packet
-    ev_tstamp latest_rtt;        // latest_rtt
-    ev_tstamp srtt;              // smoothed_rtt
-    ev_tstamp rttvar;            // rttvar
-    uint64_t reorder_thresh;     // reordering_threshold
-    double reorder_fract;        // time_reordering_fraction
-    ev_tstamp loss_t;            // loss_time
-
-    /// Sent-but-unACKed packets. The @p buf and @len fields of the w_iov
-    /// structs are relative to any stream data.
-    ///
-    struct pm_nr_splay unacked_pkts; // sent_packets
-    struct diet acked_pkts;
 
     struct diet recv; ///< Received packet numbers still needing to be ACKed.
 
@@ -101,11 +79,7 @@ struct q_conn {
     ev_io rx_w;           ///< RX watcher.
     ev_async tx_w;        ///< TX watcher.
 
-    // CC state
-    uint64_t in_flight; // bytes_in_flight
-    uint64_t cwnd;      // congestion_window
-    uint64_t rec_end;
-    uint64_t ssthresh;
+    struct recovery rec; ///< Loss recovery state.
 
     // TLS state
     ptls_t * tls;
@@ -164,16 +138,14 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 
 struct ev_loop;
 
-extern void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c);
-
 extern void __attribute__((nonnull))
 cid_splay(struct q_conn * const c, const struct sockaddr_in * const peer);
 
 extern void __attribute__((nonnull))
-ld_alarm(struct ev_loop * const l, ev_timer * const w, int e);
+tx_w(struct ev_loop * const l, ev_async * const w, int e);
 
 extern void __attribute__((nonnull))
-tx_w(struct ev_loop * const l, ev_async * const w, int e);
+tx(struct q_conn * const c, const bool rtx, const uint32_t limit);
 
 extern void __attribute__((nonnull))
 rx(struct ev_loop * const l, ev_io * const rx_w, int e);
@@ -183,12 +155,7 @@ get_conn_by_ipnp(const struct sockaddr_in * const peer, const bool is_clnt);
 
 extern struct q_conn * get_conn_by_cid(const uint64_t id, const bool is_clnt);
 
-extern void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c);
-
 extern void * __attribute__((nonnull)) loop_run(void * const arg);
 
 extern void __attribute__((nonnull))
 loop_update(struct ev_loop * const l, ev_async * const w, int e);
-
-extern bool __attribute__((nonnull))
-find_sent_pkt(struct q_conn * const c, const uint64_t nr, struct w_iov ** v);

@@ -25,7 +25,6 @@
 
 #include <arpa/inet.h>
 #include <inttypes.h>
-#include <math.h>
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -42,6 +41,7 @@
 #include "diet.h"
 #include "pkt.h"
 #include "quic.h"
+#include "recovery.h"
 #include "stream.h"
 #include "tls.h"
 
@@ -141,33 +141,16 @@ static struct q_conn * new_conn(struct w_engine * const w,
     tls_ctx.random_bytes(c->stateless_reset_token,
                          sizeof(c->stateless_reset_token));
 
-    // initialize LD state
-    // XXX: UsingTimeLossDetection not defined?
-    c->ld_alarm.data = c;
-    ev_init(&c->ld_alarm, ld_alarm);
-    if (c->use_time_loss_det) {
-        c->reorder_thresh = UINT64_MAX;
-        c->reorder_fract = kTimeReorderingFraction;
-    } else {
-        c->reorder_thresh = kReorderingThreshold;
-        c->reorder_fract = HUGE_VAL;
-    }
-    c->lg_sent = peer_name ? 999 : 7999; // TODO: randomize initial pkt nr
-
-    // initialize CC state
-    c->cwnd = kInitialWindow;
-    c->ssthresh = UINT64_MAX;
-
     if (peer_name) {
         c->is_clnt = true;
         ensure(c->peer_name = strdup(peer_name), "could not dup peer_name");
     }
 
+    // initialize recovery state
+    rec_init(c);
+
     splay_init(&c->streams);
     diet_init(&c->closed_streams);
-    diet_init(&c->acked_pkts);
-    splay_init(&c->unacked_pkts);
-    // splay_init(&c->rtx_pkts);
     diet_init(&c->recv);
 
     // initialize idle timeout
@@ -431,7 +414,7 @@ void q_close(struct q_conn * const c)
     // wait until everything is ACKed
     bool done = false;
     do {
-        if ((done |= !splay_empty(&c->unacked_pkts))) {
+        if ((done |= !splay_empty(&c->rec.sent_pkts))) {
             warn(CRT, "waiting for ACKs %u", done);
         }
         if ((done |= !diet_empty(&c->recv))) {
@@ -443,7 +426,7 @@ void q_close(struct q_conn * const c)
 
     // we're done
     ev_io_stop(loop, &c->rx_w);
-    ev_timer_stop(loop, &c->ld_alarm);
+    ev_timer_stop(loop, &c->rec.ld_alarm);
 
     struct q_stream * nxt;
     for (s = splay_min(stream, &c->streams); s; s = nxt) {
@@ -454,7 +437,6 @@ void q_close(struct q_conn * const c)
     ptls_aead_free(c->in_kp0);
     ptls_aead_free(c->out_kp0);
     diet_free(&c->closed_streams);
-    diet_free(&c->acked_pkts);
     diet_free(&c->recv);
     ptls_free(c->tls);
     free(c->peer_name);

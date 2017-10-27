@@ -41,6 +41,7 @@
 #include "marshall.h"
 #include "pkt.h"
 #include "quic.h"
+#include "recovery.h"
 #include "stream.h"
 
 
@@ -130,23 +131,22 @@ void enc_pkt(struct q_stream * const s,
              struct w_iov * const v,
              struct w_iov_sq * const q)
 {
-    struct q_conn * const c = s->c;
-
     // prepend the header by adjusting the buffer offset
-    v->buf -= Q_OFFSET;
-    v->len += Q_OFFSET;
+    adj_iov_to_start(v);
 
+    struct q_conn * const c = s->c;
     uint16_t i = 0;
     uint64_t prev_nr = 0;
     if (rtx) {
         prev_nr = meta(v).nr;
         warn(INF, "enc RTX %" PRIu64 " as %" PRIu64 " in idx %u", prev_nr,
              c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv)
-                                            : c->lg_sent + 1, v->idx);
+                                            : c->rec.lg_sent + 1,
+             v->idx);
     }
 
     meta(v).nr =
-        c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv) : ++c->lg_sent;
+        c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv) : ++c->rec.lg_sent;
     // TODO: increase by random offset
 
     uint8_t flags = 0;
@@ -207,7 +207,7 @@ void enc_pkt(struct q_stream * const s,
     } else
         meta(v).ack_header_pos = 0;
 
-    if (c->state == CONN_STAT_CLSD) {
+    if (c->state == CONN_STAT_CLSD && !c->cc_sent) {
         const char reas[] = "As if that blind rage had washed me clean, rid me "
                             "of hope; for the first time, in that night alive "
                             "with signs and stars, I opened myself to the "
@@ -221,6 +221,7 @@ void enc_pkt(struct q_stream * const s,
         v->len = i + 7 + sizeof(reas);
         i += enc_conn_close_frame(v, i, CONN_CLOS_ERR_NO_ERROR, reas,
                                   sizeof(reas));
+        c->cc_sent = true;
 
     } else {
 
@@ -276,8 +277,6 @@ void enc_pkt(struct q_stream * const s,
     }
 
     sq_insert_tail(q, x, next);
-
-    meta(v).tx_cnt++;
     meta(v).tx_len = x->len;
 
     warn(NTE,
@@ -292,6 +291,5 @@ void enc_pkt(struct q_stream * const s,
         // adjust v->len to end of stream data (excl. padding)
         v->len = meta(v).stream_data_end;
 
-    v->buf += Q_OFFSET;
-    v->len -= Q_OFFSET;
+    adj_iov_to_data(v);
 }
