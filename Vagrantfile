@@ -31,19 +31,20 @@ Vagrant.configure("2") do |config|
     export DEBIAN_FRONTEND=noninteractive
 
     # update the box
-    apt-get update
-    apt-get -y dist-upgrade
+    apt-get -y update
+    apt-get -y upgrade
     apt-get -y autoremove
     apt-get -y autoclean
 
     # install some tools that are needed
     apt-get -y install git tmux ninja-build libev-dev libssl-dev g++ fish \
       pkg-config htop silversearcher-ag linux-tools-common linux-tools-generic \
-      gdb valgrind mercurial libhttp-parser-dev
+      gdb valgrind mercurial libhttp-parser-dev iwyu \
+      clang-tidy libclang-common-3.9-dev
 
     # install recent cmake
-    wget -q https://cmake.org/files/v3.9/cmake-3.9.3-Linux-x86_64.sh
-    sh cmake-3.9.3-Linux-x86_64.sh --skip-license --prefix=/usr/local
+    wget -q https://cmake.org/files/v3.9/cmake-3.9.4-Linux-x86_64.sh
+    sh cmake-3.9.4-Linux-x86_64.sh --skip-license --prefix=/usr/local
 
     # change shell to fish
     chsh -s /usr/bin/fish ubuntu
