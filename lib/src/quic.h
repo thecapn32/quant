@@ -198,7 +198,7 @@ extern void * api_arg;
 
 
 #define q_alloc_iov(w, len, off)                                               \
-    ({                                                                         \
+    __extension__({                                                            \
         struct w_iov * __v = w_alloc_iov((w), (len), (off));                   \
         ASAN_UNPOISON_MEMORY_REGION(&meta(__v), sizeof(meta(__v)));            \
         __v;                                                                   \
