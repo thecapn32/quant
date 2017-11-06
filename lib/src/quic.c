@@ -158,7 +158,6 @@ static struct q_conn * new_conn(struct w_engine * const w,
     c->idle_alarm.data = c;
     c->idle_alarm.repeat = kIdleTimeout;
     ev_init(&c->idle_alarm, idle_alarm);
-    ev_timer_again(loop, &c->idle_alarm);
 
     // initialize socket and start an RX/TX watchers
     ev_async_init(&c->tx_w, tx_w);
@@ -212,6 +211,7 @@ struct q_conn * q_connect(void * const q,
          cid, inet_ntoa(peer->sin_addr), ntohs(peer->sin_port), peer_name);
 
     c->next_sid = 1; // client initiates odd-numbered streams
+    ev_timer_again(loop, &c->idle_alarm);
     w_connect(c->sock, peer->sin_addr.s_addr, peer->sin_port);
 
     // allocate stream zero and start TLS handshake on stream 0
@@ -338,6 +338,7 @@ struct q_conn * q_accept(struct q_conn * const c)
         return 0;
     }
     c->state = CONN_STAT_ESTB;
+    ev_timer_again(loop, &c->idle_alarm);
 
     warn(WRN, "%s conn %" PRIx64 " connected to clnt %s:%u", conn_type(c),
          c->id, inet_ntoa(c->peer.sin_addr), ntohs(c->peer.sin_port));
