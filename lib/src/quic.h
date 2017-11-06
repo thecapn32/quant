@@ -48,7 +48,8 @@ struct pkt_meta {
     uint8_t is_rtxable : 1;     ///< Is this packet retransmittable?
     uint8_t is_rtxed : 1;       ///< Does the w_iov hold truncated data?
     uint8_t is_acked : 1;       ///< Is the w_iov ACKed?
-    uint8_t : 5;
+    uint8_t is_ack_only : 1;    ///< Is this a pure ACK?
+    uint8_t : 4;
     uint8_t _unused[7];
 };
 

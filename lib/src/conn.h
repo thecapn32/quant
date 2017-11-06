@@ -59,8 +59,7 @@ struct q_conn {
     uint8_t had_rx : 1;   ///< We had an RX event on this connection.
     uint8_t needs_tx : 1; ///< We have a pending TX on this connection.
     uint8_t use_time_loss_det : 1; ///< UsingTimeLossDetection()
-    uint8_t cc_sent : 1;           ///< Connection-close frame sent
-    uint8_t : 2;
+    uint8_t : 3;
 
     uint8_t state; ///< State of the connection.
 

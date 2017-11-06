@@ -207,7 +207,7 @@ void enc_pkt(struct q_stream * const s,
     } else
         meta(v).ack_header_pos = 0;
 
-    if (c->state == CONN_STAT_CLSD && !c->cc_sent) {
+    if (c->state == CONN_STAT_CLSD) {
         const char reas[] = "As if that blind rage had washed me clean, rid me "
                             "of hope; for the first time, in that night alive "
                             "with signs and stars, I opened myself to the "
@@ -221,7 +221,6 @@ void enc_pkt(struct q_stream * const s,
         v->len = i + 7 + sizeof(reas);
         i += enc_conn_close_frame(v, i, CONN_CLOS_ERR_NO_ERROR, reas,
                                   sizeof(reas));
-        c->cc_sent = true;
 
     } else {
 

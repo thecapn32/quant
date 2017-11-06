@@ -145,6 +145,20 @@ struct q_conn * get_conn_by_cid(const uint64_t id, const bool is_clnt)
 }
 
 
+static void log_sent_pkts(struct q_conn * const c)
+{
+    char sent_pkts_buf[1024] = "";
+    for (struct pkt_meta * p = splay_min(pm_nr_splay, &c->rec.sent_pkts); p;
+         p = splay_next(pm_nr_splay, &c->rec.sent_pkts, p)) {
+        char tmp[1024] = "";
+        snprintf(tmp, sizeof(tmp), "%" PRIu64 " ", p->nr);
+        strncat(sent_pkts_buf, tmp,
+                sizeof(sent_pkts_buf) - strlen(sent_pkts_buf) - 1);
+    }
+    warn(CRT, "unacked: %s", sent_pkts_buf);
+}
+
+
 static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
                                                       const bool rtx,
                                                       const uint32_t limit,
@@ -180,25 +194,17 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             memcpy(r->buf, v->buf - Q_OFFSET, Q_OFFSET); // copy pkt data
             meta(r).is_rtxed = true;
 
-            // we reinsert meta(v) with its new pkt nr below
+            // we reinsert meta(v) with its new pkt nr in on_pkt_sent()
             splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
             splay_insert(pm_nr_splay, &c->rec.sent_pkts, &meta(r));
         }
 
         enc_pkt(s, rtx, v, &x);
         on_pkt_sent(c, v);
-
-        char sent_pkts_buf[1024] = "";
-        for (struct pkt_meta * p = splay_min(pm_nr_splay, &c->rec.sent_pkts); p;
-             p = splay_next(pm_nr_splay, &c->rec.sent_pkts, p)) {
-            char tmp[1024] = "";
-            snprintf(tmp, sizeof(tmp), "%" PRIu64 ", ", p->nr);
-            strncat(sent_pkts_buf, tmp,
-                    sizeof(sent_pkts_buf) - strlen(sent_pkts_buf) - 1);
-        }
-        warn(CRT, "unacked: %s", sent_pkts_buf);
-
         encoded++;
+
+        log_sent_pkts(c);
+
         if (limit && encoded == limit) {
             warn(NTE, "tx limit %u reached", limit);
             break;
@@ -238,13 +244,12 @@ tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
 
     const bool did_tx = tx_stream(s, rtx, limit, v);
 
-    if (!rtx) { //  && !meta(v).is_rtxable) {
+    if (!rtx && !meta(v).is_rtxable) {
         ensure(sq_last(&s->out, w_iov, next) == v, "queue mixed up");
         if (last)
             sq_remove_after(&s->out, last, next);
         else
             sq_remove_head(&s->out, next);
-        // q_free_iov(s->c, v);
     }
 
     return did_tx;
@@ -580,6 +585,10 @@ void rx(struct ev_loop * const l,
         // reset idle timeout
         ev_timer_again(l, &c->idle_alarm);
 
+        // any stream-0 data will have been consumed by tls_handshake
+        struct q_stream * s = get_stream(c, 0);
+        q_free(w_engine(c->sock), &s->in);
+
         // is a TX needed for this connection?
         if (c->needs_tx)
             tx(c, false, 0);
@@ -587,14 +596,6 @@ void rx(struct ev_loop * const l,
         // clear the helper flags set above
         c->needs_tx = c->had_rx = false;
 
-        char sent_pkts_buf[1024] = "";
-        for (struct pkt_meta * p = splay_min(pm_nr_splay, &c->rec.sent_pkts); p;
-             p = splay_next(pm_nr_splay, &c->rec.sent_pkts, p)) {
-            char tmp[1024] = "";
-            snprintf(tmp, sizeof(tmp), "%" PRIu64 " ", p->nr);
-            strncat(sent_pkts_buf, tmp,
-                    sizeof(sent_pkts_buf) - strlen(sent_pkts_buf) - 1);
-        }
-        warn(CRT, "unacked: %s", sent_pkts_buf);
+        log_sent_pkts(c);
     }
 }

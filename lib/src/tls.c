@@ -32,7 +32,6 @@
 #include <picotls/minicrypto.h>
 #include <picotls/openssl.h>
 
-#include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
 #include "cert.h"
@@ -399,11 +398,7 @@ uint32_t tls_handshake(struct q_stream * const s)
     ensure(ret == 0 || ret == PTLS_ERROR_IN_PROGRESS, "TLS error: %u", ret);
     ensure(iv == 0 || iv->len && iv->len == in_len, "TLS data remaining");
 
-    if (iv)
-        // the assumption is that ptls_handshake has consumed all stream-0
-        // data
-        q_free(w_engine(s->c->sock), &s->in);
-    else
+    if (!iv)
         s->c->state = CONN_STAT_VERS_SENT;
 
     if ((ret == 0 || ret == PTLS_ERROR_IN_PROGRESS) && ov->len != 0)

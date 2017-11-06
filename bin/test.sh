@@ -87,8 +87,8 @@ esac
 # if we are on MacOS X, configure the firewall to add delay and loss
 if [ -x /usr/sbin/dnctl ]; then
         # create pipes to limit bandwidth and add loss
-        sudo dnctl pipe 1 config plr 0.25 #bw 64Kbit/s delay 250 queue 10Kbytes #plr 0.25
-        sudo dnctl pipe 2 config plr 0.25 #bw 64Kbit/s delay 250 queue 10Kbytes #plr 0.25
+        sudo dnctl pipe 1 config plr 0.25 #bw 64Kbit/s delay 250 queue 10Kbytes #plr 0.5
+        sudo dnctl pipe 2 config plr 0 #bw 64Kbit/s delay 250 queue 10Kbytes #plr 0.25
         sudo pfctl -f - <<EOF
                 dummynet out proto udp from any to $addr port $port pipe 1
                 dummynet out proto udp from $addr port $port to any pipe 2

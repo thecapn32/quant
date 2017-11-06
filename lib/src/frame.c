@@ -177,7 +177,6 @@ dec_stream_frame(struct q_conn * const c,
             v->buf = b;
             v->len = l;
         }
-        c->needs_tx = true;
         return i;
     }
 
@@ -188,7 +187,6 @@ dec_stream_frame(struct q_conn * const c,
              ") on %s conn %" PRIx64 " str %u",
              *len, plural(*len), off, off + *len, conn_type(c), c->id, sid);
         q_free_iov(c, v);
-        c->needs_tx = true;
         return i;
     }
 
@@ -302,7 +300,7 @@ uint16_t dec_ack_frame(
 
 
 static uint16_t __attribute__((nonnull))
-dec_conn_close_frame(struct q_conn * const c,
+dec_conn_close_frame(struct q_conn * const c __attribute__((unused)),
                      const struct w_iov * const v,
                      const uint16_t pos)
 {
@@ -323,9 +321,6 @@ dec_conn_close_frame(struct q_conn * const c,
              reas_phr);
     }
 
-    // maybe_api_return(q_read, c);
-
-    c->needs_tx = true;
     return i;
 }
 
@@ -383,6 +378,7 @@ void dec_frames(struct q_conn * const c, struct w_iov * v)
     uint16_t dpos = 0;
     uint16_t dlen = 0;
 
+    meta(v).is_ack_only = true;
     while (i < v->len) {
         const uint8_t type = ((const uint8_t * const)(v->buf))[i];
         if (pad_start && (type != FRAM_TYPE_PAD || i == v->len - 1)) {
@@ -390,7 +386,10 @@ void dec_frames(struct q_conn * const c, struct w_iov * v)
             pad_start = 0;
         }
 
+        meta(v).is_ack_only |= !is_set(FRAM_TYPE_ACK, type);
+
         if (is_set(FRAM_TYPE_STRM, type)) {
+            c->needs_tx = true;
             if (dpos) {
                 // already had at least one stream frame in this packet,
                 // generate (another) copy
@@ -463,7 +462,6 @@ uint16_t enc_padding_frame(struct w_iov * const v,
 {
     warn(DBG, "encoding padding frame into [%u..%u]", pos, pos + len - 1);
     memset(&v->buf[pos], FRAM_TYPE_PAD, len);
-    meta(v).is_rtxable = true;
     return len;
 }
 
@@ -648,8 +646,6 @@ uint16_t enc_conn_close_frame(struct w_iov * const v,
 
     memcpy(&v->buf[i], reas, rlen);
     warn(DBG, "enc %u-byte reason phrase into [%u..%u]", rlen, i, i + rlen - 1);
-
-    meta(v).is_rtxable = true;
 
     return i + rlen - pos;
 }

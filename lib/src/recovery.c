@@ -66,7 +66,6 @@ one_rtxable_pkt_outstanding(struct q_conn * const c)
 
 static void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c)
 {
-    // see DetectLostPackets pseudo code
     c->rec.loss_t = 0;
     ev_tstamp delay_until_lost = HUGE_VAL;
     if (!is_inf(c->rec.reorder_fract))
@@ -90,15 +89,16 @@ static void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c)
         const ev_tstamp time_since_sent = now - p->tx_t;
         const uint64_t delta = c->rec.lg_acked - p->nr;
 
-        warn(INF,
-             "pkt %" PRIu64
-             ": time_since_sent %f > delay_until_lost %f || delta %" PRIu64
-             " > c->rec.reorder_thresh %" PRIu64,
-             p->nr, time_since_sent, delay_until_lost, delta,
-             c->rec.reorder_thresh);
+        // warn(INF,
+        //      "pkt %" PRIu64
+        //      ": time_since_sent %f > delay_until_lost %f || delta %" PRIu64
+        //      " > c->rec.reorder_thresh %" PRIu64,
+        //      p->nr, time_since_sent, delay_until_lost, delta,
+        //      c->rec.reorder_thresh);
 
         if (time_since_sent > delay_until_lost ||
             delta > c->rec.reorder_thresh) {
+            warn(WRN, "pkt %" PRIu64 " considered lost", p->nr);
 
             // OnPacketsLost:
             if (p->is_rtxable) {
@@ -109,11 +109,15 @@ static void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c)
 
             largest_lost_packet = MAX(largest_lost_packet, p->nr);
 
-            splay_remove(pm_nr_splay, &c->rec.sent_pkts, p);
-
-            warn(WRN, "pkt %" PRIu64 " considered lost", p->nr);
-            if (p->is_rtxed)
+            if (p->is_rtxed || !p->is_rtxable) {
+                warn(DBG, "free rtxed/non-rtxable pkt %" PRIu64, p->nr);
+                splay_remove(pm_nr_splay, &c->rec.sent_pkts, p);
                 q_free_iov(c, w_iov(w_engine(c->sock), w_iov_idx(p)));
+            } else {
+                warn(DBG, "mark non-rtxed pkt %" PRIu64, p->nr);
+                p->tx_len = 0;
+            }
+
 
         } else if (is_zero(c->rec.loss_t) && !is_inf(delay_until_lost))
             c->rec.loss_t = now + delay_until_lost - time_since_sent;
@@ -198,7 +202,9 @@ void on_pkt_sent(struct q_conn * const c, struct w_iov * const v)
     const ev_tstamp now = ev_now(loop);
 
     /* c->rec.last_sent_t = */ meta(v).tx_t = now;
-    splay_insert(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
+    if (c->state != CONN_STAT_VERS_REJ)
+        // don't track version negotiation responses
+        splay_insert(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
 
     if (meta(v).is_rtxable) {
         c->rec.in_flight += meta(v).tx_len; // OnPacketSentCC
@@ -289,10 +295,12 @@ void on_pkt_acked(struct q_conn * const c, const uint64_t ack)
     }
 
     // check if a q_write is done
-    struct q_stream * const s = meta(v).str;
-    if (s && ++s->out_ack_cnt == sq_len(&s->out))
-        // all packets are ACKed
-        maybe_api_return(q_write, s);
+    if (meta(v).is_rtxed == false) {
+        struct q_stream * const s = meta(v).str;
+        if (s && ++s->out_ack_cnt == sq_len(&s->out))
+            // all packets are ACKed
+            maybe_api_return(q_write, s);
+    }
 }
 
 
