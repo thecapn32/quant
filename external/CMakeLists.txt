@@ -44,7 +44,7 @@ externalproject_add(picotls
   PATCH_COMMAND sed -i "" -e "s/-std=c99 -Wall -O2 -g//" CMakeLists.txt
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-    -DCMAKE_C_FLAGS=${PICOTLS_CFLAGS}
+    # -DCMAKE_C_FLAGS=${PICOTLS_CFLAGS}
     -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}
     -DOPENSSL_LIBRARIES=${OPENSSL_ROOT_DIR}/lib
     -DOPENSSL_INCLUDE_DIR=${OPENSSL_ROOT_DIR}/include
@@ -199,14 +199,14 @@ externalproject_add(mozquic
 # Use picoquic for testing against
 externalproject_add(picoquic
   DEPENDS picotls
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/private-octopus/picoquic.git
   GIT_SHALLOW 1
   # PATCH_COMMAND sed -i "" -e "s/-Werror//g" Makefile
   BUILD_IN_SOURCE 1
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-    -DCMAKE_C_FLAGS=${PICOTLS_CFLAGS}
+    # -DCMAKE_C_FLAGS=${PICOTLS_CFLAGS}
     -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}
     -DOPENSSL_LIBRARIES=${OPENSSL_ROOT_DIR}/lib
     -DOPENSSL_INCLUDE_DIR=${OPENSSL_ROOT_DIR}/include

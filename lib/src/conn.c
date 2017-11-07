@@ -42,7 +42,6 @@
 
 #include "conn.h"
 #include "diet.h"
-#include "fnv_1a.h"
 #include "frame.h"
 #include "marshall.h"
 #include "pkt.h"
@@ -269,8 +268,10 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
                  rtx ? "RTX" : "TX", conn_type(c), c->id, s->id,
                  sq_len(&s->out), plural(sq_len(&s->out)));
             did_tx |= tx_stream(s, rtx, limit, 0);
-        } else if ((s->state == STRM_STAT_HCLO || s->state == STRM_STAT_CLSD) &&
-                   !s->fin_sent)
+        } else if (((s->state == STRM_STAT_HCLO ||
+                     s->state == STRM_STAT_CLSD) &&
+                    !s->fin_sent) ||
+                   s->open_win)
             did_tx |= tx_other(s, rtx, limit);
     }
 
@@ -288,23 +289,6 @@ void tx_w(struct ev_loop * const l __attribute__((unused)),
           int e __attribute__((unused)))
 {
     tx(w->data, false, 0);
-}
-
-
-static bool __attribute__((nonnull))
-verify_hash(const uint8_t * buf, const uint16_t len)
-{
-    uint64_t hash_rx;
-    uint16_t i = len - sizeof(hash_rx);
-    dec(hash_rx, buf, len, i, 0, "%" PRIx64);
-    warn(DBG, "verifying %lu-byte hash %" PRIx64 " in [%lu..%u] over [0..%lu]",
-         sizeof(hash_rx), hash_rx, len - sizeof(hash_rx), len - 1,
-         len - sizeof(hash_rx) - 1);
-    const uint64_t hash_comp = fnv_1a(buf, len - sizeof(hash_rx));
-    if (hash_rx != hash_comp)
-        warn(WRN, "hash mismatch: computed %" PRIx64 " vs. %" PRIx64, hash_comp,
-             hash_rx);
-    return hash_rx == hash_comp;
 }
 
 
@@ -379,8 +363,9 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
 
     case CONN_STAT_VERS_SENT: {
         if (is_set(F_LH_TYPE_VNEG, flags)) {
-            ensure(find_sent_pkt(c, meta(v).nr), "did not send pkt %" PRIu64,
-                   meta(v).nr);
+            // XXX this doesn't work, since we're flushing CH state on retry
+            // ensure(find_sent_pkt(c, meta(v).nr), "did not send pkt %" PRIu64,
+            //        meta(v).nr);
 
             const uint32_t vers = pkt_vers(v->buf, v->len);
             if (c->vers != vers) {
@@ -414,7 +399,7 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
             struct q_stream * s = get_stream(c, 0);
             q_free(w_engine(c->sock), &s->out);
             s->out_off = 0;
-            tls_handshake(s);
+            tls_handshake(s, 0);
             c->needs_tx = true;
 
         } else {
@@ -513,6 +498,7 @@ void rx(struct ev_loop * const l,
                     }
                     update_ipnp(c, &peer);
                     update_cid(c, cid);
+                    init_cleartext_prot(c);
                     new_stream(c, 0);
                 }
 
@@ -523,19 +509,16 @@ void rx(struct ev_loop * const l,
 
         meta(v).nr = pkt_nr(v->buf, v->len, c);
         uint16_t prot_len = 0;
-        if (is_set(F_LONG_HDR, flags) && pkt_type(flags) != F_LH_1RTT_KPH0)
-            if (pkt_type(flags) == F_LH_TYPE_VNEG)
-                // version negotiation responses do not carry a hash
-                prot_len = UINT16_MAX;
-            else
-                prot_len = verify_hash(v->buf, v->len) ? sizeof(uint64_t) : 0;
+        if (is_set(F_LONG_HDR, flags) && pkt_type(flags) == F_LH_TYPE_VNEG)
+            // version negotiation responses do not carry protection
+            prot_len = UINT16_MAX;
         else {
             const uint16_t len = dec_aead(c, v, hdr_len);
             prot_len = len != 0 ? v->len - len : 0;
         }
 
         if (prot_len == 0) {
-            warn(ERR, "hash mismatch or AEAD decrypt error; ignoring pkt");
+            warn(ERR, "AEAD decrypt error; ignoring pkt");
 #ifndef NDEBUG
             if (util_dlevel == DBG)
                 hexdump(v->buf, v->len);

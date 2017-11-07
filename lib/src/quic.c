@@ -59,8 +59,7 @@ const uint32_t ok_vers[] = {
 #ifndef NDEBUG
     0xbabababa, // XXX reserved version to trigger negotiation
 #endif
-    0xff000005, // draft-ietf-quic-transport-05
-    // 0xff000007, // draft-ietf-quic-transport-07
+    0xff000007, // draft-ietf-quic-transport-07
 };
 
 /// Length of the @p ok_vers array.
@@ -217,7 +216,7 @@ struct q_conn * q_connect(void * const q,
     // allocate stream zero and start TLS handshake on stream 0
     struct q_stream * const s = new_stream(c, 0);
     init_tls(c);
-    tls_handshake(s);
+    tls_handshake(s, 0);
     ev_async_send(loop, &c->tx_w);
 
     warn(WRN, "waiting for connect to complete on %s conn %" PRIx64 " to %s:%u",
@@ -251,11 +250,25 @@ void q_write(struct q_stream * const s, struct w_iov_sq * const q)
              s->c->id, s->id, s->state);
         return;
     }
+
+    // add to stream
     sq_concat(&s->out, q);
+
+    // remember the last iov in the queue
+    struct w_iov * const prev_last = sq_last(&s->out, w_iov, next);
 
     // kick TX watcher
     ev_async_send(loop, &s->c->tx_w);
     loop_run(q_write, s);
+
+    // the last packet in s->out may be a pure FIN - if so, drop it
+    struct w_iov * const last = sq_last(&s->out, w_iov, next);
+    if (last && meta(last).stream_header_pos &&
+        meta(last).stream_data_end == Q_OFFSET) {
+        ensure(sq_next(prev_last, next) == last, "queue messed up");
+        sq_remove_after(&s->out, prev_last, next);
+        q_free_iov(s->c, last);
+    }
 
     // return written data back to user stailq
     sq_concat(q, &s->out);
@@ -353,6 +366,8 @@ struct q_stream * q_rsv_stream(struct q_conn * const c)
     ensure(c->is_clnt == odd || !c->is_clnt && !odd,
            "am %s, expected %s connection stream ID, got %u", conn_type(c),
            c->is_clnt ? "odd" : "even", c->next_sid);
+    ensure(c->next_sid <= c->max_stream_id, "sid %u <= max %u", c->next_sid,
+           c->max_stream_id);
     return new_stream(c, c->next_sid);
 }
 

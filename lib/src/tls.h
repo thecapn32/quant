@@ -40,6 +40,8 @@ struct tls {
     uint8_t out_sec[PTLS_MAX_DIGEST_SIZE];
     ptls_aead_context_t * in_kp0;
     ptls_aead_context_t * out_kp0;
+    ptls_aead_context_t * in_clr;
+    ptls_aead_context_t * out_clr;
 
     uint8_t tp_buf[96];
     ptls_raw_extension_t tp_ext[2];
@@ -50,13 +52,15 @@ struct tls {
 /// TLS context.
 extern ptls_context_t tls_ctx;
 
+extern void __attribute__((nonnull))
+init_cleartext_prot(struct q_conn * const c);
 
 extern void __attribute__((nonnull)) init_tls(struct q_conn * const c);
 
 extern void __attribute__((nonnull)) free_tls(struct q_conn * const c);
 
-extern uint32_t __attribute__((nonnull))
-tls_handshake(struct q_stream * const s);
+extern uint32_t __attribute__((nonnull(1)))
+tls_handshake(struct q_stream * const s, struct w_iov * const iv);
 
 extern void init_tls_ctx(void);
 

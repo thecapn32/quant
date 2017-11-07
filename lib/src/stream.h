@@ -52,7 +52,8 @@ struct q_stream {
     uint32_t id;
     uint8_t state;
     uint8_t fin_sent : 1;
-    uint8_t : 7;
+    uint8_t open_win : 1;
+    uint8_t : 6;
     uint8_t _unused[2];
 };
 

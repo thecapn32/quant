@@ -62,8 +62,6 @@ struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
     sq_init(&s->out);
     sq_init(&s->in);
     s->id = id;
-    ensure(s->id <= c->max_stream_id, "sid %u <= max %u", s->id,
-           c->max_stream_id);
     s->max_stream_data = c->max_stream_data;
     if (id)
         c->next_sid += 2;

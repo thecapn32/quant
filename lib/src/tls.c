@@ -23,6 +23,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <arpa/inet.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <string.h>
@@ -48,7 +49,7 @@ ptls_context_t tls_ctx = {0};
 static ptls_minicrypto_secp256r1sha256_sign_certificate_t sign_cert = {0};
 static ptls_iovec_t tls_certs = {0};
 static ptls_openssl_verify_certificate_t verifier = {0};
-static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-05", 5}};
+static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-07", 5}};
 static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 
 #define TLS_EXT_TYPE_TRANSPORT_PARAMETERS 26
@@ -89,10 +90,13 @@ on_ch(ptls_on_client_hello_t * const self __attribute__((unused)),
                        MIN(prot[i].len, alpn[j].len)) == 0)
                 goto done;
 
-done:
-    if (j == prot_cnt)
-        die("no client-requested ALPN supported");
+    if (j == prot_cnt) {
+        warn(CRT, "no client-requested ALPN (incl. %.*s) supported, ignoring",
+             prot[0].len, prot[0].base);
+        return 0;
+    }
 
+done:
     warn(INF, "supporting client-requested ALPN %.*s", alpn[j].len,
          alpn[j].base);
 
@@ -200,12 +204,15 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         switch (tp) {
         case TP_INITIAL_MAX_STREAM_DATA:
             dec_tp(c->max_stream_data, sizeof(uint32_t));
+            // we need to apply this parameter to stream 0
+            struct q_stream * const s = get_stream(c, 0);
+            s->max_stream_data = c->max_stream_data;
             break;
 
         case TP_INITIAL_MAX_DATA: {
             uint64_t max_data_kb = 0;
             dec_tp(max_data_kb, sizeof(uint32_t));
-            c->max_stream_data = max_data_kb << 10;
+            c->max_data = max_data_kb << 10;
             break;
         }
 
@@ -258,9 +265,10 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
     do {                                                                       \
         const uint16_t param = (tp);                                           \
         enc((c)->tls.tp_buf, len, i, &param, 0, "%u");                         \
-        const uint16_t bytes = (w) ? (w) : sizeof(var);                        \
+        const uint16_t bytes = (w);                                            \
         enc((c)->tls.tp_buf, len, i, &bytes, 0, "%u");                         \
-        enc((c)->tls.tp_buf, len, i, &(var), bytes, "%u");                     \
+        if (w)                                                                 \
+            enc((c)->tls.tp_buf, len, i, &(var), bytes, "%u");                 \
     } while (0)
 
 
@@ -283,21 +291,20 @@ static void init_tp(struct q_conn * const c)
     const uint16_t enc_len_pos = i;
     i += sizeof(uint16_t);
 
-    enc_tp(c, TP_IDLE_TIMEOUT, initial_idle_timeout, 0);
-    enc_tp(c, TP_INITIAL_MAX_STREAM_ID, initial_max_stream_id, 0);
+    // XXX ngtcp2 and picoquic cannot parse omit_connection_id as the last tp
+    const struct q_conn * const other = get_conn_by_ipnp(&c->peer, 0);
+    if (!other || other->id == c->id)
+        enc_tp(c, TP_OMIT_CONNECTION_ID, i, 0); // i not used
+    enc_tp(c, TP_IDLE_TIMEOUT, initial_idle_timeout,
+           sizeof(initial_idle_timeout));
+    enc_tp(c, TP_INITIAL_MAX_STREAM_ID, initial_max_stream_id,
+           sizeof(initial_max_stream_id));
     enc_tp(c, TP_INITIAL_MAX_STREAM_DATA, initial_max_stream_data,
            sizeof(uint32_t));
     const uint32_t initial_max_data_kb = (uint32_t)(initial_max_data >> 10);
-    enc_tp(c, TP_INITIAL_MAX_DATA, initial_max_data_kb, 0);
+    enc_tp(c, TP_INITIAL_MAX_DATA, initial_max_data_kb,
+           sizeof(initial_max_data_kb));
     enc_tp(c, TP_MAX_PACKET_SIZE, w_mtu(w_engine(c->sock)), sizeof(uint16_t));
-
-    const struct q_conn * const other = get_conn_by_ipnp(&c->peer, 0);
-    if (!other || other->id == c->id) {
-        const uint16_t tp = TP_OMIT_CONNECTION_ID;
-        enc(c->tls.tp_buf, len, i, &tp, 0, "%u");
-        const uint16_t bytes = 0;
-        enc(c->tls.tp_buf, len, i, &bytes, 0, "%u");
-    }
 
     if (!c->is_clnt) {
         const uint16_t p = TP_STATELESS_RESET_TOKEN;
@@ -324,6 +331,62 @@ static void init_tp(struct q_conn * const c)
 }
 
 
+#define PTLS_CTXT_CLNT_LABL "tls13 QUIC client cleartext Secret"
+#define PTLS_CTXT_SERV_LABL "tls13 QUIC server cleartext Secret"
+
+static ptls_aead_context_t *
+init_cleartext_secret(struct q_conn * const c __attribute__((unused)),
+                      ptls_cipher_suite_t * const cs,
+                      uint8_t * const sec, // NOLINT
+                      const char * const label,
+                      uint8_t is_enc)
+{
+    uint8_t lab[255];
+    uint16_t i = 0;
+    enc(lab, sizeof(lab), i, (const uint16_t *)&cs->hash->digest_size,
+        sizeof(uint16_t), "%u");
+
+    const uint8_t lab_len = (uint8_t)strlen(label);
+    enc(lab, sizeof(lab), i, &lab_len, 0, "%u");
+
+    memcpy((char *)&lab[i], label, lab_len + 1);
+    i += lab_len + 1;
+
+    const ptls_iovec_t inf = {.base = lab, .len = i};
+    const ptls_iovec_t prk = {.base = sec, .len = cs->hash->digest_size};
+
+    uint8_t secret[255];
+    ensure(ptls_hkdf_expand(cs->hash, secret, cs->hash->digest_size, prk,
+                            inf) == 0,
+           "HKDF-Expand-Label");
+
+    return ptls_aead_new(cs->aead, cs->hash, is_enc, secret);
+}
+
+
+void init_cleartext_prot(struct q_conn * const c)
+{
+    static uint8_t qv1_salt[] = {0xaf, 0xc8, 0x24, 0xec, 0x5f, 0xc7, 0x7e,
+                                 0xca, 0x1e, 0x9d, 0x36, 0xf3, 0x7f, 0xb2,
+                                 0xd4, 0x65, 0x18, 0xc3, 0x66, 0x39};
+
+    const ptls_cipher_suite_t * const cs = &ptls_openssl_aes128gcmsha256;
+
+    uint8_t sec[PTLS_MAX_SECRET_SIZE];
+    const ptls_iovec_t salt = {.base = qv1_salt, .len = sizeof(qv1_salt)};
+
+    uint64_t ncid = htonll(c->id);
+    const ptls_iovec_t cid = {.base = (uint8_t *)&ncid, .len = sizeof(ncid)};
+    ensure(ptls_hkdf_extract(cs->hash, sec, salt, cid) == 0, "HKDF-Extract");
+
+    c->tls.in_clr = init_cleartext_secret(
+        c, cs, sec, c->is_clnt ? PTLS_CTXT_SERV_LABL : PTLS_CTXT_CLNT_LABL, 0);
+    c->tls.out_clr = init_cleartext_secret(
+        c, cs, sec, c->is_clnt ? PTLS_CTXT_CLNT_LABL : PTLS_CTXT_SERV_LABL, 1);
+    ensure(c->tls.in_clr && c->tls.out_clr, "got cleartext secrets");
+}
+
+
 void init_tls(struct q_conn * const c)
 {
     if (c->tls.t)
@@ -336,6 +399,8 @@ void init_tls(struct q_conn * const c)
                                     strlen(c->peer_name)) == 0,
                "ptls_set_server_name");
     init_tp(c);
+    if (!c->tls.in_clr)
+        init_cleartext_prot(c);
 
     c->tls.tls_hshake_prop = (ptls_handshake_properties_t){
         .additional_extensions = c->tls.tp_ext,
@@ -350,49 +415,50 @@ void free_tls(struct q_conn * const c)
 {
     ptls_aead_free(c->tls.in_kp0);
     ptls_aead_free(c->tls.out_kp0);
+    ptls_aead_free(c->tls.in_clr);
+    ptls_aead_free(c->tls.out_clr);
     ptls_free(c->tls.t);
 }
 
 
-static void __attribute__((nonnull))
-conn_setup_1rtt_secret(struct q_conn * const c,
-                       ptls_cipher_suite_t * const cipher,
-                       ptls_aead_context_t ** aead,
-                       uint8_t * const sec,
-                       const char * const label,
-                       uint8_t is_enc)
+static ptls_aead_context_t * __attribute__((nonnull))
+init_1rtt_secret(ptls_t * const t,
+                 const ptls_cipher_suite_t * const cs,
+                 uint8_t * const sec,
+                 const char * const label,
+                 uint8_t is_enc)
 {
-    int ret = ptls_export_secret(c->tls.t, sec, cipher->hash->digest_size,
-                                 label, ptls_iovec_init(0, 0));
-    ensure(ret == 0, "ptls_export_secret");
-    if (*aead)
-        // tls_handshake() is called multiple times when generating CHs
-        ptls_aead_free(*aead);
-    *aead = ptls_aead_new(cipher->aead, cipher->hash, is_enc, sec);
-    ensure(aead, "ptls_aead_new");
+    ensure(ptls_export_secret(t, sec, cs->hash->digest_size, label,
+                              ptls_iovec_init(0, 0)) == 0,
+           "ptls_export_secret");
+    return ptls_aead_new(cs->aead, cs->hash, is_enc, sec);
 }
 
 
-#define PTLS_CLNT_LABL "EXPORTER-QUIC client 1-RTT Secret"
-#define PTLS_SERV_LABL "EXPORTER-QUIC server 1-RTT Secret"
+#define PTLS_1RTT_CLNT_LABL "EXPORTER-QUIC client 1-RTT Secret"
+#define PTLS_1RTT_SERV_LABL "EXPORTER-QUIC server 1-RTT Secret"
 
-static void __attribute__((nonnull)) conn_setup_1rtt(struct q_conn * const c)
+static void __attribute__((nonnull)) init_1rtt_prot(struct q_conn * const c)
 {
-    ptls_cipher_suite_t * const cipher = ptls_get_cipher(c->tls.t);
-    conn_setup_1rtt_secret(c, cipher, &c->tls.in_kp0, c->tls.in_sec,
-                           c->is_clnt ? PTLS_SERV_LABL : PTLS_CLNT_LABL, 0);
-    conn_setup_1rtt_secret(c, cipher, &c->tls.out_kp0, c->tls.out_sec,
-                           c->is_clnt ? PTLS_CLNT_LABL : PTLS_SERV_LABL, 1);
+    if (c->tls.in_kp0) {
+        // tls_handshake() is called multiple times when generating CHs
+        ptls_aead_free(c->tls.in_kp0);
+        ptls_aead_free(c->tls.out_kp0);
+    }
 
+    const ptls_cipher_suite_t * const cs = ptls_get_cipher(c->tls.t);
+    c->tls.in_kp0 = init_1rtt_secret(
+        c->tls.t, cs, c->tls.in_sec,
+        c->is_clnt ? PTLS_1RTT_SERV_LABL : PTLS_1RTT_CLNT_LABL, 0);
+    c->tls.out_kp0 = init_1rtt_secret(
+        c->tls.t, cs, c->tls.out_sec,
+        c->is_clnt ? PTLS_1RTT_CLNT_LABL : PTLS_1RTT_SERV_LABL, 1);
     c->state = CONN_STAT_VERS_OK;
 }
 
 
-uint32_t tls_handshake(struct q_stream * const s)
+uint32_t tls_handshake(struct q_stream * const s, struct w_iov * const iv)
 {
-    // get pointer to any received handshake data
-    // XXX there is an assumption here that we only have one inbound packet
-    struct w_iov * const iv = sq_first(&s->in);
     size_t in_len = iv ? iv->len : 0;
 
     // allocate a new w_iov
@@ -419,7 +485,7 @@ uint32_t tls_handshake(struct q_stream * const s)
         q_free_iov(s->c, ov);
 
     if (ret == 0)
-        conn_setup_1rtt(s->c);
+        init_1rtt_prot(s->c);
 
     return (uint32_t)ret;
 }
@@ -458,13 +524,20 @@ uint16_t dec_aead(struct q_conn * const c,
                   const struct w_iov * v,
                   const uint16_t hdr_len)
 {
+    ptls_aead_context_t * aead = c->tls.in_kp0;
+    const uint8_t flags = pkt_flags(v->buf);
+    if (is_set(F_LONG_HDR, flags) && pkt_type(flags) >= F_LH_CLNT_INIT &&
+        pkt_type(flags) <= F_LH_CLNT_CTXT)
+        aead = c->tls.in_clr;
+
     const size_t len =
-        ptls_aead_decrypt(c->tls.in_kp0, &v->buf[hdr_len], &v->buf[hdr_len],
+        ptls_aead_decrypt(aead, &v->buf[hdr_len], &v->buf[hdr_len],
                           v->len - hdr_len, meta(v).nr, v->buf, hdr_len);
     if (len == SIZE_MAX)
         return 0; // AEAD decrypt error
-    warn(DBG, "verifying %lu-byte AEAD over [0..%u] in [%u..%u]",
-         v->len - len - hdr_len, v->len - (v->len - len - hdr_len) - 1,
+    warn(DBG, "verifying %lu-byte %s AEAD over [0..%u] in [%u..%u]",
+         v->len - len - hdr_len, aead == c->tls.in_kp0 ? "1RTT" : "cleartext",
+         v->len - (v->len - len - hdr_len) - 1,
          v->len - (v->len - len - hdr_len), v->len - 1);
     return hdr_len + (uint16_t)len;
 }
@@ -476,10 +549,13 @@ uint16_t enc_aead(struct q_conn * const c,
                   const uint16_t hdr_len)
 {
     memcpy(x->buf, v->buf, hdr_len); // copy pkt header
-    const size_t len =
-        ptls_aead_encrypt(c->tls.out_kp0, &x->buf[hdr_len], &v->buf[hdr_len],
-                          v->len - hdr_len, meta(v).nr, v->buf, hdr_len);
-    warn(DBG, "added %lu-byte AEAD over [0..%u] in [%u..%u]",
-         len + hdr_len - v->len, v->len - 1, v->len, len + hdr_len - 1);
+    const size_t len = ptls_aead_encrypt(
+        c->state >= CONN_STAT_ESTB ? c->tls.out_kp0 : c->tls.out_clr,
+        &x->buf[hdr_len], &v->buf[hdr_len], v->len - hdr_len, meta(v).nr,
+        v->buf, hdr_len);
+    warn(DBG, "added %lu-byte %s AEAD over [0..%u] in [%u..%u]",
+         len + hdr_len - v->len,
+         c->state >= CONN_STAT_ESTB ? "1RTT" : "cleartext", v->len - 1, v->len,
+         len + hdr_len - 1);
     return hdr_len + (uint16_t)len;
 }

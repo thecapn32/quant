@@ -35,7 +35,6 @@
 
 #include "conn.h"
 #include "diet.h"
-#include "fnv_1a.h"
 #include "frame.h"
 #include "marshall.h"
 #include "pkt.h"
@@ -114,17 +113,6 @@ static uint8_t __attribute__((const)) needed_pkt_nr_len(const uint64_t n)
     return 4;
 }
 
-
-#define CONN_CLOS_ERR_NO_ERROR 0x80000000
-// #define CONN_CLOS_ERR_INTERNAL_ERROR 0x80000001
-// #define CONN_CLOS_ERR_CANCELLED 0x80000002
-// #define CONN_CLOS_ERR_FLOW_CONTROL_ERROR 0x80000003
-// #define CONN_CLOS_ERR_STREAM_ID_ERROR 0x80000004
-// #define CONN_CLOS_ERR_STREAM_STATE_ERROR 0x80000005
-// #define CONN_CLOS_ERR_FINAL_OFFSET_ERROR 0x80000006
-// #define CONN_CLOS_ERR_FRAME_FORMAT_ERROR 0x80000007
-// #define CONN_CLOS_ERR_VERSION_NEGOTIATION_ERROR 0x80000009
-// #define CONN_CLOS_ERR_PROTOCOL_VIOLATION 0x8000000A
 
 void enc_pkt(struct q_stream * const s,
              const bool rtx,
@@ -219,9 +207,18 @@ void enc_pkt(struct q_stream * const s,
                             "large crowd of spectators the day of my execution "
                             "and that they greet me with cries of hate.";
         v->len = i + 7 + sizeof(reas);
-        enc_conn_close_frame(v, i, CONN_CLOS_ERR_NO_ERROR, reas, sizeof(reas));
+        enc_conn_close_frame(v, i, CONN_CLSE_ERR_NO_ERROR, reas, sizeof(reas));
 
     } else {
+
+        // check if we need to increase the stream window
+        if (s->open_win) {
+            s->max_stream_data += 0x1000;
+            enc_max_stream_data_frame(s, v, i);
+            s->open_win = false;
+        }
+
+        // TODO: need to RTX most recent MAX_STREAM_DATA and MAX_DATA on RTX
 
         if (rtx) {
             ensure(meta(v).is_rtxable, "is rtxable");
@@ -241,7 +238,7 @@ void enc_pkt(struct q_stream * const s,
         }
 
         if (c->state == CONN_STAT_VERS_SENT)
-            i += enc_padding_frame(v, i, MIN_INI_LEN - i - sizeof(uint64_t));
+            i += enc_padding_frame(v, i, MIN_INI_LEN - i - AEAD_LEN);
         v->len = i;
     }
 
@@ -251,20 +248,9 @@ void enc_pkt(struct q_stream * const s,
     x->port = v->port;
     x->flags = v->flags;
 
-    if (c->state < CONN_STAT_ESTB) {
+    if (c->state == CONN_STAT_VERS_REJ) {
         memcpy(x->buf, v->buf, v->len); // copy data
         x->len = v->len;
-        // version negotiation server responses do not carry a hash
-        if (c->state != CONN_STAT_VERS_REJ) {
-            const uint64_t hash = fnv_1a(x->buf, x->len);
-            warn(DBG,
-                 "adding %lu-byte hash %" PRIx64 " over [0..%u] into [%u..%lu]",
-                 sizeof(hash), hash, x->len - 1, x->len,
-                 x->len + sizeof(hash) - 1);
-            uint64_t hash_pos = x->len;
-            x->len += sizeof(hash);
-            enc(x->buf, x->len, hash_pos, &hash, 0, "%" PRIx64);
-        }
     } else
         x->len = enc_aead(c, v, x, hdr_len);
 

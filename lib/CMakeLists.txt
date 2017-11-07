@@ -38,7 +38,7 @@ include(GNUInstallDirs)
 
 add_library(common
   OBJECT
-    src/fnv_1a.c src/pkt.c src/frame.c src/quic.c src/stream.c src/conn.c
+    src/pkt.c src/frame.c src/quic.c src/stream.c src/conn.c
     src/diet.c src/util.c src/tls.c src/recovery.c
     ${CMAKE_CURRENT_BINARY_DIR}/src/config.c
     ${CMAKE_CURRENT_BINARY_DIR}/src/cert.c

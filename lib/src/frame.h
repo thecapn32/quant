@@ -49,7 +49,7 @@ enc_stream_frame(struct q_stream * const s, struct w_iov * const v);
 extern uint16_t __attribute__((nonnull))
 enc_conn_close_frame(struct w_iov * const v,
                      const uint16_t pos,
-                     const uint32_t err_code,
+                     const uint16_t err_code,
                      const char * const reas,
                      const uint16_t reas_len);
 
@@ -60,3 +60,8 @@ extern uint16_t __attribute__((nonnull(1, 2, 5))) dec_ack_frame(
     void (*before_ack)(struct q_conn * const, const uint64_t, const uint16_t),
     void (*on_each_ack)(struct q_conn * const, const uint64_t),
     void (*after_ack)(struct q_conn * const));
+
+extern uint16_t __attribute__((nonnull))
+enc_max_stream_data_frame(struct q_stream * const s,
+                          struct w_iov * const v,
+                          const uint16_t pos);
