@@ -31,7 +31,6 @@
 #include <byteswap.h>
 #endif
 
-#include <picotls.h>
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
@@ -43,6 +42,7 @@
 #include "quic.h"
 #include "recovery.h"
 #include "stream.h"
+#include "tls.h"
 
 
 /// Packet number lengths for different short-header packet types
@@ -219,8 +219,7 @@ void enc_pkt(struct q_stream * const s,
                             "large crowd of spectators the day of my execution "
                             "and that they greet me with cries of hate.";
         v->len = i + 7 + sizeof(reas);
-        i += enc_conn_close_frame(v, i, CONN_CLOS_ERR_NO_ERROR, reas,
-                                  sizeof(reas));
+        enc_conn_close_frame(v, i, CONN_CLOS_ERR_NO_ERROR, reas, sizeof(reas));
 
     } else {
 
@@ -266,14 +265,8 @@ void enc_pkt(struct q_stream * const s,
             x->len += sizeof(hash);
             enc(x->buf, x->len, hash_pos, &hash, 0, "%" PRIx64);
         }
-    } else {
-        memcpy(x->buf, v->buf, hdr_len); // copy pkt header
-        x->len = hdr_len + (uint16_t)ptls_aead_encrypt(
-                               c->out_kp0, &x->buf[hdr_len], &v->buf[hdr_len],
-                               v->len - hdr_len, meta(v).nr, v->buf, hdr_len);
-        warn(DBG, "added %d-byte AEAD over [0..%u] into [%u..%u]",
-             x->len - v->len, i - 1, i, x->len - 1);
-    }
+    } else
+        x->len = enc_aead(c, v, x, hdr_len);
 
     sq_insert_tail(q, x, next);
     meta(v).tx_len = x->len;

@@ -442,14 +442,12 @@ void q_close(struct q_conn * const c)
         free_stream(s);
     }
 
-    ptls_aead_free(c->in_kp0);
-    ptls_aead_free(c->out_kp0);
     diet_free(&c->closed_streams);
     diet_free(&c->recv);
-    ptls_free(c->tls);
     free(c->peer_name);
     if (c->sock)
         w_close(c->sock);
+    free_tls(c);
 
     // remove connection from global lists
     splay_remove(ipnp_splay, &conns_by_ipnp, c);

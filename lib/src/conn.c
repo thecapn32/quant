@@ -308,22 +308,6 @@ verify_hash(const uint8_t * buf, const uint16_t len)
 }
 
 
-static uint16_t __attribute__((nonnull)) dec_aead(struct q_conn * const c,
-                                                  const struct w_iov * v,
-                                                  const uint16_t hdr_len)
-{
-    const size_t len =
-        ptls_aead_decrypt(c->in_kp0, &v->buf[hdr_len], &v->buf[hdr_len],
-                          v->len - hdr_len, meta(v).nr, v->buf, hdr_len);
-    if (len == SIZE_MAX)
-        return 0; // AEAD decrypt error
-    warn(DBG, "verifying %lu-byte AEAD over [0..%u] in [%u..%u]",
-         v->len - len - hdr_len, v->len - (v->len - len - hdr_len) - 1,
-         v->len - (v->len - len - hdr_len), v->len - 1);
-    return hdr_len + (uint16_t)len;
-}
-
-
 static void __attribute__((nonnull))
 update_cid(struct q_conn * const c, const uint64_t cid)
 {

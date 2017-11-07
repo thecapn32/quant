@@ -176,7 +176,8 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
     // get connection based on properties pointer
     struct q_conn * const c =
-        (void *)((char *)properties - offsetof(struct q_conn, tls_hshake_prop));
+        (void *)((char *)properties - offsetof(struct tls, tls_hshake_prop) -
+                 offsetof(struct q_conn, tls));
 
     // set up parsing
     const uint8_t * const buf = slots[0].data.base;
@@ -256,26 +257,26 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 #define enc_tp(c, tp, var, w)                                                  \
     do {                                                                       \
         const uint16_t param = (tp);                                           \
-        enc((c)->tp_buf, len, i, &param, 0, "%u");                             \
+        enc((c)->tls.tp_buf, len, i, &param, 0, "%u");                         \
         const uint16_t bytes = (w) ? (w) : sizeof(var);                        \
-        enc((c)->tp_buf, len, i, &bytes, 0, "%u");                             \
-        enc((c)->tp_buf, len, i, &(var), bytes, "%u");                         \
+        enc((c)->tls.tp_buf, len, i, &bytes, 0, "%u");                         \
+        enc((c)->tls.tp_buf, len, i, &(var), bytes, "%u");                     \
     } while (0)
 
 
 static void init_tp(struct q_conn * const c)
 {
     uint16_t i = 0;
-    const uint16_t len = sizeof(c->tp_buf);
+    const uint16_t len = sizeof(c->tls.tp_buf);
 
     if (c->is_clnt) {
-        enc(c->tp_buf, len, i, &c->vers, 0, "0x%08x");
-        enc(c->tp_buf, len, i, &c->vers_initial, 0, "0x%08x");
+        enc(c->tls.tp_buf, len, i, &c->vers, 0, "0x%08x");
+        enc(c->tls.tp_buf, len, i, &c->vers_initial, 0, "0x%08x");
     } else {
         const uint16_t vl = ok_vers_len * sizeof(ok_vers[0]);
-        enc(c->tp_buf, len, i, &vl, 1, "%u");
+        enc(c->tls.tp_buf, len, i, &vl, 1, "%u");
         for (uint8_t n = 0; n < ok_vers_len; n++)
-            enc(c->tp_buf, len, i, &ok_vers[n], 0, "0x%08x");
+            enc(c->tls.tp_buf, len, i, &ok_vers[n], 0, "0x%08x");
     }
 
     // keep track of encoded length
@@ -293,18 +294,18 @@ static void init_tp(struct q_conn * const c)
     const struct q_conn * const other = get_conn_by_ipnp(&c->peer, 0);
     if (!other || other->id == c->id) {
         const uint16_t tp = TP_OMIT_CONNECTION_ID;
-        enc(c->tp_buf, len, i, &tp, 0, "%u");
+        enc(c->tls.tp_buf, len, i, &tp, 0, "%u");
         const uint16_t bytes = 0;
-        enc(c->tp_buf, len, i, &bytes, 0, "%u");
+        enc(c->tls.tp_buf, len, i, &bytes, 0, "%u");
     }
 
     if (!c->is_clnt) {
         const uint16_t p = TP_STATELESS_RESET_TOKEN;
-        enc(c->tp_buf, len, i, &p, 0, "%u");
+        enc(c->tls.tp_buf, len, i, &p, 0, "%u");
         const uint16_t w = sizeof(c->stateless_reset_token);
-        enc(c->tp_buf, len, i, &w, 0, "%u");
+        enc(c->tls.tp_buf, len, i, &w, 0, "%u");
         ensure(i + sizeof(c->stateless_reset_token) < len, "tp_buf overrun");
-        memcpy(&c->tp_buf[i], c->stateless_reset_token,
+        memcpy(&c->tls.tp_buf[i], c->stateless_reset_token,
                sizeof(c->stateless_reset_token));
         warn(DBG, "enc %u byte%s stateless_reset_token at [%u..%u]", w,
              plural(w), i, i + w);
@@ -314,33 +315,42 @@ static void init_tp(struct q_conn * const c)
     // encode length of all transport parameters
     const uint16_t enc_len = i - enc_len_pos - sizeof(enc_len);
     i = enc_len_pos;
-    enc(c->tp_buf, len, i, &enc_len, 0, "%u");
+    enc(c->tls.tp_buf, len, i, &enc_len, 0, "%u");
 
-    c->tp_ext[0] = (ptls_raw_extension_t){
+    c->tls.tp_ext[0] = (ptls_raw_extension_t){
         TLS_EXT_TYPE_TRANSPORT_PARAMETERS,
-        {c->tp_buf, enc_len + enc_len_pos + sizeof(enc_len)}};
-    c->tp_ext[1] = (ptls_raw_extension_t){UINT16_MAX};
+        {c->tls.tp_buf, enc_len + enc_len_pos + sizeof(enc_len)}};
+    c->tls.tp_ext[1] = (ptls_raw_extension_t){UINT16_MAX};
 }
 
 
 void init_tls(struct q_conn * const c)
 {
-    if (c->tls)
+    if (c->tls.t)
         // we are re-initializing during version negotiation
-        ptls_free(c->tls);
-    ensure((c->tls = ptls_new(&tls_ctx, !c->is_clnt)) != 0, "alloc TLS state");
+        ptls_free(c->tls.t);
+    ensure((c->tls.t = ptls_new(&tls_ctx, !c->is_clnt)) != 0,
+           "alloc TLS state");
     if (c->is_clnt)
-        ensure(ptls_set_server_name(c->tls, c->peer_name,
+        ensure(ptls_set_server_name(c->tls.t, c->peer_name,
                                     strlen(c->peer_name)) == 0,
                "ptls_set_server_name");
     init_tp(c);
 
-    c->tls_hshake_prop = (ptls_handshake_properties_t){
-        .additional_extensions = c->tp_ext,
+    c->tls.tls_hshake_prop = (ptls_handshake_properties_t){
+        .additional_extensions = c->tls.tp_ext,
         .collect_extension = filter_tp,
         .collected_extensions = chk_tp,
         .client.negotiated_protocols.list = alpn,
         .client.negotiated_protocols.count = alpn_cnt};
+}
+
+
+void free_tls(struct q_conn * const c)
+{
+    ptls_aead_free(c->tls.in_kp0);
+    ptls_aead_free(c->tls.out_kp0);
+    ptls_free(c->tls.t);
 }
 
 
@@ -352,8 +362,8 @@ conn_setup_1rtt_secret(struct q_conn * const c,
                        const char * const label,
                        uint8_t is_enc)
 {
-    int ret = ptls_export_secret(c->tls, sec, cipher->hash->digest_size, label,
-                                 ptls_iovec_init(0, 0));
+    int ret = ptls_export_secret(c->tls.t, sec, cipher->hash->digest_size,
+                                 label, ptls_iovec_init(0, 0));
     ensure(ret == 0, "ptls_export_secret");
     if (*aead)
         // tls_handshake() is called multiple times when generating CHs
@@ -368,10 +378,10 @@ conn_setup_1rtt_secret(struct q_conn * const c,
 
 static void __attribute__((nonnull)) conn_setup_1rtt(struct q_conn * const c)
 {
-    ptls_cipher_suite_t * const cipher = ptls_get_cipher(c->tls);
-    conn_setup_1rtt_secret(c, cipher, &c->in_kp0, c->in_sec,
+    ptls_cipher_suite_t * const cipher = ptls_get_cipher(c->tls.t);
+    conn_setup_1rtt_secret(c, cipher, &c->tls.in_kp0, c->tls.in_sec,
                            c->is_clnt ? PTLS_SERV_LABL : PTLS_CLNT_LABL, 0);
-    conn_setup_1rtt_secret(c, cipher, &c->out_kp0, c->out_sec,
+    conn_setup_1rtt_secret(c, cipher, &c->tls.out_kp0, c->tls.out_sec,
                            c->is_clnt ? PTLS_CLNT_LABL : PTLS_SERV_LABL, 1);
 
     c->state = CONN_STAT_VERS_OK;
@@ -390,8 +400,8 @@ uint32_t tls_handshake(struct q_stream * const s)
         q_alloc_iov(w_engine(s->c->sock), MAX_PKT_LEN, Q_OFFSET);
     ptls_buffer_t tb;
     ptls_buffer_init(&tb, ov->buf, ov->len);
-    const int ret = ptls_handshake(s->c->tls, &tb, iv ? iv->buf : 0, &in_len,
-                                   &s->c->tls_hshake_prop);
+    const int ret = ptls_handshake(s->c->tls.t, &tb, iv ? iv->buf : 0, &in_len,
+                                   &s->c->tls.tls_hshake_prop);
     ov->len = (uint16_t)tb.off;
     warn(DBG, "in %u, gen %u into idx %u, ret %u", iv ? iv->len : 0, ov->len,
          ov->idx, ret);
@@ -441,4 +451,35 @@ void init_tls_ctx(void)
     ensure(ptls_openssl_init_verify_certificate(&verifier, 0) == 0,
            "ptls_openssl_init_verify_certificate");
     tls_ctx.verify_certificate = &verifier.super;
+}
+
+
+uint16_t dec_aead(struct q_conn * const c,
+                  const struct w_iov * v,
+                  const uint16_t hdr_len)
+{
+    const size_t len =
+        ptls_aead_decrypt(c->tls.in_kp0, &v->buf[hdr_len], &v->buf[hdr_len],
+                          v->len - hdr_len, meta(v).nr, v->buf, hdr_len);
+    if (len == SIZE_MAX)
+        return 0; // AEAD decrypt error
+    warn(DBG, "verifying %lu-byte AEAD over [0..%u] in [%u..%u]",
+         v->len - len - hdr_len, v->len - (v->len - len - hdr_len) - 1,
+         v->len - (v->len - len - hdr_len), v->len - 1);
+    return hdr_len + (uint16_t)len;
+}
+
+
+uint16_t enc_aead(struct q_conn * const c,
+                  const struct w_iov * v,
+                  const struct w_iov * x,
+                  const uint16_t hdr_len)
+{
+    memcpy(x->buf, v->buf, hdr_len); // copy pkt header
+    const size_t len =
+        ptls_aead_encrypt(c->tls.out_kp0, &x->buf[hdr_len], &v->buf[hdr_len],
+                          v->len - hdr_len, meta(v).nr, v->buf, hdr_len);
+    warn(DBG, "added %lu-byte AEAD over [0..%u] in [%u..%u]",
+         len + hdr_len - v->len, v->len - 1, v->len, len + hdr_len - 1);
+    return hdr_len + (uint16_t)len;
 }

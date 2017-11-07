@@ -31,11 +31,11 @@
 #include <stdint.h>
 
 #include <ev.h>
-#include <picotls.h>
 #include <warpcore/warpcore.h>
 
 #include "diet.h"
 #include "recovery.h"
+#include "tls.h"
 
 
 extern splay_head(ipnp_splay, q_conn) conns_by_ipnp;
@@ -79,17 +79,8 @@ struct q_conn {
     ev_async tx_w;        ///< TX watcher.
 
     struct recovery rec; ///< Loss recovery state.
+    struct tls tls;      ///< TLS state.
 
-    // TLS state
-    ptls_t * tls;
-    uint8_t in_sec[PTLS_MAX_DIGEST_SIZE];
-    uint8_t out_sec[PTLS_MAX_DIGEST_SIZE];
-    ptls_aead_context_t * in_kp0;
-    ptls_aead_context_t * out_kp0;
-
-    uint8_t tp_buf[96];
-    ptls_raw_extension_t tp_ext[2];
-    ptls_handshake_properties_t tls_hshake_prop;
     uint8_t stateless_reset_token[16];
     uint64_t max_data;
     uint64_t max_stream_data;

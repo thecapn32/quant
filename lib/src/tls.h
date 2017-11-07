@@ -31,6 +31,20 @@
 
 struct q_conn;
 struct q_stream;
+struct w_iov;
+
+
+struct tls {
+    ptls_t * t;
+    uint8_t in_sec[PTLS_MAX_DIGEST_SIZE];
+    uint8_t out_sec[PTLS_MAX_DIGEST_SIZE];
+    ptls_aead_context_t * in_kp0;
+    ptls_aead_context_t * out_kp0;
+
+    uint8_t tp_buf[96];
+    ptls_raw_extension_t tp_ext[2];
+    ptls_handshake_properties_t tls_hshake_prop;
+};
 
 
 /// TLS context.
@@ -39,7 +53,18 @@ extern ptls_context_t tls_ctx;
 
 extern void __attribute__((nonnull)) init_tls(struct q_conn * const c);
 
+extern void __attribute__((nonnull)) free_tls(struct q_conn * const c);
+
 extern uint32_t __attribute__((nonnull))
 tls_handshake(struct q_stream * const s);
 
 extern void init_tls_ctx(void);
+
+extern uint16_t __attribute__((nonnull)) dec_aead(struct q_conn * const c,
+                                                  const struct w_iov * v,
+                                                  const uint16_t hdr_len);
+
+extern uint16_t __attribute__((nonnull)) enc_aead(struct q_conn * const c,
+                                                  const struct w_iov * v,
+                                                  const struct w_iov * x,
+                                                  const uint16_t hdr_len);
