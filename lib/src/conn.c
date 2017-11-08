@@ -306,18 +306,42 @@ update_ipnp(struct q_conn * const c, const struct sockaddr_in * const peer)
 }
 
 
-static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
-                                                 struct w_iov * const v,
-                                                 const uint16_t prot_len)
+static bool __attribute__((nonnull))
+verify_prot(struct q_conn * const c, struct w_iov * const v)
+{
+    const uint8_t flags = pkt_flags(v->buf);
+    if (is_set(F_LONG_HDR, flags) && pkt_type(flags) == F_LH_TYPE_VNEG)
+        // version negotiation responses do not carry protection
+        return true;
+
+    const uint16_t hdr_len = pkt_hdr_len(v->buf, v->len);
+    const uint16_t len = dec_aead(c, v, hdr_len);
+    if (len == 0) {
+        warn(ERR, "AEAD decrypt error");
+#ifndef NDEBUG
+        if (util_dlevel == DBG)
+            hexdump(v->buf, v->len);
+#endif
+        q_free_iov(w_engine(c->sock), v);
+        return false;
+    }
+    warn(DBG, "%u", len);
+    v->len -= v->len - len;
+    return true;
+}
+
+
+static void __attribute__((nonnull))
+process_pkt(struct q_conn * const c, struct w_iov * const v)
 {
     const uint8_t flags = pkt_flags(v->buf);
 
     switch (c->state) {
     case CONN_STAT_IDLE:
-    case CONN_STAT_VERS_REJ: {
+    case CONN_STAT_VERS_REJ:
         // validate minimum packet size
-        if (v->len + prot_len < MIN_INI_LEN) {
-            warn(ERR, "initial %u-byte pkt too short (< %u)", v->len + prot_len,
+        if (v->len < MIN_INI_LEN) {
+            warn(ERR, "initial %u-byte pkt too short (< %u)", v->len,
                  MIN_INI_LEN);
 #ifndef NDEBUG
             if (util_dlevel == DBG)
@@ -338,6 +362,10 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
         if (vers_supported(c->vers) && !is_force_neg_vers(c->vers)) {
             warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
 
+            init_cleartext_prot(c);
+            if (verify_prot(c, v) == false)
+                return;
+
             // this is a new connection; server picks a new random cid
             uint64_t cid;
             tls_ctx.random_bytes(&cid, sizeof(cid));
@@ -355,9 +383,8 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
                  conn_type(c), c->id, c->vers);
         }
         break;
-    }
 
-    case CONN_STAT_VERS_SENT: {
+    case CONN_STAT_VERS_SENT:
         if (is_set(F_LH_TYPE_VNEG, flags)) {
             // XXX this doesn't work, since we're flushing CH state on retry
             // ensure(find_sent_pkt(c, meta(v).nr), "did not send pkt %" PRIu64,
@@ -400,14 +427,18 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
 
         } else {
             warn(INF, "serv accepted vers 0x%08x", c->vers);
+            if (verify_prot(c, v) == false)
+                return;
             diet_insert(&c->recv, meta(v).nr);
             c->state = CONN_STAT_VERS_OK;
             dec_frames(c, v);
         }
         break;
-    }
 
-    case CONN_STAT_VERS_OK: {
+    case CONN_STAT_VERS_OK:
+        if (verify_prot(c, v) == false)
+            return;
+
         // pass any further data received on stream 0 to TLS and check
         // whether that completes the client handshake
         if (!is_set(F_LONG_HDR, flags) || pkt_type(flags) >= F_LH_CLNT_CTXT) {
@@ -417,10 +448,11 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
         diet_insert(&c->recv, meta(v).nr);
         dec_frames(c, v);
         break;
-    }
 
     case CONN_STAT_ESTB:
     case CONN_STAT_CLSD:
+        if (verify_prot(c, v) == false)
+            return;
         diet_insert(&c->recv, meta(v).nr);
         dec_frames(c, v);
         break;
@@ -495,7 +527,6 @@ void rx(struct ev_loop * const l,
                     }
                     update_ipnp(c, &peer);
                     update_cid(c, cid);
-                    init_cleartext_prot(c);
                     new_stream(c, 0);
                 }
 
@@ -504,40 +535,21 @@ void rx(struct ev_loop * const l,
         }
         ensure(c, "managed to find conn");
 
-        meta(v).nr = pkt_nr(v->buf, v->len, c);
-        uint16_t prot_len = 0;
-        if (is_set(F_LONG_HDR, flags) && pkt_type(flags) == F_LH_TYPE_VNEG)
-            // version negotiation responses do not carry protection
-            prot_len = UINT16_MAX;
-        else {
-            const uint16_t len = dec_aead(c, v, hdr_len);
-            prot_len = len != 0 ? v->len - len : 0;
-        }
-
-        if (prot_len == 0) {
-            warn(ERR, "AEAD decrypt error; ignoring pkt");
-#ifndef NDEBUG
-            if (util_dlevel == DBG)
-                hexdump(v->buf, v->len);
-#endif
-            q_free_iov(w, v);
-            continue;
-        }
-
         // remember that we had a RX event on this connection
         if (!c->had_rx) {
             c->had_rx = true;
             sl_insert_head(&crx, c, next);
         }
 
+        meta(v).nr = pkt_nr(v->buf, v->len, c);
+
         warn(NTE,
              "rx pkt %" PRIu64 " (len %u, idx %u, type 0x%02x = " bitstring_fmt
              ") on %s conn %" PRIx64,
              meta(v).nr, v->len, v->idx, flags, to_bitstring(flags),
              conn_type(c), cid);
-        v->len -= prot_len == UINT16_MAX ? 0 : prot_len;
 
-        process_pkt(c, v, prot_len);
+        process_pkt(c, v);
     }
 
     // for all connections that had RX events, reset idle timeout and check

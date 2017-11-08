@@ -450,6 +450,7 @@ void dec_frames(struct q_conn * const c, struct w_iov * v)
 
             case FRAM_TYPE_RST_STRM:
                 i = dec_reset_stream_frame(c, v, i);
+                c->needs_tx = true;
                 break;
 
             case FRAM_TYPE_CONN_CLSE:
