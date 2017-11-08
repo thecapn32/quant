@@ -219,8 +219,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
         w_nic_tx(w_engine(c->sock));
         if (!c->is_clnt)
             w_disconnect(c->sock);
-        // since we never touched the meta-data for x, no need for q_free()
-        w_free(w_engine(c->sock), &x);
+        q_free(w_engine(c->sock), &x);
     }
     return encoded;
 }
@@ -327,7 +326,7 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
             if (util_dlevel == DBG)
                 hexdump(v->buf, v->len);
 #endif
-            q_free_iov(c, v);
+            q_free_iov(w_engine(c->sock), v);
             return;
         }
 
@@ -448,6 +447,7 @@ void rx(struct ev_loop * const l,
     w_rx(ws, &i);
 
     while (!sq_empty(&i)) {
+        warn(DBG, "----------------------------------------------------------");
         struct w_iov * const v = sq_first(&i);
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         sq_remove_head(&i, next);
@@ -460,7 +460,7 @@ void rx(struct ev_loop * const l,
             if (util_dlevel == DBG)
                 hexdump(v->buf, v->len);
 #endif
-            w_free_iov(w, v); // OK to use w_free_iov here
+            q_free_iov(w, v);
             continue;
         }
 
@@ -493,7 +493,7 @@ void rx(struct ev_loop * const l,
                     if (c == 0) {
                         // TODO: maintain accept queue
                         warn(CRT, "app is not in q_accept(), ignoring");
-                        w_free_iov(w, v); // OK to use w_free_iov here
+                        q_free_iov(w, v);
                         continue;
                     }
                     update_ipnp(c, &peer);
@@ -523,7 +523,7 @@ void rx(struct ev_loop * const l,
             if (util_dlevel == DBG)
                 hexdump(v->buf, v->len);
 #endif
-            w_free_iov(w, v); // OK to use w_free_iov here
+            q_free_iov(w, v);
             continue;
         }
 

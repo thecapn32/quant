@@ -194,7 +194,7 @@ dec_stream_frame(struct q_conn * const c,
              "%u byte%s dup data (off %" PRIu64 "-%" PRIu64
              ") on %s conn %" PRIx64 " str %u",
              *len, plural(*len), off, off + *len, conn_type(c), c->id, sid);
-        q_free_iov(c, v);
+        q_free_iov(w_engine(c->sock), v);
         return i;
     }
 
@@ -253,6 +253,7 @@ uint16_t dec_ack_frame(
     const uint8_t lg_ack_len = dec_lg_ack_len(type);
     uint64_t lg_ack = 0;
     dec(lg_ack, v->buf, v->len, i, lg_ack_len, "%" PRIu64);
+    ensure(lg_ack, "ACK 0");
 
     uint16_t ack_delay = 0;
     dec(ack_delay, v->buf, v->len, i, 0, "%u");
@@ -263,7 +264,6 @@ uint16_t dec_ack_frame(
     if (before_ack)
         before_ack(c, lg_ack_in_block, ack_delay);
     do {
-        // warn(CRT, "num_blocks %u", num_blocks);
         uint64_t ack_block_len = 0;
         dec(ack_block_len, v->buf, v->len, i, len_ack_block_len, "%" PRIu64);
         if (lg_ack_in_block == lg_ack)

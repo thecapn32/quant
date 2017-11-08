@@ -181,8 +181,10 @@ void q_alloc(void * const w, struct w_iov_sq * const q, const uint32_t len)
 {
     w_alloc_len(w, q, len, MAX_PKT_LEN - AEAD_LEN, Q_OFFSET);
     struct w_iov * v;
-    sq_foreach (v, q, next)
+    sq_foreach (v, q, next) {
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
+        warn(DBG, "q_alloc idx %u", v->idx);
+    }
 }
 
 
@@ -192,6 +194,7 @@ void q_free(void * const w, struct w_iov_sq * const q)
     sq_foreach (v, q, next) {
         meta(v) = (struct pkt_meta){0};
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
+        warn(DBG, "q_free idx %u", v->idx);
     }
     w_free((struct w_engine *)w, q);
 }
@@ -267,7 +270,7 @@ void q_write(struct q_stream * const s, struct w_iov_sq * const q)
         meta(last).stream_data_end == Q_OFFSET) {
         ensure(sq_next(prev_last, next) == last, "queue messed up");
         sq_remove_after(&s->out, prev_last, next);
-        q_free_iov(s->c, last);
+        q_free_iov(w_engine(s->c->sock), last);
     }
 
     // return written data back to user stailq

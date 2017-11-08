@@ -482,7 +482,7 @@ uint32_t tls_handshake(struct q_stream * const s, struct w_iov * const iv)
         sq_insert_tail(&s->out, ov, next);
     else
         // we are done with the handshake, no need to TX after all
-        q_free_iov(s->c, ov);
+        q_free_iov(w_engine(s->c->sock), ov);
 
     if (ret == 0)
         init_1rtt_prot(s->c);

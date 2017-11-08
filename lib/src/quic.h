@@ -35,6 +35,7 @@
 
 /// Packet meta-data information associated with w_iov buffers
 struct pkt_meta {
+    // XXX need to potententially change pm_cpy() below if fields are reordered
     splay_entry(pkt_meta) nr_node;
     splay_entry(pkt_meta) off_node;
     ev_tstamp tx_t;             ///< Transmission timestamp.
@@ -89,10 +90,10 @@ extern struct pkt_meta * pm;
 
 
 #define pm_cpy(dst, src)                                                       \
-    memcpy((uint8_t *)(dst) + offsetof(struct pkt_meta, nr),                   \
-           (uint8_t *)(src) + offsetof(struct pkt_meta, nr),                   \
+    memcpy((uint8_t *)(dst) + offsetof(struct pkt_meta, tx_t),                 \
+           (uint8_t *)(src) + offsetof(struct pkt_meta, tx_t),                 \
            sizeof(struct pkt_meta) -                                           \
-               (sizeof(struct pkt_meta) - offsetof(struct pkt_meta, nr)))
+               (sizeof(struct pkt_meta) - offsetof(struct pkt_meta, tx_t)))
 
 /// Offset of stream frame payload data in w_iov buffers.
 #define Q_OFFSET 64
@@ -189,17 +190,19 @@ extern void * api_arg;
     } while (0)
 
 
-#define q_free_iov(c, v)                                                       \
+#define q_free_iov(w, v)                                                       \
     do {                                                                       \
-        w_free_iov(w_engine((c)->sock), (v));                                  \
+        w_free_iov((w), (v));                                                  \
         meta(v) = (struct pkt_meta){0};                                        \
+        warn(DBG, "q_free_iov idx %u", (v)->idx);                              \
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));                  \
     } while (0)
 
 
 #define q_alloc_iov(w, len, off)                                               \
     __extension__({                                                            \
-        struct w_iov * __v = w_alloc_iov((w), (len), (off));                   \
-        ASAN_UNPOISON_MEMORY_REGION(&meta(__v), sizeof(meta(__v)));            \
-        __v;                                                                   \
+        struct w_iov * _v = w_alloc_iov((w), (len), (off));                    \
+        ASAN_UNPOISON_MEMORY_REGION(&meta(_v), sizeof(meta(_v)));              \
+        warn(DBG, "q_alloc_iov idx %u", _v->idx);                              \
+        _v;                                                                    \
     })

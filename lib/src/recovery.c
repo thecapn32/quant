@@ -112,7 +112,8 @@ static void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c)
             if (p->is_rtxed || !p->is_rtxable) {
                 warn(DBG, "free rtxed/non-rtxable pkt %" PRIu64, p->nr);
                 splay_remove(pm_nr_splay, &c->rec.sent_pkts, p);
-                q_free_iov(c, w_iov(w_engine(c->sock), w_iov_idx(p)));
+                q_free_iov(w_engine(c->sock),
+                           w_iov(w_engine(c->sock), w_iov_idx(p)));
             } else {
                 warn(DBG, "mark non-rtxed pkt %" PRIu64, p->nr);
                 p->tx_len = 0;
