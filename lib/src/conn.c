@@ -168,8 +168,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
     struct w_iov_sq x = sq_head_initializer(x);
     uint32_t encoded = 0;
     struct w_iov * v = from;
-    sq_foreach_from(v, &s->out, next)
-    {
+    sq_foreach_from (v, &s->out, next) {
         if (meta(v).is_acked) {
             warn(DBG,
                  "skipping ACKed pkt %" PRIu64 " idx %u on str %u during %s",
@@ -398,7 +397,7 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
             struct q_stream * s = get_stream(c, 0);
             q_free(w_engine(c->sock), &s->out);
             s->out_off = 0;
-            tls_handshake(s, 0);
+            tls_handshake(s);
             c->needs_tx = true;
 
         } else {

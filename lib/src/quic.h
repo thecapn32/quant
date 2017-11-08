@@ -43,6 +43,7 @@ struct pkt_meta {
     uint64_t in_off;            ///< Packet number.
     struct q_stream * str;      ///< Stream this data was written on.
     uint16_t stream_header_pos; ///< Offset of stream frame header.
+    uint16_t stream_data_start; ///< Offset of first byte of stream frame data.
     uint16_t stream_data_end;   ///< Offset of last byte of stream frame data.
     uint16_t ack_header_pos;    ///< Offset of ACK frame header.
     uint16_t tx_len;            ///< Length of protected packet at TX.
@@ -51,7 +52,7 @@ struct pkt_meta {
     uint8_t is_acked : 1;       ///< Is the w_iov ACKed?
     uint8_t is_ack_only : 1;    ///< Is this a pure ACK?
     uint8_t : 4;
-    uint8_t _unused[7];
+    uint8_t _unused[5];
 };
 
 

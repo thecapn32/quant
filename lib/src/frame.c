@@ -88,8 +88,7 @@ static uint8_t __attribute__((const)) dec_off_len(const uint8_t flags)
 static uint16_t __attribute__((nonnull))
 dec_stream_frame(struct q_conn * const c,
                  struct w_iov * const v,
-                 const uint16_t pos,
-                 uint16_t * const len)
+                 const uint16_t pos)
 {
     uint16_t i = pos;
 
@@ -101,18 +100,20 @@ dec_stream_frame(struct q_conn * const c,
     dec(sid, v->buf, v->len, i, sid_len, "%u");
 
     const uint8_t off_len = dec_off_len(type);
-    uint64_t off = 0;
     if (off_len)
-        dec(off, v->buf, v->len, i, off_len, "%" PRIu64);
-    // TODO: pay attention to offset when delivering data to app
+        dec(meta(v).in_off, v->buf, v->len, i, off_len, "%" PRIu64);
 
+    uint16_t l;
     if (is_set(F_STREAM_DATA_LEN, type))
-        dec(*len, v->buf, v->len, i, 0, "%u");
+        dec(l, v->buf, v->len, i, 0, "%u");
     else
         // stream data extends to end of packet
-        *len = v->len - i;
+        l = v->len - i;
 
-    ensure(*len || is_set(F_STREAM_FIN, type), "len %u > 0 or FIN", *len);
+    ensure(l || is_set(F_STREAM_FIN, type), "len %u > 0 or FIN", l);
+
+    meta(v).stream_data_start = i;
+    meta(v).stream_data_end = l + i;
 
     // deliver data into stream
     struct q_stream * s = get_stream(c, sid);
@@ -120,18 +121,19 @@ dec_stream_frame(struct q_conn * const c,
         if (diet_find(&c->closed_streams, sid)) {
             warn(WRN, "ignoring frame for closed str %u on %s conn %" PRIx64,
                  sid, conn_type(c), c->id);
-            return i;
+            goto done;
         }
         s = new_stream(c, sid);
     }
 
     // best case: new in-order data
-    if (off == s->in_off) {
+    if (meta(v).in_off == s->in_off) {
         warn(NTE,
              "%u byte%s new data (off %" PRIu64 "-%" PRIu64
              ") on %s conn %" PRIx64 " str %u",
-             *len, plural(*len), off, off + *len, conn_type(c), c->id, sid);
-        s->in_off += *len;
+             l, plural(l), meta(v).in_off, meta(v).in_off + l, conn_type(c),
+             c->id, sid);
+        s->in_off += l;
         sq_insert_tail(&s->in, v, next);
 
         // check if a hole has been filled that lets us dequeue ooo data
@@ -173,41 +175,32 @@ dec_stream_frame(struct q_conn * const c,
 
         if (s->id != 0)
             maybe_api_return(q_read, s->c);
-        else {
-            // adjust w_iov start and len to stream frame data for TLS handshake
-            uint8_t * const b = v->buf;
-            const uint16_t l = v->len;
-            v->buf = &v->buf[i];
-            v->len = *len;
-            if (tls_handshake(s, v) == 0)
-                maybe_api_return(q_connect, c);
-            // undo adjust
-            v->buf = b;
-            v->len = l;
-        }
-        return i;
+        else if (tls_handshake(s) == 0)
+            maybe_api_return(q_connect, c);
+        goto done;
     }
 
     // data is a complete duplicate
-    if (off + *len <= s->in_off) {
+    if (meta(v).in_off + l <= s->in_off) {
         warn(NTE,
              "%u byte%s dup data (off %" PRIu64 "-%" PRIu64
              ") on %s conn %" PRIx64 " str %u",
-             *len, plural(*len), off, off + *len, conn_type(c), c->id, sid);
+             l, plural(l), meta(v).in_off, meta(v).in_off + l, conn_type(c),
+             c->id, sid);
         q_free_iov(w_engine(c->sock), v);
-        return i;
+        goto done;
     }
 
     // data is out of order
     warn(NTE,
          "reordered data: %u byte%s data (off %" PRIu64 "-%" PRIu64
          "), expected %" PRIu64 " on %s conn %" PRIx64 " str %u",
-         *len, plural(*len), off, off + *len, s->in_off, conn_type(c), c->id,
-         sid);
-    meta(v).in_off = off;
-    meta(v).stream_data_end = *len;
+         l, plural(l), meta(v).in_off, meta(v).in_off + l, s->in_off,
+         conn_type(c), c->id, sid);
     splay_insert(pm_off_splay, &s->in_ooo, &meta(v));
-    return i;
+
+done:
+    return meta(v).stream_data_end;
 }
 
 
@@ -423,8 +416,6 @@ void dec_frames(struct q_conn * const c, struct w_iov * v)
 {
     uint16_t i = pkt_hdr_len(v->buf, v->len);
     uint16_t pad_start = 0;
-    uint16_t dpos = 0;
-    uint16_t dlen = 0;
 
     meta(v).is_ack_only = true;
     while (i < v->len) {
@@ -438,7 +429,7 @@ void dec_frames(struct q_conn * const c, struct w_iov * v)
 
         if (is_set(FRAM_TYPE_STRM, type)) {
             c->needs_tx = true;
-            if (dpos) {
+            if (meta(v).stream_data_start) {
                 // already had at least one stream frame in this packet,
                 // generate (another) copy
                 warn(INF, "more than one stream frame in pkt, copy");
@@ -448,15 +439,14 @@ void dec_frames(struct q_conn * const c, struct w_iov * v)
                 meta(vdup) = meta(v);
                 vdup->len = v->len;
                 // adjust w_iov start and len to stream frame data
-                v->buf = &v->buf[dpos];
-                v->len = dlen;
+                v->buf = &v->buf[meta(v).stream_data_start];
+                v->len = meta(v).stream_data_end - meta(v).stream_data_start;
                 // continue parsing in the copied w_iov
                 v = vdup;
             }
 
             // this is the first stream frame in this packet
-            dpos = dec_stream_frame(c, v, i, &dlen);
-            i = dpos + dlen;
+            i = dec_stream_frame(c, v, i);
 
         } else if (is_set(FRAM_TYPE_ACK, type)) {
             i = dec_ack_frame(c, v, i, &on_ack_rx_1, &on_pkt_acked,
@@ -508,10 +498,10 @@ void dec_frames(struct q_conn * const c, struct w_iov * v)
             }
     }
 
-    if (dpos) {
+    if (meta(v).stream_data_start) {
         // adjust w_iov start and len to stream frame data
-        v->buf = &v->buf[dpos];
-        v->len = dlen;
+        v->buf = &v->buf[meta(v).stream_data_start];
+        v->len = meta(v).stream_data_end - meta(v).stream_data_start;
     }
 }
 

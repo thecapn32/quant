@@ -457,35 +457,46 @@ static void __attribute__((nonnull)) init_1rtt_prot(struct q_conn * const c)
 }
 
 
-uint32_t tls_handshake(struct q_stream * const s, struct w_iov * const iv)
+uint32_t tls_handshake(struct q_stream * const s)
 {
-    size_t in_len = iv ? iv->len : 0;
-
-    // allocate a new w_iov
-    struct w_iov * ov =
-        q_alloc_iov(w_engine(s->c->sock), MAX_PKT_LEN, Q_OFFSET);
-    ptls_buffer_t tb;
-    ptls_buffer_init(&tb, ov->buf, ov->len);
-    const int ret = ptls_handshake(s->c->tls.t, &tb, iv ? iv->buf : 0, &in_len,
-                                   &s->c->tls.tls_hshake_prop);
-    ov->len = (uint16_t)tb.off;
-    warn(DBG, "in %u, gen %u into idx %u, ret %u", iv ? iv->len : 0, ov->len,
-         ov->idx, ret);
-    ensure(ret == 0 || ret == PTLS_ERROR_IN_PROGRESS, "TLS error: %u", ret);
-    ensure(iv == 0 || iv->len && iv->len == in_len, "TLS data remaining");
+    int ret = 0;
+    struct w_iov * iv = sq_first(&s->in);
 
     if (!iv)
         s->c->state = CONN_STAT_VERS_SENT;
 
-    if ((ret == 0 || ret == PTLS_ERROR_IN_PROGRESS) && ov->len != 0)
-        // enqueue for TX
-        sq_insert_tail(&s->out, ov, next);
-    else
-        // we are done with the handshake, no need to TX after all
-        q_free_iov(w_engine(s->c->sock), ov);
+    do {
+        const uint16_t in_data_len =
+            iv ? meta(iv).stream_data_end - meta(iv).stream_data_start : 0;
 
-    if (ret == 0)
-        init_1rtt_prot(s->c);
+        // allocate a new w_iov
+        struct w_iov * ov =
+            q_alloc_iov(w_engine(s->c->sock), MAX_PKT_LEN, Q_OFFSET);
+        ptls_buffer_t tb;
+        ptls_buffer_init(&tb, ov->buf, ov->len);
+
+        size_t in_len = in_data_len;
+        ret = ptls_handshake(s->c->tls.t, &tb,
+                             iv ? &iv->buf[meta(iv).stream_data_start] : 0,
+                             &in_len, &s->c->tls.tls_hshake_prop);
+        ov->len = (uint16_t)tb.off;
+        warn(DBG, "in %u, gen %u into idx %u, ret %u", iv ? in_data_len : 0,
+             ov->len, ov->idx, ret);
+        ensure(ret == 0 || ret == PTLS_ERROR_IN_PROGRESS, "TLS error: %u", ret);
+        ensure(iv == 0 || in_data_len && in_data_len == in_len, "data left");
+
+        if ((ret == 0 || ret == PTLS_ERROR_IN_PROGRESS) && ov->len != 0)
+            // enqueue for TX
+            sq_insert_tail(&s->out, ov, next);
+        else
+            // we are done with the handshake, no need to TX after all
+            q_free_iov(w_engine(s->c->sock), ov);
+
+        if (ret == 0)
+            init_1rtt_prot(s->c);
+
+        iv = iv ? sq_next(iv, next) : 0;
+    } while (iv);
 
     return (uint32_t)ret;
 }
