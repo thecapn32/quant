@@ -84,7 +84,7 @@ pkt_vers(const uint8_t * const buf, const uint16_t len);
 extern uint16_t __attribute__((nonnull))
 pkt_hdr_len(const uint8_t * const buf, const uint16_t len);
 
-extern void __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
+extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
                                              const bool rtx,
                                              struct w_iov * const v,
                                              struct w_iov_sq * const q);

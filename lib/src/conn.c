@@ -197,11 +197,11 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             splay_insert(pm_nr_splay, &c->rec.sent_pkts, &meta(r));
         }
 
-        enc_pkt(s, rtx, v, &x);
-        on_pkt_sent(c, v);
-        encoded++;
-
-        log_sent_pkts(c);
+        if (enc_pkt(s, rtx, v, &x)) {
+            on_pkt_sent(c, v);
+            encoded++;
+            log_sent_pkts(c);
+        }
 
         if (limit && encoded == limit) {
             warn(NTE, "tx limit %u reached", limit);
@@ -210,7 +210,6 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
     }
 
     if (encoded) {
-        set_ld_alarm(c);
         // transmit encrypted/protected packets and then free the chain
         if (!c->is_clnt)
             w_connect(c->sock, c->peer.sin_addr.s_addr, c->peer.sin_port);
@@ -258,8 +257,7 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
     bool did_tx = false;
     struct q_stream * s;
     splay_foreach (s, stream, &c->streams) {
-        if (s->state != STRM_STAT_CLSD && !sq_empty(&s->out) &&
-            sq_len(&s->out) > s->out_ack_cnt) {
+        if (!sq_empty(&s->out) && sq_len(&s->out) > s->out_ack_cnt) {
             warn(DBG,
                  "data %s on %s conn %" PRIx64 " str %u w/%" PRIu64
                  " pkt%s in queue",

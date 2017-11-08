@@ -40,7 +40,7 @@ struct pkt_meta {
     splay_entry(pkt_meta) off_node;
     ev_tstamp tx_t;             ///< Transmission timestamp.
     uint64_t nr;                ///< Packet number.
-    uint64_t in_off;            ///< Packet number.
+    uint64_t in_off;            ///< Stream data offset.
     struct q_stream * str;      ///< Stream this data was written on.
     uint16_t stream_header_pos; ///< Offset of stream frame header.
     uint16_t stream_data_start; ///< Offset of first byte of stream frame data.
@@ -79,6 +79,15 @@ extern struct pkt_meta * pm;
 /// @return     Pointer to the pkt_meta entry for the w_iov.
 ///
 #define meta(v) pm[(v)->idx]
+
+
+/// Return the length of the stream data in a given w_iov.
+///
+/// @param      v     Pointer to a w_iov.
+///
+/// @return     Length of stream data.
+///
+#define stream_data_len(v) (meta(v).stream_data_end - meta(v).stream_data_start)
 
 
 /// Return the w_iov index of a given pkt_meta.

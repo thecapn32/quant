@@ -82,8 +82,8 @@ extern void __attribute__((nonnull)) on_ack_rx_2(struct q_conn * const c);
 extern void __attribute__((nonnull))
 on_pkt_acked(struct q_conn * const c, const uint64_t ack);
 
-
-extern void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c);
-
 extern struct w_iov * __attribute__((nonnull))
 find_sent_pkt(struct q_conn * const c, const uint64_t nr);
+
+extern uint32_t __attribute__((nonnull))
+rtxable_pkts_outstanding(struct q_conn * const c);

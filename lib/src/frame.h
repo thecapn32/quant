@@ -31,6 +31,22 @@ struct q_conn;
 struct q_stream;
 struct w_iov;
 
+
+#define FRAM_TYPE_PAD 0x00
+#define FRAM_TYPE_RST_STRM 0x01
+#define FRAM_TYPE_CONN_CLSE 0x02
+#define FRAM_TYPE_APPL_CLSE 0x03
+#define FRAM_TYPE_MAX_DATA 0x04
+#define FRAM_TYPE_MAX_STRM_DATA 0x05
+#define FRAM_TYPE_MAX_STRM_ID 0x06
+#define FRAM_TYPE_PING 0x07
+#define FRAM_TYPE_STRM_BLCK 0x09
+#define FRAM_TYPE_STOP_SEND 0x0C
+
+#define FRAM_TYPE_STRM 0xC0
+#define FRAM_TYPE_ACK 0xA0
+
+
 extern void __attribute__((nonnull))
 dec_frames(struct q_conn * const c, struct w_iov * v);
 
@@ -47,11 +63,11 @@ extern uint16_t __attribute__((nonnull))
 enc_stream_frame(struct q_stream * const s, struct w_iov * const v);
 
 extern uint16_t __attribute__((nonnull))
-enc_conn_close_frame(struct w_iov * const v,
-                     const uint16_t pos,
-                     const uint16_t err_code,
-                     const char * const reas,
-                     const uint16_t reas_len);
+enc_close_frame(struct w_iov * const v,
+                const uint16_t pos,
+                const uint8_t type,
+                const uint16_t err_code,
+                const char * const reas);
 
 extern uint16_t __attribute__((nonnull(1, 2, 5))) dec_ack_frame(
     struct q_conn * const c,

@@ -44,23 +44,59 @@
 struct ev_loop;
 
 
-static bool __attribute__((nonnull))
-no_rtxable_pkts_outstanding(struct q_conn * const c)
+uint32_t rtxable_pkts_outstanding(struct q_conn * const c)
 {
+    uint32_t cnt = 0;
     struct pkt_meta * p;
     splay_foreach (p, pm_nr_splay, &c->rec.sent_pkts)
         if (p->is_rtxable && !p->is_acked)
-            return false;
-    return true;
+            cnt++;
+    return cnt;
 }
 
 
-static bool __attribute__((nonnull))
-one_rtxable_pkt_outstanding(struct q_conn * const c)
+static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
 {
-    struct pkt_meta * p;
-    return (p = splay_min(pm_nr_splay, &c->rec.sent_pkts)) &&
-           splay_next(pm_nr_splay, &c->rec.sent_pkts, p);
+    const uint32_t rtxable_outstanding = rtxable_pkts_outstanding(c);
+    if (rtxable_outstanding == 0) {
+        // retransmittable packets are not outstanding
+        ev_timer_stop(loop, &c->rec.ld_alarm);
+        warn(INF, "no RTX-able pkts outstanding, stopping ld_alarm");
+        return;
+    }
+
+    ev_tstamp dur = 0;
+    if (c->state < CONN_STAT_ESTB) {
+        dur = is_zero(c->rec.srtt) ? kDefaultInitialRtt : c->rec.srtt;
+        dur = MAX(2 * dur, kMinTLPTimeout) * (1 << c->rec.hshake_cnt);
+        warn(INF, "handshake RTX alarm in %f sec on %s conn %" PRIx64, dur,
+             conn_type(c), c->id);
+
+    } else if (!is_zero(c->rec.loss_t)) {
+        dur = c->rec.loss_t - ev_now(loop);
+        warn(INF, "early RTX or time alarm in %f sec on %s conn %" PRIx64, dur,
+             conn_type(c), c->id);
+
+        // } else if (c->rec.tlp_cnt < kMaxTLPs) {
+        //     if (rtxable_outstanding == 1)
+        //         dur = 1.5 * c->rec.srtt + kDelayedAckTimeout;
+        //     else
+        //         dur = kMinTLPTimeout;
+        //     dur = MAX(dur, 2 * c->rec.srtt);
+        //     warn(INF, "TLP alarm in %f sec on %s conn %" PRIx64, dur,
+        //     conn_type(c),
+        //          c->id);
+
+    } else {
+        dur = c->rec.srtt + 4 * c->rec.rttvar;
+        dur = MAX(dur, kMinRTOTimeout);
+        dur *= (1 << c->rec.rto_cnt);
+        warn(INF, "RTO alarm in %f sec on %s conn %" PRIx64, dur, conn_type(c),
+             c->id);
+    }
+
+    c->rec.ld_alarm.repeat = dur;
+    ev_timer_again(loop, &c->rec.ld_alarm);
 }
 
 
@@ -156,19 +192,19 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
              conn_type(c), c->id);
         detect_lost_pkts(c);
 
-    } else if (c->rec.tlp_cnt < kMaxTLPs) {
-        warn(INF, "TLP alarm #%u on %s conn %" PRIx64, c->rec.tlp_cnt,
-             conn_type(c), c->id);
-        tx(c, true, 1); // XXX is this an RTX or not?
-        c->rec.tlp_cnt++;
+        // } else if (c->rec.tlp_cnt < kMaxTLPs) {
+        //     warn(INF, "TLP alarm #%u on %s conn %" PRIx64, c->rec.tlp_cnt,
+        //          conn_type(c), c->id);
+        //     tx(c, true, 1); // XXX is this an RTX or not?
+        //     c->rec.tlp_cnt++;
 
     } else {
         warn(INF, "RTO alarm #%u on %s conn %" PRIx64, c->rec.rto_cnt,
              conn_type(c), c->id);
         if (c->rec.rto_cnt == 0)
             c->rec.lg_sent_before_rto = c->rec.lg_sent;
-        tx(c, true, 2);
-        c->rec.rto_cnt++; // XXX is this an RTX or not?
+        tx(c, true, 2); // XXX is this an RTX or not?
+        c->rec.rto_cnt++;
     }
 
     set_ld_alarm(c);
@@ -265,7 +301,7 @@ void on_pkt_acked(struct q_conn * const c, const uint64_t ack)
     c->rec.hshake_cnt = c->rec.tlp_cnt = c->rec.rto_cnt = 0;
     splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
 
-    if (no_rtxable_pkts_outstanding(c))
+    if (rtxable_pkts_outstanding(c) == 0)
         maybe_api_return(q_close, c);
 
     // stop ACKing packets that were contained in the ACK frame of this
@@ -302,52 +338,6 @@ void on_pkt_acked(struct q_conn * const c, const uint64_t ack)
             // all packets are ACKed
             maybe_api_return(q_write, s);
     }
-}
-
-
-void set_ld_alarm(struct q_conn * const c)
-{
-    if (no_rtxable_pkts_outstanding(c)) {
-        // retransmittable packets are not outstanding
-        if (ev_is_active(&c->rec.ld_alarm)) {
-            ev_timer_stop(loop, &c->rec.ld_alarm);
-            warn(INF, "no RTX-able pkts outstanding, stopping LD alarm");
-        }
-        return;
-    }
-
-    ev_tstamp dur = 0;
-    const ev_tstamp now = ev_now(loop);
-    if (c->state < CONN_STAT_ESTB) {
-        dur = is_zero(c->rec.srtt) ? kDefaultInitialRtt : c->rec.srtt;
-        dur = MAX(2 * dur, kMinTLPTimeout) * (1 << c->rec.hshake_cnt);
-        warn(INF, "handshake RTX alarm in %f sec on %s conn %" PRIx64, dur,
-             conn_type(c), c->id);
-
-    } else if (!is_zero(c->rec.loss_t)) {
-        dur = c->rec.loss_t - now;
-        warn(INF, "early RTX or time LD alarm in %f sec on %s conn %" PRIx64,
-             dur, conn_type(c), c->id);
-
-    } else if (c->rec.tlp_cnt < kMaxTLPs) {
-        if (one_rtxable_pkt_outstanding(c))
-            dur = 1.5 * c->rec.srtt + kDelayedAckTimeout;
-        else
-            dur = kMinTLPTimeout;
-        dur = MAX(dur, 2 * c->rec.srtt);
-        warn(INF, "TLP alarm in %f sec on %s conn %" PRIx64, dur, conn_type(c),
-             c->id);
-
-    } else {
-        dur = c->rec.srtt + 4 * c->rec.rttvar;
-        dur = MAX(dur, kMinRTOTimeout);
-        dur *= (1 << c->rec.rto_cnt);
-        warn(INF, "RTO alarm in %f sec on %s conn %" PRIx64, dur, conn_type(c),
-             c->id);
-    }
-
-    c->rec.ld_alarm.repeat = dur;
-    ev_timer_again(loop, &c->rec.ld_alarm);
 }
 
 

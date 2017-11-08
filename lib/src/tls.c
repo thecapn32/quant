@@ -466,15 +466,13 @@ uint32_t tls_handshake(struct q_stream * const s)
         s->c->state = CONN_STAT_VERS_SENT;
 
     do {
-        const uint16_t in_data_len =
-            iv ? meta(iv).stream_data_end - meta(iv).stream_data_start : 0;
-
-        // allocate a new w_iov
+        // allocate a new w_iov for potential outbound handshake data
         struct w_iov * ov =
             q_alloc_iov(w_engine(s->c->sock), MAX_PKT_LEN, Q_OFFSET);
         ptls_buffer_t tb;
         ptls_buffer_init(&tb, ov->buf, ov->len);
 
+        const uint16_t in_data_len = iv ? stream_data_len(iv) : 0;
         size_t in_len = in_data_len;
         ret = ptls_handshake(s->c->tls.t, &tb,
                              iv ? &iv->buf[meta(iv).stream_data_start] : 0,

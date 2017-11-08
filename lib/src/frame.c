@@ -47,20 +47,6 @@
 #include "tls.h"
 
 
-#define FRAM_TYPE_PAD 0x00
-#define FRAM_TYPE_RST_STRM 0x01
-#define FRAM_TYPE_CONN_CLSE 0x02
-#define FRAM_TYPE_MAX_DATA 0x04
-#define FRAM_TYPE_MAX_STRM_DATA 0x05
-#define FRAM_TYPE_MAX_STRM_ID 0x06
-#define FRAM_TYPE_PING 0x07
-#define FRAM_TYPE_STRM_BLCK 0x09
-#define FRAM_TYPE_STOP_SEND 0x0C
-
-#define FRAM_TYPE_STRM 0xC0
-#define FRAM_TYPE_ACK 0xA0
-
-
 // Convert stream ID length encoded in flags to bytes
 static uint8_t __attribute__((const)) dec_sid_len(const uint8_t flags)
 {
@@ -308,11 +294,14 @@ dec_reset_stream_frame(struct q_conn * const c,
 
 
 static uint16_t __attribute__((nonnull))
-dec_conn_close_frame(struct q_conn * const c __attribute__((unused)),
-                     const struct w_iov * const v,
-                     const uint16_t pos)
+dec_close_frame(struct q_conn * const c __attribute__((unused)),
+                const struct w_iov * const v,
+                const uint16_t pos)
 {
-    uint16_t i = pos + 1;
+    uint16_t i = pos;
+
+    uint8_t type = 0;
+    dec(type, v->buf, v->len, i, 0, "0x%02x");
 
     uint16_t err_code = 0;
     dec(err_code, v->buf, v->len, i, 0, "0x%04x");
@@ -440,7 +429,7 @@ void dec_frames(struct q_conn * const c, struct w_iov * v)
                 vdup->len = v->len;
                 // adjust w_iov start and len to stream frame data
                 v->buf = &v->buf[meta(v).stream_data_start];
-                v->len = meta(v).stream_data_end - meta(v).stream_data_start;
+                v->len = stream_data_len(v);
                 // continue parsing in the copied w_iov
                 v = vdup;
             }
@@ -464,7 +453,8 @@ void dec_frames(struct q_conn * const c, struct w_iov * v)
                 break;
 
             case FRAM_TYPE_CONN_CLSE:
-                i = dec_conn_close_frame(c, v, i);
+            case FRAM_TYPE_APPL_CLSE:
+                i = dec_close_frame(c, v, i);
                 break;
 
             case FRAM_TYPE_PING:
@@ -501,7 +491,7 @@ void dec_frames(struct q_conn * const c, struct w_iov * v)
     if (meta(v).stream_data_start) {
         // adjust w_iov start and len to stream frame data
         v->buf = &v->buf[meta(v).stream_data_start];
-        v->len = meta(v).stream_data_end - meta(v).stream_data_start;
+        v->len = stream_data_len(v);
     }
 }
 
@@ -670,25 +660,25 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
     s->out_off += dlen; // increase the stream data offset
     meta(v).str = s;    // remember stream this buf belongs to
     meta(v).is_rtxable = true;
+    meta(v).stream_data_start = Q_OFFSET;
+    meta(v).stream_data_end = Q_OFFSET + dlen;
 
     return v->len;
 }
 
 
-uint16_t enc_conn_close_frame(struct w_iov * const v,
-                              const uint16_t pos,
-                              const uint16_t err_code,
-                              const char * const reas,
-                              const uint16_t reas_len)
+uint16_t enc_close_frame(struct w_iov * const v,
+                         const uint16_t pos,
+                         const uint8_t type,
+                         const uint16_t err_code,
+                         const char * const reas)
 {
     uint16_t i = pos;
 
-    const uint8_t type = FRAM_TYPE_CONN_CLSE;
     enc(v->buf, v->len, i, &type, 0, "0x%02x");
-
     enc(v->buf, v->len, i, &err_code, 0, "0x%04x");
 
-    const uint16_t rlen = MIN(reas_len, v->len - i);
+    const uint16_t rlen = MIN((uint16_t)strlen(reas), v->len - i);
     enc(v->buf, v->len, i, &rlen, 0, "%u");
 
     memcpy(&v->buf[i], reas, rlen);

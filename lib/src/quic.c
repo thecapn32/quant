@@ -256,6 +256,7 @@ void q_write(struct q_stream * const s, struct w_iov_sq * const q)
 
     // add to stream
     sq_concat(&s->out, q);
+    s->out_ack_cnt = 0;
 
     // remember the last iov in the queue
     struct w_iov * const prev_last = sq_last(&s->out, w_iov, next);
@@ -264,17 +265,16 @@ void q_write(struct q_stream * const s, struct w_iov_sq * const q)
     ev_async_send(loop, &s->c->tx_w);
     loop_run(q_write, s);
 
-    // the last packet in s->out may be a pure FIN - if so, drop it
+    // the last packet in s->out may be a pure FIN - if so, don't return it
     struct w_iov * const last = sq_last(&s->out, w_iov, next);
-    if (last && meta(last).stream_header_pos &&
-        meta(last).stream_data_end == Q_OFFSET) {
+    if (last && meta(last).stream_header_pos && stream_data_len(last) == 0) {
         ensure(sq_next(prev_last, next) == last, "queue messed up");
         sq_remove_after(&s->out, prev_last, next);
-        q_free_iov(w_engine(s->c->sock), last);
-    }
-
-    // return written data back to user stailq
-    sq_concat(q, &s->out);
+        sq_concat(q, &s->out);
+        sq_insert_tail(&s->out, last, next);
+    } else
+        sq_concat(q, &s->out);
+    s->out_ack_cnt = 0;
 
     warn(WRN, "wrote %u byte%s on %s conn %" PRIx64 " str %u", qlen,
          plural(qlen), conn_type(s->c), s->c->id, s->id);
@@ -433,22 +433,17 @@ void q_close(struct q_conn * const c)
         if (s->id != 0)
             q_close_stream(s);
 
+    // wait until everything is ACKed
+    while (rtxable_pkts_outstanding(c) == 0) {
+        warn(CRT, "waiting for ACKs");
+        ev_async_send(loop, &c->tx_w);
+        loop_run(q_close, c);
+    }
+
     // send connection close frame
     c->state = CONN_STAT_CLSD;
     ev_async_send(loop, &c->tx_w);
-
-    // wait until everything is ACKed
-    bool done = false;
-    do {
-        if ((done |= !splay_empty(&c->rec.sent_pkts))) {
-            warn(CRT, "waiting for ACKs %u", done);
-        }
-        if ((done |= !diet_empty(&c->recv))) {
-            warn(CRT, "waiting to send ACKs %u", done);
-            ev_async_send(loop, &c->tx_w);
-        }
-        loop_run(q_close, c);
-    } while (done == false);
+    loop_run(q_close, c);
 
     // we're done
     ev_io_stop(loop, &c->rx_w);
