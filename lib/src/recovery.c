@@ -30,6 +30,7 @@
 #include <sys/param.h>
 
 #include <ev.h>
+#include <picotls.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
@@ -39,6 +40,7 @@
 #include "quic.h"
 #include "recovery.h"
 #include "stream.h"
+#include "tls.h"
 
 
 struct ev_loop;
@@ -368,7 +370,8 @@ void rec_init(struct q_conn * const c)
     }
     splay_init(&c->rec.sent_pkts);
 
-    c->rec.lg_sent = c->is_clnt ? 999 : 7999; // TODO: randomize initial pkt nr
+    tls_ctx.random_bytes(&c->rec.lg_sent, sizeof(uint32_t));
+    hexdump(&c->rec.lg_sent, sizeof(uint64_t));
 
     c->rec.cwnd = kInitialWindow;
     c->rec.ssthresh = UINT64_MAX;

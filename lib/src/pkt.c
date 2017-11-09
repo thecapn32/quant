@@ -46,7 +46,7 @@
 
 
 /// Packet number lengths for different short-header packet types
-static const uint8_t pkt_nr_len[] = {0xFF, 1, 2, 4};
+static const uint8_t pkt_nr_lens[] = {0xFF, 1, 2, 4};
 
 
 uint16_t pkt_hdr_len(const uint8_t * const buf, const uint16_t len)
@@ -61,7 +61,7 @@ uint16_t pkt_hdr_len(const uint8_t * const buf, const uint16_t len)
             warn(ERR, "illegal pkt type %u", type);
             return UINT16_MAX;
         }
-        pos = 1 + (is_set(F_SH_CID, flags) ? 8 : 0) + pkt_nr_len[type];
+        pos = 1 + (is_set(F_SH_CID, flags) ? 8 : 0) + pkt_nr_lens[type];
     }
     ensure(pos <= len, "payload position %u after end of packet %u", pos, len);
     return pos;
@@ -84,18 +84,22 @@ uint64_t pkt_cid(const uint8_t * const buf, const uint16_t len)
 uint64_t
 pkt_nr(const uint8_t * const buf, const uint16_t len, struct q_conn * const c)
 {
+    const uint64_t next = diet_max(&c->recv) + 1;
     const uint8_t flags = pkt_flags(buf);
-    if (c) {
-        char s[256];
-        diet_to_str(s, sizeof(s), &c->recv);
-        warn(CRT, "recv: %s", s);
-    }
-    uint64_t nr = c ? diet_max(&c->recv) + 1 : 0;
+    const uint8_t nr_len =
+        is_set(F_LONG_HDR, flags) ? 4 : pkt_nr_lens[pkt_type(flags)];
+    ensure(nr_len <= 4, "illegal packet number len %u", nr_len);
+
     uint16_t i = is_set(F_LONG_HDR, flags) || is_set(F_SH_CID, flags) ? 9 : 1;
-    dec(nr, buf, len, i,
-        is_set(F_LONG_HDR, flags) ? 4 : pkt_nr_len[pkt_type(flags)],
-        "%" PRIu64);
-    return nr;
+    uint64_t nr = next;
+    dec(nr, buf, len, i, nr_len, "%" PRIu64);
+
+    // const uint64_t mask[] = {0x0, 0x100UL, 0x10000UL, 0x0, 0x100000000UL};
+    const uint64_t alt = nr + (UINT64_C(1) << (nr_len * 8));
+    const uint64_t d1 = next >= nr ? next - nr : nr - next;
+    const uint64_t d2 = next >= alt ? next - alt : alt - next;
+
+    return d1 < d2 ? nr : alt;
 }
 
 
@@ -108,13 +112,17 @@ uint32_t pkt_vers(const uint8_t * const buf, const uint16_t len)
     return vers;
 }
 
+
 static const uint8_t enc_pkt_nr_len[] = {0xFF, 1, 2, 0xFF, 3};
 
-static uint8_t __attribute__((const)) needed_pkt_nr_len(const uint64_t n)
+
+static uint8_t __attribute__((nonnull))
+needed_pkt_nr_len(struct q_conn * const c, const uint64_t n)
 {
-    if (n < UINT8_MAX)
+    const uint64_t d = (n - c->rec.lg_acked) * 2;
+    if (d < UINT8_MAX)
         return 1;
-    if (n < UINT16_MAX)
+    if (d < UINT16_MAX)
         return 2;
     return 4;
 }
@@ -142,6 +150,7 @@ bool enc_pkt(struct q_stream * const s,
         c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv) : ++c->rec.lg_sent;
     // TODO: increase by random offset
 
+    const uint8_t pkt_nr_len = needed_pkt_nr_len(c, meta(v).nr);
     uint8_t flags = 0;
     switch (c->state) {
     case CONN_STAT_VERS_SENT:
@@ -157,7 +166,7 @@ bool enc_pkt(struct q_stream * const s,
     case CONN_STAT_CLSD:
         if (!c->omit_cid)
             flags |= F_SH_CID;
-        flags |= enc_pkt_nr_len[needed_pkt_nr_len(meta(v).nr)];
+        flags |= enc_pkt_nr_len[pkt_nr_len];
         break;
     default:
         die("unknown conn state %u", c->state);
@@ -191,8 +200,7 @@ bool enc_pkt(struct q_stream * const s,
             diet_remove(&c->recv, meta(v).nr);
         }
     } else
-        enc(v->buf, v->len, i, &meta(v).nr, needed_pkt_nr_len(meta(v).nr),
-            "%" PRIu64);
+        enc(v->buf, v->len, i, &meta(v).nr, pkt_nr_len, "%" PRIu64);
 
     const uint16_t hdr_len = i;
 
