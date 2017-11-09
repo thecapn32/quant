@@ -41,19 +41,20 @@ struct q_stream {
 
     struct w_iov_sq out;  ///< Tail queue containing outbound data.
     uint64_t out_ack_cnt; ///< Number of unique ACKs received for pkts in o.
-    uint64_t out_off;     ///< Current stream offset.
+    uint64_t out_off;     ///< Current outbound stream offset.
+    uint64_t out_off_max; ///< Outbound max_stream_data.
 
     struct w_iov_sq in;         ///< Tail queue containing inbound data.
     struct pm_off_splay in_ooo; ///< Out-of-order inbound data.
-    uint64_t in_off;
-
-    uint64_t max_stream_data;
+    uint64_t in_off;            ///< Current inbound in-order stream offset.
+    uint64_t in_off_max;        ///< Inbound max_stream_data.
 
     uint32_t id;
     uint8_t state;
     uint8_t fin_sent : 1;
-    uint8_t open_win : 1;
-    uint8_t : 6;
+    uint8_t open_win : 1; ///< We need to open the receive window.
+    uint8_t blocked : 1;  ///< We are receive-window-blocked.
+    uint8_t : 5;
     uint8_t _unused[2];
 };
 

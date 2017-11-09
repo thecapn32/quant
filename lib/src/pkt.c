@@ -85,6 +85,11 @@ uint64_t
 pkt_nr(const uint8_t * const buf, const uint16_t len, struct q_conn * const c)
 {
     const uint8_t flags = pkt_flags(buf);
+    if (c) {
+        char s[256];
+        diet_to_str(s, sizeof(s), &c->recv);
+        warn(CRT, "recv: %s", s);
+    }
     uint64_t nr = c ? diet_max(&c->recv) + 1 : 0;
     uint16_t i = is_set(F_LONG_HDR, flags) || is_set(F_SH_CID, flags) ? 9 : 1;
     dec(nr, buf, len, i,
@@ -163,6 +168,7 @@ bool enc_pkt(struct q_stream * const s,
              "RTX of 0x%02x-type pkt %" PRIu64
              " prevented; new type would be 0x%02x",
              pkt_flags(v->buf), meta(v).nr, flags);
+        adj_iov_to_data(v);
         return false;
     }
 
@@ -197,10 +203,24 @@ bool enc_pkt(struct q_stream * const s,
         meta(v).ack_header_pos = 0;
 
 
-    // check if we need to increase the stream window
-    if (s->open_win) {
-        s->max_stream_data += 0x1000;
-        enc_max_stream_data_frame(s, v, i);
+    // TODO: Unclear whether this is the best way to send this in the long run.
+    // warn(NTE, "str %u out_off %u/%u", s->id, s->out_off, s->out_off_max);
+    if (s->out_off_max && s->out_off + MAX_PKT_LEN > s->out_off_max) {
+        // if we have less than one full packet's worth of window, block
+        s->blocked = true;
+        adj_iov_to_data(v);
+        return false;
+    }
+    if (s->out_off_max && s->out_off + 2 * MAX_PKT_LEN > s->out_off_max)
+        // if we have less than two full packets' worth of window, notify
+        i += enc_stream_blocked_frame(s, v, i);
+
+    // TODO: Unclear whether this is the best way to send this in the long run.
+    // warn(NTE, "str %u in_off %u/%u", s->id, s->in_off, s->in_off_max);
+    if (s->open_win || s->in_off + MAX_PKT_LEN > s->in_off_max) {
+        // increase receive window
+        s->in_off_max += 0x1000;
+        i += enc_max_stream_data_frame(s, v, i);
         s->open_win = false;
     }
 
@@ -213,7 +233,7 @@ bool enc_pkt(struct q_stream * const s,
     }
 
     if (rtx) {
-        ensure(meta(v).is_rtxable, "is rtxable");
+        ensure(is_rtxable(&meta(v)), "is rtxable");
 
         // this is a RTX, pad out until beginning of stream header
         enc_padding_frame(v, i, meta(v).stream_header_pos - i);
@@ -225,7 +245,7 @@ bool enc_pkt(struct q_stream * const s,
             // this is a fresh data or pure FIN packet
             // add a stream frame header, after padding out rest of Q_OFFSET
             enc_padding_frame(v, i, Q_OFFSET - i);
-            meta(v).stream_data_end = i = enc_stream_frame(s, v);
+            i = enc_stream_frame(s, v);
         }
     }
 

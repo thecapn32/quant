@@ -43,8 +43,10 @@ struct w_iov;
 #define FRAM_TYPE_STRM_BLCK 0x09
 #define FRAM_TYPE_STOP_SEND 0x0C
 
-#define FRAM_TYPE_STRM 0xC0
 #define FRAM_TYPE_ACK 0xA0
+#define FRAM_TYPE_STRM 0xC0
+
+#define MAX_FRAM_TYPE FRAM_TYPE_STRM
 
 
 extern void __attribute__((nonnull))
@@ -81,3 +83,8 @@ extern uint16_t __attribute__((nonnull))
 enc_max_stream_data_frame(struct q_stream * const s,
                           struct w_iov * const v,
                           const uint16_t pos);
+
+extern uint16_t __attribute__((nonnull))
+enc_stream_blocked_frame(struct q_stream * const s,
+                         const struct w_iov * const v,
+                         const uint16_t pos);

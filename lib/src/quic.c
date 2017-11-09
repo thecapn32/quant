@@ -183,7 +183,7 @@ void q_alloc(void * const w, struct w_iov_sq * const q, const uint32_t len)
     struct w_iov * v;
     sq_foreach (v, q, next) {
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
-        warn(DBG, "q_alloc idx %u", v->idx);
+        // warn(DBG, "q_alloc idx %u", v->idx);
     }
 }
 
@@ -194,7 +194,7 @@ void q_free(void * const w, struct w_iov_sq * const q)
     sq_foreach (v, q, next) {
         meta(v) = (struct pkt_meta){0};
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
-        warn(DBG, "q_free idx %u", v->idx);
+        // warn(DBG, "q_free idx %u", v->idx);
     }
     w_free((struct w_engine *)w, q);
 }
@@ -434,7 +434,7 @@ void q_close(struct q_conn * const c)
             q_close_stream(s);
 
     // wait until everything is ACKed
-    while (rtxable_pkts_outstanding(c) == 0) {
+    while (rtxable_pkts_outstanding(c) != 0) {
         warn(CRT, "waiting for ACKs");
         ev_async_send(loop, &c->tx_w);
         loop_run(q_close, c);

@@ -49,7 +49,7 @@ uint32_t rtxable_pkts_outstanding(struct q_conn * const c)
     uint32_t cnt = 0;
     struct pkt_meta * p;
     splay_foreach (p, pm_nr_splay, &c->rec.sent_pkts)
-        if (p->is_rtxable && !p->is_acked)
+        if (is_rtxable(p) && !p->is_acked)
             cnt++;
     return cnt;
 }
@@ -137,7 +137,7 @@ static void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c)
             warn(WRN, "pkt %" PRIu64 " considered lost", p->nr);
 
             // OnPacketsLost:
-            if (p->is_rtxable) {
+            if (is_rtxable(p)) {
                 c->rec.in_flight -= p->tx_len;
                 warn(INF, "in_flight -%u = %" PRIu64, p->tx_len,
                      c->rec.in_flight);
@@ -145,7 +145,7 @@ static void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c)
 
             largest_lost_packet = MAX(largest_lost_packet, p->nr);
 
-            if (p->is_rtxed || !p->is_rtxable) {
+            if (p->is_rtxed || !is_rtxable(p)) {
                 warn(DBG, "free rtxed/non-rtxable pkt %" PRIu64, p->nr);
                 splay_remove(pm_nr_splay, &c->rec.sent_pkts, p);
                 q_free_iov(w_engine(c->sock),
@@ -243,7 +243,7 @@ void on_pkt_sent(struct q_conn * const c, struct w_iov * const v)
         // don't track version negotiation responses
         splay_insert(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
 
-    if (meta(v).is_rtxable) {
+    if (is_rtxable(&meta(v))) {
         c->rec.in_flight += meta(v).tx_len; // OnPacketSentCC
         warn(INF, "in_flight +%u = %" PRIu64, meta(v).tx_len, c->rec.in_flight);
         set_ld_alarm(c);
@@ -318,7 +318,7 @@ void on_pkt_acked(struct q_conn * const c, const uint64_t ack)
         warn(DBG, "pkt %" PRIu64 " did not contain an ACK frame", ack);
 
     // OnPacketAckedCC
-    if (meta(v).is_rtxable) {
+    if (is_rtxable(&meta(v))) {
         c->rec.in_flight -= meta(v).tx_len;
         warn(INF, "in_flight -%u = %" PRIu64, meta(v).tx_len, c->rec.in_flight);
     }

@@ -25,12 +25,15 @@
 
 #pragma once
 
+#include <bitstring.h>
 #include <sanitizer/asan_interface.h>
 #include <stddef.h>
 #include <stdint.h>
 
 #include <ev.h>
 #include <warpcore/warpcore.h>
+
+#include "frame.h"
 
 
 /// Packet meta-data information associated with w_iov buffers
@@ -47,12 +50,11 @@ struct pkt_meta {
     uint16_t stream_data_end;   ///< Offset of last byte of stream frame data.
     uint16_t ack_header_pos;    ///< Offset of ACK frame header.
     uint16_t tx_len;            ///< Length of protected packet at TX.
-    uint8_t is_rtxable : 1;     ///< Is this packet retransmittable?
     uint8_t is_rtxed : 1;       ///< Does the w_iov hold truncated data?
     uint8_t is_acked : 1;       ///< Is the w_iov ACKed?
-    uint8_t is_ack_only : 1;    ///< Is this a pure ACK?
-    uint8_t : 4;
-    uint8_t _unused[5];
+    uint8_t : 6;
+    bitstr_t bit_decl(frames, MAX_FRAM_TYPE + 1); ///< Frames present in pkt.
+    uint8_t _unused[4];
 };
 
 
@@ -122,6 +124,20 @@ extern struct pkt_meta * pm;
         (v)->len -= Q_OFFSET;                                                  \
     } while (0)
 
+
+#define is_rtxable(p) (p)->stream_header_pos
+
+#define is_ack_only(p)                                                         \
+    ({                                                                         \
+        int _b1 = -1, _b2 = -1;                                                \
+        bit_ffs((p)->frames, MAX_FRAM_TYPE, &_b1);                             \
+        if (_b1 >= 0) {                                                        \
+            bit_clear((p)->frames, _b1);                                       \
+            bit_ffs((p)->frames, MAX_FRAM_TYPE, &_b2);                         \
+            bit_set((p)->frames, _b1);                                         \
+        }                                                                      \
+        _b1 == FRAM_TYPE_ACK && _b2 == -1;                                     \
+    })
 
 extern struct ev_loop * loop;
 
@@ -204,7 +220,7 @@ extern void * api_arg;
     do {                                                                       \
         w_free_iov((w), (v));                                                  \
         meta(v) = (struct pkt_meta){0};                                        \
-        warn(DBG, "q_free_iov idx %u", (v)->idx);                              \
+        /*warn(DBG, "q_free_iov idx %u", (v)->idx);*/                          \
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));                  \
     } while (0)
 
@@ -213,6 +229,6 @@ extern void * api_arg;
     __extension__({                                                            \
         struct w_iov * _v = w_alloc_iov((w), (len), (off));                    \
         ASAN_UNPOISON_MEMORY_REGION(&meta(_v), sizeof(meta(_v)));              \
-        warn(DBG, "q_alloc_iov idx %u", _v->idx);                              \
+        /*warn(DBG, "q_alloc_iov idx %u", _v->idx);*/                          \
         _v;                                                                    \
     })

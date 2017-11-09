@@ -206,7 +206,8 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             dec_tp(c->max_stream_data, sizeof(uint32_t));
             // we need to apply this parameter to stream 0
             struct q_stream * const s = get_stream(c, 0);
-            s->max_stream_data = c->max_stream_data;
+            s->out_off_max = c->max_stream_data;
+            warn(INF, "str %u out_off_max = %u", s->id, s->out_off_max);
             break;
 
         case TP_INITIAL_MAX_DATA: {

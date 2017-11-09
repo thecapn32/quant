@@ -83,7 +83,7 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
 
     // if this a directory, look up its index
     if (info.st_mode & S_IFDIR) {
-        strncat(path, "/CMakeLists.txt", sizeof(path) - len - 1);
+        strncat(path, "/index.html", sizeof(path) - len - 1);
         r = fstatat(d->dir, path, &info, 0);
         ensure(r != -1, "could not stat %s", path);
     }

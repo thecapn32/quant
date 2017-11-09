@@ -24,6 +24,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <arpa/inet.h>
+#include <bitstring.h>
 #include <inttypes.h>
 #include <netinet/in.h>
 #include <sanitizer/asan_interface.h>
@@ -56,9 +57,9 @@ struct cid_splay conns_by_cid = splay_initializer(&conns_by_cid);
 
 
 uint16_t initial_idle_timeout = kIdleTimeout;
-uint64_t initial_max_data = 0xFFFF;        // <= uint32_t for trans param
+uint64_t initial_max_data = 0x1000;        // <= uint32_t for trans param
 uint64_t initial_max_stream_data = 0x1000; // <= uint32_t for trans param
-uint32_t initial_max_stream_id = 0xFF;
+uint32_t initial_max_stream_id = 0x04;
 
 
 int ipnp_splay_cmp(const struct q_conn * const a, const struct q_conn * const b)
@@ -150,7 +151,9 @@ static void log_sent_pkts(struct q_conn * const c)
     for (struct pkt_meta * p = splay_min(pm_nr_splay, &c->rec.sent_pkts); p;
          p = splay_next(pm_nr_splay, &c->rec.sent_pkts, p)) {
         char tmp[1024] = "";
-        snprintf(tmp, sizeof(tmp), "%" PRIu64 " ", p->nr);
+        const bool ack_only = is_ack_only(p);
+        snprintf(tmp, sizeof(tmp), "%s%" PRIu64 "%s%s ", ack_only ? "(" : "",
+                 p->nr, is_rtxable(p) ? "+" : "", ack_only ? ")" : "");
         strncat(sent_pkts_buf, tmp,
                 sizeof(sent_pkts_buf) - strlen(sent_pkts_buf) - 1);
     }
@@ -169,6 +172,12 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
     uint32_t encoded = 0;
     struct w_iov * v = from;
     sq_foreach_from (v, &s->out, next) {
+        if (s->blocked) {
+            warn(NTE, "str %u blocked, out_off %u/%u", s->id, s->out_off,
+                 s->out_off_max);
+            break;
+        }
+
         if (meta(v).is_acked) {
             warn(DBG,
                  "skipping ACKed pkt %" PRIu64 " idx %u on str %u during %s",
@@ -189,7 +198,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             struct w_iov * const r =
                 q_alloc_iov(w_engine(c->sock), Q_OFFSET, 0);
             pm_cpy(&meta(r), &meta(v));                  // copy pkt meta data
-            memcpy(r->buf, v->buf - Q_OFFSET, Q_OFFSET); // copy pkt data
+            memcpy(r->buf, v->buf - Q_OFFSET, Q_OFFSET); // copy pkt headers
             meta(r).is_rtxed = true;
 
             // we reinsert meta(v) with its new pkt nr in on_pkt_sent()
@@ -240,7 +249,7 @@ tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
 
     const bool did_tx = tx_stream(s, rtx, limit, v);
 
-    if (!rtx && !meta(v).is_rtxable) {
+    if (!rtx && !is_rtxable(&meta(v))) {
         ensure(sq_last(&s->out, w_iov, next) == v, "queue mixed up");
         if (last)
             sq_remove_after(&s->out, last, next);
@@ -257,22 +266,25 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
     bool did_tx = false;
     struct q_stream * s;
     splay_foreach (s, stream, &c->streams) {
-        if (!sq_empty(&s->out) && sq_len(&s->out) > s->out_ack_cnt) {
+        if (!s->blocked && !sq_empty(&s->out) &&
+            sq_len(&s->out) > s->out_ack_cnt) {
             warn(DBG,
                  "data %s on %s conn %" PRIx64 " str %u w/%" PRIu64
                  " pkt%s in queue",
                  rtx ? "RTX" : "TX", conn_type(c), c->id, s->id,
                  sq_len(&s->out), plural(sq_len(&s->out)));
             did_tx |= tx_stream(s, rtx, limit, 0);
-        } else if (((s->state == STRM_STAT_HCLO ||
-                     s->state == STRM_STAT_CLSD) &&
-                    !s->fin_sent) ||
-                   s->open_win)
+        }
+        if (did_tx == false &&
+            (s->open_win == true ||
+             ((s->state == STRM_STAT_HCLO || s->state == STRM_STAT_CLSD) &&
+              s->fin_sent == false)))
             did_tx |= tx_other(s, rtx, limit);
     }
 
     if (did_tx == false) {
-        // need to ACK w/o any stream data to piggyback on, so abuse stream 0
+        // need to ACK w/o any stream data to piggyback on, so abuse stream
+        // 0
         s = get_stream(c, 0);
         ensure(s, "no stream 0");
         tx_other(s, rtx, limit);
@@ -325,7 +337,6 @@ verify_prot(struct q_conn * const c, struct w_iov * const v)
         q_free_iov(w_engine(c->sock), v);
         return false;
     }
-    warn(DBG, "%u", len);
     v->len -= v->len - len;
     return true;
 }
@@ -387,7 +398,8 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
     case CONN_STAT_VERS_SENT:
         if (is_set(F_LH_TYPE_VNEG, flags)) {
             // XXX this doesn't work, since we're flushing CH state on retry
-            // ensure(find_sent_pkt(c, meta(v).nr), "did not send pkt %" PRIu64,
+            // ensure(find_sent_pkt(c, meta(v).nr), "did not send pkt %"
+            // PRIu64,
             //        meta(v).nr);
 
             const uint32_t vers = pkt_vers(v->buf, v->len);
@@ -535,13 +547,26 @@ void rx(struct ev_loop * const l,
         }
         ensure(c, "managed to find conn");
 
+        meta(v).nr = pkt_nr(v->buf, v->len, c);
+
+        // XXX rethink this
+        // const uint64_t drop[] = {8000, 8001, 8002};
+        // const uint16_t drop_len = sizeof(drop) / sizeof(drop[0]);
+        // uint16_t n;
+        // for (n = 0; n < drop_len; n++)
+        //     if (meta(v).nr == drop[n])
+        //         break;
+        // if (n < drop_len) {
+        //     warn(CRT, "dropping pkt %" PRIu64, meta(v).nr);
+        //     q_free_iov(w, v);
+        //     continue;
+        // }
+
         // remember that we had a RX event on this connection
         if (!c->had_rx) {
             c->had_rx = true;
             sl_insert_head(&crx, c, next);
         }
-
-        meta(v).nr = pkt_nr(v->buf, v->len, c);
 
         warn(NTE,
              "rx pkt %" PRIu64 " (len %u, idx %u, type 0x%02x = " bitstring_fmt

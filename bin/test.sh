@@ -12,6 +12,7 @@ s=${2:-quant}
 addr=127.0.0.1
 port=4433 # mozquic server can only run on 4433 at the moment
 path=/ #index.html
+dir=/Users/lars/Sites/lars/output
 
 # (re-)build the client (and possibly server) to test
 ninja "$c"
@@ -55,7 +56,7 @@ esac
 # commands to run the different servers on  $addr:$port
 case $s in
         quant)
-                s="bin/server -v5 -p $port -d .."
+                s="bin/server -v5 -p $port -d $dir"
                 ;;
         quicly)
                 s="external/usr/local/bin/cli -a hq-05 -l /tmp/quicly-s.log -v \
@@ -70,7 +71,7 @@ case $s in
                 ;;
         ngtcp2)
                 s="external/ngtcp2-prefix/src/ngtcp2/examples/server \
-                        $addr $port lib/src/key.pem lib/src/cert.pem"
+                        -d $dir $addr $port lib/src/key.pem lib/src/cert.pem"
                 ;;
         mozquic)
                 s="env MOZQUIC_LOG=all:9 \
