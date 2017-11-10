@@ -361,10 +361,6 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         if (v->len < MIN_INI_LEN) {
             warn(ERR, "initial %u-byte pkt too short (< %u)", v->len,
                  MIN_INI_LEN);
-#ifndef NDEBUG
-            if (util_dlevel == DBG)
-                hexdump(v->buf, v->len);
-#endif
             q_free_iov(w_engine(c->sock), v);
             return;
         }
@@ -495,19 +491,17 @@ void rx(struct ev_loop * const l,
     w_rx(ws, &i);
 
     while (!sq_empty(&i)) {
-        warn(DBG, "----------------------------------------------------------");
+        // warn(DBG, "-------------------------------------------------------");
         struct w_iov * const v = sq_first(&i);
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         sq_remove_head(&i, next);
+
         if (v->len > MAX_PKT_LEN)
             warn(WRN, "received %u-byte pkt (> %u max)", v->len, MAX_PKT_LEN);
         const uint16_t hdr_len = pkt_hdr_len(v->buf, v->len);
         if (v->len < hdr_len) {
-            warn(ERR, "%u-byte pkt < %u-byte hdr; ignoring", v->len, hdr_len);
-#ifndef NDEBUG
-            if (util_dlevel == DBG)
-                hexdump(v->buf, v->len);
-#endif
+            warn(ERR, "%u-byte pkt indicates %u-byte hdr; ignoring", v->len,
+                 hdr_len);
             q_free_iov(w, v);
             continue;
         }
@@ -552,7 +546,12 @@ void rx(struct ev_loop * const l,
             } else
                 c = get_conn_by_ipnp(&peer, is_clnt);
         }
-        ensure(c, "managed to find conn");
+
+        if (c == 0) {
+            warn(ERR, "cannot find connection for 0x%02x packet", flags);
+            q_free_iov(w, v);
+            continue;
+        }
 
         meta(v).nr = pkt_nr(v->buf, v->len, c);
 
