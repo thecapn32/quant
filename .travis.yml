@@ -5,10 +5,6 @@ language: cpp
 os:
   - linux
 
-branches:
-  only:
-    - master
-
 env:
   matrix:
     - BUILD_TYPE=Debug    MYCC=gcc-7      MYCXX=g++-7
