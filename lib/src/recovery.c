@@ -371,8 +371,6 @@ void rec_init(struct q_conn * const c)
     splay_init(&c->rec.sent_pkts);
 
     tls_ctx.random_bytes(&c->rec.lg_sent, sizeof(uint32_t));
-    hexdump(&c->rec.lg_sent, sizeof(uint64_t));
-
     c->rec.cwnd = kInitialWindow;
     c->rec.ssthresh = UINT64_MAX;
 }
