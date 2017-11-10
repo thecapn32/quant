@@ -100,7 +100,7 @@ externalproject_add(minq
   DOWNLOAD_COMMAND
     env GOPATH=${GOPATH} go get ${MINQ} &&
       env GOPATH=${GOPATH} go get github.com/cloudflare/cfssl/helpers || true
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   # UPDATE_COMMAND cd ${GOPATH}/src/github.com/ekr/minq && git pull
   CONFIGURE_COMMAND
     cd ${GOPATH}/src/github.com/bifurcation/mint &&
@@ -184,7 +184,8 @@ externalproject_add(nss
 
 externalproject_add(mozquic
   DEPENDS nss
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
+  GIT_TAG 07
   GIT_REPOSITORY https://github.com/mcmanus/mozquic.git
   GIT_SHALLOW 1
   PATCH_COMMAND sed -i "" -e "s/-Werror//g" Makefile
@@ -217,4 +218,10 @@ externalproject_add(picoquic
   EXCLUDE_FROM_ALL 1
   # BUILD_COMMAND ninja picoquicdemo
   INSTALL_COMMAND ""
+)
+
+# grep '^[^#]*_add' ../external/CMakeLists.txt | cut -f2 -d\( | sort | fmt -w 60
+add_custom_target(ext-all DEPENDS
+                  minq mozquic ngtcp2 nspr nss openssl picoquic picotls quicly
+                  warp
 )
