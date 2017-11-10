@@ -138,6 +138,7 @@ bool enc_pkt(struct q_stream * const s,
 
     struct q_conn * const c = s->c;
 
+#ifndef NDEBUG
     if (rtx) {
         const uint64_t prev_nr = meta(v).nr;
         warn(INF, "enc RTX %" PRIu64 " as %" PRIu64 " in idx %u", prev_nr,
@@ -145,6 +146,7 @@ bool enc_pkt(struct q_stream * const s,
                                             : c->rec.lg_sent + 1,
              v->idx);
     }
+#endif
 
     meta(v).nr =
         c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv) : ++c->rec.lg_sent;
