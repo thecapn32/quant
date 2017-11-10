@@ -36,6 +36,7 @@ addons:
       - ninja-build
       - libev-dev
       - libhttp-parser-dev
+      - libbsd-dev
   coverity_scan:
     project:
       name: "NTAP/$PROJECT"
@@ -55,8 +56,8 @@ addons:
 before_install:
   # manually install latest cmake
   - |
-    wget -q https://cmake.org/files/v3.9/cmake-3.9.4-Linux-x86_64.sh
-    sh cmake-3.9.4-Linux-x86_64.sh --skip-license
+    wget -q https://cmake.org/files/v3.9/cmake-3.9.5-Linux-x86_64.sh
+    sh cmake-3.9.5-Linux-x86_64.sh --skip-license
 
 script:
   - |
