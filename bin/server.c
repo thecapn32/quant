@@ -115,12 +115,7 @@ int main(int argc, char * argv[])
     uint16_t port = 4433;
     int ch;
 
-    while ((ch = getopt(argc, argv,
-                        "hi:p:d:"
-#ifndef NDEBUG
-                        "v:"
-#endif
-                        )) != -1) {
+    while ((ch = getopt(argc, argv, "hi:p:d:v:")) != -1) {
         switch (ch) {
         case 'i':
             strncpy(ifname, optarg, sizeof(ifname) - 1);
@@ -131,11 +126,11 @@ int main(int argc, char * argv[])
         case 'p':
             port = (uint16_t)MIN(UINT16_MAX, strtol(optarg, 0, 10));
             break;
-#ifndef NDEBUG
         case 'v':
+#ifndef NDEBUG
             util_dlevel = (short)MIN(DLEVEL, strtoul(optarg, 0, 10));
-            break;
 #endif
+            break;
         case 'h':
         case '?':
         default:

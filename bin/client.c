@@ -81,21 +81,16 @@ int main(int argc, char * argv[])
         ;
     int ch;
 
-    while ((ch = getopt(argc, argv,
-                        "hi:"
-#ifndef NDEBUG
-                        "v:"
-#endif
-                        )) != -1) {
+    while ((ch = getopt(argc, argv, "hi:v:")) != -1) {
         switch (ch) {
         case 'i':
             strncpy(ifname, optarg, sizeof(ifname) - 1);
             break;
-#ifndef NDEBUG
         case 'v':
+#ifndef NDEBUG
             util_dlevel = (short)MIN(DLEVEL, strtoul(optarg, 0, 10));
-            break;
 #endif
+            break;
         case 'h':
         case '?':
         default:
