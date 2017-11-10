@@ -5,6 +5,10 @@ language: cpp
 os:
   - linux
 
+branches:
+  except:
+    - gh-pages
+
 env:
   matrix:
     - BUILD_TYPE=Debug    MYCC=gcc-7      MYCXX=g++-7
