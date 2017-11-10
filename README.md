@@ -30,6 +30,10 @@ So you need to install some dependencies. On the Mac, the easiest way is via
 
     brew install cmake libev http-parser doxygen
 
+On Debian-based Linux systems, do
+
+    apt install libev-dev libssl-dev libhttp-parser-dev libbsd-dev
+
 On Darwin, you *must* also install the Xcode command line tools first:
 
     xcode-select --install

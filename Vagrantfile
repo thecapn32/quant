@@ -40,7 +40,7 @@ Vagrant.configure("2") do |config|
     apt-get -y install git tmux ninja-build libev-dev libssl-dev g++ fish \
       pkg-config htop silversearcher-ag linux-tools-common linux-tools-generic \
       gdb valgrind mercurial libhttp-parser-dev iwyu \
-      clang-tidy libclang-common-3.9-dev
+      clang-tidy libclang-common-3.9-dev libbsd-dev
 
     # install recent cmake
     wget -q https://cmake.org/files/v3.9/cmake-3.9.4-Linux-x86_64.sh

@@ -23,7 +23,6 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <bitstring.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -32,6 +31,9 @@
 
 #ifdef __linux__
 #include <byteswap.h>
+#include <bsd/bitstring.h>
+#else
+#include <bitstring.h>
 #endif
 
 #include <quant/quant.h>

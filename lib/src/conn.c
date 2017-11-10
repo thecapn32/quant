@@ -24,7 +24,6 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <arpa/inet.h>
-#include <bitstring.h>
 #include <inttypes.h>
 #include <netinet/in.h>
 #include <sanitizer/asan_interface.h>
@@ -35,9 +34,15 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
+#ifdef __linux__
+#include <bsd/bitstring.h>
+#else
+#include <bitstring.h>
+#endif
+
+
 #include <ev.h>
 #include <picotls.h>
-
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 

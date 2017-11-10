@@ -25,10 +25,15 @@
 
 #pragma once
 
-#include <bitstring.h>
 #include <sanitizer/asan_interface.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#ifdef __linux__
+#include <bsd/bitstring.h>
+#else
+#include <bitstring.h>
+#endif
 
 #include <ev.h>
 #include <warpcore/warpcore.h>
@@ -128,7 +133,7 @@ extern struct pkt_meta * pm;
 #define is_rtxable(p) (p)->stream_header_pos
 
 #define is_ack_only(p)                                                         \
-    ({                                                                         \
+    __extension__({                                                            \
         int _b1 = -1, _b2 = -1;                                                \
         bit_ffs((p)->frames, MAX_FRAM_TYPE, &_b1);                             \
         if (_b1 >= 0) {                                                        \
