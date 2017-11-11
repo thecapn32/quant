@@ -354,11 +354,9 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
     case CONN_STAT_IDLE:
     case CONN_STAT_VERS_REJ:
         // validate minimum packet size
-        if (v->len < MIN_INI_LEN) {
+        if (v->len < MIN_INI_LEN)
             warn(ERR, "initial %u-byte pkt too short (< %u)", v->len,
                  MIN_INI_LEN);
-            goto done;
-        }
 
         ensure(is_set(F_LONG_HDR, flags), "have a long header");
 

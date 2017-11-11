@@ -225,13 +225,14 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
         case TP_IDLE_TIMEOUT:
             dec_tp(c->idle_timeout, 0);
-            ensure(c->idle_timeout <= 600, "valid idle timeout");
+            if (c->idle_timeout > 600)
+                warn(ERR, "idle timeout %u > 600", c->idle_timeout);
             break;
 
         case TP_MAX_PACKET_SIZE:
             dec_tp(c->max_packet_size, 0);
-            ensure(c->max_packet_size >= 1200 && c->max_packet_size <= 65527,
-                   "max_packet_size %u invalid", c->max_packet_size);
+            if (c->max_packet_size < 1200 || c->max_packet_size > 65527)
+                warn(ERR, "max_packet_size %u invalid", c->max_packet_size);
             break;
 
         case TP_OMIT_CONNECTION_ID: {

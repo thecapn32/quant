@@ -49,7 +49,6 @@
 #include "quic.h"
 #include "recovery.h"
 #include "stream.h"
-#include "tls.h"
 
 
 // Convert stream ID length encoded in flags to bytes

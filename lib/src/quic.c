@@ -493,9 +493,11 @@ void q_cleanup(void * const q)
     // stop the event loop
     ev_loop_destroy(loop);
 
+#if __has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
     for (uint32_t i = 0; i < nbufs; i++)
         if (!__asan_address_is_poisoned(&pm[i]))
             warn(DBG, "buffer %u still in use", i);
+#endif
 
     free(pm);
     w_cleanup(q);
