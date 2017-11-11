@@ -216,7 +216,6 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
         if (enc_pkt(s, rtx, v, &x)) {
             on_pkt_sent(c, v);
             encoded++;
-            log_sent_pkts(c);
         }
 
         if (limit && encoded == limit) {
@@ -235,6 +234,8 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             w_disconnect(c->sock);
         q_free(w_engine(c->sock), &x);
     }
+
+    log_sent_pkts(c);
     return encoded;
 }
 
@@ -336,11 +337,6 @@ verify_prot(struct q_conn * const c, struct w_iov * const v)
     const uint16_t hdr_len = pkt_hdr_len(v->buf, v->len);
     const uint16_t len = dec_aead(c, v, hdr_len);
     if (len == 0) {
-        warn(ERR, "AEAD decrypt error");
-#ifndef NDEBUG
-        if (util_dlevel == DBG)
-            hexdump(v->buf, v->len);
-#endif
         q_free_iov(w_engine(c->sock), v);
         return false;
     }
@@ -361,8 +357,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         if (v->len < MIN_INI_LEN) {
             warn(ERR, "initial %u-byte pkt too short (< %u)", v->len,
                  MIN_INI_LEN);
-            q_free_iov(w_engine(c->sock), v);
-            return;
+            goto done;
         }
 
         ensure(is_set(F_LONG_HDR, flags), "have a long header");
@@ -378,7 +373,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 
             init_cleartext_prot(c);
             if (verify_prot(c, v) == false)
-                return;
+                goto done;
 
             // this is a new connection; server picks a new random cid
             uint64_t cid;
@@ -437,7 +432,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             struct q_stream * s = get_stream(c, 0);
             q_free(w_engine(c->sock), &s->out);
             s->out_off = 0;
-            tls_handshake(s);
+            tls_handshake(s, 0);
             c->needs_tx = true;
 
         } else {
@@ -452,7 +447,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 
     case CONN_STAT_VERS_OK:
         if (verify_prot(c, v) == false)
-            return;
+            goto done;
 
         // pass any further data received on stream 0 to TLS and check
         // whether that completes the client handshake
@@ -467,13 +462,19 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
     case CONN_STAT_ESTB:
     case CONN_STAT_CLSD:
         if (verify_prot(c, v) == false)
-            return;
+            goto done;
         diet_insert(&c->recv, meta(v).nr);
         dec_frames(c, v);
         break;
 
     default:
         die("TODO: state %u", c->state);
+    }
+
+done:
+    if (is_rtxable(&meta(v)) == false) {
+        warn(DBG, "discard %u", v->idx);
+        q_free_iov(w_engine(c->sock), v);
     }
 }
 
@@ -575,26 +576,32 @@ void rx(struct ev_loop * const l,
         }
 
         warn(NTE,
-             "rx pkt %" PRIu64 " (len %u, idx %u, type 0x%02x = " bitstring_fmt
+             "rx pkt %" PRIu64 "/%" PRIx64
+             " (len %u, idx %u, type 0x%02x = " bitstring_fmt
              ") on %s conn %" PRIx64,
-             meta(v).nr, v->len, v->idx, flags, to_bitstring(flags),
+             meta(v).nr, meta(v).nr, v->len, v->idx, flags, to_bitstring(flags),
              conn_type(c), cid);
 
         process_pkt(c, v);
     }
 
-    // for all connections that had RX events, reset idle timeout and check
-    // if we need to do a TX
+    // for all connections that had RX events
     while (!sl_empty(&crx)) {
         struct q_conn * const c = sl_first(&crx);
         sl_remove_head(&crx, next);
 
+        // process stream 0
+        struct q_stream * const s = get_stream(c, 0);
+        while (!sq_empty(&s->in)) {
+            struct w_iov * iv = sq_first(&s->in);
+            sq_remove_head(&s->in, next);
+            if (tls_handshake(s, iv) == 0)
+                maybe_api_return(q_connect, c);
+            q_free_iov(w_engine(c->sock), iv);
+        }
+
         // reset idle timeout
         ev_timer_again(l, &c->idle_alarm);
-
-        // any stream-0 data will have been consumed by tls_handshake
-        struct q_stream * s = get_stream(c, 0);
-        q_free(w_engine(c->sock), &s->in);
 
         // is a TX needed for this connection?
         if (c->needs_tx)

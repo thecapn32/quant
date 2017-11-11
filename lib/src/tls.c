@@ -345,10 +345,12 @@ init_cleartext_secret(struct q_conn * const c __attribute__((unused)),
                       uint8_t is_enc)
 {
     const ptls_iovec_t secret = {.base = sec, .len = cs->hash->digest_size};
+    // hexdump(sec, cs->hash->digest_size);
     uint8_t output[255];
     ensure(ptls_hkdf_expand_label(cs->hash, output, cs->hash->digest_size,
                                   secret, label, ptls_iovec_init(0, 0)) == 0,
            "HKDF-Expand-Label");
+    // hexdump(output, cs->hash->digest_size);
 
     return ptls_aead_new(cs->aead, cs->hash, is_enc, output);
 }
@@ -371,8 +373,10 @@ void init_cleartext_prot(struct q_conn * const c)
 
     c->tls.in_clr = init_cleartext_secret(
         c, cs, sec, c->is_clnt ? PTLS_CTXT_SERV_LABL : PTLS_CTXT_CLNT_LABL, 0);
+    // hexdump(c->tls.in_clr->static_iv, c->tls.in_clr->algo->iv_size);
     c->tls.out_clr = init_cleartext_secret(
         c, cs, sec, c->is_clnt ? PTLS_CTXT_CLNT_LABL : PTLS_CTXT_SERV_LABL, 1);
+    // hexdump(c->tls.out_clr->static_iv, c->tls.out_clr->algo->iv_size);
     ensure(c->tls.in_clr && c->tls.out_clr, "got cleartext secrets");
 }
 
@@ -447,44 +451,35 @@ static void __attribute__((nonnull)) init_1rtt_prot(struct q_conn * const c)
 }
 
 
-uint32_t tls_handshake(struct q_stream * const s)
+uint32_t tls_handshake(struct q_stream * const s, struct w_iov * const iv)
 {
     int ret = 0;
-    struct w_iov * iv = sq_first(&s->in);
 
-    if (!iv)
-        s->c->state = CONN_STAT_VERS_SENT;
+    // allocate a new w_iov for potential outbound handshake data
+    struct w_iov * ov =
+        q_alloc_iov(w_engine(s->c->sock), MAX_PKT_LEN, Q_OFFSET);
+    ptls_buffer_t tb;
+    ptls_buffer_init(&tb, ov->buf, ov->len);
 
-    do {
-        // allocate a new w_iov for potential outbound handshake data
-        struct w_iov * ov =
-            q_alloc_iov(w_engine(s->c->sock), MAX_PKT_LEN, Q_OFFSET);
-        ptls_buffer_t tb;
-        ptls_buffer_init(&tb, ov->buf, ov->len);
+    const uint16_t in_data_len = iv ? iv->len : 0;
+    size_t in_len = in_data_len;
+    ret = ptls_handshake(s->c->tls.t, &tb, iv ? iv->buf : 0, &in_len,
+                         &s->c->tls.tls_hshake_prop);
+    ov->len = (uint16_t)tb.off;
+    warn(DBG, "in %u, gen %u into idx %u, ret %u", iv ? in_data_len : 0,
+         ov->len, ov->idx, ret);
+    ensure(ret == 0 || ret == PTLS_ERROR_IN_PROGRESS, "TLS error: %u", ret);
+    ensure(iv == 0 || in_data_len && in_data_len == in_len, "data left");
 
-        const uint16_t in_data_len = iv ? stream_data_len(iv) : 0;
-        size_t in_len = in_data_len;
-        ret = ptls_handshake(s->c->tls.t, &tb,
-                             iv ? &iv->buf[meta(iv).stream_data_start] : 0,
-                             &in_len, &s->c->tls.tls_hshake_prop);
-        ov->len = (uint16_t)tb.off;
-        warn(DBG, "in %u, gen %u into idx %u, ret %u", iv ? in_data_len : 0,
-             ov->len, ov->idx, ret);
-        ensure(ret == 0 || ret == PTLS_ERROR_IN_PROGRESS, "TLS error: %u", ret);
-        ensure(iv == 0 || in_data_len && in_data_len == in_len, "data left");
+    if ((ret == 0 || ret == PTLS_ERROR_IN_PROGRESS) && ov->len != 0)
+        // enqueue for TX
+        sq_insert_tail(&s->out, ov, next);
+    else
+        // we are done with the handshake, no need to TX after all
+        q_free_iov(w_engine(s->c->sock), ov);
 
-        if ((ret == 0 || ret == PTLS_ERROR_IN_PROGRESS) && ov->len != 0)
-            // enqueue for TX
-            sq_insert_tail(&s->out, ov, next);
-        else
-            // we are done with the handshake, no need to TX after all
-            q_free_iov(w_engine(s->c->sock), ov);
-
-        if (ret == 0)
-            init_1rtt_prot(s->c);
-
-        iv = iv ? sq_next(iv, next) : 0;
-    } while (iv);
+    if (ret == 0)
+        init_1rtt_prot(s->c);
 
     return (uint32_t)ret;
 }
@@ -532,8 +527,11 @@ uint16_t dec_aead(struct q_conn * const c,
     const size_t len =
         ptls_aead_decrypt(aead, &v->buf[hdr_len], &v->buf[hdr_len],
                           v->len - hdr_len, meta(v).nr, v->buf, hdr_len);
-    if (len == SIZE_MAX)
-        return 0; // AEAD decrypt error
+    if (len == SIZE_MAX) {
+        warn(ERR, "AEAD %s decrypt error",
+             aead == c->tls.in_kp0 ? "1RTT" : "cleartext");
+        return 0;
+    }
     warn(DBG, "verifying %lu-byte %s AEAD over [0..%u] in [%u..%u]",
          v->len - len - hdr_len, aead == c->tls.in_kp0 ? "1RTT" : "cleartext",
          v->len - (v->len - len - hdr_len) - 1,

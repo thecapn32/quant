@@ -281,12 +281,12 @@ bool enc_pkt(struct q_stream * const s,
     meta(v).tx_len = x->len;
 
     warn(NTE,
-         "enc pkt %" PRIu64
+         "enc pkt %" PRIu64 "/%" PRIx64
          " (len %u+%u, idx %u+%u, type 0x%02x = " bitstring_fmt
          ") on %s conn %" PRIx64,
-         meta(v).nr, v->len, meta(v).tx_len - v->len, v->idx, x->idx,
-         pkt_flags(v->buf), to_bitstring(pkt_flags(v->buf)), conn_type(c),
-         c->id);
+         meta(v).nr, meta(v).nr, v->len, meta(v).tx_len - v->len, v->idx,
+         x->idx, pkt_flags(v->buf), to_bitstring(pkt_flags(v->buf)),
+         conn_type(c), c->id);
 
     if (c->state == CONN_STAT_VERS_SENT)
         // adjust v->len to end of stream data (excl. padding)

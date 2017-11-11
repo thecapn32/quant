@@ -185,7 +185,7 @@ void q_alloc(void * const w, struct w_iov_sq * const q, const uint32_t len)
     struct w_iov * v;
     sq_foreach (v, q, next) {
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
-        // warn(DBG, "q_alloc idx %u", v->idx);
+        warn(DBG, "q_alloc idx %u", v->idx);
     }
 }
 
@@ -194,9 +194,10 @@ void q_free(void * const w, struct w_iov_sq * const q)
 {
     struct w_iov * v;
     sq_foreach (v, q, next) {
+        ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         meta(v) = (struct pkt_meta){0};
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
-        // warn(DBG, "q_free idx %u", v->idx);
+        warn(DBG, "q_free idx %u", v->idx);
     }
     w_free((struct w_engine *)w, q);
 }
@@ -221,7 +222,8 @@ struct q_conn * q_connect(void * const q,
     // allocate stream zero and start TLS handshake on stream 0
     struct q_stream * const s = new_stream(c, 0);
     init_tls(c);
-    tls_handshake(s);
+    c->state = CONN_STAT_VERS_SENT;
+    tls_handshake(s, 0);
     ev_async_send(loop, &c->tx_w);
 
     warn(WRN, "waiting for connect to complete on %s conn %" PRIx64 " to %s:%u",
@@ -490,6 +492,10 @@ void q_cleanup(void * const q)
 
     // stop the event loop
     ev_loop_destroy(loop);
+
+    for (uint32_t i = 0; i < nbufs; i++)
+        if (!__asan_address_is_poisoned(&pm[i]))
+            warn(DBG, "buffer %u still in use", i);
 
     free(pm);
     w_cleanup(q);

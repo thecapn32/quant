@@ -32,8 +32,8 @@
 #include <sys/param.h>
 
 #ifdef __linux__
-#include <byteswap.h>
 #include <bsd/bitstring.h>
+#include <byteswap.h>
 #else
 #include <bitstring.h>
 #endif
@@ -81,7 +81,7 @@ dec_stream_frame(struct q_conn * const c,
                  struct w_iov * const v,
                  const uint16_t pos)
 {
-    uint16_t i = pos;
+    uint16_t i = meta(v).stream_header_pos = pos;
 
     uint8_t type = 0;
     dec(type, v->buf, v->len, i, 0, "0x%02x");
@@ -161,8 +161,6 @@ dec_stream_frame(struct q_conn * const c,
 
         if (s->id != 0)
             maybe_api_return(q_read, s->c);
-        else if (tls_handshake(s) == 0)
-            maybe_api_return(q_connect, c);
         goto done;
     }
 
@@ -173,7 +171,6 @@ dec_stream_frame(struct q_conn * const c,
              ") on %s conn %" PRIx64 " str %u",
              l, plural(l), meta(v).in_off, meta(v).in_off + l, conn_type(c),
              c->id, sid);
-        q_free_iov(w_engine(c->sock), v);
         goto done;
     }
 
@@ -585,7 +582,8 @@ uint16_t enc_ack_frame(struct q_conn * const c,
             enc(v->buf, v->len, i, &gap, sizeof(uint8_t), "%" PRIu64);
         }
         const uint64_t ack_block = b->hi - b->lo + (prev_lo ? 1 : 0);
-        warn(NTE, "ACKing %" PRIu64 "-%" PRIu64, b->lo, b->hi);
+        warn(NTE, "ACKing %" PRIu64 "-%" PRIu64 " / %" PRIx64 "-%" PRIx64,
+             b->lo, b->hi, b->lo, b->hi);
         enc(v->buf, v->len, i, &ack_block, ack_block_len, "%" PRIu64);
         prev_lo = b->lo;
     }
