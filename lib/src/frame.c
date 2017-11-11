@@ -228,7 +228,6 @@ uint16_t dec_ack_frame(
     const uint8_t lg_ack_len = dec_lg_ack_len(type);
     uint64_t lg_ack = 0;
     dec(lg_ack, v->buf, v->len, i, lg_ack_len, "%" PRIu64);
-    ensure(lg_ack, "ACK 0");
 
     uint16_t ack_delay = 0;
     dec(ack_delay, v->buf, v->len, i, 0, "%u");
