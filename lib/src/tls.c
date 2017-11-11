@@ -334,8 +334,8 @@ static void init_tp(struct q_conn * const c)
 }
 
 
-#define PTLS_CTXT_CLNT_LABL "tls13 QUIC client cleartext Secret"
-#define PTLS_CTXT_SERV_LABL "tls13 QUIC server cleartext Secret"
+#define PTLS_CTXT_CLNT_LABL "QUIC client cleartext Secret"
+#define PTLS_CTXT_SERV_LABL "QUIC server cleartext Secret"
 
 static ptls_aead_context_t *
 init_cleartext_secret(struct q_conn * const c __attribute__((unused)),
@@ -344,26 +344,13 @@ init_cleartext_secret(struct q_conn * const c __attribute__((unused)),
                       const char * const label,
                       uint8_t is_enc)
 {
-    uint8_t lab[255];
-    uint16_t i = 0;
-    enc(lab, sizeof(lab), i, (const uint16_t *)&cs->hash->digest_size,
-        sizeof(uint16_t), "%u");
-
-    const uint8_t lab_len = (uint8_t)strlen(label);
-    enc(lab, sizeof(lab), i, &lab_len, 0, "%u");
-
-    memcpy((char *)&lab[i], label, lab_len + 1);
-    i += lab_len + 1;
-
-    const ptls_iovec_t inf = {.base = lab, .len = i};
-    const ptls_iovec_t prk = {.base = sec, .len = cs->hash->digest_size};
-
-    uint8_t secret[255];
-    ensure(ptls_hkdf_expand(cs->hash, secret, cs->hash->digest_size, prk,
-                            inf) == 0,
+    const ptls_iovec_t secret = {.base = sec, .len = cs->hash->digest_size};
+    uint8_t output[255];
+    ensure(ptls_hkdf_expand_label(cs->hash, output, cs->hash->digest_size,
+                                  secret, label, ptls_iovec_init(0, 0)) == 0,
            "HKDF-Expand-Label");
 
-    return ptls_aead_new(cs->aead, cs->hash, is_enc, secret);
+    return ptls_aead_new(cs->aead, cs->hash, is_enc, output);
 }
 
 
