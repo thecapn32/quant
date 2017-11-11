@@ -115,7 +115,7 @@ externalproject_add(minq
 
 # Use quicly for testing against
 externalproject_add(quicly
-  UPDATE_COMMAND ""
+  # UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/h2o/quicly.git
   GIT_SHALLOW 1
   CONFIGURE_COMMAND ""
@@ -143,7 +143,7 @@ externalproject_add(openssl
 
 externalproject_add(ngtcp2
   DEPENDS openssl
-  UPDATE_COMMAND ""
+  # UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/ngtcp2/ngtcp2.git
   GIT_SHALLOW 1
   PATCH_COMMAND autoreconf -i
@@ -200,7 +200,7 @@ externalproject_add(mozquic
 # Use picoquic for testing against
 externalproject_add(picoquic
   DEPENDS picotls
-  UPDATE_COMMAND ""
+  # UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/private-octopus/picoquic.git
   GIT_SHALLOW 1
   # PATCH_COMMAND sed -i "" -e "s/-Werror//g" Makefile
