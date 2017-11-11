@@ -263,6 +263,9 @@ tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
             sq_remove_after(&s->out, last, next);
         else
             sq_remove_head(&s->out, next);
+        if (s->c->state == CONN_STAT_VERS_REJ)
+            // we can free the version negotiation response
+            q_free_iov(w_engine(s->c->sock), v);
     }
 
     return did_tx;
@@ -470,10 +473,8 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
     }
 
 done:
-    if (is_rtxable(&meta(v)) == false) {
-        warn(DBG, "discard %u", v->idx);
+    if (is_rtxable(&meta(v)) == false)
         q_free_iov(w_engine(c->sock), v);
-    }
 }
 
 

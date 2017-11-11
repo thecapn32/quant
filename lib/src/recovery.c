@@ -342,6 +342,11 @@ void on_pkt_acked(struct q_conn * const c, const uint64_t ack)
             // all packets are ACKed
             maybe_api_return(q_write, s);
     }
+
+    if (!is_rtxable(&meta(v))) {
+        splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
+        q_free_iov(w_engine(c->sock), v);
+    }
 }
 
 

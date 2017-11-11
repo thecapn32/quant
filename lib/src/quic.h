@@ -227,7 +227,7 @@ extern void * api_arg;
     do {                                                                       \
         w_free_iov((w), (v));                                                  \
         meta(v) = (struct pkt_meta){0};                                        \
-        warn(DBG, "q_free_iov idx %u", (v)->idx);                              \
+        /* warn(DBG, "q_free_iov idx %u", (v)->idx); */                        \
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));                  \
     } while (0)
 
@@ -236,6 +236,6 @@ extern void * api_arg;
     __extension__({                                                            \
         struct w_iov * _v = w_alloc_iov((w), (len), (off));                    \
         ASAN_UNPOISON_MEMORY_REGION(&meta(_v), sizeof(meta(_v)));              \
-        warn(DBG, "q_alloc_iov idx %u", _v->idx);                              \
+        /* warn(DBG, "q_alloc_iov idx %u", _v->idx); */                        \
         _v;                                                                    \
     })
