@@ -133,10 +133,10 @@ int main(int argc, char * argv[])
             strncpy(dir, optarg, sizeof(dir) - 1);
             break;
         case 'c':
-            strncpy(dir, optarg, sizeof(dir) - 1);
+            strncpy(dir, optarg, sizeof(cert) - 1);
             break;
         case 'k':
-            strncpy(dir, optarg, sizeof(dir) - 1);
+            strncpy(dir, optarg, sizeof(key) - 1);
             break;
         case 'p':
             port = (uint16_t)MIN(UINT16_MAX, strtol(optarg, 0, 10));
