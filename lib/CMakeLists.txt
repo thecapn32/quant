@@ -7,7 +7,10 @@ add_custom_command(
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src/cert.h
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/src
   COMMAND mkdir -p -m 0700 ${HOST}
-  COMMAND scp -r ubuntu@${HOST}:/etc/letsencrypt/live/${HOST} .
+  COMMAND
+    test -d /etc/letsencrypt/live/${HOST} &&
+      cp -r /etc/letsencrypt/live/${HOST} . ||
+        scp -r ubuntu@${HOST}:/etc/letsencrypt/live/${HOST} .
   COMMAND echo "#define RSA_CERTIFICATE \\" > cert.h
   COMMAND
     cat ${HOST}/fullchain.pem | sed -e "s/^/    \\\"/" -e "s/$/\\\\n\\\" \\\\/" >> cert.h
