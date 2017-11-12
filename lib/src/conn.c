@@ -395,7 +395,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         break;
 
     case CONN_STAT_VERS_SENT:
-        if (is_set(F_LH_TYPE_VNEG, flags)) {
+        if (pkt_type(flags) == F_LH_TYPE_VNEG) {
             // XXX this doesn't work, since we're flushing CH state on retry
             // ensure(find_sent_pkt(c, meta(v).nr), "did not send pkt %"
             // PRIu64,
@@ -441,7 +441,14 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             if (verify_prot(c, v) == false)
                 return;
             diet_insert(&c->recv, meta(v).nr);
-            c->state = CONN_STAT_VERS_OK;
+
+            if (pkt_type(flags) == F_LH_SERV_RTRY) {
+                c->state = CONN_STAT_RETRY;
+                // reset stream 0 offset
+                struct q_stream * s = get_stream(c, 0);
+                s->out_off = 0;
+            } else
+                c->state = CONN_STAT_VERS_OK;
             dec_frames(c, v);
         }
         break;
@@ -460,6 +467,9 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         dec_frames(c, v);
         break;
 
+    case CONN_STAT_RETRY:
+        c->state = CONN_STAT_ESTB;
+        // fall-through
     case CONN_STAT_ESTB:
     case CONN_STAT_CLSD:
         if (verify_prot(c, v) == false)

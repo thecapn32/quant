@@ -158,6 +158,7 @@ bool enc_pkt(struct q_stream * const s,
     uint8_t flags = 0;
     switch (c->state) {
     case CONN_STAT_VERS_SENT:
+    case CONN_STAT_RETRY:
         flags |= F_LONG_HDR | F_LH_CLNT_INIT;
         break;
     case CONN_STAT_VERS_REJ:
@@ -208,7 +209,8 @@ bool enc_pkt(struct q_stream * const s,
 
     const uint16_t hdr_len = i;
 
-    if (c->state != CONN_STAT_VERS_REJ && !splay_empty(&c->recv)) {
+    if (c->state != CONN_STAT_VERS_REJ && c->state != CONN_STAT_RETRY &&
+        !splay_empty(&c->recv)) {
         meta(v).ack_header_pos = i;
         i += enc_ack_frame(c, v, i);
     } else

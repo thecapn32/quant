@@ -111,9 +111,10 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 #define CONN_STAT_IDLE 0
 #define CONN_STAT_VERS_SENT 1
 #define CONN_STAT_VERS_REJ 2
-#define CONN_STAT_VERS_OK 3
-#define CONN_STAT_ESTB 4
-#define CONN_STAT_CLSD 5
+#define CONN_STAT_RETRY 3
+#define CONN_STAT_VERS_OK 4
+#define CONN_STAT_ESTB 5
+#define CONN_STAT_CLSD 6
 
 
 #define conn_type(c) (c->is_clnt ? "clnt" : "serv")
