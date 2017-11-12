@@ -458,7 +458,7 @@ static void __attribute__((nonnull)) init_1rtt_prot(struct q_conn * const c)
 }
 
 
-uint32_t tls_handshake(struct q_stream * const s, struct w_iov * const iv)
+uint32_t tls_rx(struct q_stream * const s, struct w_iov * const iv)
 {
     uint8_t buf[4096];
     ptls_buffer_t tb;
@@ -466,8 +466,14 @@ uint32_t tls_handshake(struct q_stream * const s, struct w_iov * const iv)
 
     const uint16_t in_data_len = iv ? iv->len : 0;
     size_t in_len = in_data_len;
-    const int ret = ptls_handshake(s->c->tls.t, &tb, iv ? iv->buf : 0, &in_len,
-                                   &s->c->tls.tls_hshake_prop);
+
+    int ret = 0;
+    if (ptls_handshake_is_complete(s->c->tls.t))
+        ret = ptls_receive(s->c->tls.t, &tb, iv ? iv->buf : 0, &in_len);
+    else
+        ret = ptls_handshake(s->c->tls.t, &tb, iv ? iv->buf : 0, &in_len,
+                             &s->c->tls.tls_hshake_prop);
+
     warn(DBG, "in %u, gen %u, ret %u", iv ? in_data_len : 0, tb.off, ret);
     ensure(ret == 0 || ret == PTLS_ERROR_IN_PROGRESS, "TLS error: %u", ret);
     ensure(iv == 0 || in_data_len && in_data_len == in_len, "data left");

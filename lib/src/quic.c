@@ -223,7 +223,7 @@ struct q_conn * q_connect(void * const q,
     struct q_stream * const s = new_stream(c, 0);
     init_tls(c);
     c->state = CONN_STAT_VERS_SENT;
-    tls_handshake(s, 0);
+    tls_rx(s, 0);
     ev_async_send(loop, &c->tx_w);
 
     warn(WRN, "waiting for connect to complete on %s conn %" PRIx64 " to %s:%u",

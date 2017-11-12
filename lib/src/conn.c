@@ -64,8 +64,8 @@ struct cid_splay conns_by_cid = splay_initializer(&conns_by_cid);
 
 
 uint16_t initial_idle_timeout = kIdleTimeout;
-uint64_t initial_max_data = 0x1000;        // <= uint32_t for trans param
-uint64_t initial_max_stream_data = 0x1000; // <= uint32_t for trans param
+uint64_t initial_max_data = 0x4000;        // <= uint32_t for trans param
+uint64_t initial_max_stream_data = 0x4000; // <= uint32_t for trans param
 uint32_t initial_max_stream_id = 0x04;
 
 
@@ -433,7 +433,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             struct q_stream * s = get_stream(c, 0);
             q_free(w_engine(c->sock), &s->out);
             s->out_off = 0;
-            tls_handshake(s, 0);
+            tls_rx(s, 0);
             c->needs_tx = true;
 
         } else {
@@ -594,7 +594,7 @@ void rx(struct ev_loop * const l,
         while (!sq_empty(&s->in)) {
             struct w_iov * iv = sq_first(&s->in);
             sq_remove_head(&s->in, next);
-            if (tls_handshake(s, iv) == 0)
+            if (tls_rx(s, iv) == 0)
                 maybe_api_return(q_connect, c);
             q_free_iov(w_engine(c->sock), iv);
         }
