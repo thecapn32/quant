@@ -34,7 +34,7 @@ add_library(common
     ${CMAKE_CURRENT_BINARY_DIR}/src/config.c
     ${CMAKE_CURRENT_BINARY_DIR}/src/cert.h
 )
-add_dependencies(common warpcore ptls-core ptls-openssl)
+add_dependencies(common warpcore ptls-core ptls-openssl ptls-minicrypto)
 
 
 add_library(${PROJECT_NAME}_stat STATIC $<TARGET_OBJECTS:common>)
@@ -89,7 +89,7 @@ foreach(TARGET ${TARGETS})
 
   if(NOT ${TARGET} MATCHES "common")
     target_link_libraries(${TARGET}
-      warpcore ptls-core ptls-openssl ${LIBEV_LIB})
+      warpcore ptls-core ptls-openssl ptls-minicrypto ${LIBEV_LIB})
 
     install(TARGETS ${TARGET}
       EXPORT ${TARGET}

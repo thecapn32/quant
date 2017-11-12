@@ -37,6 +37,8 @@
 #include <openssl/pem.h>
 #include <openssl/x509.h>
 
+// IWYU pragma: no_include <picotls/../picotls.h>
+#include <picotls/minicrypto.h>
 #include <picotls/openssl.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
@@ -161,7 +163,8 @@ static uint16_t chk_tp_serv(const struct q_conn * const c,
     uint32_t vers_initial;
     dec(vers_initial, buf, len, i, 0, "0x%08x");
 
-    ensure(vers == c->vers, "vers 0x%08x found in tp", c->vers);
+    if (vers != c->vers)
+        warn(ERR, "vers 0x%08x not found in tp", c->vers);
     ensure(vers_initial == c->vers_initial, "vers_initial 0x%08x found in tp",
            c->vers_initial);
 
@@ -522,10 +525,13 @@ void init_tls_ctx(void)
     ensure(ptls_openssl_init_verify_certificate(&verifier, 0) == 0,
            "ptls_openssl_init_verify_certificate");
 
+    static ptls_key_exchange_algorithm_t * key_exchanges[] = {
+        &ptls_minicrypto_x25519, &ptls_openssl_secp256r1, 0};
+
     tls_ctx.certificates.count = i;
     tls_ctx.certificates.list = tls_certs;
     tls_ctx.cipher_suites = ptls_openssl_cipher_suites;
-    tls_ctx.key_exchanges = ptls_openssl_key_exchanges;
+    tls_ctx.key_exchanges = key_exchanges;
     tls_ctx.on_client_hello = &cb;
     tls_ctx.random_bytes = ptls_openssl_random_bytes;
     tls_ctx.sign_certificate = &sign_cert.super;
