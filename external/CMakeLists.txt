@@ -1,7 +1,7 @@
 include(ExternalProject)
 
 externalproject_add(warp
-  UPDATE_COMMAND ""
+  # UPDATE_COMMAND "" # XXX do not commit with this being empty
   GIT_REPOSITORY https://github.com/NTAP/warpcore.git
   GIT_SHALLOW 1
   GIT_TAG dev
@@ -38,7 +38,7 @@ string(REPLACE "-fsanitize=leak" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
 string(REPLACE "-fsanitize=undefined" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
 
 externalproject_add(picotls
-  UPDATE_COMMAND ""
+  # UPDATE_COMMAND "" # XXX do not commit with this being empty
   GIT_REPOSITORY https://github.com/h2o/picotls.git
   GIT_SHALLOW 1
   PATCH_COMMAND sed -i "" -e "s/-std=c99 -Wall -O2 -g//" CMakeLists.txt
