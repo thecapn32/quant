@@ -9,7 +9,7 @@ add_custom_command(
   COMMAND mkdir -p -m 0700 ${HOST}
   COMMAND
     test -d /etc/letsencrypt/live/${HOST} &&
-      cp -r /etc/letsencrypt/live/${HOST} . ||
+      cp -rL /etc/letsencrypt/live/${HOST} . ||
         scp -r ubuntu@${HOST}:/etc/letsencrypt/live/${HOST} .
   COMMAND echo "#define RSA_CERTIFICATE \\" > cert.h
   COMMAND
