@@ -13,6 +13,8 @@ addr=127.0.0.1
 port=4433 # mozquic server can only run on 4433 at the moment
 path=/ #index.html
 dir=/Users/lars/Sites/lars/output
+cert=lib/src/quant.eggert.org/fullchain.pem
+key=lib/src/quant.eggert.org/privkey.pem
 
 # (re-)build the client (and possibly server) to test
 ninja "$c"
@@ -27,7 +29,7 @@ case $c in
                 c="bin/client -v5 https://$addr:$port$path"
                 ;;
         quicly)
-                c="external/usr/local/bin/cli -a hq-05 -l /tmp/quicly-c.log -v \
+                c="external/usr/local/bin/cli -l /tmp/quicly-c.log -v \
                         -p $path $addr $port"
                 ;;
         minq)
@@ -60,18 +62,18 @@ case $s in
                 ;;
         quicly)
                 s="external/usr/local/bin/cli -a hq-05 -l /tmp/quicly-s.log -v \
-                        -k lib/src/key.pem -c lib/src/cert.pem $addr $port"
+                        -k $key -c $cert $addr $port"
                 ;;
         minq)
                 s="env MINQ_LOG=\* GOPATH=$(pwd)/external/go go run \
                         external/go/src/github.com/ekr/minq/bin/server/main.go \
-                        -addr $addr:$port -http -key lib/src/key.pem \
-                        -cert lib/src/cert.pem -server-name $addr 2>&1 \
+                        -addr $addr:$port -http -key $key \
+                        -cert $cert -server-name $addr 2>&1 \
                         | grep -v -E 'Frame type (byte )?0'"
                 ;;
         ngtcp2)
                 s="external/ngtcp2-prefix/src/ngtcp2/examples/server \
-                        -d $dir $addr $port lib/src/key.pem lib/src/cert.pem"
+                        -d $dir $addr $port $key $cert"
                 ;;
         mozquic)
                 s="env MOZQUIC_LOG=all:9 \
@@ -81,7 +83,7 @@ case $s in
                 ;;
         picoquic)
                 s="external/picoquic-prefix/src/picoquic/picoquicdemo \
-                        -p $port -k lib/src/key.pem -c lib/src/cert.pem"
+                        -p $port -k $key -c $cert"
                 ;;
 esac
 

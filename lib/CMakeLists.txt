@@ -2,35 +2,23 @@ string(TOUPPER ${PROJECT_NAME} PROJECT_NAME_UC)
 configure_file(include/${PROJECT_NAME}/config.h.in include/${PROJECT_NAME}/config.h)
 configure_file(src/config.c.in src/config.c)
 
-string(REGEX REPLACE "/include$" "/bin/openssl" OPENSSL ${OPENSSL_INCLUDE_DIR})
+set(HOST quant.eggert.org)
 add_custom_command(
-  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src/cert.c
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src/cert.h
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/src
-  COMMAND ${OPENSSL} ecparam -name prime256v1 -out prime256v1.param
+  COMMAND mkdir -p -m 0700 ${HOST}
+  COMMAND scp -r ubuntu@${HOST}:/etc/letsencrypt/live/${HOST} .
+  COMMAND echo "#define RSA_CERTIFICATE \\" > cert.h
   COMMAND
-    ${OPENSSL} req -new -newkey ec:prime256v1.param -days 365 -nodes -x509
-      -subj "/CN=localhost" -keyout key.pem -out cert.pem
-  COMMAND echo "#include \"cert.h\"" > cert.c
+    cat ${HOST}/fullchain.pem | sed -e "s/^/    \\\"/" -e "s/$/\\\\n\\\" \\\\/" >> cert.h
+  COMMAND echo >> cert.h
+  COMMAND echo "#define RSA_PRIVATE_KEY \\" >> cert.h
   COMMAND
-    ${OPENSSL} ec -in key.pem -text |
-      grep -A1000 priv: | grep -B1000 pub: > key.txt
-  COMMAND
-    sed -n 4p key.txt | cut -d: -f3 > /dev/null && sed -n 2p key.txt |
-      grep 00 > /dev/null && sed -i.orig s/00://1 key.txt || true
-  COMMAND
-    sed -E -e "s/pub:/};/" -e "s/([0-9a-f][0-9a-f]):?/0x\\1, /g"
-           -e "s/priv:/unsigned char tls_key[] = {/" < key.txt
-      >> cert.c
-  COMMAND echo "unsigned char tls_cert[] = {" >> cert.c
-  COMMAND
-    ${OPENSSL} base64 -d -in cert.pem | xxd -i >> cert.c
-  COMMAND echo "};" >> cert.c
-  COMMAND echo "unsigned int tls_key_len = sizeof(tls_key) / sizeof(unsigned char);" >> cert.c
-  COMMAND echo "unsigned int tls_cert_len = sizeof(tls_cert) / sizeof(unsigned char);" >> cert.c
+    cat ${HOST}/privkey.pem | sed -e "s/^/    \\\"/" -e "s/$/\\\\n\\\" \\\\/" >> cert.h
   VERBATIM
 )
 
-set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/src/cert.c
+set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/src/cert.h
   PROPERTIES GENERATED True
 )
 
@@ -41,9 +29,9 @@ add_library(common
     src/pkt.c src/frame.c src/quic.c src/stream.c src/conn.c
     src/diet.c src/util.c src/tls.c src/recovery.c
     ${CMAKE_CURRENT_BINARY_DIR}/src/config.c
-    ${CMAKE_CURRENT_BINARY_DIR}/src/cert.c
+    ${CMAKE_CURRENT_BINARY_DIR}/src/cert.h
 )
-add_dependencies(common warpcore ptls-core ptls-minicrypto ptls-openssl)
+add_dependencies(common warpcore ptls-core ptls-openssl)
 
 
 add_library(${PROJECT_NAME}_stat STATIC $<TARGET_OBJECTS:common>)
@@ -81,6 +69,7 @@ foreach(TARGET ${TARGETS})
       $<INSTALL_INTERFACE:include>
     PRIVATE
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/src>
       $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/external/include>
       ${OPENSSL_ROOT_DIR}/include
   )
@@ -97,7 +86,7 @@ foreach(TARGET ${TARGETS})
 
   if(NOT ${TARGET} MATCHES "common")
     target_link_libraries(${TARGET}
-      warpcore ptls-core ptls-minicrypto ptls-openssl ${LIBEV_LIB})
+      warpcore ptls-core ptls-openssl ${LIBEV_LIB})
 
     install(TARGETS ${TARGET}
       EXPORT ${TARGET}

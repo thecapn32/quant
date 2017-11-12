@@ -31,10 +31,14 @@
 #include <string.h>
 #include <sys/param.h>
 
-// IWYU pragma: no_include <picotls/../picotls.h>
-#include <picotls/minicrypto.h>
-#include <picotls/openssl.h>
+#include <openssl/bio.h>
+#include <openssl/evp.h>
+#include <openssl/ossl_typ.h>
+#include <openssl/pem.h>
+#include <openssl/x509.h>
 
+#include <picotls/openssl.h>
+#include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
 #include "cert.h"
@@ -48,9 +52,11 @@
 
 ptls_context_t tls_ctx = {0};
 
-static ptls_minicrypto_secp256r1sha256_sign_certificate_t sign_cert = {0};
-static ptls_iovec_t tls_certs = {0};
+#define TLS_MAX_CERTS 10
+static ptls_iovec_t tls_certs[TLS_MAX_CERTS];
+static ptls_openssl_sign_certificate_t sign_cert = {0};
 static ptls_openssl_verify_certificate_t verifier = {0};
+
 static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-07", 5}};
 static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 
@@ -454,30 +460,31 @@ static void __attribute__((nonnull)) init_1rtt_prot(struct q_conn * const c)
 
 uint32_t tls_handshake(struct q_stream * const s, struct w_iov * const iv)
 {
-    int ret = 0;
-
-    // allocate a new w_iov for potential outbound handshake data
-    struct w_iov * ov =
-        q_alloc_iov(w_engine(s->c->sock), MAX_PKT_LEN, Q_OFFSET);
+    uint8_t buf[4096];
     ptls_buffer_t tb;
-    ptls_buffer_init(&tb, ov->buf, ov->len);
+    ptls_buffer_init(&tb, buf, sizeof(buf));
 
     const uint16_t in_data_len = iv ? iv->len : 0;
     size_t in_len = in_data_len;
-    ret = ptls_handshake(s->c->tls.t, &tb, iv ? iv->buf : 0, &in_len,
-                         &s->c->tls.tls_hshake_prop);
-    ov->len = (uint16_t)tb.off;
-    warn(DBG, "in %u, gen %u into idx %u, ret %u", iv ? in_data_len : 0,
-         ov->len, ov->idx, ret);
+    const int ret = ptls_handshake(s->c->tls.t, &tb, iv ? iv->buf : 0, &in_len,
+                                   &s->c->tls.tls_hshake_prop);
+    warn(DBG, "in %u, gen %u, ret %u", iv ? in_data_len : 0, tb.off, ret);
     ensure(ret == 0 || ret == PTLS_ERROR_IN_PROGRESS, "TLS error: %u", ret);
     ensure(iv == 0 || in_data_len && in_data_len == in_len, "data left");
 
-    if ((ret == 0 || ret == PTLS_ERROR_IN_PROGRESS) && ov->len != 0)
+    if ((ret == 0 || ret == PTLS_ERROR_IN_PROGRESS) && tb.off) {
         // enqueue for TX
-        sq_insert_tail(&s->out, ov, next);
-    else
-        // we are done with the handshake, no need to TX after all
-        q_free_iov(w_engine(s->c->sock), ov);
+        struct w_iov_sq o = sq_head_initializer(o);
+        q_alloc(w_engine(s->c->sock), &o, (uint32_t)tb.off);
+        uint8_t * data = tb.base;
+        struct w_iov * ov;
+        sq_foreach (ov, &o, next) {
+            memcpy(ov->buf, data, ov->len);
+            data += ov->len;
+        }
+        sq_concat(&s->out, &o);
+    }
+    ptls_buffer_dispose(&tb);
 
     if (ret == 0)
         init_1rtt_prot(s->c);
@@ -488,29 +495,34 @@ uint32_t tls_handshake(struct q_stream * const s, struct w_iov * const iv)
 
 void init_tls_ctx(void)
 {
-    // warn(DBG, "TLS: key %u byte%s, cert %u byte%s", tls_key_len,
-    //      plural(tls_key_len), tls_cert_len, plural(tls_cert_len));
-    tls_ctx.random_bytes = ptls_minicrypto_random_bytes;
+    BIO * bio = BIO_new_mem_buf(RSA_PRIVATE_KEY, strlen(RSA_PRIVATE_KEY));
+    EVP_PKEY * const key = PEM_read_bio_PrivateKey(bio, 0, 0, 0);
+    ensure(key, "failed to load private key");
+    BIO_free(bio);
+    ptls_openssl_init_sign_certificate(&sign_cert, key);
+    EVP_PKEY_free(key);
 
-    // allow secp256r1 and x25519
-    static ptls_key_exchange_algorithm_t * my_own_key_exchanges[] = {
-        &ptls_minicrypto_secp256r1, &ptls_minicrypto_x25519, NULL};
-
-    tls_ctx.key_exchanges = my_own_key_exchanges;
-    tls_ctx.cipher_suites = ptls_minicrypto_cipher_suites;
-    tls_ctx.on_client_hello = &cb;
-
-    ensure(ptls_minicrypto_init_secp256r1sha256_sign_certificate(
-               &sign_cert, ptls_iovec_init(tls_key, tls_key_len)) == 0,
-           "ptls_minicrypto_init_secp256r1sha256_sign_certificate");
-    tls_ctx.sign_certificate = &sign_cert.super;
-
-    tls_certs = ptls_iovec_init(tls_cert, tls_cert_len);
-    tls_ctx.certificates.list = &tls_certs;
-    tls_ctx.certificates.count = 1;
+    bio = BIO_new_mem_buf(RSA_CERTIFICATE, strlen(RSA_CERTIFICATE));
+    uint8_t i = 0;
+    do {
+        X509 * const cert = PEM_read_bio_X509(bio, 0, 0, 0);
+        if (cert == 0)
+            break;
+        tls_certs[i].len = (size_t)i2d_X509(cert, &tls_certs[i].base);
+        X509_free(cert);
+    } while (i++ < TLS_MAX_CERTS);
+    BIO_free(bio);
 
     ensure(ptls_openssl_init_verify_certificate(&verifier, 0) == 0,
            "ptls_openssl_init_verify_certificate");
+
+    tls_ctx.certificates.count = i;
+    tls_ctx.certificates.list = tls_certs;
+    tls_ctx.cipher_suites = ptls_openssl_cipher_suites;
+    tls_ctx.key_exchanges = ptls_openssl_key_exchanges;
+    tls_ctx.on_client_hello = &cb;
+    tls_ctx.random_bytes = ptls_openssl_random_bytes;
+    tls_ctx.sign_certificate = &sign_cert.super;
     tls_ctx.verify_certificate = &verifier.super;
 }
 
