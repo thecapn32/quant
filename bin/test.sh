@@ -58,7 +58,7 @@ esac
 # commands to run the different servers on  $addr:$port
 case $s in
         quant)
-                s="bin/server -v5 -p $port -d $dir"
+                s="sudo bin/server -v5 -p $port -d $dir"
                 ;;
         quicly)
                 s="external/usr/local/bin/cli -a hq-05 -l /tmp/quicly-s.log -v \

@@ -28,10 +28,10 @@
 #include <arpa/inet.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/param.h>
 
-#include <openssl/bio.h>
 #include <openssl/evp.h>
 #include <openssl/ossl_typ.h>
 #include <openssl/pem.h>
@@ -43,7 +43,6 @@
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
-#include "cert.h"
 #include "conn.h"
 #include "marshall.h"
 #include "pkt.h"
@@ -502,25 +501,35 @@ uint32_t tls_rx(struct q_stream * const s, struct w_iov * const iv)
 }
 
 
-void init_tls_ctx(void)
+void init_tls_ctx(const char * const cert, const char * const key)
 {
-    BIO * bio = BIO_new_mem_buf(RSA_PRIVATE_KEY, strlen(RSA_PRIVATE_KEY));
-    EVP_PKEY * const key = PEM_read_bio_PrivateKey(bio, 0, 0, 0);
-    ensure(key, "failed to load private key");
-    BIO_free(bio);
-    ptls_openssl_init_sign_certificate(&sign_cert, key);
-    EVP_PKEY_free(key);
+    FILE * fp = 0;
+    if (key) {
+        fp = fopen(key, "rbe");
+        ensure(fp, "could not open key %s", key);
+        EVP_PKEY * const pkey = PEM_read_PrivateKey(fp, 0, 0, 0);
+        ensure(pkey, "failed to load private key");
+        fclose(fp);
+        ptls_openssl_init_sign_certificate(&sign_cert, pkey);
+        EVP_PKEY_free(pkey);
+    }
 
-    bio = BIO_new_mem_buf(RSA_CERTIFICATE, strlen(RSA_CERTIFICATE));
-    uint8_t i = 0;
-    do {
-        X509 * const cert = PEM_read_bio_X509(bio, 0, 0, 0);
-        if (cert == 0)
-            break;
-        tls_certs[i].len = (size_t)i2d_X509(cert, &tls_certs[i].base);
-        X509_free(cert);
-    } while (i++ < TLS_MAX_CERTS);
-    BIO_free(bio);
+    if (cert) {
+        fp = fopen(cert, "rbe");
+        ensure(fp, "could not open cert %s", cert);
+        uint8_t i = 0;
+        do {
+            X509 * const x509 = PEM_read_X509(fp, 0, 0, 0);
+            if (x509 == 0)
+                break;
+            tls_certs[i].len = (size_t)i2d_X509(x509, &tls_certs[i].base);
+            X509_free(x509);
+        } while (i++ < TLS_MAX_CERTS);
+        fclose(fp);
+
+        tls_ctx.certificates.count = i;
+        tls_ctx.certificates.list = tls_certs;
+    }
 
     ensure(ptls_openssl_init_verify_certificate(&verifier, 0) == 0,
            "ptls_openssl_init_verify_certificate");
@@ -528,8 +537,6 @@ void init_tls_ctx(void)
     static ptls_key_exchange_algorithm_t * key_exchanges[] = {
         &ptls_minicrypto_x25519, &ptls_openssl_secp256r1, 0};
 
-    tls_ctx.certificates.count = i;
-    tls_ctx.certificates.list = tls_certs;
     tls_ctx.cipher_suites = ptls_openssl_cipher_suites;
     tls_ctx.key_exchanges = key_exchanges;
     tls_ctx.on_client_hello = &cb;

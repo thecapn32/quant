@@ -379,7 +379,9 @@ struct q_stream * q_rsv_stream(struct q_conn * const c)
 }
 
 
-void * q_init(const char * const ifname)
+void * q_init(const char * const ifname,
+              const char * const cert,
+              const char * const key)
 {
     // check versions
     // ensure(WARPCORE_VERSION_MAJOR == 0 && WARPCORE_VERSION_MINOR == 12,
@@ -397,7 +399,7 @@ void * q_init(const char * const ifname)
     ASAN_POISON_MEMORY_REGION(pm, nbufs * sizeof(*pm));
 
     // initialize TLS context
-    init_tls_ctx();
+    init_tls_ctx(cert, key);
 
     // initialize the event loop
     loop = ev_default_loop(0);

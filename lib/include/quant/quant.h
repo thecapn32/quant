@@ -37,7 +37,9 @@ struct w_iov_sq;
 struct q_stream;
 
 
-extern void * __attribute__((nonnull)) q_init(const char * const ifname);
+extern void * __attribute__((nonnull(1))) q_init(const char * const ifname,
+                                                 const char * const cert,
+                                                 const char * const key);
 
 extern void __attribute__((nonnull)) q_cleanup(void * const q);
 

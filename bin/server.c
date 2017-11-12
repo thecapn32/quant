@@ -46,12 +46,16 @@
 static void __attribute__((noreturn)) usage(const char * const name,
                                             const char * const ifname,
                                             const uint16_t port,
-                                            const char * const dir)
+                                            const char * const dir,
+                                            const char * const cert,
+                                            const char * const key)
 {
     printf("%s [options]\n", name);
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
     printf("\t[-p port]\tdestination port; default %d\n", port);
     printf("\t[-d dir]\tserver root directory; default %s\n", dir);
+    printf("\t[-c cert]\tTLS certificate; default %s\n", cert);
+    printf("\t[-k key]\tTLS key; default %s\n", key);
 #ifndef NDEBUG
     printf("\t[-v verbosity]\tverbosity level (0-%u, default %u)\n", DLEVEL,
            util_dlevel);
@@ -114,15 +118,24 @@ int main(int argc, char * argv[])
 #endif
         ;
     char dir[MAXPATHLEN] = "/Users/lars/Sites/lars/output";
+    char cert[MAXPATHLEN] =
+        "/etc/letsencrypt/live/slate.eggert.org/fullchain.pem";
+    char key[MAXPATHLEN] = "/etc/letsencrypt/live/slate.eggert.org/privkey.pem";
     uint16_t port = 4433;
     int ch;
 
-    while ((ch = getopt(argc, argv, "hi:p:d:v:")) != -1) {
+    while ((ch = getopt(argc, argv, "hi:p:d:v:c:k:")) != -1) {
         switch (ch) {
         case 'i':
             strncpy(ifname, optarg, sizeof(ifname) - 1);
             break;
         case 'd':
+            strncpy(dir, optarg, sizeof(dir) - 1);
+            break;
+        case 'c':
+            strncpy(dir, optarg, sizeof(dir) - 1);
+            break;
+        case 'k':
             strncpy(dir, optarg, sizeof(dir) - 1);
             break;
         case 'p':
@@ -136,14 +149,14 @@ int main(int argc, char * argv[])
         case 'h':
         case '?':
         default:
-            usage(basename(argv[0]), ifname, port, dir);
+            usage(basename(argv[0]), ifname, port, dir, cert, key);
         }
     }
 
     const int dir_fd = open(dir, O_RDONLY | O_CLOEXEC);
     ensure(dir_fd != -1, "%s does not exist", dir);
 
-    void * const q = q_init(ifname);
+    void * const q = q_init(ifname, cert, key);
     struct q_conn * c = q_bind(q, port);
     warn(DBG, "%s waiting on %s port %d", basename(argv[0]), ifname, port);
 

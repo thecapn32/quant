@@ -124,7 +124,7 @@ int main(int argc, char * argv[])
     ensure(peer->ai_next == 0, "multiple addresses not supported");
 
     warn(INF, "%s retrieving %s", basename(argv[0]), url);
-    void * const q = q_init(ifname);
+    void * const q = q_init(ifname, 0, 0);
     struct q_conn * const c =
         q_connect(q, (struct sockaddr_in *)(void *)peer->ai_addr, dest);
 

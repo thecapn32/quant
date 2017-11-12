@@ -62,11 +62,15 @@ int main(int argc
 #endif
 
     // init
+    char cert[MAXPATHLEN] =
+        "/etc/letsencrypt/live/slate.eggert.org/fullchain.pem";
+    char key[MAXPATHLEN] = "/etc/letsencrypt/live/slate.eggert.org/privkey.pem";
     void * q = q_init("lo"
 #ifndef __linux__
                       "0"
 #endif
-    );
+                      ,
+                      cert, key);
 
     // bind server socket
     struct q_conn * const sc = q_bind(q, 55555);

@@ -2,29 +2,6 @@ string(TOUPPER ${PROJECT_NAME} PROJECT_NAME_UC)
 configure_file(include/${PROJECT_NAME}/config.h.in include/${PROJECT_NAME}/config.h)
 configure_file(src/config.c.in src/config.c)
 
-set(HOST quant.eggert.org)
-add_custom_command(
-  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src/cert.h
-  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/src
-  COMMAND mkdir -p -m 0700 ${HOST}
-  COMMAND
-    test -d /etc/letsencrypt/live/${HOST} &&
-      cp -rL /etc/letsencrypt/live/${HOST} . ||
-        scp -r ubuntu@${HOST}:/etc/letsencrypt/live/${HOST} .
-  COMMAND echo "#define RSA_CERTIFICATE \\" > cert.h
-  COMMAND
-    cat ${HOST}/fullchain.pem | sed -e "s/^/    \\\"/" -e "s/$/\\\\n\\\" \\\\/" >> cert.h
-  COMMAND echo >> cert.h
-  COMMAND echo "#define RSA_PRIVATE_KEY \\" >> cert.h
-  COMMAND
-    cat ${HOST}/privkey.pem | sed -e "s/^/    \\\"/" -e "s/$/\\\\n\\\" \\\\/" >> cert.h
-  VERBATIM
-)
-
-set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/src/cert.h
-  PROPERTIES GENERATED True
-)
-
 include(GNUInstallDirs)
 
 add_library(common
@@ -32,7 +9,6 @@ add_library(common
     src/pkt.c src/frame.c src/quic.c src/stream.c src/conn.c
     src/diet.c src/util.c src/tls.c src/recovery.c
     ${CMAKE_CURRENT_BINARY_DIR}/src/config.c
-    ${CMAKE_CURRENT_BINARY_DIR}/src/cert.h
 )
 add_dependencies(common warpcore ptls-core ptls-openssl ptls-minicrypto)
 

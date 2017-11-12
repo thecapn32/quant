@@ -550,7 +550,7 @@ void rx(struct ev_loop * const l,
                                        sizeof(peer), host, sizeof(host), 0, 0,
                                        0) == 0,
                            "getnameinfo");
-                    warn(CRT, "new serv conn from %s at %s:%u (%s)", host,
+                    warn(CRT, "new serv conn from %s at %s:%u", host,
                          inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
                     const struct sockaddr_in none = {0};
                     c = get_conn_by_ipnp(&none, is_clnt);
