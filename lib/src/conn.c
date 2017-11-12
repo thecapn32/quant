@@ -27,6 +27,7 @@
 
 #include <arpa/inet.h>
 #include <inttypes.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <sanitizer/asan_interface.h>
 #include <stdbool.h>
@@ -544,7 +545,12 @@ void rx(struct ev_loop * const l,
                          cid, conn_type(c), c->id);
                     update_cid(c, cid);
                 } else {
-                    warn(CRT, "new serv conn from %s:%u",
+                    char host[NI_MAXHOST];
+                    ensure(getnameinfo((const struct sockaddr *)&peer,
+                                       sizeof(peer), host, sizeof(host), 0, 0,
+                                       0) == 0,
+                           "getnameinfo");
+                    warn(CRT, "new serv conn from %s at %s:%u (%s)", host,
                          inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
                     const struct sockaddr_in none = {0};
                     c = get_conn_by_ipnp(&none, is_clnt);
