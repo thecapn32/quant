@@ -100,8 +100,8 @@ externalproject_add(minq
   DOWNLOAD_COMMAND
     env GOPATH=${GOPATH} go get ${MINQ} &&
       env GOPATH=${GOPATH} go get github.com/cloudflare/cfssl/helpers || true
-  UPDATE_COMMAND ""
-  # UPDATE_COMMAND cd ${GOPATH}/src/github.com/ekr/minq && git pull
+  # UPDATE_COMMAND ""
+  UPDATE_COMMAND cd ${GOPATH}/src/github.com/ekr/minq && git pull
   CONFIGURE_COMMAND
     cd ${GOPATH}/src/github.com/bifurcation/mint &&
       git remote add ekr https://www.github.com/ekr/mint || true &&
@@ -159,7 +159,7 @@ externalproject_add(ngtcp2
 
 # Use mozquic for testing against
 externalproject_add(nspr
-  UPDATE_COMMAND ""
+  # UPDATE_COMMAND ""
   SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/mozquic-prefix/src/nspr
   CONFIGURE_COMMAND ""
   HG_REPOSITORY https://hg.mozilla.org/projects/nspr
@@ -173,8 +173,8 @@ externalproject_add(nss
   # UPDATE_COMMAND ""
   SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/mozquic-prefix/src/nss
   GIT_REPOSITORY https://github.com/nss-dev/nss.git
-  # GIT_SHALLOW 1
-  GIT_TAG 4171be633 #NSS_TLS13_DRAFT19_BRANCH
+  GIT_SHALLOW 1
+  GIT_TAG NSS_TLS13_DRAFT19_BRANCH
   CONFIGURE_COMMAND ""
   BUILD_COMMAND ""
   BUILD_IN_SOURCE 1
