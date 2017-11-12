@@ -45,15 +45,11 @@ addons:
     build_command_prepend: |
       cd $TRAVIS_BUILD_DIR
       rm -rf build
-      mkdir -p build/lib/src
+      mkdir build
       cd build
-      echo '#define RSA_CERTIFICATE ""' > lib/src/cert.h
-      echo '#define RSA_PRIVATE_KEY ""' >> lib/src/cert.h
-      cat lib/src/cert.h
       ../bin/cmake -GNinja -DCMAKE_C_COMPILER=$MYCC \
         -DCMAKE_CXX_COMPILER=$MYCXX -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
         -DCMAKE_INSTALL_PREFIX:PATH=/tmp ..
-      cat lib/src/cert.h
     build_command: ninja
     branch_pattern: coverity
 
