@@ -31,8 +31,11 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/param.h>
 #include <sys/socket.h>
+
+#ifdef NDEBUG
+#include <sys/param.h>
+#endif
 
 #ifndef NDEBUG
 #include <getopt.h>
