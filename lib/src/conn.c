@@ -375,13 +375,14 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             init_cleartext_prot(c);
             if (verify_prot(c, v) == false)
                 goto done;
-
+#ifndef NO_RANDOM_CID
             // this is a new connection; server picks a new random cid
             uint64_t cid;
             tls_ctx.random_bytes(&cid, sizeof(cid));
             warn(NTE, "picked new cid %" PRIx64 " for %s conn %" PRIx64, cid,
                  conn_type(c), c->id);
             update_cid(c, cid);
+#endif
             init_tls(c);
             dec_frames(c, v);
 
@@ -507,7 +508,6 @@ void rx(struct ev_loop * const l,
     w_rx(ws, &i);
 
     while (!sq_empty(&i)) {
-        // warn(DBG, "-------------------------------------------------------");
         struct w_iov * const v = sq_first(&i);
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         sq_remove_head(&i, next);
