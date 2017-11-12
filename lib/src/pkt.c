@@ -164,6 +164,7 @@ bool enc_pkt(struct q_stream * const s,
     case CONN_STAT_VERS_REJ:
         flags |= F_LONG_HDR | F_LH_TYPE_VNEG;
         break;
+    case CONN_STAT_IDLE:
     case CONN_STAT_VERS_OK:
         flags |= F_LONG_HDR | (c->is_clnt ? F_LH_CLNT_CTXT : F_LH_SERV_CTXT);
         break;
