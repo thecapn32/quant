@@ -50,6 +50,8 @@ addons:
       ../bin/cmake -GNinja -DCMAKE_C_COMPILER=$MYCC \
         -DCMAKE_CXX_COMPILER=$MYCXX -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
         -DCMAKE_INSTALL_PREFIX:PATH=/tmp ..
+      echo '#define RSA_CERTIFICATE ""' > lib/src/cert.h
+      echo '#define RSA_PRIVATE_KEY ""' >> lib/src/cert.h
     build_command: ninja
     branch_pattern: coverity
 
