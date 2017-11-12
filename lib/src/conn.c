@@ -440,16 +440,19 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             warn(INF, "serv accepted vers 0x%08x", c->vers);
             if (verify_prot(c, v) == false)
                 return;
-            diet_insert(&c->recv, meta(v).nr);
+
+            dec_frames(c, v);
 
             if (pkt_type(flags) == F_LH_SERV_RTRY) {
+                warn(INF, "handling serv stateless retry");
                 c->state = CONN_STAT_RETRY;
-                // reset stream 0 offset
+                // reset stream 0 offsets
                 struct q_stream * s = get_stream(c, 0);
-                s->out_off = 0;
-            } else
+                s->out_off = s->in_off = 0;
+            } else {
                 c->state = CONN_STAT_VERS_OK;
-            dec_frames(c, v);
+                diet_insert(&c->recv, meta(v).nr);
+            }
         }
         break;
 
@@ -468,8 +471,11 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         break;
 
     case CONN_STAT_RETRY:
-        c->state = CONN_STAT_ESTB;
-        // fall-through
+        if (verify_prot(c, v) == false)
+            goto done;
+        dec_frames(c, v);
+        break;
+
     case CONN_STAT_ESTB:
     case CONN_STAT_CLSD:
         if (verify_prot(c, v) == false)
