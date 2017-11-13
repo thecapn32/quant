@@ -25,12 +25,17 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <arpa/inet.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/param.h>
+
+#ifdef __linux__
+#include <byteswap.h>
+#else
+#include <arpa/inet.h>
+#endif
 
 #include <openssl/evp.h>
 #include <openssl/ossl_typ.h>

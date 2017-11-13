@@ -35,12 +35,12 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
-#include <sys/types.h>
 
 #ifdef __linux__
 #include <bsd/bitstring.h>
 #else
 #include <bitstring.h>
+#include <sys/types.h>
 #endif
 
 

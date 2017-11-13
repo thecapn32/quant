@@ -35,7 +35,10 @@
 #include <string.h>
 #include <sys/param.h>
 #include <sys/stat.h>
+
+#ifndef __linux__
 #include <sys/types.h>
+#endif
 
 #include <http_parser.h>
 
