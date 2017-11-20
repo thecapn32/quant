@@ -139,8 +139,7 @@ dec_stream_frame(struct q_conn * const c,
                  sdl, plural(sdl), p->in_off, p->in_off + sdl, conn_type(c),
                  c->id, sid);
 
-            sq_insert_tail(&s->in, w_iov(w_engine(c->sock), w_iov_idx(p)),
-                           next);
+            sq_insert_tail(&s->in, w_iov(w_engine(c->sock), pm_idx(p)), next);
             splay_remove(pm_off_splay, &s->in_ooo, p);
             s->in_off += sdl;
         }

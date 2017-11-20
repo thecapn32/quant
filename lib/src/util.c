@@ -55,7 +55,7 @@ void q_write_str(void * const q,
 
     // write it and free tail queue
     q_write(s, &o);
-    q_free(q, &o);
+    q_free(&o);
 }
 
 
@@ -81,6 +81,6 @@ void q_write_file(void * const q,
 
     // write it and free tail queue and iov
     q_write(s, &o);
-    q_free(q, &o);
+    q_free(&o);
     free(iov);
 }

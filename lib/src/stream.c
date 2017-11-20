@@ -81,8 +81,8 @@ void free_stream(struct q_stream * const s)
 
     diet_insert(&s->c->closed_streams, s->id);
 
-    q_free(w_engine(s->c->sock), &s->out);
-    q_free(w_engine(s->c->sock), &s->in);
+    q_free(&s->out);
+    q_free(&s->in);
 
     splay_remove(stream, &s->c->streams, s);
     free(s);

@@ -28,7 +28,6 @@
 #include <arpa/inet.h>
 #include <inttypes.h>
 #include <netinet/in.h>
-#include <sanitizer/asan_interface.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -39,6 +38,10 @@
 #include <picotls.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
+
+#ifdef HAVE_ASAN
+#include <sanitizer/asan_interface.h>
+#endif
 
 #include "conn.h"
 #include "diet.h"
@@ -185,21 +188,21 @@ void q_alloc(void * const w, struct w_iov_sq * const q, const uint32_t len)
     struct w_iov * v;
     sq_foreach (v, q, next) {
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
-        // warn(DBG, "q_alloc idx %u", v->idx);
+        // warn(DBG, "q_alloc idx %u len %u", w_iov_idx(v), v->len);
     }
 }
 
 
-void q_free(void * const w, struct w_iov_sq * const q)
+void q_free(struct w_iov_sq * const q)
 {
     struct w_iov * v;
     sq_foreach (v, q, next) {
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         meta(v) = (struct pkt_meta){0};
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
-        // warn(DBG, "q_free idx %u", v->idx);
+        // warn(DBG, "q_free idx %u", w_iov_idx(v));
     }
-    w_free((struct w_engine *)w, q);
+    w_free(q);
 }
 
 
@@ -223,7 +226,7 @@ struct q_conn * q_connect(void * const q,
     struct q_stream * const s = new_stream(c, 0);
     init_tls(c);
     c->state = CONN_STAT_VERS_SENT;
-    tls_rx(s, 0);
+    tls_io(s, 0);
     ev_async_send(loop, &c->tx_w);
 
     warn(WRN, "waiting for connect to complete on %s conn %" PRIx64 " to %s:%u",
@@ -393,10 +396,10 @@ void * q_init(const char * const ifname,
     splay_init(&conns_by_cid);
 
     // initialize warpcore on the given interface
-    void * const w = w_init(ifname, 0, nbufs);
-    pm = calloc(nbufs, sizeof(*pm));
+    struct w_engine * const w = w_init(ifname, 0, nbufs);
+    pm = calloc(nbufs + 1, sizeof(*pm));
     ensure(pm, "could not calloc");
-    ASAN_POISON_MEMORY_REGION(pm, nbufs * sizeof(*pm));
+    ASAN_POISON_MEMORY_REGION(pm, (nbufs + 1) * sizeof(*pm));
 
     // initialize TLS context
     init_tls_ctx(cert, key);
@@ -495,8 +498,8 @@ void q_cleanup(void * const q)
     // stop the event loop
     ev_loop_destroy(loop);
 
-#if __has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
-    for (uint32_t i = 0; i < nbufs; i++)
+#ifdef HAVE_ASAN
+    for (uint32_t i = 0; i <= nbufs; i++)
         if (!__asan_address_is_poisoned(&pm[i]))
             warn(DBG, "buffer %u still in use", i);
 #endif

@@ -465,7 +465,7 @@ static void __attribute__((nonnull)) init_1rtt_prot(struct q_conn * const c)
 }
 
 
-uint32_t tls_rx(struct q_stream * const s, struct w_iov * const iv)
+uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
 {
     uint8_t buf[4096];
     ptls_buffer_t tb;

@@ -184,7 +184,7 @@ int main(int argc, char * argv[])
             break;
     }
 
-    q_free(q, &i);
+    q_free(&i);
     q_close(c);
 
 done:

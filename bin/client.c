@@ -143,7 +143,7 @@ int main(int argc, char * argv[])
         sq_foreach (v, &i, next)
             printf("%.*s", v->len, v->buf);
         printf("\n");
-        q_free(q, &i);
+        q_free(&i);
     }
 
     // clean up

@@ -152,11 +152,10 @@ static void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c)
             if (p->is_rtxed || !is_rtxable(p)) {
                 warn(DBG, "free rtxed/non-rtxable pkt %" PRIu64, p->nr);
                 splay_remove(pm_nr_splay, &c->rec.sent_pkts, p);
-                q_free_iov(w_engine(c->sock),
-                           w_iov(w_engine(c->sock), w_iov_idx(p)));
-            // } else {
-            //     warn(DBG, "mark non-rtxed pkt %" PRIu64, p->nr);
-            //     TODO: figure out how/if to mark this
+                q_free_iov(w_iov(w_engine(c->sock), pm_idx(p)));
+                // } else {
+                //     warn(DBG, "mark non-rtxed pkt %" PRIu64, p->nr);
+                //     TODO: figure out how/if to mark this
             }
 
 
@@ -345,19 +344,17 @@ void on_pkt_acked(struct q_conn * const c, const uint64_t ack)
 
     if (!is_rtxable(&meta(v))) {
         splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
-        q_free_iov(w_engine(c->sock), v);
+        q_free_iov(v);
     }
 }
 
 
 struct w_iov * find_sent_pkt(struct q_conn * const c, const uint64_t nr)
 {
-    struct pkt_meta which_meta = {.nr = nr};
+    struct pkt_meta which = {.nr = nr};
     const struct pkt_meta * const p =
-        splay_find(pm_nr_splay, &c->rec.sent_pkts, &which_meta);
-    if (p)
-        return w_iov(w_engine(c->sock), w_iov_idx(p));
-    return 0;
+        splay_find(pm_nr_splay, &c->rec.sent_pkts, &which);
+    return p ? w_iov(w_engine(c->sock), pm_idx(p)) : 0;
 }
 
 

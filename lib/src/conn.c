@@ -27,9 +27,7 @@
 
 #include <arpa/inet.h>
 #include <inttypes.h>
-#include <netdb.h>
 #include <netinet/in.h>
-#include <sanitizer/asan_interface.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -43,11 +41,14 @@
 #include <sys/types.h>
 #endif
 
-
 #include <ev.h>
 #include <picotls.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
+
+#ifdef HAVE_ASAN
+#include <sanitizer/asan_interface.h>
+#endif
 
 #include "conn.h"
 #include "diet.h"
@@ -160,8 +161,9 @@ static void log_sent_pkts(struct q_conn * const c)
          p = splay_next(pm_nr_splay, &c->rec.sent_pkts, p)) {
         char tmp[1024] = "";
         const bool ack_only = is_ack_only(p);
-        snprintf(tmp, sizeof(tmp), "%s%" PRIu64 "%s%s ", ack_only ? "(" : "",
-                 p->nr, is_rtxable(p) ? "+" : "", ack_only ? ")" : "");
+        snprintf(tmp, sizeof(tmp), "%s%" PRIu64 "@%lu%s%s ",
+                 ack_only ? "(" : "", p->nr, pm_idx(p),
+                 is_rtxable(p) ? "+" : "", ack_only ? ")" : "");
         strncat(sent_pkts_buf, tmp,
                 sizeof(sent_pkts_buf) - strlen(sent_pkts_buf) - 1);
     }
@@ -189,14 +191,14 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
         if (meta(v).is_acked) {
             warn(DBG,
                  "skipping ACKed pkt %" PRIu64 " idx %u on str %u during %s",
-                 meta(v).nr, v->idx, s->id, rtx ? "RTX" : "TX");
+                 meta(v).nr, w_iov_idx(v), s->id, rtx ? "RTX" : "TX");
             continue;
         }
 
         if (rtx != (meta(v).tx_len > 0)) {
             warn(DBG, "skipping %s pkt %" PRIu64 " idx %u on str %u during %s",
-                 meta(v).tx_len ? "already-tx'ed" : "fresh", meta(v).nr, v->idx,
-                 s->id, rtx ? "RTX" : "TX");
+                 meta(v).tx_len ? "already-tx'ed" : "fresh", meta(v).nr,
+                 w_iov_idx(v), s->id, rtx ? "RTX" : "TX");
             continue;
         }
 
@@ -204,7 +206,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             ensure(meta(v).is_rtxed == false, "cannot RTX an RTX");
             // on RTX, remember orig pkt meta data
             struct w_iov * const r =
-                q_alloc_iov(w_engine(c->sock), Q_OFFSET, 0);
+                q_alloc_iov(w_engine(c->sock), 0, Q_OFFSET);
             pm_cpy(&meta(r), &meta(v));                  // copy pkt meta data
             memcpy(r->buf, v->buf - Q_OFFSET, Q_OFFSET); // copy pkt headers
             meta(r).is_rtxed = true;
@@ -233,7 +235,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
         w_nic_tx(w_engine(c->sock));
         if (!c->is_clnt)
             w_disconnect(c->sock);
-        q_free(w_engine(c->sock), &x);
+        q_free(&x);
     }
 
     log_sent_pkts(c);
@@ -251,7 +253,8 @@ tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
 
     struct w_iov *v = 0, *last = 0;
     if (!rtx) {
-        v = q_alloc_iov(w_engine(s->c->sock), Q_OFFSET, Q_OFFSET);
+        v = q_alloc_iov(w_engine(s->c->sock), 0, Q_OFFSET);
+        v->len = 0; // this packet will have no stream data
         last = sq_last(&s->out, w_iov, next);
         sq_insert_tail(&s->out, v, next);
     }
@@ -266,7 +269,7 @@ tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
             sq_remove_head(&s->out, next);
         if (s->c->state == CONN_STAT_VERS_REJ)
             // we can free the version negotiation response
-            q_free_iov(w_engine(s->c->sock), v);
+            q_free_iov(v);
     }
 
     return did_tx;
@@ -341,7 +344,7 @@ verify_prot(struct q_conn * const c, struct w_iov * const v)
     const uint16_t hdr_len = pkt_hdr_len(v->buf, v->len);
     const uint16_t len = dec_aead(c, v, hdr_len);
     if (len == 0) {
-        q_free_iov(w_engine(c->sock), v);
+        q_free_iov(v);
         return false;
     }
     v->len -= v->len - len;
@@ -433,9 +436,9 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                 splay_remove(pm_nr_splay, &c->rec.sent_pkts, ch);
             }
             struct q_stream * s = get_stream(c, 0);
-            q_free(w_engine(c->sock), &s->out);
+            q_free(&s->out);
             s->out_off = 0;
-            tls_rx(s, 0);
+            tls_io(s, 0);
             c->needs_tx = true;
 
         } else {
@@ -492,7 +495,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 
 done:
     if (is_rtxable(&meta(v)) == false)
-        q_free_iov(w_engine(c->sock), v);
+        q_free_iov(v);
 }
 
 
@@ -519,7 +522,7 @@ void rx(struct ev_loop * const l,
         if (v->len < hdr_len) {
             warn(ERR, "%u-byte pkt indicates %u-byte hdr; ignoring", v->len,
                  hdr_len);
-            q_free_iov(w, v);
+            q_free_iov(v);
             continue;
         }
 
@@ -545,19 +548,14 @@ void rx(struct ev_loop * const l,
                          cid, conn_type(c), c->id);
                     update_cid(c, cid);
                 } else {
-                    char host[NI_MAXHOST];
-                    ensure(getnameinfo((const struct sockaddr *)&peer,
-                                       sizeof(peer), host, sizeof(host), 0, 0,
-                                       0) == 0,
-                           "getnameinfo");
-                    warn(CRT, "new serv conn from %s at %s:%u", host,
+                    warn(CRT, "new serv conn from %s:%u",
                          inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
                     const struct sockaddr_in none = {0};
                     c = get_conn_by_ipnp(&none, is_clnt);
                     if (c == 0) {
                         // TODO: maintain accept queue
                         warn(CRT, "app is not in q_accept(), ignoring");
-                        q_free_iov(w, v);
+                        q_free_iov(v);
                         continue;
                     }
                     update_ipnp(c, &peer);
@@ -571,7 +569,7 @@ void rx(struct ev_loop * const l,
 
         if (c == 0) {
             warn(ERR, "cannot find connection for 0x%02x packet", flags);
-            q_free_iov(w, v);
+            q_free_iov(v);
             continue;
         }
 
@@ -586,7 +584,7 @@ void rx(struct ev_loop * const l,
         //         break;
         // if (n < drop_len) {
         //     warn(CRT, "dropping pkt %" PRIu64, meta(v).nr);
-        //     q_free_iov(w, v);
+        //     q_free_iov(v);
         //     continue;
         // }
 
@@ -600,8 +598,8 @@ void rx(struct ev_loop * const l,
              "rx pkt %" PRIu64 "/%" PRIx64
              " (len %u, idx %u, type 0x%02x = " bitstring_fmt
              ") on %s conn %" PRIx64,
-             meta(v).nr, meta(v).nr, v->len, v->idx, flags, to_bitstring(flags),
-             conn_type(c), cid);
+             meta(v).nr, meta(v).nr, v->len, w_iov_idx(v), flags,
+             to_bitstring(flags), conn_type(c), cid);
 
         process_pkt(c, v);
     }
@@ -616,9 +614,9 @@ void rx(struct ev_loop * const l,
         while (!sq_empty(&s->in)) {
             struct w_iov * iv = sq_first(&s->in);
             sq_remove_head(&s->in, next);
-            if (tls_rx(s, iv) == 0)
+            if (tls_io(s, iv) == 0)
                 maybe_api_return(q_connect, c);
-            q_free_iov(w_engine(c->sock), iv);
+            q_free_iov(iv);
         }
 
         // reset idle timeout

@@ -62,7 +62,7 @@ extern void __attribute__((nonnull)) init_tls(struct q_conn * const c);
 extern void __attribute__((nonnull)) free_tls(struct q_conn * const c);
 
 extern uint32_t __attribute__((nonnull(1)))
-tls_rx(struct q_stream * const s, struct w_iov * const iv);
+tls_io(struct q_stream * const s, struct w_iov * const iv);
 
 extern void init_tls_ctx(const char * const cert, const char * const key);
 

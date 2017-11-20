@@ -146,7 +146,7 @@ bool enc_pkt(struct q_stream * const s,
         warn(INF, "enc RTX %" PRIu64 " as %" PRIu64 " in idx %u", prev_nr,
              c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv)
                                             : c->rec.lg_sent + 1,
-             v->idx);
+             w_iov_idx(v));
     }
 #endif
 
@@ -287,8 +287,8 @@ bool enc_pkt(struct q_stream * const s,
          "enc pkt %" PRIu64 "/%" PRIx64
          " (len %u+%u, idx %u+%u, type 0x%02x = " bitstring_fmt
          ") on %s conn %" PRIx64,
-         meta(v).nr, meta(v).nr, v->len, meta(v).tx_len - v->len, v->idx,
-         x->idx, pkt_flags(v->buf), to_bitstring(pkt_flags(v->buf)),
+         meta(v).nr, meta(v).nr, v->len, meta(v).tx_len - v->len, w_iov_idx(v),
+         w_iov_idx(x), pkt_flags(v->buf), to_bitstring(pkt_flags(v->buf)),
          conn_type(c), c->id);
 
     if (c->state == CONN_STAT_VERS_SENT)

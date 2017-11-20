@@ -41,3 +41,4 @@ extern const char @PROJECT_NAME@_version[];
 
 #cmakedefine HAVE_ENDIAN_H
 #cmakedefine HAVE_SYS_ENDIAN_H
+#cmakedefine HAVE_ASAN
