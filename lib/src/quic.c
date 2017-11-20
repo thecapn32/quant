@@ -498,11 +498,11 @@ void q_cleanup(void * const q)
     // stop the event loop
     ev_loop_destroy(loop);
 
-#ifdef HAVE_ASAN
-    for (uint32_t i = 0; i <= nbufs; i++)
-        if (!__asan_address_is_poisoned(&pm[i]))
+    for (uint32_t i = 0; i <= nbufs; i++) {
+        ASAN_UNPOISON_MEMORY_REGION(&pm[i], sizeof(pm[i]));
+        if (pm[i].nr)
             warn(DBG, "buffer %u still in use", i);
-#endif
+    }
 
     free(pm);
     w_cleanup(q);
