@@ -242,14 +242,18 @@ uint16_t dec_ack_frame(
     do {
         uint64_t ack_block_len = 0;
         dec(ack_block_len, v->buf, v->len, i, len_ack_block_len, "%" PRIu64);
-        if (lg_ack_in_block == lg_ack)
-            // this is the first ACK block
-            ack_block_len++;
+
+        warn(NTE, "got ACKs for " FMT_PNR "-" FMT_PNR " / %" PRIx64 "-%" PRIx64,
+             lg_ack_in_block - ack_block_len, lg_ack_in_block,
+             lg_ack_in_block - ack_block_len, lg_ack_in_block);
 
         uint64_t ack = lg_ack_in_block;
-        while (ack > lg_ack_in_block - ack_block_len) {
+        while (ack + ack_block_len >= lg_ack_in_block) {
             on_each_ack(c, ack);
-            ack--;
+            if (likely(ack > 0))
+                ack--;
+            else
+                break;
         }
 
         if (num_blocks > 1) {
