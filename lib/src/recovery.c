@@ -73,12 +73,12 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
     if (c->state < CONN_STAT_ESTB) {
         dur = is_zero(c->rec.srtt) ? kDefaultInitialRtt : c->rec.srtt;
         dur = MAX(2 * dur, kMinTLPTimeout) * (1 << c->rec.hshake_cnt);
-        warn(INF, "handshake RTX alarm in %f sec on %s conn %" PRIx64, dur,
+        warn(INF, "handshake RTX alarm in %f sec on %s conn " FMT_CID, dur,
              conn_type(c), c->id);
 
     } else if (!is_zero(c->rec.loss_t)) {
         dur = c->rec.loss_t - ev_now(loop);
-        warn(INF, "early RTX or time alarm in %f sec on %s conn %" PRIx64, dur,
+        warn(INF, "early RTX or time alarm in %f sec on %s conn " FMT_CID, dur,
              conn_type(c), c->id);
 
         // } else if (c->rec.tlp_cnt < kMaxTLPs) {
@@ -87,7 +87,7 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
         //     else
         //         dur = kMinTLPTimeout;
         //     dur = MAX(dur, 2 * c->rec.srtt);
-        //     warn(INF, "TLP alarm in %f sec on %s conn %" PRIx64, dur,
+        //     warn(INF, "TLP alarm in %f sec on %s conn " FMT_CID, dur,
         //     conn_type(c),
         //          c->id);
 
@@ -95,7 +95,7 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
         dur = c->rec.srtt + 4 * c->rec.rttvar;
         dur = MAX(dur, kMinRTOTimeout);
         dur *= (1 << c->rec.rto_cnt);
-        warn(INF, "RTO alarm in %f sec on %s conn %" PRIx64, dur, conn_type(c),
+        warn(INF, "RTO alarm in %f sec on %s conn " FMT_CID, dur, conn_type(c),
              c->id);
     }
 
@@ -138,7 +138,7 @@ static void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c)
 
         if (time_since_sent > delay_until_lost ||
             delta > c->rec.reorder_thresh) {
-            warn(WRN, "pkt %" PRIu64 " considered lost", p->nr);
+            warn(WRN, "pkt " FMT_PNR " considered lost", p->nr);
 
             // OnPacketsLost:
             if (is_rtxable(p)) {
@@ -150,11 +150,11 @@ static void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c)
             largest_lost_packet = MAX(largest_lost_packet, p->nr);
 
             if (p->is_rtxed || !is_rtxable(p)) {
-                warn(DBG, "free rtxed/non-rtxable pkt %" PRIu64, p->nr);
+                warn(DBG, "free rtxed/non-rtxable pkt " FMT_PNR, p->nr);
                 splay_remove(pm_nr_splay, &c->rec.sent_pkts, p);
                 q_free_iov(w_iov(w_engine(c->sock), pm_idx(p)));
                 // } else {
-                //     warn(DBG, "mark non-rtxed pkt %" PRIu64, p->nr);
+                //     warn(DBG, "mark non-rtxed pkt "FMT_PNR, p->nr);
                 //     TODO: figure out how/if to mark this
             }
 
@@ -186,23 +186,23 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
     // see OnLossDetectionAlarm pseudo code
     if (c->state < CONN_STAT_ESTB) {
         c->rec.hshake_cnt++;
-        warn(INF, "handshake RTX #%u on %s conn %" PRIx64, c->rec.hshake_cnt,
+        warn(INF, "handshake RTX #%u on %s conn " FMT_CID, c->rec.hshake_cnt,
              conn_type(c), c->id);
         tx(c, true, 0);
 
     } else if (!is_zero(c->rec.loss_t)) {
-        warn(INF, "early RTX or time loss detection alarm on %s conn %" PRIx64,
+        warn(INF, "early RTX or time loss detection alarm on %s conn " FMT_CID,
              conn_type(c), c->id);
         detect_lost_pkts(c);
 
         // } else if (c->rec.tlp_cnt < kMaxTLPs) {
-        //     warn(INF, "TLP alarm #%u on %s conn %" PRIx64, c->rec.tlp_cnt,
+        //     warn(INF, "TLP alarm #%u on %s conn " FMT_CID, c->rec.tlp_cnt,
         //          conn_type(c), c->id);
         //     tx(c, true, 1); // XXX is this an RTX or not?
         //     c->rec.tlp_cnt++;
 
     } else {
-        warn(INF, "RTO alarm #%u on %s conn %" PRIx64, c->rec.rto_cnt,
+        warn(INF, "RTO alarm #%u on %s conn " FMT_CID, c->rec.rto_cnt,
              conn_type(c), c->id);
         if (c->rec.rto_cnt == 0)
             c->rec.lg_sent_before_rto = c->rec.lg_sent;
@@ -231,7 +231,7 @@ static void __attribute__((nonnull)) update_rtt(struct q_conn * const c)
             .75 * c->rec.rttvar + .25 * fabs(c->rec.srtt - c->rec.latest_rtt);
         c->rec.srtt = .875 * c->rec.srtt + .125 * c->rec.latest_rtt;
     }
-    warn(INF, "srtt = %f, rttvar = %f on %s conn %" PRIx64, c->rec.srtt,
+    warn(INF, "srtt = %f, rttvar = %f on %s conn " FMT_CID, c->rec.srtt,
          c->rec.rttvar, conn_type(c), c->id);
 }
 
@@ -264,7 +264,7 @@ void on_ack_rx_1(struct q_conn * const c,
 
     c->rec.lg_acked = ack;
     struct w_iov * const v = find_sent_pkt(c, ack);
-    ensure(v, "found ACKed pkt %" PRIu64, ack);
+    ensure(v, "found ACKed pkt " FMT_PNR, ack);
     c->rec.latest_rtt = ev_now(loop) - meta(v).tx_t;
     if (c->rec.latest_rtt > ack_delay)
         c->rec.latest_rtt -= ack_delay;
@@ -284,15 +284,15 @@ void on_pkt_acked(struct q_conn * const c, const uint64_t ack)
 {
     struct w_iov * const v = find_sent_pkt(c, ack);
     if (!v) {
-        warn(DBG, "got ACK for pkt %" PRIu64 " with no metadata", ack);
+        warn(DBG, "got ACK for pkt " FMT_PNR " with no metadata", ack);
         return;
     }
 
     // only act on first-time ACKs
     if (meta(v).is_acked)
-        warn(WRN, "repeated ACK for %" PRIu64, ack);
+        warn(WRN, "repeated ACK for " FMT_PNR, ack);
     else
-        warn(NTE, "first ACK for %" PRIu64, ack);
+        warn(NTE, "first ACK for " FMT_PNR, ack);
     meta(v).is_acked = true;
 
     // If a packet sent prior to RTO was ACKed, then the RTO was spurious.
@@ -310,15 +310,15 @@ void on_pkt_acked(struct q_conn * const c, const uint64_t ack)
     // stop ACKing packets that were contained in the ACK frame of this
     // packet
     if (meta(v).ack_header_pos) {
-        warn(DBG, "decoding ACK info from pkt %" PRIu64 " from pos %u", ack,
+        warn(DBG, "decoding ACK info from pkt " FMT_PNR " from pos %u", ack,
              meta(v).ack_header_pos);
         adj_iov_to_start(v);
         dec_ack_frame(c, v, meta(v).ack_header_pos, 0, &track_acked_pkts, 0);
         adj_iov_to_data(v);
-        warn(DBG, "done decoding ACK info from pkt %" PRIu64 " from pos %u",
+        warn(DBG, "done decoding ACK info from pkt " FMT_PNR " from pos %u",
              ack, meta(v).ack_header_pos);
     } else
-        warn(DBG, "pkt %" PRIu64 " did not contain an ACK frame", ack);
+        warn(DBG, "pkt " FMT_PNR " did not contain an ACK frame", ack);
 
     // OnPacketAckedCC
     if (is_rtxable(&meta(v))) {

@@ -161,7 +161,7 @@ static void log_sent_pkts(struct q_conn * const c)
          p = splay_next(pm_nr_splay, &c->rec.sent_pkts, p)) {
         char tmp[1024] = "";
         const bool ack_only = is_ack_only(p);
-        snprintf(tmp, sizeof(tmp), "%s%" PRIu64 "@%lu%s%s ",
+        snprintf(tmp, sizeof(tmp), "%s" FMT_PNR "@%lu%s%s ",
                  ack_only ? "(" : "", p->nr, pm_idx(p),
                  is_rtxable(p) ? "+" : "", ack_only ? ")" : "");
         strncat(sent_pkts_buf, tmp,
@@ -183,20 +183,23 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
     struct w_iov * v = from;
     sq_foreach_from (v, &s->out, next) {
         if (s->blocked) {
-            warn(NTE, "str %u blocked, out_off %u/%u", s->id, s->out_off,
-                 s->out_off_max);
+            warn(NTE, "str " FMT_SID " blocked, out_off %u/%u", s->id,
+                 s->out_off, s->out_off_max);
             break;
         }
 
         if (meta(v).is_acked) {
             warn(DBG,
-                 "skipping ACKed pkt %" PRIu64 " idx %u on str %u during %s",
+                 "skipping ACKed pkt " FMT_PNR " idx %u on str " FMT_SID
+                 " during %s",
                  meta(v).nr, w_iov_idx(v), s->id, rtx ? "RTX" : "TX");
             continue;
         }
 
         if (rtx != (meta(v).tx_len > 0)) {
-            warn(DBG, "skipping %s pkt %" PRIu64 " idx %u on str %u during %s",
+            warn(DBG,
+                 "skipping %s pkt " FMT_PNR " idx %u on str " FMT_SID
+                 " during %s",
                  meta(v).tx_len ? "already-tx'ed" : "fresh", meta(v).nr,
                  w_iov_idx(v), s->id, rtx ? "RTX" : "TX");
             continue;
@@ -247,7 +250,7 @@ static uint32_t
 tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
 {
     warn(DBG,
-         "other %s on %s conn %" PRIx64 " str %u w/%" PRIu64 " pkt%s in queue",
+         "other %s on %s conn " FMT_CID " str " FMT_SID " w/%u pkt%s in queue",
          rtx ? "RTX" : "TX", conn_type(s->c), s->c->id, s->id, sq_len(&s->out),
          plural(sq_len(&s->out)));
 
@@ -284,8 +287,8 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
         if (!s->blocked && !sq_empty(&s->out) &&
             sq_len(&s->out) > s->out_ack_cnt) {
             warn(DBG,
-                 "data %s on %s conn %" PRIx64 " str %u w/%" PRIu64
-                 " pkt%s in queue",
+                 "data %s on %s conn " FMT_CID " str " FMT_SID
+                 " w/%u pkt%s in queue",
                  rtx ? "RTX" : "TX", conn_type(c), c->id, s->id,
                  sq_len(&s->out), plural(sq_len(&s->out)));
             did_tx |= tx_stream(s, rtx, limit, 0);
@@ -383,7 +386,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             // this is a new connection; server picks a new random cid
             uint64_t cid;
             tls_ctx.random_bytes(&cid, sizeof(cid));
-            warn(NTE, "picked new cid %" PRIx64 " for %s conn %" PRIx64, cid,
+            warn(NTE, "picked new cid " FMT_CID " for %s conn " FMT_CID, cid,
                  conn_type(c), c->id);
             update_cid(c, cid);
 #endif
@@ -393,7 +396,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         } else {
             c->state = CONN_STAT_VERS_REJ;
             warn(WRN,
-                 "%s conn %" PRIx64
+                 "%s conn " FMT_CID
                  " clnt-requested vers 0x%08x not supported ",
                  conn_type(c), c->id, c->vers);
         }
@@ -544,7 +547,7 @@ void rx(struct ev_loop * const l,
                 if (is_clnt) {
                     // server may have picked a new cid
                     c = get_conn_by_ipnp(&peer, is_clnt);
-                    warn(DBG, "got new cid %" PRIx64 " for %s conn %" PRIx64,
+                    warn(DBG, "got new cid " FMT_CID " for %s conn " FMT_CID,
                          cid, conn_type(c), c->id);
                     update_cid(c, cid);
                 } else {
@@ -583,7 +586,7 @@ void rx(struct ev_loop * const l,
         //     if (meta(v).nr == drop[n])
         //         break;
         // if (n < drop_len) {
-        //     warn(CRT, "dropping pkt %" PRIu64, meta(v).nr);
+        //     warn(CRT, "dropping pkt " FMT_PNR, meta(v).nr);
         //     q_free_iov(v);
         //     continue;
         // }
@@ -595,9 +598,9 @@ void rx(struct ev_loop * const l,
         }
 
         warn(NTE,
-             "rx pkt %" PRIu64 "/%" PRIx64
+             "rx pkt " FMT_PNR "/%" PRIx64
              " (len %u, idx %u, type 0x%02x = " bitstring_fmt
-             ") on %s conn %" PRIx64,
+             ") on %s conn " FMT_CID,
              meta(v).nr, meta(v).nr, v->len, w_iov_idx(v), flags,
              to_bitstring(flags), conn_type(c), cid);
 

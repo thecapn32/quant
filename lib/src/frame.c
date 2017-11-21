@@ -87,7 +87,7 @@ dec_stream_frame(struct q_conn * const c,
 
     uint32_t sid = 0;
     const uint8_t sid_len = dec_sid_len(type);
-    dec(sid, v->buf, v->len, i, sid_len, "%u");
+    dec(sid, v->buf, v->len, i, sid_len, FMT_SID);
 
     const uint8_t off_len = dec_off_len(type);
     if (off_len)
@@ -109,7 +109,9 @@ dec_stream_frame(struct q_conn * const c,
     struct q_stream * s = get_stream(c, sid);
     if (s == 0) {
         if (diet_find(&c->closed_streams, sid)) {
-            warn(WRN, "ignoring frame for closed str %u on %s conn %" PRIx64,
+            warn(WRN,
+                 "ignoring frame for closed str " FMT_SID
+                 " on %s conn " FMT_CID,
                  sid, conn_type(c), c->id);
             goto done;
         }
@@ -120,7 +122,7 @@ dec_stream_frame(struct q_conn * const c,
     if (meta(v).in_off == s->in_off) {
         warn(NTE,
              "%u byte%s new data (off %" PRIu64 "-%" PRIu64
-             ") on %s conn %" PRIx64 " str %u",
+             ") on %s conn " FMT_CID " str " FMT_SID,
              l, plural(l), meta(v).in_off, meta(v).in_off + l, conn_type(c),
              c->id, sid);
         s->in_off += l;
@@ -135,7 +137,7 @@ dec_stream_frame(struct q_conn * const c,
 
             warn(NTE,
                  "deliver %u ooo byte%s (off %" PRIu64 "-%" PRIu64
-                 ") on %s conn %" PRIx64 " str %u",
+                 ") on %s conn " FMT_CID " str " FMT_SID,
                  sdl, plural(sdl), p->in_off, p->in_off + sdl, conn_type(c),
                  c->id, sid);
 
@@ -151,7 +153,8 @@ dec_stream_frame(struct q_conn * const c,
             s->state =
                 s->state <= STRM_STAT_OPEN ? STRM_STAT_HCRM : STRM_STAT_CLSD;
             warn(NTE,
-                 "received FIN on %s conn %" PRIx64 " str %u, state %u -> %u",
+                 "received FIN on %s conn " FMT_CID " str " FMT_SID
+                 ", state %u -> %u",
                  conn_type(c), c->id, s->id, old_state, s->state);
             if (s->id != 0 && splay_empty(&s->in_ooo))
                 maybe_api_return(q_readall_str, s);
@@ -166,7 +169,7 @@ dec_stream_frame(struct q_conn * const c,
     if (meta(v).in_off + l <= s->in_off) {
         warn(NTE,
              "%u byte%s dup data (off %" PRIu64 "-%" PRIu64
-             ") on %s conn %" PRIx64 " str %u",
+             ") on %s conn " FMT_CID " str " FMT_SID,
              l, plural(l), meta(v).in_off, meta(v).in_off + l, conn_type(c),
              c->id, sid);
         goto done;
@@ -175,7 +178,7 @@ dec_stream_frame(struct q_conn * const c,
     // data is out of order
     warn(NTE,
          "reordered data: %u byte%s data (off %" PRIu64 "-%" PRIu64
-         "), expected %" PRIu64 " on %s conn %" PRIx64 " str %u",
+         "), expected %" PRIu64 " on %s conn " FMT_CID " str " FMT_SID,
          l, plural(l), meta(v).in_off, meta(v).in_off + l, s->in_off,
          conn_type(c), c->id, sid);
     splay_insert(pm_off_splay, &s->in_ooo, &meta(v));
@@ -226,7 +229,7 @@ uint16_t dec_ack_frame(
 
     const uint8_t lg_ack_len = dec_lg_ack_len(type);
     uint64_t lg_ack = 0;
-    dec(lg_ack, v->buf, v->len, i, lg_ack_len, "%" PRIu64);
+    dec(lg_ack, v->buf, v->len, i, lg_ack_len, FMT_PNR);
 
     uint16_t ack_delay = 0;
     dec(ack_delay, v->buf, v->len, i, 0, "%u");
@@ -271,7 +274,7 @@ dec_reset_stream_frame(struct q_conn * const c,
     uint16_t i = pos + 1;
 
     uint32_t sid = 0;
-    dec(sid, v->buf, v->len, i, 0, "%u");
+    dec(sid, v->buf, v->len, i, 0, FMT_SID);
     struct q_stream * const s = get_stream(c, sid);
     ensure(s, "have stream %u", sid);
 
@@ -324,11 +327,11 @@ dec_max_stream_data_frame(struct q_conn * const c,
     uint16_t i = pos + 1;
 
     uint32_t sid = 0;
-    dec(sid, v->buf, v->len, i, 0, "%u");
+    dec(sid, v->buf, v->len, i, 0, FMT_SID);
     struct q_stream * const s = get_stream(c, sid);
     ensure(s, "have stream %u", sid);
     dec(s->out_off_max, v->buf, v->len, i, 0, "%" PRIu64);
-    warn(INF, "str %u out_off_max = %u", s->id, s->out_off_max);
+    warn(INF, "str " FMT_SID " out_off_max = %u", s->id, s->out_off_max);
     s->blocked = false;
 
     return i;
@@ -366,7 +369,7 @@ dec_stream_blocked_frame(struct q_conn * const c,
     uint16_t i = pos + 1;
 
     uint32_t sid = 0;
-    dec(sid, v->buf, v->len, i, 0, "%u");
+    dec(sid, v->buf, v->len, i, 0, FMT_SID);
     struct q_stream * const s = get_stream(c, sid);
     ensure(s, "have stream %u", sid);
 
@@ -385,7 +388,7 @@ dec_stop_sending_frame(struct q_conn * const c,
     uint16_t i = pos + 1;
 
     uint32_t sid = 0;
-    dec(sid, v->buf, v->len, i, 0, "%u");
+    dec(sid, v->buf, v->len, i, 0, FMT_SID);
     struct q_stream * const s = get_stream(c, sid);
     ensure(s, "have stream %u", sid);
 
@@ -566,7 +569,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
         enc(v->buf, v->len, i, &num_blocks, 0, "%u");
 
 
-    enc(v->buf, v->len, i, &lg_recv, lg_ack_len, "%" PRIu64);
+    enc(v->buf, v->len, i, &lg_recv, lg_ack_len, FMT_PNR);
 
     const uint16_t ack_delay = 0;
     enc(v->buf, v->len, i, &ack_delay, 0, "%u");
@@ -580,7 +583,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
             enc(v->buf, v->len, i, &gap, sizeof(uint8_t), "%" PRIu64);
         }
         const uint64_t ack_block = b->hi - b->lo + (prev_lo ? 1 : 0);
-        warn(NTE, "ACKing %" PRIu64 "-%" PRIu64 " / %" PRIx64 "-%" PRIx64,
+        warn(NTE, "ACKing " FMT_PNR "-" FMT_PNR " / %" PRIx64 "-%" PRIx64,
              b->lo, b->hi, b->lo, b->hi);
         enc(v->buf, v->len, i, &ack_block, ack_block_len, "%" PRIu64);
         prev_lo = b->lo;
@@ -628,7 +631,7 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
     ensure(dlen || s->state > STRM_STAT_OPEN,
            "no stream data or need to send FIN");
 
-    warn(INF, "%u byte%s at off %" PRIu64 "-%" PRIu64 " on str %u", dlen,
+    warn(INF, "%u byte%s at off %" PRIu64 "-%" PRIu64 " on str " FMT_SID, dlen,
          plural(dlen), s->out_off, dlen ? s->out_off + dlen - 1 : s->out_off,
          s->id);
 
@@ -639,7 +642,8 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
     // if stream is closed locally and this is the last packet, include a FIN
     if ((s->state == STRM_STAT_HCLO || s->state == STRM_STAT_CLSD) &&
         v == sq_last(&s->out, w_iov, next)) {
-        warn(NTE, "sending %s FIN on %s conn %" PRIx64 " str %u, state %u",
+        warn(NTE,
+             "sending %s FIN on %s conn " FMT_CID " str " FMT_SID ", state %u",
              dlen ? "" : "pure", conn_type(s->c), s->c->id, s->id, s->state);
         type |= F_STREAM_FIN;
         s->fin_sent = 1;
@@ -654,7 +658,7 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
     uint16_t i = meta(v).stream_header_pos =
         Q_OFFSET - 1 - (dlen ? 2 : 0) - off_len - sid_len;
     enc(v->buf, v->len, i, &type, 0, "0x%02x");
-    enc(v->buf, v->len, i, &s->id, sid_len, "%u");
+    enc(v->buf, v->len, i, &s->id, sid_len, FMT_SID);
     if (off_len)
         enc(v->buf, v->len, i, &s->out_off, off_len, "%" PRIu64);
     if (dlen)
@@ -700,7 +704,7 @@ uint16_t enc_max_stream_data_frame(struct q_stream * const s,
 
     const uint8_t type = FRAM_TYPE_MAX_STRM_DATA;
     enc(v->buf, v->len, i, &type, 0, "0x%02x");
-    enc(v->buf, v->len, i, &s->id, 0, "%u");
+    enc(v->buf, v->len, i, &s->id, 0, FMT_SID);
     enc(v->buf, v->len, i, &s->in_off_max, 0, "%u");
 
     return i;
@@ -716,7 +720,7 @@ uint16_t enc_stream_blocked_frame(struct q_stream * const s,
 
     const uint8_t type = FRAM_TYPE_STRM_BLCK;
     enc(v->buf, v->len, i, &type, 0, "0x%02x");
-    enc(v->buf, v->len, i, &s->id, 0, "%u");
+    enc(v->buf, v->len, i, &s->id, 0, FMT_SID);
 
     return i;
 }

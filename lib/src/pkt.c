@@ -76,7 +76,7 @@ uint64_t pkt_cid(const uint8_t * const buf, const uint16_t len)
     uint64_t cid = 0;
     if (is_set(F_LONG_HDR, flags) || is_set(F_SH_CID, flags)) {
         uint16_t i = 1;
-        dec(cid, buf, len, i, 0, "%" PRIx64);
+        dec(cid, buf, len, i, 0, FMT_CID);
     } else
         die("no connection ID in header");
     return cid;
@@ -94,7 +94,7 @@ pkt_nr(const uint8_t * const buf, const uint16_t len, struct q_conn * const c)
 
     uint16_t i = is_set(F_LONG_HDR, flags) || is_set(F_SH_CID, flags) ? 9 : 1;
     uint64_t nr = next;
-    dec(nr, buf, len, i, nr_len, "%" PRIu64);
+    dec(nr, buf, len, i, nr_len, FMT_PNR);
 
     // const uint64_t mask[] = {0x0, 0x100UL, 0x10000UL, 0x0, 0x100000000UL};
     const uint64_t alt = nr + (UINT64_C(1) << (nr_len * 8));
@@ -143,7 +143,7 @@ bool enc_pkt(struct q_stream * const s,
 #ifndef NDEBUG
     if (rtx) {
         const uint64_t prev_nr = meta(v).nr;
-        warn(INF, "enc RTX %" PRIu64 " as %" PRIu64 " in idx %u", prev_nr,
+        warn(INF, "enc RTX " FMT_PNR " as " FMT_PNR " in idx %u", prev_nr,
              c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv)
                                             : c->rec.lg_sent + 1,
              w_iov_idx(v));
@@ -180,7 +180,7 @@ bool enc_pkt(struct q_stream * const s,
 
     if (rtx && flags != pkt_flags(v->buf)) {
         warn(NTE,
-             "RTX of 0x%02x-type pkt %" PRIu64
+             "RTX of 0x%02x-type pkt " FMT_PNR
              " prevented; new type would be 0x%02x",
              pkt_flags(v->buf), meta(v).nr, flags);
         adj_iov_to_data(v);
@@ -191,7 +191,7 @@ bool enc_pkt(struct q_stream * const s,
     enc(v->buf, v->len, i, &flags, 0, "0x%02x");
 
     if (is_set(F_LONG_HDR, flags) || is_set(F_SH_CID, flags))
-        enc(v->buf, v->len, i, &c->id, 0, "%" PRIx64);
+        enc(v->buf, v->len, i, &c->id, 0, FMT_CID);
 
     if (is_set(F_LONG_HDR, flags)) {
         enc(v->buf, v->len, i, &meta(v).nr, sizeof(uint32_t), "%u");
@@ -206,7 +206,7 @@ bool enc_pkt(struct q_stream * const s,
             diet_remove(&c->recv, meta(v).nr);
         }
     } else
-        enc(v->buf, v->len, i, &meta(v).nr, pkt_nr_len, "%" PRIu64);
+        enc(v->buf, v->len, i, &meta(v).nr, pkt_nr_len, FMT_PNR);
 
     const uint16_t hdr_len = i;
 
@@ -284,9 +284,9 @@ bool enc_pkt(struct q_stream * const s,
     meta(v).tx_len = x->len;
 
     warn(NTE,
-         "enc pkt %" PRIu64 "/%" PRIx64
+         "enc pkt " FMT_PNR "/%" PRIx64
          " (len %u+%u, idx %u+%u, type 0x%02x = " bitstring_fmt
-         ") on %s conn %" PRIx64,
+         ") on %s conn " FMT_CID,
          meta(v).nr, meta(v).nr, v->len, meta(v).tx_len - v->len, w_iov_idx(v),
          w_iov_idx(x), pkt_flags(v->buf), to_bitstring(pkt_flags(v->buf)),
          conn_type(c), c->id);

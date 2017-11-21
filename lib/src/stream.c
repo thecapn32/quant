@@ -25,7 +25,6 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <inttypes.h>
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -34,6 +33,7 @@
 
 #include "conn.h"
 #include "diet.h"
+#include "quic.h"
 #include "stream.h"
 
 
@@ -69,15 +69,16 @@ struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
     if (id)
         c->next_sid += 2;
     splay_insert(stream, &c->streams, s);
-    warn(INF, "reserved str %u on %s conn %" PRIx64, id, conn_type(c), c->id);
+    warn(INF, "reserved str " FMT_SID " on %s conn " FMT_CID, id, conn_type(c),
+         c->id);
     return s;
 }
 
 
 void free_stream(struct q_stream * const s)
 {
-    warn(INF, "freeing str %u on %s conn %" PRIx64, s->id, conn_type(s->c),
-         s->c->id);
+    warn(INF, "freeing str " FMT_SID " on %s conn " FMT_CID, s->id,
+         conn_type(s->c), s->c->id);
 
     diet_insert(&s->c->closed_streams, s->id);
 
