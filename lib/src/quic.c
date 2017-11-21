@@ -183,7 +183,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
 
 void q_alloc(void * const w, struct w_iov_sq * const q, const uint32_t len)
 {
-    w_alloc_len(w, q, len, MAX_PKT_LEN - AEAD_LEN, Q_OFFSET);
+    w_alloc_len(w, q, len, MAX_PKT_LEN - AEAD_LEN - Q_OFFSET, Q_OFFSET);
     struct w_iov * v;
     sq_foreach (v, q, next) {
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
