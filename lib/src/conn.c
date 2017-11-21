@@ -161,9 +161,9 @@ static void log_sent_pkts(struct q_conn * const c)
          p = splay_next(pm_nr_splay, &c->rec.sent_pkts, p)) {
         char tmp[1024] = "";
         const bool ack_only = is_ack_only(p);
-        snprintf(tmp, sizeof(tmp), "%s" FMT_PNR "@%lu%s%s ",
-                 ack_only ? "(" : "", p->nr, pm_idx(p),
-                 is_rtxable(p) ? "+" : "", ack_only ? ")" : "");
+        snprintf(tmp, sizeof(tmp), "%s%s" FMT_PNR " (%" PRIx64 ")%s ",
+                 is_rtxable(p) ? "+" : "", ack_only ? "[" : "", p->nr, p->nr,
+                 ack_only ? "]" : "");
         strncat(sent_pkts_buf, tmp,
                 sizeof(sent_pkts_buf) - strlen(sent_pkts_buf) - 1);
     }
@@ -190,18 +190,18 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
 
         if (meta(v).is_acked) {
             warn(DBG,
-                 "skipping ACKed pkt " FMT_PNR " idx %u on str " FMT_SID
+                 "skipping ACKed pkt " FMT_PNR " (%" PRIx64 ") on str " FMT_SID
                  " during %s",
-                 meta(v).nr, w_iov_idx(v), s->id, rtx ? "RTX" : "TX");
+                 meta(v).nr, meta(v).nr, s->id, rtx ? "RTX" : "TX");
             continue;
         }
 
         if (rtx != (meta(v).tx_len > 0)) {
             warn(DBG,
-                 "skipping %s pkt " FMT_PNR " idx %u on str " FMT_SID
+                 "skipping %s pkt " FMT_PNR " (%" PRIx64 ") on str " FMT_SID
                  " during %s",
                  meta(v).tx_len ? "already-tx'ed" : "fresh", meta(v).nr,
-                 w_iov_idx(v), s->id, rtx ? "RTX" : "TX");
+                 meta(v).nr, s->id, rtx ? "RTX" : "TX");
             continue;
         }
 
@@ -598,11 +598,9 @@ void rx(struct ev_loop * const l,
         }
 
         warn(NTE,
-             "rx pkt " FMT_PNR "/%" PRIx64
-             " (len %u, idx %u, type 0x%02x = " bitstring_fmt
-             ") on %s conn " FMT_CID,
-             meta(v).nr, meta(v).nr, v->len, w_iov_idx(v), flags,
-             to_bitstring(flags), conn_type(c), cid);
+             "rx pkt " FMT_PNR " (%" PRIx64 "), len %u, type 0x%02x"
+             " on %s conn " FMT_CID,
+             meta(v).nr, meta(v).nr, v->len, flags, conn_type(c), c->id);
 
         process_pkt(c, v);
     }
@@ -628,10 +626,10 @@ void rx(struct ev_loop * const l,
         // is a TX needed for this connection?
         if (c->needs_tx)
             tx(c, false, 0);
+        else
+            log_sent_pkts(c);
 
         // clear the helper flags set above
         c->needs_tx = c->had_rx = false;
-
-        log_sent_pkts(c);
     }
 }

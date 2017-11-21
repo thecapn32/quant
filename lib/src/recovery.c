@@ -284,15 +284,16 @@ void on_pkt_acked(struct q_conn * const c, const uint64_t ack)
 {
     struct w_iov * const v = find_sent_pkt(c, ack);
     if (!v) {
-        warn(DBG, "got ACK for pkt " FMT_PNR " with no metadata", ack);
+        warn(DBG, "got ACK for pkt " FMT_PNR " (%" PRIx64 ") with no metadata",
+             ack, ack);
         return;
     }
 
     // only act on first-time ACKs
     if (meta(v).is_acked)
-        warn(WRN, "repeated ACK for " FMT_PNR, ack);
+        warn(WRN, "repeated ACK for " FMT_PNR " (%" PRIx64 ")", ack, ack);
     else
-        warn(NTE, "first ACK for " FMT_PNR, ack);
+        warn(NTE, "first ACK for " FMT_PNR " (%" PRIx64 ")", ack, ack);
     meta(v).is_acked = true;
 
     // If a packet sent prior to RTO was ACKed, then the RTO was spurious.
@@ -310,15 +311,17 @@ void on_pkt_acked(struct q_conn * const c, const uint64_t ack)
     // stop ACKing packets that were contained in the ACK frame of this
     // packet
     if (meta(v).ack_header_pos) {
-        warn(DBG, "decoding ACK info from pkt " FMT_PNR " from pos %u", ack,
-             meta(v).ack_header_pos);
+        warn(DBG,
+             "decoding ACK info from pkt " FMT_PNR " (%" PRIx64 ") from pos %u",
+             ack, ack, meta(v).ack_header_pos);
         adj_iov_to_start(v);
         dec_ack_frame(c, v, meta(v).ack_header_pos, 0, &track_acked_pkts, 0);
         adj_iov_to_data(v);
-        warn(DBG, "done decoding ACK info from pkt " FMT_PNR " from pos %u",
-             ack, meta(v).ack_header_pos);
+        warn(DBG, "done decoding ACK info from pkt (%" PRIx64 ") from pos %u",
+             ack, ack, meta(v).ack_header_pos);
     } else
-        warn(DBG, "pkt " FMT_PNR " did not contain an ACK frame", ack);
+        warn(DBG, "pkt " FMT_PNR " (%" PRIx64 ") did not contain an ACK frame",
+             ack, ack);
 
     // OnPacketAckedCC
     if (is_rtxable(&meta(v))) {

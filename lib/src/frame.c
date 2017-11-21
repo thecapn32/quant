@@ -243,7 +243,7 @@ uint16_t dec_ack_frame(
         uint64_t ack_block_len = 0;
         dec(ack_block_len, v->buf, v->len, i, len_ack_block_len, "%" PRIu64);
 
-        warn(NTE, "got ACKs for " FMT_PNR "-" FMT_PNR " / %" PRIx64 "-%" PRIx64,
+        warn(NTE, "got ACKs " FMT_PNR "-" FMT_PNR " (%" PRIx64 "-%" PRIx64 ")",
              lg_ack_in_block - ack_block_len, lg_ack_in_block,
              lg_ack_in_block - ack_block_len, lg_ack_in_block);
 
@@ -587,7 +587,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
             enc(v->buf, v->len, i, &gap, sizeof(uint8_t), "%" PRIu64);
         }
         const uint64_t ack_block = b->hi - b->lo + (prev_lo ? 1 : 0);
-        warn(NTE, "ACKing " FMT_PNR "-" FMT_PNR " / %" PRIx64 "-%" PRIx64,
+        warn(NTE, "ACKing " FMT_PNR "-" FMT_PNR " (%" PRIx64 "-%" PRIx64 ")",
              b->lo, b->hi, b->lo, b->hi);
         enc(v->buf, v->len, i, &ack_block, ack_block_len, "%" PRIu64);
         prev_lo = b->lo;
