@@ -115,12 +115,12 @@ case $s in
                 ;;
         ats)
                 cat <<EOF > external/etc/trafficserver/records.config
-                    CONFIG proxy.config.udp.threads INT 1
-                    CONFIG proxy.config.http.server_ports STRING $port:quic
-                    CONFIG proxy.config.ssl.server.cipher_suite STRING TLS13-AES-128-GCM-SHA256:TLS13-AES-128-GCM-SHA256:TLS13-CHACHA20-POLY1305-SHA256:ECDHE-ECDSA-AES256-GCM.....
                     CONFIG proxy.config.diags.debug.enabled INT 1
-                    CONFIG proxy.config.diags.debug.tags STRING quic.*
+                    CONFIG proxy.config.diags.debug.tags STRING quic
+                    CONFIG proxy.config.http.server_ports STRING $port:quic
                     CONFIG proxy.config.quic.no_activity_timeout_in INT 10
+                    CONFIG proxy.config.ssl.server.cipher_suite STRING TLS13-AES-128-GCM-SHA256:TLS13-AES-128-GCM-SHA256:TLS13-CHACHA20-POLY1305-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-DSS-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA256:DHE-RSA-AES128-SHA256:DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA:DHE-DSS-AES256-SHA:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:AES256-GCM-SHA384:AES128-GCM-SHA256:AES256-SHA256:AES128-SHA256:AES256-SHA:AES128-SHA:DES-CBC3-SHA:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!aECDH:!EDH-DSS-DES-CBC3-SHA:!EDH-RSA-DES-CBC3-SHA:!KRB5-DES-CBC3-SHA
+                    CONFIG proxy.config.udp.threads INT 1
 EOF
                 cat <<EOF > external/etc/trafficserver/ssl_multicert.config
                     dest_ip=* ssl_cert_name=$cert ssl_key_name=$key
