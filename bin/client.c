@@ -47,7 +47,7 @@ usage(const char * const name, const char * const ifname)
     printf("%s [options] URL\n", name);
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
 #ifndef NDEBUG
-    printf("\t[-v verbosity]\tverbosity level (0-%u, default %u)\n", DLEVEL,
+    printf("\t[-v verbosity]\tverbosity level (0-%d, default %d)\n", DLEVEL,
            util_dlevel);
 #endif
     exit(0);

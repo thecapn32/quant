@@ -60,7 +60,7 @@ static void __attribute__((noreturn)) usage(const char * const name,
     printf("\t[-c cert]\tTLS certificate; default %s\n", cert);
     printf("\t[-k key]\tTLS key; default %s\n", key);
 #ifndef NDEBUG
-    printf("\t[-v verbosity]\tverbosity level (0-%u, default %u)\n", DLEVEL,
+    printf("\t[-v verbosity]\tverbosity level (0-%d, default %d)\n", DLEVEL,
            util_dlevel);
 #endif
     exit(0);
