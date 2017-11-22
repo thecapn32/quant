@@ -103,6 +103,15 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     find_program (DSYMUTIL dsymutil)
   endif()
 
+  find_program(CPPCHECK NAMES cppcheck)
+  if(CPPCHECK)
+    message(STATUS "Found cppcheck: ${CPPCHECK}")
+    set(CMAKE_C_CPPCHECK ${CPPCHECK} -q
+        --enable=warning,style,performance,portability
+        -I external/include -I lib/include -I ${PROJECT_SOURCE_DIR}/lib/include
+    )
+  endif()
+
   # Use include-what-you-use to check #includes, if it's installed
   find_program(IWYU NAMES include-what-you-use iwyu)
   if(IWYU)
