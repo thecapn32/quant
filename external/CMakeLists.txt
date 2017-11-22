@@ -159,7 +159,7 @@ externalproject_add(ngtcp2
 
 # Use mozquic for testing against
 externalproject_add(nspr
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/mozquic-prefix/src/nspr
   CONFIGURE_COMMAND ""
   HG_REPOSITORY https://hg.mozilla.org/projects/nspr
@@ -170,7 +170,7 @@ externalproject_add(nspr
 
 externalproject_add(nss
   DEPENDS nspr
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/mozquic-prefix/src/nss
   GIT_REPOSITORY https://github.com/nss-dev/nss.git
   GIT_SHALLOW 1
@@ -185,7 +185,7 @@ externalproject_add(nss
 externalproject_add(mozquic
   DEPENDS nss
   # UPDATE_COMMAND ""
-  GIT_TAG 07
+  # GIT_TAG 07
   GIT_REPOSITORY https://github.com/mcmanus/mozquic.git
   GIT_SHALLOW 1
   PATCH_COMMAND sed -i "" -e "s/-Werror//g" Makefile
