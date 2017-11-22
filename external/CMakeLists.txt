@@ -136,8 +136,8 @@ externalproject_add(openssl
   GIT_SHALLOW 1
   CONFIGURE_COMMAND ./config --prefix=${CMAKE_CURRENT_BINARY_DIR} enable-tls1_3
   BUILD_IN_SOURCE 1
-  INSTALL_COMMAND make install_sw
   BUILD_COMMAND make -j16
+  INSTALL_COMMAND make install_sw
   EXCLUDE_FROM_ALL 1
 )
 
@@ -176,9 +176,9 @@ externalproject_add(nss
   GIT_SHALLOW 1
   GIT_TAG NSS_TLS13_DRAFT19_BRANCH
   CONFIGURE_COMMAND ""
-  BUILD_COMMAND ""
+  BUILD_COMMAND ./build.sh
   BUILD_IN_SOURCE 1
-  INSTALL_COMMAND ./build.sh
+  INSTALL_COMMAND ""
   EXCLUDE_FROM_ALL 1
 )
 
@@ -191,7 +191,7 @@ externalproject_add(mozquic
   PATCH_COMMAND sed -i "" -e "s/-Werror//g" Makefile
   CONFIGURE_COMMAND ""
   BUILD_IN_SOURCE 1
-  BUILD_COMMAND make
+  BUILD_COMMAND make -j16
   INSTALL_COMMAND ""
   EXCLUDE_FROM_ALL 1
 )
@@ -216,12 +216,28 @@ externalproject_add(picoquic
     -DCMAKE_POSITION_INDEPENDENT_CODE=True
     -DCMAKE_C_STANDARD=${CMAKE_C_STANDARD}
   EXCLUDE_FROM_ALL 1
-  # BUILD_COMMAND ninja picoquicdemo
   INSTALL_COMMAND ""
+)
+
+
+# Use ats for testing against
+externalproject_add(ats
+  DEPENDS openssl
+  # UPDATE_COMMAND ""
+  GIT_REPOSITORY https://github.com/apache/trafficserver.git
+  GIT_SHALLOW 1
+  GIT_TAG quic-latest
+  PATCH_COMMAND autoreconf -i
+  CONFIGURE_COMMAND
+    ./configure PKG_CONFIG_PATH=${CMAKE_CURRENT_BINARY_DIR}/lib/pkgconfig
+      --enable-debug --prefix=${CMAKE_CURRENT_BINARY_DIR}
+  BUILD_IN_SOURCE 1
+  BUILD_COMMAND make -j16
+  EXCLUDE_FROM_ALL 1
 )
 
 # grep '^[^#]*_add' ../external/CMakeLists.txt | cut -f2 -d\( | sort | fmt -w 60
 add_custom_target(ext-all DEPENDS
-                  minq mozquic ngtcp2 nspr nss openssl picoquic picotls quicly
-                  warp
+                  ats minq mozquic ngtcp2 nspr nss openssl picoquic picotls
+                  quicly warp
 )

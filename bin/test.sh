@@ -31,7 +31,7 @@ else
 fi
 
 export ASAN_OPTIONS=strict_string_checks=1:strict_init_order=1:detect_stack_use_after_return=1:detect_leaks=1:check_initialization_order=1:sleep_before_dying=30:alloc_dealloc_mismatch=1:detect_invalid_pointer_pairs=1
-export UBSAN_OPTIONS=suppressions=../misc/ubsan.supp:print_stacktrace=1
+# export UBSAN_OPTIONS=suppressions=../misc/ubsan.supp:print_stacktrace=1
 
 # commands to run the different clients against $addr:$port
 case $c in
@@ -112,6 +112,23 @@ case $s in
         picoquic)
                 sc="external/picoquic-prefix/src/picoquic/picoquicdemo \
                         -p $port -k $key -c $cert"
+                ;;
+        ats)
+                cat <<EOF > external/etc/trafficserver/records.config
+                    CONFIG proxy.config.udp.threads INT 1
+                    CONFIG proxy.config.http.server_ports STRING $port:quic
+                    CONFIG proxy.config.ssl.server.cipher_suite STRING TLS13-AES-128-GCM-SHA256:TLS13-AES-128-GCM-SHA256:TLS13-CHACHA20-POLY1305-SHA256:ECDHE-ECDSA-AES256-GCM.....
+                    CONFIG proxy.config.diags.debug.enabled INT 1
+                    CONFIG proxy.config.diags.debug.tags STRING quic.*
+                    CONFIG proxy.config.quic.no_activity_timeout_in INT 10
+EOF
+                cat <<EOF > external/etc/trafficserver/ssl_multicert.config
+                    dest_ip=* ssl_cert_name=$cert ssl_key_name=$key
+EOF
+                cat <<EOF > external/etc/trafficserver/remap.config
+                    map / http://127.0.0.1:8000/
+EOF
+                sc="external/bin/traffic_server"
                 ;;
 esac
 
