@@ -12,9 +12,7 @@ add_library(common
 )
 add_dependencies(common warpcore ptls-core ptls-openssl ptls-minicrypto)
 
-
-add_library(${PROJECT_NAME}_stat STATIC $<TARGET_OBJECTS:common>)
-add_library(${PROJECT_NAME}_dyn SHARED $<TARGET_OBJECTS:common>)
+add_library(${PROJECT_NAME} $<TARGET_OBJECTS:common>)
 
 install(DIRECTORY include/${PROJECT_NAME}
         DESTINATION include
@@ -30,27 +28,25 @@ if(NOT LIBEV_LIB)
 endif()
 find_path(LIBEV_INCLUDE ev.h PATH_SUFFIXES include/ev include)
 find_package_handle_standard_args(libev DEFAULT_MSG LIBEV_LIB LIBEV_INCLUDE)
-include_directories(${LIBEV_INCLUDE})
 
-
-if (DSYMUTIL)
-  add_custom_command (TARGET ${PROJECT_NAME}_dyn POST_BUILD
+if(DSYMUTIL)
+  add_custom_command (TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${DSYMUTIL} ARGS *${CMAKE_SHARED_LIBRARY_SUFFIX}
   )
 endif()
 
-set(TARGETS common ${PROJECT_NAME}_stat ${PROJECT_NAME}_dyn)
+set(TARGETS common ${PROJECT_NAME})
 foreach(TARGET ${TARGETS})
+  add_dependencies(${TARGET} warpcore ptls-core ptls-openssl ptls-minicrypto)
   target_include_directories(${TARGET}
     SYSTEM PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
       $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
-      $<INSTALL_INTERFACE:include>
     PRIVATE
-      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
-      $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/src>
       $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/external/include>
       ${OPENSSL_ROOT_DIR}/include
+      ${LIBEV_INCLUDE}
+      ${WARP_INCLUDE}
   )
 
   set_target_properties(${TARGET}
@@ -75,4 +71,3 @@ foreach(TARGET ${TARGETS})
     )
   endif()
 endforeach()
-

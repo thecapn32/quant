@@ -1,11 +1,10 @@
-include_directories(${CMAKE_SOURCE_DIR}/lib/src
-  SYSTEM ${CMAKE_BINARY_DIR}/external/include
-)
-
-add_executable(test_diet test_diet.c)
-target_link_libraries(test_diet ${PROJECT_NAME}_dyn)
-add_test(test_diet test_diet)
-
-add_executable(test_conn test_conn.c)
-target_link_libraries(test_conn ${PROJECT_NAME}_dyn)
-add_test(test_conn test_conn)
+foreach(TARGET diet conn)
+  add_executable(test_${TARGET} test_${TARGET}.c)
+  target_link_libraries(test_${TARGET} ${PROJECT_NAME})
+  target_include_directories(test_${TARGET}
+    PRIVATE
+      ${CMAKE_BINARY_DIR}/external/include
+      ${CMAKE_SOURCE_DIR}/lib/src
+  )
+  add_test(test_${TARGET} test_${TARGET})
+endforeach()

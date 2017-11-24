@@ -1,41 +1,44 @@
 include(ExternalProject)
 
-externalproject_add(warp
-  # UPDATE_COMMAND "" # XXX do not commit with this being empty
-  GIT_REPOSITORY https://github.com/NTAP/warpcore.git
-  GIT_SHALLOW 1
-  GIT_TAG dev
-  CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
-    -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -DDLEVEL=WRN
-    -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DBUILD_DOCUMENTATION=FALSE
-  BUILD_BYPRODUCTS
-    ${CMAKE_CURRENT_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}sockcore${CMAKE_STATIC_LIBRARY_SUFFIX}
-    ${CMAKE_CURRENT_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}warpcore${CMAKE_STATIC_LIBRARY_SUFFIX}
-)
-
-file(MAKE_DIRECTORY
-      ${CMAKE_CURRENT_BINARY_DIR}/include ${CMAKE_CURRENT_BINARY_DIR}/lib)
-add_library(warpcore STATIC IMPORTED GLOBAL)
-set(WARP ${CMAKE_CURRENT_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}warpcore${CMAKE_STATIC_LIBRARY_SUFFIX})
-if(NOT EXISTS ${WARP})
-  set(WARP ${CMAKE_CURRENT_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}sockcore${CMAKE_STATIC_LIBRARY_SUFFIX})
+if(BUILD_SHARED_LIBS)
+  set(CMAKE_FIND_LIBRARY_PREFIXES ${CMAKE_SHARED_LIBRARY_PREFIX})
+  set(CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_SHARED_LIBRARY_SUFFIX})
+  set(LIBRARY_PREFIX ${CMAKE_SHARED_LIBRARY_PREFIX})
+  set(LIBRARY_SUFFIX ${CMAKE_SHARED_LIBRARY_SUFFIX})
+else()
+  set(CMAKE_FIND_LIBRARY_PREFIXES ${CMAKE_STATIC_LIBRARY_PREFIX})
+  set(CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_STATIC_LIBRARY_SUFFIX})
+  set(LIBRARY_PREFIX ${CMAKE_STATIC_LIBRARY_PREFIX})
+  set(LIBRARY_SUFFIX ${CMAKE_STATIC_LIBRARY_SUFFIX})
 endif()
+
+
+if(NOT WARP_LIB OR NOT WARP_INCLUDE)
+  externalproject_add(warp
+    # UPDATE_COMMAND "" # XXX do not commit with this being empty
+    GIT_REPOSITORY https://github.com/NTAP/warpcore.git
+    GIT_SHALLOW 1
+    GIT_TAG dev
+    CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
+      -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -DDLEVEL=WRN
+      -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DBUILD_DOCUMENTATION=FALSE
+    BUILD_BYPRODUCTS
+      ${CMAKE_CURRENT_BINARY_DIR}/lib/${LIBRARY_PREFIX}warpcore${LIBRARY_SUFFIX}
+      ${CMAKE_CURRENT_BINARY_DIR}/lib/${LIBRARY_PREFIX}sockcore${LIBRARY_SUFFIX}
+  )
+  add_dependencies(warpcore warp)
+  set(WARP_LIB ${CMAKE_CURRENT_BINARY_DIR}/lib/${LIBRARY_PREFIX}warpcore${LIBRARY_SUFFIX})
+  if(NOT EXISTS ${WARP_LIB})
+    set(WARP_LIB ${CMAKE_CURRENT_BINARY_DIR}/lib/${LIBRARY_PREFIX}sockcore${LIBRARY_SUFFIX})
+  endif()
+  set(WARP_INCLUDE ${CMAKE_CURRENT_BINARY_DIR}/include)
+endif()
+
 set_target_properties(warpcore PROPERTIES
-  IMPORTED_LOCATION ${WARP}
-  INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_BINARY_DIR}/include
+  IMPORTED_LOCATION ${WARP_LIB}
+  INTERFACE_INCLUDE_DIRECTORIES ${WARP_INCLUDE}
 )
-add_dependencies(warpcore warp)
 
-
-# build picotls with most of our CFLAGS
-string(TOUPPER ${CMAKE_BUILD_TYPE} CMAKE_BUILD_TYPE_UC)
-set(PICOTLS_CFLAGS "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_${CMAKE_BUILD_TYPE_UC}}")
-string(REPLACE "-Werror" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
-string(REPLACE "-Wextra" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
-string(REPLACE "-Wpedantic" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
-string(REPLACE "-Weverything" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
-string(REPLACE "-fsanitize=leak" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
-string(REPLACE "-fsanitize=undefined" "" PICOTLS_CFLAGS "${PICOTLS_CFLAGS}")
 
 externalproject_add(picotls
   # UPDATE_COMMAND "" # XXX do not commit with this being empty
@@ -44,7 +47,6 @@ externalproject_add(picotls
   PATCH_COMMAND sed -i "" -e "s/-std=c99 -Wall -O2 -g//" CMakeLists.txt
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-    # -DCMAKE_C_FLAGS=${PICOTLS_CFLAGS}
     -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}
     -DOPENSSL_LIBRARIES=${OPENSSL_ROOT_DIR}/lib
     -DOPENSSL_INCLUDE_DIR=${OPENSSL_ROOT_DIR}/include
@@ -54,14 +56,14 @@ externalproject_add(picotls
   INSTALL_COMMAND
     cp -a ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls/include
       ${CMAKE_CURRENT_BINARY_DIR} &&
-    cp -a ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/${CMAKE_STATIC_LIBRARY_PREFIX}picotls-minicrypto${CMAKE_STATIC_LIBRARY_SUFFIX}
-      ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/${CMAKE_STATIC_LIBRARY_PREFIX}picotls-openssl${CMAKE_STATIC_LIBRARY_SUFFIX}
-      ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/${CMAKE_STATIC_LIBRARY_PREFIX}picotls-core${CMAKE_STATIC_LIBRARY_SUFFIX}
+    cp -a ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/${LIBRARY_PREFIX}picotls-minicrypto${LIBRARY_SUFFIX}
+      ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/${LIBRARY_PREFIX}picotls-openssl${LIBRARY_SUFFIX}
+      ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/${LIBRARY_PREFIX}picotls-core${LIBRARY_SUFFIX}
       ${CMAKE_CURRENT_BINARY_DIR}/lib || true
   BUILD_BYPRODUCTS
-    ${CMAKE_CURRENT_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}picotls-minicrypto${CMAKE_STATIC_LIBRARY_SUFFIX}
-    ${CMAKE_CURRENT_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}picotls-openssl${CMAKE_STATIC_LIBRARY_SUFFIX}
-    ${CMAKE_CURRENT_BINARY_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}picotls-core${CMAKE_STATIC_LIBRARY_SUFFIX}
+    ${CMAKE_CURRENT_BINARY_DIR}/lib/${LIBRARY_PREFIX}picotls-minicrypto${LIBRARY_SUFFIX}
+    ${CMAKE_CURRENT_BINARY_DIR}/lib/${LIBRARY_PREFIX}picotls-openssl${LIBRARY_SUFFIX}
+    ${CMAKE_CURRENT_BINARY_DIR}/lib/${LIBRARY_PREFIX}picotls-core${LIBRARY_SUFFIX}
 )
 
 foreach(TARGET ptls-core ptls-minicrypto ptls-openssl)
@@ -70,7 +72,7 @@ foreach(TARGET ptls-core ptls-minicrypto ptls-openssl)
   set_target_properties(${TARGET}
     PROPERTIES
       IMPORTED_LOCATION
-        ${CMAKE_CURRENT_BINARY_DIR}/lib/lib${LIBNAME}${CMAKE_STATIC_LIBRARY_SUFFIX}
+        ${CMAKE_CURRENT_BINARY_DIR}/lib/${LIBRARY_PREFIX}${LIBNAME}${LIBRARY_SUFFIX}
       INTERFACE_INCLUDE_DIRECTORIES
         "${CMAKE_CURRENT_BINARY_DIR}/include;${OPENSSL_ROOT_DIR}/include"
       INTERFACE_LINK_LIBRARIES "${OPENSSL_LIBRARIES}"
@@ -96,18 +98,13 @@ set(GOPATH ${CMAKE_CURRENT_BINARY_DIR}/go)
 
 # Use minq for testing against
 set(MINQ github.com/ekr/minq)
+set(MINQDEPS github.com/bifurcation/mint github.com/cloudflare/cfssl/helpers)
 externalproject_add(minq
-  DOWNLOAD_COMMAND
-    env GOPATH=${GOPATH} go get ${MINQ} &&
-      env GOPATH=${GOPATH} go get github.com/cloudflare/cfssl/helpers || true
-  # UPDATE_COMMAND ""
-  UPDATE_COMMAND cd ${GOPATH}/src/github.com/ekr/minq && git pull
-  CONFIGURE_COMMAND
-    cd ${GOPATH}/src/github.com/bifurcation/mint &&
-      git remote add ekr https://www.github.com/ekr/mint || true &&
-      git fetch ekr && git checkout master
-  BUILD_COMMAND
-    cd ${GOPATH}/src/${MINQ} && env GOPATH=${GOPATH} go test
+  DOWNLOAD_COMMAND env GOPATH=${GOPATH} go get ${MINQ} ${MINQDEPS}
+  UPDATE_COMMAND ""
+  # UPDATE_COMMAND env GOPATH=${GOPATH} go get -u ${MINQ} ${MINQDEPS}
+  CONFIGURE_COMMAND ""
+  BUILD_COMMAND cd ${GOPATH}/src/${MINQ} && env GOPATH=${GOPATH} go test
   INSTALL_COMMAND ""
   EXCLUDE_FROM_ALL 1
 )
@@ -207,7 +204,6 @@ externalproject_add(picoquic
   BUILD_IN_SOURCE 1
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-    # -DCMAKE_C_FLAGS=${PICOTLS_CFLAGS}
     -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}
     -DOPENSSL_LIBRARIES=${OPENSSL_ROOT_DIR}/lib
     -DOPENSSL_INCLUDE_DIR=${OPENSSL_ROOT_DIR}/include

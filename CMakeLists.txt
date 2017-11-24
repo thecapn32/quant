@@ -16,9 +16,14 @@ endif()
 find_package(OpenSSL REQUIRED)
 string(REGEX REPLACE "/include$" "" OPENSSL_ROOT_DIR ${OPENSSL_INCLUDE_DIR})
 
-# Check if _GNU_SOURCE is available.
-check_symbol_exists(__GNU_LIBRARY__ "features.h" _GNU_SOURCE)
-if(_GNU_SOURCE)
+find_library(WARP_LIB NAMES sockcore warpcore)
+find_path(WARP_INCLUDE warpcore/warpcore.h)
+add_library(warpcore STATIC IMPORTED GLOBAL)
+if(NOT WARP_INCLUDE)
+  set(WARP_INCLUDE ${CMAKE_CURRENT_BINARY_DIR}/external/include)
+endif()
+
+if("${CMAKE_SYSTEM}" MATCHES "Linux")
   add_definitions(-D_GNU_SOURCE)
 endif()
 
@@ -76,31 +81,31 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
   # See if we can use the address sanitizer
   include(CheckIncludeFile)
   check_include_file(sanitizer/asan_interface.h HAVE_ASAN)
-  if(HAVE_ASAN)
+  if(HAVE_ASAN AND NOT NO_SANITIZERS)
     set(CMAKE_REQUIRED_FLAGS -fsanitize=address)
     check_c_compiler_flag("" _fsanitize_address)
     if(_fsanitize_address)
       set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address")
     endif()
     unset(CMAKE_REQUIRED_FLAGS)
+
+    # Set some additional flags for Debug builds
+    set(FLAGS -fno-omit-frame-pointer -fsanitize-address-use-after-scope
+        -fno-optimize-sibling-calls
+        -fsanitize=undefined -fsanitize=unsigned-integer-overflow
+        -fno-sanitize=alignment -fno-common
+    )
+    foreach(FLAG ${FLAGS})
+      string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
+      check_c_compiler_flag(${FLAG} ${F})
+      if(${F})
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${FLAG}")
+      endif()
+    endforeach()
   endif()
 
-  # Set some additional flags for Debug builds
-  set(FLAGS -fno-omit-frame-pointer -fsanitize-address-use-after-scope
-      -fno-optimize-sibling-calls
-      -fsanitize=undefined -fsanitize=unsigned-integer-overflow
-      -fno-sanitize=alignment -fno-common
-  )
-  foreach(FLAG ${FLAGS})
-    string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
-    check_c_compiler_flag(${FLAG} ${F})
-    if(${F})
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${FLAG}")
-    endif()
-  endforeach()
-
-  if (APPLE)
-    find_program (DSYMUTIL dsymutil)
+  if(APPLE AND BUILD_SHARED_LIBS)
+    find_program(DSYMUTIL dsymutil)
   endif()
 
   find_program(CPPCHECK NAMES cppcheck)
@@ -122,7 +127,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
         --mapping_file=${PROJECT_SOURCE_DIR}/misc/${CMAKE_SYSTEM_NAME_LC}.imp)
   endif()
 
-  if (CMAKE_C_COMPILER_ID MATCHES "Clang")
+  if(CMAKE_C_COMPILER_ID MATCHES "Clang")
     # Use clang-tidy for extra warnings, if it's installed
     find_program(CLANGTIDY NAMES clang-tidy clang-tidy40 clang-tidy39
                  clang-tidy38 clang-tidy37)

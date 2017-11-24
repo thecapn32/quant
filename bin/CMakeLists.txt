@@ -15,23 +15,20 @@ if(NOT HTTP_PARSER_LIB)
   message(FATAL_ERROR "http-parser not found")
 endif()
 find_path(HTTP_PARSER_INCLUDE http_parser.h PATH_SUFFIXES include)
-find_package_handle_standard_args(http-parser DEFAULT_MSG HTTP_PARSER_LIB HTTP_PARSER_INCLUDE)
-include_directories(${HTTP_PARSER_INCLUDE})
+find_package_handle_standard_args(http-parser
+  DEFAULT_MSG HTTP_PARSER_LIB HTTP_PARSER_INCLUDE
+)
+# target_include_directories(${HTTP_PARSER_INCLUDE})
 
-add_executable(client client.c)
-target_link_libraries(client ${PROJECT_NAME}_dyn ${HTTP_PARSER_LIB})
-
-add_executable(server server.c)
-target_link_libraries(server ${PROJECT_NAME}_dyn ${HTTP_PARSER_LIB})
-
-add_custom_target(quant DEPENDS client server)
+foreach(TARGET client server)
+  add_executable(${TARGET} ${TARGET}.c)
+  target_link_libraries(${TARGET} ${PROJECT_NAME} ${HTTP_PARSER_LIB})
+  if(DSYMUTIL)
+    add_custom_command(TARGET ${TARGET} POST_BUILD
+      COMMAND ${DSYMUTIL} ARGS $<TARGET_FILE:${TARGET}>
+    )
+  endif()
+endforeach()
 
 install(TARGETS client server DESTINATION bin)
 
-if (DSYMUTIL)
-  foreach (TARGET client server)
-    add_custom_command (TARGET ${TARGET} POST_BUILD
-      COMMAND ${DSYMUTIL} ARGS $<TARGET_FILE:${TARGET}>
-    )
-  endforeach()
-endif()
