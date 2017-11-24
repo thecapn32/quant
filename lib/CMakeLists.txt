@@ -61,7 +61,7 @@ foreach(TARGET ${TARGETS})
 
   if(NOT ${TARGET} MATCHES "common")
     target_link_libraries(${TARGET}
-      warpcore ptls-core ptls-openssl ptls-minicrypto ${LIBEV_LIB})
+      m warpcore ptls-core ptls-openssl ptls-minicrypto ${LIBEV_LIB})
 
     install(TARGETS ${TARGET}
       EXPORT ${TARGET}
