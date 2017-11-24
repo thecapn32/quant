@@ -18,8 +18,7 @@ FROM alpine:3.6
 COPY --from=0 /dst /
 COPY --from=0 /www /www
 COPY --from=0 /tls /tls
-RUN find /tls
-RUN apk add --no-cache openssl http-parser libev
+RUN apk add --no-cache libcrypto1.0 http-parser libev
 EXPOSE 4433/UDP
-CMD ["server", "-i", "eth0", "-d", "/www", "-c", "/tls/quant.crt", \
-        "-k", "/tls/quant.key"]
+CMD ["/bin/server", "-i", "eth0", "-d", "/www", \
+        "-c", "/tls/quant.crt", "-k", "/tls/quant.key"]
