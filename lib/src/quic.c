@@ -27,6 +27,7 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -383,6 +384,17 @@ struct q_stream * q_rsv_stream(struct q_conn * const c)
 }
 
 
+static void __attribute__((noreturn))
+signal_cb(struct ev_loop * l,
+          ev_signal * w,
+          int revents __attribute__((unused)))
+{
+    ev_break(l, EVBREAK_ALL);
+    w_cleanup(w->data);
+    exit(0);
+}
+
+
 void * q_init(const char * const ifname,
               const char * const cert,
               const char * const key)
@@ -407,6 +419,12 @@ void * q_init(const char * const ifname,
 
     // initialize the event loop
     loop = ev_default_loop(0);
+
+    // libev seems to need this inside docker to handle Ctrl-C?
+    static ev_signal signal_w;
+    signal_w.data = w;
+    ev_signal_init(&signal_w, signal_cb, SIGINT);
+    ev_signal_start(loop, &signal_w);
 
     warn(INF, "%s %s with libev %u.%u ready", quant_name, quant_version,
          ev_version_major(), ev_version_minor());
