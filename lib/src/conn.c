@@ -340,7 +340,7 @@ static bool __attribute__((nonnull))
 verify_prot(struct q_conn * const c, struct w_iov * const v)
 {
     const uint8_t flags = pkt_flags(v->buf);
-    if (is_set(F_LONG_HDR, flags) && pkt_type(flags) == F_LH_TYPE_VNEG)
+    if (is_set(F_LONG_HDR, flags) && pkt_type(flags) == F_LH_VNEG)
         // version negotiation responses do not carry protection
         return true;
 
@@ -403,7 +403,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         break;
 
     case CONN_STAT_VERS_SENT:
-        if (pkt_type(flags) == F_LH_TYPE_VNEG) {
+        if (pkt_type(flags) == F_LH_VNEG) {
             // XXX this doesn't work, since we're flushing CH state on retry
             // ensure(find_sent_pkt(c, meta(v).nr), "did not send pkt %"
             // PRIu64,
@@ -451,7 +451,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 
             dec_frames(c, v);
 
-            if (pkt_type(flags) == F_LH_SERV_RTRY) {
+            if (pkt_type(flags) == F_LH_RTRY) {
                 warn(INF, "handling serv stateless retry");
                 c->state = CONN_STAT_RETRY;
                 // reset stream 0 offsets
@@ -470,7 +470,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 
         // pass any further data received on stream 0 to TLS and check
         // whether that completes the client handshake
-        if (!is_set(F_LONG_HDR, flags) || pkt_type(flags) >= F_LH_CLNT_CTXT) {
+        if (!is_set(F_LONG_HDR, flags) || pkt_type(flags) >= F_LH_HSHK) {
             maybe_api_return(q_accept, c);
             c->state = CONN_STAT_ESTB;
         }

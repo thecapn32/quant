@@ -63,7 +63,7 @@ static ptls_iovec_t tls_certs[TLS_MAX_CERTS];
 static ptls_openssl_sign_certificate_t sign_cert = {0};
 static ptls_openssl_verify_certificate_t verifier = {0};
 
-static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-07", 5}};
+static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-08", 5}};
 static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 
 #define TLS_EXT_TYPE_TRANSPORT_PARAMETERS 26
@@ -349,9 +349,6 @@ static void init_tp(struct q_conn * const c)
 }
 
 
-#define PTLS_CTXT_CLNT_LABL "QUIC client cleartext Secret"
-#define PTLS_CTXT_SERV_LABL "QUIC server cleartext Secret"
-
 static ptls_aead_context_t *
 init_cleartext_secret(struct q_conn * const c __attribute__((unused)),
                       ptls_cipher_suite_t * const cs,
@@ -360,16 +357,16 @@ init_cleartext_secret(struct q_conn * const c __attribute__((unused)),
                       uint8_t is_enc)
 {
     const ptls_iovec_t secret = {.base = sec, .len = cs->hash->digest_size};
-    // hexdump(sec, cs->hash->digest_size);
     uint8_t output[255];
     ensure(ptls_hkdf_expand_label(cs->hash, output, cs->hash->digest_size,
                                   secret, label, ptls_iovec_init(0, 0)) == 0,
            "HKDF-Expand-Label");
-    // hexdump(output, cs->hash->digest_size);
-
     return ptls_aead_new(cs->aead, cs->hash, is_enc, output);
 }
 
+
+#define PTLS_HSHK_CLNT_LABL "QUIC client handshake secret"
+#define PTLS_HSHK_SERV_LABL "QUIC server handshake secret"
 
 void init_cleartext_prot(struct q_conn * const c)
 {
@@ -387,11 +384,9 @@ void init_cleartext_prot(struct q_conn * const c)
     ensure(ptls_hkdf_extract(cs->hash, sec, salt, cid) == 0, "HKDF-Extract");
 
     c->tls.in_clr = init_cleartext_secret(
-        c, cs, sec, c->is_clnt ? PTLS_CTXT_SERV_LABL : PTLS_CTXT_CLNT_LABL, 0);
-    // hexdump(c->tls.in_clr->static_iv, c->tls.in_clr->algo->iv_size);
+        c, cs, sec, c->is_clnt ? PTLS_HSHK_SERV_LABL : PTLS_HSHK_CLNT_LABL, 0);
     c->tls.out_clr = init_cleartext_secret(
-        c, cs, sec, c->is_clnt ? PTLS_CTXT_CLNT_LABL : PTLS_CTXT_SERV_LABL, 1);
-    // hexdump(c->tls.out_clr->static_iv, c->tls.out_clr->algo->iv_size);
+        c, cs, sec, c->is_clnt ? PTLS_HSHK_CLNT_LABL : PTLS_HSHK_SERV_LABL, 1);
     ensure(c->tls.in_clr && c->tls.out_clr, "got cleartext secrets");
 }
 
@@ -558,8 +553,8 @@ uint16_t dec_aead(struct q_conn * const c,
 {
     ptls_aead_context_t * aead = c->tls.in_kp0;
     const uint8_t flags = pkt_flags(v->buf);
-    if (is_set(F_LONG_HDR, flags) && pkt_type(flags) >= F_LH_CLNT_INIT &&
-        pkt_type(flags) <= F_LH_CLNT_CTXT)
+    if (is_set(F_LONG_HDR, flags) && pkt_type(flags) >= F_LH_INIT &&
+        pkt_type(flags) <= F_LH_HSHK)
         aead = c->tls.in_clr;
 
     const size_t len =

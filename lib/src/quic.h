@@ -248,7 +248,7 @@ extern void * api_arg;
         _v;                                                                    \
     })
 
-#define NRM "\x1B[0m"   ///< ANSI escape sequence: reset all to normal
+#define NRM "\x1B[0m" ///< ANSI escape sequence: reset all to normal
 // #define BLD "\x1B[1m"   ///< ANSI escape sequence: bold
 // #define DIM "\x1B[2m"   ///< ANSI escape sequence: dim
 // #define ULN "\x1B[3m"   ///< ANSI escape sequence: underline
@@ -256,12 +256,12 @@ extern void * api_arg;
 // #define REV "\x1B[7m"   ///< ANSI escape sequence: reverse
 // #define HID "\x1B[8m"   ///< ANSI escape sequence: hidden
 // #define BLK "\x1B[30m"  ///< ANSI escape sequence: black
-#define RED "\x1B[31m"  ///< ANSI escape sequence: red
+#define RED "\x1B[31m" ///< ANSI escape sequence: red
 // #define GRN "\x1B[32m"  ///< ANSI escape sequence: green
-#define YEL "\x1B[33m"  ///< ANSI escape sequence: yellow
+#define YEL "\x1B[33m" ///< ANSI escape sequence: yellow
 // #define BLU "\x1B[34m"  ///< ANSI escape sequence: blue
 // #define MAG "\x1B[35m"  ///< ANSI escape sequence: magenta
-#define CYN "\x1B[36m"  ///< ANSI escape sequence: cyan
+#define CYN "\x1B[36m" ///< ANSI escape sequence: cyan
 // #define WHT "\x1B[37m"  ///< ANSI escape sequence: white
 
 #define FMT_CID CYN "%" PRIx64 NRM

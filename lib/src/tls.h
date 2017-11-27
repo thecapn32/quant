@@ -36,6 +36,9 @@ struct q_stream;
 struct w_iov;
 
 
+#define AEAD_LEN 16
+
+
 struct tls {
     ptls_t * t;
     uint8_t in_sec[PTLS_MAX_DIGEST_SIZE];
