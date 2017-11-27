@@ -11,7 +11,7 @@ s=${2:-quant}
 # port to run servers on
 addr=127.0.0.1
 port=4433 # mozquic server can only run on 4433 at the moment
-path=/ #index.html
+path=/index.html
 dir=/Users/lars/Sites/lars/output
 cert=/etc/letsencrypt/live/slate.eggert.org/fullchain.pem
 key=/etc/letsencrypt/live/slate.eggert.org/privkey.pem
@@ -51,13 +51,14 @@ case $c in
                         -p $path $addr $port"
                 ;;
         minq)
-                cc="env MINQ_LOG=\* GOPATH=$(pwd)/external/go go run \
+                cc="env MINQ_LOG=aead,connection,ack,handshake,tls,server,udp \
+                        GOPATH=$(pwd)/external/go go run \
                         external/go/src/github.com/ekr/minq/bin/client/main.go \
-                        -addr $addr:$port -http $path  2>&1 | \
-                                grep -v -E 'Frame type (byte )?0'"
+                        -addr $addr:$port -http $path"
                 ;;
         ngtcp2)
-                cc="echo GET / | external/ngtcp2-prefix/src/ngtcp2/examples/client \
+                cc="echo GET / | \
+                        external/ngtcp2-prefix/src/ngtcp2/examples/client \
                         -i $addr $port"
                 ;;
         mozquic)
@@ -89,15 +90,16 @@ case $s in
                 sc="bin/server -v5 -i vboxnet3 -p $port -d $dir"
                 ;;
         quicly)
-                sc="external/usr/local/bin/cli -a hq-05 -l /tmp/quicly-s.log -v \
+                sc="external/usr/local/bin/cli \
+                        -l /tmp/quicly-s.log -v \
                         -k $key -c $cert $addr $port"
                 ;;
         minq)
-                sc="env MINQ_LOG=\* GOPATH=$(pwd)/external/go go run \
+                sc="env MINQ_LOG=aead,connection,ack,handshake,tls,server,udp \
+                        GOPATH=$(pwd)/external/go go run \
                         external/go/src/github.com/ekr/minq/bin/server/main.go \
-                        -addr $addr:$port -http -key $key \
-                        -cert $cert -server-name $addr 2>&1 \
-                        | grep -v -E 'Frame type (byte )?0'"
+                        -addr $addr:$port -http -key $key -stateless-reset \
+                        -cert $cert -server-name $addr"
                 ;;
         ngtcp2)
                 sc="external/ngtcp2-prefix/src/ngtcp2/examples/server \
@@ -114,20 +116,9 @@ case $s in
                         -p $port -k $key -c $cert"
                 ;;
         ats)
-                cat <<EOF > external/etc/trafficserver/records.config
-                    CONFIG proxy.config.diags.debug.enabled INT 1
-                    CONFIG proxy.config.diags.debug.tags STRING quic
-                    CONFIG proxy.config.http.server_ports STRING $port:quic
-                    CONFIG proxy.config.quic.no_activity_timeout_in INT 10
-                    CONFIG proxy.config.ssl.server.cipher_suite STRING TLS13-AES-128-GCM-SHA256:TLS13-AES-128-GCM-SHA256:TLS13-CHACHA20-POLY1305-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-DSS-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA256:DHE-RSA-AES128-SHA256:DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA:DHE-DSS-AES256-SHA:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:AES256-GCM-SHA384:AES128-GCM-SHA256:AES256-SHA256:AES128-SHA256:AES256-SHA:AES128-SHA:DES-CBC3-SHA:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!aECDH:!EDH-DSS-DES-CBC3-SHA:!EDH-RSA-DES-CBC3-SHA:!KRB5-DES-CBC3-SHA
-                    CONFIG proxy.config.udp.threads INT 1
-EOF
-                cat <<EOF > external/etc/trafficserver/ssl_multicert.config
-                    dest_ip=* ssl_cert_name=$cert ssl_key_name=$key
-EOF
-                cat <<EOF > external/etc/trafficserver/remap.config
-                    map / http://127.0.0.1:8000/
-EOF
+                sed -i"" -e "s/.*proxy.config.http.server_ports.*/CONFIG proxy.config.http.server_ports STRING $port:quic/g" external/etc/trafficserver/records.config
+                echo "dest_ip=* ssl_cert_name=$cert ssl_key_name=$key" > external/etc/trafficserver/ssl_multicert.config
+                echo "map / http://127.0.0.1:8000/" > external/etc/trafficserver/remap.config
                 sc="external/bin/traffic_server"
                 ;;
 esac
@@ -148,6 +139,9 @@ tmux -CC \
         new-session "sleep $delay; $cc" \; \
         split-window -h "$sc" \; \
         set remain-on-exit on
+
+# ats doesn't exit cleanly
+pkill traffic_server
 
 # if we are on MacOS X, unconfigure the firewall
 if [ -x /usr/sbin/dnctl ]; then

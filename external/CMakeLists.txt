@@ -133,7 +133,7 @@ externalproject_add(openssl
   GIT_SHALLOW 1
   CONFIGURE_COMMAND ./config --prefix=${CMAKE_CURRENT_BINARY_DIR} enable-tls1_3
   BUILD_IN_SOURCE 1
-  BUILD_COMMAND make -j16
+  BUILD_COMMAND make -j8
   INSTALL_COMMAND make install_sw
   EXCLUDE_FROM_ALL 1
 )
@@ -149,7 +149,7 @@ externalproject_add(ngtcp2
       --enable-werror --enable-debug --prefix=${CMAKE_CURRENT_BINARY_DIR}
       --program-prefix=ngtcp2
   BUILD_IN_SOURCE 1
-  BUILD_COMMAND make -j16
+  BUILD_COMMAND make -j8
   EXCLUDE_FROM_ALL 1
 )
 
@@ -188,7 +188,7 @@ externalproject_add(mozquic
   PATCH_COMMAND sed -i "" -e "s/-Werror//g" Makefile
   CONFIGURE_COMMAND ""
   BUILD_IN_SOURCE 1
-  BUILD_COMMAND make -j16
+  BUILD_COMMAND make -j8
   INSTALL_COMMAND ""
   EXCLUDE_FROM_ALL 1
 )
@@ -219,7 +219,7 @@ externalproject_add(picoquic
 # Use ats for testing against
 externalproject_add(ats
   DEPENDS openssl
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/apache/trafficserver.git
   GIT_SHALLOW 1
   GIT_TAG quic-latest
@@ -228,7 +228,17 @@ externalproject_add(ats
     ./configure PKG_CONFIG_PATH=${CMAKE_CURRENT_BINARY_DIR}/lib/pkgconfig
       --enable-debug --prefix=${CMAKE_CURRENT_BINARY_DIR}
   BUILD_IN_SOURCE 1
-  BUILD_COMMAND make -j16
+  BUILD_COMMAND make -j8
+  INSTALL_COMMAND
+    make install &&
+    echo "CONFIG proxy.config.udp.threads INT 1" >> ${CMAKE_CURRENT_BINARY_DIR}/etc/trafficserver/records.config &&
+    echo "CONFIG proxy.config.quic.no_activity_timeout_in INT 10" >> ${CMAKE_CURRENT_BINARY_DIR}/etc/trafficserver/records.config &&
+    sed -i "" -E
+      -e "s/.*proxy.config.diags.debug.enabled.*/CONFIG proxy.config.diags.debug.enabled INT 1/g"
+      -e "s/.*proxy.config.diags.debug.tags.*/CONFIG proxy.config.diags.debug.tags STRING quic/g"
+      -e "s/.*proxy.config.http.server_ports.*/CONFIG proxy.config.http.server_ports STRING 4433:quic/g"
+      -e "s/.*proxy.config.ssl.server.cipher_suite.*/CONFIG proxy.config.ssl.server.cipher_suite STRING TLS13-AES-128-GCM-SHA256:TLS13-AES-128-GCM-SHA256:TLS13-CHACHA20-POLY1305-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-DSS-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA256:DHE-RSA-AES128-SHA256:DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA:DHE-DSS-AES256-SHA:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:AES256-GCM-SHA384:AES128-GCM-SHA256:AES256-SHA256:AES128-SHA256:AES256-SHA:AES128-SHA:DES-CBC3-SHA:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!aECDH:!EDH-DSS-DES-CBC3-SHA:!EDH-RSA-DES-CBC3-SHA:!KRB5-DES-CBC3-SHA/g"
+      ${CMAKE_CURRENT_BINARY_DIR}/etc/trafficserver/records.config
   EXCLUDE_FROM_ALL 1
 )
 
