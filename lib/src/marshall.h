@@ -30,11 +30,15 @@
 
 extern uint16_t varint_sizeof(const uint64_t v);
 
-/// Encodes the lower @p src_len bytes of host byte-order data contained in @p
-/// src into network byte-order at at position @p pos of buffer @p buf (which
-/// has total length @p buf_len), using printf format string @p fmt to format
-/// the data for debug logging. Macro increases @p pos by @p len as a side
-/// effect.
+
+#ifndef NDEBUG
+/// If @p src_len is given, encodes the lower @p src_len bytes of host
+/// byte-order data contained in @p src into network byte-order at at position
+/// @p pos of buffer @p buf (which has total length @p buf_len), using printf
+/// format string @p fmt to format the data for debug logging.
+///
+/// For varint encoding (@p src_len is zero), @p src *must* point to an
+/// uint64_t.
 ///
 /// @param      buf      Buffer to decode from.
 /// @param      buf_len  Buffer length.
@@ -43,52 +47,75 @@ extern uint16_t varint_sizeof(const uint64_t v);
 /// @param      src_len  Length to encode.
 /// @param      fmt      Printf format for debug logging.
 ///
-
+/// @return     Buffer offset of byte following the encoded data.
+///
 #define enc(buf, buf_len, pos, src, src_len, fmt)                              \
     marshall_enc(buf, buf_len, pos, src, src_len,                              \
                  "enc %s = " fmt NRM " into %u byte%s (%s) at %s[%u..%u]",     \
                  __func__, __FILE__, __LINE__, #buf, #src)
+#else
+#define enc(buf, buf_len, pos, src, src_len, fmt)                              \
+    marshall_enc(buf, buf_len, pos, src, src_len)
+#endif
+
 
 extern uint16_t marshall_enc(uint8_t * const buf,
                              const uint16_t buf_len,
                              const uint16_t pos,
                              const void * const src,
-                             const uint16_t src_len,
+                             const uint16_t src_len
+#ifndef NDEBUG
+                             ,
                              const char * const fmt,
                              const char * const func,
                              const char * const file,
                              const unsigned line,
                              const char * const buf_str,
-                             const char * const src_str);
+                             const char * const src_str
+#endif
+);
 
 
-/// Decodes @p len bytes of network byte-order data starting at position @p pos
-/// of buffer @p buf (which has total length @p buf_len) info variable @p dst in
-/// host byte-order, using printf format string @p fmt to format the data for
-/// debug logging. Macro increases @p pos by @p len as a side effect.
+#ifndef NDEBUG
+/// Decodes @p dst_len bytes (if given, otherwise varint encoding is assumed) of
+/// network byte-order data starting at position @p pos of buffer @p buf (which
+/// has total length @p buf_len) info variable @p dst in host byte-order, using
+/// printf format string @p fmt to format the data for debug logging.
+///
+/// For varint decoding (@p dst_len is zero), @p dst *must* point to an
+/// uint64_t.
 ///
 /// @param      dst      Destination to decode into.
 /// @param      buf      Buffer to decode from.
 /// @param      buf_len  Buffer length.
 /// @param      pos      Buffer position to start decoding from.
-/// @param      len      Length to decode.
+/// @param      dst_len  Length to decode. Zero for varint decoding.
 /// @param      fmt      Printf format for debug logging.
 ///
-
-
+/// @return     Buffer offset of byte following the decoded data.
+///
 #define dec(dst, buf, buf_len, pos, dst_len, fmt)                              \
     marshall_dec(dst, buf, buf_len, pos, dst_len,                              \
                  "dec %u byte%s (%s) from %s[%u..%u] into %s = " fmt NRM,      \
                  __func__, __FILE__, __LINE__, #buf, #dst)
+#else
+#define dec(dst, buf, buf_len, pos, dst_len, fmt)                              \
+    marshall_dec(dst, buf, buf_len, pos, dst_len)
+#endif
+
 
 extern uint16_t marshall_dec(void * const dst,
                              const uint8_t * const buf,
                              const uint16_t buf_len,
                              const uint16_t pos,
-                             const uint16_t dst_len,
+                             const uint16_t dst_len
+#ifndef NDEBUG
+                             ,
                              const char * const fmt,
                              const char * const func,
                              const char * const file,
                              const unsigned line,
                              const char * const buf_str,
-                             const char * const dst_str);
+                             const char * const dst_str
+#endif
+);

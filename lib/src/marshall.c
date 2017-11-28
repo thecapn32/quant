@@ -65,24 +65,34 @@ uint16_t __attribute__((const)) varint_sizeof(const uint64_t v)
 }
 
 
+#ifndef NDEBUG
 #define log_enc(type, fmt)                                                     \
     util_warn(DBG, func, file, line, fmt,                                      \
               (src_str[0] == '&' ? &src_str[1] : src_str), *(const type *)src, \
               i - pos, plural(i - pos), (src_len ? "fix" : "var"), buf_str,    \
               pos, i - 1)
+#else
+#define log_enc(type, fmt)                                                     \
+    do {                                                                       \
+    } while (0)
+#endif
 
 
 uint16_t __attribute__((nonnull)) marshall_enc(uint8_t * const buf,
                                                const uint16_t buf_len,
                                                const uint16_t pos,
                                                const void * const src,
-                                               const uint16_t src_len,
+                                               const uint16_t src_len
+#ifndef NDEBUG
+                                               ,
                                                const char * const fmt,
                                                const char * const func,
                                                const char * const file,
                                                const unsigned line,
                                                const char * const buf_str,
-                                               const char * const src_str)
+                                               const char * const src_str
+#endif
+)
 {
     uint16_t i = pos;
 
@@ -155,10 +165,16 @@ uint16_t __attribute__((nonnull)) marshall_enc(uint8_t * const buf,
 }
 
 
+#ifndef NDEBUG
 #define log_dec(type)                                                          \
     util_warn(DBG, func, file, line, fmt, i - pos, plural(i - pos),            \
               (dst_len ? "fix" : "var"), buf_str, pos, i - 1, dst_str,         \
               *(const type *)dst)
+#else
+#define log_dec(type)                                                          \
+    do {                                                                       \
+    } while (0)
+#endif
 
 
 extern uint16_t __attribute__((nonnull))
@@ -166,13 +182,17 @@ marshall_dec(void * const dst,
              const uint8_t * const buf,
              const uint16_t buf_len,
              const uint16_t pos,
-             const uint16_t dst_len,
+             const uint16_t dst_len
+#ifndef NDEBUG
+             ,
              const char * const fmt,
              const char * const func,
              const char * const file,
              const unsigned line,
              const char * const buf_str,
-             const char * const dst_str)
+             const char * const dst_str
+#endif
+)
 {
     uint16_t i = pos;
 
