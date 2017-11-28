@@ -213,14 +213,14 @@ bool enc_pkt(struct q_stream * const s,
             diet_remove(&c->recv, meta(v).nr);
         }
     } else
-        i = enc(v->buf, v->len, i, &meta(v).nr, pkt_nr_len, FMT_PNR);
+        i = enc(v->buf, v->len, i, &meta(v).nr, pkt_nr_len, FMT_PNR32);
 
     const uint16_t hdr_len = i;
 
     if (c->state != CONN_STAT_VERS_REJ && c->state != CONN_STAT_RETRY &&
         !splay_empty(&c->recv)) {
         meta(v).ack_header_pos = i;
-        i += enc_ack_frame(c, v, i);
+        i = enc_ack_frame(c, v, i);
     } else
         meta(v).ack_header_pos = 0;
 
@@ -235,22 +235,23 @@ bool enc_pkt(struct q_stream * const s,
     }
     if (s->out_off_max && s->out_off + 2 * MAX_PKT_LEN > s->out_off_max)
         // if we have less than two full packets' worth of window, notify
-        i += enc_stream_blocked_frame(s, v, i);
+        i = enc_stream_blocked_frame(s, v, i);
 
     // TODO: Unclear whether this is the best way to send this in the long run.
     // warn(NTE, "str %u in_off %u/%u", s->id, s->in_off, s->in_off_max);
-    if (s->open_win || s->in_off + MAX_PKT_LEN > s->in_off_max) {
+    if (c->state >= CONN_STAT_ESTB &&
+        (s->open_win || s->in_off + MAX_PKT_LEN > s->in_off_max)) {
         // increase receive window
         s->in_off_max += 0x1000;
-        i += enc_max_stream_data_frame(s, v, i);
+        i = enc_max_stream_data_frame(s, v, i);
         s->open_win = false;
     }
 
     // TODO: need to RTX most recent MAX_STREAM_DATA and MAX_DATA on RTX
 
     if (c->state == CONN_STAT_CLSD) {
-        i += enc_close_frame(v, i, FRAM_TYPE_CONN_CLSE, CONN_CLSE_ERR_NO_ERROR,
-                             "QUANT SAYS GOOD-BYE");
+        i = enc_close_frame(v, i, FRAM_TYPE_CONN_CLSE, CONN_CLSE_ERR_NO_ERROR,
+                            "QUANT SAYS GOOD-BYE");
         maybe_api_return(q_close, c);
     }
 
@@ -272,7 +273,7 @@ bool enc_pkt(struct q_stream * const s,
     }
 
     if (c->state == CONN_STAT_VERS_SENT)
-        i += enc_padding_frame(v, i, MIN_INI_LEN - i - AEAD_LEN);
+        i = enc_padding_frame(v, i, MIN_INI_LEN - i - AEAD_LEN);
     v->len = i;
 
     // alloc a new buffer to encrypt/sign into for TX

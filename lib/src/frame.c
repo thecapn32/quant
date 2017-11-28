@@ -60,10 +60,10 @@ dec_stream_frame(struct q_conn * const c,
                  struct w_iov * const v,
                  const uint16_t pos)
 {
-    uint16_t i = meta(v).stream_header_pos = pos;
+    meta(v).stream_header_pos = pos;
 
     uint8_t type = 0;
-    i = dec(&type, v->buf, v->len, i, sizeof(type), "0x%02x");
+    uint16_t i = dec(&type, v->buf, v->len, pos, sizeof(type), "0x%02x");
 
     uint64_t sid = 0;
     i = dec(&sid, v->buf, v->len, i, 0, FMT_SID);
@@ -93,10 +93,10 @@ dec_stream_frame(struct q_conn * const c,
                  sid, conn_type(c), c->id);
             goto done;
         }
-        ensure((sid & STRM_FL_INI) == c->is_clnt,
+        ensure(is_set(STRM_FL_INI, sid) == c->is_clnt,
                "got sid %" PRIu64 " but am %s", sid, conn_type(c));
-        ensure((sid & STRM_FL_DIR) == 0,
-               "TODO: unidirectional streams not supported yet");
+        ensure(is_set(STRM_FL_DIR, sid) == false,
+               "TODO: unidirectional streams not supported yet %" PRIu64, sid);
         s = new_stream(c, sid);
     }
 
@@ -178,9 +178,8 @@ uint16_t dec_ack_frame(
     void (*on_each_ack)(struct q_conn * const, const uint64_t),
     void (*after_ack)(struct q_conn * const))
 {
-    uint16_t i = pos;
     uint8_t type = 0;
-    i = dec(&type, v->buf, v->len, i, sizeof(type), "0x%02x");
+    uint16_t i = dec(&type, v->buf, v->len, pos, sizeof(type), "0x%02x");
 
     uint64_t lg_ack = 0;
     i = dec(&lg_ack, v->buf, v->len, i, 0, FMT_PNR);
@@ -248,17 +247,15 @@ dec_reset_stream_frame(struct q_conn * const c,
 
     return i;
 }
-
+#endif
 
 static uint16_t __attribute__((nonnull))
 dec_close_frame(struct q_conn * const c __attribute__((unused)),
                 const struct w_iov * const v,
                 const uint16_t pos)
 {
-    uint16_t i = pos;
-
     uint8_t type = 0;
-    i = dec(&type, v->buf, v->len, i, sizeof(type), "0x%02x");
+    uint16_t i = dec(&type, v->buf, v->len, pos, sizeof(type), "0x%02x");
 
     uint16_t err_code = 0;
     i = dec(&err_code, v->buf, v->len, i, sizeof(err_code), "0x%04x");
@@ -280,16 +277,13 @@ dec_close_frame(struct q_conn * const c __attribute__((unused)),
     return i;
 }
 
-
 static uint16_t __attribute__((nonnull))
 dec_max_stream_data_frame(struct q_conn * const c,
                           const struct w_iov * const v,
                           const uint16_t pos)
 {
-    uint16_t i = pos + 1;
-
-    uint32_t sid = 0;
-    i = dec(&sid, v->buf, v->len, i, 0, FMT_SID);
+    uint64_t sid = 0;
+    uint16_t i = dec(&sid, v->buf, v->len, pos + 1, 0, FMT_SID);
     struct q_stream * const s = get_stream(c, sid);
     ensure(s, "have stream %u", sid);
     i = dec(&s->out_off_max, v->buf, v->len, i, 0, "%" PRIu64);
@@ -298,7 +292,6 @@ dec_max_stream_data_frame(struct q_conn * const c,
 
     return i;
 }
-#endif
 
 
 static uint16_t __attribute__((nonnull))
@@ -319,16 +312,13 @@ dec_max_data_frame(struct q_conn * const c,
 }
 
 
-#if 0
 static uint16_t __attribute__((nonnull))
 dec_stream_blocked_frame(struct q_conn * const c,
                          const struct w_iov * const v,
                          const uint16_t pos)
 {
-    uint16_t i = pos + 1;
-
-    uint32_t sid = 0;
-    i = dec(&sid, v->buf, v->len, i, 0, FMT_SID);
+    uint64_t sid = 0;
+    const uint16_t i = dec(&sid, v->buf, v->len, pos + 1, 0, FMT_SID);
     struct q_stream * const s = get_stream(c, sid);
     ensure(s, "have stream %u", sid);
 
@@ -337,7 +327,6 @@ dec_stream_blocked_frame(struct q_conn * const c,
 
     return i;
 }
-#endif
 
 
 static uint16_t __attribute__((nonnull))
@@ -345,20 +334,17 @@ dec_stop_sending_frame(struct q_conn * const c,
                        const struct w_iov * const v,
                        const uint16_t pos)
 {
-    uint16_t i = pos + 1;
-
     uint64_t sid = 0;
-    i = dec(&sid, v->buf, v->len, i, 0, FMT_SID);
+    uint16_t i = dec(&sid, v->buf, v->len, pos + 1, 0, FMT_SID);
     struct q_stream * const s = get_stream(c, sid);
     ensure(s, "have stream %u", sid);
 
-    uint16_t err_code = 0;
-    i = dec(&err_code, v->buf, v->len, i, sizeof(err_code), "%0x04x");
-
     warn(CRT, "TODO: handle STOP_SENDING");
 
-    return i;
+    uint16_t err_code = 0;
+    return dec(&err_code, v->buf, v->len, i, sizeof(err_code), "%0x04x");
 }
+
 
 void dec_frames(struct q_conn * const c, struct w_iov * v)
 {
@@ -411,22 +397,24 @@ void dec_frames(struct q_conn * const c, struct w_iov * v)
                 i = dec_reset_stream_frame(c, v, i);
                 // c->needs_tx = true;
                 break;
+#endif
 
             case FRAM_TYPE_CONN_CLSE:
             case FRAM_TYPE_APPL_CLSE:
                 i = dec_close_frame(c, v, i);
                 break;
 
+#if 0
             case FRAM_TYPE_PING:
                 warn(INF, "ping frame in [%u]", i);
                 i++;
                 c->needs_tx = true;
                 break;
+#endif
 
             case FRAM_TYPE_MAX_STRM_DATA:
                 i = dec_max_stream_data_frame(c, v, i);
                 break;
-#endif
 
             case FRAM_TYPE_MAX_STRM_ID:
                 i = dec_max_stream_id_frame(c, v, i);
@@ -435,11 +423,11 @@ void dec_frames(struct q_conn * const c, struct w_iov * v)
             case FRAM_TYPE_MAX_DATA:
                 i = dec_max_data_frame(c, v, i);
                 break;
-#if 0
+
             case FRAM_TYPE_STRM_BLCK:
                 i = dec_stream_blocked_frame(c, v, i);
                 break;
-#endif
+
             case FRAM_TYPE_STOP_SEND:
                 i = dec_stop_sending_frame(c, v, i);
                 break;
@@ -464,7 +452,7 @@ uint16_t enc_padding_frame(struct w_iov * const v,
     warn(DBG, "encoding padding frame into [%u..%u]", pos, pos + len - 1);
     memset(&v->buf[pos], FRAM_TYPE_PAD, len);
     bit_set(meta(v).frames, FRAM_TYPE_PAD);
-    return len;
+    return pos + len;
 }
 
 
@@ -498,7 +486,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
         i = enc(v->buf, v->len, i, &ack_block, 0, "%" PRIu64);
         prev_lo = b->lo;
     }
-    return i - pos;
+    return i;
 }
 
 
@@ -555,9 +543,8 @@ uint16_t enc_close_frame(struct w_iov * const v,
                          const char * const reas)
 {
     bit_set(meta(v).frames, type);
-    uint16_t i = pos;
 
-    i = enc(v->buf, v->len, i, &type, sizeof(type), "0x%02x");
+    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
     i = enc(v->buf, v->len, i, &err_code, sizeof(err_code), "0x%04x");
 
     const uint64_t rlen = MIN(strlen(reas), v->len - i);
@@ -566,7 +553,7 @@ uint16_t enc_close_frame(struct w_iov * const v,
     memcpy(&v->buf[i], reas, rlen);
     warn(DBG, "enc %u-byte reason phrase into [%u..%u]", rlen, i, i + rlen - 1);
 
-    return i - pos + (uint16_t)rlen;
+    return i + (uint16_t)rlen;
 }
 
 
@@ -575,14 +562,11 @@ uint16_t enc_max_stream_data_frame(struct q_stream * const s,
                                    const uint16_t pos)
 {
     bit_set(meta(v).frames, FRAM_TYPE_MAX_STRM_DATA);
-    uint16_t i = pos;
 
     const uint8_t type = FRAM_TYPE_MAX_STRM_DATA;
-    i = enc(v->buf, v->len, i, &type, sizeof(type), "0x%02x");
+    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
     i = enc(v->buf, v->len, i, &s->id, 0, FMT_SID);
-    i = enc(v->buf, v->len, i, &s->in_off_max, 0, "%" PRIu64);
-
-    return i;
+    return enc(v->buf, v->len, i, &s->in_off_max, 0, "%" PRIu64);
 }
 
 
@@ -591,11 +575,8 @@ uint16_t enc_stream_blocked_frame(struct q_stream * const s,
                                   const uint16_t pos)
 {
     bit_set(meta(v).frames, FRAM_TYPE_STRM_BLCK);
-    uint16_t i = pos;
 
     const uint8_t type = FRAM_TYPE_STRM_BLCK;
-    i = enc(v->buf, v->len, i, &type, sizeof(type), "0x%02x");
-    i = enc(v->buf, v->len, i, &s->id, 0, FMT_SID);
-
-    return i;
+    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
+    return enc(v->buf, v->len, i, &s->id, 0, FMT_SID);
 }
