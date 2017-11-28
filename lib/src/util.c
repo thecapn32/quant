@@ -47,7 +47,7 @@ void q_write_str(void * const q,
 
     // chunk up string
     const char * i = str;
-    struct w_iov * v;
+    struct w_iov * v = 0;
     sq_foreach (v, &o, next) {
         strncpy((char *)v->buf, i, v->len);
         i += v->len;

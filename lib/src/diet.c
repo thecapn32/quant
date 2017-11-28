@@ -281,7 +281,7 @@ void diet_free(struct diet * const t)
 
 size_t diet_to_str(char * const str, const size_t len, struct diet * const t)
 {
-    struct ival * i;
+    struct ival * i = 0;
     size_t pos = 0;
     str[0] = 0;
     splay_foreach (i, diet, t) {

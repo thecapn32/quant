@@ -45,12 +45,10 @@
 #if defined(HAVE_ENDIAN_H)
 // e.g., Linux
 #include <endian.h>
-#define ntohll be64toh
 #define htonll htobe64
 #elif defined(HAVE_SYS_ENDIAN_H)
 // e.g., FreeBSD
 #include <sys/endian.h>
-#define ntohll be64toh
 #define htonll htobe64
 #else
 #include <arpa/inet.h>
@@ -501,7 +499,7 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
         struct w_iov_sq o = sq_head_initializer(o);
         q_alloc(w_engine(s->c->sock), &o, (uint32_t)tb.off);
         uint8_t * data = tb.base;
-        struct w_iov * ov;
+        struct w_iov * ov = 0;
         sq_foreach (ov, &o, next) {
             memcpy(ov->buf, data, ov->len);
             data += ov->len;
@@ -524,8 +522,8 @@ void init_tls_ctx(const char * const cert, const char * const key)
         fp = fopen(key, "rbe");
         ensure(fp, "could not open key %s", key);
         EVP_PKEY * const pkey = PEM_read_PrivateKey(fp, 0, 0, 0);
-        ensure(pkey, "failed to load private key");
         fclose(fp);
+        ensure(pkey, "failed to load private key");
         ptls_openssl_init_sign_certificate(&sign_cert, pkey);
         EVP_PKEY_free(pkey);
     }

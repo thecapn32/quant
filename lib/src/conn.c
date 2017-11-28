@@ -283,7 +283,7 @@ tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
 void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
 {
     bool did_tx = false;
-    struct q_stream * s;
+    struct q_stream * s = 0;
     splay_foreach (s, stream, &c->streams) {
         if (!s->blocked && !sq_empty(&s->out) &&
             sq_len(&s->out) > s->out_ack_cnt) {

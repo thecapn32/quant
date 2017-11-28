@@ -189,7 +189,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
 void q_alloc(void * const w, struct w_iov_sq * const q, const uint32_t len)
 {
     w_alloc_len(w, q, len, MAX_PKT_LEN - AEAD_LEN - Q_OFFSET, Q_OFFSET);
-    struct w_iov * v;
+    struct w_iov * v = 0;
     sq_foreach (v, q, next) {
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         // warn(DBG, "q_alloc idx %u len %u", w_iov_idx(v), v->len);
@@ -199,7 +199,7 @@ void q_alloc(void * const w, struct w_iov_sq * const q, const uint32_t len)
 
 void q_free(struct w_iov_sq * const q)
 {
-    struct w_iov * v;
+    struct w_iov * v = 0;
     sq_foreach (v, q, next) {
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         meta(v) = (struct pkt_meta){0};

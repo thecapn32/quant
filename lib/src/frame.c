@@ -262,7 +262,7 @@ dec_close_frame(struct q_conn * const c __attribute__((unused)),
 
     uint64_t reas_len = 0;
     i = dec(&reas_len, v->buf, v->len, i, 0, "%" PRIu64);
-    ensure(reas_len <= v->len - i, "reason_len invalid");
+    ensure(reas_len + i <= v->len, "reason_len invalid");
 
     if (reas_len) {
         char reas_phr[UINT16_MAX];
@@ -473,7 +473,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     const uint64_t block_cnt = diet_cnt(&c->recv) - 1;
     i = enc(v->buf, v->len, i, &block_cnt, 0, "%" PRIu64);
 
-    struct ival * b;
+    struct ival * b = 0;
     uint64_t prev_lo = 0;
     splay_foreach_rev (b, diet, &c->recv) {
         if (prev_lo) {

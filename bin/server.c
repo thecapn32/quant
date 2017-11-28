@@ -175,7 +175,7 @@ int main(int argc, char * argv[])
     struct q_stream * s = q_read(c, &i);
     d.s = s;
 
-    struct w_iov * v;
+    struct w_iov * v = 0;
     sq_foreach (v, &i, next) {
         const size_t parsed =
             http_parser_execute(&parser, &settings, (char *)v->buf, v->len);
