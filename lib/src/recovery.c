@@ -256,7 +256,7 @@ void on_pkt_sent(struct q_conn * const c, struct w_iov * const v)
 
 void on_ack_rx_1(struct q_conn * const c,
                  const uint64_t ack,
-                 const uint16_t ack_delay)
+                 const uint64_t ack_delay)
 {
     // if the largest ACKed is newly ACKed, update the RTT
     if (c->rec.lg_acked >= ack)

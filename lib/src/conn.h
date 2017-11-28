@@ -66,7 +66,9 @@ struct q_conn {
     uint8_t state; ///< State of the connection.
 
     uint16_t max_packet_size;
-    uint32_t max_stream_id;
+    uint16_t idle_timeout;
+    uint8_t ack_delay_exponent;
+    uint8_t _unused;
     uint64_t max_stream_data;
 
     ev_timer idle_alarm;
@@ -86,12 +88,9 @@ struct q_conn {
     struct recovery rec; ///< Loss recovery state.
     struct tls tls;      ///< TLS state.
 
+    uint64_t max_stream_id;
     uint64_t max_data;
-    uint16_t idle_timeout;
-    uint8_t ack_delay_exponent;
     uint8_t stateless_reset_token[16];
-
-    uint8_t _unused[5];
 };
 
 

@@ -75,7 +75,7 @@ extern uint16_t __attribute__((nonnull(1, 2, 5))) dec_ack_frame(
     struct q_conn * const c,
     const struct w_iov * const v,
     const uint16_t pos,
-    void (*before_ack)(struct q_conn * const, const uint64_t, const uint16_t),
+    void (*before_ack)(struct q_conn * const, const uint64_t, const uint64_t),
     void (*on_each_ack)(struct q_conn * const, const uint64_t),
     void (*after_ack)(struct q_conn * const));
 

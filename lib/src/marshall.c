@@ -156,7 +156,7 @@ uint16_t __attribute__((nonnull)) marshall_enc(uint8_t * const buf,
 
 
 #define log_dec(type)                                                          \
-    util_warn(DBG, func, file, line, fmt, sizeof(type), plural(sizeof(type)),  \
+    util_warn(DBG, func, file, line, fmt, i - pos, plural(i - pos),            \
               (dst_len ? "fix" : "var"), buf_str, pos, i - 1, dst_str,         \
               *(const type *)dst)
 
@@ -183,14 +183,14 @@ marshall_dec(void * const dst,
             ensure(pos + 1 <= buf_len, "decoding from pos %u > buf len %u",
                    pos + 1, buf_len);
             *(uint8_t *)dst = buf[i++];
-            log_dec(uint8_t);
+            log_dec(uint64_t);
 
         } else if (buf[pos] < 0x80) {
             ensure(pos + 2 <= buf_len, "decoding from pos %u > buf len %u",
                    pos + 2, buf_len);
             *(uint16_t *)dst = (uint16_t)((buf[i++] & 0x3f) << 8);
             *(uint16_t *)dst |= buf[i++];
-            log_dec(uint16_t);
+            log_dec(uint64_t);
 
         } else if (buf[pos] < 0xc0) {
             ensure(pos + 4 <= buf_len, "decoding from pos %u > buf len %u",
@@ -199,7 +199,7 @@ marshall_dec(void * const dst,
                 ntohl(*(const uint32_t *)(const void *)&buf[pos]) &
                 0x3fffffffUL;
             i += 4;
-            log_dec(uint32_t);
+            log_dec(uint64_t);
 
         } else {
             ensure(pos + 8 <= buf_len, "decoding from pos %u > buf len %u",

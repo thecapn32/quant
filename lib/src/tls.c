@@ -232,17 +232,17 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             break;
 
         case TP_INITIAL_MAX_STREAM_ID:
-            dec_tp(&c->max_stream_id, sizeof(c->max_stream_id));
+            dec_tp(&c->max_stream_id, sizeof(uint32_t));
             break;
 
         case TP_IDLE_TIMEOUT:
-            dec_tp(&c->idle_timeout, sizeof(c->idle_timeout));
+            dec_tp(&c->idle_timeout, sizeof(uint16_t));
             if (c->idle_timeout > 600)
                 warn(ERR, "idle timeout %u > 600", c->idle_timeout);
             break;
 
         case TP_MAX_PACKET_SIZE:
-            dec_tp(&c->max_packet_size, sizeof(c->max_packet_size));
+            dec_tp(&c->max_packet_size, sizeof(uint16_t));
             if (c->max_packet_size < 1200 || c->max_packet_size > 65527)
                 warn(ERR, "max_packet_size %u invalid", c->max_packet_size);
             break;
@@ -255,7 +255,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         }
 
         case TP_ACK_DELAY_EXPONENT:
-            dec_tp(&c->ack_delay_exponent, sizeof(c->ack_delay_exponent));
+            dec_tp(&c->ack_delay_exponent, sizeof(uint8_t));
             if (c->ack_delay_exponent > 20)
                 warn(ERR, "ack_delay_exponent %u invalid",
                      c->ack_delay_exponent);

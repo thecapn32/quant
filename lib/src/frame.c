@@ -72,9 +72,9 @@ dec_stream_frame(struct q_conn * const c,
     if (is_set(F_STREAM_OFF, type))
         i = dec(&meta(v).in_off, v->buf, v->len, i, 0, "%" PRIu64);
 
-    uint16_t l;
+    uint64_t l;
     if (is_set(F_STREAM_LEN, type))
-        i = dec(&l, v->buf, v->len, i, 0, "%u");
+        i = dec(&l, v->buf, v->len, i, 0, "%" PRIu64);
     else
         // stream data extends to end of packet
         l = v->len - i;
@@ -82,7 +82,7 @@ dec_stream_frame(struct q_conn * const c,
     ensure(l || is_set(F_STREAM_FIN, type), "len %u > 0 or FIN", l);
 
     meta(v).stream_data_start = i;
-    meta(v).stream_data_end = l + i;
+    meta(v).stream_data_end = (uint16_t)l + i;
 
     // deliver data into stream
     struct q_stream * s = get_stream(c, sid);
@@ -94,8 +94,8 @@ dec_stream_frame(struct q_conn * const c,
                  sid, conn_type(c), c->id);
             goto done;
         }
-        ensure((sid & STRM_FL_INI) != c->is_clnt,
-               "got sid %" PRIu64 "but am %s", conn_type(c));
+        ensure((sid & STRM_FL_INI) == c->is_clnt,
+               "got sid %" PRIu64 " but am %s", sid, conn_type(c));
         ensure((sid & STRM_FL_DIR) == 0,
                "TODO: unidirectional streams not supported yet");
         s = new_stream(c, sid);
@@ -171,61 +171,34 @@ done:
 }
 
 
-// Convert largest ACK length encoded in flags to bytes
-static uint8_t __attribute__((const)) dec_lg_ack_len(const uint8_t flags)
-{
-    const uint8_t l = (flags & 0x0C) >> 2;
-    ensure(l <= 3, "cannot decode largest ACK length %u", l);
-    const uint8_t dec[] = {1, 2, 4, 8};
-    return dec[l];
-}
-
-
-// Convert length of ACK block length encoded in flags to bytes
-static uint8_t __attribute__((const)) dec_len_ack_block_len(const uint8_t flags)
-{
-    const uint8_t l = flags & 0x03;
-    ensure(l <= 3, "cannot decode largest ACK length %u", l);
-    const uint8_t dec[] = {1, 2, 4, 8};
-    return dec[l];
-}
-
-
-#define F_ACK_N 0x10
-
 uint16_t dec_ack_frame(
     struct q_conn * const c,
     const struct w_iov * const v,
     const uint16_t pos,
-    void (*before_ack)(struct q_conn * const, const uint64_t, const uint16_t),
+    void (*before_ack)(struct q_conn * const, const uint64_t, const uint64_t),
     void (*on_each_ack)(struct q_conn * const, const uint64_t),
     void (*after_ack)(struct q_conn * const))
 {
     uint16_t i = pos;
     uint8_t type = 0;
-    i = dec(&type, v->buf, v->len, i, 0, "0x%02x");
+    i = dec(&type, v->buf, v->len, i, sizeof(type), "0x%02x");
 
-    uint16_t num_blocks = 0;
-    if (is_set(F_ACK_N, type))
-        i = dec(&num_blocks, v->buf, v->len, i, sizeof(uint8_t), "%u");
-    num_blocks++;
-
-    const uint8_t lg_ack_len = dec_lg_ack_len(type);
     uint64_t lg_ack = 0;
-    i = dec(&lg_ack, v->buf, v->len, i, lg_ack_len, FMT_PNR);
+    i = dec(&lg_ack, v->buf, v->len, i, 0, FMT_PNR);
 
-    uint16_t ack_delay = 0;
-    i = dec(&ack_delay, v->buf, v->len, i, 0, "%u");
+    uint64_t ack_delay = 0;
+    i = dec(&ack_delay, v->buf, v->len, i, 0, "%" PRIu64);
 
-    const uint8_t len_ack_block_len = dec_len_ack_block_len(type);
+    uint64_t num_blocks = 0;
+    i = dec(&num_blocks, v->buf, v->len, i, 0, "%" PRIu64);
+    num_blocks++;
 
     uint64_t lg_ack_in_block = lg_ack;
     if (before_ack)
         before_ack(c, lg_ack_in_block, ack_delay);
     do {
         uint64_t ack_block_len = 0;
-        i = dec(&ack_block_len, v->buf, v->len, i, len_ack_block_len,
-                "%" PRIu64);
+        i = dec(&ack_block_len, v->buf, v->len, i, 0, "%" PRIu64);
 
         warn(NTE, "got ACKs " FMT_PNR "-" FMT_PNR " (%" PRIx64 "-%" PRIx64 ")",
              lg_ack_in_block - ack_block_len, lg_ack_in_block,
@@ -241,8 +214,8 @@ uint16_t dec_ack_frame(
         }
 
         if (num_blocks > 1) {
-            uint8_t gap = 0;
-            i = dec(&gap, v->buf, v->len, i, 0, "%u");
+            uint64_t gap = 0;
+            i = dec(&gap, v->buf, v->len, i, 0, "%" PRIu64);
             lg_ack_in_block = ack - gap;
         }
         num_blocks--;
@@ -253,7 +226,7 @@ uint16_t dec_ack_frame(
     return i;
 }
 
-
+#if 0
 static uint16_t __attribute__((nonnull))
 dec_reset_stream_frame(struct q_conn * const c,
                        const struct w_iov * const v,
@@ -326,6 +299,7 @@ dec_max_stream_data_frame(struct q_conn * const c,
 
     return i;
 }
+#endif
 
 
 static uint16_t __attribute__((nonnull))
@@ -333,10 +307,7 @@ dec_max_stream_id_frame(struct q_conn * const c,
                         const struct w_iov * const v,
                         const uint16_t pos)
 {
-    uint16_t i = pos + 1;
-
-    i = dec(&c->max_stream_id, v->buf, v->len, i, 0, "%u");
-    return i;
+    return dec(&c->max_stream_id, v->buf, v->len, pos + 1, 0, "%" PRIu64);
 }
 
 
@@ -345,12 +316,11 @@ dec_max_data_frame(struct q_conn * const c,
                    const struct w_iov * const v,
                    const uint16_t pos)
 {
-    uint16_t i = pos + 1;
-    i = dec(&c->max_data, v->buf, v->len, i, 0, "%" PRIu64);
-    return i;
+    return dec(&c->max_data, v->buf, v->len, pos + 1, 0, "%" PRIu64);
 }
 
 
+#if 0
 static uint16_t __attribute__((nonnull))
 dec_stream_blocked_frame(struct q_conn * const c,
                          const struct w_iov * const v,
@@ -368,6 +338,7 @@ dec_stream_blocked_frame(struct q_conn * const c,
 
     return i;
 }
+#endif
 
 
 static uint16_t __attribute__((nonnull))
@@ -377,19 +348,18 @@ dec_stop_sending_frame(struct q_conn * const c,
 {
     uint16_t i = pos + 1;
 
-    uint32_t sid = 0;
+    uint64_t sid = 0;
     i = dec(&sid, v->buf, v->len, i, 0, FMT_SID);
     struct q_stream * const s = get_stream(c, sid);
     ensure(s, "have stream %u", sid);
 
     uint16_t err_code = 0;
-    i = dec(&err_code, v->buf, v->len, i, 0, "%0x04x");
+    i = dec(&err_code, v->buf, v->len, i, sizeof(err_code), "%0x04x");
 
     warn(CRT, "TODO: handle STOP_SENDING");
 
     return i;
 }
-
 
 void dec_frames(struct q_conn * const c, struct w_iov * v)
 {
@@ -437,7 +407,7 @@ void dec_frames(struct q_conn * const c, struct w_iov * v)
                 pad_start = pad_start ? pad_start : i;
                 i++;
                 break;
-
+#if 0
             case FRAM_TYPE_RST_STRM:
                 i = dec_reset_stream_frame(c, v, i);
                 // c->needs_tx = true;
@@ -457,6 +427,7 @@ void dec_frames(struct q_conn * const c, struct w_iov * v)
             case FRAM_TYPE_MAX_STRM_DATA:
                 i = dec_max_stream_data_frame(c, v, i);
                 break;
+#endif
 
             case FRAM_TYPE_MAX_STRM_ID:
                 i = dec_max_stream_id_frame(c, v, i);
@@ -465,11 +436,11 @@ void dec_frames(struct q_conn * const c, struct w_iov * v)
             case FRAM_TYPE_MAX_DATA:
                 i = dec_max_data_frame(c, v, i);
                 break;
-
+#if 0
             case FRAM_TYPE_STRM_BLCK:
                 i = dec_stream_blocked_frame(c, v, i);
                 break;
-
+#endif
             case FRAM_TYPE_STOP_SEND:
                 i = dec_stop_sending_frame(c, v, i);
                 break;
@@ -587,16 +558,16 @@ uint16_t enc_close_frame(struct w_iov * const v,
     bit_set(meta(v).frames, type);
     uint16_t i = pos;
 
-    enc(v->buf, v->len, i, &type, 0, "0x%02x");
-    enc(v->buf, v->len, i, &err_code, 0, "0x%04x");
+    i = enc(v->buf, v->len, i, &type, sizeof(type), "0x%02x");
+    i = enc(v->buf, v->len, i, &err_code, sizeof(err_code), "0x%04x");
 
-    const uint16_t rlen = MIN((uint16_t)strlen(reas), v->len - i);
-    enc(v->buf, v->len, i, &rlen, 0, "%u");
+    const uint64_t rlen = MIN(strlen(reas), v->len - i);
+    i = enc(v->buf, v->len, i, &rlen, 0, "%" PRIu64);
 
     memcpy(&v->buf[i], reas, rlen);
     warn(DBG, "enc %u-byte reason phrase into [%u..%u]", rlen, i, i + rlen - 1);
 
-    return i + rlen - pos;
+    return i - pos + (uint16_t)rlen;
 }
 
 
@@ -608,9 +579,9 @@ uint16_t enc_max_stream_data_frame(struct q_stream * const s,
     uint16_t i = pos;
 
     const uint8_t type = FRAM_TYPE_MAX_STRM_DATA;
-    enc(v->buf, v->len, i, &type, 0, "0x%02x");
-    enc(v->buf, v->len, i, &s->id, 0, FMT_SID);
-    enc(v->buf, v->len, i, &s->in_off_max, 0, "%u");
+    i = enc(v->buf, v->len, i, &type, sizeof(type), "0x%02x");
+    i = enc(v->buf, v->len, i, &s->id, 0, FMT_SID);
+    i = enc(v->buf, v->len, i, &s->in_off_max, 0, "%" PRIu64);
 
     return i;
 }
@@ -624,8 +595,8 @@ uint16_t enc_stream_blocked_frame(struct q_stream * const s,
     uint16_t i = pos;
 
     const uint8_t type = FRAM_TYPE_STRM_BLCK;
-    enc(v->buf, v->len, i, &type, 0, "0x%02x");
-    enc(v->buf, v->len, i, &s->id, 0, FMT_SID);
+    i = enc(v->buf, v->len, i, &type, sizeof(type), "0x%02x");
+    i = enc(v->buf, v->len, i, &s->id, 0, FMT_SID);
 
     return i;
 }
