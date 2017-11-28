@@ -33,7 +33,6 @@
 
 #ifdef __linux__
 #include <bsd/bitstring.h>
-#include <byteswap.h>
 #else
 #include <bitstring.h>
 #endif

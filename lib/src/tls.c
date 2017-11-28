@@ -31,12 +31,6 @@
 #include <string.h>
 #include <sys/param.h>
 
-#ifdef __linux__
-#include <byteswap.h>
-#else
-#include <arpa/inet.h>
-#endif
-
 #include <openssl/evp.h>
 #include <openssl/ossl_typ.h>
 #include <openssl/pem.h>
@@ -47,6 +41,20 @@
 #include <picotls/openssl.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
+
+#if defined(HAVE_ENDIAN_H)
+// e.g., Linux
+#include <endian.h>
+#define ntohll be64toh
+#define htonll htobe64
+#elif defined(HAVE_SYS_ENDIAN_H)
+// e.g., FreeBSD
+#include <sys/endian.h>
+#define ntohll be64toh
+#define htonll htobe64
+#else
+#include <arpa/inet.h>
+#endif
 
 #include "conn.h"
 #include "marshall.h"

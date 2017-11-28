@@ -29,12 +29,20 @@
 #include <stdint.h>
 #include <string.h>
 
-#ifdef __linux__
-#include <byteswap.h>
-#endif
-
-#include <quant/quant.h>
+#include <quant/quant.h> // IWYU pragma: keep
 #include <warpcore/warpcore.h>
+
+#if defined(HAVE_ENDIAN_H)
+// e.g., Linux
+#include <endian.h>
+#define ntohll be64toh
+#define htonll htobe64
+#elif defined(HAVE_SYS_ENDIAN_H)
+// e.g., FreeBSD
+#include <sys/endian.h>
+#define ntohll be64toh
+#define htonll htobe64
+#endif
 
 #include "conn.h"
 #include "diet.h"

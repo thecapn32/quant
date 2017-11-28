@@ -29,6 +29,8 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <quant/quant.h> // IWYU pragma: keep
+#include <warpcore/warpcore.h>
 
 #if defined(HAVE_ENDIAN_H)
 // e.g., Linux
@@ -41,8 +43,6 @@
 #define ntohll be64toh
 #define htonll htobe64
 #endif
-
-#include <warpcore/warpcore.h>
 
 #include "marshall.h"
 
