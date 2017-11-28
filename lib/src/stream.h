@@ -37,6 +37,10 @@
 struct q_conn;
 struct stream;
 
+#define STRM_FL_INI 0x01
+#define STRM_FL_DIR 0x02
+
+
 struct q_stream {
     splay_entry(q_stream) node;
     struct q_conn * c;

@@ -149,7 +149,9 @@ static struct q_conn * new_conn(struct w_engine * const w,
     if (peer_name) {
         c->is_clnt = true;
         ensure(c->peer_name = strdup(peer_name), "could not dup peer_name");
-    }
+        c->next_sid = 4;
+    } else
+        c->next_sid = 5;
 
     // initialize recovery state
     rec_init(c);
@@ -220,7 +222,6 @@ struct q_conn * q_connect(void * const q,
     warn(WRN, "connecting %s conn " FMT_CID " to %s:%u w/SNI %s", conn_type(c),
          cid, inet_ntoa(peer->sin_addr), ntohs(peer->sin_port), peer_name);
 
-    c->next_sid = 0; // client initiates even-numbered streams
     ev_timer_again(loop, &c->idle_alarm);
     w_connect(c->sock, peer->sin_addr.s_addr, peer->sin_port);
 
@@ -375,11 +376,6 @@ struct q_conn * q_accept(struct q_conn * const c)
 
 struct q_stream * q_rsv_stream(struct q_conn * const c)
 {
-
-    const uint8_t odd = c->next_sid % 2; // NOTE: % in assert confuses printf
-    ensure(c->is_clnt == odd || !c->is_clnt && !odd,
-           "am %s, expected %s connection stream ID, got %u", conn_type(c),
-           c->is_clnt ? "odd" : "even", c->next_sid);
     ensure(c->next_sid <= c->max_stream_id, "sid %u <= max %u", c->next_sid,
            c->max_stream_id);
     return new_stream(c, c->next_sid);

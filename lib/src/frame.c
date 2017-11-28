@@ -94,6 +94,10 @@ dec_stream_frame(struct q_conn * const c,
                  sid, conn_type(c), c->id);
             goto done;
         }
+        ensure((sid & STRM_FL_INI) != c->is_clnt,
+               "got sid %" PRIu64 "but am %s", conn_type(c));
+        ensure((sid & STRM_FL_DIR) == 0,
+               "TODO: unidirectional streams not supported yet");
         s = new_stream(c, sid);
     }
 
