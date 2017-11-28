@@ -75,6 +75,7 @@ static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 #define TP_OMIT_CONNECTION_ID 0x0004
 #define TP_MAX_PACKET_SIZE 0x0005
 #define TP_STATELESS_RESET_TOKEN 0x0006
+#define TP_ACK_DELAY_EXPONENT 0x0007
 
 
 static int __attribute__((nonnull))
@@ -139,12 +140,12 @@ static uint16_t chk_tp_clnt(const struct q_conn * const c,
 
     // parse server versions
     uint8_t n;
-    dec(n, buf, len, i, 0, "%u");
+    i = dec(&n, buf, len, i, sizeof(n), "%u");
     bool found = false;
     while (n > 0) {
         uint32_t vers;
         n -= sizeof(vers);
-        dec(vers, buf, len, i, 0, "0x%08x");
+        i = dec(&vers, buf, len, i, sizeof(vers), "0x%08x");
         found = found ? found : vers == c->vers;
     }
     ensure(found, "negotiated version found in transport parameters");
@@ -162,10 +163,10 @@ static uint16_t chk_tp_serv(const struct q_conn * const c,
     uint16_t i = pos;
 
     uint32_t vers;
-    dec(vers, buf, len, i, 0, "0x%08x");
+    i = dec(&vers, buf, len, i, sizeof(vers), "0x%08x");
 
     uint32_t vers_initial;
-    dec(vers_initial, buf, len, i, 0, "0x%08x");
+    i = dec(&vers_initial, buf, len, i, sizeof(vers_initial), "0x%08x");
 
     if (vers != c->vers)
         warn(ERR, "vers 0x%08x not found in tp", c->vers);
@@ -179,10 +180,10 @@ static uint16_t chk_tp_serv(const struct q_conn * const c,
 #define dec_tp(var, w)                                                         \
     do {                                                                       \
         uint16_t l;                                                            \
-        dec(l, buf, len, i, 0, "%u");                                          \
+        i = dec(&l, buf, len, i, sizeof(l), "%u");                             \
         ensure(l == 0 || l == ((w) ? (w) : sizeof(var)), "invalid len %u", l); \
         if (l)                                                                 \
-            dec((var), buf, len, i, (w) ? (w) : 0, "%u");                      \
+            i = dec((var), buf, len, i, (w) ? (w) : 0, "%u");                  \
     } while (0)
 
 
@@ -209,16 +210,16 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         i = chk_tp_serv(c, buf, len, i);
 
     uint16_t tpl;
-    dec(tpl, buf, len, i, 0, "%u");
+    i = dec(&tpl, buf, len, i, sizeof(tpl), "%u");
     ensure(tpl == len - i, "tp len %u is correct", tpl);
     len = i + tpl;
 
     while (i < len) {
         uint16_t tp;
-        dec(tp, buf, len, i, 0, "%u");
+        i = dec(&tp, buf, len, i, sizeof(tp), "%u");
         switch (tp) {
         case TP_INITIAL_MAX_STREAM_DATA:
-            dec_tp(c->max_stream_data, sizeof(uint32_t));
+            dec_tp(&c->max_stream_data, sizeof(uint32_t));
             // we need to apply this parameter to stream 0
             struct q_stream * const s = get_stream(c, 0);
             s->out_off_max = c->max_stream_data;
@@ -226,40 +227,44 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                  s->out_off_max);
             break;
 
-        case TP_INITIAL_MAX_DATA: {
-            uint64_t max_data_kb = 0;
-            dec_tp(max_data_kb, sizeof(uint32_t));
-            c->max_data = max_data_kb << 10;
+        case TP_INITIAL_MAX_DATA:
+            dec_tp(&c->max_data, sizeof(uint32_t));
             break;
-        }
 
         case TP_INITIAL_MAX_STREAM_ID:
-            dec_tp(c->max_stream_id, 0);
+            dec_tp(&c->max_stream_id, sizeof(c->max_stream_id));
             break;
 
         case TP_IDLE_TIMEOUT:
-            dec_tp(c->idle_timeout, 0);
+            dec_tp(&c->idle_timeout, sizeof(c->idle_timeout));
             if (c->idle_timeout > 600)
                 warn(ERR, "idle timeout %u > 600", c->idle_timeout);
             break;
 
         case TP_MAX_PACKET_SIZE:
-            dec_tp(c->max_packet_size, 0);
+            dec_tp(&c->max_packet_size, sizeof(c->max_packet_size));
             if (c->max_packet_size < 1200 || c->max_packet_size > 65527)
                 warn(ERR, "max_packet_size %u invalid", c->max_packet_size);
             break;
 
         case TP_OMIT_CONNECTION_ID: {
             uint16_t dummy;
-            dec_tp(dummy, 0);
+            dec_tp(&dummy, sizeof(dummy));
             c->omit_cid = true;
             break;
         }
 
+        case TP_ACK_DELAY_EXPONENT:
+            dec_tp(&c->ack_delay_exponent, sizeof(c->ack_delay_exponent));
+            if (c->ack_delay_exponent > 20)
+                warn(ERR, "ack_delay_exponent %u invalid",
+                     c->ack_delay_exponent);
+            break;
+
         case TP_STATELESS_RESET_TOKEN:
             ensure(c->is_clnt, "am client");
             uint16_t l;
-            dec(l, buf, len, i, 0, "%u");
+            i = dec(&l, buf, len, i, sizeof(l), "%u");
             ensure(l == sizeof(c->stateless_reset_token), "valid len");
             memcpy(c->stateless_reset_token, &buf[i],
                    sizeof(c->stateless_reset_token));
@@ -282,11 +287,11 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 #define enc_tp(c, tp, var, w)                                                  \
     do {                                                                       \
         const uint16_t param = (tp);                                           \
-        enc((c)->tls.tp_buf, len, i, &param, 0, "%u");                         \
+        i = enc((c)->tls.tp_buf, len, i, &param, sizeof(param), "%u");         \
         const uint16_t bytes = (w);                                            \
-        enc((c)->tls.tp_buf, len, i, &bytes, 0, "%u");                         \
+        i = enc((c)->tls.tp_buf, len, i, &bytes, sizeof(bytes), "%u");         \
         if (w)                                                                 \
-            enc((c)->tls.tp_buf, len, i, &(var), bytes, "%u");                 \
+            i = enc((c)->tls.tp_buf, len, i, &(var), bytes, "%u");             \
     } while (0)
 
 
@@ -296,13 +301,15 @@ static void init_tp(struct q_conn * const c)
     const uint16_t len = sizeof(c->tls.tp_buf);
 
     if (c->is_clnt) {
-        enc(c->tls.tp_buf, len, i, &c->vers, 0, "0x%08x");
-        enc(c->tls.tp_buf, len, i, &c->vers_initial, 0, "0x%08x");
+        i = enc(c->tls.tp_buf, len, i, &c->vers, sizeof(c->vers), "0x%08x");
+        i = enc(c->tls.tp_buf, len, i, &c->vers_initial,
+                sizeof(c->vers_initial), "0x%08x");
     } else {
-        const uint16_t vl = ok_vers_len * sizeof(ok_vers[0]);
-        enc(c->tls.tp_buf, len, i, &vl, 1, "%u");
+        const uint8_t vl = ok_vers_len * sizeof(ok_vers[0]);
+        i = enc(c->tls.tp_buf, len, i, &vl, sizeof(vl), "%u");
         for (uint8_t n = 0; n < ok_vers_len; n++)
-            enc(c->tls.tp_buf, len, i, &ok_vers[n], 0, "0x%08x");
+            i = enc(c->tls.tp_buf, len, i, &ok_vers[n], sizeof(ok_vers[n]),
+                    "0x%08x");
     }
 
     // keep track of encoded length
@@ -318,17 +325,17 @@ static void init_tp(struct q_conn * const c)
     enc_tp(c, TP_INITIAL_MAX_STREAM_ID, initial_max_stream_id,
            sizeof(initial_max_stream_id));
     enc_tp(c, TP_INITIAL_MAX_STREAM_DATA, initial_max_stream_data,
-           sizeof(uint32_t));
-    const uint32_t initial_max_data_kb = (uint32_t)(initial_max_data >> 10);
-    enc_tp(c, TP_INITIAL_MAX_DATA, initial_max_data_kb,
-           sizeof(initial_max_data_kb));
+           sizeof(initial_max_stream_data));
+    enc_tp(c, TP_INITIAL_MAX_DATA, initial_max_data, sizeof(initial_max_data));
     enc_tp(c, TP_MAX_PACKET_SIZE, w_mtu(w_engine(c->sock)), sizeof(uint16_t));
+    enc_tp(c, TP_ACK_DELAY_EXPONENT, initial_ack_delay_exponent,
+           sizeof(initial_ack_delay_exponent));
 
     if (!c->is_clnt) {
         const uint16_t p = TP_STATELESS_RESET_TOKEN;
-        enc(c->tls.tp_buf, len, i, &p, 0, "%u");
+        i = enc(c->tls.tp_buf, len, i, &p, 2, "%u");
         const uint16_t w = sizeof(c->stateless_reset_token);
-        enc(c->tls.tp_buf, len, i, &w, 0, "%u");
+        i = enc(c->tls.tp_buf, len, i, &w, 2, "%u");
         ensure(i + sizeof(c->stateless_reset_token) < len, "tp_buf overrun");
         memcpy(&c->tls.tp_buf[i], c->stateless_reset_token,
                sizeof(c->stateless_reset_token));
@@ -340,7 +347,7 @@ static void init_tp(struct q_conn * const c)
     // encode length of all transport parameters
     const uint16_t enc_len = i - enc_len_pos - sizeof(enc_len);
     i = enc_len_pos;
-    enc(c->tls.tp_buf, len, i, &enc_len, 0, "%u");
+    i = enc(c->tls.tp_buf, len, i, &enc_len, 2, "%u");
 
     c->tls.tp_ext[0] = (ptls_raw_extension_t){
         TLS_EXT_TYPE_TRANSPORT_PARAMETERS,

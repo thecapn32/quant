@@ -54,7 +54,7 @@ struct q_conn {
 
     uint32_t vers;         ///< QUIC version in use for this connection.
     uint32_t vers_initial; ///< QUIC version first negotiated.
-    uint32_t next_sid;     ///< Next stream ID to use on q_rsv_stream().
+    uint64_t next_sid;     ///< Next stream ID to use on q_rsv_stream().
 
     uint8_t is_clnt : 1;  ///< We are the client on this connection.
     uint8_t omit_cid : 1; ///< We can omit the CID during TX on this connection.
@@ -65,7 +65,10 @@ struct q_conn {
 
     uint8_t state; ///< State of the connection.
 
-    uint8_t _unused[2];
+    uint16_t max_packet_size;
+    uint32_t max_stream_id;
+    uint64_t max_stream_data;
+
     ev_timer idle_alarm;
 
     struct diet recv; ///< Received packet numbers still needing to be ACKed.
@@ -83,19 +86,20 @@ struct q_conn {
     struct recovery rec; ///< Loss recovery state.
     struct tls tls;      ///< TLS state.
 
-    uint8_t stateless_reset_token[16];
     uint64_t max_data;
-    uint64_t max_stream_data;
-    uint32_t max_stream_id;
     uint16_t idle_timeout;
-    uint16_t max_packet_size;
+    uint8_t ack_delay_exponent;
+    uint8_t stateless_reset_token[16];
+
+    uint8_t _unused[5];
 };
 
 
 extern uint16_t initial_idle_timeout;
-extern uint64_t initial_max_data;
-extern uint64_t initial_max_stream_data;
+extern uint32_t initial_max_data;
+extern uint32_t initial_max_stream_data;
 extern uint32_t initial_max_stream_id;
+extern uint8_t initial_ack_delay_exponent;
 
 
 extern int __attribute__((nonnull))

@@ -7,7 +7,7 @@ include(GNUInstallDirs)
 add_library(common
   OBJECT
     src/pkt.c src/frame.c src/quic.c src/stream.c src/conn.c
-    src/diet.c src/util.c src/tls.c src/recovery.c
+    src/diet.c src/util.c src/tls.c src/recovery.c src/marshall.c
     ${CMAKE_CURRENT_BINARY_DIR}/src/config.c
 )
 add_dependencies(common warpcore ptls-core ptls-openssl ptls-minicrypto)

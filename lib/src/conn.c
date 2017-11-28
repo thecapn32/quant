@@ -66,9 +66,10 @@ struct cid_splay conns_by_cid = splay_initializer(&conns_by_cid);
 
 
 uint16_t initial_idle_timeout = kIdleTimeout;
-uint64_t initial_max_data = 0x4000;        // <= uint32_t for trans param
-uint64_t initial_max_stream_data = 0x4000; // <= uint32_t for trans param
+uint32_t initial_max_data = 0x4000;
+uint32_t initial_max_stream_data = 0x4000;
 uint32_t initial_max_stream_id = 0x04;
+uint8_t initial_ack_delay_exponent = 0; // TODO: make this sensible
 
 
 int ipnp_splay_cmp(const struct q_conn * const a, const struct q_conn * const b)
@@ -126,7 +127,7 @@ pick_from_server_vers(const void * const buf, const uint16_t len)
         for (uint8_t j = 0; j < len - pos; j += sizeof(uint32_t)) {
             uint32_t vers = 0;
             uint16_t x = j + pos;
-            dec(vers, buf, len, x, 0, "0x%08x");
+            dec(&vers, buf, len, x, sizeof(vers), "0x%08x");
             warn(DBG, "serv prio %ld = 0x%08x; our prio %u = 0x%08x",
                  j / sizeof(uint32_t), vers, i, ok_vers[i]);
             if (ok_vers[i] == vers)
@@ -346,10 +347,8 @@ verify_prot(struct q_conn * const c, struct w_iov * const v)
 
     const uint16_t hdr_len = pkt_hdr_len(v->buf, v->len);
     const uint16_t len = dec_aead(c, v, hdr_len);
-    if (len == 0) {
-        q_free_iov(v);
+    if (len == 0)
         return false;
-    }
     v->len -= v->len - len;
     return true;
 }

@@ -68,7 +68,7 @@ struct pkt_meta {
     uint8_t is_acked : 1;       ///< Is the w_iov ACKed?
     uint8_t : 6;
     bitstr_t bit_decl(frames, MAX_FRAM_TYPE + 1); ///< Frames present in pkt.
-    uint8_t _unused[4];
+    uint8_t _unused[2];
 };
 
 
@@ -266,4 +266,5 @@ extern void * api_arg;
 
 #define FMT_CID CYN "%" PRIx64 NRM
 #define FMT_PNR YEL "%" PRIu64 NRM
-#define FMT_SID RED "%u" NRM
+#define FMT_PNR32 YEL "%u" NRM
+#define FMT_SID RED "%" PRIu64 NRM

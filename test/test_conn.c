@@ -98,9 +98,10 @@ int main(int argc
     struct w_iov * const ov = sq_first(&o);
 
     // add some payload data
-    ov->len = (uint16_t)snprintf((char *)ov->buf, 1024,
-                                 "***HELLO, STR %u ON CONN %" PRIx64 "!***",
-                                 q_sid(s), q_cid(cc));
+    ov->len =
+        (uint16_t)snprintf((char *)ov->buf, 1024,
+                           "***HELLO, STR %" PRIu64 " ON CONN %" PRIx64 "!***",
+                           q_sid(s), q_cid(cc));
 
     // send the data
     warn(INF, "writing %u byte%s: %s", ov->len, plural(ov->len),

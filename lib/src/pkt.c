@@ -48,7 +48,8 @@
 
 
 /// Packet number lengths for different short-header packet types
-static const uint8_t pkt_nr_lens[] = {0xFF, 1, 2, 4};
+static const uint8_t pkt_nr_lens[] = {0, sizeof(uint8_t), sizeof(uint16_t),
+                                      sizeof(uint32_t)};
 
 
 uint16_t pkt_hdr_len(const uint8_t * const buf, const uint16_t len)
@@ -74,10 +75,9 @@ uint64_t pkt_cid(const uint8_t * const buf, const uint16_t len)
 {
     const uint8_t flags = pkt_flags(buf);
     uint64_t cid = 0;
-    if (is_set(F_LONG_HDR, flags) || is_set(F_SH_CID, flags)) {
-        uint16_t i = 1;
-        dec(cid, buf, len, i, 0, FMT_CID);
-    } else
+    if (is_set(F_LONG_HDR, flags) || is_set(F_SH_CID, flags))
+        dec(&cid, buf, len, 1, sizeof(cid), FMT_CID);
+    else
         die("no connection ID in header");
     return cid;
 }
@@ -88,15 +88,15 @@ pkt_nr(const uint8_t * const buf, const uint16_t len, struct q_conn * const c)
 {
     const uint64_t next = diet_max(&c->recv) + 1;
     const uint8_t flags = pkt_flags(buf);
-    const uint8_t nr_len =
-        is_set(F_LONG_HDR, flags) ? 4 : pkt_nr_lens[pkt_type(flags)];
-    ensure(nr_len <= 4, "illegal packet number len %u", nr_len);
+    const uint8_t nr_len = is_set(F_LONG_HDR, flags)
+                               ? sizeof(uint32_t)
+                               : pkt_nr_lens[pkt_type(flags)];
 
-    uint16_t i = is_set(F_LONG_HDR, flags) || is_set(F_SH_CID, flags) ? 9 : 1;
     uint64_t nr = next;
-    dec(nr, buf, len, i, nr_len, FMT_PNR);
+    dec(&nr, buf, len,
+        is_set(F_LONG_HDR, flags) || is_set(F_SH_CID, flags) ? 9 : 1, nr_len,
+        FMT_PNR32);
 
-    // const uint64_t mask[] = {0x0, 0x100UL, 0x10000UL, 0x0, 0x100000000UL};
     const uint64_t alt = nr + (UINT64_C(1) << (nr_len * 8));
     const uint64_t d1 = next >= nr ? next - nr : nr - next;
     const uint64_t d2 = next >= alt ? next - alt : alt - next;
@@ -109,8 +109,7 @@ uint32_t pkt_vers(const uint8_t * const buf, const uint16_t len)
 {
     ensure(is_set(F_LONG_HDR, pkt_flags(buf)), "short header");
     uint32_t vers = 0;
-    uint16_t i = 13;
-    dec(vers, buf, len, i, 0, "0x%08x");
+    dec(&vers, buf, len, 13, sizeof(vers), "0x%08x");
     return vers;
 }
 
@@ -187,26 +186,26 @@ bool enc_pkt(struct q_stream * const s,
         return false;
     }
 
-    uint16_t i = 0;
-    enc(v->buf, v->len, i, &flags, 0, "0x%02x");
+    uint16_t i = enc(v->buf, v->len, 0, &flags, sizeof(flags), "0x%02x");
 
     if (is_set(F_LONG_HDR, flags) || is_set(F_SH_CID, flags))
-        enc(v->buf, v->len, i, &c->id, 0, FMT_CID);
+        i = enc(v->buf, v->len, i, &c->id, sizeof(c->id), FMT_CID);
 
     if (is_set(F_LONG_HDR, flags)) {
-        enc(v->buf, v->len, i, &meta(v).nr, sizeof(uint32_t), "%u");
-        enc(v->buf, v->len, i, &c->vers, 0, "0x%08x");
+        i = enc(v->buf, v->len, i, &meta(v).nr, sizeof(uint32_t), FMT_PNR32);
+        i = enc(v->buf, v->len, i, &c->vers, sizeof(c->vers), "0x%08x");
         if (c->state == CONN_STAT_VERS_REJ) {
             warn(INF, "sending version negotiation server response");
             for (uint8_t j = 0; j < ok_vers_len; j++)
                 if (!is_force_neg_vers(ok_vers[j]))
-                    enc(v->buf, v->len, i, &ok_vers[j], 0, "0x%08x");
+                    i = enc(v->buf, v->len, i, &ok_vers[j], sizeof(ok_vers[j]),
+                            "0x%08x");
             v->len = i;
             // don't remember the failed client initial
             diet_remove(&c->recv, meta(v).nr);
         }
     } else
-        enc(v->buf, v->len, i, &meta(v).nr, pkt_nr_len, FMT_PNR);
+        i = enc(v->buf, v->len, i, &meta(v).nr, pkt_nr_len, FMT_PNR);
 
     const uint16_t hdr_len = i;
 

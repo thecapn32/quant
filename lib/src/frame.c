@@ -51,28 +51,9 @@
 #include "stream.h"
 
 
-// Convert stream ID length encoded in flags to bytes
-static uint8_t __attribute__((const)) dec_sid_len(const uint8_t flags)
-{
-    const uint8_t l = (flags & 0x18) >> 3;
-    ensure(l <= 3, "cannot decode stream ID length %u", l);
-    const uint8_t dec[] = {1, 2, 3, 4};
-    return dec[l];
-}
-
-
-// Convert stream offset length encoded in flags to bytes
-static uint8_t __attribute__((const)) dec_off_len(const uint8_t flags)
-{
-    const uint8_t l = (flags & 0x06) >> 1;
-    ensure(l <= 3, "cannot decode stream offset length %u", l);
-    const uint8_t dec[] = {0, 2, 4, 8};
-    return dec[l];
-}
-
-
-#define F_STREAM_FIN 0x20
-#define F_STREAM_DATA_LEN 0x01
+#define F_STREAM_FIN 0x01
+#define F_STREAM_LEN 0x02
+#define F_STREAM_OFF 0x04
 
 
 static uint16_t __attribute__((nonnull))
@@ -83,19 +64,17 @@ dec_stream_frame(struct q_conn * const c,
     uint16_t i = meta(v).stream_header_pos = pos;
 
     uint8_t type = 0;
-    dec(type, v->buf, v->len, i, 0, "0x%02x");
+    i = dec(&type, v->buf, v->len, i, sizeof(type), "0x%02x");
 
-    uint32_t sid = 0;
-    const uint8_t sid_len = dec_sid_len(type);
-    dec(sid, v->buf, v->len, i, sid_len, FMT_SID);
+    uint64_t sid = 0;
+    i = dec(&sid, v->buf, v->len, i, 0, FMT_SID);
 
-    const uint8_t off_len = dec_off_len(type);
-    if (off_len)
-        dec(meta(v).in_off, v->buf, v->len, i, off_len, "%" PRIu64);
+    if (is_set(F_STREAM_OFF, type))
+        i = dec(&meta(v).in_off, v->buf, v->len, i, 0, "%" PRIu64);
 
     uint16_t l;
-    if (is_set(F_STREAM_DATA_LEN, type))
-        dec(l, v->buf, v->len, i, 0, "%u");
+    if (is_set(F_STREAM_LEN, type))
+        i = dec(&l, v->buf, v->len, i, 0, "%u");
     else
         // stream data extends to end of packet
         l = v->len - i;
@@ -220,19 +199,19 @@ uint16_t dec_ack_frame(
 {
     uint16_t i = pos;
     uint8_t type = 0;
-    dec(type, v->buf, v->len, i, 0, "0x%02x");
+    i = dec(&type, v->buf, v->len, i, 0, "0x%02x");
 
     uint16_t num_blocks = 0;
     if (is_set(F_ACK_N, type))
-        dec(num_blocks, v->buf, v->len, i, sizeof(uint8_t), "%u");
+        i = dec(&num_blocks, v->buf, v->len, i, sizeof(uint8_t), "%u");
     num_blocks++;
 
     const uint8_t lg_ack_len = dec_lg_ack_len(type);
     uint64_t lg_ack = 0;
-    dec(lg_ack, v->buf, v->len, i, lg_ack_len, FMT_PNR);
+    i = dec(&lg_ack, v->buf, v->len, i, lg_ack_len, FMT_PNR);
 
     uint16_t ack_delay = 0;
-    dec(ack_delay, v->buf, v->len, i, 0, "%u");
+    i = dec(&ack_delay, v->buf, v->len, i, 0, "%u");
 
     const uint8_t len_ack_block_len = dec_len_ack_block_len(type);
 
@@ -241,7 +220,8 @@ uint16_t dec_ack_frame(
         before_ack(c, lg_ack_in_block, ack_delay);
     do {
         uint64_t ack_block_len = 0;
-        dec(ack_block_len, v->buf, v->len, i, len_ack_block_len, "%" PRIu64);
+        i = dec(&ack_block_len, v->buf, v->len, i, len_ack_block_len,
+                "%" PRIu64);
 
         warn(NTE, "got ACKs " FMT_PNR "-" FMT_PNR " (%" PRIx64 "-%" PRIx64 ")",
              lg_ack_in_block - ack_block_len, lg_ack_in_block,
@@ -258,7 +238,7 @@ uint16_t dec_ack_frame(
 
         if (num_blocks > 1) {
             uint8_t gap = 0;
-            dec(gap, v->buf, v->len, i, 0, "%u");
+            i = dec(&gap, v->buf, v->len, i, 0, "%u");
             lg_ack_in_block = ack - gap;
         }
         num_blocks--;
@@ -278,15 +258,15 @@ dec_reset_stream_frame(struct q_conn * const c,
     uint16_t i = pos + 1;
 
     uint32_t sid = 0;
-    dec(sid, v->buf, v->len, i, 0, FMT_SID);
+    i = dec(&sid, v->buf, v->len, i, 0, FMT_SID);
     struct q_stream * const s = get_stream(c, sid);
     ensure(s, "have stream %u", sid);
 
     uint16_t err_code = 0;
-    dec(err_code, v->buf, v->len, i, 0, "0x%04x");
+    i = dec(&err_code, v->buf, v->len, i, 0, "0x%04x");
 
     uint64_t off = 0;
-    dec(off, v->buf, v->len, i, 0, "%" PRIu64);
+    i = dec(&off, v->buf, v->len, i, 0, "%" PRIu64);
 
     warn(CRT, "TODO: handle RST_STREAM");
 
@@ -302,13 +282,13 @@ dec_close_frame(struct q_conn * const c __attribute__((unused)),
     uint16_t i = pos;
 
     uint8_t type = 0;
-    dec(type, v->buf, v->len, i, 0, "0x%02x");
+    i = dec(&type, v->buf, v->len, i, sizeof(type), "0x%02x");
 
     uint16_t err_code = 0;
-    dec(err_code, v->buf, v->len, i, 0, "0x%04x");
+    i = dec(&err_code, v->buf, v->len, i, sizeof(err_code), "0x%04x");
 
-    uint16_t reas_len = 0;
-    dec(reas_len, v->buf, v->len, i, 0, "%u");
+    uint64_t reas_len = 0;
+    i = dec(&reas_len, v->buf, v->len, i, 0, "%" PRIu64);
     ensure(reas_len <= v->len - i, "reason_len invalid");
 
     if (reas_len) {
@@ -318,6 +298,8 @@ dec_close_frame(struct q_conn * const c __attribute__((unused)),
         warn(NTE, "%u-byte conn close reason: %.*s", reas_len, reas_len,
              reas_phr);
     }
+
+    // TODO: close connection
 
     return i;
 }
@@ -331,10 +313,10 @@ dec_max_stream_data_frame(struct q_conn * const c,
     uint16_t i = pos + 1;
 
     uint32_t sid = 0;
-    dec(sid, v->buf, v->len, i, 0, FMT_SID);
+    i = dec(&sid, v->buf, v->len, i, 0, FMT_SID);
     struct q_stream * const s = get_stream(c, sid);
     ensure(s, "have stream %u", sid);
-    dec(s->out_off_max, v->buf, v->len, i, 0, "%" PRIu64);
+    i = dec(&s->out_off_max, v->buf, v->len, i, 0, "%" PRIu64);
     warn(INF, "str " FMT_SID " out_off_max = %u", s->id, s->out_off_max);
     s->blocked = false;
 
@@ -349,7 +331,7 @@ dec_max_stream_id_frame(struct q_conn * const c,
 {
     uint16_t i = pos + 1;
 
-    dec(c->max_stream_id, v->buf, v->len, i, 0, "%u");
+    i = dec(&c->max_stream_id, v->buf, v->len, i, 0, "%u");
     return i;
 }
 
@@ -360,7 +342,7 @@ dec_max_data_frame(struct q_conn * const c,
                    const uint16_t pos)
 {
     uint16_t i = pos + 1;
-    dec(c->max_data, v->buf, v->len, i, 0, "%" PRIu64);
+    i = dec(&c->max_data, v->buf, v->len, i, 0, "%" PRIu64);
     return i;
 }
 
@@ -373,7 +355,7 @@ dec_stream_blocked_frame(struct q_conn * const c,
     uint16_t i = pos + 1;
 
     uint32_t sid = 0;
-    dec(sid, v->buf, v->len, i, 0, FMT_SID);
+    i = dec(&sid, v->buf, v->len, i, 0, FMT_SID);
     struct q_stream * const s = get_stream(c, sid);
     ensure(s, "have stream %u", sid);
 
@@ -392,12 +374,12 @@ dec_stop_sending_frame(struct q_conn * const c,
     uint16_t i = pos + 1;
 
     uint32_t sid = 0;
-    dec(sid, v->buf, v->len, i, 0, FMT_SID);
+    i = dec(&sid, v->buf, v->len, i, 0, FMT_SID);
     struct q_stream * const s = get_stream(c, sid);
     ensure(s, "have stream %u", sid);
 
     uint16_t err_code = 0;
-    dec(err_code, v->buf, v->len, i, 0, "%0x04x");
+    i = dec(&err_code, v->buf, v->len, i, 0, "%0x04x");
 
     warn(CRT, "TODO: handle STOP_SENDING");
 
@@ -512,118 +494,37 @@ uint16_t enc_padding_frame(struct w_iov * const v,
 }
 
 
-static const uint8_t enc_lg_ack_len[] = {0xFF,      0x00, 0x01 << 2, 0xFF,
-                                         0x02 << 2, 0xFF, 0xFF,      0xFF,
-                                         0x03 << 2}; // 0xFF = invalid
-
-
-static uint8_t __attribute__((const)) needed_lg_ack_len(const uint64_t n)
-{
-    if (n < UINT8_MAX)
-        return 1;
-    if (n < UINT16_MAX)
-        return 2;
-    if (n < UINT32_MAX)
-        return 4;
-    return 8;
-}
-
-
-static const uint8_t enc_ack_block_len[] = {
-    0xFF, 0x00, 0x01, 0xFF, 0x02, 0xFF, 0xFF, 0xFF, 0x03}; // 0xFF = invalid
-
-
-static uint8_t __attribute__((nonnull))
-needed_ack_block_len(struct q_conn * const c)
-{
-    const uint64_t max_block = diet_max(&c->recv) - diet_max(&c->recv);
-    if (max_block < UINT8_MAX)
-        return 1;
-    if (max_block < UINT16_MAX)
-        return 2;
-    if (max_block < UINT32_MAX)
-        return 4;
-    return 8;
-}
-
-
 uint16_t enc_ack_frame(struct q_conn * const c,
                        struct w_iov * const v,
                        const uint16_t pos)
 {
     uint8_t type = FRAM_TYPE_ACK;
     bit_set(meta(v).frames, FRAM_TYPE_ACK);
-
-    uint8_t num_blocks = (uint8_t)MIN(c->recv.cnt, UINT8_MAX);
-    if (num_blocks > 1) {
-        num_blocks--;
-        type |= F_ACK_N;
-    }
+    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
 
     const uint64_t lg_recv = diet_max(&c->recv);
-    const uint8_t lg_ack_len = needed_lg_ack_len(lg_recv);
-    type |= enc_lg_ack_len[lg_ack_len];
-    const uint8_t ack_block_len = needed_ack_block_len(c);
-    type |= enc_ack_block_len[ack_block_len];
+    i = enc(v->buf, v->len, i, &lg_recv, 0, FMT_PNR);
 
-    uint16_t i = pos;
-    enc(v->buf, v->len, i, &type, 0, "0x%02x");
+    const uint64_t ack_delay = 0;
+    i = enc(v->buf, v->len, i, &ack_delay, 0, "%" PRIu64);
 
-    if (is_set(F_ACK_N, type))
-        enc(v->buf, v->len, i, &num_blocks, 0, "%u");
-
-
-    enc(v->buf, v->len, i, &lg_recv, lg_ack_len, FMT_PNR);
-
-    const uint16_t ack_delay = 0;
-    enc(v->buf, v->len, i, &ack_delay, 0, "%u");
+    const uint64_t block_cnt = diet_cnt(&c->recv) - 1;
+    i = enc(v->buf, v->len, i, &block_cnt, 0, "%" PRIu64);
 
     struct ival * b;
     uint64_t prev_lo = 0;
     splay_foreach_rev (b, diet, &c->recv) {
         if (prev_lo) {
             const uint64_t gap = prev_lo - b->hi - 1;
-            ensure(gap <= UINT8_MAX, "TODO: gap %" PRIu64 " too large", gap);
-            enc(v->buf, v->len, i, &gap, sizeof(uint8_t), "%" PRIu64);
+            i = enc(v->buf, v->len, i, &gap, 0, "%" PRIu64);
         }
         const uint64_t ack_block = b->hi - b->lo + (prev_lo ? 1 : 0);
         warn(NTE, "ACKing " FMT_PNR "-" FMT_PNR " (%" PRIx64 "-%" PRIx64 ")",
              b->lo, b->hi, b->lo, b->hi);
-        enc(v->buf, v->len, i, &ack_block, ack_block_len, "%" PRIu64);
+        i = enc(v->buf, v->len, i, &ack_block, 0, "%" PRIu64);
         prev_lo = b->lo;
     }
     return i - pos;
-}
-
-
-static const uint8_t enc_sid_len[] = {0xFF, 0x00, 0x01, 002,
-                                      0x03}; // 0xFF = invalid
-
-static uint8_t __attribute__((const)) needed_sid_len(const uint32_t n)
-{
-    if (n < UINT8_MAX)
-        return 1;
-    if (n < UINT16_MAX)
-        return 2;
-    if (n < 0x00FFFFFF) // UINT24_MAX :-)
-        return 3;
-    return 4;
-}
-
-
-static const uint8_t enc_off_len[] = {0x00,      0xFF, 0x01 << 1, 0xFF,
-                                      0x02 << 1, 0xFF, 0xFF,      0xFF,
-                                      0x03 << 1}; // 0xFF = invalid
-
-static uint8_t __attribute__((const)) needed_off_len(const uint64_t n)
-{
-    if (n == 0)
-        return 0;
-    if (n < UINT16_MAX)
-        return 2;
-    if (n < UINT32_MAX)
-        return 4;
-    return 8;
 }
 
 
@@ -631,7 +532,7 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
 {
     bit_set(meta(v).frames, FRAM_TYPE_STRM);
 
-    const uint16_t dlen = v->len - Q_OFFSET;
+    const uint64_t dlen = v->len - Q_OFFSET;
     ensure(dlen || s->state > STRM_STAT_OPEN,
            "no stream data or need to send FIN");
 
@@ -639,9 +540,8 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
          plural(dlen), s->out_off, dlen ? s->out_off + dlen - 1 : s->out_off,
          s->id);
 
-    const uint8_t sid_len = needed_sid_len(s->id);
-    uint8_t type =
-        FRAM_TYPE_STRM | (dlen ? F_STREAM_DATA_LEN : 0) | enc_sid_len[sid_len];
+    uint8_t type = FRAM_TYPE_STRM | (dlen ? F_STREAM_LEN : 0) |
+                   (s->out_off ? F_STREAM_OFF : 0);
 
     // if stream is closed locally and this is the last packet, include a FIN
     if ((s->state == STRM_STAT_HCLO || s->state == STRM_STAT_CLSD) &&
@@ -654,24 +554,21 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
         maybe_api_return(q_close_stream, s);
     }
 
-    // prepend a stream frame header
-    const uint8_t off_len = needed_off_len(s->out_off);
-    type |= enc_off_len[off_len];
-
     // now that we know how long the stream frame header is, encode it
     uint16_t i = meta(v).stream_header_pos =
-        Q_OFFSET - 1 - (dlen ? 2 : 0) - off_len - sid_len;
-    enc(v->buf, v->len, i, &type, 0, "0x%02x");
-    enc(v->buf, v->len, i, &s->id, sid_len, FMT_SID);
-    if (off_len)
-        enc(v->buf, v->len, i, &s->out_off, off_len, "%" PRIu64);
+        Q_OFFSET - 1 - varint_sizeof(s->id) - (dlen ? varint_sizeof(dlen) : 0) -
+        (s->out_off ? varint_sizeof(s->out_off) : 0);
+    i = enc(v->buf, v->len, i, &type, sizeof(type), "0x%02x");
+    i = enc(v->buf, v->len, i, &s->id, 0, FMT_SID);
+    if (s->out_off)
+        i = enc(v->buf, v->len, i, &s->out_off, 0, "%" PRIu64);
     if (dlen)
-        enc(v->buf, v->len, i, &dlen, 0, "%u");
+        i = enc(v->buf, v->len, i, &dlen, 0, "%u"); // NOLINT
 
     s->out_off += dlen; // increase the stream data offset
     meta(v).str = s;    // remember stream this buf belongs to
     meta(v).stream_data_start = Q_OFFSET;
-    meta(v).stream_data_end = Q_OFFSET + dlen;
+    meta(v).stream_data_end = Q_OFFSET + (uint16_t)dlen;
 
     return v->len;
 }

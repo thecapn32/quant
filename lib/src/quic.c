@@ -163,6 +163,8 @@ static struct q_conn * new_conn(struct w_engine * const w,
     c->idle_alarm.repeat = kIdleTimeout;
     ev_init(&c->idle_alarm, idle_alarm);
 
+    c->ack_delay_exponent = initial_ack_delay_exponent;
+
     // initialize socket and start an RX/TX watchers
     ev_async_init(&c->tx_w, tx_w);
     c->tx_w.data = c;
@@ -218,7 +220,7 @@ struct q_conn * q_connect(void * const q,
     warn(WRN, "connecting %s conn " FMT_CID " to %s:%u w/SNI %s", conn_type(c),
          cid, inet_ntoa(peer->sin_addr), ntohs(peer->sin_port), peer_name);
 
-    c->next_sid = 1; // client initiates odd-numbered streams
+    c->next_sid = 0; // client initiates even-numbered streams
     ev_timer_again(loop, &c->idle_alarm);
     w_connect(c->sock, peer->sin_addr.s_addr, peer->sin_port);
 
@@ -534,7 +536,7 @@ uint64_t q_cid(const struct q_conn * const c)
 }
 
 
-uint32_t q_sid(const struct q_stream * const s)
+uint64_t q_sid(const struct q_stream * const s)
 {
     return s->id;
 }

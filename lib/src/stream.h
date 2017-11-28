@@ -51,13 +51,13 @@ struct q_stream {
     uint64_t in_off;            ///< Current inbound in-order stream offset.
     uint64_t in_off_max;        ///< Inbound max_stream_data.
 
-    uint32_t id;
+    uint64_t id;
     uint8_t state;
     uint8_t fin_sent : 1;
     uint8_t open_win : 1; ///< We need to open the receive window.
     uint8_t blocked : 1;  ///< We are receive-window-blocked.
     uint8_t : 5;
-    uint8_t _unused[2];
+    uint8_t _unused[6];
 };
 
 #define STRM_STAT_IDLE 0
@@ -67,16 +67,16 @@ struct q_stream {
 #define STRM_STAT_CLSD 4
 
 
-extern int32_t __attribute__((nonnull))
+extern int __attribute__((nonnull))
 stream_cmp(const struct q_stream * const a, const struct q_stream * const b);
 
 SPLAY_PROTOTYPE(stream, q_stream, node, stream_cmp)
 
 
 extern struct q_stream * __attribute__((nonnull))
-get_stream(struct q_conn * const c, const uint32_t id);
+get_stream(struct q_conn * const c, const uint64_t id);
 
 extern struct q_stream * __attribute__((nonnull))
-new_stream(struct q_conn * const c, const uint32_t id);
+new_stream(struct q_conn * const c, const uint64_t id);
 
 extern void __attribute__((nonnull)) free_stream(struct q_stream * const s);

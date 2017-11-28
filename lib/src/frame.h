@@ -44,10 +44,8 @@ struct w_iov;
 #define FRAM_TYPE_PING 0x07
 #define FRAM_TYPE_STRM_BLCK 0x09
 #define FRAM_TYPE_STOP_SEND 0x0C
-
-#define FRAM_TYPE_ACK 0xA0
-#define FRAM_TYPE_STRM 0xC0
-
+#define FRAM_TYPE_ACK 0x0E
+#define FRAM_TYPE_STRM 0x10
 #define MAX_FRAM_TYPE FRAM_TYPE_STRM
 
 

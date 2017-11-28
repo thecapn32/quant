@@ -37,24 +37,23 @@
 #include "stream.h"
 
 
-int32_t stream_cmp(const struct q_stream * const a,
-                   const struct q_stream * const b)
+int stream_cmp(const struct q_stream * const a, const struct q_stream * const b)
 {
-    return (int32_t)a->id - (int32_t)b->id;
+    return (a->id > b->id) - (a->id < b->id);
 }
 
 
 SPLAY_GENERATE(stream, q_stream, node, stream_cmp)
 
 
-struct q_stream * get_stream(struct q_conn * const c, const uint32_t id)
+struct q_stream * get_stream(struct q_conn * const c, const uint64_t id)
 {
     struct q_stream which = {.id = id};
     return splay_find(stream, &c->streams, &which);
 }
 
 
-struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
+struct q_stream * new_stream(struct q_conn * const c, const uint64_t id)
 {
     ensure(get_stream(c, id) == 0, "stream already %u exists", id);
 
