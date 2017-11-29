@@ -197,6 +197,7 @@ externalproject_add(picoquic
   # UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/private-octopus/picoquic.git
   GIT_SHALLOW 1
+  GIT_TAG draft-21
   BUILD_IN_SOURCE 1
   CMAKE_ARGS
     -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
