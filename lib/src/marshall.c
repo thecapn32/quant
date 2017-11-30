@@ -201,6 +201,7 @@ marshall_dec(void * const dst,
     switch (dst_len) {
     case 0:
         // varint decoding
+        *(uint64_t *)dst = 0;
         if (buf[pos] < 0x40) {
             ensure(pos + 1 <= buf_len, "decoding from pos %u > buf len %u",
                    pos + 1, buf_len);
