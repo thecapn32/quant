@@ -168,7 +168,7 @@ static void log_sent_pkts(struct q_conn * const c)
         strncat(sent_pkts_buf, tmp,
                 sizeof(sent_pkts_buf) - strlen(sent_pkts_buf) - 1);
     }
-    warn(CRT, "unacked: %s", sent_pkts_buf);
+    warn(INF, "unacked: %s", sent_pkts_buf);
 }
 
 
