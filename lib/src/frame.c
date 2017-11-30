@@ -103,7 +103,7 @@ dec_stream_frame(struct q_conn * const c,
     // best case: new in-order data
     if (meta(v).in_off == s->in_off) {
         warn(NTE,
-             "%u byte%s new data (off %" PRIu64 "-%" PRIu64
+             "%" PRIu64 " byte%s new data (off %" PRIu64 "-%" PRIu64
              ") on %s conn " FMT_CID " str " FMT_SID,
              l, plural(l), meta(v).in_off, meta(v).in_off + l, conn_type(c),
              c->id, sid);
@@ -150,7 +150,7 @@ dec_stream_frame(struct q_conn * const c,
     // data is a complete duplicate
     if (meta(v).in_off + l <= s->in_off) {
         warn(NTE,
-             "%u byte%s dup data (off %" PRIu64 "-%" PRIu64
+             "%" PRIu64 " byte%s dup data (off %" PRIu64 "-%" PRIu64
              ") on %s conn " FMT_CID " str " FMT_SID,
              l, plural(l), meta(v).in_off, meta(v).in_off + l, conn_type(c),
              c->id, sid);
@@ -159,7 +159,7 @@ dec_stream_frame(struct q_conn * const c,
 
     // data is out of order
     warn(NTE,
-         "reordered data: %u byte%s data (off %" PRIu64 "-%" PRIu64
+         "reordered data: %" PRIu64 " byte%s data (off %" PRIu64 "-%" PRIu64
          "), expected %" PRIu64 " on %s conn " FMT_CID " str " FMT_SID,
          l, plural(l), meta(v).in_off, meta(v).in_off + l, s->in_off,
          conn_type(c), c->id, sid);
@@ -287,7 +287,7 @@ dec_max_stream_data_frame(struct q_conn * const c,
     struct q_stream * const s = get_stream(c, sid);
     ensure(s, "have stream %u", sid);
     i = dec(&s->out_off_max, v->buf, v->len, i, 0, "%" PRIu64);
-    warn(INF, "str " FMT_SID " out_off_max = %u", s->id, s->out_off_max);
+    warn(INF, "str " FMT_SID " out_off_max = %" PRIu64, s->id, s->out_off_max);
     s->blocked = false;
 
     return i;
@@ -498,9 +498,10 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
     ensure(dlen || s->state > STRM_STAT_OPEN,
            "no stream data or need to send FIN");
 
-    warn(INF, "%u byte%s at off %" PRIu64 "-%" PRIu64 " on str " FMT_SID, dlen,
-         plural(dlen), s->out_off, dlen ? s->out_off + dlen - 1 : s->out_off,
-         s->id);
+    warn(INF,
+         "%" PRIu64 " byte%s at off %" PRIu64 "-%" PRIu64 " on str " FMT_SID,
+         dlen, plural(dlen), s->out_off,
+         dlen ? s->out_off + dlen - 1 : s->out_off, s->id);
 
     uint8_t type = FRAM_TYPE_STRM | (dlen ? F_STREAM_LEN : 0) |
                    (s->out_off ? F_STREAM_OFF : 0);
@@ -551,7 +552,8 @@ uint16_t enc_close_frame(struct w_iov * const v,
     i = enc(v->buf, v->len, i, &rlen, 0, "%" PRIu64);
 
     memcpy(&v->buf[i], reas, rlen);
-    warn(DBG, "enc %u-byte reason phrase into [%u..%u]", rlen, i, i + rlen - 1);
+    warn(DBG, "enc %" PRIu64 "-byte reason phrase into [%u..%" PRIu64 "]", rlen,
+         i, i + rlen - 1);
 
     return i + (uint16_t)rlen;
 }
