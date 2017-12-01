@@ -25,6 +25,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <bitstring.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -82,6 +83,8 @@ static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 #define TP_MAX_PACKET_SIZE 0x0005
 #define TP_STATELESS_RESET_TOKEN 0x0006
 #define TP_ACK_DELAY_EXPONENT 0x0007
+
+#define TP_MAX TP_ACK_DELAY_EXPONENT
 
 
 static int __attribute__((nonnull))
@@ -220,9 +223,17 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
     ensure(tpl == len - i, "tp len %u is correct", tpl);
     len = i + tpl;
 
+    // keep track of which transport parameters we've seen before
+    bitstr_t bit_decl(tp_list, TP_MAX + 1) = {0};
+
     while (i < len) {
         uint16_t tp;
         i = dec(&tp, buf, len, i, sizeof(tp), "%u");
+
+        // check if this transport parameter is a duplicate
+        ensure(tp <= TP_MAX, "unknown tp %u", tp);
+        ensure(!bit_test(tp_list, tp), "tp %u is a duplicate", tp);
+
         switch (tp) {
         case TP_INITIAL_MAX_STREAM_DATA:
             dec_tp(&c->max_stream_data, sizeof(uint32_t));
