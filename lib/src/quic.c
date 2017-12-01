@@ -165,7 +165,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
     c->idle_alarm.repeat = kIdleTimeout;
     ev_init(&c->idle_alarm, idle_alarm);
 
-    c->initial_ack_delay_exponent = 0; // TODO
+    c->ack_delay_exponent = c->initial_ack_delay_exponent = 3;
     c->initial_idle_timeout = kIdleTimeout;
     c->initial_max_data = 0x2000;
     c->initial_max_stream_data = 0x2000;

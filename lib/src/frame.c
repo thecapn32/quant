@@ -32,6 +32,7 @@
 #include <string.h>
 #include <sys/param.h>
 
+#include <ev.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
@@ -193,8 +194,9 @@ uint16_t dec_ack_frame(
     uint64_t lg_ack = 0;
     i = dec(&lg_ack, v->buf, v->len, i, 0, FMT_PNR_OUT);
 
-    uint64_t ack_delay = 0;
-    i = dec(&ack_delay, v->buf, v->len, i, 0, "%" PRIu64);
+    uint64_t ack_delay_raw = 0;
+    i = dec(&ack_delay_raw, v->buf, v->len, i, 0, "%" PRIu64);
+    const uint64_t ack_delay = ack_delay_raw * (1 << c->ack_delay_exponent);
 
     uint64_t num_blocks = 0;
     i = dec(&num_blocks, v->buf, v->len, i, 0, "%" PRIu64);
@@ -211,10 +213,10 @@ uint16_t dec_ack_frame(
         if (n == num_blocks + 1)
             warn(INF,
                  FRAM_IN "ACK" NRM " lg=" FMT_PNR_OUT " delay=%" PRIu64
-                         " cnt=%" PRIu64 " block=%" PRIu64 " (" FMT_PNR_OUT
-                         "-" FMT_PNR_OUT ")",
-                 lg_ack, ack_delay, num_blocks, ack_block_len, lg_ack_in_block,
-                 lg_ack_in_block - ack_block_len);
+                         " (%" PRIu64 " usec) cnt=%" PRIu64 " block=%" PRIu64
+                         " (" FMT_PNR_OUT "-" FMT_PNR_OUT ")",
+                 lg_ack, ack_delay_raw, ack_delay, num_blocks, ack_block_len,
+                 lg_ack_in_block, lg_ack_in_block - ack_block_len);
         else
             warn(INF,
                  FRAM_IN "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64
@@ -514,7 +516,9 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     const uint64_t lg_recv = diet_max(&c->recv);
     i = enc(v->buf, v->len, i, &lg_recv, 0, FMT_PNR_IN);
 
-    const uint64_t ack_delay = 0;
+    const uint64_t ack_delay =
+        (uint64_t)((ev_now(loop) - c->lg_recv_t) * 1000000) /
+        (1 << c->initial_ack_delay_exponent);
     i = enc(v->buf, v->len, i, &ack_delay, 0, "%" PRIu64);
 
     const uint64_t block_cnt = diet_cnt(&c->recv) - 1;
@@ -538,10 +542,11 @@ uint16_t enc_ack_frame(struct q_conn * const c,
         else
             warn(INF,
                  FRAM_OUT "ACK" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64
-                          " cnt=%" PRIu64 " block=%" PRIu64 " (" FMT_PNR_IN
-                          "-" FMT_PNR_IN ")",
-                 lg_recv, ack_delay, block_cnt, ack_block, b->lo, b->hi, b->lo,
-                 b->hi);
+                          " (%" PRIu64 " usec) cnt=%" PRIu64 " block=%" PRIu64
+                          " (" FMT_PNR_IN "-" FMT_PNR_IN ")",
+                 lg_recv, ack_delay,
+                 ack_delay * (1 << c->initial_ack_delay_exponent), block_cnt,
+                 ack_block, b->lo, b->hi, b->lo, b->hi);
 
         i = enc(v->buf, v->len, i, &ack_block, 0, "%" PRIu64);
         prev_lo = b->lo;

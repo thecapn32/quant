@@ -91,7 +91,8 @@ struct q_conn {
 
     ev_timer idle_alarm;
 
-    struct diet recv; ///< Received packet numbers still needing to be ACKed.
+    struct diet recv;    ///< Received packet numbers still needing to be ACKed.
+    ev_tstamp lg_recv_t; ///< Time when lg_recv was received
 
     struct sockaddr_in peer; ///< Address of our peer.
     char * peer_name;

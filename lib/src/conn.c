@@ -341,6 +341,15 @@ verify_prot(struct q_conn * const c, struct w_iov * const v)
 
 
 static void __attribute__((nonnull))
+track_recv(struct q_conn * const c, const uint64_t nr)
+{
+    diet_insert(&c->recv, nr);
+    if (nr == diet_max(&c->recv))
+        c->lg_recv_t = ev_now(loop);
+}
+
+
+static void __attribute__((nonnull))
 process_pkt(struct q_conn * const c, struct w_iov * const v)
 {
     const uint8_t flags = pkt_flags(v->buf);
@@ -358,7 +367,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         // respond to the version negotiation packet
         c->vers = pkt_vers(v->buf, v->len);
         c->needs_tx = true;
-        diet_insert(&c->recv, meta(v).nr);
+        track_recv(c, meta(v).nr);
         if (c->vers_initial == 0)
             c->vers_initial = c->vers;
         if (vers_supported(c->vers) && !is_force_neg_vers(c->vers)) {
@@ -443,7 +452,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                 s->out_off = s->in_off = 0;
             } else {
                 c->state = CONN_STAT_VERS_OK;
-                diet_insert(&c->recv, meta(v).nr);
+                track_recv(c, meta(v).nr);
             }
         }
         break;
@@ -458,7 +467,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             maybe_api_return(q_accept, c);
             c->state = CONN_STAT_ESTB;
         }
-        diet_insert(&c->recv, meta(v).nr);
+        track_recv(c, meta(v).nr);
         dec_frames(c, v);
         break;
 
@@ -472,7 +481,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
     case CONN_STAT_CLSD:
         if (verify_prot(c, v) == false)
             goto done;
-        diet_insert(&c->recv, meta(v).nr);
+        track_recv(c, meta(v).nr);
         dec_frames(c, v);
         break;
 
