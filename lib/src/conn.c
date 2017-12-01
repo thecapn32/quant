@@ -469,7 +469,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 
         // pass any further data received on stream 0 to TLS and check
         // whether that completes the client handshake
-        if (!is_set(F_LONG_HDR, flags) || pkt_type(flags) >= F_LH_HSHK) {
+        if (!is_set(F_LONG_HDR, flags) || pkt_type(flags) <= F_LH_HSHK) {
             maybe_api_return(q_accept, c);
             c->state = CONN_STAT_ESTB;
         }
@@ -533,7 +533,7 @@ void rx(struct ev_loop * const l,
         uint64_t cid = 0;
         struct q_conn * c = 0;
 
-        if (is_set(F_LONG_HDR, flags) || is_set(F_SH_CID, flags)) {
+        if (is_set(F_LONG_HDR, flags) || !is_set(F_SH_OMIT_CID, flags)) {
             cid = pkt_cid(v->buf, v->len);
             c = get_conn_by_cid(cid, is_clnt);
         }

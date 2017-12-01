@@ -566,8 +566,8 @@ uint16_t dec_aead(struct q_conn * const c,
 {
     ptls_aead_context_t * aead = c->tls.in_kp0;
     const uint8_t flags = pkt_flags(v->buf);
-    if (is_set(F_LONG_HDR, flags) && pkt_type(flags) >= F_LH_INIT &&
-        pkt_type(flags) <= F_LH_HSHK)
+    if (is_set(F_LONG_HDR, flags) && pkt_type(flags) <= F_LH_INIT &&
+        pkt_type(flags) >= F_LH_HSHK)
         aead = c->tls.in_clr;
 
     const size_t len =

@@ -100,7 +100,7 @@ void log_pkt(const char * const dir, const struct w_iov * const v)
               dir, v->len, flags, col_dir, pkt_type_str(flags),
               pkt_cid(v->buf, v->len), pkt_vers(v->buf, v->len), col_nr,
               meta(v).nr);
-    else if (is_set(F_SH_CID, flags))
+    else if (!is_set(F_SH_OMIT_CID, flags))
         twarn(NTE,
               BLD "%s" NRM " len=%u 0x%02x=%s%s" NRM "|CID cid=" FMT_CID
                   " nr=%s%" PRIu64,
@@ -130,7 +130,7 @@ uint16_t pkt_hdr_len(const uint8_t * const buf, const uint16_t len)
             warn(ERR, "illegal pkt type %u", type);
             return UINT16_MAX;
         }
-        pos = 1 + (is_set(F_SH_CID, flags) ? 8 : 0) + pkt_nr_lens[type];
+        pos = 1 + (is_set(F_SH_OMIT_CID, flags) ? 0 : 8) + pkt_nr_lens[type];
     }
     ensure(pos <= len, "payload position %u after end of packet %u", pos, len);
     return pos;
@@ -141,7 +141,7 @@ uint64_t pkt_cid(const uint8_t * const buf, const uint16_t len)
 {
     const uint8_t flags = pkt_flags(buf);
     uint64_t cid = 0;
-    if (is_set(F_LONG_HDR, flags) || is_set(F_SH_CID, flags))
+    if (is_set(F_LONG_HDR, flags) || !is_set(F_SH_OMIT_CID, flags))
         dec(&cid, buf, len, 1, sizeof(cid), FMT_CID);
     else
         die("no connection ID in header");
@@ -160,8 +160,8 @@ pkt_nr(const uint8_t * const buf, const uint16_t len, struct q_conn * const c)
 
     uint64_t nr = next;
     dec(&nr, buf, len,
-        is_set(F_LONG_HDR, flags) || is_set(F_SH_CID, flags) ? 9 : 1, nr_len,
-        FMT_PNR32_IN);
+        is_set(F_LONG_HDR, flags) || !is_set(F_SH_OMIT_CID, flags) ? 9 : 1,
+        nr_len, FMT_PNR32_IN);
 
     const uint64_t alt = nr + (UINT64_C(1) << (nr_len * 8));
     const uint64_t d1 = next >= nr ? next - nr : nr - next;
@@ -236,8 +236,8 @@ bool enc_pkt(struct q_stream * const s,
         break;
     case CONN_STAT_ESTB:
     case CONN_STAT_CLSD:
-        if (!c->omit_cid)
-            flags |= F_SH_CID;
+        if (c->omit_cid)
+            flags |= F_SH_OMIT_CID;
         flags |= enc_pkt_nr_len[pkt_nr_len];
         break;
     default:
@@ -255,11 +255,12 @@ bool enc_pkt(struct q_stream * const s,
 
     uint16_t i = enc(v->buf, v->len, 0, &flags, sizeof(flags), "0x%02x");
 
-    if (is_set(F_LONG_HDR, flags) || is_set(F_SH_CID, flags))
+    if (is_set(F_LONG_HDR, flags) || !is_set(F_SH_OMIT_CID, flags))
         i = enc(v->buf, v->len, i, &c->id, sizeof(c->id), FMT_CID);
 
     if (is_set(F_LONG_HDR, flags)) {
-        i = enc(v->buf, v->len, i, &meta(v).nr, sizeof(uint32_t), FMT_PNR32_OUT);
+        i = enc(v->buf, v->len, i, &meta(v).nr, sizeof(uint32_t),
+                FMT_PNR32_OUT);
         i = enc(v->buf, v->len, i, &c->vers, sizeof(c->vers), "0x%08x");
         if (c->state == CONN_STAT_VERS_REJ) {
             warn(INF, "sending version negotiation server response");
