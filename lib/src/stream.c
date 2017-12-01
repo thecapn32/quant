@@ -66,7 +66,7 @@ struct q_stream * new_stream(struct q_conn * const c, const uint64_t id)
     s->in_off_max = c->local_max_strm_data;
     s->out_off_max = c->peer_max_strm_data;
     if (id)
-        c->next_sid += 2;
+        c->next_sid += 4;
     splay_insert(stream, &c->streams, s);
     warn(INF, "reserved str " FMT_SID " on %s conn " FMT_CID, id, conn_type(c),
          c->id);
