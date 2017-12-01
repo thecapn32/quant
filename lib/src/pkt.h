@@ -92,7 +92,7 @@ extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
 extern void __attribute__((nonnull))
 log_pkt(const char * const dir, const struct w_iov * const v);
 #else
-#define log_pkt(...)                                                              \
+#define log_pkt(...)                                                           \
     do {                                                                       \
     } while (0)
 #endif

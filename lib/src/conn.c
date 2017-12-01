@@ -58,13 +58,6 @@ struct ipnp_splay conns_by_ipnp = splay_initializer(&conns_by_ipnp);
 struct cid_splay conns_by_cid = splay_initializer(&conns_by_cid);
 
 
-uint16_t initial_idle_timeout = kIdleTimeout;
-uint32_t initial_max_data = 0x2000;
-uint32_t initial_max_stream_data = 0x2000;
-uint32_t initial_max_stream_id = 0x04;
-uint8_t initial_ack_delay_exponent = 0; // TODO: make this sensible
-
-
 int ipnp_splay_cmp(const struct q_conn * const a, const struct q_conn * const b)
 {
     ensure((a->peer.sin_family == AF_INET || a->peer.sin_family == 0) &&

@@ -165,7 +165,12 @@ static struct q_conn * new_conn(struct w_engine * const w,
     c->idle_alarm.repeat = kIdleTimeout;
     ev_init(&c->idle_alarm, idle_alarm);
 
-    c->ack_delay_exponent = initial_ack_delay_exponent;
+    c->initial_ack_delay_exponent = 0; // TODO
+    c->initial_idle_timeout = kIdleTimeout;
+    c->initial_max_data = 0x2000;
+    c->initial_max_stream_data = 0x2000;
+    c->initial_max_stream_id_bidi = c->is_clnt ? 5 : 4;
+    c->initial_max_stream_id_uni = 0; // TODO: support unidir streams
 
     // initialize socket and start an RX/TX watchers
     ev_async_init(&c->tx_w, tx_w);
@@ -375,8 +380,8 @@ struct q_conn * q_accept(struct q_conn * const c)
 
 struct q_stream * q_rsv_stream(struct q_conn * const c)
 {
-    ensure(c->next_sid <= c->max_stream_id, "sid %u <= max %u", c->next_sid,
-           c->max_stream_id);
+    ensure(c->next_sid <= c->max_stream_id_bidi, "sid %u <= max %u",
+           c->next_sid, c->max_stream_id_bidi);
     return new_stream(c, c->next_sid);
 }
 

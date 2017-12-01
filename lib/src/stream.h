@@ -37,8 +37,8 @@
 struct q_conn;
 struct stream;
 
-#define STRM_FL_INI 0x01
-#define STRM_FL_DIR 0x02
+#define STRM_FL_INI_SRV 0x01
+#define STRM_FL_DIR_UNI 0x02
 
 
 struct q_stream {

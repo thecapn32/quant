@@ -92,9 +92,9 @@ dec_stream_frame(struct q_conn * const c,
                  sid, conn_type(c), c->id);
             goto done;
         }
-        ensure(is_set(STRM_FL_INI, sid) == c->is_clnt,
+        ensure(is_set(STRM_FL_INI_SRV, sid) == c->is_clnt,
                "got sid %" PRIu64 " but am %s", sid, conn_type(c));
-        ensure(is_set(STRM_FL_DIR, sid) == false,
+        ensure(is_set(STRM_FL_DIR_UNI, sid) == false,
                "TODO: unidirectional streams not supported yet %" PRIu64, sid);
         s = new_stream(c, sid);
     }
@@ -320,10 +320,21 @@ dec_max_stream_id_frame(struct q_conn * const c,
                         const struct w_iov * const v,
                         const uint16_t pos)
 {
-    const uint16_t i =
-        dec(&c->max_stream_id, v->buf, v->len, pos + 1, 0, "%" PRIu64);
+    uint64_t max = 0;
+    const uint16_t i = dec(&max, v->buf, v->len, pos + 1, 0, "%" PRIu64);
 
-    warn(INF, FRAM_IN "MAX_STREAM_ID" NRM " max=%" PRIu64, c->max_stream_id);
+    ensure(is_set(STRM_FL_INI_SRV, max) == c->is_clnt,
+           "illegal MAX_STREAM_ID %u", max);
+
+    if (is_set(STRM_FL_DIR_UNI, max)) {
+        c->max_stream_id_uni = max;
+        warn(INF, FRAM_IN "MAX_STREAM_ID" NRM " max=%" PRIu64 " (unidir)",
+             c->max_stream_id_uni);
+    } else {
+        c->max_stream_id_bidi = max;
+        warn(INF, FRAM_IN "MAX_STREAM_ID" NRM " max=%" PRIu64 " (bidir)",
+             c->max_stream_id_bidi);
+    }
 
     return i;
 }
