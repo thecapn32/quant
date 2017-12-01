@@ -65,7 +65,7 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
     if (rtxable_outstanding == 0) {
         // retransmittable packets are not outstanding
         ev_timer_stop(loop, &c->rec.ld_alarm);
-        warn(INF, "no RTX-able pkts outstanding, stopping ld_alarm");
+        warn(DBG, "no RTX-able pkts outstanding, stopping ld_alarm");
         return;
     }
 
@@ -73,12 +73,12 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
     if (c->state < CONN_STAT_ESTB) {
         dur = is_zero(c->rec.srtt) ? kDefaultInitialRtt : c->rec.srtt;
         dur = MAX(2 * dur, kMinTLPTimeout) * (1 << c->rec.hshake_cnt);
-        warn(INF, "handshake RTX alarm in %f sec on %s conn " FMT_CID, dur,
+        warn(DBG, "handshake RTX alarm in %f sec on %s conn " FMT_CID, dur,
              conn_type(c), c->id);
 
     } else if (!is_zero(c->rec.loss_t)) {
         dur = c->rec.loss_t - ev_now(loop);
-        warn(INF, "early RTX or time alarm in %f sec on %s conn " FMT_CID, dur,
+        warn(DBG, "early RTX or time alarm in %f sec on %s conn " FMT_CID, dur,
              conn_type(c), c->id);
 
         // } else if (c->rec.tlp_cnt < kMaxTLPs) {
@@ -87,7 +87,7 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
         //     else
         //         dur = kMinTLPTimeout;
         //     dur = MAX(dur, 2 * c->rec.srtt);
-        //     warn(INF, "TLP alarm in %f sec on %s conn " FMT_CID, dur,
+        //     warn(DBG, "TLP alarm in %f sec on %s conn " FMT_CID, dur,
         //     conn_type(c),
         //          c->id);
 
@@ -95,7 +95,7 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
         dur = c->rec.srtt + 4 * c->rec.rttvar;
         dur = MAX(dur, kMinRTOTimeout);
         dur *= (1 << c->rec.rto_cnt);
-        warn(INF, "RTO alarm in %f sec on %s conn " FMT_CID, dur, conn_type(c),
+        warn(DBG, "RTO alarm in %f sec on %s conn " FMT_CID, dur, conn_type(c),
              c->id);
     }
 
@@ -129,7 +129,7 @@ static void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c)
         const ev_tstamp time_since_sent = now - p->tx_t;
         const uint64_t delta = c->rec.lg_acked - p->nr;
 
-        // warn(INF,
+        // warn(DBG,
         //      "pkt %" PRIu64
         //      ": time_since_sent %f > delay_until_lost %f || delta %" PRIu64
         //      " > c->rec.reorder_thresh %" PRIu64,
@@ -138,23 +138,23 @@ static void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c)
 
         if (time_since_sent > delay_until_lost ||
             delta > c->rec.reorder_thresh) {
-            warn(WRN, "pkt " FMT_PNR " considered lost", p->nr);
+            warn(WRN, "pkt " FMT_PNR_OUT " considered lost", p->nr);
 
             // OnPacketsLost:
             if (is_rtxable(p)) {
                 c->rec.in_flight -= p->tx_len;
-                warn(INF, "in_flight -%u = %" PRIu64, p->tx_len,
+                warn(DBG, "in_flight -%u = %" PRIu64, p->tx_len,
                      c->rec.in_flight);
             }
 
             largest_lost_packet = MAX(largest_lost_packet, p->nr);
 
             if (p->is_rtxed || !is_rtxable(p)) {
-                warn(DBG, "free rtxed/non-rtxable pkt " FMT_PNR, p->nr);
+                warn(DBG, "free rtxed/non-rtxable pkt " FMT_PNR_OUT, p->nr);
                 splay_remove(pm_nr_splay, &c->rec.sent_pkts, p);
                 q_free_iov(w_iov(w_engine(c->sock), pm_idx(p)));
                 // } else {
-                //     warn(DBG, "mark non-rtxed pkt "FMT_PNR, p->nr);
+                //     warn(DBG, "mark non-rtxed pkt "FMT_PNR_OUT, p->nr);
                 //     TODO: figure out how/if to mark this
             }
 
@@ -170,7 +170,7 @@ static void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c)
         c->rec.cwnd *= kLossReductionFactor;
         c->rec.cwnd = MAX(c->rec.cwnd, kMinimumWindow);
         c->rec.ssthresh = c->rec.cwnd;
-        warn(INF, "cwnd %" PRIu64 ", ssthresh %" PRIu64, c->rec.cwnd,
+        warn(DBG, "cwnd %" PRIu64 ", ssthresh %" PRIu64, c->rec.cwnd,
              c->rec.ssthresh);
     }
 }
@@ -231,7 +231,7 @@ static void __attribute__((nonnull)) update_rtt(struct q_conn * const c)
             .75 * c->rec.rttvar + .25 * fabs(c->rec.srtt - c->rec.latest_rtt);
         c->rec.srtt = .875 * c->rec.srtt + .125 * c->rec.latest_rtt;
     }
-    warn(INF, "srtt = %f, rttvar = %f on %s conn " FMT_CID, c->rec.srtt,
+    warn(DBG, "srtt = %f, rttvar = %f on %s conn " FMT_CID, c->rec.srtt,
          c->rec.rttvar, conn_type(c), c->id);
 }
 
@@ -248,7 +248,7 @@ void on_pkt_sent(struct q_conn * const c, struct w_iov * const v)
 
     if (is_rtxable(&meta(v))) {
         c->rec.in_flight += meta(v).tx_len; // OnPacketSentCC
-        warn(INF, "in_flight +%u = %" PRIu64, meta(v).tx_len, c->rec.in_flight);
+        warn(DBG, "in_flight +%u = %" PRIu64, meta(v).tx_len, c->rec.in_flight);
         set_ld_alarm(c);
     }
 }
@@ -264,11 +264,11 @@ void on_ack_rx_1(struct q_conn * const c,
 
     c->rec.lg_acked = ack;
     struct w_iov * const v = find_sent_pkt(c, ack);
-    ensure(v, "found ACKed pkt " FMT_PNR, ack);
+    ensure(v, "found ACKed pkt " FMT_PNR_OUT, ack);
     c->rec.latest_rtt = ev_now(loop) - meta(v).tx_t;
     if (c->rec.latest_rtt > ack_delay)
         c->rec.latest_rtt -= ack_delay;
-    warn(INF, "latest_rtt %f", c->rec.latest_rtt);
+    warn(DBG, "latest_rtt %f", c->rec.latest_rtt);
     update_rtt(c);
 }
 
@@ -284,23 +284,24 @@ void on_pkt_acked(struct q_conn * const c, const uint64_t ack)
 {
     struct w_iov * const v = find_sent_pkt(c, ack);
     if (!v) {
-        warn(DBG, "got ACK for pkt " FMT_PNR " (%" PRIx64 ") with no metadata",
+        warn(DBG,
+             "got ACK for pkt " FMT_PNR_OUT " (%" PRIx64 ") with no metadata",
              ack, ack);
         return;
     }
 
     // only act on first-time ACKs
     if (meta(v).is_acked)
-        warn(WRN, "repeated ACK for " FMT_PNR " (%" PRIx64 ")", ack, ack);
+        warn(WRN, "repeated ACK for " FMT_PNR_OUT " (%" PRIx64 ")", ack, ack);
     else
-        warn(NTE, "first ACK for " FMT_PNR " (%" PRIx64 ")", ack, ack);
+        warn(DBG, "first ACK for " FMT_PNR_OUT " (%" PRIx64 ")", ack, ack);
     meta(v).is_acked = true;
 
     // If a packet sent prior to RTO was ACKed, then the RTO was spurious.
     // Otherwise, inform congestion control.
     if (c->rec.rto_cnt > 0 && ack > c->rec.lg_sent_before_rto) {
         c->rec.cwnd = kMinimumWindow; // OnRetransmissionTimeoutVerified
-        warn(INF, "cwnd %u", c->rec.cwnd);
+        warn(DBG, "cwnd %u", c->rec.cwnd);
     }
     c->rec.hshake_cnt = c->rec.tlp_cnt = c->rec.rto_cnt = 0;
     splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
@@ -312,21 +313,31 @@ void on_pkt_acked(struct q_conn * const c, const uint64_t ack)
     // packet
     if (meta(v).ack_header_pos) {
         warn(DBG,
-             "decoding ACK info from pkt " FMT_PNR " (%" PRIx64 ") from pos %u",
+             "decoding ACK info from pkt " FMT_PNR_OUT " (%" PRIx64
+             ") from pos %u",
              ack, ack, meta(v).ack_header_pos);
         adj_iov_to_start(v);
+#ifndef NDEBUG
+        // temporarily suppress debug output
+        const short l = util_dlevel;
+        util_dlevel = util_dlevel == DBG ? DBG : 0;
+#endif
         dec_ack_frame(c, v, meta(v).ack_header_pos, 0, &track_acked_pkts, 0);
+#ifndef NDEBUG
+        util_dlevel = l;
+#endif
         adj_iov_to_data(v);
         warn(DBG, "done decoding ACK info from pkt (%" PRIx64 ") from pos %u",
              ack, ack, meta(v).ack_header_pos);
     } else
-        warn(DBG, "pkt " FMT_PNR " (%" PRIx64 ") did not contain an ACK frame",
+        warn(DBG,
+             "pkt " FMT_PNR_OUT " (%" PRIx64 ") did not contain an ACK frame",
              ack, ack);
 
     // OnPacketAckedCC
     if (is_rtxable(&meta(v))) {
         c->rec.in_flight -= meta(v).tx_len;
-        warn(INF, "in_flight -%u = %" PRIu64, meta(v).tx_len, c->rec.in_flight);
+        warn(DBG, "in_flight -%u = %" PRIu64, meta(v).tx_len, c->rec.in_flight);
     }
 
     if (ack >= c->rec.rec_end) {
@@ -334,7 +345,7 @@ void on_pkt_acked(struct q_conn * const c, const uint64_t ack)
             c->rec.cwnd += meta(v).tx_len;
         else
             c->rec.cwnd += kDefaultMss * meta(v).tx_len / c->rec.cwnd;
-        warn(INF, "cwnd %" PRIu64, c->rec.cwnd);
+        warn(DBG, "cwnd %" PRIu64, c->rec.cwnd);
     }
 
     // check if a q_write is done

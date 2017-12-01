@@ -51,6 +51,68 @@
 #include "tls.h"
 
 
+#ifndef NDEBUG
+#define FMT_PNR32_OUT BLU "%u" NRM
+#define FMT_PNR32_IN GRN "%u" NRM
+
+
+static const char * pkt_type_str(const uint8_t flags)
+{
+    if (is_set(F_LONG_HDR, flags))
+        switch (pkt_type(flags)) {
+        case F_LH_VNEG:
+            return "Version Negotiation";
+        case F_LH_INIT:
+            return "Initial";
+        case F_LH_RTRY:
+            return "Retry";
+        case F_LH_HSHK:
+            return "Handshake";
+        case F_LH_0RTT:
+            return "0-RTT Protected";
+        default:
+            die("unknown packet type 0x%02x", flags);
+        }
+    else
+        switch (pkt_type(flags)) {
+        case 0x01:
+            return "Short(1)";
+        case 0x02:
+            return "Short(2)";
+        case 0x03:
+            return "Short(4)";
+        default:
+            die("unknown packet type 0x%02x", flags);
+        }
+}
+
+
+void log_pkt(const char * const dir, const struct w_iov * const v)
+{
+    const uint8_t flags = pkt_flags(v->buf);
+    const char * col_dir = *dir == 'R' ? BLD BLU : BLD GRN;
+    const char * col_nr = *dir == 'R' ? BLU : GRN;
+
+    if (is_set(F_LONG_HDR, flags))
+        twarn(NTE,
+              BLD "%s" NRM " len=%u 0x%02x=%s%s " NRM "cid=" FMT_CID
+                  " vers=0x%08x nr=%s%u",
+              dir, v->len, flags, col_dir, pkt_type_str(flags),
+              pkt_cid(v->buf, v->len), pkt_vers(v->buf, v->len), col_nr,
+              meta(v).nr);
+    else if (is_set(F_SH_CID, flags))
+        twarn(NTE,
+              BLD "%s" NRM " len=%u 0x%02x=%s%s" NRM "|CID cid=" FMT_CID
+                  " nr=%s%" PRIu64,
+              dir, v->len, flags, col_dir, pkt_type_str(flags),
+              pkt_cid(v->buf, v->len), col_nr, meta(v).nr);
+    else
+        twarn(NTE, BLD "%s" NRM " len=%u 0x%02x=%s%s " NRM "nr=%s%" PRIu64, dir,
+              v->len, flags, col_dir, pkt_type_str(flags), col_nr, meta(v).nr);
+}
+#endif
+
+
 /// Packet number lengths for different short-header packet types
 static const uint8_t pkt_nr_lens[] = {0, sizeof(uint8_t), sizeof(uint16_t),
                                       sizeof(uint32_t)};
@@ -99,7 +161,7 @@ pkt_nr(const uint8_t * const buf, const uint16_t len, struct q_conn * const c)
     uint64_t nr = next;
     dec(&nr, buf, len,
         is_set(F_LONG_HDR, flags) || is_set(F_SH_CID, flags) ? 9 : 1, nr_len,
-        FMT_PNR32);
+        FMT_PNR32_IN);
 
     const uint64_t alt = nr + (UINT64_C(1) << (nr_len * 8));
     const uint64_t d1 = next >= nr ? next - nr : nr - next;
@@ -146,7 +208,8 @@ bool enc_pkt(struct q_stream * const s,
 #ifndef NDEBUG
     if (rtx) {
         const uint64_t prev_nr = meta(v).nr;
-        warn(INF, "enc RTX " FMT_PNR " as " FMT_PNR " in idx %u", prev_nr,
+        warn(INF, "enc RTX " FMT_PNR_OUT " as " FMT_PNR_OUT " in idx %u",
+             prev_nr,
              c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv)
                                             : c->rec.lg_sent + 1,
              w_iov_idx(v));
@@ -183,7 +246,7 @@ bool enc_pkt(struct q_stream * const s,
 
     if (rtx && flags != pkt_flags(v->buf)) {
         warn(NTE,
-             "RTX of 0x%02x-type pkt " FMT_PNR
+             "RTX of 0x%02x-type pkt " FMT_PNR_OUT
              " prevented; new type would be 0x%02x",
              pkt_flags(v->buf), meta(v).nr, flags);
         adj_iov_to_data(v);
@@ -196,7 +259,7 @@ bool enc_pkt(struct q_stream * const s,
         i = enc(v->buf, v->len, i, &c->id, sizeof(c->id), FMT_CID);
 
     if (is_set(F_LONG_HDR, flags)) {
-        i = enc(v->buf, v->len, i, &meta(v).nr, sizeof(uint32_t), FMT_PNR32);
+        i = enc(v->buf, v->len, i, &meta(v).nr, sizeof(uint32_t), FMT_PNR32_OUT);
         i = enc(v->buf, v->len, i, &c->vers, sizeof(c->vers), "0x%08x");
         if (c->state == CONN_STAT_VERS_REJ) {
             warn(INF, "sending version negotiation server response");
@@ -209,7 +272,9 @@ bool enc_pkt(struct q_stream * const s,
             diet_remove(&c->recv, meta(v).nr);
         }
     } else
-        i = enc(v->buf, v->len, i, &meta(v).nr, pkt_nr_len, FMT_PNR32);
+        i = enc(v->buf, v->len, i, &meta(v).nr, pkt_nr_len, FMT_PNR32_OUT);
+
+    log_pkt("TX", v);
 
     const uint16_t hdr_len = i;
 
@@ -222,7 +287,6 @@ bool enc_pkt(struct q_stream * const s,
 
 
     // TODO: Unclear whether this is the best way to send this in the long run.
-    // warn(NTE, "str %u out_off %u/%u", s->id, s->out_off, s->out_off_max);
     if (s->out_off_max && s->out_off + MAX_PKT_LEN > s->out_off_max) {
         // if we have less than one full packet's worth of window, block
         s->blocked = true;
@@ -234,7 +298,6 @@ bool enc_pkt(struct q_stream * const s,
         i = enc_stream_blocked_frame(s, v, i);
 
     // TODO: Unclear whether this is the best way to send this in the long run.
-    // warn(NTE, "str %u in_off %u/%u", s->id, s->in_off, s->in_off_max);
     if (c->state >= CONN_STAT_ESTB &&
         (s->open_win || s->in_off + MAX_PKT_LEN > s->in_off_max)) {
         // increase receive window
@@ -286,12 +349,6 @@ bool enc_pkt(struct q_stream * const s,
 
     sq_insert_tail(q, x, next);
     meta(v).tx_len = x->len;
-
-    warn(NTE,
-         "tx pkt " FMT_PNR " (%" PRIx64
-         "), len %u+%u, type 0x%02x on %s conn " FMT_CID,
-         meta(v).nr, meta(v).nr, v->len, meta(v).tx_len - v->len,
-         pkt_flags(v->buf), conn_type(c), c->id);
 
     if (c->state == CONN_STAT_VERS_SENT)
         // adjust v->len to end of stream data (excl. padding)

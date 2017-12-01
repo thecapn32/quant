@@ -461,7 +461,7 @@ void q_close(struct q_conn * const c)
 
     // wait until everything is ACKed
     while (rtxable_pkts_outstanding(c) != 0) {
-        warn(CRT, "waiting for ACKs");
+        warn(NTE, "waiting for ACKs");
         ev_async_send(loop, &c->tx_w);
         loop_run(q_close, c);
     }

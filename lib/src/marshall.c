@@ -26,6 +26,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <arpa/inet.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -68,7 +69,7 @@ uint16_t __attribute__((const)) varint_sizeof(const uint64_t v)
 #ifndef NDEBUG
 #define log_enc(type, fmt)                                                     \
     if (unlikely(DLEVEL >= DBG && util_dlevel >= DBG))                         \
-    util_warn(DBG, func, file, line, fmt,                                      \
+    util_warn(DBG, false, func, file, line, fmt,                               \
               (src_str[0] == '&' ? &src_str[1] : src_str), *(const type *)src, \
               i - pos, plural(i - pos), (src_len ? "fix" : "var"), buf_str,    \
               pos, i - 1)
@@ -169,7 +170,7 @@ uint16_t __attribute__((nonnull)) marshall_enc(uint8_t * const buf,
 #ifndef NDEBUG
 #define log_dec(type)                                                          \
     if (unlikely(DLEVEL >= DBG && util_dlevel >= DBG))                         \
-    util_warn(DBG, func, file, line, fmt, i - pos, plural(i - pos),            \
+    util_warn(DBG, false, func, file, line, fmt, i - pos, plural(i - pos),     \
               (dst_len ? "fix" : "var"), buf_str, pos, i - 1, dst_str,         \
               *(const type *)dst)
 #else

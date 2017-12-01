@@ -43,7 +43,7 @@
 #define F_LH_0RTT 0x05
 
 #define F_SH_CID 0x40
-#define F_SH_KYPH 0x20
+#define F_SH_KPH 0x20
 
 
 #define CONN_CLSE_ERR_NO_ERROR 0x0
@@ -62,7 +62,6 @@
 #define pkt_flags(buf) (*(const uint8_t * const)(buf))
 
 #define pkt_type(flags) (flags & (is_set(F_LONG_HDR, flags) ? ~0x80 : ~0xe0))
-
 
 struct q_conn;
 struct q_stream;
@@ -85,3 +84,12 @@ extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
                                              const bool rtx,
                                              struct w_iov * const v,
                                              struct w_iov_sq * const q);
+
+#ifndef NDEBUG
+extern void __attribute__((nonnull))
+log_pkt(const char * const dir, const struct w_iov * const v);
+#else
+#define log_pkt(...)                                                              \
+    do {                                                                       \
+    } while (0)
+#endif

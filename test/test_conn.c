@@ -59,6 +59,7 @@ int main(int argc
 )
 {
 #ifndef NDEBUG
+    util_dlevel = DLEVEL; // default to maximum compiled-in verbosity
     int ch;
     while ((ch = getopt(argc, argv, "v:")) != -1)
         if (ch == 'v')

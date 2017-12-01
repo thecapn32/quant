@@ -49,10 +49,14 @@
 #include "recovery.h"
 #include "stream.h"
 
-
 #define F_STREAM_FIN 0x01
 #define F_STREAM_LEN 0x02
 #define F_STREAM_OFF 0x04
+
+#ifndef NDEBUG
+#define FRAM_IN BLD BLU
+#define FRAM_OUT BLD GRN
+#endif
 
 
 static uint16_t __attribute__((nonnull))
@@ -102,7 +106,7 @@ dec_stream_frame(struct q_conn * const c,
 
     // best case: new in-order data
     if (meta(v).in_off == s->in_off) {
-        warn(NTE,
+        warn(DBG,
              "%" PRIu64 " byte%s new data (off %" PRIu64 "-%" PRIu64
              ") on %s conn " FMT_CID " str " FMT_SID,
              l, plural(l), meta(v).in_off, meta(v).in_off + l, conn_type(c),
@@ -117,7 +121,7 @@ dec_stream_frame(struct q_conn * const c,
             nxt = splay_next(pm_off_splay, &s->in_ooo, p);
             const uint16_t sdl = p->stream_data_end;
 
-            warn(NTE,
+            warn(DBG,
                  "deliver %u ooo byte%s (off %" PRIu64 "-%" PRIu64
                  ") on %s conn " FMT_CID " str " FMT_SID,
                  sdl, plural(sdl), p->in_off, p->in_off + sdl, conn_type(c),
@@ -134,7 +138,7 @@ dec_stream_frame(struct q_conn * const c,
 #endif
             s->state =
                 s->state <= STRM_STAT_OPEN ? STRM_STAT_HCRM : STRM_STAT_CLSD;
-            warn(NTE,
+            warn(DBG,
                  "received FIN on %s conn " FMT_CID " str " FMT_SID
                  ", state %u -> %u",
                  conn_type(c), c->id, s->id, old_state, s->state);
@@ -149,7 +153,7 @@ dec_stream_frame(struct q_conn * const c,
 
     // data is a complete duplicate
     if (meta(v).in_off + l <= s->in_off) {
-        warn(NTE,
+        warn(DBG,
              "%" PRIu64 " byte%s dup data (off %" PRIu64 "-%" PRIu64
              ") on %s conn " FMT_CID " str " FMT_SID,
              l, plural(l), meta(v).in_off, meta(v).in_off + l, conn_type(c),
@@ -158,7 +162,7 @@ dec_stream_frame(struct q_conn * const c,
     }
 
     // data is out of order
-    warn(NTE,
+    warn(DBG,
          "reordered data: %" PRIu64 " byte%s data (off %" PRIu64 "-%" PRIu64
          "), expected %" PRIu64 " on %s conn " FMT_CID " str " FMT_SID,
          l, plural(l), meta(v).in_off, meta(v).in_off + l, s->in_off,
@@ -166,6 +170,16 @@ dec_stream_frame(struct q_conn * const c,
     splay_insert(pm_off_splay, &s->in_ooo, &meta(v));
 
 done:
+    warn(INF,
+         FRAM_IN "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID " off=%" PRIu64
+                 " len=%" PRIu64,
+         type, is_set(F_STREAM_FIN, type) ? "FIN" : "",
+         is_set(F_STREAM_FIN, type) && is_set(F_STREAM_LEN | F_STREAM_OFF, type)
+             ? "|"
+             : "",
+         is_set(F_STREAM_LEN, type) ? "LEN" : "",
+         is_set(F_STREAM_OFF, type) ? "|" : "",
+         is_set(F_STREAM_OFF, type) ? "OFF" : "", sid, meta(v).in_off, l);
     return meta(v).stream_data_end;
 }
 
@@ -182,25 +196,36 @@ uint16_t dec_ack_frame(
     uint16_t i = dec(&type, v->buf, v->len, pos, sizeof(type), "0x%02x");
 
     uint64_t lg_ack = 0;
-    i = dec(&lg_ack, v->buf, v->len, i, 0, FMT_PNR);
+    i = dec(&lg_ack, v->buf, v->len, i, 0, FMT_PNR_OUT);
 
     uint64_t ack_delay = 0;
     i = dec(&ack_delay, v->buf, v->len, i, 0, "%" PRIu64);
 
     uint64_t num_blocks = 0;
     i = dec(&num_blocks, v->buf, v->len, i, 0, "%" PRIu64);
-    num_blocks++;
 
     uint64_t lg_ack_in_block = lg_ack;
     if (before_ack)
         before_ack(c, lg_ack_in_block, ack_delay);
-    do {
+
+    for (uint64_t n = num_blocks + 1; n > 0; n--) {
+        uint64_t gap = 0;
         uint64_t ack_block_len = 0;
         i = dec(&ack_block_len, v->buf, v->len, i, 0, "%" PRIu64);
 
-        warn(NTE, "got ACKs " FMT_PNR "-" FMT_PNR " (%" PRIx64 "-%" PRIx64 ")",
-             lg_ack_in_block - ack_block_len, lg_ack_in_block,
-             lg_ack_in_block - ack_block_len, lg_ack_in_block);
+        if (n == num_blocks + 1)
+            warn(INF,
+                 FRAM_IN "ACK" NRM " lg=" FMT_PNR_OUT " delay=%" PRIu64
+                         " cnt=%" PRIu64 " block=%" PRIu64 " (" FMT_PNR_OUT
+                         "-" FMT_PNR_OUT ")",
+                 lg_ack, ack_delay, num_blocks, ack_block_len, lg_ack_in_block,
+                 lg_ack_in_block - ack_block_len);
+        else
+            warn(INF,
+                 FRAM_IN "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64
+                         " (" FMT_PNR_OUT "-" FMT_PNR_OUT ")",
+                 gap, ack_block_len, lg_ack_in_block,
+                 lg_ack_in_block - ack_block_len);
 
         uint64_t ack = lg_ack_in_block;
         while (ack + ack_block_len >= lg_ack_in_block) {
@@ -212,12 +237,10 @@ uint16_t dec_ack_frame(
         }
 
         if (num_blocks > 1) {
-            uint64_t gap = 0;
             i = dec(&gap, v->buf, v->len, i, 0, "%" PRIu64);
             lg_ack_in_block = ack - gap;
         }
-        num_blocks--;
-    } while (num_blocks);
+    }
 
     if (after_ack)
         after_ack(c);
@@ -264,15 +287,16 @@ dec_close_frame(struct q_conn * const c __attribute__((unused)),
     i = dec(&reas_len, v->buf, v->len, i, 0, "%" PRIu64);
     ensure(reas_len + i <= v->len, "reason_len invalid");
 
+    char reas_phr[UINT16_MAX];
     if (reas_len) {
-        char reas_phr[UINT16_MAX];
         memcpy(reas_phr, &v->buf[i], reas_len);
         i += reas_len;
-        warn(NTE, "%u-byte conn close reason: %.*s", reas_len, reas_len,
-             reas_phr);
     }
 
     // TODO: close connection
+
+    warn(INF, FRAM_IN "CLOSE" NRM " err=0x%04x rlen=%" PRIu64 " reason=%.*s",
+         err_code, reas_len, reas_len, reas_phr);
 
     return i;
 }
@@ -287,8 +311,10 @@ dec_max_stream_data_frame(struct q_conn * const c,
     struct q_stream * const s = get_stream(c, sid);
     ensure(s, "have stream %u", sid);
     i = dec(&s->out_off_max, v->buf, v->len, i, 0, "%" PRIu64);
-    warn(INF, "str " FMT_SID " out_off_max = %" PRIu64, s->id, s->out_off_max);
     s->blocked = false;
+
+    warn(INF, FRAM_IN "MAX_STREAM_DATA" NRM " id=" FMT_SID " max=%" PRIu64, sid,
+         s->out_off_max);
 
     return i;
 }
@@ -299,7 +325,12 @@ dec_max_stream_id_frame(struct q_conn * const c,
                         const struct w_iov * const v,
                         const uint16_t pos)
 {
-    return dec(&c->max_stream_id, v->buf, v->len, pos + 1, 0, "%" PRIu64);
+    const uint16_t i =
+        dec(&c->max_stream_id, v->buf, v->len, pos + 1, 0, "%" PRIu64);
+
+    warn(INF, FRAM_IN "MAX_STREAM_ID" NRM " max=%" PRIu64, c->max_stream_id);
+
+    return i;
 }
 
 
@@ -308,7 +339,12 @@ dec_max_data_frame(struct q_conn * const c,
                    const struct w_iov * const v,
                    const uint16_t pos)
 {
-    return dec(&c->max_data, v->buf, v->len, pos + 1, 0, "%" PRIu64);
+    const uint16_t i =
+        dec(&c->max_data, v->buf, v->len, pos + 1, 0, "%" PRIu64);
+
+    warn(INF, FRAM_IN "MAX_DATA" NRM " max=%" PRIu64, c->max_data);
+
+    return i;
 }
 
 
@@ -321,6 +357,8 @@ dec_stream_blocked_frame(struct q_conn * const c,
     const uint16_t i = dec(&sid, v->buf, v->len, pos + 1, 0, FMT_SID);
     struct q_stream * const s = get_stream(c, sid);
     ensure(s, "have stream %u", sid);
+
+    warn(INF, FRAM_IN "STREAM_BLOCKED" NRM " id=" FMT_SID, sid);
 
     // open the stream window and send a frame
     s->open_win = true;
@@ -339,10 +377,13 @@ dec_stop_sending_frame(struct q_conn * const c,
     struct q_stream * const s = get_stream(c, sid);
     ensure(s, "have stream %u", sid);
 
-    warn(CRT, "TODO: handle STOP_SENDING");
-
     uint16_t err_code = 0;
-    return dec(&err_code, v->buf, v->len, i, sizeof(err_code), "%0x04x");
+    i = dec(&err_code, v->buf, v->len, i, sizeof(err_code), "0x%04x");
+
+    warn(INF, FRAM_IN "STOP_SENDING" NRM " id=" FMT_SID " err=0x%04x", sid,
+         err_code);
+
+    return i;
 }
 
 
@@ -354,7 +395,7 @@ void dec_frames(struct q_conn * const c, struct w_iov * v)
     while (i < v->len) {
         const uint8_t type = ((const uint8_t * const)(v->buf))[i];
         if (pad_start && (type != FRAM_TYPE_PAD || i == v->len - 1)) {
-            warn(DBG, "skipped padding in [%u..%u]", pad_start, i);
+            warn(INF, FRAM_IN "PADDING" NRM " len=%u", i - pad_start);
             pad_start = 0;
         }
 
@@ -364,7 +405,7 @@ void dec_frames(struct q_conn * const c, struct w_iov * v)
             if (meta(v).stream_data_start) {
                 // already had at least one stream frame in this packet,
                 // generate (another) copy
-                warn(INF, "more than one stream frame in pkt, copy");
+                warn(DBG, "more than one stream frame in pkt, copy");
                 struct w_iov * const vdup =
                     q_alloc_iov(w_engine(c->sock), MAX_PKT_LEN, Q_OFFSET);
                 memcpy(vdup->buf, v->buf, v->len);
@@ -449,7 +490,7 @@ uint16_t enc_padding_frame(struct w_iov * const v,
                            const uint16_t pos,
                            const uint16_t len)
 {
-    warn(DBG, "encoding padding frame into [%u..%u]", pos, pos + len - 1);
+    warn(INF, FRAM_OUT "PADDING" NRM " len=%u", len);
     memset(&v->buf[pos], FRAM_TYPE_PAD, len);
     bit_set(meta(v).frames, FRAM_TYPE_PAD);
     return pos + len;
@@ -465,7 +506,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
 
     const uint64_t lg_recv = diet_max(&c->recv);
-    i = enc(v->buf, v->len, i, &lg_recv, 0, FMT_PNR);
+    i = enc(v->buf, v->len, i, &lg_recv, 0, FMT_PNR_IN);
 
     const uint64_t ack_delay = 0;
     i = enc(v->buf, v->len, i, &ack_delay, 0, "%" PRIu64);
@@ -476,13 +517,26 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     struct ival * b = 0;
     uint64_t prev_lo = 0;
     splay_foreach_rev (b, diet, &c->recv) {
+        uint64_t gap = 0;
         if (prev_lo) {
-            const uint64_t gap = prev_lo - b->hi - 1;
+            gap = prev_lo - b->hi - 1;
             i = enc(v->buf, v->len, i, &gap, 0, "%" PRIu64);
         }
         const uint64_t ack_block = b->hi - b->lo + (prev_lo ? 1 : 0);
-        warn(NTE, "ACKing " FMT_PNR "-" FMT_PNR " (%" PRIx64 "-%" PRIx64 ")",
-             b->lo, b->hi, b->lo, b->hi);
+
+        if (prev_lo)
+            warn(INF,
+                 FRAM_OUT "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64
+                          " (" FMT_PNR_IN "-" FMT_PNR_IN ")",
+                 gap, block_cnt, ack_block, b->lo, b->hi);
+        else
+            warn(INF,
+                 FRAM_OUT "ACK" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64
+                          " cnt=%" PRIu64 " block=%" PRIu64 " (" FMT_PNR_IN
+                          "-" FMT_PNR_IN ")",
+                 lg_recv, ack_delay, block_cnt, ack_block, b->lo, b->hi, b->lo,
+                 b->hi);
+
         i = enc(v->buf, v->len, i, &ack_block, 0, "%" PRIu64);
         prev_lo = b->lo;
     }
@@ -498,20 +552,12 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
     ensure(dlen || s->state > STRM_STAT_OPEN,
            "no stream data or need to send FIN");
 
-    warn(INF,
-         "%" PRIu64 " byte%s at off %" PRIu64 "-%" PRIu64 " on str " FMT_SID,
-         dlen, plural(dlen), s->out_off,
-         dlen ? s->out_off + dlen - 1 : s->out_off, s->id);
-
     uint8_t type = FRAM_TYPE_STRM | (dlen ? F_STREAM_LEN : 0) |
                    (s->out_off ? F_STREAM_OFF : 0);
 
     // if stream is closed locally and this is the last packet, include a FIN
     if ((s->state == STRM_STAT_HCLO || s->state == STRM_STAT_CLSD) &&
         v == sq_last(&s->out, w_iov, next)) {
-        warn(NTE,
-             "sending %s FIN on %s conn " FMT_CID " str " FMT_SID ", state %u",
-             dlen ? "" : "pure", conn_type(s->c), s->c->id, s->id, s->state);
         type |= F_STREAM_FIN;
         s->fin_sent = 1;
         maybe_api_return(q_close_stream, s);
@@ -526,12 +572,23 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
     if (s->out_off)
         i = enc(v->buf, v->len, i, &s->out_off, 0, "%" PRIu64);
     if (dlen)
-        i = enc(v->buf, v->len, i, &dlen, 0, "%u"); // NOLINT
+        enc(v->buf, v->len, i, &dlen, 0, "%u");
 
     s->out_off += dlen; // increase the stream data offset
     meta(v).str = s;    // remember stream this buf belongs to
     meta(v).stream_data_start = Q_OFFSET;
     meta(v).stream_data_end = Q_OFFSET + (uint16_t)dlen;
+
+    warn(INF,
+         FRAM_OUT "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID " off=%" PRIu64
+                  " len=%" PRIu64,
+         type, is_set(F_STREAM_FIN, type) ? "FIN" : "",
+         is_set(F_STREAM_FIN, type) && is_set(F_STREAM_LEN | F_STREAM_OFF, type)
+             ? "|"
+             : "",
+         is_set(F_STREAM_LEN, type) ? "LEN" : "",
+         is_set(F_STREAM_OFF, type) ? "|" : "",
+         is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id, meta(v).in_off, dlen);
 
     return v->len;
 }
@@ -555,6 +612,9 @@ uint16_t enc_close_frame(struct w_iov * const v,
     warn(DBG, "enc %" PRIu64 "-byte reason phrase into [%u..%" PRIu64 "]", rlen,
          i, i + rlen - 1);
 
+    warn(INF, FRAM_OUT "CLOSE" NRM " err=0x%04x rlen=%" PRIu64 " reason=%.*s",
+         err_code, rlen, rlen, reas);
+
     return i + (uint16_t)rlen;
 }
 
@@ -568,7 +628,12 @@ uint16_t enc_max_stream_data_frame(struct q_stream * const s,
     const uint8_t type = FRAM_TYPE_MAX_STRM_DATA;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
     i = enc(v->buf, v->len, i, &s->id, 0, FMT_SID);
-    return enc(v->buf, v->len, i, &s->in_off_max, 0, "%" PRIu64);
+    i = enc(v->buf, v->len, i, &s->in_off_max, 0, "%" PRIu64);
+
+    warn(INF, FRAM_OUT "MAX_STREAM_DATA" NRM " id=" FMT_SID " max=%" PRIu64,
+         s->id, s->in_off_max);
+
+    return i;
 }
 
 
@@ -580,5 +645,9 @@ uint16_t enc_stream_blocked_frame(struct q_stream * const s,
 
     const uint8_t type = FRAM_TYPE_STRM_BLCK;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
-    return enc(v->buf, v->len, i, &s->id, 0, FMT_SID);
+    i = enc(v->buf, v->len, i, &s->id, 0, FMT_SID);
+
+    warn(INF, FRAM_OUT "STREAM_BLOCKED" NRM " id=" FMT_SID, s->id);
+
+    return i;
 }

@@ -162,9 +162,9 @@ static void log_sent_pkts(struct q_conn * const c)
          p = splay_next(pm_nr_splay, &c->rec.sent_pkts, p)) {
         char tmp[1024] = "";
         const bool ack_only = is_ack_only(p);
-        snprintf(tmp, sizeof(tmp), "%s%s" FMT_PNR " (%" PRIx64 ")%s ",
-                 is_rtxable(p) ? "+" : "", ack_only ? "[" : "", p->nr, p->nr,
-                 ack_only ? "]" : "");
+        snprintf(tmp, sizeof(tmp), "%s%s" FMT_PNR_OUT "%s ",
+                 is_rtxable(p) ? "*" : "", ack_only ? "(" : "", p->nr,
+                 ack_only ? ")" : "");
         strncat(sent_pkts_buf, tmp,
                 sizeof(sent_pkts_buf) - strlen(sent_pkts_buf) - 1);
     }
@@ -191,15 +191,15 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
 
         if (meta(v).is_acked) {
             warn(DBG,
-                 "skipping ACKed pkt " FMT_PNR " (%" PRIx64 ") on str " FMT_SID
-                 " during %s",
+                 "skipping ACKed pkt " FMT_PNR_OUT " (%" PRIx64
+                 ") on str " FMT_SID " during %s",
                  meta(v).nr, meta(v).nr, s->id, rtx ? "RTX" : "TX");
             continue;
         }
 
         if (rtx != (meta(v).tx_len > 0)) {
             warn(DBG,
-                 "skipping %s pkt " FMT_PNR " (%" PRIx64 ") on str " FMT_SID
+                 "skipping %s pkt " FMT_PNR_OUT " (%" PRIx64 ") on str " FMT_SID
                  " during %s",
                  meta(v).tx_len ? "already-tx'ed" : "fresh", meta(v).nr,
                  meta(v).nr, s->id, rtx ? "RTX" : "TX");
@@ -550,7 +550,7 @@ void rx(struct ev_loop * const l,
                          cid, conn_type(c), c->id);
                     update_cid(c, cid);
                 } else {
-                    warn(CRT, "new serv conn from %s:%u",
+                    warn(NTE, "new serv conn from %s:%u",
                          inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
                     const struct sockaddr_in none = {0};
                     c = get_conn_by_ipnp(&none, is_clnt);
@@ -576,6 +576,7 @@ void rx(struct ev_loop * const l,
         }
 
         meta(v).nr = pkt_nr(v->buf, v->len, c);
+        log_pkt("RX", v);
 
         // XXX rethink this
         // const uint64_t drop[] = {8000, 8001, 8002};
@@ -595,11 +596,6 @@ void rx(struct ev_loop * const l,
             c->had_rx = true;
             sl_insert_head(&crx, c, next);
         }
-
-        warn(NTE,
-             "rx pkt " FMT_PNR " (%" PRIx64 "), len %u, type 0x%02x"
-             " on %s conn " FMT_CID,
-             meta(v).nr, meta(v).nr, v->len, flags, conn_type(c), c->id);
 
         process_pkt(c, v);
     }
