@@ -165,12 +165,12 @@ static struct q_conn * new_conn(struct w_engine * const w,
     c->idle_alarm.repeat = kIdleTimeout;
     ev_init(&c->idle_alarm, idle_alarm);
 
-    c->ack_delay_exponent = c->initial_ack_delay_exponent = 3;
-    c->initial_idle_timeout = kIdleTimeout;
-    c->initial_max_data = 0x2000;
-    c->initial_max_stream_data = 0x2000;
-    c->initial_max_stream_id_bidi = c->is_clnt ? 5 : 4;
-    c->initial_max_stream_id_uni = 0; // TODO: support unidir streams
+    c->peer_ack_del_exp = c->local_ack_del_exp = 3;
+    c->local_idle_to = kIdleTimeout;
+    c->local_max_data = 0x2000;
+    c->local_max_strm_data = 0x2000;
+    c->local_max_strm_bidi = c->is_clnt ? 5 : 4;
+    c->local_max_strm_uni = 0; // TODO: support unidir streams
 
     // initialize socket and start an RX/TX watchers
     ev_async_init(&c->tx_w, tx_w);
@@ -380,8 +380,8 @@ struct q_conn * q_accept(struct q_conn * const c)
 
 struct q_stream * q_rsv_stream(struct q_conn * const c)
 {
-    ensure(c->next_sid <= c->max_stream_id_bidi, "sid %u <= max %u",
-           c->next_sid, c->max_stream_id_bidi);
+    ensure(c->next_sid <= c->peer_max_strm_bidi, "sid %u <= max %u",
+           c->next_sid, c->peer_max_strm_bidi);
     return new_stream(c, c->next_sid);
 }
 

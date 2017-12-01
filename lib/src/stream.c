@@ -63,8 +63,8 @@ struct q_stream * new_stream(struct q_conn * const c, const uint64_t id)
     sq_init(&s->out);
     sq_init(&s->in);
     s->id = id;
-    s->in_off_max = c->initial_max_stream_data;
-    s->out_off_max = c->max_stream_data;
+    s->in_off_max = c->local_max_strm_data;
+    s->out_off_max = c->peer_max_strm_data;
     if (id)
         c->next_sid += 2;
     splay_insert(stream, &c->streams, s);

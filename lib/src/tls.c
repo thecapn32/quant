@@ -238,44 +238,44 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
         switch (tp) {
         case TP_INITIAL_MAX_STREAM_DATA:
-            dec_tp(&c->max_stream_data, sizeof(uint32_t));
+            dec_tp(&c->peer_max_strm_data, sizeof(uint32_t));
             // we need to apply this parameter to stream 0
             struct q_stream * const s = get_stream(c, 0);
-            s->out_off_max = c->max_stream_data;
+            s->out_off_max = c->peer_max_strm_data;
             warn(DBG, "str " FMT_SID " out_off_max = %u", s->id,
                  s->out_off_max);
             break;
 
         case TP_INITIAL_MAX_DATA:
-            dec_tp(&c->max_data, sizeof(uint32_t));
+            dec_tp(&c->peer_max_data, sizeof(uint32_t));
             break;
 
         case TP_INITIAL_MAX_STREAM_ID_BIDI:
-            dec_tp(&c->max_stream_id_bidi, sizeof(uint32_t));
-            ensure(is_set(STRM_FL_DIR_UNI, c->max_stream_id_bidi) == false,
-                   "got unidir sid %" PRIu64, c->max_stream_id_bidi);
-            ensure(is_set(STRM_FL_INI_SRV, c->max_stream_id_bidi) != c->is_clnt,
-                   "illegal initiator for sid %" PRIu64, c->max_stream_id_bidi);
+            dec_tp(&c->peer_max_strm_bidi, sizeof(uint32_t));
+            ensure(is_set(STRM_FL_DIR_UNI, c->peer_max_strm_bidi) == false,
+                   "got unidir sid %" PRIu64, c->peer_max_strm_bidi);
+            ensure(is_set(STRM_FL_INI_SRV, c->peer_max_strm_bidi) != c->is_clnt,
+                   "illegal initiator for sid %" PRIu64, c->peer_max_strm_bidi);
             break;
 
         case TP_INITIAL_MAX_STREAM_ID_UNI:
-            dec_tp(&c->max_stream_id_uni, sizeof(uint32_t));
-            ensure(is_set(STRM_FL_DIR_UNI, c->max_stream_id_uni),
-                   "got bidir sid %" PRIu64, c->max_stream_id_uni);
-            ensure(is_set(STRM_FL_INI_SRV, c->max_stream_id_uni) != c->is_clnt,
-                   "illegal initiator for sid %" PRIu64, c->max_stream_id_uni);
+            dec_tp(&c->peer_max_strm_uni, sizeof(uint32_t));
+            ensure(is_set(STRM_FL_DIR_UNI, c->peer_max_strm_uni),
+                   "got bidir sid %" PRIu64, c->peer_max_strm_uni);
+            ensure(is_set(STRM_FL_INI_SRV, c->peer_max_strm_uni) != c->is_clnt,
+                   "illegal initiator for sid %" PRIu64, c->peer_max_strm_uni);
             break;
 
         case TP_IDLE_TIMEOUT:
-            dec_tp(&c->idle_timeout, sizeof(uint16_t));
-            if (c->idle_timeout > 600)
-                warn(ERR, "idle timeout %u > 600", c->idle_timeout);
+            dec_tp(&c->peer_idle_to, sizeof(uint16_t));
+            if (c->peer_idle_to > 600)
+                warn(ERR, "idle timeout %u > 600", c->peer_idle_to);
             break;
 
         case TP_MAX_PACKET_SIZE:
-            dec_tp(&c->max_packet_size, sizeof(uint16_t));
-            if (c->max_packet_size < 1200 || c->max_packet_size > 65527)
-                warn(ERR, "max_packet_size %u invalid", c->max_packet_size);
+            dec_tp(&c->peer_max_pkt, sizeof(uint16_t));
+            if (c->peer_max_pkt < 1200 || c->peer_max_pkt > 65527)
+                warn(ERR, "peer_max_pkt %u invalid", c->peer_max_pkt);
             break;
 
         case TP_OMIT_CONNECTION_ID: {
@@ -286,10 +286,9 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         }
 
         case TP_ACK_DELAY_EXPONENT:
-            dec_tp(&c->ack_delay_exponent, sizeof(uint8_t));
-            if (c->ack_delay_exponent > 20)
-                warn(ERR, "ack_delay_exponent %u invalid",
-                     c->ack_delay_exponent);
+            dec_tp(&c->peer_ack_del_exp, sizeof(uint8_t));
+            if (c->peer_ack_del_exp > 20)
+                warn(ERR, "peer_ack_del_exp %u invalid", c->peer_ack_del_exp);
             break;
 
         case TP_STATELESS_RESET_TOKEN:
@@ -351,19 +350,14 @@ static void init_tp(struct q_conn * const c)
     const struct q_conn * const other = get_conn_by_ipnp(&c->peer, 0);
     if (!other || other->id == c->id)
         enc_tp(c, TP_OMIT_CONNECTION_ID, i, 0); // i not used
-    enc_tp(c, TP_IDLE_TIMEOUT, c->initial_idle_timeout,
-           sizeof(c->initial_idle_timeout));
-    enc_tp(c, TP_INITIAL_MAX_STREAM_ID_BIDI, c->initial_max_stream_id_bidi,
-           sizeof(c->initial_max_stream_id_bidi));
-    enc_tp(c, TP_INITIAL_MAX_STREAM_DATA, c->initial_max_stream_data,
-           sizeof(c->initial_max_stream_data));
-    enc_tp(c, TP_INITIAL_MAX_DATA, c->initial_max_data,
-           sizeof(c->initial_max_data));
+    enc_tp(c, TP_IDLE_TIMEOUT, c->local_idle_to, sizeof(uint16_t));
+    enc_tp(c, TP_INITIAL_MAX_STREAM_ID_BIDI, c->local_max_strm_bidi,
+           sizeof(uint32_t));
+    enc_tp(c, TP_INITIAL_MAX_STREAM_DATA, c->local_max_strm_data,
+           sizeof(uint32_t));
+    enc_tp(c, TP_INITIAL_MAX_DATA, c->local_max_data, sizeof(uint32_t));
     enc_tp(c, TP_MAX_PACKET_SIZE, w_mtu(w_engine(c->sock)), sizeof(uint16_t));
-    enc_tp(c, TP_ACK_DELAY_EXPONENT, c->initial_ack_delay_exponent,
-           sizeof(c->initial_ack_delay_exponent));
-    // TODO: support unidirectional streams
-
+    enc_tp(c, TP_ACK_DELAY_EXPONENT, c->local_ack_del_exp, sizeof(uint8_t));
 
     if (!c->is_clnt) {
         const uint16_t p = TP_STATELESS_RESET_TOKEN;

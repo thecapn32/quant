@@ -65,29 +65,21 @@ struct q_conn {
 
     uint8_t state; ///< State of the connection.
 
-    uint16_t max_packet_size;
+    uint16_t peer_max_pkt;
+    uint16_t local_idle_to;
+    uint16_t peer_idle_to;
+    uint64_t local_max_strm_data;
+    uint64_t peer_max_strm_data;
+    uint64_t local_max_data;
+    uint64_t peer_max_data;
+    uint64_t local_max_strm_uni;
+    uint64_t peer_max_strm_uni;
+    uint64_t local_max_strm_bidi;
+    uint64_t peer_max_strm_bidi;
+    uint8_t local_ack_del_exp;
+    uint8_t peer_ack_del_exp;
 
-    uint16_t idle_timeout;
-    uint16_t initial_idle_timeout;
-
-    uint8_t ack_delay_exponent;
-    uint8_t initial_ack_delay_exponent;
-
-    uint8_t _unused[2];
-
-    uint32_t initial_max_stream_data;
-    uint64_t max_stream_data;
-
-    uint64_t max_data;
-    uint32_t initial_max_data;
-
-    uint32_t initial_max_stream_id_uni;
-    uint64_t max_stream_id_uni;
-
-    uint64_t max_stream_id_bidi;
-    uint32_t initial_max_stream_id_bidi;
-
-    uint8_t _unused2[4];
+    uint8_t _unused[6];
 
     ev_timer idle_alarm;
 

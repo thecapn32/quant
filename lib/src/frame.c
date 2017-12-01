@@ -196,7 +196,7 @@ uint16_t dec_ack_frame(
 
     uint64_t ack_delay_raw = 0;
     i = dec(&ack_delay_raw, v->buf, v->len, i, 0, "%" PRIu64);
-    const uint64_t ack_delay = ack_delay_raw * (1 << c->ack_delay_exponent);
+    const uint64_t ack_delay = ack_delay_raw * (1 << c->peer_ack_del_exp);
 
     uint64_t num_blocks = 0;
     i = dec(&num_blocks, v->buf, v->len, i, 0, "%" PRIu64);
@@ -329,13 +329,13 @@ dec_max_stream_id_frame(struct q_conn * const c,
            "illegal MAX_STREAM_ID %u", max);
 
     if (is_set(STRM_FL_DIR_UNI, max)) {
-        c->max_stream_id_uni = max;
+        c->peer_max_strm_uni = max;
         warn(INF, FRAM_IN "MAX_STREAM_ID" NRM " max=%" PRIu64 " (unidir)",
-             c->max_stream_id_uni);
+             c->peer_max_strm_uni);
     } else {
-        c->max_stream_id_bidi = max;
+        c->peer_max_strm_bidi = max;
         warn(INF, FRAM_IN "MAX_STREAM_ID" NRM " max=%" PRIu64 " (bidir)",
-             c->max_stream_id_bidi);
+             c->peer_max_strm_bidi);
     }
 
     return i;
@@ -348,9 +348,9 @@ dec_max_data_frame(struct q_conn * const c,
                    const uint16_t pos)
 {
     const uint16_t i =
-        dec(&c->max_data, v->buf, v->len, pos + 1, 0, "%" PRIu64);
+        dec(&c->peer_max_data, v->buf, v->len, pos + 1, 0, "%" PRIu64);
 
-    warn(INF, FRAM_IN "MAX_DATA" NRM " max=%" PRIu64, c->max_data);
+    warn(INF, FRAM_IN "MAX_DATA" NRM " max=%" PRIu64, c->peer_max_data);
 
     return i;
 }
@@ -518,7 +518,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
 
     const uint64_t ack_delay =
         (uint64_t)((ev_now(loop) - c->lg_recv_t) * 1000000) /
-        (1 << c->initial_ack_delay_exponent);
+        (1 << c->local_ack_del_exp);
     i = enc(v->buf, v->len, i, &ack_delay, 0, "%" PRIu64);
 
     const uint64_t block_cnt = diet_cnt(&c->recv) - 1;
@@ -544,9 +544,8 @@ uint16_t enc_ack_frame(struct q_conn * const c,
                  FRAM_OUT "ACK" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64
                           " (%" PRIu64 " usec) cnt=%" PRIu64 " block=%" PRIu64
                           " (" FMT_PNR_IN "-" FMT_PNR_IN ")",
-                 lg_recv, ack_delay,
-                 ack_delay * (1 << c->initial_ack_delay_exponent), block_cnt,
-                 ack_block, b->lo, b->hi, b->lo, b->hi);
+                 lg_recv, ack_delay, ack_delay * (1 << c->local_ack_del_exp),
+                 block_cnt, ack_block, b->lo, b->hi, b->lo, b->hi);
 
         i = enc(v->buf, v->len, i, &ack_block, 0, "%" PRIu64);
         prev_lo = b->lo;
