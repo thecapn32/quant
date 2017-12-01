@@ -141,10 +141,9 @@ uint64_t pkt_cid(const uint8_t * const buf, const uint16_t len)
 {
     const uint8_t flags = pkt_flags(buf);
     uint64_t cid = 0;
-    if (is_set(F_LONG_HDR, flags) || !is_set(F_SH_OMIT_CID, flags))
-        dec(&cid, buf, len, 1, sizeof(cid), FMT_CID);
-    else
-        die("no connection ID in header");
+    ensure(is_set(F_LONG_HDR, flags) || !is_set(F_SH_OMIT_CID, flags),
+           "no connection ID in header");
+    dec(&cid, buf, len, 1, sizeof(cid), FMT_CID);
     return cid;
 }
 
@@ -160,7 +159,7 @@ pkt_nr(const uint8_t * const buf, const uint16_t len, struct q_conn * const c)
 
     uint64_t nr = next;
     dec(&nr, buf, len,
-        is_set(F_LONG_HDR, flags) || !is_set(F_SH_OMIT_CID, flags) ? 9 : 1,
+        is_set(F_LONG_HDR, flags) || !is_set(F_SH_OMIT_CID, flags) ? 13 : 1,
         nr_len, FMT_PNR32_IN);
 
     const uint64_t alt = nr + (UINT64_C(1) << (nr_len * 8));
@@ -173,9 +172,9 @@ pkt_nr(const uint8_t * const buf, const uint16_t len, struct q_conn * const c)
 
 uint32_t pkt_vers(const uint8_t * const buf, const uint16_t len)
 {
-    ensure(is_set(F_LONG_HDR, pkt_flags(buf)), "short header");
+    ensure(is_set(F_LONG_HDR, pkt_flags(buf)), "have long header");
     uint32_t vers = 0;
-    dec(&vers, buf, len, 13, sizeof(vers), "0x%08x");
+    dec(&vers, buf, len, 9, sizeof(vers), "0x%08x");
     return vers;
 }
 
@@ -236,9 +235,7 @@ bool enc_pkt(struct q_stream * const s,
         break;
     case CONN_STAT_ESTB:
     case CONN_STAT_CLSD:
-        if (c->omit_cid)
-            flags |= F_SH_OMIT_CID;
-        flags |= enc_pkt_nr_len[pkt_nr_len];
+        flags |= enc_pkt_nr_len[pkt_nr_len] | (c->omit_cid ? F_SH_OMIT_CID : 0);
         break;
     default:
         die("unknown conn state %u", c->state);
@@ -259,9 +256,9 @@ bool enc_pkt(struct q_stream * const s,
         i = enc(v->buf, v->len, i, &c->id, sizeof(c->id), FMT_CID);
 
     if (is_set(F_LONG_HDR, flags)) {
+        i = enc(v->buf, v->len, i, &c->vers, sizeof(c->vers), "0x%08x");
         i = enc(v->buf, v->len, i, &meta(v).nr, sizeof(uint32_t),
                 FMT_PNR32_OUT);
-        i = enc(v->buf, v->len, i, &c->vers, sizeof(c->vers), "0x%08x");
         if (c->state == CONN_STAT_VERS_REJ) {
             warn(INF, "sending version negotiation server response");
             for (uint8_t j = 0; j < ok_vers_len; j++)
