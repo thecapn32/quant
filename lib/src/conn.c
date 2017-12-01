@@ -26,23 +26,17 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <arpa/inet.h>
+#include <bitstring.h>
 #include <inttypes.h>
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 
-#ifdef __linux__
-#include <bsd/bitstring.h>
-#else
-#include <bitstring.h>
-#include <sys/types.h>
-#endif
-
 #include <ev.h>
-#include <picotls.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
@@ -58,7 +52,6 @@
 #include "quic.h"
 #include "recovery.h"
 #include "stream.h"
-#include "tls.h"
 
 
 struct ipnp_splay conns_by_ipnp = splay_initializer(&conns_by_ipnp);
@@ -383,8 +376,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                 goto done;
 #ifndef NO_RANDOM_CID
             // this is a new connection; server picks a new random cid
-            uint64_t cid;
-            tls_ctx.random_bytes(&cid, sizeof(cid));
+            const uint64_t cid = arc4random();
             warn(NTE, "picked new cid " FMT_CID " for %s conn " FMT_CID, cid,
                  conn_type(c), c->id);
             update_cid(c, cid);

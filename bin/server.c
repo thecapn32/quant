@@ -26,7 +26,6 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <fcntl.h>
-#include <getopt.h>
 #include <inttypes.h>
 #include <net/if.h>
 #include <stdint.h>
@@ -35,6 +34,7 @@
 #include <string.h>
 #include <sys/param.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #ifndef __linux__
 #include <sys/types.h>

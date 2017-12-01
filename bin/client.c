@@ -25,7 +25,6 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <getopt.h>
 #include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -34,6 +33,7 @@
 #include <string.h>
 #include <sys/param.h>
 #include <sys/socket.h>
+#include <unistd.h>
 
 #include <http_parser.h>
 

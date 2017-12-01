@@ -25,17 +25,12 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <bitstring.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/param.h>
-
-#ifdef __linux__
-#include <bsd/bitstring.h>
-#else
-#include <bitstring.h>
-#endif
 
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>

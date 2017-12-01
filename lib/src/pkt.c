@@ -32,14 +32,6 @@
 #include <quant/quant.h> // IWYU pragma: keep
 #include <warpcore/warpcore.h>
 
-#if defined(HAVE_ENDIAN_H)
-// e.g., Linux
-#include <endian.h>
-#elif defined(HAVE_SYS_ENDIAN_H)
-// e.g., FreeBSD
-#include <sys/endian.h>
-#endif
-
 #include "conn.h"
 #include "diet.h"
 #include "frame.h"
@@ -220,6 +212,7 @@ bool enc_pkt(struct q_stream * const s,
 
     meta(v).nr =
         c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv) : ++c->rec.lg_sent;
+    ensure(meta(v).nr < (1ULL << 62) - 1, "packet number overflow");
     // TODO: increase by random offset
 
     const uint8_t pkt_nr_len = needed_pkt_nr_len(c, meta(v).nr);

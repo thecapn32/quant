@@ -38,9 +38,9 @@
 #endif
 
 #ifndef NDEBUG
-#include <getopt.h>
 #include <stdlib.h>
 #include <sys/param.h>
+#include <unistd.h>
 #endif
 
 #include <quant/quant.h>

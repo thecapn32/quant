@@ -62,7 +62,9 @@ foreach(TARGET ${TARGETS})
   if(NOT ${TARGET} MATCHES "common")
     target_link_libraries(${TARGET}
       m warpcore ptls-core ptls-openssl ptls-minicrypto ${LIBEV_LIB})
-
+    if("${CMAKE_SYSTEM}" MATCHES "Linux")
+      target_link_libraries(${TARGET} bsd)
+    endif()
     install(TARGETS ${TARGET}
       EXPORT ${TARGET}
       ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}

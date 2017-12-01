@@ -29,10 +29,10 @@
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <sys/param.h>
 
 #include <ev.h>
-#include <picotls.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
@@ -42,7 +42,6 @@
 #include "quic.h"
 #include "recovery.h"
 #include "stream.h"
-#include "tls.h"
 
 
 struct ev_loop;
@@ -388,7 +387,7 @@ void rec_init(struct q_conn * const c)
     }
     splay_init(&c->rec.sent_pkts);
 
-    tls_ctx.random_bytes(&c->rec.lg_sent, sizeof(uint32_t));
+    c->rec.lg_sent = arc4random_uniform((1UL << 32) - 1025);
     c->rec.cwnd = kInitialWindow;
     c->rec.ssthresh = UINT64_MAX;
 }

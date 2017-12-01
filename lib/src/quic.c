@@ -215,8 +215,7 @@ struct q_conn * q_connect(void * const q,
                           const char * const peer_name)
 {
     // make new connection
-    uint64_t cid;
-    tls_ctx.random_bytes(&cid, sizeof(cid));
+    const uint64_t cid = arc4random();
     const uint vers = ok_vers[0];
     struct q_conn * const c = new_conn(q, vers, cid, peer, peer_name, 0);
     warn(WRN, "connecting %s conn " FMT_CID " to %s:%u w/SNI %s", conn_type(c),

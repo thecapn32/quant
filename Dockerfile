@@ -3,7 +3,7 @@ RUN echo "@edge http://dl-cdn.alpinelinux.org/alpine/edge/main" \
         >> /etc/apk/repositories
 RUN apk add --no-cache cmake@edge ninja gcc g++ git musl-dev linux-headers \
         libbsd-dev mercurial openssl \
-        openssl-dev http-parser-dev libev-dev
+        openssl-dev http-parser-dev libev-dev libbsd-dev
 RUN git config --global user.email "docker@example.com"
 ADD . /src
 WORKDIR /src/Debug
@@ -18,7 +18,7 @@ FROM alpine:3.6
 COPY --from=0 /dst /
 COPY --from=0 /www /www
 COPY --from=0 /tls /tls
-RUN apk add --no-cache libcrypto1.0 http-parser libev
+RUN apk add --no-cache libcrypto1.0 http-parser libev libbsd
 EXPOSE 4433/UDP
 CMD ["/bin/server", "-i", "eth0", "-d", "/www", \
         "-c", "/tls/quant.crt", "-k", "/tls/quant.key"]
