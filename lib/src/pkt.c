@@ -75,11 +75,11 @@ static const char * pkt_type_str(const uint8_t flags)
         }
     else
         switch (pkt_type(flags)) {
-        case 0x01:
+        case F_SH_1OCT:
             return "Short(1)";
-        case 0x02:
+        case F_SH_2OCT:
             return "Short(2)";
-        case 0x03:
+        case F_SH_4OCT:
             return "Short(4)";
         default:
             die("unknown packet type 0x%02x", flags);
@@ -100,22 +100,24 @@ void log_pkt(const char * const dir, const struct w_iov * const v)
               dir, v->len, flags, col_dir, pkt_type_str(flags),
               pkt_cid(v->buf, v->len), pkt_vers(v->buf, v->len), col_nr,
               meta(v).nr);
-    else if (!is_set(F_SH_OMIT_CID, flags))
+    else if (is_set(F_SH_OMIT_CID, flags))
         twarn(NTE,
-              BLD "%s" NRM " len=%u 0x%02x=%s%s" NRM "|CID cid=" FMT_CID
+              BLD "%s" NRM " len=%u 0x%02x=%s%s" NRM "|NO_CID nr=%s%" PRIu64,
+              dir, v->len, flags, col_dir, pkt_type_str(flags), col_nr,
+              meta(v).nr);
+    else
+        twarn(NTE,
+              BLD "%s" NRM " len=%u 0x%02x=%s%s" NRM " cid=" FMT_CID
                   " nr=%s%" PRIu64,
               dir, v->len, flags, col_dir, pkt_type_str(flags),
               pkt_cid(v->buf, v->len), col_nr, meta(v).nr);
-    else
-        twarn(NTE, BLD "%s" NRM " len=%u 0x%02x=%s%s " NRM "nr=%s%" PRIu64, dir,
-              v->len, flags, col_dir, pkt_type_str(flags), col_nr, meta(v).nr);
 }
 #endif
 
 
 /// Packet number lengths for different short-header packet types
-static const uint8_t pkt_nr_lens[] = {0, sizeof(uint8_t), sizeof(uint16_t),
-                                      sizeof(uint32_t)};
+static const uint8_t pkt_nr_lens[] = {sizeof(uint32_t), sizeof(uint16_t),
+                                      sizeof(uint8_t)};
 
 
 uint16_t pkt_hdr_len(const uint8_t * const buf, const uint16_t len)
@@ -126,11 +128,12 @@ uint16_t pkt_hdr_len(const uint8_t * const buf, const uint16_t len)
         pos = 17;
     else {
         const uint8_t type = pkt_type(flags);
-        if (type < 1 || type > 3) {
-            warn(ERR, "illegal pkt type %u", type);
+        if (type > F_SH_1OCT || type < F_SH_4OCT) {
+            warn(ERR, "illegal pkt type 0x%02x", type);
             return UINT16_MAX;
         }
-        pos = 1 + (is_set(F_SH_OMIT_CID, flags) ? 0 : 8) + pkt_nr_lens[type];
+        pos = 1 + (is_set(F_SH_OMIT_CID, flags) ? 0 : 8) +
+              pkt_nr_lens[type - F_SH_4OCT];
     }
     ensure(pos <= len, "payload position %u after end of packet %u", pos, len);
     return pos;
@@ -155,7 +158,7 @@ pkt_nr(const uint8_t * const buf, const uint16_t len, struct q_conn * const c)
     const uint8_t flags = pkt_flags(buf);
     const uint8_t nr_len = is_set(F_LONG_HDR, flags)
                                ? sizeof(uint32_t)
-                               : pkt_nr_lens[pkt_type(flags)];
+                               : pkt_nr_lens[pkt_type(flags) - F_SH_4OCT];
 
     uint64_t nr = next;
     dec(&nr, buf, len,
@@ -179,7 +182,7 @@ uint32_t pkt_vers(const uint8_t * const buf, const uint16_t len)
 }
 
 
-static const uint8_t enc_pkt_nr_len[] = {0xFF, 1, 2, 0xFF, 3};
+static const uint8_t pkt_type[] = {0xFF, F_SH_1OCT, F_SH_2OCT, 0xFF, F_SH_4OCT};
 
 
 static uint8_t __attribute__((nonnull))
@@ -235,7 +238,7 @@ bool enc_pkt(struct q_stream * const s,
         break;
     case CONN_STAT_ESTB:
     case CONN_STAT_CLSD:
-        flags |= enc_pkt_nr_len[pkt_nr_len] | (c->omit_cid ? F_SH_OMIT_CID : 0);
+        flags |= pkt_type[pkt_nr_len] | (c->omit_cid ? F_SH_OMIT_CID : 0);
         break;
     default:
         die("unknown conn state %u", c->state);

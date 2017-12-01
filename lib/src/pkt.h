@@ -45,7 +45,9 @@
 
 #define F_SH_OMIT_CID 0x40
 #define F_SH_KPH 0x20
-
+#define F_SH_1OCT 0x1F
+#define F_SH_2OCT 0x1E
+#define F_SH_4OCT 0x1D
 
 #define CONN_CLSE_ERR_NO_ERROR 0x0
 // #define CONN_CLSE_ERR_INTERNAL_ERROR 0x1
