@@ -380,7 +380,8 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                 goto done;
 #ifndef NO_RANDOM_CID
             // this is a new connection; server picks a new random cid
-            const uint64_t cid = arc4random();
+            uint64_t cid;
+            arc4random_buf(&cid, sizeof(cid));
             warn(NTE, "picked new cid " FMT_CID " for %s conn " FMT_CID, cid,
                  conn_type(c), c->id);
             update_cid(c, cid);

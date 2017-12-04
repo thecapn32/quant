@@ -35,7 +35,6 @@
 #include <sys/types.h>
 
 #include <ev.h>
-#include <picotls.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
@@ -143,8 +142,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
         c->peer = *peer;
     c->id = cid;
     c->vers = c->vers_initial = vers;
-    tls_ctx.random_bytes(c->stateless_reset_token,
-                         sizeof(c->stateless_reset_token));
+    arc4random_buf(c->stateless_reset_token, sizeof(c->stateless_reset_token));
 
     if (peer_name) {
         c->is_clnt = true;
@@ -220,7 +218,8 @@ struct q_conn * q_connect(void * const q,
                           const char * const peer_name)
 {
     // make new connection
-    const uint64_t cid = arc4random();
+    uint64_t cid;
+    arc4random_buf(&cid, sizeof(cid));
     const uint vers = ok_vers[0];
     struct q_conn * const c = new_conn(q, vers, cid, peer, peer_name, 0);
     warn(WRN, "connecting %s conn " FMT_CID " to %s:%u w/SNI %s", conn_type(c),
