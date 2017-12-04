@@ -49,6 +49,9 @@ struct w_iov;
 #define MAX_FRAM_TYPE FRAM_TYPE_STRM
 
 
+extern uint64_t __attribute__((const))
+shorten_ack_nr(const uint64_t ack, const uint64_t diff);
+
 extern void __attribute__((nonnull))
 dec_frames(struct q_conn * const c, struct w_iov * v);
 

@@ -144,15 +144,17 @@ struct q_conn * get_conn_by_cid(const uint64_t id, const bool is_clnt)
 static void log_sent_pkts(struct q_conn * const c)
 {
     char sent_pkts_buf[1024] = "";
+    uint64_t prev = 0;
     for (struct pkt_meta * p = splay_min(pm_nr_splay, &c->rec.sent_pkts); p;
          p = splay_next(pm_nr_splay, &c->rec.sent_pkts, p)) {
         char tmp[1024] = "";
         const bool ack_only = is_ack_only(p);
         snprintf(tmp, sizeof(tmp), "%s%s" FMT_PNR_OUT "%s ",
-                 is_rtxable(p) ? "*" : "", ack_only ? "(" : "", p->nr,
+                 is_rtxable(p) ? "*" : "", ack_only ? "(" : "", shorten_ack_nr(p->nr, p->nr-prev),
                  ack_only ? ")" : "");
         strncat(sent_pkts_buf, tmp,
                 sizeof(sent_pkts_buf) - strlen(sent_pkts_buf) - 1);
+        prev = p->nr;
     }
     warn(INF, "unacked: %s", sent_pkts_buf);
 }
