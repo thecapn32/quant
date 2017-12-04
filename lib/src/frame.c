@@ -350,7 +350,7 @@ dec_max_stream_id_frame(struct q_conn * const c,
     uint64_t max = 0;
     const uint16_t i = dec(&max, v->buf, v->len, pos + 1, 0, "%" PRIu64);
 
-    ensure(is_set(STRM_FL_INI_SRV, max) == c->is_clnt,
+    ensure(is_set(STRM_FL_INI_SRV, max) != c->is_clnt,
            "illegal MAX_STREAM_ID %u", max);
 
     if (is_set(STRM_FL_DIR_UNI, max)) {
