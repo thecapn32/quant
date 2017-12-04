@@ -149,6 +149,10 @@ static uint16_t chk_tp_clnt(const struct q_conn * const c,
 {
     uint16_t i = pos;
 
+    // parse negotiated version
+    uint32_t neg_vers = 0;
+    i = dec(&neg_vers, buf, len, i, sizeof(neg_vers), "0x%08x");
+
     // parse server versions
     uint8_t n;
     i = dec(&n, buf, len, i, sizeof(n), "%u");
@@ -157,7 +161,7 @@ static uint16_t chk_tp_clnt(const struct q_conn * const c,
         uint32_t vers;
         n -= sizeof(vers);
         i = dec(&vers, buf, len, i, sizeof(vers), "0x%08x");
-        found = found ? found : vers == c->vers;
+        found = found ? found : vers == c->vers && vers == neg_vers;
     }
     ensure(found, "negotiated version found in transport parameters");
     // TODO: validate that version negotiation on these values has same result
@@ -173,16 +177,12 @@ static uint16_t chk_tp_serv(const struct q_conn * const c,
 {
     uint16_t i = pos;
 
-    uint32_t vers;
-    i = dec(&vers, buf, len, i, sizeof(vers), "0x%08x");
-
     uint32_t vers_initial;
     i = dec(&vers_initial, buf, len, i, sizeof(vers_initial), "0x%08x");
 
-    if (vers != c->vers)
-        warn(ERR, "vers 0x%08x not found in tp", c->vers);
-    ensure(vers_initial == c->vers_initial, "vers_initial 0x%08x found in tp",
-           c->vers_initial);
+    if (vers_initial != c->vers_initial)
+        warn(ERR, "vers_initial 0x%08x != first received 0x%08x", vers_initial,
+             c->vers_initial);
 
     return i;
 }
@@ -331,10 +331,10 @@ static void init_tp(struct q_conn * const c)
     const uint16_t len = sizeof(c->tls.tp_buf);
 
     if (c->is_clnt) {
-        i = enc(c->tls.tp_buf, len, i, &c->vers, sizeof(c->vers), "0x%08x");
         i = enc(c->tls.tp_buf, len, i, &c->vers_initial,
                 sizeof(c->vers_initial), "0x%08x");
     } else {
+        i = enc(c->tls.tp_buf, len, i, &c->vers, sizeof(c->vers), "0x%08x");
         const uint8_t vl = ok_vers_len * sizeof(ok_vers[0]);
         i = enc(c->tls.tp_buf, len, i, &vl, sizeof(vl), "%u");
         for (uint8_t n = 0; n < ok_vers_len; n++)
