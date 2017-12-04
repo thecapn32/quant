@@ -150,8 +150,8 @@ static void log_sent_pkts(struct q_conn * const c)
         char tmp[1024] = "";
         const bool ack_only = is_ack_only(p);
         snprintf(tmp, sizeof(tmp), "%s%s" FMT_PNR_OUT "%s ",
-                 is_rtxable(p) ? "*" : "", ack_only ? "(" : "", shorten_ack_nr(p->nr, p->nr-prev),
-                 ack_only ? ")" : "");
+                 is_rtxable(p) ? "*" : "", ack_only ? "(" : "",
+                 shorten_ack_nr(p->nr, p->nr - prev), ack_only ? ")" : "");
         strncat(sent_pkts_buf, tmp,
                 sizeof(sent_pkts_buf) - strlen(sent_pkts_buf) - 1);
         prev = p->nr;
@@ -460,25 +460,17 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         }
         break;
 
-    case CONN_STAT_VERS_OK:
-        if (verify_prot(c, v) == false)
-            goto done;
-
-        // pass any further data received on stream 0 to TLS and check
-        // whether that completes the client handshake
-        if (!is_set(F_LONG_HDR, flags) || pkt_type(flags) <= F_LH_HSHK) {
-            maybe_api_return(q_accept, c);
-            c->state = CONN_STAT_ESTB;
-        }
-        track_recv(c, meta(v).nr);
-        dec_frames(c, v);
-        break;
-
     case CONN_STAT_RETRY:
         if (verify_prot(c, v) == false)
             goto done;
         dec_frames(c, v);
         break;
+
+    case CONN_STAT_VERS_OK:
+        // pass any further data received on stream 0 to TLS and check
+        // whether that completes the client handshake
+        if (!is_set(F_LONG_HDR, flags) || pkt_type(flags) <= F_LH_HSHK)
+            maybe_api_return(q_accept, c);
 
     case CONN_STAT_ESTB:
     case CONN_STAT_CLSD:
