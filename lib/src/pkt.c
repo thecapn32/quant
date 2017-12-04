@@ -154,7 +154,7 @@ pkt_nr(const uint8_t * const buf, const uint16_t len, struct q_conn * const c)
 
     uint64_t nr = next;
     dec(&nr, buf, len,
-        is_set(F_LONG_HDR, flags) || !is_set(F_SH_OMIT_CID, flags) ? 13 : 1,
+        is_set(F_LONG_HDR, flags) ? 13 : is_set(F_SH_OMIT_CID, flags) ? 1 : 9,
         nr_len, FMT_PNR32_IN);
 
     const uint64_t alt = nr + (UINT64_C(1) << (nr_len * 8));
