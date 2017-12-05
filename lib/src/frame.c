@@ -108,6 +108,7 @@ dec_stream_frame(struct q_conn * const c,
              ") on %s conn " FMT_CID " str " FMT_SID,
              l, plural(l), meta(v).in_off, meta(v).in_off + l, conn_type(c),
              c->id, sid);
+        track_bytes_in(s, l);
         s->in_off += l;
         sq_insert_tail(&s->in, v, next);
 
@@ -116,17 +117,17 @@ dec_stream_frame(struct q_conn * const c,
         for (p = splay_min(pm_off_splay, &s->in_ooo);
              p && p->in_off == s->in_off; p = nxt) {
             nxt = splay_next(pm_off_splay, &s->in_ooo, p);
-            const uint16_t sdl = p->stream_data_end;
+            l = p->stream_data_end;
 
             warn(DBG,
                  "deliver %u ooo byte%s (off %" PRIu64 "-%" PRIu64
                  ") on %s conn " FMT_CID " str " FMT_SID,
-                 sdl, plural(sdl), p->in_off, p->in_off + sdl, conn_type(c),
-                 c->id, sid);
+                 l, plural(l), p->in_off, p->in_off + l, conn_type(c), c->id,
+                 sid);
 
+            s->in_off += l;
             sq_insert_tail(&s->in, w_iov(w_engine(c->sock), pm_idx(p)), next);
             splay_remove(pm_off_splay, &s->in_ooo, p);
-            s->in_off += sdl;
         }
 
         if (is_set(F_STREAM_FIN, type)) {
@@ -150,7 +151,7 @@ dec_stream_frame(struct q_conn * const c,
 
     // data is a complete duplicate
     if (meta(v).in_off + l <= s->in_off) {
-        warn(DBG,
+        warn(CRT,
              "%" PRIu64 " byte%s dup data (off %" PRIu64 "-%" PRIu64
              ") on %s conn " FMT_CID " str " FMT_SID,
              l, plural(l), meta(v).in_off, meta(v).in_off + l, conn_type(c),
@@ -165,6 +166,7 @@ dec_stream_frame(struct q_conn * const c,
          l, plural(l), meta(v).in_off, meta(v).in_off + l, s->in_off,
          conn_type(c), c->id, sid);
     splay_insert(pm_off_splay, &s->in_ooo, &meta(v));
+    track_bytes_in(s, l);
 
 done:
     warn(INF,
@@ -332,11 +334,11 @@ dec_max_stream_data_frame(struct q_conn * const c,
     uint16_t i = dec(&sid, v->buf, v->len, pos + 1, 0, FMT_SID);
     struct q_stream * const s = get_stream(c, sid);
     ensure(s, "have stream %u", sid);
-    i = dec(&s->out_off_max, v->buf, v->len, i, 0, "%" PRIu64);
+    i = dec(&s->out_data_max, v->buf, v->len, i, 0, "%" PRIu64);
     s->blocked = false;
 
     warn(INF, FRAM_IN "MAX_STREAM_DATA" NRM " id=" FMT_SID " max=%" PRIu64, sid,
-         s->out_off_max);
+         s->out_data_max);
 
     return i;
 }
@@ -374,6 +376,7 @@ dec_max_data_frame(struct q_conn * const c,
 {
     const uint16_t i =
         dec(&c->peer_max_data, v->buf, v->len, pos + 1, 0, "%" PRIu64);
+    c->blocked = false;
 
     warn(INF, FRAM_IN "MAX_DATA" NRM " max=%" PRIu64, c->peer_max_data);
 
@@ -490,7 +493,7 @@ void dec_frames(struct q_conn * const c, struct w_iov * v)
                 i = dec_max_stream_data_frame(c, v, i);
                 break;
 
-            case FRAM_TYPE_MAX_STRM_ID:
+            case FRAM_TYPE_MAX_SID:
                 i = dec_max_stream_id_frame(c, v, i);
                 break;
 
@@ -500,6 +503,12 @@ void dec_frames(struct q_conn * const c, struct w_iov * v)
 
             case FRAM_TYPE_STRM_BLCK:
                 i = dec_stream_blocked_frame(c, v, i);
+                break;
+
+            case FRAM_TYPE_BLCK:
+                c->open_win = true;
+                warn(INF, FRAM_IN "BLOCKED" NRM);
+                i++;
                 break;
 
             case FRAM_TYPE_STOP_SEND:
@@ -622,6 +631,7 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
     if (dlen)
         enc(v->buf, v->len, i, &dlen, 0, "%u");
 
+    track_bytes_out(s, dlen);
     s->out_off += dlen; // increase the stream data offset
     meta(v).str = s;    // remember stream this buf belongs to
     meta(v).stream_data_start = Q_OFFSET;
@@ -676,10 +686,26 @@ uint16_t enc_max_stream_data_frame(struct q_stream * const s,
     const uint8_t type = FRAM_TYPE_MAX_STRM_DATA;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
     i = enc(v->buf, v->len, i, &s->id, 0, FMT_SID);
-    i = enc(v->buf, v->len, i, &s->in_off_max, 0, "%" PRIu64);
+    i = enc(v->buf, v->len, i, &s->in_data_max, 0, "%" PRIu64);
 
     warn(INF, FRAM_OUT "MAX_STREAM_DATA" NRM " id=" FMT_SID " max=%" PRIu64,
-         s->id, s->in_off_max);
+         s->id, s->in_data_max);
+
+    return i;
+}
+
+
+uint16_t enc_max_data_frame(struct q_conn * const c,
+                            struct w_iov * const v,
+                            const uint16_t pos)
+{
+    bit_set(meta(v).frames, FRAM_TYPE_MAX_DATA);
+
+    const uint8_t type = FRAM_TYPE_MAX_DATA;
+    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
+    i = enc(v->buf, v->len, i, &c->local_max_data, 0, "%" PRIu64);
+
+    warn(INF, FRAM_OUT "MAX_DATA" NRM " max=%" PRIu64, c->local_max_data);
 
     return i;
 }
@@ -696,6 +722,19 @@ uint16_t enc_stream_blocked_frame(struct q_stream * const s,
     i = enc(v->buf, v->len, i, &s->id, 0, FMT_SID);
 
     warn(INF, FRAM_OUT "STREAM_BLOCKED" NRM " id=" FMT_SID, s->id);
+
+    return i;
+}
+
+
+uint16_t enc_blocked_frame(const struct w_iov * const v, const uint16_t pos)
+{
+    bit_set(meta(v).frames, FRAM_TYPE_BLCK);
+
+    const uint8_t type = FRAM_TYPE_BLCK;
+    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
+
+    warn(INF, FRAM_OUT "BLOCKED" NRM);
 
     return i;
 }

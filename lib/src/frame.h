@@ -40,11 +40,15 @@ struct w_iov;
 #define FRAM_TYPE_APPL_CLSE 0x03
 #define FRAM_TYPE_MAX_DATA 0x04
 #define FRAM_TYPE_MAX_STRM_DATA 0x05
-#define FRAM_TYPE_MAX_STRM_ID 0x06
+#define FRAM_TYPE_MAX_SID 0x06
 #define FRAM_TYPE_PING 0x07
+#define FRAM_TYPE_BLCK 0x08
 #define FRAM_TYPE_STRM_BLCK 0x09
-#define FRAM_TYPE_STOP_SEND 0x0C
-#define FRAM_TYPE_ACK 0x0E
+#define FRAM_TYPE_ID_BLCK 0x0a
+#define FRAM_TYPE_NEW_CID 0x0b
+#define FRAM_TYPE_STOP_SEND 0x0c
+#define FRAM_TYPE_PONG 0x0d
+#define FRAM_TYPE_ACK 0x0e
 #define FRAM_TYPE_STRM 0x10
 #define MAX_FRAM_TYPE FRAM_TYPE_STRM
 
@@ -88,6 +92,14 @@ enc_max_stream_data_frame(struct q_stream * const s,
                           const uint16_t pos);
 
 extern uint16_t __attribute__((nonnull))
+enc_max_data_frame(struct q_conn * const c,
+                   struct w_iov * const v,
+                   const uint16_t pos);
+
+extern uint16_t __attribute__((nonnull))
 enc_stream_blocked_frame(struct q_stream * const s,
                          const struct w_iov * const v,
                          const uint16_t pos);
+
+extern uint16_t __attribute__((nonnull))
+enc_blocked_frame(const struct w_iov * const v, const uint16_t pos);

@@ -156,7 +156,7 @@ static void log_sent_pkts(struct q_conn * const c)
                 sizeof(sent_pkts_buf) - strlen(sent_pkts_buf) - 1);
         prev = p->nr;
     }
-    warn(INF, "unacked: %s", sent_pkts_buf);
+    warn(DBG, "unacked: %s", sent_pkts_buf);
 }
 
 
@@ -165,17 +165,12 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
                                                       const uint32_t limit,
                                                       struct w_iov * const from)
 {
-    struct q_conn * const c = s->c;
-
     struct w_iov_sq x = sq_head_initializer(x);
     uint32_t encoded = 0;
     struct w_iov * v = from;
     sq_foreach_from (v, &s->out, next) {
-        if (s->blocked) {
-            warn(NTE, "str " FMT_SID " blocked, out_off %u/%u", s->id,
-                 s->out_off, s->out_off_max);
+        if (s->blocked || s->c->blocked)
             break;
-        }
 
         if (meta(v).is_acked) {
             warn(DBG,
@@ -198,18 +193,26 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             ensure(meta(v).is_rtxed == false, "cannot RTX an RTX");
             // on RTX, remember orig pkt meta data
             struct w_iov * const r =
-                q_alloc_iov(w_engine(c->sock), 0, Q_OFFSET);
+                q_alloc_iov(w_engine(s->c->sock), 0, Q_OFFSET);
             pm_cpy(&meta(r), &meta(v));                  // copy pkt meta data
             memcpy(r->buf, v->buf - Q_OFFSET, Q_OFFSET); // copy pkt headers
             meta(r).is_rtxed = true;
 
             // we reinsert meta(v) with its new pkt nr in on_pkt_sent()
-            splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
-            splay_insert(pm_nr_splay, &c->rec.sent_pkts, &meta(r));
+            splay_remove(pm_nr_splay, &s->c->rec.sent_pkts, &meta(v));
+            splay_insert(pm_nr_splay, &s->c->rec.sent_pkts, &meta(r));
+        }
+
+        if (s->c->state >= CONN_STAT_ESTB) {
+            // if we have less than two full packet's worth of window, block
+            if (s->out_data + 2 * MAX_PKT_LEN > s->out_data_max)
+                s->blocked = true;
+            if (s->c->out_data + 2 * MAX_PKT_LEN > s->c->peer_max_data)
+                s->c->blocked = true;
         }
 
         if (enc_pkt(s, rtx, v, &x)) {
-            on_pkt_sent(c, v);
+            on_pkt_sent(s->c, v);
             encoded++;
         }
 
@@ -221,16 +224,17 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
 
     if (encoded) {
         // transmit encrypted/protected packets and then free the chain
-        if (!c->is_clnt)
-            w_connect(c->sock, c->peer.sin_addr.s_addr, c->peer.sin_port);
-        w_tx(c->sock, &x);
-        w_nic_tx(w_engine(c->sock));
-        if (!c->is_clnt)
-            w_disconnect(c->sock);
+        if (!s->c->is_clnt)
+            w_connect(s->c->sock, s->c->peer.sin_addr.s_addr,
+                      s->c->peer.sin_port);
+        w_tx(s->c->sock, &x);
+        w_nic_tx(w_engine(s->c->sock));
+        if (!s->c->is_clnt)
+            w_disconnect(s->c->sock);
         q_free(&x);
     }
 
-    log_sent_pkts(c);
+    log_sent_pkts(s->c);
     return encoded;
 }
 
@@ -273,7 +277,11 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
     bool did_tx = false;
     struct q_stream * s = 0;
     splay_foreach (s, stream, &c->streams) {
-        if (!s->blocked && !sq_empty(&s->out) &&
+        // check if we need to open stream or connection windows
+        s->open_win |= s->in_data == s->in_data_max;
+        s->c->open_win |= s->c->in_data == s->c->local_max_data;
+
+        if (!s->blocked && !s->c->blocked && !sq_empty(&s->out) &&
             sq_len(&s->out) > s->out_ack_cnt) {
             warn(DBG,
                  "data %s on %s conn " FMT_CID " str " FMT_SID
@@ -283,15 +291,14 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
             did_tx |= tx_stream(s, rtx, limit, 0);
         }
         if (did_tx == false &&
-            (s->open_win == true ||
+            (s->open_win == true || s->c->open_win == true ||
              ((s->state == STRM_STAT_HCLO || s->state == STRM_STAT_CLSD) &&
               s->fin_sent == false)))
             did_tx |= tx_other(s, rtx, limit);
     }
 
     if (did_tx == false) {
-        // need to ACK w/o any stream data to piggyback on, so abuse stream
-        // 0
+        // need to ACK w/o any stream data to piggyback on; so abuse stream 0
         s = get_stream(c, 0);
         ensure(s, "no stream 0");
         tx_other(s, rtx, limit);

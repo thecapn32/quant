@@ -237,14 +237,9 @@ bool enc_pkt(struct q_stream * const s,
         die("unknown conn state %u", c->state);
     }
 
-    if (rtx && flags != pkt_flags(v->buf)) {
-        warn(NTE,
-             "RTX of 0x%02x-type pkt " FMT_PNR_OUT
-             " prevented; new type would be 0x%02x",
-             pkt_flags(v->buf), meta(v).nr, flags);
-        adj_iov_to_data(v);
-        return false;
-    }
+    ensure(!rtx || flags == pkt_flags(v->buf),
+           "RTX of 0x%02x-type pkt " FMT_PNR_OUT "; new type would be 0x%02x",
+           pkt_flags(v->buf), meta(v).nr, flags);
 
     uint16_t i = enc(v->buf, v->len, 0, &flags, sizeof(flags), "0x%02x");
 
@@ -280,24 +275,22 @@ bool enc_pkt(struct q_stream * const s,
         meta(v).ack_header_pos = 0;
 
 
-    // TODO: Unclear whether this is the best way to send this in the long run.
-    if (s->out_off_max && s->out_off + MAX_PKT_LEN > s->out_off_max) {
-        // if we have less than one full packet's worth of window, block
-        s->blocked = true;
-        adj_iov_to_data(v);
-        return false;
-    }
-    if (s->out_off_max && s->out_off + 2 * MAX_PKT_LEN > s->out_off_max)
-        // if we have less than two full packets' worth of window, notify
+    if (s->blocked)
         i = enc_stream_blocked_frame(s, v, i);
 
-    // TODO: Unclear whether this is the best way to send this in the long run.
-    if (c->state >= CONN_STAT_ESTB &&
-        (s->open_win || s->in_off + MAX_PKT_LEN > s->in_off_max)) {
-        // increase receive window
-        s->in_off_max += 0x1000;
+    if (s->c->blocked)
+        i = enc_blocked_frame(v, i);
+
+    if (s->open_win) {
+        s->in_data_max += 0x1000;
         i = enc_max_stream_data_frame(s, v, i);
         s->open_win = false;
+    }
+
+    if (s->c->open_win) {
+        s->c->local_max_data += 0x1000;
+        i = enc_max_data_frame(s->c, v, i);
+        s->c->open_win = false;
     }
 
     // TODO: need to RTX most recent MAX_STREAM_DATA and MAX_DATA on RTX

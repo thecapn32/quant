@@ -25,6 +25,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -63,8 +64,8 @@ struct q_stream * new_stream(struct q_conn * const c, const uint64_t id)
     sq_init(&s->out);
     sq_init(&s->in);
     s->id = id;
-    s->in_off_max = c->local_max_strm_data;
-    s->out_off_max = c->peer_max_strm_data;
+    s->in_data_max = c->local_max_strm_data;
+    s->out_data_max = c->peer_max_strm_data;
     if (id)
         c->next_sid += 4;
     splay_insert(stream, &c->streams, s);
@@ -86,4 +87,34 @@ void free_stream(struct q_stream * const s)
 
     splay_remove(stream, &s->c->streams, s);
     free(s);
+}
+
+
+void track_bytes_in(struct q_stream * const s, const uint64_t n)
+{
+    if (s->id)
+        s->c->in_data += n;
+    if (s->c->state >= CONN_STAT_ESTB)
+        s->in_data += n;
+
+    warn(DBG,
+         "IN: str %u in_data=%" PRIu64 "/%" PRIu64 " in_off=%" PRIu64
+         " C: in_data=%" PRIu64 "/%" PRIu64,
+         s->id, s->in_data, s->in_data_max, s->in_off, s->c->in_data,
+         s->c->local_max_data);
+}
+
+
+void track_bytes_out(struct q_stream * const s, const uint64_t n)
+{
+    if (s->id)
+        s->c->out_data += n;
+    if (s->c->state >= CONN_STAT_ESTB)
+        s->out_data += n;
+
+    warn(DBG,
+         "OUT: str %u out_data=%" PRIu64 "/%" PRIu64 " out_off=%" PRIu64
+         " C: out_data=%" PRIu64 "/%" PRIu64,
+         s->id, s->out_data, s->out_data_max, s->out_off, s->c->out_data,
+         s->c->peer_max_data);
 }

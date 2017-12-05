@@ -166,7 +166,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
     c->peer_ack_del_exp = c->local_ack_del_exp = 3;
     c->local_idle_to = kIdleTimeout;
     c->local_max_data = 0x2000;
-    c->local_max_strm_data = 0x2000;
+    c->local_max_strm_data = 0x1000;
     c->local_max_strm_bidi = c->is_clnt ? 5 : 4;
     c->local_max_strm_uni = 0; // TODO: support unidir streams
 
@@ -443,7 +443,6 @@ void q_close_stream(struct q_stream * const s)
     warn(WRN, "closing str " FMT_SID " state %u on %s conn " FMT_CID, s->id,
          s->state, conn_type(s->c), s->c->id);
     s->state = s->state == STRM_STAT_HCRM ? STRM_STAT_CLSD : STRM_STAT_HCLO;
-    warn(WRN, "new state %u", s->state);
     ev_async_send(loop, &s->c->tx_w);
     loop_run(q_close_stream, s);
 }

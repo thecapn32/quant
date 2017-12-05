@@ -61,7 +61,9 @@ struct q_conn {
     uint8_t had_rx : 1;   ///< We had an RX event on this connection.
     uint8_t needs_tx : 1; ///< We have a pending TX on this connection.
     uint8_t use_time_loss_det : 1; ///< UsingTimeLossDetection()
-    uint8_t : 3;
+    uint8_t open_win : 1;          ///< We need to open the receive window.
+    uint8_t blocked : 1;           ///< We are receive-window-blocked.
+    uint8_t : 1;
 
     uint8_t state; ///< State of the connection.
 
@@ -80,6 +82,9 @@ struct q_conn {
     uint8_t peer_ack_del_exp;
 
     uint8_t _unused[6];
+
+    uint64_t in_data;
+    uint64_t out_data;
 
     ev_timer idle_alarm;
 
