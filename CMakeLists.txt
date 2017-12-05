@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.9)
 
-project(quant VERSION 0.0.7 LANGUAGES C)
+project(quant VERSION 0.0.8 LANGUAGES C)
 
 # Check for dependencies before mucking with the compiler flags
 include(CheckSymbolExists)
