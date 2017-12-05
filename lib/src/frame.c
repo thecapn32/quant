@@ -234,8 +234,10 @@ uint16_t dec_ack_frame(
                      lg_ack, ack_delay_raw, ack_delay, num_blocks,
                      ack_block_len);
             else
-                warn(INF, FRAM_IN "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64,
-                     gap, ack_block_len);
+                warn(INF,
+                     FRAM_IN "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64
+                             " [" FMT_PNR_OUT "]",
+                     gap, ack_block_len, lg_ack_in_block);
         else if (n == num_blocks + 1)
             warn(INF,
                  FRAM_IN "ACK" NRM " lg=" FMT_PNR_OUT " delay=%" PRIu64
@@ -260,9 +262,9 @@ uint16_t dec_ack_frame(
                 break;
         }
 
-        if (num_blocks > 1) {
+        if (n > 1) {
             i = dec(&gap, v->buf, v->len, i, 0, "%" PRIu64);
-            lg_ack_in_block = ack - gap;
+            lg_ack_in_block = ack - gap - 1;
         }
     }
 
@@ -563,18 +565,17 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     splay_foreach_rev (b, diet, &c->recv) {
         uint64_t gap = 0;
         if (prev_lo) {
-            gap = prev_lo - b->hi - 1;
+            gap = prev_lo - b->hi - 2;
             i = enc(v->buf, v->len, i, &gap, 0, "%" PRIu64);
         }
-        const uint64_t ack_block = b->hi - b->lo + (prev_lo ? 1 : 0);
+        const uint64_t ack_block = b->hi - b->lo;
 
         if (ack_block)
             if (prev_lo)
                 warn(INF,
                      FRAM_OUT "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64
                               " [" FMT_PNR_IN ".." FMT_PNR_IN "]",
-                     gap, block_cnt, ack_block, b->lo,
-                     shorten_ack_nr(b->hi, ack_block));
+                     gap, ack_block, b->lo, shorten_ack_nr(b->hi, ack_block));
             else
                 warn(INF,
                      FRAM_OUT "ACK" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64
@@ -585,8 +586,10 @@ uint16_t enc_ack_frame(struct q_conn * const c,
                      ack_delay * (1 << c->local_ack_del_exp), block_cnt,
                      ack_block, b->lo, shorten_ack_nr(b->hi, ack_block));
         else if (prev_lo)
-            warn(INF, FRAM_OUT "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64, gap,
-                 block_cnt, ack_block);
+            warn(INF,
+                 FRAM_OUT "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64
+                          " [" FMT_PNR_IN "]",
+                 gap, ack_block, b->hi);
         else
             warn(INF,
                  FRAM_OUT "ACK" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64
