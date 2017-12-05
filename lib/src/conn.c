@@ -478,6 +478,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         // whether that completes the client handshake
         if (!is_set(F_LONG_HDR, flags) || pkt_type(flags) <= F_LH_HSHK)
             maybe_api_return(q_accept, c);
+        // fall through
 
     case CONN_STAT_ESTB:
     case CONN_STAT_CLSD:
