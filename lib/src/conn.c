@@ -211,10 +211,9 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
                 s->c->blocked = true;
         }
 
-        if (enc_pkt(s, rtx, v, &x)) {
-            on_pkt_sent(s->c, v);
-            encoded++;
-        }
+        enc_pkt(s, rtx, v, &x);
+        on_pkt_sent(s->c, v);
+        encoded++;
 
         if (limit && encoded == limit) {
             warn(NTE, "tx limit %u reached", limit);

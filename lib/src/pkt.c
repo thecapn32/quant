@@ -189,7 +189,7 @@ needed_pkt_nr_len(struct q_conn * const c, const uint64_t n)
 }
 
 
-bool enc_pkt(struct q_stream * const s,
+void enc_pkt(struct q_stream * const s,
              const bool rtx,
              struct w_iov * const v,
              struct w_iov_sq * const q)
@@ -198,48 +198,45 @@ bool enc_pkt(struct q_stream * const s,
     adj_iov_to_start(v);
 
     struct q_conn * const c = s->c;
-
-#ifndef NDEBUG
-    if (rtx) {
-        const uint64_t prev_nr = meta(v).nr;
-        warn(INF, "enc RTX " FMT_PNR_OUT " as " FMT_PNR_OUT " in idx %u",
-             prev_nr,
-             c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv)
-                                            : c->rec.lg_sent + 1,
-             w_iov_idx(v));
-    }
-#endif
-
-    meta(v).nr =
-        c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv) : ++c->rec.lg_sent;
-    ensure(meta(v).nr < (1ULL << 62) - 1, "packet number overflow");
-    // TODO: increase by random offset
-
-    const uint8_t pkt_nr_len = needed_pkt_nr_len(c, meta(v).nr);
     uint8_t flags = 0;
-    switch (c->state) {
-    case CONN_STAT_VERS_SENT:
-    case CONN_STAT_RETRY:
-        flags = F_LONG_HDR | F_LH_INIT;
-        break;
-    case CONN_STAT_VERS_REJ:
-        flags = F_LONG_HDR | F_LH_VNEG;
-        break;
-    case CONN_STAT_IDLE:
-    case CONN_STAT_VERS_OK:
-        flags = F_LONG_HDR | F_LH_HSHK;
-        break;
-    case CONN_STAT_ESTB:
-    case CONN_STAT_CLSD:
-        flags |= pkt_type[pkt_nr_len] | (c->omit_cid ? F_SH_OMIT_CID : 0);
-        break;
-    default:
-        die("unknown conn state %u", c->state);
+    uint8_t pkt_nr_len = 0;
+
+    if (rtx) {
+        flags = pkt_flags(v->buf);
+        warn(INF, "enc RTX 0x%02x-type " FMT_PNR_OUT, flags, meta(v).nr);
+
+        meta(v).nr = is_set(F_LONG_HDR | F_LH_VNEG, flags) ? diet_max(&c->recv)
+                                                           : ++c->rec.lg_sent;
+    } else {
+
+        // TODO: increase by random offset
+        meta(v).nr = c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv)
+                                                    : ++c->rec.lg_sent;
+
+        switch (c->state) {
+        case CONN_STAT_VERS_SENT:
+        case CONN_STAT_RETRY:
+            flags = F_LONG_HDR | F_LH_INIT;
+            break;
+        case CONN_STAT_VERS_REJ:
+            flags = F_LONG_HDR | F_LH_VNEG;
+            break;
+        case CONN_STAT_IDLE:
+        case CONN_STAT_VERS_OK:
+            flags = F_LONG_HDR | F_LH_HSHK;
+            break;
+        case CONN_STAT_ESTB:
+        case CONN_STAT_CLSD:
+            pkt_nr_len = needed_pkt_nr_len(c, meta(v).nr);
+            flags = pkt_type[pkt_nr_len] | (c->omit_cid ? F_SH_OMIT_CID : 0);
+            break;
+        default:
+            die("unknown conn state %u", c->state);
+        }
     }
 
-    ensure(!rtx || flags == pkt_flags(v->buf),
-           "RTX of 0x%02x-type pkt " FMT_PNR_OUT "; new type would be 0x%02x",
-           pkt_flags(v->buf), meta(v).nr, flags);
+    ensure(meta(v).nr < (1ULL << 62) - 1, "packet number overflow");
+
 
     uint16_t i = enc(v->buf, v->len, 0, &flags, sizeof(flags), "0x%02x");
 
@@ -250,7 +247,7 @@ bool enc_pkt(struct q_stream * const s,
         i = enc(v->buf, v->len, i, &c->vers, sizeof(c->vers), "0x%08x");
         i = enc(v->buf, v->len, i, &meta(v).nr, sizeof(uint32_t),
                 FMT_PNR32_OUT);
-        if (c->state == CONN_STAT_VERS_REJ) {
+        if (is_set(F_LH_VNEG, flags)) {
             warn(INF, "sending version negotiation server response");
             for (uint8_t j = 0; j < ok_vers_len; j++)
                 if (!is_force_neg_vers(ok_vers[j]))
@@ -267,8 +264,9 @@ bool enc_pkt(struct q_stream * const s,
 
     const uint16_t hdr_len = i;
 
-    if (c->state != CONN_STAT_VERS_REJ && c->state != CONN_STAT_RETRY &&
-        !splay_empty(&c->recv)) {
+    if (!splay_empty(&c->recv) &&
+        (!is_set(F_LONG_HDR, flags) ||
+         (!is_set(F_LH_VNEG, flags) && !is_set(F_LH_RTRY, flags)))) {
         meta(v).ack_header_pos = i;
         i = enc_ack_frame(c, v, i);
     } else
@@ -342,5 +340,4 @@ bool enc_pkt(struct q_stream * const s,
         v->len = meta(v).stream_data_end;
 
     adj_iov_to_data(v);
-    return true;
 }
