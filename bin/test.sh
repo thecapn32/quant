@@ -136,8 +136,8 @@ esac
 # fi
 
 tmux -CC \
-        new-session "sleep $delay; $cc; sleep 5" \; \
-        split-window -h "$sc; sleep 5" \; \
+        new-session "sleep $delay; $cc; sleep 1" \; \
+        split-window -h "$sc; sleep 1" \; \
         set remain-on-exit on
 
 # ats doesn't exit cleanly
