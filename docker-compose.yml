@@ -1,0 +1,67 @@
+version: "3"
+services:
+
+  client:
+    image: ntap/quant
+    privileged: true
+    command: >
+      sh -c "
+        route add server gw switch &&
+        netstat -rn &&
+        sleep 2 &&
+        client -v5 -i eth0 https://server/index.html
+      "
+    sysctls:
+      net.ipv4.conf.eth0.send_redirects: 0
+      net.ipv4.conf.all.send_redirects: 0
+      net.ipv4.conf.default.send_redirects: 0
+    networks:
+      - quic
+
+  server:
+    image: ntap/quant
+    privileged: true
+    command: >
+      sh -c "
+        route add client gw switch &&
+        netstat -rn &&
+        server -i eth0 -d /www -c /tls/quant.crt -k /tls/quant.key -v5
+      "
+    sysctls:
+      net.ipv4.conf.eth0.send_redirects: 0
+      net.ipv4.conf.all.send_redirects: 0
+      net.ipv4.conf.default.send_redirects: 0
+    ports:
+      - "4433:4433/udp"
+    networks:
+      - quic
+
+  switch:
+    image: larseggert/flow-disruptor
+    privileged: true
+    command: >
+      sh -c "
+        ip addr show dev eth0 | grep 'inet ' | cut -f2 -dt | cut -f1 -d/ > /tmp/ip &&
+        ip route show default dev eth0 | grep default | cut -d' ' -f3 > /tmp/gw &&
+        ip link add type veth &&
+        ifconfig veth0 up promisc &&
+        ifconfig veth1 `cat /tmp/ip` up promisc &&
+        ifconfig eth0 down &&
+        ifconfig eth0 inet 0.0.0.0 up promisc &&
+        route add default gw `cat tmp/gw` dev veth1 &&
+        ifconfig -a &&
+        tcpdump -n -i veth1 arp or icmp or ip &
+        flow-disruptor --downlink_iface veth0 --uplink_iface eth0 \
+          --config /cfg/switch.cfg
+      "
+    sysctls:
+      net.ipv4.conf.eth0.send_redirects: 0
+      net.ipv4.conf.all.send_redirects: 0
+      net.ipv4.conf.default.send_redirects: 0
+    volumes:
+      - .:/cfg
+    networks:
+      - quic
+
+networks:
+  quic:
