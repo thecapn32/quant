@@ -17,7 +17,7 @@ FROM alpine:3.7
 COPY --from=0 /dst /
 COPY --from=0 /2048-master /www
 COPY --from=0 /tls /tls
-RUN apk add --no-cache libcrypto1.0 http-parser libev libbsd
+RUN apk add --no-cache libcrypto1.0 http-parser libev libbsd ethtool
 EXPOSE 4433/UDP
 CMD ["/bin/server", "-i", "eth0", "-d", "/www", \
         "-c", "/tls/quant.crt", "-k", "/tls/quant.key"]

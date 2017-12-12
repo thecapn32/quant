@@ -4,64 +4,58 @@ services:
   client:
     image: ntap/quant
     privileged: true
+    tty: true
     command: >
       sh -c "
-        route add server gw switch &&
-        netstat -rn &&
-        sleep 2 &&
-        client -v5 -i eth0 https://server/index.html
+        route add server dev eth0 ;
+        ethtool --offload eth0 rx off tx off;
+        sleep 1 ;
+        client -v3 -i eth0 https://server/index.html
       "
-    sysctls:
-      net.ipv4.conf.eth0.send_redirects: 0
-      net.ipv4.conf.all.send_redirects: 0
-      net.ipv4.conf.default.send_redirects: 0
+    extra_hosts:
+      - "server:172.88.88.88"
     networks:
-      - quic
+      net-client:
+        ipv4_address: 172.11.11.11
 
   server:
     image: ntap/quant
     privileged: true
+    tty: true
+    expose:
+      - 4433
     command: >
       sh -c "
-        route add client gw switch &&
-        netstat -rn &&
-        server -i eth0 -d /www -c /tls/quant.crt -k /tls/quant.key -v5
+        route add client dev eth0 ;
+        ethtool --offload eth0 rx off tx off;
+        server -i eth0 -d /www -c /tls/quant.crt -k /tls/quant.key -v3
       "
-    sysctls:
-      net.ipv4.conf.eth0.send_redirects: 0
-      net.ipv4.conf.all.send_redirects: 0
-      net.ipv4.conf.default.send_redirects: 0
-    ports:
-      - "4433:4433/udp"
+    extra_hosts:
+      - "client:172.11.11.11"
     networks:
-      - quic
+      net-server:
+        ipv4_address: 172.88.88.88
 
   switch:
     image: larseggert/flow-disruptor
-    privileged: true
-    command: >
-      sh -c "
-        ip addr show dev eth0 | grep 'inet ' | cut -f2 -dt | cut -f1 -d/ > /tmp/ip &&
-        ip route show default dev eth0 | grep default | cut -d' ' -f3 > /tmp/gw &&
-        ip link add type veth &&
-        ifconfig veth0 up promisc &&
-        ifconfig veth1 `cat /tmp/ip` up promisc &&
-        ifconfig eth0 down &&
-        ifconfig eth0 inet 0.0.0.0 up promisc &&
-        route add default gw `cat tmp/gw` dev veth1 &&
-        ifconfig -a &&
-        tcpdump -n -i veth1 arp or icmp or ip &
-        flow-disruptor --downlink_iface veth0 --uplink_iface eth0 \
-          --config /cfg/switch.cfg
-      "
+    tty: true
     sysctls:
-      net.ipv4.conf.eth0.send_redirects: 0
-      net.ipv4.conf.all.send_redirects: 0
-      net.ipv4.conf.default.send_redirects: 0
+      net.ipv4.ip_forward: 0
+    command: >
+        flow-disruptor --downlink_iface eth0 --uplink_iface eth1
+          --config /cfg/switch.cfg
     volumes:
       - .:/cfg
     networks:
-      - quic
+      - net-client
+      - net-server
 
 networks:
-  quic:
+  net-client:
+    ipam:
+      config:
+        - subnet: 172.11.11.0/24
+  net-server:
+    ipam:
+      config:
+        - subnet: 172.88.88.0/24
