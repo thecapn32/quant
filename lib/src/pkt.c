@@ -205,35 +205,33 @@ void enc_pkt(struct q_stream * const s,
         meta(v).nr = is_set(F_LONG_HDR | F_LH_VNEG, flags) ? diet_max(&c->recv)
                                                            : ++c->rec.lg_sent;
     } else {
-
         // TODO: increase by random offset
         meta(v).nr = c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv)
                                                     : ++c->rec.lg_sent;
+    }
 
-        switch (c->state) {
-        case CONN_STAT_VERS_SENT:
-        case CONN_STAT_RETRY:
-            flags = F_LONG_HDR | F_LH_INIT;
-            break;
-        case CONN_STAT_VERS_REJ:
-            flags = F_LONG_HDR | F_LH_VNEG;
-            break;
-        case CONN_STAT_IDLE:
-        case CONN_STAT_VERS_OK:
-            flags = F_LONG_HDR | F_LH_HSHK;
-            break;
-        case CONN_STAT_ESTB:
-        case CONN_STAT_CLSD:
-            pkt_nr_len = needed_pkt_nr_len(c, meta(v).nr);
-            flags = pkt_type[pkt_nr_len] | (c->omit_cid ? F_SH_OMIT_CID : 0);
-            break;
-        default:
-            die("unknown conn state %u", c->state);
-        }
+    switch (c->state) {
+    case CONN_STAT_VERS_SENT:
+    case CONN_STAT_RETRY:
+        flags = F_LONG_HDR | F_LH_INIT;
+        break;
+    case CONN_STAT_VERS_REJ:
+        flags = F_LONG_HDR | F_LH_VNEG;
+        break;
+    case CONN_STAT_IDLE:
+    case CONN_STAT_VERS_OK:
+        flags = F_LONG_HDR | F_LH_HSHK;
+        break;
+    case CONN_STAT_ESTB:
+    case CONN_STAT_CLSD:
+        pkt_nr_len = needed_pkt_nr_len(c, meta(v).nr);
+        flags = pkt_type[pkt_nr_len] | (c->omit_cid ? F_SH_OMIT_CID : 0);
+        break;
+    default:
+        die("unknown conn state %u", c->state);
     }
 
     ensure(meta(v).nr < (1ULL << 62) - 1, "packet number overflow");
-
 
     uint16_t i = enc(v->buf, v->len, 0, &flags, sizeof(flags), "0x%02x");
 
