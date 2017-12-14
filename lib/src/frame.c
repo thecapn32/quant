@@ -650,12 +650,6 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
     if (dlen)
         enc(v->buf, v->len, i, &dlen, 0, "%u");
 
-    track_bytes_out(s, dlen);
-    s->out_off += dlen; // increase the stream data offset
-    meta(v).str = s;    // remember stream this buf belongs to
-    meta(v).stream_data_start = Q_OFFSET;
-    meta(v).stream_data_end = Q_OFFSET + (uint16_t)dlen;
-
     warn(INF,
          FRAM_OUT "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID " off=%" PRIu64
                   " len=%" PRIu64,
@@ -665,7 +659,13 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
              : "",
          is_set(F_STREAM_LEN, type) ? "LEN" : "",
          is_set(F_STREAM_OFF, type) ? "|" : "",
-         is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id, meta(v).in_off, dlen);
+         is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id, s->out_off, dlen);
+
+    track_bytes_out(s, dlen);
+    s->out_off += dlen; // increase the stream data offset
+    meta(v).str = s;    // remember stream this buf belongs to
+    meta(v).stream_data_start = Q_OFFSET;
+    meta(v).stream_data_end = Q_OFFSET + (uint16_t)dlen;
 
     return v->len;
 }
