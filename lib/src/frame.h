@@ -56,7 +56,7 @@ struct w_iov;
 extern uint64_t __attribute__((const))
 shorten_ack_nr(const uint64_t ack, const uint64_t diff);
 
-extern void __attribute__((nonnull))
+extern uint16_t __attribute__((nonnull))
 dec_frames(struct q_conn * const c, struct w_iov * v);
 
 extern uint16_t __attribute__((nonnull))
@@ -71,7 +71,7 @@ extern uint16_t __attribute__((nonnull)) enc_ack_frame(struct q_conn * const c,
 extern uint16_t __attribute__((nonnull))
 enc_stream_frame(struct q_stream * const s, struct w_iov * const v);
 
-extern uint16_t __attribute__((nonnull))
+extern uint16_t __attribute__((nonnull(1)))
 enc_close_frame(struct w_iov * const v,
                 const uint16_t pos,
                 const uint8_t type,

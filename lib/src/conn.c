@@ -574,19 +574,6 @@ void rx(struct ev_loop * const l,
         meta(v).nr = pkt_nr(v->buf, v->len, c);
         log_pkt("RX", v);
 
-        // XXX rethink this
-        // const uint64_t drop[] = {8000, 8001, 8002};
-        // const uint16_t drop_len = sizeof(drop) / sizeof(drop[0]);
-        // uint16_t n;
-        // for (n = 0; n < drop_len; n++)
-        //     if (meta(v).nr == drop[n])
-        //         break;
-        // if (n < drop_len) {
-        //     warn(CRT, "dropping pkt " FMT_PNR, meta(v).nr);
-        //     q_free_iov(v);
-        //     continue;
-        // }
-
         // remember that we had a RX event on this connection
         if (!c->had_rx) {
             c->had_rx = true;
@@ -623,4 +610,21 @@ void rx(struct ev_loop * const l,
         // clear the helper flags set above
         c->needs_tx = c->had_rx = false;
     }
+}
+
+
+void err_close(struct q_conn * const c,
+               const uint16_t code,
+               const char * const reas)
+{
+    if (c->err_code) {
+        warn(WRN, "ignoring new err 0x%04x (%s); existing err is 0x%04x (%s) ",
+             code, reas, c->err_code, c->err_reason);
+        return;
+    }
+
+    warn(ERR, "%s", reas);
+    c->err_code = code;
+    c->err_reason = reas;
+    c->state = CONN_STAT_CLSD;
 }

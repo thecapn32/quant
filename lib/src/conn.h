@@ -81,7 +81,9 @@ struct q_conn {
     uint8_t local_ack_del_exp;
     uint8_t peer_ack_del_exp;
 
-    uint8_t _unused[6];
+    uint8_t _unused[4];
+    uint16_t err_code;
+    const char * err_reason;
 
     uint64_t in_data;
     uint64_t out_data;
@@ -162,3 +164,7 @@ extern void * __attribute__((nonnull)) loop_run(void * const arg);
 
 extern void __attribute__((nonnull))
 loop_update(struct ev_loop * const l, ev_async * const w, int e);
+
+extern void __attribute__((nonnull)) err_close(struct q_conn * const c,
+                                               const uint16_t code,
+                                               const char * const reas);

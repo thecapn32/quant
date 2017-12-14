@@ -96,8 +96,12 @@ dec_stream_frame(struct q_conn * const c,
         }
         ensure(is_set(STRM_FL_INI_SRV, sid) == c->is_clnt,
                "got sid %" PRIu64 " but am %s", sid, conn_type(c));
-        ensure(is_set(STRM_FL_DIR_UNI, sid) == false,
-               "TODO: unidirectional streams not supported yet %" PRIu64, sid);
+
+        if (is_set(STRM_FL_DIR_UNI, sid)) {
+            err_close(c, ERR_INTERNAL_ERR,
+                      "TODO: unidirectional streams not supported yet");
+            return 0;
+        }
         s = new_stream(c, sid);
     }
 
@@ -299,7 +303,7 @@ dec_reset_stream_frame(struct q_conn * const c,
 #endif
 
 static uint16_t __attribute__((nonnull))
-dec_close_frame(struct q_conn * const c __attribute__((unused)),
+dec_close_frame(struct q_conn * const c,
                 const struct w_iov * const v,
                 const uint16_t pos)
 {
@@ -320,8 +324,11 @@ dec_close_frame(struct q_conn * const c __attribute__((unused)),
     }
 
     // TODO: close connection
+    c->state = CONN_STAT_CLSD;
 
-    warn(INF, FRAM_IN "CLOSE" NRM " err=0x%04x rlen=%" PRIu64 " reason=%.*s",
+    warn(INF,
+         FRAM_IN "CLOSE" NRM " err=" RED "0x%04x " NRM "rlen=%" PRIu64
+                 " reason=" RED "%.*s" NRM,
          err_code, reas_len, reas_len, reas_phr);
 
     return i;
@@ -425,7 +432,7 @@ dec_stop_sending_frame(struct q_conn * const c,
 }
 
 
-void dec_frames(struct q_conn * const c, struct w_iov * v)
+uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
 {
     uint16_t i = pkt_hdr_len(v->buf, v->len);
     uint16_t pad_start = 0;
@@ -465,7 +472,6 @@ void dec_frames(struct q_conn * const c, struct w_iov * v)
                               on_ack_rx_2);
 
         } else {
-            bit_set(meta(v).frames, type);
             switch (type) {
             case FRAM_TYPE_PAD:
                 pad_start = pad_start ? pad_start : i;
@@ -518,15 +524,25 @@ void dec_frames(struct q_conn * const c, struct w_iov * v)
                 break;
 
             default:
-                die("unknown frame type 0x%02x", type);
+                err_close(c, ERR_FRAME_ERR(type), "unknown frame type");
+                i = 0;
             }
         }
+
+        if (i == 0)
+            // there was an error parsing a frame
+            return 0;
+
+        // record this frame type in the meta data
+        bit_set(meta(v).frames, type);
     }
     if (meta(v).stream_data_start) {
         // adjust w_iov start and len to stream frame data
         v->buf = &v->buf[meta(v).stream_data_start];
         v->len = stream_data_len(v);
     }
+
+    return i;
 }
 
 
@@ -545,7 +561,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
                        struct w_iov * const v,
                        const uint16_t pos)
 {
-    uint8_t type = FRAM_TYPE_ACK;
+    const uint8_t type = FRAM_TYPE_ACK;
     bit_set(meta(v).frames, FRAM_TYPE_ACK);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
 
@@ -666,15 +682,21 @@ uint16_t enc_close_frame(struct w_iov * const v,
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
     i = enc(v->buf, v->len, i, &err_code, sizeof(err_code), "0x%04x");
 
-    const uint64_t rlen = MIN(strlen(reas), v->len - i);
+    const uint64_t rlen = reas ? MIN(strlen(reas), v->len - i) : 0;
     i = enc(v->buf, v->len, i, &rlen, 0, "%" PRIu64);
 
-    memcpy(&v->buf[i], reas, rlen);
-    warn(DBG, "enc %" PRIu64 "-byte reason phrase into [%u..%" PRIu64 "]", rlen,
-         i, i + rlen - 1);
+    if (reas) {
+        memcpy(&v->buf[i], reas, rlen);
+        warn(DBG, "enc %" PRIu64 "-byte reason phrase into [%u..%" PRIu64 "]",
+             rlen, i, i + rlen - 1);
 
-    warn(INF, FRAM_OUT "CLOSE" NRM " err=0x%04x rlen=%" PRIu64 " reason=%.*s",
-         err_code, rlen, rlen, reas);
+        warn(INF,
+             FRAM_OUT "CLOSE" NRM " err=" RED "0x%04x" NRM " rlen=%" PRIu64
+                      " reason=" RED "%.*s" NRM,
+             err_code, rlen, rlen, reas);
+
+    } else
+        warn(INF, FRAM_OUT "CLOSE" NRM " err=" RED "0x%04x" NRM, err_code);
 
     return i + (uint16_t)rlen;
 }

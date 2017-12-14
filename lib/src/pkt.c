@@ -291,8 +291,8 @@ void enc_pkt(struct q_stream * const s,
     // TODO: need to RTX most recent MAX_STREAM_DATA and MAX_DATA on RTX
 
     if (c->state == CONN_STAT_CLSD) {
-        i = enc_close_frame(v, i, FRAM_TYPE_CONN_CLSE, CONN_CLSE_ERR_NO_ERROR,
-                            "QUANT SAYS GOOD-BYE");
+        i = enc_close_frame(v, i, FRAM_TYPE_CONN_CLSE, c->err_code,
+                            c->err_reason);
         maybe_api_return(q_close, c);
     }
 
