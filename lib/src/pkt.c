@@ -62,8 +62,6 @@ static const char * pkt_type_str(const uint8_t flags)
             return "Handshake";
         case F_LH_0RTT:
             return "0-RTT Protected";
-        default:
-            die("unknown packet type 0x%02x", flags);
         }
     else
         switch (pkt_type(flags)) {
@@ -73,9 +71,8 @@ static const char * pkt_type_str(const uint8_t flags)
             return "Short(2)";
         case F_SH_4OCT:
             return "Short(4)";
-        default:
-            die("unknown packet type 0x%02x", flags);
         }
+    return ("Unknown");
 }
 
 
