@@ -579,6 +579,7 @@ void init_tls_ctx(const char * const cert, const char * const key)
     tls_ctx.random_bytes = ptls_openssl_random_bytes;
     tls_ctx.sign_certificate = &sign_cert.super;
     tls_ctx.verify_certificate = &verifier.super;
+    tls_ctx.get_time =&ptls_get_time;
 }
 
 
