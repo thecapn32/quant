@@ -277,17 +277,21 @@ void enc_pkt(struct q_stream * const s,
         meta(v).ack_header_pos = 0;
 
 
-    if (s->blocked)
-        i = enc_stream_blocked_frame(s, v, i);
+    // XXX rethink this - there needs to be a list of which streams are blocked
+    // or need their window opened
+    struct q_stream * t = 0;
+    splay_foreach (t, stream, &c->streams) {
+        if (t->blocked)
+            i = enc_stream_blocked_frame(t, v, i);
+        if (t->open_win) {
+            t->in_data_max += 0x1000;
+            i = enc_max_stream_data_frame(t, v, i);
+            t->open_win = false;
+        }
+    }
 
     if (s->c->blocked)
         i = enc_blocked_frame(v, i);
-
-    if (s->open_win) {
-        s->in_data_max += 0x1000;
-        i = enc_max_stream_data_frame(s, v, i);
-        s->open_win = false;
-    }
 
     if (s->c->open_win) {
         s->c->local_max_data += 0x1000;
