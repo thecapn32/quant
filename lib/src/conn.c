@@ -335,7 +335,7 @@ static bool __attribute__((nonnull))
 verify_prot(struct q_conn * const c, struct w_iov * const v)
 {
     const uint8_t flags = pkt_flags(v->buf);
-    if (is_set(F_LONG_HDR, flags) && pkt_type(flags) == F_LH_VNEG)
+    if (is_set(F_LONG_HDR, flags) && pkt_vers(v->buf, v->len) == 0)
         // version negotiation responses do not carry protection
         return true;
 
@@ -405,23 +405,9 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         break;
 
     case CONN_STAT_VERS_SENT:
-        if (pkt_type(flags) == F_LH_VNEG) {
-            // XXX this doesn't work, since we're flushing CH state on retry
-            // ensure(find_sent_pkt(c, meta(v).nr), "did not send pkt %"
-            // PRIu64,
-            //        meta(v).nr);
-
-            const uint32_t vers = pkt_vers(v->buf, v->len);
-            if (c->vers != vers) {
-                warn(NTE,
-                     "ignoring vers neg response for 0x%08x "
-                     "since we're trying 0x%08x",
-                     vers, c->vers);
-                break;
-            }
-
-            warn(INF, "serv didn't like our vers 0x%08x", vers);
-            ensure(vers_supported(vers), "vers 0x%08x not one of ours", vers);
+        if (pkt_vers(v->buf, v->len) == 0) {
+            warn(INF, "serv didn't like our vers 0x%08x", c->vers);
+            // TODO: check CID
 
             if (c->vers_initial == 0)
                 c->vers_initial = c->vers;

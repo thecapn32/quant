@@ -48,12 +48,13 @@
 #define FMT_PNR32_IN GRN "%u" NRM
 
 
-static const char * pkt_type_str(const uint8_t flags)
+static const char * pkt_type_str(const struct w_iov * const v)
 {
-    if (is_set(F_LONG_HDR, flags))
-        switch (pkt_type(flags)) {
-        case F_LH_VNEG:
+    const uint8_t flags = pkt_flags(v->buf);
+    if (is_set(F_LONG_HDR, flags)) {
+        if (pkt_vers(v->buf, v->len) == 0)
             return "Version Negotiation";
+        switch (pkt_type(flags)) {
         case F_LH_INIT:
             return "Initial";
         case F_LH_RTRY:
@@ -63,7 +64,7 @@ static const char * pkt_type_str(const uint8_t flags)
         case F_LH_0RTT:
             return "0-RTT Protected";
         }
-    else
+    } else
         switch (pkt_type(flags)) {
         case F_SH_1OCT:
             return "Short(1)";
@@ -82,23 +83,29 @@ void log_pkt(const char * const dir, const struct w_iov * const v)
     const char * col_dir = *dir == 'R' ? BLD BLU : BLD GRN;
     const char * col_nr = *dir == 'R' ? BLU : GRN;
 
-    if (is_set(F_LONG_HDR, flags))
-        twarn(NTE,
-              BLD "%s" NRM " len=%u 0x%02x=%s%s " NRM "cid=" FMT_CID
-                  " vers=0x%08x nr=%s%u",
-              dir, v->len, flags, col_dir, pkt_type_str(flags),
-              pkt_cid(v->buf, v->len), pkt_vers(v->buf, v->len), col_nr,
-              meta(v).nr);
-    else if (is_set(F_SH_OMIT_CID, flags))
+    if (is_set(F_LONG_HDR, flags)) {
+        const uint32_t vers = pkt_vers(v->buf, v->len);
+        if (vers == 0)
+            twarn(NTE,
+                  BLD "%s" NRM " len=%u 0x%02x=%s%s " NRM "cid=" FMT_CID
+                      " vers=0x%08x",
+                  dir, v->len, flags, col_dir, pkt_type_str(v),
+                  pkt_cid(v->buf, v->len), vers);
+        else
+            twarn(NTE,
+                  BLD "%s" NRM " len=%u 0x%02x=%s%s " NRM "cid=" FMT_CID
+                      " vers=0x%08x nr=%s%u",
+                  dir, v->len, flags, col_dir, pkt_type_str(v),
+                  pkt_cid(v->buf, v->len), vers, col_nr, meta(v).nr);
+    } else if (is_set(F_SH_OMIT_CID, flags))
         twarn(NTE,
               BLD "%s" NRM " len=%u 0x%02x=%s%s" NRM "|NO_CID nr=%s%" PRIu64,
-              dir, v->len, flags, col_dir, pkt_type_str(flags), col_nr,
-              meta(v).nr);
+              dir, v->len, flags, col_dir, pkt_type_str(v), col_nr, meta(v).nr);
     else
         twarn(NTE,
               BLD "%s" NRM " len=%u 0x%02x=%s%s" NRM " cid=" FMT_CID
                   " nr=%s%" PRIu64,
-              dir, v->len, flags, col_dir, pkt_type_str(flags),
+              dir, v->len, flags, col_dir, pkt_type_str(v),
               pkt_cid(v->buf, v->len), col_nr, meta(v).nr);
 }
 #endif
@@ -114,7 +121,10 @@ uint16_t pkt_hdr_len(const uint8_t * const buf, const uint16_t len)
     const uint8_t flags = pkt_flags(buf);
     uint16_t pos = 0;
     if (is_set(F_LONG_HDR, flags))
-        pos = 17;
+        if (pkt_vers(buf, len) == 0)
+            pos = 13;
+        else
+            pos = 17;
     else {
         const uint8_t type = pkt_type(flags);
         if (type > F_SH_1OCT || type < F_SH_4OCT) {
@@ -196,27 +206,36 @@ void enc_pkt(struct q_stream * const s,
 
     struct q_conn * const c = s->c;
     uint8_t flags = 0;
-    uint8_t pkt_nr_len = 0;
+    uint16_t hdr_len = 0;
+    uint16_t i = 0;
 
-    if (rtx) {
-        flags = pkt_flags(v->buf);
-        warn(INF, "enc RTX 0x%02x-type " FMT_PNR_OUT, flags, meta(v).nr);
-
-        meta(v).nr = is_set(F_LONG_HDR | F_LH_VNEG, flags) ? diet_max(&c->recv)
-                                                           : ++c->rec.lg_sent;
-    } else {
-        // TODO: increase by random offset
-        meta(v).nr = c->state == CONN_STAT_VERS_REJ ? diet_max(&c->recv)
-                                                    : ++c->rec.lg_sent;
+    if (c->state == CONN_STAT_VERS_REJ) {
+        warn(INF, "sending version negotiation server response");
+        flags = F_LONG_HDR | (uint8_t)w_rand();
+        i = enc(v->buf, v->len, 0, &flags, sizeof(flags), "0x%02x");
+        i = enc(v->buf, v->len, i, &c->id, sizeof(c->id), FMT_CID);
+        const uint32_t vers = 0;
+        i = enc(v->buf, v->len, i, &vers, sizeof(c->vers), "0x%08x");
+        for (uint8_t j = 0; j < ok_vers_len; j++)
+            if (!is_force_neg_vers(ok_vers[j]))
+                i = enc(v->buf, v->len, i, &ok_vers[j], sizeof(ok_vers[j]),
+                        "0x%08x");
+        hdr_len = v->len = i;
+        // don't remember the failed client initial
+        diet_remove(&c->recv, meta(v).nr);
+        log_pkt("TX", v);
+        goto tx;
     }
 
+    if (rtx)
+        warn(INF, "enc RTX 0x%02x-type " FMT_PNR_OUT, flags, meta(v).nr);
+    meta(v).nr = ++c->rec.lg_sent;
+
+    uint8_t pkt_nr_len = 0;
     switch (c->state) {
     case CONN_STAT_VERS_SENT:
     case CONN_STAT_RETRY:
         flags = F_LONG_HDR | F_LH_INIT;
-        break;
-    case CONN_STAT_VERS_REJ:
-        flags = F_LONG_HDR | F_LH_VNEG;
         break;
     case CONN_STAT_IDLE:
     case CONN_STAT_VERS_OK:
@@ -233,7 +252,7 @@ void enc_pkt(struct q_stream * const s,
 
     ensure(meta(v).nr < (1ULL << 62) - 1, "packet number overflow");
 
-    uint16_t i = enc(v->buf, v->len, 0, &flags, sizeof(flags), "0x%02x");
+    i = enc(v->buf, v->len, 0, &flags, sizeof(flags), "0x%02x");
 
     if (is_set(F_LONG_HDR, flags) || !is_set(F_SH_OMIT_CID, flags))
         i = enc(v->buf, v->len, i, &c->id, sizeof(c->id), FMT_CID);
@@ -242,26 +261,16 @@ void enc_pkt(struct q_stream * const s,
         i = enc(v->buf, v->len, i, &c->vers, sizeof(c->vers), "0x%08x");
         i = enc(v->buf, v->len, i, &meta(v).nr, sizeof(uint32_t),
                 FMT_PNR32_OUT);
-        if (is_set(F_LH_VNEG, flags)) {
-            warn(INF, "sending version negotiation server response");
-            for (uint8_t j = 0; j < ok_vers_len; j++)
-                if (!is_force_neg_vers(ok_vers[j]))
-                    i = enc(v->buf, v->len, i, &ok_vers[j], sizeof(ok_vers[j]),
-                            "0x%08x");
-            v->len = i;
-            // don't remember the failed client initial
-            diet_remove(&c->recv, meta(v).nr);
-        }
     } else
         i = enc(v->buf, v->len, i, &meta(v).nr, pkt_nr_len, FMT_PNR32_OUT);
 
     log_pkt("TX", v);
 
-    const uint16_t hdr_len = i;
+    hdr_len = i;
 
     if (!splay_empty(&c->recv) &&
         (!is_set(F_LONG_HDR, flags) ||
-         (!is_set(F_LH_VNEG, flags) && !is_set(F_LH_RTRY, flags)))) {
+         (c->state != CONN_STAT_VERS_REJ && !is_set(F_LH_RTRY, flags)))) {
         meta(v).ack_header_pos = i;
         i = enc_ack_frame(c, v, i);
     } else
@@ -313,6 +322,8 @@ void enc_pkt(struct q_stream * const s,
 
     if (c->state == CONN_STAT_VERS_SENT)
         i = enc_padding_frame(v, i, MIN_INI_LEN - i - AEAD_LEN);
+
+tx:
     v->len = i;
 
     // alloc a new buffer to encrypt/sign into for TX

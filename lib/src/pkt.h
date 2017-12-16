@@ -37,11 +37,10 @@
 
 #define F_LONG_HDR 0x80
 
-#define F_LH_VNEG 0x7F
-#define F_LH_INIT 0x7E
-#define F_LH_RTRY 0x7D
-#define F_LH_HSHK 0x7C
-#define F_LH_0RTT 0x7B
+#define F_LH_INIT 0x7F
+#define F_LH_RTRY 0x7E
+#define F_LH_HSHK 0x7D
+#define F_LH_0RTT 0x7C
 
 #define F_SH_OMIT_CID 0x40
 #define F_SH_KPH 0x20
