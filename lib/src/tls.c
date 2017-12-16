@@ -60,6 +60,7 @@
 #include "marshall.h"
 #include "pkt.h"
 #include "quic.h"
+#include "recovery.h"
 #include "stream.h"
 #include "tls.h"
 
@@ -493,6 +494,7 @@ static void __attribute__((nonnull)) init_1rtt_prot(struct q_conn * const c)
         c->tls.t, cs, c->tls.out_sec,
         c->is_clnt ? PTLS_1RTT_CLNT_LABL : PTLS_1RTT_SERV_LABL, 1);
     c->state = CONN_STAT_VERS_OK;
+    c->rec.lg_acked = c->rec.lg_sent;
 }
 
 
@@ -579,7 +581,7 @@ void init_tls_ctx(const char * const cert, const char * const key)
     tls_ctx.random_bytes = ptls_openssl_random_bytes;
     tls_ctx.sign_certificate = &sign_cert.super;
     tls_ctx.verify_certificate = &verifier.super;
-    tls_ctx.get_time =&ptls_get_time;
+    tls_ctx.get_time = &ptls_get_time;
 }
 
 
