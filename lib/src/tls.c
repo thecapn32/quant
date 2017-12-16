@@ -530,7 +530,7 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
     }
     ptls_buffer_dispose(&tb);
 
-    if (ret == 0)
+    if (ret == 0 && s->c->state <= CONN_STAT_VERS_OK)
         init_1rtt_prot(s->c);
 
     return (uint32_t)ret;
