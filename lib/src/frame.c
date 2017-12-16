@@ -507,6 +507,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
 
             case FRAM_TYPE_MAX_DATA:
                 i = dec_max_data_frame(c, v, i);
+                c->blocked = false;
                 break;
 
             case FRAM_TYPE_STRM_BLCK:
