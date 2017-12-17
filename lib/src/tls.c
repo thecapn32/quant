@@ -150,9 +150,8 @@ static uint16_t chk_tp_clnt(const struct q_conn * const c,
 {
     uint16_t i = pos;
 
-    // parse negotiated version
-    uint32_t neg_vers = 0;
-    i = dec(&neg_vers, buf, len, i, sizeof(neg_vers), "0x%08x");
+    uint32_t vers_initial;
+    i = dec(&vers_initial, buf, len, i, sizeof(vers_initial), "0x%08x");
 
     // parse server versions
     uint8_t n;
@@ -162,7 +161,7 @@ static uint16_t chk_tp_clnt(const struct q_conn * const c,
         uint32_t vers;
         n -= sizeof(vers);
         i = dec(&vers, buf, len, i, sizeof(vers), "0x%08x");
-        found = found ? found : vers == c->vers && vers == neg_vers;
+        found = found ? found : vers == c->vers;
     }
     ensure(found, "negotiated version found in transport parameters");
     // TODO: validate that version negotiation on these values has same result
