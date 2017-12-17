@@ -165,8 +165,9 @@ static struct q_conn * new_conn(struct w_engine * const w,
 
     c->peer_ack_del_exp = c->local_ack_del_exp = 3;
     c->local_idle_to = kIdleTimeout;
-    c->local_max_data = 0x2000;
-    c->local_max_strm_data = 0x1000;
+    // XXX: check IDs if stream 0 is flow-controlled during handshake or not
+    c->local_max_data = 0x4000;
+    c->local_max_strm_data = 0x2000;
     c->local_max_strm_bidi = c->is_clnt ? 5 : 4;
     c->local_max_strm_uni = 0; // TODO: support unidir streams
 
