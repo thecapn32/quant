@@ -235,10 +235,11 @@ void enc_pkt(struct q_stream * const s,
     switch (c->state) {
     case CONN_STAT_VERS_SENT:
     case CONN_STAT_RETRY:
+    case CONN_STAT_VERS_OK:
         flags = F_LONG_HDR | F_LH_INIT;
         break;
     case CONN_STAT_IDLE:
-    case CONN_STAT_VERS_OK:
+    case CONN_STAT_HSHK_DONE:
         flags = F_LONG_HDR | F_LH_HSHK;
         break;
     case CONN_STAT_ESTB:
@@ -324,7 +325,7 @@ void enc_pkt(struct q_stream * const s,
         }
     }
 
-    if (c->state == CONN_STAT_VERS_SENT)
+    if (c->state == CONN_STAT_VERS_SENT || c->state == CONN_STAT_VERS_OK)
         i = enc_padding_frame(v, i, MIN_INI_LEN - i - AEAD_LEN);
 
 tx:

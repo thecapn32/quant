@@ -492,8 +492,6 @@ static void __attribute__((nonnull)) init_1rtt_prot(struct q_conn * const c)
     c->tls.out_kp0 = init_1rtt_secret(
         c->tls.t, cs, c->tls.out_sec,
         c->is_clnt ? PTLS_1RTT_CLNT_LABL : PTLS_1RTT_SERV_LABL, 1);
-    c->state = CONN_STAT_VERS_OK;
-    c->rec.lg_acked = c->rec.lg_sent;
 }
 
 
@@ -531,8 +529,12 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
     }
     ptls_buffer_dispose(&tb);
 
-    if (ret == 0 && s->c->state <= CONN_STAT_VERS_OK)
+    if (ret == 0 && s->c->state <= CONN_STAT_VERS_OK) {
         init_1rtt_prot(s->c);
+        s->c->state = CONN_STAT_HSHK_DONE;
+        s->c->rec.lg_acked = s->c->rec.lg_sent;
+        s->c->needs_tx = true;
+    }
 
     return (uint32_t)ret;
 }

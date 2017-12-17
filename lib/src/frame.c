@@ -446,7 +446,6 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
 
         if (is_set(FRAM_TYPE_STRM, type)) {
             bit_set(meta(v).frames, FRAM_TYPE_STRM);
-            c->needs_tx = true;
             if (meta(v).stream_data_start) {
                 // already had at least one stream frame in this packet,
                 // generate (another) copy
@@ -480,7 +479,6 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
 #if 0
             case FRAM_TYPE_RST_STRM:
                 i = dec_reset_stream_frame(c, v, i);
-                // c->needs_tx = true;
                 break;
 #endif
 
@@ -493,7 +491,6 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
             case FRAM_TYPE_PING:
                 warn(INF, "ping frame in [%u]", i);
                 i++;
-                c->needs_tx = true;
                 break;
 #endif
 

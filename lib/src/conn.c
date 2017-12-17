@@ -418,6 +418,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                 die("no vers in common with serv");
 
             // retransmit the ClientHello
+            c->state = CONN_STAT_VERS_OK;
             init_tls(c);
             // free the previous ClientHello
             struct pkt_meta *ch, *nxt;
@@ -459,6 +460,13 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         break;
 
     case CONN_STAT_VERS_OK:
+    case CONN_STAT_HSHK_DONE:
+        if (pkt_vers(v->buf, v->len) == 0) {
+            // we shouldn't get another version negotiation packet here, ignore
+            warn(NTE, "ignoring spurious ver neg response");
+            goto done;
+        }
+
         // pass any further data received on stream 0 to TLS and check
         // whether that completes the client handshake
         if (!is_set(F_LONG_HDR, flags) || pkt_type(flags) <= F_LH_HSHK)

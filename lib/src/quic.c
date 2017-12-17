@@ -240,7 +240,7 @@ struct q_conn * q_connect(void * const q,
          conn_type(c), c->id, inet_ntoa(peer->sin_addr), ntohs(peer->sin_port));
     loop_run(q_connect, c);
 
-    if (c->state != CONN_STAT_VERS_OK) {
+    if (c->state != CONN_STAT_HSHK_DONE) {
         warn(WRN, "%s conn " FMT_CID " not connected, state 0x%02x",
              conn_type(c), c->id, c->state);
         return 0;
