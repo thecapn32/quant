@@ -346,6 +346,9 @@ dec_max_stream_data_frame(struct q_conn * const c,
     i = dec(&s->out_data_max, v->buf, v->len, i, 0, "%" PRIu64);
     s->blocked = false;
 
+    // TODO: we should only do this if TX is pending on this stream
+    s->c->needs_tx = true;
+
     warn(INF, FRAM_IN "MAX_STREAM_DATA" NRM " id=" FMT_SID " max=%" PRIu64, sid,
          s->out_data_max);
 
@@ -505,6 +508,8 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
             case FRAM_TYPE_MAX_DATA:
                 i = dec_max_data_frame(c, v, i);
                 c->blocked = false;
+                // TODO: we should only do this if TX is pending on any stream
+                c->needs_tx = true;
                 break;
 
             case FRAM_TYPE_STRM_BLCK:
