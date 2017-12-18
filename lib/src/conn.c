@@ -660,6 +660,7 @@ void conn_to_state(struct q_conn * const c, const uint8_t state)
     case CONN_STAT_VERS_REJ:
     case CONN_STAT_VERS_OK:
     case CONN_STAT_HSHK_DONE:
+    case CONN_STAT_HSHK_FAIL:
         break;
     case CONN_STAT_DRNG:
     case CONN_STAT_CLNG:
