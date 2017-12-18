@@ -477,6 +477,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
     case CONN_STAT_ESTB:
     case CONN_STAT_CLNG:
     case CONN_STAT_HSHK_FAIL:
+    case CONN_STAT_DRNG:
         if (verify_prot(c, v) == false)
             goto done;
         track_recv(c, meta(v).nr);

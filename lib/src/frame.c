@@ -402,14 +402,35 @@ dec_stream_blocked_frame(struct q_conn * const c,
                          const uint16_t pos)
 {
     uint64_t sid = 0;
-    const uint16_t i = dec(&sid, v->buf, v->len, pos + 1, 0, FMT_SID);
+    uint16_t i = dec(&sid, v->buf, v->len, pos + 1, 0, FMT_SID);
     struct q_stream * const s = get_stream(c, sid);
     ensure(s, "have stream %u", sid);
 
-    warn(INF, FRAM_IN "STREAM_BLOCKED" NRM " id=" FMT_SID, sid);
+    uint64_t off = 0;
+    i = dec(&off, v->buf, v->len, i, 0, "%" PRIu64);
+
+    warn(INF, FRAM_IN "STREAM_BLOCKED" NRM " id=" FMT_SID " off=%" PRIu64, sid,
+         off);
 
     // open the stream window and send a frame
     s->open_win = true;
+
+    return i;
+}
+
+
+static uint16_t __attribute__((nonnull))
+dec_blocked_frame(struct q_conn * const c,
+                  const struct w_iov * const v,
+                  const uint16_t pos)
+{
+    uint64_t off = 0;
+    uint16_t i = dec(&off, v->buf, v->len, pos + 1, 0, FMT_SID);
+
+    warn(INF, FRAM_IN "BLOCKED" NRM " off=%" PRIu64, off);
+
+    // open the connection window and send a frame
+    c->open_win = true;
 
     return i;
 }
@@ -474,10 +495,11 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
                 // generate (another) copy
                 warn(DBG, "more than one stream frame in pkt, copy");
                 struct w_iov * const vdup =
-                    q_alloc_iov(w_engine(c->sock), MAX_PKT_LEN, Q_OFFSET);
-                memcpy(vdup->buf, v->buf, v->len);
+                    q_alloc_iov(w_engine(c->sock), MAX_PKT_LEN, 0);
+                memcpy(vdup->buf, v->buf - Q_OFFSET, v->len + Q_OFFSET);
                 meta(vdup) = meta(v);
                 vdup->len = v->len;
+                vdup->buf += Q_OFFSET;
                 // adjust w_iov start and len to stream frame data
                 v->buf = &v->buf[meta(v).stream_data_start];
                 v->len = stream_data_len(v);
@@ -534,9 +556,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
                 break;
 
             case FRAM_TYPE_BLCK:
-                c->open_win = true;
-                warn(INF, FRAM_IN "BLOCKED" NRM);
-                i++;
+                i = dec_blocked_frame(c, v, i);
                 break;
 
             case FRAM_TYPE_STOP_SEND:
@@ -766,21 +786,26 @@ uint16_t enc_stream_blocked_frame(struct q_stream * const s,
     const uint8_t type = FRAM_TYPE_STRM_BLCK;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
     i = enc(v->buf, v->len, i, &s->id, 0, FMT_SID);
+    i = enc(v->buf, v->len, i, &s->out_off, 0, "%" PRIu64);
 
-    warn(INF, FRAM_OUT "STREAM_BLOCKED" NRM " id=" FMT_SID, s->id);
+    warn(INF, FRAM_OUT "STREAM_BLOCKED" NRM " id=" FMT_SID " off=%" PRIu64,
+         s->id, s->out_off);
 
     return i;
 }
 
 
-uint16_t enc_blocked_frame(const struct w_iov * const v, const uint16_t pos)
+uint16_t enc_blocked_frame(struct q_conn * const c,
+                           const struct w_iov * const v,
+                           const uint16_t pos)
 {
     bit_set(meta(v).frames, FRAM_TYPE_BLCK);
 
     const uint8_t type = FRAM_TYPE_BLCK;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
+    i = enc(v->buf, v->len, i, &c->peer_max_data, 0, "%" PRIu64);
 
-    warn(INF, FRAM_OUT "BLOCKED" NRM);
+    warn(INF, FRAM_OUT "BLOCKED" NRM " off=%" PRIu64, c->peer_max_data);
 
     return i;
 }

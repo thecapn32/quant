@@ -102,4 +102,6 @@ enc_stream_blocked_frame(struct q_stream * const s,
                          const uint16_t pos);
 
 extern uint16_t __attribute__((nonnull))
-enc_blocked_frame(const struct w_iov * const v, const uint16_t pos);
+enc_blocked_frame(struct q_conn * const c,
+                  const struct w_iov * const v,
+                  const uint16_t pos);

@@ -294,7 +294,7 @@ void enc_pkt(struct q_stream * const s,
     }
 
     if (s->c->blocked)
-        i = enc_blocked_frame(v, i);
+        i = enc_blocked_frame(c, v, i);
 
     if (s->c->open_win) {
         s->c->local_max_data += 0x1000;
