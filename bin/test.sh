@@ -47,7 +47,8 @@ case $c in
                                 https://172.28.128.1:$port$path\""
                 ;;
         quicly)
-                cc="external/usr/local/bin/cli -l /tmp/quicly-c.log -v \
+                cc="external/quicly-prefix/src/quicly-build/cli \
+                        -l /tmp/quicly-c.log -v \
                         -p $path $addr $port"
                 ;;
         minq)
@@ -90,7 +91,7 @@ case $s in
                 sc="bin/server -v5 -i vboxnet3 -p $port -d $dir"
                 ;;
         quicly)
-                sc="external/usr/local/bin/cli \
+                sc="external/quicly-prefix/src/quicly-build/cli \
                         -l /tmp/quicly-s.log -v \
                         -k $key -c $cert $addr $port"
                 ;;
@@ -126,8 +127,8 @@ esac
 # # if we are on MacOS X, configure the firewall to add delay and loss
 # if [ -x /usr/sbin/dnctl ]; then
 #         # create pipes to limit bandwidth and add loss
-#         sudo dnctl pipe 1 config bw 64Kbit/s delay 250 queue 10Kbytes #plr 0.5
-#         sudo dnctl pipe 2 config bw 64Kbit/s delay 250 queue 10Kbytes #plr 0.25
+#         sudo dnctl pipe 1 config delay 750
+#         sudo dnctl pipe 2 config delay 750 #bw 64Kbit/s delay 250 queue 10Kbytes #plr 0.25
 #         sudo pfctl -f - <<EOF
 #                 dummynet out proto udp from any to $addr port $port pipe 1
 #                 dummynet out proto udp from $addr port $port to any pipe 2
@@ -141,7 +142,7 @@ tmux -CC \
         set remain-on-exit on
 
 # ats doesn't exit cleanly
-pkill traffic_server
+pkill -9 traffic_server
 
 # if we are on MacOS X, unconfigure the firewall
 if [ -x /usr/sbin/dnctl ]; then
