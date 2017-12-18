@@ -435,6 +435,26 @@ dec_stop_sending_frame(struct q_conn * const c,
 }
 
 
+static uint16_t __attribute__((nonnull))
+dec_ping_frame(struct q_conn * const c,
+               const struct w_iov * const v,
+               const uint16_t pos)
+{
+    uint8_t len = 0;
+    uint16_t i = dec(&len, v->buf, v->len, pos + 1, sizeof(len), "%u");
+
+    warn(INF, FRAM_IN "PING" NRM " len=%u data=%.*s", len, len, v->buf[i]);
+
+    if (len)
+        err_close(c, ERR_FRAME_ERR(FRAM_TYPE_PING),
+                  "TODO: ping frame with data not supported");
+
+    c->needs_tx = true;
+
+    return i;
+}
+
+
 uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
 {
     uint16_t i = pkt_hdr_len(v->buf, v->len);
@@ -490,12 +510,9 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
                 i = dec_close_frame(c, v, i);
                 break;
 
-#if 0
             case FRAM_TYPE_PING:
-                warn(INF, "ping frame in [%u]", i);
-                i++;
+                i = dec_ping_frame(c, v, i);
                 break;
-#endif
 
             case FRAM_TYPE_MAX_STRM_DATA:
                 i = dec_max_stream_data_frame(c, v, i);
