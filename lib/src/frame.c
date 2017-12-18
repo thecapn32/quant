@@ -62,7 +62,7 @@ dec_stream_frame(struct q_conn * const c,
                  const uint16_t pos)
 {
     meta(v).stream_header_pos = pos;
-
+    const char * kind = 0;
     uint8_t type = 0;
     uint16_t i = dec(&type, v->buf, v->len, pos, sizeof(type), "0x%02x");
 
@@ -112,6 +112,7 @@ dec_stream_frame(struct q_conn * const c,
              ") on %s conn " FMT_CID " str " FMT_SID,
              l, plural(l), meta(v).in_off, meta(v).in_off + l, conn_type(c),
              c->id, sid);
+        kind = "seq";
         track_bytes_in(s, l);
         s->in_off += l;
         sq_insert_tail(&s->in, v, next);
@@ -160,6 +161,7 @@ dec_stream_frame(struct q_conn * const c,
              ") on %s conn " FMT_CID " str " FMT_SID,
              l, plural(l), meta(v).in_off, meta(v).in_off + l, conn_type(c),
              c->id, sid);
+        kind = "dup";
         goto done;
     }
 
@@ -169,20 +171,21 @@ dec_stream_frame(struct q_conn * const c,
          "), expected %" PRIu64 " on %s conn " FMT_CID " str " FMT_SID,
          l, plural(l), meta(v).in_off, meta(v).in_off + l, s->in_off,
          conn_type(c), c->id, sid);
+    kind = "ooo";
     splay_insert(pm_off_splay, &s->in_ooo, &meta(v));
     track_bytes_in(s, l);
 
 done:
     warn(INF,
          FRAM_IN "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID " off=%" PRIu64
-                 " len=%" PRIu64,
+                 " len=%" PRIu64 " [%s]",
          type, is_set(F_STREAM_FIN, type) ? "FIN" : "",
          is_set(F_STREAM_FIN, type) && is_set(F_STREAM_LEN | F_STREAM_OFF, type)
              ? "|"
              : "",
          is_set(F_STREAM_LEN, type) ? "LEN" : "",
          is_set(F_STREAM_OFF, type) ? "|" : "",
-         is_set(F_STREAM_OFF, type) ? "OFF" : "", sid, meta(v).in_off, l);
+         is_set(F_STREAM_OFF, type) ? "OFF" : "", sid, meta(v).in_off, l, kind);
     return meta(v).stream_data_end;
 }
 
@@ -495,11 +498,10 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
                 // generate (another) copy
                 warn(DBG, "more than one stream frame in pkt, copy");
                 struct w_iov * const vdup =
-                    q_alloc_iov(w_engine(c->sock), MAX_PKT_LEN, 0);
-                memcpy(vdup->buf, v->buf - Q_OFFSET, v->len + Q_OFFSET);
+                    q_alloc_iov(w_engine(c->sock), 0, 0);
+                memcpy(vdup->buf, v->buf, v->len);
                 meta(vdup) = meta(v);
                 vdup->len = v->len;
-                vdup->buf += Q_OFFSET;
                 // adjust w_iov start and len to stream frame data
                 v->buf = &v->buf[meta(v).stream_data_start];
                 v->len = stream_data_len(v);
