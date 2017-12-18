@@ -234,16 +234,18 @@ void enc_pkt(struct q_stream * const s,
     uint8_t pkt_nr_len = 0;
     switch (c->state) {
     case CONN_STAT_VERS_SENT:
-    case CONN_STAT_RETRY:
+    case CONN_STAT_RTRY:
     case CONN_STAT_VERS_OK:
         flags = F_LONG_HDR | F_LH_INIT;
         break;
     case CONN_STAT_IDLE:
     case CONN_STAT_HSHK_DONE:
+    case CONN_STAT_HSHK_FAIL:
         flags = F_LONG_HDR | F_LH_HSHK;
         break;
     case CONN_STAT_ESTB:
-    case CONN_STAT_CLSD:
+    case CONN_STAT_CLNG:
+    case CONN_STAT_DRNG:
         pkt_nr_len = needed_pkt_nr_len(c, meta(v).nr);
         flags = pkt_type[pkt_nr_len] | (c->omit_cid ? F_SH_OMIT_CID : 0);
         break;
@@ -302,11 +304,9 @@ void enc_pkt(struct q_stream * const s,
 
     // TODO: need to RTX most recent MAX_STREAM_DATA and MAX_DATA on RTX
 
-    if (c->state == CONN_STAT_CLSD) {
+    if (c->state == CONN_STAT_CLNG || c->state == CONN_STAT_HSHK_FAIL)
         i = enc_close_frame(v, i, FRAM_TYPE_CONN_CLSE, c->err_code,
                             c->err_reason);
-        maybe_api_return(q_close, c);
-    }
 
     if (rtx) {
         ensure(is_rtxable(&meta(v)), "is rtxable");

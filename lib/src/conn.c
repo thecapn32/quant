@@ -263,9 +263,9 @@ tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
             sq_remove_after(&s->out, last, next);
         else
             sq_remove_head(&s->out, next);
-        if (s->c->state == CONN_STAT_VERS_REJ)
-            // we can free the version negotiation response
-            q_free_iov(v);
+        // if (s->c->state == CONN_STAT_VERS_REJ)
+        //     // we can free the version negotiation response
+        //     q_free_iov(v);
     }
 
     return did_tx;
@@ -397,7 +397,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             dec_frames(c, v);
 
         } else {
-            c->state = CONN_STAT_VERS_REJ;
+            conn_to_state(c, CONN_STAT_VERS_REJ);
             warn(WRN,
                  "%s conn " FMT_CID
                  " clnt-requested vers 0x%08x not supported ",
@@ -419,7 +419,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                 die("no vers in common with serv");
 
             // retransmit the ClientHello
-            c->state = CONN_STAT_VERS_OK;
+            conn_to_state(c, CONN_STAT_VERS_OK);
             init_tls(c);
             // free the previous ClientHello
             struct pkt_meta *ch, *nxt;
@@ -443,18 +443,18 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 
             if (pkt_type(flags) == F_LH_RTRY) {
                 warn(INF, "handling serv stateless retry");
-                c->state = CONN_STAT_RETRY;
+                conn_to_state(c, CONN_STAT_RTRY);
                 // reset stream 0 offsets
                 struct q_stream * s = get_stream(c, 0);
                 s->out_off = s->in_off = 0;
             } else {
-                c->state = CONN_STAT_VERS_OK;
+                conn_to_state(c, CONN_STAT_VERS_OK);
                 track_recv(c, meta(v).nr);
             }
         }
         break;
 
-    case CONN_STAT_RETRY:
+    case CONN_STAT_RTRY:
         if (verify_prot(c, v) == false)
             goto done;
         dec_frames(c, v);
@@ -475,7 +475,8 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         // fall through
 
     case CONN_STAT_ESTB:
-    case CONN_STAT_CLSD:
+    case CONN_STAT_CLNG:
+    case CONN_STAT_HSHK_FAIL:
         if (verify_prot(c, v) == false)
             goto done;
         track_recv(c, meta(v).nr);
@@ -561,7 +562,7 @@ void rx(struct ev_loop * const l,
         }
 
         if (c == 0) {
-            warn(ERR, "cannot find connection for 0x%02x packet", flags);
+            warn(INF, "cannot find connection for 0x%02x packet", flags);
             q_free_iov(v);
             continue;
         }
@@ -632,6 +633,42 @@ void err_close(struct q_conn * const c,
 
     warn(ERR, "%s", reas);
     c->err_code = code;
-    c->err_reason = reas;
-    c->state = CONN_STAT_CLSD;
+    c->err_reason = strdup(reas);
+    conn_to_state(c, c->state <= CONN_STAT_HSHK_DONE ? CONN_STAT_HSHK_FAIL
+                                                     : CONN_STAT_CLNG);
+}
+
+
+static void __attribute__((nonnull))
+enter_closed(struct ev_loop * const l __attribute__((unused)),
+             ev_timer * const w,
+             int e __attribute__((unused)))
+{
+    struct q_conn * const c = w->data;
+    maybe_api_return(q_close, c);
+}
+
+
+void conn_to_state(struct q_conn * const c, const uint8_t state)
+{
+    warn(NTE, "conn %" PRIx64 " state %u -> %u", c->id, c->state, state);
+    c->state = state;
+
+    switch (state) {
+    case CONN_STAT_VERS_SENT:
+    case CONN_STAT_ESTB:
+    case CONN_STAT_VERS_REJ:
+    case CONN_STAT_VERS_OK:
+    case CONN_STAT_HSHK_DONE:
+        break;
+    case CONN_STAT_DRNG:
+    case CONN_STAT_CLNG:
+        c->closing_alarm.data = c;
+        c->closing_alarm.repeat = 3; // TODO: 3 * RTO
+        ev_init(&c->closing_alarm, enter_closed);
+        ev_timer_again(loop, &c->closing_alarm);
+        break;
+    default:
+        die("unhandled state %u", state);
+    }
 }

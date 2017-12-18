@@ -58,6 +58,9 @@
 // #define ERR_TRANSPORT_PARAMETER_ERR 0x8
 // #define ERR_VERSION_NEGOTIATION_ERR 0x9
 // #define ERR_PROTOCOL_VIOLATION 0xA
+#define ERR_TLS_HSHAKE_FAIL 0x201
+// #define ERR_TLS_FATL_ALRT_GEN 0x202
+// #define ERR_TLS_FATL_ALRT_REC 0x203
 #define ERR_FRAME_ERR(type) ((0x1 << 8) | (type))
 
 

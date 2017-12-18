@@ -323,8 +323,8 @@ dec_close_frame(struct q_conn * const c,
         i += reas_len;
     }
 
-    // TODO: close connection
-    c->state = CONN_STAT_CLSD;
+    conn_to_state(c, c->state == CONN_STAT_HSHK_DONE ? CONN_STAT_HSHK_FAIL
+                                                     : CONN_STAT_DRNG);
 
     warn(INF,
          FRAM_IN "CLOSE" NRM " err=" RED "0x%04x " NRM "rlen=%" PRIu64
@@ -527,7 +527,8 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
                 break;
 
             default:
-                err_close(c, ERR_FRAME_ERR(type), "unknown frame type");
+                err_close(c, ERR_FRAME_ERR(type), "unknown frame type 0x%02x",
+                          type);
                 i = 0;
             }
         }

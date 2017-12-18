@@ -196,7 +196,7 @@ void q_alloc(void * const w, struct w_iov_sq * const q, const uint32_t len)
     struct w_iov * v = 0;
     sq_foreach (v, q, next) {
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
-        // warn(DBG, "q_alloc idx %u len %u", w_iov_idx(v), v->len);
+        warn(DBG, "q_alloc idx %u len %u", w_iov_idx(v), v->len);
     }
 }
 
@@ -208,7 +208,7 @@ void q_free(struct w_iov_sq * const q)
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         meta(v) = (struct pkt_meta){0};
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
-        // warn(DBG, "q_free idx %u", w_iov_idx(v));
+        warn(DBG, "q_free idx %u", w_iov_idx(v));
     }
     w_free(q);
 }
@@ -232,7 +232,7 @@ struct q_conn * q_connect(void * const q,
     // allocate stream zero and start TLS handshake on stream 0
     struct q_stream * const s = new_stream(c, 0);
     init_tls(c);
-    c->state = CONN_STAT_VERS_SENT;
+    conn_to_state(c, CONN_STAT_VERS_SENT);
     tls_io(s, 0);
     ev_async_send(loop, &c->tx_w);
 
@@ -246,7 +246,7 @@ struct q_conn * q_connect(void * const q,
         return 0;
     }
 
-    c->state = CONN_STAT_ESTB;
+    conn_to_state(c, CONN_STAT_ESTB);
 
     warn(WRN, "%s conn " FMT_CID " connected", conn_type(c), c->id);
     return c;
@@ -369,7 +369,7 @@ struct q_conn * q_accept(struct q_conn * const c)
         // TODO free embryonic connection
         return 0;
     }
-    c->state = CONN_STAT_ESTB;
+    conn_to_state(c, CONN_STAT_ESTB);
     ev_timer_again(loop, &c->idle_alarm);
 
     warn(WRN, "%s conn " FMT_CID " connected to clnt %s:%u", conn_type(c),
@@ -451,7 +451,7 @@ void q_close_stream(struct q_stream * const s)
 
 void q_close(struct q_conn * const c)
 {
-    if (c->state == CONN_STAT_CLSD)
+    if (c->state >= CONN_STAT_CLNG)
         return;
 
     warn(WRN, "closing %s conn " FMT_CID, conn_type(c), c->id);
@@ -462,15 +462,8 @@ void q_close(struct q_conn * const c)
         if (s->id != 0)
             q_close_stream(s);
 
-    // wait until everything is ACKed
-    while (rtxable_pkts_outstanding(c) != 0) {
-        warn(NTE, "waiting for ACKs");
-        ev_async_send(loop, &c->tx_w);
-        loop_run(q_close, c);
-    }
-
     // send connection close frame
-    c->state = CONN_STAT_CLSD;
+    conn_to_state(c, CONN_STAT_CLNG);
     ev_async_send(loop, &c->tx_w);
     loop_run(q_close, c);
 

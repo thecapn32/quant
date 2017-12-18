@@ -89,6 +89,7 @@ struct q_conn {
     uint64_t out_data;
 
     ev_timer idle_alarm;
+    ev_timer closing_alarm;
 
     struct diet recv;    ///< Received packet numbers still needing to be ACKed.
     ev_tstamp lg_recv_t; ///< Time when lg_recv was received
@@ -123,11 +124,13 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 #define CONN_STAT_IDLE 0
 #define CONN_STAT_VERS_SENT 1
 #define CONN_STAT_VERS_REJ 2
-#define CONN_STAT_RETRY 3
+#define CONN_STAT_RTRY 3
 #define CONN_STAT_VERS_OK 4
 #define CONN_STAT_HSHK_DONE 5
-#define CONN_STAT_ESTB 6
-#define CONN_STAT_CLSD 7
+#define CONN_STAT_HSHK_FAIL 6
+#define CONN_STAT_ESTB 7
+#define CONN_STAT_CLNG 8
+#define CONN_STAT_DRNG 9
 
 
 #define conn_type(c) (c->is_clnt ? "clnt" : "serv")
@@ -170,3 +173,6 @@ extern void __attribute__((nonnull)) err_close(struct q_conn * const c,
                                                const uint16_t code,
                                                const char * const fmt,
                                                ...);
+
+extern void __attribute__((nonnull))
+conn_to_state(struct q_conn * const c, const uint8_t state);

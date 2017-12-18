@@ -305,8 +305,8 @@ void on_pkt_acked(struct q_conn * const c, const uint64_t ack)
     c->rec.hshake_cnt = c->rec.tlp_cnt = c->rec.rto_cnt = 0;
     splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
 
-    if (rtxable_pkts_outstanding(c) == 0)
-        maybe_api_return(q_close, c);
+    // if (rtxable_pkts_outstanding(c) == 0)
+    //     maybe_api_return(q_close, c);
 
     // stop ACKing packets that were contained in the ACK frame of this
     // packet

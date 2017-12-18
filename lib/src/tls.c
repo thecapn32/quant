@@ -222,7 +222,10 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
     uint16_t tpl;
     i = dec(&tpl, buf, len, i, sizeof(tpl), "%u");
-    ensure(tpl == len - i, "tp len %u is correct", tpl);
+    if (tpl != len - i) {
+        err_close(c, ERR_TLS_HSHAKE_FAIL, "tp len %u is incorrect", tpl);
+        return 1;
+    }
     len = i + tpl;
 
     // keep track of which transport parameters we've seen before
@@ -512,10 +515,9 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
                              &s->c->tls.tls_hshake_prop);
 
     warn(DBG, "in %u, gen %u, ret %u", iv ? in_data_len : 0, tb.off, ret);
-    ensure(ret == 0 || ret == PTLS_ERROR_IN_PROGRESS, "TLS error: %u", ret);
     ensure(iv == 0 || in_data_len && in_data_len == in_len, "data left");
 
-    if ((ret == 0 || ret == PTLS_ERROR_IN_PROGRESS) && tb.off) {
+    if (tb.off) {
         // enqueue for TX
         struct w_iov_sq o = sq_head_initializer(o);
         q_alloc(w_engine(s->c->sock), &o, (uint32_t)tb.off);
@@ -526,15 +528,16 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
             data += ov->len;
         }
         sq_concat(&s->out, &o);
+        s->c->needs_tx = true;
     }
     ptls_buffer_dispose(&tb);
 
     if (ret == 0 && s->c->state <= CONN_STAT_VERS_OK) {
         init_1rtt_prot(s->c);
-        s->c->state = CONN_STAT_HSHK_DONE;
+        conn_to_state(s->c, CONN_STAT_HSHK_DONE);
         s->c->rec.lg_acked = s->c->rec.lg_sent;
-        s->c->needs_tx = true;
-    }
+    } else if (ret != 0 && ret != PTLS_ERROR_IN_PROGRESS)
+        err_close(s->c, ERR_TLS_HSHAKE_FAIL, "picotls error %u", ret);
 
     return (uint32_t)ret;
 }
@@ -590,11 +593,11 @@ uint16_t dec_aead(struct q_conn * const c,
                   const struct w_iov * v,
                   const uint16_t hdr_len)
 {
-    ptls_aead_context_t * aead = c->tls.in_kp0;
+    ptls_aead_context_t * aead = c->tls.in_clr;
     const uint8_t flags = pkt_flags(v->buf);
-    if (is_set(F_LONG_HDR, flags) && pkt_type(flags) <= F_LH_INIT &&
-        pkt_type(flags) >= F_LH_HSHK)
-        aead = c->tls.in_clr;
+    if ((!is_set(F_LONG_HDR, flags) || pkt_type(flags) <= F_LH_0RTT) &&
+        c->tls.in_kp0)
+        aead = c->tls.in_kp0;
 
     const size_t len =
         ptls_aead_decrypt(aead, &v->buf[hdr_len], &v->buf[hdr_len],
