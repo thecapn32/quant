@@ -29,6 +29,7 @@
 #include <bitstring.h>
 #include <inttypes.h>
 #include <netinet/in.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -609,8 +610,20 @@ void rx(struct ev_loop * const l,
 
 void err_close(struct q_conn * const c,
                const uint16_t code,
-               const char * const reas)
+               const char * const fmt,
+               ...)
 {
+    va_list ap;
+    va_start(ap, fmt);
+
+    char reas[256];
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wformat-nonliteral"
+    const int ret = vsnprintf(reas, sizeof(reas), fmt, ap);
+#pragma clang diagnostic pop
+    ensure(ret >= 0, "vsnprintf() failed");
+    va_end(ap);
+
     if (c->err_code) {
         warn(WRN, "ignoring new err 0x%04x (%s); existing err is 0x%04x (%s) ",
              code, reas, c->err_code, c->err_reason);

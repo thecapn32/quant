@@ -168,4 +168,5 @@ loop_update(struct ev_loop * const l, ev_async * const w, int e);
 
 extern void __attribute__((nonnull)) err_close(struct q_conn * const c,
                                                const uint16_t code,
-                                               const char * const reas);
+                                               const char * const fmt,
+                                               ...);
