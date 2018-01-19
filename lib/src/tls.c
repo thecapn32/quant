@@ -471,7 +471,7 @@ init_1rtt_secret(ptls_t * const t,
                  uint8_t is_enc)
 {
     ensure(ptls_export_secret(t, sec, cs->hash->digest_size, label,
-                              ptls_iovec_init(0, 0)) == 0,
+                              ptls_iovec_init(0, 0), 0) == 0,
            "ptls_export_secret");
     return ptls_aead_new(cs->aead, cs->hash, is_enc, sec);
 }
