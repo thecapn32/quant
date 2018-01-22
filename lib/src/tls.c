@@ -577,7 +577,7 @@ void init_tls_ctx(const char * const cert, const char * const key)
            "ptls_openssl_init_verify_certificate");
 
     static ptls_key_exchange_algorithm_t * key_exchanges[] = {
-        &ptls_minicrypto_x25519, &ptls_openssl_secp256r1, 0};
+        &ptls_openssl_secp256r1, &ptls_minicrypto_x25519, 0};
 
     tls_ctx.cipher_suites = ptls_openssl_cipher_suites;
     tls_ctx.key_exchanges = key_exchanges;
