@@ -657,12 +657,14 @@ void conn_to_state(struct q_conn * const c, const uint8_t state)
 
     switch (state) {
     case CONN_STAT_VERS_SENT:
-    case CONN_STAT_ESTB:
     case CONN_STAT_VERS_REJ:
     case CONN_STAT_RTRY:
     case CONN_STAT_VERS_OK:
     case CONN_STAT_HSHK_DONE:
     case CONN_STAT_HSHK_FAIL:
+        break;
+    case CONN_STAT_ESTB:
+        c->needs_tx = true;
         break;
     case CONN_STAT_DRNG:
     case CONN_STAT_CLNG:
