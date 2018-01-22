@@ -168,7 +168,8 @@ externalproject_add(nss
   UPDATE_COMMAND ""
   SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/mozquic-prefix/src/nss
   GIT_REPOSITORY https://github.com/nss-dev/nss.git
-  GIT_SHALLOW 1
+  # GIT_SHALLOW 1
+  GIT_TAG affb759ef3116d82c15bba3e0b38fc8d8560dfdc
   CONFIGURE_COMMAND ""
   BUILD_COMMAND ./build.sh
   BUILD_IN_SOURCE 1
@@ -179,7 +180,6 @@ externalproject_add(nss
 externalproject_add(mozquic
   DEPENDS nss
   # UPDATE_COMMAND ""
-  GIT_TAG 08
   GIT_REPOSITORY https://github.com/mcmanus/mozquic.git
   GIT_SHALLOW 1
   PATCH_COMMAND sed -i "" -e "s/-Werror//g" Makefile
