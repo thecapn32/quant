@@ -380,9 +380,12 @@ struct q_conn * q_accept(struct q_conn * const c)
 
 struct q_stream * q_rsv_stream(struct q_conn * const c)
 {
-    if (c->next_sid > c->peer_max_strm_bidi)
+    if (c->next_sid > c->peer_max_strm_bidi) {
         // we hit the max stream limit, wait for MAX_STREAM_ID frame
+        warn(WRN, "MAX_STREAM_ID increase needed (%u > %u)", c->next_sid,
+             c->peer_max_strm_bidi);
         loop_run(q_rsv_stream, c);
+    }
 
     ensure(c->next_sid <= c->peer_max_strm_bidi, "sid %u <= max %u",
            c->next_sid, c->peer_max_strm_bidi);
