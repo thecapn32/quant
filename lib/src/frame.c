@@ -380,6 +380,8 @@ dec_max_stream_id_frame(struct q_conn * const c,
              c->peer_max_strm_bidi);
     }
 
+    maybe_api_return(q_rsv_stream, c);
+
     return i;
 }
 
