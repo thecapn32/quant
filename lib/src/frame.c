@@ -71,6 +71,8 @@ dec_stream_frame(struct q_conn * const c,
 
     if (is_set(F_STREAM_OFF, type))
         i = dec(&meta(v).in_off, v->buf, v->len, i, 0, "%" PRIu64);
+    else
+        meta(v).in_off = 0;
 
     uint64_t l;
     if (is_set(F_STREAM_LEN, type))
