@@ -483,6 +483,30 @@ dec_ping_frame(struct q_conn * const c,
 }
 
 
+static uint16_t __attribute__((nonnull))
+dec_new_cid_frame(struct q_conn * const c __attribute__((unused)),
+                  const struct w_iov * const v,
+                  const uint16_t pos)
+{
+    uint64_t seq = 0;
+    uint16_t i = dec(&seq, v->buf, v->len, pos + 1, 0, "%" PRIu64);
+
+    uint64_t cid = 0;
+    i = dec(&cid, v->buf, v->len, i, sizeof(cid), "%" PRIx64);
+
+    uint8_t srt[16];
+    memcpy(srt, &v->buf[i], sizeof(srt));
+    i += sizeof(srt);
+
+    warn(INF, FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu64 " cid=0x%" PRIx64,
+         seq, cid);
+
+    // TODO: actually do something with the new CIDs
+
+    return i;
+}
+
+
 uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
 {
     uint16_t i = pkt_hdr_len(v->buf, v->len);
@@ -567,6 +591,10 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
 
             case FRAM_TYPE_STOP_SEND:
                 i = dec_stop_sending_frame(c, v, i);
+                break;
+
+            case FRAM_TYPE_NEW_CID:
+                i = dec_new_cid_frame(c, v, i);
                 break;
 
             default:
