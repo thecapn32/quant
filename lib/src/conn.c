@@ -462,7 +462,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 
     case CONN_STAT_VERS_OK:
     case CONN_STAT_HSHK_DONE:
-        if (pkt_vers(v->buf, v->len) == 0) {
+        if (is_set(F_LONG_HDR, flags) && pkt_vers(v->buf, v->len) == 0) {
             // we shouldn't get another version negotiation packet here, ignore
             warn(NTE, "ignoring spurious ver neg response");
             goto done;
