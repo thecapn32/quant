@@ -555,7 +555,7 @@ void rx(struct ev_loop * const l,
                     }
                     update_ipnp(c, &peer);
                     update_cid(c, cid);
-                    new_stream(c, 0);
+                    new_stream(c, 0, false);
                 }
 
             } else
@@ -652,7 +652,7 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
 
 void conn_to_state(struct q_conn * const c, const uint8_t state)
 {
-    warn(NTE, "conn %" PRIx64 " state %u -> %u", c->id, c->state, state);
+    warn(DBG, "conn %" PRIx64 " state %u -> %u", c->id, c->state, state);
     c->state = state;
 
     switch (state) {

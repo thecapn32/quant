@@ -302,6 +302,17 @@ void enc_pkt(struct q_stream * const s,
         s->c->open_win = false;
     }
 
+    if (c->peer_max_strm_bidi && c->next_sid > c->peer_max_strm_bidi) {
+        warn(CRT, "%" PRIu64 " %" PRIu64, c->next_sid, c->peer_max_strm_bidi);
+        i = enc_stream_id_blocked_frame(c, v, i);
+    }
+
+    if (s->c->inc_sid) {
+        s->c->local_max_strm_bidi += 4;
+        i = enc_max_stream_id_frame(s->c, v, i);
+        s->c->inc_sid = false;
+    }
+
     // TODO: need to RTX most recent MAX_STREAM_DATA and MAX_DATA on RTX
 
     if (c->state == CONN_STAT_CLNG || c->state == CONN_STAT_HSHK_FAIL)

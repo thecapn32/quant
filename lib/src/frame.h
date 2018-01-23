@@ -97,6 +97,11 @@ enc_max_data_frame(struct q_conn * const c,
                    const uint16_t pos);
 
 extern uint16_t __attribute__((nonnull))
+enc_max_stream_id_frame(struct q_conn * const c,
+                        struct w_iov * const v,
+                        const uint16_t pos);
+
+extern uint16_t __attribute__((nonnull))
 enc_stream_blocked_frame(struct q_stream * const s,
                          const struct w_iov * const v,
                          const uint16_t pos);
@@ -105,3 +110,8 @@ extern uint16_t __attribute__((nonnull))
 enc_blocked_frame(struct q_conn * const c,
                   const struct w_iov * const v,
                   const uint16_t pos);
+
+extern uint16_t __attribute__((nonnull))
+enc_stream_id_blocked_frame(struct q_conn * const c,
+                            const struct w_iov * const v,
+                            const uint16_t pos);

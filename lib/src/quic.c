@@ -147,9 +147,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
     if (peer_name) {
         c->is_clnt = true;
         ensure(c->peer_name = strdup(peer_name), "could not dup peer_name");
-        c->next_sid = 4;
-    } else
-        c->next_sid = 5;
+    }
 
     // initialize recovery state
     rec_init(c);
@@ -168,7 +166,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
     // XXX: check IDs if stream 0 is flow-controlled during handshake or not
     c->local_max_data = 0x4000;
     c->local_max_strm_data = 0x2000;
-    c->local_max_strm_bidi = c->is_clnt ? 5 : 4;
+    c->local_max_strm_bidi = c->is_clnt ? 1 : 4;
     c->local_max_strm_uni = 0; // TODO: support unidir streams
 
     // initialize socket and start an RX/TX watchers
@@ -230,7 +228,7 @@ struct q_conn * q_connect(void * const q,
     w_connect(c->sock, peer->sin_addr.s_addr, peer->sin_port);
 
     // allocate stream zero and start TLS handshake on stream 0
-    struct q_stream * const s = new_stream(c, 0);
+    struct q_stream * const s = new_stream(c, 0, true);
     init_tls(c);
     conn_to_state(c, CONN_STAT_VERS_SENT);
     tls_io(s, 0);
@@ -390,7 +388,7 @@ struct q_stream * q_rsv_stream(struct q_conn * const c)
     ensure(c->next_sid <= c->peer_max_strm_bidi, "sid %u <= max %u",
            c->next_sid, c->peer_max_strm_bidi);
 
-    return new_stream(c, c->next_sid);
+    return new_stream(c, c->next_sid, true);
 }
 
 

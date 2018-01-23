@@ -104,7 +104,7 @@ dec_stream_frame(struct q_conn * const c,
                       "TODO: unidirectional streams not supported yet");
             return 0;
         }
-        s = new_stream(c, sid);
+        s = new_stream(c, sid, false);
     }
 
     // best case: new in-order data
@@ -436,13 +436,33 @@ dec_blocked_frame(struct q_conn * const c,
                   const uint16_t pos)
 {
     uint64_t off = 0;
-    uint16_t i = dec(&off, v->buf, v->len, pos + 1, 0, FMT_SID);
+    uint16_t i = dec(&off, v->buf, v->len, pos + 1, 0, "%" PRIu64);
 
     warn(INF, FRAM_IN "BLOCKED" NRM " off=%" PRIu64, off);
 
     // open the connection window and send a frame
     c->open_win = true;
     c->needs_tx = true;
+
+    return i;
+}
+
+
+static uint16_t __attribute__((nonnull))
+dec_stream_id_blocked_frame(struct q_conn * const c,
+                            const struct w_iov * const v,
+                            const uint16_t pos)
+{
+    uint64_t sid = 0;
+    uint16_t i = dec(&sid, v->buf, v->len, pos + 1, 0, FMT_SID);
+
+    warn(INF, FRAM_IN "STREAM_ID_BLOCKED" NRM " sid=" FMT_SID, sid);
+
+    if (sid == c->local_max_strm_bidi) {
+        // let the peer open more streams
+        c->inc_sid = true;
+        c->needs_tx = true;
+    }
 
     return i;
 }
@@ -589,6 +609,10 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
 
             case FRAM_TYPE_BLCK:
                 i = dec_blocked_frame(c, v, i);
+                break;
+
+            case FRAM_TYPE_ID_BLCK:
+                i = dec_stream_id_blocked_frame(c, v, i);
                 break;
 
             case FRAM_TYPE_STOP_SEND:
@@ -813,6 +837,23 @@ uint16_t enc_max_data_frame(struct q_conn * const c,
 }
 
 
+uint16_t enc_max_stream_id_frame(struct q_conn * const c,
+                                 struct w_iov * const v,
+                                 const uint16_t pos)
+{
+    bit_set(meta(v).frames, FRAM_TYPE_MAX_SID);
+
+    const uint8_t type = FRAM_TYPE_MAX_SID;
+    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
+    i = enc(v->buf, v->len, i, &c->local_max_strm_bidi, 0, "%" PRIu64);
+
+    warn(INF, FRAM_OUT "MAX_STREAM_ID" NRM " max=%" PRIu64,
+         c->local_max_strm_bidi);
+
+    return i;
+}
+
+
 uint16_t enc_stream_blocked_frame(struct q_stream * const s,
                                   const struct w_iov * const v,
                                   const uint16_t pos)
@@ -842,6 +883,23 @@ uint16_t enc_blocked_frame(struct q_conn * const c,
     i = enc(v->buf, v->len, i, &c->peer_max_data, 0, "%" PRIu64);
 
     warn(INF, FRAM_OUT "BLOCKED" NRM " off=%" PRIu64, c->peer_max_data);
+
+    return i;
+}
+
+
+uint16_t enc_stream_id_blocked_frame(struct q_conn * const c,
+                                     const struct w_iov * const v,
+                                     const uint16_t pos)
+{
+    bit_set(meta(v).frames, FRAM_TYPE_ID_BLCK);
+
+    const uint8_t type = FRAM_TYPE_ID_BLCK;
+    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
+    i = enc(v->buf, v->len, i, &c->peer_max_strm_bidi, 0, "%" PRIu64);
+
+    warn(INF, FRAM_OUT "STREAM_ID_BLOCKED" NRM " sid=" FMT_SID,
+         c->peer_max_strm_bidi);
 
     return i;
 }

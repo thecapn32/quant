@@ -27,6 +27,7 @@
 
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include <warpcore/warpcore.h>
@@ -83,7 +84,7 @@ extern struct q_stream * __attribute__((nonnull))
 get_stream(struct q_conn * const c, const uint64_t id);
 
 extern struct q_stream * __attribute__((nonnull))
-new_stream(struct q_conn * const c, const uint64_t id);
+new_stream(struct q_conn * const c, const uint64_t id, const bool active);
 
 extern void __attribute__((nonnull)) free_stream(struct q_stream * const s);
 

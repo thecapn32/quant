@@ -54,7 +54,8 @@ struct q_stream * get_stream(struct q_conn * const c, const uint64_t id)
 }
 
 
-struct q_stream * new_stream(struct q_conn * const c, const uint64_t id)
+struct q_stream *
+new_stream(struct q_conn * const c, const uint64_t id, const bool active)
 {
     ensure(get_stream(c, id) == 0, "stream already %u exists", id);
 
@@ -66,10 +67,14 @@ struct q_stream * new_stream(struct q_conn * const c, const uint64_t id)
     s->id = id;
     s->in_data_max = c->local_max_strm_data;
     s->out_data_max = c->peer_max_strm_data;
-    if (id)
-        c->next_sid += 4;
+    if (active) {
+        if (c->next_sid == 0)
+            c->next_sid = c->is_clnt ? 4 : 1;
+        else
+            c->next_sid += 4;
+    }
     splay_insert(stream, &c->streams, s);
-    warn(INF, "reserved str " FMT_SID " on %s conn " FMT_CID, id, conn_type(c),
+    warn(DBG, "reserved str " FMT_SID " on %s conn " FMT_CID, id, conn_type(c),
          c->id);
     return s;
 }

@@ -63,7 +63,7 @@ struct q_conn {
     uint8_t use_time_loss_det : 1; ///< UsingTimeLossDetection()
     uint8_t open_win : 1;          ///< We need to open the receive window.
     uint8_t blocked : 1;           ///< We are receive-window-blocked.
-    uint8_t : 1;
+    uint8_t inc_sid : 1;           ///< Make more stream IDs available to peer.
 
     uint8_t state; ///< State of the connection.
 
