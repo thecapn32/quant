@@ -196,7 +196,7 @@ void q_alloc(void * const w, struct w_iov_sq * const q, const uint32_t len)
     struct w_iov * v = 0;
     sq_foreach (v, q, next) {
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
-        warn(DBG, "q_alloc idx %u len %u", w_iov_idx(v), v->len);
+        // warn(DBG, "q_alloc idx %u len %u", w_iov_idx(v), v->len);
     }
 }
 
@@ -208,7 +208,7 @@ void q_free(struct w_iov_sq * const q)
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         meta(v) = (struct pkt_meta){0};
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
-        warn(DBG, "q_free idx %u", w_iov_idx(v));
+        // warn(DBG, "q_free idx %u", w_iov_idx(v));
     }
     w_free(q);
 }
