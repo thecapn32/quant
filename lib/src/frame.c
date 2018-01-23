@@ -395,7 +395,10 @@ dec_max_data_frame(struct q_conn * const c,
 {
     const uint16_t i =
         dec(&c->peer_max_data, v->buf, v->len, pos + 1, 0, "%" PRIu64);
+
     c->blocked = false;
+    // TODO: we should only do this if TX is pending on any stream
+    c->needs_tx = true;
 
     warn(INF, FRAM_IN "MAX_DATA" NRM " max=%" PRIu64, c->peer_max_data);
 
@@ -421,6 +424,7 @@ dec_stream_blocked_frame(struct q_conn * const c,
 
     // open the stream window and send a frame
     s->open_win = true;
+    s->c->needs_tx = true;
 
     return i;
 }
@@ -438,6 +442,7 @@ dec_blocked_frame(struct q_conn * const c,
 
     // open the connection window and send a frame
     c->open_win = true;
+    c->needs_tx = true;
 
     return i;
 }
@@ -576,9 +581,6 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
 
             case FRAM_TYPE_MAX_DATA:
                 i = dec_max_data_frame(c, v, i);
-                c->blocked = false;
-                // TODO: we should only do this if TX is pending on any stream
-                c->needs_tx = true;
                 break;
 
             case FRAM_TYPE_STRM_BLCK:
