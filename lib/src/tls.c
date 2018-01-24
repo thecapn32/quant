@@ -532,7 +532,7 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
     }
     ptls_buffer_dispose(&tb);
 
-    if (ret == 0 && s->c->state <= CONN_STAT_VERS_OK) {
+    if (ret == 0 && s->c->state < CONN_STAT_HSHK_DONE) {
         init_1rtt_prot(s->c);
         conn_to_state(s->c, CONN_STAT_HSHK_DONE);
         s->c->rec.lg_acked = s->c->rec.lg_sent;

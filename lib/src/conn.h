@@ -125,12 +125,11 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 #define CONN_STAT_VERS_SENT 1
 #define CONN_STAT_VERS_REJ 2
 #define CONN_STAT_RTRY 3
-#define CONN_STAT_VERS_OK 4
-#define CONN_STAT_HSHK_DONE 5
-#define CONN_STAT_HSHK_FAIL 6
-#define CONN_STAT_ESTB 7
-#define CONN_STAT_CLNG 8
-#define CONN_STAT_DRNG 9
+#define CONN_STAT_HSHK_DONE 4
+#define CONN_STAT_HSHK_FAIL 5
+#define CONN_STAT_ESTB 6
+#define CONN_STAT_CLNG 7
+#define CONN_STAT_DRNG 8
 
 
 #define conn_type(c) (c->is_clnt ? "clnt" : "serv")
