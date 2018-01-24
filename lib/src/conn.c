@@ -457,6 +457,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
     case CONN_STAT_RTRY:
         if (verify_prot(c, v) == false)
             goto done;
+        track_recv(c, meta(v).nr);
         dec_frames(c, v);
         break;
 
