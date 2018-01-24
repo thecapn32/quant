@@ -475,8 +475,16 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
     case CONN_STAT_CLNG:
     case CONN_STAT_HSHK_FAIL:
     case CONN_STAT_DRNG:
-        if (verify_prot(c, v) == false)
+        if (verify_prot(c, v) == false) {
+            // check if this is a stateless reset
+            if (memcmp(&v->buf[v->len - 16], c->stateless_reset_token, 16) ==
+                0) {
+                warn(NTE, "stateless reset on %s conn " FMT_CID, conn_type(c),
+                     c->id);
+                conn_to_state(c, CONN_STAT_DRNG);
+            }
             goto done;
+        }
         track_recv(c, meta(v).nr);
         dec_frames(c, v);
         break;
@@ -664,6 +672,9 @@ void conn_to_state(struct q_conn * const c, const uint8_t state)
         break;
     case CONN_STAT_DRNG:
     case CONN_STAT_CLNG:
+        // stop LD alarm
+        ev_timer_stop(loop, &c->rec.ld_alarm);
+
         c->closing_alarm.data = c;
         c->closing_alarm.repeat = 3; // TODO: 3 * RTO
         ev_init(&c->closing_alarm, enter_closed);
