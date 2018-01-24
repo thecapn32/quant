@@ -407,12 +407,18 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 
     case CONN_STAT_VERS_SENT:
         if (pkt_vers(v->buf, v->len) == 0) {
+            const uint32_t try_vers = pick_from_server_vers(v->buf, v->len);
+            if (try_vers == c->vers) {
+                warn(INF, "ignoring spurious vers neg response");
+                break;
+            }
+
             warn(INF, "serv didn't like our vers 0x%08x", c->vers);
             // TODO: check CID
 
             if (c->vers_initial == 0)
                 c->vers_initial = c->vers;
-            c->vers = pick_from_server_vers(v->buf, v->len);
+            c->vers = try_vers;
             if (c->vers)
                 warn(INF, "retrying with vers 0x%08x", c->vers);
             else
