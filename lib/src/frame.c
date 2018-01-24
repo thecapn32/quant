@@ -70,9 +70,9 @@ dec_stream_frame(struct q_conn * const c,
     i = dec(&sid, v->buf, v->len, i, 0, FMT_SID);
 
     if (is_set(F_STREAM_OFF, type))
-        i = dec(&meta(v).in_off, v->buf, v->len, i, 0, "%" PRIu64);
+        i = dec(&meta(v).stream_off, v->buf, v->len, i, 0, "%" PRIu64);
     else
-        meta(v).in_off = 0;
+        meta(v).stream_off = 0;
 
     uint64_t l;
     if (is_set(F_STREAM_LEN, type))
@@ -108,12 +108,12 @@ dec_stream_frame(struct q_conn * const c,
     }
 
     // best case: new in-order data
-    if (meta(v).in_off == s->in_off) {
+    if (meta(v).stream_off == s->in_off) {
         warn(DBG,
              "%" PRIu64 " byte%s new data (off %" PRIu64 "-%" PRIu64
              ") on %s conn " FMT_CID " str " FMT_SID,
-             l, plural(l), meta(v).in_off, meta(v).in_off + l, conn_type(c),
-             c->id, sid);
+             l, plural(l), meta(v).stream_off, meta(v).stream_off + l,
+             conn_type(c), c->id, sid);
         kind = "seq";
         track_bytes_in(s, l);
         s->in_off += l;
@@ -122,15 +122,15 @@ dec_stream_frame(struct q_conn * const c,
         // check if a hole has been filled that lets us dequeue ooo data
         struct pkt_meta *p, *nxt;
         for (p = splay_min(pm_off_splay, &s->in_ooo);
-             p && p->in_off == s->in_off; p = nxt) {
+             p && p->stream_off == s->in_off; p = nxt) {
             nxt = splay_next(pm_off_splay, &s->in_ooo, p);
             l = p->stream_data_end;
 
             warn(DBG,
                  "deliver %u ooo byte%s (off %" PRIu64 "-%" PRIu64
                  ") on %s conn " FMT_CID " str " FMT_SID,
-                 l, plural(l), p->in_off, p->in_off + l, conn_type(c), c->id,
-                 sid);
+                 l, plural(l), p->stream_off, p->stream_off + l, conn_type(c),
+                 c->id, sid);
 
             s->in_off += l;
             sq_insert_tail(&s->in, w_iov(w_engine(c->sock), pm_idx(p)), next);
@@ -157,12 +157,12 @@ dec_stream_frame(struct q_conn * const c,
     }
 
     // data is a complete duplicate
-    if (meta(v).in_off + l <= s->in_off) {
+    if (meta(v).stream_off + l <= s->in_off) {
         warn(CRT,
              "%" PRIu64 " byte%s dup data (off %" PRIu64 "-%" PRIu64
              ") on %s conn " FMT_CID " str " FMT_SID,
-             l, plural(l), meta(v).in_off, meta(v).in_off + l, conn_type(c),
-             c->id, sid);
+             l, plural(l), meta(v).stream_off, meta(v).stream_off + l,
+             conn_type(c), c->id, sid);
         kind = "dup";
         goto done;
     }
@@ -171,7 +171,7 @@ dec_stream_frame(struct q_conn * const c,
     warn(DBG,
          "reordered data: %" PRIu64 " byte%s data (off %" PRIu64 "-%" PRIu64
          "), expected %" PRIu64 " on %s conn " FMT_CID " str " FMT_SID,
-         l, plural(l), meta(v).in_off, meta(v).in_off + l, s->in_off,
+         l, plural(l), meta(v).stream_off, meta(v).stream_off + l, s->in_off,
          conn_type(c), c->id, sid);
     kind = "ooo";
     splay_insert(pm_off_splay, &s->in_ooo, &meta(v));
@@ -187,7 +187,8 @@ done:
              : "",
          is_set(F_STREAM_LEN, type) ? "LEN" : "",
          is_set(F_STREAM_OFF, type) ? "|" : "",
-         is_set(F_STREAM_OFF, type) ? "OFF" : "", sid, meta(v).in_off, l, kind);
+         is_set(F_STREAM_OFF, type) ? "OFF" : "", sid, meta(v).stream_off, l,
+         kind);
     return meta(v).stream_data_end;
 }
 
@@ -763,10 +764,12 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
          is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id, s->out_off, dlen);
 
     track_bytes_out(s, dlen);
-    s->out_off += dlen; // increase the stream data offset
     meta(v).str = s;    // remember stream this buf belongs to
     meta(v).stream_data_start = Q_OFFSET;
     meta(v).stream_data_end = Q_OFFSET + (uint16_t)dlen;
+    meta(v).stream_off = s->out_off;
+
+    s->out_off += dlen; // increase the stream data offset
 
     return v->len;
 }

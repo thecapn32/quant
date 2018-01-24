@@ -104,7 +104,7 @@ int pm_nr_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
 
 int pm_off_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
 {
-    return (a->in_off > b->in_off) - (a->in_off < b->in_off);
+    return (a->stream_off > b->stream_off) - (a->stream_off < b->stream_off);
 }
 
 

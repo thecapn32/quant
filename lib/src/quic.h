@@ -52,8 +52,8 @@ struct pkt_meta {
     splay_entry(pkt_meta) off_node;
     ev_tstamp tx_t;             ///< Transmission timestamp.
     uint64_t nr;                ///< Packet number.
-    uint64_t in_off;            ///< Stream data offset.
     struct q_stream * str;      ///< Stream this data was written on.
+    uint64_t stream_off;        ///< Stream data offset.
     uint16_t stream_header_pos; ///< Offset of stream frame header.
     uint16_t stream_data_start; ///< Offset of first byte of stream frame data.
     uint16_t stream_data_end;   ///< Offset of last byte of stream frame data.
