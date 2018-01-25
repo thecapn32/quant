@@ -325,6 +325,7 @@ void enc_pkt(struct q_stream * const s,
         enc_padding_frame(v, i, meta(v).stream_header_pos - i);
         i = meta(v).stream_data_end;
 
+#ifndef NDEBUG
         // duplicate the logging that enc_stream_frame() does for a fresh TX
         const uint8_t type = v->buf[meta(v).stream_header_pos];
         warn(INF,
@@ -339,6 +340,7 @@ void enc_pkt(struct q_stream * const s,
              is_set(F_STREAM_OFF, type) ? "|" : "",
              is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id, meta(v).stream_off,
              stream_data_len(v));
+#endif
 
     } else {
         if (v->len > Q_OFFSET || s->state == STRM_STAT_HCLO ||
