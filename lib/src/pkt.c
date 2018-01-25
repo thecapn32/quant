@@ -301,10 +301,8 @@ void enc_pkt(struct q_stream * const s,
         s->c->open_win = false;
     }
 
-    if (c->peer_max_strm_bidi && c->next_sid > c->peer_max_strm_bidi) {
-        warn(CRT, "%" PRIu64 " %" PRIu64, c->next_sid, c->peer_max_strm_bidi);
+    if (c->peer_max_strm_bidi && c->next_sid > c->peer_max_strm_bidi)
         i = enc_stream_id_blocked_frame(c, v, i);
-    }
 
     if (s->c->inc_sid) {
         s->c->local_max_strm_bidi += 4;
