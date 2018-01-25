@@ -185,23 +185,23 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
     // see OnLossDetectionAlarm pseudo code
     if (c->state < CONN_STAT_ESTB) {
         c->rec.hshake_cnt++;
-        warn(INF, "handshake RTX #%u on %s conn " FMT_CID, c->rec.hshake_cnt,
+        warn(DBG, "handshake RTX #%u on %s conn " FMT_CID, c->rec.hshake_cnt,
              conn_type(c), c->id);
         tx(c, true, 0);
 
     } else if (!is_zero(c->rec.loss_t)) {
-        warn(INF, "early RTX or time loss detection alarm on %s conn " FMT_CID,
+        warn(DBG, "early RTX or time loss detection alarm on %s conn " FMT_CID,
              conn_type(c), c->id);
         detect_lost_pkts(c);
 
         // } else if (c->rec.tlp_cnt < kMaxTLPs) {
-        //     warn(INF, "TLP alarm #%u on %s conn " FMT_CID, c->rec.tlp_cnt,
+        //     warn(DBG, "TLP alarm #%u on %s conn " FMT_CID, c->rec.tlp_cnt,
         //          conn_type(c), c->id);
         //     tx(c, true, 1); // XXX is this an RTX or not?
         //     c->rec.tlp_cnt++;
 
     } else {
-        warn(INF, "RTO alarm #%u on %s conn " FMT_CID, c->rec.rto_cnt,
+        warn(DBG, "RTO alarm #%u on %s conn " FMT_CID, c->rec.rto_cnt,
              conn_type(c), c->id);
         if (c->rec.rto_cnt == 0)
             c->rec.lg_sent_before_rto = c->rec.lg_sent;

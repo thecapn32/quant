@@ -52,6 +52,15 @@ struct w_iov;
 #define FRAM_TYPE_STRM 0x10
 #define MAX_FRAM_TYPE FRAM_TYPE_STRM
 
+#define F_STREAM_FIN 0x01
+#define F_STREAM_LEN 0x02
+#define F_STREAM_OFF 0x04
+
+#ifndef NDEBUG
+#define FRAM_IN BLD BLU
+#define FRAM_OUT BLD GRN
+#endif
+
 
 extern uint64_t __attribute__((const))
 shorten_ack_nr(const uint64_t ack, const uint64_t diff);

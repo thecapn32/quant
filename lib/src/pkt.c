@@ -228,7 +228,7 @@ void enc_pkt(struct q_stream * const s,
     }
 
     if (rtx)
-        warn(INF, "enc RTX 0x%02x-type " FMT_PNR_OUT, flags, meta(v).nr);
+        warn(DBG, "enc RTX 0x%02x-type " FMT_PNR_OUT, flags, meta(v).nr);
     meta(v).nr = ++c->rec.lg_sent;
 
     uint8_t pkt_nr_len = 0;
@@ -324,6 +324,21 @@ void enc_pkt(struct q_stream * const s,
         // this is a RTX, pad out until beginning of stream header
         enc_padding_frame(v, i, meta(v).stream_header_pos - i);
         i = meta(v).stream_data_end;
+
+        // duplicate the logging that enc_stream_frame() does for a fresh TX
+        const uint8_t type = v->buf[meta(v).stream_header_pos];
+        warn(INF,
+             FRAM_OUT "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID
+                      " off=%" PRIu64 " len=%u " REV BLD GRN "[RTX]",
+             type, is_set(F_STREAM_FIN, type) ? "FIN" : "",
+             is_set(F_STREAM_FIN, type) &&
+                     is_set(F_STREAM_LEN | F_STREAM_OFF, type)
+                 ? "|"
+                 : "",
+             is_set(F_STREAM_LEN, type) ? "LEN" : "",
+             is_set(F_STREAM_OFF, type) ? "|" : "",
+             is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id, meta(v).stream_off,
+             stream_data_len(v));
 
     } else {
         if (v->len > Q_OFFSET || s->state == STRM_STAT_HCLO ||

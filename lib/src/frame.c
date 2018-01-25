@@ -46,15 +46,6 @@
 #include "recovery.h"
 #include "stream.h"
 
-#define F_STREAM_FIN 0x01
-#define F_STREAM_LEN 0x02
-#define F_STREAM_OFF 0x04
-
-#ifndef NDEBUG
-#define FRAM_IN BLD BLU
-#define FRAM_OUT BLD GRN
-#endif
-
 
 static uint16_t __attribute__((nonnull))
 dec_stream_frame(struct q_conn * const c,

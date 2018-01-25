@@ -248,7 +248,7 @@ extern void * api_arg;
 // #define DIM "\x1B[2m"   ///< ANSI escape sequence: dim
 // #define ULN "\x1B[3m"   ///< ANSI escape sequence: underline
 // #define BLN "\x1B[5m"   ///< ANSI escape sequence: blink
-// #define REV "\x1B[7m"   ///< ANSI escape sequence: reverse
+#define REV "\x1B[7m"   ///< ANSI escape sequence: reverse
 // #define HID "\x1B[8m"   ///< ANSI escape sequence: hidden
 // #define BLK "\x1B[30m"  ///< ANSI escape sequence: black
 #define RED "\x1B[31m" ///< ANSI escape sequence: red
