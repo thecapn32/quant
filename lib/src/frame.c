@@ -173,7 +173,8 @@ done:
          FRAM_IN "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID " off=%" PRIu64
                  " len=%" PRIu64 " [%s]",
          type, is_set(F_STREAM_FIN, type) ? "FIN" : "",
-         is_set(F_STREAM_FIN, type) && is_set(F_STREAM_LEN | F_STREAM_OFF, type)
+         is_set(F_STREAM_FIN, type) &&
+                 (is_set(F_STREAM_LEN, type) | is_set(F_STREAM_OFF, type))
              ? "|"
              : "",
          is_set(F_STREAM_LEN, type) ? "LEN" : "",
@@ -755,7 +756,7 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
          is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id, s->out_off, dlen);
 
     track_bytes_out(s, dlen);
-    meta(v).str = s;    // remember stream this buf belongs to
+    meta(v).str = s; // remember stream this buf belongs to
     meta(v).stream_data_start = Q_OFFSET;
     meta(v).stream_data_end = Q_OFFSET + (uint16_t)dlen;
     meta(v).stream_off = s->out_off;
