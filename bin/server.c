@@ -179,8 +179,9 @@ int main(int argc, char * argv[])
     sq_foreach (v, &i, next) {
         const size_t parsed =
             http_parser_execute(&parser, &settings, (char *)v->buf, v->len);
-        ensure(parsed == v->len, "HTTP parser error: %.*s", v->len - parsed,
-               &v->buf[parsed]);
+        if (parsed != v->len)
+            warn(ERR, "HTTP parser error: %.*s", v->len - parsed,
+                 &v->buf[parsed]);
         if (q_is_str_closed(s))
             break;
     }
