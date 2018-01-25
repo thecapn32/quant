@@ -170,7 +170,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
     uint32_t encoded = 0;
     struct w_iov * v = from;
     sq_foreach_from (v, &s->out, next) {
-        if (s->blocked || s->c->blocked)
+        if (v->len > Q_OFFSET && (s->blocked || s->c->blocked))
             break;
 
         if (meta(v).is_acked) {
