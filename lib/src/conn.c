@@ -363,6 +363,9 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 {
     const uint8_t flags = pkt_flags(v->buf);
 
+    if (c->is_clnt && c->state == CONN_STAT_IDLE)
+        conn_to_state(c, CONN_STAT_CH_SENT);
+
     switch (c->state) {
     case CONN_STAT_IDLE:
     case CONN_STAT_VERS_REJ:
@@ -405,7 +408,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         }
         break;
 
-    case CONN_STAT_VERS_SENT:
+    case CONN_STAT_CH_SENT:
         if (pkt_vers(v->buf, v->len) == 0) {
             const uint32_t try_vers = pick_from_server_vers(v->buf, v->len);
             if (try_vers == c->vers) {
@@ -425,6 +428,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                 die("no vers in common with serv");
 
             // retransmit the ClientHello
+            conn_to_state(c, CONN_STAT_IDLE);
             init_tls(c);
             // free the previous ClientHello
             struct pkt_meta *ch, *nxt;
@@ -667,7 +671,8 @@ void conn_to_state(struct q_conn * const c, const uint8_t state)
     c->state = state;
 
     switch (state) {
-    case CONN_STAT_VERS_SENT:
+    case CONN_STAT_IDLE:
+    case CONN_STAT_CH_SENT:
     case CONN_STAT_VERS_REJ:
     case CONN_STAT_RTRY:
     case CONN_STAT_HSHK_DONE:

@@ -230,7 +230,6 @@ struct q_conn * q_connect(void * const q,
     // allocate stream zero and start TLS handshake on stream 0
     struct q_stream * const s = new_stream(c, 0, true);
     init_tls(c);
-    conn_to_state(c, CONN_STAT_VERS_SENT);
     tls_io(s, 0);
     ev_async_send(loop, &c->tx_w);
 

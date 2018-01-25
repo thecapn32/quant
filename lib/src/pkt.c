@@ -233,11 +233,11 @@ void enc_pkt(struct q_stream * const s,
 
     uint8_t pkt_nr_len = 0;
     switch (c->state) {
-    case CONN_STAT_VERS_SENT:
+    case CONN_STAT_IDLE:
     case CONN_STAT_RTRY:
         flags = F_LONG_HDR | F_LH_INIT;
         break;
-    case CONN_STAT_IDLE:
+    case CONN_STAT_CH_SENT:
     case CONN_STAT_HSHK_DONE:
     case CONN_STAT_HSHK_FAIL:
         flags = F_LONG_HDR | F_LH_HSHK;
@@ -352,7 +352,7 @@ void enc_pkt(struct q_stream * const s,
         }
     }
 
-    if (c->state == CONN_STAT_VERS_SENT || c->state == CONN_STAT_RTRY)
+    if (c->state == CONN_STAT_IDLE || c->state == CONN_STAT_RTRY)
         i = enc_padding_frame(v, i, MIN_INI_LEN - i - AEAD_LEN);
 
 tx:
@@ -373,7 +373,7 @@ tx:
     sq_insert_tail(q, x, next);
     meta(v).tx_len = x->len;
 
-    if (c->state == CONN_STAT_VERS_SENT)
+    if (c->state == CONN_STAT_IDLE || c->state == CONN_STAT_RTRY)
         // adjust v->len to end of stream data (excl. padding)
         v->len = meta(v).stream_data_end;
 

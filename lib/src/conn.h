@@ -122,7 +122,7 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 
 
 #define CONN_STAT_IDLE 0
-#define CONN_STAT_VERS_SENT 1
+#define CONN_STAT_CH_SENT 1
 #define CONN_STAT_VERS_REJ 2
 #define CONN_STAT_RTRY 3
 #define CONN_STAT_HSHK_DONE 4
