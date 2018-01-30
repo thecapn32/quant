@@ -10,10 +10,9 @@ framework.
 The quant repository is [on GitHub](https://github.com/NTAP/quant), as is
 the [documentation](https://ntap.github.io/quant/).
 
-We *plan* to use [picotls](https://github.com/h2o/picotls) for its [TLS
+We use [picotls](https://github.com/h2o/picotls) for its [TLS
 1.3](https://datatracker.ietf.org/doc/draft-ietf-tls-tls13/) implementation.
-Another alternative might be [ARM mbed](https://www.mbed.com/en/), once it
-supports TLS 1.3. Picotls will be built automatically.
+Picotls will be built automatically.
 
 
 ## Prerequisites
@@ -66,7 +65,7 @@ examples in `bin`.
 
 ## Copyright
 
-Copyright (c) 2016-2017, NetApp, Inc.
+Copyright (c) 2016-2018, NetApp, Inc.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,

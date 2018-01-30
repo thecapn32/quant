@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
-// Copyright (c) 2016-2017, NetApp, Inc.
+// Copyright (c) 2016-2018, NetApp, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -27,15 +27,10 @@
 
 #pragma once
 
+#include <bitstring.h>
 #include <inttypes.h>
 #include <stddef.h>
 #include <stdint.h>
-
-#ifdef __linux__
-#include <bsd/bitstring.h>
-#else
-#include <bitstring.h>
-#endif
 
 #include <ev.h>
 #include <warpcore/warpcore.h>
@@ -57,8 +52,8 @@ struct pkt_meta {
     splay_entry(pkt_meta) off_node;
     ev_tstamp tx_t;             ///< Transmission timestamp.
     uint64_t nr;                ///< Packet number.
-    uint64_t in_off;            ///< Stream data offset.
     struct q_stream * str;      ///< Stream this data was written on.
+    uint64_t stream_off;        ///< Stream data offset.
     uint16_t stream_header_pos; ///< Offset of stream frame header.
     uint16_t stream_data_start; ///< Offset of first byte of stream frame data.
     uint16_t stream_data_end;   ///< Offset of last byte of stream frame data.
@@ -68,7 +63,7 @@ struct pkt_meta {
     uint8_t is_acked : 1;       ///< Is the w_iov ACKed?
     uint8_t : 6;
     bitstr_t bit_decl(frames, MAX_FRAM_TYPE + 1); ///< Frames present in pkt.
-    uint8_t _unused[4];
+    uint8_t _unused[2];
 };
 
 
@@ -248,22 +243,25 @@ extern void * api_arg;
         _v;                                                                    \
     })
 
-#define NRM "\x1B[0m"   ///< ANSI escape sequence: reset all to normal
-// #define BLD "\x1B[1m"   ///< ANSI escape sequence: bold
+#define NRM "\x1B[0m" ///< ANSI escape sequence: reset all to normal
+#define BLD "\x1B[1m" ///< ANSI escape sequence: bold
 // #define DIM "\x1B[2m"   ///< ANSI escape sequence: dim
 // #define ULN "\x1B[3m"   ///< ANSI escape sequence: underline
 // #define BLN "\x1B[5m"   ///< ANSI escape sequence: blink
-// #define REV "\x1B[7m"   ///< ANSI escape sequence: reverse
+#define REV "\x1B[7m"   ///< ANSI escape sequence: reverse
 // #define HID "\x1B[8m"   ///< ANSI escape sequence: hidden
 // #define BLK "\x1B[30m"  ///< ANSI escape sequence: black
-#define RED "\x1B[31m"  ///< ANSI escape sequence: red
-// #define GRN "\x1B[32m"  ///< ANSI escape sequence: green
-#define YEL "\x1B[33m"  ///< ANSI escape sequence: yellow
-// #define BLU "\x1B[34m"  ///< ANSI escape sequence: blue
-// #define MAG "\x1B[35m"  ///< ANSI escape sequence: magenta
-#define CYN "\x1B[36m"  ///< ANSI escape sequence: cyan
+#define RED "\x1B[31m" ///< ANSI escape sequence: red
+#define GRN "\x1B[32m" ///< ANSI escape sequence: green
+#define YEL "\x1B[33m" ///< ANSI escape sequence: yellow
+#define BLU "\x1B[34m" ///< ANSI escape sequence: blue
+#define MAG "\x1B[35m" ///< ANSI escape sequence: magenta
+#define CYN "\x1B[36m" ///< ANSI escape sequence: cyan
 // #define WHT "\x1B[37m"  ///< ANSI escape sequence: white
 
-#define FMT_CID CYN "%" PRIx64 NRM
-#define FMT_PNR YEL "%" PRIu64 NRM
-#define FMT_SID RED "%u" NRM
+#define FMT_CID "%" PRIx64
+
+#define FMT_PNR_IN BLU "%" PRIu64 NRM
+#define FMT_PNR_OUT GRN "%" PRIu64 NRM
+
+#define FMT_SID RED "%" PRIu64 NRM

@@ -7,12 +7,12 @@ include(GNUInstallDirs)
 add_library(common
   OBJECT
     src/pkt.c src/frame.c src/quic.c src/stream.c src/conn.c
-    src/diet.c src/util.c src/tls.c src/recovery.c
+    src/diet.c src/util.c src/tls.c src/recovery.c src/marshall.c
     ${CMAKE_CURRENT_BINARY_DIR}/src/config.c
 )
 add_dependencies(common warpcore ptls-core ptls-openssl ptls-minicrypto)
 
-add_library(${PROJECT_NAME} $<TARGET_OBJECTS:common>)
+add_library(lib${PROJECT_NAME} $<TARGET_OBJECTS:common>)
 
 install(DIRECTORY include/${PROJECT_NAME}
         DESTINATION include
@@ -29,13 +29,13 @@ endif()
 find_path(LIBEV_INCLUDE ev.h PATH_SUFFIXES include/ev include)
 find_package_handle_standard_args(libev DEFAULT_MSG LIBEV_LIB LIBEV_INCLUDE)
 
-if(DSYMUTIL)
-  add_custom_command (TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${DSYMUTIL} ARGS *${CMAKE_SHARED_LIBRARY_SUFFIX}
+if(DSYMUTIL AND BUILD_SHARED_LIBS)
+  add_custom_command (TARGET lib${PROJECT_NAME} POST_BUILD
+    COMMAND ${DSYMUTIL} ARGS *${CMAKE_STATIC_LIBRARY_SUFFIX}
   )
 endif()
 
-set(TARGETS common ${PROJECT_NAME})
+set(TARGETS common lib${PROJECT_NAME})
 foreach(TARGET ${TARGETS})
   add_dependencies(${TARGET} warpcore ptls-core ptls-openssl ptls-minicrypto)
   target_include_directories(${TARGET}
@@ -62,7 +62,9 @@ foreach(TARGET ${TARGETS})
   if(NOT ${TARGET} MATCHES "common")
     target_link_libraries(${TARGET}
       m warpcore ptls-core ptls-openssl ptls-minicrypto ${LIBEV_LIB})
-
+    if("${CMAKE_SYSTEM}" MATCHES "Linux")
+      target_link_libraries(${TARGET} bsd)
+    endif()
     install(TARGETS ${TARGET}
       EXPORT ${TARGET}
       ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}

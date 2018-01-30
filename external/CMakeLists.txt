@@ -22,7 +22,7 @@ if(NOT WARP_LIB OR NOT WARP_INCLUDE)
     CMAKE_ARGS
       -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
       -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-      -DDLEVEL=WRN
+      -DDLEVEL=WRN -DCONTINUOUS_INTEGRATION=1
       -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
       -DBUILD_DOCUMENTATION=FALSE
     BUILD_BYPRODUCTS
@@ -47,7 +47,6 @@ externalproject_add(picotls
   # UPDATE_COMMAND "" # XXX do not commit with this being empty
   GIT_REPOSITORY https://github.com/h2o/picotls.git
   GIT_SHALLOW 1
-  PATCH_COMMAND sed -i "" -e "s/-std=c99 -Wall -O2 -g//" CMakeLists.txt
   CMAKE_ARGS
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
     -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}
@@ -126,7 +125,9 @@ externalproject_add(quicly
 # Use ngtcp2 for testing against
 externalproject_add(openssl
   UPDATE_COMMAND ""
-  GIT_REPOSITORY https://github.com/openssl/openssl.git
+  # GIT_REPOSITORY https://github.com/openssl/openssl.git
+  GIT_REPOSITORY https://github.com/tatsuhiro-t/openssl
+  GIT_TAG quic
   GIT_SHALLOW 1
   CONFIGURE_COMMAND ./config --prefix=${CMAKE_CURRENT_BINARY_DIR} enable-tls1_3
   BUILD_IN_SOURCE 1
@@ -167,8 +168,8 @@ externalproject_add(nss
   UPDATE_COMMAND ""
   SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/mozquic-prefix/src/nss
   GIT_REPOSITORY https://github.com/nss-dev/nss.git
-  GIT_SHALLOW 1
-  GIT_TAG NSS_TLS13_DRAFT19_BRANCH
+  # GIT_SHALLOW 1
+  GIT_TAG affb759ef3116d82c15bba3e0b38fc8d8560dfdc
   CONFIGURE_COMMAND ""
   BUILD_COMMAND ./build.sh
   BUILD_IN_SOURCE 1
@@ -179,7 +180,6 @@ externalproject_add(nss
 externalproject_add(mozquic
   DEPENDS nss
   # UPDATE_COMMAND ""
-  # GIT_TAG 07
   GIT_REPOSITORY https://github.com/mcmanus/mozquic.git
   GIT_SHALLOW 1
   PATCH_COMMAND sed -i "" -e "s/-Werror//g" Makefile
@@ -229,7 +229,7 @@ externalproject_add(ats
     echo "CONFIG proxy.config.quic.no_activity_timeout_in INT 10" >> ${CMAKE_CURRENT_BINARY_DIR}/etc/trafficserver/records.config &&
     sed -i "" -E
       -e "s/.*proxy.config.diags.debug.enabled.*/CONFIG proxy.config.diags.debug.enabled INT 1/g"
-      -e "s/.*proxy.config.diags.debug.tags.*/CONFIG proxy.config.diags.debug.tags STRING quic/g"
+      -e "s/.*proxy.config.diags.debug.tags.*/CONFIG proxy.config.diags.debug.tags STRING quic|udp/g"
       -e "s/.*proxy.config.http.server_ports.*/CONFIG proxy.config.http.server_ports STRING 4433:quic/g"
       -e "s/.*proxy.config.ssl.server.cipher_suite.*/CONFIG proxy.config.ssl.server.cipher_suite STRING TLS13-AES-128-GCM-SHA256:TLS13-AES-128-GCM-SHA256:TLS13-CHACHA20-POLY1305-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-DSS-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA256:DHE-RSA-AES128-SHA256:DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA:DHE-DSS-AES256-SHA:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:AES256-GCM-SHA384:AES128-GCM-SHA256:AES256-SHA256:AES128-SHA256:AES256-SHA:AES128-SHA:DES-CBC3-SHA:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!aECDH:!EDH-DSS-DES-CBC3-SHA:!EDH-RSA-DES-CBC3-SHA:!KRB5-DES-CBC3-SHA/g"
       ${CMAKE_CURRENT_BINARY_DIR}/etc/trafficserver/records.config

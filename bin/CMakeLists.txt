@@ -22,13 +22,15 @@ find_package_handle_standard_args(http-parser
 
 foreach(TARGET client server)
   add_executable(${TARGET} ${TARGET}.c)
-  target_link_libraries(${TARGET} ${PROJECT_NAME} ${HTTP_PARSER_LIB})
+  target_link_libraries(${TARGET} lib${PROJECT_NAME} ${HTTP_PARSER_LIB})
   if(DSYMUTIL)
     add_custom_command(TARGET ${TARGET} POST_BUILD
       COMMAND ${DSYMUTIL} ARGS $<TARGET_FILE:${TARGET}>
     )
   endif()
 endforeach()
+
+add_custom_target(${PROJECT_NAME} DEPENDS client server)
 
 install(TARGETS client server DESTINATION bin)
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
-// Copyright (c) 2016-2017, NetApp, Inc.
+// Copyright (c) 2016-2018, NetApp, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -27,6 +27,7 @@
 
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include <warpcore/warpcore.h>
@@ -37,27 +38,33 @@
 struct q_conn;
 struct stream;
 
+#define STRM_FL_INI_SRV 0x01
+#define STRM_FL_DIR_UNI 0x02
+
+
 struct q_stream {
     splay_entry(q_stream) node;
     struct q_conn * c;
 
-    struct w_iov_sq out;  ///< Tail queue containing outbound data.
-    uint64_t out_ack_cnt; ///< Number of unique ACKs received for pkts in o.
-    uint64_t out_off;     ///< Current outbound stream offset.
-    uint64_t out_off_max; ///< Outbound max_stream_data.
+    struct w_iov_sq out;   ///< Tail queue containing outbound data.
+    uint64_t out_ack_cnt;  ///< Number of unique ACKs received for pkts in o.
+    uint64_t out_off;      ///< Current outbound stream offset.
+    uint64_t out_data_max; ///< Outbound max_stream_data.
+    uint64_t out_data;     ///< Outbound data sent.
 
     struct w_iov_sq in;         ///< Tail queue containing inbound data.
     struct pm_off_splay in_ooo; ///< Out-of-order inbound data.
     uint64_t in_off;            ///< Current inbound in-order stream offset.
-    uint64_t in_off_max;        ///< Inbound max_stream_data.
+    uint64_t in_data_max;       ///< Inbound max_stream_data.
+    uint64_t in_data;           ///< Inbound data received.
 
-    uint32_t id;
+    uint64_t id;
     uint8_t state;
     uint8_t fin_sent : 1;
     uint8_t open_win : 1; ///< We need to open the receive window.
     uint8_t blocked : 1;  ///< We are receive-window-blocked.
     uint8_t : 5;
-    uint8_t _unused[2];
+    uint8_t _unused[6];
 };
 
 #define STRM_STAT_IDLE 0
@@ -67,16 +74,22 @@ struct q_stream {
 #define STRM_STAT_CLSD 4
 
 
-extern int32_t __attribute__((nonnull))
+extern int __attribute__((nonnull))
 stream_cmp(const struct q_stream * const a, const struct q_stream * const b);
 
 SPLAY_PROTOTYPE(stream, q_stream, node, stream_cmp)
 
 
 extern struct q_stream * __attribute__((nonnull))
-get_stream(struct q_conn * const c, const uint32_t id);
+get_stream(struct q_conn * const c, const uint64_t id);
 
 extern struct q_stream * __attribute__((nonnull))
-new_stream(struct q_conn * const c, const uint32_t id);
+new_stream(struct q_conn * const c, const uint64_t id, const bool active);
 
 extern void __attribute__((nonnull)) free_stream(struct q_stream * const s);
+
+extern void __attribute__((nonnull))
+track_bytes_in(struct q_stream * const s, const uint64_t n);
+
+extern void __attribute__((nonnull))
+track_bytes_out(struct q_stream * const s, const uint64_t n);

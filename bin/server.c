@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
-// Copyright (c) 2016-2017, NetApp, Inc.
+// Copyright (c) 2016-2018, NetApp, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,6 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <fcntl.h>
-#include <getopt.h>
 #include <inttypes.h>
 #include <net/if.h>
 #include <stdint.h>
@@ -35,6 +34,7 @@
 #include <string.h>
 #include <sys/param.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #ifndef __linux__
 #include <sys/types.h>
@@ -175,11 +175,13 @@ int main(int argc, char * argv[])
     struct q_stream * s = q_read(c, &i);
     d.s = s;
 
-    struct w_iov * v;
+    struct w_iov * v = 0;
     sq_foreach (v, &i, next) {
         const size_t parsed =
             http_parser_execute(&parser, &settings, (char *)v->buf, v->len);
-        ensure(parsed == v->len, "HTTP parser error");
+        if (parsed != v->len)
+            warn(ERR, "HTTP parser error: %.*s", v->len - parsed,
+                 &v->buf[parsed]);
         if (q_is_str_closed(s))
             break;
     }

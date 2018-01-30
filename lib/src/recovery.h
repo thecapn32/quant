@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
-// Copyright (c) 2016-2017, NetApp, Inc.
+// Copyright (c) 2016-2018, NetApp, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -77,7 +77,7 @@ on_pkt_sent(struct q_conn * const c, struct w_iov * const v);
 
 extern void __attribute__((nonnull)) on_ack_rx_1(struct q_conn * const c,
                                                  const uint64_t ack,
-                                                 const uint16_t ack_delay);
+                                                 const uint64_t ack_delay);
 
 extern void __attribute__((nonnull)) on_ack_rx_2(struct q_conn * const c);
 

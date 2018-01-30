@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
-// Copyright (c) 2016-2017, NetApp, Inc.
+// Copyright (c) 2016-2018, NetApp, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -47,7 +47,7 @@ void q_write_str(void * const q,
 
     // chunk up string
     const char * i = str;
-    struct w_iov * v;
+    struct w_iov * v = 0;
     sq_foreach (v, &o, next) {
         strncpy((char *)v->buf, i, v->len);
         i += v->len;

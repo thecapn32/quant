@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
-// Copyright (c) 2016-2017, NetApp, Inc.
+// Copyright (c) 2016-2018, NetApp, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -34,6 +34,9 @@
 struct q_conn;
 struct q_stream;
 struct w_iov;
+
+
+#define AEAD_LEN 16
 
 
 struct tls {

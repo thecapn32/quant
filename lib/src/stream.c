@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
-// Copyright (c) 2016-2017, NetApp, Inc.
+// Copyright (c) 2016-2018, NetApp, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -25,6 +25,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -37,24 +38,24 @@
 #include "stream.h"
 
 
-int32_t stream_cmp(const struct q_stream * const a,
-                   const struct q_stream * const b)
+int stream_cmp(const struct q_stream * const a, const struct q_stream * const b)
 {
-    return (int32_t)a->id - (int32_t)b->id;
+    return (a->id > b->id) - (a->id < b->id);
 }
 
 
 SPLAY_GENERATE(stream, q_stream, node, stream_cmp)
 
 
-struct q_stream * get_stream(struct q_conn * const c, const uint32_t id)
+struct q_stream * get_stream(struct q_conn * const c, const uint64_t id)
 {
     struct q_stream which = {.id = id};
     return splay_find(stream, &c->streams, &which);
 }
 
 
-struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
+struct q_stream *
+new_stream(struct q_conn * const c, const uint64_t id, const bool active)
 {
     ensure(get_stream(c, id) == 0, "stream already %u exists", id);
 
@@ -64,12 +65,16 @@ struct q_stream * new_stream(struct q_conn * const c, const uint32_t id)
     sq_init(&s->out);
     sq_init(&s->in);
     s->id = id;
-    s->in_off_max = initial_max_stream_data;
-    s->out_off_max = c->max_stream_data;
-    if (id)
-        c->next_sid += 2;
+    s->in_data_max = c->local_max_strm_data;
+    s->out_data_max = c->peer_max_strm_data;
+    if (active) {
+        if (c->next_sid == 0)
+            c->next_sid = c->is_clnt ? 4 : 1;
+        else
+            c->next_sid += 4;
+    }
     splay_insert(stream, &c->streams, s);
-    warn(INF, "reserved str " FMT_SID " on %s conn " FMT_CID, id, conn_type(c),
+    warn(DBG, "reserved str " FMT_SID " on %s conn " FMT_CID, id, conn_type(c),
          c->id);
     return s;
 }
@@ -87,4 +92,34 @@ void free_stream(struct q_stream * const s)
 
     splay_remove(stream, &s->c->streams, s);
     free(s);
+}
+
+
+void track_bytes_in(struct q_stream * const s, const uint64_t n)
+{
+    if (s->id)
+        s->c->in_data += n;
+    if (s->c->state >= CONN_STAT_ESTB)
+        s->in_data += n;
+
+    warn(DBG,
+         "IN: str %u in_data=%" PRIu64 "/%" PRIu64 " in_off=%" PRIu64
+         " C: in_data=%" PRIu64 "/%" PRIu64,
+         s->id, s->in_data, s->in_data_max, s->in_off, s->c->in_data,
+         s->c->local_max_data);
+}
+
+
+void track_bytes_out(struct q_stream * const s, const uint64_t n)
+{
+    if (s->id)
+        s->c->out_data += n;
+    if (s->c->state >= CONN_STAT_ESTB)
+        s->out_data += n;
+
+    warn(DBG,
+         "OUT: str %u out_data=%" PRIu64 "/%" PRIu64 " out_off=%" PRIu64
+         " C: out_data=%" PRIu64 "/%" PRIu64,
+         s->id, s->out_data, s->out_data_max, s->out_off, s->c->out_data,
+         s->c->peer_max_data);
 }

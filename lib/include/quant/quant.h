@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
-// Copyright (c) 2016-2017, NetApp, Inc.
+// Copyright (c) 2016-2018, NetApp, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -74,7 +74,7 @@ extern void __attribute__((nonnull)) q_free(struct w_iov_sq * const q);
 
 extern uint64_t __attribute__((nonnull)) q_cid(const struct q_conn * const c);
 
-extern uint32_t __attribute__((nonnull)) q_sid(const struct q_stream * const s);
+extern uint64_t __attribute__((nonnull)) q_sid(const struct q_stream * const s);
 
 extern void __attribute__((nonnull))
 q_write_str(void * const q, struct q_stream * const s, const char * const str);

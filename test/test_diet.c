@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
-// Copyright (c) 2016-2017, NetApp, Inc.
+// Copyright (c) 2016-2018, NetApp, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -27,6 +27,7 @@
 
 #include <inttypes.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 #include <warpcore/warpcore.h>
 
@@ -39,12 +40,10 @@ int main()
     char s[256];
     struct diet t = diet_initializer(diet);
 
-    plat_initrandom();
-
     // insert some items
     uint64_t i = 1;
     while (i <= n) {
-        const uint64_t x = (uint64_t)plat_random() % n + 1;
+        const uint64_t x = (uint64_t)arc4random_uniform(n + 1);
         if (diet_find(&t, x) == 0) {
             diet_insert(&t, x);
             diet_to_str(s, sizeof(s), &t);
@@ -59,7 +58,7 @@ int main()
     // remove all items
     i = 1;
     while (!splay_empty(&t)) {
-        const uint64_t x = (uint64_t)plat_random() % n + 1;
+        const uint64_t x = (uint64_t)arc4random_uniform(n + 1);
         if (diet_find(&t, x)) {
             diet_remove(&t, x);
             diet_to_str(s, sizeof(s), &t);

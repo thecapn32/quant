@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
-// Copyright (c) 2016-2017, NetApp, Inc.
+// Copyright (c) 2016-2018, NetApp, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -40,18 +40,32 @@ struct w_iov;
 #define FRAM_TYPE_APPL_CLSE 0x03
 #define FRAM_TYPE_MAX_DATA 0x04
 #define FRAM_TYPE_MAX_STRM_DATA 0x05
-#define FRAM_TYPE_MAX_STRM_ID 0x06
+#define FRAM_TYPE_MAX_SID 0x06
 #define FRAM_TYPE_PING 0x07
+#define FRAM_TYPE_BLCK 0x08
 #define FRAM_TYPE_STRM_BLCK 0x09
-#define FRAM_TYPE_STOP_SEND 0x0C
-
-#define FRAM_TYPE_ACK 0xA0
-#define FRAM_TYPE_STRM 0xC0
-
+#define FRAM_TYPE_ID_BLCK 0x0a
+#define FRAM_TYPE_NEW_CID 0x0b
+#define FRAM_TYPE_STOP_SEND 0x0c
+#define FRAM_TYPE_PONG 0x0d
+#define FRAM_TYPE_ACK 0x0e
+#define FRAM_TYPE_STRM 0x10
 #define MAX_FRAM_TYPE FRAM_TYPE_STRM
 
+#define F_STREAM_FIN 0x01
+#define F_STREAM_LEN 0x02
+#define F_STREAM_OFF 0x04
 
-extern void __attribute__((nonnull))
+#ifndef NDEBUG
+#define FRAM_IN BLD BLU
+#define FRAM_OUT BLD GRN
+#endif
+
+
+extern uint64_t __attribute__((const))
+shorten_ack_nr(const uint64_t ack, const uint64_t diff);
+
+extern uint16_t __attribute__((nonnull))
 dec_frames(struct q_conn * const c, struct w_iov * v);
 
 extern uint16_t __attribute__((nonnull))
@@ -66,7 +80,7 @@ extern uint16_t __attribute__((nonnull)) enc_ack_frame(struct q_conn * const c,
 extern uint16_t __attribute__((nonnull))
 enc_stream_frame(struct q_stream * const s, struct w_iov * const v);
 
-extern uint16_t __attribute__((nonnull))
+extern uint16_t __attribute__((nonnull(1)))
 enc_close_frame(struct w_iov * const v,
                 const uint16_t pos,
                 const uint8_t type,
@@ -77,7 +91,7 @@ extern uint16_t __attribute__((nonnull(1, 2, 5))) dec_ack_frame(
     struct q_conn * const c,
     const struct w_iov * const v,
     const uint16_t pos,
-    void (*before_ack)(struct q_conn * const, const uint64_t, const uint16_t),
+    void (*before_ack)(struct q_conn * const, const uint64_t, const uint64_t),
     void (*on_each_ack)(struct q_conn * const, const uint64_t),
     void (*after_ack)(struct q_conn * const));
 
@@ -87,6 +101,26 @@ enc_max_stream_data_frame(struct q_stream * const s,
                           const uint16_t pos);
 
 extern uint16_t __attribute__((nonnull))
+enc_max_data_frame(struct q_conn * const c,
+                   struct w_iov * const v,
+                   const uint16_t pos);
+
+extern uint16_t __attribute__((nonnull))
+enc_max_stream_id_frame(struct q_conn * const c,
+                        struct w_iov * const v,
+                        const uint16_t pos);
+
+extern uint16_t __attribute__((nonnull))
 enc_stream_blocked_frame(struct q_stream * const s,
                          const struct w_iov * const v,
                          const uint16_t pos);
+
+extern uint16_t __attribute__((nonnull))
+enc_blocked_frame(struct q_conn * const c,
+                  const struct w_iov * const v,
+                  const uint16_t pos);
+
+extern uint16_t __attribute__((nonnull))
+enc_stream_id_blocked_frame(struct q_conn * const c,
+                            const struct w_iov * const v,
+                            const uint16_t pos);

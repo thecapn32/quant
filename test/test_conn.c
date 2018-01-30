@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
-// Copyright (c) 2016-2017, NetApp, Inc.
+// Copyright (c) 2016-2018, NetApp, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -38,9 +38,9 @@
 #endif
 
 #ifndef NDEBUG
-#include <getopt.h>
 #include <stdlib.h>
 #include <sys/param.h>
+#include <unistd.h>
 #endif
 
 #include <quant/quant.h>
@@ -59,6 +59,7 @@ int main(int argc
 )
 {
 #ifndef NDEBUG
+    util_dlevel = DLEVEL; // default to maximum compiled-in verbosity
     int ch;
     while ((ch = getopt(argc, argv, "v:")) != -1)
         if (ch == 'v')
@@ -98,9 +99,10 @@ int main(int argc
     struct w_iov * const ov = sq_first(&o);
 
     // add some payload data
-    ov->len = (uint16_t)snprintf((char *)ov->buf, 1024,
-                                 "***HELLO, STR %u ON CONN %" PRIx64 "!***",
-                                 q_sid(s), q_cid(cc));
+    ov->len =
+        (uint16_t)snprintf((char *)ov->buf, 1024,
+                           "***HELLO, STR %" PRIu64 " ON CONN %" PRIx64 "!***",
+                           q_sid(s), q_cid(cc));
 
     // send the data
     warn(INF, "writing %u byte%s: %s", ov->len, plural(ov->len),

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
-// Copyright (c) 2016-2017, NetApp, Inc.
+// Copyright (c) 2016-2018, NetApp, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -25,127 +25,20 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <arpa/inet.h>
 #include <stdint.h>
-#include <warpcore/warpcore.h>
-
-#include "quant/config.h"
-
-#if defined(HAVE_ENDIAN_H)
-// e.g., Linux
-#include <endian.h>
-#define ntohll be64toh
-#define htonll htobe64
-#elif defined(HAVE_SYS_ENDIAN_H)
-// e.g., FreeBSD
-#include <sys/endian.h>
-#define ntohll be64toh
-#define htonll htobe64
-#endif
 
 
-/// C generic returning the type of the passed expression @p x. Only contains
-/// entries for the types the marshalling functions support.
+extern uint16_t varint_sizeof(const uint64_t v);
+
+
+#ifndef NDEBUG
+/// If @p src_len is given, encodes the lower @p src_len bytes of host
+/// byte-order data contained in @p src into network byte-order at at position
+/// @p pos of buffer @p buf (which has total length @p buf_len), using printf
+/// format string @p fmt to format the data for debug logging.
 ///
-/// @param      x     An expression
-///
-/// @return     String containing the type of @p x.
-///
-// clang-format off
-#define type_str(x)                                                            \
-    _Generic((x),                                                              \
-            uint8_t           : "uint8_t",                                     \
-            const uint8_t     : "const uint8_t",                               \
-            uint16_t          : "uint16_t",                                    \
-            const uint16_t    : "const uint16_t",                              \
-            uint32_t          : "uint32_t",                                    \
-            const uint32_t    : "const uint32_t",                              \
-            uint64_t          : "uint64_t",                                    \
-            const uint64_t    : "const uint64_t")
-// clang-format on
-
-
-/// printf pattern for to_bitstring
-#define bitstring_fmt "%c%c%c%c:%c%c%c%c"
-
-
-/// Convert @p byte into eight characters (0 or 1, respectively) for use with
-/// printf-style functions and @p bitstring_fmt.
-///
-/// @param      byte  The byte to convert.
-///
-/// @return     Sequence of eight characters.
-///
-#define to_bitstring(byte)                                                     \
-    ((byte & 0x80) ? '1' : '0'), ((byte & 0x40) ? '1' : '0'),                  \
-        ((byte & 0x20) ? '1' : '0'), ((byte & 0x10) ? '1' : '0'),              \
-        ((byte & 0x08) ? '1' : '0'), ((byte & 0x04) ? '1' : '0'),              \
-        ((byte & 0x02) ? '1' : '0'), ((byte & 0x01) ? '1' : '0')
-
-
-/// Decodes @p len bytes of network byte-order data starting at position @p pos
-/// of buffer @p buf (which has total length @p buf_len) info variable @p dst in
-/// host byte-order, using printf format string @p fmt to format the data for
-/// debug logging. Macro increases @p pos by @p len as a side effect.
-///
-/// @param      dst      Destination to decode into.
-/// @param      buf      Buffer to decode from.
-/// @param      buf_len  Buffer length.
-/// @param      pos      Buffer position to start decoding from.
-/// @param      len      Length to decode.
-/// @param      fmt      Printf format for debug logging.
-///
-#define dec(dst, buf, buf_len, pos, len, fmt)                                  \
-    do {                                                                       \
-        const size_t __len = len ? len : sizeof(dst);                          \
-        ensure(pos + __len <= buf_len,                                         \
-               "attempting to decode %zu byte%s starting at " #buf "["         \
-               "%u], which is past " #buf_len " = %u",                         \
-               __len, plural(__len), pos, buf_len - 1);                        \
-        memcpy(&dst, &((const uint8_t *)buf)[pos], __len);                     \
-        switch (__len) {                                                       \
-        case 8: {                                                              \
-            uint64_t * const __dst = (void * const) & dst;                     \
-            *__dst = ntohll(*__dst);                                           \
-            break;                                                             \
-        }                                                                      \
-        case 4: {                                                              \
-            uint32_t * const __dst = (void * const) & dst;                     \
-            *__dst = ntohl(*__dst);                                            \
-            break;                                                             \
-        }                                                                      \
-        case 2: {                                                              \
-            uint16_t * const __dst = (void * const) & dst;                     \
-            *__dst = ntohs(*__dst);                                            \
-            break;                                                             \
-        }                                                                      \
-        case 1:                                                                \
-            break;                                                             \
-        default:                                                               \
-            die("cannot unmarshall field length %zu", __len);                  \
-            break;                                                             \
-        }                                                                      \
-        if (__len == 1)                                                        \
-            warn(DBG,                                                          \
-                 "dec %zu byte%s from " #buf "[%u..%zu] into %s " #dst         \
-                 " = " fmt " (" bitstring_fmt ")",                             \
-                 __len, plural(__len), pos, pos + __len - 1, type_str(dst),    \
-                 dst, to_bitstring(((const uint8_t *)buf)[pos]));              \
-        else                                                                   \
-            warn(DBG,                                                          \
-                 "dec %zu byte%s from " #buf "[%u..%zu] into %s " #dst         \
-                 " = " fmt,                                                    \
-                 __len, plural(__len), pos, pos + __len - 1, type_str(dst),    \
-                 dst);                                                         \
-        pos += __len;                                                          \
-    } while (0)
-
-
-/// Encodes the lower @p src_len bytes of host byte-order data contained in @p
-/// src into network byte-order at at position @p pos of buffer @p buf (which
-/// has total length @p buf_len), using printf format string @p fmt to format
-/// the data for debug logging. Macro increases @p pos by @p len as a side
-/// effect.
+/// For varint encoding (@p src_len is zero), @p src *must* point to an
+/// uint64_t.
 ///
 /// @param      buf      Buffer to decode from.
 /// @param      buf_len  Buffer length.
@@ -154,50 +47,75 @@
 /// @param      src_len  Length to encode.
 /// @param      fmt      Printf format for debug logging.
 ///
+/// @return     Buffer offset of byte following the encoded data.
+///
 #define enc(buf, buf_len, pos, src, src_len, fmt)                              \
-    do {                                                                       \
-        const size_t __len = src_len ? src_len : sizeof(*src);                 \
-        ensure(pos + __len <= buf_len,                                         \
-               "attempting to encode %zu byte%s into " #buf                    \
-               "[%u..%zu], which is past end of " #buf_len " = %u",            \
-               __len, plural(__len), pos, pos + __len, buf_len - 1);           \
-        memcpy(&((uint8_t * const)buf)[pos], src, __len);                      \
-        switch (__len) {                                                       \
-        case 8: {                                                              \
-            uint64_t * const __dst =                                           \
-                (void * const) & ((uint8_t * const)buf)[pos];                  \
-            *__dst = htonll(*__dst);                                           \
-            break;                                                             \
-        }                                                                      \
-        case 4: {                                                              \
-            uint32_t * const __dst =                                           \
-                (void * const) & ((uint8_t * const)buf)[pos];                  \
-            *__dst = htonl(*__dst);                                            \
-            break;                                                             \
-        }                                                                      \
-        case 2: {                                                              \
-            uint16_t * const __dst =                                           \
-                (void * const) & ((uint8_t * const)buf)[pos];                  \
-            *__dst = htons(*__dst);                                            \
-            break;                                                             \
-        }                                                                      \
-        case 1:                                                                \
-            break;                                                             \
-        default:                                                               \
-            die("cannot marshall field length %zu", __len);                    \
-            break;                                                             \
-        }                                                                      \
-        if (__len == 1)                                                        \
-            warn(DBG,                                                          \
-                 "enc %s %s = " fmt " (" bitstring_fmt ") "                    \
-                 "into %zu byte%s at " #buf "[%u..%zu]",                       \
-                 type_str(*src), (#src[0] == '&' ? &#src[1] : #src), *src,     \
-                 to_bitstring(*src), __len, plural(__len), pos,                \
-                 pos + __len - 1);                                             \
-        else                                                                   \
-            warn(DBG,                                                          \
-                 "enc %s %s = " fmt " into %zu byte%s at " #buf "[%u..%zu]",   \
-                 type_str(*src), (#src[0] == '&' ? &#src[1] : #src), *src,     \
-                 __len, plural(__len), pos, pos + __len - 1);                  \
-        pos += __len;                                                          \
-    } while (0)
+    marshall_enc(buf, buf_len, pos, src, src_len,                              \
+                 "enc %s = " fmt NRM " into %u byte%s (%s) at %s[%u..%u]",     \
+                 __func__, __FILE__, __LINE__, #buf, #src)
+#else
+#define enc(buf, buf_len, pos, src, src_len, fmt)                              \
+    marshall_enc(buf, buf_len, pos, src, src_len)
+#endif
+
+
+extern uint16_t marshall_enc(uint8_t * const buf,
+                             const uint16_t buf_len,
+                             const uint16_t pos,
+                             const void * const src,
+                             const uint16_t src_len
+#ifndef NDEBUG
+                             ,
+                             const char * const fmt,
+                             const char * const func,
+                             const char * const file,
+                             const unsigned line,
+                             const char * const buf_str,
+                             const char * const src_str
+#endif
+);
+
+
+#ifndef NDEBUG
+/// Decodes @p dst_len bytes (if given, otherwise varint encoding is assumed) of
+/// network byte-order data starting at position @p pos of buffer @p buf (which
+/// has total length @p buf_len) info variable @p dst in host byte-order, using
+/// printf format string @p fmt to format the data for debug logging.
+///
+/// For varint decoding (@p dst_len is zero), @p dst *must* point to an
+/// uint64_t.
+///
+/// @param      dst      Destination to decode into.
+/// @param      buf      Buffer to decode from.
+/// @param      buf_len  Buffer length.
+/// @param      pos      Buffer position to start decoding from.
+/// @param      dst_len  Length to decode. Zero for varint decoding.
+/// @param      fmt      Printf format for debug logging.
+///
+/// @return     Buffer offset of byte following the decoded data.
+///
+#define dec(dst, buf, buf_len, pos, dst_len, fmt)                              \
+    marshall_dec(dst, buf, buf_len, pos, dst_len,                              \
+                 "dec %u byte%s (%s) from %s[%u..%u] into %s = " fmt NRM,      \
+                 __func__, __FILE__, __LINE__, #buf, #dst)
+#else
+#define dec(dst, buf, buf_len, pos, dst_len, fmt)                              \
+    marshall_dec(dst, buf, buf_len, pos, dst_len)
+#endif
+
+
+extern uint16_t marshall_dec(void * const dst,
+                             const uint8_t * const buf,
+                             const uint16_t buf_len,
+                             const uint16_t pos,
+                             const uint16_t dst_len
+#ifndef NDEBUG
+                             ,
+                             const char * const fmt,
+                             const char * const func,
+                             const char * const file,
+                             const unsigned line,
+                             const char * const buf_str,
+                             const char * const dst_str
+#endif
+);

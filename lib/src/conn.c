@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
-// Copyright (c) 2016-2017, NetApp, Inc.
+// Copyright (c) 2016-2018, NetApp, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,23 +26,18 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <arpa/inet.h>
+#include <bitstring.h>
 #include <inttypes.h>
 #include <netinet/in.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 
-#ifdef __linux__
-#include <bsd/bitstring.h>
-#else
-#include <bitstring.h>
-#include <sys/types.h>
-#endif
-
 #include <ev.h>
-#include <picotls.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
@@ -58,17 +53,10 @@
 #include "quic.h"
 #include "recovery.h"
 #include "stream.h"
-#include "tls.h"
 
 
 struct ipnp_splay conns_by_ipnp = splay_initializer(&conns_by_ipnp);
 struct cid_splay conns_by_cid = splay_initializer(&conns_by_cid);
-
-
-uint16_t initial_idle_timeout = kIdleTimeout;
-uint64_t initial_max_data = 0x4000;        // <= uint32_t for trans param
-uint64_t initial_max_stream_data = 0x4000; // <= uint32_t for trans param
-uint32_t initial_max_stream_id = 0x04;
 
 
 int ipnp_splay_cmp(const struct q_conn * const a, const struct q_conn * const b)
@@ -126,7 +114,7 @@ pick_from_server_vers(const void * const buf, const uint16_t len)
         for (uint8_t j = 0; j < len - pos; j += sizeof(uint32_t)) {
             uint32_t vers = 0;
             uint16_t x = j + pos;
-            dec(vers, buf, len, x, 0, "0x%08x");
+            dec(&vers, buf, len, x, sizeof(vers), "0x%08x");
             warn(DBG, "serv prio %ld = 0x%08x; our prio %u = 0x%08x",
                  j / sizeof(uint32_t), vers, i, ok_vers[i]);
             if (ok_vers[i] == vers)
@@ -157,17 +145,19 @@ struct q_conn * get_conn_by_cid(const uint64_t id, const bool is_clnt)
 static void log_sent_pkts(struct q_conn * const c)
 {
     char sent_pkts_buf[1024] = "";
+    uint64_t prev = 0;
     for (struct pkt_meta * p = splay_min(pm_nr_splay, &c->rec.sent_pkts); p;
          p = splay_next(pm_nr_splay, &c->rec.sent_pkts, p)) {
         char tmp[1024] = "";
         const bool ack_only = is_ack_only(p);
-        snprintf(tmp, sizeof(tmp), "%s%s" FMT_PNR " (%" PRIx64 ")%s ",
-                 is_rtxable(p) ? "+" : "", ack_only ? "[" : "", p->nr, p->nr,
-                 ack_only ? "]" : "");
+        snprintf(tmp, sizeof(tmp), "%s%s" FMT_PNR_OUT "%s ",
+                 is_rtxable(p) ? "*" : "", ack_only ? "(" : "",
+                 shorten_ack_nr(p->nr, p->nr - prev), ack_only ? ")" : "");
         strncat(sent_pkts_buf, tmp,
                 sizeof(sent_pkts_buf) - strlen(sent_pkts_buf) - 1);
+        prev = p->nr;
     }
-    warn(CRT, "unacked: %s", sent_pkts_buf);
+    warn(DBG, "unacked: %s", sent_pkts_buf);
 }
 
 
@@ -176,29 +166,24 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
                                                       const uint32_t limit,
                                                       struct w_iov * const from)
 {
-    struct q_conn * const c = s->c;
-
     struct w_iov_sq x = sq_head_initializer(x);
     uint32_t encoded = 0;
     struct w_iov * v = from;
     sq_foreach_from (v, &s->out, next) {
-        if (s->blocked) {
-            warn(NTE, "str " FMT_SID " blocked, out_off %u/%u", s->id,
-                 s->out_off, s->out_off_max);
+        if (v->len > Q_OFFSET && (s->blocked || s->c->blocked))
             break;
-        }
 
         if (meta(v).is_acked) {
             warn(DBG,
-                 "skipping ACKed pkt " FMT_PNR " (%" PRIx64 ") on str " FMT_SID
-                 " during %s",
+                 "skipping ACKed pkt " FMT_PNR_OUT " (%" PRIx64
+                 ") on str " FMT_SID " during %s",
                  meta(v).nr, meta(v).nr, s->id, rtx ? "RTX" : "TX");
             continue;
         }
 
         if (rtx != (meta(v).tx_len > 0)) {
             warn(DBG,
-                 "skipping %s pkt " FMT_PNR " (%" PRIx64 ") on str " FMT_SID
+                 "skipping %s pkt " FMT_PNR_OUT " (%" PRIx64 ") on str " FMT_SID
                  " during %s",
                  meta(v).tx_len ? "already-tx'ed" : "fresh", meta(v).nr,
                  meta(v).nr, s->id, rtx ? "RTX" : "TX");
@@ -209,20 +194,27 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             ensure(meta(v).is_rtxed == false, "cannot RTX an RTX");
             // on RTX, remember orig pkt meta data
             struct w_iov * const r =
-                q_alloc_iov(w_engine(c->sock), 0, Q_OFFSET);
+                q_alloc_iov(w_engine(s->c->sock), 0, Q_OFFSET);
             pm_cpy(&meta(r), &meta(v));                  // copy pkt meta data
             memcpy(r->buf, v->buf - Q_OFFSET, Q_OFFSET); // copy pkt headers
             meta(r).is_rtxed = true;
 
             // we reinsert meta(v) with its new pkt nr in on_pkt_sent()
-            splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
-            splay_insert(pm_nr_splay, &c->rec.sent_pkts, &meta(r));
+            splay_remove(pm_nr_splay, &s->c->rec.sent_pkts, &meta(v));
+            splay_insert(pm_nr_splay, &s->c->rec.sent_pkts, &meta(r));
         }
 
-        if (enc_pkt(s, rtx, v, &x)) {
-            on_pkt_sent(c, v);
-            encoded++;
+        if (s->c->state >= CONN_STAT_ESTB) {
+            // if we have less than two full packet's worth of window, block
+            if (s->out_data + 2 * MAX_PKT_LEN > s->out_data_max)
+                s->blocked = true;
+            if (s->c->out_data + 2 * MAX_PKT_LEN > s->c->peer_max_data)
+                s->c->blocked = true;
         }
+
+        enc_pkt(s, rtx, v, &x);
+        on_pkt_sent(s->c, v);
+        encoded++;
 
         if (limit && encoded == limit) {
             warn(NTE, "tx limit %u reached", limit);
@@ -232,16 +224,17 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
 
     if (encoded) {
         // transmit encrypted/protected packets and then free the chain
-        if (!c->is_clnt)
-            w_connect(c->sock, c->peer.sin_addr.s_addr, c->peer.sin_port);
-        w_tx(c->sock, &x);
-        w_nic_tx(w_engine(c->sock));
-        if (!c->is_clnt)
-            w_disconnect(c->sock);
+        if (!s->c->is_clnt)
+            w_connect(s->c->sock, s->c->peer.sin_addr.s_addr,
+                      s->c->peer.sin_port);
+        w_tx(s->c->sock, &x);
+        w_nic_tx(w_engine(s->c->sock));
+        if (!s->c->is_clnt)
+            w_disconnect(s->c->sock);
         q_free(&x);
     }
 
-    log_sent_pkts(c);
+    log_sent_pkts(s->c);
     return encoded;
 }
 
@@ -270,9 +263,9 @@ tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
             sq_remove_after(&s->out, last, next);
         else
             sq_remove_head(&s->out, next);
-        if (s->c->state == CONN_STAT_VERS_REJ)
-            // we can free the version negotiation response
-            q_free_iov(v);
+        // if (s->c->state == CONN_STAT_VERS_REJ)
+        //     // we can free the version negotiation response
+        //     q_free_iov(v);
     }
 
     return did_tx;
@@ -282,9 +275,13 @@ tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
 void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
 {
     bool did_tx = false;
-    struct q_stream * s;
+    struct q_stream * s = 0;
     splay_foreach (s, stream, &c->streams) {
-        if (!s->blocked && !sq_empty(&s->out) &&
+        // check if we need to open stream or connection windows
+        s->open_win |= s->in_data == s->in_data_max;
+        s->c->open_win |= s->c->in_data == s->c->local_max_data;
+
+        if (!s->blocked && !s->c->blocked && !sq_empty(&s->out) &&
             sq_len(&s->out) > s->out_ack_cnt) {
             warn(DBG,
                  "data %s on %s conn " FMT_CID " str " FMT_SID
@@ -294,15 +291,14 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
             did_tx |= tx_stream(s, rtx, limit, 0);
         }
         if (did_tx == false &&
-            (s->open_win == true ||
+            (s->open_win == true || s->c->open_win == true ||
              ((s->state == STRM_STAT_HCLO || s->state == STRM_STAT_CLSD) &&
               s->fin_sent == false)))
             did_tx |= tx_other(s, rtx, limit);
     }
 
     if (did_tx == false) {
-        // need to ACK w/o any stream data to piggyback on, so abuse stream
-        // 0
+        // need to ACK w/o any stream data to piggyback on; so abuse stream 0
         s = get_stream(c, 0);
         ensure(s, "no stream 0");
         tx_other(s, rtx, limit);
@@ -340,18 +336,25 @@ static bool __attribute__((nonnull))
 verify_prot(struct q_conn * const c, struct w_iov * const v)
 {
     const uint8_t flags = pkt_flags(v->buf);
-    if (is_set(F_LONG_HDR, flags) && pkt_type(flags) == F_LH_TYPE_VNEG)
+    if (is_set(F_LONG_HDR, flags) && pkt_vers(v->buf, v->len) == 0)
         // version negotiation responses do not carry protection
         return true;
 
     const uint16_t hdr_len = pkt_hdr_len(v->buf, v->len);
     const uint16_t len = dec_aead(c, v, hdr_len);
-    if (len == 0) {
-        q_free_iov(v);
+    if (len == 0)
         return false;
-    }
     v->len -= v->len - len;
     return true;
+}
+
+
+static void __attribute__((nonnull))
+track_recv(struct q_conn * const c, const uint64_t nr)
+{
+    diet_insert(&c->recv, nr);
+    if (nr == diet_max(&c->recv))
+        c->lg_recv_t = ev_now(loop);
 }
 
 
@@ -359,6 +362,9 @@ static void __attribute__((nonnull))
 process_pkt(struct q_conn * const c, struct w_iov * const v)
 {
     const uint8_t flags = pkt_flags(v->buf);
+
+    if (c->is_clnt && c->state == CONN_STAT_IDLE)
+        conn_to_state(c, CONN_STAT_CH_SENT);
 
     switch (c->state) {
     case CONN_STAT_IDLE:
@@ -373,7 +379,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         // respond to the version negotiation packet
         c->vers = pkt_vers(v->buf, v->len);
         c->needs_tx = true;
-        diet_insert(&c->recv, meta(v).nr);
+        track_recv(c, meta(v).nr);
         if (c->vers_initial == 0)
             c->vers_initial = c->vers;
         if (vers_supported(c->vers) && !is_force_neg_vers(c->vers)) {
@@ -385,7 +391,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 #ifndef NO_RANDOM_CID
             // this is a new connection; server picks a new random cid
             uint64_t cid;
-            tls_ctx.random_bytes(&cid, sizeof(cid));
+            arc4random_buf(&cid, sizeof(cid));
             warn(NTE, "picked new cid " FMT_CID " for %s conn " FMT_CID, cid,
                  conn_type(c), c->id);
             update_cid(c, cid);
@@ -394,7 +400,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             dec_frames(c, v);
 
         } else {
-            c->state = CONN_STAT_VERS_REJ;
+            conn_to_state(c, CONN_STAT_VERS_REJ);
             warn(WRN,
                  "%s conn " FMT_CID
                  " clnt-requested vers 0x%08x not supported ",
@@ -402,34 +408,27 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         }
         break;
 
-    case CONN_STAT_VERS_SENT:
-        if (pkt_type(flags) == F_LH_TYPE_VNEG) {
-            // XXX this doesn't work, since we're flushing CH state on retry
-            // ensure(find_sent_pkt(c, meta(v).nr), "did not send pkt %"
-            // PRIu64,
-            //        meta(v).nr);
-
-            const uint32_t vers = pkt_vers(v->buf, v->len);
-            if (c->vers != vers) {
-                warn(NTE,
-                     "ignoring vers neg response for 0x%08x "
-                     "since we're trying 0x%08x",
-                     vers, c->vers);
+    case CONN_STAT_CH_SENT:
+        if (pkt_vers(v->buf, v->len) == 0) {
+            const uint32_t try_vers = pick_from_server_vers(v->buf, v->len);
+            if (try_vers == c->vers) {
+                warn(INF, "ignoring spurious vers neg response");
                 break;
             }
 
-            warn(INF, "serv didn't like our vers 0x%08x", vers);
-            ensure(vers_supported(vers), "vers 0x%08x not one of ours", vers);
+            warn(INF, "serv didn't like our vers 0x%08x", c->vers);
+            // TODO: check CID
 
             if (c->vers_initial == 0)
                 c->vers_initial = c->vers;
-            c->vers = pick_from_server_vers(v->buf, v->len);
+            c->vers = try_vers;
             if (c->vers)
                 warn(INF, "retrying with vers 0x%08x", c->vers);
             else
                 die("no vers in common with serv");
 
             // retransmit the ClientHello
+            conn_to_state(c, CONN_STAT_IDLE);
             init_tls(c);
             // free the previous ClientHello
             struct pkt_meta *ch, *nxt;
@@ -451,44 +450,52 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 
             dec_frames(c, v);
 
-            if (pkt_type(flags) == F_LH_SERV_RTRY) {
+            if (pkt_type(flags) == F_LH_RTRY) {
                 warn(INF, "handling serv stateless retry");
-                c->state = CONN_STAT_RETRY;
+                conn_to_state(c, CONN_STAT_RTRY);
                 // reset stream 0 offsets
                 struct q_stream * s = get_stream(c, 0);
                 s->out_off = s->in_off = 0;
-            } else {
-                c->state = CONN_STAT_VERS_OK;
-                diet_insert(&c->recv, meta(v).nr);
-            }
+            } else
+                track_recv(c, meta(v).nr);
         }
         break;
 
-    case CONN_STAT_VERS_OK:
+    case CONN_STAT_RTRY:
         if (verify_prot(c, v) == false)
             goto done;
+        track_recv(c, meta(v).nr);
+        dec_frames(c, v);
+        break;
+
+    case CONN_STAT_HSHK_DONE:
+        if (is_set(F_LONG_HDR, flags) && pkt_vers(v->buf, v->len) == 0) {
+            // we shouldn't get another version negotiation packet here, ignore
+            warn(NTE, "ignoring spurious ver neg response");
+            goto done;
+        }
 
         // pass any further data received on stream 0 to TLS and check
         // whether that completes the client handshake
-        if (!is_set(F_LONG_HDR, flags) || pkt_type(flags) >= F_LH_CLNT_CTXT) {
+        if (!is_set(F_LONG_HDR, flags) || pkt_type(flags) <= F_LH_HSHK)
             maybe_api_return(q_accept, c);
-            c->state = CONN_STAT_ESTB;
-        }
-        diet_insert(&c->recv, meta(v).nr);
-        dec_frames(c, v);
-        break;
-
-    case CONN_STAT_RETRY:
-        if (verify_prot(c, v) == false)
-            goto done;
-        dec_frames(c, v);
-        break;
+        // fall through
 
     case CONN_STAT_ESTB:
-    case CONN_STAT_CLSD:
-        if (verify_prot(c, v) == false)
+    case CONN_STAT_CLNG:
+    case CONN_STAT_HSHK_FAIL:
+    case CONN_STAT_DRNG:
+        if (verify_prot(c, v) == false) {
+            // check if this is a stateless reset
+            if (memcmp(&v->buf[v->len - 16], c->stateless_reset_token, 16) ==
+                0) {
+                warn(NTE, "stateless reset on %s conn " FMT_CID, conn_type(c),
+                     c->id);
+                conn_to_state(c, CONN_STAT_DRNG);
+            }
             goto done;
-        diet_insert(&c->recv, meta(v).nr);
+        }
+        track_recv(c, meta(v).nr);
         dec_frames(c, v);
         break;
 
@@ -534,7 +541,7 @@ void rx(struct ev_loop * const l,
         uint64_t cid = 0;
         struct q_conn * c = 0;
 
-        if (is_set(F_LONG_HDR, flags) || is_set(F_SH_CID, flags)) {
+        if (is_set(F_LONG_HDR, flags) || !is_set(F_SH_OMIT_CID, flags)) {
             cid = pkt_cid(v->buf, v->len);
             c = get_conn_by_cid(cid, is_clnt);
         }
@@ -551,7 +558,7 @@ void rx(struct ev_loop * const l,
                          cid, conn_type(c), c->id);
                     update_cid(c, cid);
                 } else {
-                    warn(CRT, "new serv conn from %s:%u",
+                    warn(NTE, "new serv conn from %s:%u",
                          inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
                     const struct sockaddr_in none = {0};
                     c = get_conn_by_ipnp(&none, is_clnt);
@@ -563,7 +570,7 @@ void rx(struct ev_loop * const l,
                     }
                     update_ipnp(c, &peer);
                     update_cid(c, cid);
-                    new_stream(c, 0);
+                    new_stream(c, 0, false);
                 }
 
             } else
@@ -571,36 +578,19 @@ void rx(struct ev_loop * const l,
         }
 
         if (c == 0) {
-            warn(ERR, "cannot find connection for 0x%02x packet", flags);
+            warn(INF, "cannot find connection for 0x%02x packet", flags);
             q_free_iov(v);
             continue;
         }
 
         meta(v).nr = pkt_nr(v->buf, v->len, c);
-
-        // XXX rethink this
-        // const uint64_t drop[] = {8000, 8001, 8002};
-        // const uint16_t drop_len = sizeof(drop) / sizeof(drop[0]);
-        // uint16_t n;
-        // for (n = 0; n < drop_len; n++)
-        //     if (meta(v).nr == drop[n])
-        //         break;
-        // if (n < drop_len) {
-        //     warn(CRT, "dropping pkt " FMT_PNR, meta(v).nr);
-        //     q_free_iov(v);
-        //     continue;
-        // }
+        log_pkt("RX", v);
 
         // remember that we had a RX event on this connection
         if (!c->had_rx) {
             c->had_rx = true;
             sl_insert_head(&crx, c, next);
         }
-
-        warn(NTE,
-             "rx pkt " FMT_PNR " (%" PRIx64 "), len %u, type 0x%02x"
-             " on %s conn " FMT_CID,
-             meta(v).nr, meta(v).nr, v->len, flags, conn_type(c), c->id);
 
         process_pkt(c, v);
     }
@@ -631,5 +621,77 @@ void rx(struct ev_loop * const l,
 
         // clear the helper flags set above
         c->needs_tx = c->had_rx = false;
+    }
+}
+
+
+void err_close(struct q_conn * const c,
+               const uint16_t code,
+               const char * const fmt,
+               ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+
+    char reas[256];
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wformat-nonliteral"
+    const int ret = vsnprintf(reas, sizeof(reas), fmt, ap);
+#pragma clang diagnostic pop
+    ensure(ret >= 0, "vsnprintf() failed");
+    va_end(ap);
+
+    if (c->err_code) {
+        warn(WRN, "ignoring new err 0x%04x (%s); existing err is 0x%04x (%s) ",
+             code, reas, c->err_code, c->err_reason);
+        return;
+    }
+
+    warn(ERR, "%s", reas);
+    c->err_code = code;
+    c->err_reason = strdup(reas);
+    conn_to_state(c, c->state <= CONN_STAT_HSHK_DONE ? CONN_STAT_HSHK_FAIL
+                                                     : CONN_STAT_CLNG);
+}
+
+
+static void __attribute__((nonnull))
+enter_closed(struct ev_loop * const l __attribute__((unused)),
+             ev_timer * const w,
+             int e __attribute__((unused)))
+{
+    struct q_conn * const c = w->data;
+    maybe_api_return(q_close, c);
+}
+
+
+void conn_to_state(struct q_conn * const c, const uint8_t state)
+{
+    warn(DBG, "conn %" PRIx64 " state %u -> %u", c->id, c->state, state);
+    c->state = state;
+
+    switch (state) {
+    case CONN_STAT_IDLE:
+    case CONN_STAT_CH_SENT:
+    case CONN_STAT_VERS_REJ:
+    case CONN_STAT_RTRY:
+    case CONN_STAT_HSHK_DONE:
+    case CONN_STAT_HSHK_FAIL:
+        break;
+    case CONN_STAT_ESTB:
+        c->needs_tx = true;
+        break;
+    case CONN_STAT_DRNG:
+    case CONN_STAT_CLNG:
+        // stop LD alarm
+        ev_timer_stop(loop, &c->rec.ld_alarm);
+
+        c->closing_alarm.data = c;
+        c->closing_alarm.repeat = 3; // TODO: 3 * RTO
+        ev_init(&c->closing_alarm, enter_closed);
+        ev_timer_again(loop, &c->closing_alarm);
+        break;
+    default:
+        die("unhandled state %u", state);
     }
 }

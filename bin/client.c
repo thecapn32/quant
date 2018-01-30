@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
-// Copyright (c) 2016-2017, NetApp, Inc.
+// Copyright (c) 2016-2018, NetApp, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -25,7 +25,6 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <getopt.h>
 #include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -34,6 +33,7 @@
 #include <string.h>
 #include <sys/param.h>
 #include <sys/socket.h>
+#include <unistd.h>
 
 #include <http_parser.h>
 
@@ -128,26 +128,27 @@ int main(int argc, char * argv[])
     struct q_conn * const c =
         q_connect(q, (struct sockaddr_in *)(void *)peer->ai_addr, dest);
 
-    if (*path) {
-        // create an HTTP/0.9 request
-        char req[sizeof(path) + 6];
-        snprintf(req, sizeof(req), "GET %s\r\n", path);
-        struct q_stream * const s = q_rsv_stream(c);
-        q_write_str(q, s, req);
-        q_close_stream(s);
+    if (c) {
+        if (*path) {
+            // create an HTTP/0.9 request
+            char req[sizeof(path) + 6];
+            snprintf(req, sizeof(req), "GET %s\r\n", path);
+            struct q_stream * const s = q_rsv_stream(c);
+            q_write_str(q, s, req);
+            q_close_stream(s);
 
-        // read HTTP/0.9 reply and dump it to stdout
-        struct w_iov_sq i = sq_head_initializer(i);
-        q_readall_str(s, &i);
-        struct w_iov * v;
-        sq_foreach (v, &i, next)
-            printf("%.*s", v->len, v->buf);
-        printf("\n");
-        q_free(&i);
+            // read HTTP/0.9 reply and dump it to stdout
+            struct w_iov_sq i = sq_head_initializer(i);
+            q_readall_str(s, &i);
+            struct w_iov * v;
+            sq_foreach (v, &i, next)
+                printf("%.*s", v->len, v->buf);
+            printf("\n");
+            q_free(&i);
+        }
+        q_close(c);
     }
 
-    // clean up
-    q_close(c);
     q_cleanup(q);
     freeaddrinfo(peer);
     warn(DBG, "%s exiting", basename(argv[0]));

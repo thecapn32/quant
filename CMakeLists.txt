@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.9)
 
-project(quant VERSION 0.0.7 LANGUAGES C)
+project(quant VERSION 0.0.8 LANGUAGES C)
 
 # Check for dependencies before mucking with the compiler flags
 include(CheckSymbolExists)
@@ -24,7 +24,8 @@ if(NOT WARP_INCLUDE)
 endif()
 
 if("${CMAKE_SYSTEM}" MATCHES "Linux")
-  add_definitions(-D_GNU_SOURCE)
+  add_definitions(-D_GNU_SOURCE -DLIBBSD_OVERLAY)
+  include_directories(SYSTEM /usr/include/bsd)
 endif()
 
 # Build "Debug" type by default
@@ -43,8 +44,7 @@ set(CMAKE_C_STANDARD 11)
 include(CheckCCompilerFlag)
 foreach(FLAG -march=native -Wextra -Wpedantic -Weverything -Werror
         -fcolor-diagnostics -fdiagnostics-color=always
-        # for older gcc:
-        -Wno-missing-field-initializers -Wno-disabled-macro-expansion
+        -Wno-missing-field-initializers -Wno-disabled-macro-expansion  -Wno-cpp
         )
   string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
   check_c_compiler_flag(${FLAG} ${F})
@@ -104,7 +104,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     endforeach()
   endif()
 
-  if(APPLE AND BUILD_SHARED_LIBS)
+  if(APPLE)
     find_program(DSYMUTIL dsymutil)
   endif()
 

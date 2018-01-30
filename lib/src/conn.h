@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
-// Copyright (c) 2016-2017, NetApp, Inc.
+// Copyright (c) 2016-2018, NetApp, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -54,21 +54,45 @@ struct q_conn {
 
     uint32_t vers;         ///< QUIC version in use for this connection.
     uint32_t vers_initial; ///< QUIC version first negotiated.
-    uint32_t next_sid;     ///< Next stream ID to use on q_rsv_stream().
+    uint64_t next_sid;     ///< Next stream ID to use on q_rsv_stream().
 
     uint8_t is_clnt : 1;  ///< We are the client on this connection.
     uint8_t omit_cid : 1; ///< We can omit the CID during TX on this connection.
     uint8_t had_rx : 1;   ///< We had an RX event on this connection.
     uint8_t needs_tx : 1; ///< We have a pending TX on this connection.
     uint8_t use_time_loss_det : 1; ///< UsingTimeLossDetection()
-    uint8_t : 3;
+    uint8_t open_win : 1;          ///< We need to open the receive window.
+    uint8_t blocked : 1;           ///< We are receive-window-blocked.
+    uint8_t inc_sid : 1;           ///< Make more stream IDs available to peer.
 
     uint8_t state; ///< State of the connection.
 
-    uint8_t _unused[2];
-    ev_timer idle_alarm;
+    uint16_t peer_max_pkt;
+    uint16_t local_idle_to;
+    uint16_t peer_idle_to;
+    uint64_t local_max_strm_data;
+    uint64_t peer_max_strm_data;
+    uint64_t local_max_data;
+    uint64_t peer_max_data;
+    uint64_t local_max_strm_uni;
+    uint64_t peer_max_strm_uni;
+    uint64_t local_max_strm_bidi;
+    uint64_t peer_max_strm_bidi;
+    uint8_t local_ack_del_exp;
+    uint8_t peer_ack_del_exp;
 
-    struct diet recv; ///< Received packet numbers still needing to be ACKed.
+    uint8_t _unused[4];
+    uint16_t err_code;
+    const char * err_reason;
+
+    uint64_t in_data;
+    uint64_t out_data;
+
+    ev_timer idle_alarm;
+    ev_timer closing_alarm;
+
+    struct diet recv;    ///< Received packet numbers still needing to be ACKed.
+    ev_tstamp lg_recv_t; ///< Time when lg_recv was received
 
     struct sockaddr_in peer; ///< Address of our peer.
     char * peer_name;
@@ -84,18 +108,7 @@ struct q_conn {
     struct tls tls;      ///< TLS state.
 
     uint8_t stateless_reset_token[16];
-    uint64_t max_data;
-    uint64_t max_stream_data;
-    uint32_t max_stream_id;
-    uint16_t idle_timeout;
-    uint16_t max_packet_size;
 };
-
-
-extern uint16_t initial_idle_timeout;
-extern uint64_t initial_max_data;
-extern uint64_t initial_max_stream_data;
-extern uint32_t initial_max_stream_id;
 
 
 extern int __attribute__((nonnull))
@@ -109,12 +122,14 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 
 
 #define CONN_STAT_IDLE 0
-#define CONN_STAT_VERS_SENT 1
+#define CONN_STAT_CH_SENT 1
 #define CONN_STAT_VERS_REJ 2
-#define CONN_STAT_RETRY 3
-#define CONN_STAT_VERS_OK 4
-#define CONN_STAT_ESTB 5
-#define CONN_STAT_CLSD 6
+#define CONN_STAT_RTRY 3
+#define CONN_STAT_HSHK_DONE 4
+#define CONN_STAT_HSHK_FAIL 5
+#define CONN_STAT_ESTB 6
+#define CONN_STAT_CLNG 7
+#define CONN_STAT_DRNG 8
 
 
 #define conn_type(c) (c->is_clnt ? "clnt" : "serv")
@@ -152,3 +167,11 @@ extern void * __attribute__((nonnull)) loop_run(void * const arg);
 
 extern void __attribute__((nonnull))
 loop_update(struct ev_loop * const l, ev_async * const w, int e);
+
+extern void __attribute__((nonnull)) err_close(struct q_conn * const c,
+                                               const uint16_t code,
+                                               const char * const fmt,
+                                               ...);
+
+extern void __attribute__((nonnull))
+conn_to_state(struct q_conn * const c, const uint8_t state);

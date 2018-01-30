@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
-// Copyright (c) 2016-2017, NetApp, Inc.
+// Copyright (c) 2016-2018, NetApp, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -35,7 +35,6 @@
 #include <sys/types.h>
 
 #include <ev.h>
-#include <picotls.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
@@ -64,7 +63,7 @@ const uint32_t ok_vers[] = {
 #ifndef NDEBUG
     0xbabababa, // XXX reserved version to trigger negotiation
 #endif
-    0xff000007, // draft-ietf-quic-transport-07
+    0xff000008, // draft-ietf-quic-transport-08
 };
 
 /// Length of the @p ok_vers array.
@@ -105,7 +104,7 @@ int pm_nr_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
 
 int pm_off_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
 {
-    return (a->in_off > b->in_off) - (a->in_off < b->in_off);
+    return (a->stream_off > b->stream_off) - (a->stream_off < b->stream_off);
 }
 
 
@@ -143,8 +142,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
         c->peer = *peer;
     c->id = cid;
     c->vers = c->vers_initial = vers;
-    tls_ctx.random_bytes(c->stateless_reset_token,
-                         sizeof(c->stateless_reset_token));
+    arc4random_buf(c->stateless_reset_token, sizeof(c->stateless_reset_token));
 
     if (peer_name) {
         c->is_clnt = true;
@@ -162,6 +160,14 @@ static struct q_conn * new_conn(struct w_engine * const w,
     c->idle_alarm.data = c;
     c->idle_alarm.repeat = kIdleTimeout;
     ev_init(&c->idle_alarm, idle_alarm);
+
+    c->peer_ack_del_exp = c->local_ack_del_exp = 3;
+    c->local_idle_to = kIdleTimeout;
+    // XXX: check IDs if stream 0 is flow-controlled during handshake or not
+    c->local_max_data = 0x4000;
+    c->local_max_strm_data = 0x2000;
+    c->local_max_strm_bidi = c->is_clnt ? 1 : 4;
+    c->local_max_strm_uni = 0; // TODO: support unidir streams
 
     // initialize socket and start an RX/TX watchers
     ev_async_init(&c->tx_w, tx_w);
@@ -185,7 +191,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
 void q_alloc(void * const w, struct w_iov_sq * const q, const uint32_t len)
 {
     w_alloc_len(w, q, len, MAX_PKT_LEN - AEAD_LEN - Q_OFFSET, Q_OFFSET);
-    struct w_iov * v;
+    struct w_iov * v = 0;
     sq_foreach (v, q, next) {
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         // warn(DBG, "q_alloc idx %u len %u", w_iov_idx(v), v->len);
@@ -195,7 +201,7 @@ void q_alloc(void * const w, struct w_iov_sq * const q, const uint32_t len)
 
 void q_free(struct w_iov_sq * const q)
 {
-    struct w_iov * v;
+    struct w_iov * v = 0;
     sq_foreach (v, q, next) {
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         meta(v) = (struct pkt_meta){0};
@@ -212,20 +218,18 @@ struct q_conn * q_connect(void * const q,
 {
     // make new connection
     uint64_t cid;
-    tls_ctx.random_bytes(&cid, sizeof(cid));
+    arc4random_buf(&cid, sizeof(cid));
     const uint vers = ok_vers[0];
     struct q_conn * const c = new_conn(q, vers, cid, peer, peer_name, 0);
     warn(WRN, "connecting %s conn " FMT_CID " to %s:%u w/SNI %s", conn_type(c),
          cid, inet_ntoa(peer->sin_addr), ntohs(peer->sin_port), peer_name);
 
-    c->next_sid = 1; // client initiates odd-numbered streams
     ev_timer_again(loop, &c->idle_alarm);
     w_connect(c->sock, peer->sin_addr.s_addr, peer->sin_port);
 
     // allocate stream zero and start TLS handshake on stream 0
-    struct q_stream * const s = new_stream(c, 0);
+    struct q_stream * const s = new_stream(c, 0, true);
     init_tls(c);
-    c->state = CONN_STAT_VERS_SENT;
     tls_io(s, 0);
     ev_async_send(loop, &c->tx_w);
 
@@ -233,13 +237,13 @@ struct q_conn * q_connect(void * const q,
          conn_type(c), c->id, inet_ntoa(peer->sin_addr), ntohs(peer->sin_port));
     loop_run(q_connect, c);
 
-    if (c->state != CONN_STAT_VERS_OK) {
+    if (c->state != CONN_STAT_HSHK_DONE) {
         warn(WRN, "%s conn " FMT_CID " not connected, state 0x%02x",
              conn_type(c), c->id, c->state);
         return 0;
     }
 
-    c->state = CONN_STAT_ESTB;
+    conn_to_state(c, CONN_STAT_ESTB);
 
     warn(WRN, "%s conn " FMT_CID " connected", conn_type(c), c->id);
     return c;
@@ -362,7 +366,7 @@ struct q_conn * q_accept(struct q_conn * const c)
         // TODO free embryonic connection
         return 0;
     }
-    c->state = CONN_STAT_ESTB;
+    conn_to_state(c, CONN_STAT_ESTB);
     ev_timer_again(loop, &c->idle_alarm);
 
     warn(WRN, "%s conn " FMT_CID " connected to clnt %s:%u", conn_type(c),
@@ -373,14 +377,17 @@ struct q_conn * q_accept(struct q_conn * const c)
 
 struct q_stream * q_rsv_stream(struct q_conn * const c)
 {
+    if (c->next_sid > c->peer_max_strm_bidi) {
+        // we hit the max stream limit, wait for MAX_STREAM_ID frame
+        warn(WRN, "MAX_STREAM_ID increase needed (%u > %u)", c->next_sid,
+             c->peer_max_strm_bidi);
+        loop_run(q_rsv_stream, c);
+    }
 
-    const uint8_t odd = c->next_sid % 2; // NOTE: % in assert confuses printf
-    ensure(c->is_clnt == odd || !c->is_clnt && !odd,
-           "am %s, expected %s connection stream ID, got %u", conn_type(c),
-           c->is_clnt ? "odd" : "even", c->next_sid);
-    ensure(c->next_sid <= c->max_stream_id, "sid %u <= max %u", c->next_sid,
-           c->max_stream_id);
-    return new_stream(c, c->next_sid);
+    ensure(c->next_sid <= c->peer_max_strm_bidi, "sid %u <= max %u",
+           c->next_sid, c->peer_max_strm_bidi);
+
+    return new_stream(c, c->next_sid, true);
 }
 
 
@@ -442,7 +449,6 @@ void q_close_stream(struct q_stream * const s)
     warn(WRN, "closing str " FMT_SID " state %u on %s conn " FMT_CID, s->id,
          s->state, conn_type(s->c), s->c->id);
     s->state = s->state == STRM_STAT_HCRM ? STRM_STAT_CLSD : STRM_STAT_HCLO;
-    warn(WRN, "new state %u", s->state);
     ev_async_send(loop, &s->c->tx_w);
     loop_run(q_close_stream, s);
 }
@@ -450,7 +456,7 @@ void q_close_stream(struct q_stream * const s)
 
 void q_close(struct q_conn * const c)
 {
-    if (c->state == CONN_STAT_CLSD)
+    if (c->state >= CONN_STAT_CLNG)
         return;
 
     warn(WRN, "closing %s conn " FMT_CID, conn_type(c), c->id);
@@ -461,15 +467,8 @@ void q_close(struct q_conn * const c)
         if (s->id != 0)
             q_close_stream(s);
 
-    // wait until everything is ACKed
-    while (rtxable_pkts_outstanding(c) != 0) {
-        warn(CRT, "waiting for ACKs");
-        ev_async_send(loop, &c->tx_w);
-        loop_run(q_close, c);
-    }
-
     // send connection close frame
-    c->state = CONN_STAT_CLSD;
+    conn_to_state(c, CONN_STAT_CLNG);
     ev_async_send(loop, &c->tx_w);
     loop_run(q_close, c);
 
@@ -534,7 +533,7 @@ uint64_t q_cid(const struct q_conn * const c)
 }
 
 
-uint32_t q_sid(const struct q_stream * const s)
+uint64_t q_sid(const struct q_stream * const s)
 {
     return s->id;
 }
