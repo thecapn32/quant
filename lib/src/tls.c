@@ -397,9 +397,9 @@ init_cleartext_secret(struct q_conn * const c __attribute__((unused)),
     const ptls_iovec_t secret = {.base = sec, .len = cs->hash->digest_size};
     uint8_t output[255];
     ensure(ptls_hkdf_expand_label(cs->hash, output, cs->hash->digest_size,
-                                  secret, label, ptls_iovec_init(0, 0)) == 0,
+                                  secret, label, ptls_iovec_init(0, 0), 0) == 0,
            "HKDF-Expand-Label");
-    return ptls_aead_new(cs->aead, cs->hash, is_enc, output);
+    return ptls_aead_new(cs->aead, cs->hash, is_enc, output, 0);
 }
 
 
@@ -473,7 +473,7 @@ init_1rtt_secret(ptls_t * const t,
     ensure(ptls_export_secret(t, sec, cs->hash->digest_size, label,
                               ptls_iovec_init(0, 0), 0) == 0,
            "ptls_export_secret");
-    return ptls_aead_new(cs->aead, cs->hash, is_enc, sec);
+    return ptls_aead_new(cs->aead, cs->hash, is_enc, sec, 0);
 }
 
 
