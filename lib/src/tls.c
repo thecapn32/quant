@@ -72,7 +72,7 @@ static ptls_iovec_t tls_certs[TLS_MAX_CERTS];
 static ptls_openssl_sign_certificate_t sign_cert = {0};
 static ptls_openssl_verify_certificate_t verifier = {0};
 
-static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-08", 5}};
+static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-09", 5}};
 static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 
 #define TLS_EXT_TYPE_TRANSPORT_PARAMETERS 26
