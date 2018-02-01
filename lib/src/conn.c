@@ -661,7 +661,9 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
              int e __attribute__((unused)))
 {
     struct q_conn * const c = w->data;
+    conn_to_state(c, CONN_STAT_CLSD);
     maybe_api_return(q_close, c);
+    maybe_api_return(q_read, c);
 }
 
 
@@ -677,6 +679,7 @@ void conn_to_state(struct q_conn * const c, const uint8_t state)
     case CONN_STAT_RTRY:
     case CONN_STAT_HSHK_DONE:
     case CONN_STAT_HSHK_FAIL:
+    case CONN_STAT_CLSD:
         break;
     case CONN_STAT_ESTB:
         c->needs_tx = true;

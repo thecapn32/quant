@@ -299,10 +299,13 @@ void q_write(struct q_stream * const s, struct w_iov_sq * const q)
 
 struct q_stream * q_read(struct q_conn * const c, struct w_iov_sq * const q)
 {
+    if(c->state == CONN_STAT_CLSD)
+        return 0;
+
     warn(WRN, "reading on %s conn " FMT_CID, conn_type(c), c->id);
     struct q_stream * s = 0;
 
-    while (s == 0) {
+    while (s == 0 && c->state != CONN_STAT_CLSD) {
         splay_foreach (s, stream, &c->streams) {
             if (s->state == STRM_STAT_CLSD)
                 continue;
@@ -314,17 +317,20 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_sq * const q)
 
         if (s == 0) {
             // no data queued on any non-zero stream, we need to wait
-            warn(WRN, "waiting for data on any stream on %s conn " FMT_CID,
-                 conn_type(c), c->id);
+            warn(WRN, "%u waiting for data on any stream on %s conn " FMT_CID,
+                 c->state, conn_type(c), c->id);
             loop_run(q_read, c);
         }
     }
 
     // return data
-    sq_concat(q, &s->in);
-    warn(WRN, "read %u byte%s on %s conn " FMT_CID " str " FMT_SID,
-         w_iov_sq_len(q), plural(w_iov_sq_len(q)), conn_type(s->c), s->c->id,
-         s->id);
+    if (s) {
+        sq_concat(q, &s->in);
+        warn(WRN, "read %u byte%s on %s conn " FMT_CID " str " FMT_SID,
+             w_iov_sq_len(q), plural(w_iov_sq_len(q)), conn_type(s->c),
+             s->c->id, s->id);
+    }
+
     return s;
 }
 
