@@ -36,7 +36,7 @@ export ASAN_OPTIONS=strict_string_checks=1:strict_init_order=1:detect_stack_use_
 # commands to run the different clients against $addr:$port
 case $c in
         quant)
-                cc="bin/client -v5 https://$addr:$port$path"
+                cc="bin/client -v5 https://$addr:$port$path https://$addr:$port$path"
                 ;;
         wsquant)
                 cc="bin/client -i vboxnet3 -v5 https://172.28.128.3:$port$path"

@@ -166,27 +166,31 @@ int main(int argc, char * argv[])
     if (q_accept(c) == 0)
         goto done;
 
-    http_parser_settings settings = {.on_url = serve_cb};
-    struct cb_data d = {.c = c, .q = q, .dir = dir_fd};
-    http_parser parser = {.data = &d};
-    http_parser_init(&parser, HTTP_REQUEST);
+    while (1) {
+        http_parser_settings settings = {.on_url = serve_cb};
+        struct cb_data d = {.c = c, .q = q, .dir = dir_fd};
+        http_parser parser = {.data = &d};
+        http_parser_init(&parser, HTTP_REQUEST);
 
-    struct w_iov_sq i = sq_head_initializer(i);
-    struct q_stream * s = q_read(c, &i);
-    d.s = s;
-
-    struct w_iov * v = 0;
-    sq_foreach (v, &i, next) {
-        const size_t parsed =
-            http_parser_execute(&parser, &settings, (char *)v->buf, v->len);
-        if (parsed != v->len)
-            warn(ERR, "HTTP parser error: %.*s", v->len - parsed,
-                 &v->buf[parsed]);
-        if (q_is_str_closed(s))
+        struct w_iov_sq i = sq_head_initializer(i);
+        struct q_stream * s = q_read(c, &i);
+        if (s == 0)
             break;
-    }
+        d.s = s;
 
-    q_free(&i);
+        struct w_iov * v = 0;
+        sq_foreach (v, &i, next) {
+            const size_t parsed =
+                http_parser_execute(&parser, &settings, (char *)v->buf, v->len);
+            if (parsed != v->len)
+                warn(ERR, "HTTP parser error: %.*s", v->len - parsed,
+                     &v->buf[parsed]);
+            if (q_is_str_closed(s))
+                break;
+        }
+
+        q_free(&i);
+    }
     q_close(c);
 
 done:
