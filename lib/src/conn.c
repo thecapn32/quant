@@ -263,9 +263,6 @@ tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
             sq_remove_after(&s->out, last, next);
         else
             sq_remove_head(&s->out, next);
-        // if (s->c->state == CONN_STAT_VERS_REJ)
-        //     // we can free the version negotiation response
-        //     q_free_iov(v);
     }
 
     return did_tx;

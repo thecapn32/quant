@@ -485,10 +485,17 @@ void q_close(struct q_conn * const c)
     ev_io_stop(loop, &c->rx_w);
     ev_timer_stop(loop, &c->rec.ld_alarm);
 
-    struct q_stream *s, *nxt;
-    for (s = splay_min(stream, &c->streams); s; s = nxt) {
-        nxt = splay_next(stream, &c->streams, s);
+    struct q_stream *s, *ns;
+    for (s = splay_min(stream, &c->streams); s; s = ns) {
+        ns = splay_next(stream, &c->streams, s);
         free_stream(s);
+    }
+
+    struct pkt_meta *p, *np;
+    for (p = splay_min(pm_nr_splay, &c->rec.sent_pkts); p; p = np) {
+        np = splay_next(pm_nr_splay, &c->rec.sent_pkts, p);
+        splay_remove(pm_nr_splay, &c->rec.sent_pkts, p);
+        q_free_iov(w_iov(w_engine(c->sock), pm_idx(p)));
     }
 
     diet_free(&c->closed_streams);
