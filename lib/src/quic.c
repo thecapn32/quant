@@ -303,10 +303,14 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_sq * const q)
     struct q_stream * s = 0;
 
     while (s == 0) {
-        splay_foreach (s, stream, &c->streams)
+        splay_foreach (s, stream, &c->streams) {
+            if (s->state == STRM_STAT_CLSD)
+                continue;
+
             if (!sq_empty(&s->in))
                 // we found a stream with queued data
                 break;
+        }
 
         if (s == 0) {
             // no data queued on any non-zero stream, we need to wait
