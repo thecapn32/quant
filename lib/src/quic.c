@@ -299,7 +299,7 @@ void q_write(struct q_stream * const s, struct w_iov_sq * const q)
 
 struct q_stream * q_read(struct q_conn * const c, struct w_iov_sq * const q)
 {
-    if(c->state == CONN_STAT_CLSD)
+    if (c->state == CONN_STAT_CLSD)
         return 0;
 
     warn(WRN, "reading on %s conn " FMT_CID, conn_type(c), c->id);
@@ -466,27 +466,26 @@ void q_close_stream(struct q_stream * const s)
 
 void q_close(struct q_conn * const c)
 {
-    if (c->state >= CONN_STAT_CLNG)
-        return;
+    if (c->state < CONN_STAT_CLNG) {
+        warn(WRN, "closing %s conn " FMT_CID, conn_type(c), c->id);
 
-    warn(WRN, "closing %s conn " FMT_CID, conn_type(c), c->id);
+        // close all streams
+        struct q_stream * s;
+        splay_foreach (s, stream, &c->streams)
+            if (s->id != 0)
+                q_close_stream(s);
 
-    // close all streams
-    struct q_stream * s;
-    splay_foreach (s, stream, &c->streams)
-        if (s->id != 0)
-            q_close_stream(s);
-
-    // send connection close frame
-    conn_to_state(c, CONN_STAT_CLNG);
-    ev_async_send(loop, &c->tx_w);
-    loop_run(q_close, c);
+        // send connection close frame
+        conn_to_state(c, CONN_STAT_CLNG);
+        ev_async_send(loop, &c->tx_w);
+        loop_run(q_close, c);
+    }
 
     // we're done
     ev_io_stop(loop, &c->rx_w);
     ev_timer_stop(loop, &c->rec.ld_alarm);
 
-    struct q_stream * nxt;
+    struct q_stream *s, *nxt;
     for (s = splay_min(stream, &c->streams); s; s = nxt) {
         nxt = splay_next(stream, &c->streams, s);
         free_stream(s);
