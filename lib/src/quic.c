@@ -317,8 +317,8 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_sq * const q)
 
         if (s == 0) {
             // no data queued on any non-zero stream, we need to wait
-            warn(WRN, "%u waiting for data on any stream on %s conn " FMT_CID,
-                 c->state, conn_type(c), c->id);
+            warn(WRN, "waiting for data on any stream on %s conn " FMT_CID,
+                 conn_type(c), c->id);
             loop_run(q_read, c);
         }
     }
