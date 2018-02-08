@@ -10,7 +10,7 @@ RUN ninja install
 ADD https://github.com/gabrielecirulli/2048/archive/master.zip /www
 WORKDIR /tls
 RUN openssl req -batch -new -newkey rsa:2048 -sha256 -days 9365 -nodes -x509 \
-        -keyout quant.key -out quant.crt
+        -keyout quant.key -out quant.crt -subj "/"
 
 FROM alpine:3.7
 COPY --from=0 /dst /
