@@ -133,7 +133,7 @@ dec_stream_frame(struct q_conn * const c,
             const uint8_t old_state = s->state;
 #endif
             s->state =
-                s->state <= STRM_STAT_OPEN ? STRM_STAT_HCRM : STRM_STAT_CLSD;
+                s->state <= STRM_STAT_HCRM ? STRM_STAT_HCRM : STRM_STAT_CLSD;
             warn(DBG,
                  "received FIN on %s conn " FMT_CID " str " FMT_SID
                  ", state %u -> %u",
