@@ -3,59 +3,21 @@ services:
 
   client:
     image: ntap/quant
-    privileged: true
-    tty: true
     command: >
-      sh -c "
-        route add server dev eth0 ;
-        ethtool --offload eth0 rx off tx off;
-        sleep 1 ;
-        client -v3 -i eth0 https://server/index.html
-      "
-    extra_hosts:
-      - "server:172.88.88.88"
-    networks:
-      net-client:
-        ipv4_address: 172.11.11.11
+        client -v4 -i eth0 https://valve/index.html
 
   server:
     image: ntap/quant
-    privileged: true
+    expose:
+      - 4433
+    command: >
+        server -i eth0 -d /www -c /tls/quant.crt -k /tls/quant.key -v4
+
+  valve:
+    image: larseggert/qvalve
     tty: true
     expose:
       - 4433
     command: >
-      sh -c "
-        route add client dev eth0 ;
-        ethtool --offload eth0 rx off tx off;
-        server -i eth0 -d /www -c /tls/quant.crt -k /tls/quant.key -v3
-      "
-    extra_hosts:
-      - "client:172.11.11.11"
-    networks:
-      net-server:
-        ipv4_address: 172.88.88.88
+        /qvalve/qvalve.py -fa server
 
-  switch:
-    image: larseggert/flow-disruptor
-    tty: true
-    sysctls:
-      net.ipv4.ip_forward: 0
-    command: >
-        flow-disruptor --downlink_iface eth0 --uplink_iface eth1
-          --config /cfg/switch.cfg
-    volumes:
-      - .:/cfg
-    networks:
-      - net-client
-      - net-server
-
-networks:
-  net-client:
-    ipam:
-      config:
-        - subnet: 172.11.11.0/24
-  net-server:
-    ipam:
-      config:
-        - subnet: 172.88.88.0/24
