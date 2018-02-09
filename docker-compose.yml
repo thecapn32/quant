@@ -16,10 +16,7 @@ services:
   valve:
     image: larseggert/qvalve
     tty: true
-    #sysctls:
-    #  net.ipv4.ip_forward: 0
     expose:
       - 4433
     command: >
         /qvalve/qvalve.py -fa server
-
