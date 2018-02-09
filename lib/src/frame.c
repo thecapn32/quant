@@ -142,12 +142,12 @@ dec_stream_frame(struct q_conn * const c,
 
     // data is a complete duplicate
     if (meta(v).stream_off + l <= s->in_off) {
-        warn(CRT,
+        warn(DBG,
              "%" PRIu64 " byte%s dup data (off %" PRIu64 "-%" PRIu64
              ") on %s conn " FMT_CID " str " FMT_SID,
              l, plural(l), meta(v).stream_off, meta(v).stream_off + l,
              conn_type(c), c->id, sid);
-        kind = "dup";
+        kind = RED "dup" NRM;
         goto done;
     }
 
@@ -157,7 +157,7 @@ dec_stream_frame(struct q_conn * const c,
          "), expected %" PRIu64 " on %s conn " FMT_CID " str " FMT_SID,
          l, plural(l), meta(v).stream_off, meta(v).stream_off + l, s->in_off,
          conn_type(c), c->id, sid);
-    kind = "ooo";
+    kind = YEL "ooo" NRM;
     splay_insert(pm_off_splay, &s->in_ooo, &meta(v));
     track_bytes_in(s, l);
 
