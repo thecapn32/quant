@@ -664,34 +664,13 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
 }
 
 
-void conn_to_state(struct q_conn * const c, const uint8_t state)
+void enter_closing(struct q_conn * const c)
 {
-    warn(DBG, "conn %" PRIx64 " state %u -> %u", c->id, c->state, state);
-    c->state = state;
+    // stop LD alarm
+    ev_timer_stop(loop, &c->rec.ld_alarm);
 
-    switch (state) {
-    case CONN_STAT_IDLE:
-    case CONN_STAT_CH_SENT:
-    case CONN_STAT_VERS_REJ:
-    case CONN_STAT_RTRY:
-    case CONN_STAT_HSHK_DONE:
-    case CONN_STAT_HSHK_FAIL:
-    case CONN_STAT_CLSD:
-        break;
-    case CONN_STAT_ESTB:
-        c->needs_tx = true;
-        break;
-    case CONN_STAT_DRNG:
-    case CONN_STAT_CLNG:
-        // stop LD alarm
-        ev_timer_stop(loop, &c->rec.ld_alarm);
-
-        c->closing_alarm.data = c;
-        c->closing_alarm.repeat = 3; // TODO: 3 * RTO
-        ev_init(&c->closing_alarm, enter_closed);
-        ev_timer_again(loop, &c->closing_alarm);
-        break;
-    default:
-        die("unhandled state %u", state);
-    }
+    c->closing_alarm.data = c;
+    c->closing_alarm.repeat = 3; // TODO: 3 * RTO
+    ev_init(&c->closing_alarm, enter_closed);
+    ev_timer_again(loop, &c->closing_alarm);
 }

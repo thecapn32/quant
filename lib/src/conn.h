@@ -27,6 +27,7 @@
 
 #pragma once
 
+#include <inttypes.h>
 #include <math.h>
 #include <netinet/in.h>
 #include <stdbool.h>
@@ -145,6 +146,33 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 #define is_inf(t) (fpclassify(t) == FP_INFINITE)
 
 
+#define conn_to_state(c, s)                                                    \
+    do {                                                                       \
+        warn(DBG, "conn %" PRIx64 " state %u -> %u", c->id, c->state, s);      \
+        c->state = s;                                                          \
+                                                                               \
+        switch (s) {                                                           \
+        case CONN_STAT_IDLE:                                                   \
+        case CONN_STAT_CH_SENT:                                                \
+        case CONN_STAT_VERS_REJ:                                               \
+        case CONN_STAT_RTRY:                                                   \
+        case CONN_STAT_HSHK_DONE:                                              \
+        case CONN_STAT_HSHK_FAIL:                                              \
+        case CONN_STAT_CLSD:                                                   \
+            break;                                                             \
+        case CONN_STAT_ESTB:                                                   \
+            c->needs_tx = true;                                                \
+            break;                                                             \
+        case CONN_STAT_DRNG:                                                   \
+        case CONN_STAT_CLNG:                                                   \
+            enter_closing(c);                                                  \
+            break;                                                             \
+        default:                                                               \
+            die("unhandled state %u", s);                                      \
+        }                                                                      \
+    } while (0)
+
+
 struct ev_loop;
 
 extern void __attribute__((nonnull))
@@ -174,5 +202,4 @@ extern void __attribute__((nonnull)) err_close(struct q_conn * const c,
                                                const char * const fmt,
                                                ...);
 
-extern void __attribute__((nonnull))
-conn_to_state(struct q_conn * const c, const uint8_t state);
+extern void __attribute__((nonnull)) enter_closing(struct q_conn * const c);
