@@ -27,6 +27,7 @@
 
 #pragma once
 
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -72,6 +73,14 @@ struct q_stream {
 #define STRM_STAT_HCRM 2 ///< half-closed remote
 #define STRM_STAT_HCLO 3 ///< half-closed local
 #define STRM_STAT_CLSD 4
+
+
+#define strm_to_state(strm, s)                                                 \
+    do {                                                                       \
+        warn(DBG, "conn %" PRIx64 " strm " FMT_SID " state %u -> %u",          \
+             strm->c->id, strm->id, strm->state, (s));                         \
+        strm->state = (s);                                                     \
+    } while (0)
 
 
 extern int __attribute__((nonnull))

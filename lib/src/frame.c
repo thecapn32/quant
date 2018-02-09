@@ -129,15 +129,8 @@ dec_stream_frame(struct q_conn * const c,
         }
 
         if (is_set(F_STREAM_FIN, type)) {
-#ifndef NDEBUG
-            const uint8_t old_state = s->state;
-#endif
-            s->state =
-                s->state <= STRM_STAT_HCRM ? STRM_STAT_HCRM : STRM_STAT_CLSD;
-            warn(DBG,
-                 "received FIN on %s conn " FMT_CID " str " FMT_SID
-                 ", state %u -> %u",
-                 conn_type(c), c->id, s->id, old_state, s->state);
+            strm_to_state(s, s->state <= STRM_STAT_HCRM ? STRM_STAT_HCRM
+                                                        : STRM_STAT_CLSD);
             if (s->id != 0 && splay_empty(&s->in_ooo))
                 maybe_api_return(q_readall_str, s);
         }

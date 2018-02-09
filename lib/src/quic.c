@@ -458,7 +458,8 @@ void q_close_stream(struct q_stream * const s)
 
     warn(WRN, "closing str " FMT_SID " state %u on %s conn " FMT_CID, s->id,
          s->state, conn_type(s->c), s->c->id);
-    s->state = s->state == STRM_STAT_HCRM ? STRM_STAT_CLSD : STRM_STAT_HCLO;
+    strm_to_state(s,
+                  s->state == STRM_STAT_HCRM ? STRM_STAT_CLSD : STRM_STAT_HCLO);
     ev_async_send(loop, &s->c->tx_w);
     loop_run(q_close_stream, s);
 }
