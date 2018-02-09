@@ -122,7 +122,7 @@ static void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c)
          p && p->nr < c->rec.lg_acked; p = nxt) {
         nxt = splay_next(pm_nr_splay, &c->rec.sent_pkts, p);
 
-        if (p->is_acked)
+        if (p->is_acked || p->is_lost)
             continue;
 
         const ev_tstamp time_since_sent = now - p->tx_t;
@@ -138,6 +138,7 @@ static void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c)
         if (time_since_sent > delay_until_lost ||
             delta > c->rec.reorder_thresh) {
             warn(WRN, "pkt " FMT_PNR_OUT " considered lost", p->nr);
+            p->is_lost = true;
 
             // OnPacketsLost:
             if (is_rtxable(p)) {
@@ -149,14 +150,11 @@ static void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c)
             largest_lost_packet = MAX(largest_lost_packet, p->nr);
 
             if (p->is_rtxed || !is_rtxable(p)) {
-                warn(DBG, "free rtxed/non-rtxable pkt " FMT_PNR_OUT, p->nr);
+                warn(DBG, "free already-rtxed/non-rtxable pkt " FMT_PNR_OUT,
+                     p->nr);
                 splay_remove(pm_nr_splay, &c->rec.sent_pkts, p);
                 q_free_iov(w_iov(w_engine(c->sock), pm_idx(p)));
-                // } else {
-                //     warn(DBG, "mark non-rtxed pkt "FMT_PNR_OUT, p->nr);
-                //     TODO: figure out how/if to mark this
             }
-
 
         } else if (is_zero(c->rec.loss_t) && !is_inf(delay_until_lost))
             c->rec.loss_t = now + delay_until_lost - time_since_sent;
@@ -349,7 +347,7 @@ void on_pkt_acked(struct q_conn * const c, const uint64_t ack)
 
     // check if a q_write is done
     if (meta(v).is_rtxed == false) {
-        struct q_stream * const s = meta(v).str;
+        struct q_stream * const s = meta(v).stream;
         if (s && ++s->out_ack_cnt == sq_len(&s->out))
             // all packets are ACKed
             maybe_api_return(q_write, s);

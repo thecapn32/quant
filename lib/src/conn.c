@@ -501,7 +501,8 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
     }
 
 done:
-    if (is_rtxable(&meta(v)) == false)
+    if (is_rtxable(&meta(v)) == false || meta(v).stream == 0)
+        // this packet is not rtx'able, or the stream data is duplicate
         q_free_iov(v);
 }
 

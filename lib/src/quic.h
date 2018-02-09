@@ -52,7 +52,7 @@ struct pkt_meta {
     splay_entry(pkt_meta) off_node;
     ev_tstamp tx_t;             ///< Transmission timestamp.
     uint64_t nr;                ///< Packet number.
-    struct q_stream * str;      ///< Stream this data was written on.
+    struct q_stream * stream;   ///< Stream this data was written on.
     uint64_t stream_off;        ///< Stream data offset.
     uint16_t stream_header_pos; ///< Offset of stream frame header.
     uint16_t stream_data_start; ///< Offset of first byte of stream frame data.
@@ -61,7 +61,8 @@ struct pkt_meta {
     uint16_t tx_len;            ///< Length of protected packet at TX.
     uint8_t is_rtxed : 1;       ///< Does the w_iov hold truncated data?
     uint8_t is_acked : 1;       ///< Is the w_iov ACKed?
-    uint8_t : 6;
+    uint8_t is_lost : 1;        ///< Have we marked this w_iov as lost?
+    uint8_t : 5;
     bitstr_t bit_decl(frames, MAX_FRAM_TYPE + 1); ///< Frames present in pkt.
     uint8_t _unused[2];
 };
@@ -248,7 +249,7 @@ extern void * api_arg;
 // #define DIM "\x1B[2m"   ///< ANSI escape sequence: dim
 // #define ULN "\x1B[3m"   ///< ANSI escape sequence: underline
 // #define BLN "\x1B[5m"   ///< ANSI escape sequence: blink
-#define REV "\x1B[7m"   ///< ANSI escape sequence: reverse
+#define REV "\x1B[7m" ///< ANSI escape sequence: reverse
 // #define HID "\x1B[8m"   ///< ANSI escape sequence: hidden
 // #define BLK "\x1B[30m"  ///< ANSI escape sequence: black
 #define RED "\x1B[31m" ///< ANSI escape sequence: red

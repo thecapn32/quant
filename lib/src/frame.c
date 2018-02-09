@@ -109,6 +109,7 @@ dec_stream_frame(struct q_conn * const c,
         track_bytes_in(s, l);
         s->in_off += l;
         sq_insert_tail(&s->in, v, next);
+        meta(v).stream = s;
 
         // check if a hole has been filled that lets us dequeue ooo data
         struct pkt_meta *p, *nxt;
@@ -124,6 +125,7 @@ dec_stream_frame(struct q_conn * const c,
                  c->id, sid);
 
             s->in_off += l;
+            meta(v).stream = s;
             sq_insert_tail(&s->in, w_iov(w_engine(c->sock), pm_idx(p)), next);
             splay_remove(pm_off_splay, &s->in_ooo, p);
         }
@@ -160,6 +162,7 @@ dec_stream_frame(struct q_conn * const c,
     kind = YEL "ooo" NRM;
     splay_insert(pm_off_splay, &s->in_ooo, &meta(v));
     track_bytes_in(s, l);
+    meta(v).stream = s;
 
 done:
     warn(INF,
@@ -534,9 +537,9 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
 
         if (is_set(FRAM_TYPE_STRM, type)) {
             bit_set(meta(v).frames, FRAM_TYPE_STRM);
-            if (meta(v).stream_data_start) {
-                // already had at least one stream frame in this packet,
-                // generate (another) copy
+            if (meta(v).stream_data_start && meta(v).stream) {
+                // already had at least one stream frame in this packet
+                // with non-duplicate data, so generate (another) copy
                 warn(DBG, "more than one stream frame in pkt, copy");
                 struct w_iov * const vdup =
                     q_alloc_iov(w_engine(c->sock), 0, 0);
@@ -750,7 +753,7 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
          is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id, s->out_off, dlen);
 
     track_bytes_out(s, dlen);
-    meta(v).str = s; // remember stream this buf belongs to
+    meta(v).stream = s; // remember stream this buf belongs to
     meta(v).stream_data_start = Q_OFFSET;
     meta(v).stream_data_end = Q_OFFSET + (uint16_t)dlen;
     meta(v).stream_off = s->out_off;

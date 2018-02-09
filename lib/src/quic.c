@@ -203,6 +203,9 @@ void q_free(struct w_iov_sq * const q)
 {
     struct w_iov * v = 0;
     sq_foreach (v, q, next) {
+        if (meta(v).stream)
+            splay_remove(pm_nr_splay, &meta(v).stream->c->rec.sent_pkts,
+                         &meta(v));
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         meta(v) = (struct pkt_meta){0};
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
@@ -536,7 +539,7 @@ void q_cleanup(void * const q)
     for (uint32_t i = 0; i <= nbufs; i++) {
         ASAN_UNPOISON_MEMORY_REGION(&pm[i], sizeof(pm[i]));
         if (pm[i].nr)
-            warn(DBG, "buffer %u still in use", i);
+            warn(DBG, "buffer %u still in use for pkt %" PRIu64, i, pm[i].nr);
     }
 
     free(pm);
