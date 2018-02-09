@@ -235,9 +235,9 @@ void enc_pkt(struct q_stream * const s,
     switch (c->state) {
     case CONN_STAT_IDLE:
     case CONN_STAT_RTRY:
+    case CONN_STAT_CH_SENT:
         flags = F_LONG_HDR | F_LH_INIT;
         break;
-    case CONN_STAT_CH_SENT:
     case CONN_STAT_HSHK_DONE:
     case CONN_STAT_HSHK_FAIL:
         flags = F_LONG_HDR | F_LH_HSHK;
