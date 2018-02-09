@@ -4,7 +4,7 @@ rm -f /cores/*.core
 
 set -e
 
-docker-compose up --no-color --force-recreate --remove-orphans -d
+docker-compose up --force-recreate --remove-orphans -d
 
 tmux -CC \
         new-session "docker-compose logs -f client | cut -f2- -d\\|" \; \
