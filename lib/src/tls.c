@@ -100,7 +100,7 @@ on_ch(ptls_on_client_hello_t * const self __attribute__((unused)),
       const size_t sig_alg_cnt __attribute__((unused)))
 {
     if (sni.len) {
-        warn(INF, "using clnt-requested SNI %.*s", sni.len, sni.base);
+        warn(INF, "\tSNI %.*s", sni.len, sni.base);
         ensure(ptls_set_server_name(tls, (const char *)sni.base, sni.len) == 0,
                "ptls_set_server_name");
     }
@@ -118,14 +118,13 @@ on_ch(ptls_on_client_hello_t * const self __attribute__((unused)),
                 goto done;
 
     if (j == prot_cnt) {
-        warn(CRT, "no client-requested ALPN (incl. %.*s) supported, ignoring",
+        warn(CRT, "no clnt-requested ALPN (incl. %.*s) supported, ignoring",
              prot[0].len, prot[0].base);
         return 0;
     }
 
 done:
-    warn(INF, "supporting client-requested ALPN %.*s", alpn[j].len,
-         alpn[j].base);
+    warn(INF, "\tALPN %.*s", alpn[j].len, alpn[j].base);
 
     return 0;
 }
@@ -242,19 +241,20 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         switch (tp) {
         case TP_INITIAL_MAX_STREAM_DATA:
             dec_tp(&c->peer_max_strm_data, sizeof(uint32_t));
+            warn(INF, "\tinitial_max_stream_data = %u", c->peer_max_strm_data);
             // we need to apply this parameter to stream 0
             struct q_stream * const s = get_stream(c, 0);
             s->out_data_max = c->peer_max_strm_data;
-            warn(DBG, "str " FMT_SID " out_data_max = %u", s->id,
-                 s->out_data_max);
             break;
 
         case TP_INITIAL_MAX_DATA:
             dec_tp(&c->peer_max_data, sizeof(uint32_t));
+            warn(INF, "\tinitial_max_data = %u", c->peer_max_data);
             break;
 
         case TP_INITIAL_MAX_STREAM_ID_BIDI:
             dec_tp(&c->peer_max_strm_bidi, sizeof(uint32_t));
+            warn(INF, "\tinitial_max_stream_id_bidi = %u", c->peer_max_strm_bidi);
             ensure(is_set(STRM_FL_DIR_UNI, c->peer_max_strm_bidi) == false,
                    "got unidir sid %" PRIu64, c->peer_max_strm_bidi);
             ensure(is_set(STRM_FL_INI_SRV, c->peer_max_strm_bidi) != c->is_clnt,
@@ -263,6 +263,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
         case TP_INITIAL_MAX_STREAM_ID_UNI:
             dec_tp(&c->peer_max_strm_uni, sizeof(uint32_t));
+            warn(INF, "\tinitial_max_stream_id_uni = %u", c->peer_max_strm_uni);
             ensure(is_set(STRM_FL_DIR_UNI, c->peer_max_strm_uni),
                    "got bidir sid %" PRIu64, c->peer_max_strm_uni);
             ensure(is_set(STRM_FL_INI_SRV, c->peer_max_strm_uni) != c->is_clnt,
@@ -271,12 +272,14 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
         case TP_IDLE_TIMEOUT:
             dec_tp(&c->peer_idle_to, sizeof(uint16_t));
+            warn(INF, "\tidle_timeout = %u", c->peer_idle_to);
             if (c->peer_idle_to > 600)
                 warn(ERR, "idle timeout %u > 600", c->peer_idle_to);
             break;
 
         case TP_MAX_PACKET_SIZE:
             dec_tp(&c->peer_max_pkt, sizeof(uint16_t));
+            warn(INF, "\tmax_packet_size = %u", c->peer_max_pkt);
             if (c->peer_max_pkt < 1200 || c->peer_max_pkt > 65527)
                 warn(ERR, "peer_max_pkt %u invalid", c->peer_max_pkt);
             break;
@@ -284,12 +287,14 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         case TP_OMIT_CONNECTION_ID: {
             uint16_t dummy;
             dec_tp(&dummy, sizeof(dummy));
+            warn(INF, "\tomit_connection_id = true");
             c->omit_cid = true;
             break;
         }
 
         case TP_ACK_DELAY_EXPONENT:
             dec_tp(&c->peer_ack_del_exp, sizeof(uint8_t));
+            warn(INF, "\tack_delay_exponent = %u", c->peer_ack_del_exp);
             if (c->peer_ack_del_exp > 20)
                 warn(ERR, "peer_ack_del_exp %u invalid", c->peer_ack_del_exp);
             break;
@@ -301,8 +306,17 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             ensure(l == sizeof(c->stateless_reset_token), "valid len");
             memcpy(c->stateless_reset_token, &buf[i],
                    sizeof(c->stateless_reset_token));
-            warn(DBG, "dec %u byte%s from [%u..%u] into stateless_reset_token ",
-                 l, plural(l), i, i + l);
+            warn(INF,
+                 "\tstateless_reset_token = %02x%02x%02x%02x%02x%02x%02x%02x "
+                 "%02x%02x%02x%02x%02x%02x%02x%02x",
+                 c->stateless_reset_token[0], c->stateless_reset_token[1],
+                 c->stateless_reset_token[2], c->stateless_reset_token[3],
+                 c->stateless_reset_token[4], c->stateless_reset_token[5],
+                 c->stateless_reset_token[6], c->stateless_reset_token[7],
+                 c->stateless_reset_token[8], c->stateless_reset_token[9],
+                 c->stateless_reset_token[10], c->stateless_reset_token[11],
+                 c->stateless_reset_token[12], c->stateless_reset_token[13],
+                 c->stateless_reset_token[14], c->stateless_reset_token[15]);
             i += sizeof(c->stateless_reset_token);
             break;
 
@@ -515,7 +529,8 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
                              &s->c->tls.tls_hshake_prop);
 
     warn(DBG, "in %u, gen %u, ret %u", iv ? in_data_len : 0, tb.off, ret);
-    ensure(iv == 0 || in_data_len && in_data_len == in_len, "data left");
+    ensure(iv == 0 || in_data_len && in_data_len == in_len, "%u data left",
+           in_data_len - in_len);
 
     if (tb.off) {
         // enqueue for TX
