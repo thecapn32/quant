@@ -451,8 +451,8 @@ void * q_init(const char * const ifname,
     ev_signal_init(&signal_w, signal_cb, SIGINT);
     ev_signal_start(loop, &signal_w);
 
-    warn(INF, "%s %s with libev %u.%u ready", quant_name, quant_version,
-         ev_version_major(), ev_version_minor());
+    warn(INF, "%s/%s %s with libev %u.%u ready", quant_name, w->backend_name,
+         quant_version, ev_version_major(), ev_version_minor());
     warn(INF, "submit bug reports at https://github.com/NTAP/quant/issues");
 
     return w;
