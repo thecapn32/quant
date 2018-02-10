@@ -143,7 +143,8 @@ extern struct pkt_meta * pm;
 
 static inline bool is_ack_only(const struct pkt_meta * const p)
 {
-    bitstr_t bit_decl(frames, MAX_FRAM_TYPE + 1); // NOLINT
+    // cppcheck-suppress unreadVariable
+    bitstr_t bit_decl(frames, MAX_FRAM_TYPE + 1);
     memcpy(frames, p->frames, sizeof(frames));
 
     // padding doesn't count
