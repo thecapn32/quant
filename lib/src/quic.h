@@ -29,8 +29,10 @@
 
 #include <bitstring.h>
 #include <inttypes.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #include <ev.h>
 #include <warpcore/warpcore.h>
@@ -138,17 +140,26 @@ extern struct pkt_meta * pm;
 
 #define is_rtxable(p) (p)->stream_header_pos
 
-#define is_ack_only(p)                                                         \
-    __extension__({                                                            \
-        int _b1 = -1, _b2 = -1;                                                \
-        bit_ffs((p)->frames, MAX_FRAM_TYPE, &_b1);                             \
-        if (_b1 >= 0) {                                                        \
-            bit_clear((p)->frames, _b1);                                       \
-            bit_ffs((p)->frames, MAX_FRAM_TYPE, &_b2);                         \
-            bit_set((p)->frames, _b1);                                         \
-        }                                                                      \
-        _b1 == FRAM_TYPE_ACK && _b2 == -1;                                     \
-    })
+
+static inline bool is_ack_only(const struct pkt_meta * const p)
+{
+    bitstr_t bit_decl(frames, MAX_FRAM_TYPE + 1); // NOLINT
+    memcpy(frames, p->frames, sizeof(frames));
+
+    // padding doesn't count
+    bit_clear(frames, FRAM_TYPE_PAD);
+
+    int first_bit_set = -1, second_bit_set = -1;
+    bit_ffs(frames, MAX_FRAM_TYPE, &first_bit_set);
+
+    if (first_bit_set >= 0) {
+        bit_clear(frames, first_bit_set);
+        bit_ffs(frames, MAX_FRAM_TYPE, &second_bit_set);
+    }
+
+    return first_bit_set == FRAM_TYPE_ACK && second_bit_set == -1;
+}
+
 
 extern struct ev_loop * loop;
 
