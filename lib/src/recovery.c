@@ -25,6 +25,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <bitstring.h>
 #include <inttypes.h>
 #include <math.h>
 #include <stdbool.h>
@@ -61,8 +62,9 @@ uint32_t rtxable_pkts_outstanding(struct q_conn * const c)
 static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
 {
     const uint32_t rtxable_outstanding = rtxable_pkts_outstanding(c);
+    // don't arm the alarm if there are no packets with
+    // retransmittable data in flight
     if (rtxable_outstanding == 0) {
-        // retransmittable packets are not outstanding
         ev_timer_stop(loop, &c->rec.ld_alarm);
         warn(DBG, "no RTX-able pkts outstanding, stopping ld_alarm");
         return;
@@ -76,19 +78,14 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
              conn_type(c), c->id);
 
     } else if (!is_zero(c->rec.loss_t)) {
-        dur = c->rec.loss_t - ev_now(loop);
+        dur = c->rec.loss_t - c->rec.last_sent_t;
         warn(DBG, "early RTX or time alarm in %f sec on %s conn " FMT_CID, dur,
              conn_type(c), c->id);
 
-        // } else if (c->rec.tlp_cnt < kMaxTLPs) {
-        //     if (rtxable_outstanding == 1)
-        //         dur = 1.5 * c->rec.srtt + kDelayedAckTimeout;
-        //     else
-        //         dur = kMinTLPTimeout;
-        //     dur = MAX(dur, 2 * c->rec.srtt);
-        //     warn(DBG, "TLP alarm in %f sec on %s conn " FMT_CID, dur,
-        //     conn_type(c),
-        //          c->id);
+    } else if (c->rec.tlp_cnt < kMaxTLPs) {
+        dur = MAX(1.5 * c->rec.srtt + c->rec.max_ack_del, kMinTLPTimeout);
+        warn(DBG, "TLP alarm in %f sec on %s conn " FMT_CID, dur, conn_type(c),
+             c->id);
 
     } else {
         dur = c->rec.srtt + 4 * c->rec.rttvar;
@@ -98,7 +95,7 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
              c->id);
     }
 
-    c->rec.ld_alarm.repeat = dur;
+    c->rec.ld_alarm.repeat = c->rec.last_sent_t + dur - ev_now(loop);
     ev_timer_again(loop, &c->rec.ld_alarm);
 }
 
@@ -112,7 +109,7 @@ static void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c)
             (1 + c->rec.reorder_fract) * MAX(c->rec.latest_rtt, c->rec.srtt);
     else if (c->rec.lg_acked == c->rec.lg_sent)
         // Early retransmit alarm.
-        delay_until_lost = 1.125 * MAX(c->rec.latest_rtt, c->rec.srtt);
+        delay_until_lost = 1.25 * MAX(c->rec.latest_rtt, c->rec.srtt);
 
     const ev_tstamp now = ev_now(loop);
     uint64_t largest_lost_packet = 0;
@@ -218,27 +215,12 @@ track_acked_pkts(struct q_conn * const c, const uint64_t ack)
 }
 
 
-static void __attribute__((nonnull)) update_rtt(struct q_conn * const c)
-{
-    if (is_zero(c->rec.srtt)) {
-        c->rec.srtt = c->rec.latest_rtt;
-        c->rec.rttvar = c->rec.latest_rtt / 2;
-    } else {
-        c->rec.rttvar =
-            .75 * c->rec.rttvar + .25 * fabs(c->rec.srtt - c->rec.latest_rtt);
-        c->rec.srtt = .875 * c->rec.srtt + .125 * c->rec.latest_rtt;
-    }
-    warn(DBG, "srtt = %f, rttvar = %f on %s conn " FMT_CID, c->rec.srtt,
-         c->rec.rttvar, conn_type(c), c->id);
-}
-
-
 void on_pkt_sent(struct q_conn * const c, struct w_iov * const v)
 {
     // sent_packets[packet_number] updated in enc_pkt()
     const ev_tstamp now = ev_now(loop);
 
-    /* c->rec.last_sent_t = */ meta(v).tx_t = now;
+    c->rec.last_sent_t = meta(v).tx_t = now;
     if (c->state != CONN_STAT_VERS_REJ)
         // don't track version negotiation responses
         splay_insert(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
@@ -253,7 +235,7 @@ void on_pkt_sent(struct q_conn * const c, struct w_iov * const v)
 
 void on_ack_rx_1(struct q_conn * const c,
                  const uint64_t ack,
-                 const uint64_t ack_delay)
+                 const uint64_t ack_del)
 {
     // if the largest ACKed is newly ACKed, update the RTT
     if (c->rec.lg_acked >= ack)
@@ -263,10 +245,34 @@ void on_ack_rx_1(struct q_conn * const c,
     struct w_iov * const v = find_sent_pkt(c, ack);
     ensure(v, "found ACKed pkt " FMT_PNR_OUT, ack);
     c->rec.latest_rtt = ev_now(loop) - meta(v).tx_t;
-    if (c->rec.latest_rtt > ack_delay)
-        c->rec.latest_rtt -= ack_delay;
-    warn(DBG, "latest_rtt %f", c->rec.latest_rtt);
-    update_rtt(c);
+
+    // UpdateRtt
+
+    // min_rtt ignores ack delay
+    c->rec.min_rtt = MIN(c->rec.min_rtt, c->rec.latest_rtt);
+
+    // adjust for ack delay if it's plausible
+    if (c->rec.latest_rtt - c->rec.min_rtt > ack_del) {
+        c->rec.latest_rtt -= ack_del;
+        warn(DBG, "latest_rtt %f", c->rec.latest_rtt);
+
+        // only save into max ack delay if it's used
+        // for rtt calculation and is not ack only
+        if (!is_ack_only(&meta(v)))
+            c->rec.max_ack_del = MAX(c->rec.max_ack_del, ack_del);
+    }
+
+    // based on RFC6298
+    if (is_zero(c->rec.srtt)) {
+        c->rec.srtt = c->rec.latest_rtt;
+        c->rec.rttvar = c->rec.latest_rtt / 2;
+    } else {
+        const ev_tstamp rttvar_sample = fabs(c->rec.srtt - c->rec.latest_rtt);
+        c->rec.rttvar = .75 * c->rec.rttvar + .25 * rttvar_sample;
+        c->rec.srtt = .875 * c->rec.srtt + .125 * c->rec.latest_rtt;
+    }
+    warn(DBG, "srtt = %f, rttvar = %f on %s conn " FMT_CID, c->rec.srtt,
+         c->rec.rttvar, conn_type(c), c->id);
 }
 
 
