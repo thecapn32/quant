@@ -161,6 +161,11 @@ static struct q_conn * new_conn(struct w_engine * const w,
     c->idle_alarm.repeat = kIdleTimeout;
     ev_init(&c->idle_alarm, idle_alarm);
 
+    // initialize ACK timeout
+    c->ack_alarm.data = c;
+    c->ack_alarm.repeat = kDelayedAckTimeout;
+    ev_init(&c->ack_alarm, ack_alarm);
+
     c->peer_ack_del_exp = c->local_ack_del_exp = 3;
     c->local_idle_to = kIdleTimeout;
     // XXX: check IDs if stream 0 is flow-controlled during handshake or not
@@ -490,6 +495,7 @@ void q_close(struct q_conn * const c)
     ev_timer_stop(loop, &c->rec.ld_alarm);
     ev_timer_stop(loop, &c->closing_alarm);
     ev_timer_stop(loop, &c->idle_alarm);
+    ev_timer_stop(loop, &c->ack_alarm);
 
     struct q_stream *s, *ns;
     for (s = splay_min(stream, &c->streams); s; s = ns) {

@@ -216,6 +216,11 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
         on_pkt_sent(s->c, v);
         encoded++;
 
+        // if this packet contains an ACK frame, re-arm the timer
+        if (s->c->state >= CONN_STAT_ESTB &&
+            bit_test(meta(v).frames, FRAM_TYPE_ACK))
+            ev_timer_again(loop, &s->c->ack_alarm);
+
         if (limit && encoded == limit) {
             warn(NTE, "tx limit %u reached", limit);
             break;
@@ -494,6 +499,11 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         }
         track_recv(c, meta(v).nr);
         dec_frames(c, v);
+
+        // if this packet contains a STREAM frame, arm the ACK timer
+        if (bit_test(meta(v).frames, FRAM_TYPE_STRM))
+            ev_timer_again(loop, &c->ack_alarm);
+
         break;
 
     default:
@@ -674,4 +684,16 @@ void enter_closing(struct q_conn * const c)
     c->closing_alarm.repeat = 3; // TODO: 3 * RTO
     ev_init(&c->closing_alarm, enter_closed);
     ev_timer_again(loop, &c->closing_alarm);
+}
+
+
+void ack_alarm(struct ev_loop * const l __attribute__((unused)),
+               ev_timer * const w,
+               int e __attribute__((unused)))
+{
+    struct q_conn * const c = w->data;
+    c->needs_tx = true;
+    tx(w->data, false, 0);
+    c->needs_tx = false;
+    ev_timer_stop(loop, &c->ack_alarm);
 }

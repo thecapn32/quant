@@ -91,6 +91,7 @@ struct q_conn {
 
     ev_timer idle_alarm;
     ev_timer closing_alarm;
+    ev_timer ack_alarm;
 
     struct diet recv;    ///< Received packet numbers still needing to be ACKed.
     ev_tstamp lg_recv_t; ///< Time when lg_recv was received
@@ -203,3 +204,6 @@ extern void __attribute__((nonnull)) err_close(struct q_conn * const c,
                                                ...);
 
 extern void __attribute__((nonnull)) enter_closing(struct q_conn * const c);
+
+extern void __attribute__((nonnull))
+ack_alarm(struct ev_loop * const l, ev_timer * const w, int e);
