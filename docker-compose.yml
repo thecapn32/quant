@@ -1,11 +1,6 @@
 version: "3"
 services:
 
-  client:
-    image: ntap/quant
-    command: >
-        client -v4 -i eth0 https://valve/index.html
-
   server:
     image: ntap/quant
     expose:
@@ -14,9 +9,22 @@ services:
         server -i eth0 -d /www -c /tls/quant.crt -k /tls/quant.key -v4
 
   valve:
+    depends_on:
+      - server
     image: larseggert/qvalve
     tty: true
     expose:
       - 4433
+    volumes:
+      - ../qvalve:/qvalve-dev:ro
     command: >
-        /qvalve/qvalve.py -fa server
+        /qvalve-dev/qvalve.py -ra server
+
+  client:
+    depends_on:
+      - server
+      - valve
+    image: ntap/quant
+    command: >
+        client -v4 -i eth0 https://valve/index.html
+
