@@ -50,7 +50,8 @@ struct w_iov;
 #define FRAM_TYPE_PONG 0x0d
 #define FRAM_TYPE_ACK 0x0e
 #define FRAM_TYPE_STRM 0x10
-#define MAX_FRAM_TYPE FRAM_TYPE_STRM
+#define FRAM_TYPE_STRM_MAX 0x17
+#define MAX_FRAM_TYPE FRAM_TYPE_STRM_MAX
 
 #define F_STREAM_FIN 0x01
 #define F_STREAM_LEN 0x02
