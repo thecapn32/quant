@@ -488,6 +488,8 @@ void q_close(struct q_conn * const c)
     // we're done
     ev_io_stop(loop, &c->rx_w);
     ev_timer_stop(loop, &c->rec.ld_alarm);
+    ev_timer_stop(loop, &c->closing_alarm);
+    ev_timer_stop(loop, &c->idle_alarm);
 
     struct q_stream *s, *ns;
     for (s = splay_min(stream, &c->streams); s; s = ns) {
