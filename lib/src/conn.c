@@ -216,10 +216,12 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
         on_pkt_sent(s->c, v);
         encoded++;
 
-        // if this packet contains an ACK frame, re-arm the timer
+        // if this packet contains an ACK frame, stop the timer
         if (s->c->state >= CONN_STAT_ESTB &&
-            bit_test(meta(v).frames, FRAM_TYPE_ACK))
-            ev_timer_again(loop, &s->c->ack_alarm);
+            bit_test(meta(v).frames, FRAM_TYPE_ACK)) {
+            warn(DBG, "ACK sent, stopping ACK timer");
+            ev_timer_stop(loop, &s->c->ack_alarm);
+        }
 
         if (limit && encoded == limit) {
             warn(NTE, "tx limit %u reached", limit);
@@ -305,6 +307,8 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
         ensure(s, "no stream 0");
         tx_other(s, rtx, limit);
     }
+
+    c->needs_tx = false;
 }
 
 
@@ -500,10 +504,11 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         track_recv(c, meta(v).nr);
         dec_frames(c, v);
 
-        // if this packet contains a STREAM frame, arm the ACK timer
-        if (bit_test(meta(v).frames, FRAM_TYPE_STRM))
+        // if packet has anything other than ACK frames, arm the ACK timer
+        if (!is_ack_only(&meta(v))) {
+            warn(DBG, "non-ACK frame received, starting ACK timer");
             ev_timer_again(loop, &c->ack_alarm);
-
+        }
         break;
 
     default:
@@ -692,8 +697,8 @@ void ack_alarm(struct ev_loop * const l __attribute__((unused)),
                int e __attribute__((unused)))
 {
     struct q_conn * const c = w->data;
+    warn(INF, "ACK timer fired");
     c->needs_tx = true;
     tx(w->data, false, 0);
-    c->needs_tx = false;
     ev_timer_stop(loop, &c->ack_alarm);
 }
