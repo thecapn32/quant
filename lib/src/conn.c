@@ -450,7 +450,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             c->needs_tx = true;
 
         } else {
-            warn(INF, "serv accepted vers 0x%08x", c->vers);
+            // server accepted version
             if (verify_prot(c, v) == false)
                 return;
 
@@ -606,12 +606,6 @@ void rx(struct ev_loop * const l,
         }
 
         process_pkt(c, v);
-    }
-
-    // for all connections that had RX events
-    while (!sl_empty(&crx)) {
-        struct q_conn * const c = sl_first(&crx);
-        sl_remove_head(&crx, next);
 
         // process stream 0
         struct q_stream * const s = get_stream(c, 0);
@@ -622,6 +616,12 @@ void rx(struct ev_loop * const l,
                 maybe_api_return(q_connect, c);
             q_free_iov(iv);
         }
+    }
+
+    // for all connections that had RX events
+    while (!sl_empty(&crx)) {
+        struct q_conn * const c = sl_first(&crx);
+        sl_remove_head(&crx, next);
 
         // reset idle timeout
         ev_timer_again(l, &c->idle_alarm);
