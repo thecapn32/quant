@@ -43,10 +43,12 @@ struct tls {
     ptls_t * t;
     uint8_t in_sec[PTLS_MAX_DIGEST_SIZE];
     uint8_t out_sec[PTLS_MAX_DIGEST_SIZE];
-    ptls_aead_context_t * in_kp0;
-    ptls_aead_context_t * out_kp0;
     ptls_aead_context_t * in_clr;
     ptls_aead_context_t * out_clr;
+    ptls_aead_context_t * in_0rtt;
+    ptls_aead_context_t * out_0rtt;
+    ptls_aead_context_t * in_1rtt;
+    ptls_aead_context_t * out_1rtt;
 
     uint8_t tp_buf[96];
     ptls_raw_extension_t tp_ext[2];
