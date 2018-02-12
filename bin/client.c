@@ -180,7 +180,7 @@ int main(int argc, char * argv[])
 #endif
         ;
     int ch;
-    char cache[MAXPATHLEN] = "/tmp/" QUANT "-client.0rtt";
+    char cache[MAXPATHLEN] = "/tmp/" QUANT "-session";
 
     while ((ch = getopt(argc, argv, "hi:v:")) != -1) {
         switch (ch) {
