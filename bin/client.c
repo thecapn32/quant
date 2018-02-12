@@ -80,8 +80,9 @@ struct stream_entry {
 static sl_head(stream_list, stream_entry) sl = sl_head_initializer(sl);
 
 
-static void __attribute__((noreturn))
-usage(const char * const name, const char * const ifname)
+static void __attribute__((noreturn, nonnull)) usage(const char * const name,
+                                                     const char * const ifname,
+                                                     const char * const cache)
 {
     printf("%s [options] URL\n", name);
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
@@ -89,6 +90,7 @@ usage(const char * const name, const char * const ifname)
     printf("\t[-v verbosity]\tverbosity level (0-%d, default %d)\n", DLEVEL,
            util_dlevel);
 #endif
+    printf("\t[-s cache]\tTLS 0-RTT state cache; default %s\n", cache);
     exit(0);
 }
 
@@ -178,6 +180,7 @@ int main(int argc, char * argv[])
 #endif
         ;
     int ch;
+    char cache[MAXPATHLEN] = "/tmp/" QUANT "-client.0rtt";
 
     while ((ch = getopt(argc, argv, "hi:v:")) != -1) {
         switch (ch) {
@@ -192,11 +195,11 @@ int main(int argc, char * argv[])
         case 'h':
         case '?':
         default:
-            usage(basename(argv[0]), ifname);
+            usage(basename(argv[0]), ifname, cache);
         }
     }
 
-    void * const q = q_init(ifname, 0, 0);
+    void * const q = q_init(ifname, 0, 0, cache);
     struct conn_cache cc = splay_initializer(cc);
     struct http_parser_url u = {0};
 

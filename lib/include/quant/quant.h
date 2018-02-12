@@ -39,7 +39,8 @@ struct q_stream;
 
 extern void * __attribute__((nonnull(1))) q_init(const char * const ifname,
                                                  const char * const cert,
-                                                 const char * const key);
+                                                 const char * const key,
+                                                 const char * const cache);
 
 extern void __attribute__((nonnull)) q_cleanup(void * const q);
 

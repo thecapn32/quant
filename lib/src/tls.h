@@ -69,7 +69,9 @@ extern void __attribute__((nonnull)) free_tls(struct q_conn * const c);
 extern uint32_t __attribute__((nonnull(1)))
 tls_io(struct q_stream * const s, struct w_iov * const iv);
 
-extern void init_tls_ctx(const char * const cert, const char * const key);
+extern void init_tls_ctx(const char * const cert,
+                         const char * const key,
+                         const char * const cache);
 
 extern uint16_t __attribute__((nonnull)) dec_aead(struct q_conn * const c,
                                                   const struct w_iov * v,

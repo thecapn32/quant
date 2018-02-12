@@ -75,6 +75,8 @@ static ptls_openssl_verify_certificate_t verifier = {0};
 static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-09", 5}};
 static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 
+static char cache_file[MAXPATHLEN];
+
 #define TLS_EXT_TYPE_TRANSPORT_PARAMETERS 26
 
 #define TP_INITIAL_MAX_STREAM_DATA 0x0000
@@ -470,6 +472,19 @@ void init_tls(struct q_conn * const c)
         .client.negotiated_protocols.list = alpn,
         .client.negotiated_protocols.count = alpn_cnt,
         .client.max_early_data_size = &max_early_data_size};
+
+    // try to load session ticket
+    FILE * fp = fopen(cache_file, "rbe");
+    if (fp) {
+        static uint8_t ticket[16384];
+        const size_t ticket_size = fread(ticket, 1, sizeof(ticket), fp);
+        ensure(ticket_size && feof(fp), "cannot load ticket from %s",
+               cache_file);
+        fclose(fp);
+        c->tls.tls_hshake_prop.client.session_ticket =
+            ptls_iovec_init(ticket, ticket_size);
+        warn(NTE, "trying 0-RTT handshake with ticket in %s", cache_file);
+    }
 }
 
 
@@ -581,11 +596,15 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
 static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
                              __attribute__((unused)),
                              ptls_t * tls __attribute__((unused)),
-                             int is_encrypt __attribute__((unused)),
+                             int is_encrypt,
                              ptls_buffer_t * dst,
                              ptls_iovec_t src)
 {
-    hexdump(src.base, src.len);
+    if (is_encrypt) {
+        warn(NTE, "creating new session ticket");
+    } else {
+        warn(NTE, "verifying session ticket");
+    }
 
     int ret;
     if ((ret = ptls_buffer_reserve(dst, src.len)) != 0)
@@ -593,6 +612,7 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
 
     memcpy(dst->base + dst->off, src.base, src.len);
     dst->off += src.len;
+
 
     return 0;
 }
@@ -602,16 +622,21 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
                           ptls_t * tls __attribute__((unused)),
                           ptls_iovec_t src)
 {
-    hexdump(src.base, src.len);
+    FILE * const fp = fopen(cache_file, "wbe");
+    ensure(fp, "could not open cache file %s", cache_file);
+    fwrite(src.base, 1, src.len, fp);
+    fclose(fp);
+    warn(NTE, "saved new session ticket to %s", cache_file);
     return 0;
 }
-
 
 static ptls_save_ticket_t save_ticket = {.cb = save_ticket_cb};
 static ptls_encrypt_ticket_t encrypt_ticket = {.cb = encrypt_ticket_cb};
 
 
-void init_tls_ctx(const char * const cert, const char * const key)
+void init_tls_ctx(const char * const cert,
+                  const char * const key,
+                  const char * const cache)
 {
     FILE * fp = 0;
     if (key) {
@@ -641,6 +666,16 @@ void init_tls_ctx(const char * const cert, const char * const key)
         tls_ctx.certificates.list = tls_certs;
     }
 
+    if (cache) {
+        strncpy(cache_file, cache, MAXPATHLEN);
+        tls_ctx.save_ticket = &save_ticket;
+    } else {
+        tls_ctx.encrypt_ticket = &encrypt_ticket;
+        tls_ctx.max_early_data_size = 8192;
+        tls_ctx.ticket_lifetime = 60 * 60 * 24;
+        tls_ctx.require_dhe_on_psk = 0;
+    }
+
     ensure(ptls_openssl_init_verify_certificate(&verifier, 0) == 0,
            "ptls_openssl_init_verify_certificate");
 
@@ -654,11 +689,6 @@ void init_tls_ctx(const char * const cert, const char * const key)
     tls_ctx.sign_certificate = &sign_cert.super;
     tls_ctx.verify_certificate = &verifier.super;
     tls_ctx.get_time = &ptls_get_time;
-    tls_ctx.save_ticket = &save_ticket;
-    tls_ctx.encrypt_ticket = &encrypt_ticket;
-    tls_ctx.max_early_data_size = 8192;
-    tls_ctx.ticket_lifetime = 60 * 60 * 24;
-    tls_ctx.require_dhe_on_psk = 0;
 }
 
 

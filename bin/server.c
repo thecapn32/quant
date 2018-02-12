@@ -159,7 +159,7 @@ int main(int argc, char * argv[])
     const int dir_fd = open(dir, O_RDONLY | O_CLOEXEC);
     ensure(dir_fd != -1, "%s does not exist", dir);
 
-    void * const q = q_init(ifname, cert, key);
+    void * const q = q_init(ifname, cert, key, 0);
     struct q_conn * c = q_bind(q, port);
     warn(DBG, "%s waiting on %s port %d", basename(argv[0]), ifname, port);
 

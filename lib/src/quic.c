@@ -422,7 +422,8 @@ signal_cb(struct ev_loop * l,
 
 void * q_init(const char * const ifname,
               const char * const cert,
-              const char * const key)
+              const char * const key,
+              const char * const cache)
 {
     // check versions
     // ensure(WARPCORE_VERSION_MAJOR == 0 && WARPCORE_VERSION_MINOR == 12,
@@ -440,7 +441,7 @@ void * q_init(const char * const ifname,
     ASAN_POISON_MEMORY_REGION(pm, (nbufs + 1) * sizeof(*pm));
 
     // initialize TLS context
-    init_tls_ctx(cert, key);
+    init_tls_ctx(cert, key, cache);
 
     // initialize the event loop
     loop = ev_default_loop(0);
