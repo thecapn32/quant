@@ -50,7 +50,7 @@ case $c in
                 ;;
         quicly)
                 cc="external/quicly-prefix/src/quicly-build/cli \
-                        -l /tmp/quicly-c.log -v \
+                        -l /tmp/quicly-c.log -s /tmp/quicly-session -v \
                         -p $path $addr $port"
                 ;;
         minq)
@@ -60,9 +60,11 @@ case $c in
                         -addr $addr:$port -http $path"
                 ;;
         ngtcp2)
+                touch /tmp/ngtcp2-session /tmp/ngtcp2-tp
                 cc="echo GET / | \
                         external/ngtcp2-prefix/src/ngtcp2/examples/client \
-                        -i $addr $port"
+                        -i $addr $port --session-file=/tmp/ngtcp2-session \
+                        --tp-file=/tmp/ngtcp2-tp"
                 ;;
         mozquic)
                 cc="env MOZQUIC_LOG=all:9 \
