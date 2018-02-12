@@ -25,10 +25,10 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include "@PROJECT_NAME@/config.h"
+#include <@PROJECT_NAME@/@PROJECT_NAME@.h>
 
 /// The name of this library.
-const char @PROJECT_NAME@_name[] = "@PROJECT_NAME@";
+const char @PROJECT_NAME@_name[] = @PROJECT_NAME_UC@;
 
 /// The version of this library.
 const char @PROJECT_NAME@_version[] = "@PROJECT_VERSION@";
