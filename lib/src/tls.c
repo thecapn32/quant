@@ -490,13 +490,20 @@ void init_tls(struct q_conn * const c)
 
 void free_tls(struct q_conn * const c)
 {
-    ptls_aead_free(c->tls.in_0rtt);
-    ptls_aead_free(c->tls.out_0rtt);
-    ptls_aead_free(c->tls.in_1rtt);
-    ptls_aead_free(c->tls.out_1rtt);
-    ptls_aead_free(c->tls.in_clr);
-    ptls_aead_free(c->tls.out_clr);
-    ptls_free(c->tls.t);
+    if (c->tls.in_0rtt)
+        ptls_aead_free(c->tls.in_0rtt);
+    if (c->tls.out_0rtt)
+        ptls_aead_free(c->tls.out_0rtt);
+    if (c->tls.in_1rtt)
+        ptls_aead_free(c->tls.in_1rtt);
+    if (c->tls.out_1rtt)
+        ptls_aead_free(c->tls.out_1rtt);
+    if (c->tls.in_clr)
+        ptls_aead_free(c->tls.in_clr);
+    if (c->tls.out_clr)
+        ptls_aead_free(c->tls.out_clr);
+    if (c->tls.t)
+        ptls_free(c->tls.t);
 }
 
 
@@ -612,7 +619,6 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
 
     memcpy(dst->base + dst->off, src.base, src.len);
     dst->off += src.len;
-
 
     return 0;
 }

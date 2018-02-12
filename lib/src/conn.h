@@ -84,7 +84,7 @@ struct q_conn {
 
     uint8_t _unused[4];
     uint16_t err_code;
-    const char * err_reason;
+    char * err_reason;
 
     uint64_t in_data;
     uint64_t out_data;

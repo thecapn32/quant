@@ -371,7 +371,7 @@ struct q_conn * q_bind(void * const q, const uint16_t port)
 
 struct q_conn * q_accept(struct q_conn * const c)
 {
-    if (c->state >= CONN_STAT_ESTB) {
+    if (c->state >= CONN_STAT_HSHK_DONE) {
         warn(WRN, "got %s conn " FMT_CID, conn_type(c), c->id);
         return c;
     }
@@ -379,9 +379,9 @@ struct q_conn * q_accept(struct q_conn * const c)
     warn(WRN, "waiting for accept on %s conn", conn_type(c));
     loop_run(q_accept, c);
 
-    if (c->id == 0) {
-        warn(WRN, "conn not accepted");
-        // TODO free embryonic connection
+    if (c->state != CONN_STAT_HSHK_DONE) {
+        q_close(c);
+        warn(ERR, "conn not accepted");
         return 0;
     }
     conn_to_state(c, CONN_STAT_ESTB);
@@ -517,6 +517,8 @@ void q_close(struct q_conn * const c)
     if (c->sock)
         w_close(c->sock);
     free_tls(c);
+    if (c->err_reason)
+        free(c->err_reason);
 
     // remove connection from global lists
     splay_remove(ipnp_splay, &conns_by_ipnp, c);

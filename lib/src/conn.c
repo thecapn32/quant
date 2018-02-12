@@ -392,8 +392,10 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
 
             init_cleartext_prot(c);
-            if (verify_prot(c, v) == false)
+            if (verify_prot(c, v) == false) {
+                err_close(c, ERR_TLS_HSHAKE_FAIL, "AEAD decrypt failed");
                 goto done;
+            }
 #ifndef NO_RANDOM_CID
             // this is a new connection; server picks a new random cid
             uint64_t cid;
@@ -451,8 +453,10 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 
         } else {
             // server accepted version
-            if (verify_prot(c, v) == false)
-                return;
+            if (verify_prot(c, v) == false) {
+                err_close(c, ERR_TLS_HSHAKE_FAIL, "AEAD decrypt failed");
+                goto done;
+            }
 
             dec_frames(c, v);
 
@@ -468,8 +472,10 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         break;
 
     case CONN_STAT_RTRY:
-        if (verify_prot(c, v) == false)
+        if (verify_prot(c, v) == false) {
+            err_close(c, ERR_TLS_HSHAKE_FAIL, "AEAD decrypt failed");
             goto done;
+        }
         track_recv(c, meta(v).nr);
         dec_frames(c, v);
         break;
@@ -677,6 +683,7 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
     conn_to_state(c, CONN_STAT_CLSD);
     maybe_api_return(q_close, c);
     maybe_api_return(q_read, c);
+    maybe_api_return(q_accept, c);
 }
 
 
