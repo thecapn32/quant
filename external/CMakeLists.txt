@@ -14,6 +14,9 @@ endif()
 
 
 if(NOT WARP_LIB OR NOT WARP_INCLUDE)
+  # fix for https://github.com/NTAP/quant/issues/7
+  file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include)
+
   externalproject_add(warp
     # UPDATE_COMMAND "" # XXX do not commit with this being empty
     GIT_REPOSITORY https://github.com/NTAP/warpcore.git
@@ -22,9 +25,8 @@ if(NOT WARP_LIB OR NOT WARP_INCLUDE)
     CMAKE_ARGS
       -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
       -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-      -DDLEVEL=WRN -DCONTINUOUS_INTEGRATION=1
+      -DDLEVEL=WRN
       -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-      -DBUILD_DOCUMENTATION=FALSE
     BUILD_BYPRODUCTS
       ${CMAKE_CURRENT_BINARY_DIR}/lib/${LIBRARY_PREFIX}warpcore${LIBRARY_SUFFIX}
       ${CMAKE_CURRENT_BINARY_DIR}/lib/${LIBRARY_PREFIX}sockcore${LIBRARY_SUFFIX}
