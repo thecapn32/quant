@@ -127,7 +127,7 @@ externalproject_add(openssl
   UPDATE_COMMAND ""
   # GIT_REPOSITORY https://github.com/openssl/openssl.git
   GIT_REPOSITORY https://github.com/tatsuhiro-t/openssl
-  GIT_TAG quic
+  GIT_TAG early-exporter
   GIT_SHALLOW 1
   CONFIGURE_COMMAND ./config --prefix=${CMAKE_CURRENT_BINARY_DIR} enable-tls1_3
   BUILD_IN_SOURCE 1
