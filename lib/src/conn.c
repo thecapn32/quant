@@ -390,7 +390,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         if (vers_supported(c->vers) && !is_force_neg_vers(c->vers)) {
             warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
 
-            init_cleartext_prot(c);
+            init_hshk_prot(c);
             if (verify_prot(c, v) == false) {
                 err_close(c, ERR_TLS_HSHAKE_FAIL, "AEAD decrypt failed");
                 goto done;

@@ -62,8 +62,7 @@ struct tls {
 /// TLS context.
 extern ptls_context_t tls_ctx;
 
-extern void __attribute__((nonnull))
-init_cleartext_prot(struct q_conn * const c);
+extern void __attribute__((nonnull)) init_hshk_prot(struct q_conn * const c);
 
 extern void __attribute__((nonnull)) init_0rtt_prot(struct q_conn * const c);
 

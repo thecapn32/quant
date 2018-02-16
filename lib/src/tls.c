@@ -445,12 +445,12 @@ static void init_tp(struct q_conn * const c)
 }
 
 
-static ptls_aead_context_t *
-init_cleartext_secret(struct q_conn * const c __attribute__((unused)),
-                      ptls_cipher_suite_t * const cs,
-                      uint8_t * const sec, // NOLINT
-                      const char * const label,
-                      uint8_t is_enc)
+static ptls_aead_context_t * init_hshk_secret(struct q_conn * const c
+                                              __attribute__((unused)),
+                                              ptls_cipher_suite_t * const cs,
+                                              uint8_t * const sec, // NOLINT
+                                              const char * const label,
+                                              uint8_t is_enc)
 {
     const ptls_iovec_t secret = {.base = sec, .len = cs->hash->digest_size};
     uint8_t output[PTLS_MAX_SECRET_SIZE];
@@ -458,14 +458,15 @@ init_cleartext_secret(struct q_conn * const c __attribute__((unused)),
                                   secret, label, ptls_iovec_init(0, 0),
                                   "QUIC ") == 0,
            "ptls_hkdf_expand_label");
-    return ptls_aead_new(cs->aead, cs->hash, is_enc, output, 0);
+    // hexdump(output, cs->hash->digest_size); // handshake secret
+    return ptls_aead_new(cs->aead, cs->hash, is_enc, output, "QUIC ");
 }
 
 
 #define CLNT_LABL_HSHK "client hs"
 #define SERV_LABL_HSHK "server hs"
 
-void init_cleartext_prot(struct q_conn * const c)
+void init_hshk_prot(struct q_conn * const c)
 {
     static uint8_t qv1_salt[] = {0xaf, 0xc8, 0x24, 0xec, 0x5f, 0xc7, 0x7e,
                                  0xca, 0x1e, 0x9d, 0x36, 0xf3, 0x7f, 0xb2,
@@ -480,18 +481,25 @@ void init_cleartext_prot(struct q_conn * const c)
     const ptls_iovec_t cid = {.base = (uint8_t *)&ncid, .len = sizeof(ncid)};
     ensure(ptls_hkdf_extract(cs->hash, sec, salt, cid) == 0,
            "ptls_hkdf_extract");
+    // hexdump(sec, PTLS_MAX_SECRET_SIZE);
 
-    c->tls.in_clr = init_cleartext_secret(
+    c->tls.in_clr = init_hshk_secret(
         c, cs, sec, c->is_clnt ? SERV_LABL_HSHK : CLNT_LABL_HSHK, 0);
-    c->tls.out_clr = init_cleartext_secret(
+    // hexdump(c->tls.in_clr->static_iv, c->tls.in_clr->algo->iv_size);
+
+    c->tls.out_clr = init_hshk_secret(
         c, cs, sec, c->is_clnt ? CLNT_LABL_HSHK : SERV_LABL_HSHK, 1);
-    ensure(c->tls.in_clr && c->tls.out_clr, "got cleartext secrets");
+    // hexdump(c->tls.out_clr->static_iv, c->tls.out_clr->algo->iv_size);
 }
 
 
 static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
                              __attribute__((unused)),
-                             ptls_t * tls,
+                             ptls_t * tls
+#ifdef NDEBUG
+                             __attribute__((unused))
+#endif
+                             ,
                              int is_encrypt,
                              ptls_buffer_t * dst,
                              ptls_iovec_t src)
@@ -592,7 +600,7 @@ void init_tls(struct q_conn * const c)
                "ptls_set_server_name");
     init_tp(c);
     if (!c->tls.in_clr)
-        init_cleartext_prot(c);
+        init_hshk_prot(c);
 
     size_t max_early_data_size = 0;
     c->tls.tls_hshake_prop = (ptls_handshake_properties_t){
@@ -636,7 +644,6 @@ void free_tls(struct q_conn * const c)
     // free ticket cache
     struct tls_ticket *t, *tmp;
     for (t = splay_min(ticket_splay, &tickets); t != 0; t = tmp) {
-        warn(INF, "freeing ticket for %s %s", t->sni, t->alpn);
         tmp = splay_next(ticket_splay, &tickets, t);
         free(t->sni);
         free(t->alpn);
@@ -657,7 +664,7 @@ init_secret(ptls_t * const t,
     ensure(ptls_export_secret(t, sec, cs->hash->digest_size, label,
                               ptls_iovec_init(0, 0), is_early) == 0,
            "ptls_export_secret");
-    return ptls_aead_new(cs->aead, cs->hash, is_enc, sec, 0);
+    return ptls_aead_new(cs->aead, cs->hash, is_enc, sec, "QUIC ");
 }
 
 
