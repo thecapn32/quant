@@ -886,12 +886,14 @@ which_aead(const struct q_conn * const c,
 }
 
 
+#ifndef NDEBUG
 #define aead_type(c, a)                                                        \
     (((a) == (c)->tls.in_1rtt || (a) == (c)->tls.out_1rtt)                     \
          ? "1-RTT"                                                             \
          : (((a) == (c)->tls.in_0rtt || (a) == (c)->tls.out_0rtt)              \
                 ? "0-RTT"                                                      \
                 : "cleartext"))
+#endif
 
 
 uint16_t dec_aead(struct q_conn * const c,
