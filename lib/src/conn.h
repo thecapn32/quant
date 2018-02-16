@@ -45,6 +45,18 @@ extern splay_head(ipnp_splay, q_conn) conns_by_ipnp;
 extern splay_head(cid_splay, q_conn) conns_by_cid;
 
 
+struct transport_params {
+    uint64_t max_strm_data;
+    uint64_t max_data;
+    uint64_t max_strm_uni;
+    uint64_t max_strm_bidi;
+    uint16_t max_pkt;
+    uint16_t idle_to;
+    uint8_t ack_del_exp;
+    uint8_t _unused[3];
+};
+
+
 /// A QUIC connection.
 struct q_conn {
     splay_entry(q_conn) node_ipnp;
@@ -68,23 +80,12 @@ struct q_conn {
 
     uint8_t state; ///< State of the connection.
 
-    uint16_t peer_max_pkt;
-    uint16_t local_idle_to;
-    uint16_t peer_idle_to;
-    uint64_t local_max_strm_data;
-    uint64_t peer_max_strm_data;
-    uint64_t local_max_data;
-    uint64_t peer_max_data;
-    uint64_t local_max_strm_uni;
-    uint64_t peer_max_strm_uni;
-    uint64_t local_max_strm_bidi;
-    uint64_t peer_max_strm_bidi;
-    uint8_t local_ack_del_exp;
-    uint8_t peer_ack_del_exp;
-
-    uint8_t _unused[4];
     uint16_t err_code;
+    uint8_t _unused[4];
     char * err_reason;
+
+    struct transport_params tp_peer;
+    struct transport_params tp_local;
 
     uint64_t in_data;
     uint64_t out_data;
@@ -125,14 +126,15 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 
 #define CONN_STAT_IDLE 0
 #define CONN_STAT_CH_SENT 1
-#define CONN_STAT_VERS_REJ 2
-#define CONN_STAT_RTRY 3
-#define CONN_STAT_HSHK_DONE 4
-#define CONN_STAT_HSHK_FAIL 5
-#define CONN_STAT_ESTB 6
-#define CONN_STAT_CLNG 7
-#define CONN_STAT_DRNG 8
-#define CONN_STAT_CLSD 9
+#define CONN_STAT_VERS_NEG 2
+#define CONN_STAT_VERS_NEG_SENT 3
+#define CONN_STAT_RTRY 4
+#define CONN_STAT_HSHK_DONE 5
+#define CONN_STAT_HSHK_FAIL 6
+#define CONN_STAT_ESTB 7
+#define CONN_STAT_CLNG 8
+#define CONN_STAT_DRNG 9
+#define CONN_STAT_CLSD 10
 
 
 #define conn_type(c) (c->is_clnt ? "clnt" : "serv")
@@ -155,9 +157,13 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
         switch (s) {                                                           \
         case CONN_STAT_IDLE:                                                   \
         case CONN_STAT_CH_SENT:                                                \
-        case CONN_STAT_VERS_REJ:                                               \
+        case CONN_STAT_VERS_NEG:                                               \
+        case CONN_STAT_VERS_NEG_SENT:                                          \
         case CONN_STAT_RTRY:                                                   \
+            break;                                                             \
         case CONN_STAT_HSHK_DONE:                                              \
+            c->rec.lg_acked = c->rec.lg_sent;                                  \
+            break;                                                             \
         case CONN_STAT_HSHK_FAIL:                                              \
         case CONN_STAT_CLSD:                                                   \
             break;                                                             \

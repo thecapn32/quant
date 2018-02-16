@@ -65,8 +65,8 @@ new_stream(struct q_conn * const c, const uint64_t id, const bool active)
     sq_init(&s->out);
     sq_init(&s->in);
     s->id = id;
-    s->in_data_max = c->local_max_strm_data;
-    s->out_data_max = c->peer_max_strm_data;
+    s->in_data_max = c->tp_local.max_strm_data;
+    s->out_data_max = c->tp_peer.max_strm_data;
     if (active) {
         if (c->next_sid == 0)
             c->next_sid = c->is_clnt ? 4 : 1;
@@ -107,7 +107,7 @@ void track_bytes_in(struct q_stream * const s, const uint64_t n)
          "IN: str %u in_data=%" PRIu64 "/%" PRIu64 " in_off=%" PRIu64
          " C: in_data=%" PRIu64 "/%" PRIu64,
          s->id, s->in_data, s->in_data_max, s->in_off, s->c->in_data,
-         s->c->local_max_data);
+         s->c->tp_local.max_data);
 }
 
 
@@ -122,5 +122,5 @@ void track_bytes_out(struct q_stream * const s, const uint64_t n)
          "OUT: str %u out_data=%" PRIu64 "/%" PRIu64 " out_off=%" PRIu64
          " C: out_data=%" PRIu64 "/%" PRIu64,
          s->id, s->out_data, s->out_data_max, s->out_off, s->c->out_data,
-         s->c->peer_max_data);
+         s->c->tp_peer.max_data);
 }

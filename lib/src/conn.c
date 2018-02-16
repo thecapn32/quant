@@ -208,7 +208,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             // if we have less than two full packet's worth of window, block
             if (s->out_data + 2 * MAX_PKT_LEN > s->out_data_max)
                 s->blocked = true;
-            if (s->c->out_data + 2 * MAX_PKT_LEN > s->c->peer_max_data)
+            if (s->c->out_data + 2 * MAX_PKT_LEN > s->c->tp_peer.max_data)
                 s->c->blocked = true;
         }
 
@@ -283,7 +283,7 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
     splay_foreach (s, stream, &c->streams) {
         // check if we need to open stream or connection windows
         s->open_win |= s->in_data == s->in_data_max;
-        s->c->open_win |= s->c->in_data == s->c->local_max_data;
+        s->c->open_win |= s->c->in_data == s->c->tp_local.max_data;
 
         if (!s->blocked && !s->c->blocked && !sq_empty(&s->out) &&
             sq_len(&s->out) > s->out_ack_cnt) {
@@ -297,12 +297,15 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
         if (did_tx == false &&
             (s->open_win == true || s->c->open_win == true ||
              ((s->state == STRM_STAT_HCLO || s->state == STRM_STAT_CLSD) &&
-              s->fin_sent == false)))
+              s->fin_sent == false))) {
             did_tx |= tx_other(s, rtx, limit);
+        }
+        if (s->c->state < CONN_STAT_HSHK_DONE && s->c->tls.do_0rtt == 0)
+            break;
     }
 
-    if (did_tx == false) {
-        // need to ACK w/o any stream data to piggyback on; so abuse stream 0
+    if (did_tx == false && c->state != CONN_STAT_VERS_NEG_SENT) {
+        // need to ACK or handshake
         s = get_stream(c, 0);
         ensure(s, "no stream 0");
         tx_other(s, rtx, limit);
@@ -369,18 +372,14 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 {
     const uint8_t flags = pkt_flags(v->buf);
 
-    if (c->is_clnt && c->state == CONN_STAT_IDLE)
-        conn_to_state(c, CONN_STAT_CH_SENT);
-
     switch (c->state) {
     case CONN_STAT_IDLE:
-    case CONN_STAT_VERS_REJ:
+    case CONN_STAT_VERS_NEG:
+    case CONN_STAT_VERS_NEG_SENT:
         // validate minimum packet size
-        if (v->len < MIN_INI_LEN)
+        if (pkt_type(flags) == F_LH_INIT && v->len < MIN_INI_LEN)
             warn(ERR, "initial %u-byte pkt too short (< %u)", v->len,
                  MIN_INI_LEN);
-
-        ensure(is_set(F_LONG_HDR, flags), "have a long header");
 
         // respond to the version negotiation packet
         c->vers = pkt_vers(v->buf, v->len);
@@ -408,11 +407,18 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             dec_frames(c, v);
 
         } else {
-            conn_to_state(c, CONN_STAT_VERS_REJ);
-            warn(WRN,
-                 "%s conn " FMT_CID
-                 " clnt-requested vers 0x%08x not supported ",
-                 conn_type(c), c->id, c->vers);
+            if (c->state != CONN_STAT_VERS_NEG_SENT) {
+                conn_to_state(c, CONN_STAT_VERS_NEG);
+                warn(WRN,
+                     "%s conn " FMT_CID
+                     " clnt-requested vers 0x%08x not supported ",
+                     conn_type(c), c->id, c->vers);
+            } else
+                warn(WRN,
+                     "%s conn " FMT_CID " clnt-requested vers 0x%08x not "
+                     "supported, but already sent version "
+                     "negotiation ",
+                     conn_type(c), c->id, c->vers);
         }
         break;
 
@@ -435,20 +441,35 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             else
                 die("no vers in common with serv");
 
-            // retransmit the ClientHello
+            // reset TLS state
             conn_to_state(c, CONN_STAT_IDLE);
             init_tls(c);
-            // free the previous ClientHello
+
+            // remove ClientHello and 0-RTT data from recovery state
             struct pkt_meta *ch, *nxt;
             for (ch = splay_min(pm_nr_splay, &c->rec.sent_pkts); ch; ch = nxt) {
                 nxt = splay_next(pm_nr_splay, &c->rec.sent_pkts, ch);
                 c->rec.in_flight -= ch->tx_len;
                 splay_remove(pm_nr_splay, &c->rec.sent_pkts, ch);
             }
+
+            // free the previous ClientHello flight, and create a new one
             struct q_stream * s = get_stream(c, 0);
             q_free(&s->out);
-            s->out_off = 0;
             tls_io(s, 0);
+            if (s->c->tls.do_0rtt)
+                init_0rtt_prot(c);
+
+            // reset all streams (stream 0 and any 0-RTT streams)
+            splay_foreach (s, stream, &c->streams) {
+                // reset stream offset
+                s->out_off = 0;
+                // forget we transmitted any packets
+                struct w_iov * ov = 0;
+                sq_foreach_from (ov, &s->out, next)
+                    meta(ov).tx_len = 0;
+            }
+
             c->needs_tx = true;
 
         } else {
@@ -569,27 +590,35 @@ void rx(struct ev_loop * const l,
             const struct sockaddr_in peer = {.sin_family = AF_INET,
                                              .sin_port = v->port,
                                              .sin_addr = {.s_addr = v->ip}};
+            c = get_conn_by_ipnp(&peer, is_clnt);
             if (is_set(F_LONG_HDR, flags)) {
                 if (is_clnt) {
                     // server may have picked a new cid
-                    c = get_conn_by_ipnp(&peer, is_clnt);
-                    warn(DBG, "got new cid " FMT_CID " for %s conn " FMT_CID,
+                    warn(INF, "got new cid " FMT_CID " for %s conn " FMT_CID,
                          cid, conn_type(c), c->id);
                     update_cid(c, cid);
                 } else {
-                    warn(NTE, "new serv conn from %s:%u",
-                         inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
-                    const struct sockaddr_in none = {0};
-                    c = get_conn_by_ipnp(&none, is_clnt);
-                    if (c == 0) {
-                        // TODO: maintain accept queue
-                        warn(CRT, "app is not in q_accept(), ignoring");
-                        q_free_iov(v);
-                        continue;
+                    if (c)
+                        warn(NTE,
+                             "got pkt for orig cid " FMT_CID ", new is " FMT_CID
+                             ", accepting anyway",
+                             cid, c->id);
+                    else {
+                        warn(NTE, "new serv conn w/cis " FMT_CID " from %s:%u",
+                             cid, inet_ntoa(peer.sin_addr),
+                             ntohs(peer.sin_port));
+                        const struct sockaddr_in none = {0};
+                        c = get_conn_by_ipnp(&none, is_clnt);
+                        if (c == 0) {
+                            // TODO: maintain accept queue
+                            warn(CRT, "app is not in q_accept(), ignoring");
+                            q_free_iov(v);
+                            continue;
+                        }
+                        update_ipnp(c, &peer);
+                        update_cid(c, cid);
+                        new_stream(c, 0, false);
                     }
-                    update_ipnp(c, &peer);
-                    update_cid(c, cid);
-                    new_stream(c, 0, false);
                 }
 
             } else
@@ -635,8 +664,8 @@ void rx(struct ev_loop * const l,
         // is a TX needed for this connection?
         if (c->needs_tx)
             tx(c, false, 0);
-        else
-            log_sent_pkts(c);
+
+        log_sent_pkts(c);
 
         // clear the helper flags set above
         c->needs_tx = c->had_rx = false;

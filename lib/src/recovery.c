@@ -220,7 +220,7 @@ void on_pkt_sent(struct q_conn * const c, struct w_iov * const v)
     const ev_tstamp now = ev_now(loop);
 
     c->rec.last_sent_t = meta(v).tx_t = now;
-    if (c->state != CONN_STAT_VERS_REJ)
+    if (c->state != CONN_STAT_VERS_NEG_SENT)
         // don't track version negotiation responses
         splay_insert(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
 

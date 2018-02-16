@@ -166,13 +166,13 @@ static struct q_conn * new_conn(struct w_engine * const w,
     c->ack_alarm.repeat = kDelayedAckTimeout;
     ev_init(&c->ack_alarm, ack_alarm);
 
-    c->peer_ack_del_exp = c->local_ack_del_exp = 3;
-    c->local_idle_to = kIdleTimeout;
+    c->tp_peer.ack_del_exp = c->tp_local.ack_del_exp = 3;
+    c->tp_local.idle_to = kIdleTimeout;
     // XXX: check IDs if stream 0 is flow-controlled during handshake or not
-    c->local_max_data = 0x4000;
-    c->local_max_strm_data = 0x2000;
-    c->local_max_strm_bidi = c->is_clnt ? 1 : 4;
-    c->local_max_strm_uni = 0; // TODO: support unidir streams
+    c->tp_local.max_data = 0x4000;
+    c->tp_local.max_strm_data = 0x2000;
+    c->tp_local.max_strm_bidi = c->is_clnt ? 1 : 4;
+    c->tp_local.max_strm_uni = 0; // TODO: support unidir streams
 
     // initialize socket and start an RX/TX watchers
     ev_async_init(&c->tx_w, tx_w);
@@ -222,7 +222,9 @@ void q_free(struct w_iov_sq * const q)
 
 struct q_conn * q_connect(void * const q,
                           const struct sockaddr_in * const peer,
-                          const char * const peer_name)
+                          const char * const peer_name,
+                          struct w_iov_sq * const early_data,
+                          struct q_stream ** const early_data_stream)
 {
     // make new connection
     uint64_t cid;
@@ -236,9 +238,22 @@ struct q_conn * q_connect(void * const q,
     w_connect(c->sock, peer->sin_addr.s_addr, peer->sin_port);
 
     // allocate stream zero and start TLS handshake on stream 0
-    struct q_stream * const s = new_stream(c, 0, true);
+    struct q_stream * s = new_stream(c, 0, true);
     init_tls(c);
     tls_io(s, 0);
+
+    if (early_data) {
+        if (s->c->tls.do_0rtt)
+            init_0rtt_prot(c);
+        ensure(early_data_stream, "early data without stream pointer");
+
+        // queue up early data
+        s = new_stream(c, c->next_sid, true);
+        sq_concat(&s->out, early_data);
+        *early_data_stream = s;
+        // TODO place data back in sq
+    }
+
     ev_async_send(loop, &c->tx_w);
 
     warn(WRN, "waiting for connect to complete on %s conn " FMT_CID " to %s:%u",
@@ -395,15 +410,15 @@ struct q_conn * q_accept(struct q_conn * const c)
 
 struct q_stream * q_rsv_stream(struct q_conn * const c)
 {
-    if (c->next_sid > c->peer_max_strm_bidi) {
+    if (c->next_sid > c->tp_peer.max_strm_bidi) {
         // we hit the max stream limit, wait for MAX_STREAM_ID frame
         warn(WRN, "MAX_STREAM_ID increase needed (%u > %u)", c->next_sid,
-             c->peer_max_strm_bidi);
+             c->tp_peer.max_strm_bidi);
         loop_run(q_rsv_stream, c);
     }
 
-    ensure(c->next_sid <= c->peer_max_strm_bidi, "sid %u <= max %u",
-           c->next_sid, c->peer_max_strm_bidi);
+    ensure(c->next_sid <= c->tp_peer.max_strm_bidi, "sid %u <= max %u",
+           c->next_sid, c->tp_peer.max_strm_bidi);
 
     return new_stream(c, c->next_sid, true);
 }
@@ -440,6 +455,11 @@ void * q_init(const char * const ifname,
     ensure(pm, "could not calloc");
     ASAN_POISON_MEMORY_REGION(pm, (nbufs + 1) * sizeof(*pm));
 
+    warn(INF, "%s/%s %s/%s with libev %u.%u ready", quant_name, w->backend_name,
+         quant_version, QUANT_COMMIT_HASH_ABBREV, ev_version_major(),
+         ev_version_minor());
+    warn(INF, "submit bug reports at https://github.com/NTAP/quant/issues");
+
     // initialize TLS context
     init_tls_ctx(cert, key, cache);
 
@@ -451,11 +471,6 @@ void * q_init(const char * const ifname,
     signal_w.data = w;
     ev_signal_init(&signal_w, signal_cb, SIGINT);
     ev_signal_start(loop, &signal_w);
-
-    warn(INF, "%s/%s %s/%s with libev %u.%u ready", quant_name, w->backend_name,
-         quant_version, QUANT_COMMIT_HASH_ABBREV, ev_version_major(),
-         ev_version_minor());
-    warn(INF, "submit bug reports at https://github.com/NTAP/quant/issues");
 
     return w;
 }

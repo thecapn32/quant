@@ -37,6 +37,24 @@
 struct q_stream;
 
 
+void q_chunk_str(void * const q,
+                 const char * const str,
+                 const uint32_t len,
+                 struct w_iov_sq * o)
+{
+    // allocate tail queue
+    q_alloc(q, o, len);
+
+    // chunk up string
+    const char * i = str;
+    struct w_iov * v = 0;
+    sq_foreach (v, o, next) {
+        strncpy((char *)v->buf, i, v->len);
+        i += v->len;
+    }
+}
+
+
 void q_write_str(void * const q,
                  struct q_stream * const s,
                  const char * const str)

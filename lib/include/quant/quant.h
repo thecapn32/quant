@@ -44,10 +44,12 @@ extern void * __attribute__((nonnull(1))) q_init(const char * const ifname,
 
 extern void __attribute__((nonnull)) q_cleanup(void * const q);
 
-extern struct q_conn * __attribute__((nonnull))
+extern struct q_conn * __attribute__((nonnull(1, 2, 3)))
 q_connect(void * const q,
           const struct sockaddr_in * const peer,
-          const char * const peer_name);
+          const char * const peer_name,
+          struct w_iov_sq * const early_data,
+          struct q_stream ** const early_data_stream);
 
 extern void __attribute__((nonnull)) q_close(struct q_conn * const c);
 
@@ -76,6 +78,11 @@ extern void __attribute__((nonnull)) q_free(struct w_iov_sq * const q);
 extern uint64_t __attribute__((nonnull)) q_cid(const struct q_conn * const c);
 
 extern uint64_t __attribute__((nonnull)) q_sid(const struct q_stream * const s);
+
+extern void __attribute__((nonnull)) q_chunk_str(void * const q,
+                                                 const char * const str,
+                                                 const uint32_t len,
+                                                 struct w_iov_sq * o);
 
 extern void __attribute__((nonnull))
 q_write_str(void * const q, struct q_stream * const s, const char * const str);

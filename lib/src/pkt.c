@@ -209,7 +209,7 @@ void enc_pkt(struct q_stream * const s,
     uint16_t hdr_len = 0;
     uint16_t i = 0;
 
-    if (c->state == CONN_STAT_VERS_REJ) {
+    if (c->state == CONN_STAT_VERS_NEG) {
         warn(INF, "sending version negotiation server response");
         flags = F_LONG_HDR | (uint8_t)w_rand();
         i = enc(v->buf, v->len, 0, &flags, sizeof(flags), "0x%02x");
@@ -236,7 +236,7 @@ void enc_pkt(struct q_stream * const s,
     case CONN_STAT_IDLE:
     case CONN_STAT_RTRY:
     case CONN_STAT_CH_SENT:
-        flags = F_LONG_HDR | F_LH_INIT;
+        flags = F_LONG_HDR | (s->id == 0 ? F_LH_INIT : F_LH_0RTT);
         break;
     case CONN_STAT_HSHK_DONE:
     case CONN_STAT_HSHK_FAIL:
@@ -270,9 +270,7 @@ void enc_pkt(struct q_stream * const s,
 
     hdr_len = i;
 
-    if (!splay_empty(&c->recv) &&
-        (!is_set(F_LONG_HDR, flags) ||
-         (c->state != CONN_STAT_VERS_REJ && !is_set(F_LH_RTRY, flags)))) {
+    if (!splay_empty(&c->recv) && c->state >= CONN_STAT_HSHK_DONE) {
         meta(v).ack_header_pos = i;
         i = enc_ack_frame(c, v, i);
     } else
@@ -296,16 +294,16 @@ void enc_pkt(struct q_stream * const s,
         i = enc_blocked_frame(c, v, i);
 
     if (s->c->open_win) {
-        s->c->local_max_data += 0x1000;
+        s->c->tp_local.max_data += 0x1000;
         i = enc_max_data_frame(s->c, v, i);
         s->c->open_win = false;
     }
 
-    if (c->peer_max_strm_bidi && c->next_sid > c->peer_max_strm_bidi)
+    if (c->tp_peer.max_strm_bidi && c->next_sid > c->tp_peer.max_strm_bidi)
         i = enc_stream_id_blocked_frame(c, v, i);
 
     if (s->c->inc_sid) {
-        s->c->local_max_strm_bidi += 4;
+        s->c->tp_local.max_strm_bidi += 4;
         i = enc_max_stream_id_frame(s->c, v, i);
         s->c->inc_sid = false;
     }
@@ -350,8 +348,11 @@ void enc_pkt(struct q_stream * const s,
         }
     }
 
-    if (c->state == CONN_STAT_IDLE || c->state == CONN_STAT_RTRY)
+    if ((c->state == CONN_STAT_IDLE || c->state == CONN_STAT_RTRY) &&
+        pkt_type(flags) != F_LH_0RTT) {
         i = enc_padding_frame(v, i, MIN_INI_LEN - i - AEAD_LEN);
+        conn_to_state(c, CONN_STAT_CH_SENT);
+    }
 
 tx:
     v->len = i;
@@ -362,9 +363,10 @@ tx:
     x->port = v->port;
     x->flags = v->flags;
 
-    if (c->state == CONN_STAT_VERS_REJ) {
+    if (c->state == CONN_STAT_VERS_NEG) {
         memcpy(x->buf, v->buf, v->len); // copy data
         x->len = v->len;
+        conn_to_state(c, CONN_STAT_VERS_NEG_SENT);
     } else
         x->len = enc_aead(c, v, x, hdr_len);
 

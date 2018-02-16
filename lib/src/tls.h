@@ -41,8 +41,6 @@ struct w_iov;
 
 struct tls {
     ptls_t * t;
-    uint8_t in_sec[PTLS_MAX_DIGEST_SIZE];
-    uint8_t out_sec[PTLS_MAX_DIGEST_SIZE];
     ptls_aead_context_t * in_clr;
     ptls_aead_context_t * out_clr;
     ptls_aead_context_t * in_0rtt;
@@ -53,6 +51,11 @@ struct tls {
     uint8_t tp_buf[96];
     ptls_raw_extension_t tp_ext[2];
     ptls_handshake_properties_t tls_hshake_prop;
+
+    uint8_t do_0rtt : 1;
+    uint8_t : 7;
+
+    uint8_t _unused[7];
 };
 
 
@@ -61,6 +64,8 @@ extern ptls_context_t tls_ctx;
 
 extern void __attribute__((nonnull))
 init_cleartext_prot(struct q_conn * const c);
+
+extern void __attribute__((nonnull)) init_0rtt_prot(struct q_conn * const c);
 
 extern void __attribute__((nonnull)) init_tls(struct q_conn * const c);
 
@@ -71,7 +76,7 @@ tls_io(struct q_stream * const s, struct w_iov * const iv);
 
 extern void init_tls_ctx(const char * const cert,
                          const char * const key,
-                         const char * const cache);
+                         const char * const ticket_store);
 
 extern uint16_t __attribute__((nonnull)) dec_aead(struct q_conn * const c,
                                                   const struct w_iov * v,

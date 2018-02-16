@@ -183,7 +183,8 @@ done:
 
 uint64_t shorten_ack_nr(const uint64_t ack, const uint64_t diff)
 {
-    ensure(diff, "no diff between ACKs");
+    ensure(diff, "no diff between ACK %" PRIu64 " and diff %" PRIu64, ack,
+           diff);
 
     uint64_t div = (uint64_t)(powl(ceill(log10l(diff)), 10));
     div = MAX(10, div);
@@ -209,7 +210,7 @@ uint16_t dec_ack_frame(
 
     uint64_t ack_delay_raw = 0;
     i = dec(&ack_delay_raw, v->buf, v->len, i, 0, "%" PRIu64);
-    const uint64_t ack_delay = ack_delay_raw * (1 << c->peer_ack_del_exp);
+    const uint64_t ack_delay = ack_delay_raw * (1 << c->tp_peer.ack_del_exp);
 
     uint64_t num_blocks = 0;
     i = dec(&num_blocks, v->buf, v->len, i, 0, "%" PRIu64);
@@ -338,13 +339,13 @@ dec_max_stream_id_frame(struct q_conn * const c,
            "illegal MAX_STREAM_ID %u", max);
 
     if (is_set(STRM_FL_DIR_UNI, max)) {
-        c->peer_max_strm_uni = max;
+        c->tp_peer.max_strm_uni = max;
         warn(INF, FRAM_IN "MAX_STREAM_ID" NRM " max=%" PRIu64 " (unidir)",
-             c->peer_max_strm_uni);
+             c->tp_peer.max_strm_uni);
     } else {
-        c->peer_max_strm_bidi = max;
+        c->tp_peer.max_strm_bidi = max;
         warn(INF, FRAM_IN "MAX_STREAM_ID" NRM " max=%" PRIu64 " (bidir)",
-             c->peer_max_strm_bidi);
+             c->tp_peer.max_strm_bidi);
     }
 
     maybe_api_return(q_rsv_stream, c);
@@ -359,13 +360,13 @@ dec_max_data_frame(struct q_conn * const c,
                    const uint16_t pos)
 {
     const uint16_t i =
-        dec(&c->peer_max_data, v->buf, v->len, pos + 1, 0, "%" PRIu64);
+        dec(&c->tp_peer.max_data, v->buf, v->len, pos + 1, 0, "%" PRIu64);
 
     c->blocked = false;
     // TODO: we should only do this if TX is pending on any stream
     c->needs_tx = true;
 
-    warn(INF, FRAM_IN "MAX_DATA" NRM " max=%" PRIu64, c->peer_max_data);
+    warn(INF, FRAM_IN "MAX_DATA" NRM " max=%" PRIu64, c->tp_peer.max_data);
 
     return i;
 }
@@ -423,7 +424,7 @@ dec_stream_id_blocked_frame(struct q_conn * const c,
 
     warn(INF, FRAM_IN "STREAM_ID_BLOCKED" NRM " sid=" FMT_SID, sid);
 
-    if (sid == c->local_max_strm_bidi) {
+    if (sid == c->tp_local.max_strm_bidi) {
         // let the peer open more streams
         c->inc_sid = true;
         c->needs_tx = true;
@@ -657,7 +658,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
 
     const uint64_t ack_delay =
         (uint64_t)((ev_now(loop) - c->lg_recv_t) * 1000000) /
-        (1 << c->local_ack_del_exp);
+        (1 << c->tp_local.ack_del_exp);
     i = enc(v->buf, v->len, i, &ack_delay, 0, "%" PRIu64);
 
     const uint64_t block_cnt = diet_cnt(&c->recv) - 1;
@@ -686,7 +687,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
                               " block=%" PRIu64 " [" FMT_PNR_IN ".." FMT_PNR_IN
                               "]",
                      lg_recv, ack_delay,
-                     ack_delay * (1 << c->local_ack_del_exp), block_cnt,
+                     ack_delay * (1 << c->tp_local.ack_del_exp), block_cnt,
                      ack_block, b->lo, shorten_ack_nr(b->hi, ack_block));
         else if (prev_lo)
             warn(INF,
@@ -697,7 +698,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
             warn(INF,
                  FRAM_OUT "ACK" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64
                           " (%" PRIu64 " usec) cnt=%" PRIu64 " block=%" PRIu64,
-                 lg_recv, ack_delay, ack_delay * (1 << c->local_ack_del_exp),
+                 lg_recv, ack_delay, ack_delay * (1 << c->tp_local.ack_del_exp),
                  block_cnt, ack_block);
 
         i = enc(v->buf, v->len, i, &ack_block, 0, "%" PRIu64);
@@ -809,9 +810,9 @@ uint16_t enc_max_data_frame(struct q_conn * const c,
 {
     const uint8_t type = FRAM_TYPE_MAX_DATA;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
-    i = enc(v->buf, v->len, i, &c->local_max_data, 0, "%" PRIu64);
+    i = enc(v->buf, v->len, i, &c->tp_local.max_data, 0, "%" PRIu64);
 
-    warn(INF, FRAM_OUT "MAX_DATA" NRM " max=%" PRIu64, c->local_max_data);
+    warn(INF, FRAM_OUT "MAX_DATA" NRM " max=%" PRIu64, c->tp_local.max_data);
 
     return i;
 }
@@ -823,10 +824,10 @@ uint16_t enc_max_stream_id_frame(struct q_conn * const c,
 {
     const uint8_t type = FRAM_TYPE_MAX_SID;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
-    i = enc(v->buf, v->len, i, &c->local_max_strm_bidi, 0, "%" PRIu64);
+    i = enc(v->buf, v->len, i, &c->tp_local.max_strm_bidi, 0, "%" PRIu64);
 
     warn(INF, FRAM_OUT "MAX_STREAM_ID" NRM " max=%" PRIu64,
-         c->local_max_strm_bidi);
+         c->tp_local.max_strm_bidi);
 
     return i;
 }
@@ -854,9 +855,9 @@ uint16_t enc_blocked_frame(struct q_conn * const c,
 {
     const uint8_t type = FRAM_TYPE_BLCK;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
-    i = enc(v->buf, v->len, i, &c->peer_max_data, 0, "%" PRIu64);
+    i = enc(v->buf, v->len, i, &c->tp_peer.max_data, 0, "%" PRIu64);
 
-    warn(INF, FRAM_OUT "BLOCKED" NRM " off=%" PRIu64, c->peer_max_data);
+    warn(INF, FRAM_OUT "BLOCKED" NRM " off=%" PRIu64, c->tp_peer.max_data);
 
     return i;
 }
@@ -868,10 +869,10 @@ uint16_t enc_stream_id_blocked_frame(struct q_conn * const c,
 {
     const uint8_t type = FRAM_TYPE_ID_BLCK;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
-    i = enc(v->buf, v->len, i, &c->peer_max_strm_bidi, 0, "%" PRIu64);
+    i = enc(v->buf, v->len, i, &c->tp_peer.max_strm_bidi, 0, "%" PRIu64);
 
     warn(INF, FRAM_OUT "STREAM_ID_BLOCKED" NRM " sid=" FMT_SID,
-         c->peer_max_strm_bidi);
+         c->tp_peer.max_strm_bidi);
 
     return i;
 }
