@@ -445,6 +445,8 @@ static void init_tp(struct q_conn * const c)
 }
 
 
+#define QUIC_LABL "QUIC "
+
 static ptls_aead_context_t * init_hshk_secret(struct q_conn * const c
                                               __attribute__((unused)),
                                               ptls_cipher_suite_t * const cs,
@@ -456,10 +458,10 @@ static ptls_aead_context_t * init_hshk_secret(struct q_conn * const c
     uint8_t output[PTLS_MAX_SECRET_SIZE];
     ensure(ptls_hkdf_expand_label(cs->hash, output, cs->hash->digest_size,
                                   secret, label, ptls_iovec_init(0, 0),
-                                  "QUIC ") == 0,
+                                  QUIC_LABL) == 0,
            "ptls_hkdf_expand_label");
     // hexdump(output, cs->hash->digest_size); // handshake secret
-    return ptls_aead_new(cs->aead, cs->hash, is_enc, output, "QUIC ");
+    return ptls_aead_new(cs->aead, cs->hash, is_enc, output, QUIC_LABL);
 }
 
 
@@ -664,11 +666,11 @@ init_secret(ptls_t * const t,
     ensure(ptls_export_secret(t, sec, cs->hash->digest_size, label,
                               ptls_iovec_init(0, 0), is_early) == 0,
            "ptls_export_secret");
-    return ptls_aead_new(cs->aead, cs->hash, is_enc, sec, "QUIC ");
+    return ptls_aead_new(cs->aead, cs->hash, is_enc, sec, QUIC_LABL);
 }
 
 
-#define BOTH_LABL_0RTT "EXPORTER-QUIC 0rtt"
+#define LABL_0RTT "EXPORTER-QUIC 0rtt"
 
 void init_0rtt_prot(struct q_conn * const c)
 {
@@ -680,8 +682,8 @@ void init_0rtt_prot(struct q_conn * const c)
 
     const ptls_cipher_suite_t * const cs = ptls_get_cipher(c->tls.t);
     uint8_t sec[PTLS_MAX_DIGEST_SIZE];
-    c->tls.in_0rtt = init_secret(c->tls.t, cs, sec, BOTH_LABL_0RTT, 0, 1);
-    c->tls.out_0rtt = init_secret(c->tls.t, cs, sec, BOTH_LABL_0RTT, 1, 1);
+    c->tls.in_0rtt = init_secret(c->tls.t, cs, sec, LABL_0RTT, 0, 1);
+    c->tls.out_0rtt = init_secret(c->tls.t, cs, sec, LABL_0RTT, 1, 1);
 }
 
 
