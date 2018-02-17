@@ -148,7 +148,6 @@ static void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c)
             if (p->is_rtxed || !is_rtxable(p)) {
                 warn(DBG, "free already-rtxed/non-rtxable pkt " FMT_PNR_OUT,
                      p->nr);
-                splay_remove(pm_nr_splay, &c->rec.sent_pkts, p);
                 q_free_iov(w_iov(w_engine(c->sock), pm_idx(p)));
             }
 
@@ -243,6 +242,11 @@ void on_ack_rx_1(struct q_conn * const c,
     c->rec.lg_acked = ack;
     struct w_iov * const v = find_sent_pkt(c, ack);
     ensure(v, "found ACKed pkt " FMT_PNR_OUT, ack);
+    // if (v == 0) {
+    //     warn(ERR, "got ACK for " FMT_PNR_OUT " that is missing from record",
+    //          ack);
+    //     return;
+    // }
     c->rec.latest_rtt = ev_now(loop) - meta(v).tx_t;
 
     // UpdateRtt
@@ -358,10 +362,8 @@ void on_pkt_acked(struct q_conn * const c, const uint64_t ack)
             maybe_api_return(q_write, s);
     }
 
-    if (!is_rtxable(&meta(v))) {
-        splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
+    if (!is_rtxable(&meta(v)))
         q_free_iov(v);
-    }
 }
 
 

@@ -199,7 +199,7 @@ void q_alloc(void * const w, struct w_iov_sq * const q, const uint32_t len)
     struct w_iov * v = 0;
     sq_foreach (v, q, next) {
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
-        // warn(DBG, "q_alloc idx %u len %u", w_iov_idx(v), v->len);
+        // warn(CRT, "q_alloc idx %u len %u", w_iov_idx(v), v->len);
     }
 }
 
@@ -208,13 +208,14 @@ void q_free(struct w_iov_sq * const q)
 {
     struct w_iov * v = 0;
     sq_foreach (v, q, next) {
+        // warn(CRT, "q_free idx %u str %d", w_iov_idx(v),
+        //      meta(v).stream ? meta(v).stream->id : -1);
         if (meta(v).stream)
             splay_remove(pm_nr_splay, &meta(v).stream->c->rec.sent_pkts,
                          &meta(v));
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         meta(v) = (struct pkt_meta){0};
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
-        // warn(DBG, "q_free idx %u", w_iov_idx(v));
     }
     w_free(q);
 }
@@ -238,7 +239,7 @@ struct q_conn * q_connect(void * const q,
     w_connect(c->sock, peer->sin_addr.s_addr, peer->sin_port);
 
     // allocate stream zero and start TLS handshake on stream 0
-    struct q_stream * s = new_stream(c, 0, true);
+    struct q_stream * const s = new_stream(c, 0, true);
     init_tls(c);
     tls_io(s, 0);
 
@@ -248,9 +249,8 @@ struct q_conn * q_connect(void * const q,
         ensure(early_data_stream, "early data without stream pointer");
 
         // queue up early data
-        s = new_stream(c, c->next_sid, true);
-        sq_concat(&s->out, early_data);
-        *early_data_stream = s;
+        *early_data_stream = new_stream(c, c->next_sid, true);
+        sq_concat(&(*early_data_stream)->out, early_data);
         // TODO place data back in sq
     }
 

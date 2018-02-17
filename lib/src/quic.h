@@ -241,10 +241,14 @@ extern void * api_arg;
 
 #define q_free_iov(v)                                                          \
     do {                                                                       \
-        w_free_iov(v);                                                         \
+        /* warn(CRT, "q_free_iov idx %u str %d", w_iov_idx(v), */              \
+        /*     meta(v).stream ? meta(v).stream->id : -1); */                   \
+        if (meta(v).stream)                                                    \
+            splay_remove(pm_nr_splay, &meta(v).stream->c->rec.sent_pkts,       \
+                         &meta(v));                                            \
         meta(v) = (struct pkt_meta){0};                                        \
-        /* warn(DBG, "q_free_iov idx %u", w_iov_idx(v)); */                    \
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));                  \
+        w_free_iov(v);                                                         \
     } while (0)
 
 
@@ -252,7 +256,7 @@ extern void * api_arg;
     __extension__({                                                            \
         struct w_iov * _v = w_alloc_iov((w), (len), (off));                    \
         ASAN_UNPOISON_MEMORY_REGION(&meta(_v), sizeof(meta(_v)));              \
-        /* warn(DBG, "q_alloc_iov idx %u", w_iov_idx(_v)); */                  \
+        /* warn(CRT, "q_alloc_iov idx %u", w_iov_idx(_v)); */                  \
         _v;                                                                    \
     })
 

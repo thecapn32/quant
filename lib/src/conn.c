@@ -146,8 +146,8 @@ static void log_sent_pkts(struct q_conn * const c)
 {
     char sent_pkts_buf[1024] = "";
     uint64_t prev = 0;
-    for (struct pkt_meta * p = splay_min(pm_nr_splay, &c->rec.sent_pkts); p;
-         p = splay_next(pm_nr_splay, &c->rec.sent_pkts, p)) {
+    struct pkt_meta * p;
+    splay_foreach (p, pm_nr_splay, &c->rec.sent_pkts) {
         char tmp[1024] = "";
         const bool ack_only = is_ack_only(p);
         snprintf(tmp, sizeof(tmp), "%s%s" FMT_PNR_OUT "%s ",
@@ -441,35 +441,30 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             else
                 die("no vers in common with serv");
 
-            // reset TLS state
-            conn_to_state(c, CONN_STAT_IDLE);
-            init_tls(c);
-
-            // remove ClientHello and 0-RTT data from recovery state
-            struct pkt_meta *ch, *nxt;
-            for (ch = splay_min(pm_nr_splay, &c->rec.sent_pkts); ch; ch = nxt) {
-                nxt = splay_next(pm_nr_splay, &c->rec.sent_pkts, ch);
-                c->rec.in_flight -= ch->tx_len;
-                splay_remove(pm_nr_splay, &c->rec.sent_pkts, ch);
-            }
-
-            // free the previous ClientHello flight, and create a new one
+            // free the previous ClientHello flight
             struct q_stream * s = get_stream(c, 0);
             q_free(&s->out);
+            q_free(&s->in);
+
+            // reset TLS state and create new CH
+            conn_to_state(c, CONN_STAT_IDLE);
+            init_tls(c);
             tls_io(s, 0);
             if (s->c->tls.do_0rtt)
                 init_0rtt_prot(c);
 
             // reset all streams (stream 0 and any 0-RTT streams)
+            c->rec.in_flight = 0;
             splay_foreach (s, stream, &c->streams) {
                 // reset stream offset
                 s->out_off = 0;
                 // forget we transmitted any packets
                 struct w_iov * ov = 0;
-                sq_foreach_from (ov, &s->out, next)
+                sq_foreach_from (ov, &s->out, next) {
                     meta(ov).tx_len = 0;
+                    splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(ov));
+                }
             }
-
             c->needs_tx = true;
 
         } else {
