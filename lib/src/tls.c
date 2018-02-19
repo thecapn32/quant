@@ -280,9 +280,10 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             dec_tp(&c->tp_peer.max_strm_data, sizeof(uint32_t));
             warn(INF, "\tinitial_max_stream_data = %u",
                  c->tp_peer.max_strm_data);
-            // we need to apply this parameter to stream 0
-            struct q_stream * const s = get_stream(c, 0);
-            s->out_data_max = c->tp_peer.max_strm_data;
+            // we need to apply this parameter to all current streams
+            struct q_stream * s;
+            splay_foreach (s, stream, &c->streams)
+                s->out_data_max = c->tp_peer.max_strm_data;
             break;
 
         case TP_INITIAL_MAX_DATA:
