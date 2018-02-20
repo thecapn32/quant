@@ -537,6 +537,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
         }
 
         if (is_set(FRAM_TYPE_STRM, type)) {
+            bit_set(meta(v).frames, FRAM_TYPE_STRM);
             if (meta(v).stream_data_start && meta(v).stream) {
                 // already had at least one stream frame in this packet
                 // with non-duplicate data, so generate (another) copy
@@ -557,6 +558,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
             i = dec_stream_frame(c, v, i);
 
         } else if (is_set(FRAM_TYPE_ACK, type)) {
+            bit_set(meta(v).frames, FRAM_TYPE_ACK);
             i = dec_ack_frame(c, v, i, &on_ack_rx_1, &on_pkt_acked,
                               on_ack_rx_2);
 
@@ -642,6 +644,7 @@ uint16_t enc_padding_frame(struct w_iov * const v,
 {
     warn(INF, FRAM_OUT "PADDING" NRM " len=%u", len);
     memset(&v->buf[pos], FRAM_TYPE_PAD, len);
+    bit_set(meta(v).frames, FRAM_TYPE_PAD);
     return pos + len;
 }
 
@@ -651,6 +654,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
                        const uint16_t pos)
 {
     const uint8_t type = FRAM_TYPE_ACK;
+    bit_set(meta(v).frames, FRAM_TYPE_ACK);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
 
     const uint64_t lg_recv = diet_max(&c->recv);
@@ -724,6 +728,7 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
         s->fin_sent = 1;
         maybe_api_return(q_close_stream, s);
     }
+    bit_set(meta(v).frames, type);
 
     // now that we know how long the stream frame header is, encode it
     uint16_t i = meta(v).stream_header_pos =
@@ -766,6 +771,8 @@ uint16_t enc_close_frame(struct w_iov * const v,
                          const uint16_t err_code,
                          const char * const reas)
 {
+    bit_set(meta(v).frames, type);
+
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
     i = enc(v->buf, v->len, i, &err_code, sizeof(err_code), "0x%04x");
 
@@ -793,6 +800,8 @@ uint16_t enc_max_stream_data_frame(struct q_stream * const s,
                                    struct w_iov * const v,
                                    const uint16_t pos)
 {
+    bit_set(meta(v).frames, FRAM_TYPE_MAX_STRM_DATA);
+
     const uint8_t type = FRAM_TYPE_MAX_STRM_DATA;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
     i = enc(v->buf, v->len, i, &s->id, 0, FMT_SID);
@@ -809,6 +818,8 @@ uint16_t enc_max_data_frame(struct q_conn * const c,
                             struct w_iov * const v,
                             const uint16_t pos)
 {
+    bit_set(meta(v).frames, FRAM_TYPE_MAX_DATA);
+
     const uint8_t type = FRAM_TYPE_MAX_DATA;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
     i = enc(v->buf, v->len, i, &c->tp_local.max_data, 0, "%" PRIu64);
@@ -823,6 +834,8 @@ uint16_t enc_max_stream_id_frame(struct q_conn * const c,
                                  struct w_iov * const v,
                                  const uint16_t pos)
 {
+    bit_set(meta(v).frames, FRAM_TYPE_MAX_SID);
+
     const uint8_t type = FRAM_TYPE_MAX_SID;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
     i = enc(v->buf, v->len, i, &c->tp_local.max_strm_bidi, 0, "%" PRIu64);
@@ -838,6 +851,8 @@ uint16_t enc_stream_blocked_frame(struct q_stream * const s,
                                   const struct w_iov * const v,
                                   const uint16_t pos)
 {
+    bit_set(meta(v).frames, FRAM_TYPE_STRM_BLCK);
+
     const uint8_t type = FRAM_TYPE_STRM_BLCK;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
     i = enc(v->buf, v->len, i, &s->id, 0, FMT_SID);
@@ -854,6 +869,8 @@ uint16_t enc_blocked_frame(struct q_conn * const c,
                            const struct w_iov * const v,
                            const uint16_t pos)
 {
+    bit_set(meta(v).frames, FRAM_TYPE_BLCK);
+
     const uint8_t type = FRAM_TYPE_BLCK;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
     i = enc(v->buf, v->len, i, &c->tp_peer.max_data, 0, "%" PRIu64);
@@ -868,6 +885,8 @@ uint16_t enc_stream_id_blocked_frame(struct q_conn * const c,
                                      const struct w_iov * const v,
                                      const uint16_t pos)
 {
+    bit_set(meta(v).frames, FRAM_TYPE_ID_BLCK);
+
     const uint8_t type = FRAM_TYPE_ID_BLCK;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
     i = enc(v->buf, v->len, i, &c->tp_peer.max_strm_bidi, 0, "%" PRIu64);
