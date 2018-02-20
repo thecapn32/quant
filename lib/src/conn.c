@@ -606,7 +606,7 @@ void rx(struct ev_loop * const l,
                              ", accepting anyway",
                              cid, c->id);
                     else {
-                        warn(NTE, "new serv conn w/cis " FMT_CID " from %s:%u",
+                        warn(NTE, "new serv conn w/cid " FMT_CID " from %s:%u",
                              cid, inet_ntoa(peer.sin_addr),
                              ntohs(peer.sin_port));
                         const struct sockaddr_in none = {0};

@@ -330,7 +330,7 @@ void enc_pkt(struct q_stream * const s,
                       " off=%" PRIu64 " len=%u " REV BLD GRN "[RTX]",
              type, is_set(F_STREAM_FIN, type) ? "FIN" : "",
              is_set(F_STREAM_FIN, type) &&
-                     is_set(F_STREAM_LEN | F_STREAM_OFF, type)
+                     (is_set(F_STREAM_LEN, type) | is_set(F_STREAM_OFF, type))
                  ? "|"
                  : "",
              is_set(F_STREAM_LEN, type) ? "LEN" : "",
