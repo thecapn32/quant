@@ -740,7 +740,8 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
          FRAM_OUT "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID " off=%" PRIu64
                   " len=%" PRIu64,
          type, is_set(F_STREAM_FIN, type) ? "FIN" : "",
-         is_set(F_STREAM_FIN, type) && is_set(F_STREAM_LEN | F_STREAM_OFF, type)
+         is_set(F_STREAM_FIN, type) &&
+                 (is_set(F_STREAM_LEN, type) | is_set(F_STREAM_OFF, type))
              ? "|"
              : "",
          is_set(F_STREAM_LEN, type) ? "LEN" : "",
