@@ -430,14 +430,14 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                 break;
             }
 
-            warn(INF, "serv didn't like our vers 0x%08x", c->vers);
             // TODO: check CID
 
             if (c->vers_initial == 0)
                 c->vers_initial = c->vers;
             c->vers = try_vers;
             if (c->vers)
-                warn(INF, "retrying with vers 0x%08x", c->vers);
+                warn(INF, "serv didn't like vers 0x%08x, retrying with 0x%08x",
+                     c->vers_initial, c->vers);
             else
                 die("no vers in common with serv");
 

@@ -508,10 +508,10 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
                              ptls_iovec_t src)
 {
     if (is_encrypt) {
-        warn(INF, "creating new session ticket for %s %s",
+        warn(INF, "creating new 0-RTT session ticket for %s %s",
              ptls_get_server_name(tls), ptls_get_negotiated_protocol(tls));
     } else {
-        warn(INF, "verifying session ticket for %s %s",
+        warn(INF, "verifying 0-RTT session ticket for %s %s",
              ptls_get_server_name(tls), ptls_get_negotiated_protocol(tls));
     }
 
@@ -531,10 +531,10 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
                           ptls_t * tls,
                           ptls_iovec_t src)
 {
-    warn(NTE, "saving tickets to %s", tickets.file_name);
+    warn(NTE, "saving 0-RTT tickets to %s", tickets.file_name);
 
     FILE * const fp = fopen(tickets.file_name, "wbe");
-    ensure(fp, "could not open ticket %s", tickets.file_name);
+    ensure(fp, "could not open ticket file %s", tickets.file_name);
 
     // write git hash
     const uint32_t hash_len = sizeof(QUANT_COMMIT_HASH);
@@ -568,7 +568,7 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
     // write all tickets
     // XXX this currently dumps the entire cache to file on each connection!
     splay_foreach (t, ticket_splay, &tickets) { // NOLINT
-        warn(INF, "writing ticket for %s %s", t->sni, t->alpn);
+        warn(INF, "writing 0-RTT ticket for %s %s", t->sni, t->alpn);
 
         size_t len = strlen(t->sni) + 1;
         ensure(fwrite(&len, sizeof(len), 1, fp), "fwrite");
@@ -620,7 +620,6 @@ void init_tls(struct q_conn * const c)
     if (t) {
         c->tls.tls_hshake_prop.client.session_ticket =
             ptls_iovec_init(t->ticket, t->ticket_len);
-        warn(NTE, "trying 0-RTT handshake");
         c->try_0rtt = 1;
     }
 }
@@ -764,11 +763,11 @@ static void read_tickets()
 {
     FILE * const fp = fopen(tickets.file_name, "rbe");
     if (fp == 0) {
-        warn(WRN, "could not read TLS tickets from %s", tickets.file_name);
+        warn(WRN, "could not read 0-RTT tickets from %s", tickets.file_name);
         return;
     }
 
-    warn(INF, "reading TLS tickets from %s", tickets.file_name);
+    warn(INF, "reading 0-RTT tickets from %s", tickets.file_name);
 
     // read and verify git hash
     uint32_t hash_len;
@@ -777,7 +776,7 @@ static void read_tickets()
     ensure(fread(buf, sizeof(uint8_t), hash_len, fp), "fread");
     if (hash_len != sizeof(QUANT_COMMIT_HASH) ||
         memcmp(buf, QUANT_COMMIT_HASH, hash_len) != 0) {
-        warn(WRN, "TLS tickets were stored by different %s version, removing",
+        warn(WRN, "0-RTT tickets were stored by different %s version, removing",
              quant_name);
         ensure(unlink(tickets.file_name) == 0, "unlink");
         goto done;
@@ -808,7 +807,7 @@ static void read_tickets()
         ensure(fread(t->ticket, sizeof(*t->ticket), len, fp), "fread");
 
         splay_insert(ticket_splay, &tickets, t);
-        warn(INF, "got ticket for %s %s", t->sni, t->alpn);
+        warn(INF, "got 0-RTT ticket for %s %s", t->sni, t->alpn);
     }
 
 done:

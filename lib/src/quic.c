@@ -232,22 +232,27 @@ struct q_conn * q_connect(void * const q,
     arc4random_buf(&cid, sizeof(cid));
     const uint vers = ok_vers[0];
     struct q_conn * const c = new_conn(q, vers, cid, peer, peer_name, 0);
-    warn(WRN, "connecting %s conn " FMT_CID " to %s:%u w/SNI %s", conn_type(c),
-         cid, inet_ntoa(peer->sin_addr), ntohs(peer->sin_port), peer_name);
+
+    // allocate stream zero and inti TLS
+    struct q_stream * const s = new_stream(c, 0, true);
+    init_tls(c);
+
+    warn(WRN,
+         "new %u-RTT %s conn " FMT_CID " to %s:%u, %u byte%s queued for TX",
+         c->try_0rtt ? 0 : 1, conn_type(c), cid, inet_ntoa(peer->sin_addr),
+         ntohs(peer->sin_port), w_iov_sq_len(early_data),
+         plural(w_iov_sq_len(early_data)));
 
     ev_timer_again(loop, &c->idle_alarm);
     w_connect(c->sock, peer->sin_addr.s_addr, peer->sin_port);
 
-    // allocate stream zero and start TLS handshake on stream 0
-    struct q_stream * const s = new_stream(c, 0, true);
-    init_tls(c);
+    // start TLS handshake on stream 0
     tls_io(s, 0);
 
     if (early_data) {
+        ensure(early_data_stream, "early data without stream pointer");
         if (s->c->try_0rtt)
             init_0rtt_prot(c);
-        ensure(early_data_stream, "early data without stream pointer");
-
         // queue up early data
         *early_data_stream = new_stream(c, c->next_sid, true);
         sq_concat(&(*early_data_stream)->out, early_data);
@@ -256,7 +261,7 @@ struct q_conn * q_connect(void * const q,
 
     ev_async_send(loop, &c->tx_w);
 
-    warn(WRN, "waiting for connect to complete on %s conn " FMT_CID " to %s:%u",
+    warn(DBG, "waiting for connect to complete on %s conn " FMT_CID " to %s:%u",
          conn_type(c), c->id, inet_ntoa(peer->sin_addr), ntohs(peer->sin_port));
     loop_run(q_connect, c);
 
@@ -266,21 +271,27 @@ struct q_conn * q_connect(void * const q,
         return 0;
     }
 
-    if (*early_data_stream && s->c->try_0rtt && c->did_0rtt == false) {
-        // 0-RTT data was not accepted by server, queue for regular transmit
-        warn(WRN, "0-RTT data rejected by server, re-queueing");
-        (*early_data_stream)->out_off = 0;
-        struct w_iov * v;
-        sq_foreach (v, &(*early_data_stream)->out, next) {
-            meta(v).tx_len = meta(v).is_acked = 0;
-            splay_remove(pm_nr_splay, &meta(v).stream->c->rec.sent_pkts,
-                         &meta(v));
-        }
+    if (*early_data_stream && early_data && s->c->try_0rtt) {
+        if (c->did_0rtt == false) {
+            // 0-RTT data was not accepted by server, queue for regular
+            // transmit
+            warn(WRN, "0-RTT data rejected by server, re-queueing");
+            (*early_data_stream)->out_off = 0;
+            struct w_iov * v;
+            sq_foreach (v, &(*early_data_stream)->out, next) {
+                meta(v).tx_len = meta(v).is_acked = 0;
+                splay_remove(pm_nr_splay, &meta(v).stream->c->rec.sent_pkts,
+                             &meta(v));
+            }
+        } else
+            // hand early data back to app after 0-RTT
+            sq_concat(early_data, &(*early_data_stream)->out);
     }
 
     conn_to_state(c, CONN_STAT_ESTB);
 
-    warn(WRN, "%s conn " FMT_CID " connected", conn_type(c), c->id);
+    warn(WRN, "%s conn " FMT_CID " connected %s", conn_type(c), c->id,
+         c->did_0rtt ? "after 0-RTT handshake" : "");
     return c;
 }
 

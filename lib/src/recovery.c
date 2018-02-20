@@ -94,7 +94,7 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
              c->id);
     }
 
-    c->rec.ld_alarm.repeat = c->rec.last_sent_t + dur;
+    c->rec.ld_alarm.repeat = c->rec.last_sent_t + dur - ev_now(loop);
     ev_timer_again(loop, &c->rec.ld_alarm);
 }
 
