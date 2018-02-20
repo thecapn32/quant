@@ -69,19 +69,23 @@ struct q_conn {
     uint32_t vers_initial; ///< QUIC version first negotiated.
     uint64_t next_sid;     ///< Next stream ID to use on q_rsv_stream().
 
-    uint8_t is_clnt : 1;  ///< We are the client on this connection.
-    uint8_t omit_cid : 1; ///< We can omit the CID during TX on this connection.
-    uint8_t had_rx : 1;   ///< We had an RX event on this connection.
-    uint8_t needs_tx : 1; ///< We have a pending TX on this connection.
-    uint8_t use_time_loss_det : 1; ///< UsingTimeLossDetection()
-    uint8_t open_win : 1;          ///< We need to open the receive window.
-    uint8_t blocked : 1;           ///< We are receive-window-blocked.
-    uint8_t inc_sid : 1;           ///< Make more stream IDs available to peer.
-
     uint8_t state; ///< State of the connection.
 
+    uint16_t is_clnt : 1;  ///< We are the client on this connection.
+    uint16_t omit_cid : 1; ///< We omit the CID during TX on this connection.
+    uint16_t had_rx : 1;   ///< We had an RX event on this connection.
+    uint16_t needs_tx : 1; ///< We have a pending TX on this connection.
+    uint16_t use_time_loss_det : 1; ///< UsingTimeLossDetection()
+    uint16_t open_win : 1;          ///< We need to open the receive window.
+    uint16_t blocked : 1;           ///< We are receive-window-blocked.
+    uint16_t inc_sid : 1;           ///< Make more stream IDs available to peer.
+    uint16_t try_0rtt : 1;          ///< Try 0-RTT handshake.
+    uint16_t did_0rtt : 1;          ///< 0-RTT handshake succeeded;
+    uint16_t : 6;
+
+    uint8_t _unused[3];
+
     uint16_t err_code;
-    uint8_t _unused[4];
     char * err_reason;
 
     struct transport_params tp_peer;

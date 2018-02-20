@@ -27,7 +27,6 @@
 
 #include <arpa/inet.h>
 #include <bitstring.h>
-#include <inttypes.h>
 #include <netinet/in.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -175,18 +174,17 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
 
         if (meta(v).is_acked) {
             warn(DBG,
-                 "skipping ACKed pkt " FMT_PNR_OUT " (%" PRIx64
-                 ") on str " FMT_SID " during %s",
-                 meta(v).nr, meta(v).nr, s->id, rtx ? "RTX" : "TX");
+                 "skipping ACKed pkt " FMT_PNR_OUT " on str " FMT_SID
+                 " during %s",
+                 meta(v).nr, s->id, rtx ? "RTX" : "TX");
             continue;
         }
 
         if (rtx != (meta(v).tx_len > 0)) {
             warn(DBG,
-                 "skipping %s pkt " FMT_PNR_OUT " (%" PRIx64 ") on str " FMT_SID
-                 " during %s",
-                 meta(v).tx_len ? "already-tx'ed" : "fresh", meta(v).nr,
-                 meta(v).nr, s->id, rtx ? "RTX" : "TX");
+                 "skipping %s pkt " FMT_PNR_OUT " on str " FMT_SID " during %s",
+                 meta(v).tx_len ? "already-tx'ed" : "fresh", meta(v).nr, s->id,
+                 rtx ? "RTX" : "TX");
             continue;
         }
 
@@ -300,8 +298,10 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
               s->fin_sent == false))) {
             did_tx |= tx_other(s, rtx, limit);
         }
-        if (s->c->state < CONN_STAT_HSHK_DONE && s->c->tls.do_0rtt == 0)
+        if (s->c->state <= CONN_STAT_HSHK_DONE && s->c->try_0rtt == false) {
+            // only send stream-0 during handshake, unless we're doing 0-RTT
             break;
+        }
     }
 
     if (did_tx == false && c->state != CONN_STAT_VERS_NEG_SENT) {
@@ -450,7 +450,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             conn_to_state(c, CONN_STAT_IDLE);
             init_tls(c);
             tls_io(s, 0);
-            if (s->c->tls.do_0rtt)
+            if (s->c->try_0rtt)
                 init_0rtt_prot(c);
 
             // reset all streams (stream 0 and any 0-RTT streams)
@@ -461,7 +461,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                 // forget we transmitted any packets
                 struct w_iov * ov = 0;
                 sq_foreach_from (ov, &s->out, next) {
-                    meta(ov).tx_len = 0;
+                    meta(ov).tx_len = meta(ov).is_acked = 0;
                     splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(ov));
                 }
             }
@@ -513,6 +513,12 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
     case CONN_STAT_CLNG:
     case CONN_STAT_HSHK_FAIL:
     case CONN_STAT_DRNG:
+        // ignore 0-RTT packets if we're not doing 0-RTT
+        if (c->did_0rtt == false && pkt_type(flags) == F_LH_0RTT) {
+            warn(NTE, "ignoring 0-RTT pkt");
+            goto done;
+        }
+
         if (verify_prot(c, v) == false) {
             // check if this is a stateless reset
             if (memcmp(&v->buf[v->len - 16], c->stateless_reset_token, 16) ==
@@ -523,6 +529,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             }
             goto done;
         }
+
         track_recv(c, meta(v).nr);
         dec_frames(c, v);
 

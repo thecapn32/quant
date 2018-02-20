@@ -244,7 +244,7 @@ struct q_conn * q_connect(void * const q,
     tls_io(s, 0);
 
     if (early_data) {
-        if (s->c->tls.do_0rtt)
+        if (s->c->try_0rtt)
             init_0rtt_prot(c);
         ensure(early_data_stream, "early data without stream pointer");
 
@@ -264,6 +264,18 @@ struct q_conn * q_connect(void * const q,
         warn(WRN, "%s conn " FMT_CID " not connected, state 0x%02x",
              conn_type(c), c->id, c->state);
         return 0;
+    }
+
+    if (*early_data_stream && s->c->try_0rtt && c->did_0rtt == false) {
+        // 0-RTT data was not accepted by server, queue for regular transmit
+        warn(WRN, "0-RTT data rejected by server, re-queueing");
+        (*early_data_stream)->out_off = 0;
+        struct w_iov * v;
+        sq_foreach (v, &(*early_data_stream)->out, next) {
+            meta(v).tx_len = meta(v).is_acked = 0;
+            splay_remove(pm_nr_splay, &meta(v).stream->c->rec.sent_pkts,
+                         &meta(v));
+        }
     }
 
     conn_to_state(c, CONN_STAT_ESTB);

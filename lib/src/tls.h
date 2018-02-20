@@ -27,6 +27,7 @@
 
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include <picotls.h>
@@ -51,11 +52,7 @@ struct tls {
     uint8_t tp_buf[96];
     ptls_raw_extension_t tp_ext[2];
     ptls_handshake_properties_t tls_hshake_prop;
-
-    uint8_t do_0rtt : 1;
-    uint8_t : 7;
-
-    uint8_t _unused[7];
+    size_t max_early_data;
 };
 
 

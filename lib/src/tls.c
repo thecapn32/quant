@@ -605,14 +605,13 @@ void init_tls(struct q_conn * const c)
     if (!c->tls.in_clr)
         init_hshk_prot(c);
 
-    size_t max_early_data_size = 0;
     c->tls.tls_hshake_prop = (ptls_handshake_properties_t){
         .additional_extensions = c->tls.tp_ext,
         .collect_extension = filter_tp,
         .collected_extensions = chk_tp,
         .client.negotiated_protocols.list = alpn,
         .client.negotiated_protocols.count = alpn_cnt,
-        .client.max_early_data_size = &max_early_data_size};
+        .client.max_early_data_size = &c->tls.max_early_data};
 
     // try to find an existing session ticket
     const struct tls_ticket which = {.sni = c->peer_name,
@@ -622,7 +621,7 @@ void init_tls(struct q_conn * const c)
         c->tls.tls_hshake_prop.client.session_ticket =
             ptls_iovec_init(t->ticket, t->ticket_len);
         warn(NTE, "trying 0-RTT handshake");
-        c->tls.do_0rtt = 1;
+        c->try_0rtt = 1;
     }
 }
 
@@ -725,8 +724,17 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
         }
 
         if (ret == 0 && s->c->state < CONN_STAT_HSHK_DONE) {
-            if (ptls_is_psk_handshake(s->c->tls.t) && !s->c->is_clnt)
-                init_0rtt_prot(s->c);
+            if (ptls_is_psk_handshake(s->c->tls.t)) {
+                if (s->c->is_clnt)
+                    s->c->did_0rtt =
+                        s->c->try_0rtt & s->c->tls.tls_hshake_prop.client
+                                             .early_data_accepted_by_peer;
+                else {
+                    init_0rtt_prot(s->c);
+                    s->c->did_0rtt = 1;
+                }
+            }
+
             init_1rtt_prot(s->c);
             conn_to_state(s->c, CONN_STAT_HSHK_DONE);
         } else if (ret != 0 && ret != PTLS_ERROR_IN_PROGRESS)
@@ -846,7 +854,7 @@ void init_tls_ctx(const char * const cert,
         read_tickets();
     } else {
         tls_ctx.encrypt_ticket = &encrypt_ticket;
-        tls_ctx.max_early_data_size = 8192;
+        tls_ctx.max_early_data_size = 0xffffffff;
         tls_ctx.ticket_lifetime = 60 * 60 * 24;
         tls_ctx.require_dhe_on_psk = 0;
     }

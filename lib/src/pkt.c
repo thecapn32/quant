@@ -299,7 +299,8 @@ void enc_pkt(struct q_stream * const s,
         s->c->open_win = false;
     }
 
-    if (c->tp_peer.max_strm_bidi && c->next_sid > c->tp_peer.max_strm_bidi)
+    if (c->state >= CONN_STAT_ESTB && c->tp_peer.max_strm_bidi &&
+        c->next_sid > c->tp_peer.max_strm_bidi)
         i = enc_stream_id_blocked_frame(c, v, i);
 
     if (s->c->inc_sid) {
