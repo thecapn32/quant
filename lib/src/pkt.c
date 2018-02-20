@@ -349,7 +349,8 @@ void enc_pkt(struct q_stream * const s,
         }
     }
 
-    if ((c->state == CONN_STAT_IDLE || c->state == CONN_STAT_RTRY) &&
+    if ((c->state == CONN_STAT_IDLE || c->state == CONN_STAT_RTRY ||
+         c->state == CONN_STAT_CH_SENT) &&
         pkt_type(flags) != F_LH_0RTT) {
         i = enc_padding_frame(v, i, MIN_INI_LEN - i - AEAD_LEN);
         conn_to_state(c, CONN_STAT_CH_SENT);
