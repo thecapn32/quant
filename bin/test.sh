@@ -61,7 +61,7 @@ case $c in
                 ;;
         ngtcp2)
                 touch /tmp/ngtcp2-session /tmp/ngtcp2-tp
-                cc="echo GET / > /tmp/ngtcp2-req | \
+                cc="echo GET $path > /tmp/ngtcp2-req | \
                         external/ngtcp2-prefix/src/ngtcp2/examples/client \
                         -d /tmp/ngtcp2-req $addr $port --session-file=/tmp/ngtcp2-session \
                         --tp-file=/tmp/ngtcp2-tp"
@@ -71,11 +71,12 @@ case $c in
                         MOZQUIC_NSS_CONFIG=external/mozquic-prefix/src/mozquic/sample/nss-config \
                         DYLD_LIBRARY_PATH=external/mozquic-prefix/src/dist/$(cat external/mozquic-prefix/src/dist/latest)/lib \
                         external/mozquic-prefix/src/mozquic/client \
-                                -peer $addr:$port -get $path -send-close"
+                                -peer $addr:$port -get $path \
+                                -ignorePKI -send-close"
                 ;;
         picoquic)
                 cc="external/picoquic-prefix/src/picoquic/picoquicdemo \
-                        $addr $port -r"
+                        $addr $port -1"
                 ;;
 esac
 
@@ -114,11 +115,12 @@ case $s in
                 sc="env MOZQUIC_LOG=all:9 \
                         MOZQUIC_NSS_CONFIG=external/mozquic-prefix/src/mozquic/sample/nss-config \
                         DYLD_LIBRARY_PATH=external/mozquic-prefix/src/dist/$(cat external/mozquic-prefix/src/dist/latest)/lib \
-                        external/mozquic-prefix/src/mozquic/server -send-close"
+                        external/mozquic-prefix/src/mozquic/server \
+                        -ignorePKI -send-close -0rtt"
                 ;;
         picoquic)
                 sc="external/picoquic-prefix/src/picoquic/picoquicdemo \
-                        -p $port -k $key -c $cert"
+                        -p $port -k $key -c $cert -1"
                 ;;
         ats)
                 sed -i"" -e "s/.*proxy.config.http.server_ports.*/CONFIG proxy.config.http.server_ports STRING $port:quic/g" external/etc/trafficserver/records.config
