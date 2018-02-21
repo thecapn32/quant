@@ -515,7 +515,7 @@ void q_close_stream(struct q_stream * const s)
 
 void q_close(struct q_conn * const c)
 {
-    if (c->state < CONN_STAT_CLNG) {
+    if (c->state > CONN_STAT_IDLE && c->state < CONN_STAT_CLNG) {
         warn(WRN, "closing %s conn " FMT_CID, conn_type(c), c->id);
 
         // close all streams
