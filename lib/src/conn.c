@@ -233,7 +233,8 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             w_connect(s->c->sock, s->c->peer.sin_addr.s_addr,
                       s->c->peer.sin_port);
         w_tx(s->c->sock, &x);
-        w_nic_tx(w_engine(s->c->sock));
+        while (w_tx_pending(&x))
+            w_nic_tx(w_engine(s->c->sock));
         if (!s->c->is_clnt)
             w_disconnect(s->c->sock);
         q_free(&x);
