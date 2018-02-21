@@ -558,6 +558,7 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
         ensure(t, "calloc");
         t->sni = s;
         t->alpn = a;
+        splay_insert(ticket_splay, &tickets, t);
     } else {
         // update current ticket
         free(t->ticket);
@@ -569,7 +570,6 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
     t->ticket = calloc(1, t->ticket_len);
     ensure(t->ticket, "calloc");
     memcpy(t->ticket, src.base, src.len);
-    splay_insert(ticket_splay, &tickets, t);
 
     // write all tickets
     // XXX this currently dumps the entire cache to file on each connection!
@@ -652,6 +652,7 @@ void free_tls(struct q_conn * const c)
     struct tls_ticket *t, *tmp;
     for (t = splay_min(ticket_splay, &tickets); t != 0; t = tmp) {
         tmp = splay_next(ticket_splay, &tickets, t);
+        splay_remove(ticket_splay, &tickets, t);
         free(t->sni);
         free(t->alpn);
         free(t->ticket);
