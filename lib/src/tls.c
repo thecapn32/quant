@@ -461,7 +461,10 @@ static ptls_aead_context_t * init_hshk_secret(struct q_conn * const c
                                   secret, label, ptls_iovec_init(0, 0),
                                   QUIC_LABL) == 0,
            "ptls_hkdf_expand_label");
-    // hexdump(output, cs->hash->digest_size); // handshake secret
+    // warn(CRT, "%s handshake secret",
+    //      is_enc ? (c->is_clnt ? "clnt" : "serv")
+    //             : (c->is_clnt ? "serv" : "clnt"));
+    // hexdump(output, cs->hash->digest_size);
     return ptls_aead_new(cs->aead, cs->hash, is_enc, output, QUIC_LABL);
 }
 
@@ -484,14 +487,17 @@ void init_hshk_prot(struct q_conn * const c)
     const ptls_iovec_t cid = {.base = (uint8_t *)&ncid, .len = sizeof(ncid)};
     ensure(ptls_hkdf_extract(cs->hash, sec, salt, cid) == 0,
            "ptls_hkdf_extract");
+    // warn(CRT, "handshake secret");
     // hexdump(sec, PTLS_MAX_SECRET_SIZE);
 
     c->tls.in_clr = init_hshk_secret(
         c, cs, sec, c->is_clnt ? SERV_LABL_HSHK : CLNT_LABL_HSHK, 0);
+    // warn(CRT, "%s iv", c->is_clnt ? "serv" : "clnt");
     // hexdump(c->tls.in_clr->static_iv, c->tls.in_clr->algo->iv_size);
 
     c->tls.out_clr = init_hshk_secret(
         c, cs, sec, c->is_clnt ? CLNT_LABL_HSHK : SERV_LABL_HSHK, 1);
+    // warn(CRT, "%s iv", c->is_clnt ? "clnt" : "serv");
     // hexdump(c->tls.out_clr->static_iv, c->tls.out_clr->algo->iv_size);
 }
 
@@ -736,8 +742,10 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
 
             init_1rtt_prot(s->c);
             conn_to_state(s->c, CONN_STAT_HSHK_DONE);
-        } else if (ret != 0 && ret != PTLS_ERROR_IN_PROGRESS)
+        } else if (ret != 0 && ret != PTLS_ERROR_IN_PROGRESS) {
             err_close(s->c, ERR_TLS_HSHAKE_FAIL, "picotls error %u", ret);
+            break;
+        }
     } while (iv && iv->len);
 
     if (tb.off) {
