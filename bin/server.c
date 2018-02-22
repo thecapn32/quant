@@ -204,7 +204,8 @@ int main(int argc, char * argv[])
 
         q_free(&i);
     }
-    q_close(c);
+    if (c)
+        q_close(c);
 
     q_cleanup(q);
     warn(DBG, "%s exiting", basename(argv[0]));
