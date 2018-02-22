@@ -3,6 +3,9 @@
 [Unit]
 Description=Quant server
 
+[Socket]
+ListenDatagram=443
+
 [Service]
 ExecStart=@CMAKE_CURRENT_BINARY_DIR@/quant-server.sh
 Restart=always
