@@ -152,7 +152,7 @@ static void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c)
             if (p->is_rtxed || !is_rtxable(p)) {
                 warn(DBG, "free already-rtxed/non-rtxable pkt " FMT_PNR_OUT,
                      p->nr);
-                q_free_iov(w_iov(w_engine(c->sock), pm_idx(p)));
+                q_free_iov(c, w_iov(w_engine(c->sock), pm_idx(p)));
             }
 
         } else if (is_zero(c->rec.loss_t) && !is_inf(delay_until_lost))
@@ -368,13 +368,13 @@ void on_pkt_acked(struct q_conn * const c, const uint64_t ack)
     }
 
     if (!is_rtxable(&meta(v)))
-        q_free_iov(v);
+        q_free_iov(c, v);
 }
 
 
 struct w_iov * find_sent_pkt(struct q_conn * const c, const uint64_t nr)
 {
-    struct pkt_meta which = {.nr = nr};
+    const struct pkt_meta which = {.nr = nr};
     const struct pkt_meta * const p =
         splay_find(pm_nr_splay, &c->rec.sent_pkts, &which);
     return p ? w_iov(w_engine(c->sock), pm_idx(p)) : 0;

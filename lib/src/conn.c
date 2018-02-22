@@ -64,8 +64,12 @@ int ipnp_splay_cmp(const struct q_conn * const a, const struct q_conn * const b)
                (b->peer.sin_family == AF_INET || b->peer.sin_family == 0),
            "limited to AF_INET");
 
-    int diff = memcmp(&a->peer.sin_addr.s_addr, &b->peer.sin_addr.s_addr,
-                      sizeof(a->peer.sin_addr.s_addr));
+    int diff = (a->sport > b->sport) - (a->sport < b->sport);
+    if (diff)
+        return diff;
+
+    diff = memcmp(&a->peer.sin_addr.s_addr, &b->peer.sin_addr.s_addr,
+                  sizeof(a->peer.sin_addr.s_addr));
     if (likely(diff))
         return diff;
 
@@ -75,7 +79,7 @@ int ipnp_splay_cmp(const struct q_conn * const a, const struct q_conn * const b)
         return diff;
 
     // include only the client flag in the comparison
-    return a->is_clnt - b->is_clnt;
+    return (a->is_clnt > b->is_clnt) - (a->is_clnt < b->is_clnt);
 }
 
 
@@ -126,10 +130,12 @@ pick_from_server_vers(const void * const buf, const uint16_t len)
 }
 
 
-struct q_conn * get_conn_by_ipnp(const struct sockaddr_in * const peer,
+struct q_conn * get_conn_by_ipnp(const uint16_t sport,
+                                 const struct sockaddr_in * const peer,
                                  const bool is_clnt)
 {
-    struct q_conn which = {.peer = *peer, .is_clnt = is_clnt};
+    const struct q_conn which = {
+        .peer = *peer, .is_clnt = is_clnt, .sport = sport};
     return splay_find(ipnp_splay, &conns_by_ipnp, &which);
 }
 
@@ -168,7 +174,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
     struct w_iov_sq x = sq_head_initializer(x);
     uint32_t encoded = 0;
     struct w_iov * v = from;
-    sq_foreach_from (v, &s->out, next) {
+    sq_foreach (v, &s->out, next) {
         if (v->len > Q_OFFSET && (s->blocked || s->c->blocked))
             break;
 
@@ -461,7 +467,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                 s->out_off = 0;
                 // forget we transmitted any packets
                 struct w_iov * ov = 0;
-                sq_foreach_from (ov, &s->out, next) {
+                sq_foreach (ov, &s->out, next) {
                     meta(ov).tx_len = meta(ov).is_acked = 0;
                     splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(ov));
                 }
@@ -506,8 +512,10 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 
         // pass any further data received on stream 0 to TLS and check
         // whether that completes the client handshake
-        if (!is_set(F_LONG_HDR, flags) || pkt_type(flags) <= F_LH_HSHK)
-            maybe_api_return(q_accept, c);
+        if (!is_set(F_LONG_HDR, flags) || pkt_type(flags) <= F_LH_HSHK) {
+            if (maybe_api_return(q_accept, accept_queue))
+                accept_queue = c;
+        }
         // fall through
 
     case CONN_STAT_ESTB:
@@ -548,7 +556,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 done:
     if (is_rtxable(&meta(v)) == false || meta(v).stream == 0)
         // this packet is not rtx'able, or the stream data is duplicate
-        q_free_iov(v);
+        q_free_iov(c, v);
 }
 
 
@@ -569,20 +577,22 @@ void rx(struct ev_loop * const l,
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         sq_remove_head(&i, next);
 
+        struct q_conn * c = 0;
+        // warn(DBG, "rx idx %u", w_iov_idx(v));
+
         if (v->len > MAX_PKT_LEN)
             warn(WRN, "received %u-byte pkt (> %u max)", v->len, MAX_PKT_LEN);
         const uint16_t hdr_len = pkt_hdr_len(v->buf, v->len);
         if (v->len < hdr_len) {
             warn(ERR, "%u-byte pkt indicates %u-byte hdr; ignoring", v->len,
                  hdr_len);
-            q_free_iov(v);
+            q_free_iov(c, v);
             continue;
         }
 
         const uint8_t flags = pkt_flags(v->buf);
         const bool is_clnt = w_connected(ws);
         uint64_t cid = 0;
-        struct q_conn * c = 0;
 
         if (is_set(F_LONG_HDR, flags) || !is_set(F_SH_OMIT_CID, flags)) {
             cid = pkt_cid(v->buf, v->len);
@@ -593,7 +603,7 @@ void rx(struct ev_loop * const l,
             const struct sockaddr_in peer = {.sin_family = AF_INET,
                                              .sin_port = v->port,
                                              .sin_addr = {.s_addr = v->ip}};
-            c = get_conn_by_ipnp(&peer, is_clnt);
+            c = get_conn_by_ipnp(w_get_sport(ws), &peer, is_clnt);
             if (is_set(F_LONG_HDR, flags)) {
                 if (is_clnt) {
                     // server may have picked a new cid
@@ -607,15 +617,17 @@ void rx(struct ev_loop * const l,
                              ", accepting anyway",
                              cid, c->id);
                     else {
-                        warn(NTE, "new serv conn w/cid " FMT_CID " from %s:%u",
-                             cid, inet_ntoa(peer.sin_addr),
-                             ntohs(peer.sin_port));
+                        warn(NTE,
+                             "new serv conn on port %u w/cid " FMT_CID
+                             " from %s:%u",
+                             ntohs(w_get_sport(ws)), cid,
+                             inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
                         const struct sockaddr_in none = {0};
-                        c = get_conn_by_ipnp(&none, is_clnt);
+                        c = get_conn_by_ipnp(w_get_sport(ws), &none, is_clnt);
                         if (c == 0) {
                             // TODO: maintain accept queue
                             warn(CRT, "app is not in q_accept(), ignoring");
-                            q_free_iov(v);
+                            q_free_iov(c, v);
                             continue;
                         }
                         update_ipnp(c, &peer);
@@ -625,12 +637,12 @@ void rx(struct ev_loop * const l,
                 }
 
             } else
-                c = get_conn_by_ipnp(&peer, is_clnt);
+                c = get_conn_by_ipnp(w_get_sport(ws), &peer, is_clnt);
         }
 
         if (c == 0) {
             warn(INF, "cannot find connection for 0x%02x packet", flags);
-            q_free_iov(v);
+            q_free_iov(c, v);
             continue;
         }
 
@@ -652,7 +664,7 @@ void rx(struct ev_loop * const l,
             sq_remove_head(&s->in, next);
             if (tls_io(s, iv) == 0)
                 maybe_api_return(q_connect, c);
-            q_free_iov(iv);
+            q_free_iov(c, iv);
         }
     }
 
@@ -715,7 +727,7 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
     conn_to_state(c, CONN_STAT_CLSD);
     maybe_api_return(q_close, c);
     maybe_api_return(q_read, c);
-    maybe_api_return(q_accept, c);
+    maybe_api_return(q_accept, accept_queue);
 }
 
 

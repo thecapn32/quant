@@ -163,6 +163,7 @@ static inline bool is_ack_only(const struct pkt_meta * const p)
 
 
 extern struct ev_loop * loop;
+extern struct q_conn * accept_queue;
 
 /// The versions of QUIC supported by this implementation
 extern const uint32_t ok_vers[];
@@ -230,25 +231,26 @@ extern void * api_arg;
 /// @param      arg   The API argument currently active.
 ///
 #define maybe_api_return(func, arg)                                            \
-    do {                                                                       \
-        ensure(api_func && api_arg, "API call active");                        \
+    __extension__({                                                            \
+        ensure(api_func, "no API call active");                                \
+        bool _ret = false;                                                     \
         if (api_func == (func_ptr)(&(func)) && api_arg == (arg)) {             \
             ev_break(loop, EVBREAK_ALL);                                       \
             warn(DBG, #func "(" #arg ") done, exiting event loop");            \
-        }                                                                      \
-    } while (0)
+            _ret = true;                                                       \
+        } else                                                                 \
+            warn(DBG, #func "(" #arg ") not active");                          \
+        _ret;                                                                  \
+    })
 
 
-#define q_free_iov(v)                                                          \
+#define q_free_iov(c, v)                                                       \
     do {                                                                       \
-        /* warn(CRT, "q_free_iov idx %u str %d", w_iov_idx(v), */              \
-        /*     meta(v).stream ? meta(v).stream->id : -1); */                   \
-        if (meta(v).stream)                                                    \
-            splay_remove(pm_nr_splay, &meta(v).stream->c->rec.sent_pkts,       \
-                         &meta(v));                                            \
+        /* warn(CRT, "q_free_iov idx %u", w_iov_idx(v)); */                    \
+        if (c)                                                                 \
+            splay_remove(pm_nr_splay, &(c)->rec.sent_pkts, &meta(v));          \
         meta(v) = (struct pkt_meta){0};                                        \
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));                  \
-        w_free_iov(v);                                                         \
     } while (0)
 
 

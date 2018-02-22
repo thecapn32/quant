@@ -45,6 +45,8 @@
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
+struct q_conn;
+
 
 static void __attribute__((noreturn)) usage(const char * const name,
                                             const char * const ifname,
@@ -110,6 +112,8 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
 }
 
 
+#define MAXPORTS 16
+
 int main(int argc, char * argv[])
 {
 #ifndef NDEBUG
@@ -124,7 +128,8 @@ int main(int argc, char * argv[])
     char cert[MAXPATHLEN] =
         "/etc/letsencrypt/live/slate.eggert.org/fullchain.pem";
     char key[MAXPATHLEN] = "/etc/letsencrypt/live/slate.eggert.org/privkey.pem";
-    uint16_t port = 4433;
+    uint16_t port[MAXPORTS] = {4433};
+    size_t num_ports = 0;
     int ch;
 
     while ((ch = getopt(argc, argv, "hi:p:d:v:c:k:")) != -1) {
@@ -142,7 +147,10 @@ int main(int argc, char * argv[])
             strncpy(key, optarg, sizeof(key) - 1);
             break;
         case 'p':
-            port = (uint16_t)MIN(UINT16_MAX, strtol(optarg, 0, 10));
+            port[num_ports++] =
+                (uint16_t)MIN(UINT16_MAX, strtol(optarg, 0, 10));
+            ensure(num_ports < MAXPORTS, "can only listen on at most %u ports",
+                   MAXPORTS);
             break;
         case 'v':
 #ifndef NDEBUG
@@ -152,21 +160,26 @@ int main(int argc, char * argv[])
         case 'h':
         case '?':
         default:
-            usage(basename(argv[0]), ifname, port, dir, cert, key);
+            usage(basename(argv[0]), ifname, port[0], dir, cert, key);
         }
     }
+
+    if (num_ports == 0)
+        num_ports = 1;
 
     const int dir_fd = open(dir, O_RDONLY | O_CLOEXEC);
     ensure(dir_fd != -1, "%s does not exist", dir);
 
     void * const q = q_init(ifname, cert, key, 0);
-    struct q_conn * c = q_bind(q, port);
-    warn(DBG, "%s waiting on %s port %d", basename(argv[0]), ifname, port);
+    struct q_conn * conn[MAXPORTS];
+    for (size_t i = 0; i < num_ports; i++) {
+        conn[i] = q_bind(q, port[i]);
+        warn(DBG, "%s waiting on %s port %d", basename(argv[0]), ifname,
+             port[i]);
+    }
 
-    if (q_accept(c) == 0)
-        goto done;
-
-    while (1) {
+    struct q_conn * const c = q_accept(q);
+    while (c) {
         http_parser_settings settings = {.on_url = serve_cb};
         struct cb_data d = {.c = c, .q = q, .dir = dir_fd};
         http_parser parser = {.data = &d};
@@ -193,7 +206,6 @@ int main(int argc, char * argv[])
     }
     q_close(c);
 
-done:
     q_cleanup(q);
     warn(DBG, "%s exiting", basename(argv[0]));
     return 0;

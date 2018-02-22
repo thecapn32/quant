@@ -83,8 +83,9 @@ struct q_conn {
     uint16_t did_0rtt : 1;          ///< 0-RTT handshake succeeded;
     uint16_t : 6;
 
-    uint8_t _unused[3];
+    uint8_t _unused[1];
 
+    uint16_t sport; ///< Local port (in network byte-order).
     uint16_t err_code;
     char * err_reason;
 
@@ -199,7 +200,9 @@ extern void __attribute__((nonnull))
 rx(struct ev_loop * const l, ev_io * const rx_w, int e);
 
 extern struct q_conn * __attribute__((nonnull))
-get_conn_by_ipnp(const struct sockaddr_in * const peer, const bool is_clnt);
+get_conn_by_ipnp(const uint16_t sport,
+                 const struct sockaddr_in * const peer,
+                 const bool is_clnt);
 
 extern struct q_conn * get_conn_by_cid(const uint64_t id, const bool is_clnt);
 

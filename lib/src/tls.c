@@ -408,7 +408,7 @@ static void init_tp(struct q_conn * const c)
     i += sizeof(uint16_t);
 
     // XXX ngtcp2 and picoquic cannot parse omit_connection_id as the last tp
-    const struct q_conn * const other = get_conn_by_ipnp(&c->peer, 0);
+    const struct q_conn * const other = get_conn_by_ipnp(c->sport, &c->peer, 0);
     if (!other || other->id == c->id)
         enc_tp(c, TP_OMIT_CONNECTION_ID, i, 0); // i not used
     enc_tp(c, TP_IDLE_TIMEOUT, c->tp_local.idle_to, sizeof(uint16_t));

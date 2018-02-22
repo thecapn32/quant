@@ -76,6 +76,8 @@ struct ev_loop * loop = 0;
 func_ptr api_func = 0;
 void * api_arg = 0;
 
+struct q_conn * accept_queue = 0;
+
 static const uint32_t nbufs = 1000; ///< Number of packet buffers to allocate.
 
 
@@ -179,6 +181,7 @@ static struct q_conn * new_conn(struct w_engine * const w,
     c->tx_w.data = c;
     ev_async_start(loop, &c->tx_w);
     c->sock = w_bind(w, htons(port), 0);
+    c->sport = w_get_sport(c->sock);
     ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
     c->rx_w.data = c->sock;
     ev_io_start(loop, &c->rx_w);
@@ -188,7 +191,8 @@ static struct q_conn * new_conn(struct w_engine * const w,
     if (c->id)
         splay_insert(cid_splay, &conns_by_cid, c);
 
-    warn(DBG, "%s conn " FMT_CID " created", conn_type(c), c->id);
+    warn(DBG, "%s conn " FMT_CID " on port %u created", conn_type(c), c->id,
+         port);
     return c;
 }
 
@@ -206,16 +210,17 @@ void q_alloc(void * const w, struct w_iov_sq * const q, const uint32_t len)
 
 void q_free(struct w_iov_sq * const q)
 {
-    struct w_iov * v = 0;
-    sq_foreach (v, q, next) {
+    struct w_iov * v = sq_first(q);
+    while (v) {
+        struct w_iov * const next = sq_next(v, next);
         // warn(CRT, "q_free idx %u str %d", w_iov_idx(v),
         //      meta(v).stream ? meta(v).stream->id : -1);
         if (meta(v).stream)
             splay_remove(pm_nr_splay, &meta(v).stream->c->rec.sent_pkts,
                          &meta(v));
-        ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         meta(v) = (struct pkt_meta){0};
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
+        v = next;
     }
     w_free(q);
 }
@@ -407,27 +412,34 @@ struct q_conn * q_bind(void * const q, const uint16_t port)
 }
 
 
-struct q_conn * q_accept(struct q_conn * const c)
+struct q_conn * q_accept(void * const q __attribute__((unused)))
 {
-    if (c->state >= CONN_STAT_HSHK_DONE) {
-        warn(WRN, "got %s conn " FMT_CID, conn_type(c), c->id);
-        return c;
+    warn(WRN, "waiting for accept on any serv conn");
+
+    if (accept_queue && accept_queue->state >= CONN_STAT_HSHK_DONE) {
+        warn(WRN, "got %s conn " FMT_CID, conn_type(accept_queue),
+             accept_queue->id);
+        return accept_queue;
     }
 
-    warn(WRN, "waiting for accept on %s conn", conn_type(c));
-    loop_run(q_accept, c);
+    accept_queue = 0;
+    loop_run(q_accept, accept_queue);
 
-    if (c->state != CONN_STAT_HSHK_DONE) {
-        q_close(c);
+    if (accept_queue == 0 || accept_queue->state != CONN_STAT_HSHK_DONE) {
+        if (accept_queue)
+            q_close(accept_queue);
         warn(ERR, "conn not accepted");
         return 0;
     }
-    conn_to_state(c, CONN_STAT_ESTB);
-    ev_timer_again(loop, &c->idle_alarm);
 
-    warn(WRN, "%s conn " FMT_CID " connected to clnt %s:%u", conn_type(c),
-         c->id, inet_ntoa(c->peer.sin_addr), ntohs(c->peer.sin_port));
-    return c;
+    conn_to_state(accept_queue, CONN_STAT_ESTB);
+    ev_timer_again(loop, &accept_queue->idle_alarm);
+
+    warn(WRN, "%s conn " FMT_CID " connected to clnt %s:%u",
+         conn_type(accept_queue), accept_queue->id,
+         inet_ntoa(accept_queue->peer.sin_addr),
+         ntohs(accept_queue->peer.sin_port));
+    return accept_queue;
 }
 
 
@@ -546,15 +558,12 @@ void q_close(struct q_conn * const c)
     struct pkt_meta *p, *np;
     for (p = splay_min(pm_nr_splay, &c->rec.sent_pkts); p; p = np) {
         np = splay_next(pm_nr_splay, &c->rec.sent_pkts, p);
-        splay_remove(pm_nr_splay, &c->rec.sent_pkts, p);
-        q_free_iov(w_iov(w_engine(c->sock), pm_idx(p)));
+        q_free_iov(c, w_iov(w_engine(c->sock), pm_idx(p)));
     }
 
     diet_free(&c->closed_streams);
     diet_free(&c->recv);
     free(c->peer_name);
-    if (c->sock)
-        w_close(c->sock);
     free_tls(c);
     if (c->err_reason)
         free(c->err_reason);
@@ -562,6 +571,9 @@ void q_close(struct q_conn * const c)
     // remove connection from global lists
     splay_remove(ipnp_splay, &conns_by_ipnp, c);
     splay_remove(cid_splay, &conns_by_cid, c);
+
+    if (c->sock)
+        w_close(c->sock);
 
     warn(WRN, "%s conn " FMT_CID " closed", conn_type(c), c->id);
     free(c);
