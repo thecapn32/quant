@@ -33,7 +33,8 @@ cd @CMAKE_BINARY_DIR@ || exit
 git pull
 cmake -GNinja ..
 ninja
-bin/server -v4 -i eth0 -d /usr/share/apache2/default-site \
+bin/server -v4 -i eth0 -p 443 -p 4433 \
+    -d /usr/share/apache2/default-site \
     -c /etc/letsencrypt/live/quant.eggert.org/fullchain.pem \
     -k /etc/letsencrypt/live/quant.eggert.org/privkey.pem \
     2>&1 | aha -s > "$name"
