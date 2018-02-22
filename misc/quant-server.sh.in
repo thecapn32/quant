@@ -16,11 +16,17 @@ function make_name() {
         echo "$path/$filename.$extension"
 }
 
+function cid_make_name() {
+        local path cid
+        path=$(dirname "$1")
+        cid=$(grep -o 'cid=[^ ]*' "$1" | cut -f2 -d= | head -n1)
+        echo "$path/$cid.html"
+}
 
 export PATH="$PATH:~/bin"
 
 name=/var/www/html/log.html
-new=$(make_name $name)
+new=$(cid_make_name $name)
 mv "$name" "$new"
 mail -s "$new" lars@netapp.com -A "$new" < /dev/null
 
