@@ -33,6 +33,7 @@ cd @CMAKE_BINARY_DIR@ || exit
 git pull
 cmake -GNinja ..
 ninja
+sudo setcap 'cap_net_bind_service=+ep' bin/server
 bin/server -v4 -i eth0 -p 443 -p 4433 \
     -d /usr/share/apache2/default-site \
     -c /etc/letsencrypt/live/quant.eggert.org/fullchain.pem \
