@@ -35,6 +35,7 @@
 #include <sys/types.h>
 
 #include <ev.h>
+#include <picotls.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
@@ -295,8 +296,8 @@ struct q_conn * q_connect(void * const q,
 
     conn_to_state(c, CONN_STAT_ESTB);
 
-    warn(WRN, "%s conn " FMT_CID " connected %s", conn_type(c), c->id,
-         c->did_0rtt ? "after 0-RTT handshake" : "");
+    warn(WRN, "%s conn " FMT_CID " connected%s, cipher %s", conn_type(c), c->id,
+         c->did_0rtt ? " after 0-RTT" : "", c->tls.out_1rtt->algo->name);
     return c;
 }
 
@@ -435,10 +436,12 @@ struct q_conn * q_accept(void * const q __attribute__((unused)))
     conn_to_state(accept_queue, CONN_STAT_ESTB);
     ev_timer_again(loop, &accept_queue->idle_alarm);
 
-    warn(WRN, "%s conn " FMT_CID " connected to clnt %s:%u",
+    warn(WRN, "%s conn " FMT_CID " connected to clnt %s:%u%s, cipher %s",
          conn_type(accept_queue), accept_queue->id,
          inet_ntoa(accept_queue->peer.sin_addr),
-         ntohs(accept_queue->peer.sin_port));
+         ntohs(accept_queue->peer.sin_port),
+         accept_queue->did_0rtt ? " after 0-RTT" : "",
+         accept_queue->tls.out_1rtt->algo->name);
     return accept_queue;
 }
 
