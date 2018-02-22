@@ -262,7 +262,6 @@ struct q_conn * q_connect(void * const q,
         // queue up early data
         *early_data_stream = new_stream(c, c->next_sid, true);
         sq_concat(&(*early_data_stream)->out, early_data);
-        // TODO place data back in sq
     }
 
     ev_async_send(loop, &c->tx_w);
@@ -283,7 +282,7 @@ struct q_conn * q_connect(void * const q,
             // transmit
             warn(WRN, "0-RTT data rejected by server, re-queueing");
             (*early_data_stream)->out_off = 0;
-            struct w_iov * v;
+            struct w_iov * v = 0;
             sq_foreach (v, &(*early_data_stream)->out, next) {
                 meta(v).tx_len = meta(v).is_acked = 0;
                 splay_remove(pm_nr_splay, &meta(v).stream->c->rec.sent_pkts,

@@ -173,7 +173,7 @@ static void __attribute__((nonnull)) free_cc(struct conn_cache * const cc)
 
 static void free_sl(void)
 {
-    struct stream_entry *i, *tmp;
+    struct stream_entry *i = 0, *tmp = 0;
     sl_foreach_safe (i, &sl, next, tmp) {
         sl_remove(&sl, i, stream_entry, next);
         free(i);

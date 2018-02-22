@@ -151,7 +151,7 @@ static void log_sent_pkts(struct q_conn * const c)
 {
     char sent_pkts_buf[1024] = "";
     uint64_t prev = 0;
-    struct pkt_meta * p;
+    struct pkt_meta * p = 0;
     splay_foreach (p, pm_nr_splay, &c->rec.sent_pkts) {
         char tmp[1024] = "";
         const bool ack_only = is_ack_only(p);
