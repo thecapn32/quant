@@ -543,10 +543,9 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
     ensure(fp, "could not open ticket file %s", tickets.file_name);
 
     // write git hash
-    const uint32_t hash_len = sizeof(QUANT_COMMIT_HASH);
-    ensure(fwrite(&hash_len, sizeof(hash_len), 1, fp), "fwrite");
-    ensure(fwrite(QUANT_COMMIT_HASH, sizeof(QUANT_COMMIT_HASH), 1, fp),
+    ensure(fwrite(&quant_commit_hash_len, sizeof(quant_commit_hash_len), 1, fp),
            "fwrite");
+    ensure(fwrite(quant_commit_hash, quant_commit_hash_len, 1, fp), "fwrite");
 
     char * s = strdup(ptls_get_server_name(tls));
     char * a = strdup(ptls_get_negotiated_protocol(tls));
@@ -783,8 +782,8 @@ static void read_tickets()
     ensure(fread(&hash_len, sizeof(hash_len), 1, fp), "fread");
     uint8_t buf[8192];
     ensure(fread(buf, sizeof(uint8_t), hash_len, fp), "fread");
-    if (hash_len != sizeof(QUANT_COMMIT_HASH) ||
-        memcmp(buf, QUANT_COMMIT_HASH, hash_len) != 0) {
+    if (hash_len != quant_commit_hash_len ||
+        memcmp(buf, quant_commit_hash, hash_len) != 0) {
         warn(WRN, "0-RTT tickets were stored by different %s version, removing",
              quant_name);
         ensure(unlink(tickets.file_name) == 0, "unlink");

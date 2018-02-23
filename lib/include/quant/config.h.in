@@ -27,6 +27,10 @@
 
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
+
+
 // IWYU pragma: private, include <@PROJECT_NAME@/@PROJECT_NAME@.h>
 
 #define @PROJECT_NAME_UC@ "@PROJECT_NAME@"
@@ -35,14 +39,20 @@
 #define @PROJECT_NAME_UC@_VERSION_MINOR @PROJECT_VERSION_MINOR@
 #define @PROJECT_NAME_UC@_VERSION_PATCH @PROJECT_VERSION_PATCH@
 
-#define @PROJECT_NAME_UC@_COMMIT_HASH "@GIT_COMMIT_HASH@"
-#define @PROJECT_NAME_UC@_COMMIT_HASH_ABBREV "@GIT_COMMIT_HASH_ABBREV@"
+#define @PROJECT_NAME_UC@_COMMIT_HASH_STR "@GIT_COMMIT_HASH_STR@"
+#define @PROJECT_NAME_UC@_COMMIT_HASH_ABBREV_STR "@GIT_COMMIT_HASH_ABBREV_STR@"
 
 /// The name of this library.
 extern const char @PROJECT_NAME@_name[];
 
 /// The version of this library.
 extern const char @PROJECT_NAME@_version[];
+
+extern const uint8_t @PROJECT_NAME@_commit_hash_abbrev[];
+extern const size_t @PROJECT_NAME@_commit_hash_abbrev_len;
+
+extern const uint8_t @PROJECT_NAME@_commit_hash[];
+extern const size_t @PROJECT_NAME@_commit_hash_len;
 
 #cmakedefine HAVE_ENDIAN_H
 #cmakedefine HAVE_SYS_ENDIAN_H

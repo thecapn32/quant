@@ -493,7 +493,7 @@ void * q_init(const char * const ifname,
     ASAN_POISON_MEMORY_REGION(pm, (nbufs + 1) * sizeof(*pm));
 
     warn(INF, "%s/%s %s/%s with libev %u.%u ready", quant_name, w->backend_name,
-         quant_version, QUANT_COMMIT_HASH_ABBREV, ev_version_major(),
+         quant_version, QUANT_COMMIT_HASH_ABBREV_STR, ev_version_major(),
          ev_version_minor());
     warn(INF, "submit bug reports at https://github.com/NTAP/quant/issues");
 
