@@ -296,7 +296,7 @@ struct q_conn * q_connect(void * const q,
     conn_to_state(c, CONN_STAT_ESTB);
 
     warn(WRN, "%s conn " FMT_CID " connected%s, cipher %s", conn_type(c), c->id,
-         c->did_0rtt ? " after 0-RTT" : "", c->tls.out_1rtt->algo->name);
+         c->did_0rtt ? " after 0-RTT" : "", c->tls.enc_1rtt->algo->name);
     return c;
 }
 
@@ -440,7 +440,7 @@ struct q_conn * q_accept(void * const q __attribute__((unused)))
          inet_ntoa(accept_queue->peer.sin_addr),
          ntohs(accept_queue->peer.sin_port),
          accept_queue->did_0rtt ? " after 0-RTT" : "",
-         accept_queue->tls.out_1rtt->algo->name);
+         accept_queue->tls.enc_1rtt->algo->name);
     return accept_queue;
 }
 
@@ -599,6 +599,8 @@ void q_cleanup(void * const q)
 
     // stop the event loop
     ev_loop_destroy(loop);
+
+    cleanup_tls_ctx();
 
     for (uint32_t i = 0; i <= nbufs; i++) {
         ASAN_UNPOISON_MEMORY_REGION(&pm[i], sizeof(pm[i]));

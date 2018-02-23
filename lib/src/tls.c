@@ -108,6 +108,10 @@ static ptls_openssl_verify_certificate_t verifier = {0};
 static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-09", 5}};
 static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 
+static ptls_aead_context_t * dec_tckt;
+static ptls_aead_context_t * enc_tckt;
+
+
 #define TLS_EXT_TYPE_TRANSPORT_PARAMETERS 26
 
 #define TP_INITIAL_MAX_STREAM_DATA 0x0000
@@ -448,6 +452,21 @@ static void init_tp(struct q_conn * const c)
 
 #define QUIC_LABL "QUIC "
 
+static void init_ticket_prot(void)
+{
+    const ptls_cipher_suite_t * const cs = &ptls_openssl_aes128gcmsha256;
+    uint8_t output[PTLS_MAX_SECRET_SIZE] = {0};
+    memcpy(output, quant_commit_hash,
+           MIN(quant_commit_hash_len, sizeof(output)));
+
+    dec_tckt = ptls_aead_new(cs->aead, cs->hash, 0, output, QUIC_LABL);
+    enc_tckt = ptls_aead_new(cs->aead, cs->hash, 1, output, QUIC_LABL);
+    ensure(dec_tckt && enc_tckt, "cannot init ticket protection");
+
+    ptls_clear_memory(output, sizeof(output));
+}
+
+
 static ptls_aead_context_t * init_hshk_secret(struct q_conn * const c
                                               __attribute__((unused)),
                                               ptls_cipher_suite_t * const cs,
@@ -490,15 +509,15 @@ void init_hshk_prot(struct q_conn * const c)
     // warn(CRT, "handshake secret");
     // hexdump(sec, PTLS_MAX_SECRET_SIZE);
 
-    c->tls.in_clr = init_hshk_secret(
+    c->tls.dec_hshk = init_hshk_secret(
         c, cs, sec, c->is_clnt ? SERV_LABL_HSHK : CLNT_LABL_HSHK, 0);
     // warn(CRT, "%s iv", c->is_clnt ? "serv" : "clnt");
-    // hexdump(c->tls.in_clr->static_iv, c->tls.in_clr->algo->iv_size);
+    // hexdump(c->tls.dec_hshk->static_iv, c->tls.dec_hshk->algo->iv_size);
 
-    c->tls.out_clr = init_hshk_secret(
+    c->tls.enc_hshk = init_hshk_secret(
         c, cs, sec, c->is_clnt ? CLNT_LABL_HSHK : SERV_LABL_HSHK, 1);
     // warn(CRT, "%s iv", c->is_clnt ? "clnt" : "serv");
-    // hexdump(c->tls.out_clr->static_iv, c->tls.out_clr->algo->iv_size);
+    // hexdump(c->tls.enc_hshk->static_iv, c->tls.enc_hshk->algo->iv_size);
 }
 
 
@@ -513,9 +532,10 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
                              ptls_buffer_t * dst,
                              ptls_iovec_t src)
 {
-    int ret;
-    if ((ret = ptls_buffer_reserve(dst, src.len + quant_commit_hash_len)) != 0)
-        return ret;
+    uint64_t tid;
+    if (ptls_buffer_reserve(dst, src.len + quant_commit_hash_len + sizeof(tid) +
+                                     enc_tckt->algo->tag_size))
+        return -1;
 
     if (is_encrypt) {
         warn(INF, "creating new 0-RTT session ticket for %s %s",
@@ -525,24 +545,42 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
         memcpy(dst->base + dst->off, quant_commit_hash, quant_commit_hash_len);
         dst->off += quant_commit_hash_len;
 
-        // now add ticket
-        // TODO encrypt
-        memcpy(dst->base + dst->off, src.base, src.len);
-        dst->off += src.len;
+        // prepend ticket id
+        arc4random_buf(&tid, sizeof(tid));
+        memcpy(dst->base + dst->off, &tid, sizeof(tid));
+        dst->off += sizeof(tid);
+
+        // now encrypt ticket
+        dst->off += ptls_aead_encrypt(enc_tckt, dst->base + dst->off, src.base,
+                                      src.len, tid, 0, 0);
 
     } else {
-        if (memcmp(src.base, quant_commit_hash, quant_commit_hash_len) != 0) {
+        if (src.len < quant_commit_hash_len + sizeof(tid) +
+                          dec_tckt->algo->tag_size ||
+            memcmp(src.base, quant_commit_hash, quant_commit_hash_len) != 0) {
             warn(WRN, "could not verify 0-RTT session ticket for %s %s",
                  ptls_get_server_name(tls), ptls_get_negotiated_protocol(tls));
             return -1;
         }
+        uint8_t * src_base = src.base + quant_commit_hash_len;
+        size_t src_len = src.len - quant_commit_hash_len;
+
+        memcpy(&tid, src_base, sizeof(tid));
+        src_base += sizeof(tid);
+        src_len -= sizeof(tid);
+
+        const size_t n = ptls_aead_decrypt(dec_tckt, dst->base + dst->off,
+                                           src_base, src_len, tid, 0, 0);
+
+        if (n > src_len) {
+            warn(WRN, "could not decrypt 0-RTT session ticket for %s %s",
+                 ptls_get_server_name(tls), ptls_get_negotiated_protocol(tls));
+            return -1;
+        }
+        dst->off += n;
 
         warn(INF, "verified 0-RTT session ticket for %s %s",
              ptls_get_server_name(tls), ptls_get_negotiated_protocol(tls));
-
-        memcpy(dst->base + dst->off, src.base + quant_commit_hash_len,
-               src.len - quant_commit_hash_len);
-        dst->off += src.len;
     }
 
     return 0;
@@ -623,7 +661,7 @@ void init_tls(struct q_conn * const c)
         ensure(ptls_set_server_name(c->tls.t, c->peer_name, 0) == 0,
                "ptls_set_server_name");
     init_tp(c);
-    if (!c->tls.in_clr)
+    if (!c->tls.dec_hshk)
         init_hshk_prot(c);
 
     c->tls.tls_hshake_prop = (ptls_handshake_properties_t){
@@ -648,18 +686,18 @@ void init_tls(struct q_conn * const c)
 
 void free_tls(struct q_conn * const c)
 {
-    if (c->tls.in_0rtt)
-        ptls_aead_free(c->tls.in_0rtt);
-    if (c->tls.out_0rtt)
-        ptls_aead_free(c->tls.out_0rtt);
-    if (c->tls.in_1rtt)
-        ptls_aead_free(c->tls.in_1rtt);
-    if (c->tls.out_1rtt)
-        ptls_aead_free(c->tls.out_1rtt);
-    if (c->tls.in_clr)
-        ptls_aead_free(c->tls.in_clr);
-    if (c->tls.out_clr)
-        ptls_aead_free(c->tls.out_clr);
+    if (c->tls.dec_0rtt)
+        ptls_aead_free(c->tls.dec_0rtt);
+    if (c->tls.enc_0rtt)
+        ptls_aead_free(c->tls.enc_0rtt);
+    if (c->tls.dec_1rtt)
+        ptls_aead_free(c->tls.dec_1rtt);
+    if (c->tls.enc_1rtt)
+        ptls_aead_free(c->tls.enc_1rtt);
+    if (c->tls.dec_hshk)
+        ptls_aead_free(c->tls.dec_hshk);
+    if (c->tls.enc_hshk)
+        ptls_aead_free(c->tls.enc_hshk);
     if (c->tls.t)
         ptls_free(c->tls.t);
 
@@ -696,15 +734,15 @@ init_secret(ptls_t * const t,
 void init_0rtt_prot(struct q_conn * const c)
 {
     // this can be called multiple times due to version negotiation
-    if (c->tls.in_0rtt)
-        ptls_aead_free(c->tls.in_0rtt);
-    if (c->tls.out_0rtt)
-        ptls_aead_free(c->tls.out_0rtt);
+    if (c->tls.dec_0rtt)
+        ptls_aead_free(c->tls.dec_0rtt);
+    if (c->tls.enc_0rtt)
+        ptls_aead_free(c->tls.enc_0rtt);
 
     const ptls_cipher_suite_t * const cs = ptls_get_cipher(c->tls.t);
     uint8_t sec[PTLS_MAX_DIGEST_SIZE];
-    c->tls.in_0rtt = init_secret(c->tls.t, cs, sec, LABL_0RTT, 0, 1);
-    c->tls.out_0rtt = init_secret(c->tls.t, cs, sec, LABL_0RTT, 1, 1);
+    c->tls.dec_0rtt = init_secret(c->tls.t, cs, sec, LABL_0RTT, 0, 1);
+    c->tls.enc_0rtt = init_secret(c->tls.t, cs, sec, LABL_0RTT, 1, 1);
 }
 
 
@@ -716,9 +754,9 @@ static void __attribute__((nonnull)) init_1rtt_prot(struct q_conn * const c)
 {
     const ptls_cipher_suite_t * const cs = ptls_get_cipher(c->tls.t);
     uint8_t sec[PTLS_MAX_DIGEST_SIZE];
-    c->tls.in_1rtt = init_secret(
+    c->tls.dec_1rtt = init_secret(
         c->tls.t, cs, sec, c->is_clnt ? SERV_LABL_1RTT : CLNT_LABL_1RTT, 0, 0);
-    c->tls.out_1rtt = init_secret(
+    c->tls.enc_1rtt = init_secret(
         c->tls.t, cs, sec, c->is_clnt ? CLNT_LABL_1RTT : SERV_LABL_1RTT, 1, 0);
 }
 
@@ -800,10 +838,8 @@ static void read_tickets()
     ensure(fread(buf, sizeof(uint8_t), hash_len, fp), "fread");
     if (hash_len != quant_commit_hash_len ||
         memcmp(buf, quant_commit_hash, hash_len) != 0) {
-        warn(
-            WRN,
-            "0-RTT tickets were stored by different %s version, removing %u %u",
-            quant_name, hash_len, quant_commit_hash_len);
+        warn(WRN, "0-RTT tickets were stored by different %s version, removing",
+             quant_name);
         ensure(unlink(tickets.file_name) == 0, "unlink");
         goto done;
     }
@@ -897,6 +933,15 @@ void init_tls_ctx(const char * const cert,
     tls_ctx.sign_certificate = &sign_cert.super;
     tls_ctx.verify_certificate = &verifier.super;
     tls_ctx.get_time = &ptls_get_time;
+
+    init_ticket_prot();
+}
+
+
+void cleanup_tls_ctx(void)
+{
+    ptls_aead_free(dec_tckt);
+    ptls_aead_free(enc_tckt);
 }
 
 
@@ -909,11 +954,11 @@ which_aead(const struct q_conn * const c,
     const uint8_t flags = pkt_flags(v->buf);
     if (is_set(F_LONG_HDR, flags)) {
         if (pkt_type(flags) == F_LH_0RTT)
-            aead = in ? c->tls.in_0rtt : c->tls.out_0rtt;
+            aead = in ? c->tls.dec_0rtt : c->tls.enc_0rtt;
         else
-            aead = in ? c->tls.in_clr : c->tls.out_clr;
+            aead = in ? c->tls.dec_hshk : c->tls.enc_hshk;
     } else
-        aead = in ? c->tls.in_1rtt : c->tls.out_1rtt;
+        aead = in ? c->tls.dec_1rtt : c->tls.enc_1rtt;
 
     ensure(aead, "AEAD null");
     return aead;
@@ -922,9 +967,9 @@ which_aead(const struct q_conn * const c,
 
 #ifndef NDEBUG
 #define aead_type(c, a)                                                        \
-    (((a) == (c)->tls.in_1rtt || (a) == (c)->tls.out_1rtt)                     \
+    (((a) == (c)->tls.dec_1rtt || (a) == (c)->tls.enc_1rtt)                    \
          ? "1-RTT"                                                             \
-         : (((a) == (c)->tls.in_0rtt || (a) == (c)->tls.out_0rtt)              \
+         : (((a) == (c)->tls.dec_0rtt || (a) == (c)->tls.enc_0rtt)             \
                 ? "0-RTT"                                                      \
                 : "cleartext"))
 #endif
