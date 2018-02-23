@@ -5,8 +5,8 @@ execute_process(
   OUTPUT_VARIABLE GIT_COMMIT_HASH_STR
   OUTPUT_STRIP_TRAILING_WHITESPACE
 )
-string(REGEX REPLACE "^(..)" "0x\\1, " GIT_COMMIT_HASH ${GIT_COMMIT_HASH_STR})
-string(REGEX REPLACE "^(.*)..$" "\\1" GIT_COMMIT_HASH ${GIT_COMMIT_HASH})
+string(REGEX REPLACE "^(..)" "0x\\1, " GIT_COMMIT_HASH "${GIT_COMMIT_HASH_STR}")
+string(REGEX REPLACE "^(.*)..$" "\\1" GIT_COMMIT_HASH "${GIT_COMMIT_HASH}")
 
 # Get the latest *abbreviated* commit hash of the working branch
 execute_process(
@@ -15,8 +15,10 @@ execute_process(
   OUTPUT_VARIABLE GIT_COMMIT_HASH_ABBREV_STR
   OUTPUT_STRIP_TRAILING_WHITESPACE
 )
-string(REGEX REPLACE "^(..)" "0x\\1, " GIT_COMMIT_HASH_ABBREV ${GIT_COMMIT_HASH_ABBREV_STR})
-string(REGEX REPLACE "^(.*)..$" "\\1" GIT_COMMIT_HASH_ABBREV ${GIT_COMMIT_HASH_ABBREV})
+string(REGEX REPLACE "^(..)" "0x\\1, " GIT_COMMIT_HASH_ABBREV
+       "${GIT_COMMIT_HASH_ABBREV_STR}")
+string(REGEX REPLACE "^(.*)..$" "\\1" GIT_COMMIT_HASH_ABBREV
+       "${GIT_COMMIT_HASH_ABBREV}")
 
 string(TOUPPER ${PROJECT_NAME} PROJECT_NAME_UC)
 configure_file(include/${PROJECT_NAME}/config.h.in include/${PROJECT_NAME}/config.h)
