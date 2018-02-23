@@ -405,7 +405,7 @@ void q_readall_str(struct q_stream * const s, struct w_iov_sq * const q)
 struct q_conn * q_bind(void * const q, const uint16_t port)
 {
     // bind socket and create new embryonic server connection
-    warn(WRN, "binding serv socket on port %u", port);
+    warn(INF, "binding serv socket on port %u", port);
     struct q_conn * const c = new_conn(q, 0, 0, 0, 0, port);
     warn(WRN, "bound %s socket on port %u", conn_type(c), port);
     return c;

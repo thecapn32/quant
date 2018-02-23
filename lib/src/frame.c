@@ -484,13 +484,13 @@ dec_new_cid_frame(struct q_conn * const c __attribute__((unused)),
     uint16_t i = dec(&seq, v->buf, v->len, pos + 1, 0, "%" PRIu64);
 
     uint64_t cid = 0;
-    i = dec(&cid, v->buf, v->len, i, sizeof(cid), "%" PRIx64);
+    i = dec(&cid, v->buf, v->len, i, sizeof(cid), FMT_CID);
 
     uint8_t srt[16];
     memcpy(srt, &v->buf[i], sizeof(srt));
     i += sizeof(srt);
 
-    warn(INF, FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu64 " cid=0x%" PRIx64,
+    warn(INF, FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu64 " cid=" FMT_CID,
          seq, cid);
 
     // TODO: actually do something with the new CIDs

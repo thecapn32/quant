@@ -27,7 +27,6 @@
 
 #pragma once
 
-#include <inttypes.h>
 #include <math.h>
 #include <netinet/in.h>
 #include <stdbool.h>
@@ -37,6 +36,7 @@
 #include <warpcore/warpcore.h>
 
 #include "diet.h"
+#include "quic.h"
 #include "recovery.h"
 #include "tls.h"
 
@@ -156,7 +156,7 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 
 #define conn_to_state(c, s)                                                    \
     do {                                                                       \
-        warn(DBG, "conn %" PRIx64 " state %u -> %u", c->id, c->state, s);      \
+        warn(DBG, "conn %" FMT_CID " state %u -> %u", c->id, c->state, s);     \
         c->state = s;                                                          \
                                                                                \
         switch (s) {                                                           \

@@ -27,7 +27,6 @@
 
 #pragma once
 
-#include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -77,7 +76,7 @@ struct q_stream {
 
 #define strm_to_state(strm, s)                                                 \
     do {                                                                       \
-        warn(DBG, "conn %" PRIx64 " strm " FMT_SID " state %u -> %u",          \
+        warn(DBG, "conn " FMT_CID " strm " FMT_SID " state %u -> %u",          \
              strm->c->id, strm->id, strm->state, (s));                         \
         strm->state = (s);                                                     \
     } while (0)

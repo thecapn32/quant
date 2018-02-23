@@ -295,17 +295,15 @@ void on_pkt_acked(struct q_conn * const c, const uint64_t ack)
 {
     struct w_iov * const v = find_sent_pkt(c, ack);
     if (!v) {
-        warn(DBG,
-             "got ACK for pkt " FMT_PNR_OUT " (%" PRIx64 ") with no metadata",
-             ack, ack);
+        warn(DBG, "got ACK for pkt " FMT_PNR_OUT " with no metadata", ack);
         return;
     }
 
     // only act on first-time ACKs
     if (meta(v).is_acked)
-        warn(WRN, "repeated ACK for " FMT_PNR_OUT " (%" PRIx64 ")", ack, ack);
+        warn(WRN, "repeated ACK for " FMT_PNR_OUT, ack);
     else
-        warn(DBG, "first ACK for " FMT_PNR_OUT " (%" PRIx64 ")", ack, ack);
+        warn(DBG, "first ACK for " FMT_PNR_OUT, ack);
     meta(v).is_acked = true;
 
     // If a packet sent prior to RTO was ACKed, then the RTO was spurious.
@@ -323,10 +321,8 @@ void on_pkt_acked(struct q_conn * const c, const uint64_t ack)
     // stop ACKing packets that were contained in the ACK frame of this
     // packet
     if (meta(v).ack_header_pos) {
-        warn(DBG,
-             "decoding ACK info from pkt " FMT_PNR_OUT " (%" PRIx64
-             ") from pos %u",
-             ack, ack, meta(v).ack_header_pos);
+        warn(DBG, "decoding ACK info from pkt " FMT_PNR_OUT " from pos %u", ack,
+             meta(v).ack_header_pos);
         adj_iov_to_start(v);
 #ifndef NDEBUG
         // temporarily suppress debug output
@@ -338,12 +334,10 @@ void on_pkt_acked(struct q_conn * const c, const uint64_t ack)
         util_dlevel = l;
 #endif
         adj_iov_to_data(v);
-        warn(DBG, "done decoding ACK info from pkt (%" PRIx64 ") from pos %u",
-             ack, ack, meta(v).ack_header_pos);
+        warn(DBG, "done decoding ACK info from pkt " FMT_PNR_OUT " from pos %u",
+             ack, meta(v).ack_header_pos);
     } else
-        warn(DBG,
-             "pkt " FMT_PNR_OUT " (%" PRIx64 ") did not contain an ACK frame",
-             ack, ack);
+        warn(DBG, "pkt " FMT_PNR_OUT " did not contain an ACK frame", ack);
 
     // OnPacketAckedCC
     if (is_rtxable(&meta(v))) {
