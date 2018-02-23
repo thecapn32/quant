@@ -513,21 +513,37 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
                              ptls_buffer_t * dst,
                              ptls_iovec_t src)
 {
+    int ret;
+    if ((ret = ptls_buffer_reserve(dst, src.len + quant_commit_hash_len)) != 0)
+        return ret;
+
     if (is_encrypt) {
         warn(INF, "creating new 0-RTT session ticket for %s %s",
              ptls_get_server_name(tls), ptls_get_negotiated_protocol(tls));
+
+        // prepend git commit hash
+        memcpy(dst->base + dst->off, quant_commit_hash, quant_commit_hash_len);
+        dst->off += quant_commit_hash_len;
+
+        // now add ticket
+        // TODO encrypt
+        memcpy(dst->base + dst->off, src.base, src.len);
+        dst->off += src.len;
+
     } else {
-        warn(INF, "verifying 0-RTT session ticket for %s %s",
+        if (memcmp(src.base, quant_commit_hash, quant_commit_hash_len) != 0) {
+            warn(WRN, "could not verify 0-RTT session ticket for %s %s",
+                 ptls_get_server_name(tls), ptls_get_negotiated_protocol(tls));
+            return -1;
+        }
+
+        warn(INF, "verified 0-RTT session ticket for %s %s",
              ptls_get_server_name(tls), ptls_get_negotiated_protocol(tls));
+
+        memcpy(dst->base + dst->off, src.base + quant_commit_hash_len,
+               src.len - quant_commit_hash_len);
+        dst->off += src.len;
     }
-
-    int ret;
-    if ((ret = ptls_buffer_reserve(dst, src.len)) != 0)
-        return ret;
-
-    // TODO encrypt
-    memcpy(dst->base + dst->off, src.base, src.len);
-    dst->off += src.len;
 
     return 0;
 }
@@ -778,14 +794,16 @@ static void read_tickets()
     warn(INF, "reading 0-RTT tickets from %s", tickets.file_name);
 
     // read and verify git hash
-    uint32_t hash_len;
-    ensure(fread(&hash_len, sizeof(hash_len), 1, fp), "fread");
+    size_t hash_len;
+    ensure(fread(&hash_len, sizeof(quant_commit_hash_len), 1, fp), "fread");
     uint8_t buf[8192];
     ensure(fread(buf, sizeof(uint8_t), hash_len, fp), "fread");
     if (hash_len != quant_commit_hash_len ||
         memcmp(buf, quant_commit_hash, hash_len) != 0) {
-        warn(WRN, "0-RTT tickets were stored by different %s version, removing",
-             quant_name);
+        warn(
+            WRN,
+            "0-RTT tickets were stored by different %s version, removing %u %u",
+            quant_name, hash_len, quant_commit_hash_len);
         ensure(unlink(tickets.file_name) == 0, "unlink");
         goto done;
     }
