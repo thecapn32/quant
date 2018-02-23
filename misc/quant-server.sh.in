@@ -1,22 +1,6 @@
 #! /usr/bin/env bash
 
 function make_name() {
-        local path filename extension
-        path=$(dirname "$1")
-        filename=$(basename "$1")
-        extension="${filename##*.}"
-        filename="${filename%.*}"
-        if [[ -e $path/$filename.$extension ]] ; then
-            i=1
-            while [[ -e $path/$filename-$i.$extension ]] ; do
-                let i++
-            done
-            filename=$filename-$i
-        fi
-        echo "$path/$filename.$extension"
-}
-
-function cid_make_name() {
         local path cid
         path=$(dirname "$1")
         cid=$(grep -o 'cid=[^ ]*' "$1" | cut -f2 -d= | head -n1)
@@ -26,7 +10,7 @@ function cid_make_name() {
 export PATH="$PATH:~/bin"
 
 name=/var/www/html/log.html
-new=$(cid_make_name $name)
+new=$(make_name $name)
 mv "$name" "$new"
 mail -s "$new" lars@netapp.com -A "$new" < /dev/null
 
@@ -40,6 +24,9 @@ git pull
 cmake -GNinja ..
 ninja
 sudo setcap 'cap_net_bind_service=+ep' bin/server
+
+export ASAN_OPTIONS=strict_string_checks=1:strict_init_order=1:detect_stack_use_after_return=1:detect_leaks=1:check_initialization_order=1:alloc_dealloc_mismatch=1:detect_invalid_pointer_pairs=1
+export LSAN_OPTIONS=verbosity=1:log_threads=1
 bin/server -v4 -i eth0 -p 443 -p 4433 \
     -d /usr/share/apache2/default-site \
     -c /etc/letsencrypt/live/quant.eggert.org/fullchain.pem \
