@@ -46,9 +46,11 @@
 ///
 int ival_cmp(const struct ival * const a, const struct ival * const b)
 {
+    // warn(DBG, "cmp %u.%" PRIu64 "-%" PRIu64 " and %u.%" PRIu64 "-%" PRIu64,
+    //      a->type, a->lo, a->hi, b->type, b->lo, b->hi);
     if ((a->lo >= b->lo && a->lo <= b->hi) ||
         (b->lo >= a->lo && b->lo <= a->hi))
-        return 0;
+        return 0; //(a->type > b->type) - (a->type < b->type);
     return (a->lo > b->lo) - (a->lo < b->lo);
 }
 
@@ -65,7 +67,7 @@ SPLAY_GENERATE(diet, ival, node, ival_cmp)
 /// @return     Zero if @p n is inside @p i. Absolute minimal distance of @p n
 ///             from the closes bound otherwise.
 ///
-static uint64_t ival_dist(const uint64_t n, const struct ival * const i)
+static inline uint64_t ival_dist(const uint64_t n, const struct ival * const i)
 {
     if (i == 0)
         return UINT64_MAX;
@@ -82,7 +84,7 @@ static uint64_t ival_dist(const uint64_t n, const struct ival * const i)
 ///
 /// @return     Largest interval underneath @p i.
 ///
-static struct ival * find_max(struct ival * const i)
+static inline struct ival * find_max(struct ival * const i)
 {
     if (i == 0)
         return 0;
@@ -99,7 +101,7 @@ static struct ival * find_max(struct ival * const i)
 ///
 /// @return     Smallest interval underneath @p i.
 ///
-static struct ival * find_min(struct ival * const i)
+static inline struct ival * find_min(struct ival * const i)
 {
     if (i == 0)
         return 0;
@@ -122,29 +124,7 @@ struct ival * diet_find(struct diet * const d, const uint64_t n)
 {
     if (splay_empty(d))
         return 0;
-
     diet_splay(d, &(const struct ival){.lo = n, .hi = n});
-
-    // Due to the way a splay works with intervals, n will be closest to (or
-    // contained in) either the root node interval after a splay operation, or
-    // in its maximum left or minimum right child. In the latter case, rotate
-    // that child to the root, to make sure n is always closest to (or inside)
-    // the root interval.
-
-    const uint64_t d_left =
-        ival_dist(n, find_max(splay_left(splay_root(d), node)));
-    const uint64_t d_right =
-        ival_dist(n, find_min(splay_right(splay_root(d), node)));
-    const uint64_t d_root = ival_dist(n, splay_root(d));
-
-    if (d_left < d_root && d_left < d_right) {
-        struct ival * const left = splay_left(splay_root(d), node);
-        splay_rotate_right(d, left, node);
-    } else if (d_right < d_root && d_right < d_left) {
-        struct ival * const right = splay_right(splay_root(d), node);
-        splay_rotate_left(d, right, node);
-    }
-
     if (n < splay_root(d)->lo || n > splay_root(d)->hi)
         return 0;
     return splay_root(d);
@@ -158,7 +138,7 @@ struct ival * diet_find(struct diet * const d, const uint64_t n)
 ///
 /// @return     Newly allocated ival struct [n..n] of type @p t.
 ///
-static struct ival * make_ival(const uint64_t n, const uint8_t t)
+static inline struct ival * make_ival(const uint64_t n, const uint8_t t)
 {
     struct ival * const i = calloc(1, sizeof(*i));
     ensure(i, "could not calloc");
@@ -167,6 +147,29 @@ static struct ival * make_ival(const uint64_t n, const uint8_t t)
     splay_left(i, node) = splay_right(i, node) = 0;
     return i;
 }
+
+
+#if 0
+static int l = 0;
+static inline void trace(struct ival * const i)
+{
+    if (i == 0) {
+        fprintf(stderr, "\n");
+        return;
+    }
+    fprintf(stderr, "%u.%" PRIu64 "-%" PRIu64 "\n", i->type, i->lo, i->hi);
+    l++;
+    for (int ll = 0; ll < l; ll++)
+        fprintf(stderr, "\t");
+    fprintf(stderr, "left: ");
+    trace(splay_left(i, node));
+    for (int ll = 0; ll < l; ll++)
+        fprintf(stderr, "\t");
+    fprintf(stderr, "right: ");
+    trace(splay_right(i, node));
+    l--;
+}
+#endif
 
 
 /// Inserts integer @p n of type @p t into the diet tree @p t.
@@ -180,61 +183,71 @@ static struct ival * make_ival(const uint64_t n, const uint8_t t)
 struct ival *
 diet_insert(struct diet * const d, const uint64_t n, const uint8_t t)
 {
-    if (splay_empty(d)) {
-        d->cnt++;
-        return splay_root(d) = make_ival(n, t);
-    }
+    if (splay_empty(d))
+        goto new_ival;
 
     // rotate the interval that contains n or is closest to it to the top
     diet_find(d, n);
 
-    warn(DBG, "root %u.%u-%u", splay_root(d)->type, splay_root(d)->lo, splay_root(d)->hi);
+    if (n >= splay_root(d)->lo && n <= splay_root(d)->hi)
+        return splay_root(d);
 
     if (n < splay_root(d)->lo) {
-        if (n + 1 == splay_root(d)->lo && t == splay_root(d)->type) {
+        struct ival * const max = find_max(splay_left(splay_root(d), node));
+
+        if (n + 1 == splay_root(d)->lo && t == splay_root(d)->type)
+            // we can expand the root to include n
             splay_root(d)->lo--;
-            if (splay_left(splay_root(d), node)) {
-                struct ival * const max =
-                    find_max(splay_left(splay_root(d), node));
-                if (max->hi + 1 == splay_root(d)->lo &&
-                    max->type == splay_root(d)->type) {
-                    splay_root(d)->lo = max->lo;
-                    splay_left(splay_root(d), node) = splay_left(max, node);
-                    free(max);
-                    d->cnt--;
-                }
-            }
-            return splay_root(d);
+        else if (max && max->hi + 1 == n && t == max->type)
+            // we can expand the max child to include n
+            max->hi++;
+        else
+            goto new_ival;
+
+        // check if we can merge the new root with its max left child
+        if (max && (max->hi == splay_root(d)->lo - 1 &&
+                    max->type == splay_root(d)->type)) {
+            splay_right(max, node) = splay_right(splay_root(d), node);
+            max->hi = splay_root(d)->hi;
+            struct ival * const old_root = splay_root(d);
+            splay_root(d) = splay_left(splay_root(d), node);
+            free(old_root);
+            d->cnt--;
         }
-        struct ival * const i = make_ival(n, t);
-        splay_insert(diet, d, i);
-        d->cnt++;
-        return i;
+        return splay_root(d);
     }
 
     if (n > splay_root(d)->hi) {
-        if (n == splay_root(d)->hi + 1 && t == splay_root(d)->type) {
+        struct ival * const min = find_min(splay_right(splay_root(d), node));
+
+        if (n == splay_root(d)->hi + 1 && t == splay_root(d)->type)
+            // we can expand the root to include n
             splay_root(d)->hi++;
-            if (splay_right(splay_root(d), node)) {
-                struct ival * const min =
-                    find_min(splay_right(splay_root(d), node));
-                if (min->lo - 1 == splay_root(d)->hi &&
-                    min->type == splay_root(d)->type) {
-                    splay_root(d)->hi = min->hi;
-                    splay_right(splay_root(d), node) = splay_right(min, node);
-                    free(min);
-                    d->cnt--;
-                }
-            }
-            return splay_root(d);
+        else if (min && min->lo - 1 == n && t == min->type)
+            // we can expand the min child to include n
+            min->lo--;
+        else
+            goto new_ival;
+
+        // check if we can merge the new root with its min right child
+        if (min && (min->lo == splay_root(d)->hi + 1 &&
+                    min->type == splay_root(d)->type)) {
+            splay_left(min, node) = splay_left(splay_root(d), node);
+            min->lo = splay_root(d)->lo;
+            struct ival * const old_root = splay_root(d);
+            splay_root(d) = splay_right(splay_root(d), node);
+            free(old_root);
+            d->cnt--;
         }
-        struct ival * const i = make_ival(n, t);
-        splay_insert(diet, d, i);
-        d->cnt++;
-        return i;
+        return splay_root(d);
     }
 
-    return splay_root(d);
+    struct ival * i; // clang doesn't like this statement after the label?
+new_ival:
+    i = make_ival(n, t);
+    splay_insert(diet, d, i);
+    d->cnt++;
+    return i;
 }
 
 
