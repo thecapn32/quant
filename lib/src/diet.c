@@ -44,12 +44,12 @@
 /// @return     Zero if a is in b or b is in a. Negative if a's lower bound is
 ///             less than b's lower bound, positive otherwise.
 ///
-int64_t ival_cmp(const struct ival * const a, const struct ival * const b)
+int ival_cmp(const struct ival * const a, const struct ival * const b)
 {
     if ((a->lo >= b->lo && a->lo <= b->hi) ||
         (b->lo >= a->lo && b->lo <= a->hi))
         return 0;
-    return (int64_t)a->lo - (int64_t)b->lo;
+    return (a->lo > b->lo) - (a->lo < b->lo);
 }
 
 
@@ -113,18 +113,17 @@ static struct ival * find_min(struct ival * const i)
 /// Pointer to the interval containing @p n in diet tree @p t. Also has the side
 /// effect of splaying the closest interval to @p n to the root of @p t.
 ///
-/// @param      t     Diet tree.
+/// @param      d     Diet tree.
 /// @param[in]  n     Integer.
 ///
 /// @return     Pointer to the ival structure containing @p i; zero otherwise.
 ///
-struct ival * diet_find(struct diet * const t, const uint64_t n)
+struct ival * diet_find(struct diet * const d, const uint64_t n)
 {
-    if (splay_empty(t))
+    if (splay_empty(d))
         return 0;
 
-    struct ival which = {.lo = n, .hi = n};
-    diet_splay(t, &which);
+    diet_splay(d, &(const struct ival){.lo = n, .hi = n});
 
     // Due to the way a splay works with intervals, n will be closest to (or
     // contained in) either the root node interval after a splay operation, or
@@ -133,159 +132,169 @@ struct ival * diet_find(struct diet * const t, const uint64_t n)
     // the root interval.
 
     const uint64_t d_left =
-        ival_dist(n, find_max(splay_left(splay_root(t), node)));
+        ival_dist(n, find_max(splay_left(splay_root(d), node)));
     const uint64_t d_right =
-        ival_dist(n, find_min(splay_right(splay_root(t), node)));
-    const uint64_t d_root = ival_dist(n, splay_root(t));
+        ival_dist(n, find_min(splay_right(splay_root(d), node)));
+    const uint64_t d_root = ival_dist(n, splay_root(d));
 
     if (d_left < d_root && d_left < d_right) {
-        struct ival * const left = splay_left(splay_root(t), node);
-        splay_rotate_right(t, left, node);
+        struct ival * const left = splay_left(splay_root(d), node);
+        splay_rotate_right(d, left, node);
     } else if (d_right < d_root && d_right < d_left) {
-        struct ival * const right = splay_right(splay_root(t), node);
-        splay_rotate_left(t, right, node);
+        struct ival * const right = splay_right(splay_root(d), node);
+        splay_rotate_left(d, right, node);
     }
 
-    if (n < splay_root(t)->lo || n > splay_root(t)->hi)
+    if (n < splay_root(d)->lo || n > splay_root(d)->hi)
         return 0;
-    return splay_root(t);
+    return splay_root(d);
 }
 
 
 /// Helper function to create a zero-width interval containing (only) @p n.
 ///
 /// @param[in]  n     Integer.
+/// @param[in]  t     Type.
 ///
-/// @return     Newly allocated ival struct [n..n].
+/// @return     Newly allocated ival struct [n..n] of type @p t.
 ///
-static struct ival * make_ival(const uint64_t n)
+static struct ival * make_ival(const uint64_t n, const uint8_t t)
 {
     struct ival * const i = calloc(1, sizeof(*i));
     ensure(i, "could not calloc");
     i->lo = i->hi = n;
+    i->type = t;
     splay_left(i, node) = splay_right(i, node) = 0;
     return i;
 }
 
 
-/// Inserts integer @p n into the diet tree @p t.
+/// Inserts integer @p n of type @p t into the diet tree @p t.
 ///
-/// @param      t     Integer.
-/// @param[in]  n     Diet tree.
+/// @param      d     Diet tree.
+/// @param[in]  n     Integer.
+/// @param[in]  t     Type.
 ///
 /// @return     Pointer to ival containing @p n.
 ///
-struct ival * diet_insert(struct diet * const t, const uint64_t n)
+struct ival *
+diet_insert(struct diet * const d, const uint64_t n, const uint8_t t)
 {
-    if (splay_empty(t)) {
-        t->cnt++;
-        return splay_root(t) = make_ival(n);
+    if (splay_empty(d)) {
+        d->cnt++;
+        return splay_root(d) = make_ival(n, t);
     }
 
     // rotate the interval that contains n or is closest to it to the top
-    diet_find(t, n);
+    diet_find(d, n);
 
-    if (n < splay_root(t)->lo) {
-        if (n + 1 == splay_root(t)->lo) {
-            splay_root(t)->lo--;
-            if (splay_left(splay_root(t), node)) {
+    warn(DBG, "root %u.%u-%u", splay_root(d)->type, splay_root(d)->lo, splay_root(d)->hi);
+
+    if (n < splay_root(d)->lo) {
+        if (n + 1 == splay_root(d)->lo && t == splay_root(d)->type) {
+            splay_root(d)->lo--;
+            if (splay_left(splay_root(d), node)) {
                 struct ival * const max =
-                    find_max(splay_left(splay_root(t), node));
-                if (max->hi + 1 == splay_root(t)->lo) {
-                    splay_root(t)->lo = max->lo;
-                    splay_left(splay_root(t), node) = splay_left(max, node);
+                    find_max(splay_left(splay_root(d), node));
+                if (max->hi + 1 == splay_root(d)->lo &&
+                    max->type == splay_root(d)->type) {
+                    splay_root(d)->lo = max->lo;
+                    splay_left(splay_root(d), node) = splay_left(max, node);
                     free(max);
-                    t->cnt--;
+                    d->cnt--;
                 }
             }
-            return splay_root(t);
+            return splay_root(d);
         }
-        struct ival * const i = make_ival(n);
-        splay_insert(diet, t, i);
-        t->cnt++;
+        struct ival * const i = make_ival(n, t);
+        splay_insert(diet, d, i);
+        d->cnt++;
         return i;
     }
 
-    if (n > splay_root(t)->hi) {
-        if (n == splay_root(t)->hi + 1) {
-            splay_root(t)->hi++;
-            if (splay_right(splay_root(t), node)) {
+    if (n > splay_root(d)->hi) {
+        if (n == splay_root(d)->hi + 1 && t == splay_root(d)->type) {
+            splay_root(d)->hi++;
+            if (splay_right(splay_root(d), node)) {
                 struct ival * const min =
-                    find_min(splay_right(splay_root(t), node));
-                if (min->lo - 1 == splay_root(t)->hi) {
-                    splay_root(t)->hi = min->hi;
-                    splay_right(splay_root(t), node) = splay_right(min, node);
+                    find_min(splay_right(splay_root(d), node));
+                if (min->lo - 1 == splay_root(d)->hi &&
+                    min->type == splay_root(d)->type) {
+                    splay_root(d)->hi = min->hi;
+                    splay_right(splay_root(d), node) = splay_right(min, node);
                     free(min);
-                    t->cnt--;
+                    d->cnt--;
                 }
             }
-            return splay_root(t);
+            return splay_root(d);
         }
-        struct ival * const i = make_ival(n);
-        splay_insert(diet, t, i);
-        t->cnt++;
+        struct ival * const i = make_ival(n, t);
+        splay_insert(diet, d, i);
+        d->cnt++;
         return i;
     }
 
-    return splay_root(t);
+    return splay_root(d);
 }
 
 
 /// Remove integer @p n from the intervals stored in diet tree @p t.
 ///
-/// @param      t     Diet tree.
+/// @param      d     Diet tree.
 /// @param[in]  n     Integer.
 ///
-void diet_remove(struct diet * const t, const uint64_t n)
+void diet_remove(struct diet * const d, const uint64_t n)
 {
     // rotate the interval that contains n or is closest to it to the top
-    diet_find(t, n);
+    diet_find(d, n);
 
-    if (n < splay_root(t)->lo || n > splay_root(t)->hi)
+    if (n < splay_root(d)->lo || n > splay_root(d)->hi)
         return;
 
-    if (n == splay_root(t)->lo) {
-        if (n == splay_root(t)->hi) {
-            free(splay_remove(diet, t, splay_root(t)));
-            t->cnt--;
+    if (n == splay_root(d)->lo) {
+        if (n == splay_root(d)->hi) {
+            free(splay_remove(diet, d, splay_root(d)));
+            d->cnt--;
         } else
             // adjust lo bound
-            splay_root(t)->lo++;
-    } else if (n == splay_root(t)->hi) {
+            splay_root(d)->lo++;
+    } else if (n == splay_root(d)->hi) {
         // adjust hi bound
-        splay_root(t)->hi--;
+        splay_root(d)->hi--;
     } else {
         // split interval
-        struct ival * const i = make_ival(splay_root(t)->lo);
-        t->cnt++;
+        struct ival * const i =
+            make_ival(splay_root(d)->lo, splay_root(d)->type);
+        d->cnt++;
         i->hi = n - 1;
-        splay_root(t)->lo = n + 1;
-        splay_left(i, node) = splay_left(splay_root(t), node);
-        splay_left(splay_root(t), node) = 0;
-        splay_right(i, node) = splay_root(t);
-        splay_root(t) = i;
+        splay_root(d)->lo = n + 1;
+        splay_left(i, node) = splay_left(splay_root(d), node);
+        splay_left(splay_root(d), node) = 0;
+        splay_right(i, node) = splay_root(d);
+        splay_root(d) = i;
     }
 }
 
 
-void diet_free(struct diet * const t)
+void diet_free(struct diet * const d)
 {
     struct ival *i, *next;
-    for (i = splay_min(diet, t); i != 0; i = next) {
-        next = splay_next(diet, t, i);
-        splay_remove(diet, t, i);
+    for (i = splay_min(diet, d); i != 0; i = next) {
+        next = splay_next(diet, d, i);
+        splay_remove(diet, d, i);
         free(i);
     }
 }
 
 
-size_t diet_to_str(char * const str, const size_t len, struct diet * const t)
+size_t diet_to_str(char * const str, const size_t len, struct diet * const d)
 {
     struct ival * i = 0;
     size_t pos = 0;
     str[0] = 0;
-    splay_foreach (i, diet, t) {
-        pos += (size_t)snprintf(&str[pos], len - pos, "%" PRIu64, i->lo);
+    splay_foreach (i, diet, d) {
+        pos += (size_t)snprintf(&str[pos], len - pos, "%u.%" PRIu64, i->type,
+                                i->lo);
         if (i->lo != i->hi)
             pos += (size_t)snprintf(&str[pos], len - pos, "-%" PRIu64, i->hi);
         pos += (size_t)snprintf(&str[pos], len - pos, ", ");

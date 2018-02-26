@@ -366,9 +366,9 @@ verify_prot(struct q_conn * const c, struct w_iov * const v)
 
 
 static void __attribute__((nonnull))
-track_recv(struct q_conn * const c, const uint64_t nr)
+track_recv(struct q_conn * const c, const uint64_t nr, const uint8_t type)
 {
-    diet_insert(&c->recv, nr);
+    diet_insert(&c->recv, nr, type);
     if (nr == diet_max(&c->recv))
         c->lg_recv_t = ev_now(loop);
 }
@@ -391,7 +391,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         // respond to the version negotiation packet
         c->vers = pkt_vers(v->buf, v->len);
         c->needs_tx = true;
-        track_recv(c, meta(v).nr);
+        track_recv(c, meta(v).nr, pkt_type(flags));
         if (c->vers_initial == 0)
             c->vers_initial = c->vers;
         if (vers_supported(c->vers) && !is_force_neg_vers(c->vers)) {
@@ -490,7 +490,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                 struct q_stream * s = get_stream(c, 0);
                 s->out_off = s->in_off = 0;
             } else
-                track_recv(c, meta(v).nr);
+                track_recv(c, meta(v).nr, pkt_type(flags));
         }
         break;
 
@@ -499,7 +499,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             err_close(c, ERR_TLS_HSHAKE_FAIL, "AEAD decrypt failed");
             goto done;
         }
-        track_recv(c, meta(v).nr);
+        track_recv(c, meta(v).nr, pkt_type(flags));
         dec_frames(c, v);
         break;
 
@@ -539,7 +539,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             goto done;
         }
 
-        track_recv(c, meta(v).nr);
+        track_recv(c, meta(v).nr, pkt_type(flags));
         dec_frames(c, v);
 
         // if packet has anything other than ACK frames, arm the ACK timer

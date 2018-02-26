@@ -37,18 +37,24 @@
 /// structure described in: Martin Erwig, "Diets for fat sets", Journal of
 /// Functional Programming, Vol. 8, No. 6, pp. 627–632, 1998.
 /// https://web.engr.oregonstate.edu/~erwig/papers/abstracts.html#JFP98
+///
+/// This implementation extends the basic diet structure by adding a "type"
+/// field to each interval. Only intervals of the same types can be merged.
+/// (This is used by quant to handle different packet types.)
 
 
-/// An interval [hi..lo] to be used with diet structures.
+/// An interval [hi..lo] to be used with diet structures, of a given type.
 ///
 struct ival {
+    splay_entry(ival) node; ///< Splay tree node data.
     uint64_t lo;            ///< Lower bound of the interval.
     uint64_t hi;            ///< Upper bound of the interval.
-    splay_entry(ival) node; ///< Splay tree node date.
+    uint8_t type;           ///< Interval type.
+    uint8_t _unused[7];
 };
 
 
-extern int64_t __attribute__((nonnull))
+extern int __attribute__((nonnull))
 ival_cmp(const struct ival * const a, const struct ival * const b);
 
 struct diet {
@@ -72,18 +78,18 @@ struct diet {
 
 SPLAY_PROTOTYPE(diet, ival, node, ival_cmp)
 
-extern struct ival * diet_find(struct diet * const t, const uint64_t n);
+extern struct ival * diet_find(struct diet * const d, const uint64_t n);
 
 extern struct ival * __attribute__((nonnull))
-diet_insert(struct diet * const t, const uint64_t n);
+diet_insert(struct diet * const d, const uint64_t n, const uint8_t t);
 
 extern void __attribute__((nonnull))
-diet_remove(struct diet * const t, const uint64_t n);
+diet_remove(struct diet * const d, const uint64_t n);
 
-extern void __attribute__((nonnull)) diet_free(struct diet * const t);
+extern void __attribute__((nonnull)) diet_free(struct diet * const d);
 
 extern size_t __attribute__((nonnull))
-diet_to_str(char * const str, const size_t len, struct diet * const t);
+diet_to_str(char * const str, const size_t len, struct diet * const d);
 
 #define diet_max(t) (splay_empty(t) ? 0 : splay_max(diet, (t))->hi)
 

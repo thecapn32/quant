@@ -86,7 +86,7 @@ void free_stream(struct q_stream * const s)
     warn(DBG, "freeing str " FMT_SID " on %s conn " FMT_CID, s->id,
          conn_type(s->c), s->c->id);
 
-    diet_insert(&s->c->closed_streams, s->id);
+    diet_insert(&s->c->closed_streams, s->id, 0);
 
     q_free(&s->out);
     q_free(&s->in);
