@@ -41,8 +41,16 @@ static void trace(struct diet * const d,
                   __attribute__((unused))
 #endif
                   ,
-                  const uint8_t t,
-                  const char * const op)
+                  const uint8_t t
+#ifdef NDEBUG
+                  __attribute__((unused))
+#endif
+                  ,
+                  const char * const op
+#ifdef NDEBUG
+                  __attribute__((unused))
+#endif
+)
 {
     char str[8192];
     diet_to_str(str, sizeof(str), d);
