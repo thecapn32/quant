@@ -36,7 +36,11 @@
 
 
 static void trace(struct diet * const d,
-                  const uint64_t x,
+                  const uint64_t x
+#ifdef NDEBUG
+                  __attribute__((unused))
+#endif
+                  ,
                   const uint8_t t,
                   const char * const op)
 {
