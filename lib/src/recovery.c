@@ -39,6 +39,7 @@
 #include "conn.h"
 #include "diet.h"
 #include "frame.h"
+#include "pkt.h"
 #include "quic.h"
 #include "recovery.h"
 #include "stream.h"
@@ -212,7 +213,9 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
 
 
 static void __attribute__((nonnull))
-track_acked_pkts(struct q_conn * const c, const uint64_t ack)
+track_acked_pkts(struct q_conn * const c,
+                 const uint64_t ack,
+                 const uint8_t flags __attribute__((unused)))
 {
     diet_remove(&c->recv, ack);
 }
@@ -291,13 +294,21 @@ void on_ack_rx_2(struct q_conn * const c)
 }
 
 
-void on_pkt_acked(struct q_conn * const c, const uint64_t ack)
+void on_pkt_acked(struct q_conn * const c,
+                  const uint64_t ack,
+                  const uint8_t flags)
 {
     struct w_iov * const v = find_sent_pkt(c, ack);
     if (!v) {
         warn(DBG, "got ACK for pkt " FMT_PNR_OUT " with no metadata", ack);
         return;
     }
+
+    adj_iov_to_start(v);
+    if (!better_or_equal_prot(flags, pkt_flags(v->buf)))
+        warn(ERR, "0x%02x-type pkt has ACK for 0x%02x-type pkt " FMT_PNR_OUT,
+             flags, pkt_flags(v->buf), ack);
+    adj_iov_to_data(v);
 
     // only act on first-time ACKs
     if (meta(v).is_acked)

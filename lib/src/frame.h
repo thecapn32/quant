@@ -27,6 +27,7 @@
 
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 
 struct q_conn;
@@ -66,6 +67,9 @@ struct w_iov;
 extern uint64_t __attribute__((const))
 shorten_ack_nr(const uint64_t ack, const uint64_t diff);
 
+extern bool __attribute__((const))
+better_or_equal_prot(const uint8_t a, const uint8_t b);
+
 extern uint16_t __attribute__((nonnull))
 dec_frames(struct q_conn * const c, struct w_iov * v);
 
@@ -93,7 +97,7 @@ extern uint16_t __attribute__((nonnull(1, 2, 5))) dec_ack_frame(
     const struct w_iov * const v,
     const uint16_t pos,
     void (*before_ack)(struct q_conn * const, const uint64_t, const uint64_t),
-    void (*on_each_ack)(struct q_conn * const, const uint64_t),
+    void (*on_each_ack)(struct q_conn * const, const uint64_t, const uint8_t),
     void (*after_ack)(struct q_conn * const));
 
 extern uint16_t __attribute__((nonnull))

@@ -84,7 +84,7 @@ extern void __attribute__((nonnull)) on_ack_rx_1(struct q_conn * const c,
 extern void __attribute__((nonnull)) on_ack_rx_2(struct q_conn * const c);
 
 extern void __attribute__((nonnull))
-on_pkt_acked(struct q_conn * const c, const uint64_t ack);
+on_pkt_acked(struct q_conn * const c, const uint64_t ack, const uint8_t flags);
 
 extern struct w_iov * __attribute__((nonnull))
 find_sent_pkt(struct q_conn * const c, const uint64_t nr);

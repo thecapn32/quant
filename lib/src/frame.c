@@ -199,7 +199,7 @@ uint16_t dec_ack_frame(
     const struct w_iov * const v,
     const uint16_t pos,
     void (*before_ack)(struct q_conn * const, const uint64_t, const uint64_t),
-    void (*on_each_ack)(struct q_conn * const, const uint64_t),
+    void (*on_each_ack)(struct q_conn * const, const uint64_t, const uint8_t),
     void (*after_ack)(struct q_conn * const))
 {
     uint8_t type = 0;
@@ -254,7 +254,7 @@ uint16_t dec_ack_frame(
 
         uint64_t ack = lg_ack_in_block;
         while (ack + ack_block_len >= lg_ack_in_block) {
-            on_each_ack(c, ack);
+            on_each_ack(c, ack, pkt_flags(v->buf));
             if (likely(ack > 0))
                 ack--;
             else
@@ -656,7 +656,7 @@ uint16_t enc_padding_frame(struct w_iov * const v,
 ///
 /// @return     True if @p a has better or equal packet protection than @p b.
 ///
-static bool better_or_equal_prot(const uint8_t a, const uint8_t b)
+bool better_or_equal_prot(const uint8_t a, const uint8_t b)
 {
     bool ret = false;
 
