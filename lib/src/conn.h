@@ -76,9 +76,9 @@ struct q_conn {
     uint16_t had_rx : 1;   ///< We had an RX event on this connection.
     uint16_t needs_tx : 1; ///< We have a pending TX on this connection.
     uint16_t use_time_loss_det : 1; ///< UsingTimeLossDetection()
-    uint16_t open_win : 1;          ///< We need to open the receive window.
+    uint16_t tx_max_data : 1;       ///< Sent a MAX_DATA frame.
     uint16_t blocked : 1;           ///< We are receive-window-blocked.
-    uint16_t inc_sid : 1;           ///< Make more stream IDs available to peer.
+    uint16_t tx_max_stream_id : 1;  ///< Send MAX_STREAM_ID frame.
     uint16_t try_0rtt : 1;          ///< Try 0-RTT handshake.
     uint16_t did_0rtt : 1;          ///< 0-RTT handshake succeeded;
     uint16_t : 6;
@@ -99,7 +99,7 @@ struct q_conn {
     ev_timer closing_alarm;
     ev_timer ack_alarm;
 
-    struct diet recv;    ///< Received packet numbers still needing to be ACKed.
+    struct diet recv; ///< Received packet numbers still needing to be ACKed.
 
     struct sockaddr_in peer; ///< Address of our peer.
     char * peer_name;

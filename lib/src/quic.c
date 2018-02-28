@@ -209,16 +209,14 @@ void q_alloc(void * const w, struct w_iov_sq * const q, const uint32_t len)
 }
 
 
-void q_free(struct w_iov_sq * const q)
+void q_free(struct q_conn * const c, struct w_iov_sq * const q)
 {
     struct w_iov * v = sq_first(q);
     while (v) {
         struct w_iov * const next = sq_next(v, next);
         // warn(CRT, "q_free idx %u str %d", w_iov_idx(v),
         //      meta(v).stream ? meta(v).stream->id : -1);
-        if (meta(v).stream)
-            splay_remove(pm_nr_splay, &meta(v).stream->c->rec.sent_pkts,
-                         &meta(v));
+        splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
         meta(v) = (struct pkt_meta){0};
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         v = next;

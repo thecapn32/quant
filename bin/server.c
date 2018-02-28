@@ -105,7 +105,7 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
     const int f = openat(d->dir, path, O_RDONLY | O_CLOEXEC);
     ensure(f != -1, "could not open %s", path);
 
-    q_write_file(d->q, d->s, f, (uint32_t)info.st_size);
+    q_write_file(d->q, d->c, d->s, f, (uint32_t)info.st_size);
     q_close_stream(d->s);
 
     return 0;
@@ -202,7 +202,7 @@ int main(int argc, char * argv[])
                 break;
         }
 
-        q_free(&i);
+        q_free(c, &i);
     }
     if (c)
         q_close(c);

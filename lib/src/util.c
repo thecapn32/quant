@@ -34,6 +34,7 @@
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
+struct q_conn;
 struct q_stream;
 
 
@@ -56,6 +57,7 @@ void q_chunk_str(void * const q,
 
 
 void q_write_str(void * const q,
+                 struct q_conn * const c,
                  struct q_stream * const s,
                  const char * const str)
 {
@@ -73,11 +75,12 @@ void q_write_str(void * const q,
 
     // write it and free tail queue
     q_write(s, &o);
-    q_free(&o);
+    q_free(c, &o);
 }
 
 
 void q_write_file(void * const q,
+                  struct q_conn * const c,
                   struct q_stream * const s,
                   const int f,
                   const uint32_t len)
@@ -99,6 +102,6 @@ void q_write_file(void * const q,
 
     // write it and free tail queue and iov
     q_write(s, &o);
-    q_free(&o);
+    q_free(c, &o);
     free(iov);
 }

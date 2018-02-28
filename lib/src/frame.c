@@ -167,7 +167,7 @@ dec_stream_frame(struct q_conn * const c,
 done:
     warn(INF,
          FRAM_IN "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID " off=%" PRIu64
-                 " len=%" PRIu64 " [%s]",
+                 "/%" PRIu64 " len=%" PRIu64 " [%s]",
          type, is_set(F_STREAM_FIN, type) ? "FIN" : "",
          is_set(F_STREAM_FIN, type) &&
                  (is_set(F_STREAM_LEN, type) | is_set(F_STREAM_OFF, type))
@@ -175,8 +175,15 @@ done:
              : "",
          is_set(F_STREAM_LEN, type) ? "LEN" : "",
          is_set(F_STREAM_OFF, type) ? "|" : "",
-         is_set(F_STREAM_OFF, type) ? "OFF" : "", sid, meta(v).stream_off, l,
-         kind);
+         is_set(F_STREAM_OFF, type) ? "OFF" : "", sid, meta(v).stream_off,
+         s->in_data_max, l, kind);
+
+
+    if (s->id != 0 && meta(v).stream_off + l - 1 > s->in_data_max)
+        err_close(c, ERR_FLOW_CONTROL_ERR,
+                  "stream %" PRIu64 " off %" PRIu64 " > in_data_max %" PRIu64,
+                  s->id, meta(v).stream_off + l - 1, s->in_data_max);
+
     return meta(v).stream_data_end;
 }
 
@@ -388,9 +395,10 @@ dec_stream_blocked_frame(struct q_conn * const c,
     warn(INF, FRAM_IN "STREAM_BLOCKED" NRM " id=" FMT_SID " off=%" PRIu64, sid,
          off);
 
-    // open the stream window and send a frame
-    s->open_win = true;
-    s->c->needs_tx = true;
+    if (off + 2 * MAX_PKT_LEN <= s->in_data_max)
+        // open the stream window and send a frame
+        s->in_data_max += 0x1000;
+    s->tx_max_stream_data = s->c->needs_tx = true;
 
     return i;
 }
@@ -406,9 +414,10 @@ dec_blocked_frame(struct q_conn * const c,
 
     warn(INF, FRAM_IN "BLOCKED" NRM " off=%" PRIu64, off);
 
-    // open the connection window and send a frame
-    c->open_win = true;
-    c->needs_tx = true;
+    if (off + 2 * MAX_PKT_LEN <= c->tp_local.max_data)
+        // open the connection window and send a frame
+        c->tp_local.max_data += 0x1000;
+    c->tx_max_data = c->needs_tx = true;
 
     return i;
 }
@@ -424,11 +433,10 @@ dec_stream_id_blocked_frame(struct q_conn * const c,
 
     warn(INF, FRAM_IN "STREAM_ID_BLOCKED" NRM " sid=" FMT_SID, sid);
 
-    if (sid == c->tp_local.max_strm_bidi) {
+    if (sid + 4 <= c->tp_local.max_strm_bidi)
         // let the peer open more streams
-        c->inc_sid = true;
-        c->needs_tx = true;
-    }
+        c->tp_local.max_strm_bidi += 4;
+    c->needs_tx = c->tx_max_stream_id = true;
 
     return i;
 }
@@ -863,7 +871,7 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
 
     warn(INF,
          FRAM_OUT "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID " off=%" PRIu64
-                  " len=%" PRIu64,
+                  "/%" PRIu64 " len=%" PRIu64,
          type, is_set(F_STREAM_FIN, type) ? "FIN" : "",
          is_set(F_STREAM_FIN, type) &&
                  (is_set(F_STREAM_LEN, type) | is_set(F_STREAM_OFF, type))
@@ -871,7 +879,8 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
              : "",
          is_set(F_STREAM_LEN, type) ? "LEN" : "",
          is_set(F_STREAM_OFF, type) ? "|" : "",
-         is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id, s->out_off, dlen);
+         is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id, s->out_off,
+         s->out_data_max, dlen);
 
     track_bytes_out(s, dlen);
     meta(v).stream = s; // remember stream this buf belongs to

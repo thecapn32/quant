@@ -73,6 +73,7 @@ SPLAY_GENERATE(conn_cache, conn_cache_entry, node, conn_cmp)
 
 struct stream_entry {
     sl_entry(stream_entry) next;
+    struct q_conn * c;
     struct q_stream * s;
 };
 
@@ -143,6 +144,7 @@ get(void * const q,
         cce->c = q_connect(q, (struct sockaddr_in *)(void *)peer->ai_addr, dest,
                            req, &se->s);
         ensure(cce->c, "connection established");
+        se->c = cce->c;
 
         // insert into connection cache
         cce->dst = *(struct sockaddr_in *)&peer->ai_addr;
@@ -251,7 +253,7 @@ int main(int argc, char * argv[])
         sq_foreach (v, &i, next)
             printf("%.*s", v->len, v->buf);
         printf("\n");
-        q_free(&i);
+        q_free(se->c, &i);
     }
 
     q_cleanup(q);

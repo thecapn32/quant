@@ -65,8 +65,10 @@ new_stream(struct q_conn * const c, const uint64_t id, const bool active)
     sq_init(&s->out);
     sq_init(&s->in);
     s->id = id;
-    s->in_data_max = c->tp_local.max_strm_data;
-    s->out_data_max = c->tp_peer.max_strm_data;
+    if (s->id) {
+        s->in_data_max = c->tp_local.max_strm_data;
+        s->out_data_max = c->tp_peer.max_strm_data;
+    }
     if (active) {
         if (c->next_sid == 0)
             c->next_sid = c->is_clnt ? 4 : 1;
@@ -88,8 +90,8 @@ void free_stream(struct q_stream * const s)
 
     diet_insert(&s->c->closed_streams, s->id, 0, 0);
 
-    q_free(&s->out);
-    q_free(&s->in);
+    q_free(s->c, &s->out);
+    q_free(s->c, &s->in);
 
     splay_remove(stream, &s->c->streams, s);
     free(s);

@@ -215,7 +215,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
 
         if (s->c->state >= CONN_STAT_ESTB) {
             // if we have less than two full packet's worth of window, block
-            if (s->out_data + 2 * MAX_PKT_LEN > s->out_data_max)
+            if (s->id != 0 && s->out_data + 2 * MAX_PKT_LEN > s->out_data_max)
                 s->blocked = true;
             if (s->c->out_data + 2 * MAX_PKT_LEN > s->c->tp_peer.max_data)
                 s->c->blocked = true;
@@ -248,7 +248,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             w_nic_tx(w_engine(s->c->sock));
         if (!s->c->is_clnt)
             w_disconnect(s->c->sock);
-        q_free(&x);
+        q_free(s->c, &x);
     }
 
     log_sent_pkts(s->c);
@@ -282,18 +282,41 @@ tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
             sq_remove_head(&s->out, next);
     }
 
+    // if we sent a version negotiation response, forget all received packets
+    if (s->c->state == CONN_STAT_VERS_NEG_SENT)
+        diet_free(&s->c->recv);
+
     return did_tx;
 }
 
 
 void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
 {
+    // check if we need to do connection-level flow control
+    if (c->in_data + 2 * MAX_PKT_LEN > c->tp_local.max_data) {
+        c->tx_max_data = true;
+        c->tp_local.max_data += 0x1000;
+    }
+
+    if (splay_max(stream, &c->streams)->id + 4 > c->tp_local.max_strm_bidi) {
+        c->tx_max_stream_id = true;
+        c->tp_local.max_strm_bidi += 4;
+    }
+
     bool did_tx = false;
     struct q_stream * s = 0;
     splay_foreach (s, stream, &c->streams) {
-        // check if we need to open stream or connection windows
-        s->open_win |= s->in_data == s->in_data_max;
-        s->c->open_win |= s->c->in_data == s->c->tp_local.max_data;
+
+        // warn(ERR,
+        //      "c %" PRIu64 "/%" PRIu64 " s " FMT_SID " %" PRIu64 "/%" PRIu64,
+        //      s->c->in_data, s->c->tp_local.max_data, s->id, s->in_data,
+        //      s->in_data_max);
+
+        // check if we need to do stream-level flow control
+        if (s->id != 0 && s->in_data + 2 * MAX_PKT_LEN > s->in_data_max) {
+            s->tx_max_stream_data = true;
+            s->in_data_max += 0x1000;
+        }
 
         if (!s->blocked && !s->c->blocked && !sq_empty(&s->out) &&
             sq_len(&s->out) > s->out_ack_cnt) {
@@ -305,7 +328,7 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
             did_tx |= tx_stream(s, rtx, limit, 0);
         }
         if (did_tx == false &&
-            (s->open_win == true || s->c->open_win == true ||
+            (s->tx_max_stream_data == true || s->c->tx_max_data == true ||
              ((s->state == STRM_STAT_HCLO || s->state == STRM_STAT_CLSD) &&
               s->fin_sent == false))) {
             did_tx |= tx_other(s, rtx, limit);
@@ -462,8 +485,8 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             struct w_iov * ov = 0;
             sq_foreach (ov, &s->out, next)
                 rtx(s, ov);
-            q_free(&s->out);
-            q_free(&s->in);
+            q_free(c, &s->out);
+            q_free(c, &s->in);
 
             // reset TLS state and create new CH
             conn_to_state(c, CONN_STAT_IDLE);

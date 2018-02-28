@@ -50,7 +50,7 @@
 
 #define ERR_NO_ERR 0x0
 #define ERR_INTERNAL_ERR 0x1
-// #define ERR_FLOW_CONTROL_ERR 0x3
+#define ERR_FLOW_CONTROL_ERR 0x3
 // #define ERR_STREAM_ID_ERR 0x4
 // #define ERR_STREAM_STATE_ERR 0x5
 // #define ERR_FINAL_OFFSET_ERR 0x6

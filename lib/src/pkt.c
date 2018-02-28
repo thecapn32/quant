@@ -210,7 +210,7 @@ void enc_pkt(struct q_stream * const s,
     uint16_t i = 0;
 
     if (c->state == CONN_STAT_VERS_NEG) {
-        warn(INF, "sending version negotiation server response");
+        warn(INF, "sending vers neg serv response");
         flags = F_LONG_HDR | (uint8_t)w_rand();
         i = enc(v->buf, v->len, 0, &flags, sizeof(flags), "0x%02x");
         i = enc(v->buf, v->len, i, &c->id, sizeof(c->id), FMT_CID);
@@ -283,37 +283,36 @@ void enc_pkt(struct q_stream * const s,
     splay_foreach (t, stream, &c->streams) {
         if (t->blocked)
             i = enc_stream_blocked_frame(t, v, i);
-        if (t->open_win) {
-            t->in_data_max += 0x1000;
+        if (t->tx_max_stream_data) {
             i = enc_max_stream_data_frame(t, v, i);
-            t->open_win = false;
+            t->tx_max_stream_data = false;
         }
     }
 
     if (s->c->blocked)
         i = enc_blocked_frame(c, v, i);
 
-    if (s->c->open_win) {
-        s->c->tp_local.max_data += 0x1000;
+    if (s->c->tx_max_data) {
         i = enc_max_data_frame(s->c, v, i);
-        s->c->open_win = false;
+        s->c->tx_max_data = false;
     }
 
     if (c->state >= CONN_STAT_ESTB && c->tp_peer.max_strm_bidi &&
         c->next_sid > c->tp_peer.max_strm_bidi)
-        i = enc_stream_id_blocked_frame(c, v, i);
+        // i = enc_stream_id_blocked_frame(c, v, i);
 
-    if (s->c->inc_sid) {
-        s->c->tp_local.max_strm_bidi += 4;
-        i = enc_max_stream_id_frame(s->c, v, i);
-        s->c->inc_sid = false;
-    }
+        if (s->c->tx_max_stream_id) {
+            i = enc_max_stream_id_frame(s->c, v, i);
+            s->c->tx_max_stream_id = false;
+        }
 
     // TODO: need to RTX most recent MAX_STREAM_DATA and MAX_DATA on RTX
 
-    if (c->state == CONN_STAT_CLNG || c->state == CONN_STAT_HSHK_FAIL)
+    if (c->state == CONN_STAT_CLNG || c->state == CONN_STAT_HSHK_FAIL) {
         i = enc_close_frame(v, i, FRAM_TYPE_CONN_CLSE, c->err_code,
                             c->err_reason);
+        goto tx;
+    }
 
     if (rtx) {
         ensure(is_rtxable(&meta(v)), "is rtxable");
