@@ -174,7 +174,7 @@ externalproject_add(nss
   SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/mozquic-prefix/src/nss
   GIT_REPOSITORY https://github.com/nss-dev/nss.git
   GIT_SHALLOW 1
-  GIT_TAG origin/NSS_3_35_BRANCH
+  GIT_TAG origin/NSS_3_36_BRANCH
   CONFIGURE_COMMAND ""
   BUILD_COMMAND ./build.sh
   BUILD_IN_SOURCE 1
