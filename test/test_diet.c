@@ -35,10 +35,10 @@
 #include "diet.h"
 
 
-static void log(struct diet * const d,
-                const uint64_t x,
-                const uint8_t t,
-                const char * const op)
+static void trace(struct diet * const d,
+                  const uint64_t x,
+                  const uint8_t t,
+                  const char * const op)
 {
     char str[8192];
     diet_to_str(str, sizeof(str), d);
@@ -74,18 +74,17 @@ int main()
     util_dlevel = DLEVEL; // default to maximum compiled-in verbosity
     struct diet d = diet_initializer(diet);
     bitstr_t bit_decl(values, N);
-    bit_nclear(values, 0, N - 1);
 
     // insert some items
     int n = 0;
     while (n != -1) {
-        bit_ffc(values, N, &n);
+        bit_ffc(values, N, &n); // NOLINT
         const uint64_t x = arc4random_uniform(N);
         if (bit_test(values, x) == 0) {
             bit_set(values, x);
             const uint8_t t = (uint8_t)arc4random_uniform(2);
             diet_insert(&d, x, t, 0);
-            log(&d, x, t, "ins");
+            trace(&d, x, t, "ins");
             chk(&d);
         }
     }
@@ -96,7 +95,7 @@ int main()
         struct ival * const i = diet_find(&d, x);
         if (i) {
             diet_remove(&d, x);
-            log(&d, x, 0, "rem");
+            trace(&d, x, 0, "rem");
             chk(&d);
         }
     }
