@@ -649,64 +649,184 @@ uint16_t enc_padding_frame(struct w_iov * const v,
 }
 
 
+/// Does a have better or equal packet protection to b?
+///
+/// @param[in]  a     Packet flags.
+/// @param[in]  b     Packet flags.
+///
+/// @return     True if @p a has better or equal packet protection than @p b.
+///
+static bool better_or_equal_prot(const uint8_t a, const uint8_t b)
+{
+    bool ret = false;
+
+    // if a is a short-header packet (= 1-RTT), we're OK
+    if (!is_set(F_LONG_HDR, a))
+        ret = true;
+
+    // for long header packets, if b is 0-RTT, a must also be 0-RTT
+    else if (pkt_type(b) == F_LH_0RTT)
+        ret = pkt_type(a) == F_LH_0RTT;
+
+    // all other long-header packers are equally protected
+    else
+        ret = true;
+
+    // warn(INF, "a 0x%02x, b 0x%02x = %u", a, b, ret);
+    return ret;
+}
+
+
 uint16_t enc_ack_frame(struct q_conn * const c,
                        struct w_iov * const v,
                        const uint16_t pos)
 {
+    struct ival *b = 0, *lg_hi = 0, *lg_lo = 0, *cur_hi = 0, *cur_lo = 0;
+    uint64_t block_cnt = 0;
+
+    splay_foreach_rev (b, diet, &c->recv) {
+        warn(DBG, "range %" PRIu64 " - %" PRIu64 " 0x%02x", b->hi, b->lo,
+             diet_class(b));
+
+        const bool prot_ok =
+            better_or_equal_prot(pkt_flags(v->buf), diet_class(b));
+
+        if (!prot_ok) {
+            warn(NTE, "prot not OK, skipping range");
+            if (cur_lo) {
+                if (lg_lo == 0) {
+                    lg_lo = cur_lo;
+                    warn(DBG, "found lg_lo %" PRIu64 " - %" PRIu64 " 0x%02x",
+                         lg_lo->hi, lg_lo->lo, diet_class(lg_lo));
+                }
+                block_cnt++;
+            }
+            cur_hi = cur_lo = 0;
+            continue;
+        }
+
+        if (cur_hi == 0) {
+            cur_hi = cur_lo = b;
+            if (lg_hi == 0) {
+                lg_hi = b;
+                warn(DBG, "found lg_hi %" PRIu64 " - %" PRIu64 " 0x%02x",
+                     lg_hi->hi, lg_hi->lo, diet_class(lg_hi));
+            }
+            continue;
+        }
+
+        if (cur_lo->lo > b->hi + 1) {
+            warn(NTE, "new range");
+            if (lg_lo == 0) {
+                lg_lo = cur_lo;
+                warn(DBG, "found lg_lo %" PRIu64 " - %" PRIu64 " 0x%02x",
+                     lg_lo->hi, lg_lo->lo, diet_class(lg_lo));
+            }
+            block_cnt++;
+            cur_hi = cur_lo = b;
+            continue;
+        }
+
+        warn(NTE, "joining with current");
+        cur_lo = b;
+    }
+
+    if (lg_hi == 0) {
+        warn(WRN, "nothing to ACK");
+        return pos;
+    }
+
+    if (lg_lo == 0) {
+        lg_lo = splay_min(diet, &c->recv);
+        warn(DBG, "found lg_lo %" PRIu64 " - %" PRIu64 " 0x%02x", lg_lo->hi,
+             lg_lo->lo, diet_class(lg_lo));
+    }
+
     const uint8_t type = FRAM_TYPE_ACK;
     bit_set(meta(v).frames, FRAM_TYPE_ACK);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
 
-    const uint64_t lg_recv = diet_max(&c->recv);
-    i = enc(v->buf, v->len, i, &lg_recv, 0, FMT_PNR_IN);
+    i = enc(v->buf, v->len, i, &lg_hi->hi, 0, FMT_PNR_IN);
 
     const uint64_t ack_delay =
-        (uint64_t)((ev_now(loop) - c->lg_recv_t) * 1000000) /
+        (uint64_t)((ev_now(loop) - diet_timestamp(lg_hi)) * 1000000) /
         (1 << c->tp_local.ack_del_exp);
     i = enc(v->buf, v->len, i, &ack_delay, 0, "%" PRIu64);
 
-    const uint64_t block_cnt = diet_cnt(&c->recv) - 1;
     i = enc(v->buf, v->len, i, &block_cnt, 0, "%" PRIu64);
 
-    struct ival * b = 0;
-    uint64_t prev_lo = 0;
-    splay_foreach_rev (b, diet, &c->recv) {
-        uint64_t gap = 0;
-        if (prev_lo) {
-            gap = prev_lo - b->hi - 2;
-            i = enc(v->buf, v->len, i, &gap, 0, "%" PRIu64);
-        }
-        const uint64_t ack_block = b->hi - b->lo;
+    warn(DBG, "lg range %" PRIu64 " - %" PRIu64 " 0x%02x", lg_hi->hi, lg_lo->lo,
+         diet_class(lg_hi));
 
-        if (ack_block)
-            if (prev_lo)
-                warn(INF,
-                     FRAM_OUT "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64
-                              " [" FMT_PNR_IN ".." FMT_PNR_IN "]",
-                     gap, ack_block, b->lo, shorten_ack_nr(b->hi, ack_block));
-            else
-                warn(INF,
-                     FRAM_OUT "ACK" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64
-                              " (%" PRIu64 " usec) cnt=%" PRIu64
-                              " block=%" PRIu64 " [" FMT_PNR_IN ".." FMT_PNR_IN
-                              "]",
-                     lg_recv, ack_delay,
-                     ack_delay * (1 << c->tp_local.ack_del_exp), block_cnt,
-                     ack_block, b->lo, shorten_ack_nr(b->hi, ack_block));
-        else if (prev_lo)
+    // encode the first ACK block directly
+    uint64_t block = lg_hi->hi - lg_lo->lo;
+    i = enc(v->buf, v->len, i, &block, 0, "%" PRIu64);
+
+    if (block)
+        warn(INF,
+             FRAM_OUT "ACK" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64 " (%" PRIu64
+                      " usec) cnt=%" PRIu64 " block=%" PRIu64 " [" FMT_PNR_IN
+                      ".." FMT_PNR_IN "]",
+             lg_hi->hi, ack_delay, ack_delay * (1 << c->tp_local.ack_del_exp),
+             block_cnt, block, lg_lo->lo, shorten_ack_nr(lg_hi->hi, block));
+    else
+        warn(INF,
+             FRAM_OUT "ACK" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64 " (%" PRIu64
+                      " usec) cnt=%" PRIu64 " block=%" PRIu64 " [" FMT_PNR_IN
+                      "]",
+             lg_hi->hi, ack_delay, ack_delay * (1 << c->tp_local.ack_del_exp),
+             block_cnt, block, lg_hi->hi);
+
+    cur_hi = lg_hi;
+    cur_lo = lg_lo;
+    b = splay_prev(diet, &c->recv, lg_lo);
+
+    while (b) {
+
+        warn(DBG, "range %" PRIu64 " - %" PRIu64 " 0x%02x", b->hi, b->lo,
+             diet_class(b));
+
+        warn(DBG, "cur %" PRIu64 " - %" PRIu64 " 0x%02x", cur_hi->hi,
+             cur_lo->lo, diet_class(cur_hi));
+
+        if (better_or_equal_prot(pkt_flags(v->buf), diet_class(b)) == false) {
+            warn(DBG, "prot not OK, skipping range");
+            goto next;
+        }
+
+        if (cur_lo->lo == b->hi + 1 &&
+            better_or_equal_prot(pkt_flags(v->buf), diet_class(b))) {
+            warn(NTE, "can join with prev");
+            cur_lo = b;
+            goto next;
+        }
+
+        uint64_t gap = 0;
+        if (cur_lo->lo > b->hi + 1 || splay_prev(diet, &c->recv, b) == 0) {
+            warn(INF, "have gap");
+            gap = cur_lo->lo - b->hi - 2;
+            i = enc(v->buf, v->len, i, &gap, 0, "%" PRIu64);
+            cur_hi = cur_lo = b;
+        }
+
+        block = cur_hi->hi - cur_lo->lo;
+        i = enc(v->buf, v->len, i, &block, 0, "%" PRIu64);
+
+        if (block)
+            warn(INF,
+                 FRAM_OUT "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64
+                          " [" FMT_PNR_IN ".." FMT_PNR_IN "]",
+                 gap, block, cur_lo->lo, shorten_ack_nr(cur_hi->hi, block));
+        else
             warn(INF,
                  FRAM_OUT "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64
                           " [" FMT_PNR_IN "]",
-                 gap, ack_block, b->hi);
-        else
-            warn(INF,
-                 FRAM_OUT "ACK" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64
-                          " (%" PRIu64 " usec) cnt=%" PRIu64 " block=%" PRIu64,
-                 lg_recv, ack_delay, ack_delay * (1 << c->tp_local.ack_del_exp),
-                 block_cnt, ack_block);
+                 gap, block, cur_lo->lo);
 
-        i = enc(v->buf, v->len, i, &ack_block, 0, "%" PRIu64);
-        prev_lo = b->lo;
+        // cur_hi = cur_lo = b;
+
+    next:
+        b = splay_prev(diet, &c->recv, b);
     }
     return i;
 }

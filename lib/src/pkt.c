@@ -94,7 +94,7 @@ void log_pkt(const char * const dir, const struct w_iov * const v)
         else
             twarn(NTE,
                   BLD "%s" NRM " len=%u 0x%02x=%s%s " NRM "cid=" FMT_CID
-                      " vers=0x%08x nr=%s%u",
+                      " vers=0x%08x nr=%s%" PRIu64,
                   dir, v->len, flags, col_dir, pkt_type_str(v),
                   pkt_cid(v->buf, v->len), vers, col_nr, meta(v).nr);
     } else if (is_set(F_SH_OMIT_CID, flags))

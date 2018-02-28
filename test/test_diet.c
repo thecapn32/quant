@@ -58,9 +58,11 @@ static void chk(struct diet * const d)
     struct ival *i, *next;
     for (i = splay_min(diet, d); i != 0; i = next) {
         next = splay_next(diet, d, i);
-        ensure(next == 0 || i->hi + 1 < next->lo || i->type != next->type,
-               "%u.%" PRIu64 "-%" PRIu64 " %u.%" PRIu64 "-%" PRIu64, i->type,
-               i->lo, i->hi, next->type, next->lo, next->hi);
+        ensure(next == 0 || i->hi + 1 < next->lo ||
+                   diet_class(i) != diet_class(next),
+               "%u.%" PRIu64 "-%" PRIu64 " %u.%" PRIu64 "-%" PRIu64,
+               diet_class(i), i->lo, i->hi, diet_class(next), next->lo,
+               next->hi);
     }
 }
 
@@ -82,7 +84,7 @@ int main()
         if (bit_test(values, x) == 0) {
             bit_set(values, x);
             const uint8_t t = (uint8_t)arc4random_uniform(2);
-            diet_insert(&d, x, t);
+            diet_insert(&d, x, t, 0);
             log(&d, x, t, "ins");
             chk(&d);
         }

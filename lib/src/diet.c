@@ -46,11 +46,9 @@
 ///
 int ival_cmp(const struct ival * const a, const struct ival * const b)
 {
-    // warn(DBG, "cmp %u.%" PRIu64 "-%" PRIu64 " and %u.%" PRIu64 "-%" PRIu64,
-    //      a->type, a->lo, a->hi, b->type, b->lo, b->hi);
     if ((a->lo >= b->lo && a->lo <= b->hi) ||
         (b->lo >= a->lo && b->lo <= a->hi))
-        return 0; //(a->type > b->type) - (a->type < b->type);
+        return 0;
     return (a->lo > b->lo) - (a->lo < b->lo);
 }
 
@@ -134,16 +132,19 @@ struct ival * diet_find(struct diet * const d, const uint64_t n)
 /// Helper function to create a zero-width interval containing (only) @p n.
 ///
 /// @param[in]  n     Integer.
-/// @param[in]  t     Type.
+/// @param[in]  c     Class.
+/// @param[in]  t     Timestamp.
 ///
 /// @return     Newly allocated ival struct [n..n] of type @p t.
 ///
-static inline struct ival * make_ival(const uint64_t n, const uint8_t t)
+static inline struct ival *
+make_ival(const uint64_t n, const uint8_t c, const ev_tstamp t)
 {
     struct ival * const i = calloc(1, sizeof(*i));
     ensure(i, "could not calloc");
     i->lo = i->hi = n;
-    i->type = t;
+    i->c = c;
+    i->t = t;
     splay_left(i, node) = splay_right(i, node) = 0;
     return i;
 }
@@ -157,7 +158,7 @@ static inline void trace(struct ival * const i)
         fprintf(stderr, "\n");
         return;
     }
-    fprintf(stderr, "%u.%" PRIu64 "-%" PRIu64 "\n", i->type, i->lo, i->hi);
+    fprintf(stderr, "%u.%" PRIu64 "-%" PRIu64 "\n", i->c, i->lo, i->hi);
     l++;
     for (int ll = 0; ll < l; ll++)
         fprintf(stderr, "\t");
@@ -176,12 +177,15 @@ static inline void trace(struct ival * const i)
 ///
 /// @param      d     Diet tree.
 /// @param[in]  n     Integer.
-/// @param[in]  t     Type.
+/// @param[in]  c     Class.
+/// @param[in]  t     Timestamp.
 ///
 /// @return     Pointer to ival containing @p n.
 ///
-struct ival *
-diet_insert(struct diet * const d, const uint64_t n, const uint8_t t)
+struct ival * diet_insert(struct diet * const d,
+                          const uint64_t n,
+                          const uint8_t c,
+                          const ev_tstamp t)
 {
     if (splay_empty(d))
         goto new_ival;
@@ -189,24 +193,26 @@ diet_insert(struct diet * const d, const uint64_t n, const uint8_t t)
     // rotate the interval that contains n or is closest to it to the top
     diet_find(d, n);
 
-    if (n >= splay_root(d)->lo && n <= splay_root(d)->hi)
+    if (n >= splay_root(d)->lo && n <= splay_root(d)->hi) {
+        splay_root(d)->t = t;
         return splay_root(d);
+    }
 
     if (n < splay_root(d)->lo) {
         struct ival * const max = find_max(splay_left(splay_root(d), node));
 
-        if (n + 1 == splay_root(d)->lo && t == splay_root(d)->type)
+        if (n + 1 == splay_root(d)->lo && c == splay_root(d)->c)
             // we can expand the root to include n
             splay_root(d)->lo--;
-        else if (max && max->hi + 1 == n && t == max->type)
+        else if (max && max->hi + 1 == n && c == max->c)
             // we can expand the max child to include n
             max->hi++;
         else
             goto new_ival;
 
         // check if we can merge the new root with its max left child
-        if (max && (max->hi == splay_root(d)->lo - 1 &&
-                    max->type == splay_root(d)->type)) {
+        if (max &&
+            (max->hi == splay_root(d)->lo - 1 && max->c == splay_root(d)->c)) {
             splay_right(max, node) = splay_right(splay_root(d), node);
             max->hi = splay_root(d)->hi;
             struct ival * const old_root = splay_root(d);
@@ -214,24 +220,25 @@ diet_insert(struct diet * const d, const uint64_t n, const uint8_t t)
             free(old_root);
             d->cnt--;
         }
+        splay_root(d)->t = t;
         return splay_root(d);
     }
 
     if (n > splay_root(d)->hi) {
         struct ival * const min = find_min(splay_right(splay_root(d), node));
 
-        if (n == splay_root(d)->hi + 1 && t == splay_root(d)->type)
+        if (n == splay_root(d)->hi + 1 && c == splay_root(d)->c)
             // we can expand the root to include n
             splay_root(d)->hi++;
-        else if (min && min->lo - 1 == n && t == min->type)
+        else if (min && min->lo - 1 == n && c == min->c)
             // we can expand the min child to include n
             min->lo--;
         else
             goto new_ival;
 
         // check if we can merge the new root with its min right child
-        if (min && (min->lo == splay_root(d)->hi + 1 &&
-                    min->type == splay_root(d)->type)) {
+        if (min &&
+            (min->lo == splay_root(d)->hi + 1 && min->c == splay_root(d)->c)) {
             splay_left(min, node) = splay_left(splay_root(d), node);
             min->lo = splay_root(d)->lo;
             struct ival * const old_root = splay_root(d);
@@ -239,12 +246,13 @@ diet_insert(struct diet * const d, const uint64_t n, const uint8_t t)
             free(old_root);
             d->cnt--;
         }
+        splay_root(d)->t = t;
         return splay_root(d);
     }
 
     struct ival * i; // clang doesn't like this statement after the label?
 new_ival:
-    i = make_ival(n, t);
+    i = make_ival(n, c, t);
     splay_insert(diet, d, i);
     d->cnt++;
     return i;
@@ -277,7 +285,7 @@ void diet_remove(struct diet * const d, const uint64_t n)
     } else {
         // split interval
         struct ival * const i =
-            make_ival(splay_root(d)->lo, splay_root(d)->type);
+            make_ival(splay_root(d)->lo, splay_root(d)->c, splay_root(d)->t);
         d->cnt++;
         i->hi = n - 1;
         splay_root(d)->lo = n + 1;
@@ -306,8 +314,8 @@ size_t diet_to_str(char * const str, const size_t len, struct diet * const d)
     size_t pos = 0;
     str[0] = 0;
     splay_foreach (i, diet, d) {
-        pos += (size_t)snprintf(&str[pos], len - pos, "%u.%" PRIu64, i->type,
-                                i->lo);
+        pos +=
+            (size_t)snprintf(&str[pos], len - pos, "%u.%" PRIu64, i->c, i->lo);
         if (i->lo != i->hi)
             pos += (size_t)snprintf(&str[pos], len - pos, "-%" PRIu64, i->hi);
         pos += (size_t)snprintf(&str[pos], len - pos, ", ");

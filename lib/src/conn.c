@@ -166,8 +166,24 @@ static void log_sent_pkts(struct q_conn * const c)
 }
 
 
+static void __attribute__((nonnull))
+rtx(struct q_stream * const s, struct w_iov * const v)
+{
+    ensure(meta(v).is_rtxed == false, "cannot RTX an RTX");
+    // on RTX, remember orig pkt meta data
+    struct w_iov * const r = q_alloc_iov(w_engine(s->c->sock), 0, Q_OFFSET);
+    pm_cpy(&meta(r), &meta(v));                  // copy pkt meta data
+    memcpy(r->buf, v->buf - Q_OFFSET, Q_OFFSET); // copy pkt headers
+    meta(r).is_rtxed = true;
+
+    // we reinsert meta(v) with its new pkt nr in on_pkt_sent()
+    splay_remove(pm_nr_splay, &s->c->rec.sent_pkts, &meta(v));
+    splay_insert(pm_nr_splay, &s->c->rec.sent_pkts, &meta(r));
+}
+
+
 static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
-                                                      const bool rtx,
+                                                      const bool is_rtx,
                                                       const uint32_t limit,
                                                       struct w_iov * const from)
 {
@@ -182,31 +198,20 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             warn(DBG,
                  "skipping ACKed pkt " FMT_PNR_OUT " on str " FMT_SID
                  " during %s",
-                 meta(v).nr, s->id, rtx ? "RTX" : "TX");
+                 meta(v).nr, s->id, is_rtx ? "RTX" : "TX");
             continue;
         }
 
-        if (rtx != (meta(v).tx_len > 0)) {
+        if (is_rtx != (meta(v).tx_len > 0)) {
             warn(DBG,
                  "skipping %s pkt " FMT_PNR_OUT " on str " FMT_SID " during %s",
                  meta(v).tx_len ? "already-tx'ed" : "fresh", meta(v).nr, s->id,
-                 rtx ? "RTX" : "TX");
+                 is_rtx ? "RTX" : "TX");
             continue;
         }
 
-        if (rtx) {
-            ensure(meta(v).is_rtxed == false, "cannot RTX an RTX");
-            // on RTX, remember orig pkt meta data
-            struct w_iov * const r =
-                q_alloc_iov(w_engine(s->c->sock), 0, Q_OFFSET);
-            pm_cpy(&meta(r), &meta(v));                  // copy pkt meta data
-            memcpy(r->buf, v->buf - Q_OFFSET, Q_OFFSET); // copy pkt headers
-            meta(r).is_rtxed = true;
-
-            // we reinsert meta(v) with its new pkt nr in on_pkt_sent()
-            splay_remove(pm_nr_splay, &s->c->rec.sent_pkts, &meta(v));
-            splay_insert(pm_nr_splay, &s->c->rec.sent_pkts, &meta(r));
-        }
+        if (is_rtx)
+            rtx(s, v);
 
         if (s->c->state >= CONN_STAT_ESTB) {
             // if we have less than two full packet's worth of window, block
@@ -216,7 +221,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
                 s->c->blocked = true;
         }
 
-        enc_pkt(s, rtx, v, &x);
+        enc_pkt(s, is_rtx, v, &x);
         on_pkt_sent(s->c, v);
         encoded++;
 
@@ -368,9 +373,7 @@ verify_prot(struct q_conn * const c, struct w_iov * const v)
 static void __attribute__((nonnull))
 track_recv(struct q_conn * const c, const uint64_t nr, const uint8_t type)
 {
-    diet_insert(&c->recv, nr, type);
-    if (nr == diet_max(&c->recv))
-        c->lg_recv_t = ev_now(loop);
+    diet_insert(&c->recv, nr, type, ev_now(loop));
 }
 
 
@@ -383,6 +386,12 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
     case CONN_STAT_IDLE:
     case CONN_STAT_VERS_NEG:
     case CONN_STAT_VERS_NEG_SENT:
+
+        if (pkt_vers(v->buf, v->len) == 0) {
+            warn(INF, "ignoring spurious vers neg response");
+            goto done;
+        }
+
         // validate minimum packet size
         if (pkt_type(flags) == F_LH_INIT && v->len < MIN_INI_LEN)
             warn(ERR, "initial %u-byte pkt too short (< %u)", v->len,
@@ -391,7 +400,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         // respond to the version negotiation packet
         c->vers = pkt_vers(v->buf, v->len);
         c->needs_tx = true;
-        track_recv(c, meta(v).nr, pkt_type(flags));
+        track_recv(c, meta(v).nr, flags);
         if (c->vers_initial == 0)
             c->vers_initial = c->vers;
         if (vers_supported(c->vers) && !is_force_neg_vers(c->vers)) {
@@ -399,7 +408,9 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 
             init_hshk_prot(c);
             if (verify_prot(c, v) == false) {
-                err_close(c, ERR_TLS_HSHAKE_FAIL, "AEAD decrypt failed");
+                err_close(c, ERR_TLS_HSHAKE_FAIL,
+                          "AEAD decrypt of 0x%02x-type packet failed",
+                          pkt_type(flags));
                 goto done;
             }
 #ifndef NO_RANDOM_CID
@@ -414,22 +425,20 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             dec_frames(c, v);
 
         } else {
-            if (c->state != CONN_STAT_VERS_NEG_SENT) {
-                conn_to_state(c, CONN_STAT_VERS_NEG);
-                warn(WRN,
-                     "%s conn " FMT_CID
-                     " clnt-requested vers 0x%08x not supported ",
-                     conn_type(c), c->id, c->vers);
-            } else
-                warn(WRN,
-                     "%s conn " FMT_CID " clnt-requested vers 0x%08x not "
-                     "supported, but already sent version "
-                     "negotiation ",
-                     conn_type(c), c->id, c->vers);
+            conn_to_state(c, CONN_STAT_VERS_NEG);
+            warn(WRN,
+                 "%s conn " FMT_CID
+                 " clnt-requested vers 0x%08x not supported ",
+                 conn_type(c), c->id, c->vers);
         }
         break;
 
     case CONN_STAT_CH_SENT:
+        if (!is_set(F_LONG_HDR, flags)) {
+            warn(WRN, "cannot handle short-header pkt yet, ignoring");
+            goto done;
+        }
+
         if (pkt_vers(v->buf, v->len) == 0) {
             const uint32_t try_vers = pick_from_server_vers(v->buf, v->len);
             if (try_vers == c->vers) {
@@ -450,6 +459,9 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 
             // free the previous ClientHello flight
             struct q_stream * s = get_stream(c, 0);
+            struct w_iov * ov = 0;
+            sq_foreach (ov, &s->out, next)
+                rtx(s, ov);
             q_free(&s->out);
             q_free(&s->in);
 
@@ -466,7 +478,6 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                 // reset stream offset
                 s->out_off = 0;
                 // forget we transmitted any packets
-                struct w_iov * ov = 0;
                 sq_foreach (ov, &s->out, next) {
                     meta(ov).tx_len = meta(ov).is_acked = 0;
                     splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(ov));
@@ -477,7 +488,9 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         } else {
             // server accepted version
             if (verify_prot(c, v) == false) {
-                err_close(c, ERR_TLS_HSHAKE_FAIL, "AEAD decrypt failed");
+                err_close(c, ERR_TLS_HSHAKE_FAIL,
+                          "AEAD decrypt of 0x%02x-type packet failed",
+                          pkt_type(flags));
                 goto done;
             }
 
@@ -490,22 +503,25 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                 struct q_stream * s = get_stream(c, 0);
                 s->out_off = s->in_off = 0;
             } else
-                track_recv(c, meta(v).nr, pkt_type(flags));
+                track_recv(c, meta(v).nr, flags);
         }
         break;
 
     case CONN_STAT_RTRY:
         if (verify_prot(c, v) == false) {
-            err_close(c, ERR_TLS_HSHAKE_FAIL, "AEAD decrypt failed");
+            err_close(c, ERR_TLS_HSHAKE_FAIL,
+                      "AEAD decrypt of 0x%02x-type packet failed",
+                      pkt_type(flags));
             goto done;
         }
-        track_recv(c, meta(v).nr, pkt_type(flags));
+        track_recv(c, meta(v).nr, flags);
         dec_frames(c, v);
         break;
 
     case CONN_STAT_HSHK_DONE:
         if (is_set(F_LONG_HDR, flags) && pkt_vers(v->buf, v->len) == 0) {
-            // we shouldn't get another version negotiation packet here, ignore
+            // we shouldn't get another version negotiation packet here,
+            // ignore
             warn(NTE, "ignoring spurious ver neg response");
             goto done;
         }
@@ -539,7 +555,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             goto done;
         }
 
-        track_recv(c, meta(v).nr, pkt_type(flags));
+        track_recv(c, meta(v).nr, flags);
         dec_frames(c, v);
 
         // if packet has anything other than ACK frames, arm the ACK timer

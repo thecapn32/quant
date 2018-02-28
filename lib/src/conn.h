@@ -100,7 +100,6 @@ struct q_conn {
     ev_timer ack_alarm;
 
     struct diet recv;    ///< Received packet numbers still needing to be ACKed.
-    ev_tstamp lg_recv_t; ///< Time when lg_recv was received
 
     struct sockaddr_in peer; ///< Address of our peer.
     char * peer_name;
@@ -156,7 +155,7 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 
 #define conn_to_state(c, s)                                                    \
     do {                                                                       \
-        warn(DBG, "conn %" FMT_CID " state %u -> %u", c->id, c->state, s);     \
+        warn(DBG, "conn " FMT_CID " state %u -> %u", c->id, c->state, s);      \
         c->state = s;                                                          \
                                                                                \
         switch (s) {                                                           \

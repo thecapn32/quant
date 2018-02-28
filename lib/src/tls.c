@@ -950,18 +950,13 @@ which_aead(const struct q_conn * const c,
            const struct w_iov * const v,
            const bool in)
 {
-    ptls_aead_context_t * aead = 0;
     const uint8_t flags = pkt_flags(v->buf);
     if (is_set(F_LONG_HDR, flags)) {
         if (pkt_type(flags) == F_LH_0RTT)
-            aead = in ? c->tls.dec_0rtt : c->tls.enc_0rtt;
-        else
-            aead = in ? c->tls.dec_hshk : c->tls.enc_hshk;
-    } else
-        aead = in ? c->tls.dec_1rtt : c->tls.enc_1rtt;
-
-    ensure(aead, "AEAD null");
-    return aead;
+            return in ? c->tls.dec_0rtt : c->tls.enc_0rtt;
+        return in ? c->tls.dec_hshk : c->tls.enc_hshk;
+    }
+    return in ? c->tls.dec_1rtt : c->tls.enc_1rtt;
 }
 
 
@@ -980,6 +975,9 @@ uint16_t dec_aead(struct q_conn * const c,
                   const uint16_t hdr_len)
 {
     ptls_aead_context_t * const aead = which_aead(c, v, true);
+    if (aead == 0)
+        return 0;
+
     const size_t len =
         ptls_aead_decrypt(aead, &v->buf[hdr_len], &v->buf[hdr_len],
                           v->len - hdr_len, meta(v).nr, v->buf, hdr_len);
@@ -1000,8 +998,10 @@ uint16_t enc_aead(struct q_conn * const c,
                   const struct w_iov * x,
                   const uint16_t hdr_len)
 {
-    memcpy(x->buf, v->buf, hdr_len); // copy pkt header
     ptls_aead_context_t * const aead = which_aead(c, v, false);
+    ensure(aead, "AEAD is null");
+
+    memcpy(x->buf, v->buf, hdr_len); // copy pkt header
     const size_t len =
         ptls_aead_encrypt(aead, &x->buf[hdr_len], &v->buf[hdr_len],
                           v->len - hdr_len, meta(v).nr, v->buf, hdr_len);
