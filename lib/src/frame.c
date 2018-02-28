@@ -229,9 +229,9 @@ uint16_t dec_ack_frame(
                 warn(INF,
                      FRAM_IN "ACK" NRM " lg=" FMT_PNR_OUT " delay=%" PRIu64
                              " (%" PRIu64 " usec) cnt=%" PRIu64
-                             " block=%" PRIu64,
+                             " block=%" PRIu64 " [" FMT_PNR_OUT "]",
                      lg_ack, ack_delay_raw, ack_delay, num_blocks,
-                     ack_block_len);
+                     ack_block_len, lg_ack);
             else
                 warn(INF,
                      FRAM_IN "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64
@@ -692,7 +692,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
             better_or_equal_prot(pkt_flags(v->buf), diet_class(b));
 
         if (!prot_ok) {
-            warn(NTE, "prot not OK, skipping range");
+            warn(DBG, "prot not OK, skipping range");
             if (cur_lo) {
                 if (lg_lo == 0) {
                     lg_lo = cur_lo;
@@ -716,7 +716,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
         }
 
         if (cur_lo->lo > b->hi + 1) {
-            warn(NTE, "new range");
+            warn(DBG, "new range");
             if (lg_lo == 0) {
                 lg_lo = cur_lo;
                 warn(DBG, "found lg_lo %" PRIu64 " - %" PRIu64 " 0x%02x",
@@ -727,7 +727,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
             continue;
         }
 
-        warn(NTE, "joining with current");
+        warn(DBG, "joining with current");
         cur_lo = b;
     }
 
@@ -796,14 +796,14 @@ uint16_t enc_ack_frame(struct q_conn * const c,
 
         if (cur_lo->lo == b->hi + 1 &&
             better_or_equal_prot(pkt_flags(v->buf), diet_class(b))) {
-            warn(NTE, "can join with prev");
+            warn(DBG, "can join with prev");
             cur_lo = b;
             goto next;
         }
 
         uint64_t gap = 0;
         if (cur_lo->lo > b->hi + 1 || splay_prev(diet, &c->recv, b) == 0) {
-            warn(INF, "have gap");
+            warn(DBG, "have gap");
             gap = cur_lo->lo - b->hi - 2;
             i = enc(v->buf, v->len, i, &gap, 0, "%" PRIu64);
             cur_hi = cur_lo = b;
