@@ -71,7 +71,9 @@ static void chk(struct diet * const d)
 
 int main()
 {
+#ifndef NDEBUG
     util_dlevel = DLEVEL; // default to maximum compiled-in verbosity
+#endif
     struct diet d = diet_initializer(diet);
     bitstr_t bit_decl(values, N);
 
