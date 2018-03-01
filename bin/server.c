@@ -28,6 +28,7 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <net/if.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -178,8 +179,13 @@ int main(int argc, char * argv[])
              port[i]);
     }
 
-    struct q_conn * const c = q_accept(q);
-    while (c) {
+    bool first = true;
+    while (1) {
+        struct q_conn * const c = q_accept(q, first ? 0 : 3);
+        first = false;
+        if (c == 0)
+            break;
+
         http_parser_settings settings = {.on_url = serve_cb};
         struct cb_data d = {.c = c, .q = q, .dir = dir_fd};
         http_parser parser = {.data = &d};
@@ -203,9 +209,8 @@ int main(int argc, char * argv[])
         }
 
         q_free(c, &i);
-    }
-    if (c)
         q_close(c);
+    }
 
     q_cleanup(q);
     warn(DBG, "%s exiting", basename(argv[0]));

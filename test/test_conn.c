@@ -88,7 +88,7 @@ int main(int argc
     ensure(cc, "is zero");
 
     // accept connection
-    q_accept(sc);
+    q_accept(sc, 0);
 
     // reserve a new stream
     struct q_stream * const s = q_rsv_stream(cc);

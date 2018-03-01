@@ -174,9 +174,10 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
         case CONN_STAT_ESTB:                                                   \
             c->needs_tx = true;                                                \
             break;                                                             \
-        case CONN_STAT_DRNG:                                                   \
         case CONN_STAT_CLNG:                                                   \
             enter_closing(c);                                                  \
+            break;                                                             \
+        case CONN_STAT_DRNG:                                                   \
             break;                                                             \
         default:                                                               \
             die("unhandled state %u", s);                                      \

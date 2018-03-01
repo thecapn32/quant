@@ -595,7 +595,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         dec_frames(c, v);
 
         // if packet has anything other than ACK frames, arm the ACK timer
-        if (!is_ack_only(&meta(v))) {
+        if (c->state != CONN_STAT_DRNG && !is_ack_only(&meta(v))) {
             warn(DBG, "non-ACK frame received, starting ACK timer");
             ev_timer_again(loop, &c->ack_alarm);
         }
@@ -785,13 +785,13 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
 
 void enter_closing(struct q_conn * const c)
 {
-    // stop LD alarm
+    // stop LD and ACK alarms
     ev_timer_stop(loop, &c->rec.ld_alarm);
+    ev_timer_stop(loop, &c->ack_alarm);
 
+    ev_timer_init(&c->closing_alarm, enter_closed, 3, 0); // TODO: 3 * RTO
     c->closing_alarm.data = c;
-    c->closing_alarm.repeat = 3; // TODO: 3 * RTO
-    ev_init(&c->closing_alarm, enter_closed);
-    ev_timer_again(loop, &c->closing_alarm);
+    ev_timer_start(loop, &c->closing_alarm);
 }
 
 

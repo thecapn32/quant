@@ -410,14 +410,31 @@ struct q_conn * q_bind(void * const q, const uint16_t port)
 }
 
 
-struct q_conn * q_accept(void * const q __attribute__((unused)))
+static void __attribute__((nonnull))
+cancel_accept(struct ev_loop * const l __attribute__((unused)),
+              ev_timer * const w __attribute__((unused)),
+              int e __attribute__((unused)))
 {
-    warn(WRN, "waiting for accept on any serv conn");
+    maybe_api_return(q_accept, accept_queue);
+}
+
+
+struct q_conn * q_accept(void * const q __attribute__((unused)),
+                         const uint64_t timeout)
+{
+    warn(WRN, "waiting for conn on any serv sock (timeout %" PRIu64 " sec)",
+         timeout);
 
     if (accept_queue && accept_queue->state >= CONN_STAT_HSHK_DONE) {
         warn(WRN, "got %s conn " FMT_CID, conn_type(accept_queue),
              accept_queue->id);
         return accept_queue;
+    }
+
+    if (timeout) {
+        ev_timer accept_alarm;
+        ev_timer_init(&accept_alarm, cancel_accept, timeout, 0);
+        ev_timer_start(loop, &accept_alarm);
     }
 
     accept_queue = 0;
@@ -439,7 +456,12 @@ struct q_conn * q_accept(void * const q __attribute__((unused)))
          ntohs(accept_queue->peer.sin_port),
          accept_queue->did_0rtt ? " after 0-RTT" : "",
          accept_queue->tls.enc_1rtt->algo->name);
-    return accept_queue;
+
+    struct q_conn * const ret = accept_queue;
+    accept_queue = 0;
+    // new_conn(q, 0, 0, 0, 0, ntohs(ret->sport));
+
+    return ret;
 }
 
 
