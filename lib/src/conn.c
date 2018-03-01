@@ -517,16 +517,29 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                 goto done;
             }
 
-            dec_frames(c, v);
-
             if (pkt_type(flags) == F_LH_RTRY) {
                 warn(INF, "handling serv stateless retry");
+
+                // verify retry contents
+                ensure(pkt_cid(v->buf, v->len) == c->id,
+                       "sent cid " FMT_CID ", received cid " FMT_CID
+                       " in retry",
+                       c->id, pkt_cid(v->buf, v->len));
+                ensure(pkt_nr(v->buf, v->len, c) == c->rec.lg_sent,
+                       "sent pkt nr " FMT_PNR_OUT
+                       ", received pkt nr " FMT_PNR_IN " in retry",
+                       c->rec.lg_sent, pkt_nr(v->buf, v->len, c));
+
+                dec_frames(c, v);
                 conn_to_state(c, CONN_STAT_RTRY);
                 // reset stream 0 offsets
                 struct q_stream * s = get_stream(c, 0);
                 s->out_off = s->in_off = 0;
-            } else
+
+            } else {
+                dec_frames(c, v);
                 track_recv(c, meta(v).nr, flags);
+            }
         }
         break;
 
