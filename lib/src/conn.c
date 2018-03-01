@@ -520,15 +520,15 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             if (pkt_type(flags) == F_LH_RTRY) {
                 warn(INF, "handling serv stateless retry");
 
-                // verify retry contents
-                ensure(pkt_cid(v->buf, v->len) == c->id,
-                       "sent cid " FMT_CID ", received cid " FMT_CID
-                       " in retry",
-                       c->id, pkt_cid(v->buf, v->len));
-                ensure(pkt_nr(v->buf, v->len, c) == c->rec.lg_sent,
-                       "sent pkt nr " FMT_PNR_OUT
-                       ", received pkt nr " FMT_PNR_IN " in retry",
-                       c->rec.lg_sent, pkt_nr(v->buf, v->len, c));
+                // verify retry
+                if (pkt_nr(v->buf, v->len, c) != c->rec.lg_sent)
+                    warn(ERR,
+                         "sent pkt nr " FMT_PNR_OUT
+                         ", received pkt nr " FMT_PNR_IN " in retry",
+                         c->rec.lg_sent, pkt_nr(v->buf, v->len, c));
+
+                // must use cid from retry for connection and re-init keys
+                init_hshk_prot(c);
 
                 dec_frames(c, v);
                 conn_to_state(c, CONN_STAT_RTRY);
