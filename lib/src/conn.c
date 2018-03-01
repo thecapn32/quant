@@ -521,11 +521,14 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                 warn(INF, "handling serv stateless retry");
 
                 // verify retry
-                if (pkt_nr(v->buf, v->len, c) != c->rec.lg_sent)
+                const struct pkt_meta * const p =
+                    splay_min(pm_nr_splay, &c->rec.sent_pkts);
+                ensure(p, "cannot find CH");
+                if (pkt_nr(v->buf, v->len, c) != p->nr)
                     warn(ERR,
                          "sent pkt nr " FMT_PNR_OUT
                          ", received pkt nr " FMT_PNR_IN " in retry",
-                         c->rec.lg_sent, pkt_nr(v->buf, v->len, c));
+                         p->nr, pkt_nr(v->buf, v->len, c));
 
                 // must use cid from retry for connection and re-init keys
                 init_hshk_prot(c);
