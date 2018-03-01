@@ -221,8 +221,6 @@ void enc_pkt(struct q_stream * const s,
                 i = enc(v->buf, v->len, i, &ok_vers[j], sizeof(ok_vers[j]),
                         "0x%08x");
         hdr_len = v->len = i;
-        // don't remember the failed client initial
-        diet_remove(&c->recv, meta(v).nr);
         log_pkt("TX", v);
         goto tx;
     }
