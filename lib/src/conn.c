@@ -802,7 +802,8 @@ void enter_closing(struct q_conn * const c)
     ev_timer_stop(loop, &c->rec.ld_alarm);
     ev_timer_stop(loop, &c->ack_alarm);
 
-    ev_timer_init(&c->closing_alarm, enter_closed, 3, 0); // TODO: 3 * RTO
+    ev_timer_init(&c->closing_alarm, enter_closed,
+                  3 * (c->rec.srtt + 4 * c->rec.rttvar), 0); // 3 * RTO
     c->closing_alarm.data = c;
     ev_timer_start(loop, &c->closing_alarm);
 }

@@ -181,15 +181,15 @@ static struct q_conn * new_conn(struct w_engine * const w,
     c->tx_w.data = c;
     ev_async_start(loop, &c->tx_w);
 
+    warn(ERR, "%u", port);
     c->sock = w_get_sock(w, htons(port), 0);
     if (c->sock == 0) {
-        warn(ERR, "new sock");
-        c->sock = w_bind(w, htons(port), 0);
+        c->rx_w.data = c->sock = w_bind(w, htons(port), 0);
         ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
-        c->rx_w.data = c->sock;
         ev_io_start(loop, &c->rx_w);
     }
     c->sport = w_get_sport(c->sock);
+    warn(ERR, "%u", ntohs(c->sport));
 
     // add connection to global data structures
     splay_insert(ipnp_splay, &conns_by_ipnp, c);
@@ -197,12 +197,14 @@ static struct q_conn * new_conn(struct w_engine * const w,
         splay_insert(cid_splay, &conns_by_cid, c);
 
     warn(DBG, "%s conn " FMT_CID " on port %u created", conn_type(c), c->id,
-         port);
+         ntohs(c->sport));
     return c;
 }
 
 
-void q_alloc(void * const w, struct w_iov_sq * const q, const uint32_t len)
+void q_alloc(struct w_engine * const w,
+             struct w_iov_sq * const q,
+             const uint32_t len)
 {
     w_alloc_len(w, q, len, MAX_PKT_LEN - AEAD_LEN - Q_OFFSET, Q_OFFSET);
     struct w_iov * v = 0;
@@ -229,7 +231,7 @@ void q_free(struct q_conn * const c, struct w_iov_sq * const q)
 }
 
 
-struct q_conn * q_connect(void * const q,
+struct q_conn * q_connect(struct w_engine * const w,
                           const struct sockaddr_in * const peer,
                           const char * const peer_name,
                           struct w_iov_sq * const early_data,
@@ -239,7 +241,7 @@ struct q_conn * q_connect(void * const q,
     uint64_t cid;
     arc4random_buf(&cid, sizeof(cid));
     const uint vers = ok_vers[0];
-    struct q_conn * const c = new_conn(q, vers, cid, peer, peer_name, 0);
+    struct q_conn * const c = new_conn(w, vers, cid, peer, peer_name, 0);
 
     // allocate stream zero and inti TLS
     struct q_stream * const s = new_stream(c, 0, true);
@@ -248,8 +250,8 @@ struct q_conn * q_connect(void * const q,
     warn(WRN,
          "new %u-RTT %s conn " FMT_CID " to %s:%u, %u byte%s queued for TX",
          c->try_0rtt ? 0 : 1, conn_type(c), cid, inet_ntoa(peer->sin_addr),
-         ntohs(peer->sin_port), w_iov_sq_len(early_data),
-         plural(w_iov_sq_len(early_data)));
+         ntohs(peer->sin_port), early_data ? w_iov_sq_len(early_data) : 0,
+         plural(early_data ? w_iov_sq_len(early_data) : 0));
 
     ev_timer_again(loop, &c->idle_alarm);
     w_connect(c->sock, peer->sin_addr.s_addr, peer->sin_port);
@@ -278,7 +280,7 @@ struct q_conn * q_connect(void * const q,
         return 0;
     }
 
-    if (*early_data_stream && early_data && s->c->try_0rtt) {
+    if (early_data && *early_data_stream && s->c->try_0rtt) {
         if (c->did_0rtt == false) {
             // 0-RTT data was not accepted by server, queue for regular
             // transmit
@@ -404,11 +406,11 @@ void q_readall_str(struct q_stream * const s, struct w_iov_sq * const q)
 }
 
 
-struct q_conn * q_bind(void * const q, const uint16_t port)
+struct q_conn * q_bind(struct w_engine * const w, const uint16_t port)
 {
     // bind socket and create new embryonic server connection
     warn(INF, "binding serv socket on port %u", port);
-    struct q_conn * const c = new_conn(q, 0, 0, 0, 0, port);
+    struct q_conn * const c = new_conn(w, 0, 0, 0, 0, port);
     warn(WRN, "bound %s socket on port %u", conn_type(c), port);
     return c;
 }
@@ -423,7 +425,7 @@ cancel_accept(struct ev_loop * const l __attribute__((unused)),
 }
 
 
-struct q_conn * q_accept(void * const q, const uint64_t timeout)
+struct q_conn * q_accept(struct w_engine * const w, const uint64_t timeout)
 {
     warn(WRN, "waiting for conn on any serv sock (timeout %" PRIu64 " sec)",
          timeout);
@@ -462,7 +464,7 @@ struct q_conn * q_accept(void * const q, const uint64_t timeout)
 
     struct q_conn * const ret = accept_queue;
     accept_queue = 0;
-    new_conn(q, 0, 0, 0, 0, ntohs(ret->sport));
+    new_conn(w, 0, 0, 0, 0, ntohs(ret->sport));
 
     return ret;
 }
@@ -495,10 +497,10 @@ signal_cb(struct ev_loop * l,
 }
 
 
-void * q_init(const char * const ifname,
-              const char * const cert,
-              const char * const key,
-              const char * const cache)
+struct w_engine * q_init(const char * const ifname,
+                         const char * const cert,
+                         const char * const key,
+                         const char * const cache)
 {
     // check versions
     // ensure(WARPCORE_VERSION_MAJOR == 0 && WARPCORE_VERSION_MINOR == 12,
@@ -568,7 +570,10 @@ void q_close(struct q_conn * const c)
     }
 
     // we're done
-    ev_io_stop(loop, &c->rx_w);
+    if (c->sock && (c->is_clnt || c->id == 0)) {
+        ev_io_stop(loop, &c->rx_w);
+        w_close(c->sock);
+    }
     ev_timer_stop(loop, &c->rec.ld_alarm);
     ev_timer_stop(loop, &c->closing_alarm);
     ev_timer_stop(loop, &c->idle_alarm);
@@ -580,11 +585,11 @@ void q_close(struct q_conn * const c)
         free_stream(s);
     }
 
-    struct pkt_meta *p, *np;
-    for (p = splay_min(pm_nr_splay, &c->rec.sent_pkts); p; p = np) {
-        np = splay_next(pm_nr_splay, &c->rec.sent_pkts, p);
-        q_free_iov(c, w_iov(w_engine(c->sock), pm_idx(p)));
-    }
+    // struct pkt_meta *p, *np;
+    // for (p = splay_min(pm_nr_splay, &c->rec.sent_pkts); p; p = np) {
+    //     np = splay_next(pm_nr_splay, &c->rec.sent_pkts, p);
+    //     q_free_iov(c, w_iov(w_engine(c->sock), pm_idx(p)));
+    // }
 
     diet_free(&c->closed_streams);
     diet_free(&c->recv);
@@ -597,15 +602,12 @@ void q_close(struct q_conn * const c)
     splay_remove(ipnp_splay, &conns_by_ipnp, c);
     splay_remove(cid_splay, &conns_by_cid, c);
 
-    if (c->sock && (c->is_clnt || c->id == 0))
-        w_close(c->sock);
-
     warn(WRN, "%s conn " FMT_CID " closed", conn_type(c), c->id);
     free(c);
 }
 
 
-void q_cleanup(void * const q)
+void q_cleanup(struct w_engine * const w)
 {
     // close all connections
     struct q_conn *c, *tmp;
@@ -632,7 +634,7 @@ void q_cleanup(void * const q)
     }
 
     free(pm);
-    w_cleanup(q);
+    w_cleanup(w);
 }
 
 

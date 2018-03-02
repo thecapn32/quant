@@ -73,7 +73,7 @@ static void __attribute__((noreturn)) usage(const char * const name,
 struct cb_data {
     struct q_stream * s;
     struct q_conn * c;
-    void * q;
+    struct w_engine * w;
     int dir;
     uint32_t _dummy;
 };
@@ -106,7 +106,7 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
     const int f = openat(d->dir, path, O_RDONLY | O_CLOEXEC);
     ensure(f != -1, "could not open %s", path);
 
-    q_write_file(d->q, d->c, d->s, f, (uint32_t)info.st_size);
+    q_write_file(d->w, d->c, d->s, f, (uint32_t)info.st_size);
     q_close_stream(d->s);
 
     return 0;
@@ -171,23 +171,23 @@ int main(int argc, char * argv[])
     const int dir_fd = open(dir, O_RDONLY | O_CLOEXEC);
     ensure(dir_fd != -1, "%s does not exist", dir);
 
-    void * const q = q_init(ifname, cert, key, 0);
+    struct w_engine * const w = q_init(ifname, cert, key, 0);
     struct q_conn * conn[MAXPORTS];
     for (size_t i = 0; i < num_ports; i++) {
-        conn[i] = q_bind(q, port[i]);
+        conn[i] = q_bind(w, port[i]);
         warn(DBG, "%s waiting on %s port %d", basename(argv[0]), ifname,
              port[i]);
     }
 
     bool first = true;
     while (1) {
-        struct q_conn * const c = q_accept(q, first ? 0 : 3);
+        struct q_conn * const c = q_accept(w, first ? 0 : 3);
         first = false;
         if (c == 0)
             break;
 
         http_parser_settings settings = {.on_url = serve_cb};
-        struct cb_data d = {.c = c, .q = q, .dir = dir_fd};
+        struct cb_data d = {.c = c, .w = w, .dir = dir_fd};
         http_parser parser = {.data = &d};
         http_parser_init(&parser, HTTP_REQUEST);
 
@@ -212,7 +212,7 @@ int main(int argc, char * argv[])
         q_close(c);
     }
 
-    q_cleanup(q);
+    q_cleanup(w);
     warn(DBG, "%s exiting", basename(argv[0]));
     return 0;
 }

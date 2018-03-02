@@ -37,15 +37,16 @@ struct w_iov_sq;
 struct q_stream;
 
 
-extern void * __attribute__((nonnull(1))) q_init(const char * const ifname,
-                                                 const char * const cert,
-                                                 const char * const key,
-                                                 const char * const cache);
+extern struct w_engine * __attribute__((nonnull(1)))
+q_init(const char * const ifname,
+       const char * const cert,
+       const char * const key,
+       const char * const cache);
 
-extern void __attribute__((nonnull)) q_cleanup(void * const q);
+extern void __attribute__((nonnull)) q_cleanup(struct w_engine * const w);
 
 extern struct q_conn * __attribute__((nonnull(1, 2, 3)))
-q_connect(void * const q,
+q_connect(struct w_engine * const w,
           const struct sockaddr_in * const peer,
           const char * const peer_name,
           struct w_iov_sq * const early_data,
@@ -54,10 +55,10 @@ q_connect(void * const q,
 extern void __attribute__((nonnull)) q_close(struct q_conn * const c);
 
 extern struct q_conn * __attribute__((nonnull))
-q_bind(void * const q, const uint16_t port);
+q_bind(struct w_engine * const w, const uint16_t port);
 
 extern struct q_conn * __attribute__((nonnull))
-q_accept(void * const q, const uint64_t timeout);
+q_accept(struct w_engine * const w, const uint64_t timeout);
 
 extern void __attribute__((nonnull))
 q_write(struct q_stream * const s, struct w_iov_sq * const q);
@@ -70,8 +71,9 @@ q_rsv_stream(struct q_conn * const c);
 
 extern void __attribute__((nonnull)) q_close_stream(struct q_stream * const s);
 
-extern void __attribute__((nonnull))
-q_alloc(void * const w, struct w_iov_sq * const q, const uint32_t len);
+extern void __attribute__((nonnull)) q_alloc(struct w_engine * const w,
+                                             struct w_iov_sq * const q,
+                                             const uint32_t len);
 
 extern void __attribute__((nonnull))
 q_free(struct q_conn * const c, struct w_iov_sq * const q);
@@ -80,17 +82,17 @@ extern uint64_t __attribute__((nonnull)) q_cid(const struct q_conn * const c);
 
 extern uint64_t __attribute__((nonnull)) q_sid(const struct q_stream * const s);
 
-extern void __attribute__((nonnull)) q_chunk_str(void * const q,
+extern void __attribute__((nonnull)) q_chunk_str(struct w_engine * const w,
                                                  const char * const str,
                                                  const uint32_t len,
                                                  struct w_iov_sq * o);
 
-extern void __attribute__((nonnull)) q_write_str(void * const q,
+extern void __attribute__((nonnull)) q_write_str(struct w_engine * const w,
                                                  struct q_conn * const c,
                                                  struct q_stream * const s,
                                                  const char * const str);
 
-extern void __attribute__((nonnull)) q_write_file(void * const q,
+extern void __attribute__((nonnull)) q_write_file(struct w_engine * const w,
                                                   struct q_conn * const c,
                                                   struct q_stream * const s,
                                                   const int f,

@@ -38,13 +38,13 @@ struct q_conn;
 struct q_stream;
 
 
-void q_chunk_str(void * const q,
+void q_chunk_str(struct w_engine * const w,
                  const char * const str,
                  const uint32_t len,
                  struct w_iov_sq * o)
 {
     // allocate tail queue
-    q_alloc(q, o, len);
+    q_alloc(w, o, len);
 
     // chunk up string
     const char * i = str;
@@ -56,14 +56,14 @@ void q_chunk_str(void * const q,
 }
 
 
-void q_write_str(void * const q,
+void q_write_str(struct w_engine * const w,
                  struct q_conn * const c,
                  struct q_stream * const s,
                  const char * const str)
 {
     // allocate tail queue
     struct w_iov_sq o = sq_head_initializer(o);
-    q_alloc(q, &o, (uint32_t)strlen(str));
+    q_alloc(w, &o, (uint32_t)strlen(str));
 
     // chunk up string
     const char * i = str;
@@ -79,7 +79,7 @@ void q_write_str(void * const q,
 }
 
 
-void q_write_file(void * const q,
+void q_write_file(struct w_engine * const w,
                   struct q_conn * const c,
                   struct q_stream * const s,
                   const int f,
@@ -87,7 +87,7 @@ void q_write_file(void * const q,
 {
     // allocate tail queue
     struct w_iov_sq o = sq_head_initializer(o);
-    q_alloc(q, &o, len);
+    q_alloc(w, &o, len);
     const uint64_t n = w_iov_sq_cnt(&o);
     struct iovec * const iov = calloc(n, sizeof(struct iovec));
     ensure(iov, "could not calloc");

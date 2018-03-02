@@ -114,7 +114,7 @@ set_from_url(char * const var,
 }
 
 static struct q_conn * __attribute__((nonnull))
-get(void * const q,
+get(struct w_engine * const w,
     struct conn_cache * const cc,
     const char * const dest,
     const char * const port,
@@ -141,7 +141,7 @@ get(void * const q,
         // no, open a new connection
         cce = calloc(1, sizeof(*cce));
         ensure(cce, "calloc failed");
-        cce->c = q_connect(q, (struct sockaddr_in *)(void *)peer->ai_addr, dest,
+        cce->c = q_connect(w, (struct sockaddr_in *)(void *)peer->ai_addr, dest,
                            req, &se->s);
         ensure(cce->c, "connection established");
         se->c = cce->c;
@@ -213,7 +213,7 @@ int main(int argc, char * argv[])
         }
     }
 
-    void * const q = q_init(ifname, 0, 0, cache);
+    struct w_engine * const w = q_init(ifname, 0, 0, cache);
     struct conn_cache cc = splay_initializer(cc);
     struct http_parser_url u = {0};
 
@@ -236,11 +236,11 @@ int main(int argc, char * argv[])
         char req[sizeof(path) + 6];
         const int req_len = snprintf(req, sizeof(req), "GET %s\r\n", path);
         struct w_iov_sq r = sq_head_initializer(r);
-        q_chunk_str(q, req, (uint32_t)req_len, &r);
+        q_chunk_str(w, req, (uint32_t)req_len, &r);
 
         // open a new connection, or get an open one
         warn(INF, "%s retrieving %s", basename(argv[0]), url);
-        get(q, &cc, dest, port, &r);
+        get(w, &cc, dest, port, &r);
     }
 
     // collect the replies
@@ -256,7 +256,7 @@ int main(int argc, char * argv[])
         q_free(se->c, &i);
     }
 
-    q_cleanup(q);
+    q_cleanup(w);
     free_cc(&cc);
     free_sl();
     warn(DBG, "%s exiting", basename(argv[0]));
