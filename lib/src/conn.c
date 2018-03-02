@@ -789,6 +789,9 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
              int e __attribute__((unused)))
 {
     struct q_conn * const c = w->data;
+    warn(DBG, "closing/draining alarm on %s conn " FMT_CID, conn_type(c),
+         c->id);
+
     conn_to_state(c, CONN_STAT_CLSD);
     maybe_api_return(q_close, c);
     maybe_api_return(q_read, c);
@@ -798,14 +801,20 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
 
 void enter_closing(struct q_conn * const c)
 {
-    // stop LD and ACK alarms
-    ev_timer_stop(loop, &c->rec.ld_alarm);
-    ev_timer_stop(loop, &c->ack_alarm);
+    if (c->in_closing == false) {
+        // stop LD and ACK alarms
+        ev_timer_stop(loop, &c->rec.ld_alarm);
+        ev_timer_stop(loop, &c->ack_alarm);
 
-    ev_timer_init(&c->closing_alarm, enter_closed,
-                  3 * (c->rec.srtt + 4 * c->rec.rttvar), 0); // 3 * RTO
-    c->closing_alarm.data = c;
-    ev_timer_start(loop, &c->closing_alarm);
+        // start closing/draining alarm (3 * RTO)
+        const ev_tstamp dur = 3 * (c->rec.srtt + 4 * c->rec.rttvar);
+        warn(DBG, "closing/draining alarm in %f sec on %s conn " FMT_CID, dur,
+             conn_type(c), c->id);
+        ev_timer_init(&c->closing_alarm, enter_closed, dur, 0);
+        c->closing_alarm.data = c;
+        ev_timer_start(loop, &c->closing_alarm);
+        c->in_closing = true;
+    }
 }
 
 

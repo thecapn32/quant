@@ -81,7 +81,8 @@ struct q_conn {
     uint16_t tx_max_stream_id : 1;  ///< Send MAX_STREAM_ID frame.
     uint16_t try_0rtt : 1;          ///< Try 0-RTT handshake.
     uint16_t did_0rtt : 1;          ///< 0-RTT handshake succeeded;
-    uint16_t : 6;
+    uint16_t in_closing : 1;        ///< Is the closing/draining timer active?
+    uint16_t : 5;
 
     uint8_t _unused[1];
 
@@ -175,9 +176,8 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
             c->needs_tx = true;                                                \
             break;                                                             \
         case CONN_STAT_CLNG:                                                   \
-            enter_closing(c);                                                  \
-            break;                                                             \
         case CONN_STAT_DRNG:                                                   \
+            enter_closing(c);                                                  \
             break;                                                             \
         default:                                                               \
             die("unhandled state %u", s);                                      \
