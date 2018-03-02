@@ -181,7 +181,6 @@ static struct q_conn * new_conn(struct w_engine * const w,
     c->tx_w.data = c;
     ev_async_start(loop, &c->tx_w);
 
-    warn(ERR, "%u", port);
     c->sock = w_get_sock(w, htons(port), 0);
     if (c->sock == 0) {
         c->rx_w.data = c->sock = w_bind(w, htons(port), 0);
@@ -189,7 +188,6 @@ static struct q_conn * new_conn(struct w_engine * const w,
         ev_io_start(loop, &c->rx_w);
     }
     c->sport = w_get_sport(c->sock);
-    warn(ERR, "%u", ntohs(c->sport));
 
     // add connection to global data structures
     splay_insert(ipnp_splay, &conns_by_ipnp, c);
