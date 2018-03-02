@@ -171,21 +171,25 @@ static struct q_conn * new_conn(struct w_engine * const w,
 
     c->tp_peer.ack_del_exp = c->tp_local.ack_del_exp = 3;
     c->tp_local.idle_to = kIdleTimeout;
-    // XXX: check IDs if stream 0 is flow-controlled during handshake or not
     c->tp_local.max_data = 0x4000;
     c->tp_local.max_strm_data = 0x2000;
     c->tp_local.max_strm_bidi = c->is_clnt ? 1 : 4;
     c->tp_local.max_strm_uni = 0; // TODO: support unidir streams
 
-    // initialize socket and start an RX/TX watchers
+    // initialize socket and start a TX watcher
     ev_async_init(&c->tx_w, tx_w);
     c->tx_w.data = c;
     ev_async_start(loop, &c->tx_w);
-    c->sock = w_bind(w, htons(port), 0);
+
+    c->sock = w_get_sock(w, htons(port), 0);
+    if (c->sock == 0) {
+        warn(ERR, "new sock");
+        c->sock = w_bind(w, htons(port), 0);
+        ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
+        c->rx_w.data = c->sock;
+        ev_io_start(loop, &c->rx_w);
+    }
     c->sport = w_get_sport(c->sock);
-    ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
-    c->rx_w.data = c->sock;
-    ev_io_start(loop, &c->rx_w);
 
     // add connection to global data structures
     splay_insert(ipnp_splay, &conns_by_ipnp, c);
@@ -419,8 +423,7 @@ cancel_accept(struct ev_loop * const l __attribute__((unused)),
 }
 
 
-struct q_conn * q_accept(void * const q __attribute__((unused)),
-                         const uint64_t timeout)
+struct q_conn * q_accept(void * const q, const uint64_t timeout)
 {
     warn(WRN, "waiting for conn on any serv sock (timeout %" PRIu64 " sec)",
          timeout);
@@ -459,7 +462,7 @@ struct q_conn * q_accept(void * const q __attribute__((unused)),
 
     struct q_conn * const ret = accept_queue;
     accept_queue = 0;
-    // new_conn(q, 0, 0, 0, 0, ntohs(ret->sport));
+    new_conn(q, 0, 0, 0, 0, ntohs(ret->sport));
 
     return ret;
 }
@@ -594,7 +597,7 @@ void q_close(struct q_conn * const c)
     splay_remove(ipnp_splay, &conns_by_ipnp, c);
     splay_remove(cid_splay, &conns_by_cid, c);
 
-    if (c->sock)
+    if (c->sock && (c->is_clnt || c->id == 0))
         w_close(c->sock);
 
     warn(WRN, "%s conn " FMT_CID " closed", conn_type(c), c->id);

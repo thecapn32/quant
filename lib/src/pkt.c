@@ -26,6 +26,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <inttypes.h>
+#include <netinet/in.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -368,6 +369,11 @@ tx:
         conn_to_state(c, CONN_STAT_VERS_NEG_SENT);
     } else
         x->len = enc_aead(c, v, x, hdr_len);
+
+    if (!c->is_clnt) {
+        x->ip = c->peer.sin_addr.s_addr;
+        x->port = c->peer.sin_port;
+    }
 
     sq_insert_tail(q, x, next);
     meta(v).tx_len = x->len;

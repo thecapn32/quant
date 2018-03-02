@@ -240,14 +240,9 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
 
     if (encoded) {
         // transmit encrypted/protected packets and then free the chain
-        if (!s->c->is_clnt)
-            w_connect(s->c->sock, s->c->peer.sin_addr.s_addr,
-                      s->c->peer.sin_port);
         w_tx(s->c->sock, &x);
         while (w_tx_pending(&x))
             w_nic_tx(w_engine(s->c->sock));
-        if (!s->c->is_clnt)
-            w_disconnect(s->c->sock);
         q_free(s->c, &x);
     }
 
@@ -535,9 +530,24 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 
                 dec_frames(c, v);
                 conn_to_state(c, CONN_STAT_RTRY);
-                // reset stream 0 offsets
-                struct q_stream * s = get_stream(c, 0);
-                s->out_off = s->in_off = 0;
+
+                // forget we transmitted any packets
+                c->rec.in_flight = 0;
+                struct q_stream * s = 0;
+                splay_foreach (s, stream, &c->streams) {
+                    if (s->id == 0)
+                        q_free(c, &s->out);
+                    // reset stream offset
+                    s->out_off = 0;
+
+                    struct w_iov * ov = 0;
+                    sq_foreach (ov, &s->out, next) {
+                        meta(ov).tx_len = meta(ov).is_acked = 0;
+                        splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(ov));
+                    }
+                }
+
+                c->needs_tx = true;
 
             } else {
                 dec_frames(c, v);
