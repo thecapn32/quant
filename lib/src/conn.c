@@ -687,16 +687,9 @@ void rx(struct ev_loop * const l,
                              " from %s:%u",
                              ntohs(w_get_sport(ws)), cid,
                              inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
-                        const struct sockaddr_in none = {0};
-                        c = get_conn_by_ipnp(w_get_sport(ws), &none, is_clnt);
-                        if (c == 0) {
-                            // TODO: maintain accept queue
-                            warn(CRT, "app is not in q_accept(), ignoring");
-                            q_free_iov(c, v);
-                            continue;
-                        }
-                        update_ipnp(c, &peer);
-                        update_cid(c, cid);
+
+                        c = new_conn(w_engine(ws), pkt_vers(v->buf, v->len),
+                                     cid, &peer, 0, ntohs(w_get_sport(ws)));
                         new_stream(c, 0, false);
                     }
                 }
@@ -827,4 +820,92 @@ void ack_alarm(struct ev_loop * const l __attribute__((unused)),
     c->needs_tx = true;
     tx(w->data, false, 0);
     ev_timer_stop(loop, &c->ack_alarm);
+}
+
+
+// TODO: for now, we just exit
+static void __attribute__((noreturn))
+idle_alarm(struct ev_loop * const l __attribute__((unused)),
+           ev_timer * const w,
+           int e __attribute__((unused)))
+{
+    warn(CRT, "idle timeout; exiting");
+
+    // stop the event loop
+    ev_loop_destroy(loop);
+
+    free(pm);
+
+    struct q_conn * const c = w->data;
+    w_cleanup(w_engine(c->sock));
+    exit(0);
+}
+
+
+struct q_conn * new_conn(struct w_engine * const w,
+                         const uint32_t vers,
+                         const uint64_t cid,
+                         const struct sockaddr_in * const peer,
+                         const char * const peer_name,
+                         const uint16_t port)
+{
+    struct q_conn * const c = calloc(1, sizeof(*c));
+    ensure(c, "could not calloc");
+
+    if (peer)
+        c->peer = *peer;
+    c->id = cid;
+    c->vers = c->vers_initial = vers;
+    arc4random_buf(c->stateless_reset_token, sizeof(c->stateless_reset_token));
+
+    if (peer_name) {
+        c->is_clnt = true;
+        ensure(c->peer_name = strdup(peer_name), "could not dup peer_name");
+    }
+
+    // initialize recovery state
+    rec_init(c);
+
+    splay_init(&c->streams);
+    diet_init(&c->closed_streams);
+    diet_init(&c->recv);
+
+    // initialize idle timeout
+    c->idle_alarm.data = c;
+    c->idle_alarm.repeat = kIdleTimeout;
+    ev_init(&c->idle_alarm, idle_alarm);
+
+    // initialize ACK timeout
+    c->ack_alarm.data = c;
+    c->ack_alarm.repeat = kDelayedAckTimeout;
+    ev_init(&c->ack_alarm, ack_alarm);
+
+    c->tp_peer.ack_del_exp = c->tp_local.ack_del_exp = 3;
+    c->tp_local.idle_to = kIdleTimeout;
+    c->tp_local.max_data = 0x4000;
+    c->tp_local.max_strm_data = 0x2000;
+    c->tp_local.max_strm_bidi = c->is_clnt ? 1 : 4;
+    c->tp_local.max_strm_uni = 0; // TODO: support unidir streams
+
+    // initialize socket and start a TX watcher
+    ev_async_init(&c->tx_w, tx_w);
+    c->tx_w.data = c;
+    ev_async_start(loop, &c->tx_w);
+
+    c->sock = w_get_sock(w, htons(port), 0);
+    if (c->sock == 0) {
+        c->rx_w.data = c->sock = w_bind(w, htons(port), 0);
+        ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
+        ev_io_start(loop, &c->rx_w);
+    }
+    c->sport = w_get_sport(c->sock);
+
+    // add connection to global data structures
+    splay_insert(ipnp_splay, &conns_by_ipnp, c);
+    if (c->id)
+        splay_insert(cid_splay, &conns_by_cid, c);
+
+    warn(DBG, "%s conn " FMT_CID " on port %u created", conn_type(c), c->id,
+         ntohs(c->sport));
+    return c;
 }

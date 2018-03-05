@@ -181,7 +181,7 @@ int main(int argc, char * argv[])
 
     bool first = true;
     while (1) {
-        struct q_conn * const c = q_accept(w, first ? 0 : 3);
+        struct q_conn * const c = q_accept(w, first ? 0 : 10);
         first = false;
         if (c == 0)
             break;
@@ -194,7 +194,7 @@ int main(int argc, char * argv[])
         struct w_iov_sq i = sq_head_initializer(i);
         struct q_stream * s = q_read(c, &i);
         if (s == 0)
-            break;
+            goto next;
         d.s = s;
 
         struct w_iov * v = 0;
@@ -209,6 +209,7 @@ int main(int argc, char * argv[])
         }
 
         q_free(c, &i);
+    next:
         q_close(c);
     }
 

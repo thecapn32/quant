@@ -220,3 +220,10 @@ extern void __attribute__((nonnull)) enter_closing(struct q_conn * const c);
 
 extern void __attribute__((nonnull))
 ack_alarm(struct ev_loop * const l, ev_timer * const w, int e);
+
+extern struct q_conn * new_conn(struct w_engine * const w,
+                                const uint32_t vers,
+                                const uint64_t cid,
+                                const struct sockaddr_in * const peer,
+                                const char * const peer_name,
+                                const uint16_t port);

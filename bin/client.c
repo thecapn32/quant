@@ -144,16 +144,17 @@ get(struct w_engine * const w,
         cce->c = q_connect(w, (struct sockaddr_in *)(void *)peer->ai_addr, dest,
                            req, &se->s);
         ensure(cce->c, "connection established");
-        se->c = cce->c;
 
         // insert into connection cache
         cce->dst = *(struct sockaddr_in *)&peer->ai_addr;
         splay_insert(conn_cache, cc, cce);
 
     } else {
+
         se->s = q_rsv_stream(cce->c);
         q_write(se->s, req);
     }
+    se->c = cce->c;
 
     q_close_stream(se->s);
     freeaddrinfo(peer);
