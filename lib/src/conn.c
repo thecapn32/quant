@@ -538,7 +538,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                     if (s->id == 0)
                         q_free(c, &s->out);
                     // reset stream offset
-                    s->out_off = 0;
+                    s->out_off = s->in_off = 0;
 
                     struct w_iov * ov = 0;
                     sq_foreach (ov, &s->out, next) {
