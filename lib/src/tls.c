@@ -494,6 +494,12 @@ static ptls_aead_context_t * init_hshk_secret(struct q_conn * const c
 
 void init_hshk_prot(struct q_conn * const c)
 {
+    // this can be called multiple times due to retry
+    if (c->tls.dec_hshk)
+        ptls_aead_free(c->tls.dec_hshk);
+    if (c->tls.enc_hshk)
+        ptls_aead_free(c->tls.enc_hshk);
+
     static uint8_t qv1_salt[] = {0xaf, 0xc8, 0x24, 0xec, 0x5f, 0xc7, 0x7e,
                                  0xca, 0x1e, 0x9d, 0x36, 0xf3, 0x7f, 0xb2,
                                  0xd4, 0x65, 0x18, 0xc3, 0x66, 0x39};
