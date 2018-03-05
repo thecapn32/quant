@@ -134,12 +134,13 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 #define CONN_STAT_VERS_NEG 2
 #define CONN_STAT_VERS_NEG_SENT 3
 #define CONN_STAT_RTRY 4
-#define CONN_STAT_HSHK_DONE 5
-#define CONN_STAT_HSHK_FAIL 6
-#define CONN_STAT_ESTB 7
-#define CONN_STAT_CLNG 8
-#define CONN_STAT_DRNG 9
-#define CONN_STAT_CLSD 10
+#define CONN_STAT_SEND_RTRY 5
+#define CONN_STAT_HSHK_DONE 6
+#define CONN_STAT_HSHK_FAIL 7
+#define CONN_STAT_ESTB 8
+#define CONN_STAT_CLNG 9
+#define CONN_STAT_DRNG 10
+#define CONN_STAT_CLSD 11
 
 
 #define conn_type(c) (c->is_clnt ? "clnt" : "serv")
@@ -165,6 +166,7 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
         case CONN_STAT_VERS_NEG:                                               \
         case CONN_STAT_VERS_NEG_SENT:                                          \
         case CONN_STAT_RTRY:                                                   \
+        case CONN_STAT_SEND_RTRY:                                              \
             break;                                                             \
         case CONN_STAT_HSHK_DONE:                                              \
             c->rec.lg_acked = c->rec.lg_sent;                                  \
@@ -227,3 +229,5 @@ extern struct q_conn * new_conn(struct w_engine * const w,
                                 const struct sockaddr_in * const peer,
                                 const char * const peer_name,
                                 const uint16_t port);
+
+extern void __attribute__((nonnull)) free_conn(struct q_conn * const c);

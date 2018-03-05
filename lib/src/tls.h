@@ -65,6 +65,8 @@ extern void __attribute__((nonnull)) init_0rtt_prot(struct q_conn * const c);
 
 extern void __attribute__((nonnull)) init_tls(struct q_conn * const c);
 
+extern void __attribute__((nonnull)) init_tp(struct q_conn * const c);
+
 extern void __attribute__((nonnull)) free_tls(struct q_conn * const c);
 
 extern uint32_t __attribute__((nonnull(1)))

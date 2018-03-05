@@ -277,8 +277,8 @@ tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
             sq_remove_head(&s->out, next);
     }
 
-    // if we sent a version negotiation response, forget all received packets
     if (s->c->state == CONN_STAT_VERS_NEG_SENT)
+        // if we sent a version negotiation response, forget all rx'ed packets
         diet_free(&s->c->recv);
 
     return did_tx;
@@ -532,6 +532,8 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                 conn_to_state(c, CONN_STAT_RTRY);
 
                 // forget we transmitted any packets
+                c->vers_initial = c->vers;
+                init_tp(c);
                 c->rec.in_flight = 0;
                 struct q_stream * s = 0;
                 splay_foreach (s, stream, &c->streams) {
@@ -614,6 +616,9 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         }
         break;
 
+    case CONN_STAT_SEND_RTRY:
+        break;
+
     default:
         die("TODO: state %u", c->state);
     }
@@ -681,7 +686,8 @@ void rx(struct ev_loop * const l,
                              "got pkt for orig cid " FMT_CID ", new is " FMT_CID
                              ", accepting anyway",
                              cid, c->id);
-                    else {
+                    else if (pkt_type(flags) == F_LH_INIT &&
+                             v->len >= MIN_INI_LEN) {
                         warn(NTE,
                              "new serv conn on port %u w/cid " FMT_CID
                              " from %s:%u",
@@ -742,6 +748,11 @@ void rx(struct ev_loop * const l,
 
         // clear the helper flags set above
         c->needs_tx = c->had_rx = false;
+
+
+        if (c->state == CONN_STAT_SEND_RTRY)
+            // if we sent a retry, forget the entire connection existed
+            free_conn(c);
     }
 }
 
@@ -908,4 +919,46 @@ struct q_conn * new_conn(struct w_engine * const w,
     warn(DBG, "%s conn " FMT_CID " on port %u created", conn_type(c), c->id,
          ntohs(c->sport));
     return c;
+}
+
+
+void free_conn(struct q_conn * const c)
+{
+    struct w_engine * const w = w_engine(c->sock);
+    if (c->sock && (c->is_clnt || c->id == 0)) {
+        // only close the socket for the final server connection
+        ev_io_stop(loop, &c->rx_w);
+        w_close(c->sock);
+    }
+    ev_timer_stop(loop, &c->rec.ld_alarm);
+    ev_timer_stop(loop, &c->closing_alarm);
+    ev_timer_stop(loop, &c->idle_alarm);
+    ev_timer_stop(loop, &c->ack_alarm);
+
+    struct q_stream *s, *ns;
+    for (s = splay_min(stream, &c->streams); s; s = ns) {
+        ns = splay_next(stream, &c->streams, s);
+        free_stream(s);
+    }
+
+    // free any w_iovs that are still hanging around
+    struct pkt_meta *p, *np;
+    for (p = splay_min(pm_nr_splay, &c->rec.sent_pkts); p; p = np) {
+        np = splay_next(pm_nr_splay, &c->rec.sent_pkts, p);
+        q_free_iov(c, w_iov(w, pm_idx(p)));
+    }
+
+    diet_free(&c->closed_streams);
+    diet_free(&c->recv);
+    free(c->peer_name);
+    free_tls(c);
+    if (c->err_reason)
+        free(c->err_reason);
+
+    // remove connection from global lists
+    splay_remove(ipnp_splay, &conns_by_ipnp, c);
+    splay_remove(cid_splay, &conns_by_cid, c);
+
+    warn(WRN, "%s conn " FMT_CID " closed", conn_type(c), c->id);
+    free(c);
 }

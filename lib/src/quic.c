@@ -43,7 +43,6 @@
 #endif
 
 #include "conn.h"
-#include "diet.h"
 #include "pkt.h"
 #include "quic.h"
 #include "recovery.h"
@@ -478,43 +477,7 @@ void q_close(struct q_conn * const c)
     }
 
     // we're done
-    struct w_engine * const w = w_engine(c->sock);
-    if (c->sock && (c->is_clnt || c->id == 0)) {
-        // only close the socket for the final server connection
-        ev_io_stop(loop, &c->rx_w);
-        w_close(c->sock);
-    }
-    ev_timer_stop(loop, &c->rec.ld_alarm);
-    ev_timer_stop(loop, &c->closing_alarm);
-    ev_timer_stop(loop, &c->idle_alarm);
-    ev_timer_stop(loop, &c->ack_alarm);
-
-    struct q_stream *s, *ns;
-    for (s = splay_min(stream, &c->streams); s; s = ns) {
-        ns = splay_next(stream, &c->streams, s);
-        free_stream(s);
-    }
-
-    // free any w_iovs that are still hanging around
-    struct pkt_meta *p, *np;
-    for (p = splay_min(pm_nr_splay, &c->rec.sent_pkts); p; p = np) {
-        np = splay_next(pm_nr_splay, &c->rec.sent_pkts, p);
-        q_free_iov(c, w_iov(w, pm_idx(p)));
-    }
-
-    diet_free(&c->closed_streams);
-    diet_free(&c->recv);
-    free(c->peer_name);
-    free_tls(c);
-    if (c->err_reason)
-        free(c->err_reason);
-
-    // remove connection from global lists
-    splay_remove(ipnp_splay, &conns_by_ipnp, c);
-    splay_remove(cid_splay, &conns_by_cid, c);
-
-    warn(WRN, "%s conn " FMT_CID " closed", conn_type(c), c->id);
-    free(c);
+    free_conn(c);
 }
 
 

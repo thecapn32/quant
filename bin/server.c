@@ -129,7 +129,7 @@ int main(int argc, char * argv[])
     char cert[MAXPATHLEN] =
         "/etc/letsencrypt/live/slate.eggert.org/fullchain.pem";
     char key[MAXPATHLEN] = "/etc/letsencrypt/live/slate.eggert.org/privkey.pem";
-    uint16_t port[MAXPORTS] = {4433};
+    uint16_t port[MAXPORTS] = {4433, 4434};
     size_t num_ports = 0;
     int ch;
 
@@ -166,7 +166,8 @@ int main(int argc, char * argv[])
     }
 
     if (num_ports == 0)
-        num_ports = 1;
+        // if no -p args were given, we listen on two ports by default
+        num_ports = 2;
 
     const int dir_fd = open(dir, O_RDONLY | O_CLOEXEC);
     ensure(dir_fd != -1, "%s does not exist", dir);

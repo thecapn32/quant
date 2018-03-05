@@ -28,6 +28,7 @@
 #include <inttypes.h>
 #include <netinet/in.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <quant/quant.h> // IWYU pragma: keep
@@ -228,7 +229,15 @@ void enc_pkt(struct q_stream * const s,
 
     if (rtx)
         warn(DBG, "enc RTX 0x%02x-type " FMT_PNR_OUT, flags, meta(v).nr);
-    meta(v).nr = ++c->rec.lg_sent;
+
+    if (c->state == CONN_STAT_SEND_RTRY) {
+        // echo pkt nr of client initial
+        meta(v).nr = diet_min(&c->recv);
+        // randomize a new CID
+        arc4random_buf(&c->id, sizeof(c->id));
+    } else
+        // next pkt nr
+        meta(v).nr = ++c->rec.lg_sent;
 
     uint8_t pkt_nr_len = 0;
     switch (c->state) {
@@ -236,6 +245,9 @@ void enc_pkt(struct q_stream * const s,
     case CONN_STAT_RTRY:
     case CONN_STAT_CH_SENT:
         flags = F_LONG_HDR | (s->id == 0 ? F_LH_INIT : F_LH_0RTT);
+        break;
+    case CONN_STAT_SEND_RTRY:
+        flags = F_LONG_HDR | F_LH_RTRY;
         break;
     case CONN_STAT_HSHK_DONE:
     case CONN_STAT_HSHK_FAIL:

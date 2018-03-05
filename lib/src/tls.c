@@ -27,6 +27,7 @@
 
 #include <bitstring.h>
 #include <inttypes.h>
+#include <netinet/in.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -110,6 +111,9 @@ static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 
 static ptls_aead_context_t * dec_tckt;
 static ptls_aead_context_t * enc_tckt;
+
+#define COOKIE_LEN 64
+static uint8_t cookie[COOKIE_LEN];
 
 
 #define TLS_EXT_TYPE_TRANSPORT_PARAMETERS 26
@@ -391,7 +395,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
     } while (0)
 
 
-static void init_tp(struct q_conn * const c)
+void init_tp(struct q_conn * const c)
 {
     uint16_t i = 0;
     const uint16_t len = sizeof(c->tls.tp_buf);
@@ -671,20 +675,32 @@ void init_tls(struct q_conn * const c)
     if (!c->tls.dec_hshk)
         init_hshk_prot(c);
 
-    c->tls.tls_hshake_prop = (ptls_handshake_properties_t){
-        .additional_extensions = c->tls.tp_ext,
-        .collect_extension = filter_tp,
-        .collected_extensions = chk_tp,
-        .client.negotiated_protocols.list = alpn,
-        .client.negotiated_protocols.count = alpn_cnt,
-        .client.max_early_data_size = &c->tls.max_early_data};
+    ptls_handshake_properties_t * const hshk_prop = &c->tls.tls_hshake_prop;
+
+    hshk_prop->additional_extensions = c->tls.tp_ext;
+    hshk_prop->collect_extension = filter_tp;
+    hshk_prop->collected_extensions = chk_tp;
+
+    if (c->is_clnt) {
+        hshk_prop->client.negotiated_protocols.list = alpn;
+        hshk_prop->client.negotiated_protocols.count = alpn_cnt;
+        hshk_prop->client.max_early_data_size = &c->tls.max_early_data;
+    } else {
+        // TODO: remove this interop hack eventually
+        hshk_prop->server.retry_uses_cookie = 1;
+        hshk_prop->server.cookie.key = cookie;
+        hshk_prop->server.cookie.additional_data.base = (uint8_t *)&c->peer;
+        hshk_prop->server.cookie.additional_data.len = sizeof(c->peer);
+        if (ntohs(c->sport) == 4434)
+            hshk_prop->server.enforce_retry = 1;
+    }
 
     // try to find an existing session ticket
     const struct tls_ticket which = {.sni = c->peer_name,
                                      .alpn = (char *)alpn[0].base};
     struct tls_ticket * const t = splay_find(ticket_splay, &tickets, &which);
     if (t) {
-        c->tls.tls_hshake_prop.client.session_ticket =
+        hshk_prop->client.session_ticket =
             ptls_iovec_init(t->ticket, t->ticket_len);
         c->try_0rtt = 1;
     }
@@ -803,6 +819,9 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
 
             init_1rtt_prot(s->c);
             conn_to_state(s->c, CONN_STAT_HSHK_DONE);
+        } else if (ret == PTLS_ERROR_STATELESS_RETRY) {
+            conn_to_state(s->c, CONN_STAT_SEND_RTRY);
+            break;
         } else if (ret != 0 && ret != PTLS_ERROR_IN_PROGRESS) {
             err_close(s->c, ERR_TLS_HSHAKE_FAIL, "picotls error %u", ret);
             break;
@@ -940,6 +959,8 @@ void init_tls_ctx(const char * const cert,
     tls_ctx.sign_certificate = &sign_cert.super;
     tls_ctx.verify_certificate = &verifier.super;
     tls_ctx.get_time = &ptls_get_time;
+
+    arc4random_buf(cookie, COOKIE_LEN);
 
     init_ticket_prot();
 }
