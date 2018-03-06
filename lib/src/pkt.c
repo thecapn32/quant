@@ -89,25 +89,26 @@ void log_pkt(const char * const dir, const struct w_iov * const v)
         const uint32_t vers = pkt_vers(v->buf, v->len);
         if (vers == 0)
             twarn(NTE,
-                  BLD "%s" NRM " len=%u 0x%02x=%s%s " NRM "cid=" FMT_CID
+                  BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM "cid=" FMT_CID
                       " vers=0x%08x",
-                  dir, v->len, flags, col_dir, pkt_type_str(v),
+                  col_dir, dir, v->len, flags, col_dir, pkt_type_str(v),
                   pkt_cid(v->buf, v->len), vers);
         else
             twarn(NTE,
-                  BLD "%s" NRM " len=%u 0x%02x=%s%s " NRM "cid=" FMT_CID
+                  BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM "cid=" FMT_CID
                       " vers=0x%08x nr=%s%" PRIu64,
-                  dir, v->len, flags, col_dir, pkt_type_str(v),
+                  col_dir, dir, v->len, flags, col_dir, pkt_type_str(v),
                   pkt_cid(v->buf, v->len), vers, col_nr, meta(v).nr);
     } else if (is_set(F_SH_OMIT_CID, flags))
         twarn(NTE,
-              BLD "%s" NRM " len=%u 0x%02x=%s%s" NRM "|NO_CID nr=%s%" PRIu64,
-              dir, v->len, flags, col_dir, pkt_type_str(v), col_nr, meta(v).nr);
+              BLD "%s%s" NRM " len=%u 0x%02x=%s%s" NRM "|NO_CID nr=%s%" PRIu64,
+              col_dir, dir, v->len, flags, col_dir, pkt_type_str(v), col_nr,
+              meta(v).nr);
     else
         twarn(NTE,
-              BLD "%s" NRM " len=%u 0x%02x=%s%s" NRM " cid=" FMT_CID
+              BLD "%s%s" NRM " len=%u 0x%02x=%s%s" NRM " cid=" FMT_CID
                   " nr=%s%" PRIu64,
-              dir, v->len, flags, col_dir, pkt_type_str(v),
+              col_dir, dir, v->len, flags, col_dir, pkt_type_str(v),
               pkt_cid(v->buf, v->len), col_nr, meta(v).nr);
 }
 #endif
