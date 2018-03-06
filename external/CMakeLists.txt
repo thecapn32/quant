@@ -176,7 +176,7 @@ externalproject_add(nss
   GIT_SHALLOW 1
   GIT_TAG origin/NSS_3_36_BRANCH
   CONFIGURE_COMMAND ""
-  BUILD_COMMAND ./build.sh
+  BUILD_COMMAND make nss_build_all USE_64=1
   BUILD_IN_SOURCE 1
   INSTALL_COMMAND ""
   EXCLUDE_FROM_ALL 1
@@ -187,7 +187,7 @@ externalproject_add(mozquic
   # UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/mcmanus/mozquic.git
   GIT_SHALLOW 1
-  PATCH_COMMAND sed -i "" -e "s/-Werror//g" Makefile
+  PATCH_COMMAND sed -i "" -e "s/-Werror//g $<SEMICOLON> s|include/nspr|include|g" Makefile
   CONFIGURE_COMMAND ""
   BUILD_IN_SOURCE 1
   BUILD_COMMAND make -j8
