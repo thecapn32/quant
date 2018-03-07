@@ -287,15 +287,18 @@ tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
 
 void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
 {
-    // check if we need to do connection-level flow control
-    if (c->in_data + 2 * MAX_PKT_LEN > c->tp_local.max_data) {
-        c->tx_max_data = true;
-        c->tp_local.max_data += 0x1000;
-    }
+    if (c->state >= CONN_STAT_ESTB) {
+        // check if we need to do connection-level flow control
+        if (c->in_data + 2 * MAX_PKT_LEN > c->tp_local.max_data) {
+            c->tx_max_data = true;
+            c->tp_local.max_data += 0x1000;
+        }
 
-    if (splay_max(stream, &c->streams)->id + 4 > c->tp_local.max_strm_bidi) {
-        c->tx_max_stream_id = true;
-        c->tp_local.max_strm_bidi += 4;
+        if (splay_max(stream, &c->streams)->id + 4 >
+            c->tp_local.max_strm_bidi) {
+            c->tx_max_stream_id = true;
+            c->tp_local.max_strm_bidi += 4;
+        }
     }
 
     bool did_tx = false;
@@ -308,7 +311,8 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
         //      s->in_data_max);
 
         // check if we need to do stream-level flow control
-        if (s->id != 0 && s->in_data + 2 * MAX_PKT_LEN > s->in_data_max) {
+        if (c->state >= CONN_STAT_ESTB && s->id != 0 &&
+            s->in_data + 2 * MAX_PKT_LEN > s->in_data_max) {
             s->tx_max_stream_data = true;
             s->in_data_max += 0x1000;
         }

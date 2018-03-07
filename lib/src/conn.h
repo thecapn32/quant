@@ -78,11 +78,12 @@ struct q_conn {
     uint16_t use_time_loss_det : 1; ///< UsingTimeLossDetection()
     uint16_t tx_max_data : 1;       ///< Sent a MAX_DATA frame.
     uint16_t blocked : 1;           ///< We are receive-window-blocked.
+    uint16_t stream_id_blocked : 1; ///< We are out of stream IDs.
     uint16_t tx_max_stream_id : 1;  ///< Send MAX_STREAM_ID frame.
     uint16_t try_0rtt : 1;          ///< Try 0-RTT handshake.
     uint16_t did_0rtt : 1;          ///< 0-RTT handshake succeeded;
     uint16_t in_closing : 1;        ///< Is the closing/draining timer active?
-    uint16_t : 5;
+    uint16_t : 4;
 
     uint8_t _unused[1];
 
