@@ -974,6 +974,8 @@ void free_conn(struct q_conn * const c)
     splay_remove(ipnp_splay, &conns_by_ipnp, c);
     splay_remove(cid_splay, &conns_by_cid, c);
 
-    warn(WRN, "%s conn " FMT_CID " closed", conn_type(c), c->id);
+    if (c->id)
+        warn(WRN, "%s conn " FMT_CID " on port %u closed", conn_type(c), c->id,
+             ntohs(c->sport));
     free(c);
 }

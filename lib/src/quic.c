@@ -316,7 +316,7 @@ void q_readall_str(struct q_stream * const s, struct w_iov_sq * const q)
 struct q_conn * q_bind(struct w_engine * const w, const uint16_t port)
 {
     // bind socket and create new embryonic server connection
-    warn(INF, "binding serv socket on port %u", port);
+    warn(DBG, "binding serv socket on port %u", port);
     struct q_conn * const c = new_conn(w, 0, 0, 0, 0, port);
     warn(WRN, "bound %s socket on port %u", conn_type(c), port);
     return c;
@@ -462,7 +462,9 @@ void q_close_stream(struct q_stream * const s)
 void q_close(struct q_conn * const c)
 {
     if (c->state > CONN_STAT_IDLE && c->state < CONN_STAT_CLNG) {
-        warn(WRN, "closing %s conn " FMT_CID, conn_type(c), c->id);
+        if (c->id)
+            warn(WRN, "closing %s conn " FMT_CID " on port %u", conn_type(c),
+                 c->id, ntohs(c->sport));
 
         // close all streams
         struct q_stream * s;
@@ -486,12 +488,12 @@ void q_cleanup(struct w_engine * const w)
     // close all connections
     struct q_conn *c, *tmp;
     for (c = splay_min(cid_splay, &conns_by_cid); c != 0; c = tmp) {
-        warn(WRN, "closing %s conn " FMT_CID, conn_type(c), c->id);
+        warn(DBG, "closing %s conn " FMT_CID, conn_type(c), c->id);
         tmp = splay_next(cid_splay, &conns_by_cid, c);
         q_close(c);
     }
     for (c = splay_min(ipnp_splay, &conns_by_ipnp); c != 0; c = tmp) {
-        warn(WRN, "closing %s conn " FMT_CID, conn_type(c), c->id);
+        warn(DBG, "closing %s conn " FMT_CID, conn_type(c), c->id);
         tmp = splay_next(ipnp_splay, &conns_by_ipnp, c);
         q_close(c);
     }
