@@ -720,7 +720,7 @@ void rx(struct ev_loop * const l,
         }
 
         meta(v).nr = pkt_nr(v->buf, v->len, c);
-        log_pkt("RX", v);
+        log_pkt("RX", v, c->id);
 
         // remember that we had a RX event on this connection
         if (!c->had_rx) {

@@ -79,7 +79,9 @@ static const char * pkt_type_str(const struct w_iov * const v)
 }
 
 
-void log_pkt(const char * const dir, const struct w_iov * const v)
+void log_pkt(const char * const dir,
+             const struct w_iov * const v,
+             const uint64_t cid)
 {
     const uint8_t flags = pkt_flags(v->buf);
     const char * col_dir = *dir == 'R' ? BLD BLU : BLD GRN;
@@ -101,9 +103,10 @@ void log_pkt(const char * const dir, const struct w_iov * const v)
                   pkt_cid(v->buf, v->len), vers, col_nr, meta(v).nr);
     } else if (is_set(F_SH_OMIT_CID, flags))
         twarn(NTE,
-              BLD "%s%s" NRM " len=%u 0x%02x=%s%s" NRM "|NO_CID nr=%s%" PRIu64,
-              col_dir, dir, v->len, flags, col_dir, pkt_type_str(v), col_nr,
-              meta(v).nr);
+              BLD "%s%s" NRM " len=%u 0x%02x=%s%s" NRM "|omit_cid(" FMT_CID
+                  ") nr=%s%" PRIu64,
+              col_dir, dir, v->len, flags, col_dir, pkt_type_str(v), cid,
+              col_nr, meta(v).nr);
     else
         twarn(NTE,
               BLD "%s%s" NRM " len=%u 0x%02x=%s%s" NRM " cid=" FMT_CID
@@ -224,7 +227,7 @@ void enc_pkt(struct q_stream * const s,
                 i = enc(v->buf, v->len, i, &ok_vers[j], sizeof(ok_vers[j]),
                         "0x%08x");
         hdr_len = v->len = i;
-        log_pkt("TX", v);
+        log_pkt("TX", v, c->id);
         goto tx;
     }
 
@@ -279,7 +282,7 @@ void enc_pkt(struct q_stream * const s,
     } else
         i = enc(v->buf, v->len, i, &meta(v).nr, pkt_nr_len, FMT_PNR32_OUT);
 
-    log_pkt("TX", v);
+    log_pkt("TX", v, c->id);
 
     hdr_len = i;
 

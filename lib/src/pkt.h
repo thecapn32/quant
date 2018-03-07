@@ -91,8 +91,9 @@ extern void __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
                                              struct w_iov_sq * const q);
 
 #ifndef NDEBUG
-extern void __attribute__((nonnull))
-log_pkt(const char * const dir, const struct w_iov * const v);
+extern void __attribute__((nonnull)) log_pkt(const char * const dir,
+                                             const struct w_iov * const v,
+                                             const uint64_t cid);
 #else
 #define log_pkt(...)                                                           \
     do {                                                                       \
