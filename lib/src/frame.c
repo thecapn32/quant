@@ -60,6 +60,7 @@ dec_stream_frame(struct q_conn * const c,
                  struct w_iov * const v,
                  const uint16_t pos)
 {
+    bool track_bytes = false;
     meta(v).stream_header_pos = pos;
     const char * kind = 0;
     uint8_t type = 0;
@@ -114,7 +115,7 @@ dec_stream_frame(struct q_conn * const c,
              l, plural(l), meta(v).stream_off, meta(v).stream_off + l,
              conn_type(c), c->id, sid);
         kind = "seq";
-        track_bytes_in(s, l);
+        track_bytes = true;
         s->in_off += l;
         sq_insert_tail(&s->in, v, next);
         meta(v).stream = s;
@@ -169,13 +170,14 @@ dec_stream_frame(struct q_conn * const c,
          conn_type(c), c->id, sid);
     kind = YEL "ooo" NRM;
     splay_insert(pm_off_splay, &s->in_ooo, &meta(v));
-    track_bytes_in(s, l);
+    track_bytes = true;
     meta(v).stream = s;
 
 done:
     warn(INF,
          FRAM_IN "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID "/%" PRIu64
-                 " off=%" PRIu64 "/%" PRIu64 " len=%" PRIu64 " [%s]",
+                 " cdata=%" PRIu64 "/%" PRIu64 " off=%" PRIu64 "/%" PRIu64
+                 " len=%" PRIu64 " [%s]",
          type, is_set(F_STREAM_FIN, type) ? "FIN" : "",
          is_set(F_STREAM_FIN, type) &&
                  (is_set(F_STREAM_LEN, type) | is_set(F_STREAM_OFF, type))
@@ -184,10 +186,13 @@ done:
          is_set(F_STREAM_LEN, type) ? "LEN" : "",
          is_set(F_STREAM_OFF, type) ? "|" : "",
          is_set(F_STREAM_OFF, type) ? "OFF" : "", sid, max_strm_id(s),
-         meta(v).stream_off, s->in_data_max, l, kind);
+         s->c->in_data, s->c->tp_local.max_data, meta(v).stream_off,
+         s->in_data_max, l, kind);
 
+    if (track_bytes)
+        track_bytes_in(s, l);
 
-    if (s->id != 0 && meta(v).stream_off + l - 1 > s->in_data_max)
+    if (meta(v).stream_off + l - 1 > s->in_data_max)
         err_close(c, ERR_FLOW_CONTROL_ERR,
                   "stream %" PRIu64 " off %" PRIu64 " > in_data_max %" PRIu64,
                   s->id, meta(v).stream_off + l - 1, s->in_data_max);
@@ -883,7 +888,8 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
 
     warn(INF,
          FRAM_OUT "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID "/%" PRIu64
-                  " off=%" PRIu64 "/%" PRIu64 " len=%" PRIu64,
+                  " cdata=%" PRIu64 "/%" PRIu64 " off=%" PRIu64 "/%" PRIu64
+                  " len=%" PRIu64,
          type, is_set(F_STREAM_FIN, type) ? "FIN" : "",
          is_set(F_STREAM_FIN, type) &&
                  (is_set(F_STREAM_LEN, type) | is_set(F_STREAM_OFF, type))
@@ -892,7 +898,8 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
          is_set(F_STREAM_LEN, type) ? "LEN" : "",
          is_set(F_STREAM_OFF, type) ? "|" : "",
          is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id, max_strm_id(s),
-         s->out_off, s->out_data_max, dlen);
+         s->c->out_data, s->c->tp_peer.max_data, s->out_off, s->out_data_max,
+         dlen);
 
     track_bytes_out(s, dlen);
     meta(v).stream = s; // remember stream this buf belongs to

@@ -215,7 +215,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
 
         if (s->c->state >= CONN_STAT_ESTB) {
             // if we have less than two full packet's worth of window, block
-            if (s->id != 0 && s->out_data + 2 * MAX_PKT_LEN > s->out_data_max)
+            if (s->out_data + 2 * MAX_PKT_LEN > s->out_data_max)
                 s->blocked = true;
             if (s->c->out_data + 2 * MAX_PKT_LEN > s->c->tp_peer.max_data)
                 s->c->blocked = true;
@@ -311,7 +311,7 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
         //      s->in_data_max);
 
         // check if we need to do stream-level flow control
-        if (c->state >= CONN_STAT_ESTB && s->id != 0 &&
+        if (c->state >= CONN_STAT_ESTB &&
             s->in_data + 2 * MAX_PKT_LEN > s->in_data_max) {
             s->tx_max_stream_data = true;
             s->in_data_max += 0x1000;
@@ -396,6 +396,29 @@ static void __attribute__((nonnull))
 track_recv(struct q_conn * const c, const uint64_t nr, const uint8_t type)
 {
     diet_insert(&c->recv, nr, type, ev_now(loop));
+}
+
+
+static void __attribute__((nonnull)) reset_conn(struct q_conn * const c)
+{
+    // reset CC state
+    c->rec.in_flight = 0;
+
+    // reset FC state
+    c->in_data = c->out_data = 0;
+
+    struct q_stream * s = 0;
+    splay_foreach (s, stream, &c->streams) {
+        // reset stream offsets
+        s->out_off = s->in_off = 0;
+
+        // forget we transmitted any packets
+        struct w_iov * v = 0;
+        sq_foreach (v, &s->out, next) {
+            meta(v).tx_len = meta(v).is_acked = 0;
+            splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
+        }
+    }
 }
 
 
@@ -494,17 +517,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             if (s->c->try_0rtt)
                 init_0rtt_prot(c);
 
-            // reset all streams (stream 0 and any 0-RTT streams)
-            c->rec.in_flight = 0;
-            splay_foreach (s, stream, &c->streams) {
-                // reset stream offset
-                s->out_off = 0;
-                // forget we transmitted any packets
-                sq_foreach (ov, &s->out, next) {
-                    meta(ov).tx_len = meta(ov).is_acked = 0;
-                    splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(ov));
-                }
-            }
+            reset_conn(c);
             c->needs_tx = true;
 
         } else {
@@ -541,21 +554,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                 // forget we transmitted any packets
                 c->vers_initial = c->vers;
                 init_tp(c);
-                c->rec.in_flight = 0;
-                struct q_stream * s = 0;
-                splay_foreach (s, stream, &c->streams) {
-                    if (s->id == 0)
-                        q_free(c, &s->out);
-                    // reset stream offset
-                    s->out_off = s->in_off = 0;
-
-                    struct w_iov * ov = 0;
-                    sq_foreach (ov, &s->out, next) {
-                        meta(ov).tx_len = meta(ov).is_acked = 0;
-                        splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(ov));
-                    }
-                }
-
+                reset_conn(c);
                 c->needs_tx = true;
 
             } else {
@@ -908,8 +907,8 @@ struct q_conn * new_conn(struct w_engine * const w,
 
     c->tp_peer.ack_del_exp = c->tp_local.ack_del_exp = 3;
     c->tp_local.idle_to = kIdleTimeout;
-    c->tp_local.max_data = 0x4000;
-    c->tp_local.max_strm_data = 0x2000;
+    c->tp_local.max_data = c->is_clnt ? 0x4000 : 0x8000;
+    c->tp_local.max_strm_data = c->is_clnt ? 0x2000 : 0x4000;
     c->tp_local.max_strm_bidi = c->is_clnt ? 1 : 4;
     c->tp_local.max_strm_uni = 0; // TODO: support unidir streams
 

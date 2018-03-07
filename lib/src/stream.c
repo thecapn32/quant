@@ -65,10 +65,8 @@ new_stream(struct q_conn * const c, const uint64_t id, const bool active)
     sq_init(&s->out);
     sq_init(&s->in);
     s->id = id;
-    if (s->id) {
-        s->in_data_max = c->tp_local.max_strm_data;
-        s->out_data_max = c->tp_peer.max_strm_data;
-    }
+    s->in_data_max = c->tp_local.max_strm_data;
+    s->out_data_max = c->tp_peer.max_strm_data;
     if (active) {
         if (c->next_sid == 0)
             c->next_sid = c->is_clnt ? 4 : 1;
@@ -100,10 +98,8 @@ void free_stream(struct q_stream * const s)
 
 void track_bytes_in(struct q_stream * const s, const uint64_t n)
 {
-    if (s->id)
-        s->c->in_data += n;
-    if (s->c->state >= CONN_STAT_ESTB)
-        s->in_data += n;
+    s->c->in_data += n;
+    s->in_data += n;
 
     warn(DBG,
          "IN: str %u in_data=%" PRIu64 "/%" PRIu64 " in_off=%" PRIu64
@@ -115,10 +111,8 @@ void track_bytes_in(struct q_stream * const s, const uint64_t n)
 
 void track_bytes_out(struct q_stream * const s, const uint64_t n)
 {
-    if (s->id)
-        s->c->out_data += n;
-    if (s->c->state >= CONN_STAT_ESTB)
-        s->out_data += n;
+    s->c->out_data += n;
+    s->out_data += n;
 
     warn(DBG,
          "OUT: str %u out_data=%" PRIu64 "/%" PRIu64 " out_off=%" PRIu64
