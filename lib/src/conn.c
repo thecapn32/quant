@@ -531,6 +531,9 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                 dec_frames(c, v);
                 conn_to_state(c, CONN_STAT_RTRY);
 
+                // we are not allowed to try 0RTT after retry
+                c->try_0rtt = false;
+
                 // forget we transmitted any packets
                 c->vers_initial = c->vers;
                 init_tp(c);
