@@ -549,7 +549,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
             if (meta(v).stream_data_start && meta(v).stream) {
                 // already had at least one stream frame in this packet
                 // with non-duplicate data, so generate (another) copy
-                warn(DBG, "more than one stream frame in pkt, copy");
+                warn(DBG, "addtl stream frame at pos %u, copy", i);
                 struct w_iov * const vdup =
                     q_alloc_iov(w_engine(c->sock), 0, 0);
                 memcpy(vdup->buf, v->buf, v->len);
@@ -623,8 +623,8 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
                 break;
 
             default:
-                err_close(c, ERR_FRAME_ERR(type), "unknown frame type 0x%02x",
-                          type);
+                err_close(c, ERR_FRAME_ERR(type),
+                          "unknown frame type 0x%02x at pos %u", type, i);
                 i = 0;
             }
         }
@@ -910,7 +910,7 @@ uint16_t enc_close_frame(struct w_iov * const v,
 
     if (reas) {
         memcpy(&v->buf[i], reas, rlen);
-        warn(DBG, "enc %" PRIu64 "-byte reason phrase into [%u..%" PRIu64 "]",
+        warn(INF, "enc %" PRIu64 "-byte reason phrase into [%u..%" PRIu64 "]",
              rlen, i, i + rlen - 1);
 
         warn(INF,
