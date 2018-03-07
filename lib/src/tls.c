@@ -612,8 +612,16 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
            "fwrite");
     ensure(fwrite(quant_commit_hash, quant_commit_hash_len, 1, fp), "fwrite");
 
-    char * s = strdup(ptls_get_server_name(tls));
-    char * a = strdup(ptls_get_negotiated_protocol(tls));
+    char * s = 0;
+    if (ptls_get_server_name(tls))
+        s = strdup(ptls_get_server_name(tls));
+    else
+        s = calloc(1, sizeof(char));
+    char * a = 0;
+    if (ptls_get_negotiated_protocol(tls))
+        a = strdup(ptls_get_negotiated_protocol(tls));
+    else
+        a = calloc(1, sizeof(char));
     const struct tls_ticket which = {.sni = s, .alpn = a};
     struct tls_ticket * t = splay_find(ticket_splay, &tickets, &which);
     if (t == 0) {
