@@ -680,9 +680,13 @@ bool better_or_equal_prot(const uint8_t a, const uint8_t b)
     if (!is_set(F_LONG_HDR, a))
         ret = true;
 
-    // for long header packets, if b is 0-RTT, a must also be 0-RTT
+    // a is long-header if we get here; if b is 0-RTT, a must also be 0-RTT
     else if (pkt_type(b) == F_LH_0RTT)
         ret = pkt_type(a) == F_LH_0RTT;
+
+    // a is long-header if we get here; b cannot be short-header
+    else if (!is_set(F_LONG_HDR, b))
+        ret = false;
 
     // all other long-header packers are equally protected
     else
@@ -708,14 +712,11 @@ uint16_t enc_ack_frame(struct q_conn * const c,
             better_or_equal_prot(pkt_flags(v->buf), diet_class(b));
 
         if (!prot_ok) {
-            warn(DBG, "prot not OK, skipping range");
-            if (cur_lo) {
-                if (lg_lo == 0) {
-                    lg_lo = cur_lo;
-                    warn(DBG, "found lg_lo %" PRIu64 " - %" PRIu64 " 0x%02x",
-                         lg_lo->hi, lg_lo->lo, diet_class(lg_lo));
-                }
-                block_cnt++;
+            warn(DBG, "prot not OK, skipping (ranges=%u)", block_cnt);
+            if (cur_lo && lg_lo == 0) {
+                lg_lo = cur_lo;
+                warn(DBG, "found lg_lo %" PRIu64 " - %" PRIu64 " 0x%02x",
+                     lg_lo->hi, lg_lo->lo, diet_class(lg_lo));
             }
             cur_hi = cur_lo = 0;
             continue;
@@ -727,18 +728,21 @@ uint16_t enc_ack_frame(struct q_conn * const c,
                 lg_hi = b;
                 warn(DBG, "found lg_hi %" PRIu64 " - %" PRIu64 " 0x%02x",
                      lg_hi->hi, lg_hi->lo, diet_class(lg_hi));
+            } else {
+                block_cnt++;
+                warn(DBG, "new range (ranges=%u)", block_cnt);
             }
             continue;
         }
 
         if (cur_lo->lo > b->hi + 1) {
-            warn(DBG, "new range");
+            block_cnt++;
+            warn(DBG, "new range (ranges=%u)", block_cnt);
             if (lg_lo == 0) {
                 lg_lo = cur_lo;
                 warn(DBG, "found lg_lo %" PRIu64 " - %" PRIu64 " 0x%02x",
                      lg_lo->hi, lg_lo->lo, diet_class(lg_lo));
             }
-            block_cnt++;
             cur_hi = cur_lo = b;
             continue;
         }
