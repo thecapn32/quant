@@ -555,6 +555,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                 c->needs_tx = true;
 
             } else {
+                conn_to_state(c, CONN_STAT_SH);
                 dec_frames(c, v);
                 track_recv(c, meta(v).nr, flags);
             }
@@ -572,6 +573,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         dec_frames(c, v);
         break;
 
+    case CONN_STAT_SH:
     case CONN_STAT_HSHK_DONE:
         if (is_set(F_LONG_HDR, flags) && pkt_vers(v->buf, v->len) == 0) {
             // we shouldn't get another version negotiation packet here,

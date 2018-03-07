@@ -135,12 +135,13 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 #define CONN_STAT_VERS_NEG_SENT 3
 #define CONN_STAT_RTRY 4
 #define CONN_STAT_SEND_RTRY 5
-#define CONN_STAT_HSHK_DONE 6
-#define CONN_STAT_HSHK_FAIL 7
-#define CONN_STAT_ESTB 8
-#define CONN_STAT_CLNG 9
-#define CONN_STAT_DRNG 10
-#define CONN_STAT_CLSD 11
+#define CONN_STAT_SH 6
+#define CONN_STAT_HSHK_DONE 7
+#define CONN_STAT_HSHK_FAIL 8
+#define CONN_STAT_ESTB 9
+#define CONN_STAT_CLNG 10
+#define CONN_STAT_DRNG 11
+#define CONN_STAT_CLSD 12
 
 
 #define conn_type(c) (c->is_clnt ? "clnt" : "serv")
@@ -163,6 +164,7 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
         switch (s) {                                                           \
         case CONN_STAT_IDLE:                                                   \
         case CONN_STAT_CH_SENT:                                                \
+        case CONN_STAT_SH:                                                     \
         case CONN_STAT_VERS_NEG:                                               \
         case CONN_STAT_VERS_NEG_SENT:                                          \
         case CONN_STAT_RTRY:                                                   \

@@ -250,6 +250,7 @@ void enc_pkt(struct q_stream * const s,
     case CONN_STAT_SEND_RTRY:
         flags = F_LONG_HDR | F_LH_RTRY;
         break;
+    case CONN_STAT_SH:
     case CONN_STAT_HSHK_DONE:
     case CONN_STAT_HSHK_FAIL:
         flags = F_LONG_HDR | F_LH_HSHK;
@@ -282,7 +283,7 @@ void enc_pkt(struct q_stream * const s,
 
     hdr_len = i;
 
-    if (!splay_empty(&c->recv) && c->state >= CONN_STAT_HSHK_DONE) {
+    if (!splay_empty(&c->recv) && c->state >= CONN_STAT_SH) {
         meta(v).ack_header_pos = i;
         i = enc_ack_frame(c, v, i);
     } else
