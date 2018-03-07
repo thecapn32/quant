@@ -47,6 +47,12 @@
 #include "stream.h"
 
 
+#define max_strm_id(s)                                                         \
+    (is_set(STRM_FL_INI_SRV, (s)->id) != (s)->c->is_clnt == false              \
+         ? (s)->c->tp_local.max_strm_bidi                                      \
+         : (s)->c->tp_peer.max_strm_bidi)
+
+
 static uint16_t __attribute__((nonnull))
 dec_stream_frame(struct q_conn * const c,
                  struct w_iov * const v,
@@ -166,8 +172,8 @@ dec_stream_frame(struct q_conn * const c,
 
 done:
     warn(INF,
-         FRAM_IN "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID " off=%" PRIu64
-                 "/%" PRIu64 " len=%" PRIu64 " [%s]",
+         FRAM_IN "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID "/%" PRIu64
+                 " off=%" PRIu64 "/%" PRIu64 " len=%" PRIu64 " [%s]",
          type, is_set(F_STREAM_FIN, type) ? "FIN" : "",
          is_set(F_STREAM_FIN, type) &&
                  (is_set(F_STREAM_LEN, type) | is_set(F_STREAM_OFF, type))
@@ -175,8 +181,8 @@ done:
              : "",
          is_set(F_STREAM_LEN, type) ? "LEN" : "",
          is_set(F_STREAM_OFF, type) ? "|" : "",
-         is_set(F_STREAM_OFF, type) ? "OFF" : "", sid, meta(v).stream_off,
-         s->in_data_max, l, kind);
+         is_set(F_STREAM_OFF, type) ? "OFF" : "", sid, max_strm_id(s),
+         meta(v).stream_off, s->in_data_max, l, kind);
 
 
     if (s->id != 0 && meta(v).stream_off + l - 1 > s->in_data_max)
@@ -870,8 +876,8 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
         enc(v->buf, v->len, i, &dlen, 0, "%u");
 
     warn(INF,
-         FRAM_OUT "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID " off=%" PRIu64
-                  "/%" PRIu64 " len=%" PRIu64,
+         FRAM_OUT "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID "/%" PRIu64
+                  " off=%" PRIu64 "/%" PRIu64 " len=%" PRIu64,
          type, is_set(F_STREAM_FIN, type) ? "FIN" : "",
          is_set(F_STREAM_FIN, type) &&
                  (is_set(F_STREAM_LEN, type) | is_set(F_STREAM_OFF, type))
@@ -879,8 +885,8 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
              : "",
          is_set(F_STREAM_LEN, type) ? "LEN" : "",
          is_set(F_STREAM_OFF, type) ? "|" : "",
-         is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id, s->out_off,
-         s->out_data_max, dlen);
+         is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id, max_strm_id(s),
+         s->out_off, s->out_data_max, dlen);
 
     track_bytes_out(s, dlen);
     meta(v).stream = s; // remember stream this buf belongs to
