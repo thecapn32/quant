@@ -260,7 +260,10 @@ void on_ack_rx_1(struct q_conn * const c,
     // UpdateRtt
 
     // min_rtt ignores ack delay
-    c->rec.min_rtt = MIN(c->rec.min_rtt, c->rec.latest_rtt);
+    if (unlikely(is_zero(c->rec.min_rtt)))
+        c->rec.min_rtt = c->rec.latest_rtt;
+    else
+        c->rec.min_rtt = MIN(c->rec.min_rtt, c->rec.latest_rtt);
 
     // adjust for ack delay if it's plausible
     if (c->rec.latest_rtt - c->rec.min_rtt > ack_del) {
