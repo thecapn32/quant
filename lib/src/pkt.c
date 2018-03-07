@@ -357,6 +357,18 @@ void enc_pkt(struct q_stream * const s,
             // add a stream frame header, after padding out rest of Q_OFFSET
             enc_padding_frame(v, i, Q_OFFSET - i);
             i = enc_stream_frame(s, v);
+
+            if (c->state == CONN_STAT_SEND_RTRY) {
+                // retry packets must not have padding (as of 09), so move the
+                // stream frame after the header (XXX ugly)
+                memmove(&v->buf[hdr_len], &v->buf[meta(v).stream_header_pos],
+                        v->len - meta(v).stream_header_pos);
+                const uint16_t offset = meta(v).stream_header_pos - hdr_len;
+                meta(v).stream_header_pos -= offset;
+                meta(v).stream_data_start -= offset;
+                meta(v).stream_data_end -= offset;
+                i = v->len -= offset;
+            }
         }
     }
 
