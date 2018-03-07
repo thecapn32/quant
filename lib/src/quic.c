@@ -267,7 +267,7 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_sq * const q)
     warn(WRN, "reading on %s conn " FMT_CID, conn_type(c), c->id);
     struct q_stream * s = 0;
 
-    while (s == 0 && c->state != CONN_STAT_CLSD) {
+    while (s == 0 && c->state <= CONN_STAT_ESTB) {
         splay_foreach (s, stream, &c->streams) {
             if (s->state == STRM_STAT_CLSD)
                 continue;

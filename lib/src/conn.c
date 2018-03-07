@@ -690,10 +690,10 @@ void rx(struct ev_loop * const l,
                          cid, conn_type(c), c->id);
                     update_cid(c, cid);
                 } else {
-                    if (c)
-                        warn(NTE,
-                             "got pkt for orig cid " FMT_CID ", new is " FMT_CID
-                             ", accepting anyway",
+                    if (c && pkt_type(flags) == F_LH_0RTT)
+                        warn(INF,
+                             "got 0-RTT pkt for orig cid " FMT_CID
+                             ", new is " FMT_CID ", accepting",
                              cid, c->id);
                     else if (pkt_type(flags) == F_LH_INIT &&
                              v->len >= MIN_INI_LEN) {
@@ -818,6 +818,12 @@ void enter_closing(struct q_conn * const c)
         // stop LD and ACK alarms
         ev_timer_stop(loop, &c->rec.ld_alarm);
         ev_timer_stop(loop, &c->ack_alarm);
+
+        if (api_func) {
+            maybe_api_return(q_close, c);
+            maybe_api_return(q_read, c);
+            maybe_api_return(q_accept, accept_queue);
+        }
 
         // start closing/draining alarm (3 * RTO)
         const ev_tstamp dur = 3 * (c->rec.srtt + 4 * c->rec.rttvar);
