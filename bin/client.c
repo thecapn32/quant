@@ -197,10 +197,13 @@ int main(int argc, char * argv[])
     int ch;
     char cache[MAXPATHLEN] = "/tmp/" QUANT "-session";
 
-    while ((ch = getopt(argc, argv, "hi:v:")) != -1) {
+    while ((ch = getopt(argc, argv, "hi:v:s:")) != -1) {
         switch (ch) {
         case 'i':
             strncpy(ifname, optarg, sizeof(ifname) - 1);
+            break;
+        case 's':
+            strncpy(cache, optarg, sizeof(cache) - 1);
             break;
         case 'v':
 #ifndef NDEBUG
