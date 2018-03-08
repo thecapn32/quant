@@ -545,7 +545,9 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
                              ptls_buffer_t * dst,
                              ptls_iovec_t src)
 {
+#ifnde NDEBUG
     struct q_conn * const c = *ptls_get_data_ptr(tls);
+#endif
     uint64_t tid;
     if (ptls_buffer_reserve(dst, src.len + quant_commit_hash_len + sizeof(tid) +
                                      enc_tckt->algo->tag_size))
