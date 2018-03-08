@@ -72,6 +72,9 @@ struct tls_ticket {
     char * alpn;
     uint8_t * ticket;
     size_t ticket_len;
+    struct transport_params tp;
+    uint32_t vers;
+    uint8_t _unused[4];
     splay_entry(tls_ticket) node;
 };
 
@@ -425,7 +428,7 @@ void init_tp(struct q_conn * const c)
     enc_tp(c, TP_INITIAL_MAX_STREAM_DATA, c->tp_local.max_strm_data,
            sizeof(uint32_t));
     enc_tp(c, TP_INITIAL_MAX_DATA, c->tp_local.max_data, sizeof(uint32_t));
-    // XXX picoquic cannot parse tack_delay_exponent as the last tp
+    // XXX picoquic cannot parse ack_delay_exponent as the last tp
     enc_tp(c, TP_ACK_DELAY_EXPONENT, c->tp_local.ack_del_exp, sizeof(uint8_t));
     enc_tp(c, TP_MAX_PACKET_SIZE, w_mtu(w_engine(c->sock)), sizeof(uint16_t));
 
@@ -542,14 +545,18 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
                              ptls_buffer_t * dst,
                              ptls_iovec_t src)
 {
+    struct q_conn * const c = *ptls_get_data_ptr(tls);
     uint64_t tid;
     if (ptls_buffer_reserve(dst, src.len + quant_commit_hash_len + sizeof(tid) +
                                      enc_tckt->algo->tag_size))
         return -1;
 
     if (is_encrypt) {
-        warn(INF, "creating new 0-RTT session ticket for %s %s",
-             ptls_get_server_name(tls), ptls_get_negotiated_protocol(tls));
+        warn(INF,
+             "creating new 0-RTT session ticket for %s conn " FMT_CID
+             " (%s %s)",
+             conn_type(c), c->id, ptls_get_server_name(tls),
+             ptls_get_negotiated_protocol(tls));
 
         // prepend git commit hash
         memcpy(dst->base + dst->off, quant_commit_hash, quant_commit_hash_len);
@@ -568,8 +575,11 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
         if (src.len < quant_commit_hash_len + sizeof(tid) +
                           dec_tckt->algo->tag_size ||
             memcmp(src.base, quant_commit_hash, quant_commit_hash_len) != 0) {
-            warn(WRN, "could not verify 0-RTT session ticket for %s %s",
-                 ptls_get_server_name(tls), ptls_get_negotiated_protocol(tls));
+            warn(WRN,
+                 "could not verify 0-RTT session ticket for %s conn " FMT_CID
+                 " (%s %s)",
+                 conn_type(c), c->id, ptls_get_server_name(tls),
+                 ptls_get_negotiated_protocol(tls));
             return -1;
         }
         uint8_t * src_base = src.base + quant_commit_hash_len;
@@ -583,14 +593,19 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
                                            src_base, src_len, tid, 0, 0);
 
         if (n > src_len) {
-            warn(WRN, "could not decrypt 0-RTT session ticket for %s %s",
-                 ptls_get_server_name(tls), ptls_get_negotiated_protocol(tls));
+            warn(WRN,
+                 "could not decrypt 0-RTT session ticket for %s conn " FMT_CID
+                 " (%s %s)",
+                 conn_type(c), c->id, ptls_get_server_name(tls),
+                 ptls_get_negotiated_protocol(tls));
             return -1;
         }
         dst->off += n;
 
-        warn(INF, "verified 0-RTT session ticket for %s %s",
-             ptls_get_server_name(tls), ptls_get_negotiated_protocol(tls));
+        warn(INF,
+             "verified 0-RTT session ticket for %s conn " FMT_CID " (%s %s)",
+             conn_type(c), c->id, ptls_get_server_name(tls),
+             ptls_get_negotiated_protocol(tls));
     }
 
     return 0;
@@ -601,6 +616,7 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
                           ptls_t * tls,
                           ptls_iovec_t src)
 {
+    struct q_conn * const c = *ptls_get_data_ptr(tls);
     warn(NTE, "saving 0-RTT tickets to %s", tickets.file_name);
 
     FILE * const fp = fopen(tickets.file_name, "wbe");
@@ -637,6 +653,9 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
         free(a);
     }
 
+    memcpy(&t->tp, &c->tp_peer, sizeof(t->tp));
+    t->vers = c->vers;
+
     t->ticket_len = src.len;
     t->ticket = calloc(1, t->ticket_len);
     ensure(t->ticket, "calloc");
@@ -645,7 +664,8 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
     // write all tickets
     // XXX this currently dumps the entire cache to file on each connection!
     splay_foreach (t, ticket_splay, &tickets) { // NOLINT
-        warn(INF, "writing 0-RTT ticket for %s %s", t->sni, t->alpn);
+        warn(INF, "writing 0-RTT ticket for %s conn " FMT_CID " (%s %s)",
+             conn_type(c), c->id, t->sni, t->alpn);
 
         size_t len = strlen(t->sni) + 1;
         ensure(fwrite(&len, sizeof(len), 1, fp), "fwrite");
@@ -654,6 +674,9 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
         len = strlen(t->alpn) + 1;
         ensure(fwrite(&len, sizeof(len), 1, fp), "fwrite");
         ensure(fwrite(t->alpn, sizeof(*t->alpn), len, fp), "fwrite");
+
+        ensure(fwrite(&t->tp, sizeof(t->tp), 1, fp), "fwrite");
+        ensure(fwrite(&t->vers, sizeof(t->vers), 1, fp), "fwrite");
 
         ensure(fwrite(&t->ticket_len, sizeof(t->ticket_len), 1, fp), "fwrite");
         ensure(fwrite(t->ticket, sizeof(*t->ticket), t->ticket_len, fp),
@@ -675,6 +698,7 @@ void init_tls(struct q_conn * const c)
         // we are re-initializing during version negotiation
         ptls_free(c->tls.t);
     ensure((c->tls.t = ptls_new(&tls_ctx, !c->is_clnt)) != 0, "ptls_new");
+    *ptls_get_data_ptr(c->tls.t) = c;
     if (c->is_clnt)
         ensure(ptls_set_server_name(c->tls.t, c->peer_name, 0) == 0,
                "ptls_set_server_name");
@@ -709,6 +733,8 @@ void init_tls(struct q_conn * const c)
     if (t) {
         hshk_prop->client.session_ticket =
             ptls_iovec_init(t->ticket, t->ticket_len);
+        memcpy(&c->tp_peer, &t->tp, sizeof(t->tp));
+        c->vers = t->vers;
         c->try_0rtt = 1;
     }
 }
@@ -895,6 +921,9 @@ static void read_tickets()
         ensure(t->alpn, "calloc");
         ensure(fread(t->alpn, sizeof(*t->alpn), len, fp), "fread");
 
+        ensure(fread(&t->tp, sizeof(t->tp), 1, fp), "fwrite");
+        ensure(fread(&t->vers, sizeof(t->vers), 1, fp), "fwrite");
+
         ensure(fread(&len, sizeof(len), 1, fp), "fread");
         t->ticket_len = len;
         t->ticket = calloc(len, sizeof(*t->ticket));
@@ -902,7 +931,7 @@ static void read_tickets()
         ensure(fread(t->ticket, sizeof(*t->ticket), len, fp), "fread");
 
         splay_insert(ticket_splay, &tickets, t);
-        warn(INF, "got 0-RTT ticket for %s %s", t->sni, t->alpn);
+        warn(INF, "got 0-RTT ticket %s %s", t->sni, t->alpn);
     }
 
 done:
