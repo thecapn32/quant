@@ -399,7 +399,21 @@ track_recv(struct q_conn * const c, const uint64_t nr, const uint8_t type)
 }
 
 
-static void __attribute__((nonnull)) reset_conn(struct q_conn * const c)
+static void __attribute__((nonnull)) process_stream0(struct q_conn * const c)
+{
+    struct q_stream * const s = get_stream(c, 0);
+    while (!sq_empty(&s->in)) {
+        struct w_iov * iv = sq_first(&s->in);
+        sq_remove_head(&s->in, next);
+        if (tls_io(s, iv) == 0)
+            maybe_api_return(q_connect, c);
+        q_free_iov(c, iv);
+    }
+}
+
+
+static void __attribute__((nonnull))
+reset_conn(struct q_conn * const c, const bool also_stream0_out)
 {
     // reset CC state
     c->rec.in_flight = 0;
@@ -407,16 +421,26 @@ static void __attribute__((nonnull)) reset_conn(struct q_conn * const c)
     // reset FC state
     c->in_data = c->out_data = 0;
 
+    // forget we received any packets
+    diet_free(&c->recv);
+
     struct q_stream * s = 0;
     splay_foreach (s, stream, &c->streams) {
         // reset stream offsets
         s->out_off = s->in_off = 0;
 
-        // forget we transmitted any packets
-        struct w_iov * v = 0;
-        sq_foreach (v, &s->out, next) {
-            meta(v).tx_len = meta(v).is_acked = 0;
-            splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
+        if (s->id) {
+            // forget we transmitted any packets
+            struct w_iov * v = 0;
+            sq_foreach (v, &s->out, next) {
+                meta(v).tx_len = meta(v).is_acked = 0;
+                splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
+            }
+        } else {
+            // free (some) stream-0 data
+            if (also_stream0_out)
+                q_free(c, &s->out);
+            q_free(c, &s->in);
         }
     }
 }
@@ -502,67 +526,64 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             else
                 die("no vers in common with serv");
 
-            // free the previous ClientHello flight
-            struct q_stream * s = get_stream(c, 0);
-            struct w_iov * ov = 0;
-            sq_foreach (ov, &s->out, next)
-                rtx(s, ov);
-            q_free(c, &s->out);
-            q_free(c, &s->in);
+            // reset connection and free previous ClientHello flight
+            reset_conn(c, true);
 
             // reset TLS state and create new CH
-            conn_to_state(c, CONN_STAT_IDLE);
             init_tls(c);
-            tls_io(s, 0);
-            if (s->c->try_0rtt)
+            tls_io(get_stream(c, 0), 0);
+
+            q_free_iov(c, v);
+            conn_to_state(c, CONN_STAT_IDLE);
+            if (c->try_0rtt)
                 init_0rtt_prot(c);
-
-            reset_conn(c);
             c->needs_tx = true;
-
-        } else {
-            // server accepted version
-            if (verify_prot(c, v) == false) {
-                err_close(c, ERR_TLS_HSHAKE_FAIL,
-                          "AEAD decrypt of 0x%02x-type packet failed",
-                          pkt_type(flags));
-                goto done;
-            }
-
-            if (pkt_type(flags) == F_LH_RTRY) {
-                warn(INF, "handling serv stateless retry");
-
-                // verify retry
-                const struct pkt_meta * const p =
-                    splay_min(pm_nr_splay, &c->rec.sent_pkts);
-                ensure(p, "cannot find CH");
-                if (pkt_nr(v->buf, v->len, c) != p->nr)
-                    warn(ERR,
-                         "sent pkt nr " FMT_PNR_OUT
-                         ", received pkt nr " FMT_PNR_IN " in retry",
-                         p->nr, pkt_nr(v->buf, v->len, c));
-
-                // must use cid from retry for connection and re-init keys
-                init_hshk_prot(c);
-
-                dec_frames(c, v);
-                conn_to_state(c, CONN_STAT_RTRY);
-
-                // we are not allowed to try 0RTT after retry
-                c->try_0rtt = false;
-
-                // forget we transmitted any packets
-                c->vers_initial = c->vers;
-                init_tp(c);
-                reset_conn(c);
-                c->needs_tx = true;
-
-            } else {
-                conn_to_state(c, CONN_STAT_SH);
-                dec_frames(c, v);
-                track_recv(c, meta(v).nr, flags);
-            }
+            return;
         }
+
+        // server accepted version
+        if (verify_prot(c, v) == false) {
+            err_close(c, ERR_TLS_HSHAKE_FAIL,
+                      "AEAD decrypt of 0x%02x-type packet failed",
+                      pkt_type(flags));
+            goto done;
+        }
+
+        if (pkt_type(flags) == F_LH_RTRY) {
+            warn(INF, "handling serv stateless retry");
+
+            // verify retry
+            const struct pkt_meta * const p =
+                splay_min(pm_nr_splay, &c->rec.sent_pkts);
+            ensure(p, "cannot find CH");
+            if (pkt_nr(v->buf, v->len, c) != p->nr)
+                warn(ERR,
+                     "sent pkt nr " FMT_PNR_OUT ", received pkt nr " FMT_PNR_IN
+                     " in retry",
+                     p->nr, pkt_nr(v->buf, v->len, c));
+
+            // must use cid from retry for connection and re-init keys
+            init_hshk_prot(c);
+
+            // process the retry data on stream-0
+            dec_frames(c, v);
+            process_stream0(c);
+
+            // we are not allowed to try 0RTT after retry
+            c->try_0rtt = false;
+
+            // forget we transmitted any packets
+            c->vers_initial = c->vers;
+            init_tp(c);
+            reset_conn(c, false);
+            conn_to_state(c, CONN_STAT_RTRY);
+            c->needs_tx = true;
+            return;
+        }
+
+        conn_to_state(c, CONN_STAT_SH);
+        dec_frames(c, v);
+        track_recv(c, meta(v).nr, flags);
         break;
 
     case CONN_STAT_RTRY:
@@ -625,6 +646,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         break;
 
     case CONN_STAT_SEND_RTRY:
+    case CONN_STAT_CLSD:
         break;
 
     default:
@@ -728,16 +750,7 @@ void rx(struct ev_loop * const l,
         }
 
         process_pkt(c, v);
-
-        // process stream 0
-        struct q_stream * const s = get_stream(c, 0);
-        while (!sq_empty(&s->in)) {
-            struct w_iov * iv = sq_first(&s->in);
-            sq_remove_head(&s->in, next);
-            if (tls_io(s, iv) == 0)
-                maybe_api_return(q_connect, c);
-            q_free_iov(c, iv);
-        }
+        process_stream0(c);
     }
 
     // for all connections that had RX events
