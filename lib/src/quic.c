@@ -150,7 +150,7 @@ struct q_conn * q_connect(struct w_engine * const w,
     const uint vers = ok_vers[0];
     struct q_conn * const c = new_conn(w, vers, cid, peer, peer_name, 0);
 
-    // allocate stream zero and inti TLS
+    // allocate stream zero and init TLS
     struct q_stream * const s = new_stream(c, 0, true);
     init_tls(c);
 
