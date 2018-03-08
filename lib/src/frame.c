@@ -663,6 +663,8 @@ uint16_t enc_padding_frame(struct w_iov * const v,
                            const uint16_t pos,
                            const uint16_t len)
 {
+    if (unlikely(len == 0))
+        return pos;
     warn(INF, FRAM_OUT "PADDING" NRM " len=%u", len);
     memset(&v->buf[pos], FRAM_TYPE_PAD, len);
     bit_set(meta(v).frames, FRAM_TYPE_PAD);
