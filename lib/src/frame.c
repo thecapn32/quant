@@ -47,14 +47,6 @@
 #include "stream.h"
 
 
-#ifndef NDEBUG
-#define max_strm_id(s)                                                         \
-    (is_set(STRM_FL_INI_SRV, (s)->id) != (s)->c->is_clnt == false              \
-         ? (s)->c->tp_local.max_strm_bidi                                      \
-         : (s)->c->tp_peer.max_strm_bidi)
-#endif
-
-
 static uint16_t __attribute__((nonnull))
 dec_stream_frame(struct q_conn * const c,
                  struct w_iov * const v,
@@ -143,7 +135,7 @@ dec_stream_frame(struct q_conn * const c,
             strm_to_state(s, s->state <= STRM_STAT_HCRM ? STRM_STAT_HCRM
                                                         : STRM_STAT_CLSD);
             if (s->id != 0 && splay_empty(&s->in_ooo))
-                maybe_api_return(q_readall_str, s);
+                maybe_api_return(q_readall_str, s->c);
         }
 
         if (s->id != 0)

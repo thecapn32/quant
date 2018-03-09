@@ -64,6 +64,12 @@ struct w_iov;
 #endif
 
 
+#define max_strm_id(s)                                                         \
+    (is_set(STRM_FL_INI_SRV, (s)->id) != (s)->c->is_clnt == false              \
+         ? (s)->c->tp_local.max_strm_bidi                                      \
+         : (s)->c->tp_peer.max_strm_bidi)
+
+
 extern uint64_t __attribute__((const))
 shorten_ack_nr(const uint64_t ack, const uint64_t diff);
 
