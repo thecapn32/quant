@@ -56,30 +56,30 @@ else
 fi
 
 pid=$$
+script=$(basename -s .sh $0)
+
 
 function test_server {
         # run quant client and produce a pure ASCII log for post-processing
-        local cache="/tmp/$1.$pid.cache"
+        local cache="/tmp/$script.$1.$pid.cache"
+        local opts="-i $iface -t3 -v4 -s $cache"
         rm -f "$cache"
 
         # initial 1rtt run
-        bin/client      -i "$iface" -v4 -s "$cache" \
-                        "https://${servers[$1]}:4433/index.html" 2>&1 | \
+        bin/client $opts "https://${servers[$1]}:4433/index.html" 2>&1 | \
                 $sed -r 's/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]//g' \
-                        > "/tmp/$1.$pid.1rtt.log"
+                > "/tmp/$script.$1.$pid.1rtt.log"
 
         # consecutive 0rtt run
-        bin/client      -i "$iface" -v4 -s "$cache" \
-                        "https://${servers[$1]}:4433/index.html" 2>&1 | \
+        bin/client $opts "https://${servers[$1]}:4433/index.html" 2>&1 | \
                 $sed -r 's/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]//g' \
-                        > "/tmp/$1.$pid.0rtt.log"
+                > "/tmp/$script.$1.$pid.0rtt.log"
         rm -f "$cache"
 
         # hrr run
-        bin/client      -i "$iface" -v4 -s "$cache" \
-                        "https://${servers[$1]}:4434/index.html" 2>&1 | \
+        bin/client $opts "https://${servers[$1]}:4434/index.html" 2>&1 | \
                 $sed -r 's/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]//g' \
-                        > "/tmp/$1.$pid.hrr.log"
+                > "/tmp/$script.$1.$pid.hrr.log"
 
         printf "%s " "$s"
 }
@@ -87,8 +87,8 @@ function test_server {
 
 function analyze {
         # analyze 1rtt
-        local log="/tmp/$1.$pid.1rtt.log"
-        awk '/RX/{exit 1}' "$log"
+        local log="/tmp/$script.$1.$pid.1rtt.log"
+        awk '/RX len=/{exit 1}' "$log"
         if [ $? == 1 ]; then
                 live[$1]="*"
         fi
@@ -98,7 +98,7 @@ function analyze {
                 vneg[$1]=V
         fi
 
-        awk '/TX.*Short/{x=1}; x && /RX.*Short/{exit 1}' "$log"
+        awk '/TX len=.*Short/{x=1}; x && /RX len=.*Short/{exit 1}' "$log"
         if [ $? == 1 ]; then
                 hshk[$1]=H
         fi
@@ -108,14 +108,17 @@ function analyze {
                 data[$1]=D
         fi
 
-        awk '/TX/{tx=1;rx=0}; /RX/{t=0;r=1}; /CLOSE err=0x0000/{if (!tc && t) { tc=1 }; if (!rc && r) { rc=1 }}; END{exit tc && rc}' "$log"
-        if [ $? == 1 ]; then
+        awk 'BEGIN{t=-1}; /TX len=/{t=1}; /RX len=/{t=0}; /CLOSE err=0x0000/{if (t==1) { tc=1 } else { rc=1 }}; END{exit tc+rc}' "$log"
+        local ret=$?
+        if [ $ret == 2 ]; then
                 close[$1]=C
+        elif [ $ret == 1 ]; then
+                close[$1]=c
         fi
         rm -f "$log"
 
         # analyze 0rtt
-        local log="/tmp/$1.$pid.0rtt.log"
+        local log="/tmp/$script.$1.$pid.0rtt.log"
         awk '/connected after 0-RTT/{x=1}; x && /CLOSE err=0x0000/{exit 1}' "$log"
         if [ $? == 1 ]; then
                 zrtt[$1]=Z
@@ -123,8 +126,8 @@ function analyze {
         rm -f "$log"
 
         # analyze hrr
-        local log="/tmp/$1.$pid.hrr.log"
-        awk '/RX.*Retry/{x=1}; x && /CLOSE err=0x0000/{exit 1}' "$log"
+        local log="/tmp/$script.$1.$pid.hrr.log"
+        awk '/RX len=.*Retry/{x=1}; x && /CLOSE err=0x0000/{exit 1}' "$log"
         if [ $? == 1 ]; then
                 hrr[$1]=S
         fi
