@@ -348,7 +348,7 @@ void enc_pkt(struct q_stream * const s,
         warn(INF,
              FRAM_OUT "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID "/%" PRIu64
                       " cdata=%" PRIu64 "/%" PRIu64 " off=%" PRIu64 "/%" PRIu64
-                      " len=%" PRIu64,
+                      " len=%" PRIu64 REV BLD GRN "[RTX]",
              type, is_set(F_STREAM_FIN, type) ? "FIN" : "",
              is_set(F_STREAM_FIN, type) &&
                      (is_set(F_STREAM_LEN, type) | is_set(F_STREAM_OFF, type))
