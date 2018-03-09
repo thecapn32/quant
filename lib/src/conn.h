@@ -231,6 +231,7 @@ extern struct q_conn * new_conn(struct w_engine * const w,
                                 const uint64_t cid,
                                 const struct sockaddr_in * const peer,
                                 const char * const peer_name,
-                                const uint16_t port);
+                                const uint16_t port,
+                                const uint64_t idle_to);
 
 extern void __attribute__((nonnull)) free_conn(struct q_conn * const c);

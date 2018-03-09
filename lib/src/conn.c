@@ -505,6 +505,12 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         if (pkt_vers(v->buf, v->len) == 0) {
             // handle an incoming vers-neg packet
             const uint32_t try_vers = pick_from_server_vers(v->buf, v->len);
+            if (try_vers == 0) {
+                // no version in common ith serv
+                conn_to_state(c, CONN_STAT_DRNG);
+                return;
+            }
+
             if (try_vers == c->vers) {
                 warn(INF, "ignoring spurious vers neg response");
                 break;
@@ -513,11 +519,8 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             if (c->vers_initial == 0)
                 c->vers_initial = c->vers;
             c->vers = try_vers;
-            if (c->vers)
-                warn(INF, "serv didn't like vers 0x%08x, retrying with 0x%08x",
-                     c->vers_initial, c->vers);
-            else
-                die("no vers in common with serv");
+            warn(INF, "serv didn't like vers 0x%08x, retrying with 0x%08x",
+                 c->vers_initial, c->vers);
 
             // reset connection and free previous ClientHello flight
             reset_conn(c, true);
@@ -719,7 +722,7 @@ void rx(struct ev_loop * const l,
                              inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
 
                         c = new_conn(w_engine(ws), pkt_vers(v->buf, v->len),
-                                     cid, &peer, 0, ntohs(w_get_sport(ws)));
+                                     cid, &peer, 0, ntohs(w_get_sport(ws)), 0);
                         new_stream(c, 0, false);
                     }
                 }
@@ -812,24 +815,21 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
          c->id);
 
     conn_to_state(c, CONN_STAT_CLSD);
+    maybe_api_return(q_connect, c);
     maybe_api_return(q_close, c);
     maybe_api_return(q_read, c);
+    maybe_api_return(q_readall_str, c);
     maybe_api_return(q_accept, accept_queue);
 }
 
 
 void enter_closing(struct q_conn * const c)
 {
-    if (c->in_closing == false) {
+    if (!ev_is_active(&c->closing_alarm)) {
         // stop LD and ACK alarms
         ev_timer_stop(loop, &c->rec.ld_alarm);
         ev_timer_stop(loop, &c->ack_alarm);
-
-        if (api_func) {
-            maybe_api_return(q_close, c);
-            maybe_api_return(q_read, c);
-            maybe_api_return(q_accept, accept_queue);
-        }
+        ev_timer_stop(loop, &c->idle_alarm);
 
         // start closing/draining alarm (3 * RTO)
         const ev_tstamp dur = 3 * (c->rec.srtt + 4 * c->rec.rttvar);
@@ -838,7 +838,6 @@ void enter_closing(struct q_conn * const c)
         ev_timer_init(&c->closing_alarm, enter_closed, dur, 0);
         c->closing_alarm.data = c;
         ev_timer_start(loop, &c->closing_alarm);
-        c->in_closing = true;
     }
 }
 
@@ -848,29 +847,24 @@ void ack_alarm(struct ev_loop * const l __attribute__((unused)),
                int e __attribute__((unused)))
 {
     struct q_conn * const c = w->data;
-    warn(INF, "ACK timer fired");
+    warn(INF, "ACK timeout on %s conn " FMT_CID, conn_type(c), c->id);
     c->needs_tx = true;
     tx(w->data, false, 0);
     ev_timer_stop(loop, &c->ack_alarm);
 }
 
 
-// TODO: for now, we just exit
-static void __attribute__((noreturn))
+static void __attribute__((nonnull))
 idle_alarm(struct ev_loop * const l __attribute__((unused)),
            ev_timer * const w,
            int e __attribute__((unused)))
 {
-    warn(CRT, "idle timeout; exiting");
-
-    // stop the event loop
-    ev_loop_destroy(loop);
-
-    free(pm);
-
     struct q_conn * const c = w->data;
-    w_cleanup(w_engine(c->sock));
-    exit(0);
+    warn(DBG, "idle timeout on %s conn " FMT_CID, conn_type(c), c->id);
+
+    // send connection close frame
+    conn_to_state(c, CONN_STAT_CLNG);
+    ev_async_send(loop, &c->tx_w);
 }
 
 
@@ -879,7 +873,8 @@ struct q_conn * new_conn(struct w_engine * const w,
                          const uint64_t cid,
                          const struct sockaddr_in * const peer,
                          const char * const peer_name,
-                         const uint16_t port)
+                         const uint16_t port,
+                         const uint64_t idle_to)
 {
     struct q_conn * const c = calloc(1, sizeof(*c));
     ensure(c, "could not calloc");
@@ -904,7 +899,7 @@ struct q_conn * new_conn(struct w_engine * const w,
 
     // initialize idle timeout
     c->idle_alarm.data = c;
-    c->idle_alarm.repeat = kIdleTimeout;
+    c->idle_alarm.repeat = idle_to ? idle_to : kIdleTimeout;
     ev_init(&c->idle_alarm, idle_alarm);
 
     // initialize ACK timeout

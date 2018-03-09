@@ -25,6 +25,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <inttypes.h>
 #include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -52,6 +53,9 @@ struct conn_cache_entry {
 struct conn_cache {
     splay_head(, conn_cache_entry);
 };
+
+
+static uint64_t timeout = 10;
 
 
 static uint32_t __attribute__((nonnull))
@@ -92,6 +96,8 @@ static void __attribute__((noreturn, nonnull)) usage(const char * const name,
            util_dlevel);
 #endif
     printf("\t[-s cache]\tTLS 0-RTT state cache; default %s\n", cache);
+    printf("\t[-t timeout]\tidle timeout in seconds; default %" PRIu64 "\n",
+           timeout);
     exit(0);
 }
 
@@ -134,23 +140,25 @@ get(struct w_engine * const w,
     sl_insert_head(&sl, se, next);
 
     // do we have a connection open to this peer?
-    struct conn_cache_entry which = {.dst =
-                                         *(struct sockaddr_in *)&peer->ai_addr};
+    const struct conn_cache_entry which = {
+        .dst = *(struct sockaddr_in *)&peer->ai_addr};
     struct conn_cache_entry * cce = splay_find(conn_cache, cc, &which);
     if (cce == 0) {
         // no, open a new connection
+        struct q_conn * const c =
+            q_connect(w, (struct sockaddr_in *)(void *)peer->ai_addr, dest, req,
+                      &se->s, timeout);
+        if (c == 0)
+            return 0;
+
         cce = calloc(1, sizeof(*cce));
         ensure(cce, "calloc failed");
-        cce->c = q_connect(w, (struct sockaddr_in *)(void *)peer->ai_addr, dest,
-                           req, &se->s);
-        ensure(cce->c, "connection established");
+        cce->c = c;
 
         // insert into connection cache
         cce->dst = *(struct sockaddr_in *)&peer->ai_addr;
         splay_insert(conn_cache, cc, cce);
-
     } else {
-
         se->s = q_rsv_stream(cce->c);
         q_write(se->s, req);
     }
@@ -197,13 +205,16 @@ int main(int argc, char * argv[])
     int ch;
     char cache[MAXPATHLEN] = "/tmp/" QUANT "-session";
 
-    while ((ch = getopt(argc, argv, "hi:v:s:")) != -1) {
+    while ((ch = getopt(argc, argv, "hi:v:s:t:")) != -1) {
         switch (ch) {
         case 'i':
             strncpy(ifname, optarg, sizeof(ifname) - 1);
             break;
         case 's':
             strncpy(cache, optarg, sizeof(cache) - 1);
+            break;
+        case 't':
+            timeout = MIN(IDLE_TIMEOUT_MAX, strtoul(optarg, 0, 10));
             break;
         case 'v':
 #ifndef NDEBUG
@@ -252,6 +263,9 @@ int main(int argc, char * argv[])
     sl_foreach (se, &sl, next) {
         // read HTTP/0.9 reply and dump it to stdout
         struct w_iov_sq i = sq_head_initializer(i);
+        if (se->c == 0)
+            continue;
+
         q_readall_str(se->s, &i);
         struct w_iov * v;
         sq_foreach (v, &i, next)

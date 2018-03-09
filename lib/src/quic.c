@@ -87,7 +87,7 @@ static const uint32_t nbufs = 1000; ///< Number of packet buffers to allocate.
 ///
 #define loop_run(func, arg)                                                    \
     do {                                                                       \
-        ensure(api_func == 0 && api_arg == 0, "no API call active");           \
+        ensure(api_func == 0 && api_arg == 0, "other API call active");        \
         api_func = (func_ptr)(&(func));                                        \
         api_arg = (arg);                                                       \
         warn(DBG, #func "(" #arg ") entering event loop");                     \
@@ -142,13 +142,15 @@ struct q_conn * q_connect(struct w_engine * const w,
                           const struct sockaddr_in * const peer,
                           const char * const peer_name,
                           struct w_iov_sq * const early_data,
-                          struct q_stream ** const early_data_stream)
+                          struct q_stream ** const early_data_stream,
+                          const uint64_t idle_timeout)
 {
     // make new connection
     uint64_t cid;
     arc4random_buf(&cid, sizeof(cid));
     const uint vers = ok_vers[0];
-    struct q_conn * const c = new_conn(w, vers, cid, peer, peer_name, 0);
+    struct q_conn * const c =
+        new_conn(w, vers, cid, peer, peer_name, 0, idle_timeout);
 
     // allocate stream zero and init TLS
     struct q_stream * const s = new_stream(c, 0, true);
@@ -302,8 +304,9 @@ void q_readall_str(struct q_stream * const s, struct w_iov_sq * const q)
     warn(WRN, "reading all on %s conn " FMT_CID " str " FMT_SID,
          conn_type(s->c), s->c->id, s->id);
 
-    while (s->state != STRM_STAT_HCRM && s->state != STRM_STAT_CLSD)
-        loop_run(q_readall_str, s);
+    while (s->c->state <= CONN_STAT_ESTB && s->state != STRM_STAT_HCRM &&
+           s->state != STRM_STAT_CLSD)
+        loop_run(q_readall_str, s->c);
 
     // return data
     sq_concat(q, &s->in);
@@ -317,7 +320,7 @@ struct q_conn * q_bind(struct w_engine * const w, const uint16_t port)
 {
     // bind socket and create new embryonic server connection
     warn(DBG, "binding serv socket on port %u", port);
-    struct q_conn * const c = new_conn(w, 0, 0, 0, 0, port);
+    struct q_conn * const c = new_conn(w, 0, 0, 0, 0, port, 0);
     warn(WRN, "bound %s socket on port %u", conn_type(c), port);
     return c;
 }

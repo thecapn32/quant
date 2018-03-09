@@ -36,6 +36,8 @@
 struct w_iov_sq;
 struct q_stream;
 
+#define IDLE_TIMEOUT_MAX 600 // 10 minutes
+
 
 extern struct w_engine * __attribute__((nonnull(1)))
 q_init(const char * const ifname,
@@ -50,7 +52,8 @@ q_connect(struct w_engine * const w,
           const struct sockaddr_in * const peer,
           const char * const peer_name,
           struct w_iov_sq * const early_data,
-          struct q_stream ** const early_data_stream);
+          struct q_stream ** const early_data_stream,
+          const uint64_t idle_timeout);
 
 extern void __attribute__((nonnull)) q_close(struct q_conn * const c);
 

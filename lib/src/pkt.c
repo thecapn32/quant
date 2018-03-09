@@ -261,8 +261,11 @@ void enc_pkt(struct q_stream * const s,
     case CONN_STAT_ESTB:
     case CONN_STAT_CLNG:
     case CONN_STAT_DRNG:
-        pkt_nr_len = needed_pkt_nr_len(c, meta(v).nr);
-        flags = pkt_type[pkt_nr_len] | (c->omit_cid ? F_SH_OMIT_CID : 0);
+        if (likely(c->tls.enc_1rtt)) {
+            pkt_nr_len = needed_pkt_nr_len(c, meta(v).nr);
+            flags = pkt_type[pkt_nr_len] | (c->omit_cid ? F_SH_OMIT_CID : 0);
+        } else
+            flags = F_LONG_HDR | F_LH_HSHK;
         break;
     default:
         die("unknown conn state %u", c->state);
@@ -292,35 +295,36 @@ void enc_pkt(struct q_stream * const s,
     } else
         meta(v).ack_header_pos = 0;
 
-
-    // XXX rethink this - there needs to be a list of which streams are blocked
-    // or need their window opened
-    struct q_stream * t = 0;
-    splay_foreach (t, stream, &c->streams) {
-        if (t->blocked)
-            i = enc_stream_blocked_frame(t, v, i);
-        if (t->tx_max_stream_data) {
-            i = enc_max_stream_data_frame(t, v, i);
-            t->tx_max_stream_data = false;
+    if (c->state == CONN_STAT_ESTB) {
+        // XXX rethink this - there needs to be a list of which streams are
+        // blocked or need their window opened
+        struct q_stream * t = 0;
+        splay_foreach (t, stream, &c->streams) {
+            if (t->blocked)
+                i = enc_stream_blocked_frame(t, v, i);
+            if (t->tx_max_stream_data) {
+                i = enc_max_stream_data_frame(t, v, i);
+                t->tx_max_stream_data = false;
+            }
         }
-    }
 
-    if (c->blocked)
-        i = enc_blocked_frame(c, v, i);
+        if (c->blocked)
+            i = enc_blocked_frame(c, v, i);
 
-    if (c->tx_max_data) {
-        i = enc_max_data_frame(c, v, i);
-        c->tx_max_data = false;
-    }
+        if (c->tx_max_data) {
+            i = enc_max_data_frame(c, v, i);
+            c->tx_max_data = false;
+        }
 
-    if (c->stream_id_blocked) {
-        i = enc_stream_id_blocked_frame(c, v, i);
-        c->stream_id_blocked = false;
-    }
+        if (c->stream_id_blocked) {
+            i = enc_stream_id_blocked_frame(c, v, i);
+            c->stream_id_blocked = false;
+        }
 
-    if (c->tx_max_stream_id) {
-        i = enc_max_stream_id_frame(c, v, i);
-        c->tx_max_stream_id = false;
+        if (c->tx_max_stream_id) {
+            i = enc_max_stream_id_frame(c, v, i);
+            c->tx_max_stream_id = false;
+        }
     }
 
     // TODO: need to RTX most recent MAX_STREAM_DATA and MAX_DATA on RTX
