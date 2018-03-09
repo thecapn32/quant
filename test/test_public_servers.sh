@@ -159,5 +159,6 @@ for s in "${!servers[@]}"; do
         printf "\\n" >> "$tmp"
 done
 
+# cat "$tmp"
 wdiff -n "$(dirname $0)/$script.result" "$tmp" | $colordiff
 rm -f "$tmp"

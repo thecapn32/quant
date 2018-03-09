@@ -1,12 +1,12 @@
                 live    vneg    hshk    data    close   zrtt    hrr
-mvfst           *       V                       c
+mvfst           *       V       H       D       C
 ngtcp2          *       V       H       D       c       Z
 quicly          *
 pandora         *       V       H       D       C
 f5              *       V       H       D       C
 minq            *
 winquic         *       V       H       D       C       Z       S
-ats             *       V                       c
+ats             *       V       H       D
 quant           *       V       H       D       C       Z       S
 picoquic        *       V       H       D       C       Z       S
 mozquic         *       V       H       D       c       Z       S
