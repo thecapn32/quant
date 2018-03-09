@@ -315,8 +315,9 @@ dec_close_frame(struct q_conn * const c,
                                                      : CONN_STAT_DRNG);
 
     warn(INF,
-         FRAM_IN "CLOSE" NRM " err=" RED "0x%04x " NRM "rlen=%" PRIu64
+         FRAM_IN "%s" NRM " err=" RED "0x%04x " NRM "rlen=%" PRIu64
                  " reason=" RED "%.*s" NRM,
+         type == FRAM_TYPE_CONN_CLSE ? "CONNECTION_CLOSE" : "APPLICATION_CLOSE",
          err_code, reas_len, reas_len, reas_phr);
 
     return i;
@@ -936,8 +937,10 @@ uint16_t enc_close_frame(struct w_iov * const v,
              rlen, i, i + rlen - 1);
 
         warn(INF,
-             FRAM_OUT "CLOSE" NRM " err=" RED "0x%04x" NRM " rlen=%" PRIu64
+             FRAM_OUT "%s" NRM " err=" RED "0x%04x" NRM " rlen=%" PRIu64
                       " reason=" RED "%.*s" NRM,
+             type == FRAM_TYPE_CONN_CLSE ? "CONNECTION_CLOSE"
+                                         : "APPLICATION_CLOSE",
              err_code, rlen, rlen, reas);
 
     } else
