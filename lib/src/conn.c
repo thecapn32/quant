@@ -455,7 +455,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
     case CONN_STAT_IDLE:
     case CONN_STAT_VERS_NEG:
     case CONN_STAT_VERS_NEG_SENT:
-
+        // respond to a client-initial
         if (pkt_vers(v->buf, v->len) == 0) {
             warn(INF, "ignoring spurious vers neg response");
             goto done;
@@ -466,7 +466,6 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             warn(ERR, "initial %u-byte pkt too short (< %u)", v->len,
                  MIN_INI_LEN);
 
-        // respond to the version negotiation packet
         c->vers = pkt_vers(v->buf, v->len);
         c->needs_tx = true;
         track_recv(c, meta(v).nr, flags);
@@ -503,19 +502,13 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         break;
 
     case CONN_STAT_CH_SENT:
-        if (!is_set(F_LONG_HDR, flags)) {
-            warn(WRN, "cannot handle short-header pkt yet, ignoring");
-            goto done;
-        }
-
         if (pkt_vers(v->buf, v->len) == 0) {
+            // handle an incoming vers-neg packet
             const uint32_t try_vers = pick_from_server_vers(v->buf, v->len);
             if (try_vers == c->vers) {
                 warn(INF, "ignoring spurious vers neg response");
                 break;
             }
-
-            // TODO: check CID
 
             if (c->vers_initial == 0)
                 c->vers_initial = c->vers;
@@ -550,6 +543,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         }
 
         if (pkt_type(flags) == F_LH_RTRY) {
+            // handle an incoming retry packet
             warn(INF, "handling serv stateless retry");
 
             // verify retry
@@ -581,6 +575,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             return;
         }
 
+        // if we get here, this should be a regular server-hello
         conn_to_state(c, CONN_STAT_SH);
         dec_frames(c, v);
         track_recv(c, meta(v).nr, flags);
@@ -600,8 +595,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
     case CONN_STAT_SH:
     case CONN_STAT_HSHK_DONE:
         if (is_set(F_LONG_HDR, flags) && pkt_vers(v->buf, v->len) == 0) {
-            // we shouldn't get another version negotiation packet here,
-            // ignore
+            // we shouldn't get another vers-neg packet here, ignore
             warn(NTE, "ignoring spurious ver neg response");
             goto done;
         }
