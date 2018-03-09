@@ -704,9 +704,6 @@ void init_tls(struct q_conn * const c)
     if (c->is_clnt)
         ensure(ptls_set_server_name(c->tls.t, c->peer_name, 0) == 0,
                "ptls_set_server_name");
-    init_tp(c);
-    if (!c->tls.dec_hshk)
-        init_hshk_prot(c);
 
     ptls_handshake_properties_t * const hshk_prop = &c->tls.tls_hshake_prop;
 
@@ -736,9 +733,13 @@ void init_tls(struct q_conn * const c)
         hshk_prop->client.session_ticket =
             ptls_iovec_init(t->ticket, t->ticket_len);
         memcpy(&c->tp_peer, &t->tp, sizeof(t->tp));
-        c->vers = t->vers;
+        c->vers_initial = c->vers = t->vers;
         c->try_0rtt = 1;
     }
+
+    init_tp(c);
+    if (!c->tls.dec_hshk)
+        init_hshk_prot(c);
 }
 
 
