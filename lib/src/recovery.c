@@ -85,11 +85,10 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
         // XXX TLP is much too aggressive on server, due to artificially low
         // initial RTT (since it's not measured during the handshake yet)
 
-        // } else if (c->rec.tlp_cnt < kMaxTLPs) {
-        //     dur = MAX(1.5 * c->rec.srtt + c->rec.max_ack_del,
-        //     kMinTLPTimeout); warn(DBG, "TLP alarm in %f sec on %s conn "
-        //     FMT_CID, dur, conn_type(c),
-        //          c->id);
+    } else if (c->rec.tlp_cnt < kMaxTLPs) {
+        dur = MAX(1.5 * c->rec.srtt + c->rec.max_ack_del, kMinTLPTimeout);
+        warn(DBG, "TLP alarm in %f sec on %s conn " FMT_CID, dur, conn_type(c),
+             c->id);
 
     } else {
         dur = c->rec.srtt + 4 * c->rec.rttvar;
