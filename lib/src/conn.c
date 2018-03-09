@@ -562,6 +562,10 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             // must use cid from retry for connection and re-init keys
             init_hshk_prot(c);
 
+            // reinit tp
+            c->vers_initial = c->vers;
+            init_tp(c);
+
             // process the retry data on stream-0
             dec_frames(c, v);
             process_stream0(c);
@@ -570,8 +574,6 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             c->try_0rtt = false;
 
             // forget we transmitted any packets
-            c->vers_initial = c->vers;
-            init_tp(c);
             reset_conn(c, false);
             conn_to_state(c, CONN_STAT_RTRY);
             c->needs_tx = true;
