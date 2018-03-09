@@ -222,7 +222,12 @@ uint16_t dec_ack_frame(
 
     uint64_t ack_delay_raw = 0;
     i = dec(&ack_delay_raw, v->buf, v->len, i, 0, "%" PRIu64);
-    const uint64_t ack_delay = ack_delay_raw * (1 << c->tp_peer.ack_del_exp);
+
+    // handshake pkts always use an ACK delay exponent of 3
+    const uint8_t pt = pkt_type(pkt_flags(v->buf));
+    const uint8_t ade =
+        pt <= F_LH_INIT && pt >= F_LH_HSHK ? 3 : c->tp_peer.ack_del_exp;
+    const uint64_t ack_delay = ack_delay_raw * (1 << ade);
 
     uint64_t num_blocks = 0;
     i = dec(&num_blocks, v->buf, v->len, i, 0, "%" PRIu64);
@@ -767,9 +772,13 @@ uint16_t enc_ack_frame(struct q_conn * const c,
 
     i = enc(v->buf, v->len, i, &lg_hi->hi, 0, FMT_PNR_IN);
 
+    // handshake pkts always use an ACK delay exponent of 3
+    const uint8_t pt = pkt_type(pkt_flags(v->buf));
+    const uint8_t ade =
+        pt <= F_LH_INIT && pt >= F_LH_HSHK ? 3 : c->tp_local.ack_del_exp;
     const uint64_t ack_delay =
         (uint64_t)((ev_now(loop) - diet_timestamp(lg_hi)) * 1000000) /
-        (1 << c->tp_local.ack_del_exp);
+        (1 << ade);
     i = enc(v->buf, v->len, i, &ack_delay, 0, "%" PRIu64);
 
     i = enc(v->buf, v->len, i, &block_cnt, 0, "%" PRIu64);
@@ -786,15 +795,15 @@ uint16_t enc_ack_frame(struct q_conn * const c,
              FRAM_OUT "ACK" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64 " (%" PRIu64
                       " usec) cnt=%" PRIu64 " block=%" PRIu64 " [" FMT_PNR_IN
                       ".." FMT_PNR_IN "]",
-             lg_hi->hi, ack_delay, ack_delay * (1 << c->tp_local.ack_del_exp),
-             block_cnt, block, lg_lo->lo, shorten_ack_nr(lg_hi->hi, block));
+             lg_hi->hi, ack_delay, ack_delay * (1 << ade), block_cnt, block,
+             lg_lo->lo, shorten_ack_nr(lg_hi->hi, block));
     else
         warn(INF,
              FRAM_OUT "ACK" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64 " (%" PRIu64
                       " usec) cnt=%" PRIu64 " block=%" PRIu64 " [" FMT_PNR_IN
                       "]",
-             lg_hi->hi, ack_delay, ack_delay * (1 << c->tp_local.ack_del_exp),
-             block_cnt, block, lg_hi->hi);
+             lg_hi->hi, ack_delay, ack_delay * (1 << ade), block_cnt, block,
+             lg_hi->hi);
 
     cur_hi = lg_hi;
     cur_lo = lg_lo;
