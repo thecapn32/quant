@@ -95,23 +95,26 @@ function test_server {
 function analyze {
         # analyze 1rtt
         local log="/tmp/$script.$1.$pid.1rtt.log"
-        awk '/RX len=/{exit 1}' "$log"
+
+        perl -n -e '/RX len=/ && exit 1;' "$log"
         [ $? == 1 ] && live[$1]="*"
 
-        awk '/0xbabababa, retrying with/{exit 1}' "$log"
+        perl -n -e '/0xbabababa, retrying with/ && exit 1;' "$log"
         [ $? == 1 ] && vneg[$1]=V
 
-        awk '/TX len=.*Short/{x=1}; x && /RX len=.*Short/{exit 1}' "$log"
+        perl -n -e '/TX len=.*Short/ and $x=1;
+                    /RX len=.*Short/ && $x && exit 1;' "$log"
         [ $? == 1 ] && hshk[$1]=H
 
-        awk '/read .* bytes on clnt conn/{exit 1}' "$log"
+        perl -n -e '/read (.*) bytes on clnt conn/ &&
+                            ($1 > 0 ? exit 1 : continue);' "$log"
         [ $? == 1 ] && data[$1]=D
 
-        awk '   BEGIN{t=-1};
-                /TX len=/{t=1};
-                /RX len=/{t=0};
-                /CLOSE err=0x0000/{if (t==1) { tc=1 } else { rc=1 }};
-                END{exit tc+rc}' "$log"
+        perl -n -e 'BEGIN{$t=-1};
+                    /TX len=/ and $t=1;
+                    /RX len=/ and $t=0;
+                    /CLOSE err=0x0000/ && ($t==1 ? $tc=1 : $rc=1);
+                    END{exit $tc+$rc};' "$log"
         local ret=$?
         if [ $ret == 2 ]; then
                 close[$1]=C
@@ -122,14 +125,16 @@ function analyze {
 
         # analyze 0rtt
         local log="/tmp/$script.$1.$pid.0rtt.log"
-        awk '   /connected after 0-RTT/{x=1};
-                x && /CLOSE err=0x0000/{exit 1}' "$log"
+        perl -n -e '/connected after 0-RTT/ and $x=1;
+                    $x && /CLOSE err=0x0000/ && exit 1;' "$log"
         [ $? == 1 ] && zrtt[$1]=Z
         rm -f "$log"
 
         # analyze hrr
         local log="/tmp/$script.$1.$pid.hrr.log"
-        awk '/RX len=.*Retry/{x=1}; x && /CLOSE err=0x0000/{exit 1}' "$log"
+        cat "$tmp"
+        perl -n -e '/RX len=.*Retry/ and $x=1;
+                   $x && /CLOSE err=0x0000/ && exit 1;' "$log"
         [ $? == 1 ] && hrr[$1]=S
         rm -f "$log"
 }
