@@ -710,18 +710,18 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     uint64_t block_cnt = 0;
 
     splay_foreach_rev (b, diet, &c->recv) {
-        warn(DBG, "range %" PRIu64 " - %" PRIu64 " 0x%02x", b->hi, b->lo,
-             diet_class(b));
+        // warn(DBG, "range %" PRIu64 " - %" PRIu64 " 0x%02x", b->hi, b->lo,
+        //      diet_class(b));
 
         const bool prot_ok =
             better_or_equal_prot(pkt_flags(v->buf), diet_class(b));
 
         if (!prot_ok) {
-            warn(DBG, "prot not OK, skipping (ranges=%u)", block_cnt);
+            // warn(DBG, "prot not OK, skipping (ranges=%u)", block_cnt);
             if (cur_lo && lg_lo == 0) {
                 lg_lo = cur_lo;
-                warn(DBG, "found lg_lo %" PRIu64 " - %" PRIu64 " 0x%02x",
-                     lg_lo->hi, lg_lo->lo, diet_class(lg_lo));
+                // warn(DBG, "found lg_lo %" PRIu64 " - %" PRIu64 " 0x%02x",
+                //      lg_lo->hi, lg_lo->lo, diet_class(lg_lo));
             }
             cur_hi = cur_lo = 0;
             continue;
@@ -731,28 +731,28 @@ uint16_t enc_ack_frame(struct q_conn * const c,
             cur_hi = cur_lo = b;
             if (lg_hi == 0) {
                 lg_hi = b;
-                warn(DBG, "found lg_hi %" PRIu64 " - %" PRIu64 " 0x%02x",
-                     lg_hi->hi, lg_hi->lo, diet_class(lg_hi));
+                // warn(DBG, "found lg_hi %" PRIu64 " - %" PRIu64 " 0x%02x",
+                //      lg_hi->hi, lg_hi->lo, diet_class(lg_hi));
             } else {
                 block_cnt++;
-                warn(DBG, "new range (ranges=%u)", block_cnt);
+                // warn(DBG, "new range (ranges=%u)", block_cnt);
             }
             continue;
         }
 
         if (cur_lo->lo > b->hi + 1) {
             block_cnt++;
-            warn(DBG, "new range (ranges=%u)", block_cnt);
+            // warn(DBG, "new range (ranges=%u)", block_cnt);
             if (lg_lo == 0) {
                 lg_lo = cur_lo;
-                warn(DBG, "found lg_lo %" PRIu64 " - %" PRIu64 " 0x%02x",
-                     lg_lo->hi, lg_lo->lo, diet_class(lg_lo));
+                // warn(DBG, "found lg_lo %" PRIu64 " - %" PRIu64 " 0x%02x",
+                //      lg_lo->hi, lg_lo->lo, diet_class(lg_lo));
             }
             cur_hi = cur_lo = b;
             continue;
         }
 
-        warn(DBG, "joining with current");
+        // warn(DBG, "joining with current");
         cur_lo = b;
     }
 
@@ -763,8 +763,8 @@ uint16_t enc_ack_frame(struct q_conn * const c,
 
     if (lg_lo == 0) {
         lg_lo = splay_min(diet, &c->recv);
-        warn(DBG, "found lg_lo %" PRIu64 " - %" PRIu64 " 0x%02x", lg_lo->hi,
-             lg_lo->lo, diet_class(lg_lo));
+        // warn(DBG, "found lg_lo %" PRIu64 " - %" PRIu64 " 0x%02x", lg_lo->hi,
+        //      lg_lo->lo, diet_class(lg_lo));
     }
 
     const uint8_t type = FRAM_TYPE_ACK;
@@ -784,8 +784,8 @@ uint16_t enc_ack_frame(struct q_conn * const c,
 
     i = enc(v->buf, v->len, i, &block_cnt, 0, "%" PRIu64);
 
-    warn(DBG, "lg range %" PRIu64 " - %" PRIu64 " 0x%02x", lg_hi->hi, lg_lo->lo,
-         diet_class(lg_hi));
+    // warn(DBG, "lg range %" PRIu64 " - %" PRIu64 " 0x%02x", lg_hi->hi, lg_lo->lo,
+    //      diet_class(lg_hi));
 
     // encode the first ACK block directly
     uint64_t block = lg_hi->hi - lg_lo->lo;
@@ -812,27 +812,27 @@ uint16_t enc_ack_frame(struct q_conn * const c,
 
     while (b) {
 
-        warn(DBG, "range %" PRIu64 " - %" PRIu64 " 0x%02x", b->hi, b->lo,
-             diet_class(b));
+        // warn(DBG, "range %" PRIu64 " - %" PRIu64 " 0x%02x", b->hi, b->lo,
+        //      diet_class(b));
 
-        warn(DBG, "cur %" PRIu64 " - %" PRIu64 " 0x%02x", cur_hi->hi,
-             cur_lo->lo, diet_class(cur_hi));
+        // warn(DBG, "cur %" PRIu64 " - %" PRIu64 " 0x%02x", cur_hi->hi,
+        //      cur_lo->lo, diet_class(cur_hi));
 
         if (better_or_equal_prot(pkt_flags(v->buf), diet_class(b)) == false) {
-            warn(DBG, "prot not OK, skipping range");
+            // warn(DBG, "prot not OK, skipping range");
             goto next;
         }
 
         if (cur_lo->lo == b->hi + 1 &&
             better_or_equal_prot(pkt_flags(v->buf), diet_class(b))) {
-            warn(DBG, "can join with prev");
+            // warn(DBG, "can join with prev");
             cur_lo = b;
             goto next;
         }
 
         uint64_t gap = 0;
         if (cur_lo->lo > b->hi + 1 || splay_prev(diet, &c->recv, b) == 0) {
-            warn(DBG, "have gap");
+            // warn(DBG, "have gap");
             gap = cur_lo->lo - b->hi - 2;
             i = enc(v->buf, v->len, i, &gap, 0, "%" PRIu64);
             cur_hi = cur_lo = b;
