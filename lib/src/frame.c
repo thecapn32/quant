@@ -551,7 +551,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
     while (i < v->len) {
         const uint8_t type = ((const uint8_t * const)(v->buf))[i];
         if (pad_start && (type != FRAM_TYPE_PAD || i == v->len - 1)) {
-            warn(INF, FRAM_IN "PADDING" NRM " len=%u", i - pad_start);
+            warn(DBG, FRAM_IN "PADDING" NRM " len=%u", i - pad_start);
             pad_start = 0;
         }
 
@@ -663,7 +663,7 @@ uint16_t enc_padding_frame(struct w_iov * const v,
 {
     if (unlikely(len == 0))
         return pos;
-    warn(INF, FRAM_OUT "PADDING" NRM " len=%u", len);
+    warn(DBG, FRAM_OUT "PADDING" NRM " len=%u", len);
     memset(&v->buf[pos], FRAM_TYPE_PAD, len);
     bit_set(meta(v).frames, FRAM_TYPE_PAD);
     return pos + len;
@@ -769,6 +769,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
 
     const uint8_t type = FRAM_TYPE_ACK;
     bit_set(meta(v).frames, FRAM_TYPE_ACK);
+    meta(v).ack_header_pos = pos;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
 
     i = enc(v->buf, v->len, i, &lg_hi->hi, 0, FMT_PNR_IN);
@@ -784,7 +785,8 @@ uint16_t enc_ack_frame(struct q_conn * const c,
 
     i = enc(v->buf, v->len, i, &block_cnt, 0, "%" PRIu64);
 
-    // warn(DBG, "lg range %" PRIu64 " - %" PRIu64 " 0x%02x", lg_hi->hi, lg_lo->lo,
+    // warn(DBG, "lg range %" PRIu64 " - %" PRIu64 " 0x%02x", lg_hi->hi,
+    // lg_lo->lo,
     //      diet_class(lg_hi));
 
     // encode the first ACK block directly
@@ -851,8 +853,6 @@ uint16_t enc_ack_frame(struct q_conn * const c,
                  FRAM_OUT "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64
                           " [" FMT_PNR_IN "]",
                  gap, block, cur_lo->lo);
-
-        // cur_hi = cur_lo = b;
 
     next:
         b = splay_prev(diet, &c->recv, b);
