@@ -42,7 +42,7 @@ declare -A servers=(
         [winquic]=msquic.westus.cloudapp.azure.com
 )
 
-results=(live vneg hshk data close zrtt hrr)
+results=(live fail vneg hshk data close zrtt hrr)
 declare -A ${results[@]}
 
 
@@ -73,7 +73,6 @@ function test_server {
         local opts="-i $iface -t3 -v4 -s $cache"
         local sed_pattern='s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]//g'
         local log_base="/tmp/$script.$1.$pid"
-        rm -f "$cache"
 
         # initial 1rtt run
         bin/client $opts "https://${servers[$1]}:4433/index.html" 2>&1 | \
@@ -87,6 +86,7 @@ function test_server {
         # hrr run
         bin/client $opts "https://${servers[$1]}:4434/index.html" 2>&1 | \
                 $sed -r "$sed_pattern" > "$log_base.hrr.log"
+        rm -f "$cache"
 
         printf "%s " "$s"
 }
@@ -95,6 +95,13 @@ function test_server {
 function analyze {
         # analyze 1rtt
         local log="/tmp/$script.$1.$pid.1rtt.log"
+
+        perl -n -e '/assertion failed/ && exit 1;' "$log"
+        if [ $? == 1 ]; then
+                fail[$1]="X"
+                tail -n 20 "$log"
+                return
+        fi
 
         perl -n -e '/RX len=/ && exit 1;' "$log"
         [ $? == 1 ] && live[$1]="*"
@@ -107,7 +114,7 @@ function analyze {
         [ $? == 1 ] && hshk[$1]=H
 
         perl -n -e '/read (.*) bytes on clnt conn/ &&
-                            ($1 > 0 ? exit 1 : continue);' "$log"
+                            ($1 > 0 ? exit 1 : next);' "$log"
         [ $? == 1 ] && data[$1]=D
 
         perl -n -e 'BEGIN{$t=-1};
@@ -125,6 +132,13 @@ function analyze {
 
         # analyze 0rtt
         local log="/tmp/$script.$1.$pid.0rtt.log"
+
+        if [ $? == 1 ]; then
+                fail[$1]="X"
+                tail -n 20 "$log"
+                return
+        fi
+
         perl -n -e '/connected after 0-RTT/ and $x=1;
                     $x && /CLOSE err=0x0000/ && exit 1;' "$log"
         [ $? == 1 ] && zrtt[$1]=Z
@@ -132,7 +146,13 @@ function analyze {
 
         # analyze hrr
         local log="/tmp/$script.$1.$pid.hrr.log"
-        cat "$tmp"
+
+        if [ $? == 1 ]; then
+                fail[$1]="X"
+                tail -n 20 "$log"
+                return
+        fi
+
         perl -n -e '/RX len=.*Retry/ and $x=1;
                    $x && /CLOSE err=0x0000/ && exit 1;' "$log"
         [ $? == 1 ] && hrr[$1]=S
