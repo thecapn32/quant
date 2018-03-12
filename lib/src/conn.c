@@ -175,6 +175,7 @@ rtx(struct q_stream * const s, struct w_iov * const v)
     pm_cpy(&meta(r), &meta(v));                  // copy pkt meta data
     memcpy(r->buf, v->buf - Q_OFFSET, Q_OFFSET); // copy pkt headers
     meta(r).is_rtxed = true;
+    adj_iov_to_data(r);
 
     // we reinsert meta(v) with its new pkt nr in on_pkt_sent()
     splay_remove(pm_nr_splay, &s->c->rec.sent_pkts, &meta(v));
@@ -413,7 +414,7 @@ static void __attribute__((nonnull)) process_stream0(struct q_conn * const c)
 
 
 static void __attribute__((nonnull))
-reset_conn(struct q_conn * const c, const bool also_stream0_out)
+reset_conn(struct q_conn * const c, const bool also_stream0_in)
 {
     // reset CC state
     c->rec.in_flight = 0;
@@ -424,6 +425,18 @@ reset_conn(struct q_conn * const c, const bool also_stream0_out)
     // forget we received any packets
     diet_free(&c->recv);
 
+    // remove all meta-data about RTX'ed packets
+    struct pkt_meta *p, *tmp;
+    for (p = splay_min(pm_nr_splay, &c->rec.sent_pkts); p != 0; p = tmp) {
+        tmp = splay_next(pm_nr_splay, &c->rec.sent_pkts, p);
+        if (p->is_rtxed) {
+            splay_remove(pm_nr_splay, &c->rec.sent_pkts, p);
+            *p = (struct pkt_meta){0};
+            ASAN_POISON_MEMORY_REGION(p, sizeof(*p));
+        }
+    }
+
+    log_sent_pkts(c);
     struct q_stream * s = 0;
     splay_foreach (s, stream, &c->streams) {
         // reset stream offsets
@@ -438,9 +451,9 @@ reset_conn(struct q_conn * const c, const bool also_stream0_out)
             }
         } else {
             // free (some) stream-0 data
-            if (also_stream0_out)
-                q_free(c, &s->out);
-            q_free(c, &s->in);
+            if (also_stream0_in)
+                q_free(c, &s->in);
+            q_free(c, &s->out);
         }
     }
 }
@@ -537,27 +550,38 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             return;
         }
 
-        // server accepted version
-        if (verify_prot(c, v) == false) {
-            err_close(c, ERR_TLS_HSHAKE_FAIL,
-                      "AEAD decrypt of 0x%02x-type packet failed",
-                      pkt_type(flags));
-            goto done;
-        }
-
         if (pkt_type(flags) == F_LH_RTRY) {
+            // verify retry
+            const uint64_t nr = pkt_nr(v->buf, v->len, c);
+            struct w_iov * const ci = find_sent_pkt(c, nr);
+            if (ci) {
+                adj_iov_to_start(ci);
+                const uint8_t type = pkt_type(pkt_flags(ci->buf));
+                adj_iov_to_data(ci);
+                if (type != F_LH_INIT) {
+                    warn(NTE,
+                         "pkt nr " FMT_PNR_OUT " was not a CI, ignoring retry",
+                         nr);
+                    goto done;
+                }
+            } else {
+                warn(NTE,
+                     "could not find sent pkt nr " FMT_PNR_OUT
+                     ", ignoring retry",
+                     nr);
+                goto done;
+            }
+
             // handle an incoming retry packet
             warn(INF, "handling serv stateless retry");
 
-            // verify retry
-            const struct pkt_meta * const p =
-                splay_min(pm_nr_splay, &c->rec.sent_pkts);
-            ensure(p, "cannot find CH");
-            if (pkt_nr(v->buf, v->len, c) != p->nr)
-                warn(ERR,
-                     "sent pkt nr " FMT_PNR_OUT ", received pkt nr " FMT_PNR_IN
-                     " in retry",
-                     p->nr, pkt_nr(v->buf, v->len, c));
+            // server accepted version
+            if (verify_prot(c, v) == false) {
+                err_close(c, ERR_TLS_HSHAKE_FAIL,
+                          "AEAD decrypt of 0x%02x-type packet failed",
+                          pkt_type(flags));
+                goto done;
+            }
 
             // must use cid from retry for connection and re-init keys
             init_hshk_prot(c);
@@ -566,18 +590,31 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             c->vers_initial = c->vers;
             init_tp(c);
 
+            // forget we transmitted any packets
+            reset_conn(c, false);
+
             // process the retry data on stream-0
             dec_frames(c, v);
             process_stream0(c);
 
+            // we can now reset stream-0 (inbound)
+            struct q_stream * const s = get_stream(c, 0);
+            s->in_off = 0;
+
             // we are not allowed to try 0RTT after retry
             c->try_0rtt = false;
 
-            // forget we transmitted any packets
-            reset_conn(c, false);
             conn_to_state(c, CONN_STAT_RTRY);
             c->needs_tx = true;
             return;
+        }
+
+        // server accepted version
+        if (verify_prot(c, v) == false) {
+            err_close(c, ERR_TLS_HSHAKE_FAIL,
+                      "AEAD decrypt of 0x%02x-type packet failed",
+                      pkt_type(flags));
+            goto done;
         }
 
         // if we get here, this should be a regular server-hello
