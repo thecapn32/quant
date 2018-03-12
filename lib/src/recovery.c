@@ -334,23 +334,26 @@ void on_pkt_acked(struct q_conn * const c,
     // stop ACKing packets that were contained in the ACK frame of this
     // packet
     if (meta(v).ack_header_pos) {
+#if !defined(NDEBUG) && defined(DEBUG_ACK_PARSING)
         warn(DBG, "decoding ACK info from pkt " FMT_PNR_OUT " from pos %u", ack,
              meta(v).ack_header_pos);
-        adj_iov_to_start(v);
-#ifndef NDEBUG
         // temporarily suppress debug output
         const short l = util_dlevel;
-        util_dlevel = util_dlevel == DBG ? DBG : 0;
+        util_dlevel = 0;
 #endif
+        adj_iov_to_start(v);
         dec_ack_frame(c, v, meta(v).ack_header_pos, 0, &track_acked_pkts, 0);
-#ifndef NDEBUG
-        util_dlevel = l;
-#endif
         adj_iov_to_data(v);
+#if !defined(NDEBUG) && defined(DEBUG_ACK_PARSING)
+        util_dlevel = l;
         warn(DBG, "done decoding ACK info from pkt " FMT_PNR_OUT " from pos %u",
              ack, meta(v).ack_header_pos);
-    } else
+#endif
+    }
+#if !defined(NDEBUG) && defined(DEBUG_ACK_PARSING)
+    else
         warn(DBG, "pkt " FMT_PNR_OUT " did not contain an ACK frame", ack);
+#endif
 
     // OnPacketAckedCC
     if (is_rtxable(&meta(v))) {
