@@ -178,7 +178,7 @@ extern const uint8_t ok_vers_len;
 
 /// Maximum reordering in time space before time based loss detection considers
 /// a packet lost. In fraction of an RTT.
-#define kTimeReorderingFraction (1 / 8)
+#define kTimeReorderingFraction 0.125
 
 /// Minimum time in the future a tail loss probe alarm may be set for (in sec).
 #define kMinTLPTimeout 0.01

@@ -55,7 +55,8 @@ endforeach()
 
 # Set C flags
 foreach(FLAG -Wno-missing-field-initializers -Wno-missing-braces
-        -Wno-gnu-statement-expression -Wno-extended-offsetof)
+        -Wno-gnu-statement-expression -Wno-extended-offsetof
+        -Wno-redundant-parens)
   string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
   check_c_compiler_flag(${FLAG} ${F})
   if(${F})
@@ -137,12 +138,14 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
           -cert-err58-cpp
           -clang-diagnostic-unused-command-line-argument
           -google-readability-braces-around-statements
+          -hicpp-braces-around-statements
           -google-readability-todo
           -google-runtime-references
           -readability-braces-around-statements
           -google-readability-function-size
           -hicpp-function-size
           -readability-function-size
+          -hicpp-signed-bitwise
       )
       string(REPLACE ";" "," CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS}")
       set(CMAKE_C_CLANG_TIDY ${CLANGTIDY}
