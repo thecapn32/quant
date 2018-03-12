@@ -85,7 +85,7 @@ pkt_vers(const uint8_t * const buf, const uint16_t len);
 extern uint16_t __attribute__((nonnull))
 pkt_hdr_len(const uint8_t * const buf, const uint16_t len);
 
-extern void __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
+extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
                                              const bool rtx,
                                              struct w_iov * const v,
                                              struct w_iov_sq * const q);
@@ -93,7 +93,8 @@ extern void __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
 #ifndef NDEBUG
 extern void __attribute__((nonnull)) log_pkt(const char * const dir,
                                              const struct w_iov * const v,
-                                             const uint64_t cid);
+                                             const uint64_t cid,
+                                             const uint16_t add_len);
 #else
 #define log_pkt(...)                                                           \
     do {                                                                       \

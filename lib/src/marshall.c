@@ -29,10 +29,6 @@
 #include <stdint.h>
 #include <string.h>
 
-#ifdef DEBUG_MARSHALL
-#include <stdbool.h>
-#endif
-
 #include <quant/quant.h> // IWYU pragma: keep
 #include <warpcore/warpcore.h>
 
@@ -49,6 +45,10 @@
 #endif
 
 #include "marshall.h"
+
+#ifdef DEBUG_MARSHALL
+#include <stdbool.h>
+#endif
 
 
 /// Computes number of bytes need to enccode @p v in QUIC varint encoding.

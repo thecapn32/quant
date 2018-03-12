@@ -222,7 +222,9 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
                 s->c->blocked = true;
         }
 
-        enc_pkt(s, is_rtx, v, &x);
+        if (enc_pkt(s, is_rtx, v, &x) == false)
+            continue;
+
         on_pkt_sent(s->c, v);
         encoded++;
 
@@ -515,6 +517,11 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         break;
 
     case CONN_STAT_CH_SENT:
+        if (!is_set(F_LONG_HDR, flags)) {
+            warn(NTE, "ignoring unexpected 0x%02x-type pkt", pkt_type(flags));
+            goto done;
+        }
+
         if (pkt_vers(v->buf, v->len) == 0) {
             // handle an incoming vers-neg packet
             const uint32_t try_vers = pick_from_server_vers(v->buf, v->len);
@@ -777,7 +784,7 @@ void rx(struct ev_loop * const l,
         }
 
         meta(v).nr = pkt_nr(v->buf, v->len, c);
-        log_pkt("RX", v, c->id);
+        log_pkt("RX", v, c->id, 0);
 
         // remember that we had a RX event on this connection
         if (!c->had_rx) {

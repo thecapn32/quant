@@ -85,10 +85,11 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
         // XXX TLP is much too aggressive on server, due to artificially low
         // initial RTT (since it's not measured during the handshake yet)
 
-    } else if (c->rec.tlp_cnt < kMaxTLPs) {
-        dur = MAX(1.5 * c->rec.srtt + c->rec.max_ack_del, kMinTLPTimeout);
-        warn(DBG, "TLP alarm in %f sec on %s conn " FMT_CID, dur, conn_type(c),
-             c->id);
+        // } else if (c->rec.tlp_cnt < kMaxTLPs) {
+        //     dur = MAX(1.5 * c->rec.srtt + c->rec.max_ack_del,
+        //     kMinTLPTimeout); warn(DBG, "TLP alarm in %f sec on %s conn "
+        //     FMT_CID, dur, conn_type(c),
+        //          c->id);
 
     } else {
         dur = c->rec.srtt + 4 * c->rec.rttvar;
@@ -99,6 +100,7 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
     }
 
     c->rec.ld_alarm.repeat = c->rec.last_sent_t + dur - ev_now(loop);
+    ensure(c->rec.ld_alarm.repeat >= 0, "repeat %f", c->rec.ld_alarm.repeat);
     ev_timer_again(loop, &c->rec.ld_alarm);
 }
 
@@ -248,12 +250,11 @@ void on_ack_rx_1(struct q_conn * const c,
 
     c->rec.lg_acked = ack;
     struct w_iov * const v = find_sent_pkt(c, ack);
-    ensure(v, "found ACKed pkt " FMT_PNR_OUT, ack);
-    // if (v == 0) {
-    //     warn(ERR, "got ACK for " FMT_PNR_OUT " that is missing from record",
-    //          ack);
-    //     return;
-    // }
+    if (v == 0) {
+        warn(ERR, "got ACK for " FMT_PNR_OUT " that is missing from record",
+             ack);
+        return;
+    }
     c->rec.latest_rtt = ev_now(loop) - meta(v).tx_t;
 
     // UpdateRtt
@@ -296,27 +297,35 @@ void on_ack_rx_2(struct q_conn * const c)
 }
 
 
+// #define DEBUG_ACK_PARSING
+
 void on_pkt_acked(struct q_conn * const c,
                   const uint64_t ack,
                   const uint8_t flags)
 {
     struct w_iov * const v = find_sent_pkt(c, ack);
     if (!v) {
-        warn(DBG, "got ACK for pkt " FMT_PNR_OUT " with no metadata", ack);
+        // warn(DBG, "got ACK for pkt " FMT_PNR_OUT " with no metadata", ack);
         return;
     }
 
     adj_iov_to_start(v);
-    if (!better_or_equal_prot(flags, pkt_flags(v->buf)))
-        warn(ERR, "0x%02x-type pkt has ACK for 0x%02x-type pkt " FMT_PNR_OUT,
-             flags, pkt_flags(v->buf), ack);
+    const uint8_t flags_buf = pkt_flags(v->buf);
     adj_iov_to_data(v);
+    if (!better_or_equal_prot(flags, flags_buf)) {
+        warn(ERR,
+             "0x%02x-type pkt has ACK for 0x%02x-type pkt " FMT_PNR_OUT
+             ", ignoring",
+             flags, flags_buf, ack);
+        return;
+    }
 
     // only act on first-time ACKs
-    if (meta(v).is_acked)
-        warn(WRN, "repeated ACK for " FMT_PNR_OUT, ack);
-    else
-        warn(DBG, "first ACK for " FMT_PNR_OUT, ack);
+    if (meta(v).is_acked) {
+        warn(WRN, "repeated ACK for " FMT_PNR_OUT ", ignoring", ack);
+        return;
+    }
+    warn(DBG, "first ACK for " FMT_PNR_OUT, ack);
     meta(v).is_acked = true;
 
     // If a packet sent prior to RTO was ACKed, then the RTO was spurious.
@@ -328,33 +337,36 @@ void on_pkt_acked(struct q_conn * const c,
     c->rec.hshake_cnt = c->rec.tlp_cnt = c->rec.rto_cnt = 0;
     splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
 
-    // if (rtxable_pkts_outstanding(c) == 0)
-    //     maybe_api_return(q_close, c);
-
-    // stop ACKing packets that were contained in the ACK frame of this
-    // packet
+    // stop ACKing packets that were contained in the ACK frame of this packet
     if (meta(v).ack_header_pos) {
-#if !defined(NDEBUG) && defined(DEBUG_ACK_PARSING)
+#ifndef NDEBUG
+        const short l = util_dlevel;
+#ifdef DEBUG_ACK_PARSING
         warn(DBG, "decoding ACK info from pkt " FMT_PNR_OUT " from pos %u", ack,
              meta(v).ack_header_pos);
         // temporarily suppress debug output
-        const short l = util_dlevel;
+        util_dlevel = util_dlevel == DBG ? DBG : 0;
+#else
         util_dlevel = 0;
+#endif
 #endif
         adj_iov_to_start(v);
         dec_ack_frame(c, v, meta(v).ack_header_pos, 0, &track_acked_pkts, 0);
         adj_iov_to_data(v);
-#if !defined(NDEBUG) && defined(DEBUG_ACK_PARSING)
+#ifndef NDEBUG
         util_dlevel = l;
+#ifdef DEBUG_ACK_PARSING
         warn(DBG, "done decoding ACK info from pkt " FMT_PNR_OUT " from pos %u",
              ack, meta(v).ack_header_pos);
 #endif
+#endif
     }
-#if !defined(NDEBUG) && defined(DEBUG_ACK_PARSING)
+#ifndef NDEBUG
+#ifdef DEBUG_ACK_PARSING
     else
         warn(DBG, "pkt " FMT_PNR_OUT " did not contain an ACK frame", ack);
 #endif
-
+#endif
     // OnPacketAckedCC
     if (is_rtxable(&meta(v))) {
         c->rec.in_flight -= meta(v).tx_len;

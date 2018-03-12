@@ -77,7 +77,8 @@ static const char * pkt_type_str(const struct w_iov * const v)
 
 void log_pkt(const char * const dir,
              const struct w_iov * const v,
-             const uint64_t cid)
+             const uint64_t cid,
+             const uint16_t add_len)
 {
     const uint8_t flags = pkt_flags(v->buf);
     const char * col_dir = *dir == 'R' ? BLD BLU : BLD GRN;
@@ -89,26 +90,27 @@ void log_pkt(const char * const dir,
             twarn(NTE,
                   BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM "cid=" FMT_CID
                       " vers=0x%08x",
-                  col_dir, dir, v->len, flags, col_dir, pkt_type_str(v),
-                  pkt_cid(v->buf, v->len), vers);
+                  col_dir, dir, v->len + add_len, flags, col_dir,
+                  pkt_type_str(v), pkt_cid(v->buf, v->len + add_len), vers);
         else
             twarn(NTE,
                   BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM "cid=" FMT_CID
                       " vers=0x%08x nr=%s%" PRIu64,
-                  col_dir, dir, v->len, flags, col_dir, pkt_type_str(v),
-                  pkt_cid(v->buf, v->len), vers, col_nr, meta(v).nr);
+                  col_dir, dir, v->len + add_len, flags, col_dir,
+                  pkt_type_str(v), pkt_cid(v->buf, v->len + add_len), vers,
+                  col_nr, meta(v).nr);
     } else if (is_set(F_SH_OMIT_CID, flags))
         twarn(NTE,
               BLD "%s%s" NRM " len=%u 0x%02x=%s%s" NRM "|omit_cid(" FMT_CID
                   ") nr=%s%" PRIu64,
-              col_dir, dir, v->len, flags, col_dir, pkt_type_str(v), cid,
-              col_nr, meta(v).nr);
+              col_dir, dir, v->len + add_len, flags, col_dir, pkt_type_str(v),
+              cid, col_nr, meta(v).nr);
     else
         twarn(NTE,
               BLD "%s%s" NRM " len=%u 0x%02x=%s%s" NRM " cid=" FMT_CID
                   " nr=%s%" PRIu64,
-              col_dir, dir, v->len, flags, col_dir, pkt_type_str(v),
-              pkt_cid(v->buf, v->len), col_nr, meta(v).nr);
+              col_dir, dir, v->len + add_len, flags, col_dir, pkt_type_str(v),
+              pkt_cid(v->buf, v->len + add_len), col_nr, meta(v).nr);
 }
 #endif
 
@@ -198,7 +200,7 @@ needed_pkt_nr_len(struct q_conn * const c, const uint64_t n)
 }
 
 
-void enc_pkt(struct q_stream * const s,
+bool enc_pkt(struct q_stream * const s,
              const bool rtx,
              struct w_iov * const v,
              struct w_iov_sq * const q)
@@ -223,7 +225,7 @@ void enc_pkt(struct q_stream * const s,
                 i = enc(v->buf, v->len, i, &ok_vers[j], sizeof(ok_vers[j]),
                         "0x%08x");
         hdr_len = v->len = i;
-        log_pkt("TX", v, c->id);
+        log_pkt("TX", v, c->id, 0);
         goto tx;
     }
 
@@ -273,17 +275,14 @@ void enc_pkt(struct q_stream * const s,
 
     if (is_set(F_LONG_HDR, flags)) {
         i = enc(v->buf, v->len, i, &c->vers, sizeof(c->vers), "0x%08x");
-        i = enc(v->buf, v->len, i, &meta(v).nr, sizeof(uint32_t),
-                GRN "%u" NRM);
+        i = enc(v->buf, v->len, i, &meta(v).nr, sizeof(uint32_t), GRN "%u" NRM);
     } else
         i = enc(v->buf, v->len, i, &meta(v).nr, pkt_nr_len, GRN "%u" NRM);
 
-    log_pkt("TX", v, c->id);
-
+    log_pkt("TX", v, c->id, AEAD_LEN);
     hdr_len = i;
 
     if (!splay_empty(&c->recv) && c->state >= CONN_STAT_SH) {
-        meta(v).ack_header_pos = i;
         i = enc_ack_frame(c, v, i);
     } else
         meta(v).ack_header_pos = 0;
@@ -385,6 +384,14 @@ void enc_pkt(struct q_stream * const s,
         conn_to_state(c, CONN_STAT_CH_SENT);
     }
 
+    if (i == hdr_len) {
+        // we didn't add any frames to this packet, so let's not send it
+        if (c->state != CONN_STAT_SEND_RTRY)
+            c->rec.lg_sent--;
+        warn(WRN, "this pkt will not be sent");
+        return false;
+    }
+
 tx:
     v->len = i;
 
@@ -414,4 +421,5 @@ tx:
         v->len = meta(v).stream_data_end;
 
     adj_iov_to_data(v);
+    return true;
 }
