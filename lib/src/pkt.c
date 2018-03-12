@@ -46,10 +46,6 @@
 
 
 #ifndef NDEBUG
-#define FMT_PNR32_OUT GRN "%u" NRM
-#define FMT_PNR32_IN BLU "%u" NRM
-
-
 static const char * pkt_type_str(const struct w_iov * const v)
 {
     const uint8_t flags = pkt_flags(v->buf);
@@ -168,7 +164,7 @@ pkt_nr(const uint8_t * const buf, const uint16_t len, struct q_conn * const c)
     uint64_t nr = next;
     dec(&nr, buf, len,
         is_set(F_LONG_HDR, flags) ? 13 : is_set(F_SH_OMIT_CID, flags) ? 1 : 9,
-        nr_len, FMT_PNR32_IN);
+        nr_len, BLU "%u" NRM);
 
     const uint64_t alt = nr + (UINT64_C(1) << (nr_len * 8));
     const uint64_t d1 = next >= nr ? next - nr : nr - next;
@@ -278,9 +274,9 @@ void enc_pkt(struct q_stream * const s,
     if (is_set(F_LONG_HDR, flags)) {
         i = enc(v->buf, v->len, i, &c->vers, sizeof(c->vers), "0x%08x");
         i = enc(v->buf, v->len, i, &meta(v).nr, sizeof(uint32_t),
-                FMT_PNR32_OUT);
+                GRN "%u" NRM);
     } else
-        i = enc(v->buf, v->len, i, &meta(v).nr, pkt_nr_len, FMT_PNR32_OUT);
+        i = enc(v->buf, v->len, i, &meta(v).nr, pkt_nr_len, GRN "%u" NRM);
 
     log_pkt("TX", v, c->id);
 

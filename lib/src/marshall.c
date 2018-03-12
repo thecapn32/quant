@@ -26,9 +26,12 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <arpa/inet.h>
-#include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+
+#ifdef DEBUG_MARSHALL
+#include <stdbool.h>
+#endif
 
 #include <quant/quant.h> // IWYU pragma: keep
 #include <warpcore/warpcore.h>
@@ -66,7 +69,7 @@ uint16_t __attribute__((const)) varint_sizeof(const uint64_t v)
 }
 
 
-#ifndef NDEBUG
+#ifdef DEBUG_MARSHALL
 #define log_enc(type, fmt)                                                     \
     if (unlikely(DLEVEL >= DBG && util_dlevel >= DBG))                         \
     util_warn(DBG, false, func, file, line, fmt,                               \
@@ -85,7 +88,7 @@ uint16_t __attribute__((nonnull)) marshall_enc(uint8_t * const buf,
                                                const uint16_t pos,
                                                const void * const src,
                                                const uint16_t src_len
-#ifndef NDEBUG
+#ifdef DEBUG_MARSHALL
                                                ,
                                                const char * const fmt,
                                                const char * const func,
@@ -167,7 +170,7 @@ uint16_t __attribute__((nonnull)) marshall_enc(uint8_t * const buf,
 }
 
 
-#ifndef NDEBUG
+#ifdef DEBUG_MARSHALL
 #define log_dec(type)                                                          \
     if (unlikely(DLEVEL >= DBG && util_dlevel >= DBG))                         \
     util_warn(DBG, false, func, file, line, fmt, i - pos, plural(i - pos),     \
@@ -186,7 +189,7 @@ marshall_dec(void * const dst,
              const uint16_t buf_len,
              const uint16_t pos,
              const uint16_t dst_len
-#ifndef NDEBUG
+#ifdef DEBUG_MARSHALL
              ,
              const char * const fmt,
              const char * const func,
