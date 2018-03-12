@@ -148,8 +148,10 @@ get(struct w_engine * const w,
         struct q_conn * const c =
             q_connect(w, (struct sockaddr_in *)(void *)peer->ai_addr, dest, req,
                       &se->s, timeout);
-        if (c == 0)
+        if (c == 0) {
+            freeaddrinfo(peer);
             return 0;
+        }
 
         cce = calloc(1, sizeof(*cce));
         ensure(cce, "calloc failed");
