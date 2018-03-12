@@ -46,8 +46,8 @@
 
 
 #ifndef NDEBUG
-#define FMT_PNR32_OUT BLU "%u" NRM
-#define FMT_PNR32_IN GRN "%u" NRM
+#define FMT_PNR32_OUT GRN "%u" NRM
+#define FMT_PNR32_IN BLU "%u" NRM
 
 
 static const char * pkt_type_str(const struct w_iov * const v)
@@ -231,9 +231,6 @@ void enc_pkt(struct q_stream * const s,
         goto tx;
     }
 
-    if (rtx)
-        warn(DBG, "enc RTX 0x%02x-type " FMT_PNR_OUT, flags, meta(v).nr);
-
     if (c->state == CONN_STAT_SEND_RTRY) {
         // echo pkt nr of client initial
         meta(v).nr = diet_min(&c->recv);
@@ -348,7 +345,7 @@ void enc_pkt(struct q_stream * const s,
         warn(INF,
              FRAM_OUT "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID "/%" PRIu64
                       " cdata=%" PRIu64 "/%" PRIu64 " off=%" PRIu64 "/%" PRIu64
-                      " len=%" PRIu64 " " REV BLD GRN "[RTX]",
+                      " len=%u " REV BLD GRN "[RTX]",
              type, is_set(F_STREAM_FIN, type) ? "FIN" : "",
              is_set(F_STREAM_FIN, type) &&
                      (is_set(F_STREAM_LEN, type) | is_set(F_STREAM_OFF, type))
