@@ -834,8 +834,9 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
         else
             ret = ptls_handshake(s->c->tls.t, &tb, iv ? iv->buf : 0, &in_len,
                                  &s->c->tls.tls_hshake_prop);
-        warn(DBG, "in %u, gen %u, ret %u, left %u", iv ? iv->len : 0, tb.off,
-             ret, iv ? iv->len - in_len : 0);
+        warn(DBG, "in %u (off %u), gen %u, ret %u, left %u", iv ? iv->len : 0,
+             iv ? meta(iv).stream_off : 0, tb.off, ret,
+             iv ? iv->len - in_len : 0);
         if (iv) {
             iv->buf += in_len;
             iv->len -= in_len;

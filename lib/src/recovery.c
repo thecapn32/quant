@@ -326,7 +326,6 @@ void on_pkt_acked(struct q_conn * const c,
         return;
     }
     warn(DBG, "first ACK for " FMT_PNR_OUT, ack);
-    meta(v).is_acked = true;
 
     // If a packet sent prior to RTO was ACKed, then the RTO was spurious.
     // Otherwise, inform congestion control.
@@ -381,13 +380,21 @@ void on_pkt_acked(struct q_conn * const c,
         warn(DBG, "cwnd %" PRIu64, c->rec.cwnd);
     }
 
-    // check if a q_write is done
-    if (meta(v).is_rtxed == false) {
-        struct q_stream * const s = meta(v).stream;
-        if (s && ++s->out_ack_cnt == sq_len(&s->out))
-            // all packets are ACKed
+    struct pkt_meta * const p = meta(v).rtx ? meta(v).rtx : &meta(v);
+    struct q_stream * const s = p->stream;
+    if (p->is_acked == false && s) {
+        p->is_acked = true;
+        s->out_ack_cnt++;
+        warn(DBG, "stream " FMT_SID " ACK cnt %u, len %u", s->id,
+             s->out_ack_cnt, sq_len(&s->out));
+
+        if (is_fully_acked(s)) {
+            // a q_write may be done
+            // warn(CRT, "fully acked");
             maybe_api_return(q_write, s);
+        }
     }
+    meta(v).is_acked = true;
 
     if (!is_rtxable(&meta(v)))
         q_free_iov(c, v);

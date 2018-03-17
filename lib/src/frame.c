@@ -101,11 +101,6 @@ dec_stream_frame(struct q_conn * const c,
 
     // best case: new in-order data
     if (meta(v).stream_off == s->in_off) {
-        warn(DBG,
-             "%" PRIu64 " byte%s new data (off %" PRIu64 "-%" PRIu64
-             ") on %s conn " FMT_CID " str " FMT_SID,
-             l, plural(l), meta(v).stream_off, meta(v).stream_off + l,
-             conn_type(c), c->id, sid);
         kind = "seq";
         track_bytes = true;
         s->in_off += l;
@@ -118,13 +113,6 @@ dec_stream_frame(struct q_conn * const c,
              p && p->stream_off == s->in_off; p = nxt) {
             nxt = splay_next(pm_off_splay, &s->in_ooo, p);
             l = p->stream_data_end;
-
-            warn(DBG,
-                 "deliver %u ooo byte%s (off %" PRIu64 "-%" PRIu64
-                 ") on %s conn " FMT_CID " str " FMT_SID,
-                 l, plural(l), p->stream_off, p->stream_off + l, conn_type(c),
-                 c->id, sid);
-
             s->in_off += l;
             meta(v).stream = s;
             sq_insert_tail(&s->in, w_iov(w_engine(c->sock), pm_idx(p)), next);
@@ -145,21 +133,11 @@ dec_stream_frame(struct q_conn * const c,
 
     // data is a complete duplicate
     if (meta(v).stream_off + l <= s->in_off) {
-        warn(DBG,
-             "%" PRIu64 " byte%s dup data (off %" PRIu64 "-%" PRIu64
-             ") on %s conn " FMT_CID " str " FMT_SID,
-             l, plural(l), meta(v).stream_off, meta(v).stream_off + l,
-             conn_type(c), c->id, sid);
         kind = RED "dup" NRM;
         goto done;
     }
 
     // data is out of order
-    warn(DBG,
-         "reordered data: %" PRIu64 " byte%s data (off %" PRIu64 "-%" PRIu64
-         "), expected %" PRIu64 " on %s conn " FMT_CID " str " FMT_SID,
-         l, plural(l), meta(v).stream_off, meta(v).stream_off + l, s->in_off,
-         conn_type(c), c->id, sid);
     kind = YEL "ooo" NRM;
     splay_insert(pm_off_splay, &s->in_ooo, &meta(v));
     track_bytes = true;
@@ -172,11 +150,11 @@ done:
                  " len=%" PRIu64 " [%s]",
          type, is_set(F_STREAM_FIN, type) ? "FIN" : "",
          is_set(F_STREAM_FIN, type) &&
-                 (is_set(F_STREAM_LEN, type) | is_set(F_STREAM_OFF, type))
+                 (is_set(F_STREAM_LEN, type) || is_set(F_STREAM_OFF, type))
              ? "|"
              : "",
          is_set(F_STREAM_LEN, type) ? "LEN" : "",
-         is_set(F_STREAM_OFF, type) ? "|" : "",
+         is_set(F_STREAM_LEN, type) && is_set(F_STREAM_OFF, type) ? "|" : "",
          is_set(F_STREAM_OFF, type) ? "OFF" : "", sid, max_strm_id(s),
          s->c->in_data, s->c->tp_local.max_data, meta(v).stream_off,
          s->in_data_max, l, kind);
@@ -335,9 +313,6 @@ dec_max_stream_data_frame(struct q_conn * const c,
     i = dec(&s->out_data_max, v->buf, v->len, i, 0, "%" PRIu64);
     s->blocked = false;
 
-    // TODO: we should only do this if TX is pending on this stream
-    s->c->needs_tx = true;
-
     warn(INF, FRAM_IN "MAX_STREAM_DATA" NRM " id=" FMT_SID " max=%" PRIu64, sid,
          s->out_data_max);
 
@@ -381,8 +356,6 @@ dec_max_data_frame(struct q_conn * const c,
         dec(&c->tp_peer.max_data, v->buf, v->len, pos + 1, 0, "%" PRIu64);
 
     c->blocked = false;
-    // TODO: we should only do this if TX is pending on any stream
-    c->needs_tx = true;
 
     warn(INF, FRAM_IN "MAX_DATA" NRM " max=%" PRIu64, c->tp_peer.max_data);
 
@@ -488,8 +461,6 @@ dec_ping_frame(struct q_conn * const c,
         err_close(c, ERR_FRAME_ERR(FRAM_TYPE_PING),
                   "TODO: ping frame with data not supported");
 
-    c->needs_tx = true;
-
     return i;
 }
 
@@ -551,7 +522,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
     while (i < v->len) {
         const uint8_t type = ((const uint8_t * const)(v->buf))[i];
         if (pad_start && (type != FRAM_TYPE_PAD || i == v->len - 1)) {
-            warn(DBG, FRAM_IN "PADDING" NRM " len=%u", i - pad_start);
+            warn(INF, FRAM_IN "PADDING" NRM " len=%u", i - pad_start);
             pad_start = 0;
         }
 
@@ -663,7 +634,7 @@ uint16_t enc_padding_frame(struct w_iov * const v,
 {
     if (unlikely(len == 0))
         return pos;
-    warn(DBG, FRAM_OUT "PADDING" NRM " len=%u", len);
+    warn(INF, FRAM_OUT "PADDING" NRM " len=%u", len);
     memset(&v->buf[pos], FRAM_TYPE_PAD, len);
     bit_set(meta(v).frames, FRAM_TYPE_PAD);
     return pos + len;
@@ -874,7 +845,6 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
     if ((s->state == STRM_STAT_HCLO || s->state == STRM_STAT_CLSD) &&
         v == sq_last(&s->out, w_iov, next)) {
         type |= F_STREAM_FIN;
-        s->fin_sent = 1;
         maybe_api_return(q_close_stream, s);
     }
     bit_set(meta(v).frames, type);
@@ -896,11 +866,11 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
                   " len=%" PRIu64,
          type, is_set(F_STREAM_FIN, type) ? "FIN" : "",
          is_set(F_STREAM_FIN, type) &&
-                 (is_set(F_STREAM_LEN, type) | is_set(F_STREAM_OFF, type))
+                 (is_set(F_STREAM_LEN, type) || is_set(F_STREAM_OFF, type))
              ? "|"
              : "",
          is_set(F_STREAM_LEN, type) ? "LEN" : "",
-         is_set(F_STREAM_OFF, type) ? "|" : "",
+         is_set(F_STREAM_LEN, type) && is_set(F_STREAM_OFF, type) ? "|" : "",
          is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id, max_strm_id(s),
          s->c->out_data, s->c->tp_peer.max_data, s->out_off, s->out_data_max,
          dlen);
@@ -944,7 +914,10 @@ uint16_t enc_close_frame(struct w_iov * const v,
              err_code, rlen, rlen, reas);
 
     } else
-        warn(INF, FRAM_OUT "CLOSE" NRM " err=" RED "0x%04x" NRM, err_code);
+        warn(INF, FRAM_OUT "%s" NRM " err=" RED "0x%04x" NRM,
+             type == FRAM_TYPE_CONN_CLSE ? "CONNECTION_CLOSE"
+                                         : "APPLICATION_CLOSE",
+             err_code);
 
     return i + (uint16_t)rlen;
 }

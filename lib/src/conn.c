@@ -167,7 +167,7 @@ static void log_sent_pkts(struct q_conn * const c)
 
 
 static void __attribute__((nonnull))
-rtx(struct q_stream * const s, struct w_iov * const v)
+rtx_pkt(struct q_stream * const s, struct w_iov * const v)
 {
     ensure(meta(v).is_rtxed == false, "cannot RTX an RTX");
     // on RTX, remember orig pkt meta data
@@ -184,7 +184,7 @@ rtx(struct q_stream * const s, struct w_iov * const v)
 
 
 static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
-                                                      const bool is_rtx,
+                                                      const bool rtx,
                                                       const uint32_t limit,
                                                       struct w_iov * const from)
 {
@@ -192,27 +192,24 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
     uint32_t encoded = 0;
     struct w_iov * v = from;
     sq_foreach (v, &s->out, next) {
-        if (v->len > Q_OFFSET && (s->blocked || s->c->blocked))
-            break;
-
         if (meta(v).is_acked) {
             warn(DBG,
                  "skipping ACKed pkt " FMT_PNR_OUT " on str " FMT_SID
                  " during %s",
-                 meta(v).nr, s->id, is_rtx ? "RTX" : "TX");
+                 meta(v).nr, s->id, rtx ? "RTX" : "TX");
             continue;
         }
 
-        if (is_rtx != (meta(v).tx_len > 0)) {
+        if (s->c->state >= CONN_STAT_ESTB && !rtx && meta(v).tx_len != 0) {
             warn(DBG,
                  "skipping %s pkt " FMT_PNR_OUT " on str " FMT_SID " during %s",
                  meta(v).tx_len ? "already-tx'ed" : "fresh", meta(v).nr, s->id,
-                 is_rtx ? "RTX" : "TX");
+                 rtx ? "RTX" : "TX");
             continue;
         }
 
-        if (is_rtx)
-            rtx(s, v);
+        if (rtx)
+            rtx_pkt(s, v);
 
         if (s->c->state >= CONN_STAT_ESTB) {
             // if we have less than two full packet's worth of window, block
@@ -222,7 +219,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
                 s->c->blocked = true;
         }
 
-        if (enc_pkt(s, is_rtx, v, &x) == false)
+        if (enc_pkt(s, rtx, v, &x) == false)
             continue;
 
         on_pkt_sent(s->c, v);
@@ -288,65 +285,78 @@ tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
 }
 
 
+static void __attribute__((nonnull)) do_conn_fc(struct q_conn * const c)
+{
+    if (c->state < CONN_STAT_ESTB)
+        return;
+
+    // check if we need to do connection-level flow control
+    if (c->in_data + 2 * MAX_PKT_LEN > c->tp_local.max_data) {
+        c->tx_max_data = true;
+        c->tp_local.max_data += 0x1000;
+    }
+
+    if (splay_max(stream, &c->streams)->id + 4 > c->tp_local.max_strm_bidi) {
+        c->tx_max_stream_id = true;
+        c->tp_local.max_strm_bidi += 4;
+    }
+}
+
+
+static void __attribute__((nonnull)) do_stream_fc(struct q_stream * const s)
+{
+    if (s->c->state < CONN_STAT_ESTB)
+        return;
+
+    if (s->in_data + 2 * MAX_PKT_LEN > s->in_data_max) {
+        s->tx_max_stream_data = true;
+        s->in_data_max += 0x1000;
+    }
+}
+
+
+#define stream_needs_ctrl(s)                                                   \
+    ((s)->tx_max_stream_data || (s)->c->tx_max_data ||                         \
+     (((s)->state == STRM_STAT_HCLO || (s)->state == STRM_STAT_CLSD) &&        \
+      (s)->fin_acked == false))
+
+
 void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
 {
-    if (c->state >= CONN_STAT_ESTB) {
-        // check if we need to do connection-level flow control
-        if (c->in_data + 2 * MAX_PKT_LEN > c->tp_local.max_data) {
-            c->tx_max_data = true;
-            c->tp_local.max_data += 0x1000;
-        }
+    if (rtx == false && c->blocked)
+        return;
 
-        if (splay_max(stream, &c->streams)->id + 4 >
-            c->tp_local.max_strm_bidi) {
-            c->tx_max_stream_id = true;
-            c->tp_local.max_strm_bidi += 4;
-        }
-    }
+    do_conn_fc(c);
 
     bool did_tx = false;
     struct q_stream * s = 0;
     splay_foreach (s, stream, &c->streams) {
+        if ((is_fully_acked(s) && !stream_needs_ctrl(s)) ||
+            (rtx == false && s->blocked))
+            continue;
 
-        // warn(ERR,
-        //      "c %" PRIu64 "/%" PRIu64 " s " FMT_SID " %" PRIu64 "/%" PRIu64,
-        //      s->c->in_data, s->c->tp_local.max_data, s->id, s->in_data,
-        //      s->in_data_max);
+        do_stream_fc(s);
 
-        // check if we need to do stream-level flow control
-        if (c->state >= CONN_STAT_ESTB &&
-            s->in_data + 2 * MAX_PKT_LEN > s->in_data_max) {
-            s->tx_max_stream_data = true;
-            s->in_data_max += 0x1000;
-        }
-
-        if (!s->blocked && !s->c->blocked && !sq_empty(&s->out) &&
-            sq_len(&s->out) > s->out_ack_cnt) {
+        if (!sq_empty(&s->out)) {
             warn(DBG,
-                 "data %s on %s conn " FMT_CID " str " FMT_SID
+                 "data %sTX on %s conn " FMT_CID " str " FMT_SID
                  " w/%u pkt%s in queue",
-                 rtx ? "RTX" : "TX", conn_type(c), c->id, s->id,
-                 sq_len(&s->out), plural(sq_len(&s->out)));
+                 rtx ? "R" : "", conn_type(c), c->id, s->id, sq_len(&s->out),
+                 plural(sq_len(&s->out)));
             did_tx |= tx_stream(s, rtx, limit, 0);
         }
-        if (did_tx == false &&
-            (s->tx_max_stream_data == true || s->c->tx_max_data == true ||
-             ((s->state == STRM_STAT_HCLO || s->state == STRM_STAT_CLSD) &&
-              s->fin_sent == false))) {
+
+        if (did_tx == false)
             did_tx |= tx_other(s, rtx, limit);
-        }
-        if (s->c->state <= CONN_STAT_HSHK_DONE && s->c->try_0rtt == false) {
+
+        if (s->c->state <= CONN_STAT_HSHK_DONE && s->c->try_0rtt == false)
             // only send stream-0 during handshake, unless we're doing 0-RTT
             break;
-        }
     }
 
-    if (did_tx == false && c->state != CONN_STAT_VERS_NEG_SENT) {
-        // need to ACK or handshake
-        s = get_stream(c, 0);
-        ensure(s, "no stream 0");
-        tx_other(s, rtx, limit);
-    }
+    if (did_tx == false && c->state != CONN_STAT_VERS_NEG_SENT)
+        // need to ACK or handshake, use stream zero
+        tx_other(get_stream(c, 0), rtx, limit);
 
     c->needs_tx = false;
 }
@@ -438,11 +448,10 @@ reset_conn(struct q_conn * const c, const bool also_stream0_in)
         }
     }
 
-    log_sent_pkts(c);
     struct q_stream * s = 0;
     splay_foreach (s, stream, &c->streams) {
         // reset stream offsets
-        s->out_off = s->in_off = 0;
+        s->out_ack_cnt = s->out_off = s->in_off = 0;
 
         if (s->id) {
             // forget we transmitted any packets
@@ -625,7 +634,6 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         }
 
         // if we get here, this should be a regular server-hello
-        conn_to_state(c, CONN_STAT_SH);
         dec_frames(c, v);
         track_recv(c, meta(v).nr, flags);
         break;

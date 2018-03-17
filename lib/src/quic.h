@@ -52,6 +52,7 @@ struct pkt_meta {
     // XXX need to potentially change pm_cpy() below if fields are reordered
     splay_entry(pkt_meta) nr_node;
     splay_entry(pkt_meta) off_node;
+    struct pkt_meta * rtx;      ///< Pointer to last RTX, if one happened.
     ev_tstamp tx_t;             ///< Transmission timestamp.
     uint64_t nr;                ///< Packet number.
     struct q_stream * stream;   ///< Stream this data was written on.
@@ -115,10 +116,14 @@ extern struct pkt_meta * pm;
 
 
 #define pm_cpy(dst, src)                                                       \
-    memcpy((uint8_t *)(dst) + offsetof(struct pkt_meta, tx_t),                 \
-           (uint8_t *)(src) + offsetof(struct pkt_meta, tx_t),                 \
-           sizeof(struct pkt_meta) -                                           \
-               (sizeof(struct pkt_meta) - offsetof(struct pkt_meta, tx_t)))
+    do {                                                                       \
+        memcpy((uint8_t *)(dst) + offsetof(struct pkt_meta, tx_t),             \
+               (uint8_t *)(src) + offsetof(struct pkt_meta, tx_t),             \
+               sizeof(struct pkt_meta) - (sizeof(struct pkt_meta) -            \
+                                          offsetof(struct pkt_meta, tx_t)));   \
+        (dst)->rtx = src;                                                      \
+    } while (0)
+
 
 /// Offset of stream frame payload data in w_iov buffers.
 #define Q_OFFSET 64

@@ -60,7 +60,7 @@ struct q_stream {
 
     uint64_t id;
     uint8_t state;
-    uint8_t fin_sent : 1;
+    uint8_t fin_acked : 1;
     uint8_t tx_max_stream_data : 1; ///< We need to open the receive window.
     uint8_t blocked : 1;            ///< We are receive-window-blocked.
     uint8_t : 5;
@@ -80,6 +80,8 @@ struct q_stream {
              strm->c->id, strm->id, strm->state, (s));                         \
         strm->state = (s);                                                     \
     } while (0)
+
+#define is_fully_acked(s) ((s)->out_ack_cnt == sq_len(&(s)->out))
 
 
 extern int __attribute__((nonnull))
