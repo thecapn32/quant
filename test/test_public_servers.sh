@@ -35,6 +35,7 @@ declare -A servers=(
         [mozquic]=mozquic.ducksong.com
         [mvfst]=fb.mvfst.net
         [ngtcp2]=nghttp2.org
+        [ngx_quic]=quic.tech
         [pandora]=pandora.cm.in.tum.de
         [picoquic]=test.privateoctopus.com
         [quant]=quant.eggert.org
@@ -159,7 +160,6 @@ function analyze {
         rm -f "$log"
 }
 
-
 printf "Testing servers: "
 for s in "${!servers[@]}"; do
         test_server "$s" &
@@ -174,7 +174,8 @@ for r in "${results[@]}"; do
 done
 printf "\\n" >> "$tmp"
 
-for s in "${!servers[@]}"; do
+mapfile -d '' sorted < <(printf '%s\0' "${!servers[@]}" | sort -z)
+for s in "${sorted[@]}"; do
         printf "%-10s\\t" "$s" >> "$tmp"
         analyze "$s"
         for r in "${results[@]}"; do
