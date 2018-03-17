@@ -351,9 +351,7 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
                  rtx ? "R" : "", conn_type(c), c->id, s->id, sq_len(&s->out),
                  plural(sq_len(&s->out)));
             did_tx |= tx_stream(s, rtx, limit, 0);
-        }
-
-        if (did_tx == false)
+        } else
             did_tx |= tx_other(s, rtx, limit);
 
         if (s->c->state <= CONN_STAT_HSHK_DONE && s->c->try_0rtt == false)
