@@ -726,9 +726,14 @@ void init_tls(struct q_conn * const c)
     }
 
     // try to find an existing session ticket
-    const struct tls_ticket which = {.sni = c->peer_name,
-                                     .alpn = (char *)alpn[0].base};
-    struct tls_ticket * const t = splay_find(ticket_splay, &tickets, &which);
+    struct tls_ticket which = {.sni = c->peer_name,
+                               .alpn = (char *)alpn[0].base};
+    struct tls_ticket * t = splay_find(ticket_splay, &tickets, &which);
+    if (t == 0) {
+        // if we couldn't find a ticket, try without an alpn
+        which.alpn = "";
+        t = splay_find(ticket_splay, &tickets, &which);
+    }
     if (t) {
         hshk_prop->client.session_ticket =
             ptls_iovec_init(t->ticket, t->ticket_len);
