@@ -200,6 +200,13 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             continue;
         }
 
+        if (s->c->state >= CONN_STAT_HSHK_DONE &&
+            s->out_off + v->len > s->out_data_max) {
+            warn(INF, "out of FC window for str " FMT_SID, meta(v).nr, s->id);
+            s->blocked = true;
+            break;
+        }
+
         if (s->c->state >= CONN_STAT_HSHK_DONE && !rtx && meta(v).tx_len != 0) {
             warn(DBG,
                  "skipping %s pkt " FMT_PNR_OUT " on str " FMT_SID " during %s",
