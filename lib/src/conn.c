@@ -207,7 +207,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             break;
         }
 
-        if (s->c->state >= CONN_STAT_HSHK_DONE && !rtx && meta(v).tx_len != 0) {
+        if (!rtx && meta(v).tx_len != 0) {
             warn(DBG,
                  "skipping %s pkt " FMT_PNR_OUT " on str " FMT_SID " during %s",
                  meta(v).tx_len ? "already-tx'ed" : "fresh", meta(v).nr, s->id,
