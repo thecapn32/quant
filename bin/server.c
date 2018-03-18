@@ -79,6 +79,26 @@ struct cb_data {
 };
 
 
+static int send_err(const struct cb_data * const d, const uint16_t code)
+{
+    const char * msg;
+    switch (code) {
+    case 403:
+        msg = "403 Forbidden";
+        break;
+    case 404:
+        msg = "404 Not Found";
+        break;
+    default:
+        msg = "500 Internal Server Error";
+    }
+
+    q_write_str(d->w, d->c, d->s, msg);
+    q_close_stream(d->s);
+    return 0;
+}
+
+
 static int serve_cb(http_parser * parser, const char * at, size_t len)
 {
     (void)parser;
@@ -89,19 +109,26 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
     char path[MAXPATHLEN] = ".";
     strncpy(&path[*at == '/' ? 1 : 0], at, MIN(len, sizeof(path) - 1));
 
+    // hacky way to prevent directory traversals
+    if (strstr(path, ".."))
+        return send_err(d, 403);
+
     struct stat info;
-    int r = fstatat(d->dir, path, &info, 0);
-    ensure(r != -1, "could not stat");
+    if (fstatat(d->dir, path, &info, 0) == -1)
+        return send_err(d, 404);
 
     // if this a directory, look up its index
     if (info.st_mode & S_IFDIR) {
         strncat(path, "/index.html", sizeof(path) - len - 1);
-        r = fstatat(d->dir, path, &info, 0);
-        ensure(r != -1, "could not stat %s", path);
+        if (fstatat(d->dir, path, &info, 0) == -1)
+            return send_err(d, 404);
     }
-    ensure(info.st_mode & S_IFREG || info.st_mode & S_IFLNK, "%s is not a file",
-           path);
-    ensure(info.st_size < UINT32_MAX, "file %s too long", path);
+
+    if ((info.st_mode & S_IFREG) == 0 || (info.st_mode & S_IFLNK) == 0)
+        return send_err(d, 403);
+
+    if (info.st_size >= UINT32_MAX)
+        return send_err(d, 500);
 
     const int f = openat(d->dir, path, O_RDONLY | O_CLOEXEC);
     ensure(f != -1, "could not open %s", path);
