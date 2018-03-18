@@ -148,7 +148,7 @@ get(struct w_engine * const w,
         // no, open a new connection
         struct q_conn * const c =
             q_connect(w, (struct sockaddr_in *)(void *)peer->ai_addr, dest, req,
-                      &se->s, timeout);
+                      &se->s, true, timeout);
         if (c == 0) {
             freeaddrinfo(peer);
             return 0;

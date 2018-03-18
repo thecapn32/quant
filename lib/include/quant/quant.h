@@ -53,6 +53,7 @@ q_connect(struct w_engine * const w,
           const char * const peer_name,
           struct w_iov_sq * const early_data,
           struct q_stream ** const early_data_stream,
+          const bool fin,
           const uint64_t idle_timeout);
 
 extern void __attribute__((nonnull)) q_close(struct q_conn * const c);

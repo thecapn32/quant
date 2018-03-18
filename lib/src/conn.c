@@ -773,8 +773,15 @@ void rx(struct ev_loop * const l,
                              "got 0-RTT pkt for orig cid " FMT_CID
                              ", new is " FMT_CID ", accepting",
                              cid, c->id);
-                    else if (pkt_type(flags) == F_LH_INIT &&
-                             v->len >= MIN_INI_LEN) {
+                    else if (c && pkt_type(flags) == F_LH_INIT) {
+                        warn(INF,
+                             "got duplicate CI for orig cid " FMT_CID
+                             ", new is " FMT_CID ", ignoring",
+                             cid, c->id);
+                        q_free_iov(c, v);
+                        continue;
+                    } else if (pkt_type(flags) == F_LH_INIT &&
+                               v->len >= MIN_INI_LEN) {
                         warn(NTE,
                              "new serv conn on port %u w/cid " FMT_CID
                              " from %s:%u",
@@ -881,6 +888,7 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
     maybe_api_return(q_read, c);
     maybe_api_return(q_readall_str, c);
     maybe_api_return(q_accept, accept_queue);
+    maybe_api_return(q_write, api_arg);
 }
 
 

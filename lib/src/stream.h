@@ -77,8 +77,8 @@ struct q_stream {
 #define strm_to_state(strm, s)                                                 \
     do {                                                                       \
         warn(DBG, "conn " FMT_CID " strm " FMT_SID " state %u -> %u",          \
-             strm->c->id, strm->id, strm->state, (s));                         \
-        strm->state = (s);                                                     \
+             (strm)->c->id, (strm)->id, (strm)->state, (s));                   \
+        (strm)->state = (s);                                                   \
     } while (0)
 
 #define is_fully_acked(s) ((s)->out_ack_cnt == sq_len(&(s)->out))

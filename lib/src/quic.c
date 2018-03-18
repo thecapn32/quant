@@ -143,6 +143,7 @@ struct q_conn * q_connect(struct w_engine * const w,
                           const char * const peer_name,
                           struct w_iov_sq * const early_data,
                           struct q_stream ** const early_data_stream,
+                          const bool fin,
                           const uint64_t idle_timeout)
 {
     // make new connection
@@ -175,6 +176,11 @@ struct q_conn * q_connect(struct w_engine * const w,
         // queue up early data
         *early_data_stream = new_stream(c, c->next_sid, true);
         sq_concat(&(*early_data_stream)->out, early_data);
+        if (fin)
+            strm_to_state(*early_data_stream,
+                          (*early_data_stream)->state == STRM_STAT_HCRM
+                              ? STRM_STAT_CLSD
+                              : STRM_STAT_HCLO);
     }
 
     ev_async_send(loop, &c->tx_w);
