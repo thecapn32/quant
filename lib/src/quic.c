@@ -79,6 +79,8 @@ struct q_conn * accept_queue = 0;
 
 static const uint32_t nbufs = 1000; ///< Number of packet buffers to allocate.
 
+static ev_timer accept_alarm;
+
 
 /// Run the event loop with the API function @p func and argument @p arg.
 ///
@@ -345,6 +347,8 @@ cancel_accept(struct ev_loop * const l __attribute__((unused)),
               ev_timer * const w __attribute__((unused)),
               int e __attribute__((unused)))
 {
+    ev_timer_stop(loop, &accept_alarm);
+    accept_queue = 0;
     maybe_api_return(q_accept, accept_queue);
 }
 
@@ -362,7 +366,6 @@ struct q_conn * q_accept(struct w_engine * const w __attribute__((unused)),
     }
 
     if (timeout) {
-        ev_timer accept_alarm;
         ev_timer_init(&accept_alarm, cancel_accept, timeout, 0);
         ev_timer_start(loop, &accept_alarm);
     }
