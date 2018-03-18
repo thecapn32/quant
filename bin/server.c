@@ -94,7 +94,6 @@ static int send_err(const struct cb_data * const d, const uint16_t code)
     }
 
     q_write_str(d->w, d->c, d->s, msg, true);
-    q_close_stream(d->s);
     return 0;
 }
 
@@ -112,6 +111,24 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
     // hacky way to prevent directory traversals
     if (strstr(path, ".."))
         return send_err(d, 403);
+
+    // check if this is a "GET /n" request for random data
+    if (strstr(path, "./") == path) {
+        uint32_t n = (uint32_t)MIN(UINT32_MAX, strtoul(&path[2], 0, 10));
+        if (n == 0)
+            return send_err(d, 403);
+        struct w_iov_sq out = sq_head_initializer(out);
+        q_alloc(d->w, &out, n);
+        // randomize data
+        struct w_iov * v;
+        char c = 'A';
+        sq_foreach (v, &out, next) {
+            memset(v->buf, c, v->len);
+            c = (c == 'Z' ? 'A' : c + 1);
+        }
+        q_write(d->s, &out, true);
+        return 0;
+    }
 
     struct stat info;
     if (fstatat(d->dir, path, &info, 0) == -1)
@@ -134,7 +151,6 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
     ensure(f != -1, "could not open %s", path);
 
     q_write_file(d->w, d->c, d->s, f, (uint32_t)info.st_size, true);
-    q_close_stream(d->s);
 
     return 0;
 }
@@ -176,7 +192,7 @@ int main(int argc, char * argv[])
             break;
         case 'p':
             port[num_ports++] =
-                (uint16_t)MIN(UINT16_MAX, strtol(optarg, 0, 10));
+                (uint16_t)MIN(UINT16_MAX, strtoul(optarg, 0, 10));
             ensure(num_ports < MAXPORTS, "can only listen on at most %u ports",
                    MAXPORTS);
             break;
