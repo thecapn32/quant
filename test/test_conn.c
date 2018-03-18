@@ -28,6 +28,7 @@
 #include <arpa/inet.h>
 #include <inttypes.h>
 #include <netinet/in.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -108,7 +109,7 @@ int main(int argc
     // send the data
     warn(INF, "writing %u byte%s: %s", ov->len, plural(ov->len),
          (char *)ov->buf);
-    q_write(s, &o);
+    q_write(s, &o, true);
 
     // read the data
     struct w_iov_sq i = sq_head_initializer(i);

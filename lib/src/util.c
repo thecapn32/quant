@@ -59,7 +59,8 @@ void q_chunk_str(struct w_engine * const w,
 void q_write_str(struct w_engine * const w,
                  struct q_conn * const c,
                  struct q_stream * const s,
-                 const char * const str)
+                 const char * const str,
+                 const bool fin)
 {
     // allocate tail queue
     struct w_iov_sq o = sq_head_initializer(o);
@@ -74,7 +75,7 @@ void q_write_str(struct w_engine * const w,
     }
 
     // write it and free tail queue
-    q_write(s, &o);
+    q_write(s, &o, fin);
     q_free(c, &o);
 }
 
@@ -83,7 +84,8 @@ void q_write_file(struct w_engine * const w,
                   struct q_conn * const c,
                   struct q_stream * const s,
                   const int f,
-                  const uint32_t len)
+                  const uint32_t len,
+                  const bool fin)
 {
     // allocate tail queue
     struct w_iov_sq o = sq_head_initializer(o);
@@ -101,7 +103,7 @@ void q_write_file(struct w_engine * const w,
     ensure(len == l, "could not read file");
 
     // write it and free tail queue and iov
-    q_write(s, &o);
+    q_write(s, &o, fin);
     q_free(c, &o);
     free(iov);
 }

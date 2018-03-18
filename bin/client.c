@@ -29,6 +29,7 @@
 #include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -162,7 +163,7 @@ get(struct w_engine * const w,
         splay_insert(conn_cache, cc, cce);
     } else {
         se->s = q_rsv_stream(cce->c);
-        q_write(se->s, req);
+        q_write(se->s, req, true);
     }
     se->c = cce->c;
 

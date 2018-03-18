@@ -93,7 +93,7 @@ static int send_err(const struct cb_data * const d, const uint16_t code)
         msg = "500 Internal Server Error";
     }
 
-    q_write_str(d->w, d->c, d->s, msg);
+    q_write_str(d->w, d->c, d->s, msg, true);
     q_close_stream(d->s);
     return 0;
 }
@@ -133,7 +133,7 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
     const int f = openat(d->dir, path, O_RDONLY | O_CLOEXEC);
     ensure(f != -1, "could not open %s", path);
 
-    q_write_file(d->w, d->c, d->s, f, (uint32_t)info.st_size);
+    q_write_file(d->w, d->c, d->s, f, (uint32_t)info.st_size, true);
     q_close_stream(d->s);
 
     return 0;

@@ -864,6 +864,9 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
         } else if (ret == PTLS_ERROR_STATELESS_RETRY) {
             conn_to_state(s->c, CONN_STAT_SEND_RTRY);
             break;
+        } else if (ret == PTLS_ERROR_IN_PROGRESS &&
+                   s->c->state == CONN_STAT_CH_SENT) {
+            conn_to_state(s->c, CONN_STAT_SH);
         } else if (ret != 0 && ret != PTLS_ERROR_IN_PROGRESS) {
             err_close(s->c, ERR_TLS_HSHAKE_FAIL, "picotls error %u", ret);
             break;
@@ -963,6 +966,7 @@ void init_tls_ctx(const char * const cert,
         EVP_PKEY_free(pkey);
     }
 
+    // TODO: replace with ptls_load_certificates()
     if (cert) {
         fp = fopen(cert, "rbe");
         ensure(fp, "could not open cert %s", cert);

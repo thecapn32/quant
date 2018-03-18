@@ -214,14 +214,17 @@ struct q_conn * q_connect(struct w_engine * const w,
 }
 
 
-void q_write(struct q_stream * const s, struct w_iov_sq * const q)
+void q_write(struct q_stream * const s,
+             struct w_iov_sq * const q,
+             const bool fin)
 {
     const uint32_t qlen = w_iov_sq_len(q);
     const uint64_t qcnt = w_iov_sq_cnt(q);
     warn(WRN,
-         "writing %u byte%s in %u buf%s on %s conn " FMT_CID " str " FMT_SID,
+         "writing %u byte%s in %u buf%s on %s conn " FMT_CID " str " FMT_SID
+         " %s",
          qlen, plural(qlen), qcnt, plural(qcnt), conn_type(s->c), s->c->id,
-         s->id);
+         s->id, fin ? "and closing" : "");
 
     if (s->state >= STRM_STAT_HCLO) {
         warn(ERR, "%s conn " FMT_CID " str " FMT_SID " is in state %u",
@@ -232,6 +235,10 @@ void q_write(struct q_stream * const s, struct w_iov_sq * const q)
     // add to stream
     sq_concat(&s->out, q);
     s->out_ack_cnt = 0;
+
+    if (fin)
+        strm_to_state(s, s->state == STRM_STAT_HCRM ? STRM_STAT_CLSD
+                                                    : STRM_STAT_HCLO);
 
     // remember the last iov in the queue
     struct w_iov * const prev_last = sq_last(&s->out, w_iov, next);
@@ -251,8 +258,9 @@ void q_write(struct q_stream * const s, struct w_iov_sq * const q)
         sq_concat(q, &s->out);
     s->out_ack_cnt = 0;
 
-    warn(WRN, "wrote %u byte%s on %s conn " FMT_CID " str " FMT_SID, qlen,
-         plural(qlen), conn_type(s->c), s->c->id, s->id);
+    warn(WRN, "wrote %u byte%s on %s conn " FMT_CID " str " FMT_SID " %s", qlen,
+         plural(qlen), conn_type(s->c), s->c->id, s->id,
+         fin ? "and closed" : "");
 
     ensure(w_iov_sq_len(q) == qlen, "payload corrupted, %u != %u",
            w_iov_sq_len(q), qlen);
