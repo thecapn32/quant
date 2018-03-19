@@ -368,6 +368,8 @@ struct q_conn * q_accept(struct w_engine * const w __attribute__((unused)),
     }
 
     if (timeout) {
+        if (ev_is_active(&accept_alarm))
+            ev_timer_stop(loop, &accept_alarm);
         ev_timer_init(&accept_alarm, cancel_accept, timeout, 0);
         ev_timer_start(loop, &accept_alarm);
     }
