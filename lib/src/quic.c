@@ -192,23 +192,25 @@ struct q_conn * q_connect(struct w_engine * const w,
     loop_run(q_connect, c);
 
     if (c->state != CONN_STAT_HSHK_DONE) {
-        warn(WRN, "%s conn " FMT_CID " not connected, state 0x%02x",
-             conn_type(c), c->id, c->state);
+        warn(WRN, "%s conn " FMT_CID " not connected", conn_type(c), c->id);
         return 0;
     }
 
-    if (early_data && *early_data_stream && s->c->try_0rtt) {
+    if (early_data && *early_data_stream) {
         if (c->did_0rtt == false) {
-            // 0-RTT data was not accepted by server, queue for regular
-            // transmit
-            warn(WRN, "0-RTT data rejected by server, re-queueing");
+            warn(WRN, "0-RTT data on str " FMT_SID " not sent, re-queueing",
+                 (*early_data_stream)->id);
             (*early_data_stream)->out_off = 0;
             struct w_iov * v = 0;
             sq_foreach (v, &(*early_data_stream)->out, next) {
                 meta(v).tx_len = meta(v).is_acked = 0;
-                splay_remove(pm_nr_splay, &meta(v).stream->c->rec.sent_pkts,
-                             &meta(v));
+                if (meta(v).stream)
+                    splay_remove(pm_nr_splay, &meta(v).stream->c->rec.sent_pkts,
+                                 &meta(v));
             }
+            // kick TX watcher
+            ev_async_send(loop, &s->c->tx_w);
+
         } else
             // hand early data back to app after 0-RTT
             sq_concat(early_data, &(*early_data_stream)->out);
