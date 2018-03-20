@@ -881,13 +881,8 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
          c->id);
 
     conn_to_state(c, CONN_STAT_CLSD);
-    maybe_api_return(q_connect, c);
-    maybe_api_return(q_close, c);
-    maybe_api_return(q_close_stream, api_arg);
-    maybe_api_return(q_read, c);
-    maybe_api_return(q_readall_str, c);
-    maybe_api_return(q_accept, accept_queue);
-    maybe_api_return(q_write, api_arg);
+    // terminate whatever API call is currently active
+    api_return();
 }
 
 

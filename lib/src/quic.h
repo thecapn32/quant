@@ -237,16 +237,23 @@ extern void * api_arg;
 ///
 #define maybe_api_return(func, arg)                                            \
     __extension__({                                                            \
-        ensure(api_func, "no API call active");                                \
-        bool _ret = false;                                                     \
         if (api_func == (func_ptr)(&(func)) && api_arg == (arg)) {             \
             ev_break(loop, EVBREAK_ALL);                                       \
             warn(DBG, #func "(" #arg ") done, exiting event loop");            \
-            _ret = true;                                                       \
-        } else                                                                 \
-            warn(DBG, #func "(" #arg ") not active");                          \
-        _ret;                                                                  \
+            api_func = api_arg = 0;                                            \
+        }                                                                      \
+        api_func == 0;                                                         \
     })
+
+
+/// Unconditionally terminate the active API call.
+///
+#define api_return()                                                           \
+    do {                                                                       \
+        ev_break(loop, EVBREAK_ALL);                                           \
+        api_func = 0;                                                          \
+        api_arg = 0;                                                           \
+    } while (0)
 
 
 #define q_free_iov(c, v)                                                       \
