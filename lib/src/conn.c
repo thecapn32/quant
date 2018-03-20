@@ -910,7 +910,7 @@ void ack_alarm(struct ev_loop * const l __attribute__((unused)),
                int e __attribute__((unused)))
 {
     struct q_conn * const c = w->data;
-    warn(INF, "ACK timeout on %s conn " FMT_CID, conn_type(c), c->id);
+    warn(DBG, "ACK timeout on %s conn " FMT_CID, conn_type(c), c->id);
     c->needs_tx = true;
     tx(w->data, false, 0);
     ev_timer_stop(loop, &c->ack_alarm);

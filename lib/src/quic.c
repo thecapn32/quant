@@ -198,7 +198,7 @@ struct q_conn * q_connect(struct w_engine * const w,
 
     if (early_data && *early_data_stream) {
         if (c->did_0rtt == false) {
-            warn(WRN, "0-RTT data on str " FMT_SID " not sent, re-queueing",
+            warn(NTE, "0-RTT data on str " FMT_SID " not sent, re-queueing",
                  (*early_data_stream)->id);
             (*early_data_stream)->out_off = 0;
             struct w_iov * v = 0;
