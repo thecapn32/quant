@@ -349,11 +349,10 @@ cancel_accept(struct ev_loop * const l __attribute__((unused)),
               ev_timer * const w __attribute__((unused)),
               int e __attribute__((unused)))
 {
-    warn(INF, "canceling q_accept()");
+    warn(DBG, "canceling q_accept()");
     ev_timer_stop(loop, &accept_alarm);
     accept_queue = 0;
     maybe_api_return(q_accept, accept_queue);
-    warn(INF, "canceling q_accept()");
 }
 
 
