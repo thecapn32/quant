@@ -112,8 +112,7 @@ dec_stream_frame(struct q_conn * const c,
         for (p = splay_min(pm_off_splay, &s->in_ooo);
              p && p->stream_off == s->in_off; p = nxt) {
             nxt = splay_next(pm_off_splay, &s->in_ooo, p);
-            l = p->stream_data_end;
-            s->in_off += l;
+            s->in_off += p->stream_data_end;
             meta(v).stream = s;
             sq_insert_tail(&s->in, w_iov(w_engine(c->sock), pm_idx(p)), next);
             splay_remove(pm_off_splay, &s->in_ooo, p);
