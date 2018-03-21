@@ -324,7 +324,7 @@ void q_readall_str(struct q_stream * const s, struct w_iov_sq * const q)
 
     while (s->c->state <= CONN_STAT_ESTB && s->state != STRM_STAT_HCRM &&
            s->state != STRM_STAT_CLSD)
-        loop_run(q_readall_str, s->c);
+        loop_run(q_readall_str, s);
 
     // return data
     sq_concat(q, &s->in);
