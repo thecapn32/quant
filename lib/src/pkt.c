@@ -26,7 +26,9 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <inttypes.h>
+#include <netinet/in.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <quant/quant.h> // IWYU pragma: keep
@@ -44,10 +46,6 @@
 
 
 #ifndef NDEBUG
-#define FMT_PNR32_OUT BLU "%u" NRM
-#define FMT_PNR32_IN GRN "%u" NRM
-
-
 static const char * pkt_type_str(const struct w_iov * const v)
 {
     const uint8_t flags = pkt_flags(v->buf);
@@ -77,7 +75,10 @@ static const char * pkt_type_str(const struct w_iov * const v)
 }
 
 
-void log_pkt(const char * const dir, const struct w_iov * const v)
+void log_pkt(const char * const dir,
+             const struct w_iov * const v,
+             const uint64_t cid,
+             const uint16_t add_len)
 {
     const uint8_t flags = pkt_flags(v->buf);
     const char * col_dir = *dir == 'R' ? BLD BLU : BLD GRN;
@@ -87,26 +88,29 @@ void log_pkt(const char * const dir, const struct w_iov * const v)
         const uint32_t vers = pkt_vers(v->buf, v->len);
         if (vers == 0)
             twarn(NTE,
-                  BLD "%s" NRM " len=%u 0x%02x=%s%s " NRM "cid=" FMT_CID
+                  BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM "cid=" FMT_CID
                       " vers=0x%08x",
-                  dir, v->len, flags, col_dir, pkt_type_str(v),
-                  pkt_cid(v->buf, v->len), vers);
+                  col_dir, dir, v->len + add_len, flags, col_dir,
+                  pkt_type_str(v), pkt_cid(v->buf, v->len + add_len), vers);
         else
             twarn(NTE,
-                  BLD "%s" NRM " len=%u 0x%02x=%s%s " NRM "cid=" FMT_CID
-                      " vers=0x%08x nr=%s%u",
-                  dir, v->len, flags, col_dir, pkt_type_str(v),
-                  pkt_cid(v->buf, v->len), vers, col_nr, meta(v).nr);
+                  BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM "cid=" FMT_CID
+                      " vers=0x%08x nr=%s%" PRIu64,
+                  col_dir, dir, v->len + add_len, flags, col_dir,
+                  pkt_type_str(v), pkt_cid(v->buf, v->len + add_len), vers,
+                  col_nr, meta(v).nr);
     } else if (is_set(F_SH_OMIT_CID, flags))
         twarn(NTE,
-              BLD "%s" NRM " len=%u 0x%02x=%s%s" NRM "|NO_CID nr=%s%" PRIu64,
-              dir, v->len, flags, col_dir, pkt_type_str(v), col_nr, meta(v).nr);
+              BLD "%s%s" NRM " len=%u 0x%02x=%s%s" NRM "|omit_cid(" FMT_CID
+                  ") nr=%s%" PRIu64,
+              col_dir, dir, v->len + add_len, flags, col_dir, pkt_type_str(v),
+              cid, col_nr, meta(v).nr);
     else
         twarn(NTE,
-              BLD "%s" NRM " len=%u 0x%02x=%s%s" NRM " cid=" FMT_CID
+              BLD "%s%s" NRM " len=%u 0x%02x=%s%s" NRM " cid=" FMT_CID
                   " nr=%s%" PRIu64,
-              dir, v->len, flags, col_dir, pkt_type_str(v),
-              pkt_cid(v->buf, v->len), col_nr, meta(v).nr);
+              col_dir, dir, v->len + add_len, flags, col_dir, pkt_type_str(v),
+              pkt_cid(v->buf, v->len + add_len), col_nr, meta(v).nr);
 }
 #endif
 
@@ -162,7 +166,7 @@ pkt_nr(const uint8_t * const buf, const uint16_t len, struct q_conn * const c)
     uint64_t nr = next;
     dec(&nr, buf, len,
         is_set(F_LONG_HDR, flags) ? 13 : is_set(F_SH_OMIT_CID, flags) ? 1 : 9,
-        nr_len, FMT_PNR32_IN);
+        nr_len, BLU "%u" NRM);
 
     const uint64_t alt = nr + (UINT64_C(1) << (nr_len * 8));
     const uint64_t d1 = next >= nr ? next - nr : nr - next;
@@ -196,7 +200,7 @@ needed_pkt_nr_len(struct q_conn * const c, const uint64_t n)
 }
 
 
-void enc_pkt(struct q_stream * const s,
+bool enc_pkt(struct q_stream * const s,
              const bool rtx,
              struct w_iov * const v,
              struct w_iov_sq * const q)
@@ -209,8 +213,8 @@ void enc_pkt(struct q_stream * const s,
     uint16_t hdr_len = 0;
     uint16_t i = 0;
 
-    if (c->state == CONN_STAT_VERS_REJ) {
-        warn(INF, "sending version negotiation server response");
+    if (c->state == CONN_STAT_VERS_NEG) {
+        warn(INF, "sending vers neg serv response");
         flags = F_LONG_HDR | (uint8_t)w_rand();
         i = enc(v->buf, v->len, 0, &flags, sizeof(flags), "0x%02x");
         i = enc(v->buf, v->len, i, &c->id, sizeof(c->id), FMT_CID);
@@ -221,23 +225,30 @@ void enc_pkt(struct q_stream * const s,
                 i = enc(v->buf, v->len, i, &ok_vers[j], sizeof(ok_vers[j]),
                         "0x%08x");
         hdr_len = v->len = i;
-        // don't remember the failed client initial
-        diet_remove(&c->recv, meta(v).nr);
-        log_pkt("TX", v);
+        log_pkt("TX", v, c->id, 0);
         goto tx;
     }
 
-    if (rtx)
-        warn(DBG, "enc RTX 0x%02x-type " FMT_PNR_OUT, flags, meta(v).nr);
-    meta(v).nr = ++c->rec.lg_sent;
+    if (c->state == CONN_STAT_SEND_RTRY) {
+        // echo pkt nr of client initial
+        meta(v).nr = diet_min(&c->recv);
+        // randomize a new CID
+        arc4random_buf(&c->id, sizeof(c->id));
+    } else
+        // next pkt nr
+        meta(v).nr = ++c->rec.lg_sent;
 
     uint8_t pkt_nr_len = 0;
     switch (c->state) {
     case CONN_STAT_IDLE:
     case CONN_STAT_RTRY:
-        flags = F_LONG_HDR | F_LH_INIT;
-        break;
     case CONN_STAT_CH_SENT:
+        flags = F_LONG_HDR | (s->id == 0 ? F_LH_INIT : F_LH_0RTT);
+        break;
+    case CONN_STAT_SEND_RTRY:
+        flags = F_LONG_HDR | F_LH_RTRY;
+        break;
+    case CONN_STAT_SH:
     case CONN_STAT_HSHK_DONE:
     case CONN_STAT_HSHK_FAIL:
         flags = F_LONG_HDR | F_LH_HSHK;
@@ -245,8 +256,11 @@ void enc_pkt(struct q_stream * const s,
     case CONN_STAT_ESTB:
     case CONN_STAT_CLNG:
     case CONN_STAT_DRNG:
-        pkt_nr_len = needed_pkt_nr_len(c, meta(v).nr);
-        flags = pkt_type[pkt_nr_len] | (c->omit_cid ? F_SH_OMIT_CID : 0);
+        if (likely(c->tls.enc_1rtt)) {
+            pkt_nr_len = needed_pkt_nr_len(c, meta(v).nr);
+            flags = pkt_type[pkt_nr_len] | (c->omit_cid ? F_SH_OMIT_CID : 0);
+        } else
+            flags = F_LONG_HDR | F_LH_HSHK;
         break;
     default:
         die("unknown conn state %u", c->state);
@@ -261,60 +275,57 @@ void enc_pkt(struct q_stream * const s,
 
     if (is_set(F_LONG_HDR, flags)) {
         i = enc(v->buf, v->len, i, &c->vers, sizeof(c->vers), "0x%08x");
-        i = enc(v->buf, v->len, i, &meta(v).nr, sizeof(uint32_t),
-                FMT_PNR32_OUT);
+        i = enc(v->buf, v->len, i, &meta(v).nr, sizeof(uint32_t), GRN "%u" NRM);
     } else
-        i = enc(v->buf, v->len, i, &meta(v).nr, pkt_nr_len, FMT_PNR32_OUT);
+        i = enc(v->buf, v->len, i, &meta(v).nr, pkt_nr_len, GRN "%u" NRM);
 
-    log_pkt("TX", v);
-
+    log_pkt("TX", v, c->id, AEAD_LEN);
     hdr_len = i;
 
-    if (!splay_empty(&c->recv) &&
-        (!is_set(F_LONG_HDR, flags) ||
-         (c->state != CONN_STAT_VERS_REJ && !is_set(F_LH_RTRY, flags)))) {
-        meta(v).ack_header_pos = i;
+    if (!splay_empty(&c->recv) && c->state >= CONN_STAT_SH) {
         i = enc_ack_frame(c, v, i);
     } else
         meta(v).ack_header_pos = 0;
 
-
-    // XXX rethink this - there needs to be a list of which streams are blocked
-    // or need their window opened
-    struct q_stream * t = 0;
-    splay_foreach (t, stream, &c->streams) {
-        if (t->blocked)
-            i = enc_stream_blocked_frame(t, v, i);
-        if (t->open_win) {
-            t->in_data_max += 0x1000;
-            i = enc_max_stream_data_frame(t, v, i);
-            t->open_win = false;
+    if (c->state == CONN_STAT_ESTB) {
+        // XXX rethink this - there needs to be a list of which streams are
+        // blocked or need their window opened
+        struct q_stream * t = 0;
+        splay_foreach (t, stream, &c->streams) {
+            if (t->blocked)
+                i = enc_stream_blocked_frame(t, v, i);
+            if (t->tx_max_stream_data) {
+                i = enc_max_stream_data_frame(t, v, i);
+                t->tx_max_stream_data = false;
+            }
         }
-    }
 
-    if (s->c->blocked)
-        i = enc_blocked_frame(c, v, i);
+        if (c->blocked)
+            i = enc_blocked_frame(c, v, i);
 
-    if (s->c->open_win) {
-        s->c->local_max_data += 0x1000;
-        i = enc_max_data_frame(s->c, v, i);
-        s->c->open_win = false;
-    }
+        if (c->tx_max_data) {
+            i = enc_max_data_frame(c, v, i);
+            c->tx_max_data = false;
+        }
 
-    if (c->peer_max_strm_bidi && c->next_sid > c->peer_max_strm_bidi)
-        i = enc_stream_id_blocked_frame(c, v, i);
+        if (c->stream_id_blocked) {
+            i = enc_stream_id_blocked_frame(c, v, i);
+            c->stream_id_blocked = false;
+        }
 
-    if (s->c->inc_sid) {
-        s->c->local_max_strm_bidi += 4;
-        i = enc_max_stream_id_frame(s->c, v, i);
-        s->c->inc_sid = false;
+        if (c->tx_max_stream_id) {
+            i = enc_max_stream_id_frame(c, v, i);
+            c->tx_max_stream_id = false;
+        }
     }
 
     // TODO: need to RTX most recent MAX_STREAM_DATA and MAX_DATA on RTX
 
-    if (c->state == CONN_STAT_CLNG || c->state == CONN_STAT_HSHK_FAIL)
+    if (c->state == CONN_STAT_CLNG || c->state == CONN_STAT_HSHK_FAIL) {
         i = enc_close_frame(v, i, FRAM_TYPE_CONN_CLSE, c->err_code,
                             c->err_reason);
+        goto tx;
+    }
 
     if (rtx) {
         ensure(is_rtxable(&meta(v)), "is rtxable");
@@ -327,31 +338,59 @@ void enc_pkt(struct q_stream * const s,
         // duplicate the logging that enc_stream_frame() does for a fresh TX
         const uint8_t type = v->buf[meta(v).stream_header_pos];
         warn(INF,
-             FRAM_OUT "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID
-                      " off=%" PRIu64 " len=%u " REV BLD GRN "[RTX]",
+             FRAM_OUT "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID "/%" PRIu64
+                      " cdata=%" PRIu64 "/%" PRIu64 " off=%" PRIu64 "/%" PRIu64
+                      " len=%u " REV BLD GRN "[RTX]",
              type, is_set(F_STREAM_FIN, type) ? "FIN" : "",
              is_set(F_STREAM_FIN, type) &&
-                     is_set(F_STREAM_LEN | F_STREAM_OFF, type)
+                     (is_set(F_STREAM_LEN, type) | is_set(F_STREAM_OFF, type))
                  ? "|"
                  : "",
              is_set(F_STREAM_LEN, type) ? "LEN" : "",
              is_set(F_STREAM_OFF, type) ? "|" : "",
-             is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id, meta(v).stream_off,
-             stream_data_len(v));
+             is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id, max_strm_id(s),
+             s->c->out_data, s->c->tp_peer.max_data, meta(v).stream_off,
+             s->out_data_max, stream_data_len(v));
 #endif
 
     } else {
         if (v->len > Q_OFFSET || s->state == STRM_STAT_HCLO ||
             s->state == STRM_STAT_CLSD) {
-            // this is a fresh data or pure FIN packet
-            // add a stream frame header, after padding out rest of Q_OFFSET
-            enc_padding_frame(v, i, Q_OFFSET - i);
-            i = enc_stream_frame(s, v);
+
+            if (c->state == CONN_STAT_SEND_RTRY) {
+                enc_stream_frame(s, v);
+                // retry packets must not have padding (as of 09), so move the
+                // stream frame after the header (XXX ugly)
+                memmove(&v->buf[hdr_len], &v->buf[meta(v).stream_header_pos],
+                        v->len - meta(v).stream_header_pos);
+                const uint16_t offset = meta(v).stream_header_pos - hdr_len;
+                meta(v).stream_header_pos -= offset;
+                meta(v).stream_data_start -= offset;
+                meta(v).stream_data_end -= offset;
+                i = v->len -= offset;
+            } else {
+                // this is a fresh data or pure FIN packet
+                // add a stream frame header, after padding out rest of Q_OFFSET
+                enc_padding_frame(v, i, Q_OFFSET - i);
+                i = enc_stream_frame(s, v);
+            }
         }
     }
 
-    if (c->state == CONN_STAT_IDLE || c->state == CONN_STAT_RTRY)
+    if ((c->state == CONN_STAT_IDLE || c->state == CONN_STAT_RTRY ||
+         c->state == CONN_STAT_CH_SENT) &&
+        pkt_type(flags) != F_LH_0RTT) {
         i = enc_padding_frame(v, i, MIN_INI_LEN - i - AEAD_LEN);
+        conn_to_state(c, CONN_STAT_CH_SENT);
+    }
+
+    if (i == hdr_len) {
+        // we didn't add any frames to this packet, so let's not send it
+        if (c->state != CONN_STAT_SEND_RTRY)
+            c->rec.lg_sent--;
+        warn(WRN, "this pkt will not be sent");
+        return false;
+    }
 
 tx:
     v->len = i;
@@ -362,11 +401,17 @@ tx:
     x->port = v->port;
     x->flags = v->flags;
 
-    if (c->state == CONN_STAT_VERS_REJ) {
+    if (c->state == CONN_STAT_VERS_NEG) {
         memcpy(x->buf, v->buf, v->len); // copy data
         x->len = v->len;
+        conn_to_state(c, CONN_STAT_VERS_NEG_SENT);
     } else
         x->len = enc_aead(c, v, x, hdr_len);
+
+    if (!c->is_clnt) {
+        x->ip = c->peer.sin_addr.s_addr;
+        x->port = c->peer.sin_port;
+    }
 
     sq_insert_tail(q, x, next);
     meta(v).tx_len = x->len;
@@ -376,4 +421,5 @@ tx:
         v->len = meta(v).stream_data_end;
 
     adj_iov_to_data(v);
+    return true;
 }

@@ -36,12 +36,25 @@
 #include <warpcore/warpcore.h>
 
 #include "diet.h"
+#include "quic.h"
 #include "recovery.h"
 #include "tls.h"
 
 
 extern splay_head(ipnp_splay, q_conn) conns_by_ipnp;
 extern splay_head(cid_splay, q_conn) conns_by_cid;
+
+
+struct transport_params {
+    uint64_t max_strm_data;
+    uint64_t max_data;
+    uint64_t max_strm_uni;
+    uint64_t max_strm_bidi;
+    uint16_t max_pkt;
+    uint16_t idle_to;
+    uint8_t ack_del_exp;
+    uint8_t _unused[3];
+};
 
 
 /// A QUIC connection.
@@ -56,43 +69,39 @@ struct q_conn {
     uint32_t vers_initial; ///< QUIC version first negotiated.
     uint64_t next_sid;     ///< Next stream ID to use on q_rsv_stream().
 
-    uint8_t is_clnt : 1;  ///< We are the client on this connection.
-    uint8_t omit_cid : 1; ///< We can omit the CID during TX on this connection.
-    uint8_t had_rx : 1;   ///< We had an RX event on this connection.
-    uint8_t needs_tx : 1; ///< We have a pending TX on this connection.
-    uint8_t use_time_loss_det : 1; ///< UsingTimeLossDetection()
-    uint8_t open_win : 1;          ///< We need to open the receive window.
-    uint8_t blocked : 1;           ///< We are receive-window-blocked.
-    uint8_t inc_sid : 1;           ///< Make more stream IDs available to peer.
-
     uint8_t state; ///< State of the connection.
 
-    uint16_t peer_max_pkt;
-    uint16_t local_idle_to;
-    uint16_t peer_idle_to;
-    uint64_t local_max_strm_data;
-    uint64_t peer_max_strm_data;
-    uint64_t local_max_data;
-    uint64_t peer_max_data;
-    uint64_t local_max_strm_uni;
-    uint64_t peer_max_strm_uni;
-    uint64_t local_max_strm_bidi;
-    uint64_t peer_max_strm_bidi;
-    uint8_t local_ack_del_exp;
-    uint8_t peer_ack_del_exp;
+    uint16_t is_clnt : 1;  ///< We are the client on this connection.
+    uint16_t omit_cid : 1; ///< We omit the CID during TX on this connection.
+    uint16_t had_rx : 1;   ///< We had an RX event on this connection.
+    uint16_t needs_tx : 1; ///< We have a pending TX on this connection.
+    uint16_t use_time_loss_det : 1; ///< UsingTimeLossDetection()
+    uint16_t tx_max_data : 1;       ///< Sent a MAX_DATA frame.
+    uint16_t blocked : 1;           ///< We are receive-window-blocked.
+    uint16_t stream_id_blocked : 1; ///< We are out of stream IDs.
+    uint16_t tx_max_stream_id : 1;  ///< Send MAX_STREAM_ID frame.
+    uint16_t try_0rtt : 1;          ///< Try 0-RTT handshake.
+    uint16_t did_0rtt : 1;          ///< 0-RTT handshake succeeded;
+    uint16_t in_closing : 1;        ///< Is the closing/draining timer active?
+    uint16_t : 4;
 
-    uint8_t _unused[4];
+    uint8_t _unused[1];
+
+    uint16_t sport; ///< Local port (in network byte-order).
     uint16_t err_code;
-    const char * err_reason;
+    char * err_reason;
+
+    struct transport_params tp_peer;
+    struct transport_params tp_local;
 
     uint64_t in_data;
     uint64_t out_data;
 
     ev_timer idle_alarm;
     ev_timer closing_alarm;
+    ev_timer ack_alarm;
 
-    struct diet recv;    ///< Received packet numbers still needing to be ACKed.
-    ev_tstamp lg_recv_t; ///< Time when lg_recv was received
+    struct diet recv; ///< Received packet numbers still needing to be ACKed.
 
     struct sockaddr_in peer; ///< Address of our peer.
     char * peer_name;
@@ -123,13 +132,17 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 
 #define CONN_STAT_IDLE 0
 #define CONN_STAT_CH_SENT 1
-#define CONN_STAT_VERS_REJ 2
-#define CONN_STAT_RTRY 3
-#define CONN_STAT_HSHK_DONE 4
-#define CONN_STAT_HSHK_FAIL 5
-#define CONN_STAT_ESTB 6
-#define CONN_STAT_CLNG 7
-#define CONN_STAT_DRNG 8
+#define CONN_STAT_VERS_NEG 2
+#define CONN_STAT_VERS_NEG_SENT 3
+#define CONN_STAT_RTRY 4
+#define CONN_STAT_SEND_RTRY 5
+#define CONN_STAT_SH 6
+#define CONN_STAT_HSHK_DONE 7
+#define CONN_STAT_HSHK_FAIL 8
+#define CONN_STAT_ESTB 9
+#define CONN_STAT_CLNG 10
+#define CONN_STAT_DRNG 11
+#define CONN_STAT_CLSD 12
 
 
 #define conn_type(c) (c->is_clnt ? "clnt" : "serv")
@@ -142,6 +155,39 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 
 
 #define is_inf(t) (fpclassify(t) == FP_INFINITE)
+
+
+#define conn_to_state(c, s)                                                    \
+    do {                                                                       \
+        warn(DBG, "conn " FMT_CID " state %u -> %u", c->id, c->state, s);      \
+        c->state = s;                                                          \
+                                                                               \
+        switch (s) {                                                           \
+        case CONN_STAT_IDLE:                                                   \
+        case CONN_STAT_CH_SENT:                                                \
+        case CONN_STAT_SH:                                                     \
+        case CONN_STAT_VERS_NEG:                                               \
+        case CONN_STAT_VERS_NEG_SENT:                                          \
+        case CONN_STAT_RTRY:                                                   \
+        case CONN_STAT_SEND_RTRY:                                              \
+            break;                                                             \
+        case CONN_STAT_HSHK_DONE:                                              \
+            c->rec.lg_acked = c->rec.lg_sent;                                  \
+            break;                                                             \
+        case CONN_STAT_HSHK_FAIL:                                              \
+        case CONN_STAT_CLSD:                                                   \
+            break;                                                             \
+        case CONN_STAT_ESTB:                                                   \
+            c->needs_tx = true;                                                \
+            break;                                                             \
+        case CONN_STAT_CLNG:                                                   \
+        case CONN_STAT_DRNG:                                                   \
+            enter_closing(c);                                                  \
+            break;                                                             \
+        default:                                                               \
+            die("unhandled state %u", s);                                      \
+        }                                                                      \
+    } while (0)
 
 
 struct ev_loop;
@@ -159,7 +205,9 @@ extern void __attribute__((nonnull))
 rx(struct ev_loop * const l, ev_io * const rx_w, int e);
 
 extern struct q_conn * __attribute__((nonnull))
-get_conn_by_ipnp(const struct sockaddr_in * const peer, const bool is_clnt);
+get_conn_by_ipnp(const uint16_t sport,
+                 const struct sockaddr_in * const peer,
+                 const bool is_clnt);
 
 extern struct q_conn * get_conn_by_cid(const uint64_t id, const bool is_clnt);
 
@@ -173,5 +221,17 @@ extern void __attribute__((nonnull)) err_close(struct q_conn * const c,
                                                const char * const fmt,
                                                ...);
 
+extern void __attribute__((nonnull)) enter_closing(struct q_conn * const c);
+
 extern void __attribute__((nonnull))
-conn_to_state(struct q_conn * const c, const uint8_t state);
+ack_alarm(struct ev_loop * const l, ev_timer * const w, int e);
+
+extern struct q_conn * new_conn(struct w_engine * const w,
+                                const uint32_t vers,
+                                const uint64_t cid,
+                                const struct sockaddr_in * const peer,
+                                const char * const peer_name,
+                                const uint16_t port,
+                                const uint64_t idle_to);
+
+extern void __attribute__((nonnull)) free_conn(struct q_conn * const c);

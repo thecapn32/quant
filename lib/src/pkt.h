@@ -50,7 +50,7 @@
 
 #define ERR_NO_ERR 0x0
 #define ERR_INTERNAL_ERR 0x1
-// #define ERR_FLOW_CONTROL_ERR 0x3
+#define ERR_FLOW_CONTROL_ERR 0x3
 // #define ERR_STREAM_ID_ERR 0x4
 // #define ERR_STREAM_STATE_ERR 0x5
 // #define ERR_FINAL_OFFSET_ERR 0x6
@@ -85,14 +85,16 @@ pkt_vers(const uint8_t * const buf, const uint16_t len);
 extern uint16_t __attribute__((nonnull))
 pkt_hdr_len(const uint8_t * const buf, const uint16_t len);
 
-extern void __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
+extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
                                              const bool rtx,
                                              struct w_iov * const v,
                                              struct w_iov_sq * const q);
 
 #ifndef NDEBUG
-extern void __attribute__((nonnull))
-log_pkt(const char * const dir, const struct w_iov * const v);
+extern void __attribute__((nonnull)) log_pkt(const char * const dir,
+                                             const struct w_iov * const v,
+                                             const uint64_t cid,
+                                             const uint16_t add_len);
 #else
 #define log_pkt(...)                                                           \
     do {                                                                       \

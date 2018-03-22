@@ -32,6 +32,10 @@ extern uint16_t varint_sizeof(const uint64_t v);
 
 
 #ifndef NDEBUG
+#define DONT_DEBUG_MARSHALL
+#endif
+
+#ifdef DEBUG_MARSHALL
 /// If @p src_len is given, encodes the lower @p src_len bytes of host
 /// byte-order data contained in @p src into network byte-order at at position
 /// @p pos of buffer @p buf (which has total length @p buf_len), using printf
@@ -64,7 +68,7 @@ extern uint16_t marshall_enc(uint8_t * const buf,
                              const uint16_t pos,
                              const void * const src,
                              const uint16_t src_len
-#ifndef NDEBUG
+#ifdef DEBUG_MARSHALL
                              ,
                              const char * const fmt,
                              const char * const func,
@@ -76,7 +80,7 @@ extern uint16_t marshall_enc(uint8_t * const buf,
 );
 
 
-#ifndef NDEBUG
+#ifdef DEBUG_MARSHALL
 /// Decodes @p dst_len bytes (if given, otherwise varint encoding is assumed) of
 /// network byte-order data starting at position @p pos of buffer @p buf (which
 /// has total length @p buf_len) info variable @p dst in host byte-order, using
@@ -109,7 +113,7 @@ extern uint16_t marshall_dec(void * const dst,
                              const uint16_t buf_len,
                              const uint16_t pos,
                              const uint16_t dst_len
-#ifndef NDEBUG
+#ifdef DEBUG_MARSHALL
                              ,
                              const char * const fmt,
                              const char * const func,

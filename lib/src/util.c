@@ -25,6 +25,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,16 +35,37 @@
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
+struct q_conn;
 struct q_stream;
 
 
-void q_write_str(void * const q,
+void q_chunk_str(struct w_engine * const w,
+                 const char * const str,
+                 const uint32_t len,
+                 struct w_iov_sq * o)
+{
+    // allocate tail queue
+    q_alloc(w, o, len);
+
+    // chunk up string
+    const char * i = str;
+    struct w_iov * v = 0;
+    sq_foreach (v, o, next) {
+        strncpy((char *)v->buf, i, v->len);
+        i += v->len;
+    }
+}
+
+
+void q_write_str(struct w_engine * const w,
+                 struct q_conn * const c,
                  struct q_stream * const s,
-                 const char * const str)
+                 const char * const str,
+                 const bool fin)
 {
     // allocate tail queue
     struct w_iov_sq o = sq_head_initializer(o);
-    q_alloc(q, &o, (uint32_t)strlen(str));
+    q_alloc(w, &o, (uint32_t)strlen(str));
 
     // chunk up string
     const char * i = str;
@@ -54,19 +76,21 @@ void q_write_str(void * const q,
     }
 
     // write it and free tail queue
-    q_write(s, &o);
-    q_free(&o);
+    q_write(s, &o, fin);
+    q_free(c, &o);
 }
 
 
-void q_write_file(void * const q,
+void q_write_file(struct w_engine * const w,
+                  struct q_conn * const c,
                   struct q_stream * const s,
                   const int f,
-                  const uint32_t len)
+                  const uint32_t len,
+                  const bool fin)
 {
     // allocate tail queue
     struct w_iov_sq o = sq_head_initializer(o);
-    q_alloc(q, &o, len);
+    q_alloc(w, &o, len);
     const uint64_t n = w_iov_sq_cnt(&o);
     struct iovec * const iov = calloc(n, sizeof(struct iovec));
     ensure(iov, "could not calloc");
@@ -80,7 +104,7 @@ void q_write_file(void * const q,
     ensure(len == l, "could not read file");
 
     // write it and free tail queue and iov
-    q_write(s, &o);
-    q_free(&o);
+    q_write(s, &o, fin);
+    q_free(c, &o);
     free(iov);
 }

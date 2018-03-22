@@ -30,6 +30,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <ev.h>
 #include <warpcore/warpcore.h>
 
 
@@ -37,18 +38,27 @@
 /// structure described in: Martin Erwig, "Diets for fat sets", Journal of
 /// Functional Programming, Vol. 8, No. 6, pp. 627–632, 1998.
 /// https://web.engr.oregonstate.edu/~erwig/papers/abstracts.html#JFP98
+///
+/// This implementation extends the basic diet structure by adding a "class"
+/// field to each interval. Only intervals of the same class can be merged.
+/// (This is used by quant to handle different packet types.) It also maintains
+/// a timestamp of the last insert operation into an @p ival, for the purposes
+/// of calculating the ACK deplay.
 
 
-/// An interval [hi..lo] to be used with diet structures.
+/// An interval [hi..lo] to be used with diet structures, of a given type.
 ///
 struct ival {
+    splay_entry(ival) node; ///< Splay tree node data.
     uint64_t lo;            ///< Lower bound of the interval.
     uint64_t hi;            ///< Upper bound of the interval.
-    splay_entry(ival) node; ///< Splay tree node date.
+    ev_tstamp t;            ///< Time stamp of last insert into this interval.
+    uint8_t c;              ///< Interval class.
+    uint8_t _unused[7];
 };
 
 
-extern int64_t __attribute__((nonnull))
+extern int __attribute__((nonnull))
 ival_cmp(const struct ival * const a, const struct ival * const b);
 
 struct diet {
@@ -57,38 +67,44 @@ struct diet {
 };
 
 
-#define diet_initializer(t)                                                    \
+#define diet_initializer(d)                                                    \
     {                                                                          \
-        splay_initializer(t), 0                                                \
+        splay_initializer(d), 0                                                \
     }
 
 
-#define diet_init(t)                                                           \
+#define diet_init(d)                                                           \
     do {                                                                       \
-        splay_init(t);                                                         \
-        (t)->cnt = 0;                                                          \
+        splay_init(d);                                                         \
+        (d)->cnt = 0;                                                          \
     } while (0)
 
 
 SPLAY_PROTOTYPE(diet, ival, node, ival_cmp)
 
-extern struct ival * diet_find(struct diet * const t, const uint64_t n);
+extern struct ival * diet_find(struct diet * const d, const uint64_t n);
 
-extern struct ival * __attribute__((nonnull))
-diet_insert(struct diet * const t, const uint64_t n);
+extern struct ival * __attribute__((nonnull)) diet_insert(struct diet * const d,
+                                                          const uint64_t n,
+                                                          const uint8_t c,
+                                                          const ev_tstamp t);
 
 extern void __attribute__((nonnull))
-diet_remove(struct diet * const t, const uint64_t n);
+diet_remove(struct diet * const d, const uint64_t n);
 
-extern void __attribute__((nonnull)) diet_free(struct diet * const t);
+extern void __attribute__((nonnull)) diet_free(struct diet * const d);
 
 extern size_t __attribute__((nonnull))
-diet_to_str(char * const str, const size_t len, struct diet * const t);
+diet_to_str(char * const str, const size_t len, struct diet * const d);
 
-#define diet_max(t) (splay_empty(t) ? 0 : splay_max(diet, (t))->hi)
+#define diet_max(d) (splay_empty(d) ? 0 : splay_max(diet, (d))->hi)
 
-#define diet_min(t) (splay_empty(t) ? 0 : splay_min(diet, (t))->lo)
+#define diet_min(d) (splay_empty(d) ? 0 : splay_min(diet, (d))->lo)
 
-#define diet_empty(t) splay_empty(t)
+#define diet_empty(d) splay_empty(d)
 
-#define diet_cnt(t) ((t)->cnt)
+#define diet_cnt(d) ((d)->cnt)
+
+#define diet_class(d) ((d)->c)
+
+#define diet_timestamp(d) ((d)->t)

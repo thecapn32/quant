@@ -29,8 +29,10 @@
 
 #include <bitstring.h>
 #include <inttypes.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #include <ev.h>
 #include <warpcore/warpcore.h>
@@ -50,9 +52,10 @@ struct pkt_meta {
     // XXX need to potentially change pm_cpy() below if fields are reordered
     splay_entry(pkt_meta) nr_node;
     splay_entry(pkt_meta) off_node;
+    struct pkt_meta * rtx;      ///< Pointer to last RTX, if one happened.
     ev_tstamp tx_t;             ///< Transmission timestamp.
     uint64_t nr;                ///< Packet number.
-    struct q_stream * str;      ///< Stream this data was written on.
+    struct q_stream * stream;   ///< Stream this data was written on.
     uint64_t stream_off;        ///< Stream data offset.
     uint16_t stream_header_pos; ///< Offset of stream frame header.
     uint16_t stream_data_start; ///< Offset of first byte of stream frame data.
@@ -61,7 +64,8 @@ struct pkt_meta {
     uint16_t tx_len;            ///< Length of protected packet at TX.
     uint8_t is_rtxed : 1;       ///< Does the w_iov hold truncated data?
     uint8_t is_acked : 1;       ///< Is the w_iov ACKed?
-    uint8_t : 6;
+    uint8_t is_lost : 1;        ///< Have we marked this w_iov as lost?
+    uint8_t : 5;
     bitstr_t bit_decl(frames, MAX_FRAM_TYPE + 1); ///< Frames present in pkt.
     uint8_t _unused[2];
 };
@@ -112,10 +116,14 @@ extern struct pkt_meta * pm;
 
 
 #define pm_cpy(dst, src)                                                       \
-    memcpy((uint8_t *)(dst) + offsetof(struct pkt_meta, tx_t),                 \
-           (uint8_t *)(src) + offsetof(struct pkt_meta, tx_t),                 \
-           sizeof(struct pkt_meta) -                                           \
-               (sizeof(struct pkt_meta) - offsetof(struct pkt_meta, tx_t)))
+    do {                                                                       \
+        memcpy((uint8_t *)(dst) + offsetof(struct pkt_meta, tx_t),             \
+               (uint8_t *)(src) + offsetof(struct pkt_meta, tx_t),             \
+               sizeof(struct pkt_meta) - (sizeof(struct pkt_meta) -            \
+                                          offsetof(struct pkt_meta, tx_t)));   \
+        (dst)->rtx = src;                                                      \
+    } while (0)
+
 
 /// Offset of stream frame payload data in w_iov buffers.
 #define Q_OFFSET 64
@@ -137,19 +145,30 @@ extern struct pkt_meta * pm;
 
 #define is_rtxable(p) (p)->stream_header_pos
 
-#define is_ack_only(p)                                                         \
-    __extension__({                                                            \
-        int _b1 = -1, _b2 = -1;                                                \
-        bit_ffs((p)->frames, MAX_FRAM_TYPE, &_b1);                             \
-        if (_b1 >= 0) {                                                        \
-            bit_clear((p)->frames, _b1);                                       \
-            bit_ffs((p)->frames, MAX_FRAM_TYPE, &_b2);                         \
-            bit_set((p)->frames, _b1);                                         \
-        }                                                                      \
-        _b1 == FRAM_TYPE_ACK && _b2 == -1;                                     \
-    })
+
+static inline bool is_ack_only(const struct pkt_meta * const p)
+{
+    // cppcheck-suppress unreadVariable
+    bitstr_t bit_decl(frames, MAX_FRAM_TYPE + 1);
+    memcpy(frames, p->frames, sizeof(frames));
+
+    // padding doesn't count
+    bit_clear(frames, FRAM_TYPE_PAD);
+
+    int first_bit_set = -1, second_bit_set = -1;
+    bit_ffs(frames, MAX_FRAM_TYPE, &first_bit_set);
+
+    if (first_bit_set >= 0) {
+        bit_clear(frames, first_bit_set);
+        bit_ffs(frames, MAX_FRAM_TYPE, &second_bit_set);
+    }
+
+    return first_bit_set == FRAM_TYPE_ACK && second_bit_set == -1;
+}
+
 
 extern struct ev_loop * loop;
+extern struct q_conn * accept_queue;
 
 /// The versions of QUIC supported by this implementation
 extern const uint32_t ok_vers[];
@@ -164,7 +183,7 @@ extern const uint8_t ok_vers_len;
 
 /// Maximum reordering in time space before time based loss detection considers
 /// a packet lost. In fraction of an RTT.
-#define kTimeReorderingFraction (1 / 8)
+#define kTimeReorderingFraction 0.125
 
 /// Minimum time in the future a tail loss probe alarm may be set for (in sec).
 #define kMinTLPTimeout 0.01
@@ -217,20 +236,32 @@ extern void * api_arg;
 /// @param      arg   The API argument currently active.
 ///
 #define maybe_api_return(func, arg)                                            \
-    do {                                                                       \
-        ensure(api_func && api_arg, "API call active");                        \
+    __extension__({                                                            \
         if (api_func == (func_ptr)(&(func)) && api_arg == (arg)) {             \
             ev_break(loop, EVBREAK_ALL);                                       \
             warn(DBG, #func "(" #arg ") done, exiting event loop");            \
+            api_func = api_arg = 0;                                            \
         }                                                                      \
+        api_func == 0;                                                         \
+    })
+
+
+/// Unconditionally terminate the active API call.
+///
+#define api_return()                                                           \
+    do {                                                                       \
+        ev_break(loop, EVBREAK_ALL);                                           \
+        api_func = 0;                                                          \
+        api_arg = 0;                                                           \
     } while (0)
 
 
-#define q_free_iov(v)                                                          \
+#define q_free_iov(c, v)                                                       \
     do {                                                                       \
-        w_free_iov(v);                                                         \
+        /* warn(CRT, "q_free_iov idx %u", w_iov_idx(v)); */                    \
+        if (c)                                                                 \
+            splay_remove(pm_nr_splay, &(c)->rec.sent_pkts, &meta(v));          \
         meta(v) = (struct pkt_meta){0};                                        \
-        /* warn(DBG, "q_free_iov idx %u", w_iov_idx(v)); */                    \
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));                  \
     } while (0)
 
@@ -239,7 +270,7 @@ extern void * api_arg;
     __extension__({                                                            \
         struct w_iov * _v = w_alloc_iov((w), (len), (off));                    \
         ASAN_UNPOISON_MEMORY_REGION(&meta(_v), sizeof(meta(_v)));              \
-        /* warn(DBG, "q_alloc_iov idx %u", w_iov_idx(_v)); */                  \
+        /* warn(CRT, "q_alloc_iov idx %u", w_iov_idx(_v)); */                  \
         _v;                                                                    \
     })
 
@@ -248,7 +279,7 @@ extern void * api_arg;
 // #define DIM "\x1B[2m"   ///< ANSI escape sequence: dim
 // #define ULN "\x1B[3m"   ///< ANSI escape sequence: underline
 // #define BLN "\x1B[5m"   ///< ANSI escape sequence: blink
-#define REV "\x1B[7m"   ///< ANSI escape sequence: reverse
+#define REV "\x1B[7m" ///< ANSI escape sequence: reverse
 // #define HID "\x1B[8m"   ///< ANSI escape sequence: hidden
 // #define BLK "\x1B[30m"  ///< ANSI escape sequence: black
 #define RED "\x1B[31m" ///< ANSI escape sequence: red
@@ -259,7 +290,7 @@ extern void * api_arg;
 #define CYN "\x1B[36m" ///< ANSI escape sequence: cyan
 // #define WHT "\x1B[37m"  ///< ANSI escape sequence: white
 
-#define FMT_CID "%" PRIx64
+#define FMT_CID "%016" PRIx64
 
 #define FMT_PNR_IN BLU "%" PRIu64 NRM
 #define FMT_PNR_OUT GRN "%" PRIu64 NRM

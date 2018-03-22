@@ -27,6 +27,7 @@
 
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include <picotls.h>
@@ -41,33 +42,41 @@ struct w_iov;
 
 struct tls {
     ptls_t * t;
-    uint8_t in_sec[PTLS_MAX_DIGEST_SIZE];
-    uint8_t out_sec[PTLS_MAX_DIGEST_SIZE];
-    ptls_aead_context_t * in_kp0;
-    ptls_aead_context_t * out_kp0;
-    ptls_aead_context_t * in_clr;
-    ptls_aead_context_t * out_clr;
+    ptls_aead_context_t * dec_hshk;
+    ptls_aead_context_t * enc_hshk;
+    ptls_aead_context_t * dec_0rtt;
+    ptls_aead_context_t * enc_0rtt;
+    ptls_aead_context_t * dec_1rtt;
+    ptls_aead_context_t * enc_1rtt;
 
     uint8_t tp_buf[96];
     ptls_raw_extension_t tp_ext[2];
     ptls_handshake_properties_t tls_hshake_prop;
+    size_t max_early_data;
 };
 
 
 /// TLS context.
 extern ptls_context_t tls_ctx;
 
-extern void __attribute__((nonnull))
-init_cleartext_prot(struct q_conn * const c);
+extern void __attribute__((nonnull)) init_hshk_prot(struct q_conn * const c);
+
+extern void __attribute__((nonnull)) init_0rtt_prot(struct q_conn * const c);
 
 extern void __attribute__((nonnull)) init_tls(struct q_conn * const c);
+
+extern void __attribute__((nonnull)) init_tp(struct q_conn * const c);
 
 extern void __attribute__((nonnull)) free_tls(struct q_conn * const c);
 
 extern uint32_t __attribute__((nonnull(1)))
 tls_io(struct q_stream * const s, struct w_iov * const iv);
 
-extern void init_tls_ctx(const char * const cert, const char * const key);
+extern void init_tls_ctx(const char * const cert,
+                         const char * const key,
+                         const char * const ticket_store);
+
+extern void cleanup_tls_ctx(void);
 
 extern uint16_t __attribute__((nonnull)) dec_aead(struct q_conn * const c,
                                                   const struct w_iov * v,

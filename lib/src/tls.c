@@ -27,11 +27,14 @@
 
 #include <bitstring.h>
 #include <inttypes.h>
+#include <netinet/in.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/param.h>
+#include <unistd.h>
 
 #include <openssl/evp.h>
 #include <openssl/ossl_typ.h>
@@ -60,20 +63,61 @@
 #include "marshall.h"
 #include "pkt.h"
 #include "quic.h"
-#include "recovery.h"
 #include "stream.h"
 #include "tls.h"
 
 
+struct tls_ticket {
+    char * sni;
+    char * alpn;
+    uint8_t * ticket;
+    size_t ticket_len;
+    struct transport_params tp;
+    uint32_t vers;
+    uint8_t _unused[4];
+    splay_entry(tls_ticket) node;
+};
+
+
+struct ticket_splay {
+    splay_head(, tls_ticket);
+    char file_name[MAXPATHLEN];
+};
+
+static int __attribute__((nonnull))
+tls_ticket_cmp(const struct tls_ticket * const a,
+               const struct tls_ticket * const b)
+{
+    int diff = strcmp(a->sni, b->sni);
+    if (diff)
+        return diff;
+
+    diff = strcmp(a->alpn, b->alpn);
+    return diff;
+}
+
+
+SPLAY_PROTOTYPE(ticket_splay, tls_ticket, node, tls_ticket_cmp)
+SPLAY_GENERATE(ticket_splay, tls_ticket, node, tls_ticket_cmp)
+
 ptls_context_t tls_ctx = {0};
+static struct ticket_splay tickets = splay_initializer(tickets);
+
 
 #define TLS_MAX_CERTS 10
 static ptls_iovec_t tls_certs[TLS_MAX_CERTS];
 static ptls_openssl_sign_certificate_t sign_cert = {0};
 static ptls_openssl_verify_certificate_t verifier = {0};
 
-static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-08", 5}};
+static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-09", 5}};
 static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
+
+static ptls_aead_context_t * dec_tckt;
+static ptls_aead_context_t * enc_tckt;
+
+#define COOKIE_LEN 64
+static uint8_t cookie[COOKIE_LEN];
+
 
 #define TLS_EXT_TYPE_TRANSPORT_PARAMETERS 26
 
@@ -100,13 +144,15 @@ on_ch(ptls_on_client_hello_t * const self __attribute__((unused)),
       const size_t sig_alg_cnt __attribute__((unused)))
 {
     if (sni.len) {
-        warn(INF, "using clnt-requested SNI %.*s", sni.len, sni.base);
+        warn(INF, "\tSNI = %.*s", sni.len, sni.base);
         ensure(ptls_set_server_name(tls, (const char *)sni.base, sni.len) == 0,
                "ptls_set_server_name");
-    }
+    } else
+        warn(INF, "\tSNI = ");
+
 
     if (prot_cnt == 0) {
-        warn(WRN, "clnt requested no ALPN");
+        warn(WRN, "\tALPN = ");
         return 0;
     }
 
@@ -118,14 +164,15 @@ on_ch(ptls_on_client_hello_t * const self __attribute__((unused)),
                 goto done;
 
     if (j == prot_cnt) {
-        warn(CRT, "no client-requested ALPN (incl. %.*s) supported, ignoring",
+        warn(WRN, "\tALPN = %.*s (and maybe others, none supported, ignoring)",
              prot[0].len, prot[0].base);
         return 0;
     }
 
 done:
-    warn(INF, "supporting client-requested ALPN %.*s", alpn[j].len,
-         alpn[j].base);
+    // mark this ALPN as negotiated
+    ptls_set_negotiated_protocol(tls, (char *)alpn[j].base, alpn[j].len);
+    warn(INF, "\tALPN = %.*s", alpn[j].len, alpn[j].base);
 
     return 0;
 }
@@ -241,57 +288,70 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
         switch (tp) {
         case TP_INITIAL_MAX_STREAM_DATA:
-            dec_tp(&c->peer_max_strm_data, sizeof(uint32_t));
-            // we need to apply this parameter to stream 0
-            struct q_stream * const s = get_stream(c, 0);
-            s->out_data_max = c->peer_max_strm_data;
-            warn(DBG, "str " FMT_SID " out_data_max = %u", s->id,
-                 s->out_data_max);
+            dec_tp(&c->tp_peer.max_strm_data, sizeof(uint32_t));
+            warn(INF, "\tinitial_max_stream_data = %u",
+                 c->tp_peer.max_strm_data);
+            // we need to apply this parameter to all current streams
+            struct q_stream * s;
+            splay_foreach (s, stream, &c->streams)
+                s->out_data_max = c->tp_peer.max_strm_data;
             break;
 
         case TP_INITIAL_MAX_DATA:
-            dec_tp(&c->peer_max_data, sizeof(uint32_t));
+            dec_tp(&c->tp_peer.max_data, sizeof(uint32_t));
+            warn(INF, "\tinitial_max_data = %u", c->tp_peer.max_data);
             break;
 
         case TP_INITIAL_MAX_STREAM_ID_BIDI:
-            dec_tp(&c->peer_max_strm_bidi, sizeof(uint32_t));
-            ensure(is_set(STRM_FL_DIR_UNI, c->peer_max_strm_bidi) == false,
-                   "got unidir sid %" PRIu64, c->peer_max_strm_bidi);
-            ensure(is_set(STRM_FL_INI_SRV, c->peer_max_strm_bidi) != c->is_clnt,
-                   "illegal initiator for sid %" PRIu64, c->peer_max_strm_bidi);
+            dec_tp(&c->tp_peer.max_strm_bidi, sizeof(uint32_t));
+            warn(INF, "\tinitial_max_stream_id_bidi = %u",
+                 c->tp_peer.max_strm_bidi);
+            ensure(is_set(STRM_FL_DIR_UNI, c->tp_peer.max_strm_bidi) == false,
+                   "got unidir sid %" PRIu64, c->tp_peer.max_strm_bidi);
+            ensure(
+                is_set(STRM_FL_INI_SRV, c->tp_peer.max_strm_bidi) != c->is_clnt,
+                "illegal initiator for sid %" PRIu64, c->tp_peer.max_strm_bidi);
             break;
 
         case TP_INITIAL_MAX_STREAM_ID_UNI:
-            dec_tp(&c->peer_max_strm_uni, sizeof(uint32_t));
-            ensure(is_set(STRM_FL_DIR_UNI, c->peer_max_strm_uni),
-                   "got bidir sid %" PRIu64, c->peer_max_strm_uni);
-            ensure(is_set(STRM_FL_INI_SRV, c->peer_max_strm_uni) != c->is_clnt,
-                   "illegal initiator for sid %" PRIu64, c->peer_max_strm_uni);
+            dec_tp(&c->tp_peer.max_strm_uni, sizeof(uint32_t));
+            warn(INF, "\tinitial_max_stream_id_uni = %u",
+                 c->tp_peer.max_strm_uni);
+            ensure(is_set(STRM_FL_DIR_UNI, c->tp_peer.max_strm_uni),
+                   "got bidir sid %" PRIu64, c->tp_peer.max_strm_uni);
+            ensure(
+                is_set(STRM_FL_INI_SRV, c->tp_peer.max_strm_uni) != c->is_clnt,
+                "illegal initiator for sid %" PRIu64, c->tp_peer.max_strm_uni);
             break;
 
         case TP_IDLE_TIMEOUT:
-            dec_tp(&c->peer_idle_to, sizeof(uint16_t));
-            if (c->peer_idle_to > 600)
-                warn(ERR, "idle timeout %u > 600", c->peer_idle_to);
+            dec_tp(&c->tp_peer.idle_to, sizeof(uint16_t));
+            warn(INF, "\tidle_timeout = %u", c->tp_peer.idle_to);
+            if (c->tp_peer.idle_to > 600)
+                warn(ERR, "idle timeout %u > 600", c->tp_peer.idle_to);
             break;
 
         case TP_MAX_PACKET_SIZE:
-            dec_tp(&c->peer_max_pkt, sizeof(uint16_t));
-            if (c->peer_max_pkt < 1200 || c->peer_max_pkt > 65527)
-                warn(ERR, "peer_max_pkt %u invalid", c->peer_max_pkt);
+            dec_tp(&c->tp_peer.max_pkt, sizeof(uint16_t));
+            warn(INF, "\tmax_packet_size = %u", c->tp_peer.max_pkt);
+            if (c->tp_peer.max_pkt < 1200 || c->tp_peer.max_pkt > 65527)
+                warn(ERR, "tp_peer.max_pkt %u invalid", c->tp_peer.max_pkt);
             break;
 
         case TP_OMIT_CONNECTION_ID: {
             uint16_t dummy;
             dec_tp(&dummy, sizeof(dummy));
+            warn(INF, "\tomit_connection_id = true");
             c->omit_cid = true;
             break;
         }
 
         case TP_ACK_DELAY_EXPONENT:
-            dec_tp(&c->peer_ack_del_exp, sizeof(uint8_t));
-            if (c->peer_ack_del_exp > 20)
-                warn(ERR, "peer_ack_del_exp %u invalid", c->peer_ack_del_exp);
+            dec_tp(&c->tp_peer.ack_del_exp, sizeof(uint8_t));
+            warn(INF, "\tack_delay_exponent = %u", c->tp_peer.ack_del_exp);
+            if (c->tp_peer.ack_del_exp > 20)
+                warn(ERR, "tp_peer.ack_del_exp %u invalid",
+                     c->tp_peer.ack_del_exp);
             break;
 
         case TP_STATELESS_RESET_TOKEN:
@@ -301,8 +361,17 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             ensure(l == sizeof(c->stateless_reset_token), "valid len");
             memcpy(c->stateless_reset_token, &buf[i],
                    sizeof(c->stateless_reset_token));
-            warn(DBG, "dec %u byte%s from [%u..%u] into stateless_reset_token ",
-                 l, plural(l), i, i + l);
+            warn(INF,
+                 "\tstateless_reset_token = %02x%02x%02x%02x%02x%02x%02x%02x "
+                 "%02x%02x%02x%02x%02x%02x%02x%02x",
+                 c->stateless_reset_token[0], c->stateless_reset_token[1],
+                 c->stateless_reset_token[2], c->stateless_reset_token[3],
+                 c->stateless_reset_token[4], c->stateless_reset_token[5],
+                 c->stateless_reset_token[6], c->stateless_reset_token[7],
+                 c->stateless_reset_token[8], c->stateless_reset_token[9],
+                 c->stateless_reset_token[10], c->stateless_reset_token[11],
+                 c->stateless_reset_token[12], c->stateless_reset_token[13],
+                 c->stateless_reset_token[14], c->stateless_reset_token[15]);
             i += sizeof(c->stateless_reset_token);
             break;
 
@@ -328,7 +397,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
     } while (0)
 
 
-static void init_tp(struct q_conn * const c)
+void init_tp(struct q_conn * const c)
 {
     uint16_t i = 0;
     const uint16_t len = sizeof(c->tls.tp_buf);
@@ -350,17 +419,18 @@ static void init_tp(struct q_conn * const c)
     i += sizeof(uint16_t);
 
     // XXX ngtcp2 and picoquic cannot parse omit_connection_id as the last tp
-    const struct q_conn * const other = get_conn_by_ipnp(&c->peer, 0);
+    const struct q_conn * const other = get_conn_by_ipnp(c->sport, &c->peer, 0);
     if (!other || other->id == c->id)
         enc_tp(c, TP_OMIT_CONNECTION_ID, i, 0); // i not used
-    enc_tp(c, TP_IDLE_TIMEOUT, c->local_idle_to, sizeof(uint16_t));
-    enc_tp(c, TP_INITIAL_MAX_STREAM_ID_BIDI, c->local_max_strm_bidi,
+    enc_tp(c, TP_IDLE_TIMEOUT, c->tp_local.idle_to, sizeof(uint16_t));
+    enc_tp(c, TP_INITIAL_MAX_STREAM_ID_BIDI, c->tp_local.max_strm_bidi,
            sizeof(uint32_t));
-    enc_tp(c, TP_INITIAL_MAX_STREAM_DATA, c->local_max_strm_data,
+    enc_tp(c, TP_INITIAL_MAX_STREAM_DATA, c->tp_local.max_strm_data,
            sizeof(uint32_t));
-    enc_tp(c, TP_INITIAL_MAX_DATA, c->local_max_data, sizeof(uint32_t));
+    enc_tp(c, TP_INITIAL_MAX_DATA, c->tp_local.max_data, sizeof(uint32_t));
+    // XXX picoquic cannot parse ack_delay_exponent as the last tp
+    enc_tp(c, TP_ACK_DELAY_EXPONENT, c->tp_local.ack_del_exp, sizeof(uint8_t));
     enc_tp(c, TP_MAX_PACKET_SIZE, w_mtu(w_engine(c->sock)), sizeof(uint16_t));
-    enc_tp(c, TP_ACK_DELAY_EXPONENT, c->local_ack_del_exp, sizeof(uint8_t));
 
     if (!c->is_clnt) {
         const uint16_t p = TP_STATELESS_RESET_TOKEN;
@@ -387,27 +457,55 @@ static void init_tp(struct q_conn * const c)
 }
 
 
-static ptls_aead_context_t *
-init_cleartext_secret(struct q_conn * const c __attribute__((unused)),
-                      ptls_cipher_suite_t * const cs,
-                      uint8_t * const sec, // NOLINT
-                      const char * const label,
-                      uint8_t is_enc)
+#define QUIC_LABL "QUIC "
+
+static void init_ticket_prot(void)
 {
-    const ptls_iovec_t secret = {.base = sec, .len = cs->hash->digest_size};
-    uint8_t output[255];
-    ensure(ptls_hkdf_expand_label(cs->hash, output, cs->hash->digest_size,
-                                  secret, label, ptls_iovec_init(0, 0), 0) == 0,
-           "HKDF-Expand-Label");
-    return ptls_aead_new(cs->aead, cs->hash, is_enc, output, 0);
+    const ptls_cipher_suite_t * const cs = &ptls_openssl_aes128gcmsha256;
+    uint8_t output[PTLS_MAX_SECRET_SIZE] = {0};
+    memcpy(output, quant_commit_hash,
+           MIN(quant_commit_hash_len, sizeof(output)));
+
+    dec_tckt = ptls_aead_new(cs->aead, cs->hash, 0, output, QUIC_LABL);
+    enc_tckt = ptls_aead_new(cs->aead, cs->hash, 1, output, QUIC_LABL);
+    ensure(dec_tckt && enc_tckt, "cannot init ticket protection");
+
+    ptls_clear_memory(output, sizeof(output));
 }
 
 
-#define PTLS_HSHK_CLNT_LABL "QUIC client handshake secret"
-#define PTLS_HSHK_SERV_LABL "QUIC server handshake secret"
-
-void init_cleartext_prot(struct q_conn * const c)
+static ptls_aead_context_t * init_hshk_secret(struct q_conn * const c
+                                              __attribute__((unused)),
+                                              ptls_cipher_suite_t * const cs,
+                                              uint8_t * const sec, // NOLINT
+                                              const char * const label,
+                                              uint8_t is_enc)
 {
+    const ptls_iovec_t secret = {.base = sec, .len = cs->hash->digest_size};
+    uint8_t output[PTLS_MAX_SECRET_SIZE];
+    ensure(ptls_hkdf_expand_label(cs->hash, output, cs->hash->digest_size,
+                                  secret, label, ptls_iovec_init(0, 0),
+                                  QUIC_LABL) == 0,
+           "ptls_hkdf_expand_label");
+    // warn(CRT, "%s handshake secret",
+    //      is_enc ? (c->is_clnt ? "clnt" : "serv")
+    //             : (c->is_clnt ? "serv" : "clnt"));
+    // hexdump(output, cs->hash->digest_size);
+    return ptls_aead_new(cs->aead, cs->hash, is_enc, output, QUIC_LABL);
+}
+
+
+#define CLNT_LABL_HSHK "client hs"
+#define SERV_LABL_HSHK "server hs"
+
+void init_hshk_prot(struct q_conn * const c)
+{
+    // this can be called multiple times due to retry
+    if (c->tls.dec_hshk)
+        ptls_aead_free(c->tls.dec_hshk);
+    if (c->tls.enc_hshk)
+        ptls_aead_free(c->tls.enc_hshk);
+
     static uint8_t qv1_salt[] = {0xaf, 0xc8, 0x24, 0xec, 0x5f, 0xc7, 0x7e,
                                  0xca, 0x1e, 0x9d, 0x36, 0xf3, 0x7f, 0xb2,
                                  0xd4, 0x65, 0x18, 0xc3, 0x66, 0x39};
@@ -419,14 +517,181 @@ void init_cleartext_prot(struct q_conn * const c)
 
     uint64_t ncid = htonll(c->id);
     const ptls_iovec_t cid = {.base = (uint8_t *)&ncid, .len = sizeof(ncid)};
-    ensure(ptls_hkdf_extract(cs->hash, sec, salt, cid) == 0, "HKDF-Extract");
+    ensure(ptls_hkdf_extract(cs->hash, sec, salt, cid) == 0,
+           "ptls_hkdf_extract");
+    // warn(CRT, "handshake secret");
+    // hexdump(sec, PTLS_MAX_SECRET_SIZE);
 
-    c->tls.in_clr = init_cleartext_secret(
-        c, cs, sec, c->is_clnt ? PTLS_HSHK_SERV_LABL : PTLS_HSHK_CLNT_LABL, 0);
-    c->tls.out_clr = init_cleartext_secret(
-        c, cs, sec, c->is_clnt ? PTLS_HSHK_CLNT_LABL : PTLS_HSHK_SERV_LABL, 1);
-    ensure(c->tls.in_clr && c->tls.out_clr, "got cleartext secrets");
+    c->tls.dec_hshk = init_hshk_secret(
+        c, cs, sec, c->is_clnt ? SERV_LABL_HSHK : CLNT_LABL_HSHK, 0);
+    // warn(CRT, "%s iv", c->is_clnt ? "serv" : "clnt");
+    // hexdump(c->tls.dec_hshk->static_iv, c->tls.dec_hshk->algo->iv_size);
+
+    c->tls.enc_hshk = init_hshk_secret(
+        c, cs, sec, c->is_clnt ? CLNT_LABL_HSHK : SERV_LABL_HSHK, 1);
+    // warn(CRT, "%s iv", c->is_clnt ? "clnt" : "serv");
+    // hexdump(c->tls.enc_hshk->static_iv, c->tls.enc_hshk->algo->iv_size);
 }
+
+
+static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
+                             __attribute__((unused)),
+                             ptls_t * tls
+#ifdef NDEBUG
+                             __attribute__((unused))
+#endif
+                             ,
+                             int is_encrypt,
+                             ptls_buffer_t * dst,
+                             ptls_iovec_t src)
+{
+#ifndef NDEBUG
+    struct q_conn * const c = *ptls_get_data_ptr(tls);
+#endif
+    uint64_t tid;
+    if (ptls_buffer_reserve(dst, src.len + quant_commit_hash_len + sizeof(tid) +
+                                     enc_tckt->algo->tag_size))
+        return -1;
+
+    if (is_encrypt) {
+        warn(INF,
+             "creating new 0-RTT session ticket for %s conn " FMT_CID
+             " (%s %s)",
+             conn_type(c), c->id, ptls_get_server_name(tls),
+             ptls_get_negotiated_protocol(tls));
+
+        // prepend git commit hash
+        memcpy(dst->base + dst->off, quant_commit_hash, quant_commit_hash_len);
+        dst->off += quant_commit_hash_len;
+
+        // prepend ticket id
+        arc4random_buf(&tid, sizeof(tid));
+        memcpy(dst->base + dst->off, &tid, sizeof(tid));
+        dst->off += sizeof(tid);
+
+        // now encrypt ticket
+        dst->off += ptls_aead_encrypt(enc_tckt, dst->base + dst->off, src.base,
+                                      src.len, tid, 0, 0);
+
+    } else {
+        if (src.len < quant_commit_hash_len + sizeof(tid) +
+                          dec_tckt->algo->tag_size ||
+            memcmp(src.base, quant_commit_hash, quant_commit_hash_len) != 0) {
+            warn(WRN,
+                 "could not verify 0-RTT session ticket for %s conn " FMT_CID
+                 " (%s %s)",
+                 conn_type(c), c->id, ptls_get_server_name(tls),
+                 ptls_get_negotiated_protocol(tls));
+            return -1;
+        }
+        uint8_t * src_base = src.base + quant_commit_hash_len;
+        size_t src_len = src.len - quant_commit_hash_len;
+
+        memcpy(&tid, src_base, sizeof(tid));
+        src_base += sizeof(tid);
+        src_len -= sizeof(tid);
+
+        const size_t n = ptls_aead_decrypt(dec_tckt, dst->base + dst->off,
+                                           src_base, src_len, tid, 0, 0);
+
+        if (n > src_len) {
+            warn(WRN,
+                 "could not decrypt 0-RTT session ticket for %s conn " FMT_CID
+                 " (%s %s)",
+                 conn_type(c), c->id, ptls_get_server_name(tls),
+                 ptls_get_negotiated_protocol(tls));
+            return -1;
+        }
+        dst->off += n;
+
+        warn(INF,
+             "verified 0-RTT session ticket for %s conn " FMT_CID " (%s %s)",
+             conn_type(c), c->id, ptls_get_server_name(tls),
+             ptls_get_negotiated_protocol(tls));
+    }
+
+    return 0;
+}
+
+
+static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
+                          ptls_t * tls,
+                          ptls_iovec_t src)
+{
+    struct q_conn * const c = *ptls_get_data_ptr(tls);
+    warn(NTE, "saving 0-RTT tickets to %s", tickets.file_name);
+
+    FILE * const fp = fopen(tickets.file_name, "wbe");
+    ensure(fp, "could not open ticket file %s", tickets.file_name);
+
+    // write git hash
+    ensure(fwrite(&quant_commit_hash_len, sizeof(quant_commit_hash_len), 1, fp),
+           "fwrite");
+    ensure(fwrite(quant_commit_hash, quant_commit_hash_len, 1, fp), "fwrite");
+
+    char * s = 0;
+    if (ptls_get_server_name(tls))
+        s = strdup(ptls_get_server_name(tls));
+    else
+        s = calloc(1, sizeof(char));
+    char * a = 0;
+    if (ptls_get_negotiated_protocol(tls))
+        a = strdup(ptls_get_negotiated_protocol(tls));
+    else
+        a = calloc(1, sizeof(char));
+    const struct tls_ticket which = {.sni = s, .alpn = a};
+    struct tls_ticket * t = splay_find(ticket_splay, &tickets, &which);
+    if (t == 0) {
+        // create new ticket
+        t = calloc(1, sizeof(*t));
+        ensure(t, "calloc");
+        t->sni = s;
+        t->alpn = a;
+        splay_insert(ticket_splay, &tickets, t);
+    } else {
+        // update current ticket
+        free(t->ticket);
+        free(s);
+        free(a);
+    }
+
+    memcpy(&t->tp, &c->tp_peer, sizeof(t->tp));
+    t->vers = c->vers;
+
+    t->ticket_len = src.len;
+    t->ticket = calloc(1, t->ticket_len);
+    ensure(t->ticket, "calloc");
+    memcpy(t->ticket, src.base, src.len);
+
+    // write all tickets
+    // XXX this currently dumps the entire cache to file on each connection!
+    splay_foreach (t, ticket_splay, &tickets) { // NOLINT
+        warn(INF, "writing 0-RTT ticket for %s conn " FMT_CID " (%s %s)",
+             conn_type(c), c->id, t->sni, t->alpn);
+
+        size_t len = strlen(t->sni) + 1;
+        ensure(fwrite(&len, sizeof(len), 1, fp), "fwrite");
+        ensure(fwrite(t->sni, sizeof(*t->sni), len, fp), "fwrite");
+
+        len = strlen(t->alpn) + 1;
+        ensure(fwrite(&len, sizeof(len), 1, fp), "fwrite");
+        ensure(fwrite(t->alpn, sizeof(*t->alpn), len, fp), "fwrite");
+
+        ensure(fwrite(&t->tp, sizeof(t->tp), 1, fp), "fwrite");
+        ensure(fwrite(&t->vers, sizeof(t->vers), 1, fp), "fwrite");
+
+        ensure(fwrite(&t->ticket_len, sizeof(t->ticket_len), 1, fp), "fwrite");
+        ensure(fwrite(t->ticket, sizeof(*t->ticket), t->ticket_len, fp),
+               "fwrite");
+    }
+
+    fclose(fp);
+    return 0;
+}
+
+
+static ptls_save_ticket_t save_ticket = {.cb = save_ticket_cb};
+static ptls_encrypt_ticket_t encrypt_ticket = {.cb = encrypt_ticket_cb};
 
 
 void init_tls(struct q_conn * const c)
@@ -434,67 +699,129 @@ void init_tls(struct q_conn * const c)
     if (c->tls.t)
         // we are re-initializing during version negotiation
         ptls_free(c->tls.t);
-    ensure((c->tls.t = ptls_new(&tls_ctx, !c->is_clnt)) != 0,
-           "alloc TLS state");
+    ensure((c->tls.t = ptls_new(&tls_ctx, !c->is_clnt)) != 0, "ptls_new");
+    *ptls_get_data_ptr(c->tls.t) = c;
     if (c->is_clnt)
-        ensure(ptls_set_server_name(c->tls.t, c->peer_name,
-                                    strlen(c->peer_name)) == 0,
+        ensure(ptls_set_server_name(c->tls.t, c->peer_name, 0) == 0,
                "ptls_set_server_name");
-    init_tp(c);
-    if (!c->tls.in_clr)
-        init_cleartext_prot(c);
 
-    c->tls.tls_hshake_prop = (ptls_handshake_properties_t){
-        .additional_extensions = c->tls.tp_ext,
-        .collect_extension = filter_tp,
-        .collected_extensions = chk_tp,
-        .client.negotiated_protocols.list = alpn,
-        .client.negotiated_protocols.count = alpn_cnt};
+    ptls_handshake_properties_t * const hshk_prop = &c->tls.tls_hshake_prop;
+
+    hshk_prop->additional_extensions = c->tls.tp_ext;
+    hshk_prop->collect_extension = filter_tp;
+    hshk_prop->collected_extensions = chk_tp;
+
+    if (c->is_clnt) {
+        hshk_prop->client.negotiated_protocols.list = alpn;
+        hshk_prop->client.negotiated_protocols.count = alpn_cnt;
+        hshk_prop->client.max_early_data_size = &c->tls.max_early_data;
+    } else {
+        // TODO: remove this interop hack eventually
+        hshk_prop->server.retry_uses_cookie = 1;
+        hshk_prop->server.cookie.key = cookie;
+        hshk_prop->server.cookie.additional_data.base = (uint8_t *)&c->peer;
+        hshk_prop->server.cookie.additional_data.len = sizeof(c->peer);
+        if (ntohs(c->sport) == 4434)
+            hshk_prop->server.enforce_retry = 1;
+    }
+
+    // try to find an existing session ticket
+    struct tls_ticket which = {.sni = c->peer_name,
+                               .alpn = (char *)alpn[0].base};
+    struct tls_ticket * t = splay_find(ticket_splay, &tickets, &which);
+    if (t == 0) {
+        // if we couldn't find a ticket, try without an alpn
+        which.alpn = "";
+        t = splay_find(ticket_splay, &tickets, &which);
+    }
+    if (t) {
+        hshk_prop->client.session_ticket =
+            ptls_iovec_init(t->ticket, t->ticket_len);
+        memcpy(&c->tp_peer, &t->tp, sizeof(t->tp));
+        c->vers_initial = c->vers = t->vers;
+        c->try_0rtt = 1;
+    }
+
+    init_tp(c);
+    if (!c->tls.dec_hshk)
+        init_hshk_prot(c);
 }
 
 
 void free_tls(struct q_conn * const c)
 {
-    ptls_aead_free(c->tls.in_kp0);
-    ptls_aead_free(c->tls.out_kp0);
-    ptls_aead_free(c->tls.in_clr);
-    ptls_aead_free(c->tls.out_clr);
-    ptls_free(c->tls.t);
+    if (c->tls.dec_0rtt)
+        ptls_aead_free(c->tls.dec_0rtt);
+    if (c->tls.enc_0rtt)
+        ptls_aead_free(c->tls.enc_0rtt);
+    if (c->tls.dec_1rtt)
+        ptls_aead_free(c->tls.dec_1rtt);
+    if (c->tls.enc_1rtt)
+        ptls_aead_free(c->tls.enc_1rtt);
+    if (c->tls.dec_hshk)
+        ptls_aead_free(c->tls.dec_hshk);
+    if (c->tls.enc_hshk)
+        ptls_aead_free(c->tls.enc_hshk);
+    if (c->tls.t)
+        ptls_free(c->tls.t);
+
+    // free ticket cache
+    struct tls_ticket *t, *tmp;
+    for (t = splay_min(ticket_splay, &tickets); t != 0; t = tmp) {
+        tmp = splay_next(ticket_splay, &tickets, t);
+        splay_remove(ticket_splay, &tickets, t);
+        free(t->sni);
+        free(t->alpn);
+        free(t->ticket);
+        free(t);
+    }
 }
 
 
 static ptls_aead_context_t * __attribute__((nonnull))
-init_1rtt_secret(ptls_t * const t,
-                 const ptls_cipher_suite_t * const cs,
-                 uint8_t * const sec,
-                 const char * const label,
-                 uint8_t is_enc)
+init_secret(ptls_t * const t,
+            const ptls_cipher_suite_t * const cs,
+            uint8_t * const sec,
+            const char * const label,
+            uint8_t is_enc,
+            uint8_t is_early)
 {
     ensure(ptls_export_secret(t, sec, cs->hash->digest_size, label,
-                              ptls_iovec_init(0, 0), 0) == 0,
+                              ptls_iovec_init(0, 0), is_early) == 0,
            "ptls_export_secret");
-    return ptls_aead_new(cs->aead, cs->hash, is_enc, sec, 0);
+    return ptls_aead_new(cs->aead, cs->hash, is_enc, sec, QUIC_LABL);
 }
 
 
-#define PTLS_1RTT_CLNT_LABL "EXPORTER-QUIC client 1-RTT Secret"
-#define PTLS_1RTT_SERV_LABL "EXPORTER-QUIC server 1-RTT Secret"
+#define LABL_0RTT "EXPORTER-QUIC 0rtt"
+
+void init_0rtt_prot(struct q_conn * const c)
+{
+    // this can be called multiple times due to version negotiation
+    if (c->tls.dec_0rtt)
+        ptls_aead_free(c->tls.dec_0rtt);
+    if (c->tls.enc_0rtt)
+        ptls_aead_free(c->tls.enc_0rtt);
+
+    const ptls_cipher_suite_t * const cs = ptls_get_cipher(c->tls.t);
+    uint8_t sec[PTLS_MAX_DIGEST_SIZE];
+    c->tls.dec_0rtt = init_secret(c->tls.t, cs, sec, LABL_0RTT, 0, 1);
+    c->tls.enc_0rtt = init_secret(c->tls.t, cs, sec, LABL_0RTT, 1, 1);
+}
+
+
+#define CLNT_LABL_1RTT "EXPORTER-QUIC client 1rtt"
+#define SERV_LABL_1RTT "EXPORTER-QUIC server 1rtt"
+
 
 static void __attribute__((nonnull)) init_1rtt_prot(struct q_conn * const c)
 {
-    if (c->tls.in_kp0) {
-        // tls_handshake() is called multiple times when generating CHs
-        ptls_aead_free(c->tls.in_kp0);
-        ptls_aead_free(c->tls.out_kp0);
-    }
-
     const ptls_cipher_suite_t * const cs = ptls_get_cipher(c->tls.t);
-    c->tls.in_kp0 = init_1rtt_secret(
-        c->tls.t, cs, c->tls.in_sec,
-        c->is_clnt ? PTLS_1RTT_SERV_LABL : PTLS_1RTT_CLNT_LABL, 0);
-    c->tls.out_kp0 = init_1rtt_secret(
-        c->tls.t, cs, c->tls.out_sec,
-        c->is_clnt ? PTLS_1RTT_CLNT_LABL : PTLS_1RTT_SERV_LABL, 1);
+    uint8_t sec[PTLS_MAX_DIGEST_SIZE];
+    c->tls.dec_1rtt = init_secret(
+        c->tls.t, cs, sec, c->is_clnt ? SERV_LABL_1RTT : CLNT_LABL_1RTT, 0, 0);
+    c->tls.enc_1rtt = init_secret(
+        c->tls.t, cs, sec, c->is_clnt ? CLNT_LABL_1RTT : SERV_LABL_1RTT, 1, 0);
 }
 
 
@@ -504,18 +831,47 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
     ptls_buffer_t tb;
     ptls_buffer_init(&tb, buf, sizeof(buf));
 
-    const uint16_t in_data_len = iv ? iv->len : 0;
-    size_t in_len = in_data_len;
-
     int ret = 0;
-    if (ptls_handshake_is_complete(s->c->tls.t))
-        ret = ptls_receive(s->c->tls.t, &tb, iv ? iv->buf : 0, &in_len);
-    else
-        ret = ptls_handshake(s->c->tls.t, &tb, iv ? iv->buf : 0, &in_len,
-                             &s->c->tls.tls_hshake_prop);
+    do {
+        size_t in_len = iv ? iv->len : 0;
+        if (ptls_handshake_is_complete(s->c->tls.t))
+            ret = ptls_receive(s->c->tls.t, &tb, iv ? iv->buf : 0, &in_len);
+        else
+            ret = ptls_handshake(s->c->tls.t, &tb, iv ? iv->buf : 0, &in_len,
+                                 &s->c->tls.tls_hshake_prop);
+        warn(DBG, "in %u (off %u), gen %u, ret %u, left %u", iv ? iv->len : 0,
+             iv ? meta(iv).stream_off : 0, tb.off, ret,
+             iv ? iv->len - in_len : 0);
+        if (iv) {
+            iv->buf += in_len;
+            iv->len -= in_len;
+        }
 
-    warn(DBG, "in %u, gen %u, ret %u", iv ? in_data_len : 0, tb.off, ret);
-    ensure(iv == 0 || in_data_len && in_data_len == in_len, "data left");
+        if (ret == 0 && s->c->state < CONN_STAT_HSHK_DONE) {
+            if (ptls_is_psk_handshake(s->c->tls.t)) {
+                if (s->c->is_clnt)
+                    s->c->did_0rtt =
+                        s->c->try_0rtt & s->c->tls.tls_hshake_prop.client
+                                             .early_data_accepted_by_peer;
+                else {
+                    init_0rtt_prot(s->c);
+                    s->c->did_0rtt = 1;
+                }
+            }
+
+            init_1rtt_prot(s->c);
+            conn_to_state(s->c, CONN_STAT_HSHK_DONE);
+        } else if (ret == PTLS_ERROR_STATELESS_RETRY) {
+            conn_to_state(s->c, CONN_STAT_SEND_RTRY);
+            break;
+        } else if (ret == PTLS_ERROR_IN_PROGRESS &&
+                   s->c->state == CONN_STAT_CH_SENT) {
+            conn_to_state(s->c, CONN_STAT_SH);
+        } else if (ret != 0 && ret != PTLS_ERROR_IN_PROGRESS) {
+            err_close(s->c, ERR_TLS_HSHAKE_FAIL, "picotls error %u", ret);
+            break;
+        }
+    } while (iv && iv->len);
 
     if (tb.off) {
         // enqueue for TX
@@ -532,18 +888,72 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
     }
     ptls_buffer_dispose(&tb);
 
-    if (ret == 0 && s->c->state < CONN_STAT_HSHK_DONE) {
-        init_1rtt_prot(s->c);
-        conn_to_state(s->c, CONN_STAT_HSHK_DONE);
-        s->c->rec.lg_acked = s->c->rec.lg_sent;
-    } else if (ret != 0 && ret != PTLS_ERROR_IN_PROGRESS)
-        err_close(s->c, ERR_TLS_HSHAKE_FAIL, "picotls error %u", ret);
-
     return (uint32_t)ret;
 }
 
 
-void init_tls_ctx(const char * const cert, const char * const key)
+static void read_tickets()
+{
+    FILE * const fp = fopen(tickets.file_name, "rbe");
+    if (fp == 0) {
+        warn(WRN, "could not read 0-RTT tickets from %s", tickets.file_name);
+        return;
+    }
+
+    warn(INF, "reading 0-RTT tickets from %s", tickets.file_name);
+
+    // read and verify git hash
+    size_t hash_len;
+    ensure(fread(&hash_len, sizeof(quant_commit_hash_len), 1, fp), "fread");
+    uint8_t buf[8192];
+    ensure(fread(buf, sizeof(uint8_t), hash_len, fp), "fread");
+    if (hash_len != quant_commit_hash_len ||
+        memcmp(buf, quant_commit_hash, hash_len) != 0) {
+        warn(WRN, "0-RTT tickets were stored by different %s version, removing",
+             quant_name);
+        ensure(unlink(tickets.file_name) == 0, "unlink");
+        goto done;
+    }
+
+    for (;;) {
+        // try and read the SNI len
+        size_t len;
+        if (fread(&len, sizeof(len), 1, fp) != 1)
+            // we read all the tickets
+            break;
+
+        struct tls_ticket * const t = calloc(1, sizeof(*t));
+        ensure(t, "calloc");
+        t->sni = calloc(1, len);
+        ensure(t->sni, "calloc");
+        ensure(fread(t->sni, sizeof(*t->sni), len, fp), "fread");
+
+        ensure(fread(&len, sizeof(len), 1, fp), "fread");
+        t->alpn = calloc(1, len);
+        ensure(t->alpn, "calloc");
+        ensure(fread(t->alpn, sizeof(*t->alpn), len, fp), "fread");
+
+        ensure(fread(&t->tp, sizeof(t->tp), 1, fp), "fwrite");
+        ensure(fread(&t->vers, sizeof(t->vers), 1, fp), "fwrite");
+
+        ensure(fread(&len, sizeof(len), 1, fp), "fread");
+        t->ticket_len = len;
+        t->ticket = calloc(len, sizeof(*t->ticket));
+        ensure(t->ticket, "calloc");
+        ensure(fread(t->ticket, sizeof(*t->ticket), len, fp), "fread");
+
+        splay_insert(ticket_splay, &tickets, t);
+        warn(INF, "got 0-RTT ticket %s %s", t->sni, t->alpn);
+    }
+
+done:
+    fclose(fp);
+}
+
+
+void init_tls_ctx(const char * const cert,
+                  const char * const key,
+                  const char * const ticket_store)
 {
     FILE * fp = 0;
     if (key) {
@@ -556,6 +966,7 @@ void init_tls_ctx(const char * const cert, const char * const key)
         EVP_PKEY_free(pkey);
     }
 
+    // TODO: replace with ptls_load_certificates()
     if (cert) {
         fp = fopen(cert, "rbe");
         ensure(fp, "could not open cert %s", cert);
@@ -573,6 +984,17 @@ void init_tls_ctx(const char * const cert, const char * const key)
         tls_ctx.certificates.list = tls_certs;
     }
 
+    if (ticket_store) {
+        strncpy(tickets.file_name, ticket_store, MAXPATHLEN);
+        tls_ctx.save_ticket = &save_ticket;
+        read_tickets();
+    } else {
+        tls_ctx.encrypt_ticket = &encrypt_ticket;
+        tls_ctx.max_early_data_size = 0xffffffff;
+        tls_ctx.ticket_lifetime = 60 * 60 * 24;
+        tls_ctx.require_dhe_on_psk = 0;
+    }
+
     ensure(ptls_openssl_init_verify_certificate(&verifier, 0) == 0,
            "ptls_openssl_init_verify_certificate");
 
@@ -586,29 +1008,62 @@ void init_tls_ctx(const char * const cert, const char * const key)
     tls_ctx.sign_certificate = &sign_cert.super;
     tls_ctx.verify_certificate = &verifier.super;
     tls_ctx.get_time = &ptls_get_time;
+
+    arc4random_buf(cookie, COOKIE_LEN);
+
+    init_ticket_prot();
 }
+
+
+void cleanup_tls_ctx(void)
+{
+    ptls_aead_free(dec_tckt);
+    ptls_aead_free(enc_tckt);
+}
+
+
+static ptls_aead_context_t * __attribute__((nonnull))
+which_aead(const struct q_conn * const c,
+           const struct w_iov * const v,
+           const bool in)
+{
+    const uint8_t flags = pkt_flags(v->buf);
+    if (is_set(F_LONG_HDR, flags)) {
+        if (pkt_type(flags) == F_LH_0RTT)
+            return in ? c->tls.dec_0rtt : c->tls.enc_0rtt;
+        return in ? c->tls.dec_hshk : c->tls.enc_hshk;
+    }
+    return in ? c->tls.dec_1rtt : c->tls.enc_1rtt;
+}
+
+
+#ifndef NDEBUG
+#define aead_type(c, a)                                                        \
+    (((a) == (c)->tls.dec_1rtt || (a) == (c)->tls.enc_1rtt)                    \
+         ? "1-RTT"                                                             \
+         : (((a) == (c)->tls.dec_0rtt || (a) == (c)->tls.enc_0rtt)             \
+                ? "0-RTT"                                                      \
+                : "cleartext"))
+#endif
 
 
 uint16_t dec_aead(struct q_conn * const c,
                   const struct w_iov * v,
                   const uint16_t hdr_len)
 {
-    ptls_aead_context_t * aead = c->tls.in_clr;
-    const uint8_t flags = pkt_flags(v->buf);
-    if ((!is_set(F_LONG_HDR, flags) || pkt_type(flags) <= F_LH_0RTT) &&
-        c->tls.in_kp0)
-        aead = c->tls.in_kp0;
+    ptls_aead_context_t * const aead = which_aead(c, v, true);
+    if (aead == 0)
+        return 0;
 
     const size_t len =
         ptls_aead_decrypt(aead, &v->buf[hdr_len], &v->buf[hdr_len],
                           v->len - hdr_len, meta(v).nr, v->buf, hdr_len);
     if (len == SIZE_MAX) {
-        warn(ERR, "AEAD %s decrypt error",
-             aead == c->tls.in_kp0 ? "1RTT" : "cleartext");
+        warn(ERR, "AEAD %s decrypt error", aead_type(c, aead));
         return 0;
     }
     warn(DBG, "verifying %lu-byte %s AEAD over [0..%u] in [%u..%u]",
-         v->len - len - hdr_len, aead == c->tls.in_kp0 ? "1RTT" : "cleartext",
+         v->len - len - hdr_len, aead_type(c, aead),
          v->len - (v->len - len - hdr_len) - 1,
          v->len - (v->len - len - hdr_len), v->len - 1);
     return hdr_len + (uint16_t)len;
@@ -620,14 +1075,15 @@ uint16_t enc_aead(struct q_conn * const c,
                   const struct w_iov * x,
                   const uint16_t hdr_len)
 {
+    ptls_aead_context_t * const aead = which_aead(c, v, false);
+    ensure(aead, "AEAD is null");
+
     memcpy(x->buf, v->buf, hdr_len); // copy pkt header
-    const size_t len = ptls_aead_encrypt(
-        c->state >= CONN_STAT_ESTB ? c->tls.out_kp0 : c->tls.out_clr,
-        &x->buf[hdr_len], &v->buf[hdr_len], v->len - hdr_len, meta(v).nr,
-        v->buf, hdr_len);
+    const size_t len =
+        ptls_aead_encrypt(aead, &x->buf[hdr_len], &v->buf[hdr_len],
+                          v->len - hdr_len, meta(v).nr, v->buf, hdr_len);
     warn(DBG, "added %lu-byte %s AEAD over [0..%u] in [%u..%u]",
-         len + hdr_len - v->len,
-         c->state >= CONN_STAT_ESTB ? "1RTT" : "cleartext", v->len - 1, v->len,
+         len + hdr_len - v->len, aead_type(c, aead), v->len - 1, v->len,
          len + hdr_len - 1);
     return hdr_len + (uint16_t)len;
 }

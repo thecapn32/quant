@@ -1,7 +1,7 @@
 # QUANT – QUIC Userspace Accelerated Network Transfers
 
-These are the beginnings of a BSD-licensed C11 implementation of
-[QUIC](https://www.chromium.org/quic), the Google-originated proposal for a new
+QUANT is a BSD-licensed C11 implementation of the emerging IETF
+[QUIC](https://quicwg.github.io/) standard for a new
 HTTP/2 transport over UDP. QUANT uses the
 [warpcore](https://github.com/NTAP/warpcore) zero-copy  userspace UDP/IPv4 stack
 on top of the [netmap](http://info.iet.unipi.it/~luigi/netmap/) packet I/O
@@ -20,9 +20,7 @@ Picotls will be built automatically.
 We use the [cmake](https://cmake.org/) build system.
 
 We use [libev](http://software.schmorp.de/pkg/libev.html) as a basis for the
-event loop that underlies this implementation. The intent is that it will in the
-end resemble something like what [libebb](http://tinyclouds.org/libebb/)
-offers for HTTP/1.1 and TLS.
+event loop that underlies this implementation.
 
 So you need to install some dependencies. On the Mac, the easiest way is via
 [Homebrew](http://brew.sh/), so install that first. Then, do
@@ -39,7 +37,7 @@ On Darwin, you *must* also install the Xcode command line tools first:
 
 
 ## Building
-Warpcore uses [cmake](https://cmake.org/) as a build system. To do an
+To do an
 out-of-source build of warpcore (best practice with `cmake`), do the following
 to build with `make` as a generator:
 

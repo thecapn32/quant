@@ -25,7 +25,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <inttypes.h>
+// #include <inttypes.h>
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -65,14 +65,15 @@ new_stream(struct q_conn * const c, const uint64_t id, const bool active)
     sq_init(&s->out);
     sq_init(&s->in);
     s->id = id;
-    s->in_data_max = c->local_max_strm_data;
-    s->out_data_max = c->peer_max_strm_data;
+    s->in_data_max = c->tp_local.max_strm_data;
+    s->out_data_max = c->tp_peer.max_strm_data;
     if (active) {
         if (c->next_sid == 0)
             c->next_sid = c->is_clnt ? 4 : 1;
         else
             c->next_sid += 4;
     }
+    strm_to_state(s, STRM_STAT_OPEN);
     splay_insert(stream, &c->streams, s);
     warn(DBG, "reserved str " FMT_SID " on %s conn " FMT_CID, id, conn_type(c),
          c->id);
@@ -82,13 +83,13 @@ new_stream(struct q_conn * const c, const uint64_t id, const bool active)
 
 void free_stream(struct q_stream * const s)
 {
-    warn(INF, "freeing str " FMT_SID " on %s conn " FMT_CID, s->id,
+    warn(DBG, "freeing str " FMT_SID " on %s conn " FMT_CID, s->id,
          conn_type(s->c), s->c->id);
 
-    diet_insert(&s->c->closed_streams, s->id);
+    diet_insert(&s->c->closed_streams, s->id, 0, 0);
 
-    q_free(&s->out);
-    q_free(&s->in);
+    q_free(s->c, &s->out);
+    q_free(s->c, &s->in);
 
     splay_remove(stream, &s->c->streams, s);
     free(s);
@@ -97,29 +98,25 @@ void free_stream(struct q_stream * const s)
 
 void track_bytes_in(struct q_stream * const s, const uint64_t n)
 {
-    if (s->id)
-        s->c->in_data += n;
-    if (s->c->state >= CONN_STAT_ESTB)
-        s->in_data += n;
+    s->c->in_data += n;
+    s->in_data += n;
 
-    warn(DBG,
-         "IN: str %u in_data=%" PRIu64 "/%" PRIu64 " in_off=%" PRIu64
-         " C: in_data=%" PRIu64 "/%" PRIu64,
-         s->id, s->in_data, s->in_data_max, s->in_off, s->c->in_data,
-         s->c->local_max_data);
+    // warn(DBG,
+    //      "IN: str %u in_data=%" PRIu64 "/%" PRIu64 " in_off=%" PRIu64
+    //      " C: in_data=%" PRIu64 "/%" PRIu64,
+    //      s->id, s->in_data, s->in_data_max, s->in_off, s->c->in_data,
+    //      s->c->tp_local.max_data);
 }
 
 
 void track_bytes_out(struct q_stream * const s, const uint64_t n)
 {
-    if (s->id)
-        s->c->out_data += n;
-    if (s->c->state >= CONN_STAT_ESTB)
-        s->out_data += n;
+    s->c->out_data += n;
+    s->out_data += n;
 
-    warn(DBG,
-         "OUT: str %u out_data=%" PRIu64 "/%" PRIu64 " out_off=%" PRIu64
-         " C: out_data=%" PRIu64 "/%" PRIu64,
-         s->id, s->out_data, s->out_data_max, s->out_off, s->c->out_data,
-         s->c->peer_max_data);
+    // warn(DBG,
+    //      "OUT: str %u out_data=%" PRIu64 "/%" PRIu64 " out_off=%" PRIu64
+    //      " C: out_data=%" PRIu64 "/%" PRIu64,
+    //      s->id, s->out_data, s->out_data_max, s->out_off, s->c->out_data,
+    //      s->c->tp_peer.max_data);
 }

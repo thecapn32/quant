@@ -27,6 +27,7 @@
 
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 
 struct q_conn;
@@ -50,7 +51,8 @@ struct w_iov;
 #define FRAM_TYPE_PONG 0x0d
 #define FRAM_TYPE_ACK 0x0e
 #define FRAM_TYPE_STRM 0x10
-#define MAX_FRAM_TYPE FRAM_TYPE_STRM
+#define FRAM_TYPE_STRM_MAX 0x17
+#define MAX_FRAM_TYPE FRAM_TYPE_STRM_MAX
 
 #define F_STREAM_FIN 0x01
 #define F_STREAM_LEN 0x02
@@ -62,8 +64,17 @@ struct w_iov;
 #endif
 
 
+#define max_strm_id(s)                                                         \
+    (is_set(STRM_FL_INI_SRV, (s)->id) != (s)->c->is_clnt == false              \
+         ? (s)->c->tp_local.max_strm_bidi                                      \
+         : (s)->c->tp_peer.max_strm_bidi)
+
+
 extern uint64_t __attribute__((const))
 shorten_ack_nr(const uint64_t ack, const uint64_t diff);
+
+extern bool __attribute__((const))
+better_or_equal_prot(const uint8_t a, const uint8_t b);
 
 extern uint16_t __attribute__((nonnull))
 dec_frames(struct q_conn * const c, struct w_iov * v);
@@ -92,7 +103,7 @@ extern uint16_t __attribute__((nonnull(1, 2, 5))) dec_ack_frame(
     const struct w_iov * const v,
     const uint16_t pos,
     void (*before_ack)(struct q_conn * const, const uint64_t, const uint64_t),
-    void (*on_each_ack)(struct q_conn * const, const uint64_t),
+    void (*on_each_ack)(struct q_conn * const, const uint64_t, const uint8_t),
     void (*after_ack)(struct q_conn * const));
 
 extern uint16_t __attribute__((nonnull))

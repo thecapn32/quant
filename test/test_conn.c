@@ -28,6 +28,7 @@
 #include <arpa/inet.h>
 #include <inttypes.h>
 #include <netinet/in.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -70,32 +71,33 @@ int main(int argc
     char cert[MAXPATHLEN] =
         "/etc/letsencrypt/live/slate.eggert.org/fullchain.pem";
     char key[MAXPATHLEN] = "/etc/letsencrypt/live/slate.eggert.org/privkey.pem";
-    void * q = q_init("lo"
+    struct w_engine * w = q_init("lo"
 #ifndef __linux__
-                      "0"
+                                 "0"
 #endif
-                      ,
-                      cert, key);
+                                 ,
+                                 cert, key, 0);
 
     // bind server socket
-    struct q_conn * const sc = q_bind(q, 55555);
+    q_bind(w, 55555);
 
     // connect to server
     const struct sockaddr_in sip = {.sin_family = AF_INET,
                                     .sin_addr.s_addr = inet_addr("127.0.0.1"),
                                     .sin_port = htons(55555)};
-    struct q_conn * const cc = q_connect(q, &sip, "localhost");
+    struct q_conn * const cc = q_connect(w, &sip, "localhost", 0, 0, true, 0);
     ensure(cc, "is zero");
 
     // accept connection
-    q_accept(sc);
+    struct q_conn * const sc = q_accept(w, 0);
+    ensure(sc, "is zero");
 
     // reserve a new stream
     struct q_stream * const s = q_rsv_stream(cc);
 
     // allocate buffers to transmit a packet
     struct w_iov_sq o = sq_head_initializer(o);
-    q_alloc(q, &o, 1024);
+    q_alloc(w, &o, 1024);
     struct w_iov * const ov = sq_first(&o);
 
     // add some payload data
@@ -107,7 +109,7 @@ int main(int argc
     // send the data
     warn(INF, "writing %u byte%s: %s", ov->len, plural(ov->len),
          (char *)ov->buf);
-    q_write(s, &o);
+    q_write(s, &o, true);
 
     // read the data
     struct w_iov_sq i = sq_head_initializer(i);
@@ -119,5 +121,5 @@ int main(int argc
     // close connections
     q_close(cc);
     q_close(sc);
-    q_cleanup(q);
+    q_cleanup(w);
 }

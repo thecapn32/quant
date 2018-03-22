@@ -30,25 +30,25 @@ else
         [ "$c" != "$s" ] && ninja "$s"
 fi
 
+set +e
+
 export ASAN_OPTIONS=strict_string_checks=1:strict_init_order=1:detect_stack_use_after_return=1:detect_leaks=1:check_initialization_order=1:sleep_before_dying=30:alloc_dealloc_mismatch=1:detect_invalid_pointer_pairs=1
-# export UBSAN_OPTIONS=suppressions=../misc/ubsan.supp:print_stacktrace=1
+export LSAN_OPTIONS=log_threads=1
+export UBSAN_OPTIONS=print_stacktrace=1 # :suppressions=../misc/ubsan.supp
 
 # commands to run the different clients against $addr:$port
 case $c in
-        quant)
-                cc="bin/client -v5 https://$addr:$port$path"
-                ;;
-        wsquant)
-                cc="bin/client -i vboxnet3 -v5 https://172.28.128.3:$port$path"
+        quant|wsquant)
+                cc="bin/client -v5 https://$addr:$port$path" # https://$addr:$port$path"
                 ;;
         wcquant)
                 cc="vagrant ssh -c \"\
-                        /vagrant/Linux/bin/client -i enp0s8 -v5 \
-                                https://172.28.128.1:$port$path\""
+                        /vagrant/Linux/bin/client -i enp0s3 -v5 \
+                                https://$addr:44433$path\""
                 ;;
         quicly)
                 cc="external/quicly-prefix/src/quicly-build/cli \
-                        -l /tmp/quicly-c.log -v \
+                        -l /tmp/quicly-c.log -s /tmp/quicly-session -v \
                         -p $path $addr $port"
                 ;;
         minq)
@@ -58,37 +58,37 @@ case $c in
                         -addr $addr:$port -http $path"
                 ;;
         ngtcp2)
-                cc="echo GET / | \
+                touch /tmp/ngtcp2-session /tmp/ngtcp2-tp
+                cc="echo GET $path > /tmp/ngtcp2-req | \
                         external/ngtcp2-prefix/src/ngtcp2/examples/client \
-                        -i $addr $port"
+                        -d /tmp/ngtcp2-req $addr $port --session-file=/tmp/ngtcp2-session \
+                        --tp-file=/tmp/ngtcp2-tp"
                 ;;
         mozquic)
                 cc="env MOZQUIC_LOG=all:9 \
                         MOZQUIC_NSS_CONFIG=external/mozquic-prefix/src/mozquic/sample/nss-config \
                         DYLD_LIBRARY_PATH=external/mozquic-prefix/src/dist/$(cat external/mozquic-prefix/src/dist/latest)/lib \
                         external/mozquic-prefix/src/mozquic/client \
-                                -peer $addr:$port -get $path -send-close"
+                                -peer $addr:$port -get $path \
+                                -ignorePKI -send-close"
                 ;;
         picoquic)
-                cc="external/picoquic-prefix/src/picoquic/picoquicdemo \
-                        $addr $port -r"
+                cc="pushd external/picoquic-prefix/src/picoquic; ./picoquicdemo \
+                        $addr $port -1; popd"
                 ;;
 esac
 
 # commands to run the different servers on  $addr:$port
 case $s in
-        quant)
+        quant|wcquant)
                 sc="bin/server -v5 -p $port -d $dir"
                 ;;
         wsquant)
                 sc="vagrant ssh -c \"\
-                        /vagrant/Linux/bin/server -i enp0s8 -v5 -p $port \
+                        /vagrant/Linux/bin/server -i enp0s3 -v5 -p $port \
                                 -c ~/slate.eggert.org/fullchain.pem \
                                 -k ~/slate.eggert.org/privkey.pem \
-                                -d /usr/share/apache2/default-site\""
-                ;;
-        wcquant)
-                sc="bin/server -v5 -i vboxnet3 -p $port -d $dir"
+                                -d /usr/share/doc/valgrind/html\""
                 ;;
         quicly)
                 sc="external/quicly-prefix/src/quicly-build/cli \
@@ -110,11 +110,12 @@ case $s in
                 sc="env MOZQUIC_LOG=all:9 \
                         MOZQUIC_NSS_CONFIG=external/mozquic-prefix/src/mozquic/sample/nss-config \
                         DYLD_LIBRARY_PATH=external/mozquic-prefix/src/dist/$(cat external/mozquic-prefix/src/dist/latest)/lib \
-                        external/mozquic-prefix/src/mozquic/server -send-close"
+                        external/mozquic-prefix/src/mozquic/server \
+                        -ignorePKI -send-close -0rtt"
                 ;;
         picoquic)
-                sc="external/picoquic-prefix/src/picoquic/picoquicdemo \
-                        -p $port -k $key -c $cert"
+                sc="pushd external/picoquic-prefix/src/picoquic/; ./picoquicdemo \
+                        -p $port -k $key -c $cert -1; popd"
                 ;;
         ats)
                 sed -i"" -e "s/.*proxy.config.http.server_ports.*/CONFIG proxy.config.http.server_ports STRING $port:quic/g" external/etc/trafficserver/records.config
@@ -127,8 +128,8 @@ esac
 # # if we are on MacOS X, configure the firewall to add delay and loss
 # if [ -x /usr/sbin/dnctl ]; then
 #         # create pipes to limit bandwidth and add loss
-#         sudo dnctl pipe 1 config delay 750
-#         sudo dnctl pipe 2 config delay 750 #bw 64Kbit/s delay 250 queue 10Kbytes #plr 0.25
+#         sudo dnctl pipe 1 config delay 50 plr .1
+#         sudo dnctl pipe 2 config delay 50 plr .1 #bw 64Kbit/s delay 250 queue 10Kbytes #plr 0.25
 #         sudo pfctl -f - <<EOF
 #                 dummynet out proto udp from any to $addr port $port pipe 1
 #                 dummynet out proto udp from $addr port $port to any pipe 2
@@ -146,6 +147,6 @@ pkill -9 traffic_server
 
 # if we are on MacOS X, unconfigure the firewall
 if [ -x /usr/sbin/dnctl ]; then
-        sudo pfctl -d
         sudo dnctl -f flush
+        sudo pfctl -f /etc/pf.conf -d
 fi

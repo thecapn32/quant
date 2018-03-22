@@ -60,9 +60,9 @@ struct q_stream {
 
     uint64_t id;
     uint8_t state;
-    uint8_t fin_sent : 1;
-    uint8_t open_win : 1; ///< We need to open the receive window.
-    uint8_t blocked : 1;  ///< We are receive-window-blocked.
+    uint8_t fin_acked : 1;
+    uint8_t tx_max_stream_data : 1; ///< We need to open the receive window.
+    uint8_t blocked : 1;            ///< We are receive-window-blocked.
     uint8_t : 5;
     uint8_t _unused[6];
 };
@@ -72,6 +72,16 @@ struct q_stream {
 #define STRM_STAT_HCRM 2 ///< half-closed remote
 #define STRM_STAT_HCLO 3 ///< half-closed local
 #define STRM_STAT_CLSD 4
+
+
+#define strm_to_state(strm, s)                                                 \
+    do {                                                                       \
+        warn(DBG, "conn " FMT_CID " strm " FMT_SID " state %u -> %u",          \
+             (strm)->c->id, (strm)->id, (strm)->state, (s));                   \
+        (strm)->state = (s);                                                   \
+    } while (0)
+
+#define is_fully_acked(s) ((s)->out_ack_cnt == sq_len(&(s)->out))
 
 
 extern int __attribute__((nonnull))

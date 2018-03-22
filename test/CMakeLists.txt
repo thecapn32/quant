@@ -1,3 +1,7 @@
+configure_file(test_public_servers.sh test_public_servers.sh COPYONLY)
+configure_file(test_public_servers.result test_public_servers.result COPYONLY)
+add_test(test_public_servers.sh test_public_servers.sh)
+
 foreach(TARGET diet conn)
   add_executable(test_${TARGET} test_${TARGET}.c)
   target_link_libraries(test_${TARGET} lib${PROJECT_NAME})
@@ -13,3 +17,4 @@ foreach(TARGET diet conn)
   endif()
   add_test(test_${TARGET} test_${TARGET})
 endforeach()
+

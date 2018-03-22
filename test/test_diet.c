@@ -25,6 +25,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <bitstring.h>
 #include <inttypes.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -34,40 +35,85 @@
 #include "diet.h"
 
 
+static void trace(struct diet * const d,
+                  const uint64_t x
+#ifdef NDEBUG
+                  __attribute__((unused))
+#endif
+                  ,
+                  const uint8_t t
+#ifdef NDEBUG
+                  __attribute__((unused))
+#endif
+                  ,
+                  const char * const op
+#ifdef NDEBUG
+                  __attribute__((unused))
+#endif
+)
+{
+    char str[8192];
+    diet_to_str(str, sizeof(str), d);
+    warn(DBG, "cnt %" PRIu64 ", %s %u.%" PRIu64 ": %s", diet_cnt(d), op, t, x,
+         str);
+
+    uint64_t c = 0;
+    char * s = str;
+    while (*s)
+        c += *(s++) == ',';
+    ensure(str[0] == 0 || c + 1 == diet_cnt(d), "%u %u", c + 1, diet_cnt(d));
+}
+
+
+static void chk(struct diet * const d)
+{
+    struct ival *i, *next;
+    for (i = splay_min(diet, d); i != 0; i = next) {
+        next = splay_next(diet, d, i);
+        ensure(next == 0 || i->hi + 1 < next->lo ||
+                   diet_class(i) != diet_class(next),
+               "%u.%" PRIu64 "-%" PRIu64 " %u.%" PRIu64 "-%" PRIu64,
+               diet_class(i), i->lo, i->hi, diet_class(next), next->lo,
+               next->hi);
+    }
+}
+
+
+#define N 30
+
 int main()
 {
-    const uint64_t n = 20;
-    char s[256];
-    struct diet t = diet_initializer(diet);
+#ifndef NDEBUG
+    util_dlevel = DLEVEL; // default to maximum compiled-in verbosity
+#endif
+    struct diet d = diet_initializer(diet);
+    bitstr_t bit_decl(values, N);
 
     // insert some items
-    uint64_t i = 1;
-    while (i <= n) {
-        const uint64_t x = (uint64_t)arc4random_uniform(n + 1);
-        if (diet_find(&t, x) == 0) {
-            diet_insert(&t, x);
-            diet_to_str(s, sizeof(s), &t);
-            warn(DBG,
-                 "[%03" PRIu64 "] ranges %03" PRIu64 ", ins %03" PRIu64 ": %s",
-                 i, t.cnt, x, s);
-            i++;
+    int n = 0;
+    while (n != -1) {
+        bit_ffc(values, N, &n); // NOLINT
+        const uint64_t x = arc4random_uniform(N);
+        if (bit_test(values, x) == 0) {
+            bit_set(values, x);
+            const uint8_t t = (uint8_t)arc4random_uniform(2);
+            diet_insert(&d, x, t, 0);
+            trace(&d, x, t, "ins");
+            chk(&d);
         }
     }
-    // the above should have printed "1-n" as the last line
 
     // remove all items
-    i = 1;
-    while (!splay_empty(&t)) {
-        const uint64_t x = (uint64_t)arc4random_uniform(n + 1);
-        if (diet_find(&t, x)) {
-            diet_remove(&t, x);
-            diet_to_str(s, sizeof(s), &t);
-            warn(DBG,
-                 "[%03" PRIu64 "] ranges %03" PRIu64 ", rem %03" PRIu64 ": %s",
-                 i, t.cnt, x, s);
-            i++;
+    while (!splay_empty(&d)) {
+        const uint64_t x = arc4random_uniform(N);
+        struct ival * const i = diet_find(&d, x);
+        if (i) {
+            diet_remove(&d, x);
+            trace(&d, x, 0, "rem");
+            chk(&d);
         }
     }
+    ensure(diet_cnt(&d) == 0, "incorrect node count %u != 0", diet_cnt(&d));
 
     return 0;
 }

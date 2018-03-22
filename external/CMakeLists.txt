@@ -43,6 +43,7 @@ endif()
 set_target_properties(warpcore PROPERTIES
   IMPORTED_LOCATION ${WARP_LIB}
   INTERFACE_INCLUDE_DIRECTORIES ${WARP_INCLUDE}
+  INTERFACE_LINK_LIBRARIES dl
 )
 
 
@@ -50,6 +51,7 @@ externalproject_add(picotls
   # UPDATE_COMMAND "" # XXX do not commit with this being empty
   GIT_REPOSITORY https://github.com/h2o/picotls.git
   GIT_SHALLOW 1
+  # GIT_TAG 7474dfe64a8c18a70d927ae38073d6ee263d6a79
   CMAKE_ARGS
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
     -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}
@@ -130,7 +132,7 @@ externalproject_add(openssl
   UPDATE_COMMAND ""
   # GIT_REPOSITORY https://github.com/openssl/openssl.git
   GIT_REPOSITORY https://github.com/tatsuhiro-t/openssl
-  GIT_TAG quic
+  GIT_TAG early-exporter
   GIT_SHALLOW 1
   CONFIGURE_COMMAND ./config --prefix=${CMAKE_CURRENT_BINARY_DIR} enable-tls1_3
   BUILD_IN_SOURCE 1
@@ -171,10 +173,10 @@ externalproject_add(nss
   UPDATE_COMMAND ""
   SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/mozquic-prefix/src/nss
   GIT_REPOSITORY https://github.com/nss-dev/nss.git
-  # GIT_SHALLOW 1
-  GIT_TAG affb759ef3116d82c15bba3e0b38fc8d8560dfdc
+  GIT_SHALLOW 1
+  GIT_TAG origin/NSS_3_36_BRANCH
   CONFIGURE_COMMAND ""
-  BUILD_COMMAND ./build.sh
+  BUILD_COMMAND make nss_build_all USE_64=1
   BUILD_IN_SOURCE 1
   INSTALL_COMMAND ""
   EXCLUDE_FROM_ALL 1
@@ -185,7 +187,7 @@ externalproject_add(mozquic
   # UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/mcmanus/mozquic.git
   GIT_SHALLOW 1
-  PATCH_COMMAND sed -i "" -e "s/-Werror//g" Makefile
+  PATCH_COMMAND sed -i "" -e "s/-Werror//g $<SEMICOLON> s|include/nspr|include|g" Makefile
   CONFIGURE_COMMAND ""
   BUILD_IN_SOURCE 1
   BUILD_COMMAND make -j8
@@ -200,7 +202,7 @@ externalproject_add(picoquic
   # UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/private-octopus/picoquic.git
   GIT_SHALLOW 1
-  GIT_TAG draft-21
+  # GIT_TAG draft-21
   BUILD_IN_SOURCE 1
   CMAKE_ARGS
     -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}

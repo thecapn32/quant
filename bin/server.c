@@ -28,6 +28,7 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <net/if.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,6 +45,8 @@
 
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
+
+struct q_conn;
 
 
 static void __attribute__((noreturn)) usage(const char * const name,
@@ -70,10 +73,29 @@ static void __attribute__((noreturn)) usage(const char * const name,
 struct cb_data {
     struct q_stream * s;
     struct q_conn * c;
-    void * q;
+    struct w_engine * w;
     int dir;
     uint32_t _dummy;
 };
+
+
+static int send_err(const struct cb_data * const d, const uint16_t code)
+{
+    const char * msg;
+    switch (code) {
+    case 403:
+        msg = "403 Forbidden";
+        break;
+    case 404:
+        msg = "404 Not Found";
+        break;
+    default:
+        msg = "500 Internal Server Error";
+    }
+
+    q_write_str(d->w, d->c, d->s, msg, true);
+    return 0;
+}
 
 
 static int serve_cb(http_parser * parser, const char * at, size_t len)
@@ -86,29 +108,53 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
     char path[MAXPATHLEN] = ".";
     strncpy(&path[*at == '/' ? 1 : 0], at, MIN(len, sizeof(path) - 1));
 
+    // hacky way to prevent directory traversals
+    if (strstr(path, ".."))
+        return send_err(d, 403);
+
+    // check if this is a "GET /n" request for random data
+    uint32_t n = (uint32_t)MIN(UINT32_MAX, strtoul(&path[2], 0, 10));
+    if (n) {
+        struct w_iov_sq out = sq_head_initializer(out);
+        q_alloc(d->w, &out, n);
+        // randomize data
+        struct w_iov * v = 0;
+        char c = 'A';
+        sq_foreach (v, &out, next) {
+            memset(v->buf, c, v->len);
+            c = (c == 'Z' ? 'A' : c + 1);
+        }
+        q_write(d->s, &out, true);
+        return 0;
+    }
+
     struct stat info;
-    int r = fstatat(d->dir, path, &info, 0);
-    ensure(r != -1, "could not stat");
+    if (fstatat(d->dir, path, &info, 0) == -1)
+        return send_err(d, 404);
 
     // if this a directory, look up its index
     if (info.st_mode & S_IFDIR) {
         strncat(path, "/index.html", sizeof(path) - len - 1);
-        r = fstatat(d->dir, path, &info, 0);
-        ensure(r != -1, "could not stat %s", path);
+        if (fstatat(d->dir, path, &info, 0) == -1)
+            return send_err(d, 404);
     }
-    ensure(info.st_mode & S_IFREG || info.st_mode & S_IFLNK, "%s is not a file",
-           path);
-    ensure(info.st_size < UINT32_MAX, "file %s too long", path);
+
+    if ((info.st_mode & S_IFREG) == 0 || (info.st_mode & S_IFLNK) == 0)
+        return send_err(d, 403);
+
+    if (info.st_size >= UINT32_MAX)
+        return send_err(d, 500);
 
     const int f = openat(d->dir, path, O_RDONLY | O_CLOEXEC);
     ensure(f != -1, "could not open %s", path);
 
-    q_write_file(d->q, d->s, f, (uint32_t)info.st_size);
-    q_close_stream(d->s);
+    q_write_file(d->w, d->c, d->s, f, (uint32_t)info.st_size, true);
 
     return 0;
 }
 
+
+#define MAXPORTS 16
 
 int main(int argc, char * argv[])
 {
@@ -124,7 +170,8 @@ int main(int argc, char * argv[])
     char cert[MAXPATHLEN] =
         "/etc/letsencrypt/live/slate.eggert.org/fullchain.pem";
     char key[MAXPATHLEN] = "/etc/letsencrypt/live/slate.eggert.org/privkey.pem";
-    uint16_t port = 4433;
+    uint16_t port[MAXPORTS] = {4433, 4434};
+    size_t num_ports = 0;
     int ch;
 
     while ((ch = getopt(argc, argv, "hi:p:d:v:c:k:")) != -1) {
@@ -142,7 +189,10 @@ int main(int argc, char * argv[])
             strncpy(key, optarg, sizeof(key) - 1);
             break;
         case 'p':
-            port = (uint16_t)MIN(UINT16_MAX, strtol(optarg, 0, 10));
+            port[num_ports++] =
+                (uint16_t)MIN(UINT16_MAX, strtoul(optarg, 0, 10));
+            ensure(num_ports < MAXPORTS, "can only listen on at most %u ports",
+                   MAXPORTS);
             break;
         case 'v':
 #ifndef NDEBUG
@@ -152,45 +202,60 @@ int main(int argc, char * argv[])
         case 'h':
         case '?':
         default:
-            usage(basename(argv[0]), ifname, port, dir, cert, key);
+            usage(basename(argv[0]), ifname, port[0], dir, cert, key);
         }
     }
+
+    if (num_ports == 0)
+        // if no -p args were given, we listen on two ports by default
+        num_ports = 2;
 
     const int dir_fd = open(dir, O_RDONLY | O_CLOEXEC);
     ensure(dir_fd != -1, "%s does not exist", dir);
 
-    void * const q = q_init(ifname, cert, key);
-    struct q_conn * c = q_bind(q, port);
-    warn(DBG, "%s waiting on %s port %d", basename(argv[0]), ifname, port);
-
-    if (q_accept(c) == 0)
-        goto done;
-
-    http_parser_settings settings = {.on_url = serve_cb};
-    struct cb_data d = {.c = c, .q = q, .dir = dir_fd};
-    http_parser parser = {.data = &d};
-    http_parser_init(&parser, HTTP_REQUEST);
-
-    struct w_iov_sq i = sq_head_initializer(i);
-    struct q_stream * s = q_read(c, &i);
-    d.s = s;
-
-    struct w_iov * v = 0;
-    sq_foreach (v, &i, next) {
-        const size_t parsed =
-            http_parser_execute(&parser, &settings, (char *)v->buf, v->len);
-        if (parsed != v->len)
-            warn(ERR, "HTTP parser error: %.*s", v->len - parsed,
-                 &v->buf[parsed]);
-        if (q_is_str_closed(s))
-            break;
+    struct w_engine * const w = q_init(ifname, cert, key, 0);
+    struct q_conn * conn[MAXPORTS];
+    for (size_t i = 0; i < num_ports; i++) {
+        conn[i] = q_bind(w, port[i]);
+        warn(DBG, "%s waiting on %s port %d", basename(argv[0]), ifname,
+             port[i]);
     }
 
-    q_free(&i);
-    q_close(c);
+    bool first = true;
+    while (1) {
+        struct q_conn * const c = q_accept(w, first ? 0 : 10);
+        first = false;
+        if (c == 0)
+            break;
 
-done:
-    q_cleanup(q);
+        http_parser_settings settings = {.on_url = serve_cb};
+        struct cb_data d = {.c = c, .w = w, .dir = dir_fd};
+        http_parser parser = {.data = &d};
+        http_parser_init(&parser, HTTP_REQUEST);
+
+        struct w_iov_sq i = sq_head_initializer(i);
+        struct q_stream * s = q_read(c, &i);
+        if (s == 0)
+            goto next;
+        d.s = s;
+
+        struct w_iov * v = 0;
+        sq_foreach (v, &i, next) {
+            const size_t parsed =
+                http_parser_execute(&parser, &settings, (char *)v->buf, v->len);
+            if (parsed != v->len)
+                warn(ERR, "HTTP parser error: %.*s", v->len - parsed,
+                     &v->buf[parsed]);
+            if (q_is_str_closed(s))
+                break;
+        }
+
+        q_free(c, &i);
+    next:
+        q_close(c);
+    }
+
+    q_cleanup(w);
     warn(DBG, "%s exiting", basename(argv[0]));
     return 0;
 }
