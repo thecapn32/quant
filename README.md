@@ -58,7 +58,29 @@ logging enabled. In order to build an optimized build, do this:
 ## Testing
 
 The `libquant` library will be in `lib`. There are `client` and `server`
-examples in `bin`.
+examples in `bin`. They explain their usage when called with a `-h` argument.
+
+The current interop status of quant against [other
+stacks](https://github.com/quicwg/base-drafts/wiki/Implementations) is captured
+in [this
+spreadsheet](https://docs.google.com/spreadsheets/d/1D0tW89vOoaScs3IY9RGC0UesWGAwE6xyLk0l4JtvTVg/edit?usp=sharing).
+
+At the moment, development happens in branches other than `master`, which are
+numbered according to the [IETF Internet Drafts](https://quicwg.github.io/) they
+implement. The `master` branch is updated whenever such a per-draft branch is
+stable.
+
+
+## Contributing
+
+I'm happy to merge contributions that fix
+[bugs](https://github.com/NTAP/quant/issues?q=is%3Aopen+is%3Aissue+label%3Abug)
+or add
+[features](https://github.com/NTAP/quant/issues?q=is%3Aopen+is%3Aissue+label%3Aenhancement).
+Please send pull requests.
+
+(Contributions to the underlying [warpcore](https://github.com/NTAP/warpcore)
+stack are also very welcome.)
 
 
 ## Copyright
