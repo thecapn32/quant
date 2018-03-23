@@ -39,6 +39,7 @@ declare -A servers=(
         [pandora]=pandora.cm.in.tum.de
         [picoquic]=test.privateoctopus.com
         [quant]=quant.eggert.org
+        [quicker]=quicker.edm.uhasselt.be
         [quicly]=kazuhooku.com
         [winquic]=msquic.westus.cloudapp.azure.com
 )
