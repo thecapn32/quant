@@ -8,6 +8,7 @@ ngtcp2          *               V       H       D       c       Z
 ngx_quic        *               V       H               c
 pandora                                                 c
 picoquic        *               V       H       D       C       Z       S
-quant           *               V       H       D       c       Z       S
+quant           *               V       H       D       C       Z       S
+quicker         *               V       H       D       c       Z
 quicly          *               V       H       D       c       Z       S
 winquic         *               V       H       D       C       Z       S
