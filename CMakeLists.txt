@@ -43,7 +43,7 @@ set(CMAKE_C_STANDARD 11)
 # Set general compile flags, if they are supported
 include(CheckCCompilerFlag)
 foreach(FLAG -march=native -Wextra -Wpedantic -Weverything -Werror
-        -fcolor-diagnostics -fdiagnostics-color=always
+        -fcolor-diagnostics -fdiagnostics-color=always -Wextended-offsetof
         -Wno-missing-field-initializers -Wno-disabled-macro-expansion  -Wno-cpp
         )
   string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
