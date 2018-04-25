@@ -112,14 +112,14 @@ static bool __attribute__((const)) vers_supported(const uint32_t v)
 
 
 static uint32_t __attribute__((nonnull))
-pick_from_server_vers(const void * const buf, const uint16_t len)
+pick_from_server_vers(const struct w_iov * const v)
 {
-    const uint16_t pos = pkt_hdr_len(buf, len);
+    const uint16_t pos = meta(v).hdr.hdr_len;
     for (uint8_t i = 0; i < ok_vers_len; i++)
-        for (uint8_t j = 0; j < len - pos; j += sizeof(uint32_t)) {
+        for (uint8_t j = 0; j < v->len - pos; j += sizeof(uint32_t)) {
             uint32_t vers = 0;
             uint16_t x = j + pos;
-            dec(&vers, buf, len, x, sizeof(vers), "0x%08x");
+            dec(&vers, v->buf, v->len, x, sizeof(vers), "0x%08x");
             warn(DBG, "serv prio %ld = 0x%08x; our prio %u = 0x%08x",
                  j / sizeof(uint32_t), vers, i, ok_vers[i]);
             if (ok_vers[i] == vers)
@@ -160,10 +160,11 @@ static void log_sent_pkts(struct q_conn * const c)
         const bool ack_only = is_ack_only(p);
         snprintf(tmp, sizeof(tmp), "%s%s" FMT_PNR_OUT "%s ",
                  is_rtxable(p) ? "*" : "", ack_only ? "(" : "",
-                 shorten_ack_nr(p->nr, p->nr - prev), ack_only ? ")" : "");
+                 shorten_ack_nr(p->hdr.nr, p->hdr.nr - prev),
+                 ack_only ? ")" : "");
         strncat(sent_pkts_buf, tmp,
                 sizeof(sent_pkts_buf) - strlen(sent_pkts_buf) - 1);
-        prev = p->nr;
+        prev = p->hdr.nr;
     }
     warn(DBG, "unacked: %s", sent_pkts_buf);
 }
@@ -199,13 +200,14 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             warn(DBG,
                  "skipping ACKed pkt " FMT_PNR_OUT " on str " FMT_SID
                  " during %s",
-                 meta(v).nr, s->id, rtx ? "RTX" : "TX");
+                 meta(v).hdr.nr, s->id, rtx ? "RTX" : "TX");
             continue;
         }
 
         if (s->c->state == CONN_STAT_ESTB &&
             s->out_off + v->len > s->out_data_max) {
-            warn(INF, "out of FC window for str " FMT_SID, meta(v).nr, s->id);
+            warn(INF, "out of FC window for str " FMT_SID, meta(v).hdr.nr,
+                 s->id);
             s->blocked = true;
             break;
         }
@@ -213,8 +215,8 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
         if (!rtx && meta(v).tx_len != 0) {
             warn(DBG,
                  "skipping %s pkt " FMT_PNR_OUT " on str " FMT_SID " during %s",
-                 meta(v).tx_len ? "already-tx'ed" : "fresh", meta(v).nr, s->id,
-                 rtx ? "RTX" : "TX");
+                 meta(v).tx_len ? "already-tx'ed" : "fresh", meta(v).hdr.nr,
+                 s->id, rtx ? "RTX" : "TX");
             continue;
         }
 
@@ -397,13 +399,11 @@ update_ipnp(struct q_conn * const c, const struct sockaddr_in * const peer)
 static bool __attribute__((nonnull))
 verify_prot(struct q_conn * const c, struct w_iov * const v)
 {
-    const uint8_t flags = pkt_flags(v->buf);
-    if (is_set(F_LONG_HDR, flags) && pkt_vers(v->buf, v->len) == 0)
+    if (is_set(F_LONG_HDR, meta(v).hdr.flags) && meta(v).hdr.vers == 0)
         // version negotiation responses do not carry protection
         return true;
 
-    const uint16_t hdr_len = pkt_hdr_len(v->buf, v->len);
-    const uint16_t len = dec_aead(c, v, hdr_len);
+    const uint16_t len = dec_aead(c, v, meta(v).hdr.hdr_len);
     if (len == 0)
         return false;
     v->len -= v->len - len;
@@ -479,26 +479,24 @@ reset_conn(struct q_conn * const c, const bool also_stream0_in)
 static void __attribute__((nonnull))
 process_pkt(struct q_conn * const c, struct w_iov * const v)
 {
-    const uint8_t flags = pkt_flags(v->buf);
-
     switch (c->state) {
     case CONN_STAT_IDLE:
     case CONN_STAT_VERS_NEG:
     case CONN_STAT_VERS_NEG_SENT:
         // respond to a client-initial
-        if (pkt_vers(v->buf, v->len) == 0) {
+        if (meta(v).hdr.vers == 0) {
             warn(INF, "ignoring spurious vers neg response");
             goto done;
         }
 
         // validate minimum packet size
-        if (pkt_type(flags) == F_LH_INIT && v->len < MIN_INI_LEN)
+        if (meta(v).hdr.type == F_LH_INIT && v->len < MIN_INI_LEN)
             warn(ERR, "initial %u-byte pkt too short (< %u)", v->len,
                  MIN_INI_LEN);
 
-        c->vers = pkt_vers(v->buf, v->len);
+        c->vers = meta(v).hdr.vers;
         c->needs_tx = true;
-        track_recv(c, meta(v).nr, flags);
+        track_recv(c, meta(v).hdr.nr, meta(v).hdr.flags);
         if (c->vers_initial == 0)
             c->vers_initial = c->vers;
         if (vers_supported(c->vers) && !is_force_neg_vers(c->vers)) {
@@ -508,7 +506,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             if (verify_prot(c, v) == false) {
                 err_close(c, ERR_TLS_HSHAKE_FAIL,
                           "AEAD decrypt of 0x%02x-type packet failed",
-                          pkt_type(flags));
+                          meta(v).hdr.type);
                 goto done;
             }
 #ifndef NO_RANDOM_CID
@@ -530,14 +528,14 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         break;
 
     case CONN_STAT_CH_SENT:
-        if (!is_set(F_LONG_HDR, flags)) {
-            warn(NTE, "ignoring unexpected 0x%02x-type pkt", pkt_type(flags));
+        if (!is_set(F_LONG_HDR, meta(v).hdr.flags)) {
+            warn(NTE, "ignoring unexpected 0x%02x-type pkt", meta(v).hdr.type);
             goto done;
         }
 
-        if (pkt_vers(v->buf, v->len) == 0) {
+        if (meta(v).hdr.vers == 0) {
             // handle an incoming vers-neg packet
-            const uint32_t try_vers = pick_from_server_vers(v->buf, v->len);
+            const uint32_t try_vers = pick_from_server_vers(v);
             if (try_vers == 0) {
                 // no version in common ith serv
                 conn_to_state(c, CONN_STAT_DRNG);
@@ -570,25 +568,23 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             return;
         }
 
-        if (pkt_type(flags) == F_LH_RTRY) {
+        if (meta(v).hdr.type == F_LH_RTRY) {
             // verify retry
-            const uint64_t nr = pkt_nr(v->buf, v->len, c);
-            struct w_iov * const ci = find_sent_pkt(c, nr);
+            struct w_iov * const ci = find_sent_pkt(c, meta(v).hdr.nr);
             if (ci) {
                 adj_iov_to_start(ci);
-                const uint8_t type = pkt_type(pkt_flags(ci->buf));
                 adj_iov_to_data(ci);
-                if (type != F_LH_INIT) {
+                if (meta(v).hdr.type != F_LH_INIT) {
                     warn(NTE,
                          "pkt nr " FMT_PNR_OUT " was not a CI, ignoring retry",
-                         nr);
+                         meta(v).hdr.nr);
                     goto done;
                 }
             } else {
                 warn(NTE,
                      "could not find sent pkt nr " FMT_PNR_OUT
                      ", ignoring retry",
-                     nr);
+                     meta(v).hdr.nr);
                 goto done;
             }
 
@@ -599,7 +595,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             if (verify_prot(c, v) == false) {
                 err_close(c, ERR_TLS_HSHAKE_FAIL,
                           "AEAD decrypt of 0x%02x-type packet failed",
-                          pkt_type(flags));
+                          meta(v).hdr.type);
                 goto done;
             }
 
@@ -633,29 +629,29 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         if (verify_prot(c, v) == false) {
             err_close(c, ERR_TLS_HSHAKE_FAIL,
                       "AEAD decrypt of 0x%02x-type packet failed",
-                      pkt_type(flags));
+                      meta(v).hdr.type);
             goto done;
         }
 
         // if we get here, this should be a regular server-hello
         dec_frames(c, v);
-        track_recv(c, meta(v).nr, flags);
+        track_recv(c, meta(v).hdr.nr, meta(v).hdr.flags);
         break;
 
     case CONN_STAT_RTRY:
         if (verify_prot(c, v) == false) {
             err_close(c, ERR_TLS_HSHAKE_FAIL,
                       "AEAD decrypt of 0x%02x-type packet failed",
-                      pkt_type(flags));
+                      meta(v).hdr.type);
             goto done;
         }
-        track_recv(c, meta(v).nr, flags);
+        track_recv(c, meta(v).hdr.nr, meta(v).hdr.flags);
         dec_frames(c, v);
         break;
 
     case CONN_STAT_SH:
     case CONN_STAT_HSHK_DONE:
-        if (is_set(F_LONG_HDR, flags) && pkt_vers(v->buf, v->len) == 0) {
+        if (is_set(F_LONG_HDR, meta(v).hdr.flags) && meta(v).hdr.vers == 0) {
             // we shouldn't get another vers-neg packet here, ignore
             warn(NTE, "ignoring spurious ver neg response");
             goto done;
@@ -663,7 +659,8 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 
         // pass any further data received on stream 0 to TLS and check
         // whether that completes the client handshake
-        if (!is_set(F_LONG_HDR, flags) || pkt_type(flags) <= F_LH_HSHK) {
+        if (!is_set(F_LONG_HDR, meta(v).hdr.flags) ||
+            meta(v).hdr.type <= F_LH_HSHK) {
             if (maybe_api_return(q_accept, accept_queue))
                 accept_queue = c;
         }
@@ -674,7 +671,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
     case CONN_STAT_HSHK_FAIL:
     case CONN_STAT_DRNG:
         // ignore 0-RTT packets if we're not doing 0-RTT
-        if (c->did_0rtt == false && pkt_type(flags) == F_LH_0RTT) {
+        if (c->did_0rtt == false && meta(v).hdr.type == F_LH_0RTT) {
             warn(NTE, "ignoring 0-RTT pkt");
             goto done;
         }
@@ -690,7 +687,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             goto done;
         }
 
-        track_recv(c, meta(v).nr, flags);
+        track_recv(c, meta(v).hdr.nr, meta(v).hdr.flags);
         dec_frames(c, v);
 
         // if packet has anything other than ACK frames, arm the ACK timer
@@ -732,61 +729,54 @@ void rx(struct ev_loop * const l,
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         sq_remove_head(&i, next);
 
-        struct q_conn * c = 0;
+        dec_pkt_hdr(v);
         // warn(DBG, "rx idx %u", w_iov_idx(v));
 
         if (v->len > MAX_PKT_LEN)
             warn(WRN, "received %u-byte pkt (> %u max)", v->len, MAX_PKT_LEN);
-        const uint16_t hdr_len = pkt_hdr_len(v->buf, v->len);
-        if (v->len < hdr_len) {
-            warn(ERR, "%u-byte pkt indicates %u-byte hdr; ignoring", v->len,
-                 hdr_len);
-            q_free_iov(c, v);
-            continue;
-        }
+        // if (v->len < meta(v).hdr.hdr_len) {
+        //     warn(ERR, "%u-byte pkt indicates %u-byte hdr; ignoring", v->len,
+        //          meta(v).hdr.hdr_len);
+        //     q_free_iov(c, v);
+        //     continue;
+        // }
 
-        const uint8_t flags = pkt_flags(v->buf);
         const bool is_clnt = w_connected(ws);
-        struct cid dcid;
-        if (is_set(F_LONG_HDR, flags) || !is_set(F_SH_OMIT_CID, flags)) {
-            pkt_dcid(v->buf, v->len, &dcid);
-            c = get_conn_by_cid(&dcid, is_clnt);
-        }
-
+        struct q_conn * c = get_conn_by_cid(&meta(v).hdr.dcid, is_clnt);
         if (c == 0) {
             const struct sockaddr_in peer = {.sin_family = AF_INET,
                                              .sin_port = v->port,
                                              .sin_addr = {.s_addr = v->ip}};
             c = get_conn_by_ipnp(w_get_sport(ws), &peer, is_clnt);
-            if (is_set(F_LONG_HDR, flags)) {
+            if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
                 if (is_clnt) {
                     // // server may have picked a new cid
                     // warn(INF, "got new cid " FMT_CID " for %s conn " FMT_CID,
                     //      cid, conn_type(c), c->id);
                     // update_cid(c, cid);
                 } else {
-                    if (c && pkt_type(flags) == F_LH_0RTT)
+                    if (c && meta(v).hdr.type == F_LH_0RTT)
                         warn(INF,
                              "got 0-RTT pkt for orig cid %s, new is %s, "
                              "accepting",
-                             cid2str(&dcid), cid2str(&c->dcid));
-                    else if (c && pkt_type(flags) == F_LH_INIT) {
+                             cid2str(&meta(v).hdr.dcid), cid2str(&c->dcid));
+                    else if (c && meta(v).hdr.type == F_LH_INIT) {
                         warn(INF,
                              "got duplicate CI for orig cid %s, new is %s, "
                              "ignoring",
-                             cid2str(&dcid), cid2str(&c->dcid));
+                             cid2str(&meta(v).hdr.dcid), cid2str(&c->dcid));
                         q_free_iov(c, v);
                         continue;
-                    } else if (pkt_type(flags) == F_LH_INIT &&
+                    } else if (meta(v).hdr.type == F_LH_INIT &&
                                v->len >= MIN_INI_LEN) {
                         warn(NTE,
                              "new serv conn on port %u w/cid %s from %s:%u",
-                             ntohs(w_get_sport(ws)), cid2str(&dcid),
+                             ntohs(w_get_sport(ws)), cid2str(&meta(v).hdr.dcid),
                              inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
 
-                        c = new_conn(w_engine(ws), pkt_vers(v->buf, v->len),
-                                     &dcid, 0, &peer, 0, ntohs(w_get_sport(ws)),
-                                     0);
+                        c = new_conn(w_engine(ws), meta(v).hdr.vers,
+                                     &meta(v).hdr.dcid, 0, &peer, 0,
+                                     ntohs(w_get_sport(ws)), 0);
                         new_stream(c, 0, false);
                     }
                 }
@@ -796,12 +786,14 @@ void rx(struct ev_loop * const l,
         }
 
         if (c == 0) {
-            warn(INF, "cannot find connection for 0x%02x packet", flags);
+            warn(INF, "cannot find connection for 0x%02x packet",
+                 meta(v).hdr.flags);
             q_free_iov(c, v);
             continue;
         }
 
-        meta(v).nr = pkt_nr(v->buf, v->len, c);
+        if (meta(v).hdr.vers)
+            dec_pkt_nr(v, c);
         log_pkt("RX", v, c, 0);
 
         // remember that we had a RX event on this connection

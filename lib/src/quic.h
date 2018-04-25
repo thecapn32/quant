@@ -47,6 +47,24 @@
 #include "frame.h"
 
 
+struct cid {
+    uint8_t id[14]; ///< Connection ID
+    uint8_t len;    ///< Connection ID length
+};
+
+
+struct pkt_hdr {
+    uint16_t plen;
+    uint16_t hdr_len;
+    uint32_t vers;
+    uint64_t nr;
+    struct cid dcid;
+    struct cid scid;
+    uint8_t flags; // first byte of packet
+    uint8_t type;
+};
+
+
 /// Packet meta-data information associated with w_iov buffers
 struct pkt_meta {
     // XXX need to potentially change pm_cpy() below if fields are reordered
@@ -54,7 +72,6 @@ struct pkt_meta {
     splay_entry(pkt_meta) off_node;
     struct pkt_meta * rtx;      ///< Pointer to last RTX, if one happened.
     ev_tstamp tx_t;             ///< Transmission timestamp.
-    uint64_t nr;                ///< Packet number.
     struct q_stream * stream;   ///< Stream this data was written on.
     uint64_t stream_off;        ///< Stream data offset.
     uint16_t stream_header_pos; ///< Offset of stream frame header.
@@ -68,6 +85,7 @@ struct pkt_meta {
     uint8_t : 5;
     bitstr_t bit_decl(frames, MAX_FRAM_TYPE + 1); ///< Frames present in pkt.
     uint8_t _unused[2];
+    struct pkt_hdr hdr;
 };
 
 

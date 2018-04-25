@@ -40,7 +40,6 @@
 #include "conn.h"
 #include "diet.h"
 #include "frame.h"
-#include "pkt.h"
 #include "quic.h"
 #include "recovery.h"
 #include "stream.h"
@@ -122,25 +121,25 @@ static void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c)
     struct pkt_meta *p, *nxt;
 
     for (p = splay_min(pm_nr_splay, &c->rec.sent_pkts);
-         p && p->nr < c->rec.lg_acked; p = nxt) {
+         p && p->hdr.nr < c->rec.lg_acked; p = nxt) {
         nxt = splay_next(pm_nr_splay, &c->rec.sent_pkts, p);
 
         if (p->is_acked || p->is_lost)
             continue;
 
         const ev_tstamp time_since_sent = now - p->tx_t;
-        const uint64_t delta = c->rec.lg_acked - p->nr;
+        const uint64_t delta = c->rec.lg_acked - p->hdr.nr;
 
         // warn(DBG,
         //      "pkt %" PRIu64
         //      ": time_since_sent %f > delay_until_lost %f || delta %" PRIu64
         //      " > c->rec.reorder_thresh %" PRIu64,
-        //      p->nr, time_since_sent, delay_until_lost, delta,
+        //      p->hdr.nr, time_since_sent, delay_until_lost, delta,
         //      c->rec.reorder_thresh);
 
         if (time_since_sent > delay_until_lost ||
             delta > c->rec.reorder_thresh) {
-            warn(WRN, "pkt " FMT_PNR_OUT " considered lost", p->nr);
+            warn(WRN, "pkt " FMT_PNR_OUT " considered lost", p->hdr.nr);
             p->is_lost = true;
 
             // OnPacketsLost:
@@ -150,11 +149,11 @@ static void __attribute__((nonnull)) detect_lost_pkts(struct q_conn * const c)
                      c->rec.in_flight);
             }
 
-            largest_lost_packet = MAX(largest_lost_packet, p->nr);
+            largest_lost_packet = MAX(largest_lost_packet, p->hdr.nr);
 
             if (p->is_rtxed || !is_rtxable(p)) {
                 warn(DBG, "free already-rtxed/non-rtxable pkt " FMT_PNR_OUT,
-                     p->nr);
+                     p->hdr.nr);
                 q_free_iov(c, w_iov(w_engine(c->sock), pm_idx(p)));
             }
 
@@ -311,13 +310,12 @@ void on_pkt_acked(struct q_conn * const c,
     }
 
     adj_iov_to_start(v);
-    const uint8_t flags_buf = pkt_flags(v->buf);
     adj_iov_to_data(v);
-    if (!better_or_equal_prot(flags, flags_buf)) {
+    if (!better_or_equal_prot(flags, meta(v).hdr.flags)) {
         warn(ERR,
              "0x%02x-type pkt has ACK for 0x%02x-type pkt " FMT_PNR_OUT
              ", ignoring",
-             flags, flags_buf, ack);
+             flags, meta(v).hdr.flags, ack);
         return;
     }
 
@@ -404,7 +402,7 @@ void on_pkt_acked(struct q_conn * const c,
 
 struct w_iov * find_sent_pkt(struct q_conn * const c, const uint64_t nr)
 {
-    const struct pkt_meta which = {.nr = nr};
+    const struct pkt_meta which = {.hdr.nr = nr};
     const struct pkt_meta * const p =
         splay_find(pm_nr_splay, &c->rec.sent_pkts, &which);
     return p ? w_iov(w_engine(c->sock), pm_idx(p)) : 0;

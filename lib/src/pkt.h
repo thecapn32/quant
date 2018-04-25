@@ -30,8 +30,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "quic.h"
-
 #define MAX_PKT_LEN 1252
 #define MIN_INI_LEN 1200
 
@@ -64,35 +62,15 @@
 #define ERR_FRAME_ERR(type) ((0x1 << 8) | (type))
 
 
-#define pkt_flags(buf) (*(const uint8_t * const)(buf))
-
-#define pkt_type(flags) (flags & (is_set(F_LONG_HDR, flags) ? ~0x80 : ~0xe0))
-
 struct q_conn;
 struct q_stream;
 struct w_iov;
 struct w_iov_sq;
-struct cid;
 
-extern void __attribute__((nonnull)) pkt_dcid(const uint8_t * const buf,
-                                              const uint16_t len,
-                                              struct cid * const dcid);
+extern void __attribute__((nonnull)) dec_pkt_hdr(const struct w_iov * const v);
 
-extern void __attribute__((nonnull)) pkt_scid(const uint8_t * const buf,
-                                              const uint16_t len,
-                                              struct cid * const scid);
-
-extern uint64_t __attribute__((nonnull))
-pkt_nr(const uint8_t * const buf, const uint16_t len, struct q_conn * const c);
-
-extern uint32_t __attribute__((nonnull))
-pkt_vers(const uint8_t * const buf, const uint16_t len);
-
-extern uint16_t __attribute__((nonnull))
-pkt_hdr_len(const uint8_t * const buf, const uint16_t len);
-
-extern uint64_t __attribute__((nonnull))
-pkt_plen(const uint8_t * const buf, const uint16_t len);
+extern void __attribute__((nonnull))
+dec_pkt_nr(const struct w_iov * const v, struct q_conn * const c);
 
 extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
                                              const bool rtx,

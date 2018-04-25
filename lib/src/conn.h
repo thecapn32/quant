@@ -36,6 +36,7 @@
 #include <warpcore/warpcore.h>
 
 #include "diet.h"
+#include "quic.h"
 #include "recovery.h"
 #include "tls.h"
 
@@ -53,12 +54,6 @@ struct transport_params {
     uint16_t idle_to;
     uint8_t ack_del_exp;
     uint8_t _unused[3];
-};
-
-
-struct cid {
-    uint8_t id[14]; ///< Connection ID
-    uint8_t len;    ///< Connection ID length
 };
 
 

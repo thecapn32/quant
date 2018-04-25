@@ -1023,9 +1023,8 @@ which_aead(const struct q_conn * const c,
            const struct w_iov * const v,
            const bool in)
 {
-    const uint8_t flags = pkt_flags(v->buf);
-    if (is_set(F_LONG_HDR, flags)) {
-        if (pkt_type(flags) == F_LH_0RTT)
+    if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
+        if (meta(v).hdr.type == F_LH_0RTT)
             return in ? c->tls.dec_0rtt : c->tls.enc_0rtt;
         return in ? c->tls.dec_hshk : c->tls.enc_hshk;
     }
@@ -1053,7 +1052,7 @@ uint16_t dec_aead(struct q_conn * const c,
 
     const size_t len =
         ptls_aead_decrypt(aead, &v->buf[hdr_len], &v->buf[hdr_len],
-                          v->len - hdr_len, meta(v).nr, v->buf, hdr_len);
+                          v->len - hdr_len, meta(v).hdr.nr, v->buf, hdr_len);
     if (len == SIZE_MAX) {
         warn(ERR, "AEAD %s decrypt error", aead_type(c, aead));
         return 0;
@@ -1077,7 +1076,7 @@ uint16_t enc_aead(struct q_conn * const c,
     memcpy(x->buf, v->buf, hdr_len); // copy pkt header
     const size_t len =
         ptls_aead_encrypt(aead, &x->buf[hdr_len], &v->buf[hdr_len],
-                          v->len - hdr_len, meta(v).nr, v->buf, hdr_len);
+                          v->len - hdr_len, meta(v).hdr.nr, v->buf, hdr_len);
     warn(DBG, "added %lu-byte %s AEAD over [0..%u] in [%u..%u]",
          len + hdr_len - v->len, aead_type(c, aead), v->len - 1, v->len,
          len + hdr_len - 1);

@@ -48,11 +48,10 @@
 #ifndef NDEBUG
 static const char * pkt_type_str(const struct w_iov * const v)
 {
-    const uint8_t flags = pkt_flags(v->buf);
-    if (is_set(F_LONG_HDR, flags)) {
-        if (pkt_vers(v->buf, v->len) == 0)
+    if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
+        if (meta(v).hdr.vers == 0)
             return "Version Negotiation";
-        switch (pkt_type(flags)) {
+        switch (meta(v).hdr.type) {
         case F_LH_INIT:
             return "Initial";
         case F_LH_RTRY:
@@ -63,7 +62,7 @@ static const char * pkt_type_str(const struct w_iov * const v)
             return "0-RTT Protected";
         }
     } else
-        switch (pkt_type(flags)) {
+        switch (meta(v).hdr.type) {
         case F_SH_1OCT:
             return "Short(1)";
         case F_SH_2OCT:
@@ -80,163 +79,44 @@ void log_pkt(const char * const dir,
              const struct q_conn * const c __attribute__((unused)),
              const uint16_t add_len)
 {
-    const uint8_t flags = pkt_flags(v->buf);
     const char * col_dir = *dir == 'R' ? BLD BLU : BLD GRN;
     const char * col_nr = *dir == 'R' ? BLU : GRN;
 
-    if (is_set(F_LONG_HDR, flags)) {
-        const uint32_t vers = pkt_vers(v->buf, v->len);
-        struct cid dcid = {0}, scid = {0};
-        pkt_dcid(v->buf, v->len, &dcid);
-        pkt_scid(v->buf, v->len, &scid);
-        if (vers == 0)
+    if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
+        if (meta(v).hdr.vers == 0)
             twarn(NTE,
                   BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM
                       "vers=0x%08x dcid=%s scid=%s",
-                  col_dir, dir, v->len + add_len, flags, col_dir,
-                  pkt_type_str(v), vers, cid2str(&dcid), cid2str(&scid));
+                  col_dir, dir, v->len + add_len, meta(v).hdr.flags, col_dir,
+                  pkt_type_str(v), meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
+                  cid2str(&meta(v).hdr.scid));
         else
             twarn(NTE,
                   BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM
-                      "vers=0x%08x dcid=%s scid=%s nr=%s%" PRIu64,
-                  col_dir, dir, v->len + add_len, flags, col_dir,
-                  pkt_type_str(v), vers, cid2str(&dcid), cid2str(&scid), col_nr,
-                  meta(v).nr);
+                      "vers=0x%08x dcid=%s scid=%s plen=%u nr=%s%" PRIu64,
+                  col_dir, dir, v->len + add_len, meta(v).hdr.flags, col_dir,
+                  pkt_type_str(v), meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
+                  cid2str(&meta(v).hdr.scid), meta(v).hdr.plen, col_nr,
+                  meta(v).hdr.nr);
+        //  else if (is_set(F_SH_OMIT_CID, meta(v).hdr.flags))
+        //     twarn(NTE,
+        //           BLD "%s%s" NRM " len=%u 0x%02x=%s%s" NRM "|omit_cid(%s" NRM
+        //               ") nr=%s%" PRIu64,
+        //           col_dir, dir, v->len + add_len, meta(v).hdr.flags, col_dir,
+        //           pkt_type_str(v), cid, col_nr, meta(v).hdr.nr);
+        // else
+        //     twarn(NTE,
+        //           BLD "%s%s" NRM " len=%u 0x%02x=%s%s" NRM " cid=" NRM
+        //               " nr=%s%" PRIu64,
+        //           col_dir, dir, v->len + add_len, meta(v).hdr.flags, col_dir,
+        //           pkt_type_str(v), pkt_cid(v->buf, v->len + add_len), col_nr,
+        //           meta(v).hdr.nr);
     }
-    //  else if (is_set(F_SH_OMIT_CID, flags))
-    //     twarn(NTE,
-    //           BLD "%s%s" NRM " len=%u 0x%02x=%s%s" NRM "|omit_cid(%s" NRM
-    //               ") nr=%s%" PRIu64,
-    //           col_dir, dir, v->len + add_len, flags, col_dir,
-    //           pkt_type_str(v), cid, col_nr, meta(v).nr);
-    // else
-    //     twarn(NTE,
-    //           BLD "%s%s" NRM " len=%u 0x%02x=%s%s" NRM " cid=" NRM
-    //               " nr=%s%" PRIu64,
-    //           col_dir, dir, v->len + add_len, flags, col_dir,
-    //           pkt_type_str(v), pkt_cid(v->buf, v->len + add_len), col_nr,
-    //           meta(v).nr);
 }
 #endif
 
 
-/// Packet number lengths for different short-header packet types
-static const uint8_t pkt_nr_lens[] = {sizeof(uint32_t), sizeof(uint16_t),
-                                      sizeof(uint8_t)};
-
-
-static uint8_t pkt_dcid_len(const uint8_t * const buf, const uint16_t len)
-{
-    uint8_t cil = 0;
-    dec(&cil, buf, len, 5, sizeof(cil), "0x%02x");
-    cil >>= 4;
-    if (cil)
-        cil += 3;
-    return cil;
-}
-
-
-static uint8_t pkt_scid_len(const uint8_t * const buf, const uint16_t len)
-{
-    uint8_t cil = 0;
-    dec(&cil, buf, len, 5, sizeof(cil), "0x%02x");
-    cil &= 0x0f;
-    if (cil)
-        cil += 3;
-    return cil;
-}
-
-
-void pkt_dcid(const uint8_t * const buf,
-              const uint16_t len,
-              struct cid * const dcid)
-{
-    const uint8_t flags = pkt_flags(buf);
-    ensure(is_set(F_LONG_HDR, flags) || !is_set(F_SH_OMIT_CID, flags),
-           "no destination connection ID in header");
-    dcid->len = pkt_dcid_len(buf, len);
-    if (dcid->len)
-        memcpy(dcid->id, &buf[6], dcid->len);
-}
-
-
-void pkt_scid(const uint8_t * const buf,
-              const uint16_t len,
-              struct cid * const scid)
-{
-    const uint8_t flags = pkt_flags(buf);
-    ensure(is_set(F_LONG_HDR, flags) || !is_set(F_SH_OMIT_CID, flags),
-           "no source connection ID in header");
-    scid->len = pkt_scid_len(buf, len);
-    if (scid->len) {
-        const uint8_t dcid_len = pkt_dcid_len(buf, len);
-        memcpy(scid->id, &buf[dcid_len ? 10 : 6], scid->len);
-    }
-}
-
-
-uint64_t pkt_plen(const uint8_t * const buf, const uint16_t len)
-{
-    uint64_t plen = 0;
-    dec(&plen, buf, len, 5 + pkt_dcid_len(buf, len) + pkt_scid_len(buf, len), 0,
-        "%" PRIu64);
-    return plen;
-}
-
-
-uint16_t pkt_hdr_len(const uint8_t * const buf, const uint16_t len)
-{
-    const uint8_t flags = pkt_flags(buf);
-    uint16_t pos = 0;
-    if (is_set(F_LONG_HDR, flags)) {
-        pos = 5 + pkt_dcid_len(buf, len);
-        pos += pkt_scid_len(buf, len);
-        pos += varint_sizeof(buf[pos]);
-        pos += 4;
-    } else {
-        const uint8_t type = pkt_type(flags);
-        if (type > F_SH_1OCT || type < F_SH_4OCT) {
-            warn(ERR, "illegal pkt type 0x%02x", type);
-            return UINT16_MAX;
-        }
-        pos = 1 + (is_set(F_SH_OMIT_CID, flags) ? 0 : 8) +
-              pkt_nr_lens[type - F_SH_4OCT];
-    }
-    ensure(pos <= len, "payload position %u after end of packet %u", pos, len);
-    return pos;
-}
-
-
-uint64_t
-pkt_nr(const uint8_t * const buf, const uint16_t len, struct q_conn * const c)
-{
-    const uint64_t next = diet_max(&c->recv) + 1;
-    const uint8_t flags = pkt_flags(buf);
-    const uint8_t nr_len = is_set(F_LONG_HDR, flags)
-                               ? sizeof(uint32_t)
-                               : pkt_nr_lens[pkt_type(flags) - F_SH_4OCT];
-
-    uint64_t nr = next;
-    dec(&nr, buf, len, pkt_hdr_len(buf, len) - 5, nr_len, BLU "%u" NRM);
-
-    const uint64_t alt = nr + (UINT64_C(1) << (nr_len * 8));
-    const uint64_t d1 = next >= nr ? next - nr : nr - next;
-    const uint64_t d2 = next >= alt ? next - alt : alt - next;
-
-    return d1 < d2 ? nr : alt;
-}
-
-
-uint32_t pkt_vers(const uint8_t * const buf, const uint16_t len)
-{
-    ensure(is_set(F_LONG_HDR, pkt_flags(buf)), "have long header");
-    uint32_t vers = 0;
-    dec(&vers, buf, len, 1, sizeof(vers), "0x%08x");
-    return vers;
-}
-
-
-static const uint8_t pkt_type[] = {0xFF, F_SH_1OCT, F_SH_2OCT, 0xFF, F_SH_4OCT};
+static const uint8_t pkt_type[] = {0xff, F_SH_1OCT, F_SH_2OCT, 0xff, F_SH_4OCT};
 
 
 static uint8_t __attribute__((nonnull))
@@ -251,8 +131,9 @@ needed_pkt_nr_len(struct q_conn * const c, const uint64_t n)
 }
 
 
-static uint16_t
-enc_cid(struct w_iov * const v, const uint16_t pos, const struct cid * const id)
+static uint16_t enc_lh_cid(struct w_iov * const v,
+                           const uint16_t pos,
+                           const struct cid * const id)
 {
     warn(DBG, "enc cid = %s into %u byte%s at v->buf[%u..%u]", cid2str(id),
          id->len, plural(id->len), pos, pos + id->len - 1);
@@ -262,15 +143,17 @@ enc_cid(struct w_iov * const v, const uint16_t pos, const struct cid * const id)
 
 
 static uint16_t
-enc_cids(struct q_conn * const c, struct w_iov * const v, const uint16_t pos)
+enc_lh_cids(struct q_conn * const c, struct w_iov * const v, const uint16_t pos)
 {
+    meta(v).hdr.dcid = c->dcid;
+    meta(v).hdr.scid = c->scid;
     const uint8_t cil = (uint8_t)((c->dcid.len ? c->dcid.len - 3 : 0) << 4) |
                         (uint8_t)(c->scid.len ? c->scid.len - 3 : 0);
     uint16_t i = enc(v->buf, v->len, pos, &cil, sizeof(cil), "0x%02x");
     if (c->dcid.len)
-        i = enc_cid(v, i, &c->dcid);
+        i = enc_lh_cid(v, i, &c->dcid);
     if (c->scid.len)
-        i = enc_cid(v, i, &c->scid);
+        i = enc_lh_cid(v, i, &c->scid);
     return i;
 }
 
@@ -284,80 +167,93 @@ bool enc_pkt(struct q_stream * const s,
     adj_iov_to_start(v);
 
     struct q_conn * const c = s->c;
-    uint8_t flags = 0;
-    uint16_t hdr_len = 0;
     uint16_t i = 0;
 
     if (c->state == CONN_STAT_VERS_NEG) {
         warn(INF, "sending vers neg serv response");
-        flags = F_LONG_HDR | (uint8_t)w_rand();
-        i = enc(v->buf, v->len, 0, &flags, sizeof(flags), "0x%02x");
-        const uint32_t vers = 0;
-        i = enc(v->buf, v->len, i, &vers, sizeof(c->vers), "0x%08x");
-        i = enc_cids(c, v, i);
+        meta(v).hdr.type = (uint8_t)w_rand();
+        meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
+        i = enc(v->buf, v->len, 0, &meta(v).hdr.flags,
+                sizeof(meta(v).hdr.flags), "0x%02x");
+        i = enc(v->buf, v->len, i, &meta(v).hdr.vers, sizeof(meta(v).hdr.vers),
+                "0x%08x");
+        i = enc_lh_cids(c, v, i);
         for (uint8_t j = 0; j < ok_vers_len; j++)
             if (!is_force_neg_vers(ok_vers[j]))
                 i = enc(v->buf, v->len, i, &ok_vers[j], sizeof(ok_vers[j]),
                         "0x%08x");
-        hdr_len = v->len = i;
+        meta(v).hdr.hdr_len = v->len = i;
         log_pkt("TX", v, c, 0);
         goto tx;
     }
 
     if (c->state == CONN_STAT_SEND_RTRY) {
         // echo pkt nr of client initial
-        meta(v).nr = diet_min(&c->recv);
+        meta(v).hdr.nr = diet_min(&c->recv);
         // TODO: randomize a new CID
         // arc4random_buf(&c->id, sizeof(c->id));
     } else
         // next pkt nr
-        meta(v).nr = ++c->rec.lg_sent;
+        meta(v).hdr.nr = ++c->rec.lg_sent;
 
     uint8_t pkt_nr_len = 0;
     switch (c->state) {
     case CONN_STAT_IDLE:
     case CONN_STAT_RTRY:
     case CONN_STAT_CH_SENT:
-        flags = F_LONG_HDR | (s->id == 0 ? F_LH_INIT : F_LH_0RTT);
+        meta(v).hdr.type = (s->id == 0 ? F_LH_INIT : F_LH_0RTT);
+        meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
         break;
     case CONN_STAT_SEND_RTRY:
-        flags = F_LONG_HDR | F_LH_RTRY;
+        meta(v).hdr.type = F_LH_RTRY;
+        meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
         break;
     case CONN_STAT_SH:
     case CONN_STAT_HSHK_DONE:
     case CONN_STAT_HSHK_FAIL:
-        flags = F_LONG_HDR | F_LH_HSHK;
+        meta(v).hdr.type = F_LH_HSHK;
+        meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
         break;
     case CONN_STAT_ESTB:
     case CONN_STAT_CLNG:
     case CONN_STAT_DRNG:
         if (likely(c->tls.enc_1rtt)) {
-            pkt_nr_len = needed_pkt_nr_len(c, meta(v).nr);
-            flags = pkt_type[pkt_nr_len] | (c->omit_cid ? F_SH_OMIT_CID : 0);
-        } else
-            flags = F_LONG_HDR | F_LH_HSHK;
+            pkt_nr_len = needed_pkt_nr_len(c, meta(v).hdr.nr);
+            meta(v).hdr.type = (c->omit_cid ? F_SH_OMIT_CID : 0);
+            meta(v).hdr.flags = pkt_type[pkt_nr_len] | meta(v).hdr.type;
+        } else {
+            meta(v).hdr.type = F_LH_HSHK;
+            meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
+        }
         break;
     default:
         die("unknown conn state %u", c->state);
     }
 
-    ensure(meta(v).nr < (1ULL << 62) - 1, "packet number overflow");
+    ensure(meta(v).hdr.nr < (1ULL << 62) - 1, "packet number overflow");
 
-    i = enc(v->buf, v->len, 0, &flags, sizeof(flags), "0x%02x");
+    i = enc(v->buf, v->len, 0, &meta(v).hdr.flags, sizeof(meta(v).hdr.flags),
+            "0x%02x");
 
-    if (is_set(F_LONG_HDR, flags))
+    if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
+        meta(v).hdr.vers = c->vers;
         i = enc(v->buf, v->len, i, &c->vers, sizeof(c->vers), "0x%08x");
+    }
 
-    if (is_set(F_LONG_HDR, flags) || !is_set(F_SH_OMIT_CID, flags))
-        i = enc_cids(c, v, i);
+    if (is_set(F_LONG_HDR, meta(v).hdr.flags) ||
+        !is_set(F_SH_OMIT_CID, meta(v).hdr.flags))
+        i = enc_lh_cids(c, v, i);
 
-    if (is_set(F_LONG_HDR, flags))
-        i = enc(v->buf, v->len, i, &meta(v).nr, sizeof(uint32_t), GRN "%u" NRM);
-    else
-        i = enc(v->buf, v->len, i, &meta(v).nr, pkt_nr_len, GRN "%u" NRM);
+    if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
+        const uint64_t plen = meta(v).hdr.plen = v->len;
+        i = enc(v->buf, v->len, i, &plen, 0, "%" PRIu64);
+        i = enc(v->buf, v->len, i, &meta(v).hdr.nr, sizeof(uint32_t),
+                GRN "%u" NRM);
+    } else
+        i = enc(v->buf, v->len, i, &meta(v).hdr.nr, pkt_nr_len, GRN "%u" NRM);
 
     log_pkt("TX", v, c, AEAD_LEN);
-    hdr_len = i;
+    meta(v).hdr.hdr_len = i;
 
     if (!splay_empty(&c->recv) && c->state >= CONN_STAT_SH) {
         i = enc_ack_frame(c, v, i);
@@ -436,18 +332,21 @@ bool enc_pkt(struct q_stream * const s,
 
             if (c->state == CONN_STAT_SEND_RTRY) {
                 enc_stream_frame(s, v);
-                // retry packets must not have padding (as of 09), so move the
-                // stream frame after the header (XXX ugly)
-                memmove(&v->buf[hdr_len], &v->buf[meta(v).stream_header_pos],
+                // retry packets must not have padding (as of 09), so move
+                // the stream frame after the header (XXX ugly)
+                memmove(&v->buf[meta(v).hdr.hdr_len],
+                        &v->buf[meta(v).stream_header_pos],
                         v->len - meta(v).stream_header_pos);
-                const uint16_t offset = meta(v).stream_header_pos - hdr_len;
+                const uint16_t offset =
+                    meta(v).stream_header_pos - meta(v).hdr.hdr_len;
                 meta(v).stream_header_pos -= offset;
                 meta(v).stream_data_start -= offset;
                 meta(v).stream_data_end -= offset;
                 i = v->len -= offset;
             } else {
                 // this is a fresh data or pure FIN packet
-                // add a stream frame header, after padding out rest of Q_OFFSET
+                // add a stream frame header, after padding out rest of
+                // Q_OFFSET
                 enc_padding_frame(v, i, Q_OFFSET - i);
                 i = enc_stream_frame(s, v);
             }
@@ -456,12 +355,12 @@ bool enc_pkt(struct q_stream * const s,
 
     if ((c->state == CONN_STAT_IDLE || c->state == CONN_STAT_RTRY ||
          c->state == CONN_STAT_CH_SENT) &&
-        pkt_type(flags) != F_LH_0RTT) {
+        meta(v).hdr.type != F_LH_0RTT) {
         i = enc_padding_frame(v, i, MIN_INI_LEN - i - AEAD_LEN);
         conn_to_state(c, CONN_STAT_CH_SENT);
     }
 
-    if (i == hdr_len) {
+    if (i == meta(v).hdr.hdr_len) {
         // we didn't add any frames to this packet, so let's not send it
         if (c->state != CONN_STAT_SEND_RTRY)
             c->rec.lg_sent--;
@@ -483,7 +382,7 @@ tx:
         x->len = v->len;
         conn_to_state(c, CONN_STAT_VERS_NEG_SENT);
     } else
-        x->len = enc_aead(c, v, x, hdr_len);
+        x->len = enc_aead(c, v, x, meta(v).hdr.hdr_len);
 
     if (!c->is_clnt) {
         x->ip = c->peer.sin_addr.s_addr;
@@ -499,4 +398,90 @@ tx:
 
     adj_iov_to_data(v);
     return true;
+}
+
+
+/// Packet number lengths for different short-header packet types
+static const uint8_t pkt_nr_lens[] = {sizeof(uint32_t), sizeof(uint16_t),
+                                      sizeof(uint8_t)};
+
+
+void dec_pkt_hdr(const struct w_iov * const v)
+{
+    meta(v).hdr.flags = *v->buf;
+    meta(v).hdr.type = *v->buf & (is_set(F_LONG_HDR, *v->buf) ? ~0x80 : ~0xe0);
+
+    if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
+        meta(v).hdr.hdr_len =
+            dec(&meta(v).hdr.vers, v->buf, v->len, 1, 4, "0x%08x");
+
+        meta(v).hdr.hdr_len =
+            dec(&meta(v).hdr.dcid.len, v->buf, v->len, 5, 1, "0x%02x");
+        meta(v).hdr.dcid.len >>= 4;
+        if (meta(v).hdr.dcid.len) {
+            meta(v).hdr.dcid.len += 3;
+            memcpy(&meta(v).hdr.dcid.id, &v->buf[6], meta(v).hdr.dcid.len);
+            warn(
+                DBG,
+                "dec %u byte%s from v->buf[%u..%u] into &meta(v).hdr.dcid = %s",
+                meta(v).hdr.dcid.len, plural(meta(v).hdr.dcid.len),
+                meta(v).hdr.hdr_len,
+                meta(v).hdr.hdr_len + meta(v).hdr.dcid.len - 1,
+                cid2str(&meta(v).hdr.dcid));
+            meta(v).hdr.hdr_len += meta(v).hdr.dcid.len;
+        }
+
+        dec(&meta(v).hdr.scid.len, v->buf, v->len, 5, 1, "0x%02x");
+        meta(v).hdr.scid.len &= 0x0f;
+        if (meta(v).hdr.scid.len) {
+            meta(v).hdr.scid.len += 3;
+            memcpy(&meta(v).hdr.scid.id, &v->buf[meta(v).hdr.hdr_len],
+                   meta(v).hdr.scid.len);
+            warn(
+                DBG,
+                "dec %u byte%s from v->buf[%u..%u] into &meta(v).hdr.scid = %s",
+                meta(v).hdr.scid.len, plural(meta(v).hdr.scid.len),
+                meta(v).hdr.hdr_len,
+                meta(v).hdr.hdr_len + meta(v).hdr.scid.len - 1,
+                cid2str(&meta(v).hdr.scid));
+            meta(v).hdr.hdr_len += meta(v).hdr.scid.len;
+        }
+
+        if (meta(v).hdr.vers == 0)
+            // version negotiation packet
+            return;
+
+        uint64_t plen = 0;
+        meta(v).hdr.hdr_len =
+            dec(&plen, v->buf, v->len, meta(v).hdr.hdr_len, 0, "%" PRIu64);
+        meta(v).hdr.plen = (uint16_t)plen;
+
+        return;
+    }
+
+    meta(v).hdr.hdr_len = 1;
+
+    memcpy(&meta(v).hdr.dcid.id, &v->buf[1], meta(v).hdr.dcid.len);
+    meta(v).hdr.hdr_len += meta(v).hdr.dcid.len;
+}
+
+
+void dec_pkt_nr(const struct w_iov * const v, struct q_conn * const c)
+{
+    if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
+        uint32_t nr = 0;
+        dec(&nr, v->buf, v->len, meta(v).hdr.hdr_len, 4, "%u");
+        meta(v).hdr.nr = nr;
+        meta(v).hdr.hdr_len += 4;
+        return;
+    }
+
+    const uint64_t next = diet_max(&c->recv) + 1;
+    const uint8_t nr_len = pkt_nr_lens[meta(v).hdr.type - F_SH_4OCT];
+    uint64_t nr = next;
+    dec(&nr, v->buf, v->len, meta(v).hdr.hdr_len, nr_len, "%u");
+    const uint64_t alt = nr + (UINT64_C(1) << (nr_len * 8));
+    const uint64_t d1 = next >= nr ? next - nr : nr - next;
+    const uint64_t d2 = next >= alt ? next - alt : alt - next;
+    meta(v).hdr.nr = d1 < d2 ? nr : alt;
 }

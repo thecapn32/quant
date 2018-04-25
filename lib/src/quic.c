@@ -102,7 +102,7 @@ static ev_timer accept_alarm;
 
 int pm_nr_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
 {
-    return (a->nr > b->nr) - (a->nr < b->nr);
+    return (a->hdr.nr > b->hdr.nr) - (a->hdr.nr < b->hdr.nr);
 }
 
 
@@ -527,8 +527,9 @@ void q_cleanup(struct w_engine * const w)
 
     for (uint32_t i = 0; i <= nbufs; i++) {
         ASAN_UNPOISON_MEMORY_REGION(&pm[i], sizeof(pm[i]));
-        if (pm[i].nr)
-            warn(DBG, "buffer %u still in use for pkt %" PRIu64, i, pm[i].nr);
+        if (pm[i].hdr.nr)
+            warn(DBG, "buffer %u still in use for pkt %" PRIu64, i,
+                 pm[i].hdr.nr);
     }
 
     free(pm);

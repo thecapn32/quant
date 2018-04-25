@@ -209,9 +209,10 @@ uint16_t dec_ack_frame(
     i = dec(&ack_delay_raw, v->buf, v->len, i, 0, "%" PRIu64);
 
     // handshake pkts always use an ACK delay exponent of 3
-    const uint8_t pt = pkt_type(pkt_flags(v->buf));
     const uint8_t ade =
-        pt <= F_LH_INIT && pt >= F_LH_HSHK ? 3 : c->tp_peer.ack_del_exp;
+        meta(v).hdr.type <= F_LH_INIT && meta(v).hdr.type >= F_LH_HSHK
+            ? 3
+            : c->tp_peer.ack_del_exp;
     const uint64_t ack_delay = ack_delay_raw * (1 << ade);
 
     uint64_t num_blocks = 0;
@@ -256,7 +257,7 @@ uint16_t dec_ack_frame(
 
         uint64_t ack = lg_ack_in_block;
         while (ack + ack_block_len >= lg_ack_in_block) {
-            on_each_ack(c, ack, pkt_flags(v->buf));
+            on_each_ack(c, ack, meta(v).hdr.flags);
             if (likely(ack > 0))
                 ack--;
             else
@@ -524,7 +525,7 @@ dec_rst_stream_frame(struct q_conn * const c __attribute__((unused)),
 
 uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
 {
-    uint16_t i = pkt_hdr_len(v->buf, v->len);
+    uint16_t i = meta(v).hdr.hdr_len;
     uint16_t pad_start = 0;
 
     while (i < v->len) {
@@ -656,6 +657,8 @@ uint16_t enc_padding_frame(struct w_iov * const v,
 ///
 /// @return     True if @p a has better or equal packet protection than @p b.
 ///
+#define pkt_type(flags) (flags & (is_set(F_LONG_HDR, flags) ? ~0x80 : ~0xe0))
+
 bool better_or_equal_prot(const uint8_t a, const uint8_t b)
 {
     bool ret = false;
@@ -693,7 +696,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
         //      diet_class(b));
 
         const bool prot_ok =
-            better_or_equal_prot(pkt_flags(v->buf), diet_class(b));
+            better_or_equal_prot(meta(v).hdr.flags, diet_class(b));
 
         if (!prot_ok) {
             // warn(DBG, "prot not OK, skipping (ranges=%u)", block_cnt);
@@ -754,9 +757,10 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     i = enc(v->buf, v->len, i, &lg_hi->hi, 0, FMT_PNR_IN);
 
     // handshake pkts always use an ACK delay exponent of 3
-    const uint8_t pt = pkt_type(pkt_flags(v->buf));
     const uint8_t ade =
-        pt <= F_LH_INIT && pt >= F_LH_HSHK ? 3 : c->tp_local.ack_del_exp;
+        meta(v).hdr.type <= F_LH_INIT && meta(v).hdr.type >= F_LH_HSHK
+            ? 3
+            : c->tp_local.ack_del_exp;
     const uint64_t ack_delay =
         (uint64_t)((ev_now(loop) - diet_timestamp(lg_hi)) * 1000000) /
         (1 << ade);
@@ -799,13 +803,13 @@ uint16_t enc_ack_frame(struct q_conn * const c,
         // warn(DBG, "cur %" PRIu64 " - %" PRIu64 " 0x%02x", cur_hi->hi,
         //      cur_lo->lo, diet_class(cur_hi));
 
-        if (better_or_equal_prot(pkt_flags(v->buf), diet_class(b)) == false) {
+        if (better_or_equal_prot(meta(v).hdr.flags, diet_class(b)) == false) {
             // warn(DBG, "prot not OK, skipping range");
             goto next;
         }
 
         if (cur_lo->lo == b->hi + 1 &&
-            better_or_equal_prot(pkt_flags(v->buf), diet_class(b))) {
+            better_or_equal_prot(meta(v).hdr.flags, diet_class(b))) {
             // warn(DBG, "can join with prev");
             cur_lo = b;
             goto next;
