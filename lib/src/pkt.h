@@ -72,9 +72,15 @@ struct q_conn;
 struct q_stream;
 struct w_iov;
 struct w_iov_sq;
+struct cid;
 
-extern uint64_t __attribute__((nonnull))
-pkt_cid(const uint8_t * const buf, const uint16_t len);
+extern void __attribute__((nonnull)) pkt_dcid(const uint8_t * const buf,
+                                              const uint16_t len,
+                                              struct cid * const dcid);
+
+extern void __attribute__((nonnull)) pkt_scid(const uint8_t * const buf,
+                                              const uint16_t len,
+                                              struct cid * const scid);
 
 extern uint64_t __attribute__((nonnull))
 pkt_nr(const uint8_t * const buf, const uint16_t len, struct q_conn * const c);
@@ -85,6 +91,9 @@ pkt_vers(const uint8_t * const buf, const uint16_t len);
 extern uint16_t __attribute__((nonnull))
 pkt_hdr_len(const uint8_t * const buf, const uint16_t len);
 
+extern uint64_t __attribute__((nonnull))
+pkt_plen(const uint8_t * const buf, const uint16_t len);
+
 extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
                                              const bool rtx,
                                              struct w_iov * const v,
@@ -93,7 +102,7 @@ extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
 #ifndef NDEBUG
 extern void __attribute__((nonnull)) log_pkt(const char * const dir,
                                              const struct w_iov * const v,
-                                             const uint64_t cid,
+                                             const struct q_conn * const c,
                                              const uint16_t add_len);
 #else
 #define log_pkt(...)                                                           \

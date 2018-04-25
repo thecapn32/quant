@@ -32,11 +32,8 @@
 
 #include <warpcore/warpcore.h>
 
+#include "conn.h"
 #include "quic.h"
-
-
-struct q_conn;
-struct stream;
 
 #define STRM_FL_INI_SRV 0x01
 #define STRM_FL_DIR_UNI 0x02
@@ -76,8 +73,8 @@ struct q_stream {
 
 #define strm_to_state(strm, s)                                                 \
     do {                                                                       \
-        warn(DBG, "conn " FMT_CID " strm " FMT_SID " state %u -> %u",          \
-             (strm)->c->id, (strm)->id, (strm)->state, (s));                   \
+        warn(DBG, "conn %s strm " FMT_SID " state %u -> %u",                   \
+             cid2str(&(strm)->c->scid), (strm)->id, (strm)->state, (s));       \
         (strm)->state = (s);                                                   \
     } while (0)
 

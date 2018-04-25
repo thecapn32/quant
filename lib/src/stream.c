@@ -27,6 +27,7 @@
 
 // #include <inttypes.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #include <quant/quant.h>
@@ -75,16 +76,16 @@ new_stream(struct q_conn * const c, const uint64_t id, const bool active)
     }
     strm_to_state(s, STRM_STAT_OPEN);
     splay_insert(stream, &c->streams, s);
-    warn(DBG, "reserved str " FMT_SID " on %s conn " FMT_CID, id, conn_type(c),
-         c->id);
+    warn(DBG, "reserved str " FMT_SID " on %s conn %s", id, conn_type(c),
+         cid2str(&c->scid));
     return s;
 }
 
 
 void free_stream(struct q_stream * const s)
 {
-    warn(DBG, "freeing str " FMT_SID " on %s conn " FMT_CID, s->id,
-         conn_type(s->c), s->c->id);
+    warn(DBG, "freeing str " FMT_SID " on %s conn %s", s->id, conn_type(s->c),
+         cid2str(&s->c->scid));
 
     diet_insert(&s->c->closed_streams, s->id, 0, 0);
 

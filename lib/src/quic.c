@@ -30,6 +30,7 @@
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
 
@@ -62,7 +63,7 @@ const uint32_t ok_vers[] = {
 #ifndef NDEBUG
     0xbabababa, // XXX reserved version to trigger negotiation
 #endif
-    0xff000009, // draft-ietf-quic-transport-09
+    0xff00000a, // draft-ietf-quic-transport-11
 };
 
 /// Length of the @p ok_vers array.
@@ -149,20 +150,18 @@ struct q_conn * q_connect(struct w_engine * const w,
                           const uint64_t idle_timeout)
 {
     // make new connection
-    uint64_t cid;
-    arc4random_buf(&cid, sizeof(cid));
     const uint vers = ok_vers[0];
     struct q_conn * const c =
-        new_conn(w, vers, cid, peer, peer_name, 0, idle_timeout);
+        new_conn(w, vers, 0, 0, peer, peer_name, 0, idle_timeout);
 
     // allocate stream zero and init TLS
     struct q_stream * const s = new_stream(c, 0, true);
     init_tls(c);
 
-    warn(WRN,
-         "new %u-RTT %s conn " FMT_CID " to %s:%u, %u byte%s queued for TX",
-         c->try_0rtt ? 0 : 1, conn_type(c), cid, inet_ntoa(peer->sin_addr),
-         ntohs(peer->sin_port), early_data ? w_iov_sq_len(early_data) : 0,
+    warn(WRN, "new %u-RTT %s conn %s to %s:%u, %u byte%s queued for TX",
+         c->try_0rtt ? 0 : 1, conn_type(c), cid2str(&c->scid),
+         inet_ntoa(peer->sin_addr), ntohs(peer->sin_port),
+         early_data ? w_iov_sq_len(early_data) : 0,
          plural(early_data ? w_iov_sq_len(early_data) : 0));
 
     ev_timer_again(loop, &c->idle_alarm);
@@ -187,12 +186,13 @@ struct q_conn * q_connect(struct w_engine * const w,
 
     ev_async_send(loop, &c->tx_w);
 
-    warn(DBG, "waiting for connect to complete on %s conn " FMT_CID " to %s:%u",
-         conn_type(c), c->id, inet_ntoa(peer->sin_addr), ntohs(peer->sin_port));
+    warn(DBG, "waiting for connect to complete on %s conn %s to %s:%u",
+         conn_type(c), cid2str(&c->scid), inet_ntoa(peer->sin_addr),
+         ntohs(peer->sin_port));
     loop_run(q_connect, c);
 
     if (c->state != CONN_STAT_HSHK_DONE) {
-        warn(WRN, "%s conn " FMT_CID " not connected", conn_type(c), c->id);
+        warn(WRN, "%s conn %s not connected", conn_type(c), cid2str(&c->scid));
         return 0;
     }
 
@@ -218,8 +218,9 @@ struct q_conn * q_connect(struct w_engine * const w,
 
     conn_to_state(c, CONN_STAT_ESTB);
 
-    warn(WRN, "%s conn " FMT_CID " connected%s, cipher %s", conn_type(c), c->id,
-         c->did_0rtt ? " after 0-RTT" : "", c->tls.enc_1rtt->algo->name);
+    warn(WRN, "%s conn %s connected%s, cipher %s", conn_type(c),
+         cid2str(&c->scid), c->did_0rtt ? " after 0-RTT" : "",
+         c->tls.enc_1rtt->algo->name);
     return c;
 }
 
@@ -230,15 +231,13 @@ void q_write(struct q_stream * const s,
 {
     const uint32_t qlen = w_iov_sq_len(q);
     const uint64_t qcnt = w_iov_sq_cnt(q);
-    warn(WRN,
-         "writing %u byte%s in %u buf%s on %s conn " FMT_CID " str " FMT_SID
-         " %s",
-         qlen, plural(qlen), qcnt, plural(qcnt), conn_type(s->c), s->c->id,
-         s->id, fin ? "and closing" : "");
+    warn(WRN, "writing %u byte%s in %u buf%s on %s conn %s str " FMT_SID " %s",
+         qlen, plural(qlen), qcnt, plural(qcnt), conn_type(s->c),
+         cid2str(&s->c->scid), s->id, fin ? "and closing" : "");
 
     if (s->state >= STRM_STAT_HCLO) {
-        warn(ERR, "%s conn " FMT_CID " str " FMT_SID " is in state %u",
-             conn_type(s->c), s->c->id, s->id, s->state);
+        warn(ERR, "%s conn %s str " FMT_SID " is in state %u", conn_type(s->c),
+             cid2str(&s->c->scid), s->id, s->state);
         return;
     }
 
@@ -268,8 +267,8 @@ void q_write(struct q_stream * const s,
         sq_concat(q, &s->out);
     s->out_ack_cnt = 0;
 
-    warn(WRN, "wrote %u byte%s on %s conn " FMT_CID " str " FMT_SID " %s", qlen,
-         plural(qlen), conn_type(s->c), s->c->id, s->id,
+    warn(WRN, "wrote %u byte%s on %s conn %s str " FMT_SID " %s", qlen,
+         plural(qlen), conn_type(s->c), cid2str(&s->c->scid), s->id,
          fin ? "and closed" : "");
 
     ensure(w_iov_sq_len(q) == qlen, "payload corrupted, %u != %u",
@@ -284,7 +283,7 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_sq * const q)
     if (c->state == CONN_STAT_CLSD)
         return 0;
 
-    warn(WRN, "reading on %s conn " FMT_CID, conn_type(c), c->id);
+    warn(WRN, "reading on %s conn %s", conn_type(c), cid2str(&c->scid));
     struct q_stream * s = 0;
 
     while (s == 0 && c->state <= CONN_STAT_ESTB) {
@@ -299,8 +298,8 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_sq * const q)
 
         if (s == 0) {
             // no data queued on any non-zero stream, we need to wait
-            warn(WRN, "waiting for data on any stream on %s conn " FMT_CID,
-                 conn_type(c), c->id);
+            warn(WRN, "waiting for data on any stream on %s conn %s",
+                 conn_type(c), cid2str(&c->scid));
             loop_run(q_read, c);
         }
     }
@@ -308,9 +307,9 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_sq * const q)
     // return data
     if (s) {
         sq_concat(q, &s->in);
-        warn(WRN, "read %u byte%s on %s conn " FMT_CID " str " FMT_SID,
-             w_iov_sq_len(q), plural(w_iov_sq_len(q)), conn_type(s->c),
-             s->c->id, s->id);
+        warn(WRN, "read %u byte%s on %s conn %s str " FMT_SID, w_iov_sq_len(q),
+             plural(w_iov_sq_len(q)), conn_type(s->c), cid2str(&s->c->scid),
+             s->id);
     }
 
     return s;
@@ -319,8 +318,8 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_sq * const q)
 
 void q_readall_str(struct q_stream * const s, struct w_iov_sq * const q)
 {
-    warn(WRN, "reading all on %s conn " FMT_CID " str " FMT_SID,
-         conn_type(s->c), s->c->id, s->id);
+    warn(WRN, "reading all on %s conn %s str " FMT_SID, conn_type(s->c),
+         cid2str(&s->c->scid), s->id);
 
     while (s->c->state <= CONN_STAT_ESTB && s->state != STRM_STAT_HCRM &&
            s->state != STRM_STAT_CLSD)
@@ -328,9 +327,8 @@ void q_readall_str(struct q_stream * const s, struct w_iov_sq * const q)
 
     // return data
     sq_concat(q, &s->in);
-    warn(WRN, "read %u byte%s on %s conn " FMT_CID " str " FMT_SID,
-         w_iov_sq_len(q), plural(w_iov_sq_len(q)), conn_type(s->c), s->c->id,
-         s->id);
+    warn(WRN, "read %u byte%s on %s conn %s str " FMT_SID, w_iov_sq_len(q),
+         plural(w_iov_sq_len(q)), conn_type(s->c), cid2str(&s->c->scid), s->id);
 }
 
 
@@ -338,7 +336,7 @@ struct q_conn * q_bind(struct w_engine * const w, const uint16_t port)
 {
     // bind socket and create new embryonic server connection
     warn(DBG, "binding serv socket on port %u", port);
-    struct q_conn * const c = new_conn(w, 0, 0, 0, 0, port, 0);
+    struct q_conn * const c = new_conn(w, 0, 0, 0, 0, 0, port, 0);
     warn(WRN, "bound %s socket on port %u", conn_type(c), port);
     return c;
 }
@@ -363,8 +361,8 @@ struct q_conn * q_accept(struct w_engine * const w __attribute__((unused)),
          timeout);
 
     if (accept_queue && accept_queue->state >= CONN_STAT_HSHK_DONE) {
-        warn(WRN, "got %s conn " FMT_CID, conn_type(accept_queue),
-             accept_queue->id);
+        warn(WRN, "got %s conn %s", conn_type(accept_queue),
+             cid2str(&accept_queue->scid));
         return accept_queue;
     }
 
@@ -388,8 +386,8 @@ struct q_conn * q_accept(struct w_engine * const w __attribute__((unused)),
     conn_to_state(accept_queue, CONN_STAT_ESTB);
     ev_timer_again(loop, &accept_queue->idle_alarm);
 
-    warn(WRN, "%s conn " FMT_CID " connected to clnt %s:%u%s, cipher %s",
-         conn_type(accept_queue), accept_queue->id,
+    warn(WRN, "%s conn %s connected to clnt %s:%u%s, cipher %s",
+         conn_type(accept_queue), cid2str(&accept_queue->scid),
          inet_ntoa(accept_queue->peer.sin_addr),
          ntohs(accept_queue->peer.sin_port),
          accept_queue->did_0rtt ? " after 0-RTT" : "",
@@ -475,8 +473,8 @@ void q_close_stream(struct q_stream * const s)
     if (s->state == STRM_STAT_HCLO || s->state == STRM_STAT_CLSD)
         return;
 
-    warn(WRN, "closing str " FMT_SID " state %u on %s conn " FMT_CID, s->id,
-         s->state, conn_type(s->c), s->c->id);
+    warn(WRN, "closing str " FMT_SID " state %u on %s conn %s", s->id, s->state,
+         conn_type(s->c), cid2str(&s->c->scid));
     strm_to_state(s,
                   s->state == STRM_STAT_HCRM ? STRM_STAT_CLSD : STRM_STAT_HCLO);
     ev_async_send(loop, &s->c->tx_w);
@@ -487,9 +485,8 @@ void q_close_stream(struct q_stream * const s)
 void q_close(struct q_conn * const c)
 {
     if (c->state > CONN_STAT_IDLE && c->state < CONN_STAT_CLNG) {
-        if (c->id)
-            warn(WRN, "closing %s conn " FMT_CID " on port %u", conn_type(c),
-                 c->id, ntohs(c->sport));
+        warn(WRN, "closing %s conn %s on port %u", conn_type(c),
+             cid2str(&c->scid), ntohs(c->sport));
 
         // close all streams
         struct q_stream * s;
@@ -513,12 +510,12 @@ void q_cleanup(struct w_engine * const w)
     // close all connections
     struct q_conn *c, *tmp;
     for (c = splay_min(cid_splay, &conns_by_cid); c != 0; c = tmp) {
-        warn(DBG, "closing %s conn " FMT_CID, conn_type(c), c->id);
+        warn(DBG, "closing %s conn %s", conn_type(c), cid2str(&c->scid));
         tmp = splay_next(cid_splay, &conns_by_cid, c);
         q_close(c);
     }
     for (c = splay_min(ipnp_splay, &conns_by_ipnp); c != 0; c = tmp) {
-        warn(DBG, "closing %s conn " FMT_CID, conn_type(c), c->id);
+        warn(DBG, "closing %s conn %s", conn_type(c), cid2str(&c->scid));
         tmp = splay_next(ipnp_splay, &conns_by_ipnp, c);
         q_close(c);
     }
@@ -539,9 +536,9 @@ void q_cleanup(struct w_engine * const w)
 }
 
 
-uint64_t q_cid(const struct q_conn * const c)
+char * q_cid(const struct q_conn * const c)
 {
-    return c->id;
+    return cid2str(&c->scid);
 }
 
 

@@ -28,11 +28,13 @@
 #include <stdint.h>
 
 
-extern uint16_t varint_sizeof(const uint64_t v);
+extern uint16_t varint_size_needed(const uint64_t v);
+
+extern uint16_t varint_sizeof(const uint8_t first_byte);
 
 
 #ifndef NDEBUG
-#define DONT_DEBUG_MARSHALL
+#define DEBUG_MARSHALL
 #endif
 
 #ifdef DEBUG_MARSHALL

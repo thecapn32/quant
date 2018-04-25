@@ -29,6 +29,7 @@
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/param.h>
 
@@ -74,13 +75,13 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
     if (c->state < CONN_STAT_ESTB) {
         dur = is_zero(c->rec.srtt) ? kDefaultInitialRtt : c->rec.srtt;
         dur = MAX(2 * dur, kMinTLPTimeout) * (1 << c->rec.hshake_cnt);
-        warn(DBG, "handshake RTX alarm in %f sec on %s conn " FMT_CID, dur,
-             conn_type(c), c->id);
+        warn(DBG, "handshake RTX alarm in %f sec on %s conn %s", dur,
+             conn_type(c), cid2str(&c->scid));
 
     } else if (!is_zero(c->rec.loss_t)) {
         dur = c->rec.loss_t - c->rec.last_sent_t;
-        warn(DBG, "early RTX or time alarm in %f sec on %s conn " FMT_CID, dur,
-             conn_type(c), c->id);
+        warn(DBG, "early RTX or time alarm in %f sec on %s conn %s", dur,
+             conn_type(c), cid2str(&c->scid));
 
         // XXX TLP is much too aggressive on server, due to artificially low
         // initial RTT (since it's not measured during the handshake yet)
@@ -89,14 +90,14 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
         //     dur = MAX(1.5 * c->rec.srtt + c->rec.max_ack_del,
         //     kMinTLPTimeout); warn(DBG, "TLP alarm in %f sec on %s conn "
         //     FMT_CID, dur, conn_type(c),
-        //          c->id);
+        //          cid2str(&c->scid));
 
     } else {
         dur = c->rec.srtt + 4 * c->rec.rttvar;
         dur = MAX(dur, kMinRTOTimeout);
         dur *= (1 << c->rec.rto_cnt);
-        warn(DBG, "RTO alarm in %f sec on %s conn " FMT_CID, dur, conn_type(c),
-             c->id);
+        warn(DBG, "RTO alarm in %f sec on %s conn %s", dur, conn_type(c),
+             cid2str(&c->scid));
     }
 
     c->rec.ld_alarm.repeat = c->rec.last_sent_t + dur - ev_now(loop);
@@ -184,24 +185,24 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
     // see OnLossDetectionAlarm pseudo code
     if (c->state < CONN_STAT_ESTB) {
         c->rec.hshake_cnt++;
-        warn(DBG, "handshake RTX #%u on %s conn " FMT_CID, c->rec.hshake_cnt,
-             conn_type(c), c->id);
+        warn(DBG, "handshake RTX #%u on %s conn %s", c->rec.hshake_cnt,
+             conn_type(c), cid2str(&c->scid));
         tx(c, true, 0);
 
     } else if (!is_zero(c->rec.loss_t)) {
-        warn(DBG, "early RTX or time loss detection alarm on %s conn " FMT_CID,
-             conn_type(c), c->id);
+        warn(DBG, "early RTX or time loss detection alarm on %s conn %s",
+             conn_type(c), cid2str(&c->scid));
         detect_lost_pkts(c);
 
         // } else if (c->rec.tlp_cnt < kMaxTLPs) {
-        //     warn(DBG, "TLP alarm #%u on %s conn " FMT_CID, c->rec.tlp_cnt,
-        //          conn_type(c), c->id);
+        //     warn(DBG, "TLP alarm #%u on %s conn %s", c->rec.tlp_cnt,
+        //          conn_type(c), cid2str(&c->scid));
         //     tx(c, true, 1); // XXX is this an RTX or not?
         //     c->rec.tlp_cnt++;
 
     } else {
-        warn(DBG, "RTO alarm #%u on %s conn " FMT_CID, c->rec.rto_cnt,
-             conn_type(c), c->id);
+        warn(DBG, "RTO alarm #%u on %s conn %s", c->rec.rto_cnt, conn_type(c),
+             cid2str(&c->scid));
         if (c->rec.rto_cnt == 0)
             c->rec.lg_sent_before_rto = c->rec.lg_sent;
         tx(c, true, 2); // XXX is this an RTX or not?
@@ -285,8 +286,8 @@ void on_ack_rx_1(struct q_conn * const c,
         c->rec.rttvar = .75 * c->rec.rttvar + .25 * rttvar_sample;
         c->rec.srtt = .875 * c->rec.srtt + .125 * c->rec.latest_rtt;
     }
-    warn(DBG, "srtt = %f, rttvar = %f on %s conn " FMT_CID, c->rec.srtt,
-         c->rec.rttvar, conn_type(c), c->id);
+    warn(DBG, "srtt = %f, rttvar = %f on %s conn %s", c->rec.srtt,
+         c->rec.rttvar, conn_type(c), cid2str(&c->scid));
 }
 
 

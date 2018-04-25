@@ -109,7 +109,7 @@ static ptls_iovec_t tls_certs[TLS_MAX_CERTS];
 static ptls_openssl_sign_certificate_t sign_cert = {0};
 static ptls_openssl_verify_certificate_t verifier = {0};
 
-static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-09", 5}};
+static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-11", 5}};
 static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 
 static ptls_aead_context_t * dec_tckt;
@@ -419,9 +419,9 @@ void init_tp(struct q_conn * const c)
     i += sizeof(uint16_t);
 
     // XXX ngtcp2 and picoquic cannot parse omit_connection_id as the last tp
-    const struct q_conn * const other = get_conn_by_ipnp(c->sport, &c->peer, 0);
-    if (!other || other->id == c->id)
-        enc_tp(c, TP_OMIT_CONNECTION_ID, i, 0); // i not used
+    // const struct q_conn * const other = get_conn_by_ipnp(c->sport, &c->peer,
+    // 0); if (!other || other->id == c->id)
+    //     enc_tp(c, TP_OMIT_CONNECTION_ID, i, 0); // i not used
     enc_tp(c, TP_IDLE_TIMEOUT, c->tp_local.idle_to, sizeof(uint16_t));
     enc_tp(c, TP_INITIAL_MAX_STREAM_ID_BIDI, c->tp_local.max_strm_bidi,
            sizeof(uint32_t));
@@ -448,7 +448,7 @@ void init_tp(struct q_conn * const c)
     // encode length of all transport parameters
     const uint16_t enc_len = i - enc_len_pos - sizeof(enc_len);
     i = enc_len_pos;
-    i = enc(c->tls.tp_buf, len, i, &enc_len, 2, "%u");
+    enc(c->tls.tp_buf, len, i, &enc_len, 2, "%u");
 
     c->tls.tp_ext[0] = (ptls_raw_extension_t){
         TLS_EXT_TYPE_TRANSPORT_PARAMETERS,
@@ -474,8 +474,8 @@ static void init_ticket_prot(void)
 }
 
 
-static ptls_aead_context_t * init_hshk_secret(struct q_conn * const c
-                                              __attribute__((unused)),
+static ptls_aead_context_t * init_hshk_secret(struct q_conn * const c,
+                                              // __attribute__((unused)),
                                               ptls_cipher_suite_t * const cs,
                                               uint8_t * const sec, // NOLINT
                                               const char * const label,
@@ -487,10 +487,10 @@ static ptls_aead_context_t * init_hshk_secret(struct q_conn * const c
                                   secret, label, ptls_iovec_init(0, 0),
                                   QUIC_LABL) == 0,
            "ptls_hkdf_expand_label");
-    // warn(CRT, "%s handshake secret",
-    //      is_enc ? (c->is_clnt ? "clnt" : "serv")
-    //             : (c->is_clnt ? "serv" : "clnt"));
-    // hexdump(output, cs->hash->digest_size);
+    warn(CRT, "%s handshake secret",
+         is_enc ? (c->is_clnt ? "clnt" : "serv")
+                : (c->is_clnt ? "serv" : "clnt"));
+    hexdump(output, cs->hash->digest_size);
     return ptls_aead_new(cs->aead, cs->hash, is_enc, output, QUIC_LABL);
 }
 
@@ -506,31 +506,31 @@ void init_hshk_prot(struct q_conn * const c)
     if (c->tls.enc_hshk)
         ptls_aead_free(c->tls.enc_hshk);
 
-    static uint8_t qv1_salt[] = {0xaf, 0xc8, 0x24, 0xec, 0x5f, 0xc7, 0x7e,
-                                 0xca, 0x1e, 0x9d, 0x36, 0xf3, 0x7f, 0xb2,
-                                 0xd4, 0x65, 0x18, 0xc3, 0x66, 0x39};
+    static uint8_t qv1_salt[] = {0x9c, 0x10, 0x8f, 0x98, 0x52, 0x0a, 0x5c,
+                                 0x5c, 0x32, 0x96, 0x8e, 0x95, 0x0e, 0x8a,
+                                 0x2c, 0x5f, 0xe0, 0x6d, 0x6c, 0x38};
 
     const ptls_cipher_suite_t * const cs = &ptls_openssl_aes128gcmsha256;
 
     uint8_t sec[PTLS_MAX_SECRET_SIZE];
     const ptls_iovec_t salt = {.base = qv1_salt, .len = sizeof(qv1_salt)};
 
-    uint64_t ncid = htonll(c->id);
-    const ptls_iovec_t cid = {.base = (uint8_t *)&ncid, .len = sizeof(ncid)};
+    const ptls_iovec_t cid = {.base = (uint8_t *)&c->scid.id,
+                              .len = c->scid.len};
     ensure(ptls_hkdf_extract(cs->hash, sec, salt, cid) == 0,
            "ptls_hkdf_extract");
-    // warn(CRT, "handshake secret");
-    // hexdump(sec, PTLS_MAX_SECRET_SIZE);
+    warn(CRT, "handshake secret");
+    hexdump(sec, PTLS_MAX_SECRET_SIZE);
 
     c->tls.dec_hshk = init_hshk_secret(
         c, cs, sec, c->is_clnt ? SERV_LABL_HSHK : CLNT_LABL_HSHK, 0);
-    // warn(CRT, "%s iv", c->is_clnt ? "serv" : "clnt");
-    // hexdump(c->tls.dec_hshk->static_iv, c->tls.dec_hshk->algo->iv_size);
+    warn(CRT, "%s iv", c->is_clnt ? "serv" : "clnt");
+    hexdump(c->tls.dec_hshk->static_iv, c->tls.dec_hshk->algo->iv_size);
 
     c->tls.enc_hshk = init_hshk_secret(
         c, cs, sec, c->is_clnt ? CLNT_LABL_HSHK : SERV_LABL_HSHK, 1);
-    // warn(CRT, "%s iv", c->is_clnt ? "clnt" : "serv");
-    // hexdump(c->tls.enc_hshk->static_iv, c->tls.enc_hshk->algo->iv_size);
+    warn(CRT, "%s iv", c->is_clnt ? "clnt" : "serv");
+    hexdump(c->tls.enc_hshk->static_iv, c->tls.enc_hshk->algo->iv_size);
 }
 
 
@@ -554,10 +554,8 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
         return -1;
 
     if (is_encrypt) {
-        warn(INF,
-             "creating new 0-RTT session ticket for %s conn " FMT_CID
-             " (%s %s)",
-             conn_type(c), c->id, ptls_get_server_name(tls),
+        warn(INF, "creating new 0-RTT session ticket for %s conn %s(% s % s) ",
+             conn_type(c), cid2str(&c->scid), ptls_get_server_name(tls),
              ptls_get_negotiated_protocol(tls));
 
         // prepend git commit hash
@@ -578,9 +576,8 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
                           dec_tckt->algo->tag_size ||
             memcmp(src.base, quant_commit_hash, quant_commit_hash_len) != 0) {
             warn(WRN,
-                 "could not verify 0-RTT session ticket for %s conn " FMT_CID
-                 " (%s %s)",
-                 conn_type(c), c->id, ptls_get_server_name(tls),
+                 "could not verify 0-RTT session ticket for %s conn %s (%s %s)",
+                 conn_type(c), cid2str(&c->scid), ptls_get_server_name(tls),
                  ptls_get_negotiated_protocol(tls));
             return -1;
         }
@@ -595,18 +592,17 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
                                            src_base, src_len, tid, 0, 0);
 
         if (n > src_len) {
-            warn(WRN,
-                 "could not decrypt 0-RTT session ticket for %s conn " FMT_CID
-                 " (%s %s)",
-                 conn_type(c), c->id, ptls_get_server_name(tls),
-                 ptls_get_negotiated_protocol(tls));
+            warn(
+                WRN,
+                "could not decrypt 0-RTT session ticket for %s conn %s (%s %s)",
+                conn_type(c), cid2str(&c->scid), ptls_get_server_name(tls),
+                ptls_get_negotiated_protocol(tls));
             return -1;
         }
         dst->off += n;
 
-        warn(INF,
-             "verified 0-RTT session ticket for %s conn " FMT_CID " (%s %s)",
-             conn_type(c), c->id, ptls_get_server_name(tls),
+        warn(INF, "verified 0-RTT session ticket for %s conn %s (%s %s)",
+             conn_type(c), cid2str(&c->scid), ptls_get_server_name(tls),
              ptls_get_negotiated_protocol(tls));
     }
 
@@ -666,8 +662,8 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
     // write all tickets
     // XXX this currently dumps the entire cache to file on each connection!
     splay_foreach (t, ticket_splay, &tickets) { // NOLINT
-        warn(INF, "writing 0-RTT ticket for %s conn " FMT_CID " (%s %s)",
-             conn_type(c), c->id, t->sni, t->alpn);
+        warn(INF, "writing 0-RTT ticket for %s conn %s (%s %s)", conn_type(c),
+             cid2str(&c->scid), t->sni, t->alpn);
 
         size_t len = strlen(t->sni) + 1;
         ensure(fwrite(&len, sizeof(len), 1, fp), "fwrite");

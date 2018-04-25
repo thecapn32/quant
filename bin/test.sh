@@ -60,7 +60,7 @@ case $c in
         ngtcp2)
                 touch /tmp/ngtcp2-session /tmp/ngtcp2-tp
                 cc="echo GET $path > /tmp/ngtcp2-req | \
-                        external/ngtcp2-prefix/src/ngtcp2/examples/client \
+                        external/ngtcp2-prefix/src/ngtcp2/examples/client -s \
                         -d /tmp/ngtcp2-req $addr $port --session-file=/tmp/ngtcp2-session \
                         --tp-file=/tmp/ngtcp2-tp"
                 ;;
@@ -103,7 +103,7 @@ case $s in
                         -cert $cert -server-name $addr"
                 ;;
         ngtcp2)
-                sc="external/ngtcp2-prefix/src/ngtcp2/examples/server \
+                sc="external/ngtcp2-prefix/src/ngtcp2/examples/server -s \
                         -d $dir $addr $port $key $cert"
                 ;;
         mozquic)

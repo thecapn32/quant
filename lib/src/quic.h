@@ -290,8 +290,6 @@ extern void * api_arg;
 #define CYN "\x1B[36m" ///< ANSI escape sequence: cyan
 // #define WHT "\x1B[37m"  ///< ANSI escape sequence: white
 
-#define FMT_CID "%016" PRIx64
-
 #define FMT_PNR_IN BLU "%" PRIu64 NRM
 #define FMT_PNR_OUT GRN "%" PRIu64 NRM
 

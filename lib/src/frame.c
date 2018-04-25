@@ -30,6 +30,7 @@
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/param.h>
 
@@ -82,10 +83,8 @@ dec_stream_frame(struct q_conn * const c,
     struct q_stream * s = get_stream(c, sid);
     if (s == 0) {
         if (diet_find(&c->closed_streams, sid)) {
-            warn(WRN,
-                 "ignoring frame for closed str " FMT_SID
-                 " on %s conn " FMT_CID,
-                 sid, conn_type(c), c->id);
+            warn(WRN, "ignoring frame for closed str " FMT_SID " on %s conn %s",
+                 sid, conn_type(c), cid2str(&c->scid));
             goto done;
         }
         ensure(is_set(STRM_FL_INI_SRV, sid) == c->is_clnt,
@@ -473,28 +472,29 @@ dec_ping_frame(struct q_conn * const c,
 }
 
 
-static uint16_t __attribute__((nonnull))
-dec_new_cid_frame(struct q_conn * const c __attribute__((unused)),
-                  const struct w_iov * const v,
-                  const uint16_t pos)
-{
-    uint64_t seq = 0;
-    uint16_t i = dec(&seq, v->buf, v->len, pos + 1, 0, "%" PRIu64);
+// static uint16_t __attribute__((nonnull))
+// dec_new_cid_frame(struct q_conn * const c __attribute__((unused)),
+//                   const struct w_iov * const v,
+//                   const uint16_t pos)
+// {
+//     uint64_t seq = 0;
+//     uint16_t i = dec(&seq, v->buf, v->len, pos + 1, 0, "%" PRIu64);
 
-    uint64_t cid = 0;
-    i = dec(&cid, v->buf, v->len, i, sizeof(cid), FMT_CID);
+//     uint64_t cid = 0;
+//     i = dec(&cid, v->buf, v->len, i, sizeof(cid), FMT_CID);
 
-    uint8_t srt[16];
-    memcpy(srt, &v->buf[i], sizeof(srt));
-    i += sizeof(srt);
+//     uint8_t srt[16];
+//     memcpy(srt, &v->buf[i], sizeof(srt));
+//     i += sizeof(srt);
 
-    warn(INF, FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu64 " cid=" FMT_CID,
-         seq, cid);
+//     warn(INF, FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu64 " cid="
+//     FMT_CID,
+//          seq, cid);
 
-    // TODO: actually do something with the new CIDs
+//     // TODO: actually do something with the new CIDs
 
-    return i;
-}
+//     return i;
+// }
 
 
 static uint16_t __attribute__((nonnull))
@@ -608,9 +608,9 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
                 i = dec_stop_sending_frame(c, v, i);
                 break;
 
-            case FRAM_TYPE_NEW_CID:
-                i = dec_new_cid_frame(c, v, i);
-                break;
+                // case FRAM_TYPE_NEW_CID:
+                //     i = dec_new_cid_frame(c, v, i);
+                //     break;
 
             default:
                 err_close(c, ERR_FRAME_ERR(type),
@@ -859,8 +859,9 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
 
     // now that we know how long the stream frame header is, encode it
     uint16_t i = meta(v).stream_header_pos =
-        Q_OFFSET - 1 - varint_sizeof(s->id) - (dlen ? varint_sizeof(dlen) : 0) -
-        (s->out_off ? varint_sizeof(s->out_off) : 0);
+        Q_OFFSET - 1 - varint_size_needed(s->id) -
+        (dlen ? varint_size_needed(dlen) : 0) -
+        (s->out_off ? varint_size_needed(s->out_off) : 0);
     i = enc(v->buf, v->len, i, &type, sizeof(type), "0x%02x");
     i = enc(v->buf, v->len, i, &s->id, 0, FMT_SID);
     if (s->out_off)

@@ -57,13 +57,25 @@
 ///
 /// @return     Number of bytes needed in varint encoding (1, 2, 4 or 8).
 ///
-uint16_t __attribute__((const)) varint_sizeof(const uint64_t v)
+uint16_t __attribute__((const)) varint_size_needed(const uint64_t v)
 {
     if (v < 0x40)
         return 1;
     if (v < (0x40 << 8))
         return 2;
     if (v < (0x40 << 24))
+        return 4;
+    return 8;
+}
+
+
+uint16_t __attribute__((const)) varint_sizeof(const uint8_t first_byte)
+{
+    if (first_byte < 0x40)
+        return 1;
+    if (first_byte < 0x80)
+        return 2;
+    if (first_byte < 0xc0)
         return 4;
     return 8;
 }

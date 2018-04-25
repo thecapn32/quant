@@ -36,7 +36,6 @@
 #include <warpcore/warpcore.h>
 
 #include "diet.h"
-#include "quic.h"
 #include "recovery.h"
 #include "tls.h"
 
@@ -57,19 +56,20 @@ struct transport_params {
 };
 
 
+struct cid {
+    uint8_t id[14]; ///< Connection ID
+    uint8_t len;    ///< Connection ID length
+};
+
+
 /// A QUIC connection.
 struct q_conn {
     splay_entry(q_conn) node_ipnp;
     splay_entry(q_conn) node_cid;
     sl_entry(q_conn) next;
 
-    uint64_t id; ///< Connection ID
-
-    uint32_t vers;         ///< QUIC version in use for this connection.
-    uint32_t vers_initial; ///< QUIC version first negotiated.
-    uint64_t next_sid;     ///< Next stream ID to use on q_rsv_stream().
-
-    uint8_t state; ///< State of the connection.
+    struct cid dcid; ///< Destination connection ID
+    struct cid scid; ///< Source connection ID
 
     uint16_t is_clnt : 1;  ///< We are the client on this connection.
     uint16_t omit_cid : 1; ///< We omit the CID during TX on this connection.
@@ -85,11 +85,17 @@ struct q_conn {
     uint16_t in_closing : 1;        ///< Is the closing/draining timer active?
     uint16_t : 4;
 
-    uint8_t _unused[1];
+    uint32_t vers;         ///< QUIC version in use for this connection.
+    uint32_t vers_initial; ///< QUIC version first negotiated.
+    uint64_t next_sid;     ///< Next stream ID to use on q_rsv_stream().
+
+    char * err_reason;
+    uint16_t err_code;
 
     uint16_t sport; ///< Local port (in network byte-order).
-    uint16_t err_code;
-    char * err_reason;
+    uint8_t state;  ///< State of the connection.
+
+    uint8_t _unused[3];
 
     struct transport_params tp_peer;
     struct transport_params tp_local;
@@ -157,9 +163,18 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 #define is_inf(t) (fpclassify(t) == FP_INFINITE)
 
 
+#define cid2str(i)                                                             \
+    __extension__({                                                            \
+        static char _str[sizeof(*(i)) * 2 + 1];                                \
+        for (uint8_t _n = 0; _n < (i)->len; _n++)                              \
+            sprintf(&_str[2 * _n], "%02x", (i)->id[_n]);                       \
+        _str;                                                                  \
+    })
+
+
 #define conn_to_state(c, s)                                                    \
     do {                                                                       \
-        warn(DBG, "conn " FMT_CID " state %u -> %u", c->id, c->state, s);      \
+        warn(DBG, "conn %s state %u -> %u", cid2str(&c->scid), c->state, s);   \
         c->state = s;                                                          \
                                                                                \
         switch (s) {                                                           \
@@ -209,7 +224,8 @@ get_conn_by_ipnp(const uint16_t sport,
                  const struct sockaddr_in * const peer,
                  const bool is_clnt);
 
-extern struct q_conn * get_conn_by_cid(const uint64_t id, const bool is_clnt);
+extern struct q_conn * get_conn_by_cid(const struct cid * const scid,
+                                       const bool is_clnt);
 
 extern void * __attribute__((nonnull)) loop_run(void * const arg);
 
@@ -228,7 +244,8 @@ ack_alarm(struct ev_loop * const l, ev_timer * const w, int e);
 
 extern struct q_conn * new_conn(struct w_engine * const w,
                                 const uint32_t vers,
-                                const uint64_t cid,
+                                const struct cid * const dcid,
+                                const struct cid * const scid,
                                 const struct sockaddr_in * const peer,
                                 const char * const peer_name,
                                 const uint16_t port,

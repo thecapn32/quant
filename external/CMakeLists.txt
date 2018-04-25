@@ -18,7 +18,7 @@ if(NOT WARP_LIB OR NOT WARP_INCLUDE)
   file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include)
 
   externalproject_add(warp
-    # UPDATE_COMMAND "" # XXX do not commit with this being empty
+    UPDATE_COMMAND "" # XXX do not commit with this being empty
     GIT_REPOSITORY https://github.com/NTAP/warpcore.git
     GIT_SHALLOW 1
     GIT_TAG dev
@@ -48,7 +48,7 @@ set_target_properties(warpcore PROPERTIES
 
 
 externalproject_add(picotls
-  # UPDATE_COMMAND "" # XXX do not commit with this being empty
+  UPDATE_COMMAND "" # XXX do not commit with this being empty
   GIT_REPOSITORY https://github.com/h2o/picotls.git
   GIT_SHALLOW 1
   # GIT_TAG 7474dfe64a8c18a70d927ae38073d6ee263d6a79
@@ -132,7 +132,7 @@ externalproject_add(openssl
   UPDATE_COMMAND ""
   # GIT_REPOSITORY https://github.com/openssl/openssl.git
   GIT_REPOSITORY https://github.com/tatsuhiro-t/openssl
-  GIT_TAG early-exporter
+  GIT_TAG tlsv1.3-28
   GIT_SHALLOW 1
   CONFIGURE_COMMAND ./config --prefix=${CMAKE_CURRENT_BINARY_DIR} enable-tls1_3
   BUILD_IN_SOURCE 1
@@ -143,7 +143,7 @@ externalproject_add(openssl
 
 externalproject_add(ngtcp2
   DEPENDS openssl
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/ngtcp2/ngtcp2.git
   GIT_SHALLOW 1
   PATCH_COMMAND autoreconf -i
