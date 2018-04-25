@@ -63,7 +63,7 @@ const uint32_t ok_vers[] = {
 #ifndef NDEBUG
     0xbabababa, // XXX reserved version to trigger negotiation
 #endif
-    0xff00000a, // draft-ietf-quic-transport-11
+    0xff00000b, // draft-ietf-quic-transport-11
 };
 
 /// Length of the @p ok_vers array.
