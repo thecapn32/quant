@@ -939,14 +939,14 @@ struct q_conn * new_conn(struct w_engine * const w,
     if (dcid) {
         memcpy(&c->dcid, dcid, sizeof(*dcid));
     } else {
-        c->dcid.len = 8 + (uint8_t)arc4random_uniform(6);
+        c->dcid.len = 8 + (uint8_t)arc4random_uniform(sizeof(dcid->id) - 8);
         arc4random_buf(c->dcid.id, c->dcid.len);
     }
 
     if (scid) {
         memcpy(&c->scid, scid, sizeof(*scid));
     } else {
-        c->scid.len = 4 + (uint8_t)arc4random_uniform(10);
+        c->scid.len = 4 + (uint8_t)arc4random_uniform(sizeof(dcid->id) - 4);
         arc4random_buf(c->scid.id, c->scid.len);
     }
 

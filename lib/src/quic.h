@@ -48,7 +48,7 @@
 
 
 struct cid {
-    uint8_t id[14]; ///< Connection ID
+    uint8_t id[18]; ///< Connection ID
     uint8_t len;    ///< Connection ID length
 };
 
