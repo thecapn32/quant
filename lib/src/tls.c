@@ -817,12 +817,12 @@ void free_tls(struct q_conn * const c)
 
 static ptls_aead_context_t * __attribute__((nonnull))
 init_secret(ptls_t * const t,
-            const ptls_cipher_suite_t * const cs,
-            uint8_t * const sec,
             const char * const label,
             uint8_t is_enc,
             uint8_t is_early)
 {
+    const ptls_cipher_suite_t * const cs = ptls_get_cipher(t);
+    uint8_t sec[PTLS_MAX_DIGEST_SIZE];
     ensure(ptls_export_secret(t, sec, cs->hash->digest_size, label,
                               ptls_iovec_init(0, 0), is_early) == 0,
            "ptls_export_secret");
@@ -840,10 +840,8 @@ void init_0rtt_prot(struct q_conn * const c)
     if (c->tls.enc_0rtt)
         ptls_aead_free(c->tls.enc_0rtt);
 
-    const ptls_cipher_suite_t * const cs = ptls_get_cipher(c->tls.t);
-    uint8_t sec[PTLS_MAX_DIGEST_SIZE];
-    c->tls.dec_0rtt = init_secret(c->tls.t, cs, sec, LABL_0RTT, 0, 1);
-    c->tls.enc_0rtt = init_secret(c->tls.t, cs, sec, LABL_0RTT, 1, 1);
+    c->tls.dec_0rtt = init_secret(c->tls.t, LABL_0RTT, 0, 1);
+    c->tls.enc_0rtt = init_secret(c->tls.t, LABL_0RTT, 1, 1);
 }
 
 
@@ -853,12 +851,10 @@ void init_0rtt_prot(struct q_conn * const c)
 
 static void __attribute__((nonnull)) init_1rtt_prot(struct q_conn * const c)
 {
-    const ptls_cipher_suite_t * const cs = ptls_get_cipher(c->tls.t);
-    uint8_t sec[PTLS_MAX_DIGEST_SIZE];
     c->tls.dec_1rtt = init_secret(
-        c->tls.t, cs, sec, c->is_clnt ? SERV_LABL_1RTT : CLNT_LABL_1RTT, 0, 0);
+        c->tls.t, c->is_clnt ? SERV_LABL_1RTT : CLNT_LABL_1RTT, 0, 0);
     c->tls.enc_1rtt = init_secret(
-        c->tls.t, cs, sec, c->is_clnt ? CLNT_LABL_1RTT : SERV_LABL_1RTT, 1, 0);
+        c->tls.t, c->is_clnt ? CLNT_LABL_1RTT : SERV_LABL_1RTT, 1, 0);
 }
 
 
