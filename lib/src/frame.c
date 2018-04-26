@@ -657,7 +657,8 @@ uint16_t enc_padding_frame(struct w_iov * const v,
 ///
 /// @return     True if @p a has better or equal packet protection than @p b.
 ///
-#define pkt_type(flags) (flags & (is_set(F_LONG_HDR, flags) ? ~0x80 : ~0xe0))
+#define pkt_type(flags)                                                        \
+    ((flags) & (is_set(F_LONG_HDR, (flags)) ? ~0x80 : ~0xe0))
 
 bool better_or_equal_prot(const uint8_t a, const uint8_t b)
 {
