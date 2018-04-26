@@ -245,7 +245,10 @@ bool enc_pkt(struct q_stream * const s,
         i = enc_lh_cids(c, v, i);
 
     if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
-        const uint64_t plen = meta(v).hdr.plen = v->len;
+        uint64_t plen = v->len + AEAD_LEN - i - sizeof(uint32_t);
+        const uint64_t plen_len = varint_size_needed(plen);
+        plen -= plen_len - (varint_size_needed(plen) -
+                            varint_size_needed(plen - plen_len));
         i = enc(v->buf, v->len, i, &plen, 0, "%" PRIu64);
         i = enc(v->buf, v->len, i, &meta(v).hdr.nr, sizeof(uint32_t),
                 GRN "%u" NRM);
