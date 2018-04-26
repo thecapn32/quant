@@ -50,11 +50,9 @@
 #if defined(HAVE_ENDIAN_H)
 // e.g., Linux
 #include <endian.h>
-#define htonll htobe64
 #elif defined(HAVE_SYS_ENDIAN_H)
 // e.g., FreeBSD
 #include <sys/endian.h>
-#define htonll htobe64
 #else
 #include <arpa/inet.h>
 #endif
