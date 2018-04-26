@@ -775,8 +775,8 @@ void rx(struct ev_loop * const l,
                              inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
 
                         c = new_conn(w_engine(ws), meta(v).hdr.vers,
-                                     &meta(v).hdr.dcid, 0, &peer, 0,
-                                     ntohs(w_get_sport(ws)), 0);
+                                     &meta(v).hdr.scid, &meta(v).hdr.dcid,
+                                     &peer, 0, ntohs(w_get_sport(ws)), 0);
                         new_stream(c, 0, false);
                     }
                 }
@@ -938,14 +938,14 @@ struct q_conn * new_conn(struct w_engine * const w,
 
     if (dcid) {
         memcpy(&c->dcid, dcid, sizeof(*dcid));
-    } else {
+    } else if (peer) {
         c->dcid.len = 8 + (uint8_t)arc4random_uniform(sizeof(dcid->id) - 8);
         arc4random_buf(c->dcid.id, c->dcid.len);
     }
 
     if (scid) {
         memcpy(&c->scid, scid, sizeof(*scid));
-    } else {
+    } else if (peer) {
         c->scid.len = 4 + (uint8_t)arc4random_uniform(sizeof(dcid->id) - 4);
         arc4random_buf(c->scid.id, c->scid.len);
     }

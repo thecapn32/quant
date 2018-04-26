@@ -135,8 +135,10 @@ static uint16_t enc_lh_cid(struct w_iov * const v,
                            const uint16_t pos,
                            const struct cid * const id)
 {
+#ifdef DEBUG_MARSHALL
     warn(DBG, "enc cid = %s into %u byte%s at v->buf[%u..%u]", cid2str(id),
          id->len, plural(id->len), pos, pos + id->len - 1);
+#endif
     memcpy(&v->buf[pos], id->id, id->len);
     return pos + id->len;
 }
@@ -147,13 +149,14 @@ enc_lh_cids(struct q_conn * const c, struct w_iov * const v, const uint16_t pos)
 {
     meta(v).hdr.dcid = c->dcid;
     meta(v).hdr.scid = c->scid;
-    const uint8_t cil = (uint8_t)((c->dcid.len ? c->dcid.len - 3 : 0) << 4) |
-                        (uint8_t)(c->scid.len ? c->scid.len - 3 : 0);
+    const uint8_t cil =
+        (uint8_t)((meta(v).hdr.dcid.len ? meta(v).hdr.dcid.len - 3 : 0) << 4) |
+        (uint8_t)(meta(v).hdr.scid.len ? meta(v).hdr.scid.len - 3 : 0);
     uint16_t i = enc(v->buf, v->len, pos, &cil, sizeof(cil), "0x%02x");
-    if (c->dcid.len)
-        i = enc_lh_cid(v, i, &c->dcid);
-    if (c->scid.len)
-        i = enc_lh_cid(v, i, &c->scid);
+    if (meta(v).hdr.dcid.len)
+        i = enc_lh_cid(v, i, &meta(v).hdr.dcid);
+    if (meta(v).hdr.scid.len)
+        i = enc_lh_cid(v, i, &meta(v).hdr.scid);
     return i;
 }
 
@@ -424,6 +427,7 @@ void dec_pkt_hdr(const struct w_iov * const v)
         if (meta(v).hdr.dcid.len) {
             meta(v).hdr.dcid.len += 3;
             memcpy(&meta(v).hdr.dcid.id, &v->buf[6], meta(v).hdr.dcid.len);
+#ifdef DEBUG_MARSHALL
             warn(
                 DBG,
                 "dec %u byte%s from v->buf[%u..%u] into &meta(v).hdr.dcid = %s",
@@ -431,6 +435,7 @@ void dec_pkt_hdr(const struct w_iov * const v)
                 meta(v).hdr.hdr_len,
                 meta(v).hdr.hdr_len + meta(v).hdr.dcid.len - 1,
                 cid2str(&meta(v).hdr.dcid));
+#endif
             meta(v).hdr.hdr_len += meta(v).hdr.dcid.len;
         }
 
@@ -440,6 +445,7 @@ void dec_pkt_hdr(const struct w_iov * const v)
             meta(v).hdr.scid.len += 3;
             memcpy(&meta(v).hdr.scid.id, &v->buf[meta(v).hdr.hdr_len],
                    meta(v).hdr.scid.len);
+#ifdef DEBUG_MARSHALL
             warn(
                 DBG,
                 "dec %u byte%s from v->buf[%u..%u] into &meta(v).hdr.scid = %s",
@@ -447,6 +453,7 @@ void dec_pkt_hdr(const struct w_iov * const v)
                 meta(v).hdr.hdr_len,
                 meta(v).hdr.hdr_len + meta(v).hdr.scid.len - 1,
                 cid2str(&meta(v).hdr.scid));
+#endif
             meta(v).hdr.hdr_len += meta(v).hdr.scid.len;
         }
 

@@ -472,7 +472,7 @@ void init_tp(struct q_conn * const c)
     enc_tp(c, TP_INITIAL_MAX_STREAM_ID_BIDI, c->tp_local.max_strm_bidi,
            sizeof(uint16_t));
     enc_tp(c, TP_INITIAL_MAX_STREAM_DATA, c->tp_local.max_strm_data,
-           sizeof(uint16_t));
+           sizeof(uint32_t));
     enc_tp(c, TP_INITIAL_MAX_DATA, c->tp_local.max_data, sizeof(uint32_t));
     // XXX picoquic cannot parse ack_delay_exponent as the last tp
     enc_tp(c, TP_ACK_DELAY_EXPONENT, c->tp_local.ack_del_exp, sizeof(uint8_t));
@@ -557,8 +557,9 @@ void init_hshk_prot(struct q_conn * const c)
     uint8_t sec[PTLS_MAX_SECRET_SIZE];
     const ptls_iovec_t salt = {.base = qv1_salt, .len = sizeof(qv1_salt)};
 
-    const ptls_iovec_t cid = {.base = (uint8_t *)&c->dcid.id,
-                              .len = c->dcid.len};
+    const ptls_iovec_t cid = {
+        .base = (uint8_t *)(c->is_clnt ? &c->dcid.id : &c->scid.id),
+        .len = c->is_clnt ? c->dcid.len : c->scid.len};
     ensure(ptls_hkdf_extract(cs->hash, sec, salt, cid) == 0,
            "ptls_hkdf_extract");
     // warn(CRT, "handshake secret");
