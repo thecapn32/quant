@@ -69,7 +69,7 @@ script:
     ../bin/cmake -GNinja -DCMAKE_C_COMPILER=$MYCC \
       -DCMAKE_CXX_COMPILER=$MYCXX -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
       -DCMAKE_INSTALL_PREFIX:PATH=/tmp ..
-    ninja
+    ninja -v -j1 -k1
 
 after_success:
   # update the documentation
