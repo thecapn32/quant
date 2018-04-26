@@ -134,6 +134,64 @@ static uint8_t cookie[COOKIE_LEN];
 #define TP_MAX TP_INITIAL_MAX_STREAM_ID_UNI
 
 
+static int qhkdf_expand(ptls_hash_algorithm_t * const algo,
+                        void * const output,
+                        size_t outlen,
+                        const void * const secret,
+                        const char * const label)
+{
+    ptls_buffer_t hkdf_label;
+    uint8_t hkdf_label_buf[16];
+    int ret;
+
+    ptls_buffer_init(&hkdf_label, hkdf_label_buf, sizeof(hkdf_label_buf));
+
+    ptls_buffer_push16(&hkdf_label, (uint16_t)outlen);
+    ptls_buffer_push_block(&hkdf_label, 1, {
+        const char * const base_label = "QUIC ";
+        ptls_buffer_pushv(&hkdf_label, base_label, strlen(base_label));
+        ptls_buffer_pushv(&hkdf_label, label, strlen(label));
+    });
+
+    ret = ptls_hkdf_expand(algo, output, outlen,
+                           ptls_iovec_init(secret, algo->digest_size),
+                           ptls_iovec_init(hkdf_label.base, hkdf_label.off));
+
+Exit:
+    ptls_buffer_dispose(&hkdf_label);
+    return ret;
+}
+
+static ptls_aead_context_t * new_aead(ptls_aead_algorithm_t * const aead,
+                                      ptls_hash_algorithm_t * const hash,
+                                      int is_enc,
+                                      const void * const secret)
+{
+    ptls_aead_context_t * ctx = 0;
+    uint8_t key[PTLS_MAX_SECRET_SIZE];
+    int ret;
+
+    if ((ret = qhkdf_expand(hash, key, aead->key_size, secret, "key")) != 0)
+        goto Exit;
+    if ((ctx = ptls_aead_new(aead, is_enc, key)) == 0) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    if ((ret = qhkdf_expand(hash, ctx->static_iv, aead->iv_size, secret,
+                            "iv")) != 0)
+        goto Exit;
+
+    ret = 0;
+Exit:
+    if (ret != 0 && ctx != 0) {
+        ptls_aead_free(ctx);
+        ctx = 0;
+    }
+    ptls_clear_memory(key, sizeof(key));
+    return ctx;
+}
+
+
 static int __attribute__((nonnull))
 on_ch(ptls_on_client_hello_t * const self __attribute__((unused)),
       ptls_t * const tls,
@@ -457,8 +515,6 @@ void init_tp(struct q_conn * const c)
 }
 
 
-#define QUIC_LABL "QUIC "
-
 static void init_ticket_prot(void)
 {
     const ptls_cipher_suite_t * const cs = &ptls_openssl_aes128gcmsha256;
@@ -466,8 +522,8 @@ static void init_ticket_prot(void)
     memcpy(output, quant_commit_hash,
            MIN(quant_commit_hash_len, sizeof(output)));
 
-    dec_tckt = ptls_aead_new(cs->aead, cs->hash, 0, output, QUIC_LABL);
-    enc_tckt = ptls_aead_new(cs->aead, cs->hash, 1, output, QUIC_LABL);
+    dec_tckt = new_aead(cs->aead, cs->hash, 0, output);
+    enc_tckt = new_aead(cs->aead, cs->hash, 1, output);
     ensure(dec_tckt && enc_tckt, "cannot init ticket protection");
 
     ptls_clear_memory(output, sizeof(output));
@@ -481,17 +537,15 @@ static ptls_aead_context_t * init_hshk_secret(struct q_conn * const c,
                                               const char * const label,
                                               uint8_t is_enc)
 {
-    const ptls_iovec_t secret = {.base = sec, .len = cs->hash->digest_size};
     uint8_t output[PTLS_MAX_SECRET_SIZE];
-    ensure(ptls_hkdf_expand_label(cs->hash, output, cs->hash->digest_size,
-                                  secret, label, ptls_iovec_init(0, 0),
-                                  QUIC_LABL) == 0,
-           "ptls_hkdf_expand_label");
+    ensure(qhkdf_expand(cs->hash, output, cs->hash->digest_size, sec, label) ==
+               0,
+           "qhkdf_expand");
     warn(CRT, "%s handshake secret",
          is_enc ? (c->is_clnt ? "clnt" : "serv")
                 : (c->is_clnt ? "serv" : "clnt"));
     hexdump(output, cs->hash->digest_size);
-    return ptls_aead_new(cs->aead, cs->hash, is_enc, output, QUIC_LABL);
+    return new_aead(cs->aead, cs->hash, is_enc, output);
 }
 
 
@@ -515,8 +569,8 @@ void init_hshk_prot(struct q_conn * const c)
     uint8_t sec[PTLS_MAX_SECRET_SIZE];
     const ptls_iovec_t salt = {.base = qv1_salt, .len = sizeof(qv1_salt)};
 
-    const ptls_iovec_t cid = {.base = (uint8_t *)&c->scid.id,
-                              .len = c->scid.len};
+    const ptls_iovec_t cid = {.base = (uint8_t *)&c->dcid.id,
+                              .len = c->dcid.len};
     ensure(ptls_hkdf_extract(cs->hash, sec, salt, cid) == 0,
            "ptls_hkdf_extract");
     warn(CRT, "handshake secret");
@@ -785,7 +839,7 @@ init_secret(ptls_t * const t,
     ensure(ptls_export_secret(t, sec, cs->hash->digest_size, label,
                               ptls_iovec_init(0, 0), is_early) == 0,
            "ptls_export_secret");
-    return ptls_aead_new(cs->aead, cs->hash, is_enc, sec, QUIC_LABL);
+    return new_aead(cs->aead, cs->hash, is_enc, sec);
 }
 
 

@@ -18,7 +18,7 @@ if(NOT WARP_LIB OR NOT WARP_INCLUDE)
   file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include)
 
   externalproject_add(warp
-    UPDATE_COMMAND "" # XXX do not commit with this being empty
+    # UPDATE_COMMAND "" # XXX do not commit with this being empty
     GIT_REPOSITORY https://github.com/NTAP/warpcore.git
     GIT_SHALLOW 1
     GIT_TAG dev
@@ -48,10 +48,10 @@ set_target_properties(warpcore PROPERTIES
 
 
 externalproject_add(picotls
-  UPDATE_COMMAND "" # XXX do not commit with this being empty
+  # UPDATE_COMMAND "" # XXX do not commit with this being empty
   GIT_REPOSITORY https://github.com/h2o/picotls.git
   GIT_SHALLOW 1
-  # GIT_TAG 7474dfe64a8c18a70d927ae38073d6ee263d6a79
+  GIT_TAG 57439007f1f2b28f8f3d5acee6f177637891e332
   CMAKE_ARGS
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
     -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}
