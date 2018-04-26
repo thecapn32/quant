@@ -363,7 +363,8 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             dec_tp(&c->tp_peer.max_strm_bidi, sizeof(uint16_t));
             warn(INF, "\tinitial_max_stream_id_bidi = %u",
                  c->tp_peer.max_strm_bidi);
-            // ensure(is_set(STRM_FL_DIR_UNI, c->tp_peer.max_strm_bidi) == false,
+            // ensure(is_set(STRM_FL_DIR_UNI, c->tp_peer.max_strm_bidi) ==
+            // false,
             //        "got unidir sid %" PRIu64, c->tp_peer.max_strm_bidi);
             ensure(
                 is_set(STRM_FL_INI_SRV, c->tp_peer.max_strm_bidi) != c->is_clnt,
@@ -517,10 +518,10 @@ static void init_ticket_prot(void)
 }
 
 
-static ptls_aead_context_t * init_hshk_secret(struct q_conn * const c,
-                                              // __attribute__((unused)),
+static ptls_aead_context_t * init_hshk_secret(struct q_conn * const c
+                                              __attribute__((unused)),
                                               ptls_cipher_suite_t * const cs,
-                                              uint8_t * const sec, // NOLINT
+                                              uint8_t * const sec,
                                               const char * const label,
                                               uint8_t is_enc)
 {
@@ -528,10 +529,10 @@ static ptls_aead_context_t * init_hshk_secret(struct q_conn * const c,
     ensure(qhkdf_expand(cs->hash, output, cs->hash->digest_size, sec, label) ==
                0,
            "qhkdf_expand");
-    warn(CRT, "%s handshake secret",
-         is_enc ? (c->is_clnt ? "clnt" : "serv")
-                : (c->is_clnt ? "serv" : "clnt"));
-    hexdump(output, cs->hash->digest_size);
+    // warn(CRT, "%s handshake secret",
+    //      is_enc ? (c->is_clnt ? "clnt" : "serv")
+    //             : (c->is_clnt ? "serv" : "clnt"));
+    // hexdump(output, cs->hash->digest_size);
     return new_aead(cs->aead, cs->hash, is_enc, output);
 }
 
@@ -560,18 +561,18 @@ void init_hshk_prot(struct q_conn * const c)
                               .len = c->dcid.len};
     ensure(ptls_hkdf_extract(cs->hash, sec, salt, cid) == 0,
            "ptls_hkdf_extract");
-    warn(CRT, "handshake secret");
-    hexdump(sec, PTLS_MAX_SECRET_SIZE);
+    // warn(CRT, "handshake secret");
+    // hexdump(sec, PTLS_MAX_SECRET_SIZE);
 
     c->tls.dec_hshk = init_hshk_secret(
         c, cs, sec, c->is_clnt ? SERV_LABL_HSHK : CLNT_LABL_HSHK, 0);
-    warn(CRT, "%s iv", c->is_clnt ? "serv" : "clnt");
-    hexdump(c->tls.dec_hshk->static_iv, c->tls.dec_hshk->algo->iv_size);
+    // warn(CRT, "%s iv", c->is_clnt ? "serv" : "clnt");
+    // hexdump(c->tls.dec_hshk->static_iv, c->tls.dec_hshk->algo->iv_size);
 
     c->tls.enc_hshk = init_hshk_secret(
         c, cs, sec, c->is_clnt ? CLNT_LABL_HSHK : SERV_LABL_HSHK, 1);
-    warn(CRT, "%s iv", c->is_clnt ? "clnt" : "serv");
-    hexdump(c->tls.enc_hshk->static_iv, c->tls.enc_hshk->algo->iv_size);
+    // warn(CRT, "%s iv", c->is_clnt ? "clnt" : "serv");
+    // hexdump(c->tls.enc_hshk->static_iv, c->tls.enc_hshk->algo->iv_size);
 }
 
 
