@@ -125,7 +125,6 @@ static uint8_t cookie[COOKIE_LEN];
 #define TP_INITIAL_MAX_DATA 0x0001
 #define TP_INITIAL_MAX_STREAM_ID_BIDI 0x0002
 #define TP_IDLE_TIMEOUT 0x0003
-#define TP_OMIT_CONNECTION_ID 0x0004
 #define TP_MAX_PACKET_SIZE 0x0005
 #define TP_STATELESS_RESET_TOKEN 0x0006
 #define TP_ACK_DELAY_EXPONENT 0x0007
@@ -361,22 +360,22 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             break;
 
         case TP_INITIAL_MAX_STREAM_ID_BIDI:
-            dec_tp(&c->tp_peer.max_strm_bidi, sizeof(uint32_t));
+            dec_tp(&c->tp_peer.max_strm_bidi, sizeof(uint16_t));
             warn(INF, "\tinitial_max_stream_id_bidi = %u",
                  c->tp_peer.max_strm_bidi);
-            ensure(is_set(STRM_FL_DIR_UNI, c->tp_peer.max_strm_bidi) == false,
-                   "got unidir sid %" PRIu64, c->tp_peer.max_strm_bidi);
+            // ensure(is_set(STRM_FL_DIR_UNI, c->tp_peer.max_strm_bidi) == false,
+            //        "got unidir sid %" PRIu64, c->tp_peer.max_strm_bidi);
             ensure(
                 is_set(STRM_FL_INI_SRV, c->tp_peer.max_strm_bidi) != c->is_clnt,
                 "illegal initiator for sid %" PRIu64, c->tp_peer.max_strm_bidi);
             break;
 
         case TP_INITIAL_MAX_STREAM_ID_UNI:
-            dec_tp(&c->tp_peer.max_strm_uni, sizeof(uint32_t));
+            dec_tp(&c->tp_peer.max_strm_uni, sizeof(uint16_t));
             warn(INF, "\tinitial_max_stream_id_uni = %u",
                  c->tp_peer.max_strm_uni);
-            ensure(is_set(STRM_FL_DIR_UNI, c->tp_peer.max_strm_uni),
-                   "got bidir sid %" PRIu64, c->tp_peer.max_strm_uni);
+            // ensure(is_set(STRM_FL_DIR_UNI, c->tp_peer.max_strm_uni),
+            //        "got bidir sid %" PRIu64, c->tp_peer.max_strm_uni);
             ensure(
                 is_set(STRM_FL_INI_SRV, c->tp_peer.max_strm_uni) != c->is_clnt,
                 "illegal initiator for sid %" PRIu64, c->tp_peer.max_strm_uni);
@@ -395,14 +394,6 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             if (c->tp_peer.max_pkt < 1200 || c->tp_peer.max_pkt > 65527)
                 warn(ERR, "tp_peer.max_pkt %u invalid", c->tp_peer.max_pkt);
             break;
-
-        case TP_OMIT_CONNECTION_ID: {
-            uint16_t dummy;
-            dec_tp(&dummy, sizeof(dummy));
-            warn(INF, "\tomit_connection_id = true");
-            c->omit_cid = true;
-            break;
-        }
 
         case TP_ACK_DELAY_EXPONENT:
             dec_tp(&c->tp_peer.ack_del_exp, sizeof(uint8_t));
@@ -476,15 +467,11 @@ void init_tp(struct q_conn * const c)
     const uint16_t enc_len_pos = i;
     i += sizeof(uint16_t);
 
-    // XXX ngtcp2 and picoquic cannot parse omit_connection_id as the last tp
-    // const struct q_conn * const other = get_conn_by_ipnp(c->sport, &c->peer,
-    // 0); if (!other || other->id == c->id)
-    //     enc_tp(c, TP_OMIT_CONNECTION_ID, i, 0); // i not used
     enc_tp(c, TP_IDLE_TIMEOUT, c->tp_local.idle_to, sizeof(uint16_t));
     enc_tp(c, TP_INITIAL_MAX_STREAM_ID_BIDI, c->tp_local.max_strm_bidi,
-           sizeof(uint32_t));
+           sizeof(uint16_t));
     enc_tp(c, TP_INITIAL_MAX_STREAM_DATA, c->tp_local.max_strm_data,
-           sizeof(uint32_t));
+           sizeof(uint16_t));
     enc_tp(c, TP_INITIAL_MAX_DATA, c->tp_local.max_data, sizeof(uint32_t));
     // XXX picoquic cannot parse ack_delay_exponent as the last tp
     enc_tp(c, TP_ACK_DELAY_EXPONENT, c->tp_local.ack_del_exp, sizeof(uint8_t));
