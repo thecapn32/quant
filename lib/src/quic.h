@@ -144,7 +144,7 @@ extern struct pkt_meta * pm;
 
 
 /// Offset of stream frame payload data in w_iov buffers.
-#define Q_OFFSET 64
+#define Q_OFFSET 96
 
 
 #define adj_iov_to_start(v)                                                    \

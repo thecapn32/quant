@@ -266,6 +266,11 @@ bool enc_pkt(struct q_stream * const s,
     } else
         meta(v).ack_header_pos = 0;
 
+    if (c->needs_path_resp) {
+        i = enc_path_response_frame(c, v, i);
+        c->needs_path_resp = false;
+    }
+
     if (c->state == CONN_STAT_ESTB) {
         // XXX rethink this - there needs to be a list of which streams are
         // blocked or need their window opened
@@ -337,7 +342,7 @@ bool enc_pkt(struct q_stream * const s,
             s->state == STRM_STAT_CLSD) {
 
             if (c->state == CONN_STAT_SEND_RTRY) {
-                enc_stream_frame(s, v);
+                enc_stream_frame(s, v, i);
                 // retry packets must not have padding (as of 09), so move
                 // the stream frame after the header (XXX ugly)
                 memmove(&v->buf[meta(v).hdr.hdr_len],
@@ -354,7 +359,7 @@ bool enc_pkt(struct q_stream * const s,
                 // add a stream frame header, after padding out rest of
                 // Q_OFFSET
                 enc_padding_frame(v, i, Q_OFFSET - i);
-                i = enc_stream_frame(s, v);
+                i = enc_stream_frame(s, v, i);
             }
         }
     }

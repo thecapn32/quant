@@ -456,19 +456,14 @@ dec_stop_sending_frame(struct q_conn * const c,
 
 
 static uint16_t __attribute__((nonnull))
-dec_ping_frame(struct q_conn * const c,
-               const struct w_iov * const v,
-               const uint16_t pos)
+dec_path_chlg_frame(struct q_conn * const c,
+                    const struct w_iov * const v,
+                    const uint16_t pos)
 {
-    uint8_t len = 0;
-    uint16_t i = dec(&len, v->buf, v->len, pos + 1, sizeof(len), "%u");
-
-    warn(INF, FRAM_IN "PING" NRM " len=%u data=%.*s", len, len, v->buf[i]);
-
-    if (len)
-        err_close(c, ERR_FRAME_ERR(FRAM_TYPE_PING),
-                  "TODO: ping frame with data not supported");
-
+    uint16_t i = dec(&c->path_resp, v->buf, v->len, pos + 1,
+                     sizeof(c->path_resp), "0x%" PRIx64);
+    warn(INF, FRAM_IN "PATH_CHALLENGE" NRM " data=%" PRIx64, c->path_resp);
+    c->needs_path_resp = true;
     return i;
 }
 
@@ -578,7 +573,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
                 break;
 
             case FRAM_TYPE_PING:
-                i = dec_ping_frame(c, v, i);
+                warn(INF, FRAM_IN "PING" NRM);
                 break;
 
             case FRAM_TYPE_MAX_STRM_DATA:
@@ -607,6 +602,10 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
 
             case FRAM_TYPE_STOP_SEND:
                 i = dec_stop_sending_frame(c, v, i);
+                break;
+
+            case FRAM_TYPE_PATH_CHLG:
+                i = dec_path_chlg_frame(c, v, i);
                 break;
 
                 // case FRAM_TYPE_NEW_CID:
@@ -845,7 +844,9 @@ uint16_t enc_ack_frame(struct q_conn * const c,
 }
 
 
-uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
+uint16_t enc_stream_frame(struct q_stream * const s,
+                          struct w_iov * const v,
+                          const uint16_t pos)
 {
     const uint64_t dlen = v->len - Q_OFFSET;
     ensure(dlen || s->state > STRM_STAT_OPEN,
@@ -867,6 +868,7 @@ uint16_t enc_stream_frame(struct q_stream * const s, struct w_iov * const v)
         Q_OFFSET - 1 - varint_size_needed(s->id) -
         (dlen ? varint_size_needed(dlen) : 0) -
         (s->out_off ? varint_size_needed(s->out_off) : 0);
+    ensure(i > pos, "Q_OFFSET exhausted (%u > %u)", i, pos);
     i = enc(v->buf, v->len, i, &type, sizeof(type), "0x%02x");
     i = enc(v->buf, v->len, i, &s->id, 0, FMT_SID);
     if (s->out_off)
@@ -1034,6 +1036,23 @@ uint16_t enc_stream_id_blocked_frame(struct q_conn * const c,
 
     warn(INF, FRAM_OUT "STREAM_ID_BLOCKED" NRM " sid=" FMT_SID,
          c->tp_peer.max_strm_bidi);
+
+    return i;
+}
+
+
+uint16_t enc_path_response_frame(struct q_conn * const c,
+                                 const struct w_iov * const v,
+                                 const uint16_t pos)
+{
+    bit_set(meta(v).frames, FRAM_TYPE_PATH_RESP);
+
+    const uint8_t type = FRAM_TYPE_PATH_RESP;
+    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
+    i = enc(v->buf, v->len, i, &c->path_resp, sizeof(c->path_resp),
+            "0x%" PRIx64);
+
+    warn(INF, FRAM_OUT "PATH_RESPONSE" NRM " data=%" PRIx64, c->path_resp);
 
     return i;
 }

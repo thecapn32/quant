@@ -78,7 +78,8 @@ struct q_conn {
     uint16_t try_0rtt : 1;          ///< Try 0-RTT handshake.
     uint16_t did_0rtt : 1;          ///< 0-RTT handshake succeeded;
     uint16_t in_closing : 1;        ///< Is the closing/draining timer active?
-    uint16_t : 4;
+    uint16_t needs_path_resp : 1;   ///< Needs a PATH_RESPONSE.
+    uint16_t : 3;
 
     uint32_t vers;         ///< QUIC version in use for this connection.
     uint32_t vers_initial; ///< QUIC version first negotiated.
@@ -118,6 +119,7 @@ struct q_conn {
     struct tls tls;      ///< TLS state.
 
     uint8_t stateless_reset_token[16];
+    uint64_t path_resp;
 };
 
 

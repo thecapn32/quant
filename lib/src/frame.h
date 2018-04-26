@@ -49,7 +49,7 @@ struct w_iov;
 #define FRAM_TYPE_NEW_CID 0x0b
 #define FRAM_TYPE_STOP_SEND 0x0c
 #define FRAM_TYPE_ACK 0x0d
-#define FRAM_TYPE_PATH_CHAL 0x0e
+#define FRAM_TYPE_PATH_CHLG 0x0e
 #define FRAM_TYPE_PATH_RESP 0x0f
 #define FRAM_TYPE_STRM 0x10
 #define FRAM_TYPE_STRM_MAX 0x17
@@ -90,7 +90,9 @@ extern uint16_t __attribute__((nonnull)) enc_ack_frame(struct q_conn * const c,
                                                        const uint16_t pos);
 
 extern uint16_t __attribute__((nonnull))
-enc_stream_frame(struct q_stream * const s, struct w_iov * const v);
+enc_stream_frame(struct q_stream * const s,
+                 struct w_iov * const v,
+                 const uint16_t pos);
 
 extern uint16_t __attribute__((nonnull(1)))
 enc_close_frame(struct w_iov * const v,
@@ -98,6 +100,11 @@ enc_close_frame(struct w_iov * const v,
                 const uint8_t type,
                 const uint16_t err_code,
                 const char * const reas);
+
+extern uint16_t __attribute__((nonnull))
+enc_path_response_frame(struct q_conn * const c,
+                        const struct w_iov * const v,
+                        const uint16_t pos);
 
 extern uint16_t __attribute__((nonnull(1, 2, 5))) dec_ack_frame(
     struct q_conn * const c,
