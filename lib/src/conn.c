@@ -749,12 +749,7 @@ void rx(struct ev_loop * const l,
                                              .sin_addr = {.s_addr = v->ip}};
             c = get_conn_by_ipnp(w_get_sport(ws), &peer, is_clnt);
             if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
-                if (is_clnt) {
-                    // // server may have picked a new cid
-                    // warn(INF, "got new cid " FMT_CID " for %s conn " FMT_CID,
-                    //      cid, conn_type(c), c->id);
-                    // update_cid(c, cid);
-                } else {
+                if (!is_clnt) {
                     if (c && meta(v).hdr.type == F_LH_0RTT)
                         warn(INF,
                              "got 0-RTT pkt for orig cid %s, new is %s, "
@@ -783,6 +778,12 @@ void rx(struct ev_loop * const l,
 
             } else
                 c = get_conn_by_ipnp(w_get_sport(ws), &peer, is_clnt);
+
+        } else if (memcmp(&meta(v).hdr.scid, &c->dcid, sizeof(c->dcid)) != 0) {
+            // the scid has changed
+            warn(INF, "got new dcid %s for %s conn (was %s)",
+                 cid2str(&meta(v).hdr.scid), conn_type(c), cid2str(&c->dcid));
+            c->dcid = meta(v).hdr.scid;
         }
 
         if (c == 0) {
