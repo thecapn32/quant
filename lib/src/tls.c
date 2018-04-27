@@ -64,6 +64,8 @@
 #include "stream.h"
 #include "tls.h"
 
+// #define DEBUG_KEYS
+
 
 struct tls_ticket {
     char * sni;
@@ -517,7 +519,10 @@ static void init_ticket_prot(void)
 
 
 static ptls_aead_context_t * init_hshk_secret(struct q_conn * const c
-                                              __attribute__((unused)),
+#ifndef DEBUG_KEYS
+                                              __attribute__((unused))
+#endif
+                                              ,
                                               ptls_cipher_suite_t * const cs,
                                               uint8_t * const sec,
                                               const char * const label,
@@ -527,10 +532,12 @@ static ptls_aead_context_t * init_hshk_secret(struct q_conn * const c
     ensure(qhkdf_expand(cs->hash, output, cs->hash->digest_size, sec, label) ==
                0,
            "qhkdf_expand");
-    // warn(CRT, "%s handshake secret",
-    //      is_enc ? (c->is_clnt ? "clnt" : "serv")
-    //             : (c->is_clnt ? "serv" : "clnt"));
-    // hexdump(output, cs->hash->digest_size);
+#ifdef DEBUG_KEYS
+    warn(CRT, "%s handshake secret",
+         is_enc ? (c->is_clnt ? "clnt" : "serv")
+                : (c->is_clnt ? "serv" : "clnt"));
+    hexdump(output, cs->hash->digest_size);
+#endif
     return new_aead(cs->aead, cs->hash, is_enc, output);
 }
 
@@ -560,18 +567,22 @@ void init_hshk_prot(struct q_conn * const c)
         .len = c->is_clnt ? c->dcid.len : c->scid.len};
     ensure(ptls_hkdf_extract(cs->hash, sec, salt, cid) == 0,
            "ptls_hkdf_extract");
-    // warn(CRT, "handshake secret");
-    // hexdump(sec, PTLS_MAX_SECRET_SIZE);
-
+#ifdef DEBUG_KEYS
+    warn(CRT, "handshake secret");
+    hexdump(sec, PTLS_MAX_SECRET_SIZE);
+#endif
     c->tls.dec_hshk = init_hshk_secret(
         c, cs, sec, c->is_clnt ? SERV_LABL_HSHK : CLNT_LABL_HSHK, 0);
-    // warn(CRT, "%s iv", c->is_clnt ? "serv" : "clnt");
-    // hexdump(c->tls.dec_hshk->static_iv, c->tls.dec_hshk->algo->iv_size);
-
+#ifdef DEBUG_KEYS
+    warn(CRT, "%s iv", c->is_clnt ? "serv" : "clnt");
+    hexdump(c->tls.dec_hshk->static_iv, c->tls.dec_hshk->algo->iv_size);
+#endif
     c->tls.enc_hshk = init_hshk_secret(
         c, cs, sec, c->is_clnt ? CLNT_LABL_HSHK : SERV_LABL_HSHK, 1);
-    // warn(CRT, "%s iv", c->is_clnt ? "clnt" : "serv");
-    // hexdump(c->tls.enc_hshk->static_iv, c->tls.enc_hshk->algo->iv_size);
+#ifdef DEBUG_KEYS
+    warn(CRT, "%s iv", c->is_clnt ? "clnt" : "serv");
+    hexdump(c->tls.enc_hshk->static_iv, c->tls.enc_hshk->algo->iv_size);
+#endif
 }
 
 
@@ -826,6 +837,11 @@ init_secret(ptls_t * const t,
     ensure(ptls_export_secret(t, sec, cs->hash->digest_size, label,
                               ptls_iovec_init(0, 0), is_early) == 0,
            "ptls_export_secret");
+#ifdef DEBUG_KEYS
+    warn(CRT, "%s secret", label);
+    hexdump(sec, cs->hash->digest_size);
+#endif
+
     return new_aead(cs->aead, cs->hash, is_enc, sec);
 }
 
