@@ -509,14 +509,12 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                           meta(v).hdr.type);
                 goto done;
             }
-#ifndef NO_RANDOM_CID
-            // // this is a new connection; server picks a new random cid
-            // uint64_t cid;
-            // arc4random_buf(&cid, sizeof(cid));
-            // warn(NTE, "picked new cid " FMT_CID " for %s conn " FMT_CID, cid,
-            //      conn_type(c), c->id);
-            // update_cid(c, cid);
-#endif
+            // this is a new connection; server picks a new random cid
+            struct cid new_scid = {.len = SERV_SCID_LEN};
+            arc4random_buf(&new_scid, new_scid.len);
+            warn(NTE, "picked new scid %s for %s conn (was %s)",
+                 cid2str(&new_scid), conn_type(c), cid2str(&c->scid));
+            update_scid(c, &new_scid);
             init_tls(c);
             dec_frames(c, v);
 
@@ -683,6 +681,10 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                 warn(NTE, "stateless reset on %s conn %s", conn_type(c),
                      cid2str(&c->scid));
                 conn_to_state(c, CONN_STAT_DRNG);
+            } else {
+                err_close(c, ERR_TLS_HSHAKE_FAIL,
+                          "AEAD decrypt of 0x%02x-type packet failed",
+                          meta(v).hdr.type);
             }
             goto done;
         }
@@ -729,7 +731,9 @@ void rx(struct ev_loop * const l,
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         sq_remove_head(&i, next);
 
-        dec_pkt_hdr(v);
+        const bool is_clnt = w_connected(ws);
+        dec_pkt_hdr_initial(v, is_clnt);
+
         // warn(DBG, "rx idx %u", w_iov_idx(v));
 
         if (v->len > MAX_PKT_LEN)
@@ -741,7 +745,6 @@ void rx(struct ev_loop * const l,
         //     continue;
         // }
 
-        const bool is_clnt = w_connected(ws);
         struct q_conn * c = get_conn_by_cid(&meta(v).hdr.dcid, is_clnt);
         if (c == 0) {
             const struct sockaddr_in peer = {.sin_family = AF_INET,
@@ -779,10 +782,13 @@ void rx(struct ev_loop * const l,
             } else
                 c = get_conn_by_ipnp(w_get_sport(ws), &peer, is_clnt);
 
-        } else if (memcmp(&meta(v).hdr.scid, &c->dcid, sizeof(c->dcid)) != 0) {
-            // the scid has changed
-            warn(INF, "got new dcid %s for %s conn (was %s)",
-                 cid2str(&meta(v).hdr.scid), conn_type(c), cid2str(&c->dcid));
+        } else if (meta(v).hdr.scid.len) {
+            if (memcmp(&meta(v).hdr.scid, &c->dcid, sizeof(c->dcid)) != 0)
+                warn(INF, "got new dcid %s for %s conn (was %s)",
+                     cid2str(&meta(v).hdr.scid), conn_type(c),
+                     cid2str(&c->dcid));
+
+            // always update the cid (TODO: check that this is allowed)
             c->dcid = meta(v).hdr.scid;
         }
 
@@ -793,9 +799,9 @@ void rx(struct ev_loop * const l,
             continue;
         }
 
-        if (meta(v).hdr.vers)
-            dec_pkt_nr(v, c);
-        log_pkt("RX", v, c, 0);
+        if (meta(v).hdr.vers || !is_set(F_LONG_HDR, meta(v).hdr.flags))
+            dec_pkt_hdr_remainder(v, c);
+        log_pkt("RX", v, 0);
 
         // remember that we had a RX event on this connection
         if (!c->had_rx) {
@@ -940,14 +946,14 @@ struct q_conn * new_conn(struct w_engine * const w,
     if (dcid) {
         memcpy(&c->dcid, dcid, sizeof(*dcid));
     } else if (peer) {
-        c->dcid.len = 8 + (uint8_t)arc4random_uniform(sizeof(dcid->id) - 8);
+        c->dcid.len = SERV_SCID_LEN;
         arc4random_buf(c->dcid.id, c->dcid.len);
     }
 
     if (scid) {
         memcpy(&c->scid, scid, sizeof(*scid));
     } else if (peer) {
-        c->scid.len = 4 + (uint8_t)arc4random_uniform(sizeof(dcid->id) - 4);
+        c->scid.len = CLNT_SCID_LEN;
         arc4random_buf(c->scid.id, c->scid.len);
     }
 

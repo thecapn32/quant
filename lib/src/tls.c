@@ -64,7 +64,9 @@
 #include "stream.h"
 #include "tls.h"
 
+#ifndef NDEBUG
 // #define DEBUG_KEYS
+#endif
 
 
 struct tls_ticket {
@@ -135,7 +137,7 @@ static uint8_t cookie[COOKIE_LEN];
 
 static int qhkdf_expand(ptls_hash_algorithm_t * const algo,
                         void * const output,
-                        size_t outlen,
+                        const size_t outlen,
                         const void * const secret,
                         const char * const label)
 {
@@ -163,7 +165,7 @@ Exit:
 
 static ptls_aead_context_t * new_aead(ptls_aead_algorithm_t * const aead,
                                       ptls_hash_algorithm_t * const hash,
-                                      int is_enc,
+                                      const int is_enc,
                                       const void * const secret)
 {
     ptls_aead_context_t * ctx = 0;
@@ -172,6 +174,10 @@ static ptls_aead_context_t * new_aead(ptls_aead_algorithm_t * const aead,
 
     if ((ret = qhkdf_expand(hash, key, aead->key_size, secret, "key")) != 0)
         goto Exit;
+#ifdef DEBUG_KEYS
+    warn(CRT, "key");
+    hexdump(key, aead->key_size);
+#endif
     if ((ctx = ptls_aead_new(aead, is_enc, key)) == 0) {
         ret = PTLS_ERROR_NO_MEMORY;
         goto Exit;
@@ -179,6 +185,10 @@ static ptls_aead_context_t * new_aead(ptls_aead_algorithm_t * const aead,
     if ((ret = qhkdf_expand(hash, ctx->static_iv, aead->iv_size, secret,
                             "iv")) != 0)
         goto Exit;
+#ifdef DEBUG_KEYS
+    warn(CRT, "iv");
+    hexdump(ctx->static_iv, aead->iv_size);
+#endif
 
     ret = 0;
 Exit:
@@ -518,12 +528,7 @@ static void init_ticket_prot(void)
 }
 
 
-static ptls_aead_context_t * init_hshk_secret(struct q_conn * const c
-#ifndef DEBUG_KEYS
-                                              __attribute__((unused))
-#endif
-                                              ,
-                                              ptls_cipher_suite_t * const cs,
+static ptls_aead_context_t * init_hshk_secret(ptls_cipher_suite_t * const cs,
                                               uint8_t * const sec,
                                               const char * const label,
                                               uint8_t is_enc)
@@ -533,17 +538,12 @@ static ptls_aead_context_t * init_hshk_secret(struct q_conn * const c
                0,
            "qhkdf_expand");
 #ifdef DEBUG_KEYS
-    warn(CRT, "%s handshake secret",
-         is_enc ? (c->is_clnt ? "clnt" : "serv")
-                : (c->is_clnt ? "serv" : "clnt"));
+    warn(CRT, "%s handshake secret", label);
     hexdump(output, cs->hash->digest_size);
 #endif
     return new_aead(cs->aead, cs->hash, is_enc, output);
 }
 
-
-#define CLNT_LABL_HSHK "client hs"
-#define SERV_LABL_HSHK "server hs"
 
 void init_hshk_prot(struct q_conn * const c)
 {
@@ -571,14 +571,14 @@ void init_hshk_prot(struct q_conn * const c)
     warn(CRT, "handshake secret");
     hexdump(sec, PTLS_MAX_SECRET_SIZE);
 #endif
-    c->tls.dec_hshk = init_hshk_secret(
-        c, cs, sec, c->is_clnt ? SERV_LABL_HSHK : CLNT_LABL_HSHK, 0);
+    c->tls.dec_hshk =
+        init_hshk_secret(cs, sec, c->is_clnt ? "server hs" : "client hs", 0);
 #ifdef DEBUG_KEYS
     warn(CRT, "%s iv", c->is_clnt ? "serv" : "clnt");
     hexdump(c->tls.dec_hshk->static_iv, c->tls.dec_hshk->algo->iv_size);
 #endif
-    c->tls.enc_hshk = init_hshk_secret(
-        c, cs, sec, c->is_clnt ? CLNT_LABL_HSHK : SERV_LABL_HSHK, 1);
+    c->tls.enc_hshk =
+        init_hshk_secret(cs, sec, c->is_clnt ? "client hs" : "server hs", 1);
 #ifdef DEBUG_KEYS
     warn(CRT, "%s iv", c->is_clnt ? "clnt" : "serv");
     hexdump(c->tls.enc_hshk->static_iv, c->tls.enc_hshk->algo->iv_size);

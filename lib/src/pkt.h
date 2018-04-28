@@ -40,11 +40,17 @@
 #define F_LH_HSHK 0x7D
 #define F_LH_0RTT 0x7C
 
-#define F_SH_OMIT_CID 0x40
-#define F_SH_KPH 0x20
-#define F_SH_1OCT 0x1F
-#define F_SH_2OCT 0x1E
-#define F_SH_4OCT 0x1D
+#define F_SH_KYPH 0x40
+#define F_SH_RSV1 0x20
+#define F_SH_RSV2 0x10
+#define F_SH_GOOG 0x08
+#define F_SH_EXP 0x04
+
+#define F_SH 0x30
+
+#define F_SH_4OCT 0x02
+#define F_SH_2OCT 0x01
+#define F_SH_1OCT 0x00
 
 #define ERR_NO_ERR 0x0
 #define ERR_INTERNAL_ERR 0x1
@@ -67,10 +73,11 @@ struct q_stream;
 struct w_iov;
 struct w_iov_sq;
 
-extern void __attribute__((nonnull)) dec_pkt_hdr(const struct w_iov * const v);
+extern void __attribute__((nonnull))
+dec_pkt_hdr_initial(const struct w_iov * const v, const bool is_clnt);
 
 extern void __attribute__((nonnull))
-dec_pkt_nr(const struct w_iov * const v, struct q_conn * const c);
+dec_pkt_hdr_remainder(const struct w_iov * const v, struct q_conn * const c);
 
 extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
                                              const bool rtx,
@@ -80,7 +87,6 @@ extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
 #ifndef NDEBUG
 extern void __attribute__((nonnull)) log_pkt(const char * const dir,
                                              const struct w_iov * const v,
-                                             const struct q_conn * const c,
                                              const uint16_t add_len);
 #else
 #define log_pkt(...)                                                           \

@@ -54,6 +54,20 @@ struct cid {
 
 
 struct pkt_hdr {
+    // union {
+    //     struct {
+    //         uint8_t lh : 1;
+    //         uint8_t lh_type : 7;
+    //     };
+    //     struct {
+    //         uint8_t xlh : 1;
+    //         uint8_t kp : 1;
+    //         uint8_t rsv : 3;
+    //         uint8_t exp : 1;
+    //         uint8_t sh_type : 2;
+    //     };
+    // } flags;
+
     uint16_t plen;
     uint16_t hdr_len;
     uint32_t vers;
@@ -146,6 +160,9 @@ extern struct pkt_meta * pm;
 /// Offset of stream frame payload data in w_iov buffers.
 #define Q_OFFSET 96
 
+
+#define CLNT_SCID_LEN 4
+#define SERV_SCID_LEN 8
 
 #define adj_iov_to_start(v)                                                    \
     do {                                                                       \
