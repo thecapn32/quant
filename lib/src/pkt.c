@@ -326,31 +326,12 @@ bool enc_pkt(struct q_stream * const s,
              s->out_data_max, stream_data_len(v));
 #endif
 
-    } else {
-        if (v->len > Q_OFFSET || s->state == STRM_STAT_HCLO ||
-            s->state == STRM_STAT_CLSD) {
-
-            if (c->state == CONN_STAT_SEND_RTRY) {
-                enc_stream_frame(s, v, i);
-                // retry packets must not have padding (as of 09), so move
-                // the stream frame after the header (XXX ugly)
-                memmove(&v->buf[meta(v).hdr.hdr_len],
-                        &v->buf[meta(v).stream_header_pos],
-                        v->len - meta(v).stream_header_pos);
-                const uint16_t offset =
-                    meta(v).stream_header_pos - meta(v).hdr.hdr_len;
-                meta(v).stream_header_pos -= offset;
-                meta(v).stream_data_start -= offset;
-                meta(v).stream_data_end -= offset;
-                i = v->len -= offset;
-            } else {
-                // this is a fresh data or pure FIN packet
-                // add a stream frame header, after padding out rest of
-                // Q_OFFSET
-                enc_padding_frame(v, i, Q_OFFSET - i);
-                i = enc_stream_frame(s, v, i);
-            }
-        }
+    } else if (v->len > Q_OFFSET || s->state == STRM_STAT_HCLO ||
+               s->state == STRM_STAT_CLSD) {
+        // this is a fresh data or pure FIN packet
+        // pad out rest of Q_OFFSET and add a stream frame header
+        enc_padding_frame(v, i, Q_OFFSET - i);
+        i = enc_stream_frame(s, v, i);
     }
 
     if ((c->state == CONN_STAT_IDLE || c->state == CONN_STAT_RTRY ||
