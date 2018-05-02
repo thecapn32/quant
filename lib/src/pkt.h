@@ -30,6 +30,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "quic.h"
+
 #define MAX_PKT_LEN 1252
 #define MIN_INI_LEN 1200
 

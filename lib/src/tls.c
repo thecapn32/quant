@@ -26,7 +26,6 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <bitstring.h>
-#include <inttypes.h>
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -371,25 +370,19 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
         case TP_INITIAL_MAX_STREAM_ID_BIDI:
             dec_tp(&c->tp_peer.max_strm_bidi, sizeof(uint16_t));
+            c->tp_peer.max_strm_bidi <<= 2;
+            c->tp_peer.max_strm_bidi |= c->is_clnt ? 0 : STRM_FL_INI_SRV;
             warn(INF, "\tinitial_max_stream_id_bidi = %u",
                  c->tp_peer.max_strm_bidi);
-            // ensure(is_set(STRM_FL_DIR_UNI, c->tp_peer.max_strm_bidi) ==
-            // false,
-            //        "got unidir sid %" PRIu64, c->tp_peer.max_strm_bidi);
-            ensure(
-                is_set(STRM_FL_INI_SRV, c->tp_peer.max_strm_bidi) != c->is_clnt,
-                "illegal initiator for sid %" PRIu64, c->tp_peer.max_strm_bidi);
             break;
 
         case TP_INITIAL_MAX_STREAM_ID_UNI:
             dec_tp(&c->tp_peer.max_strm_uni, sizeof(uint16_t));
+            c->tp_peer.max_strm_uni <<= 2;
+            c->tp_peer.max_strm_uni |=
+                STRM_FL_DIR_UNI | (c->is_clnt ? 0 : STRM_FL_INI_SRV);
             warn(INF, "\tinitial_max_stream_id_uni = %u",
                  c->tp_peer.max_strm_uni);
-            // ensure(is_set(STRM_FL_DIR_UNI, c->tp_peer.max_strm_uni),
-            //        "got bidir sid %" PRIu64, c->tp_peer.max_strm_uni);
-            ensure(
-                is_set(STRM_FL_INI_SRV, c->tp_peer.max_strm_uni) != c->is_clnt,
-                "illegal initiator for sid %" PRIu64, c->tp_peer.max_strm_uni);
             break;
 
         case TP_IDLE_TIMEOUT:
@@ -478,13 +471,14 @@ void init_tp(struct q_conn * const c)
     const uint16_t enc_len_pos = i;
     i += sizeof(uint16_t);
 
+    // convert the stream ID number to a count
+    const uint16_t max_strm_bidi = (uint16_t)c->tp_local.max_strm_bidi >> 2;
+    enc_tp(c, TP_INITIAL_MAX_STREAM_ID_BIDI, max_strm_bidi, sizeof(uint16_t));
+
     enc_tp(c, TP_IDLE_TIMEOUT, c->tp_local.idle_to, sizeof(uint16_t));
-    enc_tp(c, TP_INITIAL_MAX_STREAM_ID_BIDI, c->tp_local.max_strm_bidi,
-           sizeof(uint16_t));
     enc_tp(c, TP_INITIAL_MAX_STREAM_DATA, c->tp_local.max_strm_data,
            sizeof(uint32_t));
     enc_tp(c, TP_INITIAL_MAX_DATA, c->tp_local.max_data, sizeof(uint32_t));
-    // XXX picoquic cannot parse ack_delay_exponent as the last tp
     enc_tp(c, TP_ACK_DELAY_EXPONENT, c->tp_local.ack_del_exp, sizeof(uint8_t));
     enc_tp(c, TP_MAX_PACKET_SIZE, w_mtu(w_engine(c->sock)), sizeof(uint16_t));
 
