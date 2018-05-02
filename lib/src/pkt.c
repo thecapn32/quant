@@ -28,7 +28,6 @@
 #include <inttypes.h>
 #include <netinet/in.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
 
 #include <quant/quant.h> // IWYU pragma: keep

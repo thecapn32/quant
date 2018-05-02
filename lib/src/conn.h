@@ -163,8 +163,11 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 #define cid2str(i)                                                             \
     __extension__({                                                            \
         static char _str[sizeof(*(i)) * 2 + 1] = "0";                          \
-        for (uint8_t _n = 0; _n < (i)->len; _n++)                              \
-            sprintf(&_str[2 * _n], "%02x", (i)->id[_n]);                       \
+        const char _hex_str[] = "0123456789abcdef";                            \
+        for (int _j = 0; _j < (i)->len; _j++) {                                \
+            _str[_j * 2] = _hex_str[((i)->id[_j] >> 4) & 0x0f];                \
+            _str[_j * 2 + 1] = _hex_str[(i)->id[_j] & 0x0f];                   \
+        }                                                                      \
         _str;                                                                  \
     })
 
