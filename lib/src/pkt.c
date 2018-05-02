@@ -107,7 +107,8 @@ void log_pkt(const char * const dir,
 #endif
 
 
-static const uint8_t pkt_type[] = {0xff, F_SH_1OCT, F_SH_2OCT, 0xff, F_SH_4OCT};
+static const uint8_t pkt_type_sh[] = {0xff, F_SH_1OCT, F_SH_2OCT, 0xff,
+                                      F_SH_4OCT};
 
 
 static uint8_t __attribute__((nonnull))
@@ -212,7 +213,7 @@ bool enc_pkt(struct q_stream * const s,
     case CONN_STAT_DRNG:
         if (likely(c->tls.enc_1rtt)) {
             pkt_nr_len = needed_pkt_nr_len(c, meta(v).hdr.nr);
-            meta(v).hdr.type = pkt_type[pkt_nr_len];
+            meta(v).hdr.type = pkt_type_sh[pkt_nr_len];
             meta(v).hdr.flags = F_SH | meta(v).hdr.type;
         } else {
             meta(v).hdr.type = F_LH_HSHK;

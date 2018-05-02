@@ -476,6 +476,28 @@ reset_conn(struct q_conn * const c, const bool also_stream0_in)
 }
 
 
+#define ignore_sh_pkt(v)                                                       \
+    do {                                                                       \
+        if (!is_set(F_LONG_HDR, meta(v).hdr.flags)) {                          \
+            warn(NTE, "ignoring unexpected 0x%02x-type SH pkt",                \
+                 pkt_type((v)->buf[0]));                                       \
+            goto done;                                                         \
+        }                                                                      \
+    } while (0)
+
+
+#define ignore_prot_fail_pkt(c, v)                                             \
+    do {                                                                       \
+        if (verify_prot(c, v) == false) {                                      \
+            err_close(c, ERR_TLS_HSHAKE_FAIL,                                  \
+                      "AEAD decrypt of 0x%02x-type %s packet failed",          \
+                      pkt_type((v)->buf[0]),                                   \
+                      is_set(F_LONG_HDR, meta(v).hdr.flags) ? "LH" : "SH");    \
+            goto done;                                                         \
+        }                                                                      \
+    } while (0)
+
+
 static void __attribute__((nonnull))
 process_pkt(struct q_conn * const c, struct w_iov * const v)
 {
@@ -488,6 +510,8 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             warn(INF, "ignoring spurious vers neg response");
             goto done;
         }
+
+        ignore_sh_pkt(v);
 
         // validate minimum packet size
         if (meta(v).hdr.type == F_LH_INIT && v->len < MIN_INI_LEN)
@@ -503,12 +527,8 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
 
             init_hshk_prot(c);
-            if (verify_prot(c, v) == false) {
-                err_close(c, ERR_TLS_HSHAKE_FAIL,
-                          "AEAD decrypt of 0x%02x-type packet failed",
-                          meta(v).hdr.type);
-                goto done;
-            }
+            ignore_prot_fail_pkt(c, v);
+
             // this is a new connection; server picks a new random cid
             struct cid new_scid = {.len = SERV_SCID_LEN};
             arc4random_buf(&new_scid, new_scid.len);
@@ -526,10 +546,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         break;
 
     case CONN_STAT_CH_SENT:
-        if (!is_set(F_LONG_HDR, meta(v).hdr.flags)) {
-            warn(NTE, "ignoring unexpected 0x%02x-type pkt", meta(v).hdr.type);
-            goto done;
-        }
+        ignore_sh_pkt(v);
 
         if (meta(v).hdr.vers == 0) {
             // handle an incoming vers-neg packet
@@ -589,14 +606,9 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             // handle an incoming retry packet
             warn(INF, "handling serv stateless retry");
 
-            // server accepted version
-            if (verify_prot(c, v) == false) {
-                err_close(c, ERR_TLS_HSHAKE_FAIL,
-                          "AEAD decrypt of 0x%02x-type packet failed",
-                          meta(v).hdr.type);
-                goto done;
-            }
+            ignore_prot_fail_pkt(c, v);
 
+            // server accepted version -
             // must use cid from retry for connection and re-init keys
             init_hshk_prot(c);
 
@@ -623,26 +635,16 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             return;
         }
 
-        // server accepted version
-        if (verify_prot(c, v) == false) {
-            err_close(c, ERR_TLS_HSHAKE_FAIL,
-                      "AEAD decrypt of 0x%02x-type packet failed",
-                      meta(v).hdr.type);
-            goto done;
-        }
+        ignore_prot_fail_pkt(c, v);
 
+        // server accepted version -
         // if we get here, this should be a regular server-hello
         dec_frames(c, v);
         track_recv(c, meta(v).hdr.nr, meta(v).hdr.flags);
         break;
 
     case CONN_STAT_RTRY:
-        if (verify_prot(c, v) == false) {
-            err_close(c, ERR_TLS_HSHAKE_FAIL,
-                      "AEAD decrypt of 0x%02x-type packet failed",
-                      meta(v).hdr.type);
-            goto done;
-        }
+        ignore_prot_fail_pkt(c, v);
         track_recv(c, meta(v).hdr.nr, meta(v).hdr.flags);
         dec_frames(c, v);
         break;
@@ -681,12 +683,8 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                 warn(NTE, "stateless reset on %s conn %s", conn_type(c),
                      cid2str(&c->scid));
                 conn_to_state(c, CONN_STAT_DRNG);
-            } else {
-                err_close(c, ERR_TLS_HSHAKE_FAIL,
-                          "AEAD decrypt of 0x%02x-type packet failed",
-                          meta(v).hdr.type);
-            }
-            goto done;
+            } else
+                ignore_prot_fail_pkt(c, v);
         }
 
         track_recv(c, meta(v).hdr.nr, meta(v).hdr.flags);
