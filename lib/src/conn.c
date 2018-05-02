@@ -587,12 +587,11 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             // verify retry
             struct w_iov * const ci = find_sent_pkt(c, meta(v).hdr.nr);
             if (ci) {
-                adj_iov_to_start(ci);
-                adj_iov_to_data(ci);
-                if (meta(v).hdr.type != F_LH_INIT) {
+                if (meta(ci).hdr.type != F_LH_INIT) {
                     warn(NTE,
-                         "pkt nr " FMT_PNR_OUT " was not a CI, ignoring retry",
-                         meta(v).hdr.nr);
+                         "pkt nr " FMT_PNR_OUT
+                         " was not a CI (0x%0x), ignoring retry",
+                         meta(ci).hdr.nr, meta(ci).hdr.type);
                     goto done;
                 }
             } else {
