@@ -112,7 +112,7 @@ dec_stream_frame(struct q_conn * const c,
             nxt = splay_next(pm_off_splay, &s->in_ooo, p);
             s->in_off += p->stream_data_end;
             meta(v).stream = s;
-            sq_insert_tail(&s->in, w_iov(w_engine(c->sock), pm_idx(p)), next);
+            sq_insert_tail(&s->in, w_iov(c->w, pm_idx(p)), next);
             splay_remove(pm_off_splay, &s->in_ooo, p);
         }
 
@@ -535,8 +535,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
                 // already had at least one stream frame in this packet
                 // with non-duplicate data, so generate (another) copy
                 warn(DBG, "addtl stream frame at pos %u, copy", i);
-                struct w_iov * const vdup =
-                    q_alloc_iov(w_engine(c->sock), 0, 0);
+                struct w_iov * const vdup = q_alloc_iov(c->w, 0, 0);
                 memcpy(vdup->buf, v->buf, v->len);
                 meta(vdup) = meta(v);
                 vdup->len = v->len;

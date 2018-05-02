@@ -175,7 +175,7 @@ rtx_pkt(struct q_stream * const s, struct w_iov * const v)
 {
     ensure(meta(v).is_rtxed == false, "cannot RTX an RTX");
     // on RTX, remember orig pkt meta data
-    struct w_iov * const r = q_alloc_iov(w_engine(s->c->sock), 0, Q_OFFSET);
+    struct w_iov * const r = q_alloc_iov(s->c->w, 0, Q_OFFSET);
     pm_cpy(&meta(r), &meta(v));                  // copy pkt meta data
     memcpy(r->buf, v->buf - Q_OFFSET, Q_OFFSET); // copy pkt headers
     meta(r).is_rtxed = true;
@@ -254,7 +254,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
         // transmit encrypted/protected packets and then free the chain
         w_tx(s->c->sock, &x);
         while (w_tx_pending(&x))
-            w_nic_tx(w_engine(s->c->sock));
+            w_nic_tx(s->c->w);
         q_free(s->c, &x);
     }
 
@@ -272,7 +272,7 @@ tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
 
     struct w_iov *v = 0, *last = 0;
     if (!rtx) {
-        v = q_alloc_iov(w_engine(s->c->sock), 0, Q_OFFSET);
+        v = q_alloc_iov(s->c->w, 0, Q_OFFSET);
         v->len = 0; // this packet will have no stream data
         last = sq_last(&s->out, w_iov, next);
         sq_insert_tail(&s->out, v, next);
@@ -769,9 +769,9 @@ void rx(struct ev_loop * const l,
                              ntohs(w_get_sport(ws)), cid2str(&meta(v).hdr.dcid),
                              inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
 
-                        c = new_conn(w_engine(ws), meta(v).hdr.vers,
-                                     &meta(v).hdr.scid, &meta(v).hdr.dcid,
-                                     &peer, 0, ntohs(w_get_sport(ws)), 0);
+                        c = new_conn(w, meta(v).hdr.vers, &meta(v).hdr.scid,
+                                     &meta(v).hdr.dcid, &peer, 0,
+                                     ntohs(w_get_sport(ws)), 0);
                         new_stream(c, 0, false);
                     }
                 }
@@ -919,9 +919,12 @@ idle_alarm(struct ev_loop * const l __attribute__((unused)),
     struct q_conn * const c = w->data;
     warn(DBG, "idle timeout on %s conn %s", conn_type(c), cid2str(&c->scid));
 
-    // send connection close frame
-    conn_to_state(c, CONN_STAT_CLNG);
-    ev_async_send(loop, &c->tx_w);
+    if (c->state >= CONN_STAT_ESTB) {
+        // send connection close frame
+        conn_to_state(c, CONN_STAT_CLNG);
+        ev_async_send(loop, &c->tx_w);
+    } else
+        conn_to_state(c, CONN_STAT_DRNG);
 }
 
 
@@ -991,11 +994,13 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->tx_w.data = c;
     ev_async_start(loop, &c->tx_w);
 
+    c->w = w;
     c->sock = w_get_sock(w, htons(port), 0);
     if (c->sock == 0) {
         c->rx_w.data = c->sock = w_bind(w, htons(port), 0);
         ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
         ev_io_start(loop, &c->rx_w);
+        c->holds_sock = true;
     }
     c->sport = w_get_sport(c->sock);
 
@@ -1012,8 +1017,7 @@ struct q_conn * new_conn(struct w_engine * const w,
 
 void free_conn(struct q_conn * const c)
 {
-    struct w_engine * const w = w_engine(c->sock);
-    if (c->sock && (c->is_clnt || c->scid.len == 0)) {
+    if (c->holds_sock) {
         // only close the socket for the final server connection
         ev_io_stop(loop, &c->rx_w);
         w_close(c->sock);
@@ -1033,7 +1037,7 @@ void free_conn(struct q_conn * const c)
     struct pkt_meta *p, *np;
     for (p = splay_min(pm_nr_splay, &c->rec.sent_pkts); p; p = np) {
         np = splay_next(pm_nr_splay, &c->rec.sent_pkts, p);
-        q_free_iov(c, w_iov(w, pm_idx(p)));
+        q_free_iov(c, w_iov(c->w, pm_idx(p)));
     }
 
     diet_free(&c->closed_streams);

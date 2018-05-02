@@ -66,10 +66,11 @@ struct q_conn {
     struct cid dcid; ///< Destination connection ID
     struct cid scid; ///< Source connection ID
 
-    uint16_t is_clnt : 1;  ///< We are the client on this connection.
-    uint16_t omit_cid : 1; ///< We omit the CID during TX on this connection.
-    uint16_t had_rx : 1;   ///< We had an RX event on this connection.
-    uint16_t needs_tx : 1; ///< We have a pending TX on this connection.
+    uint16_t holds_sock : 1; ///< Connection manages a warpcore socket.
+    uint16_t is_clnt : 1;    ///< We are the client on this connection.
+    uint16_t omit_cid : 1;   ///< We omit the CID during TX on this connection.
+    uint16_t had_rx : 1;     ///< We had an RX event on this connection.
+    uint16_t needs_tx : 1;   ///< We have a pending TX on this connection.
     uint16_t use_time_loss_det : 1; ///< UsingTimeLossDetection()
     uint16_t tx_max_data : 1;       ///< Sent a MAX_DATA frame.
     uint16_t blocked : 1;           ///< We are receive-window-blocked.
@@ -79,7 +80,9 @@ struct q_conn {
     uint16_t did_0rtt : 1;          ///< 0-RTT handshake succeeded;
     uint16_t in_closing : 1;        ///< Is the closing/draining timer active?
     uint16_t needs_path_resp : 1;   ///< Needs a PATH_RESPONSE.
-    uint16_t : 3;
+    uint16_t : 2;
+
+    struct w_engine * w; ///< Underlying warpcore engine.
 
     uint32_t vers;         ///< QUIC version in use for this connection.
     uint32_t vers_initial; ///< QUIC version first negotiated.
