@@ -278,12 +278,14 @@ void q_write(struct q_stream * const s,
 }
 
 
-struct q_stream * q_read(struct q_conn * const c, struct w_iov_sq * const q)
+struct q_stream *
+q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool block)
 {
     if (c->state == CONN_STAT_CLSD)
         return 0;
 
-    warn(WRN, "reading on %s conn %s", conn_type(c), cid2str(&c->scid));
+    warn(WRN, "%sblocking read on %s conn %s", block ? "" : "non-",
+         conn_type(c), cid2str(&c->scid));
     struct q_stream * s = 0;
 
     while (s == 0 && c->state <= CONN_STAT_ESTB) {
@@ -297,7 +299,12 @@ struct q_stream * q_read(struct q_conn * const c, struct w_iov_sq * const q)
         }
 
         if (s == 0) {
-            // no data queued on any non-zero stream, we need to wait
+            // no data queued on any non-zero stream
+            if (block == false)
+                // don't wait
+                break;
+
+            // wait for new data
             warn(WRN, "waiting for data on any stream on %s conn %s",
                  conn_type(c), cid2str(&c->scid));
             loop_run(q_read, c);

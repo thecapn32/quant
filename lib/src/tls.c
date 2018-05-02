@@ -600,7 +600,7 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
         return -1;
 
     if (is_encrypt) {
-        warn(INF, "creating new 0-RTT session ticket for %s conn %s(% s % s) ",
+        warn(INF, "creating new 0-RTT session ticket for %s conn %s(%s %s) ",
              conn_type(c), cid2str(&c->scid), ptls_get_server_name(tls),
              ptls_get_negotiated_protocol(tls));
 

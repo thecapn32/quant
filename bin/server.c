@@ -92,6 +92,7 @@ static int send_err(const struct cb_data * const d, const uint16_t code)
     default:
         msg = "500 Internal Server Error";
     }
+    warn(ERR, msg);
 
     q_write_str(d->w, d->c, d->s, msg, true);
     return 0;
@@ -221,37 +222,43 @@ int main(int argc, char * argv[])
              port[i]);
     }
 
-    bool first = true;
+    bool first_conn = true;
     while (1) {
-        struct q_conn * const c = q_accept(w, first ? 0 : 10);
-        first = false;
+        struct q_conn * const c = q_accept(w, first_conn ? 0 : 10);
+        first_conn = false;
         if (c == 0)
             break;
 
         http_parser_settings settings = {.on_url = serve_cb};
         struct cb_data d = {.c = c, .w = w, .dir = dir_fd};
         http_parser parser = {.data = &d};
+        bool first_req = true;
+
+    again:
         http_parser_init(&parser, HTTP_REQUEST);
-
         struct w_iov_sq i = sq_head_initializer(i);
-        struct q_stream * s = q_read(c, &i);
-        if (s == 0)
-            goto next;
-        d.s = s;
+        struct q_stream * s = q_read(c, &i, first_req);
+        if (s) {
+            d.s = s;
+            struct w_iov * v = 0;
+            sq_foreach (v, &i, next) {
+                const size_t parsed = http_parser_execute(
+                    &parser, &settings, (char *)v->buf, v->len);
+                if (parsed != v->len) {
+                    warn(ERR, "HTTP parser error: %.*s", v->len - parsed,
+                         &v->buf[parsed]);
+                    break;
+                }
+                if (q_is_str_closed(s)) {
+                    first_req = false;
+                    break;
+                }
+            }
 
-        struct w_iov * v = 0;
-        sq_foreach (v, &i, next) {
-            const size_t parsed =
-                http_parser_execute(&parser, &settings, (char *)v->buf, v->len);
-            if (parsed != v->len)
-                warn(ERR, "HTTP parser error: %.*s", v->len - parsed,
-                     &v->buf[parsed]);
-            if (q_is_str_closed(s))
-                break;
+            q_free(c, &i);
+            if (v)
+                goto again;
         }
-
-        q_free(c, &i);
-    next:
         q_close(c);
     }
 

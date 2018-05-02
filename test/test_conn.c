@@ -112,7 +112,7 @@ int main(int argc
 
     // read the data
     struct w_iov_sq i = sq_head_initializer(i);
-    q_read(sc, &i);
+    q_read(sc, &i, true);
     struct w_iov * const iv = sq_first(&i);
     ensure(strncmp((char *)ov->buf, (char *)iv->buf, ov->len) == 0,
            "data mismatch");
