@@ -119,6 +119,7 @@ static ptls_aead_context_t * enc_tckt;
 #define COOKIE_LEN 64
 static uint8_t cookie[COOKIE_LEN];
 
+static FILE * tls_log_file;
 
 #define TLS_EXT_TYPE_TRANSPORT_PARAMETERS 26
 
@@ -242,9 +243,6 @@ done:
 
     return 0;
 }
-
-
-static ptls_on_client_hello_t cb = {on_ch};
 
 
 static int filter_tp(ptls_t * tls __attribute__((unused)),
@@ -994,9 +992,32 @@ done:
 }
 
 
+static void fprinthex(FILE * const fp, const ptls_iovec_t vec)
+{
+    for (size_t i = 0; i != vec.len; ++i)
+        fprintf(fp, "%02x", vec.base[i]);
+}
+
+
+static void log_secret_cb(ptls_log_secret_t * const self
+                          __attribute__((unused)),
+                          ptls_t * const tls,
+                          const char * const label,
+                          ptls_iovec_t secret)
+{
+    fprintf(tls_log_file, "%s ", label);
+    fprinthex(tls_log_file, ptls_get_client_random(tls));
+    fprintf(tls_log_file, " ");
+    fprinthex(tls_log_file, secret);
+    fprintf(tls_log_file, "\n");
+    fflush(tls_log_file);
+}
+
+
 void init_tls_ctx(const char * const cert,
                   const char * const key,
-                  const char * const ticket_store)
+                  const char * const ticket_store,
+                  const char * const tls_log)
 {
     FILE * fp = 0;
     if (key) {
@@ -1038,6 +1059,11 @@ void init_tls_ctx(const char * const cert,
         tls_ctx.require_dhe_on_psk = 0;
     }
 
+    if (tls_log) {
+        tls_log_file = fopen(tls_log, "wbe");
+        ensure(tls_log_file, "could not open TLS log %s", tls_log);
+    }
+
     ensure(ptls_openssl_init_verify_certificate(&verifier, 0) == 0,
            "ptls_openssl_init_verify_certificate");
 
@@ -1046,7 +1072,9 @@ void init_tls_ctx(const char * const cert,
 
     tls_ctx.cipher_suites = ptls_openssl_cipher_suites;
     tls_ctx.key_exchanges = key_exchanges;
-    tls_ctx.on_client_hello = &cb;
+    tls_ctx.on_client_hello = &(ptls_on_client_hello_t){.cb = on_ch};
+    if (tls_log)
+        tls_ctx.log_secret = &(ptls_log_secret_t){.cb = log_secret_cb};
     tls_ctx.random_bytes = ptls_openssl_random_bytes;
     tls_ctx.sign_certificate = &sign_cert.super;
     tls_ctx.verify_certificate = &verifier.super;

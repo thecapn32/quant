@@ -74,7 +74,8 @@ tls_io(struct q_stream * const s, struct w_iov * const iv);
 
 extern void init_tls_ctx(const char * const cert,
                          const char * const key,
-                         const char * const ticket_store);
+                         const char * const ticket_store,
+                         const char * const tls_log);
 
 extern void cleanup_tls_ctx(void);
 

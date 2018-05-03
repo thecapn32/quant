@@ -436,7 +436,8 @@ signal_cb(struct ev_loop * l,
 struct w_engine * q_init(const char * const ifname,
                          const char * const cert,
                          const char * const key,
-                         const char * const cache)
+                         const char * const cache,
+                         const char * const tls_log)
 {
     // check versions
     // ensure(WARPCORE_VERSION_MAJOR == 0 && WARPCORE_VERSION_MINOR == 12,
@@ -459,7 +460,7 @@ struct w_engine * q_init(const char * const ifname,
     warn(INF, "submit bug reports at https://github.com/NTAP/quant/issues");
 
     // initialize TLS context
-    init_tls_ctx(cert, key, cache);
+    init_tls_ctx(cert, key, cache, tls_log);
 
     // initialize the event loop
     loop = ev_default_loop(0);

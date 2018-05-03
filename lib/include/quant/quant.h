@@ -43,7 +43,8 @@ extern struct w_engine * __attribute__((nonnull(1)))
 q_init(const char * const ifname,
        const char * const cert,
        const char * const key,
-       const char * const cache);
+       const char * const cache,
+       const char * const tls_log);
 
 extern void __attribute__((nonnull)) q_cleanup(struct w_engine * const w);
 

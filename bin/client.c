@@ -88,17 +88,19 @@ static sl_head(stream_list, stream_entry) sl = sl_head_initializer(sl);
 
 static void __attribute__((noreturn, nonnull)) usage(const char * const name,
                                                      const char * const ifname,
-                                                     const char * const cache)
+                                                     const char * const cache,
+                                                     const char * const tls_log)
 {
     printf("%s [options] URL\n", name);
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
+    printf("\t[-s cache]\tTLS 0-RTT state cache; default %s\n", cache);
+    printf("\t[-l log]\tlog file for TLS keys; default %s\n", tls_log);
+    printf("\t[-t timeout]\tidle timeout in seconds; default %" PRIu64 "\n",
+           timeout);
 #ifndef NDEBUG
     printf("\t[-v verbosity]\tverbosity level (0-%d, default %d)\n", DLEVEL,
            util_dlevel);
 #endif
-    printf("\t[-s cache]\tTLS 0-RTT state cache; default %s\n", cache);
-    printf("\t[-t timeout]\tidle timeout in seconds; default %" PRIu64 "\n",
-           timeout);
     exit(0);
 }
 
@@ -207,6 +209,7 @@ int main(int argc, char * argv[])
         ;
     int ch;
     char cache[MAXPATHLEN] = "/tmp/" QUANT "-session";
+    char tls_log[MAXPATHLEN] = "/tmp/" QUANT "-tlslog";
 
     while ((ch = getopt(argc, argv, "hi:v:s:t:")) != -1) {
         switch (ch) {
@@ -219,6 +222,9 @@ int main(int argc, char * argv[])
         case 't':
             timeout = MIN(IDLE_TIMEOUT_MAX, strtoul(optarg, 0, 10));
             break;
+        case 'l':
+            strncpy(tls_log, optarg, sizeof(tls_log) - 1);
+            break;
         case 'v':
 #ifndef NDEBUG
             util_dlevel = (short)MIN(DLEVEL, strtoul(optarg, 0, 10));
@@ -227,11 +233,11 @@ int main(int argc, char * argv[])
         case 'h':
         case '?':
         default:
-            usage(basename(argv[0]), ifname, cache);
+            usage(basename(argv[0]), ifname, cache, tls_log);
         }
     }
 
-    struct w_engine * const w = q_init(ifname, 0, 0, cache);
+    struct w_engine * const w = q_init(ifname, 0, 0, cache, tls_log);
     struct conn_cache cc = splay_initializer(cc);
     struct http_parser_url u = {0};
 
