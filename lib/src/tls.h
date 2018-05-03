@@ -78,11 +78,9 @@ extern void init_tls_ctx(const char * const cert,
 
 extern void cleanup_tls_ctx(void);
 
-extern uint16_t __attribute__((nonnull)) dec_aead(struct q_conn * const c,
-                                                  const struct w_iov * v,
-                                                  const uint16_t hdr_len);
+extern uint16_t __attribute__((nonnull))
+dec_aead(const struct q_conn * const c, const struct w_iov * const v);
 
-extern uint16_t __attribute__((nonnull)) enc_aead(struct q_conn * const c,
-                                                  const struct w_iov * v,
-                                                  const struct w_iov * x,
-                                                  const uint16_t hdr_len);
+extern uint16_t __attribute__((nonnull)) enc_aead(const struct q_conn * const c,
+                                                  const struct w_iov * const v,
+                                                  const struct w_iov * const x);

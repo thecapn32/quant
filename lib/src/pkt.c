@@ -75,7 +75,7 @@ static const char * pkt_type_str(const struct w_iov * const v)
 
 void log_pkt(const char * const dir,
              const struct w_iov * const v,
-             const uint16_t add_len)
+             const uint16_t len)
 {
     const char * col_dir = *dir == 'R' ? BLD BLU : BLD GRN;
     const char * col_nr = *dir == 'R' ? BLU : GRN;
@@ -85,23 +85,22 @@ void log_pkt(const char * const dir,
             twarn(NTE,
                   BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM
                       "vers=0x%08x dcid=%s scid=%s",
-                  col_dir, dir, v->len + add_len, meta(v).hdr.flags, col_dir,
-                  pkt_type_str(v), meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
+                  col_dir, dir, len, meta(v).hdr.type, col_dir, pkt_type_str(v),
+                  meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
                   cid2str(&meta(v).hdr.scid));
         else
             twarn(NTE,
                   BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM
                       "vers=0x%08x dcid=%s scid=%s plen=%u nr=%s%" PRIu64,
-                  col_dir, dir, v->len + add_len, meta(v).hdr.flags, col_dir,
-                  pkt_type_str(v), meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
+                  col_dir, dir, len, meta(v).hdr.type, col_dir, pkt_type_str(v),
+                  meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
                   cid2str(&meta(v).hdr.scid), meta(v).hdr.plen, col_nr,
                   meta(v).hdr.nr);
     } else
         twarn(NTE,
               BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM "dcid=%s nr=%s%" PRIu64,
-              col_dir, dir, v->len + add_len, meta(v).hdr.flags, col_dir,
-              pkt_type_str(v), cid2str(&meta(v).hdr.dcid), col_nr,
-              meta(v).hdr.nr);
+              col_dir, dir, len, meta(v).hdr.type, col_dir, pkt_type_str(v),
+              cid2str(&meta(v).hdr.dcid), col_nr, meta(v).hdr.nr);
 }
 #endif
 
@@ -176,7 +175,7 @@ bool enc_pkt(struct q_stream * const s,
                 i = enc(v->buf, v->len, i, &ok_vers[j], sizeof(ok_vers[j]),
                         "0x%08x");
         meta(v).hdr.hdr_len = v->len = i;
-        log_pkt("TX", v, 0);
+        log_pkt("TX", v, v->len);
         goto tx;
     }
 
@@ -190,8 +189,11 @@ bool enc_pkt(struct q_stream * const s,
         meta(v).hdr.nr = ++c->rec.lg_sent;
 
     uint8_t pkt_nr_len = 0;
+    uint16_t pkt_len = v->len;
     switch (c->state) {
     case CONN_STAT_IDLE:
+        pkt_len = MIN_INI_LEN - AEAD_LEN;
+        ensure(pkt_len > v->len, "shrinking pkt");
     case CONN_STAT_RTRY:
     case CONN_STAT_CH_SENT:
         meta(v).hdr.type = (s->id == 0 ? F_LH_INIT : F_LH_0RTT);
@@ -234,10 +236,12 @@ bool enc_pkt(struct q_stream * const s,
 
         i = enc_lh_cids(c, v, i);
 
-        uint64_t plen = v->len + AEAD_LEN - i - sizeof(uint32_t);
-        const uint64_t plen_len = varint_size_needed(plen);
-        plen -= plen_len - (varint_size_needed(plen) -
-                            varint_size_needed(plen - plen_len));
+        meta(v).hdr.plen = pkt_len - i - sizeof(uint32_t) + AEAD_LEN;
+        const uint64_t plen_len = varint_size_needed(meta(v).hdr.plen);
+        meta(v).hdr.plen -=
+            plen_len - (varint_size_needed(meta(v).hdr.plen) -
+                        varint_size_needed(meta(v).hdr.plen - plen_len));
+        const uint64_t plen = meta(v).hdr.plen;
         i = enc(v->buf, v->len, i, &plen, 0, "%" PRIu64);
         i = enc(v->buf, v->len, i, &meta(v).hdr.nr, sizeof(uint32_t),
                 GRN "%u" NRM);
@@ -247,7 +251,7 @@ bool enc_pkt(struct q_stream * const s,
         i = enc(v->buf, v->len, i, &meta(v).hdr.nr, pkt_nr_len, GRN "%u" NRM);
     }
 
-    log_pkt("TX", v, AEAD_LEN);
+    log_pkt("TX", v, pkt_len + AEAD_LEN);
     meta(v).hdr.hdr_len = i;
 
     if (!splay_empty(&c->recv) && c->state >= CONN_STAT_SH) {
@@ -337,7 +341,7 @@ bool enc_pkt(struct q_stream * const s,
     if ((c->state == CONN_STAT_IDLE || c->state == CONN_STAT_RTRY ||
          c->state == CONN_STAT_CH_SENT) &&
         meta(v).hdr.type != F_LH_0RTT) {
-        i = enc_padding_frame(v, i, MIN_INI_LEN - i - AEAD_LEN);
+        i = enc_padding_frame(v, i, pkt_len - i);
         conn_to_state(c, CONN_STAT_CH_SENT);
     }
 
@@ -363,7 +367,7 @@ tx:
         x->len = v->len;
         conn_to_state(c, CONN_STAT_VERS_NEG_SENT);
     } else
-        x->len = enc_aead(c, v, x, meta(v).hdr.hdr_len);
+        x->len = enc_aead(c, v, x);
 
     if (!c->is_clnt) {
         x->ip = c->peer.sin_addr.s_addr;
@@ -380,11 +384,6 @@ tx:
     adj_iov_to_data(v);
     return true;
 }
-
-
-/// Packet number lengths for different short-header packet types
-static const uint8_t pkt_nr_lens[] = {sizeof(uint8_t), sizeof(uint16_t),
-                                      sizeof(uint32_t)};
 
 
 void dec_pkt_hdr_initial(const struct w_iov * const v, const bool is_clnt)
@@ -450,6 +449,7 @@ void dec_pkt_hdr_initial(const struct w_iov * const v, const bool is_clnt)
 
     meta(v).hdr.hdr_len = 1;
 
+    // this logic depends on picking a SCID with a known length during handshake
     meta(v).hdr.dcid.len = (is_clnt ? CLNT_SCID_LEN : SERV_SCID_LEN);
     memcpy(&meta(v).hdr.dcid.id, &v->buf[1], meta(v).hdr.dcid.len);
 #ifdef DEBUG_MARSHALL
@@ -462,19 +462,39 @@ void dec_pkt_hdr_initial(const struct w_iov * const v, const bool is_clnt)
 }
 
 
-void dec_pkt_hdr_remainder(const struct w_iov * const v,
-                           struct q_conn * const c)
+void dec_pkt_hdr_remainder(struct w_iov * const v,
+                           struct q_conn * const c,
+                           struct w_iov_sq * const i)
 {
     if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
         uint32_t nr = 0;
         dec(&nr, v->buf, v->len, meta(v).hdr.hdr_len, 4, "%u");
         meta(v).hdr.nr = nr;
         meta(v).hdr.hdr_len += 4;
+
+        // check for coalesced packet
+        const uint16_t pkt_len = meta(v).hdr.hdr_len + meta(v).hdr.plen;
+        if (pkt_len < v->len) {
+            // allocate new w_iov for coalesced packet and copy it over
+            struct w_iov * const vdup = w_iov_dup(v);
+            vdup->buf += pkt_len;
+            vdup->len -= pkt_len;
+            // adjust original length
+            v->len = pkt_len;
+            // rx() has already removed v from i, so just insert vdup at head
+            sq_insert_head(i, vdup, next);
+            warn(DBG, "split out 0x%02x-type coalesced pkt of len %u",
+                 pkt_type(*vdup->buf), vdup->len);
+        }
+
         return;
     }
 
-    const uint64_t next = diet_max(&c->recv) + 1;
+    static const uint8_t pkt_nr_lens[] = {sizeof(uint8_t), sizeof(uint16_t),
+                                          sizeof(uint32_t)};
     const uint8_t nr_len = pkt_nr_lens[meta(v).hdr.type];
+
+    const uint64_t next = diet_max(&c->recv) + 1;
     uint64_t nr = next;
     dec(&nr, v->buf, v->len, meta(v).hdr.hdr_len, nr_len, "%u");
     meta(v).hdr.hdr_len += nr_len;

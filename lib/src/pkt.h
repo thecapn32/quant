@@ -83,7 +83,9 @@ extern void __attribute__((nonnull))
 dec_pkt_hdr_initial(const struct w_iov * const v, const bool is_clnt);
 
 extern void __attribute__((nonnull))
-dec_pkt_hdr_remainder(const struct w_iov * const v, struct q_conn * const c);
+dec_pkt_hdr_remainder(struct w_iov * const v,
+                      struct q_conn * const c,
+                      struct w_iov_sq * const i);
 
 extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
                                              const bool rtx,
@@ -93,7 +95,7 @@ extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
 #ifndef NDEBUG
 extern void __attribute__((nonnull)) log_pkt(const char * const dir,
                                              const struct w_iov * const v,
-                                             const uint16_t add_len);
+                                             const uint16_t len);
 #else
 #define log_pkt(...)                                                           \
     do {                                                                       \

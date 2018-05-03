@@ -133,15 +133,14 @@ extern struct pkt_meta * pm;
 #define pm_idx(m) ((m)-pm)
 
 
-#define pm_cpy(dst, src)                                                       \
-    do {                                                                       \
-        memcpy((uint8_t *)(dst) + offsetof(struct pkt_meta, tx_t),             \
-               (uint8_t *)(src) + offsetof(struct pkt_meta, tx_t),             \
-               sizeof(struct pkt_meta) - (sizeof(struct pkt_meta) -            \
-                                          offsetof(struct pkt_meta, tx_t)));   \
-        (dst)->rtx = src;                                                      \
-    } while (0)
-
+static inline void __attribute__((nonnull))
+pm_cpy(struct pkt_meta * const dst, struct pkt_meta * const src)
+{
+    memcpy((uint8_t *)dst + offsetof(struct pkt_meta, tx_t),
+           (uint8_t *)src + offsetof(struct pkt_meta, tx_t),
+           sizeof(struct pkt_meta) -
+               (sizeof(struct pkt_meta) - offsetof(struct pkt_meta, tx_t)));
+}
 
 /// Offset of stream frame payload data in w_iov buffers.
 #define Q_OFFSET 96
@@ -167,7 +166,8 @@ extern struct pkt_meta * pm;
 #define is_rtxable(p) (p)->stream_header_pos
 
 
-static inline bool is_ack_only(const struct pkt_meta * const p)
+static inline bool __attribute__((nonnull))
+is_ack_only(const struct pkt_meta * const p)
 {
     // cppcheck-suppress unreadVariable
     bitstr_t bit_decl(frames, MAX_FRAM_TYPE + 1);
@@ -294,6 +294,19 @@ extern void * api_arg;
         /* warn(CRT, "q_alloc_iov idx %u", w_iov_idx(_v)); */                  \
         _v;                                                                    \
     })
+
+
+static inline __attribute__((nonnull)) struct w_iov *
+w_iov_dup(const struct w_iov * const v)
+{
+    struct w_iov * const vdup = w_alloc_iov(v->w, v->len, 0);
+    memcpy(vdup->buf, v->buf, v->len);
+    vdup->ip = v->ip;
+    vdup->port = v->port;
+    vdup->flags = v->flags;
+    return vdup;
+}
+
 
 #define NRM "\x1B[0m" ///< ANSI escape sequence: reset all to normal
 #define BLD "\x1B[1m" ///< ANSI escape sequence: bold

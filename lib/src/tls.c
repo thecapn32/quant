@@ -600,7 +600,7 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
         return -1;
 
     if (is_encrypt) {
-        warn(INF, "creating new 0-RTT session ticket for %s conn %s(%s %s) ",
+        warn(INF, "creating new 0-RTT session ticket for %s conn %s (%s %s)",
              conn_type(c), cid2str(&c->scid), ptls_get_server_name(tls),
              ptls_get_negotiated_protocol(tls));
 
@@ -1085,47 +1085,51 @@ which_aead(const struct q_conn * const c,
          ? "1-RTT"                                                             \
          : (((a) == (c)->tls.dec_0rtt || (a) == (c)->tls.enc_0rtt)             \
                 ? "0-RTT"                                                      \
-                : "cleartext"))
+                : "handshake"))
 #endif
 
 
-uint16_t dec_aead(struct q_conn * const c,
-                  const struct w_iov * v,
-                  const uint16_t hdr_len)
+uint16_t dec_aead(const struct q_conn * const c, const struct w_iov * const v)
 {
     ptls_aead_context_t * const aead = which_aead(c, v, true);
     if (aead == 0)
         return 0;
 
+    const uint16_t hdr_len = meta(v).hdr.hdr_len;
+    const uint16_t plen =
+        meta(v).hdr.plen ? meta(v).hdr.plen : v->len - hdr_len;
     const size_t len =
-        ptls_aead_decrypt(aead, &v->buf[hdr_len], &v->buf[hdr_len],
-                          v->len - hdr_len, meta(v).hdr.nr, v->buf, hdr_len);
-    if (len == SIZE_MAX) {
-        warn(ERR, "AEAD %s decrypt error", aead_type(c, aead));
+        ptls_aead_decrypt(aead, &v->buf[hdr_len], &v->buf[hdr_len], plen,
+                          meta(v).hdr.nr, v->buf, hdr_len);
+    warn(DBG, "len %u, plen %u, hdr_len %u, nr %u", len, plen, hdr_len,
+         meta(v).hdr.nr);
+    if (len == SIZE_MAX)
         return 0;
-    }
-    warn(DBG, "verifying %lu-byte %s AEAD over [0..%u] in [%u..%u]",
-         v->len - len - hdr_len, aead_type(c, aead),
-         v->len - (v->len - len - hdr_len) - 1,
-         v->len - (v->len - len - hdr_len), v->len - 1);
+    warn(DBG, "verifying %lu-byte %s AEAD over [0..%u] in [%u..%u]", AEAD_LEN,
+         aead_type(c, aead), hdr_len + plen - AEAD_LEN - 1,
+         hdr_len + plen - AEAD_LEN, hdr_len + plen - 1);
     return hdr_len + (uint16_t)len;
 }
 
 
-uint16_t enc_aead(struct q_conn * const c,
-                  const struct w_iov * v,
-                  const struct w_iov * x,
-                  const uint16_t hdr_len)
+uint16_t enc_aead(const struct q_conn * const c,
+                  const struct w_iov * const v,
+                  const struct w_iov * const x)
 {
     ptls_aead_context_t * const aead = which_aead(c, v, false);
     ensure(aead, "AEAD is null");
 
+    const uint16_t hdr_len = meta(v).hdr.hdr_len;
     memcpy(x->buf, v->buf, hdr_len); // copy pkt header
+
+    const uint16_t plen =
+        meta(v).hdr.plen ? meta(v).hdr.plen : v->len - hdr_len + AEAD_LEN;
+    warn(DBG, "plen %u, hdr_len %u, nr %u", plen, hdr_len, meta(v).hdr.nr);
     const size_t len =
         ptls_aead_encrypt(aead, &x->buf[hdr_len], &v->buf[hdr_len],
-                          v->len - hdr_len, meta(v).hdr.nr, v->buf, hdr_len);
-    warn(DBG, "added %lu-byte %s AEAD over [0..%u] in [%u..%u]",
-         len + hdr_len - v->len, aead_type(c, aead), v->len - 1, v->len,
-         len + hdr_len - 1);
+                          plen - AEAD_LEN, meta(v).hdr.nr, v->buf, hdr_len);
+    warn(DBG, "added %lu-byte %s AEAD over [0..%u] in [%u..%u]", AEAD_LEN,
+         aead_type(c, aead), hdr_len + plen - AEAD_LEN - 1,
+         hdr_len + plen - AEAD_LEN, hdr_len + plen - 1);
     return hdr_len + (uint16_t)len;
 }

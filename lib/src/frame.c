@@ -535,10 +535,8 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
                 // already had at least one stream frame in this packet
                 // with non-duplicate data, so generate (another) copy
                 warn(DBG, "addtl stream frame at pos %u, copy", i);
-                struct w_iov * const vdup = q_alloc_iov(c->w, 0, 0);
-                memcpy(vdup->buf, v->buf, v->len);
-                meta(vdup) = meta(v);
-                vdup->len = v->len;
+                struct w_iov * const vdup = w_iov_dup(v);
+                pm_cpy(&meta(vdup), &meta(v));
                 // adjust w_iov start and len to stream frame data
                 v->buf = &v->buf[meta(v).stream_data_start];
                 v->len = stream_data_len(v);

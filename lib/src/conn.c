@@ -145,7 +145,7 @@ struct q_conn * get_conn_by_ipnp(const uint16_t sport,
 struct q_conn * get_conn_by_cid(const struct cid * const scid,
                                 const bool is_clnt)
 {
-    struct q_conn which = {.scid = *scid, .is_clnt = is_clnt};
+    const struct q_conn which = {.scid = *scid, .is_clnt = is_clnt};
     return splay_find(cid_splay, &conns_by_cid, &which);
 }
 
@@ -179,6 +179,7 @@ rtx_pkt(struct q_stream * const s, struct w_iov * const v)
     pm_cpy(&meta(r), &meta(v));                  // copy pkt meta data
     memcpy(r->buf, v->buf - Q_OFFSET, Q_OFFSET); // copy pkt headers
     meta(r).is_rtxed = true;
+    meta(r).rtx = &meta(v);
     adj_iov_to_data(r);
 
     // we reinsert meta(v) with its new pkt nr in on_pkt_sent()
@@ -387,15 +388,6 @@ update_scid(struct q_conn * const c, const struct cid * const scid)
 }
 
 
-static void __attribute__((nonnull))
-update_ipnp(struct q_conn * const c, const struct sockaddr_in * const peer)
-{
-    splay_remove(ipnp_splay, &conns_by_ipnp, c);
-    c->peer = *peer;
-    splay_insert(ipnp_splay, &conns_by_ipnp, c);
-}
-
-
 static bool __attribute__((nonnull))
 verify_prot(struct q_conn * const c, struct w_iov * const v)
 {
@@ -403,10 +395,10 @@ verify_prot(struct q_conn * const c, struct w_iov * const v)
         // version negotiation responses do not carry protection
         return true;
 
-    const uint16_t len = dec_aead(c, v, meta(v).hdr.hdr_len);
+    const uint16_t len = dec_aead(c, v);
     if (len == 0)
         return false;
-    v->len -= v->len - len;
+    v->len -= AEAD_LEN;
     return true;
 }
 
@@ -490,7 +482,7 @@ reset_conn(struct q_conn * const c, const bool also_stream0_in)
     do {                                                                       \
         if (verify_prot(c, v) == false) {                                      \
             err_close(c, ERR_TLS_HSHAKE_FAIL,                                  \
-                      "AEAD decrypt of 0x%02x-type %s packet failed",          \
+                      "AEAD fail on 0x%02x-type %s pkt",                       \
                       pkt_type((v)->buf[0]),                                   \
                       is_set(F_LONG_HDR, meta(v).hdr.flags) ? "LH" : "SH");    \
             goto done;                                                         \
@@ -513,11 +505,6 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 
         ignore_sh_pkt(v);
 
-        // validate minimum packet size
-        if (meta(v).hdr.type == F_LH_INIT && v->len < MIN_INI_LEN)
-            warn(ERR, "initial %u-byte pkt too short (< %u)", v->len,
-                 MIN_INI_LEN);
-
         c->vers = meta(v).hdr.vers;
         c->needs_tx = true;
         track_recv(c, meta(v).hdr.nr, meta(v).hdr.flags);
@@ -531,7 +518,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 
             // this is a new connection; server picks a new random cid
             struct cid new_scid = {.len = SERV_SCID_LEN};
-            arc4random_buf(&new_scid, new_scid.len);
+            arc4random_buf(new_scid.id, new_scid.len);
             warn(NTE, "picked new scid %s for %s conn (was %s)",
                  cid2str(&new_scid), conn_type(c), cid2str(&c->scid));
             update_scid(c, &new_scid);
@@ -731,16 +718,8 @@ void rx(struct ev_loop * const l,
         const bool is_clnt = w_connected(ws);
         dec_pkt_hdr_initial(v, is_clnt);
 
-        // warn(DBG, "rx idx %u", w_iov_idx(v));
-
         if (v->len > MAX_PKT_LEN)
             warn(WRN, "received %u-byte pkt (> %u max)", v->len, MAX_PKT_LEN);
-        // if (v->len < meta(v).hdr.hdr_len) {
-        //     warn(ERR, "%u-byte pkt indicates %u-byte hdr; ignoring", v->len,
-        //          meta(v).hdr.hdr_len);
-        //     q_free_iov(c, v);
-        //     continue;
-        // }
 
         struct q_conn * c = get_conn_by_cid(&meta(v).hdr.dcid, is_clnt);
         if (c == 0) {
@@ -754,20 +733,24 @@ void rx(struct ev_loop * const l,
                         warn(INF,
                              "got 0-RTT pkt for orig cid %s, new is %s, "
                              "accepting",
-                             cid2str(&meta(v).hdr.dcid), cid2str(&c->dcid));
+                             cid2str(&meta(v).hdr.dcid), cid2str(&c->scid));
                     else if (c && meta(v).hdr.type == F_LH_INIT) {
                         warn(INF,
                              "got duplicate CI for orig cid %s, new is %s, "
                              "ignoring",
-                             cid2str(&meta(v).hdr.dcid), cid2str(&c->dcid));
+                             cid2str(&meta(v).hdr.dcid), cid2str(&c->scid));
                         q_free_iov(c, v);
                         continue;
-                    } else if (meta(v).hdr.type == F_LH_INIT &&
-                               v->len >= MIN_INI_LEN) {
+                    } else if (meta(v).hdr.type == F_LH_INIT) {
                         warn(NTE,
                              "new serv conn on port %u w/cid %s from %s:%u",
                              ntohs(w_get_sport(ws)), cid2str(&meta(v).hdr.dcid),
                              inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
+
+                        // validate minimum packet size
+                        if (v->len < MIN_INI_LEN)
+                            warn(ERR, "initial %u-byte pkt too short (< %u)",
+                                 v->len, MIN_INI_LEN);
 
                         c = new_conn(w, meta(v).hdr.vers, &meta(v).hdr.scid,
                                      &meta(v).hdr.dcid, &peer, 0,
@@ -775,9 +758,7 @@ void rx(struct ev_loop * const l,
                         new_stream(c, 0, false);
                     }
                 }
-
-            } else
-                c = get_conn_by_ipnp(w_get_sport(ws), &peer, is_clnt);
+            }
 
         } else if (meta(v).hdr.scid.len) {
             if (memcmp(&meta(v).hdr.scid, &c->dcid, sizeof(c->dcid)) != 0)
@@ -797,8 +778,11 @@ void rx(struct ev_loop * const l,
         }
 
         if (meta(v).hdr.vers || !is_set(F_LONG_HDR, meta(v).hdr.flags))
-            dec_pkt_hdr_remainder(v, c);
-        log_pkt("RX", v, 0);
+            dec_pkt_hdr_remainder(v, c, &i);
+
+        log_pkt("RX", v,
+                meta(v).hdr.plen ? meta(v).hdr.hdr_len + meta(v).hdr.plen
+                                 : v->len);
 
         // remember that we had a RX event on this connection
         if (!c->had_rx) {
@@ -943,27 +927,27 @@ struct q_conn * new_conn(struct w_engine * const w,
     if (peer)
         c->peer = *peer;
 
+    if (peer_name) {
+        c->is_clnt = true;
+        ensure(c->peer_name = strdup(peer_name), "could not dup peer_name");
+    }
+
     if (dcid) {
         memcpy(&c->dcid, dcid, sizeof(*dcid));
-    } else if (peer) {
+    } else if (c->is_clnt) {
         c->dcid.len = SERV_SCID_LEN;
         arc4random_buf(c->dcid.id, c->dcid.len);
     }
 
     if (scid) {
         memcpy(&c->scid, scid, sizeof(*scid));
-    } else if (peer) {
+    } else if (c->is_clnt) {
         c->scid.len = CLNT_SCID_LEN;
         arc4random_buf(c->scid.id, c->scid.len);
     }
 
     c->vers = c->vers_initial = vers;
     arc4random_buf(c->stateless_reset_token, sizeof(c->stateless_reset_token));
-
-    if (peer_name) {
-        c->is_clnt = true;
-        ensure(c->peer_name = strdup(peer_name), "could not dup peer_name");
-    }
 
     // initialize recovery state
     rec_init(c);
