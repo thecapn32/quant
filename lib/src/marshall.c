@@ -29,6 +29,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <quant/config.h> // IWYU pragma: keep
 #include <warpcore/warpcore.h>
 
 #if defined(HAVE_ENDIAN_H)
