@@ -26,7 +26,6 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <fcntl.h>
-#include <inttypes.h>
 #include <net/if.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -103,8 +102,8 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
 {
     (void)parser;
     const struct cb_data * const d = parser->data;
-    warn(INF, "conn %" PRIx64 " str %u serving URL %.*s", q_cid(d->c),
-         q_sid(d->s), (int)len, at);
+    warn(INF, "conn %s str %u serving URL %.*s", q_cid(d->c), q_sid(d->s),
+         (int)len, at);
 
     char path[MAXPATHLEN] = ".";
     strncpy(&path[*at == '/' ? 1 : 0], at, MIN(len, sizeof(path) - 1));
