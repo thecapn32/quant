@@ -947,7 +947,15 @@ static void read_tickets()
     size_t hash_len;
     ensure(fread(&hash_len, sizeof(quant_commit_hash_len), 1, fp), "fread");
     uint8_t buf[8192];
+    // work around a false positive in fread_chk() on older gcc versions
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wreserved-id-macro"
+#pragma clang diagnostic ignored "-Wunused-macros"
+#define TEMP_FORTIFY_SOURCE _FORTIFY_SOURCE
+#undef _FORTIFY_SOURCE
     ensure(fread(buf, sizeof(uint8_t), hash_len, fp), "fread");
+#define _FORTIFY_SOURCE TEMP_FORTIFY_SOURCE
+#pragma clang diagnostic pop
     if (hash_len != quant_commit_hash_len ||
         memcmp(buf, quant_commit_hash, hash_len) != 0) {
         warn(WRN, "0-RTT tickets were stored by different %s version, removing",
