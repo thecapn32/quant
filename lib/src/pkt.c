@@ -388,8 +388,9 @@ tx:
 
 void dec_pkt_hdr_initial(const struct w_iov * const v, const bool is_clnt)
 {
+    meta(v).is_valid = true;
     meta(v).hdr.flags = *v->buf;
-    meta(v).hdr.type = *v->buf & (is_set(F_LONG_HDR, *v->buf) ? ~0x80 : 0x03);
+    meta(v).hdr.type = pkt_type(*v->buf);
 #ifdef DEBUG_MARSHALL
     warn(DBG, "dec 1 byte from v->buf[%u..%u] into &meta(v).hdr.flags = 0x%02x",
          meta(v).hdr.hdr_len, meta(v).hdr.hdr_len + 1, meta(v).hdr.flags);
@@ -398,6 +399,13 @@ void dec_pkt_hdr_initial(const struct w_iov * const v, const bool is_clnt)
     if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
         meta(v).hdr.hdr_len =
             dec(&meta(v).hdr.vers, v->buf, v->len, 1, 4, "0x%08x");
+
+        // check if the packet type/version combo makes sense
+        if (meta(v).hdr.vers &&
+            (meta(v).hdr.type > F_LH_INIT || meta(v).hdr.type < F_LH_0RTT)) {
+            meta(v).is_valid = false;
+            return;
+        }
 
         meta(v).hdr.hdr_len =
             dec(&meta(v).hdr.dcid.len, v->buf, v->len, 5, 1, "0x%02x");

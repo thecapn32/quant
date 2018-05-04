@@ -717,11 +717,17 @@ void rx(struct ev_loop * const l,
 
         const bool is_clnt = w_connected(ws);
         dec_pkt_hdr_initial(v, is_clnt);
+        struct q_conn * c = 0;
+        if (meta(v).is_valid == false) {
+            warn(ERR, "received invalid %u-byte pkt, ignoring", v->len);
+            q_free_iov(c, v);
+            continue;
+        }
 
         if (v->len > MAX_PKT_LEN)
             warn(WRN, "received %u-byte pkt (> %u max)", v->len, MAX_PKT_LEN);
 
-        struct q_conn * c = get_conn_by_cid(&meta(v).hdr.dcid, is_clnt);
+        c = get_conn_by_cid(&meta(v).hdr.dcid, is_clnt);
         if (c == 0) {
             const struct sockaddr_in peer = {.sin_family = AF_INET,
                                              .sin_port = v->port,

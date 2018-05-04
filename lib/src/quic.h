@@ -82,7 +82,8 @@ struct pkt_meta {
     uint8_t is_rtxed : 1;       ///< Does the w_iov hold truncated data?
     uint8_t is_acked : 1;       ///< Is the w_iov ACKed?
     uint8_t is_lost : 1;        ///< Have we marked this w_iov as lost?
-    uint8_t : 5;
+    uint8_t is_valid : 1;       ///< Is the packet well-formed?
+    uint8_t : 4;
     bitstr_t bit_decl(frames, MAX_FRAM_TYPE + 1); ///< Frames present in pkt.
     uint8_t _unused[2];
     struct pkt_hdr hdr;
@@ -284,6 +285,7 @@ extern void * api_arg;
             splay_remove(pm_nr_splay, &(c)->rec.sent_pkts, &meta(v));          \
         meta(v) = (struct pkt_meta){0};                                        \
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));                  \
+        w_free_iov(v);                                                         \
     } while (0)
 
 

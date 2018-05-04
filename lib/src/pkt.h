@@ -70,8 +70,7 @@
 #define ERR_FRAME_ERR(type) ((0x1 << 8) | (type))
 
 
-#define pkt_type(flags)                                                        \
-    ((flags) & (is_set(F_LONG_HDR, (flags)) ? ~0x80 : ~0xe0))
+#define pkt_type(flags) ((flags) & (is_set(F_LONG_HDR, (flags)) ? ~0x80 : 0x03))
 
 
 struct q_conn;
