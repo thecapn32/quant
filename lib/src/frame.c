@@ -570,6 +570,8 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
 
             case FRAM_TYPE_PING:
                 warn(INF, FRAM_IN "PING" NRM);
+                // PIMG frames need to be ACK'ed
+                c->needs_tx = true;
                 i++;
                 break;
 
