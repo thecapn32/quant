@@ -11,8 +11,8 @@ branches:
 
 env:
   matrix:
-    - BUILD_TYPE=Debug    MYCC=gcc-4.9    MYCXX=g++-4.9
-    - BUILD_TYPE=Release  MYCC=gcc-4.9    MYCXX=g++-4.9
+    - BUILD_TYPE=Debug    MYCC=gcc-5      MYCXX=g++-5
+    - BUILD_TYPE=Release  MYCC=gcc-5      MYCXX=g++-5
     - BUILD_TYPE=Debug    MYCC=gcc-7      MYCXX=g++-7
     - BUILD_TYPE=Release  MYCC=gcc-7      MYCXX=g++-7
     - BUILD_TYPE=Debug    MYCC=clang-5.0  MYCXX=clang++-5.0
@@ -33,7 +33,7 @@ addons:
       - llvm-toolchain-trusty-5.0
       - llvm-toolchain-trusty-6.0
     packages:
-      - g++-4.9
+      - g++-5
       - g++-7
       - clang-5.0
       - clang-6.0

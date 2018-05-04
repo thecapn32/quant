@@ -946,12 +946,7 @@ static void read_tickets()
     // read and verify git hash
     size_t hash_len;
     ensure(fread(&hash_len, sizeof(quant_commit_hash_len), 1, fp), "fread");
-#if __GNUC__ < 5
-    // work around a false positive in fread_chk() on older gcc versions
-    uint8_t * buf = malloc(8192);
-#else
     uint8_t buf[8192];
-#endif
     ensure(fread(buf, sizeof(uint8_t), hash_len, fp), "fread");
     if (hash_len != quant_commit_hash_len ||
         memcmp(buf, quant_commit_hash, hash_len) != 0) {
@@ -993,9 +988,6 @@ static void read_tickets()
     }
 
 done:
-#if __GNUC__ < 5
-    free(buf);
-#endif
     fclose(fp);
 }
 

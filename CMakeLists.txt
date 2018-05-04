@@ -79,6 +79,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
   # Enable debug support in the queue.h macros
   add_definitions(-DQUEUE_MACRO_DEBUG_TRASH)
 
+  add_definitions("-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2")
+
   # See if we can use the address sanitizer
   include(CheckIncludeFile)
   check_include_file(sanitizer/asan_interface.h HAVE_ASAN)
