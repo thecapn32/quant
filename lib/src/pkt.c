@@ -30,7 +30,6 @@
 #include <stdint.h>
 #include <string.h>
 
-#include <quant/quant.h> // IWYU pragma: keep
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
