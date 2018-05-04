@@ -76,6 +76,10 @@ case $c in
                 cc="pushd external/picoquic-prefix/src/picoquic; ./picoquicdemo \
                         $addr $port -1; popd"
                 ;;
+
+        quicker)
+                cc="external/bin/node external/quicker-prefix/src/quicker/out/mainclient.js $addr $port"
+                ;;
 esac
 
 # commands to run the different servers on  $addr:$port
@@ -122,6 +126,10 @@ case $s in
                 echo "dest_ip=* ssl_cert_name=$cert ssl_key_name=$key" > external/etc/trafficserver/ssl_multicert.config
                 echo "map / http://127.0.0.1:8000/" > external/etc/trafficserver/remap.config
                 sc="external/bin/traffic_server"
+                ;;
+
+        quicker)
+                sc="external/bin/node external/quicker-prefix/src/quicker/out/main.js $addr $port $key $cert"
                 ;;
 esac
 

@@ -241,8 +241,39 @@ externalproject_add(ats
   EXCLUDE_FROM_ALL 1
 )
 
+
+# Use quicker for testing against
+externalproject_add(node
+  UPDATE_COMMAND ""
+  GIT_REPOSITORY https://github.com/kevin-kp/node
+  GIT_SHALLOW 1
+  GIT_TAG add_quicker_support-tls-d28
+  BUILD_IN_SOURCE 1
+  CONFIGURE_COMMAND
+    ./configure --openssl-no-asm --prefix=${CMAKE_CURRENT_BINARY_DIR}
+  BUILD_COMMAND make -j8
+  EXCLUDE_FROM_ALL 1
+)
+
+externalproject_add(quicker
+  DEPENDS node
+  UPDATE_COMMAND ""
+  GIT_REPOSITORY https://github.com/rmarx/quicker
+  GIT_SHALLOW 1
+  PATCH_COMMAND
+    npm install &&
+    npm install typescript &&
+    node_modules/typescript/bin/tsc -p .
+  CONFIGURE_COMMAND ""
+  BUILD_IN_SOURCE 1
+  BUILD_COMMAND ""
+  INSTALL_COMMAND ""
+  EXCLUDE_FROM_ALL 1
+)
+
+
 # grep '^[^#]*_add' ../external/CMakeLists.txt | cut -f2 -d\( | sort | fmt -w 60
 add_custom_target(ext-all DEPENDS
-                  ats minq mozquic ngtcp2 nspr nss openssl picoquic picotls
-                  quicly warp
+  ats minq mozquic ngtcp2 node nspr nss openssl picoquic
+  picotls quicker quicly warp
 )
