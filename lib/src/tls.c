@@ -1069,12 +1069,14 @@ void init_tls_ctx(const char * const cert,
 
     static ptls_key_exchange_algorithm_t * key_exchanges[] = {
         &ptls_openssl_secp256r1, &ptls_minicrypto_x25519, 0};
+    static ptls_on_client_hello_t on_client_hello = {.cb = on_ch};
+    static ptls_log_secret_t log_secret = {.cb = log_secret_cb};
 
     tls_ctx.cipher_suites = ptls_openssl_cipher_suites;
     tls_ctx.key_exchanges = key_exchanges;
-    tls_ctx.on_client_hello = &(ptls_on_client_hello_t){.cb = on_ch};
+    tls_ctx.on_client_hello = &on_client_hello;
     if (tls_log)
-        tls_ctx.log_secret = &(ptls_log_secret_t){.cb = log_secret_cb};
+        tls_ctx.log_secret = &log_secret;
     tls_ctx.random_bytes = ptls_openssl_random_bytes;
     tls_ctx.sign_certificate = &sign_cert.super;
     tls_ctx.verify_certificate = &verifier.super;
@@ -1129,8 +1131,6 @@ uint16_t dec_aead(const struct q_conn * const c, const struct w_iov * const v)
     const size_t len =
         ptls_aead_decrypt(aead, &v->buf[hdr_len], &v->buf[hdr_len], plen,
                           meta(v).hdr.nr, v->buf, hdr_len);
-    warn(DBG, "len %u, plen %u, hdr_len %u, nr %u", len, plen, hdr_len,
-         meta(v).hdr.nr);
     if (len == SIZE_MAX)
         return 0;
     warn(DBG, "verifying %lu-byte %s AEAD over [0..%u] in [%u..%u]", AEAD_LEN,
@@ -1152,7 +1152,6 @@ uint16_t enc_aead(const struct q_conn * const c,
 
     const uint16_t plen =
         meta(v).hdr.plen ? meta(v).hdr.plen : v->len - hdr_len + AEAD_LEN;
-    warn(DBG, "plen %u, hdr_len %u, nr %u", plen, hdr_len, meta(v).hdr.nr);
     const size_t len =
         ptls_aead_encrypt(aead, &x->buf[hdr_len], &v->buf[hdr_len],
                           plen - AEAD_LEN, meta(v).hdr.nr, v->buf, hdr_len);
