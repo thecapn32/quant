@@ -41,6 +41,7 @@ declare -A servers=(
         [quant]=quant.eggert.org
         [quicker]=quicker.edm.uhasselt.be
         [quicly]=kazuhooku.com
+        [quicr]=ralith.com
         [winquic]=msquic.westus.cloudapp.azure.com
 )
 
