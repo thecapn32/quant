@@ -163,8 +163,13 @@ else()
   endif()
 
   # check for INTERPROCEDURAL_OPTIMIZATION support
-  include(CheckIPOSupported)
-  check_ipo_supported(RESULT IPO)
+  # (except on older gcc where that breaks)
+  if(CMAKE_COMPILER_IS_GNUCC AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 6.0)
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT IPO)
+  else()
+    set(IPO False)
+  endif()
 endif()
 
 # flags for "Release" builds
