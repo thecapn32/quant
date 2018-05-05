@@ -188,11 +188,8 @@ bool enc_pkt(struct q_stream * const s,
         meta(v).hdr.nr = ++c->rec.lg_sent;
 
     uint8_t pkt_nr_len = 0;
-    uint16_t pkt_len = v->len;
     switch (c->state) {
     case CONN_STAT_IDLE:
-        pkt_len = MIN_INI_LEN - AEAD_LEN;
-        ensure(pkt_len > v->len, "shrinking pkt");
     case CONN_STAT_RTRY:
     case CONN_STAT_CH_SENT:
         meta(v).hdr.type = (s->id == 0 ? F_LH_INIT : F_LH_0RTT);
@@ -235,11 +232,15 @@ bool enc_pkt(struct q_stream * const s,
 
         i = enc_lh_cids(c, v, i);
 
-        meta(v).hdr.plen = pkt_len - i - sizeof(uint32_t) + AEAD_LEN;
+        meta(v).hdr.plen =
+            (meta(v).hdr.type == F_LH_INIT ? MIN_INI_LEN - AEAD_LEN : v->len) -
+            i - sizeof(uint32_t) + AEAD_LEN;
+        warn(DBG, "plen %u", meta(v).hdr.plen);
         const uint64_t plen_len = varint_size_needed(meta(v).hdr.plen);
         meta(v).hdr.plen -=
             plen_len - (varint_size_needed(meta(v).hdr.plen) -
                         varint_size_needed(meta(v).hdr.plen - plen_len));
+        warn(DBG, "plen %u", meta(v).hdr.plen);
         const uint64_t plen = meta(v).hdr.plen;
         i = enc(v->buf, v->len, i, &plen, 0, "%" PRIu64);
         i = enc(v->buf, v->len, i, &meta(v).hdr.nr, sizeof(uint32_t),
@@ -250,8 +251,8 @@ bool enc_pkt(struct q_stream * const s,
         i = enc(v->buf, v->len, i, &meta(v).hdr.nr, pkt_nr_len, GRN "%u" NRM);
     }
 
-    log_pkt("TX", v, pkt_len + AEAD_LEN);
     meta(v).hdr.hdr_len = i;
+    log_pkt("TX", v, meta(v).hdr.hdr_len + meta(v).hdr.plen);
 
     if (!splay_empty(&c->recv) && c->state >= CONN_STAT_SH) {
         i = enc_ack_frame(c, v, i);
@@ -340,17 +341,11 @@ bool enc_pkt(struct q_stream * const s,
     if ((c->state == CONN_STAT_IDLE || c->state == CONN_STAT_RTRY ||
          c->state == CONN_STAT_CH_SENT) &&
         meta(v).hdr.type != F_LH_0RTT) {
-        i = enc_padding_frame(v, i, pkt_len - i);
+        i = enc_padding_frame(v, i, MIN_INI_LEN - i - AEAD_LEN);
         conn_to_state(c, CONN_STAT_CH_SENT);
     }
 
-    if (i == meta(v).hdr.hdr_len) {
-        // we didn't add any frames to this packet, so let's not send it
-        if (c->state != CONN_STAT_SEND_RTRY)
-            c->rec.lg_sent--;
-        warn(WRN, "this pkt will not be sent");
-        return false;
-    }
+    ensure(i > meta(v).hdr.hdr_len, "would have sent pkt w/o frames");
 
 tx:
     v->len = i;
