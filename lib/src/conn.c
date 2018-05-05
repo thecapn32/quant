@@ -643,10 +643,9 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             goto done;
         }
 
-        // pass any further data received on stream 0 to TLS and check
-        // whether that completes the client handshake
+        // if we got a SH or 0RTT packet, a q_accept() may be finished
         if (!is_set(F_LONG_HDR, meta(v).hdr.flags) ||
-            meta(v).hdr.type <= F_LH_HSHK) {
+            meta(v).hdr.type == F_LH_0RTT) {
             if (maybe_api_return(q_accept, accept_queue))
                 accept_queue = c;
         }
