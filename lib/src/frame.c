@@ -120,8 +120,6 @@ dec_stream_frame(struct q_conn * const c,
         // check if we have delivered a FIN, and act on it if we did
         struct w_iov * const last = sq_last(&s->in, w_iov, next);
         if (last) {
-            if (last != v)
-                adj_iov_to_start(last);
             const uint8_t last_type = last->buf[meta(last).stream_header_pos];
             if (is_set(F_STREAM_FIN, last_type)) {
                 strm_to_state(s, s->state <= STRM_STAT_HCRM ? STRM_STAT_HCRM
@@ -129,8 +127,6 @@ dec_stream_frame(struct q_conn * const c,
                 if (s->id != 0)
                     maybe_api_return(q_readall_str, s);
             }
-            if (last != v)
-                adj_iov_to_data(last);
         }
 
         if (s->id != 0)
@@ -149,7 +145,6 @@ dec_stream_frame(struct q_conn * const c,
     splay_insert(pm_off_splay, &s->in_ooo, &meta(v));
     track_bytes = true;
     meta(v).stream = s;
-    adj_iov_to_data(v); // XXX verify fix of the quic-tracker's FIN reorder test
 
 done:
     warn(INF,
