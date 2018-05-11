@@ -205,7 +205,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             continue;
         }
 
-        if (s->c->state == CONN_STAT_ESTB &&
+        if ((s->c->state == CONN_STAT_ESTB || s->c->is_clnt == false) &&
             s->out_off + v->len > s->out_data_max) {
             warn(INF, "out of FC window for str " FMT_SID, meta(v).hdr.nr,
                  s->id);
@@ -349,17 +349,14 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
 
         do_stream_fc(s);
 
-        if (s->id == 0 || c->state >= CONN_STAT_ESTB) {
-            if (!sq_empty(&s->out)) {
-                warn(DBG,
-                     "data %sTX on %s conn %s str " FMT_SID
-                     " w/%u pkt%s in queue",
-                     rtx ? "R" : "", conn_type(c), cid2str(&c->scid), s->id,
-                     sq_len(&s->out), plural(sq_len(&s->out)));
-                did_tx |= tx_stream(s, rtx, limit, 0);
-            } else
-                did_tx |= tx_other(s, rtx, limit);
-        }
+        if (!sq_empty(&s->out)) {
+            warn(DBG,
+                 "data %sTX on %s conn %s str " FMT_SID " w/%u pkt%s in queue",
+                 rtx ? "R" : "", conn_type(c), cid2str(&c->scid), s->id,
+                 sq_len(&s->out), plural(sq_len(&s->out)));
+            did_tx |= tx_stream(s, rtx, limit, 0);
+        } else
+            did_tx |= tx_other(s, rtx, limit);
 
         if (s->c->state <= CONN_STAT_HSHK_DONE && s->c->try_0rtt == false)
             // only send stream-0 during handshake, unless we're doing 0-RTT
@@ -815,14 +812,8 @@ void rx(struct ev_loop * const l,
         ev_timer_again(l, &c->idle_alarm);
 
         // is a TX needed for this connection?
-        if (c->needs_tx) {
-            const uint32_t limit = c->is_clnt == false &&
-                                           c->state == CONN_STAT_HSHK_DONE &&
-                                           c->path_chlg_out != c->path_resp_in
-                                       ? PATH_CHLG_LIMIT
-                                       : 0;
-            tx(c, false, limit);
-        }
+        if (c->needs_tx)
+            tx(c, false, 0);
 
         log_sent_pkts(c);
 

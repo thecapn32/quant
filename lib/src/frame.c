@@ -476,9 +476,14 @@ dec_path_response_frame(struct q_conn * const c,
                      sizeof(c->path_resp_in), "0x%" PRIx64);
     warn(INF, FRAM_IN "PATH_RESPONSE" NRM " data=%" PRIx64, c->path_resp_in);
 
-    if (c->path_resp_in == c->path_chlg_out)
-        // TODO: unblock stream 0 SH flight
+    if (c->path_resp_in == c->path_chlg_out) {
         c->tx_path_chlg = false;
+        if (c->is_clnt == false && c->state == CONN_STAT_HSHK_DONE) {
+            // unblock stream 0 SH flight
+            struct q_stream * s = get_stream(c, 0);
+            s->out_data_max = c->tp_peer.max_strm_data;
+        }
+    }
 
     return i;
 }

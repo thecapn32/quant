@@ -923,6 +923,10 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
         if (sq_len(&o) > PATH_CHLG_LIMIT) {
             s->c->tx_path_chlg = true;
             arc4random_buf(&s->c->path_chlg_out, sizeof(s->c->path_chlg_out));
+            // temporarily lower the FC window until a PATH_RESPONSE arrives
+            s->out_data_max =
+                s->out_data +
+                PATH_CHLG_LIMIT * (MAX_PKT_LEN - AEAD_LEN - Q_OFFSET);
         }
 
         uint8_t * data = tb.base;
