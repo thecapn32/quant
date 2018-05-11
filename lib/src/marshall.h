@@ -34,7 +34,7 @@ extern uint16_t varint_sizeof(const uint8_t first_byte);
 
 
 #ifndef NDEBUG
-#define DEBUG_MARSHALL
+// #define DEBUG_MARSHALL
 #endif
 
 #ifdef DEBUG_MARSHALL
@@ -63,7 +63,7 @@ extern uint16_t varint_sizeof(const uint8_t first_byte);
                  __func__, __FILE__, __LINE__, #buf, #src)
 #else
 #define enc(buf, buf_len, pos, src, src_len, enc_len, fmt)                     \
-    marshall_encf(buf, buf_len, pos, src, src_len, enc_len, fmt)
+    marshall_enc(buf, buf_len, pos, src, src_len, enc_len)
 #endif
 
 

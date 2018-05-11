@@ -118,7 +118,11 @@ needed_pkt_nr_len(struct q_conn * const c, const uint64_t n)
 }
 
 
-static uint16_t enc_cid(const char * const type,
+static uint16_t enc_cid(const char * const type
+#ifndef DEBUG_MARSHALL
+                        __attribute__((unused))
+#endif
+                        ,
                         struct w_iov * const v,
                         const uint16_t pos,
                         const struct cid * const id)
