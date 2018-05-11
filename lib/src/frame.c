@@ -149,6 +149,7 @@ dec_stream_frame(struct q_conn * const c,
     splay_insert(pm_off_splay, &s->in_ooo, &meta(v));
     track_bytes = true;
     meta(v).stream = s;
+    adj_iov_to_data(v); // XXX verify fix of the quic-tracker's FIN reorder test
 
 done:
     warn(INF,
