@@ -918,6 +918,11 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
         // enqueue for TX
         struct w_iov_sq o = sq_head_initializer(o);
         q_alloc(w_engine(s->c->sock), &o, (uint32_t)tb.off);
+
+        // if we have >3 pkts to send, SHOULD send PATH_CHALLENGE
+        if (sq_len(&o) > 3)
+            arc4random_buf(&s->c->path_chlg, sizeof(s->c->path_chlg));
+
         uint8_t * data = tb.base;
         struct w_iov * ov = 0;
         sq_foreach (ov, &o, next) {

@@ -123,6 +123,7 @@ struct q_conn {
 
     uint8_t stateless_reset_token[16];
     uint64_t path_resp;
+    uint64_t path_chlg;
 };
 
 

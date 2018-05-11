@@ -298,7 +298,7 @@ dec_close_frame(struct q_conn * const c,
     }
 
     conn_to_state(c, c->state < CONN_STAT_HSHK_DONE ? CONN_STAT_HSHK_FAIL
-                                                     : CONN_STAT_DRNG);
+                                                    : CONN_STAT_DRNG);
 
     warn(INF,
          FRAM_IN "%s" NRM " err=" RED "0x%04x " NRM "rlen=%" PRIu64
@@ -1050,6 +1050,23 @@ uint16_t enc_path_response_frame(struct q_conn * const c,
             "0x%" PRIx64);
 
     warn(INF, FRAM_OUT "PATH_RESPONSE" NRM " data=%" PRIx64, c->path_resp);
+
+    return i;
+}
+
+
+uint16_t enc_path_challenge_frame(struct q_conn * const c,
+                                  const struct w_iov * const v,
+                                  const uint16_t pos)
+{
+    bit_set(meta(v).frames, FRAM_TYPE_PATH_CHLG);
+
+    const uint8_t type = FRAM_TYPE_PATH_CHLG;
+    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
+    i = enc(v->buf, v->len, i, &c->path_chlg, sizeof(c->path_chlg), 0,
+            "0x%" PRIx64);
+
+    warn(INF, FRAM_OUT "PATH_CHALLENGE" NRM " data=%" PRIx64, c->path_chlg);
 
     return i;
 }

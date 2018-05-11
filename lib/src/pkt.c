@@ -261,6 +261,9 @@ bool enc_pkt(struct q_stream * const s,
         c->needs_path_resp = false;
     }
 
+    if (c->path_chlg)
+        i = enc_path_challenge_frame(c, v, i);
+
     if (c->state == CONN_STAT_ESTB) {
         // XXX rethink this - there needs to be a list of which streams are
         // blocked or need their window opened
