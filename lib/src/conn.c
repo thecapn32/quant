@@ -349,14 +349,17 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
 
         do_stream_fc(s);
 
-        if (!sq_empty(&s->out)) {
-            warn(DBG,
-                 "data %sTX on %s conn %s str " FMT_SID " w/%u pkt%s in queue",
-                 rtx ? "R" : "", conn_type(c), cid2str(&c->scid), s->id,
-                 sq_len(&s->out), plural(sq_len(&s->out)));
-            did_tx |= tx_stream(s, rtx, limit, 0);
-        } else
-            did_tx |= tx_other(s, rtx, limit);
+        if (s->id == 0 || c->state >= CONN_STAT_ESTB) {
+            if (!sq_empty(&s->out)) {
+                warn(DBG,
+                     "data %sTX on %s conn %s str " FMT_SID
+                     " w/%u pkt%s in queue",
+                     rtx ? "R" : "", conn_type(c), cid2str(&c->scid), s->id,
+                     sq_len(&s->out), plural(sq_len(&s->out)));
+                did_tx |= tx_stream(s, rtx, limit, 0);
+            } else
+                did_tx |= tx_other(s, rtx, limit);
+        }
 
         if (s->c->state <= CONN_STAT_HSHK_DONE && s->c->try_0rtt == false)
             // only send stream-0 during handshake, unless we're doing 0-RTT
@@ -527,7 +530,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 
             // if the CH doesn't include any stream-0 data, bail
             if (meta(v).stream == 0 || meta(v).stream->id != 0) {
-                warn(ERR, "Initial pkt w/o stream data");
+                warn(ERR, "initial pkt w/o stream data");
                 goto done;
             }
 
@@ -812,8 +815,14 @@ void rx(struct ev_loop * const l,
         ev_timer_again(l, &c->idle_alarm);
 
         // is a TX needed for this connection?
-        if (c->needs_tx)
-            tx(c, false, 0);
+        if (c->needs_tx) {
+            const uint32_t limit = c->is_clnt == false &&
+                                           c->state == CONN_STAT_HSHK_DONE &&
+                                           c->path_chlg_out != c->path_resp_in
+                                       ? PATH_CHLG_LIMIT
+                                       : 0;
+            tx(c, false, limit);
+        }
 
         log_sent_pkts(c);
 

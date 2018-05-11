@@ -920,7 +920,7 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
         q_alloc(w_engine(s->c->sock), &o, (uint32_t)tb.off);
 
         // if we have >3 pkts to send, SHOULD send PATH_CHALLENGE
-        if (sq_len(&o) > 3) {
+        if (sq_len(&o) > PATH_CHLG_LIMIT) {
             s->c->tx_path_chlg = true;
             arc4random_buf(&s->c->path_chlg_out, sizeof(s->c->path_chlg_out));
         }

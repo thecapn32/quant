@@ -465,7 +465,7 @@ dec_path_challenge_frame(struct q_conn * const c,
     warn(INF, FRAM_IN "PATH_CHALLENGE" NRM " data=%" PRIx64, c->path_chlg_in);
 
     c->path_resp_out = c->path_chlg_in;
-    c->tx_path_resp = true;
+    c->needs_tx = c->tx_path_resp = true;
 
     return i;
 }
