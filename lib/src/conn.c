@@ -525,6 +525,12 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             init_tls(c);
             dec_frames(c, v);
 
+            // if the CH doesn't include any stream-0 data, bail
+            if (meta(v).stream == 0 || meta(v).stream->id != 0) {
+                warn(ERR, "Initial pkt w/o stream data");
+                goto done;
+            }
+
         } else {
             conn_to_state(c, CONN_STAT_VERS_NEG);
             warn(WRN, "%s conn %s clnt-requested vers 0x%08x not supported ",
