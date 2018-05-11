@@ -256,12 +256,12 @@ bool enc_pkt(struct q_stream * const s,
     } else
         meta(v).ack_header_pos = 0;
 
-    if (c->needs_path_resp) {
+    if (c->tx_path_resp) {
         i = enc_path_response_frame(c, v, i);
-        c->needs_path_resp = false;
+        c->tx_path_resp = false;
     }
 
-    if (c->path_chlg)
+    if (c->tx_path_chlg)
         i = enc_path_challenge_frame(c, v, i);
 
     if (c->state == CONN_STAT_ESTB) {

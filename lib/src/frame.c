@@ -456,14 +456,34 @@ dec_stop_sending_frame(struct q_conn * const c,
 
 
 static uint16_t __attribute__((nonnull))
-dec_path_chlg_frame(struct q_conn * const c,
-                    const struct w_iov * const v,
-                    const uint16_t pos)
+dec_path_challenge_frame(struct q_conn * const c,
+                         const struct w_iov * const v,
+                         const uint16_t pos)
 {
-    uint16_t i = dec(&c->path_resp, v->buf, v->len, pos + 1,
-                     sizeof(c->path_resp), "0x%" PRIx64);
-    warn(INF, FRAM_IN "PATH_CHALLENGE" NRM " data=%" PRIx64, c->path_resp);
-    c->needs_path_resp = true;
+    uint16_t i = dec(&c->path_chlg_in, v->buf, v->len, pos + 1,
+                     sizeof(c->path_chlg_in), "0x%" PRIx64);
+    warn(INF, FRAM_IN "PATH_CHALLENGE" NRM " data=%" PRIx64, c->path_chlg_in);
+
+    c->path_resp_out = c->path_chlg_in;
+    c->tx_path_resp = true;
+
+    return i;
+}
+
+
+static uint16_t __attribute__((nonnull))
+dec_path_response_frame(struct q_conn * const c,
+                        const struct w_iov * const v,
+                        const uint16_t pos)
+{
+    uint16_t i = dec(&c->path_resp_in, v->buf, v->len, pos + 1,
+                     sizeof(c->path_resp_in), "0x%" PRIx64);
+    warn(INF, FRAM_IN "PATH_RESPONSE" NRM " data=%" PRIx64, c->path_resp_in);
+
+    if (c->path_resp_in == c->path_chlg_out)
+        // TODO: unblock stream 0 SH flight
+        c->tx_path_chlg = false;
+
     return i;
 }
 
@@ -548,13 +568,13 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
             // this is the first stream frame in this packet
             i = dec_stream_frame(c, v, i);
 
-        } else if (is_set(FRAM_TYPE_ACK, type)) {
-            bit_set(meta(v).frames, FRAM_TYPE_ACK);
-            i = dec_ack_frame(c, v, i, &on_ack_rx_1, &on_pkt_acked,
-                              on_ack_rx_2);
-
         } else {
             switch (type) {
+            case FRAM_TYPE_ACK:
+                i = dec_ack_frame(c, v, i, &on_ack_rx_1, &on_pkt_acked,
+                                  on_ack_rx_2);
+                break;
+
             case FRAM_TYPE_PAD:
                 pad_start = pad_start ? pad_start : i;
                 i++;
@@ -605,7 +625,11 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
                 break;
 
             case FRAM_TYPE_PATH_CHLG:
-                i = dec_path_chlg_frame(c, v, i);
+                i = dec_path_challenge_frame(c, v, i);
+                break;
+
+            case FRAM_TYPE_PATH_RESP:
+                i = dec_path_response_frame(c, v, i);
                 break;
 
                 // case FRAM_TYPE_NEW_CID:
@@ -1046,10 +1070,10 @@ uint16_t enc_path_response_frame(struct q_conn * const c,
 
     const uint8_t type = FRAM_TYPE_PATH_RESP;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
-    i = enc(v->buf, v->len, i, &c->path_resp, sizeof(c->path_resp), 0,
+    i = enc(v->buf, v->len, i, &c->path_resp_out, sizeof(c->path_resp_out), 0,
             "0x%" PRIx64);
 
-    warn(INF, FRAM_OUT "PATH_RESPONSE" NRM " data=%" PRIx64, c->path_resp);
+    warn(INF, FRAM_OUT "PATH_RESPONSE" NRM " data=%" PRIx64, c->path_resp_out);
 
     return i;
 }
@@ -1063,10 +1087,10 @@ uint16_t enc_path_challenge_frame(struct q_conn * const c,
 
     const uint8_t type = FRAM_TYPE_PATH_CHLG;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
-    i = enc(v->buf, v->len, i, &c->path_chlg, sizeof(c->path_chlg), 0,
+    i = enc(v->buf, v->len, i, &c->path_chlg_out, sizeof(c->path_chlg_out), 0,
             "0x%" PRIx64);
 
-    warn(INF, FRAM_OUT "PATH_CHALLENGE" NRM " data=%" PRIx64, c->path_chlg);
+    warn(INF, FRAM_OUT "PATH_CHALLENGE" NRM " data=%" PRIx64, c->path_chlg_out);
 
     return i;
 }

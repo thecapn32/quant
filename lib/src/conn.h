@@ -79,8 +79,9 @@ struct q_conn {
     uint16_t try_0rtt : 1;          ///< Try 0-RTT handshake.
     uint16_t did_0rtt : 1;          ///< 0-RTT handshake succeeded;
     uint16_t in_closing : 1;        ///< Is the closing/draining timer active?
-    uint16_t needs_path_resp : 1;   ///< Needs a PATH_RESPONSE.
-    uint16_t : 2;
+    uint16_t tx_path_resp : 1;      ///< Send PATH_RESPONSE.
+    uint16_t tx_path_chlg : 1;      ///< Send PATH_CHALLENGE.
+    uint16_t : 1;
 
     struct w_engine * w; ///< Underlying warpcore engine.
 
@@ -122,8 +123,12 @@ struct q_conn {
     struct tls tls;      ///< TLS state.
 
     uint8_t stateless_reset_token[16];
-    uint64_t path_resp;
-    uint64_t path_chlg;
+
+    uint64_t path_chlg_in;
+    uint64_t path_resp_out;
+
+    uint64_t path_chlg_out;
+    uint64_t path_resp_in;
 };
 
 
