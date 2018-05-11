@@ -125,6 +125,7 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
             c = (c == 'Z' ? 'A' : c + 1);
         }
         q_write(d->s, &out, true);
+        q_free(d->c, &out);
         return 0;
     }
 
