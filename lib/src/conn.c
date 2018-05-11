@@ -785,9 +785,7 @@ void rx(struct ev_loop * const l,
         if (meta(v).hdr.vers || !is_set(F_LONG_HDR, meta(v).hdr.flags))
             dec_pkt_hdr_remainder(v, c, &i);
 
-        log_pkt("RX", v,
-                meta(v).hdr.plen ? meta(v).hdr.hdr_len + meta(v).hdr.plen
-                                 : v->len);
+        log_pkt("RX", v);
 
         // remember that we had a RX event on this connection
         if (!c->had_rx) {

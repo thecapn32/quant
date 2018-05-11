@@ -296,7 +296,7 @@ dec_close_frame(struct q_conn * const c,
         i += reas_len;
     }
 
-    conn_to_state(c, c->state == CONN_STAT_HSHK_DONE ? CONN_STAT_HSHK_FAIL
+    conn_to_state(c, c->state < CONN_STAT_HSHK_DONE ? CONN_STAT_HSHK_FAIL
                                                      : CONN_STAT_DRNG);
 
     warn(INF,
@@ -748,9 +748,9 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     const uint8_t type = FRAM_TYPE_ACK;
     bit_set(meta(v).frames, FRAM_TYPE_ACK);
     meta(v).ack_header_pos = pos;
-    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
+    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
-    i = enc(v->buf, v->len, i, &lg_hi->hi, 0, FMT_PNR_IN);
+    i = enc(v->buf, v->len, i, &lg_hi->hi, 0, 0, FMT_PNR_IN);
 
     // handshake pkts always use an ACK delay exponent of 3
     const uint8_t ade =
@@ -760,9 +760,9 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     const uint64_t ack_delay =
         (uint64_t)((ev_now(loop) - diet_timestamp(lg_hi)) * 1000000) /
         (1 << ade);
-    i = enc(v->buf, v->len, i, &ack_delay, 0, "%" PRIu64);
+    i = enc(v->buf, v->len, i, &ack_delay, 0, 0, "%" PRIu64);
 
-    i = enc(v->buf, v->len, i, &block_cnt, 0, "%" PRIu64);
+    i = enc(v->buf, v->len, i, &block_cnt, 0, 0, "%" PRIu64);
 
     // warn(DBG, "lg range %" PRIu64 " - %" PRIu64 " 0x%02x", lg_hi->hi,
     // lg_lo->lo,
@@ -770,7 +770,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
 
     // encode the first ACK block directly
     uint64_t block = lg_hi->hi - lg_lo->lo;
-    i = enc(v->buf, v->len, i, &block, 0, "%" PRIu64);
+    i = enc(v->buf, v->len, i, &block, 0, 0, "%" PRIu64);
 
     if (block)
         warn(INF,
@@ -815,12 +815,12 @@ uint16_t enc_ack_frame(struct q_conn * const c,
         if (cur_lo->lo > b->hi + 1 || splay_prev(diet, &c->recv, b) == 0) {
             // warn(DBG, "have gap");
             gap = cur_lo->lo - b->hi - 2;
-            i = enc(v->buf, v->len, i, &gap, 0, "%" PRIu64);
+            i = enc(v->buf, v->len, i, &gap, 0, 0, "%" PRIu64);
             cur_hi = cur_lo = b;
         }
 
         block = cur_hi->hi - cur_lo->lo;
-        i = enc(v->buf, v->len, i, &block, 0, "%" PRIu64);
+        i = enc(v->buf, v->len, i, &block, 0, 0, "%" PRIu64);
 
         if (block)
             warn(INF,
@@ -865,12 +865,12 @@ uint16_t enc_stream_frame(struct q_stream * const s,
         (dlen ? varint_size_needed(dlen) : 0) -
         (s->out_off ? varint_size_needed(s->out_off) : 0);
     ensure(i > pos, "Q_OFFSET exhausted (%u > %u)", i, pos);
-    i = enc(v->buf, v->len, i, &type, sizeof(type), "0x%02x");
-    i = enc(v->buf, v->len, i, &s->id, 0, FMT_SID);
+    i = enc(v->buf, v->len, i, &type, sizeof(type), 0, "0x%02x");
+    i = enc(v->buf, v->len, i, &s->id, 0, 0, FMT_SID);
     if (s->out_off)
-        i = enc(v->buf, v->len, i, &s->out_off, 0, "%" PRIu64);
+        i = enc(v->buf, v->len, i, &s->out_off, 0, 0, "%" PRIu64);
     if (dlen)
-        enc(v->buf, v->len, i, &dlen, 0, "%u");
+        enc(v->buf, v->len, i, &dlen, 0, 0, "%u");
 
     warn(INF,
          FRAM_OUT "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID "/%" PRIu64
@@ -907,11 +907,11 @@ uint16_t enc_close_frame(struct w_iov * const v,
 {
     bit_set(meta(v).frames, type);
 
-    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
-    i = enc(v->buf, v->len, i, &err_code, sizeof(err_code), "0x%04x");
+    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
+    i = enc(v->buf, v->len, i, &err_code, sizeof(err_code), 0, "0x%04x");
 
     const uint64_t rlen = reas ? MIN(strlen(reas), v->len - i) : 0;
-    i = enc(v->buf, v->len, i, &rlen, 0, "%" PRIu64);
+    i = enc(v->buf, v->len, i, &rlen, 0, 0, "%" PRIu64);
 
     if (reas) {
         memcpy(&v->buf[i], reas, rlen);
@@ -942,9 +942,9 @@ uint16_t enc_max_stream_data_frame(struct q_stream * const s,
     bit_set(meta(v).frames, FRAM_TYPE_MAX_STRM_DATA);
 
     const uint8_t type = FRAM_TYPE_MAX_STRM_DATA;
-    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
-    i = enc(v->buf, v->len, i, &s->id, 0, FMT_SID);
-    i = enc(v->buf, v->len, i, &s->in_data_max, 0, "%" PRIu64);
+    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
+    i = enc(v->buf, v->len, i, &s->id, 0, 0, FMT_SID);
+    i = enc(v->buf, v->len, i, &s->in_data_max, 0, 0, "%" PRIu64);
 
     warn(INF, FRAM_OUT "MAX_STREAM_DATA" NRM " id=" FMT_SID " max=%" PRIu64,
          s->id, s->in_data_max);
@@ -960,8 +960,8 @@ uint16_t enc_max_data_frame(struct q_conn * const c,
     bit_set(meta(v).frames, FRAM_TYPE_MAX_DATA);
 
     const uint8_t type = FRAM_TYPE_MAX_DATA;
-    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
-    i = enc(v->buf, v->len, i, &c->tp_local.max_data, 0, "%" PRIu64);
+    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
+    i = enc(v->buf, v->len, i, &c->tp_local.max_data, 0, 0, "%" PRIu64);
 
     warn(INF, FRAM_OUT "MAX_DATA" NRM " max=%" PRIu64, c->tp_local.max_data);
 
@@ -976,8 +976,8 @@ uint16_t enc_max_stream_id_frame(struct q_conn * const c,
     bit_set(meta(v).frames, FRAM_TYPE_MAX_SID);
 
     const uint8_t type = FRAM_TYPE_MAX_SID;
-    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
-    i = enc(v->buf, v->len, i, &c->tp_local.max_strm_bidi, 0, "%" PRIu64);
+    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
+    i = enc(v->buf, v->len, i, &c->tp_local.max_strm_bidi, 0, 0, "%" PRIu64);
 
     warn(INF, FRAM_OUT "MAX_STREAM_ID" NRM " max=%" PRIu64,
          c->tp_local.max_strm_bidi);
@@ -993,9 +993,9 @@ uint16_t enc_stream_blocked_frame(struct q_stream * const s,
     bit_set(meta(v).frames, FRAM_TYPE_STRM_BLCK);
 
     const uint8_t type = FRAM_TYPE_STRM_BLCK;
-    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
-    i = enc(v->buf, v->len, i, &s->id, 0, FMT_SID);
-    i = enc(v->buf, v->len, i, &s->out_off, 0, "%" PRIu64);
+    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
+    i = enc(v->buf, v->len, i, &s->id, 0, 0, FMT_SID);
+    i = enc(v->buf, v->len, i, &s->out_off, 0, 0, "%" PRIu64);
 
     warn(INF, FRAM_OUT "STREAM_BLOCKED" NRM " id=" FMT_SID " off=%" PRIu64,
          s->id, s->out_off);
@@ -1011,8 +1011,8 @@ uint16_t enc_blocked_frame(struct q_conn * const c,
     bit_set(meta(v).frames, FRAM_TYPE_BLCK);
 
     const uint8_t type = FRAM_TYPE_BLCK;
-    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
-    i = enc(v->buf, v->len, i, &c->tp_peer.max_data, 0, "%" PRIu64);
+    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
+    i = enc(v->buf, v->len, i, &c->tp_peer.max_data, 0, 0, "%" PRIu64);
 
     warn(INF, FRAM_OUT "BLOCKED" NRM " off=%" PRIu64, c->tp_peer.max_data);
 
@@ -1027,8 +1027,8 @@ uint16_t enc_stream_id_blocked_frame(struct q_conn * const c,
     bit_set(meta(v).frames, FRAM_TYPE_ID_BLCK);
 
     const uint8_t type = FRAM_TYPE_ID_BLCK;
-    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
-    i = enc(v->buf, v->len, i, &c->tp_peer.max_strm_bidi, 0, "%" PRIu64);
+    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
+    i = enc(v->buf, v->len, i, &c->tp_peer.max_strm_bidi, 0, 0, "%" PRIu64);
 
     warn(INF, FRAM_OUT "STREAM_ID_BLOCKED" NRM " sid=" FMT_SID,
          c->tp_peer.max_strm_bidi);
@@ -1044,8 +1044,8 @@ uint16_t enc_path_response_frame(struct q_conn * const c,
     bit_set(meta(v).frames, FRAM_TYPE_PATH_RESP);
 
     const uint8_t type = FRAM_TYPE_PATH_RESP;
-    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), "0x%02x");
-    i = enc(v->buf, v->len, i, &c->path_resp, sizeof(c->path_resp),
+    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
+    i = enc(v->buf, v->len, i, &c->path_resp, sizeof(c->path_resp), 0,
             "0x%" PRIx64);
 
     warn(INF, FRAM_OUT "PATH_RESPONSE" NRM " data=%" PRIx64, c->path_resp);

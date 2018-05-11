@@ -72,9 +72,7 @@ static const char * pkt_type_str(const struct w_iov * const v)
 }
 
 
-void log_pkt(const char * const dir,
-             const struct w_iov * const v,
-             const uint16_t len)
+void log_pkt(const char * const dir, const struct w_iov * const v)
 {
     const char * col_dir = *dir == 'R' ? BLD BLU : BLD GRN;
     const char * col_nr = *dir == 'R' ? BLU : GRN;
@@ -84,21 +82,21 @@ void log_pkt(const char * const dir,
             twarn(NTE,
                   BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM
                       "vers=0x%08x dcid=%s scid=%s",
-                  col_dir, dir, len, meta(v).hdr.type, col_dir, pkt_type_str(v),
-                  meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
+                  col_dir, dir, v->len, meta(v).hdr.type, col_dir,
+                  pkt_type_str(v), meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
                   cid2str(&meta(v).hdr.scid));
         else
             twarn(NTE,
                   BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM
                       "vers=0x%08x dcid=%s scid=%s plen=%u nr=%s%" PRIu64,
-                  col_dir, dir, len, meta(v).hdr.type, col_dir, pkt_type_str(v),
-                  meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
+                  col_dir, dir, v->len, meta(v).hdr.type, col_dir,
+                  pkt_type_str(v), meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
                   cid2str(&meta(v).hdr.scid), meta(v).hdr.plen, col_nr,
                   meta(v).hdr.nr);
     } else
         twarn(NTE,
               BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM "dcid=%s nr=%s%" PRIu64,
-              col_dir, dir, len, meta(v).hdr.type, col_dir, pkt_type_str(v),
+              col_dir, dir, v->len, meta(v).hdr.type, col_dir, pkt_type_str(v),
               cid2str(&meta(v).hdr.dcid), col_nr, meta(v).hdr.nr);
 }
 #endif
@@ -120,11 +118,13 @@ needed_pkt_nr_len(struct q_conn * const c, const uint64_t n)
 }
 
 
-static uint16_t
-enc_cid(struct w_iov * const v, const uint16_t pos, const struct cid * const id)
+static uint16_t enc_cid(const char * const type,
+                        struct w_iov * const v,
+                        const uint16_t pos,
+                        const struct cid * const id)
 {
 #ifdef DEBUG_MARSHALL
-    warn(DBG, "enc cid = %s into %u byte%s at v->buf[%u..%u]", cid2str(id),
+    warn(DBG, "enc %s = %s into %u byte%s at v->buf[%u..%u]", type, cid2str(id),
          id->len, plural(id->len), pos, pos + id->len - 1);
 #endif
     memcpy(&v->buf[pos], id->id, id->len);
@@ -140,11 +140,11 @@ enc_lh_cids(struct q_conn * const c, struct w_iov * const v, const uint16_t pos)
     const uint8_t cil =
         (uint8_t)((meta(v).hdr.dcid.len ? meta(v).hdr.dcid.len - 3 : 0) << 4) |
         (uint8_t)(meta(v).hdr.scid.len ? meta(v).hdr.scid.len - 3 : 0);
-    uint16_t i = enc(v->buf, v->len, pos, &cil, sizeof(cil), "0x%02x");
+    uint16_t i = enc(v->buf, v->len, pos, &cil, sizeof(cil), 0, "0x%02x");
     if (meta(v).hdr.dcid.len)
-        i = enc_cid(v, i, &meta(v).hdr.dcid);
+        i = enc_cid("dcid", v, i, &meta(v).hdr.dcid);
     if (meta(v).hdr.scid.len)
-        i = enc_cid(v, i, &meta(v).hdr.scid);
+        i = enc_cid("scid", v, i, &meta(v).hdr.scid);
     return i;
 }
 
@@ -165,16 +165,16 @@ bool enc_pkt(struct q_stream * const s,
         meta(v).hdr.type = (uint8_t)w_rand();
         meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
         i = enc(v->buf, v->len, 0, &meta(v).hdr.flags,
-                sizeof(meta(v).hdr.flags), "0x%02x");
+                sizeof(meta(v).hdr.flags), 0, "0x%02x");
         i = enc(v->buf, v->len, i, &meta(v).hdr.vers, sizeof(meta(v).hdr.vers),
-                "0x%08x");
+                0, "0x%08x");
         i = enc_lh_cids(c, v, i);
         for (uint8_t j = 0; j < ok_vers_len; j++)
             if (!is_force_neg_vers(ok_vers[j]))
-                i = enc(v->buf, v->len, i, &ok_vers[j], sizeof(ok_vers[j]),
+                i = enc(v->buf, v->len, i, &ok_vers[j], sizeof(ok_vers[j]), 0,
                         "0x%08x");
         meta(v).hdr.hdr_len = v->len = i;
-        log_pkt("TX", v, v->len);
+        log_pkt("TX", v);
         goto tx;
     }
 
@@ -223,36 +223,29 @@ bool enc_pkt(struct q_stream * const s,
 
     ensure(meta(v).hdr.nr < (1ULL << 62) - 1, "packet number overflow");
 
-    i = enc(v->buf, v->len, 0, &meta(v).hdr.flags, sizeof(meta(v).hdr.flags),
+    i = enc(v->buf, v->len, 0, &meta(v).hdr.flags, sizeof(meta(v).hdr.flags), 0,
             "0x%02x");
 
+    uint16_t plen_pos = 0;
     if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
         meta(v).hdr.vers = c->vers;
-        i = enc(v->buf, v->len, i, &c->vers, sizeof(c->vers), "0x%08x");
-
+        i = enc(v->buf, v->len, i, &c->vers, sizeof(c->vers), 0, "0x%08x");
         i = enc_lh_cids(c, v, i);
-
-        meta(v).hdr.plen =
-            (meta(v).hdr.type == F_LH_INIT ? MIN_INI_LEN - AEAD_LEN : v->len) -
-            i - sizeof(uint32_t) + AEAD_LEN;
-        warn(DBG, "plen %u", meta(v).hdr.plen);
-        const uint64_t plen_len = varint_size_needed(meta(v).hdr.plen);
-        meta(v).hdr.plen -=
-            plen_len - (varint_size_needed(meta(v).hdr.plen) -
-                        varint_size_needed(meta(v).hdr.plen - plen_len));
-        warn(DBG, "plen %u", meta(v).hdr.plen);
-        const uint64_t plen = meta(v).hdr.plen;
-        i = enc(v->buf, v->len, i, &plen, 0, "%" PRIu64);
-        i = enc(v->buf, v->len, i, &meta(v).hdr.nr, sizeof(uint32_t),
+        // leave space for payload length field (2 bytes is enough)
+        plen_pos = i;
+        i += 2;
+        // encode pkt nr
+        i = enc(v->buf, v->len, i, &meta(v).hdr.nr, sizeof(uint32_t), 0,
                 GRN "%u" NRM);
     } else {
-        i = enc_cid(v, i, &c->dcid);
+        i = enc_cid("dcid", v, i, &c->dcid);
         meta(v).hdr.dcid = c->dcid;
-        i = enc(v->buf, v->len, i, &meta(v).hdr.nr, pkt_nr_len, GRN "%u" NRM);
+        i = enc(v->buf, v->len, i, &meta(v).hdr.nr, pkt_nr_len, 0,
+                GRN "%u" NRM);
     }
 
     meta(v).hdr.hdr_len = i;
-    log_pkt("TX", v, meta(v).hdr.hdr_len + meta(v).hdr.plen);
+    log_pkt("TX", v);
 
     if (!splay_empty(&c->recv) && c->state >= CONN_STAT_SH) {
         i = enc_ack_frame(c, v, i);
@@ -343,6 +336,12 @@ bool enc_pkt(struct q_stream * const s,
         meta(v).hdr.type != F_LH_0RTT) {
         i = enc_padding_frame(v, i, MIN_INI_LEN - i - AEAD_LEN);
         conn_to_state(c, CONN_STAT_CH_SENT);
+    }
+
+    // for LH pkts, now encode the payload length
+    if (plen_pos) {
+        const uint64_t plen = i - meta(v).hdr.hdr_len + AEAD_LEN;
+        enc(v->buf, v->len, plen_pos, &plen, 0, 2, "%" PRIu64);
     }
 
     ensure(i > meta(v).hdr.hdr_len, "would have sent pkt w/o frames");

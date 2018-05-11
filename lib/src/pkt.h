@@ -28,7 +28,6 @@
 #pragma once
 
 #include <stdbool.h>
-#include <stdint.h>
 
 #include "quic.h"
 
@@ -92,9 +91,8 @@ extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
                                              struct w_iov_sq * const q);
 
 #ifndef NDEBUG
-extern void __attribute__((nonnull)) log_pkt(const char * const dir,
-                                             const struct w_iov * const v,
-                                             const uint16_t len);
+extern void __attribute__((nonnull))
+log_pkt(const char * const dir, const struct w_iov * const v);
 #else
 #define log_pkt(...)                                                           \
     do {                                                                       \

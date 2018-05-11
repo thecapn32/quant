@@ -34,34 +34,36 @@ extern uint16_t varint_sizeof(const uint8_t first_byte);
 
 
 #ifndef NDEBUG
-// #define DEBUG_MARSHALL
+#define DEBUG_MARSHALL
 #endif
 
 #ifdef DEBUG_MARSHALL
-/// If @p src_len is given, encodes the lower @p src_len bytes of host
-/// byte-order data contained in @p src into network byte-order at at position
-/// @p pos of buffer @p buf (which has total length @p buf_len), using printf
-/// format string @p fmt to format the data for debug logging.
+/// Encodes @p src in host byte-order data into network byte-order at at
+/// position @p pos of buffer @p buf (which has total length @p buf_len), using
+/// printf format string @p fmt to format the data for debug logging.
 ///
-/// For varint encoding (@p src_len is zero), @p src *must* point to an
-/// uint64_t.
+/// @p src_len must be sizeof(src) for fixed-length encoding, or zero for
+/// "varint" encoding, in which case @p src must be uint64_t. In the latter
+/// case, if @p enc_len is zero, the "varint" encoding will use the minimal
+/// number of bytes necessary, otherwise, it will encode into @p enc_len bytes.
 ///
-/// @param      buf      Buffer to decode from.
+/// @param      buf      Buffer to encode into.
 /// @param      buf_len  Buffer length.
-/// @param      pos      Buffer position to start encoding to.
+/// @param      pos      Buffer position to start encoding from.
 /// @param      src      Source data.
-/// @param      src_len  Length to encode.
+/// @param      src_len  Length of @p src (zero means "varint" encoding).
+/// @param      enc_len  Length to encode (only affects "varint" encoding).
 /// @param      fmt      Printf format for debug logging.
 ///
 /// @return     Buffer offset of byte following the encoded data.
 ///
-#define enc(buf, buf_len, pos, src, src_len, fmt)                              \
-    marshall_enc(buf, buf_len, pos, src, src_len,                              \
+#define enc(buf, buf_len, pos, src, src_len, enc_len, fmt)                     \
+    marshall_enc(buf, buf_len, pos, src, src_len, enc_len,                     \
                  "enc %s = " fmt NRM " into %u byte%s (%s) at %s[%u..%u]",     \
                  __func__, __FILE__, __LINE__, #buf, #src)
 #else
-#define enc(buf, buf_len, pos, src, src_len, fmt)                              \
-    marshall_enc(buf, buf_len, pos, src, src_len)
+#define enc(buf, buf_len, pos, src, src_len, enc_len, fmt)                     \
+    marshall_encf(buf, buf_len, pos, src, src_len, enc_len, fmt)
 #endif
 
 
@@ -69,7 +71,8 @@ extern uint16_t marshall_enc(uint8_t * const buf,
                              const uint16_t buf_len,
                              const uint16_t pos,
                              const void * const src,
-                             const uint16_t src_len
+                             const uint8_t src_len,
+                             const uint8_t enc_len
 #ifdef DEBUG_MARSHALL
                              ,
                              const char * const fmt,
@@ -114,7 +117,7 @@ extern uint16_t marshall_dec(void * const dst,
                              const uint8_t * const buf,
                              const uint16_t buf_len,
                              const uint16_t pos,
-                             const uint16_t dst_len
+                             const uint8_t dst_len
 #ifdef DEBUG_MARSHALL
                              ,
                              const char * const fmt,

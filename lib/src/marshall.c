@@ -99,7 +99,8 @@ uint16_t __attribute__((nonnull)) marshall_enc(uint8_t * const buf,
                                                const uint16_t buf_len,
                                                const uint16_t pos,
                                                const void * const src,
-                                               const uint16_t src_len
+                                               const uint8_t src_len,
+                                               const uint8_t enc_len
 #ifdef DEBUG_MARSHALL
                                                ,
                                                const char * const fmt,
@@ -116,18 +117,20 @@ uint16_t __attribute__((nonnull)) marshall_enc(uint8_t * const buf,
     switch (src_len) {
     case 0:
         // varint encoding
-        if (*(const uint64_t *)src < 0x40) {
+        if (enc_len == 1 || (enc_len == 0 && *(const uint64_t *)src < 0x40)) {
             ensure(pos + 1 <= buf_len, "buf len %u insufficient", buf_len);
             buf[i++] = *(const uint8_t *)src;
             log_enc(uint64_t, fmt);
 
-        } else if (*(const uint64_t *)src < (0x40 << 8)) {
+        } else if (enc_len == 2 ||
+                   (enc_len == 0 && *(const uint64_t *)src < (0x40 << 8))) {
             ensure(pos + 2 <= buf_len, "buf len %u insufficient", buf_len);
             buf[i++] = 0x40 | *(const uint16_t *)src >> 8;
             buf[i++] = *(const uint16_t *)src & 0xff;
             log_enc(uint64_t, fmt);
 
-        } else if (*(const uint64_t *)src < (0x40 << 24)) {
+        } else if (enc_len == 4 ||
+                   (enc_len == 0 && *(const uint64_t *)src < (0x40 << 24))) {
             ensure(pos + 4 <= buf_len, "buf len %u insufficient", buf_len);
             const uint32_t v = htonl((0x80UL << 24) | *(const uint32_t *)src);
             memcpy(&buf[i], &v, 4);
@@ -145,6 +148,7 @@ uint16_t __attribute__((nonnull)) marshall_enc(uint8_t * const buf,
 
     case 1:
         // single byte to network byte order
+        ensure(enc_len == 0, "cannot set enc_len %u w/fixed-len enc", enc_len);
         ensure(pos + 1 <= buf_len, "buf len %u insufficient", buf_len);
         buf[i++] = *(const uint8_t *)src;
         log_enc(uint8_t, fmt);
@@ -152,6 +156,7 @@ uint16_t __attribute__((nonnull)) marshall_enc(uint8_t * const buf,
 
     case 2:
         // uint16_t to network byte order
+        ensure(enc_len == 0, "cannot set enc_len %u w/fixed-len enc", enc_len);
         ensure(pos + 2 <= buf_len, "buf len %u insufficient", buf_len);
         *(uint16_t *)(void *)&buf[i] = htons(*(const uint16_t *)src);
         i += 2;
@@ -160,6 +165,7 @@ uint16_t __attribute__((nonnull)) marshall_enc(uint8_t * const buf,
 
     case 4:
         // uint32_t to network byte order
+        ensure(enc_len == 0, "cannot set enc_len %u w/fixed-len enc", enc_len);
         ensure(pos + 4 <= buf_len, "buf len %u insufficient", buf_len);
         *(uint32_t *)(void *)&buf[i] = htonl(*(const uint32_t *)src);
         i += 4;
@@ -168,6 +174,7 @@ uint16_t __attribute__((nonnull)) marshall_enc(uint8_t * const buf,
 
     case 8:
         // uint64_t to network byte order
+        ensure(enc_len == 0, "cannot set enc_len %u w/fixed-len enc", enc_len);
         ensure(pos + 8 <= buf_len, "buf len %u insufficient", buf_len);
         *(uint64_t *)(void *)&buf[i] = htonll(*(const uint64_t *)src);
         i += 8;
@@ -200,7 +207,7 @@ marshall_dec(void * const dst,
              const uint8_t * const buf,
              const uint16_t buf_len,
              const uint16_t pos,
-             const uint16_t dst_len
+             const uint8_t dst_len
 #ifdef DEBUG_MARSHALL
              ,
              const char * const fmt,

@@ -440,11 +440,11 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 #define enc_tp(c, tp, var, w)                                                  \
     do {                                                                       \
         const uint16_t param = (tp);                                           \
-        i = enc((c)->tls.tp_buf, len, i, &param, sizeof(param), "%u");         \
+        i = enc((c)->tls.tp_buf, len, i, &param, sizeof(param), 0, "%u");      \
         const uint16_t bytes = (w);                                            \
-        i = enc((c)->tls.tp_buf, len, i, &bytes, sizeof(bytes), "%u");         \
+        i = enc((c)->tls.tp_buf, len, i, &bytes, sizeof(bytes), 0, "%u");      \
         if (w)                                                                 \
-            i = enc((c)->tls.tp_buf, len, i, &(var), bytes, "%u");             \
+            i = enc((c)->tls.tp_buf, len, i, &(var), bytes, 0, "%u");          \
     } while (0)
 
 
@@ -455,13 +455,13 @@ void init_tp(struct q_conn * const c)
 
     if (c->is_clnt) {
         i = enc(c->tls.tp_buf, len, i, &c->vers_initial,
-                sizeof(c->vers_initial), "0x%08x");
+                sizeof(c->vers_initial), 0, "0x%08x");
     } else {
-        i = enc(c->tls.tp_buf, len, i, &c->vers, sizeof(c->vers), "0x%08x");
+        i = enc(c->tls.tp_buf, len, i, &c->vers, sizeof(c->vers), 0, "0x%08x");
         const uint8_t vl = ok_vers_len * sizeof(ok_vers[0]);
-        i = enc(c->tls.tp_buf, len, i, &vl, sizeof(vl), "%u");
+        i = enc(c->tls.tp_buf, len, i, &vl, sizeof(vl), 0, "%u");
         for (uint8_t n = 0; n < ok_vers_len; n++)
-            i = enc(c->tls.tp_buf, len, i, &ok_vers[n], sizeof(ok_vers[n]),
+            i = enc(c->tls.tp_buf, len, i, &ok_vers[n], sizeof(ok_vers[n]), 0,
                     "0x%08x");
     }
 
@@ -482,9 +482,9 @@ void init_tp(struct q_conn * const c)
 
     if (!c->is_clnt) {
         const uint16_t p = TP_STATELESS_RESET_TOKEN;
-        i = enc(c->tls.tp_buf, len, i, &p, 2, "%u");
+        i = enc(c->tls.tp_buf, len, i, &p, 2, 0, "%u");
         const uint16_t w = sizeof(c->stateless_reset_token);
-        i = enc(c->tls.tp_buf, len, i, &w, 2, "%u");
+        i = enc(c->tls.tp_buf, len, i, &w, 2, 0, "%u");
         ensure(i + sizeof(c->stateless_reset_token) < len, "tp_buf overrun");
         memcpy(&c->tls.tp_buf[i], c->stateless_reset_token,
                sizeof(c->stateless_reset_token));
@@ -496,7 +496,7 @@ void init_tp(struct q_conn * const c)
     // encode length of all transport parameters
     const uint16_t enc_len = i - enc_len_pos - sizeof(enc_len);
     i = enc_len_pos;
-    enc(c->tls.tp_buf, len, i, &enc_len, 2, "%u");
+    enc(c->tls.tp_buf, len, i, &enc_len, 2, 0, "%u");
 
     c->tls.tp_ext[0] = (ptls_raw_extension_t){
         TLS_EXT_TYPE_TRANSPORT_PARAMETERS,
