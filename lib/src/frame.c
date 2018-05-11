@@ -96,6 +96,7 @@ dec_stream_frame(struct q_conn * const c,
         }
         s = new_stream(c, sid, false);
     }
+    meta(v).stream = s;
 
     // best case: new in-order data
     if (meta(v).stream_off == s->in_off) {
