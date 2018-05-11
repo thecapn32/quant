@@ -196,12 +196,12 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
     struct w_iov_sq x = sq_head_initializer(x);
     uint32_t encoded = 0;
     struct w_iov * v = from;
-    sq_foreach (v, &s->out, next) {
+    sq_foreach (v, &s->out, next) { // TODO: use sq_foreach_from
         if (meta(v).is_acked) {
-            warn(DBG,
-                 "skipping ACKed pkt " FMT_PNR_OUT " on str " FMT_SID
-                 " during %s",
-                 meta(v).hdr.nr, s->id, rtx ? "RTX" : "TX");
+            // warn(DBG,
+            //      "skipping ACKed pkt " FMT_PNR_OUT " on str " FMT_SID
+            //      " during %s",
+            //      meta(v).hdr.nr, s->id, rtx ? "RTX" : "TX");
             continue;
         }
 
