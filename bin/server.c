@@ -117,6 +117,14 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
     if (n) {
         struct w_iov_sq out = sq_head_initializer(out);
         q_alloc(d->w, &out, n);
+        // check whether we managed to allow enough buffers
+        if (w_iov_sq_len(&out) != n) {
+            warn(ERR, "could only allocate %u/%u bytes of buffer",
+                 w_iov_sq_len(&out), n);
+            q_free(d->c, &out);
+            return send_err(d, 500);
+        }
+
         // randomize data
         struct w_iov * v = 0;
         char c = 'A';
