@@ -365,7 +365,7 @@ void on_pkt_acked(struct q_conn * const c,
 #endif
 #endif
     // OnPacketAckedCC
-    if (is_rtxable(&meta(v))) {
+    if (is_rtxable(&meta(v)) && meta(v).is_lost == false) {
         c->rec.in_flight -= meta(v).tx_len;
         warn(DBG, "in_flight -%u = %" PRIu64, meta(v).tx_len, c->rec.in_flight);
     }

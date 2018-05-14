@@ -22,7 +22,7 @@ if(NOT WARP_LIB OR NOT WARP_INCLUDE)
   endif()
 
   externalproject_add(warp
-    # UPDATE_COMMAND "" # XXX do not commit with this being empty
+    UPDATE_COMMAND "" # XXX do not commit with this being empty
     GIT_REPOSITORY https://github.com/NTAP/warpcore.git
     GIT_SHALLOW 1
     GIT_TAG dev
@@ -53,7 +53,7 @@ set_target_properties(warpcore PROPERTIES
 
 
 externalproject_add(picotls
-  # UPDATE_COMMAND "" # XXX do not commit with this being empty
+  UPDATE_COMMAND "" # XXX do not commit with this being empty
   GIT_REPOSITORY https://github.com/h2o/picotls.git
   GIT_SHALLOW 1
   GIT_TAG 914fc78b9f88ca5e15aefeeff239e7e5c2d608c4
@@ -179,7 +179,7 @@ externalproject_add(nss
   SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/mozquic-prefix/src/nss
   GIT_REPOSITORY https://github.com/nss-dev/nss.git
   GIT_SHALLOW 1
-  GIT_TAG origin/NSS_3_36_BRANCH
+  # GIT_TAG origin/NSS_3_36_BRANCH
   CONFIGURE_COMMAND ""
   BUILD_COMMAND make nss_build_all USE_64=1
   BUILD_IN_SOURCE 1
@@ -189,8 +189,9 @@ externalproject_add(nss
 
 externalproject_add(mozquic
   DEPENDS nss
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/mcmanus/mozquic.git
+  # GIT_TAG draft-11
   GIT_SHALLOW 1
   PATCH_COMMAND sed -i "" -e "s/-Werror//g $<SEMICOLON> s|include/nspr|include|g" Makefile
   CONFIGURE_COMMAND ""
@@ -204,7 +205,7 @@ externalproject_add(mozquic
 # Use picoquic for testing against
 externalproject_add(picoquic
   DEPENDS picotls
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/private-octopus/picoquic.git
   GIT_SHALLOW 1
   # GIT_TAG draft-21
@@ -272,6 +273,19 @@ externalproject_add(quicker
   CONFIGURE_COMMAND ""
   BUILD_IN_SOURCE 1
   BUILD_COMMAND ""
+  INSTALL_COMMAND ""
+  EXCLUDE_FROM_ALL 1
+)
+
+
+set(TRACKER github.com/mpiraux/master-thesis)
+externalproject_add(quic-tracker
+  DEPENDS picotls
+  DOWNLOAD_COMMAND env GOPATH=${GOPATH} go get ${TRACKER}
+  UPDATE_COMMAND ""
+  # UPDATE_COMMAND env GOPATH=${GOPATH} go get -u ${TRACKER}
+  CONFIGURE_COMMAND ""
+  BUILD_COMMAND cd ${GOPATH}/src/${TRACKER}../pigotls && make -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}
   INSTALL_COMMAND ""
   EXCLUDE_FROM_ALL 1
 )

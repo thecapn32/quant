@@ -318,6 +318,7 @@ static inline __attribute__((nonnull)) struct w_iov *
 w_iov_dup(const struct w_iov * const v)
 {
     struct w_iov * const vdup = w_alloc_iov(v->w, v->len, 0);
+    ASAN_UNPOISON_MEMORY_REGION(&meta(vdup), sizeof(meta(vdup)));
     memcpy(vdup->buf, v->buf, v->len);
     vdup->ip = v->ip;
     vdup->port = v->port;

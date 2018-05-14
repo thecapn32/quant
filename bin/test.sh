@@ -11,7 +11,7 @@ s=${2:-quant}
 # port to run servers on
 addr=127.0.0.1
 port=4433 # mozquic server can only run on 4433 at the moment
-path=/index.html
+path=/10000
 dir=/Users/lars/Sites/lars/output
 cert=/etc/letsencrypt/live/slate.eggert.org/fullchain.pem
 key=/etc/letsencrypt/live/slate.eggert.org/privkey.pem
@@ -73,8 +73,8 @@ case $c in
                                 -ignorePKI -send-close"
                 ;;
         picoquic)
-                cc="pushd external/picoquic-prefix/src/picoquic; ./picoquicdemo \
-                        $addr $port -1; popd"
+                cc="external/picoquic-prefix/src/picoquic/picoquicdemo \
+                        $addr $port -1"
                 ;;
 
         quicker)
@@ -118,8 +118,8 @@ case $s in
                         -ignorePKI -send-close -0rtt"
                 ;;
         picoquic)
-                sc="pushd external/picoquic-prefix/src/picoquic/; ./picoquicdemo \
-                        -p $port -k $key -c $cert -1; popd"
+                sc="external/picoquic-prefix/src/picoquic/picoquicdemo \
+                        -p $port -k $key -c $cert -1"
                 ;;
         ats)
                 sed -i"" -e "s/.*proxy.config.http.server_ports.*/CONFIG proxy.config.http.server_ports STRING $port:quic/g" external/etc/trafficserver/records.config
