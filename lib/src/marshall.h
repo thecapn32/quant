@@ -34,7 +34,7 @@ extern uint16_t varint_sizeof(const uint8_t first_byte);
 
 
 #ifndef NDEBUG
-// #define DEBUG_MARSHALL
+#define DEBUG_MARSHALL
 #endif
 
 #ifdef DEBUG_MARSHALL
@@ -101,7 +101,8 @@ extern uint16_t marshall_enc(uint8_t * const buf,
 /// @param      dst_len  Length to decode. Zero for varint decoding.
 /// @param      fmt      Printf format for debug logging.
 ///
-/// @return     Buffer offset of byte following the decoded data.
+/// @return     Buffer offset of byte following the decoded data, or UINT16_MAX
+///             if the decoding failed.
 ///
 #define dec(dst, buf, buf_len, pos, dst_len, fmt)                              \
     marshall_dec(dst, buf, buf_len, pos, dst_len,                              \
@@ -126,5 +127,47 @@ extern uint16_t marshall_dec(void * const dst,
                              const unsigned line,
                              const char * const buf_str,
                              const char * const dst_str
+#endif
+);
+
+
+#ifdef DEBUG_MARSHALL
+/// Decodes @p dst_len bytes of raw data starting at position @p pos of buffer
+/// @p buf (which has total length @p buf_len) info variable @p dst, using
+/// printf format string @p fmt to format the data for debug logging.
+///
+/// @param      dst      Destination to decode into.
+/// @param      buf      Buffer to decode from.
+/// @param      buf_len  Buffer length.
+/// @param      pos      Buffer position to start decoding from.
+/// @param      dst_len  Length to decode. Zero for varint decoding.
+/// @param      fmt      Printf format for debug logging.
+///
+/// @return     Buffer offset of byte following the decoded data, or UINT16_MAX
+///             if the decoding failed.
+///
+#define dec_buf(dst, buf, buf_len, pos, dst_len, fmt)                          \
+    marshall_dec_buf(dst, buf, buf_len, pos, dst_len,                          \
+                     "dec %u byte%s (%s) from %s[%u..%u] into %s = " fmt NRM,  \
+                     __func__, __FILE__, __LINE__, #buf, #dst)
+#else
+#define dec_buf(dst, buf, buf_len, pos, dst_len, fmt)                          \
+    marshall_dec_buf(dst, buf, buf_len, pos, dst_len)
+#endif
+
+
+extern uint16_t marshall_dec_buf(void * const dst,
+                                 const uint8_t * const buf,
+                                 const uint16_t buf_len,
+                                 const uint16_t pos,
+                                 const uint8_t dst_len
+#ifdef DEBUG_MARSHALL
+                                 ,
+                                 const char * const fmt,
+                                 const char * const func,
+                                 const char * const file,
+                                 const unsigned line,
+                                 const char * const buf_str,
+                                 const char * const dst_str
 #endif
 );

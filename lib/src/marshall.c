@@ -45,6 +45,7 @@
 #endif
 
 #include "marshall.h"
+#include "quic.h"
 
 #ifdef DEBUG_MARSHALL
 #include <stdbool.h>
@@ -226,21 +227,30 @@ marshall_dec(void * const dst,
         // varint decoding
         *(uint64_t *)dst = 0;
         if (buf[pos] < 0x40) {
-            ensure(pos + 1 <= buf_len, "decoding from pos %u > buf len %u",
-                   pos + 1, buf_len);
+            if (unlikely(pos + 1 > buf_len)) {
+                warn(WRN, "cannot decode from pos %u > buf len %u", pos + 1,
+                     buf_len);
+                return UINT16_MAX;
+            }
             *(uint8_t *)dst = buf[i++];
             log_dec(uint64_t);
 
         } else if (buf[pos] < 0x80) {
-            ensure(pos + 2 <= buf_len, "decoding from pos %u > buf len %u",
-                   pos + 2, buf_len);
+            if (unlikely(pos + 2 > buf_len)) {
+                warn(WRN, "cannot decode from pos %u > buf len %u", pos + 2,
+                     buf_len);
+                return UINT16_MAX;
+            }
             *(uint16_t *)dst = (uint16_t)((buf[i++] & 0x3f) << 8);
             *(uint16_t *)dst |= buf[i++];
             log_dec(uint64_t);
 
         } else if (buf[pos] < 0xc0) {
-            ensure(pos + 4 <= buf_len, "decoding from pos %u > buf len %u",
-                   pos + 4, buf_len);
+            if (unlikely(pos + 4 > buf_len)) {
+                warn(WRN, "cannot decode from pos %u > buf len %u", pos + 4,
+                     buf_len);
+                return UINT16_MAX;
+            }
             *(uint32_t *)dst =
                 ntohl(*(const uint32_t *)(const void *)&buf[pos]) &
                 0x3fffffffUL;
@@ -248,8 +258,11 @@ marshall_dec(void * const dst,
             log_dec(uint64_t);
 
         } else {
-            ensure(pos + 8 <= buf_len, "decoding from pos %u > buf len %u",
-                   pos + 8, buf_len);
+            if (unlikely(pos + 8 > buf_len)) {
+                warn(WRN, "cannot decode from pos %u > buf len %u", pos + 8,
+                     buf_len);
+                return UINT16_MAX;
+            }
             *(uint64_t *)dst =
                 ntohll(*(const uint64_t *)(const void *)&buf[pos]) &
                 0x3fffffffffffffffULL;
@@ -260,16 +273,22 @@ marshall_dec(void * const dst,
 
     case 1:
         // single byte from network byte order
-        ensure(pos + 1 <= buf_len, "decoding from pos %u > buf len %u", pos + 1,
-               buf_len);
+        if (unlikely(pos + 1 > buf_len)) {
+            warn(WRN, "cannot decode from pos %u > buf len %u", pos + 1,
+                 buf_len);
+            return UINT16_MAX;
+        }
         *(uint8_t *)dst = buf[i++];
         log_dec(uint8_t);
         break;
 
     case 2:
         // uint16_t from network byte order
-        ensure(pos + 2 <= buf_len, "decoding from pos %u > buf len %u", pos + 2,
-               buf_len);
+        if (unlikely(pos + 2 > buf_len)) {
+            warn(WRN, "cannot decode from pos %u > buf len %u", pos + 2,
+                 buf_len);
+            return UINT16_MAX;
+        }
         *(uint16_t *)dst = ntohs(*(const uint16_t *)(const void *)&buf[pos]);
         i += 2;
         log_dec(uint16_t);
@@ -277,8 +296,11 @@ marshall_dec(void * const dst,
 
     case 4:
         // uint32_t from network byte order
-        ensure(pos + 4 <= buf_len, "decoding from pos %u > buf len %u", pos + 4,
-               buf_len);
+        if (unlikely(pos + 4 > buf_len)) {
+            warn(WRN, "cannot decode from pos %u > buf len %u", pos + 4,
+                 buf_len);
+            return UINT16_MAX;
+        }
         *(uint32_t *)dst = ntohl(*(const uint32_t *)(const void *)&buf[pos]);
         i += 4;
         log_dec(uint32_t);
@@ -286,8 +308,11 @@ marshall_dec(void * const dst,
 
     case 8:
         // uint64_t from network byte order
-        ensure(pos + 8 <= buf_len, "decoding from pos %u > buf len %u", pos + 8,
-               buf_len);
+        if (unlikely(pos + 8 > buf_len)) {
+            warn(WRN, "cannot decode from pos %u > buf len %u", pos + 8,
+                 buf_len);
+            return UINT16_MAX;
+        }
         *(uint64_t *)dst = ntohll(*(const uint64_t *)(const void *)&buf[pos]);
         i += 8;
         log_dec(uint64_t);
@@ -297,5 +322,40 @@ marshall_dec(void * const dst,
         die("cannot decode length %u", dst_len);
     }
 
+    return i;
+}
+
+
+extern uint16_t __attribute__((nonnull))
+marshall_dec_buf(void * const dst,
+                 const uint8_t * const buf,
+                 const uint16_t buf_len,
+                 const uint16_t pos,
+                 const uint8_t dst_len
+#ifdef DEBUG_MARSHALL
+                 ,
+                 const char * const fmt,
+                 const char * const func,
+                 const char * const file,
+                 const unsigned line,
+                 const char * const buf_str,
+                 const char * const dst_str
+#endif
+)
+{
+    uint16_t i = pos;
+    if (unlikely(pos + dst_len > buf_len)) {
+        warn(WRN, "cannot decode from pos %u > buf len %u", pos + 4, buf_len);
+        return UINT16_MAX;
+    }
+
+    memcpy(dst, &buf[pos], dst_len);
+#ifdef DEBUG_MARSHALL
+    if (unlikely(DLEVEL >= DBG && util_dlevel >= DBG))
+        util_warn(DBG, false, func, file, line, fmt, i - pos, plural(i - pos),
+                  (dst_len ? "fix" : "var"), buf_str, pos, i - 1, dst_str,
+                  hex2str(dst, dst_len));
+#endif
+    i += dst_len;
     return i;
 }

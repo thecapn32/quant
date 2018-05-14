@@ -721,9 +721,8 @@ void rx(struct ev_loop * const l,
         sq_remove_head(&i, next);
 
         const bool is_clnt = w_connected(ws);
-        dec_pkt_hdr_initial(v, is_clnt);
         struct q_conn * c = 0;
-        if (meta(v).is_valid == false) {
+        if (dec_pkt_hdr_initial(v, is_clnt) == false) {
             warn(ERR, "received invalid %u-byte pkt, ignoring", v->len);
             q_free_iov(c, v);
             continue;
@@ -789,7 +788,11 @@ void rx(struct ev_loop * const l,
         }
 
         if (meta(v).hdr.vers || !is_set(F_LONG_HDR, meta(v).hdr.flags))
-            dec_pkt_hdr_remainder(v, c, &i);
+            if (dec_pkt_hdr_remainder(v, c, &i) == false) {
+                warn(ERR, "received invalid %u-byte pkt, ignoring", v->len);
+                q_free_iov(c, v);
+                continue;
+            }
 
         log_pkt("RX", v);
 

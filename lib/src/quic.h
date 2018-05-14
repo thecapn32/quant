@@ -82,8 +82,7 @@ struct pkt_meta {
     uint8_t is_rtxed : 1;       ///< Does the w_iov hold truncated data?
     uint8_t is_acked : 1;       ///< Is the w_iov ACKed?
     uint8_t is_lost : 1;        ///< Have we marked this w_iov as lost?
-    uint8_t is_valid : 1;       ///< Is the packet well-formed?
-    uint8_t : 4;
+    uint8_t : 5;
     bitstr_t bit_decl(frames, MAX_FRAM_TYPE + 1); ///< Frames present in pkt.
     uint8_t _unused[2];
     struct pkt_hdr hdr;
@@ -163,6 +162,22 @@ pm_cpy(struct pkt_meta * const dst, struct pkt_meta * const src)
         (v)->buf += Q_OFFSET;                                                  \
         (v)->len -= Q_OFFSET;                                                  \
     } while (0)
+
+
+#define hex2str(buf, len)                                                      \
+    __extension__({                                                            \
+        static char _str[2 * 32 + 1] = "0";                                    \
+        static const char _hex_str[] = "0123456789abcdef";                     \
+        int _j;                                                                \
+        for (_j = 0; _j < len && _j < 32; _j++) {                              \
+            _str[_j * 2] = _hex_str[(((const uint8_t *)buf)[_j] >> 4) & 0x0f]; \
+            _str[_j * 2 + 1] = _hex_str[((const uint8_t *)buf)[_j] & 0x0f];    \
+        }                                                                      \
+        if (_j == 32)                                                          \
+            _str[_j * 2 - 1] = _str[_j * 2 - 2] = _str[_j * 2 - 3] = '.';      \
+        _str[_j * 2] = 0;                                                      \
+        _str;                                                                  \
+    })
 
 
 #define is_rtxable(p) (p)->stream_header_pos

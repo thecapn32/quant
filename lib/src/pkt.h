@@ -77,10 +77,10 @@ struct q_stream;
 struct w_iov;
 struct w_iov_sq;
 
-extern void __attribute__((nonnull))
+extern bool __attribute__((nonnull))
 dec_pkt_hdr_initial(const struct w_iov * const v, const bool is_clnt);
 
-extern void __attribute__((nonnull))
+extern bool __attribute__((nonnull))
 dec_pkt_hdr_remainder(struct w_iov * const v,
                       struct q_conn * const c,
                       struct w_iov_sq * const i);

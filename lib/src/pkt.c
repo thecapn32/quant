@@ -386,42 +386,36 @@ tx:
 }
 
 
-void dec_pkt_hdr_initial(const struct w_iov * const v, const bool is_clnt)
+bool dec_pkt_hdr_initial(const struct w_iov * const v, const bool is_clnt)
 {
-    meta(v).is_valid = true;
-    meta(v).hdr.flags = *v->buf;
+    uint16_t ret = dec(&meta(v).hdr.flags, v->buf, v->len, 0, 1, "0x%02x");
+    if (unlikely(ret == UINT16_MAX))
+        return false;
     meta(v).hdr.type = pkt_type(*v->buf);
-#ifdef DEBUG_MARSHALL
-    warn(DBG, "dec 1 byte from v->buf[%u..%u] into &meta(v).hdr.flags = 0x%02x",
-         meta(v).hdr.hdr_len, meta(v).hdr.hdr_len + 1, meta(v).hdr.flags);
-#endif
 
     if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
-        meta(v).hdr.hdr_len =
-            dec(&meta(v).hdr.vers, v->buf, v->len, 1, 4, "0x%08x");
+        ret = dec(&meta(v).hdr.vers, v->buf, v->len, 1, 4, "0x%08x");
+        if (unlikely(ret == UINT16_MAX))
+            return false;
+        meta(v).hdr.hdr_len = ret;
 
         // check if the packet type/version combo makes sense
         if (meta(v).hdr.vers &&
-            (meta(v).hdr.type > F_LH_INIT || meta(v).hdr.type < F_LH_0RTT)) {
-            meta(v).is_valid = false;
-            return;
-        }
+            (meta(v).hdr.type > F_LH_INIT || meta(v).hdr.type < F_LH_0RTT))
+            return false;
 
-        meta(v).hdr.hdr_len =
-            dec(&meta(v).hdr.dcid.len, v->buf, v->len, 5, 1, "0x%02x");
+        ret = dec(&meta(v).hdr.dcid.len, v->buf, v->len, 5, 1, "0x%02x");
+        if (unlikely(ret == UINT16_MAX))
+            return false;
+        meta(v).hdr.hdr_len = ret;
+
         meta(v).hdr.dcid.len >>= 4;
         if (meta(v).hdr.dcid.len) {
             meta(v).hdr.dcid.len += 3;
-            memcpy(&meta(v).hdr.dcid.id, &v->buf[6], meta(v).hdr.dcid.len);
-#ifdef DEBUG_MARSHALL
-            warn(
-                DBG,
-                "dec %u byte%s from v->buf[%u..%u] into &meta(v).hdr.dcid = %s",
-                meta(v).hdr.dcid.len, plural(meta(v).hdr.dcid.len),
-                meta(v).hdr.hdr_len,
-                meta(v).hdr.hdr_len + meta(v).hdr.dcid.len - 1,
-                cid2str(&meta(v).hdr.dcid));
-#endif
+            ret = dec_buf(&meta(v).hdr.dcid.id, v->buf, v->len, 6,
+                          meta(v).hdr.dcid.len, "%s");
+            if (unlikely(ret == UINT16_MAX))
+                return false;
             meta(v).hdr.hdr_len += meta(v).hdr.dcid.len;
         }
 
@@ -429,54 +423,48 @@ void dec_pkt_hdr_initial(const struct w_iov * const v, const bool is_clnt)
         meta(v).hdr.scid.len &= 0x0f;
         if (meta(v).hdr.scid.len) {
             meta(v).hdr.scid.len += 3;
-            memcpy(&meta(v).hdr.scid.id, &v->buf[meta(v).hdr.hdr_len],
-                   meta(v).hdr.scid.len);
-#ifdef DEBUG_MARSHALL
-            warn(
-                DBG,
-                "dec %u byte%s from v->buf[%u..%u] into &meta(v).hdr.scid = %s",
-                meta(v).hdr.scid.len, plural(meta(v).hdr.scid.len),
-                meta(v).hdr.hdr_len,
-                meta(v).hdr.hdr_len + meta(v).hdr.scid.len - 1,
-                cid2str(&meta(v).hdr.scid));
-#endif
+            ret = dec_buf(&meta(v).hdr.scid.id, v->buf, v->len,
+                          meta(v).hdr.hdr_len, meta(v).hdr.scid.len, "%s");
+            if (unlikely(ret == UINT16_MAX))
+                return false;
             meta(v).hdr.hdr_len += meta(v).hdr.scid.len;
         }
 
         if (meta(v).hdr.vers == 0)
             // version negotiation packet
-            return;
+            return true;
 
         uint64_t plen = 0;
         meta(v).hdr.hdr_len =
             dec(&plen, v->buf, v->len, meta(v).hdr.hdr_len, 0, "%" PRIu64);
         meta(v).hdr.plen = (uint16_t)plen;
-
-        return;
+        return true;
     }
 
     meta(v).hdr.hdr_len = 1;
 
     // this logic depends on picking a SCID with a known length during handshake
     meta(v).hdr.dcid.len = (is_clnt ? CLNT_SCID_LEN : SERV_SCID_LEN);
-    memcpy(&meta(v).hdr.dcid.id, &v->buf[1], meta(v).hdr.dcid.len);
-#ifdef DEBUG_MARSHALL
-    warn(DBG, "dec %u byte%s from v->buf[%u..%u] into &meta(v).hdr.dcid = %s",
-         meta(v).hdr.dcid.len, plural(meta(v).hdr.dcid.len),
-         meta(v).hdr.hdr_len, meta(v).hdr.hdr_len + meta(v).hdr.dcid.len - 1,
-         cid2str(&meta(v).hdr.dcid));
-#endif
+
+    ret = dec_buf(&meta(v).hdr.dcid.id, v->buf, v->len, 1, meta(v).hdr.dcid.len,
+                  "%s");
+    if (unlikely(ret == UINT16_MAX))
+        return false;
     meta(v).hdr.hdr_len += meta(v).hdr.dcid.len;
+    return true;
 }
 
 
-void dec_pkt_hdr_remainder(struct w_iov * const v,
+bool dec_pkt_hdr_remainder(struct w_iov * const v,
                            struct q_conn * const c,
                            struct w_iov_sq * const i)
 {
     if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
         uint32_t nr = 0;
-        dec(&nr, v->buf, v->len, meta(v).hdr.hdr_len, 4, "%u");
+        uint16_t ret = dec(&nr, v->buf, v->len, meta(v).hdr.hdr_len, 4, "%u");
+        if (unlikely(ret == UINT16_MAX))
+            return false;
+
         meta(v).hdr.nr = nr;
         meta(v).hdr.hdr_len += 4;
 
@@ -495,19 +483,22 @@ void dec_pkt_hdr_remainder(struct w_iov * const v,
                  pkt_type(*vdup->buf), vdup->len);
         }
 
-        return;
+    } else {
+        static const uint8_t pkt_nr_lens[] = {sizeof(uint8_t), sizeof(uint16_t),
+                                              sizeof(uint32_t)};
+        const uint8_t nr_len = pkt_nr_lens[meta(v).hdr.type];
+        const uint64_t next = diet_max(&c->recv) + 1;
+        uint64_t nr = next;
+        uint16_t ret =
+            dec(&nr, v->buf, v->len, meta(v).hdr.hdr_len, nr_len, "%u");
+        if (unlikely(ret == UINT16_MAX))
+            return false;
+
+        meta(v).hdr.hdr_len += nr_len;
+        const uint64_t alt = nr + (UINT64_C(1) << (nr_len * 8));
+        const uint64_t d1 = next >= nr ? next - nr : nr - next;
+        const uint64_t d2 = next >= alt ? next - alt : alt - next;
+        meta(v).hdr.nr = d1 < d2 ? nr : alt;
     }
-
-    static const uint8_t pkt_nr_lens[] = {sizeof(uint8_t), sizeof(uint16_t),
-                                          sizeof(uint32_t)};
-    const uint8_t nr_len = pkt_nr_lens[meta(v).hdr.type];
-
-    const uint64_t next = diet_max(&c->recv) + 1;
-    uint64_t nr = next;
-    dec(&nr, v->buf, v->len, meta(v).hdr.hdr_len, nr_len, "%u");
-    meta(v).hdr.hdr_len += nr_len;
-    const uint64_t alt = nr + (UINT64_C(1) << (nr_len * 8));
-    const uint64_t d1 = next >= nr ? next - nr : nr - next;
-    const uint64_t d2 = next >= alt ? next - alt : alt - next;
-    meta(v).hdr.nr = d1 < d2 ? nr : alt;
+    return true;
 }

@@ -169,18 +169,7 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 #define is_inf(t) (fpclassify(t) == FP_INFINITE)
 
 
-#define cid2str(i)                                                             \
-    __extension__({                                                            \
-        static char _str[sizeof(*(i)) * 2 + 1] = "0";                          \
-        const char _hex_str[] = "0123456789abcdef";                            \
-        int _j;                                                                \
-        for (_j = 0; _j < (i)->len; _j++) {                                    \
-            _str[_j * 2] = _hex_str[((i)->id[_j] >> 4) & 0x0f];                \
-            _str[_j * 2 + 1] = _hex_str[(i)->id[_j] & 0x0f];                   \
-        }                                                                      \
-        _str[_j * 2] = 0;                                                      \
-        _str;                                                                  \
-    })
+#define cid2str(i) hex2str((i)->id, (i)->len)
 
 
 #define conn_to_state(c, s)                                                    \
