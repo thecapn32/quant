@@ -82,7 +82,7 @@ dec_stream_frame(struct q_conn * const c,
     struct q_stream * s = get_stream(c, sid);
     if (s == 0) {
         if (diet_find(&c->closed_streams, sid)) {
-            warn(WRN, "ignoring frame for closed str " FMT_SID " on %s conn %s",
+            warn(WRN, "ignoring frame for closed strm " FMT_SID " on %s conn %s",
                  sid, conn_type(c), cid2str(&c->scid));
             goto done;
         }

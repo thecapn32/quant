@@ -199,7 +199,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
     sq_foreach (v, &s->out, next) { // TODO: use sq_foreach_from
         if (meta(v).is_acked) {
             // warn(DBG,
-            //      "skipping ACKed pkt " FMT_PNR_OUT " on str " FMT_SID
+            //      "skipping ACKed pkt " FMT_PNR_OUT " on strm " FMT_SID
             //      " during %s",
             //      meta(v).hdr.nr, s->id, rtx ? "RTX" : "TX");
             continue;
@@ -207,7 +207,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
 
         if ((s->c->state == CONN_STAT_ESTB || s->c->is_clnt == false) &&
             s->out_off + v->len > s->out_data_max) {
-            warn(INF, "out of FC window for str " FMT_SID, meta(v).hdr.nr,
+            warn(INF, "out of FC window for strm " FMT_SID, meta(v).hdr.nr,
                  s->id);
             s->blocked = true;
             break;
@@ -215,7 +215,8 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
 
         if (!rtx && meta(v).tx_len != 0) {
             warn(DBG,
-                 "skipping %s pkt " FMT_PNR_OUT " on str " FMT_SID " during %s",
+                 "skipping %s pkt " FMT_PNR_OUT " on strm " FMT_SID
+                 " during %s",
                  meta(v).tx_len ? "already-tx'ed" : "fresh", meta(v).hdr.nr,
                  s->id, rtx ? "RTX" : "TX");
             continue;
@@ -267,7 +268,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
 static uint32_t
 tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
 {
-    warn(DBG, "other %s on %s conn %s str " FMT_SID " w/%u pkt%s in queue",
+    warn(DBG, "other %s on %s conn %s strm " FMT_SID " w/%u pkt%s in queue",
          rtx ? "RTX" : "TX", conn_type(s->c), cid2str(&s->c->scid), s->id,
          sq_len(&s->out), plural(sq_len(&s->out)));
 
@@ -351,7 +352,7 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
 
         if (!sq_empty(&s->out)) {
             warn(DBG,
-                 "data %sTX on %s conn %s str " FMT_SID " w/%u pkt%s in queue",
+                 "data %sTX on %s conn %s strm " FMT_SID " w/%u pkt%s in queue",
                  rtx ? "R" : "", conn_type(c), cid2str(&c->scid), s->id,
                  sq_len(&s->out), plural(sq_len(&s->out)));
             did_tx |= tx_stream(s, rtx, limit, 0);
