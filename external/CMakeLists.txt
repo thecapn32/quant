@@ -151,13 +151,13 @@ externalproject_add(ngtcp2
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/ngtcp2/ngtcp2.git
   GIT_SHALLOW 1
-  PATCH_COMMAND autoreconf -i
-  CONFIGURE_COMMAND
-    ./configure PKG_CONFIG_PATH=${CMAKE_CURRENT_BINARY_DIR}/lib/pkgconfig
-      --enable-werror --enable-debug --prefix=${CMAKE_CURRENT_BINARY_DIR}
-      --program-prefix=ngtcp2
+  CMAKE_ARGS
+    -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+    -DOPENSSL_ROOT_DIR=${CMAKE_CURRENT_BINARY_DIR}
+    -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+    -DENABLE_DEBUG=ON -DENABLE_ASAN=ON
   BUILD_IN_SOURCE 1
-  BUILD_COMMAND make -j8
+  INSTALL_COMMAND ""
   EXCLUDE_FROM_ALL 1
 )
 
