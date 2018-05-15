@@ -45,10 +45,11 @@
 #endif
 
 #include "marshall.h"
-#include "quic.h"
 
 #ifdef DEBUG_MARSHALL
 #include <stdbool.h>
+
+#include "quic.h"
 #endif
 
 

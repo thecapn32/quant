@@ -672,19 +672,9 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             // check if this is a stateless reset
             if (memcmp(&v->buf[v->len - 16], c->stateless_reset_token, 16) ==
                 0) {
-                warn(INF,
-                     BLU BLD "STATELESS RESET" NRM
-                             " token = %02x%02x%02x%02x%02x%02x%02x%02x "
-                             "%02x%02x%02x%02x%02x%02x%02x%02x",
-                     c->stateless_reset_token[0], c->stateless_reset_token[1],
-                     c->stateless_reset_token[2], c->stateless_reset_token[3],
-                     c->stateless_reset_token[4], c->stateless_reset_token[5],
-                     c->stateless_reset_token[6], c->stateless_reset_token[7],
-                     c->stateless_reset_token[8], c->stateless_reset_token[9],
-                     c->stateless_reset_token[10], c->stateless_reset_token[11],
-                     c->stateless_reset_token[12], c->stateless_reset_token[13],
-                     c->stateless_reset_token[14],
-                     c->stateless_reset_token[15]);
+                warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
+                     hex2str(c->stateless_reset_token,
+                             sizeof(c->stateless_reset_token)));
                 conn_to_state(c, CONN_STAT_DRNG);
                 goto done;
             } else

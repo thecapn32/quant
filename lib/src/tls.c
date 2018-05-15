@@ -412,17 +412,9 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             ensure(l == sizeof(c->stateless_reset_token), "valid len");
             memcpy(c->stateless_reset_token, &buf[i],
                    sizeof(c->stateless_reset_token));
-            warn(INF,
-                 "\tstateless_reset_token = %02x%02x%02x%02x%02x%02x%02x%02x "
-                 "%02x%02x%02x%02x%02x%02x%02x%02x",
-                 c->stateless_reset_token[0], c->stateless_reset_token[1],
-                 c->stateless_reset_token[2], c->stateless_reset_token[3],
-                 c->stateless_reset_token[4], c->stateless_reset_token[5],
-                 c->stateless_reset_token[6], c->stateless_reset_token[7],
-                 c->stateless_reset_token[8], c->stateless_reset_token[9],
-                 c->stateless_reset_token[10], c->stateless_reset_token[11],
-                 c->stateless_reset_token[12], c->stateless_reset_token[13],
-                 c->stateless_reset_token[14], c->stateless_reset_token[15]);
+            warn(INF, "\tstateless_reset_token = %s",
+                 hex2str(c->stateless_reset_token,
+                         sizeof(c->stateless_reset_token)));
             i += sizeof(c->stateless_reset_token);
             break;
 
@@ -892,8 +884,8 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
             if (ptls_is_psk_handshake(s->c->tls.t)) {
                 if (s->c->is_clnt)
                     s->c->did_0rtt =
-                        s->c->try_0rtt & s->c->tls.tls_hshake_prop.client
-                                             .early_data_accepted_by_peer;
+                        s->c->try_0rtt && s->c->tls.tls_hshake_prop.client
+                                              .early_data_accepted_by_peer;
                 else {
                     init_0rtt_prot(s->c);
                     s->c->did_0rtt = 1;

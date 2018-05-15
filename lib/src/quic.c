@@ -195,27 +195,19 @@ struct q_conn * q_connect(struct w_engine * const w,
         return 0;
     }
 
-    if (early_data && *early_data_stream) {
-        if (c->did_0rtt == false) {
-            warn(NTE, "0-RTT data on strm " FMT_SID " not sent, re-queueing",
-                 (*early_data_stream)->id);
-            (*early_data_stream)->out_off = 0;
-            struct w_iov * v = 0;
-            sq_foreach (v, &(*early_data_stream)->out, next) {
-                meta(v).tx_len = meta(v).is_acked = 0;
-                if (meta(v).stream)
-                    splay_remove(pm_nr_splay, &meta(v).stream->c->rec.sent_pkts,
-                                 &meta(v));
-            }
-            // kick TX watcher
-            ev_async_send(loop, &s->c->tx_w);
-
-        } else
-            // hand early data back to app after 0-RTT
-            sq_concat(early_data, &(*early_data_stream)->out);
-    }
-
     conn_to_state(c, CONN_STAT_ESTB);
+
+    if (early_data && *early_data_stream) {
+        if (c->did_0rtt == false ||
+            is_fully_acked(*early_data_stream) == false) {
+            warn(NTE, "0-RTT data not yet fully ACKed on strm " FMT_SID,
+                 (*early_data_stream)->id);
+            loop_run(q_write, *early_data_stream);
+        }
+
+        // hand early data back to app after 0-RTT
+        sq_concat(early_data, &(*early_data_stream)->out);
+    }
 
     warn(WRN, "%s conn %s connected%s, cipher %s", conn_type(c),
          cid2str(&c->scid), c->did_0rtt ? " after 0-RTT" : "",

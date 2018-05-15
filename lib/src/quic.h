@@ -169,7 +169,8 @@ pm_cpy(struct pkt_meta * const dst, struct pkt_meta * const src)
         static char _str[2 * 32 + 1] = "0";                                    \
         static const char _hex_str[] = "0123456789abcdef";                     \
         int _j;                                                                \
-        for (_j = 0; _j < len && _j < 32; _j++) {                              \
+        for (_j = 0; (unsigned long)_j < (unsigned long)len && _j < 32;        \
+             _j++) {                                                           \
             _str[_j * 2] = _hex_str[(((const uint8_t *)buf)[_j] >> 4) & 0x0f]; \
             _str[_j * 2 + 1] = _hex_str[((const uint8_t *)buf)[_j] & 0x0f];    \
         }                                                                      \
