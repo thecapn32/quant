@@ -132,7 +132,7 @@ static FILE * tls_log_file;
 #define TP_ACK_DELAY_EXPONENT 0x0007
 #define TP_INITIAL_MAX_STREAM_ID_UNI 0x0008
 
-#define TP_MAX TP_INITIAL_MAX_STREAM_ID_UNI
+#define TP_MAX (TP_INITIAL_MAX_STREAM_ID_UNI + 1)
 
 
 static int qhkdf_expand(ptls_hash_algorithm_t * const algo,
@@ -340,15 +340,25 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
     len = i + tpl;
 
     // keep track of which transport parameters we've seen before
-    bitstr_t bit_decl(tp_list, TP_MAX + 1) = {0};
+    bitstr_t bit_decl(tp_list, TP_MAX) = {0};
 
     while (i < len) {
         uint16_t tp;
-        i = dec(&tp, buf, len, i, sizeof(tp), "%u");
+        i = dec(&tp, buf, len, i, sizeof(tp), "0x%04x");
+
+        // skip unknown TPs
+        if (tp >= TP_MAX) {
+            uint16_t unknown_len;
+            i = dec(&unknown_len, buf, len, i, sizeof(unknown_len), "%u");
+            warn(WRN, "skipping unknown tp 0x%04x w/len %u", tp, unknown_len);
+            i += unknown_len;
+        }
 
         // check if this transport parameter is a duplicate
-        ensure(tp <= TP_MAX, "unknown tp %u", tp);
-        ensure(!bit_test(tp_list, tp), "tp %u is a duplicate", tp);
+        if (bit_test(tp_list, tp)) {
+            err_close(c, ERR_TLS_HSHAKE_FAIL, "tp 0x%04x is a duplicate", tp);
+            return 1;
+        }
 
         switch (tp) {
         case TP_INITIAL_MAX_STREAM_DATA:
