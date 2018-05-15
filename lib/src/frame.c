@@ -482,6 +482,7 @@ dec_path_response_frame(struct q_conn * const c,
             // unblock stream 0 SH flight
             struct q_stream * s = get_stream(c, 0);
             s->out_data_max = c->tp_peer.max_strm_data;
+            s->blocked = false;
         }
     }
 

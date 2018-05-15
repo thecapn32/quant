@@ -182,12 +182,10 @@ bool enc_pkt(struct q_stream * const s,
         goto tx;
     }
 
-    if (c->state == CONN_STAT_SEND_RTRY) {
+    if (c->state == CONN_STAT_SEND_RTRY)
         // echo pkt nr of client initial
         meta(v).hdr.nr = diet_min(&c->recv);
-        // TODO: randomize a new CID
-        // arc4random_buf(&c->id, sizeof(c->id));
-    } else
+    else
         // next pkt nr
         meta(v).hdr.nr = ++c->rec.lg_sent;
 
@@ -251,7 +249,7 @@ bool enc_pkt(struct q_stream * const s,
     meta(v).hdr.hdr_len = i;
     log_pkt("TX", v);
 
-    if (!splay_empty(&c->recv) && c->state >= CONN_STAT_SH) {
+    if (!splay_empty(&c->recv) && c->state >= CONN_STAT_SEND_RTRY) {
         i = enc_ack_frame(c, v, i);
     } else
         meta(v).ack_header_pos = 0;

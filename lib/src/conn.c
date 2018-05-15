@@ -205,7 +205,8 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             continue;
         }
 
-        if ((s->c->state == CONN_STAT_ESTB || s->c->is_clnt == false) &&
+        if ((s->c->state == CONN_STAT_ESTB ||
+             (s->c->is_clnt == false && s->c->state != CONN_STAT_SEND_RTRY)) &&
             s->out_off + v->len > s->out_data_max) {
             warn(INF, "out of FC window for strm " FMT_SID, meta(v).hdr.nr,
                  s->id);
