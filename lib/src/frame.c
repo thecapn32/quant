@@ -82,7 +82,8 @@ dec_stream_frame(struct q_conn * const c,
     struct q_stream * s = get_stream(c, sid);
     if (s == 0) {
         if (diet_find(&c->closed_streams, sid)) {
-            warn(WRN, "ignoring frame for closed strm " FMT_SID " on %s conn %s",
+            warn(WRN,
+                 "ignoring frame for closed strm " FMT_SID " on %s conn %s",
                  sid, conn_type(c), cid2str(&c->scid));
             goto done;
         }
@@ -288,10 +289,8 @@ dec_close_frame(struct q_conn * const c,
     ensure(reas_len + i <= v->len, "reason_len invalid");
 
     char reas_phr[UINT16_MAX];
-    if (reas_len) {
-        memcpy(reas_phr, &v->buf[i], reas_len);
-        i += reas_len;
-    }
+    if (reas_len)
+        i = dec_buf(&reas_phr, v->buf, v->len, i, (uint16_t)reas_len, "%s");
 
     conn_to_state(c, c->state < CONN_STAT_HSHK_DONE ? CONN_STAT_HSHK_FAIL
                                                     : CONN_STAT_DRNG);
@@ -941,10 +940,7 @@ uint16_t enc_close_frame(struct w_iov * const v,
     i = enc(v->buf, v->len, i, &rlen, 0, 0, "%" PRIu64);
 
     if (reas) {
-        memcpy(&v->buf[i], reas, rlen);
-        warn(INF, "enc %" PRIu64 "-byte reason phrase into [%u..%" PRIu64 "]",
-             rlen, i, i + rlen - 1);
-
+        i = enc_buf(v->buf, v->len, i, reas, (uint16_t)rlen, "%s");
         warn(INF,
              FRAM_OUT "%s" NRM " err=" RED "0x%04x" NRM " rlen=%" PRIu64
                       " reason=" RED "%.*s" NRM,
@@ -958,7 +954,7 @@ uint16_t enc_close_frame(struct w_iov * const v,
                                          : "APPLICATION_CLOSE",
              err_code);
 
-    return i + (uint16_t)rlen;
+    return i;
 }
 
 

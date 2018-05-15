@@ -34,7 +34,7 @@ extern uint16_t varint_sizeof(const uint8_t first_byte);
 
 
 #ifndef NDEBUG
-// #define DEBUG_MARSHALL
+#define DEBUG_MARSHALL
 #endif
 
 #ifdef DEBUG_MARSHALL
@@ -81,6 +81,47 @@ extern uint16_t marshall_enc(uint8_t * const buf,
                              const unsigned line,
                              const char * const buf_str,
                              const char * const src_str
+#endif
+);
+
+
+#ifdef DEBUG_MARSHALL
+/// Encodes @p src raw data into position @p pos of buffer @p buf (which has
+/// total length @p buf_len), using printf format string @p fmt to format the
+/// data for debug logging.
+///
+/// @param      buf      Buffer to encode into.
+/// @param      buf_len  Buffer length.
+/// @param      pos      Buffer position to start encoding from.
+/// @param      src      Source data.
+/// @param      enc_len  Length to encode.
+/// @param      fmt      Printf format for debug logging.
+///
+/// @return     Buffer offset of byte following the encoded data.
+///
+#define enc_buf(buf, buf_len, pos, src, enc_len, fmt)                          \
+    marshall_enc_buf(buf, buf_len, pos, src, enc_len,                          \
+                     "enc %s = " fmt NRM " into %u byte%s (%s) at %s[%u..%u]", \
+                     __func__, __FILE__, __LINE__, #buf, #src)
+#else
+#define enc_buf(buf, buf_len, pos, src, enc_len, fmt)                          \
+    marshall_enc_buf(buf, buf_len, pos, src, enc_len)
+#endif
+
+
+extern uint16_t marshall_enc_buf(uint8_t * const buf,
+                                 const uint16_t buf_len,
+                                 const uint16_t pos,
+                                 const void * const src,
+                                 const uint16_t enc_len
+#ifdef DEBUG_MARSHALL
+                                 ,
+                                 const char * const fmt,
+                                 const char * const func,
+                                 const char * const file,
+                                 const unsigned line,
+                                 const char * const buf_str,
+                                 const char * const src_str
 #endif
 );
 
@@ -160,7 +201,7 @@ extern uint16_t marshall_dec_buf(void * const dst,
                                  const uint8_t * const buf,
                                  const uint16_t buf_len,
                                  const uint16_t pos,
-                                 const uint8_t dst_len
+                                 const uint16_t dst_len
 #ifdef DEBUG_MARSHALL
                                  ,
                                  const char * const fmt,

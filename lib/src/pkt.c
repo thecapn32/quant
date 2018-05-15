@@ -118,24 +118,6 @@ needed_pkt_nr_len(struct q_conn * const c, const uint64_t n)
 }
 
 
-static uint16_t enc_cid(const char * const type
-#ifndef DEBUG_MARSHALL
-                        __attribute__((unused))
-#endif
-                        ,
-                        struct w_iov * const v,
-                        const uint16_t pos,
-                        const struct cid * const id)
-{
-#ifdef DEBUG_MARSHALL
-    warn(DBG, "enc %s = %s into %u byte%s at v->buf[%u..%u]", type, cid2str(id),
-         id->len, plural(id->len), pos, pos + id->len - 1);
-#endif
-    memcpy(&v->buf[pos], id->id, id->len);
-    return pos + id->len;
-}
-
-
 static uint16_t
 enc_lh_cids(struct q_conn * const c, struct w_iov * const v, const uint16_t pos)
 {
@@ -146,9 +128,11 @@ enc_lh_cids(struct q_conn * const c, struct w_iov * const v, const uint16_t pos)
         (uint8_t)(meta(v).hdr.scid.len ? meta(v).hdr.scid.len - 3 : 0);
     uint16_t i = enc(v->buf, v->len, pos, &cil, sizeof(cil), 0, "0x%02x");
     if (meta(v).hdr.dcid.len)
-        i = enc_cid("dcid", v, i, &meta(v).hdr.dcid);
+        i = enc_buf(v->buf, v->len, i, &meta(v).hdr.dcid.id,
+                    meta(v).hdr.dcid.len, "%s");
     if (meta(v).hdr.scid.len)
-        i = enc_cid("scid", v, i, &meta(v).hdr.scid);
+        i = enc_buf(v->buf, v->len, i, &meta(v).hdr.scid.id,
+                    meta(v).hdr.scid.len, "%s");
     return i;
 }
 
@@ -240,7 +224,7 @@ bool enc_pkt(struct q_stream * const s,
         i = enc(v->buf, v->len, i, &meta(v).hdr.nr, sizeof(uint32_t), 0,
                 GRN "%u" NRM);
     } else {
-        i = enc_cid("dcid", v, i, &c->dcid);
+        i = enc_buf(v->buf, v->len, i, &c->dcid.id, c->dcid.len, "%s");
         meta(v).hdr.dcid = c->dcid;
         i = enc(v->buf, v->len, i, &meta(v).hdr.nr, pkt_nr_len, 0,
                 GRN "%u" NRM);

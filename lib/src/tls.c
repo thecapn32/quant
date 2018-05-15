@@ -305,7 +305,7 @@ static uint16_t chk_tp_serv(const struct q_conn * const c,
         i = dec(&l, buf, len, i, sizeof(l), "%u");                             \
         ensure(l == 0 || l == ((w) ? (w) : sizeof(var)), "invalid len %u", l); \
         if (l)                                                                 \
-            i = dec((var), buf, len, i, (w) ? (w) : 0, "%u");                  \
+            i = dec(var, buf, len, i, (w) ? (w) : 0, "%u");                    \
     } while (0)
 
 
@@ -436,7 +436,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         const uint16_t bytes = (w);                                            \
         i = enc((c)->tls.tp_buf, len, i, &bytes, sizeof(bytes), 0, "%u");      \
         if (w)                                                                 \
-            i = enc((c)->tls.tp_buf, len, i, &(var), bytes, 0, "%u");          \
+            i = enc(c->tls.tp_buf, len, i, &(var), bytes, 0, "%u");            \
     } while (0)
 
 
@@ -478,11 +478,8 @@ void init_tp(struct q_conn * const c)
         const uint16_t w = sizeof(c->stateless_reset_token);
         i = enc(c->tls.tp_buf, len, i, &w, 2, 0, "%u");
         ensure(i + sizeof(c->stateless_reset_token) < len, "tp_buf overrun");
-        memcpy(&c->tls.tp_buf[i], c->stateless_reset_token,
-               sizeof(c->stateless_reset_token));
-        warn(DBG, "enc %u byte%s stateless_reset_token at [%u..%u]", w,
-             plural(w), i, i + w);
-        i += sizeof(c->stateless_reset_token);
+        i = enc_buf(c->tls.tp_buf, len, i, c->stateless_reset_token,
+                    sizeof(c->stateless_reset_token), "%s");
     }
 
     // encode length of all transport parameters
