@@ -138,8 +138,7 @@ pm_cpy(struct pkt_meta * const dst, struct pkt_meta * const src)
 {
     memcpy((uint8_t *)dst + offsetof(struct pkt_meta, tx_t),
            (uint8_t *)src + offsetof(struct pkt_meta, tx_t),
-           sizeof(struct pkt_meta) -
-               (sizeof(struct pkt_meta) - offsetof(struct pkt_meta, tx_t)));
+           sizeof(struct pkt_meta) - offsetof(struct pkt_meta, tx_t));
 }
 
 /// Offset of stream frame payload data in w_iov buffers.
