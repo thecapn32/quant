@@ -83,7 +83,7 @@ struct pkt_meta {
     uint8_t is_acked : 1;       ///< Is the w_iov ACKed?
     uint8_t is_lost : 1;        ///< Have we marked this w_iov as lost?
     uint8_t : 5;
-    bitstr_t bit_decl(frames, MAX_FRAM_TYPE + 1); ///< Frames present in pkt.
+    bitstr_t bit_decl(frames, NUM_FRAM_TYPES); ///< Frames present in pkt.
     uint8_t _unused[2];
     struct pkt_hdr hdr;
 };
@@ -188,18 +188,18 @@ static inline bool __attribute__((nonnull))
 is_ack_only(const struct pkt_meta * const p)
 {
     // cppcheck-suppress unreadVariable
-    bitstr_t bit_decl(frames, MAX_FRAM_TYPE + 1);
+    bitstr_t bit_decl(frames, NUM_FRAM_TYPES);
     memcpy(frames, p->frames, sizeof(frames));
 
     // padding doesn't count
     bit_clear(frames, FRAM_TYPE_PAD);
 
     int first_bit_set = -1, second_bit_set = -1;
-    bit_ffs(frames, MAX_FRAM_TYPE, &first_bit_set);
+    bit_ffs(frames, NUM_FRAM_TYPES, &first_bit_set);
 
     if (first_bit_set >= 0) {
         bit_clear(frames, first_bit_set);
-        bit_ffs(frames, MAX_FRAM_TYPE, &second_bit_set);
+        bit_ffs(frames, NUM_FRAM_TYPES, &second_bit_set);
     }
 
     return first_bit_set == FRAM_TYPE_ACK && second_bit_set == -1;
