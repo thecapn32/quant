@@ -200,7 +200,9 @@ struct q_conn * q_connect(struct w_engine * const w,
     if (early_data && *early_data_stream) {
         if (c->did_0rtt == false ||
             is_fully_acked(*early_data_stream) == false) {
-            warn(NTE, "0-RTT data not yet fully ACKed on strm " FMT_SID,
+            warn(DBG, "%s on strm " FMT_SID,
+                 c->did_0rtt ? "0-RTT data not fully ACK'ed yet"
+                             : "TX early data after 1-RTT handshake",
                  (*early_data_stream)->id);
             loop_run(q_write, *early_data_stream);
         }
