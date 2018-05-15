@@ -22,7 +22,7 @@ if(NOT WARP_LIB OR NOT WARP_INCLUDE)
   endif()
 
   externalproject_add(warp
-    UPDATE_COMMAND "" # XXX do not commit with this being empty
+    # UPDATE_COMMAND "" # XXX do not commit with this being empty
     GIT_REPOSITORY https://github.com/NTAP/warpcore.git
     GIT_SHALLOW 1
     GIT_TAG dev
@@ -53,7 +53,7 @@ set_target_properties(warpcore PROPERTIES
 
 
 externalproject_add(picotls
-  UPDATE_COMMAND "" # XXX do not commit with this being empty
+  # UPDATE_COMMAND "" # XXX do not commit with this being empty
   GIT_REPOSITORY https://github.com/h2o/picotls.git
   GIT_SHALLOW 1
   GIT_TAG 914fc78b9f88ca5e15aefeeff239e7e5c2d608c4

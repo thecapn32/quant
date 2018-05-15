@@ -73,7 +73,7 @@ script=$(basename -s .sh $0)
 function test_server {
         # run quant client and produce a pure ASCII log for post-processing
         local cache="/tmp/$script.$1.$pid.cache"
-        local opts="-i $iface -t3 -v5 -s $cache"
+        local opts="-i $iface -t3 -v4 -s $cache"
         local sed_pattern='s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]//g'
         local log_base="/tmp/$script.$1.$pid"
 
@@ -187,6 +187,6 @@ for s in "${sorted[@]}"; do
         printf "\\n" >> "$tmp"
 done
 
-cat "$tmp"
-# wdiff -n "$(dirname $0)/$script.result" "$tmp" | $colordiff
+# cat "$tmp"
+wdiff -n "$(dirname $0)/$script.result" "$tmp" | $colordiff
 rm -f "$tmp"
