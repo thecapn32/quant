@@ -610,11 +610,13 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             c->vers_initial = c->vers;
             init_tp(c);
 
+            // handle the ACK frame in the Retry
+            dec_frames(c, v);
+
             // forget we transmitted any packets
             reset_conn(c, false);
 
             // process the retry data on stream-0
-            dec_frames(c, v);
             process_stream0(c);
 
             // we can now reset stream-0 (inbound)
