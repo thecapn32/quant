@@ -346,4 +346,4 @@ w_iov_dup(const struct w_iov * const v)
 #define FMT_PNR_IN BLU "%" PRIu64 NRM
 #define FMT_PNR_OUT GRN "%" PRIu64 NRM
 
-#define FMT_SID RED "%" PRIu64 NRM
+#define FMT_SID BLD YEL "%" PRIu64 NRM

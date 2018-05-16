@@ -296,10 +296,11 @@ dec_close_frame(struct q_conn * const c,
                                                     : CONN_STAT_DRNG);
 
     warn(INF,
-         FRAM_IN "%s" NRM " err=" RED "0x%04x " NRM "rlen=%" PRIu64
-                 " reason=" RED "%.*s" NRM,
+         FRAM_IN "%s" NRM " err=%s0x%04x " NRM "rlen=%" PRIu64
+                 " reason=%s%.*s" NRM,
          type == FRAM_TYPE_CONN_CLSE ? "CONNECTION_CLOSE" : "APPLICATION_CLOSE",
-         err_code, reas_len, reas_len, reas_phr);
+         err_code ? RED : NRM, err_code, reas_len, err_code ? RED : NRM,
+         reas_len, reas_phr);
 
     return i;
 }
@@ -442,9 +443,8 @@ dec_stop_sending_frame(struct q_conn * const c,
     uint16_t err_code = 0;
     i = dec(&err_code, v->buf, v->len, i, sizeof(err_code), "0x%04x");
 
-    warn(INF,
-         FRAM_IN "STOP_SENDING" NRM " id=" FMT_SID " err=" RED "0x%04x" NRM,
-         sid, err_code);
+    warn(INF, FRAM_IN "STOP_SENDING" NRM " id=" FMT_SID " err=%s0x%04x" NRM,
+         sid, err_code ? RED : NRM, err_code);
 
     return i;
 }
@@ -529,9 +529,9 @@ dec_rst_stream_frame(struct q_conn * const c __attribute__((unused)),
     i = dec(&off, v->buf, v->len, i, 0, "%" PRIu64);
 
     warn(INF,
-         FRAM_IN "RST_STREAM" NRM " sid=" FMT_SID " err=" RED "0x%04x" NRM
+         FRAM_IN "RST_STREAM" NRM " sid=" FMT_SID " err=%s0x%04x" NRM
                  " off=%" PRIu64,
-         sid, err, off);
+         sid, err ? RED : NRM, err, off);
 
     // TODO: actually do something with this
 
@@ -942,17 +942,17 @@ uint16_t enc_close_frame(struct w_iov * const v,
     if (reas) {
         i = enc_buf(v->buf, v->len, i, reas, (uint16_t)rlen, "%s");
         warn(INF,
-             FRAM_OUT "%s" NRM " err=" RED "0x%04x" NRM " rlen=%" PRIu64
-                      " reason=" RED "%.*s" NRM,
+             FRAM_OUT "%s" NRM " err=%s0x%04x" NRM " rlen=%" PRIu64
+                      " reason=%s%.*s" NRM,
              type == FRAM_TYPE_CONN_CLSE ? "CONNECTION_CLOSE"
                                          : "APPLICATION_CLOSE",
-             err_code, rlen, rlen, reas);
-
+             err_code ? RED : NRM, err_code, rlen, err_code ? RED : NRM, rlen,
+             reas);
     } else
-        warn(INF, FRAM_OUT "%s" NRM " err=" RED "0x%04x" NRM,
+        warn(INF, FRAM_OUT "%s" NRM " err=%s0x%04x" NRM,
              type == FRAM_TYPE_CONN_CLSE ? "CONNECTION_CLOSE"
                                          : "APPLICATION_CLOSE",
-             err_code);
+             err_code ? RED : NRM, err_code);
 
     return i;
 }
