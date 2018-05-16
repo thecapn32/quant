@@ -146,7 +146,7 @@ function analyze {
 
         perl -n -e '/connected after 0-RTT/ and $x=1;
                     $x && /CLOSE err=0x0000/ && exit 1;' "$log"
-        [ $? == 1 ] && zrtt[$1]=Z
+        [ $? == 1 ] && zrtt[$1]=RZ
         rm -f "$log"
 
         # analyze hrr

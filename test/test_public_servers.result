@@ -1,14 +1,15 @@
                 live    fail    vneg    hshk    data    close   zrtt    hrr
-ats             *               V       H       D       c       Z
-f5              *               V       H       D       C
-minq            *
-mozquic         *               V       H       D       c       Z       S
-mvfst           *               V       H       D       C       Z
-ngtcp2          *               V       H       D       c       Z
-ngx_quic        *               V       H               c
-pandora                                                 c
-picoquic        *               V       H       D       C       Z       S
-quant           *               V       H       D       C       Z       S
-quicker         *               V       H       D       c       Z
-quicly          *               V       H       D       c       Z       S
-winquic         *               V       H       D       C       Z       S
+ats             *               V       H       D       c       RZ
+f5              *               V
+minq
+mozquic         *               V       H       D       c       RZ      S
+mvfst
+ngtcp2          *               V       H       D       c       RZ
+ngx_quic        *               V
+pandora
+picoquic        *               V       H       D       C       RZ      S
+quant           *               V       H       D       C       RZ      S
+quicker         *               V       H               c
+quicly
+quicr           *               V                       c
+winquic         *               V       H       D       C       RZ      S
