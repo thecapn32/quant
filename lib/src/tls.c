@@ -352,6 +352,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             i = dec(&unknown_len, buf, len, i, sizeof(unknown_len), "%u");
             warn(WRN, "skipping unknown tp 0x%04x w/len %u", tp, unknown_len);
             i += unknown_len;
+            continue;
         }
 
         // check if this transport parameter is a duplicate
