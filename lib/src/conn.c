@@ -348,7 +348,8 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
     struct q_stream * s = 0;
     splay_foreach (s, stream, &c->streams) {
         if ((is_fully_acked(s) && !stream_needs_ctrl(s)) ||
-            (rtx == false && s->blocked))
+            (rtx == false && s->blocked) ||
+            (s->id && c->state < CONN_STAT_ESTB))
             continue;
 
         do_stream_fc(s);

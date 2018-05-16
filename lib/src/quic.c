@@ -204,6 +204,7 @@ struct q_conn * q_connect(struct w_engine * const w,
                  c->did_0rtt ? "0-RTT data not fully ACK'ed yet"
                              : "TX early data after 1-RTT handshake",
                  (*early_data_stream)->id);
+            ev_async_send(loop, &s->c->tx_w);
             loop_run(q_write, *early_data_stream);
         }
 
