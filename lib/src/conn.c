@@ -208,9 +208,9 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
         if ((s->c->state == CONN_STAT_ESTB ||
              (s->c->is_clnt == false && s->c->state != CONN_STAT_SEND_RTRY &&
               s->c->state != CONN_STAT_HSHK_FAIL)) &&
-            s->out_off + v->len > s->out_data_max) {
-            warn(INF, "out of FC window for strm " FMT_SID, meta(v).hdr.nr,
-                 s->id);
+            s->out_data_max && s->out_off + v->len > s->out_data_max) {
+            warn(INF, "out of FC window for strm " FMT_SID ", %u+%u/%u", s->id,
+                 s->out_off, v->len, s->out_data_max);
             s->blocked = true;
             break;
         }
@@ -228,10 +228,9 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             rtx_pkt(s, v);
 
         if (s->c->state >= CONN_STAT_ESTB) {
-            // if we have less than two full packet's worth of window, block
-            if (s->out_data + 2 * MAX_PKT_LEN > s->out_data_max)
+            if (s->id && s->out_data + v->len > s->out_data_max)
                 s->blocked = true;
-            if (s->c->out_data + 2 * MAX_PKT_LEN > s->c->tp_peer.max_data)
+            if (s->c->out_data + v->len > s->c->tp_peer.max_data)
                 s->c->blocked = true;
         }
 
@@ -325,7 +324,7 @@ static void __attribute__((nonnull)) do_stream_fc(struct q_stream * const s)
     if (s->c->state < CONN_STAT_ESTB)
         return;
 
-    if (s->in_data + 2 * MAX_PKT_LEN > s->in_data_max) {
+    if (s->id && s->in_data + 2 * MAX_PKT_LEN > s->in_data_max) {
         s->tx_max_stream_data = true;
         s->in_data_max += 0x1000;
     }

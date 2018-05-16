@@ -64,8 +64,8 @@ new_stream(struct q_conn * const c, const uint64_t id, const bool active)
     sq_init(&s->out);
     sq_init(&s->in);
     s->id = id;
-    s->in_data_max = c->tp_local.max_strm_data;
-    s->out_data_max = c->tp_peer.max_strm_data;
+    s->in_data_max = id ? c->tp_local.max_strm_data : 0;
+    s->out_data_max = id ? c->tp_peer.max_strm_data : 0;
     if (active) {
         if (c->next_sid == 0)
             c->next_sid = c->is_clnt ? 4 : 1;

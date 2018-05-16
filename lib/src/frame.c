@@ -170,7 +170,7 @@ done:
     if (track_bytes)
         track_bytes_in(s, l);
 
-    if (meta(v).stream_off + l - 1 > s->in_data_max)
+    if (s->id && meta(v).stream_off + l - 1 > s->in_data_max)
         err_close(c, ERR_FLOW_CONTROL_ERR,
                   "stream %" PRIu64 " off %" PRIu64 " > in_data_max %" PRIu64,
                   s->id, meta(v).stream_off + l - 1, s->in_data_max);
@@ -316,7 +316,9 @@ dec_max_stream_data_frame(struct q_conn * const c,
 {
     uint64_t sid = 0;
     uint16_t i = dec(&sid, v->buf, v->len, pos + 1, 0, FMT_SID);
-    struct q_stream * const s = get_stream(c, sid);
+    struct q_stream * s = get_stream(c, sid);
+    if (s == 0)
+        s = new_stream(c, sid, false);
     ensure(s, "have stream %u", sid);
     i = dec(&s->out_data_max, v->buf, v->len, i, 0, "%" PRIu64);
     s->blocked = false;
@@ -484,7 +486,7 @@ dec_path_response_frame(struct q_conn * const c,
         if (c->is_clnt == false && c->state == CONN_STAT_HSHK_DONE) {
             // unblock stream 0 SH flight
             struct q_stream * s = get_stream(c, 0);
-            s->out_data_max = c->tp_peer.max_strm_data;
+            s->out_data_max = 0;
             s->blocked = false;
         }
     }
