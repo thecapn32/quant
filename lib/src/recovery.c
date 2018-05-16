@@ -250,8 +250,8 @@ void on_ack_rx_1(struct q_conn * const c,
     c->rec.lg_acked = ack;
     struct w_iov * const v = find_sent_pkt(c, ack);
     if (v == 0) {
-        warn(ERR, "got ACK for " FMT_PNR_OUT " that is missing from record",
-             ack);
+        if (diet_find(&c->acked, ack) == 0)
+            warn(ERR, "got ACK for pkt " FMT_PNR_OUT " never sent", ack);
         return;
     }
     c->rec.latest_rtt = ev_now(loop) - meta(v).tx_t;
