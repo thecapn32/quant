@@ -53,6 +53,7 @@ struct transport_params {
     uint16_t max_pkt;
     uint16_t idle_to;
     uint8_t ack_del_exp;
+    uint8_t stateless_reset_token[16];
     uint8_t _unused[3];
 };
 
@@ -122,8 +123,6 @@ struct q_conn {
 
     struct recovery rec; ///< Loss recovery state.
     struct tls tls;      ///< TLS state.
-
-    uint8_t stateless_reset_token[16];
 
     uint64_t path_chlg_in;
     uint64_t path_resp_out;

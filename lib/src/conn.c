@@ -400,8 +400,28 @@ verify_prot(struct q_conn * const c, struct w_iov * const v)
         return true;
 
     const uint16_t len = dec_aead(c, v);
-    if (len == 0)
+    if (len == 0) {
+        // AEAD failed, but this might be a stateless reset
+        warn(ERR, "%s %s",
+             hex2str(c->tp_peer.stateless_reset_token,
+                     sizeof(c->tp_peer.stateless_reset_token)),
+             hex2str(&v->buf[v->len - 16], 16));
+
+        if (memcmp(&v->buf[v->len - 16], c->tp_peer.stateless_reset_token,
+                   16) == 0) {
+            warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
+                 hex2str(c->tp_peer.stateless_reset_token,
+                         sizeof(c->tp_peer.stateless_reset_token)));
+            conn_to_state(c, CONN_STAT_DRNG);
+        } else
+            // it is not a stateless reset
+            err_close(c, ERR_TLS_HSHAKE_FAIL, "AEAD fail on 0x%02x-type %s pkt",
+                      pkt_type((v)->buf[0]),
+                      is_set(F_LONG_HDR, meta(v).hdr.flags) ? "LH" : "SH");
         return false;
+    }
+
+    // packet protection verified OK
     v->len -= AEAD_LEN;
     return true;
 }
@@ -483,18 +503,6 @@ reset_conn(struct q_conn * const c, const bool also_stream0_in)
     } while (0)
 
 
-#define ignore_prot_fail_pkt(c, v)                                             \
-    do {                                                                       \
-        if (verify_prot(c, v) == false) {                                      \
-            err_close(c, ERR_TLS_HSHAKE_FAIL,                                  \
-                      "AEAD fail on 0x%02x-type %s pkt",                       \
-                      pkt_type((v)->buf[0]),                                   \
-                      is_set(F_LONG_HDR, meta(v).hdr.flags) ? "LH" : "SH");    \
-            goto done;                                                         \
-        }                                                                      \
-    } while (0)
-
-
 static void __attribute__((nonnull))
 process_pkt(struct q_conn * const c, struct w_iov * const v)
 {
@@ -519,7 +527,8 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
 
             init_hshk_prot(c);
-            ignore_prot_fail_pkt(c, v);
+            if (verify_prot(c, v) == false)
+                goto done;
 
             // this is a new connection; server picks a new random cid
             struct cid new_scid = {.len = SERV_SCID_LEN};
@@ -603,7 +612,8 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             // handle an incoming retry packet
             warn(INF, "handling serv stateless retry");
 
-            ignore_prot_fail_pkt(c, v);
+            if (verify_prot(c, v) == false)
+                goto done;
 
             // server accepted version -
             // must use cid from retry for connection and re-init keys
@@ -634,7 +644,8 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             return;
         }
 
-        ignore_prot_fail_pkt(c, v);
+        if (verify_prot(c, v) == false)
+            goto done;
 
         // server accepted version -
         // if we get here, this should be a regular server-hello
@@ -643,7 +654,9 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         break;
 
     case CONN_STAT_RTRY:
-        ignore_prot_fail_pkt(c, v);
+        if (verify_prot(c, v) == false)
+            goto done;
+
         track_recv(c, meta(v).hdr.nr, meta(v).hdr.flags);
         dec_frames(c, v);
         break;
@@ -674,18 +687,8 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             goto done;
         }
 
-        if (verify_prot(c, v) == false) {
-            // check if this is a stateless reset
-            if (memcmp(&v->buf[v->len - 16], c->stateless_reset_token, 16) ==
-                0) {
-                warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
-                     hex2str(c->stateless_reset_token,
-                             sizeof(c->stateless_reset_token)));
-                conn_to_state(c, CONN_STAT_DRNG);
-                goto done;
-            } else
-                ignore_prot_fail_pkt(c, v);
-        }
+        if (verify_prot(c, v) == false)
+            goto done;
 
         track_recv(c, meta(v).hdr.nr, meta(v).hdr.flags);
         dec_frames(c, v);
@@ -970,7 +973,6 @@ struct q_conn * new_conn(struct w_engine * const w,
     }
 
     c->vers = c->vers_initial = vers;
-    arc4random_buf(c->stateless_reset_token, sizeof(c->stateless_reset_token));
 
     // initialize recovery state
     rec_init(c);

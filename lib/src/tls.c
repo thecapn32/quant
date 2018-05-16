@@ -419,13 +419,13 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             ensure(c->is_clnt, "am client");
             uint16_t l;
             i = dec(&l, buf, len, i, sizeof(l), "%u");
-            ensure(l == sizeof(c->stateless_reset_token), "valid len");
-            memcpy(c->stateless_reset_token, &buf[i],
-                   sizeof(c->stateless_reset_token));
+            ensure(l == sizeof(c->tp_peer.stateless_reset_token), "valid len");
+            memcpy(c->tp_peer.stateless_reset_token, &buf[i],
+                   sizeof(c->tp_peer.stateless_reset_token));
             warn(INF, "\tstateless_reset_token = %s",
-                 hex2str(c->stateless_reset_token,
-                         sizeof(c->stateless_reset_token)));
-            i += sizeof(c->stateless_reset_token);
+                 hex2str(c->tp_peer.stateless_reset_token,
+                         sizeof(c->tp_peer.stateless_reset_token)));
+            i += sizeof(c->tp_peer.stateless_reset_token);
             break;
 
         default:
@@ -483,13 +483,16 @@ void init_tp(struct q_conn * const c)
     enc_tp(c, TP_MAX_PACKET_SIZE, w_mtu(c->w), sizeof(uint16_t));
 
     if (!c->is_clnt) {
+        arc4random_buf(c->tp_local.stateless_reset_token,
+                       sizeof(c->tp_local.stateless_reset_token));
         const uint16_t p = TP_STATELESS_RESET_TOKEN;
         i = enc(c->tls.tp_buf, len, i, &p, 2, 0, "%u");
-        const uint16_t w = sizeof(c->stateless_reset_token);
+        const uint16_t w = sizeof(c->tp_local.stateless_reset_token);
         i = enc(c->tls.tp_buf, len, i, &w, 2, 0, "%u");
-        ensure(i + sizeof(c->stateless_reset_token) < len, "tp_buf overrun");
-        i = enc_buf(c->tls.tp_buf, len, i, c->stateless_reset_token,
-                    sizeof(c->stateless_reset_token), "%s");
+        ensure(i + sizeof(c->tp_local.stateless_reset_token) < len,
+               "tp_buf overrun");
+        i = enc_buf(c->tls.tp_buf, len, i, c->tp_local.stateless_reset_token,
+                    sizeof(c->tp_local.stateless_reset_token), "%s");
     }
 
     // encode length of all transport parameters
@@ -984,8 +987,8 @@ static void read_tickets()
         ensure(t->alpn, "calloc");
         ensure(fread(t->alpn, sizeof(*t->alpn), len, fp), "fread");
 
-        ensure(fread(&t->tp, sizeof(t->tp), 1, fp), "fwrite");
-        ensure(fread(&t->vers, sizeof(t->vers), 1, fp), "fwrite");
+        ensure(fread(&t->tp, sizeof(t->tp), 1, fp), "fread");
+        ensure(fread(&t->vers, sizeof(t->vers), 1, fp), "fread");
 
         ensure(fread(&len, sizeof(len), 1, fp), "fread");
         t->ticket_len = len;
