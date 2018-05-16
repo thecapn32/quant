@@ -407,11 +407,6 @@ verify_prot(struct q_conn * const c, struct w_iov * const v)
     const uint16_t len = dec_aead(c, v);
     if (len == 0) {
         // AEAD failed, but this might be a stateless reset
-        warn(ERR, "%s %s",
-             hex2str(c->tp_peer.stateless_reset_token,
-                     sizeof(c->tp_peer.stateless_reset_token)),
-             hex2str(&v->buf[v->len - 16], 16));
-
         if (memcmp(&v->buf[v->len - 16], c->tp_peer.stateless_reset_token,
                    16) == 0) {
             warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
