@@ -547,6 +547,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             // if the CH doesn't include any stream-0 data, bail
             if (meta(v).stream == 0 || meta(v).stream->id != 0) {
                 warn(ERR, "initial pkt w/o stream data");
+                conn_to_state(c, CONN_STAT_DRNG);
                 goto done;
             }
 
