@@ -291,9 +291,11 @@ tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
             sq_remove_head(&s->out, next);
     }
 
-    if (s->c->state == CONN_STAT_VERS_NEG_SENT)
-        // if we sent a version negotiation response, forget all rx'ed packets
+    if (s->c->state == CONN_STAT_VERS_NEG_SENT) {
+        // if we sent a version negotiation response, forget all packets
         diet_free(&s->c->recv);
+        diet_free(&s->c->acked);
+    }
 
     return did_tx;
 }
@@ -434,8 +436,9 @@ reset_conn(struct q_conn * const c, const bool also_stream0_in)
     // reset FC state
     c->in_data = c->out_data = 0;
 
-    // forget we received any packets
+    // forget we received or sent any packets
     diet_free(&c->recv);
+    diet_free(&c->acked);
 
     // remove all meta-data about RTX'ed packets
     struct pkt_meta *p, *tmp;
@@ -974,6 +977,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     splay_init(&c->streams);
     diet_init(&c->closed_streams);
     diet_init(&c->recv);
+    diet_init(&c->acked);
 
     // initialize idle timeout
     c->idle_alarm.data = c;
@@ -1045,6 +1049,7 @@ void free_conn(struct q_conn * const c)
 
     diet_free(&c->closed_streams);
     diet_free(&c->recv);
+    diet_free(&c->acked);
     free(c->peer_name);
     free_tls(c);
     if (c->err_reason)

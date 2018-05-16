@@ -108,6 +108,7 @@ struct q_conn {
     ev_timer ack_alarm;
 
     struct diet recv; ///< Received packet numbers still needing to be ACKed.
+    struct diet acked; ///< Sent packet numbers already ACKed.
 
     struct sockaddr_in peer; ///< Address of our peer.
     char * peer_name;

@@ -303,8 +303,9 @@ void on_pkt_acked(struct q_conn * const c,
                   const uint8_t flags)
 {
     struct w_iov * const v = find_sent_pkt(c, ack);
-    if (!v) {
-        warn(NTE, "got ACK for pkt " FMT_PNR_OUT " with no metadata", ack);
+    if (v == 0) {
+        if (diet_find(&c->acked, ack) == 0)
+            warn(ERR, "got ACK for pkt " FMT_PNR_OUT " never sent", ack);
         return;
     }
 
@@ -324,6 +325,7 @@ void on_pkt_acked(struct q_conn * const c,
         return;
     }
     warn(DBG, "first ACK for " FMT_PNR_OUT, ack);
+    diet_insert(&c->acked, ack, 0, ev_now(loop));
 
     // If a packet sent prior to RTO was ACKed, then the RTO was spurious.
     // Otherwise, inform congestion control.
