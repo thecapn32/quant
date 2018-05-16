@@ -894,8 +894,9 @@ void enter_closing(struct q_conn * const c)
         ev_timer_stop(loop, &c->idle_alarm);
 
         // start closing/draining alarm (3 * RTO)
-        const ev_tstamp dur = 3 * (c->rec.srtt + 4 * c->rec.rttvar);
-        ensure(dur > 0, "invalid alarm duration %f", dur);
+        const ev_tstamp dur =
+            3 * (is_zero(c->rec.srtt) ? kDefaultInitialRtt : c->rec.srtt) +
+            4 * c->rec.rttvar;
         warn(DBG, "closing/draining alarm in %f sec on %s conn %s", dur,
              conn_type(c), cid2str(&c->scid));
         ev_timer_init(&c->closing_alarm, enter_closed, dur, 0);
