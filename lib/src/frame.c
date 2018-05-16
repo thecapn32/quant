@@ -61,6 +61,10 @@ dec_stream_frame(struct q_conn * const c,
     uint64_t sid = 0;
     i = dec(&sid, v->buf, v->len, i, 0, FMT_SID);
 
+    ensure(sid == 0 || !is_set(F_LONG_HDR, meta(v).hdr.flags) ||
+               meta(v).hdr.type == F_LH_0RTT,
+           "sid %u in 0x%02x-type pkt", sid, meta(v).hdr.type);
+
     if (is_set(F_STREAM_OFF, type))
         i = dec(&meta(v).stream_off, v->buf, v->len, i, 0, "%" PRIu64);
     else
@@ -870,6 +874,10 @@ uint16_t enc_stream_frame(struct q_stream * const s,
                           struct w_iov * const v,
                           const uint16_t pos)
 {
+    ensure(s->id == 0 || !is_set(F_LONG_HDR, meta(v).hdr.flags) ||
+               meta(v).hdr.type == F_LH_0RTT,
+           "sid %u in 0x%02x-type pkt", s->id, meta(v).hdr.type);
+
     const uint64_t dlen = v->len - Q_OFFSET;
     ensure(dlen || s->state > STRM_STAT_OPEN,
            "no stream data or need to send FIN");
