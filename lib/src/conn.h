@@ -185,10 +185,7 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
         case CONN_STAT_VERS_NEG_SENT:                                          \
         case CONN_STAT_RTRY:                                                   \
         case CONN_STAT_SEND_RTRY:                                              \
-            break;                                                             \
         case CONN_STAT_HSHK_DONE:                                              \
-            c->rec.lg_acked = c->rec.lg_sent;                                  \
-            break;                                                             \
         case CONN_STAT_HSHK_FAIL:                                              \
         case CONN_STAT_CLSD:                                                   \
             break;                                                             \

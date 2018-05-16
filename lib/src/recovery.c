@@ -304,7 +304,7 @@ void on_pkt_acked(struct q_conn * const c,
 {
     struct w_iov * const v = find_sent_pkt(c, ack);
     if (!v) {
-        // warn(DBG, "got ACK for pkt " FMT_PNR_OUT " with no metadata", ack);
+        warn(NTE, "got ACK for pkt " FMT_PNR_OUT " with no metadata", ack);
         return;
     }
 
