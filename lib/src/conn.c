@@ -333,8 +333,7 @@ static void __attribute__((nonnull)) do_stream_fc(struct q_stream * const s)
 
 #define stream_needs_ctrl(s)                                                   \
     ((s)->tx_max_stream_data || (s)->c->tx_max_data ||                         \
-     (((s)->state == STRM_STAT_HCLO || (s)->state == STRM_STAT_CLSD) &&        \
-      (s)->fin_acked == false))
+     (((s)->state == STRM_STAT_HCLO)))
 
 
 void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
@@ -347,6 +346,10 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
     bool did_tx = false;
     struct q_stream * s = 0;
     splay_foreach (s, stream, &c->streams) {
+        // warn(ERR, "sid %u: %u && %u || %u && %u || %u && %u", s->id,
+        //      is_fully_acked(s), !stream_needs_ctrl(s), rtx == false,
+        //      s->blocked, s->id != 0, c->state < CONN_STAT_ESTB);
+
         if ((is_fully_acked(s) && !stream_needs_ctrl(s)) ||
             (rtx == false && s->blocked) ||
             (s->id && c->state < CONN_STAT_ESTB))
@@ -740,9 +743,6 @@ void rx(struct ev_loop * const l,
             q_free_iov(c, v);
             continue;
         }
-
-        if (v->len > MAX_PKT_LEN)
-            warn(WRN, "received %u-byte pkt (> %u max)", v->len, MAX_PKT_LEN);
 
         c = get_conn_by_cid(&meta(v).hdr.dcid, is_clnt);
         if (c == 0) {

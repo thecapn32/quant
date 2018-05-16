@@ -129,14 +129,43 @@ void q_free(struct q_conn * const c, struct w_iov_sq * const q)
     struct w_iov * v = sq_first(q);
     while (v) {
         struct w_iov * const next = sq_next(v, next);
-        // warn(CRT, "q_free idx %u strm %d", w_iov_idx(v),
-        //      meta(v).stream ? meta(v).stream->id : -1);
+        // warn(CRT, "q_free idx %u strm %d %" PRIu64, w_iov_idx(v),
+        //      meta(v).stream ? meta(v).stream->id : -1, meta(v).hdr.nr);
         splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
         meta(v) = (struct pkt_meta){0};
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         v = next;
     }
     w_free(q);
+}
+
+
+static void __attribute__((nonnull))
+do_write(struct q_stream * const s, struct w_iov_sq * const q, const bool fin)
+{
+    s->out_ack_cnt = 0;
+
+    if (fin)
+        strm_to_state(s, s->state == STRM_STAT_HCRM ? STRM_STAT_CLSD
+                                                    : STRM_STAT_HCLO);
+
+    // remember the last iov in the queue
+    struct w_iov * const prev_last = sq_last(&s->out, w_iov, next);
+
+    // kick TX watcher
+    ev_async_send(loop, &s->c->tx_w);
+    loop_run(q_write, s);
+
+    // the last packet in s->out may be a pure FIN - if so, don't return it
+    struct w_iov * const last = sq_last(&s->out, w_iov, next);
+    if (last && meta(last).stream_header_pos && stream_data_len(last) == 0) {
+        ensure(sq_next(prev_last, next) == last, "queue messed up");
+        sq_remove_after(&s->out, prev_last, next);
+        sq_concat(q, &s->out);
+        sq_insert_tail(&s->out, last, next);
+    } else
+        sq_concat(q, &s->out);
+    s->out_ack_cnt = 0;
 }
 
 
@@ -204,12 +233,10 @@ struct q_conn * q_connect(struct w_engine * const w,
                  c->did_0rtt ? "0-RTT data not fully ACK'ed yet"
                              : "TX early data after 1-RTT handshake",
                  (*early_data_stream)->id);
-            ev_async_send(loop, &s->c->tx_w);
-            loop_run(q_write, *early_data_stream);
-        }
-
-        // hand early data back to app after 0-RTT
-        sq_concat(early_data, &(*early_data_stream)->out);
+            do_write(*early_data_stream, early_data, fin);
+        } else
+            // hand early data back to app after 0-RTT
+            sq_concat(early_data, &(*early_data_stream)->out);
     }
 
     warn(WRN, "%s conn %s connected%s, cipher %s", conn_type(c),
@@ -237,29 +264,7 @@ void q_write(struct q_stream * const s,
 
     // add to stream
     sq_concat(&s->out, q);
-    s->out_ack_cnt = 0;
-
-    if (fin)
-        strm_to_state(s, s->state == STRM_STAT_HCRM ? STRM_STAT_CLSD
-                                                    : STRM_STAT_HCLO);
-
-    // remember the last iov in the queue
-    struct w_iov * const prev_last = sq_last(&s->out, w_iov, next);
-
-    // kick TX watcher
-    ev_async_send(loop, &s->c->tx_w);
-    loop_run(q_write, s);
-
-    // the last packet in s->out may be a pure FIN - if so, don't return it
-    struct w_iov * const last = sq_last(&s->out, w_iov, next);
-    if (last && meta(last).stream_header_pos && stream_data_len(last) == 0) {
-        ensure(sq_next(prev_last, next) == last, "queue messed up");
-        sq_remove_after(&s->out, prev_last, next);
-        sq_concat(q, &s->out);
-        sq_insert_tail(&s->out, last, next);
-    } else
-        sq_concat(q, &s->out);
-    s->out_ack_cnt = 0;
+    do_write(s, q, fin);
 
     warn(WRN, "wrote %u byte%s on %s conn %s strm " FMT_SID " %s", qlen,
          plural(qlen), conn_type(s->c), cid2str(&s->c->scid), s->id,

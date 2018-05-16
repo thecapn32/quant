@@ -57,10 +57,9 @@ struct q_stream {
 
     uint64_t id;
     uint8_t state;
-    uint8_t fin_acked : 1;
     uint8_t tx_max_stream_data : 1; ///< We need to open the receive window.
     uint8_t blocked : 1;            ///< We are receive-window-blocked.
-    uint8_t : 5;
+    uint8_t : 6;
     uint8_t _unused[6];
 };
 

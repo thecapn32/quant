@@ -296,7 +296,8 @@ extern void * api_arg;
 
 #define q_free_iov(c, v)                                                       \
     do {                                                                       \
-        /* warn(CRT, "q_free_iov idx %u", w_iov_idx(v)); */                    \
+        /* warn(CRT, "q_free_iov idx %u %" PRIu64, w_iov_idx(v),               \
+         * meta(v).hdr.nr); */                                                 \
         if (c)                                                                 \
             splay_remove(pm_nr_splay, &(c)->rec.sent_pkts, &meta(v));          \
         meta(v) = (struct pkt_meta){0};                                        \

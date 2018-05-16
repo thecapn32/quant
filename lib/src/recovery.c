@@ -325,7 +325,6 @@ void on_pkt_acked(struct q_conn * const c,
         return;
     }
     warn(DBG, "first ACK for " FMT_PNR_OUT, ack);
-    diet_insert(&c->acked, ack, 0, ev_now(loop));
 
     // If a packet sent prior to RTO was ACKed, then the RTO was spurious.
     // Otherwise, inform congestion control.
@@ -334,7 +333,18 @@ void on_pkt_acked(struct q_conn * const c,
         warn(DBG, "cwnd %u", c->rec.cwnd);
     }
     c->rec.hshake_cnt = c->rec.tlp_cnt = c->rec.rto_cnt = 0;
+    diet_insert(&c->acked, ack, 0, ev_now(loop));
     splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
+
+    // if this pkt was since RTX'ed, update the record
+    struct w_iov * r = v;
+    while (meta(r).is_rtxed) {
+        warn(DBG, FMT_PNR_OUT " was RTX'ed as " FMT_PNR_OUT, meta(r).hdr.nr,
+             meta(r).rtx->hdr.nr);
+        diet_insert(&c->acked, meta(r).rtx->hdr.nr, 0, ev_now(loop));
+        splay_remove(pm_nr_splay, &c->rec.sent_pkts, meta(r).rtx);
+        r = w_iov(c->w, pm_idx(meta(r).rtx));
+    }
 
     // stop ACKing packets that were contained in the ACK frame of this packet
     if (meta(v).ack_header_pos) {
