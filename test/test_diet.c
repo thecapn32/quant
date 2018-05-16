@@ -87,6 +87,7 @@ int main()
     util_dlevel = DLEVEL; // default to maximum compiled-in verbosity
 #endif
     struct diet d = diet_initializer(diet);
+    // cppcheck-suppress unreadVariable
     bitstr_t bit_decl(values, N);
 
     // insert some items
