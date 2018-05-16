@@ -102,7 +102,9 @@ function analyze {
         perl -n -e '/assertion failed/ && exit 1;' "$log"
         if [ $? == 1 ]; then
                 fail[$1]="X"
+                echo "Test with $1 crashed:"
                 tail -n 20 "$log"
+                echo
                 return
         fi
 
