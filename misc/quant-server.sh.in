@@ -12,8 +12,11 @@ export PATH="$PATH:~/bin"
 name=/var/www/html/log.html
 new=$(make_name $name)
 mv "$name" "$new"
-# don't email me anymore:
-# mail -s "$new" lars@netapp.com -A "$new" < /dev/null
+
+# send email if we crashed
+if grep -q 'assertion failed' "$new"; then
+        mail -s "$new" lars@netapp.com -A "$new" < /dev/null
+fi
 
 cat <<-EOF > /var/www/html/.htaccess
 RewriteRule ^log$ /$(basename "$new") [R]
