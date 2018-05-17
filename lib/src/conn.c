@@ -396,6 +396,15 @@ update_scid(struct q_conn * const c, const struct cid * const scid)
 }
 
 
+static void __attribute__((nonnull))
+update_ipnp(struct q_conn * const c, const struct sockaddr_in * const peer)
+{
+    splay_remove(ipnp_splay, &conns_by_ipnp, c);
+    c->peer = *peer;
+    splay_insert(ipnp_splay, &conns_by_ipnp, c);
+}
+
+
 static bool __attribute__((nonnull))
 verify_prot(struct q_conn * const c, struct w_iov * const v)
 {
@@ -740,11 +749,12 @@ void rx(struct ev_loop * const l,
             continue;
         }
 
+        const struct sockaddr_in peer = {.sin_family = AF_INET,
+                                         .sin_port = v->port,
+                                         .sin_addr = {.s_addr = v->ip}};
+
         c = get_conn_by_cid(&meta(v).hdr.dcid, is_clnt);
         if (c == 0) {
-            const struct sockaddr_in peer = {.sin_family = AF_INET,
-                                             .sin_port = v->port,
-                                             .sin_addr = {.s_addr = v->ip}};
             c = get_conn_by_ipnp(w_get_sport(ws), &peer, is_clnt);
             if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
                 if (!is_clnt) {
@@ -779,14 +789,23 @@ void rx(struct ev_loop * const l,
                 }
             }
 
-        } else if (meta(v).hdr.scid.len) {
-            if (memcmp(&meta(v).hdr.scid, &c->dcid, sizeof(c->dcid)) != 0)
-                warn(INF, "got new dcid %s for %s conn (was %s)",
-                     cid2str(&meta(v).hdr.scid), conn_type(c),
-                     cid2str(&c->dcid));
+        } else {
+            if (meta(v).hdr.scid.len) {
+                if (memcmp(&meta(v).hdr.scid, &c->dcid, sizeof(c->dcid)) != 0)
+                    warn(NTE, "got new dcid %s for %s conn (was %s)",
+                         cid2str(&meta(v).hdr.scid), conn_type(c),
+                         cid2str(&c->dcid));
 
-            // always update the cid (TODO: check that this is allowed)
-            c->dcid = meta(v).hdr.scid;
+                // always update the cid (TODO: check that this is allowed)
+                c->dcid = meta(v).hdr.scid;
+            }
+
+            // check if this pkt came from a new source IP and/or port
+            if (memcmp(&c->peer, &peer, sizeof(peer)) != 0) {
+                warn(NTE, "pkt came from new peer %s:%u, updating conn",
+                     inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
+                update_ipnp(c, &peer);
+            }
         }
 
         if (c == 0) {
