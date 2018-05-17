@@ -559,7 +559,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             // handle an incoming vers-neg packet
             const uint32_t try_vers = pick_from_server_vers(v);
             if (try_vers == 0) {
-                // no version in common ith serv
+                // no version in common with serv
                 conn_to_state(c, CONN_STAT_DRNG);
                 return;
             }
