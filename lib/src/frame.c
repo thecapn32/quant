@@ -495,29 +495,31 @@ dec_path_response_frame(struct q_conn * const c,
 }
 
 
-// static uint16_t __attribute__((nonnull))
-// dec_new_cid_frame(struct q_conn * const c __attribute__((unused)),
-//                   const struct w_iov * const v,
-//                   const uint16_t pos)
-// {
-//     uint64_t seq = 0;
-//     uint16_t i = dec(&seq, v->buf, v->len, pos + 1, 0, "%" PRIu64);
+static uint16_t __attribute__((nonnull))
+dec_new_cid_frame(struct q_conn * const c __attribute__((unused)),
+                  const struct w_iov * const v,
+                  const uint16_t pos)
+{
+    uint64_t seq = 0;
+    uint16_t i = dec(&seq, v->buf, v->len, pos + 1, 0, "%" PRIu64);
 
-//     uint64_t cid = 0;
-//     i = dec(&cid, v->buf, v->len, i, sizeof(cid), FMT_CID);
+    struct cid dcid = {0};
+    i = dec(&dcid.len, v->buf, v->len, i, sizeof(dcid.len), "%u");
+    i = dec_buf(dcid.id, v->buf, v->len, i, dcid.len, "%s");
 
-//     uint8_t srt[16];
-//     memcpy(srt, &v->buf[i], sizeof(srt));
-//     i += sizeof(srt);
+    uint8_t token[16];
+    i = dec_buf(token, v->buf, v->len, i, sizeof(token), "%s");
 
-//     warn(INF, FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu64 " cid="
-//     FMT_CID,
-//          seq, cid);
+    warn(INF,
+         FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu64
+                 " len=%u dcid=%s token=%s",
+         seq, dcid.len, hex2str(dcid.id, dcid.len),
+         hex2str(token, sizeof(token)));
 
-//     // TODO: actually do something with the new CIDs
+    // TODO: actually do something with the new CIDs
 
-//     return i;
-// }
+    return i;
+}
 
 
 static uint16_t __attribute__((nonnull))
@@ -639,9 +641,9 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
                 i = dec_path_response_frame(c, v, i);
                 break;
 
-                // case FRAM_TYPE_NEW_CID:
-                //     i = dec_new_cid_frame(c, v, i);
-                //     break;
+            case FRAM_TYPE_NEW_CID:
+                i = dec_new_cid_frame(c, v, i);
+                break;
 
             default:
                 err_close(c, ERR_FRAME_ERR(type),
