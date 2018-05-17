@@ -38,7 +38,6 @@
 #include <openssl/evp.h>
 #include <openssl/ossl_typ.h>
 #include <openssl/pem.h>
-#include <openssl/x509.h>
 
 // IWYU pragma: no_include <picotls/../picotls.h>
 #include <picotls/minicrypto.h>
@@ -105,8 +104,6 @@ ptls_context_t tls_ctx = {0};
 static struct ticket_splay tickets = splay_initializer(tickets);
 
 
-#define TLS_MAX_CERTS 10
-static ptls_iovec_t tls_certs[TLS_MAX_CERTS];
 static ptls_openssl_sign_certificate_t sign_cert = {0};
 static ptls_openssl_verify_certificate_t verifier = {0};
 
@@ -1034,9 +1031,8 @@ void init_tls_ctx(const char * const cert,
                   const char * const ticket_store,
                   const char * const tls_log)
 {
-    FILE * fp = 0;
     if (key) {
-        fp = fopen(key, "rbe");
+        FILE * const fp = fopen(key, "rbe");
         ensure(fp, "could not open key %s", key);
         EVP_PKEY * const pkey = PEM_read_PrivateKey(fp, 0, 0, 0);
         fclose(fp);
@@ -1045,22 +1041,13 @@ void init_tls_ctx(const char * const cert,
         EVP_PKEY_free(pkey);
     }
 
-    // TODO: replace with ptls_load_certificates()
     if (cert) {
-        fp = fopen(cert, "rbe");
-        ensure(fp, "could not open cert %s", cert);
-        uint8_t i = 0;
-        do {
-            X509 * const x509 = PEM_read_X509(fp, 0, 0, 0);
-            if (x509 == 0)
-                break;
-            tls_certs[i].len = (size_t)i2d_X509(x509, &tls_certs[i].base);
-            X509_free(x509);
-        } while (i++ < TLS_MAX_CERTS);
-        fclose(fp);
-
-        tls_ctx.certificates.count = i;
-        tls_ctx.certificates.list = tls_certs;
+        // TODO: remove this once ptls_load_certificates() takes a const
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wcast-qual"
+        const int ret = ptls_load_certificates(&tls_ctx, (char *)cert);
+#pragma clang diagnostic pop
+        ensure(ret == 0, "ptls_load_certificates");
     }
 
     if (ticket_store) {
