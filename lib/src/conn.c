@@ -375,6 +375,9 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
         // need to ACK or handshake, use stream zero
         tx_other(get_stream(c, 0), rtx, limit);
 
+    if (c->state == CONN_STAT_HSHK_DONE && c->tx_path_chlg == false)
+        conn_to_state(c, CONN_STAT_ESTB);
+
     c->needs_tx = false;
 }
 
@@ -672,6 +675,10 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 
     case CONN_STAT_SH:
     case CONN_STAT_HSHK_DONE:
+    case CONN_STAT_ESTB:
+    case CONN_STAT_CLNG:
+    case CONN_STAT_HSHK_FAIL:
+    case CONN_STAT_DRNG:
         if (is_set(F_LONG_HDR, meta(v).hdr.flags) && meta(v).hdr.vers == 0) {
             // we shouldn't get another vers-neg packet here, ignore
             warn(NTE, "ignoring spurious ver neg response");
@@ -684,12 +691,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             if (maybe_api_return(q_accept, accept_queue))
                 accept_queue = c;
         }
-        // fall through
 
-    case CONN_STAT_ESTB:
-    case CONN_STAT_CLNG:
-    case CONN_STAT_HSHK_FAIL:
-    case CONN_STAT_DRNG:
         // ignore 0-RTT packets if we're not doing 0-RTT
         if (c->did_0rtt == false && meta(v).hdr.type == F_LH_0RTT) {
             warn(NTE, "ignoring 0-RTT pkt");

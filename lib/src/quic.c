@@ -219,12 +219,10 @@ struct q_conn * q_connect(struct w_engine * const w,
          ntohs(peer->sin_port));
     loop_run(q_connect, c);
 
-    if (c->state != CONN_STAT_HSHK_DONE) {
+    if (c->state != CONN_STAT_ESTB) {
         warn(WRN, "%s conn %s not connected", conn_type(c), cid2str(&c->scid));
         return 0;
     }
-
-    conn_to_state(c, CONN_STAT_ESTB);
 
     if (early_data && *early_data_stream) {
         if (c->did_0rtt == false ||
@@ -366,7 +364,7 @@ struct q_conn * q_accept(struct w_engine * const w __attribute__((unused)),
     warn(WRN, "waiting for conn on any serv sock (timeout %" PRIu64 " sec)",
          timeout);
 
-    if (accept_queue && accept_queue->state >= CONN_STAT_HSHK_DONE) {
+    if (accept_queue && accept_queue->state >= CONN_STAT_ESTB) {
         warn(WRN, "got %s conn %s", conn_type(accept_queue),
              cid2str(&accept_queue->scid));
         return accept_queue;
@@ -382,14 +380,13 @@ struct q_conn * q_accept(struct w_engine * const w __attribute__((unused)),
     accept_queue = 0;
     loop_run(q_accept, accept_queue);
 
-    if (accept_queue == 0 || accept_queue->state != CONN_STAT_HSHK_DONE) {
+    if (accept_queue == 0 || accept_queue->state != CONN_STAT_ESTB) {
         if (accept_queue)
             q_close(accept_queue);
         warn(ERR, "conn not accepted");
         return 0;
     }
 
-    conn_to_state(accept_queue, CONN_STAT_ESTB);
     ev_timer_again(loop, &accept_queue->idle_alarm);
 
     warn(WRN, "%s conn %s connected to clnt %s:%u%s, cipher %s",
