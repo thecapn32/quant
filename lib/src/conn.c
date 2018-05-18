@@ -670,13 +670,6 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         // if we get here, this should be a regular server-hello
         dec_frames(c, v);
         track_recv(c, meta(v).hdr.nr, meta(v).hdr.flags);
-
-        // if packet has anything other than ACK frames, arm the ACK timer
-        if (!is_ack_only(&meta(v))) {
-            warn(DBG, "non-ACK frame received, starting ACK timer");
-            ev_timer_again(loop, &c->ack_alarm);
-        }
-
         break;
 
     case CONN_STAT_RTRY:
@@ -718,19 +711,19 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         track_recv(c, meta(v).hdr.nr, meta(v).hdr.flags);
         dec_frames(c, v);
 
-        // if packet has anything other than ACK frames, arm the ACK timer
-        if (c->state != CONN_STAT_DRNG && !is_ack_only(&meta(v))) {
-            warn(DBG, "non-ACK frame received, starting ACK timer");
-            ev_timer_again(loop, &c->ack_alarm);
-        }
-        break;
-
     case CONN_STAT_SEND_RTRY:
     case CONN_STAT_CLSD:
         break;
 
     default:
         die("TODO: state %u", c->state);
+    }
+
+    // if packet has anything other than ACK frames, arm the ACK timer
+    if (c->state <= CONN_STAT_ESTB && c->state != CONN_STAT_HSHK_FAIL &&
+        !is_ack_only(&meta(v))) {
+        warn(DBG, "non-ACK frame received, starting ACK timer");
+        ev_timer_again(loop, &c->ack_alarm);
     }
 
 done:
@@ -922,12 +915,12 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
 
 void enter_closing(struct q_conn * const c)
 {
-    if (!ev_is_active(&c->closing_alarm)) {
-        // stop LD and ACK alarms
-        ev_timer_stop(loop, &c->rec.ld_alarm);
-        ev_timer_stop(loop, &c->ack_alarm);
-        ev_timer_stop(loop, &c->idle_alarm);
+    // stop LD and ACK alarms
+    ev_timer_stop(loop, &c->rec.ld_alarm);
+    ev_timer_stop(loop, &c->ack_alarm);
+    ev_timer_stop(loop, &c->idle_alarm);
 
+    if (!ev_is_active(&c->closing_alarm)) {
         // start closing/draining alarm (3 * RTO)
         const ev_tstamp dur =
             3 * (is_zero(c->rec.srtt) ? kDefaultInitialRtt : c->rec.srtt) +

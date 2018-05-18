@@ -459,7 +459,11 @@ dec_stop_sending_frame(struct q_conn * const c,
     uint64_t sid = 0;
     uint16_t i = dec(&sid, v->buf, v->len, pos + 1, 0, FMT_SID);
     struct q_stream * const s = get_stream(c, sid);
-    ensure(s, "have stream %u", sid);
+    if (unlikely(s == 0)) {
+        err_close(c, ERR_FRAME_ERR(FRAM_TYPE_STOP_SEND), "unknown strm %u",
+                  sid);
+        return 0;
+    }
 
     uint16_t err_code = 0;
     i = dec(&err_code, v->buf, v->len, i, sizeof(err_code), "0x%04x");
