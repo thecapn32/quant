@@ -69,7 +69,7 @@ fi
 
 pid=$$
 script=$(basename -s .sh $0)
-
+rm -f "/tmp/$script*"
 
 function test_server {
         # run quant client and produce a pure ASCII log for post-processing
