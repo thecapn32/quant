@@ -576,7 +576,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                 return;
             }
 
-            if (try_vers == c->vers) {
+            if (unlikely(try_vers == c->vers)) {
                 warn(INF, "ignoring spurious vers neg response");
                 break;
             }
@@ -600,6 +600,13 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                 init_0rtt_prot(c);
             c->needs_tx = true;
             return;
+        }
+
+        if (unlikely(meta(v).hdr.vers != c->vers)) {
+            warn(ERR, "serv responded with vers 0x%08x to our CI w/vers 0x%08x",
+                 meta(v).hdr.vers, c->vers);
+            err_close(c, ERR_TLS_HSHAKE_FAIL, "wrong vers in SH");
+            goto done;
         }
 
         if (meta(v).hdr.type == F_LH_RTRY) {
