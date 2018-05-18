@@ -33,6 +33,11 @@
 #include <string.h>
 #include <sys/param.h>
 
+// #define FUZZING
+#ifdef FUZZING
+#include <stdlib.h>
+#endif
+
 #include <ev.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
@@ -60,10 +65,12 @@ dec_stream_frame(struct q_conn * const c,
 
     uint64_t sid = 0;
     i = dec(&sid, v->buf, v->len, i, 0, FMT_SID);
-
-    ensure(sid == 0 || !is_set(F_LONG_HDR, meta(v).hdr.flags) ||
-               meta(v).hdr.type == F_LH_0RTT,
-           "sid %u in 0x%02x-type pkt", sid, meta(v).hdr.type);
+    if (unlikely(sid && is_set(F_LONG_HDR, meta(v).hdr.flags) &&
+                 meta(v).hdr.type != F_LH_0RTT)) {
+        err_close(c, ERR_FRAME_ERR(type), "sid %u in 0x%02x-type pkt", sid,
+                  meta(v).hdr.type);
+        return 0;
+    }
 
     if (is_set(F_STREAM_OFF, type))
         i = dec(&meta(v).stream_off, v->buf, v->len, i, 0, "%" PRIu64);
@@ -91,8 +98,12 @@ dec_stream_frame(struct q_conn * const c,
                  sid, conn_type(c), cid2str(&c->scid));
             goto done;
         }
-        ensure(is_set(STRM_FL_INI_SRV, sid) == c->is_clnt,
-               "got sid %" PRIu64 " but am %s", sid, conn_type(c));
+
+        if (unlikely(is_set(STRM_FL_INI_SRV, sid) != c->is_clnt)) {
+            err_close(c, ERR_FRAME_ERR(type), "got sid %" PRIu64 " but am %s",
+                      sid, conn_type(c));
+            return 0;
+        }
 
         if (is_set(STRM_FL_DIR_UNI, sid)) {
             err_close(c, ERR_INTERNAL_ERR,
@@ -381,7 +392,11 @@ dec_stream_blocked_frame(struct q_conn * const c,
     uint64_t sid = 0;
     uint16_t i = dec(&sid, v->buf, v->len, pos + 1, 0, FMT_SID);
     struct q_stream * const s = get_stream(c, sid);
-    ensure(s, "have stream %u", sid);
+    if (unlikely(s == 0)) {
+        err_close(c, ERR_FRAME_ERR(FRAM_TYPE_STRM_BLCK), "unknown strm %u",
+                  sid);
+        return 0;
+    }
 
     uint64_t off = 0;
     i = dec(&off, v->buf, v->len, i, 0, "%" PRIu64);
@@ -646,13 +661,19 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
                 break;
 
             default:
+#ifdef FUZZING
+                warn(DBG, "ignoring unknown frame type 0x%02x at pos %u", type,
+                     i);
+                i++;
+#else
                 err_close(c, ERR_FRAME_ERR(type),
                           "unknown frame type 0x%02x at pos %u", type, i);
                 i = 0;
+#endif
             }
         }
 
-        if (i == 0)
+        if (unlikely(i == 0))
             // there was an error parsing a frame
             return 0;
 
@@ -676,7 +697,15 @@ uint16_t enc_padding_frame(struct w_iov * const v,
     if (unlikely(len == 0))
         return pos;
     warn(INF, FRAM_OUT "PADDING" NRM " len=%u", len);
-    memset(&v->buf[pos], FRAM_TYPE_PAD, len);
+#ifdef FUZZING
+    if (arc4random() % 9 == 0) {
+        // instead of encoding padding bytes, encode random data
+        uint8_t fuzz[16];
+        arc4random_buf(fuzz, sizeof(fuzz));
+        memset_pattern16(&v->buf[pos], fuzz, len);
+    } else
+#endif
+        memset(&v->buf[pos], FRAM_TYPE_PAD, len);
     bit_set(meta(v).frames, FRAM_TYPE_PAD);
     return pos + len;
 }
