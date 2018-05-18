@@ -670,6 +670,13 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         // if we get here, this should be a regular server-hello
         dec_frames(c, v);
         track_recv(c, meta(v).hdr.nr, meta(v).hdr.flags);
+
+        // if packet has anything other than ACK frames, arm the ACK timer
+        if (!is_ack_only(&meta(v))) {
+            warn(DBG, "non-ACK frame received, starting ACK timer");
+            ev_timer_again(loop, &c->ack_alarm);
+        }
+
         break;
 
     case CONN_STAT_RTRY:
