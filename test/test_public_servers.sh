@@ -42,6 +42,7 @@ declare -A servers=(
         [quicker]=quicker.edm.uhasselt.be
         [quicly]=kazuhooku.com
         [quicr]=ralith.com
+        [quinn]=xavamedia.nl
         [winquic]=msquic.westus.cloudapp.azure.com
 )
 
@@ -73,7 +74,7 @@ script=$(basename -s .sh $0)
 function test_server {
         # run quant client and produce a pure ASCII log for post-processing
         local cache="/tmp/$script.$1.$pid.cache"
-        local opts="-i $iface -t3 -v4 -s $cache"
+        local opts="-i $iface -t3 -v5 -s $cache"
         local sed_pattern='s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]//g'
         local log_base="/tmp/$script.$1.$pid"
 
@@ -131,7 +132,7 @@ function analyze {
         if [ $ret == 2 ]; then
                 close[$1]=C
         elif [ $ret == 1 ]; then
-                close[$1]=c
+                close[$1]=C # XXX c
         fi
         rm -f "$log"
 
