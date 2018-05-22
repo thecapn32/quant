@@ -810,9 +810,11 @@ void rx(struct ev_loop * const l,
 
             // check if this pkt came from a new source IP and/or port
             if (memcmp(&c->peer, &peer, sizeof(peer)) != 0) {
-                warn(NTE, "pkt came from new peer %s:%u, updating conn",
+                warn(NTE, "pkt came from new peer %s:%u, probing",
                      inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
                 update_ipnp(c, &peer);
+                arc4random_buf(&c->path_chlg_out, sizeof(c->path_chlg_out));
+                c->tx_path_chlg = true;
             }
         }
 
