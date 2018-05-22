@@ -530,7 +530,6 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         ignore_sh_pkt(v);
 
         c->vers = meta(v).hdr.vers;
-        c->needs_tx = true;
         track_recv(c, meta(v).hdr.nr, meta(v).hdr.flags);
         if (c->vers_initial == 0)
             c->vers_initial = c->vers;
