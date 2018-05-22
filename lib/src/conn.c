@@ -35,7 +35,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
-#include <sys/types.h>
 
 #include <ev.h>
 #include <quant/quant.h>
@@ -59,23 +58,27 @@ struct ipnp_splay conns_by_ipnp = splay_initializer(&conns_by_ipnp);
 struct cid_splay conns_by_cid = splay_initializer(&conns_by_cid);
 
 
-int ipnp_splay_cmp(const struct q_conn * const a, const struct q_conn * const b)
+static int __attribute__((nonnull))
+sockaddr_in_cmp(const struct sockaddr_in * const a,
+                const struct sockaddr_in * const b)
 {
-    ensure((a->peer.sin_family == AF_INET || a->peer.sin_family == 0) &&
-               (b->peer.sin_family == AF_INET || b->peer.sin_family == 0),
-           "limited to AF_INET");
-
-    int diff = (a->sport > b->sport) - (a->sport < b->sport);
+    int diff =
+        (a->sin_family > b->sin_family) - (a->sin_family < b->sin_family);
     if (diff)
         return diff;
 
-    diff = memcmp(&a->peer.sin_addr.s_addr, &b->peer.sin_addr.s_addr,
-                  sizeof(a->peer.sin_addr.s_addr));
-    if (likely(diff))
+    diff = (a->sin_port > b->sin_port) - (a->sin_port < b->sin_port);
+    if (diff)
         return diff;
 
-    diff = (a->peer.sin_port > b->peer.sin_port) -
-           (a->peer.sin_port < b->peer.sin_port);
+    return (a->sin_addr.s_addr > b->sin_addr.s_addr) -
+           (a->sin_addr.s_addr < b->sin_addr.s_addr);
+}
+
+
+int ipnp_splay_cmp(const struct q_conn * const a, const struct q_conn * const b)
+{
+    const int diff = sockaddr_in_cmp(&a->peer, &b->peer);
     if (likely(diff))
         return diff;
 
@@ -809,7 +812,7 @@ void rx(struct ev_loop * const l,
             }
 
             // check if this pkt came from a new source IP and/or port
-            if (memcmp(&c->peer, &peer, sizeof(peer)) != 0) {
+            if (sockaddr_in_cmp(&c->peer, &peer) != 0) {
                 warn(NTE, "pkt came from new peer %s:%u, probing",
                      inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
                 update_ipnp(c, &peer);
