@@ -1042,11 +1042,7 @@ void init_tls_ctx(const char * const cert,
     }
 
     if (cert) {
-        // TODO: remove this once ptls_load_certificates() takes a const
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wcast-qual"
-        const int ret = ptls_load_certificates(&tls_ctx, (char *)cert);
-#pragma clang diagnostic pop
+        const int ret = ptls_load_certificates(&tls_ctx, cert);
         ensure(ret == 0, "ptls_load_certificates");
     }
 
