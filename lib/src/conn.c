@@ -1098,4 +1098,7 @@ void free_conn(struct q_conn * const c)
         warn(WRN, "%s conn %s on port %u closed", conn_type(c),
              cid2str(&c->scid), ntohs(c->sport));
     free(c);
+
+    if(accept_queue == c)
+        accept_queue = 0;
 }
