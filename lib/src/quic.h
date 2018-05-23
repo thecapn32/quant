@@ -276,13 +276,8 @@ extern void * api_arg;
 #define ARG_MATCH(_1, _2, _3, _4, _5, _6, _7, _8, _9, N, ...) N
 
 
-// clang-format off
 #define maybe_api_return(...)                                                  \
-    _Pragma("clang diagnostic push")                                           \
-    _Pragma("clang diagnostic ignored \"-Wgnu-zero-variadic-macro-arguments\"")\
-    OVERLOADED_MACRO(maybe_api_return, __VA_ARGS__)                            \
-    _Pragma("clang diagnostic pop")
-// clang-format on
+    __extension__(OVERLOADED_MACRO(maybe_api_return, __VA_ARGS__))
 
 
 /// If current API function and argument match @p func and @p arg, exit the
