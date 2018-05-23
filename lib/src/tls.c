@@ -784,8 +784,7 @@ void init_tls(struct q_conn * const c)
     }
 
     init_tp(c);
-    if (!c->tls.dec_hshk)
-        init_hshk_prot(c);
+    init_hshk_prot(c);
 }
 
 

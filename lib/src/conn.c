@@ -539,7 +539,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         if (vers_supported(c->vers) && !is_force_neg_vers(c->vers)) {
             warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
 
-            init_hshk_prot(c);
+            init_tls(c);
             if (verify_prot(c, v) == false)
                 goto done;
 
@@ -549,7 +549,6 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             warn(NTE, "picked new scid %s for %s conn (was %s)",
                  cid2str(&new_scid), conn_type(c), cid2str(&c->scid));
             update_scid(c, &new_scid);
-            init_tls(c);
             dec_frames(c, v);
 
             // if the CH doesn't include any stream-0 data, bail
