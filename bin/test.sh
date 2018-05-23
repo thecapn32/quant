@@ -80,6 +80,16 @@ case $c in
         quicker)
                 cc="external/bin/node external/quicker-prefix/src/quicker/out/mainclient.js $addr $port"
                 ;;
+
+        quic-tracker)
+                tmp=$(mktemp)
+                printf "%s:%s\\t%s" $addr $port $path > "$tmp"
+                cc="env GOPATH=$(pwd)/external/go \
+                        CGO_CFLAGS=-I/usr/local/opt/openssl@1.1/include \
+                        CGO_LDFLAGS=-L/usr/local/opt/openssl@1.1/lib \
+                    go run $(pwd)/external/go/src/github.com/mpiraux/master-thesis/bin/scenario/scenario_runner.go \
+                        -hosts $tmp -scenario unsupported_tls_version; rm $tmp"
+                ;;
 esac
 
 # commands to run the different servers on  $addr:$port
