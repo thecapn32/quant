@@ -913,7 +913,7 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
 
     conn_to_state(c, CONN_STAT_CLSD);
     // terminate whatever API call is currently active
-    api_return();
+    maybe_api_return(c);
 }
 
 
@@ -1056,6 +1056,9 @@ struct q_conn * new_conn(struct w_engine * const w,
 
 void free_conn(struct q_conn * const c)
 {
+    // exit any active API call on the connection
+    maybe_api_return(c);
+
     if (c->holds_sock) {
         // only close the socket for the final server connection
         ev_io_stop(loop, &c->rx_w);

@@ -267,13 +267,32 @@ extern func_ptr api_func;
 extern void * api_arg;
 
 
+#define OVERLOADED_MACRO(M, ...) OVR(M, COUNT_ARGS(__VA_ARGS__))(__VA_ARGS__)
+#define OVR(macroName, number_of_args) OVR_EXPAND(macroName, number_of_args)
+#define OVR_EXPAND(macroName, number_of_args) macroName##number_of_args
+
+#define COUNT_ARGS(...)                                                        \
+    ARG_PATTERN_MATCH(__VA_ARGS__, 9, 8, 7, 6, 5, 4, 3, 2, 1)
+#define ARG_PATTERN_MATCH(_1, _2, _3, _4, _5, _6, _7, _8, _9, N, ...) N
+
+// clang-format off
+#define maybe_api_return(...)                                                  \
+    _Pragma("clang diagnostic push")                                           \
+    _Pragma("clang diagnostic ignored \"-Wgnu-zero-variadic-macro-arguments\"")\
+    OVERLOADED_MACRO(maybe_api_return, __VA_ARGS__)                            \
+    _Pragma("clang diagnostic pop")
+// clang-format on
+
+
 /// If current API function and argument match @p func and @p arg, exit the
 /// event loop.
 ///
 /// @param      func  The API function currently active.
 /// @param      arg   The API argument currently active.
 ///
-#define maybe_api_return(func, arg)                                            \
+/// @return     True if the event loop was exited.
+///
+#define maybe_api_return2(func, arg)                                           \
     __extension__({                                                            \
         if (api_func == (func_ptr)(&(func)) && api_arg == (arg)) {             \
             ev_break(loop, EVBREAK_ALL);                                       \
@@ -284,14 +303,21 @@ extern void * api_arg;
     })
 
 
-/// Unconditionally terminate the active API call.
+/// If current API argument matches@p arg, exit the event loop.
 ///
-#define api_return()                                                           \
-    do {                                                                       \
-        ev_break(loop, EVBREAK_ALL);                                           \
-        api_func = 0;                                                          \
-        api_arg = 0;                                                           \
-    } while (0)
+/// @param      arg   The API argument currently active.
+///
+/// @return     True if the event loop was exited.
+///
+#define maybe_api_return1(arg)                                                 \
+    __extension__({                                                            \
+        if (api_arg == (arg)) {                                                \
+            ev_break(loop, EVBREAK_ALL);                                       \
+            warn(DBG, #arg " done, exiting event loop");                       \
+            api_func = api_arg = 0;                                            \
+        }                                                                      \
+        api_func == 0;                                                         \
+    })
 
 
 #define q_free_iov(c, v)                                                       \
