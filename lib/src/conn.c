@@ -898,6 +898,7 @@ void err_close(struct q_conn * const c,
     c->err_reason = strdup(reas);
     conn_to_state(c, c->state <= CONN_STAT_HSHK_DONE ? CONN_STAT_HSHK_FAIL
                                                      : CONN_STAT_CLNG);
+    c->needs_tx = true;
 }
 
 
