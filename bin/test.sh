@@ -84,11 +84,11 @@ case $c in
         quic-tracker)
                 tmp=$(mktemp)
                 printf "%s:%s\\t%s" $addr $port $path > "$tmp"
-                cc="env GOPATH=$(pwd)/external/go \
+                cc="sudo env GOPATH=$(pwd)/external/go \
                         CGO_CFLAGS=-I/usr/local/opt/openssl@1.1/include \
                         CGO_LDFLAGS=-L/usr/local/opt/openssl@1.1/lib \
                     go run $(pwd)/external/go/src/github.com/mpiraux/master-thesis/bin/scenario/scenario_runner.go \
-                        -hosts $tmp -scenario unsupported_tls_version; rm $tmp"
+                        -interface lo0 -hosts $tmp -scenario http_get_on_uni_stream; rm $tmp"
                 ;;
 esac
 
