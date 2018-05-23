@@ -267,13 +267,14 @@ extern func_ptr api_func;
 extern void * api_arg;
 
 
-#define OVERLOADED_MACRO(M, ...) OVR(M, COUNT_ARGS(__VA_ARGS__))(__VA_ARGS__)
-#define OVR(macroName, number_of_args) OVR_EXPAND(macroName, number_of_args)
-#define OVR_EXPAND(macroName, number_of_args) macroName##number_of_args
+// see https://stackoverflow.com/a/45600545/2240756
+//
+#define OVERLOADED_MACRO(M, ...) OVR(M, CNT_ARGS(__VA_ARGS__))(__VA_ARGS__)
+#define OVR(macro_name, nargs) OVR_EXPAND(macro_name, nargs)
+#define OVR_EXPAND(macro_name, nargs) macro_name##nargs
+#define CNT_ARGS(...) ARG_MATCH(__VA_ARGS__, 9, 8, 7, 6, 5, 4, 3, 2, 1)
+#define ARG_MATCH(_1, _2, _3, _4, _5, _6, _7, _8, _9, N, ...) N
 
-#define COUNT_ARGS(...)                                                        \
-    ARG_PATTERN_MATCH(__VA_ARGS__, 9, 8, 7, 6, 5, 4, 3, 2, 1)
-#define ARG_PATTERN_MATCH(_1, _2, _3, _4, _5, _6, _7, _8, _9, N, ...) N
 
 // clang-format off
 #define maybe_api_return(...)                                                  \
