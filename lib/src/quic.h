@@ -307,7 +307,7 @@ extern void * api_arg;
 ///
 #define maybe_api_return1(arg)                                                 \
     __extension__({                                                            \
-        if (api_arg == (arg)) {                                                \
+        if (api_arg == 0 || api_arg == (arg)) {                                \
             ev_break(loop, EVBREAK_ALL);                                       \
             warn(DBG, #arg " done, exiting event loop");                       \
             api_func = api_arg = 0;                                            \
