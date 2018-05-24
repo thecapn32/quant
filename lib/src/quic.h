@@ -165,15 +165,15 @@ pm_cpy(struct pkt_meta * const dst, struct pkt_meta * const src)
 
 #define hex2str(buf, len)                                                      \
     __extension__({                                                            \
-        static char _str[2 * 32 + 1] = "0";                                    \
+        static char _str[2 * 64 + 1] = "0";                                    \
         static const char _hex_str[] = "0123456789abcdef";                     \
         int _j;                                                                \
-        for (_j = 0; (unsigned long)_j < (unsigned long)len && _j < 32;        \
+        for (_j = 0; (unsigned long)_j < (unsigned long)len && _j < 64;        \
              _j++) {                                                           \
             _str[_j * 2] = _hex_str[(((const uint8_t *)buf)[_j] >> 4) & 0x0f]; \
             _str[_j * 2 + 1] = _hex_str[((const uint8_t *)buf)[_j] & 0x0f];    \
         }                                                                      \
-        if (_j == 32)                                                          \
+        if (_j == 64)                                                          \
             _str[_j * 2 - 1] = _str[_j * 2 - 2] = _str[_j * 2 - 3] = '.';      \
         _str[_j * 2] = 0;                                                      \
         _str;                                                                  \
