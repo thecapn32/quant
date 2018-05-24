@@ -118,14 +118,15 @@ static FILE * tls_log_file;
 
 #define TP_INITIAL_MAX_STREAM_DATA 0x0000
 #define TP_INITIAL_MAX_DATA 0x0001
-#define TP_INITIAL_MAX_STREAM_ID_BIDI 0x0002
+#define TP_INITIAL_MAX_BIDI_STREAMS 0x0002
 #define TP_IDLE_TIMEOUT 0x0003
+// #define TP_PREFERRED_ADDRESS 0x004
 #define TP_MAX_PACKET_SIZE 0x0005
 #define TP_STATELESS_RESET_TOKEN 0x0006
 #define TP_ACK_DELAY_EXPONENT 0x0007
-#define TP_INITIAL_MAX_STREAM_ID_UNI 0x0008
+#define TP_INITIAL_MAX_UNI_STREAMS 0x0008
 
-#define TP_MAX (TP_INITIAL_MAX_STREAM_ID_UNI + 1)
+#define TP_MAX (TP_INITIAL_MAX_UNI_STREAMS + 1)
 
 
 static int qhkdf_expand(ptls_hash_algorithm_t * const algo,
@@ -167,7 +168,7 @@ static ptls_aead_context_t * new_aead(ptls_aead_algorithm_t * const aead,
 
     if ((ret = qhkdf_expand(hash, key, aead->key_size, secret, "key")) != 0)
         goto Exit;
-    warn(DBG, "key: %s", hex2str(key, aead->key_size));
+    warn(DBG, "key=%s", hex2str(key, aead->key_size));
     if ((ctx = ptls_aead_new(aead, is_enc, key)) == 0) {
         ret = PTLS_ERROR_NO_MEMORY;
         goto Exit;
@@ -175,7 +176,7 @@ static ptls_aead_context_t * new_aead(ptls_aead_algorithm_t * const aead,
     if ((ret = qhkdf_expand(hash, ctx->static_iv, aead->iv_size, secret,
                             "iv")) != 0)
         goto Exit;
-    warn(DBG, "iv: %s", hex2str(ctx->static_iv, aead->iv_size));
+    // warn(DBG, "iv=%s", hex2str(ctx->static_iv, aead->iv_size));
 
     ret = 0;
 Exit:
@@ -365,7 +366,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             warn(INF, "\tinitial_max_data = %u", c->tp_peer.max_data);
             break;
 
-        case TP_INITIAL_MAX_STREAM_ID_BIDI:
+        case TP_INITIAL_MAX_BIDI_STREAMS:
             dec_tp(&c->tp_peer.max_strm_bidi, sizeof(uint16_t));
             c->tp_peer.max_strm_bidi <<= 2;
             c->tp_peer.max_strm_bidi |= c->is_clnt ? 0 : STRM_FL_INI_SRV;
@@ -373,7 +374,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                  c->tp_peer.max_strm_bidi);
             break;
 
-        case TP_INITIAL_MAX_STREAM_ID_UNI:
+        case TP_INITIAL_MAX_UNI_STREAMS:
             dec_tp(&c->tp_peer.max_strm_uni, sizeof(uint16_t));
             c->tp_peer.max_strm_uni <<= 2;
             c->tp_peer.max_strm_uni |=
@@ -462,7 +463,7 @@ void init_tp(struct q_conn * const c)
 
     // convert the stream ID number to a count
     const uint16_t max_strm_bidi = (uint16_t)c->tp_local.max_strm_bidi >> 2;
-    enc_tp(c, TP_INITIAL_MAX_STREAM_ID_BIDI, max_strm_bidi, sizeof(uint16_t));
+    enc_tp(c, TP_INITIAL_MAX_BIDI_STREAMS, max_strm_bidi, sizeof(uint16_t));
 
     enc_tp(c, TP_IDLE_TIMEOUT, c->tp_local.idle_to, sizeof(uint16_t));
     enc_tp(c, TP_INITIAL_MAX_STREAM_DATA, c->tp_local.max_strm_data,
@@ -520,7 +521,7 @@ static ptls_aead_context_t * init_hshk_secret(ptls_cipher_suite_t * const cs,
     ensure(qhkdf_expand(cs->hash, output, cs->hash->digest_size, sec, label) ==
                0,
            "qhkdf_expand");
-    warn(DBG, "%s: %s", label, hex2str(output, cs->hash->digest_size));
+    // warn(DBG, "%s: %s", label, hex2str(output, cs->hash->digest_size));
     return new_aead(cs->aead, cs->hash, is_enc, output);
 }
 
@@ -547,15 +548,23 @@ void init_hshk_prot(struct q_conn * const c)
         .len = c->is_clnt ? c->dcid.len : c->scid.len};
     ensure(ptls_hkdf_extract(cs->hash, sec, salt, cid) == 0,
            "ptls_hkdf_extract");
-    warn(DBG, "handshake secret: %s", hex2str(sec, PTLS_MAX_SECRET_SIZE));
+    warn(DBG, "handshake secret=%s", hex2str(sec, PTLS_MAX_SECRET_SIZE));
+
     c->tls.dec_hshk =
         init_hshk_secret(cs, sec, c->is_clnt ? "server hs" : "client hs", 0);
-    warn(DBG, "%s iv: %s", c->is_clnt ? "serv" : "clnt",
+    warn(DBG, "%s iv=%s", c->is_clnt ? "serv" : "clnt",
          hex2str(c->tls.dec_hshk->static_iv, c->tls.dec_hshk->algo->iv_size));
     c->tls.enc_hshk =
         init_hshk_secret(cs, sec, c->is_clnt ? "client hs" : "server hs", 1);
-    warn(DBG, "%s iv: %s", c->is_clnt ? "clnt" : "serv",
+    warn(DBG, "%s iv=%s", c->is_clnt ? "clnt" : "serv",
          hex2str(c->tls.enc_hshk->static_iv, c->tls.enc_hshk->algo->iv_size));
+
+    c->tls.dec_pnr = init_hshk_secret(cs, sec, "pn", 0);
+    warn(DBG, "pn dec=%s",
+         hex2str(c->tls.dec_pnr->static_iv, c->tls.dec_pnr->algo->iv_size));
+    c->tls.enc_pnr = init_hshk_secret(cs, sec, "pn", 1);
+    warn(DBG, "pn enc=%s",
+         hex2str(c->tls.enc_pnr->static_iv, c->tls.enc_pnr->algo->iv_size));
 }
 
 
@@ -782,6 +791,10 @@ void free_tls(struct q_conn * const c)
         ptls_aead_free(c->tls.dec_hshk);
     if (c->tls.enc_hshk)
         ptls_aead_free(c->tls.enc_hshk);
+    if (c->tls.dec_pnr)
+        ptls_aead_free(c->tls.dec_pnr);
+    if (c->tls.enc_pnr)
+        ptls_aead_free(c->tls.enc_pnr);
     if (c->tls.t)
         ptls_free(c->tls.t);
 
@@ -809,7 +822,7 @@ init_secret(ptls_t * const t,
     ensure(ptls_export_secret(t, sec, cs->hash->digest_size, label,
                               ptls_iovec_init(0, 0), is_early) == 0,
            "ptls_export_secret");
-    warn(DBG, "%s secret", label, hex2str(sec, cs->hash->digest_size));
+    warn(DBG, "%s secret=%s", label, hex2str(sec, cs->hash->digest_size));
 
     return new_aead(cs->aead, cs->hash, is_enc, sec);
 }

@@ -48,6 +48,8 @@ struct tls {
     ptls_aead_context_t * enc_0rtt;
     ptls_aead_context_t * dec_1rtt;
     ptls_aead_context_t * enc_1rtt;
+    ptls_aead_context_t * dec_pnr;
+    ptls_aead_context_t * enc_pnr;
 
     uint8_t tp_buf[96];
     ptls_raw_extension_t tp_ext[2];
