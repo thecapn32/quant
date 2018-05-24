@@ -1099,6 +1099,6 @@ void free_conn(struct q_conn * const c)
              cid2str(&c->scid), ntohs(c->sport));
     free(c);
 
-    if(accept_queue == c)
+    if (accept_queue == c)
         accept_queue = 0;
 }
