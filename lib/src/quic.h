@@ -264,7 +264,7 @@ extern const uint8_t ok_vers_len;
 
 typedef void (*func_ptr)(void);
 extern func_ptr api_func;
-extern void * api_arg;
+extern void *api_conn, *api_strm;
 
 
 // see https://stackoverflow.com/a/45600545/2240756
@@ -280,37 +280,42 @@ extern void * api_arg;
     __extension__(OVERLOADED_MACRO(maybe_api_return, __VA_ARGS__))
 
 
-/// If current API function and argument match @p func and @p arg, exit the
-/// event loop.
+/// If current API function and argument match @p func and @p arg - and @p strm
+/// if it is non-zero - exit the event loop.
 ///
-/// @param      func  The API function currently active.
-/// @param      arg   The API argument currently active.
+/// @param      func  The API function to potentially return to.
+/// @param      conn  The connection to check API activity on.
+/// @param      strm  The stream to check API activity on.
 ///
 /// @return     True if the event loop was exited.
 ///
-#define maybe_api_return2(func, arg)                                           \
+#define maybe_api_return3(func, conn, strm)                                    \
     __extension__({                                                            \
-        if (api_func == (func_ptr)(&(func)) && api_arg == (arg)) {             \
+        if (api_func == (func_ptr)(&(func)) && api_conn == (conn) &&           \
+            (strm == 0 || api_strm == strm)) {                                 \
             ev_break(loop, EVBREAK_ALL);                                       \
-            warn(DBG, #func "(" #arg ") done, exiting event loop");            \
-            api_func = api_arg = 0;                                            \
+            warn(DBG,                                                          \
+                 #func "(" #conn ", " #strm ") done, exiting event loop");     \
+            api_func = api_conn = api_strm = 0;                                \
         }                                                                      \
         api_func == 0;                                                         \
     })
 
 
-/// If current API argument matches@p arg, exit the event loop.
+/// If current API argument matches @p arg - and @p strm if it is non-zero -
+/// exit the event loop (for any active API function).
 ///
-/// @param      arg   The API argument currently active.
+/// @param      conn  The connection to check API activity on.
+/// @param      strm  The stream to check API activity on.
 ///
 /// @return     True if the event loop was exited.
 ///
-#define maybe_api_return1(arg)                                                 \
+#define maybe_api_return2(conn, strm)                                          \
     __extension__({                                                            \
-        if (api_arg == 0 || api_arg == (arg)) {                                \
+        if (api_conn == (conn) && (strm == 0 || api_strm == strm)) {           \
             ev_break(loop, EVBREAK_ALL);                                       \
-            warn(DBG, #arg " done, exiting event loop");                       \
-            api_func = api_arg = 0;                                            \
+            warn(DBG, "<any>(" #conn ", " #strm ") done, exiting event loop"); \
+            api_func = api_conn = api_strm = 0;                                \
         }                                                                      \
         api_func == 0;                                                         \
     })

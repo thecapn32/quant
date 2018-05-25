@@ -62,6 +62,7 @@ const uint32_t ok_vers[] = {
 #ifndef NDEBUG
     0xbabababa, // XXX reserved version to trigger negotiation
 #endif
+    // 0xff00000c, // draft-ietf-quic-transport-12
     0xff00000b, // draft-ietf-quic-transport-11
 };
 
@@ -73,7 +74,7 @@ struct pkt_meta * pm = 0;
 struct ev_loop * loop = 0;
 
 func_ptr api_func = 0;
-void * api_arg = 0;
+void *api_conn = 0, *api_strm = 0;
 
 struct q_conn * accept_queue = 0;
 
@@ -82,20 +83,23 @@ static const uint32_t nbufs = 1000; ///< Number of packet buffers to allocate.
 static ev_timer accept_alarm;
 
 
-/// Run the event loop with the API function @p func and argument @p arg.
+/// Run the event loop for the API function @p func with connection @p conn and
+/// (optionally, if non-zero) stream @p strm.
 ///
-/// @param      func  The active API function.
-/// @param      arg   The argument of the currently active API function.
+/// @param      func  The API function to run the event loop for.
+/// @param      conn  The connection to run the event loop for.
+/// @param      strm  The stream to run the event loop for.
 ///
-#define loop_run(func, arg)                                                    \
+#define loop_run(func, conn, strm)                                             \
     do {                                                                       \
-        ensure(api_func == 0 && api_arg == 0, "other API call active");        \
+        ensure(api_func == 0, "other API call active");                        \
         api_func = (func_ptr)(&(func));                                        \
-        api_arg = (arg);                                                       \
-        warn(DBG, #func "(" #arg ") entering event loop");                     \
+        api_conn = (conn);                                                     \
+        api_strm = (strm);                                                     \
+        warn(DBG, #func "(" #conn ", " #strm ") entering event loop");         \
         ev_run(loop, 0);                                                       \
         api_func = 0;                                                          \
-        api_arg = 0;                                                           \
+        api_conn = api_strm = 0;                                               \
     } while (0)
 
 
@@ -154,7 +158,7 @@ do_write(struct q_stream * const s, struct w_iov_sq * const q, const bool fin)
 
     // kick TX watcher
     ev_async_send(loop, &s->c->tx_w);
-    loop_run(q_write, s);
+    loop_run(q_write, s->c, s);
 
     // the last packet in s->out may be a pure FIN - if so, don't return it
     struct w_iov * const last = sq_last(&s->out, w_iov, next);
@@ -217,7 +221,7 @@ struct q_conn * q_connect(struct w_engine * const w,
     warn(DBG, "waiting for connect to complete on %s conn %s to %s:%u",
          conn_type(c), cid2str(&c->scid), inet_ntoa(peer->sin_addr),
          ntohs(peer->sin_port));
-    loop_run(q_connect, c);
+    loop_run(q_connect, c, 0);
 
     if (c->state != CONN_STAT_ESTB) {
         warn(WRN, "%s conn %s not connected", conn_type(c), cid2str(&c->scid));
@@ -304,7 +308,7 @@ q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool block)
             // wait for new data
             warn(WRN, "waiting for data on any stream on %s conn %s",
                  conn_type(c), cid2str(&c->scid));
-            loop_run(q_read, c);
+            loop_run(q_read, c, 0);
         }
     }
 
@@ -327,7 +331,7 @@ void q_readall_str(struct q_stream * const s, struct w_iov_sq * const q)
 
     while (s->c->state <= CONN_STAT_ESTB && s->state != STRM_STAT_HCRM &&
            s->state != STRM_STAT_CLSD)
-        loop_run(q_readall_str, s);
+        loop_run(q_readall_str, s->c, s);
 
     // return data
     sq_concat(q, &s->in);
@@ -354,7 +358,7 @@ cancel_accept(struct ev_loop * const l __attribute__((unused)),
     warn(DBG, "canceling q_accept()");
     ev_timer_stop(loop, &accept_alarm);
     accept_queue = 0;
-    maybe_api_return(q_accept, accept_queue);
+    maybe_api_return(q_accept, accept_queue, 0);
 }
 
 
@@ -378,7 +382,7 @@ struct q_conn * q_accept(struct w_engine * const w __attribute__((unused)),
     }
 
     accept_queue = 0;
-    loop_run(q_accept, accept_queue);
+    loop_run(q_accept, accept_queue, 0);
 
     if (accept_queue == 0 || accept_queue->state != CONN_STAT_ESTB) {
         if (accept_queue)
@@ -409,7 +413,7 @@ struct q_stream * q_rsv_stream(struct q_conn * const c)
         // we hit the max stream limit, wait for MAX_STREAM_ID frame
         warn(WRN, "MAX_STREAM_ID increase needed (%u > %u)", c->next_sid,
              c->tp_peer.max_strm_bidi);
-        loop_run(q_rsv_stream, c);
+        loop_run(q_rsv_stream, c, 0);
     }
 
     ensure(c->next_sid <= c->tp_peer.max_strm_bidi, "sid %u <= max %u",
@@ -482,7 +486,7 @@ void q_close_stream(struct q_stream * const s)
     strm_to_state(s,
                   s->state == STRM_STAT_HCRM ? STRM_STAT_CLSD : STRM_STAT_HCLO);
     ev_async_send(loop, &s->c->tx_w);
-    loop_run(q_close_stream, s);
+    loop_run(q_close_stream, s->c, s);
 }
 
 
@@ -501,7 +505,7 @@ void q_close(struct q_conn * const c)
         // send connection close frame
         conn_to_state(c, CONN_STAT_CLNG);
         ev_async_send(loop, &c->tx_w);
-        loop_run(q_close, c);
+        loop_run(q_close, c, 0);
     }
 
     // we're done

@@ -141,12 +141,12 @@ dec_stream_frame(struct q_conn * const c,
                 strm_to_state(s, s->state <= STRM_STAT_HCRM ? STRM_STAT_HCRM
                                                             : STRM_STAT_CLSD);
                 if (s->id != 0)
-                    maybe_api_return(q_readall_str, s);
+                    maybe_api_return(q_readall_str, s->c, s);
             }
         }
 
         if (s->id != 0)
-            maybe_api_return(q_read, s->c);
+            maybe_api_return(q_read, s->c, s);
         goto done;
     }
 
@@ -362,7 +362,7 @@ dec_max_stream_id_frame(struct q_conn * const c,
              c->tp_peer.max_strm_bidi);
     }
 
-    maybe_api_return(q_rsv_stream, c);
+    maybe_api_return(q_rsv_stream, c, 0);
 
     return i;
 }
@@ -926,7 +926,7 @@ uint16_t enc_stream_frame(struct q_stream * const s,
     if ((s->state == STRM_STAT_HCLO || s->state == STRM_STAT_CLSD) &&
         v == sq_last(&s->out, w_iov, next)) {
         type |= F_STREAM_FIN;
-        maybe_api_return(q_close_stream, s);
+        maybe_api_return(q_close_stream, s->c, s);
     }
     bit_set(meta(v).frames, type);
 

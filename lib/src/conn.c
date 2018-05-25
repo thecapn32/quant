@@ -455,7 +455,7 @@ static void __attribute__((nonnull)) process_stream0(struct q_conn * const c)
         struct w_iov * iv = sq_first(&s->in);
         sq_remove_head(&s->in, next);
         if (tls_io(s, iv) == 0)
-            maybe_api_return(q_connect, c);
+            maybe_api_return(q_connect, c, 0);
         q_free_iov(c, iv);
     }
 }
@@ -696,7 +696,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         // if we got a SH or 0RTT packet, a q_accept() may be finished
         if (!is_set(F_LONG_HDR, meta(v).hdr.flags) ||
             meta(v).hdr.type == F_LH_0RTT) {
-            if (maybe_api_return(q_accept, accept_queue))
+            if (maybe_api_return(q_accept, accept_queue, 0))
                 accept_queue = c;
         }
 
@@ -913,7 +913,7 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
 
     conn_to_state(c, CONN_STAT_CLSD);
     // terminate whatever API call is currently active
-    maybe_api_return(c);
+    maybe_api_return(c, 0);
 }
 
 
@@ -1057,7 +1057,7 @@ struct q_conn * new_conn(struct w_engine * const w,
 void free_conn(struct q_conn * const c)
 {
     // exit any active API call on the connection
-    maybe_api_return(c);
+    maybe_api_return(c, 0);
 
     if (c->holds_sock) {
         // only close the socket for the final server connection

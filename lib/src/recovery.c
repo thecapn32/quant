@@ -401,9 +401,9 @@ void on_pkt_acked(struct q_conn * const c,
         if (is_fully_acked(s)) {
             // a q_write may be done
             // warn(CRT, "fully acked");
-            maybe_api_return(q_write, s);
+            maybe_api_return(q_write, s->c, s);
             if (s->id && s->c->did_0rtt)
-                maybe_api_return(q_connect, s->c);
+                maybe_api_return(q_connect, s->c, 0);
         }
     }
     meta(v).is_acked = true;
