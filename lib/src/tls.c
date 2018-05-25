@@ -529,10 +529,13 @@ static ptls_aead_context_t * init_hshk_secret(ptls_cipher_suite_t * const cs,
 void init_hshk_prot(struct q_conn * const c)
 {
     // this can be called multiple times due to retry
-    if (c->tls.dec_hshk)
+    if (c->tls.dec_hshk) {
+        // if we allocated one, assume we allocated them all
         ptls_aead_free(c->tls.dec_hshk);
-    if (c->tls.enc_hshk)
         ptls_aead_free(c->tls.enc_hshk);
+        ptls_aead_free(c->tls.dec_pnr);
+        ptls_aead_free(c->tls.enc_pnr);
+    }
 
     static uint8_t qv1_salt[] = {0x9c, 0x10, 0x8f, 0x98, 0x52, 0x0a, 0x5c,
                                  0x5c, 0x32, 0x96, 0x8e, 0x95, 0x0e, 0x8a,
