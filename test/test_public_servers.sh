@@ -69,7 +69,7 @@ fi
 
 pid=$$
 script=$(basename -s .sh $0)
-rm -f "/tmp/$script*"
+rm -f /tmp/$script*
 
 function test_server {
         # run quant client and produce a pure ASCII log for post-processing
@@ -103,7 +103,7 @@ function analyze {
         perl -n -e '/assertion failed/ && exit 1;' "$log"
         if [ $? == 1 ]; then
                 fail[$1]="X"
-                echo "Test with $1 crashed:"
+                echo "1-RTT test with $1 crashed:"
                 tail -n 20 "$log"
                 echo
                 return
@@ -141,7 +141,9 @@ function analyze {
 
         if [ $? == 1 ]; then
                 fail[$1]="X"
+                echo "0-RTT test with $1 crashed:"
                 tail -n 20 "$log"
+                echo
                 return
         fi
 
@@ -155,7 +157,9 @@ function analyze {
 
         if [ $? == 1 ]; then
                 fail[$1]="X"
+                echo "HRR test with $1 crashed:"
                 tail -n 20 "$log"
+                echo
                 return
         fi
 
