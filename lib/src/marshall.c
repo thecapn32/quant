@@ -223,7 +223,7 @@ uint16_t __attribute__((nonnull)) marshall_enc_pnr(uint8_t * const buf,
         break;
 
     case 4: {
-        const uint32_t v = htonl((0xc0UL << 24) | *src);
+        const uint32_t v = htonl(((uint32_t)0xc0 << 24) | *src);
         memcpy(&buf[i], &v, 4);
         i += 4;
         log_enc(uint32_t, fmt, "pnr");
