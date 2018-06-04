@@ -40,17 +40,21 @@ struct w_iov;
 #define AEAD_LEN 16
 
 
+struct cipher_ctx {
+    ptls_aead_context_t * aead;
+    ptls_cipher_context_t * pne;
+};
+
+struct pp {
+    struct cipher_ctx handshake;
+    struct cipher_ctx early_data;
+    struct cipher_ctx one_rtt[2]; // TODO: handle key phase
+};
+
 struct tls {
     ptls_t * t;
-    ptls_aead_context_t * dec_hshk;
-    ptls_aead_context_t * enc_hshk;
-    ptls_aead_context_t * dec_0rtt;
-    ptls_aead_context_t * enc_0rtt;
-    ptls_aead_context_t * dec_1rtt;
-    ptls_aead_context_t * enc_1rtt;
-    ptls_aead_context_t * dec_pnr;
-    ptls_aead_context_t * enc_pnr;
-
+    struct pp in_pp;
+    struct pp out_pp;
     uint8_t tp_buf[96];
     ptls_raw_extension_t tp_ext[2];
     ptls_handshake_properties_t tls_hshake_prop;

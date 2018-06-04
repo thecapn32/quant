@@ -25,6 +25,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <assert.h>
 #include <bitstring.h>
 #include <netinet/in.h>
 #include <stdbool.h>
@@ -106,8 +107,8 @@ static ptls_openssl_verify_certificate_t verifier = {0};
 static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-12", 5}};
 static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 
-static ptls_aead_context_t * dec_tckt;
-static ptls_aead_context_t * enc_tckt;
+static struct cipher_ctx dec_tckt;
+static struct cipher_ctx enc_tckt;
 
 #define COOKIE_LEN 64
 static uint8_t cookie[COOKIE_LEN];
@@ -129,11 +130,45 @@ static FILE * tls_log_file;
 #define TP_MAX (TP_INITIAL_MAX_UNI_STREAMS + 1)
 
 
-static int qhkdf_expand(ptls_hash_algorithm_t * const algo,
-                        void * const output,
-                        const size_t outlen,
-                        const void * const secret,
-                        const char * const label)
+// quicly shim
+#define st_quicly_cipher_context_t cipher_ctx
+#define st_quicly_packet_protection_t pp
+#define quicly_hexdump(a, b, c) hex2str(a, b)
+#ifndef NDEBUG
+#define QUICLY_DEBUG 1
+#else
+#define QUICLY_DEBUG 0
+#endif
+
+
+// from quicly
+static void dispose_cipher(struct st_quicly_cipher_context_t * ctx)
+{
+    ptls_aead_free(ctx->aead);
+    ptls_cipher_free(ctx->pne);
+}
+
+
+// from quicly
+static void free_packet_protection(struct st_quicly_packet_protection_t * pp)
+{
+    if (pp->handshake.aead != NULL)
+        dispose_cipher(&pp->handshake);
+    if (pp->early_data.aead != NULL)
+        dispose_cipher(&pp->early_data);
+    if (pp->one_rtt[0].aead != NULL)
+        dispose_cipher(&pp->one_rtt[0]);
+    if (pp->one_rtt[1].aead != NULL)
+        dispose_cipher(&pp->one_rtt[1]);
+}
+
+
+// from quicly
+static int qhkdf_expand(ptls_hash_algorithm_t * algo,
+                        void * output,
+                        size_t outlen,
+                        const void * secret,
+                        const char * label)
 {
     ptls_buffer_t hkdf_label;
     uint8_t hkdf_label_buf[16];
@@ -143,7 +178,7 @@ static int qhkdf_expand(ptls_hash_algorithm_t * const algo,
 
     ptls_buffer_push16(&hkdf_label, (uint16_t)outlen);
     ptls_buffer_push_block(&hkdf_label, 1, {
-        const char * const base_label = "QUIC ";
+        const char * base_label = "QUIC ";
         ptls_buffer_pushv(&hkdf_label, base_label, strlen(base_label));
         ptls_buffer_pushv(&hkdf_label, label, strlen(label));
     });
@@ -157,35 +192,131 @@ Exit:
     return ret;
 }
 
-static ptls_aead_context_t * new_aead(ptls_aead_algorithm_t * const aead,
-                                      ptls_hash_algorithm_t * const hash,
-                                      const int is_enc,
-                                      const void * const secret)
+
+// from quicly
+static int setup_cipher(struct st_quicly_cipher_context_t * ctx,
+                        ptls_aead_algorithm_t * aead,
+                        ptls_hash_algorithm_t * hash,
+                        int is_enc,
+                        const void * secret)
 {
-    ptls_aead_context_t * ctx = 0;
     uint8_t key[PTLS_MAX_SECRET_SIZE];
     int ret;
 
+    *ctx = (struct st_quicly_cipher_context_t){NULL};
+
     if ((ret = qhkdf_expand(hash, key, aead->key_size, secret, "key")) != 0)
         goto Exit;
-    warn(DBG, "key=%s", hex2str(key, aead->key_size));
-    if ((ctx = ptls_aead_new(aead, is_enc, key)) == 0) {
+    if ((ctx->aead = ptls_aead_new(aead, is_enc, key)) == NULL) {
         ret = PTLS_ERROR_NO_MEMORY;
         goto Exit;
     }
-    if ((ret = qhkdf_expand(hash, ctx->static_iv, aead->iv_size, secret,
+    if ((ret = qhkdf_expand(hash, ctx->aead->static_iv, aead->iv_size, secret,
                             "iv")) != 0)
         goto Exit;
-    // warn(DBG, "iv=%s", hex2str(ctx->static_iv, aead->iv_size));
+
+    if ((ret = qhkdf_expand(hash, key, aead->ctr_cipher->key_size, secret,
+                            "pn")) != 0)
+        goto Exit;
+    if ((ctx->pne = ptls_cipher_new(aead->ctr_cipher, is_enc, key)) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
 
     ret = 0;
 Exit:
-    if (ret != 0 && ctx != 0) {
-        ptls_aead_free(ctx);
-        ctx = 0;
+    if (ret != 0) {
+        if (ctx->aead != NULL) {
+            ptls_aead_free(ctx->aead);
+            ctx->aead = NULL;
+        }
+        if (ctx->pne != NULL) {
+            ptls_cipher_free(ctx->pne);
+            ctx->pne = NULL;
+        }
     }
     ptls_clear_memory(key, sizeof(key));
-    return ctx;
+    return ret;
+}
+
+
+// from quicly
+static int setup_handshake_secret(struct st_quicly_cipher_context_t * ctx,
+                                  ptls_cipher_suite_t * cs,
+                                  const void * master_secret,
+                                  const char * label,
+                                  int is_enc)
+{
+    uint8_t aead_secret[PTLS_MAX_DIGEST_SIZE];
+    int ret;
+
+    if ((ret = qhkdf_expand(cs->hash, aead_secret, cs->hash->digest_size,
+                            master_secret, label)) != 0)
+        goto Exit;
+    if (QUICLY_DEBUG) {
+        char * aead_secret_hex =
+            quicly_hexdump(aead_secret, cs->hash->digest_size, SIZE_MAX);
+        fprintf(stderr, "%s: label: \"%s\", aead-secret: %s\n", __FUNCTION__,
+                label, aead_secret_hex);
+        // free(aead_secret_hex);
+    }
+    if ((ret = setup_cipher(ctx, cs->aead, cs->hash, is_enc, aead_secret)) != 0)
+        goto Exit;
+
+Exit:
+    ptls_clear_memory(aead_secret, sizeof(aead_secret));
+    return ret;
+}
+
+
+static int
+setup_handshake_encryption(struct st_quicly_cipher_context_t * ingress,
+                           struct st_quicly_cipher_context_t * egress,
+                           ptls_cipher_suite_t ** cipher_suites,
+                           ptls_iovec_t cid,
+                           int is_client)
+{
+    static const uint8_t salt[] = {0x9c, 0x10, 0x8f, 0x98, 0x52, 0x0a, 0x5c,
+                                   0x5c, 0x32, 0x96, 0x8e, 0x95, 0x0e, 0x8a,
+                                   0x2c, 0x5f, 0xe0, 0x6d, 0x6c, 0x38};
+    static const char * labels[2] = {"client hs", "server hs"};
+    ptls_cipher_suite_t ** cs;
+    uint8_t secret[PTLS_MAX_DIGEST_SIZE];
+    int ret;
+
+    /* find aes128gcm cipher */
+    for (cs = cipher_suites;; ++cs) {
+        assert(cs != NULL);
+        if ((*cs)->id == PTLS_CIPHER_SUITE_AES_128_GCM_SHA256)
+            break;
+    }
+
+    /* extract master secret */
+    if ((ret = ptls_hkdf_extract((*cs)->hash, secret,
+                                 ptls_iovec_init(salt, sizeof(salt)), cid)) !=
+        0)
+        goto Exit;
+    if (QUICLY_DEBUG) {
+        char *cid_hex = quicly_hexdump(cid.base, cid.len, SIZE_MAX),
+             *secret_hex =
+                 quicly_hexdump(secret, (*cs)->hash->digest_size, SIZE_MAX);
+        fprintf(stderr, "%s: cid: %s -> secret: %s\n", __FUNCTION__, cid_hex,
+                secret_hex);
+        // free(cid_hex);
+        // free(secret_hex);
+    }
+
+    /* create aead contexts */
+    if ((ret = setup_handshake_secret(ingress, *cs, secret, labels[is_client],
+                                      0)) != 0)
+        goto Exit;
+    if ((ret = setup_handshake_secret(egress, *cs, secret, labels[!is_client],
+                                      1)) != 0)
+        goto Exit;
+
+Exit:
+    ptls_clear_memory(secret, sizeof(secret));
+    return ret;
 }
 
 
@@ -503,71 +634,9 @@ static void init_ticket_prot(void)
     uint8_t output[PTLS_MAX_SECRET_SIZE] = {0};
     memcpy(output, quant_commit_hash,
            MIN(quant_commit_hash_len, sizeof(output)));
-
-    dec_tckt = new_aead(cs->aead, cs->hash, 0, output);
-    enc_tckt = new_aead(cs->aead, cs->hash, 1, output);
-    ensure(dec_tckt && enc_tckt, "cannot init ticket protection");
-
+    setup_cipher(&dec_tckt, cs->aead, cs->hash, 0, output);
+    setup_cipher(&enc_tckt, cs->aead, cs->hash, 1, output);
     ptls_clear_memory(output, sizeof(output));
-}
-
-
-static ptls_aead_context_t * init_hshk_secret(ptls_cipher_suite_t * const cs,
-                                              uint8_t * const sec,
-                                              const char * const label,
-                                              uint8_t is_enc)
-{
-    uint8_t output[PTLS_MAX_SECRET_SIZE];
-    ensure(qhkdf_expand(cs->hash, output, cs->hash->digest_size, sec, label) ==
-               0,
-           "qhkdf_expand");
-    // warn(DBG, "%s: %s", label, hex2str(output, cs->hash->digest_size));
-    return new_aead(cs->aead, cs->hash, is_enc, output);
-}
-
-
-void init_hshk_prot(struct q_conn * const c)
-{
-    // this can be called multiple times due to retry
-    if (c->tls.dec_hshk) {
-        // if we allocated one, assume we allocated them all
-        ptls_aead_free(c->tls.dec_hshk);
-        ptls_aead_free(c->tls.enc_hshk);
-        ptls_aead_free(c->tls.dec_pnr);
-        ptls_aead_free(c->tls.enc_pnr);
-    }
-
-    static uint8_t qv1_salt[] = {0x9c, 0x10, 0x8f, 0x98, 0x52, 0x0a, 0x5c,
-                                 0x5c, 0x32, 0x96, 0x8e, 0x95, 0x0e, 0x8a,
-                                 0x2c, 0x5f, 0xe0, 0x6d, 0x6c, 0x38};
-
-    const ptls_cipher_suite_t * const cs = &ptls_openssl_aes128gcmsha256;
-
-    uint8_t sec[PTLS_MAX_SECRET_SIZE];
-    const ptls_iovec_t salt = {.base = qv1_salt, .len = sizeof(qv1_salt)};
-
-    const ptls_iovec_t cid = {
-        .base = (uint8_t *)(c->is_clnt ? &c->dcid.id : &c->scid.id),
-        .len = c->is_clnt ? c->dcid.len : c->scid.len};
-    ensure(ptls_hkdf_extract(cs->hash, sec, salt, cid) == 0,
-           "ptls_hkdf_extract");
-    warn(DBG, "handshake secret=%s", hex2str(sec, PTLS_MAX_SECRET_SIZE));
-
-    c->tls.dec_hshk =
-        init_hshk_secret(cs, sec, c->is_clnt ? "server hs" : "client hs", 0);
-    warn(DBG, "%s iv=%s", c->is_clnt ? "serv" : "clnt",
-         hex2str(c->tls.dec_hshk->static_iv, c->tls.dec_hshk->algo->iv_size));
-    c->tls.enc_hshk =
-        init_hshk_secret(cs, sec, c->is_clnt ? "client hs" : "server hs", 1);
-    warn(DBG, "%s iv=%s", c->is_clnt ? "clnt" : "serv",
-         hex2str(c->tls.enc_hshk->static_iv, c->tls.enc_hshk->algo->iv_size));
-
-    c->tls.dec_pnr = init_hshk_secret(cs, sec, "pn", 0);
-    warn(DBG, "pn dec=%s",
-         hex2str(c->tls.dec_pnr->static_iv, c->tls.dec_pnr->algo->iv_size));
-    c->tls.enc_pnr = init_hshk_secret(cs, sec, "pn", 1);
-    warn(DBG, "pn enc=%s",
-         hex2str(c->tls.enc_pnr->static_iv, c->tls.enc_pnr->algo->iv_size));
 }
 
 
@@ -587,7 +656,7 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
 #endif
     uint64_t tid;
     if (ptls_buffer_reserve(dst, src.len + quant_commit_hash_len + sizeof(tid) +
-                                     enc_tckt->algo->tag_size))
+                                     enc_tckt.aead->algo->tag_size))
         return -1;
 
     if (is_encrypt) {
@@ -605,12 +674,12 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
         dst->off += sizeof(tid);
 
         // now encrypt ticket
-        dst->off += ptls_aead_encrypt(enc_tckt, dst->base + dst->off, src.base,
-                                      src.len, tid, 0, 0);
+        dst->off += ptls_aead_encrypt(enc_tckt.aead, dst->base + dst->off,
+                                      src.base, src.len, tid, 0, 0);
 
     } else {
         if (src.len < quant_commit_hash_len + sizeof(tid) +
-                          dec_tckt->algo->tag_size ||
+                          dec_tckt.aead->algo->tag_size ||
             memcmp(src.base, quant_commit_hash, quant_commit_hash_len) != 0) {
             warn(WRN,
                  "could not verify 0-RTT session ticket for %s conn %s (%s %s)",
@@ -625,7 +694,7 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
         src_base += sizeof(tid);
         src_len -= sizeof(tid);
 
-        const size_t n = ptls_aead_decrypt(dec_tckt, dst->base + dst->off,
+        const size_t n = ptls_aead_decrypt(dec_tckt.aead, dst->base + dst->off,
                                            src_base, src_len, tid, 0, 0);
 
         if (n > src_len) {
@@ -782,22 +851,9 @@ void init_tls(struct q_conn * const c)
 
 void free_tls(struct q_conn * const c)
 {
-    if (c->tls.dec_0rtt)
-        ptls_aead_free(c->tls.dec_0rtt);
-    if (c->tls.enc_0rtt)
-        ptls_aead_free(c->tls.enc_0rtt);
-    if (c->tls.dec_1rtt)
-        ptls_aead_free(c->tls.dec_1rtt);
-    if (c->tls.enc_1rtt)
-        ptls_aead_free(c->tls.enc_1rtt);
-    if (c->tls.dec_hshk)
-        ptls_aead_free(c->tls.dec_hshk);
-    if (c->tls.enc_hshk)
-        ptls_aead_free(c->tls.enc_hshk);
-    if (c->tls.dec_pnr)
-        ptls_aead_free(c->tls.dec_pnr);
-    if (c->tls.enc_pnr)
-        ptls_aead_free(c->tls.enc_pnr);
+    free_packet_protection(&c->tls.in_pp);
+    free_packet_protection(&c->tls.out_pp);
+
     if (c->tls.t)
         ptls_free(c->tls.t);
 
@@ -814,48 +870,71 @@ void free_tls(struct q_conn * const c)
 }
 
 
-static ptls_aead_context_t * __attribute__((nonnull))
-init_secret(ptls_t * const t,
-            const char * const label,
-            uint8_t is_enc,
-            uint8_t is_early)
+// from quicly
+static int setup_secret(struct st_quicly_packet_protection_t * pp,
+                        ptls_t * tls,
+                        const char * label,
+                        int is_early,
+                        int is_enc)
 {
-    const ptls_cipher_suite_t * const cs = ptls_get_cipher(t);
-    uint8_t sec[PTLS_MAX_DIGEST_SIZE];
-    ensure(ptls_export_secret(t, sec, cs->hash->digest_size, label,
-                              ptls_iovec_init(0, 0), is_early) == 0,
-           "ptls_export_secret");
-    warn(DBG, "%s secret=%s", label, hex2str(sec, cs->hash->digest_size));
+    ptls_cipher_suite_t * cipher = ptls_get_cipher(tls);
+    struct st_quicly_cipher_context_t * ctx =
+        is_early ? &pp->early_data : &pp->one_rtt[0];
+    uint8_t secret[PTLS_MAX_DIGEST_SIZE];
+    int ret;
 
-    return new_aead(cs->aead, cs->hash, is_enc, sec);
+    if ((ret = ptls_export_secret(tls, secret, cipher->hash->digest_size, label,
+                                  ptls_iovec_init(NULL, 0), is_early)) != 0)
+        goto Exit;
+    if ((ret = setup_cipher(ctx, cipher->aead, cipher->hash, is_enc, secret)) !=
+        0)
+        goto Exit;
+
+Exit:
+    ptls_clear_memory(secret, sizeof(secret));
+    return ret;
 }
 
 
-#define LABL_0RTT "EXPORTER-QUIC 0rtt"
+void init_hshk_prot(struct q_conn * const c)
+{
+    free_packet_protection(&c->tls.in_pp);
+    free_packet_protection(&c->tls.out_pp);
+
+    const ptls_iovec_t cid = {
+        .base = (uint8_t *)(c->is_clnt ? &c->dcid.id : &c->scid.id),
+        .len = c->is_clnt ? c->dcid.len : c->scid.len};
+    ptls_cipher_suite_t * cs = &ptls_openssl_aes128gcmsha256;
+
+    setup_handshake_encryption(&c->tls.in_pp.handshake,
+                               &c->tls.out_pp.handshake, &cs, cid, c->is_clnt);
+}
+
 
 void init_0rtt_prot(struct q_conn * const c)
 {
     // this can be called multiple times due to version negotiation
-    if (c->tls.dec_0rtt)
-        ptls_aead_free(c->tls.dec_0rtt);
-    if (c->tls.enc_0rtt)
-        ptls_aead_free(c->tls.enc_0rtt);
+    if (c->tls.in_pp.early_data.aead)
+        dispose_cipher(&c->tls.in_pp.early_data);
+    if (c->tls.out_pp.early_data.aead)
+        dispose_cipher(&c->tls.out_pp.early_data);
 
-    c->tls.dec_0rtt = init_secret(c->tls.t, LABL_0RTT, 0, 1);
-    c->tls.enc_0rtt = init_secret(c->tls.t, LABL_0RTT, 1, 1);
+    int ret = setup_secret(&c->tls.in_pp, c->tls.t, "EXPORTER-QUIC 0rtt", 1, 0);
+    ensure(ret == 0, "setup_secret %u", ret);
+    ret = setup_secret(&c->tls.out_pp, c->tls.t, "EXPORTER-QUIC 0rtt", 1, 1);
+    ensure(ret == 0, "setup_secret %u", ret);
 }
-
-
-#define CLNT_LABL_1RTT "EXPORTER-QUIC client 1rtt"
-#define SERV_LABL_1RTT "EXPORTER-QUIC server 1rtt"
 
 
 static void __attribute__((nonnull)) init_1rtt_prot(struct q_conn * const c)
 {
-    c->tls.dec_1rtt = init_secret(
-        c->tls.t, c->is_clnt ? SERV_LABL_1RTT : CLNT_LABL_1RTT, 0, 0);
-    c->tls.enc_1rtt = init_secret(
-        c->tls.t, c->is_clnt ? CLNT_LABL_1RTT : SERV_LABL_1RTT, 1, 0);
+    static const char * labels[] = {"EXPORTER-QUIC client 1rtt",
+                                    "EXPORTER-QUIC server 1rtt"};
+
+    int ret = setup_secret(&c->tls.in_pp, c->tls.t, labels[c->is_clnt], 0, 0);
+    ensure(ret == 0, "setup_secret %u", ret);
+    ret = setup_secret(&c->tls.out_pp, c->tls.t, labels[!c->is_clnt], 0, 1);
+    ensure(ret == 0, "setup_secret %u", ret);
 }
 
 
@@ -1080,8 +1159,8 @@ void init_tls_ctx(const char * const cert,
 
 void cleanup_tls_ctx(void)
 {
-    ptls_aead_free(dec_tckt);
-    ptls_aead_free(enc_tckt);
+    dispose_cipher(&dec_tckt);
+    dispose_cipher(&enc_tckt);
 }
 
 
@@ -1092,18 +1171,21 @@ which_aead(const struct q_conn * const c,
 {
     if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
         if (meta(v).hdr.type == F_LH_0RTT)
-            return in ? c->tls.dec_0rtt : c->tls.enc_0rtt;
-        return in ? c->tls.dec_hshk : c->tls.enc_hshk;
+            return in ? c->tls.in_pp.early_data.aead
+                      : c->tls.out_pp.early_data.aead;
+        return in ? c->tls.in_pp.handshake.aead : c->tls.out_pp.handshake.aead;
     }
-    return in ? c->tls.dec_1rtt : c->tls.enc_1rtt;
+    return in ? c->tls.in_pp.one_rtt[0].aead : c->tls.out_pp.one_rtt[0].aead;
 }
 
 
 #ifndef NDEBUG
 #define aead_type(c, a)                                                        \
-    (((a) == (c)->tls.dec_1rtt || (a) == (c)->tls.enc_1rtt)                    \
+    (((a) == (c)->tls.in_pp.one_rtt[0].aead ||                                 \
+      (a) == (c)->tls.out_pp.one_rtt[0].aead)                                  \
          ? "1-RTT"                                                             \
-         : (((a) == (c)->tls.dec_0rtt || (a) == (c)->tls.enc_0rtt)             \
+         : (((a) == (c)->tls.in_pp.early_data.aead ||                          \
+             (a) == (c)->tls.out_pp.early_data.aead)                           \
                 ? "0-RTT"                                                      \
                 : "handshake"))
 #endif

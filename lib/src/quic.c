@@ -242,7 +242,7 @@ struct q_conn * q_connect(struct w_engine * const w,
 
     warn(WRN, "%s conn %s connected%s, cipher %s", conn_type(c),
          cid2str(&c->scid), c->did_0rtt ? " after 0-RTT" : "",
-         c->tls.enc_1rtt->algo->name);
+         c->tls.out_pp.one_rtt[0].aead->algo->name);
     return c;
 }
 
@@ -397,7 +397,7 @@ struct q_conn * q_accept(struct w_engine * const w __attribute__((unused)),
          inet_ntoa(accept_queue->peer.sin_addr),
          ntohs(accept_queue->peer.sin_port),
          accept_queue->did_0rtt ? " after 0-RTT" : "",
-         accept_queue->tls.enc_1rtt->algo->name);
+         accept_queue->tls.out_pp.one_rtt[0].aead->algo->name);
 
     struct q_conn * const ret = accept_queue;
     accept_queue = 0;

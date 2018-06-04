@@ -186,7 +186,7 @@ bool enc_pkt(struct q_stream * const s,
     case CONN_STAT_ESTB:
     case CONN_STAT_CLNG:
     case CONN_STAT_DRNG:
-        if (likely(c->tls.enc_1rtt))
+        if (c->tls.out_pp.one_rtt[0].aead)
             meta(v).hdr.flags = F_SH;
         else {
             meta(v).hdr.type = F_LH_HSHK;
