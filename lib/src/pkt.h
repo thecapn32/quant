@@ -41,17 +41,12 @@
 #define F_LH_HSHK 0x7D
 #define F_LH_0RTT 0x7C
 
-#define F_SH_KYPH 0x40
-#define F_SH_RSV1 0x20
-#define F_SH_RSV2 0x10
-#define F_SH_GOOG 0x08
-#define F_SH_EXP 0x04
-
+// #define F_SH_KYPH 0x40
+// #define F_SH_RSV1 0x20
+// #define F_SH_RSV2 0x10
+// #define F_SH_GOOG 0x08
+// #define F_SH_EXP 0x04
 #define F_SH 0x30
-
-#define F_SH_4OCT 0x02
-#define F_SH_2OCT 0x01
-#define F_SH_1OCT 0x00
 
 #define ERR_NO_ERR 0x0
 #define ERR_INTERNAL_ERR 0x1

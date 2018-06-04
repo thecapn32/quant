@@ -103,7 +103,7 @@ static struct ticket_splay tickets = splay_initializer(tickets);
 static ptls_openssl_sign_certificate_t sign_cert = {0};
 static ptls_openssl_verify_certificate_t verifier = {0};
 
-static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-11", 5}};
+static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-12", 5}};
 static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 
 static ptls_aead_context_t * dec_tckt;

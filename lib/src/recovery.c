@@ -29,7 +29,6 @@
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <sys/param.h>
 
 #include <ev.h>
@@ -438,7 +437,7 @@ void rec_init(struct q_conn * const c)
     }
     splay_init(&c->rec.sent_pkts);
 
-    c->rec.lg_sent = arc4random_uniform((1UL << 32) - 1025);
+    c->rec.lg_sent = UINT64_MAX;
     c->rec.cwnd = kInitialWindow;
     c->rec.ssthresh = UINT64_MAX;
 }
