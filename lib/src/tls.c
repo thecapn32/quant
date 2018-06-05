@@ -133,11 +133,11 @@ static FILE * tls_log_file;
 // quicly shim
 #define st_quicly_cipher_context_t cipher_ctx
 #define st_quicly_packet_protection_t pp
-#define quicly_hexdump(a, b, c) hex2str(a, b)
+// #define quicly_hexdump(a, b, c) hex2str(a, b)
 // #ifndef NDEBUG
 // #define QUICLY_DEBUG 1
 // #else
-#define QUICLY_DEBUG 0
+// #define QUICLY_DEBUG 0
 // #endif
 
 
@@ -253,6 +253,7 @@ static int setup_handshake_secret(struct st_quicly_cipher_context_t * ctx,
     if ((ret = qhkdf_expand(cs->hash, aead_secret, cs->hash->digest_size,
                             master_secret, label)) != 0)
         goto Exit;
+# if 0
     if (QUICLY_DEBUG) {
         char * aead_secret_hex =
             quicly_hexdump(aead_secret, cs->hash->digest_size, SIZE_MAX);
@@ -260,6 +261,7 @@ static int setup_handshake_secret(struct st_quicly_cipher_context_t * ctx,
                 label, aead_secret_hex);
         // free(aead_secret_hex);
     }
+#endif
     if ((ret = setup_cipher(ctx, cs->aead, cs->hash, is_enc, aead_secret)) != 0)
         goto Exit;
 
@@ -296,6 +298,7 @@ setup_handshake_encryption(struct st_quicly_cipher_context_t * ingress,
                                  ptls_iovec_init(salt, sizeof(salt)), cid)) !=
         0)
         goto Exit;
+# if 0
     if (QUICLY_DEBUG) {
         char *cid_hex = quicly_hexdump(cid.base, cid.len, SIZE_MAX),
              *secret_hex =
@@ -305,7 +308,7 @@ setup_handshake_encryption(struct st_quicly_cipher_context_t * ingress,
         // free(cid_hex);
         // free(secret_hex);
     }
-
+#endif
     /* create aead contexts */
     if ((ret = setup_handshake_secret(ingress, *cs, secret, labels[is_client],
                                       0)) != 0)
