@@ -30,6 +30,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <picotls.h>
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
@@ -81,10 +82,10 @@ void log_pkt(const char * const dir, const struct w_iov * const v)
         else
             twarn(NTE,
                   BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM
-                      "vers=0x%08x dcid=%s scid=%s plen=%u nr=%s%" PRIu64,
+                      "vers=0x%08x dcid=%s scid=%s len=%u nr=%s%" PRIu64,
                   col_dir, dir, v->len, meta(v).hdr.type, col_dir,
                   pkt_type_str(v), meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
-                  cid2str(&meta(v).hdr.scid), meta(v).hdr.plen, col_nr,
+                  cid2str(&meta(v).hdr.scid), meta(v).hdr.len, col_nr,
                   meta(v).hdr.nr);
     } else
         twarn(NTE,
@@ -135,7 +136,8 @@ bool enc_pkt(struct q_stream * const s,
     adj_iov_to_start(v);
 
     struct q_conn * const c = s->c;
-    uint16_t i = 0;
+    uint16_t i = 0, nr_pos = 0, len_pos = 0;
+    uint8_t nr_len = 0;
 
     if (c->state == CONN_STAT_VERS_NEG) {
         warn(INF, "sending vers neg serv response");
@@ -202,23 +204,20 @@ bool enc_pkt(struct q_stream * const s,
     i = enc(v->buf, v->len, 0, &meta(v).hdr.flags, sizeof(meta(v).hdr.flags), 0,
             "0x%02x");
 
-    uint16_t plen_pos = 0;
     if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
         meta(v).hdr.vers = c->vers;
         i = enc(v->buf, v->len, i, &c->vers, sizeof(c->vers), 0, "0x%08x");
         i = enc_lh_cids(c, v, i);
-        // leave space for payload length field (2 bytes is enough)
-        plen_pos = i;
+        // leave space for length field (2 bytes is enough)
+        len_pos = i;
         i += 2;
-        // encode pkt nr
-        i = enc(v->buf, v->len, i, &meta(v).hdr.nr, sizeof(uint32_t), 0,
-                GRN "%u" NRM);
     } else {
         i = enc_buf(v->buf, v->len, i, &c->dcid.id, c->dcid.len, "%s");
         meta(v).hdr.dcid = c->dcid;
-        i = enc_pnr(v->buf, v->len, i, &meta(v).hdr.nr,
-                    needed_pkt_nr_len(c, meta(v).hdr.nr), GRN "%u" NRM);
     }
+    nr_pos = i;
+    nr_len = needed_pkt_nr_len(c, meta(v).hdr.nr);
+    i = enc_pnr(v->buf, v->len, i, &meta(v).hdr.nr, nr_len, GRN "%u" NRM);
 
     meta(v).hdr.hdr_len = i;
     log_pkt("TX", v);
@@ -318,15 +317,16 @@ bool enc_pkt(struct q_stream * const s,
         conn_to_state(c, CONN_STAT_CH_SENT);
     }
 
-    // for LH pkts, now encode the payload length
-    if (plen_pos) {
-        const uint64_t plen = i - meta(v).hdr.hdr_len + AEAD_LEN;
-        enc(v->buf, v->len, plen_pos, &plen, 0, 2, "%" PRIu64);
-    }
-
     ensure(i > meta(v).hdr.hdr_len, "would have sent pkt w/o frames");
 
 tx:
+    // for LH pkts, now encode the length
+    meta(v).hdr.len = i + AEAD_LEN - nr_pos;
+    if (len_pos) {
+        const uint64_t len = meta(v).hdr.len;
+        enc(v->buf, v->len, len_pos, &len, 0, 2, "%" PRIu64);
+    }
+
     v->len = i;
 
     // alloc a new buffer to encrypt/sign into for TX
@@ -340,7 +340,7 @@ tx:
         x->len = v->len;
         conn_to_state(c, CONN_STAT_VERS_NEG_SENT);
     } else
-        x->len = enc_aead(c, v, x);
+        x->len = enc_aead(c, v, x, nr_pos);
 
     if (!c->is_clnt) {
         x->ip = c->peer.sin_addr.s_addr;
@@ -407,10 +407,10 @@ bool dec_pkt_hdr_initial(const struct w_iov * const v, const bool is_clnt)
             // version negotiation packet
             return true;
 
-        uint64_t plen = 0;
+        uint64_t len = 0;
         meta(v).hdr.hdr_len =
-            dec(&plen, v->buf, v->len, meta(v).hdr.hdr_len, 0, "%" PRIu64);
-        meta(v).hdr.plen = (uint16_t)plen;
+            dec(&len, v->buf, v->len, meta(v).hdr.hdr_len, 0, "%" PRIu64);
+        meta(v).hdr.len = (uint16_t)len;
         return true;
     }
 
@@ -432,17 +432,41 @@ bool dec_pkt_hdr_remainder(struct w_iov * const v,
                            struct q_conn * const c,
                            struct w_iov_sq * const i)
 {
+    // meta(v).hdr.hdr_len holds the offset of the pnr field
+    const uint16_t nr_pos = meta(v).hdr.hdr_len;
+    uint16_t off = nr_pos + 4;
+    const uint16_t len = is_set(F_LONG_HDR, meta(v).hdr.flags)
+                             ? nr_pos + meta(v).hdr.len + AEAD_LEN - 1
+                             : v->len;
+    if (off + AEAD_LEN > len)
+        off = len - AEAD_LEN;
+
+    const struct cipher_ctx * const ctx = which_cipher_ctx(c, v, true);
+    ensure(ctx, "cipher context is null");
+    ptls_cipher_init(ctx->pne, &v->buf[off]);
+    uint8_t enc_nr[4];
+    ptls_cipher_encrypt(ctx->pne, enc_nr, &v->buf[nr_pos], sizeof(enc_nr));
+
+    const uint64_t next = diet_max(&c->recv) + 1;
+    uint64_t nr = next;
+    const uint16_t nr_len = dec_pnr(&nr, enc_nr, sizeof(enc_nr), 0, "%u");
+    if (unlikely(nr_len == UINT16_MAX))
+        return false;
+
+    memcpy(&v->buf[nr_pos], &enc_nr, nr_len);
+
+    warn(DBG, "removed PNE over [%u..%u] based on off %u", nr_pos,
+         nr_pos + nr_len - 1, off);
+
+    const uint64_t alt = nr + (UINT64_C(1) << (nr_len * 8));
+    const uint64_t d1 = next >= nr ? next - nr : nr - next;
+    const uint64_t d2 = next >= alt ? next - alt : alt - next;
+    meta(v).hdr.nr = d1 < d2 ? nr : alt;
+    meta(v).hdr.hdr_len += nr_len;
+
     if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
-        uint32_t nr = 0;
-        uint16_t ret = dec(&nr, v->buf, v->len, meta(v).hdr.hdr_len, 4, "%u");
-        if (unlikely(ret == UINT16_MAX))
-            return false;
-
-        meta(v).hdr.nr = nr;
-        meta(v).hdr.hdr_len += 4;
-
         // check for coalesced packet
-        const uint16_t pkt_len = meta(v).hdr.hdr_len + meta(v).hdr.plen;
+        const uint16_t pkt_len = meta(v).hdr.hdr_len + meta(v).hdr.len - nr_len;
         if (pkt_len < v->len) {
             // allocate new w_iov for coalesced packet and copy it over
             struct w_iov * const vdup = w_iov_dup(v);
@@ -455,21 +479,6 @@ bool dec_pkt_hdr_remainder(struct w_iov * const v,
             warn(DBG, "split out 0x%02x-type coalesced pkt of len %u",
                  pkt_type(*vdup->buf), vdup->len);
         }
-
-    } else {
-        const uint64_t next = diet_max(&c->recv) + 1;
-        uint64_t nr = next;
-        const uint16_t pos =
-            dec_pnr(&nr, v->buf, v->len, meta(v).hdr.hdr_len, "%u");
-        if (unlikely(pos == UINT16_MAX))
-            return false;
-
-        const uint16_t nr_len = pos - meta(v).hdr.hdr_len;
-        const uint64_t alt = nr + (UINT64_C(1) << (nr_len * 8));
-        const uint64_t d1 = next >= nr ? next - nr : nr - next;
-        const uint64_t d2 = next >= alt ? next - alt : alt - next;
-        meta(v).hdr.nr = d1 < d2 ? nr : alt;
-        meta(v).hdr.hdr_len = pos;
     }
     return true;
 }

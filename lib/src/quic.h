@@ -54,7 +54,7 @@ struct cid {
 
 
 struct pkt_hdr {
-    uint16_t plen;
+    uint16_t len;
     uint16_t hdr_len;
     uint32_t vers;
     uint64_t nr;

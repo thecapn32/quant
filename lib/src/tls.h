@@ -27,6 +27,7 @@
 
 #pragma once
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -90,4 +91,10 @@ dec_aead(const struct q_conn * const c, const struct w_iov * const v);
 
 extern uint16_t __attribute__((nonnull)) enc_aead(const struct q_conn * const c,
                                                   const struct w_iov * const v,
-                                                  const struct w_iov * const x);
+                                                  const struct w_iov * const x,
+                                                  const uint16_t nr_pos);
+
+extern const struct cipher_ctx * __attribute__((nonnull))
+which_cipher_ctx(const struct q_conn * const c,
+                 const struct w_iov * const v,
+                 const bool in);

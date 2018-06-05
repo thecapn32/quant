@@ -539,7 +539,6 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         if (vers_supported(c->vers) && !is_force_neg_vers(c->vers)) {
             warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
 
-            init_tls(c);
             if (verify_prot(c, v) == false)
                 goto done;
 
@@ -795,6 +794,7 @@ void rx(struct ev_loop * const l,
                                      &meta(v).hdr.dcid, &peer, 0,
                                      ntohs(w_get_sport(ws)), 0);
                         new_stream(c, 0, false);
+                        init_tls(c);
                     }
                 }
             }

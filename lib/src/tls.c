@@ -134,11 +134,11 @@ static FILE * tls_log_file;
 #define st_quicly_cipher_context_t cipher_ctx
 #define st_quicly_packet_protection_t pp
 #define quicly_hexdump(a, b, c) hex2str(a, b)
-#ifndef NDEBUG
-#define QUICLY_DEBUG 1
-#else
+// #ifndef NDEBUG
+// #define QUICLY_DEBUG 1
+// #else
 #define QUICLY_DEBUG 0
-#endif
+// #endif
 
 
 // from quicly
@@ -1164,18 +1164,16 @@ void cleanup_tls_ctx(void)
 }
 
 
-static ptls_aead_context_t * __attribute__((nonnull))
-which_aead(const struct q_conn * const c,
-           const struct w_iov * const v,
-           const bool in)
+const struct cipher_ctx * which_cipher_ctx(const struct q_conn * const c,
+                                           const struct w_iov * const v,
+                                           const bool in)
 {
     if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
         if (meta(v).hdr.type == F_LH_0RTT)
-            return in ? c->tls.in_pp.early_data.aead
-                      : c->tls.out_pp.early_data.aead;
-        return in ? c->tls.in_pp.handshake.aead : c->tls.out_pp.handshake.aead;
+            return in ? &c->tls.in_pp.early_data : &c->tls.out_pp.early_data;
+        return in ? &c->tls.in_pp.handshake : &c->tls.out_pp.handshake;
     }
-    return in ? c->tls.in_pp.one_rtt[0].aead : c->tls.out_pp.one_rtt[0].aead;
+    return in ? &c->tls.in_pp.one_rtt[0] : &c->tls.out_pp.one_rtt[0];
 }
 
 
@@ -1193,42 +1191,56 @@ which_aead(const struct q_conn * const c,
 
 uint16_t dec_aead(const struct q_conn * const c, const struct w_iov * const v)
 {
-    ptls_aead_context_t * const aead = which_aead(c, v, true);
-    if (aead == 0)
+    const struct cipher_ctx * const ctx = which_cipher_ctx(c, v, true);
+    if (ctx == 0)
         return 0;
 
     const uint16_t hdr_len = meta(v).hdr.hdr_len;
-    const uint16_t plen =
-        meta(v).hdr.plen ? meta(v).hdr.plen : v->len - hdr_len;
-    const size_t len =
-        ptls_aead_decrypt(aead, &v->buf[hdr_len], &v->buf[hdr_len], plen,
+    ensure(meta(v).hdr.hdr_len, "meta(v).hdr.hdr_len");
+    const uint16_t len = v->len - hdr_len;
+    const size_t ret =
+        ptls_aead_decrypt(ctx->aead, &v->buf[hdr_len], &v->buf[hdr_len], len,
                           meta(v).hdr.nr, v->buf, hdr_len);
-    if (len == SIZE_MAX)
+    if (ret == SIZE_MAX)
         return 0;
     warn(DBG, "verifying %lu-byte %s AEAD over [0..%u] in [%u..%u]", AEAD_LEN,
-         aead_type(c, aead), hdr_len + plen - AEAD_LEN - 1,
-         hdr_len + plen - AEAD_LEN, hdr_len + plen - 1);
-    return hdr_len + (uint16_t)len;
+         aead_type(c, ctx->aead), hdr_len + len - AEAD_LEN - 1,
+         hdr_len + len - AEAD_LEN, hdr_len + len - 1);
+    return hdr_len + len;
 }
 
 
 uint16_t enc_aead(const struct q_conn * const c,
                   const struct w_iov * const v,
-                  const struct w_iov * const x)
+                  const struct w_iov * const x,
+                  const uint16_t nr_pos)
 {
-    ptls_aead_context_t * const aead = which_aead(c, v, false);
-    ensure(aead, "AEAD is null");
+    const struct cipher_ctx * const ctx = which_cipher_ctx(c, v, false);
+    ensure(ctx, "cipher context is null");
 
     const uint16_t hdr_len = meta(v).hdr.hdr_len;
+    ensure(meta(v).hdr.hdr_len, "meta(v).hdr.hdr_len");
     memcpy(x->buf, v->buf, hdr_len); // copy pkt header
 
-    const uint16_t plen =
-        meta(v).hdr.plen ? meta(v).hdr.plen : v->len - hdr_len + AEAD_LEN;
-    const size_t len =
-        ptls_aead_encrypt(aead, &x->buf[hdr_len], &v->buf[hdr_len],
+    const uint16_t plen = v->len - hdr_len + AEAD_LEN;
+    const size_t ret =
+        ptls_aead_encrypt(ctx->aead, &x->buf[hdr_len], &v->buf[hdr_len],
                           plen - AEAD_LEN, meta(v).hdr.nr, v->buf, hdr_len);
     warn(DBG, "added %lu-byte %s AEAD over [0..%u] in [%u..%u]", AEAD_LEN,
-         aead_type(c, aead), hdr_len + plen - AEAD_LEN - 1,
+         aead_type(c, ctx->aead), hdr_len + plen - AEAD_LEN - 1,
          hdr_len + plen - AEAD_LEN, hdr_len + plen - 1);
-    return hdr_len + (uint16_t)len;
+
+    if (nr_pos) {
+        // encrypt the packet number
+        uint16_t off = nr_pos + 4;
+        if (off + AEAD_LEN > x->len)
+            off = x->len - AEAD_LEN;
+        ptls_cipher_init(ctx->pne, &x->buf[off]);
+        ptls_cipher_encrypt(ctx->pne, &x->buf[nr_pos], &x->buf[nr_pos],
+                            hdr_len - nr_pos);
+        warn(DBG, "added PNE over [%u..%u] based on off %u", nr_pos,
+             hdr_len - 1, off);
+    }
+
+    return hdr_len + (uint16_t)ret;
 }
