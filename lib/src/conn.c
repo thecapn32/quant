@@ -613,19 +613,8 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 
         if (meta(v).hdr.type == F_LH_RTRY) {
             // verify retry
-            struct w_iov * const ci = find_sent_pkt(c, meta(v).hdr.nr);
-            if (ci) {
-                if (meta(ci).hdr.type != F_LH_INIT) {
-                    warn(NTE,
-                         "pkt nr " FMT_PNR_OUT
-                         " was not a CI (0x%0x), ignoring retry",
-                         meta(ci).hdr.nr, meta(ci).hdr.type);
-                    goto done;
-                }
-            } else {
-                warn(NTE,
-                     "could not find sent pkt nr " FMT_PNR_OUT
-                     ", ignoring retry",
+            if (meta(v).hdr.nr) {
+                warn(NTE, "retry pkt nr " FMT_PNR_OUT " != 0, ignoring",
                      meta(v).hdr.nr);
                 goto done;
             }
