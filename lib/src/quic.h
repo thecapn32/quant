@@ -321,15 +321,20 @@ extern void *api_conn, *api_strm;
     })
 
 
-#define q_free_iov(c, v)                                                       \
+#define q_free_iov(v)                                                          \
     do {                                                                       \
         /* warn(CRT, "q_free_iov idx %u %" PRIu64, w_iov_idx(v),               \
          * meta(v).hdr.nr); */                                                 \
-        if (c)                                                                 \
-            splay_remove(pm_nr_splay, &(c)->rec.sent_pkts, &meta(v));          \
         meta(v) = (struct pkt_meta){0};                                        \
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));                  \
         w_free_iov(v);                                                         \
+    } while (0)
+
+
+#define q_free_txed_iov(c, v)                                                  \
+    do {                                                                       \
+        splay_remove(pm_nr_splay, &(c)->rec.sent_pkts, &meta(v));              \
+        q_free_iov(v);                                                         \
     } while (0)
 
 

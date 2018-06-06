@@ -458,7 +458,7 @@ static void __attribute__((nonnull)) process_stream0(struct q_conn * const c)
         sq_remove_head(&s->in, next);
         if (tls_io(s, iv) == 0)
             maybe_api_return(q_connect, c, 0);
-        q_free_iov(c, iv);
+        q_free_iov(iv);
     }
 }
 
@@ -596,7 +596,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             init_tls(c);
             tls_io(get_stream(c, 0), 0);
 
-            q_free_iov(c, v);
+            q_free_iov(v);
             conn_to_state(c, CONN_STAT_IDLE);
             if (c->try_0rtt)
                 init_0rtt_prot(c);
@@ -720,7 +720,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 done:
     if (is_rtxable(&meta(v)) == false || meta(v).stream == 0)
         // this packet is not rtx'able, or the stream data is duplicate
-        q_free_iov(c, v);
+        q_free_iov(v);
 }
 
 
@@ -745,7 +745,7 @@ void rx(struct ev_loop * const l,
         struct q_conn * c = 0;
         if (dec_pkt_hdr_initial(v, is_clnt) == false) {
             warn(ERR, "received invalid %u-byte pkt, ignoring", v->len);
-            q_free_iov(c, v);
+            q_free_iov(v);
             continue;
         }
 
@@ -768,7 +768,7 @@ void rx(struct ev_loop * const l,
                              "got duplicate CI for orig cid %s, new is %s, "
                              "ignoring",
                              cid2str(&meta(v).hdr.dcid), cid2str(&c->scid));
-                        q_free_iov(c, v);
+                        q_free_iov(v);
                         continue;
                     } else if (meta(v).hdr.type == F_LH_INIT) {
                         warn(NTE,
@@ -814,14 +814,14 @@ void rx(struct ev_loop * const l,
         if (c == 0) {
             warn(INF, "cannot find connection for 0x%02x packet",
                  meta(v).hdr.flags);
-            q_free_iov(c, v);
+            q_free_iov(v);
             continue;
         }
 
         if (meta(v).hdr.vers || !is_set(F_LONG_HDR, meta(v).hdr.flags))
             if (dec_pkt_hdr_remainder(v, c, &i) == false) {
                 warn(ERR, "received invalid %u-byte pkt, ignoring", v->len);
-                q_free_iov(c, v);
+                q_free_iov(v);
                 continue;
             }
 
@@ -1070,7 +1070,7 @@ void free_conn(struct q_conn * const c)
     struct pkt_meta *p, *np;
     for (p = splay_min(pm_nr_splay, &c->rec.sent_pkts); p; p = np) {
         np = splay_next(pm_nr_splay, &c->rec.sent_pkts, p);
-        q_free_iov(c, w_iov(c->w, pm_idx(p)));
+        q_free_txed_iov(c, w_iov(c->w, pm_idx(p)));
     }
 
     diet_free(&c->closed_streams);
