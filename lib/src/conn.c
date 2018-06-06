@@ -156,14 +156,16 @@ struct q_conn * get_conn_by_cid(const struct cid * const scid,
 static void log_sent_pkts(struct q_conn * const c)
 {
     char sent_pkts_buf[1024] = "";
-    uint64_t prev = 0;
+    uint64_t prev = UINT64_MAX;
     struct pkt_meta * p = 0;
     splay_foreach (p, pm_nr_splay, &c->rec.sent_pkts) {
         char tmp[1024] = "";
         const bool ack_only = is_ack_only(p);
         snprintf(tmp, sizeof(tmp), "%s%s" FMT_PNR_OUT "%s ",
                  is_rtxable(p) ? "*" : "", ack_only ? "(" : "",
-                 shorten_ack_nr(p->hdr.nr, p->hdr.nr - prev),
+                 prev == UINT64_MAX
+                     ? p->hdr.nr
+                     : shorten_ack_nr(p->hdr.nr, p->hdr.nr - prev),
                  ack_only ? ")" : "");
         strncat(sent_pkts_buf, tmp,
                 sizeof(sent_pkts_buf) - strlen(sent_pkts_buf) - 1);
@@ -261,7 +263,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
         w_tx(s->c->sock, &x);
         while (w_tx_pending(&x))
             w_nic_tx(s->c->w);
-        q_free(s->c, &x);
+        q_free(0, &x); // c == 0: don't remove from sent_pkts
     }
 
     log_sent_pkts(s->c);

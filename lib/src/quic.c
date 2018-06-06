@@ -134,7 +134,8 @@ void q_free(struct q_conn * const c, struct w_iov_sq * const q)
         struct w_iov * const next = sq_next(v, next);
         // warn(CRT, "q_free idx %u strm %d %" PRIu64, w_iov_idx(v),
         //      meta(v).stream ? meta(v).stream->id : -1, meta(v).hdr.nr);
-        splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
+        if (c)
+            splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
         meta(v) = (struct pkt_meta){0};
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         v = next;
