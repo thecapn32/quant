@@ -158,15 +158,12 @@ bool enc_pkt(struct q_stream * const s,
     }
 
     if (c->state == CONN_STAT_SEND_RTRY)
-        // echo pkt nr of client initial
-        meta(v).hdr.nr = diet_min(&c->recv);
-    else {
+        meta(v).hdr.nr = 0;
+    else if (c->rec.lg_sent == UINT64_MAX)
         // next pkt nr
-        if (c->rec.lg_sent == UINT64_MAX)
-            meta(v).hdr.nr = c->rec.lg_sent = 0;
-        else
-            meta(v).hdr.nr = ++c->rec.lg_sent;
-    }
+        meta(v).hdr.nr = c->rec.lg_sent = 0;
+    else
+        meta(v).hdr.nr = ++c->rec.lg_sent;
 
     switch (c->state) {
     case CONN_STAT_IDLE:
