@@ -74,7 +74,7 @@ case $c in
                 ;;
         picoquic)
                 cc="external/picoquic-prefix/src/picoquic/picoquicdemo \
-                        $addr $port -1"
+                         -v ff00000c $addr $port -1"
                 ;;
 
         quicker)
