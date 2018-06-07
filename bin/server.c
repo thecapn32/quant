@@ -93,7 +93,7 @@ static int send_err(const struct cb_data * const d, const uint16_t code)
     }
     warn(ERR, msg);
 
-    q_write_str(d->w, d->c, d->s, msg, true);
+    q_write_str(d->w, d->s, msg, true);
     return 0;
 }
 
@@ -121,7 +121,7 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
         if (w_iov_sq_len(&out) != n) {
             warn(ERR, "could only allocate %u/%u bytes of buffer",
                  w_iov_sq_len(&out), n);
-            q_free(d->c, &out);
+            q_free(&out);
             return send_err(d, 500);
         }
 
@@ -133,7 +133,7 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
             c = (c == 'Z' ? 'A' : c + 1);
         }
         q_write(d->s, &out, true);
-        q_free(d->c, &out);
+        q_free(&out);
         return 0;
     }
 
@@ -157,7 +157,7 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
     const int f = openat(d->dir, path, O_RDONLY | O_CLOEXEC);
     ensure(f != -1, "could not open %s", path);
 
-    q_write_file(d->w, d->c, d->s, f, (uint32_t)info.st_size, true);
+    q_write_file(d->w, d->s, f, (uint32_t)info.st_size, true);
 
     return 0;
 }
@@ -263,7 +263,7 @@ int main(int argc, char * argv[])
                 }
             }
 
-            q_free(c, &i);
+            q_free(&i);
             if (v)
                 goto again;
         }

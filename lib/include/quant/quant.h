@@ -80,8 +80,7 @@ extern void __attribute__((nonnull)) q_alloc(struct w_engine * const w,
                                              struct w_iov_sq * const q,
                                              const uint32_t len);
 
-extern void __attribute__((nonnull(2)))
-q_free(struct q_conn * const c, struct w_iov_sq * const q);
+extern void __attribute__((nonnull)) q_free(struct w_iov_sq * const q);
 
 extern char * __attribute__((nonnull)) q_cid(const struct q_conn * const c);
 
@@ -93,13 +92,11 @@ extern void __attribute__((nonnull)) q_chunk_str(struct w_engine * const w,
                                                  struct w_iov_sq * o);
 
 extern void __attribute__((nonnull)) q_write_str(struct w_engine * const w,
-                                                 struct q_conn * const c,
                                                  struct q_stream * const s,
                                                  const char * const str,
                                                  const bool fin);
 
 extern void __attribute__((nonnull)) q_write_file(struct w_engine * const w,
-                                                  struct q_conn * const c,
                                                   struct q_stream * const s,
                                                   const int f,
                                                   const uint32_t len,

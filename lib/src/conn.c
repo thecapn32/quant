@@ -263,7 +263,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
         w_tx(s->c->sock, &x);
         while (w_tx_pending(&x))
             w_nic_tx(s->c->w);
-        q_free(0, &x); // c == 0: don't remove from sent_pkts
+        free_iov_sq(&x, 0);
     }
 
     log_sent_pkts(s->c);
@@ -482,8 +482,7 @@ reset_conn(struct q_conn * const c, const bool also_stream0_in)
         tmp = splay_next(pm_nr_splay, &c->rec.sent_pkts, p);
         if (p->is_rtxed) {
             splay_remove(pm_nr_splay, &c->rec.sent_pkts, p);
-            *p = (struct pkt_meta){0};
-            ASAN_POISON_MEMORY_REGION(p, sizeof(*p));
+            q_free_iov(w_iov(c->w, pm_idx(p)));
         }
     }
 
@@ -493,7 +492,7 @@ reset_conn(struct q_conn * const c, const bool also_stream0_in)
         s->out_ack_cnt = s->out_off = s->in_off = 0;
 
         if (s->id) {
-            // forget we transmitted any packets
+            // forget we transmitted any non-stream-0 packets
             struct w_iov * v = 0;
             sq_foreach (v, &s->out, next) {
                 meta(v).tx_len = meta(v).is_acked = 0;
@@ -502,8 +501,8 @@ reset_conn(struct q_conn * const c, const bool also_stream0_in)
         } else {
             // free (some) stream-0 data
             if (also_stream0_in)
-                q_free(c, &s->in);
-            q_free(c, &s->out);
+                free_iov_sq(&s->in, 0);
+            free_iov_sq(&s->out, c);
         }
     }
 }
@@ -543,6 +542,8 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
 
             if (verify_prot(c, v) == false)
                 goto done;
+
+            init_tp(c);
 
             // this is a new connection; server picks a new random cid
             struct cid new_scid = {.len = SERV_SCID_LEN};
@@ -616,7 +617,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             if (meta(v).hdr.nr) {
                 warn(NTE, "retry pkt nr " FMT_PNR_OUT " != 0, ignoring",
                      meta(v).hdr.nr);
-                goto done;
+                // goto done; XXX temp workaround until other stacks send 0
             }
 
             // handle an incoming retry packet
@@ -849,8 +850,6 @@ void rx(struct ev_loop * const l,
         if (c->needs_tx)
             tx(c, false, 0);
 
-        log_sent_pkts(c);
-
         // clear the helper flags set above
         c->needs_tx = c->had_rx = false;
 
@@ -1070,7 +1069,8 @@ void free_conn(struct q_conn * const c)
     struct pkt_meta *p, *np;
     for (p = splay_min(pm_nr_splay, &c->rec.sent_pkts); p; p = np) {
         np = splay_next(pm_nr_splay, &c->rec.sent_pkts, p);
-        q_free_txed_iov(c, w_iov(c->w, pm_idx(p)));
+        splay_remove(pm_nr_splay, &c->rec.sent_pkts, p);
+        q_free_iov(w_iov(c->w, pm_idx(p)));
     }
 
     diet_free(&c->closed_streams);

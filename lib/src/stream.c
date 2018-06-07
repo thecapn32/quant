@@ -28,7 +28,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
@@ -87,8 +86,8 @@ void free_stream(struct q_stream * const s)
 
     diet_insert(&s->c->closed_streams, s->id, 0, 0);
 
-    q_free(s->c, &s->out);
-    q_free(s->c, &s->in);
+    free_iov_sq(&s->out, s->c);
+    free_iov_sq(&s->in, 0);
 
     splay_remove(stream, &s->c->streams, s);
     free(s);

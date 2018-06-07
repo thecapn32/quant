@@ -127,7 +127,7 @@ void q_alloc(struct w_engine * const w,
 }
 
 
-void q_free(struct q_conn * const c, struct w_iov_sq * const q)
+void free_iov_sq(struct w_iov_sq * const q, struct q_conn * const c)
 {
     struct w_iov * v = sq_first(q);
     while (v) {
@@ -141,6 +141,12 @@ void q_free(struct q_conn * const c, struct w_iov_sq * const q)
         v = next;
     }
     w_free(q);
+}
+
+
+void q_free(struct w_iov_sq * const q)
+{
+    free_iov_sq(q, 0);
 }
 
 
@@ -189,6 +195,7 @@ struct q_conn * q_connect(struct w_engine * const w,
     // allocate stream zero and init TLS
     struct q_stream * const s = new_stream(c, 0, true);
     init_tls(c);
+    init_tp(c);
 
     warn(WRN, "new %u-RTT %s conn %s to %s:%u, %u byte%s queued for TX",
          c->try_0rtt ? 0 : 1, conn_type(c), cid2str(&c->scid),

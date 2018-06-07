@@ -46,6 +46,8 @@
 
 #include "frame.h"
 
+struct q_conn;
+
 
 struct cid {
     uint8_t id[18]; ///< Connection ID
@@ -331,13 +333,6 @@ extern void *api_conn, *api_strm;
     } while (0)
 
 
-#define q_free_txed_iov(c, v)                                                  \
-    do {                                                                       \
-        splay_remove(pm_nr_splay, &(c)->rec.sent_pkts, &meta(v));              \
-        q_free_iov(v);                                                         \
-    } while (0)
-
-
 #define q_alloc_iov(w, len, off)                                               \
     __extension__({                                                            \
         struct w_iov * _v = w_alloc_iov((w), (len), (off));                    \
@@ -345,6 +340,10 @@ extern void *api_conn, *api_strm;
         /* warn(CRT, "q_alloc_iov idx %u", w_iov_idx(_v)); */                  \
         _v;                                                                    \
     })
+
+
+extern __attribute__((nonnull(1))) void free_iov_sq(struct w_iov_sq * const q,
+                                                    struct q_conn * const c);
 
 
 static inline __attribute__((nonnull)) struct w_iov *

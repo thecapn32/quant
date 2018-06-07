@@ -253,7 +253,7 @@ static int setup_handshake_secret(struct st_quicly_cipher_context_t * ctx,
     if ((ret = qhkdf_expand(cs->hash, aead_secret, cs->hash->digest_size,
                             master_secret, label)) != 0)
         goto Exit;
-# if 0
+#if 0
     if (QUICLY_DEBUG) {
         char * aead_secret_hex =
             quicly_hexdump(aead_secret, cs->hash->digest_size, SIZE_MAX);
@@ -298,7 +298,7 @@ setup_handshake_encryption(struct st_quicly_cipher_context_t * ingress,
                                  ptls_iovec_init(salt, sizeof(salt)), cid)) !=
         0)
         goto Exit;
-# if 0
+#if 0
     if (QUICLY_DEBUG) {
         char *cid_hex = quicly_hexdump(cid.base, cid.len, SIZE_MAX),
              *secret_hex =
@@ -847,7 +847,6 @@ void init_tls(struct q_conn * const c)
         c->try_0rtt = 1;
     }
 
-    init_tp(c);
     init_hshk_prot(c);
 }
 
@@ -902,7 +901,10 @@ Exit:
 void init_hshk_prot(struct q_conn * const c)
 {
     free_packet_protection(&c->tls.in_pp);
+    memset(&c->tls.in_pp, 0, sizeof(c->tls.in_pp));
+
     free_packet_protection(&c->tls.out_pp);
+    memset(&c->tls.out_pp, 0, sizeof(c->tls.out_pp));
 
     const ptls_iovec_t cid = {
         .base = (uint8_t *)(c->is_clnt ? &c->dcid.id : &c->scid.id),
