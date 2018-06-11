@@ -179,6 +179,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
           -hicpp-function-size
           -readability-function-size
           -hicpp-signed-bitwise
+          -cppcoreguidelines-pro-bounds-pointer-arithmetic
       )
       string(REPLACE ";" "," CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS}")
       set(CMAKE_C_CLANG_TIDY ${CLANGTIDY}

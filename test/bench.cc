@@ -43,6 +43,7 @@ static struct w_engine * w;
 static void BM_quic_encryption(benchmark::State & state)
 {
     const auto len = uint16_t(state.range(0));
+    const auto pne = uint16_t(state.range(1));
     struct w_iov * const v = q_alloc_iov(w, len, 0);
     struct w_iov * const x = q_alloc_iov(w, MAX_PKT_LEN, 0);
 
@@ -51,15 +52,18 @@ static void BM_quic_encryption(benchmark::State & state)
     meta(v).hdr.hdr_len = 16;
 
     for (auto _ : state)
-        benchmark::DoNotOptimize(enc_aead(c, v, x, 0));
-    state.SetBytesProcessed(int64_t(state.iterations() * len));
+        benchmark::DoNotOptimize(enc_aead(c, v, x, pne * 16));
+    state.SetBytesProcessed(int64_t(state.iterations() * len)); // NOLINT
 
     q_free_iov(x);
     q_free_iov(v);
 }
 
 
-BENCHMARK(BM_quic_encryption)->RangeMultiplier(2)->Range(16, MAX_PKT_LEN);
+BENCHMARK(BM_quic_encryption)
+    ->RangeMultiplier(2)
+    ->Ranges({{16, MAX_PKT_LEN}, {0, 1}})
+    ->Complexity();
 
 
 // BENCHMARK_MAIN()
@@ -76,7 +80,7 @@ int main(int argc, char ** argv)
 #ifndef NDEBUG
     util_dlevel = INF;
 #endif
-    w = q_init(i, nullptr, nullptr, nullptr, nullptr);
+    w = q_init(i, nullptr, nullptr, nullptr, nullptr); // NOLINT
     c = q_bind(w, 55555);
     init_tls(c);
     init_hshk_prot(c);

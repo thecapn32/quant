@@ -1235,7 +1235,7 @@ uint16_t enc_aead(const struct q_conn * const c,
          aead_type(c, ctx->aead), hdr_len + plen - AEAD_LEN - 1,
          hdr_len + plen - AEAD_LEN, hdr_len + plen - 1);
 
-    if (nr_pos) {
+    if (likely(nr_pos)) {
         // encrypt the packet number
         uint16_t off = nr_pos + 4;
         if (off + AEAD_LEN > x->len)
