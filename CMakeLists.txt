@@ -1,9 +1,25 @@
 cmake_minimum_required(VERSION 3.9)
 
-project(quant VERSION 0.0.12 LANGUAGES C)
+project(quant VERSION 0.0.12 LANGUAGES C CXX)
 
 # Check for dependencies before mucking with the compiler flags
+include(CMakePushCheckState)
+cmake_reset_check_state()
 include(CheckSymbolExists)
+
+# See if we have google benchmark
+include(CheckCXXSymbolExists)
+set(CMAKE_REQUIRED_LIBRARIES benchmark)
+check_cxx_symbol_exists(benchmark::Initialize benchmark/benchmark.h
+                        HAVE_BENCHMARK_H)
+cmake_reset_check_state()
+
+# See if we have google gperftools
+include(CheckSymbolExists)
+set(CMAKE_REQUIRED_LIBRARIES profiler)
+check_symbol_exists(ProfilerStart gperftools/profiler.h
+                    HAVE_PROFILER)
+cmake_reset_check_state()
 
 check_symbol_exists(htobe64 endian.h HAVE_ENDIAN_H)
 check_symbol_exists(htobe64 sys/endian.h HAVE_SYS_ENDIAN_H)
@@ -37,13 +53,17 @@ endif()
 # Generate compile_commands.json for clang-tidy
 set(CMAKE_EXPORT_COMPILE_COMMANDS True)
 
-# Use modern C
+# Use modern C and C++
+set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_C_STANDARD 11)
 
 # Set general compile flags, if they are supported
 include(CheckCCompilerFlag)
+include(CheckCXXCompilerFlag)
 foreach(FLAG -march=native -Wextra -Wpedantic -Weverything -Werror
         -fcolor-diagnostics -fdiagnostics-color=always
+        -Wno-missing-braces -Wno-gnu-statement-expression -Wno-extended-offsetof
+        -Wno-redundant-parens
         -Wno-missing-field-initializers -Wno-disabled-macro-expansion -Wno-cpp
         )
   string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
@@ -51,21 +71,24 @@ foreach(FLAG -march=native -Wextra -Wpedantic -Weverything -Werror
   if(${F})
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${FLAG}")
   endif()
+  check_cxx_compiler_flag(${FLAG} ${F})
+  if(${F})
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${FLAG}")
+  endif()
 endforeach()
 
-# Set C flags
-foreach(FLAG -Wno-missing-field-initializers -Wno-missing-braces
-        -Wno-gnu-statement-expression -Wno-extended-offsetof
-        -Wno-redundant-parens)
+# Set CXX flags
+foreach(FLAG -Wno-c++98-compat -Wno-global-constructors -Wno-c99-extensions)
   string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
-  check_c_compiler_flag(${FLAG} ${F})
+  check_cxx_compiler_flag(${FLAG} ${F})
   if(${F})
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${FLAG}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${FLAG}")
   endif()
 endforeach()
 
 # flags for "Debug" and "None" builds
 set(CMAKE_C_FLAGS_DEBUG "-O0 -g3")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
 
 # disable IPO by default
 set(IPO NO)
@@ -89,6 +112,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     check_c_compiler_flag("" _fsanitize_address)
     if(_fsanitize_address)
       set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address")
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
     endif()
     unset(CMAKE_REQUIRED_FLAGS)
 
@@ -104,6 +128,10 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
       if(${F})
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${FLAG}")
       endif()
+      check_cxx_compiler_flag(${FLAG} ${F})
+      if(${F})
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${FLAG}")
+      endif()
     endforeach()
   endif()
 
@@ -118,6 +146,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
         --enable=warning,style,performance,portability
         -I external/include -I lib/include -I ${PROJECT_SOURCE_DIR}/lib/include
     )
+    set(CMAKE_CXX_CPPCHECK ${CMAKE_C_CPPCHECK})
   endif()
 
   # Use include-what-you-use to check #includes, if it's installed
@@ -128,9 +157,11 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     set(CMAKE_C_INCLUDE_WHAT_YOU_USE
         ${IWYU} -Xiwyu
         --mapping_file=${PROJECT_SOURCE_DIR}/misc/${CMAKE_SYSTEM_NAME_LC}.imp)
+    set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE ${CMAKE_C_INCLUDE_WHAT_YOU_USE})
   endif()
 
-  if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+  if(CMAKE_C_COMPILER_ID MATCHES "Clang" AND
+      CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     # Use clang-tidy for extra warnings, if it's installed
     find_program(CLANGTIDY NAMES clang-tidy clang-tidy40 clang-tidy39
                  clang-tidy38 clang-tidy37)
@@ -154,6 +185,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
           -analyze-temporary-dtors -system-headers
           -checks=${CLANG_TIDY_CHECKS}
       )
+      set(CMAKE_CXX_CLANG_TIDY ${CMAKE_C_CLANG_TIDY})
     endif()
   endif()
 else()
@@ -174,9 +206,11 @@ endif()
 
 # flags for "Release" builds
 set(CMAKE_C_FLAGS_RELEASE "-DNDEBUG -Ofast")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE}")
 
 # flags for "RelWithDebInfo" builds
 set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELEASE} -g3")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO}")
 
 # set debug level
 add_definitions(-DDLEVEL=${DLEVEL})

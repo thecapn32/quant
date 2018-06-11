@@ -27,6 +27,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdbool.h>
 #include <stdint.h>
 #include <sys/socket.h>
@@ -106,3 +110,7 @@ extern bool __attribute__((nonnull)) q_is_str_closed(struct q_stream * const s);
 
 extern void __attribute__((nonnull))
 q_readall_str(struct q_stream * const s, struct w_iov_sq * const q);
+
+#ifdef __cplusplus
+}
+#endif

@@ -18,3 +18,51 @@ foreach(TARGET diet conn)
   add_test(test_${TARGET} test_${TARGET})
 endforeach()
 
+
+if(NOT HAVE_BENCHMARK_H AND (DEFINED ENV{BENCHMARKING} OR BENCHMARKING))
+  include(ExternalProject)
+
+  externalproject_add(google-benchmark
+    UPDATE_COMMAND ""
+    GIT_REPOSITORY https://github.com/google/benchmark
+    GIT_SHALLOW 1
+    GIT_TAG v1.4.1
+    CMAKE_ARGS
+      -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}
+      -DCMAKE_BUILD_TYPE=Release
+    BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/lib/libbenchmark.a
+  )
+
+  file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/include ${CMAKE_BINARY_DIR}/lib)
+
+  add_library(benchmark STATIC IMPORTED GLOBAL)
+
+  set_target_properties(benchmark PROPERTIES
+    IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/lib/libbenchmark.a
+    INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_BINARY_DIR}/include
+    POSITION_INDEPENDENT_CODE ON
+    INTERPROCEDURAL_OPTIMIZATION ${IPO}
+  )
+
+  add_dependencies(benchmark google-benchmark)
+  set(HAVE_BENCHMARK_H 1)
+endif()
+
+if(HAVE_BENCHMARK_H)
+  add_executable(bench bench.cc )
+  target_link_libraries(bench PUBLIC benchmark pthread libquant)
+  target_include_directories(bench
+    SYSTEM PRIVATE
+      ${CMAKE_SOURCE_DIR}/lib/include
+      ${CMAKE_BINARY_DIR}/lib/include
+      ${CMAKE_SOURCE_DIR}/lib/src
+      $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/external/include>
+      ${OPENSSL_ROOT_DIR}/include
+    )
+  set_target_properties(bench
+    PROPERTIES
+      POSITION_INDEPENDENT_CODE ON
+      INTERPROCEDURAL_OPTIMIZATION ${IPO}
+  )
+  add_test(bench bench)
+endif()
