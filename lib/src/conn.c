@@ -351,13 +351,13 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
     bool did_tx = false;
     struct q_stream * s = 0;
     splay_foreach (s, stream, &c->streams) {
-        // warn(ERR, "sid %u: %u && %u || %u && %u || %u && %u", s->id,
-        //      is_fully_acked(s), !stream_needs_ctrl(s), rtx == false,
-        //      s->blocked, s->id != 0, c->state < CONN_STAT_ESTB);
-
-        if ((is_fully_acked(s) && !stream_needs_ctrl(s)) ||
+        // check if we should skip TX on this stream
+        if ( // is the stream fully ACKed and doesn't need control frames?
+            (is_fully_acked(s) && !stream_needs_ctrl(s)) ||
+            // is this a new TX but the stream is blocked?
             (rtx == false && s->blocked) ||
-            (s->id && c->state < CONN_STAT_ESTB))
+            // unless for 0-RTT, is this a non-zero stream during conn open?
+            (c->try_0rtt == false && s->id && c->state < CONN_STAT_ESTB))
             continue;
 
         do_stream_fc(s);
@@ -371,7 +371,7 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
         } else
             did_tx |= tx_other(s, rtx, limit);
 
-        if (s->c->state <= CONN_STAT_HSHK_DONE && s->c->try_0rtt == false)
+        if (c->state <= CONN_STAT_HSHK_DONE && c->try_0rtt == false)
             // only send stream-0 during handshake, unless we're doing 0-RTT
             break;
     }
@@ -617,7 +617,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             if (meta(v).hdr.nr) {
                 warn(NTE, "retry pkt nr " FMT_PNR_OUT " != 0, ignoring",
                      meta(v).hdr.nr);
-                // goto done; XXX temp workaround until other stacks send 0
+                goto done;
             }
 
             // handle an incoming retry packet
