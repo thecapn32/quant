@@ -53,17 +53,17 @@ declare -A ${results[@]}
 iface=$(route get default | grep interface: | cut -f2 -d: | tr -d "[:space:]")
 
 # prefer gsed on Mac (install with homebrew, gnu-sed formula)
-if which gsed > /dev/null; then
-        sed=$(which gsed)
+if command -v gsed > /dev/null; then
+        sed=$(command -v gsed)
 else
-        sed=$(which sed)
+        sed=$(command -v sed)
 fi
 
 # use colordiff, if installed
-if which colordiff > /dev/null; then
-        colordiff=$(which colordiff)
+if command -v colordiff > /dev/null; then
+        colordiff=$(command -v colordiff)
 else
-        colordiff=$(which cat)
+        colordiff=$(command -v cat)
 fi
 
 
