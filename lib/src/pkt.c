@@ -28,6 +28,7 @@
 #include <inttypes.h>
 #include <netinet/in.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <picotls.h>
@@ -47,7 +48,7 @@
 #ifndef NDEBUG
 static const char * pkt_type_str(const struct w_iov * const v)
 {
-    if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
+    if (is_set(F_LONG_HDR, v->buf[0])) {
         if (meta(v).hdr.vers == 0)
             return "Version Negotiation";
         switch (meta(v).hdr.type) {
@@ -71,26 +72,26 @@ void log_pkt(const char * const dir, const struct w_iov * const v)
     const char * col_dir = *dir == 'R' ? BLD BLU : BLD GRN;
     const char * col_nr = *dir == 'R' ? BLU : GRN;
 
-    if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
+    if (is_set(F_LONG_HDR, v->buf[0])) {
         if (meta(v).hdr.vers == 0)
             twarn(NTE,
                   BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM
                       "vers=0x%08x dcid=%s scid=%s",
-                  col_dir, dir, v->len, meta(v).hdr.type, col_dir,
-                  pkt_type_str(v), meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
+                  col_dir, dir, v->len, v->buf[0], col_dir, pkt_type_str(v),
+                  meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
                   cid2str(&meta(v).hdr.scid));
         else
             twarn(NTE,
                   BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM
                       "vers=0x%08x dcid=%s scid=%s len=%u nr=%s%" PRIu64,
-                  col_dir, dir, v->len, meta(v).hdr.type, col_dir,
-                  pkt_type_str(v), meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
+                  col_dir, dir, v->len, v->buf[0], col_dir, pkt_type_str(v),
+                  meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
                   cid2str(&meta(v).hdr.scid), meta(v).hdr.len, col_nr,
                   meta(v).hdr.nr);
     } else
         twarn(NTE,
               BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM "dcid=%s nr=%s%" PRIu64,
-              col_dir, dir, v->len, meta(v).hdr.type, col_dir, pkt_type_str(v),
+              col_dir, dir, v->len, v->buf[0], col_dir, pkt_type_str(v),
               cid2str(&meta(v).hdr.dcid), col_nr, meta(v).hdr.nr);
 }
 #endif
@@ -195,6 +196,10 @@ bool enc_pkt(struct q_stream * const s,
     default:
         die("unknown conn state %u", c->state);
     }
+
+    if (is_set(F_LONG_HDR, meta(v).hdr.flags) == false)
+        // for giggles, randomize the reserved bits in the short header
+        meta(v).hdr.flags |= arc4random_uniform(F_SH_EXP_MASK);
 
     ensure(meta(v).hdr.nr < (1ULL << 62) - 1, "packet number overflow");
 
