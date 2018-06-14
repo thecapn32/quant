@@ -112,8 +112,8 @@ needed_pkt_nr_len(struct q_conn * const c, const uint64_t n)
 static uint16_t
 enc_lh_cids(struct q_conn * const c, struct w_iov * const v, const uint16_t pos)
 {
-    meta(v).hdr.dcid = c->dcid;
-    meta(v).hdr.scid = *sq_first(&c->scid);
+    meta(v).hdr.dcid = *act_dcid(c);
+    meta(v).hdr.scid = *act_scid(c);
     const uint8_t cil =
         (uint8_t)((meta(v).hdr.dcid.len ? meta(v).hdr.dcid.len - 3 : 0) << 4) |
         (uint8_t)(meta(v).hdr.scid.len ? meta(v).hdr.scid.len - 3 : 0);
@@ -214,8 +214,9 @@ bool enc_pkt(struct q_stream * const s,
         len_pos = i;
         i += 2;
     } else {
-        i = enc_buf(v->buf, v->len, i, &c->dcid.id, c->dcid.len);
-        meta(v).hdr.dcid = c->dcid;
+        meta(v).hdr.dcid = *act_dcid(c);
+        i = enc_buf(v->buf, v->len, i, &meta(v).hdr.dcid.id,
+                    meta(v).hdr.dcid.len);
     }
     nr_pos = i;
     nr_len = needed_pkt_nr_len(c, meta(v).hdr.nr);

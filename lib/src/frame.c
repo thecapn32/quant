@@ -513,16 +513,18 @@ dec_path_response_frame(struct q_conn * const c,
 
 
 static uint16_t __attribute__((nonnull))
-dec_new_cid_frame(struct q_conn * const c __attribute__((unused)),
+dec_new_cid_frame(struct q_conn * const c,
                   const struct w_iov * const v,
                   const uint16_t pos)
 {
     uint64_t seq = 0;
     uint16_t i = dec(&seq, v->buf, v->len, pos + 1, 0, "%" PRIu64);
 
-    struct cid dcid = {0};
-    i = dec(&dcid.len, v->buf, v->len, i, sizeof(dcid.len), "%u");
-    i = dec_buf(dcid.id, v->buf, v->len, i, dcid.len);
+    struct cid * const dcid = calloc(1, sizeof(*dcid));
+    ensure(dcid, "could not calloc");
+
+    i = dec(&dcid->len, v->buf, v->len, i, sizeof(dcid->len), "%u");
+    i = dec_buf(dcid->id, v->buf, v->len, i, dcid->len);
 
     uint8_t token[16];
     i = dec_buf(token, v->buf, v->len, i, sizeof(token));
@@ -530,9 +532,9 @@ dec_new_cid_frame(struct q_conn * const c __attribute__((unused)),
     warn(INF,
          FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu64
                  " len=%u dcid=%s token=%s",
-         seq, dcid.len, cid2str(&dcid), hex2str(token, sizeof(token)));
+         seq, dcid->len, cid2str(dcid), hex2str(token, sizeof(token)));
 
-    // TODO: actually do something with the new CIDs
+    sq_insert_tail(&c->dcid, dcid, next);
 
     return i;
 }

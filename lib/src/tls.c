@@ -906,10 +906,9 @@ void init_hshk_prot(struct q_conn * const c)
     free_packet_protection(&c->tls.out_pp);
     memset(&c->tls.out_pp, 0, sizeof(c->tls.out_pp));
 
-    struct cid * const scid = sq_first(&c->scid);
     const ptls_iovec_t cid = {
-        .base = (uint8_t *)(c->is_clnt ? &c->dcid.id : &scid->id),
-        .len = c->is_clnt ? c->dcid.len : scid->len};
+        .base = (uint8_t *)(c->is_clnt ? &act_dcid(c)->id : &act_scid(c)->id),
+        .len = c->is_clnt ? act_dcid(c)->len : act_scid(c)->len};
     ptls_cipher_suite_t * cs = &ptls_openssl_aes128gcmsha256;
 
     setup_handshake_encryption(&c->tls.in_pp.handshake,

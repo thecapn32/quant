@@ -51,8 +51,9 @@ struct q_conn;
 
 struct cid {
     sq_entry(cid) next;
-    uint8_t len;    ///< Connection ID length
-    uint8_t id[18]; ///< Connection ID
+    uint8_t len;     ///< Connection ID length
+    uint8_t id[18];  ///< Connection ID
+    uint8_t srt[16]; ///< Stateless Reset Token
     uint8_t _unused[5];
 };
 

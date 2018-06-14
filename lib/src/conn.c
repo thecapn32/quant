@@ -808,10 +808,10 @@ void rx(struct ev_loop * const l,
                 if (memcmp(&meta(v).hdr.scid, &c->dcid, sizeof(c->dcid)) != 0)
                     warn(NTE, "got new dcid %s for %s conn (was %s)",
                          cid2str(&meta(v).hdr.scid), conn_type(c),
-                         cid2str(&c->dcid));
+                         cid2str(act_dcid(c)));
 
                 // always update the cid (TODO: check that this is allowed)
-                c->dcid = meta(v).hdr.scid;
+                // c->dcid = meta(v).hdr.scid;
             }
 
             // check if this pkt came from a new source IP and/or port
@@ -989,11 +989,19 @@ struct q_conn * new_conn(struct w_engine * const w,
         ensure(c->peer_name = strdup(peer_name), "could not dup peer_name");
     }
 
-    if (dcid) {
-        memcpy(&c->dcid, dcid, sizeof(*dcid));
-    } else if (c->is_clnt) {
-        c->dcid.len = SERV_SCID_LEN;
-        arc4random_buf(c->dcid.id, c->dcid.len);
+    // init dcid
+    sq_init(&c->dcid);
+    if (dcid || c->is_clnt) {
+        struct cid * const ndcid = calloc(1, sizeof(*ndcid));
+        ensure(ndcid, "could not calloc");
+        if (dcid) {
+            ndcid->len = dcid->len;
+            memcpy(ndcid->id, dcid->id, dcid->len);
+        } else {
+            ndcid->len = SERV_SCID_LEN;
+            arc4random_buf(ndcid->id, ndcid->len);
+        }
+        sq_insert_tail(&c->dcid, ndcid, next);
     }
 
     c->vers = c->vers_initial = vers;
@@ -1040,21 +1048,22 @@ struct q_conn * new_conn(struct w_engine * const w,
     }
     c->sport = w_get_sport(c->sock);
 
-    // add connection to global data structures
+    // init scid and add connection to global data structures
     sq_init(&c->scid);
     splay_insert(ipnp_splay, &conns_by_ipnp, c);
-    if (scid) {
-        add_scid(c, scid);
-    } else if (c->is_clnt) {
-        struct cid nscid = {.len = CLNT_SCID_LEN};
-        arc4random_buf(nscid.id, nscid.len);
-        add_scid(c, &nscid);
-    } else
-        goto done;
+    if (scid || c->is_clnt) {
+        if (scid)
+            add_scid(c, scid);
+        else {
+            struct cid nscid = {.len = CLNT_SCID_LEN};
+            arc4random_buf(nscid.id, nscid.len);
+            add_scid(c, &nscid);
+        }
+    }
 
     warn(DBG, "%s conn %s on port %u created", conn_type(c), scid2str(c),
          ntohs(c->sport));
-done:
+
     return c;
 }
 
@@ -1100,13 +1109,19 @@ void free_conn(struct q_conn * const c)
     splay_remove(ipnp_splay, &conns_by_ipnp, c);
 
     while (!sq_empty(&c->scid)) {
-        struct cid * const id = sq_first(&c->scid);
+        struct cid * const scid = sq_first(&(c)->scid);
         sq_remove_head(&c->scid, next);
-        const struct q_cid_map which = {.cid = *id};
+        const struct q_cid_map which = {.cid = *scid};
         struct q_cid_map * const cm =
             splay_find(cid_splay, &conns_by_cid, &which);
         splay_remove(cid_splay, &conns_by_cid, cm);
         free(cm);
+    }
+
+    while (!sq_empty(&c->dcid)) {
+        struct cid * const dcid = sq_first(&(c)->dcid);
+        sq_remove_head(&c->dcid, next);
+        free(dcid);
     }
 
     free(c);

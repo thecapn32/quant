@@ -70,9 +70,8 @@ struct q_conn {
     splay_entry(q_conn) node_ipnp;
     sl_entry(q_conn) next;
 
-    struct cid dcid;     ///< Destination connection ID
-    // sq_head(, cid) dcid; ///< Destination connection ID map
-    sq_head(, cid) scid; ///< Source connection ID map
+    sq_head(dcid_head, cid) dcid; ///< Destination connection IDs
+    sq_head(scid_head, cid) scid; ///< Source connection IDs
 
     uint16_t holds_sock : 1; ///< Connection manages a warpcore socket.
     uint16_t is_clnt : 1;    ///< We are the client on this connection.
@@ -183,7 +182,11 @@ SPLAY_PROTOTYPE(cid_splay, q_cid_map, node, cid_splay_cmp)
 #define cid2str(i) hex2str((i)->id, (i)->len)
 
 
-#define scid2str(c) sq_first(&(c)->scid) ? cid2str(sq_first(&(c)->scid)) : "0"
+#define act_scid(c) sq_first(&(c)->scid)
+#define act_dcid(c) sq_first(&(c)->dcid)
+
+
+#define scid2str(c) act_scid(c) ? cid2str(act_scid(c)) : "0"
 
 
 #define conn_to_state(c, s)                                                    \
