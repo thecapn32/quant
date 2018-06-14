@@ -543,13 +543,11 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             ensure(c->is_clnt, "am client");
             uint16_t l;
             i = dec(&l, buf, len, i, sizeof(l), "%u");
-            ensure(l == sizeof(c->tp_peer.stateless_reset_token), "valid len");
-            memcpy(c->tp_peer.stateless_reset_token, &buf[i],
-                   sizeof(c->tp_peer.stateless_reset_token));
+            ensure(l == sizeof(act_dcid(c)->srt), "valid len");
+            memcpy(act_dcid(c)->srt, &buf[i], sizeof(act_dcid(c)->srt));
             warn(INF, "\tstateless_reset_token = %s",
-                 hex2str(c->tp_peer.stateless_reset_token,
-                         sizeof(c->tp_peer.stateless_reset_token)));
-            i += sizeof(c->tp_peer.stateless_reset_token);
+                 hex2str(act_dcid(c)->srt, sizeof(act_dcid(c)->srt)));
+            i += sizeof(act_dcid(c)->srt);
             break;
 
         default:
@@ -606,17 +604,14 @@ void init_tp(struct q_conn * const c)
     enc_tp(c, TP_ACK_DELAY_EXPONENT, c->tp_local.ack_del_exp, sizeof(uint8_t));
     enc_tp(c, TP_MAX_PACKET_SIZE, w_mtu(c->w), sizeof(uint16_t));
 
-    if (!c->is_clnt) {
-        arc4random_buf(c->tp_local.stateless_reset_token,
-                       sizeof(c->tp_local.stateless_reset_token));
+    if (!c->is_clnt) { // TODO: change in -13
         const uint16_t p = TP_STATELESS_RESET_TOKEN;
         i = enc(c->tls.tp_buf, len, i, &p, 2, 0, "%u");
-        const uint16_t w = sizeof(c->tp_local.stateless_reset_token);
+        const uint16_t w = sizeof(act_scid(c)->srt);
         i = enc(c->tls.tp_buf, len, i, &w, 2, 0, "%u");
-        ensure(i + sizeof(c->tp_local.stateless_reset_token) < len,
-               "tp_buf overrun");
-        i = enc_buf(c->tls.tp_buf, len, i, c->tp_local.stateless_reset_token,
-                    sizeof(c->tp_local.stateless_reset_token));
+        ensure(i + sizeof(act_scid(c)->srt) < len, "tp_buf overrun");
+        i = enc_buf(c->tls.tp_buf, len, i, act_scid(c)->srt,
+                    sizeof(act_scid(c)->srt));
     }
 
     // encode length of all transport parameters

@@ -53,7 +53,6 @@ struct transport_params {
     uint16_t max_pkt;
     uint16_t idle_to;
     uint8_t ack_del_exp;
-    uint8_t stateless_reset_token[16];
     uint8_t _unused[3];
 };
 
@@ -187,6 +186,7 @@ SPLAY_PROTOTYPE(cid_splay, q_cid_map, node, cid_splay_cmp)
 
 
 #define scid2str(c) act_scid(c) ? cid2str(act_scid(c)) : "0"
+#define dcid2str(c) act_dcid(c) ? cid2str(act_dcid(c)) : "0"
 
 
 #define conn_to_state(c, s)                                                    \
@@ -257,4 +257,7 @@ extern struct q_conn * new_conn(struct w_engine * const w,
 extern void __attribute__((nonnull)) free_conn(struct q_conn * const c);
 
 extern void __attribute__((nonnull))
-add_scid(struct q_conn * const c, const struct cid * const scid);
+add_scid(struct q_conn * const c, const struct cid * const id);
+
+extern void __attribute__((nonnull))
+add_dcid(struct q_conn * const c, const struct cid * const id);

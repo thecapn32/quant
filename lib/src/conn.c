@@ -58,7 +58,7 @@ struct ipnp_splay conns_by_ipnp = splay_initializer(&conns_by_ipnp);
 struct cid_splay conns_by_cid = splay_initializer(&conns_by_cid);
 
 
-static int __attribute__((nonnull))
+static inline int __attribute__((nonnull))
 sockaddr_in_cmp(const struct sockaddr_in * const a,
                 const struct sockaddr_in * const b)
 {
@@ -78,22 +78,24 @@ sockaddr_in_cmp(const struct sockaddr_in * const a,
 
 int ipnp_splay_cmp(const struct q_conn * const a, const struct q_conn * const b)
 {
-    const int diff = sockaddr_in_cmp(&a->peer, &b->peer);
-    if (likely(diff))
-        return diff;
+    return sockaddr_in_cmp(&a->peer, &b->peer);
+}
 
-    // include only the client flag in the comparison
-    return (a->is_clnt > b->is_clnt) - (a->is_clnt < b->is_clnt);
+
+static inline int __attribute__((nonnull))
+cid_cmp(const struct cid * const a, const struct cid * const b)
+{
+    const int diff = (a->len > b->len) - (a->len < b->len);
+    if (diff)
+        return diff;
+    return memcmp(a->id, b->id, a->len);
 }
 
 
 int cid_splay_cmp(const struct q_cid_map * const a,
                   const struct q_cid_map * const b)
 {
-    const int diff = (a->cid.len > b->cid.len) - (a->cid.len < b->cid.len);
-    if (diff)
-        return diff;
-    return memcmp(&a->cid.id, &b->cid.id, a->cid.len);
+    return cid_cmp(&a->cid, &b->cid);
 }
 
 
@@ -396,23 +398,44 @@ void tx_w(struct ev_loop * const l __attribute__((unused)),
 }
 
 
-void add_scid(struct q_conn * const c, const struct cid * const scid)
+void add_scid(struct q_conn * const c, const struct cid * const id)
 {
-    struct q_cid_map * cm = calloc(1, sizeof(*cm));
+    struct q_cid_map * const cm = calloc(1, sizeof(*cm));
     ensure(cm, "could not calloc");
-    cm->cid = *scid;
+    cid_cpy(&cm->cid, id);
     cm->c = c;
     splay_insert(cid_splay, &conns_by_cid, cm);
     sq_insert_tail(&c->scid, &cm->cid, next);
+}
 
-    // warn(ERR, "conn scids");
-    // struct cid * id;
-    // sq_foreach (id, &c->scid, next)
-    //     warn(ERR, "scid %s", cid2str(id));
 
-    // warn(ERR, "all scids");
-    // splay_foreach (cm, cid_splay, &conns_by_cid)
-    //     warn(ERR, "scid %s", cid2str(&cm->cid));
+void add_dcid(struct q_conn * const c, const struct cid * const id)
+{
+    struct cid * const dcid = calloc(1, sizeof(*dcid));
+    ensure(dcid, "could not calloc");
+    cid_cpy(dcid, id);
+    sq_insert_tail(&c->dcid, dcid, next);
+}
+
+
+static void __attribute__((nonnull)) use_next_scid(struct q_conn * const c)
+{
+    struct cid * const scid = act_scid(c);
+    sq_remove(&c->scid, scid, cid, next);
+    const struct q_cid_map which = {.cid = *scid};
+    struct q_cid_map * const cm = splay_find(cid_splay, &conns_by_cid, &which);
+    splay_remove(cid_splay, &conns_by_cid, cm);
+    warn(DBG, "new dcid=%s (was %s)", scid2str(c), cid2str(scid));
+    free(cm);
+}
+
+
+static void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c)
+{
+    struct cid * const dcid = act_dcid(c);
+    sq_remove(&c->dcid, dcid, cid, next);
+    warn(DBG, "new dcid=%s (was %s)", dcid2str(c), cid2str(dcid));
+    free(dcid);
 }
 
 
@@ -435,11 +458,10 @@ verify_prot(struct q_conn * const c, struct w_iov * const v)
     const uint16_t len = dec_aead(c, v);
     if (len == 0) {
         // AEAD failed, but this might be a stateless reset
-        if (memcmp(&v->buf[v->len - 16], c->tp_peer.stateless_reset_token,
-                   16) == 0) {
+        if (memcmp(&v->buf[v->len - sizeof(act_dcid(c)->srt)], act_dcid(c)->srt,
+                   sizeof(act_dcid(c)->srt)) == 0) {
             warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
-                 hex2str(c->tp_peer.stateless_reset_token,
-                         sizeof(c->tp_peer.stateless_reset_token)));
+                 hex2str(act_dcid(c)->srt, sizeof(act_dcid(c)->srt)));
             conn_to_state(c, CONN_STAT_DRNG);
         } else
             // it is not a stateless reset
@@ -563,6 +585,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             warn(NTE, "picked new scid %s for %s conn (was %s)",
                  cid2str(&new_scid), conn_type(c), scid2str(c));
             add_scid(c, &new_scid);
+            use_next_scid(c);
             dec_frames(c, v);
 
             // if the CH doesn't include any stream-0 data, bail
@@ -804,15 +827,14 @@ void rx(struct ev_loop * const l,
             }
 
         } else {
-            if (meta(v).hdr.scid.len) {
-                if (memcmp(&meta(v).hdr.scid, &c->dcid, sizeof(c->dcid)) != 0)
+            if (meta(v).hdr.scid.len)
+                if (cid_cmp(&meta(v).hdr.scid, act_dcid(c)) != 0) {
                     warn(NTE, "got new dcid %s for %s conn (was %s)",
                          cid2str(&meta(v).hdr.scid), conn_type(c),
                          cid2str(act_dcid(c)));
-
-                // always update the cid (TODO: check that this is allowed)
-                // c->dcid = meta(v).hdr.scid;
-            }
+                    add_dcid(c, &meta(v).hdr.scid);
+                    use_next_dcid(c);
+                }
 
             // check if this pkt came from a new source IP and/or port
             if (sockaddr_in_cmp(&c->peer, &peer) != 0) {
@@ -994,13 +1016,13 @@ struct q_conn * new_conn(struct w_engine * const w,
     if (dcid || c->is_clnt) {
         struct cid * const ndcid = calloc(1, sizeof(*ndcid));
         ensure(ndcid, "could not calloc");
-        if (dcid) {
-            ndcid->len = dcid->len;
-            memcpy(ndcid->id, dcid->id, dcid->len);
-        } else {
+        if (dcid)
+            cid_cpy(ndcid, dcid);
+        else {
             ndcid->len = SERV_SCID_LEN;
             arc4random_buf(ndcid->id, ndcid->len);
         }
+        arc4random_buf(ndcid->srt, sizeof(ndcid->srt));
         sq_insert_tail(&c->dcid, ndcid, next);
     }
 
@@ -1052,13 +1074,15 @@ struct q_conn * new_conn(struct w_engine * const w,
     sq_init(&c->scid);
     splay_insert(ipnp_splay, &conns_by_ipnp, c);
     if (scid || c->is_clnt) {
+        struct cid nscid;
         if (scid)
-            add_scid(c, scid);
+            cid_cpy(&nscid, scid);
         else {
-            struct cid nscid = {.len = CLNT_SCID_LEN};
+            nscid.len = CLNT_SCID_LEN;
             arc4random_buf(nscid.id, nscid.len);
-            add_scid(c, &nscid);
         }
+        arc4random_buf(nscid.srt, sizeof(nscid.srt));
+        add_scid(c, &nscid);
     }
 
     warn(DBG, "%s conn %s on port %u created", conn_type(c), scid2str(c),
@@ -1107,23 +1131,10 @@ void free_conn(struct q_conn * const c)
 
     // remove connection from global lists
     splay_remove(ipnp_splay, &conns_by_ipnp, c);
-
-    while (!sq_empty(&c->scid)) {
-        struct cid * const scid = sq_first(&(c)->scid);
-        sq_remove_head(&c->scid, next);
-        const struct q_cid_map which = {.cid = *scid};
-        struct q_cid_map * const cm =
-            splay_find(cid_splay, &conns_by_cid, &which);
-        splay_remove(cid_splay, &conns_by_cid, cm);
-        free(cm);
-    }
-
-    while (!sq_empty(&c->dcid)) {
-        struct cid * const dcid = sq_first(&(c)->dcid);
-        sq_remove_head(&c->dcid, next);
-        free(dcid);
-    }
-
+    while (!sq_empty(&c->scid))
+        use_next_scid(c);
+    while (!sq_empty(&c->dcid))
+        use_next_dcid(c);
     free(c);
 
     if (accept_queue == c)

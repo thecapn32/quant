@@ -520,21 +520,17 @@ dec_new_cid_frame(struct q_conn * const c,
     uint64_t seq = 0;
     uint16_t i = dec(&seq, v->buf, v->len, pos + 1, 0, "%" PRIu64);
 
-    struct cid * const dcid = calloc(1, sizeof(*dcid));
-    ensure(dcid, "could not calloc");
-
-    i = dec(&dcid->len, v->buf, v->len, i, sizeof(dcid->len), "%u");
-    i = dec_buf(dcid->id, v->buf, v->len, i, dcid->len);
-
-    uint8_t token[16];
-    i = dec_buf(token, v->buf, v->len, i, sizeof(token));
+    struct cid dcid;
+    i = dec(&dcid.len, v->buf, v->len, i, sizeof(dcid.len), "%u");
+    i = dec_buf(dcid.id, v->buf, v->len, i, dcid.len);
+    i = dec_buf(dcid.srt, v->buf, v->len, i, sizeof(dcid.srt));
 
     warn(INF,
          FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu64
                  " len=%u dcid=%s token=%s",
-         seq, dcid->len, cid2str(dcid), hex2str(token, sizeof(token)));
+         seq, dcid.len, cid2str(&dcid), hex2str(dcid.srt, sizeof(dcid.srt)));
 
-    sq_insert_tail(&c->dcid, dcid, next);
+    add_dcid(c, &dcid);
 
     return i;
 }
@@ -1152,20 +1148,18 @@ uint16_t enc_new_cid_frame(struct q_conn * const c,
 
     struct cid ncid = {.len = c->is_clnt ? CLNT_SCID_LEN : SERV_SCID_LEN};
     arc4random_buf(ncid.id, ncid.len);
+    arc4random_buf(ncid.srt, sizeof(ncid.srt));
     add_scid(c, &ncid);
 
     i = enc(v->buf, v->len, i, &ncid.len, sizeof(ncid.len), 0, "%u");
     i = enc_buf(v->buf, v->len, i, ncid.id, ncid.len);
-
-    // TODO: store srt somewhere
-    uint8_t srt[16];
-    arc4random_buf(srt, sizeof(srt));
-    i = enc_buf(v->buf, v->len, i, srt, sizeof(srt));
+    i = enc_buf(v->buf, v->len, i, &ncid.srt, sizeof(ncid.srt));
 
     warn(INF,
          FRAM_OUT "NEW_CONNECTION_ID" NRM " seq=%" PRIx64
                   " len=%u cid=%s token=%s",
-         c->ncid_seq_out, ncid.len, cid2str(&ncid), hex2str(srt, sizeof(srt)));
+         c->ncid_seq_out, ncid.len, cid2str(&ncid),
+         hex2str(ncid.srt, sizeof(ncid.srt)));
 
     return i;
 }

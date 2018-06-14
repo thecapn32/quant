@@ -58,6 +58,16 @@ struct cid {
 };
 
 
+static inline void __attribute__((nonnull))
+cid_cpy(struct cid * const dst, const struct cid * const src)
+{
+    memcpy((uint8_t *)dst + offsetof(struct cid, len),
+           (const uint8_t *)src + offsetof(struct cid, len),
+           sizeof(struct cid) - offsetof(struct cid, len) -
+               (sizeof(struct cid) - offsetof(struct cid, _unused)));
+}
+
+
 struct pkt_hdr {
     uint16_t len;
     uint16_t hdr_len;
@@ -140,10 +150,10 @@ extern struct pkt_meta * pm;
 
 
 static inline void __attribute__((nonnull))
-pm_cpy(struct pkt_meta * const dst, struct pkt_meta * const src)
+pm_cpy(struct pkt_meta * const dst, const struct pkt_meta * const src)
 {
     memcpy((uint8_t *)dst + offsetof(struct pkt_meta, tx_t),
-           (uint8_t *)src + offsetof(struct pkt_meta, tx_t),
+           (const uint8_t *)src + offsetof(struct pkt_meta, tx_t),
            sizeof(struct pkt_meta) - offsetof(struct pkt_meta, tx_t));
 }
 
