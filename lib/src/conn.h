@@ -60,7 +60,7 @@ struct transport_params {
 
 struct q_cid_map {
     splay_entry(q_cid_map) node;
-    struct cid scid;   ///< Source connection ID
+    struct cid cid;    ///< Connection ID
     struct q_conn * c; ///< Connection
 };
 
@@ -71,6 +71,7 @@ struct q_conn {
     sl_entry(q_conn) next;
 
     struct cid dcid;     ///< Destination connection ID
+    // sq_head(, cid) dcid; ///< Destination connection ID map
     sq_head(, cid) scid; ///< Source connection ID map
 
     uint16_t holds_sock : 1; ///< Connection manages a warpcore socket.

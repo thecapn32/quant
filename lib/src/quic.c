@@ -524,7 +524,7 @@ void q_cleanup(struct w_engine * const w)
     // close all connections
     while (!splay_empty(&conns_by_cid)) {
         struct q_cid_map * const cm = splay_min(cid_splay, &conns_by_cid);
-        warn(DBG, "closing %s conn %s", conn_type(cm->c), cid2str(&cm->scid));
+        warn(DBG, "closing %s conn %s", conn_type(cm->c), cid2str(&cm->cid));
         q_close(cm->c);
     }
     while (!splay_empty(&conns_by_ipnp)) {

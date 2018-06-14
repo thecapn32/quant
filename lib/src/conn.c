@@ -90,10 +90,10 @@ int ipnp_splay_cmp(const struct q_conn * const a, const struct q_conn * const b)
 int cid_splay_cmp(const struct q_cid_map * const a,
                   const struct q_cid_map * const b)
 {
-    const int diff = (a->scid.len > b->scid.len) - (a->scid.len < b->scid.len);
+    const int diff = (a->cid.len > b->cid.len) - (a->cid.len < b->cid.len);
     if (diff)
         return diff;
-    return memcmp(&a->scid.id, &b->scid.id, a->scid.len);
+    return memcmp(&a->cid.id, &b->cid.id, a->cid.len);
 }
 
 
@@ -145,7 +145,7 @@ get_conn_by_ipnp(const uint16_t sport, const struct sockaddr_in * const peer)
 static struct q_conn * __attribute__((nonnull))
 get_conn_by_cid(const struct cid * const scid)
 {
-    const struct q_cid_map which = {.scid = *scid};
+    const struct q_cid_map which = {.cid = *scid};
     struct q_cid_map * const cm = splay_find(cid_splay, &conns_by_cid, &which);
     return cm ? cm->c : 0;
 }
@@ -400,10 +400,10 @@ void add_scid(struct q_conn * const c, const struct cid * const scid)
 {
     struct q_cid_map * cm = calloc(1, sizeof(*cm));
     ensure(cm, "could not calloc");
-    cm->scid = *scid;
+    cm->cid = *scid;
     cm->c = c;
     splay_insert(cid_splay, &conns_by_cid, cm);
-    sq_insert_tail(&c->scid, &cm->scid, next);
+    sq_insert_tail(&c->scid, &cm->cid, next);
 
     // warn(ERR, "conn scids");
     // struct cid * id;
@@ -412,7 +412,7 @@ void add_scid(struct q_conn * const c, const struct cid * const scid)
 
     // warn(ERR, "all scids");
     // splay_foreach (cm, cid_splay, &conns_by_cid)
-    //     warn(ERR, "scid %s", cid2str(&cm->scid));
+    //     warn(ERR, "scid %s", cid2str(&cm->cid));
 }
 
 
@@ -1102,7 +1102,7 @@ void free_conn(struct q_conn * const c)
     while (!sq_empty(&c->scid)) {
         struct cid * const id = sq_first(&c->scid);
         sq_remove_head(&c->scid, next);
-        const struct q_cid_map which = {.scid = *id};
+        const struct q_cid_map which = {.cid = *id};
         struct q_cid_map * const cm =
             splay_find(cid_splay, &conns_by_cid, &which);
         splay_remove(cid_splay, &conns_by_cid, cm);
