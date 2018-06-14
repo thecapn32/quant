@@ -153,6 +153,27 @@ get_conn_by_cid(const struct cid * const scid)
 }
 
 
+static void __attribute__((nonnull)) use_next_scid(struct q_conn * const c)
+{
+    struct cid * const scid = act_scid(c);
+    sq_remove(&c->scid, scid, cid, next);
+    const struct q_cid_map which = {.cid = *scid};
+    struct q_cid_map * const cm = splay_find(cid_splay, &conns_by_cid, &which);
+    splay_remove(cid_splay, &conns_by_cid, cm);
+    warn(DBG, "new dcid=%s (was %s)", scid2str(c), cid2str(scid));
+    free(cm);
+}
+
+
+static void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c)
+{
+    struct cid * const dcid = act_dcid(c);
+    sq_remove(&c->dcid, dcid, cid, next);
+    warn(DBG, "new dcid=%s (was %s)", dcid2str(c), cid2str(dcid));
+    free(dcid);
+}
+
+
 static void log_sent_pkts(struct q_conn * const c)
 {
     char sent_pkts_buf[1024] = "";
@@ -322,8 +343,16 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
         c->tp_local.max_strm_bidi += 4;
     }
 
-    if (c->ncid_seq_out == UINT64_MAX)
-        c->tx_ncid = true;
+    // send a NEW_CONNECTION_ID frame if the peer doesn't have one remaining
+    c->tx_ncid = (sq_len(&c->scid) < 2);
+
+    // if the peer has made a new CID available, switch to it
+    if (sq_len(&c->dcid) > 1) {
+        warn(NTE, "migration to dcid %s for %s conn (was %s)",
+             cid2str(sq_next(act_dcid(c), next)), conn_type(c),
+             cid2str(act_dcid(c)));
+        use_next_dcid(c);
+    }
 }
 
 
@@ -415,27 +444,6 @@ void add_dcid(struct q_conn * const c, const struct cid * const id)
     ensure(dcid, "could not calloc");
     cid_cpy(dcid, id);
     sq_insert_tail(&c->dcid, dcid, next);
-}
-
-
-static void __attribute__((nonnull)) use_next_scid(struct q_conn * const c)
-{
-    struct cid * const scid = act_scid(c);
-    sq_remove(&c->scid, scid, cid, next);
-    const struct q_cid_map which = {.cid = *scid};
-    struct q_cid_map * const cm = splay_find(cid_splay, &conns_by_cid, &which);
-    splay_remove(cid_splay, &conns_by_cid, cm);
-    warn(DBG, "new dcid=%s (was %s)", scid2str(c), cid2str(scid));
-    free(cm);
-}
-
-
-static void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c)
-{
-    struct cid * const dcid = act_dcid(c);
-    sq_remove(&c->dcid, dcid, cid, next);
-    warn(DBG, "new dcid=%s (was %s)", dcid2str(c), cid2str(dcid));
-    free(dcid);
 }
 
 
@@ -582,7 +590,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             // this is a new connection; server picks a new random cid
             struct cid new_scid = {.len = SERV_SCID_LEN};
             arc4random_buf(new_scid.id, new_scid.len);
-            warn(NTE, "picked new scid %s for %s conn (was %s)",
+            warn(NTE, "hshk switch to scid %s for %s conn (was %s)",
                  cid2str(&new_scid), conn_type(c), scid2str(c));
             add_scid(c, &new_scid);
             use_next_scid(c);
@@ -829,12 +837,19 @@ void rx(struct ev_loop * const l,
         } else {
             if (meta(v).hdr.scid.len)
                 if (cid_cmp(&meta(v).hdr.scid, act_dcid(c)) != 0) {
-                    warn(NTE, "got new dcid %s for %s conn (was %s)",
+                    warn(NTE, "hshk switch to dcid %s for %s conn (was %s)",
                          cid2str(&meta(v).hdr.scid), conn_type(c),
                          cid2str(act_dcid(c)));
                     add_dcid(c, &meta(v).hdr.scid);
                     use_next_dcid(c);
                 }
+
+            if (cid_cmp(&meta(v).hdr.dcid, act_scid(c)) != 0) {
+                warn(NTE, "migration to scid %s for %s conn (was %s)",
+                     cid2str(&meta(v).hdr.dcid), conn_type(c),
+                     cid2str(act_scid(c)));
+                use_next_scid(c);
+            }
 
             // check if this pkt came from a new source IP and/or port
             if (sockaddr_in_cmp(&c->peer, &peer) != 0) {

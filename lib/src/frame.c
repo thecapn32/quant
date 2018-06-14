@@ -1161,5 +1161,7 @@ uint16_t enc_new_cid_frame(struct q_conn * const c,
          c->ncid_seq_out, ncid.len, cid2str(&ncid),
          hex2str(ncid.srt, sizeof(ncid.srt)));
 
+    c->tx_ncid = false;
+
     return i;
 }
