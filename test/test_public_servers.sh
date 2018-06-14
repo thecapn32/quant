@@ -46,7 +46,7 @@ declare -A servers=(
         [winquic]=msquic.westus.cloudapp.azure.com
 )
 
-results=(live fail vneg hshk data close zrtt hrr)
+results=(live fail vneg hshk data close zrtt hrr mig)
 declare -A ${results[@]}
 
 
@@ -134,6 +134,10 @@ function analyze {
         elif [ $ret == 1 ]; then
                 close[$1]=C # XXX c
         fi
+
+        perl -n -e '/dec_new_cid_frame.*NEW_CONNECTION_ID/ and $n=1;
+                    /migration to dcid/ && $n && exit 1;' "$log"
+        [ $? == 1 ] && mig[$1]=M
         rm -f "$log"
 
         # analyze 0rtt

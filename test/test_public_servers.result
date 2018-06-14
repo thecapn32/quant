@@ -1,4 +1,4 @@
-                live    fail    vneg    hshk    data    close   zrtt    hrr
+                live    fail    vneg    hshk    data    close   zrtt    hrr     mig
 ats             *
 f5              *               V
 minq
@@ -7,9 +7,9 @@ mvfst
 ngtcp2          *               V       H       D       C       RZ
 ngx_quic        *               V       H       D       C
 pandora
-picoquic        *               V       H       D       C       RZ      S
-quant           *               V       H       D       C       RZ      S
-quicker         *
+picoquic
+quant           *               V       H       D       C       RZ      S       M
+quicker
 quicly          *               V       H       D       C       RZ
 quicr           *
 quinn
