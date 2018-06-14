@@ -134,7 +134,11 @@ get(struct w_engine * const w,
                                    .ai_socktype = SOCK_DGRAM,
                                    .ai_protocol = IPPROTO_UDP};
     const int err = getaddrinfo(dest, port, &hints, &peer);
-    ensure(err == 0, "getaddrinfo: %s", gai_strerror(err));
+    if (err) {
+        warn(ERR, "getaddrinfo: %s", gai_strerror(err));
+        freeaddrinfo(peer);
+        return 0;
+    }
     ensure(peer->ai_next == 0, "multiple addresses not supported");
 
     // add to stream list
