@@ -616,7 +616,7 @@ void init_tp(struct q_conn * const c)
         ensure(i + sizeof(c->tp_local.stateless_reset_token) < len,
                "tp_buf overrun");
         i = enc_buf(c->tls.tp_buf, len, i, c->tp_local.stateless_reset_token,
-                    sizeof(c->tp_local.stateless_reset_token), "%s");
+                    sizeof(c->tp_local.stateless_reset_token));
     }
 
     // encode length of all transport parameters

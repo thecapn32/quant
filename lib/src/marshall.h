@@ -127,12 +127,12 @@ extern uint16_t marshall_enc_pnr(uint8_t * const buf,
 ///
 /// @return     Buffer offset of byte following the encoded data.
 ///
-#define enc_buf(buf, buf_len, pos, src, enc_len, fmt)                          \
+#define enc_buf(buf, buf_len, pos, src, enc_len)                               \
     marshall_enc_buf(buf, buf_len, pos, src, enc_len,                          \
-                     "enc %s = " fmt NRM " into %u byte%s (%s) at %s[%u..%u]", \
+                     "enc %s = %s into %u byte%s (%s) at %s[%u..%u]",          \
                      __func__, __FILE__, __LINE__, #buf, #src)
 #else
-#define enc_buf(buf, buf_len, pos, src, enc_len, fmt)                          \
+#define enc_buf(buf, buf_len, pos, src, enc_len)                               \
     marshall_enc_buf(buf, buf_len, pos, src, enc_len)
 #endif
 
@@ -242,12 +242,12 @@ extern uint16_t marshall_dec_pnr(void * const dst,
 /// @return     Buffer offset of byte following the decoded data, or UINT16_MAX
 ///             if the decoding failed.
 ///
-#define dec_buf(dst, buf, buf_len, pos, dst_len, fmt)                          \
+#define dec_buf(dst, buf, buf_len, pos, dst_len)                               \
     marshall_dec_buf(dst, buf, buf_len, pos, dst_len,                          \
-                     "dec %u byte%s (%s) from %s[%u..%u] into %s = " fmt NRM,  \
+                     "dec %u byte%s (%s) from %s[%u..%u] into %s = %s",        \
                      __func__, __FILE__, __LINE__, #buf, #dst)
 #else
-#define dec_buf(dst, buf, buf_len, pos, dst_len, fmt)                          \
+#define dec_buf(dst, buf, buf_len, pos, dst_len)                               \
     marshall_dec_buf(dst, buf, buf_len, pos, dst_len)
 #endif
 

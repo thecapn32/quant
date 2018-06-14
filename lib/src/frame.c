@@ -305,7 +305,7 @@ dec_close_frame(struct q_conn * const c,
 
     char reas_phr[UINT16_MAX];
     if (reas_len)
-        i = dec_buf(&reas_phr, v->buf, v->len, i, (uint16_t)reas_len, "%s");
+        i = dec_buf(&reas_phr, v->buf, v->len, i, (uint16_t)reas_len);
 
     conn_to_state(c, c->state < CONN_STAT_HSHK_DONE ? CONN_STAT_HSHK_FAIL
                                                     : CONN_STAT_DRNG);
@@ -524,10 +524,10 @@ dec_new_cid_frame(struct q_conn * const c __attribute__((unused)),
 
     struct cid dcid = {0};
     i = dec(&dcid.len, v->buf, v->len, i, sizeof(dcid.len), "%u");
-    i = dec_buf(dcid.id, v->buf, v->len, i, dcid.len, "%s");
+    i = dec_buf(dcid.id, v->buf, v->len, i, dcid.len);
 
     uint8_t token[16];
-    i = dec_buf(token, v->buf, v->len, i, sizeof(token), "%s");
+    i = dec_buf(token, v->buf, v->len, i, sizeof(token));
 
     warn(INF,
          FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu64
@@ -985,7 +985,7 @@ uint16_t enc_close_frame(struct w_iov * const v,
     i = enc(v->buf, v->len, i, &rlen, 0, 0, "%" PRIu64);
 
     if (reas) {
-        i = enc_buf(v->buf, v->len, i, reas, (uint16_t)rlen, "%s");
+        i = enc_buf(v->buf, v->len, i, reas, (uint16_t)rlen);
         warn(INF,
              FRAM_OUT "%s" NRM " err=%s0x%04x" NRM " rlen=%" PRIu64
                       " reason=%s%.*s" NRM,

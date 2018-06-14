@@ -120,10 +120,10 @@ enc_lh_cids(struct q_conn * const c, struct w_iov * const v, const uint16_t pos)
     uint16_t i = enc(v->buf, v->len, pos, &cil, sizeof(cil), 0, "0x%02x");
     if (meta(v).hdr.dcid.len)
         i = enc_buf(v->buf, v->len, i, &meta(v).hdr.dcid.id,
-                    meta(v).hdr.dcid.len, "%s");
+                    meta(v).hdr.dcid.len);
     if (meta(v).hdr.scid.len)
         i = enc_buf(v->buf, v->len, i, &meta(v).hdr.scid.id,
-                    meta(v).hdr.scid.len, "%s");
+                    meta(v).hdr.scid.len);
     return i;
 }
 
@@ -214,7 +214,7 @@ bool enc_pkt(struct q_stream * const s,
         len_pos = i;
         i += 2;
     } else {
-        i = enc_buf(v->buf, v->len, i, &c->dcid.id, c->dcid.len, "%s");
+        i = enc_buf(v->buf, v->len, i, &c->dcid.id, c->dcid.len);
         meta(v).hdr.dcid = c->dcid;
     }
     nr_pos = i;
@@ -388,7 +388,7 @@ bool dec_pkt_hdr_initial(const struct w_iov * const v, const bool is_clnt)
         if (meta(v).hdr.dcid.len) {
             meta(v).hdr.dcid.len += 3;
             ret = dec_buf(&meta(v).hdr.dcid.id, v->buf, v->len, 6,
-                          meta(v).hdr.dcid.len, "%s");
+                          meta(v).hdr.dcid.len);
             if (unlikely(ret == UINT16_MAX))
                 return false;
             meta(v).hdr.hdr_len += meta(v).hdr.dcid.len;
@@ -399,7 +399,7 @@ bool dec_pkt_hdr_initial(const struct w_iov * const v, const bool is_clnt)
         if (meta(v).hdr.scid.len) {
             meta(v).hdr.scid.len += 3;
             ret = dec_buf(&meta(v).hdr.scid.id, v->buf, v->len,
-                          meta(v).hdr.hdr_len, meta(v).hdr.scid.len, "%s");
+                          meta(v).hdr.hdr_len, meta(v).hdr.scid.len);
             if (unlikely(ret == UINT16_MAX))
                 return false;
             meta(v).hdr.hdr_len += meta(v).hdr.scid.len;
@@ -421,8 +421,8 @@ bool dec_pkt_hdr_initial(const struct w_iov * const v, const bool is_clnt)
     // this logic depends on picking a SCID with a known length during handshake
     meta(v).hdr.dcid.len = (is_clnt ? CLNT_SCID_LEN : SERV_SCID_LEN);
 
-    ret = dec_buf(&meta(v).hdr.dcid.id, v->buf, v->len, 1, meta(v).hdr.dcid.len,
-                  "%s");
+    ret =
+        dec_buf(&meta(v).hdr.dcid.id, v->buf, v->len, 1, meta(v).hdr.dcid.len);
     if (unlikely(ret == UINT16_MAX))
         return false;
     meta(v).hdr.hdr_len += meta(v).hdr.dcid.len;
