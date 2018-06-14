@@ -74,7 +74,7 @@ new_stream(struct q_conn * const c, const uint64_t id, const bool active)
     strm_to_state(s, STRM_STAT_OPEN);
     splay_insert(stream, &c->streams, s);
     warn(DBG, "reserved strm " FMT_SID " on %s conn %s", id, conn_type(c),
-         cid2str(&c->scid));
+         scid2str(c));
     return s;
 }
 
@@ -82,7 +82,7 @@ new_stream(struct q_conn * const c, const uint64_t id, const bool active)
 void free_stream(struct q_stream * const s)
 {
     warn(DBG, "freeing strm " FMT_SID " on %s conn %s", s->id, conn_type(s->c),
-         cid2str(&s->c->scid));
+         scid2str(s->c));
 
     diet_insert(&s->c->closed_streams, s->id, 0, 0);
 

@@ -73,7 +73,7 @@ struct q_stream {
 #define strm_to_state(strm, s)                                                 \
     do {                                                                       \
         warn(DBG, "conn %s strm " FMT_SID " state %u -> %u",                   \
-             cid2str(&(strm)->c->scid), (strm)->id, (strm)->state, (s));       \
+             scid2str((strm)->c), (strm)->id, (strm)->state, (s));             \
         (strm)->state = (s);                                                   \
     } while (0)
 

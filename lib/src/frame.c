@@ -30,13 +30,11 @@
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/param.h>
 
 // #define FUZZING
-#ifdef FUZZING
-#include <stdlib.h>
-#endif
 
 #include <ev.h>
 #include <quant/quant.h>
@@ -95,7 +93,7 @@ dec_stream_frame(struct q_conn * const c,
         if (diet_find(&c->closed_streams, sid)) {
             warn(WRN,
                  "ignoring frame for closed strm " FMT_SID " on %s conn %s",
-                 sid, conn_type(c), cid2str(&c->scid));
+                 sid, conn_type(c), cid2str(sq_first(&c->scid)));
             goto done;
         }
 
@@ -532,8 +530,7 @@ dec_new_cid_frame(struct q_conn * const c __attribute__((unused)),
     warn(INF,
          FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu64
                  " len=%u dcid=%s token=%s",
-         seq, dcid.len, hex2str(dcid.id, dcid.len),
-         hex2str(token, sizeof(token)));
+         seq, dcid.len, cid2str(&dcid), hex2str(token, sizeof(token)));
 
     // TODO: actually do something with the new CIDs
 
@@ -1134,6 +1131,39 @@ uint16_t enc_path_challenge_frame(struct q_conn * const c,
             "0x%" PRIx64);
 
     warn(INF, FRAM_OUT "PATH_CHALLENGE" NRM " data=%" PRIx64, c->path_chlg_out);
+
+    return i;
+}
+
+
+uint16_t enc_new_cid_frame(struct q_conn * const c,
+                           const struct w_iov * const v,
+                           const uint16_t pos)
+{
+    bit_set(meta(v).frames, FRAM_TYPE_NEW_CID);
+
+    const uint8_t type = FRAM_TYPE_NEW_CID;
+    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
+
+    c->ncid_seq_out = c->ncid_seq_out == UINT64_MAX ? 0 : c->ncid_seq_out + 1;
+    i = enc(v->buf, v->len, i, &c->ncid_seq_out, 0, 0, "%" PRIu64);
+
+    struct cid ncid = {.len = c->is_clnt ? CLNT_SCID_LEN : SERV_SCID_LEN};
+    arc4random_buf(ncid.id, ncid.len);
+    add_scid(c, &ncid);
+
+    i = enc(v->buf, v->len, i, &ncid.len, sizeof(ncid.len), 0, "%u");
+    i = enc_buf(v->buf, v->len, i, ncid.id, ncid.len);
+
+    // TODO: store srt somewhere
+    uint8_t srt[16];
+    arc4random_buf(srt, sizeof(srt));
+    i = enc_buf(v->buf, v->len, i, srt, sizeof(srt));
+
+    warn(INF,
+         FRAM_OUT "NEW_CONNECTION_ID" NRM " seq=%" PRIx64
+                  " len=%u cid=%s token=%s",
+         c->ncid_seq_out, ncid.len, cid2str(&ncid), hex2str(srt, sizeof(srt)));
 
     return i;
 }

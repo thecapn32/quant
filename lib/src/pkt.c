@@ -113,7 +113,7 @@ static uint16_t
 enc_lh_cids(struct q_conn * const c, struct w_iov * const v, const uint16_t pos)
 {
     meta(v).hdr.dcid = c->dcid;
-    meta(v).hdr.scid = c->scid;
+    meta(v).hdr.scid = *sq_first(&c->scid);
     const uint8_t cil =
         (uint8_t)((meta(v).hdr.dcid.len ? meta(v).hdr.dcid.len - 3 : 0) << 4) |
         (uint8_t)(meta(v).hdr.scid.len ? meta(v).hdr.scid.len - 3 : 0);
@@ -236,6 +236,9 @@ bool enc_pkt(struct q_stream * const s,
 
     if (c->tx_path_chlg)
         i = enc_path_challenge_frame(c, v, i);
+
+    if (c->tx_ncid)
+        i = enc_new_cid_frame(c, v, i);
 
     if (c->state == CONN_STAT_ESTB) {
         // XXX rethink this - there needs to be a list of which streams are

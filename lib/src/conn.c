@@ -87,19 +87,18 @@ int ipnp_splay_cmp(const struct q_conn * const a, const struct q_conn * const b)
 }
 
 
-int cid_splay_cmp(const struct q_conn * const a, const struct q_conn * const b)
+int cid_splay_cmp(const struct q_cid_map * const a,
+                  const struct q_cid_map * const b)
 {
-    // intentionally including id + len in this memcmp
-    const int diff = memcmp(&a->scid, &b->scid, sizeof(a->scid));
-    if (likely(diff))
+    const int diff = (a->scid.len > b->scid.len) - (a->scid.len < b->scid.len);
+    if (diff)
         return diff;
-    // include only the client flags in the comparison
-    return a->is_clnt - b->is_clnt;
+    return memcmp(&a->scid.id, &b->scid.id, a->scid.len);
 }
 
 
 SPLAY_GENERATE(ipnp_splay, q_conn, node_ipnp, ipnp_splay_cmp)
-SPLAY_GENERATE(cid_splay, q_conn, node_cid, cid_splay_cmp)
+SPLAY_GENERATE(cid_splay, q_cid_map, node, cid_splay_cmp)
 
 
 static bool __attribute__((const)) vers_supported(const uint32_t v)
@@ -135,21 +134,20 @@ pick_from_server_vers(const struct w_iov * const v)
 }
 
 
-struct q_conn * get_conn_by_ipnp(const uint16_t sport,
-                                 const struct sockaddr_in * const peer,
-                                 const bool is_clnt)
+static struct q_conn * __attribute__((nonnull))
+get_conn_by_ipnp(const uint16_t sport, const struct sockaddr_in * const peer)
 {
-    const struct q_conn which = {
-        .peer = *peer, .is_clnt = is_clnt, .sport = sport};
+    const struct q_conn which = {.peer = *peer, .sport = sport};
     return splay_find(ipnp_splay, &conns_by_ipnp, &which);
 }
 
 
-struct q_conn * get_conn_by_cid(const struct cid * const scid,
-                                const bool is_clnt)
+static struct q_conn * __attribute__((nonnull))
+get_conn_by_cid(const struct cid * const scid)
 {
-    const struct q_conn which = {.scid = *scid, .is_clnt = is_clnt};
-    return splay_find(cid_splay, &conns_by_cid, &which);
+    const struct q_cid_map which = {.scid = *scid};
+    struct q_cid_map * const cm = splay_find(cid_splay, &conns_by_cid, &which);
+    return cm ? cm->c : 0;
 }
 
 
@@ -275,7 +273,7 @@ static uint32_t
 tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
 {
     warn(DBG, "other %s on %s conn %s strm " FMT_SID " w/%u pkt%s in queue",
-         rtx ? "RTX" : "TX", conn_type(s->c), cid2str(&s->c->scid), s->id,
+         rtx ? "RTX" : "TX", conn_type(s->c), scid2str(s->c), s->id,
          sq_len(&s->out), plural(sq_len(&s->out)));
 
     struct w_iov *v = 0, *last = 0;
@@ -306,7 +304,7 @@ tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
 }
 
 
-static void __attribute__((nonnull)) do_conn_fc(struct q_conn * const c)
+static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
 {
     if (c->state < CONN_STAT_ESTB)
         return;
@@ -321,6 +319,9 @@ static void __attribute__((nonnull)) do_conn_fc(struct q_conn * const c)
         c->tx_max_stream_id = true;
         c->tp_local.max_strm_bidi += 4;
     }
+
+    if (c->ncid_seq_out == UINT64_MAX)
+        c->tx_ncid = true;
 }
 
 
@@ -346,7 +347,7 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
     if (rtx == false && c->blocked)
         return;
 
-    do_conn_fc(c);
+    do_conn_mgmt(c);
 
     bool did_tx = false;
     struct q_stream * s = 0;
@@ -365,7 +366,7 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
         if (!sq_empty(&s->out)) {
             warn(DBG,
                  "data %sTX on %s conn %s strm " FMT_SID " w/%u pkt%s in queue",
-                 rtx ? "R" : "", conn_type(c), cid2str(&c->scid), s->id,
+                 rtx ? "R" : "", conn_type(c), scid2str(c), s->id,
                  sq_len(&s->out), plural(sq_len(&s->out)));
             did_tx |= tx_stream(s, rtx, limit, 0);
         } else
@@ -395,12 +396,23 @@ void tx_w(struct ev_loop * const l __attribute__((unused)),
 }
 
 
-static void __attribute__((nonnull))
-update_scid(struct q_conn * const c, const struct cid * const scid)
+void add_scid(struct q_conn * const c, const struct cid * const scid)
 {
-    splay_remove(cid_splay, &conns_by_cid, c);
-    c->scid = *scid;
-    splay_insert(cid_splay, &conns_by_cid, c);
+    struct q_cid_map * cm = calloc(1, sizeof(*cm));
+    ensure(cm, "could not calloc");
+    cm->scid = *scid;
+    cm->c = c;
+    splay_insert(cid_splay, &conns_by_cid, cm);
+    sq_insert_tail(&c->scid, &cm->scid, next);
+
+    // warn(ERR, "conn scids");
+    // struct cid * id;
+    // sq_foreach (id, &c->scid, next)
+    //     warn(ERR, "scid %s", cid2str(id));
+
+    // warn(ERR, "all scids");
+    // splay_foreach (cm, cid_splay, &conns_by_cid)
+    //     warn(ERR, "scid %s", cid2str(&cm->scid));
 }
 
 
@@ -549,8 +561,8 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             struct cid new_scid = {.len = SERV_SCID_LEN};
             arc4random_buf(new_scid.id, new_scid.len);
             warn(NTE, "picked new scid %s for %s conn (was %s)",
-                 cid2str(&new_scid), conn_type(c), cid2str(&c->scid));
-            update_scid(c, &new_scid);
+                 cid2str(&new_scid), conn_type(c), scid2str(c));
+            add_scid(c, &new_scid);
             dec_frames(c, v);
 
             // if the CH doesn't include any stream-0 data, bail
@@ -563,7 +575,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
         } else {
             conn_to_state(c, CONN_STAT_VERS_NEG);
             warn(WRN, "%s conn %s clnt-requested vers 0x%08x not supported ",
-                 conn_type(c), cid2str(&c->scid), c->vers);
+                 conn_type(c), scid2str(c), c->vers);
         }
         break;
 
@@ -754,21 +766,21 @@ void rx(struct ev_loop * const l,
                                          .sin_port = v->port,
                                          .sin_addr = {.s_addr = v->ip}};
 
-        c = get_conn_by_cid(&meta(v).hdr.dcid, is_clnt);
+        c = get_conn_by_cid(&meta(v).hdr.dcid);
         if (c == 0) {
-            c = get_conn_by_ipnp(w_get_sport(ws), &peer, is_clnt);
+            c = get_conn_by_ipnp(w_get_sport(ws), &peer);
             if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
                 if (!is_clnt) {
                     if (c && meta(v).hdr.type == F_LH_0RTT)
                         warn(INF,
                              "got 0-RTT pkt for orig cid %s, new is %s, "
                              "accepting",
-                             cid2str(&meta(v).hdr.dcid), cid2str(&c->scid));
+                             cid2str(&meta(v).hdr.dcid), scid2str(c));
                     else if (c && meta(v).hdr.type == F_LH_INIT) {
                         warn(INF,
                              "got duplicate CI for orig cid %s, new is %s, "
                              "ignoring",
-                             cid2str(&meta(v).hdr.dcid), cid2str(&c->scid));
+                             cid2str(&meta(v).hdr.dcid), scid2str(c));
                         q_free_iov(v);
                         continue;
                     } else if (meta(v).hdr.type == F_LH_INIT) {
@@ -813,8 +825,8 @@ void rx(struct ev_loop * const l,
         }
 
         if (c == 0) {
-            warn(INF, "cannot find connection for 0x%02x packet",
-                 meta(v).hdr.flags);
+            warn(INF, "cannot find conn %s for 0x%02x-type pkt",
+                 cid2str(&meta(v).hdr.dcid), meta(v).hdr.flags);
             q_free_iov(v);
             continue;
         }
@@ -899,7 +911,7 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
 {
     struct q_conn * const c = w->data;
     warn(DBG, "closing/draining alarm on %s conn %s", conn_type(c),
-         cid2str(&c->scid));
+         scid2str(c));
 
     conn_to_state(c, CONN_STAT_CLSD);
     // terminate whatever API call is currently active
@@ -920,7 +932,7 @@ void enter_closing(struct q_conn * const c)
             3 * (is_zero(c->rec.srtt) ? kDefaultInitialRtt : c->rec.srtt) +
             4 * c->rec.rttvar;
         warn(DBG, "closing/draining alarm in %f sec on %s conn %s", dur,
-             conn_type(c), cid2str(&c->scid));
+             conn_type(c), scid2str(c));
         ev_timer_init(&c->closing_alarm, enter_closed, dur, 0);
         c->closing_alarm.data = c;
         ev_timer_start(loop, &c->closing_alarm);
@@ -933,7 +945,7 @@ void ack_alarm(struct ev_loop * const l __attribute__((unused)),
                int e __attribute__((unused)))
 {
     struct q_conn * const c = w->data;
-    warn(DBG, "ACK timeout on %s conn %s", conn_type(c), cid2str(&c->scid));
+    warn(DBG, "ACK timeout on %s conn %s", conn_type(c), scid2str(c));
     c->needs_tx = true;
     tx(w->data, false, 0);
     ev_timer_stop(loop, &c->ack_alarm);
@@ -946,7 +958,7 @@ idle_alarm(struct ev_loop * const l __attribute__((unused)),
            int e __attribute__((unused)))
 {
     struct q_conn * const c = w->data;
-    warn(DBG, "idle timeout on %s conn %s", conn_type(c), cid2str(&c->scid));
+    warn(DBG, "idle timeout on %s conn %s", conn_type(c), scid2str(c));
 
     if (c->state >= CONN_STAT_ESTB) {
         // send connection close frame
@@ -984,13 +996,6 @@ struct q_conn * new_conn(struct w_engine * const w,
         arc4random_buf(c->dcid.id, c->dcid.len);
     }
 
-    if (scid) {
-        memcpy(&c->scid, scid, sizeof(*scid));
-    } else if (c->is_clnt) {
-        c->scid.len = CLNT_SCID_LEN;
-        arc4random_buf(c->scid.id, c->scid.len);
-    }
-
     c->vers = c->vers_initial = vers;
 
     // initialize recovery state
@@ -1018,6 +1023,8 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->tp_local.max_strm_bidi = c->is_clnt ? 1 : 4;
     c->tp_local.max_strm_uni = 0; // TODO: support unidir streams
 
+    c->ncid_seq_out = UINT64_MAX;
+
     // initialize socket and start a TX watcher
     ev_async_init(&c->tx_w, tx_w);
     c->tx_w.data = c;
@@ -1034,12 +1041,20 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->sport = w_get_sport(c->sock);
 
     // add connection to global data structures
+    sq_init(&c->scid);
     splay_insert(ipnp_splay, &conns_by_ipnp, c);
-    if (c->scid.len)
-        splay_insert(cid_splay, &conns_by_cid, c);
+    if (scid) {
+        add_scid(c, scid);
+    } else if (c->is_clnt) {
+        struct cid nscid = {.len = CLNT_SCID_LEN};
+        arc4random_buf(nscid.id, nscid.len);
+        add_scid(c, &nscid);
+    } else
+        goto done;
 
-    warn(DBG, "%s conn %s on port %u created", conn_type(c), cid2str(&c->scid),
+    warn(DBG, "%s conn %s on port %u created", conn_type(c), scid2str(c),
          ntohs(c->sport));
+done:
     return c;
 }
 
@@ -1083,11 +1098,17 @@ void free_conn(struct q_conn * const c)
 
     // remove connection from global lists
     splay_remove(ipnp_splay, &conns_by_ipnp, c);
-    splay_remove(cid_splay, &conns_by_cid, c);
 
-    if (c->scid.len)
-        warn(WRN, "%s conn %s on port %u closed", conn_type(c),
-             cid2str(&c->scid), ntohs(c->sport));
+    while (!sq_empty(&c->scid)) {
+        struct cid * const id = sq_first(&c->scid);
+        sq_remove_head(&c->scid, next);
+        const struct q_cid_map which = {.scid = *id};
+        struct q_cid_map * const cm =
+            splay_find(cid_splay, &conns_by_cid, &which);
+        splay_remove(cid_splay, &conns_by_cid, cm);
+        free(cm);
+    }
+
     free(c);
 
     if (accept_queue == c)

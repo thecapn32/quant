@@ -42,7 +42,7 @@
 
 
 extern splay_head(ipnp_splay, q_conn) conns_by_ipnp;
-extern splay_head(cid_splay, q_conn) conns_by_cid;
+extern splay_head(cid_splay, q_cid_map) conns_by_cid;
 
 
 struct transport_params {
@@ -58,14 +58,20 @@ struct transport_params {
 };
 
 
+struct q_cid_map {
+    splay_entry(q_cid_map) node;
+    struct cid scid;   ///< Source connection ID
+    struct q_conn * c; ///< Connection
+};
+
+
 /// A QUIC connection.
 struct q_conn {
     splay_entry(q_conn) node_ipnp;
-    splay_entry(q_conn) node_cid;
     sl_entry(q_conn) next;
 
-    struct cid dcid; ///< Destination connection ID
-    struct cid scid; ///< Source connection ID
+    struct cid dcid;     ///< Destination connection ID
+    sq_head(, cid) scid; ///< Source connection ID map
 
     uint16_t holds_sock : 1; ///< Connection manages a warpcore socket.
     uint16_t is_clnt : 1;    ///< We are the client on this connection.
@@ -82,21 +88,22 @@ struct q_conn {
     uint16_t in_closing : 1;        ///< Is the closing/draining timer active?
     uint16_t tx_path_resp : 1;      ///< Send PATH_RESPONSE.
     uint16_t tx_path_chlg : 1;      ///< Send PATH_CHALLENGE.
-    uint16_t : 1;
+    uint16_t tx_ncid : 1;           ///< Send NEW_CONNECTION_ID.
+
+    uint8_t state; ///< State of the connection.
+
+    uint8_t _unused;
+
+    uint16_t sport; ///< Local port (in network byte-order).
+
+    uint16_t err_code;
+    char * err_reason;
 
     struct w_engine * w; ///< Underlying warpcore engine.
 
     uint32_t vers;         ///< QUIC version in use for this connection.
     uint32_t vers_initial; ///< QUIC version first negotiated.
     uint64_t next_sid;     ///< Next stream ID to use on q_rsv_stream().
-
-    char * err_reason;
-    uint16_t err_code;
-
-    uint16_t sport; ///< Local port (in network byte-order).
-    uint8_t state;  ///< State of the connection.
-
-    uint8_t _unused[3];
 
     struct transport_params tp_peer;
     struct transport_params tp_local;
@@ -108,7 +115,7 @@ struct q_conn {
     ev_timer closing_alarm;
     ev_timer ack_alarm;
 
-    struct diet recv; ///< Received packet numbers still needing to be ACKed.
+    struct diet recv;  ///< Received packet numbers still needing to be ACKed.
     struct diet acked; ///< Sent packet numbers already ACKed.
 
     struct sockaddr_in peer; ///< Address of our peer.
@@ -129,6 +136,8 @@ struct q_conn {
 
     uint64_t path_chlg_out;
     uint64_t path_resp_in;
+
+    uint64_t ncid_seq_out;
 };
 
 
@@ -136,10 +145,11 @@ extern int __attribute__((nonnull))
 ipnp_splay_cmp(const struct q_conn * const a, const struct q_conn * const b);
 
 extern int __attribute__((nonnull))
-cid_splay_cmp(const struct q_conn * const a, const struct q_conn * const b);
+cid_splay_cmp(const struct q_cid_map * const a,
+              const struct q_cid_map * const b);
 
 SPLAY_PROTOTYPE(ipnp_splay, q_conn, node_ipnp, ipnp_splay_cmp)
-SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
+SPLAY_PROTOTYPE(cid_splay, q_cid_map, node, cid_splay_cmp)
 
 
 #define CONN_STAT_IDLE 0
@@ -172,9 +182,12 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 #define cid2str(i) hex2str((i)->id, (i)->len)
 
 
+#define scid2str(c) sq_first(&(c)->scid) ? cid2str(sq_first(&(c)->scid)) : "0"
+
+
 #define conn_to_state(c, s)                                                    \
     do {                                                                       \
-        warn(DBG, "conn %s state %u -> %u", cid2str(&c->scid), c->state, s);   \
+        warn(DBG, "conn %s state %u -> %u", scid2str(c), c->state, s);         \
         c->state = s;                                                          \
                                                                                \
         switch (s) {                                                           \
@@ -205,9 +218,6 @@ SPLAY_PROTOTYPE(cid_splay, q_conn, node_cid, cid_splay_cmp)
 struct ev_loop;
 
 extern void __attribute__((nonnull))
-cid_splay(struct q_conn * const c, const struct sockaddr_in * const peer);
-
-extern void __attribute__((nonnull))
 tx_w(struct ev_loop * const l, ev_async * const w, int e);
 
 extern void __attribute__((nonnull))
@@ -215,14 +225,6 @@ tx(struct q_conn * const c, const bool rtx, const uint32_t limit);
 
 extern void __attribute__((nonnull))
 rx(struct ev_loop * const l, ev_io * const rx_w, int e);
-
-extern struct q_conn * __attribute__((nonnull))
-get_conn_by_ipnp(const uint16_t sport,
-                 const struct sockaddr_in * const peer,
-                 const bool is_clnt);
-
-extern struct q_conn * get_conn_by_cid(const struct cid * const scid,
-                                       const bool is_clnt);
 
 extern void * __attribute__((nonnull)) loop_run(void * const arg);
 
@@ -249,3 +251,6 @@ extern struct q_conn * new_conn(struct w_engine * const w,
                                 const uint64_t idle_to);
 
 extern void __attribute__((nonnull)) free_conn(struct q_conn * const c);
+
+extern void __attribute__((nonnull))
+add_scid(struct q_conn * const c, const struct cid * const scid);

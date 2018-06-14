@@ -50,8 +50,10 @@ struct q_conn;
 
 
 struct cid {
-    uint8_t id[18]; ///< Connection ID
+    sq_entry(cid) next;
     uint8_t len;    ///< Connection ID length
+    uint8_t id[18]; ///< Connection ID
+    uint8_t _unused[5];
 };
 
 
@@ -64,6 +66,7 @@ struct pkt_hdr {
     struct cid scid;
     uint8_t flags; // first byte of packet
     uint8_t type;
+    uint8_t _unused[6];
 };
 
 
