@@ -7,9 +7,9 @@ mvfst
 ngtcp2          *               V       H       D       C       RZ
 ngx_quic        *               V       H       D       C
 pandora
-picoquic
+picoquic        *               V       H       D       C       RZ      S
 quant           *               V       H       D       C       RZ      S       M
-quicker
+quicker         *
 quicly          *               V       H       D       C       RZ
 quicr           *
 quinn
