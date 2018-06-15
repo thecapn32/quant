@@ -538,6 +538,14 @@ void q_cleanup(struct w_engine * const w)
 
     cleanup_tls_ctx();
 
+    // free 0-RTT reordering cache
+    while (!splay_empty(&zrtt_ooo_by_cid)) {
+        struct zrtt_ooo * const zo =
+            splay_min(zrtt_ooo_splay, &zrtt_ooo_by_cid);
+        splay_remove(zrtt_ooo_splay, &zrtt_ooo_by_cid, zo);
+        free(zo);
+    }
+
     for (uint32_t i = 0; i <= nbufs; i++) {
         ASAN_UNPOISON_MEMORY_REGION(&pm[i], sizeof(pm[i]));
         if (pm[i].hdr.nr)

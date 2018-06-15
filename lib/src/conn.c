@@ -115,26 +115,16 @@ static bool __attribute__((const)) vers_supported(const uint32_t v)
 }
 
 
-struct zrtt_ooo {
-    splay_entry(zrtt_ooo) node;
-    struct cid cid;   ///< CID of 0-RTT pkt
-    struct w_iov * v; ///< the buffer containing the 0-RTT pkt
-    ev_tstamp t;      ///< Insertion time
-};
+struct zrtt_ooo_splay zrtt_ooo_by_cid = splay_initializer(&zrtt_ooo_by_cid);
 
 
-static splay_head(zrtt_ooo_splay, zrtt_ooo)
-    zrtt_ooo_by_cid = splay_initializer(&zrtt_ooo_by_cid);
-
-
-static inline int __attribute__((nonnull))
-zrtt_ooo_cmp(const struct zrtt_ooo * const a, const struct zrtt_ooo * const b)
+int zrtt_ooo_cmp(const struct zrtt_ooo * const a,
+                 const struct zrtt_ooo * const b)
 {
     return cid_cmp(&a->cid, &b->cid);
 }
 
 
-SPLAY_PROTOTYPE(zrtt_ooo_splay, zrtt_ooo, node, zrtt_ooo_cmp)
 SPLAY_GENERATE(zrtt_ooo_splay, zrtt_ooo, node, zrtt_ooo_cmp)
 
 
