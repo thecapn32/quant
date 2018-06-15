@@ -634,6 +634,7 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
             conn_to_state(c, CONN_STAT_VERS_NEG);
             warn(WRN, "%s conn %s clnt-requested vers 0x%08x not supported ",
                  conn_type(c), scid2str(c), c->vers);
+            c->needs_tx = true;
         }
         break;
 
@@ -783,7 +784,7 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
 
     // if packet has anything other than ACK frames, arm the ACK timer
     if (c->state <= CONN_STAT_ESTB && c->state != CONN_STAT_HSHK_FAIL &&
-        !is_ack_only(&meta(v))) {
+        c->state != CONN_STAT_VERS_NEG && !is_ack_only(&meta(v))) {
         warn(DBG, "non-ACK frame received, starting ACK timer");
         ev_timer_again(loop, &c->ack_alarm);
     }
