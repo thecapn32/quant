@@ -115,6 +115,29 @@ static bool __attribute__((const)) vers_supported(const uint32_t v)
 }
 
 
+struct zrtt_ooo {
+    splay_entry(zrtt_ooo) node;
+    struct cid cid;   ///< CID of 0-RTT pkt
+    struct w_iov * v; ///< the buffer containing the 0-RTT pkt
+    ev_tstamp t;      ///< Insertion time
+};
+
+
+static splay_head(zrtt_ooo_splay, zrtt_ooo)
+    zrtt_ooo_by_cid = splay_initializer(&zrtt_ooo_by_cid);
+
+
+static inline int __attribute__((nonnull))
+zrtt_ooo_cmp(const struct zrtt_ooo * const a, const struct zrtt_ooo * const b)
+{
+    return cid_cmp(&a->cid, &b->cid);
+}
+
+
+SPLAY_PROTOTYPE(zrtt_ooo_splay, zrtt_ooo, node, zrtt_ooo_cmp)
+SPLAY_GENERATE(zrtt_ooo_splay, zrtt_ooo, node, zrtt_ooo_cmp)
+
+
 static uint32_t __attribute__((nonnull))
 pick_from_server_vers(const struct w_iov * const v)
 {
@@ -560,8 +583,9 @@ reset_conn(struct q_conn * const c, const bool also_stream0_in)
     } while (0)
 
 
-static void __attribute__((nonnull))
-process_pkt(struct q_conn * const c, struct w_iov * const v)
+static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
+                                                 struct w_iov * const v,
+                                                 struct w_iov_sq * const i)
 {
     switch (c->state) {
     case CONN_STAT_IDLE:
@@ -585,15 +609,6 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             if (verify_prot(c, v) == false)
                 goto done;
 
-            init_tp(c);
-
-            // this is a new connection; server picks a new random cid
-            struct cid new_scid = {.len = SERV_SCID_LEN};
-            arc4random_buf(new_scid.id, new_scid.len);
-            warn(NTE, "hshk switch to scid %s for %s conn (was %s)",
-                 cid2str(&new_scid), conn_type(c), scid2str(c));
-            add_scid(c, &new_scid);
-            use_next_scid(c);
             dec_frames(c, v);
 
             // if the CH doesn't include any stream-0 data, bail
@@ -602,6 +617,28 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
                 conn_to_state(c, CONN_STAT_DRNG);
                 goto done;
             }
+
+            init_tp(c);
+
+            // check if any reordered 0-RTT packets are cached for this CID
+            const struct zrtt_ooo which = {.cid = meta(v).hdr.dcid};
+            struct zrtt_ooo * const zo =
+                splay_find(zrtt_ooo_splay, &zrtt_ooo_by_cid, &which);
+            if (zo) {
+                warn(INF, "have reordered 0-RTT pkt (t=%f sec) for %s conn %s",
+                     ev_now(loop) - zo->t, conn_type(c), scid2str(c));
+                splay_remove(zrtt_ooo_splay, &zrtt_ooo_by_cid, zo);
+                sq_insert_head(i, zo->v, next);
+                free(zo);
+            }
+
+            // this is a new connection; server picks a new random cid
+            struct cid new_scid = {.len = SERV_SCID_LEN};
+            arc4random_buf(new_scid.id, new_scid.len);
+            warn(NTE, "hshk switch to scid %s for %s conn (was %s)",
+                 cid2str(&new_scid), conn_type(c), scid2str(c));
+            add_scid(c, &new_scid);
+            use_next_scid(c);
 
         } else {
             conn_to_state(c, CONN_STAT_VERS_NEG);
@@ -690,7 +727,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             struct q_stream * const s = get_stream(c, 0);
             s->in_off = 0;
 
-            // we are not allowed to try 0RTT after retry
+            // we are not allowed to try 0-RTT after retry
             c->try_0rtt = false;
 
             conn_to_state(c, CONN_STAT_RTRY);
@@ -727,7 +764,7 @@ process_pkt(struct q_conn * const c, struct w_iov * const v)
             goto done;
         }
 
-        // if we got a SH or 0RTT packet, a q_accept() may be finished
+        // if we got a SH or 0-RTT packet, a q_accept() may be finished
         if (!is_set(F_LONG_HDR, meta(v).hdr.flags) ||
             meta(v).hdr.type == F_LH_0RTT) {
             if (maybe_api_return(q_accept, accept_queue, 0))
@@ -864,7 +901,21 @@ void rx(struct ev_loop * const l,
         if (c == 0) {
             warn(INF, "cannot find conn %s for 0x%02x-type pkt",
                  cid2str(&meta(v).hdr.dcid), meta(v).hdr.flags);
-            q_free_iov(v);
+
+            // if this is a 0-RTT pkt, track it (may be reordered)
+            if (is_set(F_LONG_HDR, meta(v).hdr.flags) &&
+                meta(v).hdr.type == F_LH_0RTT) {
+                struct zrtt_ooo * const zo = calloc(1, sizeof(*zo));
+                ensure(zo, "could not calloc");
+                cid_cpy(&zo->cid, &meta(v).hdr.dcid);
+                zo->v = v;
+                zo->t = ev_now(loop);
+                splay_insert(zrtt_ooo_splay, &zrtt_ooo_by_cid, zo);
+                warn(INF, "caching 0-RTT pkt for unknown conn %s",
+                     cid2str(&meta(v).hdr.dcid));
+            } else
+                q_free_iov(v);
+
             continue;
         }
 
@@ -883,7 +934,7 @@ void rx(struct ev_loop * const l,
             sl_insert_head(&crx, c, next);
         }
 
-        process_pkt(c, v);
+        process_pkt(c, v, &i);
         process_stream0(c);
     }
 
