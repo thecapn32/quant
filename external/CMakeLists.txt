@@ -151,6 +151,7 @@ externalproject_add(ngtcp2
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/ngtcp2/ngtcp2.git
   GIT_SHALLOW 1
+  # GIT_TAG draft-12
   CMAKE_ARGS
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
     -DOPENSSL_ROOT_DIR=${CMAKE_CURRENT_BINARY_DIR}
@@ -205,7 +206,7 @@ externalproject_add(mozquic
 # Use picoquic for testing against
 externalproject_add(picoquic
   DEPENDS picotls
-  UPDATE_COMMAND ""
+  # UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/private-octopus/picoquic.git
   GIT_SHALLOW 1
   # GIT_TAG draft-21
@@ -255,8 +256,9 @@ externalproject_add(node
   GIT_SHALLOW 1
   GIT_TAG add_quicker_support-tls-d28
   BUILD_IN_SOURCE 1
+  PATCH_COMMAND sed -i "" -e "s/.*g.*-7.*//g" configure
   CONFIGURE_COMMAND
-    env CXX=clang++ CC=clang ./configure --openssl-no-asm --prefix=${CMAKE_CURRENT_BINARY_DIR}
+    ./configure --openssl-no-asm --prefix=${CMAKE_CURRENT_BINARY_DIR}
   BUILD_COMMAND make -j8
   EXCLUDE_FROM_ALL 1
 )
