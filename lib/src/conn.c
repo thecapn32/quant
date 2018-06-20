@@ -995,6 +995,7 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
     conn_to_state(c, CONN_STAT_CLSD);
     // terminate whatever API call is currently active
     maybe_api_return(c, 0);
+    maybe_api_return(accept_queue, 0);
 }
 
 
