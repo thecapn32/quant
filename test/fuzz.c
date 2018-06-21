@@ -25,23 +25,25 @@
 
 #include <net/if.h>
 #include <stdbool.h>
-#include <stddef.h>
 #include <stdint.h>
+#include <string.h>
+#include <sys/param.h>
 
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
-#include <conn.h> // IWYU pragma: keep
-#include <pkt.h>  // IWYU pragma: keep
+#include <conn.h>
+#include <pkt.h>
 #include <quic.h>
+#include <tls.h>
 
 
-extern int LLVMFuzzerTestOneInput(uint8_t * data, size_t size);
+extern int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size);
 extern int LLVMFuzzerInitialize(int * argc, char *** argv);
 
 
 static void * w;
-
+static struct q_conn * c;
 
 int LLVMFuzzerInitialize(int * argc __attribute__((unused)),
                          char *** argv __attribute__((unused)))
@@ -52,28 +54,46 @@ int LLVMFuzzerInitialize(int * argc __attribute__((unused)),
 #endif
         ;
 #ifndef NDEBUG
-    util_dlevel = DBG;
+    util_dlevel = ERR;
 #endif
 
     w = q_init(i, 0, 0, 0, 0);
+    const struct cid dcid = {.len = 1, .id = "\00"};
+    const struct cid scid = {.len = 1, .id = "\ff"};
+    c = new_conn(w, 0, &dcid, &scid, 0, 0, 0, 0);
+
+    // create fake 1-RTT/early crypto contexts (by copying the handshake one)
+    init_tls(c);
+    init_hshk_prot(c);
+    memcpy(&c->tls.in_pp.one_rtt[0], &c->tls.in_pp.handshake,
+           sizeof(c->tls.in_pp.one_rtt));
+    memcpy(&c->tls.in_pp.early_data, &c->tls.in_pp.handshake,
+           sizeof(c->tls.in_pp.early_data));
 
     return 0;
 }
 
 
-int LLVMFuzzerTestOneInput(uint8_t * data, size_t size)
+int LLVMFuzzerTestOneInput(const uint8_t * data, const size_t size)
 {
-    struct q_conn c = {.w = w};
-    struct w_iov_sq i;
+    // we need one byte to init a flag
+    if (size == 0)
+        return 0;
 
     struct w_iov * v = q_alloc_iov(w, MAX_PKT_LEN, 0);
-    v->buf = data;
-    v->len = (uint16_t)size;
+    ensure(v, "cannot alloc w_iov");
 
-    if (dec_pkt_hdr_initial(v, false))
-        dec_pkt_hdr_remainder(v, &c, &i);
+    const bool is_clnt = (data[0] % 2);
+
+    memcpy(v->buf, &data[1], MIN(size - 1, v->len));
+    v->len = (uint16_t)MIN(size - 1, v->len);
+    struct w_iov_sq i = sq_head_initializer(i);
+
+    if (dec_pkt_hdr_initial(v, is_clnt))
+        dec_pkt_hdr_remainder(v, c, &i);
 
     q_free_iov(v);
+    free_iov_sq(&i, c);
 
     return 0;
 }

@@ -67,7 +67,11 @@ if(HAVE_BENCHMARK_H)
   add_test(bench bench)
 endif()
 
+
+set(CMAKE_REQUIRED_FLAGS -fsanitize=fuzzer)
 check_c_compiler_flag(-fsanitize=fuzzer HAVE_FUZZER)
+cmake_reset_check_state()
+
 if(HAVE_FUZZER)
   add_executable(fuzz fuzz.c)
   target_compile_options(fuzz PRIVATE -fsanitize=fuzzer)
