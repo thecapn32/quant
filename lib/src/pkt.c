@@ -416,6 +416,8 @@ bool dec_pkt_hdr_initial(const struct w_iov * const v, const bool is_clnt)
         uint64_t len = 0;
         meta(v).hdr.hdr_len =
             dec(&len, v->buf, v->len, meta(v).hdr.hdr_len, 0, "%" PRIu64);
+        if (unlikely(meta(v).hdr.hdr_len == UINT16_MAX))
+            return false;
         meta(v).hdr.len = (uint16_t)len;
         return true;
     }
@@ -448,7 +450,10 @@ bool dec_pkt_hdr_remainder(struct w_iov * const v,
         off = len - AEAD_LEN;
 
     const struct cipher_ctx * const ctx = which_cipher_ctx(c, v, true);
-    ensure(ctx, "cipher context is null");
+    if (!ctx->pne)
+        // this packet requires a higher protection level than we have available
+        return false;
+
     ptls_cipher_init(ctx->pne, &v->buf[off]);
     uint8_t enc_nr[4];
     ptls_cipher_encrypt(ctx->pne, enc_nr, &v->buf[nr_pos], sizeof(enc_nr));
