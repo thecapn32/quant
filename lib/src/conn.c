@@ -505,7 +505,7 @@ track_recv(struct q_conn * const c, const uint64_t nr, const uint8_t type)
 }
 
 
-static void __attribute__((nonnull)) process_stream0(struct q_conn * const c)
+static void __attribute__((nonnull)) rx_stream0(struct q_conn * const c)
 {
     struct q_stream * const s = get_stream(c, 0);
     while (!sq_empty(&s->in)) {
@@ -573,9 +573,9 @@ reset_conn(struct q_conn * const c, const bool also_stream0_in)
     } while (0)
 
 
-static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
-                                                 struct w_iov * const v,
-                                                 struct w_iov_sq * const i)
+static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
+                                            struct w_iov * const v,
+                                            struct w_iov_sq * const i)
 {
     switch (c->state) {
     case CONN_STAT_IDLE:
@@ -712,7 +712,7 @@ static void __attribute__((nonnull)) process_pkt(struct q_conn * const c,
             reset_conn(c, false);
 
             // process the retry data on stream-0
-            process_stream0(c);
+            rx_stream0(c);
 
             // we can now reset stream-0 (inbound)
             struct q_stream * const s = get_stream(c, 0);
@@ -802,7 +802,7 @@ void
 #else
 static void __attribute__((nonnull))
 #endif
-process_pkts(struct w_iov_sq * const i,
+rx_pkts(struct w_iov_sq * const i,
              struct q_conn_sl * const crx,
              const struct w_sock * const ws)
 {
@@ -927,8 +927,8 @@ process_pkts(struct w_iov_sq * const i,
             sl_insert_head(crx, c, next);
         }
 
-        process_pkt(c, v, i);
-        process_stream0(c);
+        rx_pkt(c, v, i);
+        rx_stream0(c);
     }
 }
 
@@ -943,7 +943,7 @@ void rx(struct ev_loop * const l,
     struct w_iov_sq i = sq_head_initializer(i);
     struct q_conn_sl crx = sl_head_initializer();
     w_rx(ws, &i);
-    process_pkts(&i, &crx, ws);
+    rx_pkts(&i, &crx, ws);
 
     // for all connections that had RX events
     while (!sl_empty(&crx)) {

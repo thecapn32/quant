@@ -35,7 +35,6 @@
 #include <conn.h>
 #include <pkt.h>
 #include <quic.h>
-#include <tls.h>
 
 
 extern int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size);
@@ -59,17 +58,7 @@ int LLVMFuzzerInitialize(int * argc __attribute__((unused)),
 #endif
 
     w = q_init(i, 0, 0, 0, 0, false);
-    // const struct cid dcid = {.len = 1, .id = "\x00"};
-    // const struct cid scid = {.len = 1, .id = "\xff"};
     c = new_conn(w, 0, 0, 0, 0, 0, 0, 0);
-
-    // // create fake 1-RTT/early crypto contexts (by copying the handshake one)
-    // init_tls(c);
-    // init_hshk_prot(c);
-    // memcpy(&c->tls.in_pp.one_rtt[0], &c->tls.in_pp.handshake,
-    //        sizeof(c->tls.in_pp.one_rtt));
-    // memcpy(&c->tls.in_pp.early_data, &c->tls.in_pp.handshake,
-    //        sizeof(c->tls.in_pp.early_data));
 
     return 0;
 }
@@ -86,7 +75,7 @@ int LLVMFuzzerTestOneInput(const uint8_t * data, const size_t size)
     sq_insert_head(&i, v, next);
 
     struct q_conn_sl crx;
-    process_pkts(&i, &crx, c->sock);
+    rx_pkts(&i, &crx, c->sock);
     free_iov_sq(&i, c);
 
     return 0;

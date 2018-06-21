@@ -280,8 +280,7 @@ add_dcid(struct q_conn * const c, const struct cid * const id);
 
 
 #ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-extern void __attribute__((nonnull))
-process_pkts(struct w_iov_sq * const i,
-             struct q_conn_sl * const crx,
-             const struct w_sock * const ws);
+extern void __attribute__((nonnull)) rx_pkts(struct w_iov_sq * const i,
+                                             struct q_conn_sl * const crx,
+                                             const struct w_sock * const ws);
 #endif
