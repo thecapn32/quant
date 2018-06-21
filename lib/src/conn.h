@@ -63,6 +63,7 @@ struct q_cid_map {
     struct q_conn * c; ///< Connection
 };
 
+sl_head(q_conn_sl, q_conn);
 
 /// A QUIC connection.
 struct q_conn {
@@ -276,3 +277,11 @@ add_scid(struct q_conn * const c, const struct cid * const id);
 
 extern void __attribute__((nonnull))
 add_dcid(struct q_conn * const c, const struct cid * const id);
+
+
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+extern void __attribute__((nonnull))
+process_pkts(struct w_iov_sq * const i,
+             struct q_conn_sl * const crx,
+             const struct w_sock * const ws);
+#endif

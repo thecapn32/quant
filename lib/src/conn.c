@@ -796,22 +796,19 @@ done:
 }
 
 
-void rx(struct ev_loop * const l,
-        ev_io * const rx_w,
-        int e __attribute__((unused)))
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+void
+#else
+static void __attribute__((nonnull))
+#endif
+process_pkts(struct w_iov_sq * const i,
+             struct q_conn_sl * const crx,
+             const struct w_sock * const ws)
 {
-    // read from NIC
-    struct w_sock * const ws = rx_w->data;
-    struct w_engine * const w = w_engine(ws);
-    w_nic_rx(w, -1);
-    struct w_iov_sq i = sq_head_initializer(i);
-    sl_head(, q_conn) crx = sl_head_initializer();
-    w_rx(ws, &i);
-
-    while (!sq_empty(&i)) {
-        struct w_iov * const v = sq_first(&i);
+    while (!sq_empty(i)) {
+        struct w_iov * const v = sq_first(i);
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
-        sq_remove_head(&i, next);
+        sq_remove_head(i, next);
 
         const bool is_clnt = w_connected(ws);
         struct q_conn * c = 0;
@@ -853,9 +850,9 @@ void rx(struct ev_loop * const l,
                             warn(ERR, "initial %u-byte pkt too short (< %u)",
                                  v->len, MIN_INI_LEN);
 
-                        c = new_conn(w, meta(v).hdr.vers, &meta(v).hdr.scid,
-                                     &meta(v).hdr.dcid, &peer, 0,
-                                     ntohs(w_get_sport(ws)), 0);
+                        c = new_conn(w_engine(ws), meta(v).hdr.vers,
+                                     &meta(v).hdr.scid, &meta(v).hdr.dcid,
+                                     &peer, 0, ntohs(w_get_sport(ws)), 0);
                         new_stream(c, 0, false);
                         init_tls(c);
                     }
@@ -911,7 +908,7 @@ void rx(struct ev_loop * const l,
         }
 
         if (meta(v).hdr.vers || !is_set(F_LONG_HDR, meta(v).hdr.flags))
-            if (dec_pkt_hdr_remainder(v, c, &i) == false) {
+            if (dec_pkt_hdr_remainder(v, c, i) == false) {
                 warn(ERR, "received invalid %u-byte pkt, ignoring", v->len);
                 q_free_iov(v);
                 continue;
@@ -922,12 +919,26 @@ void rx(struct ev_loop * const l,
         // remember that we had a RX event on this connection
         if (!c->had_rx) {
             c->had_rx = true;
-            sl_insert_head(&crx, c, next);
+            sl_insert_head(crx, c, next);
         }
 
-        process_pkt(c, v, &i);
+        process_pkt(c, v, i);
         process_stream0(c);
     }
+}
+
+
+void rx(struct ev_loop * const l,
+        ev_io * const rx_w,
+        int e __attribute__((unused)))
+{
+    // read from NIC
+    struct w_sock * const ws = rx_w->data;
+    w_nic_rx(w_engine(ws), -1);
+    struct w_iov_sq i = sq_head_initializer(i);
+    struct q_conn_sl crx = sl_head_initializer();
+    w_rx(ws, &i);
+    process_pkts(&i, &crx, ws);
 
     // for all connections that had RX events
     while (!sl_empty(&crx)) {
