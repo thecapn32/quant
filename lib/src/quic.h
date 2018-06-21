@@ -393,3 +393,11 @@ w_iov_dup(const struct w_iov * const v)
 #define FMT_PNR_OUT GRN "%" PRIu64 NRM
 
 #define FMT_SID BLD YEL "%" PRIu64 NRM
+
+
+#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+extern int corpus_pkt_dir, corpus_frm_dir;
+
+extern __attribute__((nonnull)) void
+write_to_corpus(const int dir, const void * const data, const size_t len);
+#endif

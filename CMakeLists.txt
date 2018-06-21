@@ -104,12 +104,18 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 
   add_definitions("-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2")
 
-  # check if we have a fuzzer
-  set(CMAKE_REQUIRED_FLAGS -fsanitize=fuzzer)
-  check_c_compiler_flag(-fsanitize=fuzzer HAVE_FUZZER)
-  cmake_reset_check_state()
-  if(HAVE_FUZZER)
-    add_definitions(-DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+  if(FUZZER)
+    # check if we have a fuzzer
+    set(CMAKE_REQUIRED_FLAGS -fsanitize=fuzzer)
+    check_c_compiler_flag(-fsanitize=fuzzer HAVE_FUZZER)
+    cmake_reset_check_state()
+    if(HAVE_FUZZER)
+      add_definitions(-DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=fuzzer")
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=fuzzer")
+    else()
+      message(FATAL_ERROR "No fuzzer available")
+    endif()
   endif()
 
   # See if we can use the address sanitizer

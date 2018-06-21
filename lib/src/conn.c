@@ -797,7 +797,6 @@ done:
 
 
 #ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-// #define SUPPRESS_DURING_FUZZING
 void
 #else
 static void __attribute__((nonnull))
@@ -811,10 +810,16 @@ rx_pkts(struct w_iov_sq * const i,
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         sq_remove_head(i, next);
 
+#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+        // when called from the fuzzer, v->ip is zero
+        if (v->ip)
+            write_to_corpus(corpus_pkt_dir, v->buf, v->len);
+#endif
+
         const bool is_clnt = w_connected(ws);
         struct q_conn * c = 0;
         if (dec_pkt_hdr_initial(v, is_clnt) == false) {
-#ifndef SUPPRESS_DURING_FUZZING
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
             warn(ERR, "received invalid %u-byte pkt, ignoring", v->len);
 #endif
             q_free_iov(v);
@@ -912,7 +917,7 @@ rx_pkts(struct w_iov_sq * const i,
 
         if (meta(v).hdr.vers || !is_set(F_LONG_HDR, meta(v).hdr.flags))
             if (dec_pkt_hdr_remainder(v, c, i) == false) {
-#ifndef SUPPRESS_DURING_FUZZING
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
                 warn(ERR, "received invalid %u-byte pkt, ignoring", v->len);
 #endif
                 q_free_iov(v);

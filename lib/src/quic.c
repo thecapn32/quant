@@ -42,6 +42,14 @@
 #include <sanitizer/asan_interface.h>
 #endif
 
+#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/param.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
 #include "conn.h"
 #include "pkt.h"
 #include "quic.h"
@@ -59,7 +67,7 @@ SPLAY_GENERATE(pm_off_splay, pkt_meta, off_node, pm_off_cmp)
 
 /// QUIC version supported by this implementation in order of preference.
 const uint32_t ok_vers[] = {
-#ifndef NDEBUG
+#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
     0xbabababa, // XXX reserved version to trigger negotiation
 #endif
     0xff00000c, // draft-ietf-quic-transport-12
@@ -80,6 +88,11 @@ struct q_conn * accept_queue = 0;
 static const uint32_t nbufs = 1000; ///< Number of packet buffers to allocate.
 
 static ev_timer accept_alarm;
+
+
+#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+int corpus_pkt_dir, corpus_frm_dir;
+#endif
 
 
 /// Run the event loop for the API function @p func with connection @p conn and
@@ -440,6 +453,19 @@ signal_cb(struct ev_loop * l,
 }
 
 
+#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+static int __attribute__((nonnull))
+mk_or_open_dir(const char * const path, mode_t mode)
+{
+    int fd = mkdir(path, mode);
+    if (fd == -1 && errno == EEXIST)
+        fd = open(path, O_RDONLY | O_CLOEXEC);
+    ensure(fd != -1, "mk_or_open_dir %s", path);
+    return fd;
+}
+#endif
+
+
 struct w_engine * q_init(const char * const ifname,
                          const char * const cert,
                          const char * const key,
@@ -478,6 +504,17 @@ struct w_engine * q_init(const char * const ifname,
     signal_w.data = w;
     ev_signal_init(&signal_w, signal_cb, SIGINT);
     ev_signal_start(loop, &signal_w);
+
+#ifndef NDEBUG
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+    warn(CRT, "%s compiled for fuzzing - will not communicate", quant_name);
+#else
+    // create the directories for exporting fuzzer corpus data
+    warn(NTE, "debug build, storing fuzzer corpus data");
+    corpus_pkt_dir = mk_or_open_dir("corpus_pkt", 0755);
+    corpus_frm_dir = mk_or_open_dir("corpus_frm", 0755);
+#endif
+#endif
 
     return w;
 }
@@ -556,6 +593,11 @@ void q_cleanup(struct w_engine * const w)
 
     free(pm);
     w_cleanup(w);
+
+#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+    close(corpus_pkt_dir);
+    close(corpus_frm_dir);
+#endif
 }
 
 
@@ -575,3 +617,18 @@ bool q_is_str_closed(struct q_stream * const s)
 {
     return s->state == STRM_STAT_CLSD;
 }
+
+
+#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+void write_to_corpus(const int dir, const void * const data, const size_t len)
+{
+    char file[MAXPATHLEN], rand[8];
+    arc4random_buf(rand, sizeof(rand));
+    strncpy(file, hex2str(rand, sizeof(rand)), MAXPATHLEN);
+    const int fd =
+        openat(dir, file, O_CREAT | O_EXCL | O_WRONLY | O_CLOEXEC, 0755);
+    ensure(fd != -1, "cannot open");
+    ensure(write(fd, data, len) != -1, "cannot write %s", file);
+    close(fd);
+}
+#endif

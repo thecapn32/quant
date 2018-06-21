@@ -68,21 +68,22 @@ if(HAVE_BENCHMARK_H)
 endif()
 
 if(HAVE_FUZZER)
-  add_executable(fuzz fuzz.c)
-  target_compile_options(fuzz PRIVATE -fsanitize=fuzzer)
-  target_link_libraries(fuzz PUBLIC libquant)
-  target_include_directories(fuzz
-    SYSTEM PRIVATE
-      ${CMAKE_SOURCE_DIR}/lib/include
-      ${CMAKE_BINARY_DIR}/lib/include
-      ${CMAKE_SOURCE_DIR}/lib/src
-      $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/external/include>
-      ${OPENSSL_ROOT_DIR}/include
+  foreach(TARGET fuzz_pkt fuzz_frm)
+    add_executable(${TARGET} ${TARGET}.c)
+    target_link_libraries(${TARGET} PUBLIC libquant)
+    target_include_directories(${TARGET}
+      SYSTEM PRIVATE
+        ${CMAKE_SOURCE_DIR}/lib/include
+        ${CMAKE_BINARY_DIR}/lib/include
+        ${CMAKE_SOURCE_DIR}/lib/src
+        $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/external/include>
+        ${OPENSSL_ROOT_DIR}/include
+      )
+    set_target_properties(${TARGET}
+      PROPERTIES
+        POSITION_INDEPENDENT_CODE ON
+        INTERPROCEDURAL_OPTIMIZATION ${IPO}
+        LINK_FLAGS -fsanitize=fuzzer
     )
-  set_target_properties(fuzz
-    PROPERTIES
-      POSITION_INDEPENDENT_CODE ON
-      INTERPROCEDURAL_OPTIMIZATION ${IPO}
-      LINK_FLAGS -fsanitize=fuzzer
-  )
+  endforeach()
 endif()
