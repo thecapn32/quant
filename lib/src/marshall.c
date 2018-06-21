@@ -307,8 +307,10 @@ marshall_dec(void * const dst,
         *(uint64_t *)dst = 0;
         if (buf[pos] < 0x40) {
             if (unlikely(pos + 1 > buf_len)) {
+#ifdef DEBUG_MARSHALL
                 warn(WRN, "cannot decode from pos %u > buf len %u", pos + 1,
                      buf_len);
+#endif
                 return UINT16_MAX;
             }
             *(uint8_t *)dst = buf[i++];
@@ -316,8 +318,10 @@ marshall_dec(void * const dst,
 
         } else if (buf[pos] < 0x80) {
             if (unlikely(pos + 2 > buf_len)) {
+#ifdef DEBUG_MARSHALL
                 warn(WRN, "cannot decode from pos %u > buf len %u", pos + 2,
                      buf_len);
+#endif
                 return UINT16_MAX;
             }
             *(uint16_t *)dst = (uint16_t)((buf[i++] & 0x3f) << 8);
@@ -326,8 +330,10 @@ marshall_dec(void * const dst,
 
         } else if (buf[pos] < 0xc0) {
             if (unlikely(pos + 4 > buf_len)) {
+#ifdef DEBUG_MARSHALL
                 warn(WRN, "cannot decode from pos %u > buf len %u", pos + 4,
                      buf_len);
+#endif
                 return UINT16_MAX;
             }
             *(uint32_t *)dst =
@@ -338,8 +344,10 @@ marshall_dec(void * const dst,
 
         } else {
             if (unlikely(pos + 8 > buf_len)) {
+#ifdef DEBUG_MARSHALL
                 warn(WRN, "cannot decode from pos %u > buf len %u", pos + 8,
                      buf_len);
+#endif
                 return UINT16_MAX;
             }
             *(uint64_t *)dst =
@@ -353,8 +361,10 @@ marshall_dec(void * const dst,
     case 1:
         // single byte from network byte order
         if (unlikely(pos + 1 > buf_len)) {
+#ifdef DEBUG_MARSHALL
             warn(WRN, "cannot decode from pos %u > buf len %u", pos + 1,
                  buf_len);
+#endif
             return UINT16_MAX;
         }
         *(uint8_t *)dst = buf[i++];
@@ -364,8 +374,10 @@ marshall_dec(void * const dst,
     case 2:
         // uint16_t from network byte order
         if (unlikely(pos + 2 > buf_len)) {
+#ifdef DEBUG_MARSHALL
             warn(WRN, "cannot decode from pos %u > buf len %u", pos + 2,
                  buf_len);
+#endif
             return UINT16_MAX;
         }
         *(uint16_t *)dst = ntohs(*(const uint16_t *)(const void *)&buf[pos]);
@@ -376,8 +388,10 @@ marshall_dec(void * const dst,
     case 4:
         // uint32_t from network byte order
         if (unlikely(pos + 4 > buf_len)) {
+#ifdef DEBUG_MARSHALL
             warn(WRN, "cannot decode from pos %u > buf len %u", pos + 4,
                  buf_len);
+#endif
             return UINT16_MAX;
         }
         *(uint32_t *)dst = ntohl(*(const uint32_t *)(const void *)&buf[pos]);
@@ -388,8 +402,10 @@ marshall_dec(void * const dst,
     case 8:
         // uint64_t from network byte order
         if (unlikely(pos + 8 > buf_len)) {
+#ifdef DEBUG_MARSHALL
             warn(WRN, "cannot decode from pos %u > buf len %u", pos + 8,
                  buf_len);
+#endif
             return UINT16_MAX;
         }
         *(uint64_t *)dst = ntohll(*(const uint64_t *)(const void *)&buf[pos]);
@@ -426,8 +442,10 @@ marshall_dec_pnr(void * const dst,
     // varint pnr decoding
     if (buf[pos] < 0x80) {
         if (unlikely(pos + 1 > buf_len)) {
+#ifdef DEBUG_MARSHALL
             warn(WRN, "cannot decode from pos %u > buf len %u", pos + 1,
                  buf_len);
+#endif
             return UINT16_MAX;
         }
         *(uint8_t *)dst = buf[i++];
@@ -435,8 +453,10 @@ marshall_dec_pnr(void * const dst,
 
     } else if (buf[pos] < 0x40) {
         if (unlikely(pos + 2 > buf_len)) {
+#ifdef DEBUG_MARSHALL
             warn(WRN, "cannot decode from pos %u > buf len %u", pos + 2,
                  buf_len);
+#endif
             return UINT16_MAX;
         }
         *(uint16_t *)dst = (uint16_t)((buf[i++] & 0x3f) << 8);
@@ -445,8 +465,10 @@ marshall_dec_pnr(void * const dst,
 
     } else {
         if (unlikely(pos + 4 > buf_len)) {
+#ifdef DEBUG_MARSHALL
             warn(WRN, "cannot decode from pos %u > buf len %u", pos + 4,
                  buf_len);
+#endif
             return UINT16_MAX;
         }
         *(uint32_t *)dst =
@@ -479,7 +501,9 @@ marshall_dec_buf(void * const dst,
 )
 {
     if (unlikely(pos + dst_len > buf_len)) {
+#ifdef DEBUG_MARSHALL
         warn(WRN, "cannot decode from pos %u > buf len %u", pos + 4, buf_len);
+#endif
         return UINT16_MAX;
     }
 

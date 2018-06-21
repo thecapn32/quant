@@ -797,6 +797,7 @@ done:
 
 
 #ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+// #define SUPPRESS_DURING_FUZZING
 void
 #else
 static void __attribute__((nonnull))
@@ -813,7 +814,9 @@ process_pkts(struct w_iov_sq * const i,
         const bool is_clnt = w_connected(ws);
         struct q_conn * c = 0;
         if (dec_pkt_hdr_initial(v, is_clnt) == false) {
+#ifndef SUPPRESS_DURING_FUZZING
             warn(ERR, "received invalid %u-byte pkt, ignoring", v->len);
+#endif
             q_free_iov(v);
             continue;
         }
@@ -909,7 +912,9 @@ process_pkts(struct w_iov_sq * const i,
 
         if (meta(v).hdr.vers || !is_set(F_LONG_HDR, meta(v).hdr.flags))
             if (dec_pkt_hdr_remainder(v, c, i) == false) {
+#ifndef SUPPRESS_DURING_FUZZING
                 warn(ERR, "received invalid %u-byte pkt, ignoring", v->len);
+#endif
                 q_free_iov(v);
                 continue;
             }
