@@ -34,8 +34,6 @@
 #include <string.h>
 #include <sys/param.h>
 
-// #define FUZZING
-
 #include <ev.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
@@ -660,15 +658,9 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
                 break;
 
             default:
-#ifdef FUZZING
-                warn(DBG, "ignoring unknown frame type 0x%02x at pos %u", type,
-                     i);
-                i++;
-#else
                 err_close(c, ERR_FRAME_ERR(type),
                           "unknown frame type 0x%02x at pos %u", type, i);
                 i = 0;
-#endif
             }
         }
 
@@ -696,15 +688,7 @@ uint16_t enc_padding_frame(struct w_iov * const v,
     if (unlikely(len == 0))
         return pos;
     warn(INF, FRAM_OUT "PADDING" NRM " len=%u", len);
-#ifdef FUZZING
-    if (arc4random() % 9 == 0) {
-        // instead of encoding padding bytes, encode random data
-        uint8_t fuzz[16];
-        arc4random_buf(fuzz, sizeof(fuzz));
-        memset_pattern16(&v->buf[pos], fuzz, len);
-    } else
-#endif
-        memset(&v->buf[pos], FRAM_TYPE_PAD, len);
+    memset(&v->buf[pos], FRAM_TYPE_PAD, len);
     bit_set(meta(v).frames, FRAM_TYPE_PAD);
     return pos + len;
 }
