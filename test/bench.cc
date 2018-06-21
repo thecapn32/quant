@@ -83,7 +83,7 @@ int main(int argc, char ** argv)
 #ifndef NDEBUG
     util_dlevel = INF;
 #endif
-    w = q_init(i, nullptr, nullptr, nullptr, nullptr); // NOLINT
+    w = q_init(i, nullptr, nullptr, nullptr, nullptr, false); // NOLINT
     c = q_bind(w, 55555);
     init_tls(c);
     init_hshk_prot(c);

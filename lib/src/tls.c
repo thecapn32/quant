@@ -1100,7 +1100,8 @@ static void log_secret_cb(ptls_log_secret_t * const self
 void init_tls_ctx(const char * const cert,
                   const char * const key,
                   const char * const ticket_store,
-                  const char * const tls_log)
+                  const char * const tls_log,
+                  const bool verify_certs)
 {
     if (key) {
         FILE * const fp = fopen(key, "rbe");
@@ -1148,7 +1149,8 @@ void init_tls_ctx(const char * const cert,
         tls_ctx.log_secret = &log_secret;
     tls_ctx.random_bytes = ptls_openssl_random_bytes;
     tls_ctx.sign_certificate = &sign_cert.super;
-    tls_ctx.verify_certificate = &verifier.super;
+    if (verify_certs)
+        tls_ctx.verify_certificate = &verifier.super;
     tls_ctx.get_time = &ptls_get_time;
 
     arc4random_buf(cookie, COOKIE_LEN);

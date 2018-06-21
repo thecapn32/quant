@@ -57,7 +57,7 @@ int LLVMFuzzerInitialize(int * argc __attribute__((unused)),
     util_dlevel = ERR;
 #endif
 
-    w = q_init(i, 0, 0, 0, 0);
+    w = q_init(i, 0, 0, 0, 0, false);
     const struct cid dcid = {.len = 1, .id = "\00"};
     const struct cid scid = {.len = 1, .id = "\ff"};
     c = new_conn(w, 0, &dcid, &scid, 0, 0, 0, 0);

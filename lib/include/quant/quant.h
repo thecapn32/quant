@@ -48,7 +48,8 @@ q_init(const char * const ifname,
        const char * const cert,
        const char * const key,
        const char * const cache,
-       const char * const tls_log);
+       const char * const tls_log,
+       const bool verify_certs);
 
 extern void __attribute__((nonnull)) q_cleanup(struct w_engine * const w);
 
