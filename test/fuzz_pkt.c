@@ -33,6 +33,7 @@
 #include <warpcore/warpcore.h>
 
 #include <conn.h>
+#include <diet.h>
 #include <pkt.h>
 #include <quic.h>
 
@@ -77,6 +78,9 @@ int LLVMFuzzerTestOneInput(const uint8_t * data, const size_t size)
     struct q_conn_sl crx;
     rx_pkts(&i, &crx, c->sock);
     free_iov_sq(&i, c);
+    diet_free(&c->closed_streams);
+    diet_free(&c->recv);
+    diet_free(&c->acked);
 
     return 0;
 }

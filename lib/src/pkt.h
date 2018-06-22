@@ -82,7 +82,7 @@ extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
                                              struct w_iov * const v,
                                              struct w_iov_sq * const q);
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
 extern void __attribute__((nonnull))
 log_pkt(const char * const dir, const struct w_iov * const v);
 #else

@@ -109,8 +109,10 @@ static bool __attribute__((const)) vers_supported(const uint32_t v)
         if (v == ok_vers[i])
             return true;
 
-    // we're out of matching candidates
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     warn(INF, "no vers in common with clnt");
+#endif
+    // we're out of matching candidates
     return false;
 }
 
@@ -173,7 +175,9 @@ static void __attribute__((nonnull)) use_next_scid(struct q_conn * const c)
     const struct q_cid_map which = {.cid = *scid};
     struct q_cid_map * const cm = splay_find(cid_splay, &conns_by_cid, &which);
     splay_remove(cid_splay, &conns_by_cid, cm);
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     warn(DBG, "new dcid=%s (was %s)", scid2str(c), cid2str(scid));
+#endif
     free(cm);
 }
 
@@ -182,7 +186,9 @@ static void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c)
 {
     struct cid * const dcid = act_dcid(c);
     sq_remove(&c->dcid, dcid, cid, next);
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     warn(DBG, "new dcid=%s (was %s)", dcid2str(c), cid2str(dcid));
+#endif
     free(dcid);
 }
 
@@ -477,12 +483,17 @@ verify_prot(struct q_conn * const c, struct w_iov * const v)
         return true;
 
     const uint16_t len = dec_aead(c, v);
-    if (len == 0) {
+    if (unlikely(len == 0)) {
         // AEAD failed, but this might be a stateless reset
-        if (memcmp(&v->buf[v->len - sizeof(act_dcid(c)->srt)], act_dcid(c)->srt,
-                   sizeof(act_dcid(c)->srt)) == 0) {
+        const size_t act_dcid_len = sizeof(act_dcid(c)->srt);
+        if (unlikely(act_dcid_len > v->len))
+            return false;
+        if (memcmp(&v->buf[v->len - act_dcid_len], act_dcid(c)->srt,
+                   act_dcid_len) == 0) {
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
             warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
-                 hex2str(act_dcid(c)->srt, sizeof(act_dcid(c)->srt)));
+                 hex2str(act_dcid(c)->srt, act_dcid_len));
+#endif
             conn_to_state(c, CONN_STAT_DRNG);
         } else
             // it is not a stateless reset
@@ -583,7 +594,9 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
     case CONN_STAT_VERS_NEG_SENT:
         // respond to a client-initial
         if (meta(v).hdr.vers == 0) {
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
             warn(INF, "ignoring spurious vers neg response");
+#endif
             goto done;
         }
 
@@ -594,8 +607,9 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         if (c->vers_initial == 0)
             c->vers_initial = c->vers;
         if (vers_supported(c->vers) && !is_force_neg_vers(c->vers)) {
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
             warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
-
+#endif
             if (verify_prot(c, v) == false)
                 goto done;
 
@@ -626,15 +640,19 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             // this is a new connection; server picks a new random cid
             struct cid new_scid = {.len = SERV_SCID_LEN};
             arc4random_buf(new_scid.id, new_scid.len);
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
             warn(NTE, "hshk switch to scid %s for %s conn (was %s)",
                  cid2str(&new_scid), conn_type(c), scid2str(c));
+#endif
             add_scid(c, &new_scid);
             use_next_scid(c);
 
         } else {
             conn_to_state(c, CONN_STAT_VERS_NEG);
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
             warn(WRN, "%s conn %s clnt-requested vers 0x%08x not supported ",
                  conn_type(c), scid2str(c), c->vers);
+#endif
             c->needs_tx = true;
         }
         break;
@@ -788,12 +806,14 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         die("TODO: state %u", c->state);
     }
 
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     // if packet has anything other than ACK frames, arm the ACK timer
     if (c->state <= CONN_STAT_ESTB && c->state != CONN_STAT_HSHK_FAIL &&
         c->state != CONN_STAT_VERS_NEG && !is_ack_only(&meta(v))) {
         warn(DBG, "non-ACK frame received, starting ACK timer");
         ev_timer_again(loop, &c->ack_alarm);
     }
+#endif
 
 done:
     if (is_rtxable(&meta(v)) == false || meta(v).stream == 0)
@@ -842,15 +862,21 @@ rx_pkts(struct w_iov_sq * const i,
             if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
                 if (!is_clnt) {
                     if (c && meta(v).hdr.type == F_LH_0RTT)
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
                         warn(INF,
                              "got 0-RTT pkt for orig cid %s, new is %s, "
                              "accepting",
                              cid2str(&meta(v).hdr.dcid), scid2str(c));
+#else
+                        (void)c;
+#endif
                     else if (c && meta(v).hdr.type == F_LH_INIT) {
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
                         warn(INF,
                              "got duplicate CI for orig cid %s, new is %s, "
                              "ignoring",
                              cid2str(&meta(v).hdr.dcid), scid2str(c));
+#endif
                         q_free_iov(v);
                         continue;
                     } else if (meta(v).hdr.type == F_LH_INIT) {
@@ -860,9 +886,11 @@ rx_pkts(struct w_iov_sq * const i,
                              inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
 
                         // validate minimum packet size
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
                         if (v->len < MIN_INI_LEN)
                             warn(ERR, "initial %u-byte pkt too short (< %u)",
                                  v->len, MIN_INI_LEN);
+#endif
 
                         c = new_conn(w_engine(ws), meta(v).hdr.vers,
                                      &meta(v).hdr.scid, &meta(v).hdr.dcid,
@@ -876,9 +904,11 @@ rx_pkts(struct w_iov_sq * const i,
         } else {
             if (meta(v).hdr.scid.len)
                 if (cid_cmp(&meta(v).hdr.scid, act_dcid(c)) != 0) {
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
                     warn(NTE, "hshk switch to dcid %s for %s conn (was %s)",
                          cid2str(&meta(v).hdr.scid), conn_type(c),
                          cid2str(act_dcid(c)));
+#endif
                     add_dcid(c, &meta(v).hdr.scid);
                     use_next_dcid(c);
                 }
@@ -901,8 +931,10 @@ rx_pkts(struct w_iov_sq * const i,
         }
 
         if (c == 0) {
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
             warn(INF, "cannot find conn %s for 0x%02x-type pkt",
                  cid2str(&meta(v).hdr.dcid), meta(v).hdr.flags);
+#endif
 
             // if this is a 0-RTT pkt, track it (may be reordered)
             if (is_set(F_LONG_HDR, meta(v).hdr.flags) &&

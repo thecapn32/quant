@@ -1194,20 +1194,25 @@ const struct cipher_ctx * which_cipher_ctx(const struct q_conn * const c,
 uint16_t dec_aead(const struct q_conn * const c, const struct w_iov * const v)
 {
     const struct cipher_ctx * const ctx = which_cipher_ctx(c, v, true);
-    if (ctx == 0)
+    if (unlikely(ctx == 0 || ctx->aead == 0))
         return 0;
 
     const uint16_t hdr_len = meta(v).hdr.hdr_len;
     ensure(meta(v).hdr.hdr_len, "meta(v).hdr.hdr_len");
     const uint16_t len = v->len - hdr_len;
+    if (unlikely(hdr_len > v->len))
+        return 0;
+
     const size_t ret =
         ptls_aead_decrypt(ctx->aead, &v->buf[hdr_len], &v->buf[hdr_len], len,
                           meta(v).hdr.nr, v->buf, hdr_len);
-    if (ret == SIZE_MAX)
+    if (unlikely(ret == SIZE_MAX))
         return 0;
+
     warn(DBG, "verifying %lu-byte %s AEAD over [0..%u] in [%u..%u]", AEAD_LEN,
          aead_type(c, ctx->aead), hdr_len + len - AEAD_LEN - 1,
          hdr_len + len - AEAD_LEN, hdr_len + len - 1);
+
     return hdr_len + len;
 }
 
@@ -1218,7 +1223,8 @@ uint16_t enc_aead(const struct q_conn * const c,
                   const uint16_t nr_pos)
 {
     const struct cipher_ctx * const ctx = which_cipher_ctx(c, v, false);
-    ensure(ctx, "cipher context is null");
+    if (unlikely(ctx == 0 || ctx->aead == 0))
+        return 0;
 
     const uint16_t hdr_len = meta(v).hdr.hdr_len;
     ensure(meta(v).hdr.hdr_len, "meta(v).hdr.hdr_len");

@@ -45,7 +45,7 @@
 #include "tls.h"
 
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
 static const char * pkt_type_str(const struct w_iov * const v)
 {
     if (is_set(F_LONG_HDR, v->buf[0])) {
@@ -345,8 +345,11 @@ tx:
         memcpy(x->buf, v->buf, v->len); // copy data
         x->len = v->len;
         conn_to_state(c, CONN_STAT_VERS_NEG_SENT);
-    } else
+    } else {
         x->len = enc_aead(c, v, x, nr_pos);
+        if (unlikely(x->len == 0))
+            return false;
+    }
 
     if (!c->is_clnt) {
         x->ip = c->peer.sin_addr.s_addr;
@@ -398,6 +401,10 @@ bool dec_pkt_hdr_initial(const struct w_iov * const v, const bool is_clnt)
             meta(v).hdr.hdr_len += meta(v).hdr.dcid.len;
         }
 
+        // if this is a CI, the dcid len must be >= 8 bytes
+        if (unlikely(meta(v).hdr.type == F_LH_INIT && meta(v).hdr.dcid.len < 8))
+            return false;
+
         dec(&meta(v).hdr.scid.len, v->buf, v->len, 5, 1, "0x%02x");
         meta(v).hdr.scid.len &= 0x0f;
         if (meta(v).hdr.scid.len) {
@@ -419,6 +426,11 @@ bool dec_pkt_hdr_initial(const struct w_iov * const v, const bool is_clnt)
         if (unlikely(meta(v).hdr.hdr_len == UINT16_MAX))
             return false;
         meta(v).hdr.len = (uint16_t)len;
+
+        // the len cannot be larger than the rx'ed pkt
+        if (unlikely(meta(v).hdr.len + meta(v).hdr.hdr_len > v->len))
+            return false;
+
         return true;
     }
 
@@ -466,8 +478,10 @@ bool dec_pkt_hdr_remainder(struct w_iov * const v,
 
     memcpy(&v->buf[nr_pos], &enc_nr, nr_len);
 
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     warn(DBG, "removed PNE over [%u..%u] based on off %u", nr_pos,
          nr_pos + nr_len - 1, off);
+#endif
 
     const uint64_t alt = nr + (UINT64_C(1) << (nr_len * 8));
     const uint64_t d1 = next >= nr ? next - nr : nr - next;
@@ -487,8 +501,10 @@ bool dec_pkt_hdr_remainder(struct w_iov * const v,
             v->len = pkt_len;
             // rx() has already removed v from i, so just insert vdup at head
             sq_insert_head(i, vdup, next);
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
             warn(DBG, "split out 0x%02x-type coalesced pkt of len %u",
                  pkt_type(*vdup->buf), vdup->len);
+#endif
         }
     }
     return true;
