@@ -32,7 +32,7 @@
 
 #include <warpcore/warpcore.h>
 
-#include "conn.h"
+#include "conn.h" // IWYU pragma: keep
 #include "quic.h"
 
 #define STRM_FL_INI_SRV 0x01
@@ -70,12 +70,16 @@ struct q_stream {
 #define STRM_STAT_CLSD 4
 
 
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
 #define strm_to_state(strm, s)                                                 \
     do {                                                                       \
         warn(DBG, "conn %s strm " FMT_SID " state %u -> %u",                   \
              scid2str((strm)->c), (strm)->id, (strm)->state, (s));             \
         (strm)->state = (s);                                                   \
     } while (0)
+#else
+#define strm_to_state(strm, s) (strm)->state = (s)
+#endif
 
 #define is_fully_acked(s) ((s)->out_ack_cnt == sq_len(&(s)->out))
 

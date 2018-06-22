@@ -45,7 +45,7 @@ struct w_iov;
 #define FRAM_TYPE_PING 0x07
 #define FRAM_TYPE_BLCK 0x08
 #define FRAM_TYPE_STRM_BLCK 0x09
-#define FRAM_TYPE_ID_BLCK 0x0a
+#define FRAM_TYPE_SID_BLCK 0x0a
 #define FRAM_TYPE_NEW_CID 0x0b
 #define FRAM_TYPE_STOP_SEND 0x0c
 #define FRAM_TYPE_ACK 0x0d

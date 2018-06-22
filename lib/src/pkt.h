@@ -58,7 +58,7 @@
 #define ERR_TLS_HSHAKE_FAIL 0x201
 // #define ERR_TLS_FATL_ALRT_GEN 0x202
 // #define ERR_TLS_FATL_ALRT_REC 0x203
-#define ERR_FRAME_ERR(type) ((0x1 << 8) | (type))
+#define ERR_FRM(type) ((0x1 << 8) | (type))
 
 
 #define pkt_type(flags) ((flags) & (is_set(F_LONG_HDR, (flags)) ? ~0x80 : 0x03))

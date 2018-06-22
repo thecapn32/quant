@@ -234,8 +234,6 @@ uint16_t __attribute__((nonnull)) marshall_enc_pnr(uint8_t * const buf,
         die("cannot encode length %u", enc_len);
     }
 
-    // warn(ERR, "enc len %u, first byte 0x%02x", enc_len, buf[pos]);
-
     return i;
 }
 
@@ -476,8 +474,6 @@ marshall_dec_pnr(void * const dst,
         i += 4;
         log_dec(uint32_t, "pnr");
     }
-
-    // warn(ERR, "dec len %u, first byte 0x%02x", i - pos, buf[pos]);
 
     return i;
 }

@@ -36,6 +36,7 @@
 #include <frame.h>
 #include <pkt.h>
 #include <quic.h>
+#include <stream.h>
 
 
 extern int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size);
@@ -75,6 +76,9 @@ int LLVMFuzzerTestOneInput(const uint8_t * data, const size_t size)
 
     dec_frames(c, v);
 
+    struct q_stream * s;
+    splay_foreach (s, stream, &c->streams)
+        free_iov_sq(&s->in, 0);
     q_free_iov(v);
 
     return 0;

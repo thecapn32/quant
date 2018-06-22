@@ -64,7 +64,9 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
     // retransmittable data in flight
     if (rtxable_outstanding == 0) {
         ev_timer_stop(loop, &c->rec.ld_alarm);
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
         warn(DBG, "no RTX-able pkts outstanding, stopping ld_alarm");
+#endif
         return;
     }
 
@@ -250,8 +252,10 @@ void on_ack_rx_1(struct q_conn * const c,
     c->rec.lg_acked = ack;
     struct w_iov * const v = find_sent_pkt(c, ack);
     if (v == 0) {
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
         if (diet_find(&c->acked, ack) == 0)
             warn(ERR, "got ACK for pkt " FMT_PNR_OUT " never sent", ack);
+#endif
         return;
     }
     c->rec.latest_rtt = ev_now(loop) - meta(v).tx_t;
@@ -304,8 +308,10 @@ void on_pkt_acked(struct q_conn * const c,
 {
     struct w_iov * const v = find_sent_pkt(c, ack);
     if (v == 0) {
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
         if (diet_find(&c->acked, ack) == 0)
             warn(ERR, "got ACK for pkt " FMT_PNR_OUT " never sent", ack);
+#endif
         return;
     }
 

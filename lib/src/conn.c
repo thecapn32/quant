@@ -599,7 +599,8 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             if (verify_prot(c, v) == false)
                 goto done;
 
-            dec_frames(c, v);
+            if (dec_frames(c, v) == UINT16_MAX)
+                goto done;
 
             // if the CH doesn't include any stream-0 data, bail
             if (meta(v).stream == 0 || meta(v).stream->id != 0) {
@@ -706,7 +707,8 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             init_tp(c);
 
             // handle the ACK frame in the Retry
-            dec_frames(c, v);
+            if (dec_frames(c, v) == UINT16_MAX)
+                goto done;
 
             // forget we transmitted any packets
             reset_conn(c, false);
@@ -729,10 +731,12 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         if (verify_prot(c, v) == false)
             goto done;
 
+        track_recv(c, meta(v).hdr.nr, meta(v).hdr.flags);
+
         // server accepted version -
         // if we get here, this should be a regular server-hello
-        dec_frames(c, v);
-        track_recv(c, meta(v).hdr.nr, meta(v).hdr.flags);
+        if (dec_frames(c, v) == UINT16_MAX)
+            goto done;
         break;
 
     case CONN_STAT_RTRY:
@@ -740,7 +744,8 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             goto done;
 
         track_recv(c, meta(v).hdr.nr, meta(v).hdr.flags);
-        dec_frames(c, v);
+        if (dec_frames(c, v) == UINT16_MAX)
+            goto done;
         break;
 
     case CONN_STAT_SH:
@@ -772,7 +777,8 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             goto done;
 
         track_recv(c, meta(v).hdr.nr, meta(v).hdr.flags);
-        dec_frames(c, v);
+        if (dec_frames(c, v) == UINT16_MAX)
+            goto done;
 
     case CONN_STAT_SEND_RTRY:
     case CONN_STAT_CLSD:
@@ -989,6 +995,7 @@ void err_close(struct q_conn * const c,
     ensure(ret >= 0, "vsnprintf() failed");
     va_end(ap);
 
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     if (c->err_code) {
         warn(WRN, "ignoring new err 0x%04x (%s); existing err is 0x%04x (%s) ",
              code, reas, c->err_code, c->err_reason);
@@ -996,6 +1003,7 @@ void err_close(struct q_conn * const c,
     }
 
     warn(ERR, "%s", reas);
+#endif
     c->err_code = code;
     c->err_reason = strdup(reas);
     conn_to_state(c, c->state <= CONN_STAT_HSHK_DONE ? CONN_STAT_HSHK_FAIL

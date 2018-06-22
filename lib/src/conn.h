@@ -205,6 +205,8 @@ SPLAY_PROTOTYPE(zrtt_ooo_splay, zrtt_ooo, node, zrtt_ooo_cmp)
 #define dcid2str(c) act_dcid(c) ? cid2str(act_dcid(c)) : "0"
 
 
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+
 #define conn_to_state(c, s)                                                    \
     do {                                                                       \
         warn(DBG, "conn %s state %u -> %u", scid2str(c), c->state, s);         \
@@ -234,6 +236,14 @@ SPLAY_PROTOTYPE(zrtt_ooo_splay, zrtt_ooo, node, zrtt_ooo_cmp)
         }                                                                      \
     } while (0)
 
+#else
+
+#define conn_to_state(c, s)                                                    \
+    do {                                                                       \
+        &(c);                                                                  \
+    } while (0)
+
+#endif
 
 struct ev_loop;
 

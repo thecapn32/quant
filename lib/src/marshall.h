@@ -123,7 +123,6 @@ extern uint16_t marshall_enc_pnr(uint8_t * const buf,
 /// @param      pos      Buffer position to start encoding from.
 /// @param      src      Source data.
 /// @param      enc_len  Length to encode.
-/// @param      fmt      Printf format for debug logging.
 ///
 /// @return     Buffer offset of byte following the encoded data.
 ///
@@ -237,7 +236,6 @@ extern uint16_t marshall_dec_pnr(void * const dst,
 /// @param      buf_len  Buffer length.
 /// @param      pos      Buffer position to start decoding from.
 /// @param      dst_len  Length to decode. Zero for varint decoding.
-/// @param      fmt      Printf format for debug logging.
 ///
 /// @return     Buffer offset of byte following the decoded data, or UINT16_MAX
 ///             if the decoding failed.

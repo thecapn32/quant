@@ -622,11 +622,11 @@ bool q_is_str_closed(struct q_stream * const s)
 #if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
 void write_to_corpus(const int dir, const void * const data, const size_t len)
 {
-    char file[MAXPATHLEN], rand[8];
+    char file[MAXPATHLEN], rand[16];
     arc4random_buf(rand, sizeof(rand));
     strncpy(file, hex2str(rand, sizeof(rand)), MAXPATHLEN);
     const int fd =
-        openat(dir, file, O_CREAT | O_EXCL | O_WRONLY | O_CLOEXEC, 0755);
+        openat(dir, file, O_CREAT | O_EXCL | O_WRONLY | O_CLOEXEC, 0644);
     ensure(fd != -1, "cannot open");
     ensure(write(fd, data, len) != -1, "cannot write %s", file);
     close(fd);
