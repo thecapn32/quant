@@ -83,7 +83,7 @@ if(HAVE_FUZZER)
       PROPERTIES
         POSITION_INDEPENDENT_CODE ON
         INTERPROCEDURAL_OPTIMIZATION ${IPO}
-        LINK_FLAGS -fsanitize=fuzzer
+        LINK_FLAGS -fsanitize=fuzzer,address,undefined
     )
   endforeach()
 endif()

@@ -104,20 +104,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 
   add_definitions("-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2")
 
-  if(FUZZER)
-    # check if we have a fuzzer
-    set(CMAKE_REQUIRED_FLAGS -fsanitize=fuzzer)
-    check_c_compiler_flag(-fsanitize=fuzzer HAVE_FUZZER)
-    cmake_reset_check_state()
-    if(HAVE_FUZZER)
-      add_definitions(-DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=fuzzer")
-      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=fuzzer")
-    else()
-      message(FATAL_ERROR "No fuzzer available")
-    endif()
-  endif()
-
   # See if we can use the address sanitizer
   include(CheckIncludeFile)
   check_include_file(sanitizer/asan_interface.h HAVE_ASAN)
@@ -132,9 +118,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 
     # Set some additional flags for Debug builds
     set(FLAGS -fno-omit-frame-pointer -fsanitize-address-use-after-scope
-        -fno-optimize-sibling-calls
-        -fsanitize=undefined -fsanitize=unsigned-integer-overflow
-        -fno-sanitize=alignment -fno-common
+        -fno-optimize-sibling-calls -fno-common
+        -fsanitize=undefined -fsanitize=integer -fsanitize=nullability
     )
     foreach(FLAG ${FLAGS})
       string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
@@ -216,6 +201,20 @@ else()
     check_ipo_supported(RESULT IPO)
   else()
     set(IPO False)
+  endif()
+endif()
+
+if(FUZZER)
+  # check if we have a fuzzer
+  set(CMAKE_REQUIRED_FLAGS -fsanitize=fuzzer)
+  check_c_compiler_flag(-fsanitize=fuzzer HAVE_FUZZER)
+  cmake_reset_check_state()
+  if(HAVE_FUZZER)
+    add_definitions(-DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=fuzzer,address,undefined")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=fuzzer,address,undefined")
+  else()
+    message(FATAL_ERROR "No fuzzer available")
   endif()
 endif()
 
