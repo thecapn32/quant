@@ -55,7 +55,7 @@ set_target_properties(warpcore PROPERTIES
 externalproject_add(picotls
   # UPDATE_COMMAND "" # XXX do not commit with this being empty
   GIT_REPOSITORY https://github.com/h2o/picotls.git
-  GIT_SHALLOW 1
+  # GIT_SHALLOW 1 # does not work together with GIT_TAG
   GIT_TAG c07a6ac08586d2fd177e7871c6ee879e4ac11603
   CMAKE_ARGS
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
