@@ -96,6 +96,17 @@ uint16_t __attribute__((const)) varint_sizeof(const uint8_t first_byte)
 #endif
 
 
+#define do_enc(var, type, fmt, enc_type)                                       \
+    do {                                                                       \
+        ensure(pos + sizeof(var) <= buf_len,                                   \
+               "can't enc %u byte%s at pos %u - buf len is %u", sizeof(var),   \
+               plural(sizeof(var)), i, buf_len);                               \
+        memcpy(&buf[i], &(var), sizeof(var));                                  \
+        i += sizeof(var);                                                      \
+        log_enc(type, fmt, enc_type);                                          \
+    } while (0)
+
+
 uint16_t __attribute__((nonnull)) marshall_enc(uint8_t * const buf,
                                                const uint16_t buf_len,
                                                const uint16_t pos,
@@ -115,72 +126,59 @@ uint16_t __attribute__((nonnull)) marshall_enc(uint8_t * const buf,
 {
     uint16_t i = pos;
 
+    ensure(src_len == 0 || enc_len == 0,
+           "cannot set enc_len %u w/fixed-len enc", enc_len);
+
     switch (src_len) {
-    case 0:
+    case 0: {
         // varint encoding
-        if (enc_len == 1 || (enc_len == 0 && *(const uint64_t *)src < 0x40)) {
-            ensure(pos + 1 <= buf_len, "buf len %u insufficient", buf_len);
-            buf[i++] = *(const uint8_t *)src;
-            log_enc(uint64_t, fmt, "var");
+        const uint64_t src64 = *(const uint64_t *)src;
+        if (enc_len == 1 || (enc_len == 0 && src64 < 0x40)) {
+            const uint8_t v = *(const uint8_t *)src;
+            do_enc(v, uint64_t, fmt, "var");
 
-        } else if (enc_len == 2 ||
-                   (enc_len == 0 && *(const uint64_t *)src < (0x40 << 8))) {
-            ensure(pos + 2 <= buf_len, "buf len %u insufficient", buf_len);
-            buf[i++] = 0x40 | *(const uint16_t *)src >> 8;
-            buf[i++] = *(const uint16_t *)src & 0xff;
-            log_enc(uint64_t, fmt, "var");
+        } else if (enc_len == 2 || (enc_len == 0 && src64 < (0x40 << 8))) {
+            const uint16_t v = htons((0x40 << 8) | *(const uint16_t *)src);
+            do_enc(v, uint64_t, fmt, "var");
 
-        } else if (enc_len == 4 ||
-                   (enc_len == 0 && *(const uint64_t *)src < (0x40 << 24))) {
-            ensure(pos + 4 <= buf_len, "buf len %u insufficient", buf_len);
+        } else if (enc_len == 4 || (enc_len == 0 && src64 < (0x40 << 24))) {
             const uint32_t v = htonl((0x80UL << 24) | *(const uint32_t *)src);
-            memcpy(&buf[i], &v, 4);
-            i += 4;
-            log_enc(uint64_t, fmt, "var");
+            do_enc(v, uint64_t, fmt, "var");
 
         } else {
-            ensure(pos + 8 <= buf_len, "buf len %u insufficient", buf_len);
-            const uint64_t v = htonll((0xc0ULL << 56) | *(const uint64_t *)src);
-            memcpy(&buf[i], &v, 8);
-            i += 8;
-            log_enc(uint64_t, fmt, "var");
+            const uint64_t v = htonll((0xc0ULL << 56) | src64);
+            do_enc(v, uint64_t, fmt, "var");
         }
         break;
+    }
 
-    case 1:
+    case 1: {
         // single byte to network byte order
-        ensure(enc_len == 0, "cannot set enc_len %u w/fixed-len enc", enc_len);
-        ensure(pos + 1 <= buf_len, "buf len %u insufficient", buf_len);
-        buf[i++] = *(const uint8_t *)src;
-        log_enc(uint8_t, fmt, "fix");
+        const uint8_t v = *(const uint8_t *)src;
+        do_enc(v, uint8_t, fmt, "fix");
         break;
+    }
 
-    case 2:
+    case 2: {
         // uint16_t to network byte order
-        ensure(enc_len == 0, "cannot set enc_len %u w/fixed-len enc", enc_len);
-        ensure(pos + 2 <= buf_len, "buf len %u insufficient", buf_len);
-        *(uint16_t *)(void *)&buf[i] = htons(*(const uint16_t *)src);
-        i += 2;
-        log_enc(uint16_t, fmt, "fix");
+        const uint16_t v = htons(*(const uint16_t *)src);
+        do_enc(v, uint16_t, fmt, "fix");
         break;
+    }
 
-    case 4:
+    case 4: {
         // uint32_t to network byte order
-        ensure(enc_len == 0, "cannot set enc_len %u w/fixed-len enc", enc_len);
-        ensure(pos + 4 <= buf_len, "buf len %u insufficient", buf_len);
-        *(uint32_t *)(void *)&buf[i] = htonl(*(const uint32_t *)src);
-        i += 4;
-        log_enc(uint32_t, fmt, "fix");
+        const uint32_t v = htonl(*(const uint32_t *)src);
+        do_enc(v, uint32_t, fmt, "fix");
         break;
+    }
 
-    case 8:
+    case 8: {
         // uint64_t to network byte order
-        ensure(enc_len == 0, "cannot set enc_len %u w/fixed-len enc", enc_len);
-        ensure(pos + 8 <= buf_len, "buf len %u insufficient", buf_len);
-        *(uint64_t *)(void *)&buf[i] = htonll(*(const uint64_t *)src);
-        i += 8;
-        log_enc(uint64_t, fmt, "fix");
+        const uint64_t v = htonll(*(const uint64_t *)src);
+        do_enc(v, uint64_t, fmt, "fix");
         break;
+    }
 
     default:
         die("cannot encode length %u", src_len);
@@ -207,26 +205,24 @@ uint16_t __attribute__((nonnull)) marshall_enc_pnr(uint8_t * const buf,
 )
 {
     uint16_t i = pos;
-    ensure(pos + enc_len <= buf_len, "buf len %u insufficient", buf_len);
 
     // varint pnr encoding
     switch (enc_len) {
-    case 1:
-        buf[i++] = *(const uint8_t *)src;
-        log_enc(uint32_t, fmt, "pnr");
+    case 1: {
+        const uint8_t v = *(const uint8_t *)src;
+        do_enc(v, uint32_t, fmt, "pnr");
         break;
+    }
 
-    case 2:
-        buf[i++] = 0x40 | *(const uint16_t *)src >> 8;
-        buf[i++] = *(const uint16_t *)src & 0xff;
-        log_enc(uint32_t, fmt, "pnr");
+    case 2: {
+        const uint16_t v = htons((0x80 << 8) | *(const uint16_t *)src);
+        do_enc(v, uint32_t, fmt, "pnr");
         break;
+    }
 
     case 4: {
-        const uint32_t v = htonl((0xc0UL << 24) | (uint32_t)*src);
-        memcpy(&buf[i], &v, 4);
-        i += 4;
-        log_enc(uint32_t, fmt, "pnr");
+        const uint32_t v = htonl((0xc0UL << 24) | *(const uint32_t *)src);
+        do_enc(v, uint32_t, fmt, "pnr");
         break;
     }
 
@@ -254,7 +250,7 @@ uint16_t __attribute__((nonnull)) marshall_enc_buf(uint8_t * const buf,
 #endif
 )
 {
-    ensure(pos + enc_len <= buf_len, "buf len %u insufficient", buf_len);
+    ensure(pos + enc_len <= buf_len, "buf len %u exhausted", buf_len);
     memcpy(&buf[pos], src, enc_len);
 #ifdef DEBUG_MARSHALL
     if (unlikely(DLEVEL >= DBG && util_dlevel >= DBG))
@@ -278,6 +274,18 @@ uint16_t __attribute__((nonnull)) marshall_enc_buf(uint8_t * const buf,
     do {                                                                       \
     } while (0)
 #endif
+
+
+#define do_dec(var)                                                            \
+    do {                                                                       \
+        if (unlikely(pos + sizeof(var) > buf_len)) {                           \
+            warn(WRN, "cannot decode from pos %u > buf len %u", pos + 1,       \
+                 buf_len);                                                     \
+            return UINT16_MAX;                                                 \
+        }                                                                      \
+        memcpy(&(var), &buf[i], sizeof(var));                                  \
+        i += sizeof(var);                                                      \
+    } while (0)
 
 
 extern uint16_t __attribute__((nonnull))
@@ -304,112 +312,63 @@ marshall_dec(void * const dst,
         // varint decoding
         *(uint64_t *)dst = 0;
         if (buf[pos] < 0x40) {
-            if (unlikely(pos + 1 > buf_len)) {
-#ifdef DEBUG_MARSHALL
-                warn(WRN, "cannot decode from pos %u > buf len %u", pos + 1,
-                     buf_len);
-#endif
-                return UINT16_MAX;
-            }
-            *(uint8_t *)dst = buf[i++];
-            log_dec(uint64_t, "var");
+            uint8_t v;
+            do_dec(v);
+            *(uint8_t *)dst = v;
 
         } else if (buf[pos] < 0x80) {
-            if (unlikely(pos + 2 > buf_len)) {
-#ifdef DEBUG_MARSHALL
-                warn(WRN, "cannot decode from pos %u > buf len %u", pos + 2,
-                     buf_len);
-#endif
-                return UINT16_MAX;
-            }
-            *(uint16_t *)dst = (uint16_t)((buf[i++] & 0x3f) << 8);
-            *(uint16_t *)dst |= buf[i++];
-            log_dec(uint64_t, "var");
+            uint16_t v;
+            do_dec(v);
+            *(uint16_t *)dst = ntohs(v) & 0x3fff;
 
         } else if (buf[pos] < 0xc0) {
-            if (unlikely(pos + 4 > buf_len)) {
-#ifdef DEBUG_MARSHALL
-                warn(WRN, "cannot decode from pos %u > buf len %u", pos + 4,
-                     buf_len);
-#endif
-                return UINT16_MAX;
-            }
-            *(uint32_t *)dst =
-                ntohl(*(const uint32_t *)(const void *)&buf[pos]) &
-                0x3fffffffUL;
-            i += 4;
-            log_dec(uint64_t, "var");
+            uint32_t v;
+            do_dec(v);
+            *(uint32_t *)dst = ntohl(v) & 0x3fffffffUL;
 
         } else {
-            if (unlikely(pos + 8 > buf_len)) {
-#ifdef DEBUG_MARSHALL
-                warn(WRN, "cannot decode from pos %u > buf len %u", pos + 8,
-                     buf_len);
-#endif
-                return UINT16_MAX;
-            }
-            *(uint64_t *)dst =
-                ntohll(*(const uint64_t *)(const void *)&buf[pos]) &
-                0x3fffffffffffffffULL;
-            i += 8;
-            log_dec(uint64_t, "var");
+            uint64_t v;
+            do_dec(v);
+            *(uint64_t *)dst = ntohll(v) & 0x3fffffffffffffffULL;
         }
+        log_dec(uint64_t, "var");
         break;
 
-    case 1:
+    case 1: {
         // single byte from network byte order
-        if (unlikely(pos + 1 > buf_len)) {
-#ifdef DEBUG_MARSHALL
-            warn(WRN, "cannot decode from pos %u > buf len %u", pos + 1,
-                 buf_len);
-#endif
-            return UINT16_MAX;
-        }
-        *(uint8_t *)dst = buf[i++];
+        uint8_t v;
+        do_dec(v);
+        *(uint8_t *)dst = v;
         log_dec(uint8_t, "fix");
         break;
+    }
 
-    case 2:
+    case 2: {
         // uint16_t from network byte order
-        if (unlikely(pos + 2 > buf_len)) {
-#ifdef DEBUG_MARSHALL
-            warn(WRN, "cannot decode from pos %u > buf len %u", pos + 2,
-                 buf_len);
-#endif
-            return UINT16_MAX;
-        }
-        *(uint16_t *)dst = ntohs(*(const uint16_t *)(const void *)&buf[pos]);
-        i += 2;
+        uint16_t v;
+        do_dec(v);
+        *(uint16_t *)dst = ntohs(v);
         log_dec(uint16_t, "fix");
         break;
+    }
 
-    case 4:
+    case 4: {
         // uint32_t from network byte order
-        if (unlikely(pos + 4 > buf_len)) {
-#ifdef DEBUG_MARSHALL
-            warn(WRN, "cannot decode from pos %u > buf len %u", pos + 4,
-                 buf_len);
-#endif
-            return UINT16_MAX;
-        }
-        *(uint32_t *)dst = ntohl(*(const uint32_t *)(const void *)&buf[pos]);
-        i += 4;
+        uint32_t v;
+        do_dec(v);
+        *(uint32_t *)dst = ntohl(v);
         log_dec(uint32_t, "fix");
         break;
+    }
 
-    case 8:
+    case 8: {
         // uint64_t from network byte order
-        if (unlikely(pos + 8 > buf_len)) {
-#ifdef DEBUG_MARSHALL
-            warn(WRN, "cannot decode from pos %u > buf len %u", pos + 8,
-                 buf_len);
-#endif
-            return UINT16_MAX;
-        }
-        *(uint64_t *)dst = ntohll(*(const uint64_t *)(const void *)&buf[pos]);
-        i += 8;
+        uint64_t v;
+        do_dec(v);
+        *(uint64_t *)dst = ntohll(v);
         log_dec(uint64_t, "fix");
         break;
+    }
 
     default:
         die("cannot decode length %u", dst_len);
@@ -439,41 +398,21 @@ marshall_dec_pnr(void * const dst,
 
     // varint pnr decoding
     if (buf[pos] < 0x80) {
-        if (unlikely(pos + 1 > buf_len)) {
-#ifdef DEBUG_MARSHALL
-            warn(WRN, "cannot decode from pos %u > buf len %u", pos + 1,
-                 buf_len);
-#endif
-            return UINT16_MAX;
-        }
-        *(uint8_t *)dst = buf[i++];
-        log_dec(uint32_t, "pnr");
+        uint8_t v;
+        do_dec(v);
+        *(uint8_t *)dst = v;
 
     } else if (buf[pos] < 0x40) {
-        if (unlikely(pos + 2 > buf_len)) {
-#ifdef DEBUG_MARSHALL
-            warn(WRN, "cannot decode from pos %u > buf len %u", pos + 2,
-                 buf_len);
-#endif
-            return UINT16_MAX;
-        }
-        *(uint16_t *)dst = (uint16_t)((buf[i++] & 0x3f) << 8);
-        *(uint16_t *)dst |= buf[i++];
-        log_dec(uint32_t, "pnr");
+        uint16_t v;
+        do_dec(v);
+        *(uint16_t *)dst = ntohs(v) & 0x3fff;
 
     } else {
-        if (unlikely(pos + 4 > buf_len)) {
-#ifdef DEBUG_MARSHALL
-            warn(WRN, "cannot decode from pos %u > buf len %u", pos + 4,
-                 buf_len);
-#endif
-            return UINT16_MAX;
-        }
-        *(uint32_t *)dst =
-            ntohl(*(const uint32_t *)(const void *)&buf[pos]) & 0x3fffffffUL;
-        i += 4;
-        log_dec(uint32_t, "pnr");
+        uint32_t v;
+        do_dec(v);
+        *(uint32_t *)dst = ntohl(v) & 0x3fffffffUL;
     }
+    log_dec(uint32_t, "pnr");
 
     return i;
 }
