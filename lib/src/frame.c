@@ -103,7 +103,7 @@ dec_stream_frame(struct q_conn * const c,
     uint64_t l = 0;
     if (is_set(F_STREAM_LEN, t)) {
         i = dec_chk(t, &l, v->buf, v->len, i, 0, "%" PRIu64);
-        if (unlikely(l > v->len - i))
+        if (unlikely(l > (uint64_t)v->len - i))
             err_close_return(c, ERR_FRM(t), "illegal strm len");
     } else
         // stream data extends to end of packet
@@ -204,7 +204,7 @@ done:
     if (track_bytes)
         track_bytes_in(s, l);
 
-    if (s && s->id && meta(v).stream_off + l - 1 > s->in_data_max)
+    if (s && s->id && meta(v).stream_off + l > s->in_data_max)
         err_close_return(c, ERR_FLOW_CONTROL_ERR,
                          "stream %" PRIu64 " off %" PRIu64
                          " > in_data_max %" PRIu64,
@@ -242,6 +242,11 @@ uint16_t dec_ack_frame(
     uint64_t ack_delay_raw = 0;
     i = dec_chk(FRAM_TYPE_ACK, &ack_delay_raw, v->buf, v->len, i, 0,
                 "%" PRIu64);
+
+    // TODO: figure out a better way to handle huge ACK delays
+    if (unlikely(ack_delay_raw > UINT32_MAX))
+        err_close_return(c, ERR_FRM(FRAM_TYPE_ACK), "ACK delay raw %" PRIu64,
+                         ack_delay_raw);
 
     // handshake pkts always use an ACK delay exponent of 3
     const uint8_t ade =
@@ -299,7 +304,7 @@ uint16_t dec_ack_frame(
 #endif
 
         uint64_t ack = lg_ack_in_block;
-        while (ack + ack_block_len >= lg_ack_in_block) {
+        while (ack_block_len >= lg_ack_in_block - ack) {
             on_each_ack(c, ack, meta(v).hdr.flags);
             if (likely(ack > 0))
                 ack--;
@@ -309,6 +314,10 @@ uint16_t dec_ack_frame(
 
         if (n > 1) {
             i = dec_chk(FRAM_TYPE_ACK, &gap, v->buf, v->len, i, 0, "%" PRIu64);
+            // warn(ERR, "%" PRIu64 " %" PRIu64, ack, gap);
+            if (unlikely(ack <= gap))
+                err_close_return(c, ERR_FRM(FRAM_TYPE_ACK), "ACK gap %" PRIu64,
+                                 gap);
             lg_ack_in_block = ack - gap - 1;
         }
     }
