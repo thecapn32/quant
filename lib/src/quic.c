@@ -499,11 +499,13 @@ struct w_engine * q_init(const char * const ifname,
     // initialize the event loop
     loop = ev_default_loop(0);
 
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     // libev seems to need this inside docker to handle Ctrl-C?
     static ev_signal signal_w;
     signal_w.data = w;
     ev_signal_init(&signal_w, signal_cb, SIGINT);
     ev_signal_start(loop, &signal_w);
+#endif
 
 #ifndef NDEBUG
 #ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
