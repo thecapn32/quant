@@ -17,15 +17,19 @@ cert=/etc/letsencrypt/live/slate.eggert.org/fullchain.pem
 key=/etc/letsencrypt/live/slate.eggert.org/privkey.pem
 
 # (re-)build the client (and possibly server) to test
-if [ "$c" == wcquant ] || [ "$s" == wcquant ] ||
-   [ "$c" == wsquant ] || [ "$s" == wsquant ]; then
-        delay=0.1
+if [ "$c" == wquant ] || [ "$s" == wquant ]; then
+        delay=3
+        addr=$(vagrant ssh -c 'ip -o -4 address show enp0s8')
+        addr=$(echo $addr | awk '{print $4;}' | cut -d/ -f 1)
+        iface=$(route get $addr | grep interface | cut -f2 -d:)
         vagrant ssh -c "\
                 mkdir -p /vagrant/Linux; \
                 cd /vagrant/Linux; \
-                cmake -GNinja .. && ninja"
+                cmake -GNinja .. && ninja; \
+                sudo dhclient enp0s8"
 else
-        delay=0.1
+        delay=.2
+        iface=lo0
         ninja "$c"
         [ "$c" != "$s" ] && ninja "$s"
 fi
@@ -38,12 +42,12 @@ export UBSAN_OPTIONS=print_stacktrace=1 # :suppressions=../misc/ubsan.supp
 
 # commands to run the different clients against $addr:$port
 case $c in
-        quant|wsquant)
-                cc="bin/client -v5 https://$addr:$port$path" # https://$addr:$port$path"
+        quant)
+                cc="bin/client -v5 -i $iface https://$addr:$port$path" # https://$addr:$port$path"
                 ;;
-        wcquant)
+        wquant)
                 cc="vagrant ssh -c \"\
-                        /vagrant/Linux/bin/client -i enp0s3 -v5 \
+                        /vagrant/Linux/bin/client -v5 -i enp0s8 \
                                 https://$addr:44433$path\""
                 ;;
         quicly)
@@ -74,7 +78,7 @@ case $c in
                 ;;
         picoquic)
                 cc="external/picoquic-prefix/src/picoquic/picoquicdemo \
-                         -v ff00000c $addr $port -1"
+                         $addr $port -1"
                 ;;
 
         quicker)
@@ -94,12 +98,12 @@ esac
 
 # commands to run the different servers on  $addr:$port
 case $s in
-        quant|wcquant)
-                sc="bin/server -v5 -p $port -d $dir"
+        quant)
+                sc="bin/server -v5 -i $iface -p $port -d $dir"
                 ;;
-        wsquant)
+        wquant)
                 sc="vagrant ssh -c \"\
-                        /vagrant/Linux/bin/server -i enp0s3 -v5 -p $port \
+                        /vagrant/Linux/bin/server -i enp0s8 -v5 -p $port \
                                 -c ~/slate.eggert.org/fullchain.pem \
                                 -k ~/slate.eggert.org/privkey.pem \
                                 -d /usr/share/doc/valgrind/html\""
@@ -163,8 +167,8 @@ tmux -CC \
 # ats doesn't exit cleanly
 pkill -9 traffic_server
 
-# if we are on MacOS X, unconfigure the firewall
-if [ -x /usr/sbin/dnctl ]; then
-        sudo dnctl -f flush
-        sudo pfctl -f /etc/pf.conf -d
-fi
+# # if we are on MacOS X, unconfigure the firewall
+# if [ -x /usr/sbin/dnctl ]; then
+#         sudo dnctl -f flush
+#         sudo pfctl -f /etc/pf.conf -d
+# fi
