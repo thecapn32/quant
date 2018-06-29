@@ -34,13 +34,18 @@ configure_file(src/config.c.in src/config.c)
 
 include(GNUInstallDirs)
 
+if(OpenSSL_FOUND)
+  add_definitions(-DPTLS_OPENSSL)
+  set(PTLS_OPENSSL ptls-openssl)
+endif()
+
 add_library(common
   OBJECT
     src/pkt.c src/frame.c src/quic.c src/stream.c src/conn.c
     src/diet.c src/util.c src/tls.c src/recovery.c src/marshall.c
     ${CMAKE_CURRENT_BINARY_DIR}/src/config.c
 )
-add_dependencies(common warpcore ptls-core ptls-openssl ptls-minicrypto)
+add_dependencies(common warpcore ptls-core ${PTLS_OPENSSL} ptls-minicrypto)
 
 add_library(lib${PROJECT_NAME} $<TARGET_OBJECTS:common>)
 
@@ -67,7 +72,7 @@ endif()
 
 set(TARGETS common lib${PROJECT_NAME})
 foreach(TARGET ${TARGETS})
-  add_dependencies(${TARGET} warpcore ptls-core ptls-openssl ptls-minicrypto)
+  add_dependencies(${TARGET} warpcore ptls-core ${PTLS_OPENSSL} ptls-minicrypto)
   target_include_directories(${TARGET}
     SYSTEM PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -91,7 +96,7 @@ foreach(TARGET ${TARGETS})
 
   if(NOT ${TARGET} MATCHES "common")
     target_link_libraries(${TARGET}
-      m warpcore ptls-core ptls-openssl ptls-minicrypto ${LIBEV_LIB})
+      m warpcore ptls-core ${PTLS_OPENSSL} ptls-minicrypto ${LIBEV_LIB})
     if("${CMAKE_SYSTEM}" MATCHES "Linux")
       target_link_libraries(${TARGET} bsd)
     endif()

@@ -36,13 +36,14 @@
 #include <sys/param.h>
 #include <unistd.h>
 
+#ifdef PTLS_OPENSSL
 #include <openssl/evp.h>
 #include <openssl/ossl_typ.h>
 #include <openssl/pem.h>
-
-// IWYU pragma: no_include <picotls/../picotls.h>
-#include <picotls/minicrypto.h>
 #include <picotls/openssl.h>
+#endif
+
+#include <picotls/minicrypto.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
@@ -100,9 +101,10 @@ SPLAY_GENERATE(ticket_splay, tls_ticket, node, tls_ticket_cmp)
 ptls_context_t tls_ctx = {0};
 static struct ticket_splay tickets = splay_initializer(tickets);
 
-
+#ifdef PTLS_OPENSSL
 static ptls_openssl_sign_certificate_t sign_cert = {0};
 static ptls_openssl_verify_certificate_t verifier = {0};
+#endif
 
 static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-12", 5}};
 static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
@@ -628,7 +630,12 @@ void init_tp(struct q_conn * const c)
 
 static void init_ticket_prot(void)
 {
-    const ptls_cipher_suite_t * const cs = &ptls_openssl_aes128gcmsha256;
+    const ptls_cipher_suite_t * const cs =
+#ifdef PTLS_OPENSSL
+        &ptls_openssl_aes128gcmsha256;
+#else
+        &ptls_minicrypto_aes128gcmsha256;
+#endif
     uint8_t output[PTLS_MAX_SECRET_SIZE] = {0};
     memcpy(output, quant_commit_hash,
            MIN(quant_commit_hash_len, sizeof(output)));
@@ -904,8 +911,12 @@ void init_hshk_prot(struct q_conn * const c)
     const ptls_iovec_t cid = {
         .base = (uint8_t *)(c->is_clnt ? &act_dcid(c)->id : &act_scid(c)->id),
         .len = c->is_clnt ? act_dcid(c)->len : act_scid(c)->len};
-    ptls_cipher_suite_t * cs = &ptls_openssl_aes128gcmsha256;
-
+    ptls_cipher_suite_t * cs =
+#ifdef PTLS_OPENSSL
+        &ptls_openssl_aes128gcmsha256;
+#else
+        &ptls_minicrypto_aes128gcmsha256;
+#endif
     setup_handshake_encryption(&c->tls.in_pp.handshake,
                                &c->tls.out_pp.handshake, &cs, cid, c->is_clnt);
 }
@@ -1101,9 +1112,14 @@ void init_tls_ctx(const char * const cert,
                   const char * const key,
                   const char * const ticket_store,
                   const char * const tls_log,
-                  const bool verify_certs)
+                  const bool verify_certs
+#ifndef PTLS_OPENSSL
+                  __attribute__((unused))
+#endif
+)
 {
     if (key) {
+#ifdef PTLS_OPENSSL
         FILE * const fp = fopen(key, "rbe");
         ensure(fp, "could not open key %s", key);
         EVP_PKEY * const pkey = PEM_read_PrivateKey(fp, 0, 0, 0);
@@ -1111,6 +1127,11 @@ void init_tls_ctx(const char * const cert,
         ensure(pkey, "failed to load private key");
         ptls_openssl_init_sign_certificate(&sign_cert, pkey);
         EVP_PKEY_free(pkey);
+#else
+        // XXX ptls_minicrypto_load_private_key() only works for ECDSA keys
+        const int ret = ptls_minicrypto_load_private_key(&tls_ctx, key);
+        ensure(ret == 0, "could not open key %s", key);
+#endif
     }
 
     if (cert) {
@@ -1134,23 +1155,41 @@ void init_tls_ctx(const char * const cert,
         ensure(tls_log_file, "could not open TLS log %s", tls_log);
     }
 
+#ifdef PTLS_OPENSSL
     ensure(ptls_openssl_init_verify_certificate(&verifier, 0) == 0,
            "ptls_openssl_init_verify_certificate");
+#endif
 
     static ptls_key_exchange_algorithm_t * key_exchanges[] = {
-        &ptls_openssl_secp256r1, &ptls_minicrypto_x25519, 0};
+#ifdef PTLS_OPENSSL
+        &ptls_openssl_secp256r1,
+#endif
+        &ptls_minicrypto_x25519, 0};
     static ptls_on_client_hello_t on_client_hello = {.cb = on_ch};
     static ptls_log_secret_t log_secret = {.cb = log_secret_cb};
 
-    tls_ctx.cipher_suites = ptls_openssl_cipher_suites;
+    tls_ctx.cipher_suites =
+#ifdef PTLS_OPENSSL
+        ptls_openssl_cipher_suites;
+#else
+        ptls_minicrypto_cipher_suites;
+#endif
     tls_ctx.key_exchanges = key_exchanges;
     tls_ctx.on_client_hello = &on_client_hello;
     if (tls_log)
         tls_ctx.log_secret = &log_secret;
-    tls_ctx.random_bytes = ptls_openssl_random_bytes;
+    tls_ctx.random_bytes =
+#ifdef PTLS_OPENSSL
+        ptls_openssl_random_bytes;
+#else
+        ptls_minicrypto_random_bytes;
+#endif
+
+#ifdef PTLS_OPENSSL
     tls_ctx.sign_certificate = &sign_cert.super;
     if (verify_certs)
         tls_ctx.verify_certificate = &verifier.super;
+#endif
     tls_ctx.get_time = &ptls_get_time;
 
     arc4random_buf(cookie, COOKIE_LEN);
