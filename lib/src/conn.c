@@ -671,7 +671,7 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 
             if (unlikely(try_vers == c->vers)) {
                 warn(INF, "ignoring spurious vers neg response");
-                break;
+                goto done;
             }
 
             if (c->vers_initial == 0)
