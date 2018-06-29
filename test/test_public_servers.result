@@ -1,5 +1,5 @@
                 live    fail    vneg    hshk    data    close   zrtt    hrr     mig
-ats             *
+ats             *               V       H       D       C                       M
 f5              *               V
 minq
 mozquic         *
