@@ -1248,9 +1248,9 @@ uint16_t dec_aead(const struct q_conn * const c, const struct w_iov * const v)
     if (unlikely(ret == SIZE_MAX))
         return 0;
 
-    warn(DBG, "verifying %lu-byte %s AEAD over [0..%u] in [%u..%u]", AEAD_LEN,
-         aead_type(c, ctx->aead), hdr_len + len - AEAD_LEN - 1,
-         hdr_len + len - AEAD_LEN, hdr_len + len - 1);
+    warn(DBG, "dec %s AEAD over [0..%u] in [%u..%u]", aead_type(c, ctx->aead),
+         hdr_len + len - AEAD_LEN - 1, hdr_len + len - AEAD_LEN,
+         hdr_len + len - 1);
 
     return hdr_len + len;
 }
@@ -1273,10 +1273,6 @@ uint16_t enc_aead(const struct q_conn * const c,
     const size_t ret =
         ptls_aead_encrypt(ctx->aead, &x->buf[hdr_len], &v->buf[hdr_len],
                           plen - AEAD_LEN, meta(v).hdr.nr, v->buf, hdr_len);
-    warn(DBG, "added %lu-byte %s AEAD over [0..%u] in [%u..%u]", AEAD_LEN,
-         aead_type(c, ctx->aead), hdr_len + plen - AEAD_LEN - 1,
-         hdr_len + plen - AEAD_LEN, hdr_len + plen - 1);
-
     if (likely(nr_pos)) {
         // encrypt the packet number
         uint16_t off = nr_pos + 4;
@@ -1285,9 +1281,16 @@ uint16_t enc_aead(const struct q_conn * const c,
         ptls_cipher_init(ctx->pne, &x->buf[off]);
         ptls_cipher_encrypt(ctx->pne, &x->buf[nr_pos], &x->buf[nr_pos],
                             hdr_len - nr_pos);
-        warn(DBG, "added PNE over [%u..%u] based on off %u", nr_pos,
-             hdr_len - 1, off);
-    }
+        warn(DBG,
+             "enc %s AEAD over [0..%u] in [%u..%u]; PNE over "
+             "[%u..%u] w/off %u",
+             aead_type(c, ctx->aead), hdr_len + plen - AEAD_LEN - 1,
+             hdr_len + plen - AEAD_LEN, hdr_len + plen - 1, nr_pos, hdr_len - 1,
+             off);
+    } else
+        warn(DBG, "enc %s AEAD over [0..%u] in [%u..%u]",
+             aead_type(c, ctx->aead), hdr_len + plen - AEAD_LEN - 1,
+             hdr_len + plen - AEAD_LEN, hdr_len + plen - 1);
 
     return hdr_len + (uint16_t)ret;
 }

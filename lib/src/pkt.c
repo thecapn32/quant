@@ -479,8 +479,8 @@ bool dec_pkt_hdr_remainder(struct w_iov * const v,
     memcpy(&v->buf[nr_pos], &enc_nr, nr_len);
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-    warn(DBG, "removed PNE over [%u..%u] based on off %u", nr_pos,
-         nr_pos + nr_len - 1, off);
+    warn(DBG, "dec PNE over [%u..%u] w/off %u", nr_pos, nr_pos + nr_len - 1,
+         off);
 #endif
 
     const uint64_t alt = nr + (UINT64_C(1) << (nr_len * 8));
