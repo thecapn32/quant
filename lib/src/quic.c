@@ -90,7 +90,8 @@ static const uint32_t nbufs = 1000; ///< Number of packet buffers to allocate.
 static ev_timer accept_alarm;
 
 
-#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) &&  \
+    !defined(NO_FUZZER_CORPUS_COLLECTION)
 int corpus_pkt_dir, corpus_frm_dir;
 #endif
 
@@ -507,7 +508,7 @@ struct w_engine * q_init(const char * const ifname,
     ev_signal_start(loop, &signal_w);
 #endif
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) && !defined(NO_FUZZER_CORPUS_COLLECTION)
 #ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     warn(CRT, "%s compiled for fuzzing - will not communicate", quant_name);
 #else
@@ -596,7 +597,8 @@ void q_cleanup(struct w_engine * const w)
     free(pm);
     w_cleanup(w);
 
-#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) &&  \
+    !defined(NO_FUZZER_CORPUS_COLLECTION)
     close(corpus_pkt_dir);
     close(corpus_frm_dir);
 #endif
@@ -621,7 +623,8 @@ bool q_is_str_closed(struct q_stream * const s)
 }
 
 
-#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) &&  \
+    !defined(NO_FUZZER_CORPUS_COLLECTION)
 void write_to_corpus(const int dir, const void * const data, const size_t len)
 {
     char file[MAXPATHLEN], rand[16];

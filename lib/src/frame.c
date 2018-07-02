@@ -168,7 +168,7 @@ dec_stream_frame(struct q_conn * const c,
         }
 
         if (s->id != 0)
-            maybe_api_return(q_read, s->c, s);
+            maybe_api_return(q_read, s->c, 0);
         goto done;
     }
 
@@ -657,7 +657,8 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
     uint16_t i = meta(v).hdr.hdr_len;
     uint16_t pad_start = 0;
 
-#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) &&  \
+    !defined(NO_FUZZER_CORPUS_COLLECTION)
     // when called from the fuzzer, v->ip is zero
     if (v->ip)
         write_to_corpus(corpus_frm_dir, &v->buf[i], v->len - i);

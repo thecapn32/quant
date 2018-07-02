@@ -5,7 +5,8 @@ RUN apk add --no-cache cmake ninja gcc g++ git musl-dev linux-headers \
 RUN git config --global user.email "docker@example.com"
 ADD . /src
 WORKDIR /src/Debug
-RUN cmake -GNinja -DNO_SANITIZERS=True -DCMAKE_INSTALL_PREFIX=/dst ..
+RUN cmake -GNinja -DNO_SANITIZERS=True -DNO_FUZZER_CORPUS_COLLECTION=True \
+        -DCMAKE_INSTALL_PREFIX=/dst ..
 RUN ninja install
 ADD https://github.com/gabrielecirulli/2048/archive/master.zip /
 RUN unzip /master.zip -d /

@@ -836,7 +836,8 @@ rx_pkts(struct w_iov_sq * const i,
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         sq_remove_head(i, next);
 
-#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) &&  \
+    !defined(NO_FUZZER_CORPUS_COLLECTION)
         // when called from the fuzzer, v->ip is zero
         if (v->ip)
             write_to_corpus(corpus_pkt_dir, v->buf, v->len);
