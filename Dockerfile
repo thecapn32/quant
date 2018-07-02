@@ -1,4 +1,4 @@
-FROM ntap/warpcore:dev
+FROM ntap/warpcore:latest
 RUN apk add --no-cache cmake ninja gcc g++ git musl-dev linux-headers \
         libbsd-dev mercurial openssl \
         openssl-dev http-parser-dev libev-dev libbsd-dev
@@ -13,7 +13,7 @@ WORKDIR /tls
 RUN openssl req -batch -new -newkey rsa:2048 -sha256 -days 9365 -nodes -x509 \
         -keyout quant.key -out quant.crt -subj "/"
 
-FROM alpine:3.7
+FROM alpine:latest
 COPY --from=0 /dst /
 COPY --from=0 /2048-master /www
 COPY --from=0 /tls /tls
