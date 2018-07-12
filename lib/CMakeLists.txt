@@ -10,6 +10,7 @@ string(REGEX REPLACE "^(.*)..$" "\\1" GIT_COMMIT_HASH "${GIT_COMMIT_HASH}")
 if(NOT GIT_COMMIT_HASH_STR)
   message(WARNING "Could not determine git commit hash")
   set(GIT_COMMIT_HASH 0x00)
+  set(GIT_COMMIT_HASH_STR "00")
 endif()
 
 # Get the latest *abbreviated* commit hash of the working branch
@@ -26,6 +27,7 @@ string(REGEX REPLACE "^(.*)..$" "\\1" GIT_COMMIT_HASH_ABBREV
 if(NOT GIT_COMMIT_HASH_ABBREV_STR)
   message(WARNING "Could not determine abbreviated git commit hash")
   set(GIT_COMMIT_HASH_ABBREV 0x00)
+  set(GIT_COMMIT_HASH_ABBREV_STR "00")
 endif()
 
 string(TOUPPER ${PROJECT_NAME} PROJECT_NAME_UC)
