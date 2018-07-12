@@ -27,7 +27,7 @@ cd @CMAKE_BINARY_DIR@ || exit
 prev=$(git rev-list HEAD -n 1)
 git pull
 if [ "$prev" = "$(git rev-list HEAD -n 1)" ]; then
-        cmake -GNinja ..
+        cmake -GNinja -DNO_FUZZER_CORPUS_COLLECTION=True ..
         ninja
         sudo setcap 'cap_net_bind_service=+ep' bin/server
 fi
