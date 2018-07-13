@@ -1,23 +1,22 @@
+---
 version: "3"
 services:
 
   server:
     image: ntap/quant
     expose:
-      - 4433
-    command: server -i eth0 -d /www -c /tls/quant.crt -k /tls/quant.key -v4
+      - 4433/udp
+    command: server -i eth0 -t 1 -v4 -d /www -c /tls/quant.crt -k /tls/quant.key
 
   valve:
     depends_on:
       - server
     image: larseggert/qvalve
-    tty: true
     expose:
-      - 4433
+      - 4433/udp
     volumes:
-      - ../qvalve:/qvalve-dev:ro
-    working_dir: /qvalve-dev
-    command: ./qvalve.py -ra server -t tests/demo.qv
+      - ./qvalve-tests:/qvalve-tests:ro
+    command: env PYTHONUNBUFFERED=1 qvalve -ra server -r tests/demo.qv
 
   client:
     depends_on:
