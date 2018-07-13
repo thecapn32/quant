@@ -26,6 +26,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <fcntl.h>
+#include <inttypes.h>
 #include <net/if.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -53,7 +54,8 @@ static void __attribute__((noreturn)) usage(const char * const name,
                                             const uint16_t port,
                                             const char * const dir,
                                             const char * const cert,
-                                            const char * const key)
+                                            const char * const key,
+                                            const uint64_t timeout)
 {
     printf("%s [options]\n", name);
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
@@ -61,6 +63,8 @@ static void __attribute__((noreturn)) usage(const char * const name,
     printf("\t[-d dir]\tserver root directory; default %s\n", dir);
     printf("\t[-c cert]\tTLS certificate; default %s\n", cert);
     printf("\t[-k key]\tTLS key; default %s\n", key);
+    printf("\t[-t timeout]\tidle timeout in seconds; default %" PRIu64 "\n",
+           timeout);
 #ifndef NDEBUG
     printf("\t[-v verbosity]\tverbosity level (0-%d, default %d)\n", DLEVEL,
            util_dlevel);
@@ -167,6 +171,7 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
 
 int main(int argc, char * argv[])
 {
+    uint64_t timeout = 10;
 #ifndef NDEBUG
     util_dlevel = DLEVEL; // default to maximum compiled-in verbosity
 #endif
@@ -183,7 +188,7 @@ int main(int argc, char * argv[])
     size_t num_ports = 0;
     int ch;
 
-    while ((ch = getopt(argc, argv, "hi:p:d:v:c:k:")) != -1) {
+    while ((ch = getopt(argc, argv, "hi:p:d:v:c:k:t:")) != -1) {
         switch (ch) {
         case 'i':
             strncpy(ifname, optarg, sizeof(ifname) - 1);
@@ -203,6 +208,9 @@ int main(int argc, char * argv[])
             ensure(num_ports < MAXPORTS, "can only listen on at most %u ports",
                    MAXPORTS);
             break;
+        case 't':
+            timeout = MIN(IDLE_TIMEOUT_MAX, strtoul(optarg, 0, 10));
+            break;
         case 'v':
 #ifndef NDEBUG
             util_dlevel = (short)MIN(DLEVEL, strtoul(optarg, 0, 10));
@@ -211,7 +219,7 @@ int main(int argc, char * argv[])
         case 'h':
         case '?':
         default:
-            usage(basename(argv[0]), ifname, port[0], dir, cert, key);
+            usage(basename(argv[0]), ifname, port[0], dir, cert, key, timeout);
         }
     }
 
@@ -232,7 +240,7 @@ int main(int argc, char * argv[])
 
     bool first_conn = true;
     while (1) {
-        struct q_conn * const c = q_accept(w, first_conn ? 0 : 10);
+        struct q_conn * const c = q_accept(w, first_conn ? 0 : timeout);
         first_conn = false;
         if (c == 0)
             break;
