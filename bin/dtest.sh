@@ -4,7 +4,14 @@ rm -f /cores/*.core
 
 set -e
 
-for t in qvalve-tests/*; do
+# clean up from previous run
+docker-compose down --timeout 1 --remove-orphans 2> /dev/null
+
+# if arguments are given, assume they are tests (otherwise run all)
+tests="qvalve-tests/*"
+[ ! -z "$*" ] && tests=$*
+
+for t in $tests; do
         echo -n "$t"
 
         declare -A log cmd ret
