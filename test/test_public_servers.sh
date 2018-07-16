@@ -46,7 +46,7 @@ declare -A servers=(
         [winquic]=msquic.westus.cloudapp.azure.com
 )
 
-results=(live fail vneg hshk data close zrtt hrr mig)
+results=(live fail vneg hshk data clse zrtt hrr mig)
 declare -A ${results[@]}
 
 
@@ -68,8 +68,8 @@ fi
 
 
 pid=$$
-script=$(basename -s .sh $0)
-rm -f /tmp/$script*
+script=$(basename -s .sh "$0")
+rm -f /tmp/"$script"*
 
 function test_server {
         # run quant client and produce a pure ASCII log for post-processing
@@ -130,9 +130,9 @@ function analyze {
                     END{exit $tc+$rc};' "$log"
         local ret=$?
         if [ $ret == 2 ]; then
-                close[$1]=C
+                clse[$1]=C
         elif [ $ret == 1 ]; then
-                close[$1]=C # XXX c
+                clse[$1]=C # XXX c
         fi
 
         perl -n -e '/dec_new_cid_frame.*NEW_CONNECTION_ID/ and $n=1;
@@ -181,7 +181,7 @@ wait
 printf "\\n\\n"
 
 tmp=$(mktemp)
-printf "%10s\\t" "" >> "$tmp"
+printf "%8s\\t" "" >> "$tmp"
 for r in "${results[@]}"; do
         printf "%s\\t" "$r" >> "$tmp"
 done
@@ -189,15 +189,15 @@ printf "\\n" >> "$tmp"
 
 mapfile -d '' sorted < <(printf '%s\0' "${!servers[@]}" | sort -z)
 for s in "${sorted[@]}"; do
-        printf "%-10s\\t" "$s" >> "$tmp"
+        printf "%-8s\\t" "$s" >> "$tmp"
         analyze "$s"
         for r in "${results[@]}"; do
-                v="$r[$s]"
+                v=$r[$s]
                 printf "%s\\t" "${!v}" >> "$tmp"
         done
         printf "\\n" >> "$tmp"
 done
 
-# cat "$tmp"
+expand -t 5 "$tmp" | sponge "$tmp"
 wdiff -n "$(dirname $0)/$script.result" "$tmp" | $colordiff
 rm -f "$tmp"
