@@ -957,7 +957,8 @@ rx_pkts(struct w_iov_sq * const i,
         if (meta(v).hdr.vers || !is_set(F_LONG_HDR, meta(v).hdr.flags))
             if (dec_pkt_hdr_remainder(v, c, i) == false) {
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-                warn(ERR, "received invalid %u-byte pkt, ignoring", v->len);
+                warn(ERR, "received invalid %u-byte 0x%02x-type pkt, ignoring",
+                     v->len, meta(v).hdr.flags);
 #endif
                 q_free_iov(v);
                 continue;
