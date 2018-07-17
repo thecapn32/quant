@@ -59,7 +59,7 @@ done
 
 for s in ok fail; do
         [ -n "${status[$s]}" ] && \
-                echo ${col[$s]}$s${norm} ${status[$s]}/${status[all]}
+                echo "${col[$s]}$s${norm} ${status[$s]}/${status[all]}"
 done
 
 
