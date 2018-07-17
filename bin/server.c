@@ -187,6 +187,7 @@ int main(int argc, char * argv[])
     uint16_t port[MAXPORTS] = {4433, 4434};
     size_t num_ports = 0;
     int ch;
+    int ret = 0;
 
     while ((ch = getopt(argc, argv, "hi:p:d:v:c:k:t:")) != -1) {
         switch (ch) {
@@ -242,8 +243,12 @@ int main(int argc, char * argv[])
     while (1) {
         struct q_conn * const c = q_accept(w, first_conn ? 0 : timeout);
         first_conn = false;
-        if (c == 0)
+        if (c == 0) {
+            if (first_conn)
+                // first q_accept() failed
+                ret = 1;
             break;
+        }
 
         http_parser_settings settings = {.on_url = serve_cb};
         struct cb_data d = {.c = c, .w = w, .dir = dir_fd};
@@ -263,6 +268,7 @@ int main(int argc, char * argv[])
                 if (parsed != v->len) {
                     warn(ERR, "HTTP parser error: %.*s", v->len - parsed,
                          &v->buf[parsed]);
+                    ret = 1;
                     break;
                 }
                 if (q_is_str_closed(s)) {
@@ -280,5 +286,5 @@ int main(int argc, char * argv[])
 
     q_cleanup(w);
     warn(DBG, "%s exiting", basename(argv[0]));
-    return 0;
+    return ret;
 }

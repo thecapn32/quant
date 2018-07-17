@@ -218,6 +218,7 @@ int main(int argc, char * argv[])
     char cache[MAXPATHLEN] = "/tmp/" QUANT "-session";
     char tls_log[MAXPATHLEN] = "/tmp/" QUANT "-tlslog";
     bool verify_certs = false;
+    int ret = 0;
 
     while ((ch = getopt(argc, argv, "hi:v:s:t:c")) != -1) {
         switch (ch) {
@@ -276,7 +277,11 @@ int main(int argc, char * argv[])
 
         // open a new connection, or get an open one
         warn(INF, "%s retrieving %s", basename(argv[0]), url);
-        get(w, &cc, dest, port, &r);
+        if (get(w, &cc, dest, port, &r) == 0) {
+            // q_connect() failed
+            ret = 1;
+            goto done;
+        }
     }
 
     // collect the replies
@@ -288,6 +293,11 @@ int main(int argc, char * argv[])
             continue;
 
         q_readall_str(se->s, &i);
+        if (w_iov_sq_cnt(&i) == 0) {
+            // no data read
+            ret = 1;
+            goto done;
+        }
         struct w_iov * v;
         sq_foreach (v, &i, next)
             printf("%.*s", v->len, v->buf);
@@ -295,9 +305,10 @@ int main(int argc, char * argv[])
         q_free(&i);
     }
 
+done:
     q_cleanup(w);
     free_cc(&cc);
     free_sl();
     warn(DBG, "%s exiting", basename(argv[0]));
-    return 0;
+    return ret;
 }
