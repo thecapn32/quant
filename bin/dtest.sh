@@ -6,7 +6,6 @@ set -e
 
 red=$(tput setaf 1)
 green=$(tput setaf 2)
-# blue=$(tput setaf 4)
 bold=$(tput bold)
 norm=$(tput sgr0)
 
@@ -17,40 +16,35 @@ docker-compose down --timeout 1 --remove-orphans 2> /dev/null
 tests="qvalve-tests/*"
 [ ! -z "$*" ] && tests=$*
 
-declare -A status col
-col[ok]="${bold}${green}"
-col[fail]="${bold}${red}"
+declare -A col=(
+        [ok]="${bold}${green}"
+        [fail]="${bold}${red}"
+)
 
+declare -A status
 for t in $tests; do
-        echo -n "$t"
+        echo -n "$t ..."
 
-        declare -A log cmd ret
-        for s in server valve client; do
-                cmd[$s]="docker-compose run --detach --no-deps -T \
-                        --service-ports --name $s $s"
-                log[$s]="docker logs --follow $s"
-        done
+        cmd="docker-compose run --detach --no-deps -T --service-ports"
+        $cmd --name server server > /dev/null 2> /dev/null
+        $cmd --name valve valve \
+                env PYTHONUNBUFFERED=1 qvalve -ra server -r "/$t" > /dev/null
+        $cmd --name client client \
+                client -v4 -i eth0 https://valve/10000 > /dev/null
 
-        ${cmd[server]} > /dev/null 2> /dev/null
-        ${cmd[valve]} env PYTHONUNBUFFERED=1 \
-                qvalve -ra server -r "/$t" > /dev/null
-        ${cmd[client]} client -v4 -i eth0 https://valve/10000 > /dev/null
-
-        for s in client server; do
-                ret[$s]=$(docker container wait $s)
-        done
-
-        if [ "${ret[client]}" == 0 ] && [ "${ret[server]}" == 0 ]; then
+        if [ "$(docker container wait client)" == 0 ] && \
+           [ "$(docker container wait server)" == 0 ]; then
                 stat=ok
         else
                 stat=fail
-                tmux -CC \
-                        new-session "${log[client]}" \; \
-                        split-window -h "${log[valve]}" \; \
-                        split-window -h "${log[server]}" \; \
-                        set remain-on-exit on
+                # save the logs
+                base=$(basename -s .qv "$t")
+                for s in server valve client; do
+                        docker logs $s > "${base}-${s}.log" 2>&1
+                done
         fi
-        echo " - ${col[$stat]}${stat}${norm}"
+
+        echo " ${col[$stat]}${stat}${norm}"
         status[$stat]=$((status[$stat] + 1))
         status[all]=$((status[all] + 1))
 
@@ -61,7 +55,6 @@ for s in ok fail; do
         [ -n "${status[$s]}" ] && \
                 echo "${col[$s]}$s${norm} ${status[$s]}/${status[all]}"
 done
-
 
 docker-compose kill
 docker-compose down --timeout 1 --remove-orphans 2> /dev/null
