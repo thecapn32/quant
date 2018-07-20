@@ -971,7 +971,7 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
             iv->len -= in_len;
         }
 
-        if (ret == 0 && s->c->state < CONN_STAT_HSHK_DONE) {
+        if (ret == 0 && s->c->state != established) {
             if (ptls_is_psk_handshake(s->c->tls.t)) {
                 if (s->c->is_clnt)
                     s->c->did_0rtt =
@@ -983,15 +983,21 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
                 }
             }
 
-            init_1rtt_prot(s->c);
-            conn_to_state(s->c, CONN_STAT_HSHK_DONE);
+            if (s->c->state == clnt_tx_ci || s->c->state == clnt_rx_sh ||
+                s->c->state == serv_lstn) {
+                init_1rtt_prot(s->c);
+                conn_to_state(s->c, s->c->is_clnt ? clnt_tx_cf : serv_tx_sh);
+            }
+
         } else if (ret == PTLS_ERROR_STATELESS_RETRY) {
-            conn_to_state(s->c, CONN_STAT_SEND_RTRY);
+            conn_to_state(s->c, serv_tx_rtry);
             break;
-        } else if (ret == PTLS_ERROR_IN_PROGRESS &&
-                   s->c->state == CONN_STAT_CH_SENT) {
-            conn_to_state(s->c, CONN_STAT_SH);
-        } else if (ret != 0 && ret != PTLS_ERROR_IN_PROGRESS) {
+        } else if (ret == PTLS_ERROR_IN_PROGRESS) {
+            if (s->c->state == idle)
+                conn_to_state(s->c, clnt_tx_ci);
+            else if (s->c->state == clnt_tx_ci)
+                conn_to_state(s->c, clnt_rx_sh);
+        } else if (ret != 0) {
             err_close(s->c, ERR_TLS_HSHAKE_FAIL, "picotls error %u", ret);
             break;
         }

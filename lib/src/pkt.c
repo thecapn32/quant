@@ -142,7 +142,7 @@ bool enc_pkt(struct q_stream * const s,
     uint16_t i = 0, nr_pos = 0, len_pos = 0;
     uint8_t nr_len = 0;
 
-    if (c->state == CONN_STAT_VERS_NEG) {
+    if (c->state == serv_tx_vneg) {
         warn(INF, "sending vers neg serv response");
         meta(v).hdr.type = (uint8_t)w_rand();
         meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
@@ -160,7 +160,7 @@ bool enc_pkt(struct q_stream * const s,
         goto tx;
     }
 
-    if (c->state == CONN_STAT_SEND_RTRY)
+    if (c->state == serv_tx_rtry)
         meta(v).hdr.nr = 0;
     else if (c->rec.lg_sent == UINT64_MAX)
         // next pkt nr
@@ -169,25 +169,23 @@ bool enc_pkt(struct q_stream * const s,
         meta(v).hdr.nr = ++c->rec.lg_sent;
 
     switch (c->state) {
-    case CONN_STAT_IDLE:
-    case CONN_STAT_RTRY:
-    case CONN_STAT_CH_SENT:
+    case clnt_tx_ci:
         meta(v).hdr.type = (s->id == 0 ? F_LH_INIT : F_LH_0RTT);
         meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
         break;
-    case CONN_STAT_SEND_RTRY:
+    case serv_tx_rtry:
         meta(v).hdr.type = F_LH_RTRY;
         meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
         break;
-    case CONN_STAT_SH:
-    case CONN_STAT_HSHK_DONE:
-    case CONN_STAT_HSHK_FAIL:
+    case clnt_rx_sh:
+    case clnt_tx_cf:
+    case serv_tx_sh:
         meta(v).hdr.type = F_LH_HSHK;
         meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
         break;
-    case CONN_STAT_ESTB:
-    case CONN_STAT_CLNG:
-    case CONN_STAT_DRNG:
+    case established:
+    case closing:
+    case draining:
         if (c->tls.out_pp.one_rtt[0].aead)
             meta(v).hdr.flags = F_SH;
         else {
@@ -196,7 +194,7 @@ bool enc_pkt(struct q_stream * const s,
         }
         break;
     default:
-        die("unknown conn state %u", c->state);
+        die("unknown conn state %s", state_str[c->state]);
     }
 
     if (is_set(F_LONG_HDR, meta(v).hdr.flags) == false)
@@ -227,7 +225,8 @@ bool enc_pkt(struct q_stream * const s,
     meta(v).hdr.hdr_len = i;
     log_pkt("TX", v);
 
-    if (!splay_empty(&c->recv) && c->state >= CONN_STAT_SEND_RTRY) {
+    if (!splay_empty(&c->recv) && c->state != clnt_tx_ci &&
+        c->state != serv_tx_rtry) {
         i = enc_ack_frame(c, v, i);
     } else
         meta(v).ack_header_pos = 0;
@@ -243,7 +242,7 @@ bool enc_pkt(struct q_stream * const s,
     if (c->tx_ncid)
         i = enc_new_cid_frame(c, v, i);
 
-    if (c->state == CONN_STAT_ESTB) {
+    if (c->state == established) {
         // XXX rethink this - there needs to be a list of which streams are
         // blocked or need their window opened
         struct q_stream * t = 0;
@@ -277,7 +276,7 @@ bool enc_pkt(struct q_stream * const s,
 
     // TODO: need to RTX most recent MAX_STREAM_DATA and MAX_DATA on RTX
 
-    if (c->state == CONN_STAT_CLNG || c->state == CONN_STAT_HSHK_FAIL) {
+    if (c->state == closing) {
         i = enc_close_frame(v, i, FRAM_TYPE_CONN_CLSE, c->err_code,
                             c->err_reason);
         goto tx;
@@ -318,12 +317,8 @@ bool enc_pkt(struct q_stream * const s,
         i = enc_stream_frame(s, v, i);
     }
 
-    if ((c->state == CONN_STAT_IDLE || c->state == CONN_STAT_RTRY ||
-         c->state == CONN_STAT_CH_SENT) &&
-        meta(v).hdr.type != F_LH_0RTT) {
+    if (c->state == clnt_tx_ci && meta(v).hdr.type != F_LH_0RTT)
         i = enc_padding_frame(v, i, MIN_INI_LEN - i - AEAD_LEN);
-        conn_to_state(c, CONN_STAT_CH_SENT);
-    }
 
     ensure(i > meta(v).hdr.hdr_len, "would have sent pkt w/o frames");
 
@@ -343,10 +338,9 @@ tx:
     x->port = v->port;
     x->flags = v->flags;
 
-    if (c->state == CONN_STAT_VERS_NEG) {
+    if (c->state == serv_tx_vneg) {
         memcpy(x->buf, v->buf, v->len); // copy data
         x->len = v->len;
-        conn_to_state(c, CONN_STAT_VERS_NEG_SENT);
     } else {
         x->len = enc_aead(c, v, x, nr_pos);
         if (unlikely(x->len == 0))
@@ -361,7 +355,7 @@ tx:
     sq_insert_tail(q, x, next);
     meta(v).tx_len = x->len;
 
-    if (c->state == CONN_STAT_IDLE || c->state == CONN_STAT_RTRY)
+    if (c->state == clnt_tx_ci || c->state == serv_tx_rtry)
         // adjust v->len to end of stream data (excl. padding)
         v->len = meta(v).stream_data_end;
 

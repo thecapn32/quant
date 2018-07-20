@@ -63,8 +63,9 @@ include(CheckCXXCompilerFlag)
 foreach(FLAG -march=native -Wextra -Wpedantic -Weverything -Werror
         -fcolor-diagnostics -fdiagnostics-color=always
         -Wno-missing-braces -Wno-gnu-statement-expression -Wno-extended-offsetof
-        -Wno-redundant-parens
+        -Wno-redundant-parens -Wno-switch-enum
         -Wno-missing-field-initializers -Wno-disabled-macro-expansion -Wno-cpp
+        -fcomment-block-commands=dotfile
         )
   string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
   check_c_compiler_flag(${FLAG} ${F})

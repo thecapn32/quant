@@ -54,6 +54,12 @@
 #include "stream.h"
 
 
+#undef STATE
+#define STATE(k, v) [v] = #k
+
+const char * const state_str[] = {STATES};
+
+
 struct ipnp_splay conns_by_ipnp = splay_initializer(&conns_by_ipnp);
 struct cid_splay conns_by_cid = splay_initializer(&conns_by_cid);
 
@@ -250,9 +256,8 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             continue;
         }
 
-        if ((s->c->state == CONN_STAT_ESTB ||
-             (s->c->is_clnt == false && s->c->state != CONN_STAT_SEND_RTRY &&
-              s->c->state != CONN_STAT_HSHK_FAIL)) &&
+        if ((s->c->state == established ||
+             (s->c->is_clnt == false && s->c->state != serv_tx_rtry)) &&
             s->out_data_max && s->out_off + v->len > s->out_data_max) {
             warn(INF, "out of FC window for strm " FMT_SID ", %u+%u/%u", s->id,
                  s->out_off, v->len, s->out_data_max);
@@ -272,7 +277,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
         if (rtx)
             rtx_pkt(s, v);
 
-        if (s->c->state >= CONN_STAT_ESTB) {
+        if (s->c->state == established) {
             if (s->id && s->out_data + v->len > s->out_data_max)
                 s->blocked = true;
             if (s->c->out_data + v->len > s->c->tp_peer.max_data)
@@ -286,7 +291,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
         encoded++;
 
         // if this packet contains an ACK frame, stop the timer
-        if (s->c->state >= CONN_STAT_ESTB &&
+        if (s->c->state == established &&
             bit_test(meta(v).frames, FRAM_TYPE_ACK)) {
             warn(DBG, "ACK sent, stopping ACK timer");
             ev_timer_stop(loop, &s->c->ack_alarm);
@@ -336,10 +341,11 @@ tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
             sq_remove_head(&s->out, next);
     }
 
-    if (s->c->state == CONN_STAT_VERS_NEG_SENT) {
+    if (s->c->state == serv_tx_vneg) {
         // if we sent a version negotiation response, forget all packets
         diet_free(&s->c->recv);
         diet_free(&s->c->acked);
+        conn_to_state(s->c, serv_lstn);
     }
 
     return did_tx;
@@ -348,7 +354,7 @@ tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
 
 static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
 {
-    if (c->state < CONN_STAT_ESTB)
+    if (c->state != established)
         return;
 
     // check if we need to do connection-level flow control
@@ -377,7 +383,7 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
 
 static void __attribute__((nonnull)) do_stream_fc(struct q_stream * const s)
 {
-    if (s->c->state < CONN_STAT_ESTB)
+    if (s->c->state != established)
         return;
 
     if (s->id && s->in_data + 2 * MAX_PKT_LEN > s->in_data_max) {
@@ -400,6 +406,9 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
     do_conn_mgmt(c);
 
     bool did_tx = false;
+    if (c->state == serv_tx_vneg)
+        goto other;
+
     struct q_stream * s = 0;
     splay_foreach (s, stream, &c->streams) {
         // check if we should skip TX on this stream
@@ -408,7 +417,7 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
             // is this a new TX but the stream is blocked?
             (rtx == false && s->blocked) ||
             // unless for 0-RTT, is this a non-zero stream during conn open?
-            (c->try_0rtt == false && s->id && c->state < CONN_STAT_ESTB))
+            (c->try_0rtt == false && s->id && c->state != established))
             continue;
 
         do_stream_fc(s);
@@ -422,17 +431,18 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
         } else
             did_tx |= tx_other(s, rtx, limit);
 
-        if (c->state <= CONN_STAT_HSHK_DONE && c->try_0rtt == false)
+        if (c->state != established && c->try_0rtt == false)
             // only send stream-0 during handshake, unless we're doing 0-RTT
             break;
     }
 
-    if (did_tx == false && c->state != CONN_STAT_VERS_NEG_SENT)
+other:
+    if (did_tx == false)
         // need to ACK or handshake, use stream zero
         tx_other(get_stream(c, 0), rtx, limit);
 
-    if (c->state == CONN_STAT_HSHK_DONE && c->tx_path_chlg == false)
-        conn_to_state(c, CONN_STAT_ESTB);
+    if (c->state == clnt_tx_cf)
+        conn_to_state(c, established);
 
     c->needs_tx = false;
 }
@@ -494,7 +504,7 @@ verify_prot(struct q_conn * const c, struct w_iov * const v)
             warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
                  hex2str(act_dcid(c)->srt, act_dcid_len));
 #endif
-            conn_to_state(c, CONN_STAT_DRNG);
+            conn_to_state(c, draining);
         } else
             // it is not a stateless reset
             err_close(c, ERR_TLS_HSHAKE_FAIL, "AEAD fail on 0x%02x-type %s pkt",
@@ -541,6 +551,8 @@ reset_conn(struct q_conn * const c, const bool also_stream0_in)
     // forget we received or sent any packets
     diet_free(&c->recv);
     diet_free(&c->acked);
+
+    conn_to_state(c, c->is_clnt ? idle : serv_lstn);
 
     // remove all meta-data about RTX'ed packets
     struct pkt_meta *p, *tmp;
@@ -589,16 +601,15 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
                                             struct w_iov_sq * const i)
 {
     switch (c->state) {
-    case CONN_STAT_IDLE:
-    case CONN_STAT_VERS_NEG:
-    case CONN_STAT_VERS_NEG_SENT:
+    case serv_lstn:
+    case serv_tx_vneg:
         // respond to a client-initial
-        if (meta(v).hdr.vers == 0) {
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-            warn(INF, "ignoring spurious vers neg response");
-#endif
-            goto done;
-        }
+        //         if (meta(v).hdr.vers == 0) {
+        // #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+        //             warn(INF, "ignoring spurious vers neg response");
+        // #endif
+        //             goto done;
+        //         }
 
         ignore_sh_pkt(v);
 
@@ -619,7 +630,7 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             // if the CH doesn't include any stream-0 data, bail
             if (meta(v).stream == 0 || meta(v).stream->id != 0) {
                 warn(ERR, "initial pkt w/o stream data");
-                conn_to_state(c, CONN_STAT_DRNG);
+                conn_to_state(c, draining);
                 goto done;
             }
 
@@ -648,7 +659,7 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             use_next_scid(c);
 
         } else {
-            conn_to_state(c, CONN_STAT_VERS_NEG);
+            conn_to_state(c, serv_tx_vneg);
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
             warn(WRN, "%s conn %s clnt-requested vers 0x%08x not supported ",
                  conn_type(c), scid2str(c), c->vers);
@@ -657,7 +668,8 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         }
         break;
 
-    case CONN_STAT_CH_SENT:
+    case clnt_tx_ci:
+    case clnt_rx_sh:
         ignore_sh_pkt(v);
 
         if (meta(v).hdr.vers == 0) {
@@ -665,7 +677,7 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             const uint32_t try_vers = pick_from_server_vers(v);
             if (try_vers == 0) {
                 // no version in common with serv
-                conn_to_state(c, CONN_STAT_DRNG);
+                conn_to_state(c, draining);
                 return;
             }
 
@@ -688,7 +700,6 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             tls_io(get_stream(c, 0), 0);
 
             q_free_iov(v);
-            conn_to_state(c, CONN_STAT_IDLE);
             if (c->try_0rtt)
                 init_0rtt_prot(c);
             c->needs_tx = true;
@@ -741,7 +752,6 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             // we are not allowed to try 0-RTT after retry
             c->try_0rtt = false;
 
-            conn_to_state(c, CONN_STAT_RTRY);
             c->needs_tx = true;
             return;
         }
@@ -757,32 +767,23 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             goto done;
         break;
 
-    case CONN_STAT_RTRY:
-        if (verify_prot(c, v) == false)
-            goto done;
+    case serv_tx_sh:
+        // if we got a SH or 0-RTT packet, a q_accept() may be finished
+        if (!is_set(F_LONG_HDR, meta(v).hdr.flags) ||
+            meta(v).hdr.type == F_LH_0RTT) {
+            conn_to_state(c, established);
+            if (maybe_api_return(q_accept, accept_queue, 0))
+                accept_queue = c;
+        }
+        // fall-through
 
-        track_recv(c, meta(v).hdr.nr, meta(v).hdr.flags);
-        if (dec_frames(c, v) == UINT16_MAX)
-            goto done;
-        break;
-
-    case CONN_STAT_SH:
-    case CONN_STAT_HSHK_DONE:
-    case CONN_STAT_ESTB:
-    case CONN_STAT_CLNG:
-    case CONN_STAT_HSHK_FAIL:
-    case CONN_STAT_DRNG:
+    case established:
+    case closing:
+    case draining:
         if (is_set(F_LONG_HDR, meta(v).hdr.flags) && meta(v).hdr.vers == 0) {
             // we shouldn't get another vers-neg packet here, ignore
             warn(NTE, "ignoring spurious ver neg response");
             goto done;
-        }
-
-        // if we got a SH or 0-RTT packet, a q_accept() may be finished
-        if (!is_set(F_LONG_HDR, meta(v).hdr.flags) ||
-            meta(v).hdr.type == F_LH_0RTT) {
-            if (maybe_api_return(q_accept, accept_queue, 0))
-                accept_queue = c;
         }
 
         // ignore 0-RTT packets if we're not doing 0-RTT
@@ -798,18 +799,18 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         if (dec_frames(c, v) == UINT16_MAX)
             goto done;
 
-    case CONN_STAT_SEND_RTRY:
-    case CONN_STAT_CLSD:
+    case serv_tx_rtry:
+    case closed:
         break;
 
     default:
-        die("TODO: state %u", c->state);
+        die("TODO: state %s", state_str[c->state]);
     }
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     // if packet has anything other than ACK frames, arm the ACK timer
-    if (c->state <= CONN_STAT_ESTB && c->state != CONN_STAT_HSHK_FAIL &&
-        c->state != CONN_STAT_VERS_NEG && !is_ack_only(&meta(v))) {
+    if (c->state != established && c->state != serv_tx_vneg &&
+        !is_ack_only(&meta(v))) {
         warn(DBG, "non-ACK frame received, starting ACK timer");
         ev_timer_again(loop, &c->ack_alarm);
     }
@@ -1006,7 +1007,7 @@ void rx(struct ev_loop * const l,
         c->needs_tx = c->had_rx = false;
 
 
-        if (c->state == CONN_STAT_SEND_RTRY)
+        if (c->state == serv_tx_rtry)
             // if we sent a retry, forget the entire connection existed
             free_conn(c);
     }
@@ -1040,8 +1041,7 @@ void err_close(struct q_conn * const c,
 #endif
     c->err_code = code;
     c->err_reason = strdup(reas);
-    conn_to_state(c, c->state <= CONN_STAT_HSHK_DONE ? CONN_STAT_HSHK_FAIL
-                                                     : CONN_STAT_CLNG);
+    conn_to_state(c, closing);
     c->needs_tx = true;
 }
 
@@ -1055,7 +1055,7 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
     warn(DBG, "closing/draining alarm on %s conn %s", conn_type(c),
          scid2str(c));
 
-    conn_to_state(c, CONN_STAT_CLSD);
+    conn_to_state(c, closed);
     // terminate whatever API call is currently active
     maybe_api_return(c, 0);
     maybe_api_return(q_accept, accept_queue, 0);
@@ -1103,12 +1103,12 @@ idle_alarm(struct ev_loop * const l __attribute__((unused)),
     struct q_conn * const c = w->data;
     warn(DBG, "idle timeout on %s conn %s", conn_type(c), scid2str(c));
 
-    if (c->state >= CONN_STAT_ESTB) {
+    if (c->state != established) {
         // send connection close frame
-        conn_to_state(c, CONN_STAT_CLNG);
+        conn_to_state(c, closing);
         ev_async_send(loop, &c->tx_w);
     } else
-        conn_to_state(c, CONN_STAT_DRNG);
+        conn_to_state(c, draining);
 }
 
 
@@ -1208,6 +1208,8 @@ struct q_conn * new_conn(struct w_engine * const w,
 
     warn(DBG, "%s conn %s on port %u created", conn_type(c), scid2str(c),
          ntohs(c->sport));
+
+    conn_to_state(c, c->is_clnt ? idle : serv_lstn);
 
     return c;
 }

@@ -244,7 +244,7 @@ struct q_conn * q_connect(struct w_engine * const w,
          ntohs(peer->sin_port));
     loop_run(q_connect, c, 0);
 
-    if (c->state != CONN_STAT_ESTB) {
+    if (c->state != established) {
         warn(WRN, "%s conn %s not connected", conn_type(c), scid2str(c));
         return 0;
     }
@@ -303,14 +303,14 @@ void q_write(struct q_stream * const s,
 struct q_stream *
 q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool block)
 {
-    if (c->state == CONN_STAT_CLSD)
+    if (c->state == closed)
         return 0;
 
     warn(WRN, "%sblocking read on %s conn %s", block ? "" : "non-",
          conn_type(c), scid2str(c));
     struct q_stream * s = 0;
 
-    while (s == 0 && c->state <= CONN_STAT_ESTB) {
+    while (s == 0 && c->state == established) {
         splay_foreach (s, stream, &c->streams) {
             if (s->state == STRM_STAT_CLSD)
                 continue;
@@ -349,7 +349,7 @@ void q_readall_str(struct q_stream * const s, struct w_iov_sq * const q)
     warn(WRN, "reading all on %s conn %s strm " FMT_SID, conn_type(s->c),
          scid2str(s->c), s->id);
 
-    while (s->c->state <= CONN_STAT_ESTB && s->state != STRM_STAT_HCRM &&
+    while (s->c->state == established && s->state != STRM_STAT_HCRM &&
            s->state != STRM_STAT_CLSD)
         loop_run(q_readall_str, s->c, s);
 
@@ -388,7 +388,7 @@ struct q_conn * q_accept(struct w_engine * const w __attribute__((unused)),
     warn(WRN, "waiting for conn on any serv sock (timeout %" PRIu64 " sec)",
          timeout);
 
-    if (accept_queue && accept_queue->state >= CONN_STAT_ESTB) {
+    if (accept_queue && accept_queue->state == established) {
         warn(WRN, "got %s conn %s", conn_type(accept_queue),
              scid2str(accept_queue));
         return accept_queue;
@@ -404,7 +404,7 @@ struct q_conn * q_accept(struct w_engine * const w __attribute__((unused)),
     accept_queue = 0;
     loop_run(q_accept, accept_queue, 0);
 
-    if (accept_queue == 0 || accept_queue->state != CONN_STAT_ESTB) {
+    if (accept_queue == 0 || accept_queue->state != established) {
         if (accept_queue)
             q_close(accept_queue);
         warn(ERR, "conn not accepted");
@@ -413,7 +413,7 @@ struct q_conn * q_accept(struct w_engine * const w __attribute__((unused)),
 
     ev_timer_again(loop, &accept_queue->idle_alarm);
 
-    warn(WRN, "%s conn %s connected to clnt %s:%u%s, cipher %s",
+    warn(WRN, "%s conn %s accepted from clnt %s:%u%s, cipher %s",
          conn_type(accept_queue), scid2str(accept_queue),
          inet_ntoa(accept_queue->peer.sin_addr),
          ntohs(accept_queue->peer.sin_port),
@@ -539,7 +539,7 @@ void q_close_stream(struct q_stream * const s)
 
 void q_close(struct q_conn * const c)
 {
-    if (c->state > CONN_STAT_IDLE && c->state < CONN_STAT_CLNG) {
+    if (c->state != closing && c->state != draining && c->state != closed) {
         warn(WRN, "closing %s conn %s on port %u", conn_type(c), scid2str(c),
              ntohs(c->sport));
 
@@ -549,10 +549,14 @@ void q_close(struct q_conn * const c)
             if (s->id != 0)
                 q_close_stream(s);
 
-        // send connection close frame
-        conn_to_state(c, CONN_STAT_CLNG);
-        ev_async_send(loop, &c->tx_w);
-        loop_run(q_close, c, 0);
+        if (c->state == serv_lstn)
+            conn_to_state(c, closed);
+        else {
+            // send connection close frame
+            conn_to_state(c, closing);
+            ev_async_send(loop, &c->tx_w);
+            loop_run(q_close, c, 0);
+        }
     }
 
     // we're done

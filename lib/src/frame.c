@@ -350,8 +350,8 @@ dec_close_frame(struct q_conn * const c,
     if (reas_len)
         i = dec_chk_buf(type, &reas_phr, v->buf, v->len, i, (uint16_t)reas_len);
 
-    conn_to_state(c, c->state < CONN_STAT_HSHK_DONE ? CONN_STAT_HSHK_FAIL
-                                                    : CONN_STAT_DRNG);
+    conn_to_state(c, draining);
+    c->needs_tx = true;
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     warn(INF,
@@ -577,7 +577,7 @@ dec_path_response_frame(struct q_conn * const c,
 
     if (c->path_resp_in == c->path_chlg_out) {
         c->tx_path_chlg = false;
-        if (c->is_clnt == false && c->state == CONN_STAT_HSHK_DONE) {
+        if (c->is_clnt == false && c->state == serv_tx_sh) {
             // unblock stream 0 SH flight
             struct q_stream * s = get_stream(c, 0);
             s->out_data_max = 0;

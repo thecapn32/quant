@@ -25,6 +25,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <bitstring.h>
 #include <inttypes.h>
 #include <math.h>
 #include <stdbool.h>
@@ -71,7 +72,7 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
     }
 
     ev_tstamp dur = 0;
-    if (c->state < CONN_STAT_ESTB) {
+    if (c->state != established) {
         dur = is_zero(c->rec.srtt) ? kDefaultInitialRtt : c->rec.srtt;
         dur = MAX(2 * dur, kMinTLPTimeout) * (1 << c->rec.hshake_cnt);
         warn(DBG, "handshake RTX alarm in %f sec on %s conn %s", dur,
@@ -183,7 +184,7 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
     struct q_conn * const c = w->data;
 
     // see OnLossDetectionAlarm pseudo code
-    if (c->state < CONN_STAT_ESTB) {
+    if (c->state != established) {
         c->rec.hshake_cnt++;
         warn(DBG, "handshake RTX #%u on %s conn %s", c->rec.hshake_cnt,
              conn_type(c), scid2str(c));
@@ -229,7 +230,7 @@ void on_pkt_sent(struct q_conn * const c, struct w_iov * const v)
     const ev_tstamp now = ev_now(loop);
 
     c->rec.last_sent_t = meta(v).tx_t = now;
-    if (c->state != CONN_STAT_VERS_NEG_SENT)
+    if (c->state != serv_tx_vneg)
         // don't track version negotiation responses
         splay_insert(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
 
@@ -290,6 +291,11 @@ void on_ack_rx_1(struct q_conn * const c,
     }
     warn(DBG, "srtt = %f, rttvar = %f on %s conn %s", c->rec.srtt,
          c->rec.rttvar, conn_type(c), scid2str(c));
+
+    // if this ACK'ed a CLOSE frame, move to draining
+    if (c->state == closing && (bit_test(meta(v).frames, FRAM_TYPE_CONN_CLSE) ||
+                                bit_test(meta(v).frames, FRAM_TYPE_APPL_CLSE)))
+        conn_to_state(c, draining);
 }
 
 

@@ -65,6 +65,26 @@ struct q_cid_map {
 
 sl_head(q_conn_sl, q_conn);
 
+
+#define STATE(k, v) k = v
+#define STATES                                                                 \
+    /* states valid on both client and server */                               \
+    STATE(closed, 0), STATE(idle, 1), STATE(established, 2),                   \
+        STATE(closing, 50),                                                    \
+        STATE(draining, 51), /* states only valid on client */                 \
+        STATE(clnt_tx_ci, 100), STATE(clnt_rx_sh, 101),                        \
+        STATE(clnt_tx_cf, 103), /* states only valid on server */              \
+        STATE(serv_lstn, 200), STATE(serv_rx_ci, 201),                         \
+        STATE(serv_tx_vneg, 202), STATE(serv_tx_rtry, 203),                    \
+        STATE(serv_tx_sh, 204),
+
+/// Define connection states.
+/// \dotfile conn-states.dot "Connection state diagram."
+typedef enum { STATES } conn_state_t;
+
+extern const char * const state_str[];
+
+
 /// A QUIC connection.
 struct q_conn {
     splay_entry(q_conn) node_ipnp;
@@ -90,20 +110,23 @@ struct q_conn {
     uint16_t tx_path_chlg : 1;      ///< Send PATH_CHALLENGE.
     uint16_t tx_ncid : 1;           ///< Send NEW_CONNECTION_ID.
 
-    uint8_t state; ///< State of the connection.
-
-    uint8_t _unused;
-
     uint16_t sport; ///< Local port (in network byte-order).
 
-    uint16_t err_code;
-    char * err_reason;
+    conn_state_t state; ///< State of the connection.
 
     struct w_engine * w; ///< Underlying warpcore engine.
 
+    char * err_reason;
+    uint16_t err_code;
+
+    uint8_t _unused[2];
+
     uint32_t vers;         ///< QUIC version in use for this connection.
     uint32_t vers_initial; ///< QUIC version first negotiated.
-    uint64_t next_sid;     ///< Next stream ID to use on q_rsv_stream().
+
+    uint8_t _unused2[4];
+
+    uint64_t next_sid; ///< Next stream ID to use on q_rsv_stream().
 
     struct transport_params tp_peer;
     struct transport_params tp_local;
@@ -167,22 +190,7 @@ zrtt_ooo_cmp(const struct zrtt_ooo * const a, const struct zrtt_ooo * const b);
 SPLAY_PROTOTYPE(zrtt_ooo_splay, zrtt_ooo, node, zrtt_ooo_cmp)
 
 
-#define CONN_STAT_IDLE 0
-#define CONN_STAT_CH_SENT 1
-#define CONN_STAT_VERS_NEG 2
-#define CONN_STAT_VERS_NEG_SENT 3
-#define CONN_STAT_RTRY 4
-#define CONN_STAT_SEND_RTRY 5
-#define CONN_STAT_SH 6
-#define CONN_STAT_HSHK_DONE 7
-#define CONN_STAT_HSHK_FAIL 8
-#define CONN_STAT_ESTB 9
-#define CONN_STAT_CLNG 10
-#define CONN_STAT_DRNG 11
-#define CONN_STAT_CLSD 12
-
-
-#define conn_type(c) (c->is_clnt ? "clnt" : "serv")
+#define conn_type(c) ((c)->is_clnt ? "clnt" : "serv")
 
 
 #define is_force_neg_vers(vers) (((vers)&0x0f0f0f0f) == 0x0a0a0a0a)
@@ -209,39 +217,23 @@ SPLAY_PROTOTYPE(zrtt_ooo_splay, zrtt_ooo, node, zrtt_ooo_cmp)
 
 #define conn_to_state(c, s)                                                    \
     do {                                                                       \
-        warn(DBG, "conn %s state %u -> %u", scid2str(c), c->state, s);         \
-        c->state = s;                                                          \
-                                                                               \
-        switch (s) {                                                           \
-        case CONN_STAT_IDLE:                                                   \
-        case CONN_STAT_CH_SENT:                                                \
-        case CONN_STAT_SH:                                                     \
-        case CONN_STAT_VERS_NEG:                                               \
-        case CONN_STAT_VERS_NEG_SENT:                                          \
-        case CONN_STAT_RTRY:                                                   \
-        case CONN_STAT_SEND_RTRY:                                              \
-        case CONN_STAT_HSHK_DONE:                                              \
-        case CONN_STAT_HSHK_FAIL:                                              \
-        case CONN_STAT_CLSD:                                                   \
-            break;                                                             \
-        case CONN_STAT_ESTB:                                                   \
-            c->needs_tx = true;                                                \
-            break;                                                             \
-        case CONN_STAT_CLNG:                                                   \
-        case CONN_STAT_DRNG:                                                   \
-            enter_closing(c);                                                  \
-            break;                                                             \
-        default:                                                               \
-            die("unhandled state %u", s);                                      \
-        }                                                                      \
+        warn(DBG, "conn %s state %s -> " RED "%s" NRM, scid2str(c),            \
+             state_str[(c)->state], state_str[(s)]);                           \
+        if (likely((c)->state != (s))) {                                       \
+            (c)->state = (s);                                                  \
+            ensure(((c)->is_clnt && (c)->state < 200) ||                       \
+                       (!(c)->is_clnt &&                                       \
+                        ((c)->state < 100 || (c)->state >= 200)),              \
+                   "%s and state is %s", conn_type(c), state_str[(c)->state]); \
+            if ((c)->state == closing)                                         \
+                enter_closing(c);                                              \
+        } else                                                                 \
+            warn(ERR, "useless transition %u %u!", (c)->state, (s));           \
     } while (0)
 
 #else
 
-#define conn_to_state(c, s)                                                    \
-    do {                                                                       \
-        &(c);                                                                  \
-    } while (0)
+#define conn_to_state(c, s) (c)->state = (s)
 
 #endif
 
