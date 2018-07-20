@@ -22,14 +22,15 @@ function run_test() {
 
         $dc up --no-start 2> /dev/null
         cmd="$dc run --detach --no-deps -T --service-ports"
-        $cmd --name "$base-server" server > /dev/null &
+        $cmd --name "$base-server" server \
+                server -i eth0 -t 1 -v5 -d /www \
+                        -c /tls/quant.crt -k /tls/quant.key > /dev/null
         $cmd --name "$base-valve" valve \
                 env PYTHONUNBUFFERED=1 qvalve -ra "$base-server" -r "/$t" \
-                        > /dev/null &
+                        > /dev/null
         $cmd --name "$base-client" client \
-                client -v4 -i eth0 "https://$base-valve/10000" \
-                        > /dev/null &
-        wait
+                client -v5 -i eth0 "https://$base-valve/10000" \
+                        > /dev/null
 
         ret=ok
         if [ "$(docker container wait "$base-client")" != 0 ] || \
