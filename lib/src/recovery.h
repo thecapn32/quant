@@ -38,7 +38,7 @@ struct w_iov;
 
 
 struct recovery {
-    /// Sent-but-unACKed packets. The @p buf and @len fields of the w_iov
+    /// Sent-but-unACKed packets. The @p buf and @p len fields of the w_iov
     /// structs are relative to any stream data.
     ///
     struct pm_nr_splay sent_pkts; // sent_packets
