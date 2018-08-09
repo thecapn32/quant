@@ -70,7 +70,7 @@ const uint32_t ok_vers[] = {
 #if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
     0xbabababa, // XXX reserved version to trigger negotiation
 #endif
-    0xff00000c, // draft-ietf-quic-transport-12
+    0xff00000d, // draft-ietf-quic-transport-13
 };
 
 /// Length of the @p ok_vers array.
