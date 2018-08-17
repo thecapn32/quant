@@ -55,8 +55,8 @@ set_target_properties(warpcore PROPERTIES
 externalproject_add(picotls
   # UPDATE_COMMAND "" # XXX do not commit with this being empty
   GIT_REPOSITORY https://github.com/h2o/picotls.git
-  # GIT_SHALLOW 1 # does not work together with GIT_TAG
-  GIT_TAG c07a6ac08586d2fd177e7871c6ee879e4ac11603
+  GIT_SHALLOW 1 # does not work together with GIT_TAG
+  GIT_TAG 502690178d9ae570da6689e27209b6569f70d035
   CMAKE_ARGS
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
     -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}
@@ -137,7 +137,7 @@ externalproject_add(openssl
   UPDATE_COMMAND ""
   # GIT_REPOSITORY https://github.com/openssl/openssl.git
   GIT_REPOSITORY https://github.com/tatsuhiro-t/openssl
-  GIT_TAG tlsv1.3-28
+  GIT_TAG quic-draft-13
   GIT_SHALLOW 1
   CONFIGURE_COMMAND ./config --prefix=${CMAKE_CURRENT_BINARY_DIR} enable-tls1_3
   BUILD_IN_SOURCE 1
