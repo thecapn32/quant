@@ -212,7 +212,7 @@ static int setup_cipher(struct st_quicly_cipher_context_t * ctx,
         char *secret_hex = quicly_hexdump(secret, hash->digest_size, SIZE_MAX),
              *pnekey_hex =
                  quicly_hexdump(pnekey, aead->ctr_cipher->key_size, SIZE_MAX);
-        fprintf(stderr, "%s:\n  aead-secret: %s\n  pne-key: %s\n", __FUNCTION__,
+        fprintf(stderr, "%s:\n  aead-secret: %s\n  pne-key: %s\n", __func__,
                 secret_hex, pnekey_hex);
         // free(secret_hex);
         // free(pnekey_hex);
@@ -909,11 +909,6 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
          c->tls.tls_io.off, c->tls.epoch_off[0], c->tls.epoch_off[1],
          c->tls.epoch_off[2], c->tls.epoch_off[3], c->tls.epoch_off[4], ret,
          iv ? iv->len - in_len : 0);
-
-    // if (iv) {
-    //     iv->buf += in_len;
-    //     iv->len -= in_len;
-    // }
 
     if (ret == 0 && c->state != established) {
         if (ptls_is_psk_handshake(c->tls.t)) {
