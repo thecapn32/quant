@@ -39,6 +39,19 @@
 #define STRM_FL_DIR_UNI 0x02
 
 
+#define STRM_STATE(k, v) k = v
+#define STRM_STATES                                                            \
+    STRM_STATE(strm_idle, 0), STRM_STATE(strm_open, 1),                        \
+        STRM_STATE(strm_hcrm, 2), STRM_STATE(strm_hclo, 3),                    \
+        STRM_STATE(strm_clsd, 4)
+
+// Define stream states.
+// \dotfile conn-states.dot "Connection state diagram."
+typedef enum { STRM_STATES } strm_state_t;
+
+extern const char * const strm_state_str[];
+
+
 struct q_stream {
     splay_entry(q_stream) node;
     struct q_conn * c;
@@ -56,25 +69,22 @@ struct q_stream {
     uint64_t in_data;           ///< Inbound data received.
 
     int64_t id;
-    uint8_t state;
+    strm_state_t state;
     uint8_t tx_max_stream_data : 1; ///< We need to open the receive window.
     uint8_t blocked : 1;            ///< We are receive-window-blocked.
     uint8_t : 6;
-    uint8_t _unused[6];
+    uint8_t _unused[3];
 };
-
-#define STRM_STAT_IDLE 0
-#define STRM_STAT_OPEN 1
-#define STRM_STAT_HCRM 2 ///< half-closed remote
-#define STRM_STAT_HCLO 3 ///< half-closed local
-#define STRM_STAT_CLSD 4
 
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
 #define strm_to_state(strm, s)                                                 \
     do {                                                                       \
-        warn(DBG, "conn %s strm " FMT_SID " state %u -> %u",                   \
-             scid2str((strm)->c), (strm)->id, (strm)->state, (s));             \
+        warn(DBG,                                                              \
+             "conn %s strm " FMT_SID " state " YEL "%s" NRM " -> " YEL         \
+             "%s" NRM,                                                         \
+             scid2str((strm)->c), (strm)->id, strm_state_str[(strm)->state],   \
+             strm_state_str[(s)]);                                             \
         (strm)->state = (s);                                                   \
     } while (0)
 #else
@@ -85,7 +95,9 @@ struct q_stream {
 
 #define crpt_strm_id(epoch) (-((int64_t)epoch + 1))
 
-#define strm_epoch(id) (size_t)(id >= 0 ? 3 : -(id + 1))
+#define strm_epoch(s)                                                          \
+    (uint8_t)((s)->id < 0 ? -((s)->id + 1)                                     \
+                          : ((s)->c->state == conn_opng ? 1 : 3))
 
 extern int __attribute__((nonnull))
 stream_cmp(const struct q_stream * const a, const struct q_stream * const b);

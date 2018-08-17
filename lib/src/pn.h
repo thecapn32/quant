@@ -39,9 +39,6 @@
 splay_head(pm_nr_splay, pkt_meta);
 
 
-// typedef enum { pn_init = 0, pn_0rtt = 1, pn_hshk = 2, pn_data = 3 } ptls_epoch;
-
-
 struct pn_space {
     struct diet recv;  ///< Received packet numbers still needing to be ACKed.
     struct diet acked; ///< Sent packet numbers already ACKed.

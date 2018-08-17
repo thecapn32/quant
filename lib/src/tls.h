@@ -52,10 +52,11 @@ struct tls {
     ptls_handshake_properties_t tls_hshake_prop;
     size_t max_early_data;
     size_t epoch_off[5];
-    size_t epoch_in, epoch_out;
     ptls_buffer_t tls_io;
+    uint8_t epoch_out; // TODO: remove
+    uint8_t _unused;
     uint8_t tp_buf[96];
-    uint8_t tls_io_buf[8192];
+    uint8_t tls_io_buf[4094];
 };
 
 
@@ -63,8 +64,6 @@ struct tls {
 extern ptls_context_t tls_ctx;
 
 extern void __attribute__((nonnull)) init_pn_init_prot(struct q_conn * const c);
-
-extern void __attribute__((nonnull)) init_0rtt_prot(struct q_conn * const c);
 
 extern void __attribute__((nonnull)) init_tls(struct q_conn * const c);
 

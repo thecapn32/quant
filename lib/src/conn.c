@@ -37,6 +37,7 @@
 #include <sys/socket.h>
 
 #include <ev.h>
+#include <picotls.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
@@ -54,10 +55,10 @@
 #include "stream.h"
 
 
-#undef STATE
-#define STATE(k, v) [v] = #k
+#undef CONN_STATE
+#define CONN_STATE(k, v) [v] = #k
 
-const char * const state_str[] = {STATES};
+const char * const conn_state_str[] = {CONN_STATES};
 
 
 struct ipnp_splay conns_by_ipnp = splay_initializer(&conns_by_ipnp);
@@ -201,7 +202,7 @@ static void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c)
 
 static void log_sent_pkts(struct q_conn * const c)
 {
-    for (size_t e = 0; e < 3; e++) {
+    for (uint8_t e = 0; e < 3; e++) {
         char sent_pkts_buf[1024] = "";
         uint64_t prev = UINT64_MAX;
         struct pkt_meta * p = 0;
@@ -247,8 +248,6 @@ reset_conn(struct q_conn * const c, const bool also_crypto_in)
     init_pn(&c->pn_init.pn);
     init_pn(&c->pn_hshk.pn);
     init_pn(&c->pn_data.pn);
-
-    conn_to_state(c, c->is_clnt ? idle : serv_lstn);
 }
 
 
@@ -265,7 +264,8 @@ rtx_pkt(struct q_stream * const s, struct w_iov * const v)
     adj_iov_to_data(r);
 
     // we reinsert meta(v) with its new pkt nr in on_pkt_sent()
-    struct pn_space * const pn = pn_for_epoch(s->c, s->c->tls.epoch_out);
+    struct pn_space * const pn =
+        pn_for_epoch(s->c, epoch_for_pkt_type(meta(v).hdr.type));
     splay_remove(pm_nr_splay, &pn->sent_pkts, &meta(v));
     splay_insert(pm_nr_splay, &pn->sent_pkts, &meta(r));
 }
@@ -288,8 +288,9 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             continue;
         }
 
-        if ((s->c->state == established ||
-             (s->c->is_clnt == false && s->c->state != serv_tx_rtry)) &&
+        // TODO revise for -14
+        if ((s->c->state == conn_estb ||
+             (s->c->is_clnt == false && s->c->state != conn_tx_rtry)) &&
             s->out_data_max && s->out_off + v->len > s->out_data_max) {
             warn(INF, "out of FC window for strm " FMT_SID ", %u+%u/%u", s->id,
                  s->out_off, v->len, s->out_data_max);
@@ -309,7 +310,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
         if (rtx)
             rtx_pkt(s, v);
 
-        if (s->c->state == established) {
+        if (s->c->state == conn_estb) {
             if (s->id && s->out_data + v->len > s->out_data_max)
                 s->blocked = true;
             if (s->c->out_data + v->len > s->c->tp_peer.max_data)
@@ -323,14 +324,11 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
         encoded++;
 
         // if this packet contains an ACK frame, stop the timer
-        if (s->c->state == established &&
+        if (s->c->state == conn_estb &&
             bit_test(meta(v).frames, FRAM_TYPE_ACK)) {
             warn(DBG, "ACK sent, stopping ACK timer");
             ev_timer_stop(loop, &s->c->ack_alarm);
         }
-
-        if (s->c->state == serv_tx_si)
-            conn_to_state(s->c, serv_tx_sh);
 
         if (limit && encoded == limit) {
             warn(NTE, "tx limit %u reached", limit);
@@ -351,45 +349,42 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
 }
 
 
-static uint32_t
-tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
-{
-    warn(DBG,
-         "other %s on %s conn %s strm " FMT_SID " w/%u crypto pkt%s in queue",
-         rtx ? "RTX" : "TX", conn_type(s->c), scid2str(s->c), s->id,
-         sq_len(&s->out), plural(sq_len(&s->out)));
+// static uint32_t
+// tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
+// {
+//     warn(DBG,
+//          "other %s on %s conn %s strm " FMT_SID " w/%u crypto pkt%s in
+//          queue", rtx ? "RTX" : "TX", conn_type(s->c), scid2str(s->c), s->id,
+//          sq_len(&s->out), plural(sq_len(&s->out)));
 
-    struct w_iov *v = 0, *last = 0;
-    if (!rtx && sq_len(&s->out) == 0) {
-        v = q_alloc_iov(s->c->w, 0, Q_OFFSET);
-        v->len = 0; // this packet will have no stream data
-        last = sq_last(&s->out, w_iov, next);
-        sq_insert_tail(&s->out, v, next);
-    }
+//     struct w_iov *v = 0, *last = 0;
+//     if (!rtx && sq_len(&s->out) == 0) {
+//         v = q_alloc_iov(s->c->w, 0, Q_OFFSET);
+//         v->len = 0; // this packet will have no stream data
+//         last = sq_last(&s->out, w_iov, next);
+//         sq_insert_tail(&s->out, v, next);
+//     }
 
-    const bool did_tx = tx_stream(s, rtx, limit, v);
+//     const bool did_tx = tx_stream(s, rtx, limit, v);
 
-    if (!rtx && sq_len(&s->out) == 0 && !is_rtxable(&meta(v))) {
-        ensure(sq_last(&s->out, w_iov, next) == v, "queue mixed up");
-        if (last)
-            sq_remove_after(&s->out, last, next);
-        else
-            sq_remove_head(&s->out, next);
-    }
+//     if (!rtx && sq_len(&s->out) == 0 && !is_rtxable(&meta(v))) {
+//         ensure(sq_last(&s->out, w_iov, next) == v, "queue mixed up");
+//         if (last)
+//             sq_remove_after(&s->out, last, next);
+//         else
+//             sq_remove_head(&s->out, next);
+//     }
 
-    if (s->c->state == serv_tx_vneg)
-        // if we sent a version negotiation response, reset
-        reset_conn(s->c, true);
+//     if (s->c->state == conn_tx_vneg)
+//         // if we sent a version negotiation response, reset
+//         reset_conn(s->c, true);
 
-    return did_tx;
-}
+//     return did_tx;
+// }
 
 
 static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
 {
-    if (c->state != established)
-        return;
-
     // check if we need to do connection-level flow control
     if (c->in_data + 2 * MAX_PKT_LEN > c->tp_local.max_data) {
         c->tx_max_data = true;
@@ -416,7 +411,7 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
 
 static void __attribute__((nonnull)) do_stream_fc(struct q_stream * const s)
 {
-    if (s->c->state != established)
+    if (s->c->state != conn_estb)
         return;
 
     if (s->id && s->in_data + 2 * MAX_PKT_LEN > s->in_data_max) {
@@ -428,11 +423,29 @@ static void __attribute__((nonnull)) do_stream_fc(struct q_stream * const s)
 
 #define stream_needs_ctrl(s)                                                   \
     ((s)->tx_max_stream_data || (s)->c->tx_max_data ||                         \
-     (((s)->state == STRM_STAT_HCLO)))
+     (((s)->state == strm_hclo)))
+
+
+static void __attribute__((nonnull))
+tx_crypto(struct q_conn * const c, const uint8_t e)
+{
+    for (uint8_t epoch = 0; epoch <= e; epoch++) {
+        struct q_stream * const s = get_stream(c, crpt_strm_id(epoch));
+        if (!sq_empty(&s->out))
+            tx_stream(s, false, 0, 0);
+    }
+}
 
 
 void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
 {
+    if (c->state == conn_opng) {
+        tx_crypto(c, c->tls.epoch_out);
+        c->needs_tx = false;
+        if (c->tls.epoch_out == 0)
+            return;
+    }
+
     if (rtx == false && c->blocked)
         return;
 
@@ -440,18 +453,6 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
 
     bool did_tx = false;
     struct q_stream * s = 0;
-
-    if (c->state != established) {
-        for (size_t e = 0; e <= c->tls.epoch_out; e++) {
-            s = get_stream(c, crpt_strm_id(e));
-            // warn(ERR, "check " FMT_SID, s->id);
-            if (!sq_empty(&s->out))
-                did_tx |= tx_stream(s, rtx, limit, 0);
-        }
-        if (did_tx)
-            goto done;
-    }
-
     splay_foreach (s, stream, &c->streams) {
         // warn(ERR, "stream %" PRId64 " %u", s->id, sq_len(&s->out));
         // check if we should skip TX on this stream
@@ -462,36 +463,63 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
             // is this a new TX but the stream is blocked?
             (rtx == false && s->blocked) ||
             // unless for 0-RTT, is this a regular stream during conn open?
-            (c->try_0rtt == false && s->id >= 0 && c->state != established)) {
-            // warn(ERR, "skip %" PRId64, s->id);
+            (c->try_0rtt == false && s->id >= 0 && c->state != conn_estb)) {
+            // warn(ERR, "skip %d", s->id);
             continue;
         }
 
         do_stream_fc(s);
 
-        if (!sq_empty(&s->out)) {
-            warn(DBG,
-                 "data %sTX on %s conn %s strm " FMT_SID " w/%u pkt%s in queue",
-                 rtx ? "R" : "", conn_type(c), scid2str(c), s->id,
-                 sq_len(&s->out), plural(sq_len(&s->out)));
-            did_tx |= tx_stream(s, rtx, limit, 0);
-        } else
-            did_tx |= tx_other(s, rtx, limit);
+        if (sq_empty(&s->out))
+            continue;
 
-        if (c->state != established && c->try_0rtt == false)
-            // only send stream-0 during handshake, unless we're doing 0-RTT
-            break;
+        warn(DBG,
+             "data %sTX on %s conn %s strm " FMT_SID " w/%u pkt%s in queue",
+             rtx ? "R" : "", conn_type(c), scid2str(c), s->id, sq_len(&s->out),
+             plural(sq_len(&s->out)));
+
+        did_tx |= tx_stream(s, rtx, limit, 0);
     }
 
-done:
     if (did_tx == false)
-        // need to ACK or handshake, abuse crypto stream
-        tx_other(get_stream(c, crpt_strm_id(c->tls.epoch_out)), rtx, limit);
-
-    if (c->state == clnt_tx_cf)
-        conn_to_state(c, established);
+        // need to send other frame, do it in an ACK
+        tx_ack(c, (uint8_t)ptls_get_read_epoch(c->tls.t));
 
     c->needs_tx = false;
+}
+
+
+void tx_ack(struct q_conn * const c, const uint8_t e)
+{
+    struct w_iov_sq x = sq_head_initializer(x);
+    struct q_stream * const s = get_stream(c, crpt_strm_id(e));
+    struct pn_space * const pn = pn_for_epoch(c, e);
+
+    // warn(ERR, "ACK check %d %u", s->id, diet_cnt(&pn->recv));
+
+    if (diet_empty(&pn->recv))
+        return;
+
+    struct w_iov * const a = q_alloc_iov(c->w, 0, Q_OFFSET);
+    a->len = 0;
+
+    if (enc_pkt(s, false, a, &x))
+        on_pkt_sent(s, a);
+
+    if (sq_len(&x) == 0)
+        return;
+
+    // transmit encrypted/protected packets and then free the chain
+    w_tx(c->sock, &x);
+    while (w_tx_pending(&x))
+        w_nic_tx(c->w);
+
+    // warn(DBG, "ACK sent, stopping ACK timer");
+    ev_timer_stop(loop, &c->ack_alarm);
+
+    log_sent_pkts(c);
+    free_iov_sq(&x);
+    // q_free_iov(a);
 }
 
 
@@ -551,7 +579,7 @@ verify_prot(struct q_conn * const c, struct w_iov * const v)
             warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
                  hex2str(act_dcid(c)->srt, act_dcid_len));
 #endif
-            conn_to_state(c, draining);
+            conn_to_state(c, conn_drng);
         } else
             // it is not a stateless reset
             err_close(c, ERR_PROTOCOL_VIOLATION, 0,
@@ -567,22 +595,31 @@ verify_prot(struct q_conn * const c, struct w_iov * const v)
 
 
 static void __attribute__((nonnull))
-track_recv(struct q_conn * const c, const uint64_t nr, const uint8_t type)
+track_recv(struct q_conn * const c, const uint64_t nr, const uint8_t flags)
 {
-    struct pn_space * const pn = pn_for_epoch(c, c->tls.epoch_in);
-    diet_insert(&pn->recv, nr, type, ev_now(loop));
+    struct pn_space * const pn =
+        pn_for_epoch(c, epoch_for_pkt_type(pkt_type(flags)));
+    diet_insert(&pn->recv, nr, flags, ev_now(loop));
 }
 
 
 static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
 {
-    struct q_stream * const s = get_stream(c, crpt_strm_id(c->tls.epoch_in));
+    const uint8_t epoch = (uint8_t)ptls_get_read_epoch(c->tls.t);
+    struct q_stream * const s = get_stream(c, crpt_strm_id(epoch));
     while (!sq_empty(&s->in)) {
         struct w_iov * iv = sq_first(&s->in);
         sq_remove_head(&s->in, next);
-        if (tls_io(s, iv) == 0)
+        if (tls_io(s, iv) == 0) {
             maybe_api_return(q_connect, c, 0);
-        q_free_iov(iv);
+            tx_crypto(c, c->tls.epoch_out - 1);
+            conn_to_state(c, conn_estb);
+        }
+        // q_free_iov(iv);
+
+        if (ptls_get_read_epoch(c->tls.t) > epoch)
+            // we have something left to ACK in the previous epoch
+            tx_ack(c, epoch);
     }
 }
 
@@ -602,8 +639,7 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
                                             struct w_iov_sq * const i)
 {
     switch (c->state) {
-    case serv_lstn:
-    case serv_tx_vneg:
+    case conn_tx_vneg:
         // respond to a client-initial
         //         if (meta(v).hdr.vers == 0) {
         // #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
@@ -631,7 +667,7 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             // if the CH doesn't include any crypto frames, bail
             if (bit_test(meta(v).frames, FRAM_TYPE_CRPT) == false) {
                 warn(ERR, "initial pkt w/o crypto frames");
-                conn_to_state(c, draining);
+                conn_to_state(c, conn_drng);
                 goto done;
             }
 
@@ -660,7 +696,7 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             use_next_scid(c);
 
         } else {
-            conn_to_state(c, serv_tx_vneg);
+            conn_to_state(c, conn_tx_vneg);
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
             warn(WRN, "%s conn %s clnt-requested vers 0x%08x not supported ",
                  conn_type(c), scid2str(c), c->vers);
@@ -669,8 +705,7 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         }
         break;
 
-    case clnt_tx_ci:
-    case clnt_rx_sh:
+    case conn_opng:
         ignore_sh_pkt(v);
 
         if (meta(v).hdr.vers == 0) {
@@ -678,7 +713,7 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             const uint32_t try_vers = pick_from_server_vers(v);
             if (try_vers == 0) {
                 // no version in common with serv
-                conn_to_state(c, draining);
+                conn_to_state(c, conn_drng);
                 return;
             }
 
@@ -700,9 +735,6 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             init_tls(c);
             tls_io(get_stream(c, crpt_strm_id(0)), 0);
 
-            q_free_iov(v);
-            // if (c->try_0rtt)
-            //     init_0rtt_prot(c);
             c->needs_tx = true;
             return;
         }
@@ -747,12 +779,8 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             rx_crypto(c);
 
             // we can now reset the crypto stream offset (inbound)
-            struct q_stream * const s =
-                get_stream(c, crpt_strm_id(c->tls.epoch_in));
+            struct q_stream * const s = get_stream(c, crpt_strm_id(0));
             s->in_off = 0;
-
-            // we are not allowed to try 0-RTT after retry
-            c->try_0rtt = false;
 
             c->needs_tx = true;
             return;
@@ -769,20 +797,9 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             goto done;
         break;
 
-    case clnt_tx_cf:
-    case serv_tx_sh:
-        // if we got a SH or 0-RTT packet, a q_accept() may be finished
-        if (!is_set(F_LONG_HDR, meta(v).hdr.flags) ||
-            meta(v).hdr.type == F_LH_0RTT) {
-            conn_to_state(c, established);
-            if (maybe_api_return(q_accept, accept_queue, 0))
-                accept_queue = c;
-        }
-        // fall-through
-
-    case established:
-    case closing:
-    case draining:
+    case conn_estb:
+    case conn_clsg:
+    case conn_drng:
         if (is_set(F_LONG_HDR, meta(v).hdr.flags) && meta(v).hdr.vers == 0) {
             // we shouldn't get another vers-neg packet here, ignore
             warn(NTE, "ignoring spurious ver neg response");
@@ -802,27 +819,29 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         if (dec_frames(c, v) == UINT16_MAX)
             goto done;
 
-    case serv_tx_rtry:
-    case closed:
+    case conn_tx_rtry:
+    case conn_clsd:
         break;
 
     default:
-        die("TODO: state %s", state_str[c->state]);
+        die("TODO: state %s", conn_state_str[c->state]);
     }
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     // if packet has anything other than ACK frames, arm the ACK timer
-    if (c->state != established && c->state != serv_tx_vneg &&
-        !is_ack_only(&meta(v))) {
+    if (!is_ack_only(&meta(v)) && c->state == conn_estb &&
+        !ev_is_active(&c->ack_alarm)) {
         warn(DBG, "non-ACK frame received, starting ACK timer");
         ev_timer_again(loop, &c->ack_alarm);
     }
 #endif
 
 done:
-    if (is_rtxable(&meta(v)) == false || meta(v).stream == 0)
+    if (is_rtxable(&meta(v)) == false || meta(v).stream == 0) {
         // this packet is not rtx'able, or the stream data is duplicate
-        q_free_iov(v);
+        // q_free_iov(v);
+        // warn(ERR, "free");
+    }
 }
 
 
@@ -853,7 +872,7 @@ rx_pkts(struct w_iov_sq * const i,
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
             warn(ERR, "received invalid %u-byte pkt, ignoring", v->len);
 #endif
-            q_free_iov(v);
+            // q_free_iov(v);
             continue;
         }
 
@@ -882,7 +901,7 @@ rx_pkts(struct w_iov_sq * const i,
                              "ignoring",
                              cid2str(&meta(v).hdr.dcid), scid2str(c));
 #endif
-                        q_free_iov(v);
+                        // q_free_iov(v);
                         continue;
                     } else if (meta(v).hdr.type == F_LH_INIT) {
                         warn(NTE,
@@ -952,9 +971,9 @@ rx_pkts(struct w_iov_sq * const i,
                 warn(INF, "caching 0-RTT pkt for unknown conn %s",
                      cid2str(&meta(v).hdr.dcid));
             } else
-                q_free_iov(v);
+                // q_free_iov(v);
 
-            continue;
+                continue;
         }
 
         if (meta(v).hdr.vers || !is_set(F_LONG_HDR, meta(v).hdr.flags))
@@ -963,7 +982,7 @@ rx_pkts(struct w_iov_sq * const i,
                 warn(ERR, "received invalid %u-byte 0x%02x-type pkt, ignoring",
                      v->len, meta(v).hdr.flags);
 #endif
-                q_free_iov(v);
+                // q_free_iov(v);
                 continue;
             }
 
@@ -1009,7 +1028,7 @@ void rx(struct ev_loop * const l,
         c->needs_tx = c->had_rx = false;
 
 
-        if (c->state == serv_tx_rtry)
+        if (c->state == conn_tx_rtry)
             // if we sent a retry, forget the entire connection existed
             free_conn(c);
     }
@@ -1045,7 +1064,7 @@ void err_close(struct q_conn * const c,
     c->err_code = code;
     c->err_reason = strdup(reas);
     c->err_frm = frm;
-    conn_to_state(c, closing);
+    conn_to_state(c, conn_clsg);
     c->needs_tx = true;
 }
 
@@ -1059,7 +1078,7 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
     warn(DBG, "closing/draining alarm on %s conn %s", conn_type(c),
          scid2str(c));
 
-    conn_to_state(c, closed);
+    conn_to_state(c, conn_clsd);
     // terminate whatever API call is currently active
     maybe_api_return(c, 0);
     maybe_api_return(q_accept, accept_queue, 0);
@@ -1093,8 +1112,7 @@ void ack_alarm(struct ev_loop * const l __attribute__((unused)),
 {
     struct q_conn * const c = w->data;
     warn(DBG, "ACK timeout on %s conn %s", conn_type(c), scid2str(c));
-    c->needs_tx = true;
-    tx(w->data, false, 0);
+    tx_ack(w->data, 3);
     ev_timer_stop(loop, &c->ack_alarm);
 }
 
@@ -1107,12 +1125,12 @@ idle_alarm(struct ev_loop * const l __attribute__((unused)),
     struct q_conn * const c = w->data;
     warn(DBG, "idle timeout on %s conn %s", conn_type(c), scid2str(c));
 
-    if (c->state != established) {
+    if (c->state != conn_estb) {
         // send connection close frame
-        conn_to_state(c, closing);
+        conn_to_state(c, conn_clsg);
         ev_async_send(loop, &c->tx_w);
     } else
-        conn_to_state(c, draining);
+        conn_to_state(c, conn_drng);
 }
 
 
@@ -1213,13 +1231,13 @@ struct q_conn * new_conn(struct w_engine * const w,
     }
 
     // create crypto streams
-    for (size_t e = 0; e < 4; e++)
+    for (uint8_t e = 0; e < 4; e++)
         new_stream(c, crpt_strm_id(e), false);
 
     warn(DBG, "%s conn %s on port %u created", conn_type(c), scid2str(c),
          ntohs(c->sport));
 
-    conn_to_state(c, c->is_clnt ? idle : serv_lstn);
+    conn_to_state(c, c->is_clnt ? conn_idle : conn_opng);
 
     return c;
 }

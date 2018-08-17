@@ -60,6 +60,8 @@
 
 #define pkt_type(flags) ((flags) & (is_set(F_LONG_HDR, (flags)) ? ~0x80 : 0x03))
 
+#define epoch_for_pkt_type(t)                                                  \
+    ((t) == F_LH_INIT ? 0 : ((t) == F_LH_0RTT ? 1 : ((t) == F_LH_HSHK ? 2 : 3)))
 
 struct q_conn;
 struct q_stream;

@@ -36,6 +36,12 @@
 #include "stream.h"
 
 
+#undef STRM_STATE
+#define STRM_STATE(k, v) [v] = #k
+
+const char * const strm_state_str[] = {STRM_STATES};
+
+
 int stream_cmp(const struct q_stream * const a, const struct q_stream * const b)
 {
     return (a->id > b->id) - (a->id < b->id);
@@ -64,7 +70,7 @@ new_stream(struct q_conn * const c, const int64_t id, const bool active)
     sq_init(&s->in);
     s->c = c;
     s->id = id;
-    strm_to_state(s, STRM_STAT_OPEN);
+    strm_to_state(s, strm_open);
     splay_insert(stream, &c->streams, s);
 
     if (id >= 0) {
@@ -136,12 +142,8 @@ void reset_stream(struct q_stream * const s, const bool also_crypto_in)
     s->out_ack_cnt = s->out_off = s->in_off = 0;
 
     // forget we transmitted any data packets
-    struct w_iov * v = 0;
-    sq_foreach (v, &s->out, next) {
-        meta(v).tx_len = meta(v).is_acked = 0;
-        if (s->id >= 0 || also_crypto_in)
-            // free (some) crypto data
-            free_iov_sq(&s->in);
-        free_iov_sq(&s->out);
-    }
+    if (s->id >= 0 || also_crypto_in)
+        // free (some) crypto data
+        free_iov_sq(&s->in);
+    free_iov_sq(&s->out);
 }

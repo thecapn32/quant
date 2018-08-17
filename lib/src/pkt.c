@@ -109,9 +109,8 @@ void log_pkt(const char * const dir, const struct w_iov * const v)
 
 
 static uint8_t __attribute__((nonnull))
-needed_pkt_nr_len(struct q_conn * const c, const uint64_t n)
+needed_pkt_nr_len(struct pn_space * const pn, const uint64_t n)
 {
-    struct pn_space * const pn = pn_for_epoch(c, c->tls.epoch_out);
     const uint64_t d = (n - pn->lg_acked) * 2;
     if (d <= 0x7F)
         return 1;
@@ -152,10 +151,10 @@ bool enc_pkt(struct q_stream * const s,
     uint16_t i = 0, nr_pos = 0, len_pos = 0;
     uint8_t nr_len = 0;
 
-    const size_t epoch = strm_epoch(s->id);
+    const uint8_t epoch = strm_epoch(s);
     struct pn_space * const pn = pn_for_epoch(c, epoch);
 
-    if (c->state == serv_tx_vneg) {
+    if (c->state == conn_tx_vneg) {
         warn(INF, "sending vers neg serv response");
         meta(v).hdr.type = (uint8_t)w_rand();
         meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
@@ -173,7 +172,7 @@ bool enc_pkt(struct q_stream * const s,
         goto tx;
     }
 
-    if (c->state == serv_tx_rtry)
+    if (c->state == conn_tx_rtry)
         meta(v).hdr.nr = 0;
     else if (pn->lg_sent == UINT64_MAX)
         // next pkt nr
@@ -186,10 +185,10 @@ bool enc_pkt(struct q_stream * const s,
         meta(v).hdr.type = F_LH_INIT;
         meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
         break;
-        // case serv_tx_rtry:
-        //     meta(v).hdr.type = F_LH_RTRY;
-        //     meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
-        //     break;
+    case 1:
+        meta(v).hdr.type = F_LH_0RTT;
+        meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
+        break;
     case 2:
         meta(v).hdr.type = F_LH_HSHK;
         meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
@@ -234,14 +233,13 @@ bool enc_pkt(struct q_stream * const s,
                     meta(v).hdr.dcid.len);
     }
     nr_pos = i;
-    nr_len = needed_pkt_nr_len(c, meta(v).hdr.nr);
+    nr_len = needed_pkt_nr_len(pn, meta(v).hdr.nr);
     i = enc_pnr(v->buf, v->len, i, &meta(v).hdr.nr, nr_len, GRN "%u" NRM);
 
     meta(v).hdr.hdr_len = i;
     log_pkt("TX", v);
 
-    if (!splay_empty(&pn->recv) && c->state != clnt_tx_ci &&
-        c->state != serv_tx_rtry) {
+    if (!splay_empty(&pn->recv) && c->state != conn_tx_rtry) {
         i = enc_ack_frame(c, pn, v, i);
     } else
         meta(v).ack_header_pos = 0;
@@ -254,10 +252,10 @@ bool enc_pkt(struct q_stream * const s,
     if (c->tx_path_chlg)
         i = enc_path_challenge_frame(c, v, i);
 
-    if (c->tx_ncid)
+    if (c->state == conn_estb && c->tx_ncid)
         i = enc_new_cid_frame(c, v, i);
 
-    if (c->state == established) {
+    if (c->state == conn_estb) {
         // XXX rethink this - there needs to be a list of which streams are
         // blocked or need their window opened
         struct q_stream * t = 0;
@@ -291,9 +289,10 @@ bool enc_pkt(struct q_stream * const s,
 
     // TODO: need to RTX most recent MAX_STREAM_DATA and MAX_DATA on RTX
 
-    if (c->state == closing) {
-        i = enc_close_frame(v, i, FRAM_TYPE_CONN_CLSE, c->err_code, c->err_frm,
-                            c->err_reason);
+    if (c->state == conn_clsg) {
+        i = enc_close_frame(
+            v, i, c->err_code == 0 ? FRAM_TYPE_APPL_CLSE : FRAM_TYPE_CONN_CLSE,
+            c->err_code, c->err_frm, c->err_reason);
         goto tx;
     }
 
@@ -324,18 +323,15 @@ bool enc_pkt(struct q_stream * const s,
              s->out_data_max, stream_data_len(v));
 #endif
 
-    } else if (v->len > Q_OFFSET || s->state == STRM_STAT_HCLO ||
-               s->state == STRM_STAT_CLSD) {
-        // this is an Initial,  fresh data or pure stream FIN packet
+    } else if (v->len > Q_OFFSET || s->state == strm_hclo ||
+               s->state == strm_clsd) {
+        // this is an Initial, fresh data or pure stream FIN packet
         // pad out rest of Q_OFFSET and add a stream frame header
         enc_padding_frame(v, i, Q_OFFSET - i);
-        i = enc_stream_or_crypto_frame(
-            s, v, i,
-            c->state != clnt_tx_ci && c->state != serv_tx_si &&
-                c->state != serv_tx_sh && c->state != clnt_tx_cf);
+        i = enc_stream_or_crypto_frame(s, v, i, s->id >= 0);
     }
 
-    if (c->state == clnt_tx_ci && meta(v).hdr.type != F_LH_0RTT)
+    if (meta(v).hdr.type == F_LH_INIT && c->is_clnt && v->len > Q_OFFSET)
         i = enc_padding_frame(v, i, MIN_INI_LEN - i - AEAD_LEN);
 
     ensure(i > meta(v).hdr.hdr_len, "would have sent pkt w/o frames");
@@ -356,7 +352,7 @@ tx:
     x->port = v->port;
     x->flags = v->flags;
 
-    if (c->state == serv_tx_vneg) {
+    if (c->state == conn_tx_vneg) {
         memcpy(x->buf, v->buf, v->len); // copy data
         x->len = v->len;
     } else {
@@ -374,7 +370,8 @@ tx:
     meta(v).tx_len = x->len;
     meta(v).pn = pn;
 
-    if (c->state == clnt_tx_ci || c->state == serv_tx_rtry)
+    if ((meta(v).hdr.type == F_LH_INIT && c->is_clnt) ||
+        c->state == conn_tx_rtry)
         // adjust v->len to end of stream data (excl. padding)
         v->len = meta(v).stream_data_end;
 

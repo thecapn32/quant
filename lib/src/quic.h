@@ -260,7 +260,7 @@ extern const uint8_t ok_vers_len;
 /// Reduction in congestion window when a new loss event is detected.
 #define kLossReductionFactor 0.5
 
-/// Default idle timeout.
+/// Default conn_idle timeout.
 #define kIdleTimeout 10
 
 

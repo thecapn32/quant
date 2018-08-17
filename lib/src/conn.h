@@ -67,23 +67,18 @@ struct q_cid_map {
 sl_head(q_conn_sl, q_conn);
 
 
-#define STATE(k, v) k = v
-#define STATES                                                                 \
-    /* states valid on both client and server */                               \
-    STATE(closed, 0), STATE(idle, 1), STATE(established, 2),                   \
-        STATE(closing, 50),                                                    \
-        STATE(draining, 51), /* states only valid on client */                 \
-        STATE(clnt_tx_ci, 100), STATE(clnt_rx_sh, 101),                        \
-        STATE(clnt_tx_cf, 103), /* states only valid on server */              \
-        STATE(serv_lstn, 200), STATE(serv_rx_ci, 201),                         \
-        STATE(serv_tx_vneg, 202), STATE(serv_tx_rtry, 203),                    \
-        STATE(serv_tx_si, 204), STATE(serv_tx_sh, 205),
+#define CONN_STATE(k, v) k = v
+#define CONN_STATES                                                            \
+    CONN_STATE(conn_clsd, 0), CONN_STATE(conn_idle, 1),                        \
+        CONN_STATE(conn_opng, 2), CONN_STATE(conn_estb, 3),                    \
+        CONN_STATE(conn_clsg, 4), CONN_STATE(conn_drng, 51),                   \
+        CONN_STATE(conn_tx_vneg, 202), CONN_STATE(conn_tx_rtry, 203)
 
 /// Define connection states.
 /// \dotfile conn-states.dot "Connection state diagram."
-typedef enum { STATES } conn_state_t;
+typedef enum { CONN_STATES } conn_state_t;
 
-extern const char * const state_str[];
+extern const char * const conn_state_str[];
 
 
 /// A QUIC connection.
@@ -106,10 +101,10 @@ struct q_conn {
     uint16_t tx_max_stream_id : 1;  ///< Send MAX_STREAM_ID frame.
     uint16_t try_0rtt : 1;          ///< Try 0-RTT handshake.
     uint16_t did_0rtt : 1;          ///< 0-RTT handshake succeeded;
-    uint16_t in_closing : 1;        ///< Is the closing/draining timer active?
     uint16_t tx_path_resp : 1;      ///< Send PATH_RESPONSE.
     uint16_t tx_path_chlg : 1;      ///< Send PATH_CHALLENGE.
     uint16_t tx_ncid : 1;           ///< Send NEW_CONNECTION_ID.
+    uint16_t : 1;
 
     uint16_t sport; ///< Local port (in network byte-order).
 
@@ -233,14 +228,15 @@ SPLAY_PROTOTYPE(zrtt_ooo_splay, zrtt_ooo, node, zrtt_ooo_cmp)
 #define conn_to_state(c, s)                                                    \
     do {                                                                       \
         warn(DBG, "conn %s state %s -> " RED "%s" NRM, scid2str(c),            \
-             state_str[(c)->state], state_str[(s)]);                           \
+             conn_state_str[(c)->state], conn_state_str[(s)]);                 \
         if (likely((c)->state != (s))) {                                       \
             (c)->state = (s);                                                  \
             ensure(((c)->is_clnt && (c)->state < 200) ||                       \
                        (!(c)->is_clnt &&                                       \
                         ((c)->state < 100 || (c)->state >= 200)),              \
-                   "%s and state is %s", conn_type(c), state_str[(c)->state]); \
-            if ((c)->state == closing)                                         \
+                   "%s and state is %s", conn_type(c),                         \
+                   conn_state_str[(c)->state]);                                \
+            if ((c)->state == conn_clsg)                                       \
                 enter_closing(c);                                              \
         } else                                                                 \
             warn(ERR, "useless transition %u %u!", (c)->state, (s));           \
@@ -259,6 +255,9 @@ tx_w(struct ev_loop * const l, ev_async * const w, int e);
 
 extern void __attribute__((nonnull))
 tx(struct q_conn * const c, const bool rtx, const uint32_t limit);
+
+extern void __attribute__((nonnull))
+tx_ack(struct q_conn * const c, const uint8_t e);
 
 extern void __attribute__((nonnull))
 rx(struct ev_loop * const l, ev_io * const rx_w, int e);

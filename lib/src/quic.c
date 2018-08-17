@@ -164,8 +164,7 @@ do_write(struct q_stream * const s, struct w_iov_sq * const q, const bool fin)
     s->out_ack_cnt = 0;
 
     if (fin)
-        strm_to_state(s, s->state == STRM_STAT_HCRM ? STRM_STAT_CLSD
-                                                    : STRM_STAT_HCLO);
+        strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
 
     // remember the last iov in the queue
     struct w_iov * const prev_last = sq_last(&s->out, w_iov, next);
@@ -225,9 +224,8 @@ struct q_conn * q_connect(struct w_engine * const w,
         sq_concat(&(*early_data_stream)->out, early_data);
         if (fin)
             strm_to_state(*early_data_stream,
-                          (*early_data_stream)->state == STRM_STAT_HCRM
-                              ? STRM_STAT_CLSD
-                              : STRM_STAT_HCLO);
+                          (*early_data_stream)->state == strm_hcrm ? strm_clsd
+                                                                   : strm_hclo);
     }
 
     ev_async_send(loop, &c->tx_w);
@@ -235,25 +233,26 @@ struct q_conn * q_connect(struct w_engine * const w,
     warn(DBG, "waiting for connect to complete on %s conn %s to %s:%u",
          conn_type(c), scid2str(c), inet_ntoa(peer->sin_addr),
          ntohs(peer->sin_port));
+    conn_to_state(c, conn_opng);
     loop_run(q_connect, c, 0);
 
-    if (c->state != established) {
+    if (c->state != conn_estb) {
         warn(WRN, "%s conn %s not connected", conn_type(c), scid2str(c));
         return 0;
     }
 
-    if (early_data && *early_data_stream) {
-        if (c->did_0rtt == false ||
-            is_fully_acked(*early_data_stream) == false) {
-            warn(DBG, "%s on strm " FMT_SID,
-                 c->did_0rtt ? "0-RTT data not fully ACK'ed yet"
-                             : "TX early data after 1-RTT handshake",
-                 (*early_data_stream)->id);
-            do_write(*early_data_stream, early_data, fin);
-        } else
-            // hand early data back to app after 0-RTT
-            sq_concat(early_data, &(*early_data_stream)->out);
-    }
+    // if (early_data && *early_data_stream) {
+    //     if (c->did_0rtt == false ||
+    //         is_fully_acked(*early_data_stream) == false) {
+    //         warn(DBG, "%s on strm " FMT_SID,
+    //              c->did_0rtt ? "0-RTT data not fully ACK'ed yet"
+    //                          : "TX early data after 1-RTT handshake",
+    //              (*early_data_stream)->id);
+    //         do_write(*early_data_stream, early_data, fin);
+    //     } else
+    //         // hand early data back to app after 0-RTT
+    //         sq_concat(early_data, &(*early_data_stream)->out);
+    // }
 
     warn(WRN, "%s conn %s connected%s, cipher %s", conn_type(c), scid2str(c),
          c->did_0rtt ? " after 0-RTT" : "",
@@ -272,7 +271,7 @@ void q_write(struct q_stream * const s,
          qlen, plural(qlen), qcnt, plural(qcnt), conn_type(s->c),
          scid2str(s->c), s->id, fin ? "and closing" : "");
 
-    if (s->state >= STRM_STAT_HCLO) {
+    if (s->state >= strm_hclo) {
         warn(ERR, "%s conn %s strm " FMT_SID " is in state %u", conn_type(s->c),
              scid2str(s->c), s->id, s->state);
         return;
@@ -296,16 +295,16 @@ void q_write(struct q_stream * const s,
 struct q_stream *
 q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool block)
 {
-    if (c->state == closed)
+    if (c->state == conn_clsd)
         return 0;
 
     warn(WRN, "%sblocking read on %s conn %s", block ? "" : "non-",
          conn_type(c), scid2str(c));
     struct q_stream * s = 0;
 
-    while (s == 0 && c->state == established) {
+    while (s == 0 && c->state == conn_estb) {
         splay_foreach (s, stream, &c->streams) {
-            if (s->state == STRM_STAT_CLSD)
+            if (s->state == strm_clsd)
                 continue;
 
             if (!sq_empty(&s->in))
@@ -342,8 +341,8 @@ void q_readall_str(struct q_stream * const s, struct w_iov_sq * const q)
     warn(WRN, "reading all on %s conn %s strm " FMT_SID, conn_type(s->c),
          scid2str(s->c), s->id);
 
-    while (s->c->state == established && s->state != STRM_STAT_HCRM &&
-           s->state != STRM_STAT_CLSD)
+    while (s->c->state == conn_estb && s->state != strm_hcrm &&
+           s->state != strm_clsd)
         loop_run(q_readall_str, s->c, s);
 
     // return data
@@ -381,7 +380,7 @@ struct q_conn * q_accept(struct w_engine * const w __attribute__((unused)),
     warn(WRN, "waiting for conn on any serv sock (timeout %" PRIu64 " sec)",
          timeout);
 
-    if (accept_queue && accept_queue->state == established) {
+    if (accept_queue && accept_queue->state == conn_estb) {
         warn(WRN, "got %s conn %s", conn_type(accept_queue),
              scid2str(accept_queue));
         return accept_queue;
@@ -397,7 +396,7 @@ struct q_conn * q_accept(struct w_engine * const w __attribute__((unused)),
     accept_queue = 0;
     loop_run(q_accept, accept_queue, 0);
 
-    if (accept_queue == 0 || accept_queue->state != established) {
+    if (accept_queue == 0 || accept_queue->state != conn_estb) {
         if (accept_queue)
             q_close(accept_queue);
         warn(ERR, "conn not accepted");
@@ -518,13 +517,12 @@ struct w_engine * q_init(const char * const ifname,
 
 void q_close_stream(struct q_stream * const s)
 {
-    if (s->state == STRM_STAT_HCLO || s->state == STRM_STAT_CLSD)
+    if (s->state == strm_hclo || s->state == strm_clsd)
         return;
 
     warn(WRN, "closing strm " FMT_SID " state %u on %s conn %s", s->id,
          s->state, conn_type(s->c), scid2str(s->c));
-    strm_to_state(s,
-                  s->state == STRM_STAT_HCRM ? STRM_STAT_CLSD : STRM_STAT_HCLO);
+    strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
     ev_async_send(loop, &s->c->tx_w);
     loop_run(q_close_stream, s->c, s);
 }
@@ -532,7 +530,8 @@ void q_close_stream(struct q_stream * const s)
 
 void q_close(struct q_conn * const c)
 {
-    if (c->state != closing && c->state != draining && c->state != closed) {
+    if (c->state != conn_clsg && c->state != conn_drng &&
+        c->state != conn_clsd) {
         warn(WRN, "closing %s conn %s on port %u", conn_type(c), scid2str(c),
              ntohs(c->sport));
 
@@ -542,11 +541,11 @@ void q_close(struct q_conn * const c)
             if (s->id >= 0)
                 q_close_stream(s);
 
-        if (c->state == serv_lstn)
-            conn_to_state(c, closed);
+        if (c->state == conn_opng)
+            conn_to_state(c, conn_clsd);
         else {
             // send connection close frame
-            conn_to_state(c, closing);
+            conn_to_state(c, conn_clsg);
             ev_async_send(loop, &c->tx_w);
             loop_run(q_close, c, 0);
         }
@@ -616,7 +615,7 @@ uint64_t q_sid(const struct q_stream * const s)
 
 bool q_is_str_closed(struct q_stream * const s)
 {
-    return s->state == STRM_STAT_CLSD;
+    return s->state == strm_clsd;
 }
 
 

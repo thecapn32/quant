@@ -865,38 +865,11 @@ void init_pn_init_prot(struct q_conn * const c)
 }
 
 
-// void init_0rtt_prot(struct q_conn * const c)
-// {
-//     // this can be called multiple times due to version negotiation
-//     if (c->tls.in_pp.early_data.aead)
-//         dispose_cipher(&c->tls.in_pp.early_data);
-//     if (c->tls.out_pp.early_data.aead)
-//         dispose_cipher(&c->tls.out_pp.early_data);
-
-//     int ret = setup_secret(&c->tls.in_pp, c->tls.t, "EXPORTER-QUIC 0rtt", 1,
-//     0); ensure(ret == 0, "setup_secret %u", ret); ret =
-//     setup_secret(&c->tls.out_pp, c->tls.t, "EXPORTER-QUIC 0rtt", 1, 1);
-//     ensure(ret == 0, "setup_secret %u", ret);
-// }
-
-
-// static void __attribute__((nonnull)) init_1rtt_prot(struct q_conn * const c)
-// {
-//     static const char * labels[] = {"EXPORTER-QUIC client 1rtt",
-//                                     "EXPORTER-QUIC server 1rtt"};
-
-//     int ret = setup_secret(&c->tls.in_pp, c->tls.t, labels[c->is_clnt], 0,
-//     0); ensure(ret == 0, "setup_secret %u", ret); ret =
-//     setup_secret(&c->tls.out_pp, c->tls.t, labels[!c->is_clnt], 0, 1);
-//     ensure(ret == 0, "setup_secret %u", ret);
-// }
-
-
 uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
 {
     struct q_conn * const c = s->c;
     const size_t in_len = iv ? iv->len : 0;
-    const size_t epoch_in = strm_epoch(s->id);
+    const uint8_t epoch_in = strm_epoch(s);
     const size_t prev_off = c->tls.tls_io.off;
     const int ret = ptls_handle_message(
         c->tls.t, &c->tls.tls_io, c->tls.epoch_off, epoch_in, iv ? iv->buf : 0,
@@ -910,39 +883,28 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
          c->tls.epoch_off[2], c->tls.epoch_off[3], c->tls.epoch_off[4], ret,
          iv ? iv->len - in_len : 0);
 
-    if (ret == 0 && c->state != established) {
+    if (ret == 0 && c->state != conn_estb) {
         if (ptls_is_psk_handshake(c->tls.t)) {
             if (c->is_clnt)
                 c->did_0rtt =
                     c->try_0rtt &&
                     c->tls.tls_hshake_prop.client.early_data_accepted_by_peer;
-            else {
-                // init_0rtt_prot(c);
+            else
                 c->did_0rtt = 1;
-            }
         }
 
-        if (c->state == clnt_tx_ci || c->state == clnt_rx_sh ||
-            c->state == serv_lstn)
-            conn_to_state(c, c->is_clnt ? clnt_tx_cf : serv_tx_si);
-
     } else if (ret == PTLS_ERROR_STATELESS_RETRY) {
-        conn_to_state(c, serv_tx_rtry);
+        conn_to_state(c, conn_tx_rtry);
         return (uint32_t)ret;
-    } else if (ret == PTLS_ERROR_IN_PROGRESS) {
-        if (c->state == idle)
-            conn_to_state(c, clnt_tx_ci);
-        else if (c->state == clnt_tx_ci)
-            conn_to_state(c, clnt_rx_sh);
-    } else if (ret != 0) {
+    } else if (ret != 0 && ret != PTLS_ERROR_IN_PROGRESS) {
         err_close(c, ERR_TLS(PTLS_ERROR_TO_ALERT(ret)), FRAM_TYPE_CRPT,
                   "picotls error %u", ret);
         return (uint32_t)ret;
     }
 
-    if (c->tls.tls_io.off > prev_off)
+    if (c->tls.tls_io.off > prev_off) {
         // enqueue for TX
-        for (size_t e = epoch_in; e < 4; e++) {
+        for (uint8_t e = epoch_in; e < 4; e++) {
             const size_t out_len =
                 c->tls.epoch_off[e + 1] - c->tls.epoch_off[e];
             if (out_len == 0)
@@ -959,8 +921,9 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
                 data += ov->len;
             }
             sq_concat(&se->out, &o);
-            c->needs_tx = true;
         }
+        c->needs_tx = true;
+    }
 
     return (uint32_t)ret;
 }
@@ -1076,11 +1039,8 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
     }
 
     if (is_enc) {
-        c->tls.epoch_out = epoch;
+        c->tls.epoch_out = (uint8_t)epoch;
         // warn(ERR, "epoch_out %u", c->tls.epoch_out);
-    } else {
-        c->tls.epoch_in = epoch;
-        // warn(ERR, "epoch_in %u", c->tls.epoch_in);
     }
 
     return setup_cipher(cipher_slot, cipher->aead, cipher->hash, is_enc,

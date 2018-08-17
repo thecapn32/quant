@@ -29,7 +29,6 @@
 #include <inttypes.h>
 #include <math.h>
 #include <stdbool.h>
-#include <stddef.h>
 #include <stdint.h>
 #include <sys/param.h>
 
@@ -76,7 +75,7 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
     }
 
     ev_tstamp dur = 0;
-    if (c->state != established) {
+    if (c->state != conn_estb) {
         dur = is_zero(c->rec.srtt) ? kDefaultInitialRtt : c->rec.srtt;
         dur = MAX(2 * dur, kMinTLPTimeout) * (1 << c->rec.hshake_cnt);
         warn(DBG, "handshake RTX alarm in %f sec on %s conn %s", dur,
@@ -161,7 +160,7 @@ detect_lost_pkts(struct q_conn * const c, struct pn_space * const pn)
                 warn(DBG, "free already-rtxed/non-rtxable pkt " FMT_PNR_OUT,
                      p->hdr.nr);
                 splay_remove(pm_nr_splay, &pn->sent_pkts, p);
-                q_free_iov(w_iov(c->w, pm_idx(p)));
+                // q_free_iov(w_iov(c->w, pm_idx(p)));
             }
 
         } else if (is_zero(c->rec.loss_t) && !is_inf(delay_until_lost))
@@ -189,7 +188,7 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
     struct q_conn * const c = w->data;
 
     // see OnLossDetectionAlarm pseudo code
-    if (c->state != established) {
+    if (c->state != conn_estb) {
         c->rec.hshake_cnt++;
         warn(DBG, "handshake RTX #%u on %s conn %s", c->rec.hshake_cnt,
              conn_type(c), scid2str(c));
@@ -239,9 +238,9 @@ void on_pkt_sent(struct q_stream * const s, struct w_iov * const v)
     const ev_tstamp now = ev_now(loop);
 
     s->c->rec.last_sent_t = meta(v).tx_t = now;
-    if (s->c->state != serv_tx_vneg) {
+    if (s->c->state != conn_tx_vneg) {
         // don't track version negotiation responses
-        struct pn_space * const pn = pn_for_epoch(s->c, strm_epoch(s->id));
+        struct pn_space * const pn = pn_for_epoch(s->c, strm_epoch(s));
         splay_insert(pm_nr_splay, &pn->sent_pkts, &meta(v));
     }
 
@@ -305,10 +304,11 @@ void on_ack_rx_1(struct q_conn * const c,
     warn(DBG, "srtt = %f, rttvar = %f on %s conn %s", c->rec.srtt,
          c->rec.rttvar, conn_type(c), scid2str(c));
 
-    // if this ACK'ed a CLOSE frame, move to draining
-    if (c->state == closing && (bit_test(meta(v).frames, FRAM_TYPE_CONN_CLSE) ||
-                                bit_test(meta(v).frames, FRAM_TYPE_APPL_CLSE)))
-        conn_to_state(c, draining);
+    // if this ACK'ed a CLOSE frame, move to conn_drng
+    if (c->state == conn_clsg &&
+        (bit_test(meta(v).frames, FRAM_TYPE_CONN_CLSE) ||
+         bit_test(meta(v).frames, FRAM_TYPE_APPL_CLSE)))
+        conn_to_state(c, conn_drng);
 }
 
 
@@ -426,7 +426,7 @@ void on_pkt_acked(struct q_conn * const c,
 
         if (is_fully_acked(s)) {
             // a q_write may be done
-            // warn(CRT, "fully acked");
+            warn(CRT, "fully acked");
             maybe_api_return(q_write, s->c, s);
             if (s->id && s->c->did_0rtt)
                 maybe_api_return(q_connect, s->c, 0);
@@ -434,8 +434,10 @@ void on_pkt_acked(struct q_conn * const c,
     }
     meta(v).is_acked = true;
 
-    if (!is_rtxable(&meta(v)))
-        q_free_iov(v);
+    if (!is_rtxable(&meta(v))) {
+        // warn(ERR, "freeee");
+        // q_free_iov(v);
+    }
 }
 
 

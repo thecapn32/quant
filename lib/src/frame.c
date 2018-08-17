@@ -47,7 +47,6 @@
 #include "quic.h"
 #include "recovery.h"
 #include "stream.h"
-#include "tls.h"
 
 
 #define err_close_return(c, code, ...)                                         \
@@ -94,7 +93,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     if (dec_strm)
         i = dec_chk(t, &sid, v->buf, v->len, i, 0, FMT_SID);
     else
-        sid = crpt_strm_id(c->tls.epoch_in);
+        sid = crpt_strm_id(epoch_for_pkt_type(meta(v).hdr.type));
 
     if (is_set(F_STREAM_OFF, t) || !dec_strm)
         i = dec_chk(t, &meta(v).stream_off, v->buf, v->len, i, 0, "%" PRIu64);
@@ -162,8 +161,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
         if (last) {
             const uint8_t last_type = last->buf[meta(last).stream_header_pos];
             if (is_set(F_STREAM_FIN, last_type)) {
-                strm_to_state(s, s->state <= STRM_STAT_HCRM ? STRM_STAT_HCRM
-                                                            : STRM_STAT_CLSD);
+                strm_to_state(s, s->state <= strm_hcrm ? strm_hcrm : strm_clsd);
                 if (dec_strm)
                     maybe_api_return(q_readall_str, s->c, s);
             }
@@ -370,7 +368,7 @@ dec_close_frame(struct q_conn * const c,
     if (reas_len)
         i = dec_chk_buf(type, &reas_phr, v->buf, v->len, i, (uint16_t)reas_len);
 
-    conn_to_state(c, draining);
+    conn_to_state(c, conn_drng);
     c->needs_tx = true;
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
@@ -1024,7 +1022,7 @@ uint16_t enc_stream_or_crypto_frame(struct q_stream * const s,
                    meta(v).hdr.type == F_LH_0RTT,
                "sid %u in 0x%02x-type pkt", s->id, meta(v).hdr.type);
 
-        ensure(dlen || s->state > STRM_STAT_OPEN,
+        ensure(dlen || s->state > strm_open,
                "no stream data or need to send FIN");
 
         type = FRAM_TYPE_STRM | (dlen ? F_STREAM_LEN : 0) |
@@ -1032,7 +1030,7 @@ uint16_t enc_stream_or_crypto_frame(struct q_stream * const s,
 
         // if stream is closed locally and this is the last packet, include a
         // FIN
-        if ((s->state == STRM_STAT_HCLO || s->state == STRM_STAT_CLSD) &&
+        if ((s->state == strm_hclo || s->state == strm_clsd) &&
             v == sq_last(&s->out, w_iov, next)) {
             type |= F_STREAM_FIN;
             maybe_api_return(q_close_stream, s->c, s);
