@@ -45,7 +45,7 @@ int stream_cmp(const struct q_stream * const a, const struct q_stream * const b)
 SPLAY_GENERATE(stream, q_stream, node, stream_cmp)
 
 
-struct q_stream * get_stream(struct q_conn * const c, const uint64_t id)
+struct q_stream * get_stream(struct q_conn * const c, const int64_t id)
 {
     struct q_stream which = {.id = id};
     return splay_find(stream, &c->streams, &which);
@@ -53,26 +53,31 @@ struct q_stream * get_stream(struct q_conn * const c, const uint64_t id)
 
 
 struct q_stream *
-new_stream(struct q_conn * const c, const uint64_t id, const bool active)
+new_stream(struct q_conn * const c, const int64_t id, const bool active)
 {
-    ensure(get_stream(c, id) == 0, "stream already %u exists", id);
+    if (id >= 0)
+        ensure(get_stream(c, id) == 0, "stream already %u exists", id);
 
     struct q_stream * const s = calloc(1, sizeof(*s));
     ensure(s, "could not calloc q_stream");
-    s->c = c;
     sq_init(&s->out);
     sq_init(&s->in);
+    s->c = c;
     s->id = id;
-    s->in_data_max = id ? c->tp_local.max_strm_data : 0;
-    s->out_data_max = id ? c->tp_peer.max_strm_data : 0;
-    if (active) {
-        if (c->next_sid == 0)
-            c->next_sid = c->is_clnt ? 4 : 1;
-        else
-            c->next_sid += 4;
-    }
     strm_to_state(s, STRM_STAT_OPEN);
     splay_insert(stream, &c->streams, s);
+
+    if (id >= 0) {
+        s->in_data_max = c->tp_local.max_strm_data;
+        s->out_data_max = c->tp_peer.max_strm_data;
+
+        if (active) {
+            if (c->next_sid == 0)
+                c->next_sid = c->is_clnt ? 4 : 1;
+            else
+                c->next_sid += 4;
+        }
+    }
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     warn(DBG, "reserved strm " FMT_SID " on %s conn %s", id, conn_type(c),
@@ -88,12 +93,13 @@ void free_stream(struct q_stream * const s)
     warn(DBG, "freeing strm " FMT_SID " on %s conn %s", s->id, conn_type(s->c),
          scid2str(s->c));
 
-    diet_insert(&s->c->closed_streams, s->id, 0, 0);
-
-    free_iov_sq(&s->out, s->c);
-    free_iov_sq(&s->in, 0);
+    if (s->id >= 0) {
+        diet_insert(&s->c->closed_streams, (uint64_t)s->id, 0, 0);
+    }
 
     splay_remove(stream, &s->c->streams, s);
+    free_iov_sq(&s->out);
+    free_iov_sq(&s->in);
     free(s);
 }
 
@@ -121,4 +127,21 @@ void track_bytes_out(struct q_stream * const s, const uint64_t n)
     //      " C: out_data=%" PRIu64 "/%" PRIu64,
     //      s->id, s->out_data, s->out_data_max, s->out_off, s->c->out_data,
     //      s->c->tp_peer.max_data);
+}
+
+
+void reset_stream(struct q_stream * const s, const bool also_crypto_in)
+{
+    // reset stream offsets
+    s->out_ack_cnt = s->out_off = s->in_off = 0;
+
+    // forget we transmitted any data packets
+    struct w_iov * v = 0;
+    sq_foreach (v, &s->out, next) {
+        meta(v).tx_len = meta(v).is_acked = 0;
+        if (s->id >= 0 || also_crypto_in)
+            // free (some) crypto data
+            free_iov_sq(&s->in);
+        free_iov_sq(&s->out);
+    }
 }

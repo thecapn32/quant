@@ -319,17 +319,17 @@ marshall_dec(void * const dst,
         } else if (buf[pos] < 0x80) {
             uint16_t v;
             do_dec(v);
-            *(uint16_t *)dst = ntohs(v) & 0x3fff;
+            *(uint16_t *)dst = ntohs(v) & VARINT2_MAX;
 
         } else if (buf[pos] < 0xc0) {
             uint32_t v;
             do_dec(v);
-            *(uint32_t *)dst = ntohl(v) & 0x3fffffffUL;
+            *(uint32_t *)dst = ntohl(v) & VARINT4_MAX;
 
         } else {
             uint64_t v;
             do_dec(v);
-            *(uint64_t *)dst = ntohll(v) & 0x3fffffffffffffffULL;
+            *(uint64_t *)dst = ntohll(v) & VARINT8_MAX;
         }
         log_dec(uint64_t, "var");
         break;

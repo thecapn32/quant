@@ -55,7 +55,7 @@ struct q_stream {
     uint64_t in_data_max;       ///< Inbound max_stream_data.
     uint64_t in_data;           ///< Inbound data received.
 
-    uint64_t id;
+    int64_t id;
     uint8_t state;
     uint8_t tx_max_stream_data : 1; ///< We need to open the receive window.
     uint8_t blocked : 1;            ///< We are receive-window-blocked.
@@ -83,6 +83,9 @@ struct q_stream {
 
 #define is_fully_acked(s) ((s)->out_ack_cnt == sq_len(&(s)->out))
 
+#define crpt_strm_id(epoch) (-((int64_t)epoch + 1))
+
+#define strm_epoch(id) (size_t)(id >= 0 ? 3 : -(id + 1))
 
 extern int __attribute__((nonnull))
 stream_cmp(const struct q_stream * const a, const struct q_stream * const b);
@@ -91,10 +94,10 @@ SPLAY_PROTOTYPE(stream, q_stream, node, stream_cmp)
 
 
 extern struct q_stream * __attribute__((nonnull))
-get_stream(struct q_conn * const c, const uint64_t id);
+get_stream(struct q_conn * const c, const int64_t id);
 
-extern struct q_stream * __attribute__((nonnull))
-new_stream(struct q_conn * const c, const uint64_t id, const bool active);
+extern struct q_stream *
+new_stream(struct q_conn * const c, const int64_t id, const bool active);
 
 extern void __attribute__((nonnull)) free_stream(struct q_stream * const s);
 
@@ -103,3 +106,6 @@ track_bytes_in(struct q_stream * const s, const uint64_t n);
 
 extern void __attribute__((nonnull))
 track_bytes_out(struct q_stream * const s, const uint64_t n);
+
+extern void __attribute__((nonnull))
+reset_stream(struct q_stream * const s, const bool also_crypto_in);

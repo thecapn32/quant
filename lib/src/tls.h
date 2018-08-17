@@ -34,8 +34,8 @@
 #include <picotls.h>
 
 struct q_conn;
-struct q_stream;
 struct w_iov;
+struct q_stream;
 
 
 #define AEAD_LEN 16
@@ -46,27 +46,23 @@ struct cipher_ctx {
     ptls_cipher_context_t * pne;
 };
 
-struct pp {
-    struct cipher_ctx handshake;
-    struct cipher_ctx early_data;
-    struct cipher_ctx one_rtt[2]; // TODO: handle key phase
-};
-
 struct tls {
     ptls_t * t;
-    struct pp in_pp;
-    struct pp out_pp;
-    uint8_t tp_buf[96];
     ptls_raw_extension_t tp_ext[2];
     ptls_handshake_properties_t tls_hshake_prop;
     size_t max_early_data;
+    size_t epoch_off[5];
+    size_t epoch_in, epoch_out;
+    ptls_buffer_t tls_io;
+    uint8_t tp_buf[96];
+    uint8_t tls_io_buf[8192];
 };
 
 
 /// TLS context.
 extern ptls_context_t tls_ctx;
 
-extern void __attribute__((nonnull)) init_hshk_prot(struct q_conn * const c);
+extern void __attribute__((nonnull)) init_pn_init_prot(struct q_conn * const c);
 
 extern void __attribute__((nonnull)) init_0rtt_prot(struct q_conn * const c);
 
@@ -85,7 +81,7 @@ extern void init_tls_ctx(const char * const cert,
                          const char * const tls_log,
                          const bool verify_certs);
 
-extern void cleanup_tls_ctx(void);
+extern void free_tls_ctx(void);
 
 extern uint16_t __attribute__((nonnull))
 dec_aead(const struct q_conn * const c, const struct w_iov * const v);

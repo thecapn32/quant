@@ -37,6 +37,13 @@ extern uint16_t varint_sizeof(const uint8_t first_byte);
 // #define DEBUG_MARSHALL
 #endif
 
+
+#define VARINT1_MAX 0x3fU
+#define VARINT2_MAX 0x3FFFU
+#define VARINT4_MAX 0x3fffffffUL
+#define VARINT8_MAX 0x3fffffffffffffffULL
+#define VARINT_MAX VARINT8_MAX
+
 #ifdef DEBUG_MARSHALL
 /// Encodes @p src in host byte-order data into network byte-order at at
 /// position @p pos of buffer @p buf (which has total length @p buf_len), using

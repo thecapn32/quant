@@ -201,23 +201,54 @@ static void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c)
 
 static void log_sent_pkts(struct q_conn * const c)
 {
-    char sent_pkts_buf[1024] = "";
-    uint64_t prev = UINT64_MAX;
-    struct pkt_meta * p = 0;
-    splay_foreach (p, pm_nr_splay, &c->rec.sent_pkts) {
-        char tmp[1024] = "";
-        const bool ack_only = is_ack_only(p);
-        snprintf(tmp, sizeof(tmp), "%s%s" FMT_PNR_OUT "%s ",
-                 is_rtxable(p) ? "*" : "", ack_only ? "(" : "",
-                 prev == UINT64_MAX
-                     ? p->hdr.nr
-                     : shorten_ack_nr(p->hdr.nr, p->hdr.nr - prev),
-                 ack_only ? ")" : "");
-        strncat(sent_pkts_buf, tmp,
-                sizeof(sent_pkts_buf) - strlen(sent_pkts_buf) - 1);
-        prev = p->hdr.nr;
+    for (size_t e = 0; e < 3; e++) {
+        char sent_pkts_buf[1024] = "";
+        uint64_t prev = UINT64_MAX;
+        struct pkt_meta * p = 0;
+        struct pn_space * const pn = pn_for_epoch(c, e);
+        splay_foreach (p, pm_nr_splay, &pn->sent_pkts) {
+            char tmp[1024] = "";
+            const bool ack_only = is_ack_only(p);
+            snprintf(tmp, sizeof(tmp), "%s%s" FMT_PNR_OUT "%s ",
+                     is_rtxable(p) ? "*" : "", ack_only ? "(" : "",
+                     prev == UINT64_MAX
+                         ? p->hdr.nr
+                         : shorten_ack_nr(p->hdr.nr, p->hdr.nr - prev),
+                     ack_only ? ")" : "");
+            strncat(sent_pkts_buf, tmp,
+                    sizeof(sent_pkts_buf) - strlen(sent_pkts_buf) - 1);
+            prev = p->hdr.nr;
+        }
+        warn(DBG, "epoch %u%s unacked: %s", e, e == 1 ? "/3" : "",
+             sent_pkts_buf);
     }
-    warn(DBG, "unacked: %s", sent_pkts_buf);
+}
+
+
+static void __attribute__((nonnull))
+reset_conn(struct q_conn * const c, const bool also_crypto_in)
+{
+    // reset CC state
+    c->rec.in_flight = 0;
+
+    // reset FC state
+    c->in_data = c->out_data = 0;
+
+    struct q_stream * s = 0;
+    splay_foreach (s, stream, &c->streams)
+        // only reset the crypto streams
+        if (s->id < 0)
+            reset_stream(s, also_crypto_in);
+
+    // reset packet number spaces
+    free_pn(&c->pn_init.pn);
+    free_pn(&c->pn_hshk.pn);
+    free_pn(&c->pn_data.pn);
+    init_pn(&c->pn_init.pn);
+    init_pn(&c->pn_hshk.pn);
+    init_pn(&c->pn_data.pn);
+
+    conn_to_state(c, c->is_clnt ? idle : serv_lstn);
 }
 
 
@@ -234,8 +265,9 @@ rtx_pkt(struct q_stream * const s, struct w_iov * const v)
     adj_iov_to_data(r);
 
     // we reinsert meta(v) with its new pkt nr in on_pkt_sent()
-    splay_remove(pm_nr_splay, &s->c->rec.sent_pkts, &meta(v));
-    splay_insert(pm_nr_splay, &s->c->rec.sent_pkts, &meta(r));
+    struct pn_space * const pn = pn_for_epoch(s->c, s->c->tls.epoch_out);
+    splay_remove(pm_nr_splay, &pn->sent_pkts, &meta(v));
+    splay_insert(pm_nr_splay, &pn->sent_pkts, &meta(r));
 }
 
 
@@ -287,7 +319,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
         if (enc_pkt(s, rtx, v, &x) == false)
             continue;
 
-        on_pkt_sent(s->c, v);
+        on_pkt_sent(s, v);
         encoded++;
 
         // if this packet contains an ACK frame, stop the timer
@@ -296,6 +328,9 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             warn(DBG, "ACK sent, stopping ACK timer");
             ev_timer_stop(loop, &s->c->ack_alarm);
         }
+
+        if (s->c->state == serv_tx_si)
+            conn_to_state(s->c, serv_tx_sh);
 
         if (limit && encoded == limit) {
             warn(NTE, "tx limit %u reached", limit);
@@ -308,7 +343,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
         w_tx(s->c->sock, &x);
         while (w_tx_pending(&x))
             w_nic_tx(s->c->w);
-        free_iov_sq(&x, 0);
+        free_iov_sq(&x);
     }
 
     log_sent_pkts(s->c);
@@ -319,12 +354,13 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
 static uint32_t
 tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
 {
-    warn(DBG, "other %s on %s conn %s strm " FMT_SID " w/%u pkt%s in queue",
+    warn(DBG,
+         "other %s on %s conn %s strm " FMT_SID " w/%u crypto pkt%s in queue",
          rtx ? "RTX" : "TX", conn_type(s->c), scid2str(s->c), s->id,
          sq_len(&s->out), plural(sq_len(&s->out)));
 
     struct w_iov *v = 0, *last = 0;
-    if (!rtx) {
+    if (!rtx && sq_len(&s->out) == 0) {
         v = q_alloc_iov(s->c->w, 0, Q_OFFSET);
         v->len = 0; // this packet will have no stream data
         last = sq_last(&s->out, w_iov, next);
@@ -333,7 +369,7 @@ tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
 
     const bool did_tx = tx_stream(s, rtx, limit, v);
 
-    if (!rtx && !is_rtxable(&meta(v))) {
+    if (!rtx && sq_len(&s->out) == 0 && !is_rtxable(&meta(v))) {
         ensure(sq_last(&s->out, w_iov, next) == v, "queue mixed up");
         if (last)
             sq_remove_after(&s->out, last, next);
@@ -341,12 +377,9 @@ tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
             sq_remove_head(&s->out, next);
     }
 
-    if (s->c->state == serv_tx_vneg) {
-        // if we sent a version negotiation response, forget all packets
-        diet_free(&s->c->recv);
-        diet_free(&s->c->acked);
-        conn_to_state(s->c, serv_lstn);
-    }
+    if (s->c->state == serv_tx_vneg)
+        // if we sent a version negotiation response, reset
+        reset_conn(s->c, true);
 
     return did_tx;
 }
@@ -406,19 +439,33 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
     do_conn_mgmt(c);
 
     bool did_tx = false;
-    if (c->state == serv_tx_vneg)
-        goto other;
-
     struct q_stream * s = 0;
+
+    if (c->state != established) {
+        for (size_t e = 0; e <= c->tls.epoch_out; e++) {
+            s = get_stream(c, crpt_strm_id(e));
+            // warn(ERR, "check " FMT_SID, s->id);
+            if (!sq_empty(&s->out))
+                did_tx |= tx_stream(s, rtx, limit, 0);
+        }
+        if (did_tx)
+            goto done;
+    }
+
     splay_foreach (s, stream, &c->streams) {
+        // warn(ERR, "stream %" PRId64 " %u", s->id, sq_len(&s->out));
         // check if we should skip TX on this stream
-        if ( // is the stream fully ACKed and doesn't need control frames?
+        if ( // this is a crypto stream
+            (s->id < 0) ||
+            // is the stream fully ACKed and doesn't need control frames?
             (is_fully_acked(s) && !stream_needs_ctrl(s)) ||
             // is this a new TX but the stream is blocked?
             (rtx == false && s->blocked) ||
-            // unless for 0-RTT, is this a non-zero stream during conn open?
-            (c->try_0rtt == false && s->id && c->state != established))
+            // unless for 0-RTT, is this a regular stream during conn open?
+            (c->try_0rtt == false && s->id >= 0 && c->state != established)) {
+            // warn(ERR, "skip %" PRId64, s->id);
             continue;
+        }
 
         do_stream_fc(s);
 
@@ -436,10 +483,10 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
             break;
     }
 
-other:
+done:
     if (did_tx == false)
-        // need to ACK or handshake, use stream zero
-        tx_other(get_stream(c, 0), rtx, limit);
+        // need to ACK or handshake, abuse crypto stream
+        tx_other(get_stream(c, crpt_strm_id(c->tls.epoch_out)), rtx, limit);
 
     if (c->state == clnt_tx_cf)
         conn_to_state(c, established);
@@ -507,8 +554,8 @@ verify_prot(struct q_conn * const c, struct w_iov * const v)
             conn_to_state(c, draining);
         } else
             // it is not a stateless reset
-            err_close(c, ERR_TLS_HSHAKE_FAIL, "AEAD fail on 0x%02x-type %s pkt",
-                      pkt_type((v)->buf[0]),
+            err_close(c, ERR_PROTOCOL_VIOLATION, 0,
+                      "AEAD fail on 0x%02x-type %s pkt", pkt_type((v)->buf[0]),
                       is_set(F_LONG_HDR, meta(v).hdr.flags) ? "LH" : "SH");
         return false;
     }
@@ -522,66 +569,20 @@ verify_prot(struct q_conn * const c, struct w_iov * const v)
 static void __attribute__((nonnull))
 track_recv(struct q_conn * const c, const uint64_t nr, const uint8_t type)
 {
-    diet_insert(&c->recv, nr, type, ev_now(loop));
+    struct pn_space * const pn = pn_for_epoch(c, c->tls.epoch_in);
+    diet_insert(&pn->recv, nr, type, ev_now(loop));
 }
 
 
-static void __attribute__((nonnull)) rx_stream0(struct q_conn * const c)
+static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
 {
-    struct q_stream * const s = get_stream(c, 0);
+    struct q_stream * const s = get_stream(c, crpt_strm_id(c->tls.epoch_in));
     while (!sq_empty(&s->in)) {
         struct w_iov * iv = sq_first(&s->in);
         sq_remove_head(&s->in, next);
         if (tls_io(s, iv) == 0)
             maybe_api_return(q_connect, c, 0);
         q_free_iov(iv);
-    }
-}
-
-
-static void __attribute__((nonnull))
-reset_conn(struct q_conn * const c, const bool also_stream0_in)
-{
-    // reset CC state
-    c->rec.in_flight = 0;
-
-    // reset FC state
-    c->in_data = c->out_data = 0;
-
-    // forget we received or sent any packets
-    diet_free(&c->recv);
-    diet_free(&c->acked);
-
-    conn_to_state(c, c->is_clnt ? idle : serv_lstn);
-
-    // remove all meta-data about RTX'ed packets
-    struct pkt_meta *p, *tmp;
-    for (p = splay_min(pm_nr_splay, &c->rec.sent_pkts); p != 0; p = tmp) {
-        tmp = splay_next(pm_nr_splay, &c->rec.sent_pkts, p);
-        if (p->is_rtxed) {
-            splay_remove(pm_nr_splay, &c->rec.sent_pkts, p);
-            q_free_iov(w_iov(c->w, pm_idx(p)));
-        }
-    }
-
-    struct q_stream * s = 0;
-    splay_foreach (s, stream, &c->streams) {
-        // reset stream offsets
-        s->out_ack_cnt = s->out_off = s->in_off = 0;
-
-        if (s->id) {
-            // forget we transmitted any non-stream-0 packets
-            struct w_iov * v = 0;
-            sq_foreach (v, &s->out, next) {
-                meta(v).tx_len = meta(v).is_acked = 0;
-                splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
-            }
-        } else {
-            // free (some) stream-0 data
-            if (also_stream0_in)
-                free_iov_sq(&s->in, 0);
-            free_iov_sq(&s->out, c);
-        }
     }
 }
 
@@ -627,9 +628,9 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             if (dec_frames(c, v) == UINT16_MAX)
                 goto done;
 
-            // if the CH doesn't include any stream-0 data, bail
-            if (meta(v).stream == 0 || meta(v).stream->id != 0) {
-                warn(ERR, "initial pkt w/o stream data");
+            // if the CH doesn't include any crypto frames, bail
+            if (bit_test(meta(v).frames, FRAM_TYPE_CRPT) == false) {
+                warn(ERR, "initial pkt w/o crypto frames");
                 conn_to_state(c, draining);
                 goto done;
             }
@@ -697,11 +698,11 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 
             // reset TLS state and create new CH
             init_tls(c);
-            tls_io(get_stream(c, 0), 0);
+            tls_io(get_stream(c, crpt_strm_id(0)), 0);
 
             q_free_iov(v);
-            if (c->try_0rtt)
-                init_0rtt_prot(c);
+            // if (c->try_0rtt)
+            //     init_0rtt_prot(c);
             c->needs_tx = true;
             return;
         }
@@ -709,7 +710,7 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         if (unlikely(meta(v).hdr.vers != c->vers)) {
             warn(ERR, "serv responded with vers 0x%08x to our CI w/vers 0x%08x",
                  meta(v).hdr.vers, c->vers);
-            err_close(c, ERR_TLS_HSHAKE_FAIL, "wrong vers in SH");
+            err_close(c, ERR_PROTOCOL_VIOLATION, 0, "wrong vers in SH");
             goto done;
         }
 
@@ -729,7 +730,7 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 
             // server accepted version -
             // must use cid from retry for connection and re-init keys
-            init_hshk_prot(c);
+            init_pn_init_prot(c);
 
             // reinit tp
             c->vers_initial = c->vers;
@@ -742,11 +743,12 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             // forget we transmitted any packets
             reset_conn(c, false);
 
-            // process the retry data on stream-0
-            rx_stream0(c);
+            // process the retry data
+            rx_crypto(c);
 
-            // we can now reset stream-0 (inbound)
-            struct q_stream * const s = get_stream(c, 0);
+            // we can now reset the crypto stream offset (inbound)
+            struct q_stream * const s =
+                get_stream(c, crpt_strm_id(c->tls.epoch_in));
             s->in_off = 0;
 
             // we are not allowed to try 0-RTT after retry
@@ -767,6 +769,7 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             goto done;
         break;
 
+    case clnt_tx_cf:
     case serv_tx_sh:
         // if we got a SH or 0-RTT packet, a q_accept() may be finished
         if (!is_set(F_LONG_HDR, meta(v).hdr.flags) ||
@@ -846,7 +849,7 @@ rx_pkts(struct w_iov_sq * const i,
 
         const bool is_clnt = w_connected(ws);
         struct q_conn * c = 0;
-        if (dec_pkt_hdr_initial(v, is_clnt) == false) {
+        if (dec_pkt_hdr_beginning(v, is_clnt) == false) {
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
             warn(ERR, "received invalid %u-byte pkt, ignoring", v->len);
 #endif
@@ -897,7 +900,6 @@ rx_pkts(struct w_iov_sq * const i,
                         c = new_conn(w_engine(ws), meta(v).hdr.vers,
                                      &meta(v).hdr.scid, &meta(v).hdr.dcid,
                                      &peer, 0, ntohs(w_get_sport(ws)), 0);
-                        new_stream(c, 0, false);
                         init_tls(c);
                     }
                 }
@@ -974,7 +976,7 @@ rx_pkts(struct w_iov_sq * const i,
         }
 
         rx_pkt(c, v, i);
-        rx_stream0(c);
+        rx_crypto(c);
     }
 }
 
@@ -1016,6 +1018,7 @@ void rx(struct ev_loop * const l,
 
 void err_close(struct q_conn * const c,
                const uint16_t code,
+               const uint8_t frm,
                const char * const fmt,
                ...)
 {
@@ -1041,6 +1044,7 @@ void err_close(struct q_conn * const c,
 #endif
     c->err_code = code;
     c->err_reason = strdup(reas);
+    c->err_frm = frm;
     conn_to_state(c, closing);
     c->needs_tx = true;
 }
@@ -1148,14 +1152,13 @@ struct q_conn * new_conn(struct w_engine * const w,
     }
 
     c->vers = c->vers_initial = vers;
-
-    // initialize recovery state
-    rec_init(c);
-
     splay_init(&c->streams);
     diet_init(&c->closed_streams);
-    diet_init(&c->recv);
-    diet_init(&c->acked);
+
+    // initialize packet number spaces
+    init_pn(&c->pn_init.pn);
+    init_pn(&c->pn_hshk.pn);
+    init_pn(&c->pn_data.pn);
 
     // initialize idle timeout
     c->idle_alarm.data = c;
@@ -1173,6 +1176,9 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->tp_local.max_strm_data = c->is_clnt ? 0x2000 : 0x4000;
     c->tp_local.max_strm_bidi = c->is_clnt ? 1 : 4;
     c->tp_local.max_strm_uni = 0; // TODO: support unidir streams
+
+    // initialize recovery state
+    init_rec(c);
 
     c->ncid_seq_out = UINT64_MAX;
 
@@ -1206,6 +1212,10 @@ struct q_conn * new_conn(struct w_engine * const w,
         add_scid(c, &nscid);
     }
 
+    // create crypto streams
+    for (size_t e = 0; e < 4; e++)
+        new_stream(c, crpt_strm_id(e), false);
+
     warn(DBG, "%s conn %s on port %u created", conn_type(c), scid2str(c),
          ntohs(c->sport));
 
@@ -1235,20 +1245,15 @@ void free_conn(struct q_conn * const c)
         ns = splay_next(stream, &c->streams, s);
         free_stream(s);
     }
+    free_tls(c);
 
-    // free any w_iovs that are still hanging around
-    struct pkt_meta *p, *np;
-    for (p = splay_min(pm_nr_splay, &c->rec.sent_pkts); p; p = np) {
-        np = splay_next(pm_nr_splay, &c->rec.sent_pkts, p);
-        splay_remove(pm_nr_splay, &c->rec.sent_pkts, p);
-        q_free_iov(w_iov(c->w, pm_idx(p)));
-    }
+    // free packet number spaces
+    free_pn(&c->pn_init.pn);
+    free_pn(&c->pn_hshk.pn);
+    free_pn(&c->pn_data.pn);
 
     diet_free(&c->closed_streams);
-    diet_free(&c->recv);
-    diet_free(&c->acked);
     free(c->peer_name);
-    free_tls(c);
     if (c->err_reason)
         free(c->err_reason);
 

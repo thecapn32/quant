@@ -52,14 +52,14 @@
 
 #include "conn.h"
 #include "pkt.h"
+#include "pn.h"
 #include "quic.h"
-#include "recovery.h"
 #include "stream.h"
 #include "tls.h"
 
+
 struct ev_loop;
 
-SPLAY_GENERATE(pm_nr_splay, pkt_meta, nr_node, pm_nr_cmp)
 SPLAY_GENERATE(pm_off_splay, pkt_meta, off_node, pm_off_cmp)
 
 // TODO: many of these globals should move to a per-engine struct
@@ -116,12 +116,6 @@ int corpus_pkt_dir, corpus_frm_dir;
     } while (0)
 
 
-int pm_nr_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
-{
-    return (a->hdr.nr > b->hdr.nr) - (a->hdr.nr < b->hdr.nr);
-}
-
-
 int pm_off_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
 {
     return (a->stream_off > b->stream_off) - (a->stream_off < b->stream_off);
@@ -141,15 +135,15 @@ void q_alloc(struct w_engine * const w,
 }
 
 
-void free_iov_sq(struct w_iov_sq * const q, struct q_conn * const c)
+void free_iov_sq(struct w_iov_sq * const q)
 {
     struct w_iov * v = sq_first(q);
     while (v) {
         struct w_iov * const next = sq_next(v, next);
         // warn(CRT, "q_free idx %u strm %d %" PRIu64, w_iov_idx(v),
         //      meta(v).stream ? meta(v).stream->id : -1, meta(v).hdr.nr);
-        if (c)
-            splay_remove(pm_nr_splay, &c->rec.sent_pkts, &meta(v));
+        if (meta(v).pn)
+            splay_remove(pm_nr_splay, &meta(v).pn->sent_pkts, &meta(v));
         meta(v) = (struct pkt_meta){0};
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         v = next;
@@ -160,7 +154,7 @@ void free_iov_sq(struct w_iov_sq * const q, struct q_conn * const c)
 
 void q_free(struct w_iov_sq * const q)
 {
-    free_iov_sq(q, 0);
+    free_iov_sq(q);
 }
 
 
@@ -206,8 +200,7 @@ struct q_conn * q_connect(struct w_engine * const w,
     struct q_conn * const c =
         new_conn(w, vers, 0, 0, peer, peer_name, 0, idle_timeout);
 
-    // allocate stream zero and init TLS
-    struct q_stream * const s = new_stream(c, 0, true);
+    // init TLS
     init_tls(c);
     init_tp(c);
 
@@ -220,13 +213,13 @@ struct q_conn * q_connect(struct w_engine * const w,
     ev_timer_again(loop, &c->idle_alarm);
     w_connect(c->sock, peer->sin_addr.s_addr, peer->sin_port);
 
-    // start TLS handshake on stream 0
-    tls_io(s, 0);
+    // start TLS handshake
+    tls_io(get_stream(c, crpt_strm_id(0)), 0);
 
     if (early_data) {
         ensure(early_data_stream, "early data without stream pointer");
-        if (s->c->try_0rtt)
-            init_0rtt_prot(c);
+        // if (c->try_0rtt)
+        //     init_0rtt_prot(c);
         // queue up early data
         *early_data_stream = new_stream(c, c->next_sid, true);
         sq_concat(&(*early_data_stream)->out, early_data);
@@ -264,7 +257,7 @@ struct q_conn * q_connect(struct w_engine * const w,
 
     warn(WRN, "%s conn %s connected%s, cipher %s", conn_type(c), scid2str(c),
          c->did_0rtt ? " after 0-RTT" : "",
-         c->tls.out_pp.one_rtt[0].aead->algo->name);
+         c->pn_data.out_1rtt.aead->algo->name);
     return c;
 }
 
@@ -418,7 +411,7 @@ struct q_conn * q_accept(struct w_engine * const w __attribute__((unused)),
          inet_ntoa(accept_queue->peer.sin_addr),
          ntohs(accept_queue->peer.sin_port),
          accept_queue->did_0rtt ? " after 0-RTT" : "",
-         accept_queue->tls.out_pp.one_rtt[0].aead->algo->name);
+         accept_queue->pn_data.out_1rtt.aead->algo->name);
 
     struct q_conn * const ret = accept_queue;
     accept_queue = 0;
@@ -546,7 +539,7 @@ void q_close(struct q_conn * const c)
         // close all streams
         struct q_stream * s;
         splay_foreach (s, stream, &c->streams)
-            if (s->id != 0)
+            if (s->id >= 0)
                 q_close_stream(s);
 
         if (c->state == serv_lstn)
@@ -581,7 +574,7 @@ void q_cleanup(struct w_engine * const w)
     // stop the event loop
     ev_loop_destroy(loop);
 
-    cleanup_tls_ctx();
+    free_tls_ctx();
 
     // free 0-RTT reordering cache
     while (!splay_empty(&zrtt_ooo_by_cid)) {
@@ -617,7 +610,7 @@ char * q_cid(const struct q_conn * const c)
 
 uint64_t q_sid(const struct q_stream * const s)
 {
-    return s->id;
+    return (uint64_t)s->id;
 }
 
 

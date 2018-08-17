@@ -43,9 +43,11 @@
 #include "frame.h"
 #include "marshall.h"
 #include "pkt.h"
+#include "pn.h"
 #include "quic.h"
 #include "recovery.h"
 #include "stream.h"
+#include "tls.h"
 
 
 #define err_close_return(c, code, ...)                                         \
@@ -59,8 +61,8 @@
     __extension__({                                                            \
         const uint16_t _i = dec(dst, buf, buf_len, pos, dst_len, __VA_ARGS__); \
         if (unlikely(_i == UINT16_MAX))                                        \
-            err_close_return(c, ERR_FRM(type), "%s in %s:%u", #dst, __FILE__,  \
-                             __LINE__);                                        \
+            err_close_return(c, ERR_FRAME_ENC, type, "%s in %s:%u", #dst,      \
+                             __FILE__, __LINE__);                              \
         _i;                                                                    \
     })
 
@@ -69,16 +71,17 @@
     __extension__({                                                            \
         const uint16_t _i = dec_buf(dst, buf, buf_len, pos, dst_len);          \
         if (unlikely(_i == UINT16_MAX))                                        \
-            err_close_return(c, ERR_FRM(type), "%s in %s:%u", #dst, __FILE__,  \
-                             __LINE__);                                        \
+            err_close_return(c, ERR_FRAME_ENC, type, "%s in %s:%u", #dst,      \
+                             __FILE__, __LINE__);                              \
         _i;                                                                    \
     })
 
 
 static uint16_t __attribute__((nonnull))
-dec_stream_frame(struct q_conn * const c,
-                 struct w_iov * const v,
-                 const uint16_t pos)
+dec_stream_or_crypto_frame(struct q_conn * const c,
+                           struct w_iov * const v,
+                           const uint16_t pos,
+                           const bool dec_strm)
 {
     bool track_bytes = false;
     meta(v).stream_header_pos = pos;
@@ -87,24 +90,22 @@ dec_stream_frame(struct q_conn * const c,
     uint8_t t = 0;
     uint16_t i = dec_chk(t, &t, v->buf, v->len, pos, sizeof(t), "0x%02x");
 
-    uint64_t sid = 0;
-    i = dec_chk(t, &sid, v->buf, v->len, i, 0, FMT_SID);
+    int64_t sid = 0;
+    if (dec_strm)
+        i = dec_chk(t, &sid, v->buf, v->len, i, 0, FMT_SID);
+    else
+        sid = crpt_strm_id(c->tls.epoch_in);
 
-    if (unlikely(sid && is_set(F_LONG_HDR, meta(v).hdr.flags) &&
-                 meta(v).hdr.type != F_LH_0RTT))
-        err_close_return(c, ERR_FRM(t), "sid %u in 0x%02x-type pkt", sid,
-                         meta(v).hdr.type);
-
-    if (is_set(F_STREAM_OFF, t))
+    if (is_set(F_STREAM_OFF, t) || !dec_strm)
         i = dec_chk(t, &meta(v).stream_off, v->buf, v->len, i, 0, "%" PRIu64);
     else
         meta(v).stream_off = 0;
 
     uint64_t l = 0;
-    if (is_set(F_STREAM_LEN, t)) {
+    if (is_set(F_STREAM_LEN, t) || !dec_strm) {
         i = dec_chk(t, &l, v->buf, v->len, i, 0, "%" PRIu64);
         if (unlikely(l > (uint64_t)v->len - i))
-            err_close_return(c, ERR_FRM(t), "illegal strm len");
+            err_close_return(c, ERR_FRAME_ENC, t, "illegal strm len");
     } else
         // stream data extends to end of packet
         l = v->len - i;
@@ -115,8 +116,8 @@ dec_stream_frame(struct q_conn * const c,
     // deliver data into stream
     struct q_stream * s = get_stream(c, sid);
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-    if (s == 0) {
-        if (diet_find(&c->closed_streams, sid)) {
+    if (dec_strm && s == 0) {
+        if (diet_find(&c->closed_streams, (uint64_t)sid)) {
             warn(WRN,
                  "ignoring frame for closed strm " FMT_SID " on %s conn %s",
                  sid, conn_type(c), cid2str(sq_first(&c->scid)));
@@ -124,11 +125,12 @@ dec_stream_frame(struct q_conn * const c,
         }
 
         if (unlikely(is_set(STRM_FL_INI_SRV, sid) != c->is_clnt))
-            err_close_return(c, ERR_FRM(t), "got sid %" PRIu64 " but am %s",
-                             sid, conn_type(c));
+            err_close_return(c, ERR_FRAME_ENC, t,
+                             "got sid %" PRIu64 " but am %s", sid,
+                             conn_type(c));
 
         if (is_set(STRM_FL_DIR_UNI, sid))
-            err_close_return(c, ERR_INTERNAL_ERR,
+            err_close_return(c, ERR_INTERNAL, 0,
                              "TODO: unidirectional streams not supported yet");
 
         s = new_stream(c, sid, false);
@@ -162,12 +164,12 @@ dec_stream_frame(struct q_conn * const c,
             if (is_set(F_STREAM_FIN, last_type)) {
                 strm_to_state(s, s->state <= STRM_STAT_HCRM ? STRM_STAT_HCRM
                                                             : STRM_STAT_CLSD);
-                if (s->id != 0)
+                if (dec_strm)
                     maybe_api_return(q_readall_str, s->c, s);
             }
         }
 
-        if (s->id != 0)
+        if (dec_strm)
             maybe_api_return(q_read, s->c, 0);
         goto done;
     }
@@ -185,27 +187,33 @@ dec_stream_frame(struct q_conn * const c,
     meta(v).stream = s;
 
 done:
-    warn(INF,
-         FRAM_IN "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID "/%" PRIu64
-                 " cdata=%" PRIu64 "/%" PRIu64 " off=%" PRIu64 "/%" PRIu64
-                 " len=%" PRIu64 " [%s]",
-         t, is_set(F_STREAM_FIN, t) ? "FIN" : "",
-         is_set(F_STREAM_FIN, t) &&
-                 (is_set(F_STREAM_LEN, t) || is_set(F_STREAM_OFF, t))
-             ? "|"
-             : "",
-         is_set(F_STREAM_LEN, t) ? "LEN" : "",
-         is_set(F_STREAM_LEN, t) && is_set(F_STREAM_OFF, t) ? "|" : "",
-         is_set(F_STREAM_OFF, t) ? "OFF" : "", sid, max_strm_id(s),
-         s->c->in_data, s->c->tp_local.max_data, meta(v).stream_off,
-         s->in_data_max, l, kind);
+    if (dec_strm)
+        warn(INF,
+             FRAM_IN "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID "/%" PRIu64
+                     " cdata=%" PRIu64 "/%" PRIu64 " off=%" PRIu64 "/%" PRIu64
+                     " len=%" PRIu64 " [%s]",
+             t, is_set(F_STREAM_FIN, t) ? "FIN" : "",
+             is_set(F_STREAM_FIN, t) &&
+                     (is_set(F_STREAM_LEN, t) || is_set(F_STREAM_OFF, t))
+                 ? "|"
+                 : "",
+             is_set(F_STREAM_LEN, t) ? "LEN" : "",
+             is_set(F_STREAM_LEN, t) && is_set(F_STREAM_OFF, t) ? "|" : "",
+             is_set(F_STREAM_OFF, t) ? "OFF" : "", sid, max_strm_id(s),
+             s->c->in_data, s->c->tp_local.max_data, meta(v).stream_off,
+             s->in_data_max, l, kind);
+    else
+        warn(INF,
+             FRAM_IN "CRYPTO" NRM " 0x%02x off=%" PRIu64 "/%" PRIu64
+                     " len=%" PRIu64 " [%s]",
+             t, meta(v).stream_off, s->in_data_max, l, kind);
 #endif
 
     if (track_bytes)
         track_bytes_in(s, l);
 
-    if (s && s->id && meta(v).stream_off + l > s->in_data_max)
-        err_close_return(c, ERR_FLOW_CONTROL_ERR,
+    if (s && dec_strm && meta(v).stream_off + l > s->in_data_max)
+        err_close_return(c, ERR_FLOW_CONTROL, 0,
                          "stream %" PRIu64 " off %" PRIu64
                          " > in_data_max %" PRIu64,
                          s->id, meta(v).stream_off + l - 1, s->in_data_max);
@@ -227,13 +235,19 @@ uint64_t shorten_ack_nr(const uint64_t ack, const uint64_t diff)
 }
 
 
-uint16_t dec_ack_frame(
-    struct q_conn * const c,
-    const struct w_iov * const v,
-    const uint16_t pos,
-    void (*before_ack)(struct q_conn * const, const uint64_t, const uint64_t),
-    void (*on_each_ack)(struct q_conn * const, const uint64_t, const uint8_t),
-    void (*after_ack)(struct q_conn * const))
+uint16_t dec_ack_frame(struct q_conn * const c,
+                       const struct w_iov * const v,
+                       const uint16_t pos,
+                       void (*before_ack)(struct q_conn * const,
+                                          struct pn_space * const pn,
+                                          const uint64_t,
+                                          const uint64_t),
+                       void (*on_each_ack)(struct q_conn * const,
+                                           struct pn_space * const pn,
+                                           const uint64_t,
+                                           const uint8_t),
+                       void (*after_ack)(struct q_conn * const,
+                                         struct pn_space * const pn))
 {
     uint64_t lg_ack = 0;
     uint16_t i = dec_chk(FRAM_TYPE_ACK, &lg_ack, v->buf, v->len, pos + 1, 0,
@@ -245,8 +259,8 @@ uint16_t dec_ack_frame(
 
     // TODO: figure out a better way to handle huge ACK delays
     if (unlikely(ack_delay_raw > UINT32_MAX))
-        err_close_return(c, ERR_FRM(FRAM_TYPE_ACK), "ACK delay raw %" PRIu64,
-                         ack_delay_raw);
+        err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_ACK,
+                         "ACK delay raw %" PRIu64, ack_delay_raw);
 
     // handshake pkts always use an ACK delay exponent of 3
     const uint8_t ade =
@@ -255,12 +269,14 @@ uint16_t dec_ack_frame(
             : c->tp_peer.ack_del_exp;
     const uint64_t ack_delay = ack_delay_raw * (1 << ade);
 
+    struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
+
     uint64_t num_blocks = 0;
     i = dec_chk(FRAM_TYPE_ACK, &num_blocks, v->buf, v->len, i, 0, "%" PRIu64);
 
     uint64_t lg_ack_in_block = lg_ack;
     if (before_ack)
-        before_ack(c, lg_ack_in_block, ack_delay);
+        before_ack(c, pn, lg_ack_in_block, ack_delay);
 
     for (uint64_t n = num_blocks + 1; n > 0; n--) {
         uint64_t gap = 0;
@@ -270,7 +286,7 @@ uint16_t dec_ack_frame(
 
         // TODO: figure out a better way to handle huge ACK blocks
         if (unlikely(ack_block_len > UINT16_MAX))
-            err_close_return(c, ERR_FRM(FRAM_TYPE_ACK),
+            err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_ACK,
                              "ACK block len %" PRIu64, ack_block_len);
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
@@ -305,7 +321,7 @@ uint16_t dec_ack_frame(
 
         uint64_t ack = lg_ack_in_block;
         while (ack_block_len >= lg_ack_in_block - ack) {
-            on_each_ack(c, ack, meta(v).hdr.flags);
+            on_each_ack(c, pn, ack, meta(v).hdr.flags);
             if (likely(ack > 0))
                 ack--;
             else
@@ -316,14 +332,14 @@ uint16_t dec_ack_frame(
             i = dec_chk(FRAM_TYPE_ACK, &gap, v->buf, v->len, i, 0, "%" PRIu64);
             // warn(ERR, "%" PRIu64 " %" PRIu64, ack, gap);
             if (unlikely(ack <= gap))
-                err_close_return(c, ERR_FRM(FRAM_TYPE_ACK), "ACK gap %" PRIu64,
-                                 gap);
+                err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_ACK,
+                                 "ACK gap %" PRIu64, gap);
             lg_ack_in_block = ack - gap - 1;
         }
     }
 
     if (after_ack)
-        after_ack(c);
+        after_ack(c, pn);
     return i;
 }
 
@@ -341,10 +357,14 @@ dec_close_frame(struct q_conn * const c,
     uint16_t err_code = 0;
     i = dec_chk(type, &err_code, v->buf, v->len, i, sizeof(err_code), "0x%04x");
 
+    uint64_t frame_type = 0;
+    i = dec_chk(type, &frame_type, v->buf, v->len, i, 0, "0x%" PRIx64);
+
     uint64_t reas_len = 0;
     i = dec_chk(type, &reas_len, v->buf, v->len, i, 0, "%" PRIu64);
     if (unlikely(i == UINT16_MAX || reas_len + i > v->len))
-        err_close_return(c, ERR_FRM(type), "illegal reason len %u", reas_len);
+        err_close_return(c, ERR_FRAME_ENC, type, "illegal reason len %u",
+                         reas_len);
 
     char reas_phr[UINT16_MAX];
     if (reas_len)
@@ -355,11 +375,11 @@ dec_close_frame(struct q_conn * const c,
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     warn(INF,
-         FRAM_IN "%s" NRM " err=%s0x%04x " NRM "rlen=%" PRIu64
-                 " reason=%s%.*s" NRM,
+         FRAM_IN "%s" NRM " err=%s0x%04x " NRM "frame=0x%" PRIx64
+                 " rlen=%" PRIu64 " reason=%s%.*s" NRM,
          type == FRAM_TYPE_CONN_CLSE ? "CONNECTION_CLOSE" : "APPLICATION_CLOSE",
-         err_code ? RED : NRM, err_code, reas_len, err_code ? RED : NRM,
-         reas_len, reas_phr);
+         err_code ? RED : NRM, err_code, frame_type, reas_len,
+         err_code ? RED : NRM, reas_len, reas_phr);
 #endif
 
     return i;
@@ -371,7 +391,7 @@ dec_max_stream_data_frame(struct q_conn * const c,
                           const struct w_iov * const v,
                           const uint16_t pos)
 {
-    uint64_t sid = 0;
+    int64_t sid = 0;
     uint16_t i = dec_chk(FRAM_TYPE_MAX_STRM_DATA, &sid, v->buf, v->len, pos + 1,
                          0, FMT_SID);
 
@@ -397,12 +417,12 @@ dec_max_stream_id_frame(struct q_conn * const c,
                         const struct w_iov * const v,
                         const uint16_t pos)
 {
-    uint64_t max = 0;
+    int64_t max = 0;
     const uint16_t i = dec_chk(FRAM_TYPE_MAX_SID, &max, v->buf, v->len, pos + 1,
                                0, "%" PRIu64);
 
     if (is_set(STRM_FL_INI_SRV, max) == c->is_clnt)
-        err_close_return(c, ERR_FRM(FRAM_TYPE_MAX_SID),
+        err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_MAX_SID,
                          "illegal MAX_SID for %s: %u", conn_type(c), max);
 
     if (is_set(STRM_FL_DIR_UNI, max)) {
@@ -447,14 +467,14 @@ dec_stream_blocked_frame(struct q_conn * const c,
                          const struct w_iov * const v,
                          const uint16_t pos)
 {
-    uint64_t sid = 0;
+    int64_t sid = 0;
     uint16_t i =
         dec_chk(FRAM_TYPE_STRM_BLCK, &sid, v->buf, v->len, pos + 1, 0, FMT_SID);
 
     struct q_stream * const s = get_stream(c, sid);
     if (unlikely(s == 0))
-        err_close_return(c, ERR_FRM(FRAM_TYPE_STRM_BLCK), "unknown strm %u",
-                         sid);
+        err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_STRM_BLCK,
+                         "unknown strm %u", sid);
 
     uint64_t off = 0;
     i = dec_chk(FRAM_TYPE_STRM_BLCK, &off, v->buf, v->len, i, 0, "%" PRIu64);
@@ -500,7 +520,7 @@ dec_stream_id_blocked_frame(struct q_conn * const c,
                             const struct w_iov * const v,
                             const uint16_t pos)
 {
-    uint64_t sid = 0;
+    int64_t sid = 0;
     uint16_t i =
         dec_chk(FRAM_TYPE_SID_BLCK, &sid, v->buf, v->len, pos + 1, 0, FMT_SID);
 
@@ -522,14 +542,14 @@ dec_stop_sending_frame(struct q_conn * const c,
                        const struct w_iov * const v,
                        const uint16_t pos)
 {
-    uint64_t sid = 0;
+    int64_t sid = 0;
     uint16_t i =
         dec_chk(FRAM_TYPE_STOP_SEND, &sid, v->buf, v->len, pos + 1, 0, FMT_SID);
 
     struct q_stream * const s = get_stream(c, sid);
     if (unlikely(s == 0))
-        err_close_return(c, ERR_FRM(FRAM_TYPE_STOP_SEND), "unknown strm %u",
-                         sid);
+        err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_STOP_SEND,
+                         "unknown strm %u", sid);
 
     uint16_t err_code = 0;
     i = dec_chk(FRAM_TYPE_STOP_SEND, &err_code, v->buf, v->len, i,
@@ -575,15 +595,8 @@ dec_path_response_frame(struct q_conn * const c,
     warn(INF, FRAM_IN "PATH_RESPONSE" NRM " data=%" PRIx64, c->path_resp_in);
 #endif
 
-    if (c->path_resp_in == c->path_chlg_out) {
+    if (c->path_resp_in == c->path_chlg_out)
         c->tx_path_chlg = false;
-        if (c->is_clnt == false && c->state == serv_tx_sh) {
-            // unblock stream 0 SH flight
-            struct q_stream * s = get_stream(c, 0);
-            s->out_data_max = 0;
-            s->blocked = false;
-        }
-    }
 
     return i;
 }
@@ -603,8 +616,8 @@ dec_new_cid_frame(struct q_conn * const c,
                 sizeof(dcid.len), "%u");
 
     if (unlikely(dcid.len < 4 || dcid.len > 18))
-        err_close_return(c, ERR_FRM(FRAM_TYPE_NEW_CID), "illegel cid len %u",
-                         dcid.len);
+        err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_NEW_CID,
+                         "illegel cid len %u", dcid.len);
 
     i = dec_chk_buf(FRAM_TYPE_NEW_CID, dcid.id, v->buf, v->len, i, dcid.len);
     i = dec_chk_buf(FRAM_TYPE_NEW_CID, dcid.srt, v->buf, v->len, i,
@@ -693,7 +706,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
             }
 
             // this is the first stream frame in this packet
-            i = dec_stream_frame(c, v, i);
+            i = dec_stream_or_crypto_frame(c, v, i, true);
         } else {
             switch (type) {
             case FRAM_TYPE_ACK:
@@ -764,8 +777,12 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
                 i = dec_new_cid_frame(c, v, i);
                 break;
 
+            case FRAM_TYPE_CRPT:
+                i = dec_stream_or_crypto_frame(c, v, i, false);
+                break;
+
             default:
-                err_close(c, ERR_FRM(type),
+                err_close(c, ERR_FRAME_ENC, type,
                           "unknown frame type 0x%02x at pos %u", type, i);
                 i = UINT16_MAX;
             }
@@ -834,13 +851,14 @@ bool better_or_equal_prot(const uint8_t a, const uint8_t b)
 
 
 uint16_t enc_ack_frame(struct q_conn * const c,
+                       struct pn_space * const pn,
                        struct w_iov * const v,
                        const uint16_t pos)
 {
     struct ival *b = 0, *lg_hi = 0, *lg_lo = 0, *cur_hi = 0, *cur_lo = 0;
     uint64_t block_cnt = 0;
 
-    splay_foreach_rev (b, diet, &c->recv) {
+    splay_foreach_rev (b, diet, &pn->recv) {
         // warn(DBG, "range %" PRIu64 " - %" PRIu64 " 0x%02x", b->hi, b->lo,
         //      diet_class(b));
 
@@ -893,7 +911,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     }
 
     if (lg_lo == 0) {
-        lg_lo = splay_min(diet, &c->recv);
+        lg_lo = splay_min(diet, &pn->recv);
         // warn(DBG, "found lg_lo %" PRIu64 " - %" PRIu64 " 0x%02x", lg_lo->hi,
         //      lg_lo->lo, diet_class(lg_lo));
     }
@@ -942,7 +960,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
 
     cur_hi = lg_hi;
     cur_lo = lg_lo;
-    b = splay_prev(diet, &c->recv, lg_lo);
+    b = splay_prev(diet, &pn->recv, lg_lo);
 
     while (b) {
 
@@ -965,7 +983,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
         }
 
         uint64_t gap = 0;
-        if (cur_lo->lo > b->hi + 1 || splay_prev(diet, &c->recv, b) == 0) {
+        if (cur_lo->lo > b->hi + 1 || splay_prev(diet, &pn->recv, b) == 0) {
             // warn(DBG, "have gap");
             gap = cur_lo->lo - b->hi - 2;
             i = enc(v->buf, v->len, i, &gap, 0, 0, "%" PRIu64);
@@ -987,62 +1005,78 @@ uint16_t enc_ack_frame(struct q_conn * const c,
                  gap, block, cur_lo->lo);
 
     next:
-        b = splay_prev(diet, &c->recv, b);
+        b = splay_prev(diet, &pn->recv, b);
     }
     return i;
 }
 
 
-uint16_t enc_stream_frame(struct q_stream * const s,
-                          struct w_iov * const v,
-                          const uint16_t pos)
+uint16_t enc_stream_or_crypto_frame(struct q_stream * const s,
+                                    struct w_iov * const v,
+                                    const uint16_t pos,
+                                    const bool enc_strm)
 {
-    ensure(s->id == 0 || !is_set(F_LONG_HDR, meta(v).hdr.flags) ||
-               meta(v).hdr.type == F_LH_0RTT,
-           "sid %u in 0x%02x-type pkt", s->id, meta(v).hdr.type);
-
     const uint64_t dlen = v->len - Q_OFFSET;
-    ensure(dlen || s->state > STRM_STAT_OPEN,
-           "no stream data or need to send FIN");
+    uint8_t type;
 
-    uint8_t type = FRAM_TYPE_STRM | (dlen ? F_STREAM_LEN : 0) |
-                   (s->out_off ? F_STREAM_OFF : 0);
+    if (enc_strm) {
+        ensure(!is_set(F_LONG_HDR, meta(v).hdr.flags) ||
+                   meta(v).hdr.type == F_LH_0RTT,
+               "sid %u in 0x%02x-type pkt", s->id, meta(v).hdr.type);
 
-    // if stream is closed locally and this is the last packet, include a FIN
-    if ((s->state == STRM_STAT_HCLO || s->state == STRM_STAT_CLSD) &&
-        v == sq_last(&s->out, w_iov, next)) {
-        type |= F_STREAM_FIN;
-        maybe_api_return(q_close_stream, s->c, s);
-    }
+        ensure(dlen || s->state > STRM_STAT_OPEN,
+               "no stream data or need to send FIN");
+
+        type = FRAM_TYPE_STRM | (dlen ? F_STREAM_LEN : 0) |
+               (s->out_off ? F_STREAM_OFF : 0);
+
+        // if stream is closed locally and this is the last packet, include a
+        // FIN
+        if ((s->state == STRM_STAT_HCLO || s->state == STRM_STAT_CLSD) &&
+            v == sq_last(&s->out, w_iov, next)) {
+            type |= F_STREAM_FIN;
+            maybe_api_return(q_close_stream, s->c, s);
+        }
+    } else
+        type = FRAM_TYPE_CRPT;
+
     bit_set(meta(v).frames, type);
 
     // now that we know how long the stream frame header is, encode it
     uint16_t i = meta(v).stream_header_pos =
-        Q_OFFSET - 1 - varint_size_needed(s->id) -
-        (dlen ? varint_size_needed(dlen) : 0) -
-        (s->out_off ? varint_size_needed(s->out_off) : 0);
+        Q_OFFSET - 1 - (enc_strm ? varint_size_needed((uint64_t)s->id) : 0) -
+        (dlen || !enc_strm ? varint_size_needed(dlen) : 0) -
+        (s->out_off || !enc_strm ? varint_size_needed(s->out_off) : 0);
     ensure(i > pos, "Q_OFFSET exhausted (%u > %u)", i, pos);
     i = enc(v->buf, v->len, i, &type, sizeof(type), 0, "0x%02x");
-    i = enc(v->buf, v->len, i, &s->id, 0, 0, FMT_SID);
-    if (s->out_off)
+    if (enc_strm)
+        i = enc(v->buf, v->len, i, &s->id, 0, 0, FMT_SID);
+    if (s->out_off || !enc_strm)
         i = enc(v->buf, v->len, i, &s->out_off, 0, 0, "%" PRIu64);
-    if (dlen)
+    if (dlen || !enc_strm)
         enc(v->buf, v->len, i, &dlen, 0, 0, "%u");
 
-    warn(INF,
-         FRAM_OUT "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID "/%" PRIu64
-                  " cdata=%" PRIu64 "/%" PRIu64 " off=%" PRIu64 "/%" PRIu64
-                  " len=%" PRIu64,
-         type, is_set(F_STREAM_FIN, type) ? "FIN" : "",
-         is_set(F_STREAM_FIN, type) &&
-                 (is_set(F_STREAM_LEN, type) || is_set(F_STREAM_OFF, type))
-             ? "|"
-             : "",
-         is_set(F_STREAM_LEN, type) ? "LEN" : "",
-         is_set(F_STREAM_LEN, type) && is_set(F_STREAM_OFF, type) ? "|" : "",
-         is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id, max_strm_id(s),
-         s->c->out_data, s->c->tp_peer.max_data, s->out_off, s->out_data_max,
-         dlen);
+    if (enc_strm)
+        warn(INF,
+             FRAM_OUT "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID "/%" PRIu64
+                      " cdata=%" PRIu64 "/%" PRIu64 " off=%" PRIu64 "/%" PRIu64
+                      " len=%" PRIu64,
+             type, is_set(F_STREAM_FIN, type) ? "FIN" : "",
+             is_set(F_STREAM_FIN, type) &&
+                     (is_set(F_STREAM_LEN, type) || is_set(F_STREAM_OFF, type))
+                 ? "|"
+                 : "",
+             is_set(F_STREAM_LEN, type) ? "LEN" : "",
+             is_set(F_STREAM_LEN, type) && is_set(F_STREAM_OFF, type) ? "|"
+                                                                      : "",
+             is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id, max_strm_id(s),
+             s->c->out_data, s->c->tp_peer.max_data, s->out_off,
+             s->out_data_max, dlen);
+    else
+        warn(INF,
+             FRAM_OUT "CRYPTO" NRM " 0x%02x off=%" PRIu64 "/%" PRIu64
+                      " len=%" PRIu64,
+             type, s->out_off, s->out_data_max, dlen);
 
     track_bytes_out(s, dlen);
     meta(v).stream = s; // remember stream this buf belongs to
@@ -1060,30 +1094,25 @@ uint16_t enc_close_frame(struct w_iov * const v,
                          const uint16_t pos,
                          const uint8_t type,
                          const uint16_t err_code,
+                         const uint8_t err_frm,
                          const char * const reas)
 {
     bit_set(meta(v).frames, type);
 
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
     i = enc(v->buf, v->len, i, &err_code, sizeof(err_code), 0, "0x%04x");
+    i = enc(v->buf, v->len, i, &err_frm, sizeof(err_frm), 0, "0x%02x");
 
     const uint64_t rlen = reas ? MIN(strlen(reas), v->len - i) : 0;
     i = enc(v->buf, v->len, i, &rlen, 0, 0, "%" PRIu64);
 
-    if (reas) {
-        i = enc_buf(v->buf, v->len, i, reas, (uint16_t)rlen);
-        warn(INF,
-             FRAM_OUT "%s" NRM " err=%s0x%04x" NRM " rlen=%" PRIu64
-                      " reason=%s%.*s" NRM,
-             type == FRAM_TYPE_CONN_CLSE ? "CONNECTION_CLOSE"
-                                         : "APPLICATION_CLOSE",
-             err_code ? RED : NRM, err_code, rlen, err_code ? RED : NRM, rlen,
-             reas);
-    } else
-        warn(INF, FRAM_OUT "%s" NRM " err=%s0x%04x" NRM,
-             type == FRAM_TYPE_CONN_CLSE ? "CONNECTION_CLOSE"
-                                         : "APPLICATION_CLOSE",
-             err_code ? RED : NRM, err_code);
+    i = enc_buf(v->buf, v->len, i, reas, (uint16_t)rlen);
+    warn(INF,
+         FRAM_OUT "%s" NRM " err=%s0x%04x" NRM " frame=0x%02x rlen=%" PRIu64
+                  " reason=%s%.*s" NRM,
+         type == FRAM_TYPE_CONN_CLSE ? "CONNECTION_CLOSE" : "APPLICATION_CLOSE",
+         err_code ? RED : NRM, err_code, err_frm, reas ? rlen : 0,
+         err_code ? RED : NRM, reas ? rlen : 0, reas);
 
     return i;
 }

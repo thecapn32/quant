@@ -36,6 +36,7 @@
 #include <warpcore/warpcore.h>
 
 #include "diet.h"
+#include "pn.h"
 #include "quic.h"
 #include "recovery.h"
 #include "tls.h"
@@ -48,8 +49,8 @@ extern splay_head(cid_splay, q_cid_map) conns_by_cid;
 struct transport_params {
     uint64_t max_strm_data;
     uint64_t max_data;
-    uint64_t max_strm_uni;
-    uint64_t max_strm_bidi;
+    int64_t max_strm_uni;
+    int64_t max_strm_bidi;
     uint16_t max_pkt;
     uint16_t idle_to;
     uint8_t ack_del_exp;
@@ -76,7 +77,7 @@ sl_head(q_conn_sl, q_conn);
         STATE(clnt_tx_cf, 103), /* states only valid on server */              \
         STATE(serv_lstn, 200), STATE(serv_rx_ci, 201),                         \
         STATE(serv_tx_vneg, 202), STATE(serv_tx_rtry, 203),                    \
-        STATE(serv_tx_sh, 204),
+        STATE(serv_tx_si, 204), STATE(serv_tx_sh, 205),
 
 /// Define connection states.
 /// \dotfile conn-states.dot "Connection state diagram."
@@ -118,15 +119,19 @@ struct q_conn {
 
     char * err_reason;
     uint16_t err_code;
+    uint8_t err_frm;
 
-    uint8_t _unused[2];
+    uint8_t _unused;
 
     uint32_t vers;         ///< QUIC version in use for this connection.
     uint32_t vers_initial; ///< QUIC version first negotiated.
 
     uint8_t _unused2[4];
 
-    uint64_t next_sid; ///< Next stream ID to use on q_rsv_stream().
+    struct pn_hshk_space pn_init, pn_hshk;
+    struct pn_data_space pn_data;
+
+    int64_t next_sid; ///< Next stream ID to use on q_rsv_stream().
 
     struct transport_params tp_peer;
     struct transport_params tp_local;
@@ -137,9 +142,6 @@ struct q_conn {
     ev_timer idle_alarm;
     ev_timer closing_alarm;
     ev_timer ack_alarm;
-
-    struct diet recv;  ///< Received packet numbers still needing to be ACKed.
-    struct diet acked; ///< Sent packet numbers already ACKed.
 
     struct sockaddr_in peer; ///< Address of our peer.
     char * peer_name;
@@ -162,6 +164,19 @@ struct q_conn {
 
     uint64_t ncid_seq_out;
 };
+
+
+#define pn_for_epoch(c, e)                                                     \
+    ((e) == 0 ? &(c)->pn_init.pn                                               \
+              : ((e) == 1 ? &(c)->pn_data.pn                                   \
+                          : ((e) == 2 ? &(c)->pn_hshk.pn : &(c)->pn_data.pn)))
+
+#define pn_for_pkt_type(c, t)                                                  \
+    ((t) == F_LH_INIT                                                          \
+         ? &(c)->pn_init.pn                                                    \
+         : ((t) == F_LH_0RTT                                                   \
+                ? &(c)->pn_data.pn                                             \
+                : ((t) == F_LH_HSHK ? &(c)->pn_hshk.pn : &(c)->pn_data.pn)))
 
 
 extern int __attribute__((nonnull))
@@ -255,6 +270,7 @@ loop_update(struct ev_loop * const l, ev_async * const w, int e);
 
 extern void __attribute__((nonnull)) err_close(struct q_conn * const c,
                                                const uint16_t code,
+                                               const uint8_t frm,
                                                const char * const fmt,
                                                ...);
 

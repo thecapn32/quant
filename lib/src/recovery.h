@@ -31,18 +31,14 @@
 
 #include <ev.h>
 
-#include "quic.h"
 
 struct q_conn;
 struct w_iov;
+struct q_stream;
+struct pn_space;
 
 
 struct recovery {
-    /// Sent-but-unACKed packets. The @p buf and @p len fields of the w_iov
-    /// structs are relative to any stream data.
-    ///
-    struct pm_nr_splay sent_pkts; // sent_packets
-
     // LD state
     ev_timer ld_alarm;   // loss_detection_alarm
     uint16_t hshake_cnt; // handshake_count
@@ -51,18 +47,15 @@ struct recovery {
 
     uint8_t _unused2[2];
 
-    uint64_t lg_sent_before_rto; // largest_sent_before_rto
-    ev_tstamp last_sent_t;       // time_of_last_sent_packet
-    uint64_t lg_sent;            // largest_sent_packet
-    uint64_t lg_acked;           // largest_acked_packet
-    ev_tstamp max_ack_del;       // max_ack_delay
-    ev_tstamp min_rtt;           // min_rtt
-    ev_tstamp latest_rtt;        // latest_rtt
-    ev_tstamp srtt;              // smoothed_rtt
-    ev_tstamp rttvar;            // rttvar
-    uint64_t reorder_thresh;     // reordering_threshold
-    double reorder_fract;        // time_reordering_fraction
-    ev_tstamp loss_t;            // loss_time
+    ev_tstamp last_sent_t;   // time_of_last_sent_packet
+    ev_tstamp max_ack_del;   // max_ack_delay
+    ev_tstamp min_rtt;       // min_rtt
+    ev_tstamp latest_rtt;    // latest_rtt
+    ev_tstamp srtt;          // smoothed_rtt
+    ev_tstamp rttvar;        // rttvar
+    uint64_t reorder_thresh; // reordering_threshold
+    double reorder_fract;    // time_reordering_fraction
+    ev_tstamp loss_t;        // loss_time
 
     // CC state
     uint64_t in_flight; // bytes_in_flight
@@ -72,22 +65,28 @@ struct recovery {
 };
 
 
-extern void __attribute__((nonnull)) rec_init(struct q_conn * const c);
+extern void __attribute__((nonnull)) init_rec(struct q_conn * const c);
 
 extern void __attribute__((nonnull))
-on_pkt_sent(struct q_conn * const c, struct w_iov * const v);
+on_pkt_sent(struct q_stream * const s, struct w_iov * const v);
 
 extern void __attribute__((nonnull)) on_ack_rx_1(struct q_conn * const c,
+                                                 struct pn_space * const pn,
                                                  const uint64_t ack,
                                                  const uint64_t ack_del);
 
-extern void __attribute__((nonnull)) on_ack_rx_2(struct q_conn * const c);
-
 extern void __attribute__((nonnull))
-on_pkt_acked(struct q_conn * const c, const uint64_t ack, const uint8_t flags);
+on_ack_rx_2(struct q_conn * const c, struct pn_space * const pn);
+
+extern void __attribute__((nonnull)) on_pkt_acked(struct q_conn * const c,
+                                                  struct pn_space * const pn,
+                                                  const uint64_t ack,
+                                                  const uint8_t flags);
 
 extern struct w_iov * __attribute__((nonnull))
-find_sent_pkt(struct q_conn * const c, const uint64_t nr);
+find_sent_pkt(struct q_conn * const c,
+              struct pn_space * const pn,
+              const uint64_t nr);
 
 extern uint32_t __attribute__((nonnull))
 rtxable_pkts_outstanding(struct q_conn * const c);

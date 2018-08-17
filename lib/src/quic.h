@@ -46,8 +46,6 @@
 
 #include "frame.h"
 
-struct q_conn;
-
 
 struct cid {
     sq_entry(cid) next;
@@ -75,6 +73,8 @@ struct pkt_hdr {
     uint64_t nr;
     struct cid dcid;
     struct cid scid;
+    uint64_t tok_len;
+    uint8_t * tok;
     uint8_t flags; // first byte of packet
     uint8_t type;
     uint8_t _unused[6];
@@ -100,21 +100,17 @@ struct pkt_meta {
     uint8_t is_lost : 1;        ///< Have we marked this w_iov as lost?
     uint8_t : 5;
     bitstr_t bit_decl(frames, NUM_FRAM_TYPES); ///< Frames present in pkt.
-    uint8_t _unused[2];
+    uint8_t _unused;
+    struct pn_space * pn;
     struct pkt_hdr hdr;
 };
 
 
 extern int __attribute__((nonnull))
-pm_nr_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b);
-
-extern int __attribute__((nonnull))
 pm_off_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b);
 
-splay_head(pm_nr_splay, pkt_meta);
 splay_head(pm_off_splay, pkt_meta);
 
-SPLAY_PROTOTYPE(pm_nr_splay, pkt_meta, nr_node, pm_nr_cmp)
 SPLAY_PROTOTYPE(pm_off_splay, pkt_meta, off_node, pm_off_cmp)
 
 
@@ -158,7 +154,7 @@ pm_cpy(struct pkt_meta * const dst, const struct pkt_meta * const src)
 }
 
 /// Offset of stream frame payload data in w_iov buffers.
-#define Q_OFFSET 96
+#define Q_OFFSET 64
 
 #define PATH_CHLG_LIMIT 2
 
@@ -356,8 +352,7 @@ extern void *api_conn, *api_strm;
     })
 
 
-extern __attribute__((nonnull(1))) void free_iov_sq(struct w_iov_sq * const q,
-                                                    struct q_conn * const c);
+extern __attribute__((nonnull(1))) void free_iov_sq(struct w_iov_sq * const q);
 
 
 static inline __attribute__((nonnull)) struct w_iov *
@@ -392,7 +387,7 @@ w_iov_dup(const struct w_iov * const v)
 #define FMT_PNR_IN BLU "%" PRIu64 NRM
 #define FMT_PNR_OUT GRN "%" PRIu64 NRM
 
-#define FMT_SID BLD YEL "%" PRIu64 NRM
+#define FMT_SID BLD YEL "%" PRId64 NRM
 
 
 #if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) &&  \

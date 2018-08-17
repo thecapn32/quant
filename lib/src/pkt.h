@@ -45,20 +45,17 @@
 #define F_SH_EXP_MASK 0x07
 #define F_SH 0x30
 
-#define ERR_NO_ERR 0x0
-#define ERR_INTERNAL_ERR 0x1
-#define ERR_FLOW_CONTROL_ERR 0x3
-// #define ERR_STREAM_ID_ERR 0x4
-// #define ERR_STREAM_STATE_ERR 0x5
-// #define ERR_FINAL_OFFSET_ERR 0x6
-// #define ERR_FRAME_FORMAT_ERR 0x7
-// #define ERR_TRANSPORT_PARAMETER_ERR 0x8
-// #define ERR_VERSION_NEGOTIATION_ERR 0x9
-// #define ERR_PROTOCOL_VIOLATION 0xA
-#define ERR_TLS_HSHAKE_FAIL 0x201
-// #define ERR_TLS_FATL_ALRT_GEN 0x202
-// #define ERR_TLS_FATL_ALRT_REC 0x203
-#define ERR_FRM(type) ((0x1 << 8) | (type))
+#define ERR_NONE 0x0
+#define ERR_INTERNAL 0x1
+#define ERR_FLOW_CONTROL 0x3
+// #define ERR_STREAM_ID 0x4
+// #define ERR_STREAM_STATE 0x5
+// #define ERR_FINAL_OFFSET 0x6
+#define ERR_FRAME_ENC 0x7
+#define ERR_TRANSPORT_PARAMETER 0x8
+// #define ERR_VERSION_NEGOTIATION 0x9
+#define ERR_PROTOCOL_VIOLATION 0xa
+#define ERR_TLS(type) (0x100 + (type))
 
 
 #define pkt_type(flags) ((flags) & (is_set(F_LONG_HDR, (flags)) ? ~0x80 : 0x03))
@@ -70,7 +67,7 @@ struct w_iov;
 struct w_iov_sq;
 
 extern bool __attribute__((nonnull))
-dec_pkt_hdr_initial(const struct w_iov * const v, const bool is_clnt);
+dec_pkt_hdr_beginning(const struct w_iov * const v, const bool is_clnt);
 
 extern bool __attribute__((nonnull))
 dec_pkt_hdr_remainder(struct w_iov * const v,
