@@ -31,6 +31,7 @@
 
 extern "C" {
 #include "pkt.h"
+#include "pn.h"
 #include "quic.h"
 #include "tls.h" // IWYU pragma: keep
 }
@@ -44,8 +45,8 @@ static void BM_quic_encryption(benchmark::State & state)
 {
     const auto len = uint16_t(state.range(0));
     const auto pne = uint16_t(state.range(1));
-    struct w_iov * const v = q_alloc_iov(w, len, 0);
-    struct w_iov * const x = q_alloc_iov(w, MAX_PKT_LEN, 0);
+    struct w_iov * v = q_alloc_iov(w, len, 0);
+    struct w_iov * x = q_alloc_iov(w, MAX_PKT_LEN, 0);
 
     arc4random_buf(v->buf, len);
     meta(v).hdr.type = F_LH_INIT;

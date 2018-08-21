@@ -122,11 +122,8 @@ int pm_off_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
 }
 
 
-void q_alloc(struct w_engine * const w,
-             struct w_iov_sq * const q,
-             const uint32_t len)
+static void __attribute__((nonnull)) sq_unpoison(struct w_iov_sq * const q)
 {
-    w_alloc_len(w, q, len, MAX_PKT_LEN - AEAD_LEN - Q_OFFSET, Q_OFFSET);
     struct w_iov * v = 0;
     sq_foreach (v, q, next) {
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
@@ -135,26 +132,33 @@ void q_alloc(struct w_engine * const w,
 }
 
 
-void free_iov_sq(struct w_iov_sq * const q)
+// static void __attribute__((nonnull)) q_alloc_cnt(struct w_engine * const w,
+//                                                  struct w_iov_sq * const q,
+//                                                  const uint32_t cnt)
+// {
+//     w_alloc_cnt(w, q, cnt, MAX_PKT_LEN - AEAD_LEN - Q_OFFSET, Q_OFFSET);
+//     sq_unpoison(q);
+// }
+
+
+void q_alloc(struct w_engine * const w,
+             struct w_iov_sq * const q,
+             const uint32_t len)
 {
-    struct w_iov * v = sq_first(q);
-    while (v) {
-        struct w_iov * const next = sq_next(v, next);
-        // warn(CRT, "q_free idx %u strm %d %" PRIu64, w_iov_idx(v),
-        //      meta(v).stream ? meta(v).stream->id : -1, meta(v).hdr.nr);
-        if (meta(v).pn)
-            splay_remove(pm_nr_splay, &meta(v).pn->sent_pkts, &meta(v));
-        meta(v) = (struct pkt_meta){0};
-        ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
-        v = next;
-    }
-    w_free(q);
+    w_alloc_len(w, q, len, MAX_PKT_LEN - AEAD_LEN - Q_OFFSET, Q_OFFSET);
+    sq_unpoison(q);
 }
 
 
 void q_free(struct w_iov_sq * const q)
 {
-    free_iov_sq(q);
+    struct w_iov * v = sq_first(q);
+    while (v) {
+        sq_remove_head(q, next);
+        struct w_iov * const next = sq_next(v, next);
+        q_free_iov(v);
+        v = next;
+    }
 }
 
 

@@ -142,7 +142,7 @@ extern struct pkt_meta * pm;
 /// @return     Index of the struct w_iov the struct pkt_meta holds meta data
 ///             for.
 ///
-#define pm_idx(m) ((m)-pm)
+#define pm_idx(m) (uint32_t)((m)-pm)
 
 
 static inline void __attribute__((nonnull))
@@ -337,28 +337,29 @@ extern void *api_conn, *api_strm;
     do {                                                                       \
         /* warn(CRT, "q_free_iov idx %u %" PRIu64, w_iov_idx(v),               \
          * meta(v).hdr.nr); */                                                 \
+        if (meta(v).pn)                                                        \
+            splay_remove(pm_nr_splay, &meta(v).pn->sent_pkts, &meta(v));       \
         meta(v) = (struct pkt_meta){0};                                        \
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));                  \
         w_free_iov(v);                                                         \
     } while (0)
 
 
-#define q_alloc_iov(w, len, off)                                               \
+#define q_alloc_iov(w, l, off)                                                 \
     __extension__({                                                            \
-        struct w_iov * _v = w_alloc_iov((w), (len), (off));                    \
+        struct w_iov * _v = w_alloc_iov((w), (l), (off));                      \
         ASAN_UNPOISON_MEMORY_REGION(&meta(_v), sizeof(meta(_v)));              \
-        /* warn(CRT, "q_alloc_iov idx %u", w_iov_idx(_v)); */                  \
+        warn(CRT, "q_alloc_iov idx %u (next %p) len %u=%u off %u",             \
+             w_iov_idx(_v), sq_next(_v, next), (l), _v->len, (off));           \
         _v;                                                                    \
     })
-
-
-extern __attribute__((nonnull(1))) void free_iov_sq(struct w_iov_sq * const q);
 
 
 static inline __attribute__((nonnull)) struct w_iov *
 w_iov_dup(const struct w_iov * const v)
 {
     struct w_iov * const vdup = w_alloc_iov(v->w, v->len, 0);
+    warn(ERR, "%u %u %u %u", v->len, vdup->len, w_iov_idx(v), w_iov_idx(vdup));
     ASAN_UNPOISON_MEMORY_REGION(&meta(vdup), sizeof(meta(vdup)));
     memcpy(vdup->buf, v->buf, v->len);
     vdup->ip = v->ip;

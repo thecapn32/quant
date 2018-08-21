@@ -160,7 +160,7 @@ detect_lost_pkts(struct q_conn * const c, struct pn_space * const pn)
                 warn(DBG, "free already-rtxed/non-rtxable pkt " FMT_PNR_OUT,
                      p->hdr.nr);
                 splay_remove(pm_nr_splay, &pn->sent_pkts, p);
-                // q_free_iov(w_iov(c->w, pm_idx(p)));
+                q_free_iov(w_iov(c->w, pm_idx(p)));
             }
 
         } else if (is_zero(c->rec.loss_t) && !is_inf(delay_until_lost))
@@ -238,11 +238,8 @@ void on_pkt_sent(struct q_stream * const s, struct w_iov * const v)
     const ev_tstamp now = ev_now(loop);
 
     s->c->rec.last_sent_t = meta(v).tx_t = now;
-    if (s->c->state != conn_tx_vneg) {
-        // don't track version negotiation responses
-        struct pn_space * const pn = pn_for_epoch(s->c, strm_epoch(s));
-        splay_insert(pm_nr_splay, &pn->sent_pkts, &meta(v));
-    }
+    struct pn_space * const pn = pn_for_epoch(s->c, strm_epoch(s));
+    splay_insert(pm_nr_splay, &pn->sent_pkts, &meta(v));
 
     if (is_rtxable(&meta(v))) {
         s->c->rec.in_flight += meta(v).tx_len; // OnPacketSentCC
@@ -434,10 +431,8 @@ void on_pkt_acked(struct q_conn * const c,
     }
     meta(v).is_acked = true;
 
-    if (!is_rtxable(&meta(v))) {
-        // warn(ERR, "freeee");
-        // q_free_iov(v);
-    }
+    if (!is_rtxable(&meta(v)))
+        q_free_iov(v);
 }
 
 

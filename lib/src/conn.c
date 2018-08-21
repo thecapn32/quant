@@ -341,46 +341,12 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
         w_tx(s->c->sock, &x);
         while (w_tx_pending(&x))
             w_nic_tx(s->c->w);
-        free_iov_sq(&x);
+        q_free(&x);
     }
 
     log_sent_pkts(s->c);
     return encoded;
 }
-
-
-// static uint32_t
-// tx_other(struct q_stream * const s, const bool rtx, const uint32_t limit)
-// {
-//     warn(DBG,
-//          "other %s on %s conn %s strm " FMT_SID " w/%u crypto pkt%s in
-//          queue", rtx ? "RTX" : "TX", conn_type(s->c), scid2str(s->c), s->id,
-//          sq_len(&s->out), plural(sq_len(&s->out)));
-
-//     struct w_iov *v = 0, *last = 0;
-//     if (!rtx && sq_len(&s->out) == 0) {
-//         v = q_alloc_iov(s->c->w, 0, Q_OFFSET);
-//         v->len = 0; // this packet will have no stream data
-//         last = sq_last(&s->out, w_iov, next);
-//         sq_insert_tail(&s->out, v, next);
-//     }
-
-//     const bool did_tx = tx_stream(s, rtx, limit, v);
-
-//     if (!rtx && sq_len(&s->out) == 0 && !is_rtxable(&meta(v))) {
-//         ensure(sq_last(&s->out, w_iov, next) == v, "queue mixed up");
-//         if (last)
-//             sq_remove_after(&s->out, last, next);
-//         else
-//             sq_remove_head(&s->out, next);
-//     }
-
-//     if (s->c->state == conn_tx_vneg)
-//         // if we sent a version negotiation response, reset
-//         reset_conn(s->c, true);
-
-//     return did_tx;
-// }
 
 
 static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
@@ -500,11 +466,11 @@ void tx_ack(struct q_conn * const c, const uint8_t e)
     if (diet_empty(&pn->recv))
         return;
 
-    struct w_iov * const a = q_alloc_iov(c->w, 0, Q_OFFSET);
-    a->len = 0;
+    struct w_iov * const v = q_alloc_iov(c->w, 0, Q_OFFSET);
+    v->len = 0;
 
-    if (enc_pkt(s, false, a, &x))
-        on_pkt_sent(s, a);
+    if (enc_pkt(s, false, v, &x))
+        on_pkt_sent(s, v);
 
     if (sq_len(&x) == 0)
         return;
@@ -518,8 +484,9 @@ void tx_ack(struct q_conn * const c, const uint8_t e)
     ev_timer_stop(loop, &c->ack_alarm);
 
     log_sent_pkts(c);
-    free_iov_sq(&x);
-    // q_free_iov(a);
+    q_free(&x);
+    if (is_ack_only(&meta(v)))
+        q_free_iov(v);
 }
 
 
@@ -615,7 +582,7 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
             tx_crypto(c, c->tls.epoch_out - 1);
             conn_to_state(c, conn_estb);
         }
-        // q_free_iov(iv);
+        q_free_iov(iv);
 
         if (ptls_get_read_epoch(c->tls.t) > epoch)
             // we have something left to ACK in the previous epoch
@@ -736,6 +703,8 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             tls_io(get_stream(c, crpt_strm_id(0)), 0);
 
             c->needs_tx = true;
+            q_free_iov(v);
+
             return;
         }
 
@@ -837,11 +806,9 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 #endif
 
 done:
-    if (is_rtxable(&meta(v)) == false || meta(v).stream == 0) {
+    if (is_rtxable(&meta(v)) == false || meta(v).stream == 0)
         // this packet is not rtx'able, or the stream data is duplicate
-        // q_free_iov(v);
-        // warn(ERR, "free");
-    }
+        q_free_iov(v);
 }
 
 
@@ -872,7 +839,7 @@ rx_pkts(struct w_iov_sq * const i,
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
             warn(ERR, "received invalid %u-byte pkt, ignoring", v->len);
 #endif
-            // q_free_iov(v);
+            q_free_iov(v);
             continue;
         }
 
@@ -901,7 +868,7 @@ rx_pkts(struct w_iov_sq * const i,
                              "ignoring",
                              cid2str(&meta(v).hdr.dcid), scid2str(c));
 #endif
-                        // q_free_iov(v);
+                        q_free_iov(v);
                         continue;
                     } else if (meta(v).hdr.type == F_LH_INIT) {
                         warn(NTE,
@@ -971,9 +938,9 @@ rx_pkts(struct w_iov_sq * const i,
                 warn(INF, "caching 0-RTT pkt for unknown conn %s",
                      cid2str(&meta(v).hdr.dcid));
             } else
-                // q_free_iov(v);
+                q_free_iov(v);
 
-                continue;
+            continue;
         }
 
         if (meta(v).hdr.vers || !is_set(F_LONG_HDR, meta(v).hdr.flags))
@@ -982,7 +949,7 @@ rx_pkts(struct w_iov_sq * const i,
                 warn(ERR, "received invalid %u-byte 0x%02x-type pkt, ignoring",
                      v->len, meta(v).hdr.flags);
 #endif
-                // q_free_iov(v);
+                q_free_iov(v);
                 continue;
             }
 

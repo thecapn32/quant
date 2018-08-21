@@ -28,6 +28,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
@@ -104,8 +105,8 @@ void free_stream(struct q_stream * const s)
     }
 
     splay_remove(stream, &s->c->streams, s);
-    free_iov_sq(&s->out);
-    free_iov_sq(&s->in);
+    q_free(&s->out);
+    q_free(&s->in);
     free(s);
 }
 
@@ -144,6 +145,6 @@ void reset_stream(struct q_stream * const s, const bool also_crypto_in)
     // forget we transmitted any data packets
     if (s->id >= 0 || also_crypto_in)
         // free (some) crypto data
-        free_iov_sq(&s->in);
-    free_iov_sq(&s->out);
+        q_free(&s->in);
+    q_free(&s->out);
 }

@@ -546,8 +546,10 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         i = enc((c)->tls.tp_buf, len, i, &param, sizeof(param), 0, "%u");      \
         const uint16_t bytes = (w);                                            \
         i = enc((c)->tls.tp_buf, len, i, &bytes, sizeof(bytes), 0, "%u");      \
-        if (w)                                                                 \
-            i = enc((c)->tls.tp_buf, len, i, &(var), bytes, 0, "%u");          \
+        if (w) {                                                               \
+            const uint64_t tmp_var = (var);                                    \
+            i = enc((c)->tls.tp_buf, len, i, &tmp_var, bytes, 0, "%u");        \
+        }                                                                      \
     } while (0)
 
 

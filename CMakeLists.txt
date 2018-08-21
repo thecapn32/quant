@@ -174,12 +174,16 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
       set(CLANG_TIDY_CHECKS *
           -cert-err58-cpp
           -cppcoreguidelines-owning-memory
+          -cppcoreguidelines-pro-bounds-array-to-pointer-decay
           -cppcoreguidelines-pro-bounds-pointer-arithmetic
+          -cppcoreguidelines-pro-type-vararg
           -google-readability-braces-around-statements
           -google-readability-todo
           -google-runtime-references
           -hicpp-braces-around-statements
+          -hicpp-no-array-decay
           -hicpp-signed-bitwise
+          -hicpp-vararg
           -readability-braces-around-statements
       )
       string(REPLACE ";" "," CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS}")

@@ -104,6 +104,7 @@ void log_pkt(const char * const dir, const struct w_iov * const v)
               col_dir, dir, *dir == 'R' ? v->len : 0, v->buf[0], col_dir,
               pkt_type_str(v), cid2str(&meta(v).hdr.dcid), col_nr,
               meta(v).hdr.nr);
+    warn(DBG, "idx %u", w_iov_idx(v));
 }
 #endif
 
@@ -153,6 +154,7 @@ bool enc_pkt(struct q_stream * const s,
 
     const uint8_t epoch = strm_epoch(s);
     struct pn_space * const pn = pn_for_epoch(c, epoch);
+    meta(v).pn = pn;
 
     if (c->state == conn_tx_vneg) {
         warn(INF, "sending vers neg serv response");
@@ -347,7 +349,7 @@ tx:
     v->len = i;
 
     // alloc a new buffer to encrypt/sign into for TX
-    struct w_iov * const x = q_alloc_iov(c->w, MAX_PKT_LEN, 0);
+    struct w_iov * const x = q_alloc_iov(c->w, 0, 0);
     x->ip = v->ip;
     x->port = v->port;
     x->flags = v->flags;
@@ -368,7 +370,6 @@ tx:
 
     sq_insert_tail(q, x, next);
     meta(v).tx_len = x->len;
-    meta(v).pn = pn;
 
     if ((meta(v).hdr.type == F_LH_INIT && c->is_clnt) ||
         c->state == conn_tx_rtry)
