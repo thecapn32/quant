@@ -163,17 +163,20 @@ struct q_conn {
 };
 
 
-#define pn_for_epoch(c, e)                                                     \
-    ((e) == 0 ? &(c)->pn_init.pn                                               \
-              : ((e) == 1 ? &(c)->pn_data.pn                                   \
-                          : ((e) == 2 ? &(c)->pn_hshk.pn : &(c)->pn_data.pn)))
-
-#define pn_for_pkt_type(c, t)                                                  \
-    ((t) == F_LH_INIT                                                          \
-         ? &(c)->pn_init.pn                                                    \
-         : ((t) == F_LH_0RTT                                                   \
-                ? &(c)->pn_data.pn                                             \
-                : ((t) == F_LH_HSHK ? &(c)->pn_hshk.pn : &(c)->pn_data.pn)))
+static inline __attribute__((always_inline, nonnull)) struct pn_space *
+pn_for_epoch(struct q_conn * const c, const uint8_t e)
+{
+    switch (e) {
+    case 0:
+        return &c->pn_init.pn;
+    case 1:
+        return &c->pn_data.pn;
+    case 2:
+        return &c->pn_hshk.pn;
+    default:
+        return &c->pn_data.pn;
+    }
+}
 
 
 extern int __attribute__((nonnull))
@@ -202,16 +205,32 @@ zrtt_ooo_cmp(const struct zrtt_ooo * const a, const struct zrtt_ooo * const b);
 SPLAY_PROTOTYPE(zrtt_ooo_splay, zrtt_ooo, node, zrtt_ooo_cmp)
 
 
-#define conn_type(c) ((c)->is_clnt ? "clnt" : "serv")
+static inline __attribute__((always_inline, nonnull)) const char *
+conn_type(const struct q_conn * const c)
+{
+    return c->is_clnt ? "clnt" : "serv";
+}
 
 
-#define is_force_neg_vers(vers) (((vers)&0x0f0f0f0f) == 0x0a0a0a0a)
+static inline __attribute__((always_inline, const)) bool
+is_force_neg_vers(const uint32_t vers)
+{
+    return (vers & 0x0f0f0f0f) == 0x0a0a0a0a;
+}
 
 
-#define is_zero(t) (fpclassify(t) == FP_ZERO)
+static inline __attribute__((always_inline, const)) bool
+is_zero(const ev_tstamp t)
+{
+    return fpclassify(t) == FP_ZERO;
+}
 
 
-#define is_inf(t) (fpclassify(t) == FP_INFINITE)
+static inline __attribute__((always_inline, const)) bool
+is_inf(const ev_tstamp t)
+{
+    return fpclassify(t) == FP_INFINITE;
+}
 
 
 #define cid2str(i) hex2str((i)->id, (i)->len)

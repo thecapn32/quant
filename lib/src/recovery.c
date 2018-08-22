@@ -225,8 +225,7 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
 static void __attribute__((nonnull))
 track_acked_pkts(struct q_conn * const c __attribute__((unused)),
                  struct pn_space * const pn,
-                 const uint64_t ack,
-                 const uint8_t flags __attribute__((unused)))
+                 const uint64_t ack)
 {
     diet_remove(&pn->recv, ack);
 }
@@ -320,8 +319,7 @@ void on_ack_rx_2(struct q_conn * const c, struct pn_space * const pn)
 
 void on_pkt_acked(struct q_conn * const c,
                   struct pn_space * const pn,
-                  const uint64_t ack,
-                  const uint8_t flags)
+                  const uint64_t ack)
 {
     struct w_iov * const v = find_sent_pkt(c, pn, ack);
     if (v == 0) {
@@ -329,16 +327,6 @@ void on_pkt_acked(struct q_conn * const c,
         if (diet_find(&pn->acked, ack) == 0)
             warn(ERR, "got ACK for pkt " FMT_PNR_OUT " never sent", ack);
 #endif
-        return;
-    }
-
-    adj_iov_to_start(v);
-    adj_iov_to_data(v);
-    if (!better_or_equal_prot(flags, meta(v).hdr.flags)) {
-        warn(ERR,
-             "0x%02x-type pkt has ACK for 0x%02x-type pkt " FMT_PNR_OUT
-             ", ignoring",
-             flags, meta(v).hdr.flags, ack);
         return;
     }
 

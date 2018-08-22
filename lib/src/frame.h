@@ -122,8 +122,7 @@ dec_ack_frame(struct q_conn * const c,
                                  const uint64_t),
               void (*on_each_ack)(struct q_conn * const,
                                   struct pn_space * const pn,
-                                  const uint64_t,
-                                  const uint8_t),
+                                  const uint64_t),
               void (*after_ack)(struct q_conn * const,
                                 struct pn_space * const pn));
 

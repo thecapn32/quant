@@ -242,8 +242,7 @@ uint16_t dec_ack_frame(struct q_conn * const c,
                                           const uint64_t),
                        void (*on_each_ack)(struct q_conn * const,
                                            struct pn_space * const pn,
-                                           const uint64_t,
-                                           const uint8_t),
+                                           const uint64_t),
                        void (*after_ack)(struct q_conn * const,
                                          struct pn_space * const pn))
 {
@@ -319,7 +318,7 @@ uint16_t dec_ack_frame(struct q_conn * const c,
 
         uint64_t ack = lg_ack_in_block;
         while (ack_block_len >= lg_ack_in_block - ack) {
-            on_each_ack(c, pn, ack, meta(v).hdr.flags);
+            on_each_ack(c, pn, ack);
             if (likely(ack > 0))
                 ack--;
             else

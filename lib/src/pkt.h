@@ -28,8 +28,12 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stdint.h>
 
+#include "conn.h"
+#include "pn.h"
 #include "quic.h"
+
 
 #define MAX_PKT_LEN 1252
 #define MIN_INI_LEN 1200
@@ -58,15 +62,48 @@
 #define ERR_TLS(type) (0x100 + (type))
 
 
-#define pkt_type(flags) ((flags) & (is_set(F_LONG_HDR, (flags)) ? ~0x80 : 0x03))
+static inline __attribute__((always_inline, const)) uint8_t
+pkt_type(const uint8_t flags)
+{
+    return flags & (is_set(F_LONG_HDR, flags) ? ~0x80 : 0x03);
+}
 
-#define epoch_for_pkt_type(t)                                                  \
-    ((t) == F_LH_INIT ? 0 : ((t) == F_LH_0RTT ? 1 : ((t) == F_LH_HSHK ? 2 : 3)))
 
-struct q_conn;
+static inline __attribute__((always_inline, const)) uint8_t
+epoch_for_pkt_type(const uint8_t type)
+{
+    switch (type) {
+    case F_LH_INIT:
+        return 0;
+    case F_LH_0RTT:
+        return 1;
+    case F_LH_HSHK:
+        return 2;
+    default:
+        return 3;
+    }
+}
+
 struct q_stream;
 struct w_iov;
 struct w_iov_sq;
+
+
+static inline __attribute__((always_inline, nonnull)) struct pn_space *
+pn_for_pkt_type(struct q_conn * const c, const uint8_t t)
+{
+    switch (t) {
+    case F_LH_INIT:
+        return &c->pn_init.pn;
+    case F_LH_0RTT:
+        return &c->pn_data.pn;
+    case F_LH_HSHK:
+        return &c->pn_hshk.pn;
+    default:
+        return &c->pn_data.pn;
+    }
+}
+
 
 extern bool __attribute__((nonnull))
 dec_pkt_hdr_beginning(const struct w_iov * const v, const bool is_clnt);

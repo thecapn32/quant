@@ -87,8 +87,9 @@ new_stream(struct q_conn * const c, const int64_t id, const bool active)
     }
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-    warn(DBG, "reserved strm " FMT_SID " on %s conn %s", id, conn_type(c),
-         scid2str(c));
+    if (s->id >= 0)
+        warn(DBG, "reserved strm " FMT_SID " on %s conn %s", id, conn_type(c),
+             scid2str(c));
 #endif
 
     return s;
@@ -97,8 +98,9 @@ new_stream(struct q_conn * const c, const int64_t id, const bool active)
 
 void free_stream(struct q_stream * const s)
 {
-    warn(DBG, "freeing strm " FMT_SID " on %s conn %s", s->id, conn_type(s->c),
-         scid2str(s->c));
+    if (s->id >= 0)
+        warn(DBG, "freeing strm " FMT_SID " on %s conn %s", s->id,
+             conn_type(s->c), scid2str(s->c));
 
     if (s->id >= 0) {
         diet_insert(&s->c->closed_streams, (uint64_t)s->id, 0, 0);

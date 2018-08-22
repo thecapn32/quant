@@ -146,8 +146,8 @@ pick_from_server_vers(const struct w_iov * const v)
             uint32_t vers = 0;
             uint16_t x = j + pos;
             dec(&vers, v->buf, v->len, x, sizeof(vers), "0x%08x");
-            warn(DBG, "serv prio %ld = 0x%08x; our prio %u = 0x%08x",
-                 j / sizeof(uint32_t), vers, i, ok_vers[i]);
+            // warn(DBG, "serv prio %ld = 0x%08x; our prio %u = 0x%08x",
+            //      j / sizeof(uint32_t), vers, i, ok_vers[i]);
             if (ok_vers[i] == vers)
                 return vers;
         }
@@ -576,11 +576,13 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
         struct w_iov * iv = sq_first(&s->in);
         sq_remove_head(&s->in, next);
         if (tls_io(s, iv) == 0) {
-            maybe_api_return(q_connect, c, 0);
-            if (maybe_api_return(q_accept, accept_queue, 0))
-                accept_queue = c;
-            tx_crypto(c, c->tls.epoch_out - 1);
-            conn_to_state(c, conn_estb);
+            tx_crypto(c, c->tls.epoch_out);
+            if (c->state != conn_estb) {
+                maybe_api_return(q_connect, c, 0);
+                if (maybe_api_return(q_accept, accept_queue, 0))
+                    accept_queue = c;
+                conn_to_state(c, conn_estb);
+            }
         }
         q_free_iov(iv);
 

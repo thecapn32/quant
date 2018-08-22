@@ -80,30 +80,47 @@ struct q_stream {
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
 #define strm_to_state(strm, s)                                                 \
     do {                                                                       \
-        warn(DBG,                                                              \
-             "conn %s strm " FMT_SID " state " YEL "%s" NRM " -> " YEL         \
-             "%s" NRM,                                                         \
-             scid2str((strm)->c), (strm)->id, strm_state_str[(strm)->state],   \
-             strm_state_str[(s)]);                                             \
+        if ((strm)->id >= 0) {                                                 \
+            warn(DBG,                                                          \
+                 "conn %s strm " FMT_SID " state " YEL "%s" NRM " -> " YEL     \
+                 "%s" NRM,                                                     \
+                 scid2str((strm)->c), (strm)->id,                              \
+                 strm_state_str[(strm)->state], strm_state_str[(s)]);          \
+        }                                                                      \
         (strm)->state = (s);                                                   \
     } while (0)
 #else
 #define strm_to_state(strm, s) (strm)->state = (s)
 #endif
 
-#define is_fully_acked(s) ((s)->out_ack_cnt == sq_len(&(s)->out))
 
-#define crpt_strm_id(epoch) (-((int64_t)epoch + 1))
+static inline __attribute__((always_inline, const)) bool
+is_fully_acked(const struct q_stream * const s)
+{
+    return s->out_ack_cnt == sq_len(&s->out);
+}
 
-#define strm_epoch(s)                                                          \
-    (uint8_t)((s)->id < 0 ? -((s)->id + 1)                                     \
-                          : ((s)->c->state == conn_opng ? 1 : 3))
+
+static inline __attribute__((always_inline, const)) int64_t
+crpt_strm_id(const uint8_t epoch)
+{
+    return -((int64_t)epoch + 1);
+}
+
+
+static inline __attribute__((always_inline, const)) uint8_t
+strm_epoch(const struct q_stream * const s)
+{
+    if (s->id < 0)
+        return (uint8_t)(-s->id) - 1;
+    if (s->c->state == conn_opng)
+        return 1;
+    return 3;
+}
+
 
 extern int __attribute__((nonnull))
 stream_cmp(const struct q_stream * const a, const struct q_stream * const b);
-
-SPLAY_PROTOTYPE(stream, q_stream, node, stream_cmp)
-
 
 extern struct q_stream * __attribute__((nonnull))
 get_stream(struct q_conn * const c, const int64_t id);
@@ -121,3 +138,5 @@ track_bytes_out(struct q_stream * const s, const uint64_t n);
 
 extern void __attribute__((nonnull))
 reset_stream(struct q_stream * const s, const bool also_crypto_in);
+
+SPLAY_PROTOTYPE(stream, q_stream, node, stream_cmp)
