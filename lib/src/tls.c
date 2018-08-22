@@ -446,7 +446,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
     bitstr_t bit_decl(tp_list, TP_MAX) = {0};
 
     while (i < len) {
-        uint16_t tp;
+        uint16_t tp = 0;
         i = dec(&tp, buf, len, i, sizeof(tp), "0x%04x");
 
         // skip unknown TPs
