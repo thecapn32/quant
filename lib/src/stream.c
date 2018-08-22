@@ -75,8 +75,8 @@ new_stream(struct q_conn * const c, const int64_t id, const bool active)
     splay_insert(stream, &c->streams, s);
 
     if (id >= 0) {
-        s->in_data_max = c->tp_local.max_strm_data;
-        s->out_data_max = c->tp_peer.max_strm_data;
+        s->in_data_max = c->tp_local.max_strm_data_bidi_remote;
+        s->out_data_max = c->tp_peer.max_strm_data_bidi_local;
 
         if (active) {
             if (c->next_sid == 0)

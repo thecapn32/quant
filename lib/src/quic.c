@@ -534,8 +534,8 @@ void q_close_stream(struct q_stream * const s)
 
 void q_close(struct q_conn * const c)
 {
-    if (c->state != conn_clsg && c->state != conn_drng &&
-        c->state != conn_clsd) {
+    if (c->state != conn_idle && c->state != conn_clsg &&
+        c->state != conn_drng && c->state != conn_clsd) {
         warn(WRN, "closing %s conn %s on port %u", conn_type(c), scid2str(c),
              ntohs(c->sport));
 

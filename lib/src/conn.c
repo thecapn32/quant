@@ -317,7 +317,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
                 s->c->blocked = true;
         }
 
-        if (enc_pkt(s, rtx, v, &x) == false)
+        if (enc_pkt(s, rtx, true, v, &x) == false)
             continue;
 
         on_pkt_sent(s, v);
@@ -467,9 +467,7 @@ void tx_ack(struct q_conn * const c, const uint8_t e)
         return;
 
     struct w_iov * const v = q_alloc_iov(c->w, 0, Q_OFFSET);
-    v->len = 0;
-
-    if (enc_pkt(s, false, v, &x))
+    if (enc_pkt(s, false, false, v, &x))
         on_pkt_sent(s, v);
 
     if (sq_len(&x) == 0)
@@ -579,6 +577,8 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
         sq_remove_head(&s->in, next);
         if (tls_io(s, iv) == 0) {
             maybe_api_return(q_connect, c, 0);
+            if (maybe_api_return(q_accept, accept_queue, 0))
+                accept_queue = c;
             tx_crypto(c, c->tls.epoch_out - 1);
             conn_to_state(c, conn_estb);
         }
@@ -606,7 +606,7 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
                                             struct w_iov_sq * const i)
 {
     switch (c->state) {
-    case conn_tx_vneg:
+    case conn_idle:
         // respond to a client-initial
         //         if (meta(v).hdr.vers == 0) {
         // #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
@@ -661,9 +661,9 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 #endif
             add_scid(c, &new_scid);
             use_next_scid(c);
+            conn_to_state(c, conn_opng);
 
         } else {
-            conn_to_state(c, conn_tx_vneg);
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
             warn(WRN, "%s conn %s clnt-requested vers 0x%08x not supported ",
                  conn_type(c), scid2str(c), c->vers);
@@ -788,8 +788,8 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         if (dec_frames(c, v) == UINT16_MAX)
             goto done;
 
-    case conn_tx_rtry:
-    case conn_clsd:
+        // case conn_tx_rtry:
+        // case conn_clsd:
         break;
 
     default:
@@ -1158,7 +1158,8 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->tp_peer.ack_del_exp = c->tp_local.ack_del_exp = 3;
     c->tp_local.idle_to = kIdleTimeout;
     c->tp_local.max_data = c->is_clnt ? 0x4000 : 0x8000;
-    c->tp_local.max_strm_data = c->is_clnt ? 0x2000 : 0x4000;
+    c->tp_local.max_strm_data_bidi_local =
+        c->tp_local.max_strm_data_bidi_remote = c->is_clnt ? 0x2000 : 0x4000;
     c->tp_local.max_strm_bidi = c->is_clnt ? 1 : 4;
     c->tp_local.max_strm_uni = 0; // TODO: support unidir streams
 
@@ -1204,7 +1205,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     warn(DBG, "%s conn %s on port %u created", conn_type(c), scid2str(c),
          ntohs(c->sport));
 
-    conn_to_state(c, c->is_clnt ? conn_idle : conn_opng);
+    conn_to_state(c, conn_idle);
 
     return c;
 }

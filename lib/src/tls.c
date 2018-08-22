@@ -121,17 +121,20 @@ static FILE * tls_log_file;
 
 #define TLS_EXT_TYPE_TRANSPORT_PARAMETERS 0xffa5
 
-#define TP_INITIAL_MAX_STREAM_DATA 0x0000
-#define TP_INITIAL_MAX_DATA 0x0001
-#define TP_INITIAL_MAX_BIDI_STREAMS 0x0002
-#define TP_IDLE_TIMEOUT 0x0003
-// #define TP_PREFERRED_ADDRESS 0x004
-#define TP_MAX_PACKET_SIZE 0x0005
-#define TP_STATELESS_RESET_TOKEN 0x0006
-#define TP_ACK_DELAY_EXPONENT 0x0007
-#define TP_INITIAL_MAX_UNI_STREAMS 0x0008
+#define TP_INITIAL_MAX_STREAM_DATA_BIDI_LOCAL 0
+#define TP_INITIAL_MAX_DATA 1
+#define TP_INITIAL_MAX_BIDI_STREAMS 2
+#define TP_IDLE_TIMEOUT 3
+// #define TP_PREFERRED_ADDRESS 4
+#define TP_MAX_PACKET_SIZE 5
+#define TP_STATELESS_RESET_TOKEN 6
+#define TP_ACK_DELAY_EXPONENT 7
+#define TP_INITIAL_MAX_UNI_STREAMS 8
+// #define TP_DISABLE_MIGRATION 9
+#define TP_INITIAL_MAX_STREAM_DATA_BIDI_REMOTE 10
+#define TP_INITIAL_MAX_STREAM_DATA_UNI 11
 
-#define TP_MAX (TP_INITIAL_MAX_UNI_STREAMS + 1)
+#define TP_MAX (TP_INITIAL_MAX_STREAM_DATA_UNI + 1)
 
 
 // quicly shim
@@ -463,16 +466,29 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         }
 
         switch (tp) {
-        case TP_INITIAL_MAX_STREAM_DATA:
-            dec_tp(&c->tp_peer.max_strm_data, sizeof(uint32_t));
-            warn(INF, "\tinitial_max_stream_data = %u",
-                 c->tp_peer.max_strm_data);
-            // we need to apply this parameter to all current non-zero streams
+        case TP_INITIAL_MAX_STREAM_DATA_BIDI_LOCAL: {
+            dec_tp(&c->tp_peer.max_strm_data_bidi_local, sizeof(uint32_t));
+            warn(INF, "\tinitial_max_stream_data_bidi_local = %u",
+                 c->tp_peer.max_strm_data_bidi_local);
+            // apply this parameter to all current non-crypto streams
             struct q_stream * s;
             splay_foreach (s, stream, &c->streams)
-                if (s->id)
-                    s->out_data_max = c->tp_peer.max_strm_data;
+                if (s->id >= 0)
+                    s->out_data_max = c->tp_peer.max_strm_data_bidi_local;
             break;
+        }
+
+        case TP_INITIAL_MAX_STREAM_DATA_BIDI_REMOTE: {
+            dec_tp(&c->tp_peer.max_strm_data_bidi_remote, sizeof(uint32_t));
+            warn(INF, "\tinitial_max_stream_data_bidi_remote = %u",
+                 c->tp_peer.max_strm_data_bidi_remote);
+            // apply this parameter to all current non-crypto streams
+            struct q_stream * s;
+            splay_foreach (s, stream, &c->streams)
+                if (s->id >= 0)
+                    s->out_data_max = c->tp_peer.max_strm_data_bidi_remote;
+            break;
+        }
 
         case TP_INITIAL_MAX_DATA:
             dec_tp(&c->tp_peer.max_data, sizeof(uint32_t));
@@ -579,8 +595,10 @@ void init_tp(struct q_conn * const c)
     enc_tp(c, TP_INITIAL_MAX_BIDI_STREAMS, max_strm_bidi, sizeof(uint16_t));
 
     enc_tp(c, TP_IDLE_TIMEOUT, c->tp_local.idle_to, sizeof(uint16_t));
-    enc_tp(c, TP_INITIAL_MAX_STREAM_DATA, c->tp_local.max_strm_data,
-           sizeof(uint32_t));
+    enc_tp(c, TP_INITIAL_MAX_STREAM_DATA_BIDI_REMOTE,
+           c->tp_local.max_strm_data_bidi_remote, sizeof(uint32_t));
+    enc_tp(c, TP_INITIAL_MAX_STREAM_DATA_BIDI_LOCAL,
+           c->tp_local.max_strm_data_bidi_local, sizeof(uint32_t));
     enc_tp(c, TP_INITIAL_MAX_DATA, c->tp_local.max_data, sizeof(uint32_t));
     enc_tp(c, TP_ACK_DELAY_EXPONENT, c->tp_local.ack_del_exp, sizeof(uint8_t));
     enc_tp(c, TP_MAX_PACKET_SIZE, w_mtu(c->w), sizeof(uint16_t));
@@ -791,7 +809,7 @@ void init_tls(struct q_conn * const c)
         ensure(ptls_set_server_name(c->tls.t, c->peer_name, 0) == 0,
                "ptls_set_server_name");
 
-    ptls_buffer_init(&c->tls.tls_io, &c->tls.tls_io_buf,
+    ptls_buffer_init(&c->tls.tls_io, c->tls.tls_io_buf,
                      sizeof(c->tls.tls_io_buf));
 
     ptls_handshake_properties_t * const hshk_prop = &c->tls.tls_hshake_prop;
@@ -837,7 +855,8 @@ void init_tls(struct q_conn * const c)
 
 void free_tls(struct q_conn * const c)
 {
-    ptls_free(c->tls.t);
+    if (c->tls.t)
+        ptls_free(c->tls.t);
     ptls_buffer_dispose(&c->tls.tls_io);
 
     dispose_cipher(&c->pn_init.in);
@@ -1194,19 +1213,19 @@ uint16_t dec_aead(const struct q_conn * const c, const struct w_iov * const v)
 {
     const struct cipher_ctx * const ctx = which_cipher_ctx(c, v, true);
     if (unlikely(ctx == 0 || ctx->aead == 0))
-        die("here");
+        return 0;
 
     const uint16_t hdr_len = meta(v).hdr.hdr_len;
     ensure(meta(v).hdr.hdr_len, "meta(v).hdr.hdr_len");
     const uint16_t len = v->len - hdr_len;
     if (unlikely(hdr_len > v->len))
-        die("here");
+        return 0;
 
     const size_t ret =
         ptls_aead_decrypt(ctx->aead, &v->buf[hdr_len], &v->buf[hdr_len], len,
                           meta(v).hdr.nr, v->buf, hdr_len);
     if (unlikely(ret == SIZE_MAX))
-        die("here");
+        return 0;
 
     warn(DBG, "dec %s AEAD over [0..%u] in [%u..%u]", aead_type(c, ctx->aead),
          hdr_len + len - AEAD_LEN - 1, hdr_len + len - AEAD_LEN,

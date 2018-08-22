@@ -104,7 +104,6 @@ void log_pkt(const char * const dir, const struct w_iov * const v)
               col_dir, dir, *dir == 'R' ? v->len : 0, v->buf[0], col_dir,
               pkt_type_str(v), cid2str(&meta(v).hdr.dcid), col_nr,
               meta(v).hdr.nr);
-    warn(DBG, "idx %u", w_iov_idx(v));
 }
 #endif
 
@@ -142,6 +141,7 @@ enc_lh_cids(struct q_conn * const c, struct w_iov * const v, const uint16_t pos)
 
 bool enc_pkt(struct q_stream * const s,
              const bool rtx,
+             const bool enc_data,
              struct w_iov * const v,
              struct w_iov_sq * const q)
 {
@@ -156,7 +156,7 @@ bool enc_pkt(struct q_stream * const s,
     struct pn_space * const pn = pn_for_epoch(c, epoch);
     meta(v).pn = pn;
 
-    if (c->state == conn_tx_vneg) {
+    if (c->state == conn_idle) {
         warn(INF, "sending vers neg serv response");
         meta(v).hdr.type = (uint8_t)w_rand();
         meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
@@ -325,15 +325,14 @@ bool enc_pkt(struct q_stream * const s,
              s->out_data_max, stream_data_len(v));
 #endif
 
-    } else if (v->len > Q_OFFSET || s->state == strm_hclo ||
-               s->state == strm_clsd) {
+    } else if (enc_data || s->state == strm_hclo || s->state == strm_clsd) {
         // this is an Initial, fresh data or pure stream FIN packet
         // pad out rest of Q_OFFSET and add a stream frame header
         enc_padding_frame(v, i, Q_OFFSET - i);
         i = enc_stream_or_crypto_frame(s, v, i, s->id >= 0);
     }
 
-    if (meta(v).hdr.type == F_LH_INIT && c->is_clnt && v->len > Q_OFFSET)
+    if (meta(v).hdr.type == F_LH_INIT && c->is_clnt && enc_data)
         i = enc_padding_frame(v, i, MIN_INI_LEN - i - AEAD_LEN);
 
     ensure(i > meta(v).hdr.hdr_len, "would have sent pkt w/o frames");
@@ -354,7 +353,7 @@ tx:
     x->port = v->port;
     x->flags = v->flags;
 
-    if (c->state == conn_tx_vneg) {
+    if (c->state == conn_idle) {
         memcpy(x->buf, v->buf, v->len); // copy data
         x->len = v->len;
     } else {

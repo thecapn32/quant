@@ -349,8 +349,8 @@ extern void *api_conn, *api_strm;
     __extension__({                                                            \
         struct w_iov * _v = w_alloc_iov((w), (l), (off));                      \
         ASAN_UNPOISON_MEMORY_REGION(&meta(_v), sizeof(meta(_v)));              \
-        warn(CRT, "q_alloc_iov idx %u (next %p) len %u=%u off %u",             \
-             w_iov_idx(_v), sq_next(_v, next), (l), _v->len, (off));           \
+        /* warn(CRT, "q_alloc_iov idx %u (next %p) len %u=%u off %u",          \
+             w_iov_idx(_v), sq_next(_v, next), (l), _v->len, (off));*/         \
         _v;                                                                    \
     })
 
@@ -359,7 +359,6 @@ static inline __attribute__((nonnull)) struct w_iov *
 w_iov_dup(const struct w_iov * const v)
 {
     struct w_iov * const vdup = w_alloc_iov(v->w, v->len, 0);
-    warn(ERR, "%u %u %u %u", v->len, vdup->len, w_iov_idx(v), w_iov_idx(vdup));
     ASAN_UNPOISON_MEMORY_REGION(&meta(vdup), sizeof(meta(vdup)));
     memcpy(vdup->buf, v->buf, v->len);
     vdup->ip = v->ip;

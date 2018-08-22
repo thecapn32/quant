@@ -47,7 +47,9 @@ extern splay_head(cid_splay, q_cid_map) conns_by_cid;
 
 
 struct transport_params {
-    uint64_t max_strm_data;
+    uint64_t max_strm_data_uni;
+    uint64_t max_strm_data_bidi_local;
+    uint64_t max_strm_data_bidi_remote;
     uint64_t max_data;
     int64_t max_strm_uni;
     int64_t max_strm_bidi;
@@ -72,7 +74,7 @@ sl_head(q_conn_sl, q_conn);
     CONN_STATE(conn_clsd, 0), CONN_STATE(conn_idle, 1),                        \
         CONN_STATE(conn_opng, 2), CONN_STATE(conn_estb, 3),                    \
         CONN_STATE(conn_clsg, 4), CONN_STATE(conn_drng, 51),                   \
-        CONN_STATE(conn_tx_vneg, 202), CONN_STATE(conn_tx_rtry, 203)
+        CONN_STATE(conn_tx_rtry, 203)
 
 /// Define connection states.
 /// \dotfile conn-states.dot "Connection state diagram."
@@ -91,7 +93,6 @@ struct q_conn {
 
     uint16_t holds_sock : 1; ///< Connection manages a warpcore socket.
     uint16_t is_clnt : 1;    ///< We are the client on this connection.
-    uint16_t omit_cid : 1;   ///< We omit the CID during TX on this connection.
     uint16_t had_rx : 1;     ///< We had an RX event on this connection.
     uint16_t needs_tx : 1;   ///< We have a pending TX on this connection.
     uint16_t use_time_loss_det : 1; ///< UsingTimeLossDetection()
@@ -104,6 +105,7 @@ struct q_conn {
     uint16_t tx_path_resp : 1;      ///< Send PATH_RESPONSE.
     uint16_t tx_path_chlg : 1;      ///< Send PATH_CHALLENGE.
     uint16_t tx_ncid : 1;           ///< Send NEW_CONNECTION_ID.
+    uint16_t tx_rtry : 1;           ///< We need to send a RETRY.
     uint16_t : 1;
 
     uint16_t sport; ///< Local port (in network byte-order).
