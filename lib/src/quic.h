@@ -101,7 +101,7 @@ struct pkt_meta {
     uint8_t : 5;
     bitstr_t bit_decl(frames, NUM_FRAM_TYPES); ///< Frames present in pkt.
     uint8_t _unused;
-    struct pn_space * pn;
+    struct pn_space * pn; ///< Packet number space; only set on TX.
     struct pkt_hdr hdr;
 };
 
@@ -335,8 +335,8 @@ extern void *api_conn, *api_strm;
 
 #define q_free_iov(v)                                                          \
     do {                                                                       \
-        /* warn(CRT, "q_free_iov idx %u %" PRIu64, w_iov_idx(v),               \
-         * meta(v).hdr.nr); */                                                 \
+        /* warn(CRT, "q_free_iov idx %u nr %" PRIu64, w_iov_idx(v),            \
+         *   meta(v).hdr.nr); */                                               \
         if (meta(v).pn)                                                        \
             splay_remove(pm_nr_splay, &meta(v).pn->sent_pkts, &meta(v));       \
         meta(v) = (struct pkt_meta){0};                                        \
@@ -349,8 +349,8 @@ extern void *api_conn, *api_strm;
     __extension__({                                                            \
         struct w_iov * _v = w_alloc_iov((w), (l), (off));                      \
         ASAN_UNPOISON_MEMORY_REGION(&meta(_v), sizeof(meta(_v)));              \
-        /* warn(CRT, "q_alloc_iov idx %u (next %p) len %u=%u off %u",          \
-             w_iov_idx(_v), sq_next(_v, next), (l), _v->len, (off));*/         \
+        /* warn(CRT, "q_alloc_iov idx %u len %u off %u", w_iov_idx(_v),        \
+           _v->len, (off)); */                                                 \
         _v;                                                                    \
     })
 

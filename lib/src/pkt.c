@@ -479,8 +479,6 @@ bool dec_pkt_hdr_remainder(struct w_iov * const v,
                            struct q_conn * const c,
                            struct w_iov_sq * const i)
 {
-    meta(v).pn = pn_for_pkt_type(c, meta(v).hdr.type);
-
     // meta(v).hdr.hdr_len holds the offset of the pnr field
     const uint16_t nr_pos = meta(v).hdr.hdr_len;
     uint16_t off = nr_pos + 4;
@@ -499,7 +497,8 @@ bool dec_pkt_hdr_remainder(struct w_iov * const v,
     uint8_t enc_nr[4];
     ptls_cipher_encrypt(ctx->pne, enc_nr, &v->buf[nr_pos], sizeof(enc_nr));
 
-    const uint64_t next = diet_max(&meta(v).pn->recv) + 1;
+    struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
+    const uint64_t next = diet_max(&pn->recv) + 1;
     uint64_t nr = next;
     const uint16_t nr_len = dec_pnr(&nr, enc_nr, sizeof(enc_nr), 0, "%u");
     if (unlikely(nr_len == UINT16_MAX))

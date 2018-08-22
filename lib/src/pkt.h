@@ -84,10 +84,6 @@ epoch_for_pkt_type(const uint8_t type)
     }
 }
 
-struct q_stream;
-struct w_iov;
-struct w_iov_sq;
-
 
 static inline __attribute__((always_inline, nonnull)) struct pn_space *
 pn_for_pkt_type(struct q_conn * const c, const uint8_t t)
@@ -104,6 +100,10 @@ pn_for_pkt_type(struct q_conn * const c, const uint8_t t)
     }
 }
 
+
+struct q_stream;
+struct w_iov;
+struct w_iov_sq;
 
 extern bool __attribute__((nonnull))
 dec_pkt_hdr_beginning(const struct w_iov * const v, const bool is_clnt);
