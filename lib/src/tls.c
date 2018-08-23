@@ -363,7 +363,7 @@ static uint16_t chk_tp_clnt(const struct q_conn * const c,
 {
     uint16_t i = pos;
 
-    uint32_t vers_initial;
+    uint32_t vers_initial = 0;
     i = dec(&vers_initial, buf, len, i, sizeof(vers_initial), "0x%08x");
 
     // parse server versions
@@ -371,7 +371,7 @@ static uint16_t chk_tp_clnt(const struct q_conn * const c,
     i = dec(&n, buf, len, i, sizeof(n), "%u");
     bool found = false;
     while (n > 0) {
-        uint32_t vers;
+        uint32_t vers = 0;;
         n -= sizeof(vers);
         i = dec(&vers, buf, len, i, sizeof(vers), "0x%08x");
         found = found ? found : vers == c->vers;
