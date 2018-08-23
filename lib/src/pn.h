@@ -29,11 +29,16 @@
 
 #include <stdint.h>
 
+#include <ev.h>
 #include <warpcore/warpcore.h>
 
 #include "diet.h"
 #include "quic.h"
 #include "tls.h"
+
+
+struct q_conn;
+struct ev_loop;
 
 
 splay_head(pm_nr_splay, pkt_meta);
@@ -51,6 +56,9 @@ struct pn_space {
     uint64_t lg_sent;            // largest_sent_packet
     uint64_t lg_acked;           // largest_acked_packet
     uint64_t lg_sent_before_rto; // largest_sent_before_rto
+
+    ev_timer ack_alarm;
+    struct q_conn * c;
 };
 
 
@@ -76,6 +84,10 @@ pm_nr_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b);
 SPLAY_PROTOTYPE(pm_nr_splay, pkt_meta, nr_node, pm_nr_cmp)
 
 
-extern void __attribute__((nonnull)) init_pn(struct pn_space * const pn);
+extern void __attribute__((nonnull))
+init_pn(struct pn_space * const pn, struct q_conn * const c);
 
 extern void __attribute__((nonnull)) free_pn(struct pn_space * const pn);
+
+extern void __attribute__((nonnull))
+ack_alarm(struct ev_loop * const l, ev_timer * const w, int e);

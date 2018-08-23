@@ -26,6 +26,10 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include "pn.h"
+#include "conn.h"
+
+
+struct ev_loop;
 
 
 SPLAY_GENERATE(pm_nr_splay, pkt_meta, nr_node, pm_nr_cmp)
@@ -37,17 +41,49 @@ int pm_nr_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
 }
 
 
-void init_pn(struct pn_space * const pn)
+static inline __attribute__((always_inline, nonnull)) epoch_t
+epoch_for_pn(const struct pn_space * pn)
+{
+    if (pn == &pn->c->pn_init.pn)
+        return ep_init;
+    if (pn == &pn->c->pn_hshk.pn)
+        return ep_hshk;
+    return pn->c->state == conn_opng ? ep_0rtt : ep_data;
+}
+
+
+void ack_alarm(struct ev_loop * const l __attribute__((unused)),
+               ev_timer * const w,
+               int e)
+{
+    struct pn_space * const pn = w->data;
+    if (e)
+        warn(DBG, "ACK timeout on %s conn %s epoch %u", conn_type(pn->c),
+             scid2str(pn->c), epoch_for_pn(pn));
+
+    tx_ack(pn->c, epoch_for_pn(pn));
+    ev_timer_stop(loop, &pn->ack_alarm);
+}
+
+
+void init_pn(struct pn_space * const pn, struct q_conn * const c)
 {
     diet_init(&pn->recv);
     diet_init(&pn->acked);
     splay_init(&pn->sent_pkts);
     pn->lg_sent = UINT64_MAX;
+    pn->c = c;
+
+    // initialize ACK timeout
+    pn->ack_alarm.data = pn;
+    pn->ack_alarm.repeat = kDelayedAckTimeout;
+    ev_init(&pn->ack_alarm, ack_alarm);
 }
 
 
 void free_pn(struct pn_space * const pn)
 {
+    ev_timer_stop(loop, &pn->ack_alarm);
     diet_free(&pn->recv);
     diet_free(&pn->acked);
 }

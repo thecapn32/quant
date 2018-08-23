@@ -30,9 +30,11 @@
 #include <math.h>
 #include <netinet/in.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include <ev.h>
+#include <picotls.h>
 #include <warpcore/warpcore.h>
 
 #include "diet.h"
@@ -138,7 +140,6 @@ struct q_conn {
 
     ev_timer idle_alarm;
     ev_timer closing_alarm;
-    ev_timer ack_alarm;
 
     struct sockaddr_in peer; ///< Address of our peer.
     char * peer_name;
@@ -175,6 +176,25 @@ pn_for_epoch(struct q_conn * const c, const epoch_t e)
         return &c->pn_hshk.pn;
     case ep_data:
         return &c->pn_data.pn;
+    }
+}
+
+
+static inline __attribute__((always_inline, nonnull)) epoch_t
+epoch_in(const struct q_conn * const c)
+{
+    const size_t epoch = ptls_get_read_epoch(c->tls.t);
+    switch (epoch) {
+    case 0:
+        return ep_init;
+    case 1:
+        return ep_0rtt;
+    case 2:
+        return ep_hshk;
+    case 3:
+        return ep_data;
+    default:
+        die("unhandled epoch %u", epoch);
     }
 }
 
@@ -258,8 +278,6 @@ is_inf(const ev_tstamp t)
                         ((c)->state < 100 || (c)->state >= 200)),              \
                    "%s and state is %s", conn_type(c),                         \
                    conn_state_str[(c)->state]);                                \
-            if ((c)->state == conn_clsg)                                       \
-                enter_closing(c);                                              \
         } else                                                                 \
             warn(ERR, "useless transition %u %u!", (c)->state, (s));           \
     } while (0)
@@ -296,9 +314,6 @@ extern void __attribute__((nonnull)) err_close(struct q_conn * const c,
                                                ...);
 
 extern void __attribute__((nonnull)) enter_closing(struct q_conn * const c);
-
-extern void __attribute__((nonnull))
-ack_alarm(struct ev_loop * const l, ev_timer * const w, int e);
 
 extern struct q_conn * new_conn(struct w_engine * const w,
                                 const uint32_t vers,

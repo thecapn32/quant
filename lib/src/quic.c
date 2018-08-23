@@ -549,7 +549,7 @@ void q_close(struct q_conn * const c)
             conn_to_state(c, conn_clsd);
         else {
             // send connection close frame
-            conn_to_state(c, conn_clsg);
+            enter_closing(c);
             ev_async_send(loop, &c->tx_w);
             loop_run(q_close, c, 0);
         }

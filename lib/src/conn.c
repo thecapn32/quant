@@ -37,7 +37,6 @@
 #include <sys/socket.h>
 
 #include <ev.h>
-#include <picotls.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
@@ -246,9 +245,9 @@ reset_conn(struct q_conn * const c, const bool also_crypto_in)
     free_pn(&c->pn_init.pn);
     free_pn(&c->pn_hshk.pn);
     free_pn(&c->pn_data.pn);
-    init_pn(&c->pn_init.pn);
-    init_pn(&c->pn_hshk.pn);
-    init_pn(&c->pn_data.pn);
+    init_pn(&c->pn_init.pn, c);
+    init_pn(&c->pn_hshk.pn, c);
+    init_pn(&c->pn_data.pn, c);
 }
 
 
@@ -327,8 +326,11 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
         // if this packet contains an ACK frame, stop the timer
         if (s->c->state == conn_estb &&
             bit_test(meta(v).frames, FRAM_TYPE_ACK)) {
-            warn(DBG, "ACK sent, stopping ACK timer");
-            ev_timer_stop(loop, &s->c->ack_alarm);
+            warn(DBG, "ACK sent, stopping epoch %u ACK timer",
+                 epoch_for_pkt_type(meta(v).hdr.type));
+            struct pn_space * const pn =
+                pn_for_pkt_type(s->c, meta(v).hdr.type);
+            ev_timer_stop(loop, &pn->ack_alarm);
         }
 
         if (limit && encoded == limit) {
@@ -450,7 +452,7 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
 
     if (did_tx == false)
         // need to send other frame, do it in an ACK
-        tx_ack(c, (uint8_t)ptls_get_read_epoch(c->tls.t));
+        tx_ack(c, epoch_in(c));
 
     c->needs_tx = false;
 }
@@ -479,13 +481,10 @@ void tx_ack(struct q_conn * const c, const epoch_t e)
     while (w_tx_pending(&x))
         w_nic_tx(c->w);
 
-    // warn(DBG, "ACK sent, stopping ACK timer");
-    ev_timer_stop(loop, &c->ack_alarm);
-
     log_sent_pkts(c);
     q_free(&x);
     if (is_ack_only(&meta(v)))
-        q_free_iov(v);
+        q_free_iov(v); // XXX this will cause spurious unknown ACK warnings
 }
 
 
@@ -571,25 +570,25 @@ track_recv(struct q_conn * const c, const uint64_t nr, const uint8_t flags)
 
 static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
 {
-    const epoch_t epoch = (uint8_t)ptls_get_read_epoch(c->tls.t);
-    struct q_stream * const s = get_stream(c, crpt_strm_id(epoch));
-    while (!sq_empty(&s->in)) {
-        struct w_iov * iv = sq_first(&s->in);
-        sq_remove_head(&s->in, next);
-        if (tls_io(s, iv) == 0) {
-            tx_crypto(c, c->tls.epoch_out);
-            if (c->state != conn_estb) {
-                maybe_api_return(q_connect, c, 0);
-                if (maybe_api_return(q_accept, accept_queue, 0))
-                    accept_queue = c;
-                conn_to_state(c, conn_estb);
+    const epoch_t e = epoch_in(c);
+    for (epoch_t epoch = e; epoch <= ep_data; epoch++) {
+        struct q_stream * const s = get_stream(c, crpt_strm_id(epoch));
+        while (!sq_empty(&s->in)) {
+            struct w_iov * iv = sq_first(&s->in);
+            sq_remove_head(&s->in, next);
+            if (tls_io(s, iv) == 0) {
+                tx_crypto(c, c->tls.epoch_out);
+                if (c->state != conn_estb) {
+                    maybe_api_return(q_connect, c, 0);
+                    if (maybe_api_return(q_accept, accept_queue, 0))
+                        accept_queue = c;
+                    conn_to_state(c, conn_estb);
+                }
             }
+            q_free_iov(iv);
         }
-        q_free_iov(iv);
 
-        if (ptls_get_read_epoch(c->tls.t) > epoch)
-            // we have something left to ACK in the previous epoch
-            tx_ack(c, epoch);
+        // TODO think whether we can opportunistically ACK as we switch epochs
     }
 }
 
@@ -604,10 +603,11 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
     } while (0)
 
 
-static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
+static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
                                             struct w_iov * const v,
                                             struct w_iov_sq * const i)
 {
+    bool ok = false;
     switch (c->state) {
     case conn_idle:
         // respond to a client-initial
@@ -673,6 +673,7 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 #endif
             c->needs_tx = true;
         }
+        ok = true;
         break;
 
     case conn_opng:
@@ -684,7 +685,7 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             if (try_vers == 0) {
                 // no version in common with serv
                 conn_to_state(c, conn_drng);
-                return;
+                goto done;
             }
 
             if (unlikely(try_vers == c->vers)) {
@@ -706,9 +707,8 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             tls_io(get_stream(c, crpt_strm_id(0)), 0);
 
             c->needs_tx = true;
-            q_free_iov(v);
 
-            return;
+            goto done;
         }
 
         if (unlikely(meta(v).hdr.vers != c->vers)) {
@@ -754,8 +754,8 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             struct q_stream * const s = get_stream(c, crpt_strm_id(0));
             s->in_off = 0;
 
-            c->needs_tx = true;
-            return;
+            ok = c->needs_tx = true;
+            goto done;
         }
 
         if (verify_prot(c, v) == false)
@@ -765,8 +765,7 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 
         // server accepted version -
         // if we get here, this should be a regular server-hello
-        if (dec_frames(c, v) == UINT16_MAX)
-            goto done;
+        ok = (dec_frames(c, v) != UINT16_MAX);
         break;
 
     case conn_estb:
@@ -793,6 +792,7 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 
         // case conn_tx_rtry:
         // case conn_clsd:
+        ok = true;
         break;
 
     default:
@@ -801,10 +801,11 @@ static void __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     // if packet has anything other than ACK frames, arm the ACK timer
-    if (!is_ack_only(&meta(v)) && c->state == conn_estb &&
-        !ev_is_active(&c->ack_alarm)) {
-        warn(DBG, "non-ACK frame received, starting ACK timer");
-        ev_timer_again(loop, &c->ack_alarm);
+    if (!is_ack_only(&meta(v))) {
+        warn(DBG, "non-ACK frame received, starting epoch %u ACK timer",
+             epoch_for_pkt_type(meta(v).hdr.type));
+        struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
+        ev_timer_again(loop, &pn->ack_alarm);
     }
 #endif
 
@@ -812,6 +813,8 @@ done:
     if (is_rtxable(&meta(v)) == false || meta(v).stream == 0)
         // this packet is not rtx'able, or the stream data is duplicate
         q_free_iov(v);
+
+    return ok;
 }
 
 
@@ -964,8 +967,8 @@ rx_pkts(struct w_iov_sq * const i,
             sl_insert_head(crx, c, next);
         }
 
-        rx_pkt(c, v, i);
-        rx_crypto(c);
+        if (rx_pkt(c, v, i))
+            rx_crypto(c);
     }
 }
 
@@ -1057,10 +1060,20 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
 
 void enter_closing(struct q_conn * const c)
 {
-    // stop LD and ACK alarms
-    ev_timer_stop(loop, &c->rec.ld_alarm);
-    ev_timer_stop(loop, &c->ack_alarm);
-    ev_timer_stop(loop, &c->idle_alarm);
+    // send any ACKs we still owe the peer
+    for (epoch_t e = ep_init; e <= ep_data; e++) {
+        struct pn_space * const pn = pn_for_epoch(c, e);
+        if ( // we don't ACK in the 0-RTT packet number space
+            e != ep_0rtt &&
+            // don't ACK here, because there will be in ACK in the CLOSE pkt
+            e != c->tls.epoch_out &&
+            // don't ACK if the timer is not running
+            ev_timer_remaining(loop, &pn->ack_alarm) < kDelayedAckTimeout)
+            ev_invoke(loop, &pn->ack_alarm, 0);
+        ev_timer_stop(loop, &pn->ack_alarm);
+    }
+
+    conn_to_state(c, conn_clsg);
 
     if (!ev_is_active(&c->closing_alarm)) {
         // start closing/draining alarm (3 * RTO)
@@ -1073,17 +1086,10 @@ void enter_closing(struct q_conn * const c)
         c->closing_alarm.data = c;
         ev_timer_start(loop, &c->closing_alarm);
     }
-}
 
-
-void ack_alarm(struct ev_loop * const l __attribute__((unused)),
-               ev_timer * const w,
-               int e __attribute__((unused)))
-{
-    struct q_conn * const c = w->data;
-    warn(DBG, "ACK timeout on %s conn %s", conn_type(c), scid2str(c));
-    tx_ack(w->data, 3);
-    ev_timer_stop(loop, &c->ack_alarm);
+    // stop LD and ACK alarms
+    ev_timer_stop(loop, &c->rec.ld_alarm);
+    ev_timer_stop(loop, &c->idle_alarm);
 }
 
 
@@ -1097,7 +1103,7 @@ idle_alarm(struct ev_loop * const l __attribute__((unused)),
 
     if (c->state != conn_estb) {
         // send connection close frame
-        conn_to_state(c, conn_clsg);
+        enter_closing(c);
         ev_async_send(loop, &c->tx_w);
     } else
         conn_to_state(c, conn_drng);
@@ -1144,19 +1150,14 @@ struct q_conn * new_conn(struct w_engine * const w,
     diet_init(&c->closed_streams);
 
     // initialize packet number spaces
-    init_pn(&c->pn_init.pn);
-    init_pn(&c->pn_hshk.pn);
-    init_pn(&c->pn_data.pn);
+    init_pn(&c->pn_init.pn, c);
+    init_pn(&c->pn_hshk.pn, c);
+    init_pn(&c->pn_data.pn, c);
 
     // initialize idle timeout
     c->idle_alarm.data = c;
     c->idle_alarm.repeat = idle_to ? idle_to : kIdleTimeout;
     ev_init(&c->idle_alarm, idle_alarm);
-
-    // initialize ACK timeout
-    c->ack_alarm.data = c;
-    c->ack_alarm.repeat = kDelayedAckTimeout;
-    ev_init(&c->ack_alarm, ack_alarm);
 
     c->tp_peer.ack_del_exp = c->tp_local.ack_del_exp = 3;
     c->tp_local.idle_to = kIdleTimeout;
@@ -1227,7 +1228,6 @@ void free_conn(struct q_conn * const c)
     ev_timer_stop(loop, &c->rec.ld_alarm);
     ev_timer_stop(loop, &c->closing_alarm);
     ev_timer_stop(loop, &c->idle_alarm);
-    ev_timer_stop(loop, &c->ack_alarm);
 
     struct q_stream *s, *ns;
     for (s = splay_min(stream, &c->streams); s; s = ns) {

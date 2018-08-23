@@ -247,18 +247,18 @@ bool enc_pkt(struct q_stream * const s,
     } else
         meta(v).ack_header_pos = 0;
 
-    if (c->tx_path_resp) {
-        i = enc_path_response_frame(c, v, i);
-        c->tx_path_resp = false;
-    }
-
-    if (c->tx_path_chlg)
-        i = enc_path_challenge_frame(c, v, i);
-
-    if (epoch == ep_data && c->tx_ncid)
-        i = enc_new_cid_frame(c, v, i);
-
     if (epoch == ep_data) {
+        if (c->tx_path_resp) {
+            i = enc_path_response_frame(c, v, i);
+            c->tx_path_resp = false;
+        }
+
+        if (c->tx_path_chlg)
+            i = enc_path_challenge_frame(c, v, i);
+
+        if (c->tx_ncid)
+            i = enc_new_cid_frame(c, v, i);
+
         // XXX rethink this - there needs to be a list of which streams are
         // blocked or need their window opened
         struct q_stream * t = 0;
@@ -288,16 +288,18 @@ bool enc_pkt(struct q_stream * const s,
             i = enc_max_stream_id_frame(c, v, i);
             c->tx_max_stream_id = false;
         }
+
+        // TODO: need to RTX most recent MAX_STREAM_DATA and MAX_DATA on RTX
+
+        if (c->state == conn_clsg) {
+            i = enc_close_frame(v, i,
+                                c->err_code == 0 ? FRAM_TYPE_APPL_CLSE
+                                                 : FRAM_TYPE_CONN_CLSE,
+                                c->err_code, c->err_frm, c->err_reason);
+            goto tx;
+        }
     }
 
-    // TODO: need to RTX most recent MAX_STREAM_DATA and MAX_DATA on RTX
-
-    if (c->state == conn_clsg) {
-        i = enc_close_frame(
-            v, i, c->err_code == 0 ? FRAM_TYPE_APPL_CLSE : FRAM_TYPE_CONN_CLSE,
-            c->err_code, c->err_frm, c->err_reason);
-        goto tx;
-    }
 
     if (rtx) {
         ensure(is_rtxable(&meta(v)), "is rtxable");

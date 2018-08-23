@@ -406,14 +406,14 @@ void on_pkt_acked(struct q_conn * const c,
     if (p->is_acked == false && s) {
         p->is_acked = true;
         s->out_ack_cnt++;
-        warn(DBG, "stream " FMT_SID " ACK cnt %u, len %u", s->id,
-             s->out_ack_cnt, sq_len(&s->out));
+        warn(DBG, "stream " FMT_SID " ACK cnt %u, len %u %s", s->id,
+             s->out_ack_cnt, sq_len(&s->out),
+             is_fully_acked(s) ? "(fully acked)" : "");
 
         if (is_fully_acked(s)) {
             // a q_write may be done
-            warn(CRT, "fully acked");
             maybe_api_return(q_write, s->c, s);
-            if (s->id && s->c->did_0rtt)
+            if (s->id >= 0 && s->c->did_0rtt)
                 maybe_api_return(q_connect, s->c, 0);
         }
     }
