@@ -371,7 +371,7 @@ static uint16_t chk_tp_clnt(const struct q_conn * const c,
     i = dec(&n, buf, len, i, sizeof(n), "%u");
     bool found = false;
     while (n > 0) {
-        uint32_t vers = 0;;
+        uint32_t vers = 0;
         n -= sizeof(vers);
         i = dec(&vers, buf, len, i, sizeof(vers), "0x%08x");
         found = found ? found : vers == c->vers;
@@ -466,6 +466,18 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         }
 
         switch (tp) {
+        case TP_INITIAL_MAX_STREAM_DATA_UNI: {
+            dec_tp(&c->tp_peer.max_strm_data_uni, sizeof(uint32_t));
+            warn(INF, "\tinitial_max_stream_data_uni = %u",
+                 c->tp_peer.max_strm_data_uni);
+            // apply this parameter to all current non-crypto streams
+            struct q_stream * s;
+            splay_foreach (s, stream, &c->streams)
+                if (s->id >= 0)
+                    s->out_data_max = c->tp_peer.max_strm_data_uni;
+            break;
+        }
+
         case TP_INITIAL_MAX_STREAM_DATA_BIDI_LOCAL: {
             dec_tp(&c->tp_peer.max_strm_data_bidi_local, sizeof(uint32_t));
             warn(INF, "\tinitial_max_stream_data_bidi_local = %u",
@@ -546,7 +558,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             break;
 
         default:
-            die("unsupported transport parameter 0x%04x", tp);
+            die("unsupported transport parameter %u", tp);
         }
     }
 
@@ -925,7 +937,7 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
 
     if (c->tls.tls_io.off > prev_off) {
         // enqueue for TX
-        for (epoch_t e = epoch_in; e <= ep_data; e++) {
+        for (epoch_t e = ep_init; e <= ep_data; e++) {
             const size_t out_len =
                 c->tls.epoch_off[e + 1] - c->tls.epoch_off[e];
             if (out_len == 0)

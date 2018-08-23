@@ -182,7 +182,8 @@ static void __attribute__((nonnull)) use_next_scid(struct q_conn * const c)
     struct q_cid_map * const cm = splay_find(cid_splay, &conns_by_cid, &which);
     splay_remove(cid_splay, &conns_by_cid, cm);
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-    warn(DBG, "new dcid=%s (was %s)", scid2str(c), cid2str(scid));
+    if (act_scid(c))
+        warn(DBG, "new dcid=%s (was %s)", scid2str(c), cid2str(scid));
 #endif
     free(cm);
 }
@@ -193,7 +194,8 @@ static void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c)
     struct cid * const dcid = act_dcid(c);
     sq_remove(&c->dcid, dcid, cid, next);
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-    warn(DBG, "new dcid=%s (was %s)", dcid2str(c), cid2str(dcid));
+    if (act_dcid(c))
+        warn(DBG, "new dcid=%s (was %s)", dcid2str(c), cid2str(dcid));
 #endif
     free(dcid);
 }
@@ -408,7 +410,8 @@ tx_crypto(struct q_conn * const c, const epoch_t e)
 
 void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
 {
-    if (c->state == conn_opng) {
+    // non-RTX crypto streams are handled here
+    if (rtx == false && c->state == conn_opng) {
         tx_crypto(c, c->tls.epoch_out);
         c->needs_tx = false;
         if (c->tls.epoch_out == ep_init)
@@ -425,8 +428,8 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
     splay_foreach (s, stream, &c->streams) {
         // warn(ERR, "stream %" PRId64 " %u", s->id, sq_len(&s->out));
         // check if we should skip TX on this stream
-        if ( // this is a crypto stream
-            (s->id < 0) ||
+        if ( // this is a crypto stream and we're not doing an RTX
+            (s->id < 0 && rtx == false) ||
             // is the stream fully ACKed and doesn't need control frames?
             (is_fully_acked(s) && !stream_needs_ctrl(s)) ||
             // is this a new TX but the stream is blocked?
@@ -570,26 +573,24 @@ track_recv(struct q_conn * const c, const uint64_t nr, const uint8_t flags)
 
 static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
 {
-    const epoch_t e = epoch_in(c);
-    for (epoch_t epoch = e; epoch <= ep_data; epoch++) {
-        struct q_stream * const s = get_stream(c, crpt_strm_id(epoch));
-        while (!sq_empty(&s->in)) {
-            struct w_iov * iv = sq_first(&s->in);
-            sq_remove_head(&s->in, next);
-            if (tls_io(s, iv) == 0) {
-                tx_crypto(c, c->tls.epoch_out);
-                if (c->state != conn_estb) {
-                    maybe_api_return(q_connect, c, 0);
-                    if (maybe_api_return(q_accept, accept_queue, 0))
-                        accept_queue = c;
-                    conn_to_state(c, conn_estb);
-                }
+    const epoch_t epoch = epoch_in(c);
+    struct q_stream * const s = get_stream(c, crpt_strm_id(epoch));
+    while (!sq_empty(&s->in)) {
+        struct w_iov * iv = sq_first(&s->in);
+        sq_remove_head(&s->in, next);
+        if (tls_io(s, iv) == 0) {
+            tx_crypto(c, c->tls.epoch_out);
+            if (c->state != conn_estb) {
+                maybe_api_return(q_connect, c, 0);
+                if (maybe_api_return(q_accept, accept_queue, 0))
+                    accept_queue = c;
+                conn_to_state(c, conn_estb);
             }
-            q_free_iov(iv);
         }
-
-        // TODO think whether we can opportunistically ACK as we switch epochs
+        q_free_iov(iv);
     }
+
+    // TODO think whether we can opportunistically ACK as we switch epochs
 }
 
 
@@ -800,11 +801,12 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
     }
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-    // if packet has anything other than ACK frames, arm the ACK timer
-    if (!is_ack_only(&meta(v))) {
+    // if packet has anything other than ACK frames, maybe arm the ACK timer
+    struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
+    if (c->state != conn_clsg && c->state != conn_drng &&
+        !is_ack_only(&meta(v)) && !ev_is_active(&pn->ack_alarm)) {
         warn(DBG, "non-ACK frame received, starting epoch %u ACK timer",
              epoch_for_pkt_type(meta(v).hdr.type));
-        struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
         ev_timer_again(loop, &pn->ack_alarm);
     }
 #endif

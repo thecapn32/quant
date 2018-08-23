@@ -76,6 +76,37 @@
     })
 
 
+void log_stream_or_crypto_frame(const bool rtx, const struct w_iov * const v)
+{
+    const struct q_stream * const s = meta(v).stream;
+    const uint8_t type = v->buf[meta(v).stream_header_pos];
+
+    if (s->id >= 0)
+        warn(INF,
+             FRAM_OUT "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID "/%" PRIu64
+                      " cdata=%" PRIu64 "/%" PRIu64 " off=%" PRIu64 "/%" PRIu64
+                      " len=%u %s",
+             type, is_set(F_STREAM_FIN, type) ? "FIN" : "",
+             is_set(F_STREAM_FIN, type) &&
+                     (is_set(F_STREAM_LEN, type) || is_set(F_STREAM_OFF, type))
+                 ? "|"
+                 : "",
+             is_set(F_STREAM_LEN, type) ? "LEN" : "",
+             is_set(F_STREAM_LEN, type) && is_set(F_STREAM_OFF, type) ? "|"
+                                                                      : "",
+             is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id, max_strm_id(s),
+             s->c->out_data, s->c->tp_peer.max_data, meta(v).stream_off,
+             s->out_data_max, stream_data_len(v),
+             rtx ? REV BLD GRN "[RTX]" : "");
+    else
+        warn(INF,
+             FRAM_OUT "CRYPTO" NRM " 0x%02x off=%" PRIu64 "/%" PRIu64
+                      " len=%u %s",
+             type, meta(v).stream_off, s->out_data_max, stream_data_len(v),
+             rtx ? REV BLD GRN "[RTX]" : "");
+}
+
+
 static uint16_t __attribute__((nonnull))
 dec_stream_or_crypto_frame(struct q_conn * const c,
                            struct w_iov * const v,
@@ -1053,34 +1084,13 @@ uint16_t enc_stream_or_crypto_frame(struct q_stream * const s,
     if (dlen || !enc_strm)
         enc(v->buf, v->len, i, &dlen, 0, 0, "%u");
 
-    if (enc_strm)
-        warn(INF,
-             FRAM_OUT "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID "/%" PRIu64
-                      " cdata=%" PRIu64 "/%" PRIu64 " off=%" PRIu64 "/%" PRIu64
-                      " len=%" PRIu64,
-             type, is_set(F_STREAM_FIN, type) ? "FIN" : "",
-             is_set(F_STREAM_FIN, type) &&
-                     (is_set(F_STREAM_LEN, type) || is_set(F_STREAM_OFF, type))
-                 ? "|"
-                 : "",
-             is_set(F_STREAM_LEN, type) ? "LEN" : "",
-             is_set(F_STREAM_LEN, type) && is_set(F_STREAM_OFF, type) ? "|"
-                                                                      : "",
-             is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id, max_strm_id(s),
-             s->c->out_data, s->c->tp_peer.max_data, s->out_off,
-             s->out_data_max, dlen);
-    else
-        warn(INF,
-             FRAM_OUT "CRYPTO" NRM " 0x%02x off=%" PRIu64 "/%" PRIu64
-                      " len=%" PRIu64,
-             type, s->out_off, s->out_data_max, dlen);
-
-    track_bytes_out(s, dlen);
     meta(v).stream = s; // remember stream this buf belongs to
     meta(v).stream_data_start = Q_OFFSET;
     meta(v).stream_data_end = Q_OFFSET + (uint16_t)dlen;
     meta(v).stream_off = s->out_off;
 
+    log_stream_or_crypto_frame(false, v);
+    track_bytes_out(s, dlen);
     s->out_off += dlen; // increase the stream data offset
 
     return v->len;

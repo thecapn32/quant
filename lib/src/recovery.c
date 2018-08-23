@@ -218,7 +218,7 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
     }
 
     // XXX is in the pseudo code, but it's already also called in  on_pkt_sent()
-    // set_ld_alarm(c);
+    set_ld_alarm(c);
 }
 
 

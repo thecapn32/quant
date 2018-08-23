@@ -247,6 +247,15 @@ bool enc_pkt(struct q_stream * const s,
     } else
         meta(v).ack_header_pos = 0;
 
+    if (c->state == conn_clsg || c->state == conn_drng) {
+        if (c->state == conn_clsg)
+            i = enc_close_frame(v, i,
+                                c->err_code == 0 ? FRAM_TYPE_APPL_CLSE
+                                                 : FRAM_TYPE_CONN_CLSE,
+                                c->err_code, c->err_frm, c->err_reason);
+        goto tx;
+    }
+
     if (epoch == ep_data) {
         if (c->tx_path_resp) {
             i = enc_path_response_frame(c, v, i);
@@ -263,6 +272,8 @@ bool enc_pkt(struct q_stream * const s,
         // blocked or need their window opened
         struct q_stream * t = 0;
         splay_foreach (t, stream, &c->streams) {
+            if (t->id < 0)
+                continue;
             if (t->blocked)
                 i = enc_stream_blocked_frame(t, v, i);
             if (t->tx_max_stream_data) {
@@ -290,14 +301,6 @@ bool enc_pkt(struct q_stream * const s,
         }
 
         // TODO: need to RTX most recent MAX_STREAM_DATA and MAX_DATA on RTX
-
-        if (c->state == conn_clsg) {
-            i = enc_close_frame(v, i,
-                                c->err_code == 0 ? FRAM_TYPE_APPL_CLSE
-                                                 : FRAM_TYPE_CONN_CLSE,
-                                c->err_code, c->err_frm, c->err_reason);
-            goto tx;
-        }
     }
 
 
@@ -307,26 +310,7 @@ bool enc_pkt(struct q_stream * const s,
         // this is a RTX, pad out until beginning of stream header
         enc_padding_frame(v, i, meta(v).stream_header_pos - i);
         i = meta(v).stream_data_end;
-
-#ifndef NDEBUG
-        // duplicate the logging that enc_stream_frame() does for a fresh TX
-        const uint8_t type = v->buf[meta(v).stream_header_pos];
-        warn(INF,
-             FRAM_OUT "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID "/%" PRIu64
-                      " cdata=%" PRIu64 "/%" PRIu64 " off=%" PRIu64 "/%" PRIu64
-                      " len=%u " REV BLD GRN "[RTX]",
-             type, is_set(F_STREAM_FIN, type) ? "FIN" : "",
-             is_set(F_STREAM_FIN, type) &&
-                     (is_set(F_STREAM_LEN, type) || is_set(F_STREAM_OFF, type))
-                 ? "|"
-                 : "",
-             is_set(F_STREAM_LEN, type) ? "LEN" : "",
-             is_set(F_STREAM_LEN, type) && is_set(F_STREAM_OFF, type) ? "|"
-                                                                      : "",
-             is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id, max_strm_id(s),
-             s->c->out_data, s->c->tp_peer.max_data, meta(v).stream_off,
-             s->out_data_max, stream_data_len(v));
-#endif
+        log_stream_or_crypto_frame(true, v);
 
     } else if (enc_data || s->state == strm_hclo || s->state == strm_clsd) {
         // this is an Initial, fresh data or pure stream FIN packet

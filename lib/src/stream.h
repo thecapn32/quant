@@ -83,9 +83,7 @@ struct q_stream {
 #define strm_to_state(strm, s)                                                 \
     do {                                                                       \
         if ((strm)->id >= 0) {                                                 \
-            warn(DBG,                                                          \
-                 "conn %s strm " FMT_SID " state " YEL "%s" NRM " -> " YEL     \
-                 "%s" NRM,                                                     \
+            warn(DBG, "conn %s strm " FMT_SID " state  %s -> " YEL "%s" NRM,   \
                  scid2str((strm)->c), (strm)->id,                              \
                  strm_state_str[(strm)->state], strm_state_str[(s)]);          \
         }                                                                      \
