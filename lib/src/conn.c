@@ -202,7 +202,7 @@ static void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c)
 
 static void log_sent_pkts(struct q_conn * const c)
 {
-    for (uint8_t e = 0; e < 3; e++) {
+    for (epoch_t e = ep_init; e < ep_data; e++) {
         char sent_pkts_buf[1024] = "";
         uint64_t prev = UINT64_MAX;
         struct pkt_meta * p = 0;
@@ -220,8 +220,9 @@ static void log_sent_pkts(struct q_conn * const c)
                     sizeof(sent_pkts_buf) - strlen(sent_pkts_buf) - 1);
             prev = p->hdr.nr;
         }
-        warn(DBG, "epoch %u%s unacked: %s", e, e == 1 ? "/3" : "",
-             sent_pkts_buf);
+        if (sent_pkts_buf[0])
+            warn(DBG, "epoch %u%s unacked: %s", e, e == 1 ? "/3" : "",
+                 sent_pkts_buf);
     }
 }
 
@@ -393,9 +394,9 @@ static void __attribute__((nonnull)) do_stream_fc(struct q_stream * const s)
 
 
 static void __attribute__((nonnull))
-tx_crypto(struct q_conn * const c, const uint8_t e)
+tx_crypto(struct q_conn * const c, const epoch_t e)
 {
-    for (uint8_t epoch = 0; epoch <= e; epoch++) {
+    for (epoch_t epoch = 0; epoch <= e; epoch++) {
         struct q_stream * const s = get_stream(c, crpt_strm_id(epoch));
         if (!sq_empty(&s->out))
             tx_stream(s, false, 0, 0);
@@ -408,7 +409,7 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
     if (c->state == conn_opng) {
         tx_crypto(c, c->tls.epoch_out);
         c->needs_tx = false;
-        if (c->tls.epoch_out == 0)
+        if (c->tls.epoch_out == ep_init)
             return;
     }
 
@@ -455,7 +456,7 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
 }
 
 
-void tx_ack(struct q_conn * const c, const uint8_t e)
+void tx_ack(struct q_conn * const c, const epoch_t e)
 {
     struct w_iov_sq x = sq_head_initializer(x);
     struct q_stream * const s = get_stream(c, crpt_strm_id(e));
@@ -570,7 +571,7 @@ track_recv(struct q_conn * const c, const uint64_t nr, const uint8_t flags)
 
 static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
 {
-    const uint8_t epoch = (uint8_t)ptls_get_read_epoch(c->tls.t);
+    const epoch_t epoch = (uint8_t)ptls_get_read_epoch(c->tls.t);
     struct q_stream * const s = get_stream(c, crpt_strm_id(epoch));
     while (!sq_empty(&s->in)) {
         struct w_iov * iv = sq_first(&s->in);
@@ -1201,7 +1202,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     }
 
     // create crypto streams
-    for (uint8_t e = 0; e < 4; e++)
+    for (epoch_t e = ep_init; e <= ep_data; e++)
         new_stream(c, crpt_strm_id(e), false);
 
     warn(DBG, "%s conn %s on port %u created", conn_type(c), scid2str(c),

@@ -164,16 +164,16 @@ struct q_conn {
 
 
 static inline __attribute__((always_inline, nonnull)) struct pn_space *
-pn_for_epoch(struct q_conn * const c, const uint8_t e)
+pn_for_epoch(struct q_conn * const c, const epoch_t e)
 {
     switch (e) {
-    case 0:
+    case ep_init:
         return &c->pn_init.pn;
-    case 1:
+    case ep_0rtt:
         return &c->pn_data.pn;
-    case 2:
+    case ep_hshk:
         return &c->pn_hshk.pn;
-    default:
+    case ep_data:
         return &c->pn_data.pn;
     }
 }
@@ -196,6 +196,7 @@ struct zrtt_ooo {
     struct w_iov * v; ///< the buffer containing the 0-RTT pkt
     ev_tstamp t;      ///< Insertion time
 };
+
 
 extern splay_head(zrtt_ooo_splay, zrtt_ooo) zrtt_ooo_by_cid;
 
@@ -278,7 +279,7 @@ extern void __attribute__((nonnull))
 tx(struct q_conn * const c, const bool rtx, const uint32_t limit);
 
 extern void __attribute__((nonnull))
-tx_ack(struct q_conn * const c, const uint8_t e);
+tx_ack(struct q_conn * const c, const epoch_t e);
 
 extern void __attribute__((nonnull))
 rx(struct ev_loop * const l, ev_io * const rx_w, int e);

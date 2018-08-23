@@ -152,7 +152,7 @@ bool enc_pkt(struct q_stream * const s,
     uint16_t i = 0, nr_pos = 0, len_pos = 0;
     uint8_t nr_len = 0;
 
-    const uint8_t epoch = strm_epoch(s);
+    const epoch_t epoch = strm_epoch(s);
     struct pn_space * const pn = pn_for_epoch(c, epoch);
     meta(v).pn = pn;
 
@@ -183,19 +183,22 @@ bool enc_pkt(struct q_stream * const s,
         meta(v).hdr.nr = ++pn->lg_sent;
 
     switch (epoch) {
-    case 0:
+    case ep_init:
         meta(v).hdr.type = F_LH_INIT;
         meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
         break;
-    case 1:
-        meta(v).hdr.type = F_LH_0RTT;
-        meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
+    case ep_0rtt:
+        if (c->is_clnt) {
+            meta(v).hdr.type = F_LH_0RTT;
+            meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
+        } else
+            meta(v).hdr.flags = F_SH;
         break;
-    case 2:
+    case ep_hshk:
         meta(v).hdr.type = F_LH_HSHK;
         meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
         break;
-    case 3:
+    case ep_data:
         if (pn == &c->pn_data.pn)
             meta(v).hdr.flags = F_SH;
         else {
@@ -203,8 +206,6 @@ bool enc_pkt(struct q_stream * const s,
             meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
         }
         break;
-    default:
-        die("unknown epoch %u", epoch);
     }
 
     if (is_set(F_LONG_HDR, meta(v).hdr.flags) == false)
@@ -254,10 +255,10 @@ bool enc_pkt(struct q_stream * const s,
     if (c->tx_path_chlg)
         i = enc_path_challenge_frame(c, v, i);
 
-    if (c->state == conn_estb && c->tx_ncid)
+    if (epoch == ep_data && c->tx_ncid)
         i = enc_new_cid_frame(c, v, i);
 
-    if (c->state == conn_estb) {
+    if (epoch == ep_data) {
         // XXX rethink this - there needs to be a list of which streams are
         // blocked or need their window opened
         struct q_stream * t = 0;

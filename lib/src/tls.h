@@ -46,6 +46,10 @@ struct cipher_ctx {
     ptls_cipher_context_t * pne;
 };
 
+
+typedef enum { ep_init = 0, ep_0rtt = 1, ep_hshk = 2, ep_data = 3 } epoch_t;
+
+
 struct tls {
     ptls_t * t;
     ptls_raw_extension_t tp_ext[2];
@@ -53,10 +57,9 @@ struct tls {
     size_t max_early_data;
     size_t epoch_off[5];
     ptls_buffer_t tls_io;
-    uint8_t epoch_out; // TODO: remove
-    uint8_t _unused;
+    epoch_t epoch_out; // TODO: remove
     uint8_t tp_buf[96];
-    uint8_t tls_io_buf[4094];
+    uint8_t tls_io_buf[4092];
 };
 
 

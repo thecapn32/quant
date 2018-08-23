@@ -34,6 +34,8 @@
 
 #include "conn.h" // IWYU pragma: keep
 #include "quic.h"
+#include "tls.h"
+
 
 #define STRM_FL_INI_SRV 0x01
 #define STRM_FL_DIR_UNI 0x02
@@ -102,17 +104,17 @@ is_fully_acked(const struct q_stream * const s)
 
 
 static inline __attribute__((always_inline, const)) int64_t
-crpt_strm_id(const uint8_t epoch)
+crpt_strm_id(const epoch_t epoch)
 {
     return -((int64_t)epoch + 1);
 }
 
 
-static inline __attribute__((always_inline, const)) uint8_t
+static inline __attribute__((always_inline, const)) epoch_t
 strm_epoch(const struct q_stream * const s)
 {
     if (s->id < 0)
-        return (uint8_t)(-s->id) - 1;
+        return (epoch_t)(-s->id) - 1;
     if (s->c->state == conn_opng)
         return 1;
     return 3;

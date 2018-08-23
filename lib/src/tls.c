@@ -890,7 +890,7 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
 {
     struct q_conn * const c = s->c;
     const size_t in_len = iv ? iv->len : 0;
-    const uint8_t epoch_in = strm_epoch(s);
+    const epoch_t epoch_in = strm_epoch(s);
     const size_t prev_off = c->tls.tls_io.off;
     const int ret = ptls_handle_message(
         c->tls.t, &c->tls.tls_io, c->tls.epoch_off, epoch_in, iv ? iv->buf : 0,
@@ -925,7 +925,7 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
 
     if (c->tls.tls_io.off > prev_off) {
         // enqueue for TX
-        for (uint8_t e = epoch_in; e < 4; e++) {
+        for (epoch_t e = epoch_in; e <= ep_data; e++) {
             const size_t out_len =
                 c->tls.epoch_off[e + 1] - c->tls.epoch_off[e];
             if (out_len == 0)
