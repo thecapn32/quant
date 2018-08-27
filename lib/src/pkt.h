@@ -74,6 +74,7 @@ epoch_for_pkt_type(const uint8_t type)
 {
     switch (type) {
     case F_LH_INIT:
+    case F_LH_RTRY:
         return 0;
     case F_LH_0RTT:
         return 1;
@@ -90,6 +91,7 @@ pn_for_pkt_type(struct q_conn * const c, const uint8_t t)
 {
     switch (t) {
     case F_LH_INIT:
+    case F_LH_RTRY:
         return &c->pn_init.pn;
     case F_LH_0RTT:
         return &c->pn_data.pn;
@@ -106,7 +108,9 @@ struct w_iov;
 struct w_iov_sq;
 
 extern bool __attribute__((nonnull))
-dec_pkt_hdr_beginning(const struct w_iov * const v, const bool is_clnt);
+dec_pkt_hdr_beginning(const struct w_iov * const v,
+                      const bool is_clnt,
+                      struct cid * const odcid);
 
 extern bool __attribute__((nonnull))
 dec_pkt_hdr_remainder(struct w_iov * const v,
@@ -120,8 +124,10 @@ extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
                                              struct w_iov_sq * const q);
 
 #if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
-extern void __attribute__((nonnull))
-log_pkt(const char * const dir, const struct w_iov * const v);
+extern void __attribute__((nonnull(1, 2)))
+log_pkt(const char * const dir,
+        const struct w_iov * const v,
+        const struct cid * const odcid);
 #else
 #define log_pkt(...)                                                           \
     do {                                                                       \

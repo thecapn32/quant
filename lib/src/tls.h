@@ -74,7 +74,7 @@ extern void __attribute__((nonnull)) init_tp(struct q_conn * const c);
 
 extern void __attribute__((nonnull)) free_tls(struct q_conn * const c);
 
-extern uint32_t __attribute__((nonnull(1)))
+extern int __attribute__((nonnull(1)))
 tls_io(struct q_stream * const s, struct w_iov * const iv);
 
 extern void init_tls_ctx(const char * const cert,

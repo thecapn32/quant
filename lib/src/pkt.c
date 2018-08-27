@@ -67,7 +67,9 @@ static const char * pkt_type_str(const struct w_iov * const v)
 }
 
 
-void log_pkt(const char * const dir, const struct w_iov * const v)
+void log_pkt(const char * const dir,
+             const struct w_iov * const v,
+             const struct cid * const odcid)
 {
     const char * col_dir = *dir == 'R' ? BLD BLU : BLD GRN;
     const char * col_nr = *dir == 'R' ? BLU : GRN;
@@ -81,6 +83,14 @@ void log_pkt(const char * const dir, const struct w_iov * const v)
                   col_dir, dir, *dir == 'R' ? v->len : 0, v->buf[0], col_dir,
                   pkt_type_str(v), meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
                   cid2str(&meta(v).hdr.scid));
+        else if (meta(v).hdr.type == F_LH_RTRY)
+            twarn(NTE,
+                  BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM
+                      "vers=0x%08x dcid=%s scid=%s odcid=%s tok=%s",
+                  col_dir, dir, *dir == 'R' ? v->len : 0, v->buf[0], col_dir,
+                  pkt_type_str(v), meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
+                  cid2str(&meta(v).hdr.scid), cid2str(odcid),
+                  hex2str(meta(v).hdr.tok, meta(v).hdr.tok_len));
         else if (meta(v).hdr.type == F_LH_INIT)
             twarn(NTE,
                   BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM
@@ -170,11 +180,11 @@ bool enc_pkt(struct q_stream * const s,
                 i = enc(v->buf, v->len, i, &ok_vers[j], sizeof(ok_vers[j]), 0,
                         "0x%08x");
         meta(v).hdr.hdr_len = v->len = i;
-        log_pkt("TX", v);
+        log_pkt("TX", v, 0);
         goto tx;
     }
 
-    if (c->state == conn_tx_rtry)
+    if (c->tx_rtry)
         meta(v).hdr.nr = 0;
     else if (pn->lg_sent == UINT64_MAX)
         // next pkt nr
@@ -182,10 +192,22 @@ bool enc_pkt(struct q_stream * const s,
     else
         meta(v).hdr.nr = ++pn->lg_sent;
 
+    struct cid odcid;
     switch (epoch) {
     case ep_init:
-        meta(v).hdr.type = F_LH_INIT;
+        meta(v).hdr.type = c->tx_rtry ? F_LH_RTRY : F_LH_INIT;
         meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
+
+        // this is a new connection; server picks a new random cid
+        struct cid new_scid = {.len = SERV_SCID_LEN};
+        arc4random_buf(new_scid.id, new_scid.len);
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+        warn(NTE, "hshk switch to scid %s for %s conn (was %s)",
+             cid2str(&new_scid), conn_type(c), scid2str(c));
+#endif
+        cid_cpy(&odcid, act_scid(c));
+        add_scid(c, &new_scid);
+        use_next_scid(c);
         break;
     case ep_0rtt:
         if (c->is_clnt) {
@@ -222,27 +244,43 @@ bool enc_pkt(struct q_stream * const s,
         i = enc(v->buf, v->len, i, &c->vers, sizeof(c->vers), 0, "0x%08x");
         i = enc_lh_cids(c, v, i);
 
-        if (meta(v).hdr.type == F_LH_INIT) {
+        if (meta(v).hdr.type == F_LH_RTRY) {
+            const uint8_t odcil = (uint8_t)(arc4random_uniform(0xf) << 4) |
+                                  (odcid.len ? odcid.len - 3 : 0);
+            i = enc(v->buf, v->len, i, &odcil, sizeof(odcil), 0, "0x%02x");
+            if (odcid.len)
+                i = enc_buf(v->buf, v->len, i, &odcid.id, odcid.len);
+        }
+
+        if (meta(v).hdr.type == F_LH_INIT || meta(v).hdr.type == F_LH_RTRY) {
+            // TODO encode a token
             uint64_t tok = 0;
             i = enc(v->buf, v->len, i, &tok, 0, 0, "%" PRIu64);
         }
 
-        // leave space for length field (2 bytes is enough)
-        len_pos = i;
-        i += 2;
+        if (meta(v).hdr.type != F_LH_RTRY) {
+            // leave space for length field (2 bytes is enough)
+            len_pos = i;
+            i += 2;
+        }
+
     } else {
         cid_cpy(&meta(v).hdr.dcid, act_dcid(c));
         i = enc_buf(v->buf, v->len, i, &meta(v).hdr.dcid.id,
                     meta(v).hdr.dcid.len);
     }
-    nr_pos = i;
-    nr_len = needed_pkt_nr_len(pn, meta(v).hdr.nr);
-    i = enc_pnr(v->buf, v->len, i, &meta(v).hdr.nr, nr_len, GRN "%u" NRM);
+
+
+    if (meta(v).hdr.type != F_LH_RTRY) {
+        nr_pos = i;
+        nr_len = needed_pkt_nr_len(pn, meta(v).hdr.nr);
+        i = enc_pnr(v->buf, v->len, i, &meta(v).hdr.nr, nr_len, GRN "%u" NRM);
+    }
 
     meta(v).hdr.hdr_len = i;
-    log_pkt("TX", v);
+    log_pkt("TX", v, meta(v).hdr.type == F_LH_RTRY ? &odcid : 0);
 
-    if (!splay_empty(&pn->recv) && c->state != conn_tx_rtry) {
+    if (meta(v).hdr.type != F_LH_RTRY && !splay_empty(&pn->recv)) {
         i = enc_ack_frame(c, pn, v, i);
     } else
         meta(v).ack_header_pos = 0;
@@ -357,8 +395,7 @@ tx:
     sq_insert_tail(q, x, next);
     meta(v).tx_len = x->len;
 
-    if ((meta(v).hdr.type == F_LH_INIT && c->is_clnt) ||
-        c->state == conn_tx_rtry)
+    if ((meta(v).hdr.type == F_LH_INIT && c->is_clnt) || c->tx_rtry)
         // adjust v->len to end of stream data (excl. padding)
         v->len = meta(v).stream_data_end;
 
@@ -386,7 +423,9 @@ tx:
     })
 
 
-bool dec_pkt_hdr_beginning(const struct w_iov * const v, const bool is_clnt)
+bool dec_pkt_hdr_beginning(const struct w_iov * const v,
+                           const bool is_clnt,
+                           struct cid * const odcid)
 {
     dec_chk(&meta(v).hdr.flags, v->buf, v->len, 0, 1, "0x%02x");
     meta(v).hdr.type = pkt_type(*v->buf);
@@ -427,7 +466,16 @@ bool dec_pkt_hdr_beginning(const struct w_iov * const v, const bool is_clnt)
             // version negotiation packet
             return true;
 
-        if (meta(v).hdr.type == F_LH_INIT) {
+        if (meta(v).hdr.type == F_LH_RTRY) {
+            // decode odcid
+            meta(v).hdr.hdr_len = dec(&odcid->len, v->buf, v->len,
+                                      meta(v).hdr.hdr_len, 1, "0x%02x");
+            odcid->len = (odcid->len & 0x0f) + 3;
+            meta(v).hdr.hdr_len = dec_chk_buf(&odcid->id, v->buf, v->len,
+                                              meta(v).hdr.hdr_len, odcid->len);
+        }
+
+        if (meta(v).hdr.type == F_LH_INIT || meta(v).hdr.type == F_LH_RTRY) {
             // decode token
             meta(v).hdr.hdr_len = dec_chk(&meta(v).hdr.tok_len, v->buf, v->len,
                                           meta(v).hdr.hdr_len, 0, "%" PRIu64);
@@ -440,16 +488,18 @@ bool dec_pkt_hdr_beginning(const struct w_iov * const v, const bool is_clnt)
             }
         }
 
-        uint64_t len = 0;
-        meta(v).hdr.hdr_len =
-            dec(&len, v->buf, v->len, meta(v).hdr.hdr_len, 0, "%" PRIu64);
-        if (unlikely(meta(v).hdr.hdr_len == UINT16_MAX))
-            return false;
-        meta(v).hdr.len = (uint16_t)len;
+        if (meta(v).hdr.type != F_LH_RTRY) {
+            uint64_t len = 0;
+            meta(v).hdr.hdr_len =
+                dec(&len, v->buf, v->len, meta(v).hdr.hdr_len, 0, "%" PRIu64);
+            if (unlikely(meta(v).hdr.hdr_len == UINT16_MAX))
+                return false;
+            meta(v).hdr.len = (uint16_t)len;
 
-        // the len cannot be larger than the rx'ed pkt
-        if (unlikely(meta(v).hdr.len + meta(v).hdr.hdr_len > v->len))
-            return false;
+            // the len cannot be larger than the rx'ed pkt
+            if (unlikely(meta(v).hdr.len + meta(v).hdr.hdr_len > v->len))
+                return false;
+        }
 
         return true;
     }

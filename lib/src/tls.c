@@ -898,7 +898,7 @@ void init_pn_init_prot(struct q_conn * const c)
 }
 
 
-uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
+int tls_io(struct q_stream * const s, struct w_iov * const iv)
 {
     struct q_conn * const c = s->c;
     const size_t in_len = iv ? iv->len : 0;
@@ -927,12 +927,11 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
         }
 
     } else if (ret == PTLS_ERROR_STATELESS_RETRY) {
-        conn_to_state(c, conn_tx_rtry);
-        return (uint32_t)ret;
+        c->needs_tx = c->tx_rtry = true;
     } else if (ret != 0 && ret != PTLS_ERROR_IN_PROGRESS) {
         err_close(c, ERR_TLS(PTLS_ERROR_TO_ALERT(ret)), FRAM_TYPE_CRPT,
                   "picotls error %u", ret);
-        return (uint32_t)ret;
+        return ret;
     }
 
     if (c->tls.tls_io.off > prev_off) {
@@ -942,8 +941,8 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
                 c->tls.epoch_off[e + 1] - c->tls.epoch_off[e];
             if (out_len == 0)
                 continue;
-            // warn(ERR, "epoch %u: off %u len %u", e, c->tls.epoch_off[e],
-            //      out_len);
+            warn(ERR, "epoch %u: off %u len %u", e, c->tls.epoch_off[e],
+                 out_len);
             struct w_iov_sq o = sq_head_initializer(o);
             q_alloc(w_engine(c->sock), &o, (uint32_t)out_len);
             const uint8_t * data = c->tls.tls_io.base + c->tls.epoch_off[e];
@@ -958,7 +957,7 @@ uint32_t tls_io(struct q_stream * const s, struct w_iov * const iv)
         c->needs_tx = true;
     }
 
-    return (uint32_t)ret;
+    return ret;
 }
 
 

@@ -27,6 +27,7 @@
 
 #include <arpa/inet.h>
 #include <bitstring.h>
+#include <inttypes.h>
 #include <netinet/in.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -174,7 +175,7 @@ get_conn_by_cid(const struct cid * const scid)
 }
 
 
-static void __attribute__((nonnull)) use_next_scid(struct q_conn * const c)
+void use_next_scid(struct q_conn * const c)
 {
     struct cid * const scid = act_scid(c);
     sq_remove(&c->scid, scid, cid, next);
@@ -237,11 +238,11 @@ reset_conn(struct q_conn * const c, const bool also_crypto_in)
     // reset FC state
     c->in_data = c->out_data = 0;
 
-    struct q_stream * s = 0;
-    splay_foreach (s, stream, &c->streams)
-        // only reset the crypto streams
-        if (s->id < 0)
-            reset_stream(s, also_crypto_in);
+    // only reset the crypto streams
+    for (epoch_t epoch = ep_init; epoch <= ep_data; epoch++) {
+        struct q_stream * const s = get_stream(c, crpt_strm_id(epoch));
+        reset_stream(s, also_crypto_in);
+    }
 
     // reset packet number spaces
     free_pn(&c->pn_init.pn);
@@ -290,10 +291,8 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             continue;
         }
 
-        // TODO revise for -14
-        if ((s->c->state == conn_estb ||
-             (s->c->is_clnt == false && s->c->state != conn_tx_rtry)) &&
-            s->out_data_max && s->out_off + v->len > s->out_data_max) {
+        if (s->id >= 0 && s->c->state == conn_estb && s->out_data_max &&
+            s->out_off + v->len > s->out_data_max) {
             warn(INF, "out of FC window for strm " FMT_SID ", %u+%u/%u", s->id,
                  s->out_off, v->len, s->out_data_max);
             s->blocked = true;
@@ -400,7 +399,7 @@ static void __attribute__((nonnull)) do_stream_fc(struct q_stream * const s)
 static void __attribute__((nonnull))
 tx_crypto(struct q_conn * const c, const epoch_t e)
 {
-    for (epoch_t epoch = 0; epoch <= e; epoch++) {
+    for (epoch_t epoch = ep_init; epoch <= e; epoch++) {
         struct q_stream * const s = get_stream(c, crpt_strm_id(epoch));
         if (!sq_empty(&s->out))
             tx_stream(s, false, 0, 0);
@@ -578,16 +577,17 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
     while (!sq_empty(&s->in)) {
         struct w_iov * iv = sq_first(&s->in);
         sq_remove_head(&s->in, next);
-        if (tls_io(s, iv) == 0) {
+        const int ret = tls_io(s, iv);
+        if (ret == 0 || ret == PTLS_ERROR_STATELESS_RETRY) {
             tx_crypto(c, c->tls.epoch_out);
-            if (c->state != conn_estb) {
+            if (ret == 0 && c->state != conn_estb) {
                 maybe_api_return(q_connect, c, 0);
                 if (maybe_api_return(q_accept, accept_queue, 0))
                     accept_queue = c;
                 conn_to_state(c, conn_estb);
             }
         }
-        q_free_iov(iv);
+        // q_free_iov(iv);
     }
 
     // TODO think whether we can opportunistically ACK as we switch epochs
@@ -655,16 +655,6 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
                 sq_insert_head(i, zo->v, next);
                 free(zo);
             }
-
-            // this is a new connection; server picks a new random cid
-            struct cid new_scid = {.len = SERV_SCID_LEN};
-            arc4random_buf(new_scid.id, new_scid.len);
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-            warn(NTE, "hshk switch to scid %s for %s conn (was %s)",
-                 cid2str(&new_scid), conn_type(c), scid2str(c));
-#endif
-            add_scid(c, &new_scid);
-            use_next_scid(c);
             conn_to_state(c, conn_opng);
 
         } else {
@@ -720,13 +710,6 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         }
 
         if (meta(v).hdr.type == F_LH_RTRY) {
-            // verify retry
-            if (meta(v).hdr.nr) {
-                warn(NTE, "retry pkt nr " FMT_PNR_OUT " != 0, ignoring",
-                     meta(v).hdr.nr);
-                goto done;
-            }
-
             // handle an incoming retry packet
             warn(INF, "handling serv stateless retry");
 
@@ -752,7 +735,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             rx_crypto(c);
 
             // we can now reset the crypto stream offset (inbound)
-            struct q_stream * const s = get_stream(c, crpt_strm_id(0));
+            struct q_stream * const s = get_stream(c, crpt_strm_id(ep_init));
             s->in_off = 0;
 
             ok = c->needs_tx = true;
@@ -791,8 +774,6 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         if (dec_frames(c, v) == UINT16_MAX)
             goto done;
 
-        // case conn_tx_rtry:
-        // case conn_clsd:
         ok = true;
         break;
 
@@ -843,7 +824,8 @@ rx_pkts(struct w_iov_sq * const i,
 
         const bool is_clnt = w_connected(ws);
         struct q_conn * c = 0;
-        if (dec_pkt_hdr_beginning(v, is_clnt) == false) {
+        struct cid odcid;
+        if (dec_pkt_hdr_beginning(v, is_clnt, &odcid) == false) {
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
             warn(ERR, "received invalid %u-byte pkt, ignoring", v->len);
 #endif
@@ -902,6 +884,13 @@ rx_pkts(struct w_iov_sq * const i,
         } else {
             if (meta(v).hdr.scid.len)
                 if (cid_cmp(&meta(v).hdr.scid, act_dcid(c)) != 0) {
+                    if (meta(v).hdr.type == F_LH_RTRY &&
+                        cid_cmp(&odcid, act_dcid(c)) != 0) {
+                        warn(ERR, "RETRY cid mismatch %s != %s",
+                             cid2str(&odcid), cid2str(act_dcid(c)));
+                        q_free_iov(v);
+                        continue;
+                    }
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
                     warn(NTE, "hshk switch to dcid %s for %s conn (was %s)",
                          cid2str(&meta(v).hdr.scid), conn_type(c),
@@ -951,7 +940,8 @@ rx_pkts(struct w_iov_sq * const i,
             continue;
         }
 
-        if (meta(v).hdr.vers || !is_set(F_LONG_HDR, meta(v).hdr.flags))
+        if ((meta(v).hdr.vers && meta(v).hdr.type != F_LH_RTRY) ||
+            !is_set(F_LONG_HDR, meta(v).hdr.flags))
             if (dec_pkt_hdr_remainder(v, c, i) == false) {
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
                 warn(ERR, "received invalid %u-byte 0x%02x-type pkt, ignoring",
@@ -961,7 +951,7 @@ rx_pkts(struct w_iov_sq * const i,
                 continue;
             }
 
-        log_pkt("RX", v);
+        log_pkt("RX", v, &odcid);
 
         // remember that we had a RX event on this connection
         if (!c->had_rx) {
@@ -1002,8 +992,7 @@ void rx(struct ev_loop * const l,
         // clear the helper flags set above
         c->needs_tx = c->had_rx = false;
 
-
-        if (c->state == conn_tx_rtry)
+        if (c->tx_rtry)
             // if we sent a retry, forget the entire connection existed
             free_conn(c);
     }

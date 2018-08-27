@@ -75,8 +75,8 @@ sl_head(q_conn_sl, q_conn);
 #define CONN_STATES                                                            \
     CONN_STATE(conn_clsd, 0), CONN_STATE(conn_idle, 1),                        \
         CONN_STATE(conn_opng, 2), CONN_STATE(conn_estb, 3),                    \
-        CONN_STATE(conn_clsg, 4), CONN_STATE(conn_drng, 51),                   \
-        CONN_STATE(conn_tx_rtry, 203)
+        CONN_STATE(conn_clsg, 4), CONN_STATE(conn_drng, 51),
+
 
 /// Define connection states.
 /// \dotfile conn-states.dot "Connection state diagram."
@@ -331,6 +331,8 @@ add_scid(struct q_conn * const c, const struct cid * const id);
 
 extern void __attribute__((nonnull))
 add_dcid(struct q_conn * const c, const struct cid * const id);
+
+extern void __attribute__((nonnull)) use_next_scid(struct q_conn * const c);
 
 
 #ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
