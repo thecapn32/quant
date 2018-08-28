@@ -112,7 +112,7 @@ function analyze {
         perl -n -e '/RX len=/ && exit 1;' "$log"
         [ $? == 1 ] && live[$1]="*"
 
-        perl -n -e '/0xbabababa, retrying with/ && exit 1;' "$log"
+        perl -n -e '/0xbabababa, retrying with|no vers in common/ && exit 1;' "$log"
         [ $? == 1 ] && vneg[$1]=V
 
         perl -n -e '/TX len=.*Short/ and $x=1;
@@ -199,5 +199,6 @@ for s in "${sorted[@]}"; do
 done
 
 expand -t 5 "$tmp" | sponge "$tmp"
+# cat "$tmp"
 wdiff -n "$(dirname $0)/$script.result" "$tmp" | $colordiff
 rm -f "$tmp"
