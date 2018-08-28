@@ -27,7 +27,6 @@
 
 #include <arpa/inet.h>
 #include <bitstring.h>
-#include <inttypes.h>
 #include <netinet/in.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -110,14 +109,17 @@ SPLAY_GENERATE(ipnp_splay, q_conn, node_ipnp, ipnp_splay_cmp)
 SPLAY_GENERATE(cid_splay, q_cid_map, node, cid_splay_cmp)
 
 
-static bool __attribute__((const)) vers_supported(const uint32_t v)
+bool vers_supported(const uint32_t v)
 {
+    if (is_force_neg_vers(v) || is_rsvd_vers(v))
+        return false;
+
     for (uint8_t i = 0; i < ok_vers_len; i++)
         if (v == ok_vers[i])
             return true;
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-    warn(INF, "no vers in common with clnt");
+    warn(INF, "no vers in common");
 #endif
     // we're out of matching candidates
     return false;
@@ -141,16 +143,26 @@ static uint32_t __attribute__((nonnull))
 pick_from_server_vers(const struct w_iov * const v)
 {
     const uint16_t pos = meta(v).hdr.hdr_len;
-    for (uint8_t i = 0; i < ok_vers_len; i++)
+    for (uint8_t i = 0; i < ok_vers_len; i++) {
+        if (is_rsvd_vers(ok_vers[i]))
+            // skip over reserved versions in our local list
+            continue;
+
         for (uint8_t j = 0; j < v->len - pos; j += sizeof(uint32_t)) {
             uint32_t vers = 0;
             uint16_t x = j + pos;
             dec(&vers, v->buf, v->len, x, sizeof(vers), "0x%08x");
-            // warn(DBG, "serv prio %ld = 0x%08x; our prio %u = 0x%08x",
-            //      j / sizeof(uint32_t), vers, i, ok_vers[i]);
+
+            if (is_rsvd_vers(vers))
+                // skip over reserved versions in the server's list
+                continue;
+
+            warn(DBG, "serv prio %ld = 0x%08x; our prio %u = 0x%08x",
+                 j / sizeof(uint32_t), vers, i, ok_vers[i]);
             if (ok_vers[i] == vers)
                 return vers;
         }
+    }
 
     // we're out of matching candidates
     warn(INF, "no vers in common with serv");
@@ -230,31 +242,6 @@ static void log_sent_pkts(struct q_conn * const c)
 
 
 static void __attribute__((nonnull))
-reset_conn(struct q_conn * const c, const bool also_crypto_in)
-{
-    // reset CC state
-    c->rec.in_flight = 0;
-
-    // reset FC state
-    c->in_data = c->out_data = 0;
-
-    // only reset the crypto streams
-    for (epoch_t epoch = ep_init; epoch <= ep_data; epoch++) {
-        struct q_stream * const s = get_stream(c, crpt_strm_id(epoch));
-        reset_stream(s, also_crypto_in);
-    }
-
-    // reset packet number spaces
-    free_pn(&c->pn_init.pn);
-    free_pn(&c->pn_hshk.pn);
-    free_pn(&c->pn_data.pn);
-    init_pn(&c->pn_init.pn, c);
-    init_pn(&c->pn_hshk.pn, c);
-    init_pn(&c->pn_data.pn, c);
-}
-
-
-static void __attribute__((nonnull))
 rtx_pkt(struct q_stream * const s, struct w_iov * const v)
 {
     ensure(meta(v).is_rtxed == false, "cannot RTX an RTX");
@@ -320,8 +307,6 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
 
         if (enc_pkt(s, rtx, true, v, &x) == false)
             continue;
-
-        on_pkt_sent(s, v);
         encoded++;
 
         // if this packet contains an ACK frame, stop the timer
@@ -401,7 +386,7 @@ tx_crypto(struct q_conn * const c, const epoch_t e)
 {
     for (epoch_t epoch = ep_init; epoch <= e; epoch++) {
         struct q_stream * const s = get_stream(c, crpt_strm_id(epoch));
-        if (!sq_empty(&s->out))
+        if (!is_fully_acked(s))
             tx_stream(s, false, 0, 0);
     }
 }
@@ -472,8 +457,7 @@ void tx_ack(struct q_conn * const c, const epoch_t e)
         return;
 
     struct w_iov * const v = q_alloc_iov(c->w, 0, Q_OFFSET);
-    if (enc_pkt(s, false, false, v, &x))
-        on_pkt_sent(s, v);
+    enc_pkt(s, false, false, v, &x);
 
     if (sq_len(&x) == 0)
         return;
@@ -604,6 +588,34 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
     } while (0)
 
 
+static void __attribute__((nonnull)) vneg_or_rtry_resp(struct q_conn * const c)
+{
+    // reset CC state
+    c->rec.in_flight = 0;
+
+    // reset FC state
+    c->in_data = c->out_data = 0;
+
+    // only reset the crypto streams
+    for (epoch_t epoch = ep_init; epoch <= ep_data; epoch++) {
+        struct q_stream * const s = get_stream(c, crpt_strm_id(epoch));
+        reset_stream(s);
+    }
+
+    // reset packet number spaces
+    free_pn(&c->pn_init.pn);
+    free_pn(&c->pn_hshk.pn);
+    free_pn(&c->pn_data.pn);
+    init_pn(&c->pn_init.pn, c);
+    init_pn(&c->pn_hshk.pn, c);
+    init_pn(&c->pn_data.pn, c);
+
+    // reset TLS state and create new CH
+    init_tls(c);
+    tls_io(get_stream(c, crpt_strm_id(ep_init)), 0);
+}
+
+
 static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
                                             struct w_iov * const v,
                                             struct w_iov_sq * const i)
@@ -623,14 +635,32 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 
         c->vers = meta(v).hdr.vers;
         track_recv(c, meta(v).hdr.nr, meta(v).hdr.flags);
-        if (c->vers_initial == 0)
-            c->vers_initial = c->vers;
         if (vers_supported(c->vers) && !is_force_neg_vers(c->vers)) {
+            if (verify_prot(c, v) == false)
+                goto done;
+
+            if (c->tx_rtry) {
+                // tx_rtry is currently always set on port 4434
+                if (meta(v).hdr.type == F_LH_INIT && meta(v).hdr.tok_len) {
+                    // this may be a second initial following an earlier retry
+                    if (verify_rtry_tok(c, v) == false) {
+                        warn(ERR, "retry token verification failed");
+                        enter_closing(c);
+                        goto done;
+                    } else
+                        c->tx_rtry = false;
+                } else {
+                    warn(INF, "sending retry");
+                    // send a RETRY
+                    make_rtry_tok(c);
+                    c->needs_tx = true;
+                    goto done;
+                }
+            }
+
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
             warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
 #endif
-            if (verify_prot(c, v) == false)
-                goto done;
 
             if (dec_frames(c, v) == UINT16_MAX)
                 goto done;
@@ -638,7 +668,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             // if the CH doesn't include any crypto frames, bail
             if (bit_test(meta(v).frames, FRAM_TYPE_CRPT) == false) {
                 warn(ERR, "initial pkt w/o crypto frames");
-                conn_to_state(c, conn_drng);
+                enter_closing(c);
                 goto done;
             }
 
@@ -657,12 +687,22 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             }
             conn_to_state(c, conn_opng);
 
+            // this is a new connection; server picks a new random cid
+            struct cid new_scid = {.len = SERV_SCID_LEN};
+            arc4random_buf(new_scid.id, new_scid.len);
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+            warn(NTE, "hshk switch to scid %s for %s conn (was %s)",
+                 cid2str(&new_scid), conn_type(c), scid2str(c));
+#endif
+            add_scid(c, &new_scid);
+            use_next_scid(c);
+
         } else {
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
             warn(WRN, "%s conn %s clnt-requested vers 0x%08x not supported ",
                  conn_type(c), scid2str(c), c->vers);
 #endif
-            c->needs_tx = true;
+            c->tx_vneg = c->needs_tx = true;
         }
         ok = true;
         break;
@@ -675,7 +715,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             const uint32_t try_vers = pick_from_server_vers(v);
             if (try_vers == 0) {
                 // no version in common with serv
-                conn_to_state(c, conn_drng);
+                enter_closing(c);
                 goto done;
             }
 
@@ -684,21 +724,10 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
                 goto done;
             }
 
-            if (c->vers_initial == 0)
-                c->vers_initial = c->vers;
+            vneg_or_rtry_resp(c);
             c->vers = try_vers;
             warn(INF, "serv didn't like vers 0x%08x, retrying with 0x%08x",
                  c->vers_initial, c->vers);
-
-            // reset connection and free previous ClientHello flight
-            reset_conn(c, true);
-
-            // reset TLS state and create new CH
-            init_tls(c);
-            tls_io(get_stream(c, crpt_strm_id(0)), 0);
-
-            c->needs_tx = true;
-
             goto done;
         }
 
@@ -711,34 +740,21 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 
         if (meta(v).hdr.type == F_LH_RTRY) {
             // handle an incoming retry packet
-            warn(INF, "handling serv stateless retry");
-
-            if (verify_prot(c, v) == false)
-                goto done;
-
-            // server accepted version -
             // must use cid from retry for connection and re-init keys
-            init_pn_init_prot(c);
+            free_prot(c);
+            init_prot(c);
 
-            // reinit tp
-            c->vers_initial = c->vers;
-            init_tp(c);
+            vneg_or_rtry_resp(c);
 
-            // handle the ACK frame in the Retry
-            if (dec_frames(c, v) == UINT16_MAX)
-                goto done;
+            if (c->tok)
+                free(c->tok);
+            c->tok_len = meta(v).hdr.tok_len;
+            c->tok = calloc(c->tok_len, sizeof(uint8_t));
+            ensure(c->tok, "could not calloc");
+            memcpy(c->tok, meta(v).hdr.tok, c->tok_len);
 
-            // forget we transmitted any packets
-            reset_conn(c, false);
-
-            // process the retry data
-            rx_crypto(c);
-
-            // we can now reset the crypto stream offset (inbound)
-            struct q_stream * const s = get_stream(c, crpt_strm_id(ep_init));
-            s->in_off = 0;
-
-            ok = c->needs_tx = true;
+            warn(INF, "handling serv stateless retry w/tok %s",
+                 hex2str(c->tok, c->tok_len));
             goto done;
         }
 
@@ -827,7 +843,8 @@ rx_pkts(struct w_iov_sq * const i,
         struct cid odcid;
         if (dec_pkt_hdr_beginning(v, is_clnt, &odcid) == false) {
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-            warn(ERR, "received invalid %u-byte pkt, ignoring", v->len);
+            warn(ERR, "received invalid %u-byte pkt (type 0x%02x), ignoring",
+                 v->len, v->buf[0]);
 #endif
             q_free_iov(v);
             continue;
@@ -992,8 +1009,8 @@ void rx(struct ev_loop * const l,
         // clear the helper flags set above
         c->needs_tx = c->had_rx = false;
 
-        if (c->tx_rtry)
-            // if we sent a retry, forget the entire connection existed
+        if (c->tx_rtry || c->tx_vneg)
+            // if we sent a retry or vneg, forget the entire connection existed
             free_conn(c);
     }
 }
@@ -1039,10 +1056,8 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
              int e __attribute__((unused)))
 {
     struct q_conn * const c = w->data;
-    warn(DBG, "closing/draining alarm on %s conn %s", conn_type(c),
-         scid2str(c));
-
     conn_to_state(c, conn_clsd);
+
     // terminate whatever API call is currently active
     maybe_api_return(c, 0);
     maybe_api_return(q_accept, accept_queue, 0);
@@ -1051,6 +1066,10 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
 
 void enter_closing(struct q_conn * const c)
 {
+    // stop LD and ACK alarms
+    ev_timer_stop(loop, &c->rec.ld_alarm);
+    ev_timer_stop(loop, &c->idle_alarm);
+
     // send any ACKs we still owe the peer
     for (epoch_t e = ep_init; e <= ep_data; e++) {
         struct pn_space * const pn = pn_for_epoch(c, e);
@@ -1064,23 +1083,25 @@ void enter_closing(struct q_conn * const c)
         ev_timer_stop(loop, &pn->ack_alarm);
     }
 
-    conn_to_state(c, conn_clsg);
+    ev_init(&c->closing_alarm, enter_closed);
+    c->closing_alarm.data = c;
 
-    if (!ev_is_active(&c->closing_alarm)) {
-        // start closing/draining alarm (3 * RTO)
-        const ev_tstamp dur =
-            3 * (is_zero(c->rec.srtt) ? kDefaultInitialRtt : c->rec.srtt) +
-            4 * c->rec.rttvar;
-        warn(DBG, "closing/draining alarm in %f sec on %s conn %s", dur,
-             conn_type(c), scid2str(c));
-        ev_timer_init(&c->closing_alarm, enter_closed, dur, 0);
-        c->closing_alarm.data = c;
-        ev_timer_start(loop, &c->closing_alarm);
+    if (c->state == conn_idle || c->state == conn_opng) {
+        // no need to go closing->draining in these cases
+        ev_invoke(loop, &c->closing_alarm, 0);
+        return;
     }
 
-    // stop LD and ACK alarms
-    ev_timer_stop(loop, &c->rec.ld_alarm);
-    ev_timer_stop(loop, &c->idle_alarm);
+    // start closing/draining alarm (3 * RTO)
+    const ev_tstamp dur =
+        (3 * (is_zero(c->rec.srtt) ? kDefaultInitialRtt : c->rec.srtt) +
+         4 * c->rec.rttvar);
+    warn(DBG, "closing/draining alarm in %f sec on %s conn %s", dur,
+         conn_type(c), scid2str(c));
+    ev_timer_init(&c->closing_alarm, enter_closed, dur, 0);
+    ev_timer_start(loop, &c->closing_alarm);
+
+    conn_to_state(c, conn_clsg);
 }
 
 
@@ -1236,6 +1257,8 @@ void free_conn(struct q_conn * const c)
     free(c->peer_name);
     if (c->err_reason)
         free(c->err_reason);
+    if (c->tok)
+        free(c->tok);
 
     // remove connection from global lists
     splay_remove(ipnp_splay, &conns_by_ipnp, c);

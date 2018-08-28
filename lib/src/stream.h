@@ -83,7 +83,7 @@ struct q_stream {
 #define strm_to_state(strm, s)                                                 \
     do {                                                                       \
         if ((strm)->id >= 0) {                                                 \
-            warn(DBG, "conn %s strm " FMT_SID " state  %s -> " YEL "%s" NRM,   \
+            warn(DBG, "conn %s strm " FMT_SID " state %s -> " YEL "%s" NRM,    \
                  scid2str((strm)->c), (strm)->id,                              \
                  strm_state_str[(strm)->state], strm_state_str[(s)]);          \
         }                                                                      \
@@ -136,7 +136,6 @@ track_bytes_in(struct q_stream * const s, const uint64_t n);
 extern void __attribute__((nonnull))
 track_bytes_out(struct q_stream * const s, const uint64_t n);
 
-extern void __attribute__((nonnull))
-reset_stream(struct q_stream * const s, const bool also_crypto_in);
+extern void __attribute__((nonnull)) reset_stream(struct q_stream * const s);
 
 SPLAY_PROTOTYPE(stream, q_stream, node, stream_cmp)

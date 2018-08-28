@@ -41,6 +41,7 @@
 #include "pkt.h"
 #include "pn.h"
 #include "quic.h"
+#include "recovery.h"
 #include "stream.h"
 #include "tls.h"
 
@@ -166,7 +167,7 @@ bool enc_pkt(struct q_stream * const s,
     struct pn_space * const pn = pn_for_epoch(c, epoch);
     meta(v).pn = pn;
 
-    if (c->state == conn_idle) {
+    if (c->tx_vneg) {
         warn(INF, "sending vers neg serv response");
         meta(v).hdr.type = (uint8_t)w_rand();
         meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
@@ -198,16 +199,18 @@ bool enc_pkt(struct q_stream * const s,
         meta(v).hdr.type = c->tx_rtry ? F_LH_RTRY : F_LH_INIT;
         meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
 
-        // this is a new connection; server picks a new random cid
-        struct cid new_scid = {.len = SERV_SCID_LEN};
-        arc4random_buf(new_scid.id, new_scid.len);
+        if (c->state == conn_idle) {
+            // this is a new connection; server picks a new random cid
+            struct cid new_scid = {.len = SERV_SCID_LEN};
+            arc4random_buf(new_scid.id, new_scid.len);
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-        warn(NTE, "hshk switch to scid %s for %s conn (was %s)",
-             cid2str(&new_scid), conn_type(c), scid2str(c));
+            warn(NTE, "hshk switch to scid %s for %s conn (was %s)",
+                 cid2str(&new_scid), conn_type(c), scid2str(c));
 #endif
-        cid_cpy(&odcid, act_scid(c));
-        add_scid(c, &new_scid);
-        use_next_scid(c);
+            cid_cpy(&odcid, act_scid(c));
+            add_scid(c, &new_scid);
+            use_next_scid(c);
+        }
         break;
     case ep_0rtt:
         if (c->is_clnt) {
@@ -252,10 +255,16 @@ bool enc_pkt(struct q_stream * const s,
                 i = enc_buf(v->buf, v->len, i, &odcid.id, odcid.len);
         }
 
-        if (meta(v).hdr.type == F_LH_INIT || meta(v).hdr.type == F_LH_RTRY) {
-            // TODO encode a token
-            uint64_t tok = 0;
-            i = enc(v->buf, v->len, i, &tok, 0, 0, "%" PRIu64);
+        if (meta(v).hdr.type == F_LH_INIT)
+            i = enc(v->buf, v->len, i, &c->tok_len, 0, 0, "%" PRIu64);
+
+        if ((meta(v).hdr.type == F_LH_INIT || meta(v).hdr.type == F_LH_RTRY) &&
+            c->tok_len) {
+            meta(v).hdr.tok_len = c->tok_len;
+            meta(v).hdr.tok = calloc(c->tok_len, sizeof(uint8_t));
+            ensure(meta(v).hdr.tok, "could not calloc");
+            memcpy(meta(v).hdr.tok, c->tok, c->tok_len);
+            i = enc_buf(v->buf, v->len, i, c->tok, (uint16_t)c->tok_len);
         }
 
         if (meta(v).hdr.type != F_LH_RTRY) {
@@ -360,7 +369,8 @@ bool enc_pkt(struct q_stream * const s,
     if (meta(v).hdr.type == F_LH_INIT && c->is_clnt && enc_data)
         i = enc_padding_frame(v, i, MIN_INI_LEN - i - AEAD_LEN);
 
-    ensure(i > meta(v).hdr.hdr_len, "would have sent pkt w/o frames");
+    if (meta(v).hdr.type != F_LH_RTRY)
+        ensure(i > meta(v).hdr.hdr_len, "would have sent pkt w/o frames");
 
 tx:
     // for LH pkts, now encode the length
@@ -395,11 +405,12 @@ tx:
     sq_insert_tail(q, x, next);
     meta(v).tx_len = x->len;
 
-    if ((meta(v).hdr.type == F_LH_INIT && c->is_clnt) || c->tx_rtry)
-        // adjust v->len to end of stream data (excl. padding)
+    if (unlikely(meta(v).hdr.type == F_LH_INIT && c->is_clnt))
+        // adjust v->len to exclude the post-stream padding for CI
         v->len = meta(v).stream_data_end;
 
     adj_iov_to_data(v);
+    on_pkt_sent(s, v);
     return true;
 }
 
@@ -475,17 +486,24 @@ bool dec_pkt_hdr_beginning(const struct w_iov * const v,
                                               meta(v).hdr.hdr_len, odcid->len);
         }
 
-        if (meta(v).hdr.type == F_LH_INIT || meta(v).hdr.type == F_LH_RTRY) {
+        if (meta(v).hdr.type == F_LH_INIT) {
             // decode token
             meta(v).hdr.hdr_len = dec_chk(&meta(v).hdr.tok_len, v->buf, v->len,
                                           meta(v).hdr.hdr_len, 0, "%" PRIu64);
-            if (meta(v).hdr.tok_len) {
-                meta(v).hdr.tok = calloc(meta(v).hdr.tok_len, sizeof(uint8_t));
-                ensure(meta(v).hdr.tok, "could not calloc");
-                meta(v).hdr.hdr_len = dec_chk_buf(
-                    &meta(v).hdr.tok, v->buf, v->len, meta(v).hdr.hdr_len,
-                    (uint16_t)meta(v).hdr.tok_len);
-            }
+            if (is_clnt && meta(v).hdr.tok_len)
+                return false;
+        } else if (meta(v).hdr.type == F_LH_RTRY)
+            meta(v).hdr.tok_len = v->len - meta(v).hdr.hdr_len;
+
+        if (meta(v).hdr.tok_len) {
+            if (unlikely(meta(v).hdr.tok_len) > v->len - meta(v).hdr.hdr_len)
+                // corrupt token len
+                return false;
+            meta(v).hdr.tok = calloc(meta(v).hdr.tok_len, sizeof(uint8_t));
+            ensure(meta(v).hdr.tok, "could not calloc");
+            meta(v).hdr.hdr_len =
+                dec_chk_buf(meta(v).hdr.tok, v->buf, v->len,
+                            meta(v).hdr.hdr_len, (uint16_t)meta(v).hdr.tok_len);
         }
 
         if (meta(v).hdr.type != F_LH_RTRY) {

@@ -87,7 +87,7 @@ int main(int argc, char ** argv)
     w = q_init(i, nullptr, nullptr, nullptr, nullptr, false); // NOLINT
     c = q_bind(w, 55555);
     init_tls(c);
-    init_pn_init_prot(c);
+    init_prot(c);
     benchmark::RunSpecifiedBenchmarks();
 
     q_cleanup(w);

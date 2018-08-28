@@ -67,6 +67,13 @@
 #include "tls.h"
 
 
+#ifdef PTLS_OPENSSL
+#define CIPHER_SUITE ptls_openssl_aes128gcmsha256
+#else
+#define CIPHER_SUITE ptls_minicrypto_aes128gcmsha256
+#endif
+
+
 struct tls_ticket {
     char * sni;
     char * alpn;
@@ -108,7 +115,8 @@ static ptls_openssl_sign_certificate_t sign_cert = {0};
 static ptls_openssl_verify_certificate_t verifier = {0};
 #endif
 
-static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-13", 5}};
+static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-14", 5},
+                                    {(uint8_t *)"hq-13", 5}}; // TODO remove
 static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 
 static struct cipher_ctx dec_tckt;
@@ -316,8 +324,12 @@ on_ch(ptls_on_client_hello_t * const self __attribute__((unused)),
         warn(INF, "\tSNI = %.*s", sni.len, sni.base);
         ensure(ptls_set_server_name(tls, (const char *)sni.base, sni.len) == 0,
                "ptls_set_server_name");
-    } else
+    } else {
         warn(INF, "\tSNI = ");
+        const char no_sni[] = "NO SNI GIVEN";
+        ensure(ptls_set_server_name(tls, no_sni, sizeof(no_sni)) == 0,
+               "ptls_set_server_name");
+    }
 
 
     if (prot_cnt == 0) {
@@ -393,9 +405,8 @@ static uint16_t chk_tp_serv(const struct q_conn * const c,
     uint32_t vers_initial;
     i = dec(&vers_initial, buf, len, i, sizeof(vers_initial), "0x%08x");
 
-    if (vers_initial != c->vers_initial)
-        warn(ERR, "vers_initial 0x%08x != first received 0x%08x", vers_initial,
-             c->vers_initial);
+    if (c->vers != vers_initial && vers_supported(vers_initial))
+        warn(ERR, "vers_initial 0x%08x is supported - MITM?", vers_initial);
 
     return i;
 }
@@ -639,12 +650,7 @@ void init_tp(struct q_conn * const c)
 
 static void init_ticket_prot(void)
 {
-    const ptls_cipher_suite_t * const cs =
-#ifdef PTLS_OPENSSL
-        &ptls_openssl_aes128gcmsha256;
-#else
-        &ptls_minicrypto_aes128gcmsha256;
-#endif
+    const ptls_cipher_suite_t * const cs = &CIPHER_SUITE;
     uint8_t output[PTLS_MAX_SECRET_SIZE] = {0};
     memcpy(output, quant_commit_hash,
            MIN(quant_commit_hash_len, sizeof(output)));
@@ -841,7 +847,9 @@ void init_tls(struct q_conn * const c)
         hshk_prop->server.cookie.additional_data.base = (uint8_t *)&c->peer;
         hshk_prop->server.cookie.additional_data.len = sizeof(c->peer);
         if (ntohs(c->sport) == 4434)
-            hshk_prop->server.enforce_retry = 1;
+            // TODO handle differently
+            // hshk_prop->server.enforce_retry = 1;
+            c->tx_rtry = true;
     }
 
     // try to find an existing session ticket
@@ -861,16 +869,12 @@ void init_tls(struct q_conn * const c)
         c->try_0rtt = 1;
     }
 
-    init_pn_init_prot(c);
+    init_prot(c);
 }
 
 
-void free_tls(struct q_conn * const c)
+void free_prot(struct q_conn * const c)
 {
-    if (c->tls.t)
-        ptls_free(c->tls.t);
-    ptls_buffer_dispose(&c->tls.tls_io);
-
     dispose_cipher(&c->pn_init.in);
     dispose_cipher(&c->pn_init.out);
     dispose_cipher(&c->pn_hshk.in);
@@ -882,17 +886,21 @@ void free_tls(struct q_conn * const c)
 }
 
 
-void init_pn_init_prot(struct q_conn * const c)
+void free_tls(struct q_conn * const c)
+{
+    if (c->tls.t)
+        ptls_free(c->tls.t);
+    ptls_buffer_dispose(&c->tls.tls_io);
+    free_prot(c);
+}
+
+
+void init_prot(struct q_conn * const c)
 {
     const ptls_iovec_t cid = {
         .base = (uint8_t *)(c->is_clnt ? &act_dcid(c)->id : &act_scid(c)->id),
         .len = c->is_clnt ? act_dcid(c)->len : act_scid(c)->len};
-    ptls_cipher_suite_t * cs =
-#ifdef PTLS_OPENSSL
-        &ptls_openssl_aes128gcmsha256;
-#else
-        &ptls_minicrypto_aes128gcmsha256;
-#endif
+    ptls_cipher_suite_t * cs = &CIPHER_SUITE;
     setup_initial_encryption(&c->pn_init.in, &c->pn_init.out, &cs, cid,
                              c->is_clnt);
 }
@@ -926,8 +934,10 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
                 c->did_0rtt = 1;
         }
 
-    } else if (ret == PTLS_ERROR_STATELESS_RETRY) {
-        c->needs_tx = c->tx_rtry = true;
+        // TODO handle differently
+        // } else if (ret == PTLS_ERROR_STATELESS_RETRY) {
+        //     c->needs_tx = c->tx_rtry = true;
+
     } else if (ret != 0 && ret != PTLS_ERROR_IN_PROGRESS) {
         err_close(c, ERR_TLS(PTLS_ERROR_TO_ALERT(ret)), FRAM_TYPE_CRPT,
                   "picotls error %u", ret);
@@ -941,12 +951,14 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
                 c->tls.epoch_off[e + 1] - c->tls.epoch_off[e];
             if (out_len == 0)
                 continue;
+            struct q_stream * const se = get_stream(c, crpt_strm_id(e));
+            if (se->out_off >= out_len)
+                continue;
             warn(ERR, "epoch %u: off %u len %u", e, c->tls.epoch_off[e],
                  out_len);
             struct w_iov_sq o = sq_head_initializer(o);
             q_alloc(w_engine(c->sock), &o, (uint32_t)out_len);
             const uint8_t * data = c->tls.tls_io.base + c->tls.epoch_off[e];
-            struct q_stream * const se = get_stream(c, crpt_strm_id(e));
             struct w_iov * ov = 0;
             sq_foreach (ov, &o, next) {
                 memcpy(ov->buf, data, ov->len);
@@ -1283,4 +1295,24 @@ uint16_t enc_aead(const struct q_conn * const c,
              hdr_len + plen - AEAD_LEN, hdr_len + plen - 1);
 
     return hdr_len + (uint16_t)ret;
+}
+
+
+void make_rtry_tok(struct q_conn * const c)
+{
+    const ptls_cipher_suite_t * const cs = &CIPHER_SUITE;
+    c->tok_len = cs->hash->digest_size;
+    c->tok = calloc(c->tok_len, sizeof(uint8_t));
+    ensure(c->tok, "cannot calloc");
+    ptls_calc_hash(cs->hash, c->tok, &c->peer, sizeof(c->peer));
+}
+
+
+bool verify_rtry_tok(const struct q_conn * const c,
+                     const struct w_iov * const v)
+{
+    const ptls_cipher_suite_t * const cs = &CIPHER_SUITE;
+    uint8_t buf[PTLS_MAX_DIGEST_SIZE];
+    ptls_calc_hash(cs->hash, buf, &c->peer, sizeof(c->peer));
+    return memcmp(buf, meta(v).hdr.tok, cs->hash->digest_size) == 0;
 }

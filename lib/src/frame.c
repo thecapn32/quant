@@ -386,7 +386,8 @@ dec_close_frame(struct q_conn * const c,
     i = dec_chk(type, &err_code, v->buf, v->len, i, sizeof(err_code), "0x%04x");
 
     uint64_t frame_type = 0;
-    i = dec_chk(type, &frame_type, v->buf, v->len, i, 0, "0x%" PRIx64);
+    if (type == FRAM_TYPE_CONN_CLSE)
+        i = dec_chk(type, &frame_type, v->buf, v->len, i, 0, "0x%" PRIx64);
 
     uint64_t reas_len = 0;
     i = dec_chk(type, &reas_len, v->buf, v->len, i, 0, "%" PRIu64);
@@ -398,16 +399,24 @@ dec_close_frame(struct q_conn * const c,
     if (reas_len)
         i = dec_chk_buf(type, &reas_phr, v->buf, v->len, i, (uint16_t)reas_len);
 
-    conn_to_state(c, conn_drng);
-    c->needs_tx = true;
+    if (c->state != conn_drng) {
+        conn_to_state(c, conn_clsg);
+        c->needs_tx = true;
+    }
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-    warn(INF,
-         FRAM_IN "%s" NRM " err=%s0x%04x " NRM "frame=0x%" PRIx64
-                 " rlen=%" PRIu64 " reason=%s%.*s" NRM,
-         type == FRAM_TYPE_CONN_CLSE ? "CONNECTION_CLOSE" : "APPLICATION_CLOSE",
-         err_code ? RED : NRM, err_code, frame_type, reas_len,
-         err_code ? RED : NRM, reas_len, reas_phr);
+    if (type == FRAM_TYPE_CONN_CLSE)
+        warn(INF,
+             FRAM_IN "CONNECTION_CLOSE" NRM " err=%s0x%04x " NRM
+                     "frame=0x%" PRIx64 " rlen=%" PRIu64 " reason=%s%.*s" NRM,
+             err_code ? RED : NRM, err_code, frame_type, reas_len,
+             err_code ? RED : NRM, reas_len, reas_phr);
+    else
+        warn(INF,
+             FRAM_IN "APPLICATION_CLOSE" NRM " err=%s0x%04x " NRM
+                     " rlen=%" PRIu64 " reason=%s%.*s" NRM,
+             err_code ? RED : NRM, err_code, reas_len, err_code ? RED : NRM,
+             reas_len, reas_phr);
 #endif
 
     return i;
@@ -1108,18 +1117,27 @@ uint16_t enc_close_frame(struct w_iov * const v,
 
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
     i = enc(v->buf, v->len, i, &err_code, sizeof(err_code), 0, "0x%04x");
-    i = enc(v->buf, v->len, i, &err_frm, sizeof(err_frm), 0, "0x%02x");
+    if (type == FRAM_TYPE_CONN_CLSE)
+        i = enc(v->buf, v->len, i, &err_frm, sizeof(err_frm), 0, "0x%02x");
 
     const uint64_t rlen = reas ? MIN(strlen(reas), v->len - i) : 0;
     i = enc(v->buf, v->len, i, &rlen, 0, 0, "%" PRIu64);
 
     i = enc_buf(v->buf, v->len, i, reas, (uint16_t)rlen);
-    warn(INF,
-         FRAM_OUT "%s" NRM " err=%s0x%04x" NRM " frame=0x%02x rlen=%" PRIu64
-                  " reason=%s%.*s" NRM,
-         type == FRAM_TYPE_CONN_CLSE ? "CONNECTION_CLOSE" : "APPLICATION_CLOSE",
-         err_code ? RED : NRM, err_code, err_frm, reas ? rlen : 0,
-         err_code ? RED : NRM, reas ? rlen : 0, reas);
+
+    if (type == FRAM_TYPE_CONN_CLSE)
+        warn(INF,
+             FRAM_OUT "CONNECTION_CLOSE" NRM " err=%s0x%04x" NRM
+                      " frame=0x%02x rlen=%" PRIu64 " reason=%s%.*s" NRM,
+             err_code ? RED : NRM, err_code, err_frm, reas ? rlen : 0,
+             err_code ? RED : NRM, reas ? rlen : 0, reas);
+    else
+        warn(INF,
+             FRAM_OUT "APPLICATION_CLOSE" NRM " err=%s0x%04x" NRM
+                      " rlen=%" PRIu64 " reason=%s%.*s" NRM,
+             err_code ? RED : NRM, err_code, reas ? rlen : 0,
+             err_code ? RED : NRM, reas ? rlen : 0, reas);
+
 
     return i;
 }

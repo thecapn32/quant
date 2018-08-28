@@ -139,17 +139,12 @@ void track_bytes_out(struct q_stream * const s, const uint64_t n)
 }
 
 
-void reset_stream(struct q_stream * const s, const bool also_crypto_in)
+void reset_stream(struct q_stream * const s)
 {
     // reset stream offsets
-    s->out_ack_cnt = s->in_off = 0;
-    if (also_crypto_in)
-        // we are dealing with a vneg-caused reset
-        s->out_off = 0;
+    s->out_ack_cnt = s->in_off = s->out_off = 0;
 
     // forget we transmitted any data packets
-    if (s->id >= 0 || also_crypto_in)
-        // free (some) crypto data
-        q_free(&s->in);
+    q_free(&s->in);
     q_free(&s->out);
 }

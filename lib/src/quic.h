@@ -32,6 +32,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <ev.h>
@@ -339,6 +340,8 @@ extern void *api_conn, *api_strm;
          *   meta(v).hdr.nr); */                                               \
         if (meta(v).pn)                                                        \
             splay_remove(pm_nr_splay, &meta(v).pn->sent_pkts, &meta(v));       \
+        if (meta(v).hdr.tok)                                                   \
+            free(meta(v).hdr.tok);                                             \
         meta(v) = (struct pkt_meta){0};                                        \
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));                  \
         w_free_iov(v);                                                         \

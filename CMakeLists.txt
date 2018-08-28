@@ -173,6 +173,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
       message(STATUS "Found clang-tidy: ${CLANGTIDY}")
       set(CLANG_TIDY_CHECKS *
           -cert-err58-cpp
+          -cppcoreguidelines-no-malloc
           -cppcoreguidelines-owning-memory
           -cppcoreguidelines-pro-bounds-array-to-pointer-decay
           -cppcoreguidelines-pro-bounds-pointer-arithmetic

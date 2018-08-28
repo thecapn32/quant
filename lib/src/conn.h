@@ -108,7 +108,7 @@ struct q_conn {
     uint16_t tx_path_chlg : 1;      ///< Send PATH_CHALLENGE.
     uint16_t tx_ncid : 1;           ///< Send NEW_CONNECTION_ID.
     uint16_t tx_rtry : 1;           ///< We need to send a RETRY.
-    uint16_t : 1;
+    uint16_t tx_vneg : 1;           ///< We need to send a vers neg response.
 
     uint16_t sport; ///< Local port (in network byte-order).
 
@@ -161,6 +161,9 @@ struct q_conn {
     uint64_t path_resp_in;
 
     uint64_t ncid_seq_out;
+
+    uint64_t tok_len;
+    uint8_t * tok;
 };
 
 
@@ -241,6 +244,13 @@ is_force_neg_vers(const uint32_t vers)
 
 
 static inline __attribute__((always_inline, const)) bool
+is_rsvd_vers(const uint32_t vers)
+{
+    return (vers & 0xffff0000) == 0x00000000;
+}
+
+
+static inline __attribute__((always_inline, const)) bool
 is_zero(const ev_tstamp t)
 {
     return fpclassify(t) == FP_ZERO;
@@ -271,14 +281,9 @@ is_inf(const ev_tstamp t)
     do {                                                                       \
         warn(DBG, "conn %s state %s -> " RED "%s" NRM, scid2str(c),            \
              conn_state_str[(c)->state], conn_state_str[(s)]);                 \
-        if (likely((c)->state != (s))) {                                       \
+        if (likely((c)->state != (s)))                                         \
             (c)->state = (s);                                                  \
-            ensure(((c)->is_clnt && (c)->state < 200) ||                       \
-                       (!(c)->is_clnt &&                                       \
-                        ((c)->state < 100 || (c)->state >= 200)),              \
-                   "%s and state is %s", conn_type(c),                         \
-                   conn_state_str[(c)->state]);                                \
-        } else                                                                 \
+        else                                                                   \
             warn(ERR, "useless transition %u %u!", (c)->state, (s));           \
     } while (0)
 
@@ -289,6 +294,8 @@ is_inf(const ev_tstamp t)
 #endif
 
 struct ev_loop;
+
+extern bool __attribute__((const)) vers_supported(const uint32_t v);
 
 extern void __attribute__((nonnull))
 tx_w(struct ev_loop * const l, ev_async * const w, int e);

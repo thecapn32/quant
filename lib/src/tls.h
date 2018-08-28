@@ -66,11 +66,13 @@ struct tls {
 /// TLS context.
 extern ptls_context_t tls_ctx;
 
-extern void __attribute__((nonnull)) init_pn_init_prot(struct q_conn * const c);
+extern void __attribute__((nonnull)) init_prot(struct q_conn * const c);
 
 extern void __attribute__((nonnull)) init_tls(struct q_conn * const c);
 
 extern void __attribute__((nonnull)) init_tp(struct q_conn * const c);
+
+extern void __attribute__((nonnull)) free_prot(struct q_conn * const c);
 
 extern void __attribute__((nonnull)) free_tls(struct q_conn * const c);
 
@@ -97,3 +99,8 @@ extern const struct cipher_ctx * __attribute__((nonnull))
 which_cipher_ctx(const struct q_conn * const c,
                  const struct w_iov * const v,
                  const bool in);
+
+extern void __attribute__((nonnull)) make_rtry_tok(struct q_conn * const c);
+
+extern bool __attribute__((nonnull))
+verify_rtry_tok(const struct q_conn * const c, const struct w_iov * const v);
