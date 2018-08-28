@@ -773,7 +773,9 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
     case conn_drng:
         if (is_set(F_LONG_HDR, meta(v).hdr.flags) && meta(v).hdr.vers == 0) {
             // we shouldn't get another vers-neg packet here, ignore
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
             warn(NTE, "ignoring spurious ver neg response");
+#endif
             goto done;
         }
 
@@ -903,8 +905,10 @@ rx_pkts(struct w_iov_sq * const i,
                 if (cid_cmp(&meta(v).hdr.scid, act_dcid(c)) != 0) {
                     if (meta(v).hdr.type == F_LH_RTRY &&
                         cid_cmp(&odcid, act_dcid(c)) != 0) {
-                        warn(ERR, "RETRY cid mismatch %s != %s",
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+                        warn(ERR, "retry dcid mismatch %s != %s",
                              cid2str(&odcid), cid2str(act_dcid(c)));
+#endif
                         q_free_iov(v);
                         continue;
                     }
@@ -949,8 +953,10 @@ rx_pkts(struct w_iov_sq * const i,
                 zo->v = v;
                 zo->t = ev_now(loop);
                 splay_insert(zrtt_ooo_splay, &zrtt_ooo_by_cid, zo);
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
                 warn(INF, "caching 0-RTT pkt for unknown conn %s",
                      cid2str(&meta(v).hdr.dcid));
+#endif
             } else
                 q_free_iov(v);
 

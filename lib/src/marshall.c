@@ -276,11 +276,19 @@ uint16_t __attribute__((nonnull)) marshall_enc_buf(uint8_t * const buf,
 #endif
 
 
+#ifdef DEBUG_MARSHALL
+#define warn_overrun                                                           \
+    warn(WRN, "cannot decode from pos %u > buf len %u", pos + 1, buf_len)
+#else
+#define warn_overrun                                                           \
+    do {                                                                       \
+    } while (0)
+#endif
+
 #define do_dec(var)                                                            \
     do {                                                                       \
         if (unlikely(pos + sizeof(var) > buf_len)) {                           \
-            warn(WRN, "cannot decode from pos %u > buf len %u", pos + 1,       \
-                 buf_len);                                                     \
+            warn_overrun;                                                      \
             return UINT16_MAX;                                                 \
         }                                                                      \
         memcpy(&(var), &buf[i], sizeof(var));                                  \
