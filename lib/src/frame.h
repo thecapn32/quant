@@ -73,8 +73,12 @@ struct w_iov;
          : (s)->c->tp_peer.max_strm_bidi)
 
 
+#ifdef NDEBUG
+#define log_stream_or_crypto_frame(rtx, v)
+#else
 extern void __attribute__((nonnull))
 log_stream_or_crypto_frame(const bool rtx, const struct w_iov * const v);
+#endif
 
 extern uint64_t __attribute__((const))
 shorten_ack_nr(const uint64_t ack, const uint64_t diff);

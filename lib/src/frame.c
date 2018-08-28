@@ -76,6 +76,7 @@
     })
 
 
+#ifndef NDEBUG
 void log_stream_or_crypto_frame(const bool rtx, const struct w_iov * const v)
 {
     const struct q_stream * const s = meta(v).stream;
@@ -105,6 +106,7 @@ void log_stream_or_crypto_frame(const bool rtx, const struct w_iov * const v)
              type, meta(v).stream_off, s->out_data_max, stream_data_len(v),
              rtx ? REV BLD GRN "[RTX]" : "");
 }
+#endif
 
 
 static uint16_t __attribute__((nonnull))
