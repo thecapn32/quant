@@ -29,7 +29,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/param.h>
 
 #include <warpcore/warpcore.h>
 
@@ -54,26 +53,6 @@ int ival_cmp(const struct ival * const a, const struct ival * const b)
 
 
 SPLAY_GENERATE(diet, ival, node, ival_cmp)
-
-
-/// Absolute minimal distance of @p n from the interval @p i,. i.e., either its
-/// lower or upper boundary.
-///
-/// @param[in]  n     Integer.
-/// @param[in]  i     Interval.
-///
-/// @return     Zero if @p n is inside @p i. Absolute minimal distance of @p n
-///             from the closes bound otherwise.
-///
-static inline uint64_t ival_dist(const uint64_t n, const struct ival * const i)
-{
-    if (i == 0)
-        return UINT64_MAX;
-    if (n >= i->lo && n <= i->hi)
-        return 0;
-    return MIN(n > i->lo ? n - i->lo : i->lo - n,
-               n > i->hi ? n - i->hi : i->hi - n);
-}
 
 
 /// Return maximum interval underneath @p i.

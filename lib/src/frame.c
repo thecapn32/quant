@@ -857,38 +857,6 @@ uint16_t enc_padding_frame(struct w_iov * const v,
 }
 
 
-/// Does a have better or equal packet protection to b?
-///
-/// @param[in]  a     Packet flags.
-/// @param[in]  b     Packet flags.
-///
-/// @return     True if @p a has better or equal packet protection than @p b.
-///
-bool better_or_equal_prot(const uint8_t a, const uint8_t b)
-{
-    bool ret = false;
-
-    // if a is a short-header packet (= 1-RTT), we're OK
-    if (!is_set(F_LONG_HDR, a))
-        ret = true;
-
-    // a is long-header if we get here; if b is 0-RTT, a must also be 0-RTT
-    else if (pkt_type(b) == F_LH_0RTT)
-        ret = pkt_type(a) == F_LH_0RTT;
-
-    // a is long-header if we get here; b cannot be short-header
-    else if (!is_set(F_LONG_HDR, b))
-        ret = false;
-
-    // all other long-header packers are equally protected
-    else
-        ret = true;
-
-    // warn(INF, "a 0x%02x, b 0x%02x = %u", a, b, ret);
-    return ret;
-}
-
-
 uint16_t enc_ack_frame(struct q_conn * const c,
                        struct pn_space * const pn,
                        struct w_iov * const v,

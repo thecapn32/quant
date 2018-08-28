@@ -163,36 +163,6 @@ static void dispose_cipher(struct st_quicly_cipher_context_t * ctx)
 
 
 // from quicly
-static int qhkdf_expand(ptls_hash_algorithm_t * algo,
-                        void * output,
-                        size_t outlen,
-                        const void * secret,
-                        const char * label)
-{
-    ptls_buffer_t hkdf_label;
-    uint8_t hkdf_label_buf[16];
-    int ret;
-
-    ptls_buffer_init(&hkdf_label, hkdf_label_buf, sizeof(hkdf_label_buf));
-
-    ptls_buffer_push16(&hkdf_label, (uint16_t)outlen);
-    ptls_buffer_push_block(&hkdf_label, 1, {
-        const char * base_label = "QUIC ";
-        ptls_buffer_pushv(&hkdf_label, base_label, strlen(base_label));
-        ptls_buffer_pushv(&hkdf_label, label, strlen(label));
-    });
-
-    ret = ptls_hkdf_expand(algo, output, outlen,
-                           ptls_iovec_init(secret, algo->digest_size),
-                           ptls_iovec_init(hkdf_label.base, hkdf_label.off));
-
-Exit:
-    ptls_buffer_dispose(&hkdf_label);
-    return ret;
-}
-
-
-// from quicly
 static int setup_cipher(struct st_quicly_cipher_context_t * ctx,
                         ptls_aead_algorithm_t * aead,
                         ptls_hash_algorithm_t * hash,
