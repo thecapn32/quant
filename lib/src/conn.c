@@ -550,7 +550,7 @@ track_recv(struct q_conn * const c, const uint64_t nr, const uint8_t flags)
 {
     struct pn_space * const pn =
         pn_for_epoch(c, epoch_for_pkt_type(pkt_type(flags)));
-    diet_insert(&pn->recv, nr, flags, ev_now(loop));
+    diet_insert(&pn->recv, nr, ev_now(loop));
 }
 
 

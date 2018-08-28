@@ -103,7 +103,7 @@ void free_stream(struct q_stream * const s)
              conn_type(s->c), scid2str(s->c));
 
     if (s->id >= 0) {
-        diet_insert(&s->c->closed_streams, (uint64_t)s->id, 0, 0);
+        diet_insert(&s->c->closed_streams, (uint64_t)s->id, 0);
     }
 
     splay_remove(stream, &s->c->streams, s);

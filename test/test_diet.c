@@ -41,11 +41,13 @@ static void trace(struct diet * const d,
                   __attribute__((unused))
 #endif
                   ,
+#ifdef DIET_CLASS
                   const uint8_t t
 #ifdef NDEBUG
                   __attribute__((unused))
 #endif
                   ,
+#endif
                   const char * const op
 #ifdef NDEBUG
                   __attribute__((unused))
@@ -54,8 +56,12 @@ static void trace(struct diet * const d,
 {
     char str[8192];
     diet_to_str(str, sizeof(str), d);
+#ifdef DIET_CLASS
     warn(DBG, "cnt %" PRIu64 ", %s %u.%" PRIu64 ": %s", diet_cnt(d), op, t, x,
          str);
+#else
+    warn(DBG, "cnt %" PRIu64 ", %s %" PRIu64 ": %s", diet_cnt(d), op, x, str);
+#endif
 
     uint64_t c = 0;
     char * s = str;
@@ -70,11 +76,17 @@ static void chk(struct diet * const d)
     struct ival *i, *next;
     for (i = splay_min(diet, d); i != 0; i = next) {
         next = splay_next(diet, d, i);
+#ifdef DIET_CLASS
         ensure(next == 0 || i->hi + 1 < next->lo ||
                    diet_class(i) != diet_class(next),
                "%u.%" PRIu64 "-%" PRIu64 " %u.%" PRIu64 "-%" PRIu64,
                diet_class(i), i->lo, i->hi, diet_class(next), next->lo,
                next->hi);
+#else
+        ensure(next == 0 || i->hi + 1 < next->lo,
+               "%" PRIu64 "-%" PRIu64 " %" PRIu64 "-%" PRIu64, i->lo, i->hi,
+               next->lo, next->hi);
+#endif
     }
 }
 
@@ -97,9 +109,19 @@ int main()
         const uint64_t x = arc4random_uniform(N);
         if (bit_test(values, x) == 0) {
             bit_set(values, x);
+#ifdef DIET_CLASS
             const uint8_t t = (uint8_t)arc4random_uniform(2);
-            diet_insert(&d, x, t, 0);
-            trace(&d, x, t, "ins");
+#endif
+            diet_insert(&d, x,
+#ifdef DIET_CLASS
+                        t,
+#endif
+                        0);
+            trace(&d, x,
+#ifdef DIET_CLASS
+                  t,
+#endif
+                  "ins");
             chk(&d);
         }
     }
@@ -110,7 +132,11 @@ int main()
         struct ival * const i = diet_find(&d, x);
         if (i) {
             diet_remove(&d, x);
-            trace(&d, x, 0, "rem");
+            trace(&d, x,
+#ifdef DIET_CLASS
+                  0,
+#endif
+                  "rem");
             chk(&d);
         }
     }

@@ -27,6 +27,7 @@
 
 #pragma once
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -40,10 +41,13 @@
 /// https://web.engr.oregonstate.edu/~erwig/papers/abstracts.html#JFP98
 ///
 /// This implementation extends the basic diet structure by adding a "class"
-/// field to each interval. Only intervals of the same class can be merged.
-/// (This is used by quant to handle different packet types.) It also maintains
-/// a timestamp of the last insert operation into an @p ival, for the purposes
-/// of calculating the ACK deplay.
+/// field to each interval. Only intervals of the same class can be merged. This
+/// can be enabled by compiling with DIET_CLASS defined. (This was used by quant
+/// to handle ACKs for different packet types, which is no longer needed with
+/// different packet number spaces in -13 and beyond.)
+///
+/// It also maintains a timestamp of the last insert operation into an @p ival,
+/// for the purposes of calculating the ACK delay.
 
 
 /// An interval [hi..lo] to be used with diet structures, of a given type.
@@ -53,8 +57,10 @@ struct ival {
     uint64_t lo;            ///< Lower bound of the interval.
     uint64_t hi;            ///< Upper bound of the interval.
     ev_tstamp t;            ///< Time stamp of last insert into this interval.
-    uint8_t c;              ///< Interval class.
+#ifdef DIET_CLASS
+    uint8_t c; ///< Interval class.
     uint8_t _unused[7];
+#endif
 };
 
 
@@ -86,7 +92,9 @@ extern struct ival * diet_find(struct diet * const d, const uint64_t n);
 
 extern struct ival * __attribute__((nonnull)) diet_insert(struct diet * const d,
                                                           const uint64_t n,
+#ifdef DIET_CLASS
                                                           const uint8_t c,
+#endif
                                                           const ev_tstamp t);
 
 extern void __attribute__((nonnull))
@@ -97,14 +105,59 @@ extern void __attribute__((nonnull)) diet_free(struct diet * const d);
 extern size_t __attribute__((nonnull))
 diet_to_str(char * const str, const size_t len, struct diet * const d);
 
-#define diet_max(d) (splay_empty(d) ? 0 : splay_max(diet, (d))->hi)
 
-#define diet_min(d) (splay_empty(d) ? 0 : splay_min(diet, (d))->lo)
+static inline struct ival * __attribute__((nonnull, always_inline))
+diet_max_ival(struct diet * const d)
+{
+    return splay_empty(d) ? 0 : splay_max(diet, d);
+}
 
-#define diet_empty(d) splay_empty(d)
 
-#define diet_cnt(d) ((d)->cnt)
+static inline struct ival * __attribute__((nonnull, always_inline))
+diet_min_ival(struct diet * const d)
+{
+    return splay_empty(d) ? 0 : splay_min(diet, d);
+}
 
-#define diet_class(d) ((d)->c)
 
-#define diet_timestamp(d) ((d)->t)
+static inline uint64_t __attribute__((nonnull, always_inline))
+diet_max(struct diet * const d)
+{
+    return splay_empty(d) ? 0 : splay_max(diet, d)->hi;
+}
+
+
+static inline uint64_t __attribute__((nonnull, always_inline))
+diet_min(struct diet * const d)
+{
+    return splay_empty(d) ? 0 : splay_min(diet, d)->lo;
+}
+
+
+inline bool __attribute__((nonnull, always_inline))
+diet_empty(const struct diet * const d)
+{
+    return splay_empty(d);
+}
+
+
+inline uint64_t __attribute__((nonnull, always_inline))
+diet_cnt(const struct diet * const d)
+{
+    return d->cnt;
+}
+
+#ifdef DIET_CLASS
+inline uint8_t __attribute__((nonnull, always_inline))
+diet_class(const struct ival * const i)
+{
+    return i->c;
+}
+#endif
+
+
+inline ev_tstamp __attribute__((nonnull, always_inline))
+diet_timestamp(const struct ival * const i)
+{
+    return i->t;
+}
