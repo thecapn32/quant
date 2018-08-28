@@ -183,6 +183,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
           -google-runtime-references
           -hicpp-braces-around-statements
           -hicpp-no-array-decay
+          -hicpp-no-malloc
           -hicpp-signed-bitwise
           -hicpp-vararg
           -readability-braces-around-statements

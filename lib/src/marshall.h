@@ -34,7 +34,7 @@ extern uint16_t varint_sizeof(const uint8_t first_byte);
 
 
 #ifndef NDEBUG
-#define DEBUG_MARSHALL
+// #define DEBUG_MARSHALL
 #endif
 
 
