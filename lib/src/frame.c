@@ -441,6 +441,7 @@ dec_max_stream_data_frame(struct q_conn * const c,
     i = dec_chk(FRAM_TYPE_MAX_STRM_DATA, &s->out_data_max, v->buf, v->len, i, 0,
                 "%" PRIu64);
     s->blocked = false;
+    c->needs_tx = true;
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     warn(INF, FRAM_IN "MAX_STREAM_DATA" NRM " id=" FMT_SID " max=%" PRIu64, sid,
@@ -523,10 +524,11 @@ dec_stream_blocked_frame(struct q_conn * const c,
          off);
 #endif
 
-    if (off + 2 * MAX_PKT_LEN <= s->in_data_max)
+    if (off + 2 * MAX_PKT_LEN >= s->in_data_max) {
         // open the stream window and send a frame
         s->in_data_max += 0x1000;
-    s->tx_max_stream_data = s->c->needs_tx = true;
+        s->tx_max_stream_data = s->c->needs_tx = true;
+    }
 
     return i;
 }
