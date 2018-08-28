@@ -496,7 +496,7 @@ bool dec_pkt_hdr_beginning(const struct w_iov * const v,
             meta(v).hdr.tok_len = v->len - meta(v).hdr.hdr_len;
 
         if (meta(v).hdr.tok_len) {
-            if (unlikely(meta(v).hdr.tok_len) > v->len - meta(v).hdr.hdr_len)
+            if (unlikely(meta(v).hdr.tok_len > v->len - meta(v).hdr.hdr_len))
                 // corrupt token len
                 return false;
             meta(v).hdr.tok = calloc(meta(v).hdr.tok_len, sizeof(uint8_t));
