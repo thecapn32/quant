@@ -58,7 +58,8 @@ struct transport_params {
     uint16_t max_pkt;
     uint16_t idle_to;
     uint8_t ack_del_exp;
-    uint8_t _unused[3];
+    bool disable_migration;
+    uint8_t _unused[2];
 };
 
 

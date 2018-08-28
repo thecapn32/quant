@@ -138,7 +138,7 @@ static FILE * tls_log_file;
 #define TP_STATELESS_RESET_TOKEN 6
 #define TP_ACK_DELAY_EXPONENT 7
 #define TP_INITIAL_MAX_UNI_STREAMS 8
-// #define TP_DISABLE_MIGRATION 9
+#define TP_DISABLE_MIGRATION 9
 #define TP_INITIAL_MAX_STREAM_DATA_BIDI_REMOTE 10
 #define TP_INITIAL_MAX_STREAM_DATA_UNI 11
 
@@ -526,6 +526,14 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                 warn(ERR, "tp_peer.ack_del_exp %u invalid",
                      c->tp_peer.ack_del_exp);
             break;
+
+        case TP_DISABLE_MIGRATION: {
+            uint16_t dummy;
+            dec_tp(&dummy, sizeof(dummy));
+            warn(INF, "\tdisable_migration = true");
+            c->tp_peer.disable_migration = true;
+            break;
+        }
 
         case TP_STATELESS_RESET_TOKEN:
             ensure(c->is_clnt, "am client");
