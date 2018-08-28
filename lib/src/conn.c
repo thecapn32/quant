@@ -623,14 +623,6 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
     bool ok = false;
     switch (c->state) {
     case conn_idle:
-        // respond to a client-initial
-        //         if (meta(v).hdr.vers == 0) {
-        // #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-        //             warn(INF, "ignoring spurious vers neg response");
-        // #endif
-        //             goto done;
-        //         }
-
         ignore_sh_pkt(v);
 
         c->vers = meta(v).hdr.vers;
@@ -711,16 +703,17 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         ignore_sh_pkt(v);
 
         if (meta(v).hdr.vers == 0) {
+            if (c->vers != ok_vers[0]) {
+                // we must have already reacted to a prior vneg pkt
+                warn(INF, "ignoring spurious vers neg response");
+                goto done;
+            }
+
             // handle an incoming vers-neg packet
             const uint32_t try_vers = pick_from_server_vers(v);
             if (try_vers == 0) {
                 // no version in common with serv
                 enter_closing(c);
-                goto done;
-            }
-
-            if (unlikely(try_vers == c->vers)) {
-                warn(INF, "ignoring spurious vers neg response");
                 goto done;
             }
 
