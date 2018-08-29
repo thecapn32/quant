@@ -1198,7 +1198,7 @@ const struct cipher_ctx * which_cipher_ctx(const struct q_conn * const c,
 }
 
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) && defined(DEBUG_MARSHALL)
 #define aead_type(c, a)                                                        \
     ((a) == (c)->pn_init.in.aead || (a) == (c)->pn_init.out.aead               \
          ? "Initial"                                                           \
@@ -1229,9 +1229,11 @@ uint16_t dec_aead(const struct q_conn * const c, const struct w_iov * const v)
     if (unlikely(ret == SIZE_MAX))
         return 0;
 
+#ifdef DEBUG_MARSHALL
     warn(DBG, "dec %s AEAD over [0..%u] in [%u..%u]", aead_type(c, ctx->aead),
          hdr_len + len - AEAD_LEN - 1, hdr_len + len - AEAD_LEN,
          hdr_len + len - 1);
+#endif
 
     return hdr_len + len;
 }
@@ -1262,17 +1264,21 @@ uint16_t enc_aead(const struct q_conn * const c,
         ptls_cipher_init(ctx->pne, &x->buf[off]);
         ptls_cipher_encrypt(ctx->pne, &x->buf[nr_pos], &x->buf[nr_pos],
                             hdr_len - nr_pos);
+#ifdef DEBUG_MARSHALL
         warn(DBG,
              "enc %s AEAD over [0..%u] in [%u..%u]; PNE over "
              "[%u..%u] w/off %u",
              aead_type(c, ctx->aead), hdr_len + plen - AEAD_LEN - 1,
              hdr_len + plen - AEAD_LEN, hdr_len + plen - 1, nr_pos, hdr_len - 1,
              off);
-    } else
+#endif
+    }
+#ifdef DEBUG_MARSHALL
+    else
         warn(DBG, "enc %s AEAD over [0..%u] in [%u..%u]",
              aead_type(c, ctx->aead), hdr_len + plen - AEAD_LEN - 1,
              hdr_len + plen - AEAD_LEN, hdr_len + plen - 1);
-
+#endif
     return hdr_len + (uint16_t)ret;
 }
 

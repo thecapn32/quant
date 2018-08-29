@@ -76,7 +76,8 @@ sl_head(q_conn_sl, q_conn);
 #define CONN_STATES                                                            \
     CONN_STATE(conn_clsd, 0), CONN_STATE(conn_idle, 1),                        \
         CONN_STATE(conn_opng, 2), CONN_STATE(conn_estb, 3),                    \
-        CONN_STATE(conn_clsg, 4), CONN_STATE(conn_drng, 51),
+        CONN_STATE(conn_qlse, 4), CONN_STATE(conn_clsg, 5),                    \
+        CONN_STATE(conn_drng, 6),
 
 
 /// Define connection states.

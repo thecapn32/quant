@@ -546,7 +546,7 @@ void q_close(struct q_conn * const c)
         warn(WRN, "closing %s conn %s on port %u", conn_type(c), scid2str(c),
              ntohs(c->sport));
 
-        conn_to_state(c, conn_clsg);
+        conn_to_state(c, conn_qlse);
         ev_async_send(loop, &c->tx_w);
         loop_run(q_close, c, 0);
     }

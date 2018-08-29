@@ -74,7 +74,9 @@ struct w_iov;
 
 
 #ifdef NDEBUG
-#define log_stream_or_crypto_frame(rtx, v)
+#define log_stream_or_crypto_frame(rtx, v, in, kind)                           \
+    do {                                                                       \
+    } while (0)
 #else
 extern void __attribute__((nonnull))
 log_stream_or_crypto_frame(const bool rtx,

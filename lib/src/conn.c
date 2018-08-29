@@ -395,12 +395,21 @@ tx_crypto(struct q_conn * const c, const epoch_t e)
 
 void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
 {
-    // non-RTX crypto streams are handled here
-    if (rtx == false && c->state == conn_opng) {
-        tx_crypto(c, c->tls.epoch_out);
-        c->needs_tx = false;
-        if (c->tls.epoch_out == ep_init)
-            return;
+    switch (c->state) {
+    case conn_qlse:
+        enter_closing(c);
+        break;
+
+    case conn_opng:
+        if (rtx == false) {
+            tx_crypto(c, c->tls.epoch_out);
+            c->needs_tx = false;
+            if (c->tls.epoch_out == ep_init)
+                return;
+        }
+        break;
+    default:
+        break;
     }
 
     if (rtx == false && c->blocked)

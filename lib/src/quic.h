@@ -284,7 +284,8 @@ extern void *api_conn, *api_strm;
 #define EV_VERIFY(l) ev_verify(l)
 #else
 #define EV_VERIFY(l)                                                           \
-    do {} while(0))
+    do {                                                                       \
+    } while (0)
 #endif
 
 
