@@ -51,27 +51,35 @@
 
 #define err_close_return(c, code, ...)                                         \
     do {                                                                       \
-        err_close(c, code, __VA_ARGS__);                                       \
+        err_close((c), (code), __VA_ARGS__);                                   \
         return UINT16_MAX;                                                     \
     } while (0)
 
 
 #define dec_chk(type, dst, buf, buf_len, pos, dst_len, ...)                    \
     __extension__({                                                            \
-        const uint16_t _i = dec(dst, buf, buf_len, pos, dst_len, __VA_ARGS__); \
-        if (unlikely(_i == UINT16_MAX))                                        \
-            err_close_return(c, ERR_FRAME_ENC, type, "%s in %s:%u", #dst,      \
-                             __FILE__, __LINE__);                              \
+        const uint16_t _i =                                                    \
+            dec((dst), (buf), (buf_len), (pos), (dst_len), __VA_ARGS__);       \
+        if (unlikely(_i == UINT16_MAX)) {                                      \
+            warn(ERR, "dec buffer overrun for %s", #dst);                      \
+            err_close(c, ERR_FRAME_ENC, (type), "%s in %s:%u", #dst, __FILE__, \
+                      __LINE__);                                               \
+            return UINT16_MAX;                                                 \
+        }                                                                      \
         _i;                                                                    \
     })
 
 
 #define dec_chk_buf(type, dst, buf, buf_len, pos, dst_len)                     \
     __extension__({                                                            \
-        const uint16_t _i = dec_buf(dst, buf, buf_len, pos, dst_len);          \
-        if (unlikely(_i == UINT16_MAX))                                        \
-            err_close_return(c, ERR_FRAME_ENC, type, "%s in %s:%u", #dst,      \
-                             __FILE__, __LINE__);                              \
+        const uint16_t _i =                                                    \
+            dec_buf((dst), (buf), (buf_len), (pos), (dst_len));                \
+        if (unlikely(_i == UINT16_MAX)) {                                      \
+            warn(ERR, "dec_buf buffer overrun for %s", #dst);                  \
+            err_close(c, ERR_FRAME_ENC, (type), "%s in %s:%u", #dst, __FILE__, \
+                      __LINE__);                                               \
+            return UINT16_MAX;                                                 \
+        }                                                                      \
         _i;                                                                    \
     })
 
@@ -266,6 +274,7 @@ uint16_t dec_ack_frame(struct q_conn * const c,
     uint64_t lg_ack = 0;
     uint16_t i = dec_chk(FRAM_TYPE_ACK, &lg_ack, v->buf, v->len, pos + 1, 0,
                          FMT_PNR_OUT);
+    ensure(i != UINT16_MAX, "bang");
 
     uint64_t ack_delay_raw = 0;
     i = dec_chk(FRAM_TYPE_ACK, &ack_delay_raw, v->buf, v->len, i, 0,
@@ -986,8 +995,9 @@ uint16_t enc_close_frame(struct w_iov * const v,
 
     const uint64_t rlen = reas ? MIN(strlen(reas), v->len - i) : 0;
     i = enc(v->buf, v->len, i, &rlen, 0, 0, "%" PRIu64);
-
-    i = enc_buf(v->buf, v->len, i, reas, (uint16_t)rlen);
+    warn(ERR, "%u", rlen);
+    if (rlen)
+        i = enc_buf(v->buf, v->len, i, reas, (uint16_t)rlen);
 
     if (type == FRAM_TYPE_CONN_CLSE)
         warn(INF,
