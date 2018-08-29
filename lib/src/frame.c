@@ -995,7 +995,6 @@ uint16_t enc_close_frame(struct w_iov * const v,
 
     const uint64_t rlen = reas ? MIN(strlen(reas), v->len - i) : 0;
     i = enc(v->buf, v->len, i, &rlen, 0, 0, "%" PRIu64);
-    warn(ERR, "%u", rlen);
     if (rlen)
         i = enc_buf(v->buf, v->len, i, reas, (uint16_t)rlen);
 
