@@ -46,7 +46,7 @@ declare -A servers=(
         [winquic]=msquic.westus.cloudapp.azure.com
 )
 
-results=(live fail vneg hshk data clse zrtt hrr mig)
+results=(live fail vneg hshk data clse zrtt rtry mig)
 declare -A ${results[@]}
 
 
@@ -87,9 +87,9 @@ function test_server {
                 $sed -r "$sed_pattern" > "$log_base.0rtt.log"
         rm -f "$cache"
 
-        # hrr run
+        # rtry run
         bin/client $opts "https://${servers[$1]}:4434/index.html" 2>&1 | \
-                $sed -r "$sed_pattern" > "$log_base.hrr.log"
+                $sed -r "$sed_pattern" > "$log_base.rtry.log"
         rm -f "$cache"
 
         printf "%s " "$s"
@@ -112,8 +112,16 @@ function analyze {
         perl -n -e '/RX len=/ && exit 1;' "$log"
         [ $? == 1 ] && live[$1]="*"
 
-        perl -n -e '/0xbabababa, retrying with|no vers in common/ && exit 1;' "$log"
-        [ $? == 1 ] && vneg[$1]=V
+        perl -n -e 'BEGIN{$v=-1};
+                    /0xbabababa, retrying with/ and $v=1;
+                    /no vers in common/ and $v=0;
+                    END{exit $v};' "$log"
+        local ret=$?
+        if [ $ret == 1 ]; then
+                vneg[$1]=V
+        elif [ $ret == 0 ]; then
+                vneg[$1]=v
+        fi
 
         perl -n -e '/TX len=.*Short/ and $x=1;
                     /RX len=.*Short/ && $x && exit 1;' "$log"
@@ -132,7 +140,7 @@ function analyze {
         if [ $ret == 2 ]; then
                 clse[$1]=C
         elif [ $ret == 1 ]; then
-                clse[$1]=C # XXX c
+                clse[$1]=c
         fi
 
         perl -n -e '/dec_new_cid_frame.*NEW_CONNECTION_ID/ and $n=1;
@@ -156,12 +164,12 @@ function analyze {
         [ $? == 1 ] && zrtt[$1]=RZ
         rm -f "$log"
 
-        # analyze hrr
-        local log="/tmp/$script.$1.$pid.hrr.log"
+        # analyze rtry
+        local log="/tmp/$script.$1.$pid.rtry.log"
 
         if [ $? == 1 ]; then
                 fail[$1]="X"
-                echo "HRR test with $1 crashed:"
+                echo "retry test with $1 crashed:"
                 tail -n 20 "$log"
                 echo
                 return
@@ -169,7 +177,7 @@ function analyze {
 
         perl -n -e '/RX len=.*Retry/ and $x=1;
                    $x && /CLOSE err=0x0000/ && exit 1;' "$log"
-        [ $? == 1 ] && hrr[$1]=S
+        [ $? == 1 ] && rtry[$1]=S
         rm -f "$log"
 }
 
