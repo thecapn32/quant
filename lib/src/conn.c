@@ -479,8 +479,6 @@ void tx_ack(struct q_conn * const c, const epoch_t e)
 
     log_sent_pkts(c);
     q_free(&x);
-    // if (is_ack_only(&meta(v)))
-    //     q_free_iov(v); // XXX this will cause spurious unknown ACK warnings
 
     // if this packet contains an ACK frame, stop the timer
     if (c->state == conn_estb && bit_test(meta(v).frames, FRAM_TYPE_ACK)) {
@@ -1061,8 +1059,7 @@ void err_close(struct q_conn * const c,
     c->err_code = code;
     c->err_reason = strdup(reas);
     c->err_frm = frm;
-    conn_to_state(c, conn_clsg);
-    c->needs_tx = true;
+    enter_closing(c);
 }
 
 

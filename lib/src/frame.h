@@ -133,7 +133,8 @@ dec_ack_frame(struct q_conn * const c,
                                   struct pn_space * const pn,
                                   const uint64_t),
               void (*after_ack)(struct q_conn * const,
-                                struct pn_space * const pn));
+                                struct pn_space * const pn),
+              const bool parse_only);
 
 extern uint16_t __attribute__((nonnull))
 enc_max_stream_data_frame(struct q_stream * const s,

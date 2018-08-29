@@ -294,12 +294,10 @@ bool enc_pkt(struct q_stream * const s,
     } else
         meta(v).ack_header_pos = 0;
 
-    if (c->state == conn_clsg || c->state == conn_drng) {
-        if (c->state == conn_clsg)
-            i = enc_close_frame(v, i,
-                                c->err_code == 0 ? FRAM_TYPE_APPL_CLSE
-                                                 : FRAM_TYPE_CONN_CLSE,
-                                c->err_code, c->err_frm, c->err_reason);
+    if (c->state == conn_clsg) {
+        i = enc_close_frame(
+            v, i, c->err_code == 0 ? FRAM_TYPE_APPL_CLSE : FRAM_TYPE_CONN_CLSE,
+            c->err_code, c->err_frm, c->err_reason);
         goto tx;
     }
 
@@ -361,7 +359,7 @@ bool enc_pkt(struct q_stream * const s,
 
     } else if (enc_data
                // || s->state == strm_hclo || s->state == strm_clsd
-               ) {
+    ) {
         // this is an Initial, fresh data or pure stream FIN packet
         // pad out rest of Q_OFFSET and add a stream frame header
         enc_padding_frame(v, i, Q_OFFSET - i);
@@ -395,8 +393,10 @@ tx:
         x->len = v->len;
     } else {
         x->len = enc_aead(c, v, x, nr_pos);
-        if (unlikely(x->len == 0))
+        if (unlikely(x->len == 0)) {
+            adj_iov_to_start(v);
             return false;
+        }
     }
 
     if (!c->is_clnt) {
@@ -407,7 +407,8 @@ tx:
     sq_insert_tail(q, x, next);
     meta(v).tx_len = x->len;
 
-    if (unlikely(meta(v).hdr.type == F_LH_INIT && c->is_clnt))
+    if (unlikely(meta(v).hdr.type == F_LH_INIT && c->is_clnt &&
+                 meta(v).stream_data_end))
         // adjust v->len to exclude the post-stream padding for CI
         v->len = meta(v).stream_data_end;
 

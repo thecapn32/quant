@@ -86,12 +86,6 @@ new_stream(struct q_conn * const c, const int64_t id, const bool active)
         }
     }
 
-// #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-//     if (s->id >= 0)
-//         warn(DBG, "reserved strm " FMT_SID " on %s conn %s", id, conn_type(c),
-//              scid2str(c));
-// #endif
-
     return s;
 }
 

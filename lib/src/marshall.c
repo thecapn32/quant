@@ -74,7 +74,7 @@ uint16_t varint_size_needed(const uint64_t v)
 #ifdef DEBUG_MARSHALL
 #define log_enc(type, fmt, enc_type)                                           \
     if (unlikely(DLEVEL >= DBG && util_dlevel >= DBG))                         \
-    util_warn(DBG, false, func, file, line, fmt,                               \
+    util_warn(DBG, false, func, file, line, (fmt),                             \
               (src_str[0] == '&' ? &src_str[1] : src_str), *(const type *)src, \
               i - pos, plural(i - pos), (enc_type), buf_str, pos, i - 1)
 #else
@@ -91,7 +91,7 @@ uint16_t varint_size_needed(const uint64_t v)
                plural(sizeof(var)), i, buf_len);                               \
         memcpy(&buf[i], &(var), sizeof(var));                                  \
         i += sizeof(var);                                                      \
-        log_enc(type, fmt, enc_type);                                          \
+        log_enc(type, (fmt), (enc_type));                                      \
     } while (0)
 
 
@@ -255,7 +255,7 @@ uint16_t marshall_enc_buf(uint8_t * const buf,
 #ifdef DEBUG_MARSHALL
 #define log_dec(type, dec_type)                                                \
     if (unlikely(DLEVEL >= DBG && util_dlevel >= DBG))                         \
-    util_warn(DBG, false, func, file, line, fmt, i - pos, plural(i - pos),     \
+    util_warn(DBG, false, func, file, line, (fmt), i - pos, plural(i - pos),   \
               (dec_type), buf_str, pos, i - 1,                                 \
               (dst_str[0] == '&' ? &dst_str[1] : dst_str), *(const type *)dst)
 #else

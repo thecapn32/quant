@@ -365,13 +365,14 @@ void on_pkt_acked(struct q_conn * const c,
         warn(DBG, "decoding ACK info from pkt " FMT_PNR_OUT " from pos %u", ack,
              meta(v).ack_header_pos);
         // temporarily suppress debug output
-        util_dlevel = util_dlevel == DBG ? DBG : 0;
+        util_dlevel = util_dlevel == DBG ? DBG : WRN;
 #else
-        util_dlevel = 0;
+        util_dlevel = WRN;
 #endif
 #endif
         adj_iov_to_start(v);
-        dec_ack_frame(c, v, meta(v).ack_header_pos, 0, &track_acked_pkts, 0);
+        dec_ack_frame(c, v, meta(v).ack_header_pos, 0, &track_acked_pkts, 0,
+                      true);
         adj_iov_to_data(v);
 #ifndef NDEBUG
         util_dlevel = l;

@@ -62,23 +62,22 @@ extern uint16_t __attribute__((const)) varint_size_needed(const uint64_t v);
 /// @return     Buffer offset of byte following the encoded data.
 ///
 #define enc(buf, buf_len, pos, src, src_len, enc_len, fmt)                     \
-    marshall_enc(buf, buf_len, pos, src, src_len, enc_len,                     \
+    marshall_enc((buf), (buf_len), (pos), (src), (src_len), (enc_len),         \
                  "enc %s = " fmt NRM " into %u byte%s (%s) at %s[%u..%u]",     \
                  __func__, __FILE__, __LINE__, #buf, #src)
 
 #define enc_pnr(buf, buf_len, pos, src, enc_len, fmt)                          \
-    marshall_enc_pnr(buf, buf_len, pos, src, enc_len,                          \
+    marshall_enc_pnr((buf), (buf_len), (pos), (src), (enc_len),                \
                      "enc %s = " fmt NRM " into %u byte%s (%s) at %s[%u..%u]", \
                      __func__, __FILE__, __LINE__, #buf, #src)
 
 #else
 
 #define enc(buf, buf_len, pos, src, src_len, enc_len, fmt)                     \
-    marshall_enc(buf, buf_len, pos, src, src_len, enc_len)
+    marshall_enc((buf), (buf_len), (pos), (src), (src_len), (enc_len))
 
 #define enc_pnr(buf, buf_len, pos, src, enc_len, fmt)                          \
-    marshall_enc_pnr(buf, buf_len, pos, src, enc_len)
-
+    marshall_enc_pnr((buf), (buf_len), (pos), (src), (enc_len))
 #endif
 
 
@@ -133,12 +132,12 @@ marshall_enc_pnr(uint8_t * const buf,
 /// @return     Buffer offset of byte following the encoded data.
 ///
 #define enc_buf(buf, buf_len, pos, src, enc_len)                               \
-    marshall_enc_buf(buf, buf_len, pos, src, enc_len,                          \
+    marshall_enc_buf((buf), (buf_len), (pos), (src), (enc_len),                \
                      "enc %s = %s into %u byte%s (%s) at %s[%u..%u]",          \
                      __func__, __FILE__, __LINE__, #buf, #src)
 #else
 #define enc_buf(buf, buf_len, pos, src, enc_len)                               \
-    marshall_enc_buf(buf, buf_len, pos, src, enc_len)
+    marshall_enc_buf((buf), (buf_len), (pos), (src), (enc_len))
 #endif
 
 
@@ -180,22 +179,22 @@ marshall_enc_buf(uint8_t * const buf,
 ///             if the decoding failed.
 ///
 #define dec(dst, buf, buf_len, pos, dst_len, fmt)                              \
-    marshall_dec(dst, buf, buf_len, pos, dst_len,                              \
+    marshall_dec((dst), (buf), (buf_len), (pos), (dst_len),                    \
                  "dec %u byte%s (%s) from %s[%u..%u] into %s = " fmt NRM,      \
                  __func__, __FILE__, __LINE__, #buf, #dst)
 
 #define dec_pnr(dst, buf, buf_len, pos, fmt)                                   \
-    marshall_dec_pnr(dst, buf, buf_len, pos,                                   \
+    marshall_dec_pnr((dst), (buf), (buf_len), (pos),                           \
                      "dec %u byte%s (%s) from %s[%u..%u] into %s = " fmt NRM,  \
                      __func__, __FILE__, __LINE__, #buf, #dst)
 
 #else
 
 #define dec(dst, buf, buf_len, pos, dst_len, fmt)                              \
-    marshall_dec(dst, buf, buf_len, pos, dst_len)
+    marshall_dec((dst), (buf), (buf_len), (pos), (dst_len))
 
 #define dec_pnr(dst, buf, buf_len, pos, fmt)                                   \
-    marshall_dec_pnr(dst, buf, buf_len, pos)
+    marshall_dec_pnr((dst), (buf), (buf_len), (pos))
 
 #endif
 
@@ -250,12 +249,12 @@ marshall_dec_pnr(void * const dst,
 ///             if the decoding failed.
 ///
 #define dec_buf(dst, buf, buf_len, pos, dst_len)                               \
-    marshall_dec_buf(dst, buf, buf_len, pos, dst_len,                          \
+    marshall_dec_buf((dst), (buf), (buf_len), (pos), (dst_len),                \
                      "dec %u byte%s (%s) from %s[%u..%u] into %s = %s",        \
                      __func__, __FILE__, __LINE__, #buf, #dst)
 #else
 #define dec_buf(dst, buf, buf_len, pos, dst_len)                               \
-    marshall_dec_buf(dst, buf, buf_len, pos, dst_len)
+    marshall_dec_buf((dst), (buf), (buf_len), (pos), (dst_len))
 #endif
 
 

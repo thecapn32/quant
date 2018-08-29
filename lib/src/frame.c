@@ -56,29 +56,31 @@
     } while (0)
 
 
-#define dec_chk(type, dst, buf, buf_len, pos, dst_len, ...)                    \
+#define dec_chk(do_close, type, dst, buf, buf_len, pos, dst_len, ...)          \
     __extension__({                                                            \
         const uint16_t _i =                                                    \
             dec((dst), (buf), (buf_len), (pos), (dst_len), __VA_ARGS__);       \
         if (unlikely(_i == UINT16_MAX)) {                                      \
-            warn(ERR, "dec buffer overrun for %s", #dst);                      \
-            err_close(c, ERR_FRAME_ENC, (type), "%s in %s:%u", #dst, __FILE__, \
-                      __LINE__);                                               \
-            return UINT16_MAX;                                                 \
+            if (do_close)                                                      \
+                err_close_return(c, ERR_FRAME_ENC, (type), "dec %s in %s:%u",  \
+                                 #dst, __FILE__, __LINE__);                    \
+            else                                                               \
+                die("dec error %s", #dst);                                     \
         }                                                                      \
         _i;                                                                    \
     })
 
 
-#define dec_chk_buf(type, dst, buf, buf_len, pos, dst_len)                     \
+#define dec_chk_buf(do_close, type, dst, buf, buf_len, pos, dst_len)           \
     __extension__({                                                            \
         const uint16_t _i =                                                    \
             dec_buf((dst), (buf), (buf_len), (pos), (dst_len));                \
         if (unlikely(_i == UINT16_MAX)) {                                      \
-            warn(ERR, "dec_buf buffer overrun for %s", #dst);                  \
-            err_close(c, ERR_FRAME_ENC, (type), "%s in %s:%u", #dst, __FILE__, \
-                      __LINE__);                                               \
-            return UINT16_MAX;                                                 \
+            if (do_close)                                                      \
+                err_close_return(c, ERR_FRAME_ENC, (type), "dec %s in %s:%u",  \
+                                 #dst, __FILE__, __LINE__);                    \
+            else                                                               \
+                die("dec_buf error %s", #dst);                                 \
         }                                                                      \
         _i;                                                                    \
     })
@@ -132,22 +134,23 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
 
     // we need to decode the type byte, since stream frames have multiple types
     uint8_t t = 0;
-    uint16_t i = dec_chk(t, &t, v->buf, v->len, pos, sizeof(t), "0x%02x");
+    uint16_t i = dec_chk(true, t, &t, v->buf, v->len, pos, sizeof(t), "0x%02x");
 
     int64_t sid = 0;
     if (dec_strm)
-        i = dec_chk(t, &sid, v->buf, v->len, i, 0, FMT_SID);
+        i = dec_chk(true, t, &sid, v->buf, v->len, i, 0, FMT_SID);
     else
         sid = crpt_strm_id(epoch_for_pkt_type(meta(v).hdr.type));
 
     if (is_set(F_STREAM_OFF, t) || !dec_strm)
-        i = dec_chk(t, &meta(v).stream_off, v->buf, v->len, i, 0, "%" PRIu64);
+        i = dec_chk(true, t, &meta(v).stream_off, v->buf, v->len, i, 0,
+                    "%" PRIu64);
     else
         meta(v).stream_off = 0;
 
     uint64_t l = 0;
     if (is_set(F_STREAM_LEN, t) || !dec_strm) {
-        i = dec_chk(t, &l, v->buf, v->len, i, 0, "%" PRIu64);
+        i = dec_chk(true, t, &l, v->buf, v->len, i, 0, "%" PRIu64);
         if (unlikely(l > (uint64_t)v->len - i))
             err_close_return(c, ERR_FRAME_ENC, t, "illegal strm len");
     } else
@@ -269,16 +272,16 @@ uint16_t dec_ack_frame(struct q_conn * const c,
                                            struct pn_space * const pn,
                                            const uint64_t),
                        void (*after_ack)(struct q_conn * const,
-                                         struct pn_space * const pn))
+                                         struct pn_space * const pn),
+                       const bool parse_only)
 {
     uint64_t lg_ack = 0;
-    uint16_t i = dec_chk(FRAM_TYPE_ACK, &lg_ack, v->buf, v->len, pos + 1, 0,
-                         FMT_PNR_OUT);
-    ensure(i != UINT16_MAX, "bang");
+    uint16_t i = dec_chk(parse_only == false, FRAM_TYPE_ACK, &lg_ack, v->buf,
+                         v->len, pos + 1, 0, FMT_PNR_OUT);
 
     uint64_t ack_delay_raw = 0;
-    i = dec_chk(FRAM_TYPE_ACK, &ack_delay_raw, v->buf, v->len, i, 0,
-                "%" PRIu64);
+    i = dec_chk(parse_only == false, FRAM_TYPE_ACK, &ack_delay_raw, v->buf,
+                v->len, i, 0, "%" PRIu64);
 
     // TODO: figure out a better way to handle huge ACK delays
     if (unlikely(ack_delay_raw > UINT32_MAX))
@@ -295,7 +298,8 @@ uint16_t dec_ack_frame(struct q_conn * const c,
     struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
 
     uint64_t num_blocks = 0;
-    i = dec_chk(FRAM_TYPE_ACK, &num_blocks, v->buf, v->len, i, 0, "%" PRIu64);
+    i = dec_chk(parse_only == false, FRAM_TYPE_ACK, &num_blocks, v->buf, v->len,
+                i, 0, "%" PRIu64);
 
     uint64_t lg_ack_in_block = lg_ack;
     if (before_ack)
@@ -304,8 +308,8 @@ uint16_t dec_ack_frame(struct q_conn * const c,
     for (uint64_t n = num_blocks + 1; n > 0; n--) {
         uint64_t gap = 0;
         uint64_t ack_block_len = 0;
-        i = dec_chk(FRAM_TYPE_ACK, &ack_block_len, v->buf, v->len, i, 0,
-                    "%" PRIu64);
+        i = dec_chk(parse_only == false, FRAM_TYPE_ACK, &ack_block_len, v->buf,
+                    v->len, i, 0, "%" PRIu64);
 
         // TODO: figure out a better way to handle huge ACK blocks
         if (unlikely(ack_block_len > UINT16_MAX))
@@ -352,7 +356,8 @@ uint16_t dec_ack_frame(struct q_conn * const c,
         }
 
         if (n > 1) {
-            i = dec_chk(FRAM_TYPE_ACK, &gap, v->buf, v->len, i, 0, "%" PRIu64);
+            i = dec_chk(parse_only == false, FRAM_TYPE_ACK, &gap, v->buf,
+                        v->len, i, 0, "%" PRIu64);
             // warn(ERR, "%" PRIu64 " %" PRIu64, ack, gap);
             if (unlikely(ack <= gap))
                 err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_ACK,
@@ -375,24 +380,27 @@ dec_close_frame(struct q_conn * const c,
     // we need to decode the type byte, since this function handles two types
     uint8_t type = 0;
     uint16_t i =
-        dec_chk(type, &type, v->buf, v->len, pos, sizeof(type), "0x%02x");
+        dec_chk(true, type, &type, v->buf, v->len, pos, sizeof(type), "0x%02x");
 
     uint16_t err_code = 0;
-    i = dec_chk(type, &err_code, v->buf, v->len, i, sizeof(err_code), "0x%04x");
+    i = dec_chk(true, type, &err_code, v->buf, v->len, i, sizeof(err_code),
+                "0x%04x");
 
     uint64_t frame_type = 0;
     if (type == FRAM_TYPE_CONN_CLSE)
-        i = dec_chk(type, &frame_type, v->buf, v->len, i, 0, "0x%" PRIx64);
+        i = dec_chk(true, type, &frame_type, v->buf, v->len, i, 0,
+                    "0x%" PRIx64);
 
     uint64_t reas_len = 0;
-    i = dec_chk(type, &reas_len, v->buf, v->len, i, 0, "%" PRIu64);
+    i = dec_chk(true, type, &reas_len, v->buf, v->len, i, 0, "%" PRIu64);
     if (unlikely(i == UINT16_MAX || reas_len + i > v->len))
         err_close_return(c, ERR_FRAME_ENC, type, "illegal reason len %u",
                          reas_len);
 
     char reas_phr[UINT16_MAX];
     if (reas_len)
-        i = dec_chk_buf(type, &reas_phr, v->buf, v->len, i, (uint16_t)reas_len);
+        i = dec_chk_buf(true, type, &reas_phr, v->buf, v->len, i,
+                        (uint16_t)reas_len);
 
     if (c->state != conn_drng) {
         conn_to_state(c, conn_drng);
@@ -424,15 +432,15 @@ dec_max_stream_data_frame(struct q_conn * const c,
                           const uint16_t pos)
 {
     int64_t sid = 0;
-    uint16_t i = dec_chk(FRAM_TYPE_MAX_STRM_DATA, &sid, v->buf, v->len, pos + 1,
-                         0, FMT_SID);
+    uint16_t i = dec_chk(true, FRAM_TYPE_MAX_STRM_DATA, &sid, v->buf, v->len,
+                         pos + 1, 0, FMT_SID);
 
     struct q_stream * s = get_stream(c, sid);
     if (unlikely(s == 0))
         s = new_stream(c, sid, false);
 
-    i = dec_chk(FRAM_TYPE_MAX_STRM_DATA, &s->out_data_max, v->buf, v->len, i, 0,
-                "%" PRIu64);
+    i = dec_chk(true, FRAM_TYPE_MAX_STRM_DATA, &s->out_data_max, v->buf, v->len,
+                i, 0, "%" PRIu64);
     s->blocked = false;
     c->needs_tx = true;
 
@@ -451,8 +459,8 @@ dec_max_stream_id_frame(struct q_conn * const c,
                         const uint16_t pos)
 {
     int64_t max = 0;
-    const uint16_t i = dec_chk(FRAM_TYPE_MAX_SID, &max, v->buf, v->len, pos + 1,
-                               0, "%" PRIu64);
+    const uint16_t i = dec_chk(true, FRAM_TYPE_MAX_SID, &max, v->buf, v->len,
+                               pos + 1, 0, "%" PRIu64);
 
     if (is_set(STRM_FL_INI_SRV, max) == c->is_clnt)
         err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_MAX_SID,
@@ -483,8 +491,8 @@ dec_max_data_frame(struct q_conn * const c,
                    const struct w_iov * const v,
                    const uint16_t pos)
 {
-    const uint16_t i = dec_chk(FRAM_TYPE_MAX_DATA, &c->tp_peer.max_data, v->buf,
-                               v->len, pos + 1, 0, "%" PRIu64);
+    const uint16_t i = dec_chk(true, FRAM_TYPE_MAX_DATA, &c->tp_peer.max_data,
+                               v->buf, v->len, pos + 1, 0, "%" PRIu64);
     c->blocked = false;
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
@@ -501,8 +509,8 @@ dec_stream_blocked_frame(struct q_conn * const c,
                          const uint16_t pos)
 {
     int64_t sid = 0;
-    uint16_t i =
-        dec_chk(FRAM_TYPE_STRM_BLCK, &sid, v->buf, v->len, pos + 1, 0, FMT_SID);
+    uint16_t i = dec_chk(true, FRAM_TYPE_STRM_BLCK, &sid, v->buf, v->len,
+                         pos + 1, 0, FMT_SID);
 
     struct q_stream * const s = get_stream(c, sid);
     if (unlikely(s == 0))
@@ -510,7 +518,8 @@ dec_stream_blocked_frame(struct q_conn * const c,
                          "unknown strm %u", sid);
 
     uint64_t off = 0;
-    i = dec_chk(FRAM_TYPE_STRM_BLCK, &off, v->buf, v->len, i, 0, "%" PRIu64);
+    i = dec_chk(true, FRAM_TYPE_STRM_BLCK, &off, v->buf, v->len, i, 0,
+                "%" PRIu64);
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     warn(INF, FRAM_IN "STREAM_BLOCKED" NRM " id=" FMT_SID " off=%" PRIu64, sid,
@@ -533,8 +542,8 @@ dec_blocked_frame(struct q_conn * const c,
                   const uint16_t pos)
 {
     uint64_t off = 0;
-    uint16_t i =
-        dec_chk(FRAM_TYPE_BLCK, &off, v->buf, v->len, pos + 1, 0, "%" PRIu64);
+    uint16_t i = dec_chk(true, FRAM_TYPE_BLCK, &off, v->buf, v->len, pos + 1, 0,
+                         "%" PRIu64);
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     warn(INF, FRAM_IN "BLOCKED" NRM " off=%" PRIu64, off);
@@ -555,8 +564,8 @@ dec_stream_id_blocked_frame(struct q_conn * const c,
                             const uint16_t pos)
 {
     int64_t sid = 0;
-    uint16_t i =
-        dec_chk(FRAM_TYPE_SID_BLCK, &sid, v->buf, v->len, pos + 1, 0, FMT_SID);
+    uint16_t i = dec_chk(true, FRAM_TYPE_SID_BLCK, &sid, v->buf, v->len,
+                         pos + 1, 0, FMT_SID);
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     warn(INF, FRAM_IN "STREAM_ID_BLOCKED" NRM " sid=" FMT_SID, sid);
@@ -577,8 +586,8 @@ dec_stop_sending_frame(struct q_conn * const c,
                        const uint16_t pos)
 {
     int64_t sid = 0;
-    uint16_t i =
-        dec_chk(FRAM_TYPE_STOP_SEND, &sid, v->buf, v->len, pos + 1, 0, FMT_SID);
+    uint16_t i = dec_chk(true, FRAM_TYPE_STOP_SEND, &sid, v->buf, v->len,
+                         pos + 1, 0, FMT_SID);
 
     struct q_stream * const s = get_stream(c, sid);
     if (unlikely(s == 0))
@@ -586,7 +595,7 @@ dec_stop_sending_frame(struct q_conn * const c,
                          "unknown strm %u", sid);
 
     uint16_t err_code = 0;
-    i = dec_chk(FRAM_TYPE_STOP_SEND, &err_code, v->buf, v->len, i,
+    i = dec_chk(true, FRAM_TYPE_STOP_SEND, &err_code, v->buf, v->len, i,
                 sizeof(err_code), "0x%04x");
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
@@ -603,8 +612,9 @@ dec_path_challenge_frame(struct q_conn * const c,
                          const struct w_iov * const v,
                          const uint16_t pos)
 {
-    uint16_t i = dec_chk(FRAM_TYPE_PATH_CHLG, &c->path_chlg_in, v->buf, v->len,
-                         pos + 1, sizeof(c->path_chlg_in), "0x%" PRIx64);
+    uint16_t i =
+        dec_chk(true, FRAM_TYPE_PATH_CHLG, &c->path_chlg_in, v->buf, v->len,
+                pos + 1, sizeof(c->path_chlg_in), "0x%" PRIx64);
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     warn(INF, FRAM_IN "PATH_CHALLENGE" NRM " data=%" PRIx64, c->path_chlg_in);
@@ -622,8 +632,9 @@ dec_path_response_frame(struct q_conn * const c,
                         const struct w_iov * const v,
                         const uint16_t pos)
 {
-    uint16_t i = dec_chk(FRAM_TYPE_PATH_RESP, &c->path_resp_in, v->buf, v->len,
-                         pos + 1, sizeof(c->path_resp_in), "0x%" PRIx64);
+    uint16_t i =
+        dec_chk(true, FRAM_TYPE_PATH_RESP, &c->path_resp_in, v->buf, v->len,
+                pos + 1, sizeof(c->path_resp_in), "0x%" PRIx64);
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     warn(INF, FRAM_IN "PATH_RESPONSE" NRM " data=%" PRIx64, c->path_resp_in);
@@ -642,19 +653,20 @@ dec_new_cid_frame(struct q_conn * const c,
                   const uint16_t pos)
 {
     uint64_t seq = 0;
-    uint16_t i = dec_chk(FRAM_TYPE_NEW_CID, &seq, v->buf, v->len, pos + 1, 0,
-                         "%" PRIu64);
+    uint16_t i = dec_chk(true, FRAM_TYPE_NEW_CID, &seq, v->buf, v->len, pos + 1,
+                         0, "%" PRIu64);
 
     struct cid dcid;
-    i = dec_chk(FRAM_TYPE_NEW_CID, &dcid.len, v->buf, v->len, i,
+    i = dec_chk(true, FRAM_TYPE_NEW_CID, &dcid.len, v->buf, v->len, i,
                 sizeof(dcid.len), "%u");
 
     if (unlikely(dcid.len < 4 || dcid.len > 18))
         err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_NEW_CID,
                          "illegel cid len %u", dcid.len);
 
-    i = dec_chk_buf(FRAM_TYPE_NEW_CID, dcid.id, v->buf, v->len, i, dcid.len);
-    i = dec_chk_buf(FRAM_TYPE_NEW_CID, dcid.srt, v->buf, v->len, i,
+    i = dec_chk_buf(true, FRAM_TYPE_NEW_CID, dcid.id, v->buf, v->len, i,
+                    dcid.len);
+    i = dec_chk_buf(true, FRAM_TYPE_NEW_CID, dcid.srt, v->buf, v->len, i,
                     sizeof(dcid.srt));
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
@@ -676,15 +688,16 @@ dec_rst_stream_frame(struct q_conn * const c,
                      const uint16_t pos)
 {
     uint64_t sid = 0;
-    uint16_t i =
-        dec_chk(FRAM_TYPE_RST_STRM, &sid, v->buf, v->len, pos + 1, 0, FMT_SID);
+    uint16_t i = dec_chk(true, FRAM_TYPE_RST_STRM, &sid, v->buf, v->len,
+                         pos + 1, 0, FMT_SID);
 
     uint16_t err = 0;
-    i = dec_chk(FRAM_TYPE_RST_STRM, &err, v->buf, v->len, i, sizeof(err),
+    i = dec_chk(true, FRAM_TYPE_RST_STRM, &err, v->buf, v->len, i, sizeof(err),
                 "0x%04x");
 
     uint64_t off = 0;
-    i = dec_chk(FRAM_TYPE_RST_STRM, &off, v->buf, v->len, i, 0, "%" PRIu64);
+    i = dec_chk(true, FRAM_TYPE_RST_STRM, &off, v->buf, v->len, i, 0,
+                "%" PRIu64);
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     warn(INF,
@@ -713,7 +726,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
 
     while (i < v->len) {
         uint8_t type = 0;
-        dec_chk(type, &type, v->buf, v->len, i, sizeof(type), "0x%02x");
+        dec_chk(true, type, &type, v->buf, v->len, i, sizeof(type), "0x%02x");
 
         if (pad_start && (type != FRAM_TYPE_PAD || i == v->len - 1)) {
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
@@ -745,7 +758,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
             switch (type) {
             case FRAM_TYPE_ACK:
                 i = dec_ack_frame(c, v, i, &on_ack_rx_1, &on_pkt_acked,
-                                  on_ack_rx_2);
+                                  on_ack_rx_2, false);
                 break;
 
             case FRAM_TYPE_PAD:
