@@ -96,18 +96,24 @@ function test_server {
 }
 
 
-function analyze {
-        # analyze 1rtt
-        local log="/tmp/$script.$1.$pid.1rtt.log"
-
-        perl -n -e '/assertion failed/ && exit 1;' "$log"
+function check_fail {
+        local log="$2"
+        perl -n -e '/assertion failed|AddressSanitizer/ && exit 1;' "$log"
         if [ $? == 1 ]; then
                 fail[$1]="X"
-                echo "1-RTT test with $1 crashed:"
+                echo "Test with $1 crashed:"
                 tail -n 20 "$log"
                 echo
                 return
         fi
+
+}
+
+
+function analyze {
+        # analyze 1rtt
+        local log="/tmp/$script.$1.$pid.1rtt.log"
+        check_fail "$1" "$log"
 
         perl -n -e '/RX len=/ && exit 1;' "$log"
         [ $? == 1 ] && live[$1]="*"
@@ -146,10 +152,11 @@ function analyze {
         perl -n -e '/dec_new_cid_frame.*NEW_CONNECTION_ID/ and $n=1;
                     /migration to dcid/ && $n && exit 1;' "$log"
         [ $? == 1 ] && mig[$1]=M
-        rm -f "$log"
+        [ ${fail[$1]} ] || rm -f "$log"
 
         # analyze 0rtt
         local log="/tmp/$script.$1.$pid.0rtt.log"
+        check_fail "$1" "$log"
 
         if [ $? == 1 ]; then
                 fail[$1]="X"
@@ -162,10 +169,11 @@ function analyze {
         perl -n -e '/connected after 0-RTT/ and $x=1;
                     $x && /CLOSE err=0x0000/ && exit 1;' "$log"
         [ $? == 1 ] && zrtt[$1]=RZ
-        rm -f "$log"
+        [ ${fail[$1]} ] || rm -f "$log"
 
         # analyze rtry
         local log="/tmp/$script.$1.$pid.rtry.log"
+        check_fail "$1" "$log"
 
         if [ $? == 1 ]; then
                 fail[$1]="X"
@@ -178,7 +186,7 @@ function analyze {
         perl -n -e '/RX len=.*Retry/ and $x=1;
                    $x && /CLOSE err=0x0000/ && exit 1;' "$log"
         [ $? == 1 ] && rtry[$1]=S
-        rm -f "$log"
+        [ ${fail[$1]} ] || rm -f "$log"
 }
 
 printf "Testing servers: "

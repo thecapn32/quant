@@ -7,7 +7,7 @@ mvfst
 ngtcp2    *         V    H    D    c    RZ
 ngx_quic  *         v
 pandora
-picoquic  *         V    H    D    C    RZ   S
+picoquic  *         V    H    D    c    RZ   S
 quant     *         V    H    D    c    RZ   S    M
 quicker
 quicly
