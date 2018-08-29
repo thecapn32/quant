@@ -928,7 +928,7 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
             struct q_stream * const se = get_stream(c, crpt_strm_id(e));
             if (se->out_data >= out_len)
                 continue;
-            warn(ERR, "epoch %u: off %u len %u", e, c->tls.epoch_off[e],
+            warn(DBG, "epoch %u: off %u len %u", e, c->tls.epoch_off[e],
                  out_len);
             struct w_iov_sq o = sq_head_initializer(o);
             q_alloc(w_engine(c->sock), &o, (uint32_t)out_len);
