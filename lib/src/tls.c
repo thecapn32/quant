@@ -295,13 +295,8 @@ on_ch(ptls_on_client_hello_t * const self __attribute__((unused)),
         warn(INF, "\tSNI = %.*s", sni.len, sni.base);
         ensure(ptls_set_server_name(tls, (const char *)sni.base, sni.len) == 0,
                "ptls_set_server_name");
-    } else {
+    } else
         warn(INF, "\tSNI = ");
-        const char no_sni[] = "NO SNI GIVEN";
-        ensure(ptls_set_server_name(tls, no_sni, sizeof(no_sni)) == 0,
-               "ptls_set_server_name");
-    }
-
 
     if (prot_cnt == 0) {
         warn(WRN, "\tALPN = ");
