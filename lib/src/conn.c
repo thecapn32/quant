@@ -611,11 +611,9 @@ static void __attribute__((nonnull)) vneg_or_rtry_resp(struct q_conn * const c)
     // reset FC state
     c->in_data = c->out_data = 0;
 
-    // only reset the crypto streams
-    for (epoch_t epoch = ep_init; epoch <= ep_data; epoch++) {
-        struct q_stream * const s = get_stream(c, crpt_strm_id(epoch));
-        reset_stream(s);
-    }
+    struct q_stream * s;
+    splay_foreach (s, stream, &c->streams)
+        reset_stream(s, s->id < 0);
 
     // reset packet number spaces
     free_pn(&c->pn_init.pn);
@@ -749,9 +747,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         if (meta(v).hdr.type == F_LH_RTRY) {
             // handle an incoming retry packet
             // must use cid from retry for connection and re-init keys
-            free_prot(c);
             init_prot(c);
-
             vneg_or_rtry_resp(c);
 
             if (c->tok)

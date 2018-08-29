@@ -72,8 +72,6 @@ extern void __attribute__((nonnull)) init_tls(struct q_conn * const c);
 
 extern void __attribute__((nonnull)) init_tp(struct q_conn * const c);
 
-extern void __attribute__((nonnull)) free_prot(struct q_conn * const c);
-
 extern void __attribute__((nonnull)) free_tls(struct q_conn * const c);
 
 extern int __attribute__((nonnull(1)))
@@ -96,9 +94,7 @@ extern uint16_t __attribute__((nonnull)) enc_aead(const struct q_conn * const c,
                                                   const uint16_t nr_pos);
 
 extern const struct cipher_ctx * __attribute__((nonnull))
-which_cipher_ctx(const struct q_conn * const c,
-                 const struct w_iov * const v,
-                 const bool in);
+which_cipher_ctx(const struct q_conn * const c, const uint8_t t, const bool in);
 
 extern void __attribute__((nonnull)) make_rtry_tok(struct q_conn * const c);
 

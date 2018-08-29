@@ -134,6 +134,7 @@ track_bytes_in(struct q_stream * const s, const uint64_t n);
 extern void __attribute__((nonnull))
 track_bytes_out(struct q_stream * const s, const uint64_t n);
 
-extern void __attribute__((nonnull)) reset_stream(struct q_stream * const s);
+extern void __attribute__((nonnull))
+reset_stream(struct q_stream * const s, const bool forget);
 
 SPLAY_PROTOTYPE(stream, q_stream, node, stream_cmp)

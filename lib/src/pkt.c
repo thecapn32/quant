@@ -546,8 +546,9 @@ bool dec_pkt_hdr_remainder(struct w_iov * const v,
     if (off + AEAD_LEN > len)
         off = len - AEAD_LEN;
 
-    const struct cipher_ctx * const ctx = which_cipher_ctx(c, v, true);
-    if (!ctx->pne)
+    const struct cipher_ctx * const ctx =
+        which_cipher_ctx(c, meta(v).hdr.type, true);
+    if (unlikely(!ctx->pne))
         // this packet requires a higher protection level than we have available
         return false;
 

@@ -847,7 +847,7 @@ void init_tls(struct q_conn * const c)
 }
 
 
-void free_prot(struct q_conn * const c)
+static void __attribute__((nonnull)) free_prot(struct q_conn * const c)
 {
     dispose_cipher(&c->pn_init.in);
     dispose_cipher(&c->pn_init.out);
@@ -1040,20 +1040,20 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
     struct cipher_ctx * cipher_slot;
 
     switch (epoch) {
-    case 1: // 0-RTT
+    case ep_0rtt:
         cipher_slot = is_enc ? &c->pn_data.out_0rtt : &c->pn_data.in[0];
         break;
 
-    case 2: // handshake
+    case ep_hshk:
         cipher_slot = is_enc ? &c->pn_hshk.out : &c->pn_hshk.in;
         break;
 
-    case 3: // 1-RTT
+    case ep_data:
         cipher_slot = is_enc ? &c->pn_data.out_1rtt : &c->pn_data.in[1];
         break;
 
     default:
-        die("epoch %u unknown");
+        die("epoch %u unknown", epoch);
     }
 
     if (is_enc)
@@ -1178,18 +1178,20 @@ void free_tls_ctx(void)
 }
 
 
-const struct cipher_ctx * which_cipher_ctx(const struct q_conn * const c,
-                                           const struct w_iov * const v,
-                                           const bool in)
+const struct cipher_ctx *
+which_cipher_ctx(const struct q_conn * const c, const uint8_t t, const bool in)
 {
-    if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
-        if (meta(v).hdr.type == F_LH_0RTT)
-            return in ? &c->pn_data.in[0] : &c->pn_data.out_0rtt;
-        if (meta(v).hdr.type == F_LH_HSHK)
-            return in ? &c->pn_hshk.in : &c->pn_hshk.out;
+    switch (t) {
+    case F_LH_INIT:
+    case F_LH_RTRY:
         return in ? &c->pn_init.in : &c->pn_init.out;
+    case F_LH_0RTT:
+        return in ? &c->pn_data.in[0] : &c->pn_data.out_0rtt;
+    case F_LH_HSHK:
+        return in ? &c->pn_hshk.in : &c->pn_hshk.out;
+    default:
+        return in ? &c->pn_data.in[1] : &c->pn_data.out_1rtt;
     }
-    return in ? &c->pn_data.in[1] : &c->pn_data.out_1rtt;
 }
 
 
@@ -1208,7 +1210,8 @@ const struct cipher_ctx * which_cipher_ctx(const struct q_conn * const c,
 
 uint16_t dec_aead(const struct q_conn * const c, const struct w_iov * const v)
 {
-    const struct cipher_ctx * const ctx = which_cipher_ctx(c, v, true);
+    const struct cipher_ctx * const ctx =
+        which_cipher_ctx(c, meta(v).hdr.type, true);
     if (unlikely(ctx == 0 || ctx->aead == 0))
         return 0;
 
@@ -1239,7 +1242,8 @@ uint16_t enc_aead(const struct q_conn * const c,
                   const struct w_iov * const x,
                   const uint16_t nr_pos)
 {
-    const struct cipher_ctx * const ctx = which_cipher_ctx(c, v, false);
+    const struct cipher_ctx * const ctx =
+        which_cipher_ctx(c, meta(v).hdr.type, false);
     if (unlikely(ctx == 0 || ctx->aead == 0))
         return 0;
 

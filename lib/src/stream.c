@@ -125,12 +125,28 @@ void track_bytes_out(struct q_stream * const s, const uint64_t n)
 }
 
 
-void reset_stream(struct q_stream * const s)
+static void __attribute__((nonnull)) reset_pm(const struct w_iov_sq * const q)
+{
+    struct w_iov * v;
+    sq_foreach (v, q, next) {
+        if (meta(v).hdr.tok)
+            free(meta(v).hdr.tok);
+        meta(v) = (struct pkt_meta){0};
+    }
+}
+
+
+void reset_stream(struct q_stream * const s, const bool forget)
 {
     // reset stream offsets
     s->out_ack_cnt = s->in_data = s->out_data = 0;
 
-    // forget we transmitted any data packets
-    q_free(&s->in);
-    q_free(&s->out);
+    if (forget) {
+        q_free(&s->in);
+        q_free(&s->out);
+    } else {
+        // reset pkt meta
+        reset_pm(&s->in);
+        reset_pm(&s->out);
+    }
 }
