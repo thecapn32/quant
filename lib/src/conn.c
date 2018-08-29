@@ -1104,10 +1104,6 @@ void enter_closing(struct q_conn * const c)
         ev_timer_stop(loop, &pn->ack_alarm);
     }
 
-    ev_init(&c->closing_alarm, enter_closed);
-    c->closing_alarm.data = c;
-    c->needs_tx = false;
-
     if (c->state == conn_idle || c->state == conn_opng ||
         c->state == conn_drng) {
         // no need to go closing->draining in these cases
@@ -1189,6 +1185,10 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->idle_alarm.data = c;
     c->idle_alarm.repeat = idle_to ? idle_to : kIdleTimeout;
     ev_init(&c->idle_alarm, idle_alarm);
+
+    // intialize closing alarm
+    c->closing_alarm.data = c;
+    ev_init(&c->closing_alarm, enter_closed);
 
     c->tp_peer.ack_del_exp = c->tp_local.ack_del_exp = 3;
     c->tp_local.idle_to = kIdleTimeout;
