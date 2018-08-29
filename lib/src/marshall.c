@@ -59,7 +59,7 @@
 ///
 /// @return     Number of bytes needed in varint encoding (1, 2, 4 or 8).
 ///
-uint16_t __attribute__((const)) varint_size_needed(const uint64_t v)
+uint16_t varint_size_needed(const uint64_t v)
 {
     if (v < 0x40)
         return 1;
@@ -95,20 +95,20 @@ uint16_t __attribute__((const)) varint_size_needed(const uint64_t v)
     } while (0)
 
 
-uint16_t __attribute__((nonnull)) marshall_enc(uint8_t * const buf,
-                                               const uint16_t buf_len,
-                                               const uint16_t pos,
-                                               const void * const src,
-                                               const uint8_t src_len,
-                                               const uint8_t enc_len
+uint16_t marshall_enc(uint8_t * const buf,
+                      const uint16_t buf_len,
+                      const uint16_t pos,
+                      const void * const src,
+                      const uint8_t src_len,
+                      const uint8_t enc_len
 #ifdef DEBUG_MARSHALL
-                                               ,
-                                               const char * const fmt,
-                                               const char * const func,
-                                               const char * const file,
-                                               const unsigned line,
-                                               const char * const buf_str,
-                                               const char * const src_str
+                      ,
+                      const char * const fmt,
+                      const char * const func,
+                      const char * const file,
+                      const unsigned line,
+                      const char * const buf_str,
+                      const char * const src_str
 #endif
 )
 {
@@ -176,19 +176,19 @@ uint16_t __attribute__((nonnull)) marshall_enc(uint8_t * const buf,
 }
 
 
-uint16_t __attribute__((nonnull)) marshall_enc_pnr(uint8_t * const buf,
-                                                   const uint16_t buf_len,
-                                                   const uint16_t pos,
-                                                   const uint64_t * const src,
-                                                   const uint8_t enc_len
+uint16_t marshall_enc_pnr(uint8_t * const buf,
+                          const uint16_t buf_len,
+                          const uint16_t pos,
+                          const uint64_t * const src,
+                          const uint8_t enc_len
 #ifdef DEBUG_MARSHALL
-                                                   ,
-                                                   const char * const fmt,
-                                                   const char * const func,
-                                                   const char * const file,
-                                                   const unsigned line,
-                                                   const char * const buf_str,
-                                                   const char * const src_str
+                          ,
+                          const char * const fmt,
+                          const char * const func,
+                          const char * const file,
+                          const unsigned line,
+                          const char * const buf_str,
+                          const char * const src_str
 #endif
 )
 {
@@ -222,23 +222,24 @@ uint16_t __attribute__((nonnull)) marshall_enc_pnr(uint8_t * const buf,
 }
 
 
-uint16_t __attribute__((nonnull)) marshall_enc_buf(uint8_t * const buf,
-                                                   const uint16_t buf_len,
-                                                   const uint16_t pos,
-                                                   const void * const src,
-                                                   const uint16_t enc_len
+uint16_t marshall_enc_buf(uint8_t * const buf,
+                          const uint16_t buf_len,
+                          const uint16_t pos,
+                          const void * const src,
+                          const uint16_t enc_len
 #ifdef DEBUG_MARSHALL
-                                                   ,
-                                                   const char * const fmt,
-                                                   const char * const func,
-                                                   const char * const file,
-                                                   const unsigned line,
-                                                   const char * const buf_str,
-                                                   const char * const src_str
+                          ,
+                          const char * const fmt,
+                          const char * const func,
+                          const char * const file,
+                          const unsigned line,
+                          const char * const buf_str,
+                          const char * const src_str
 #endif
 )
 {
     ensure(pos + enc_len <= buf_len, "buf len %u exhausted", buf_len);
+    ensure(src, "src is 0");
     memcpy(&buf[pos], src, enc_len);
 #ifdef DEBUG_MARSHALL
     if (unlikely(DLEVEL >= DBG && util_dlevel >= DBG))
@@ -284,20 +285,19 @@ uint16_t __attribute__((nonnull)) marshall_enc_buf(uint8_t * const buf,
     } while (0)
 
 
-extern uint16_t __attribute__((nonnull))
-marshall_dec(void * const dst,
-             const uint8_t * const buf,
-             const uint16_t buf_len,
-             const uint16_t pos,
-             const uint8_t dst_len
+extern uint16_t marshall_dec(void * const dst,
+                             const uint8_t * const buf,
+                             const uint16_t buf_len,
+                             const uint16_t pos,
+                             const uint8_t dst_len
 #ifdef DEBUG_MARSHALL
-             ,
-             const char * const fmt,
-             const char * const func,
-             const char * const file,
-             const unsigned line,
-             const char * const buf_str,
-             const char * const dst_str
+                             ,
+                             const char * const fmt,
+                             const char * const func,
+                             const char * const file,
+                             const unsigned line,
+                             const char * const buf_str,
+                             const char * const dst_str
 #endif
 )
 {
@@ -374,19 +374,18 @@ marshall_dec(void * const dst,
 }
 
 
-extern uint16_t __attribute__((nonnull))
-marshall_dec_pnr(void * const dst,
-                 const uint8_t * const buf,
-                 const uint16_t buf_len,
-                 const uint16_t pos
+extern uint16_t marshall_dec_pnr(void * const dst,
+                                 const uint8_t * const buf,
+                                 const uint16_t buf_len,
+                                 const uint16_t pos
 #ifdef DEBUG_MARSHALL
-                 ,
-                 const char * const fmt,
-                 const char * const func,
-                 const char * const file,
-                 const unsigned line,
-                 const char * const buf_str,
-                 const char * const dst_str
+                                 ,
+                                 const char * const fmt,
+                                 const char * const func,
+                                 const char * const file,
+                                 const unsigned line,
+                                 const char * const buf_str,
+                                 const char * const dst_str
 #endif
 )
 {
@@ -414,20 +413,19 @@ marshall_dec_pnr(void * const dst,
 }
 
 
-extern uint16_t __attribute__((nonnull))
-marshall_dec_buf(void * const dst,
-                 const uint8_t * const buf,
-                 const uint16_t buf_len,
-                 const uint16_t pos,
-                 const uint16_t dst_len
+extern uint16_t marshall_dec_buf(void * const dst,
+                                 const uint8_t * const buf,
+                                 const uint16_t buf_len,
+                                 const uint16_t pos,
+                                 const uint16_t dst_len
 #ifdef DEBUG_MARSHALL
-                 ,
-                 const char * const fmt,
-                 const char * const func,
-                 const char * const file,
-                 const unsigned line,
-                 const char * const buf_str,
-                 const char * const dst_str
+                                 ,
+                                 const char * const fmt,
+                                 const char * const func,
+                                 const char * const file,
+                                 const unsigned line,
+                                 const char * const buf_str,
+                                 const char * const dst_str
 #endif
 )
 {
