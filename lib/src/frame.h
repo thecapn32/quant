@@ -77,7 +77,10 @@ struct w_iov;
 #define log_stream_or_crypto_frame(rtx, v)
 #else
 extern void __attribute__((nonnull))
-log_stream_or_crypto_frame(const bool rtx, const struct w_iov * const v);
+log_stream_or_crypto_frame(const bool rtx,
+                           const struct w_iov * const v,
+                           const bool in,
+                           const char * const kind);
 #endif
 
 extern uint64_t __attribute__((const))

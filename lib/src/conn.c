@@ -278,14 +278,6 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             continue;
         }
 
-        if (s->id >= 0 && s->c->state == conn_estb && s->out_data_max &&
-            s->out_off + v->len > s->out_data_max) {
-            warn(INF, "out of FC window for strm " FMT_SID ", %u+%u/%u", s->id,
-                 s->out_off, v->len, s->out_data_max);
-            s->blocked = true;
-            break;
-        }
-
         if (!rtx && meta(v).tx_len != 0) {
             warn(DBG,
                  "skipping %s pkt " FMT_PNR_OUT " on strm " FMT_SID
@@ -299,9 +291,12 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             rtx_pkt(s, v);
 
         if (s->c->state == conn_estb) {
-            if (s->id && s->out_data + v->len > s->out_data_max)
+            // add one MTU, so we can still encode this stream frame
+            if (s->id >= 0 &&
+                s->out_data + v->len + w_mtu(s->c->w) > s->out_data_max)
                 s->blocked = true;
-            if (s->c->out_data + v->len > s->c->tp_peer.max_data)
+            if (s->c->out_data + v->len + w_mtu(s->c->w) >
+                s->c->tp_peer.max_data)
                 s->c->blocked = true;
         }
 
@@ -318,6 +313,9 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
                 pn_for_pkt_type(s->c, meta(v).hdr.type);
             ev_timer_stop(loop, &pn->ack_alarm);
         }
+
+        if (s->blocked || s->c->blocked)
+            break;
 
         if (limit && encoded == limit) {
             warn(NTE, "tx limit %u reached", limit);
@@ -340,6 +338,9 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
 
 static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
 {
+    if (c->state == conn_clsg || c->state == conn_drng)
+        return;
+
     // check if we need to do connection-level flow control
     if (c->in_data + 2 * MAX_PKT_LEN > c->tp_local.max_data) {
         c->tx_max_data = true;
@@ -469,8 +470,15 @@ void tx_ack(struct q_conn * const c, const epoch_t e)
 
     log_sent_pkts(c);
     q_free(&x);
-    if (is_ack_only(&meta(v)))
-        q_free_iov(v); // XXX this will cause spurious unknown ACK warnings
+    // if (is_ack_only(&meta(v)))
+    //     q_free_iov(v); // XXX this will cause spurious unknown ACK warnings
+
+    // if this packet contains an ACK frame, stop the timer
+    if (c->state == conn_estb && bit_test(meta(v).frames, FRAM_TYPE_ACK)) {
+        warn(DBG, "ACK sent, stopping epoch %u ACK timer",
+             epoch_for_pkt_type(meta(v).hdr.type));
+        ev_timer_stop(loop, &pn->ack_alarm);
+    }
 }
 
 
@@ -795,7 +803,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     // if packet has anything other than ACK frames, maybe arm the ACK timer
     struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
-    if (c->state != conn_clsg && c->state != conn_drng &&
+    if (c->state != conn_drng && c->state != conn_clsd &&
         !is_ack_only(&meta(v)) && !ev_is_active(&pn->ack_alarm)) {
         warn(DBG, "non-ACK frame received, starting epoch %u ACK timer",
              epoch_for_pkt_type(meta(v).hdr.type));
@@ -1065,14 +1073,19 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
 
 void enter_closing(struct q_conn * const c)
 {
+    if (c->state == conn_clsg)
+        return;
+
     // stop LD and ACK alarms
     ev_timer_stop(loop, &c->rec.ld_alarm);
     ev_timer_stop(loop, &c->idle_alarm);
 
-    // send any ACKs we still owe the peer
+    // stop ACK alarm and (maybe) send any ACKs we still owe the peer
     for (epoch_t e = ep_init; e <= ep_data; e++) {
         struct pn_space * const pn = pn_for_epoch(c, e);
-        if ( // we don't ACK in the 0-RTT packet number space
+        if ( // don't ACK when we did this already
+            c->state != conn_drng &&
+            // we don't ACK in the 0-RTT packet number space
             e != ep_0rtt &&
             // don't ACK here, because there will be in ACK in the CLOSE pkt
             e != c->tls.epoch_out &&
@@ -1084,8 +1097,10 @@ void enter_closing(struct q_conn * const c)
 
     ev_init(&c->closing_alarm, enter_closed);
     c->closing_alarm.data = c;
+    c->needs_tx = false;
 
-    if (c->state == conn_idle || c->state == conn_opng) {
+    if (c->state == conn_idle || c->state == conn_opng ||
+        c->state == conn_drng) {
         // no need to go closing->draining in these cases
         ev_invoke(loop, &c->closing_alarm, 0);
         return;
@@ -1112,12 +1127,8 @@ idle_alarm(struct ev_loop * const l __attribute__((unused)),
     struct q_conn * const c = w->data;
     warn(DBG, "idle timeout on %s conn %s", conn_type(c), scid2str(c));
 
-    if (c->state != conn_estb) {
-        // send connection close frame
-        enter_closing(c);
-        ev_async_send(loop, &c->tx_w);
-    } else
-        conn_to_state(c, conn_drng);
+    conn_to_state(c, conn_drng);
+    enter_closing(c);
 }
 
 

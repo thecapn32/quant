@@ -115,8 +115,9 @@ static ptls_openssl_sign_certificate_t sign_cert = {0};
 static ptls_openssl_verify_certificate_t verifier = {0};
 #endif
 
+// client always tries to negotiate first entry
 static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-14", 5},
-                                    {(uint8_t *)"hq-13", 5}}; // TODO remove
+                                    {(uint8_t *)"hq-13", 5}};
 static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 
 static struct cipher_ctx dec_tckt;
@@ -815,8 +816,8 @@ void init_tls(struct q_conn * const c)
     hshk_prop->collected_extensions = chk_tp;
 
     if (c->is_clnt) {
-        hshk_prop->client.negotiated_protocols.list = alpn;
-        hshk_prop->client.negotiated_protocols.count = alpn_cnt;
+        hshk_prop->client.negotiated_protocols.list = &alpn[0];
+        hshk_prop->client.negotiated_protocols.count = 1;
         hshk_prop->client.max_early_data_size = &c->tls.max_early_data;
     } else {
         // TODO: remove this interop hack eventually
@@ -930,7 +931,7 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
             if (out_len == 0)
                 continue;
             struct q_stream * const se = get_stream(c, crpt_strm_id(e));
-            if (se->out_off >= out_len)
+            if (se->out_data >= out_len)
                 continue;
             warn(ERR, "epoch %u: off %u len %u", e, c->tls.epoch_off[e],
                  out_len);

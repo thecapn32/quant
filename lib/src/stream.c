@@ -115,34 +115,26 @@ void free_stream(struct q_stream * const s)
 
 void track_bytes_in(struct q_stream * const s, const uint64_t n)
 {
-    s->c->in_data += n;
+    if (s->id >= 0)
+        // crypto "streams" don't count
+        s->c->in_data += n;
     s->in_data += n;
-
-    // warn(DBG,
-    //      "IN: strm %u in_data=%" PRIu64 "/%" PRIu64 " in_off=%" PRIu64
-    //      " C: in_data=%" PRIu64 "/%" PRIu64,
-    //      s->id, s->in_data, s->in_data_max, s->in_off, s->c->in_data,
-    //      s->c->tp_local.max_data);
 }
 
 
 void track_bytes_out(struct q_stream * const s, const uint64_t n)
 {
-    s->c->out_data += n;
+    if (s->id >= 0)
+        // crypto "streams" don't count
+        s->c->out_data += n;
     s->out_data += n;
-
-    // warn(DBG,
-    //      "OUT: strm %u out_data=%" PRIu64 "/%" PRIu64 " out_off=%" PRIu64
-    //      " C: out_data=%" PRIu64 "/%" PRIu64,
-    //      s->id, s->out_data, s->out_data_max, s->out_off, s->c->out_data,
-    //      s->c->tp_peer.max_data);
 }
 
 
 void reset_stream(struct q_stream * const s)
 {
     // reset stream offsets
-    s->out_ack_cnt = s->in_off = s->out_off = 0;
+    s->out_ack_cnt = s->in_data = s->out_data = 0;
 
     // forget we transmitted any data packets
     q_free(&s->in);

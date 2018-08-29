@@ -60,15 +60,13 @@ struct q_stream {
 
     struct w_iov_sq out;   ///< Tail queue containing outbound data.
     uint64_t out_ack_cnt;  ///< Number of unique ACKs received for pkts in o.
-    uint64_t out_off;      ///< Current outbound stream offset.
+    uint64_t out_data;     ///< Current outbound stream offset (= data sent).
     uint64_t out_data_max; ///< Outbound max_stream_data.
-    uint64_t out_data;     ///< Outbound data sent.
 
     struct w_iov_sq in;         ///< Tail queue containing inbound data.
     struct pm_off_splay in_ooo; ///< Out-of-order inbound data.
-    uint64_t in_off;            ///< Current inbound in-order stream offset.
     uint64_t in_data_max;       ///< Inbound max_stream_data.
-    uint64_t in_data;           ///< Inbound data received.
+    uint64_t in_data;           ///< In-order stream data received.
 
     int64_t id;
     strm_state_t state;

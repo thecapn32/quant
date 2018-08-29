@@ -280,6 +280,14 @@ extern func_ptr api_func;
 extern void *api_conn, *api_strm;
 
 
+#ifndef NDEBUG
+#define EV_VERIFY(l) ev_verify(l)
+#else
+#define EV_VERIFY(l)                                                           \
+    do {} while(0))
+#endif
+
+
 // see https://stackoverflow.com/a/45600545/2240756
 //
 #define OVERLOADED_MACRO(M, ...) OVR(M, CNT_ARGS(__VA_ARGS__))(__VA_ARGS__)
@@ -304,6 +312,7 @@ extern void *api_conn, *api_strm;
 ///
 #define maybe_api_return3(func, conn, strm)                                    \
     __extension__({                                                            \
+        EV_VERIFY(loop);                                                       \
         if (api_func == (func_ptr)(&(func)) && api_conn == (conn) &&           \
             (strm == 0 || api_strm == strm)) {                                 \
             ev_break(loop, EVBREAK_ALL);                                       \
@@ -325,6 +334,7 @@ extern void *api_conn, *api_strm;
 ///
 #define maybe_api_return2(conn, strm)                                          \
     __extension__({                                                            \
+        EV_VERIFY(loop);                                                       \
         if (api_conn == (conn) && (strm == 0 || api_strm == strm)) {           \
             ev_break(loop, EVBREAK_ALL);                                       \
             warn(DBG, "<any>(" #conn ", " #strm ") done, exiting event loop"); \

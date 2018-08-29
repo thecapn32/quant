@@ -357,9 +357,11 @@ bool enc_pkt(struct q_stream * const s,
         // this is a RTX, pad out until beginning of stream header
         enc_padding_frame(v, i, meta(v).stream_header_pos - i);
         i = meta(v).stream_data_end;
-        log_stream_or_crypto_frame(true, v);
+        log_stream_or_crypto_frame(true, v, false, "");
 
-    } else if (enc_data || s->state == strm_hclo || s->state == strm_clsd) {
+    } else if (enc_data
+               // || s->state == strm_hclo || s->state == strm_clsd
+               ) {
         // this is an Initial, fresh data or pure stream FIN packet
         // pad out rest of Q_OFFSET and add a stream frame header
         enc_padding_frame(v, i, Q_OFFSET - i);

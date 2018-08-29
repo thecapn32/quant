@@ -77,17 +77,21 @@
 
 
 #ifndef NDEBUG
-void log_stream_or_crypto_frame(const bool rtx, const struct w_iov * const v)
+void log_stream_or_crypto_frame(const bool rtx,
+                                const struct w_iov * const v,
+                                const bool in,
+                                const char * const kind)
 {
     const struct q_stream * const s = meta(v).stream;
     const uint8_t type = v->buf[meta(v).stream_header_pos];
 
     if (s->id >= 0)
         warn(INF,
-             FRAM_OUT "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID "/%" PRIu64
-                      " cdata=%" PRIu64 "/%" PRIu64 " off=%" PRIu64 "/%" PRIu64
-                      " len=%u %s",
-             type, is_set(F_STREAM_FIN, type) ? "FIN" : "",
+             "%sSTREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID "/%" PRIu64
+             " cdata=%" PRIu64 "/%" PRIu64 " off=%" PRIu64 "/%" PRIu64
+             " len=%u %s%s%s%s",
+             in ? FRAM_IN : FRAM_OUT, type,
+             is_set(F_STREAM_FIN, type) ? "FIN" : "",
              is_set(F_STREAM_FIN, type) &&
                      (is_set(F_STREAM_LEN, type) || is_set(F_STREAM_OFF, type))
                  ? "|"
@@ -98,13 +102,13 @@ void log_stream_or_crypto_frame(const bool rtx, const struct w_iov * const v)
              is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id, max_strm_id(s),
              s->c->out_data, s->c->tp_peer.max_data, meta(v).stream_off,
              s->out_data_max, stream_data_len(v),
-             rtx ? REV BLD GRN "[RTX]" : "");
+             rtx ? REV BLD GRN "[RTX]" NRM " " : "", in ? "[" : "", kind,
+             in ? "]" : "");
     else
-        warn(INF,
-             FRAM_OUT "CRYPTO" NRM " 0x%02x off=%" PRIu64 "/%" PRIu64
-                      " len=%u %s",
-             type, meta(v).stream_off, s->out_data_max, stream_data_len(v),
-             rtx ? REV BLD GRN "[RTX]" : "");
+        warn(INF, "%sCRYPTO" NRM " 0x%02x off=%" PRIu64 " len=%u %s%s%s%s",
+             in ? FRAM_IN : FRAM_OUT, type, meta(v).stream_off,
+             stream_data_len(v), rtx ? REV BLD GRN "[RTX]" NRM " " : "",
+             in ? "[" : "", kind, in ? "]" : "");
 }
 #endif
 
@@ -146,6 +150,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     meta(v).stream_data_end = (uint16_t)l + i;
 
     // deliver data into stream
+    const char * kind = "";
     struct q_stream * s = get_stream(c, sid);
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     if (dec_strm && s == 0) {
@@ -170,20 +175,18 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     meta(v).stream = s;
 
     // best case: new in-order data
-    const char * kind = 0;
-    if (meta(v).stream_off == s->in_off) {
+    if (meta(v).stream_off == s->in_data) {
         kind = "seq";
         track_bytes = true;
-        s->in_off += l;
         sq_insert_tail(&s->in, v, next);
         meta(v).stream = s;
 
         // check if a hole has been filled that lets us dequeue ooo data
         struct pkt_meta *p, *nxt;
         for (p = splay_min(pm_off_splay, &s->in_ooo);
-             p && p->stream_off == s->in_off; p = nxt) {
+             p && p->stream_off == s->in_data; p = nxt) {
             nxt = splay_next(pm_off_splay, &s->in_ooo, p);
-            s->in_off += p->stream_data_end;
+            s->in_data += p->stream_data_end;
             meta(v).stream = s;
             sq_insert_tail(&s->in, w_iov(c->w, pm_idx(p)), next);
             splay_remove(pm_off_splay, &s->in_ooo, p);
@@ -206,7 +209,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     }
 
     // data is a complete duplicate
-    if (meta(v).stream_off + l <= s->in_off) {
+    if (meta(v).stream_off + l <= s->in_data) {
         kind = RED "dup" NRM;
         goto done;
     }
@@ -218,26 +221,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     meta(v).stream = s;
 
 done:
-    if (dec_strm)
-        warn(INF,
-             FRAM_IN "STREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID "/%" PRIu64
-                     " cdata=%" PRIu64 "/%" PRIu64 " off=%" PRIu64 "/%" PRIu64
-                     " len=%" PRIu64 " [%s]",
-             t, is_set(F_STREAM_FIN, t) ? "FIN" : "",
-             is_set(F_STREAM_FIN, t) &&
-                     (is_set(F_STREAM_LEN, t) || is_set(F_STREAM_OFF, t))
-                 ? "|"
-                 : "",
-             is_set(F_STREAM_LEN, t) ? "LEN" : "",
-             is_set(F_STREAM_LEN, t) && is_set(F_STREAM_OFF, t) ? "|" : "",
-             is_set(F_STREAM_OFF, t) ? "OFF" : "", sid, max_strm_id(s),
-             s->c->in_data, s->c->tp_local.max_data, meta(v).stream_off,
-             s->in_data_max, l, kind);
-    else
-        warn(INF,
-             FRAM_IN "CRYPTO" NRM " 0x%02x off=%" PRIu64 "/%" PRIu64
-                     " len=%" PRIu64 " [%s]",
-             t, meta(v).stream_off, s->in_data_max, l, kind);
+    log_stream_or_crypto_frame(false, v, true, kind);
 #endif
 
     if (track_bytes)
@@ -402,8 +386,8 @@ dec_close_frame(struct q_conn * const c,
         i = dec_chk_buf(type, &reas_phr, v->buf, v->len, i, (uint16_t)reas_len);
 
     if (c->state != conn_drng) {
-        conn_to_state(c, conn_clsg);
-        c->needs_tx = true;
+        conn_to_state(c, conn_drng);
+        enter_closing(c);
     }
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
@@ -945,7 +929,7 @@ uint16_t enc_stream_or_crypto_frame(struct q_stream * const s,
                "no stream data or need to send FIN");
 
         type = FRAM_TYPE_STRM | (dlen ? F_STREAM_LEN : 0) |
-               (s->out_off ? F_STREAM_OFF : 0);
+               (s->out_data ? F_STREAM_OFF : 0);
 
         // if stream is closed locally and this is the last packet, include a
         // FIN
@@ -963,24 +947,24 @@ uint16_t enc_stream_or_crypto_frame(struct q_stream * const s,
     uint16_t i = meta(v).stream_header_pos =
         Q_OFFSET - 1 - (enc_strm ? varint_size_needed((uint64_t)s->id) : 0) -
         (dlen || !enc_strm ? varint_size_needed(dlen) : 0) -
-        (s->out_off || !enc_strm ? varint_size_needed(s->out_off) : 0);
+        (s->out_data || !enc_strm ? varint_size_needed(s->out_data) : 0);
     ensure(i > pos, "Q_OFFSET exhausted (%u > %u)", i, pos);
     i = enc(v->buf, v->len, i, &type, sizeof(type), 0, "0x%02x");
     if (enc_strm)
         i = enc(v->buf, v->len, i, &s->id, 0, 0, FMT_SID);
-    if (s->out_off || !enc_strm)
-        i = enc(v->buf, v->len, i, &s->out_off, 0, 0, "%" PRIu64);
+    if (s->out_data || !enc_strm)
+        i = enc(v->buf, v->len, i, &s->out_data, 0, 0, "%" PRIu64);
     if (dlen || !enc_strm)
         enc(v->buf, v->len, i, &dlen, 0, 0, "%u");
 
     meta(v).stream = s; // remember stream this buf belongs to
     meta(v).stream_data_start = Q_OFFSET;
     meta(v).stream_data_end = Q_OFFSET + (uint16_t)dlen;
-    meta(v).stream_off = s->out_off;
+    meta(v).stream_off = s->out_data;
 
-    log_stream_or_crypto_frame(false, v);
+    log_stream_or_crypto_frame(false, v, false, "");
     track_bytes_out(s, dlen);
-    s->out_off += dlen; // increase the stream data offset
+    ensure(!enc_strm || s->out_data < s->out_data_max, "exceeded fc window");
 
     return v->len;
 }
@@ -1083,10 +1067,11 @@ uint16_t enc_stream_blocked_frame(struct q_stream * const s,
     const uint8_t type = FRAM_TYPE_STRM_BLCK;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
     i = enc(v->buf, v->len, i, &s->id, 0, 0, FMT_SID);
-    i = enc(v->buf, v->len, i, &s->out_off, 0, 0, "%" PRIu64);
+    const uint64_t off = s->out_data + v->len - Q_OFFSET;
+    i = enc(v->buf, v->len, i, &off, 0, 0, "%" PRIu64);
 
     warn(INF, FRAM_OUT "STREAM_BLOCKED" NRM " id=" FMT_SID " off=%" PRIu64,
-         s->id, s->out_off);
+         s->id, off);
 
     return i;
 }
@@ -1100,9 +1085,10 @@ uint16_t enc_blocked_frame(struct q_conn * const c,
 
     const uint8_t type = FRAM_TYPE_BLCK;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
-    i = enc(v->buf, v->len, i, &c->tp_peer.max_data, 0, 0, "%" PRIu64);
+    const uint64_t off = c->tp_peer.max_data + v->len - Q_OFFSET;
+    i = enc(v->buf, v->len, i, &off, 0, 0, "%" PRIu64);
 
-    warn(INF, FRAM_OUT "BLOCKED" NRM " off=%" PRIu64, c->tp_peer.max_data);
+    warn(INF, FRAM_OUT "BLOCKED" NRM " off=%" PRIu64, off);
 
     return i;
 }

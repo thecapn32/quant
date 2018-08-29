@@ -106,6 +106,7 @@ int corpus_pkt_dir, corpus_frm_dir;
 ///
 #define loop_run(func, conn, strm)                                             \
     do {                                                                       \
+        EV_VERIFY(loop);                                                       \
         ensure(api_func == 0, "other API call active");                        \
         api_func = (func_ptr)(&(func));                                        \
         api_conn = (conn);                                                     \
@@ -386,9 +387,11 @@ struct q_conn * q_accept(struct w_engine * const w __attribute__((unused)),
          timeout);
 
     if (accept_queue && accept_queue->state == conn_estb) {
-        warn(WRN, "got %s conn %s", conn_type(accept_queue),
+        warn(WRN, "accepting queued %s conn %s", conn_type(accept_queue),
              scid2str(accept_queue));
-        return accept_queue;
+        struct q_conn * const ret = accept_queue;
+        accept_queue = 0;
+        return ret;
     }
 
     if (timeout) {
@@ -402,8 +405,8 @@ struct q_conn * q_accept(struct w_engine * const w __attribute__((unused)),
     loop_run(q_accept, accept_queue, 0);
 
     if (accept_queue == 0 || accept_queue->state != conn_estb) {
-        if (accept_queue)
-            q_close(accept_queue);
+        // if (accept_queue)
+        //     q_close(accept_queue);
         warn(ERR, "conn not accepted");
         return 0;
     }
@@ -535,28 +538,20 @@ void q_close_stream(struct q_stream * const s)
 
 void q_close(struct q_conn * const c)
 {
-    if (c->state != conn_idle && c->state != conn_clsg &&
-        c->state != conn_drng && c->state != conn_clsd) {
+    if (c->state == conn_idle || c->state == conn_clsd)
+        goto done;
+
+    if (c->is_clnt || c->holds_sock == false) {
+        // we don't need to do the closing dance for master server connections
         warn(WRN, "closing %s conn %s on port %u", conn_type(c), scid2str(c),
              ntohs(c->sport));
 
-        // close all streams
-        struct q_stream * s;
-        splay_foreach (s, stream, &c->streams)
-            if (s->id >= 0)
-                q_close_stream(s);
-
-        if (c->state == conn_opng)
-            conn_to_state(c, conn_clsd);
-        else {
-            // send connection close frame
-            enter_closing(c);
-            ev_async_send(loop, &c->tx_w);
-            loop_run(q_close, c, 0);
-        }
+        conn_to_state(c, conn_clsg);
+        ev_async_send(loop, &c->tx_w);
+        loop_run(q_close, c, 0);
     }
 
-    // we're done
+done:
     free_conn(c);
 }
 
