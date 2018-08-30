@@ -402,11 +402,6 @@ dec_close_frame(struct q_conn * const c,
         i = dec_chk_buf(true, type, &reas_phr, v->buf, v->len, i,
                         (uint16_t)reas_len);
 
-    if (c->state != conn_drng) {
-        conn_to_state(c, conn_drng);
-        enter_closing(c);
-    }
-
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     if (type == FRAM_TYPE_CONN_CLSE)
         warn(INF,
@@ -421,6 +416,11 @@ dec_close_frame(struct q_conn * const c,
              err_code ? RED : NRM, err_code, reas_len, err_code ? RED : NRM,
              reas_len, reas_phr);
 #endif
+
+    if (c->state != conn_drng) {
+        conn_to_state(c, conn_drng);
+        enter_closing(c);
+    }
 
     return i;
 }

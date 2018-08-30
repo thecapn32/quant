@@ -240,47 +240,51 @@ int main(int argc, char * argv[])
     }
 
     bool first_conn = true;
-    while (1) {
-        struct q_conn * const c = q_accept(w, first_conn ? 0 : timeout);
-        first_conn = false;
-        if (c == 0) {
-            if (first_conn)
-                // first q_accept() failed
-                ret = 1;
-            break;
-        }
+    http_parser_settings settings = {.on_url = serve_cb};
 
-        http_parser_settings settings = {.on_url = serve_cb};
+    while (1) {
+        struct q_conn * c = q_rx_ready(first_conn ? 0 : timeout);
+        if (c == 0)
+            break;
+        first_conn = false;
+
+        // do we need to q_accept?
+        size_t i = 0;
+        for (; i < num_ports; i++)
+            if (c == conn[i]) {
+                q_accept(0);
+                break;
+            }
+        if (i < num_ports)
+            continue;
+
+        // do we need to handle a request?
         struct cb_data d = {.c = c, .w = w, .dir = dir_fd};
         http_parser parser = {.data = &d};
-        bool first_req = true;
 
-    again:
         http_parser_init(&parser, HTTP_REQUEST);
-        struct w_iov_sq i = sq_head_initializer(i);
-        struct q_stream * s = q_read(c, &i, first_req);
-        if (s) {
-            d.s = s;
-            struct w_iov * v = 0;
-            sq_foreach (v, &i, next) {
-                const size_t parsed = http_parser_execute(
-                    &parser, &settings, (char *)v->buf, v->len);
-                if (parsed != v->len) {
-                    warn(ERR, "HTTP parser error: %.*s", v->len - parsed,
-                         &v->buf[parsed]);
-                    ret = 1;
-                    break;
-                }
-                if (q_is_str_closed(s)) {
-                    first_req = false;
-                    break;
-                }
-            }
+        struct w_iov_sq q = sq_head_initializer(q);
+        struct q_stream * s = q_read(c, &q, false);
 
-            q_free(&i);
-            if (v)
-                goto again;
+        if (sq_empty(&q))
+            continue;
+
+        d.s = s;
+        struct w_iov * v = 0;
+        sq_foreach (v, &q, next) {
+            const size_t parsed =
+                http_parser_execute(&parser, &settings, (char *)v->buf, v->len);
+            if (parsed != v->len) {
+                warn(ERR, "HTTP parser error: %.*s", v->len - parsed,
+                     &v->buf[parsed]);
+                ret = 1;
+                break;
+            }
+            if (q_is_str_closed(s))
+                break;
         }
+
+        q_free(&q);
         q_close(c);
     }
 

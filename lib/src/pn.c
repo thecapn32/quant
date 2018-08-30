@@ -54,14 +54,14 @@ epoch_for_pn(const struct pn_space * pn)
 
 void ack_alarm(struct ev_loop * const l __attribute__((unused)),
                ev_timer * const w,
-               int e)
+               int e __attribute__((unused)))
 {
     struct pn_space * const pn = w->data;
-    if (e)
+    if (epoch_for_pn(pn) >= epoch_in(pn->c)) {
         warn(DBG, "ACK timer fired on %s conn %s epoch %u", conn_type(pn->c),
              scid2str(pn->c), epoch_for_pn(pn));
-
-    tx_ack(pn->c, epoch_for_pn(pn));
+        tx_ack(pn->c, epoch_for_pn(pn));
+    }
     ev_timer_stop(loop, &pn->ack_alarm);
 }
 

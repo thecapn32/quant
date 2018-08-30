@@ -60,6 +60,7 @@
 const char * const conn_state_str[] = {CONN_STATES};
 
 
+struct q_conn * c_rx_ready;
 struct ipnp_splay conns_by_ipnp = splay_initializer(&conns_by_ipnp);
 struct cid_splay conns_by_cid = splay_initializer(&conns_by_cid);
 
@@ -580,10 +581,13 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
         if (ret == 0 || ret == PTLS_ERROR_STATELESS_RETRY) {
             tx_crypto(c, c->tls.epoch_out);
             if (ret == 0 && c->state != conn_estb) {
-                maybe_api_return(q_connect, c, 0);
-                if (maybe_api_return(q_accept, accept_queue, 0))
-                    accept_queue = c;
                 conn_to_state(c, conn_estb);
+                if (c->is_clnt)
+                    maybe_api_return(q_connect, c, 0);
+                else {
+                    sl_insert_head(&aq, c, node_aq);
+                    maybe_api_return(q_accept, 0, 0);
+                }
             }
         }
         // q_free_iov(iv);
@@ -983,7 +987,7 @@ rx_pkts(struct w_iov_sq * const i,
         // remember that we had a RX event on this connection
         if (!c->had_rx) {
             c->had_rx = true;
-            sl_insert_head(crx, c, next);
+            sl_insert_head(crx, c, node_rx);
         }
 
         if (rx_pkt(c, v, i))
@@ -1000,14 +1004,14 @@ void rx(struct ev_loop * const l,
     struct w_sock * const ws = rx_w->data;
     w_nic_rx(w_engine(ws), -1);
     struct w_iov_sq i = sq_head_initializer(i);
-    struct q_conn_sl crx = sl_head_initializer();
+    struct q_conn_sl crx = sl_head_initializer(crx);
     w_rx(ws, &i);
     rx_pkts(&i, &crx, ws);
 
     // for all connections that had RX events
     while (!sl_empty(&crx)) {
         struct q_conn * const c = sl_first(&crx);
-        sl_remove_head(&crx, next);
+        sl_remove_head(&crx, node_rx);
 
         // reset idle timeout
         ev_timer_again(l, &c->idle_alarm);
@@ -1019,9 +1023,14 @@ void rx(struct ev_loop * const l,
         // clear the helper flags set above
         c->needs_tx = c->had_rx = false;
 
-        if (c->tx_rtry || c->tx_vneg)
+        if (c->tx_rtry || c->tx_vneg) {
             // if we sent a retry or vneg, forget the entire connection existed
             free_conn(c);
+            continue;
+        }
+
+        c_rx_ready = c;
+        maybe_api_return(q_rx_ready, 0, 0);
     }
 }
 
@@ -1069,7 +1078,7 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
 
     // terminate whatever API call is currently active
     maybe_api_return(c, 0);
-    maybe_api_return(q_accept, accept_queue, 0);
+    maybe_api_return(q_accept, 0, 0);
 }
 
 
@@ -1279,7 +1288,4 @@ void free_conn(struct q_conn * const c)
     while (!sq_empty(&c->dcid))
         use_next_dcid(c);
     free(c);
-
-    if (accept_queue == c)
-        accept_queue = 0;
 }

@@ -219,7 +219,7 @@ is_ack_only(const struct pkt_meta * const p)
 
 
 extern struct ev_loop * loop;
-extern struct q_conn * accept_queue;
+extern struct q_conn_sl aq;
 
 /// The versions of QUIC supported by this implementation
 extern const uint32_t ok_vers[];

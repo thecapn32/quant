@@ -89,7 +89,7 @@ int main(int argc
     ensure(cc, "is zero");
 
     // accept connection
-    struct q_conn * const sc = q_accept(w, 0);
+    struct q_conn * const sc = q_accept(0);
     ensure(sc, "is zero");
 
     // reserve a new stream

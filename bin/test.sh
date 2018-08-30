@@ -11,7 +11,7 @@ s=${2:-quant}
 # port to run servers on
 addr=127.0.0.1
 port=4433 # mozquic server can only run on 4433 at the moment
-path=/index.html
+path=/talks.html
 dir=/Users/lars/Sites/lars/output
 cert=/etc/letsencrypt/live/slate.eggert.org/fullchain.pem
 key=/etc/letsencrypt/live/slate.eggert.org/privkey.pem
@@ -52,7 +52,7 @@ case $c in
                 ;;
         quicly)
                 cc="external/quicly-prefix/src/quicly-build/cli \
-                        -l /tmp/quicly-c.log -s /tmp/quicly-session -v \
+                        -l /tmp/quicly-c.log -s /tmp/quicly-session -n -v \
                         -p $path $addr $port"
                 ;;
         minq)

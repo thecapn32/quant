@@ -84,11 +84,11 @@ struct ev_loop * loop = 0;
 func_ptr api_func = 0;
 void *api_conn = 0, *api_strm = 0;
 
-struct q_conn * accept_queue = 0;
+struct q_conn_sl aq = sl_head_initializer(aq);
 
 static const uint32_t nbufs = 1000; ///< Number of packet buffers to allocate.
 
-static ev_timer accept_alarm;
+static ev_timer api_alarm;
 
 
 #if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) &&  \
@@ -369,59 +369,51 @@ struct q_conn * q_bind(struct w_engine * const w, const uint16_t port)
 
 
 static void __attribute__((nonnull))
-cancel_accept(struct ev_loop * const l __attribute__((unused)),
-              ev_timer * const w __attribute__((unused)),
-              int e __attribute__((unused)))
+cancel_api_call(struct ev_loop * const l __attribute__((unused)),
+                ev_timer * const w __attribute__((unused)),
+                int e __attribute__((unused)))
 {
-    warn(DBG, "canceling q_accept()");
-    ev_timer_stop(loop, &accept_alarm);
-    accept_queue = 0;
-    maybe_api_return(q_accept, accept_queue, 0);
+    warn(DBG, "canceling API call");
+    ev_timer_stop(loop, &api_alarm);
+    maybe_api_return(q_accept, 0, 0);
+    maybe_api_return(q_rx_ready, 0, 0);
 }
 
 
-struct q_conn * q_accept(struct w_engine * const w __attribute__((unused)),
-                         const uint64_t timeout)
+struct q_conn * q_accept(const uint64_t timeout)
 {
-    warn(WRN, "waiting for conn on any serv sock (timeout %" PRIu64 " sec)",
-         timeout);
-
-    if (accept_queue && accept_queue->state == conn_estb) {
-        warn(WRN, "accepting queued %s conn %s", conn_type(accept_queue),
-             scid2str(accept_queue));
-        struct q_conn * const ret = accept_queue;
-        accept_queue = 0;
+    if (sl_first(&aq)) {
+        struct q_conn * const ret = sl_first(&aq);
+        sl_remove_head(&aq, node_aq);
+        warn(WRN, "accepting queued %s conn %s", conn_type(ret), scid2str(ret));
         return ret;
     }
 
+    warn(WRN, "waiting for conn on any serv sock (timeout %" PRIu64 " sec)",
+         timeout);
+
     if (timeout) {
-        if (ev_is_active(&accept_alarm))
-            ev_timer_stop(loop, &accept_alarm);
-        ev_timer_init(&accept_alarm, cancel_accept, timeout, 0);
-        ev_timer_start(loop, &accept_alarm);
+        if (ev_is_active(&api_alarm))
+            ev_timer_stop(loop, &api_alarm);
+        ev_timer_init(&api_alarm, cancel_api_call, timeout, 0);
+        ev_timer_start(loop, &api_alarm);
     }
 
-    accept_queue = 0;
-    loop_run(q_accept, accept_queue, 0);
+    loop_run(q_accept, 0, 0);
 
-    if (accept_queue == 0 || accept_queue->state != conn_estb) {
-        // if (accept_queue)
-        //     q_close(accept_queue);
+    if (sl_empty(&aq)) {
         warn(ERR, "conn not accepted");
         return 0;
     }
 
-    ev_timer_again(loop, &accept_queue->idle_alarm);
+    struct q_conn * const ret = sl_first(&aq);
+    sl_remove_head(&aq, node_aq);
+    ev_timer_again(loop, &ret->idle_alarm);
 
     warn(WRN, "%s conn %s accepted from clnt %s:%u%s, cipher %s",
-         conn_type(accept_queue), scid2str(accept_queue),
-         inet_ntoa(accept_queue->peer.sin_addr),
-         ntohs(accept_queue->peer.sin_port),
-         accept_queue->did_0rtt ? " after 0-RTT" : "",
-         accept_queue->pn_data.out_1rtt.aead->algo->name);
-
-    struct q_conn * const ret = accept_queue;
-    accept_queue = 0;
+         conn_type(ret), scid2str(ret), inet_ntoa(ret->peer.sin_addr),
+         ntohs(ret->peer.sin_port), ret->did_0rtt ? " after 0-RTT" : "",
+         ret->pn_data.out_1rtt.aead->algo->name);
 
     return ret;
 }
@@ -633,3 +625,25 @@ void write_to_corpus(const int dir, const void * const data, const size_t len)
     close(fd);
 }
 #endif
+
+
+struct q_conn * q_rx_ready(const uint64_t timeout)
+{
+    if (timeout) {
+        if (ev_is_active(&api_alarm))
+            ev_timer_stop(loop, &api_alarm);
+        ev_timer_init(&api_alarm, cancel_api_call, timeout, 0);
+        ev_timer_start(loop, &api_alarm);
+    }
+
+    c_rx_ready = 0;
+    loop_run(q_rx_ready, 0, 0);
+
+    if (c_rx_ready)
+        warn(WRN, "%s conn %s ready to rx", conn_type(c_rx_ready),
+             scid2str(c_rx_ready));
+    else
+        warn(WRN, "no conn ready to rx");
+
+    return c_rx_ready;
+}

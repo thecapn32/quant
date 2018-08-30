@@ -68,7 +68,7 @@ extern struct q_conn * __attribute__((nonnull))
 q_bind(struct w_engine * const w, const uint16_t port);
 
 extern struct q_conn * __attribute__((nonnull))
-q_accept(struct w_engine * const w, const uint64_t timeout);
+q_accept(const uint64_t timeout);
 
 extern void __attribute__((nonnull))
 q_write(struct q_stream * const s, struct w_iov_sq * const q, const bool fin);
@@ -111,6 +111,8 @@ extern bool __attribute__((nonnull)) q_is_str_closed(struct q_stream * const s);
 
 extern void __attribute__((nonnull))
 q_readall_str(struct q_stream * const s, struct w_iov_sq * const q);
+
+extern struct q_conn * q_rx_ready(const uint64_t timeout);
 
 #ifdef __cplusplus
 }

@@ -90,7 +90,8 @@ extern const char * const conn_state_str[];
 /// A QUIC connection.
 struct q_conn {
     splay_entry(q_conn) node_ipnp;
-    sl_entry(q_conn) next;
+    sl_entry(q_conn) node_rx; ///< For maintaining the RX queue.
+    sl_entry(q_conn) node_aq; ///< For maintaining the accept queue.
 
     sq_head(dcid_head, cid) dcid; ///< Destination connection IDs
     sq_head(scid_head, cid) scid; ///< Source connection IDs
@@ -167,6 +168,9 @@ struct q_conn {
     uint64_t tok_len;
     uint8_t * tok;
 };
+
+
+extern struct q_conn * c_rx_ready;
 
 
 static inline __attribute__((always_inline, nonnull)) struct pn_space *
