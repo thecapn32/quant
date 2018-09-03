@@ -350,8 +350,7 @@ extern void *api_conn, *api_strm;
     })
 
 
-extern void __attribute__((nonnull, always_inline))
-pm_free(struct pkt_meta * const m);
+extern void __attribute__((nonnull)) pm_free(struct pkt_meta * const m);
 
 
 #define q_free_iov(v)                                                          \
