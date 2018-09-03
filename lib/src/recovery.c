@@ -49,24 +49,11 @@
 struct ev_loop;
 
 
-uint32_t rtxable_pkts_outstanding(struct q_conn * const c)
-{
-    uint32_t cnt = 0;
-    struct pkt_meta * p;
-    struct pn_space * const pn = pn_for_epoch(c, c->tls.epoch_out);
-    splay_foreach (p, pm_nr_splay, &pn->sent_pkts)
-        if (is_rtxable(p) && !p->is_acked)
-            cnt++;
-    return cnt;
-}
-
-
 static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
 {
-    const uint32_t rtxable_outstanding = rtxable_pkts_outstanding(c);
     // don't arm the alarm if there are no packets with
     // retransmittable data in flight
-    if (rtxable_outstanding == 0) {
+    if (c->rec.in_flight == 0) {
         ev_timer_stop(loop, &c->rec.ld_alarm);
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
         warn(DBG, "no RTX-able pkts outstanding, stopping ld_alarm");

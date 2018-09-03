@@ -86,6 +86,3 @@ extern struct w_iov * __attribute__((nonnull))
 find_sent_pkt(struct q_conn * const c,
               struct pn_space * const pn,
               const uint64_t nr);
-
-extern uint32_t __attribute__((nonnull))
-rtxable_pkts_outstanding(struct q_conn * const c);
