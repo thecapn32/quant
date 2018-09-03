@@ -861,6 +861,7 @@ rx_pkts(struct w_iov_sq * const i,
         struct q_conn * c = 0;
         struct cid odcid;
         if (dec_pkt_hdr_beginning(v, is_clnt, &odcid) == false) {
+            log_pkt("RX", v, &odcid);
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
             warn(ERR, "received invalid %u-byte pkt (type 0x%02x), ignoring",
                  v->len, v->buf[0]);
@@ -888,6 +889,7 @@ rx_pkts(struct w_iov_sq * const i,
                         (void)c;
 #endif
                     else if (c && meta(v).hdr.type == F_LH_INIT) {
+                        log_pkt("RX", v, &odcid);
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
                         warn(INF,
                              "got duplicate CI for orig cid %s, new is %s, "
@@ -922,6 +924,7 @@ rx_pkts(struct w_iov_sq * const i,
                 if (cid_cmp(&meta(v).hdr.scid, act_dcid(c)) != 0) {
                     if (meta(v).hdr.type == F_LH_RTRY &&
                         cid_cmp(&odcid, act_dcid(c)) != 0) {
+                        log_pkt("RX", v, &odcid);
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
                         warn(ERR, "retry dcid mismatch %s != %s",
                              cid2str(&odcid), cid2str(act_dcid(c)));
@@ -974,15 +977,21 @@ rx_pkts(struct w_iov_sq * const i,
                 warn(INF, "caching 0-RTT pkt for unknown conn %s",
                      cid2str(&meta(v).hdr.dcid));
 #endif
-            } else
+            } else {
+                log_pkt("RX", v, &odcid);
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+                warn(INF, "ignoring unexpected 0x%02x-type pkt for conn %s",
+                     meta(v).hdr.flags, cid2str(&meta(v).hdr.dcid));
+#endif
                 q_free_iov(v);
-
-            continue;
+                continue;
+            }
         }
 
         if ((meta(v).hdr.vers && meta(v).hdr.type != F_LH_RTRY) ||
             !is_set(F_LONG_HDR, meta(v).hdr.flags))
             if (dec_pkt_hdr_remainder(v, c, i) == false) {
+                log_pkt("RX", v, &odcid);
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
                 warn(ERR, "received invalid %u-byte 0x%02x-type pkt, ignoring",
                      v->len, meta(v).hdr.flags);
