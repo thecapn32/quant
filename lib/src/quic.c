@@ -243,8 +243,6 @@ struct q_conn * q_connect(struct w_engine * const w,
 
     if (early_data) {
         ensure(early_data_stream, "early data without stream pointer");
-        // if (c->try_0rtt)
-        //     init_0rtt_prot(c);
         // queue up early data
         *early_data_stream = new_stream(c, c->next_sid, true);
         sq_concat(&(*early_data_stream)->out, early_data);
@@ -266,19 +264,6 @@ struct q_conn * q_connect(struct w_engine * const w,
         warn(WRN, "%s conn %s not connected", conn_type(c), scid2str(c));
         return 0;
     }
-
-    // if (early_data && *early_data_stream) {
-    //     if (c->did_0rtt == false ||
-    //         out_fully_acked(*early_data_stream) == false) {
-    //         warn(DBG, "%s on strm " FMT_SID,
-    //              c->did_0rtt ? "0-RTT data not fully ACK'ed yet"
-    //                          : "TX early data after 1-RTT handshake",
-    //              (*early_data_stream)->id);
-    //         do_write(*early_data_stream, early_data, fin);
-    //     } else
-    //         // hand early data back to app after 0-RTT
-    //         sq_concat(early_data, &(*early_data_stream)->out);
-    // }
 
     warn(WRN, "%s conn %s connected%s, cipher %s", conn_type(c), scid2str(c),
          c->did_0rtt ? " after 0-RTT" : "",
