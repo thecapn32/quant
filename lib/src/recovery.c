@@ -62,7 +62,7 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
     }
 
     ev_tstamp dur = 0;
-    if (c->state != conn_estb) {
+    if (c->state == conn_opng) {
         dur = is_zero(c->rec.srtt) ? kDefaultInitialRtt : c->rec.srtt;
         dur = MAX(2 * dur, kMinTLPTimeout) * (1 << c->rec.hshake_cnt);
         warn(DBG, "handshake RTX alarm in %f sec on %s conn %s", dur,
@@ -171,7 +171,7 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
     struct q_conn * const c = w->data;
 
     // see OnLossDetectionAlarm pseudo code
-    if (c->state != conn_estb) {
+    if (c->state == conn_opng) {
         c->rec.hshake_cnt++;
         warn(DBG, "handshake RTX #%u on %s conn %s", c->rec.hshake_cnt,
              conn_type(c), scid2str(c));
