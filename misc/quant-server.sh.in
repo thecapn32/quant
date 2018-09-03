@@ -11,7 +11,8 @@ export PATH="$PATH:~/bin"
 
 name=/var/www/html/log.html
 new=$(make_name $name)
-[ -f "$new" ] && new="$new-"$(md5sum $"name" | cut -f1 -f " ")
+# %N only works on Linux
+[ -f "$new" ] && new="$new-"$(date +%N)
 mv "$name" "$new"
 
 # send email if we crashed
