@@ -269,7 +269,7 @@ struct q_conn * q_connect(struct w_engine * const w,
 
     // if (early_data && *early_data_stream) {
     //     if (c->did_0rtt == false ||
-    //         is_fully_acked(*early_data_stream) == false) {
+    //         out_fully_acked(*early_data_stream) == false) {
     //         warn(DBG, "%s on strm " FMT_SID,
     //              c->did_0rtt ? "0-RTT data not fully ACK'ed yet"
     //                          : "TX early data after 1-RTT handshake",

@@ -27,6 +27,7 @@
 
 #include "pn.h"
 #include "conn.h"
+#include "stream.h"
 
 
 struct ev_loop;

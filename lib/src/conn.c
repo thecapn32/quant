@@ -390,7 +390,7 @@ tx_crypto(struct q_conn * const c, const epoch_t e)
         struct q_stream * const s = get_stream(c, crpt_strm_id(epoch));
         if (sq_empty(&s->out))
             continue;
-        if (is_fully_acked(s)) {
+        if (out_fully_acked(s)) {
             // no need to keep this crypto data around
             q_free(&s->in);
             q_free(&s->out);
@@ -432,7 +432,7 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
         if ( // this is a crypto stream and we're not doing an RTX
             (s->id < 0 && rtx == false) ||
             // is the stream fully ACKed and doesn't need control frames?
-            (is_fully_acked(s) && !stream_needs_ctrl(s)) ||
+            (out_fully_acked(s) && !stream_needs_ctrl(s)) ||
             // is this a new TX but the stream is blocked?
             (rtx == false && s->blocked) ||
             // unless for 0-RTT, is this a regular stream during conn open?

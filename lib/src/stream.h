@@ -93,7 +93,7 @@ struct q_stream {
 
 
 static inline __attribute__((always_inline, const)) bool
-is_fully_acked(const struct q_stream * const s)
+out_fully_acked(const struct q_stream * const s)
 {
     return s->out_ack_cnt == sq_len(&s->out);
 }
