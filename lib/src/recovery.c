@@ -156,12 +156,8 @@ detect_lost_pkts(struct q_conn * const c, struct pn_space * const pn)
 
             largest_lost_packet = MAX(largest_lost_packet, p->hdr.nr);
 
-            if (p->is_rtxed || !is_rtxable(p)) {
-                warn(DBG, "free already-rtxed/non-rtxable pkt " FMT_PNR_OUT,
-                     p->hdr.nr);
-                splay_remove(pm_nr_splay, &pn->sent_pkts, p);
+            if (p->is_rtx || !is_rtxable(p))
                 q_free_iov(w_iov(c->w, pm_idx(p)));
-            }
 
         } else if (is_zero(c->rec.loss_t) && !is_inf(delay_until_lost))
             c->rec.loss_t = now + delay_until_lost - time_since_sent;
@@ -346,16 +342,33 @@ void on_pkt_acked(struct q_conn * const c,
     c->rec.hshake_cnt = c->rec.tlp_cnt = c->rec.rto_cnt = 0;
     diet_insert(&pn->acked, ack, ev_now(loop));
     splay_remove(pm_nr_splay, &pn->sent_pkts, &meta(v));
+    meta(v).is_acked = true;
 
-    // if this pkt was since RTX'ed, update the record
-    struct w_iov * r = v;
-    while (meta(r).is_rtxed) {
-        warn(DBG, FMT_PNR_OUT " was RTX'ed as " FMT_PNR_OUT, meta(r).hdr.nr,
-             meta(r).rtx->hdr.nr);
-        diet_insert(&pn->acked, meta(r).rtx->hdr.nr, ev_now(loop));
-        splay_remove(pm_nr_splay, &pn->sent_pkts, meta(r).rtx);
-        r = w_iov(c->w, pm_idx(meta(r).rtx));
+    // if this ACK is for a pkt that was RTX'ed, update the record
+    struct w_iov * orig_v = v;
+    if (meta(v).is_rtx) {
+        struct pkt_meta * const r = sl_first(&meta(v).rtx);
+        ensure(sl_next(r, rtx_next) == 0, "rtx chain corrupt");
+        warn(DBG, FMT_PNR_OUT " was RTX'ed as " FMT_PNR_OUT, meta(v).hdr.nr,
+             r->hdr.nr);
+        orig_v = w_iov(c->w, pm_idx(r));
     }
+
+    struct q_stream * const s = meta(orig_v).stream;
+    if (s && meta(orig_v).is_acked == false) {
+        s->out_ack_cnt++;
+        warn(DBG, "stream " FMT_SID " ACK cnt %u, len %u %s", s->id,
+             s->out_ack_cnt, sq_len(&s->out),
+             is_fully_acked(s) ? "(fully acked)" : "");
+
+        if (is_fully_acked(s)) {
+            // a q_write may be done
+            maybe_api_return(q_write, s->c, s);
+            if (s->id >= 0 && s->c->did_0rtt)
+                maybe_api_return(q_connect, s->c, 0);
+        }
+    }
+    meta(orig_v).is_acked = true;
 
     // stop ACKing packets that were contained in the ACK frame of this packet
     if (meta(v).ack_header_pos) {
@@ -402,26 +415,8 @@ void on_pkt_acked(struct q_conn * const c,
         warn(DBG, "cwnd %" PRIu64, c->rec.cwnd);
     }
 
-    struct pkt_meta * const p = meta(v).rtx ? meta(v).rtx : &meta(v);
-    struct q_stream * const s = p->stream;
-    if (p->is_acked == false && s) {
-        p->is_acked = true;
-        s->out_ack_cnt++;
-        warn(DBG, "stream " FMT_SID " ACK cnt %u, len %u %s", s->id,
-             s->out_ack_cnt, sq_len(&s->out),
-             is_fully_acked(s) ? "(fully acked)" : "");
-
-        if (is_fully_acked(s)) {
-            // a q_write may be done
-            maybe_api_return(q_write, s->c, s);
-            if (s->id >= 0 && s->c->did_0rtt)
-                maybe_api_return(q_connect, s->c, 0);
-        }
-    }
-    meta(v).is_acked = true;
-
-    if (!is_rtxable(&meta(v)))
-        q_free_iov(v);
+    if (!is_rtxable(&meta(orig_v)))
+        q_free_iov(orig_v);
 }
 
 

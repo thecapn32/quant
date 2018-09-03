@@ -89,5 +89,7 @@ init_pn(struct pn_space * const pn, struct q_conn * const c);
 
 extern void __attribute__((nonnull)) free_pn(struct pn_space * const pn);
 
+extern void __attribute__((nonnull)) reset_pn(struct pn_space * const pn);
+
 extern void __attribute__((nonnull))
 ack_alarm(struct ev_loop * const l, ev_timer * const w, int e);

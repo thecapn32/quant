@@ -382,8 +382,8 @@ tx:
 
     v->len = i;
 
-    // alloc a new buffer to encrypt/sign into for TX
-    struct w_iov * const x = q_alloc_iov(c->w, 0, 0);
+    // alloc directly from warpcore for crypto TX - no need for metadata alloc
+    struct w_iov * const x = w_alloc_iov(c->w, 0, 0);
     x->ip = v->ip;
     x->port = v->port;
     x->flags = v->flags;

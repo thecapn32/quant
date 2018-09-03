@@ -162,6 +162,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
 
     // deliver data into stream
     const char * kind = "";
+    bool is_dup = false;
     struct q_stream * s = get_stream(c, sid);
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     if (dec_strm && s == 0) {
@@ -190,7 +191,6 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
         kind = "seq";
         track_bytes = true;
         sq_insert_tail(&s->in, v, next);
-        meta(v).stream = s;
 
         // check if a hole has been filled that lets us dequeue ooo data
         struct pkt_meta *p, *nxt;
@@ -198,7 +198,6 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
              p && p->stream_off == s->in_data; p = nxt) {
             nxt = splay_next(pm_off_splay, &s->in_ooo, p);
             s->in_data += p->stream_data_end;
-            meta(v).stream = s;
             sq_insert_tail(&s->in, w_iov(c->w, pm_idx(p)), next);
             splay_remove(pm_off_splay, &s->in_ooo, p);
         }
@@ -222,6 +221,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     // data is a complete duplicate
     if (meta(v).stream_off + l <= s->in_data) {
         kind = RED "dup" NRM;
+        is_dup = true;
         goto done;
     }
 
@@ -229,7 +229,6 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     kind = YEL "ooo" NRM;
     splay_insert(pm_off_splay, &s->in_ooo, &meta(v));
     track_bytes = true;
-    meta(v).stream = s;
 
 done:
     log_stream_or_crypto_frame(false, v, true, kind);
@@ -243,6 +242,10 @@ done:
                          "stream %" PRIu64 " off %" PRIu64
                          " > in_data_max %" PRIu64,
                          s->id, meta(v).stream_off + l - 1, s->in_data_max);
+
+    if (is_dup)
+        // this indicates to callers that the w_iov was not placed in a stream
+        meta(v).stream = 0;
 
     return meta(v).stream_data_end;
 }

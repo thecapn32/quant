@@ -31,7 +31,6 @@
 
 extern "C" {
 #include "pkt.h"
-#include "pn.h"
 #include "quic.h"
 #include "tls.h" // IWYU pragma: keep
 }

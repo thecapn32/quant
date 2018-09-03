@@ -51,6 +51,7 @@
 #endif
 
 #include "conn.h"
+#include "diet.h"
 #include "pkt.h"
 #include "pn.h"
 #include "quic.h"
@@ -124,6 +125,34 @@ int pm_off_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
 }
 
 
+void pm_free(struct pkt_meta * const m)
+{
+    if (m->pn) {
+        splay_remove(pm_nr_splay, &m->pn->sent_pkts, m);
+        diet_insert(&m->pn->acked, m->hdr.nr, ev_now(loop));
+    }
+
+    if (m->hdr.tok)
+        free(m->hdr.tok);
+
+    if (m->is_rtx)
+        return;
+
+    struct pkt_meta * rm = sl_first(&m->rtx);
+    while (rm) {
+        // warn(CRT, "free rtx iov idx %u nr %" PRIu64, pm_idx(rm), rm->hdr.nr);
+        sl_remove_head(&m->rtx, rtx_next);
+        struct pkt_meta * const next_rm = sl_next(rm, rtx_next);
+        splay_remove(pm_nr_splay, &m->pn->sent_pkts, rm);
+        diet_insert(&m->pn->acked, rm->hdr.nr, ev_now(loop));
+        w_free_iov(w_iov(rm->pn->c->w, pm_idx(rm)));
+        *rm = (struct pkt_meta){0};
+        ASAN_POISON_MEMORY_REGION(rm, sizeof(*rm));
+        rm = next_rm;
+    }
+}
+
+
 static void __attribute__((nonnull)) sq_unpoison(struct w_iov_sq * const q)
 {
     struct w_iov * v = 0;
@@ -132,15 +161,6 @@ static void __attribute__((nonnull)) sq_unpoison(struct w_iov_sq * const q)
         // warn(CRT, "q_alloc idx %u len %u", w_iov_idx(v), v->len);
     }
 }
-
-
-// static void __attribute__((nonnull)) q_alloc_cnt(struct w_engine * const w,
-//                                                  struct w_iov_sq * const q,
-//                                                  const uint32_t cnt)
-// {
-//     w_alloc_cnt(w, q, cnt, MAX_PKT_LEN - AEAD_LEN - Q_OFFSET, Q_OFFSET);
-//     sq_unpoison(q);
-// }
 
 
 void q_alloc(struct w_engine * const w,

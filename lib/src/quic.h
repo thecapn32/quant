@@ -32,7 +32,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include <ev.h>
@@ -67,6 +66,9 @@ cid_cpy(struct cid * const dst, const struct cid * const src)
 }
 
 
+sl_head(pm_sl, pkt_meta);
+
+
 struct pkt_hdr {
     uint16_t len;
     uint16_t hdr_len;
@@ -87,7 +89,10 @@ struct pkt_meta {
     // XXX need to potentially change pm_cpy() below if fields are reordered
     splay_entry(pkt_meta) nr_node;
     splay_entry(pkt_meta) off_node;
-    struct pkt_meta * rtx;      ///< Pointer to last RTX, if one happened.
+    sl_entry(pkt_meta) rtx_next;
+
+    // pm_cpy() starts copying from here:
+    struct pm_sl rtx;           ///< List of pkt_meta structs of previous TXs.
     ev_tstamp tx_t;             ///< Transmission timestamp.
     struct q_stream * stream;   ///< Stream this data was written on.
     uint64_t stream_off;        ///< Stream data offset.
@@ -96,7 +101,7 @@ struct pkt_meta {
     uint16_t stream_data_end;   ///< Offset of last byte of stream frame data.
     uint16_t ack_header_pos;    ///< Offset of ACK frame header.
     uint16_t tx_len;            ///< Length of protected packet at TX.
-    uint8_t is_rtxed : 1;       ///< Does the w_iov hold truncated data?
+    uint8_t is_rtx : 1;         ///< Does the w_iov hold truncated data?
     uint8_t is_acked : 1;       ///< Is the w_iov ACKed?
     uint8_t is_lost : 1;        ///< Have we marked this w_iov as lost?
     uint8_t : 5;
@@ -345,14 +350,15 @@ extern void *api_conn, *api_strm;
     })
 
 
+extern void __attribute__((nonnull, always_inline))
+pm_free(struct pkt_meta * const m);
+
+
 #define q_free_iov(v)                                                          \
     do {                                                                       \
         /* warn(CRT, "q_free_iov idx %u nr %" PRIu64, w_iov_idx(v),            \
-         *   meta(v).hdr.nr); */                                               \
-        if (meta(v).pn)                                                        \
-            splay_remove(pm_nr_splay, &meta(v).pn->sent_pkts, &meta(v));       \
-        if (meta(v).hdr.tok)                                                   \
-            free(meta(v).hdr.tok);                                             \
+             meta(v).hdr.nr); */                                               \
+        pm_free(&meta(v));                                                     \
         meta(v) = (struct pkt_meta){0};                                        \
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));                  \
         w_free_iov(v);                                                         \
@@ -369,7 +375,7 @@ extern void *api_conn, *api_strm;
     })
 
 
-static inline __attribute__((nonnull)) struct w_iov *
+static inline struct w_iov * __attribute__((nonnull))
 w_iov_dup(const struct w_iov * const v)
 {
     struct w_iov * const vdup = w_alloc_iov(v->w, v->len, 0);
@@ -408,6 +414,6 @@ w_iov_dup(const struct w_iov * const v)
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 extern int corpus_pkt_dir, corpus_frm_dir;
 
-extern __attribute__((nonnull)) void
+extern void __attribute__((nonnull))
 write_to_corpus(const int dir, const void * const data, const size_t len);
 #endif

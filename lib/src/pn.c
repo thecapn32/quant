@@ -81,9 +81,31 @@ void init_pn(struct pn_space * const pn, struct q_conn * const c)
 }
 
 
+void reset_pn(struct pn_space * const pn)
+{
+    diet_free(&pn->recv);
+    diet_free(&pn->acked);
+    diet_init(&pn->recv);
+    diet_init(&pn->acked);
+
+    pn->lg_sent = UINT64_MAX;
+    ev_timer_stop(loop, &pn->ack_alarm);
+}
+
+
 void free_pn(struct pn_space * const pn)
 {
     ev_timer_stop(loop, &pn->ack_alarm);
+
+    // free any remaining buffers
+    struct pkt_meta * p = splay_min(pm_nr_splay, &pn->sent_pkts);
+    while (p) {
+        struct pkt_meta * const nxt =
+            splay_next(pm_nr_splay, &pn->sent_pkts, p);
+        q_free_iov(w_iov(pn->c->w, pm_idx(p)));
+        p = nxt;
+    }
+
     diet_free(&pn->recv);
     diet_free(&pn->acked);
 }

@@ -196,8 +196,8 @@ void use_next_scid(struct q_conn * const c)
     struct q_cid_map * const cm = splay_find(cid_splay, &conns_by_cid, &which);
     splay_remove(cid_splay, &conns_by_cid, cm);
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-    if (act_scid(c))
-        warn(DBG, "new dcid=%s (was %s)", scid2str(c), cid2str(scid));
+    if (c->state != conn_clsd)
+        warn(DBG, "new scid=%s (was %s)", scid2str(c), cid2str(scid));
 #endif
     free(cm);
 }
@@ -208,7 +208,7 @@ static void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c)
     struct cid * const dcid = act_dcid(c);
     sq_remove(&c->dcid, dcid, cid, next);
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-    if (act_dcid(c))
+    if (c->state != conn_clsd)
         warn(DBG, "new dcid=%s (was %s)", dcid2str(c), cid2str(dcid));
 #endif
     free(dcid);
@@ -245,20 +245,19 @@ static void log_sent_pkts(struct q_conn * const c)
 static void __attribute__((nonnull))
 rtx_pkt(struct q_stream * const s, struct w_iov * const v)
 {
-    ensure(meta(v).is_rtxed == false, "cannot RTX an RTX");
+    ensure(meta(v).is_rtx == false, "cannot RTX an RTX");
     // on RTX, remember orig pkt meta data
     struct w_iov * const r = q_alloc_iov(s->c->w, 0, Q_OFFSET);
     pm_cpy(&meta(r), &meta(v));                  // copy pkt meta data
     memcpy(r->buf, v->buf - Q_OFFSET, Q_OFFSET); // copy pkt headers
-    meta(r).is_rtxed = true;
-    meta(r).rtx = &meta(v);
+    meta(r).is_rtx = true;
+    sl_insert_head(&meta(v).rtx, &meta(r), rtx_next);
+    sl_insert_head(&meta(r).rtx, &meta(v), rtx_next);
     adj_iov_to_data(r);
 
     // we reinsert meta(v) with its new pkt nr in on_pkt_sent()
-    struct pn_space * const pn =
-        pn_for_epoch(s->c, epoch_for_pkt_type(meta(v).hdr.type));
-    splay_remove(pm_nr_splay, &pn->sent_pkts, &meta(v));
-    splay_insert(pm_nr_splay, &pn->sent_pkts, &meta(r));
+    splay_remove(pm_nr_splay, &meta(v).pn->sent_pkts, &meta(v));
+    splay_insert(pm_nr_splay, &meta(v).pn->sent_pkts, &meta(r));
 }
 
 
@@ -329,7 +328,8 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
         w_tx(s->c->sock, &x);
         while (w_tx_pending(&x))
             w_nic_tx(s->c->w);
-        q_free(&x);
+        // x was allocated straight from warpcore, no metadata needs to be freed
+        w_free(&x);
     }
 
     log_sent_pkts(s->c);
@@ -388,7 +388,13 @@ tx_crypto(struct q_conn * const c, const epoch_t e)
 {
     for (epoch_t epoch = ep_init; epoch <= e; epoch++) {
         struct q_stream * const s = get_stream(c, crpt_strm_id(epoch));
-        if (!is_fully_acked(s))
+        if (sq_empty(&s->out))
+            continue;
+        if (is_fully_acked(s)) {
+            // no need to keep this crypto data around
+            q_free(&s->in);
+            q_free(&s->out);
+        } else
             tx_stream(s, false, 0, 0);
     }
 }
@@ -479,7 +485,8 @@ void tx_ack(struct q_conn * const c, const epoch_t e)
         w_nic_tx(c->w);
 
     log_sent_pkts(c);
-    q_free(&x);
+    // x was allocated straight from warpcore, no metadata needs to be freed
+    w_free(&x);
 
     // if this packet contains an ACK frame, stop the timer
     if (c->state == conn_estb && bit_test(meta(v).frames, FRAM_TYPE_ACK)) {
@@ -575,8 +582,12 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
     const epoch_t epoch = epoch_in(c);
     struct q_stream * const s = get_stream(c, crpt_strm_id(epoch));
     while (!sq_empty(&s->in)) {
+        // take the data out of the crypto stream
         struct w_iov * iv = sq_first(&s->in);
         sq_remove_head(&s->in, next);
+        meta(iv).stream = 0;
+
+        // and process it
         const int ret = tls_io(s, iv);
         if (ret == 0 || ret == PTLS_ERROR_STATELESS_RETRY) {
             tx_crypto(c, c->tls.epoch_out);
@@ -590,7 +601,6 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
                 }
             }
         }
-        // q_free_iov(iv);
     }
 
     // TODO think whether we can opportunistically ACK as we switch epochs
@@ -617,15 +627,14 @@ static void __attribute__((nonnull)) vneg_or_rtry_resp(struct q_conn * const c)
 
     struct q_stream * s;
     splay_foreach (s, stream, &c->streams)
-        reset_stream(s, s->id < 0);
+        reset_stream(s, s->id < 0 && (c->try_0rtt == false ||
+                                      (strm_epoch(s) != ep_0rtt &&
+                                       strm_epoch(s) != ep_data)));
 
     // reset packet number spaces
-    free_pn(&c->pn_init.pn);
-    free_pn(&c->pn_hshk.pn);
-    free_pn(&c->pn_data.pn);
-    init_pn(&c->pn_init.pn, c);
-    init_pn(&c->pn_hshk.pn, c);
-    init_pn(&c->pn_data.pn, c);
+    reset_pn(&c->pn_init.pn);
+    reset_pn(&c->pn_hshk.pn);
+    reset_pn(&c->pn_data.pn);
 
     // reset TLS state and create new CH
     init_tls(c);
@@ -720,6 +729,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         ignore_sh_pkt(v);
 
         if (meta(v).hdr.vers == 0) {
+            // this is a vneg pkt
             if (c->vers != ok_vers[0]) {
                 // we must have already reacted to a prior vneg pkt
                 warn(INF, "ignoring spurious vers neg response");
@@ -750,8 +760,6 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 
         if (meta(v).hdr.type == F_LH_RTRY) {
             // handle an incoming retry packet
-            // must use cid from retry for connection and re-init keys
-            init_prot(c);
             vneg_or_rtry_resp(c);
 
             if (c->tok)
@@ -819,10 +827,6 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 #endif
 
 done:
-    if (is_rtxable(&meta(v)) == false || meta(v).stream == 0)
-        // this packet is not rtx'able, or the stream data is duplicate
-        q_free_iov(v);
-
     return ok;
 }
 
@@ -840,6 +844,8 @@ rx_pkts(struct w_iov_sq * const i,
         struct w_iov * const v = sq_first(i);
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         sq_remove_head(i, next);
+
+        // warn(DBG, "rx idx %u", w_iov_idx(v));
 
 #if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) &&  \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
@@ -992,6 +998,10 @@ rx_pkts(struct w_iov_sq * const i,
 
         if (rx_pkt(c, v, i))
             rx_crypto(c);
+
+        if (meta(v).stream == 0)
+            // we didn't place this pkt in any stream - bye!
+            q_free_iov(v);
     }
 }
 
