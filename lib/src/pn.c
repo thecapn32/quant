@@ -27,7 +27,6 @@
 
 #include "pn.h"
 #include "conn.h"
-#include "stream.h"
 
 
 struct ev_loop;
@@ -58,7 +57,7 @@ void ack_alarm(struct ev_loop * const l __attribute__((unused)),
                int e __attribute__((unused)))
 {
     struct pn_space * const pn = w->data;
-    if (epoch_for_pn(pn) >= epoch_in(pn->c)) {
+    if (!diet_empty(&pn->recv)) {
         warn(DBG, "ACK timer fired on %s conn %s epoch %u", conn_type(pn->c),
              scid2str(pn->c), epoch_for_pn(pn));
         tx_ack(pn->c, epoch_for_pn(pn));

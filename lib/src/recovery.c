@@ -218,7 +218,7 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
 }
 
 
-static void __attribute__((nonnull))
+static inline void __attribute__((nonnull))
 track_acked_pkts(struct q_conn * const c __attribute__((unused)),
                  struct pn_space * const pn,
                  const uint64_t ack)

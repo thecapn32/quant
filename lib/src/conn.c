@@ -603,7 +603,10 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
         }
     }
 
-    // TODO think whether we can opportunistically ACK as we switch epochs
+    if (epoch_in(c) > epoch)
+        // let's fire off some ACKs for the previous epochs
+        for (epoch_t e = ep_init; e <= epoch; e++)
+            tx_ack(c, e);
 }
 
 
