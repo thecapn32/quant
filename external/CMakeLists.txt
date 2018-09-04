@@ -281,13 +281,13 @@ externalproject_add(quicker
 )
 
 
-set(TRACKER github.com/mpiraux/master-thesis)
+set(TRACKER github.com/QUIC-Tracker/quic-tracker)
 externalproject_add(quic-tracker
   DEPENDS picotls
   DOWNLOAD_COMMAND env GOPATH=${GOPATH} CGO_CFLAGS=-I${OPENSSL_ROOT_DIR}/include CGO_LDFLAGS=-L${OPENSSL_ROOT_DIR}/lib go get ${TRACKER} || true
   UPDATE_COMMAND ""
-  CONFIGURE_COMMAND sed -i "" -e "s/make check//g $<SEMICOLON> s|go build|GOPATH=${GOPATH} CGO_CFLAGS=-I${OPENSSL_ROOT_DIR}/include CGO_LDFLAGS=-L${OPENSSL_ROOT_DIR}/lib go build|g" ${GOPATH}/src/${TRACKER}/../pigotls/Makefile
-  BUILD_COMMAND cd ${GOPATH}/src/${TRACKER}/../pigotls && env OPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR} gmake
+  CONFIGURE_COMMAND sed -i "" -e "s/make check//g $<SEMICOLON> s|go build|GOPATH=${GOPATH} CGO_CFLAGS=-I${OPENSSL_ROOT_DIR}/include CGO_LDFLAGS=-L${OPENSSL_ROOT_DIR}/lib go build|g" ${GOPATH}/src/${TRACKER}/../../mpiraux/pigotls/Makefile
+  BUILD_COMMAND cd ${GOPATH}/src/${TRACKER}/../../mpiraux/pigotls && env OPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR} gmake
   INSTALL_COMMAND echo env GOPATH=${GOPATH} CGO_CFLAGS=-I${OPENSSL_ROOT_DIR}/include CGO_LDFLAGS=-L${OPENSSL_ROOT_DIR}/lib go run ${GOPATH}/src/${TRACKER}/bin/scenario/scenario_runner.go
   EXCLUDE_FROM_ALL 1
 )
