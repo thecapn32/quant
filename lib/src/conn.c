@@ -814,6 +814,12 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         ok = true;
         break;
 
+    case conn_clsd:
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+        warn(NTE, "ignoring pkt for closed %s conn", conn_type(c));
+        break;
+#endif
+
     default:
         die("TODO: state %s", conn_state_str[c->state]);
     }
@@ -889,15 +895,19 @@ rx_pkts(struct w_iov_sq * const i,
                         (void)c;
 #endif
                     else if (c && meta(v).hdr.type == F_LH_INIT) {
-                        log_pkt("RX", v, &odcid);
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+//                         log_pkt("RX", v, &odcid);
+// #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+//                         warn(INF,
+//                              "got duplicate CI for orig cid %s, new is %s, "
+//                              "ignoring",
+//                              cid2str(&meta(v).hdr.dcid), scid2str(c));
+// #endif
+//                         q_free_iov(v);
+//                         continue;
                         warn(INF,
-                             "got duplicate CI for orig cid %s, new is %s, "
-                             "ignoring",
+                             "got another CI for orig cid %s, new is %s, "
+                             "TENTATIVELY ACCEPTING",
                              cid2str(&meta(v).hdr.dcid), scid2str(c));
-#endif
-                        q_free_iov(v);
-                        continue;
                     } else if (meta(v).hdr.type == F_LH_INIT) {
                         warn(NTE,
                              "new serv conn on port %u w/cid %s from %s:%u",
