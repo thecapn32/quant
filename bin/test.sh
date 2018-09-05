@@ -86,13 +86,11 @@ case $c in
                 ;;
 
         quic-tracker)
-                tmp=$(mktemp)
-                printf "%s:%s\\t%s" $addr $port $path > "$tmp"
                 cc="sudo env GOPATH=$(pwd)/external/go \
                         CGO_CFLAGS=-I/usr/local/opt/openssl@1.1/include \
                         CGO_LDFLAGS=-L/usr/local/opt/openssl@1.1/lib \
                     go run $(pwd)/external/go/src/github.com/QUIC-Tracker/quic-tracker/bin/test_suite/scenario_runner.go \
-                        -interface lo0 -hosts $tmp -scenario http_get_on_uni_stream; rm $tmp"
+                        -interface lo0 -host $addr:$port -scenario http_get_on_uni_stream"
                 ;;
 esac
 
