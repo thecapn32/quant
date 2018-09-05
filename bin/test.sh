@@ -91,7 +91,7 @@ case $c in
                 cc="sudo env GOPATH=$(pwd)/external/go \
                         CGO_CFLAGS=-I/usr/local/opt/openssl@1.1/include \
                         CGO_LDFLAGS=-L/usr/local/opt/openssl@1.1/lib \
-                    go run $(pwd)/external/go/src/github.com/mpiraux/master-thesis/bin/scenario/scenario_runner.go \
+                    go run $(pwd)/external/go/src/github.com/QUIC-Tracker/quic-tracker/bin/test_suite/scenario_runner.go \
                         -interface lo0 -hosts $tmp -scenario http_get_on_uni_stream; rm $tmp"
                 ;;
 esac
@@ -150,8 +150,8 @@ esac
 # # if we are on MacOS X, configure the firewall to add delay and loss
 # if [ -x /usr/sbin/dnctl ]; then
 #         # create pipes to limit bandwidth and add loss
-#         sudo dnctl pipe 1 config delay 50 plr .1
-#         sudo dnctl pipe 2 config delay 50 plr .1 #bw 64Kbit/s delay 250 queue 10Kbytes #plr 0.25
+#         sudo dnctl pipe 1 config delay 350 #plr .1
+#         sudo dnctl pipe 2 config delay 350 #plr .1 #bw 64Kbit/s delay 250 queue 10Kbytes #plr 0.25
 #         sudo pfctl -f - <<EOF
 #                 dummynet out proto udp from any to $addr port $port pipe 1
 #                 dummynet out proto udp from $addr port $port to any pipe 2
