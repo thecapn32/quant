@@ -127,17 +127,17 @@ bool vers_supported(const uint32_t v)
 }
 
 
-struct zrtt_ooo_splay zrtt_ooo_by_cid = splay_initializer(&zrtt_ooo_by_cid);
+struct ooo_0rtt_splay ooo_0rtt_by_cid = splay_initializer(&ooo_0rtt_by_cid);
 
 
-int zrtt_ooo_cmp(const struct zrtt_ooo * const a,
-                 const struct zrtt_ooo * const b)
+int ooo_0rtt_cmp(const struct ooo_0rtt * const a,
+                 const struct ooo_0rtt * const b)
 {
     return cid_cmp(&a->cid, &b->cid);
 }
 
 
-SPLAY_GENERATE(zrtt_ooo_splay, zrtt_ooo, node, zrtt_ooo_cmp)
+SPLAY_GENERATE(ooo_0rtt_splay, ooo_0rtt, node, ooo_0rtt_cmp)
 
 
 static uint32_t __attribute__((nonnull))
@@ -697,13 +697,13 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             init_tp(c);
 
             // check if any reordered 0-RTT packets are cached for this CID
-            const struct zrtt_ooo which = {.cid = meta(v).hdr.dcid};
-            struct zrtt_ooo * const zo =
-                splay_find(zrtt_ooo_splay, &zrtt_ooo_by_cid, &which);
+            const struct ooo_0rtt which = {.cid = meta(v).hdr.dcid};
+            struct ooo_0rtt * const zo =
+                splay_find(ooo_0rtt_splay, &ooo_0rtt_by_cid, &which);
             if (zo) {
                 warn(INF, "have reordered 0-RTT pkt (t=%f sec) for %s conn %s",
                      ev_now(loop) - zo->t, conn_type(c), scid2str(c));
-                splay_remove(zrtt_ooo_splay, &zrtt_ooo_by_cid, zo);
+                splay_remove(ooo_0rtt_splay, &ooo_0rtt_by_cid, zo);
                 sq_insert_head(i, zo->v, next);
                 free(zo);
             }
@@ -964,12 +964,12 @@ rx_pkts(struct w_iov_sq * const i,
             // if this is a 0-RTT pkt, track it (may be reordered)
             if (is_set(F_LONG_HDR, meta(v).hdr.flags) &&
                 meta(v).hdr.type == F_LH_0RTT) {
-                struct zrtt_ooo * const zo = calloc(1, sizeof(*zo));
+                struct ooo_0rtt * const zo = calloc(1, sizeof(*zo));
                 ensure(zo, "could not calloc");
                 cid_cpy(&zo->cid, &meta(v).hdr.dcid);
                 zo->v = v;
                 zo->t = ev_now(loop);
-                splay_insert(zrtt_ooo_splay, &zrtt_ooo_by_cid, zo);
+                splay_insert(ooo_0rtt_splay, &ooo_0rtt_by_cid, zo);
                 log_pkt("RX", v, &odcid);
 #ifndef FUZZING
                 warn(INF, "caching 0-RTT pkt for unknown conn %s",

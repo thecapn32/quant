@@ -573,10 +573,10 @@ void q_cleanup(struct w_engine * const w)
     free_tls_ctx();
 
     // free 0-RTT reordering cache
-    while (!splay_empty(&zrtt_ooo_by_cid)) {
-        struct zrtt_ooo * const zo =
-            splay_min(zrtt_ooo_splay, &zrtt_ooo_by_cid);
-        splay_remove(zrtt_ooo_splay, &zrtt_ooo_by_cid, zo);
+    while (!splay_empty(&ooo_0rtt_by_cid)) {
+        struct ooo_0rtt * const zo =
+            splay_min(ooo_0rtt_splay, &ooo_0rtt_by_cid);
+        splay_remove(ooo_0rtt_splay, &ooo_0rtt_by_cid, zo);
         free(zo);
     }
 

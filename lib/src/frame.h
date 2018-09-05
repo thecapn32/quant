@@ -55,7 +55,9 @@ struct w_iov;
 #define FRAM_TYPE_STRM 0x10 // we only encode this type in the frames bitstr_t
 #define FRAM_TYPE_STRM_MAX 0x17
 #define FRAM_TYPE_CRPT 0x18
-#define NUM_FRAM_TYPES FRAM_TYPE_CRPT + 1
+#define FRAM_TYPE_NEW_TOKN 0x19
+#define FRAM_TYPE_ACK_ECN 0x1a
+#define NUM_FRAM_TYPES FRAM_TYPE_ACK_ECN + 1
 
 #define F_STREAM_FIN 0x01
 #define F_STREAM_LEN 0x02

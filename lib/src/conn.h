@@ -221,20 +221,20 @@ SPLAY_PROTOTYPE(ipnp_splay, q_conn, node_ipnp, ipnp_splay_cmp)
 SPLAY_PROTOTYPE(cid_splay, q_cid_map, node, cid_splay_cmp)
 
 
-struct zrtt_ooo {
-    splay_entry(zrtt_ooo) node;
+struct ooo_0rtt {
+    splay_entry(ooo_0rtt) node;
     struct cid cid;   ///< CID of 0-RTT pkt
     struct w_iov * v; ///< the buffer containing the 0-RTT pkt
     ev_tstamp t;      ///< Insertion time
 };
 
 
-extern splay_head(zrtt_ooo_splay, zrtt_ooo) zrtt_ooo_by_cid;
+extern splay_head(ooo_0rtt_splay, ooo_0rtt) ooo_0rtt_by_cid;
 
 extern int __attribute__((nonnull))
-zrtt_ooo_cmp(const struct zrtt_ooo * const a, const struct zrtt_ooo * const b);
+ooo_0rtt_cmp(const struct ooo_0rtt * const a, const struct ooo_0rtt * const b);
 
-SPLAY_PROTOTYPE(zrtt_ooo_splay, zrtt_ooo, node, zrtt_ooo_cmp)
+SPLAY_PROTOTYPE(ooo_0rtt_splay, ooo_0rtt, node, ooo_0rtt_cmp)
 
 
 static inline __attribute__((always_inline, nonnull)) const char *
