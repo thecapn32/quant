@@ -71,17 +71,17 @@ sl_head(pm_sl, pkt_meta);
 
 
 struct pkt_hdr {
+    uint64_t nr;
     uint16_t len;
     uint16_t hdr_len;
     uint32_t vers;
-    uint64_t nr;
     struct cid dcid;
     struct cid scid;
-    uint64_t tok_len;
     uint8_t * tok;
+    uint16_t tok_len;
     uint8_t flags; // first byte of packet
     uint8_t type;
-    uint8_t _unused[6];
+    uint8_t _unused[4];
 };
 
 

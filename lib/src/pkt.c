@@ -256,8 +256,10 @@ bool enc_pkt(struct q_stream * const s,
                 i = enc_buf(v->buf, v->len, i, &odcid.id, odcid.len);
         }
 
-        if (meta(v).hdr.type == F_LH_INIT)
-            i = enc(v->buf, v->len, i, &c->tok_len, 0, 0, "%" PRIu64);
+        if (meta(v).hdr.type == F_LH_INIT) {
+            const uint64_t tok_len = c->tok_len;
+            i = enc(v->buf, v->len, i, &tok_len, 0, 0, "%" PRIu64);
+        }
 
         if ((meta(v).hdr.type == F_LH_INIT || meta(v).hdr.type == F_LH_RTRY) &&
             c->tok_len) {
@@ -492,8 +494,10 @@ bool dec_pkt_hdr_beginning(const struct w_iov * const v,
 
         if (meta(v).hdr.type == F_LH_INIT) {
             // decode token
-            meta(v).hdr.hdr_len = dec_chk(&meta(v).hdr.tok_len, v->buf, v->len,
+            uint64_t tok_len = 0;
+            meta(v).hdr.hdr_len = dec_chk(&tok_len, v->buf, v->len,
                                           meta(v).hdr.hdr_len, 0, "%" PRIu64);
+            meta(v).hdr.tok_len = (uint16_t)tok_len;
             if (is_clnt && meta(v).hdr.tok_len)
                 return false;
         } else if (meta(v).hdr.type == F_LH_RTRY)

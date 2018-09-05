@@ -1287,7 +1287,7 @@ void make_rtry_tok(struct q_conn * const c)
     const ptls_cipher_suite_t * const cs = &CIPHER_SUITE;
     if (c->tok)
         free(c->tok);
-    c->tok_len = cs->hash->digest_size;
+    c->tok_len = (uint16_t)cs->hash->digest_size;
     c->tok = calloc(c->tok_len, sizeof(uint8_t));
     ensure(c->tok, "cannot calloc");
     ptls_calc_hash(cs->hash, c->tok, &c->peer, sizeof(c->peer));

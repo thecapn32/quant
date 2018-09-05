@@ -128,7 +128,9 @@ struct q_conn {
     uint32_t vers;         ///< QUIC version in use for this connection.
     uint32_t vers_initial; ///< QUIC version first negotiated.
 
-    uint8_t _unused2[4];
+    uint16_t tok_len;
+
+    uint8_t _unused2[2];
 
     struct pn_hshk_space pn_init, pn_hshk;
     struct pn_data_space pn_data;
@@ -166,7 +168,6 @@ struct q_conn {
 
     uint64_t ncid_seq_out;
 
-    uint64_t tok_len;
     uint8_t * tok;
 };
 
