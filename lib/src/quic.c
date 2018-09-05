@@ -27,7 +27,6 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -45,6 +44,7 @@
 #if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
 #include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <unistd.h>

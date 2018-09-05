@@ -161,10 +161,10 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     meta(v).stream_data_end = (uint16_t)l + i;
 
     // deliver data into stream
-    const char * kind = "";
     bool is_dup = false;
     struct q_stream * s = get_stream(c, sid);
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+    const char * kind = "";
     if (dec_strm && s == 0) {
         if (diet_find(&c->closed_streams, (uint64_t)sid)) {
             warn(WRN,

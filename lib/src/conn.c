@@ -818,8 +818,8 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
     case conn_clsd:
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
         warn(NTE, "ignoring pkt for closed %s conn", conn_type(c));
-        break;
 #endif
+        break;
 
     default:
         die("TODO: state %s", conn_state_str[c->state]);
@@ -1138,10 +1138,12 @@ void enter_closing(struct q_conn * const c)
     const ev_tstamp dur =
         (3 * (is_zero(c->rec.srtt) ? kDefaultInitialRtt : c->rec.srtt) +
          4 * c->rec.rttvar);
+    ev_timer_init(&c->closing_alarm, enter_closed, dur, 0);
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+    ev_timer_start(loop, &c->closing_alarm);
     warn(DBG, "closing/draining alarm in %f sec on %s conn %s", dur,
          conn_type(c), scid2str(c));
-    ev_timer_init(&c->closing_alarm, enter_closed, dur, 0);
-    ev_timer_start(loop, &c->closing_alarm);
+#endif
 
     conn_to_state(c, conn_clsg);
 }
