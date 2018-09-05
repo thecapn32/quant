@@ -3,14 +3,14 @@ ats       *         v
 f5
 minq      *         v
 mozquic
-mvfst
+mvfst     *
 ngtcp2    *         V    H    D    c    RZ   S
-ngx_quic  *         v
+ngx_quic
 pandora
 picoquic  *         V    H    D    C    RZ   S
-quant     *         V    H    D    C    RZ   S    M
+quant     *         V    H    D    c    RZ   S    M
 quicker
 quicly
 quicr     *         v
 quinn
-winquic   *         V
+winquic   *         V    H    D    C    RZ   S

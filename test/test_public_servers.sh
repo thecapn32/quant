@@ -98,7 +98,7 @@ function test_server {
 
 function check_fail {
         local log="$2"
-        perl -n -e '/assertion failed|AddressSanitizer/ && exit 1;' "$log"
+        perl -n -e '/assertion failed|AddressSanitizer|runtime error/ && exit 1;' "$log"
         if [ $? == 1 ]; then
                 fail[$1]="X"
                 echo "Test with $1 crashed:"
