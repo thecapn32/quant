@@ -96,13 +96,12 @@ struct q_conn {
     sq_head(dcid_head, cid) dcid; ///< Destination connection IDs
     sq_head(scid_head, cid) scid; ///< Source connection IDs
 
-    uint16_t holds_sock : 1; ///< Connection manages a warpcore socket.
-    uint16_t is_clnt : 1;    ///< We are the client on this connection.
-    uint16_t had_rx : 1;     ///< We had an RX event on this connection.
-    uint16_t needs_tx : 1;   ///< We have a pending TX on this connection.
-    uint16_t use_time_loss_det : 1; ///< UsingTimeLossDetection()
-    uint16_t tx_max_data : 1;       ///< Sent a MAX_DATA frame.
-    uint16_t blocked : 1;           ///< We are receive-window-blocked.
+    uint16_t holds_sock : 1;  ///< Connection manages a warpcore socket.
+    uint16_t is_clnt : 1;     ///< We are the client on this connection.
+    uint16_t had_rx : 1;      ///< We had an RX event on this connection.
+    uint16_t needs_tx : 1;    ///< We have a pending TX on this connection.
+    uint16_t tx_max_data : 1; ///< Sent a MAX_DATA frame.
+    uint16_t blocked : 1;     ///< We are receive-window-blocked.
     uint16_t stream_id_blocked : 1; ///< We are out of stream IDs.
     uint16_t tx_max_stream_id : 1;  ///< Send MAX_STREAM_ID frame.
     uint16_t try_0rtt : 1;          ///< Try 0-RTT handshake.
@@ -112,6 +111,7 @@ struct q_conn {
     uint16_t tx_ncid : 1;           ///< Send NEW_CONNECTION_ID.
     uint16_t tx_rtry : 1;           ///< We need to send a RETRY.
     uint16_t tx_vneg : 1;           ///< We need to send a vers neg response.
+    uint16_t : 1;
 
     uint16_t sport; ///< Local port (in network byte-order).
 
@@ -147,6 +147,7 @@ struct q_conn {
     struct sockaddr_in peer; ///< Address of our peer.
     char * peer_name;
 
+    // TODO we might want to maintain pointers to the crypto streams here
     splay_head(stream, q_stream) streams;
     struct diet closed_streams;
 

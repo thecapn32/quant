@@ -47,20 +47,20 @@ struct recovery {
 
     uint8_t _unused2[2];
 
-    ev_tstamp last_sent_t;   // time_of_last_sent_packet
-    ev_tstamp max_ack_del;   // max_ack_delay
-    ev_tstamp min_rtt;       // min_rtt
-    ev_tstamp latest_rtt;    // latest_rtt
-    ev_tstamp srtt;          // smoothed_rtt
-    ev_tstamp rttvar;        // rttvar
-    uint64_t reorder_thresh; // reordering_threshold
-    double reorder_fract;    // time_reordering_fraction
-    ev_tstamp loss_t;        // loss_time
+    ev_tstamp last_sent_hshk_t;    // time_of_last_sent_handshake_packet
+    ev_tstamp last_sent_rtxable_t; // time_of_last_sent_retransmittable_packet
+    ev_tstamp max_ack_del;         // max_ack_delay
+    ev_tstamp min_rtt;             // min_rtt
+    ev_tstamp latest_rtt;          // latest_rtt
+    ev_tstamp srtt;                // smoothed_rtt
+    ev_tstamp rttvar;              // rttvar
+    uint64_t reorder_thresh;       // reordering_threshold
+    ev_tstamp loss_t;              // loss_time
 
     // CC state
     uint64_t in_flight; // bytes_in_flight
     uint64_t cwnd;      // congestion_window
-    uint64_t rec_end;
+    uint64_t eor;       // end_of_recovery
     uint64_t ssthresh;
 };
 

@@ -196,7 +196,7 @@ void use_next_scid(struct q_conn * const c)
     struct q_cid_map * const cm = splay_find(cid_splay, &conns_by_cid, &which);
     splay_remove(cid_splay, &conns_by_cid, cm);
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-    if (c->state != conn_clsd)
+    if (act_scid(c))
         warn(DBG, "new scid=%s (was %s)", scid2str(c), cid2str(scid));
 #endif
     free(cm);
@@ -208,7 +208,7 @@ static void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c)
     struct cid * const dcid = act_dcid(c);
     sq_remove(&c->dcid, dcid, cid, next);
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-    if (c->state != conn_clsd)
+    if (act_dcid(c))
         warn(DBG, "new dcid=%s (was %s)", dcid2str(c), cid2str(dcid));
 #endif
     free(dcid);
@@ -394,6 +394,7 @@ tx_crypto(struct q_conn * const c, const epoch_t e)
             // no need to keep this crypto data around
             q_free(&s->in);
             q_free(&s->out);
+            s->out_ack_cnt = 0;
         } else
             tx_stream(s, false, 0, 0);
     }
@@ -894,21 +895,7 @@ rx_pkts(struct w_iov_sq * const i,
 #else
                         (void)c;
 #endif
-                    else if (c && meta(v).hdr.type == F_LH_INIT) {
-//                         log_pkt("RX", v, &odcid);
-// #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-//                         warn(INF,
-//                              "got duplicate CI for orig cid %s, new is %s, "
-//                              "ignoring",
-//                              cid2str(&meta(v).hdr.dcid), scid2str(c));
-// #endif
-//                         q_free_iov(v);
-//                         continue;
-                        warn(INF,
-                             "got another CI for orig cid %s, new is %s, "
-                             "TENTATIVELY ACCEPTING",
-                             cid2str(&meta(v).hdr.dcid), scid2str(c));
-                    } else if (meta(v).hdr.type == F_LH_INIT) {
+                    else if (c == 0 && meta(v).hdr.type == F_LH_INIT) {
                         warn(NTE,
                              "new serv conn on port %u w/cid %s from %s:%u",
                              ntohs(w_get_sport(ws)), cid2str(&meta(v).hdr.dcid),
@@ -983,19 +970,21 @@ rx_pkts(struct w_iov_sq * const i,
                 zo->v = v;
                 zo->t = ev_now(loop);
                 splay_insert(zrtt_ooo_splay, &zrtt_ooo_by_cid, zo);
+                log_pkt("RX", v, &odcid);
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
                 warn(INF, "caching 0-RTT pkt for unknown conn %s",
                      cid2str(&meta(v).hdr.dcid));
 #endif
-            } else {
-                log_pkt("RX", v, &odcid);
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-                warn(INF, "ignoring unexpected 0x%02x-type pkt for conn %s",
-                     meta(v).hdr.flags, cid2str(&meta(v).hdr.dcid));
-#endif
-                q_free_iov(v);
                 continue;
             }
+
+            log_pkt("RX", v, &odcid);
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+            warn(INF, "ignoring unexpected 0x%02x-type pkt for conn %s",
+                 meta(v).hdr.flags, cid2str(&meta(v).hdr.dcid));
+#endif
+            q_free_iov(v);
+            continue;
         }
 
         if ((meta(v).hdr.vers && meta(v).hdr.type != F_LH_RTRY) ||

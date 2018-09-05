@@ -739,6 +739,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
         }
 
         if (type >= FRAM_TYPE_STRM && type <= FRAM_TYPE_STRM_MAX) {
+            // we only encode FRAM_TYPE_STRM in the frames bitstr_t
             bit_set(meta(v).frames, FRAM_TYPE_STRM);
             if (meta(v).stream_data_start && meta(v).stream) {
                 // already had at least one stream frame in this packet

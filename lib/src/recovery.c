@@ -49,6 +49,26 @@
 struct ev_loop;
 
 
+static inline bool __attribute__((nonnull))
+in_recovery(const struct q_conn * const c, const uint64_t nr)
+{
+    return nr <= c->rec.eor;
+}
+
+
+static inline bool __attribute__((nonnull))
+hshk_pkts_outstanding(struct q_conn * const c)
+{
+    struct q_stream * const init_stream = get_stream(c, crpt_strm_id(ep_init));
+    struct q_stream * const hshk_stream = get_stream(c, crpt_strm_id(ep_hshk));
+    // struct q_stream * const zrtt_stream = get_stream(c,
+    // crpt_strm_id(ep_0rtt));
+    return out_fully_acked(init_stream) == false ||
+           out_fully_acked(hshk_stream) == false; //||
+    // out_fully_acked(zrtt_stream) == false;
+}
+
+
 static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
 {
     // don't arm the alarm if there are no packets with
@@ -56,41 +76,41 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
     if (c->rec.in_flight == 0) {
         ev_timer_stop(loop, &c->rec.ld_alarm);
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-        warn(DBG, "no RTX-able pkts outstanding, stopping ld_alarm");
+        // warn(DBG, "no RTX-able pkts outstanding, stopping ld_alarm");
 #endif
         return;
     }
 
-    ev_tstamp dur = 0;
-    if (c->state == conn_opng) {
-        dur = is_zero(c->rec.srtt) ? kDefaultInitialRtt : c->rec.srtt;
-        dur = MAX(2 * dur, kMinTLPTimeout) * (1 << c->rec.hshake_cnt);
-        warn(DBG, "handshake RTX alarm in %f sec on %s conn %s", dur,
-             conn_type(c), scid2str(c));
+    // assumption: "handshake packet" = contains CRYPTO frame
+    if (hshk_pkts_outstanding(c)) {
+        ev_tstamp to =
+            2 * (is_zero(c->rec.srtt) ? kDefaultInitialRtt : c->rec.srtt);
+        to = MAX(to + c->rec.max_ack_del, kMinTLPTimeout) *
+             (1 << c->rec.hshake_cnt);
+        c->rec.ld_alarm.repeat = ev_now(loop) - c->rec.last_sent_hshk_t + to;
+        warn(DBG, "handshake RTX alarm in %f sec on %s conn %s",
+             c->rec.ld_alarm.repeat, conn_type(c), scid2str(c));
 
     } else if (!is_zero(c->rec.loss_t)) {
-        dur = c->rec.loss_t - c->rec.last_sent_t;
-        warn(DBG, "early RTX or time alarm in %f sec on %s conn %s", dur,
-             conn_type(c), scid2str(c));
-
-        // XXX TLP is much too aggressive on server, due to artificially low
-        // initial RTT (since it's not measured during the handshake yet)
-
-        // } else if (c->rec.tlp_cnt < kMaxTLPs) {
-        //     dur = MAX(1.5 * c->rec.srtt + c->rec.max_ack_del,
-        //     kMinTLPTimeout); warn(DBG, "TLP alarm in %f sec on %s conn "
-        //     FMT_CID, dur, conn_type(c),
-        //          scid2str(c));
+        c->rec.ld_alarm.repeat = c->rec.loss_t - c->rec.last_sent_rtxable_t;
+        warn(DBG, "early RTX or time alarm in %f sec on %s conn %s",
+             c->rec.ld_alarm.repeat, conn_type(c), scid2str(c));
 
     } else {
-        dur = c->rec.srtt + 4 * c->rec.rttvar;
-        dur = MAX(dur, kMinRTOTimeout);
-        dur *= (1 << c->rec.rto_cnt);
-        warn(DBG, "RTO alarm in %f sec on %s conn %s", dur, conn_type(c),
-             scid2str(c));
+        ev_tstamp to = c->rec.srtt + (4 * c->rec.rttvar) + c->rec.max_ack_del;
+        to = MAX(to, kMinRTOTimeout);
+        c->rec.ld_alarm.repeat = to * (1 << c->rec.rto_cnt);
+        if (c->rec.tlp_cnt < kMaxTLPs) {
+            const ev_tstamp tlp_to =
+                MAX(1.5 * c->rec.srtt + c->rec.max_ack_del, kMinTLPTimeout);
+            c->rec.ld_alarm.repeat = MIN(tlp_to, to);
+            warn(DBG, "TLP alarm in %f sec on %s conn %s",
+                 c->rec.ld_alarm.repeat, conn_type(c), scid2str(c));
+        } else
+            warn(DBG, "RTO alarm in %f sec on %s conn %s",
+                 c->rec.ld_alarm.repeat, conn_type(c), scid2str(c));
     }
 
-    c->rec.ld_alarm.repeat = c->rec.last_sent_t + dur - ev_now(loop);
     ensure(c->rec.ld_alarm.repeat >= 0, "repeat %f", c->rec.ld_alarm.repeat);
     ev_timer_again(loop, &c->rec.ld_alarm);
 }
@@ -101,21 +121,18 @@ detect_lost_pkts(struct q_conn * const c, struct pn_space * const pn)
 {
     c->rec.loss_t = 0;
     ev_tstamp delay_until_lost = HUGE_VAL;
-    if (!is_inf(c->rec.reorder_fract))
-        delay_until_lost =
-            (1 + c->rec.reorder_fract) * MAX(c->rec.latest_rtt, c->rec.srtt);
-    else if (pn->lg_acked == pn->lg_sent)
-        // Early retransmit alarm.
-        delay_until_lost = 1.25 * MAX(c->rec.latest_rtt, c->rec.srtt);
+
+    if (pn->lg_acked == pn->lg_sent)
+        // Early retransmit timer.
+        delay_until_lost = 1.125 * MAX(c->rec.latest_rtt, c->rec.srtt);
 
     const ev_tstamp now = ev_now(loop);
     uint64_t largest_lost_packet = 0;
-    struct pkt_meta *p, *nxt;
 
+    struct pkt_meta *p, *nxt;
     for (p = splay_min(pm_nr_splay, &pn->sent_pkts);
          p && p->hdr.nr < pn->lg_acked; p = nxt) {
         nxt = splay_next(pm_nr_splay, &pn->sent_pkts, p);
-
         if (p->is_acked || p->is_lost)
             continue;
 
@@ -135,12 +152,11 @@ detect_lost_pkts(struct q_conn * const c, struct pn_space * const pn)
             p->is_lost = true;
 
             // OnPacketsLost:
-            if (is_rtxable(p)) {
+            if (is_ack_only(p) == false) {
                 c->rec.in_flight -= p->tx_len;
                 warn(DBG, "in_flight -%u = %" PRIu64, p->tx_len,
                      c->rec.in_flight);
             }
-
             largest_lost_packet = MAX(largest_lost_packet, p->hdr.nr);
 
             if (p->is_rtx || !is_rtxable(p))
@@ -150,10 +166,11 @@ detect_lost_pkts(struct q_conn * const c, struct pn_space * const pn)
             c->rec.loss_t = now + delay_until_lost - time_since_sent;
     }
 
+    // CongestionEvent:
     // Start a new recovery epoch if the lost packet is larger
     // than the end of the previous recovery epoch.
-    if (c->rec.rec_end < largest_lost_packet) {
-        c->rec.rec_end = pn->lg_sent;
+    if (!in_recovery(c, largest_lost_packet)) {
+        c->rec.eor = pn->lg_sent;
         c->rec.cwnd *= kLossReductionFactor;
         c->rec.cwnd = MAX(c->rec.cwnd, kMinimumWindow);
         c->rec.ssthresh = c->rec.cwnd;
@@ -169,13 +186,15 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
             int e __attribute__((unused)))
 {
     struct q_conn * const c = w->data;
+    bool did_tx = false;
 
     // see OnLossDetectionAlarm pseudo code
-    if (c->state == conn_opng) {
-        c->rec.hshake_cnt++;
-        warn(DBG, "handshake RTX #%u on %s conn %s", c->rec.hshake_cnt,
+    if (hshk_pkts_outstanding(c)) {
+        warn(DBG, "handshake RTX #%u on %s conn %s", c->rec.hshake_cnt + 1,
              conn_type(c), scid2str(c));
         tx(c, true, 0);
+        did_tx = true;
+        c->rec.hshake_cnt++;
 
     } else if (!is_zero(c->rec.loss_t)) {
         warn(DBG, "early RTX or time loss detection alarm on %s conn %s",
@@ -183,11 +202,12 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
         struct pn_space * const pn = pn_for_epoch(c, c->tls.epoch_out);
         detect_lost_pkts(c, pn);
 
-        // } else if (c->rec.tlp_cnt < kMaxTLPs) {
-        //     warn(DBG, "TLP alarm #%u on %s conn %s", c->rec.tlp_cnt,
-        //          conn_type(c), scid2str(c));
-        //     tx(c, true, 1); // XXX is this an RTX or not?
-        //     c->rec.tlp_cnt++;
+    } else if (c->rec.tlp_cnt < kMaxTLPs) {
+        warn(DBG, "TLP alarm #%u on %s conn %s", c->rec.tlp_cnt, conn_type(c),
+             scid2str(c));
+        tx(c, true, 1); // XXX is this an RTX or not?
+        did_tx = true;
+        c->rec.tlp_cnt++;
 
     } else {
         warn(DBG, "RTO alarm #%u on %s conn %s", c->rec.rto_cnt, conn_type(c),
@@ -197,11 +217,14 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
             pn->lg_sent_before_rto = pn->lg_sent;
         }
         tx(c, true, 2); // XXX is this an RTX or not?
+        did_tx = true;
         c->rec.rto_cnt++;
     }
 
     // XXX is in the pseudo code, but it's already also called in  on_pkt_sent()
-    set_ld_alarm(c);
+    if (did_tx == false)
+        // set_ld_alarm is also called in on_pkt_sent, avoid duplicate
+        set_ld_alarm(c);
 }
 
 
@@ -216,14 +239,24 @@ track_acked_pkts(struct q_conn * const c __attribute__((unused)),
 
 void on_pkt_sent(struct q_stream * const s, struct w_iov * const v)
 {
-    // sent_packets[packet_number] updated in enc_pkt()
-    const ev_tstamp now = ev_now(loop);
+    // these are updated in enc_pkt():
+    // * largest_sent_packet
+    // * sent_packets[packet_number].packet_number
+    // * sent_packets[packet_number].bytes
+    //
+    // these we maintain via the frames bitstr_t in pkt_meta:
+    // * sent_packets[packet_number].ack_only
 
-    s->c->rec.last_sent_t = meta(v).tx_t = now;
+    meta(v).tx_t = ev_now(loop);
     struct pn_space * const pn = pn_for_epoch(s->c, strm_epoch(s));
     splay_insert(pm_nr_splay, &pn->sent_pkts, &meta(v));
 
-    if (is_rtxable(&meta(v))) {
+    if (likely(s->c->state != conn_idle) && is_ack_only(&meta(v)) == false) {
+        if (bit_test(meta(v).frames, FRAM_TYPE_CRPT))
+            // is_handshake_packet
+            s->c->rec.last_sent_hshk_t = meta(v).tx_t;
+        s->c->rec.last_sent_rtxable_t = meta(v).tx_t;
+
         s->c->rec.in_flight += meta(v).tx_len; // OnPacketSentCC
         warn(DBG, "in_flight +%u = %" PRIu64, meta(v).tx_len,
              s->c->rec.in_flight);
@@ -238,7 +271,7 @@ void on_ack_rx_1(struct q_conn * const c,
                  const uint64_t ack_del)
 {
     // if the largest ACKed is newly ACKed, update the RTT
-    if (pn->lg_acked >= ack)
+    if (likely(pn->lg_acked != UINT64_MAX) && pn->lg_acked >= ack)
         return;
 
     pn->lg_acked = ack;
@@ -252,13 +285,10 @@ void on_ack_rx_1(struct q_conn * const c,
     }
     c->rec.latest_rtt = ev_now(loop) - meta(v).tx_t;
 
-    // UpdateRtt
+    // UpdateRtt follows:
 
     // min_rtt ignores ack delay
-    if (unlikely(is_zero(c->rec.min_rtt)))
-        c->rec.min_rtt = c->rec.latest_rtt;
-    else
-        c->rec.min_rtt = MIN(c->rec.min_rtt, c->rec.latest_rtt);
+    c->rec.min_rtt = MIN(c->rec.min_rtt, c->rec.latest_rtt);
 
     // adjust for ack delay if it's plausible
     if (c->rec.latest_rtt - c->rec.min_rtt > ack_del) {
@@ -272,7 +302,7 @@ void on_ack_rx_1(struct q_conn * const c,
     }
 
     // based on RFC6298
-    if (is_zero(c->rec.srtt)) {
+    if (unlikely(is_zero(c->rec.srtt))) {
         c->rec.srtt = c->rec.latest_rtt;
         c->rec.rttvar = c->rec.latest_rtt / 2;
     } else {
@@ -295,6 +325,25 @@ void on_ack_rx_2(struct q_conn * const c, struct pn_space * const pn)
 {
     detect_lost_pkts(c, pn);
     set_ld_alarm(c);
+    // TODO: ProcessECN(ack)
+}
+
+
+static void on_pkt_acked_cc(struct q_conn * const c, struct w_iov * const v)
+{
+    c->rec.in_flight -= meta(v).tx_len;
+    warn(DBG, "in_flight -%u = %" PRIu64, meta(v).tx_len, c->rec.in_flight);
+
+    if (in_recovery(c, meta(v).hdr.nr))
+        return;
+
+    if (c->rec.cwnd < c->rec.ssthresh)
+        // slow start
+        c->rec.cwnd += meta(v).tx_len;
+    else
+        // congestion avoidance
+        c->rec.cwnd += kMaxDatagramSize * meta(v).tx_len / c->rec.cwnd;
+    warn(DBG, "cwnd %" PRIu64, c->rec.cwnd);
 }
 
 
@@ -320,20 +369,38 @@ void on_pkt_acked(struct q_conn * const c,
     }
     warn(DBG, "first ACK for " FMT_PNR_OUT, ack);
 
+
+    if (is_ack_only(&meta(v)) == false)
+        on_pkt_acked_cc(c, v);
+
     // If a packet sent prior to RTO was ACKed, then the RTO was spurious.
     // Otherwise, inform congestion control.
     if (c->rec.rto_cnt > 0 && ack > pn->lg_sent_before_rto) {
-        c->rec.cwnd = kMinimumWindow; // OnRetransmissionTimeoutVerified
+        // OnRetransmissionTimeoutVerified
+        c->rec.cwnd = kMinimumWindow;
         warn(DBG, "cwnd %u", c->rec.cwnd);
+        // Declare all packets prior to packet_number lost.
+
+        for (struct pkt_meta * p = splay_min(pm_nr_splay, &pn->sent_pkts);
+             p && p->hdr.nr < ack;
+             p = splay_next(pm_nr_splay, &pn->sent_pkts, p)) {
+            warn(DBG, "pkt %" FMT_PNR_OUT " considered lost", p->hdr.nr);
+            p->is_lost = true;
+            c->rec.in_flight -= p->tx_len;
+            warn(DBG, "in_flight -%u = %" PRIu64, p->tx_len, c->rec.in_flight);
+        }
     }
+
     c->rec.hshake_cnt = c->rec.tlp_cnt = c->rec.rto_cnt = 0;
     diet_insert(&pn->acked, ack, ev_now(loop));
     splay_remove(pm_nr_splay, &pn->sent_pkts, &meta(v));
-    meta(v).is_acked = true;
+
+    // rest of function is not from pseudo code
 
     // if this ACK is for a pkt that was RTX'ed, update the record
     struct w_iov * orig_v = v;
     if (meta(v).is_rtx) {
+        meta(v).is_acked = true;
         struct pkt_meta * const r = sl_first(&meta(v).rtx);
         ensure(sl_next(r, rtx_next) == 0, "rtx chain corrupt");
         warn(DBG, FMT_PNR_OUT " was RTX'ed as " FMT_PNR_OUT, meta(v).hdr.nr,
@@ -388,19 +455,6 @@ void on_pkt_acked(struct q_conn * const c,
         warn(DBG, "pkt " FMT_PNR_OUT " did not contain an ACK frame", ack);
 #endif
 #endif
-    // OnPacketAckedCC
-    if (is_rtxable(&meta(v)) && meta(v).is_lost == false) {
-        c->rec.in_flight -= meta(v).tx_len;
-        warn(DBG, "in_flight -%u = %" PRIu64, meta(v).tx_len, c->rec.in_flight);
-    }
-
-    if (ack >= c->rec.rec_end) {
-        if (c->rec.cwnd < c->rec.ssthresh)
-            c->rec.cwnd += meta(v).tx_len;
-        else
-            c->rec.cwnd += kDefaultMss * meta(v).tx_len / c->rec.cwnd;
-        warn(DBG, "cwnd %" PRIu64, c->rec.cwnd);
-    }
 
     if (!is_rtxable(&meta(orig_v)))
         q_free_iov(orig_v);
@@ -421,18 +475,12 @@ struct w_iov * find_sent_pkt(struct q_conn * const c,
 void init_rec(struct q_conn * const c)
 {
     // we don't need to init variables to zero
+    c->rec.min_rtt = HUGE_VAL;
 
     c->rec.ld_alarm.data = c;
     ev_init(&c->rec.ld_alarm, on_ld_alarm);
 
-    if (c->use_time_loss_det) {
-        c->rec.reorder_thresh = UINT64_MAX;
-        c->rec.reorder_fract = kTimeReorderingFraction;
-    } else {
-        c->rec.reorder_thresh = kReorderingThreshold;
-        c->rec.reorder_fract = HUGE_VAL;
-    }
-
+    c->rec.reorder_thresh = kReorderingThreshold;
     c->rec.cwnd = kInitialWindow;
     c->rec.ssthresh = UINT64_MAX;
 }

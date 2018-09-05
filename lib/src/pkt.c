@@ -122,7 +122,8 @@ void log_pkt(const char * const dir,
 static uint8_t __attribute__((nonnull))
 needed_pkt_nr_len(struct pn_space * const pn, const uint64_t n)
 {
-    const uint64_t d = (n - pn->lg_acked) * 2;
+    const uint64_t d =
+        (n - (unlikely(pn->lg_acked == UINT64_MAX) ? 0 : pn->lg_acked)) * 2;
     if (d <= 0x7F)
         return 1;
     if (d <= 0x3FFF)

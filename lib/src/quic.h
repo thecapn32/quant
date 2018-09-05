@@ -33,6 +33,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/param.h>
 
 #include <ev.h>
 #include <warpcore/warpcore.h>
@@ -209,7 +210,7 @@ is_ack_only(const struct pkt_meta * const p)
     memcpy(frames, p->frames, sizeof(frames));
 
     // padding doesn't count
-    bit_clear(frames, FRAM_TYPE_PAD);
+    // YES IT DOES: bit_clear(frames, FRAM_TYPE_PAD);
 
     int first_bit_set = -1, second_bit_set = -1;
     bit_ffs(frames, NUM_FRAM_TYPES, &first_bit_set);
@@ -237,10 +238,6 @@ extern const uint8_t ok_vers_len;
 /// considers a packet lost.
 #define kReorderingThreshold 3
 
-/// Maximum reordering in time space before time based loss detection considers
-/// a packet lost. In fraction of an RTT.
-#define kTimeReorderingFraction 0.125
-
 /// Minimum time in the future a tail loss probe alarm may be set for (in sec).
 #define kMinTLPTimeout 0.01
 
@@ -253,15 +250,18 @@ extern const uint8_t ok_vers_len;
 /// The default RTT used before an RTT sample is taken (in sec).
 #define kDefaultInitialRtt 0.1
 
-/// The default max packet size used for calculating default and minimum
-/// congestion windows.
-#define kDefaultMss 1460
+/// The sender's maximum payload size. Does not include UDP or IP overhead.
+/// The max packet size is used for calculating initial and minimum congestion
+/// windows.
+#define kMaxDatagramSize 1200
 
-/// Default limit on the amount of outstanding data in bytes.
-#define kInitialWindow 10 * kDefaultMss
+/// Default limit on the initial amount of outstanding data in bytes. Taken from
+/// [RFC6928].
+#define kInitialWindow                                                         \
+    MIN(10 * kMaxDatagramSize, MAX(2 * kMaxDatagramSize, 14600))
 
-/// Default minimum congestion window.
-#define kMinimumWindow 2 * kDefaultMss
+/// Minimum congestion window in bytes.
+#define kMinimumWindow 2 * kMaxDatagramSize
 
 /// Reduction in congestion window when a new loss event is detected.
 #define kLossReductionFactor 0.5

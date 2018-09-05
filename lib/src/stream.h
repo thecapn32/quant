@@ -92,7 +92,7 @@ struct q_stream {
 #endif
 
 
-static inline __attribute__((always_inline, const)) bool
+static inline __attribute__((always_inline)) bool
 out_fully_acked(const struct q_stream * const s)
 {
     return s->out_ack_cnt == sq_len(&s->out);
@@ -106,7 +106,7 @@ crpt_strm_id(const epoch_t epoch)
 }
 
 
-static inline __attribute__((always_inline, const)) epoch_t
+static inline __attribute__((always_inline)) epoch_t
 strm_epoch(const struct q_stream * const s)
 {
     if (s->id < 0)

@@ -71,7 +71,7 @@ void init_pn(struct pn_space * const pn, struct q_conn * const c)
     diet_init(&pn->recv);
     diet_init(&pn->acked);
     splay_init(&pn->sent_pkts);
-    pn->lg_sent = UINT64_MAX;
+    pn->lg_sent = pn->lg_acked = UINT64_MAX;
     pn->c = c;
 
     // initialize ACK timeout
