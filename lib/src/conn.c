@@ -897,9 +897,9 @@ rx_pkts(struct w_iov_sq * const i,
 #endif
                     else if (c == 0 && meta(v).hdr.type == F_LH_INIT) {
                         warn(NTE,
-                             "new serv conn on port %u w/cid %s from %s:%u",
-                             ntohs(w_get_sport(ws)), cid2str(&meta(v).hdr.dcid),
-                             inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
+                             "new serv conn on port %u from %s:%u w/cid=%s",
+                             ntohs(w_get_sport(ws)), inet_ntoa(peer.sin_addr),
+                             ntohs(peer.sin_port), cid2str(&meta(v).hdr.dcid));
 
                         // validate minimum packet size
 #ifndef FUZZING
