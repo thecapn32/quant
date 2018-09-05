@@ -409,7 +409,7 @@ w_iov_dup(const struct w_iov * const v)
 #define FMT_SID BLD YEL "%" PRId64 NRM
 
 
-#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) &&  \
+#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 extern int corpus_pkt_dir, corpus_frm_dir;
 

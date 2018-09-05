@@ -46,7 +46,7 @@
 #include "tls.h"
 
 
-#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+#if !defined(NDEBUG) && !defined(FUZZING)
 static const char * pkt_type_str(const struct w_iov * const v)
 {
     if (is_set(F_LONG_HDR, v->buf[0])) {
@@ -204,7 +204,7 @@ bool enc_pkt(struct q_stream * const s,
             // this is a new connection; server picks a new random cid
             struct cid new_scid = {.len = SERV_SCID_LEN};
             arc4random_buf(new_scid.id, new_scid.len);
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
             warn(NTE, "hshk switch to scid %s for %s conn (was %s)",
                  cid2str(&new_scid), conn_type(c), scid2str(c));
 #endif
@@ -566,7 +566,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const v,
 
     memcpy(&v->buf[nr_pos], &enc_nr, nr_len);
 
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
     warn(DBG, "dec PNE over [%u..%u] w/off %u", nr_pos, nr_pos + nr_len - 1,
          off);
 #endif
@@ -589,7 +589,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const v,
             v->len = pkt_len;
             // rx() has already removed v from i, so just insert vdup at head
             sq_insert_head(i, vdup, next);
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
             warn(DBG, "split out 0x%02x-type coalesced pkt of len %u",
                  pkt_type(*vdup->buf), vdup->len);
 #endif

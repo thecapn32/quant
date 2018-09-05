@@ -41,7 +41,7 @@
 #include <sanitizer/asan_interface.h>
 #endif
 
-#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+#if !defined(NDEBUG) && !defined(FUZZING)
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -68,7 +68,7 @@ SPLAY_GENERATE(pm_off_splay, pkt_meta, off_node, pm_off_cmp)
 
 /// QUIC version supported by this implementation in order of preference.
 const uint32_t ok_vers[] = {
-#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+#if !defined(NDEBUG) && !defined(FUZZING)
     0xbabababa, // XXX reserved version to trigger negotiation
 #endif
     0x00001234, // reserved version for inclusion in vneg response
@@ -92,7 +92,7 @@ static const uint32_t nbufs = 1000; ///< Number of packet buffers to allocate.
 static ev_timer api_alarm;
 
 
-#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) &&  \
+#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 int corpus_pkt_dir, corpus_frm_dir;
 #endif
@@ -451,7 +451,7 @@ signal_cb(struct ev_loop * l,
 }
 
 
-#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+#if !defined(NDEBUG) && !defined(FUZZING)
 static int __attribute__((nonnull))
 mk_or_open_dir(const char * const path, mode_t mode)
 {
@@ -497,7 +497,7 @@ struct w_engine * q_init(const char * const ifname,
     // initialize the event loop
     loop = ev_default_loop(0);
 
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
     // libev seems to need this inside docker to handle Ctrl-C?
     static ev_signal signal_w;
     signal_w.data = w;
@@ -506,7 +506,7 @@ struct w_engine * q_init(const char * const ifname,
 #endif
 
 #if !defined(NDEBUG) && !defined(NO_FUZZER_CORPUS_COLLECTION)
-#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifdef FUZZING
     warn(CRT, "%s compiled for fuzzing - will not communicate", quant_name);
 #else
     // create the directories for exporting fuzzer corpus data
@@ -590,7 +590,7 @@ void q_cleanup(struct w_engine * const w)
     free(pm);
     w_cleanup(w);
 
-#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) &&  \
+#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
     close(corpus_pkt_dir);
     close(corpus_frm_dir);
@@ -616,7 +616,7 @@ bool q_is_str_closed(struct q_stream * const s)
 }
 
 
-#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) &&  \
+#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 void write_to_corpus(const int dir, const void * const data, const size_t len)
 {

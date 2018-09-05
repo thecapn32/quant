@@ -282,7 +282,7 @@ is_inf(const ev_tstamp t)
 #define dcid2str(c) act_dcid(c) ? cid2str(act_dcid(c)) : "0"
 
 
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
 
 #define conn_to_state(c, s)                                                    \
     do {                                                                       \
@@ -349,7 +349,7 @@ add_dcid(struct q_conn * const c, const struct cid * const id);
 extern void __attribute__((nonnull)) use_next_scid(struct q_conn * const c);
 
 
-#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifdef FUZZING
 extern void __attribute__((nonnull)) rx_pkts(struct w_iov_sq * const i,
                                              struct q_conn_sl * const crx,
                                              const struct w_sock * const ws);

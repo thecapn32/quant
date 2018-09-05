@@ -119,7 +119,7 @@ bool vers_supported(const uint32_t v)
         if (v == ok_vers[i])
             return true;
 
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
     warn(INF, "no vers in common");
 #endif
     // we're out of matching candidates
@@ -195,7 +195,7 @@ void use_next_scid(struct q_conn * const c)
     const struct q_cid_map which = {.cid = *scid};
     struct q_cid_map * const cm = splay_find(cid_splay, &conns_by_cid, &which);
     splay_remove(cid_splay, &conns_by_cid, cm);
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
     if (act_scid(c))
         warn(DBG, "new scid=%s (was %s)", scid2str(c), cid2str(scid));
 #endif
@@ -207,7 +207,7 @@ static void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c)
 {
     struct cid * const dcid = act_dcid(c);
     sq_remove(&c->dcid, dcid, cid, next);
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
     if (act_dcid(c))
         warn(DBG, "new dcid=%s (was %s)", dcid2str(c), cid2str(dcid));
 #endif
@@ -550,7 +550,7 @@ verify_prot(struct q_conn * const c, struct w_iov * const v)
             return false;
         if (memcmp(&v->buf[v->len - act_dcid_len], act_dcid(c)->srt,
                    act_dcid_len) == 0) {
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
             warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
                  hex2str(act_dcid(c)->srt, act_dcid_len));
 #endif
@@ -680,7 +680,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
                 }
             }
 
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
             warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
 #endif
 
@@ -712,7 +712,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             // this is a new connection; server picks a new random cid
             struct cid new_scid = {.len = SERV_SCID_LEN};
             arc4random_buf(new_scid.id, new_scid.len);
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
             warn(NTE, "hshk switch to scid %s for %s conn (was %s)",
                  cid2str(&new_scid), conn_type(c), scid2str(c));
 #endif
@@ -720,7 +720,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             use_next_scid(c);
 
         } else {
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
             warn(WRN, "%s conn %s clnt-requested vers 0x%08x not supported ",
                  conn_type(c), scid2str(c), c->vers);
 #endif
@@ -793,7 +793,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
     case conn_drng:
         if (is_set(F_LONG_HDR, meta(v).hdr.flags) && meta(v).hdr.vers == 0) {
             // we shouldn't get another vers-neg packet here, ignore
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
             warn(NTE, "ignoring spurious ver neg response");
 #endif
             goto done;
@@ -816,7 +816,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         break;
 
     case conn_clsd:
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
         warn(NTE, "ignoring pkt for closed %s conn", conn_type(c));
 #endif
         break;
@@ -825,7 +825,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         die("TODO: state %s", conn_state_str[c->state]);
     }
 
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
     // if packet has anything other than ACK frames, maybe arm the ACK timer
     struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
     if (c->state != conn_drng && c->state != conn_clsd &&
@@ -841,7 +841,7 @@ done:
 }
 
 
-#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifdef FUZZING
 void
 #else
 static void __attribute__((nonnull))
@@ -857,7 +857,7 @@ rx_pkts(struct w_iov_sq * const i,
 
         // warn(DBG, "rx idx %u", w_iov_idx(v));
 
-#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) &&  \
+#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
         // when called from the fuzzer, v->ip is zero
         if (v->ip)
@@ -869,7 +869,7 @@ rx_pkts(struct w_iov_sq * const i,
         struct cid odcid;
         if (dec_pkt_hdr_beginning(v, is_clnt, &odcid) == false) {
             log_pkt("RX", v, &odcid);
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
             warn(ERR, "received invalid %u-byte pkt (type 0x%02x), ignoring",
                  v->len, v->buf[0]);
 #endif
@@ -887,7 +887,7 @@ rx_pkts(struct w_iov_sq * const i,
             if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
                 if (!is_clnt) {
                     if (c && meta(v).hdr.type == F_LH_0RTT)
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
                         warn(INF,
                              "got 0-RTT pkt for orig cid %s, new is %s, "
                              "accepting",
@@ -902,7 +902,7 @@ rx_pkts(struct w_iov_sq * const i,
                              inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
 
                         // validate minimum packet size
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
                         if (v->len < MIN_INI_LEN)
                             warn(ERR, "initial %u-byte pkt too short (< %u)",
                                  v->len, MIN_INI_LEN);
@@ -922,14 +922,14 @@ rx_pkts(struct w_iov_sq * const i,
                     if (meta(v).hdr.type == F_LH_RTRY &&
                         cid_cmp(&odcid, act_dcid(c)) != 0) {
                         log_pkt("RX", v, &odcid);
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
                         warn(ERR, "retry dcid mismatch %s != %s",
                              cid2str(&odcid), cid2str(act_dcid(c)));
 #endif
                         q_free_iov(v);
                         continue;
                     }
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
                     warn(NTE, "hshk switch to dcid %s for %s conn (was %s)",
                          cid2str(&meta(v).hdr.scid), conn_type(c),
                          cid2str(act_dcid(c)));
@@ -956,7 +956,7 @@ rx_pkts(struct w_iov_sq * const i,
         }
 
         if (c == 0) {
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
             warn(INF, "cannot find conn %s for 0x%02x-type pkt",
                  cid2str(&meta(v).hdr.dcid), meta(v).hdr.flags);
 #endif
@@ -971,7 +971,7 @@ rx_pkts(struct w_iov_sq * const i,
                 zo->t = ev_now(loop);
                 splay_insert(zrtt_ooo_splay, &zrtt_ooo_by_cid, zo);
                 log_pkt("RX", v, &odcid);
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
                 warn(INF, "caching 0-RTT pkt for unknown conn %s",
                      cid2str(&meta(v).hdr.dcid));
 #endif
@@ -979,7 +979,7 @@ rx_pkts(struct w_iov_sq * const i,
             }
 
             log_pkt("RX", v, &odcid);
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
             warn(INF, "ignoring unexpected 0x%02x-type pkt for conn %s",
                  meta(v).hdr.flags, cid2str(&meta(v).hdr.dcid));
 #endif
@@ -991,7 +991,7 @@ rx_pkts(struct w_iov_sq * const i,
             !is_set(F_LONG_HDR, meta(v).hdr.flags))
             if (dec_pkt_hdr_remainder(v, c, i) == false) {
                 log_pkt("RX", v, &odcid);
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
                 warn(ERR, "received invalid %u-byte 0x%02x-type pkt, ignoring",
                      v->len, meta(v).hdr.flags);
 #endif
@@ -1073,7 +1073,7 @@ void err_close(struct q_conn * const c,
     ensure(ret >= 0, "vsnprintf() failed");
     va_end(ap);
 
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
     if (c->err_code) {
         warn(WRN, "ignoring new err 0x%04x (%s); existing err is 0x%04x (%s) ",
              code, reas, c->err_code, c->err_reason);
@@ -1139,7 +1139,7 @@ void enter_closing(struct q_conn * const c)
         (3 * (is_zero(c->rec.srtt) ? kDefaultInitialRtt : c->rec.srtt) +
          4 * c->rec.rttvar);
     ev_timer_init(&c->closing_alarm, enter_closed, dur, 0);
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
     ev_timer_start(loop, &c->closing_alarm);
     warn(DBG, "closing/draining alarm in %f sec on %s conn %s", dur,
          conn_type(c), scid2str(c));

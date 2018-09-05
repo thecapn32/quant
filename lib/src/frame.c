@@ -163,7 +163,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     // deliver data into stream
     bool is_dup = false;
     struct q_stream * s = get_stream(c, sid);
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
     const char * kind = "";
     if (dec_strm && s == 0) {
         if (diet_find(&c->closed_streams, (uint64_t)sid)) {
@@ -319,7 +319,7 @@ uint16_t dec_ack_frame(struct q_conn * const c,
             err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_ACK,
                              "ACK block len %" PRIu64, ack_block_len);
 
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
         if (ack_block_len == 0)
             if (n == num_blocks + 1)
                 warn(INF,
@@ -405,7 +405,7 @@ dec_close_frame(struct q_conn * const c,
         i = dec_chk_buf(true, type, &reas_phr, v->buf, v->len, i,
                         (uint16_t)reas_len);
 
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
     if (type == FRAM_TYPE_CONN_CLSE)
         warn(INF,
              FRAM_IN "CONNECTION_CLOSE" NRM " err=%s0x%04x " NRM
@@ -447,7 +447,7 @@ dec_max_stream_data_frame(struct q_conn * const c,
     s->blocked = false;
     c->needs_tx = true;
 
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
     warn(INF, FRAM_IN "MAX_STREAM_DATA" NRM " id=" FMT_SID " max=%" PRIu64, sid,
          s->out_data_max);
 #endif
@@ -471,13 +471,13 @@ dec_max_stream_id_frame(struct q_conn * const c,
 
     if (is_set(STRM_FL_DIR_UNI, max)) {
         c->tp_peer.max_strm_uni = max;
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
         warn(INF, FRAM_IN "MAX_STREAM_ID" NRM " max=%" PRIu64 " (unidir)",
              c->tp_peer.max_strm_uni);
 #endif
     } else {
         c->tp_peer.max_strm_bidi = max;
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
         warn(INF, FRAM_IN "MAX_STREAM_ID" NRM " max=%" PRIu64 " (bidir)",
              c->tp_peer.max_strm_bidi);
 #endif
@@ -498,7 +498,7 @@ dec_max_data_frame(struct q_conn * const c,
                                v->buf, v->len, pos + 1, 0, "%" PRIu64);
     c->blocked = false;
 
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
     warn(INF, FRAM_IN "MAX_DATA" NRM " max=%" PRIu64, c->tp_peer.max_data);
 #endif
 
@@ -524,7 +524,7 @@ dec_stream_blocked_frame(struct q_conn * const c,
     i = dec_chk(true, FRAM_TYPE_STRM_BLCK, &off, v->buf, v->len, i, 0,
                 "%" PRIu64);
 
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
     warn(INF, FRAM_IN "STREAM_BLOCKED" NRM " id=" FMT_SID " off=%" PRIu64, sid,
          off);
 #endif
@@ -548,7 +548,7 @@ dec_blocked_frame(struct q_conn * const c,
     uint16_t i = dec_chk(true, FRAM_TYPE_BLCK, &off, v->buf, v->len, pos + 1, 0,
                          "%" PRIu64);
 
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
     warn(INF, FRAM_IN "BLOCKED" NRM " off=%" PRIu64, off);
 #endif
 
@@ -570,7 +570,7 @@ dec_stream_id_blocked_frame(struct q_conn * const c,
     uint16_t i = dec_chk(true, FRAM_TYPE_SID_BLCK, &sid, v->buf, v->len,
                          pos + 1, 0, FMT_SID);
 
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
     warn(INF, FRAM_IN "STREAM_ID_BLOCKED" NRM " sid=" FMT_SID, sid);
 #endif
 
@@ -601,7 +601,7 @@ dec_stop_sending_frame(struct q_conn * const c,
     i = dec_chk(true, FRAM_TYPE_STOP_SEND, &err_code, v->buf, v->len, i,
                 sizeof(err_code), "0x%04x");
 
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
     warn(INF, FRAM_IN "STOP_SENDING" NRM " id=" FMT_SID " err=%s0x%04x" NRM,
          sid, err_code ? RED : NRM, err_code);
 #endif
@@ -619,7 +619,7 @@ dec_path_challenge_frame(struct q_conn * const c,
         dec_chk(true, FRAM_TYPE_PATH_CHLG, &c->path_chlg_in, v->buf, v->len,
                 pos + 1, sizeof(c->path_chlg_in), "0x%" PRIx64);
 
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
     warn(INF, FRAM_IN "PATH_CHALLENGE" NRM " data=%" PRIx64, c->path_chlg_in);
 #endif
 
@@ -639,7 +639,7 @@ dec_path_response_frame(struct q_conn * const c,
         dec_chk(true, FRAM_TYPE_PATH_RESP, &c->path_resp_in, v->buf, v->len,
                 pos + 1, sizeof(c->path_resp_in), "0x%" PRIx64);
 
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
     warn(INF, FRAM_IN "PATH_RESPONSE" NRM " data=%" PRIx64, c->path_resp_in);
 #endif
 
@@ -672,7 +672,7 @@ dec_new_cid_frame(struct q_conn * const c,
     i = dec_chk_buf(true, FRAM_TYPE_NEW_CID, dcid.srt, v->buf, v->len, i,
                     sizeof(dcid.srt));
 
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
     warn(INF,
          FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu64
                  " len=%u dcid=%s token=%s",
@@ -702,7 +702,7 @@ dec_rst_stream_frame(struct q_conn * const c,
     i = dec_chk(true, FRAM_TYPE_RST_STRM, &off, v->buf, v->len, i, 0,
                 "%" PRIu64);
 
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
     warn(INF,
          FRAM_IN "RST_STREAM" NRM " sid=" FMT_SID " err=%s0x%04x" NRM
                  " off=%" PRIu64,
@@ -720,7 +720,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
     uint16_t i = meta(v).hdr.hdr_len;
     uint16_t pad_start = 0;
 
-#if !defined(NDEBUG) && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION) &&  \
+#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
     // when called from the fuzzer, v->ip is zero
     if (v->ip)
@@ -732,7 +732,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
         dec_chk(true, type, &type, v->buf, v->len, i, sizeof(type), "0x%02x");
 
         if (pad_start && (type != FRAM_TYPE_PAD || i == v->len - 1)) {
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
             warn(INF, FRAM_IN "PADDING" NRM " len=%u", i - pad_start);
 #endif
             pad_start = 0;
@@ -744,7 +744,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
             if (meta(v).stream_data_start && meta(v).stream) {
                 // already had at least one stream frame in this packet
                 // with non-duplicate data, so generate (another) copy
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
                 warn(DBG, "addtl stream frame at pos %u, copy", i);
 #endif
                 struct w_iov * const vdup = w_iov_dup(v);
@@ -780,7 +780,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
                 break;
 
             case FRAM_TYPE_PING:
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
                 warn(INF, FRAM_IN "PING" NRM);
 #endif
                 // PING frames need to be ACK'ed

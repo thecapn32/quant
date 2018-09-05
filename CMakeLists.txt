@@ -218,12 +218,17 @@ if(FUZZER)
   check_c_compiler_flag(-fsanitize=fuzzer HAVE_FUZZER)
   cmake_reset_check_state()
   if(HAVE_FUZZER)
-    add_definitions(-DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+    add_definitions(-DFUZZING)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=fuzzer,address,undefined")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=fuzzer,address,undefined")
   else()
     message(FATAL_ERROR "No fuzzer available")
   endif()
+endif()
+
+if(NOT CMAKE_BUILD_TYPE MATCHES Release AND HAVE_PROFILER)
+  set(CMAKE_C_STANDARD_LIBRARIES "-lprofiler -ltcmalloc")
+  set(CMAKE_CXX_STANDARD_LIBRARIES ${CMAKE_C_STANDARD_LIBRARIES})
 endif()
 
 # flags for "Release" builds

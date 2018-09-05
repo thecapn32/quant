@@ -77,7 +77,7 @@ struct q_stream {
 };
 
 
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#ifndef FUZZING
 #define strm_to_state(strm, s)                                                 \
     do {                                                                       \
         if ((strm)->id >= 0) {                                                 \
