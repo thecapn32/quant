@@ -218,7 +218,7 @@ bool enc_pkt(struct q_stream * const s,
             meta(v).hdr.type = F_LH_0RTT;
             meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
         } else
-            meta(v).hdr.flags = F_SH;
+            meta(v).hdr.type = meta(v).hdr.flags = F_SH;
         break;
     case ep_hshk:
         meta(v).hdr.type = F_LH_HSHK;
@@ -226,7 +226,7 @@ bool enc_pkt(struct q_stream * const s,
         break;
     case ep_data:
         if (pn == &c->pn_data.pn)
-            meta(v).hdr.flags = F_SH;
+            meta(v).hdr.type = meta(v).hdr.flags = F_SH;
         else {
             meta(v).hdr.type = F_LH_HSHK;
             meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
