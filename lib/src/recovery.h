@@ -62,6 +62,10 @@ struct recovery {
     uint64_t cwnd;      // congestion_window
     uint64_t eor;       // end_of_recovery
     uint64_t ssthresh;
+
+    uint64_t ect0_cnt;
+    uint64_t ect1_cnt;
+    uint64_t ce_cnt;
 };
 
 

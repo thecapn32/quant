@@ -28,6 +28,7 @@
 #include <arpa/inet.h>
 #include <bitstring.h>
 #include <netinet/in.h>
+#include <netinet/ip.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -413,6 +414,7 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
             tx_crypto(c, c->tls.epoch_out);
             c->needs_tx = false;
             if (c->tls.epoch_out == ep_init)
+                // we did not progress to the 0-RTT epoch
                 return;
         }
         break;
@@ -837,6 +839,19 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 #endif
 
 done:
+    // update ECN info
+    switch (v->flags & IPTOS_ECN_MASK) {
+    case IPTOS_ECN_ECT1:
+        c->rec.ect1_cnt++;
+        break;
+    case IPTOS_ECN_ECT0:
+        c->rec.ect0_cnt++;
+        break;
+    case IPTOS_ECN_CE:
+        c->rec.ce_cnt++;
+        break;
+    }
+
     return ok;
 }
 

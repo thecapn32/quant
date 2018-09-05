@@ -278,18 +278,31 @@ uint16_t dec_ack_frame(struct q_conn * const c,
                                          struct pn_space * const pn),
                        const bool parse_only)
 {
+    // we need to decode the type byte, to check for ACK_ECN
+    uint8_t t = 0;
+    uint16_t i = dec_chk(true, t, &t, v->buf, v->len, pos, sizeof(t), "0x%02x");
+
     uint64_t lg_ack = 0;
-    uint16_t i = dec_chk(parse_only == false, FRAM_TYPE_ACK, &lg_ack, v->buf,
-                         v->len, pos + 1, 0, FMT_PNR_OUT);
+    i = dec_chk(!parse_only, t, &lg_ack, v->buf, v->len, i, 0, FMT_PNR_OUT);
 
     uint64_t ack_delay_raw = 0;
-    i = dec_chk(parse_only == false, FRAM_TYPE_ACK, &ack_delay_raw, v->buf,
-                v->len, i, 0, "%" PRIu64);
+    i = dec_chk(!parse_only, t, &ack_delay_raw, v->buf, v->len, i, 0,
+                "%" PRIu64);
+
+    uint64_t ect0_cnt = 0, ect1_cnt = 0, ce_cnt = 0;
+    if (t == FRAM_TYPE_ACK_ECN) {
+        // decode ECN
+        i = dec_chk(!parse_only, t, &ect0_cnt, v->buf, v->len, i, 0,
+                    "%" PRIu64);
+        i = dec_chk(!parse_only, t, &ect1_cnt, v->buf, v->len, i, 0,
+                    "%" PRIu64);
+        i = dec_chk(!parse_only, t, &ce_cnt, v->buf, v->len, i, 0, "%" PRIu64);
+    }
 
     // TODO: figure out a better way to handle huge ACK delays
     if (unlikely(ack_delay_raw > UINT32_MAX))
-        err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_ACK,
-                         "ACK delay raw %" PRIu64, ack_delay_raw);
+        err_close_return(c, ERR_FRAME_ENC, t, "ACK delay raw %" PRIu64,
+                         ack_delay_raw);
 
     // handshake pkts always use an ACK delay exponent of 3
     const uint8_t ade =
@@ -301,8 +314,7 @@ uint16_t dec_ack_frame(struct q_conn * const c,
     struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
 
     uint64_t num_blocks = 0;
-    i = dec_chk(parse_only == false, FRAM_TYPE_ACK, &num_blocks, v->buf, v->len,
-                i, 0, "%" PRIu64);
+    i = dec_chk(!parse_only, t, &num_blocks, v->buf, v->len, i, 0, "%" PRIu64);
 
     uint64_t lg_ack_in_block = lg_ack;
     if (before_ack)
@@ -311,42 +323,67 @@ uint16_t dec_ack_frame(struct q_conn * const c,
     for (uint64_t n = num_blocks + 1; n > 0; n--) {
         uint64_t gap = 0;
         uint64_t ack_block_len = 0;
-        i = dec_chk(parse_only == false, FRAM_TYPE_ACK, &ack_block_len, v->buf,
-                    v->len, i, 0, "%" PRIu64);
+        i = dec_chk(!parse_only, t, &ack_block_len, v->buf, v->len, i, 0,
+                    "%" PRIu64);
 
         // TODO: figure out a better way to handle huge ACK blocks
         if (unlikely(ack_block_len > UINT16_MAX))
-            err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_ACK,
-                             "ACK block len %" PRIu64, ack_block_len);
+            err_close_return(c, ERR_FRAME_ENC, t, "ACK block len %" PRIu64,
+                             ack_block_len);
 
 #ifndef FUZZING
-        if (ack_block_len == 0)
-            if (n == num_blocks + 1)
-                warn(INF,
-                     FRAM_IN "ACK" NRM " lg=" FMT_PNR_OUT " delay=%" PRIu64
-                             " (%" PRIu64 " usec) cnt=%" PRIu64
-                             " block=%" PRIu64 " [" FMT_PNR_OUT "]",
-                     lg_ack, ack_delay_raw, ack_delay, num_blocks,
-                     ack_block_len, lg_ack);
-            else
+        if (ack_block_len == 0) {
+            if (n == num_blocks + 1) {
+                if (t == FRAM_TYPE_ACK_ECN)
+                    warn(INF,
+                         FRAM_IN
+                         "ACK_ECN" NRM " lg=" FMT_PNR_OUT " delay=%" PRIu64
+                         " (%" PRIu64 " usec) ect0=%" PRIu64 " ect1=%" PRIu64
+                         " ce=%" PRIu64 " cnt=%" PRIu64 " block=%" PRIu64
+                         " [" FMT_PNR_OUT "]",
+                         lg_ack, ack_delay_raw, ack_delay, ect0_cnt, ect1_cnt,
+                         ce_cnt, num_blocks, ack_block_len, lg_ack);
+                else
+                    warn(INF,
+                         FRAM_IN "ACK" NRM " lg=" FMT_PNR_OUT " delay=%" PRIu64
+                                 " (%" PRIu64 " usec) cnt=%" PRIu64
+                                 " block=%" PRIu64 " [" FMT_PNR_OUT "]",
+                         lg_ack, ack_delay_raw, ack_delay, num_blocks,
+                         ack_block_len, lg_ack);
+            } else
                 warn(INF,
                      FRAM_IN "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64
                              " [" FMT_PNR_OUT "]",
                      gap, ack_block_len, lg_ack_in_block);
-        else if (n == num_blocks + 1)
-            warn(INF,
-                 FRAM_IN "ACK" NRM " lg=" FMT_PNR_OUT " delay=%" PRIu64
-                         " (%" PRIu64 " usec) cnt=%" PRIu64 " block=%" PRIu64
-                         " [" FMT_PNR_OUT ".." FMT_PNR_OUT "]",
-                 lg_ack, ack_delay_raw, ack_delay, num_blocks, ack_block_len,
-                 lg_ack_in_block - ack_block_len,
-                 shorten_ack_nr(lg_ack_in_block, ack_block_len));
-        else
-            warn(INF,
-                 FRAM_IN "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64
-                         " [" FMT_PNR_OUT ".." FMT_PNR_OUT "]",
-                 gap, ack_block_len, lg_ack_in_block - ack_block_len,
-                 shorten_ack_nr(lg_ack_in_block, ack_block_len));
+        } else {
+            if (n == num_blocks + 1) {
+                if (t == FRAM_TYPE_ACK_ECN)
+                    warn(INF,
+                         FRAM_IN "ACK_ECN" NRM " lg=" FMT_PNR_OUT
+                                 " delay=%" PRIu64 " (%" PRIu64
+                                 " usec) cnt=%" PRIu64 " block=%" PRIu64
+                                 " [" FMT_PNR_OUT ".." FMT_PNR_OUT "]",
+                         lg_ack, ack_delay_raw, ack_delay, num_blocks,
+                         ack_block_len, lg_ack_in_block - ack_block_len,
+                         shorten_ack_nr(lg_ack_in_block, ack_block_len));
+                else
+                    warn(INF,
+                         FRAM_IN "ACK" NRM " lg=" FMT_PNR_OUT " delay=%" PRIu64
+                                 " (%" PRIu64 " usec) ect0=%" PRIu64
+                                 " ect1=%" PRIu64 " ce=%" PRIu64 " cnt=%" PRIu64
+                                 " block=%" PRIu64 " [" FMT_PNR_OUT
+                                 ".." FMT_PNR_OUT "]",
+                         lg_ack, ack_delay_raw, ack_delay, ect0_cnt, ect1_cnt,
+                         ce_cnt, num_blocks, ack_block_len,
+                         lg_ack_in_block - ack_block_len,
+                         shorten_ack_nr(lg_ack_in_block, ack_block_len));
+            } else
+                warn(INF,
+                     FRAM_IN "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64
+                             " [" FMT_PNR_OUT ".." FMT_PNR_OUT "]",
+                     gap, ack_block_len, lg_ack_in_block - ack_block_len,
+                     shorten_ack_nr(lg_ack_in_block, ack_block_len));
+        }
 #endif
 
         uint64_t ack = lg_ack_in_block;
@@ -359,12 +396,10 @@ uint16_t dec_ack_frame(struct q_conn * const c,
         }
 
         if (n > 1) {
-            i = dec_chk(parse_only == false, FRAM_TYPE_ACK, &gap, v->buf,
-                        v->len, i, 0, "%" PRIu64);
+            i = dec_chk(!parse_only, t, &gap, v->buf, v->len, i, 0, "%" PRIu64);
             // warn(ERR, "%" PRIu64 " %" PRIu64, ack, gap);
             if (unlikely(ack <= gap))
-                err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_ACK,
-                                 "ACK gap %" PRIu64, gap);
+                err_close_return(c, ERR_FRAME_ENC, t, "ACK gap %" PRIu64, gap);
             lg_ack_in_block = ack - gap - 1;
         }
     }
@@ -761,6 +796,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
         } else {
             switch (type) {
             case FRAM_TYPE_ACK:
+            case FRAM_TYPE_ACK_ECN:
                 i = dec_ack_frame(c, v, i, &on_ack_rx_1, &on_pkt_acked,
                                   on_ack_rx_2, false);
                 break;
@@ -874,7 +910,8 @@ uint16_t enc_ack_frame(struct q_conn * const c,
                        struct w_iov * const v,
                        const uint16_t pos)
 {
-    const uint8_t type = FRAM_TYPE_ACK;
+    const bool enc_ecn = c->rec.ect0_cnt || c->rec.ect1_cnt || c->rec.ce_cnt;
+    const uint8_t type = enc_ecn ? FRAM_TYPE_ACK_ECN : FRAM_TYPE_ACK;
     bit_set(meta(v).frames, FRAM_TYPE_ACK);
     meta(v).ack_header_pos = pos;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
@@ -893,6 +930,13 @@ uint16_t enc_ack_frame(struct q_conn * const c,
         (uint64_t)((ev_now(loop) - diet_timestamp(b)) * 1000000) / (1 << ade);
     i = enc(v->buf, v->len, i, &ack_delay, 0, 0, "%" PRIu64);
 
+    if (enc_ecn) {
+        // encode ECN
+        i = enc(v->buf, v->len, i, &c->rec.ect0_cnt, 0, 0, "%" PRIu64);
+        i = enc(v->buf, v->len, i, &c->rec.ect1_cnt, 0, 0, "%" PRIu64);
+        i = enc(v->buf, v->len, i, &c->rec.ce_cnt, 0, 0, "%" PRIu64);
+    }
+
     const uint64_t block_cnt = diet_cnt(&pn->recv) - 1;
     i = enc(v->buf, v->len, i, &block_cnt, 0, 0, "%" PRIu64);
 
@@ -905,32 +949,58 @@ uint16_t enc_ack_frame(struct q_conn * const c,
         }
         const uint64_t ack_block = b->hi - b->lo;
 
-        if (ack_block)
+        if (ack_block) {
             if (prev_lo)
                 warn(INF,
                      FRAM_OUT "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64
                               " [" FMT_PNR_IN ".." FMT_PNR_IN "]",
                      gap, ack_block, b->lo, shorten_ack_nr(b->hi, ack_block));
-            else
+            else {
+                if (enc_ecn)
+                    warn(INF,
+                         FRAM_OUT
+                         "ACK_ECN" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64
+                         " (%" PRIu64 " usec) ect0=%" PRIu64 " ect1=%" PRIu64
+                         " ce=%" PRIu64 " cnt=%" PRIu64 " block=%" PRIu64
+                         " [" FMT_PNR_IN ".." FMT_PNR_IN "]",
+                         lg_recv, ack_delay, ack_delay * (1 << ade),
+                         c->rec.ect0_cnt, c->rec.ect1_cnt, c->rec.ce_cnt,
+                         block_cnt, ack_block, b->lo,
+                         shorten_ack_nr(b->hi, ack_block));
+                else
+                    warn(INF,
+                         FRAM_OUT "ACK" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64
+                                  " (%" PRIu64 " usec) cnt=%" PRIu64
+                                  " block=%" PRIu64 " [" FMT_PNR_IN
+                                  ".." FMT_PNR_IN "]",
+                         lg_recv, ack_delay, ack_delay * (1 << ade), block_cnt,
+                         ack_block, b->lo, shorten_ack_nr(b->hi, ack_block));
+            }
+        } else {
+            if (prev_lo)
                 warn(INF,
-                     FRAM_OUT "ACK" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64
-                              " (%" PRIu64 " usec) cnt=%" PRIu64
-                              " block=%" PRIu64 " [" FMT_PNR_IN ".." FMT_PNR_IN
-                              "]",
-                     lg_recv, ack_delay, ack_delay * (1 << ade), block_cnt,
-                     ack_block, b->lo, shorten_ack_nr(b->hi, ack_block));
-        else if (prev_lo)
-            warn(INF,
-                 FRAM_OUT "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64
-                          " [" FMT_PNR_IN "]",
-                 gap, ack_block, b->hi);
-        else
-            warn(INF,
-                 FRAM_OUT "ACK" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64
-                          " (%" PRIu64 " usec) cnt=%" PRIu64 " block=%" PRIu64,
-                 lg_recv, ack_delay, ack_delay * (1 << ade), block_cnt,
-                 ack_block);
-
+                     FRAM_OUT "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64
+                              " [" FMT_PNR_IN "]",
+                     gap, ack_block, b->hi);
+            else {
+                if (enc_ecn)
+                    warn(INF,
+                         FRAM_OUT
+                         "ACK_ECN" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64
+                         " (%" PRIu64 " usec) ect0=%" PRIu64 " ect1=%" PRIu64
+                         " ce=%" PRIu64 " cnt=%" PRIu64 " block=%" PRIu64,
+                         lg_recv, ack_delay, ack_delay * (1 << ade),
+                         c->rec.ect0_cnt, c->rec.ect1_cnt, c->rec.ce_cnt,
+                         block_cnt, ack_block);
+                else
+                    warn(INF,
+                         FRAM_OUT "ACK" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64
+                                  " (%" PRIu64 " usec) cnt=%" PRIu64
+                                  " block=%" PRIu64 " [" FMT_PNR_IN "]",
+                         lg_recv, ack_delay, ack_delay * (1 << ade), block_cnt,
+                         ack_block, lg_recv);
+            }
+        }
         i = enc(v->buf, v->len, i, &ack_block, 0, 0, "%" PRIu64);
         prev_lo = b->lo;
     }
