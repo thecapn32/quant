@@ -61,11 +61,8 @@ hshk_pkts_outstanding(struct q_conn * const c)
 {
     struct q_stream * const init_stream = get_stream(c, crpt_strm_id(ep_init));
     struct q_stream * const hshk_stream = get_stream(c, crpt_strm_id(ep_hshk));
-    // struct q_stream * const zrtt_stream = get_stream(c,
-    // crpt_strm_id(ep_0rtt));
     return out_fully_acked(init_stream) == false ||
            out_fully_acked(hshk_stream) == false; //||
-    // out_fully_acked(zrtt_stream) == false;
 }
 
 
