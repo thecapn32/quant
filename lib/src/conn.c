@@ -471,7 +471,7 @@ void tx_ack(struct q_conn * const c, const epoch_t e)
     struct q_stream * const s = get_stream(c, crpt_strm_id(e));
     struct pn_space * const pn = pn_for_epoch(c, e);
 
-    if (!needs_ack(pn))
+    if (!needs_ack(pn) && c->tx_vneg == false && c->tx_rtry == false)
         return;
 
     struct w_iov * const v = q_alloc_iov(c->w, 0, Q_OFFSET);
@@ -597,6 +597,8 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
                 if (c->is_clnt)
                     maybe_api_return(q_connect, c, 0);
                 else {
+                    // TODO: find a better way to send NEW_TOKEN
+                    make_rtry_tok(c);
                     sl_insert_head(&aq, c, node_aq);
                     maybe_api_return(q_accept, 0, 0);
                 }
@@ -766,8 +768,10 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             // handle an incoming retry packet
             vneg_or_rtry_resp(c);
 
-            if (c->tok)
+            if (c->tok_len) {
                 free(c->tok);
+                c->tok_len = 0;
+            }
             c->tok_len = meta(v).hdr.tok_len;
             c->tok = calloc(c->tok_len, sizeof(uint8_t));
             ensure(c->tok, "could not calloc");
@@ -828,8 +832,9 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 #ifndef FUZZING
     // if packet has anything other than ACK frames, maybe arm the ACK timer
     struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
-    if (c->state != conn_drng && c->state != conn_clsd &&
-        !is_ack_only(&meta(v)) && !ev_is_active(&pn->ack_alarm)) {
+    if (c->state != conn_drng && c->state != conn_clsd && !c->tx_rtry &&
+        !c->tx_vneg && !is_ack_only(&meta(v)) &&
+        !ev_is_active(&pn->ack_alarm)) {
         warn(DBG, "non-ACK frame received, starting epoch %u ACK timer",
              epoch_for_pkt_type(meta(v).hdr.type));
         ev_timer_again(loop, &pn->ack_alarm);
@@ -1314,7 +1319,7 @@ void free_conn(struct q_conn * const c)
     free(c->peer_name);
     if (c->err_reason)
         free(c->err_reason);
-    if (c->tok)
+    if (c->tok_len)
         free(c->tok);
 
     // remove connection from global lists

@@ -177,3 +177,8 @@ extern uint16_t __attribute__((nonnull))
 enc_new_cid_frame(struct q_conn * const c,
                   const struct w_iov * const v,
                   const uint16_t pos);
+
+extern uint16_t __attribute__((nonnull))
+enc_new_token_frame(struct q_conn * const c,
+                    const struct w_iov * const v,
+                    const uint16_t pos);

@@ -132,7 +132,7 @@ void pm_free(struct pkt_meta * const m)
         diet_insert(&m->pn->acked, m->hdr.nr, ev_now(loop));
     }
 
-    if (m->hdr.tok)
+    if (m->hdr.tok_len)
         free(m->hdr.tok);
 
     if (m->is_rtx)

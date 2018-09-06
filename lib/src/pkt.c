@@ -256,18 +256,19 @@ bool enc_pkt(struct q_stream * const s,
                 i = enc_buf(v->buf, v->len, i, &odcid.id, odcid.len);
         }
 
+        const uint64_t tok_len =
+            c->state == conn_idle || c->state == conn_opng ? c->tok_len : 0;
         if (meta(v).hdr.type == F_LH_INIT) {
-            const uint64_t tok_len = c->tok_len;
             i = enc(v->buf, v->len, i, &tok_len, 0, 0, "%" PRIu64);
         }
 
         if ((meta(v).hdr.type == F_LH_INIT || meta(v).hdr.type == F_LH_RTRY) &&
-            c->tok_len) {
-            meta(v).hdr.tok_len = c->tok_len;
-            meta(v).hdr.tok = calloc(c->tok_len, sizeof(uint8_t));
+            tok_len) {
+            meta(v).hdr.tok_len = (uint16_t)tok_len;
+            meta(v).hdr.tok = calloc(tok_len, sizeof(uint8_t));
             ensure(meta(v).hdr.tok, "could not calloc");
-            memcpy(meta(v).hdr.tok, c->tok, c->tok_len);
-            i = enc_buf(v->buf, v->len, i, c->tok, (uint16_t)c->tok_len);
+            memcpy(meta(v).hdr.tok, c->tok, tok_len);
+            i = enc_buf(v->buf, v->len, i, c->tok, (uint16_t)tok_len);
         }
 
         if (meta(v).hdr.type != F_LH_RTRY) {
@@ -305,6 +306,12 @@ bool enc_pkt(struct q_stream * const s,
     }
 
     if (epoch == ep_data) {
+        if (!c->is_clnt && c->tok_len) {
+            i = enc_new_token_frame(c, v, i);
+            free(c->tok);
+            c->tok_len = 0;
+        }
+
         if (c->tx_path_resp) {
             i = enc_path_response_frame(c, v, i);
             c->tx_path_resp = false;
@@ -499,6 +506,7 @@ bool dec_pkt_hdr_beginning(const struct w_iov * const v,
                                           meta(v).hdr.hdr_len, 0, "%" PRIu64);
             meta(v).hdr.tok_len = (uint16_t)tok_len;
             if (is_clnt && meta(v).hdr.tok_len)
+                // server initial pkts must have no tokens
                 return false;
         } else if (meta(v).hdr.type == F_LH_RTRY)
             meta(v).hdr.tok_len = v->len - meta(v).hdr.hdr_len;

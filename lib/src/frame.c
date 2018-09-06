@@ -710,7 +710,7 @@ dec_new_cid_frame(struct q_conn * const c,
 #ifndef FUZZING
     warn(INF,
          FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu64
-                 " len=%u dcid=%s token=%s",
+                 " len=%u dcid=%s tok=%s",
          seq, dcid.len, cid2str(&dcid), hex2str(dcid.srt, sizeof(dcid.srt)));
 #endif
 
@@ -742,6 +742,32 @@ dec_rst_stream_frame(struct q_conn * const c,
          FRAM_IN "RST_STREAM" NRM " sid=" FMT_SID " err=%s0x%04x" NRM
                  " off=%" PRIu64,
          sid, err ? RED : NRM, err, off);
+#endif
+
+    // TODO: actually do something with this
+
+    return i;
+}
+
+
+static uint16_t __attribute__((nonnull))
+dec_new_token_frame(struct q_conn * const c,
+                    const struct w_iov * const v,
+                    const uint16_t pos)
+{
+    uint64_t tok_len = 0;
+    uint16_t i = dec_chk(true, FRAM_TYPE_NEW_TOKN, &tok_len, v->buf, v->len,
+                         pos + 1, 0, "%" PRIu64);
+
+    // TODO: actually do something with the token
+    uint8_t tok[4096];
+    ensure(tok_len < sizeof(tok), "not enough space for tok");
+    i = dec_chk_buf(true, FRAM_TYPE_NEW_TOKN, tok, v->buf, v->len, i,
+                    (uint16_t)tok_len);
+
+#ifndef FUZZING
+    warn(INF, FRAM_IN "NEW_TOKEN" NRM " len=%" PRIu64 " tok=%s", tok_len,
+         hex2str(tok, tok_len));
 #endif
 
     // TODO: actually do something with this
@@ -866,6 +892,10 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
 
             case FRAM_TYPE_CRPT:
                 i = dec_stream_or_crypto_frame(c, v, i, false);
+                break;
+
+            case FRAM_TYPE_NEW_TOKN:
+                i = dec_new_token_frame(c, v, i);
                 break;
 
             default:
@@ -1264,11 +1294,31 @@ uint16_t enc_new_cid_frame(struct q_conn * const c,
 
     warn(INF,
          FRAM_OUT "NEW_CONNECTION_ID" NRM " seq=%" PRIx64
-                  " len=%u cid=%s token=%s",
+                  " len=%u cid=%s tok=%s",
          c->ncid_seq_out, ncid.len, cid2str(&ncid),
          hex2str(ncid.srt, sizeof(ncid.srt)));
 
     c->tx_ncid = false;
+
+    return i;
+}
+
+
+uint16_t enc_new_token_frame(struct q_conn * const c,
+                             const struct w_iov * const v,
+                             const uint16_t pos)
+{
+    bit_set(meta(v).frames, FRAM_TYPE_NEW_TOKN);
+
+    const uint8_t type = FRAM_TYPE_NEW_TOKN;
+    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
+
+    const uint64_t tok_len = c->tok_len;
+    i = enc(v->buf, v->len, i, &tok_len, 0, 0, "%" PRIu64);
+    i = enc_buf(v->buf, v->len, i, c->tok, c->tok_len);
+
+    warn(INF, FRAM_OUT "NEW_TOKEN" NRM " len=%u tok=%s", c->tok_len,
+         hex2str(c->tok, c->tok_len));
 
     return i;
 }
