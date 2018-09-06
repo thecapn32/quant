@@ -12,6 +12,10 @@ else()
   set(LIBRARY_SUFFIX ${CMAKE_STATIC_LIBRARY_SUFFIX})
 endif()
 
+find_package(Git)
+if(NOT GIT_FOUND)
+  message(FATAL_ERROR "git is required for building")
+endif()
 
 if(NOT WARP_LIB OR NOT WARP_INCLUDE)
   # fix for https://github.com/NTAP/quant/issues/7
@@ -163,44 +167,47 @@ externalproject_add(ngtcp2
 )
 
 
-# Use mozquic for testing against
-externalproject_add(nspr
-  UPDATE_COMMAND ""
-  SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/mozquic-prefix/src/nspr
-  CONFIGURE_COMMAND ""
-  HG_REPOSITORY https://hg.mozilla.org/projects/nspr
-  BUILD_COMMAND ""
-  INSTALL_COMMAND ""
-  EXCLUDE_FROM_ALL 1
-)
+find_package(Hg)
+if(HG_FOUND)
+  # Use mozquic for testing against
+  externalproject_add(nspr
+    UPDATE_COMMAND ""
+    SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/mozquic-prefix/src/nspr
+    CONFIGURE_COMMAND ""
+    HG_REPOSITORY https://hg.mozilla.org/projects/nspr
+    BUILD_COMMAND ""
+    INSTALL_COMMAND ""
+    EXCLUDE_FROM_ALL 1
+  )
 
-externalproject_add(nss
-  DEPENDS nspr
-  UPDATE_COMMAND ""
-  SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/mozquic-prefix/src/nss
-  GIT_REPOSITORY https://github.com/nss-dev/nss.git
-  GIT_SHALLOW 1
-  # GIT_TAG origin/NSS_3_36_BRANCH
-  CONFIGURE_COMMAND ""
-  BUILD_COMMAND make nss_build_all USE_64=1
-  BUILD_IN_SOURCE 1
-  INSTALL_COMMAND ""
-  EXCLUDE_FROM_ALL 1
-)
+  externalproject_add(nss
+    DEPENDS nspr
+    UPDATE_COMMAND ""
+    SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/mozquic-prefix/src/nss
+    GIT_REPOSITORY https://github.com/nss-dev/nss.git
+    GIT_SHALLOW 1
+    # GIT_TAG origin/NSS_3_36_BRANCH
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND make nss_build_all USE_64=1
+    BUILD_IN_SOURCE 1
+    INSTALL_COMMAND ""
+    EXCLUDE_FROM_ALL 1
+  )
 
-externalproject_add(mozquic
-  DEPENDS nss
-  UPDATE_COMMAND ""
-  GIT_REPOSITORY https://github.com/mcmanus/mozquic.git
-  # GIT_TAG draft-11
-  GIT_SHALLOW 1
-  PATCH_COMMAND sed -i "" -e "s/-Werror//g $<SEMICOLON> s|include/nspr|include|g" Makefile
-  CONFIGURE_COMMAND ""
-  BUILD_IN_SOURCE 1
-  BUILD_COMMAND make -j8
-  INSTALL_COMMAND ""
-  EXCLUDE_FROM_ALL 1
-)
+  externalproject_add(mozquic
+    DEPENDS nss
+    UPDATE_COMMAND ""
+    GIT_REPOSITORY https://github.com/mcmanus/mozquic.git
+    # GIT_TAG draft-11
+    GIT_SHALLOW 1
+    PATCH_COMMAND sed -i "" -e "s/-Werror//g $<SEMICOLON> s|include/nspr|include|g" Makefile
+    CONFIGURE_COMMAND ""
+    BUILD_IN_SOURCE 1
+    BUILD_COMMAND make -j8
+    INSTALL_COMMAND ""
+    EXCLUDE_FROM_ALL 1
+  )
+endif()
 
 
 # Use picoquic for testing against
