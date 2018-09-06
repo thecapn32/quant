@@ -471,9 +471,7 @@ void tx_ack(struct q_conn * const c, const epoch_t e)
     struct q_stream * const s = get_stream(c, crpt_strm_id(e));
     struct pn_space * const pn = pn_for_epoch(c, e);
 
-    // warn(ERR, "ACK check %d %u", s->id, diet_cnt(&pn->recv));
-
-    if (diet_empty(&pn->recv))
+    if (!needs_ack(pn))
         return;
 
     struct w_iov * const v = q_alloc_iov(c->w, 0, Q_OFFSET);
@@ -492,7 +490,7 @@ void tx_ack(struct q_conn * const c, const epoch_t e)
     w_free(&x);
 
     // if this packet contains an ACK frame, stop the timer
-    if (c->state == conn_estb && bit_test(meta(v).frames, FRAM_TYPE_ACK)) {
+    if (bit_test(meta(v).frames, FRAM_TYPE_ACK)) {
         warn(DBG, "ACK sent, stopping epoch %u ACK timer",
              epoch_for_pkt_type(meta(v).hdr.type));
         ev_timer_stop(loop, &pn->ack_alarm);
