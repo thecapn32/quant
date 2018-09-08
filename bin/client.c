@@ -142,7 +142,6 @@ get(struct w_engine * const w,
         freeaddrinfo(peer);
         return 0;
     }
-    ensure(peer->ai_next == 0, "multiple addresses not supported");
 
     // add to stream list
     struct stream_entry * se = calloc(1, sizeof(*se));
