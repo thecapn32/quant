@@ -1193,11 +1193,10 @@ uint16_t enc_stream_blocked_frame(struct q_stream * const s,
     const uint8_t type = FRAM_TYPE_STRM_BLCK;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
     i = enc(v->buf, v->len, i, &s->id, 0, 0, FMT_SID);
-    const uint64_t off = s->out_data + v->len - Q_OFFSET;
-    i = enc(v->buf, v->len, i, &off, 0, 0, "%" PRIu64);
+    i = enc(v->buf, v->len, i, &s->out_data, 0, 0, "%" PRIu64);
 
     warn(INF, FRAM_OUT "STREAM_BLOCKED" NRM " id=" FMT_SID " off=%" PRIu64,
-         s->id, off);
+         s->id, s->out_data);
 
     return i;
 }

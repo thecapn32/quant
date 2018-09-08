@@ -78,6 +78,10 @@ new_stream(struct q_conn * const c, const int64_t id, const bool active)
         s->in_data_max = c->tp_local.max_strm_data_bidi_remote;
         s->out_data_max = c->tp_peer.max_strm_data_bidi_local;
 
+        // if limit is less than an MTU, we are already blocked
+        if (s->out_data_max && s->out_data_max < w_mtu(s->c->w))
+            s->blocked = true;
+
         if (active) {
             if (c->next_sid == 0)
                 c->next_sid = c->is_clnt ? 4 : 1;

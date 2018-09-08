@@ -271,13 +271,8 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
     uint32_t encoded = 0;
     struct w_iov * v = from;
     sq_foreach (v, &s->out, next) { // TODO: use sq_foreach_from
-        if (meta(v).is_acked) {
-            // warn(DBG,
-            //      "skipping ACKed pkt " FMT_PNR_OUT " on strm " FMT_SID
-            //      " during %s",
-            //      meta(v).hdr.nr, s->id, rtx ? "RTX" : "TX");
+        if (meta(v).is_acked)
             continue;
-        }
 
         if (!rtx && meta(v).tx_len != 0) {
             warn(DBG,

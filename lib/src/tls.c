@@ -462,8 +462,12 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             // apply this parameter to all current non-crypto streams
             struct q_stream * s;
             splay_foreach (s, stream, &c->streams)
-                if (s->id >= 0)
+                if (s->id >= 0) {
                     s->out_data_max = c->tp_peer.max_strm_data_bidi_local;
+                    // if  limit is less than an MTU, we are already blocked
+                    if (s->out_data_max && s->out_data_max < w_mtu(s->c->w))
+                        s->blocked = true;
+                }
             break;
         }
 
