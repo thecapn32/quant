@@ -16,7 +16,7 @@ new=$(make_name $name)
 mv "$name" "$new"
 
 # send email if we crashed
-if grep -E -i -q 'assertion failed|AddressSanitizer|runtime error' "$new"; then
+if grep -E -i -q 'assertion failed|AddressSanitizer|runtime error|ACK_ECN' "$new"; then
         mail -s "$new" lars@netapp.com -A "$new" < /dev/null
 fi
 
