@@ -293,7 +293,7 @@ bool enc_pkt(struct q_stream * const s,
     meta(v).hdr.hdr_len = i;
     log_pkt("TX", v, meta(v).hdr.type == F_LH_RTRY ? &odcid : 0);
 
-    if (meta(v).hdr.type != F_LH_RTRY && !splay_empty(&pn->recv)) {
+    if (meta(v).hdr.type != F_LH_RTRY && !diet_empty(&pn->recv)) {
         i = enc_ack_frame(c, pn, v, i);
     } else
         meta(v).ack_header_pos = 0;
