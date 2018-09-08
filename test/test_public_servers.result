@@ -4,8 +4,8 @@ f5
 minq      *         v
 mozquic
 mvfst     *
-ngtcp2    *         V    H    D    c    RZ   S
-ngx_quic
+ngtcp2    *         V    H    D    C    RZ   S
+ngx_quic  *         V
 pandora
 picoquic  *         V    H    D    C    RZ   S
 quant     *         V    H    D    C    RZ   S    M

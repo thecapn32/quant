@@ -29,21 +29,22 @@
 
 
 declare -A servers=(
-        [ats]=quic.ogre.com
-        [f5]=208.85.208.226
-        [minq]=minq.dev.mozaws.net
-        [mozquic]=mozquic.ducksong.com
-        [mvfst]=fb.mvfst.net
-        [ngtcp2]=nghttp2.org
-        [ngx_quic]=quic.tech
-        [pandora]=pandora.cm.in.tum.de
-        [picoquic]=test.privateoctopus.com
-        [quant]=quant.eggert.org
-        [quicker]=quicker.edm.uhasselt.be
-        [quicly]=kazuhooku.com
-        [quicr]=ralith.com
-        [quinn]=xavamedia.nl
-        [winquic]=msquic.westus.cloudapp.azure.com
+        #[tag]=name:port:retry-ports
+        [ats]=quic.ogre.com:4433:4434
+        [f5]=208.85.208.226:4433:4434
+        [minq]=minq.dev.mozaws.net:4433:4434
+        [mozquic]=mozquic.ducksong.com:4433:4434
+        [mvfst]=fb.mvfst.net:4433:4434
+        [ngtcp2]=nghttp2.org:4433:4434
+        [ngx_quic]=cloudflare-quic.com:443:4434
+        [pandora]=pandora.cm.in.tum.de:4433:4434
+        [picoquic]=test.privateoctopus.com:4433:4434
+        [quant]=quant.eggert.org:4433:4434
+        [quicker]=quicker.edm.uhasselt.be:4433:4434
+        [quicly]=kazuhooku.com:4433:4434
+        [quicr]=ralith.com:4433:4434
+        [quinn]=xavamedia.nl:4433:4434
+        [winquic]=msquic.westus.cloudapp.azure.com:4433:4434
 )
 
 results=(live fail vneg hshk data clse zrtt rtry mig)
@@ -78,17 +79,20 @@ function test_server {
         local sed_pattern='s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]//g'
         local log_base="/tmp/$script.$1.$pid"
 
+        IFS=':' read -ra info <<< "${servers[$1]}"
+        # 0=name, 1=port, 2=retry-port
+
         # initial 1rtt run
-        bin/client $opts "https://${servers[$1]}:4433/index.html" 2>&1 | \
+        bin/client $opts "https://${info[0]}:${info[1]}/index.html" 2>&1 | \
                 $sed -r "$sed_pattern" > "$log_base.1rtt.log"
 
         # consecutive 0rtt run
-        bin/client $opts "https://${servers[$1]}:4433/index.html" 2>&1 | \
+        bin/client $opts "https://${info[0]}:${info[1]}/index.html" 2>&1 | \
                 $sed -r "$sed_pattern" > "$log_base.0rtt.log"
         rm -f "$cache"
 
         # rtry run
-        bin/client $opts "https://${servers[$1]}:4434/index.html" 2>&1 | \
+        bin/client $opts "https://${info[0]}:${info[2]}/index.html" 2>&1 | \
                 $sed -r "$sed_pattern" > "$log_base.rtry.log"
         rm -f "$cache"
 
@@ -146,7 +150,7 @@ function analyze {
         if [ $ret == 2 ]; then
                 clse[$1]=C
         elif [ $ret == 1 ]; then
-                clse[$1]=c
+                clse[$1]=C #c
         fi
 
         perl -n -e '/dec_new_cid_frame.*NEW_CONNECTION_ID/ and $n=1;
