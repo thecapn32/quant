@@ -444,94 +444,74 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
         switch (tp) {
         case TP_INITIAL_MAX_STREAM_DATA_UNI: {
-            dec_tp(&c->tp_peer.max_strm_data_uni, sizeof(uint32_t));
+            dec_tp(&c->tp_out.max_strm_data_uni, sizeof(uint32_t));
             warn(INF, "\tinitial_max_stream_data_uni = %u",
-                 c->tp_peer.max_strm_data_uni);
+                 c->tp_out.max_strm_data_uni);
             // apply this parameter to all current non-crypto streams
             struct q_stream * s;
             splay_foreach (s, stream, &c->streams)
                 if (s->id >= 0)
-                    s->out_data_max = c->tp_peer.max_strm_data_uni;
+                    s->out_data_max = c->tp_out.max_strm_data_uni;
             break;
         }
 
-        case TP_INITIAL_MAX_STREAM_DATA_BIDI_LOCAL: {
-            dec_tp(&c->tp_peer.max_strm_data_bidi_local, sizeof(uint32_t));
+        case TP_INITIAL_MAX_STREAM_DATA_BIDI_LOCAL:
+            dec_tp(&c->tp_out.max_strm_data_bidi_remote, sizeof(uint32_t));
             warn(INF, "\tinitial_max_stream_data_bidi_local = %u",
-                 c->tp_peer.max_strm_data_bidi_local);
-            // apply this parameter to all current non-crypto streams
-            struct q_stream * s;
-            splay_foreach (s, stream, &c->streams)
-                if (s->id >= 0) {
-                    s->out_data_max = c->tp_peer.max_strm_data_bidi_local;
-                    // if  limit is less than an MTU, we are already blocked
-                    if (s->out_data_max && s->out_data_max < w_mtu(s->c->w))
-                        s->blocked = true;
-                }
+                 c->tp_out.max_strm_data_bidi_remote);
             break;
-        }
 
-        case TP_INITIAL_MAX_STREAM_DATA_BIDI_REMOTE: {
-            dec_tp(&c->tp_peer.max_strm_data_bidi_remote, sizeof(uint32_t));
+        case TP_INITIAL_MAX_STREAM_DATA_BIDI_REMOTE:
+            // this is RX'ed as _remote, but applies to streams we open, so:
+            dec_tp(&c->tp_out.max_strm_data_bidi_local, sizeof(uint32_t));
             warn(INF, "\tinitial_max_stream_data_bidi_remote = %u",
-                 c->tp_peer.max_strm_data_bidi_remote);
-            // apply this parameter to all current non-crypto streams
-            struct q_stream * s;
-            splay_foreach (s, stream, &c->streams)
-                if (s->id >= 0)
-                    s->out_data_max = c->tp_peer.max_strm_data_bidi_remote;
+                 c->tp_out.max_strm_data_bidi_local);
             break;
-        }
 
         case TP_INITIAL_MAX_DATA:
-            dec_tp(&c->tp_peer.max_data, sizeof(uint32_t));
-            warn(INF, "\tinitial_max_data = %u", c->tp_peer.max_data);
+            dec_tp(&c->tp_out.max_data, sizeof(uint32_t));
+            warn(INF, "\tinitial_max_data = %u", c->tp_out.max_data);
             break;
 
         case TP_INITIAL_MAX_BIDI_STREAMS:
-            dec_tp(&c->tp_peer.max_strm_bidi, sizeof(uint16_t));
-            c->tp_peer.max_strm_bidi <<= 2;
-            c->tp_peer.max_strm_bidi |= c->is_clnt ? 0 : STRM_FL_INI_SRV;
-            warn(INF, "\tinitial_max_stream_id_bidi = %u",
-                 c->tp_peer.max_strm_bidi);
+            dec_tp(&c->tp_out.max_bidi_streams, sizeof(uint16_t));
+            warn(INF, "\tinitial_max_bidi_streams = %u",
+                 c->tp_out.max_bidi_streams);
             break;
 
         case TP_INITIAL_MAX_UNI_STREAMS:
-            dec_tp(&c->tp_peer.max_strm_uni, sizeof(uint16_t));
-            c->tp_peer.max_strm_uni <<= 2;
-            c->tp_peer.max_strm_uni |=
-                STRM_FL_DIR_UNI | (c->is_clnt ? 0 : STRM_FL_INI_SRV);
-            warn(INF, "\tinitial_max_stream_id_uni = %u",
-                 c->tp_peer.max_strm_uni);
+            dec_tp(&c->tp_out.max_uni_streams, sizeof(uint16_t));
+            warn(INF, "\tinitial_max_uni_streams = %u",
+                 c->tp_out.max_uni_streams);
             break;
 
         case TP_IDLE_TIMEOUT:
-            dec_tp(&c->tp_peer.idle_to, sizeof(uint16_t));
-            warn(INF, "\tidle_timeout = %u", c->tp_peer.idle_to);
-            if (c->tp_peer.idle_to > 600)
-                warn(ERR, "idle timeout %u > 600", c->tp_peer.idle_to);
+            dec_tp(&c->tp_out.idle_to, sizeof(uint16_t));
+            warn(INF, "\tidle_timeout = %u", c->tp_out.idle_to);
+            if (c->tp_out.idle_to > 600)
+                warn(ERR, "idle timeout %u > 600", c->tp_out.idle_to);
             break;
 
         case TP_MAX_PACKET_SIZE:
-            dec_tp(&c->tp_peer.max_pkt, sizeof(uint16_t));
-            warn(INF, "\tmax_packet_size = %u", c->tp_peer.max_pkt);
-            if (c->tp_peer.max_pkt < 1200 || c->tp_peer.max_pkt > 65527)
-                warn(ERR, "tp_peer.max_pkt %u invalid", c->tp_peer.max_pkt);
+            dec_tp(&c->tp_out.max_pkt, sizeof(uint16_t));
+            warn(INF, "\tmax_packet_size = %u", c->tp_out.max_pkt);
+            if (c->tp_out.max_pkt < 1200 || c->tp_out.max_pkt > 65527)
+                warn(ERR, "tp_out.max_pkt %u invalid", c->tp_out.max_pkt);
             break;
 
         case TP_ACK_DELAY_EXPONENT:
-            dec_tp(&c->tp_peer.ack_del_exp, sizeof(uint8_t));
-            warn(INF, "\tack_delay_exponent = %u", c->tp_peer.ack_del_exp);
-            if (c->tp_peer.ack_del_exp > 20)
-                warn(ERR, "tp_peer.ack_del_exp %u invalid",
-                     c->tp_peer.ack_del_exp);
+            dec_tp(&c->tp_out.ack_del_exp, sizeof(uint8_t));
+            warn(INF, "\tack_delay_exponent = %u", c->tp_out.ack_del_exp);
+            if (c->tp_out.ack_del_exp > 20)
+                warn(ERR, "tp_out.ack_del_exp %u invalid",
+                     c->tp_out.ack_del_exp);
             break;
 
         case TP_DISABLE_MIGRATION: {
             uint16_t dummy;
             dec_tp(&dummy, sizeof(dummy));
             warn(INF, "\tdisable_migration = true");
-            c->tp_peer.disable_migration = true;
+            c->tp_out.disable_migration = true;
             break;
         }
 
@@ -552,6 +532,11 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
     }
 
     ensure(i == len, "out of parameters");
+
+    // apply these parameter to all current non-crypto streams
+    struct q_stream * s;
+    splay_foreach (s, stream, &c->streams)
+        apply_stream_limits(s);
 
     return 0;
 }
@@ -591,17 +576,15 @@ void init_tp(struct q_conn * const c)
     const uint16_t enc_len_pos = i;
     i += sizeof(uint16_t);
 
-    // convert the stream ID number to a count
-    const uint16_t max_strm_bidi = (uint16_t)c->tp_local.max_strm_bidi >> 2;
-    enc_tp(c, TP_INITIAL_MAX_BIDI_STREAMS, max_strm_bidi, sizeof(uint16_t));
-
-    enc_tp(c, TP_IDLE_TIMEOUT, c->tp_local.idle_to, sizeof(uint16_t));
+    enc_tp(c, TP_INITIAL_MAX_BIDI_STREAMS, (uint64_t)c->tp_in.max_bidi_streams,
+           sizeof(uint16_t));
+    enc_tp(c, TP_IDLE_TIMEOUT, c->tp_in.idle_to, sizeof(uint16_t));
     enc_tp(c, TP_INITIAL_MAX_STREAM_DATA_BIDI_REMOTE,
-           c->tp_local.max_strm_data_bidi_remote, sizeof(uint32_t));
+           c->tp_in.max_strm_data_bidi_remote, sizeof(uint32_t));
     enc_tp(c, TP_INITIAL_MAX_STREAM_DATA_BIDI_LOCAL,
-           c->tp_local.max_strm_data_bidi_local, sizeof(uint32_t));
-    enc_tp(c, TP_INITIAL_MAX_DATA, c->tp_local.max_data, sizeof(uint32_t));
-    enc_tp(c, TP_ACK_DELAY_EXPONENT, c->tp_local.ack_del_exp, sizeof(uint8_t));
+           c->tp_in.max_strm_data_bidi_local, sizeof(uint32_t));
+    enc_tp(c, TP_INITIAL_MAX_DATA, c->tp_in.max_data, sizeof(uint32_t));
+    enc_tp(c, TP_ACK_DELAY_EXPONENT, c->tp_in.ack_del_exp, sizeof(uint8_t));
     enc_tp(c, TP_MAX_PACKET_SIZE, w_mtu(c->w), sizeof(uint16_t));
 
     if (!c->is_clnt) { // TODO: change in -13
@@ -755,7 +738,7 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
         free(a);
     }
 
-    memcpy(&t->tp, &c->tp_peer, sizeof(t->tp));
+    memcpy(&t->tp, &c->tp_out, sizeof(t->tp));
     t->vers = c->vers;
 
     t->ticket_len = src.len;
@@ -842,7 +825,7 @@ void init_tls(struct q_conn * const c)
     if (t) {
         hshk_prop->client.session_ticket =
             ptls_iovec_init(t->ticket, t->ticket_len);
-        memcpy(&c->tp_peer, &t->tp, sizeof(t->tp));
+        memcpy(&c->tp_out, &t->tp, sizeof(t->tp));
         c->vers_initial = c->vers = t->vers;
         c->try_0rtt = 1;
     }

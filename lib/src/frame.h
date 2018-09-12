@@ -69,12 +69,6 @@ struct w_iov;
 #endif
 
 
-#define max_strm_id(s)                                                         \
-    (is_set(STRM_FL_INI_SRV, (s)->id) != (s)->c->is_clnt == false              \
-         ? (s)->c->tp_local.max_strm_bidi                                      \
-         : (s)->c->tp_peer.max_strm_bidi)
-
-
 #ifdef NDEBUG
 #define log_stream_or_crypto_frame(rtx, v, in, kind)                           \
     do {                                                                       \

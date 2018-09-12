@@ -46,8 +46,9 @@ splay_head(pm_nr_splay, pkt_meta);
 
 
 struct pn_space {
-    struct diet recv;  ///< Received packet numbers still needing to be ACKed.
-    struct diet acked; ///< Sent packet numbers already ACKed.
+    struct diet recv; ///< Received packet numbers still needing to be ACKed.
+    struct diet recv_all; ///< All received packet numbers.
+    struct diet acked;    ///< Sent packet numbers already ACKed.
 
     /// Sent-but-unACKed packets. The @p buf and @p len fields of the w_iov
     /// structs are relative to any stream or crypto data.

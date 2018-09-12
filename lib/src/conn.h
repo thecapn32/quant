@@ -53,8 +53,8 @@ struct transport_params {
     uint64_t max_strm_data_bidi_local;
     uint64_t max_strm_data_bidi_remote;
     uint64_t max_data;
-    int64_t max_strm_uni;
-    int64_t max_strm_bidi;
+    int64_t max_uni_streams;  // this is count, not a max ID
+    int64_t max_bidi_streams; // this is count, not a max ID
     uint16_t max_pkt;
     uint16_t idle_to;
     uint8_t ack_del_exp;
@@ -137,8 +137,8 @@ struct q_conn {
 
     int64_t next_sid; ///< Next stream ID to use on q_rsv_stream().
 
-    struct transport_params tp_peer;
-    struct transport_params tp_local;
+    struct transport_params tp_in;  ///< Transport parameters for RX.
+    struct transport_params tp_out; ///< Transport parameters for TX.
 
     uint64_t in_data;
     uint64_t out_data;

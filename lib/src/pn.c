@@ -69,6 +69,7 @@ void ack_alarm(struct ev_loop * const l __attribute__((unused)),
 void init_pn(struct pn_space * const pn, struct q_conn * const c)
 {
     diet_init(&pn->recv);
+    diet_init(&pn->recv_all);
     diet_init(&pn->acked);
     splay_init(&pn->sent_pkts);
     pn->lg_sent = pn->lg_acked = UINT64_MAX;
@@ -84,8 +85,10 @@ void init_pn(struct pn_space * const pn, struct q_conn * const c)
 void reset_pn(struct pn_space * const pn)
 {
     diet_free(&pn->recv);
+    diet_free(&pn->recv_all);
     diet_free(&pn->acked);
     diet_init(&pn->recv);
+    diet_init(&pn->recv_all);
     diet_init(&pn->acked);
 
     pn->lg_sent = UINT64_MAX;
@@ -107,5 +110,6 @@ void free_pn(struct pn_space * const pn)
     }
 
     diet_free(&pn->recv);
+    diet_free(&pn->recv_all);
     diet_free(&pn->acked);
 }

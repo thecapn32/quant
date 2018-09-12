@@ -292,7 +292,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
                 s->out_data + v->len + w_mtu(s->c->w) > s->out_data_max)
                 s->blocked = true;
             if (s->c->out_data + v->len + w_mtu(s->c->w) >
-                s->c->tp_peer.max_data)
+                s->c->tp_out.max_data)
                 s->c->blocked = true;
         }
 
@@ -339,14 +339,14 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
         return;
 
     // check if we need to do connection-level flow control
-    if (c->in_data + 2 * MAX_PKT_LEN > c->tp_local.max_data) {
+    if (c->in_data + 2 * MAX_PKT_LEN > c->tp_in.max_data) {
         c->tx_max_data = true;
-        c->tp_local.max_data += 0x1000;
+        c->tp_in.max_data += 0x1000;
     }
 
-    if (splay_max(stream, &c->streams)->id + 4 > c->tp_local.max_strm_bidi) {
+    if (splay_max(stream, &c->streams)->id >> 2 >= c->tp_in.max_bidi_streams) {
         c->tx_max_stream_id = true;
-        c->tp_local.max_strm_bidi += 4;
+        c->tp_in.max_bidi_streams += 2;
     }
 
     // send a NEW_CONNECTION_ID frame if the peer doesn't have one remaining
@@ -570,6 +570,7 @@ track_recv(struct q_conn * const c, const uint64_t nr, const uint8_t flags)
     struct pn_space * const pn =
         pn_for_epoch(c, epoch_for_pkt_type(pkt_type(flags)));
     diet_insert(&pn->recv, nr, ev_now(loop));
+    diet_insert(&pn->recv_all, nr, ev_now(loop));
 }
 
 
@@ -648,6 +649,13 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
                                             struct w_iov_sq * const i)
 {
     bool ok = false;
+
+    struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
+    if (diet_find(&pn->recv_all, meta(v).hdr.nr)) {
+        warn(ERR, "duplicate pkt nr " FMT_PNR_IN ", ignoring", meta(v).hdr.nr);
+        goto done;
+    }
+
     switch (c->state) {
     case conn_idle:
         ignore_sh_pkt(v);
@@ -826,7 +834,6 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 
 #ifndef FUZZING
     // if packet has anything other than ACK frames, maybe arm the ACK timer
-    struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
     if (c->state != conn_drng && c->state != conn_clsd && !c->tx_rtry &&
         !c->tx_vneg && !is_ack_only(&meta(v)) &&
         !ev_is_active(&pn->ack_alarm)) {
@@ -1228,13 +1235,13 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->closing_alarm.data = c;
     ev_init(&c->closing_alarm, enter_closed);
 
-    c->tp_peer.ack_del_exp = c->tp_local.ack_del_exp = 3;
-    c->tp_local.idle_to = kIdleTimeout;
-    c->tp_local.max_data = c->is_clnt ? 0x4000 : 0x8000;
-    c->tp_local.max_strm_data_bidi_local =
-        c->tp_local.max_strm_data_bidi_remote = c->is_clnt ? 0x2000 : 0x4000;
-    c->tp_local.max_strm_bidi = c->is_clnt ? 1 : 4;
-    c->tp_local.max_strm_uni = 0; // TODO: support unidir streams
+    c->tp_in.ack_del_exp = c->tp_out.ack_del_exp = 3;
+    c->tp_in.idle_to = kIdleTimeout;
+    c->tp_in.max_data = c->is_clnt ? 0x4000 : 0x8000;
+    c->tp_in.max_strm_data_bidi_local = c->tp_in.max_strm_data_bidi_remote =
+        c->is_clnt ? 0x2000 : 0x4000;
+    c->tp_in.max_bidi_streams = c->is_clnt ? 1 : 2;
+    c->tp_in.max_uni_streams = 0; // TODO: support unidir streams
 
     // initialize recovery state
     init_rec(c);

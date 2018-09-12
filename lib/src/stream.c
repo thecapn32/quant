@@ -59,6 +59,24 @@ struct q_stream * get_stream(struct q_conn * const c, const int64_t id)
 }
 
 
+void apply_stream_limits(struct q_stream * const s)
+{
+    if (s->id < 0)
+        return;
+
+    s->in_data_max = is_set(STRM_FL_INI_SRV, s->id) == !s->c->is_clnt
+                         ? s->c->tp_in.max_strm_data_bidi_local
+                         : s->c->tp_in.max_strm_data_bidi_remote;
+    s->out_data_max = is_set(STRM_FL_INI_SRV, s->id) == !s->c->is_clnt
+                          ? s->c->tp_out.max_strm_data_bidi_local
+                          : s->c->tp_out.max_strm_data_bidi_remote;
+
+    // if limit is less than an MTU, we are already blocked
+    if (s->out_data_max && s->out_data_max < w_mtu(s->c->w))
+        s->blocked = true;
+}
+
+
 struct q_stream *
 new_stream(struct q_conn * const c, const int64_t id, const bool active)
 {
@@ -74,20 +92,13 @@ new_stream(struct q_conn * const c, const int64_t id, const bool active)
     strm_to_state(s, strm_open);
     splay_insert(stream, &c->streams, s);
 
-    if (id >= 0) {
-        s->in_data_max = c->tp_local.max_strm_data_bidi_remote;
-        s->out_data_max = c->tp_peer.max_strm_data_bidi_local;
+    apply_stream_limits(s);
 
-        // if limit is less than an MTU, we are already blocked
-        if (s->out_data_max && s->out_data_max < w_mtu(s->c->w))
-            s->blocked = true;
-
-        if (active) {
-            if (c->next_sid == 0)
-                c->next_sid = c->is_clnt ? 4 : 1;
-            else
-                c->next_sid += 4;
-        }
+    if (active) {
+        if (c->next_sid == 0)
+            c->next_sid = c->is_clnt ? 4 : 1;
+        else
+            c->next_sid += 4;
     }
 
     return s;
