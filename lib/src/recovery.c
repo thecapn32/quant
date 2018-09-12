@@ -381,7 +381,7 @@ void on_pkt_acked(struct q_conn * const c,
         for (struct pkt_meta * p = splay_min(pm_nr_splay, &pn->sent_pkts);
              p && p->hdr.nr < ack;
              p = splay_next(pm_nr_splay, &pn->sent_pkts, p)) {
-            warn(DBG, "pkt %" FMT_PNR_OUT " considered lost", p->hdr.nr);
+            warn(DBG, "pkt " FMT_PNR_OUT " considered lost", p->hdr.nr);
             p->is_lost = true;
             c->rec.in_flight -= p->tx_len;
             warn(DBG, "in_flight -%u = %" PRIu64, p->tx_len, c->rec.in_flight);
