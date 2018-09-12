@@ -421,6 +421,10 @@ void on_pkt_acked(struct q_conn * const c,
     }
     meta(orig_v).is_acked = true;
 
+    if (s && is_fin(v))
+        // this ACKs a FIN
+        maybe_api_return(q_close_stream, s->c, s);
+
     // stop ACKing packets that were contained in the ACK frame of this packet
     if (meta(v).ack_header_pos) {
 #ifndef NDEBUG

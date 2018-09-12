@@ -72,7 +72,8 @@ struct q_stream {
     strm_state_t state;
     uint8_t tx_max_stream_data : 1; ///< We need to open the receive window.
     uint8_t blocked : 1;            ///< We are receive-window-blocked.
-    uint8_t : 6;
+    uint8_t tx_fin : 1;             ///< We need to send a FIN.
+    uint8_t : 5;
     uint8_t _unused[3];
 };
 
@@ -114,6 +115,13 @@ strm_epoch(const struct q_stream * const s)
     if (s->c->state == conn_opng)
         return 1;
     return 3;
+}
+
+
+static inline __attribute__((always_inline)) bool
+stream_needs_ctrl(const struct q_stream * const s)
+{
+    return s->tx_fin || s->tx_max_stream_data || s->c->tx_max_data;
 }
 
 

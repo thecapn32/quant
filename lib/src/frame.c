@@ -1084,7 +1084,7 @@ uint16_t enc_stream_or_crypto_frame(struct q_stream * const s,
         if ((s->state == strm_hclo || s->state == strm_clsd) &&
             v == sq_last(&s->out, w_iov, next)) {
             type |= F_STREAM_FIN;
-            maybe_api_return(q_close_stream, s->c, s);
+            s->tx_fin = false;
         }
     } else
         type = FRAM_TYPE_CRPT;

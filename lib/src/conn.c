@@ -275,11 +275,11 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             continue;
 
         if (!rtx && meta(v).tx_len != 0) {
-            warn(DBG,
-                 "skipping %s pkt " FMT_PNR_OUT " on strm " FMT_SID
-                 " during %s",
-                 meta(v).tx_len ? "already-tx'ed" : "fresh", meta(v).hdr.nr,
-                 s->id, rtx ? "RTX" : "TX");
+            // warn(DBG,
+            //      "skipping %s pkt " FMT_PNR_OUT " on strm " FMT_SID
+            //      " during %s",
+            //      meta(v).tx_len ? "already-tx'ed" : "fresh", meta(v).hdr.nr,
+            //      s->id, rtx ? "RTX" : "TX");
             continue;
         }
 
@@ -303,8 +303,8 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
         // if this packet contains an ACK frame, stop the timer
         if (s->c->state == conn_estb &&
             bit_test(meta(v).frames, FRAM_TYPE_ACK)) {
-            warn(DBG, "ACK sent, stopping epoch %u ACK timer",
-                 epoch_for_pkt_type(meta(v).hdr.type));
+            // warn(DBG, "ACK sent, stopping epoch %u ACK timer",
+            //      epoch_for_pkt_type(meta(v).hdr.type));
             struct pn_space * const pn =
                 pn_for_pkt_type(s->c, meta(v).hdr.type);
             ev_timer_stop(loop, &pn->ack_alarm);
@@ -317,6 +317,15 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             warn(NTE, "tx limit %u reached", limit);
             break;
         }
+    }
+
+    if (encoded == false && s->tx_fin) {
+        // we need to send a FIN
+        v = q_alloc_iov(s->c->w, 0, Q_OFFSET);
+        v->len = 0;
+        sq_insert_tail(&s->out, v, next);
+        if (enc_pkt(s, rtx, true, v, &x))
+            encoded++;
     }
 
     if (encoded) {
@@ -372,11 +381,6 @@ static void __attribute__((nonnull)) do_stream_fc(struct q_stream * const s)
         s->in_data_max += 0x1000;
     }
 }
-
-
-#define stream_needs_ctrl(s)                                                   \
-    ((s)->tx_max_stream_data || (s)->c->tx_max_data ||                         \
-     (((s)->state == strm_hclo)))
 
 
 static void __attribute__((nonnull))
@@ -441,7 +445,7 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
 
         do_stream_fc(s);
 
-        if (sq_empty(&s->out))
+        if (sq_empty(&s->out) && !stream_needs_ctrl(s))
             continue;
 
         warn(DBG,

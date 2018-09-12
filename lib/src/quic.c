@@ -283,8 +283,8 @@ void q_write(struct q_stream * const s,
          scid2str(s->c), s->id, fin ? "and closing" : "");
 
     if (s->state >= strm_hclo) {
-        warn(ERR, "%s conn %s strm " FMT_SID " is in state %u", conn_type(s->c),
-             scid2str(s->c), s->id, s->state);
+        warn(ERR, "%s conn %s strm " FMT_SID " is in state %s", conn_type(s->c),
+             scid2str(s->c), s->id, strm_state_str[s->state]);
         return;
     }
 
@@ -525,9 +525,10 @@ void q_close_stream(struct q_stream * const s)
     if (s->state == strm_hclo || s->state == strm_clsd)
         return;
 
-    warn(WRN, "closing strm " FMT_SID " state %u on %s conn %s", s->id,
-         s->state, conn_type(s->c), scid2str(s->c));
+    warn(WRN, "closing strm " FMT_SID " state %s on %s conn %s", s->id,
+         strm_state_str[s->state], conn_type(s->c), scid2str(s->c));
     strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
+    s->tx_fin = true;
     ev_async_send(loop, &s->c->tx_w);
     loop_run(q_close_stream, s->c, s);
 }

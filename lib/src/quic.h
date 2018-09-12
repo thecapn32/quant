@@ -113,6 +113,16 @@ struct pkt_meta {
 };
 
 
+/// Is flag @p f set in flags variable @p v?
+///
+/// @param      f     Flag.
+/// @param      v     Variable.
+///
+/// @return     True if set, false otherwise.
+///
+#define is_set(f, v) (((v) & (f)) == (f))
+
+
 extern int __attribute__((nonnull))
 pm_off_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b);
 
@@ -224,6 +234,14 @@ is_ack_only(const struct pkt_meta * const p)
 }
 
 
+static inline bool __attribute__((nonnull)) is_fin(const struct w_iov * const v)
+{
+    return meta(v).stream_header_pos != 0 &&
+           is_set(F_STREAM_FIN,
+                  *(v->buf - Q_OFFSET + meta(v).stream_header_pos));
+}
+
+
 extern struct ev_loop * loop;
 extern struct q_conn_sl aq;
 
@@ -268,16 +286,6 @@ extern const uint8_t ok_vers_len;
 
 /// Default conn_idle timeout.
 #define kIdleTimeout 10
-
-
-/// Is flag @p f set in flags variable @p v?
-///
-/// @param      f     Flag.
-/// @param      v     Variable.
-///
-/// @return     True if set, false otherwise.
-///
-#define is_set(f, v) (((v) & (f)) == (f))
 
 
 typedef void (*func_ptr)(void);
