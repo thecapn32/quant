@@ -1317,6 +1317,8 @@ void free_conn(struct q_conn * const c)
     free_pn(&c->pn_hshk.pn);
     free_pn(&c->pn_data.pn);
 
+    ev_async_stop(loop, &c->tx_w);
+
     diet_free(&c->closed_streams);
     free(c->peer_name);
     if (c->err_reason)
