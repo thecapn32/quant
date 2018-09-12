@@ -1,5 +1,8 @@
 #! /usr/bin/env bash
 
+# sudo apt install ninja-build aha mailutils python-certbot-apache pkgconf g++ \
+#   mercurial cmake
+
 function make_name() {
         local path cid
         path=$(dirname "$1")
@@ -17,7 +20,7 @@ mv "$name" "$new"
 
 # send email if we crashed
 if grep -E -i -q 'assertion failed|AddressSanitizer|runtime error|ACK_ECN' "$new"; then
-        mail -s "$new" lars@netapp.com -A "$new" < /dev/null
+        mail -s "$new" lars@eggert.org -A "$new" < /dev/null
 fi
 
 cat <<-EOF > /var/www/html/.htaccess
