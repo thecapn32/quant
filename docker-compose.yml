@@ -11,7 +11,7 @@ services:
   valve:
     depends_on:
       - server
-    image: larseggert/qvalve
+    image: ntap/qvalve
     expose:
       - 4433/udp
     volumes:
