@@ -722,7 +722,7 @@ dec_new_cid_frame(struct q_conn * const c,
 
     if (unlikely(dcid.len < 4 || dcid.len > 18))
         err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_NEW_CID,
-                         "illegel cid len %u", dcid.len);
+                         "illegal cid len %u", dcid.len);
 
     i = dec_chk_buf(true, FRAM_TYPE_NEW_CID, dcid.id, v->buf, v->len, i,
                     dcid.len);
@@ -736,7 +736,12 @@ dec_new_cid_frame(struct q_conn * const c,
          seq, dcid.len, cid2str(&dcid), hex2str(dcid.srt, sizeof(dcid.srt)));
 #endif
 
-    add_dcid(c, &dcid);
+    if (c->max_cid_seq_in == UINT64_MAX || seq > c->max_cid_seq_in) {
+        add_dcid(c, &dcid);
+        c->max_cid_seq_in = seq;
+    } else
+        warn(WRN, "highest seq seen %" PRIu64 " > %" PRIu64 ", ignoring",
+             c->max_cid_seq_in, seq);
 
     return i;
 }
@@ -1306,8 +1311,9 @@ uint16_t enc_new_cid_frame(struct q_conn * const c,
     const uint8_t type = FRAM_TYPE_NEW_CID;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
-    c->ncid_seq_out = c->ncid_seq_out == UINT64_MAX ? 0 : c->ncid_seq_out + 1;
-    i = enc(v->buf, v->len, i, &c->ncid_seq_out, 0, 0, "%" PRIu64);
+    c->max_cid_seq_out =
+        c->max_cid_seq_out == UINT64_MAX ? 0 : c->max_cid_seq_out + 1;
+    i = enc(v->buf, v->len, i, &c->max_cid_seq_out, 0, 0, "%" PRIu64);
 
     struct cid ncid = {.len = c->is_clnt ? CLNT_SCID_LEN : SERV_SCID_LEN};
     arc4random_buf(ncid.id, ncid.len);
@@ -1321,7 +1327,7 @@ uint16_t enc_new_cid_frame(struct q_conn * const c,
     warn(INF,
          FRAM_OUT "NEW_CONNECTION_ID" NRM " seq=%" PRIx64
                   " len=%u cid=%s tok=%s",
-         c->ncid_seq_out, ncid.len, cid2str(&ncid),
+         c->max_cid_seq_out, ncid.len, cid2str(&ncid),
          hex2str(ncid.srt, sizeof(ncid.srt)));
 
     c->tx_ncid = false;

@@ -1250,7 +1250,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     // initialize recovery state
     init_rec(c);
 
-    c->ncid_seq_out = UINT64_MAX;
+    c->max_cid_seq_out = c->max_cid_seq_in = UINT64_MAX;
 
     // initialize socket and start a TX watcher
     ev_async_init(&c->tx_w, tx_w);

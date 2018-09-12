@@ -166,7 +166,8 @@ struct q_conn {
     uint64_t path_chlg_out;
     uint64_t path_resp_in;
 
-    uint64_t ncid_seq_out;
+    uint64_t max_cid_seq_out;
+    uint64_t max_cid_seq_in;
 
     uint8_t * tok;
 };
