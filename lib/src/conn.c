@@ -342,7 +342,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
 }
 
 
-static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
+void do_conn_fc(struct q_conn * const c)
 {
     if (c->state == conn_clsg || c->state == conn_drng)
         return;
@@ -350,8 +350,15 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
     // check if we need to do connection-level flow control
     if (c->in_data + 2 * MAX_PKT_LEN > c->tp_in.max_data) {
         c->tx_max_data = true;
-        c->tp_in.max_data += 0x1000;
+        c->tp_in.new_max_data = c->tp_in.max_data + 0x1000;
     }
+}
+
+
+static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
+{
+    if (c->state == conn_clsg || c->state == conn_drng)
+        return;
 
     if (splay_max(stream, &c->streams)->id >> 2 >= c->tp_in.max_bidi_streams) {
         c->tx_max_stream_id = true;
@@ -367,18 +374,6 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
              cid2str(sq_next(act_dcid(c), next)), conn_type(c),
              cid2str(act_dcid(c)));
         use_next_dcid(c);
-    }
-}
-
-
-static void __attribute__((nonnull)) do_stream_fc(struct q_stream * const s)
-{
-    if (s->c->state != conn_estb)
-        return;
-
-    if (s->id && s->in_data + 2 * MAX_PKT_LEN > s->in_data_max) {
-        s->tx_max_stream_data = true;
-        s->in_data_max += 0x1000;
     }
 }
 
@@ -442,8 +437,6 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
             // warn(ERR, "skip %d", s->id);
             continue;
         }
-
-        do_stream_fc(s);
 
         if (sq_empty(&s->out) && !stream_needs_ctrl(s))
             continue;

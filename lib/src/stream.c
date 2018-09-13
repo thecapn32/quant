@@ -33,6 +33,7 @@
 
 #include "conn.h"
 #include "diet.h"
+#include "pkt.h"
 #include "quic.h"
 #include "stream.h"
 
@@ -163,5 +164,17 @@ void reset_stream(struct q_stream * const s, const bool forget)
         // reset pkt meta
         reset_pm(&s->in);
         reset_pm(&s->out);
+    }
+}
+
+
+void do_stream_fc(struct q_stream * const s)
+{
+    if (s->c->state != conn_estb)
+        return;
+
+    if (s->id >= 0 && s->in_data + 2 * MAX_PKT_LEN > s->in_data_max) {
+        s->tx_max_stream_data = true;
+        s->new_in_data_max = s->in_data_max + 0x1000;
     }
 }

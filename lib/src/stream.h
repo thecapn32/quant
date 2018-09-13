@@ -66,6 +66,7 @@ struct q_stream {
     struct w_iov_sq in;         ///< Tail queue containing inbound data.
     struct pm_off_splay in_ooo; ///< Out-of-order inbound data.
     uint64_t in_data_max;       ///< Inbound max_stream_data.
+    uint64_t new_in_data_max;   ///< New inbound max_stream_data (for update).
     uint64_t in_data;           ///< In-order stream data received.
 
     int64_t id;
@@ -147,5 +148,7 @@ reset_stream(struct q_stream * const s, const bool forget);
 
 extern void __attribute__((nonnull))
 apply_stream_limits(struct q_stream * const s);
+
+extern void __attribute__((nonnull)) do_stream_fc(struct q_stream * const s);
 
 SPLAY_PROTOTYPE(stream, q_stream, node, stream_cmp)

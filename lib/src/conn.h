@@ -53,6 +53,7 @@ struct transport_params {
     uint64_t max_strm_data_bidi_local;
     uint64_t max_strm_data_bidi_remote;
     uint64_t max_data;
+    uint64_t new_max_data;
     int64_t max_uni_streams;  // this is count, not a max ID
     int64_t max_bidi_streams; // this is count, not a max ID
     uint16_t max_pkt;
@@ -349,6 +350,8 @@ extern void __attribute__((nonnull))
 add_dcid(struct q_conn * const c, const struct cid * const id);
 
 extern void __attribute__((nonnull)) use_next_scid(struct q_conn * const c);
+
+extern void __attribute__((nonnull)) do_conn_fc(struct q_conn * const c);
 
 
 #ifdef FUZZING

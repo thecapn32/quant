@@ -218,8 +218,11 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
             }
         }
 
-        if (dec_strm)
+        if (dec_strm) {
+            do_stream_fc(s);
+            do_conn_fc(s->c);
             maybe_api_return(q_read, s->c, 0);
+        }
         goto done;
     }
 
@@ -585,11 +588,7 @@ dec_stream_blocked_frame(struct q_conn * const c,
          off);
 #endif
 
-    // open the stream window and send a frame
-    // TODO validate whether we should
-    s->in_data_max += 0x1000;
-    s->tx_max_stream_data = s->c->needs_tx = true;
-
+    do_stream_fc(s);
     return i;
 }
 
@@ -607,11 +606,7 @@ dec_blocked_frame(struct q_conn * const c,
     warn(INF, FRAM_IN "BLOCKED" NRM " off=%" PRIu64, off);
 #endif
 
-    // open the connection window and send a frame
-    // TODO validate whether we should
-    c->tp_in.max_data += 0x1000;
-    c->tx_max_data = c->needs_tx = true;
-
+    do_conn_fc(c);
     return i;
 }
 
@@ -1169,10 +1164,13 @@ uint16_t enc_max_stream_data_frame(struct q_stream * const s,
     const uint8_t type = FRAM_TYPE_MAX_STRM_DATA;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
     i = enc(v->buf, v->len, i, &s->id, 0, 0, FMT_SID);
-    i = enc(v->buf, v->len, i, &s->in_data_max, 0, 0, "%" PRIu64);
+    i = enc(v->buf, v->len, i, &s->new_in_data_max, 0, 0, "%" PRIu64);
 
     warn(INF, FRAM_OUT "MAX_STREAM_DATA" NRM " id=" FMT_SID " max=%" PRIu64,
-         s->id, s->in_data_max);
+         s->id, s->new_in_data_max);
+
+    // update the stream
+    s->in_data_max = s->new_in_data_max;
 
     return i;
 }
@@ -1186,9 +1184,12 @@ uint16_t enc_max_data_frame(struct q_conn * const c,
 
     const uint8_t type = FRAM_TYPE_MAX_DATA;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
-    i = enc(v->buf, v->len, i, &c->tp_in.max_data, 0, 0, "%" PRIu64);
+    i = enc(v->buf, v->len, i, &c->tp_in.new_max_data, 0, 0, "%" PRIu64);
 
-    warn(INF, FRAM_OUT "MAX_DATA" NRM " max=%" PRIu64, c->tp_in.max_data);
+    warn(INF, FRAM_OUT "MAX_DATA" NRM " max=%" PRIu64, c->tp_in.new_max_data);
+
+    // update connection
+    c->tp_in.max_data = c->tp_in.new_max_data;
 
     return i;
 }
