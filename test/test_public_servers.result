@@ -1,5 +1,5 @@
           live fail vneg hshk data clse zrtt rtry mig
-ats       *         V    H    D    C
+ats       *         V    H    D    C    RZ
 f5
 minq      *         v
 mozquic

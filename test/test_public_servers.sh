@@ -29,22 +29,22 @@
 
 
 declare -A servers=(
-        #[tag]=name:port:retry-ports
-        [ats]=quic.ogre.com:4433:4434
-        [f5]=208.85.208.226:4433:4434
-        [minq]=minq.dev.mozaws.net:4433:4434
-        [mozquic]=mozquic.ducksong.com:4433:4434
-        [mvfst]=fb.mvfst.net:4433:4434
-        [ngtcp2]=nghttp2.org:4433:4434
-        [ngx_quic]=cloudflare-quic.com:443:4434
-        [pandora]=pandora.cm.in.tum.de:4433:4434
-        [picoquic]=test.privateoctopus.com:4433:4434
-        [quant]=quant.eggert.org:4433:4434
-        [quicker]=quicker.edm.uhasselt.be:4433:4434
-        [quicly]=kazuhooku.com:4433:4434
-        [quicr]=ralith.com:4433:4434
-        [quinn]=xavamedia.nl:4433:4434
-        [winquic]=msquic.westus.cloudapp.azure.com:4433:4434
+        #[tag]=name:port:retry-ports:URL
+        [ats]=quic.ogre.com:4433:4434:/en/latest/
+        [f5]=208.85.208.226:4433:4434:/index.html
+        [minq]=minq.dev.mozaws.net:4433:4434:/index.html
+        [mozquic]=mozquic.ducksong.com:4433:4434:/index.html
+        [mvfst]=fb.mvfst.net:4433:4434:/index.html
+        [ngtcp2]=nghttp2.org:4433:4434:/blog/
+        [ngx_quic]=cloudflare-quic.com:443:4434:/index.html
+        [pandora]=pandora.cm.in.tum.de:4433:4434:/index.html
+        [picoquic]=test.privateoctopus.com:4433:4434:/10000
+        [quant]=quant.eggert.org:4433:4434:/10000
+        [quicker]=quicker.edm.uhasselt.be:4433:4434:/index.html
+        [quicly]=kazuhooku.com:4433:4434:/index.html
+        [quicr]=ralith.com:4433:4434:/index.html
+        [quinn]=xavamedia.nl:4433:4434:/index.html
+        [winquic]=msquic.westus.cloudapp.azure.com:4433:4434:/index.html
 )
 
 results=(live fail vneg hshk data clse zrtt rtry mig)
@@ -80,19 +80,19 @@ function test_server {
         local log_base="/tmp/$script.$1.$pid"
 
         IFS=':' read -ra info <<< "${servers[$1]}"
-        # 0=name, 1=port, 2=retry-port
+        # 0=name, 1=port, 2=retry-port, 3=URL
 
         # initial 1rtt run
-        bin/client $opts "https://${info[0]}:${info[1]}/index.html" 2>&1 | \
+        bin/client $opts "https://${info[0]}:${info[1]}${info[3]}" 2>&1 | \
                 $sed -r "$sed_pattern" > "$log_base.1rtt.log"
 
         # consecutive 0rtt run
-        bin/client $opts "https://${info[0]}:${info[1]}/index.html" 2>&1 | \
+        bin/client $opts "https://${info[0]}:${info[1]}${info[3]}" 2>&1 | \
                 $sed -r "$sed_pattern" > "$log_base.0rtt.log"
         rm -f "$cache"
 
         # rtry run
-        bin/client $opts "https://${info[0]}:${info[2]}/index.html" 2>&1 | \
+        bin/client $opts "https://${info[0]}:${info[2]}${info[3]}" 2>&1 | \
                 $sed -r "$sed_pattern" > "$log_base.rtry.log"
         rm -f "$cache"
 
@@ -137,7 +137,8 @@ function analyze {
                     /RX len=.*Short/ && $x && exit 1;' "$log"
         [ $? == 1 ] && hshk[$1]=H
 
-        perl -n -e '/read (.*) bytes on clnt conn/ &&
+        perl -n -e '/idle timeout on clnt conn/ && exit 0;
+                    /read (.*) bytes on clnt conn/ &&
                             ($1 > 0 ? exit 1 : next);' "$log"
         [ $? == 1 ] && data[$1]=D
 
@@ -153,8 +154,8 @@ function analyze {
                 clse[$1]=C #c
         fi
 
-        perl -n -e '/dec_new_cid_frame.*NEW_CONNECTION_ID/ and $n=1;
-                    /migration to dcid/ && $n && exit 1;' "$log"
+        perl -n -e '/enc_new_cid_frame.*NEW_CONNECTION_ID/ and $n=1;
+                    /migration to scid/ && $n && exit 1;' "$log"
         [ $? == 1 ] && mig[$1]=M
         [ ${fail[$1]} ] || rm -f "$log"
 
