@@ -237,8 +237,7 @@ is_ack_only(const struct pkt_meta * const p)
 static inline bool __attribute__((nonnull)) is_fin(const struct w_iov * const v)
 {
     return meta(v).stream_header_pos != 0 &&
-           is_set(F_STREAM_FIN,
-                  *(v->buf - Q_OFFSET + meta(v).stream_header_pos));
+           is_set(F_STREAM_FIN, *(v->buf + meta(v).stream_header_pos));
 }
 
 

@@ -249,12 +249,11 @@ rtx_pkt(struct q_stream * const s, struct w_iov * const v)
     ensure(meta(v).is_rtx == false, "cannot RTX an RTX");
     // on RTX, remember orig pkt meta data
     struct w_iov * const r = q_alloc_iov(s->c->w, 0, Q_OFFSET);
-    pm_cpy(&meta(r), &meta(v));                  // copy pkt meta data
-    memcpy(r->buf, v->buf - Q_OFFSET, Q_OFFSET); // copy pkt headers
+    pm_cpy(&meta(r), &meta(v)); // copy pkt meta data
+    memcpy(r->buf - Q_OFFSET, v->buf - Q_OFFSET, Q_OFFSET); // copy pkt headers
     meta(r).is_rtx = true;
     sl_insert_head(&meta(v).rtx, &meta(r), rtx_next);
     sl_insert_head(&meta(r).rtx, &meta(v), rtx_next);
-    adj_iov_to_data(r);
 
     // we reinsert meta(v) with its new pkt nr in on_pkt_sent()
     splay_remove(pm_nr_splay, &meta(v).pn->sent_pkts, &meta(v));

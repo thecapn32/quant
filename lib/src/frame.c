@@ -134,7 +134,6 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
                            const uint16_t pos,
                            const bool dec_strm)
 {
-    bool track_bytes = false;
     meta(v).stream_header_pos = pos;
 
     // we need to decode the type byte, since stream frames have multiple types
@@ -192,9 +191,10 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     meta(v).stream = s;
 
     // best case: new in-order data
+    warn(CRT, "s->in_data %" PRIu64, s->in_data);
     if (meta(v).stream_off == s->in_data) {
         kind = "seq";
-        track_bytes = true;
+        track_bytes_in(s, l);
         sq_insert_tail(&s->in, v, next);
 
         // check if a hole has been filled that lets us dequeue ooo data
@@ -202,7 +202,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
         for (p = splay_min(pm_off_splay, &s->in_ooo);
              p && p->stream_off == s->in_data; p = nxt) {
             nxt = splay_next(pm_off_splay, &s->in_ooo, p);
-            s->in_data += p->stream_data_end;
+            track_bytes_in(s, p->stream_data_end - p->stream_data_start);
             sq_insert_tail(&s->in, w_iov(c->w, pm_idx(p)), next);
             splay_remove(pm_off_splay, &s->in_ooo, p);
         }
@@ -210,12 +210,18 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
         // check if we have delivered a FIN, and act on it if we did
         struct w_iov * const last = sq_last(&s->in, w_iov, next);
         if (last) {
-            const uint8_t last_type = last->buf[meta(last).stream_header_pos];
-            if (is_set(F_STREAM_FIN, last_type)) {
+            // if last is the current packet, its v->buf is the start of the
+            // packet header; if it's dequeued from ooo, its v->buf points to
+            // the start of the stream data - deal with this:
+            if (last != v)
+                last->buf -= meta(v).stream_data_start;
+            if (is_fin(last)) {
                 strm_to_state(s, s->state <= strm_hcrm ? strm_hcrm : strm_clsd);
                 if (dec_strm)
                     maybe_api_return(q_readall_str, s->c, s);
             }
+            if (last != v)
+                last->buf += meta(v).stream_data_start;
         }
 
         if (dec_strm) {
@@ -236,14 +242,10 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     // data is out of order
     kind = YEL "ooo" NRM;
     splay_insert(pm_off_splay, &s->in_ooo, &meta(v));
-    track_bytes = true;
 
 done:
     log_stream_or_crypto_frame(false, v, true, kind);
 #endif
-
-    if (track_bytes)
-        track_bytes_in(s, l);
 
     if (s && dec_strm && meta(v).stream_off + l > s->in_data_max)
         err_close_return(c, ERR_FLOW_CONTROL, 0,

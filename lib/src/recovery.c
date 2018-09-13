@@ -421,9 +421,13 @@ void on_pkt_acked(struct q_conn * const c,
     }
     meta(orig_v).is_acked = true;
 
-    if (s && is_fin(v))
-        // this ACKs a FIN
-        maybe_api_return(q_close_stream, s->c, s);
+    if (s) {
+        adj_iov_to_start(v);
+        if (is_fin(v))
+            // this ACKs a FIN
+            maybe_api_return(q_close_stream, s->c, s);
+        adj_iov_to_data(v);
+    }
 
     // stop ACKing packets that were contained in the ACK frame of this packet
     if (meta(v).ack_header_pos) {
