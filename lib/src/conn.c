@@ -470,7 +470,8 @@ void tx_ack(struct q_conn * const c, const epoch_t e)
     struct q_stream * const s = get_stream(c, crpt_strm_id(e));
     struct pn_space * const pn = pn_for_epoch(c, e);
 
-    if (!needs_ack(pn) && c->tx_vneg == false && c->tx_rtry == false)
+    if (!needs_ack(pn) && c->tx_vneg == false && c->tx_rtry == false &&
+        c->state != conn_clsg)
         return;
 
     struct w_iov * const v = q_alloc_iov(c->w, 0, Q_OFFSET);
@@ -592,7 +593,7 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
         const int ret = tls_io(s, iv);
         if (ret == 0 || ret == PTLS_ERROR_STATELESS_RETRY) {
             tx_crypto(c, c->tls.epoch_out);
-            if (ret == 0 && c->state != conn_estb) {
+            if (ret == 0 && (c->state == conn_idle || c->state == conn_opng)) {
                 conn_to_state(c, conn_estb);
                 if (c->is_clnt)
                     maybe_api_return(q_connect, c, 0);
