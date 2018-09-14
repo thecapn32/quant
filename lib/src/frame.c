@@ -501,10 +501,12 @@ dec_max_stream_data_frame(struct q_conn * const c,
         s->out_data_max = max;
         s->blocked = false;
         c->needs_tx = true;
-    } else
-        warn(WRN, "MAX_STREAM_DATA %" PRIu64 " < current value %" PRIu64, max,
+    }
+#ifndef FUZZING
+    else
+        warn(WRN, "MAX_STREAM_DATA %" PRIu64 " <= current value %" PRIu64, max,
              s->out_data_max);
-
+#endif
 
     return i;
 }
@@ -535,9 +537,12 @@ dec_max_stream_id_frame(struct q_conn * const c,
     if (max > *which) {
         *which = max >> 2;
         maybe_api_return(q_rsv_stream, c, 0);
-    } else
-        warn(WRN, "MAX_STREAM_ID %" PRIu64 " < current value %" PRIu64,
+    }
+#ifndef FUZZING
+    else
+        warn(WRN, "MAX_STREAM_ID %" PRIu64 " <= current value %" PRIu64,
              max >> 2, *which);
+#endif
 
     return i;
 }
@@ -560,9 +565,12 @@ dec_max_data_frame(struct q_conn * const c,
         c->tp_out.max_data = max;
         c->blocked = false;
         c->needs_tx = true;
-    } else
-        warn(WRN, "MAX_DATA %" PRIu64 " < current value %" PRIu64, max,
+    }
+#ifndef FUZZING
+    else
+        warn(WRN, "MAX_DATA %" PRIu64 " <= current value %" PRIu64, max,
              c->tp_out.max_data);
+#endif
 
     return i;
 }
@@ -627,9 +635,10 @@ dec_stream_id_blocked_frame(struct q_conn * const c,
     warn(INF, FRAM_IN "STREAM_ID_BLOCKED" NRM " sid=" FMT_SID, sid);
 #endif
 
-    ensure(!is_set(STRM_FL_DIR_UNI, sid), "STREAM_ID_BLOCKED for uni strm?");
+    if (is_set(STRM_FL_DIR_UNI, sid))
+        err_close_return(c, ERR_INTERNAL, 0, "TODO: unidir strm");
 
-    if (sid << 2 <= c->tp_in.max_bidi_streams)
+    if (sid >> 2 <= c->tp_in.max_bidi_streams)
         // let the peer open more streams
         c->tp_in.max_bidi_streams += 2;
     c->needs_tx = c->tx_max_stream_id = true;
@@ -737,9 +746,12 @@ dec_new_cid_frame(struct q_conn * const c,
     if (c->max_cid_seq_in == UINT64_MAX || seq > c->max_cid_seq_in) {
         add_dcid(c, &dcid);
         c->max_cid_seq_in = seq;
-    } else
-        warn(WRN, "highest seq seen %" PRIu64 " > %" PRIu64 ", ignoring",
+    }
+#ifndef FUZZING
+    else
+        warn(WRN, "highest seq seen %" PRIu64 " <= %" PRIu64 ", ignoring",
              c->max_cid_seq_in, seq);
+#endif
 
     return i;
 }
@@ -784,9 +796,14 @@ dec_new_token_frame(struct q_conn * const c,
     uint16_t i = dec_chk(true, FRAM_TYPE_NEW_TOKN, &tok_len, v->buf, v->len,
                          pos + 1, 0, "%" PRIu64);
 
+    if (unlikely(tok_len > v->len - i))
+        err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_NEW_TOKN,
+                         "illegal tok len");
+
     // TODO: actually do something with the token
     uint8_t tok[4096];
-    ensure(tok_len < sizeof(tok), "not enough space for tok");
+    ensure(tok_len < sizeof(tok), "tok_len %" PRIu64 " > %u", tok_len,
+           sizeof(tok));
     i = dec_chk_buf(true, FRAM_TYPE_NEW_TOKN, tok, v->buf, v->len, i,
                     (uint16_t)tok_len);
 

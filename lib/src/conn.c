@@ -653,7 +653,9 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 
     struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
     if (diet_find(&pn->recv_all, meta(v).hdr.nr)) {
+#ifndef FUZZING
         warn(ERR, "duplicate pkt nr " FMT_PNR_IN ", ignoring", meta(v).hdr.nr);
+#endif
         goto done;
     }
 
