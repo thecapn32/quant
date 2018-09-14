@@ -112,7 +112,7 @@ struct q_conn {
     uint16_t tx_ncid : 1;           ///< Send NEW_CONNECTION_ID.
     uint16_t tx_rtry : 1;           ///< We need to send a RETRY.
     uint16_t tx_vneg : 1;           ///< We need to send a vers neg response.
-    uint16_t : 1;
+    uint16_t have_new_data : 1;     ///< New stream data was enqueued.
 
     uint16_t sport; ///< Local port (in network byte-order).
 

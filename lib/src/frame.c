@@ -191,7 +191,6 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     meta(v).stream = s;
 
     // best case: new in-order data
-    warn(CRT, "s->in_data %" PRIu64, s->in_data);
     if (meta(v).stream_off == s->in_data) {
         kind = "seq";
         track_bytes_in(s, l);
@@ -227,6 +226,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
         if (dec_strm) {
             do_stream_fc(s);
             do_conn_fc(s->c);
+            s->c->have_new_data = true;
             maybe_api_return(q_read, s->c, 0);
         }
         goto done;
@@ -467,6 +467,7 @@ dec_close_frame(struct q_conn * const c,
 
     if (c->state != conn_drng) {
         conn_to_state(c, conn_drng);
+        c->needs_tx = false;
         enter_closing(c);
     }
 

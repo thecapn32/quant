@@ -218,7 +218,7 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
         c->rec.rto_cnt++;
     }
 
-    // XXX is in the pseudo code, but it's already also called in  on_pkt_sent()
+    // XXX is in the pseudo code, but it's already also called in on_pkt_sent()
     if (did_tx == false)
         // set_ld_alarm is also called in on_pkt_sent, avoid duplicate
         set_ld_alarm(c);
@@ -257,8 +257,12 @@ void on_pkt_sent(struct q_stream * const s, struct w_iov * const v)
         s->c->rec.in_flight += meta(v).tx_len; // OnPacketSentCC
         warn(DBG, "in_flight +%u = %" PRIu64, meta(v).tx_len,
              s->c->rec.in_flight);
-        set_ld_alarm(s->c);
     }
+
+    // TODO this should be in the clause above, but since we currently don't RTX
+    // NEW_TOKEN, NEW_CONNECTION_ID, etc. that means the timers don't back off
+    // correctly
+    set_ld_alarm(s->c);
 }
 
 

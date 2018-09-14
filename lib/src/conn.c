@@ -1051,8 +1051,9 @@ void rx(struct ev_loop * const l,
         struct q_conn * const c = sl_first(&crx);
         sl_remove_head(&crx, node_rx);
 
-        // reset idle timeout
-        ev_timer_again(l, &c->idle_alarm);
+        if (c->state != conn_drng)
+            // reset idle timeout
+            ev_timer_again(l, &c->idle_alarm);
 
         // is a TX needed for this connection?
         if (c->needs_tx)
@@ -1067,8 +1068,11 @@ void rx(struct ev_loop * const l,
             continue;
         }
 
-        c_rx_ready = c;
-        maybe_api_return(q_rx_ready, 0, 0);
+        if (c_rx_ready == 0 && c->have_new_data) {
+            c_rx_ready = c;
+            c->have_new_data = false;
+            maybe_api_return(q_rx_ready, 0, 0);
+        }
     }
 }
 
@@ -1162,7 +1166,8 @@ void enter_closing(struct q_conn * const c)
          conn_type(c), scid2str(c));
 #endif
 
-    conn_to_state(c, conn_clsg);
+    if (c->state != conn_drng)
+        conn_to_state(c, conn_clsg);
 }
 
 
@@ -1329,5 +1334,7 @@ void free_conn(struct q_conn * const c)
         use_next_scid(c);
     while (!sq_empty(&c->dcid))
         use_next_dcid(c);
+    if (c_rx_ready == c)
+        c_rx_ready = 0;
     free(c);
 }

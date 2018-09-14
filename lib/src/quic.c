@@ -635,21 +635,26 @@ void write_to_corpus(const int dir, const void * const data, const size_t len)
 
 struct q_conn * q_rx_ready(const uint64_t timeout)
 {
+    if (c_rx_ready)
+        goto done;
+    else
+        warn(WRN, "no conn ready to rx yet");
+
     if (timeout) {
         if (ev_is_active(&api_alarm))
             ev_timer_stop(loop, &api_alarm);
         ev_timer_init(&api_alarm, cancel_api_call, timeout, 0);
         ev_timer_start(loop, &api_alarm);
     }
-
-    c_rx_ready = 0;
     loop_run(q_rx_ready, 0, 0);
 
-    if (c_rx_ready)
+done:
+    if (c_rx_ready) {
         warn(WRN, "%s conn %s ready to rx", conn_type(c_rx_ready),
              scid2str(c_rx_ready));
-    else
-        warn(WRN, "no conn ready to rx");
-
-    return c_rx_ready;
+        struct q_conn * const ret = c_rx_ready;
+        c_rx_ready = 0;
+        return ret;
+    }
+    return 0;
 }
