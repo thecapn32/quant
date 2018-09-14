@@ -796,7 +796,7 @@ dec_new_token_frame(struct q_conn * const c,
     uint16_t i = dec_chk(true, FRAM_TYPE_NEW_TOKN, &tok_len, v->buf, v->len,
                          pos + 1, 0, "%" PRIu64);
 
-    if (unlikely(tok_len > v->len - i))
+    if (unlikely(tok_len > (uint64_t)(v->len - i)))
         err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_NEW_TOKN,
                          "illegal tok len");
 
