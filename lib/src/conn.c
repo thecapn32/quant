@@ -273,7 +273,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
         if (meta(v).is_acked)
             continue;
 
-        if (!rtx && meta(v).tx_len != 0) {
+        if (rtx == (meta(v).tx_len == 0)) {
             // warn(DBG,
             //      "skipping %s pkt " FMT_PNR_OUT " on strm " FMT_SID
             //      " during %s",
@@ -348,7 +348,7 @@ void do_conn_fc(struct q_conn * const c)
 
     // check if we need to do connection-level flow control
     if (c->in_data + 2 * MAX_PKT_LEN > c->tp_in.max_data) {
-        c->tx_max_data = true;
+        c->tx_max_data = c->needs_tx = true;
         c->tp_in.new_max_data = c->tp_in.max_data + 0x1000;
     }
 }
