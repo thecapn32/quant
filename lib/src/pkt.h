@@ -48,6 +48,7 @@
 // #define F_SH_KYPH 0x40
 #define F_SH_EXP_MASK 0x07
 #define F_SH 0x30
+#define F_SH_MASK 0xb8
 
 #define ERR_NONE 0x0
 #define ERR_INTERNAL 0x1

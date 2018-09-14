@@ -62,7 +62,7 @@ static const char * pkt_type_str(const struct w_iov * const v)
         case F_LH_0RTT:
             return "0-RTT Protected";
         }
-    } else
+    } else if (is_set(F_SH, v->buf[0] & F_SH_MASK))
         return "Short";
     return RED "Unknown" NRM;
 }
