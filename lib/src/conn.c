@@ -398,6 +398,9 @@ tx_crypto(struct q_conn * const c, const epoch_t e)
 void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
 {
     switch (c->state) {
+    case conn_drng:
+        die("must not TX while draining");
+
     case conn_qlse:
         enter_closing(c);
         break;
@@ -411,6 +414,7 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
                 return;
         }
         break;
+
     default:
         break;
     }
@@ -1143,28 +1147,30 @@ void enter_closing(struct q_conn * const c)
             // don't ACK here, because there will be in ACK in the CLOSE pkt
             e != c->tls.epoch_out &&
             // don't ACK if the timer is not running
-            ev_timer_remaining(loop, &pn->ack_alarm) < kDelayedAckTimeout)
+            ev_is_active(&pn->ack_alarm))
             ev_invoke(loop, &pn->ack_alarm, 0);
         ev_timer_stop(loop, &pn->ack_alarm);
     }
 
-    if (c->state == conn_idle || c->state == conn_opng ||
-        c->state == conn_drng) {
+    if (c->state == conn_idle || c->state == conn_opng) {
         // no need to go closing->draining in these cases
         ev_invoke(loop, &c->closing_alarm, 0);
         return;
     }
 
-    // start closing/draining alarm (3 * RTO)
-    const ev_tstamp dur =
-        (3 * (is_zero(c->rec.srtt) ? kDefaultInitialRtt : c->rec.srtt) +
-         4 * c->rec.rttvar);
-    ev_timer_init(&c->closing_alarm, enter_closed, dur, 0);
+    // if we're going closing->draining, don't start the timer again
+    if (!ev_is_active(&c->closing_alarm)) {
+        // start closing/draining alarm (3 * RTO)
+        const ev_tstamp dur =
+            (3 * (is_zero(c->rec.srtt) ? kDefaultInitialRtt : c->rec.srtt) +
+             4 * c->rec.rttvar);
+        ev_timer_init(&c->closing_alarm, enter_closed, dur, 0);
 #ifndef FUZZING
-    ev_timer_start(loop, &c->closing_alarm);
-    warn(DBG, "closing/draining alarm in %f sec on %s conn %s", dur,
-         conn_type(c), scid2str(c));
+        ev_timer_start(loop, &c->closing_alarm);
+        warn(DBG, "closing/draining alarm in %f sec on %s conn %s", dur,
+             conn_type(c), scid2str(c));
 #endif
+    }
 
     if (c->state != conn_drng)
         conn_to_state(c, conn_clsg);

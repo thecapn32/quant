@@ -536,18 +536,20 @@ void q_close_stream(struct q_stream * const s)
 
 void q_close(struct q_conn * const c)
 {
-    if (c->state == conn_idle || c->state == conn_clsd)
+    warn(WRN, "closing %s conn %s on port %u", conn_type(c), scid2str(c),
+         ntohs(c->sport));
+
+    if (c->state == conn_idle || c->state == conn_clsd ||
+        (!c->is_clnt && c->holds_sock))
+        // we don't need to do the closing dance in these cases
         goto done;
 
-    if (c->is_clnt || c->holds_sock == false) {
-        // we don't need to do the closing dance for master server connections
-        warn(WRN, "closing %s conn %s on port %u", conn_type(c), scid2str(c),
-             ntohs(c->sport));
-
+    if (c->state != conn_drng) {
         conn_to_state(c, conn_qlse);
         ev_async_send(loop, &c->tx_w);
-        loop_run(q_close, c, 0);
     }
+
+    loop_run(q_close, c, 0);
 
 done:
     free_conn(c);

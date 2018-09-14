@@ -68,6 +68,10 @@ hshk_pkts_outstanding(struct q_conn * const c)
 
 static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
 {
+    if (c->state == conn_clsg || c->state == conn_drng)
+        // don't do LD while draining
+        return;
+
     // don't arm the alarm if there are no packets with
     // retransmittable data in flight
     if (c->rec.in_flight == 0) {
