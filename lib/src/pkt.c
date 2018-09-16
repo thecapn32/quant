@@ -457,8 +457,13 @@ bool dec_pkt_hdr_beginning(const struct w_iov * const v,
 
         // check if the packet type/version combo makes sense
         if (meta(v).hdr.vers &&
-            (meta(v).hdr.type > F_LH_INIT || meta(v).hdr.type < F_LH_0RTT))
+            (meta(v).hdr.type > F_LH_INIT || meta(v).hdr.type < F_LH_0RTT)) {
+#ifndef FUZZING
+            warn(DBG, "illegal pkt type 0x%02x", meta(v).hdr.type);
+#endif
             return false;
+        }
+
 
         meta(v).hdr.hdr_len =
             dec_chk(&meta(v).hdr.dcid.len, v->buf, v->len, 5, 1, "0x%02x");
@@ -471,9 +476,13 @@ bool dec_pkt_hdr_beginning(const struct w_iov * const v,
         }
 
         // if this is a CI, the dcid len must be >= 8 bytes
-        if (is_clnt == false &&
-            unlikely(meta(v).hdr.type == F_LH_INIT && meta(v).hdr.dcid.len < 8))
+        if (is_clnt == false && unlikely(meta(v).hdr.type == F_LH_INIT &&
+                                         meta(v).hdr.dcid.len < 8)) {
+#ifndef FUZZING
+            warn(DBG, "dcid len %u too short", meta(v).hdr.dcid.len);
+#endif
             return false;
+        }
 
         dec(&meta(v).hdr.scid.len, v->buf, v->len, 5, 1, "0x%02x");
         meta(v).hdr.scid.len &= 0x0f;
@@ -503,16 +512,24 @@ bool dec_pkt_hdr_beginning(const struct w_iov * const v,
             meta(v).hdr.hdr_len = dec_chk(&tok_len, v->buf, v->len,
                                           meta(v).hdr.hdr_len, 0, "%" PRIu64);
             meta(v).hdr.tok_len = (uint16_t)tok_len;
-            if (is_clnt && meta(v).hdr.tok_len)
+            if (is_clnt && meta(v).hdr.tok_len) {
                 // server initial pkts must have no tokens
+#ifndef FUZZING
+                warn(DBG, "tok present in serv initial");
+#endif
                 return false;
+            }
         } else if (meta(v).hdr.type == F_LH_RTRY)
             meta(v).hdr.tok_len = v->len - meta(v).hdr.hdr_len;
 
         if (meta(v).hdr.tok_len) {
-            if (unlikely(meta(v).hdr.tok_len + meta(v).hdr.hdr_len > v->len))
+            if (unlikely(meta(v).hdr.tok_len + meta(v).hdr.hdr_len > v->len)) {
                 // corrupt token len
+#ifndef FUZZING
+                warn(DBG, "tok_len %u invalid", meta(v).hdr.tok_len);
+#endif
                 return false;
+            }
             meta(v).hdr.tok = calloc(meta(v).hdr.tok_len, sizeof(uint8_t));
             ensure(meta(v).hdr.tok, "could not calloc");
             meta(v).hdr.hdr_len =
@@ -529,8 +546,12 @@ bool dec_pkt_hdr_beginning(const struct w_iov * const v,
             meta(v).hdr.len = (uint16_t)len;
 
             // the len cannot be larger than the rx'ed pkt
-            if (unlikely(meta(v).hdr.len + meta(v).hdr.hdr_len > v->len))
+            if (unlikely(meta(v).hdr.len + meta(v).hdr.hdr_len > v->len)) {
+#ifndef FUZZING
+                warn(DBG, "len %u invalid", meta(v).hdr.len);
+#endif
                 return false;
+            }
         }
 
         return true;
@@ -559,9 +580,13 @@ bool dec_pkt_hdr_remainder(struct w_iov * const v,
 
     const struct cipher_ctx * const ctx =
         which_cipher_ctx(c, meta(v).hdr.type, true);
-    if (unlikely(!ctx->pne))
+    if (unlikely(!ctx->pne)) {
         // this packet requires a higher protection level than we have available
+#ifndef FUZZING
+        warn(DBG, "don't have PNE keys");
+#endif
         return false;
+    }
 
     ptls_cipher_init(ctx->pne, &v->buf[off]);
     uint8_t enc_nr[4];
@@ -571,8 +596,12 @@ bool dec_pkt_hdr_remainder(struct w_iov * const v,
     const uint64_t next = diet_max(&pn->recv) + 1;
     uint64_t nr = next;
     const uint16_t nr_len = dec_pnr(&nr, enc_nr, sizeof(enc_nr), 0, "%u");
-    if (unlikely(nr_len == UINT16_MAX))
+    if (unlikely(nr_len == UINT16_MAX)) {
+#ifndef FUZZING
+        warn(DBG, "can't undo PNE");
+#endif
         return false;
+    }
 
     memcpy(&v->buf[nr_pos], &enc_nr, nr_len);
 
