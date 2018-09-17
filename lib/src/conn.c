@@ -61,7 +61,7 @@
 const char * const conn_state_str[] = {CONN_STATES};
 
 
-struct q_conn * c_rx_ready;
+struct q_conn_sl c_ready;
 struct ipnp_splay conns_by_ipnp = splay_initializer(&conns_by_ipnp);
 struct cid_splay conns_by_cid = splay_initializer(&conns_by_cid);
 
@@ -870,8 +870,8 @@ void
 static void __attribute__((nonnull))
 #endif
 rx_pkts(struct w_iov_sq * const i,
-             struct q_conn_sl * const crx,
-             const struct w_sock * const ws)
+        struct q_conn_sl * const crx,
+        const struct w_sock * const ws)
 {
     while (!sq_empty(i)) {
         struct w_iov * const v = sq_first(i);
@@ -1027,7 +1027,7 @@ rx_pkts(struct w_iov_sq * const i,
         // remember that we had a RX event on this connection
         if (!c->had_rx) {
             c->had_rx = true;
-            sl_insert_head(crx, c, node_rx);
+            sl_insert_head(crx, c, node_rx_int);
         }
 
         if (rx_pkt(c, v, i))
@@ -1055,7 +1055,7 @@ void rx(struct ev_loop * const l,
     // for all connections that had RX events
     while (!sl_empty(&crx)) {
         struct q_conn * const c = sl_first(&crx);
-        sl_remove_head(&crx, node_rx);
+        sl_remove_head(&crx, node_rx_int);
 
         if (c->state != conn_drng)
             // reset idle timeout
@@ -1068,15 +1068,12 @@ void rx(struct ev_loop * const l,
         // clear the helper flags set above
         c->needs_tx = c->had_rx = false;
 
-        if (c->tx_rtry || c->tx_vneg) {
+        if (c->tx_rtry || c->tx_vneg)
             // if we sent a retry or vneg, forget the entire connection existed
             free_conn(c);
-            continue;
-        }
-
-        if (c_rx_ready == 0 && c->have_new_data) {
-            c_rx_ready = c;
-            c->have_new_data = false;
+        else if (c->have_new_data) {
+            if (!c->in_c_ready)
+                sl_insert_head(&c_ready, c, node_rx_int);
             maybe_api_return(q_rx_ready, 0, 0);
         }
     }
@@ -1343,7 +1340,9 @@ void free_conn(struct q_conn * const c)
         use_next_scid(c);
     while (!sq_empty(&c->dcid))
         use_next_dcid(c);
-    if (c_rx_ready == c)
-        c_rx_ready = 0;
+
+    if (c->in_c_ready)
+        sl_remove(&c_ready, c, q_conn, node_rx_int);
+
     free(c);
 }

@@ -91,47 +91,47 @@ extern const char * const conn_state_str[];
 /// A QUIC connection.
 struct q_conn {
     splay_entry(q_conn) node_ipnp;
-    sl_entry(q_conn) node_rx; ///< For maintaining the RX queue.
-    sl_entry(q_conn) node_aq; ///< For maintaining the accept queue.
+    sl_entry(q_conn) node_rx_int; ///< For maintaining the internal RX queue.
+    sl_entry(q_conn) node_rx_ext; ///< For maintaining the external RX queue.
+    sl_entry(q_conn) node_aq;     ///< For maintaining the accept queue.
 
     sq_head(dcid_head, cid) dcid; ///< Destination connection IDs
     sq_head(scid_head, cid) scid; ///< Source connection IDs
 
-    uint16_t holds_sock : 1;  ///< Connection manages a warpcore socket.
-    uint16_t is_clnt : 1;     ///< We are the client on this connection.
-    uint16_t had_rx : 1;      ///< We had an RX event on this connection.
-    uint16_t needs_tx : 1;    ///< We have a pending TX on this connection.
-    uint16_t tx_max_data : 1; ///< Sent a MAX_DATA frame.
-    uint16_t blocked : 1;     ///< We are receive-window-blocked.
-    uint16_t stream_id_blocked : 1; ///< We are out of stream IDs.
-    uint16_t tx_max_stream_id : 1;  ///< Send MAX_STREAM_ID frame.
-    uint16_t try_0rtt : 1;          ///< Try 0-RTT handshake.
-    uint16_t did_0rtt : 1;          ///< 0-RTT handshake succeeded;
-    uint16_t tx_path_resp : 1;      ///< Send PATH_RESPONSE.
-    uint16_t tx_path_chlg : 1;      ///< Send PATH_CHALLENGE.
-    uint16_t tx_ncid : 1;           ///< Send NEW_CONNECTION_ID.
-    uint16_t tx_rtry : 1;           ///< We need to send a RETRY.
-    uint16_t tx_vneg : 1;           ///< We need to send a vers neg response.
-    uint16_t have_new_data : 1;     ///< New stream data was enqueued.
+    uint32_t holds_sock : 1;  ///< Connection manages a warpcore socket.
+    uint32_t is_clnt : 1;     ///< We are the client on this connection.
+    uint32_t had_rx : 1;      ///< We had an RX event on this connection.
+    uint32_t needs_tx : 1;    ///< We have a pending TX on this connection.
+    uint32_t tx_max_data : 1; ///< Sent a MAX_DATA frame.
+    uint32_t blocked : 1;     ///< We are receive-window-blocked.
+    uint32_t stream_id_blocked : 1; ///< We are out of stream IDs.
+    uint32_t tx_max_stream_id : 1;  ///< Send MAX_STREAM_ID frame.
+    uint32_t try_0rtt : 1;          ///< Try 0-RTT handshake.
+    uint32_t did_0rtt : 1;          ///< 0-RTT handshake succeeded;
+    uint32_t tx_path_resp : 1;      ///< Send PATH_RESPONSE.
+    uint32_t tx_path_chlg : 1;      ///< Send PATH_CHALLENGE.
+    uint32_t tx_ncid : 1;           ///< Send NEW_CONNECTION_ID.
+    uint32_t tx_rtry : 1;           ///< We need to send a RETRY.
+    uint32_t tx_vneg : 1;           ///< We need to send a vers neg response.
+    uint32_t have_new_data : 1;     ///< New stream data was enqueued.
+    uint32_t in_c_ready : 1;
+    uint32_t : 15;
 
     uint16_t sport; ///< Local port (in network byte-order).
+    uint16_t tok_len;
 
     conn_state_t state; ///< State of the connection.
 
-    struct w_engine * w; ///< Underlying warpcore engine.
-
-    char * err_reason;
     uint16_t err_code;
     uint8_t err_frm;
 
     uint8_t _unused;
+    struct w_engine * w; ///< Underlying warpcore engine.
+
+    char * err_reason;
 
     uint32_t vers;         ///< QUIC version in use for this connection.
     uint32_t vers_initial; ///< QUIC version first negotiated.
-
-    uint16_t tok_len;
-
-    uint8_t _unused2[2];
 
     struct pn_hshk_space pn_init, pn_hshk;
     struct pn_data_space pn_data;
@@ -174,7 +174,7 @@ struct q_conn {
 };
 
 
-extern struct q_conn * c_rx_ready;
+extern struct q_conn_sl c_ready;
 
 
 static inline __attribute__((always_inline, nonnull)) struct pn_space *
