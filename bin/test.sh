@@ -77,8 +77,8 @@ case $c in
                                 -ignorePKI -send-close"
                 ;;
         picoquic)
-                cc="external/picoquic-prefix/src/picoquic/picoquicdemo \
-                         $addr $port -1"
+                cc="external/picoquic-prefix/src/picoquic/picoquicdemo  -1 -n localhost \
+                         $addr $port"
                 ;;
 
         quicker)
@@ -90,7 +90,7 @@ case $c in
                         CGO_CFLAGS=-I/usr/local/opt/openssl@1.1/include \
                         CGO_LDFLAGS=-L/usr/local/opt/openssl@1.1/lib \
                     go run $(pwd)/external/go/src/github.com/QUIC-Tracker/quic-tracker/bin/test_suite/scenario_runner.go \
-                        -interface lo0 -host $addr:$port -scenario http_get_on_uni_stream"
+                        -interface lo0 -host $addr:$port -scenario flow_control"
                 ;;
 esac
 
