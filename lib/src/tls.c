@@ -788,9 +788,6 @@ void init_tls(struct q_conn * const c)
         ensure(ptls_set_server_name(c->tls.t, c->peer_name, 0) == 0,
                "ptls_set_server_name");
 
-    ptls_buffer_init(&c->tls.tls_io, c->tls.tls_io_buf,
-                     sizeof(c->tls.tls_io_buf));
-
     ptls_handshake_properties_t * const hshk_prop = &c->tls.tls_hshake_prop;
 
     hshk_prop->additional_extensions = c->tls.tp_ext;
@@ -851,7 +848,6 @@ void free_tls(struct q_conn * const c)
 {
     if (c->tls.t)
         ptls_free(c->tls.t);
-    ptls_buffer_dispose(&c->tls.tls_io);
     free_prot(c);
 }
 
@@ -872,18 +868,19 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
     struct q_conn * const c = s->c;
     const size_t in_len = iv ? iv->len : 0;
     const epoch_t epoch_in = strm_epoch(s);
-    const size_t prev_off = c->tls.tls_io.off;
-    const int ret = ptls_handle_message(
-        c->tls.t, &c->tls.tls_io, c->tls.epoch_off, epoch_in, iv ? iv->buf : 0,
-        in_len, &c->tls.tls_hshake_prop);
+    size_t epoch_off[5] = {0};
+    ptls_buffer_t tls_io;
+    uint8_t tls_io_buf[4096];
+    ptls_buffer_init(&tls_io, tls_io_buf, sizeof(tls_io_buf));
+
+    const int ret =
+        ptls_handle_message(c->tls.t, &tls_io, epoch_off, epoch_in,
+                            iv ? iv->buf : 0, in_len, &c->tls.tls_hshake_prop);
     warn(DBG,
-         "epoch %u, in %u (off %u), gen %u (%u-%u-%u-%u-%u), ret %u, "
-         "left "
-         "%u",
-         epoch_in, iv ? iv->len : 0, iv ? meta(iv).stream_off : 0,
-         c->tls.tls_io.off, c->tls.epoch_off[0], c->tls.epoch_off[1],
-         c->tls.epoch_off[2], c->tls.epoch_off[3], c->tls.epoch_off[4], ret,
-         iv ? iv->len - in_len : 0);
+         "epoch %u, in %u (off %u), gen %u (%u-%u-%u-%u-%u), ret %u, left %u",
+         epoch_in, iv ? iv->len : 0, iv ? meta(iv).stream_off : 0, tls_io.off,
+         epoch_off[0], epoch_off[1], epoch_off[2], epoch_off[3], epoch_off[4],
+         ret, iv ? iv->len - in_len : 0);
 
     if (ret == 0 && c->state != conn_estb) {
         if (ptls_is_psk_handshake(c->tls.t)) {
@@ -905,21 +902,17 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
         return ret;
     }
 
-    if (c->tls.tls_io.off > prev_off) {
+    if (tls_io.off) {
         // enqueue for TX
         for (epoch_t e = ep_init; e <= ep_data; e++) {
-            const size_t out_len =
-                c->tls.epoch_off[e + 1] - c->tls.epoch_off[e];
+            const size_t out_len = epoch_off[e + 1] - epoch_off[e];
             if (out_len == 0)
                 continue;
             struct q_stream * const se = get_stream(c, crpt_strm_id(e));
-            if (se->out_data >= out_len)
-                continue;
-            warn(DBG, "epoch %u: off %u len %u", e, c->tls.epoch_off[e],
-                 out_len);
+            warn(DBG, "epoch %u: off %u len %u", e, epoch_off[e], out_len);
             struct w_iov_sq o = sq_head_initializer(o);
             q_alloc(w_engine(c->sock), &o, (uint32_t)out_len);
-            const uint8_t * data = c->tls.tls_io.base + c->tls.epoch_off[e];
+            const uint8_t * data = tls_io.base + epoch_off[e];
             struct w_iov * ov = 0;
             sq_foreach (ov, &o, next) {
                 memcpy(ov->buf, data, ov->len);
