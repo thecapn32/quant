@@ -234,9 +234,15 @@ bool enc_pkt(struct q_stream * const s,
         break;
     }
 
-    if (is_set(F_LONG_HDR, meta(v).hdr.flags) == false)
-        // for giggles, randomize the reserved bits in the short header
-        meta(v).hdr.flags |= arc4random_uniform(F_SH_EXP_MASK);
+    if (is_set(F_LONG_HDR, meta(v).hdr.flags) == false) {
+        // clear spin/vec
+        meta(v).hdr.flags &= ~F_SH_EXP_MASK;
+
+        // set spin bit
+        if (c->next_spin) {
+            meta(v).hdr.flags |= F_SH_SPIN;
+        }
+    }
 
     ensure(meta(v).hdr.nr < (1ULL << 62) - 1, "packet number overflow");
 
@@ -632,6 +638,16 @@ bool dec_pkt_hdr_remainder(struct w_iov * const v,
             warn(DBG, "split out 0x%02x-type coalesced pkt of len %u",
                  pkt_type(*vdup->buf), vdup->len);
 #endif
+        }
+    } else {
+        // short header, spin the bit
+        if (nr > c->max_recv_pn) {
+            c->max_recv_pn = nr;
+            if (c->is_clnt) {
+                c->next_spin = ((meta(v).hdr.flags & F_SH_SPIN) == 0);
+            } else {
+                c->next_spin = ((meta(v).hdr.flags & F_SH_SPIN) != 0);
+            }
         }
     }
     return true;

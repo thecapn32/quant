@@ -124,7 +124,8 @@ struct q_conn {
     uint16_t err_code;
     uint8_t err_frm;
 
-    uint8_t _unused;
+    uint8_t next_spin : 1;
+    uint8_t _unused : 7;
 
     uint32_t vers;         ///< QUIC version in use for this connection.
     uint32_t vers_initial; ///< QUIC version first negotiated.
@@ -135,6 +136,8 @@ struct q_conn {
 
     struct pn_hshk_space pn_init, pn_hshk;
     struct pn_data_space pn_data;
+
+    uint64_t max_recv_pn;
 
     int64_t next_sid; ///< Next stream ID to use on q_rsv_stream().
 

@@ -47,6 +47,9 @@
 
 // #define F_SH_KYPH 0x40
 #define F_SH_EXP_MASK 0x07
+#define F_SH_SPIN 0x04
+#define F_SH_VEC1 0x02
+#define F_SH_VEC0 0x01
 #define F_SH 0x30
 #define F_SH_MASK 0xb8
 
