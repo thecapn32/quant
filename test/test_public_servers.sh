@@ -31,7 +31,7 @@
 declare -A servers=(
         #[tag]=name:port:retry-ports:URL
         [ats]=quic.ogre.com:4433:4434:/en/latest/
-        [f5]=208.85.208.226:4433:4434:/index.html
+        [f5]=208.85.208.226:4433:4434:/file15k
         [minq]=minq.dev.mozaws.net:4433:4434:/index.html
         [mozquic]=mozquic.ducksong.com:4433:4434:/index.html
         [mvfst]=fb.mvfst.net:4433:4434:/index.html
@@ -41,7 +41,7 @@ declare -A servers=(
         [picoquic]=test.privateoctopus.com:4433:4434:/10000
         [quant]=quant.eggert.org:4433:4434:/10000
         [quicker]=quicker.edm.uhasselt.be:4433:4434:/index.html
-        [quicly]=kazuhooku.com:4433:4434:/index.html
+        [quicly]=kazuhooku.com:4433:4434:/10000.txt
         [quicr]=ralith.com:4433:4434:/index.html
         [quinn]=xavamedia.nl:4433:4434:/index.html
         [winquic]=msquic.westus.cloudapp.azure.com:4433:4434:/index.html
