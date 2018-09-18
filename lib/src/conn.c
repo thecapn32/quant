@@ -360,7 +360,9 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
         return;
 
     // do we need to make more stream IDs available?
-    do_stream_id_fc(splay_max(stream, &c->streams));
+    struct q_stream * const s = splay_max(stream, &c->streams);
+    if (s)
+        do_stream_id_fc(s);
 
     // send a NEW_CONNECTION_ID frame if the peer doesn't have one remaining
     c->tx_ncid = (sq_len(&c->scid) < 2);
