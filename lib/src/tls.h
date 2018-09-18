@@ -55,11 +55,8 @@ struct tls {
     ptls_raw_extension_t tp_ext[2];
     ptls_handshake_properties_t tls_hshake_prop;
     size_t max_early_data;
-    size_t epoch_off[5];
-    ptls_buffer_t tls_io;
     epoch_t epoch_out; // TODO: remove
-    uint8_t tp_buf[96];
-    uint8_t tls_io_buf[4092];
+    uint8_t tp_buf[100];
 };
 
 
