@@ -641,8 +641,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const v,
         }
     } else {
         // short header, spin the bit
-        if (nr > c->pn_data.lg_recv) {
-            c->pn_data.lg_recv = nr;
+        if (nr == diet_max(&(c->pn_data.pn.recv_all))) {
             if (c->is_clnt) {
                 c->next_spin = ((meta(v).hdr.flags & F_SH_SPIN) == 0);
             } else {
