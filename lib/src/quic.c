@@ -244,7 +244,7 @@ struct q_conn * q_connect(struct w_engine * const w,
     if (early_data) {
         ensure(early_data_stream, "early data without stream pointer");
         // queue up early data
-        *early_data_stream = new_stream(c, c->next_sid, true);
+        *early_data_stream = new_stream(c, c->next_sid);
         sq_concat(&(*early_data_stream)->out, early_data);
         if (fin)
             strm_to_state(*early_data_stream,
@@ -426,17 +426,17 @@ struct q_conn * q_accept(const uint64_t timeout)
 
 struct q_stream * q_rsv_stream(struct q_conn * const c)
 {
-    if (c->next_sid >> 2 > c->tp_out.max_bidi_streams) {
+    if (c->next_sid >> 2 > c->tp_out.max_bidi_streams - 1) {
         // we hit the max stream limit, wait for MAX_STREAM_ID frame
         warn(WRN, "MAX_STREAM_ID increase needed (%u > %u)", c->next_sid >> 2,
              c->tp_out.max_bidi_streams);
         loop_run(q_rsv_stream, c, 0);
     }
 
-    ensure(c->next_sid >> 2 <= c->tp_out.max_bidi_streams, "sid %u <= max %u",
+    ensure(c->next_sid >> 2 < c->tp_out.max_bidi_streams, "sid %u < max %u",
            c->next_sid >> 2, c->tp_out.max_bidi_streams);
 
-    return new_stream(c, c->next_sid, true);
+    return new_stream(c, c->next_sid);
 }
 
 

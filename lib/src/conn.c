@@ -359,10 +359,8 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
     if (c->state == conn_clsg || c->state == conn_drng)
         return;
 
-    if (splay_max(stream, &c->streams)->id >> 2 >= c->tp_in.max_bidi_streams) {
-        c->tx_max_stream_id = true;
-        c->tp_in.max_bidi_streams += 2;
-    }
+    // do we need to make more stream IDs available?
+    do_stream_id_fc(splay_max(stream, &c->streams));
 
     // send a NEW_CONNECTION_ID frame if the peer doesn't have one remaining
     c->tx_ncid = (sq_len(&c->scid) < 2);
@@ -1239,7 +1237,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->idle_alarm.repeat = idle_to ? idle_to : kIdleTimeout;
     ev_init(&c->idle_alarm, idle_alarm);
 
-    // intialize closing alarm
+    // initialize closing alarm
     c->closing_alarm.data = c;
     ev_init(&c->closing_alarm, enter_closed);
 
@@ -1288,7 +1286,7 @@ struct q_conn * new_conn(struct w_engine * const w,
 
     // create crypto streams
     for (epoch_t e = ep_init; e <= ep_data; e++)
-        new_stream(c, crpt_strm_id(e), false);
+        new_stream(c, crpt_strm_id(e));
 
     warn(DBG, "%s conn %s on port %u created", conn_type(c), scid2str(c),
          ntohs(c->sport));

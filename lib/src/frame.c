@@ -112,8 +112,10 @@ void log_stream_or_crypto_frame(const bool rtx,
                                                                       : "",
              is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id,
              is_set(STRM_FL_INI_SRV, s->id) == c->is_clnt
-                 ? c->tp_in.max_bidi_streams
-                 : c->tp_out.max_bidi_streams,
+                 ? ((c->tp_in.max_bidi_streams - 1) << 2) +
+                       (is_set(STRM_FL_INI_SRV, s->id) ? STRM_FL_INI_SRV : 0)
+                 : ((c->tp_out.max_bidi_streams - 1) << 2) +
+                       (is_set(STRM_FL_INI_SRV, s->id) ? STRM_FL_INI_SRV : 0),
              in ? c->in_data : c->out_data,
              in ? c->tp_in.max_data : c->tp_out.max_data, meta(v).stream_off,
              in ? s->in_data_max : s->out_data_max, stream_data_len(v),
@@ -186,7 +188,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
             err_close_return(c, ERR_INTERNAL, 0,
                              "TODO: unidirectional streams not supported yet");
 
-        s = new_stream(c, sid, false);
+        s = new_stream(c, sid);
     }
     meta(v).stream = s;
 
@@ -486,7 +488,7 @@ dec_max_stream_data_frame(struct q_conn * const c,
 
     struct q_stream * s = get_stream(c, sid);
     if (unlikely(s == 0))
-        s = new_stream(c, sid, false);
+        s = new_stream(c, sid);
 
     uint64_t max = 0;
     i = dec_chk(true, FRAM_TYPE_MAX_STRM_DATA, &max, v->buf, v->len, i, 0,
@@ -534,14 +536,15 @@ dec_max_stream_id_frame(struct q_conn * const c,
                                 ? &c->tp_out.max_uni_streams
                                 : &c->tp_out.max_bidi_streams;
 
+    max = (max >> 2) + 1;
     if (max > *which) {
-        *which = max >> 2;
+        *which = max;
         maybe_api_return(q_rsv_stream, c, 0);
     }
 #ifndef FUZZING
     else
-        warn(WRN, "MAX_STREAM_ID %" PRIu64 " <= current value %" PRIu64,
-             max >> 2, *which);
+        warn(WRN, "max_bidi_streams %" PRIu64 " <= current value %" PRIu64, max,
+             *which);
 #endif
 
     return i;
@@ -1224,11 +1227,13 @@ uint16_t enc_max_stream_id_frame(struct q_conn * const c,
     const uint8_t type = FRAM_TYPE_MAX_SID;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
-    const uint64_t mbs =
-        c->tp_in.max_bidi_streams << 2 & (!c->is_clnt ? STRM_FL_INI_SRV : 0);
-    i = enc(v->buf, v->len, i, &mbs, 0, 0, "%" PRIu64);
+    const int64_t mbs = ((c->tp_in.new_max_bidi_streams - 1) << 2) +
+                        (c->is_clnt ? STRM_FL_INI_SRV : 0);
+    i = enc(v->buf, v->len, i, &mbs, 0, 0, "%" PRId64);
 
     warn(INF, FRAM_OUT "MAX_STREAM_ID" NRM " max=" FMT_SID, mbs);
+
+    c->tp_in.max_bidi_streams = c->tp_in.new_max_bidi_streams;
 
     return i;
 }
@@ -1279,9 +1284,9 @@ uint16_t enc_stream_id_blocked_frame(struct q_conn * const c,
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
     // TODO handle unidir
-    const uint64_t mbs =
-        c->tp_out.max_bidi_streams << 2 & (!c->is_clnt ? STRM_FL_INI_SRV : 0);
-    i = enc(v->buf, v->len, i, &mbs, 0, 0, "%" PRIu64);
+    const int64_t mbs = ((c->tp_out.max_bidi_streams - 1) << 2) +
+                        (!c->is_clnt ? STRM_FL_INI_SRV : 0);
+    i = enc(v->buf, v->len, i, &mbs, 0, 0, "%" PRId64);
 
     warn(INF, FRAM_OUT "STREAM_ID_BLOCKED" NRM " sid=" FMT_SID, mbs);
 

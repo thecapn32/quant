@@ -56,6 +56,7 @@ struct transport_params {
     uint64_t new_max_data;
     int64_t max_uni_streams;  // this is count, not a max ID
     int64_t max_bidi_streams; // this is count, not a max ID
+    int64_t new_max_bidi_streams;
     uint16_t max_pkt;
     uint16_t idle_to;
     uint8_t ack_del_exp;

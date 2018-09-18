@@ -132,8 +132,7 @@ stream_cmp(const struct q_stream * const a, const struct q_stream * const b);
 extern struct q_stream * __attribute__((nonnull))
 get_stream(struct q_conn * const c, const int64_t id);
 
-extern struct q_stream *
-new_stream(struct q_conn * const c, const int64_t id, const bool active);
+extern struct q_stream * new_stream(struct q_conn * const c, const int64_t id);
 
 extern void __attribute__((nonnull)) free_stream(struct q_stream * const s);
 
@@ -150,5 +149,7 @@ extern void __attribute__((nonnull))
 apply_stream_limits(struct q_stream * const s);
 
 extern void __attribute__((nonnull)) do_stream_fc(struct q_stream * const s);
+
+extern void __attribute__((nonnull)) do_stream_id_fc(struct q_stream * const s);
 
 SPLAY_PROTOTYPE(stream, q_stream, node, stream_cmp)

@@ -78,8 +78,7 @@ void apply_stream_limits(struct q_stream * const s)
 }
 
 
-struct q_stream *
-new_stream(struct q_conn * const c, const int64_t id, const bool active)
+struct q_stream * new_stream(struct q_conn * const c, const int64_t id)
 {
     if (id >= 0)
         ensure(get_stream(c, id) == 0, "stream already %u exists", id);
@@ -93,15 +92,21 @@ new_stream(struct q_conn * const c, const int64_t id, const bool active)
     strm_to_state(s, strm_open);
     splay_insert(stream, &c->streams, s);
 
-    apply_stream_limits(s);
+    if (s->id < 0)
+        goto done;
 
-    if (active) {
+    apply_stream_limits(s);
+    do_stream_id_fc(s);
+
+    if (is_set(STRM_FL_INI_SRV, s->id) == !s->c->is_clnt) {
+        // this is a local stream
         if (c->next_sid == 0)
             c->next_sid = c->is_clnt ? 4 : 1;
         else
             c->next_sid += 4;
     }
 
+done:
     return s;
 }
 
@@ -170,11 +175,28 @@ void reset_stream(struct q_stream * const s, const bool forget)
 
 void do_stream_fc(struct q_stream * const s)
 {
-    if (s->c->state != conn_estb || s->id < 0)
-        return;
 
     if (s->in_data + 2 * MAX_PKT_LEN > s->in_data_max) {
         s->tx_max_stream_data = s->c->needs_tx = true;
         s->new_in_data_max = s->in_data_max + 0x1000;
+    }
+}
+
+
+void do_stream_id_fc(struct q_stream * const s)
+{
+    if (s->c->state != conn_estb || s->id < 0)
+        return;
+
+    if (is_set(STRM_FL_INI_SRV, s->id) == s->c->is_clnt) {
+        // this is a local stream
+        if (s->id >> 2 == s->c->tp_in.max_bidi_streams - 1) {
+            s->c->tx_max_stream_id = true;
+            s->c->tp_in.new_max_bidi_streams = s->c->tp_in.max_bidi_streams + 1;
+        }
+    } else {
+        // this is a remote stream
+        if (s->id >> 2 == s->c->tp_out.max_bidi_streams - 1)
+            s->c->stream_id_blocked = true;
     }
 }
