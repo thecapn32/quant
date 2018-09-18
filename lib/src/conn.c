@@ -1070,8 +1070,10 @@ void rx(struct ev_loop * const l,
             // if we sent a retry or vneg, forget the entire connection existed
             free_conn(c);
         else if (c->have_new_data) {
-            if (!c->in_c_ready)
+            if (!c->in_c_ready) {
                 sl_insert_head(&c_ready, c, node_rx_int);
+                c->in_c_ready = true;
+            }
             maybe_api_return(q_rx_ready, 0, 0);
         }
     }
