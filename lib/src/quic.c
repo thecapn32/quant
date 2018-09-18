@@ -87,7 +87,7 @@ void *api_conn = 0, *api_strm = 0;
 
 struct q_conn_sl aq = sl_head_initializer(aq);
 
-static const uint32_t nbufs = 1000; ///< Number of packet buffers to allocate.
+static const uint32_t nbufs = 100000; ///< Number of packet buffers to allocate.
 
 static ev_timer api_alarm;
 
