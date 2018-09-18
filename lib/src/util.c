@@ -27,10 +27,8 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
-#include <sys/uio.h>
+#include <unistd.h>
 
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
@@ -88,20 +86,14 @@ void q_write_file(struct w_engine * const w,
     // allocate tail queue
     struct w_iov_sq o = sq_head_initializer(o);
     q_alloc(w, &o, len);
-    const uint64_t n = w_iov_sq_cnt(&o);
-    struct iovec * const iov = calloc(n, sizeof(struct iovec));
-    ensure(iov, "could not calloc");
 
-    // prep iovec and read file
-    uint32_t i = 0;
     struct w_iov * v;
-    sq_foreach (v, &o, next)
-        iov[i++] = (struct iovec){.iov_base = v->buf, .iov_len = v->len};
-    const ssize_t l = readv(f, iov, (int)n);
-    ensure(len == l, "could not read file");
+    sq_foreach (v, &o, next) {
+        const ssize_t ret = read(f, v->buf, v->len);
+        ensure(ret != -1, "cannot read");
+    }
 
     // write it and free tail queue and iov
     q_write(s, &o, fin);
     q_free(&o);
-    free(iov);
 }
