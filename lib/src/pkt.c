@@ -610,7 +610,8 @@ bool dec_pkt_hdr_remainder(struct w_iov * const v,
          off);
 #endif
 
-    const uint64_t alt = nr + (UINT64_C(1) << (nr_len * 8));
+    const uint8_t lens[] = {0xff, 7, 14, 0xff, 30};
+    const uint64_t alt = nr + (UINT64_C(1) << lens[nr_len]);
     const uint64_t d1 = next >= nr ? next - nr : nr - next;
     const uint64_t d2 = next >= alt ? next - alt : alt - next;
     meta(v).hdr.nr = d1 < d2 ? nr : alt;

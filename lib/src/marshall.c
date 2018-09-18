@@ -197,7 +197,7 @@ uint16_t marshall_enc_pnr(uint8_t * const buf,
     // varint pnr encoding
     switch (enc_len) {
     case 1: {
-        const uint8_t v = *(const uint8_t *)src;
+        const uint8_t v = *(const uint8_t *)src & ~0x80;
         do_enc(v, uint32_t, fmt, "pnr");
         break;
     }
