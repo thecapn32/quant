@@ -649,7 +649,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const v,
     } else {
 #ifdef SPINBIT
         // short header, spin the bit
-        if (nr == diet_max(&(c->pn_data.pn.recv_all))) {
+        if (nr > diet_max(&(c->pn_data.pn.recv_all))) {
             if (c->is_clnt) {
                 c->next_spin = ((meta(v).hdr.flags & F_SH_SPIN) == 0);
                 warn(DBG, "inverting spin to %x", c->next_spin);
@@ -658,7 +658,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const v,
                 warn(DBG, "reflecting spin to %x", c->next_spin);
             }
         } else {
-            warn(DBG, "not updating next_spin: %llx != %llx", nr, diet_max(&(c->pn_data.pn.recv_all)));
+            warn(DBG, "not updating next_spin: %llx <= %llx", nr, diet_max(&(c->pn_data.pn.recv_all)));
         }
 #endif
     }
