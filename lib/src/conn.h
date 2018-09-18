@@ -137,8 +137,6 @@ struct q_conn {
     struct pn_hshk_space pn_init, pn_hshk;
     struct pn_data_space pn_data;
 
-    uint64_t max_recv_pn;
-
     int64_t next_sid; ///< Next stream ID to use on q_rsv_stream().
 
     struct transport_params tp_in;  ///< Transport parameters for RX.
