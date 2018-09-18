@@ -175,6 +175,8 @@ void reset_stream(struct q_stream * const s, const bool forget)
 
 void do_stream_fc(struct q_stream * const s)
 {
+    if (s->c->state != conn_estb || s->id < 0)
+        return;
 
     if (s->in_data + 2 * MAX_PKT_LEN > s->in_data_max) {
         s->tx_max_stream_data = s->c->needs_tx = true;

@@ -100,5 +100,5 @@ ack_alarm(struct ev_loop * const l, ev_timer * const w, int e);
 static inline bool __attribute__((nonnull, always_inline))
 needs_ack(struct pn_space * const pn)
 {
-    return !diet_empty(&pn->recv) && pn->lg_acked < diet_max(&pn->recv);
+    return !diet_empty(&pn->recv);
 }
