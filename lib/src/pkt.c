@@ -240,11 +240,10 @@ bool enc_pkt(struct q_stream * const s,
         meta(v).hdr.flags &= ~F_SH_EXP_MASK;
 
         // set spin bit
-        if (c->next_spin) {
+        if (c->next_spin)
             meta(v).hdr.flags |= F_SH_SPIN;
-        }
 
-        warn(DBG, "setting spin bits to %x", meta(v).hdr.flags & F_SH_EXP_MASK);
+        warn(DBG, "setting spin bits to %02x", meta(v).hdr.flags & F_SH_EXP_MASK);
 #else
         // for giggles, randomize the reserved bits in the short header
         meta(v).hdr.flags |= arc4random_uniform(F_SH_EXP_MASK);
@@ -657,9 +656,8 @@ bool dec_pkt_hdr_remainder(struct w_iov * const v,
                 c->next_spin = ((meta(v).hdr.flags & F_SH_SPIN) != 0);
                 warn(DBG, "reflecting spin to %x", c->next_spin);
             }
-        } else {
+        } else
             warn(DBG, "not updating next_spin: %llx <= %llx", nr, diet_max(&(c->pn_data.pn.recv_all)));
-        }
 #endif
     }
     return true;

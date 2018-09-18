@@ -116,7 +116,12 @@ struct q_conn {
     uint32_t tx_vneg : 1;           ///< We need to send a vers neg response.
     uint32_t have_new_data : 1;     ///< New stream data was enqueued.
     uint32_t in_c_ready : 1;
+#ifdef SPINBIT
+    uint32_t next_spin : 1;         ///< spin value to set on next packet sent
+    uint32_t : 14;
+#else 
     uint32_t : 15;
+#endif
 
     uint16_t sport; ///< Local port (in network byte-order).
     uint16_t tok_len;
@@ -126,12 +131,8 @@ struct q_conn {
     uint16_t err_code;
     uint8_t err_frm;
 
-#ifdef SPINBIT
-    uint8_t next_spin : 1;
-    uint8_t _unused : 7;
-#else
     uint8_t _unused;
-#endif
+
     struct w_engine * w; ///< Underlying warpcore engine.
 
     char * err_reason;
