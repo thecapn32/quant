@@ -73,7 +73,6 @@ struct pn_hshk_space {
 
 struct pn_data_space {
     struct pn_space pn;
-    uint64_t lg_recv;
     struct cipher_ctx in[2];
     struct cipher_ctx out_0rtt;
     struct cipher_ctx out_1rtt;
