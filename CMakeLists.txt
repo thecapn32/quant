@@ -226,6 +226,10 @@ if(FUZZER)
   endif()
 endif()
 
+if(SPINBIT)
+  add_definitions(-DSPINBIT)
+endif()
+
 if(NOT CMAKE_BUILD_TYPE MATCHES Release AND HAVE_PROFILER)
 #  set(CMAKE_C_STANDARD_LIBRARIES "-lprofiler -ltcmalloc")
   set(CMAKE_C_STANDARD_LIBRARIES "-lprofiler")

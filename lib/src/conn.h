@@ -124,8 +124,12 @@ struct q_conn {
     uint16_t err_code;
     uint8_t err_frm;
 
+#ifdef SPINBIT
     uint8_t next_spin : 1;
     uint8_t _unused : 7;
+#else
+    uint8_t _unused;
+#endif
 
     uint32_t vers;         ///< QUIC version in use for this connection.
     uint32_t vers_initial; ///< QUIC version first negotiated.
