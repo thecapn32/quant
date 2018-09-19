@@ -234,9 +234,21 @@ bool enc_pkt(struct q_stream * const s,
         break;
     }
 
-    if (is_set(F_LONG_HDR, meta(v).hdr.flags) == false)
+    if (is_set(F_LONG_HDR, meta(v).hdr.flags) == false) {
+#ifdef SPINBIT
+        // clear spin/vec
+        meta(v).hdr.flags &= ~F_SH_EXP_MASK;
+
+        // set spin bit
+        if (c->next_spin)
+            meta(v).hdr.flags |= F_SH_SPIN;
+
+        warn(DBG, "setting spin bits to %02x", meta(v).hdr.flags & F_SH_EXP_MASK);
+#else
         // for giggles, randomize the reserved bits in the short header
         meta(v).hdr.flags |= arc4random_uniform(F_SH_EXP_MASK);
+#endif
+    }
 
     ensure(meta(v).hdr.nr < (1ULL << 62) - 1, "packet number overflow");
 
@@ -634,6 +646,20 @@ bool dec_pkt_hdr_remainder(struct w_iov * const v,
                  pkt_type(*vdup->buf), vdup->len);
 #endif
         }
+    } else {
+#ifdef SPINBIT
+        // short header, spin the bit
+        if (nr > diet_max(&(c->pn_data.pn.recv_all))) {
+            if (c->is_clnt) {
+                c->next_spin = ((meta(v).hdr.flags & F_SH_SPIN) == 0);
+                warn(DBG, "inverting spin to %x", c->next_spin);
+            } else {
+                c->next_spin = ((meta(v).hdr.flags & F_SH_SPIN) != 0);
+                warn(DBG, "reflecting spin to %x", c->next_spin);
+            }
+        } else
+            warn(DBG, "not updating next_spin: %llx <= %llx", nr, diet_max(&(c->pn_data.pn.recv_all)));
+#endif
     }
     return true;
 }
