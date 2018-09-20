@@ -30,6 +30,7 @@
 
 declare -A servers=(
         #[tag]=name:port:retry-ports:URL
+        # [apple]=10.26.178.21:4433:4434:/index.html
         [ats]=quic.ogre.com:4433:4434:/en/latest/
         [f5]=208.85.208.226:4433:4434:/file15k
         [minq]=minq.dev.mozaws.net:4433:4434:/index.html
@@ -44,7 +45,7 @@ declare -A servers=(
         [quicly]=kazuhooku.com:4433:4434:/10000.txt
         [quicr]=ralith.com:4433:4434:/index.html
         [quinn]=xavamedia.nl:4433:4434:/index.html
-        [winquic]=msquic.westus.cloudapp.azure.com:4433:4434:/index.html
+        [winquic]=msquic.westus.cloudapp.azure.com:4433:4434:/the-odyssey.txt
 )
 
 results=(live fail vneg hshk data clse zrtt rtry mig)
@@ -75,7 +76,7 @@ rm -f /tmp/"$script"*
 function test_server {
         # run quant client and produce a pure ASCII log for post-processing
         local cache="/tmp/$script.$1.$pid.cache"
-        local opts="-i $iface -t3 -v5 -s $cache"
+        local opts="-i $iface -t6 -v5 -s $cache"
         local sed_pattern='s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]//g'
         local log_base="/tmp/$script.$1.$pid"
 
