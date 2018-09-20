@@ -160,8 +160,12 @@ detect_lost_pkts(struct q_conn * const c, struct pn_space * const pn)
             }
             largest_lost_packet = MAX(largest_lost_packet, p->hdr.nr);
 
-            if (p->is_rtx || !is_rtxable(p))
+            if (p->is_rtx || !is_rtxable(p)) {
+                if (p->is_rtx)
+                    // remove from the original w_iov rtx list
+                    sl_remove(&sl_first(&p->rtx)->rtx, p, pkt_meta, rtx_next);
                 q_free_iov(w_iov(c->w, pm_idx(p)));
+            }
 
         } else if (is_zero(c->rec.loss_t) && !is_inf(delay_until_lost))
             c->rec.loss_t = now + delay_until_lost - time_since_sent;

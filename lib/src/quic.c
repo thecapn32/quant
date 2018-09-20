@@ -141,6 +141,7 @@ void pm_free(struct pkt_meta * const m)
     struct pkt_meta * rm = sl_first(&m->rtx);
     while (rm) {
         // warn(CRT, "free rtx iov idx %u nr %" PRIu64, pm_idx(rm), rm->hdr.nr);
+        ensure(rm->is_rtx, "is an RTX");
         sl_remove_head(&m->rtx, rtx_next);
         struct pkt_meta * const next_rm = sl_next(rm, rtx_next);
         splay_remove(pm_nr_splay, &rm->pn->sent_pkts, rm);
