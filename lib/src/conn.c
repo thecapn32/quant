@@ -349,7 +349,7 @@ void do_conn_fc(struct q_conn * const c)
     // check if we need to do connection-level flow control
     if (c->in_data + 2 * MAX_PKT_LEN > c->tp_in.max_data) {
         c->tx_max_data = c->needs_tx = true;
-        c->tp_in.new_max_data = c->tp_in.max_data + 0x1000;
+        c->tp_in.new_max_data = c->tp_in.max_data + 0xA000;
     }
 }
 

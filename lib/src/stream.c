@@ -180,7 +180,7 @@ void do_stream_fc(struct q_stream * const s)
 
     if (s->in_data + 2 * MAX_PKT_LEN > s->in_data_max) {
         s->tx_max_stream_data = s->c->needs_tx = true;
-        s->new_in_data_max = s->in_data_max + 0x1000;
+        s->new_in_data_max = s->in_data_max + 0x8000;
     }
 }
 
