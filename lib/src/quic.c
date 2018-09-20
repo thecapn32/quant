@@ -143,8 +143,8 @@ void pm_free(struct pkt_meta * const m)
         // warn(CRT, "free rtx iov idx %u nr %" PRIu64, pm_idx(rm), rm->hdr.nr);
         sl_remove_head(&m->rtx, rtx_next);
         struct pkt_meta * const next_rm = sl_next(rm, rtx_next);
-        splay_remove(pm_nr_splay, &m->pn->sent_pkts, rm);
-        diet_insert(&m->pn->acked, rm->hdr.nr, ev_now(loop));
+        splay_remove(pm_nr_splay, &rm->pn->sent_pkts, rm);
+        diet_insert(&rm->pn->acked, rm->hdr.nr, ev_now(loop));
         w_free_iov(w_iov(rm->pn->c->w, pm_idx(rm)));
         *rm = (struct pkt_meta){0};
         ASAN_POISON_MEMORY_REGION(rm, sizeof(*rm));
