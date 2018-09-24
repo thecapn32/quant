@@ -457,9 +457,9 @@ static int __attribute__((nonnull))
 mk_or_open_dir(const char * const path, mode_t mode)
 {
     int fd = mkdir(path, mode);
-    if (fd == -1 && errno == EEXIST)
-        fd = open(path, O_RDONLY | O_CLOEXEC);
-    ensure(fd != -1, "mk_or_open_dir %s", path);
+    ensure(fd == 0 || fd == -1 && errno == EEXIST, "mkdir %s", path);
+    fd = open(path, O_RDONLY | O_CLOEXEC);
+    ensure(fd != -1, "open %s", path);
     return fd;
 }
 #endif
