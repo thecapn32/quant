@@ -55,6 +55,14 @@ logging enabled. In order to build an optimized build, do this:
     make
 
 
+## Docker container
+
+Instead of building quant for yourself, you can also obtain a pre-built Docker container. For example,
+
+    docker pull ntap/quant:latest
+
+should download the latest build on the `master` branch. The docker container by default exposes a QUIC server on port 4433 that can serve `/index.html` and possibly other resources.
+
 ## Testing
 
 The `libquant` library will be in `lib`. There are `client` and `server`
