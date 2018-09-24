@@ -995,7 +995,7 @@ rx_pkts(struct w_iov_sq * const i,
                 zo->v = v;
                 zo->t = ev_now(loop);
                 splay_insert(ooo_0rtt_splay, &ooo_0rtt_by_cid, zo);
-                log_pkt("RX", v, &odcid);
+                log_pkt("RX", v, &odcid); // NOLINT
 #ifndef FUZZING
                 warn(INF, "caching 0-RTT pkt for unknown conn %s",
                      cid2str(&meta(v).hdr.dcid));

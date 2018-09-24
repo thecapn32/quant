@@ -176,7 +176,7 @@ detect_lost_pkts(struct q_conn * const c, struct pn_space * const pn)
     // than the end of the previous recovery epoch.
     if (!in_recovery(c, largest_lost_packet)) {
         c->rec.eor = pn->lg_sent;
-        c->rec.cwnd *= kLossReductionFactor;
+        c->rec.cwnd = (uint64_t)((double)c->rec.cwnd * kLossReductionFactor);
         c->rec.cwnd = MAX(c->rec.cwnd, kMinimumWindow);
         c->rec.ssthresh = c->rec.cwnd;
         warn(DBG, "cwnd %" PRIu64 ", ssthresh %" PRIu64, c->rec.cwnd,

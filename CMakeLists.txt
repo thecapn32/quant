@@ -178,10 +178,12 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
           -cppcoreguidelines-pro-bounds-array-to-pointer-decay
           -cppcoreguidelines-pro-bounds-pointer-arithmetic
           -cppcoreguidelines-pro-type-vararg
+          -fuchsia-statically-constructed-objects
           -google-readability-braces-around-statements
           -google-readability-todo
           -google-runtime-references
           -hicpp-braces-around-statements
+          -hicpp-multiway-paths-covered
           -hicpp-no-array-decay
           -hicpp-no-malloc
           -hicpp-signed-bitwise
@@ -190,8 +192,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
       )
       string(REPLACE ";" "," CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS}")
       set(CMAKE_C_CLANG_TIDY ${CLANGTIDY}
-          -analyze-temporary-dtors -system-headers
-          -checks=${CLANG_TIDY_CHECKS}
+          -system-headers -checks=${CLANG_TIDY_CHECKS}
       )
       set(CMAKE_CXX_CLANG_TIDY ${CMAKE_C_CLANG_TIDY})
     endif()

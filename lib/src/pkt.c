@@ -194,7 +194,7 @@ bool enc_pkt(struct q_stream * const s,
     else
         meta(v).hdr.nr = ++pn->lg_sent;
 
-    struct cid odcid;
+    struct cid odcid = {0};
     switch (epoch) {
     case ep_init:
         meta(v).hdr.type = c->tx_rtry ? F_LH_RTRY : F_LH_INIT;
