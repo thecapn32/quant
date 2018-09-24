@@ -25,6 +25,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <fcntl.h>
 #include <inttypes.h>
 #include <net/if.h>
 #include <netdb.h>
@@ -36,6 +37,7 @@
 #include <string.h>
 #include <sys/param.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <http_parser.h>
@@ -80,6 +82,7 @@ struct stream_entry {
     sl_entry(stream_entry) next;
     struct q_conn * c;
     struct q_stream * s;
+    char * url;
 };
 
 
@@ -130,7 +133,7 @@ get(struct w_engine * const w,
     struct conn_cache * const cc,
     const char * const dest,
     const char * const port,
-    struct w_iov_sq * const req)
+    const char * const path)
 {
     struct addrinfo * peer;
     const struct addrinfo hints = {.ai_family = PF_INET,
@@ -148,6 +151,13 @@ get(struct w_engine * const w,
     ensure(se, "calloc failed");
     sl_insert_head(&sl, se, next);
 
+    // assemble an HTTP/0.9 request
+    char req_str[MAXPATHLEN + 6];
+    const int req_str_len =
+        snprintf(req_str, sizeof(req_str), "GET %s\r\n", path);
+    struct w_iov_sq req = sq_head_initializer(req);
+    q_chunk_str(w, req_str, (uint32_t)req_str_len, &req);
+
     // do we have a connection open to this peer?
     const struct conn_cache_entry which = {
         .dst = *(struct sockaddr_in *)&peer->ai_addr};
@@ -155,8 +165,8 @@ get(struct w_engine * const w,
     if (cce == 0) {
         // no, open a new connection
         struct q_conn * const c =
-            q_connect(w, (struct sockaddr_in *)(void *)peer->ai_addr, dest, req,
-                      &se->s, true, timeout);
+            q_connect(w, (struct sockaddr_in *)(void *)peer->ai_addr, dest,
+                      &req, &se->s, true, timeout);
         if (c == 0) {
             freeaddrinfo(peer);
             return 0;
@@ -171,9 +181,10 @@ get(struct w_engine * const w,
         splay_insert(conn_cache, cc, cce);
     } else {
         se->s = q_rsv_stream(cce->c);
-        q_write(se->s, req, true);
+        q_write(se->s, &req, true);
     }
     se->c = cce->c;
+    se->url = strdup(path);
 
     q_close_stream(se->s);
     freeaddrinfo(peer);
@@ -198,6 +209,7 @@ static void free_sl(void)
     struct stream_entry *i = 0, *tmp = 0;
     sl_foreach_safe (i, &sl, next, tmp) {
         sl_remove(&sl, i, stream_entry, next);
+        free(i->url);
         free(i);
     }
 }
@@ -268,15 +280,9 @@ int main(int argc, char * argv[])
         set_from_url(port, sizeof(port), url, &u, UF_PORT, "4433");
         set_from_url(path, sizeof(path), url, &u, UF_PATH, "/index.html");
 
-        // assemble an HTTP/0.9 request
-        char req[sizeof(path) + 6];
-        const int req_len = snprintf(req, sizeof(req), "GET %s\r\n", path);
-        struct w_iov_sq r = sq_head_initializer(r);
-        q_chunk_str(w, req, (uint32_t)req_len, &r);
-
         // open a new connection, or get an open one
         warn(INF, "%s retrieving %s", basename(argv[0]), url);
-        if (get(w, &cc, dest, port, &r) == 0) {
+        if (get(w, &cc, dest, port, path) == 0) {
             // q_connect() failed
             ret = 1;
             goto done;
@@ -297,9 +303,22 @@ int main(int argc, char * argv[])
             ret = 1;
             goto done;
         }
+
+        const int fd = open(basename(se->url), O_CREAT | O_WRONLY | O_CLOEXEC,
+                            S_IRUSR | S_IWUSR | S_IRGRP);
+        ensure(fd != -1, "cannot open %s", basename(se->url));
+
+        // save the object, and print its first three packets to stdout
         struct w_iov * v;
-        sq_foreach (v, &i, next)
-            printf("%.*s", v->len, v->buf);
+        uint32_t n = 0;
+        sq_foreach (v, &i, next) {
+            if (n < 4)
+                printf("%.*s", v->len, v->buf);
+            else
+                printf(".");
+            n++;
+            ensure(write(fd, v->buf, v->len) != -1, "cannot write");
+        }
         printf("\n");
         q_free(&i);
     }
