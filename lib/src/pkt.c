@@ -154,8 +154,7 @@ enc_lh_cids(struct q_conn * const c, struct w_iov * const v, const uint16_t pos)
 bool enc_pkt(struct q_stream * const s,
              const bool rtx,
              const bool enc_data,
-             struct w_iov * const v,
-             struct w_iov_sq * const q)
+             struct w_iov * const v)
 {
     // prepend the header by adjusting the buffer offset
     adj_iov_to_start(v);
@@ -425,7 +424,7 @@ tx:
         x->port = c->peer.sin_port;
     }
 
-    sq_insert_tail(q, x, next);
+    sq_insert_tail(&c->txq, x, next);
     meta(v).tx_len = x->len;
 
     if (unlikely(meta(v).hdr.type == F_LH_INIT && c->is_clnt &&

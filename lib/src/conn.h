@@ -178,6 +178,8 @@ struct q_conn {
     uint64_t max_cid_seq_in;
 
     uint8_t * tok;
+
+    struct w_iov_sq txq;
 };
 
 

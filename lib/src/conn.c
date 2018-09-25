@@ -263,12 +263,11 @@ rtx_pkt(struct q_stream * const s, struct w_iov * const v)
 }
 
 
-static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
-                                                      const bool rtx,
-                                                      const uint32_t limit,
-                                                      struct w_iov * const from)
+static void __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
+                                                  const bool rtx,
+                                                  const uint32_t limit,
+                                                  struct w_iov * const from)
 {
-    struct w_iov_sq x = sq_head_initializer(x);
     uint32_t encoded = 0;
     struct w_iov * v = from;
     sq_foreach (v, &s->out, next) { // TODO: use sq_foreach_from
@@ -297,7 +296,7 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
                 s->c->blocked = true;
         }
 
-        if (enc_pkt(s, rtx, true, v, &x) == false)
+        if (enc_pkt(s, rtx, true, v) == false)
             continue;
         encoded++;
 
@@ -320,26 +319,16 @@ static uint32_t __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
         }
     }
 
-    if (encoded == false && s->tx_fin) {
+    if (encoded == 0 && s->tx_fin) {
         // we need to send a FIN
         v = q_alloc_iov(s->c->w, 0, Q_OFFSET);
         v->len = 0;
         sq_insert_tail(&s->out, v, next);
-        if (enc_pkt(s, rtx, true, v, &x))
+        if (enc_pkt(s, rtx, true, v))
             encoded++;
     }
 
-    if (encoded) {
-        // transmit encrypted/protected packets and then free the chain
-        w_tx(s->c->sock, &x);
-        while (w_tx_pending(&x))
-            w_nic_tx(s->c->w);
-        // x was allocated straight from warpcore, no metadata needs to be freed
-        w_free(&x);
-    }
-
     log_sent_pkts(s->c);
-    return encoded;
 }
 
 
@@ -413,7 +402,7 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
             c->needs_tx = false;
             if (c->tls.epoch_out == ep_init)
                 // we did not progress to the 0-RTT epoch
-                return;
+                goto done;
         }
         break;
 
@@ -422,11 +411,10 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
     }
 
     if (rtx == false && c->blocked)
-        return;
+        goto done;
 
     do_conn_mgmt(c);
 
-    bool did_tx = false;
     struct q_stream * s = 0;
     splay_foreach (s, stream, &c->streams) {
         // warn(ERR, "stream %" PRId64 " %u", s->id, sq_len(&s->out));
@@ -451,12 +439,22 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
              rtx ? "R" : "", conn_type(c), scid2str(c), s->id, sq_len(&s->out),
              plural(sq_len(&s->out)));
 
-        did_tx |= tx_stream(s, rtx, limit, 0);
+        tx_stream(s, rtx, limit, 0);
     }
 
-    if (did_tx == false)
+    if (sq_empty(&c->txq))
         // need to send other frame, do it in an ACK
         tx_ack(c, epoch_in(c));
+
+done:
+    if (!sq_empty(&c->txq)) {
+        // transmit encrypted/protected packets and then free the chain
+        w_tx(c->sock, &c->txq);
+        while (w_tx_pending(&c->txq))
+            w_nic_tx(c->w);
+        // x was allocated straight from warpcore, no metadata needs to be freed
+        w_free(&c->txq);
+    }
 
     c->needs_tx = false;
 }
@@ -464,7 +462,6 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
 
 void tx_ack(struct q_conn * const c, const epoch_t e)
 {
-    struct w_iov_sq x = sq_head_initializer(x);
     struct q_stream * const s = get_stream(c, crpt_strm_id(e));
     struct pn_space * const pn = pn_for_epoch(c, e);
 
@@ -473,19 +470,10 @@ void tx_ack(struct q_conn * const c, const epoch_t e)
         return;
 
     struct w_iov * const v = q_alloc_iov(c->w, 0, Q_OFFSET);
-    enc_pkt(s, false, false, v, &x);
+    enc_pkt(s, false, false, v);
 
-    if (sq_len(&x) == 0)
+    if (sq_len(&c->txq) == 0)
         return;
-
-    // transmit encrypted/protected packets and then free the chain
-    w_tx(c->sock, &x);
-    while (w_tx_pending(&x))
-        w_nic_tx(c->w);
-
-    log_sent_pkts(c);
-    // x was allocated straight from warpcore, no metadata needs to be freed
-    w_free(&x);
 
     // if this packet contains an ACK frame, stop the timer
     if (bit_test(meta(v).frames, FRAM_TYPE_ACK)) {
@@ -1232,6 +1220,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->vers = c->vers_initial = vers;
     splay_init(&c->streams);
     diet_init(&c->closed_streams);
+    sq_init(&c->txq);
 
     // initialize packet number spaces
     init_pn(&c->pn_init.pn, c);
