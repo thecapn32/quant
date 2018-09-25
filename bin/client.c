@@ -304,6 +304,10 @@ int main(int argc, char * argv[])
             goto done;
         }
 
+        char * const slash = strrchr(se->url, '/');
+        if (slash && *(slash + 1) == 0)
+            // this URL ends in a slash, so strip that to name the file
+            *slash = 0;
         const int fd = open(basename(se->url), O_CREAT | O_WRONLY | O_CLOEXEC,
                             S_IRUSR | S_IWUSR | S_IRGRP);
         ensure(fd != -1, "cannot open %s", basename(se->url));
@@ -320,6 +324,7 @@ int main(int argc, char * argv[])
             ensure(write(fd, v->buf, v->len) != -1, "cannot write");
         }
         printf("\n");
+        close(fd);
         q_free(&i);
     }
 
