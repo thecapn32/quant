@@ -188,11 +188,13 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
           -hicpp-no-malloc
           -hicpp-signed-bitwise
           -hicpp-vararg
+          -llvm-header-guard
+          -readability-avoid-const-params-in-decls
           -readability-braces-around-statements
       )
       string(REPLACE ";" "," CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS}")
       set(CMAKE_C_CLANG_TIDY ${CLANGTIDY}
-          -system-headers -checks=${CLANG_TIDY_CHECKS}
+          -header-filter=.* -checks=${CLANG_TIDY_CHECKS}
       )
       set(CMAKE_CXX_CLANG_TIDY ${CMAKE_C_CLANG_TIDY})
     endif()

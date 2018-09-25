@@ -197,10 +197,11 @@ pm_cpy(struct pkt_meta * const dst, const struct pkt_meta * const src)
         static char _str[2 * 64 + 1] = "0";                                    \
         static const char _hex_str[] = "0123456789abcdef";                     \
         int _j;                                                                \
-        for (_j = 0; (unsigned long)_j < (unsigned long)len && _j < 64;        \
+        for (_j = 0; (unsigned long)_j < (unsigned long)(len) && _j < 64;      \
              _j++) {                                                           \
-            _str[_j * 2] = _hex_str[(((const uint8_t *)buf)[_j] >> 4) & 0x0f]; \
-            _str[_j * 2 + 1] = _hex_str[((const uint8_t *)buf)[_j] & 0x0f];    \
+            _str[_j * 2] =                                                     \
+                _hex_str[(((const uint8_t *)(buf))[_j] >> 4) & 0x0f];          \
+            _str[_j * 2 + 1] = _hex_str[((const uint8_t *)(buf))[_j] & 0x0f];  \
         }                                                                      \
         if (_j == 64)                                                          \
             _str[_j * 2 - 1] = _str[_j * 2 - 2] = _str[_j * 2 - 3] = '.';      \
@@ -278,7 +279,7 @@ extern const uint8_t ok_vers_len;
     MIN(10 * kMaxDatagramSize, MAX(2 * kMaxDatagramSize, 14600))
 
 /// Minimum congestion window in bytes.
-#define kMinimumWindow 2 * kMaxDatagramSize
+#define kMinimumWindow (2 * kMaxDatagramSize)
 
 /// Reduction in congestion window when a new loss event is detected.
 #define kLossReductionFactor 0.5
@@ -327,7 +328,7 @@ extern void *api_conn, *api_strm;
     __extension__({                                                            \
         EV_VERIFY(loop);                                                       \
         if (api_func == (func_ptr)(&(func)) && api_conn == (conn) &&           \
-            (strm == 0 || api_strm == strm)) {                                 \
+            ((strm) == 0 || api_strm == (strm))) {                             \
             ev_break(loop, EVBREAK_ALL);                                       \
             warn(DBG,                                                          \
                  #func "(" #conn ", " #strm ") done, exiting event loop");     \
@@ -348,7 +349,7 @@ extern void *api_conn, *api_strm;
 #define maybe_api_return2(conn, strm)                                          \
     __extension__({                                                            \
         EV_VERIFY(loop);                                                       \
-        if (api_conn == (conn) && (strm == 0 || api_strm == strm)) {           \
+        if (api_conn == (conn) && ((strm) == 0 || api_strm == (strm))) {       \
             ev_break(loop, EVBREAK_ALL);                                       \
             warn(DBG, "<any>(" #conn ", " #strm ") done, exiting event loop"); \
             api_func = api_conn = api_strm = 0;                                \
