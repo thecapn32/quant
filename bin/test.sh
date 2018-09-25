@@ -11,8 +11,8 @@ s=${2:-quant}
 # port to run servers on
 addr=127.0.0.1
 port=4433 # mozquic server can only run on 4433 at the moment
-path=/talks.html
-dir=/Users/lars/Sites/lars/output
+path=/rfc8085.txt
+dir=/Users/lars/Sites/lars/output/papers
 cert=/etc/letsencrypt/live/slate.eggert.org/fullchain.pem
 key=/etc/letsencrypt/live/slate.eggert.org/privkey.pem
 
@@ -37,7 +37,7 @@ fi
 set +e
 
 export ASAN_OPTIONS=strict_string_checks=1:strict_init_order=1:detect_stack_use_after_return=1:detect_leaks=1:check_initialization_order=1:sleep_before_dying=30:alloc_dealloc_mismatch=1:detect_invalid_pointer_pairs=1
-export LSAN_OPTIONS=log_threads=1
+# export LSAN_OPTIONS=log_threads=1
 export UBSAN_OPTIONS=print_stacktrace=1 # :suppressions=../misc/ubsan.supp
 
 # commands to run the different clients against $addr:$port
