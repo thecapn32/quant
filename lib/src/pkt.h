@@ -67,7 +67,7 @@
 static inline __attribute__((always_inline, const)) uint8_t
 pkt_type(const uint8_t flags)
 {
-    return flags & (is_set(F_LONG_HDR, flags) ? ~0x80 : 0x03);
+    return flags & (is_set(F_LONG_HDR, flags) ? ~0x80 : F_SH_MASK);
 }
 
 
@@ -123,6 +123,8 @@ extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
                                              const bool rtx,
                                              const bool enc_data,
                                              struct w_iov * const v);
+
+extern void __attribute__((nonnull)) coalesce(struct w_iov_sq * const q);
 
 #if !defined(NDEBUG) && !defined(FUZZING)
 extern void __attribute__((nonnull(1, 2)))

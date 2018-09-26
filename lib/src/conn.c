@@ -301,7 +301,7 @@ static void __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
         encoded++;
 
         // if this packet contains an ACK frame, stop the timer
-        if (s->c->state == conn_estb &&
+        if ( // s->c->state == conn_estb &&
             bit_test(meta(v).frames, FRAM_TYPE_ACK)) {
             // warn(DBG, "ACK sent, stopping epoch %u ACK timer",
             //      epoch_for_pkt_type(meta(v).hdr.type));
@@ -448,6 +448,9 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
 
 done:
     if (!sq_empty(&c->txq)) {
+        if (unlikely(sq_len(&c->txq) > 1 &&
+                     pkt_type(*sq_first(&c->txq)->buf) != F_SH))
+            coalesce(&c->txq);
         // transmit encrypted/protected packets and then free the chain
         w_tx(c->sock, &c->txq);
         while (w_tx_pending(&c->txq))
@@ -868,7 +871,7 @@ rx_pkts(struct w_iov_sq * const i,
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         sq_remove_head(i, next);
 
-        // warn(DBG, "rx idx %u", w_iov_idx(v));
+        // warn(DBG, "rx idx %u len %u", w_iov_idx(v), v->len);
 
 #if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)

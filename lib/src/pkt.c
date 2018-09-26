@@ -47,12 +47,14 @@
 
 
 #if !defined(NDEBUG) && !defined(FUZZING)
-static const char * pkt_type_str(const struct w_iov * const v)
+static const char * __attribute__((nonnull))
+pkt_type_str(const struct w_iov * const v)
 {
-    if (is_set(F_LONG_HDR, v->buf[0])) {
-        if (meta(v).hdr.vers == 0)
+    if (is_set(F_LONG_HDR, *v->buf)) {
+        if (v->buf[1] == 0 && v->buf[2] == 0 && v->buf[3] == 0 &&
+            v->buf[4] == 0)
             return "Version Negotiation";
-        switch (meta(v).hdr.type) {
+        switch (pkt_type(*v->buf)) {
         case F_LH_INIT:
             return "Initial";
         case F_LH_RTRY:
@@ -62,9 +64,49 @@ static const char * pkt_type_str(const struct w_iov * const v)
         case F_LH_0RTT:
             return "0-RTT Protected";
         }
-    } else if (is_set(F_SH, v->buf[0] & F_SH_MASK))
+    } else if (is_set(F_SH, *v->buf & F_SH_MASK))
         return "Short";
     return RED "Unknown" NRM;
+}
+
+
+static bool __attribute__((const))
+can_coalesce_pkt_types(const uint8_t a, const uint8_t b)
+{
+    return (a == F_LH_INIT && (b == F_LH_0RTT || b == F_LH_HSHK)) ||
+           (a == F_LH_HSHK && b == F_SH);
+}
+
+
+void coalesce(struct w_iov_sq * const q)
+{
+    struct w_iov * v = sq_first(q);
+    while (v) {
+        struct w_iov * next = sq_next(v, next);
+        uint8_t cur_flags = *v->buf;
+
+        struct w_iov * prev = v;
+        while (next) {
+            struct w_iov * const next_next = sq_next(next, next);
+
+            // do we have space? do the packet types make sense to coalesce?
+            if (v->len + next->len <= kMaxDatagramSize &&
+                can_coalesce_pkt_types(pkt_type(cur_flags),
+                                       pkt_type(*next->buf))) {
+                // we can coalesce
+                warn(DBG, "coalescing 0x%02x len %u behind 0x%02x len %u",
+                     *next->buf, next->len, cur_flags, v->len);
+                memcpy(v->buf + v->len, next->buf, next->len);
+                v->len += next->len;
+                cur_flags = *next->buf;
+                sq_remove_after(q, prev, next);
+                w_free_iov(next);
+            } else
+                prev = next;
+            next = next_next;
+        }
+        v = sq_next(v, next);
+    }
 }
 
 
@@ -76,19 +118,19 @@ void log_pkt(const char * const dir,
     const char * col_nr = *dir == 'R' ? BLU : GRN;
 
     // XXX: on TX, v->len is not yet final/correct, so don't print it
-    if (is_set(F_LONG_HDR, v->buf[0])) {
+    if (is_set(F_LONG_HDR, *v->buf)) {
         if (meta(v).hdr.vers == 0)
             twarn(NTE,
                   BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM
                       "vers=0x%08x dcid=%s scid=%s",
-                  col_dir, dir, *dir == 'R' ? v->len : 0, v->buf[0], col_dir,
+                  col_dir, dir, *dir == 'R' ? v->len : 0, *v->buf, col_dir,
                   pkt_type_str(v), meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
                   cid2str(&meta(v).hdr.scid));
         else if (meta(v).hdr.type == F_LH_RTRY)
             twarn(NTE,
                   BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM
                       "vers=0x%08x dcid=%s scid=%s odcid=%s tok=%s",
-                  col_dir, dir, *dir == 'R' ? v->len : 0, v->buf[0], col_dir,
+                  col_dir, dir, *dir == 'R' ? v->len : 0, *v->buf, col_dir,
                   pkt_type_str(v), meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
                   cid2str(&meta(v).hdr.scid), cid2str(odcid),
                   hex2str(meta(v).hdr.tok, meta(v).hdr.tok_len));
@@ -96,7 +138,7 @@ void log_pkt(const char * const dir,
             twarn(NTE,
                   BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM
                       "vers=0x%08x dcid=%s scid=%s tok=%s len=%u nr=%s%" PRIu64,
-                  col_dir, dir, *dir == 'R' ? v->len : 0, v->buf[0], col_dir,
+                  col_dir, dir, *dir == 'R' ? v->len : 0, *v->buf, col_dir,
                   pkt_type_str(v), meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
                   cid2str(&meta(v).hdr.scid),
                   hex2str(meta(v).hdr.tok, meta(v).hdr.tok_len),
@@ -105,14 +147,14 @@ void log_pkt(const char * const dir,
             twarn(NTE,
                   BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM
                       "vers=0x%08x dcid=%s scid=%s len=%u nr=%s%" PRIu64,
-                  col_dir, dir, *dir == 'R' ? v->len : 0, v->buf[0], col_dir,
+                  col_dir, dir, *dir == 'R' ? v->len : 0, *v->buf, col_dir,
                   pkt_type_str(v), meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
                   cid2str(&meta(v).hdr.scid), meta(v).hdr.len, col_nr,
                   meta(v).hdr.nr);
     } else
         twarn(NTE,
               BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM "dcid=%s nr=%s%" PRIu64,
-              col_dir, dir, *dir == 'R' ? v->len : 0, v->buf[0], col_dir,
+              col_dir, dir, *dir == 'R' ? v->len : 0, *v->buf, col_dir,
               pkt_type_str(v), cid2str(&meta(v).hdr.dcid), col_nr,
               meta(v).hdr.nr);
 }
@@ -132,7 +174,7 @@ needed_pkt_nr_len(struct pn_space * const pn, const uint64_t n)
 }
 
 
-static uint16_t
+static uint16_t __attribute__((nonnull))
 enc_lh_cids(struct q_conn * const c, struct w_iov * const v, const uint16_t pos)
 {
     cid_cpy(&meta(v).hdr.dcid, act_dcid(c));
@@ -386,8 +428,14 @@ bool enc_pkt(struct q_stream * const s,
         i = enc_stream_or_crypto_frame(s, v, i, s->id >= 0);
     }
 
-    if (meta(v).hdr.type == F_LH_INIT && c->is_clnt && enc_data)
-        i = enc_padding_frame(v, i, MIN_INI_LEN - i - AEAD_LEN);
+    if (c->is_clnt && enc_data) {
+        if (c->try_0rtt == false && meta(v).hdr.type == F_LH_INIT)
+            i = enc_padding_frame(v, i, MIN_INI_LEN - i - AEAD_LEN);
+        if (c->try_0rtt == true && meta(v).hdr.type == F_LH_0RTT)
+            // if we pad the 0-RTT pkt, peek at txq to get the CI length
+            i = enc_padding_frame(
+                v, i, MIN_INI_LEN - i - AEAD_LEN - sq_first(&c->txq)->len);
+    }
 
     if (meta(v).hdr.type != F_LH_RTRY)
         ensure(i > meta(v).hdr.hdr_len, "would have sent pkt w/o frames");
@@ -642,8 +690,8 @@ bool dec_pkt_hdr_remainder(struct w_iov * const v,
             // rx() has already removed v from i, so just insert vdup at head
             sq_insert_head(i, vdup, next);
 #ifndef FUZZING
-            warn(DBG, "split out 0x%02x-type coalesced pkt of len %u",
-                 pkt_type(*vdup->buf), vdup->len);
+            warn(DBG, "split out coalesced %s pkt of len %u",
+                 pkt_type_str(vdup), vdup->len);
 #endif
         }
     } else {
