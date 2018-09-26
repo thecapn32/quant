@@ -133,29 +133,28 @@ void log_stream_or_crypto_frame(const bool rtx,
 static uint16_t __attribute__((nonnull))
 dec_stream_or_crypto_frame(struct q_conn * const c,
                            struct w_iov * const v,
-                           const uint16_t pos,
-                           const bool dec_strm)
+                           const uint16_t pos)
 {
     meta(v).stream_header_pos = pos;
 
-    // we need to decode the type byte, since stream frames have multiple types
+    // decode the type byte, to check whether this is a stream or crypto frame
     uint8_t t = 0;
     uint16_t i = dec_chk(true, t, &t, v->buf, v->len, pos, sizeof(t), "0x%02x");
 
     int64_t sid = 0;
-    if (dec_strm)
-        i = dec_chk(true, t, &sid, v->buf, v->len, i, 0, FMT_SID);
-    else
+    if (t == FRAM_TYPE_CRPT)
         sid = crpt_strm_id(epoch_for_pkt_type(meta(v).hdr.type));
+    else
+        i = dec_chk(true, t, &sid, v->buf, v->len, i, 0, FMT_SID);
 
-    if (is_set(F_STREAM_OFF, t) || !dec_strm)
+    if (is_set(F_STREAM_OFF, t) || t == FRAM_TYPE_CRPT)
         i = dec_chk(true, t, &meta(v).stream_off, v->buf, v->len, i, 0,
                     "%" PRIu64);
     else
         meta(v).stream_off = 0;
 
     uint64_t l = 0;
-    if (is_set(F_STREAM_LEN, t) || !dec_strm) {
+    if (is_set(F_STREAM_LEN, t) || t == FRAM_TYPE_CRPT) {
         i = dec_chk(true, t, &l, v->buf, v->len, i, 0, "%" PRIu64);
         if (unlikely(l > (uint64_t)v->len - i))
             err_close_return(c, ERR_FRAME_ENC, t, "illegal strm len");
@@ -171,7 +170,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     struct q_stream * s = get_stream(c, sid);
 #ifndef FUZZING
     const char * kind = "";
-    if (dec_strm && s == 0) {
+    if (t != FRAM_TYPE_CRPT && s == 0) {
         if (diet_find(&c->closed_streams, (uint64_t)sid)) {
             warn(WRN,
                  "ignoring frame for closed strm " FMT_SID " on %s conn %s",
@@ -218,14 +217,14 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
                 last->buf -= meta(v).stream_data_start;
             if (is_fin(last)) {
                 strm_to_state(s, s->state <= strm_hcrm ? strm_hcrm : strm_clsd);
-                if (dec_strm)
+                if (t != FRAM_TYPE_CRPT)
                     maybe_api_return(q_readall_str, s->c, s);
             }
             if (last != v)
                 last->buf += meta(v).stream_data_start;
         }
 
-        if (dec_strm) {
+        if (t != FRAM_TYPE_CRPT) {
             do_stream_fc(s);
             do_conn_fc(s->c);
             s->c->have_new_data = true;
@@ -249,7 +248,7 @@ done:
     log_stream_or_crypto_frame(false, v, true, kind);
 #endif
 
-    if (s && dec_strm && meta(v).stream_off + l > s->in_data_max)
+    if (s && t != FRAM_TYPE_CRPT && meta(v).stream_off + l > s->in_data_max)
         err_close_return(c, ERR_FLOW_CONTROL, 0,
                          "stream %" PRIu64 " off %" PRIu64
                          " > in_data_max %" PRIu64,
@@ -844,14 +843,16 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
             pad_start = 0;
         }
 
-        if (type >= FRAM_TYPE_STRM && type <= FRAM_TYPE_STRM_MAX) {
+        if (type == FRAM_TYPE_CRPT ||
+            (type >= FRAM_TYPE_STRM && type <= FRAM_TYPE_STRM_MAX)) {
             // we only encode FRAM_TYPE_STRM in the frames bitstr_t
-            bit_set(meta(v).frames, FRAM_TYPE_STRM);
+            bit_set(meta(v).frames,
+                    type == FRAM_TYPE_CRPT ? FRAM_TYPE_CRPT : FRAM_TYPE_STRM);
             if (meta(v).stream_data_start && meta(v).stream) {
                 // already had at least one stream frame in this packet
                 // with non-duplicate data, so generate (another) copy
 #ifndef FUZZING
-                warn(DBG, "addtl stream frame at pos %u, copy", i);
+                warn(DBG, "addtl stream or crypto frame at pos %u, copy", i);
 #endif
                 struct w_iov * const vdup = w_iov_dup(v);
                 pm_cpy(&meta(vdup), &meta(v));
@@ -863,7 +864,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
             }
 
             // this is the first stream frame in this packet
-            i = dec_stream_or_crypto_frame(c, v, i, true);
+            i = dec_stream_or_crypto_frame(c, v, i);
         } else {
             switch (type) {
             case FRAM_TYPE_ACK:
@@ -933,10 +934,6 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
 
             case FRAM_TYPE_NEW_CID:
                 i = dec_new_cid_frame(c, v, i);
-                break;
-
-            case FRAM_TYPE_CRPT:
-                i = dec_stream_or_crypto_frame(c, v, i, false);
                 break;
 
             case FRAM_TYPE_NEW_TOKN:
