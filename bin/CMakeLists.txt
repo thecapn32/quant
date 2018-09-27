@@ -18,10 +18,10 @@ find_path(HTTP_PARSER_INCLUDE http_parser.h PATH_SUFFIXES include)
 find_package_handle_standard_args(http-parser
   DEFAULT_MSG HTTP_PARSER_LIB HTTP_PARSER_INCLUDE
 )
-# target_include_directories(${HTTP_PARSER_INCLUDE})
 
 foreach(TARGET client server)
   add_executable(${TARGET} ${TARGET}.c)
+  target_include_directories(${TARGET} SYSTEM PRIVATE ${HTTP_PARSER_INCLUDE})
   target_link_libraries(${TARGET} lib${PROJECT_NAME} ${HTTP_PARSER_LIB})
   if(DSYMUTIL)
     add_custom_command(TARGET ${TARGET} POST_BUILD
