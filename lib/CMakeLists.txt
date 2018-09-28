@@ -31,7 +31,8 @@ if(NOT GIT_COMMIT_HASH_ABBREV_STR)
 endif()
 
 string(TOUPPER ${PROJECT_NAME} PROJECT_NAME_UC)
-configure_file(include/${PROJECT_NAME}/config.h.in include/${PROJECT_NAME}/config.h)
+configure_file(include/${PROJECT_NAME}/config.h.in
+               include/${PROJECT_NAME}/config.h)
 configure_file(src/config.c.in src/config.c)
 
 include(GNUInstallDirs)
@@ -67,7 +68,7 @@ find_path(LIBEV_INCLUDE ev.h PATH_SUFFIXES include/ev include)
 find_package_handle_standard_args(libev DEFAULT_MSG LIBEV_LIB LIBEV_INCLUDE)
 
 if(DSYMUTIL AND BUILD_SHARED_LIBS)
-  add_custom_command (TARGET lib${PROJECT_NAME} POST_BUILD
+  add_custom_command(TARGET lib${PROJECT_NAME} POST_BUILD
     COMMAND ${DSYMUTIL} ARGS *${CMAKE_STATIC_LIBRARY_SUFFIX}
   )
 endif()
@@ -79,11 +80,12 @@ foreach(TARGET ${TARGETS})
     SYSTEM PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
       $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
-    PRIVATE
-      $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/external/include>
+    SYSTEM PRIVATE
       ${OPENSSL_ROOT_DIR}/include
       ${LIBEV_INCLUDE}
       ${WARP_INCLUDE}
+    PRIVATE
+      $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/external/include>
   )
 
   set_target_properties(${TARGET}

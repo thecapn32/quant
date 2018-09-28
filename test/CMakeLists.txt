@@ -7,9 +7,10 @@ foreach(TARGET diet conn)
   target_link_libraries(test_${TARGET} lib${PROJECT_NAME})
   target_include_directories(test_${TARGET}
     SYSTEM PRIVATE
+      ${LIBEV_INCLUDE}
+    PRIVATE
       ${CMAKE_BINARY_DIR}/external/include
       ${CMAKE_SOURCE_DIR}/lib/src
-      ${LIBEV_INCLUDE}
   )
   if(DSYMUTIL)
     add_custom_command(TARGET test_${TARGET} POST_BUILD
@@ -54,11 +55,12 @@ if(HAVE_BENCHMARK_H)
   target_link_libraries(bench PUBLIC benchmark pthread libquant)
   target_include_directories(bench
     SYSTEM PRIVATE
+      ${OPENSSL_ROOT_DIR}/include
+    PRIVATE
       ${CMAKE_SOURCE_DIR}/lib/include
       ${CMAKE_BINARY_DIR}/lib/include
       ${CMAKE_SOURCE_DIR}/lib/src
       $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/external/include>
-      ${OPENSSL_ROOT_DIR}/include
     )
   set_target_properties(bench
     PROPERTIES
@@ -74,11 +76,12 @@ if(HAVE_FUZZER)
     target_link_libraries(${TARGET} PUBLIC libquant)
     target_include_directories(${TARGET}
       SYSTEM PRIVATE
+        ${OPENSSL_ROOT_DIR}/include
+      PRIVATE
         ${CMAKE_SOURCE_DIR}/lib/include
         ${CMAKE_BINARY_DIR}/lib/include
         ${CMAKE_SOURCE_DIR}/lib/src
         $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/external/include>
-        ${OPENSSL_ROOT_DIR}/include
       )
     set_target_properties(${TARGET}
       PROPERTIES
