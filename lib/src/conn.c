@@ -386,6 +386,27 @@ tx_crypto(struct q_conn * const c, const epoch_t e)
 }
 
 
+static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
+{
+    c->needs_tx = false;
+
+    if (sq_empty(&c->txq))
+        return;
+
+    if (unlikely(sq_len(&c->txq) > 1 &&
+                 pkt_type(*sq_first(&c->txq)->buf) != F_SH))
+        coalesce(&c->txq);
+
+    // transmit encrypted/protected packets
+    w_tx(c->sock, &c->txq);
+    while (w_tx_pending(&c->txq))
+        w_nic_tx(c->w);
+
+    // x was allocated straight from warpcore, no metadata needs to be freed
+    w_free(&c->txq);
+}
+
+
 void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
 {
     switch (c->state) {
@@ -442,24 +463,14 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
         tx_stream(s, rtx, limit, 0);
     }
 
-    if (sq_empty(&c->txq))
+    if (sq_empty(&c->txq)) {
         // need to send other frame, do it in an ACK
         tx_ack(c, epoch_in(c));
-
-done:
-    if (!sq_empty(&c->txq)) {
-        if (unlikely(sq_len(&c->txq) > 1 &&
-                     pkt_type(*sq_first(&c->txq)->buf) != F_SH))
-            coalesce(&c->txq);
-        // transmit encrypted/protected packets and then free the chain
-        w_tx(c->sock, &c->txq);
-        while (w_tx_pending(&c->txq))
-            w_nic_tx(c->w);
-        // x was allocated straight from warpcore, no metadata needs to be freed
-        w_free(&c->txq);
+        return;
     }
 
-    c->needs_tx = false;
+done:
+    do_tx(c);
 }
 
 
@@ -484,6 +495,8 @@ void tx_ack(struct q_conn * const c, const epoch_t e)
         //      epoch_for_pkt_type(meta(v).hdr.type));
         ev_timer_stop(loop, &pn->ack_alarm);
     }
+
+    do_tx(c);
 }
 
 
