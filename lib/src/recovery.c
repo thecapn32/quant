@@ -357,8 +357,10 @@ void on_ack_rx_2(struct q_conn * const c, struct pn_space * const pn)
 
 static void on_pkt_acked_cc(struct q_conn * const c, struct w_iov * const v)
 {
-    c->rec.in_flight -= meta(v).tx_len;
-    warn(DBG, "in_flight -%u = %" PRIu64, meta(v).tx_len, c->rec.in_flight);
+    if (meta(v).is_lost == false) {
+        c->rec.in_flight -= meta(v).tx_len;
+        warn(DBG, "in_flight -%u = %" PRIu64, meta(v).tx_len, c->rec.in_flight);
+    }
 
     if (in_recovery(c, meta(v).hdr.nr))
         return;
@@ -412,8 +414,11 @@ void on_pkt_acked(struct q_conn * const c,
              p = splay_next(pm_nr_splay, &pn->sent_pkts, p)) {
             warn(DBG, "pkt " FMT_PNR_OUT " considered lost", p->hdr.nr);
             p->is_lost = true;
-            c->rec.in_flight -= p->tx_len;
-            warn(DBG, "in_flight -%u = %" PRIu64, p->tx_len, c->rec.in_flight);
+            if (is_ack_only(p) == false) {
+                c->rec.in_flight -= p->tx_len;
+                warn(DBG, "in_flight -%u = %" PRIu64, p->tx_len,
+                     c->rec.in_flight);
+            }
         }
     }
 
