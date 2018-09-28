@@ -316,12 +316,16 @@ int main(int argc, char * argv[])
         struct w_iov * v;
         uint32_t n = 0;
         sq_foreach (v, &i, next) {
-            if (n < 4)
+            ensure(write(fd, v->buf, v->len) != -1, "cannot write");
+            if (n < 4) {
+                // don't print newlines to console log
+                for (uint16_t p = 0; p < v->len; p++)
+                    if (v->buf[p] == '\n')
+                        v->buf[p] = ' ';
                 printf("%.*s", v->len, v->buf);
-            else
+            } else
                 printf(".");
             n++;
-            ensure(write(fd, v->buf, v->len) != -1, "cannot write");
         }
         printf("\n");
         close(fd);
