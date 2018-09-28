@@ -1160,11 +1160,8 @@ void enter_closing(struct q_conn * const c)
         ev_timer_stop(loop, &pn->ack_alarm);
     }
 
-    if (c->state == conn_idle || c->state == conn_opng) {
-        // no need to go closing->draining in these cases
-        ev_invoke(loop, &c->closing_alarm, 0);
-        return;
-    }
+    if (c->state == conn_idle || c->state == conn_opng)
+        c->needs_tx = true;
 
     // if we're going closing->draining, don't start the timer again
     if (!ev_is_active(&c->closing_alarm)) {
