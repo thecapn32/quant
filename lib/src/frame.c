@@ -841,21 +841,20 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
             warn(INF, FRAM_IN "PADDING" NRM " len=%u", i - pad_start);
 #endif
             pad_start = 0;
+            bit_set(meta(v).frames, FRAM_TYPE_PAD);
         }
 
         if (type == FRAM_TYPE_CRPT ||
             (type >= FRAM_TYPE_STRM && type <= FRAM_TYPE_STRM_MAX)) {
-            // we only encode FRAM_TYPE_STRM in the frames bitstr_t
-            bit_set(meta(v).frames,
-                    type == FRAM_TYPE_CRPT ? FRAM_TYPE_CRPT : FRAM_TYPE_STRM);
-            if (meta(v).stream_data_start && meta(v).stream) {
-                // already had at least one stream frame in this packet
-                // with non-duplicate data, so generate (another) copy
+            if (bit_test(meta(v).frames, FRAM_TYPE_CRPT) ||
+                bit_test(meta(v).frames, FRAM_TYPE_STRM)) {
+                // already had at least one stream or crypto  frame in this
+                // packet with non-duplicate data, so generate (another) copy
 #ifndef FUZZING
                 warn(DBG, "addtl stream or crypto frame at pos %u, copy", i);
 #endif
                 struct w_iov * const vdup = w_iov_dup(v);
-                pm_cpy(&meta(vdup), &meta(v));
+                pm_cpy(&meta(vdup), &meta(v), false);
                 // adjust w_iov start and len to stream frame data
                 v->buf = &v->buf[meta(v).stream_data_start];
                 v->len = stream_data_len(v);
@@ -865,6 +864,9 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
 
             // this is the first stream frame in this packet
             i = dec_stream_or_crypto_frame(c, v, i);
+            bit_set(meta(v).frames,
+                    type == FRAM_TYPE_CRPT ? FRAM_TYPE_CRPT : FRAM_TYPE_STRM);
+
         } else {
             switch (type) {
             case FRAM_TYPE_ACK:
@@ -945,15 +947,16 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
                           "unknown frame type 0x%02x at pos %u", type, i);
                 i = UINT16_MAX;
             }
+
+            // record this frame type in the meta data
+            bit_set(meta(v).frames, type);
         }
 
         if (unlikely(i == UINT16_MAX))
             // there was an error parsing a frame
             return UINT16_MAX;
-
-        // record this frame type in the meta data
-        bit_set(meta(v).frames, type);
     }
+
     if (meta(v).stream_data_start) {
         // adjust w_iov start and len to stream frame data
         v->buf = &v->buf[meta(v).stream_data_start];

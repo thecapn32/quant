@@ -91,23 +91,25 @@ struct pkt_meta {
     splay_entry(pkt_meta) nr_node;
     splay_entry(pkt_meta) off_node;
     sl_entry(pkt_meta) rtx_next;
+    struct pm_sl rtx; ///< List of pkt_meta structs of previous TXs.
 
-    // pm_cpy() starts copying from here:
-    struct pm_sl rtx;           ///< List of pkt_meta structs of previous TXs.
-    ev_tstamp tx_t;             ///< Transmission timestamp.
+    // pm_cpy(true) starts copying from here:
     struct q_stream * stream;   ///< Stream this data was written on.
     uint64_t stream_off;        ///< Stream data offset.
     uint16_t stream_header_pos; ///< Offset of stream frame header.
     uint16_t stream_data_start; ///< Offset of first byte of stream frame data.
     uint16_t stream_data_end;   ///< Offset of last byte of stream frame data.
     uint16_t ack_header_pos;    ///< Offset of ACK frame header.
-    uint16_t tx_len;            ///< Length of protected packet at TX.
-    uint8_t is_rtx : 1;         ///< Does the w_iov hold truncated data?
-    uint8_t is_acked : 1;       ///< Is the w_iov ACKed?
-    uint8_t is_lost : 1;        ///< Have we marked this w_iov as lost?
-    uint8_t : 5;
     bitstr_t bit_decl(frames, NUM_FRAM_TYPES); ///< Frames present in pkt.
+
+    // pm_cpy(false) starts copying from here:
+    uint16_t tx_len;      ///< Length of protected packet at TX.
+    uint8_t is_rtx : 1;   ///< Does the w_iov hold truncated data?
+    uint8_t is_acked : 1; ///< Is the w_iov ACKed?
+    uint8_t is_lost : 1;  ///< Have we marked this w_iov as lost?
+    uint8_t : 5;
     uint8_t _unused;
+    ev_tstamp tx_t;       ///< Transmission timestamp.
     struct pn_space * pn; ///< Packet number space; only set on TX.
     struct pkt_hdr hdr;
 };
@@ -163,11 +165,14 @@ extern struct pkt_meta * pm;
 
 
 static inline void __attribute__((nonnull))
-pm_cpy(struct pkt_meta * const dst, const struct pkt_meta * const src)
+pm_cpy(struct pkt_meta * const dst,
+       const struct pkt_meta * const src,
+       const bool also_frame_info)
 {
-    memcpy((uint8_t *)dst + offsetof(struct pkt_meta, tx_t),
-           (const uint8_t *)src + offsetof(struct pkt_meta, tx_t),
-           sizeof(struct pkt_meta) - offsetof(struct pkt_meta, tx_t));
+    const size_t off = also_frame_info ? offsetof(struct pkt_meta, stream)
+                                       : offsetof(struct pkt_meta, tx_len);
+    memcpy((uint8_t *)dst + off, (const uint8_t *)src + off,
+           sizeof(*dst) - off);
 }
 
 /// Offset of stream frame payload data in w_iov buffers.

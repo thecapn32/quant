@@ -74,7 +74,7 @@ static bool __attribute__((const))
 can_coalesce_pkt_types(const uint8_t a, const uint8_t b)
 {
     return (a == F_LH_INIT && (b == F_LH_0RTT || b == F_LH_HSHK)) ||
-           (a == F_LH_HSHK && b == F_SH);
+           (a == F_LH_HSHK && b == F_SH) || (a == F_LH_0RTT && b == F_LH_HSHK);
 }
 
 
@@ -431,8 +431,8 @@ bool enc_pkt(struct q_stream * const s,
     if (c->is_clnt && enc_data) {
         if (c->try_0rtt == false && meta(v).hdr.type == F_LH_INIT)
             i = enc_padding_frame(v, i, MIN_INI_LEN - i - AEAD_LEN);
-        if (c->try_0rtt == true && meta(v).hdr.type == F_LH_0RTT)
-            // if we pad the 0-RTT pkt, peek at txq to get the CI length
+        if (c->try_0rtt == true && meta(v).hdr.type == F_LH_0RTT && s->id >= 0)
+            // if we pad the first 0-RTT pkt, peek at txq to get the CI length
             i = enc_padding_frame(
                 v, i, MIN_INI_LEN - i - AEAD_LEN - sq_first(&c->txq)->len);
     }
@@ -681,6 +681,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const v,
         // check for coalesced packet
         const uint16_t pkt_len = meta(v).hdr.hdr_len + meta(v).hdr.len - nr_len;
         if (pkt_len < v->len) {
+            // TODO check that the dcid in the split-out version matches orig
             // allocate new w_iov for coalesced packet and copy it over
             struct w_iov * const vdup = w_iov_dup(v);
             vdup->buf += pkt_len;

@@ -249,7 +249,7 @@ rtx_pkt(struct q_stream * const s, struct w_iov * const v)
     ensure(meta(v).is_rtx == false, "cannot RTX an RTX");
     // on RTX, remember orig pkt meta data
     struct w_iov * const r = q_alloc_iov(s->c->w, 0, Q_OFFSET);
-    pm_cpy(&meta(r), &meta(v)); // copy pkt meta data
+    pm_cpy(&meta(r), &meta(v), true); // copy pkt meta data
     memcpy(r->buf - Q_OFFSET, v->buf - Q_OFFSET, Q_OFFSET); // copy pkt headers
     meta(r).is_rtx = true;
     sl_insert_head(&meta(v).rtx, &meta(r), rtx_next);
@@ -480,8 +480,8 @@ void tx_ack(struct q_conn * const c, const epoch_t e)
 
     // if this packet contains an ACK frame, stop the timer
     if (bit_test(meta(v).frames, FRAM_TYPE_ACK)) {
-        warn(DBG, "ACK sent, stopping epoch %u ACK timer",
-             epoch_for_pkt_type(meta(v).hdr.type));
+        // warn(DBG, "ACK sent, stopping epoch %u ACK timer",
+        //      epoch_for_pkt_type(meta(v).hdr.type));
         ev_timer_stop(loop, &pn->ack_alarm);
     }
 }
@@ -833,8 +833,8 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
     if (c->state != conn_drng && c->state != conn_clsd && !c->tx_rtry &&
         !c->tx_vneg && !is_ack_only(&meta(v)) &&
         !ev_is_active(&pn->ack_alarm)) {
-        warn(DBG, "non-ACK frame received, starting epoch %u ACK timer",
-             epoch_for_pkt_type(meta(v).hdr.type));
+        // warn(DBG, "non-ACK frame received, starting epoch %u ACK timer",
+        //      epoch_for_pkt_type(meta(v).hdr.type));
         ev_timer_again(loop, &pn->ack_alarm);
     }
 #endif
