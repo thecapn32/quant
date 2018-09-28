@@ -385,31 +385,23 @@ bool enc_pkt(struct q_stream * const s,
                 continue;
             if (t->blocked)
                 i = enc_stream_blocked_frame(t, v, i);
-            if (t->tx_max_stream_data) {
+            if (t->tx_max_stream_data)
                 i = enc_max_stream_data_frame(t, v, i);
-                t->tx_max_stream_data = false;
-            }
         }
 
         if (c->blocked)
             i = enc_blocked_frame(c, v, i);
 
-        if (c->tx_max_data) {
+        if (c->tx_max_data)
             i = enc_max_data_frame(c, v, i);
-            c->tx_max_data = false;
-        }
 
         if (c->stream_id_blocked) {
             i = enc_stream_id_blocked_frame(c, v, i);
             c->stream_id_blocked = false;
         }
 
-        if (c->tx_max_stream_id) {
+        if (c->tx_max_stream_id)
             i = enc_max_stream_id_frame(c, v, i);
-            c->tx_max_stream_id = false;
-        }
-
-        // TODO: need to RTX most recent MAX_STREAM_DATA and MAX_DATA on RTX
     }
 
 

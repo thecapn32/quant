@@ -1187,7 +1187,10 @@ uint16_t enc_max_stream_data_frame(struct q_stream * const s,
     const uint8_t type = FRAM_TYPE_MAX_STRM_DATA;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
     i = enc(v->buf, v->len, i, &s->id, 0, 0, FMT_SID);
+    meta(v).max_stream_data_sid = s->id;
+
     i = enc(v->buf, v->len, i, &s->new_in_data_max, 0, 0, "%" PRIu64);
+    meta(v).max_stream_data = s->new_in_data_max;
 
     warn(INF, FRAM_OUT "MAX_STREAM_DATA" NRM " id=" FMT_SID " max=%" PRIu64,
          s->id, s->new_in_data_max);
@@ -1208,6 +1211,7 @@ uint16_t enc_max_data_frame(struct q_conn * const c,
     const uint8_t type = FRAM_TYPE_MAX_DATA;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
     i = enc(v->buf, v->len, i, &c->tp_in.new_max_data, 0, 0, "%" PRIu64);
+    meta(v).max_data = c->tp_in.new_max_data;
 
     warn(INF, FRAM_OUT "MAX_DATA" NRM " max=%" PRIu64, c->tp_in.new_max_data);
 
@@ -1230,6 +1234,7 @@ uint16_t enc_max_stream_id_frame(struct q_conn * const c,
     const int64_t mbs = ((c->tp_in.new_max_bidi_streams - 1) << 2) +
                         (c->is_clnt ? STRM_FL_INI_SRV : 0);
     i = enc(v->buf, v->len, i, &mbs, 0, 0, "%" PRId64);
+    meta(v).max_bidi_streams = c->tp_in.new_max_bidi_streams;
 
     warn(INF, FRAM_OUT "MAX_STREAM_ID" NRM " max=" FMT_SID, mbs);
 

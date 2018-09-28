@@ -94,12 +94,16 @@ struct pkt_meta {
     struct pm_sl rtx; ///< List of pkt_meta structs of previous TXs.
 
     // pm_cpy(true) starts copying from here:
-    struct q_stream * stream;   ///< Stream this data was written on.
-    uint64_t stream_off;        ///< Stream data offset.
-    uint16_t stream_header_pos; ///< Offset of stream frame header.
-    uint16_t stream_data_start; ///< Offset of first byte of stream frame data.
-    uint16_t stream_data_end;   ///< Offset of last byte of stream frame data.
-    uint16_t ack_header_pos;    ///< Offset of ACK frame header.
+    struct q_stream * stream;    ///< Stream this data was written on.
+    uint64_t stream_off;         ///< Stream data offset.
+    uint16_t stream_header_pos;  ///< Offset of stream frame header.
+    uint16_t stream_data_start;  ///< Offset of first byte of stream frame data.
+    uint16_t stream_data_end;    ///< Offset of last byte of stream frame data.
+    uint16_t ack_header_pos;     ///< Offset of ACK frame header.
+    int64_t max_stream_data_sid; ///< MAX_STREAM_DATA sid, if sent.
+    uint64_t max_stream_data;    ///< MAX_STREAM_DATA limit, if sent.
+    uint64_t max_data;           ///< MAX_DATA limit, if sent.
+    int64_t max_bidi_streams;    ///< MAX_STREAM_ID limit, if sent.
     bitstr_t bit_decl(frames, NUM_FRAM_TYPES); ///< Frames present in pkt.
 
     // pm_cpy(false) starts copying from here:

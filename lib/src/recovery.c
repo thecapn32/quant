@@ -322,11 +322,28 @@ void on_ack_rx_1(struct q_conn * const c,
     warn(DBG, "srtt = %f, rttvar = %f on %s conn %s", c->rec.srtt,
          c->rec.rttvar, conn_type(c), scid2str(c));
 
-    // if this ACK'ed a CLOSE frame, move to conn_drng
+    // if this ACKs a CLOSE frame, move to conn_drng
     if (c->state == conn_clsg &&
         (bit_test(meta(v).frames, FRAM_TYPE_CONN_CLSE) ||
          bit_test(meta(v).frames, FRAM_TYPE_APPL_CLSE)))
         conn_to_state(c, conn_drng);
+
+    // if this ACKs a current MAX_STREAM_DATA frame, we can stop sending it
+    if (bit_test(meta(v).frames, FRAM_TYPE_MAX_STRM_DATA)) {
+        struct q_stream * const s = get_stream(c, meta(v).max_stream_data_sid);
+        if (s && s->new_in_data_max == meta(v).max_stream_data)
+            s->tx_max_stream_data = false;
+    }
+
+    // if this ACKs the current MAX_DATA frame, we can stop sending it
+    if (bit_test(meta(v).frames, FRAM_TYPE_MAX_DATA) &&
+        c->tp_in.new_max_data == meta(v).max_data)
+        c->tx_max_data = false;
+
+    // if this ACKs the current MAX_DATA frame, we can stop sending it
+    if (bit_test(meta(v).frames, FRAM_TYPE_MAX_SID) &&
+        c->tp_in.new_max_bidi_streams == meta(v).max_bidi_streams)
+        c->tx_max_stream_id = false;
 }
 
 
