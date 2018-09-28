@@ -395,10 +395,8 @@ bool enc_pkt(struct q_stream * const s,
         if (c->tx_max_data)
             i = enc_max_data_frame(c, v, i);
 
-        if (c->stream_id_blocked) {
+        if (c->stream_id_blocked)
             i = enc_stream_id_blocked_frame(c, v, i);
-            c->stream_id_blocked = false;
-        }
 
         if (c->tx_max_stream_id)
             i = enc_max_stream_id_frame(c, v, i);

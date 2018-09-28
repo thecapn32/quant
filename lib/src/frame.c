@@ -538,6 +538,8 @@ dec_max_stream_id_frame(struct q_conn * const c,
     max = (max >> 2) + 1;
     if (max > *which) {
         *which = max;
+        c->stream_id_blocked = false;
+        c->needs_tx = true;
         maybe_api_return(q_rsv_stream, c, 0);
     }
 #ifndef FUZZING
