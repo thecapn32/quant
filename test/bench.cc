@@ -30,6 +30,7 @@
 #include <warpcore/warpcore.h>
 
 extern "C" {
+#include "conn.h" // IWYU pragma: keep
 #include "pkt.h"
 #include "quic.h"
 #include "tls.h" // IWYU pragma: keep
@@ -84,9 +85,9 @@ int main(int argc, char ** argv)
     util_dlevel = INF;
 #endif
     w = q_init(i, nullptr, nullptr, nullptr, nullptr, false); // NOLINT
-    c = q_bind(w, 55555);
+    struct cid cid = {.len = 4, .id = "1234"};
+    c = new_conn(w, 0xff00000e, &cid, &cid, nullptr, "", 55555, 0);
     init_tls(c);
-    init_prot(c);
     benchmark::RunSpecifiedBenchmarks();
 
     q_cleanup(w);
