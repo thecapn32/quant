@@ -317,7 +317,7 @@ int main(int argc, char * argv[])
         uint32_t n = 0;
         sq_foreach (v, &i, next) {
             ensure(write(fd, v->buf, v->len) != -1, "cannot write");
-            if (n < 4) {
+            if (n < 4 || v == sq_last(&i, w_iov, next)) {
                 // don't print newlines to console log
                 for (uint16_t p = 0; p < v->len; p++)
                     if (v->buf[p] == '\n')
