@@ -278,15 +278,15 @@ uint64_t shorten_ack_nr(const uint64_t ack, const uint64_t diff)
 uint16_t dec_ack_frame(struct q_conn * const c,
                        const struct w_iov * const v,
                        const uint16_t pos,
-                       void (*before_ack)(struct q_conn * const,
-                                          struct pn_space * const pn,
-                                          const uint64_t,
-                                          const uint64_t),
+                       void (*before_acks)(struct q_conn * const,
+                                           struct pn_space * const pn,
+                                           const uint64_t,
+                                           const uint64_t),
                        void (*on_each_ack)(struct q_conn * const,
                                            struct pn_space * const pn,
                                            const uint64_t),
-                       void (*after_ack)(struct q_conn * const,
-                                         struct pn_space * const pn),
+                       void (*after_acks)(struct q_conn * const,
+                                          struct pn_space * const pn),
                        const bool parse_only)
 {
     // we need to decode the type byte, to check for ACK_ECN
@@ -328,8 +328,8 @@ uint16_t dec_ack_frame(struct q_conn * const c,
     i = dec_chk(!parse_only, t, &num_blocks, v->buf, v->len, i, 0, "%" PRIu64);
 
     uint64_t lg_ack_in_block = lg_ack;
-    if (before_ack)
-        before_ack(c, pn, lg_ack_in_block, ack_delay);
+    if (before_acks)
+        before_acks(c, pn, lg_ack_in_block, ack_delay);
 
     for (uint64_t n = num_blocks + 1; n > 0; n--) {
         uint64_t gap = 0;
@@ -415,8 +415,8 @@ uint16_t dec_ack_frame(struct q_conn * const c,
         }
     }
 
-    if (after_ack)
-        after_ack(c, pn);
+    if (after_acks)
+        after_acks(c, pn);
     return i;
 }
 
