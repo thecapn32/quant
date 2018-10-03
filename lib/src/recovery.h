@@ -74,13 +74,14 @@ extern void __attribute__((nonnull)) init_rec(struct q_conn * const c);
 extern void __attribute__((nonnull))
 on_pkt_sent(struct q_stream * const s, struct w_iov * const v);
 
-extern void __attribute__((nonnull)) on_ack_rx_1(struct q_conn * const c,
-                                                 struct pn_space * const pn,
-                                                 const uint64_t ack,
-                                                 const uint64_t ack_del);
+extern void __attribute__((nonnull))
+on_ack_frame_start(struct q_conn * const c,
+                   struct pn_space * const pn,
+                   const uint64_t ack,
+                   const uint64_t ack_del);
 
 extern void __attribute__((nonnull))
-on_ack_rx_2(struct q_conn * const c, struct pn_space * const pn);
+on_ack_frame_end(struct q_conn * const c, struct pn_space * const pn);
 
 extern void __attribute__((nonnull)) on_pkt_acked(struct q_conn * const c,
                                                   struct pn_space * const pn,

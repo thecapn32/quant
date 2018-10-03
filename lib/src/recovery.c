@@ -274,10 +274,10 @@ void on_pkt_sent(struct q_stream * const s, struct w_iov * const v)
 }
 
 
-void on_ack_rx_1(struct q_conn * const c,
-                 struct pn_space * const pn,
-                 const uint64_t ack,
-                 const uint64_t ack_del)
+void on_ack_frame_start(struct q_conn * const c,
+                        struct pn_space * const pn,
+                        const uint64_t ack,
+                        const uint64_t ack_del)
 {
     // if the largest ACKed is newly ACKed, update the RTT
     if (likely(pn->lg_acked != UINT64_MAX) && pn->lg_acked >= ack)
@@ -347,7 +347,7 @@ void on_ack_rx_1(struct q_conn * const c,
 }
 
 
-void on_ack_rx_2(struct q_conn * const c, struct pn_space * const pn)
+void on_ack_frame_end(struct q_conn * const c, struct pn_space * const pn)
 {
     detect_lost_pkts(c, pn);
     set_ld_alarm(c);

@@ -873,8 +873,8 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
             switch (type) {
             case FRAM_TYPE_ACK:
             case FRAM_TYPE_ACK_ECN:
-                i = dec_ack_frame(c, v, i, &on_ack_rx_1, &on_pkt_acked,
-                                  on_ack_rx_2, false);
+                i = dec_ack_frame(c, v, i, &on_ack_frame_start, &on_pkt_acked,
+                                  on_ack_frame_end, false);
                 break;
 
             case FRAM_TYPE_PAD:
