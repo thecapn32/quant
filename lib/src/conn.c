@@ -263,16 +263,40 @@ rtx_pkt(struct q_stream * const s, struct w_iov * const v)
 }
 
 
-static void __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
-                                                  const bool rtx,
-                                                  const uint32_t limit,
-                                                  struct w_iov * const from)
+static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
+{
+    c->needs_tx = false;
+
+    if (sq_empty(&c->txq))
+        return;
+
+    if (unlikely(sq_len(&c->txq) > 1 &&
+                 pkt_type(*sq_first(&c->txq)->buf) != F_SH))
+        coalesce(&c->txq);
+
+    // transmit encrypted/protected packets
+    w_tx(c->sock, &c->txq);
+    while (w_tx_pending(&c->txq))
+        w_nic_tx(c->w);
+
+    // x was allocated straight from warpcore, no metadata needs to be freed
+    w_free(&c->txq);
+}
+
+
+static void __attribute__((nonnull(1)))
+tx_stream_data(struct q_stream * const s, const bool rtx, const uint32_t limit)
 {
     uint32_t encoded = 0;
-    struct w_iov * v = from;
-    sq_foreach (v, &s->out, next) { // TODO: use sq_foreach_from
-        if (meta(v).is_acked)
+    struct w_iov * v = rtx ? s->out_una : s->out_nxt;
+    sq_foreach_from (v, &s->out, next) {
+        if (meta(v).is_acked) {
+            // warn(DBG,
+            //      "skipping ACKed pkt " FMT_PNR_OUT " on strm " FMT_SID
+            //      " during %s",
+            //      meta(v).hdr.nr, s->id, rtx ? "RTX" : "TX");
             continue;
+        }
 
         if (rtx == (meta(v).tx_len == 0)) {
             // warn(DBG,
@@ -300,15 +324,9 @@ static void __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
             continue;
         encoded++;
 
-        // if this packet contains an ACK frame, stop the timer
-        if ( // s->c->state == conn_estb &&
-            bit_test(meta(v).frames, FRAM_TYPE_ACK)) {
-            // warn(DBG, "ACK sent, stopping epoch %u ACK timer",
-            //      epoch_for_pkt_type(meta(v).hdr.type));
-            struct pn_space * const pn =
-                pn_for_pkt_type(s->c, meta(v).hdr.type);
-            ev_timer_stop(loop, &pn->ack_alarm);
-        }
+        if (rtx == false)
+            // update the stream's out_nxt pointer
+            s->out_nxt = sq_next(v, next);
 
         if (s->blocked || s->c->blocked)
             break;
@@ -329,6 +347,15 @@ static void __attribute__((nonnull(1))) tx_stream(struct q_stream * const s,
     }
 
     log_sent_pkts(s->c);
+}
+
+
+static void __attribute__((nonnull)) tx_stream_ctrl(struct q_stream * const s)
+{
+    struct w_iov * const v = q_alloc_iov(s->c->w, 0, Q_OFFSET);
+    enc_pkt(s, false, false, v);
+    if (sq_len(&s->c->txq))
+        do_tx(s->c);
 }
 
 
@@ -381,29 +408,8 @@ tx_crypto(struct q_conn * const c, const epoch_t e)
             q_free(&s->out);
             s->out_ack_cnt = 0;
         } else
-            tx_stream(s, false, 0, 0);
+            tx_stream_data(s, false, 0);
     }
-}
-
-
-static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
-{
-    c->needs_tx = false;
-
-    if (sq_empty(&c->txq))
-        return;
-
-    if (unlikely(sq_len(&c->txq) > 1 &&
-                 pkt_type(*sq_first(&c->txq)->buf) != F_SH))
-        coalesce(&c->txq);
-
-    // transmit encrypted/protected packets
-    w_tx(c->sock, &c->txq);
-    while (w_tx_pending(&c->txq))
-        w_nic_tx(c->w);
-
-    // x was allocated straight from warpcore, no metadata needs to be freed
-    w_free(&c->txq);
 }
 
 
@@ -438,29 +444,37 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
 
     struct q_stream * s = 0;
     splay_foreach (s, stream, &c->streams) {
-        // warn(ERR, "stream %" PRId64 " %u", s->id, sq_len(&s->out));
+        const bool stream_has_data_to_tx =
+            sq_len(&s->out) > 0 && out_fully_acked(s) == false &&
+            ((rtx && s->out_una) || (!rtx && s->out_nxt));
+
+        // warn(ERR, "strm id=" FMT_SID " cnt=%u has_data=%u needs_ctrl=%u %p
+        // %p",
+        //      s->id, sq_len(&s->out), stream_has_data_to_tx,
+        //      stream_needs_ctrl(s), out_fully_acked(s), s->out_una,
+        //      s->out_nxt);
         // check if we should skip TX on this stream
         if ( // this is a crypto stream and we're not doing an RTX
             (s->id < 0 && rtx == false) ||
-            // is the stream fully ACKed and doesn't need control frames?
-            (out_fully_acked(s) && !stream_needs_ctrl(s)) ||
+            // nothing to send and doesn't need control frames?
+            (stream_has_data_to_tx == false && stream_needs_ctrl(s) == false) ||
             // is this a new TX but the stream is blocked?
             (rtx == false && s->blocked) ||
             // unless for 0-RTT, is this a regular stream during conn open?
             (c->try_0rtt == false && s->id >= 0 && c->state != conn_estb)) {
-            // warn(ERR, "skip %d", s->id);
+            // warn(ERR, "skip " FMT_SID, s->id);
             continue;
         }
 
-        if (sq_empty(&s->out) && !stream_needs_ctrl(s))
-            continue;
-
-        warn(DBG,
-             "data %sTX on %s conn %s strm " FMT_SID " w/%u pkt%s in queue",
-             rtx ? "R" : "", conn_type(c), scid2str(c), s->id, sq_len(&s->out),
+        warn(DBG, "%s %sTX on %s conn %s strm " FMT_SID " w/%u pkt%s in queue",
+             stream_has_data_to_tx ? "data" : "ctrl", rtx ? "R" : "",
+             conn_type(c), scid2str(c), s->id, sq_len(&s->out),
              plural(sq_len(&s->out)));
 
-        tx_stream(s, rtx, limit, 0);
+        if (stream_has_data_to_tx)
+            tx_stream_data(s, rtx, limit);
+        else
+            tx_stream_ctrl(s);
     }
 
     if (sq_empty(&c->txq)) {
@@ -485,18 +499,8 @@ void tx_ack(struct q_conn * const c, const epoch_t e)
 
     struct w_iov * const v = q_alloc_iov(c->w, 0, Q_OFFSET);
     enc_pkt(s, false, false, v);
-
-    if (sq_len(&c->txq) == 0)
-        return;
-
-    // if this packet contains an ACK frame, stop the timer
-    if (bit_test(meta(v).frames, FRAM_TYPE_ACK)) {
-        // warn(DBG, "ACK sent, stopping epoch %u ACK timer",
-        //      epoch_for_pkt_type(meta(v).hdr.type));
-        ev_timer_stop(loop, &pn->ack_alarm);
-    }
-
-    do_tx(c);
+    if (sq_len(&c->txq))
+        do_tx(c);
 }
 
 

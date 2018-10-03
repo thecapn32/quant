@@ -113,11 +113,9 @@ done:
 
 void free_stream(struct q_stream * const s)
 {
-    if (s->id >= 0)
+    if (s->id >= 0) {
         warn(DBG, "freeing strm " FMT_SID " on %s conn %s", s->id,
              conn_type(s->c), scid2str(s->c));
-
-    if (s->id >= 0) {
         diet_insert(&s->c->closed_streams, (uint64_t)s->id, 0);
     }
 
@@ -163,6 +161,7 @@ void reset_stream(struct q_stream * const s, const bool forget)
     s->out_ack_cnt = s->in_data = s->out_data = 0;
 
     if (forget) {
+        s->out_nxt = s->out_una = 0;
         q_free(&s->in);
         q_free(&s->out);
     } else {
@@ -201,4 +200,16 @@ void do_stream_id_fc(struct q_stream * const s)
         if (s->id >> 2 == s->c->tp_out.max_bidi_streams - 1)
             s->c->stream_id_blocked = true;
     }
+}
+
+
+void concat_out(struct q_stream * const s, struct w_iov_sq * const q)
+{
+    if (s->out_nxt == 0)
+        s->out_nxt = sq_first(q);
+
+    if (s->out_una == 0)
+        s->out_una = sq_first(q);
+
+    sq_concat(&s->out, q);
 }

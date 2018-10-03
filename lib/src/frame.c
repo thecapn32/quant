@@ -1081,6 +1081,11 @@ uint16_t enc_ack_frame(struct q_conn * const c,
         i = enc(v->buf, v->len, i, &ack_block, 0, 0, "%" PRIu64);
         prev_lo = b->lo;
     }
+
+    // warn(DBG, "ACK encoded, stopping epoch %u ACK timer",
+    //      epoch_for_pkt_type(meta(v).hdr.type));
+    ev_timer_stop(loop, &pn->ack_alarm);
+
     return i;
 }
 

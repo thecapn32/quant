@@ -188,8 +188,6 @@ void q_free(struct w_iov_sq * const q)
 static void __attribute__((nonnull))
 do_write(struct q_stream * const s, struct w_iov_sq * const q, const bool fin)
 {
-    s->out_ack_cnt = 0;
-
     if (fin)
         strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
 
@@ -209,7 +207,6 @@ do_write(struct q_stream * const s, struct w_iov_sq * const q, const bool fin)
         sq_insert_tail(&s->out, last, next);
     } else
         sq_concat(q, &s->out);
-    s->out_ack_cnt = 0;
 }
 
 
@@ -246,7 +243,7 @@ struct q_conn * q_connect(struct w_engine * const w,
         ensure(early_data_stream, "early data without stream pointer");
         // queue up early data
         *early_data_stream = new_stream(c, c->next_sid);
-        sq_concat(&(*early_data_stream)->out, early_data);
+        concat_out(*early_data_stream, early_data);
         if (fin)
             strm_to_state(*early_data_stream,
                           (*early_data_stream)->state == strm_hcrm ? strm_clsd
@@ -290,7 +287,7 @@ void q_write(struct q_stream * const s,
     }
 
     // add to stream
-    sq_concat(&s->out, q);
+    concat_out(s, q);
     do_write(s, q, fin);
 
     warn(WRN, "wrote %u byte%s on %s conn %s strm " FMT_SID " %s", qlen,

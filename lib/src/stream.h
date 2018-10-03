@@ -58,10 +58,12 @@ struct q_stream {
     splay_entry(q_stream) node;
     struct q_conn * c;
 
-    struct w_iov_sq out;   ///< Tail queue containing outbound data.
-    uint64_t out_ack_cnt;  ///< Number of unique ACKs received for pkts in o.
-    uint64_t out_data;     ///< Current outbound stream offset (= data sent).
-    uint64_t out_data_max; ///< Outbound max_stream_data.
+    struct w_iov_sq out;    ///< Tail queue containing outbound data.
+    struct w_iov * out_una; ///< Lowest un-ACK'ed data chunk.
+    struct w_iov * out_nxt; ///< Lowest unsent data chunk.
+    uint64_t out_ack_cnt;   ///< Number of unique ACKs received for pkts in o.
+    uint64_t out_data;      ///< Current outbound stream offset (= data sent).
+    uint64_t out_data_max;  ///< Outbound max_stream_data.
 
     struct w_iov_sq in;         ///< Tail queue containing inbound data.
     struct pm_off_splay in_ooo; ///< Out-of-order inbound data.
@@ -122,7 +124,7 @@ strm_epoch(const struct q_stream * const s)
 static inline __attribute__((always_inline)) bool
 stream_needs_ctrl(const struct q_stream * const s)
 {
-    return s->tx_fin || s->tx_max_stream_data || s->c->tx_max_data;
+    return s->tx_fin || s->tx_max_stream_data;
 }
 
 
@@ -151,5 +153,8 @@ apply_stream_limits(struct q_stream * const s);
 extern void __attribute__((nonnull)) do_stream_fc(struct q_stream * const s);
 
 extern void __attribute__((nonnull)) do_stream_id_fc(struct q_stream * const s);
+
+extern void __attribute__((nonnull))
+concat_out(struct q_stream * const s, struct w_iov_sq * const q);
 
 SPLAY_PROTOTYPE(stream, q_stream, node, stream_cmp)

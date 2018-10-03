@@ -918,7 +918,7 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
                 memcpy(ov->buf, data, ov->len);
                 data += ov->len;
             }
-            sq_concat(&se->out, &o);
+            concat_out(se, &o);
         }
         c->needs_tx = true;
     }

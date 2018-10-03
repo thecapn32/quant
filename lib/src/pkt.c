@@ -360,6 +360,7 @@ bool enc_pkt(struct q_stream * const s,
     }
 
     if (epoch == ep_data) {
+        // encode connection control frames
         if (!c->is_clnt && c->tok_len) {
             i = enc_new_token_frame(c, v, i);
             free(c->tok);
@@ -377,18 +378,6 @@ bool enc_pkt(struct q_stream * const s,
         if (c->tx_ncid)
             i = enc_new_cid_frame(c, v, i);
 
-        // XXX rethink this - there needs to be a list of which streams are
-        // blocked or need their window opened
-        struct q_stream * t = 0;
-        splay_foreach (t, stream, &c->streams) {
-            if (t->id < 0)
-                continue;
-            if (t->blocked)
-                i = enc_stream_blocked_frame(t, v, i);
-            if (t->tx_max_stream_data)
-                i = enc_max_stream_data_frame(t, v, i);
-        }
-
         if (c->blocked)
             i = enc_blocked_frame(c, v, i);
 
@@ -400,8 +389,16 @@ bool enc_pkt(struct q_stream * const s,
 
         if (c->tx_max_stream_id)
             i = enc_max_stream_id_frame(c, v, i);
-    }
 
+        if (s->id >= 0) {
+            // encode stream control frames
+            if (s->blocked)
+                i = enc_stream_blocked_frame(s, v, i);
+
+            if (s->tx_max_stream_data)
+                i = enc_max_stream_data_frame(s, v, i);
+        }
+    }
 
     if (rtx) {
         ensure(is_rtxable(&meta(v)), "is rtxable");

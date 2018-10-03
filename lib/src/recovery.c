@@ -455,6 +455,15 @@ void on_pkt_acked(struct q_conn * const c,
     }
     meta(orig_v).is_acked = true;
 
+    // if this ACKs its stream's out_una, move that forward
+    if (meta(orig_v).stream && meta(orig_v).stream->out_una == orig_v) {
+        struct w_iov * new_out_una = orig_v;
+        sq_foreach_from (new_out_una, &s->out, next)
+            if (meta(new_out_una).is_acked == false)
+                break;
+        meta(orig_v).stream->out_una = new_out_una;
+    }
+
     if (s) {
         adj_iov_to_start(v);
         if (is_fin(v))
