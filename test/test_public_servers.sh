@@ -107,8 +107,8 @@ function check_fail {
         perl -n -e '/assertion failed|AddressSanitizer|runtime error/ && exit 1;' "$log"
         if [ $? == 1 ]; then
                 fail[$1]="X"
-                echo "Test with $1 crashed:"
-                tail -n 20 "$log"
+                echo "Test with $1 crashed (log $log):"
+                tail -n 10 "$log"
                 echo
                 return
         fi
