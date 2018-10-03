@@ -60,7 +60,7 @@ set_target_properties(warpcore PROPERTIES
 externalproject_add(picotls
   # UPDATE_COMMAND "" # XXX do not commit with this being empty
   GIT_REPOSITORY https://github.com/h2o/picotls.git
-  GIT_SHALLOW 1 # does not work together with GIT_TAG
+  # GIT_SHALLOW 1 # does not work together with GIT_TAG
   GIT_TAG 62c7d6c43d68bc411cd3edf41d537ccae9178999
   CMAKE_ARGS
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
@@ -305,5 +305,5 @@ externalproject_add(quic-tracker
 # grep '^[^#]*_add' ../external/CMakeLists.txt | cut -f2 -d\( | sort | fmt -w 60
 add_custom_target(ext-all DEPENDS
   ats minq mozquic ngtcp2 node nspr nss openssl picoquic
-  picotls quicker quicly warp
+  picotls quic-tracker quicker quicly warp
 )
