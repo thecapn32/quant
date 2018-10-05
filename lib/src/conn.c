@@ -1057,7 +1057,7 @@ void rx(struct ev_loop * const l,
     // read from NIC
     struct w_sock * const ws = rx_w->data;
     w_nic_rx(w_engine(ws), -1);
-    struct w_iov_sq i = sq_head_initializer(i);
+    struct w_iov_sq i = w_iov_sq_initializer(i);
     struct q_conn_sl crx = sl_head_initializer(crx);
     w_rx(ws, &i);
     rx_pkts(&i, &crx, ws);

@@ -108,7 +108,7 @@ SPLAY_PROTOTYPE(ticket_splay, tls_ticket, node, tls_ticket_cmp)
 SPLAY_GENERATE(ticket_splay, tls_ticket, node, tls_ticket_cmp)
 
 ptls_context_t tls_ctx = {0};
-static struct ticket_splay tickets = splay_initializer(tickets);
+static struct ticket_splay tickets = {splay_initializer(tickets)};
 
 #ifdef PTLS_OPENSSL
 static ptls_openssl_sign_certificate_t sign_cert = {0};
@@ -910,7 +910,7 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
                 continue;
             struct q_stream * const se = get_stream(c, crpt_strm_id(e));
             warn(DBG, "epoch %u: off %u len %u", e, epoch_off[e], out_len);
-            struct w_iov_sq o = sq_head_initializer(o);
+            struct w_iov_sq o = w_iov_sq_initializer(o);
             q_alloc(w_engine(c->sock), &o, (uint32_t)out_len);
             const uint8_t * data = tls_io.base + epoch_off[e];
             struct w_iov * ov = 0;

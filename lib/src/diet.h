@@ -68,8 +68,8 @@ extern int __attribute__((nonnull))
 ival_cmp(const struct ival * const a, const struct ival * const b);
 
 struct diet {
-    splay_head(, ival); ///< Splay head.
-    uint64_t cnt;       ///< Number of nodes (intervals) in the diet tree.
+    __extension__ splay_head(, ival); ///< Splay head.
+    uint64_t cnt; ///< Number of nodes (intervals) in the diet tree.
 };
 
 

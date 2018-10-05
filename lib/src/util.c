@@ -60,7 +60,7 @@ void q_write_str(struct w_engine * const w,
                  const bool fin)
 {
     // allocate tail queue
-    struct w_iov_sq o = sq_head_initializer(o);
+    struct w_iov_sq o = w_iov_sq_initializer(o);
     q_alloc(w, &o, (uint32_t)strlen(str));
 
     // chunk up string
@@ -84,7 +84,7 @@ void q_write_file(struct w_engine * const w,
                   const bool fin)
 {
     // allocate tail queue
-    struct w_iov_sq o = sq_head_initializer(o);
+    struct w_iov_sq o = w_iov_sq_initializer(o);
     q_alloc(w, &o, len);
 
     struct w_iov * v;

@@ -375,7 +375,7 @@ extern void __attribute__((nonnull)) pm_free(struct pkt_meta * const m);
         /* warn(CRT, "q_free_iov idx %u nr %" PRIu64, w_iov_idx(v),            \
              meta(v).hdr.nr); */                                               \
         pm_free(&meta(v));                                                     \
-        meta(v) = (struct pkt_meta){0};                                        \
+        memset(&meta(v), 0, sizeof(meta(v)));                                  \
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));                  \
         w_free_iov(v);                                                         \
     } while (0)

@@ -147,7 +147,7 @@ void pm_free(struct pkt_meta * const m)
         splay_remove(pm_nr_splay, &rm->pn->sent_pkts, rm);
         diet_insert(&rm->pn->acked, rm->hdr.nr, ev_now(loop));
         w_free_iov(w_iov(rm->pn->c->w, pm_idx(rm)));
-        *rm = (struct pkt_meta){0};
+        memset(rm, 0, sizeof(*rm));
         ASAN_POISON_MEMORY_REGION(rm, sizeof(*rm));
         rm = next_rm;
     }
@@ -309,8 +309,9 @@ q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool block)
 
     warn(WRN, "%sblocking read on %s conn %s", block ? "" : "non-",
          conn_type(c), scid2str(c));
-    struct q_stream * s = 0;
 
+    struct q_stream * s = 0;
+    // cppcheck-suppress knownConditionTrueFalse
     while (s == 0 && c->state == conn_estb) {
         splay_foreach (s, stream, &c->streams) {
             if (s->state == strm_clsd)

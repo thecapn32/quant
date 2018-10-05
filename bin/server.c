@@ -119,7 +119,7 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
     // check if this is a "GET /n" request for random data
     uint32_t n = (uint32_t)MIN(UINT32_MAX, strtoul(&path[2], 0, 10));
     if (n) {
-        struct w_iov_sq out = sq_head_initializer(out);
+        struct w_iov_sq out = w_iov_sq_initializer(out);
         q_alloc(d->w, &out, n);
         // check whether we managed to allow enough buffers
         if (w_iov_sq_len(&out) != n) {
@@ -265,7 +265,7 @@ int main(int argc, char * argv[])
             http_parser parser = {.data = &d};
 
             http_parser_init(&parser, HTTP_REQUEST);
-            struct w_iov_sq q = sq_head_initializer(q);
+            struct w_iov_sq q = w_iov_sq_initializer(q);
             struct q_stream * s = q_read(c, &q, false);
 
             if (sq_empty(&q))

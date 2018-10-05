@@ -72,7 +72,7 @@ int LLVMFuzzerTestOneInput(const uint8_t * data, const size_t size)
 
     memcpy(v->buf, data, MIN(size, v->len));
     v->len = (uint16_t)MIN(size, v->len);
-    struct w_iov_sq i = sq_head_initializer(i);
+    struct w_iov_sq i = w_iov_sq_initializer(i);
     sq_insert_head(&i, v, next);
 
     struct q_conn_sl crx;

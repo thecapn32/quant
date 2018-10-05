@@ -31,6 +31,7 @@
 extern "C" {
 #endif
 
+#include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <sys/socket.h>
@@ -67,8 +68,7 @@ extern void __attribute__((nonnull)) q_close(struct q_conn * const c);
 extern struct q_conn * __attribute__((nonnull))
 q_bind(struct w_engine * const w, const uint16_t port);
 
-extern struct q_conn * __attribute__((nonnull))
-q_accept(const uint64_t timeout);
+extern struct q_conn * q_accept(const uint64_t timeout);
 
 extern void __attribute__((nonnull))
 q_write(struct q_stream * const s, struct w_iov_sq * const q, const bool fin);

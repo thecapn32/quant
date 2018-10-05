@@ -29,7 +29,6 @@ if(NOT WARP_LIB OR NOT WARP_INCLUDE)
     # UPDATE_COMMAND "" # XXX do not commit with this being empty
     GIT_REPOSITORY https://github.com/NTAP/warpcore.git
     GIT_SHALLOW 1
-    GIT_TAG dev
     CMAKE_ARGS
       -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
       -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}

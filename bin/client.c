@@ -155,7 +155,7 @@ get(struct w_engine * const w,
     char req_str[MAXPATHLEN + 6];
     const int req_str_len =
         snprintf(req_str, sizeof(req_str), "GET %s\r\n", path);
-    struct w_iov_sq req = sq_head_initializer(req);
+    struct w_iov_sq req = w_iov_sq_initializer(req);
     q_chunk_str(w, req_str, (uint32_t)req_str_len, &req);
 
     // do we have a connection open to this peer?
@@ -293,7 +293,7 @@ int main(int argc, char * argv[])
     struct stream_entry * se = 0;
     sl_foreach (se, &sl, next) {
         // read HTTP/0.9 reply and dump it to stdout
-        struct w_iov_sq i = sq_head_initializer(i);
+        struct w_iov_sq i = w_iov_sq_initializer(i);
         if (se->c == 0)
             continue;
 

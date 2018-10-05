@@ -85,7 +85,7 @@ int main(int argc, char ** argv)
     util_dlevel = INF;
 #endif
     w = q_init(i, nullptr, nullptr, nullptr, nullptr, false); // NOLINT
-    struct cid cid = {.len = 4, .id = "1234"};
+    __extension__ struct cid cid = {.len = 4, .id = "1234"};
     c = new_conn(w, 0xff00000e, &cid, &cid, nullptr, "", 55555, 0);
     init_tls(c);
     benchmark::RunSpecifiedBenchmarks();

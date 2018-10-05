@@ -98,28 +98,30 @@ script:
     mkdir build
     cd build
     ../bin/cmake -DCMAKE_C_COMPILER=$MYCC -DCMAKE_CXX_COMPILER=$MYCXX \
-      -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DCMAKE_INSTALL_PREFIX:PATH=/tmp \
+      -DCMAKE_BUILD_TYPE=$BUILD -DCMAKE_INSTALL_PREFIX:PATH=/tmp \
       -DNO_SANITIZERS=True -DFUZZER=$FUZZ -DSPINBIT=$SPIN ..
     make
 
 after_success:
   # update the documentation
   - |
-    cd $TRAVIS_BUILD_DIR/build
-    git clone -b gh-pages https://git@github.com/NTAP/$PROJECT.git gh-pages
-    cd gh-pages
-    git config --global push.default simple
-    git config user.name "Travis CI"
-    git config user.email "travis@travis-ci.org"
-    rm -rf ./*
-    touch .nojekyll
-    doxygen $TRAVIS_BUILD_DIR/build/doc/Doxyfile 2>&1 | tee doxygen.log
-    if [ -d "html" ] && [ -f "html/index.html" ]; then
-        mv html/* .
-        git add --all
-        git commit -m "Update doxygen documentation on branch gh-pages." \
-            -m "Travis CI build ${TRAVIS_BUILD_NUMBER}." \
-            -m "Commit: ${TRAVIS_COMMIT}."
-        git push --force \
-          https://${GH_REPO_TOKEN}@github.com/NTAP/$PROJECT.git > /dev/null 2>&1
+    if [ $BUILD = "Debug" -a $MYCC = "gcc-7" -a $FUZZ = 0 -a $SPIN = 1 ]; then
+      cd $TRAVIS_BUILD_DIR/build
+      git clone -b gh-pages https://git@github.com/NTAP/$PROJECT.git gh-pages
+      cd gh-pages
+      git config --global push.default simple
+      git config user.name "Travis CI"
+      git config user.email "travis@travis-ci.org"
+      rm -rf ./*
+      touch .nojekyll
+      doxygen $TRAVIS_BUILD_DIR/build/doc/Doxyfile 2>&1 | tee doxygen.log
+      if [ -d "html" ] && [ -f "html/index.html" ]; then
+          mv html/* .
+          git add --all
+          git commit -m "Update doxygen documentation on branch gh-pages." \
+              -m "Travis CI build ${TRAVIS_BUILD_NUMBER}." \
+              -m "Commit: ${TRAVIS_COMMIT}."
+          git push --force \
+            https://${GH_REPO_TOKEN}@github.com/NTAP/$PROJECT.git > /dev/null 2>&1
+      fi
     fi
