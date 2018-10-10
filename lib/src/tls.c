@@ -141,8 +141,10 @@ static FILE * tls_log_file;
 #define TP_DISABLE_MIGRATION 9
 #define TP_INITIAL_MAX_STREAM_DATA_BIDI_REMOTE 10
 #define TP_INITIAL_MAX_STREAM_DATA_UNI 11
+#define TP_MAX_ACK_DELAY 12
+#define TP_ORIGINAL_CONNECTION_ID 13
 
-#define TP_MAX (TP_INITIAL_MAX_STREAM_DATA_UNI + 1)
+#define TP_MAX (TP_ORIGINAL_CONNECTION_ID + 1)
 
 
 // quicly shim
@@ -506,6 +508,11 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                      c->tp_out.ack_del_exp);
             break;
 
+        case TP_MAX_ACK_DELAY:
+            dec_tp(&c->tp_out.max_ack_del, sizeof(uint8_t));
+            warn(INF, "\tmax_ack_delay = %u", c->tp_out.max_ack_del);
+            break;
+
         case TP_DISABLE_MIGRATION: {
             uint16_t dummy;
             dec_tp(&dummy, sizeof(dummy));
@@ -584,6 +591,7 @@ void init_tp(struct q_conn * const c)
            c->tp_in.max_strm_data_bidi_local, sizeof(uint32_t));
     enc_tp(c, TP_INITIAL_MAX_DATA, c->tp_in.max_data, sizeof(uint32_t));
     enc_tp(c, TP_ACK_DELAY_EXPONENT, c->tp_in.ack_del_exp, sizeof(uint8_t));
+    enc_tp(c, TP_MAX_ACK_DELAY, c->tp_in.max_ack_del, sizeof(uint8_t));
     enc_tp(c, TP_MAX_PACKET_SIZE, w_mtu(c->w), sizeof(uint16_t));
 
     if (!c->is_clnt) { // TODO: change in -13

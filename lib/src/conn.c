@@ -1259,6 +1259,8 @@ struct q_conn * new_conn(struct w_engine * const w,
     ev_init(&c->closing_alarm, enter_closed);
 
     c->tp_in.ack_del_exp = c->tp_out.ack_del_exp = 3;
+    c->tp_in.max_ack_del = c->tp_out.max_ack_del =
+        (uint8_t)(1000 * kDelayedAckTimeout);
     c->tp_in.idle_to = kIdleTimeout;
     c->tp_in.max_data = c->is_clnt ? 0x4000 : 0x8000;
     c->tp_in.max_strm_data_bidi_local = c->tp_in.max_strm_data_bidi_remote =
