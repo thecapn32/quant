@@ -197,7 +197,7 @@ void use_next_scid(struct q_conn * const c)
     struct q_cid_map * const cm = splay_find(cid_splay, &conns_by_cid, &which);
     splay_remove(cid_splay, &conns_by_cid, cm);
 #ifndef FUZZING
-    if (act_scid(c))
+    if (c->state != conn_clsd && act_scid(c))
         warn(DBG, "new scid=%s (was %s)", scid2str(c), cid2str(scid));
 #endif
     free(cm);
@@ -209,7 +209,7 @@ static void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c)
     struct cid * const dcid = act_dcid(c);
     sq_remove(&c->dcid, dcid, cid, next);
 #ifndef FUZZING
-    if (act_dcid(c))
+    if (c->state != conn_clsd && act_dcid(c))
         warn(DBG, "new dcid=%s (was %s)", dcid2str(c), cid2str(dcid));
 #endif
     free(dcid);
