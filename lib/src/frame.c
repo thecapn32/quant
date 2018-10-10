@@ -722,17 +722,17 @@ dec_new_cid_frame(struct q_conn * const c,
                   const struct w_iov * const v,
                   const uint16_t pos)
 {
-    uint64_t seq = 0;
-    uint16_t i = dec_chk(true, FRAM_TYPE_NEW_CID, &seq, v->buf, v->len, pos + 1,
-                         0, "%" PRIu64);
-
     struct cid dcid;
-    i = dec_chk(true, FRAM_TYPE_NEW_CID, &dcid.len, v->buf, v->len, i,
-                sizeof(dcid.len), "%u");
+    uint16_t i = dec_chk(true, FRAM_TYPE_NEW_CID, &dcid.len, v->buf, v->len,
+                         pos + 1, sizeof(dcid.len), "%u");
 
     if (unlikely(dcid.len < 4 || dcid.len > 18))
         err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_NEW_CID,
                          "illegal cid len %u", dcid.len);
+
+    uint64_t seq = 0;
+    i = dec_chk(true, FRAM_TYPE_NEW_CID, &seq, v->buf, v->len, i, 0,
+                "%" PRIu64);
 
     i = dec_chk_buf(true, FRAM_TYPE_NEW_CID, dcid.id, v->buf, v->len, i,
                     dcid.len);
@@ -1349,16 +1349,17 @@ uint16_t enc_new_cid_frame(struct q_conn * const c,
     const uint8_t type = FRAM_TYPE_NEW_CID;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
-    c->max_cid_seq_out =
-        c->max_cid_seq_out == UINT64_MAX ? 0 : c->max_cid_seq_out + 1;
-    i = enc(v->buf, v->len, i, &c->max_cid_seq_out, 0, 0, "%" PRIu64);
-
     struct cid ncid = {.len = c->is_clnt ? CLNT_SCID_LEN : SERV_SCID_LEN};
     arc4random_buf(ncid.id, ncid.len);
     arc4random_buf(ncid.srt, sizeof(ncid.srt));
     add_scid(c, &ncid);
 
     i = enc(v->buf, v->len, i, &ncid.len, sizeof(ncid.len), 0, "%u");
+
+    c->max_cid_seq_out =
+        c->max_cid_seq_out == UINT64_MAX ? 0 : c->max_cid_seq_out + 1;
+    i = enc(v->buf, v->len, i, &c->max_cid_seq_out, 0, 0, "%" PRIu64);
+
     i = enc_buf(v->buf, v->len, i, ncid.id, ncid.len);
     i = enc_buf(v->buf, v->len, i, &ncid.srt, sizeof(ncid.srt));
 
