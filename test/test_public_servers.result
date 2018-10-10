@@ -1,17 +1,17 @@
           live fail vneg hshk data clse zrtt rtry mig
 ats       *         V    H    D    C    RZ        M
 f5        *         V    H    D    C
-lsquic
+lsquic    *         V
 minq      *         v
 mozquic
 mvfst     *
 ngtcp2    *         V    H    D    C    RZ   S
 ngx_quic  *         V    H    D    C
 pandora
-picoquic  *         V    H    D    C    RZ   S
+picoquic  *         v
 quant     *         V    H    D    C    RZ   S    M
 quicker
 quicly    *         V    H    D    C    RZ
 quicr     *         v
 quinn
-winquic   *         V    H    D    C    RZ   S
+winquic
