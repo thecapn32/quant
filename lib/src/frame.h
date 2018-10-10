@@ -49,14 +49,15 @@ struct w_iov;
 #define FRAM_TYPE_SID_BLCK 0x0a
 #define FRAM_TYPE_NEW_CID 0x0b
 #define FRAM_TYPE_STOP_SEND 0x0c
-#define FRAM_TYPE_ACK 0x0d
+#define FRAM_TYPE_RTIR_CID 0x0d
 #define FRAM_TYPE_PATH_CHLG 0x0e
 #define FRAM_TYPE_PATH_RESP 0x0f
 #define FRAM_TYPE_STRM 0x10 // we only encode this type in the frames bitstr_t
 #define FRAM_TYPE_STRM_MAX 0x17
 #define FRAM_TYPE_CRPT 0x18
 #define FRAM_TYPE_NEW_TOKN 0x19
-#define FRAM_TYPE_ACK_ECN 0x1a
+#define FRAM_TYPE_ACK 0x1a // we only encode this type in the frames bitstr_t
+#define FRAM_TYPE_ACK_ECN 0x1b
 #define NUM_FRAM_TYPES (FRAM_TYPE_ACK_ECN + 1)
 
 #define F_STREAM_FIN 0x01

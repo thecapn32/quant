@@ -347,11 +347,10 @@ uint16_t dec_ack_frame(struct q_conn * const c,
             if (n == num_blocks + 1) {
                 if (t == FRAM_TYPE_ACK_ECN)
                     warn(INF,
-                         FRAM_IN
-                         "ACK_ECN" NRM " lg=" FMT_PNR_OUT " delay=%" PRIu64
-                         " (%" PRIu64 " usec) ect0=%" PRIu64 " ect1=%" PRIu64
-                         " ce=%" PRIu64 " cnt=%" PRIu64 " block=%" PRIu64
-                         " [" FMT_PNR_OUT "]",
+                         FRAM_IN "ACK" NRM " lg=" FMT_PNR_OUT " delay=%" PRIu64
+                                 " (%" PRIu64 " usec) ect0=%" PRIu64
+                                 " ect1=%" PRIu64 " ce=%" PRIu64 " cnt=%" PRIu64
+                                 " block=%" PRIu64 " [" FMT_PNR_OUT "]",
                          lg_ack, ack_delay_raw, ack_delay, ect0_cnt, ect1_cnt,
                          ce_cnt, num_blocks, ack_block_len, lg_ack);
                 else
@@ -370,10 +369,10 @@ uint16_t dec_ack_frame(struct q_conn * const c,
             if (n == num_blocks + 1) {
                 if (t == FRAM_TYPE_ACK_ECN)
                     warn(INF,
-                         FRAM_IN "ACK_ECN" NRM " lg=" FMT_PNR_OUT
-                                 " delay=%" PRIu64 " (%" PRIu64
-                                 " usec) cnt=%" PRIu64 " block=%" PRIu64
-                                 " [" FMT_PNR_OUT ".." FMT_PNR_OUT "]",
+                         FRAM_IN "ACK" NRM " lg=" FMT_PNR_OUT " delay=%" PRIu64
+                                 " (%" PRIu64 " usec) cnt=%" PRIu64
+                                 " block=%" PRIu64 " [" FMT_PNR_OUT
+                                 ".." FMT_PNR_OUT "]",
                          lg_ack, ack_delay_raw, ack_delay, num_blocks,
                          ack_block_len, lg_ack_in_block - ack_block_len,
                          shorten_ack_nr(lg_ack_in_block, ack_block_len));
@@ -871,8 +870,9 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
 
         } else {
             switch (type) {
-            case FRAM_TYPE_ACK:
             case FRAM_TYPE_ACK_ECN:
+                type = FRAM_TYPE_ACK; // only enc FRAM_TYPE_ACK in bitstr_t
+            case FRAM_TYPE_ACK:
                 i = dec_ack_frame(c, v, i, &on_ack_frame_start, &on_pkt_acked,
                                   on_ack_frame_end, false);
                 break;
