@@ -108,7 +108,7 @@ SPLAY_PROTOTYPE(ticket_splay, tls_ticket, node, tls_ticket_cmp)
 SPLAY_GENERATE(ticket_splay, tls_ticket, node, tls_ticket_cmp)
 
 ptls_context_t tls_ctx = {0};
-static struct ticket_splay tickets = {splay_initializer(tickets)};
+static struct ticket_splay tickets = {splay_initializer(tickets), {"\0"}};
 
 #ifdef PTLS_OPENSSL
 static ptls_openssl_sign_certificate_t sign_cert = {0};
@@ -116,8 +116,7 @@ static ptls_openssl_verify_certificate_t verifier = {0};
 #endif
 
 // client always tries to negotiate first entry
-static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-14", 5},
-                                    {(uint8_t *)"hq-13", 5}};
+static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-15", 5}};
 static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 
 static struct cipher_ctx dec_tckt;
