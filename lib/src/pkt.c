@@ -72,7 +72,9 @@ pkt_type_str(const struct w_iov * const v)
 
 void log_pkt(const char * const dir,
              const struct w_iov * const v,
-             const struct cid * const odcid)
+             const struct cid * const odcid,
+             const uint8_t * const tok,
+             const uint16_t tok_len)
 {
     const char * col_dir = *dir == 'R' ? BLD BLU : BLD GRN;
     const char * col_nr = *dir == 'R' ? BLU : GRN;
@@ -93,15 +95,14 @@ void log_pkt(const char * const dir,
                   col_dir, dir, *dir == 'R' ? v->len : 0, *v->buf, col_dir,
                   pkt_type_str(v), meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
                   cid2str(&meta(v).hdr.scid), cid2str(odcid),
-                  hex2str(meta(v).hdr.tok, meta(v).hdr.tok_len));
+                  hex2str(tok, tok_len));
         else if (meta(v).hdr.type == F_LH_INIT)
             twarn(NTE,
                   BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM
                       "vers=0x%08x dcid=%s scid=%s tok=%s len=%u nr=%s%" PRIu64,
                   col_dir, dir, *dir == 'R' ? v->len : 0, *v->buf, col_dir,
                   pkt_type_str(v), meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
-                  cid2str(&meta(v).hdr.scid),
-                  hex2str(meta(v).hdr.tok, meta(v).hdr.tok_len),
+                  cid2str(&meta(v).hdr.scid), hex2str(tok, tok_len),
                   meta(v).hdr.len, col_nr, meta(v).hdr.nr);
         else
             twarn(NTE,
@@ -223,7 +224,7 @@ bool enc_pkt(struct q_stream * const s,
                 i = enc(v->buf, v->len, i, &ok_vers[j], sizeof(ok_vers[j]), 0,
                         "0x%08x");
         meta(v).hdr.hdr_len = v->len = i;
-        log_pkt("TX", v, 0);
+        log_pkt("TX", v, 0, 0, 0);
         goto tx;
     }
 
@@ -235,7 +236,6 @@ bool enc_pkt(struct q_stream * const s,
     else
         meta(v).hdr.nr = ++pn->lg_sent;
 
-    struct cid odcid = {0};
     switch (epoch) {
     case ep_init:
         meta(v).hdr.type = c->tx_rtry ? F_LH_RTRY : F_LH_INIT;
@@ -249,7 +249,7 @@ bool enc_pkt(struct q_stream * const s,
             warn(NTE, "hshk switch to scid %s for %s conn (was %s)",
                  cid2str(&new_scid), conn_type(c), scid2str(c));
 #endif
-            cid_cpy(&odcid, act_scid(c));
+            cid_cpy(&c->odcid, act_scid(c));
             add_scid(c, &new_scid);
             use_next_scid(c);
         }
@@ -297,6 +297,7 @@ bool enc_pkt(struct q_stream * const s,
     i = enc(v->buf, v->len, 0, &meta(v).hdr.flags, sizeof(meta(v).hdr.flags), 0,
             "0x%02x");
 
+    uint16_t tok_len = 0;
     if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
         meta(v).hdr.vers = c->vers;
         i = enc(v->buf, v->len, i, &c->vers, sizeof(c->vers), 0, "0x%08x");
@@ -304,26 +305,22 @@ bool enc_pkt(struct q_stream * const s,
 
         if (meta(v).hdr.type == F_LH_RTRY) {
             const uint8_t odcil = (uint8_t)(arc4random_uniform(0xf) << 4) |
-                                  (odcid.len ? odcid.len - 3 : 0);
+                                  (c->odcid.len ? c->odcid.len - 3 : 0);
             i = enc(v->buf, v->len, i, &odcil, sizeof(odcil), 0, "0x%02x");
-            if (odcid.len)
-                i = enc_buf(v->buf, v->len, i, &odcid.id, odcid.len);
+            if (c->odcid.len)
+                i = enc_buf(v->buf, v->len, i, &c->odcid.id, c->odcid.len);
         }
 
-        const uint64_t tok_len =
+        tok_len =
             c->state == conn_idle || c->state == conn_opng ? c->tok_len : 0;
         if (meta(v).hdr.type == F_LH_INIT) {
-            i = enc(v->buf, v->len, i, &tok_len, 0, 0, "%" PRIu64);
+            const uint64_t tl = tok_len;
+            i = enc(v->buf, v->len, i, &tl, 0, 0, "%" PRIu64);
         }
 
         if ((meta(v).hdr.type == F_LH_INIT || meta(v).hdr.type == F_LH_RTRY) &&
-            tok_len) {
-            meta(v).hdr.tok_len = (uint16_t)tok_len;
-            meta(v).hdr.tok = calloc(tok_len, sizeof(uint8_t));
-            ensure(meta(v).hdr.tok, "could not calloc");
-            memcpy(meta(v).hdr.tok, c->tok, tok_len);
+            tok_len)
             i = enc_buf(v->buf, v->len, i, c->tok, (uint16_t)tok_len);
-        }
 
         if (meta(v).hdr.type != F_LH_RTRY) {
             // leave space for length field (2 bytes is enough)
@@ -345,7 +342,8 @@ bool enc_pkt(struct q_stream * const s,
     }
 
     meta(v).hdr.hdr_len = i;
-    log_pkt("TX", v, meta(v).hdr.type == F_LH_RTRY ? &odcid : 0);
+    log_pkt("TX", v, meta(v).hdr.type == F_LH_RTRY ? &c->odcid : 0, c->tok,
+            tok_len);
 
     if (meta(v).hdr.type != F_LH_RTRY && !diet_empty(&pn->recv)) {
         i = enc_ack_frame(c, pn, v, i);
@@ -363,7 +361,6 @@ bool enc_pkt(struct q_stream * const s,
         // encode connection control frames
         if (!c->is_clnt && c->tok_len) {
             i = enc_new_token_frame(c, v, i);
-            free(c->tok);
             c->tok_len = 0;
         }
 
@@ -494,7 +491,10 @@ tx:
 
 bool dec_pkt_hdr_beginning(const struct w_iov * const v,
                            const bool is_clnt,
-                           struct cid * const odcid)
+                           struct cid * const odcid,
+                           uint8_t * const tok,
+                           uint16_t * const tok_len)
+
 {
     dec_chk(&meta(v).hdr.flags, v->buf, v->len, 0, 1, "0x%02x");
     meta(v).hdr.type = pkt_type(*v->buf);
@@ -555,11 +555,11 @@ bool dec_pkt_hdr_beginning(const struct w_iov * const v,
 
         if (meta(v).hdr.type == F_LH_INIT) {
             // decode token
-            uint64_t tok_len = 0;
-            meta(v).hdr.hdr_len = dec_chk(&tok_len, v->buf, v->len,
+            uint64_t tl = 0;
+            meta(v).hdr.hdr_len = dec_chk(&tl, v->buf, v->len,
                                           meta(v).hdr.hdr_len, 0, "%" PRIu64);
-            meta(v).hdr.tok_len = (uint16_t)tok_len;
-            if (is_clnt && meta(v).hdr.tok_len) {
+            *tok_len = (uint16_t)tl;
+            if (is_clnt && *tok_len) {
                 // server initial pkts must have no tokens
 #ifndef FUZZING
                 warn(DBG, "tok present in serv initial");
@@ -567,21 +567,18 @@ bool dec_pkt_hdr_beginning(const struct w_iov * const v,
                 return false;
             }
         } else if (meta(v).hdr.type == F_LH_RTRY)
-            meta(v).hdr.tok_len = v->len - meta(v).hdr.hdr_len;
+            *tok_len = v->len - meta(v).hdr.hdr_len;
 
-        if (meta(v).hdr.tok_len) {
-            if (unlikely(meta(v).hdr.tok_len + meta(v).hdr.hdr_len > v->len)) {
+        if (*tok_len) {
+            if (unlikely(*tok_len + meta(v).hdr.hdr_len > v->len)) {
                 // corrupt token len
 #ifndef FUZZING
-                warn(DBG, "tok_len %u invalid", meta(v).hdr.tok_len);
+                warn(DBG, "tok_len %u invalid", *tok_len);
 #endif
                 return false;
             }
-            meta(v).hdr.tok = calloc(meta(v).hdr.tok_len, sizeof(uint8_t));
-            ensure(meta(v).hdr.tok, "could not calloc");
             meta(v).hdr.hdr_len =
-                dec_chk_buf(meta(v).hdr.tok, v->buf, v->len,
-                            meta(v).hdr.hdr_len, (uint16_t)meta(v).hdr.tok_len);
+                dec_chk_buf(tok, v->buf, v->len, meta(v).hdr.hdr_len, *tok_len);
         }
 
         if (meta(v).hdr.type != F_LH_RTRY) {

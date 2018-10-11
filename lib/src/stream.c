@@ -27,6 +27,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
@@ -147,11 +148,8 @@ void track_bytes_out(struct q_stream * const s, const uint64_t n)
 static void __attribute__((nonnull)) reset_pm(const struct w_iov_sq * const q)
 {
     struct w_iov * v;
-    sq_foreach (v, q, next) {
-        if (meta(v).hdr.tok)
-            free(meta(v).hdr.tok);
-        meta(v) = (struct pkt_meta){0};
-    }
+    sq_foreach (v, q, next)
+        memset(&meta(v), 0, sizeof(meta(v)));
 }
 
 

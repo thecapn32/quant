@@ -63,6 +63,7 @@ struct transport_params {
     uint8_t max_ack_del;
     bool disable_migration;
     uint8_t _unused;
+    struct cid orig_cid;
 };
 
 
@@ -116,7 +117,7 @@ struct q_conn {
     uint32_t tx_rtry : 1;           ///< We need to send a RETRY.
     uint32_t tx_vneg : 1;           ///< We need to send a vers neg response.
     uint32_t have_new_data : 1;     ///< New stream data was enqueued.
-    uint32_t in_c_ready : 1;
+    uint32_t in_c_ready : 1;        ///< Connection is listed in c_ready.
 #ifndef SPINBIT
     uint32_t : 15;
 #else
@@ -178,9 +179,11 @@ struct q_conn {
     uint64_t max_cid_seq_out;
     uint64_t max_cid_seq_in;
 
-    uint8_t * tok;
+    struct cid odcid; ///< Original destination CID of first Initial.
 
     struct w_iov_sq txq;
+
+    uint8_t tok[MAX_CID_LEN + MAX_HASH_LEN + 6]; // +6 for alignment
 };
 
 
@@ -363,6 +366,8 @@ extern void __attribute__((nonnull)) use_next_scid(struct q_conn * const c);
 
 extern void __attribute__((nonnull)) do_conn_fc(struct q_conn * const c);
 
+extern int __attribute__((nonnull))
+cid_cmp(const struct cid * const a, const struct cid * const b);
 
 #ifdef FUZZING
 extern void __attribute__((nonnull)) rx_pkts(struct w_iov_sq * const i,

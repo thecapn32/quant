@@ -726,7 +726,7 @@ dec_new_cid_frame(struct q_conn * const c,
     uint16_t i = dec_chk(true, FRAM_TYPE_NEW_CID, &dcid.len, v->buf, v->len,
                          pos + 1, sizeof(dcid.len), "%u");
 
-    if (unlikely(dcid.len < 4 || dcid.len > 18))
+    if (unlikely(dcid.len < 4 || dcid.len > MAX_CID_LEN))
         err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_NEW_CID,
                          "illegal cid len %u", dcid.len);
 

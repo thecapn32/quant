@@ -39,6 +39,7 @@ struct q_stream;
 
 
 #define AEAD_LEN 16
+#define MAX_HASH_LEN 32 // SHA256
 
 
 struct cipher_ctx {
@@ -56,7 +57,7 @@ struct tls {
     ptls_handshake_properties_t tls_hshake_prop;
     size_t max_early_data;
     epoch_t epoch_out; // TODO: remove
-    uint8_t tp_buf[100];
+    uint8_t tp_buf[196];
 };
 
 
@@ -95,5 +96,6 @@ which_cipher_ctx(const struct q_conn * const c, const uint8_t t, const bool in);
 
 extern void __attribute__((nonnull)) make_rtry_tok(struct q_conn * const c);
 
-extern bool __attribute__((nonnull))
-verify_rtry_tok(const struct q_conn * const c, const struct w_iov * const v);
+extern bool __attribute__((nonnull)) verify_rtry_tok(struct q_conn * const c,
+                                                     const uint8_t * const tok,
+                                                     const uint16_t tok_len);

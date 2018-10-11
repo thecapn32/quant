@@ -112,7 +112,9 @@ struct w_iov_sq;
 extern bool __attribute__((nonnull))
 dec_pkt_hdr_beginning(const struct w_iov * const v,
                       const bool is_clnt,
-                      struct cid * const odcid);
+                      struct cid * const odcid,
+                      uint8_t * const tok,
+                      uint16_t * const tok_len);
 
 extern bool __attribute__((nonnull))
 dec_pkt_hdr_remainder(struct w_iov * const v,
@@ -130,7 +132,9 @@ extern void __attribute__((nonnull)) coalesce(struct w_iov_sq * const q);
 extern void __attribute__((nonnull(1, 2)))
 log_pkt(const char * const dir,
         const struct w_iov * const v,
-        const struct cid * const odcid);
+        const struct cid * const odcid,
+        const uint8_t * const tok,
+        const uint16_t tok_len);
 #else
 #define log_pkt(...)                                                           \
     do {                                                                       \

@@ -90,8 +90,7 @@ int ipnp_splay_cmp(const struct q_conn * const a, const struct q_conn * const b)
 }
 
 
-static inline int __attribute__((nonnull))
-cid_cmp(const struct cid * const a, const struct cid * const b)
+int cid_cmp(const struct cid * const a, const struct cid * const b)
 {
     const int diff = (a->len > b->len) - (a->len < b->len);
     if (diff)
@@ -657,7 +656,9 @@ static void __attribute__((nonnull)) vneg_or_rtry_resp(struct q_conn * const c)
 
 static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
                                             struct w_iov * const v,
-                                            struct w_iov_sq * const i)
+                                            struct w_iov_sq * const i,
+                                            const uint8_t * const tok,
+                                            const uint16_t tok_len)
 {
     bool ok = false;
 
@@ -681,9 +682,8 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 
             if (c->tx_rtry) {
                 // tx_rtry is currently always set on port 4434
-                if (meta(v).hdr.type == F_LH_INIT && meta(v).hdr.tok_len) {
-                    // this may be a second initial following an earlier retry
-                    if (verify_rtry_tok(c, v) == false) {
+                if (meta(v).hdr.type == F_LH_INIT && tok_len) {
+                    if (verify_rtry_tok(c, tok, tok_len) == false) {
                         warn(ERR, "retry token verification failed");
                         enter_closing(c);
                         goto done;
@@ -781,17 +781,18 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         }
 
         if (meta(v).hdr.type == F_LH_RTRY) {
+            if (c->tok_len) {
+                // we already had an earlier RETRY on this connection
+                warn(ERR, "rx second RETRY");
+                err_close(c, ERR_PROTOCOL_VIOLATION, 0, "rx 2nd retry");
+                goto done;
+            }
+
             // handle an incoming retry packet
             vneg_or_rtry_resp(c);
 
-            if (c->tok_len) {
-                free(c->tok);
-                c->tok_len = 0;
-            }
-            c->tok_len = meta(v).hdr.tok_len;
-            c->tok = calloc(c->tok_len, sizeof(uint8_t));
-            ensure(c->tok, "could not calloc");
-            memcpy(c->tok, meta(v).hdr.tok, c->tok_len);
+            c->tok_len = tok_len;
+            memcpy(c->tok, tok, c->tok_len);
 
             warn(INF, "handling serv stateless retry w/tok %s",
                  hex2str(c->tok, c->tok_len));
@@ -900,8 +901,10 @@ rx_pkts(struct w_iov_sq * const i,
         const bool is_clnt = w_connected(ws);
         struct q_conn * c = 0;
         struct cid odcid;
-        if (dec_pkt_hdr_beginning(v, is_clnt, &odcid) == false) {
-            log_pkt("RX", v, &odcid);
+        uint8_t tok[MAX_PKT_LEN];
+        uint16_t tok_len = 0;
+        if (dec_pkt_hdr_beginning(v, is_clnt, &odcid, tok, &tok_len) == false) {
+            log_pkt("RX", v, &odcid, tok, tok_len);
 #ifndef FUZZING
             warn(ERR, "received invalid %u-byte pkt (type 0x%02x), ignoring",
                  v->len, v->buf[0]);
@@ -954,7 +957,7 @@ rx_pkts(struct w_iov_sq * const i,
                 if (cid_cmp(&meta(v).hdr.scid, act_dcid(c)) != 0) {
                     if (meta(v).hdr.type == F_LH_RTRY &&
                         cid_cmp(&odcid, act_dcid(c)) != 0) {
-                        log_pkt("RX", v, &odcid);
+                        log_pkt("RX", v, &odcid, tok, tok_len);
 #ifndef FUZZING
                         warn(ERR, "retry dcid mismatch %s != %s",
                              cid2str(&odcid), cid2str(act_dcid(c)));
@@ -1003,7 +1006,7 @@ rx_pkts(struct w_iov_sq * const i,
                 zo->v = v;
                 zo->t = ev_now(loop);
                 splay_insert(ooo_0rtt_splay, &ooo_0rtt_by_cid, zo);
-                log_pkt("RX", v, &odcid); // NOLINT
+                log_pkt("RX", v, &odcid, tok, tok_len); // NOLINT
 #ifndef FUZZING
                 warn(INF, "caching 0-RTT pkt for unknown conn %s",
                      cid2str(&meta(v).hdr.dcid));
@@ -1011,7 +1014,7 @@ rx_pkts(struct w_iov_sq * const i,
                 continue;
             }
 
-            log_pkt("RX", v, &odcid);
+            log_pkt("RX", v, &odcid, tok, tok_len);
 #ifndef FUZZING
             warn(INF, "ignoring unexpected 0x%02x-type pkt for conn %s",
                  meta(v).hdr.flags, cid2str(&meta(v).hdr.dcid));
@@ -1023,7 +1026,7 @@ rx_pkts(struct w_iov_sq * const i,
         if ((meta(v).hdr.vers && meta(v).hdr.type != F_LH_RTRY) ||
             !is_set(F_LONG_HDR, meta(v).hdr.flags))
             if (dec_pkt_hdr_remainder(v, c, i) == false) {
-                log_pkt("RX", v, &odcid);
+                log_pkt("RX", v, &odcid, tok, tok_len);
 #ifndef FUZZING
                 warn(ERR, "received invalid %u-byte 0x%02x-type pkt, ignoring",
                      v->len, meta(v).hdr.flags);
@@ -1032,7 +1035,7 @@ rx_pkts(struct w_iov_sq * const i,
                 continue;
             }
 
-        log_pkt("RX", v, &odcid);
+        log_pkt("RX", v, &odcid, tok, tok_len);
 
         // remember that we had a RX event on this connection
         if (!c->had_rx) {
@@ -1040,7 +1043,7 @@ rx_pkts(struct w_iov_sq * const i,
             sl_insert_head(crx, c, node_rx_int);
         }
 
-        if (rx_pkt(c, v, i))
+        if (rx_pkt(c, v, i, tok, tok_len))
             rx_crypto(c);
 
         if (meta(v).stream == 0)
@@ -1235,6 +1238,7 @@ struct q_conn * new_conn(struct w_engine * const w,
             ndcid->len = SERV_SCID_LEN;
             arc4random_buf(ndcid->id, ndcid->len);
         }
+        cid_cpy(&c->odcid, ndcid);
         arc4random_buf(ndcid->srt, sizeof(ndcid->srt));
         sq_insert_tail(&c->dcid, ndcid, next);
     }
@@ -1348,8 +1352,6 @@ void free_conn(struct q_conn * const c)
     free(c->peer_name);
     if (c->err_reason)
         free(c->err_reason);
-    if (c->tok_len)
-        free(c->tok);
 
     // remove connection from global lists
     splay_remove(ipnp_splay, &conns_by_ipnp, c);

@@ -48,11 +48,14 @@
 #include "frame.h"
 
 
+#define MAX_CID_LEN 18
+#define SRT_LEN 16
+
 struct cid {
     sq_entry(cid) next;
-    uint8_t len;     ///< Connection ID length
-    uint8_t id[18];  ///< Connection ID
-    uint8_t srt[16]; ///< Stateless Reset Token
+    uint8_t len;             ///< Connection ID length
+    uint8_t id[MAX_CID_LEN]; ///< Connection ID
+    uint8_t srt[SRT_LEN];    ///< Stateless Reset Token
     uint8_t _unused[5];
 };
 
@@ -77,11 +80,10 @@ struct pkt_hdr {
     uint32_t vers;
     struct cid dcid;
     struct cid scid;
-    uint8_t * tok;
-    uint16_t tok_len;
     uint8_t flags; // first byte of packet
     uint8_t type;
-    uint8_t _unused[4];
+    uint8_t _unused[6];
+    // we do not store any token of LH packets in the metadata anymore
 };
 
 

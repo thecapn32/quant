@@ -380,13 +380,18 @@ static uint16_t chk_tp_serv(const struct q_conn * const c,
 
 
 #define dec_tp(var, w)                                                         \
-    do {                                                                       \
+    __extension__({                                                            \
         uint16_t l;                                                            \
         i = dec(&l, buf, len, i, sizeof(l), "%u");                             \
-        ensure(l == 0 || l == ((w) ? (w) : sizeof(var)), "invalid len %u", l); \
-        if (l)                                                                 \
-            i = dec(var, buf, len, i, (w) ? (w) : 0, "%u");                    \
-    } while (0)
+        ensure(l <= (w), "invalid len %u", l);                                 \
+        if (l) {                                                               \
+            if (l == (w))                                                      \
+                i = dec((var), buf, len, i, (w), "%u");                        \
+            else                                                               \
+                i = dec_buf((var), buf, len, i, l);                            \
+        }                                                                      \
+        l;                                                                     \
+    })
 
 
 static int chk_tp(ptls_t * tls __attribute__((unused)),
@@ -413,7 +418,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
     uint16_t tpl;
     i = dec(&tpl, buf, len, i, sizeof(tpl), "%u");
-    if (tpl != len - i) {
+    if (unlikely(tpl != len - i)) {
         err_close(c, ERR_TRANSPORT_PARAMETER, FRAM_TYPE_CRPT,
                   "tp len %u is incorrect", tpl);
         return 1;
@@ -437,24 +442,18 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         }
 
         // check if this transport parameter is a duplicate
-        if (bit_test(tp_list, tp)) {
+        if (unlikely(bit_test(tp_list, tp))) {
             err_close(c, ERR_TRANSPORT_PARAMETER, FRAM_TYPE_CRPT,
-                      "tp 0x%04x is a duplicate", tp);
+                      "duplicate tp 0x%04x", tp);
             return 1;
         }
 
         switch (tp) {
-        case TP_INITIAL_MAX_STREAM_DATA_UNI: {
+        case TP_INITIAL_MAX_STREAM_DATA_UNI:
             dec_tp(&c->tp_out.max_strm_data_uni, sizeof(uint32_t));
             warn(INF, "\tinitial_max_stream_data_uni = %u",
                  c->tp_out.max_strm_data_uni);
-            // apply this parameter to all current non-crypto streams
-            struct q_stream * s;
-            splay_foreach (s, stream, &c->streams)
-                if (s->id >= 0)
-                    s->out_data_max = c->tp_out.max_strm_data_uni;
             break;
-        }
 
         case TP_INITIAL_MAX_STREAM_DATA_BIDI_LOCAL:
             dec_tp(&c->tp_out.max_strm_data_bidi_remote, sizeof(uint32_t));
@@ -503,14 +502,29 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         case TP_ACK_DELAY_EXPONENT:
             dec_tp(&c->tp_out.ack_del_exp, sizeof(uint8_t));
             warn(INF, "\tack_delay_exponent = %u", c->tp_out.ack_del_exp);
-            if (c->tp_out.ack_del_exp > 20)
-                warn(ERR, "tp_out.ack_del_exp %u invalid",
-                     c->tp_out.ack_del_exp);
+            if (unlikely(c->tp_out.ack_del_exp > 20)) {
+                err_close(c, ERR_TRANSPORT_PARAMETER, FRAM_TYPE_CRPT,
+                          "ack_delay_exponent %u invalid",
+                          c->tp_out.ack_del_exp);
+                return 1;
+            }
             break;
 
         case TP_MAX_ACK_DELAY:
             dec_tp(&c->tp_out.max_ack_del, sizeof(uint8_t));
             warn(INF, "\tmax_ack_delay = %u", c->tp_out.max_ack_del);
+            break;
+
+        case TP_ORIGINAL_CONNECTION_ID:
+            if (unlikely(c->is_clnt == false)) {
+                err_close(c, ERR_TRANSPORT_PARAMETER, FRAM_TYPE_CRPT,
+                          "rx original_connection_id tp at serv");
+                return 1;
+            }
+            c->tp_out.orig_cid.len = (uint8_t)dec_tp(
+                &c->tp_out.orig_cid.id, sizeof(c->tp_out.orig_cid.id));
+            warn(INF, "\toriginal_connection_id = %s",
+                 cid2str(&c->tp_out.orig_cid));
             break;
 
         case TP_DISABLE_MIGRATION: {
@@ -522,10 +536,18 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         }
 
         case TP_STATELESS_RESET_TOKEN:
-            ensure(c->is_clnt, "am client");
+            if (unlikely(c->is_clnt == false)) {
+                err_close(c, ERR_TRANSPORT_PARAMETER, FRAM_TYPE_CRPT,
+                          "rx original_connection_id tp at serv");
+                return 1;
+            }
             uint16_t l;
             i = dec(&l, buf, len, i, sizeof(l), "%u");
-            ensure(l == sizeof(act_dcid(c)->srt), "valid len");
+            if (unlikely(l != sizeof(act_dcid(c)->srt))) {
+                err_close(c, ERR_TRANSPORT_PARAMETER, FRAM_TYPE_CRPT,
+                          "illegel srt len %u", l);
+                return 1;
+            }
             memcpy(act_dcid(c)->srt, &buf[i], sizeof(act_dcid(c)->srt));
             warn(INF, "\tstateless_reset_token = %s",
                  hex2str(act_dcid(c)->srt, sizeof(act_dcid(c)->srt)));
@@ -533,11 +555,29 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             break;
 
         default:
-            die("unsupported transport parameter %u", tp);
+            err_close(c, ERR_TRANSPORT_PARAMETER, FRAM_TYPE_CRPT,
+                      "unsupported tp 0x%04x", tp);
+            return 1;
         }
     }
 
+
     ensure(i == len, "out of parameters");
+
+    if (unlikely(i != len)) {
+        err_close(c, ERR_TRANSPORT_PARAMETER, FRAM_TYPE_CRPT,
+                  "tp data left over");
+        return 1;
+    }
+
+    // if we did a RETRY, check that we got orig_cid and it matches
+    if (c->is_clnt && c->tok_len &&
+        unlikely(cid_cmp(&c->tp_out.orig_cid, &c->odcid))) {
+        err_close(c, ERR_TRANSPORT_PARAMETER, FRAM_TYPE_CRPT,
+                  "cid mismatch %s != %s", cid2str(&c->tp_out.orig_cid),
+                  cid2str(&c->odcid));
+        return 1;
+    }
 
     // apply these parameter to all current non-crypto streams
     struct q_stream * s;
@@ -558,6 +598,17 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             const uint64_t tmp_var = (var);                                    \
             i = enc((c)->tls.tp_buf, len, i, &tmp_var, bytes, 0, "%u");        \
         }                                                                      \
+    } while (0)
+
+
+#define enc_tp_buf(c, tp, var, w)                                              \
+    do {                                                                       \
+        const uint16_t param = (tp);                                           \
+        i = enc((c)->tls.tp_buf, len, i, &param, sizeof(param), 0, "%u");      \
+        const uint16_t bytes = (w);                                            \
+        i = enc((c)->tls.tp_buf, len, i, &bytes, sizeof(bytes), 0, "%u");      \
+        if (w)                                                                 \
+            i = enc_buf((c)->tls.tp_buf, len, i, (var), (w));                  \
     } while (0)
 
 
@@ -594,14 +645,12 @@ void init_tp(struct q_conn * const c)
     enc_tp(c, TP_MAX_ACK_DELAY, c->tp_in.max_ack_del, sizeof(uint8_t));
     enc_tp(c, TP_MAX_PACKET_SIZE, w_mtu(c->w), sizeof(uint16_t));
 
-    if (!c->is_clnt) { // TODO: change in -13
-        const uint16_t p = TP_STATELESS_RESET_TOKEN;
-        i = enc(c->tls.tp_buf, len, i, &p, 2, 0, "%u");
-        const uint16_t w = sizeof(act_scid(c)->srt);
-        i = enc(c->tls.tp_buf, len, i, &w, 2, 0, "%u");
-        ensure(i + sizeof(act_scid(c)->srt) < len, "tp_buf overrun");
-        i = enc_buf(c->tls.tp_buf, len, i, act_scid(c)->srt,
-                    sizeof(act_scid(c)->srt));
+    if (!c->is_clnt) {
+        // TODO: change in -13
+        enc_tp_buf(c, TP_STATELESS_RESET_TOKEN, act_scid(c)->srt,
+                   sizeof(act_scid(c)->srt));
+        if (c->odcid.len)
+            enc_tp_buf(c, TP_ORIGINAL_CONNECTION_ID, c->odcid.id, c->odcid.len);
     }
 
     // encode length of all transport parameters
@@ -903,7 +952,7 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
         // } else if (ret == PTLS_ERROR_STATELESS_RETRY) {
         //     c->needs_tx = c->tx_rtry = true;
 
-    } else if (ret != 0 && ret != PTLS_ERROR_IN_PROGRESS) {
+    } else if (unlikely(ret != 0 && ret != PTLS_ERROR_IN_PROGRESS)) {
         err_close(c, ERR_TLS(PTLS_ERROR_TO_ALERT(ret)), FRAM_TYPE_CRPT,
                   "picotls error %u", ret);
         return ret;
@@ -1270,25 +1319,54 @@ uint16_t enc_aead(const struct q_conn * const c,
 }
 
 
-void make_rtry_tok(struct q_conn * const c)
+static ptls_hash_context_t * __attribute__((nonnull))
+prep_hash_ctx(const struct q_conn * const c,
+              const ptls_cipher_suite_t * const cs)
 {
-    const ptls_cipher_suite_t * const cs = &CIPHER_SUITE;
-    if (c->tok_len) {
-        free(c->tok);
-        c->tok_len = 0;
-    }
-    c->tok_len = (uint16_t)cs->hash->digest_size;
-    c->tok = calloc(c->tok_len, sizeof(uint8_t));
-    ensure(c->tok, "cannot calloc");
-    ptls_calc_hash(cs->hash, c->tok, &c->peer, sizeof(c->peer));
+    // create hash context
+    ptls_hash_context_t * const hc = cs->hash->create();
+    ensure(hc, "could not create hash context");
+
+    // hash our git commit hash and the peer IP address
+    hc->update(hc, quant_commit_hash, quant_commit_hash_len);
+    hc->update(hc, &c->peer.sin_addr, sizeof(c->peer.sin_addr));
+
+    return hc;
 }
 
 
-bool verify_rtry_tok(const struct q_conn * const c,
-                     const struct w_iov * const v)
+void make_rtry_tok(struct q_conn * const c)
 {
     const ptls_cipher_suite_t * const cs = &CIPHER_SUITE;
-    uint8_t buf[PTLS_MAX_DIGEST_SIZE];
-    ptls_calc_hash(cs->hash, buf, &c->peer, sizeof(c->peer));
-    return memcmp(buf, meta(v).hdr.tok, cs->hash->digest_size) == 0;
+    ptls_hash_context_t * const hc = prep_hash_ctx(c, cs);
+
+    // hash current scid
+    hc->update(hc, act_scid(c)->id, act_scid(c)->len);
+    hc->final(hc, c->tok, PTLS_HASH_FINAL_MODE_FREE);
+
+    // append scid to hashed token
+    memcpy(&c->tok[cs->hash->digest_size], act_scid(c)->id, act_scid(c)->len);
+    c->tok_len = (uint16_t)cs->hash->digest_size + act_scid(c)->len;
+}
+
+
+bool verify_rtry_tok(struct q_conn * const c,
+                     const uint8_t * const tok,
+                     const uint16_t tok_len)
+{
+    const ptls_cipher_suite_t * const cs = &CIPHER_SUITE;
+    ptls_hash_context_t * const hc = prep_hash_ctx(c, cs);
+
+    // hash current cid included in token
+    hc->update(hc, tok + cs->hash->digest_size,
+               tok_len - cs->hash->digest_size);
+    uint8_t buf[MAX_HASH_LEN + MAX_CID_LEN];
+    hc->final(hc, buf, PTLS_HASH_FINAL_MODE_FREE);
+
+    if (memcmp(buf, tok, cs->hash->digest_size) == 0) {
+        c->odcid.len = (uint8_t)(tok_len - cs->hash->digest_size);
+        memcpy(&c->odcid.id, tok + cs->hash->digest_size, c->odcid.len);
+        return true;
+    }
+    return false;
 }
