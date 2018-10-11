@@ -1140,6 +1140,7 @@ void init_tls_ctx(const char * const cert,
 #endif
     tls_ctx.get_time = &ptls_get_time;
     tls_ctx.hkdf_label_prefix = HKDF_BASE_LABEL;
+    tls_ctx.omit_end_of_early_data = true;
 
     arc4random_buf(cookie, COOKIE_LEN);
 
