@@ -265,14 +265,9 @@ uint16_t marshall_enc_buf(uint8_t * const buf,
 #endif
 
 
-#ifdef DEBUG_MARSHALL
 #define warn_overrun                                                           \
     warn(WRN, "cannot decode from pos %u > buf len %u", pos + 1, buf_len)
-#else
-#define warn_overrun                                                           \
-    do {                                                                       \
-    } while (0)
-#endif
+
 
 #define do_dec(var)                                                            \
     do {                                                                       \
@@ -430,10 +425,7 @@ extern uint16_t marshall_dec_buf(void * const dst,
 )
 {
     if (unlikely(pos + dst_len > buf_len)) {
-#ifdef DEBUG_MARSHALL
-        warn(WRN, "cannot decode from pos %u > buf len %u (called from %s:%u)",
-             pos + 4, buf_len, file, line);
-#endif
+        warn_overrun;
         return UINT16_MAX;
     }
 
