@@ -746,7 +746,7 @@ dec_new_cid_frame(struct q_conn * const c,
          seq, dcid.len, cid2str(&dcid), hex2str(dcid.srt, sizeof(dcid.srt)));
 #endif
 
-    if (c->max_cid_seq_in == UINT64_MAX || seq > c->max_cid_seq_in) {
+    if (seq > c->max_cid_seq_in) {
         add_dcid(c, &dcid);
         c->max_cid_seq_in = seq;
     }
@@ -1357,8 +1357,7 @@ uint16_t enc_new_cid_frame(struct q_conn * const c,
 
     i = enc(v->buf, v->len, i, &ncid.len, sizeof(ncid.len), 0, "%u");
 
-    c->max_cid_seq_out =
-        c->max_cid_seq_out == UINT64_MAX ? 0 : c->max_cid_seq_out + 1;
+    c->max_cid_seq_out++;
     i = enc(v->buf, v->len, i, &c->max_cid_seq_out, 0, 0, "%" PRIu64);
 
     i = enc_buf(v->buf, v->len, i, ncid.id, ncid.len);
