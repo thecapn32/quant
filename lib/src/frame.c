@@ -872,6 +872,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
             switch (type) {
             case FRAM_TYPE_ACK_ECN:
                 type = FRAM_TYPE_ACK; // only enc FRAM_TYPE_ACK in bitstr_t
+                // fallthrough
             case FRAM_TYPE_ACK:
                 i = dec_ack_frame(c, v, i, &on_ack_frame_start, &on_pkt_acked,
                                   on_ack_frame_end, false);
