@@ -293,6 +293,7 @@ on_ch(ptls_on_client_hello_t * const self __attribute__((unused)),
       const size_t sig_alg_cnt __attribute__((unused)))
 {
     if (sni.len) {
+        // TODO verify the SNI instead of accepting whatever the client sent
         warn(INF, "\tSNI = %.*s", sni.len, sni.base);
         ensure(ptls_set_server_name(tls, (const char *)sni.base, sni.len) == 0,
                "ptls_set_server_name");
