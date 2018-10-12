@@ -17,12 +17,13 @@ declare -A status col=(
 
 
 function run_test() {
+        local base
         base=$(basename -s .qv "$1")
-        dc="docker-compose -p $base"
+        local dc="docker-compose -p $base"
         local size=10000
 
         $dc up --no-start 2> /dev/null
-        cmd="$dc run --detach --no-deps -T --service-ports"
+        local cmd="$dc run --detach --no-deps -T --service-ports"
         $cmd --name "$base-server" server \
                 server -i eth0 -t 1 -v5 -d /www \
                         -c /tls/quant.crt -k /tls/quant.key > /dev/null
@@ -33,16 +34,17 @@ function run_test() {
                 client -v5 -i eth0 "https://$base-valve/$size" \
                         > /dev/null
 
-        ret=ok
+        local ret=ok
         if [ "$(docker container wait "$base-client")" != 0 ] || \
            [ "$(docker container wait "$base-server")" != 0 ]; then
                 ret=fail
-        elif [ "$(sed -n -E "s/(.*)read (.*) bytes (.*)/\2/gp" $base-client.log)" -ne $size ]; then
+        elif [ "$(sed -n -E "s/(.*)read (.*) bytes (.*)/\\2/gp" \
+                  "$base-client.log")" -ne $size ]; then
                 ret=fail
         fi
 
         for s in server valve client; do
-                log="$base-$s.log"
+                local log="$base-$s.log"
                 if [ "$ret" = "ok" ]; then
                         rm -f "$log"
                 else
@@ -72,6 +74,14 @@ for t in $tests; do
         rm "/tmp/$$-$base.ret"
         status[$ret]=$((status[$ret] + 1))
         status[all]=$((status[all] + 1))
+
+        if [ "$ret" = "fail" ]; then
+                tmux -CC \
+                    new-session "cat $base-client.log" \; \
+                    split-window -h "cat $base-valve.log" \; \
+                    split-window -h "cat $base-server.log" \; \
+                    set remain-on-exit on
+        fi
 done
 
 for s in ok fail; do
