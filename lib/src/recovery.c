@@ -96,12 +96,14 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
              c->rec.ld_alarm.repeat, conn_type(c), scid2str(c));
 
     } else {
-        ev_tstamp to = c->rec.srtt + (4 * c->rec.rttvar) + c->tp_out.max_ack_del;
+        ev_tstamp to =
+            c->rec.srtt + (4 * c->rec.rttvar) + (c->tp_out.max_ack_del / 1000);
         to = MAX(to, kMinRTOTimeout);
         c->rec.ld_alarm.repeat = to * (1 << c->rec.rto_cnt);
         if (c->rec.tlp_cnt < kMaxTLPs) {
             const ev_tstamp tlp_to =
-                MAX(1.5 * c->rec.srtt + c->tp_out.max_ack_del, kMinTLPTimeout);
+                MAX(1.5 * c->rec.srtt + (c->tp_out.max_ack_del / 1000),
+                    kMinTLPTimeout);
             c->rec.ld_alarm.repeat = MIN(tlp_to, to);
             warn(DBG, "TLP alarm in %f sec on %s conn %s",
                  c->rec.ld_alarm.repeat, conn_type(c), scid2str(c));
