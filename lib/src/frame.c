@@ -765,7 +765,7 @@ dec_rst_stream_frame(struct q_conn * const c,
                      const struct w_iov * const v,
                      const uint16_t pos)
 {
-    uint64_t sid = 0;
+    int64_t sid = 0;
     uint16_t i = dec_chk(true, FRAM_TYPE_RST_STRM, &sid, v->buf, v->len,
                          pos + 1, 0, FMT_SID);
 
@@ -784,7 +784,8 @@ dec_rst_stream_frame(struct q_conn * const c,
          sid, err ? RED : NRM, err, off);
 #endif
 
-    // TODO: actually do something with this
+    struct q_stream * const s = get_stream(c, sid);
+    strm_to_state(s, strm_clsd);
 
     return i;
 }
