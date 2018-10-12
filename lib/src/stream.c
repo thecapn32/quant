@@ -25,6 +25,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,6 +37,7 @@
 #include "diet.h"
 #include "pkt.h"
 #include "quic.h"
+#include "recovery.h"
 #include "stream.h"
 
 
@@ -162,7 +164,21 @@ void reset_stream(struct q_stream * const s, const bool forget)
         s->out_nxt = s->out_una = 0;
         q_free(&s->in);
         q_free(&s->out);
+
     } else {
+        //
+        struct w_iov * v = s->out_una;
+        sq_foreach_from (v, &s->out, next) {
+            if (v == s->out_nxt)
+                break;
+            s->c->rec.in_flight -= meta(v).tx_len;
+            warn(DBG, "in_flight -%u = %" PRIu64, meta(v).tx_len,
+                 s->c->rec.in_flight);
+            v->len = meta(v).stream_data_end - Q_OFFSET;
+        }
+
+        s->out_nxt = s->out_una = sq_first(&s->out);
+
         // reset pkt meta
         reset_pm(&s->in);
         reset_pm(&s->out);

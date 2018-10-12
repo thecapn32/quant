@@ -263,6 +263,13 @@ struct q_conn * q_connect(struct w_engine * const w,
     warn(WRN, "%s conn %s connected%s, cipher %s", conn_type(c), scid2str(c),
          c->did_0rtt ? " after 0-RTT" : "",
          c->pn_data.out_1rtt.aead->algo->name);
+
+    if (c->try_0rtt == true && c->did_0rtt == false) {
+        // 0-RTT failed, RTX early data straight away
+        reset_stream(*early_data_stream, false);
+        ev_async_send(loop, &c->tx_w);
+    }
+
     return c;
 }
 
