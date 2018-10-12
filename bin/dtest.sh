@@ -19,6 +19,7 @@ declare -A status col=(
 function run_test() {
         base=$(basename -s .qv "$1")
         dc="docker-compose -p $base"
+        local size=10000
 
         $dc up --no-start 2> /dev/null
         cmd="$dc run --detach --no-deps -T --service-ports"
@@ -29,12 +30,14 @@ function run_test() {
                 env PYTHONUNBUFFERED=1 qvalve -ra "$base-server" -r "/$t" \
                         > /dev/null
         $cmd --name "$base-client" client \
-                client -v5 -i eth0 "https://$base-valve/10000" \
+                client -v5 -i eth0 "https://$base-valve/$size" \
                         > /dev/null
 
         ret=ok
         if [ "$(docker container wait "$base-client")" != 0 ] || \
            [ "$(docker container wait "$base-server")" != 0 ]; then
+                ret=fail
+        elif [ "$(sed -n -E "s/(.*)read (.*) bytes (.*)/\2/gp" $base-client.log)" -ne $size ]; then
                 ret=fail
         fi
 
