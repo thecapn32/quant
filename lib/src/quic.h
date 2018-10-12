@@ -293,7 +293,7 @@ extern const uint8_t ok_vers_len;
 #define kMinimumWindow (2 * kMaxDatagramSize)
 
 /// Reduction in congestion window when a new loss event is detected.
-#define kLossReductionFactor 0.5
+#define kLossReductionDivisor 2
 
 /// Default conn_idle timeout.
 #define kIdleTimeout 10

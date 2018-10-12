@@ -26,7 +26,6 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <bitstring.h>
-#include <inttypes.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -86,8 +85,7 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
     if (hshk_pkts_outstanding(c)) {
         ev_tstamp to =
             2 * (is_zero(c->rec.srtt) ? kDefaultInitialRtt : c->rec.srtt);
-        to = MAX(to + c->rec.max_ack_del, kMinTLPTimeout) *
-             (1 << c->rec.hshake_cnt);
+        to = MAX(to, kMinTLPTimeout) * (1 << c->rec.hshake_cnt);
         c->rec.ld_alarm.repeat = ev_now(loop) - c->rec.last_sent_hshk_t + to;
         warn(DBG, "handshake RTX alarm in %f sec on %s conn %s",
              c->rec.ld_alarm.repeat, conn_type(c), scid2str(c));
@@ -98,12 +96,12 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
              c->rec.ld_alarm.repeat, conn_type(c), scid2str(c));
 
     } else {
-        ev_tstamp to = c->rec.srtt + (4 * c->rec.rttvar) + c->rec.max_ack_del;
+        ev_tstamp to = c->rec.srtt + (4 * c->rec.rttvar) + c->tp_out.max_ack_del;
         to = MAX(to, kMinRTOTimeout);
         c->rec.ld_alarm.repeat = to * (1 << c->rec.rto_cnt);
         if (c->rec.tlp_cnt < kMaxTLPs) {
             const ev_tstamp tlp_to =
-                MAX(1.5 * c->rec.srtt + c->rec.max_ack_del, kMinTLPTimeout);
+                MAX(1.5 * c->rec.srtt + c->tp_out.max_ack_del, kMinTLPTimeout);
             c->rec.ld_alarm.repeat = MIN(tlp_to, to);
             warn(DBG, "TLP alarm in %f sec on %s conn %s",
                  c->rec.ld_alarm.repeat, conn_type(c), scid2str(c));
@@ -155,8 +153,7 @@ detect_lost_pkts(struct q_conn * const c, struct pn_space * const pn)
             // OnPacketsLost:
             if (is_ack_only(p) == false) {
                 c->rec.in_flight -= p->tx_len;
-                warn(DBG, "in_flight -%u = %" PRIu64, p->tx_len,
-                     c->rec.in_flight);
+                log_cc(c);
             }
             largest_lost_packet = MAX(largest_lost_packet, p->hdr.nr);
 
@@ -176,11 +173,10 @@ detect_lost_pkts(struct q_conn * const c, struct pn_space * const pn)
     // than the end of the previous recovery epoch.
     if (!in_recovery(c, largest_lost_packet)) {
         c->rec.eor = pn->lg_sent;
-        c->rec.cwnd = (uint64_t)((double)c->rec.cwnd * kLossReductionFactor);
+        c->rec.cwnd /= kLossReductionDivisor;
         c->rec.cwnd = MAX(c->rec.cwnd, kMinimumWindow);
         c->rec.ssthresh = c->rec.cwnd;
-        warn(DBG, "cwnd %" PRIu64 ", ssthresh %" PRIu64, c->rec.cwnd,
-             c->rec.ssthresh);
+        log_cc(c);
     }
 }
 
@@ -263,8 +259,7 @@ void on_pkt_sent(struct q_stream * const s, struct w_iov * const v)
         s->c->rec.last_sent_rtxable_t = meta(v).tx_t;
 
         s->c->rec.in_flight += meta(v).tx_len; // OnPacketSentCC
-        warn(DBG, "in_flight +%u = %" PRIu64, meta(v).tx_len,
-             s->c->rec.in_flight);
+        log_cc(s->c);
     }
 
     // TODO this should be in the clause above, but since we currently don't RTX
@@ -303,11 +298,6 @@ void on_ack_frame_start(struct q_conn * const c,
     if (c->rec.latest_rtt - c->rec.min_rtt > ack_del) {
         c->rec.latest_rtt -= ack_del;
         warn(DBG, "latest_rtt %f", c->rec.latest_rtt);
-
-        // only save into max ack delay if it's used
-        // for rtt calculation and is not ack only
-        if (!is_ack_only(&meta(v)))
-            c->rec.max_ack_del = MAX(c->rec.max_ack_del, ack_del);
     }
 
     // based on RFC6298
@@ -357,10 +347,8 @@ void on_ack_frame_end(struct q_conn * const c, struct pn_space * const pn)
 
 static void on_pkt_acked_cc(struct q_conn * const c, struct w_iov * const v)
 {
-    if (meta(v).is_lost == false) {
+    if (meta(v).is_lost == false)
         c->rec.in_flight -= meta(v).tx_len;
-        warn(DBG, "in_flight -%u = %" PRIu64, meta(v).tx_len, c->rec.in_flight);
-    }
 
     if (in_recovery(c, meta(v).hdr.nr))
         return;
@@ -371,7 +359,8 @@ static void on_pkt_acked_cc(struct q_conn * const c, struct w_iov * const v)
     else
         // congestion avoidance
         c->rec.cwnd += kMaxDatagramSize * meta(v).tx_len / c->rec.cwnd;
-    warn(DBG, "cwnd %" PRIu64, c->rec.cwnd);
+
+    log_cc(c);
 }
 
 
@@ -406,7 +395,8 @@ void on_pkt_acked(struct q_conn * const c,
     if (c->rec.rto_cnt > 0 && ack > pn->lg_sent_before_rto) {
         // OnRetransmissionTimeoutVerified
         c->rec.cwnd = kMinimumWindow;
-        warn(DBG, "cwnd %u", c->rec.cwnd);
+        log_cc(c);
+
         // Declare all packets prior to packet_number lost.
 
         for (struct pkt_meta * p = splay_min(pm_nr_splay, &pn->sent_pkts);
@@ -416,8 +406,7 @@ void on_pkt_acked(struct q_conn * const c,
             p->is_lost = true;
             if (is_ack_only(p) == false) {
                 c->rec.in_flight -= p->tx_len;
-                warn(DBG, "in_flight -%u = %" PRIu64, p->tx_len,
-                     c->rec.in_flight);
+                log_cc(c);
             }
         }
     }

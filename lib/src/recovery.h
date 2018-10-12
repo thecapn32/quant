@@ -27,13 +27,14 @@
 
 #pragma once
 
+#include <inttypes.h>
 #include <stdint.h>
 
 #include <ev.h>
+#include <warpcore/warpcore.h>
 
 
 struct q_conn;
-struct w_iov;
 struct q_stream;
 struct pn_space;
 
@@ -49,7 +50,6 @@ struct recovery {
 
     ev_tstamp last_sent_hshk_t;    // time_of_last_sent_handshake_packet
     ev_tstamp last_sent_rtxable_t; // time_of_last_sent_retransmittable_packet
-    ev_tstamp max_ack_del;         // max_ack_delay
     ev_tstamp min_rtt;             // min_rtt
     ev_tstamp latest_rtt;          // latest_rtt
     ev_tstamp srtt;                // smoothed_rtt
@@ -67,6 +67,11 @@ struct recovery {
     uint64_t ect1_cnt;
     uint64_t ce_cnt;
 };
+
+
+#define log_cc(c)                                                              \
+    warn(DBG, "in_flight=%" PRIu64 ", cwnd=%" PRIu64 ", ssthresh=%" PRIu64,    \
+         (c)->rec.in_flight, (c)->rec.cwnd, (c)->rec.ssthresh)
 
 
 extern void __attribute__((nonnull)) init_rec(struct q_conn * const c);
