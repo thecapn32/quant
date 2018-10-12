@@ -546,7 +546,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             i = dec(&l, buf, len, i, sizeof(l), "%u");
             if (unlikely(l != sizeof(act_dcid(c)->srt))) {
                 err_close(c, ERR_TRANSPORT_PARAMETER, FRAM_TYPE_CRPT,
-                          "illegel srt len %u", l);
+                          "illegal srt len %u", l);
                 return 1;
             }
             memcpy(act_dcid(c)->srt, &buf[i], sizeof(act_dcid(c)->srt));
