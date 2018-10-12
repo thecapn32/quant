@@ -384,8 +384,9 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
     // send a NEW_CONNECTION_ID frame if the peer doesn't have one remaining
     c->tx_ncid = (sq_len(&c->scid) < 2);
 
-    // if the peer has made a new CID available, switch to it
-    if (sq_len(&c->dcid) > 1) {
+    if (c->tp_out.disable_migration == false &&
+        // if the peer has made a new CID available, switch to it
+        sq_len(&c->dcid) > 1) {
         warn(NTE, "migration to dcid %s for %s conn (was %s)",
              cid2str(sq_next(act_dcid(c), next)), conn_type(c),
              cid2str(act_dcid(c)));
