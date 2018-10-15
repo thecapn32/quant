@@ -1238,8 +1238,8 @@ struct q_conn * new_conn(struct w_engine * const w,
         else {
             ndcid->len = SERV_SCID_LEN;
             arc4random_buf(ndcid->id, ndcid->len);
+            cid_cpy(&c->odcid, ndcid);
         }
-        cid_cpy(&c->odcid, ndcid);
         arc4random_buf(ndcid->srt, sizeof(ndcid->srt));
         sq_insert_tail(&c->dcid, ndcid, next);
     }
