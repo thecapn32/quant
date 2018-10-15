@@ -306,7 +306,7 @@ uint16_t dec_ack_frame(struct q_conn * const c,
     i = dec_chk(t, &num_blocks, v->buf, v->len, i, 0, "%" PRIu64);
 
     uint64_t lg_ack_in_block = lg_ack;
-    struct w_iov * sm_new_acked = 0;
+    uint64_t sm_new_acked = UINT64_MAX;
     for (uint64_t n = num_blocks + 1; n > 0; n--) {
         uint64_t gap = 0;
         uint64_t ack_block_len = 0;
@@ -375,7 +375,6 @@ uint16_t dec_ack_frame(struct q_conn * const c,
         uint64_t ack = lg_ack_in_block;
         while (ack_block_len >= lg_ack_in_block - ack) {
             struct w_iov * const acked = find_sent_pkt(c, pn, ack);
-
             if (unlikely(acked == 0)) {
 #ifndef FUZZING
                 if (unlikely(diet_find(&pn->acked, ack) == 0))
@@ -394,11 +393,11 @@ uint16_t dec_ack_frame(struct q_conn * const c,
                 // call this only for the largest ACK in the frame
                 on_ack_received_1(c, pn, acked, ack_delay);
 
-            on_pkt_acked(c, pn, acked);
-
             // this emulates FindSmallestNewlyAcked() from -recovery
-            if (sm_new_acked == 0 || meta(sm_new_acked).hdr.nr > ack)
-                sm_new_acked = acked;
+            if (sm_new_acked > ack)
+                sm_new_acked = meta(acked).hdr.nr;
+
+            on_pkt_acked(c, pn, acked);
 
         skip:
             if (likely(ack > 0))

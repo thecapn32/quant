@@ -186,7 +186,7 @@ pm_cpy(struct pkt_meta * const dst,
 }
 
 /// Offset of stream frame payload data in w_iov buffers.
-#define Q_OFFSET 128
+#define Q_OFFSET 128 // TODO: this is getting ridiculous, refactor
 
 #define PATH_CHLG_LIMIT 2
 

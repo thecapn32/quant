@@ -348,13 +348,13 @@ void on_ack_received_1(struct q_conn * const c,
 
 void on_ack_received_2(struct q_conn * const c,
                        struct pn_space * const pn,
-                       struct w_iov * const sm_new_acked)
+                       const uint64_t sm_new_acked)
 {
     // implements second part of OnAckReceived pseudocode
 
     // if (rto_count > 0 && sm_new_acked > largest_sent_before_rto):
     if (c->rec.rto_cnt > 0 && sm_new_acked &&
-        meta(sm_new_acked).hdr.nr > pn->lg_sent_before_rto) {
+        sm_new_acked > pn->lg_sent_before_rto) {
         // OnRetransmissionTimeoutVerified(smallest_newly_acked)
 
         // congestion_window = kMinimumWindow
@@ -363,7 +363,7 @@ void on_ack_received_2(struct q_conn * const c,
         // for (sent_packet: sent_packets):
         //   if (sent_packet.packet_number < packet_number):
         for (struct pkt_meta * p = splay_min(pm_nr_splay, &pn->sent_pkts);
-             p && p->hdr.nr < meta(sm_new_acked).hdr.nr;
+             p && p->hdr.nr < sm_new_acked;
              p = splay_next(pm_nr_splay, &pn->sent_pkts, p)) {
             warn(DBG, "pkt " FMT_PNR_OUT " considered lost", p->hdr.nr);
             p->is_lost = true;
