@@ -183,7 +183,7 @@ struct q_conn {
 
     struct w_iov_sq txq;
 
-    uint8_t tok[MAX_CID_LEN + MAX_HASH_LEN + 6]; // +6 for alignment
+    uint8_t tok[512]; // some stacks send ungodly large tokens
 };
 
 
