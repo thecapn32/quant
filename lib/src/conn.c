@@ -633,7 +633,7 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
 static void __attribute__((nonnull)) vneg_or_rtry_resp(struct q_conn * const c)
 {
     // reset CC state
-    c->rec.in_flight = 0;
+    init_rec(c);
 
     // reset FC state
     c->in_data = c->out_data = 0;

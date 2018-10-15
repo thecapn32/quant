@@ -280,13 +280,15 @@ uint16_t dec_ack_frame(struct q_conn * const c,
                        const uint16_t pos,
                        void (*before_acks)(struct q_conn * const,
                                            struct pn_space * const pn,
-                                           const uint64_t,
+                                           struct w_iov * const,
                                            const uint64_t),
                        void (*on_each_ack)(struct q_conn * const,
                                            struct pn_space * const pn,
+                                           struct w_iov * const,
                                            const uint64_t),
                        void (*after_acks)(struct q_conn * const,
-                                          struct pn_space * const pn),
+                                          struct pn_space * const pn,
+                                          struct w_iov * const),
                        const bool parse_only)
 {
     // we need to decode the type byte, to check for ACK_ECN
@@ -311,7 +313,7 @@ uint16_t dec_ack_frame(struct q_conn * const c,
     }
 
     // TODO: figure out a better way to handle huge ACK delays
-    if (unlikely(ack_delay_raw > UINT32_MAX))
+    if (!parse_only && unlikely(ack_delay_raw > UINT32_MAX))
         err_close_return(c, ERR_FRAME_ENC, t, "ACK delay raw %" PRIu64,
                          ack_delay_raw);
 
@@ -328,9 +330,7 @@ uint16_t dec_ack_frame(struct q_conn * const c,
     i = dec_chk(!parse_only, t, &num_blocks, v->buf, v->len, i, 0, "%" PRIu64);
 
     uint64_t lg_ack_in_block = lg_ack;
-    if (before_acks)
-        before_acks(c, pn, lg_ack_in_block, ack_delay);
-
+    struct w_iov * sm_new_acked = 0;
     for (uint64_t n = num_blocks + 1; n > 0; n--) {
         uint64_t gap = 0;
         uint64_t ack_block_len = 0;
@@ -338,68 +338,105 @@ uint16_t dec_ack_frame(struct q_conn * const c,
                     "%" PRIu64);
 
         // TODO: figure out a better way to handle huge ACK blocks
-        if (unlikely(ack_block_len > UINT16_MAX))
+        if (!parse_only && unlikely(ack_block_len > UINT16_MAX))
             err_close_return(c, ERR_FRAME_ENC, t, "ACK block len %" PRIu64,
                              ack_block_len);
 
 #ifndef FUZZING
-        if (ack_block_len == 0) {
-            if (n == num_blocks + 1) {
-                if (t == FRAM_TYPE_ACK_ECN)
+        if (!parse_only) {
+            if (ack_block_len == 0) {
+                if (n == num_blocks + 1) {
+                    if (t == FRAM_TYPE_ACK_ECN)
+                        warn(INF,
+                             FRAM_IN "ACK_ECN" NRM " lg=" FMT_PNR_OUT
+                                     " delay=%" PRIu64 " (%" PRIu64
+                                     " usec) ect0=%" PRIu64 " ect1=%" PRIu64
+                                     " ce=%" PRIu64 " cnt=%" PRIu64
+                                     " block=%" PRIu64 " [" FMT_PNR_OUT "]",
+                             lg_ack, ack_delay_raw, ack_delay, ect0_cnt,
+                             ect1_cnt, ce_cnt, num_blocks, ack_block_len,
+                             lg_ack);
+                    else
+                        warn(INF,
+                             FRAM_IN "ACK" NRM " lg=" FMT_PNR_OUT
+                                     " delay=%" PRIu64 " (%" PRIu64
+                                     " usec) cnt=%" PRIu64 " block=%" PRIu64
+                                     " [" FMT_PNR_OUT "]",
+                             lg_ack, ack_delay_raw, ack_delay, num_blocks,
+                             ack_block_len, lg_ack);
+                } else
                     warn(INF,
-                         FRAM_IN
-                         "ACK_ECN" NRM " lg=" FMT_PNR_OUT " delay=%" PRIu64
-                         " (%" PRIu64 " usec) ect0=%" PRIu64 " ect1=%" PRIu64
-                         " ce=%" PRIu64 " cnt=%" PRIu64 " block=%" PRIu64
-                         " [" FMT_PNR_OUT "]",
-                         lg_ack, ack_delay_raw, ack_delay, ect0_cnt, ect1_cnt,
-                         ce_cnt, num_blocks, ack_block_len, lg_ack);
-                else
+                         FRAM_IN "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64
+                                 " [" FMT_PNR_OUT "]",
+                         gap, ack_block_len, lg_ack_in_block);
+            } else {
+                if (n == num_blocks + 1) {
+                    if (t == FRAM_TYPE_ACK_ECN)
+                        warn(INF,
+                             FRAM_IN "ACK_ECN" NRM " lg=" FMT_PNR_OUT
+                                     " delay=%" PRIu64 " (%" PRIu64
+                                     " usec) cnt=%" PRIu64 " block=%" PRIu64
+                                     " [" FMT_PNR_OUT ".." FMT_PNR_OUT "]",
+                             lg_ack, ack_delay_raw, ack_delay, num_blocks,
+                             ack_block_len, lg_ack_in_block - ack_block_len,
+                             shorten_ack_nr(lg_ack_in_block, ack_block_len));
+                    else
+                        warn(INF,
+                             FRAM_IN
+                             "ACK" NRM " lg=" FMT_PNR_OUT " delay=%" PRIu64
+                             " (%" PRIu64 " usec) ect0=%" PRIu64
+                             " ect1=%" PRIu64 " ce=%" PRIu64 " cnt=%" PRIu64
+                             " block=%" PRIu64 " [" FMT_PNR_OUT ".." FMT_PNR_OUT
+                             "]",
+                             lg_ack, ack_delay_raw, ack_delay, ect0_cnt,
+                             ect1_cnt, ce_cnt, num_blocks, ack_block_len,
+                             lg_ack_in_block - ack_block_len,
+                             shorten_ack_nr(lg_ack_in_block, ack_block_len));
+                } else
                     warn(INF,
-                         FRAM_IN "ACK" NRM " lg=" FMT_PNR_OUT " delay=%" PRIu64
-                                 " (%" PRIu64 " usec) cnt=%" PRIu64
-                                 " block=%" PRIu64 " [" FMT_PNR_OUT "]",
-                         lg_ack, ack_delay_raw, ack_delay, num_blocks,
-                         ack_block_len, lg_ack);
-            } else
-                warn(INF,
-                     FRAM_IN "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64
-                             " [" FMT_PNR_OUT "]",
-                     gap, ack_block_len, lg_ack_in_block);
-        } else {
-            if (n == num_blocks + 1) {
-                if (t == FRAM_TYPE_ACK_ECN)
-                    warn(INF,
-                         FRAM_IN "ACK_ECN" NRM " lg=" FMT_PNR_OUT
-                                 " delay=%" PRIu64 " (%" PRIu64
-                                 " usec) cnt=%" PRIu64 " block=%" PRIu64
+                         FRAM_IN "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64
                                  " [" FMT_PNR_OUT ".." FMT_PNR_OUT "]",
-                         lg_ack, ack_delay_raw, ack_delay, num_blocks,
-                         ack_block_len, lg_ack_in_block - ack_block_len,
+                         gap, ack_block_len, lg_ack_in_block - ack_block_len,
                          shorten_ack_nr(lg_ack_in_block, ack_block_len));
-                else
-                    warn(INF,
-                         FRAM_IN "ACK" NRM " lg=" FMT_PNR_OUT " delay=%" PRIu64
-                                 " (%" PRIu64 " usec) ect0=%" PRIu64
-                                 " ect1=%" PRIu64 " ce=%" PRIu64 " cnt=%" PRIu64
-                                 " block=%" PRIu64 " [" FMT_PNR_OUT
-                                 ".." FMT_PNR_OUT "]",
-                         lg_ack, ack_delay_raw, ack_delay, ect0_cnt, ect1_cnt,
-                         ce_cnt, num_blocks, ack_block_len,
-                         lg_ack_in_block - ack_block_len,
-                         shorten_ack_nr(lg_ack_in_block, ack_block_len));
-            } else
-                warn(INF,
-                     FRAM_IN "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64
-                             " [" FMT_PNR_OUT ".." FMT_PNR_OUT "]",
-                     gap, ack_block_len, lg_ack_in_block - ack_block_len,
-                     shorten_ack_nr(lg_ack_in_block, ack_block_len));
+            }
         }
 #endif
 
         uint64_t ack = lg_ack_in_block;
         while (ack_block_len >= lg_ack_in_block - ack) {
-            on_each_ack(c, pn, ack);
+            struct w_iov * const acked =
+                parse_only ? 0 : find_sent_pkt(c, pn, ack);
+
+            if (!parse_only) {
+                if (unlikely(acked == 0)) {
+#ifndef FUZZING
+                    if (unlikely(diet_find(&pn->acked, ack) == 0))
+                        warn(ERR, "got ACK for pkt " FMT_PNR_OUT " never sent",
+                             ack);
+#endif
+                    goto skip;
+                }
+
+                if (unlikely(meta(acked).is_acked)) {
+                    warn(WRN, "repeated ACK for " FMT_PNR_OUT ", ignoring",
+                         ack);
+                    goto skip;
+                }
+
+                if (before_acks && unlikely(ack == lg_ack))
+                    // call this only for the largest ACK in the frame
+                    before_acks(c, pn, acked, ack_delay);
+            }
+
+            on_each_ack(c, pn, acked, ack);
+
+            if (!parse_only) {
+                // this emulates FindSmallestNewlyAcked() from -recovery
+                if (sm_new_acked == 0 || meta(sm_new_acked).hdr.nr > ack)
+                    sm_new_acked = acked;
+            }
+
+        skip:
             if (likely(ack > 0))
                 ack--;
             else
@@ -408,15 +445,14 @@ uint16_t dec_ack_frame(struct q_conn * const c,
 
         if (n > 1) {
             i = dec_chk(!parse_only, t, &gap, v->buf, v->len, i, 0, "%" PRIu64);
-            // warn(ERR, "%" PRIu64 " %" PRIu64, ack, gap);
-            if (unlikely(ack <= gap))
+            if (!parse_only && unlikely(ack <= gap))
                 err_close_return(c, ERR_FRAME_ENC, t, "ACK gap %" PRIu64, gap);
             lg_ack_in_block = ack - gap - 1;
         }
     }
 
-    if (after_acks)
-        after_acks(c, pn);
+    if (!parse_only && after_acks)
+        after_acks(c, pn, sm_new_acked);
     return i;
 }
 
@@ -876,8 +912,8 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
                 type = FRAM_TYPE_ACK; // only enc FRAM_TYPE_ACK in bitstr_t
                 // fallthrough
             case FRAM_TYPE_ACK:
-                i = dec_ack_frame(c, v, i, &on_ack_frame_start, &on_pkt_acked,
-                                  on_ack_frame_end, false);
+                i = dec_ack_frame(c, v, i, &on_ack_received_1, &on_pkt_acked,
+                                  &on_ack_received_2, false);
                 break;
 
             case FRAM_TYPE_PAD:

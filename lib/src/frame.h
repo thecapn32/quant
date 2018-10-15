@@ -124,13 +124,15 @@ dec_ack_frame(struct q_conn * const c,
               const uint16_t pos,
               void (*before_acks)(struct q_conn * const,
                                   struct pn_space * const pn,
-                                  const uint64_t,
+                                  struct w_iov * const,
                                   const uint64_t),
               void (*on_each_ack)(struct q_conn * const,
                                   struct pn_space * const pn,
+                                  struct w_iov * const,
                                   const uint64_t),
               void (*after_acks)(struct q_conn * const,
-                                 struct pn_space * const pn),
+                                 struct pn_space * const pn,
+                                 struct w_iov * const),
               const bool parse_only);
 
 extern uint16_t __attribute__((nonnull))

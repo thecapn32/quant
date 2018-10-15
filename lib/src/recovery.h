@@ -70,8 +70,12 @@ struct recovery {
 
 
 #define log_cc(c)                                                              \
-    warn(DBG, "in_flight=%" PRIu64 ", cwnd=%" PRIu64 ", ssthresh=%" PRIu64,    \
-         (c)->rec.in_flight, (c)->rec.cwnd, (c)->rec.ssthresh)
+    warn(NTE,                                                                  \
+         "in_flight=%" PRIu64 ", cwnd=%" PRIu64 ", ssthresh=%" PRIu64          \
+         ", srtt=%f, rttvar=%f",                                               \
+         (c)->rec.in_flight, (c)->rec.cwnd,                                    \
+         (c)->rec.ssthresh == UINT64_MAX ? 0 : (c)->rec.ssthresh,              \
+         (c)->rec.srtt, (c)->rec.rttvar)
 
 
 extern void __attribute__((nonnull)) init_rec(struct q_conn * const c);
@@ -80,17 +84,21 @@ extern void __attribute__((nonnull))
 on_pkt_sent(struct q_stream * const s, struct w_iov * const v);
 
 extern void __attribute__((nonnull))
-on_ack_frame_start(struct q_conn * const c,
-                   struct pn_space * const pn,
-                   const uint64_t ack,
-                   const uint64_t ack_del);
+on_ack_received_1(struct q_conn * const c,
+                  struct pn_space * const pn,
+                  struct w_iov * const lg_ack,
+                  const uint64_t ack_del);
 
 extern void __attribute__((nonnull))
-on_ack_frame_end(struct q_conn * const c, struct pn_space * const pn);
+on_ack_received_2(struct q_conn * const c,
+                  struct pn_space * const pn,
+                  struct w_iov * const sm_new_acked);
 
-extern void __attribute__((nonnull)) on_pkt_acked(struct q_conn * const c,
-                                                  struct pn_space * const pn,
-                                                  const uint64_t ack);
+extern void __attribute__((nonnull))
+on_pkt_acked(struct q_conn * const c,
+             struct pn_space * const pn,
+             struct w_iov * const acked_pkt,
+             const uint64_t acked);
 
 extern struct w_iov * __attribute__((nonnull))
 find_sent_pkt(struct q_conn * const c,

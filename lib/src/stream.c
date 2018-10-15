@@ -36,7 +36,6 @@
 #include "diet.h"
 #include "pkt.h"
 #include "quic.h"
-#include "recovery.h"
 #include "stream.h"
 
 
@@ -170,10 +169,9 @@ void reset_stream(struct q_stream * const s, const bool forget)
         sq_foreach_from (v, &s->out, next) {
             if (v == s->out_nxt)
                 break;
-            s->c->rec.in_flight -= meta(v).tx_len;
+            // remove trailing padding
             v->len = meta(v).stream_data_end - Q_OFFSET;
         }
-        log_cc(s->c);
 
         s->out_nxt = s->out_una = sq_first(&s->out);
 
