@@ -345,10 +345,8 @@ bool enc_pkt(struct q_stream * const s,
     log_pkt("TX", v, meta(v).hdr.type == F_LH_RTRY ? &c->odcid : 0, c->tok,
             tok_len);
 
-    if (meta(v).hdr.type != F_LH_RTRY && !diet_empty(&pn->recv)) {
+    if (meta(v).hdr.type != F_LH_RTRY && !diet_empty(&pn->recv))
         i = enc_ack_frame(c, pn, v, i);
-    } else
-        meta(v).ack_header_pos = 0;
 
     if (c->state == conn_clsg) {
         i = enc_close_frame(

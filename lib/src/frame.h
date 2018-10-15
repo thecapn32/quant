@@ -118,22 +118,10 @@ enc_path_response_frame(struct q_conn * const c,
                         const struct w_iov * const v,
                         const uint16_t pos);
 
-extern uint16_t __attribute__((nonnull(1, 2, 5)))
+extern uint16_t __attribute__((nonnull))
 dec_ack_frame(struct q_conn * const c,
               const struct w_iov * const v,
-              const uint16_t pos,
-              void (*before_acks)(struct q_conn * const,
-                                  struct pn_space * const pn,
-                                  struct w_iov * const,
-                                  const uint64_t),
-              void (*on_each_ack)(struct q_conn * const,
-                                  struct pn_space * const pn,
-                                  struct w_iov * const,
-                                  const uint64_t),
-              void (*after_acks)(struct q_conn * const,
-                                 struct pn_space * const pn,
-                                 struct w_iov * const),
-              const bool parse_only);
+              const uint16_t pos);
 
 extern uint16_t __attribute__((nonnull))
 enc_max_stream_data_frame(struct q_stream * const s,

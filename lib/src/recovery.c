@@ -39,6 +39,7 @@
 #include "conn.h"
 #include "diet.h"
 #include "frame.h"
+#include "marshall.h"
 #include "pn.h"
 #include "quic.h"
 #include "recovery.h"
@@ -233,12 +234,34 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
 
 
 static inline void __attribute__((nonnull))
-track_acked_pkts(struct q_conn * const c __attribute__((unused)),
-                 struct pn_space * const pn,
-                 struct w_iov * const acked_pkt __attribute__((unused)),
-                 const uint64_t acked)
+track_acked_pkts(struct pn_space * const pn, struct w_iov * const v)
 {
-    diet_remove(&pn->recv, acked);
+    adj_iov_to_start(v);
+
+    // this is the same loop as in dec_ack_frame() - keep changes in sync
+    uint64_t lg_ack_in_block = meta(v).lg_acked;
+    uint16_t i = meta(v).ack_block_pos;
+    for (uint64_t n = meta(v).ack_block_cnt + 1; n > 0; n--) {
+        uint64_t ack_block_len = 0;
+        dec(&ack_block_len, v->buf, v->len, i, 0, "%" PRIu64);
+
+        uint64_t ack = lg_ack_in_block;
+        while (ack_block_len >= lg_ack_in_block - ack) {
+            diet_remove(&pn->recv, ack);
+            if (likely(ack > 0))
+                ack--;
+            else
+                break;
+        }
+
+        if (n > 1) {
+            uint64_t gap = 0;
+            i = dec(&gap, v->buf, v->len, i, 0, "%" PRIu64);
+            lg_ack_in_block = ack - gap - 1;
+        }
+    }
+
+    adj_iov_to_data(v);
 }
 
 
@@ -330,7 +353,7 @@ void on_ack_received_2(struct q_conn * const c,
     // implements second part of OnAckReceived pseudocode
 
     // if (rto_count > 0 && sm_new_acked > largest_sent_before_rto):
-    if (c->rec.rto_cnt > 0 &&
+    if (c->rec.rto_cnt > 0 && sm_new_acked &&
         meta(sm_new_acked).hdr.nr > pn->lg_sent_before_rto) {
         // OnRetransmissionTimeoutVerified(smallest_newly_acked)
 
@@ -394,8 +417,7 @@ on_pkt_acked_cc(struct q_conn * const c, struct w_iov * const acked_pkt)
 
 void on_pkt_acked(struct q_conn * const c,
                   struct pn_space * const pn,
-                  struct w_iov * const acked_pkt,
-                  const uint64_t acked __attribute__((unused)))
+                  struct w_iov * const acked_pkt)
 {
     // implements OnPacketAcked pseudo code
 
@@ -477,14 +499,9 @@ void on_pkt_acked(struct q_conn * const c,
         adj_iov_to_data(acked_pkt);
     }
 
-    // stop ACKing packets that were contained in the ACK frame of this
-    // packet
-    if (meta(acked_pkt).ack_header_pos) {
-        adj_iov_to_start(acked_pkt);
-        dec_ack_frame(c, acked_pkt, meta(acked_pkt).ack_header_pos, 0,
-                      &track_acked_pkts, 0, true);
-        adj_iov_to_data(acked_pkt);
-    }
+    // stop ACKing packets that were contained in the ACK frame of this packet
+    if (bit_test(meta(acked_pkt).frames, FRAM_TYPE_ACK))
+        track_acked_pkts(pn, acked_pkt);
 
     if (!is_rtxable(&meta(orig)))
         q_free_iov(orig);
