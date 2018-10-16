@@ -27,11 +27,12 @@
 
 #pragma once
 
+#include <inttypes.h>
 #include <math.h>
 #include <netinet/in.h>
 #include <stdbool.h>
-#include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include <ev.h>
 #include <picotls.h>
@@ -89,6 +90,8 @@ sl_head(q_conn_sl, q_conn);
 typedef enum { CONN_STATES } conn_state_t;
 
 extern const char * const conn_state_str[];
+
+#define MAX_TOK_LEN 512
 
 
 /// A QUIC connection.
@@ -183,7 +186,7 @@ struct q_conn {
 
     struct w_iov_sq txq;
 
-    uint8_t tok[512]; // some stacks send ungodly large tokens
+    uint8_t tok[MAX_TOK_LEN]; // some stacks send ungodly large tokens
 };
 
 
@@ -287,7 +290,13 @@ is_inf(const ev_tstamp t)
 }
 
 
-#define cid2str(i) hex2str((i)->id, (i)->len)
+#define cid2str(i)                                                             \
+    __extension__({                                                            \
+        static char _str[2 * (MAX_CID_LEN + sizeof((i)->seq)) + 1] = "0";      \
+        snprintf(_str, sizeof(_str), "%" PRIu64 ":%s", (i)->seq,               \
+                 hex2str((i)->id, (i)->len));                                  \
+        _str;                                                                  \
+    })
 
 
 #define act_scid(c) sq_first(&(c)->scid)

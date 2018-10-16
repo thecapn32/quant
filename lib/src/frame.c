@@ -723,9 +723,7 @@ dec_new_cid_frame(struct q_conn * const c,
         err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_NEW_CID,
                          "illegal cid len %u", dcid.len);
 
-    uint64_t seq = 0;
-    i = dec_chk(FRAM_TYPE_NEW_CID, &seq, v->buf, v->len, i, 0, "%" PRIu64);
-
+    i = dec_chk(FRAM_TYPE_NEW_CID, &dcid.seq, v->buf, v->len, i, 0, "%" PRIu64);
     i = dec_chk_buf(FRAM_TYPE_NEW_CID, dcid.id, v->buf, v->len, i, dcid.len);
     i = dec_chk_buf(FRAM_TYPE_NEW_CID, dcid.srt, v->buf, v->len, i,
                     sizeof(dcid.srt));
@@ -734,17 +732,18 @@ dec_new_cid_frame(struct q_conn * const c,
     warn(INF,
          FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu64
                  " len=%u dcid=%s tok=%s",
-         seq, dcid.len, cid2str(&dcid), hex2str(dcid.srt, sizeof(dcid.srt)));
+         dcid.seq, dcid.len, cid2str(&dcid),
+         hex2str(dcid.srt, sizeof(dcid.srt)));
 #endif
 
-    if (seq > c->max_cid_seq_in) {
+    if (dcid.seq > c->max_cid_seq_in) {
         add_dcid(c, &dcid);
-        c->max_cid_seq_in = seq;
+        c->max_cid_seq_in = dcid.seq;
     }
 #ifndef FUZZING
     else
         warn(WRN, "highest seq seen %" PRIu64 " <= %" PRIu64 ", ignoring",
-             c->max_cid_seq_in, seq);
+             c->max_cid_seq_in, dcid.seq);
 #endif
 
     return i;
@@ -782,6 +781,25 @@ dec_rst_stream_frame(struct q_conn * const c,
 
 
 static uint16_t __attribute__((nonnull))
+dec_retire_cid_frame(struct q_conn * const c,
+                     const struct w_iov * const v,
+                     const uint16_t pos)
+{
+    uint64_t seq = 0;
+    uint16_t i = dec_chk(FRAM_TYPE_RTIR_CID, &seq, v->buf, v->len, pos + 1, 0,
+                         "%" PRIu64);
+
+#ifndef FUZZING
+    warn(INF, FRAM_IN "RETIRE_CONNECTION_ID" NRM " seq=%" PRIu64, seq);
+#endif
+
+    // TODO: actually do something with this
+
+    return i;
+}
+
+
+static uint16_t __attribute__((nonnull))
 dec_new_token_frame(struct q_conn * const c,
                     const struct w_iov * const v,
                     const uint16_t pos)
@@ -795,7 +813,7 @@ dec_new_token_frame(struct q_conn * const c,
                          "illegal tok len");
 
     // TODO: actually do something with the token
-    uint8_t tok[4096];
+    uint8_t tok[MAX_TOK_LEN];
     ensure(tok_len < sizeof(tok), "tok_len %" PRIu64 " > %u", tok_len,
            sizeof(tok));
     i = dec_chk_buf(FRAM_TYPE_NEW_TOKN, tok, v->buf, v->len, i,
@@ -933,6 +951,10 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
 
             case FRAM_TYPE_NEW_TOKN:
                 i = dec_new_token_frame(c, v, i);
+                break;
+
+            case FRAM_TYPE_RTIR_CID:
+                i = dec_retire_cid_frame(c, v, i);
                 break;
 
             default:
@@ -1341,23 +1363,21 @@ uint16_t enc_new_cid_frame(struct q_conn * const c,
     const uint8_t type = FRAM_TYPE_NEW_CID;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
-    struct cid ncid = {.len = c->is_clnt ? CLNT_SCID_LEN : SERV_SCID_LEN};
+    struct cid ncid = {.seq = ++c->max_cid_seq_out,
+                       .len = c->is_clnt ? CLNT_SCID_LEN : SERV_SCID_LEN};
     arc4random_buf(ncid.id, ncid.len);
     arc4random_buf(ncid.srt, sizeof(ncid.srt));
     add_scid(c, &ncid);
 
     i = enc(v->buf, v->len, i, &ncid.len, sizeof(ncid.len), 0, "%u");
-
-    c->max_cid_seq_out++;
-    i = enc(v->buf, v->len, i, &c->max_cid_seq_out, 0, 0, "%" PRIu64);
-
+    i = enc(v->buf, v->len, i, &ncid.seq, 0, 0, "%" PRIu64);
     i = enc_buf(v->buf, v->len, i, ncid.id, ncid.len);
     i = enc_buf(v->buf, v->len, i, &ncid.srt, sizeof(ncid.srt));
 
     warn(INF,
          FRAM_OUT "NEW_CONNECTION_ID" NRM " seq=%" PRIx64
                   " len=%u cid=%s tok=%s",
-         c->max_cid_seq_out, ncid.len, cid2str(&ncid),
+         ncid.seq, ncid.len, cid2str(&ncid),
          hex2str(ncid.srt, sizeof(ncid.srt)));
 
     c->tx_ncid = false;

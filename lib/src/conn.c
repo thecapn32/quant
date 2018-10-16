@@ -514,21 +514,58 @@ void tx_w(struct ev_loop * const l __attribute__((unused)),
 
 void add_scid(struct q_conn * const c, const struct cid * const id)
 {
-    struct q_cid_map * const cm = calloc(1, sizeof(*cm));
-    ensure(cm, "could not calloc");
+    struct cid * scid;
+    // sq_foreach (scid, &c->scid, next)
+    //     warn(ERR, "before scid %s", cid2str(scid));
+
+    sq_foreach (scid, &c->scid, next)
+        if (scid->seq == id->seq)
+            break;
+
+    struct q_cid_map * cm;
+    if (scid) {
+        // warn(ERR, "updating scid %s to %s", cid2str(scid), cid2str(id));
+        const struct q_cid_map which = {.cid = *scid};
+        cm = splay_find(cid_splay, &conns_by_cid, &which);
+        splay_remove(cid_splay, &conns_by_cid, cm);
+    } else {
+        // warn(ERR, "new scid %s", cid2str(id));
+        cm = calloc(1, sizeof(*cm));
+        ensure(cm, "could not calloc");
+        cm->c = c;
+    }
+
     cid_cpy(&cm->cid, id);
-    cm->c = c;
+    if (scid == 0)
+        sq_insert_tail(&c->scid, &cm->cid, next);
     splay_insert(cid_splay, &conns_by_cid, cm);
-    sq_insert_tail(&c->scid, &cm->cid, next);
+
+    // sq_foreach (scid, &c->scid, next)
+    //     warn(ERR, "after scid %s", cid2str(scid));
 }
 
 
 void add_dcid(struct q_conn * const c, const struct cid * const id)
 {
-    struct cid * const dcid = calloc(1, sizeof(*dcid));
-    ensure(dcid, "could not calloc");
+    struct cid * dcid;
+    // sq_foreach (dcid, &c->dcid, next)
+    //     warn(ERR, "before dcid %s", cid2str(dcid));
+
+    sq_foreach (dcid, &c->dcid, next)
+        if (dcid->seq == id->seq)
+            break;
+
+    if (dcid == 0) {
+        // warn(ERR, "new dcid %s", cid2str(id));
+        dcid = calloc(1, sizeof(*dcid));
+        ensure(dcid, "could not calloc");
+        sq_insert_tail(&c->dcid, dcid, next);
+    } // else warn(ERR, "updating dcid %s to %s", cid2str(dcid), cid2str(id));
+
     cid_cpy(dcid, id);
-    sq_insert_tail(&c->dcid, dcid, next);
+
+    // sq_foreach (dcid, &c->scid, next)
+    //     warn(ERR, "after dcid %s", cid2str(dcid));
 }
 
 
@@ -736,7 +773,6 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
                  cid2str(&new_scid), conn_type(c), scid2str(c));
 #endif
             add_scid(c, &new_scid);
-            use_next_scid(c);
 
         } else {
 #ifndef FUZZING
@@ -972,7 +1008,6 @@ rx_pkts(struct w_iov_sq * const i,
                          cid2str(act_dcid(c)));
 #endif
                     add_dcid(c, &meta(v).hdr.scid);
-                    use_next_dcid(c);
                 }
 
             if (cid_cmp(&meta(v).hdr.dcid, act_scid(c)) != 0) {
@@ -1230,19 +1265,14 @@ struct q_conn * new_conn(struct w_engine * const w,
 
     // init dcid
     sq_init(&c->dcid);
-    if (dcid || c->is_clnt) {
-        struct cid * const ndcid = calloc(1, sizeof(*ndcid));
-        ensure(ndcid, "could not calloc");
-        if (dcid)
-            cid_cpy(ndcid, dcid);
-        else {
-            ndcid->len = SERV_SCID_LEN;
-            arc4random_buf(ndcid->id, ndcid->len);
-            cid_cpy(&c->odcid, ndcid);
-        }
-        arc4random_buf(ndcid->srt, sizeof(ndcid->srt));
-        sq_insert_tail(&c->dcid, ndcid, next);
-    }
+    if (dcid == 0) {
+        struct cid ndcid = {.len = SERV_SCID_LEN};
+        arc4random_buf(ndcid.id, ndcid.len);
+        arc4random_buf(ndcid.srt, sizeof(ndcid.srt));
+        cid_cpy(&c->odcid, &ndcid);
+        add_dcid(c, &ndcid);
+    } else
+        add_dcid(c, dcid);
 
     c->vers = c->vers_initial = vers;
     splay_init(&c->streams);
@@ -1292,19 +1322,18 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->sport = w_get_sport(c->sock);
 
     // init scid and add connection to global data structures
-    sq_init(&c->scid);
     splay_insert(ipnp_splay, &conns_by_ipnp, c);
-    if (scid || c->is_clnt) {
-        struct cid nscid;
-        if (scid)
-            cid_cpy(&nscid, scid);
-        else {
-            nscid.len = CLNT_SCID_LEN;
-            arc4random_buf(nscid.id, nscid.len);
-        }
-        arc4random_buf(nscid.srt, sizeof(nscid.srt));
-        add_scid(c, &nscid);
+    sq_init(&c->scid);
+    struct cid nscid;
+    if (scid)
+        cid_cpy(&nscid, scid);
+    else {
+        nscid.len = CLNT_SCID_LEN;
+        arc4random_buf(nscid.id, nscid.len);
     }
+    // when called as server, the scid from the pkt hdr doesn't have an srt
+    arc4random_buf(nscid.srt, sizeof(nscid.srt));
+    add_scid(c, &nscid);
 
     // create crypto streams
     for (epoch_t e = ep_init; e <= ep_data; e++)

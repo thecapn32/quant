@@ -243,15 +243,15 @@ bool enc_pkt(struct q_stream * const s,
 
         if (c->state == conn_idle) {
             // this is a new connection; server picks a new random cid
-            struct cid new_scid = {.len = SERV_SCID_LEN};
-            arc4random_buf(new_scid.id, new_scid.len);
+            struct cid nscid = {.len = SERV_SCID_LEN};
+            arc4random_buf(nscid.id, nscid.len);
+            arc4random_buf(nscid.srt, sizeof(nscid.srt));
 #ifndef FUZZING
             warn(NTE, "hshk switch to scid %s for %s conn (was %s)",
-                 cid2str(&new_scid), conn_type(c), scid2str(c));
+                 cid2str(&nscid), conn_type(c), scid2str(c));
 #endif
             cid_cpy(&c->odcid, act_scid(c));
-            add_scid(c, &new_scid);
-            use_next_scid(c);
+            add_scid(c, &nscid);
         }
         break;
     case ep_0rtt:

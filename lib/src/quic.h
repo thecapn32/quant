@@ -53,6 +53,7 @@
 
 struct cid {
     sq_entry(cid) next;
+    uint64_t seq;            ///< Connection ID sequence number
     uint8_t len;             ///< Connection ID length
     uint8_t id[MAX_CID_LEN]; ///< Connection ID
     uint8_t srt[SRT_LEN];    ///< Stateless Reset Token
@@ -63,9 +64,9 @@ struct cid {
 static inline void __attribute__((nonnull))
 cid_cpy(struct cid * const dst, const struct cid * const src)
 {
-    memcpy((uint8_t *)dst + offsetof(struct cid, len),
-           (const uint8_t *)src + offsetof(struct cid, len),
-           sizeof(struct cid) - offsetof(struct cid, len) -
+    memcpy((uint8_t *)dst + offsetof(struct cid, seq),
+           (const uint8_t *)src + offsetof(struct cid, seq),
+           sizeof(struct cid) - offsetof(struct cid, seq) -
                (sizeof(struct cid) - offsetof(struct cid, _unused)));
 }
 
