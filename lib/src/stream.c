@@ -45,19 +45,13 @@
 const char * const strm_state_str[] = {STRM_STATES};
 
 
-int stream_cmp(const struct q_stream * const a, const struct q_stream * const b)
-{
-    return (a->id > b->id) - (a->id < b->id);
-}
-
-
-SPLAY_GENERATE(stream, q_stream, node, stream_cmp)
+SPLAY_GENERATE(streams_by_id, q_stream, node, streams_by_id_cmp)
 
 
 struct q_stream * get_stream(struct q_conn * const c, const int64_t id)
 {
     struct q_stream which = {.id = id};
-    return splay_find(stream, &c->streams, &which);
+    return splay_find(streams_by_id, &c->streams_by_id, &which);
 }
 
 
@@ -91,7 +85,7 @@ struct q_stream * new_stream(struct q_conn * const c, const int64_t id)
     s->c = c;
     s->id = id;
     strm_to_state(s, strm_open);
-    splay_insert(stream, &c->streams, s);
+    splay_insert(streams_by_id, &c->streams_by_id, s);
 
     if (s->id < 0)
         goto done;
@@ -120,7 +114,7 @@ void free_stream(struct q_stream * const s)
         diet_insert(&s->c->closed_streams, (uint64_t)s->id, 0);
     }
 
-    splay_remove(stream, &s->c->streams, s);
+    splay_remove(streams_by_id, &s->c->streams_by_id, s);
     q_free(&s->out);
     q_free(&s->in);
     free(s);

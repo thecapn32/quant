@@ -33,6 +33,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #include <ev.h>
 #include <picotls.h>
@@ -46,7 +47,7 @@
 
 
 extern splay_head(conns_by_ipnp, q_conn) conns_by_ipnp;
-extern splay_head(conns_by_cid, q_cid_map) conns_by_cid;
+extern splay_head(conns_by_id, q_cid_map) conns_by_id;
 
 
 struct transport_params {
@@ -166,7 +167,7 @@ struct q_conn {
     char * peer_name;
 
     // TODO we might want to maintain pointers to the crypto streams here
-    splay_head(stream, q_stream) streams;
+    splay_head(streams_by_id, q_stream) streams_by_id;
     struct diet closed_streams;
 
     struct w_sock * sock; ///< File descriptor (socket) for the connection.
@@ -196,7 +197,7 @@ struct q_conn {
 extern struct q_conn_sl c_ready;
 
 
-static inline __attribute__((always_inline, nonnull)) struct pn_space *
+static inline struct pn_space * __attribute__((always_inline, nonnull))
 pn_for_epoch(struct q_conn * const c, const epoch_t e)
 {
     switch (e) {
@@ -212,7 +213,7 @@ pn_for_epoch(struct q_conn * const c, const epoch_t e)
 }
 
 
-static inline __attribute__((always_inline, nonnull)) epoch_t
+static inline epoch_t __attribute__((always_inline, nonnull))
 epoch_in(const struct q_conn * const c)
 {
     const size_t epoch = ptls_get_read_epoch(c->tls.t);
@@ -231,15 +232,30 @@ epoch_in(const struct q_conn * const c)
 }
 
 
+static inline int __attribute__((always_inline, nonnull))
+cid_cmp(const struct cid * const a, const struct cid * const b)
+{
+    const int diff = (a->len > b->len) - (a->len < b->len);
+    if (diff)
+        return diff;
+    return memcmp(a->id, b->id, a->len);
+}
+
+
+static inline int __attribute__((always_inline, nonnull))
+conns_by_id_cmp(const struct q_cid_map * const a,
+                const struct q_cid_map * const b)
+{
+    return cid_cmp(&a->cid, &b->cid);
+}
+
+
 extern int __attribute__((nonnull))
 conns_by_ipnp_cmp(const struct q_conn * const a, const struct q_conn * const b);
 
-extern int __attribute__((nonnull))
-conns_by_cid_cmp(const struct q_cid_map * const a,
-                 const struct q_cid_map * const b);
 
 SPLAY_PROTOTYPE(conns_by_ipnp, q_conn, node_ipnp, conns_by_ipnp_cmp)
-SPLAY_PROTOTYPE(conns_by_cid, q_cid_map, node, conns_by_cid_cmp)
+SPLAY_PROTOTYPE(conns_by_id, q_cid_map, node, conns_by_id_cmp)
 SPLAY_PROTOTYPE(cids_by_seq, cid, node, cids_by_seq_cmp)
 
 
@@ -251,12 +267,18 @@ struct ooo_0rtt {
 };
 
 
-extern splay_head(ooo_0rtt_splay, ooo_0rtt) ooo_0rtt_by_cid;
+extern splay_head(ooo_0rtt_by_cid, ooo_0rtt) ooo_0rtt_by_cid;
 
-extern int __attribute__((nonnull))
-ooo_0rtt_cmp(const struct ooo_0rtt * const a, const struct ooo_0rtt * const b);
 
-SPLAY_PROTOTYPE(ooo_0rtt_splay, ooo_0rtt, node, ooo_0rtt_cmp)
+static inline int __attribute__((always_inline, nonnull))
+ooo_0rtt_by_cid_cmp(const struct ooo_0rtt * const a,
+                    const struct ooo_0rtt * const b)
+{
+    return cid_cmp(&a->cid, &b->cid);
+}
+
+
+SPLAY_PROTOTYPE(ooo_0rtt_by_cid, ooo_0rtt, node, ooo_0rtt_by_cid_cmp)
 
 
 static inline __attribute__((always_inline, nonnull)) const char *
@@ -390,9 +412,6 @@ add_dcid(struct q_conn * const c, const struct cid * const id);
 extern void __attribute__((nonnull)) use_next_scid(struct q_conn * const c);
 
 extern void __attribute__((nonnull)) do_conn_fc(struct q_conn * const c);
-
-extern int __attribute__((nonnull))
-cid_cmp(const struct cid * const a, const struct cid * const b);
 
 #ifdef FUZZING
 extern void __attribute__((nonnull)) rx_pkts(struct w_iov_sq * const i,

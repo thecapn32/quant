@@ -63,7 +63,7 @@ const char * const conn_state_str[] = {CONN_STATES};
 
 struct q_conn_sl c_ready;
 struct conns_by_ipnp conns_by_ipnp = splay_initializer(&conns_by_ipnp);
-struct conns_by_cid conns_by_cid = splay_initializer(&conns_by_cid);
+struct conns_by_id conns_by_id = splay_initializer(&conns_by_id);
 
 
 static inline int __attribute__((nonnull))
@@ -91,24 +91,8 @@ int conns_by_ipnp_cmp(const struct q_conn * const a,
 }
 
 
-int cid_cmp(const struct cid * const a, const struct cid * const b)
-{
-    const int diff = (a->len > b->len) - (a->len < b->len);
-    if (diff)
-        return diff;
-    return memcmp(a->id, b->id, a->len);
-}
-
-
-int conns_by_cid_cmp(const struct q_cid_map * const a,
-                     const struct q_cid_map * const b)
-{
-    return cid_cmp(&a->cid, &b->cid);
-}
-
-
 SPLAY_GENERATE(conns_by_ipnp, q_conn, node_ipnp, conns_by_ipnp_cmp)
-SPLAY_GENERATE(conns_by_cid, q_cid_map, node, conns_by_cid_cmp)
+SPLAY_GENERATE(conns_by_id, q_cid_map, node, conns_by_id_cmp)
 SPLAY_GENERATE(cids_by_seq, cid, node, cids_by_seq_cmp)
 
 
@@ -129,17 +113,10 @@ bool vers_supported(const uint32_t v)
 }
 
 
-struct ooo_0rtt_splay ooo_0rtt_by_cid = splay_initializer(&ooo_0rtt_by_cid);
+struct ooo_0rtt_by_cid ooo_0rtt_by_cid = splay_initializer(&ooo_0rtt_by_cid);
 
 
-int ooo_0rtt_cmp(const struct ooo_0rtt * const a,
-                 const struct ooo_0rtt * const b)
-{
-    return cid_cmp(&a->cid, &b->cid);
-}
-
-
-SPLAY_GENERATE(ooo_0rtt_splay, ooo_0rtt, node, ooo_0rtt_cmp)
+SPLAY_GENERATE(ooo_0rtt_by_cid, ooo_0rtt, node, ooo_0rtt_by_cid_cmp)
 
 
 static uint32_t __attribute__((nonnull))
@@ -185,8 +162,7 @@ static struct q_conn * __attribute__((nonnull))
 get_conn_by_cid(const struct cid * const scid)
 {
     const struct q_cid_map which = {.cid = *scid};
-    struct q_cid_map * const cm =
-        splay_find(conns_by_cid, &conns_by_cid, &which);
+    struct q_cid_map * const cm = splay_find(conns_by_id, &conns_by_id, &which);
     return cm ? cm->c : 0;
 }
 
@@ -197,9 +173,8 @@ void use_next_scid(struct q_conn * const c)
     splay_remove(cids_by_seq, &c->scids_by_seq, scid);
 
     const struct q_cid_map which = {.cid = *scid};
-    struct q_cid_map * const cm =
-        splay_find(conns_by_cid, &conns_by_cid, &which);
-    splay_remove(conns_by_cid, &conns_by_cid, cm);
+    struct q_cid_map * const cm = splay_find(conns_by_id, &conns_by_id, &which);
+    splay_remove(conns_by_id, &conns_by_id, cm);
 
 #ifndef FUZZING
     if (c->state != conn_clsd && act_scid(c))
@@ -231,7 +206,7 @@ static void log_sent_pkts(struct q_conn * const c)
         uint64_t prev = UINT64_MAX;
         struct pkt_meta * p = 0;
         struct pn_space * const pn = pn_for_epoch(c, e);
-        splay_foreach (p, pm_nr_splay, &pn->sent_pkts) {
+        splay_foreach (p, pm_by_nr, &pn->sent_pkts) {
             char tmp[1024] = "";
             const bool ack_only = is_ack_only(p);
             snprintf(tmp, sizeof(tmp), "%s%s" FMT_PNR_OUT "%s ",
@@ -264,8 +239,8 @@ rtx_pkt(struct q_stream * const s, struct w_iov * const v)
     sl_insert_head(&meta(r).rtx, &meta(v), rtx_next);
 
     // we reinsert meta(v) with its new pkt nr in on_pkt_sent()
-    splay_remove(pm_nr_splay, &meta(v).pn->sent_pkts, &meta(v));
-    splay_insert(pm_nr_splay, &meta(v).pn->sent_pkts, &meta(r));
+    splay_remove(pm_by_nr, &meta(v).pn->sent_pkts, &meta(v));
+    splay_insert(pm_by_nr, &meta(v).pn->sent_pkts, &meta(r));
 
     // warn(DBG, "RTX idx %u, cpy in idx %u", w_iov_idx(v), w_iov_idx(r));
 }
@@ -386,7 +361,7 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
         return;
 
     // do we need to make more stream IDs available?
-    struct q_stream * const s = splay_max(stream, &c->streams);
+    struct q_stream * const s = splay_max(streams_by_id, &c->streams_by_id);
     if (s)
         do_stream_id_fc(s);
 
@@ -448,7 +423,7 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
     do_conn_mgmt(c);
 
     struct q_stream * s = 0;
-    splay_foreach (s, stream, &c->streams) {
+    splay_foreach (s, streams_by_id, &c->streams_by_id) {
         const bool stream_has_data_to_tx =
             sq_len(&s->out) > 0 && out_fully_acked(s) == false &&
             ((rtx && s->out_una) || (!rtx && s->out_nxt));
@@ -530,14 +505,14 @@ void add_scid(struct q_conn * const c, const struct cid * const id)
     } else {
         // warn(ERR, "updating scid %s to %s", cid2str(scid), cid2str(id));
         const struct q_cid_map which = {.cid = *scid};
-        cm = splay_find(conns_by_cid, &conns_by_cid, &which);
-        splay_remove(conns_by_cid, &conns_by_cid, cm);
+        cm = splay_find(conns_by_id, &conns_by_id, &which);
+        splay_remove(conns_by_id, &conns_by_id, cm);
     }
 
     cid_cpy(&cm->cid, id);
     if (scid == 0)
         splay_insert(cids_by_seq, &c->scids_by_seq, &cm->cid);
-    splay_insert(conns_by_cid, &conns_by_cid, cm);
+    splay_insert(conns_by_id, &conns_by_id, cm);
 
     // splay_foreach (scid, cids_by_seq, &c->scids_by_seq)
     //     warn(ERR, "%s", cid2str(scid));
@@ -671,7 +646,7 @@ static void __attribute__((nonnull)) vneg_or_rtry_resp(struct q_conn * const c)
     c->in_data = c->out_data = 0;
 
     struct q_stream * s;
-    splay_foreach (s, stream, &c->streams)
+    splay_foreach (s, streams_by_id, &c->streams_by_id)
         reset_stream(s, s->id < 0 && (c->try_0rtt == false ||
                                       (strm_epoch(s) != ep_0rtt &&
                                        strm_epoch(s) != ep_data)));
@@ -750,11 +725,11 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             // check if any reordered 0-RTT packets are cached for this CID
             const struct ooo_0rtt which = {.cid = meta(v).hdr.dcid};
             struct ooo_0rtt * const zo =
-                splay_find(ooo_0rtt_splay, &ooo_0rtt_by_cid, &which);
+                splay_find(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, &which);
             if (zo) {
                 warn(INF, "have reordered 0-RTT pkt (t=%f sec) for %s conn %s",
                      ev_now(loop) - zo->t, conn_type(c), scid2str(c));
-                splay_remove(ooo_0rtt_splay, &ooo_0rtt_by_cid, zo);
+                splay_remove(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo);
                 sq_insert_head(i, zo->v, next);
                 free(zo);
             }
@@ -1034,7 +1009,7 @@ rx_pkts(struct w_iov_sq * const i,
                 cid_cpy(&zo->cid, &meta(v).hdr.dcid);
                 zo->v = v;
                 zo->t = ev_now(loop);
-                splay_insert(ooo_0rtt_splay, &ooo_0rtt_by_cid, zo);
+                splay_insert(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo);
                 log_pkt("RX", v, &odcid, tok, tok_len); // NOLINT
 #ifndef FUZZING
                 warn(INF, "caching 0-RTT pkt for unknown conn %s",
@@ -1268,7 +1243,7 @@ struct q_conn * new_conn(struct w_engine * const w,
         add_dcid(c, dcid);
 
     c->vers = c->vers_initial = vers;
-    splay_init(&c->streams);
+    splay_init(&c->streams_by_id);
     diet_init(&c->closed_streams);
     sq_init(&c->txq);
 
@@ -1356,8 +1331,8 @@ void free_conn(struct q_conn * const c)
     ev_timer_stop(loop, &c->idle_alarm);
 
     struct q_stream *s, *ns;
-    for (s = splay_min(stream, &c->streams); s; s = ns) {
-        ns = splay_next(stream, &c->streams, s);
+    for (s = splay_min(streams_by_id, &c->streams_by_id); s; s = ns) {
+        ns = splay_next(streams_by_id, &c->streams_by_id, s);
         free_stream(s);
     }
     free_tls(c);

@@ -61,7 +61,7 @@
 
 struct ev_loop;
 
-SPLAY_GENERATE(pm_off_splay, pkt_meta, off_node, pm_off_cmp)
+SPLAY_GENERATE(ooo_by_off, pkt_meta, off_node, ooo_by_off_cmp)
 
 // TODO: many of these globals should move to a per-engine struct
 
@@ -119,16 +119,10 @@ int corpus_pkt_dir, corpus_frm_dir;
     } while (0)
 
 
-int pm_off_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
-{
-    return (a->stream_off > b->stream_off) - (a->stream_off < b->stream_off);
-}
-
-
 void pm_free(struct pkt_meta * const m)
 {
     if (m->pn) {
-        splay_remove(pm_nr_splay, &m->pn->sent_pkts, m);
+        splay_remove(pm_by_nr, &m->pn->sent_pkts, m);
         diet_insert(&m->pn->acked, m->hdr.nr, ev_now(loop));
     }
 
@@ -141,7 +135,7 @@ void pm_free(struct pkt_meta * const m)
         ensure(rm->is_rtx, "is an RTX");
         sl_remove_head(&m->rtx, rtx_next);
         struct pkt_meta * const next_rm = sl_next(rm, rtx_next);
-        splay_remove(pm_nr_splay, &rm->pn->sent_pkts, rm);
+        splay_remove(pm_by_nr, &rm->pn->sent_pkts, rm);
         diet_insert(&rm->pn->acked, rm->hdr.nr, ev_now(loop));
         w_free_iov(w_iov(rm->pn->c->w, pm_idx(rm)));
         memset(rm, 0, sizeof(*rm));
@@ -317,7 +311,7 @@ q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool block)
     struct q_stream * s = 0;
     // cppcheck-suppress knownConditionTrueFalse
     while (s == 0 && c->state == conn_estb) {
-        splay_foreach (s, stream, &c->streams) {
+        splay_foreach (s, streams_by_id, &c->streams_by_id) {
             if (s->state == strm_clsd)
                 continue;
 
@@ -481,7 +475,7 @@ struct w_engine * q_init(const char * const ifname,
 
     // init connection structures
     splay_init(&conns_by_ipnp);
-    splay_init(&conns_by_cid);
+    splay_init(&conns_by_id);
 
     // initialize warpcore on the given interface
     struct w_engine * const w = w_init(ifname, 0, nbufs);
@@ -562,8 +556,8 @@ done:
 void q_cleanup(struct w_engine * const w)
 {
     // close all connections
-    while (!splay_empty(&conns_by_cid)) {
-        struct q_cid_map * const cm = splay_min(conns_by_cid, &conns_by_cid);
+    while (!splay_empty(&conns_by_id)) {
+        struct q_cid_map * const cm = splay_min(conns_by_id, &conns_by_id);
         warn(DBG, "closing %s conn %s", conn_type(cm->c), cid2str(&cm->cid));
         q_close(cm->c);
     }
@@ -581,8 +575,8 @@ void q_cleanup(struct w_engine * const w)
     // free 0-RTT reordering cache
     while (!splay_empty(&ooo_0rtt_by_cid)) {
         struct ooo_0rtt * const zo =
-            splay_min(ooo_0rtt_splay, &ooo_0rtt_by_cid);
-        splay_remove(ooo_0rtt_splay, &ooo_0rtt_by_cid, zo);
+            splay_min(ooo_0rtt_by_cid, &ooo_0rtt_by_cid);
+        splay_remove(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo);
         free(zo);
     }
 

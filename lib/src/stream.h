@@ -65,11 +65,11 @@ struct q_stream {
     uint64_t out_data;      ///< Current outbound stream offset (= data sent).
     uint64_t out_data_max;  ///< Outbound max_stream_data.
 
-    struct w_iov_sq in;         ///< Tail queue containing inbound data.
-    struct pm_off_splay in_ooo; ///< Out-of-order inbound data.
-    uint64_t in_data_max;       ///< Inbound max_stream_data.
-    uint64_t new_in_data_max;   ///< New inbound max_stream_data (for update).
-    uint64_t in_data;           ///< In-order stream data received.
+    struct w_iov_sq in;       ///< Tail queue containing inbound data.
+    struct ooo_by_off in_ooo; ///< Out-of-order inbound data.
+    uint64_t in_data_max;     ///< Inbound max_stream_data.
+    uint64_t new_in_data_max; ///< New inbound max_stream_data (for update).
+    uint64_t in_data;         ///< In-order stream data received.
 
     int64_t id;
     strm_state_t state;
@@ -96,21 +96,21 @@ struct q_stream {
 #endif
 
 
-static inline __attribute__((always_inline)) bool
+static inline bool __attribute__((nonnull, always_inline))
 out_fully_acked(const struct q_stream * const s)
 {
     return s->out_ack_cnt == sq_len(&s->out);
 }
 
 
-static inline __attribute__((always_inline, const)) int64_t
+static inline int64_t __attribute__((always_inline, const))
 crpt_strm_id(const epoch_t epoch)
 {
     return -((int64_t)epoch + 1);
 }
 
 
-static inline __attribute__((always_inline)) epoch_t
+static inline epoch_t __attribute__((nonnull, always_inline))
 strm_epoch(const struct q_stream * const s)
 {
     if (s->id < 0)
@@ -121,15 +121,23 @@ strm_epoch(const struct q_stream * const s)
 }
 
 
-static inline __attribute__((always_inline)) bool
+static inline bool __attribute__((nonnull, always_inline))
 stream_needs_ctrl(const struct q_stream * const s)
 {
     return s->tx_fin || s->tx_max_stream_data;
 }
 
 
-extern int __attribute__((nonnull))
-stream_cmp(const struct q_stream * const a, const struct q_stream * const b);
+static inline int __attribute__((nonnull, always_inline))
+streams_by_id_cmp(const struct q_stream * const a,
+                  const struct q_stream * const b)
+{
+    return (a->id > b->id) - (a->id < b->id);
+}
+
+
+SPLAY_PROTOTYPE(streams_by_id, q_stream, node, streams_by_id_cmp)
+
 
 extern struct q_stream * __attribute__((nonnull))
 get_stream(struct q_conn * const c, const int64_t id);
@@ -156,5 +164,3 @@ extern void __attribute__((nonnull)) do_stream_id_fc(struct q_stream * const s);
 
 extern void __attribute__((nonnull))
 concat_out(struct q_stream * const s, struct w_iov_sq * const q);
-
-SPLAY_PROTOTYPE(stream, q_stream, node, stream_cmp)

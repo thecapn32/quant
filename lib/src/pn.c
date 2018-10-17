@@ -32,13 +32,7 @@
 struct ev_loop;
 
 
-SPLAY_GENERATE(pm_nr_splay, pkt_meta, nr_node, pm_nr_cmp)
-
-
-int pm_nr_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
-{
-    return (a->hdr.nr > b->hdr.nr) - (a->hdr.nr < b->hdr.nr);
-}
+SPLAY_GENERATE(pm_by_nr, pkt_meta, nr_node, pm_by_nr_cmp)
 
 
 static inline __attribute__((always_inline, nonnull)) epoch_t
@@ -101,10 +95,9 @@ void free_pn(struct pn_space * const pn)
     ev_timer_stop(loop, &pn->ack_alarm);
 
     // free any remaining buffers
-    struct pkt_meta * p = splay_min(pm_nr_splay, &pn->sent_pkts);
+    struct pkt_meta * p = splay_min(pm_by_nr, &pn->sent_pkts);
     while (p) {
-        struct pkt_meta * const nxt =
-            splay_next(pm_nr_splay, &pn->sent_pkts, p);
+        struct pkt_meta * const nxt = splay_next(pm_by_nr, &pn->sent_pkts, p);
         q_free_iov(w_iov(pn->c->w, pm_idx(p)));
         p = nxt;
     }

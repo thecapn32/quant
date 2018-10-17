@@ -42,7 +42,7 @@ struct q_conn;
 struct ev_loop;
 
 
-splay_head(pm_nr_splay, pkt_meta);
+splay_head(pm_by_nr, pkt_meta);
 
 
 struct pn_space {
@@ -53,7 +53,7 @@ struct pn_space {
     /// Sent-but-unACKed packets. The @p buf and @p len fields of the w_iov
     /// structs are relative to any stream or crypto data.
     ///
-    struct pm_nr_splay sent_pkts; // sent_packets
+    struct pm_by_nr sent_pkts; // sent_packets
 
     uint64_t lg_sent;            // largest_sent_packet
     uint64_t lg_acked;           // largest_acked_packet
@@ -79,11 +79,14 @@ struct pn_data_space {
 };
 
 
-extern int __attribute__((nonnull))
-pm_nr_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b);
+static inline int __attribute__((nonnull, always_inline))
+pm_by_nr_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
+{
+    return (a->hdr.nr > b->hdr.nr) - (a->hdr.nr < b->hdr.nr);
+}
 
 
-SPLAY_PROTOTYPE(pm_nr_splay, pkt_meta, nr_node, pm_nr_cmp)
+SPLAY_PROTOTYPE(pm_by_nr, pkt_meta, nr_node, pm_by_nr_cmp)
 
 
 extern void __attribute__((nonnull))

@@ -190,12 +190,12 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
 
         // check if a hole has been filled that lets us dequeue ooo data
         struct pkt_meta *p, *nxt;
-        for (p = splay_min(pm_off_splay, &s->in_ooo);
+        for (p = splay_min(ooo_by_off, &s->in_ooo);
              p && p->stream_off == s->in_data; p = nxt) {
-            nxt = splay_next(pm_off_splay, &s->in_ooo, p);
+            nxt = splay_next(ooo_by_off, &s->in_ooo, p);
             track_bytes_in(s, p->stream_data_end - p->stream_data_start);
             sq_insert_tail(&s->in, w_iov(c->w, pm_idx(p)), next);
-            splay_remove(pm_off_splay, &s->in_ooo, p);
+            splay_remove(ooo_by_off, &s->in_ooo, p);
         }
 
         // check if we have delivered a FIN, and act on it if we did
@@ -233,7 +233,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
 
     // data is out of order
     kind = YEL "ooo" NRM;
-    splay_insert(pm_off_splay, &s->in_ooo, &meta(v));
+    splay_insert(ooo_by_off, &s->in_ooo, &meta(v));
 
 done:
     log_stream_or_crypto_frame(false, v, true, kind);

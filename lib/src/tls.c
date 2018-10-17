@@ -86,7 +86,7 @@ struct tls_ticket {
 };
 
 
-struct ticket_splay {
+struct tickets_by_peer {
     splay_head(, tls_ticket);
     char file_name[MAXPATHLEN];
 };
@@ -104,11 +104,11 @@ tls_ticket_cmp(const struct tls_ticket * const a,
 }
 
 
-SPLAY_PROTOTYPE(ticket_splay, tls_ticket, node, tls_ticket_cmp)
-SPLAY_GENERATE(ticket_splay, tls_ticket, node, tls_ticket_cmp)
+SPLAY_PROTOTYPE(tickets_by_peer, tls_ticket, node, tls_ticket_cmp)
+SPLAY_GENERATE(tickets_by_peer, tls_ticket, node, tls_ticket_cmp)
 
 ptls_context_t tls_ctx = {0};
-static struct ticket_splay tickets = {splay_initializer(tickets), {"\0"}};
+static struct tickets_by_peer tickets = {splay_initializer(tickets), {"\0"}};
 
 #ifdef PTLS_OPENSSL
 static ptls_openssl_sign_certificate_t sign_cert = {0};
@@ -583,7 +583,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
     // apply these parameter to all current non-crypto streams
     struct q_stream * s;
-    splay_foreach (s, stream, &c->streams)
+    splay_foreach (s, streams_by_id, &c->streams_by_id)
         apply_stream_limits(s);
 
     return 0;
@@ -781,14 +781,14 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
     else
         a = calloc(1, sizeof(char));
     const struct tls_ticket which = {.sni = s, .alpn = a};
-    struct tls_ticket * t = splay_find(ticket_splay, &tickets, &which);
+    struct tls_ticket * t = splay_find(tickets_by_peer, &tickets, &which);
     if (t == 0) {
         // create new ticket
         t = calloc(1, sizeof(*t));
         ensure(t, "calloc");
         t->sni = s;
         t->alpn = a;
-        splay_insert(ticket_splay, &tickets, t);
+        splay_insert(tickets_by_peer, &tickets, t);
     } else {
         // update current ticket
         free(t->ticket);
@@ -806,7 +806,7 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
 
     // write all tickets
     // XXX this currently dumps the entire cache to file on each connection!
-    splay_foreach (t, ticket_splay, &tickets) { // NOLINT
+    splay_foreach (t, tickets_by_peer, &tickets) { // NOLINT
         warn(INF, "writing 0-RTT ticket for %s conn %s (%s %s)", conn_type(c),
              scid2str(c), t->sni, t->alpn);
 
@@ -871,11 +871,11 @@ void init_tls(struct q_conn * const c)
     // try to find an existing session ticket
     struct tls_ticket which = {.sni = c->peer_name,
                                .alpn = (char *)alpn[0].base};
-    struct tls_ticket * t = splay_find(ticket_splay, &tickets, &which);
+    struct tls_ticket * t = splay_find(tickets_by_peer, &tickets, &which);
     if (t == 0) {
         // if we couldn't find a ticket, try without an alpn
         which.alpn = "";
-        t = splay_find(ticket_splay, &tickets, &which);
+        t = splay_find(tickets_by_peer, &tickets, &which);
     }
     if (t) {
         hshk_prop->client.session_ticket =
@@ -1037,7 +1037,7 @@ static void read_tickets()
         ensure(t->ticket, "calloc");
         ensure(fread(t->ticket, sizeof(*t->ticket), len, fp), "fread");
 
-        splay_insert(ticket_splay, &tickets, t);
+        splay_insert(tickets_by_peer, &tickets, t);
         warn(INF, "got 0-RTT ticket %s %s", t->sni, t->alpn);
     }
 
@@ -1208,9 +1208,9 @@ void free_tls_ctx(void)
 
     // free ticket cache
     struct tls_ticket *t, *tmp;
-    for (t = splay_min(ticket_splay, &tickets); t != 0; t = tmp) {
-        tmp = splay_next(ticket_splay, &tickets, t);
-        splay_remove(ticket_splay, &tickets, t);
+    for (t = splay_min(tickets_by_peer, &tickets); t != 0; t = tmp) {
+        tmp = splay_next(tickets_by_peer, &tickets, t);
+        splay_remove(tickets_by_peer, &tickets, t);
         free(t->sni);
         free(t->alpn);
         free(t->ticket);

@@ -133,9 +133,9 @@ detect_lost_pkts(struct q_conn * const c, struct pn_space * const pn)
     uint64_t largest_lost_packet = 0;
 
     struct pkt_meta *p, *nxt;
-    for (p = splay_min(pm_nr_splay, &pn->sent_pkts);
-         p && p->hdr.nr < pn->lg_acked; p = nxt) {
-        nxt = splay_next(pm_nr_splay, &pn->sent_pkts, p);
+    for (p = splay_min(pm_by_nr, &pn->sent_pkts); p && p->hdr.nr < pn->lg_acked;
+         p = nxt) {
+        nxt = splay_next(pm_by_nr, &pn->sent_pkts, p);
         if (p->is_acked || p->is_lost)
             continue;
 
@@ -277,7 +277,7 @@ void on_pkt_sent(struct q_stream * const s, struct w_iov * const v)
 
     meta(v).tx_t = ev_now(loop);
     struct pn_space * const pn = pn_for_epoch(s->c, strm_epoch(s));
-    splay_insert(pm_nr_splay, &pn->sent_pkts, &meta(v));
+    splay_insert(pm_by_nr, &pn->sent_pkts, &meta(v));
 
     if (likely(s->c->state != conn_idle) && is_ack_only(&meta(v)) == false) {
         if (bit_test(meta(v).frames, FRAM_TYPE_CRPT))
@@ -362,9 +362,9 @@ void on_ack_received_2(struct q_conn * const c,
 
         // for (sent_packet: sent_packets):
         //   if (sent_packet.packet_number < packet_number):
-        for (struct pkt_meta * p = splay_min(pm_nr_splay, &pn->sent_pkts);
+        for (struct pkt_meta * p = splay_min(pm_by_nr, &pn->sent_pkts);
              p && p->hdr.nr < sm_new_acked;
-             p = splay_next(pm_nr_splay, &pn->sent_pkts, p)) {
+             p = splay_next(pm_by_nr, &pn->sent_pkts, p)) {
             warn(DBG, "pkt " FMT_PNR_OUT " considered lost", p->hdr.nr);
             p->is_lost = true;
             if (is_ack_only(p) == false) {
@@ -427,7 +427,7 @@ void on_pkt_acked(struct q_conn * const c,
 
     // sent_packets.remove(acked_packet.packet_number)
     diet_insert(&pn->acked, meta(acked_pkt).hdr.nr, ev_now(loop));
-    splay_remove(pm_nr_splay, &pn->sent_pkts, &meta(acked_pkt));
+    splay_remove(pm_by_nr, &pn->sent_pkts, &meta(acked_pkt));
 
     // rest of function is not from pseudo code
 
@@ -514,7 +514,7 @@ struct w_iov * find_sent_pkt(struct q_conn * const c,
 {
     const struct pkt_meta which = {.hdr.nr = nr};
     const struct pkt_meta * const p =
-        splay_find(pm_nr_splay, &pn->sent_pkts, &which);
+        splay_find(pm_by_nr, &pn->sent_pkts, &which);
     return p ? w_iov(c->w, pm_idx(p)) : 0;
 }
 

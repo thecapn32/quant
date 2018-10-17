@@ -143,12 +143,16 @@ struct pkt_meta {
 #define is_set(f, v) (((v) & (f)) == (f))
 
 
-extern int __attribute__((nonnull))
-pm_off_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b);
+static inline int __attribute__((nonnull, always_inline))
+ooo_by_off_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
+{
+    return (a->stream_off > b->stream_off) - (a->stream_off < b->stream_off);
+}
 
-splay_head(pm_off_splay, pkt_meta);
 
-SPLAY_PROTOTYPE(pm_off_splay, pkt_meta, off_node, pm_off_cmp)
+splay_head(ooo_by_off, pkt_meta);
+
+SPLAY_PROTOTYPE(ooo_by_off, pkt_meta, off_node, ooo_by_off_cmp)
 
 
 extern struct pkt_meta * pm;
