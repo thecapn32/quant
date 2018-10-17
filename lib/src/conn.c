@@ -1296,6 +1296,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     if (scid)
         cid_cpy(&nscid, scid);
     else {
+        nscid.seq = 0;
         nscid.len = CLNT_SCID_LEN;
         arc4random_buf(nscid.id, nscid.len);
     }
@@ -1349,12 +1350,25 @@ void free_conn(struct q_conn * const c)
     if (c->err_reason)
         free(c->err_reason);
 
-    // remove connection from global lists
+    // remove connection from global lists and free CID splays
     splay_remove(conns_by_ipnp, &conns_by_ipnp, c);
-    while (!splay_empty(&c->scids_by_seq))
-        use_next_scid(c);
-    while (!splay_empty(&c->dcids_by_seq))
-        use_next_dcid(c);
+
+    while (!splay_empty(&c->scids_by_seq)) {
+        struct cid * const id = splay_min(cids_by_seq, &(c)->scids_by_seq);
+        ensure(id, "have scid");
+        splay_remove(cids_by_seq, &c->scids_by_seq, id);
+        const struct q_cid_map which = {.cid = *id};
+        struct q_cid_map * const cm =
+            splay_find(conns_by_id, &conns_by_id, &which);
+        splay_remove(conns_by_id, &conns_by_id, cm);
+        free(cm);
+    }
+
+    while (!splay_empty(&c->dcids_by_seq)) {
+        struct cid * const id = splay_min(cids_by_seq, &(c)->dcids_by_seq);
+        splay_remove(cids_by_seq, &c->dcids_by_seq, id);
+        free(id);
+    }
 
     if (c->in_c_ready)
         sl_remove(&c_ready, c, q_conn, node_rx_int);
