@@ -215,7 +215,7 @@ struct ival * diet_insert(struct diet * const d,
             struct ival * const old_root = splay_root(d);
             splay_root(d) = splay_left(splay_root(d), node);
             free(old_root);
-            d->cnt--;
+            splay_count(d)--;
         }
         splay_root(d)->t = t;
         return splay_root(d);
@@ -252,7 +252,7 @@ struct ival * diet_insert(struct diet * const d,
             struct ival * const old_root = splay_root(d);
             splay_root(d) = splay_right(splay_root(d), node);
             free(old_root);
-            d->cnt--;
+            splay_count(d)--;
         }
         splay_root(d)->t = t;
         return splay_root(d);
@@ -266,7 +266,6 @@ new_ival:
 #endif
                   t);
     splay_insert(diet, d, i);
-    d->cnt++;
     return i;
 }
 
@@ -285,10 +284,9 @@ void diet_remove(struct diet * const d, const uint64_t n)
         return;
 
     if (n == splay_root(d)->lo) {
-        if (n == splay_root(d)->hi) {
+        if (n == splay_root(d)->hi)
             free(splay_remove(diet, d, splay_root(d)));
-            d->cnt--;
-        } else
+        else
             // adjust lo bound
             splay_root(d)->lo++;
     } else if (n == splay_root(d)->hi) {
@@ -301,7 +299,7 @@ void diet_remove(struct diet * const d, const uint64_t n)
                                           splay_root(d)->c,
 #endif
                                           splay_root(d)->t);
-        d->cnt++;
+        splay_count(d)++;
         i->hi = n - 1;
         splay_root(d)->lo = n + 1;
         splay_left(i, node) = splay_left(splay_root(d), node);

@@ -67,26 +67,17 @@ struct ival {
 extern int __attribute__((nonnull))
 ival_cmp(const struct ival * const a, const struct ival * const b);
 
-struct diet {
-    __extension__ splay_head(, ival); ///< Splay head.
-    uint64_t cnt; ///< Number of nodes (intervals) in the diet tree.
-};
+
+splay_head(diet, ival);
 
 
-#define diet_initializer(d)                                                    \
-    {                                                                          \
-        splay_initializer(d), 0                                                \
-    }
-
-
-#define diet_init(d)                                                           \
-    do {                                                                       \
-        splay_init(d);                                                         \
-        (d)->cnt = 0;                                                          \
-    } while (0)
+#define diet_initializer(d) splay_initializer(d)
+#define diet_init(d) splay_init(d)
+#define diet_cnt(d) splay_count(d)
 
 
 SPLAY_PROTOTYPE(diet, ival, node, ival_cmp)
+
 
 extern struct ival * diet_find(struct diet * const d, const uint64_t n);
 
@@ -140,12 +131,6 @@ diet_empty(const struct diet * const d)
     return splay_empty(d);
 }
 
-
-inline uint64_t __attribute__((nonnull, always_inline))
-diet_cnt(const struct diet * const d)
-{
-    return d->cnt;
-}
 
 #ifdef DIET_CLASS
 inline uint8_t __attribute__((nonnull, always_inline))
