@@ -90,12 +90,12 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
         to = MAX(to, kMinTLPTimeout) * (1 << c->rec.hshake_cnt);
         c->rec.ld_alarm.repeat = ev_now(loop) - c->rec.last_sent_hshk_t + to;
         warn(DBG, "handshake RTX alarm in %f sec on %s conn %s",
-             c->rec.ld_alarm.repeat, conn_type(c), scid2str(c));
+             c->rec.ld_alarm.repeat, conn_type(c), cid2str(c->scid));
 
     } else if (!is_zero(c->rec.loss_t)) {
         c->rec.ld_alarm.repeat = c->rec.loss_t - c->rec.last_sent_rtxable_t;
         warn(DBG, "early RTX or time alarm in %f sec on %s conn %s",
-             c->rec.ld_alarm.repeat, conn_type(c), scid2str(c));
+             c->rec.ld_alarm.repeat, conn_type(c), cid2str(c->scid));
 
     } else {
         ev_tstamp to = c->rec.srtt + (4 * c->rec.rttvar) +
@@ -108,10 +108,10 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
                     kMinTLPTimeout);
             c->rec.ld_alarm.repeat = MIN(tlp_to, to);
             warn(DBG, "TLP alarm in %f sec on %s conn %s",
-                 c->rec.ld_alarm.repeat, conn_type(c), scid2str(c));
+                 c->rec.ld_alarm.repeat, conn_type(c), cid2str(c->scid));
         } else
             warn(DBG, "RTO alarm in %f sec on %s conn %s",
-                 c->rec.ld_alarm.repeat, conn_type(c), scid2str(c));
+                 c->rec.ld_alarm.repeat, conn_type(c), cid2str(c->scid));
     }
 
     ensure(c->rec.ld_alarm.repeat >= 0, "repeat %f", c->rec.ld_alarm.repeat);
@@ -196,27 +196,27 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
     // see OnLossDetectionAlarm pseudo code
     if (hshk_pkts_outstanding(c)) {
         warn(DBG, "handshake RTX #%u on %s conn %s", c->rec.hshake_cnt + 1,
-             conn_type(c), scid2str(c));
+             conn_type(c), cid2str(c->scid));
         tx(c, true, 0);
         did_tx = true;
         c->rec.hshake_cnt++;
 
     } else if (!is_zero(c->rec.loss_t)) {
         warn(DBG, "early RTX or time loss detection alarm on %s conn %s",
-             conn_type(c), scid2str(c));
+             conn_type(c), cid2str(c->scid));
         struct pn_space * const pn = pn_for_epoch(c, c->tls.epoch_out);
         detect_lost_pkts(c, pn);
 
     } else if (c->rec.tlp_cnt < kMaxTLPs) {
         warn(DBG, "TLP alarm #%u on %s conn %s", c->rec.tlp_cnt, conn_type(c),
-             scid2str(c));
+             cid2str(c->scid));
         tx(c, true, 1); // XXX is this an RTX or not?
         did_tx = true;
         c->rec.tlp_cnt++;
 
     } else {
         warn(DBG, "RTO alarm #%u on %s conn %s", c->rec.rto_cnt, conn_type(c),
-             scid2str(c));
+             cid2str(c->scid));
         if (c->rec.rto_cnt == 0) {
             struct pn_space * const pn = pn_for_epoch(c, c->tls.epoch_out);
             pn->lg_sent_before_rto = pn->lg_sent;

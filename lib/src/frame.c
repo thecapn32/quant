@@ -165,7 +165,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
         if (diet_find(&c->closed_streams, (uint64_t)sid)) {
             warn(WRN,
                  "ignoring frame for closed strm " FMT_SID " on %s conn %s",
-                 sid, conn_type(c), scid2str(c));
+                 sid, conn_type(c), cid2str(c->scid));
             goto done;
         }
 

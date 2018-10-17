@@ -116,7 +116,8 @@ void log_pkt(const char * const dir,
         twarn(NTE,
               BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM "dcid=%s nr=%s%" PRIu64,
               col_dir, dir, *dir == 'R' ? v->len : 0, *v->buf, col_dir,
-              pkt_type_str(v), cid2str(&meta(v).hdr.dcid), col_nr,
+              pkt_type_str(v),
+              hex2str(&meta(v).hdr.dcid.id, meta(v).hdr.dcid.len), col_nr,
               meta(v).hdr.nr);
 }
 #endif
@@ -178,8 +179,8 @@ needed_pkt_nr_len(struct pn_space * const pn, const uint64_t n)
 static uint16_t __attribute__((nonnull))
 enc_lh_cids(struct q_conn * const c, struct w_iov * const v, const uint16_t pos)
 {
-    cid_cpy(&meta(v).hdr.dcid, act_dcid(c));
-    cid_cpy(&meta(v).hdr.scid, act_scid(c));
+    cid_cpy(&meta(v).hdr.dcid, c->dcid);
+    cid_cpy(&meta(v).hdr.scid, c->scid);
     const uint8_t cil =
         (uint8_t)((meta(v).hdr.dcid.len ? meta(v).hdr.dcid.len - 3 : 0) << 4) |
         (uint8_t)(meta(v).hdr.scid.len ? meta(v).hdr.scid.len - 3 : 0);
@@ -248,10 +249,10 @@ bool enc_pkt(struct q_stream * const s,
             arc4random_buf(nscid.srt, sizeof(nscid.srt));
 #ifndef FUZZING
             warn(NTE, "hshk switch to scid %s for %s conn (was %s)",
-                 cid2str(&nscid), conn_type(c), scid2str(c));
+                 cid2str(&nscid), conn_type(c), cid2str(c->scid));
 #endif
-            cid_cpy(&c->odcid, act_scid(c));
-            add_scid(c, &nscid);
+            cid_cpy(&c->odcid, c->scid);
+            update_act_scid(c, &nscid);
         }
         break;
     case ep_0rtt:
@@ -329,7 +330,7 @@ bool enc_pkt(struct q_stream * const s,
         }
 
     } else {
-        cid_cpy(&meta(v).hdr.dcid, act_dcid(c));
+        cid_cpy(&meta(v).hdr.dcid, c->dcid);
         i = enc_buf(v->buf, v->len, i, &meta(v).hdr.dcid.id,
                     meta(v).hdr.dcid.len);
     }

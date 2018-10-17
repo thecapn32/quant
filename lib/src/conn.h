@@ -96,6 +96,7 @@ extern const char * const conn_state_str[];
 
 
 splay_head(cids_by_seq, cid);
+splay_head(cids_by_id, cid);
 
 
 /// A QUIC connection.
@@ -105,8 +106,11 @@ struct q_conn {
     sl_entry(q_conn) node_rx_ext; ///< For maintaining the external RX queue.
     sl_entry(q_conn) node_aq;     ///< For maintaining the accept queue.
 
-    struct cids_by_seq dcids_by_seq; ///< Destination connection IDs.
-    struct cids_by_seq scids_by_seq; ///< Source connection IDs.
+    struct cids_by_seq dcids_by_seq; ///< Destination CID hash by sequence.
+    struct cids_by_seq scids_by_seq; ///< Source CID hash by sequence.
+    struct cids_by_id scids_by_id;   ///< Source CID hash by ID.
+    struct cid * dcid;               ///< Active destination CID.
+    struct cid * scid;               ///< Active source CID.
 
     uint32_t holds_sock : 1;  ///< Connection manages a warpcore socket.
     uint32_t is_clnt : 1;     ///< We are the client on this connection.
@@ -256,7 +260,8 @@ conns_by_ipnp_cmp(const struct q_conn * const a, const struct q_conn * const b);
 
 SPLAY_PROTOTYPE(conns_by_ipnp, q_conn, node_ipnp, conns_by_ipnp_cmp)
 SPLAY_PROTOTYPE(conns_by_id, q_cid_map, node, conns_by_id_cmp)
-SPLAY_PROTOTYPE(cids_by_seq, cid, node, cids_by_seq_cmp)
+SPLAY_PROTOTYPE(cids_by_seq, cid, node_seq, cids_by_seq_cmp)
+SPLAY_PROTOTYPE(cids_by_id, cid, node_id, cid_cmp)
 
 
 struct ooo_0rtt {
@@ -325,31 +330,11 @@ is_inf(const ev_tstamp t)
     })
 
 
-#define act_scid(c)                                                            \
-    __extension__({                                                            \
-        struct cid * const _scid = splay_min(cids_by_seq, &(c)->scids_by_seq); \
-        ensure(_scid, "have scid");                                            \
-        _scid;                                                                 \
-    })
-
-
-#define act_dcid(c)                                                            \
-    __extension__({                                                            \
-        struct cid * const _dcid = splay_min(cids_by_seq, &(c)->dcids_by_seq); \
-        ensure(_dcid, "have dcid");                                            \
-        _dcid;                                                                 \
-    })
-
-
-#define scid2str(c) cid2str(act_scid(c))
-#define dcid2str(c) cid2str(act_dcid(c))
-
-
 #ifndef FUZZING
 
 #define conn_to_state(c, s)                                                    \
     do {                                                                       \
-        warn(DBG, "conn %s state %s -> " RED "%s" NRM, scid2str(c),            \
+        warn(DBG, "conn %s state %s -> " RED "%s" NRM, cid2str((c)->scid),     \
              conn_state_str[(c)->state], conn_state_str[(s)]);                 \
         if (likely((c)->state != (s)))                                         \
             (c)->state = (s);                                                  \
@@ -404,12 +389,13 @@ extern struct q_conn * new_conn(struct w_engine * const w,
 extern void __attribute__((nonnull)) free_conn(struct q_conn * const c);
 
 extern void __attribute__((nonnull))
+update_act_scid(struct q_conn * const c, const struct cid * const id);
+
+extern void __attribute__((nonnull))
 add_scid(struct q_conn * const c, const struct cid * const id);
 
 extern void __attribute__((nonnull))
 add_dcid(struct q_conn * const c, const struct cid * const id);
-
-extern void __attribute__((nonnull)) use_next_scid(struct q_conn * const c);
 
 extern void __attribute__((nonnull)) do_conn_fc(struct q_conn * const c);
 

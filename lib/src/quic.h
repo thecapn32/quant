@@ -52,7 +52,8 @@
 #define SRT_LEN 16
 
 struct cid {
-    splay_entry(cid) node;
+    splay_entry(cid) node_seq;
+    splay_entry(cid) node_id;
     uint64_t seq;            ///< Connection ID sequence number
     uint8_t len;             ///< Connection ID length
     uint8_t id[MAX_CID_LEN]; ///< Connection ID
