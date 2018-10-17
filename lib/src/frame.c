@@ -785,15 +785,19 @@ dec_retire_cid_frame(struct q_conn * const c,
                      const struct w_iov * const v,
                      const uint16_t pos)
 {
-    uint64_t seq = 0;
-    uint16_t i = dec_chk(FRAM_TYPE_RTIR_CID, &seq, v->buf, v->len, pos + 1, 0,
-                         "%" PRIu64);
+    struct cid which = {0};
+    uint16_t i = dec_chk(FRAM_TYPE_RTIR_CID, &which.seq, v->buf, v->len,
+                         pos + 1, 0, "%" PRIu64);
 
 #ifndef FUZZING
-    warn(INF, FRAM_IN "RETIRE_CONNECTION_ID" NRM " seq=%" PRIu64, seq);
+    warn(INF, FRAM_IN "RETIRE_CONNECTION_ID" NRM " seq=%" PRIu64, which.seq);
 #endif
 
-    // TODO: actually do something with this
+    struct cid * const dcid = splay_find(cids_by_seq, &c->dcids_by_seq, &which);
+    splay_remove(cids_by_seq, &c->dcids_by_seq, dcid);
+
+    // rx of RETIRE_CONNECTION_ID means we should send more
+    c->tx_ncid = true;
 
     return i;
 }
