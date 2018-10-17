@@ -91,8 +91,8 @@ void log_stream_or_crypto_frame(const bool rtx,
     if (s->id >= 0)
         warn(INF,
              "%sSTREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID "/%" PRIu64
-             " cdata=%" PRIu64 "/%" PRIu64 " off=%" PRIu64 "/%" PRIu64
-             " len=%u %s%s%s%s",
+             " off=%" PRIu64 "/%" PRIu64 " len=%u coff=%" PRIu64 "/%" PRIu64
+             " %s%s%s%s",
              in ? FRAM_IN : FRAM_OUT, type,
              is_set(F_STREAM_FIN, type) ? "FIN" : "",
              is_set(F_STREAM_FIN, type) &&
@@ -108,9 +108,9 @@ void log_stream_or_crypto_frame(const bool rtx,
                        (is_set(STRM_FL_INI_SRV, s->id) ? STRM_FL_INI_SRV : 0)
                  : ((c->tp_out.max_bidi_streams - 1) << 2) +
                        (is_set(STRM_FL_INI_SRV, s->id) ? STRM_FL_INI_SRV : 0),
-             in ? c->in_data : c->out_data,
-             in ? c->tp_in.max_data : c->tp_out.max_data, meta(v).stream_off,
-             in ? s->in_data_max : s->out_data_max, stream_data_len(v),
+             meta(v).stream_off, in ? s->in_data_max : s->out_data_max,
+             stream_data_len(v), in ? c->in_data : c->out_data,
+             in ? c->tp_in.max_data : c->tp_out.max_data,
              rtx ? REV BLD GRN "[RTX]" NRM " " : "", in ? "[" : "", kind,
              in ? "]" : "");
     else
