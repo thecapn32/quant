@@ -87,7 +87,7 @@ extern void __attribute__((nonnull)) q_alloc(struct w_engine * const w,
 
 extern void __attribute__((nonnull)) q_free(struct w_iov_sq * const q);
 
-extern char * __attribute__((nonnull)) q_cid(const struct q_conn * const c);
+extern char * __attribute__((nonnull)) q_cid(struct q_conn * const c);
 
 extern uint64_t __attribute__((nonnull)) q_sid(const struct q_stream * const s);
 

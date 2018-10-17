@@ -45,8 +45,8 @@
 #include "tls.h"
 
 
-extern splay_head(ipnp_splay, q_conn) conns_by_ipnp;
-extern splay_head(cid_splay, q_cid_map) conns_by_cid;
+extern splay_head(conns_by_ipnp, q_conn) conns_by_ipnp;
+extern splay_head(conns_by_cid, q_cid_map) conns_by_cid;
 
 
 struct transport_params {
@@ -94,6 +94,9 @@ extern const char * const conn_state_str[];
 #define MAX_TOK_LEN 512
 
 
+splay_head(cids_by_seq, cid);
+
+
 /// A QUIC connection.
 struct q_conn {
     splay_entry(q_conn) node_ipnp;
@@ -101,8 +104,8 @@ struct q_conn {
     sl_entry(q_conn) node_rx_ext; ///< For maintaining the external RX queue.
     sl_entry(q_conn) node_aq;     ///< For maintaining the accept queue.
 
-    sq_head(dcid_head, cid) dcid; ///< Destination connection IDs
-    sq_head(scid_head, cid) scid; ///< Source connection IDs
+    struct cids_by_seq dcids_by_seq; ///< Destination connection IDs.
+    struct cids_by_seq scids_by_seq; ///< Source connection IDs.
 
     uint32_t holds_sock : 1;  ///< Connection manages a warpcore socket.
     uint32_t is_clnt : 1;     ///< We are the client on this connection.
@@ -229,14 +232,15 @@ epoch_in(const struct q_conn * const c)
 
 
 extern int __attribute__((nonnull))
-ipnp_splay_cmp(const struct q_conn * const a, const struct q_conn * const b);
+conns_by_ipnp_cmp(const struct q_conn * const a, const struct q_conn * const b);
 
 extern int __attribute__((nonnull))
-cid_splay_cmp(const struct q_cid_map * const a,
-              const struct q_cid_map * const b);
+conns_by_cid_cmp(const struct q_cid_map * const a,
+                 const struct q_cid_map * const b);
 
-SPLAY_PROTOTYPE(ipnp_splay, q_conn, node_ipnp, ipnp_splay_cmp)
-SPLAY_PROTOTYPE(cid_splay, q_cid_map, node, cid_splay_cmp)
+SPLAY_PROTOTYPE(conns_by_ipnp, q_conn, node_ipnp, conns_by_ipnp_cmp)
+SPLAY_PROTOTYPE(conns_by_cid, q_cid_map, node, conns_by_cid_cmp)
+SPLAY_PROTOTYPE(cids_by_seq, cid, node, cids_by_seq_cmp)
 
 
 struct ooo_0rtt {
@@ -299,12 +303,24 @@ is_inf(const ev_tstamp t)
     })
 
 
-#define act_scid(c) sq_first(&(c)->scid)
-#define act_dcid(c) sq_first(&(c)->dcid)
+#define act_scid(c)                                                            \
+    __extension__({                                                            \
+        struct cid * const _scid = splay_min(cids_by_seq, &(c)->scids_by_seq); \
+        ensure(_scid, "have scid");                                            \
+        _scid;                                                                 \
+    })
 
 
-#define scid2str(c) act_scid(c) ? cid2str(act_scid(c)) : "0"
-#define dcid2str(c) act_dcid(c) ? cid2str(act_dcid(c)) : "0"
+#define act_dcid(c)                                                            \
+    __extension__({                                                            \
+        struct cid * const _dcid = splay_min(cids_by_seq, &(c)->dcids_by_seq); \
+        ensure(_dcid, "have dcid");                                            \
+        _dcid;                                                                 \
+    })
+
+
+#define scid2str(c) cid2str(act_scid(c))
+#define dcid2str(c) cid2str(act_dcid(c))
 
 
 #ifndef FUZZING

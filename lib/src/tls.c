@@ -544,15 +544,16 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             }
             uint16_t l;
             i = dec(&l, buf, len, i, sizeof(l), "%u");
-            if (unlikely(l != sizeof(act_dcid(c)->srt))) {
+            struct cid * const dcid = act_dcid(c);
+            if (unlikely(l != sizeof(dcid->srt))) {
                 err_close(c, ERR_TRANSPORT_PARAMETER, FRAM_TYPE_CRPT,
                           "illegal srt len %u", l);
                 return 1;
             }
-            memcpy(act_dcid(c)->srt, &buf[i], sizeof(act_dcid(c)->srt));
+            memcpy(dcid->srt, &buf[i], sizeof(dcid->srt));
             warn(INF, "\tstateless_reset_token = %s",
-                 hex2str(act_dcid(c)->srt, sizeof(act_dcid(c)->srt)));
-            i += sizeof(act_dcid(c)->srt);
+                 hex2str(dcid->srt, sizeof(dcid->srt)));
+            i += sizeof(dcid->srt);
             break;
 
         default:
@@ -648,8 +649,8 @@ void init_tp(struct q_conn * const c)
 
     if (!c->is_clnt) {
         // TODO: change in -13
-        enc_tp_buf(c, TP_STATELESS_RESET_TOKEN, act_scid(c)->srt,
-                   sizeof(act_scid(c)->srt));
+        struct cid * const scid = act_scid(c);
+        enc_tp_buf(c, TP_STATELESS_RESET_TOKEN, scid->srt, sizeof(scid->srt));
         if (c->odcid.len)
             enc_tp_buf(c, TP_ORIGINAL_CONNECTION_ID, c->odcid.id, c->odcid.len);
     }
@@ -911,9 +912,11 @@ void free_tls(struct q_conn * const c)
 
 void init_prot(struct q_conn * const c)
 {
+    struct cid * const scid = act_scid(c);
+    struct cid * const dcid = act_dcid(c);
     const ptls_iovec_t cid = {
-        .base = (uint8_t *)(c->is_clnt ? &act_dcid(c)->id : &act_scid(c)->id),
-        .len = c->is_clnt ? act_dcid(c)->len : act_scid(c)->len};
+        .base = (uint8_t *)(c->is_clnt ? &dcid->id : &scid->id),
+        .len = c->is_clnt ? dcid->len : scid->len};
     ptls_cipher_suite_t * cs = &CIPHER_SUITE;
     setup_initial_encryption(&c->pn_init.in, &c->pn_init.out, &cs, cid,
                              c->is_clnt);
@@ -1342,12 +1345,13 @@ void make_rtry_tok(struct q_conn * const c)
     ptls_hash_context_t * const hc = prep_hash_ctx(c, cs);
 
     // hash current scid
-    hc->update(hc, act_scid(c)->id, act_scid(c)->len);
+    struct cid * const scid = act_scid(c);
+    hc->update(hc, scid->id, scid->len);
     hc->final(hc, c->tok, PTLS_HASH_FINAL_MODE_FREE);
 
     // append scid to hashed token
-    memcpy(&c->tok[cs->hash->digest_size], act_scid(c)->id, act_scid(c)->len);
-    c->tok_len = (uint16_t)cs->hash->digest_size + act_scid(c)->len;
+    memcpy(&c->tok[cs->hash->digest_size], scid->id, scid->len);
+    c->tok_len = (uint16_t)cs->hash->digest_size + scid->len;
 }
 
 

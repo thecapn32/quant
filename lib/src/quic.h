@@ -52,13 +52,20 @@
 #define SRT_LEN 16
 
 struct cid {
-    sq_entry(cid) next;
+    splay_entry(cid) node;
     uint64_t seq;            ///< Connection ID sequence number
     uint8_t len;             ///< Connection ID length
     uint8_t id[MAX_CID_LEN]; ///< Connection ID
     uint8_t srt[SRT_LEN];    ///< Stateless Reset Token
     uint8_t _unused[5];
 };
+
+
+static inline int __attribute__((nonnull))
+cids_by_seq_cmp(const struct cid * const a, const struct cid * const b)
+{
+    return (a->seq > b->seq) - (a->seq < b->seq);
+}
 
 
 static inline void __attribute__((nonnull))

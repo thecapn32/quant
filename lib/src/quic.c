@@ -563,12 +563,12 @@ void q_cleanup(struct w_engine * const w)
 {
     // close all connections
     while (!splay_empty(&conns_by_cid)) {
-        struct q_cid_map * const cm = splay_min(cid_splay, &conns_by_cid);
+        struct q_cid_map * const cm = splay_min(conns_by_cid, &conns_by_cid);
         warn(DBG, "closing %s conn %s", conn_type(cm->c), cid2str(&cm->cid));
         q_close(cm->c);
     }
     while (!splay_empty(&conns_by_ipnp)) {
-        struct q_conn * const c = splay_min(ipnp_splay, &conns_by_ipnp);
+        struct q_conn * const c = splay_min(conns_by_ipnp, &conns_by_ipnp);
         warn(DBG, "closing %s conn %s", conn_type(c), scid2str(c));
         q_close(c);
     }
@@ -604,7 +604,7 @@ void q_cleanup(struct w_engine * const w)
 }
 
 
-char * q_cid(const struct q_conn * const c)
+char * q_cid(struct q_conn * const c)
 {
     return scid2str(c);
 }
