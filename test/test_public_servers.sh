@@ -156,8 +156,8 @@ function analyze {
                 clse[$1]=C #c
         fi
 
-        perl -n -e '/enc_new_cid_frame.*NEW_CONNECTION_ID/ and $n=1;
-                    /migration to scid/ && $n && exit 1;' "$log"
+        perl -n -e '/dec_new_cid_frame.*NEW_CONNECTION_ID/ and $n=1;
+                    /migration to dcid/ && $n && exit 1;' "$log"
         [ $? == 1 ] && mig[$1]=M
         [ ${fail[$1]} ] || rm -f "$log"
 
