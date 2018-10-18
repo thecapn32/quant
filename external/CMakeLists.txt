@@ -60,7 +60,7 @@ externalproject_add(picotls
   # UPDATE_COMMAND "" # XXX do not commit with this being empty
   GIT_REPOSITORY https://github.com/h2o/picotls.git
   # GIT_SHALLOW 1 # does not work together with GIT_TAG
-  GIT_TAG ab3cffb41f16c9078369d53ac2ee0504bec3dacd
+  GIT_TAG 6af0a58ca89723bcbb44c46fda6e878e32a28047
   CMAKE_ARGS
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
     -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
@@ -225,7 +225,7 @@ externalproject_add(picoquic
     -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}
     -DPICOTLS_INCLUDE_DIR=${CMAKE_CURRENT_BINARY_DIR}/include
     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-    -DCMAKE_C_FLAGS="-D_DEBUG"
+    # -DCMAKE_C_FLAGS="-D_DEBUG"
   INSTALL_COMMAND ""
   EXCLUDE_FROM_ALL 1
 )
