@@ -34,6 +34,7 @@ struct pn_space;
 struct q_conn;
 struct q_stream;
 struct w_iov;
+struct cid;
 
 
 #define FRAM_TYPE_PAD 0x00
@@ -167,3 +168,9 @@ extern uint16_t __attribute__((nonnull))
 enc_new_token_frame(struct q_conn * const c,
                     const struct w_iov * const v,
                     const uint16_t pos);
+
+extern uint16_t __attribute__((nonnull))
+enc_retire_cid_frame(struct q_conn * const c,
+                     const struct w_iov * const v,
+                     const uint16_t pos,
+                     struct cid * const cid);

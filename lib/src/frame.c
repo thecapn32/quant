@@ -793,8 +793,8 @@ dec_retire_cid_frame(struct q_conn * const c,
     warn(INF, FRAM_IN "RETIRE_CONNECTION_ID" NRM " seq=%" PRIu64, which.seq);
 #endif
 
-    struct cid * const dcid = splay_find(cids_by_seq, &c->dcids_by_seq, &which);
-    splay_remove(cids_by_seq, &c->dcids_by_seq, dcid);
+    struct cid * const scid = splay_find(cids_by_seq, &c->scids_by_seq, &which);
+    free_scid(c, scid);
 
     // rx of RETIRE_CONNECTION_ID means we should send more
     c->tx_ncid = true;
@@ -1405,6 +1405,27 @@ uint16_t enc_new_token_frame(struct q_conn * const c,
 
     warn(INF, FRAM_OUT "NEW_TOKEN" NRM " len=%u tok=%s", c->tok_len,
          hex2str(c->tok, c->tok_len));
+
+    return i;
+}
+
+
+uint16_t enc_retire_cid_frame(struct q_conn * const c,
+                              const struct w_iov * const v,
+                              const uint16_t pos,
+                              struct cid * const scid)
+{
+    bit_set(meta(v).frames, FRAM_TYPE_RTIR_CID);
+
+    const uint8_t type = FRAM_TYPE_RTIR_CID;
+    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
+    i = enc(v->buf, v->len, i, &scid->seq, 0, 0, "%" PRIu64);
+
+#ifndef FUZZING
+    warn(INF, FRAM_OUT "RETIRE_CONNECTION_ID" NRM " seq=%" PRIu64, scid->seq);
+#endif
+
+    c->tx_retire_cid = false;
 
     return i;
 }

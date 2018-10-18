@@ -198,6 +198,7 @@ static void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c)
     warn(NTE, "migration to dcid %s for %s conn (was %s)", cid2str(dcid),
          conn_type(c), cid2str(c->dcid));
 #endif
+    c->tx_retire_cid = c->dcid->retired = true;
     c->dcid = dcid;
 
     // splay_foreach (dcid, cids_by_seq, &c->dcids_by_seq)
@@ -371,15 +372,16 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
     if (s)
         do_stream_id_fc(s);
 
-    // send a NEW_CONNECTION_ID frame if the peer doesn't have one remaining
-    c->tx_ncid = (splay_count(&c->scids_by_seq) < 2);
-
-    if (c->tp_out.disable_migration == false && c->is_clnt) {
-        const struct cid * const dcid =
-            splay_max(cids_by_seq, &c->dcids_by_seq);
-        // if higher-numbered destination CIDs are available, switch to next
-        if (dcid && dcid->seq > c->dcid->seq)
-            use_next_dcid(c);
+    if (c->tp_out.disable_migration == false) {
+        if (c->is_clnt) {
+            const struct cid * const dcid =
+                splay_max(cids_by_seq, &c->dcids_by_seq);
+            // if higher-numbered destination CIDs are available, switch to next
+            if (dcid && dcid->seq > c->dcid->seq)
+                use_next_dcid(c);
+        } else
+            // send new CID if the client doesn't have one remaining
+            c->tx_ncid = (splay_count(&c->scids_by_seq) < 2);
     }
 }
 
@@ -1333,6 +1335,24 @@ struct q_conn * new_conn(struct w_engine * const w,
 }
 
 
+void free_scid(struct q_conn * const c, struct cid * const id)
+{
+    splay_remove(cids_by_seq, &c->scids_by_seq, id);
+    splay_remove(cids_by_id, &c->scids_by_id, id);
+    const struct q_cid_map which = {.cid = *id};
+    struct q_cid_map * const cm = splay_find(conns_by_id, &conns_by_id, &which);
+    splay_remove(conns_by_id, &conns_by_id, cm);
+    free(cm);
+}
+
+
+void free_dcid(struct q_conn * const c, struct cid * const id)
+{
+    splay_remove(cids_by_seq, &c->dcids_by_seq, id);
+    free(id);
+}
+
+
 void free_conn(struct q_conn * const c)
 {
     // exit any active API call on the connection
@@ -1370,20 +1390,13 @@ void free_conn(struct q_conn * const c)
     splay_remove(conns_by_ipnp, &conns_by_ipnp, c);
 
     while (!splay_empty(&c->scids_by_seq)) {
-        struct cid * const id = splay_min(cids_by_seq, &(c)->scids_by_seq);
-        ensure(id, "have scid");
-        splay_remove(cids_by_seq, &c->scids_by_seq, id);
-        const struct q_cid_map which = {.cid = *id};
-        struct q_cid_map * const cm =
-            splay_find(conns_by_id, &conns_by_id, &which);
-        splay_remove(conns_by_id, &conns_by_id, cm);
-        free(cm);
+        struct cid * const id = splay_min(cids_by_seq, &c->scids_by_seq);
+        free_scid(c, id);
     }
 
     while (!splay_empty(&c->dcids_by_seq)) {
-        struct cid * const id = splay_min(cids_by_seq, &(c)->dcids_by_seq);
-        splay_remove(cids_by_seq, &c->dcids_by_seq, id);
-        free(id);
+        struct cid * const id = splay_min(cids_by_seq, &c->dcids_by_seq);
+        free_dcid(c, id);
     }
 
     if (c->in_c_ready)

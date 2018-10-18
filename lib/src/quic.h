@@ -58,7 +58,9 @@ struct cid {
     uint8_t len;             ///< Connection ID length
     uint8_t id[MAX_CID_LEN]; ///< Connection ID
     uint8_t srt[SRT_LEN];    ///< Stateless Reset Token
-    uint8_t _unused[5];
+    uint8_t retired : 1;
+    uint8_t : 7;
+    uint8_t _unused[4];
 };
 
 

@@ -368,6 +368,19 @@ bool enc_pkt(struct q_stream * const s,
             c->tx_path_resp = false;
         }
 
+        if (c->tx_retire_cid) {
+            struct cid * rcid = splay_min(cids_by_seq, &c->dcids_by_seq);
+            while (rcid && rcid->seq < c->dcid->seq) {
+                struct cid * const next =
+                    splay_next(cids_by_seq, &c->dcids_by_seq, rcid);
+                if (rcid->retired) {
+                    i = enc_retire_cid_frame(c, v, i, rcid);
+                    free_dcid(c, rcid);
+                }
+                rcid = next;
+            }
+        }
+
         if (c->tx_path_chlg)
             i = enc_path_challenge_frame(c, v, i);
 

@@ -129,11 +129,12 @@ struct q_conn {
     uint32_t tx_vneg : 1;           ///< We need to send a vers neg response.
     uint32_t have_new_data : 1;     ///< New stream data was enqueued.
     uint32_t in_c_ready : 1;        ///< Connection is listed in c_ready.
+    uint32_t tx_retire_cid : 1;     ///< Send RETIRE_CONNECTION_ID.
 #ifndef SPINBIT
-    uint32_t : 15;
+    uint32_t : 14;
 #else
     uint32_t next_spin : 1; ///< Spin value to set on next packet sent.
-    uint32_t : 14;
+    uint32_t : 13;
 #endif
 
     uint16_t sport; ///< Local port (in network byte-order).
@@ -398,6 +399,12 @@ extern void __attribute__((nonnull))
 add_dcid(struct q_conn * const c, const struct cid * const id);
 
 extern void __attribute__((nonnull)) do_conn_fc(struct q_conn * const c);
+
+extern void __attribute__((nonnull))
+free_scid(struct q_conn * const c, struct cid * const id);
+
+extern void __attribute__((nonnull))
+free_dcid(struct q_conn * const c, struct cid * const id);
 
 #ifdef FUZZING
 extern void __attribute__((nonnull)) rx_pkts(struct w_iov_sq * const i,
