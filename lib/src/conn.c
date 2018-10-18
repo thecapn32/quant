@@ -183,8 +183,8 @@ switch_scid(struct q_conn * const c, const struct cid * const id)
 #endif
     c->scid = scid;
 
-    splay_foreach (scid, cids_by_seq, &c->scids_by_seq)
-        warn(ERR, "%s", cid2str(scid));
+    // splay_foreach (scid, cids_by_seq, &c->scids_by_seq)
+    //     warn(ERR, "%s", cid2str(scid));
 }
 
 
@@ -200,8 +200,8 @@ static void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c)
 #endif
     c->dcid = dcid;
 
-    splay_foreach (dcid, cids_by_seq, &c->dcids_by_seq)
-        warn(ERR, "%s", cid2str(dcid));
+    // splay_foreach (dcid, cids_by_seq, &c->dcids_by_seq)
+    //     warn(ERR, "%s", cid2str(dcid));
 }
 
 
@@ -503,7 +503,10 @@ void tx_w(struct ev_loop * const l __attribute__((unused)),
 
 void update_act_scid(struct q_conn * const c, const struct cid * const id)
 {
-    warn(ERR, "updating scid %s to %s", cid2str(c->scid), cid2str(id));
+#ifndef FUZZING
+    warn(NTE, "hshk switch to scid %s for %s conn (was %s)", cid2str(id),
+         conn_type(c), cid2str(c->scid));
+#endif
     const struct q_cid_map which = {.cid = *c->scid};
     struct q_cid_map * cm = splay_find(conns_by_id, &conns_by_id, &which);
     splay_remove(conns_by_id, &conns_by_id, cm);
@@ -547,7 +550,10 @@ void add_dcid(struct q_conn * const c, const struct cid * const id)
         if (c->dcid == 0)
             c->dcid = dcid;
     } else {
-        // warn(ERR, "updating dcid %s to %s", cid2str(dcid), cid2str(id));
+#ifndef FUZZING
+        warn(NTE, "hshk switch to dcid %s for %s conn (was %s)", cid2str(id),
+             conn_type(c), cid2str(c->dcid));
+#endif
         cid_cpy(dcid, id);
     }
 
@@ -755,10 +761,6 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             // this is a new connection; server picks a new random cid
             struct cid new_scid = {.len = SERV_SCID_LEN};
             arc4random_buf(new_scid.id, new_scid.len);
-#ifndef FUZZING
-            warn(NTE, "hshk switch to scid %s for %s conn (was %s)",
-                 cid2str(&new_scid), conn_type(c), cid2str(c->scid));
-#endif
             update_act_scid(c, &new_scid);
 
         } else {
@@ -989,14 +991,8 @@ rx_pkts(struct w_iov_sq * const i,
                         q_free_iov(v);
                         continue;
                     }
-                    if (c->state == conn_opng) {
-#ifndef FUZZING
-                        warn(NTE, "hshk switch to dcid %s for %s conn (was %s)",
-                             cid2str(&meta(v).hdr.scid), conn_type(c),
-                             cid2str(c->dcid));
-#endif
+                    if (c->state == conn_opng)
                         add_dcid(c, &meta(v).hdr.scid);
-                    }
                 }
             }
 
