@@ -42,6 +42,7 @@ declare -A servers=(
         [pandora]=pandora.cm.in.tum.de:4433:4434:/index.html
         [picoquic]=test.privateoctopus.com:4433:4434:/10000
         [quant]=quant.eggert.org:4433:4434:/10000
+        [quiche]=quic.tech:4433:4434:/index.html
         [quicker]=quicker.edm.uhasselt.be:4433:4434:/index.html
         [quicly]=kazuhooku.com:4433:4434:/10000.txt
         [quicr]=ralith.com:4433:4434:/index.html
@@ -135,7 +136,7 @@ function analyze {
                 vneg[$1]=v
         fi
 
-        perl -n -e '/TX len=.*Short/ and $x=1;
+        perl -n -e '/TX.*Short kyph/ and $x=1;
                     /RX len=.*Short/ && $x && exit 1;' "$log"
         [ $? == 1 ] && hshk[$1]=H
 
