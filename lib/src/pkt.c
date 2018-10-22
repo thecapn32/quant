@@ -31,7 +31,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <ev.h>
 #include <picotls.h>
+#include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
@@ -47,14 +49,13 @@
 
 
 #if !defined(NDEBUG) && !defined(FUZZING)
-static const char * __attribute__((nonnull))
-pkt_type_str(const struct w_iov * const v)
+static const char * __attribute__((const))
+pkt_type_str(const uint8_t flags, const uint8_t * const vers)
 {
-    if (is_set(F_LONG_HDR, *v->buf)) {
-        if (v->buf[1] == 0 && v->buf[2] == 0 && v->buf[3] == 0 &&
-            v->buf[4] == 0)
+    if (is_set(F_LONG_HDR, flags)) {
+        if (vers[0] == 0 && vers[1] == 0 && vers[2] == 0 && vers[3] == 0)
             return "Version Negotiation";
-        switch (pkt_type(*v->buf)) {
+        switch (pkt_type(flags)) {
         case F_LH_INIT:
             return "Initial";
         case F_LH_RTRY:
@@ -64,11 +65,14 @@ pkt_type_str(const struct w_iov * const v)
         case F_LH_0RTT:
             return "0-RTT Protected";
         }
-    } else if (is_set(F_SH, *v->buf & F_SH_MASK))
+    } else if (is_set(F_SH, flags & F_SH_MASK))
         return "Short";
     return RED "Unknown" NRM;
 }
 
+
+// local version of cid2str that is just hex2str (omits the seq)
+#define c2s(i) hex2str((i)->id, (i)->len)
 
 void log_pkt(const char * const dir,
              const struct w_iov * const v,
@@ -76,49 +80,111 @@ void log_pkt(const char * const dir,
              const uint8_t * const tok,
              const uint16_t tok_len)
 {
-    const char * col_dir = *dir == 'R' ? BLD BLU : BLD GRN;
-    const char * col_nr = *dir == 'R' ? BLU : GRN;
-
-    // XXX: on TX, v->len is not yet final/correct, so don't print it
-    if (is_set(F_LONG_HDR, *v->buf)) {
-        if (meta(v).hdr.vers == 0)
+    if (*dir == 'R') {
+        if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
+            if (meta(v).hdr.vers == 0)
+                twarn(NTE,
+                      BLD BLU "RX" NRM " len=%u 0x%02x=" BLU "%s " NRM
+                              "vers=0x%08x dcid=%s scid=%s",
+                      v->len, meta(v).hdr.flags,
+                      pkt_type_str(meta(v).hdr.flags,
+                                   (uint8_t *)&meta(v).hdr.vers),
+                      meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
+                      c2s(&meta(v).hdr.scid));
+            else if (meta(v).hdr.type == F_LH_RTRY)
+                twarn(NTE,
+                      BLD BLU "RX" NRM " len=%u 0x%02x=" BLU "%s " NRM
+                              "vers=0x%08x dcid=%s scid=%s odcid=%s tok=%s",
+                      v->len, meta(v).hdr.flags,
+                      pkt_type_str(meta(v).hdr.flags,
+                                   (uint8_t *)&meta(v).hdr.vers),
+                      meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
+                      c2s(&meta(v).hdr.scid), c2s(odcid),
+                      hex2str(tok, tok_len));
+            else if (meta(v).hdr.type == F_LH_INIT)
+                twarn(NTE,
+                      BLD BLU
+                      "RX" NRM " len=%u 0x%02x=" BLU "%s " NRM
+                      "vers=0x%08x dcid=%s scid=%s tok=%s len=%u nr=" BLU
+                      "%" PRIu64,
+                      v->len, meta(v).hdr.flags,
+                      pkt_type_str(meta(v).hdr.flags,
+                                   (uint8_t *)&meta(v).hdr.vers),
+                      meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
+                      c2s(&meta(v).hdr.scid), hex2str(tok, tok_len),
+                      meta(v).hdr.len, meta(v).hdr.nr);
+            else
+                twarn(NTE,
+                      BLD BLU "RX" NRM " len=%u 0x%02x=" BLU "%s " NRM
+                              "vers=0x%08x dcid=%s scid=%s len=%u nr=" BLU
+                              "%" PRIu64,
+                      v->len, meta(v).hdr.flags,
+                      pkt_type_str(meta(v).hdr.flags,
+                                   (uint8_t *)&meta(v).hdr.vers),
+                      meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
+                      c2s(&meta(v).hdr.scid), meta(v).hdr.len, meta(v).hdr.nr);
+        } else
             twarn(NTE,
-                  BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM
-                      "vers=0x%08x dcid=%s scid=%s",
-                  col_dir, dir, *dir == 'R' ? v->len : 0, *v->buf, col_dir,
-                  pkt_type_str(v), meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
-                  cid2str(&meta(v).hdr.scid));
-        else if (meta(v).hdr.type == F_LH_RTRY)
-            twarn(NTE,
-                  BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM
-                      "vers=0x%08x dcid=%s scid=%s odcid=%s tok=%s",
-                  col_dir, dir, *dir == 'R' ? v->len : 0, *v->buf, col_dir,
-                  pkt_type_str(v), meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
-                  cid2str(&meta(v).hdr.scid), cid2str(odcid),
-                  hex2str(tok, tok_len));
-        else if (meta(v).hdr.type == F_LH_INIT)
-            twarn(NTE,
-                  BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM
-                      "vers=0x%08x dcid=%s scid=%s tok=%s len=%u nr=%s%" PRIu64,
-                  col_dir, dir, *dir == 'R' ? v->len : 0, *v->buf, col_dir,
-                  pkt_type_str(v), meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
-                  cid2str(&meta(v).hdr.scid), hex2str(tok, tok_len),
-                  meta(v).hdr.len, col_nr, meta(v).hdr.nr);
-        else
-            twarn(NTE,
-                  BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM
-                      "vers=0x%08x dcid=%s scid=%s len=%u nr=%s%" PRIu64,
-                  col_dir, dir, *dir == 'R' ? v->len : 0, *v->buf, col_dir,
-                  pkt_type_str(v), meta(v).hdr.vers, cid2str(&meta(v).hdr.dcid),
-                  cid2str(&meta(v).hdr.scid), meta(v).hdr.len, col_nr,
+                  BLD BLU "RX" NRM " len=%u 0x%02x=" BLU "%s " NRM
+                          "kyph=%u dcid=%s nr=" BLU "%" PRIu64,
+                  v->len, meta(v).hdr.flags,
+                  pkt_type_str(meta(v).hdr.flags, (uint8_t *)&meta(v).hdr.vers),
+                  is_set(F_SH_KYPH, meta(v).hdr.flags), c2s(&meta(v).hdr.dcid),
                   meta(v).hdr.nr);
-    } else
-        twarn(NTE,
-              BLD "%s%s" NRM " len=%u 0x%02x=%s%s " NRM "dcid=%s nr=%s%" PRIu64,
-              col_dir, dir, *dir == 'R' ? v->len : 0, *v->buf, col_dir,
-              pkt_type_str(v),
-              hex2str(&meta(v).hdr.dcid.id, meta(v).hdr.dcid.len), col_nr,
-              meta(v).hdr.nr);
+
+    } else {
+        // on TX, v->len is not yet final/correct, so don't print it
+        if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
+            if (meta(v).hdr.vers == 0)
+                twarn(NTE,
+                      BLD GRN "TX" NRM " 0x%02x=" GRN "%s " NRM
+                              "vers=0x%08x dcid=%s scid=%s",
+                      meta(v).hdr.flags,
+                      pkt_type_str(meta(v).hdr.flags,
+                                   (uint8_t *)&meta(v).hdr.vers),
+                      meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
+                      c2s(&meta(v).hdr.scid));
+            else if (meta(v).hdr.type == F_LH_RTRY)
+                twarn(NTE,
+                      BLD GRN "TX" NRM " 0x%02x=" GRN "%s " NRM
+                              "vers=0x%08x dcid=%s scid=%s odcid=%s tok=%s",
+                      meta(v).hdr.flags,
+                      pkt_type_str(meta(v).hdr.flags,
+                                   (uint8_t *)&meta(v).hdr.vers),
+                      meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
+                      c2s(&meta(v).hdr.scid), c2s(odcid),
+                      hex2str(tok, tok_len));
+            else if (meta(v).hdr.type == F_LH_INIT)
+                twarn(NTE,
+                      BLD GRN
+                      "TX" NRM " 0x%02x=" GRN "%s " NRM
+                      "vers=0x%08x dcid=%s scid=%s tok=%s len=%u nr=" GRN
+                      "%" PRIu64,
+                      meta(v).hdr.flags,
+                      pkt_type_str(meta(v).hdr.flags,
+                                   (uint8_t *)&meta(v).hdr.vers),
+                      meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
+                      c2s(&meta(v).hdr.scid), hex2str(tok, tok_len),
+                      meta(v).hdr.len, meta(v).hdr.nr);
+            else
+                twarn(NTE,
+                      BLD GRN "TX" NRM " 0x%02x=" GRN "%s " NRM
+                              "vers=0x%08x dcid=%s scid=%s len=%u nr=" GRN
+                              "%" PRIu64,
+                      meta(v).hdr.flags,
+                      pkt_type_str(meta(v).hdr.flags,
+                                   (uint8_t *)&meta(v).hdr.vers),
+                      meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
+                      c2s(&meta(v).hdr.scid), meta(v).hdr.len, meta(v).hdr.nr);
+        } else
+            twarn(NTE,
+                  BLD GRN "TX" NRM " 0x%02x=" GRN "%s " NRM
+                          "kyph=%u dcid=%s nr=" GRN "%" PRIu64,
+                  meta(v).hdr.flags,
+                  pkt_type_str(meta(v).hdr.flags, (uint8_t *)&meta(v).hdr.vers),
+                  is_set(F_SH_KYPH, meta(v).hdr.flags), c2s(&meta(v).hdr.dcid),
+                  meta(v).hdr.nr);
+    }
 }
 #endif
 
@@ -177,10 +243,13 @@ needed_pkt_nr_len(struct pn_space * const pn, const uint64_t n)
 
 
 static uint16_t __attribute__((nonnull))
-enc_lh_cids(struct q_conn * const c, struct w_iov * const v, const uint16_t pos)
+enc_lh_cids(const struct cid * const dcid,
+            const struct cid * const scid,
+            struct w_iov * const v,
+            const uint16_t pos)
 {
-    cid_cpy(&meta(v).hdr.dcid, c->dcid);
-    cid_cpy(&meta(v).hdr.scid, c->scid);
+    cid_cpy(&meta(v).hdr.dcid, dcid);
+    cid_cpy(&meta(v).hdr.scid, scid);
     const uint8_t cil =
         (uint8_t)((meta(v).hdr.dcid.len ? meta(v).hdr.dcid.len - 3 : 0) << 4) |
         (uint8_t)(meta(v).hdr.scid.len ? meta(v).hdr.scid.len - 3 : 0);
@@ -204,30 +273,11 @@ bool enc_pkt(struct q_stream * const s,
     adj_iov_to_start(v);
 
     struct q_conn * const c = s->c;
-    uint16_t i = 0, nr_pos = 0, len_pos = 0;
-    uint8_t nr_len = 0;
+    uint16_t i = 0, len_pos = 0;
 
     const epoch_t epoch = strm_epoch(s);
     struct pn_space * const pn = pn_for_epoch(c, epoch);
     meta(v).pn = pn;
-
-    if (c->tx_vneg) {
-        warn(INF, "sending vers neg serv response");
-        meta(v).hdr.type = (uint8_t)w_rand();
-        meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
-        i = enc(v->buf, v->len, 0, &meta(v).hdr.flags,
-                sizeof(meta(v).hdr.flags), 0, "0x%02x");
-        i = enc(v->buf, v->len, i, &meta(v).hdr.vers, sizeof(meta(v).hdr.vers),
-                0, "0x%08x");
-        i = enc_lh_cids(c, v, i);
-        for (uint8_t j = 0; j < ok_vers_len; j++)
-            if (!is_force_neg_vers(ok_vers[j]))
-                i = enc(v->buf, v->len, i, &ok_vers[j], sizeof(ok_vers[j]), 0,
-                        "0x%08x");
-        meta(v).hdr.hdr_len = v->len = i;
-        log_pkt("TX", v, 0, 0, 0);
-        goto tx;
-    }
 
     if (c->tx_rtry)
         meta(v).hdr.nr = 0;
@@ -267,9 +317,10 @@ bool enc_pkt(struct q_stream * const s,
         meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
         break;
     case ep_data:
-        if (pn == &c->pn_data.pn)
+        if (pn == &c->pn_data.pn) {
             meta(v).hdr.type = meta(v).hdr.flags = F_SH;
-        else {
+            meta(v).hdr.flags |= c->pn_data.out_kyph ? F_SH_KYPH : 0;
+        } else {
             meta(v).hdr.type = F_LH_HSHK;
             meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
         }
@@ -302,7 +353,7 @@ bool enc_pkt(struct q_stream * const s,
     if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
         meta(v).hdr.vers = c->vers;
         i = enc(v->buf, v->len, i, &c->vers, sizeof(c->vers), 0, "0x%08x");
-        i = enc_lh_cids(c, v, i);
+        i = enc_lh_cids(c->dcid, c->scid, v, i);
 
         if (meta(v).hdr.type == F_LH_RTRY) {
             const uint8_t odcil = (uint8_t)(arc4random_uniform(0xf) << 4) |
@@ -337,9 +388,10 @@ bool enc_pkt(struct q_stream * const s,
 
 
     if (meta(v).hdr.type != F_LH_RTRY) {
-        nr_pos = i;
-        nr_len = needed_pkt_nr_len(pn, meta(v).hdr.nr);
-        i = enc_pnr(v->buf, v->len, i, &meta(v).hdr.nr, nr_len, GRN "%u" NRM);
+        meta(v).pkt_nr_pos = i;
+        meta(v).pkt_nr_len = needed_pkt_nr_len(pn, meta(v).hdr.nr);
+        i = enc_pnr(v->buf, v->len, i, &meta(v).hdr.nr, meta(v).pkt_nr_len,
+                    GRN "%u" NRM);
     }
 
     meta(v).hdr.hdr_len = i;
@@ -438,7 +490,7 @@ bool enc_pkt(struct q_stream * const s,
 
 tx:
     // for LH pkts, now encode the length
-    meta(v).hdr.len = i + AEAD_LEN - nr_pos;
+    meta(v).hdr.len = i + AEAD_LEN - meta(v).pkt_nr_pos;
     if (len_pos) {
         const uint64_t len = meta(v).hdr.len;
         enc(v->buf, v->len, len_pos, &len, 0, 2, "%" PRIu64);
@@ -456,7 +508,7 @@ tx:
         memcpy(x->buf, v->buf, v->len); // copy data
         x->len = v->len;
     } else {
-        x->len = enc_aead(c, v, x, nr_pos);
+        x->len = enc_aead(c, v, x);
         if (unlikely(x->len == 0)) {
             adj_iov_to_start(v);
             return false;
@@ -478,6 +530,7 @@ tx:
 
     adj_iov_to_data(v);
     on_pkt_sent(s, v);
+    maybe_flip_keys(c, true);
     return true;
 }
 
@@ -501,18 +554,23 @@ tx:
     })
 
 
-bool dec_pkt_hdr_beginning(const struct w_iov * const v,
+bool dec_pkt_hdr_beginning(struct w_iov * const xv,
+                           struct w_iov * const v,
                            const bool is_clnt,
                            struct cid * const odcid,
                            uint8_t * const tok,
                            uint16_t * const tok_len)
 
 {
-    dec_chk(&meta(v).hdr.flags, v->buf, v->len, 0, 1, "0x%02x");
-    meta(v).hdr.type = pkt_type(*v->buf);
+    // remember original datagram len (unless already set during decoalescing)
+    if (likely(xv->user_data == 0))
+        xv->user_data = xv->len;
+
+    dec_chk(&meta(v).hdr.flags, xv->buf, xv->len, 0, 1, "0x%02x");
+    meta(v).hdr.type = pkt_type(*xv->buf);
 
     if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
-        dec_chk(&meta(v).hdr.vers, v->buf, v->len, 1, 4, "0x%08x");
+        dec_chk(&meta(v).hdr.vers, xv->buf, xv->len, 1, 4, "0x%08x");
 
         // check if the packet type/version combo makes sense
         if (meta(v).hdr.vers &&
@@ -525,13 +583,13 @@ bool dec_pkt_hdr_beginning(const struct w_iov * const v,
 
 
         meta(v).hdr.hdr_len =
-            dec_chk(&meta(v).hdr.dcid.len, v->buf, v->len, 5, 1, "0x%02x");
+            dec_chk(&meta(v).hdr.dcid.len, xv->buf, xv->len, 5, 1, "0x%02x");
 
         meta(v).hdr.dcid.len >>= 4;
         if (meta(v).hdr.dcid.len) {
             meta(v).hdr.dcid.len += 3;
-            meta(v).hdr.hdr_len = dec_chk_buf(&meta(v).hdr.dcid.id, v->buf,
-                                              v->len, 6, meta(v).hdr.dcid.len);
+            meta(v).hdr.hdr_len = dec_chk_buf(&meta(v).hdr.dcid.id, xv->buf,
+                                              xv->len, 6, meta(v).hdr.dcid.len);
         }
 
         // if this is a CI, the dcid len must be >= 8 bytes
@@ -543,32 +601,35 @@ bool dec_pkt_hdr_beginning(const struct w_iov * const v,
             return false;
         }
 
-        dec(&meta(v).hdr.scid.len, v->buf, v->len, 5, 1, "0x%02x");
+        dec(&meta(v).hdr.scid.len, xv->buf, xv->len, 5, 1, "0x%02x");
         meta(v).hdr.scid.len &= 0x0f;
         if (meta(v).hdr.scid.len) {
             meta(v).hdr.scid.len += 3;
             meta(v).hdr.hdr_len =
-                dec_chk_buf(&meta(v).hdr.scid.id, v->buf, v->len,
+                dec_chk_buf(&meta(v).hdr.scid.id, xv->buf, xv->len,
                             meta(v).hdr.hdr_len, meta(v).hdr.scid.len);
         }
 
-        if (meta(v).hdr.vers == 0)
-            // version negotiation packet
+        if (meta(v).hdr.vers == 0) {
+            // version negotiation packet - copy raw
+            memcpy(v->buf, xv->buf, xv->len);
+            v->len = xv->len;
             return true;
+        }
 
         if (meta(v).hdr.type == F_LH_RTRY) {
             // decode odcid
-            meta(v).hdr.hdr_len = dec(&odcid->len, v->buf, v->len,
+            meta(v).hdr.hdr_len = dec(&odcid->len, xv->buf, xv->len,
                                       meta(v).hdr.hdr_len, 1, "0x%02x");
             odcid->len = (odcid->len & 0x0f) + 3;
-            meta(v).hdr.hdr_len = dec_chk_buf(&odcid->id, v->buf, v->len,
+            meta(v).hdr.hdr_len = dec_chk_buf(&odcid->id, xv->buf, xv->len,
                                               meta(v).hdr.hdr_len, odcid->len);
         }
 
         if (meta(v).hdr.type == F_LH_INIT) {
             // decode token
             uint64_t tl = 0;
-            meta(v).hdr.hdr_len = dec_chk(&tl, v->buf, v->len,
+            meta(v).hdr.hdr_len = dec_chk(&tl, xv->buf, xv->len,
                                           meta(v).hdr.hdr_len, 0, "%" PRIu64);
             *tok_len = (uint16_t)tl;
             if (is_clnt && *tok_len) {
@@ -579,30 +640,30 @@ bool dec_pkt_hdr_beginning(const struct w_iov * const v,
                 return false;
             }
         } else if (meta(v).hdr.type == F_LH_RTRY)
-            *tok_len = v->len - meta(v).hdr.hdr_len;
+            *tok_len = xv->len - meta(v).hdr.hdr_len;
 
         if (*tok_len) {
-            if (unlikely(*tok_len + meta(v).hdr.hdr_len > v->len)) {
+            if (unlikely(*tok_len + meta(v).hdr.hdr_len > xv->len)) {
                 // corrupt token len
 #ifndef FUZZING
                 warn(DBG, "tok_len %u invalid", *tok_len);
 #endif
                 return false;
             }
-            meta(v).hdr.hdr_len =
-                dec_chk_buf(tok, v->buf, v->len, meta(v).hdr.hdr_len, *tok_len);
+            meta(v).hdr.hdr_len = dec_chk_buf(tok, xv->buf, xv->len,
+                                              meta(v).hdr.hdr_len, *tok_len);
         }
 
         if (meta(v).hdr.type != F_LH_RTRY) {
             uint64_t len = 0;
             meta(v).hdr.hdr_len =
-                dec(&len, v->buf, v->len, meta(v).hdr.hdr_len, 0, "%" PRIu64);
+                dec(&len, xv->buf, xv->len, meta(v).hdr.hdr_len, 0, "%" PRIu64);
             if (unlikely(meta(v).hdr.hdr_len == UINT16_MAX))
                 return false;
             meta(v).hdr.len = (uint16_t)len;
 
             // the len cannot be larger than the rx'ed pkt
-            if (unlikely(meta(v).hdr.len + meta(v).hdr.hdr_len > v->len)) {
+            if (unlikely(meta(v).hdr.len + meta(v).hdr.hdr_len > xv->len)) {
 #ifndef FUZZING
                 warn(DBG, "len %u invalid", meta(v).hdr.len);
 #endif
@@ -615,83 +676,200 @@ bool dec_pkt_hdr_beginning(const struct w_iov * const v,
 
     // this logic depends on picking a SCID with a known length during handshake
     meta(v).hdr.dcid.len = (is_clnt ? CLNT_SCID_LEN : SERV_SCID_LEN);
-    meta(v).hdr.hdr_len = dec_chk_buf(&meta(v).hdr.dcid.id, v->buf, v->len, 1,
+    meta(v).hdr.hdr_len = dec_chk_buf(&meta(v).hdr.dcid.id, xv->buf, xv->len, 1,
                                       meta(v).hdr.dcid.len);
     return true;
 }
 
 
-bool dec_pkt_hdr_remainder(struct w_iov * const v,
-                           struct q_conn * const c,
-                           struct w_iov_sq * const i)
+static bool dec_pne(struct w_iov * const xv,
+                    struct w_iov * const v,
+                    struct q_conn * const c,
+                    const struct cipher_ctx * const ctx,
+                    uint8_t pn_enc[MAX_PKT_NR_LEN])
 {
     // meta(v).hdr.hdr_len holds the offset of the pnr field
-    const uint16_t nr_pos = meta(v).hdr.hdr_len;
-    uint16_t off = nr_pos + 4;
-    const uint16_t len = is_set(F_LONG_HDR, meta(v).hdr.flags)
-                             ? nr_pos + meta(v).hdr.len + AEAD_LEN - 1
-                             : v->len;
+    meta(v).pkt_nr_pos = meta(v).hdr.hdr_len;
+    uint16_t off = meta(v).pkt_nr_pos + MAX_PKT_NR_LEN;
+    const uint16_t len =
+        is_set(F_LONG_HDR, meta(v).hdr.flags)
+            ? meta(v).pkt_nr_pos + meta(v).hdr.len + AEAD_LEN - 1
+            : xv->len;
     if (off + AEAD_LEN > len)
         off = len - AEAD_LEN;
 
-    const struct cipher_ctx * const ctx =
-        which_cipher_ctx(c, meta(v).hdr.type, true);
-    if (unlikely(!ctx->pne)) {
-        // this packet requires a higher protection level than we have available
-#ifndef FUZZING
-        warn(DBG, "don't have PNE keys");
-#endif
-        return false;
-    }
-
-    ptls_cipher_init(ctx->pne, &v->buf[off]);
-    uint8_t enc_nr[4];
-    ptls_cipher_encrypt(ctx->pne, enc_nr, &v->buf[nr_pos], sizeof(enc_nr));
+    ptls_cipher_init(ctx->pne, &xv->buf[off]);
+    uint8_t dec_nr[MAX_PKT_NR_LEN];
+    ptls_cipher_encrypt(ctx->pne, dec_nr, &xv->buf[meta(v).pkt_nr_pos],
+                        sizeof(dec_nr));
 
     struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
     const uint64_t next = diet_max(&pn->recv) + 1;
     uint64_t nr = next;
-    const uint16_t nr_len = dec_pnr(&nr, enc_nr, sizeof(enc_nr), 0, "%u");
-    if (unlikely(nr_len == UINT16_MAX)) {
+    meta(v).pkt_nr_len =
+        (uint8_t)dec_pnr(&nr, dec_nr, sizeof(dec_nr), 0, "%08x");
+    if (unlikely(meta(v).pkt_nr_len > MAX_PKT_NR_LEN)) {
 #ifndef FUZZING
         warn(DBG, "can't undo PNE");
 #endif
         return false;
     }
 
-    memcpy(&v->buf[nr_pos], &enc_nr, nr_len);
+    // save the raw pkt nr data, in case we need to retry
+    memcpy(pn_enc, &xv->buf[meta(v).pkt_nr_pos], MAX_PKT_NR_LEN);
 
-#ifndef FUZZING
-    warn(DBG, "dec PNE over [%u..%u] w/off %u", nr_pos, nr_pos + nr_len - 1,
-         off);
+    // now overwrite with decoded data
+    memcpy(&xv->buf[meta(v).pkt_nr_pos], &dec_nr, meta(v).pkt_nr_len);
+
+#ifdef DEBUG_MARSHALL
+    warn(DBG, "dec PNE over [%u..%u] w/off %u", meta(v).pkt_nr_pos,
+         meta(v).pkt_nr_pos + meta(v).pkt_nr_len - 1, off);
 #endif
 
     const uint8_t lens[] = {0xff, 7, 14, 0xff, 30};
-    const uint64_t alt = nr + (UINT64_C(1) << lens[nr_len]);
+    const uint64_t alt = nr + (UINT64_C(1) << lens[meta(v).pkt_nr_len]);
     const uint64_t d1 = next >= nr ? next - nr : nr - next;
     const uint64_t d2 = next >= alt ? next - alt : alt - next;
     meta(v).hdr.nr = d1 < d2 ? nr : alt;
-    meta(v).hdr.hdr_len += nr_len;
+    meta(v).hdr.hdr_len += meta(v).pkt_nr_len;
+
+    return true;
+}
+
+
+static const struct cipher_ctx * __attribute__((nonnull))
+which_cipher_ctx_in(const struct q_conn * const c, const uint8_t flags)
+{
+    switch (pkt_type(flags)) {
+    case F_LH_INIT:
+    case F_LH_RTRY:
+        return &c->pn_init.in;
+    case F_LH_0RTT:
+        return &c->pn_data.in_0rtt;
+    case F_LH_HSHK:
+        return &c->pn_hshk.in;
+    default:
+        // warn(ERR, "in cipher for kyph %u", is_set(F_SH_KYPH, flags));
+        return &c->pn_data.in_1rtt[is_set(F_SH_KYPH, flags)];
+    }
+}
+
+
+bool dec_pkt_hdr_remainder(struct w_iov * const xv,
+                           struct w_iov * const v,
+                           struct q_conn * const c,
+                           struct w_iov_sq * const x)
+{
+    const struct cipher_ctx * ctx = which_cipher_ctx_in(c, meta(v).hdr.flags);
+    if (unlikely(ctx->pne == 0 || ctx->aead == 0)) {
+        if (is_set(F_LONG_HDR, meta(v).hdr.flags) == false &&
+            is_set(F_SH_KYPH, meta(v).hdr.flags) != c->pn_data.in_kyph) {
+            // this might be the first key phase flip
+            flip_keys(c, false);
+            ctx = which_cipher_ctx_in(c, meta(v).hdr.flags);
+        } else {
+            err_close(c, ERR_PROTOCOL_VIOLATION, 0,
+                      "crypto fail on 0x%02x-type %s pkt", meta(v).hdr.flags,
+                      is_set(F_LONG_HDR, meta(v).hdr.flags) ? "LH" : "SH");
+            return false;
+        }
+    }
+
+    bool first_try = true;
+    uint8_t pn_enc[MAX_PKT_NR_LEN]; // raw (encrypted) packet number data
+
+try_again:
+    if (unlikely(dec_pne(xv, v, c, ctx, pn_enc) == false)) {
+        err_close(c, ERR_PROTOCOL_VIOLATION, 0,
+                  "PNE fail on 0x%02x-type %s pkt", xv->buf[0],
+                  is_set(F_LONG_HDR, meta(v).hdr.flags) ? "LH" : "SH");
+        return false;
+    }
+
+    // we can now try and verify the packet protection
+    const uint16_t pkt_len =
+        is_set(F_LONG_HDR, meta(v).hdr.flags)
+            ? meta(v).hdr.hdr_len + meta(v).hdr.len - meta(v).pkt_nr_len
+            : xv->len;
+    const uint16_t ret = dec_aead(c, xv, v, pkt_len, ctx);
+
+    if (unlikely(ret == 0)) {
+        if (likely(is_set(F_LONG_HDR, meta(v).hdr.flags) == false)) {
+
+            // AEAD failed; this might be a stateless reset
+            if (xv->len > sizeof(c->dcid->srt)) {
+                // TODO: srt should have > 20 bytes of random prefix
+                if (memcmp(&xv->buf[xv->len - sizeof(c->dcid->srt)],
+                           c->dcid->srt, sizeof(c->dcid->srt)) == 0) {
+#ifndef FUZZING
+                    warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
+                         hex2str(c->dcid->srt, sizeof(c->dcid->srt)));
+#endif
+                    conn_to_state(c, conn_drng);
+                    return true;
+                }
+            }
+
+            // AEAD failed; this might be due to a key phase flip
+            if (likely(first_try == true)) {
+                // check if the key phase may have changed
+                const bool v_kyph = is_set(F_SH_KYPH, meta(v).hdr.flags);
+                if (unlikely(v_kyph != c->pn_data.in_kyph)) {
+                    // this packet has a different key phase than we saw before,
+                    // so undo PNE decryption and retry with flipped keys
+                    memcpy(&xv->buf[meta(v).pkt_nr_pos], pn_enc,
+                           sizeof(pn_enc));
+
+                    flip_keys(c, false);
+                    meta(v).hdr.hdr_len = meta(v).pkt_nr_pos;
+                    first_try = false;
+                    goto try_again;
+                }
+            }
+        }
+        err_close(c, ERR_PROTOCOL_VIOLATION, 0,
+                  "crypto fail on 0x%02x-type %s pkt", meta(v).hdr.flags,
+                  is_set(F_LONG_HDR, meta(v).hdr.flags) ? "LH" : "SH");
+        return false;
+    }
+
+    // packet protection verified OK
+    struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
+    if (diet_find(&pn->recv_all, meta(v).hdr.nr)) {
+        warn(ERR, "duplicate pkt nr " FMT_PNR_IN ", ignoring", meta(v).hdr.nr);
+        return false;
+    }
+
+    diet_insert(&pn->recv, meta(v).hdr.nr, ev_now(loop));
+    diet_insert(&pn->recv_all, meta(v).hdr.nr, ev_now(loop));
 
     if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
         // check for coalesced packet
-        const uint16_t pkt_len = meta(v).hdr.hdr_len + meta(v).hdr.len - nr_len;
-        if (pkt_len < v->len) {
-            // TODO check that the dcid in the split-out version matches orig
+        if (pkt_len < xv->len) {
+            // TODO check that dcid in split-out version matches orig
+
             // allocate new w_iov for coalesced packet and copy it over
-            struct w_iov * const vdup = w_iov_dup(v);
-            vdup->buf += pkt_len;
-            vdup->len -= pkt_len;
+            struct w_iov * const dup = w_iov_dup(xv);
+            dup->buf += pkt_len;
+            dup->len -= pkt_len;
             // adjust original length
-            v->len = pkt_len;
-            // rx() has already removed v from i, so just insert vdup at head
-            sq_insert_head(i, vdup, next);
+            xv->len = pkt_len;
+            // remember coalesced datagram len
+            dup->user_data = xv->len;
+            // rx() has already removed xv from x, so just insert dup at head
+            sq_insert_head(x, dup, next);
 #ifndef FUZZING
             warn(DBG, "split out coalesced %s pkt of len %u",
-                 pkt_type_str(vdup), vdup->len);
+                 pkt_type_str(*dup->buf, &dup->buf[1]), dup->len);
 #endif
         }
+
     } else {
+        // check if a key phase flip has been verified
+        const bool v_kyph = is_set(F_SH_KYPH, meta(v).hdr.flags);
+        if (unlikely(v_kyph != c->pn_data.in_kyph))
+            c->pn_data.in_kyph = v_kyph;
+
 #ifdef SPINBIT
         // short header, spin the bit
         if (nr > diet_max(&(c->pn_data.pn.recv_all))) {
@@ -703,5 +881,41 @@ bool dec_pkt_hdr_remainder(struct w_iov * const v,
                  diet_max(&(c->pn_data.pn.recv_all)));
 #endif
     }
+
+    v->len = xv->len - AEAD_LEN;
     return true;
+}
+
+
+void tx_vneg_resp(const struct w_sock * const ws, const struct w_iov * const v)
+{
+    struct w_iov * const x = q_alloc_iov(ws->w, 0, Q_OFFSET);
+    struct w_iov_sq q = w_iov_sq_initializer(q);
+    sq_insert_head(&q, x, next);
+
+    warn(INF, "sending vers neg serv response");
+    meta(x).hdr.flags = F_LONG_HDR | (uint8_t)w_rand();
+    uint16_t i = enc(x->buf, x->len, 0, &meta(x).hdr.flags,
+                     sizeof(meta(x).hdr.flags), 0, "0x%02x");
+
+    i = enc(x->buf, x->len, i, &meta(x).hdr.vers, sizeof(meta(x).hdr.vers), 0,
+            "0x%08x");
+
+    i = enc_lh_cids(&meta(v).hdr.scid, &meta(v).hdr.dcid, x, i);
+
+    for (uint8_t j = 0; j < ok_vers_len; j++)
+        if (!is_force_neg_vers(ok_vers[j]))
+            i = enc(x->buf, x->len, i, &ok_vers[j], sizeof(ok_vers[j]), 0,
+                    "0x%08x");
+
+    x->len = i;
+    x->ip = v->ip;
+    x->port = v->port;
+    log_pkt("TX", x, 0, 0, 0);
+
+    w_tx(ws, &q);
+    while (w_tx_pending(&q))
+        w_nic_tx(ws->w);
+
+    q_free(&q);
 }

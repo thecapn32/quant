@@ -31,7 +31,7 @@ function run_test() {
                 env PYTHONUNBUFFERED=1 qvalve -ra "$base-server" -r "/$t" \
                         > /dev/null
         $cmd --name "$base-client" client \
-                client -v5 -i eth0 "https://$base-valve/$size" \
+                client -v5 -t 3 -i eth0 "https://$base-valve/$size" \
                         > /dev/null
 
         local ret=ok
@@ -78,8 +78,14 @@ for t in $tests; do
         if [ "$ret" = "fail" ]; then
                 tmux -CC \
                     new-session "cat $base-client.log" \; \
-                    split-window -h "cat $base-valve.log" \; \
+                    # split-window -h "cat $base-valve.log" \; \
                     split-window -h "cat $base-server.log" \; \
+                    set remain-on-exit on
+
+                echo tmux -CC \
+                    new-session \"cat $base-client.log\" \\\; \
+                    # split-window -h \"cat $base-valve.log\" \\\; \
+                    split-window -h \"cat $base-server.log\" \\\; \
                     set remain-on-exit on
         fi
 done

@@ -45,7 +45,7 @@
 #define F_LH_HSHK 0x7D
 #define F_LH_0RTT 0x7C
 
-// #define F_SH_KYPH 0x40
+#define F_SH_KYPH 0x40
 #define F_SH_EXP_MASK 0x07
 #define F_SH_SPIN 0x04
 #define F_SH 0x30
@@ -108,18 +108,21 @@ pn_for_pkt_type(struct q_conn * const c, const uint8_t t)
 struct q_stream;
 struct w_iov;
 struct w_iov_sq;
+struct w_sock;
 
 extern bool __attribute__((nonnull))
-dec_pkt_hdr_beginning(const struct w_iov * const v,
+dec_pkt_hdr_beginning(struct w_iov * const xv,
+                      struct w_iov * const v,
                       const bool is_clnt,
                       struct cid * const odcid,
                       uint8_t * const tok,
                       uint16_t * const tok_len);
 
 extern bool __attribute__((nonnull))
-dec_pkt_hdr_remainder(struct w_iov * const v,
+dec_pkt_hdr_remainder(struct w_iov * const xv,
+                      struct w_iov * const v,
                       struct q_conn * const c,
-                      struct w_iov_sq * const i);
+                      struct w_iov_sq * const x);
 
 extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
                                              const bool rtx,
@@ -127,6 +130,10 @@ extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
                                              struct w_iov * const v);
 
 extern void __attribute__((nonnull)) coalesce(struct w_iov_sq * const q);
+
+extern void __attribute__((nonnull))
+tx_vneg_resp(const struct w_sock * const ws, const struct w_iov * const v);
+
 
 #if !defined(NDEBUG) && !defined(FUZZING)
 extern void __attribute__((nonnull(1, 2)))

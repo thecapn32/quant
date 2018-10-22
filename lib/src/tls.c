@@ -27,6 +27,7 @@
 
 #include <assert.h>
 #include <bitstring.h>
+#include <inttypes.h>
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -127,6 +128,9 @@ static uint8_t cookie[COOKIE_LEN];
 
 static FILE * tls_log_file;
 
+static uint64_t tls_key_update_amnt = 0;
+static uint64_t tls_key_update_last = 0;
+
 #define TLS_EXT_TYPE_TRANSPORT_PARAMETERS 0xffa5
 
 #define TP_INITIAL_MAX_STREAM_DATA_BIDI_LOCAL 0
@@ -151,7 +155,7 @@ static FILE * tls_log_file;
 #define HKDF_BASE_LABEL "quic "
 #define st_quicly_cipher_context_t cipher_ctx
 #define quicly_hexdump(a, b, c) hex2str(a, b)
-#define QUICLY_DEBUG 0
+#define QUICLY_DEBUG 1
 
 
 // from quicly
@@ -218,11 +222,11 @@ Exit:
 }
 
 // from quicly
-static int setup_initial_key(struct st_quicly_cipher_context_t * ctx,
-                             ptls_cipher_suite_t * cs,
-                             const void * master_secret,
-                             const char * label,
-                             int is_enc)
+int setup_initial_key(struct st_quicly_cipher_context_t * ctx,
+                      ptls_cipher_suite_t * cs,
+                      const void * master_secret,
+                      const char * label,
+                      int is_enc)
 {
     uint8_t aead_secret[PTLS_MAX_DIGEST_SIZE];
     int ret;
@@ -895,10 +899,12 @@ static void __attribute__((nonnull)) free_prot(struct q_conn * const c)
     dispose_cipher(&c->pn_init.out);
     dispose_cipher(&c->pn_hshk.in);
     dispose_cipher(&c->pn_hshk.out);
-    dispose_cipher(&c->pn_data.in[0]);
-    dispose_cipher(&c->pn_data.in[1]);
+    dispose_cipher(&c->pn_data.in_0rtt);
     dispose_cipher(&c->pn_data.out_0rtt);
-    dispose_cipher(&c->pn_data.out_1rtt);
+    dispose_cipher(&c->pn_data.in_1rtt[0]);
+    dispose_cipher(&c->pn_data.out_1rtt[0]);
+    dispose_cipher(&c->pn_data.in_1rtt[1]);
+    dispose_cipher(&c->pn_data.out_1rtt[1]);
 }
 
 
@@ -906,6 +912,7 @@ void free_tls(struct q_conn * const c)
 {
     if (c->tls.t)
         ptls_free(c->tls.t);
+    ptls_clear_memory(c->tls.secret, sizeof(c->tls.secret));
     free_prot(c);
 }
 
@@ -1075,13 +1082,14 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
                                  const size_t epoch,
                                  const void * const secret)
 {
+    // warn(CRT, "update_traffic_key %s %u", is_enc ? "tx" : "rx", epoch);
     struct q_conn * const c = *ptls_get_data_ptr(tls);
     ptls_cipher_suite_t * const cipher = ptls_get_cipher(c->tls.t);
     struct cipher_ctx * cipher_slot;
 
     switch (epoch) {
     case ep_0rtt:
-        cipher_slot = is_enc ? &c->pn_data.out_0rtt : &c->pn_data.in[0];
+        cipher_slot = is_enc ? &c->pn_data.out_0rtt : &c->pn_data.in_0rtt;
         break;
 
     case ep_hshk:
@@ -1089,7 +1097,9 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
         break;
 
     case ep_data:
-        cipher_slot = is_enc ? &c->pn_data.out_1rtt : &c->pn_data.in[1];
+        memcpy(c->tls.secret[is_enc], secret, cipher->hash->digest_size);
+        cipher_slot = is_enc ? &c->pn_data.out_1rtt[c->pn_data.out_kyph]
+                             : &c->pn_data.in_1rtt[c->pn_data.in_kyph];
         break;
 
     default:
@@ -1114,8 +1124,11 @@ void init_tls_ctx(const char * const cert,
 #ifndef PTLS_OPENSSL
                   __attribute__((unused))
 #endif
-)
+                  ,
+                  const uint64_t tls_upd_amnt)
 {
+    tls_key_update_amnt = tls_upd_amnt ? tls_upd_amnt : UINT64_MAX;
+
     if (key) {
 #ifdef PTLS_OPENSSL
         FILE * const fp = fopen(key, "rbe");
@@ -1219,19 +1232,20 @@ void free_tls_ctx(void)
 }
 
 
-const struct cipher_ctx *
-which_cipher_ctx(const struct q_conn * const c, const uint8_t t, const bool in)
+static const struct cipher_ctx * __attribute__((nonnull))
+which_cipher_ctx_out(const struct q_conn * const c, const uint8_t flags)
 {
-    switch (t) {
+    switch (pkt_type(flags)) {
     case F_LH_INIT:
     case F_LH_RTRY:
-        return in ? &c->pn_init.in : &c->pn_init.out;
+        return &c->pn_init.out;
     case F_LH_0RTT:
-        return in ? &c->pn_data.in[0] : &c->pn_data.out_0rtt;
+        return &c->pn_data.out_0rtt;
     case F_LH_HSHK:
-        return in ? &c->pn_hshk.in : &c->pn_hshk.out;
+        return &c->pn_hshk.out;
     default:
-        return in ? &c->pn_data.in[1] : &c->pn_data.out_1rtt;
+        // warn(ERR, "out cipher for kyph %u", is_set(F_SH_KYPH, flags));
+        return &c->pn_data.out_1rtt[is_set(F_SH_KYPH, flags)];
     }
 }
 
@@ -1242,31 +1256,36 @@ which_cipher_ctx(const struct q_conn * const c, const uint8_t t, const bool in)
          ? "Initial"                                                           \
          : ((a) == (c)->pn_hshk.in.aead || (a) == (c)->pn_hshk.out.aead        \
                 ? "Handshake"                                                  \
-                : ((a) == (c)->pn_data.in[0].aead ||                           \
+                : ((a) == (c)->pn_data.in_0rtt.aead ||                         \
                            (a) == (c)->pn_data.out_0rtt.aead                   \
                        ? "0-RTT"                                               \
-                       : "1-RTT")))
+                       : ((a) == (c)->pn_data.in_1rtt[0].aead ||               \
+                                  (a) == (c)->pn_data.out_1rtt[0].aead         \
+                              ? "1-RTT (0)"                                    \
+                              : "1-RTT (1)"))))
 #endif
 
 
-uint16_t dec_aead(const struct q_conn * const c, const struct w_iov * const v)
+uint16_t dec_aead(struct q_conn * const c
+#ifndef DEBUG_MARSHALL
+                  __attribute__((unused))
+#endif
+                  ,
+                  const struct w_iov * const xv,
+                  const struct w_iov * const v,
+                  const uint16_t len,
+                  const struct cipher_ctx * const ctx)
 {
-    const struct cipher_ctx * const ctx =
-        which_cipher_ctx(c, meta(v).hdr.type, true);
-    if (unlikely(ctx == 0 || ctx->aead == 0))
-        return 0;
-
     const uint16_t hdr_len = meta(v).hdr.hdr_len;
-    ensure(meta(v).hdr.hdr_len, "meta(v).hdr.hdr_len");
-    const uint16_t len = v->len - hdr_len;
-    if (unlikely(hdr_len > v->len))
+    if (unlikely(hdr_len == 0 || hdr_len > len))
         return 0;
 
     const size_t ret =
-        ptls_aead_decrypt(ctx->aead, &v->buf[hdr_len], &v->buf[hdr_len], len,
-                          meta(v).hdr.nr, v->buf, hdr_len);
+        ptls_aead_decrypt(ctx->aead, &v->buf[hdr_len], &xv->buf[hdr_len],
+                          len - hdr_len, meta(v).hdr.nr, xv->buf, hdr_len);
     if (unlikely(ret == SIZE_MAX))
         return 0;
+    memcpy(v->buf, xv->buf, hdr_len);
 
 #ifdef DEBUG_MARSHALL
     warn(DBG, "dec %s AEAD over [0..%u] in [%u..%u]", aead_type(c, ctx->aead),
@@ -1278,15 +1297,16 @@ uint16_t dec_aead(const struct q_conn * const c, const struct w_iov * const v)
 }
 
 
-uint16_t enc_aead(const struct q_conn * const c,
+uint16_t enc_aead(struct q_conn * const c,
                   const struct w_iov * const v,
-                  const struct w_iov * const x,
-                  const uint16_t nr_pos)
+                  const struct w_iov * const x)
 {
     const struct cipher_ctx * const ctx =
-        which_cipher_ctx(c, meta(v).hdr.type, false);
-    if (unlikely(ctx == 0 || ctx->aead == 0))
+        which_cipher_ctx_out(c, meta(v).hdr.flags);
+    if (unlikely(ctx == 0 || ctx->aead == 0)) {
+        warn(ERR, "no cipher context");
         return 0;
+    }
 
     const uint16_t hdr_len = meta(v).hdr.hdr_len;
     ensure(meta(v).hdr.hdr_len, "meta(v).hdr.hdr_len");
@@ -1296,21 +1316,22 @@ uint16_t enc_aead(const struct q_conn * const c,
     const size_t ret =
         ptls_aead_encrypt(ctx->aead, &x->buf[hdr_len], &v->buf[hdr_len],
                           plen - AEAD_LEN, meta(v).hdr.nr, v->buf, hdr_len);
-    if (likely(nr_pos)) {
+    if (likely(meta(v).pkt_nr_pos)) {
         // encrypt the packet number
-        uint16_t off = nr_pos + 4;
+        uint16_t off = meta(v).pkt_nr_pos + MAX_PKT_NR_LEN;
         if (off + AEAD_LEN > x->len)
             off = x->len - AEAD_LEN;
         ptls_cipher_init(ctx->pne, &x->buf[off]);
-        ptls_cipher_encrypt(ctx->pne, &x->buf[nr_pos], &x->buf[nr_pos],
-                            hdr_len - nr_pos);
+        ptls_cipher_encrypt(ctx->pne, &x->buf[meta(v).pkt_nr_pos],
+                            &x->buf[meta(v).pkt_nr_pos],
+                            hdr_len - meta(v).pkt_nr_pos);
 #ifdef DEBUG_MARSHALL
         warn(DBG,
              "enc %s AEAD over [0..%u] in [%u..%u]; PNE over "
              "[%u..%u] w/off %u",
              aead_type(c, ctx->aead), hdr_len + plen - AEAD_LEN - 1,
-             hdr_len + plen - AEAD_LEN, hdr_len + plen - 1, nr_pos, hdr_len - 1,
-             off);
+             hdr_len + plen - AEAD_LEN, hdr_len + plen - 1, meta(v).pkt_nr_pos,
+             hdr_len - 1, off);
 #endif
     }
 #ifdef DEBUG_MARSHALL
@@ -1374,4 +1395,43 @@ bool verify_rtry_tok(struct q_conn * const c,
         return true;
     }
     return false;
+}
+
+
+void flip_keys(struct q_conn * const c, const bool out)
+{
+    const bool new_kyph = !(out ? c->pn_data.out_kyph : c->pn_data.in_kyph);
+    tls_key_update_last = c->in_data + c->out_data;
+    warn(DBG, "flip %s kyph %u -> %u at %" PRIu64, out ? "out" : "in",
+         out ? c->pn_data.out_kyph : c->pn_data.in_kyph, new_kyph,
+         tls_key_update_last);
+    const ptls_cipher_suite_t * const cs = ptls_get_cipher(c->tls.t);
+
+    dispose_cipher(&c->pn_data.in_1rtt[new_kyph]);
+    if (setup_initial_key(&c->pn_data.in_1rtt[new_kyph], cs, c->tls.secret[0],
+                          "traffic upd", 0))
+        return;
+
+    dispose_cipher(&c->pn_data.out_1rtt[new_kyph]);
+    if (setup_initial_key(&c->pn_data.out_1rtt[new_kyph], cs, c->tls.secret[1],
+                          "traffic upd", 1) != 0)
+        return;
+
+    if (out == false)
+        c->pn_data.in_kyph = new_kyph;
+    c->pn_data.out_kyph = new_kyph;
+}
+
+
+void maybe_flip_keys(struct q_conn * const c, const bool out)
+{
+    if (likely(c->is_clnt == false ||
+               c->in_data + c->out_data - tls_key_update_last <
+                   tls_key_update_amnt))
+        return;
+
+    if (c->pn_data.out_kyph != c->pn_data.in_kyph)
+        return;
+
+    flip_keys(c, out);
 }

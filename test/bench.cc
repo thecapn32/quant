@@ -52,9 +52,10 @@ static void BM_quic_encryption(benchmark::State & state)
     meta(v).hdr.type = F_LH_INIT;
     meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
     meta(v).hdr.hdr_len = 16;
+    meta(v).pkt_nr_pos = pne * 16;
 
     for (auto _ : state)
-        benchmark::DoNotOptimize(enc_aead(c, v, x, pne * 16));
+        benchmark::DoNotOptimize(enc_aead(c, v, x));
     state.SetBytesProcessed(int64_t(state.iterations() * len)); // NOLINT
 
     q_free_iov(x);
@@ -84,7 +85,7 @@ int main(int argc, char ** argv)
 #ifndef NDEBUG
     util_dlevel = INF;
 #endif
-    w = q_init(i, nullptr, nullptr, nullptr, nullptr, false); // NOLINT
+    w = q_init(i, nullptr, nullptr, nullptr, nullptr, false, 0); // NOLINT
     __extension__ struct cid cid = {.len = 4, .id = "1234"};
     c = new_conn(w, 0xff00000e, &cid, &cid, nullptr, "", 55555, 0);
     init_tls(c);

@@ -11,7 +11,7 @@ s=${2:-quant}
 # port to run servers on
 addr=127.0.0.1
 port=4433 # mozquic server can only run on 4433 at the moment
-path=/rfc8085.txt
+path=/20000
 dir=/Users/lars/Sites/lars/output/papers
 cert=/etc/letsencrypt/live/slate.eggert.org/fullchain.pem
 key=/etc/letsencrypt/live/slate.eggert.org/privkey.pem
@@ -43,7 +43,8 @@ export UBSAN_OPTIONS=print_stacktrace=1
 # commands to run the different clients against $addr:$port
 case $c in
         quant)
-                cc="bin/client -v5 -i $iface https://$addr:$port$path" # https://$addr:$port$path"
+                cc="bin/client -v5 -i $iface -u 8000 \
+                        https://$addr:$port$path" # https://$addr:$port$path"
                 ;;
         wquant)
                 cc="vagrant ssh -c \"\
@@ -77,8 +78,8 @@ case $c in
                                 -ignorePKI -send-close"
                 ;;
         picoquic)
-                cc="external/picoquic-prefix/src/picoquic/picoquicdemo  -1 -n localhost \
-                         $addr $port"
+                cc="external/picoquic-prefix/src/picoquic/picoquicdemo \
+                        -1 -n localhost -u 1 $addr $port"
                 ;;
 
         quicker)
@@ -148,8 +149,8 @@ esac
 # # if we are on MacOS X, configure the firewall to add delay and loss
 # if [ -x /usr/sbin/dnctl ]; then
 #         # create pipes to limit bandwidth and add loss
-#         sudo dnctl pipe 1 config delay 350 #plr .1
-#         sudo dnctl pipe 2 config delay 350 #plr .1 #bw 64Kbit/s delay 250 queue 10Kbytes #plr 0.25
+#         sudo dnctl pipe 1 config bw 128Kbit/s delay 50 queue 10Kbytes #plr 0.25
+#         sudo dnctl pipe 2 config bw 128Kbit/s delay 50 queue 10Kbytes #plr 0.25
 #         sudo pfctl -f - <<EOF
 #                 dummynet out proto udp from any to $addr port $port pipe 1
 #                 dummynet out proto udp from $addr port $port to any pipe 2

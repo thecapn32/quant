@@ -41,10 +41,6 @@
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
-#ifdef HAVE_ASAN
-#include <sanitizer/asan_interface.h>
-#endif
-
 #include "conn.h"
 #include "diet.h"
 #include "frame.h"
@@ -484,8 +480,7 @@ void tx_ack(struct q_conn * const c, const epoch_t e)
     struct q_stream * const s = get_stream(c, crpt_strm_id(e));
     struct pn_space * const pn = pn_for_epoch(c, e);
 
-    if (!needs_ack(pn) && c->tx_vneg == false && c->tx_rtry == false &&
-        c->state != conn_clsg)
+    if (!needs_ack(pn) && c->tx_rtry == false && c->state != conn_clsg)
         return;
 
     struct w_iov * const v = q_alloc_iov(c->w, 0, Q_OFFSET);
@@ -573,50 +568,6 @@ update_ipnp(struct q_conn * const c, const struct sockaddr_in * const peer)
 }
 
 
-static bool __attribute__((nonnull))
-verify_prot(struct q_conn * const c, struct w_iov * const v)
-{
-    if (is_set(F_LONG_HDR, meta(v).hdr.flags) && meta(v).hdr.vers == 0)
-        // version negotiation responses do not carry protection
-        return true;
-
-    const uint16_t len = dec_aead(c, v);
-    if (unlikely(len == 0)) {
-        // AEAD failed, but this might be a stateless reset
-        const struct cid * const dcid = c->dcid;
-        if (unlikely(sizeof(dcid->srt) > v->len))
-            return false;
-        if (memcmp(&v->buf[v->len - sizeof(dcid->srt)], dcid->srt,
-                   sizeof(dcid->srt)) == 0) {
-#ifndef FUZZING
-            warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
-                 hex2str(dcid->srt, sizeof(dcid->srt)));
-#endif
-            conn_to_state(c, conn_drng);
-        } else
-            // it is not a stateless reset
-            err_close(c, ERR_PROTOCOL_VIOLATION, 0,
-                      "AEAD fail on 0x%02x-type %s pkt", pkt_type((v)->buf[0]),
-                      is_set(F_LONG_HDR, meta(v).hdr.flags) ? "LH" : "SH");
-        return false;
-    }
-
-    // packet protection verified OK
-    v->len -= AEAD_LEN;
-    return true;
-}
-
-
-static void __attribute__((nonnull))
-track_recv(struct q_conn * const c, const uint64_t nr, const uint8_t flags)
-{
-    struct pn_space * const pn =
-        pn_for_epoch(c, epoch_for_pkt_type(pkt_type(flags)));
-    diet_insert(&pn->recv, nr, ev_now(loop));
-    diet_insert(&pn->recv_all, nr, ev_now(loop));
-}
-
-
 static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
 {
     const epoch_t epoch = epoch_in(c);
@@ -654,7 +605,7 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
 
 #define ignore_sh_pkt(v)                                                       \
     do {                                                                       \
-        if (!is_set(F_LONG_HDR, meta(v).hdr.flags)) {                          \
+        if (unlikely(!is_set(F_LONG_HDR, meta(v).hdr.flags))) {                \
             warn(NTE, "ignoring unexpected 0x%02x-type SH pkt",                \
                  pkt_type((v)->buf[0]));                                       \
             goto done;                                                         \
@@ -689,89 +640,74 @@ static void __attribute__((nonnull)) vneg_or_rtry_resp(struct q_conn * const c)
 
 static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
                                             struct w_iov * const v,
-                                            struct w_iov_sq * const i,
+                                            struct w_iov_sq * const x,
+                                            const struct cid * const odcid,
                                             const uint8_t * const tok,
                                             const uint16_t tok_len)
 {
     bool ok = false;
-
     struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
-    if (diet_find(&pn->recv_all, meta(v).hdr.nr)) {
-#ifndef FUZZING
-        warn(ERR, "duplicate pkt nr " FMT_PNR_IN ", ignoring", meta(v).hdr.nr);
-#endif
-        goto done;
-    }
+
+    // TODO MOVE
+    log_pkt("RX", v, odcid, tok, tok_len);
 
     switch (c->state) {
     case conn_idle:
         ignore_sh_pkt(v);
 
         c->vers = meta(v).hdr.vers;
-        track_recv(c, meta(v).hdr.nr, meta(v).hdr.flags);
-        if (vers_supported(c->vers) && !is_force_neg_vers(c->vers)) {
-            if (verify_prot(c, v) == false)
-                goto done;
-
-            if (c->tx_rtry) {
-                // tx_rtry is currently always set on port 4434
-                if (meta(v).hdr.type == F_LH_INIT && tok_len) {
-                    if (verify_rtry_tok(c, tok, tok_len) == false) {
-                        warn(ERR, "retry token verification failed");
-                        enter_closing(c);
-                        goto done;
-                    } else
-                        c->tx_rtry = false;
-                } else {
-                    warn(INF, "sending retry");
-                    // send a RETRY
-                    make_rtry_tok(c);
-                    c->needs_tx = true;
+        if (c->tx_rtry) {
+            // tx_rtry is currently always set on port 4434
+            if (meta(v).hdr.type == F_LH_INIT && tok_len) {
+                if (verify_rtry_tok(c, tok, tok_len) == false) {
+                    warn(ERR, "retry token verification failed");
+                    enter_closing(c);
                     goto done;
-                }
-            }
-
-#ifndef FUZZING
-            warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
-#endif
-
-            if (dec_frames(c, v) == UINT16_MAX)
-                goto done;
-
-            // if the CH doesn't include any crypto frames, bail
-            if (bit_test(meta(v).frames, FRAM_TYPE_CRPT) == false) {
-                warn(ERR, "initial pkt w/o crypto frames");
-                enter_closing(c);
+                } else
+                    c->tx_rtry = false;
+            } else {
+                warn(INF, "sending retry");
+                // send a RETRY
+                make_rtry_tok(c);
+                c->needs_tx = true;
                 goto done;
             }
-
-            init_tp(c);
-
-            // check if any reordered 0-RTT packets are cached for this CID
-            const struct ooo_0rtt which = {.cid = meta(v).hdr.dcid};
-            struct ooo_0rtt * const zo =
-                splay_find(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, &which);
-            if (zo) {
-                warn(INF, "have reordered 0-RTT pkt (t=%f sec) for %s conn %s",
-                     ev_now(loop) - zo->t, conn_type(c), cid2str(c->scid));
-                splay_remove(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo);
-                sq_insert_head(i, zo->v, next);
-                free(zo);
-            }
-            conn_to_state(c, conn_opng);
-
-            // this is a new connection; server picks a new random cid
-            struct cid new_scid = {.len = SERV_SCID_LEN};
-            arc4random_buf(new_scid.id, new_scid.len);
-            update_act_scid(c, &new_scid);
-
-        } else {
-#ifndef FUZZING
-            warn(WRN, "%s conn %s clnt-requested vers 0x%08x not supported ",
-                 conn_type(c), cid2str(c->scid), c->vers);
-#endif
-            c->tx_vneg = c->needs_tx = true;
         }
+
+#ifndef FUZZING
+        warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
+#endif
+
+        if (dec_frames(c, v) == UINT16_MAX)
+            goto done;
+
+        // if the CH doesn't include any crypto frames, bail
+        if (bit_test(meta(v).frames, FRAM_TYPE_CRPT) == false) {
+            warn(ERR, "initial pkt w/o crypto frames");
+            enter_closing(c);
+            goto done;
+        }
+
+        init_tp(c);
+
+        // check if any reordered 0-RTT packets are cached for this CID
+        const struct ooo_0rtt which = {.cid = meta(v).hdr.dcid};
+        struct ooo_0rtt * const zo =
+            splay_find(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, &which);
+        if (zo) {
+            warn(INF, "have reordered 0-RTT pkt (t=%f sec) for %s conn %s",
+                 ev_now(loop) - zo->t, conn_type(c), cid2str(c->scid));
+            splay_remove(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo);
+            sq_insert_head(x, zo->v, next);
+            free(zo);
+        }
+        conn_to_state(c, conn_opng);
+
+        // this is a new connection; server picks a new random cid
+        struct cid new_scid = {.len = SERV_SCID_LEN};
+        arc4random_buf(new_scid.id, new_scid.len);
+        update_act_scid(c, &new_scid);
+
         ok = true;
         break;
 
@@ -827,11 +763,6 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             goto done;
         }
 
-        if (verify_prot(c, v) == false)
-            goto done;
-
-        track_recv(c, meta(v).hdr.nr, meta(v).hdr.flags);
-
         // server accepted version -
         // if we get here, this should be a regular server-hello
         ok = (dec_frames(c, v) != UINT16_MAX);
@@ -854,10 +785,6 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             goto done;
         }
 
-        if (verify_prot(c, v) == false)
-            goto done;
-
-        track_recv(c, meta(v).hdr.nr, meta(v).hdr.flags);
         if (dec_frames(c, v) == UINT16_MAX)
             goto done;
 
@@ -877,13 +804,14 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 #ifndef FUZZING
     // if packet has anything other than ACK frames, maybe arm the ACK timer
     if (c->state != conn_drng && c->state != conn_clsd && !c->tx_rtry &&
-        !c->tx_vneg && !is_ack_only(&meta(v)) &&
-        !ev_is_active(&pn->ack_alarm)) {
+        !is_ack_only(&meta(v)) && !ev_is_active(&pn->ack_alarm)) {
         // warn(DBG, "non-ACK frame received, starting epoch %u ACK timer",
         //      epoch_for_pkt_type(meta(v).hdr.type));
         ev_timer_again(loop, &pn->ack_alarm);
     }
 #endif
+
+    maybe_flip_keys(c, true);
 
 done:
     // update ECN info
@@ -908,30 +836,36 @@ void
 #else
 static void __attribute__((nonnull))
 #endif
-rx_pkts(struct w_iov_sq * const i,
+rx_pkts(struct w_iov_sq * const x,
         struct q_conn_sl * const crx,
         const struct w_sock * const ws)
 {
-    while (!sq_empty(i)) {
-        struct w_iov * const v = sq_first(i);
-        ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
-        sq_remove_head(i, next);
+    while (!sq_empty(x)) {
+        struct w_iov * xv = sq_first(x);
+        sq_remove_head(x, next);
 
-        // warn(DBG, "rx idx %u len %u", w_iov_idx(v), v->len);
+        // warn(DBG, "rx idx %u len %u", w_iov_idx(xv), xv->len);
 
 #if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
         // when called from the fuzzer, v->ip is zero
-        if (v->ip)
-            write_to_corpus(corpus_pkt_dir, v->buf, v->len);
+        if (xv->ip)
+            write_to_corpus(corpus_pkt_dir, xv->buf, xv->len);
 #endif
+
+        // allocate new w_iov for the (eventual) unencrypted data and meta-data
+        struct w_iov * const v = q_alloc_iov(ws->w, 0, Q_OFFSET);
+        v->port = xv->port;
+        v->ip = xv->ip;
+        v->flags = xv->flags;
+        v->len = xv->len;
 
         const bool is_clnt = w_connected(ws);
         struct q_conn * c = 0;
         struct cid odcid;
         uint8_t tok[MAX_PKT_LEN];
         uint16_t tok_len = 0;
-        if (dec_pkt_hdr_beginning(v, is_clnt, &odcid, tok, &tok_len) == false) {
+        if (!dec_pkt_hdr_beginning(xv, v, is_clnt, &odcid, tok, &tok_len)) {
             log_pkt("RX", v, &odcid, tok, tok_len);
 #ifndef FUZZING
             warn(ERR, "received invalid %u-byte pkt (type 0x%02x), ignoring",
@@ -960,18 +894,32 @@ rx_pkts(struct w_iov_sq * const i,
                         (void)c;
 #endif
                     else if (c == 0 && meta(v).hdr.type == F_LH_INIT) {
+                        // validate minimum packet size
+#ifndef FUZZING
+                        // TODO: actually reject
+                        if (xv->user_data < MIN_INI_LEN)
+                            warn(ERR, "initial %u-byte pkt too short (< %u)",
+                                 xv->user_data, MIN_INI_LEN);
+#endif
+
+                        if (vers_supported(meta(v).hdr.vers) == false ||
+                            is_force_neg_vers(meta(v).hdr.vers)) {
+                            log_pkt("RX", v, &odcid, tok, tok_len);
+#ifndef FUZZING
+                            warn(WRN,
+                                 "clnt-requested vers 0x%08x not "
+                                 "supported ",
+                                 meta(v).hdr.vers);
+                            tx_vneg_resp(ws, v);
+                            q_free_iov(v);
+                            continue;
+#endif
+                        }
+
                         warn(NTE,
                              "new serv conn on port %u from %s:%u w/cid=%s",
                              ntohs(w_get_sport(ws)), inet_ntoa(peer.sin_addr),
                              ntohs(peer.sin_port), cid2str(&meta(v).hdr.dcid));
-
-                        // validate minimum packet size
-#ifndef FUZZING
-                        if (v->len < MIN_INI_LEN)
-                            warn(ERR, "initial %u-byte pkt too short (< %u)",
-                                 v->len, MIN_INI_LEN);
-#endif
-
                         c = new_conn(w_engine(ws), meta(v).hdr.vers,
                                      &meta(v).hdr.scid, &meta(v).hdr.dcid,
                                      &peer, 0, ntohs(w_get_sport(ws)), 0);
@@ -1045,7 +993,7 @@ rx_pkts(struct w_iov_sq * const i,
 
         if ((meta(v).hdr.vers && meta(v).hdr.type != F_LH_RTRY) ||
             !is_set(F_LONG_HDR, meta(v).hdr.flags))
-            if (dec_pkt_hdr_remainder(v, c, i) == false) {
+            if (dec_pkt_hdr_remainder(xv, v, c, x) == false) {
                 log_pkt("RX", v, &odcid, tok, tok_len);
 #ifndef FUZZING
                 warn(ERR, "received invalid %u-byte 0x%02x-type pkt, ignoring",
@@ -1055,15 +1003,13 @@ rx_pkts(struct w_iov_sq * const i,
                 continue;
             }
 
-        log_pkt("RX", v, &odcid, tok, tok_len);
-
         // remember that we had a RX event on this connection
         if (!c->had_rx) {
             c->had_rx = true;
             sl_insert_head(crx, c, node_rx_int);
         }
 
-        if (rx_pkt(c, v, i, tok, tok_len))
+        if (rx_pkt(c, v, x, &odcid, tok, tok_len))
             rx_crypto(c);
 
         if (meta(v).stream == 0)
@@ -1080,10 +1026,10 @@ void rx(struct ev_loop * const l,
     // read from NIC
     struct w_sock * const ws = rx_w->data;
     w_nic_rx(w_engine(ws), -1);
-    struct w_iov_sq i = w_iov_sq_initializer(i);
+    struct w_iov_sq x = w_iov_sq_initializer(x);
     struct q_conn_sl crx = sl_head_initializer(crx);
-    w_rx(ws, &i);
-    rx_pkts(&i, &crx, ws);
+    w_rx(ws, &x);
+    rx_pkts(&x, &crx, ws);
 
     // for all connections that had RX events
     while (!sl_empty(&crx)) {
@@ -1101,8 +1047,8 @@ void rx(struct ev_loop * const l,
         // clear the helper flags set above
         c->needs_tx = c->had_rx = false;
 
-        if (c->tx_rtry || c->tx_vneg)
-            // if we sent a retry or vneg, forget the entire connection existed
+        if (c->tx_rtry)
+            // if we sent a retry, forget the entire connection existed
             free_conn(c);
         else if (c->have_new_data) {
             if (!c->in_c_ready) {

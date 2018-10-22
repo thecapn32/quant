@@ -73,9 +73,14 @@ struct pn_hshk_space {
 
 struct pn_data_space {
     struct pn_space pn;
-    struct cipher_ctx in[2];
+    struct cipher_ctx in_0rtt;
     struct cipher_ctx out_0rtt;
-    struct cipher_ctx out_1rtt;
+    struct cipher_ctx in_1rtt[2];
+    struct cipher_ctx out_1rtt[2];
+    uint8_t in_kyph : 1;  ///< Last seen inbound key phase bit.
+    uint8_t out_kyph : 1; ///< Current outbound key phase bit.
+    uint8_t : 6;
+    uint8_t _unused[7];
 };
 
 

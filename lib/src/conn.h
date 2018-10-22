@@ -126,15 +126,14 @@ struct q_conn {
     uint32_t tx_path_chlg : 1;      ///< Send PATH_CHALLENGE.
     uint32_t tx_ncid : 1;           ///< Send NEW_CONNECTION_ID.
     uint32_t tx_rtry : 1;           ///< We need to send a RETRY.
-    uint32_t tx_vneg : 1;           ///< We need to send a vers neg response.
     uint32_t have_new_data : 1;     ///< New stream data was enqueued.
     uint32_t in_c_ready : 1;        ///< Connection is listed in c_ready.
     uint32_t tx_retire_cid : 1;     ///< Send RETIRE_CONNECTION_ID.
 #ifndef SPINBIT
-    uint32_t : 14;
+    uint32_t : 15;
 #else
     uint32_t next_spin : 1; ///< Spin value to set on next packet sent.
-    uint32_t : 13;
+    uint32_t : 14;
 #endif
 
     uint16_t sport; ///< Local port (in network byte-order).

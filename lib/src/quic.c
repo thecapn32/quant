@@ -256,7 +256,7 @@ struct q_conn * q_connect(struct w_engine * const w,
 
     warn(WRN, "%s conn %s connected%s, cipher %s", conn_type(c),
          cid2str(c->scid), c->did_0rtt ? " after 0-RTT" : "",
-         c->pn_data.out_1rtt.aead->algo->name);
+         c->pn_data.out_1rtt[c->pn_data.out_kyph].aead->algo->name);
 
     if (c->try_0rtt == true && c->did_0rtt == false) {
         // 0-RTT failed, RTX early data straight away
@@ -417,7 +417,7 @@ struct q_conn * q_accept(const uint64_t timeout)
     warn(WRN, "%s conn %s accepted from clnt %s:%u%s, cipher %s", conn_type(c),
          cid2str(c->scid), inet_ntoa(c->peer.sin_addr), ntohs(c->peer.sin_port),
          c->did_0rtt ? " after 0-RTT" : "",
-         c->pn_data.out_1rtt.aead->algo->name);
+         c->pn_data.in_1rtt[c->pn_data.in_kyph].aead->algo->name);
 
     return c;
 }
@@ -468,7 +468,8 @@ struct w_engine * q_init(const char * const ifname,
                          const char * const key,
                          const char * const cache,
                          const char * const tls_log,
-                         const bool verify_certs)
+                         const bool verify_certs,
+                         const uint64_t tls_upd_amnt)
 {
     // check versions
     // ensure(WARPCORE_VERSION_MAJOR == 0 && WARPCORE_VERSION_MINOR == 12,
@@ -491,7 +492,7 @@ struct w_engine * q_init(const char * const ifname,
     warn(INF, "submit bug reports at https://github.com/NTAP/quant/issues");
 
     // initialize TLS context
-    init_tls_ctx(cert, key, cache, tls_log, verify_certs);
+    init_tls_ctx(cert, key, cache, tls_log, verify_certs, tls_upd_amnt);
 
     // initialize the event loop
     loop = ev_default_loop(0);

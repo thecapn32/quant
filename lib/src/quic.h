@@ -98,6 +98,9 @@ struct pkt_hdr {
 };
 
 
+#define MAX_PKT_NR_LEN 4
+
+
 /// Packet meta-data information associated with w_iov buffers
 struct pkt_meta {
     // XXX need to potentially change pm_cpy() below if fields are reordered
@@ -129,7 +132,12 @@ struct pkt_meta {
     uint8_t is_acked : 1; ///< Is the w_iov ACKed?
     uint8_t is_lost : 1;  ///< Have we marked this w_iov as lost?
     uint8_t : 5;
-    uint8_t _unused;
+
+    uint8_t pkt_nr_len;  ///< Length of the packet number data.
+    uint16_t pkt_nr_pos; ///< Offset of the packet number.
+
+    uint8_t _unused[6];
+
     ev_tstamp tx_t;       ///< Transmission timestamp.
     struct pn_space * pn; ///< Packet number space; only set on TX.
     struct pkt_hdr hdr;

@@ -53,6 +53,7 @@ typedef enum { ep_init = 0, ep_0rtt = 1, ep_hshk = 2, ep_data = 3 } epoch_t;
 
 struct tls {
     ptls_t * t;
+    uint8_t secret[2][PTLS_MAX_DIGEST_SIZE];
     ptls_raw_extension_t tp_ext[2];
     ptls_handshake_properties_t tls_hshake_prop;
     size_t max_early_data;
@@ -79,23 +80,40 @@ extern void init_tls_ctx(const char * const cert,
                          const char * const key,
                          const char * const ticket_store,
                          const char * const tls_log,
-                         const bool verify_certs);
+                         const bool verify_certs,
+                         const uint64_t tls_upd_amnt);
 
 extern void free_tls_ctx(void);
 
 extern uint16_t __attribute__((nonnull))
-dec_aead(const struct q_conn * const c, const struct w_iov * const v);
+dec_aead(struct q_conn * const c,
+         const struct w_iov * const x,
+         const struct w_iov * const v,
+         const uint16_t len,
+         const struct cipher_ctx * const ctx);
 
-extern uint16_t __attribute__((nonnull)) enc_aead(const struct q_conn * const c,
+extern uint16_t __attribute__((nonnull)) enc_aead(struct q_conn * const c,
                                                   const struct w_iov * const v,
-                                                  const struct w_iov * const x,
-                                                  const uint16_t nr_pos);
-
-extern const struct cipher_ctx * __attribute__((nonnull))
-which_cipher_ctx(const struct q_conn * const c, const uint8_t t, const bool in);
+                                                  const struct w_iov * const x);
 
 extern void __attribute__((nonnull)) make_rtry_tok(struct q_conn * const c);
 
 extern bool __attribute__((nonnull)) verify_rtry_tok(struct q_conn * const c,
                                                      const uint8_t * const tok,
                                                      const uint16_t tok_len);
+
+extern void __attribute__((nonnull))
+flip_keys(struct q_conn * const c, const bool out);
+
+extern void __attribute__((nonnull))
+maybe_flip_keys(struct q_conn * const c, const bool out);
+
+// quicly shim
+#define st_quicly_cipher_context_t cipher_ctx
+
+extern int __attribute__((nonnull))
+setup_initial_key(struct st_quicly_cipher_context_t * ctx,
+                  ptls_cipher_suite_t * cs,
+                  const void * master_secret,
+                  const char * label,
+                  int is_enc);
