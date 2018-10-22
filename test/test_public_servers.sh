@@ -40,17 +40,17 @@ declare -A servers=(
         [ngtcp2]=nghttp2.org:4433:4434:/blog/
         [ngx_quic]=cloudflare-quic.com:443:4434:/index.html
         [pandora]=pandora.cm.in.tum.de:4433:4434:/index.html
-        [picoquic]=test.privateoctopus.com:4433:4434:/10000
-        [quant]=quant.eggert.org:4433:4434:/10000
+        [picoquic]=test.privateoctopus.com:4433:4434:/20000
+        [quant]=quant.eggert.org:4433:4434:/20000
         [quiche]=quic.tech:4433:4434:/index.html
         [quicker]=quicker.edm.uhasselt.be:4433:4434:/index.html
-        [quicly]=kazuhooku.com:4433:4434:/10000.txt
+        [quicly]=kazuhooku.com:4433:4434:/20000.txt
         [quicr]=ralith.com:4433:4434:/index.html
         [quinn]=xavamedia.nl:4433:4434:/index.html
         [winquic]=msquic.westus.cloudapp.azure.com:4433:4434:/the-odyssey.txt
 )
 
-results=(live fail vneg hshk data clse zrtt rtry mig)
+results=(live fail vneg hshk data clse zrtt rtry mig kyph)
 declare -A ${results[@]}
 
 
@@ -97,6 +97,11 @@ function test_server {
         # rtry run
         bin/client $opts "https://${info[0]}:${info[2]}${info[3]}" 2>&1 | \
                 $sed -r "$sed_pattern" > "$log_base.rtry.log"
+        rm -f "$cache"
+
+        # key update run
+        bin/client $opts -u 8000 "https://${info[0]}:${info[1]}${info[3]}" 2>&1 | \
+                $sed -r "$sed_pattern" > "$log_base.kyph.log"
         rm -f "$cache"
 
         printf "%s " "$s"
@@ -194,6 +199,23 @@ function analyze {
         perl -n -e '/RX len=.*Retry/ and $x=1;
                    $x && /CLOSE err=0x0000/ && exit 1;' "$log"
         [ $? == 1 ] && rtry[$1]=S
+        [ ${fail[$1]} ] || rm -f "$log"
+
+        # analyze key update
+        local log="/tmp/$script.$1.$pid.kyph.log"
+        check_fail "$1" "$log"
+
+        if [ $? == 1 ]; then
+                fail[$1]="X"
+                echo "key-update test with $1 crashed:"
+                tail -n 20 "$log"
+                echo
+                return
+        fi
+
+        perl -n -e '/TX.*Short kyph=1/ and $x=1;
+                   $x && /RX.*Short kyph=1/ && exit 1;' "$log"
+        [ $? == 1 ] && kyph[$1]=U
         [ ${fail[$1]} ] || rm -f "$log"
 }
 
