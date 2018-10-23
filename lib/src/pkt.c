@@ -721,17 +721,18 @@ static bool dec_pne(struct w_iov * const xv,
     // now overwrite with decoded data
     memcpy(&xv->buf[meta(v).pkt_nr_pos], &dec_nr, meta(v).pkt_nr_len);
 
-#ifdef DEBUG_MARSHALL
-    warn(DBG, "dec PNE over [%u..%u] w/off %u", meta(v).pkt_nr_pos,
-         meta(v).pkt_nr_pos + meta(v).pkt_nr_len - 1, off);
-#endif
-
     const uint8_t lens[] = {0xff, 7, 14, 0xff, 30};
     const uint64_t alt = nr + (UINT64_C(1) << lens[meta(v).pkt_nr_len]);
     const uint64_t d1 = next >= nr ? next - nr : nr - next;
     const uint64_t d2 = next >= alt ? next - alt : alt - next;
     meta(v).hdr.nr = d1 < d2 ? nr : alt;
     meta(v).hdr.hdr_len += meta(v).pkt_nr_len;
+
+#ifdef DEBUG_MARSHALL
+    warn(DBG, "dec PNE over [%u..%u] w/off %u = " FMT_PNR_IN,
+         meta(v).pkt_nr_pos, meta(v).pkt_nr_pos + meta(v).pkt_nr_len - 1, off,
+         meta(v).hdr.nr);
+#endif
 
     return true;
 }
@@ -749,7 +750,6 @@ which_cipher_ctx_in(const struct q_conn * const c, const uint8_t flags)
     case F_LH_HSHK:
         return &c->pn_hshk.in;
     default:
-        // warn(ERR, "in cipher for kyph %u", is_set(F_SH_KYPH, flags));
         return &c->pn_data.in_1rtt[is_set(F_SH_KYPH, flags)];
     }
 }
@@ -833,16 +833,6 @@ try_again:
         return false;
     }
 
-    // packet protection verified OK
-    struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
-    if (diet_find(&pn->recv_all, meta(v).hdr.nr)) {
-        warn(ERR, "duplicate pkt nr " FMT_PNR_IN ", ignoring", meta(v).hdr.nr);
-        return false;
-    }
-
-    diet_insert(&pn->recv, meta(v).hdr.nr, ev_now(loop));
-    diet_insert(&pn->recv_all, meta(v).hdr.nr, ev_now(loop));
-
     if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
         // check for coalesced packet
         if (pkt_len < xv->len) {
@@ -883,6 +873,17 @@ try_again:
     }
 
     v->len = xv->len - AEAD_LEN;
+
+    // packet protection verified OK
+    struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
+    if (diet_find(&pn->recv_all, meta(v).hdr.nr)) {
+        warn(ERR, "duplicate pkt nr " FMT_PNR_IN ", ignoring", meta(v).hdr.nr);
+        return false;
+    }
+
+    diet_insert(&pn->recv, meta(v).hdr.nr, ev_now(loop));
+    diet_insert(&pn->recv_all, meta(v).hdr.nr, ev_now(loop));
+
     return true;
 }
 

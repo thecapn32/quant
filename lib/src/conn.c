@@ -641,7 +641,11 @@ static void __attribute__((nonnull)) vneg_or_rtry_resp(struct q_conn * const c)
 static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
                                             struct w_iov * const v,
                                             struct w_iov_sq * const x,
-                                            const struct cid * const odcid,
+                                            const struct cid * const odcid
+#ifdef NDEBUG
+                                            __attribute__((unused))
+#endif
+                                            ,
                                             const uint8_t * const tok,
                                             const uint16_t tok_len)
 {
@@ -844,7 +848,8 @@ rx_pkts(struct w_iov_sq * const x,
         struct w_iov * xv = sq_first(x);
         sq_remove_head(x, next);
 
-        // warn(DBG, "rx idx %u len %u", w_iov_idx(xv), xv->len);
+        // warn(DBG, "rx idx %u len %u type 0x%02x", w_iov_idx(xv), xv->len,
+        //      *xv->buf);
 
 #if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
