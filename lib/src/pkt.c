@@ -870,13 +870,13 @@ try_again:
 
 #ifdef SPINBIT
         // short header, spin the bit
-        if (nr > diet_max(&(c->pn_data.pn.recv_all))) {
+        if (meta(v).hdr.nr > diet_max(&(c->pn_data.pn.recv_all))) {
             c->next_spin = ((meta(v).hdr.flags & F_SH_SPIN) == !c->is_clnt);
             warn(DBG, "%sing spin to 0x%02x", c->is_clnt ? "invert" : "reflect",
                  c->next_spin);
         } else
-            warn(DBG, "not updating next_spin: %" PRIu64 " <= %" PRIu64, nr,
-                 diet_max(&(c->pn_data.pn.recv_all)));
+            warn(DBG, "not updating next_spin: %" PRIu64 " <= %" PRIu64,
+                 meta(v).hdr.nr, diet_max(&(c->pn_data.pn.recv_all)));
 #endif
     }
 
