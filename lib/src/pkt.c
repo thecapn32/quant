@@ -391,7 +391,7 @@ bool enc_pkt(struct q_stream * const s,
         meta(v).pkt_nr_pos = i;
         meta(v).pkt_nr_len = needed_pkt_nr_len(pn, meta(v).hdr.nr);
         i = enc_pnr(v->buf, v->len, i, &meta(v).hdr.nr, meta(v).pkt_nr_len,
-                    GRN "%u" NRM);
+                    FMT_PNR_OUT);
     }
 
     meta(v).hdr.hdr_len = i;
@@ -715,7 +715,7 @@ static bool dec_pne(struct w_iov * const xv,
     const uint64_t next = diet_max(&pn->recv) + 1;
     uint64_t nr = next;
     meta(v).pkt_nr_len =
-        (uint8_t)dec_pnr(&nr, dec_nr, sizeof(dec_nr), 0, "%08x");
+        (uint8_t)dec_pnr(&nr, dec_nr, sizeof(dec_nr), 0, FMT_PNR_IN);
     if (unlikely(meta(v).pkt_nr_len > MAX_PKT_NR_LEN)) {
 #ifndef FUZZING
         warn(DBG, "can't undo PNE");
@@ -850,10 +850,10 @@ try_again:
             struct w_iov * const dup = w_iov_dup(xv);
             dup->buf += pkt_len;
             dup->len -= pkt_len;
-            // adjust original length
-            xv->len = pkt_len;
             // remember coalesced datagram len
             dup->user_data = xv->len;
+            // adjust length of first packet
+            xv->len = pkt_len;
             // rx() has already removed xv from x, so just insert dup at head
             sq_insert_head(x, dup, next);
 #ifndef FUZZING
@@ -898,7 +898,7 @@ try_again:
 
 void tx_vneg_resp(const struct w_sock * const ws, const struct w_iov * const v)
 {
-    struct w_iov * const x = q_alloc_iov(ws->w, 0, Q_OFFSET);
+    struct w_iov * const x = q_alloc_iov(ws->w, 0, 0);
     struct w_iov_sq q = w_iov_sq_initializer(q);
     sq_insert_head(&q, x, next);
 

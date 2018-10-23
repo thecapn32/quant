@@ -87,7 +87,7 @@ extern void free_tls_ctx(void);
 
 extern uint16_t __attribute__((nonnull))
 dec_aead(struct q_conn * const c,
-         const struct w_iov * const x,
+         const struct w_iov * const xv,
          const struct w_iov * const v,
          const uint16_t len,
          const struct cipher_ctx * const ctx);
@@ -107,13 +107,3 @@ flip_keys(struct q_conn * const c, const bool out);
 
 extern void __attribute__((nonnull))
 maybe_flip_keys(struct q_conn * const c, const bool out);
-
-// quicly shim
-#define st_quicly_cipher_context_t cipher_ctx
-
-extern int __attribute__((nonnull))
-setup_initial_key(struct st_quicly_cipher_context_t * ctx,
-                  ptls_cipher_suite_t * cs,
-                  const void * master_secret,
-                  const char * label,
-                  int is_enc);

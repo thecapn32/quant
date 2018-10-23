@@ -574,7 +574,7 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
     struct q_stream * const s = get_stream(c, crpt_strm_id(epoch));
     while (!sq_empty(&s->in)) {
         // take the data out of the crypto stream
-        struct w_iov * iv = sq_first(&s->in);
+        struct w_iov * const iv = sq_first(&s->in);
         sq_remove_head(&s->in, next);
         meta(iv).stream = 0;
 
@@ -652,7 +652,6 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
     bool ok = false;
     struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
 
-    // TODO MOVE
     log_pkt("RX", v, odcid, tok, tok_len);
 
     switch (c->state) {
@@ -845,7 +844,7 @@ rx_pkts(struct w_iov_sq * const x,
         const struct w_sock * const ws)
 {
     while (!sq_empty(x)) {
-        struct w_iov * xv = sq_first(x);
+        struct w_iov * const xv = sq_first(x);
         sq_remove_head(x, next);
 
         // warn(DBG, "rx idx %u len %u type 0x%02x", w_iov_idx(xv), xv->len,
@@ -859,11 +858,10 @@ rx_pkts(struct w_iov_sq * const x,
 #endif
 
         // allocate new w_iov for the (eventual) unencrypted data and meta-data
-        struct w_iov * const v = q_alloc_iov(ws->w, 0, Q_OFFSET);
+        struct w_iov * const v = q_alloc_iov(ws->w, 0, 0);
         v->port = xv->port;
         v->ip = xv->ip;
         v->flags = xv->flags;
-        v->len = xv->len;
 
         const bool is_clnt = w_connected(ws);
         struct q_conn * c = 0;
@@ -912,8 +910,7 @@ rx_pkts(struct w_iov_sq * const x,
                             log_pkt("RX", v, &odcid, tok, tok_len);
 #ifndef FUZZING
                             warn(WRN,
-                                 "clnt-requested vers 0x%08x not "
-                                 "supported ",
+                                 "clnt-requested vers 0x%08x not supported",
                                  meta(v).hdr.vers);
                             tx_vneg_resp(ws, v);
                             q_free_iov(v);
@@ -1041,7 +1038,7 @@ void rx(struct ev_loop * const l,
         struct q_conn * const c = sl_first(&crx);
         sl_remove_head(&crx, node_rx_int);
 
-        if (c->state != conn_drng)
+        if (unlikely(c->state != conn_drng))
             // reset idle timeout
             ev_timer_again(l, &c->idle_alarm);
 
@@ -1052,7 +1049,7 @@ void rx(struct ev_loop * const l,
         // clear the helper flags set above
         c->needs_tx = c->had_rx = false;
 
-        if (c->tx_rtry)
+        if (unlikely(c->tx_rtry))
             // if we sent a retry, forget the entire connection existed
             free_conn(c);
         else if (c->have_new_data) {

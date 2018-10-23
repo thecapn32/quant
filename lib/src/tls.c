@@ -222,11 +222,11 @@ Exit:
 }
 
 // from quicly
-int setup_initial_key(struct st_quicly_cipher_context_t * ctx,
-                      ptls_cipher_suite_t * cs,
-                      const void * master_secret,
-                      const char * label,
-                      int is_enc)
+static int setup_initial_key(struct st_quicly_cipher_context_t * ctx,
+                             ptls_cipher_suite_t * cs,
+                             const void * master_secret,
+                             const char * label,
+                             int is_enc)
 {
     uint8_t aead_secret[PTLS_MAX_DIGEST_SIZE];
     int ret;
