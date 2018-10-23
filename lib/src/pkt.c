@@ -576,7 +576,7 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
         if (meta(v).hdr.vers &&
             (meta(v).hdr.type > F_LH_INIT || meta(v).hdr.type < F_LH_0RTT)) {
 #ifndef FUZZING
-            warn(DBG, "illegal pkt type 0x%02x", meta(v).hdr.type);
+            warn(DBG, "illegal LH pkt type 0x%02x", meta(v).hdr.type);
 #endif
             return false;
         }
@@ -672,6 +672,14 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
         }
 
         return true;
+    }
+
+    // this is possibly a short-header packet
+    if (unlikely(is_set(F_SH, meta(v).hdr.flags & F_SH_MASK) == false)) {
+#ifndef FUZZING
+        warn(DBG, "illegal SH pkt type 0x%02x", meta(v).hdr.flags);
+#endif
+        return false;
     }
 
     // this logic depends on picking a SCID with a known length during handshake
