@@ -50,7 +50,7 @@ declare -A servers=(
         [winquic]=msquic.westus.cloudapp.azure.com:4433:4434:/the-odyssey.txt
 )
 
-results=(live fail vneg hshk data clse zrtt rtry mig kyph)
+results=(live fail vneg hshk data clse zrtt rtry migr kyph)
 declare -A ${results[@]}
 
 
@@ -164,7 +164,7 @@ function analyze {
 
         perl -n -e '/dec_new_cid_frame.*NEW_CONNECTION_ID/ and $n=1;
                     /migration to dcid/ && $n && exit 1;' "$log"
-        [ $? == 1 ] && mig[$1]=M
+        [ $? == 1 ] && migr[$1]=M
         [ ${fail[$1]} ] || rm -f "$log"
 
         # analyze 0rtt
