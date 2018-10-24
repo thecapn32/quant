@@ -811,8 +811,9 @@ dec_new_token_frame(struct q_conn * const c,
 
     // TODO: actually do something with the token
     uint8_t tok[MAX_TOK_LEN];
-    ensure(tok_len < sizeof(tok), "tok_len %" PRIu64 " > %u", tok_len,
-           sizeof(tok));
+    if (unlikely(tok_len > sizeof(tok)))
+        err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_NEW_TOKN,
+                         "max tok_len is %u, got %u", sizeof(tok), tok_len);
     i = dec_chk_buf(FRAM_TYPE_NEW_TOKN, tok, v->buf, v->len, i,
                     (uint16_t)tok_len);
 
