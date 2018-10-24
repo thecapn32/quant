@@ -324,14 +324,14 @@ is_inf(const ev_tstamp t)
 #define cid2str(i)                                                             \
     __extension__({                                                            \
         static char _str[2 * (MAX_CID_LEN + sizeof((i)->seq)) + 1] = "0";      \
-        snprintf(_str, sizeof(_str), "%" PRIu64 ":%s", (i)->seq,               \
-                 hex2str((i)->id, (i)->len));                                  \
-        _str;                                                                  \
+        if (i)                                                                 \
+            snprintf(_str, sizeof(_str), "%" PRIu64 ":%s", (i)->seq,           \
+                     hex2str((i)->id, (i)->len));                              \
+        (i) ? _str : "?";                                                      \
     })
 
 
-#ifndef FUZZING
-
+#if !defined(NDEBUG) && !defined(FUZZING)
 #define conn_to_state(c, s)                                                    \
     do {                                                                       \
         warn(DBG, "conn %s state %s -> " RED "%s" NRM, cid2str((c)->scid),     \
@@ -341,11 +341,8 @@ is_inf(const ev_tstamp t)
         else                                                                   \
             warn(ERR, "useless transition %u %u!", (c)->state, (s));           \
     } while (0)
-
 #else
-
 #define conn_to_state(c, s) (c)->state = (s)
-
 #endif
 
 struct ev_loop;
@@ -406,7 +403,7 @@ extern void __attribute__((nonnull))
 free_dcid(struct q_conn * const c, struct cid * const id);
 
 #ifdef FUZZING
-extern void __attribute__((nonnull)) rx_pkts(struct w_iov_sq * const i,
+extern void __attribute__((nonnull)) rx_pkts(struct w_iov_sq * const x,
                                              struct q_conn_sl * const crx,
                                              const struct w_sock * const ws);
 #endif

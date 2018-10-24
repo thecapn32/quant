@@ -33,7 +33,6 @@
 #include <warpcore/warpcore.h>
 
 #include <conn.h>
-#include <diet.h>
 #include <pkt.h>
 #include <quic.h>
 
@@ -54,11 +53,8 @@ int LLVMFuzzerInitialize(int * argc __attribute__((unused)),
                        "0"
 #endif
         ;
-#ifndef NDEBUG
-    util_dlevel = DBG;
-#endif
-
-    w = q_init(i, 0, 0, 0, 0, false);
+    util_dlevel = ERR;
+    w = q_init(i, 0, 0, 0, 0, false, 8192);
     c = new_conn(w, 0, 0, 0, 0, 0, 0, 0);
 
     return 0;
@@ -67,20 +63,14 @@ int LLVMFuzzerInitialize(int * argc __attribute__((unused)),
 
 int LLVMFuzzerTestOneInput(const uint8_t * data, const size_t size)
 {
-    struct w_iov * v = q_alloc_iov(w, MAX_PKT_LEN, 0);
-    ensure(v, "cannot alloc w_iov");
-
+    struct w_iov * const v = q_alloc_iov(w, MAX_PKT_LEN, 0);
     memcpy(v->buf, data, MIN(size, v->len));
     v->len = (uint16_t)MIN(size, v->len);
     struct w_iov_sq i = w_iov_sq_initializer(i);
     sq_insert_head(&i, v, next);
 
-    struct q_conn_sl crx;
-    rx_pkts(&i, &crx, c->sock);
-    q_free(&i);
-    diet_free(&c->closed_streams);
-    // diet_free(&c->recv);
-    // diet_free(&c->acked);
+    rx_pkts(&i, &(struct q_conn_sl){0}, c->sock);
+    q_free_iov(v);
 
     return 0;
 }

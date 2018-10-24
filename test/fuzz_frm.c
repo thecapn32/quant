@@ -46,7 +46,6 @@ extern int LLVMFuzzerInitialize(int * argc, char *** argv);
 static void * w;
 static struct q_conn * c;
 
-
 int LLVMFuzzerInitialize(int * argc __attribute__((unused)),
                          char *** argv __attribute__((unused)))
 {
@@ -55,11 +54,9 @@ int LLVMFuzzerInitialize(int * argc __attribute__((unused)),
                        "0"
 #endif
         ;
-#ifndef NDEBUG
-    util_dlevel = DBG;
-#endif
+    util_dlevel = ERR;
 
-    w = q_init(i, 0, 0, 0, 0, false);
+    w = q_init(i, 0, 0, 0, 0, false, 8192);
     c = new_conn(w, 0, 0, 0, 0, 0, 0, 0);
 
     return 0;
@@ -69,17 +66,17 @@ int LLVMFuzzerInitialize(int * argc __attribute__((unused)),
 int LLVMFuzzerTestOneInput(const uint8_t * data, const size_t size)
 {
     struct w_iov * v = q_alloc_iov(w, MAX_PKT_LEN, 0);
-    ensure(v, "cannot alloc w_iov");
-
     memcpy(v->buf, data, MIN(size, v->len));
     v->len = (uint16_t)MIN(size, v->len);
 
-    dec_frames(c, v);
+    dec_frames(c, &v);
+    if (meta(v).stream == 0)
+        q_free_iov(v);
 
-    struct q_stream * s;
-    splay_foreach (s, stream, &c->streams)
-        q_free(&s->in);
-    q_free_iov(v);
+    while (!splay_empty(&c->streams_by_id)) {
+        struct q_stream * const s = splay_min(streams_by_id, &c->streams_by_id);
+        free_stream(s);
+    }
 
     return 0;
 }

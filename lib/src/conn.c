@@ -102,10 +102,8 @@ bool vers_supported(const uint32_t v)
         if (v == ok_vers[i])
             return true;
 
-#ifndef FUZZING
-    warn(INF, "no vers in common");
-#endif
     // we're out of matching candidates
+    warn(INF, "no vers in common");
     return false;
 }
 
@@ -173,14 +171,10 @@ switch_scid(struct q_conn * const c, const struct cid * const id)
     if (scid->seq <= c->scid->seq)
         return;
 
-#ifndef FUZZING
     warn(NTE, "migration to scid %s for %s conn (was %s)", cid2str(scid),
          conn_type(c), cid2str(c->scid));
-#endif
-    c->scid = scid;
 
-    // splay_foreach (scid, cids_by_seq, &c->scids_by_seq)
-    //     warn(ERR, "%s", cid2str(scid));
+    c->scid = scid;
 }
 
 
@@ -190,15 +184,11 @@ static void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c)
     struct cid * dcid = splay_find(cids_by_seq, &c->dcids_by_seq, &which);
     ensure(dcid, "have dcid");
 
-#ifndef FUZZING
     warn(NTE, "migration to dcid %s for %s conn (was %s)", cid2str(dcid),
          conn_type(c), cid2str(c->dcid));
-#endif
+
     c->tx_retire_cid = c->dcid->retired = true;
     c->dcid = dcid;
-
-    // splay_foreach (dcid, cids_by_seq, &c->dcids_by_seq)
-    //     warn(ERR, "%s", cid2str(dcid));
 }
 
 
@@ -500,10 +490,8 @@ void tx_w(struct ev_loop * const l __attribute__((unused)),
 
 void update_act_scid(struct q_conn * const c, const struct cid * const id)
 {
-#ifndef FUZZING
     warn(NTE, "hshk switch to scid %s for %s conn (was %s)", cid2str(id),
          conn_type(c), cid2str(c->scid));
-#endif
     const struct q_cid_map which = {.cid = *c->scid};
     struct q_cid_map * cm = splay_find(conns_by_id, &conns_by_id, &which);
     splay_remove(conns_by_id, &conns_by_id, cm);
@@ -547,10 +535,8 @@ void add_dcid(struct q_conn * const c, const struct cid * const id)
         if (c->dcid == 0)
             c->dcid = dcid;
     } else {
-#ifndef FUZZING
         warn(NTE, "hshk switch to dcid %s for %s conn (was %s)", cid2str(id),
              conn_type(c), cid2str(c->dcid));
-#endif
         cid_cpy(dcid, id);
     }
 
@@ -639,7 +625,7 @@ static void __attribute__((nonnull)) vneg_or_rtry_resp(struct q_conn * const c)
 
 
 static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
-                                            struct w_iov * const v,
+                                            struct w_iov * v,
                                             struct w_iov_sq * const x,
                                             const struct cid * const odcid
 #ifdef NDEBUG
@@ -677,11 +663,8 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             }
         }
 
-#ifndef FUZZING
         warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
-#endif
-
-        if (dec_frames(c, v) == UINT16_MAX)
+        if (dec_frames(c, &v) == UINT16_MAX)
             goto done;
 
         // if the CH doesn't include any crypto frames, bail
@@ -768,7 +751,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 
         // server accepted version -
         // if we get here, this should be a regular server-hello
-        ok = (dec_frames(c, v) != UINT16_MAX);
+        ok = (dec_frames(c, &v) != UINT16_MAX);
         break;
 
     case conn_estb:
@@ -776,9 +759,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
     case conn_drng:
         if (is_set(F_LONG_HDR, meta(v).hdr.flags) && meta(v).hdr.vers == 0) {
             // we shouldn't get another vers-neg packet here, ignore
-#ifndef FUZZING
             warn(NTE, "ignoring spurious ver neg response");
-#endif
             goto done;
         }
 
@@ -788,23 +769,20 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             goto done;
         }
 
-        if (dec_frames(c, v) == UINT16_MAX)
+        if (dec_frames(c, &v) == UINT16_MAX)
             goto done;
 
         ok = true;
         break;
 
     case conn_clsd:
-#ifndef FUZZING
         warn(NTE, "ignoring pkt for closed %s conn", conn_type(c));
-#endif
         break;
 
     default:
         die("TODO: state %s", conn_state_str[c->state]);
     }
 
-#ifndef FUZZING
     // if packet has anything other than ACK frames, maybe arm the ACK timer
     if (c->state != conn_drng && c->state != conn_clsd && !c->tx_rtry &&
         !is_ack_only(&meta(v)) && !ev_is_active(&pn->ack_alarm)) {
@@ -812,7 +790,6 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         //      epoch_for_pkt_type(meta(v).hdr.type));
         ev_timer_again(loop, &pn->ack_alarm);
     }
-#endif
 
     maybe_flip_keys(c, true);
 
@@ -869,11 +846,9 @@ rx_pkts(struct w_iov_sq * const x,
         uint8_t tok[MAX_PKT_LEN];
         uint16_t tok_len = 0;
         if (!dec_pkt_hdr_beginning(xv, v, is_clnt, &odcid, tok, &tok_len)) {
-            log_pkt("RX", v, &odcid, tok, tok_len);
-#ifndef FUZZING
+            // can't log packet, because it may be too short for log_pkt()
             warn(ERR, "received invalid %u-byte pkt (type 0x%02x), ignoring",
                  v->len, v->buf[0]);
-#endif
             q_free_iov(v);
             continue;
         }
@@ -888,34 +863,26 @@ rx_pkts(struct w_iov_sq * const x,
             if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
                 if (!is_clnt) {
                     if (c && meta(v).hdr.type == F_LH_0RTT)
-#ifndef FUZZING
                         warn(INF,
                              "got 0-RTT pkt for orig cid %s, new is %s, "
                              "accepting",
                              cid2str(&meta(v).hdr.dcid), cid2str(c->scid));
-#else
-                        (void)c;
-#endif
                     else if (c == 0 && meta(v).hdr.type == F_LH_INIT) {
                         // validate minimum packet size
-#ifndef FUZZING
                         // TODO: actually reject
                         if (xv->user_data < MIN_INI_LEN)
                             warn(ERR, "initial %u-byte pkt too short (< %u)",
                                  xv->user_data, MIN_INI_LEN);
-#endif
 
                         if (vers_supported(meta(v).hdr.vers) == false ||
                             is_force_neg_vers(meta(v).hdr.vers)) {
                             log_pkt("RX", v, &odcid, tok, tok_len);
-#ifndef FUZZING
                             warn(WRN,
                                  "clnt-requested vers 0x%08x not supported",
                                  meta(v).hdr.vers);
                             tx_vneg_resp(ws, v);
                             q_free_iov(v);
                             continue;
-#endif
                         }
 
                         warn(NTE,
@@ -933,13 +900,11 @@ rx_pkts(struct w_iov_sq * const x,
         } else {
             if (meta(v).hdr.scid.len) {
                 if (cid_cmp(&meta(v).hdr.scid, c->dcid) != 0) {
-                    if (meta(v).hdr.type == F_LH_RTRY &&
+                    if (meta(v).hdr.vers && meta(v).hdr.type == F_LH_RTRY &&
                         cid_cmp(&odcid, c->dcid) != 0) {
                         log_pkt("RX", v, &odcid, tok, tok_len);
-#ifndef FUZZING
                         warn(ERR, "retry dcid mismatch %s != %s",
                              cid2str(&odcid), cid2str(c->dcid));
-#endif
                         q_free_iov(v);
                         continue;
                     }
@@ -962,11 +927,9 @@ rx_pkts(struct w_iov_sq * const x,
         }
 
         if (c == 0) {
-#ifndef FUZZING
             warn(INF, "cannot find conn %s for 0x%02x-type pkt",
                  cid2str(&meta(v).hdr.dcid), meta(v).hdr.flags);
-#endif
-
+#ifndef FUZZING
             // if this is a 0-RTT pkt, track it (may be reordered)
             if (is_set(F_LONG_HDR, meta(v).hdr.flags) &&
                 meta(v).hdr.type == F_LH_0RTT) {
@@ -977,18 +940,14 @@ rx_pkts(struct w_iov_sq * const x,
                 zo->t = ev_now(loop);
                 splay_insert(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo);
                 log_pkt("RX", v, &odcid, tok, tok_len); // NOLINT
-#ifndef FUZZING
                 warn(INF, "caching 0-RTT pkt for unknown conn %s",
                      cid2str(&meta(v).hdr.dcid));
-#endif
                 continue;
             }
-
+#endif
             log_pkt("RX", v, &odcid, tok, tok_len);
-#ifndef FUZZING
             warn(INF, "ignoring unexpected 0x%02x-type pkt for conn %s",
                  meta(v).hdr.flags, cid2str(&meta(v).hdr.dcid));
-#endif
             q_free_iov(v);
             continue;
         }
@@ -997,10 +956,8 @@ rx_pkts(struct w_iov_sq * const x,
             !is_set(F_LONG_HDR, meta(v).hdr.flags))
             if (dec_pkt_hdr_remainder(xv, v, c, x) == false) {
                 log_pkt("RX", v, &odcid, tok, tok_len);
-#ifndef FUZZING
                 warn(ERR, "received invalid %u-byte 0x%02x-type pkt, ignoring",
                      v->len, meta(v).hdr.flags);
-#endif
                 q_free_iov(v);
                 continue;
             }
@@ -1086,9 +1043,9 @@ void err_close(struct q_conn * const c,
              code, reas, c->err_code, c->err_reason);
         return;
     }
+#endif
 
     warn(ERR, "%s", reas);
-#endif
     c->err_code = code;
     c->err_reason = strdup(reas);
     c->err_frm = frm;
@@ -1135,11 +1092,15 @@ void enter_closing(struct q_conn * const c)
         ev_timer_stop(loop, &pn->ack_alarm);
     }
 
+#ifndef FUZZING
     if ((c->state == conn_idle || c->state == conn_opng) && c->err_code == 0) {
+#endif
         // no need to go closing->draining in these cases
         ev_invoke(loop, &c->closing_alarm, 0);
         return;
+#ifndef FUZZING
     }
+#endif
 
     // if we're going closing->draining, don't start the timer again
     if (!ev_is_active(&c->closing_alarm)) {

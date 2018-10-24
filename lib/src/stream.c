@@ -75,8 +75,7 @@ void apply_stream_limits(struct q_stream * const s)
 
 struct q_stream * new_stream(struct q_conn * const c, const int64_t id)
 {
-    if (id >= 0)
-        ensure(get_stream(c, id) == 0, "stream already %u exists", id);
+    ensure(get_stream(c, id) == 0, "stream already %u exists", id);
 
     struct q_stream * const s = calloc(1, sizeof(*s));
     ensure(s, "could not calloc q_stream");
@@ -109,14 +108,23 @@ done:
 void free_stream(struct q_stream * const s)
 {
     if (s->id >= 0) {
+#ifndef FUZZING
         warn(DBG, "freeing strm " FMT_SID " on %s conn %s", s->id,
              conn_type(s->c), cid2str(s->c->scid));
+#endif
         diet_insert(&s->c->closed_streams, (uint64_t)s->id, 0);
     }
 
     splay_remove(streams_by_id, &s->c->streams_by_id, s);
+    while (!splay_empty(&s->in_ooo)) {
+        struct pkt_meta * const p = splay_min(ooo_by_off, &s->in_ooo);
+        warn(ERR, "idx %u", pm_idx(p));
+        splay_remove(ooo_by_off, &s->in_ooo, p);
+        q_free_iov(w_iov(s->c->w, pm_idx(p)));
+    }
     q_free(&s->out);
     q_free(&s->in);
+
     free(s);
 }
 

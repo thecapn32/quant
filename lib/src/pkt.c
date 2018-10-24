@@ -48,7 +48,7 @@
 #include "tls.h"
 
 
-#if !defined(NDEBUG) && !defined(FUZZING)
+#ifndef NDEBUG
 static const char * __attribute__((const))
 pkt_type_str(const uint8_t flags, const uint8_t * const vers)
 {
@@ -297,10 +297,8 @@ bool enc_pkt(struct q_stream * const s,
             struct cid nscid = {.len = SERV_SCID_LEN};
             arc4random_buf(nscid.id, nscid.len);
             arc4random_buf(nscid.srt, sizeof(nscid.srt));
-#ifndef FUZZING
             warn(NTE, "hshk switch to scid %s for %s conn (was %s)",
                  cid2str(&nscid), conn_type(c), cid2str(c->scid));
-#endif
             cid_cpy(&c->odcid, c->scid);
             update_act_scid(c, &nscid);
         }
@@ -575,9 +573,7 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
         // check if the packet type/version combo makes sense
         if (meta(v).hdr.vers &&
             (meta(v).hdr.type > F_LH_INIT || meta(v).hdr.type < F_LH_0RTT)) {
-#ifndef FUZZING
             warn(DBG, "illegal LH pkt type 0x%02x", meta(v).hdr.type);
-#endif
             return false;
         }
 
@@ -595,9 +591,7 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
         // if this is a CI, the dcid len must be >= 8 bytes
         if (is_clnt == false && unlikely(meta(v).hdr.type == F_LH_INIT &&
                                          meta(v).hdr.dcid.len < 8)) {
-#ifndef FUZZING
             warn(DBG, "dcid len %u too short", meta(v).hdr.dcid.len);
-#endif
             return false;
         }
 
@@ -634,9 +628,7 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
             *tok_len = (uint16_t)tl;
             if (is_clnt && *tok_len) {
                 // server initial pkts must have no tokens
-#ifndef FUZZING
                 warn(DBG, "tok present in serv initial");
-#endif
                 return false;
             }
         } else if (meta(v).hdr.type == F_LH_RTRY)
@@ -645,9 +637,7 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
         if (*tok_len) {
             if (unlikely(*tok_len + meta(v).hdr.hdr_len > xv->len)) {
                 // corrupt token len
-#ifndef FUZZING
                 warn(DBG, "tok_len %u invalid", *tok_len);
-#endif
                 return false;
             }
             meta(v).hdr.hdr_len = dec_chk_buf(tok, xv->buf, xv->len,
@@ -664,9 +654,7 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
 
             // the len cannot be larger than the rx'ed pkt
             if (unlikely(meta(v).hdr.len + meta(v).hdr.hdr_len > xv->len)) {
-#ifndef FUZZING
                 warn(DBG, "len %u invalid", meta(v).hdr.len);
-#endif
                 return false;
             }
         }
@@ -676,9 +664,7 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
 
     // this is possibly a short-header packet
     if (unlikely(is_set(F_SH, meta(v).hdr.flags & F_SH_MASK) == false)) {
-#ifndef FUZZING
         warn(DBG, "illegal SH pkt type 0x%02x", meta(v).hdr.flags);
-#endif
         return false;
     }
 
@@ -717,9 +703,7 @@ static bool dec_pne(struct w_iov * const xv,
     meta(v).pkt_nr_len =
         (uint8_t)dec_pnr(&nr, dec_nr, sizeof(dec_nr), 0, FMT_PNR_IN);
     if (unlikely(meta(v).pkt_nr_len > MAX_PKT_NR_LEN)) {
-#ifndef FUZZING
         warn(DBG, "can't undo PNE");
-#endif
         return false;
     }
 
@@ -775,24 +759,18 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
             // this might be the first key phase flip
             flip_keys(c, false);
             ctx = which_cipher_ctx_in(c, meta(v).hdr.flags);
-        } else {
-            err_close(c, ERR_PROTOCOL_VIOLATION, 0,
-                      "crypto fail on 0x%02x-type %s pkt", meta(v).hdr.flags,
-                      is_set(F_LONG_HDR, meta(v).hdr.flags) ? "LH" : "SH");
-            return false;
-        }
+            if (unlikely(ctx->pne == 0 || ctx->aead == 0))
+                goto fail;
+        } else
+            goto fail;
     }
 
     bool first_try = true;
     uint8_t pn_enc[MAX_PKT_NR_LEN]; // raw (encrypted) packet number data
 
 try_again:
-    if (unlikely(dec_pne(xv, v, c, ctx, pn_enc) == false)) {
-        err_close(c, ERR_PROTOCOL_VIOLATION, 0,
-                  "PNE fail on 0x%02x-type %s pkt", xv->buf[0],
-                  is_set(F_LONG_HDR, meta(v).hdr.flags) ? "LH" : "SH");
-        return false;
-    }
+    if (unlikely(dec_pne(xv, v, c, ctx, pn_enc) == false))
+        goto fail;
 
     // we can now try and verify the packet protection
     const uint16_t pkt_len =
@@ -809,10 +787,8 @@ try_again:
                 // TODO: srt should have > 20 bytes of random prefix
                 if (memcmp(&xv->buf[xv->len - sizeof(c->dcid->srt)],
                            c->dcid->srt, sizeof(c->dcid->srt)) == 0) {
-#ifndef FUZZING
                     warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
                          hex2str(c->dcid->srt, sizeof(c->dcid->srt)));
-#endif
                     conn_to_state(c, conn_drng);
                     return true;
                 }
@@ -827,7 +803,6 @@ try_again:
                     // so undo PNE decryption and retry with flipped keys
                     memcpy(&xv->buf[meta(v).pkt_nr_pos], pn_enc,
                            sizeof(pn_enc));
-
                     flip_keys(c, false);
                     meta(v).hdr.hdr_len = meta(v).pkt_nr_pos;
                     first_try = false;
@@ -835,10 +810,7 @@ try_again:
                 }
             }
         }
-        err_close(c, ERR_PROTOCOL_VIOLATION, 0,
-                  "crypto fail on 0x%02x-type %s pkt", meta(v).hdr.flags,
-                  is_set(F_LONG_HDR, meta(v).hdr.flags) ? "LH" : "SH");
-        return false;
+        goto fail;
     }
 
     if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
@@ -856,10 +828,8 @@ try_again:
             xv->len = pkt_len;
             // rx() has already removed xv from x, so just insert dup at head
             sq_insert_head(x, dup, next);
-#ifndef FUZZING
             warn(DBG, "split out coalesced %s pkt of len %u",
                  pkt_type_str(*dup->buf, &dup->buf[1]), dup->len);
-#endif
         }
 
     } else {
@@ -893,11 +863,22 @@ try_again:
     diet_insert(&pn->recv_all, meta(v).hdr.nr, ev_now(loop));
 
     return true;
+
+fail:
+    err_close(c, ERR_PROTOCOL_VIOLATION, 0, "crypto fail on 0x%02x-type %s pkt",
+              meta(v).hdr.flags,
+              is_set(F_LONG_HDR, meta(v).hdr.flags) ? "LH" : "SH");
+    return false;
 }
 
 
 void tx_vneg_resp(const struct w_sock * const ws, const struct w_iov * const v)
 {
+    if (unlikely(v->ip == 0 && v->port == 0)) {
+        warn(ERR, "no destination info in orig w_iov");
+        return;
+    }
+
     struct w_iov * const x = q_alloc_iov(ws->w, 0, 0);
     struct w_iov_sq q = w_iov_sq_initializer(q);
     sq_insert_head(&q, x, next);

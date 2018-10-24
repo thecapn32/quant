@@ -135,7 +135,7 @@ extern void __attribute__((nonnull))
 tx_vneg_resp(const struct w_sock * const ws, const struct w_iov * const v);
 
 
-#if !defined(NDEBUG) && !defined(FUZZING)
+#ifndef NDEBUG
 extern void __attribute__((nonnull(1, 2)))
 log_pkt(const char * const dir,
         const struct w_iov * const v,

@@ -81,13 +81,14 @@ struct q_stream {
 };
 
 
-#ifndef FUZZING
+#ifndef NDEBUG
 #define strm_to_state(s, new_state)                                            \
     do {                                                                       \
-        if ((s)->id >= 0)                                                      \
+        if ((s)->id >= 0) {                                                    \
             warn(DBG, "conn %s strm " FMT_SID " state %s -> " YEL "%s" NRM,    \
-                 cid2str((s)->c->scid), (s)->id, strm_state_str[(s)->state],   \
-                 strm_state_str[(new_state)]);                                 \
+                 (s)->c->scid ? cid2str((s)->c->scid) : "?", (s)->id,          \
+                 strm_state_str[(s)->state], strm_state_str[(new_state)]);     \
+        }                                                                      \
         (s)->state = (new_state);                                              \
     } while (0)
 #else

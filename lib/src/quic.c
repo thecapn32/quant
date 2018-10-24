@@ -68,7 +68,7 @@ SPLAY_GENERATE(ooo_by_off, pkt_meta, off_node, ooo_by_off_cmp)
 
 /// QUIC version supported by this implementation in order of preference.
 const uint32_t ok_vers[] = {
-#if !defined(NDEBUG) && !defined(FUZZING)
+#ifndef NDEBUG
     0xbabababa, // XXX reserved version to trigger negotiation
 #endif
     0x00001234, // reserved version for inclusion in vneg response
@@ -439,6 +439,7 @@ struct q_stream * q_rsv_stream(struct q_conn * const c)
 }
 
 
+#ifndef FUZZING
 static void __attribute__((noreturn))
 signal_cb(struct ev_loop * l,
           ev_signal * w,
@@ -448,6 +449,7 @@ signal_cb(struct ev_loop * l,
     w_cleanup(w->data);
     exit(0);
 }
+#endif
 
 
 #if !defined(NDEBUG) && !defined(FUZZING)
@@ -499,6 +501,7 @@ struct w_engine * q_init(const char * const ifname,
 
 #ifndef FUZZING
     // libev seems to need this inside docker to handle Ctrl-C?
+    /// but the fuzzer doesn't like it
     static ev_signal signal_w;
     signal_w.data = w;
     ev_signal_init(&signal_w, signal_cb, SIGINT);

@@ -159,14 +159,13 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     // deliver data into stream
     bool is_dup = false;
     struct q_stream * s = get_stream(c, sid);
-#ifndef FUZZING
     const char * kind = "";
-    if (t != FRAM_TYPE_CRPT && s == 0) {
+    if (unlikely(s == 0)) {
         if (diet_find(&c->closed_streams, (uint64_t)sid)) {
             warn(WRN,
                  "ignoring frame for closed strm " FMT_SID " on %s conn %s",
                  sid, conn_type(c), cid2str(c->scid));
-            goto done;
+            return meta(v).stream_data_end;
         }
 
         if (unlikely(is_set(STRM_FL_INI_SRV, sid) != c->is_clnt))
@@ -231,13 +230,30 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
         goto done;
     }
 
-    // data is out of order
+    // data is out of order - check if it overlaps with already stored ooo data
     kind = YEL "ooo" NRM;
+    struct pkt_meta * p = splay_min(ooo_by_off, &s->in_ooo);
+    while (p && p->stream_off + (p->stream_data_end - p->stream_data_start) <
+                    meta(v).stream_off) {
+        warn(ERR, "%u %u", p->stream_off,
+             p->stream_off + (p->stream_data_end - p->stream_data_start));
+        p = splay_next(ooo_by_off, &s->in_ooo, p);
+    }
+    // right edge of p >= left edge of v
+    if (p && p->stream_off <= meta(v).stream_off + stream_data_len(v)) {
+        // left edge of p <= right edge of v
+        warn(ERR, "have existing overlapping ooo data [%u..%u]", p->stream_off,
+             p->stream_off + (p->stream_data_end - p->stream_data_start));
+        is_dup = true;
+        goto done;
+    }
+
+    // this ooo data doesn't overlap with anything
     splay_insert(ooo_by_off, &s->in_ooo, &meta(v));
+    meta(v).stream = s;
 
 done:
     log_stream_or_crypto_frame(false, v, true, kind);
-#endif
 
     if (s && t != FRAM_TYPE_CRPT && meta(v).stream_off + l > s->in_data_max)
         err_close_return(c, ERR_FLOW_CONTROL, 0,
@@ -317,7 +333,11 @@ uint16_t dec_ack_frame(struct q_conn * const c,
             err_close_return(c, ERR_FRAME_ENC, t, "ACK block len %" PRIu64,
                              ack_block_len);
 
-#ifndef FUZZING
+        if (unlikely(ack_block_len > lg_ack_in_block))
+            err_close_return(c, ERR_FRAME_ENC, t, "ACK block len %" PRIu64,
+                             " > lg_ack_in_block %" PRIu64, ack_block_len,
+                             lg_ack_in_block);
+
         if (ack_block_len == 0) {
             if (n == num_blocks + 1) {
                 if (t == FRAM_TYPE_ACK_ECN)
@@ -370,13 +390,13 @@ uint16_t dec_ack_frame(struct q_conn * const c,
                      gap, ack_block_len, lg_ack_in_block - ack_block_len,
                      shorten_ack_nr(lg_ack_in_block, ack_block_len));
         }
-#endif
 
         uint64_t ack = lg_ack_in_block;
         while (ack_block_len >= lg_ack_in_block - ack) {
             struct w_iov * const acked = find_sent_pkt(c, pn, ack);
             if (unlikely(acked == 0)) {
 #ifndef FUZZING
+                // this is just way too noisy when fuzzing
                 if (unlikely(diet_find(&pn->acked, ack) == 0))
                     warn(ERR, "got ACK for pkt " FMT_PNR_OUT " never sent",
                          ack);
@@ -446,7 +466,6 @@ dec_close_frame(struct q_conn * const c,
     if (reas_len)
         i = dec_chk_buf(type, &reas_phr, v->buf, v->len, i, (uint16_t)reas_len);
 
-#ifndef FUZZING
     if (type == FRAM_TYPE_CONN_CLSE)
         warn(INF,
              FRAM_IN "CONNECTION_CLOSE" NRM " err=%s0x%04x " NRM
@@ -456,10 +475,9 @@ dec_close_frame(struct q_conn * const c,
     else
         warn(INF,
              FRAM_IN "APPLICATION_CLOSE" NRM " err=%s0x%04x " NRM
-                     " rlen=%" PRIu64 " reason=%s%.*s" NRM,
+                     "rlen=%" PRIu64 " reason=%s%.*s" NRM,
              err_code ? RED : NRM, err_code, reas_len, err_code ? RED : NRM,
              reas_len, reas_phr);
-#endif
 
     if (c->state != conn_drng) {
         conn_to_state(c, conn_drng);
@@ -488,21 +506,16 @@ dec_max_stream_data_frame(struct q_conn * const c,
     i = dec_chk(FRAM_TYPE_MAX_STRM_DATA, &max, v->buf, v->len, i, 0,
                 "%" PRIu64);
 
-#ifndef FUZZING
     warn(INF, FRAM_IN "MAX_STREAM_DATA" NRM " id=" FMT_SID " max=%" PRIu64, sid,
          max);
-#endif
 
     if (max > s->out_data_max) {
         s->out_data_max = max;
         s->blocked = false;
         c->needs_tx = true;
-    }
-#ifndef FUZZING
-    else
+    } else
         warn(WRN, "MAX_STREAM_DATA %" PRIu64 " <= current value %" PRIu64, max,
              s->out_data_max);
-#endif
 
     return i;
 }
@@ -521,10 +534,8 @@ dec_max_stream_id_frame(struct q_conn * const c,
         err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_MAX_SID,
                          "illegal MAX_STREAM_ID for %s: %u", conn_type(c), max);
 
-#ifndef FUZZING
     warn(INF, FRAM_IN "MAX_STREAM_ID" NRM " max=" FMT_SID " (%sdir)", max,
          is_set(STRM_FL_DIR_UNI, max) ? "uni" : "bi");
-#endif
 
     int64_t * const which = is_set(STRM_FL_DIR_UNI, max)
                                 ? &c->tp_out.max_uni_streams
@@ -536,12 +547,9 @@ dec_max_stream_id_frame(struct q_conn * const c,
         c->stream_id_blocked = false;
         c->needs_tx = true;
         maybe_api_return(q_rsv_stream, c, 0);
-    }
-#ifndef FUZZING
-    else
+    } else
         warn(WRN, "max_bidi_streams %" PRIu64 " <= current value %" PRIu64, max,
              *which);
-#endif
 
     return i;
 }
@@ -556,20 +564,15 @@ dec_max_data_frame(struct q_conn * const c,
     const uint16_t i = dec_chk(FRAM_TYPE_MAX_DATA, &max, v->buf, v->len,
                                pos + 1, 0, "%" PRIu64);
 
-#ifndef FUZZING
     warn(INF, FRAM_IN "MAX_DATA" NRM " max=%" PRIu64, max);
-#endif
 
     if (max > c->tp_out.max_data) {
         c->tp_out.max_data = max;
         c->blocked = false;
         c->needs_tx = true;
-    }
-#ifndef FUZZING
-    else
+    } else
         warn(WRN, "MAX_DATA %" PRIu64 " <= current value %" PRIu64, max,
              c->tp_out.max_data);
-#endif
 
     return i;
 }
@@ -592,10 +595,8 @@ dec_stream_blocked_frame(struct q_conn * const c,
     uint64_t off = 0;
     i = dec_chk(FRAM_TYPE_STRM_BLCK, &off, v->buf, v->len, i, 0, "%" PRIu64);
 
-#ifndef FUZZING
     warn(INF, FRAM_IN "STREAM_BLOCKED" NRM " id=" FMT_SID " off=%" PRIu64, sid,
          off);
-#endif
 
     do_stream_fc(s);
     return i;
@@ -611,9 +612,7 @@ dec_blocked_frame(struct q_conn * const c,
     uint16_t i =
         dec_chk(FRAM_TYPE_BLCK, &off, v->buf, v->len, pos + 1, 0, "%" PRIu64);
 
-#ifndef FUZZING
     warn(INF, FRAM_IN "BLOCKED" NRM " off=%" PRIu64, off);
-#endif
 
     do_conn_fc(c);
     return i;
@@ -629,9 +628,7 @@ dec_stream_id_blocked_frame(struct q_conn * const c,
     uint16_t i =
         dec_chk(FRAM_TYPE_SID_BLCK, &sid, v->buf, v->len, pos + 1, 0, FMT_SID);
 
-#ifndef FUZZING
     warn(INF, FRAM_IN "STREAM_ID_BLOCKED" NRM " sid=" FMT_SID, sid);
-#endif
 
     if (is_set(STRM_FL_DIR_UNI, sid))
         err_close_return(c, ERR_INTERNAL, 0, "TODO: unidir strm");
@@ -663,10 +660,8 @@ dec_stop_sending_frame(struct q_conn * const c,
     i = dec_chk(FRAM_TYPE_STOP_SEND, &err_code, v->buf, v->len, i,
                 sizeof(err_code), "0x%04x");
 
-#ifndef FUZZING
     warn(INF, FRAM_IN "STOP_SENDING" NRM " id=" FMT_SID " err=%s0x%04x" NRM,
          sid, err_code ? RED : NRM, err_code);
-#endif
 
     return i;
 }
@@ -680,9 +675,7 @@ dec_path_challenge_frame(struct q_conn * const c,
     uint16_t i = dec_chk(FRAM_TYPE_PATH_CHLG, &c->path_chlg_in, v->buf, v->len,
                          pos + 1, sizeof(c->path_chlg_in), "0x%" PRIx64);
 
-#ifndef FUZZING
     warn(INF, FRAM_IN "PATH_CHALLENGE" NRM " data=%" PRIx64, c->path_chlg_in);
-#endif
 
     c->path_resp_out = c->path_chlg_in;
     c->needs_tx = c->tx_path_resp = true;
@@ -699,9 +692,7 @@ dec_path_response_frame(struct q_conn * const c,
     uint16_t i = dec_chk(FRAM_TYPE_PATH_RESP, &c->path_resp_in, v->buf, v->len,
                          pos + 1, sizeof(c->path_resp_in), "0x%" PRIx64);
 
-#ifndef FUZZING
     warn(INF, FRAM_IN "PATH_RESPONSE" NRM " data=%" PRIx64, c->path_resp_in);
-#endif
 
     if (c->path_resp_in == c->path_chlg_out)
         c->tx_path_chlg = false;
@@ -728,23 +719,18 @@ dec_new_cid_frame(struct q_conn * const c,
     i = dec_chk_buf(FRAM_TYPE_NEW_CID, dcid.srt, v->buf, v->len, i,
                     sizeof(dcid.srt));
 
-#ifndef FUZZING
     warn(INF,
          FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu64
                  " len=%u dcid=%s tok=%s",
          dcid.seq, dcid.len, cid2str(&dcid),
          hex2str(dcid.srt, sizeof(dcid.srt)));
-#endif
 
     if (dcid.seq > c->max_cid_seq_in) {
         add_dcid(c, &dcid);
         c->max_cid_seq_in = dcid.seq;
-    }
-#ifndef FUZZING
-    else
-        warn(WRN, "highest seq seen %" PRIu64 " <= %" PRIu64 ", ignoring",
+    } else
+        warn(WRN, "highest cid seq seen %" PRIu64 " <= %" PRIu64 ", ignoring",
              c->max_cid_seq_in, dcid.seq);
-#endif
 
     return i;
 }
@@ -766,14 +752,15 @@ dec_rst_stream_frame(struct q_conn * const c,
     uint64_t off = 0;
     i = dec_chk(FRAM_TYPE_RST_STRM, &off, v->buf, v->len, i, 0, "%" PRIu64);
 
-#ifndef FUZZING
     warn(INF,
          FRAM_IN "RST_STREAM" NRM " sid=" FMT_SID " err=%s0x%04x" NRM
                  " off=%" PRIu64,
          sid, err ? RED : NRM, err, off);
-#endif
 
     struct q_stream * const s = get_stream(c, sid);
+    if (unlikely(s == 0))
+        err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_RST_STRM,
+                         "unknown strm %u", sid);
     strm_to_state(s, strm_clsd);
 
     return i;
@@ -789,12 +776,18 @@ dec_retire_cid_frame(struct q_conn * const c,
     uint16_t i = dec_chk(FRAM_TYPE_RTIR_CID, &which.seq, v->buf, v->len,
                          pos + 1, 0, "%" PRIu64);
 
-#ifndef FUZZING
     warn(INF, FRAM_IN "RETIRE_CONNECTION_ID" NRM " seq=%" PRIu64, which.seq);
-#endif
 
     struct cid * const scid = splay_find(cids_by_seq, &c->scids_by_seq, &which);
-    free_scid(c, scid);
+    if (unlikely(scid == 0))
+        warn(WRN, "could not find cid seq %" PRIu64 ", ignoring", which.seq);
+    else {
+        c->scid = splay_next(cids_by_seq, &c->scids_by_seq, scid);
+        if (unlikely(c->scid == 0))
+            err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_RTIR_CID,
+                             "no next scid");
+        free_scid(c, scid);
+    }
 
     // rx of RETIRE_CONNECTION_ID means we should send more
     c->tx_ncid = true;
@@ -823,10 +816,8 @@ dec_new_token_frame(struct q_conn * const c,
     i = dec_chk_buf(FRAM_TYPE_NEW_TOKN, tok, v->buf, v->len, i,
                     (uint16_t)tok_len);
 
-#ifndef FUZZING
     warn(INF, FRAM_IN "NEW_TOKEN" NRM " len=%" PRIu64 " tok=%s", tok_len,
          hex2str(tok, tok_len));
-#endif
 
     // TODO: actually do something with this
 
@@ -834,8 +825,10 @@ dec_new_token_frame(struct q_conn * const c,
 }
 
 
-uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
+uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
 {
+    struct w_iov * v = *vv;
+
     uint16_t i = meta(v).hdr.hdr_len;
     uint16_t pad_start = 0;
 
@@ -851,29 +844,26 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
         dec_chk(type, &type, v->buf, v->len, i, sizeof(type), "0x%02x");
 
         if (pad_start && (type != FRAM_TYPE_PAD || i == v->len - 1)) {
-#ifndef FUZZING
             warn(INF, FRAM_IN "PADDING" NRM " len=%u", i - pad_start);
-#endif
             pad_start = 0;
             bit_set(meta(v).frames, FRAM_TYPE_PAD);
         }
 
         if (type == FRAM_TYPE_CRPT ||
             (type >= FRAM_TYPE_STRM && type <= FRAM_TYPE_STRM_MAX)) {
-            if (bit_test(meta(v).frames, FRAM_TYPE_CRPT) ||
-                bit_test(meta(v).frames, FRAM_TYPE_STRM)) {
-                // already had at least one stream or crypto  frame in this
+            if ((bit_test(meta(v).frames, FRAM_TYPE_CRPT) ||
+                 bit_test(meta(v).frames, FRAM_TYPE_STRM)) &&
+                meta(v).stream) {
+                // already had at least one stream or crypto frame in this
                 // packet with non-duplicate data, so generate (another) copy
-#ifndef FUZZING
                 warn(DBG, "addtl stream or crypto frame at pos %u, copy", i);
-#endif
                 struct w_iov * const vdup = w_iov_dup(v);
                 pm_cpy(&meta(vdup), &meta(v), false);
                 // adjust w_iov start and len to stream frame data
                 v->buf = &v->buf[meta(v).stream_data_start];
                 v->len = stream_data_len(v);
                 // continue parsing in the copied w_iov
-                v = vdup;
+                v = *vv = vdup;
             }
 
             // this is the first stream frame in this packet
@@ -905,9 +895,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
                 break;
 
             case FRAM_TYPE_PING:
-#ifndef FUZZING
                 warn(INF, FRAM_IN "PING" NRM);
-#endif
                 // PING frames need to be ACK'ed
                 c->needs_tx = true;
                 i++;
@@ -962,13 +950,14 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov * v)
                 break;
 
             default:
-                err_close(c, ERR_FRAME_ENC, type,
-                          "unknown frame type 0x%02x at pos %u", type, i);
-                i = UINT16_MAX;
+                err_close_return(c, ERR_FRAME_ENC, type,
+                                 "unknown frame type 0x%02x at pos %u", type,
+                                 i);
             }
 
-            // record this frame type in the meta data
-            bit_set(meta(v).frames, type);
+            if (unlikely(i == UINT16_MAX))
+                // record this frame type in the meta data
+                bit_set(meta(v).frames, type);
         }
 
         if (unlikely(i == UINT16_MAX))
@@ -1421,9 +1410,7 @@ uint16_t enc_retire_cid_frame(struct q_conn * const c,
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
     i = enc(v->buf, v->len, i, &scid->seq, 0, 0, "%" PRIu64);
 
-#ifndef FUZZING
     warn(INF, FRAM_OUT "RETIRE_CONNECTION_ID" NRM " seq=%" PRIu64, scid->seq);
-#endif
 
     c->tx_retire_cid = false;
 
