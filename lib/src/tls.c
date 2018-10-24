@@ -155,7 +155,7 @@ static uint64_t tls_key_update_last = 0;
 #define HKDF_BASE_LABEL "quic "
 #define st_quicly_cipher_context_t cipher_ctx
 #define quicly_hexdump(a, b, c) hex2str(a, b)
-#define QUICLY_DEBUG 1
+#define QUICLY_DEBUG 0
 
 
 // from quicly
