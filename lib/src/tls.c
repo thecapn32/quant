@@ -117,7 +117,8 @@ static ptls_openssl_verify_certificate_t verifier = {0};
 #endif
 
 // client always tries to negotiate first entry
-static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-15", 5}};
+static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-15", 5},
+                                    {(uint8_t *)"hq-16", 5}};
 static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 
 static struct cipher_ctx dec_tckt;
