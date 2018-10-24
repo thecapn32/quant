@@ -1406,15 +1406,16 @@ void flip_keys(struct q_conn * const c, const bool out)
          out ? c->pn_data.out_kyph : c->pn_data.in_kyph, new_kyph,
          tls_key_update_last);
     const ptls_cipher_suite_t * const cs = ptls_get_cipher(c->tls.t);
+    static const char flip_label[] = "traffic upd";
 
     dispose_cipher(&c->pn_data.in_1rtt[new_kyph]);
     if (setup_initial_key(&c->pn_data.in_1rtt[new_kyph], cs, c->tls.secret[0],
-                          "traffic upd", 0))
+                          flip_label, 0))
         return;
 
     dispose_cipher(&c->pn_data.out_1rtt[new_kyph]);
     if (setup_initial_key(&c->pn_data.out_1rtt[new_kyph], cs, c->tls.secret[1],
-                          "traffic upd", 1) != 0)
+                          flip_label, 1) != 0)
         return;
 
     if (out == false)
