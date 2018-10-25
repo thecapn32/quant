@@ -222,31 +222,35 @@ Exit:
     return ret;
 }
 
-// from quicly
+// from quicly (with mods for key update)
 static int setup_initial_key(struct st_quicly_cipher_context_t * ctx,
                              ptls_cipher_suite_t * cs,
                              const void * master_secret,
                              const char * label,
-                             int is_enc)
+                             int is_enc,
+                             void * new_secret)
 {
     uint8_t aead_secret[PTLS_MAX_DIGEST_SIZE];
     int ret;
 
     if ((ret = ptls_hkdf_expand_label(
-             cs->hash, aead_secret, cs->hash->digest_size,
+             cs->hash, new_secret ? new_secret : aead_secret,
+             cs->hash->digest_size,
              ptls_iovec_init(master_secret, cs->hash->digest_size), label,
              ptls_iovec_init(NULL, 0), HKDF_BASE_LABEL)) != 0)
         goto Exit;
-    if ((ret = setup_cipher(ctx, cs->aead, cs->hash, is_enc, aead_secret)) != 0)
+    if ((ret = setup_cipher(ctx, cs->aead, cs->hash, is_enc,
+                            new_secret ? new_secret : aead_secret)) != 0)
         goto Exit;
 
 Exit:
-    ptls_clear_memory(aead_secret, sizeof(aead_secret));
+    ptls_clear_memory(new_secret ? new_secret : aead_secret,
+                      sizeof(aead_secret));
     return ret;
 }
 
 
-// from quicly
+// from quicly (with mods to the setup_initial_key call)
 static int setup_initial_encryption(struct st_quicly_cipher_context_t * ingress,
                                     struct st_quicly_cipher_context_t * egress,
                                     ptls_cipher_suite_t ** cipher_suites,
@@ -275,11 +279,11 @@ static int setup_initial_encryption(struct st_quicly_cipher_context_t * ingress,
         goto Exit;
 
     /* create aead contexts */
-    if ((ret = setup_initial_key(ingress, *cs, secret, labels[is_client], 0)) !=
-        0)
+    if ((ret = setup_initial_key(ingress, *cs, secret, labels[is_client], 0,
+                                 0)) != 0)
         goto Exit;
-    if ((ret = setup_initial_key(egress, *cs, secret, labels[!is_client], 1)) !=
-        0)
+    if ((ret = setup_initial_key(egress, *cs, secret, labels[!is_client], 1,
+                                 0)) != 0)
         goto Exit;
 
 Exit:
@@ -1413,16 +1417,19 @@ void flip_keys(struct q_conn * const c, const bool out)
         return;
     }
 
+    uint8_t new_secret[PTLS_MAX_DIGEST_SIZE];
     static const char flip_label[] = "traffic upd";
     dispose_cipher(&c->pn_data.in_1rtt[new_kyph]);
     if (setup_initial_key(&c->pn_data.in_1rtt[new_kyph], cs, c->tls.secret[0],
-                          flip_label, 0))
+                          flip_label, 0, new_secret))
         return;
+    memcpy(c->tls.secret[0], new_secret, cs->hash->digest_size);
 
     dispose_cipher(&c->pn_data.out_1rtt[new_kyph]);
     if (setup_initial_key(&c->pn_data.out_1rtt[new_kyph], cs, c->tls.secret[1],
-                          flip_label, 1) != 0)
+                          flip_label, 1, new_secret) != 0)
         return;
+    memcpy(c->tls.secret[1], new_secret, cs->hash->digest_size);
 
     if (out == false)
         c->pn_data.in_kyph = new_kyph;
