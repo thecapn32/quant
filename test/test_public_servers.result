@@ -4,7 +4,7 @@ f5        *         V    H    D    C
 lsquic    *         v
 minq      *         v
 mozquic
-mvfst     *
+mvfst
 ngtcp2    *         V    H    D    C    RZ   S
 ngx_quic  *         v
 pandora
@@ -15,4 +15,4 @@ quicker
 quicly    *         v
 quicr     *         v
 quinn
-winquic   *         v
+winquic   *         V    H    D    C    RZ   S
