@@ -269,8 +269,9 @@ bool enc_pkt(struct q_stream * const s,
              const bool enc_data,
              struct w_iov * const v)
 {
-    // prepend the header by adjusting the buffer offset
-    adj_iov_to_start(v);
+    if (enc_data)
+        // prepend the header by adjusting the buffer offset
+        adj_iov_to_start(v);
 
     struct q_conn * const c = s->c;
     uint16_t i = 0, len_pos = 0;
@@ -389,7 +390,7 @@ bool enc_pkt(struct q_stream * const s,
         meta(v).pkt_nr_pos = i;
         meta(v).pkt_nr_len = needed_pkt_nr_len(pn, meta(v).hdr.nr);
         i = enc_pnr(v->buf, v->len, i, &meta(v).hdr.nr, meta(v).pkt_nr_len,
-                    FMT_PNR_OUT);
+                    "%u");
     }
 
     meta(v).hdr.hdr_len = i;
@@ -467,10 +468,10 @@ bool enc_pkt(struct q_stream * const s,
         i = meta(v).stream_data_start + meta(v).stream_data_len;
         log_stream_or_crypto_frame(true, v, false, "");
 
-    } else if (enc_data && (v->len > Q_OFFSET || s->tx_fin)) {
+    } else if (enc_data) {
         // this is a fresh data/crypto or pure stream FIN packet
-        // pad out rest of Q_OFFSET and add a stream frame header
-        enc_padding_frame(v, i, Q_OFFSET - i);
+        // pad out until stream_data_start and add a stream frame header
+        enc_padding_frame(v, i, meta(v).stream_data_start - i);
         i = enc_stream_or_crypto_frame(s, v, i, s->id >= 0);
     }
 
@@ -526,7 +527,8 @@ tx:
         // adjust v->len to exclude the post-stream padding for CI
         v->len = meta(v).stream_data_start + meta(v).stream_data_len;
 
-    adj_iov_to_data(v);
+    if (enc_data)
+        adj_iov_to_data(v);
     on_pkt_sent(s, v);
     maybe_flip_keys(c, true);
     return true;

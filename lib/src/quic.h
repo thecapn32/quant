@@ -113,6 +113,8 @@ struct pkt_meta {
     struct q_stream * stream;   ///< Stream this data was written on.
     uint64_t stream_off;        ///< Stream data offset.
     uint16_t stream_header_pos; ///< Offset of stream frame header.
+
+    // XXX reset_pm() depends on the following two being in order:
     uint16_t stream_data_start; ///< Offset of first byte of stream frame data.
     uint16_t stream_data_len;   ///< Length of last stream frame data.
 
@@ -209,15 +211,15 @@ pm_cpy(struct pkt_meta * const dst,
 
 #define adj_iov_to_start(v)                                                    \
     do {                                                                       \
-        (v)->buf -= Q_OFFSET;                                                  \
-        (v)->len += Q_OFFSET;                                                  \
+        (v)->buf -= meta(v).stream_data_start;                                 \
+        (v)->len += meta(v).stream_data_start;                                 \
     } while (0)
 
 
 #define adj_iov_to_data(v)                                                     \
     do {                                                                       \
-        (v)->buf += Q_OFFSET;                                                  \
-        (v)->len -= Q_OFFSET;                                                  \
+        (v)->buf += meta(v).stream_data_start;                                 \
+        (v)->len -= meta(v).stream_data_start;                                 \
     } while (0)
 
 
@@ -405,6 +407,7 @@ extern void __attribute__((nonnull)) pm_free(struct pkt_meta * const m);
     __extension__({                                                            \
         struct w_iov * _v = w_alloc_iov((w), (l), (off));                      \
         ASAN_UNPOISON_MEMORY_REGION(&meta(_v), sizeof(meta(_v)));              \
+        meta(_v).stream_data_start = (off);                                    \
         /* warn(CRT, "q_alloc_iov idx %u len %u off %u", w_iov_idx(_v),        \
            _v->len, (off)); */                                                 \
         _v;                                                                    \

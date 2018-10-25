@@ -224,9 +224,10 @@ rtx_pkt(struct q_stream * const s, struct w_iov * const v)
 {
     ensure(meta(v).is_rtx == false, "cannot RTX an RTX");
     // on RTX, remember orig pkt meta data
-    struct w_iov * const r = q_alloc_iov(s->c->w, 0, Q_OFFSET);
+    const uint16_t data_start = meta(v).stream_data_start;
+    struct w_iov * const r = q_alloc_iov(s->c->w, 0, data_start);
     pm_cpy(&meta(r), &meta(v), true); // copy pkt meta data
-    memcpy(r->buf - Q_OFFSET, v->buf - Q_OFFSET, Q_OFFSET); // copy pkt headers
+    memcpy(r->buf - data_start, v->buf - data_start, data_start);
     meta(r).is_rtx = true;
     sl_insert_head(&meta(v).rtx, &meta(r), rtx_next);
     sl_insert_head(&meta(r).rtx, &meta(v), rtx_next);
@@ -328,7 +329,7 @@ tx_stream_data(struct q_stream * const s, const bool rtx, const uint32_t limit)
 
 static void __attribute__((nonnull)) tx_stream_ctrl(struct q_stream * const s)
 {
-    struct w_iov * const v = q_alloc_iov(s->c->w, 0, Q_OFFSET);
+    struct w_iov * const v = q_alloc_iov(s->c->w, 0, 0);
     enc_pkt(s, false, false, v);
     if (sq_len(&s->c->txq))
         do_tx(s->c);
@@ -473,7 +474,7 @@ void tx_ack(struct q_conn * const c, const epoch_t e)
     if (!needs_ack(pn) && c->tx_rtry == false && c->state != conn_clsg)
         return;
 
-    struct w_iov * const v = q_alloc_iov(c->w, 0, Q_OFFSET);
+    struct w_iov * const v = q_alloc_iov(c->w, 0, 0);
     enc_pkt(s, false, false, v);
     if (sq_len(&c->txq))
         do_tx(c);

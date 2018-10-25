@@ -146,22 +146,17 @@ void pm_free(struct pkt_meta * const m)
 }
 
 
-static void __attribute__((nonnull)) sq_unpoison(struct w_iov_sq * const q)
-{
-    struct w_iov * v = 0;
-    sq_foreach (v, q, next) {
-        ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
-        // warn(CRT, "q_alloc idx %u len %u", w_iov_idx(v), v->len);
-    }
-}
-
-
 void q_alloc(struct w_engine * const w,
              struct w_iov_sq * const q,
              const uint32_t len)
 {
     w_alloc_len(w, q, len, MAX_PKT_LEN - AEAD_LEN - Q_OFFSET, Q_OFFSET);
-    sq_unpoison(q);
+    struct w_iov * v = 0;
+    sq_foreach (v, q, next) {
+        ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
+        meta(v).stream_data_start = Q_OFFSET;
+        // warn(CRT, "q_alloc idx %u len %u", w_iov_idx(v), v->len);
+    }
 }
 
 

@@ -1101,7 +1101,7 @@ uint16_t enc_stream_or_crypto_frame(struct q_stream * const s,
                                     const uint16_t pos,
                                     const bool enc_strm)
 {
-    const uint64_t dlen = v->len - Q_OFFSET;
+    const uint64_t dlen = v->len - meta(v).stream_data_start;
     uint8_t type;
 
     if (enc_strm) {
@@ -1129,10 +1129,11 @@ uint16_t enc_stream_or_crypto_frame(struct q_stream * const s,
 
     // now that we know how long the stream frame header is, encode it
     uint16_t i = meta(v).stream_header_pos =
-        Q_OFFSET - 1 - (enc_strm ? varint_size_needed((uint64_t)s->id) : 0) -
+        meta(v).stream_data_start - 1 -
+        (enc_strm ? varint_size_needed((uint64_t)s->id) : 0) -
         (dlen || !enc_strm ? varint_size_needed(dlen) : 0) -
         (s->out_data || !enc_strm ? varint_size_needed(s->out_data) : 0);
-    ensure(i > pos, "Q_OFFSET exhausted (%u > %u)", i, pos);
+    ensure(i > pos, "not enough space for stream header (%u > %u)", i, pos);
     i = enc(v->buf, v->len, i, &type, sizeof(type), 0, "0x%02x");
     if (enc_strm)
         i = enc(v->buf, v->len, i, &s->id, 0, 0, FMT_SID);
@@ -1142,7 +1143,6 @@ uint16_t enc_stream_or_crypto_frame(struct q_stream * const s,
         enc(v->buf, v->len, i, &dlen, 0, 0, "%u");
 
     meta(v).stream = s; // remember stream this buf belongs to
-    meta(v).stream_data_start = Q_OFFSET;
     meta(v).stream_data_len = (uint16_t)dlen;
     meta(v).stream_off = s->out_data;
 
@@ -1283,7 +1283,7 @@ uint16_t enc_blocked_frame(struct q_conn * const c,
 
     const uint8_t type = FRAM_TYPE_BLCK;
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
-    const uint64_t off = c->tp_out.max_data + v->len - Q_OFFSET;
+    const uint64_t off = c->tp_out.max_data + meta(v).stream_data_len;
     i = enc(v->buf, v->len, i, &off, 0, 0, "%" PRIu64);
 
     warn(INF, FRAM_OUT "BLOCKED" NRM " off=%" PRIu64, off);

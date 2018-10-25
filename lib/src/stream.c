@@ -25,6 +25,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -150,8 +151,12 @@ void track_bytes_out(struct q_stream * const s, const uint64_t n)
 static void __attribute__((nonnull)) reset_pm(const struct w_iov_sq * const q)
 {
     struct w_iov * v;
-    sq_foreach (v, q, next)
-        memset(&meta(v), 0, sizeof(meta(v)));
+    sq_foreach (v, q, next) {
+        // don't reset stream_data_start!
+        memset(&meta(v), 0, offsetof(struct pkt_meta, stream_data_start));
+        memset(&meta(v).stream_data_len, 0,
+               sizeof(meta(v)) - offsetof(struct pkt_meta, stream_data_len));
+    }
 }
 
 
