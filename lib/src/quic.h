@@ -114,7 +114,7 @@ struct pkt_meta {
     uint64_t stream_off;        ///< Stream data offset.
     uint16_t stream_header_pos; ///< Offset of stream frame header.
     uint16_t stream_data_start; ///< Offset of first byte of stream frame data.
-    uint16_t stream_data_end;   ///< Offset of last byte of stream frame data.
+    uint16_t stream_data_len;   ///< Length of last stream frame data.
 
     uint16_t ack_block_pos; ///< Offset of first ACK block (for TX'ed pkt).
     uint64_t lg_acked; ///< "Largest Acknowledged" in ACK block (for TX'ed pkt).
@@ -176,15 +176,6 @@ extern struct pkt_meta * pm;
 /// @return     Pointer to the pkt_meta entry for the w_iov.
 ///
 #define meta(v) pm[w_iov_idx(v)]
-
-
-/// Return the length of the stream data in a given w_iov.
-///
-/// @param      v     Pointer to a w_iov.
-///
-/// @return     Length of stream data.
-///
-#define stream_data_len(v) (meta(v).stream_data_end - meta(v).stream_data_start)
 
 
 /// Return the w_iov index of a given pkt_meta.

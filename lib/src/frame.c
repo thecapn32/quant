@@ -109,14 +109,14 @@ void log_stream_or_crypto_frame(const bool rtx,
                  : ((c->tp_out.max_bidi_streams - 1) << 2) +
                        (is_set(STRM_FL_INI_SRV, s->id) ? STRM_FL_INI_SRV : 0),
              meta(v).stream_off, in ? s->in_data_max : s->out_data_max,
-             stream_data_len(v), in ? c->in_data : c->out_data,
+             meta(v).stream_data_len, in ? c->in_data : c->out_data,
              in ? c->tp_in.max_data : c->tp_out.max_data,
              rtx ? REV BLD GRN "[RTX]" NRM " " : "", in ? "[" : "", kind,
              in ? "]" : "");
     else
         warn(INF, "%sCRYPTO" NRM " 0x%02x off=%" PRIu64 " len=%u %s%s%s%s",
              in ? FRAM_IN : FRAM_OUT, type, meta(v).stream_off,
-             stream_data_len(v), rtx ? REV BLD GRN "[RTX]" NRM " " : "",
+             meta(v).stream_data_len, rtx ? REV BLD GRN "[RTX]" NRM " " : "",
              in ? "[" : "", kind, in ? "]" : "");
 }
 #endif
@@ -154,7 +154,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
         l = v->len - i;
 
     meta(v).stream_data_start = i;
-    meta(v).stream_data_end = (uint16_t)l + i;
+    meta(v).stream_data_len = (uint16_t)l;
 
     // deliver data into stream
     bool is_dup = false;
@@ -165,7 +165,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
             warn(WRN,
                  "ignoring frame for closed strm " FMT_SID " on %s conn %s",
                  sid, conn_type(c), cid2str(c->scid));
-            return meta(v).stream_data_end;
+            return meta(v).stream_data_start + meta(v).stream_data_len;
         }
 
         if (unlikely(is_set(STRM_FL_INI_SRV, sid) != c->is_clnt))
@@ -192,7 +192,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
         for (p = splay_min(ooo_by_off, &s->in_ooo);
              p && p->stream_off == s->in_data; p = nxt) {
             nxt = splay_next(ooo_by_off, &s->in_ooo, p);
-            track_bytes_in(s, p->stream_data_end - p->stream_data_start);
+            track_bytes_in(s, p->stream_data_len);
             sq_insert_tail(&s->in, w_iov(c->w, pm_idx(p)), next);
             splay_remove(ooo_by_off, &s->in_ooo, p);
         }
@@ -233,17 +233,15 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     // data is out of order - check if it overlaps with already stored ooo data
     kind = YEL "ooo" NRM;
     struct pkt_meta * p = splay_min(ooo_by_off, &s->in_ooo);
-    while (p && p->stream_off + (p->stream_data_end - p->stream_data_start) <
-                    meta(v).stream_off) {
-        warn(ERR, "%u %u", p->stream_off,
-             p->stream_off + (p->stream_data_end - p->stream_data_start));
+    while (p && p->stream_off + p->stream_data_len < meta(v).stream_off) {
+        warn(ERR, "%u %u", p->stream_off, p->stream_off + p->stream_data_len);
         p = splay_next(ooo_by_off, &s->in_ooo, p);
     }
     // right edge of p >= left edge of v
-    if (p && p->stream_off <= meta(v).stream_off + stream_data_len(v)) {
+    if (p && p->stream_off <= meta(v).stream_off + meta(v).stream_data_len) {
         // left edge of p <= right edge of v
         warn(ERR, "have existing overlapping ooo data [%u..%u]", p->stream_off,
-             p->stream_off + (p->stream_data_end - p->stream_data_start));
+             p->stream_off + p->stream_data_len);
         is_dup = true;
         goto done;
     }
@@ -265,7 +263,7 @@ done:
         // this indicates to callers that the w_iov was not placed in a stream
         meta(v).stream = 0;
 
-    return meta(v).stream_data_end;
+    return meta(v).stream_data_start + meta(v).stream_data_len;
 }
 
 
@@ -862,7 +860,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
                 pm_cpy(&meta(vdup), &meta(v), false);
                 // adjust w_iov start and len to stream frame data
                 v->buf = &v->buf[meta(v).stream_data_start];
-                v->len = stream_data_len(v);
+                v->len = meta(v).stream_data_len;
                 // continue parsing in the copied w_iov
                 v = *vv = vdup;
             }
@@ -969,7 +967,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
     if (meta(v).stream_data_start) {
         // adjust w_iov start and len to stream frame data
         v->buf = &v->buf[meta(v).stream_data_start];
-        v->len = stream_data_len(v);
+        v->len = meta(v).stream_data_len;
     }
 
     return i;
@@ -1145,7 +1143,7 @@ uint16_t enc_stream_or_crypto_frame(struct q_stream * const s,
 
     meta(v).stream = s; // remember stream this buf belongs to
     meta(v).stream_data_start = Q_OFFSET;
-    meta(v).stream_data_end = Q_OFFSET + (uint16_t)dlen;
+    meta(v).stream_data_len = (uint16_t)dlen;
     meta(v).stream_off = s->out_data;
 
     log_stream_or_crypto_frame(false, v, false, "");

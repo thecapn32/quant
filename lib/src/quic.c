@@ -192,7 +192,8 @@ do_write(struct q_stream * const s, struct w_iov_sq * const q, const bool fin)
 
     // the last packet in s->out may be a pure FIN - if so, don't return it
     struct w_iov * const last = sq_last(&s->out, w_iov, next);
-    if (last && meta(last).stream_header_pos && stream_data_len(last) == 0) {
+    if (last && meta(last).stream_header_pos &&
+        meta(last).stream_data_len == 0) {
         ensure(sq_next(prev_last, next) == last, "queue messed up");
         sq_remove_after(&s->out, prev_last, next);
         sq_concat(q, &s->out);

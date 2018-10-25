@@ -172,7 +172,7 @@ void reset_stream(struct q_stream * const s, const bool forget)
             if (v == s->out_nxt)
                 break;
             // remove trailing padding
-            v->len = meta(v).stream_data_end - Q_OFFSET;
+            v->len = meta(v).stream_data_len;
         }
 
         s->out_nxt = s->out_una = sq_first(&s->out);

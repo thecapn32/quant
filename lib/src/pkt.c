@@ -464,7 +464,7 @@ bool enc_pkt(struct q_stream * const s,
 
         // this is a RTX, pad out until beginning of stream header
         enc_padding_frame(v, i, meta(v).stream_header_pos - i);
-        i = meta(v).stream_data_end;
+        i = meta(v).stream_data_start + meta(v).stream_data_len;
         log_stream_or_crypto_frame(true, v, false, "");
 
     } else if (enc_data && (v->len > Q_OFFSET || s->tx_fin)) {
@@ -522,9 +522,9 @@ tx:
     meta(v).tx_len = x->len;
 
     if (unlikely(meta(v).hdr.type == F_LH_INIT && c->is_clnt &&
-                 meta(v).stream_data_end))
+                 meta(v).stream_data_len))
         // adjust v->len to exclude the post-stream padding for CI
-        v->len = meta(v).stream_data_end;
+        v->len = meta(v).stream_data_start + meta(v).stream_data_len;
 
     adj_iov_to_data(v);
     on_pkt_sent(s, v);
