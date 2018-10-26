@@ -57,7 +57,7 @@
 const char * const conn_state_str[] = {CONN_STATES};
 
 
-struct q_conn_sl c_ready;
+struct q_conn_sl c_ready = sl_head_initializer(c_ready);
 struct conns_by_ipnp conns_by_ipnp = splay_initializer(&conns_by_ipnp);
 struct conns_by_id conns_by_id = splay_initializer(&conns_by_id);
 
@@ -1013,10 +1013,10 @@ void rx(struct ev_loop * const l,
             free_conn(c);
         else if (c->have_new_data) {
             if (!c->in_c_ready) {
-                sl_insert_head(&c_ready, c, node_rx_int);
+                sl_insert_head(&c_ready, c, node_rx_ext);
                 c->in_c_ready = true;
+                maybe_api_return(q_rx_ready, 0, 0);
             }
-            maybe_api_return(q_rx_ready, 0, 0);
         }
     }
 }
@@ -1311,7 +1311,7 @@ void free_conn(struct q_conn * const c)
     }
 
     if (c->in_c_ready)
-        sl_remove(&c_ready, c, q_conn, node_rx_int);
+        sl_remove(&c_ready, c, q_conn, node_rx_ext);
 
     free(c);
 }

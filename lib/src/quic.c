@@ -573,11 +573,6 @@ void q_cleanup(struct w_engine * const w)
         warn(DBG, "closing %s conn %s", conn_type(cm->c), cid2str(&cm->cid));
         q_close(cm->c);
     }
-    while (!splay_empty(&conns_by_ipnp)) {
-        struct q_conn * const c = splay_min(conns_by_ipnp, &conns_by_ipnp);
-        warn(DBG, "closing %s conn %s", conn_type(c), cid2str(c->scid));
-        q_close(c);
-    }
 
     // stop the event loop
     ev_loop_destroy(loop);
