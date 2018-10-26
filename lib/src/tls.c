@@ -936,7 +936,7 @@ void init_prot(struct q_conn * const c)
 
 
 /// Offsets of stream frame payload data we TX.
-#define Q_OFFSET_HSHK 127
+#define Q_OFFSET_HSHK 128
 
 int tls_io(struct q_stream * const s, struct w_iov * const iv)
 {
