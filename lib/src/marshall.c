@@ -392,15 +392,15 @@ extern uint16_t marshall_dec_pnr(void * const dst,
         do_dec(v);
         *(uint8_t *)dst = v;
 
-    } else if (buf[pos] < 0x40) {
+    } else if (buf[pos] < 0xc0) {
         uint16_t v;
         do_dec(v);
-        *(uint16_t *)dst = ntohs(v) & 0x3fff;
+        *(uint16_t *)dst = ntohs(v) & VARINT2_MAX;
 
     } else {
         uint32_t v;
         do_dec(v);
-        *(uint32_t *)dst = ntohl(v) & 0x3fffffffUL;
+        *(uint32_t *)dst = ntohl(v) & VARINT4_MAX;
     }
     log_dec(uint32_t, "pnr");
 
