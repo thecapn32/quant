@@ -89,6 +89,8 @@ shorten_ack_nr(const uint64_t ack, const uint64_t diff);
 extern uint16_t __attribute__((nonnull))
 dec_frames(struct q_conn * const c, struct w_iov ** vv);
 
+extern uint16_t __attribute__((const)) max_frame_len(const uint8_t type);
+
 extern uint16_t __attribute__((nonnull))
 enc_padding_frame(struct w_iov * const v,
                   const uint16_t pos,
@@ -106,13 +108,10 @@ enc_stream_or_crypto_frame(struct q_stream * const s,
                            const uint16_t pos,
                            const bool enc_strm);
 
-extern uint16_t __attribute__((nonnull(1)))
-enc_close_frame(struct w_iov * const v,
-                const uint16_t pos,
-                const uint8_t type,
-                const uint16_t err_code,
-                const uint8_t err_frm,
-                const char * const reas);
+extern uint16_t __attribute__((nonnull))
+enc_close_frame(const struct q_conn * const c,
+                struct w_iov * const v,
+                const uint16_t pos);
 
 extern uint16_t __attribute__((nonnull))
 enc_path_response_frame(struct q_conn * const c,

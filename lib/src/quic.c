@@ -146,17 +146,26 @@ void pm_free(struct pkt_meta * const m)
 }
 
 
+void q_alloc_off(struct w_engine * const w,
+                 struct w_iov_sq * const q,
+                 const uint32_t len,
+                 const uint16_t off)
+{
+    w_alloc_len(w, q, len, MAX_PKT_LEN - AEAD_LEN - off, off);
+    struct w_iov * v = 0;
+    sq_foreach (v, q, next) {
+        ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
+        meta(v).stream_data_start = off;
+        // warn(CRT, "q_alloc idx %u len %u", w_iov_idx(v), v->len);
+    }
+}
+
+
 void q_alloc(struct w_engine * const w,
              struct w_iov_sq * const q,
              const uint32_t len)
 {
-    w_alloc_len(w, q, len, MAX_PKT_LEN - AEAD_LEN - Q_OFFSET, Q_OFFSET);
-    struct w_iov * v = 0;
-    sq_foreach (v, q, next) {
-        ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
-        meta(v).stream_data_start = Q_OFFSET;
-        // warn(CRT, "q_alloc idx %u len %u", w_iov_idx(v), v->len);
-    }
+    q_alloc_off(w, q, len, Q_OFFSET_ESTB);
 }
 
 

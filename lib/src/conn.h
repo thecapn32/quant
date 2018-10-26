@@ -143,12 +143,10 @@ struct q_conn {
 
     uint16_t err_code;
     uint8_t err_frm;
-
-    uint8_t _unused;
+    uint8_t err_reason_len;
+    char * err_reason;
 
     struct w_engine * w; ///< Underlying warpcore engine.
-
-    char * err_reason;
 
     uint32_t vers;         ///< QUIC version in use for this connection.
     uint32_t vers_initial; ///< QUIC version first negotiated.
@@ -233,6 +231,15 @@ epoch_in(const struct q_conn * const c)
     default:
         die("unhandled epoch %u", epoch);
     }
+}
+
+
+static inline bool __attribute__((nonnull, always_inline))
+conn_needs_ctrl(const struct q_conn * const c)
+{
+    return epoch_in(c) == ep_data &&
+           (c->tx_max_data || c->tx_max_stream_id || c->tx_path_resp ||
+            c->tx_path_chlg || c->tx_ncid || c->tx_retire_cid);
 }
 
 

@@ -201,8 +201,9 @@ pm_cpy(struct pkt_meta * const dst,
            sizeof(*dst) - off);
 }
 
-/// Offset of stream frame payload data in w_iov buffers.
-#define Q_OFFSET 128 // TODO: this is getting ridiculous, refactor
+/// Offsets of stream frame payload data we TX.
+#define Q_OFFSET_ESTB 31
+
 
 #define PATH_CHLG_LIMIT 2
 
@@ -412,6 +413,12 @@ extern void __attribute__((nonnull)) pm_free(struct pkt_meta * const m);
            _v->len, (off)); */                                                 \
         _v;                                                                    \
     })
+
+
+extern void __attribute__((nonnull)) q_alloc_off(struct w_engine * const w,
+                                                 struct w_iov_sq * const q,
+                                                 const uint32_t len,
+                                                 const uint16_t off);
 
 
 static inline struct w_iov * __attribute__((nonnull))

@@ -316,7 +316,7 @@ tx_stream_data(struct q_stream * const s, const bool rtx, const uint32_t limit)
 
     if (encoded == 0 && s->tx_fin) {
         // we need to send a FIN
-        v = q_alloc_iov(s->c->w, 0, Q_OFFSET);
+        v = q_alloc_iov(s->c->w, 0, Q_OFFSET_ESTB);
         v->len = 0;
         sq_insert_tail(&s->out, v, next);
         if (enc_pkt(s, rtx, true, v))
@@ -455,7 +455,7 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
             tx_stream_ctrl(s);
     }
 
-    if (sq_empty(&c->txq)) {
+    if (sq_empty(&c->txq) || conn_needs_ctrl(c)) {
         // need to send other frame, do it in an ACK
         tx_ack(c, epoch_in(c));
         return;
@@ -471,7 +471,8 @@ void tx_ack(struct q_conn * const c, const epoch_t e)
     struct q_stream * const s = get_stream(c, crpt_strm_id(e));
     struct pn_space * const pn = pn_for_epoch(c, e);
 
-    if (!needs_ack(pn) && c->tx_rtry == false && c->state != conn_clsg)
+    if (!needs_ack(pn) && !c->tx_rtry && c->state != conn_clsg &&
+        !conn_needs_ctrl(c))
         return;
 
     struct w_iov * const v = q_alloc_iov(c->w, 0, 0);
@@ -1045,10 +1046,10 @@ void err_close(struct q_conn * const c,
         return;
     }
 #endif
-
     warn(ERR, "%s", reas);
     c->err_code = code;
-    c->err_reason = strdup(reas);
+    c->err_reason = strndup(reas, sizeof(c->err_reason_len) * 8);
+    c->err_reason_len = (uint8_t)strlen(c->err_reason);
     c->err_frm = frm;
     enter_closing(c);
 }
