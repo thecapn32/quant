@@ -415,10 +415,10 @@ extern void __attribute__((nonnull)) pm_free(struct pkt_meta * const m);
     })
 
 
-extern void __attribute__((nonnull)) q_alloc_off(struct w_engine * const w,
-                                                 struct w_iov_sq * const q,
-                                                 const uint32_t len,
-                                                 const uint16_t off);
+extern void __attribute__((nonnull)) alloc_off(struct w_engine * const w,
+                                               struct w_iov_sq * const q,
+                                               const uint32_t len,
+                                               const uint16_t off);
 
 
 static inline struct w_iov * __attribute__((nonnull))

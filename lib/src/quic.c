@@ -146,10 +146,10 @@ void pm_free(struct pkt_meta * const m)
 }
 
 
-void q_alloc_off(struct w_engine * const w,
-                 struct w_iov_sq * const q,
-                 const uint32_t len,
-                 const uint16_t off)
+void alloc_off(struct w_engine * const w,
+               struct w_iov_sq * const q,
+               const uint32_t len,
+               const uint16_t off)
 {
     w_alloc_len(w, q, len, MAX_PKT_LEN - AEAD_LEN - off, off);
     struct w_iov * v = 0;
@@ -165,7 +165,7 @@ void q_alloc(struct w_engine * const w,
              struct w_iov_sq * const q,
              const uint32_t len)
 {
-    q_alloc_off(w, q, len, OFFSET_ESTB);
+    alloc_off(w, q, len, OFFSET_ESTB);
 }
 
 
