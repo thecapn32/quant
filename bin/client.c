@@ -317,8 +317,9 @@ int main(int argc, char * argv[])
         if (slash && *(slash + 1) == 0)
             // this URL ends in a slash, so strip that to name the file
             *slash = 0;
-        const int fd = open(basename(se->url), O_CREAT | O_WRONLY | O_CLOEXEC,
-                            S_IRUSR | S_IWUSR | S_IRGRP);
+        const int fd =
+            open(*basename(se->url) == 0 ? "index.html" : basename(se->url),
+                 O_CREAT | O_WRONLY | O_CLOEXEC, S_IRUSR | S_IWUSR | S_IRGRP);
         ensure(fd != -1, "cannot open %s", basename(se->url));
 
         // save the object, and print its first three packets to stdout
