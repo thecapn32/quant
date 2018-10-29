@@ -404,12 +404,12 @@ extern void __attribute__((nonnull)) pm_free(struct pkt_meta * const m);
     } while (0)
 
 
-#define q_alloc_iov(w, l, off)                                                 \
+#define alloc_iov(w, l, off)                                                   \
     __extension__({                                                            \
         struct w_iov * _v = w_alloc_iov((w), (l), (off));                      \
         ASAN_UNPOISON_MEMORY_REGION(&meta(_v), sizeof(meta(_v)));              \
         meta(_v).stream_data_start = (off);                                    \
-        /* warn(CRT, "q_alloc_iov idx %u len %u off %u", w_iov_idx(_v),        \
+        /* warn(CRT, "alloc_iov idx %u len %u off %u", w_iov_idx(_v),          \
            _v->len, (off)); */                                                 \
         _v;                                                                    \
     })

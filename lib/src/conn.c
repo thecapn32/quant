@@ -225,7 +225,7 @@ rtx_pkt(struct q_stream * const s, struct w_iov * const v)
     ensure(meta(v).is_rtx == false, "cannot RTX an RTX");
     // on RTX, remember orig pkt meta data
     const uint16_t data_start = meta(v).stream_data_start;
-    struct w_iov * const r = q_alloc_iov(s->c->w, 0, data_start);
+    struct w_iov * const r = alloc_iov(s->c->w, 0, data_start);
     pm_cpy(&meta(r), &meta(v), true); // copy pkt meta data
     memcpy(r->buf - data_start, v->buf - data_start, data_start);
     meta(r).is_rtx = true;
@@ -316,7 +316,7 @@ tx_stream_data(struct q_stream * const s, const bool rtx, const uint32_t limit)
 
     if (encoded == 0 && s->tx_fin) {
         // we need to send a FIN
-        v = q_alloc_iov(s->c->w, 0, OFFSET_ESTB);
+        v = alloc_iov(s->c->w, 0, OFFSET_ESTB);
         v->len = 0;
         sq_insert_tail(&s->out, v, next);
         if (enc_pkt(s, rtx, true, v))
@@ -329,7 +329,7 @@ tx_stream_data(struct q_stream * const s, const bool rtx, const uint32_t limit)
 
 static void __attribute__((nonnull)) tx_stream_ctrl(struct q_stream * const s)
 {
-    struct w_iov * const v = q_alloc_iov(s->c->w, 0, 0);
+    struct w_iov * const v = alloc_iov(s->c->w, 0, 0);
     enc_pkt(s, false, false, v);
     if (sq_len(&s->c->txq))
         do_tx(s->c);
@@ -475,7 +475,7 @@ void tx_ack(struct q_conn * const c, const epoch_t e)
         !conn_needs_ctrl(c))
         return;
 
-    struct w_iov * const v = q_alloc_iov(c->w, 0, 0);
+    struct w_iov * const v = alloc_iov(c->w, 0, 0);
     enc_pkt(s, false, false, v);
     if (sq_len(&c->txq))
         do_tx(c);
@@ -837,7 +837,7 @@ rx_pkts(struct w_iov_sq * const x,
 #endif
 
         // allocate new w_iov for the (eventual) unencrypted data and meta-data
-        struct w_iov * const v = q_alloc_iov(ws->w, 0, 0);
+        struct w_iov * const v = alloc_iov(ws->w, 0, 0);
         v->port = xv->port;
         v->ip = xv->ip;
         v->flags = xv->flags;

@@ -891,7 +891,7 @@ void tx_vneg_resp(const struct w_sock * const ws, const struct w_iov * const v)
         return;
     }
 
-    struct w_iov * const x = q_alloc_iov(ws->w, 0, 0);
+    struct w_iov * const x = alloc_iov(ws->w, 0, 0);
     struct w_iov_sq q = w_iov_sq_initializer(q);
     sq_insert_head(&q, x, next);
 
