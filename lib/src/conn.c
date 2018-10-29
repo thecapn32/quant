@@ -316,7 +316,7 @@ tx_stream_data(struct q_stream * const s, const bool rtx, const uint32_t limit)
 
     if (encoded == 0 && s->tx_fin) {
         // we need to send a FIN
-        v = q_alloc_iov(s->c->w, 0, Q_OFFSET_ESTB);
+        v = q_alloc_iov(s->c->w, 0, OFFSET_ESTB);
         v->len = 0;
         sq_insert_tail(&s->out, v, next);
         if (enc_pkt(s, rtx, true, v))

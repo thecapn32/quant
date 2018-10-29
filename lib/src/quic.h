@@ -202,7 +202,7 @@ pm_cpy(struct pkt_meta * const dst,
 }
 
 /// Offsets of stream frame payload data we TX.
-#define Q_OFFSET_ESTB 48
+#define OFFSET_ESTB 48
 
 
 #define PATH_CHLG_LIMIT 2

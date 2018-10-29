@@ -165,7 +165,7 @@ void q_alloc(struct w_engine * const w,
              struct w_iov_sq * const q,
              const uint32_t len)
 {
-    q_alloc_off(w, q, len, Q_OFFSET_ESTB);
+    q_alloc_off(w, q, len, OFFSET_ESTB);
 }
 
 

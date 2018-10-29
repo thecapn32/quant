@@ -936,7 +936,7 @@ void init_prot(struct q_conn * const c)
 
 
 /// Offsets of stream frame payload data we TX.
-#define Q_OFFSET_HSHK 128
+#define OFFSET_HSHK 128
 
 int tls_io(struct q_stream * const s, struct w_iov * const iv)
 {
@@ -986,8 +986,7 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
             struct q_stream * const se = get_stream(c, crpt_strm_id(e));
             warn(DBG, "epoch %u: off %u len %u", e, epoch_off[e], out_len);
             struct w_iov_sq o = w_iov_sq_initializer(o);
-            q_alloc_off(w_engine(c->sock), &o, (uint32_t)out_len,
-                        Q_OFFSET_HSHK);
+            q_alloc_off(w_engine(c->sock), &o, (uint32_t)out_len, OFFSET_HSHK);
             const uint8_t * data = tls_io.base + epoch_off[e];
             struct w_iov * ov = 0;
             sq_foreach (ov, &o, next) {
