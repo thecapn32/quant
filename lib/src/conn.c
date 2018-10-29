@@ -1002,7 +1002,7 @@ void rx(struct ev_loop * const l,
             ev_timer_again(l, &c->idle_alarm);
 
         // is a TX needed for this connection?
-        if (c->needs_tx)
+        if (c->needs_tx && likely(c->state != conn_drng))
             tx(c, false, 0);
 
         // clear the helper flags set above
