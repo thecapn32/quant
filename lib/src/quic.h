@@ -275,7 +275,7 @@ static inline bool __attribute__((nonnull)) is_fin(const struct w_iov * const v)
 
 
 extern struct ev_loop * loop;
-extern struct q_conn_sl aq;
+extern struct q_conn_sl accept_queue;
 
 /// The versions of QUIC supported by this implementation
 extern const uint32_t ok_vers[];

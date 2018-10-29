@@ -86,7 +86,7 @@ struct ev_loop * loop = 0;
 func_ptr api_func = 0;
 void *api_conn = 0, *api_strm = 0;
 
-struct q_conn_sl aq = sl_head_initializer(aq);
+struct q_conn_sl accept_queue = sl_head_initializer(accept_queue);
 
 static const uint32_t nbufs = 100000; ///< Number of packet buffers to allocate.
 
@@ -391,9 +391,9 @@ cancel_api_call(struct ev_loop * const l __attribute__((unused)),
 
 struct q_conn * q_accept(const uint64_t timeout)
 {
-    if (sl_first(&aq)) {
-        struct q_conn * const c = sl_first(&aq);
-        sl_remove_head(&aq, node_aq);
+    if (sl_first(&accept_queue)) {
+        struct q_conn * const c = sl_first(&accept_queue);
+        sl_remove_head(&accept_queue, node_aq);
         warn(WRN, "accepting queued %s conn %s", conn_type(c),
              cid2str(c->scid));
         return c;
@@ -411,13 +411,13 @@ struct q_conn * q_accept(const uint64_t timeout)
 
     loop_run(q_accept, 0, 0);
 
-    if (sl_empty(&aq)) {
+    if (sl_empty(&accept_queue)) {
         warn(ERR, "conn not accepted");
         return 0;
     }
 
-    struct q_conn * const c = sl_first(&aq);
-    sl_remove_head(&aq, node_aq);
+    struct q_conn * const c = sl_first(&accept_queue);
+    sl_remove_head(&accept_queue, node_aq);
     ev_timer_again(loop, &c->idle_alarm);
 
     warn(WRN, "%s conn %s accepted from clnt %s:%u%s, cipher %s", conn_type(c),

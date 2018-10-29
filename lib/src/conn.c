@@ -577,7 +577,7 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
                 else {
                     // TODO: find a better way to send NEW_TOKEN
                     make_rtry_tok(c);
-                    sl_insert_head(&aq, c, node_aq);
+                    sl_insert_head(&accept_queue, c, node_aq);
                     maybe_api_return(q_accept, 0, 0);
                 }
             }

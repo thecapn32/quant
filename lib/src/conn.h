@@ -254,8 +254,7 @@ cid_cmp(const struct cid * const a, const struct cid * const b)
 
 
 static inline int __attribute__((always_inline, nonnull))
-conns_by_id_cmp(const struct cid_map * const a,
-                const struct cid_map * const b)
+conns_by_id_cmp(const struct cid_map * const a, const struct cid_map * const b)
 {
     return cid_cmp(&a->cid, &b->cid);
 }
