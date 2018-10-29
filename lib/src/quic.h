@@ -393,9 +393,9 @@ extern void *api_conn, *api_strm;
 extern void __attribute__((nonnull)) pm_free(struct pkt_meta * const m);
 
 
-#define q_free_iov(v)                                                          \
+#define free_iov(v)                                                            \
     do {                                                                       \
-        /* warn(CRT, "q_free_iov idx %u nr %" PRIu64, w_iov_idx(v),            \
+        /* warn(CRT, "free_iov idx %u nr %" PRIu64, w_iov_idx(v),              \
              meta(v).hdr.nr); */                                               \
         pm_free(&meta(v));                                                     \
         memset(&meta(v), 0, sizeof(meta(v)));                                  \

@@ -72,7 +72,7 @@ int LLVMFuzzerTestOneInput(const uint8_t * data, const size_t size)
     sq_insert_head(&i, v, next);
 
     rx_pkts(&i, &(struct q_conn_sl){0}, c->sock);
-    q_free_iov(v);
+    free_iov(v);
 
     return 0;
 }

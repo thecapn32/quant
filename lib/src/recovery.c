@@ -165,7 +165,7 @@ detect_lost_pkts(struct q_conn * const c, struct pn_space * const pn)
                 if (p->is_rtx)
                     // remove from the original w_iov rtx list
                     sl_remove(&sl_first(&p->rtx)->rtx, p, pkt_meta, rtx_next);
-                q_free_iov(w_iov(c->w, pm_idx(p)));
+                free_iov(w_iov(c->w, pm_idx(p)));
             }
 
         } else if (is_zero(c->rec.loss_t) && !is_inf(delay_until_lost))
@@ -504,7 +504,7 @@ void on_pkt_acked(struct q_conn * const c,
         track_acked_pkts(pn, acked_pkt);
 
     if (!is_rtxable(&meta(orig)))
-        q_free_iov(orig);
+        free_iov(orig);
 }
 
 

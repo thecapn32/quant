@@ -175,7 +175,7 @@ void q_free(struct w_iov_sq * const q)
     while (v) {
         sq_remove_head(q, next);
         struct w_iov * const next = sq_next(v, next);
-        q_free_iov(v);
+        free_iov(v);
         v = next;
     }
 }

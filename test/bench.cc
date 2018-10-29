@@ -58,8 +58,8 @@ static void BM_quic_encryption(benchmark::State & state)
         benchmark::DoNotOptimize(enc_aead(c, v, x));
     state.SetBytesProcessed(int64_t(state.iterations() * len)); // NOLINT
 
-    q_free_iov(x);
-    q_free_iov(v);
+    free_iov(x);
+    free_iov(v);
 }
 
 

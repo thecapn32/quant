@@ -98,7 +98,7 @@ void free_pn(struct pn_space * const pn)
     struct pkt_meta * p = splay_min(pm_by_nr, &pn->sent_pkts);
     while (p) {
         struct pkt_meta * const nxt = splay_next(pm_by_nr, &pn->sent_pkts, p);
-        q_free_iov(w_iov(pn->c->w, pm_idx(p)));
+        free_iov(w_iov(pn->c->w, pm_idx(p)));
         p = nxt;
     }
 

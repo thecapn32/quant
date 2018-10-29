@@ -72,7 +72,7 @@ int LLVMFuzzerTestOneInput(const uint8_t * data, const size_t size)
 
     dec_frames(c, &v);
     if (meta(v).stream == 0)
-        q_free_iov(v);
+        free_iov(v);
 
     while (!splay_empty(&c->streams_by_id)) {
         struct q_stream * const s = splay_min(streams_by_id, &c->streams_by_id);

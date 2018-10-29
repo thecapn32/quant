@@ -851,7 +851,7 @@ rx_pkts(struct w_iov_sq * const x,
             // can't log packet, because it may be too short for log_pkt()
             warn(ERR, "received invalid %u-byte pkt (type 0x%02x), ignoring",
                  v->len, v->buf[0]);
-            q_free_iov(v);
+            free_iov(v);
             continue;
         }
 
@@ -883,7 +883,7 @@ rx_pkts(struct w_iov_sq * const x,
                                  "clnt-requested vers 0x%08x not supported",
                                  meta(v).hdr.vers);
                             tx_vneg_resp(ws, v);
-                            q_free_iov(v);
+                            free_iov(v);
                             continue;
                         }
 
@@ -907,7 +907,7 @@ rx_pkts(struct w_iov_sq * const x,
                         log_pkt("RX", v, &odcid, tok, tok_len);
                         warn(ERR, "retry dcid mismatch %s != %s",
                              cid2str(&odcid), cid2str(c->dcid));
-                        q_free_iov(v);
+                        free_iov(v);
                         continue;
                     }
                     if (c->state == conn_opng)
@@ -950,7 +950,7 @@ rx_pkts(struct w_iov_sq * const x,
             log_pkt("RX", v, &odcid, tok, tok_len);
             warn(INF, "ignoring unexpected 0x%02x-type pkt for conn %s",
                  meta(v).hdr.flags, cid2str(&meta(v).hdr.dcid));
-            q_free_iov(v);
+            free_iov(v);
             continue;
         }
 
@@ -960,7 +960,7 @@ rx_pkts(struct w_iov_sq * const x,
                 log_pkt("RX", v, &odcid, tok, tok_len);
                 warn(ERR, "received invalid %u-byte 0x%02x-type pkt, ignoring",
                      v->len, meta(v).hdr.flags);
-                q_free_iov(v);
+                free_iov(v);
                 continue;
             }
 
@@ -975,7 +975,7 @@ rx_pkts(struct w_iov_sq * const x,
 
         if (meta(v).stream == 0)
             // we didn't place this pkt in any stream - bye!
-            q_free_iov(v);
+            free_iov(v);
     }
 }
 
