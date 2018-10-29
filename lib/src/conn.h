@@ -47,7 +47,7 @@
 
 
 extern splay_head(conns_by_ipnp, q_conn) conns_by_ipnp;
-extern splay_head(conns_by_id, q_cid_map) conns_by_id;
+extern splay_head(conns_by_id, cid_map) conns_by_id;
 
 
 struct transport_params {
@@ -69,8 +69,8 @@ struct transport_params {
 };
 
 
-struct q_cid_map {
-    splay_entry(q_cid_map) node;
+struct cid_map {
+    splay_entry(cid_map) node;
     struct cid cid;    ///< Connection ID
     struct q_conn * c; ///< Connection
 };
@@ -254,8 +254,8 @@ cid_cmp(const struct cid * const a, const struct cid * const b)
 
 
 static inline int __attribute__((always_inline, nonnull))
-conns_by_id_cmp(const struct q_cid_map * const a,
-                const struct q_cid_map * const b)
+conns_by_id_cmp(const struct cid_map * const a,
+                const struct cid_map * const b)
 {
     return cid_cmp(&a->cid, &b->cid);
 }
@@ -266,7 +266,7 @@ conns_by_ipnp_cmp(const struct q_conn * const a, const struct q_conn * const b);
 
 
 SPLAY_PROTOTYPE(conns_by_ipnp, q_conn, node_ipnp, conns_by_ipnp_cmp)
-SPLAY_PROTOTYPE(conns_by_id, q_cid_map, node, conns_by_id_cmp)
+SPLAY_PROTOTYPE(conns_by_id, cid_map, node, conns_by_id_cmp)
 SPLAY_PROTOTYPE(cids_by_seq, cid, node_seq, cids_by_seq_cmp)
 SPLAY_PROTOTYPE(cids_by_id, cid, node_id, cid_cmp)
 

@@ -569,7 +569,7 @@ void q_cleanup(struct w_engine * const w)
 {
     // close all connections
     while (!splay_empty(&conns_by_id)) {
-        struct q_cid_map * const cm = splay_min(conns_by_id, &conns_by_id);
+        struct cid_map * const cm = splay_min(conns_by_id, &conns_by_id);
         warn(DBG, "closing %s conn %s", conn_type(cm->c), cid2str(&cm->cid));
         q_close(cm->c);
     }

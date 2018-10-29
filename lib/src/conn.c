@@ -88,7 +88,7 @@ int conns_by_ipnp_cmp(const struct q_conn * const a,
 
 
 SPLAY_GENERATE(conns_by_ipnp, q_conn, node_ipnp, conns_by_ipnp_cmp)
-SPLAY_GENERATE(conns_by_id, q_cid_map, node, conns_by_id_cmp)
+SPLAY_GENERATE(conns_by_id, cid_map, node, conns_by_id_cmp)
 SPLAY_GENERATE(cids_by_seq, cid, node_seq, cids_by_seq_cmp)
 SPLAY_GENERATE(cids_by_id, cid, node_id, cid_cmp)
 
@@ -156,8 +156,8 @@ get_conn_by_ipnp(const uint16_t sport, const struct sockaddr_in * const peer)
 static struct q_conn * __attribute__((nonnull))
 get_conn_by_cid(const struct cid * const scid)
 {
-    const struct q_cid_map which = {.cid = *scid};
-    struct q_cid_map * const cm = splay_find(conns_by_id, &conns_by_id, &which);
+    const struct cid_map which = {.cid = *scid};
+    struct cid_map * const cm = splay_find(conns_by_id, &conns_by_id, &which);
     return cm ? cm->c : 0;
 }
 
@@ -494,8 +494,8 @@ void update_act_scid(struct q_conn * const c, const struct cid * const id)
 {
     warn(NTE, "hshk switch to scid %s for %s conn (was %s)", cid2str(id),
          conn_type(c), cid2str(c->scid));
-    const struct q_cid_map which = {.cid = *c->scid};
-    struct q_cid_map * cm = splay_find(conns_by_id, &conns_by_id, &which);
+    const struct cid_map which = {.cid = *c->scid};
+    struct cid_map * cm = splay_find(conns_by_id, &conns_by_id, &which);
     splay_remove(conns_by_id, &conns_by_id, cm);
     cid_cpy(&cm->cid, id);
     splay_insert(conns_by_id, &conns_by_id, cm);
@@ -504,7 +504,7 @@ void update_act_scid(struct q_conn * const c, const struct cid * const id)
 
 void add_scid(struct q_conn * const c, const struct cid * const id)
 {
-    struct q_cid_map * cm;
+    struct cid_map * cm;
     struct cid * scid = splay_find(cids_by_seq, &c->scids_by_seq, id);
     ensure(scid == 0, "cid is new");
 
@@ -1250,8 +1250,8 @@ void free_scid(struct q_conn * const c, struct cid * const id)
 {
     splay_remove(cids_by_seq, &c->scids_by_seq, id);
     splay_remove(cids_by_id, &c->scids_by_id, id);
-    const struct q_cid_map which = {.cid = *id};
-    struct q_cid_map * const cm = splay_find(conns_by_id, &conns_by_id, &which);
+    const struct cid_map which = {.cid = *id};
+    struct cid_map * const cm = splay_find(conns_by_id, &conns_by_id, &which);
     splay_remove(conns_by_id, &conns_by_id, cm);
     free(cm);
 }
