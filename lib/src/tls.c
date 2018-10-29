@@ -967,10 +967,6 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
                 c->did_0rtt = 1;
         }
 
-        // TODO handle differently
-        // } else if (ret == PTLS_ERROR_STATELESS_RETRY) {
-        //     c->needs_tx = c->tx_rtry = true;
-
     } else if (unlikely(ret != 0 && ret != PTLS_ERROR_IN_PROGRESS)) {
         err_close(c, ERR_TLS(PTLS_ERROR_TO_ALERT(ret)), FRAM_TYPE_CRPT,
                   "picotls error %u", ret);
