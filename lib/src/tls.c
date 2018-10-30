@@ -26,7 +26,6 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <assert.h>
-#include <bitstring.h>
 #include <inttypes.h>
 #include <netinet/in.h>
 #include <stdbool.h>
@@ -58,6 +57,7 @@
 #include <arpa/inet.h>
 #endif
 
+#include "bitset.h"
 #include "conn.h"
 #include "frame.h"
 #include "marshall.h"
@@ -436,7 +436,8 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
     len = i + tpl;
 
     // keep track of which transport parameters we've seen before
-    bitstr_t bit_decl(tp_list, TP_MAX) = {0};
+    bitset_define(tp_list, TP_MAX);
+    struct tp_list tp_list = bitset_t_initializer(0);
 
     while (i < len) {
         uint16_t tp = 0;
@@ -452,11 +453,12 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         }
 
         // check if this transport parameter is a duplicate
-        if (unlikely(bit_test(tp_list, tp))) {
+        if (unlikely(bit_isset(TP_MAX, tp, &tp_list))) {
             err_close(c, ERR_TRANSPORT_PARAMETER, FRAM_TYPE_CRPT,
                       "duplicate tp 0x%04x", tp);
             return 1;
         }
+        bit_set(TP_MAX, tp, &tp_list);
 
         switch (tp) {
         case TP_INITIAL_MAX_STREAM_DATA_UNI:

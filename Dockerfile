@@ -1,7 +1,6 @@
 FROM ntap/warpcore:latest
 RUN apk add --no-cache cmake ninja gcc g++ git musl-dev linux-headers \
-        libbsd-dev mercurial openssl \
-        openssl-dev http-parser-dev libev-dev libbsd-dev
+        mercurial openssl openssl-dev http-parser-dev libev-dev libbsd-dev
 RUN git config --global user.email "docker@example.com"
 ADD . /src
 WORKDIR /src/Debug

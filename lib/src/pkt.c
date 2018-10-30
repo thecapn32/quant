@@ -417,6 +417,8 @@ bool enc_pkt(struct q_stream * const s,
     }
 
     if (epoch == ep_data || (!c->is_clnt && epoch == ep_0rtt)) {
+        // TODO: also encode frames after shorter-than-pkt stream frames
+
         // encode connection control frames
         if (!c->is_clnt && c->tok_len && have_space_for(FRAM_TYPE_NEW_TOKN)) {
             i = enc_new_token_frame(c, v, i);

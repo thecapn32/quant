@@ -26,7 +26,6 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <arpa/inet.h>
-#include <bitstring.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <stdarg.h>
@@ -41,6 +40,7 @@
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
+#include "bitset.h"
 #include "conn.h"
 #include "diet.h"
 #include "frame.h"
@@ -670,7 +670,8 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             goto done;
 
         // if the CH doesn't include any crypto frames, bail
-        if (bit_test(meta(v).frames, FRAM_TYPE_CRPT) == false) {
+        if (bit_isset(NUM_FRAM_TYPES, FRAM_TYPE_CRPT, &meta(v).frames) ==
+            false) {
             warn(ERR, "initial pkt w/o crypto frames");
             enter_closing(c);
             goto done;

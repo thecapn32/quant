@@ -27,7 +27,6 @@
 
 #pragma once
 
-#include <bitstring.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -45,6 +44,7 @@
 #define ASAN_UNPOISON_MEMORY_REGION(x, y)
 #endif
 
+#include "bitset.h"
 #include "frame.h"
 
 
@@ -101,6 +101,9 @@ struct pkt_hdr {
 #define MAX_PKT_NR_LEN 4
 
 
+bitset_define(frames, NUM_FRAM_TYPES);
+
+
 /// Packet meta-data information associated with w_iov buffers
 struct pkt_meta {
     // XXX need to potentially change pm_cpy() below if fields are reordered
@@ -126,7 +129,7 @@ struct pkt_meta {
     uint64_t max_stream_data;    ///< MAX_STREAM_DATA limit, if sent.
     uint64_t max_data;           ///< MAX_DATA limit, if sent.
     int64_t max_bidi_streams;    ///< MAX_STREAM_ID limit, if sent.
-    bitstr_t bit_decl(frames, NUM_FRAM_TYPES); ///< Frames present in pkt.
+    struct frames frames;        ///< Frames present in pkt.
 
     // pm_cpy(false) starts copying from here:
     uint16_t tx_len;      ///< Length of protected packet at TX.
@@ -138,7 +141,7 @@ struct pkt_meta {
     uint8_t pkt_nr_len;  ///< Length of the packet number data.
     uint16_t pkt_nr_pos; ///< Offset of the packet number.
 
-    uint8_t _unused[6];
+    uint8_t _unused[2];
 
     ev_tstamp tx_t;       ///< Transmission timestamp.
     struct pn_space * pn; ///< Packet number space; only set on TX.
@@ -248,22 +251,9 @@ pm_cpy(struct pkt_meta * const dst,
 static inline bool __attribute__((nonnull))
 is_ack_only(const struct pkt_meta * const p)
 {
-    // cppcheck-suppress unreadVariable
-    bitstr_t bit_decl(frames, NUM_FRAM_TYPES);
-    memcpy(frames, p->frames, sizeof(frames));
-
-    // padding doesn't count
-    // YES IT DOES: bit_clear(frames, FRAM_TYPE_PAD);
-
-    int first_bit_set = -1, second_bit_set = -1;
-    bit_ffs(frames, NUM_FRAM_TYPES, &first_bit_set);
-
-    if (first_bit_set >= 0) {
-        bit_clear(frames, first_bit_set);
-        bit_ffs(frames, NUM_FRAM_TYPES, &second_bit_set);
-    }
-
-    return first_bit_set == FRAM_TYPE_ACK && second_bit_set == -1;
+    const int first = bit_ffs(NUM_FRAM_TYPES, &p->frames) - 1;
+    const int last = bit_fls(NUM_FRAM_TYPES, &p->frames) - 1;
+    return first == FRAM_TYPE_ACK && last == FRAM_TYPE_ACK;
 }
 
 
