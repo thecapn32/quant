@@ -155,7 +155,7 @@ detect_lost_pkts(struct q_conn * const c, struct pn_space * const pn)
             p->is_lost = true;
 
             // OnPacketsLost:
-            if (is_ack_only(p) == false) {
+            if (is_ack_only(&p->frames) == false) {
                 c->rec.in_flight -= p->tx_len;
                 log_cc(c);
             }
@@ -279,7 +279,8 @@ void on_pkt_sent(struct q_stream * const s, struct w_iov * const v)
     struct pn_space * const pn = pn_for_epoch(s->c, strm_epoch(s));
     splay_insert(pm_by_nr, &pn->sent_pkts, &meta(v));
 
-    if (likely(s->c->state != conn_idle) && is_ack_only(&meta(v)) == false) {
+    if (likely(s->c->state != conn_idle) &&
+        is_ack_only(&meta(v).frames) == false) {
         if (bit_isset(NUM_FRAM_TYPES, FRAM_TYPE_CRPT, &meta(v).frames))
             // is_handshake_packet
             s->c->rec.last_sent_hshk_t = meta(v).tx_t;
@@ -367,7 +368,7 @@ void on_ack_received_2(struct q_conn * const c,
              p = splay_next(pm_by_nr, &pn->sent_pkts, p)) {
             warn(DBG, "pkt " FMT_PNR_OUT " considered lost", p->hdr.nr);
             p->is_lost = true;
-            if (is_ack_only(p) == false) {
+            if (is_ack_only(&p->frames) == false) {
                 // bytes_in_flight -= lost_packet.bytes
                 c->rec.in_flight -= p->tx_len;
                 // XXX: sent_packets.remove(sent_packet.packet_number)
@@ -422,7 +423,7 @@ void on_pkt_acked(struct q_conn * const c,
     // implements OnPacketAcked pseudo code
 
     // if (!acked_packet.is_ack_only):
-    if (is_ack_only(&meta(acked_pkt)) == false)
+    if (is_ack_only(&meta(acked_pkt).frames) == false)
         on_pkt_acked_cc(c, acked_pkt);
 
     // sent_packets.remove(acked_packet.packet_number)

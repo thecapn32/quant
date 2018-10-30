@@ -846,11 +846,11 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
         if (pad_start && (type != FRAM_TYPE_PAD || i == v->len - 1)) {
             warn(INF, FRAM_IN "PADDING" NRM " len=%u", i - pad_start);
             pad_start = 0;
-            bit_set(NUM_FRAM_TYPES, FRAM_TYPE_PAD, &meta(v).frames);
-        }
+            bit_set(NUM_FRAM_TYPES, type, &meta(v).frames);
 
-        if (type == FRAM_TYPE_CRPT ||
-            (type >= FRAM_TYPE_STRM && type <= FRAM_TYPE_STRM_MAX)) {
+        } else if (type == FRAM_TYPE_CRPT ||
+                   (type >= FRAM_TYPE_STRM && type <= FRAM_TYPE_STRM_MAX)) {
+
             if ((bit_isset(NUM_FRAM_TYPES, FRAM_TYPE_CRPT, &meta(v).frames) ||
                  bit_isset(NUM_FRAM_TYPES, FRAM_TYPE_STRM, &meta(v).frames)) &&
                 meta(v).stream) {
@@ -868,9 +868,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
 
             // this is the first stream frame in this packet
             i = dec_stream_or_crypto_frame(c, v, i);
-            bit_set(NUM_FRAM_TYPES,
-                    type == FRAM_TYPE_CRPT ? FRAM_TYPE_CRPT : FRAM_TYPE_STRM,
-                    &meta(v).frames);
+            bit_set(NUM_FRAM_TYPES, type, &meta(v).frames);
 
         } else {
             switch (type) {
@@ -956,7 +954,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
                                  i);
             }
 
-            if (unlikely(i == UINT16_MAX))
+            if (likely(i < UINT16_MAX))
                 // record this frame type in the meta data
                 bit_set(NUM_FRAM_TYPES, type, &meta(v).frames);
         }
@@ -971,6 +969,9 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
         v->buf = &v->buf[meta(v).stream_data_start];
         v->len = meta(v).stream_data_len;
     }
+
+    struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
+    bit_or(NUM_FRAM_TYPES, &pn->rx_frames, &meta(v).frames);
 
     return i;
 }
@@ -1155,6 +1156,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     // warn(DBG, "ACK encoded, stopping epoch %u ACK timer",
     //      epoch_for_pkt_type(meta(v).hdr.type));
     ev_timer_stop(loop, &pn->ack_alarm);
+    bit_zero(NUM_FRAM_TYPES, &pn->rx_frames);
 
     return i;
 }

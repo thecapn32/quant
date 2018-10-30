@@ -61,6 +61,8 @@ struct pn_space {
 
     ev_timer ack_alarm;
     struct q_conn * c;
+
+    struct frames rx_frames; ///< Frame types received since last ACK.
 };
 
 

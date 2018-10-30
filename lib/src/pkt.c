@@ -408,7 +408,8 @@ bool enc_pkt(struct q_stream * const s,
     log_pkt("TX", v, meta(v).hdr.type == F_LH_RTRY ? &c->odcid : 0, c->tok,
             tok_len);
 
-    if (meta(v).hdr.type != F_LH_RTRY && !diet_empty(&pn->recv))
+    if (meta(v).hdr.type != F_LH_RTRY && !diet_empty(&pn->recv) &&
+        !is_ack_or_padding_only(&pn->rx_frames))
         i = enc_ack_frame(c, pn, v, i);
 
     if (c->state == conn_clsg) {

@@ -201,7 +201,7 @@ static void log_sent_pkts(struct q_conn * const c)
         struct pn_space * const pn = pn_for_epoch(c, e);
         splay_foreach (p, pm_by_nr, &pn->sent_pkts) {
             char tmp[1024] = "";
-            const bool ack_only = is_ack_only(p);
+            const bool ack_only = is_ack_only(&p->frames);
             snprintf(tmp, sizeof(tmp), "%s%s" FMT_PNR_OUT "%s ",
                      is_rtxable(p) ? "*" : "", ack_only ? "(" : "",
                      prev == UINT64_MAX
@@ -788,7 +788,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 
     // if packet has anything other than ACK frames, maybe arm the ACK timer
     if (c->state != conn_drng && c->state != conn_clsd && !c->tx_rtry &&
-        !is_ack_only(&meta(v)) && !ev_is_active(&pn->ack_alarm)) {
+        !is_ack_only(&meta(v).frames) && !ev_is_active(&pn->ack_alarm)) {
         // warn(DBG, "non-ACK frame received, starting epoch %u ACK timer",
         //      epoch_for_pkt_type(meta(v).hdr.type));
         ev_timer_again(loop, &pn->ack_alarm);

@@ -249,11 +249,24 @@ pm_cpy(struct pkt_meta * const dst,
 
 
 static inline bool __attribute__((nonnull))
-is_ack_only(const struct pkt_meta * const p)
+is_ack_only(const struct frames * const f)
 {
-    const int first = bit_ffs(NUM_FRAM_TYPES, &p->frames) - 1;
-    const int last = bit_fls(NUM_FRAM_TYPES, &p->frames) - 1;
-    return first == FRAM_TYPE_ACK && last == FRAM_TYPE_ACK;
+    static const struct frames ack_only = bitset_t_initializer(FRAM_TYPE_ACK);
+    return bit_cmp(NUM_FRAM_TYPES, f, &ack_only) == 0;
+}
+
+
+static inline bool __attribute__((nonnull))
+is_ack_or_padding_only(const struct frames * const f)
+{
+    static struct frames ack_or_pad_only = bitset_t_initializer(FRAM_TYPE_ACK);
+    static bool initialized = false;
+    if (unlikely(initialized == false)) {
+        bit_set(NUM_FRAM_TYPES, FRAM_TYPE_PAD, &ack_or_pad_only);
+        initialized = true;
+    }
+
+    return is_ack_only(f) || bit_cmp(NUM_FRAM_TYPES, f, &ack_or_pad_only) == 0;
 }
 
 
