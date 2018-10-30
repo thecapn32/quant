@@ -36,6 +36,7 @@
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
+#include "bitset.h"
 #include "conn.h"
 #include "diet.h"
 #include "frame.h"
@@ -407,6 +408,10 @@ bool enc_pkt(struct q_stream * const s,
     meta(v).hdr.hdr_len = i;
     log_pkt("TX", v, meta(v).hdr.type == F_LH_RTRY ? &c->odcid : 0, c->tok,
             tok_len);
+
+    for (size_t b = 0; b < NUM_FRAM_TYPES; b++)
+        if (bit_isset(NUM_FRAM_TYPES, b, &pn->rx_frames))
+            warn(DBG, "had RX of frame type 0x%02x", b);
 
     if (meta(v).hdr.type != F_LH_RTRY && !diet_empty(&pn->recv) &&
         !is_ack_or_padding_only(&pn->rx_frames))
