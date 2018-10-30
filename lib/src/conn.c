@@ -587,7 +587,8 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
     if (epoch_in(c) > epoch)
         // let's fire off some ACKs for the previous epochs
         for (epoch_t e = ep_init; e <= epoch; e++)
-            tx_ack(c, e);
+            if (needs_ack(pn_for_epoch(c, e)))
+                tx_ack(c, e);
 }
 
 

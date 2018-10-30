@@ -110,5 +110,6 @@ ack_alarm(struct ev_loop * const l, ev_timer * const w, int e);
 static inline bool __attribute__((nonnull, always_inline))
 needs_ack(struct pn_space * const pn)
 {
-    return !diet_empty(&pn->recv) && ev_is_active(&pn->ack_alarm);
+    return !diet_empty(&pn->recv) && !is_ack_or_padding_only(&pn->rx_frames) &&
+           ev_is_active(&pn->ack_alarm);
 }
