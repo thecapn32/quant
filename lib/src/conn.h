@@ -93,6 +93,7 @@ typedef enum { CONN_STATES } conn_state_t;
 extern const char * const conn_state_str[];
 
 #define MAX_TOK_LEN 512
+#define MAX_ERR_REASON_LEN 128 // keep < 256, since err_reason_len is uint8_t
 
 
 splay_head(cids_by_seq, cid);
@@ -144,7 +145,7 @@ struct q_conn {
     uint16_t err_code;
     uint8_t err_frm;
     uint8_t err_reason_len;
-    char * err_reason;
+    char err_reason[MAX_ERR_REASON_LEN];
 
     struct w_engine * w; ///< Underlying warpcore engine.
 

@@ -1243,15 +1243,14 @@ uint16_t enc_close_frame(const struct q_conn * const c,
         warn(INF,
              FRAM_OUT "CONNECTION_CLOSE" NRM " err=%s0x%04x" NRM
                       " frame=0x%02x rlen=%" PRIu64 " reason=%s%.*s" NRM,
-             c->err_code ? RED : NRM, c->err_code, c->err_frm,
-             c->err_reason ? rlen : 0, c->err_code ? RED : NRM,
-             c->err_reason ? rlen : 0, c->err_reason);
+             c->err_code ? RED : NRM, c->err_code, c->err_frm, rlen,
+             c->err_code ? RED : NRM, rlen, c->err_reason);
     else
         warn(INF,
              FRAM_OUT "APPLICATION_CLOSE" NRM " err=%s0x%04x" NRM
                       " rlen=%" PRIu64 " reason=%s%.*s" NRM,
-             c->err_code ? RED : NRM, c->err_code, c->err_reason ? rlen : 0,
-             c->err_code ? RED : NRM, c->err_reason ? rlen : 0, c->err_reason);
+             c->err_code ? RED : NRM, c->err_code, rlen,
+             c->err_code ? RED : NRM, rlen, c->err_reason);
 
     return i;
 }

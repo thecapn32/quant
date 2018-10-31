@@ -34,6 +34,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/param.h>
 #include <sys/socket.h>
 
 #include <ev.h>
@@ -1030,28 +1031,28 @@ void err_close(struct q_conn * const c,
                const char * const fmt,
                ...)
 {
+#ifndef FUZZING
+    if (unlikely(c->err_code)) {
+        warn(WRN, "ignoring new err 0x%04x; existing err is 0x%04x (%s) ", code,
+             c->err_code, c->err_reason);
+        return;
+    }
+#endif
+
     va_list ap;
     va_start(ap, fmt);
 
-    char reas[256];
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wformat-nonliteral"
-    const int ret = vsnprintf(reas, sizeof(reas), fmt, ap);
+    const int ret = vsnprintf(c->err_reason, sizeof(c->err_reason), fmt, ap);
 #pragma clang diagnostic pop
     ensure(ret >= 0, "vsnprintf() failed");
     va_end(ap);
 
-#ifndef FUZZING
-    if (c->err_code) {
-        warn(WRN, "ignoring new err 0x%04x (%s); existing err is 0x%04x (%s) ",
-             code, reas, c->err_code, c->err_reason);
-        return;
-    }
-#endif
-    warn(ERR, "%s", reas);
+    warn(ERR, "%s", c->err_reason);
     c->err_code = code;
-    c->err_reason = strndup(reas, sizeof(c->err_reason_len) * 8);
-    c->err_reason_len = (uint8_t)strlen(c->err_reason);
+    c->err_reason_len =
+        (uint8_t)MIN((unsigned long)ret + 1, sizeof(c->err_reason));
     c->err_frm = frm;
     enter_closing(c);
 }
@@ -1296,8 +1297,6 @@ void free_conn(struct q_conn * const c)
 
     diet_free(&c->closed_streams);
     free(c->peer_name);
-    if (c->err_reason)
-        free(c->err_reason);
 
     // remove connection from global lists and free CID splays
     splay_remove(conns_by_ipnp, &conns_by_ipnp, c);
