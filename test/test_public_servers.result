@@ -1,7 +1,7 @@
           live fail vneg hshk data clse zrtt rtry migr kyph
 ats       *         v
 f5        *         V    H    D    C
-lsquic    *         v
+lsquic    *         V    H
 minq      *         v
 mozquic
 mvfst
@@ -11,7 +11,7 @@ pandora
 picoquic  *         V    H    D    C    RZ   S    M    U
 quant     *         V    H    D    C    RZ   S    M    U
 quiche    *         V    H    D    C
-quicker
+quicker   *         V    H    D    C    RZ
 quicly    *         v
 quicr     *         v
 quinn
