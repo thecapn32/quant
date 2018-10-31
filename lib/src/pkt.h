@@ -54,7 +54,7 @@
 #define ERR_NONE 0x0
 #define ERR_INTERNAL 0x1
 #define ERR_FLOW_CONTROL 0x3
-// #define ERR_STREAM_ID 0x4
+#define ERR_STREAM_ID 0x4
 // #define ERR_STREAM_STATE 0x5
 // #define ERR_FINAL_OFFSET 0x6
 #define ERR_FRAME_ENC 0x7

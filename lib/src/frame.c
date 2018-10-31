@@ -79,6 +79,22 @@
     })
 
 
+static int64_t __attribute__((nonnull))
+max_sid(const int64_t sid, const struct q_conn * const c)
+{
+    const int64_t max =
+        is_set(STRM_FL_INI_SRV, sid) == c->is_clnt
+            ? (is_set(STRM_FL_DIR_UNI, sid) ? c->tp_in.max_uni_streams
+                                            : c->tp_in.max_bidi_streams)
+            : (is_set(STRM_FL_DIR_UNI, sid) ? c->tp_out.max_uni_streams
+                                            : c->tp_out.max_bidi_streams);
+    return unlikely(max == 0)
+               ? max
+               : ((max - 1) << 2) +
+                     (is_set(STRM_FL_INI_SRV, sid) ? STRM_FL_INI_SRV : 0);
+}
+
+
 #ifndef NDEBUG
 void log_stream_or_crypto_frame(const bool rtx,
                                 const struct w_iov * const v,
@@ -103,12 +119,7 @@ void log_stream_or_crypto_frame(const bool rtx,
              is_set(F_STREAM_LEN, type) ? "LEN" : "",
              is_set(F_STREAM_LEN, type) && is_set(F_STREAM_OFF, type) ? "|"
                                                                       : "",
-             is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id,
-             is_set(STRM_FL_INI_SRV, s->id) == c->is_clnt
-                 ? ((c->tp_in.max_bidi_streams - 1) << 2) +
-                       (is_set(STRM_FL_INI_SRV, s->id) ? STRM_FL_INI_SRV : 0)
-                 : ((c->tp_out.max_bidi_streams - 1) << 2) +
-                       (is_set(STRM_FL_INI_SRV, s->id) ? STRM_FL_INI_SRV : 0),
+             is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id, max_sid(s->id, c),
              meta(v).stream_off, in ? s->in_data_max : s->out_data_max,
              meta(v).stream_data_len, in ? c->in_data : c->out_data,
              in ? c->tp_in.max_data : c->tp_out.max_data,
@@ -137,8 +148,12 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     int64_t sid = 0;
     if (t == FRAM_TYPE_CRPT)
         sid = crpt_strm_id(epoch_for_pkt_type(meta(v).hdr.type));
-    else
+    else {
         i = dec_chk(t, &sid, v->buf, v->len, i, 0, FMT_SID);
+        const int64_t max = max_sid(sid, c);
+        if (unlikely(sid > max))
+            err_close_return(c, ERR_STREAM_ID, t, "sid %d > max %d", sid, max);
+    }
 
     if (is_set(F_STREAM_OFF, t) || t == FRAM_TYPE_CRPT)
         i = dec_chk(t, &meta(v).stream_off, v->buf, v->len, i, 0, "%" PRIu64);
@@ -173,10 +188,6 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
             err_close_return(c, ERR_FRAME_ENC, t,
                              "got sid %" PRIu64 " but am %s", sid,
                              conn_type(c));
-
-        if (is_set(STRM_FL_DIR_UNI, sid))
-            err_close_return(c, ERR_INTERNAL, 0,
-                             "TODO: unidirectional streams not supported yet");
 
         s = new_stream(c, sid);
     }
