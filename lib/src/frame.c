@@ -152,7 +152,8 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
         i = dec_chk(t, &sid, v->buf, v->len, i, 0, FMT_SID);
         const int64_t max = max_sid(sid, c);
         if (unlikely(sid > max))
-            err_close_return(c, ERR_STREAM_ID, t, "sid %d > max %d", sid, max);
+            err_close_return(c, ERR_STREAM_ID, t,
+                             "sid %" PRId64 " > max %" PRId64, sid, max);
     }
 
     if (is_set(F_STREAM_OFF, t) || t == FRAM_TYPE_CRPT)
@@ -186,7 +187,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
 
         if (unlikely(is_set(STRM_FL_INI_SRV, sid) != c->is_clnt))
             err_close_return(c, ERR_FRAME_ENC, t,
-                             "got sid %" PRIu64 " but am %s", sid,
+                             "got sid %" PRId64 " but am %s", sid,
                              conn_type(c));
 
         s = new_stream(c, sid);
@@ -600,7 +601,7 @@ dec_stream_blocked_frame(struct q_conn * const c,
     struct q_stream * const s = get_stream(c, sid);
     if (unlikely(s == 0))
         err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_STRM_BLCK,
-                         "unknown strm %u", sid);
+                         "unknown strm %" PRId64, sid);
 
     uint64_t off = 0;
     i = dec_chk(FRAM_TYPE_STRM_BLCK, &off, v->buf, v->len, i, 0, "%" PRIu64);
@@ -640,12 +641,13 @@ dec_stream_id_blocked_frame(struct q_conn * const c,
 
     warn(INF, FRAM_IN "STREAM_ID_BLOCKED" NRM " sid=" FMT_SID, sid);
 
-    if (is_set(STRM_FL_DIR_UNI, sid))
-        err_close_return(c, ERR_INTERNAL, 0, "TODO: unidir strm");
+    int64_t * const lim = is_set(STRM_FL_DIR_UNI, sid)
+                              ? &c->tp_in.max_uni_streams
+                              : &c->tp_in.max_bidi_streams;
 
-    if (sid >> 2 <= c->tp_in.max_bidi_streams)
+    if (sid >> 2 <= *lim)
         // let the peer open more streams
-        c->tp_in.max_bidi_streams += 2;
+        *lim += 2;
     c->needs_tx = c->tx_max_stream_id = true;
 
     return i;
@@ -664,7 +666,7 @@ dec_stop_sending_frame(struct q_conn * const c,
     struct q_stream * const s = get_stream(c, sid);
     if (unlikely(s == 0))
         err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_STOP_SEND,
-                         "unknown strm %u", sid);
+                         "unknown strm %" PRId64, sid);
 
     uint16_t err_code = 0;
     i = dec_chk(FRAM_TYPE_STOP_SEND, &err_code, v->buf, v->len, i,
@@ -770,7 +772,7 @@ dec_rst_stream_frame(struct q_conn * const c,
     struct q_stream * const s = get_stream(c, sid);
     if (unlikely(s == 0))
         err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_RST_STRM,
-                         "unknown strm %u", sid);
+                         "unknown strm %" PRId64, sid);
     strm_to_state(s, strm_clsd);
 
     return i;
@@ -1184,7 +1186,7 @@ uint16_t enc_stream_or_crypto_frame(struct q_stream * const s,
     if (enc_strm) {
         ensure(!is_set(F_LONG_HDR, meta(v).hdr.flags) ||
                    meta(v).hdr.type == F_LH_0RTT,
-               "sid %u in 0x%02x-type pkt", s->id, meta(v).hdr.type);
+               "sid %" PRId64 " in 0x%02x-type pkt", s->id, meta(v).hdr.type);
 
         ensure(dlen || s->state > strm_open,
                "no stream data or need to send FIN");
