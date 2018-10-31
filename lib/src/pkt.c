@@ -265,15 +265,81 @@ enc_lh_cids(const struct cid * const dcid,
 }
 
 
-#define have_space_for(t)                                                      \
-    __extension__({                                                            \
-        const bool _have_space =                                               \
-            meta(v).stream_data_start == 0 ||                                  \
-            i + max_frame_len(t) < meta(v).stream_data_start;                  \
-        if (_have_space == false)                                              \
-            warn(INF, "no space to encode 0x%02x frame", t);                   \
-        _have_space;                                                           \
-    })
+static bool __attribute__((const))
+have_space_for(const uint8_t type, const uint16_t pos, const uint16_t limit)
+{
+    const bool have_space = limit == 0 || pos + max_frame_len(type) < limit;
+    if (have_space == false)
+        warn(DBG, "missing %u bytes to encode 0x%02x frame",
+             pos + max_frame_len(type) - limit, type);
+    return have_space;
+}
+
+
+static uint16_t __attribute__((nonnull))
+enc_other_frames(struct q_stream * const s,
+                 struct w_iov * const v,
+                 const uint16_t pos,
+                 const uint16_t lim)
+{
+    struct q_conn * const c = s->c;
+    uint16_t i = pos;
+
+    // encode connection control frames
+    if (!c->is_clnt && c->tok_len &&
+        have_space_for(FRAM_TYPE_NEW_TOKN, i, lim)) {
+        i = enc_new_token_frame(c, v, i);
+        c->tok_len = 0;
+    }
+
+    if (c->tx_path_resp && have_space_for(FRAM_TYPE_PATH_RESP, i, lim)) {
+        i = enc_path_response_frame(c, v, i);
+        c->tx_path_resp = false;
+    }
+
+    if (c->tx_retire_cid && have_space_for(FRAM_TYPE_RTIR_CID, i, lim)) {
+        struct cid * rcid = splay_min(cids_by_seq, &c->dcids_by_seq);
+        while (rcid && rcid->seq < c->dcid->seq) {
+            struct cid * const next =
+                splay_next(cids_by_seq, &c->dcids_by_seq, rcid);
+            if (rcid->retired) {
+                i = enc_retire_cid_frame(c, v, i, rcid);
+                free_dcid(c, rcid);
+            }
+            rcid = next;
+        }
+    }
+
+    if (c->tx_path_chlg && have_space_for(FRAM_TYPE_PATH_CHLG, i, lim))
+        i = enc_path_challenge_frame(c, v, i);
+
+    if (c->tx_ncid && have_space_for(FRAM_TYPE_NEW_CID, i, lim))
+        i = enc_new_cid_frame(c, v, i);
+
+    if (c->blocked && have_space_for(FRAM_TYPE_BLCK, i, lim))
+        i = enc_blocked_frame(c, v, i);
+
+    if (c->tx_max_data && have_space_for(FRAM_TYPE_MAX_DATA, i, lim))
+        i = enc_max_data_frame(c, v, i);
+
+    if (c->stream_id_blocked && have_space_for(FRAM_TYPE_SID_BLCK, i, lim))
+        i = enc_stream_id_blocked_frame(c, v, i);
+
+    if (c->tx_max_stream_id && have_space_for(FRAM_TYPE_MAX_SID, i, lim))
+        i = enc_max_stream_id_frame(c, v, i);
+
+    if (s->id >= 0) {
+        // encode stream control frames
+        if (s->blocked && have_space_for(FRAM_TYPE_SID_BLCK, i, lim))
+            i = enc_stream_blocked_frame(s, v, i);
+
+        if (s->tx_max_stream_data &&
+            have_space_for(FRAM_TYPE_MAX_STRM_DATA, i, lim))
+            i = enc_max_stream_data_frame(s, v, i);
+    }
+
+    return i;
+}
 
 
 bool enc_pkt(struct q_stream * const s,
@@ -409,10 +475,6 @@ bool enc_pkt(struct q_stream * const s,
     log_pkt("TX", v, meta(v).hdr.type == F_LH_RTRY ? &c->odcid : 0, c->tok,
             tok_len);
 
-    // for (size_t b = 0; b < NUM_FRAM_TYPES; b++)
-    //     if (bit_isset(NUM_FRAM_TYPES, b, &pn->rx_frames))
-    //         warn(DBG, "had RX of frame type 0x%02x", b);
-
     if (meta(v).hdr.type != F_LH_RTRY && !diet_empty(&pn->recv) &&
         !is_ack_or_padding_only(&pn->rx_frames))
         i = enc_ack_frame(c, pn, v, i);
@@ -422,61 +484,8 @@ bool enc_pkt(struct q_stream * const s,
         goto tx;
     }
 
-    if (epoch == ep_data || (!c->is_clnt && epoch == ep_0rtt)) {
-        // TODO: also encode frames after shorter-than-pkt stream frames
-
-        // encode connection control frames
-        if (!c->is_clnt && c->tok_len && have_space_for(FRAM_TYPE_NEW_TOKN)) {
-            i = enc_new_token_frame(c, v, i);
-            c->tok_len = 0;
-        }
-
-        if (c->tx_path_resp && have_space_for(FRAM_TYPE_PATH_RESP)) {
-            i = enc_path_response_frame(c, v, i);
-            c->tx_path_resp = false;
-        }
-
-        if (c->tx_retire_cid && have_space_for(FRAM_TYPE_RTIR_CID)) {
-            struct cid * rcid = splay_min(cids_by_seq, &c->dcids_by_seq);
-            while (rcid && rcid->seq < c->dcid->seq) {
-                struct cid * const next =
-                    splay_next(cids_by_seq, &c->dcids_by_seq, rcid);
-                if (rcid->retired) {
-                    i = enc_retire_cid_frame(c, v, i, rcid);
-                    free_dcid(c, rcid);
-                }
-                rcid = next;
-            }
-        }
-
-        if (c->tx_path_chlg && have_space_for(FRAM_TYPE_PATH_CHLG))
-            i = enc_path_challenge_frame(c, v, i);
-
-        if (c->tx_ncid && have_space_for(FRAM_TYPE_NEW_CID))
-            i = enc_new_cid_frame(c, v, i);
-
-        if (c->blocked && have_space_for(FRAM_TYPE_BLCK))
-            i = enc_blocked_frame(c, v, i);
-
-        if (c->tx_max_data && have_space_for(FRAM_TYPE_MAX_DATA))
-            i = enc_max_data_frame(c, v, i);
-
-        if (c->stream_id_blocked && have_space_for(FRAM_TYPE_SID_BLCK))
-            i = enc_stream_id_blocked_frame(c, v, i);
-
-        if (c->tx_max_stream_id && have_space_for(FRAM_TYPE_MAX_SID))
-            i = enc_max_stream_id_frame(c, v, i);
-
-        if (s->id >= 0) {
-            // encode stream control frames
-            if (s->blocked && have_space_for(FRAM_TYPE_SID_BLCK))
-                i = enc_stream_blocked_frame(s, v, i);
-
-            if (s->tx_max_stream_data &&
-                have_space_for(FRAM_TYPE_MAX_STRM_DATA))
-                i = enc_max_stream_data_frame(s, v, i);
-        }
-    }
+    if (epoch == ep_data || (!c->is_clnt && epoch == ep_0rtt))
+        i = enc_other_frames(s, v, i, meta(v).stream_data_start);
 
     if (rtx) {
         ensure(is_rtxable(&meta(v)), "is rtxable");
@@ -491,6 +500,13 @@ bool enc_pkt(struct q_stream * const s,
         // pad out until stream_data_start and add a stream frame header
         enc_padding_frame(v, i, meta(v).stream_data_start - i);
         i = enc_stream_or_crypto_frame(s, v, i, s->id >= 0);
+    }
+
+    if (i < MAX_PKT_LEN - AEAD_LEN && (enc_data || rtx) &&
+        (epoch == ep_data || (!c->is_clnt && epoch == ep_0rtt))) {
+        // we can try to stick some more frames in after the stream frame
+        v->len = MAX_PKT_LEN - AEAD_LEN;
+        i = enc_other_frames(s, v, i, v->len);
     }
 
     if (c->is_clnt && enc_data) {
@@ -545,8 +561,11 @@ tx:
         // adjust v->len to exclude the post-stream padding for CI
         v->len = meta(v).stream_data_start + meta(v).stream_data_len;
 
-    if (enc_data)
+    if (enc_data) {
         adj_iov_to_data(v);
+        // XXX not clear if changing the len before calling on_pkt_sent is ok
+        v->len = meta(v).stream_data_len;
+    }
     on_pkt_sent(s, v);
     maybe_flip_keys(c, true);
     return true;
