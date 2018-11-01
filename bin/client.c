@@ -59,6 +59,23 @@ struct conn_cache {
 
 
 static uint64_t timeout = 10;
+static bool do_h3 = false;
+
+
+static const uint8_t get_slash[] = {
+    0x32, 0x01, 0x00, 0x00, 0xd1, 0x5f, 0x07, 0x04, 0x48, 0x54, 0x54,
+    0x50, 0xc1, 0x50, 0x8f, 0xf1, 0xe3, 0xc2, 0xf4, 0x19, 0x25, 0x45,
+    0x65, 0x2c, 0x89, 0x29, 0x27, 0x5c, 0x87, 0xa7, 0x5f, 0x50, 0x93,
+    0xce, 0x3b, 0x10, 0xa6, 0x09, 0xa6, 0x2d, 0x89, 0xff, 0x48, 0x52,
+    0x91, 0xcc, 0x62, 0x29, 0x1f, 0xa4, 0x95, 0x1f};
+
+
+// static const uint8_t get_large[] = {
+//     0x01, 0x00, 0x00, 0xd1, 0x5f, 0x07, 0x04, 0x48, 0x54, 0x54, 0x50, 0x51,
+//     0x87, 0x62, 0x53, 0x50, 0x55, 0x84, 0x0c, 0xdf, 0x50, 0x8f, 0xf1, 0xe3,
+//     0xc2, 0xf4, 0x19, 0x25, 0x45, 0x65, 0x2c, 0x89, 0x29, 0x27, 0x5c, 0x87,
+//     0xa7, 0x5f, 0x50, 0x93, 0xce, 0x3b, 0x10, 0xa6, 0x09, 0xa6, 0x2d, 0x89,
+//     0xff, 0x48, 0x52, 0x91, 0xcc, 0x62, 0x29, 0x1f, 0xa4, 0x95, 0x1f};
 
 
 static uint32_t __attribute__((nonnull))
@@ -107,6 +124,8 @@ static void __attribute__((noreturn, nonnull)) usage(const char * const name,
     printf("\t[-u bytes]\tupdate TLS keys after this traffic volume; default "
            "%" PRIu64 "\n",
            upd_amnt);
+    printf("\t[-3]\t\tsend a static H3 request; default %s\n",
+           do_h3 ? "true" : "false");
 #ifndef NDEBUG
     printf("\t[-v verbosity]\tverbosity level (0-%d, default %d)\n", DLEVEL,
            util_dlevel);
@@ -155,12 +174,17 @@ get(struct w_engine * const w,
     ensure(se, "calloc failed");
     sl_insert_head(&sl, se, next);
 
-    // assemble an HTTP/0.9 request
-    char req_str[MAXPATHLEN + 6];
-    const int req_str_len =
-        snprintf(req_str, sizeof(req_str), "GET %s\r\n", path);
     struct w_iov_sq req = w_iov_sq_initializer(req);
-    q_chunk_str(w, req_str, (uint32_t)req_str_len, &req);
+    if (do_h3) {
+        // use a canned H/3 request
+        q_chunk_str(w, (const char *)get_slash, sizeof(get_slash), &req);
+    } else {
+        // assemble an HTTP/0.9 request
+        char req_str[MAXPATHLEN + 6];
+        const int req_str_len =
+            snprintf(req_str, sizeof(req_str), "GET %s\r\n", path);
+        q_chunk_str(w, req_str, (uint32_t)req_str_len, &req);
+    }
 
     // do we have a connection open to this peer?
     const struct conn_cache_entry which = {
@@ -184,7 +208,7 @@ get(struct w_engine * const w,
         cce->dst = *(struct sockaddr_in *)&peer->ai_addr;
         splay_insert(conn_cache, cc, cce);
     } else {
-        se->s = q_rsv_stream(cce->c);
+        se->s = q_rsv_stream(cce->c, true);
         q_write(se->s, &req, true);
     }
     se->c = cce->c;
@@ -236,7 +260,7 @@ int main(int argc, char * argv[])
     uint64_t upd_amnt = 0;
     int ret = 0;
 
-    while ((ch = getopt(argc, argv, "hi:v:s:t:cu:")) != -1) {
+    while ((ch = getopt(argc, argv, "hi:v:s:t:cu:3")) != -1) {
         switch (ch) {
         case 'i':
             strncpy(ifname, optarg, sizeof(ifname) - 1);
@@ -255,6 +279,9 @@ int main(int argc, char * argv[])
             break;
         case 'u':
             upd_amnt = MIN(UINT32_MAX, strtoul(optarg, 0, 10));
+            break;
+        case '3':
+            do_h3 = true;
             break;
         case 'v':
 #ifndef NDEBUG

@@ -93,7 +93,7 @@ int main(int argc
     ensure(sc, "is zero");
 
     // reserve a new stream
-    struct q_stream * const s = q_rsv_stream(cc);
+    struct q_stream * const s = q_rsv_stream(cc, true);
 
     // allocate buffers to transmit a packet
     struct w_iov_sq o = w_iov_sq_initializer(o);
