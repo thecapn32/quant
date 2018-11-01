@@ -26,7 +26,6 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <stdbool.h>
-#include <stdint.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -38,7 +37,7 @@ struct q_stream;
 
 void q_chunk_str(struct w_engine * const w,
                  const char * const str,
-                 const uint32_t len,
+                 const size_t len,
                  struct w_iov_sq * o)
 {
     // allocate tail queue
@@ -48,7 +47,7 @@ void q_chunk_str(struct w_engine * const w,
     const char * i = str;
     struct w_iov * v = 0;
     sq_foreach (v, o, next) {
-        strncpy((char *)v->buf, i, v->len);
+        memcpy((char *)v->buf, i, v->len);
         i += v->len;
     }
 }
@@ -57,17 +56,18 @@ void q_chunk_str(struct w_engine * const w,
 void q_write_str(struct w_engine * const w,
                  struct q_stream * const s,
                  const char * const str,
+                 const size_t len,
                  const bool fin)
 {
     // allocate tail queue
     struct w_iov_sq o = w_iov_sq_initializer(o);
-    q_alloc(w, &o, (uint32_t)strlen(str));
+    q_alloc(w, &o, len);
 
     // chunk up string
     const char * i = str;
     struct w_iov * v = 0;
     sq_foreach (v, &o, next) {
-        strncpy((char *)v->buf, i, v->len);
+        memcpy((char *)v->buf, i, v->len);
         i += v->len;
     }
 
@@ -80,7 +80,7 @@ void q_write_str(struct w_engine * const w,
 void q_write_file(struct w_engine * const w,
                   struct q_stream * const s,
                   const int f,
-                  const uint32_t len,
+                  const size_t len,
                   const bool fin)
 {
     // allocate tail queue

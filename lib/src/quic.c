@@ -163,9 +163,10 @@ void alloc_off(struct w_engine * const w,
 
 void q_alloc(struct w_engine * const w,
              struct w_iov_sq * const q,
-             const uint32_t len)
+             const size_t len)
 {
-    alloc_off(w, q, len, OFFSET_ESTB);
+    ensure(len <= UINT32_MAX, "len %u too long", len);
+    alloc_off(w, q, (uint32_t)len, OFFSET_ESTB);
 }
 
 

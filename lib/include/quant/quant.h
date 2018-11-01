@@ -82,9 +82,8 @@ q_rsv_stream(struct q_conn * const c, const bool bidi);
 
 extern void __attribute__((nonnull)) q_close_stream(struct q_stream * const s);
 
-extern void __attribute__((nonnull)) q_alloc(struct w_engine * const w,
-                                             struct w_iov_sq * const q,
-                                             const uint32_t len);
+extern void __attribute__((nonnull))
+q_alloc(struct w_engine * const w, struct w_iov_sq * const q, const size_t len);
 
 extern void __attribute__((nonnull)) q_free(struct w_iov_sq * const q);
 
@@ -94,18 +93,19 @@ extern uint64_t __attribute__((nonnull)) q_sid(const struct q_stream * const s);
 
 extern void __attribute__((nonnull)) q_chunk_str(struct w_engine * const w,
                                                  const char * const str,
-                                                 const uint32_t len,
+                                                 const size_t len,
                                                  struct w_iov_sq * o);
 
 extern void __attribute__((nonnull)) q_write_str(struct w_engine * const w,
                                                  struct q_stream * const s,
                                                  const char * const str,
+                                                 const size_t len,
                                                  const bool fin);
 
 extern void __attribute__((nonnull)) q_write_file(struct w_engine * const w,
                                                   struct q_stream * const s,
                                                   const int f,
-                                                  const uint32_t len,
+                                                  const size_t len,
                                                   const bool fin);
 
 extern bool __attribute__((nonnull)) q_is_str_closed(struct q_stream * const s);

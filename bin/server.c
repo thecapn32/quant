@@ -97,7 +97,7 @@ static int send_err(const struct cb_data * const d, const uint16_t code)
     }
     warn(ERR, msg);
 
-    q_write_str(d->w, d->s, msg, true);
+    q_write_str(d->w, d->s, msg, strlen(msg), true);
     return 0;
 }
 
