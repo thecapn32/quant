@@ -94,6 +94,7 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
 
     } else if (!is_zero(c->rec.loss_t)) {
         c->rec.ld_alarm.repeat = c->rec.loss_t - c->rec.last_sent_rtxable_t;
+        warn(DBG, "%f %f", c->rec.loss_t - c->rec.last_sent_rtxable_t);
         warn(DBG, "early RTX or time alarm in %f sec on %s conn %s",
              c->rec.ld_alarm.repeat, conn_type(c), cid2str(c->scid));
 
@@ -455,9 +456,12 @@ void on_pkt_acked(struct q_conn * const c,
         c->tx_max_data = false;
 
     // if this ACKs the current MAX_STREAM_ID frame, we can stop sending it
-    if (bit_isset(NUM_FRAM_TYPES, FRAM_TYPE_MAX_SID, &meta(acked_pkt).frames) &&
-        c->tp_in.new_max_bidi_streams == meta(acked_pkt).max_bidi_streams)
-        c->tx_max_stream_id = false;
+    if (bit_isset(NUM_FRAM_TYPES, FRAM_TYPE_MAX_SID, &meta(acked_pkt).frames)) {
+        if (c->tp_in.new_max_bidi_streams == meta(acked_pkt).max_bidi_streams)
+            c->tx_max_sid_bidi = false;
+        if (c->tp_in.new_max_uni_streams == meta(acked_pkt).max_uni_streams)
+            c->tx_max_sid_uni = false;
+    }
 
     // if this ACK is for a pkt that was RTX'ed, update the record
     struct w_iov * orig = acked_pkt;

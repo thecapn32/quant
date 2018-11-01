@@ -322,11 +322,17 @@ enc_other_frames(struct q_stream * const s,
     if (c->tx_max_data && have_space_for(FRAM_TYPE_MAX_DATA, i, lim))
         i = enc_max_data_frame(c, v, i);
 
-    if (c->stream_id_blocked && have_space_for(FRAM_TYPE_SID_BLCK, i, lim))
-        i = enc_stream_id_blocked_frame(c, v, i);
+    if (c->sid_blocked_bidi && have_space_for(FRAM_TYPE_SID_BLCK, i, lim))
+        i = enc_stream_id_blocked_frame(c, v, i, true);
 
-    if (c->tx_max_stream_id && have_space_for(FRAM_TYPE_MAX_SID, i, lim))
-        i = enc_max_stream_id_frame(c, v, i);
+    if (c->sid_blocked_uni && have_space_for(FRAM_TYPE_SID_BLCK, i, lim))
+        i = enc_stream_id_blocked_frame(c, v, i, false);
+
+    if (c->tx_max_sid_bidi && have_space_for(FRAM_TYPE_MAX_SID, i, lim))
+        i = enc_max_stream_id_frame(c, v, i, true);
+
+    if (c->tx_max_sid_uni && have_space_for(FRAM_TYPE_MAX_SID, i, lim))
+        i = enc_max_stream_id_frame(c, v, i, false);
 
     if (s->id >= 0) {
         // encode stream control frames

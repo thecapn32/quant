@@ -37,8 +37,8 @@
 #include "tls.h"
 
 
-#define STRM_FL_INI_SRV 0x01
-#define STRM_FL_DIR_UNI 0x02
+#define STRM_FL_SRV 0x01
+#define STRM_FL_UNI 0x02
 
 
 #define STRM_STATE(k, v) k = v
@@ -94,6 +94,10 @@ struct q_stream {
 #else
 #define strm_to_state(s, new_state) (s)->state = (new_state)
 #endif
+
+
+#define is_uni(id) is_set(STRM_FL_UNI, (id))
+#define is_srv_ini(id) is_set(STRM_FL_SRV, (id))
 
 
 static inline bool __attribute__((nonnull, always_inline))
@@ -160,7 +164,11 @@ apply_stream_limits(struct q_stream * const s);
 
 extern void __attribute__((nonnull)) do_stream_fc(struct q_stream * const s);
 
-extern void __attribute__((nonnull)) do_stream_id_fc(struct q_stream * const s);
+extern void __attribute__((nonnull))
+do_stream_id_fc(struct q_conn * const c, const int64_t sid);
 
 extern void __attribute__((nonnull))
 concat_out(struct q_stream * const s, struct w_iov_sq * const q);
+
+extern int64_t __attribute__((nonnull))
+max_sid(const int64_t sid, const struct q_conn * const c);

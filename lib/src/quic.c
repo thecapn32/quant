@@ -239,7 +239,7 @@ struct q_conn * q_connect(struct w_engine * const w,
     if (early_data) {
         ensure(early_data_stream, "early data without stream pointer");
         // queue up early data
-        *early_data_stream = new_stream(c, c->next_sid);
+        *early_data_stream = new_stream(c, c->next_sid_bidi);
         concat_out(*early_data_stream, early_data);
         if (fin)
             strm_to_state(*early_data_stream,
@@ -429,19 +429,23 @@ struct q_conn * q_accept(const uint64_t timeout)
 }
 
 
-struct q_stream * q_rsv_stream(struct q_conn * const c)
+struct q_stream * q_rsv_stream(struct q_conn * const c, const bool bidi)
 {
-    if (c->next_sid >> 2 > c->tp_out.max_bidi_streams - 1) {
+    int64_t * const next_sid = bidi ? &c->next_sid_bidi : &c->next_sid_uni;
+    int64_t * const max_streams =
+        bidi ? &c->tp_out.max_bidi_streams : &c->tp_out.max_uni_streams;
+
+    if (*next_sid >> 2 > *max_streams - 1) {
         // we hit the max stream limit, wait for MAX_STREAM_ID frame
-        warn(WRN, "MAX_STREAM_ID increase needed (%u > %u)", c->next_sid >> 2,
-             c->tp_out.max_bidi_streams);
+        warn(WRN, "MAX_STREAM_ID increase needed for %s (%u > %u)",
+             bidi ? "bidi" : "unidir", *next_sid >> 2, *max_streams);
         loop_run(q_rsv_stream, c, 0);
     }
 
-    ensure(c->next_sid >> 2 < c->tp_out.max_bidi_streams, "sid %u < max %u",
-           c->next_sid >> 2, c->tp_out.max_bidi_streams);
+    ensure(*next_sid >> 2 < *max_streams, "sid %u < max %u", *next_sid >> 2,
+           *max_streams);
 
-    return new_stream(c, c->next_sid);
+    return new_stream(c, *next_sid);
 }
 
 

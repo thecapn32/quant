@@ -29,6 +29,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/param.h>
 
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
@@ -56,17 +57,33 @@ struct q_stream * get_stream(struct q_conn * const c, const int64_t id)
 }
 
 
+int64_t max_sid(const int64_t sid, const struct q_conn * const c)
+{
+    const int64_t max = is_srv_ini(sid) == c->is_clnt
+                            ? (is_uni(sid) ? c->tp_in.max_uni_streams
+                                           : c->tp_in.max_bidi_streams)
+                            : (is_uni(sid) ? c->tp_out.max_uni_streams
+                                           : c->tp_out.max_bidi_streams);
+    return unlikely(max == 0)
+               ? 0
+               : ((max - 1) << 2) | ((STRM_FL_SRV | STRM_FL_UNI) & sid);
+}
+
+
 void apply_stream_limits(struct q_stream * const s)
 {
-    if (s->id < 0)
-        return;
-
-    s->in_data_max = is_set(STRM_FL_INI_SRV, s->id) == !s->c->is_clnt
-                         ? s->c->tp_in.max_strm_data_bidi_local
-                         : s->c->tp_in.max_strm_data_bidi_remote;
-    s->out_data_max = is_set(STRM_FL_INI_SRV, s->id) == !s->c->is_clnt
-                          ? s->c->tp_out.max_strm_data_bidi_local
-                          : s->c->tp_out.max_strm_data_bidi_remote;
+    s->in_data_max =
+        is_srv_ini(s->id) == s->c->is_clnt
+            ? (is_uni(s->id) ? s->c->tp_in.max_strm_data_uni
+                             : s->c->tp_in.max_strm_data_bidi_remote)
+            : (is_uni(s->id) ? s->c->tp_in.max_strm_data_uni
+                             : s->c->tp_in.max_strm_data_bidi_local);
+    s->out_data_max =
+        is_srv_ini(s->id) == s->c->is_clnt
+            ? (is_uni(s->id) ? s->c->tp_out.max_strm_data_uni
+                             : s->c->tp_out.max_strm_data_bidi_remote)
+            : (is_uni(s->id) ? s->c->tp_out.max_strm_data_uni
+                             : s->c->tp_out.max_strm_data_bidi_local);
 
     // if limit is less than an MTU, we are already blocked
     if (s->out_data_max && s->out_data_max < w_mtu(s->c->w))
@@ -87,21 +104,25 @@ struct q_stream * new_stream(struct q_conn * const c, const int64_t id)
     strm_to_state(s, strm_open);
     splay_insert(streams_by_id, &c->streams_by_id, s);
 
-    if (s->id < 0)
-        goto done;
+    if (is_uni(id))
+        c->lg_sid_uni = MAX(id, c->lg_sid_uni);
+    else
+        c->lg_sid_bidi = MAX(id, c->lg_sid_bidi);
+
+    if (unlikely(id < 0))
+        return s;
 
     apply_stream_limits(s);
-    do_stream_id_fc(s);
+    do_stream_id_fc(c, id);
 
-    if (is_set(STRM_FL_INI_SRV, s->id) == !s->c->is_clnt) {
+    if (is_srv_ini(id) != s->c->is_clnt) {
         // this is a local stream
-        if (c->next_sid == 0)
-            c->next_sid = c->is_clnt ? 4 : 1;
+        if (is_uni(id))
+            c->next_sid_uni += 4;
         else
-            c->next_sid += 4;
+            c->next_sid_bidi += 4;
     }
 
-done:
     return s;
 }
 
@@ -201,21 +222,32 @@ void do_stream_fc(struct q_stream * const s)
 }
 
 
-void do_stream_id_fc(struct q_stream * const s)
+void do_stream_id_fc(struct q_conn * const c, const int64_t sid)
 {
-    if (s->c->state != conn_estb || s->id < 0)
-        return;
 
-    if (is_set(STRM_FL_INI_SRV, s->id) == s->c->is_clnt) {
-        // this is a local stream
-        if (s->id >> 2 == s->c->tp_in.max_bidi_streams - 1) {
-            s->c->tx_max_stream_id = true;
-            s->c->tp_in.new_max_bidi_streams = s->c->tp_in.max_bidi_streams + 1;
-        }
-    } else {
+    if (is_srv_ini(sid) == c->is_clnt) {
         // this is a remote stream
-        if (s->id >> 2 == s->c->tp_out.max_bidi_streams - 1)
-            s->c->stream_id_blocked = true;
+        if (is_uni(sid)) {
+            if (sid >> 2 == c->tp_in.max_uni_streams - 1) {
+                c->tx_max_sid_uni = true;
+                c->tp_in.new_max_uni_streams = c->tp_in.max_uni_streams + 1;
+            }
+        } else {
+            if (sid >> 2 == c->tp_in.max_bidi_streams - 1) {
+                c->tx_max_sid_bidi = true;
+                c->tp_in.new_max_bidi_streams = c->tp_in.max_bidi_streams + 1;
+            }
+        }
+
+    } else {
+        // this is a local stream
+        if (is_uni(sid)) {
+            if (sid >> 2 == c->tp_out.max_uni_streams - 1)
+                c->sid_blocked_uni = true;
+        } else {
+            if (sid >> 2 == c->tp_out.max_bidi_streams - 1)
+                c->sid_blocked_bidi = true;
+        }
     }
 }
 

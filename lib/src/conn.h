@@ -56,7 +56,8 @@ struct transport_params {
     uint64_t max_strm_data_bidi_remote;
     uint64_t max_data;
     uint64_t new_max_data;
-    int64_t max_uni_streams;  // this is count, not a max ID
+    int64_t max_uni_streams; // this is count, not a max ID
+    int64_t new_max_uni_streams;
     int64_t max_bidi_streams; // this is count, not a max ID
     int64_t new_max_bidi_streams;
     uint16_t max_pkt;
@@ -113,28 +114,30 @@ struct q_conn {
     struct cid * dcid;               ///< Active destination CID.
     struct cid * scid;               ///< Active source CID.
 
-    uint32_t holds_sock : 1;  ///< Connection manages a warpcore socket.
-    uint32_t is_clnt : 1;     ///< We are the client on this connection.
-    uint32_t had_rx : 1;      ///< We had an RX event on this connection.
-    uint32_t needs_tx : 1;    ///< We have a pending TX on this connection.
-    uint32_t tx_max_data : 1; ///< Sent a MAX_DATA frame.
-    uint32_t blocked : 1;     ///< We are receive-window-blocked.
-    uint32_t stream_id_blocked : 1; ///< We are out of stream IDs.
-    uint32_t tx_max_stream_id : 1;  ///< Send MAX_STREAM_ID frame.
-    uint32_t try_0rtt : 1;          ///< Try 0-RTT handshake.
-    uint32_t did_0rtt : 1;          ///< 0-RTT handshake succeeded;
-    uint32_t tx_path_resp : 1;      ///< Send PATH_RESPONSE.
-    uint32_t tx_path_chlg : 1;      ///< Send PATH_CHALLENGE.
-    uint32_t tx_ncid : 1;           ///< Send NEW_CONNECTION_ID.
-    uint32_t tx_rtry : 1;           ///< We need to send a RETRY.
-    uint32_t have_new_data : 1;     ///< New stream data was enqueued.
-    uint32_t in_c_ready : 1;        ///< Connection is listed in c_ready.
-    uint32_t tx_retire_cid : 1;     ///< Send RETIRE_CONNECTION_ID.
+    uint32_t holds_sock : 1;       ///< Connection manages a warpcore socket.
+    uint32_t is_clnt : 1;          ///< We are the client on this connection.
+    uint32_t had_rx : 1;           ///< We had an RX event on this connection.
+    uint32_t needs_tx : 1;         ///< We have a pending TX on this connection.
+    uint32_t tx_max_data : 1;      ///< Sent a MAX_DATA frame.
+    uint32_t blocked : 1;          ///< We are receive-window-blocked.
+    uint32_t sid_blocked_bidi : 1; ///< We are out of bidi stream IDs.
+    uint32_t sid_blocked_uni : 1;  ///< We are out of unidir stream IDs.
+    uint32_t tx_max_sid_bidi : 1;  ///< Send MAX_STREAM_ID frame for bidi.
+    uint32_t tx_max_sid_uni : 1;   ///< Send MAX_STREAM_ID frame for unidir.
+    uint32_t try_0rtt : 1;         ///< Try 0-RTT handshake.
+    uint32_t did_0rtt : 1;         ///< 0-RTT handshake succeeded;
+    uint32_t tx_path_resp : 1;     ///< Send PATH_RESPONSE.
+    uint32_t tx_path_chlg : 1;     ///< Send PATH_CHALLENGE.
+    uint32_t tx_ncid : 1;          ///< Send NEW_CONNECTION_ID.
+    uint32_t tx_rtry : 1;          ///< We need to send a RETRY.
+    uint32_t have_new_data : 1;    ///< New stream data was enqueued.
+    uint32_t in_c_ready : 1;       ///< Connection is listed in c_ready.
+    uint32_t tx_retire_cid : 1;    ///< Send RETIRE_CONNECTION_ID.
 #ifndef SPINBIT
-    uint32_t : 15;
+    uint32_t : 13;
 #else
     uint32_t next_spin : 1; ///< Spin value to set on next packet sent.
-    uint32_t : 14;
+    uint32_t : 12;
 #endif
 
     uint16_t sport; ///< Local port (in network byte-order).
@@ -155,7 +158,11 @@ struct q_conn {
     struct pn_hshk_space pn_init, pn_hshk;
     struct pn_data_space pn_data;
 
-    int64_t next_sid; ///< Next stream ID to use on q_rsv_stream().
+    int64_t next_sid_bidi; ///< Next unidir stream ID to use on q_rsv_stream().
+    int64_t next_sid_uni;  ///< Next bidi stream ID to use on q_rsv_stream().
+
+    int64_t lg_sid_bidi; ///< Largest unidir stream ID in use.
+    int64_t lg_sid_uni;  ///< Largest bidi stream ID in use.
 
     struct transport_params tp_in;  ///< Transport parameters for RX.
     struct transport_params tp_out; ///< Transport parameters for TX.
@@ -239,7 +246,7 @@ static inline bool __attribute__((nonnull, always_inline))
 conn_needs_ctrl(const struct q_conn * const c)
 {
     return epoch_in(c) == ep_data &&
-           (c->tx_max_data || c->tx_max_stream_id || c->tx_path_resp ||
+           (c->tx_max_data || c->tx_max_sid_bidi || c->tx_path_resp ||
             c->tx_path_chlg || c->tx_ncid || c->tx_retire_cid);
 }
 

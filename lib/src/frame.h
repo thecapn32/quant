@@ -136,7 +136,8 @@ enc_max_data_frame(struct q_conn * const c,
 extern uint16_t __attribute__((nonnull))
 enc_max_stream_id_frame(struct q_conn * const c,
                         struct w_iov * const v,
-                        const uint16_t pos);
+                        const uint16_t pos,
+                        const bool bidi);
 
 extern uint16_t __attribute__((nonnull))
 enc_stream_blocked_frame(struct q_stream * const s,
@@ -151,7 +152,8 @@ enc_blocked_frame(struct q_conn * const c,
 extern uint16_t __attribute__((nonnull))
 enc_stream_id_blocked_frame(struct q_conn * const c,
                             const struct w_iov * const v,
-                            const uint16_t pos);
+                            const uint16_t pos,
+                            const bool bidi);
 
 extern uint16_t __attribute__((nonnull))
 enc_path_challenge_frame(struct q_conn * const c,

@@ -595,7 +595,8 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
     // apply these parameter to all current non-crypto streams
     struct q_stream * s;
     splay_foreach (s, streams_by_id, &c->streams_by_id)
-        apply_stream_limits(s);
+        if (s->id >= 0)
+            apply_stream_limits(s);
 
     return 0;
 }
@@ -648,11 +649,15 @@ void init_tp(struct q_conn * const c)
 
     enc_tp(c, TP_INITIAL_MAX_BIDI_STREAMS, (uint64_t)c->tp_in.max_bidi_streams,
            sizeof(uint16_t));
+    enc_tp(c, TP_INITIAL_MAX_UNI_STREAMS, (uint64_t)c->tp_in.max_uni_streams,
+           sizeof(uint16_t));
     enc_tp(c, TP_IDLE_TIMEOUT, c->tp_in.idle_to, sizeof(uint16_t));
     enc_tp(c, TP_INITIAL_MAX_STREAM_DATA_BIDI_REMOTE,
            c->tp_in.max_strm_data_bidi_remote, sizeof(uint32_t));
     enc_tp(c, TP_INITIAL_MAX_STREAM_DATA_BIDI_LOCAL,
            c->tp_in.max_strm_data_bidi_local, sizeof(uint32_t));
+    enc_tp(c, TP_INITIAL_MAX_STREAM_DATA_UNI, c->tp_in.max_strm_data_uni,
+           sizeof(uint32_t));
     enc_tp(c, TP_INITIAL_MAX_DATA, c->tp_in.max_data, sizeof(uint32_t));
     enc_tp(c, TP_ACK_DELAY_EXPONENT, c->tp_in.ack_del_exp, sizeof(uint8_t));
     enc_tp(c, TP_MAX_ACK_DELAY, c->tp_in.max_ack_del, sizeof(uint8_t));

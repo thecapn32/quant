@@ -78,7 +78,7 @@ extern struct q_stream * __attribute__((nonnull))
 q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool block);
 
 extern struct q_stream * __attribute__((nonnull))
-q_rsv_stream(struct q_conn * const c);
+q_rsv_stream(struct q_conn * const c, const bool bidi);
 
 extern void __attribute__((nonnull)) q_close_stream(struct q_stream * const s);
 

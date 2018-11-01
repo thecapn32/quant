@@ -356,9 +356,10 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
         return;
 
     // do we need to make more stream IDs available?
-    struct q_stream * const s = splay_max(streams_by_id, &c->streams_by_id);
-    if (s)
-        do_stream_id_fc(s);
+    if (unlikely(c->state != conn_estb)) {
+        do_stream_id_fc(c, c->lg_sid_uni);
+        do_stream_id_fc(c, c->lg_sid_bidi);
+    }
 
     if (c->tp_out.disable_migration == false) {
         if (c->is_clnt) {
@@ -1161,6 +1162,10 @@ struct q_conn * new_conn(struct w_engine * const w,
         ensure(c->peer_name = strdup(peer_name), "could not dup peer_name");
     }
 
+    // init next CIDs
+    c->next_sid_bidi = c->is_clnt ? 0 : STRM_FL_SRV;
+    c->next_sid_uni = c->is_clnt ? STRM_FL_UNI : STRM_FL_UNI | STRM_FL_SRV;
+
     // init dcid
     splay_init(&c->dcids_by_seq);
     if (c->is_clnt) {
@@ -1196,10 +1201,10 @@ struct q_conn * new_conn(struct w_engine * const w,
         (uint8_t)(1000 * kDelayedAckTimeout);
     c->tp_in.idle_to = kIdleTimeout;
     c->tp_in.max_data = c->is_clnt ? 0x4000 : 0x8000;
-    c->tp_in.max_strm_data_bidi_local = c->tp_in.max_strm_data_bidi_remote =
-        c->is_clnt ? 0x2000 : 0x4000;
+    c->tp_in.max_strm_data_uni = c->tp_in.max_strm_data_bidi_local =
+        c->tp_in.max_strm_data_bidi_remote = c->is_clnt ? 0x2000 : 0x4000;
     c->tp_in.max_bidi_streams = c->is_clnt ? 1 : 2;
-    c->tp_in.max_uni_streams = 0; // TODO: support unidir streams
+    c->tp_in.max_uni_streams = c->is_clnt ? 6 : 0;
 
     // initialize recovery state
     init_rec(c);

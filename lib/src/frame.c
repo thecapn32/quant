@@ -79,22 +79,6 @@
     })
 
 
-static int64_t __attribute__((nonnull))
-max_sid(const int64_t sid, const struct q_conn * const c)
-{
-    const int64_t max =
-        is_set(STRM_FL_INI_SRV, sid) == c->is_clnt
-            ? (is_set(STRM_FL_DIR_UNI, sid) ? c->tp_in.max_uni_streams
-                                            : c->tp_in.max_bidi_streams)
-            : (is_set(STRM_FL_DIR_UNI, sid) ? c->tp_out.max_uni_streams
-                                            : c->tp_out.max_bidi_streams);
-    return unlikely(max == 0)
-               ? max
-               : ((max - 1) << 2) +
-                     (is_set(STRM_FL_INI_SRV, sid) ? STRM_FL_INI_SRV : 0);
-}
-
-
 #ifndef NDEBUG
 void log_stream_or_crypto_frame(const bool rtx,
                                 const struct w_iov * const v,
@@ -178,14 +162,14 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     struct q_stream * s = get_stream(c, sid);
     const char * kind = "";
     if (unlikely(s == 0)) {
-        if (diet_find(&c->closed_streams, (uint64_t)sid)) {
+        if (unlikely(diet_find(&c->closed_streams, (uint64_t)sid))) {
             warn(WRN,
                  "ignoring frame for closed strm " FMT_SID " on %s conn %s",
                  sid, conn_type(c), cid2str(c->scid));
             return meta(v).stream_data_start + meta(v).stream_data_len;
         }
 
-        if (unlikely(is_set(STRM_FL_INI_SRV, sid) != c->is_clnt))
+        if (unlikely(is_srv_ini(sid) != c->is_clnt))
             err_close_return(c, ERR_FRAME_ENC, t,
                              "got sid %" PRId64 " but am %s", sid,
                              conn_type(c));
@@ -265,6 +249,8 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
 
 done:
     log_stream_or_crypto_frame(false, v, true, kind);
+    // if (t != FRAM_TYPE_CRPT)
+    //     hexdump(&v->buf[meta(v).stream_data_start], meta(v).stream_data_len);
 
     if (s && t != FRAM_TYPE_CRPT && meta(v).stream_off + l > s->in_data_max)
         err_close_return(c, ERR_FLOW_CONTROL, 0,
@@ -541,26 +527,28 @@ dec_max_stream_id_frame(struct q_conn * const c,
     const uint16_t i = dec_chk(FRAM_TYPE_MAX_SID, &max, v->buf, v->len, pos + 1,
                                0, "%" PRIu64);
 
-    if (is_set(STRM_FL_INI_SRV, max) == c->is_clnt)
+    if (is_srv_ini(max) == c->is_clnt)
         err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_MAX_SID,
                          "illegal MAX_STREAM_ID for %s: %u", conn_type(c), max);
 
     warn(INF, FRAM_IN "MAX_STREAM_ID" NRM " max=" FMT_SID " (%sdir)", max,
-         is_set(STRM_FL_DIR_UNI, max) ? "uni" : "bi");
+         is_uni(max) ? "uni" : "bi");
 
-    int64_t * const which = is_set(STRM_FL_DIR_UNI, max)
-                                ? &c->tp_out.max_uni_streams
-                                : &c->tp_out.max_bidi_streams;
+    int64_t * const max_streams =
+        is_uni(max) ? &c->tp_out.max_uni_streams : &c->tp_out.max_bidi_streams;
 
-    max = (max >> 2) + 1;
-    if (max > *which) {
-        *which = max;
-        c->stream_id_blocked = false;
+    if ((max >> 2) + 1 > *max_streams) {
+        *max_streams = (max >> 2) + 1;
+        if (is_uni(max))
+            c->sid_blocked_uni = false;
+        else
+            c->sid_blocked_bidi = false;
         c->needs_tx = true;
         maybe_api_return(q_rsv_stream, c, 0);
+
     } else
-        warn(WRN, "max_bidi_streams %" PRIu64 " <= current value %" PRIu64, max,
-             *which);
+        warn(WRN, "RX'ed max_%s_streams %" PRIu64 " <= current value %" PRIu64,
+             is_uni(max) ? "uni" : "bidi", max, *max_streams);
 
     return i;
 }
@@ -641,14 +629,18 @@ dec_stream_id_blocked_frame(struct q_conn * const c,
 
     warn(INF, FRAM_IN "STREAM_ID_BLOCKED" NRM " sid=" FMT_SID, sid);
 
-    int64_t * const lim = is_set(STRM_FL_DIR_UNI, sid)
-                              ? &c->tp_in.max_uni_streams
-                              : &c->tp_in.max_bidi_streams;
+    int64_t * const max_streams =
+        is_uni(sid) ? &c->tp_in.max_uni_streams : &c->tp_in.max_bidi_streams;
 
-    if (sid >> 2 <= *lim)
+    if (sid >> 2 <= *max_streams) {
         // let the peer open more streams
-        *lim += 2;
-    c->needs_tx = c->tx_max_stream_id = true;
+        *max_streams += 2;
+        if (is_uni(sid))
+            c->tx_max_sid_uni = true;
+        else
+            c->tx_max_sid_bidi = true;
+        c->needs_tx = true;
+    }
 
     return i;
 }
@@ -881,7 +873,10 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
 
             // this is the first stream frame in this packet
             i = dec_stream_or_crypto_frame(c, v, i);
-            bit_set(NUM_FRAM_TYPES, type, &meta(v).frames);
+            bit_set(NUM_FRAM_TYPES,
+                    // stream frames have multiple types, so don't enc "type"
+                    type == FRAM_TYPE_CRPT ? FRAM_TYPE_CRPT : FRAM_TYPE_STRM,
+                    &meta(v).frames);
 
         } else {
             switch (type) {
@@ -1315,20 +1310,32 @@ uint16_t enc_max_data_frame(struct q_conn * const c,
 
 uint16_t enc_max_stream_id_frame(struct q_conn * const c,
                                  struct w_iov * const v,
-                                 const uint16_t pos)
+                                 const uint16_t pos,
+                                 const bool bidi)
 {
     const uint8_t type = FRAM_TYPE_MAX_SID;
     bit_set(NUM_FRAM_TYPES, type, &meta(v).frames);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
-    const int64_t mbs = ((c->tp_in.new_max_bidi_streams - 1) << 2) +
-                        (c->is_clnt ? STRM_FL_INI_SRV : 0);
-    i = enc(v->buf, v->len, i, &mbs, 0, 0, "%" PRId64);
-    meta(v).max_bidi_streams = c->tp_in.new_max_bidi_streams;
+    const int64_t max = (((bidi ? c->tp_in.new_max_bidi_streams
+                                : c->tp_in.new_max_uni_streams) -
+                          1)
+                         << 2) |
+                        (bidi ? 0 : STRM_FL_UNI) |
+                        (c->is_clnt ? STRM_FL_SRV : 0);
+    i = enc(v->buf, v->len, i, &max, 0, 0, "%" PRId64);
 
-    warn(INF, FRAM_OUT "MAX_STREAM_ID" NRM " max=" FMT_SID, mbs);
+    warn(INF, FRAM_OUT "MAX_STREAM_ID" NRM " max=" FMT_SID, max);
 
-    c->tp_in.max_bidi_streams = c->tp_in.new_max_bidi_streams;
+    if (bidi) {
+        meta(v).max_bidi_streams = c->tp_in.max_bidi_streams =
+            c->tp_in.new_max_bidi_streams;
+        c->tx_max_sid_bidi = false;
+    } else {
+        meta(v).max_uni_streams = c->tp_in.max_uni_streams =
+            c->tp_in.new_max_uni_streams;
+        c->tx_max_sid_uni = false;
+    }
 
     return i;
 }
@@ -1371,18 +1378,17 @@ uint16_t enc_blocked_frame(struct q_conn * const c,
 
 uint16_t enc_stream_id_blocked_frame(struct q_conn * const c,
                                      const struct w_iov * const v,
-                                     const uint16_t pos)
+                                     const uint16_t pos,
+                                     const bool bidi)
 {
     const uint8_t type = FRAM_TYPE_SID_BLCK;
     bit_set(NUM_FRAM_TYPES, type, &meta(v).frames);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
-    // TODO handle unidir
-    const int64_t mbs = ((c->tp_out.max_bidi_streams - 1) << 2) +
-                        (!c->is_clnt ? STRM_FL_INI_SRV : 0);
-    i = enc(v->buf, v->len, i, &mbs, 0, 0, "%" PRId64);
+    const int64_t max_sid = (bidi ? c->next_sid_bidi : c->next_sid_uni) - 4;
+    i = enc(v->buf, v->len, i, &max_sid, 0, 0, "%" PRId64);
 
-    warn(INF, FRAM_OUT "STREAM_ID_BLOCKED" NRM " sid=" FMT_SID, mbs);
+    warn(INF, FRAM_OUT "STREAM_ID_BLOCKED" NRM " sid=" FMT_SID, max_sid);
 
     return i;
 }

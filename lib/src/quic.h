@@ -128,7 +128,8 @@ struct pkt_meta {
     int64_t max_stream_data_sid; ///< MAX_STREAM_DATA sid, if sent.
     uint64_t max_stream_data;    ///< MAX_STREAM_DATA limit, if sent.
     uint64_t max_data;           ///< MAX_DATA limit, if sent.
-    int64_t max_bidi_streams;    ///< MAX_STREAM_ID limit, if sent.
+    int64_t max_bidi_streams;    ///< MAX_STREAM_ID bidir limit, if sent.
+    int64_t max_uni_streams;     ///< MAX_STREAM_ID unidir limit, if sent.
     struct frames frames;        ///< Frames present in pkt.
 
     // pm_cpy(false) starts copying from here:
