@@ -61,15 +61,7 @@ void q_write_str(struct w_engine * const w,
 {
     // allocate tail queue
     struct w_iov_sq o = w_iov_sq_initializer(o);
-    q_alloc(w, &o, len);
-
-    // chunk up string
-    const char * i = str;
-    struct w_iov * v = 0;
-    sq_foreach (v, &o, next) {
-        memcpy((char *)v->buf, i, v->len);
-        i += v->len;
-    }
+    q_chunk_str(w, str, len, &o);
 
     // write it and free tail queue
     q_write(s, &o, fin);
