@@ -230,15 +230,15 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     // data is out of order - check if it overlaps with already stored ooo data
     kind = YEL "ooo" NRM;
     struct pkt_meta * p = splay_min(ooo_by_off, &s->in_ooo);
-    while (p && p->stream_off + p->stream_data_len < meta(v).stream_off) {
-        warn(ERR, "%u %u", p->stream_off, p->stream_off + p->stream_data_len);
+    while (p && p->stream_off + p->stream_data_len - 1 < meta(v).stream_off)
         p = splay_next(ooo_by_off, &s->in_ooo, p);
-    }
+
     // right edge of p >= left edge of v
     if (p && p->stream_off <= meta(v).stream_off + meta(v).stream_data_len) {
         // left edge of p <= right edge of v
-        warn(ERR, "have existing overlapping ooo data [%u..%u]", p->stream_off,
-             p->stream_off + p->stream_data_len);
+        warn(ERR, "[%u..%u] have existing overlapping ooo data [%u..%u]",
+             meta(v).stream_off, meta(v).stream_off + meta(v).stream_data_len,
+             p->stream_off, p->stream_off + p->stream_data_len - 1);
         is_dup = true;
         goto done;
     }
