@@ -366,7 +366,10 @@ int main(int argc, char * argv[])
                 for (uint16_t p = 0; p < v->len; p++)
                     if (v->buf[p] == '\n')
                         v->buf[p] = ' ';
-                printf("%.*s", v->len, v->buf);
+                if (do_h3)
+                    hexdump(v->buf, v->len);
+                else
+                    printf("%.*s", v->len, v->buf);
             } else
                 printf(".");
             n++;
