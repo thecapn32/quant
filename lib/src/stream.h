@@ -85,8 +85,12 @@ struct q_stream {
 #define strm_to_state(s, new_state)                                            \
     do {                                                                       \
         if ((s)->id >= 0) {                                                    \
-            warn(DBG, "conn %s strm " FMT_SID " state %s -> " YEL "%s" NRM,    \
+            warn(DBG,                                                          \
+                 "conn %s strm " FMT_SID " (%sdir, %s) state %s -> " YEL       \
+                 "%s" NRM,                                                     \
                  (s)->c->scid ? cid2str((s)->c->scid) : "?", (s)->id,          \
+                 is_uni((s)->id) ? "uni" : "bi",                               \
+                 is_srv_ini((s)->id) ? "serv" : "clnt",                        \
                  strm_state_str[(s)->state], strm_state_str[(new_state)]);     \
         }                                                                      \
         (s)->state = (new_state);                                              \
@@ -128,7 +132,7 @@ strm_epoch(const struct q_stream * const s)
 static inline bool __attribute__((nonnull, always_inline))
 stream_needs_ctrl(const struct q_stream * const s)
 {
-    return s->tx_fin || s->tx_max_stream_data;
+    return s->tx_fin || s->tx_max_stream_data || s->blocked;
 }
 
 

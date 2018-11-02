@@ -302,7 +302,7 @@ tx_stream_data(struct q_stream * const s, const bool rtx, const uint32_t limit)
             continue;
         encoded++;
 
-        if (rtx == false)
+        if (likely(rtx == false))
             // update the stream's out_nxt pointer
             s->out_nxt = sq_next(v, next);
 
@@ -428,18 +428,14 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
             sq_len(&s->out) > 0 && out_fully_acked(s) == false &&
             ((rtx && s->out_una) || (!rtx && s->out_nxt));
 
-        // warn(ERR, "strm id=" FMT_SID " cnt=%u has_data=%u needs_ctrl=%u %p
-        // %p",
+        // warn(ERR, "strm id=" FMT_SID ", cnt=%u, has_data=%u, needs_ctrl=%u",
         //      s->id, sq_len(&s->out), stream_has_data_to_tx,
-        //      stream_needs_ctrl(s), out_fully_acked(s), s->out_una,
-        //      s->out_nxt);
+        //      stream_needs_ctrl(s), out_fully_acked(s));
         // check if we should skip TX on this stream
         if ( // this is a crypto stream and we're not doing an RTX
             (s->id < 0 && rtx == false) ||
             // nothing to send and doesn't need control frames?
             (stream_has_data_to_tx == false && stream_needs_ctrl(s) == false) ||
-            // is this a new TX but the stream is blocked?
-            (rtx == false && s->blocked) ||
             // unless for 0-RTT, is this a regular stream during conn open?
             (c->try_0rtt == false && s->id >= 0 && c->state != conn_estb)) {
             // warn(ERR, "skip " FMT_SID, s->id);
@@ -451,7 +447,7 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
              conn_type(c), cid2str(c->scid), s->id, sq_len(&s->out),
              plural(sq_len(&s->out)));
 
-        if (stream_has_data_to_tx)
+        if (stream_has_data_to_tx && !s->blocked)
             tx_stream_data(s, rtx, limit);
         else
             tx_stream_ctrl(s);

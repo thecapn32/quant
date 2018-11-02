@@ -86,8 +86,7 @@ void apply_stream_limits(struct q_stream * const s)
                              : s->c->tp_out.max_strm_data_bidi_local);
 
     // if limit is less than an MTU, we are already blocked
-    if (s->out_data_max && s->out_data_max < w_mtu(s->c->w))
-        s->blocked = true;
+    s->blocked = s->out_data_max < w_mtu(s->c->w);
 }
 
 
