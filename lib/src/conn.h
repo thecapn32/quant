@@ -133,11 +133,13 @@ struct q_conn {
     uint32_t have_new_data : 1;    ///< New stream data was enqueued.
     uint32_t in_c_ready : 1;       ///< Connection is listed in c_ready.
     uint32_t tx_retire_cid : 1;    ///< Send RETIRE_CONNECTION_ID.
+    uint32_t do_migration : 1;     ///< Perform a CID migration when possible.
+
 #ifndef SPINBIT
-    uint32_t : 13;
+    uint32_t : 12;
 #else
     uint32_t next_spin : 1; ///< Spin value to set on next packet sent.
-    uint32_t : 12;
+    uint32_t : 11;
 #endif
 
     uint16_t sport; ///< Local port (in network byte-order).
@@ -172,6 +174,7 @@ struct q_conn {
 
     ev_timer idle_alarm;
     ev_timer closing_alarm;
+    ev_timer migration_alarm;
 
     struct sockaddr_in peer; ///< Address of our peer.
     char * peer_name;

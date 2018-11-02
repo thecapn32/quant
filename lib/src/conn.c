@@ -361,13 +361,17 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
         do_stream_id_fc(c, c->lg_sid_bidi);
     }
 
-    if (c->tp_out.disable_migration == false) {
+    if (c->tp_out.disable_migration == false && c->do_migration == true) {
         if (c->is_clnt) {
             const struct cid * const dcid =
                 splay_max(cids_by_seq, &c->dcids_by_seq);
             // if higher-numbered destination CIDs are available, switch to next
-            if (dcid && dcid->seq > c->dcid->seq)
+            if (dcid && dcid->seq > c->dcid->seq) {
                 use_next_dcid(c);
+                // don't migrate again for a while
+                c->do_migration = false;
+                ev_timer_again(loop, &c->migration_alarm);
+            }
         } else
             // send new CID if the client doesn't have one remaining
             c->tx_ncid = (splay_count(&c->scids_by_seq) < 2);
@@ -1056,6 +1060,17 @@ void err_close(struct q_conn * const c,
 
 
 static void __attribute__((nonnull))
+enable_migration(struct ev_loop * const l __attribute__((unused)),
+                 ev_timer * const w,
+                 int e __attribute__((unused)))
+{
+    struct q_conn * const c = w->data;
+    c->do_migration = true;
+    ev_timer_stop(loop, &c->migration_alarm);
+}
+
+
+static void __attribute__((nonnull))
 enter_closed(struct ev_loop * const l __attribute__((unused)),
              ev_timer * const w,
              int e __attribute__((unused)))
@@ -1192,6 +1207,12 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->closing_alarm.data = c;
     ev_init(&c->closing_alarm, enter_closed);
 
+    // initialize migration alarm
+    c->migration_alarm.data = c;
+    c->migration_alarm.repeat = 3; // seconds (after initial migration)
+    ev_init(&c->migration_alarm, enable_migration);
+    c->do_migration = true;
+
     c->tp_in.ack_del_exp = c->tp_out.ack_del_exp = 3;
     c->tp_in.max_ack_del = c->tp_out.max_ack_del =
         (uint8_t)(1000 * kDelayedAckTimeout);
@@ -1280,6 +1301,7 @@ void free_conn(struct q_conn * const c)
     }
     ev_timer_stop(loop, &c->rec.ld_alarm);
     ev_timer_stop(loop, &c->closing_alarm);
+    ev_timer_stop(loop, &c->migration_alarm);
     ev_timer_stop(loop, &c->idle_alarm);
 
     struct q_stream *s, *ns;
