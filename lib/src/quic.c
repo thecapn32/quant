@@ -113,7 +113,7 @@ int corpus_pkt_dir, corpus_frm_dir;
         api_func = (func_ptr)(&(func));                                        \
         api_conn = (conn);                                                     \
         api_strm = (strm);                                                     \
-        warn(DBG, #func "(" #conn ", " #strm ") entering event loop");         \
+        /* warn(DBG, #func "(" #conn ", " #strm ") entering event loop"); */   \
         ev_run(loop, 0);                                                       \
         api_func = 0;                                                          \
         api_conn = api_strm = 0;                                               \
@@ -354,12 +354,12 @@ q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool block)
 
 void q_readall_str(struct q_stream * const s, struct w_iov_sq * const q)
 {
-    warn(WRN, "reading all on %s conn %s strm " FMT_SID, conn_type(s->c),
-         cid2str(s->c->scid), s->id);
-
     while (s->c->state == conn_estb && s->state != strm_hcrm &&
-           s->state != strm_clsd)
+           s->state != strm_clsd) {
+        warn(WRN, "reading all on %s conn %s strm " FMT_SID, conn_type(s->c),
+             cid2str(s->c->scid), s->id);
         loop_run(q_readall_str, s->c, s);
+    }
 
     // return data
     sq_concat(q, &s->in);

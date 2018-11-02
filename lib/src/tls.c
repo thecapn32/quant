@@ -958,11 +958,11 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
     const int ret =
         ptls_handle_message(c->tls.t, &tls_io, epoch_off, epoch_in,
                             iv ? iv->buf : 0, in_len, &c->tls.tls_hshake_prop);
-    warn(DBG,
-         "epoch %u, in %u (off %u), gen %u (%u-%u-%u-%u-%u), ret %u, left %u",
-         epoch_in, iv ? iv->len : 0, iv ? meta(iv).stream_off : 0, tls_io.off,
-         epoch_off[0], epoch_off[1], epoch_off[2], epoch_off[3], epoch_off[4],
-         ret, iv ? iv->len - in_len : 0);
+    // warn(DBG,
+    //      "epoch %u, in %u (off %u), gen %u (%u-%u-%u-%u-%u), ret %u, left
+    //      %u", epoch_in, iv ? iv->len : 0, iv ? meta(iv).stream_off : 0,
+    //      tls_io.off, epoch_off[0], epoch_off[1], epoch_off[2], epoch_off[3],
+    //      epoch_off[4], ret, iv ? iv->len - in_len : 0);
 
     if (ret == 0 && c->state != conn_estb) {
         if (ptls_is_psk_handshake(c->tls.t)) {
@@ -987,7 +987,7 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
             if (out_len == 0)
                 continue;
             struct q_stream * const se = get_stream(c, crpt_strm_id(e));
-            warn(DBG, "epoch %u: off %u len %u", e, epoch_off[e], out_len);
+            // warn(DBG, "epoch %u: off %u len %u", e, epoch_off[e], out_len);
             struct w_iov_sq o = w_iov_sq_initializer(o);
             alloc_off(w_engine(c->sock), &o, (uint32_t)out_len, OFFSET_HSHK);
             const uint8_t * data = tls_io.base + epoch_off[e];
