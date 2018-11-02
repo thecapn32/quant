@@ -723,18 +723,18 @@ dec_new_cid_frame(struct q_conn * const c,
     i = dec_chk_buf(FRAM_TYPE_NEW_CID, dcid.srt, v->buf, v->len, i,
                     sizeof(dcid.srt));
 
-    warn(INF,
-         FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu64
-                 " len=%u dcid=%s tok=%s",
-         dcid.seq, dcid.len, cid2str(&dcid),
-         hex2str(dcid.srt, sizeof(dcid.srt)));
-
+    bool dup = false;
     if (dcid.seq > c->max_cid_seq_in) {
         add_dcid(c, &dcid);
         c->max_cid_seq_in = dcid.seq;
     } else
-        warn(WRN, "highest cid seq seen %" PRIu64 " <= %" PRIu64 ", ignoring",
-             c->max_cid_seq_in, dcid.seq);
+        dup = true;
+
+    warn(INF,
+         FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu64
+                 " len=%u dcid=%s tok=%s%s",
+         dcid.seq, dcid.len, cid2str(&dcid),
+         hex2str(dcid.srt, sizeof(dcid.srt)), dup ? "[" RED "dup" NRM "]" : "");
 
     return i;
 }
