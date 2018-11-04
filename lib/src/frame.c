@@ -196,9 +196,15 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
 
         // check if we have delivered a FIN, and act on it if we did
         struct w_iov * const last = sq_last(&s->in, w_iov, next);
-        if (last && is_fin(last)) {
-            strm_to_state(s, s->state <= strm_hcrm ? strm_hcrm : strm_clsd);
-            maybe_api_return(q_readall_str, s->c, s);
+        if (last) {
+            if (unlikely(v != last))
+                adj_iov_to_start(last);
+            if (is_fin(last)) {
+                strm_to_state(s, s->state <= strm_hcrm ? strm_hcrm : strm_clsd);
+                maybe_api_return(q_readall_str, s->c, s);
+            }
+            if (unlikely(v != last))
+                adj_iov_to_data(last);
         }
 
         if (t != FRAM_TYPE_CRPT) {
@@ -1075,52 +1081,29 @@ uint16_t enc_ack_frame(struct q_conn * const c,
                      FRAM_OUT "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64
                               " [" FMT_PNR_IN ".." FMT_PNR_IN "]",
                      gap, ack_block, b->lo, shorten_ack_nr(b->hi, ack_block));
-            else {
-                if (enc_ecn)
-                    warn(INF,
-                         FRAM_OUT
-                         "ACK_ECN" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64
-                         " (%" PRIu64 " usec) ect0=%" PRIu64 " ect1=%" PRIu64
-                         " ce=%" PRIu64 " cnt=%" PRIu64 " block=%" PRIu64
-                         " [" FMT_PNR_IN ".." FMT_PNR_IN "]",
-                         meta(v).lg_acked, ack_delay, ack_delay * (1 << ade),
-                         c->rec.ect0_cnt, c->rec.ect1_cnt, c->rec.ce_cnt,
-                         meta(v).ack_block_cnt, ack_block, b->lo,
-                         shorten_ack_nr(b->hi, ack_block));
-                else
-                    warn(INF,
-                         FRAM_OUT "ACK" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64
-                                  " (%" PRIu64 " usec) cnt=%" PRIu64
-                                  " block=%" PRIu64 " [" FMT_PNR_IN
-                                  ".." FMT_PNR_IN "]",
-                         meta(v).lg_acked, ack_delay, ack_delay * (1 << ade),
-                         meta(v).ack_block_cnt, ack_block, b->lo,
-                         shorten_ack_nr(b->hi, ack_block));
-            }
+            else
+                warn(INF,
+                     FRAM_OUT "ACK" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64
+                              " (%" PRIu64 " usec) cnt=%" PRIu64
+                              " block=%" PRIu64 " [" FMT_PNR_IN ".." FMT_PNR_IN
+                              "]",
+                     meta(v).lg_acked, ack_delay, ack_delay * (1 << ade),
+                     meta(v).ack_block_cnt, ack_block, b->lo,
+                     shorten_ack_nr(b->hi, ack_block));
+
         } else {
             if (prev_lo)
                 warn(INF,
                      FRAM_OUT "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64
                               " [" FMT_PNR_IN "]",
                      gap, ack_block, b->hi);
-            else {
-                if (enc_ecn)
-                    warn(INF,
-                         FRAM_OUT
-                         "ACK_ECN" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64
-                         " (%" PRIu64 " usec) ect0=%" PRIu64 " ect1=%" PRIu64
-                         " ce=%" PRIu64 " cnt=%" PRIu64 " block=%" PRIu64,
-                         meta(v).lg_acked, ack_delay, ack_delay * (1 << ade),
-                         c->rec.ect0_cnt, c->rec.ect1_cnt, c->rec.ce_cnt,
-                         meta(v).ack_block_cnt, ack_block);
-                else
-                    warn(INF,
-                         FRAM_OUT "ACK" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64
-                                  " (%" PRIu64 " usec) cnt=%" PRIu64
-                                  " block=%" PRIu64 " [" FMT_PNR_IN "]",
-                         meta(v).lg_acked, ack_delay, ack_delay * (1 << ade),
-                         meta(v).ack_block_cnt, ack_block, meta(v).lg_acked);
-            }
+            else
+                warn(INF,
+                     FRAM_OUT "ACK" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64
+                              " (%" PRIu64 " usec) cnt=%" PRIu64
+                              " block=%" PRIu64 " [" FMT_PNR_IN "]",
+                     meta(v).lg_acked, ack_delay, ack_delay * (1 << ade),
+                     meta(v).ack_block_cnt, ack_block, meta(v).lg_acked);
         }
         i = enc(v->buf, v->len, i, &ack_block, 0, 0, "%" PRIu64);
         prev_lo = b->lo;
@@ -1131,6 +1114,10 @@ uint16_t enc_ack_frame(struct q_conn * const c,
         i = enc(v->buf, v->len, i, &c->rec.ect0_cnt, 0, 0, "%" PRIu64);
         i = enc(v->buf, v->len, i, &c->rec.ect1_cnt, 0, 0, "%" PRIu64);
         i = enc(v->buf, v->len, i, &c->rec.ce_cnt, 0, 0, "%" PRIu64);
+        warn(INF,
+             FRAM_OUT "ECN" NRM " ect0=%" PRIu64 " ect1=%" PRIu64
+                      " ce=%" PRIu64,
+             c->rec.ect0_cnt, c->rec.ect1_cnt, c->rec.ce_cnt);
     }
 
     // warn(DBG, "ACK encoded, stopping epoch %u ACK timer",
