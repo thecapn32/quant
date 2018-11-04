@@ -321,7 +321,7 @@ on_ch(ptls_on_client_hello_t * const self __attribute__((unused)),
                        MIN(prot[i].len, alpn[j].len)) == 0)
                 goto done;
 
-    if (j == prot_cnt) {
+    if (j == alpn_cnt) {
         warn(WRN, "\tALPN = %.*s (and maybe others, none supported, ignoring)",
              prot[0].len, prot[0].base);
         return 0;
