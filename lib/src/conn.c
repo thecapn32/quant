@@ -851,10 +851,19 @@ rx_pkts(struct w_iov_sq * const x,
         struct cid odcid;
         uint8_t tok[MAX_PKT_LEN];
         uint16_t tok_len = 0;
-        if (!dec_pkt_hdr_beginning(xv, v, is_clnt, &odcid, tok, &tok_len)) {
+        if (unlikely(!dec_pkt_hdr_beginning(xv, v, is_clnt, &odcid, tok,
+                                            &tok_len))) {
+            // we might still need to send a vneg packet
+            if (w_connected(ws) == false) {
+                warn(ERR,
+                     "received invalid %u-byte pkt (type 0x%02x), sending vneg",
+                     v->len, v->buf[0]);
+                tx_vneg_resp(ws, v);
+            } else
+                warn(ERR,
+                     "received invalid %u-byte pkt (type 0x%02x), ignoring",
+                     v->len, v->buf[0]);
             // can't log packet, because it may be too short for log_pkt()
-            warn(ERR, "received invalid %u-byte pkt (type 0x%02x), ignoring",
-                 v->len, v->buf[0]);
             free_iov(v);
             continue;
         }
