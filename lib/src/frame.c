@@ -406,6 +406,7 @@ uint16_t dec_ack_frame(struct q_conn * const c,
         warn(INF,
              FRAM_IN "ECN" NRM " ect0=%" PRIu64 " ect1=%" PRIu64 " ce=%" PRIu64,
              ect0_cnt, ect1_cnt, ce_cnt);
+        // TODO: add sanity check whether markings make sense
     }
 
     on_ack_received_2(c, pn, sm_new_acked);
