@@ -196,19 +196,9 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
 
         // check if we have delivered a FIN, and act on it if we did
         struct w_iov * const last = sq_last(&s->in, w_iov, next);
-        if (last) {
-            // if last is the current packet, its v->buf is the start of the
-            // packet header; if it's dequeued from ooo, its v->buf points to
-            // the start of the stream data - deal with this:
-            if (last != v)
-                last->buf -= meta(v).stream_data_start;
-            if (is_fin(last)) {
-                strm_to_state(s, s->state <= strm_hcrm ? strm_hcrm : strm_clsd);
-                if (t != FRAM_TYPE_CRPT)
-                    maybe_api_return(q_readall_str, s->c, s);
-            }
-            if (last != v)
-                last->buf += meta(v).stream_data_start;
+        if (last && is_fin(last)) {
+            strm_to_state(s, s->state <= strm_hcrm ? strm_hcrm : strm_clsd);
+            maybe_api_return(q_readall_str, s->c, s);
         }
 
         if (t != FRAM_TYPE_CRPT) {
@@ -715,7 +705,8 @@ dec_new_cid_frame(struct q_conn * const c,
          FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu64
                  " len=%u dcid=%s tok=%s%s",
          dcid.seq, dcid.len, cid2str(&dcid),
-         hex2str(dcid.srt, sizeof(dcid.srt)), dup ? "[" RED "dup" NRM "]" : "");
+         hex2str(dcid.srt, sizeof(dcid.srt)),
+         dup ? " [" RED "dup" NRM "]" : "");
 
     return i;
 }
