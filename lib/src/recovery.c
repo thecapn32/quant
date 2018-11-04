@@ -244,7 +244,7 @@ track_acked_pkts(struct pn_space * const pn, struct w_iov * const v)
     uint16_t i = meta(v).ack_block_pos;
     for (uint64_t n = meta(v).ack_block_cnt + 1; n > 0; n--) {
         uint64_t ack_block_len = 0;
-        dec(&ack_block_len, v->buf, v->len, i, 0, "%" PRIu64);
+        i = dec(&ack_block_len, v->buf, v->len, i, 0, "%" PRIu64);
 
         uint64_t ack = lg_ack_in_block;
         while (ack_block_len >= lg_ack_in_block - ack) {
