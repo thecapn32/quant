@@ -803,13 +803,13 @@ done:
     // update ECN info
     switch (v->flags & IPTOS_ECN_MASK) {
     case IPTOS_ECN_ECT1:
-        c->rec.ect1_cnt++;
+        pn->ect1_cnt++;
         break;
     case IPTOS_ECN_ECT0:
-        c->rec.ect0_cnt++;
+        pn->ect0_cnt++;
         break;
     case IPTOS_ECN_CE:
-        c->rec.ce_cnt++;
+        pn->ce_cnt++;
         break;
     }
 

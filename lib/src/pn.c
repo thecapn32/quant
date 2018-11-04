@@ -87,6 +87,7 @@ void reset_pn(struct pn_space * const pn)
 
     pn->lg_sent = UINT64_MAX;
     ev_timer_stop(loop, &pn->ack_alarm);
+    pn->ect0_cnt = pn->ect1_cnt = pn->ce_cnt = 0;
 }
 
 

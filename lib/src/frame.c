@@ -1043,7 +1043,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
                        struct w_iov * const v,
                        const uint16_t pos)
 {
-    const bool enc_ecn = c->rec.ect0_cnt || c->rec.ect1_cnt || c->rec.ce_cnt;
+    const bool enc_ecn = pn->ect0_cnt || pn->ect1_cnt || pn->ce_cnt;
     const uint8_t type = enc_ecn ? FRAM_TYPE_ACK_ECN : FRAM_TYPE_ACK;
     bit_set(NUM_FRAM_TYPES, FRAM_TYPE_ACK, &meta(v).frames);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
@@ -1111,13 +1111,13 @@ uint16_t enc_ack_frame(struct q_conn * const c,
 
     if (enc_ecn) {
         // encode ECN
-        i = enc(v->buf, v->len, i, &c->rec.ect0_cnt, 0, 0, "%" PRIu64);
-        i = enc(v->buf, v->len, i, &c->rec.ect1_cnt, 0, 0, "%" PRIu64);
-        i = enc(v->buf, v->len, i, &c->rec.ce_cnt, 0, 0, "%" PRIu64);
+        i = enc(v->buf, v->len, i, &pn->ect0_cnt, 0, 0, "%" PRIu64);
+        i = enc(v->buf, v->len, i, &pn->ect1_cnt, 0, 0, "%" PRIu64);
+        i = enc(v->buf, v->len, i, &pn->ce_cnt, 0, 0, "%" PRIu64);
         warn(INF,
              FRAM_OUT "ECN" NRM " ect0=%" PRIu64 " ect1=%" PRIu64
                       " ce=%" PRIu64,
-             c->rec.ect0_cnt, c->rec.ect1_cnt, c->rec.ce_cnt);
+             pn->ect0_cnt, pn->ect1_cnt, pn->ce_cnt);
     }
 
     // warn(DBG, "ACK encoded, stopping epoch %u ACK timer",
