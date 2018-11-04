@@ -521,7 +521,9 @@ bool enc_pkt(struct q_stream * const s,
         if (c->try_0rtt == true && meta(v).hdr.type == F_LH_0RTT && s->id >= 0)
             // if we pad the first 0-RTT pkt, peek at txq to get the CI length
             i = enc_padding_frame(
-                v, i, MIN_INI_LEN - i - AEAD_LEN - sq_first(&c->txq)->len);
+                v, i,
+                MIN_INI_LEN - i - AEAD_LEN -
+                    (sq_first(&c->txq) ? sq_first(&c->txq)->len : 0));
     }
 
     if (meta(v).hdr.type != F_LH_RTRY)
