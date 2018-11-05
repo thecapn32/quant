@@ -450,7 +450,8 @@ bool enc_pkt(struct q_stream * const s,
             i = enc(v->buf, v->len, i, &tl, 0, 0, "%" PRIu64);
         }
 
-        if ((meta(v).hdr.type == F_LH_INIT || meta(v).hdr.type == F_LH_RTRY) &&
+        if (((c->is_clnt && meta(v).hdr.type == F_LH_INIT) ||
+             meta(v).hdr.type == F_LH_RTRY) &&
             c->tok_len)
             i = enc_buf(v->buf, v->len, i, c->tok, c->tok_len);
 
