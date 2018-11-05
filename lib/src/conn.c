@@ -609,7 +609,8 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
     } while (0)
 
 
-static void __attribute__((nonnull)) vneg_or_rtry_resp(struct q_conn * const c)
+static void __attribute__((nonnull))
+vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
 {
     // reset CC state
     init_rec(c);
@@ -624,9 +625,13 @@ static void __attribute__((nonnull)) vneg_or_rtry_resp(struct q_conn * const c)
                                        strm_epoch(s) != ep_data)));
 
     // reset packet number spaces
+    const uint64_t lg_sent_ini = c->pn_init.pn.lg_sent;
     reset_pn(&c->pn_init.pn);
     reset_pn(&c->pn_hshk.pn);
     reset_pn(&c->pn_data.pn);
+    if (is_vneg)
+        // we need to continue in the pkt nr sequence
+        c->pn_init.pn.lg_sent = lg_sent_ini;
 
     // reset TLS state and create new CH
     init_tls(c);
@@ -727,7 +732,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
                 goto done;
             }
 
-            vneg_or_rtry_resp(c);
+            vneg_or_rtry_resp(c, true);
             c->vers = try_vers;
             warn(INF, "serv didn't like vers 0x%08x, retrying with 0x%08x",
                  c->vers_initial, c->vers);
@@ -750,7 +755,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             }
 
             // handle an incoming retry packet
-            vneg_or_rtry_resp(c);
+            vneg_or_rtry_resp(c, false);
 
             c->tok_len = tok_len;
             memcpy(c->tok, tok, c->tok_len);
@@ -923,7 +928,7 @@ rx_pkts(struct w_iov_sq * const x,
                     if (meta(v).hdr.vers && meta(v).hdr.type == F_LH_RTRY &&
                         cid_cmp(&odcid, c->dcid) != 0) {
                         log_pkt("RX", v, &odcid, tok, tok_len);
-                        warn(ERR, "retry dcid mismatch %s != %s",
+                        warn(ERR, "retry dcid mismatch %s != %s, ignoring pkt",
                              cid2str(&odcid), cid2str(c->dcid));
                         free_iov(v);
                         continue;
