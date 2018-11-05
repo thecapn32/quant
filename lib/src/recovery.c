@@ -395,8 +395,6 @@ on_pkt_acked_cc(struct q_conn * const c, struct w_iov * const acked_pkt)
     // implement OnPacketAckedCC pseudocode
 
     // bytes_in_flight -= acked_packet.bytes
-    ensure(meta(acked_pkt).is_lost == false, "oops");
-    // XXX see if we can remove this check?
     if (meta(acked_pkt).is_lost == false)
         c->rec.in_flight -= meta(acked_pkt).tx_len;
 

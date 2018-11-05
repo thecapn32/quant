@@ -237,6 +237,11 @@ rtx_pkt(struct q_stream * const s, struct w_iov * const v)
     splay_remove(pm_by_nr, &meta(v).pn->sent_pkts, &meta(v));
     splay_insert(pm_by_nr, &meta(v).pn->sent_pkts, &meta(r));
 
+    // this is not in the recovery draft, but seems kinda obvious
+    meta(v).is_lost = true;
+    s->c->rec.in_flight -= meta(v).tx_len;
+    log_cc(s->c);
+
     // warn(DBG, "RTX idx %u, cpy in idx %u", w_iov_idx(v), w_iov_idx(r));
 }
 
