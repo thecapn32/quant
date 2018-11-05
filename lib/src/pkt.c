@@ -446,7 +446,7 @@ bool enc_pkt(struct q_stream * const s,
         }
 
         if (meta(v).hdr.type == F_LH_INIT) {
-            const uint64_t tl = c->tok_len;
+            const uint64_t tl = c->is_clnt ? c->tok_len : 0;
             i = enc(v->buf, v->len, i, &tl, 0, 0, "%" PRIu64);
         }
 
@@ -674,7 +674,7 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
             *tok_len = (uint16_t)tl;
             if (is_clnt && *tok_len) {
                 // server initial pkts must have no tokens
-                warn(DBG, "tok present in serv initial");
+                die("tok present in serv initial");
                 return false;
             }
         } else if (meta(v).hdr.type == F_LH_RTRY)
