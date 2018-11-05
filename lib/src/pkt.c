@@ -674,7 +674,7 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
             *tok_len = (uint16_t)tl;
             if (is_clnt && *tok_len) {
                 // server initial pkts must have no tokens
-                die("tok present in serv initial");
+                warn(ERR, "tok (len %u) present in serv initial", *tok_len);
                 return false;
             }
         } else if (meta(v).hdr.type == F_LH_RTRY)
