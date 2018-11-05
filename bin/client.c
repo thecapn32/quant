@@ -364,7 +364,7 @@ int main(int argc, char * argv[])
             if (n < 4 || v == sq_last(&i, w_iov, next)) {
                 // don't print newlines to console log
                 for (uint16_t p = 0; p < v->len; p++)
-                    if (v->buf[p] == '\n')
+                    if (v->buf[p] == '\n' || v->buf[p] == '\r')
                         v->buf[p] = ' ';
                 if (do_h3)
                     hexdump(v->buf, v->len);
