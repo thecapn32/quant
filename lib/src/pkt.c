@@ -377,7 +377,7 @@ bool enc_pkt(struct q_stream * const s,
         meta(v).hdr.type = c->tx_rtry ? F_LH_RTRY : F_LH_INIT;
         meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
 
-        if (c->state == conn_idle) {
+        if (c->is_clnt == false) {
             // this is a new connection; server picks a new random cid
             struct cid nscid = {.len = SERV_SCID_LEN};
             arc4random_buf(nscid.id, nscid.len);
@@ -432,7 +432,6 @@ bool enc_pkt(struct q_stream * const s,
     i = enc(v->buf, v->len, 0, &meta(v).hdr.flags, sizeof(meta(v).hdr.flags), 0,
             "0x%02x");
 
-    uint16_t tok_len = 0;
     if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
         meta(v).hdr.vers = c->vers;
         i = enc(v->buf, v->len, i, &c->vers, sizeof(c->vers), 0, "0x%08x");
@@ -446,16 +445,14 @@ bool enc_pkt(struct q_stream * const s,
                 i = enc_buf(v->buf, v->len, i, &c->odcid.id, c->odcid.len);
         }
 
-        tok_len =
-            c->state == conn_idle || c->state == conn_opng ? c->tok_len : 0;
         if (meta(v).hdr.type == F_LH_INIT) {
-            const uint64_t tl = tok_len;
+            const uint64_t tl = c->tok_len;
             i = enc(v->buf, v->len, i, &tl, 0, 0, "%" PRIu64);
         }
 
         if ((meta(v).hdr.type == F_LH_INIT || meta(v).hdr.type == F_LH_RTRY) &&
-            tok_len)
-            i = enc_buf(v->buf, v->len, i, c->tok, (uint16_t)tok_len);
+            c->tok_len)
+            i = enc_buf(v->buf, v->len, i, c->tok, c->tok_len);
 
         if (meta(v).hdr.type != F_LH_RTRY) {
             // leave space for length field (2 bytes is enough)
@@ -469,7 +466,6 @@ bool enc_pkt(struct q_stream * const s,
                     meta(v).hdr.dcid.len);
     }
 
-
     if (meta(v).hdr.type != F_LH_RTRY) {
         meta(v).pkt_nr_pos = i;
         meta(v).pkt_nr_len = needed_pkt_nr_len(pn, meta(v).hdr.nr);
@@ -479,10 +475,12 @@ bool enc_pkt(struct q_stream * const s,
 
     meta(v).hdr.hdr_len = i;
     log_pkt("TX", v, meta(v).hdr.type == F_LH_RTRY ? &c->odcid : 0, c->tok,
-            tok_len);
+            c->tok_len);
 
-    if (meta(v).hdr.type != F_LH_RTRY && !diet_empty(&pn->recv) &&
-        !is_ack_or_padding_only(&pn->rx_frames))
+    if (meta(v).hdr.type == F_LH_RTRY)
+        goto tx;
+
+    if (!diet_empty(&pn->recv) && !is_ack_or_padding_only(&pn->rx_frames))
         i = enc_ack_frame(c, pn, v, i);
 
     if (c->state == conn_clsg) {
@@ -545,7 +543,7 @@ tx:
     x->port = v->port;
     x->flags = v->flags;
 
-    if (c->state == conn_idle) {
+    if (meta(v).hdr.type == F_LH_RTRY) {
         memcpy(x->buf, v->buf, v->len); // copy data
         x->len = v->len;
     } else {
