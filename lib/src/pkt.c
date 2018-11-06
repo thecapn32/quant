@@ -298,10 +298,10 @@ enc_other_frames(struct q_stream * const s,
     }
 
     if (c->tx_retire_cid && have_space_for(FRAM_TYPE_RTIR_CID, i, lim)) {
-        struct cid * rcid = splay_min(cids_by_seq, &c->scids_by_seq);
+        struct cid * rcid = splay_min(cids_by_seq, &c->dcids_by_seq);
         while (rcid && rcid->seq < c->dcid->seq) {
             struct cid * const next =
-                splay_next(cids_by_seq, &c->scids_by_seq, rcid);
+                splay_next(cids_by_seq, &c->dcids_by_seq, rcid);
             if (rcid->retired) {
                 i = enc_retire_cid_frame(c, v, i, rcid);
                 free_dcid(c, rcid);
