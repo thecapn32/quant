@@ -154,6 +154,7 @@ detect_lost_pkts(struct q_conn * const c, struct pn_space * const pn)
             delta > c->rec.reorder_thresh) {
             warn(WRN, "pkt " FMT_PNR_OUT " considered lost", p->hdr.nr);
             p->is_lost = true;
+            c->needs_tx = true;
 
             // OnPacketsLost:
             if (is_ack_only(&p->frames) == false) {
