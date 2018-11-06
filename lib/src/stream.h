@@ -69,7 +69,8 @@ struct q_stream {
     struct ooo_by_off in_ooo; ///< Out-of-order inbound data.
     uint64_t in_data_max;     ///< Inbound max_stream_data.
     uint64_t new_in_data_max; ///< New inbound max_stream_data (for update).
-    uint64_t in_data;         ///< In-order stream data received.
+    uint64_t in_data;         ///< In-order stream data received (total).
+    uint64_t in_data_off;     ///< Next in-order stream data offset expected.
 
     int64_t id;
     strm_state_t state;

@@ -118,6 +118,16 @@ void log_stream_or_crypto_frame(const bool rtx,
 #endif
 
 
+static void __attribute__((nonnull)) trim_frame(struct pkt_meta * const p)
+{
+    const uint64_t diff = p->stream->in_data_off - p->stream_off;
+    warn(ERR, "diff=%" PRIu64, diff);
+    p->stream_off += diff;
+    p->stream_data_start += diff;
+    p->stream_data_len -= diff;
+}
+
+
 static uint16_t __attribute__((nonnull))
 dec_stream_or_crypto_frame(struct q_conn * const c,
                            struct w_iov * const v,
@@ -156,12 +166,20 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
 
     meta(v).stream_data_start = i;
     meta(v).stream_data_len = (uint16_t)l;
+    meta(v).stream = get_stream(c, sid);
 
     // deliver data into stream
     bool is_dup = false;
-    struct q_stream * s = get_stream(c, sid);
     const char * kind = "";
-    if (unlikely(s == 0)) {
+
+    if (unlikely(meta(v).stream_data_len == 0)) {
+        warn(WRN, "zero-len stream/crypto frame on sid " FMT_SID ", ignoring",
+             sid);
+        is_dup = true;
+        goto done;
+    }
+
+    if (unlikely(meta(v).stream == 0)) {
         if (unlikely(diet_find(&c->closed_streams, (uint64_t)sid))) {
             warn(WRN,
                  "ignoring frame for closed strm " FMT_SID " on %s conn %s",
@@ -174,50 +192,80 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
                              "got sid %" PRId64 " but am %s", sid,
                              conn_type(c));
 
-        s = new_stream(c, sid);
+        meta(v).stream = new_stream(c, sid);
     }
-    meta(v).stream = s;
 
     // best case: new in-order data
-    if (meta(v).stream_off == s->in_data) {
+    if (meta(v).stream->in_data_off >= meta(v).stream_off &&
+        meta(v).stream->in_data_off <=
+            meta(v).stream_off + meta(v).stream_data_len - 1) {
         kind = "seq";
-        track_bytes_in(s, l);
-        sq_insert_tail(&s->in, v, next);
+
+        if (meta(v).stream->in_data_off > meta(v).stream_off)
+            // already-received data at the beginning of the frame, trim
+            trim_frame(&meta(v));
+
+        track_bytes_in(meta(v).stream, meta(v).stream_data_len);
+        meta(v).stream->in_data_off += meta(v).stream_data_len;
+        sq_insert_tail(&meta(v).stream->in, v, next);
 
         // check if a hole has been filled that lets us dequeue ooo data
-        struct pkt_meta *p, *nxt;
-        for (p = splay_min(ooo_by_off, &s->in_ooo);
-             p && p->stream_off == s->in_data; p = nxt) {
-            nxt = splay_next(ooo_by_off, &s->in_ooo, p);
-            track_bytes_in(s, p->stream_data_len);
-            sq_insert_tail(&s->in, w_iov(c->w, pm_idx(p)), next);
-            splay_remove(ooo_by_off, &s->in_ooo, p);
+        struct pkt_meta * p = splay_min(ooo_by_off, &meta(v).stream->in_ooo);
+        while (p) {
+            struct pkt_meta * const nxt =
+                splay_next(ooo_by_off, &meta(v).stream->in_ooo, p);
+
+            if (unlikely(p->stream_off + p->stream_data_len <
+                         meta(v).stream->in_data_off)) {
+                // right edge of p < left edge of stream
+                warn(WRN, "drop stale frame [%u..%u]", p->stream_off,
+                     p->stream_off + p->stream_data_len);
+                splay_remove(ooo_by_off, &meta(v).stream->in_ooo, p);
+                p = nxt;
+                continue;
+            }
+
+            // right edge of p >= left edge of stream
+            if (p->stream_off > meta(v).stream->in_data_off)
+                // also left edge of p > left edge of stream: still a gap
+                break;
+
+            // left edge of p <= left edge of stream: overlap, trim & enqueue
+            trim_frame(p);
+            sq_insert_tail(&meta(v).stream->in, w_iov(c->w, pm_idx(p)), next);
+            meta(v).stream->in_data_off += p->stream_data_len;
+            splay_remove(ooo_by_off, &meta(v).stream->in_ooo, p);
+            p = nxt;
         }
 
         // check if we have delivered a FIN, and act on it if we did
-        struct w_iov * const last = sq_last(&s->in, w_iov, next);
+        struct w_iov * const last = sq_last(&meta(v).stream->in, w_iov, next);
         if (last) {
             if (unlikely(v != last))
                 adj_iov_to_start(last);
             if (is_fin(last)) {
-                strm_to_state(s, s->state <= strm_hcrm ? strm_hcrm : strm_clsd);
-                maybe_api_return(q_readall_str, s->c, s);
+                strm_to_state(meta(v).stream, meta(v).stream->state <= strm_hcrm
+                                                  ? strm_hcrm
+                                                  : strm_clsd);
+                maybe_api_return(q_readall_str, meta(v).stream->c,
+                                 meta(v).stream);
             }
             if (unlikely(v != last))
                 adj_iov_to_data(last);
         }
 
         if (t != FRAM_TYPE_CRPT) {
-            do_stream_fc(s);
-            do_conn_fc(s->c);
-            s->c->have_new_data = true;
-            maybe_api_return(q_read, s->c, 0);
+            do_stream_fc(meta(v).stream);
+            do_conn_fc(meta(v).stream->c);
+            meta(v).stream->c->have_new_data = true;
+            maybe_api_return(q_read, meta(v).stream->c, 0);
         }
         goto done;
     }
 
     // data is a complete duplicate
-    if (meta(v).stream_off + l <= s->in_data) {
+    if (meta(v).stream_off + meta(v).stream_data_len <=
+        meta(v).stream->in_data_off) {
         kind = RED "dup" NRM;
         is_dup = true;
         goto done;
@@ -225,12 +273,13 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
 
     // data is out of order - check if it overlaps with already stored ooo data
     kind = YEL "ooo" NRM;
-    struct pkt_meta * p = splay_min(ooo_by_off, &s->in_ooo);
+    struct pkt_meta * p = splay_min(ooo_by_off, &meta(v).stream->in_ooo);
     while (p && p->stream_off + p->stream_data_len - 1 < meta(v).stream_off)
-        p = splay_next(ooo_by_off, &s->in_ooo, p);
+        p = splay_next(ooo_by_off, &meta(v).stream->in_ooo, p);
 
     // right edge of p >= left edge of v
-    if (p && p->stream_off <= meta(v).stream_off + meta(v).stream_data_len) {
+    if (p &&
+        p->stream_off <= meta(v).stream_off + meta(v).stream_data_len - 1) {
         // left edge of p <= right edge of v
         warn(ERR, "[%u..%u] have existing overlapping ooo data [%u..%u]",
              meta(v).stream_off, meta(v).stream_off + meta(v).stream_data_len,
@@ -240,19 +289,21 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     }
 
     // this ooo data doesn't overlap with anything
-    splay_insert(ooo_by_off, &s->in_ooo, &meta(v));
-    meta(v).stream = s;
+    track_bytes_in(meta(v).stream, meta(v).stream_data_len);
+    splay_insert(ooo_by_off, &meta(v).stream->in_ooo, &meta(v));
 
 done:
     log_stream_or_crypto_frame(false, v, true, kind);
-    // if (t != FRAM_TYPE_CRPT)
-    //     hexdump(&v->buf[meta(v).stream_data_start], meta(v).stream_data_len);
 
-    if (s && t != FRAM_TYPE_CRPT && meta(v).stream_off + l > s->in_data_max)
+    if (meta(v).stream && t != FRAM_TYPE_CRPT &&
+        meta(v).stream_off + meta(v).stream_data_len >
+            meta(v).stream->in_data_max)
         err_close_return(c, ERR_FLOW_CONTROL, 0,
                          "stream %" PRIu64 " off %" PRIu64
                          " > in_data_max %" PRIu64,
-                         s->id, meta(v).stream_off + l - 1, s->in_data_max);
+                         meta(v).stream->id,
+                         meta(v).stream_off + meta(v).stream_data_len - 1,
+                         meta(v).stream->in_data_max);
 
     if (is_dup)
         // this indicates to callers that the w_iov was not placed in a stream
@@ -1149,8 +1200,7 @@ uint16_t enc_stream_or_crypto_frame(struct q_stream * const s,
         type = FRAM_TYPE_STRM | (dlen ? F_STREAM_LEN : 0) |
                (s->out_data ? F_STREAM_OFF : 0);
 
-        // if stream is closed locally and this is the last packet, include a
-        // FIN
+        // if stream is closed locally and this is last packet, include FIN
         if ((s->state == strm_hclo || s->state == strm_clsd) &&
             v == sq_last(&s->out, w_iov, next)) {
             type |= F_STREAM_FIN;

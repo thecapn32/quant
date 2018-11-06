@@ -183,7 +183,7 @@ static void __attribute__((nonnull)) reset_pm(const struct w_iov_sq * const q)
 void reset_stream(struct q_stream * const s, const bool forget)
 {
     // reset stream offsets
-    s->out_ack_cnt = s->in_data = s->out_data = 0;
+    s->out_ack_cnt = s->in_data_off = s->in_data = s->out_data = 0;
 
     if (forget) {
         s->out_nxt = s->out_una = 0;
