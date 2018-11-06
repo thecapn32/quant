@@ -1441,15 +1441,15 @@ uint16_t enc_new_token_frame(struct q_conn * const c,
 uint16_t enc_retire_cid_frame(struct q_conn * const c,
                               const struct w_iov * const v,
                               const uint16_t pos,
-                              struct cid * const scid)
+                              struct cid * const dcid)
 {
     const uint8_t type = FRAM_TYPE_RTIR_CID;
     bit_set(NUM_FRAM_TYPES, type, &meta(v).frames);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
-    i = enc(v->buf, v->len, i, &scid->seq, 0, 0, "%" PRIu64);
+    i = enc(v->buf, v->len, i, &dcid->seq, 0, 0, "%" PRIu64);
 
-    warn(INF, FRAM_OUT "RETIRE_CONNECTION_ID" NRM " seq=%" PRIu64, scid->seq);
+    warn(INF, FRAM_OUT "RETIRE_CONNECTION_ID" NRM " seq=%" PRIu64, dcid->seq);
 
     c->tx_retire_cid = false;
 
