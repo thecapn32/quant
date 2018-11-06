@@ -1307,6 +1307,10 @@ void free_scid(struct q_conn * const c, struct cid * const id)
     struct cid_map * const cm = splay_find(conns_by_id, &conns_by_id, &which);
     splay_remove(conns_by_id, &conns_by_id, cm);
     free(cm);
+
+    struct cid * scid;
+    splay_foreach (scid, cids_by_seq, &c->scids_by_seq)
+        warn(ERR, "%s", cid2str(scid));
 }
 
 
