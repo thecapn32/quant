@@ -740,6 +740,7 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
                  "could not verify 0-RTT session ticket for %s conn %s (%s %s)",
                  conn_type(c), cid2str(c->scid), ptls_get_server_name(tls),
                  ptls_get_negotiated_protocol(tls));
+            c->did_0rtt = false;
             return -1;
         }
         uint8_t * src_base = src.base + quant_commit_hash_len;
@@ -758,6 +759,7 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
                 "could not decrypt 0-RTT session ticket for %s conn %s (%s %s)",
                 conn_type(c), cid2str(c->scid), ptls_get_server_name(tls),
                 ptls_get_negotiated_protocol(tls));
+            c->did_0rtt = false;
             return -1;
         }
         dst->off += n;
@@ -765,6 +767,7 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
         warn(INF, "verified 0-RTT session ticket for %s conn %s (%s %s)",
              conn_type(c), cid2str(c->scid), ptls_get_server_name(tls),
              ptls_get_negotiated_protocol(tls));
+        c->did_0rtt = true;
     }
 
     return 0;
@@ -965,14 +968,10 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
     //      epoch_off[4], ret, iv ? iv->len - in_len : 0);
 
     if (ret == 0 && c->state != conn_estb) {
-        if (ptls_is_psk_handshake(c->tls.t)) {
-            if (c->is_clnt)
-                c->did_0rtt =
-                    c->try_0rtt &&
-                    c->tls.tls_hshake_prop.client.early_data_accepted_by_peer;
-            else
-                c->did_0rtt = 1;
-        }
+        if (ptls_is_psk_handshake(c->tls.t) && c->is_clnt)
+            c->did_0rtt =
+                c->try_0rtt &&
+                c->tls.tls_hshake_prop.client.early_data_accepted_by_peer;
 
     } else if (unlikely(ret != 0 && ret != PTLS_ERROR_IN_PROGRESS)) {
         err_close(c, ERR_TLS(PTLS_ERROR_TO_ALERT(ret)), FRAM_TYPE_CRPT,

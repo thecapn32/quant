@@ -886,12 +886,21 @@ rx_pkts(struct w_iov_sq * const x,
             c = get_conn_by_ipnp(w_get_sport(ws), &peer);
             if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
                 if (!is_clnt) {
-                    if (c && meta(v).hdr.type == F_LH_0RTT)
-                        warn(INF,
-                             "got 0-RTT pkt for orig cid %s, new is %s, "
-                             "accepting",
-                             cid2str(&meta(v).hdr.dcid), cid2str(c->scid));
-                    else if (c == 0 && meta(v).hdr.type == F_LH_INIT) {
+                    if (c && meta(v).hdr.type == F_LH_0RTT) {
+                        if (c->did_0rtt)
+                            warn(INF,
+                                 "got 0-RTT pkt for orig cid %s, new is %s, "
+                                 "accepting",
+                                 cid2str(&meta(v).hdr.dcid), cid2str(c->scid));
+                        else {
+                            warn(WRN,
+                                 "got 0-RTT pkt for orig cid %s, new is %s, "
+                                 "but rejected 0-RTT, ignoring",
+                                 cid2str(&meta(v).hdr.dcid), cid2str(c->scid));
+                            free_iov(v);
+                            continue;
+                        }
+                    } else if (c == 0 && meta(v).hdr.type == F_LH_INIT) {
                         // validate minimum packet size
                         // TODO: actually reject
                         if (xv->user_data < MIN_INI_LEN)
