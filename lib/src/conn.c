@@ -511,12 +511,11 @@ void update_act_scid(struct q_conn * const c, const struct cid * const id)
 
 void add_scid(struct q_conn * const c, const struct cid * const id)
 {
-    struct cid_map * cm;
     struct cid * scid = splay_find(cids_by_seq, &c->scids_by_seq, id);
     ensure(scid == 0, "cid is new");
 
-    // warn(ERR, "new scid %s", cid2str(id));
-    cm = calloc(1, sizeof(*cm));
+    warn(ERR, "new scid %s", cid2str(id));
+    struct cid_map * const cm = calloc(1, sizeof(*cm));
     ensure(cm, "could not calloc");
     cm->c = c;
     cid_cpy(&cm->cid, id);
@@ -526,9 +525,9 @@ void add_scid(struct q_conn * const c, const struct cid * const id)
         c->scid = &cm->cid;
     splay_insert(conns_by_id, &conns_by_id, cm);
 
-    // splay_foreach (scid, cids_by_seq, &c->scids_by_seq)
-    //     warn(ERR, "%s", cid2str(scid));
-} // NOLINT
+    splay_foreach (scid, cids_by_seq, &c->scids_by_seq)
+        warn(ERR, "%s", cid2str(scid));
+}
 
 
 void add_dcid(struct q_conn * const c, const struct cid * const id)
@@ -1292,6 +1291,7 @@ struct q_conn * new_conn(struct w_engine * const w,
 
 void free_scid(struct q_conn * const c, struct cid * const id)
 {
+    warn(ERR, "free scid seq %" PRIu64, id->seq);
     splay_remove(cids_by_seq, &c->scids_by_seq, id);
     splay_remove(cids_by_id, &c->scids_by_id, id);
     const struct cid_map which = {.cid = *id};
