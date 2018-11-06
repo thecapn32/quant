@@ -77,7 +77,7 @@ cid_cpy(struct cid * const dst, const struct cid * const src)
     memcpy((uint8_t *)dst + offsetof(struct cid, seq),
            (const uint8_t *)src + offsetof(struct cid, seq),
            sizeof(struct cid) - offsetof(struct cid, seq) -
-               (sizeof(struct cid) - offsetof(struct cid, _unused)));
+               sizeof(src->_unused));
 }
 
 
