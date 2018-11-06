@@ -929,7 +929,7 @@ rx_pkts(struct w_iov_sq * const x,
                         cid_cmp(&odcid, c->dcid) != 0) {
                         log_pkt("RX", v, &odcid, tok, tok_len);
                         warn(ERR, "retry dcid mismatch %s != %s, ignoring pkt",
-                             cid2str(&odcid), cid2str(c->dcid));
+                             hex2str(&odcid.id, odcid.len), cid2str(c->dcid));
                         free_iov(v);
                         continue;
                     }
