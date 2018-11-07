@@ -166,7 +166,12 @@ get_conn_by_cid(const struct cid * const scid)
 static bool __attribute__((nonnull))
 switch_scid(struct q_conn * const c, const struct cid * const id)
 {
-    struct cid * scid = splay_find(cids_by_id, &c->scids_by_id, id);
+    struct cid * scid;
+
+    splay_foreach (scid, cids_by_id, &c->scids_by_id)
+        warn(ERR, "%s", cid2str(scid));
+
+    splay_find(cids_by_id, &c->scids_by_id, id);
     if (unlikely(scid == 0 || scid->seq <= c->scid->seq))
         return false;
 

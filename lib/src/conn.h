@@ -257,6 +257,7 @@ conn_needs_ctrl(const struct q_conn * const c)
 static inline int __attribute__((always_inline, nonnull))
 cid_cmp(const struct cid * const a, const struct cid * const b)
 {
+    ensure(a->len && b->len, "len 0");
     const int diff = (a->len > b->len) - (a->len < b->len);
     if (diff)
         return diff;
