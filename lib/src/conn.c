@@ -526,7 +526,7 @@ void add_scid(struct q_conn * const c, const struct cid * const id)
         c->scid = &cm->cid;
     splay_insert(conns_by_id, &conns_by_id, cm);
 
-    splay_foreach (scid, cids_by_seq, &c->scids_by_seq)
+    splay_foreach (scid, cids_by_id, &c->scids_by_id)
         warn(ERR, "%s", cid2str(scid));
 }
 
@@ -1303,7 +1303,7 @@ struct q_conn * new_conn(struct w_engine * const w,
 void free_scid(struct q_conn * const c, struct cid * const id)
 {
     struct cid * scid;
-    splay_foreach (scid, cids_by_seq, &c->scids_by_seq)
+    splay_foreach (scid, cids_by_id, &c->scids_by_id)
         warn(ERR, "before %s", cid2str(scid));
 
     warn(ERR, "free scid seq %s", cid2str(id));
@@ -1315,7 +1315,7 @@ void free_scid(struct q_conn * const c, struct cid * const id)
     ensure(splay_remove(conns_by_id, &conns_by_id, cm), "node removed");
     free(cm);
 
-    splay_foreach (scid, cids_by_seq, &c->scids_by_seq)
+    splay_foreach (scid, cids_by_id, &c->scids_by_id)
         warn(ERR, "after %s", cid2str(scid));
 }
 
