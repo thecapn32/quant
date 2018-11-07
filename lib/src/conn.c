@@ -1288,14 +1288,12 @@ struct q_conn * new_conn(struct w_engine * const w,
     if (c->is_clnt) {
         nscid.len = CLNT_SCID_LEN;
         arc4random_buf(nscid.id, nscid.len);
-    } else {
-        if (scid)
-            cid_cpy(&nscid, scid);
-        else
-            nscid.len = 1;
+    } else if (scid)
+        cid_cpy(&nscid, scid);
+    if (nscid.len) {
+        arc4random_buf(nscid.srt, sizeof(nscid.srt));
+        add_scid(c, &nscid);
     }
-    arc4random_buf(nscid.srt, sizeof(nscid.srt));
-    add_scid(c, &nscid);
 
     // create crypto streams
     for (epoch_t e = ep_init; e <= ep_data; e++)
