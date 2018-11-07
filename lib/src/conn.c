@@ -1309,6 +1309,10 @@ void free_scid(struct q_conn * const c, struct cid * const id)
     warn(ERR, "free scid seq %s", cid2str(id));
 
     ensure(splay_remove(cids_by_seq, &c->scids_by_seq, id), "node removed");
+
+    splay_foreach (scid, cids_by_id, &c->scids_by_id)
+        warn(ERR, "before %s", cid2str(scid));
+
     ensure(splay_remove(cids_by_id, &c->scids_by_id, id), "node removed");
     const struct cid_map which = {.cid = *id};
     struct cid_map * const cm = splay_find(conns_by_id, &conns_by_id, &which);
