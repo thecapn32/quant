@@ -171,7 +171,7 @@ switch_scid(struct q_conn * const c, const struct cid * const id)
     splay_foreach (scid, cids_by_id, &c->scids_by_id)
         warn(ERR, "%s", cid2str(scid));
 
-    splay_find(cids_by_id, &c->scids_by_id, id);
+    scid = splay_find(cids_by_id, &c->scids_by_id, id);
     if (unlikely(scid == 0 || scid->seq <= c->scid->seq))
         return false;
 
