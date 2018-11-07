@@ -430,6 +430,7 @@ void on_pkt_acked(struct q_conn * const c,
     diet_insert(&pn->acked, meta(acked_pkt).hdr.nr, ev_now(loop));
     ensure(splay_remove(pm_by_nr, &pn->sent_pkts, &meta(acked_pkt)),
            "node removed");
+    meta(acked_pkt).is_acked = true;
 
     // rest of function is not from pseudo code
 
@@ -488,7 +489,13 @@ void on_pkt_acked(struct q_conn * const c,
                 maybe_api_return(q_connect, s->c, 0);
         }
     }
-    meta(orig).is_acked = true;
+
+    if (orig != acked_pkt) {
+        diet_insert(&pn->acked, meta(orig).hdr.nr, ev_now(loop));
+        ensure(splay_remove(pm_by_nr, &pn->sent_pkts, &meta(orig)),
+               "node removed");
+        meta(orig).is_acked = true;
+    }
 
     // if this ACKs its stream's out_una, move that forward
     if (meta(orig).stream && meta(orig).stream->out_una == orig) {
