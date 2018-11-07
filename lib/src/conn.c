@@ -954,8 +954,8 @@ rx_pkts(struct w_iov_sq * const x,
 
             if (cid_cmp(&meta(v).hdr.dcid, c->scid) != 0)
                 if (switch_scid(c, &meta(v).hdr.dcid) == false) {
-                    warn(ERR, "unknown scid %s, ignoring",
-                         hex2str(meta(v).hdr.dcid.id, meta(v).hdr.dcid.len));
+                    warn(ERR, "unknown or stale scid %s, ignoring pkt",
+                         cid2str(&meta(v).hdr.dcid));
                     free_iov(v);
                     continue;
                 }

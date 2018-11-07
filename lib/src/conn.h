@@ -34,6 +34,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/param.h>
 
 #include <ev.h>
 #include <picotls.h>
@@ -258,10 +259,8 @@ static inline int __attribute__((always_inline, nonnull))
 cid_cmp(const struct cid * const a, const struct cid * const b)
 {
     ensure(a->len && b->len, "len 0");
-    const int diff = (a->len > b->len) - (a->len < b->len);
-    if (diff)
-        return diff;
-    return memcmp(a->id, b->id, a->len);
+    // compare len and id
+    return memcmp(&a->len, &b->len, MIN(a->len, b->len) + sizeof(a->len));
 }
 
 
