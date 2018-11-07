@@ -808,7 +808,7 @@ dec_retire_cid_frame(struct q_conn * const c,
                      const struct w_iov * const v,
                      const uint16_t pos)
 {
-    struct cid which = {0};
+    struct cid which;
     uint16_t i = dec_chk(FRAM_TYPE_RTIR_CID, &which.seq, v->buf, v->len,
                          pos + 1, 0, "%" PRIu64);
 

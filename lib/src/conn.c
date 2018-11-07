@@ -516,6 +516,7 @@ void update_act_scid(struct q_conn * const c, const struct cid * const id)
 
 void add_scid(struct q_conn * const c, const struct cid * const id)
 {
+    ensure(id->len, "len 0");
     struct cid * scid = splay_find(cids_by_seq, &c->scids_by_seq, id);
     ensure(scid == 0, "cid is new");
 
