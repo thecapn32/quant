@@ -1302,7 +1302,12 @@ struct q_conn * new_conn(struct w_engine * const w,
 
 void free_scid(struct q_conn * const c, struct cid * const id)
 {
-    warn(ERR, "free scid seq %" PRIu64, id->seq);
+    struct cid * scid;
+    splay_foreach (scid, cids_by_seq, &c->scids_by_seq)
+        warn(ERR, "before %s", cid2str(scid));
+
+    warn(ERR, "free scid seq %s", cid2str(id));
+
     ensure(splay_remove(cids_by_seq, &c->scids_by_seq, id), "node removed");
     ensure(splay_remove(cids_by_id, &c->scids_by_id, id), "node removed");
     const struct cid_map which = {.cid = *id};
@@ -1310,9 +1315,8 @@ void free_scid(struct q_conn * const c, struct cid * const id)
     ensure(splay_remove(conns_by_id, &conns_by_id, cm), "node removed");
     free(cm);
 
-    struct cid * scid;
     splay_foreach (scid, cids_by_seq, &c->scids_by_seq)
-        warn(ERR, "%s", cid2str(scid));
+        warn(ERR, "after %s", cid2str(scid));
 }
 
 
