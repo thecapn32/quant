@@ -220,7 +220,8 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
                 // right edge of p < left edge of stream
                 warn(WRN, "drop stale frame [%u..%u]", p->stream_off,
                      p->stream_off + p->stream_data_len);
-                splay_remove(ooo_by_off, &meta(v).stream->in_ooo, p);
+                ensure(splay_remove(ooo_by_off, &meta(v).stream->in_ooo, p),
+                       "node removed");
                 p = nxt;
                 continue;
             }
@@ -234,7 +235,8 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
             trim_frame(p);
             sq_insert_tail(&meta(v).stream->in, w_iov(c->w, pm_idx(p)), next);
             meta(v).stream->in_data_off += p->stream_data_len;
-            splay_remove(ooo_by_off, &meta(v).stream->in_ooo, p);
+            ensure(splay_remove(ooo_by_off, &meta(v).stream->in_ooo, p),
+                   "node removed");
             p = nxt;
         }
 

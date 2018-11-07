@@ -428,7 +428,8 @@ void on_pkt_acked(struct q_conn * const c,
 
     // sent_packets.remove(acked_packet.packet_number)
     diet_insert(&pn->acked, meta(acked_pkt).hdr.nr, ev_now(loop));
-    splay_remove(pm_by_nr, &pn->sent_pkts, &meta(acked_pkt));
+    ensure(splay_remove(pm_by_nr, &pn->sent_pkts, &meta(acked_pkt)),
+           "node removed");
 
     // rest of function is not from pseudo code
 

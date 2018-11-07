@@ -1233,7 +1233,7 @@ void free_tls_ctx(void)
     struct tls_ticket *t, *tmp;
     for (t = splay_min(tickets_by_peer, &tickets); t != 0; t = tmp) {
         tmp = splay_next(tickets_by_peer, &tickets, t);
-        splay_remove(tickets_by_peer, &tickets, t);
+        ensure(splay_remove(tickets_by_peer, &tickets, t), "node removed");
         free(t->sni);
         free(t->alpn);
         free(t->ticket);

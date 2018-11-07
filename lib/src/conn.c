@@ -234,7 +234,8 @@ rtx_pkt(struct q_stream * const s, struct w_iov * const v)
     sl_insert_head(&meta(r).rtx, &meta(v), rtx_next);
 
     // we reinsert meta(v) with its new pkt nr in on_pkt_sent()
-    splay_remove(pm_by_nr, &meta(v).pn->sent_pkts, &meta(v));
+    ensure(splay_remove(pm_by_nr, &meta(v).pn->sent_pkts, &meta(v)),
+           "node removed");
     splay_insert(pm_by_nr, &meta(v).pn->sent_pkts, &meta(r));
 
     // this is not in the recovery draft, but seems kinda obvious
@@ -503,7 +504,7 @@ void update_act_scid(struct q_conn * const c, const struct cid * const id)
          conn_type(c), cid2str(c->scid));
     const struct cid_map which = {.cid = *c->scid};
     struct cid_map * cm = splay_find(conns_by_id, &conns_by_id, &which);
-    splay_remove(conns_by_id, &conns_by_id, cm);
+    ensure(splay_remove(conns_by_id, &conns_by_id, cm), "node removed");
     cid_cpy(&cm->cid, id);
     splay_insert(conns_by_id, &conns_by_id, cm);
 }
@@ -556,7 +557,7 @@ void add_dcid(struct q_conn * const c, const struct cid * const id)
 static void __attribute__((nonnull))
 update_ipnp(struct q_conn * const c, const struct sockaddr_in * const peer)
 {
-    splay_remove(conns_by_ipnp, &conns_by_ipnp, c);
+    ensure(splay_remove(conns_by_ipnp, &conns_by_ipnp, c), "node removed");
     c->peer = *peer;
     splay_insert(conns_by_ipnp, &conns_by_ipnp, c);
 }
@@ -698,7 +699,8 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         if (zo) {
             warn(INF, "have reordered 0-RTT pkt (t=%f sec) for %s conn %s",
                  ev_now(loop) - zo->t, conn_type(c), cid2str(c->scid));
-            splay_remove(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo);
+            ensure(splay_remove(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo),
+                   "node removed");
             sq_insert_head(x, zo->v, next);
             free(zo);
         }
@@ -1301,11 +1303,11 @@ struct q_conn * new_conn(struct w_engine * const w,
 void free_scid(struct q_conn * const c, struct cid * const id)
 {
     warn(ERR, "free scid seq %" PRIu64, id->seq);
-    splay_remove(cids_by_seq, &c->scids_by_seq, id);
-    splay_remove(cids_by_id, &c->scids_by_id, id);
+    ensure(splay_remove(cids_by_seq, &c->scids_by_seq, id), "node removed");
+    ensure(splay_remove(cids_by_id, &c->scids_by_id, id), "node removed");
     const struct cid_map which = {.cid = *id};
     struct cid_map * const cm = splay_find(conns_by_id, &conns_by_id, &which);
-    splay_remove(conns_by_id, &conns_by_id, cm);
+    ensure(splay_remove(conns_by_id, &conns_by_id, cm), "node removed");
     free(cm);
 
     struct cid * scid;
@@ -1316,7 +1318,7 @@ void free_scid(struct q_conn * const c, struct cid * const id)
 
 void free_dcid(struct q_conn * const c, struct cid * const id)
 {
-    splay_remove(cids_by_seq, &c->dcids_by_seq, id);
+    ensure(splay_remove(cids_by_seq, &c->dcids_by_seq, id), "node removed");
     free(id);
 }
 
@@ -1354,7 +1356,7 @@ void free_conn(struct q_conn * const c)
     free(c->peer_name);
 
     // remove connection from global lists and free CID splays
-    splay_remove(conns_by_ipnp, &conns_by_ipnp, c);
+    ensure(splay_remove(conns_by_ipnp, &conns_by_ipnp, c), "node removed");
 
     while (!splay_empty(&c->scids_by_seq)) {
         struct cid * const id = splay_min(cids_by_seq, &c->scids_by_seq);

@@ -122,8 +122,8 @@ int corpus_pkt_dir, corpus_frm_dir;
 
 void pm_free(struct pkt_meta * const m)
 {
-    if (m->pn) {
-        splay_remove(pm_by_nr, &m->pn->sent_pkts, m);
+    if (m->pn && splay_find(pm_by_nr, &m->pn->sent_pkts, m)) {
+        ensure(splay_remove(pm_by_nr, &m->pn->sent_pkts, m), "node removed");
         diet_insert(&m->pn->acked, m->hdr.nr, ev_now(loop));
     }
 
@@ -136,7 +136,7 @@ void pm_free(struct pkt_meta * const m)
         ensure(rm->is_rtx, "is an RTX");
         sl_remove_head(&m->rtx, rtx_next);
         struct pkt_meta * const next_rm = sl_next(rm, rtx_next);
-        splay_remove(pm_by_nr, &rm->pn->sent_pkts, rm);
+        ensure(splay_remove(pm_by_nr, &rm->pn->sent_pkts, rm), "node removed");
         diet_insert(&rm->pn->acked, rm->hdr.nr, ev_now(loop));
         w_free_iov(w_iov(rm->pn->c->w, pm_idx(rm)));
         memset(rm, 0, sizeof(*rm));
@@ -588,7 +588,8 @@ void q_cleanup(struct w_engine * const w)
     while (!splay_empty(&ooo_0rtt_by_cid)) {
         struct ooo_0rtt * const zo =
             splay_min(ooo_0rtt_by_cid, &ooo_0rtt_by_cid);
-        splay_remove(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo);
+        ensure(splay_remove(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo),
+               "node removed");
         free(zo);
     }
 

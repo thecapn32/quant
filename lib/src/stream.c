@@ -136,11 +136,12 @@ void free_stream(struct q_stream * const s)
         diet_insert(&s->c->closed_streams, (uint64_t)s->id, 0);
     }
 
-    splay_remove(streams_by_id, &s->c->streams_by_id, s);
+    ensure(splay_remove(streams_by_id, &s->c->streams_by_id, s),
+           "node removed");
     while (!splay_empty(&s->in_ooo)) {
         struct pkt_meta * const p = splay_min(ooo_by_off, &s->in_ooo);
         warn(ERR, "idx %u", pm_idx(p));
-        splay_remove(ooo_by_off, &s->in_ooo, p);
+        ensure(splay_remove(ooo_by_off, &s->in_ooo, p), "node removed");
         free_iov(w_iov(s->c->w, pm_idx(p)));
     }
     q_free(&s->out);
