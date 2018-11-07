@@ -163,19 +163,18 @@ get_conn_by_cid(const struct cid * const scid)
 }
 
 
-static void __attribute__((nonnull))
+static bool __attribute__((nonnull))
 switch_scid(struct q_conn * const c, const struct cid * const id)
 {
     struct cid * scid = splay_find(cids_by_id, &c->scids_by_id, id);
-    ensure(scid, "have scid");
-
-    if (scid->seq <= c->scid->seq)
-        return;
+    if (unlikely(scid == 0 || scid->seq <= c->scid->seq))
+        return false;
 
     warn(NTE, "migration to scid %s for %s conn (was %s)", cid2str(scid),
          conn_type(c), cid2str(c->scid));
 
     c->scid = scid;
+    return true;
 }
 
 
@@ -949,7 +948,12 @@ rx_pkts(struct w_iov_sq * const x,
             }
 
             if (cid_cmp(&meta(v).hdr.dcid, c->scid) != 0)
-                switch_scid(c, &meta(v).hdr.dcid);
+                if (switch_scid(c, &meta(v).hdr.dcid) == false) {
+                    warn(ERR, "unknown scid %s, ignoring",
+                         hex2str(meta(v).hdr.dcid.id, meta(v).hdr.dcid.len));
+                    free_iov(v);
+                    continue;
+                }
 
             // check if this pkt came from a new source IP and/or port
             if (sockaddr_in_cmp(&c->peer, &peer) != 0) {
