@@ -167,7 +167,7 @@ static void __attribute__((nonnull))
 switch_scid(struct q_conn * const c, const struct cid * const id)
 {
     struct cid * scid = splay_find(cids_by_id, &c->scids_by_id, id);
-    ensure(scid, "have dcid");
+    ensure(scid, "have scid");
 
     if (scid->seq <= c->scid->seq)
         return;
