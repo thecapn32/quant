@@ -211,132 +211,6 @@ struct q_conn {
 extern struct q_conn_sl c_ready;
 
 
-static inline struct pn_space * __attribute__((always_inline, nonnull))
-pn_for_epoch(struct q_conn * const c, const epoch_t e)
-{
-    switch (e) {
-    case ep_init:
-        return &c->pn_init.pn;
-    case ep_0rtt:
-        return &c->pn_data.pn;
-    case ep_hshk:
-        return &c->pn_hshk.pn;
-    case ep_data:
-        return &c->pn_data.pn;
-    }
-}
-
-
-static inline epoch_t __attribute__((always_inline, nonnull))
-epoch_in(const struct q_conn * const c)
-{
-    const size_t epoch = ptls_get_read_epoch(c->tls.t);
-    switch (epoch) {
-    case 0:
-        return ep_init;
-    case 1:
-        return ep_0rtt;
-    case 2:
-        return ep_hshk;
-    case 3:
-        return ep_data;
-    default:
-        die("unhandled epoch %u", epoch);
-    }
-}
-
-
-static inline bool __attribute__((nonnull, always_inline))
-conn_needs_ctrl(const struct q_conn * const c)
-{
-    return epoch_in(c) == ep_data &&
-           (c->tx_max_data || c->tx_max_sid_bidi || c->tx_path_resp ||
-            c->tx_path_chlg || c->tx_ncid || c->tx_retire_cid);
-}
-
-
-static inline int __attribute__((always_inline, nonnull))
-cid_cmp(const struct cid * const a, const struct cid * const b)
-{
-    ensure(a->len && b->len, "len 0");
-    // compare len and id
-    return memcmp(&a->len, &b->len, MIN(a->len, b->len) + sizeof(a->len));
-}
-
-
-static inline int __attribute__((always_inline, nonnull))
-conns_by_id_cmp(const struct cid_map * const a, const struct cid_map * const b)
-{
-    return cid_cmp(&a->cid, &b->cid);
-}
-
-
-extern int __attribute__((nonnull))
-conns_by_ipnp_cmp(const struct q_conn * const a, const struct q_conn * const b);
-
-
-SPLAY_PROTOTYPE(conns_by_ipnp, q_conn, node_ipnp, conns_by_ipnp_cmp)
-SPLAY_PROTOTYPE(conns_by_id, cid_map, node, conns_by_id_cmp)
-SPLAY_PROTOTYPE(cids_by_seq, cid, node_seq, cids_by_seq_cmp)
-SPLAY_PROTOTYPE(cids_by_id, cid, node_id, cid_cmp)
-
-
-struct ooo_0rtt {
-    splay_entry(ooo_0rtt) node;
-    struct cid cid;   ///< CID of 0-RTT pkt
-    struct w_iov * v; ///< the buffer containing the 0-RTT pkt
-    ev_tstamp t;      ///< Insertion time
-};
-
-
-extern splay_head(ooo_0rtt_by_cid, ooo_0rtt) ooo_0rtt_by_cid;
-
-
-static inline int __attribute__((always_inline, nonnull))
-ooo_0rtt_by_cid_cmp(const struct ooo_0rtt * const a,
-                    const struct ooo_0rtt * const b)
-{
-    return cid_cmp(&a->cid, &b->cid);
-}
-
-
-SPLAY_PROTOTYPE(ooo_0rtt_by_cid, ooo_0rtt, node, ooo_0rtt_by_cid_cmp)
-
-
-static inline __attribute__((always_inline, nonnull)) const char *
-conn_type(const struct q_conn * const c)
-{
-    return c->is_clnt ? "clnt" : "serv";
-}
-
-
-static inline __attribute__((always_inline, const)) bool
-is_force_neg_vers(const uint32_t vers)
-{
-    return (vers & 0x0f0f0f0f) == 0x0a0a0a0a;
-}
-
-
-static inline __attribute__((always_inline, const)) bool
-is_rsvd_vers(const uint32_t vers)
-{
-    return (vers & 0xffff0000) == 0x00000000;
-}
-
-
-static inline __attribute__((always_inline, const)) bool
-is_zero(const ev_tstamp t)
-{
-    return fpclassify(t) == FP_ZERO;
-}
-
-
-static inline __attribute__((always_inline, const)) bool
-is_inf(const ev_tstamp t)
-{
-    return fpclassify(t) == FP_INFINITE;
-}
-
 
 #define cid2str(i)                                                             \
     __extension__({                                                            \
@@ -424,3 +298,132 @@ extern void __attribute__((nonnull)) rx_pkts(struct w_iov_sq * const x,
                                              struct q_conn_sl * const crx,
                                              const struct w_sock * const ws);
 #endif
+
+static inline struct pn_space * __attribute__((always_inline, nonnull))
+pn_for_epoch(struct q_conn * const c, const epoch_t e)
+{
+    switch (e) {
+    case ep_init:
+        return &c->pn_init.pn;
+    case ep_0rtt:
+        return &c->pn_data.pn;
+    case ep_hshk:
+        return &c->pn_hshk.pn;
+    case ep_data:
+        return &c->pn_data.pn;
+    }
+}
+
+
+static inline epoch_t __attribute__((always_inline, nonnull))
+epoch_in(const struct q_conn * const c)
+{
+    const size_t epoch = ptls_get_read_epoch(c->tls.t);
+    switch (epoch) {
+    case 0:
+        return ep_init;
+    case 1:
+        return ep_0rtt;
+    case 2:
+        return ep_hshk;
+    case 3:
+        return ep_data;
+    default:
+        die("unhandled epoch %u", epoch);
+    }
+}
+
+
+static inline bool __attribute__((nonnull, always_inline))
+conn_needs_ctrl(const struct q_conn * const c)
+{
+    return epoch_in(c) == ep_data &&
+           (c->tx_max_data || c->tx_max_sid_bidi || c->tx_path_resp ||
+            c->tx_path_chlg || c->tx_ncid || c->tx_retire_cid);
+}
+
+
+static inline int __attribute__((always_inline, nonnull))
+cid_cmp(const struct cid * const a, const struct cid * const b)
+{
+    warn(ERR, "cmp %s len %u and %s len %u", cid2str(a), a->len, cid2str(b),
+         b->len);
+    ensure(a->len && b->len, "len 0");
+    // compare len and id
+    return memcmp(&a->len, &b->len, MIN(a->len, b->len) + sizeof(a->len));
+}
+
+
+static inline int __attribute__((always_inline, nonnull))
+conns_by_id_cmp(const struct cid_map * const a, const struct cid_map * const b)
+{
+    return cid_cmp(&a->cid, &b->cid);
+}
+
+
+extern int __attribute__((nonnull))
+conns_by_ipnp_cmp(const struct q_conn * const a, const struct q_conn * const b);
+
+
+SPLAY_PROTOTYPE(conns_by_ipnp, q_conn, node_ipnp, conns_by_ipnp_cmp)
+SPLAY_PROTOTYPE(conns_by_id, cid_map, node, conns_by_id_cmp)
+SPLAY_PROTOTYPE(cids_by_seq, cid, node_seq, cids_by_seq_cmp)
+SPLAY_PROTOTYPE(cids_by_id, cid, node_id, cid_cmp)
+
+
+struct ooo_0rtt {
+    splay_entry(ooo_0rtt) node;
+    struct cid cid;   ///< CID of 0-RTT pkt
+    struct w_iov * v; ///< the buffer containing the 0-RTT pkt
+    ev_tstamp t;      ///< Insertion time
+};
+
+
+extern splay_head(ooo_0rtt_by_cid, ooo_0rtt) ooo_0rtt_by_cid;
+
+
+static inline int __attribute__((always_inline, nonnull))
+ooo_0rtt_by_cid_cmp(const struct ooo_0rtt * const a,
+                    const struct ooo_0rtt * const b)
+{
+    return cid_cmp(&a->cid, &b->cid);
+}
+
+
+SPLAY_PROTOTYPE(ooo_0rtt_by_cid, ooo_0rtt, node, ooo_0rtt_by_cid_cmp)
+
+
+static inline __attribute__((always_inline, nonnull)) const char *
+conn_type(const struct q_conn * const c)
+{
+    return c->is_clnt ? "clnt" : "serv";
+}
+
+
+static inline __attribute__((always_inline, const)) bool
+is_force_neg_vers(const uint32_t vers)
+{
+    return (vers & 0x0f0f0f0f) == 0x0a0a0a0a;
+}
+
+
+static inline __attribute__((always_inline, const)) bool
+is_rsvd_vers(const uint32_t vers)
+{
+    return (vers & 0xffff0000) == 0x00000000;
+}
+
+
+static inline __attribute__((always_inline, const)) bool
+is_zero(const ev_tstamp t)
+{
+    return fpclassify(t) == FP_ZERO;
+}
+
+
+static inline __attribute__((always_inline, const)) bool
+is_inf(const ev_tstamp t)
+{
+    return fpclassify(t) == FP_INFINITE;
+}
+
