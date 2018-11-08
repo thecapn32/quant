@@ -818,10 +818,12 @@ dec_retire_cid_frame(struct q_conn * const c,
     if (unlikely(scid == 0))
         warn(WRN, "could not find cid seq %" PRIu64 ", ignoring", which.seq);
     else {
+        warn(ERR, "found %s, cur %s", cid2str(scid), cid2str(c->scid));
         c->scid = splay_next(cids_by_seq, &c->scids_by_seq, scid);
         if (unlikely(c->scid == 0))
             err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_RTIR_CID,
                              "no next scid");
+        warn(ERR, "next %s", cid2str(c->scid));
         free_scid(c, scid);
     }
 
