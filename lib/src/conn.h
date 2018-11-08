@@ -347,8 +347,8 @@ static inline int __attribute__((always_inline, nonnull))
 cid_cmp(const struct cid * const a, const struct cid * const b)
 {
     const int r = memcmp(&a->len, &b->len, MIN(a->len, b->len) + sizeof(a->len));
-    warn(ERR, "%d = cmp %s len %u and %s len %u", r, cid2str(a), a->len, cid2str(b),
-         b->len);
+    // warn(ERR, "%d = cmp %s len %u and %s len %u", r, cid2str(a), a->len, cid2str(b),
+    //      b->len);
     ensure(a->len && b->len, "len 0");
     // compare len and id
     return r;

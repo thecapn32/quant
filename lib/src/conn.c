@@ -1324,7 +1324,7 @@ void free_scid(struct q_conn * const c, struct cid * const id)
     ensure(splay_remove(cids_by_seq, &c->scids_by_seq, id), "node removed");
 
     splay_foreach (scid, cids_by_id, &c->scids_by_id)
-        warn(ERR, "before %s", cid2str(scid));
+        warn(ERR, "middle %s", cid2str(scid));
 
     ensure(splay_remove(cids_by_id, &c->scids_by_id, id), "node removed");
     const struct cid_map which = {.cid = *id};
