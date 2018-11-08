@@ -243,9 +243,9 @@ rtx_pkt(struct q_stream * const s, struct w_iov * const v)
     sl_insert_head(&meta(r).rtx, &meta(v), rtx_next);
 
     // we reinsert meta(v) with its new pkt nr in on_pkt_sent()
-    ensure(splay_remove(pm_by_nr, &meta(v).pn->sent_pkts, &meta(v)),
-           "node removed");
-    splay_insert(pm_by_nr, &meta(v).pn->sent_pkts, &meta(r));
+    ensure(splay_remove(pm_by_nr, &meta(v).pn->sent_pkts, &meta(v)), "removed");
+    ensure(splay_insert(pm_by_nr, &meta(v).pn->sent_pkts, &meta(r)) == 0,
+           "inserted");
 
     // this is not in the recovery draft, but seems kinda obvious
     meta(v).is_lost = true;
@@ -513,9 +513,9 @@ void update_act_scid(struct q_conn * const c, const struct cid * const id)
          conn_type(c), cid2str(c->scid));
     const struct cid_map which = {.cid = *c->scid};
     struct cid_map * cm = splay_find(conns_by_id, &conns_by_id, &which);
-    ensure(splay_remove(conns_by_id, &conns_by_id, cm), "node removed");
+    ensure(splay_remove(conns_by_id, &conns_by_id, cm), "removed");
     cid_cpy(&cm->cid, id);
-    splay_insert(conns_by_id, &conns_by_id, cm);
+    ensure(splay_insert(conns_by_id, &conns_by_id, cm) == 0, "inserted");
 }
 
 
@@ -530,11 +530,13 @@ void add_scid(struct q_conn * const c, const struct cid * const id)
     ensure(cm, "could not calloc");
     cm->c = c;
     cid_cpy(&cm->cid, id);
-    splay_insert(cids_by_seq, &c->scids_by_seq, &cm->cid);
-    splay_insert(cids_by_id, &c->scids_by_id, &cm->cid);
+    ensure(splay_insert(cids_by_seq, &c->scids_by_seq, &cm->cid) == 0,
+           "inserted");
+    ensure(splay_insert(cids_by_id, &c->scids_by_id, &cm->cid) == 0,
+           "inserted");
     if (c->scid == 0)
         c->scid = &cm->cid;
-    splay_insert(conns_by_id, &conns_by_id, cm);
+    ensure(splay_insert(conns_by_id, &conns_by_id, cm) == 0, "inserted");
 
     splay_foreach (scid, cids_by_id, &c->scids_by_id)
         warn(ERR, "%s", cid2str(scid));
@@ -550,7 +552,8 @@ void add_dcid(struct q_conn * const c, const struct cid * const id)
         dcid = calloc(1, sizeof(*dcid));
         ensure(dcid, "could not calloc");
         cid_cpy(dcid, id);
-        splay_insert(cids_by_seq, &c->dcids_by_seq, dcid);
+        ensure(splay_insert(cids_by_seq, &c->dcids_by_seq, dcid) == 0,
+               "inserted");
         if (c->dcid == 0)
             c->dcid = dcid;
     } else {
@@ -567,9 +570,9 @@ void add_dcid(struct q_conn * const c, const struct cid * const id)
 static void __attribute__((nonnull))
 update_ipnp(struct q_conn * const c, const struct sockaddr_in * const peer)
 {
-    ensure(splay_remove(conns_by_ipnp, &conns_by_ipnp, c), "node removed");
+    ensure(splay_remove(conns_by_ipnp, &conns_by_ipnp, c), "removed");
     c->peer = *peer;
-    splay_insert(conns_by_ipnp, &conns_by_ipnp, c);
+    ensure(splay_insert(conns_by_ipnp, &conns_by_ipnp, c) == 0, "inserted");
 }
 
 
@@ -710,7 +713,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             warn(INF, "have reordered 0-RTT pkt (t=%f sec) for %s conn %s",
                  ev_now(loop) - zo->t, conn_type(c), cid2str(c->scid));
             ensure(splay_remove(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo),
-                   "node removed");
+                   "removed");
             sq_insert_head(x, zo->v, next);
             free(zo);
         }
@@ -988,7 +991,8 @@ rx_pkts(struct w_iov_sq * const x,
                 cid_cpy(&zo->cid, &meta(v).hdr.dcid);
                 zo->v = v;
                 zo->t = ev_now(loop);
-                splay_insert(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo);
+                ensure(splay_insert(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo) == 0,
+                       "inserted");
                 log_pkt("RX", v, &odcid, tok, tok_len); // NOLINT
                 warn(INF, "caching 0-RTT pkt for unknown conn %s",
                      cid2str(&meta(v).hdr.dcid));
@@ -1286,7 +1290,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->sport = w_get_sport(c->sock);
 
     // init scid and add connection to global data structures
-    splay_insert(conns_by_ipnp, &conns_by_ipnp, c);
+    ensure(splay_insert(conns_by_ipnp, &conns_by_ipnp, c) == 0, "inserted");
     splay_init(&c->scids_by_seq);
     splay_init(&c->scids_by_id);
     struct cid nscid = {0};
@@ -1323,14 +1327,14 @@ void free_scid(struct q_conn * const c, struct cid * const id)
 
     warn(ERR, "free scid seq %s", cid2str(id));
 
-    ensure(splay_remove(cids_by_seq, &c->scids_by_seq, id), "node removed");
+    ensure(splay_remove(cids_by_seq, &c->scids_by_seq, id), "removed");
 
     splay_foreach (scid, cids_by_id, &c->scids_by_id)
         warn(ERR, "middle_by_id %s", cid2str(scid));
     splay_foreach (scid, cids_by_seq, &c->scids_by_seq)
         warn(ERR, "middle_by_seq %s", cid2str(scid));
 
-    ensure(splay_remove(cids_by_id, &c->scids_by_id, id), "node removed");
+    ensure(splay_remove(cids_by_id, &c->scids_by_id, id), "removed");
 
     splay_foreach (scid, cids_by_id, &c->scids_by_id)
         warn(ERR, "after_by_id %s", cid2str(scid));
@@ -1339,15 +1343,14 @@ void free_scid(struct q_conn * const c, struct cid * const id)
 
     const struct cid_map which = {.cid = *id};
     struct cid_map * const cm = splay_find(conns_by_id, &conns_by_id, &which);
-    ensure(splay_remove(conns_by_id, &conns_by_id, cm), "node removed");
+    ensure(splay_remove(conns_by_id, &conns_by_id, cm), "removed");
     free(cm);
-
 }
 
 
 void free_dcid(struct q_conn * const c, struct cid * const id)
 {
-    ensure(splay_remove(cids_by_seq, &c->dcids_by_seq, id), "node removed");
+    ensure(splay_remove(cids_by_seq, &c->dcids_by_seq, id), "removed");
     free(id);
 }
 
@@ -1385,7 +1388,7 @@ void free_conn(struct q_conn * const c)
     free(c->peer_name);
 
     // remove connection from global lists and free CID splays
-    ensure(splay_remove(conns_by_ipnp, &conns_by_ipnp, c), "node removed");
+    ensure(splay_remove(conns_by_ipnp, &conns_by_ipnp, c), "removed");
 
     while (!splay_empty(&c->scids_by_seq)) {
         struct cid * const id = splay_min(cids_by_seq, &c->scids_by_seq);

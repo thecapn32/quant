@@ -808,7 +808,7 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
         ensure(t, "calloc");
         t->sni = s;
         t->alpn = a;
-        splay_insert(tickets_by_peer, &tickets, t);
+        ensure(splay_insert(tickets_by_peer, &tickets, t) == 0, "inserted");
     } else {
         // update current ticket
         free(t->ticket);
@@ -1055,7 +1055,7 @@ static void read_tickets()
         ensure(t->ticket, "calloc");
         ensure(fread(t->ticket, sizeof(*t->ticket), len, fp), "fread");
 
-        splay_insert(tickets_by_peer, &tickets, t);
+        ensure(splay_insert(tickets_by_peer, &tickets, t) == 0, "inserted");
         warn(INF, "got 0-RTT ticket %s %s", t->sni, t->alpn);
     }
 
@@ -1234,7 +1234,7 @@ void free_tls_ctx(void)
     struct tls_ticket *t, *tmp;
     for (t = splay_min(tickets_by_peer, &tickets); t != 0; t = tmp) {
         tmp = splay_next(tickets_by_peer, &tickets, t);
-        ensure(splay_remove(tickets_by_peer, &tickets, t), "node removed");
+        ensure(splay_remove(tickets_by_peer, &tickets, t), "removed");
         free(t->sni);
         free(t->alpn);
         free(t->ticket);

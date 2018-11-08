@@ -221,7 +221,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
                 warn(WRN, "drop stale frame [%u..%u]", p->stream_off,
                      p->stream_off + p->stream_data_len);
                 ensure(splay_remove(ooo_by_off, &meta(v).stream->in_ooo, p),
-                       "node removed");
+                       "removed");
                 p = nxt;
                 continue;
             }
@@ -236,7 +236,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
             sq_insert_tail(&meta(v).stream->in, w_iov(c->w, pm_idx(p)), next);
             meta(v).stream->in_data_off += p->stream_data_len;
             ensure(splay_remove(ooo_by_off, &meta(v).stream->in_ooo, p),
-                   "node removed");
+                   "removed");
             p = nxt;
         }
 
@@ -292,7 +292,8 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
 
     // this ooo data doesn't overlap with anything
     track_bytes_in(meta(v).stream, meta(v).stream_data_len);
-    splay_insert(ooo_by_off, &meta(v).stream->in_ooo, &meta(v));
+    ensure(splay_insert(ooo_by_off, &meta(v).stream->in_ooo, &meta(v)) == 0,
+           "inserted");
 
 done:
     log_stream_or_crypto_frame(false, v, true, kind);

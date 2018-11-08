@@ -92,8 +92,6 @@ void apply_stream_limits(struct q_stream * const s)
 
 struct q_stream * new_stream(struct q_conn * const c, const int64_t id)
 {
-    ensure(get_stream(c, id) == 0, "stream already %u exists", id);
-
     struct q_stream * const s = calloc(1, sizeof(*s));
     ensure(s, "could not calloc q_stream");
     sq_init(&s->out);
@@ -101,7 +99,7 @@ struct q_stream * new_stream(struct q_conn * const c, const int64_t id)
     s->c = c;
     s->id = id;
     strm_to_state(s, strm_open);
-    splay_insert(streams_by_id, &c->streams_by_id, s);
+    ensure(splay_insert(streams_by_id, &c->streams_by_id, s) == 0, "inserted");
 
     if (is_uni(id))
         c->lg_sid_uni = MAX(id, c->lg_sid_uni);
@@ -136,12 +134,11 @@ void free_stream(struct q_stream * const s)
         diet_insert(&s->c->closed_streams, (uint64_t)s->id, 0);
     }
 
-    ensure(splay_remove(streams_by_id, &s->c->streams_by_id, s),
-           "node removed");
+    ensure(splay_remove(streams_by_id, &s->c->streams_by_id, s), "removed");
     while (!splay_empty(&s->in_ooo)) {
         struct pkt_meta * const p = splay_min(ooo_by_off, &s->in_ooo);
         warn(ERR, "idx %u", pm_idx(p));
-        ensure(splay_remove(ooo_by_off, &s->in_ooo, p), "node removed");
+        ensure(splay_remove(ooo_by_off, &s->in_ooo, p), "removed");
         free_iov(w_iov(s->c->w, pm_idx(p)));
     }
     q_free(&s->out);

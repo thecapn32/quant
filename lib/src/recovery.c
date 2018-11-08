@@ -279,7 +279,7 @@ void on_pkt_sent(struct q_stream * const s, struct w_iov * const v)
 
     meta(v).tx_t = ev_now(loop);
     struct pn_space * const pn = pn_for_epoch(s->c, strm_epoch(s));
-    splay_insert(pm_by_nr, &pn->sent_pkts, &meta(v));
+    ensure(splay_insert(pm_by_nr, &pn->sent_pkts, &meta(v)) == 0, "inserted");
 
     if (likely(s->c->state != conn_idle) &&
         is_ack_only(&meta(v).frames) == false) {
@@ -428,8 +428,7 @@ void on_pkt_acked(struct q_conn * const c,
 
     // sent_packets.remove(acked_packet.packet_number)
     diet_insert(&pn->acked, meta(acked_pkt).hdr.nr, ev_now(loop));
-    ensure(splay_remove(pm_by_nr, &pn->sent_pkts, &meta(acked_pkt)),
-           "node removed");
+    ensure(splay_remove(pm_by_nr, &pn->sent_pkts, &meta(acked_pkt)), "removed");
     meta(acked_pkt).is_acked = true;
 
     // rest of function is not from pseudo code
