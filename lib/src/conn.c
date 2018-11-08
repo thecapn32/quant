@@ -172,7 +172,12 @@ switch_scid(struct q_conn * const c, const struct cid * const id)
         warn(ERR, "%s", cid2str(scid));
 
     scid = splay_find(cids_by_id, &c->scids_by_id, id);
-    if (unlikely(scid == 0 || scid->seq <= c->scid->seq))
+    if (unlikely(scid == 0)) // || scid->seq <= c->scid->seq))
+        return false;
+
+    warn(CRT, "%u vs %u", scid->seq, c->scid->seq);
+
+    if (scid->seq <= c->scid->seq)
         return false;
 
     warn(NTE, "migration to scid %s for %s conn (was %s)", cid2str(scid),
