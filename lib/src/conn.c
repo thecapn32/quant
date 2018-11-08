@@ -1317,23 +1317,31 @@ void free_scid(struct q_conn * const c, struct cid * const id)
 {
     struct cid * scid;
     splay_foreach (scid, cids_by_id, &c->scids_by_id)
-        warn(ERR, "before %s", cid2str(scid));
+        warn(ERR, "before_by_id %s", cid2str(scid));
+    splay_foreach (scid, cids_by_seq, &c->scids_by_seq)
+        warn(ERR, "before_by_seq %s", cid2str(scid));
 
     warn(ERR, "free scid seq %s", cid2str(id));
 
     ensure(splay_remove(cids_by_seq, &c->scids_by_seq, id), "node removed");
 
     splay_foreach (scid, cids_by_id, &c->scids_by_id)
-        warn(ERR, "middle %s", cid2str(scid));
+        warn(ERR, "middle_by_id %s", cid2str(scid));
+    splay_foreach (scid, cids_by_seq, &c->scids_by_seq)
+        warn(ERR, "middle_by_seq %s", cid2str(scid));
 
     ensure(splay_remove(cids_by_id, &c->scids_by_id, id), "node removed");
+
+    splay_foreach (scid, cids_by_id, &c->scids_by_id)
+        warn(ERR, "after_by_id %s", cid2str(scid));
+    splay_foreach (scid, cids_by_seq, &c->scids_by_seq)
+        warn(ERR, "after_by_seq %s", cid2str(scid));
+
     const struct cid_map which = {.cid = *id};
     struct cid_map * const cm = splay_find(conns_by_id, &conns_by_id, &which);
     ensure(splay_remove(conns_by_id, &conns_by_id, cm), "node removed");
     free(cm);
 
-    splay_foreach (scid, cids_by_id, &c->scids_by_id)
-        warn(ERR, "after %s", cid2str(scid));
 }
 
 
