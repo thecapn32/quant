@@ -584,12 +584,19 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
     }
 
     // if we did a RETRY, check that we got orig_cid and it matches
-    if (c->is_clnt && c->tok_len &&
-        unlikely(cid_cmp(&c->tp_out.orig_cid, &c->odcid))) {
-        err_close(c, ERR_TRANSPORT_PARAMETER, FRAM_TYPE_CRPT,
-                  "cid mismatch %s != %s", cid2str(&c->tp_out.orig_cid),
-                  cid2str(&c->odcid));
-        return 1;
+    if (c->is_clnt && c->tok_len) {
+        if (c->tp_out.orig_cid.len == 0) {
+            err_close(c, ERR_TRANSPORT_PARAMETER, FRAM_TYPE_CRPT,
+                      "no original_connection_id tp received");
+            return 1;
+        }
+
+        if (unlikely(cid_cmp(&c->tp_out.orig_cid, &c->odcid))) {
+            err_close(c, ERR_TRANSPORT_PARAMETER, FRAM_TYPE_CRPT,
+                      "cid mismatch %s != %s", cid2str(&c->tp_out.orig_cid),
+                      cid2str(&c->odcid));
+            return 1;
+        }
     }
 
     // apply these parameter to all current non-crypto streams
