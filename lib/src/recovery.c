@@ -465,9 +465,8 @@ void on_pkt_acked(struct q_conn * const c,
     }
 
     // if this ACK is for a pkt that was RTX'ed, update the record
-    struct w_iov * orig = acked_pkt;
+    struct w_iov * orig = 0;
     if (meta(acked_pkt).is_rtx) {
-        meta(acked_pkt).is_acked = true;
         struct pkt_meta * const r = sl_first(&meta(acked_pkt).rtx);
         ensure(sl_next(r, rtx_next) == 0, "rtx chain corrupt");
         warn(DBG, FMT_PNR_OUT " was RTX'ed as " FMT_PNR_OUT,
@@ -475,8 +474,8 @@ void on_pkt_acked(struct q_conn * const c,
         orig = w_iov(c->w, pm_idx(r));
     }
 
-    struct q_stream * const s = meta(orig).stream;
-    if (s && meta(orig).is_acked == false) {
+    struct q_stream * const s = meta(acked_pkt).stream;
+    if (s && (orig == 0 || meta(orig).is_acked == false)) {
         s->out_ack_cnt++;
         if (out_fully_acked(s)) {
             warn(DBG, "stream " FMT_SID " ACK cnt %u, len %u %s", s->id,
@@ -490,20 +489,13 @@ void on_pkt_acked(struct q_conn * const c,
         }
     }
 
-    if (orig != acked_pkt) {
-        diet_insert(&pn->acked, meta(orig).hdr.nr, ev_now(loop));
-        ensure(splay_remove(pm_by_nr, &pn->sent_pkts, &meta(orig)),
-               "node removed");
-        meta(orig).is_acked = true;
-    }
-
     // if this ACKs its stream's out_una, move that forward
-    if (meta(orig).stream && meta(orig).stream->out_una == orig) {
+    if (s && s->out_una == orig) {
         struct w_iov * new_out_una = orig;
         sq_foreach_from (new_out_una, &s->out, next)
             if (meta(new_out_una).is_acked == false)
                 break;
-        meta(orig).stream->out_una = new_out_una;
+        s->out_una = new_out_una;
     }
 
     if (s) {
@@ -518,8 +510,8 @@ void on_pkt_acked(struct q_conn * const c,
     if (bit_isset(NUM_FRAM_TYPES, FRAM_TYPE_ACK, &meta(acked_pkt).frames))
         track_acked_pkts(pn, acked_pkt);
 
-    if (!is_rtxable(&meta(orig)))
-        free_iov(orig);
+    if (!is_rtxable(&meta(acked_pkt)))
+        free_iov(acked_pkt);
 }
 
 
