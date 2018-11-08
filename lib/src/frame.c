@@ -816,16 +816,19 @@ dec_retire_cid_frame(struct q_conn * const c,
 
     struct cid * const scid = splay_find(cids_by_seq, &c->scids_by_seq, &which);
     if (unlikely(scid == 0))
-        warn(WRN, "could not find cid seq %" PRIu64 ", ignoring", which.seq);
-    else {
-        warn(ERR, "found %s, cur %s", cid2str(scid), cid2str(c->scid));
-        c->scid = splay_next(cids_by_seq, &c->scids_by_seq, scid);
-        if (unlikely(c->scid == 0))
+        err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_RTIR_CID,
+                         "no cid seq %" PRIu64, which.seq);
+    else if (c->scid->seq == scid->seq) {
+        struct cid * const next_scid =
+            splay_next(cids_by_seq, &c->scids_by_seq, scid);
+        if (unlikely(next_scid == 0))
             err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_RTIR_CID,
                              "no next scid");
+        c->scid = next_scid;
         warn(ERR, "next %s", cid2str(c->scid));
-        free_scid(c, scid);
     }
+
+    free_scid(c, scid);
 
     // rx of RETIRE_CONNECTION_ID means we should send more
     c->tx_ncid = true;
