@@ -704,11 +704,7 @@ static void init_ticket_prot(void)
 
 static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
                              __attribute__((unused)),
-                             ptls_t * tls
-#ifdef NDEBUG
-                             __attribute__((unused))
-#endif
-                             ,
+                             ptls_t * tls,
                              int is_encrypt,
                              ptls_buffer_t * dst,
                              ptls_iovec_t src)
