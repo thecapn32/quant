@@ -1290,7 +1290,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->sport = w_get_sport(c->sock);
 
     // init scid and add connection to global data structures
-    ensure(splay_insert(conns_by_ipnp, &conns_by_ipnp, c) == 0, "inserted");
+    splay_insert(conns_by_ipnp, &conns_by_ipnp, c); // no guard, multiples ok
     splay_init(&c->scids_by_seq);
     splay_init(&c->scids_by_id);
     struct cid nscid = {0};
