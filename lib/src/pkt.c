@@ -377,7 +377,7 @@ bool enc_pkt(struct q_stream * const s,
         meta(v).hdr.type = c->tx_rtry ? F_LH_RTRY : F_LH_INIT;
         meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
 
-        if (c->is_clnt == false) {
+        if (c->is_clnt == false && rtx == false) {
             // this is a new connection; server picks a new random cid
             struct cid nscid = {.len = SERV_SCID_LEN};
             arc4random_buf(nscid.id, nscid.len);
