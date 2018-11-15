@@ -46,11 +46,11 @@ add_library(common
   OBJECT
     src/pkt.c src/frame.c src/quic.c src/stream.c src/conn.c src/pn.c
     src/diet.c src/util.c src/tls.c src/recovery.c src/marshall.c
-    ${CMAKE_CURRENT_BINARY_DIR}/src/config.c
 )
 add_dependencies(common warpcore ptls-core ${PTLS_OPENSSL} ptls-minicrypto)
 
-add_library(lib${PROJECT_NAME} $<TARGET_OBJECTS:common>)
+add_library(lib${PROJECT_NAME}
+            $<TARGET_OBJECTS:common> ${CMAKE_CURRENT_BINARY_DIR}/src/config.c)
 
 install(DIRECTORY include/${PROJECT_NAME}
         DESTINATION include

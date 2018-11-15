@@ -26,7 +26,7 @@ if(NOT WARP_LIB OR NOT WARP_INCLUDE)
   endif()
 
   externalproject_add(warp
-    # UPDATE_COMMAND "" # XXX do not commit with this being empty
+    UPDATE_COMMAND "" # XXX do not commit with this being empty
     GIT_REPOSITORY https://github.com/NTAP/warpcore.git
     GIT_SHALLOW 1
     CMAKE_ARGS
@@ -55,9 +55,12 @@ set_target_properties(warpcore PROPERTIES
   INTERFACE_LINK_LIBRARIES dl
 )
 
+if(CMAKE_GENERATOR STREQUAL Xcode)
+  set(BUILD_DIR ${CMAKE_BUILD_TYPE})
+endif()
 
 externalproject_add(picotls
-  # UPDATE_COMMAND "" # XXX do not commit with this being empty
+  UPDATE_COMMAND "" # XXX do not commit with this being empty
   GIT_REPOSITORY https://github.com/h2o/picotls.git
   # GIT_SHALLOW 1 # does not work together with GIT_TAG
   GIT_TAG 4c6948d114f57f1af76e77147bf59a4137083000
@@ -69,10 +72,10 @@ externalproject_add(picotls
   INSTALL_COMMAND
     cp -a ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls/include
       ${CMAKE_CURRENT_BINARY_DIR} &&
-    cp -a ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/${LIBRARY_PREFIX}picotls-minicrypto${LIBRARY_SUFFIX}
-      ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/${LIBRARY_PREFIX}picotls-openssl${LIBRARY_SUFFIX}
-      ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/${LIBRARY_PREFIX}picotls-core${LIBRARY_SUFFIX}
-      ${CMAKE_CURRENT_BINARY_DIR}/lib || true
+    cp -a ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/${BUILD_DIR}/${LIBRARY_PREFIX}picotls-minicrypto${LIBRARY_SUFFIX}
+      ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/${BUILD_DIR}/${LIBRARY_PREFIX}picotls-openssl${LIBRARY_SUFFIX}
+      ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/${BUILD_DIR}/${LIBRARY_PREFIX}picotls-core${LIBRARY_SUFFIX}
+      ${CMAKE_CURRENT_BINARY_DIR}/lib
   BUILD_BYPRODUCTS
     ${CMAKE_CURRENT_BINARY_DIR}/lib/${LIBRARY_PREFIX}picotls-minicrypto${LIBRARY_SUFFIX}
     ${CMAKE_CURRENT_BINARY_DIR}/lib/${LIBRARY_PREFIX}picotls-openssl${LIBRARY_SUFFIX}
