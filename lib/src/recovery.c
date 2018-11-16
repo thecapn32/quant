@@ -78,7 +78,7 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
     if (c->rec.in_flight == 0) {
         ev_timer_stop(loop, &c->rec.ld_alarm);
 #ifndef FUZZING
-        warn(DBG, "no RTX-able pkts outstanding, stopping ld_alarm");
+        // warn(DBG, "no RTX-able pkts outstanding, stopping ld_alarm");
 #endif
         return;
     }
@@ -89,14 +89,14 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
             2 * (is_zero(c->rec.srtt) ? kDefaultInitialRtt : c->rec.srtt);
         to = MAX(to, kMinTLPTimeout) * (1 << c->rec.hshake_cnt);
         c->rec.ld_alarm.repeat = ev_now(loop) - c->rec.last_sent_hshk_t + to;
-        warn(DBG, "handshake RTX alarm in %f sec on %s conn %s",
-             c->rec.ld_alarm.repeat, conn_type(c), cid2str(c->scid));
+        // warn(DBG, "handshake RTX alarm in %f sec on %s conn %s",
+        //      c->rec.ld_alarm.repeat, conn_type(c), cid2str(c->scid));
 
     } else if (!is_zero(c->rec.loss_t)) {
         c->rec.ld_alarm.repeat = c->rec.loss_t - c->rec.last_sent_rtxable_t;
-        warn(DBG, "%f %f", c->rec.loss_t - c->rec.last_sent_rtxable_t);
-        warn(DBG, "early RTX or time alarm in %f sec on %s conn %s",
-             c->rec.ld_alarm.repeat, conn_type(c), cid2str(c->scid));
+        // warn(DBG, "%f %f", c->rec.loss_t - c->rec.last_sent_rtxable_t);
+        // warn(DBG, "early RTX or time alarm in %f sec on %s conn %s",
+        //      c->rec.ld_alarm.repeat, conn_type(c), cid2str(c->scid));
 
     } else {
         ev_tstamp to = c->rec.srtt + (4 * c->rec.rttvar) +
@@ -108,11 +108,11 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
                 MAX(1.5 * c->rec.srtt + (c->tp_out.max_ack_del / 1000.0),
                     kMinTLPTimeout);
             c->rec.ld_alarm.repeat = MIN(tlp_to, to);
-            warn(DBG, "TLP alarm in %f sec on %s conn %s",
-                 c->rec.ld_alarm.repeat, conn_type(c), cid2str(c->scid));
-        } else
-            warn(DBG, "RTO alarm in %f sec on %s conn %s",
-                 c->rec.ld_alarm.repeat, conn_type(c), cid2str(c->scid));
+            // warn(DBG, "TLP alarm in %f sec on %s conn %s",
+            //      c->rec.ld_alarm.repeat, conn_type(c), cid2str(c->scid));
+        } // else
+          // warn(DBG, "RTO alarm in %f sec on %s conn %s",
+          //      c->rec.ld_alarm.repeat, conn_type(c), cid2str(c->scid));
     }
 
     ensure(c->rec.ld_alarm.repeat >= 0, "repeat %f", c->rec.ld_alarm.repeat);

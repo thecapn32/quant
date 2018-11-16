@@ -269,9 +269,9 @@ static bool __attribute__((const))
 have_space_for(const uint8_t type, const uint16_t pos, const uint16_t limit)
 {
     const bool have_space = limit == 0 || pos + max_frame_len(type) < limit;
-    if (have_space == false)
-        warn(DBG, "missing %u bytes to encode 0x%02x frame",
-             pos + max_frame_len(type) - limit, type);
+    // if (have_space == false)
+    //     warn(DBG, "missing %u bytes to encode 0x%02x frame",
+    //          pos + max_frame_len(type) - limit, type);
     return have_space;
 }
 
