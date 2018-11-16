@@ -564,21 +564,20 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
         struct w_iov * const iv = sq_first(&s->in);
         sq_remove_head(&s->in, next);
         meta(iv).stream = 0;
-
         // and process it
-        const int ret = tls_io(s, iv);
-        if (ret == 0) {
-            tx_crypto(c, c->tls.epoch_out);
-            if (c->state == conn_idle || c->state == conn_opng) {
-                conn_to_state(c, conn_estb);
-                if (c->is_clnt)
-                    maybe_api_return(q_connect, c, 0);
-                else {
-                    // TODO: find a better way to send NEW_TOKEN
-                    make_rtry_tok(c);
-                    sl_insert_head(&accept_queue, c, node_aq);
-                    maybe_api_return(q_accept, 0, 0);
-                }
+        if (tls_io(s, iv))
+            continue;
+
+        tx_crypto(c, c->tls.epoch_out);
+        if (c->state == conn_idle || c->state == conn_opng) {
+            conn_to_state(c, conn_estb);
+            if (c->is_clnt)
+                maybe_api_return(q_connect, c, 0);
+            else {
+                // TODO: find a better way to send NEW_TOKEN
+                make_rtry_tok(c);
+                sl_insert_head(&accept_queue, c, node_aq);
+                maybe_api_return(q_accept, 0, 0);
             }
         }
     }

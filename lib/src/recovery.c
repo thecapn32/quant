@@ -199,9 +199,10 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
     if (hshk_pkts_outstanding(c)) {
         warn(DBG, "handshake RTX #%u on %s conn %s", c->rec.hshake_cnt + 1,
              conn_type(c), cid2str(c->scid));
-        detect_lost_pkts(c, pn);
-        tx(c, 0);
+        detect_lost_pkts(c, pn_for_epoch(c, ep_init));
+        detect_lost_pkts(c, pn_for_epoch(c, ep_hshk));
         c->rec.hshake_cnt++;
+        tx(c, 0);
 
     } else if (!is_zero(c->rec.loss_t)) {
         warn(DBG, "early RTX or time loss detection alarm on %s conn %s",
@@ -211,16 +212,16 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
     } else if (c->rec.tlp_cnt < kMaxTLPs) {
         warn(DBG, "TLP alarm #%u on %s conn %s", c->rec.tlp_cnt, conn_type(c),
              cid2str(c->scid));
-        tx(c, 1);
         c->rec.tlp_cnt++;
+        tx(c, 1);
 
     } else {
         warn(DBG, "RTO alarm #%u on %s conn %s", c->rec.rto_cnt, conn_type(c),
              cid2str(c->scid));
         if (c->rec.rto_cnt == 0)
             pn->lg_sent_before_rto = pn->lg_sent;
-        tx(c, 2);
         c->rec.rto_cnt++;
+        tx(c, 2);
     }
 
     // XXX this is called in on_pkt_sent(): set_ld_alarm(c);
@@ -462,17 +463,12 @@ void on_pkt_acked(struct q_conn * const c,
     }
 
     struct q_stream * const s = meta(acked_pkt).stream;
-    if (s && (orig == 0 || meta(orig).is_acked == false)) {
+    if (s && (orig == 0 || meta(orig).is_acked == false) &&
+        s->out_una == (orig ? orig : acked_pkt)) {
         // if this ACKs its stream's out_una, move that forward
-        if (s->out_una == (orig ? orig : acked_pkt)) {
-            struct w_iov * new_out_una = s->out_una;
-            sq_foreach_from (new_out_una, &s->out, next)
-                if (meta(new_out_una).is_acked == false)
-                    break;
-            s->out_una = new_out_una;
-            warn(ERR, FMT_SID " out_una " FMT_PNR_OUT, s->id,
-                 s->out_una ? meta(s->out_una).hdr.nr : UINT64_MAX);
-        }
+        sq_foreach_from (s->out_una, &s->out, next)
+            if (meta(s->out_una).is_acked == false)
+                break;
 
         if (s->out_una == 0) {
             warn(DBG, "stream " FMT_SID " fully acked", s->id);

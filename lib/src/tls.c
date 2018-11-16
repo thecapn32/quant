@@ -980,27 +980,27 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
         return ret;
     }
 
-    if (tls_io.off) {
-        // enqueue for TX
-        for (epoch_t e = ep_init; e <= ep_data; e++) {
-            const size_t out_len = epoch_off[e + 1] - epoch_off[e];
-            if (out_len == 0)
-                continue;
-            struct q_stream * const se = get_stream(c, crpt_strm_id(e));
-            // warn(DBG, "epoch %u: off %u len %u", e, epoch_off[e], out_len);
-            struct w_iov_sq o = w_iov_sq_initializer(o);
-            alloc_off(w_engine(c->sock), &o, (uint32_t)out_len, OFFSET_HSHK);
-            const uint8_t * data = tls_io.base + epoch_off[e];
-            struct w_iov * ov = 0;
-            sq_foreach (ov, &o, next) {
-                memcpy(ov->buf, data, ov->len);
-                data += ov->len;
-            }
-            concat_out(se, &o);
+    if (tls_io.off == 0)
+        return ret;
+
+    // enqueue for TX
+    for (epoch_t e = ep_init; e <= ep_data; e++) {
+        const size_t out_len = epoch_off[e + 1] - epoch_off[e];
+        if (out_len == 0)
+            continue;
+        struct q_stream * const se = get_stream(c, crpt_strm_id(e));
+        // warn(DBG, "epoch %u: off %u len %u", e, epoch_off[e], out_len);
+        struct w_iov_sq o = w_iov_sq_initializer(o);
+        alloc_off(w_engine(c->sock), &o, (uint32_t)out_len, OFFSET_HSHK);
+        const uint8_t * data = tls_io.base + epoch_off[e];
+        struct w_iov * ov = 0;
+        sq_foreach (ov, &o, next) {
+            memcpy(ov->buf, data, ov->len);
+            data += ov->len;
         }
+        concat_out(se, &o);
         c->needs_tx = true;
     }
-
     return ret;
 }
 
