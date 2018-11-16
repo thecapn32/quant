@@ -121,7 +121,7 @@ void log_stream_or_crypto_frame(const bool rtx,
 static void __attribute__((nonnull)) trim_frame(struct pkt_meta * const p)
 {
     const uint64_t diff = p->stream->in_data_off - p->stream_off;
-    warn(ERR, "diff=%" PRIu64, diff);
+    // warn(ERR, "diff=%" PRIu64, diff);
     p->stream_off += diff;
     p->stream_data_start += diff;
     p->stream_data_len -= diff;
@@ -201,7 +201,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
             meta(v).stream_off + meta(v).stream_data_len - 1) {
         kind = "seq";
 
-        if (meta(v).stream->in_data_off > meta(v).stream_off)
+        if (unlikely(meta(v).stream->in_data_off > meta(v).stream_off))
             // already-received data at the beginning of the frame, trim
             trim_frame(&meta(v));
 
@@ -232,7 +232,8 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
                 break;
 
             // left edge of p <= left edge of stream: overlap, trim & enqueue
-            trim_frame(p);
+            if (unlikely(p->stream->in_data_off > p->stream_off))
+                trim_frame(p);
             sq_insert_tail(&meta(v).stream->in, w_iov(c->w, pm_idx(p)), next);
             meta(v).stream->in_data_off += p->stream_data_len;
             ensure(splay_remove(ooo_by_off, &meta(v).stream->in_ooo, p),
