@@ -35,22 +35,28 @@ function run_test() {
                         > /dev/null
 
         local ret=ok
-        if [ "$(docker container wait "$base-client")" != 0 ] || \
-           [ "$(docker container wait "$base-server")" != 0 ]; then
-                ret=fail
-        elif [ "$(sed -n -E "s/(.*)read (.*) bytes (.*)/\\2/gp" \
-                  "$base-client.log")" -ne $size ]; then
-                ret=fail
-        fi
 
         for s in server valve client; do
                 local log="$base-$s.log"
-                if [ "$ret" = "ok" ]; then
-                        rm -f "$log"
-                else
-                        docker logs "$base-$s" > "$log" 2>&1
-                fi
+                docker logs "$base-$s" > "$log" 2>&1
         done
+
+        if [ "$(docker container wait "$base-client")" != 0 ] || \
+           [ "$(docker container wait "$base-server")" != 0 ]; then
+                ret=fail
+        else
+                local log="$base-client.log"
+                byte=$(sed -n -E "s/(.*)read (.*) bytes (.*)/\\2/gp" "$base-client.log")
+                if [ "$byte" != $size ]; then
+                        ret=fail
+                else
+                        ret=ok
+                        for s in server valve client; do
+                                local log="$base-$s.log"
+                                # rm -f "$log"
+                        done
+                fi
+        fi
 
         echo "$t ... ${col[$ret]}${ret}${norm}"
 
@@ -75,19 +81,19 @@ for t in $tests; do
         status[$ret]=$((status[$ret] + 1))
         status[all]=$((status[all] + 1))
 
-        if [ "$ret" = "fail" ]; then
-                tmux -CC \
-                    new-session "cat $base-client.log" \; \
-                    # split-window -h "cat $base-valve.log" \; \
-                    split-window -h "cat $base-server.log" \; \
-                    set remain-on-exit on
+        # if [ "$ret" = "fail" ]; then
+                # tmux -CC \
+                #     new-session "cat $base-client.log" \; \
+                #     split-window -h "cat $base-valve.log" \; \
+                #     split-window -h "cat $base-server.log" \; \
+                #     set remain-on-exit on
 
                 echo tmux -CC \
                     new-session \"cat $base-client.log\" \\\; \
-                    # split-window -h \"cat $base-valve.log\" \\\; \
+                    split-window -h \"cat $base-valve.log\" \\\; \
                     split-window -h \"cat $base-server.log\" \\\; \
                     set remain-on-exit on
-        fi
+        # fi
 done
 
 for s in ok fail; do
