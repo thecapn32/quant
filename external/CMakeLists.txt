@@ -17,10 +17,10 @@ if(NOT GIT_FOUND)
   message(FATAL_ERROR "git is required for building")
 endif()
 
-if(NOT WARP_LIB OR NOT WARP_INCLUDE)
-  # fix for https://github.com/NTAP/quant/issues/7
-  file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include)
+# fix for https://github.com/NTAP/quant/issues/7
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include)
 
+if(NOT WARP_LIB OR NOT WARP_INCLUDE)
   if(NO_SANITIZERS)
     set(NO_SANITIZERS_FLAGS "-DNO_SANITIZERS=True")
   endif()
