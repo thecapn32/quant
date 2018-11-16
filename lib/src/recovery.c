@@ -154,6 +154,7 @@ detect_lost_pkts(struct q_conn * const c, struct pn_space * const pn)
             delta > c->rec.reorder_thresh) {
             warn(WRN, "pkt " FMT_PNR_OUT " considered lost", p->hdr.nr);
             p->is_lost = true;
+            c->needs_tx = true;
 
             // OnPacketsLost:
             if (is_ack_only(&p->frames) == false) {
@@ -198,7 +199,7 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
     if (hshk_pkts_outstanding(c)) {
         warn(DBG, "handshake RTX #%u on %s conn %s", c->rec.hshake_cnt + 1,
              conn_type(c), cid2str(c->scid));
-        tx(c, true, 0);
+        tx(c, 0);
         did_tx = true;
         c->rec.hshake_cnt++;
 
@@ -211,7 +212,7 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
     } else if (c->rec.tlp_cnt < kMaxTLPs) {
         warn(DBG, "TLP alarm #%u on %s conn %s", c->rec.tlp_cnt, conn_type(c),
              cid2str(c->scid));
-        tx(c, true, 1); // XXX is this an RTX or not?
+        tx(c, 1);
         did_tx = true;
         c->rec.tlp_cnt++;
 
@@ -222,7 +223,7 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
             struct pn_space * const pn = pn_for_epoch(c, c->tls.epoch_out);
             pn->lg_sent_before_rto = pn->lg_sent;
         }
-        tx(c, true, 2); // XXX is this an RTX or not?
+        tx(c, 2);
         did_tx = true;
         c->rec.rto_cnt++;
     }
@@ -474,26 +475,25 @@ void on_pkt_acked(struct q_conn * const c,
 
     struct q_stream * const s = meta(acked_pkt).stream;
     if (s && (orig == 0 || meta(orig).is_acked == false)) {
-        s->out_ack_cnt++;
-        if (out_fully_acked(s)) {
-            warn(DBG, "stream " FMT_SID " ACK cnt %u, len %u %s", s->id,
-                 s->out_ack_cnt, sq_len(&s->out),
-                 out_fully_acked(s) ? "(fully acked)" : "");
+        // if this ACKs its stream's out_una, move that forward
+        if (s->out_una == (orig ? orig : acked_pkt)) {
+            struct w_iov * new_out_una = s->out_una;
+            sq_foreach_from (new_out_una, &s->out, next)
+                if (meta(new_out_una).is_acked == false)
+                    break;
+            s->out_una = new_out_una;
+            warn(ERR, FMT_SID " out_una " FMT_PNR_OUT, s->id,
+                 s->out_una ? meta(s->out_una).hdr.nr : UINT64_MAX);
+        }
+
+        if (s->out_una == 0) {
+            warn(DBG, "stream " FMT_SID " fully acked", s->id);
 
             // a q_write may be done
             maybe_api_return(q_write, s->c, s);
             if (s->id >= 0 && s->c->did_0rtt)
                 maybe_api_return(q_connect, s->c, 0);
         }
-    }
-
-    // if this ACKs its stream's out_una, move that forward
-    if (s && s->out_una == orig) {
-        struct w_iov * new_out_una = orig;
-        sq_foreach_from (new_out_una, &s->out, next)
-            if (meta(new_out_una).is_acked == false)
-                break;
-        s->out_una = new_out_una;
     }
 
     if (s) {

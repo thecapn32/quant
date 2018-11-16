@@ -247,11 +247,6 @@ rtx_pkt(struct q_stream * const s, struct w_iov * const v)
     ensure(splay_insert(pm_by_nr, &meta(r).pn->sent_pkts, &meta(r)) == 0,
            "inserted");
 
-    // this is not in the recovery draft, but seems kinda obvious
-    meta(v).is_lost = true;
-    s->c->rec.in_flight -= meta(v).tx_len;
-    log_cc(s->c);
-
     // warn(DBG, "RTX idx %u, cpy in idx %u", w_iov_idx(v), w_iov_idx(r));
 }
 
@@ -278,19 +273,25 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
 
 
 static void __attribute__((nonnull))
-tx_stream_data(struct q_stream * const s, const bool rtx, const uint32_t limit)
+tx_stream_data(struct q_stream * const s, const uint32_t limit)
 {
     uint32_t encoded = 0;
-    struct w_iov * v = rtx ? s->out_una : s->out_nxt;
+    struct w_iov * v = s->out_una;
     sq_foreach_from (v, &s->out, next) {
-        ensure(rtx == (meta(v).tx_len != 0), "sid %d: %stx and tx_len %u",
-               s->id, rtx ? "r" : "", meta(v).tx_len);
-        ensure(meta(v).is_acked == false, "is ACKed");
+        if (meta(v).is_acked) {
+            warn(INF, "skip ACK'ed pkt " FMT_PNR_OUT, meta(v).hdr.nr);
+            continue;
+        }
 
-        if (rtx)
+        if (meta(v).tx_len && meta(v).is_lost == false) {
+            warn(INF, "skip non-lost TX'ed pkt " FMT_PNR_OUT, meta(v).hdr.nr);
+            continue;
+        }
+
+        if (unlikely(meta(v).is_lost))
             rtx_pkt(s, v);
 
-        if (s->c->state == conn_estb) {
+        if (likely(s->c->state == conn_estb)) {
             // add one MTU, so we can still encode this stream frame
             if (s->id >= 0 &&
                 s->out_data + v->len + w_mtu(s->c->w) > s->out_data_max)
@@ -300,18 +301,18 @@ tx_stream_data(struct q_stream * const s, const bool rtx, const uint32_t limit)
                 s->c->blocked = true;
         }
 
-        if (enc_pkt(s, rtx, true, v) == false)
+        if (unlikely(enc_pkt(s, meta(v).is_lost, true, v) == false))
             continue;
         encoded++;
 
-        if (likely(rtx == false))
+        if (likely(meta(v).is_lost == false))
             // update the stream's out_nxt pointer
             s->out_nxt = sq_next(v, next);
 
-        if (s->blocked || s->c->blocked)
+        if (unlikely(s->blocked || s->c->blocked))
             break;
 
-        if (limit && encoded == limit) {
+        if (unlikely(limit && encoded == limit)) {
             warn(NTE, "tx limit %u reached", limit);
             break;
         }
@@ -322,7 +323,7 @@ tx_stream_data(struct q_stream * const s, const bool rtx, const uint32_t limit)
         v = alloc_iov(s->c->w, 0, OFFSET_ESTB);
         v->len = 0;
         sq_insert_tail(&s->out, v, next);
-        if (enc_pkt(s, rtx, true, v))
+        if (enc_pkt(s, meta(v).is_lost, true, v))
             encoded++;
     }
 
@@ -386,20 +387,16 @@ tx_crypto(struct q_conn * const c, const epoch_t e)
 {
     for (epoch_t epoch = ep_init; epoch <= e; epoch++) {
         struct q_stream * const s = get_stream(c, crpt_strm_id(epoch));
-        if (sq_empty(&s->out) || s->out_nxt == 0)
-            continue;
-        if (out_fully_acked(s)) {
+        if (out_fully_acked(s))
             // no need to keep this crypto data around
-            q_free(&s->in);
-            q_free(&s->out);
-            s->out_ack_cnt = 0;
-        } else
-            tx_stream_data(s, false, 0);
+            reset_stream(s, true);
+        else
+            tx_stream_data(s, 0);
     }
 }
 
 
-void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
+void tx(struct q_conn * const c, const uint32_t limit)
 {
     switch (c->state) {
     case conn_drng:
@@ -410,37 +407,33 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
         break;
 
     case conn_opng:
-        if (rtx == false) {
-            tx_crypto(c, c->tls.epoch_out);
-            c->needs_tx = false;
-            if (c->tls.epoch_out == ep_init)
-                // we did not progress to the 0-RTT epoch
-                goto done;
-        }
+        tx_crypto(c, c->tls.epoch_out);
+        c->needs_tx = false;
+        if (c->tls.epoch_out == ep_init)
+            // we did not progress to the 0-RTT epoch
+            goto done;
         break;
 
     default:
         break;
     }
 
-    if (rtx == false && c->blocked)
+    if (c->blocked)
         goto done;
 
     do_conn_mgmt(c);
 
     struct q_stream * s = 0;
     splay_foreach (s, streams_by_id, &c->streams_by_id) {
-        const bool stream_has_data_to_tx =
-            sq_len(&s->out) > 0 && out_fully_acked(s) == false &&
-            ((rtx && s->out_una) || (!rtx && s->out_nxt));
+        const bool stream_has_data_to_tx = sq_len(&s->out) > 0 &&
+                                           out_fully_acked(s) == false &&
+                                           (s->out_una || s->out_nxt);
 
         // warn(ERR, "strm id=" FMT_SID ", cnt=%u, has_data=%u, needs_ctrl=%u",
         //      s->id, sq_len(&s->out), stream_has_data_to_tx,
         //      stream_needs_ctrl(s), out_fully_acked(s));
         // check if we should skip TX on this stream
-        if ( // this is a crypto stream and we're not doing an RTX
-            (s->id < 0 && rtx == false) ||
-            // nothing to send and doesn't need control frames?
+        if ( // nothing to send and doesn't need control frames?
             (stream_has_data_to_tx == false && stream_needs_ctrl(s) == false) ||
             // unless for 0-RTT, is this a regular stream during conn open?
             (c->try_0rtt == false && s->id >= 0 && c->state != conn_estb)) {
@@ -448,13 +441,12 @@ void tx(struct q_conn * const c, const bool rtx, const uint32_t limit)
             continue;
         }
 
-        warn(DBG, "%s %sTX on %s conn %s strm " FMT_SID " w/%u pkt%s in queue",
-             stream_has_data_to_tx ? "data" : "ctrl", rtx ? "R" : "",
-             conn_type(c), cid2str(c->scid), s->id, sq_len(&s->out),
-             plural(sq_len(&s->out)));
+        warn(DBG, "%s TX on %s conn %s strm " FMT_SID " w/%u pkt%s in queue",
+             stream_has_data_to_tx ? "data" : "ctrl", conn_type(c),
+             cid2str(c->scid), s->id, sq_len(&s->out), plural(sq_len(&s->out)));
 
         if (stream_has_data_to_tx && !s->blocked)
-            tx_stream_data(s, rtx, limit);
+            tx_stream_data(s, limit);
         else
             tx_stream_ctrl(s);
     }
@@ -490,7 +482,7 @@ void tx_w(struct ev_loop * const l __attribute__((unused)),
           ev_async * const w,
           int e __attribute__((unused)))
 {
-    tx(w->data, false, 0);
+    tx(w->data, 0);
 }
 
 
@@ -1051,7 +1043,7 @@ void rx(struct ev_loop * const l,
 
         // is a TX needed for this connection?
         if (c->needs_tx && likely(c->state != conn_drng))
-            tx(c, false, 0);
+            tx(c, 0);
 
         // clear the helper flags set above
         c->needs_tx = c->had_rx = false;

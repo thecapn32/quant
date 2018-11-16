@@ -61,7 +61,6 @@ struct q_stream {
     struct w_iov_sq out;    ///< Tail queue containing outbound data.
     struct w_iov * out_una; ///< Lowest un-ACK'ed data chunk.
     struct w_iov * out_nxt; ///< Lowest unsent data chunk.
-    uint64_t out_ack_cnt;   ///< Number of unique ACKs received for pkts in o.
     uint64_t out_data;      ///< Current outbound stream offset (= data sent).
     uint64_t out_data_max;  ///< Outbound max_stream_data.
 
@@ -108,7 +107,7 @@ struct q_stream {
 static inline bool __attribute__((nonnull, always_inline))
 out_fully_acked(const struct q_stream * const s)
 {
-    return s->out_ack_cnt == sq_len(&s->out);
+    return s->out_una == 0;
 }
 
 

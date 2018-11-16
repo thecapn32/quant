@@ -211,7 +211,6 @@ struct q_conn {
 extern struct q_conn_sl c_ready;
 
 
-
 #define cid2str(i)                                                             \
     __extension__({                                                            \
         static char _str[2 * (MAX_CID_LEN + sizeof((i)->seq)) + 1] = "0";      \
@@ -244,7 +243,7 @@ extern void __attribute__((nonnull))
 tx_w(struct ev_loop * const l, ev_async * const w, int e);
 
 extern void __attribute__((nonnull))
-tx(struct q_conn * const c, const bool rtx, const uint32_t limit);
+tx(struct q_conn * const c, const uint32_t limit);
 
 extern void __attribute__((nonnull))
 tx_ack(struct q_conn * const c, const epoch_t e);
