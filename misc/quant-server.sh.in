@@ -24,8 +24,8 @@ if grep -E -i -q 'assertion failed|AddressSanitizer|runtime error|ACK_ECN' "$new
 fi
 
 cat <<-EOF > /var/www/html/.htaccess
-IndexOptions FancyIndexing
-IndexOrderDefault Descending Date
+IndexIgnoreReset ON
+IndexOptions FancyIndexing Descending Date
 RewriteRule ^log$ /$(basename "$new") [R]
 EOF
 
