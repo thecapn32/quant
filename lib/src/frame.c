@@ -662,10 +662,10 @@ dec_stream_id_blocked_frame(struct q_conn * const c,
 
     warn(INF, FRAM_IN "STREAM_ID_BLOCKED" NRM " sid=" FMT_SID, sid);
 
-    int64_t * const max_streams =
-        is_uni(sid) ? &c->tp_in.max_uni_streams : &c->tp_in.max_bidi_streams;
+    int64_t * const max_streams = is_uni(sid) ? &c->tp_in.new_max_uni_streams
+                                              : &c->tp_in.new_max_bidi_streams;
 
-    if (sid >> 2 <= *max_streams) {
+    if ((sid >> 2) + 1 == *max_streams) {
         // let the peer open more streams
         *max_streams += 2;
         if (is_uni(sid))
