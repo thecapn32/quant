@@ -169,7 +169,7 @@ function analyze {
         perl -n -e '/dec_new_cid_frame.*NEW_CONNECTION_ID/ and $n=1;
                     /migration to dcid/ && $n && exit 1;' "$log"
         [ $? == 1 ] && migr[$1]=M
-        # [ ${fail[$1]} ] || rm -f "$log"
+        [ ${fail[$1]} ] || rm -f "$log"
 
         # analyze 0rtt
         local log="/tmp/$script.$1.$pid.0rtt.log"
@@ -186,7 +186,7 @@ function analyze {
         perl -n -e '/connected after 0-RTT/ and $x=1;
                     $x && /CLOSE err=0x0000/ && exit 1;' "$log"
         [ $? == 1 ] && zrtt[$1]=RZ
-        # [ ${fail[$1]} ] || rm -f "$log"
+        [ ${fail[$1]} ] || rm -f "$log"
 
         # analyze rtry
         local log="/tmp/$script.$1.$pid.rtry.log"
@@ -203,7 +203,7 @@ function analyze {
         perl -n -e '/RX len=.*Retry/ and $x=1;
                    $x && /CLOSE err=0x0000/ && exit 1;' "$log"
         [ $? == 1 ] && rtry[$1]=S
-        # [ ${fail[$1]} ] || rm -f "$log"
+        [ ${fail[$1]} ] || rm -f "$log"
 
         # analyze key update
         local log="/tmp/$script.$1.$pid.kyph.log"
@@ -220,7 +220,7 @@ function analyze {
         perl -n -e '/TX.*Short kyph=1/ and $x=1;
                    $x && /RX.*Short kyph=1/ && exit 1;' "$log"
         [ $? == 1 ] && kyph[$1]=U
-        # [ ${fail[$1]} ] || rm -f "$log"
+        [ ${fail[$1]} ] || rm -f "$log"
 }
 
 printf "Testing servers: "
