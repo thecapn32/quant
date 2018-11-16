@@ -2,16 +2,17 @@ FROM ntap/warpcore:latest
 RUN apk add --no-cache cmake ninja gcc g++ git musl-dev linux-headers \
         mercurial openssl openssl-dev http-parser-dev libev-dev libbsd-dev
 RUN git config --global user.email "docker@example.com"
-ADD . /src
-WORKDIR /src/Debug
-RUN cmake -GNinja -DNO_SANITIZERS=True -DNO_FUZZER_CORPUS_COLLECTION=True \
-        -DCMAKE_INSTALL_PREFIX=/dst ..
-RUN ninja install
 ADD https://github.com/gabrielecirulli/2048/archive/master.zip /
 RUN unzip /master.zip -d /
 WORKDIR /tls
 RUN openssl req -batch -new -newkey rsa:2048 -sha256 -days 9365 -nodes -x509 \
         -keyout quant.key -out quant.crt -subj "/"
+ADD . /src
+WORKDIR /src/Debug
+RUN cmake -GNinja -DNO_SANITIZERS=True -DNO_FUZZER_CORPUS_COLLECTION=True \
+        -DCMAKE_INSTALL_PREFIX=/dst ..
+RUN ninja picotls
+RUN ninja install
 
 FROM alpine:latest
 COPY --from=0 /dst /
