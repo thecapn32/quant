@@ -25,35 +25,30 @@ function run_test() {
         $dc up --no-start 2> /dev/null
         local cmd="$dc run --detach --no-deps -T --service-ports"
         $cmd --name "$base-server" server \
-                server -i eth0 -t 1 -v5 -d /www \
+                server -i eth0 -v5 -d /www \
                         -c /tls/quant.crt -k /tls/quant.key > /dev/null
         $cmd --name "$base-valve" valve \
                 env PYTHONUNBUFFERED=1 qvalve -ra "$base-server" -r "/$t" \
                         > /dev/null
         $cmd --name "$base-client" client \
-                client -v5 -t 3 -i eth0 "https://$base-valve/$size" \
+                client -v5 -i eth0 "https://$base-valve/$size" \
                         > /dev/null
 
-        local ret=ok
+        local sret cret
+        sret=$(docker container wait "$base-server")
+        cret=$(docker container wait "$base-client")
 
         for s in server valve client; do
-                local log="$base-$s.log"
-                docker logs "$base-$s" > "$log" 2>&1
+                docker logs "$base-$s" > "$base-$s.log" 2>&1
         done
 
-        if [ "$(docker container wait "$base-client")" != 0 ] || \
-           [ "$(docker container wait "$base-server")" != 0 ]; then
-                ret=fail
-        else
-                local log="$base-client.log"
+        local ret=fail
+        if [ "$sret" == 0 ] && [ "$cret" == 0 ]; then
                 byte=$(sed -n -E "s/(.*)read (.*) bytes (.*)/\\2/gp" "$base-client.log")
-                if [ "$byte" != $size ]; then
-                        ret=fail
-                else
+                if [ "$byte" == $size ]; then
                         ret=ok
                         for s in server valve client; do
-                                local log="$base-$s.log"
-                                # rm -f "$log"
+                                rm -f "$base-$s.log"
                         done
                 fi
         fi
@@ -81,7 +76,7 @@ for t in $tests; do
         status[$ret]=$((status[$ret] + 1))
         status[all]=$((status[all] + 1))
 
-        # if [ "$ret" = "fail" ]; then
+        if [ "$ret" = "fail" ]; then
                 # tmux -CC \
                 #     new-session "cat $base-client.log" \; \
                 #     split-window -h "cat $base-valve.log" \; \
@@ -93,7 +88,7 @@ for t in $tests; do
                     split-window -h \"cat $base-valve.log\" \\\; \
                     split-window -h \"cat $base-server.log\" \\\; \
                     set remain-on-exit on
-        # fi
+        fi
 done
 
 for s in ok fail; do
