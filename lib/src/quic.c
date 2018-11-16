@@ -267,11 +267,11 @@ struct q_conn * q_connect(struct w_engine * const w,
          cid2str(c->scid), c->did_0rtt ? " after 0-RTT" : "",
          c->pn_data.out_1rtt[c->pn_data.out_kyph].aead->algo->name);
 
-    if (c->try_0rtt == true && c->did_0rtt == false) {
-        // 0-RTT failed, RTX early data straight away
-        reset_stream(*early_data_stream, false);
-        ev_async_send(loop, &c->tx_w);
-    }
+    // if (c->try_0rtt == true && c->did_0rtt == false) {
+    //     // 0-RTT failed, RTX early data straight away
+    //     reset_stream(*early_data_stream, false);
+    //     ev_async_send(loop, &c->tx_w);
+    // }
 
     return c;
 }
@@ -317,28 +317,20 @@ q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool block)
     warn(WRN, "%sblocking read on %s conn %s", block ? "" : "non-",
          conn_type(c), cid2str(c->scid));
 
+again:;
     struct q_stream * s = 0;
-    // cppcheck-suppress knownConditionTrueFalse
-    while (s == 0 && c->state == conn_estb) {
-        splay_foreach (s, streams_by_id, &c->streams_by_id) {
-            if (s->state == strm_clsd)
-                continue;
-
-            if (!sq_empty(&s->in))
+    if (c->state == conn_estb) {
+        splay_foreach (s, streams_by_id, &c->streams_by_id)
+            if (!sq_empty(&s->in) && s->state != strm_clsd && s->id >= 0)
                 // we found a stream with queued data
                 break;
-        }
 
-        if (s == 0) {
-            // no data queued on any non-zero stream
-            if (block == false)
-                // don't wait
-                break;
-
-            // wait for new data
+        if (s == 0 && block) {
+            // no data queued on any stream, wait for new data
             warn(WRN, "waiting for data on any stream on %s conn %s",
                  conn_type(c), cid2str(c->scid));
             loop_run(q_read, c, 0);
+            goto again;
         }
     }
 

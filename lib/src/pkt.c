@@ -806,9 +806,9 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
             flip_keys(c, false);
             ctx = which_cipher_ctx_in(c, meta(v).hdr.flags);
             if (unlikely(ctx->pne == 0 || ctx->aead == 0))
-                goto fail;
+                return false;
         } else
-            goto fail;
+            return false;
     }
 
     bool first_try = true;
@@ -816,7 +816,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
 
 try_again:
     if (unlikely(dec_pne(xv, v, c, ctx, pn_enc) == false))
-        goto fail;
+        return false;
 
     // we can now try and verify the packet protection
     const uint16_t pkt_len =
@@ -856,7 +856,7 @@ try_again:
                 }
             }
         }
-        goto fail;
+        return false;
     }
 
     if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
@@ -909,12 +909,6 @@ try_again:
     diet_insert(&pn->recv_all, meta(v).hdr.nr, ev_now(loop));
 
     return true;
-
-fail:
-    err_close(c, ERR_PROTOCOL_VIOLATION, 0, "crypto fail on 0x%02x-type %s pkt",
-              meta(v).hdr.flags,
-              is_set(F_LONG_HDR, meta(v).hdr.flags) ? "LH" : "SH");
-    return false;
 }
 
 

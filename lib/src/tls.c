@@ -826,7 +826,7 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
 
     // write all tickets
     // XXX this currently dumps the entire cache to file on each connection!
-    splay_foreach (t, tickets_by_peer, &tickets) { // NOLINT
+    splay_foreach (t, tickets_by_peer, &tickets) {
         warn(INF, "writing 0-RTT ticket for %s conn %s (%s %s)", conn_type(c),
              cid2str(c->scid), t->sni, t->alpn);
 

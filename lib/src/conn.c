@@ -168,14 +168,14 @@ switch_scid(struct q_conn * const c, const struct cid * const id)
 {
     struct cid * scid;
 
-    splay_foreach (scid, cids_by_id, &c->scids_by_id)
-        warn(ERR, "%s", cid2str(scid));
+    // splay_foreach (scid, cids_by_id, &c->scids_by_id)
+    //     warn(ERR, "%s", cid2str(scid));
 
     scid = splay_find(cids_by_id, &c->scids_by_id, id);
     if (unlikely(scid == 0)) // || scid->seq <= c->scid->seq))
         return false;
 
-    warn(CRT, "%u vs %u", scid->seq, c->scid->seq);
+    // warn(CRT, "%u vs %u", scid->seq, c->scid->seq);
 
     if (scid->seq <= c->scid->seq)
         return false;
@@ -244,7 +244,7 @@ rtx_pkt(struct q_stream * const s, struct w_iov * const v)
 
     // we reinsert meta(v) with its new pkt nr in on_pkt_sent()
     ensure(splay_remove(pm_by_nr, &meta(v).pn->sent_pkts, &meta(v)), "removed");
-    ensure(splay_insert(pm_by_nr, &meta(v).pn->sent_pkts, &meta(r)) == 0,
+    ensure(splay_insert(pm_by_nr, &meta(r).pn->sent_pkts, &meta(r)) == 0,
            "inserted");
 
     // this is not in the recovery draft, but seems kinda obvious
@@ -277,28 +277,15 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
 }
 
 
-static void __attribute__((nonnull(1)))
+static void __attribute__((nonnull))
 tx_stream_data(struct q_stream * const s, const bool rtx, const uint32_t limit)
 {
     uint32_t encoded = 0;
     struct w_iov * v = rtx ? s->out_una : s->out_nxt;
     sq_foreach_from (v, &s->out, next) {
-        if (meta(v).is_acked) {
-            // warn(DBG,
-            //      "skipping ACKed pkt " FMT_PNR_OUT " on strm " FMT_SID
-            //      " during %s",
-            //      meta(v).hdr.nr, s->id, rtx ? "RTX" : "TX");
-            continue;
-        }
-
-        if (rtx == (meta(v).tx_len == 0)) {
-            // warn(DBG,
-            //      "skipping %s pkt " FMT_PNR_OUT " on strm " FMT_SID
-            //      " during %s",
-            //      meta(v).tx_len ? "already-tx'ed" : "fresh", meta(v).hdr.nr,
-            //      s->id, rtx ? "RTX" : "TX");
-            continue;
-        }
+        ensure(rtx == (meta(v).tx_len != 0), "sid %d: %stx and tx_len %u",
+               s->id, rtx ? "r" : "", meta(v).tx_len);
+        ensure(meta(v).is_acked == false, "is ACKed");
 
         if (rtx)
             rtx_pkt(s, v);
@@ -399,7 +386,7 @@ tx_crypto(struct q_conn * const c, const epoch_t e)
 {
     for (epoch_t epoch = ep_init; epoch <= e; epoch++) {
         struct q_stream * const s = get_stream(c, crpt_strm_id(epoch));
-        if (sq_empty(&s->out))
+        if (sq_empty(&s->out) || s->out_nxt == 0)
             continue;
         if (out_fully_acked(s)) {
             // no need to keep this crypto data around
@@ -525,7 +512,7 @@ void add_scid(struct q_conn * const c, const struct cid * const id)
     struct cid * scid = splay_find(cids_by_seq, &c->scids_by_seq, id);
     ensure(scid == 0, "cid is new");
 
-    warn(ERR, "new scid %s", cid2str(id));
+    // warn(ERR, "new scid %s", cid2str(id));
     struct cid_map * const cm = calloc(1, sizeof(*cm));
     ensure(cm, "could not calloc");
     cm->c = c;
@@ -538,8 +525,8 @@ void add_scid(struct q_conn * const c, const struct cid * const id)
         c->scid = &cm->cid;
     ensure(splay_insert(conns_by_id, &conns_by_id, cm) == 0, "inserted");
 
-    splay_foreach (scid, cids_by_id, &c->scids_by_id)
-        warn(ERR, "%s", cid2str(scid));
+    // splay_foreach (scid, cids_by_id, &c->scids_by_id)
+    //     warn(ERR, "%s", cid2str(scid));
 }
 
 
@@ -564,7 +551,7 @@ void add_dcid(struct q_conn * const c, const struct cid * const id)
 
     // splay_foreach (dcid, cids_by_seq, &c->dcids_by_seq)
     //     warn(ERR, "%s", cid2str(dcid));
-} // NOLINT
+}
 
 
 static void __attribute__((nonnull))
@@ -588,9 +575,9 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
 
         // and process it
         const int ret = tls_io(s, iv);
-        if (ret == 0 || ret == PTLS_ERROR_STATELESS_RETRY) {
+        if (ret == 0) {
             tx_crypto(c, c->tls.epoch_out);
-            if (ret == 0 && (c->state == conn_idle || c->state == conn_opng)) {
+            if (c->state == conn_idle || c->state == conn_opng) {
                 conn_to_state(c, conn_estb);
                 if (c->is_clnt)
                     maybe_api_return(q_connect, c, 0);
@@ -610,16 +597,6 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
             if (needs_ack(pn_for_epoch(c, e)))
                 tx_ack(c, e);
 }
-
-
-#define ignore_sh_pkt(v)                                                       \
-    do {                                                                       \
-        if (unlikely(!is_set(F_LONG_HDR, meta(v).hdr.flags))) {                \
-            warn(NTE, "ignoring unexpected 0x%02x-type SH pkt",                \
-                 pkt_type((v)->buf[0]));                                       \
-            goto done;                                                         \
-        }                                                                      \
-    } while (0)
 
 
 static void __attribute__((nonnull))
@@ -652,6 +629,22 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
 }
 
 
+static bool __attribute__((const))
+pkt_ok_for_epoch(const uint8_t flags, const epoch_t epoch)
+{
+    switch (epoch) {
+    case ep_init:;
+        const uint8_t type = pkt_type(flags);
+        return type == F_LH_INIT || type == F_LH_RTRY;
+    case ep_0rtt:
+    case ep_hshk:
+        return is_set(F_LONG_HDR, flags);
+    case ep_data:
+        return true;
+    }
+}
+
+
 static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
                                             struct w_iov * v,
                                             struct w_iov_sq * const x,
@@ -670,8 +663,6 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 
     switch (c->state) {
     case conn_idle:
-        ignore_sh_pkt(v);
-
         c->vers = meta(v).hdr.vers;
         if (c->tx_rtry) {
             // tx_rtry is currently always set on port 4434
@@ -728,8 +719,6 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         break;
 
     case conn_opng:
-        ignore_sh_pkt(v);
-
         if (meta(v).hdr.vers == 0) {
             // this is a vneg pkt
             if (c->vers != ok_vers[0]) {
@@ -993,7 +982,7 @@ rx_pkts(struct w_iov_sq * const x,
                 zo->t = ev_now(loop);
                 ensure(splay_insert(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo) == 0,
                        "inserted");
-                log_pkt("RX", v, &odcid, tok, tok_len); // NOLINT
+                log_pkt("RX", v, &odcid, tok, tok_len);
                 warn(INF, "caching 0-RTT pkt for unknown conn %s",
                      cid2str(&meta(v).hdr.dcid));
                 continue;
@@ -1010,8 +999,15 @@ rx_pkts(struct w_iov_sq * const x,
             !is_set(F_LONG_HDR, meta(v).hdr.flags))
             if (dec_pkt_hdr_remainder(xv, v, c, x) == false) {
                 log_pkt("RX", v, &odcid, tok, tok_len);
-                warn(ERR, "received invalid %u-byte 0x%02x-type pkt, ignoring",
-                     v->len, meta(v).hdr.flags);
+                if (pkt_ok_for_epoch(meta(v).hdr.flags, epoch_in(c)) == true)
+                    err_close(
+                        c, ERR_PROTOCOL_VIOLATION, 0,
+                        "crypto fail on 0x%02x-type %s pkt", meta(v).hdr.flags,
+                        is_set(F_LONG_HDR, meta(v).hdr.flags) ? "LH" : "SH");
+                else
+                    warn(ERR,
+                         "received invalid %u-byte 0x%02x-type pkt, ignoring",
+                         v->len, meta(v).hdr.flags);
                 free_iov(v);
                 continue;
             }
@@ -1319,27 +1315,27 @@ struct q_conn * new_conn(struct w_engine * const w,
 
 void free_scid(struct q_conn * const c, struct cid * const id)
 {
-    struct cid * scid;
-    splay_foreach (scid, cids_by_id, &c->scids_by_id)
-        warn(ERR, "before_by_id %s", cid2str(scid));
-    splay_foreach (scid, cids_by_seq, &c->scids_by_seq)
-        warn(ERR, "before_by_seq %s", cid2str(scid));
+    // struct cid * scid;
+    // splay_foreach (scid, cids_by_id, &c->scids_by_id)
+    //     warn(ERR, "before_by_id %s", cid2str(scid));
+    // splay_foreach (scid, cids_by_seq, &c->scids_by_seq)
+    //     warn(ERR, "before_by_seq %s", cid2str(scid));
 
-    warn(ERR, "free scid seq %s", cid2str(id));
+    // warn(ERR, "free scid seq %s", cid2str(id));
 
     ensure(splay_remove(cids_by_seq, &c->scids_by_seq, id), "removed");
 
-    splay_foreach (scid, cids_by_id, &c->scids_by_id)
-        warn(ERR, "middle_by_id %s", cid2str(scid));
-    splay_foreach (scid, cids_by_seq, &c->scids_by_seq)
-        warn(ERR, "middle_by_seq %s", cid2str(scid));
+    // splay_foreach (scid, cids_by_id, &c->scids_by_id)
+    //     warn(ERR, "middle_by_id %s", cid2str(scid));
+    // splay_foreach (scid, cids_by_seq, &c->scids_by_seq)
+    //     warn(ERR, "middle_by_seq %s", cid2str(scid));
 
     ensure(splay_remove(cids_by_id, &c->scids_by_id, id), "removed");
 
-    splay_foreach (scid, cids_by_id, &c->scids_by_id)
-        warn(ERR, "after_by_id %s", cid2str(scid));
-    splay_foreach (scid, cids_by_seq, &c->scids_by_seq)
-        warn(ERR, "after_by_seq %s", cid2str(scid));
+    // splay_foreach (scid, cids_by_id, &c->scids_by_id)
+    //     warn(ERR, "after_by_id %s", cid2str(scid));
+    // splay_foreach (scid, cids_by_seq, &c->scids_by_seq)
+    //     warn(ERR, "after_by_seq %s", cid2str(scid));
 
     const struct cid_map which = {.cid = *id};
     struct cid_map * const cm = splay_find(conns_by_id, &conns_by_id, &which);
