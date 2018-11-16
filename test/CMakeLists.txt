@@ -51,23 +51,25 @@ if(NOT HAVE_BENCHMARK_H AND (DEFINED ENV{BENCHMARKING} OR BENCHMARKING))
 endif()
 
 if(HAVE_BENCHMARK_H)
-  add_executable(bench bench.cc)
-  target_link_libraries(bench PUBLIC benchmark pthread libquant)
-  target_include_directories(bench
-    SYSTEM PRIVATE
-      ${OPENSSL_ROOT_DIR}/include
-    PRIVATE
-      ${CMAKE_SOURCE_DIR}/lib/include
-      ${CMAKE_BINARY_DIR}/lib/include
-      ${CMAKE_SOURCE_DIR}/lib/src
-      $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/external/include>
+  foreach(TARGET bench bench_conn)
+    add_executable(${TARGET} ${TARGET}.cc)
+    target_link_libraries(${TARGET} PUBLIC benchmark pthread libquant)
+    target_include_directories(${TARGET}
+      SYSTEM PRIVATE
+        ${OPENSSL_ROOT_DIR}/include
+      PRIVATE
+        ${CMAKE_SOURCE_DIR}/lib/include
+        ${CMAKE_BINARY_DIR}/lib/include
+        ${CMAKE_SOURCE_DIR}/lib/src
+        $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/external/include>
+      )
+    set_target_properties(${TARGET}
+      PROPERTIES
+        POSITION_INDEPENDENT_CODE ON
+        INTERPROCEDURAL_OPTIMIZATION ${IPO}
     )
-  set_target_properties(bench
-    PROPERTIES
-      POSITION_INDEPENDENT_CODE ON
-      INTERPROCEDURAL_OPTIMIZATION ${IPO}
-  )
-  add_test(bench bench)
+    add_test(${TARGET} ${TARGET})
+  endforeach()
 endif()
 
 if(HAVE_FUZZER)
