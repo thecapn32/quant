@@ -25,7 +25,8 @@ fi
 
 cat <<-EOF > /var/www/html/.htaccess
 IndexIgnoreReset ON
-IndexOptions FancyIndexing Descending Date
+IndexOptions FancyIndexing SuppressIcon
+IndexOrderDefault Descending Date
 RewriteRule ^log$ /$(basename "$new") [R]
 EOF
 
