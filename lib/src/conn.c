@@ -246,8 +246,6 @@ rtx_pkt(struct q_stream * const s, struct w_iov * const v)
     ensure(splay_remove(pm_by_nr, &meta(v).pn->sent_pkts, &meta(v)), "removed");
     ensure(splay_insert(pm_by_nr, &meta(r).pn->sent_pkts, &meta(r)) == 0,
            "inserted");
-
-    // warn(DBG, "RTX idx %u, cpy in idx %u", w_iov_idx(v), w_iov_idx(r));
 }
 
 
@@ -255,7 +253,7 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
 {
     c->needs_tx = false;
 
-    if (sq_empty(&c->txq))
+    if (unlikely(sq_empty(&c->txq)))
         return;
 
     if (unlikely(sq_len(&c->txq) > 1 &&
@@ -278,7 +276,7 @@ tx_stream_data(struct q_stream * const s, const uint32_t limit)
     uint32_t encoded = 0;
     struct w_iov * v = s->out_una;
     sq_foreach_from (v, &s->out, next) {
-        if (meta(v).is_acked) {
+        if (unlikely(meta(v).is_acked)) {
             warn(INF, "skip ACK'ed pkt " FMT_PNR_OUT, meta(v).hdr.nr);
             continue;
         }
@@ -309,6 +307,12 @@ tx_stream_data(struct q_stream * const s, const uint32_t limit)
             // update the stream's out_nxt pointer
             s->out_nxt = sq_next(v, next);
 
+        if (unlikely(s->c->rec.in_flight + w_mtu(s->c->w) > s->c->rec.cwnd)) {
+            warn(CRT, "cwnd limit %u reached (%u + %u > %u)",
+                 s->c->rec.in_flight, w_mtu(s->c->w), s->c->rec.cwnd);
+            break;
+        }
+
         if (unlikely(s->blocked || s->c->blocked))
             break;
 
@@ -335,8 +339,7 @@ static void __attribute__((nonnull)) tx_stream_ctrl(struct q_stream * const s)
 {
     struct w_iov * const v = alloc_iov(s->c->w, 0, 0);
     enc_pkt(s, false, false, v);
-    if (sq_len(&s->c->txq))
-        do_tx(s->c);
+    do_tx(s->c);
 }
 
 
@@ -382,43 +385,14 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
 }
 
 
-static void __attribute__((nonnull))
-tx_crypto(struct q_conn * const c, const epoch_t e)
-{
-    for (epoch_t epoch = ep_init; epoch <= e; epoch++) {
-        struct q_stream * const s = get_stream(c, crpt_strm_id(epoch));
-        if (out_fully_acked(s))
-            // no need to keep this crypto data around
-            reset_stream(s, true);
-        else
-            tx_stream_data(s, 0);
-    }
-}
-
-
 void tx(struct q_conn * const c, const uint32_t limit)
 {
-    switch (c->state) {
-    case conn_drng:
-        die("must not TX while draining");
+    ensure(c->state != conn_drng, "must not TX while draining");
 
-    case conn_qlse:
+    if (unlikely(c->state == conn_qlse))
         enter_closing(c);
-        break;
 
-    case conn_opng:
-        tx_crypto(c, c->tls.epoch_out);
-        c->needs_tx = false;
-        if (c->tls.epoch_out == ep_init)
-            // we did not progress to the 0-RTT epoch
-            goto done;
-        break;
-
-    default:
-        break;
-    }
-
-    if (c->blocked)
+    if (unlikely(c->blocked))
         goto done;
 
     do_conn_mgmt(c);
@@ -473,8 +447,7 @@ void tx_ack(struct q_conn * const c, const epoch_t e)
 
     struct w_iov * const v = alloc_iov(c->w, 0, 0);
     enc_pkt(s, false, false, v);
-    if (sq_len(&c->txq))
-        do_tx(c);
+    do_tx(c);
 }
 
 
@@ -568,7 +541,6 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
         if (tls_io(s, iv))
             continue;
 
-        tx_crypto(c, c->tls.epoch_out);
         if (c->state == conn_idle || c->state == conn_opng) {
             conn_to_state(c, conn_estb);
             if (c->is_clnt)
@@ -581,12 +553,6 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
             }
         }
     }
-
-    if (epoch_in(c) > epoch)
-        // let's fire off some ACKs for the previous epochs
-        for (epoch_t e = ep_init; e <= epoch; e++)
-            if (needs_ack(pn_for_epoch(c, e)))
-                tx_ack(c, e);
 }
 
 

@@ -114,18 +114,40 @@ out_fully_acked(const struct q_stream * const s)
 static inline int64_t __attribute__((always_inline, const))
 crpt_strm_id(const epoch_t epoch)
 {
-    return -((int64_t)epoch + 1);
+    switch (epoch) {
+    case ep_init:
+        return -4;
+    case ep_0rtt:
+        return -3;
+    case ep_hshk:
+        return -2;
+    case ep_data:
+        return -1;
+    }
 }
 
 
 static inline epoch_t __attribute__((nonnull, always_inline))
 strm_epoch(const struct q_stream * const s)
 {
-    if (s->id < 0)
-        return (epoch_t)(-s->id) - 1;
-    if (s->c->state == conn_opng)
-        return 1;
-    return 3;
+    if (unlikely(s->id < 0))
+        switch (s->id) {
+        case -4:
+            return ep_init;
+        case -3:
+            return ep_0rtt;
+        case -2:
+            return ep_hshk;
+        case -1:
+            return ep_data;
+        default:
+            die("illegal sid %d", s->id);
+        }
+
+    if (unlikely(s->c->state == conn_opng))
+        return ep_0rtt;
+
+    return ep_data;
 }
 
 
