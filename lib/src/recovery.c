@@ -63,7 +63,7 @@ hshk_pkts_outstanding(struct q_conn * const c)
     struct q_stream * const init_stream = get_stream(c, crpt_strm_id(ep_init));
     struct q_stream * const hshk_stream = get_stream(c, crpt_strm_id(ep_hshk));
     return out_fully_acked(init_stream) == false ||
-           out_fully_acked(hshk_stream) == false; //||
+           out_fully_acked(hshk_stream) == false;
 }
 
 
@@ -193,45 +193,37 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
             int e __attribute__((unused)))
 {
     struct q_conn * const c = w->data;
-    bool did_tx = false;
+    struct pn_space * const pn = pn_for_epoch(c, c->tls.epoch_out);
 
     // see OnLossDetectionAlarm pseudo code
     if (hshk_pkts_outstanding(c)) {
         warn(DBG, "handshake RTX #%u on %s conn %s", c->rec.hshake_cnt + 1,
              conn_type(c), cid2str(c->scid));
+        detect_lost_pkts(c, pn);
         tx(c, 0);
-        did_tx = true;
         c->rec.hshake_cnt++;
 
     } else if (!is_zero(c->rec.loss_t)) {
         warn(DBG, "early RTX or time loss detection alarm on %s conn %s",
              conn_type(c), cid2str(c->scid));
-        struct pn_space * const pn = pn_for_epoch(c, c->tls.epoch_out);
         detect_lost_pkts(c, pn);
 
     } else if (c->rec.tlp_cnt < kMaxTLPs) {
         warn(DBG, "TLP alarm #%u on %s conn %s", c->rec.tlp_cnt, conn_type(c),
              cid2str(c->scid));
         tx(c, 1);
-        did_tx = true;
         c->rec.tlp_cnt++;
 
     } else {
         warn(DBG, "RTO alarm #%u on %s conn %s", c->rec.rto_cnt, conn_type(c),
              cid2str(c->scid));
-        if (c->rec.rto_cnt == 0) {
-            struct pn_space * const pn = pn_for_epoch(c, c->tls.epoch_out);
+        if (c->rec.rto_cnt == 0)
             pn->lg_sent_before_rto = pn->lg_sent;
-        }
         tx(c, 2);
-        did_tx = true;
         c->rec.rto_cnt++;
     }
 
-    // XXX is in the pseudo code, but it's already also called in on_pkt_sent()
-    if (did_tx == false)
-        // set_ld_alarm is also called in on_pkt_sent, avoid duplicate
-        set_ld_alarm(c);
+    // XXX this is called in on_pkt_sent(): set_ld_alarm(c);
 }
 
 
@@ -290,12 +282,8 @@ void on_pkt_sent(struct q_stream * const s, struct w_iov * const v)
 
         s->c->rec.in_flight += meta(v).tx_len; // OnPacketSentCC
         log_cc(s->c);
+        set_ld_alarm(s->c);
     }
-
-    // TODO this should be in the clause above, but since we currently don't RTX
-    // NEW_TOKEN, NEW_CONNECTION_ID, etc. that means the timers don't back off
-    // correctly
-    set_ld_alarm(s->c);
 }
 
 
