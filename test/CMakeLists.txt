@@ -68,6 +68,11 @@ if(HAVE_BENCHMARK_H)
         POSITION_INDEPENDENT_CODE ON
         INTERPROCEDURAL_OPTIMIZATION ${IPO}
     )
+    if(DSYMUTIL)
+      add_custom_command(TARGET ${TARGET} POST_BUILD
+        COMMAND ${DSYMUTIL} ARGS ${TARGET}
+      )
+    endif()
     add_test(${TARGET} ${TARGET})
   endforeach()
 endif()

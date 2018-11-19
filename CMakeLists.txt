@@ -139,10 +139,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     endforeach()
   endif()
 
-  if(APPLE)
-    find_program(DSYMUTIL dsymutil)
-  endif()
-
   find_program(CPPCHECK NAMES cppcheck)
   if(CPPCHECK)
     message(STATUS "Found cppcheck: ${CPPCHECK}")
@@ -215,6 +211,12 @@ else()
     set(IPO False)
   endif()
 endif()
+
+
+if(APPLE)
+  find_program(DSYMUTIL dsymutil)
+endif()
+
 
 if(FUZZER)
   # check if we have a fuzzer
