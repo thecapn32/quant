@@ -50,6 +50,8 @@
 #include "stream.h"
 
 
+#define track_frame(v, ft) bit_set(NUM_FRAM_TYPES, (ft), &meta(v).frames)
+
 #define err_close_return(c, code, ...)                                         \
     do {                                                                       \
         err_close((c), (code), __VA_ARGS__);                                   \
@@ -890,13 +892,13 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
         if (pad_start && (type != FRAM_TYPE_PAD || i == v->len - 1)) {
             warn(INF, FRAM_IN "PADDING" NRM " len=%u", i - pad_start);
             pad_start = 0;
-            bit_set(NUM_FRAM_TYPES, type, &meta(v).frames);
+            track_frame(v, type);
 
         } else if (type == FRAM_TYPE_CRPT ||
                    (type >= FRAM_TYPE_STRM && type <= FRAM_TYPE_STRM_MAX)) {
 
-            if ((bit_isset(NUM_FRAM_TYPES, FRAM_TYPE_CRPT, &meta(v).frames) ||
-                 bit_isset(NUM_FRAM_TYPES, FRAM_TYPE_STRM, &meta(v).frames)) &&
+            if ((has_frame(v, FRAM_TYPE_CRPT) ||
+                 has_frame(v, FRAM_TYPE_STRM)) &&
                 meta(v).stream) {
                 // already had at least one stream or crypto frame in this
                 // packet with non-duplicate data, so generate (another) copy
@@ -912,10 +914,9 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
 
             // this is the first stream frame in this packet
             i = dec_stream_or_crypto_frame(c, v, i);
-            bit_set(NUM_FRAM_TYPES,
-                    // stream frames have multiple types, so don't enc "type"
-                    type == FRAM_TYPE_CRPT ? FRAM_TYPE_CRPT : FRAM_TYPE_STRM,
-                    &meta(v).frames);
+            // stream frames have multiple types, so don't enc "type"
+            track_frame(v, type == FRAM_TYPE_CRPT ? FRAM_TYPE_CRPT
+                                                  : FRAM_TYPE_STRM);
 
         } else {
             switch (type) {
@@ -1003,7 +1004,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
 
             if (likely(i < UINT16_MAX))
                 // record this frame type in the meta data
-                bit_set(NUM_FRAM_TYPES, type, &meta(v).frames);
+                track_frame(v, type);
         }
 
         if (unlikely(i == UINT16_MAX))
@@ -1017,6 +1018,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
         v->len = meta(v).stream_data_len;
     }
 
+    // track outstanding frame types in the pn space
     struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
     bit_or(NUM_FRAM_TYPES, &pn->rx_frames, &meta(v).frames);
 
@@ -1094,7 +1096,7 @@ uint16_t enc_padding_frame(struct w_iov * const v,
         return pos;
     warn(INF, FRAM_OUT "PADDING" NRM " len=%u", len);
     memset(&v->buf[pos], FRAM_TYPE_PAD, len);
-    bit_set(NUM_FRAM_TYPES, FRAM_TYPE_PAD, &meta(v).frames);
+    track_frame(v, FRAM_TYPE_PAD);
     return pos + len;
 }
 
@@ -1106,7 +1108,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
 {
     const bool enc_ecn = pn->ect0_cnt || pn->ect1_cnt || pn->ce_cnt;
     const uint8_t type = enc_ecn ? FRAM_TYPE_ACK_ECN : FRAM_TYPE_ACK;
-    bit_set(NUM_FRAM_TYPES, FRAM_TYPE_ACK, &meta(v).frames);
+    track_frame(v, FRAM_TYPE_ACK);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
     struct ival * b = diet_max_ival(&pn->recv);
@@ -1218,7 +1220,7 @@ uint16_t enc_stream_or_crypto_frame(struct q_stream * const s,
     } else
         type = FRAM_TYPE_CRPT;
 
-    bit_set(NUM_FRAM_TYPES, type, &meta(v).frames);
+    track_frame(v, type);
 
     // now that we know how long the stream frame header is, encode it
     uint16_t i = meta(v).stream_header_pos =
@@ -1253,7 +1255,7 @@ uint16_t enc_close_frame(const struct q_conn * const c,
 {
     const uint8_t type =
         c->err_code == 0 ? FRAM_TYPE_APPL_CLSE : FRAM_TYPE_CONN_CLSE;
-    bit_set(NUM_FRAM_TYPES, type, &meta(v).frames);
+    track_frame(v, type);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
     i = enc(v->buf, v->len, i, &c->err_code, sizeof(c->err_code), 0, "0x%04x");
@@ -1288,7 +1290,7 @@ uint16_t enc_max_stream_data_frame(struct q_stream * const s,
                                    const uint16_t pos)
 {
     const uint8_t type = FRAM_TYPE_MAX_STRM_DATA;
-    bit_set(NUM_FRAM_TYPES, type, &meta(v).frames);
+    track_frame(v, type);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
     i = enc(v->buf, v->len, i, &s->id, 0, 0, FMT_SID);
@@ -1312,7 +1314,7 @@ uint16_t enc_max_data_frame(struct q_conn * const c,
                             const uint16_t pos)
 {
     const uint8_t type = FRAM_TYPE_MAX_DATA;
-    bit_set(NUM_FRAM_TYPES, type, &meta(v).frames);
+    track_frame(v, type);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
     i = enc(v->buf, v->len, i, &c->tp_in.new_max_data, 0, 0, "%" PRIu64);
@@ -1333,7 +1335,7 @@ uint16_t enc_max_stream_id_frame(struct q_conn * const c,
                                  const bool bidi)
 {
     const uint8_t type = FRAM_TYPE_MAX_SID;
-    bit_set(NUM_FRAM_TYPES, type, &meta(v).frames);
+    track_frame(v, type);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
     const int64_t max = (((bidi ? c->tp_in.new_max_bidi_streams
@@ -1365,7 +1367,7 @@ uint16_t enc_stream_blocked_frame(struct q_stream * const s,
                                   const uint16_t pos)
 {
     const uint8_t type = FRAM_TYPE_STRM_BLCK;
-    bit_set(NUM_FRAM_TYPES, type, &meta(v).frames);
+    track_frame(v, type);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
     i = enc(v->buf, v->len, i, &s->id, 0, 0, FMT_SID);
@@ -1383,7 +1385,7 @@ uint16_t enc_blocked_frame(struct q_conn * const c,
                            const uint16_t pos)
 {
     const uint8_t type = FRAM_TYPE_BLCK;
-    bit_set(NUM_FRAM_TYPES, type, &meta(v).frames);
+    track_frame(v, type);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
     const uint64_t off = c->tp_out.max_data + meta(v).stream_data_len;
@@ -1401,7 +1403,7 @@ uint16_t enc_stream_id_blocked_frame(struct q_conn * const c,
                                      const bool bidi)
 {
     const uint8_t type = FRAM_TYPE_SID_BLCK;
-    bit_set(NUM_FRAM_TYPES, type, &meta(v).frames);
+    track_frame(v, type);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
     const int64_t max_sid = (bidi ? c->next_sid_bidi : c->next_sid_uni) - 4;
@@ -1418,7 +1420,7 @@ uint16_t enc_path_response_frame(struct q_conn * const c,
                                  const uint16_t pos)
 {
     const uint8_t type = FRAM_TYPE_PATH_RESP;
-    bit_set(NUM_FRAM_TYPES, type, &meta(v).frames);
+    track_frame(v, type);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
     i = enc(v->buf, v->len, i, &c->path_resp_out, sizeof(c->path_resp_out), 0,
@@ -1435,7 +1437,7 @@ uint16_t enc_path_challenge_frame(struct q_conn * const c,
                                   const uint16_t pos)
 {
     const uint8_t type = FRAM_TYPE_PATH_CHLG;
-    bit_set(NUM_FRAM_TYPES, type, &meta(v).frames);
+    track_frame(v, type);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
     i = enc(v->buf, v->len, i, &c->path_chlg_out, sizeof(c->path_chlg_out), 0,
@@ -1452,7 +1454,7 @@ uint16_t enc_new_cid_frame(struct q_conn * const c,
                            const uint16_t pos)
 {
     const uint8_t type = FRAM_TYPE_NEW_CID;
-    bit_set(NUM_FRAM_TYPES, type, &meta(v).frames);
+    track_frame(v, type);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
     struct cid ncid = {.seq = ++c->max_cid_seq_out,
@@ -1483,7 +1485,7 @@ uint16_t enc_new_token_frame(struct q_conn * const c,
                              const uint16_t pos)
 {
     const uint8_t type = FRAM_TYPE_NEW_TOKN;
-    bit_set(NUM_FRAM_TYPES, type, &meta(v).frames);
+    track_frame(v, type);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
     const uint64_t tok_len = c->tok_len;
@@ -1503,7 +1505,7 @@ uint16_t enc_retire_cid_frame(struct q_conn * const c,
                               struct cid * const dcid)
 {
     const uint8_t type = FRAM_TYPE_RTIR_CID;
-    bit_set(NUM_FRAM_TYPES, type, &meta(v).frames);
+    track_frame(v, type);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
     i = enc(v->buf, v->len, i, &dcid->seq, 0, 0, "%" PRIu64);

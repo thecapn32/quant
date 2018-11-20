@@ -30,6 +30,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "bitset.h"
+
 struct pn_space;
 struct q_conn;
 struct q_stream;
@@ -72,6 +74,7 @@ struct cid;
 #define FRAM_OUT BLD GRN
 #endif
 
+#define has_frame(v, ft) bit_isset(NUM_FRAM_TYPES, (ft), &meta(v).frames)
 
 #ifdef NDEBUG
 #define log_stream_or_crypto_frame(rtx, v, in, kind)                           \

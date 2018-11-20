@@ -35,7 +35,6 @@
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
-#include "bitset.h"
 #include "conn.h"
 #include "diet.h"
 #include "frame.h"
@@ -276,7 +275,7 @@ void on_pkt_sent(struct q_stream * const s, struct w_iov * const v)
 
     if (likely(s->c->state != conn_idle) &&
         is_ack_only(&meta(v).frames) == false) {
-        if (bit_isset(NUM_FRAM_TYPES, FRAM_TYPE_CRPT, &meta(v).frames))
+        if (has_frame(v, FRAM_TYPE_CRPT))
             // is_handshake_packet
             s->c->rec.last_sent_hshk_t = meta(v).tx_t;
         s->c->rec.last_sent_rtxable_t = meta(v).tx_t;
@@ -423,15 +422,12 @@ void on_pkt_acked(struct q_conn * const c,
     // rest of function is not from pseudo code
 
     // if this ACKs a CLOSE frame, move to conn_drng
-    if (c->state == conn_clsg && (bit_isset(NUM_FRAM_TYPES, FRAM_TYPE_CONN_CLSE,
-                                            &meta(acked_pkt).frames) ||
-                                  bit_isset(NUM_FRAM_TYPES, FRAM_TYPE_APPL_CLSE,
-                                            &meta(acked_pkt).frames)))
+    if (c->state == conn_clsg && (has_frame(acked_pkt, FRAM_TYPE_CONN_CLSE) ||
+                                  has_frame(acked_pkt, FRAM_TYPE_APPL_CLSE)))
         conn_to_state(c, conn_drng);
 
     // if this ACKs a current MAX_STREAM_DATA frame, we can stop sending it
-    if (bit_isset(NUM_FRAM_TYPES, FRAM_TYPE_MAX_STRM_DATA,
-                  &meta(acked_pkt).frames)) {
+    if (has_frame(acked_pkt, FRAM_TYPE_MAX_STRM_DATA)) {
         struct q_stream * const s =
             get_stream(c, meta(acked_pkt).max_stream_data_sid);
         if (s && s->new_in_data_max == meta(acked_pkt).max_stream_data)
@@ -439,13 +435,12 @@ void on_pkt_acked(struct q_conn * const c,
     }
 
     // if this ACKs the current MAX_DATA frame, we can stop sending it
-    if (bit_isset(NUM_FRAM_TYPES, FRAM_TYPE_MAX_DATA,
-                  &meta(acked_pkt).frames) &&
+    if (has_frame(acked_pkt, FRAM_TYPE_MAX_DATA) &&
         c->tp_in.new_max_data == meta(acked_pkt).max_data)
         c->tx_max_data = false;
 
     // if this ACKs the current MAX_STREAM_ID frame, we can stop sending it
-    if (bit_isset(NUM_FRAM_TYPES, FRAM_TYPE_MAX_SID, &meta(acked_pkt).frames)) {
+    if (has_frame(acked_pkt, FRAM_TYPE_MAX_SID)) {
         if (c->tp_in.new_max_bidi_streams == meta(acked_pkt).max_bidi_streams)
             c->tx_max_sid_bidi = false;
         if (c->tp_in.new_max_uni_streams == meta(acked_pkt).max_uni_streams)
@@ -489,7 +484,7 @@ void on_pkt_acked(struct q_conn * const c,
     }
 
     // stop ACKing packets that were contained in the ACK frame of this packet
-    if (bit_isset(NUM_FRAM_TYPES, FRAM_TYPE_ACK, &meta(acked_pkt).frames))
+    if (has_frame(acked_pkt, FRAM_TYPE_ACK))
         track_acked_pkts(pn, acked_pkt);
 
     if (!is_rtxable(&meta(acked_pkt)))
