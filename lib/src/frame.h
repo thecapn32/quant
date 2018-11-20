@@ -65,6 +65,8 @@ struct cid;
 #define F_STREAM_LEN 0x02
 #define F_STREAM_OFF 0x04
 
+#define DEF_ACK_DEL_EXP 3
+
 #ifndef NDEBUG
 #define FRAM_IN BLD BLU
 #define FRAM_OUT BLD GRN

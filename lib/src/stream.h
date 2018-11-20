@@ -40,6 +40,10 @@
 #define STRM_FL_SRV 0x01
 #define STRM_FL_UNI 0x02
 
+#define INIT_STRM_DATA_BIDI 65535
+#define INIT_STRM_DATA_UNI  65535
+#define INIT_MAX_UNI_STREAMS 2
+#define INIT_MAX_BIDI_STREAMS 4
 
 #define STRM_STATE(k, v) k = v
 #define STRM_STATES                                                            \

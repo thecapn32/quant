@@ -214,7 +214,9 @@ void do_stream_fc(struct q_stream * const s)
 
     if (s->in_data + 2 * MAX_PKT_LEN > s->in_data_max) {
         s->tx_max_stream_data = s->c->needs_tx = true;
-        s->new_in_data_max = s->in_data_max + 0x8000;
+        s->new_in_data_max =
+            s->in_data_max +
+            (is_uni(s->id) ? INIT_STRM_DATA_UNI : INIT_STRM_DATA_BIDI);
     }
 }
 
@@ -227,12 +229,14 @@ void do_stream_id_fc(struct q_conn * const c, const int64_t sid)
         if (is_uni(sid)) {
             if (sid >> 2 == c->tp_in.max_uni_streams - 1) {
                 c->tx_max_sid_uni = true;
-                c->tp_in.new_max_uni_streams = c->tp_in.max_uni_streams + 1;
+                c->tp_in.new_max_uni_streams =
+                    c->tp_in.max_uni_streams + INIT_MAX_UNI_STREAMS;
             }
         } else {
             if (sid >> 2 == c->tp_in.max_bidi_streams - 1) {
                 c->tx_max_sid_bidi = true;
-                c->tp_in.new_max_bidi_streams = c->tp_in.max_bidi_streams + 1;
+                c->tp_in.new_max_bidi_streams =
+                    c->tp_in.max_bidi_streams + INIT_MAX_BIDI_STREAMS;
             }
         }
 

@@ -308,7 +308,7 @@ tx_stream_data(struct q_stream * const s, const uint32_t limit)
             s->out_nxt = sq_next(v, next);
 
         if (unlikely(s->c->rec.in_flight + w_mtu(s->c->w) > s->c->rec.cwnd)) {
-            warn(CRT, "cwnd limit %u reached (%u + %u > %u)",
+            warn(CRT, "cwnd limit %u reached (%" PRIu64 " + %u > %" PRIu64 ")",
                  s->c->rec.in_flight, w_mtu(s->c->w), s->c->rec.cwnd);
             break;
         }
@@ -1214,15 +1214,16 @@ struct q_conn * new_conn(struct w_engine * const w,
     ev_init(&c->migration_alarm, enable_migration);
     c->do_migration = true;
 
-    c->tp_in.ack_del_exp = c->tp_out.ack_del_exp = 3;
+    c->tp_in.ack_del_exp = c->tp_out.ack_del_exp = DEF_ACK_DEL_EXP;
     c->tp_in.max_ack_del = c->tp_out.max_ack_del =
         (uint8_t)(1000 * kDelayedAckTimeout);
     c->tp_in.idle_to = kIdleTimeout;
-    c->tp_in.max_data = c->is_clnt ? 0x4000 : 0x8000;
-    c->tp_in.max_strm_data_uni = c->tp_in.max_strm_data_bidi_local =
-        c->tp_in.max_strm_data_bidi_remote = c->is_clnt ? 0x2000 : 0x4000;
-    c->tp_in.max_bidi_streams = c->is_clnt ? 1 : 2;
-    c->tp_in.max_uni_streams = c->is_clnt ? 6 : 0;
+    c->tp_in.max_data = INIT_MAX_BIDI_STREAMS * INIT_STRM_DATA_BIDI;
+    c->tp_in.max_strm_data_uni = INIT_STRM_DATA_UNI;
+    c->tp_in.max_strm_data_bidi_local = c->tp_in.max_strm_data_bidi_remote =
+        INIT_STRM_DATA_BIDI;
+    c->tp_in.max_bidi_streams = INIT_MAX_BIDI_STREAMS;
+    c->tp_in.max_uni_streams = INIT_MAX_UNI_STREAMS;
 
     // initialize recovery state
     init_rec(c);

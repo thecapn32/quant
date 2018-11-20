@@ -349,10 +349,10 @@ uint16_t dec_ack_frame(struct q_conn * const c,
         err_close_return(c, ERR_FRAME_ENC, t, "ACK delay raw %" PRIu64,
                          ack_delay_raw);
 
-    // handshake pkts always use an ACK delay exponent of 3
+    // handshake pkts always use the default ACK delay exponent
     const uint8_t ade =
         meta(v).hdr.type == F_LH_INIT && meta(v).hdr.type == F_LH_HSHK
-            ? 3
+            ? DEF_ACK_DEL_EXP
             : c->tp_in.ack_del_exp;
     const uint64_t ack_delay = ack_delay_raw * (1 << ade);
 
@@ -1114,10 +1114,10 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     meta(v).lg_acked = b->hi;
     i = enc(v->buf, v->len, i, &meta(v).lg_acked, 0, 0, FMT_PNR_IN);
 
-    // handshake pkts always use an ACK delay exponent of 3
+    // handshake pkts always use the default ACK delay exponent
     const uint8_t ade =
         meta(v).hdr.type <= F_LH_INIT && meta(v).hdr.type >= F_LH_HSHK
-            ? 3
+            ? DEF_ACK_DEL_EXP
             : c->tp_out.ack_del_exp;
     const uint64_t ack_delay =
         (uint64_t)((ev_now(loop) - diet_timestamp(b)) * 1000000) / (1 << ade);
