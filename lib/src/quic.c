@@ -281,15 +281,16 @@ void q_write(struct q_stream * const s,
              struct w_iov_sq * const q,
              const bool fin)
 {
+    struct q_conn * const c = s->c;
     const uint32_t qlen = w_iov_sq_len(q);
     const uint64_t qcnt = w_iov_sq_cnt(q);
     warn(WRN, "writing %u byte%s in %u buf%s on %s conn %s strm " FMT_SID " %s",
-         qlen, plural(qlen), qcnt, plural(qcnt), conn_type(s->c),
-         cid2str(s->c->scid), s->id, fin ? "and closing" : "");
+         qlen, plural(qlen), qcnt, plural(qcnt), conn_type(c), cid2str(c->scid),
+         s->id, fin ? "and closing" : "");
 
     if (s->state >= strm_hclo) {
-        warn(ERR, "%s conn %s strm " FMT_SID " is in state %s", conn_type(s->c),
-             cid2str(s->c->scid), s->id, strm_state_str[s->state]);
+        warn(ERR, "%s conn %s strm " FMT_SID " is in state %s", conn_type(c),
+             cid2str(c->scid), s->id, strm_state_str[s->state]);
         return;
     }
 
@@ -298,7 +299,7 @@ void q_write(struct q_stream * const s,
     do_write(s, q, fin);
 
     warn(WRN, "wrote %u byte%s on %s conn %s strm " FMT_SID " %s", qlen,
-         plural(qlen), conn_type(s->c), cid2str(s->c->scid), s->id,
+         plural(qlen), conn_type(c), cid2str(c->scid), s->id,
          fin ? "and closed" : "");
 
     ensure(w_iov_sq_len(q) == qlen, "payload corrupted, %u != %u",
@@ -338,8 +339,7 @@ again:;
     if (s) {
         sq_concat(q, &s->in);
         warn(WRN, "read %u byte%s on %s conn %s strm " FMT_SID, w_iov_sq_len(q),
-             plural(w_iov_sq_len(q)), conn_type(s->c), cid2str(s->c->scid),
-             s->id);
+             plural(w_iov_sq_len(q)), conn_type(c), cid2str(c->scid), s->id);
     }
 
     return s;
@@ -348,17 +348,18 @@ again:;
 
 void q_readall_str(struct q_stream * const s, struct w_iov_sq * const q)
 {
-    while (s->c->state == conn_estb && s->state != strm_hcrm &&
+    struct q_conn * const c = s->c;
+    while (c->state == conn_estb && s->state != strm_hcrm &&
            s->state != strm_clsd) {
-        warn(WRN, "reading all on %s conn %s strm " FMT_SID, conn_type(s->c),
-             cid2str(s->c->scid), s->id);
-        loop_run(q_readall_str, s->c, s);
+        warn(WRN, "reading all on %s conn %s strm " FMT_SID, conn_type(c),
+             cid2str(c->scid), s->id);
+        loop_run(q_readall_str, c, s);
     }
 
     // return data
     sq_concat(q, &s->in);
     warn(WRN, "read %u byte%s on %s conn %s strm " FMT_SID, w_iov_sq_len(q),
-         plural(w_iov_sq_len(q)), conn_type(s->c), cid2str(s->c->scid), s->id);
+         plural(w_iov_sq_len(q)), conn_type(c), cid2str(c->scid), s->id);
 }
 
 
@@ -533,12 +534,13 @@ void q_close_stream(struct q_stream * const s)
     if (s->state == strm_hclo || s->state == strm_clsd)
         return;
 
+    struct q_conn * const c = s->c;
     warn(WRN, "closing strm " FMT_SID " state %s on %s conn %s", s->id,
-         strm_state_str[s->state], conn_type(s->c), cid2str(s->c->scid));
+         strm_state_str[s->state], conn_type(c), cid2str(c->scid));
     strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
     s->tx_fin = true;
-    ev_async_send(loop, &s->c->tx_w);
-    loop_run(q_close_stream, s->c, s);
+    ev_async_send(loop, &c->tx_w);
+    loop_run(q_close_stream, c, s);
 }
 
 

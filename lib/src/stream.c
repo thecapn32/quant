@@ -72,21 +72,21 @@ int64_t max_sid(const int64_t sid, const struct q_conn * const c)
 
 void apply_stream_limits(struct q_stream * const s)
 {
-    s->in_data_max =
-        is_srv_ini(s->id) == s->c->is_clnt
-            ? (is_uni(s->id) ? s->c->tp_in.max_strm_data_uni
-                             : s->c->tp_in.max_strm_data_bidi_remote)
-            : (is_uni(s->id) ? s->c->tp_in.max_strm_data_uni
-                             : s->c->tp_in.max_strm_data_bidi_local);
+    struct q_conn * const c = s->c;
+    s->in_data_max = is_srv_ini(s->id) == c->is_clnt
+                         ? (is_uni(s->id) ? c->tp_in.max_strm_data_uni
+                                          : c->tp_in.max_strm_data_bidi_remote)
+                         : (is_uni(s->id) ? c->tp_in.max_strm_data_uni
+                                          : c->tp_in.max_strm_data_bidi_local);
     s->out_data_max =
-        is_srv_ini(s->id) == s->c->is_clnt
-            ? (is_uni(s->id) ? s->c->tp_out.max_strm_data_uni
-                             : s->c->tp_out.max_strm_data_bidi_remote)
-            : (is_uni(s->id) ? s->c->tp_out.max_strm_data_uni
-                             : s->c->tp_out.max_strm_data_bidi_local);
+        is_srv_ini(s->id) == c->is_clnt
+            ? (is_uni(s->id) ? c->tp_out.max_strm_data_uni
+                             : c->tp_out.max_strm_data_bidi_remote)
+            : (is_uni(s->id) ? c->tp_out.max_strm_data_uni
+                             : c->tp_out.max_strm_data_bidi_local);
 
     // if limit is less than an MTU, we are already blocked
-    s->blocked = s->out_data_max < w_mtu(s->c->w);
+    s->blocked = s->out_data_max < w_mtu(c->w);
 }
 
 
@@ -112,7 +112,7 @@ struct q_stream * new_stream(struct q_conn * const c, const int64_t id)
     apply_stream_limits(s);
     do_stream_id_fc(c, id);
 
-    if (is_srv_ini(id) != s->c->is_clnt) {
+    if (is_srv_ini(id) != c->is_clnt) {
         // this is a local stream
         if (is_uni(id))
             c->next_sid_uni += 4;
@@ -126,20 +126,21 @@ struct q_stream * new_stream(struct q_conn * const c, const int64_t id)
 
 void free_stream(struct q_stream * const s)
 {
+    struct q_conn * const c = s->c;
     if (s->id >= 0) {
 #ifndef FUZZING
-        warn(DBG, "freeing strm " FMT_SID " on %s conn %s", s->id,
-             conn_type(s->c), cid2str(s->c->scid));
+        warn(DBG, "freeing strm " FMT_SID " on %s conn %s", s->id, conn_type(c),
+             cid2str(c->scid));
 #endif
-        diet_insert(&s->c->closed_streams, (uint64_t)s->id, 0);
+        diet_insert(&c->closed_streams, (uint64_t)s->id, 0);
     }
 
-    ensure(splay_remove(streams_by_id, &s->c->streams_by_id, s), "removed");
+    ensure(splay_remove(streams_by_id, &c->streams_by_id, s), "removed");
     while (!splay_empty(&s->in_ooo)) {
         struct pkt_meta * const p = splay_min(ooo_by_off, &s->in_ooo);
         warn(ERR, "idx %u", pm_idx(p));
         ensure(splay_remove(ooo_by_off, &s->in_ooo, p), "removed");
-        free_iov(w_iov(s->c->w, pm_idx(p)));
+        free_iov(w_iov(c->w, pm_idx(p)));
     }
     q_free(&s->out);
     q_free(&s->in);

@@ -269,19 +269,20 @@ void on_pkt_sent(struct q_stream * const s, struct w_iov * const v)
     // * sent_packets[packet_number].ack_only
 
     meta(v).tx_t = ev_now(loop);
-    struct pn_space * const pn = pn_for_epoch(s->c, strm_epoch(s));
+    struct q_conn * const c = s->c;
+    struct pn_space * const pn = pn_for_epoch(c, strm_epoch(s));
     ensure(splay_insert(pm_by_nr, &pn->sent_pkts, &meta(v)) == 0, "inserted");
 
-    if (likely(s->c->state != conn_idle) &&
+    if (likely(c->state != conn_idle) &&
         is_ack_only(&meta(v).frames) == false) {
         if (has_frame(v, FRAM_TYPE_CRPT))
             // is_handshake_packet
-            s->c->rec.last_sent_hshk_t = meta(v).tx_t;
-        s->c->rec.last_sent_rtxable_t = meta(v).tx_t;
+            c->rec.last_sent_hshk_t = meta(v).tx_t;
+        c->rec.last_sent_rtxable_t = meta(v).tx_t;
 
-        s->c->rec.in_flight += meta(v).tx_len; // OnPacketSentCC
-        log_cc(s->c);
-        set_ld_alarm(s->c);
+        c->rec.in_flight += meta(v).tx_len; // OnPacketSentCC
+        log_cc(c);
+        set_ld_alarm(c);
     }
 }
 
@@ -473,9 +474,9 @@ void on_pkt_acked(struct q_conn * const c,
             warn(DBG, "stream " FMT_SID " fully acked", s->id);
 
             // a q_write may be done
-            maybe_api_return(q_write, s->c, s);
-            if (s->id >= 0 && s->c->did_0rtt)
-                maybe_api_return(q_connect, s->c, 0);
+            maybe_api_return(q_write, c, s);
+            if (s->id >= 0 && c->did_0rtt)
+                maybe_api_return(q_connect, c, 0);
         }
     }
 
@@ -483,7 +484,7 @@ void on_pkt_acked(struct q_conn * const c,
         adj_iov_to_start(acked_pkt);
         if (is_fin(acked_pkt))
             // this ACKs a FIN
-            maybe_api_return(q_close_stream, s->c, s);
+            maybe_api_return(q_close_stream, c, s);
         adj_iov_to_data(acked_pkt);
     }
 

@@ -274,28 +274,30 @@ tx_stream_data(struct q_stream * const s, const uint32_t limit)
 {
     uint32_t encoded = 0;
     struct w_iov * v = s->out_una;
+    struct q_conn * const c = s->c;
     sq_foreach_from (v, &s->out, next) {
+        ensure(c->rec.in_flight <= c->rec.cwnd, "in_flight > cwnd");
+
         if (unlikely(meta(v).is_acked)) {
             warn(INF, "skip ACK'ed pkt " FMT_PNR_OUT, meta(v).hdr.nr);
             continue;
         }
 
         if (meta(v).tx_len && meta(v).is_lost == false) {
-            warn(INF, "skip non-lost TX'ed pkt " FMT_PNR_OUT, meta(v).hdr.nr);
+            // warn(INF, "skip non-lost TX'ed pkt " FMT_PNR_OUT, meta(v).hdr.nr);
             continue;
         }
 
         if (unlikely(meta(v).is_lost))
             rtx_pkt(s, v);
 
-        if (likely(s->c->state == conn_estb)) {
+        if (likely(c->state == conn_estb)) {
             // add one MTU, so we can still encode this stream frame
             if (s->id >= 0 &&
-                s->out_data + v->len + w_mtu(s->c->w) > s->out_data_max)
+                s->out_data + v->len + w_mtu(c->w) > s->out_data_max)
                 s->blocked = true;
-            if (s->c->out_data + v->len + w_mtu(s->c->w) >
-                s->c->tp_out.max_data)
-                s->c->blocked = true;
+            if (c->out_data + v->len + w_mtu(c->w) > c->tp_out.max_data)
+                c->blocked = true;
         }
 
         if (unlikely(enc_pkt(s, meta(v).is_lost, true, v) == false))
@@ -306,13 +308,14 @@ tx_stream_data(struct q_stream * const s, const uint32_t limit)
             // update the stream's out_nxt pointer
             s->out_nxt = sq_next(v, next);
 
-        if (unlikely(s->c->rec.in_flight + w_mtu(s->c->w) > s->c->rec.cwnd)) {
-            warn(CRT, "cwnd limit %u reached (%" PRIu64 " + %u > %" PRIu64 ")",
-                 s->c->rec.in_flight, w_mtu(s->c->w), s->c->rec.cwnd);
+        if (unlikely(c->rec.in_flight + w_mtu(c->w) > c->rec.cwnd)) {
+            warn(CRT,
+                 "cwnd limit reached at %u (%" PRIu64 " + %u > %" PRIu64 ")",
+                 c->rec.in_flight, c->rec.in_flight, w_mtu(c->w), c->rec.cwnd);
             break;
         }
 
-        if (unlikely(s->blocked || s->c->blocked))
+        if (unlikely(s->blocked || c->blocked))
             break;
 
         if (unlikely(limit && encoded == limit)) {
@@ -323,14 +326,14 @@ tx_stream_data(struct q_stream * const s, const uint32_t limit)
 
     if (encoded == 0 && s->tx_fin) {
         // we need to send a FIN
-        v = alloc_iov(s->c->w, 0, OFFSET_ESTB);
+        v = alloc_iov(c->w, 0, OFFSET_ESTB);
         v->len = 0;
         sq_insert_tail(&s->out, v, next);
         if (enc_pkt(s, meta(v).is_lost, true, v))
             encoded++;
     }
 
-    log_sent_pkts(s->c);
+    log_sent_pkts(c);
 }
 
 
