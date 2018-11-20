@@ -172,9 +172,9 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
 
     // deliver data into stream
     bool is_dup = false;
-    const char * kind = "";
+    const char * kind = BLD RED "???" NRM;
 
-    if (unlikely(meta(v).stream_data_len == 0)) {
+    if (unlikely(meta(v).stream_data_len == 0 && !is_set(F_STREAM_FIN, t))) {
         warn(WRN, "zero-len stream/crypto frame on sid " FMT_SID ", ignoring",
              sid);
         is_dup = true;
@@ -199,8 +199,9 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
 
     // best case: new in-order data
     if (meta(v).stream->in_data_off >= meta(v).stream_off &&
-        meta(v).stream->in_data_off <=
-            meta(v).stream_off + meta(v).stream_data_len - 1) {
+        meta(v).stream->in_data_off <= meta(v).stream_off +
+                                           meta(v).stream_data_len -
+                                           (meta(v).stream_data_len ? 1 : 0)) {
         kind = "seq";
 
         if (unlikely(meta(v).stream->in_data_off > meta(v).stream_off))

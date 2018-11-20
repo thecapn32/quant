@@ -281,7 +281,9 @@ void q_write(struct q_stream * const s,
              struct w_iov_sq * const q,
              const bool fin)
 {
+#ifndef NDEBUG
     struct q_conn * const c = s->c;
+#endif
     const uint32_t qlen = w_iov_sq_len(q);
     const uint64_t qcnt = w_iov_sq_cnt(q);
     warn(WRN, "writing %u byte%s in %u buf%s on %s conn %s strm " FMT_SID " %s",
@@ -531,16 +533,18 @@ struct w_engine * q_init(const char * const ifname,
 
 void q_close_stream(struct q_stream * const s)
 {
-    if (s->state == strm_hclo || s->state == strm_clsd)
-        return;
+    if (s->state != strm_hclo && s->state != strm_clsd) {
+        struct q_conn * const c = s->c;
+        warn(WRN, "closing strm " FMT_SID " state %s on %s conn %s", s->id,
+             strm_state_str[s->state], conn_type(c), cid2str(c->scid));
+        strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
+        s->tx_fin = true;
+        ev_async_send(loop, &c->tx_w);
+        loop_run(q_close_stream, c, s);
+    }
 
-    struct q_conn * const c = s->c;
-    warn(WRN, "closing strm " FMT_SID " state %s on %s conn %s", s->id,
-         strm_state_str[s->state], conn_type(c), cid2str(c->scid));
-    strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
-    s->tx_fin = true;
-    ev_async_send(loop, &c->tx_w);
-    loop_run(q_close_stream, c, s);
+    if (s->state == strm_clsd)
+        free_stream(s);
 }
 
 
@@ -618,7 +622,7 @@ uint64_t q_sid(const struct q_stream * const s)
 }
 
 
-bool q_is_str_closed(struct q_stream * const s)
+bool q_peer_has_closed_stream(struct q_stream * const s)
 {
     return s->state == strm_clsd;
 }

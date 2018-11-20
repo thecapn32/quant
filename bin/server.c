@@ -282,8 +282,10 @@ int main(int argc, char * argv[])
                     ret = 1;
                     break;
                 }
-                if (q_is_str_closed(s))
+                if (q_peer_has_closed_stream(s)) {
+                    q_close_stream(s);
                     break;
+                }
             }
             q_free(&q);
         }

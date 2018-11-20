@@ -224,12 +224,11 @@ extern struct q_conn_sl c_ready;
 #if !defined(NDEBUG) && !defined(FUZZING)
 #define conn_to_state(c, s)                                                    \
     do {                                                                       \
-        warn(DBG, "conn %s state %s -> " RED "%s" NRM, cid2str((c)->scid),     \
-             conn_state_str[(c)->state], conn_state_str[(s)]);                 \
-        if (likely((c)->state != (s)))                                         \
-            (c)->state = (s);                                                  \
-        else                                                                   \
-            warn(ERR, "useless transition %u %u!", (c)->state, (s));           \
+        warn(DBG, "%s%s conn %s state %s -> " RED "%s" NRM,                    \
+             (c)->state == (s) ? RED BLD "useless transition: " NRM : "",      \
+             conn_type(c), cid2str((c)->scid), conn_state_str[(c)->state],     \
+             conn_state_str[(s)]);                                             \
+        (c)->state = (s);                                                      \
     } while (0)
 #else
 #define conn_to_state(c, s) (c)->state = (s)

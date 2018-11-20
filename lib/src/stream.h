@@ -41,7 +41,7 @@
 #define STRM_FL_UNI 0x02
 
 #define INIT_STRM_DATA_BIDI 65535
-#define INIT_STRM_DATA_UNI  65535
+#define INIT_STRM_DATA_UNI 65535
 #define INIT_MAX_UNI_STREAMS 2
 #define INIT_MAX_BIDI_STREAMS 4
 
@@ -89,13 +89,16 @@ struct q_stream {
 #define strm_to_state(s, new_state)                                            \
     do {                                                                       \
         if ((s)->id >= 0) {                                                    \
-            warn(DBG,                                                          \
-                 "conn %s strm " FMT_SID " (%sdir, %s) state %s -> " YEL       \
-                 "%s" NRM,                                                     \
-                 (s)->c->scid ? cid2str((s)->c->scid) : "?", (s)->id,          \
-                 is_uni((s)->id) ? "uni" : "bi",                               \
-                 is_srv_ini((s)->id) ? "serv" : "clnt",                        \
-                 strm_state_str[(s)->state], strm_state_str[(new_state)]);     \
+            warn(                                                              \
+                DBG,                                                           \
+                "%s%s conn %s strm " FMT_SID " (%sdir, %s) state %s -> " YEL   \
+                "%s" NRM,                                                      \
+                (s)->state == (new_state) ? BLD RED "useless transition: " NRM \
+                                          : "",                                \
+                conn_type((s)->c), (s)->c->scid ? cid2str((s)->c->scid) : "?", \
+                (s)->id, is_uni((s)->id) ? "uni" : "bi",                       \
+                is_srv_ini((s)->id) ? "serv" : "clnt",                         \
+                strm_state_str[(s)->state], strm_state_str[(new_state)]);      \
         }                                                                      \
         (s)->state = (new_state);                                              \
     } while (0)

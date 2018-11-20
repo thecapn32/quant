@@ -326,23 +326,18 @@ tx_stream_data(struct q_stream * const s, const uint32_t limit)
         }
     }
 
-    if (encoded == 0 && s->tx_fin) {
-        // we need to send a FIN
-        v = alloc_iov(c->w, 0, OFFSET_ESTB);
-        v->len = 0;
-        sq_insert_tail(&s->out, v, next);
-        if (enc_pkt(s, meta(v).is_lost, true, v))
-            encoded++;
-    }
-
     log_sent_pkts(c);
 }
 
 
 static void __attribute__((nonnull)) tx_stream_ctrl(struct q_stream * const s)
 {
-    struct w_iov * const v = alloc_iov(s->c->w, 0, 0);
-    enc_pkt(s, false, false, v);
+    struct w_iov * const v = alloc_iov(s->c->w, 0, s->tx_fin ? OFFSET_ESTB : 0);
+    if (s->tx_fin) {
+        v->len = 0;
+        sq_insert_tail(&s->out, v, next);
+    }
+    enc_pkt(s, false, s->tx_fin, v);
     do_tx(s->c);
 }
 
@@ -988,6 +983,9 @@ rx_pkts(struct w_iov_sq * const x,
         if (meta(v).stream == 0)
             // we didn't place this pkt in any stream - bye!
             free_iov(v);
+        else if (unlikely(meta(v).stream->state == strm_clsd &&
+                          sq_empty(&meta(v).stream->in)))
+            free_stream(meta(v).stream);
     }
 }
 

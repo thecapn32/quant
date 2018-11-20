@@ -41,7 +41,7 @@ static struct q_conn *cc, *sc;
 static uint32_t io(const uint32_t len)
 {
     // reserve a new stream
-    struct q_stream * const s = q_rsv_stream(cc, true);
+    struct q_stream * s = q_rsv_stream(cc, true);
 
     // allocate buffers to transmit a packet
     struct w_iov_sq o = w_iov_sq_initializer(o);
@@ -49,10 +49,15 @@ static uint32_t io(const uint32_t len)
 
     // send the data
     q_write(s, &o, true);
+    q_close_stream(s);
 
     // read the data
     struct w_iov_sq i = w_iov_sq_initializer(i);
-    q_read(sc, &i, true);
+    s = q_read(sc, &i, true);
+    q_close_stream(s);
+
+    q_free(&i);
+    q_free(&o);
 
     return len;
 }
@@ -67,7 +72,7 @@ static void BM_conn(benchmark::State & state)
 }
 
 
-BENCHMARK(BM_conn)->RangeMultiplier(2)->Ranges({{4096, 65535*8}})
+BENCHMARK(BM_conn)->RangeMultiplier(2)->Ranges({{4096, 65535 * 8}})
     // ->MinTime(3)
     // ->UseRealTime()
     ;

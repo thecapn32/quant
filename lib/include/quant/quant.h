@@ -108,7 +108,8 @@ extern void __attribute__((nonnull)) q_write_file(struct w_engine * const w,
                                                   const size_t len,
                                                   const bool fin);
 
-extern bool __attribute__((nonnull)) q_is_str_closed(struct q_stream * const s);
+extern bool __attribute__((nonnull))
+q_peer_has_closed_stream(struct q_stream * const s);
 
 extern void __attribute__((nonnull))
 q_readall_str(struct q_stream * const s, struct w_iov_sq * const q);
