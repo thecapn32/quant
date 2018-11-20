@@ -93,7 +93,6 @@ static void __attribute__((nonnull)) set_ld_alarm(struct q_conn * const c)
 
     } else if (!is_zero(c->rec.loss_t)) {
         c->rec.ld_alarm.repeat = c->rec.loss_t - c->rec.last_sent_rtxable_t;
-        // warn(DBG, "%f %f", c->rec.loss_t - c->rec.last_sent_rtxable_t);
         // warn(DBG, "early RTX or time alarm in %f sec on %s conn %s",
         //      c->rec.ld_alarm.repeat, conn_type(c), cid2str(c->scid));
 
@@ -374,6 +373,11 @@ void on_ack_received_2(struct q_conn * const c,
 
     detect_lost_pkts(c, pn);
     set_ld_alarm(c);
+
+    // XXX since we likely reduced in_flight during the ACK parsing, we can TX
+    if (likely(c->rec.in_flight < c->rec.cwnd))
+        c->needs_tx = true;
+
     // TODO: ProcessECN(ack)
 }
 
