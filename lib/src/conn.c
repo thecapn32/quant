@@ -276,7 +276,8 @@ tx_stream_data(struct q_stream * const s, const uint32_t limit)
     struct w_iov * v = s->out_una;
     struct q_conn * const c = s->c;
     sq_foreach_from (v, &s->out, next) {
-        ensure(c->rec.in_flight <= c->rec.cwnd, "in_flight > cwnd");
+        ensure(has_wnd(c), "in_flight %" PRIu64 " vs. cwnd %" PRIu64,
+               c->rec.in_flight, c->rec.cwnd);
 
         if (unlikely(meta(v).is_acked)) {
             warn(INF, "skip ACK'ed pkt " FMT_PNR_OUT, meta(v).hdr.nr);
@@ -284,7 +285,8 @@ tx_stream_data(struct q_stream * const s, const uint32_t limit)
         }
 
         if (meta(v).tx_len && meta(v).is_lost == false) {
-            // warn(INF, "skip non-lost TX'ed pkt " FMT_PNR_OUT, meta(v).hdr.nr);
+            // warn(INF, "skip non-lost TX'ed pkt " FMT_PNR_OUT,
+            // meta(v).hdr.nr);
             continue;
         }
 
@@ -308,10 +310,10 @@ tx_stream_data(struct q_stream * const s, const uint32_t limit)
             // update the stream's out_nxt pointer
             s->out_nxt = sq_next(v, next);
 
-        if (unlikely(c->rec.in_flight + w_mtu(c->w) > c->rec.cwnd)) {
+        if (unlikely(!has_wnd(c))) {
             warn(CRT,
-                 "cwnd limit reached at %u (%" PRIu64 " + %u > %" PRIu64 ")",
-                 c->rec.in_flight, c->rec.in_flight, w_mtu(c->w), c->rec.cwnd);
+                 "cwnd limit reached at in_flight %" PRIu64 " + %u > %" PRIu64,
+                 c->rec.in_flight, w_mtu(c->w), c->rec.cwnd);
             break;
         }
 
@@ -421,10 +423,13 @@ void tx(struct q_conn * const c, const uint32_t limit)
              stream_has_data_to_tx ? "data" : "ctrl", conn_type(c),
              cid2str(c->scid), s->id, sq_len(&s->out), plural(sq_len(&s->out)));
 
-        if (stream_has_data_to_tx && !s->blocked)
+        if (stream_has_data_to_tx && !s->blocked && has_wnd(c))
             tx_stream_data(s, limit);
-        else
+        else if (stream_needs_ctrl(s))
             tx_stream_ctrl(s);
+
+        if (unlikely(!has_wnd(c)))
+            break;
     }
 
     if (sq_empty(&c->txq) || conn_needs_ctrl(c)) {
@@ -434,7 +439,8 @@ void tx(struct q_conn * const c, const uint32_t limit)
     }
 
 done:
-    do_tx(c);
+    if (!sq_empty(&c->txq))
+        do_tx(c);
 }
 
 

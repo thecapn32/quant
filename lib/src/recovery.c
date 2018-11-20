@@ -376,7 +376,7 @@ void on_ack_received_2(struct q_conn * const c,
     set_ld_alarm(c);
 
     // XXX since we likely reduced in_flight during the ACK parsing, we can TX
-    if (likely(c->rec.in_flight < c->rec.cwnd))
+    if (likely(has_wnd(c)))
         c->needs_tx = true;
 
     // TODO: ProcessECN(ack)

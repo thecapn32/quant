@@ -334,11 +334,18 @@ epoch_in(const struct q_conn * const c)
 
 
 static inline bool __attribute__((nonnull, always_inline))
+has_wnd(const struct q_conn * const c)
+{
+    return !c->blocked && (c->rec.in_flight + w_mtu(c->w) < c->rec.cwnd);
+}
+
+
+static inline bool __attribute__((nonnull, always_inline))
 conn_needs_ctrl(const struct q_conn * const c)
 {
     return epoch_in(c) == ep_data &&
            (c->tx_max_data || c->tx_max_sid_bidi || c->tx_path_resp ||
-            c->tx_path_chlg || c->tx_ncid || c->tx_retire_cid);
+            c->tx_path_chlg || c->tx_ncid || c->tx_retire_cid || c->blocked);
 }
 
 
