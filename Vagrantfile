@@ -1,7 +1,7 @@
 Vagrant.configure("2") do |config|
 
   # OS to use for the VM
-  config.vm.box = "ubuntu/bionic64"
+  config.vm.box = "ubuntu/cosmic64"
 
   config.vm.network "private_network", type: "dhcp", auto_config: false
 
