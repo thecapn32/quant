@@ -92,9 +92,10 @@ dec_aead(struct q_conn * const c,
          const uint16_t len,
          const struct cipher_ctx * const ctx);
 
-extern uint16_t __attribute__((nonnull)) enc_aead(struct q_conn * const c,
-                                                  const struct w_iov * const v,
-                                                  const struct w_iov * const x);
+extern uint16_t __attribute__((nonnull))
+enc_aead(struct q_conn * const c,
+         const struct w_iov * const v,
+         const struct w_iov * const xv);
 
 extern void __attribute__((nonnull)) make_rtry_tok(struct q_conn * const c);
 

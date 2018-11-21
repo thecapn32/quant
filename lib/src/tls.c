@@ -1310,7 +1310,7 @@ uint16_t dec_aead(struct q_conn * const c
 
 uint16_t enc_aead(struct q_conn * const c,
                   const struct w_iov * const v,
-                  const struct w_iov * const x)
+                  const struct w_iov * const xv)
 {
     const struct cipher_ctx * const ctx =
         which_cipher_ctx_out(c, meta(v).hdr.flags);
@@ -1321,20 +1321,20 @@ uint16_t enc_aead(struct q_conn * const c,
 
     const uint16_t hdr_len = meta(v).hdr.hdr_len;
     ensure(meta(v).hdr.hdr_len, "meta(v).hdr.hdr_len");
-    memcpy(x->buf, v->buf, hdr_len); // copy pkt header
+    memcpy(xv->buf, v->buf, hdr_len); // copy pkt header
 
     const uint16_t plen = v->len - hdr_len + AEAD_LEN;
-    const size_t ret =
-        ptls_aead_encrypt(ctx->aead, &x->buf[hdr_len], &v->buf[hdr_len],
-                          plen - AEAD_LEN, meta(v).hdr.nr, v->buf, hdr_len);
+    const uint16_t ret = (uint16_t)ptls_aead_encrypt(
+        ctx->aead, &xv->buf[hdr_len], &v->buf[hdr_len], plen - AEAD_LEN,
+        meta(v).hdr.nr, v->buf, hdr_len);
     if (likely(meta(v).pkt_nr_pos)) {
         // encrypt the packet number
         uint16_t off = meta(v).pkt_nr_pos + MAX_PKT_NR_LEN;
-        if (off + AEAD_LEN > x->len)
-            off = x->len - AEAD_LEN;
-        ptls_cipher_init(ctx->pne, &x->buf[off]);
-        ptls_cipher_encrypt(ctx->pne, &x->buf[meta(v).pkt_nr_pos],
-                            &x->buf[meta(v).pkt_nr_pos],
+        if (unlikely(off + AEAD_LEN > hdr_len + ret))
+            off = hdr_len + ret - AEAD_LEN;
+        ptls_cipher_init(ctx->pne, &xv->buf[off]);
+        ptls_cipher_encrypt(ctx->pne, &xv->buf[meta(v).pkt_nr_pos],
+                            &xv->buf[meta(v).pkt_nr_pos],
                             hdr_len - meta(v).pkt_nr_pos);
 #ifdef DEBUG_MARSHALL
         warn(DBG,
@@ -1342,7 +1342,7 @@ uint16_t enc_aead(struct q_conn * const c,
              "[%u..%u] w/off %u",
              aead_type(c, ctx->aead), hdr_len + plen - AEAD_LEN - 1,
              hdr_len + plen - AEAD_LEN, hdr_len + plen - 1, meta(v).pkt_nr_pos,
-             hdr_len - 1, off);
+             meta(v).pkt_nr_pos + meta(v).pkt_nr_len - 1, off);
 #endif
     }
 #ifdef DEBUG_MARSHALL
@@ -1351,7 +1351,7 @@ uint16_t enc_aead(struct q_conn * const c,
              aead_type(c, ctx->aead), hdr_len + plen - AEAD_LEN - 1,
              hdr_len + plen - AEAD_LEN, hdr_len + plen - 1);
 #endif
-    return hdr_len + (uint16_t)ret;
+    return hdr_len + ret;
 }
 
 

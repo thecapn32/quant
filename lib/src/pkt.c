@@ -731,11 +731,10 @@ static bool dec_pne(struct w_iov * const xv,
     // meta(v).hdr.hdr_len holds the offset of the pnr field
     meta(v).pkt_nr_pos = meta(v).hdr.hdr_len;
     uint16_t off = meta(v).pkt_nr_pos + MAX_PKT_NR_LEN;
-    const uint16_t len =
-        is_set(F_LONG_HDR, meta(v).hdr.flags)
-            ? meta(v).pkt_nr_pos + meta(v).hdr.len + AEAD_LEN - 1
-            : xv->len;
-    if (off + AEAD_LEN > len)
+    const uint16_t len = is_set(F_LONG_HDR, meta(v).hdr.flags)
+                             ? meta(v).pkt_nr_pos + meta(v).hdr.len + AEAD_LEN
+                             : xv->len;
+    if (unlikely(off + AEAD_LEN > len))
         off = len - AEAD_LEN;
 
     ptls_cipher_init(ctx->pne, &xv->buf[off]);
