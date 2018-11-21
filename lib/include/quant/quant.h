@@ -51,7 +51,7 @@ q_init(const char * const ifname,
        const char * const cache,
        const char * const tls_log,
        const bool verify_certs,
-       const uint64_t tls_upd_amnt);
+       const bool flip_keys);
 
 extern void __attribute__((nonnull)) q_cleanup(struct w_engine * const w);
 

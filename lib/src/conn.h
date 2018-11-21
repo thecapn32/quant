@@ -135,12 +135,12 @@ struct q_conn {
     uint32_t in_c_ready : 1;       ///< Connection is listed in c_ready.
     uint32_t tx_retire_cid : 1;    ///< Send RETIRE_CONNECTION_ID.
     uint32_t do_migration : 1;     ///< Perform a CID migration when possible.
-
+    uint32_t do_key_flip : 1;      ///< Perform a TLS key update.
 #ifndef SPINBIT
-    uint32_t : 12;
+    uint32_t : 11;
 #else
     uint32_t next_spin : 1; ///< Spin value to set on next packet sent.
-    uint32_t : 11;
+    uint32_t : 10;
 #endif
 
     uint16_t sport; ///< Local port (in network byte-order).

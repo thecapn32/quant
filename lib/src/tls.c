@@ -26,7 +26,6 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <assert.h>
-#include <inttypes.h>
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -129,8 +128,7 @@ static uint8_t cookie[COOKIE_LEN];
 
 static FILE * tls_log_file;
 
-static uint64_t tls_key_update_amnt = 0;
-static uint64_t tls_key_update_last = 0;
+static bool do_tls_key_flips = false;
 
 #define TLS_EXT_TYPE_TRANSPORT_PARAMETERS 0xffa5
 
@@ -1136,9 +1134,9 @@ void init_tls_ctx(const char * const cert,
                   __attribute__((unused))
 #endif
                   ,
-                  const uint64_t tls_upd_amnt)
+                  const bool flip_keys)
 {
-    tls_key_update_amnt = tls_upd_amnt ? tls_upd_amnt : UINT64_MAX;
+    do_tls_key_flips = flip_keys;
 
     if (key) {
 #ifdef PTLS_OPENSSL
@@ -1413,10 +1411,8 @@ bool verify_rtry_tok(struct q_conn * const c,
 void flip_keys(struct q_conn * const c, const bool out)
 {
     const bool new_kyph = !(out ? c->pn_data.out_kyph : c->pn_data.in_kyph);
-    tls_key_update_last = c->in_data + c->out_data;
-    warn(DBG, "flip %s kyph %u -> %u at %" PRIu64, out ? "out" : "in",
-         out ? c->pn_data.out_kyph : c->pn_data.in_kyph, new_kyph,
-         tls_key_update_last);
+    warn(DBG, "flip %s kyph %u -> %u", out ? "out" : "in",
+         out ? c->pn_data.out_kyph : c->pn_data.in_kyph, new_kyph);
 
     const ptls_cipher_suite_t * const cs = ptls_get_cipher(c->tls.t);
     if (unlikely(cs == 0)) {
@@ -1446,13 +1442,12 @@ void flip_keys(struct q_conn * const c, const bool out)
 
 void maybe_flip_keys(struct q_conn * const c, const bool out)
 {
-    if (likely(c->is_clnt == false ||
-               c->in_data + c->out_data - tls_key_update_last <
-                   tls_key_update_amnt))
+    if (unlikely(do_tls_key_flips == false) || likely(c->do_key_flip == false))
         return;
 
     if (c->pn_data.out_kyph != c->pn_data.in_kyph)
         return;
 
     flip_keys(c, out);
+    c->do_key_flip = false;
 }

@@ -95,7 +95,7 @@ int main(int argc __attribute__((unused)), char ** argv __attribute__((unused)))
                "0"
 #endif
                ,
-               cert, key, nullptr, nullptr, false, 0);
+               cert, key, nullptr, nullptr, false, true);
 
     // bind server socket
     q_bind(w, 55555);

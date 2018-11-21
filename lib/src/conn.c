@@ -769,8 +769,6 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         ev_timer_again(loop, &pn->ack_alarm);
     }
 
-    maybe_flip_keys(c, true);
-
 done:
     // update ECN info
     switch (v->flags & IPTOS_ECN_MASK) {
@@ -957,6 +955,7 @@ rx_pkts(struct w_iov_sq * const x,
         if ((meta(v).hdr.vers && meta(v).hdr.type != F_LH_RTRY) ||
             !is_set(F_LONG_HDR, meta(v).hdr.flags))
             if (dec_pkt_hdr_remainder(xv, v, c, x) == false) {
+                v->len = xv->len;
                 log_pkt("RX", v, &odcid, tok, tok_len);
                 if (pkt_ok_for_epoch(meta(v).hdr.flags, epoch_in(c)) == true)
                     err_close(
@@ -1072,6 +1071,7 @@ enable_migration(struct ev_loop * const l __attribute__((unused)),
 {
     struct q_conn * const c = w->data;
     c->do_migration = true;
+    c->do_key_flip = true; // XXX we borrow the migration timer for this
     ev_timer_stop(loop, &c->migration_alarm);
 }
 
@@ -1218,6 +1218,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->migration_alarm.repeat = 3; // seconds (after initial migration)
     ev_init(&c->migration_alarm, enable_migration);
     c->do_migration = true;
+    c->do_key_flip = true;
 
     c->tp_in.ack_del_exp = c->tp_out.ack_del_exp = DEF_ACK_DEL_EXP;
     c->tp_in.max_ack_del = c->tp_out.max_ack_del =

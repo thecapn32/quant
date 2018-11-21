@@ -95,7 +95,7 @@ static void __attribute__((noreturn, nonnull)) usage(const char * const name,
                                                      const char * const cache,
                                                      const char * const tls_log,
                                                      const bool verify_certs,
-                                                     const uint64_t upd_amnt)
+                                                     const bool flip_keys)
 {
     printf("%s [options] URL\n", name);
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
@@ -105,9 +105,8 @@ static void __attribute__((noreturn, nonnull)) usage(const char * const name,
            timeout);
     printf("\t[-c]\t\tverify TLS certificates; default %s\n",
            verify_certs ? "true" : "false");
-    printf("\t[-u bytes]\tupdate TLS keys after this traffic volume; default "
-           "%" PRIu64 "\n",
-           upd_amnt);
+    printf("\t[-u]\tupdate TLS keys; default %s\n",
+           flip_keys ? "true" : "false");
     printf("\t[-3]\t\tsend a static H3 request; default %s\n",
            do_h3 ? "true" : "false");
 #ifndef NDEBUG
@@ -265,10 +264,10 @@ int main(int argc, char * argv[])
     char cache[MAXPATHLEN] = "/tmp/" QUANT "-session";
     char tls_log[MAXPATHLEN] = "/tmp/" QUANT "-tlslog";
     bool verify_certs = false;
-    uint64_t upd_amnt = 0;
+    bool flip_keys = false;
     int ret = 0;
 
-    while ((ch = getopt(argc, argv, "hi:v:s:t:cu:3")) != -1) {
+    while ((ch = getopt(argc, argv, "hi:v:s:t:cu3")) != -1) {
         switch (ch) {
         case 'i':
             strncpy(ifname, optarg, sizeof(ifname) - 1);
@@ -286,7 +285,7 @@ int main(int argc, char * argv[])
             verify_certs = true;
             break;
         case 'u':
-            upd_amnt = MIN(UINT32_MAX, strtoul(optarg, 0, 10));
+            flip_keys = true;
             break;
         case '3':
             do_h3 = true;
@@ -300,12 +299,12 @@ int main(int argc, char * argv[])
         case '?':
         default:
             usage(basename(argv[0]), ifname, cache, tls_log, verify_certs,
-                  upd_amnt);
+                  flip_keys);
         }
     }
 
     struct w_engine * const w =
-        q_init(ifname, 0, 0, cache, tls_log, verify_certs, upd_amnt);
+        q_init(ifname, 0, 0, cache, tls_log, verify_certs, flip_keys);
     struct conn_cache cc = splay_initializer(cc);
     struct http_parser_url u = {0};
 

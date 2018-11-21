@@ -482,7 +482,7 @@ struct w_engine * q_init(const char * const ifname,
                          const char * const cache,
                          const char * const tls_log,
                          const bool verify_certs,
-                         const uint64_t tls_upd_amnt)
+                         const bool flip_keys)
 {
     // check versions
     // ensure(WARPCORE_VERSION_MAJOR == 0 && WARPCORE_VERSION_MINOR == 12,
@@ -505,7 +505,7 @@ struct w_engine * q_init(const char * const ifname,
     warn(INF, "submit bug reports at https://github.com/NTAP/quant/issues");
 
     // initialize TLS context
-    init_tls_ctx(cert, key, cache, tls_log, verify_certs, tls_upd_amnt);
+    init_tls_ctx(cert, key, cache, tls_log, verify_certs, flip_keys);
 
     // initialize the event loop
     loop = ev_default_loop(0);

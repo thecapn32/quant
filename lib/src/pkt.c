@@ -574,7 +574,8 @@ tx:
         v->len = meta(v).stream_data_len;
     }
     on_pkt_sent(s, v);
-    maybe_flip_keys(c, true);
+    if (c->is_clnt && is_set(F_LONG_HDR, meta(v).hdr.flags) == false)
+        maybe_flip_keys(c, true);
     return true;
 }
 

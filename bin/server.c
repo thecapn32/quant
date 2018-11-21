@@ -231,7 +231,7 @@ int main(int argc, char * argv[])
     const int dir_fd = open(dir, O_RDONLY | O_CLOEXEC);
     ensure(dir_fd != -1, "%s does not exist", dir);
 
-    struct w_engine * const w = q_init(ifname, cert, key, 0, 0, false, 0);
+    struct w_engine * const w = q_init(ifname, cert, key, 0, 0, false, false);
     struct q_conn * conn[MAXPORTS];
     for (size_t i = 0; i < num_ports; i++) {
         conn[i] = q_bind(w, port[i]);

@@ -43,7 +43,7 @@ export UBSAN_OPTIONS=print_stacktrace=1
 # commands to run the different clients against $addr:$port
 case $c in
         quant)
-                cc="bin/client -v5 -i $iface -u 8000 \
+                cc="bin/client -v5 -i $iface -u \
                         https://$addr:$port$path" # https://$addr:$port$path"
                 ;;
         wquant)

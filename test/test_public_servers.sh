@@ -103,7 +103,7 @@ function test_server {
         rm -f "$cache"
 
         # key update run
-        bin/client $opts ${info[1]} -u 8000 \
+        bin/client $opts ${info[1]} -u \
                 "https://${info[0]}:${info[2]}${info[4]}" 2>&1 | \
                 $sed -r "$sed_pattern" > "$log_base.kyph.log"
         rm -f "$cache"

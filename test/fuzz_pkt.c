@@ -56,7 +56,7 @@ int LLVMFuzzerInitialize(int * argc __attribute__((unused)),
 #ifndef NDEBUG
     util_dlevel = DBG;
 #endif
-    w = q_init(i, 0, 0, 0, 0, false, 8192);
+    w = q_init(i, 0, 0, 0, 0, false, true);
     c = new_conn(w, 0, 0, 0, 0, 0, 0, 0);
 
     return 0;

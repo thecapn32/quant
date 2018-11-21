@@ -76,7 +76,7 @@ int main(int argc
                                  "0"
 #endif
                                  ,
-                                 cert, key, 0, 0, false, 0);
+                                 cert, key, 0, 0, false, true);
 
     // bind server socket
     q_bind(w, 55555);
