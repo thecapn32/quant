@@ -429,18 +429,21 @@ struct q_conn * q_accept(const uint64_t timeout)
 
 struct q_stream * q_rsv_stream(struct q_conn * const c, const bool bidi)
 {
+    if (c->state == conn_drng || c->state == conn_clsd)
+        return 0;
+
     int64_t * const next_sid = bidi ? &c->next_sid_bidi : &c->next_sid_uni;
     int64_t * const max_streams =
         bidi ? &c->tp_out.max_bidi_streams : &c->tp_out.max_uni_streams;
 
-    if (*next_sid >> 2 > *max_streams - 1) {
+    if (*next_sid >> 2 > *max_streams) {
         // we hit the max stream limit, wait for MAX_STREAM_ID frame
         warn(WRN, "MAX_STREAM_ID increase needed for %s (%u > %u)",
              bidi ? "bidi" : "unidir", *next_sid >> 2, *max_streams);
         loop_run(q_rsv_stream, c, 0);
     }
 
-    ensure(*next_sid >> 2 < *max_streams, "sid %u < max %u", *next_sid >> 2,
+    ensure(*next_sid >> 2 <= *max_streams, "sid %u <= max %u", *next_sid >> 2,
            *max_streams);
 
     return new_stream(c, *next_sid);
