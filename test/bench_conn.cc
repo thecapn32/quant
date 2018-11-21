@@ -25,9 +25,12 @@
 
 
 #include <arpa/inet.h>
+#include <cstdint>
+#include <fcntl.h>
+#include <libgen.h>
 #include <netinet/in.h>
-#include <sys/param.h>
 #include <sys/socket.h>
+#include <unistd.h>
 
 #include <benchmark/benchmark.h>
 #include <quant/quant.h>
@@ -80,22 +83,23 @@ BENCHMARK(BM_conn)->RangeMultiplier(2)->Ranges({{4096, 65535 * 8}})
 
 // BENCHMARK_MAIN()
 
-int main(int argc __attribute__((unused)), char ** argv __attribute__((unused)))
+int main(int argc __attribute__((unused)), char ** argv)
 {
 #ifndef NDEBUG
     util_dlevel = ERR; // default to maximum compiled-in verbosity
 #endif
 
     // init
-    char cert[MAXPATHLEN] =
-        "/etc/letsencrypt/live/slate.eggert.org/fullchain.pem";
-    char key[MAXPATHLEN] = "/etc/letsencrypt/live/slate.eggert.org/privkey.pem";
+    const int cwd = open(".", O_CLOEXEC);
+    ensure(cwd != -1, "cannot open");
+    ensure(chdir(dirname(argv[0])) == 0, "cannot chdir");
     w = q_init("lo"
 #ifndef __linux__
                "0"
 #endif
                ,
-               cert, key, nullptr, nullptr, false, true);
+               "dummy.crt", "dummy.key", nullptr, nullptr, false, true);
+    ensure(fchdir(cwd) == 0, "cannot fchdir");
 
     // bind server socket
     q_bind(w, 55555);

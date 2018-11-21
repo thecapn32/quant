@@ -3,7 +3,8 @@ configure_file(test_public_servers.result test_public_servers.result COPYONLY)
 add_test(test_public_servers.sh test_public_servers.sh)
 
 foreach(TARGET diet conn)
-  add_executable(test_${TARGET} test_${TARGET}.c)
+  add_executable(test_${TARGET} test_${TARGET}.c
+    ${CMAKE_CURRENT_BINARY_DIR}/dummy.key ${CMAKE_CURRENT_BINARY_DIR}/dummy.crt)
   target_link_libraries(test_${TARGET} lib${PROJECT_NAME})
   target_include_directories(test_${TARGET}
     SYSTEM PRIVATE
@@ -20,6 +21,12 @@ foreach(TARGET diet conn)
   add_test(test_${TARGET} test_${TARGET})
 endforeach()
 
+add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/dummy.key
+    ${CMAKE_CURRENT_BINARY_DIR}/dummy.crt
+  COMMAND openssl ARGS req -batch -new -newkey rsa:2048 -sha256 -days 9365
+    -nodes -x509 -subj "/" -keyout ${CMAKE_CURRENT_BINARY_DIR}/dummy.key
+    -out ${CMAKE_CURRENT_BINARY_DIR}/dummy.crt
+)
 
 if(NOT HAVE_BENCHMARK_H AND (DEFINED ENV{BENCHMARKING} OR BENCHMARKING))
   include(ExternalProject)

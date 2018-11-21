@@ -13,8 +13,8 @@ addr=127.0.0.1
 port=4433 # mozquic server can only run on 4433 at the moment
 path=/20000
 dir=/Users/lars/Sites/lars/output/papers
-cert=/etc/letsencrypt/live/slate.eggert.org/fullchain.pem
-key=/etc/letsencrypt/live/slate.eggert.org/privkey.pem
+cert=test/dummy.crt
+key=test/dummy.key
 
 # (re-)build the client (and possibly server) to test
 if [ "$c" == wquant ] || [ "$s" == wquant ]; then

@@ -5,9 +5,6 @@ Vagrant.configure("2") do |config|
 
   config.vm.network "private_network", type: "dhcp", auto_config: false
 
-  config.vm.provision "file", source: "/etc/letsencrypt/live/slate.eggert.org",
-    destination: "~/slate.eggert.org"
-
   # hardware configuration of the VM
   config.vm.provider "virtualbox" do |vb|
     vb.gui = false

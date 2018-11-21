@@ -26,22 +26,20 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <inttypes.h>
+#include <libgen.h>
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
-
-#ifdef NDEBUG
-#include <sys/param.h>
-#endif
+#include <unistd.h>
 
 #ifndef NDEBUG
 #include <stdlib.h>
 #include <sys/param.h>
-#include <unistd.h>
 #endif
 
 #include <quant/quant.h>
@@ -53,11 +51,7 @@ int main(int argc
          __attribute__((unused))
 #endif
          ,
-         char * argv[]
-#ifdef NDEBUG
-         __attribute__((unused))
-#endif
-)
+         char * argv[])
 {
 #ifndef NDEBUG
     util_dlevel = DLEVEL; // default to maximum compiled-in verbosity
@@ -68,15 +62,17 @@ int main(int argc
 #endif
 
     // init
-    char cert[MAXPATHLEN] =
-        "/etc/letsencrypt/live/slate.eggert.org/fullchain.pem";
-    char key[MAXPATHLEN] = "/etc/letsencrypt/live/slate.eggert.org/privkey.pem";
-    struct w_engine * w = q_init("lo"
+    const int cwd = open(".", O_CLOEXEC);
+    ensure(cwd != -1, "cannot open");
+    ensure(chdir(dirname(argv[0])) == 0, "cannot chdir");
+    struct w_engine * const w =
+        q_init("lo"
 #ifndef __linux__
-                                 "0"
+               "0"
 #endif
-                                 ,
-                                 cert, key, 0, 0, false, true);
+               ,
+               "dummy.crt", "dummy.key", 0, 0, false, true);
+    ensure(fchdir(cwd) == 0, "cannot fchdir");
 
     // bind server socket
     q_bind(w, 55555);
