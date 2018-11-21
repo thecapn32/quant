@@ -60,7 +60,7 @@ set(CMAKE_C_STANDARD 11)
 # Set general compile flags, if they are supported
 include(CheckCCompilerFlag)
 include(CheckCXXCompilerFlag)
-foreach(FLAG -march=native -Wextra -Wpedantic -Weverything -Werror
+foreach(FLAG -pipe -march=native -Wextra -Wpedantic -Weverything -Werror
         -fcolor-diagnostics -fdiagnostics-color=always
         -Wno-missing-braces -Wno-gnu-statement-expression -Wno-extended-offsetof
         -Wno-redundant-parens -Wno-switch-enum
