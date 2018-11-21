@@ -52,7 +52,7 @@ SPLAY_GENERATE(streams_by_id, q_stream, node, streams_by_id_cmp)
 
 struct q_stream * get_stream(struct q_conn * const c, const int64_t id)
 {
-    struct q_stream which = {.id = id};
+    const struct q_stream which = {.id = id};
     return splay_find(streams_by_id, &c->streams_by_id, &which);
 }
 

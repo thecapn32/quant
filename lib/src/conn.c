@@ -203,6 +203,7 @@ static void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c)
 }
 
 
+#ifndef NDEBUG
 static void log_sent_pkts(struct q_conn * const c)
 {
     for (epoch_t e = ep_init; e < ep_data; e++) {
@@ -228,6 +229,7 @@ static void log_sent_pkts(struct q_conn * const c)
                  sent_pkts_buf);
     }
 }
+#endif
 
 
 static void __attribute__((nonnull))
@@ -332,7 +334,9 @@ tx_stream_data(struct q_stream * const s, const uint32_t limit)
         }
     }
 
+#ifndef NDEBUG
     log_sent_pkts(c);
+#endif
 }
 
 
