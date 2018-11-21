@@ -293,35 +293,35 @@ Exit:
 static int __attribute__((nonnull))
 on_ch(ptls_on_client_hello_t * const self __attribute__((unused)),
       ptls_t * const tls,
-      const ptls_iovec_t sni,
-      const ptls_iovec_t * const prot,
-      const size_t prot_cnt,
-      const uint16_t * const sig_alg __attribute__((unused)),
-      const size_t sig_alg_cnt __attribute__((unused)))
+      ptls_on_client_hello_parameters_t * const params)
 {
-    if (sni.len) {
+    if (params->server_name.len) {
         // TODO verify the SNI instead of accepting whatever the client sent
-        warn(INF, "\tSNI = %.*s", sni.len, sni.base);
-        ensure(ptls_set_server_name(tls, (const char *)sni.base, sni.len) == 0,
+        warn(INF, "\tSNI = %.*s", params->server_name.len,
+             params->server_name.base);
+        ensure(ptls_set_server_name(tls, (const char *)params->server_name.base,
+                                    params->server_name.len) == 0,
                "ptls_set_server_name");
     } else
         warn(INF, "\tSNI = ");
 
-    if (prot_cnt == 0) {
+    if (params->negotiated_protocols.count == 0) {
         warn(WRN, "\tALPN = ");
         return 0;
     }
 
     size_t j;
     for (j = 0; j < alpn_cnt; j++)
-        for (size_t i = 0; i < prot_cnt; i++)
-            if (memcmp(prot[i].base, alpn[j].base,
-                       MIN(prot[i].len, alpn[j].len)) == 0)
+        for (size_t i = 0; i < params->negotiated_protocols.count; i++)
+            if (memcmp(params->negotiated_protocols.list[i].base, alpn[j].base,
+                       MIN(params->negotiated_protocols.list[i].len,
+                           alpn[j].len)) == 0)
                 goto done;
 
     if (j == alpn_cnt) {
         warn(WRN, "\tALPN = %.*s (and maybe others, none supported, ignoring)",
-             prot[0].len, prot[0].base);
+             params->negotiated_protocols.list[0].len,
+             params->negotiated_protocols.list[0].base);
         return 0;
     }
 

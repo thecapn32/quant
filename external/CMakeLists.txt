@@ -26,7 +26,7 @@ if(NOT WARP_LIB OR NOT WARP_INCLUDE)
   endif()
 
   externalproject_add(warp
-    UPDATE_COMMAND "" # XXX do not commit with this being empty
+    # UPDATE_COMMAND "" # XXX do not commit with this being empty
     GIT_REPOSITORY https://github.com/NTAP/warpcore.git
     GIT_SHALLOW 1
     CMAKE_ARGS
@@ -60,10 +60,10 @@ if(CMAKE_GENERATOR STREQUAL Xcode)
 endif()
 
 externalproject_add(picotls
-  UPDATE_COMMAND "" # XXX do not commit with this being empty
+  # UPDATE_COMMAND "" # XXX do not commit with this being empty
   GIT_REPOSITORY https://github.com/h2o/picotls.git
   # GIT_SHALLOW 1 # does not work together with GIT_TAG
-  GIT_TAG 4c6948d114f57f1af76e77147bf59a4137083000
+  GIT_TAG c5bbb1cac0f6537b80837c8ba83d1ef892b28c28
   CMAKE_ARGS
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
     -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
