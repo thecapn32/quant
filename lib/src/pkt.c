@@ -220,6 +220,8 @@ void coalesce(struct w_iov_sq * const q)
                 v->len += next->len;
                 cur_flags = *next->buf;
                 sq_remove_after(q, prev, next);
+                // warn(CRT, "w_free_iov idx %u (avail %" PRIu64 ")",
+                //      w_iov_idx(next), sq_len(&next->w->iov) + 1);
                 w_free_iov(next);
             } else
                 prev = next;
@@ -540,6 +542,9 @@ tx:
 
     // alloc directly from warpcore for crypto TX - no need for metadata alloc
     struct w_iov * const x = w_alloc_iov(c->w, 0, 0);
+    ensure(x, "w_alloc_iov failed");
+    // warn(CRT, "w_alloc_iov idx %u (avail %" PRIu64 ") len %u", w_iov_idx(x),
+    //      sq_len(&c->w->iov), x->len);
     x->ip = v->ip;
     x->port = v->port;
     x->flags = v->flags;

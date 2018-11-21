@@ -266,8 +266,12 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
     while (w_tx_pending(&c->txq))
         w_nic_tx(c->w);
 
-    // x was allocated straight from warpcore, no metadata needs to be freed
+    // txq was allocated straight from warpcore, no metadata needs to be freed
+    // const uint64_t avail = sq_len(&c->w->iov);
+    // const uint64_t sql = sq_len(&c->txq);
     w_free(&c->txq);
+    // warn(CRT, "w_free %" PRIu64 " (avail %" PRIu64 "->%" PRIu64 ")", sql,
+    // avail, sq_len(&c->w->iov));
 }
 
 
@@ -802,8 +806,8 @@ rx_pkts(struct w_iov_sq * const x,
         struct w_iov * const xv = sq_first(x);
         sq_remove_head(x, next);
 
-        // warn(DBG, "rx idx %u len %u type 0x%02x", w_iov_idx(xv), xv->len,
-        //      *xv->buf);
+        // warn(DBG, "rx idx %u (avail %" PRIu64 ") len %u type 0x%02x",
+        //      w_iov_idx(xv), sq_len(&xv->w->iov), xv->len, *xv->buf);
 
 #if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
@@ -836,8 +840,7 @@ rx_pkts(struct w_iov_sq * const x,
                      "received invalid %u-byte pkt (type 0x%02x), ignoring",
                      v->len, v->buf[0]);
             // can't log packet, because it may be too short for log_pkt()
-            free_iov(v);
-            continue;
+            goto drop;
         }
 
         const struct sockaddr_in peer = {.sin_family = AF_INET,
@@ -860,8 +863,7 @@ rx_pkts(struct w_iov_sq * const x,
                                  "got 0-RTT pkt for orig cid %s, new is %s, "
                                  "but rejected 0-RTT, ignoring",
                                  cid2str(&meta(v).hdr.dcid), cid2str(c->scid));
-                            free_iov(v);
-                            continue;
+                            goto drop;
                         }
                     } else if (c == 0 && meta(v).hdr.type == F_LH_INIT) {
                         // validate minimum packet size
@@ -877,8 +879,7 @@ rx_pkts(struct w_iov_sq * const x,
                                  "clnt-requested vers 0x%08x not supported",
                                  meta(v).hdr.vers);
                             tx_vneg_resp(ws, v);
-                            free_iov(v);
-                            continue;
+                            goto drop;
                         }
 
                         warn(NTE,
@@ -901,8 +902,7 @@ rx_pkts(struct w_iov_sq * const x,
                         log_pkt("RX", v, &odcid, tok, tok_len);
                         warn(ERR, "retry dcid mismatch %s != %s, ignoring pkt",
                              hex2str(&odcid.id, odcid.len), cid2str(c->dcid));
-                        free_iov(v);
-                        continue;
+                        goto drop;
                     }
                     if (c->state == conn_opng)
                         add_dcid(c, &meta(v).hdr.scid);
@@ -913,8 +913,7 @@ rx_pkts(struct w_iov_sq * const x,
                 if (switch_scid(c, &meta(v).hdr.dcid) == false) {
                     warn(ERR, "unknown or stale scid %s, ignoring pkt",
                          cid2str(&meta(v).hdr.dcid));
-                    free_iov(v);
-                    continue;
+                    goto drop;
                 }
 
             // check if this pkt came from a new source IP and/or port
@@ -944,14 +943,13 @@ rx_pkts(struct w_iov_sq * const x,
                 log_pkt("RX", v, &odcid, tok, tok_len);
                 warn(INF, "caching 0-RTT pkt for unknown conn %s",
                      cid2str(&meta(v).hdr.dcid));
-                continue;
+                goto next;
             }
 #endif
             log_pkt("RX", v, &odcid, tok, tok_len);
             warn(INF, "ignoring unexpected 0x%02x-type pkt for conn %s",
                  meta(v).hdr.flags, cid2str(&meta(v).hdr.dcid));
-            free_iov(v);
-            continue;
+            goto drop;
         }
 
         if ((meta(v).hdr.vers && meta(v).hdr.type != F_LH_RTRY) ||
@@ -968,8 +966,7 @@ rx_pkts(struct w_iov_sq * const x,
                     warn(ERR,
                          "received invalid %u-byte 0x%02x-type pkt, ignoring",
                          v->len, meta(v).hdr.flags);
-                free_iov(v);
-                continue;
+                goto drop;
             }
 
         // remember that we had a RX event on this connection
@@ -983,10 +980,20 @@ rx_pkts(struct w_iov_sq * const x,
 
         if (meta(v).stream == 0)
             // we didn't place this pkt in any stream - bye!
-            free_iov(v);
+            goto drop;
         else if (unlikely(meta(v).stream->state == strm_clsd &&
-                          sq_empty(&meta(v).stream->in)))
+                          sq_empty(&meta(v).stream->in))) {
             free_stream(meta(v).stream);
+            goto drop;
+        }
+        goto next;
+
+    drop:
+        free_iov(v);
+    next:
+        // warn(CRT, "w_free_iov idx %u (avail %" PRIu64 ")", w_iov_idx(xv),
+        //      sq_len(&xv->w->iov) + 1);
+        w_free_iov(xv);
     }
 }
 

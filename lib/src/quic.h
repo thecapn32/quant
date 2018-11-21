@@ -395,8 +395,8 @@ extern void __attribute__((nonnull)) pm_free(struct pkt_meta * const m);
 
 #define free_iov(v)                                                            \
     do {                                                                       \
-        /* warn(CRT, "free_iov idx %u nr %" PRIu64, w_iov_idx(v),              \
-             meta(v).hdr.nr); */                                               \
+        /* warn(CRT, "free_iov idx %u (avail %" PRIu64 ") nr %" PRIu64,        \
+             w_iov_idx(v), sq_len(&(v)->w->iov) + 1, meta(v).hdr.nr); */       \
         pm_free(&meta(v));                                                     \
         memset(&meta(v), 0, sizeof(meta(v)));                                  \
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));                  \
@@ -407,10 +407,11 @@ extern void __attribute__((nonnull)) pm_free(struct pkt_meta * const m);
 #define alloc_iov(w, l, off)                                                   \
     __extension__({                                                            \
         struct w_iov * _v = w_alloc_iov((w), (l), (off));                      \
+        ensure(_v, "w_alloc_iov failed");                                      \
         ASAN_UNPOISON_MEMORY_REGION(&meta(_v), sizeof(meta(_v)));              \
         meta(_v).stream_data_start = (off);                                    \
-        /* warn(CRT, "alloc_iov idx %u len %u off %u", w_iov_idx(_v),          \
-           _v->len, (off)); */                                                 \
+        /* warn(CRT, "alloc_iov idx %u (avail %" PRIu64 ") len %u off %u",     \
+             w_iov_idx(_v), sq_len(&(w)->iov), _v->len, (off)); */             \
         _v;                                                                    \
     })
 
@@ -425,6 +426,9 @@ static inline struct w_iov * __attribute__((nonnull))
 w_iov_dup(const struct w_iov * const v)
 {
     struct w_iov * const vdup = w_alloc_iov(v->w, v->len, 0);
+    ensure(vdup, "w_alloc_iov failed");
+    // warn(CRT, "w_alloc_iov idx %u (avail %" PRIu64 ") len %u",
+    // w_iov_idx(vdup), sq_len(&v->w->iov), vdup->len);
     ASAN_UNPOISON_MEMORY_REGION(&meta(vdup), sizeof(meta(vdup)));
     memcpy(vdup->buf, v->buf, v->len);
     vdup->ip = v->ip;

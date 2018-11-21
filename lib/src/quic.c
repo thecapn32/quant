@@ -158,7 +158,8 @@ void alloc_off(struct w_engine * const w,
     sq_foreach (v, q, next) {
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         meta(v).stream_data_start = off;
-        // warn(CRT, "q_alloc idx %u len %u", w_iov_idx(v), v->len);
+        // warn(CRT, "q_alloc idx %u (avail %" PRIu64 ") len %u", w_iov_idx(v),
+        //      sq_len(&w->iov), v->len);
     }
 }
 
@@ -198,6 +199,7 @@ do_write(struct q_stream * const s, struct w_iov_sq * const q, const bool fin)
     loop_run(q_write, s->c, s);
 
     // the last packet in s->out may be a pure FIN - if so, don't return it
+    // TODO unclear if the FIN handling is still needed
     struct w_iov * const last = sq_last(&s->out, w_iov, next);
     if (last && meta(last).stream_header_pos &&
         meta(last).stream_data_len == 0) {
