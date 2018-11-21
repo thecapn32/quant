@@ -209,9 +209,10 @@ get(struct w_engine * const w,
             // we need to open a uni stream for an empty H/3 SETTINGS frame
             struct q_stream * const ss = q_rsv_stream(cce->c, false);
             static const uint8_t h3_empty_settings[] = {0x43, 0x00, 0x04};
+            // XXX lsquic doesn't like a FIN on this stream
             q_write_str(w, ss, (const char *)h3_empty_settings,
-                        sizeof(h3_empty_settings), true);
-            q_close_stream(ss);
+                        sizeof(h3_empty_settings), false);
+            // q_close_stream(ss);
         }
 
     } else {
