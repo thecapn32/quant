@@ -15,7 +15,7 @@ endif()
 
 # Get the latest *abbreviated* commit hash of the working branch
 execute_process(
-  COMMAND git log -1 --format=%h --abbrev=8
+  COMMAND git log -1 --format=%h --abbrev=7
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   OUTPUT_VARIABLE GIT_COMMIT_HASH_ABBREV_STR
   OUTPUT_STRIP_TRAILING_WHITESPACE
