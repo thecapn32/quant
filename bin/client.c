@@ -221,7 +221,6 @@ get(struct w_engine * const w,
     se->c = cce->c;
     se->url = strdup(path);
 
-    q_close_stream(se->s);
     freeaddrinfo(peer);
 
     return cce->c; // NOLINT

@@ -536,10 +536,11 @@ struct w_engine * q_init(const char * const ifname,
 
 void q_close_stream(struct q_stream * const s)
 {
+    struct q_conn * const c = s->c;
+    warn(WRN, "closing strm " FMT_SID " state %s on %s conn %s", s->id,
+         strm_state_str[s->state], conn_type(c), cid2str(c->scid));
+
     if (s->state != strm_hclo && s->state != strm_clsd) {
-        struct q_conn * const c = s->c;
-        warn(WRN, "closing strm " FMT_SID " state %s on %s conn %s", s->id,
-             strm_state_str[s->state], conn_type(c), cid2str(c->scid));
         strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
         s->tx_fin = true;
         ev_async_send(loop, &c->tx_w);
