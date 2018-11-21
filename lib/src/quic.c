@@ -501,16 +501,25 @@ struct w_engine * q_init(const char * const ifname,
     ensure(pm, "could not calloc");
     ASAN_POISON_MEMORY_REGION(pm, (nbufs + 1) * sizeof(*pm));
 
-    warn(INF, "%s/%s %s/%s with libev %u.%u ready", quant_name, w->backend_name,
-         quant_version, QUANT_COMMIT_HASH_ABBREV_STR, ev_version_major(),
+    // initialize the event loop (prefer kqueue and epoll)
+    loop = ev_default_loop(ev_recommended_backends() | EVBACKEND_KQUEUE |
+                           EVBACKEND_EPOLL);
+
+#ifndef NDEBUG
+    static const char * ev_backend_str[] = {
+        [EVBACKEND_SELECT] = "select",   [EVBACKEND_POLL] = "poll",
+        [EVBACKEND_EPOLL] = "epoll",     [EVBACKEND_KQUEUE] = "kqueue",
+        [EVBACKEND_DEVPOLL] = "devpoll", [EVBACKEND_PORT] = "port"};
+#endif
+
+    warn(INF, "%s/%s %s/%s with libev/%s %u.%u ready", quant_name,
+         w->backend_name, quant_version, QUANT_COMMIT_HASH_ABBREV_STR,
+         ev_backend_str[ev_backend(loop)], ev_version_major(),
          ev_version_minor());
     warn(INF, "submit bug reports at https://github.com/NTAP/quant/issues");
 
     // initialize TLS context
     init_tls_ctx(cert, key, cache, tls_log, verify_certs, flip_keys);
-
-    // initialize the event loop
-    loop = ev_default_loop(0);
 
 #ifndef FUZZING
     // libev seems to need this inside docker to handle Ctrl-C?
