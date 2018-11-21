@@ -156,6 +156,8 @@ get_conn_by_ipnp(const uint16_t sport, const struct sockaddr_in * const peer)
 static struct q_conn * __attribute__((nonnull))
 get_conn_by_cid(const struct cid * const scid)
 {
+    if (unlikely(scid->len == 0))
+        return 0;
     const struct cid_map which = {.cid = *scid};
     struct cid_map * const cm = splay_find(conns_by_id, &conns_by_id, &which);
     return cm ? cm->c : 0;
@@ -737,7 +739,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
     case conn_drng:
         if (is_set(F_LONG_HDR, meta(v).hdr.flags) && meta(v).hdr.vers == 0) {
             // we shouldn't get another vers-neg packet here, ignore
-            warn(NTE, "ignoring spurious ver neg response");
+            warn(NTE, "ignoring spurious vneg response");
             goto done;
         }
 
