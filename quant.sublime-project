@@ -10,7 +10,8 @@
                 "Vagrantfile", "Dockerfile"
             ],
             "folder_exclude_patterns": [
-                ".vagrant", "Darwin*", "corpus*", "qvalve-tests"
+                ".git", ".vagrant", "Darwin*", "Linux*",
+                "corpus*", "qvalve-tests"
             ],
         },
     ],
