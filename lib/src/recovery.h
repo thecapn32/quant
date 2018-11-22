@@ -33,6 +33,7 @@
 #include <ev.h>
 #include <warpcore/warpcore.h>
 
+#include "quic.h"
 
 struct q_conn;
 struct q_stream;
@@ -66,12 +67,38 @@ struct recovery {
 
 
 #define log_cc(c)                                                              \
-    warn(NTE,                                                                  \
-         "in_flight=%" PRIu64 ", cwnd=%" PRIu64 ", ssthresh=%" PRIu64          \
-         ", srtt=%f, rttvar=%f",                                               \
-         (c)->rec.in_flight, (c)->rec.cwnd,                                    \
-         (c)->rec.ssthresh == UINT64_MAX ? 0 : (c)->rec.ssthresh,              \
-         (c)->rec.srtt, (c)->rec.rttvar)
+    do {                                                                       \
+        static uint64_t prev_in_flight = 0, prev_cwnd = 0, prev_ssthresh = 0;  \
+        static ev_tstamp prev_srtt = 0, prev_rttvar = 0;                       \
+        const uint64_t ssthresh =                                              \
+            (c)->rec.ssthresh == UINT64_MAX ? 0 : (c)->rec.ssthresh;           \
+        warn(NTE,                                                              \
+             "%sin_flight" NRM "=%" PRIu64 ", %scwnd" NRM "=%" PRIu64          \
+             ", %sssthresh" NRM "=%" PRIu64 ", %ssrtt" NRM "=%f, %srttvar" NRM \
+             "=%f",                                                            \
+             (c)->rec.in_flight > prev_in_flight                               \
+                 ? GRN                                                         \
+                 : (c)->rec.in_flight < prev_in_flight ? RED : "",             \
+             (c)->rec.in_flight,                                               \
+             (c)->rec.cwnd > prev_cwnd ? GRN                                   \
+                                       : (c)->rec.cwnd < prev_cwnd ? RED : "", \
+             (c)->rec.cwnd,                                                    \
+             ssthresh > prev_ssthresh ? GRN                                    \
+                                      : ssthresh < prev_ssthresh ? RED : "",   \
+             ssthresh,                                                         \
+             (c)->rec.srtt > prev_srtt ? GRN                                   \
+                                       : (c)->rec.srtt < prev_srtt ? RED : "", \
+             (c)->rec.srtt,                                                    \
+             (c)->rec.rttvar > prev_rttvar                                     \
+                 ? GRN                                                         \
+                 : (c)->rec.rttvar < prev_rttvar ? RED : "",                   \
+             (c)->rec.rttvar);                                                 \
+        prev_in_flight = (c)->rec.in_flight;                                   \
+        prev_cwnd = (c)->rec.cwnd;                                             \
+        prev_ssthresh = ssthresh;                                              \
+        prev_srtt = (c)->rec.srtt;                                             \
+        prev_rttvar = (c)->rec.rttvar;                                         \
+    } while (0)
 
 
 extern void __attribute__((nonnull)) init_rec(struct q_conn * const c);
