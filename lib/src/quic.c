@@ -536,8 +536,8 @@ struct w_engine * q_init(const char * const ifname,
 #else
     // create the directories for exporting fuzzer corpus data
     warn(NTE, "debug build, storing fuzzer corpus data");
-    corpus_pkt_dir = mk_or_open_dir("corpus_pkt", 0755);
-    corpus_frm_dir = mk_or_open_dir("corpus_frm", 0755);
+    corpus_pkt_dir = mk_or_open_dir("../corpus_pkt", 0755);
+    corpus_frm_dir = mk_or_open_dir("../corpus_frm", 0755);
 #endif
 #endif
 
