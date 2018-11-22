@@ -43,7 +43,7 @@
 #define INIT_STRM_DATA_BIDI 65535
 #define INIT_STRM_DATA_UNI 65535
 #define INIT_MAX_UNI_STREAMS 2
-#define INIT_MAX_BIDI_STREAMS 4
+#define INIT_MAX_BIDI_STREAMS 6 // XXX picoquic won't respect a lower count
 
 #define STRM_STATE(k, v) k = v
 #define STRM_STATES                                                            \
