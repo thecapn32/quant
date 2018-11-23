@@ -288,7 +288,7 @@ tx_stream_data(struct q_stream * const s, const uint32_t limit)
                c->rec.in_flight, c->rec.cwnd);
 
         if (unlikely(meta(v).is_acked)) {
-            warn(INF, "skip ACK'ed pkt " FMT_PNR_OUT, meta(v).hdr.nr);
+            // warn(INF, "skip ACK'ed pkt " FMT_PNR_OUT, meta(v).hdr.nr);
             continue;
         }
 
