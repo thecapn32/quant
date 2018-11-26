@@ -516,7 +516,8 @@ dec_close_frame(struct q_conn * const c,
         conn_to_state(c, conn_drng);
         c->needs_tx = false;
         enter_closing(c);
-    }
+    } else
+        ev_invoke(loop, &c->closing_alarm, 0);
 
     return i;
 }
