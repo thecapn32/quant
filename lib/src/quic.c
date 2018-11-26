@@ -185,33 +185,6 @@ void q_free(struct w_iov_sq * const q)
 }
 
 
-static void __attribute__((nonnull))
-do_write(struct q_stream * const s, struct w_iov_sq * const q, const bool fin)
-{
-    if (fin)
-        strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
-
-    // remember the last iov in the queue
-    struct w_iov * const prev_last = sq_last(&s->out, w_iov, next);
-
-    // kick TX watcher
-    ev_async_send(loop, &s->c->tx_w);
-    loop_run(q_write, s->c, s);
-
-    // the last packet in s->out may be a pure FIN - if so, don't return it
-    // TODO unclear if the FIN handling is still needed
-    struct w_iov * const last = sq_last(&s->out, w_iov, next);
-    if (last && meta(last).stream_header_pos &&
-        meta(last).stream_data_len == 0) {
-        ensure(sq_next(prev_last, next) == last, "queue messed up");
-        sq_remove_after(&s->out, prev_last, next);
-        sq_concat(q, &s->out);
-        sq_insert_tail(&s->out, last, next);
-    } else
-        sq_concat(q, &s->out);
-}
-
-
 struct q_conn * q_connect(struct w_engine * const w,
                           const struct sockaddr_in * const peer,
                           const char * const peer_name,
@@ -279,13 +252,21 @@ struct q_conn * q_connect(struct w_engine * const w,
 }
 
 
-void q_write(struct q_stream * const s,
+bool q_write(struct q_stream * const s,
              struct w_iov_sq * const q,
              const bool fin)
 {
 #ifndef NDEBUG
     struct q_conn * const c = s->c;
 #endif
+
+    if (unlikely(c->state == conn_qlse || c->state == conn_drng ||
+                 c->state == conn_clsd)) {
+        warn(ERR, "%s conn %s is in state %s, can't write", conn_type(c),
+             conn_state_str[c->state]);
+        return false;
+    }
+
     const uint32_t qlen = w_iov_sq_len(q);
     const uint64_t qcnt = w_iov_sq_cnt(q);
     warn(WRN, "writing %u byte%s in %u buf%s on %s conn %s strm " FMT_SID " %s",
@@ -293,23 +274,34 @@ void q_write(struct q_stream * const s,
          s->id, fin ? "and closing" : "");
 
     if (s->state >= strm_hclo) {
-        warn(ERR, "%s conn %s strm " FMT_SID " is in state %s", conn_type(c),
-             cid2str(c->scid), s->id, strm_state_str[s->state]);
-        return;
+        warn(ERR, "%s conn %s strm " FMT_SID " is in state %s, can't write",
+             conn_type(c), cid2str(c->scid), s->id, strm_state_str[s->state]);
+        return false;
     }
 
     // add to stream
     concat_out(s, q);
-    do_write(s, q, fin);
+    if (fin)
+        strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
+
+    // kick TX watcher
+    ev_async_send(loop, &s->c->tx_w);
+    loop_run(q_write, s->c, s);
+
+    // move data back
+    sq_concat(q, &s->out);
 
     warn(WRN, "wrote %u byte%s on %s conn %s strm " FMT_SID " %s", qlen,
          plural(qlen), conn_type(c), cid2str(c->scid), s->id,
          fin ? "and closed" : "");
 
+    // TODO these can be removed eventually
     ensure(w_iov_sq_len(q) == qlen, "payload corrupted, %u != %u",
            w_iov_sq_len(q), qlen);
     ensure(w_iov_sq_cnt(q) == qcnt, "payload corrupted, %u != %u",
            w_iov_sq_cnt(q), qcnt);
+
+    return true;
 }
 
 

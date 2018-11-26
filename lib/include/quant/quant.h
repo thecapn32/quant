@@ -71,7 +71,7 @@ q_bind(struct w_engine * const w, const uint16_t port);
 
 extern struct q_conn * q_accept(const uint64_t timeout);
 
-extern void __attribute__((nonnull))
+extern bool __attribute__((nonnull))
 q_write(struct q_stream * const s, struct w_iov_sq * const q, const bool fin);
 
 extern struct q_stream * __attribute__((nonnull))
