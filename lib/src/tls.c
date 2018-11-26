@@ -411,7 +411,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
     // get connection based on properties pointer
     struct q_conn * const c =
-        (void *)((char *)properties - offsetof(struct tls, tls_hshake_prop) -
+        (void *)((char *)properties - offsetof(struct tls, tls_hshk_prop) -
                  offsetof(struct q_conn, tls));
 
     // set up parsing
@@ -864,7 +864,7 @@ void init_tls(struct q_conn * const c)
         ensure(ptls_set_server_name(c->tls.t, c->peer_name, 0) == 0,
                "ptls_set_server_name");
 
-    ptls_handshake_properties_t * const hshk_prop = &c->tls.tls_hshake_prop;
+    ptls_handshake_properties_t * const hshk_prop = &c->tls.tls_hshk_prop;
 
     hshk_prop->additional_extensions = c->tls.tp_ext;
     hshk_prop->collect_extension = filter_tp;
@@ -959,7 +959,7 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
 
     const int ret =
         ptls_handle_message(c->tls.t, &tls_io, epoch_off, epoch_in,
-                            iv ? iv->buf : 0, in_len, &c->tls.tls_hshake_prop);
+                            iv ? iv->buf : 0, in_len, &c->tls.tls_hshk_prop);
     // warn(DBG,
     //      "epoch %u, in %u (off %u), gen %u (%u-%u-%u-%u-%u), ret %u, left
     //      %u", epoch_in, iv ? iv->len : 0, iv ? meta(iv).stream_off : 0,
@@ -970,7 +970,7 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
         if (ptls_is_psk_handshake(c->tls.t) && c->is_clnt)
             c->did_0rtt =
                 c->try_0rtt &&
-                c->tls.tls_hshake_prop.client.early_data_accepted_by_peer;
+                c->tls.tls_hshk_prop.client.early_data_accepted_by_peer;
 
     } else if (unlikely(ret != 0 && ret != PTLS_ERROR_IN_PROGRESS)) {
         err_close(c, ERR_TLS(PTLS_ERROR_TO_ALERT(ret)), FRAM_TYPE_CRPT,
