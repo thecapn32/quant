@@ -256,10 +256,7 @@ bool q_write(struct q_stream * const s,
              struct w_iov_sq * const q,
              const bool fin)
 {
-#ifndef NDEBUG
     struct q_conn * const c = s->c;
-#endif
-
     if (unlikely(c->state == conn_qlse || c->state == conn_drng ||
                  c->state == conn_clsd)) {
         warn(ERR, "%s conn %s is in state %s, can't write", conn_type(c),
