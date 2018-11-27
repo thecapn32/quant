@@ -131,7 +131,7 @@ function analyze {
         local log="/tmp/$script.$1.$pid.1rtt.log"
         check_fail "$1" "$log"
 
-        perl -n -e '/RX len=/ && exit 1;' "$log"
+        perl -n -e '/RX.*len=/ && exit 1;' "$log"
         [ $? == 1 ] && live[$1]="*"
 
         perl -n -e 'BEGIN{$v=-1};
@@ -146,7 +146,7 @@ function analyze {
         fi
 
         perl -n -e '/TX.*Short kyph/ and $x=1;
-                    /RX len=.*Short/ && $x && exit 1;' "$log"
+                    /RX.*len=.*Short/ && $x && exit 1;' "$log"
         [ $? == 1 ] && hshk[$1]=H
 
         perl -n -e '/idle timeout on clnt conn/ && exit 0;
@@ -155,8 +155,8 @@ function analyze {
         [ $? == 1 ] && data[$1]=D
 
         perl -n -e 'BEGIN{$t=-1};
-                    /TX len=/ and $t=1;
-                    /RX len=/ and $t=0;
+                    /TX.*len=/ and $t=1;
+                    /RX.*len=/ and $t=0;
                     /CLOSE err=0x0000/ && ($t==1 ? $tc=1 : $rc=1);
                     END{exit $tc+$rc};' "$log"
         local ret=$?
@@ -200,7 +200,7 @@ function analyze {
                 return
         fi
 
-        perl -n -e '/RX len=.*Retry/ and $x=1;
+        perl -n -e '/RX.*len=.*Retry/ and $x=1;
                    $x && /CLOSE err=0x0000/ && exit 1;' "$log"
         [ $? == 1 ] && rtry[$1]=S
         [ ${fail[$1]} ] || rm -f "$log"
