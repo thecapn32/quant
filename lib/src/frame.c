@@ -1222,7 +1222,7 @@ uint16_t enc_stream_or_crypto_frame(struct q_stream * const s,
     } else
         type = FRAM_TYPE_CRPT;
 
-    track_frame(v, type);
+    track_frame(v, type == FRAM_TYPE_CRPT ? FRAM_TYPE_CRPT : FRAM_TYPE_STRM);
 
     // now that we know how long the stream frame header is, encode it
     uint16_t i = meta(v).stream_header_pos =
