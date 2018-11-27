@@ -79,20 +79,22 @@ pkt_type_str(const uint8_t flags, const uint8_t * const vers)
 
 void log_pkt(const char * const dir,
              const struct w_iov * const v,
+             const uint32_t ip,
+             const uint16_t port,
              const struct cid * const odcid,
              const uint8_t * const tok,
              const uint16_t tok_len)
 {
     char addr[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &v->ip, addr, INET_ADDRSTRLEN);
-    const uint16_t port = ntohs(v->port);
+    inet_ntop(AF_INET, &ip, addr, INET_ADDRSTRLEN);
+    const uint16_t prt = ntohs(port);
     if (*dir == 'R') {
         if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
             if (meta(v).hdr.vers == 0)
                 twarn(NTE,
                       BLD BLU "RX" NRM " from=%s:%u len=%u 0x%02x=" BLU
                               "%s " NRM "vers=0x%08x dcid=%s scid=%s",
-                      addr, port, v->len, meta(v).hdr.flags,
+                      addr, prt, v->len, meta(v).hdr.flags,
                       pkt_type_str(meta(v).hdr.flags,
                                    (uint8_t *)&meta(v).hdr.vers),
                       meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
@@ -102,7 +104,7 @@ void log_pkt(const char * const dir,
                     NTE,
                     BLD BLU "RX" NRM " from=%s:%u len=%u 0x%02x=" BLU "%s " NRM
                             "vers=0x%08x dcid=%s scid=%s odcid=%s tok=%s",
-                    addr, port, v->len, meta(v).hdr.flags,
+                    addr, prt, v->len, meta(v).hdr.flags,
                     pkt_type_str(meta(v).hdr.flags,
                                  (uint8_t *)&meta(v).hdr.vers),
                     meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
@@ -113,7 +115,7 @@ void log_pkt(const char * const dir,
                       "RX" NRM " from=%s:%u len=%u 0x%02x=" BLU "%s " NRM
                       "vers=0x%08x dcid=%s scid=%s tok=%s len=%u nr=" BLU
                       "%" PRIu64,
-                      addr, port, v->len, meta(v).hdr.flags,
+                      addr, prt, v->len, meta(v).hdr.flags,
                       pkt_type_str(meta(v).hdr.flags,
                                    (uint8_t *)&meta(v).hdr.vers),
                       meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
@@ -124,7 +126,7 @@ void log_pkt(const char * const dir,
                       BLD BLU
                       "RX" NRM " from=%s:%u len=%u 0x%02x=" BLU "%s " NRM
                       "vers=0x%08x dcid=%s scid=%s len=%u nr=" BLU "%" PRIu64,
-                      addr, port, v->len, meta(v).hdr.flags,
+                      addr, prt, v->len, meta(v).hdr.flags,
                       pkt_type_str(meta(v).hdr.flags,
                                    (uint8_t *)&meta(v).hdr.vers),
                       meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
@@ -133,7 +135,7 @@ void log_pkt(const char * const dir,
             twarn(NTE,
                   BLD BLU "RX" NRM " from=%s:%u len=%u 0x%02x=" BLU "%s " NRM
                           "kyph=%u dcid=%s nr=" BLU "%" PRIu64,
-                  addr, port, v->len, meta(v).hdr.flags,
+                  addr, prt, v->len, meta(v).hdr.flags,
                   pkt_type_str(meta(v).hdr.flags, (uint8_t *)&meta(v).hdr.vers),
                   is_set(F_SH_KYPH, meta(v).hdr.flags), c2s(&meta(v).hdr.dcid),
                   meta(v).hdr.nr);
@@ -145,7 +147,7 @@ void log_pkt(const char * const dir,
                 twarn(NTE,
                       BLD GRN "TX" NRM " to=%s:%u 0x%02x=" GRN "%s " NRM
                               "vers=0x%08x dcid=%s scid=%s",
-                      addr, port, meta(v).hdr.flags,
+                      addr, prt, meta(v).hdr.flags,
                       pkt_type_str(meta(v).hdr.flags,
                                    (uint8_t *)&meta(v).hdr.vers),
                       meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
@@ -154,7 +156,7 @@ void log_pkt(const char * const dir,
                 twarn(NTE,
                       BLD GRN "TX" NRM " to=%s:%u 0x%02x=" GRN "%s " NRM
                               "vers=0x%08x dcid=%s scid=%s odcid=%s tok=%s",
-                      addr, port, meta(v).hdr.flags,
+                      addr, prt, meta(v).hdr.flags,
                       pkt_type_str(meta(v).hdr.flags,
                                    (uint8_t *)&meta(v).hdr.vers),
                       meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
@@ -166,7 +168,7 @@ void log_pkt(const char * const dir,
                       "TX" NRM " to=%s:%u 0x%02x=" GRN "%s " NRM
                       "vers=0x%08x dcid=%s scid=%s tok=%s len=%u nr=" GRN
                       "%" PRIu64,
-                      addr, port, meta(v).hdr.flags,
+                      addr, prt, meta(v).hdr.flags,
                       pkt_type_str(meta(v).hdr.flags,
                                    (uint8_t *)&meta(v).hdr.vers),
                       meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
@@ -177,7 +179,7 @@ void log_pkt(const char * const dir,
                       BLD GRN "TX" NRM " to=%s:%u 0x%02x=" GRN "%s " NRM
                               "vers=0x%08x dcid=%s scid=%s len=%u nr=" GRN
                               "%" PRIu64,
-                      addr, port, meta(v).hdr.flags,
+                      addr, prt, meta(v).hdr.flags,
                       pkt_type_str(meta(v).hdr.flags,
                                    (uint8_t *)&meta(v).hdr.vers),
                       meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
@@ -186,7 +188,7 @@ void log_pkt(const char * const dir,
             twarn(NTE,
                   BLD GRN "TX" NRM " to=%s:%u 0x%02x=" GRN "%s " NRM
                           "kyph=%u dcid=%s nr=" GRN "%" PRIu64,
-                  addr, port, meta(v).hdr.flags,
+                  addr, prt, meta(v).hdr.flags,
                   pkt_type_str(meta(v).hdr.flags, (uint8_t *)&meta(v).hdr.vers),
                   is_set(F_SH_KYPH, meta(v).hdr.flags), c2s(&meta(v).hdr.dcid),
                   meta(v).hdr.nr);
@@ -482,13 +484,13 @@ bool enc_pkt(struct q_stream * const s,
     }
 
     meta(v).hdr.hdr_len = i;
-    log_pkt("TX", v, meta(v).hdr.type == F_LH_RTRY ? &c->odcid : 0, c->tok,
-            c->tok_len);
+    log_pkt("TX", v, c->peer.sin_addr.s_addr, c->peer.sin_port,
+            meta(v).hdr.type == F_LH_RTRY ? &c->odcid : 0, c->tok, c->tok_len);
 
     if (meta(v).hdr.type == F_LH_RTRY)
         goto tx;
 
-    if (!diet_empty(&pn->recv) && !is_ack_or_padding_only(&pn->rx_frames))
+    if (needs_ack(pn))
         i = enc_ack_frame(c, pn, v, i);
 
     if (c->state == conn_clsg) {
@@ -550,9 +552,6 @@ tx:
     ensure(x, "w_alloc_iov failed");
     // warn(CRT, "w_alloc_iov idx %u (avail %" PRIu64 ") len %u", w_iov_idx(x),
     //      sq_len(&c->w->iov), x->len);
-    x->ip = v->ip;
-    x->port = v->port;
-    x->flags = v->flags;
 
     if (meta(v).hdr.type == F_LH_RTRY) {
         memcpy(x->buf, v->buf, v->len); // copy data
@@ -569,6 +568,7 @@ tx:
         x->ip = c->peer.sin_addr.s_addr;
         x->port = c->peer.sin_port;
     }
+    x->flags = v->flags;
 
     sq_insert_tail(&c->txq, x, next);
     meta(v).tx_len = x->len;
@@ -583,6 +583,11 @@ tx:
         // XXX not clear if changing the len before calling on_pkt_sent is ok
         v->len = meta(v).stream_data_len;
     }
+
+    if (unlikely(rtx))
+        // we did an RTX and this is no longer lost
+        meta(v).is_lost = false;
+
     on_pkt_sent(s, v);
     if (c->is_clnt && is_set(F_LONG_HDR, meta(v).hdr.flags) == false)
         maybe_flip_keys(c, true);
@@ -951,7 +956,8 @@ void tx_vneg_resp(const struct w_sock * const ws, const struct w_iov * const v)
     x->len = i;
     x->ip = v->ip;
     x->port = v->port;
-    log_pkt("TX", x, 0, 0, 0);
+    x->flags = v->flags;
+    log_pkt("TX", x, x->ip, x->port, 0, 0, 0);
 
     w_tx(ws, &q);
     while (w_tx_pending(&q))

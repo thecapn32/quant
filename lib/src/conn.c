@@ -629,7 +629,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
     bool ok = false;
     struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
 
-    log_pkt("RX", v, odcid, tok, tok_len);
+    log_pkt("RX", v, v->ip, v->port, odcid, tok, tok_len);
 
     switch (c->state) {
     case conn_idle:
@@ -822,8 +822,8 @@ rx_pkts(struct w_iov_sq * const x,
 
         // allocate new w_iov for the (eventual) unencrypted data and meta-data
         struct w_iov * const v = alloc_iov(ws->w, 0, 0);
-        v->port = xv->port;
         v->ip = xv->ip;
+        v->port = xv->port;
         v->flags = xv->flags;
 
         const bool is_clnt = w_connected(ws);
@@ -878,7 +878,8 @@ rx_pkts(struct w_iov_sq * const x,
 
                         if (vers_supported(meta(v).hdr.vers) == false ||
                             is_force_neg_vers(meta(v).hdr.vers)) {
-                            log_pkt("RX", v, &odcid, tok, tok_len);
+                            log_pkt("RX", v, v->ip, v->port, &odcid, tok,
+                                    tok_len);
                             warn(WRN,
                                  "clnt-requested vers 0x%08x not supported",
                                  meta(v).hdr.vers);
@@ -903,7 +904,7 @@ rx_pkts(struct w_iov_sq * const x,
                 if (cid_cmp(&meta(v).hdr.scid, c->dcid) != 0) {
                     if (meta(v).hdr.vers && meta(v).hdr.type == F_LH_RTRY &&
                         cid_cmp(&odcid, c->dcid) != 0) {
-                        log_pkt("RX", v, &odcid, tok, tok_len);
+                        log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
                         warn(ERR, "retry dcid mismatch %s != %s, ignoring pkt",
                              hex2str(&odcid.id, odcid.len), cid2str(c->dcid));
                         goto drop;
@@ -944,13 +945,13 @@ rx_pkts(struct w_iov_sq * const x,
                 zo->t = ev_now(loop);
                 ensure(splay_insert(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo) == 0,
                        "inserted");
-                log_pkt("RX", v, &odcid, tok, tok_len);
+                log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
                 warn(INF, "caching 0-RTT pkt for unknown conn %s",
                      cid2str(&meta(v).hdr.dcid));
                 goto next;
             }
 #endif
-            log_pkt("RX", v, &odcid, tok, tok_len);
+            log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
             warn(INF, "ignoring unexpected 0x%02x-type pkt for conn %s",
                  meta(v).hdr.flags, cid2str(&meta(v).hdr.dcid));
             goto drop;
@@ -960,7 +961,7 @@ rx_pkts(struct w_iov_sq * const x,
             !is_set(F_LONG_HDR, meta(v).hdr.flags))
             if (dec_pkt_hdr_remainder(xv, v, c, x) == false) {
                 v->len = xv->len;
-                log_pkt("RX", v, &odcid, tok, tok_len);
+                log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
                 if (pkt_ok_for_epoch(meta(v).hdr.flags, epoch_in(c)) == true)
                     err_close(
                         c, ERR_PROTOCOL_VIOLATION, 0,

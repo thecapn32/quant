@@ -139,6 +139,8 @@ tx_vneg_resp(const struct w_sock * const ws, const struct w_iov * const v);
 extern void __attribute__((nonnull(1, 2)))
 log_pkt(const char * const dir,
         const struct w_iov * const v,
+        const uint32_t ip,
+        const uint16_t port,
         const struct cid * const odcid,
         const uint8_t * const tok,
         const uint16_t tok_len);
