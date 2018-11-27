@@ -43,19 +43,18 @@ struct pn_space;
 struct recovery {
     // LD state
     ev_timer ld_alarm;   // loss_detection_alarm
-    uint16_t hshake_cnt; // handshake_count
+    uint16_t crypto_cnt; // crypto_count
     uint16_t tlp_cnt;    // tlp_count
     uint16_t rto_cnt;    // rto_count
 
     uint8_t _unused2[2];
 
-    ev_tstamp last_sent_hshk_t;    // time_of_last_sent_handshake_packet
+    ev_tstamp last_sent_crypto_t;  // time_of_last_sent_crypto_packet
     ev_tstamp last_sent_rtxable_t; // time_of_last_sent_retransmittable_packet
     ev_tstamp min_rtt;             // min_rtt
     ev_tstamp latest_rtt;          // latest_rtt
     ev_tstamp srtt;                // smoothed_rtt
     ev_tstamp rttvar;              // rttvar
-    uint64_t reorder_thresh;       // reordering_threshold
     ev_tstamp loss_t;              // loss_time
 
     // CC state
@@ -66,39 +65,47 @@ struct recovery {
 };
 
 
+#ifndef NDEBUG
+extern uint64_t prev_in_flight, prev_cwnd, prev_ssthresh;
+extern ev_tstamp prev_srtt, prev_rttvar;
+
 #define log_cc(c)                                                              \
     do {                                                                       \
-        static uint64_t prev_in_flight = 0, prev_cwnd = 0, prev_ssthresh = 0;  \
-        static ev_tstamp prev_srtt = 0, prev_rttvar = 0;                       \
         const uint64_t ssthresh =                                              \
             (c)->rec.ssthresh == UINT64_MAX ? 0 : (c)->rec.ssthresh;           \
+        const int64_t delta_in_flight =                                        \
+            (int64_t)(c)->rec.in_flight - (int64_t)prev_in_flight;             \
+        const int64_t delta_cwnd =                                             \
+            (int64_t)(c)->rec.cwnd - (int64_t)prev_cwnd;                       \
+        const int64_t delta_ssthresh =                                         \
+            (int64_t)ssthresh - (int64_t)prev_ssthresh;                        \
+        const ev_tstamp delta_srtt = (c)->rec.srtt - prev_srtt;                \
+        const ev_tstamp delta_rttvar = (c)->rec.rttvar - prev_rttvar;          \
         warn(NTE,                                                              \
-             "%sin_flight" NRM "=%" PRIu64 ", %scwnd" NRM "=%" PRIu64          \
-             ", %sssthresh" NRM "=%" PRIu64 ", %ssrtt" NRM "=%f, %srttvar" NRM \
-             "=%f",                                                            \
-             (c)->rec.in_flight > prev_in_flight                               \
-                 ? GRN                                                         \
-                 : (c)->rec.in_flight < prev_in_flight ? RED : "",             \
+             "in_flight=%" PRIu64 " (%s%+" PRId64 NRM "), cwnd" NRM            \
+             "=%" PRIu64 " (%s%+" PRId64 NRM "), ssthresh=%" PRIu64            \
+             " (%s%+" PRId64 NRM "), srtt=%f (%s%+f" NRM                       \
+             "), rttvar=%f (%s%+f" NRM ")",                                    \
              (c)->rec.in_flight,                                               \
-             (c)->rec.cwnd > prev_cwnd ? GRN                                   \
-                                       : (c)->rec.cwnd < prev_cwnd ? RED : "", \
-             (c)->rec.cwnd,                                                    \
-             ssthresh > prev_ssthresh ? GRN                                    \
-                                      : ssthresh < prev_ssthresh ? RED : "",   \
+             delta_in_flight > 0 ? GRN : delta_in_flight < 0 ? RED : "",       \
+             delta_in_flight, (c)->rec.cwnd,                                   \
+             delta_cwnd > 0 ? GRN : delta_cwnd < 0 ? RED : "", delta_cwnd,     \
              ssthresh,                                                         \
-             (c)->rec.srtt > prev_srtt ? GRN                                   \
-                                       : (c)->rec.srtt < prev_srtt ? RED : "", \
-             (c)->rec.srtt,                                                    \
-             (c)->rec.rttvar > prev_rttvar                                     \
-                 ? GRN                                                         \
-                 : (c)->rec.rttvar < prev_rttvar ? RED : "",                   \
-             (c)->rec.rttvar);                                                 \
+             delta_ssthresh > 0 ? GRN : delta_ssthresh < 0 ? RED : "",         \
+             delta_ssthresh, (c)->rec.srtt,                                    \
+             delta_srtt > 0 ? GRN : delta_srtt < 0 ? RED : "", delta_srtt,     \
+             (c)->rec.rttvar,                                                  \
+             delta_rttvar > 0 ? GRN : delta_rttvar < 0 ? RED : "",             \
+             delta_rttvar);                                                    \
         prev_in_flight = (c)->rec.in_flight;                                   \
         prev_cwnd = (c)->rec.cwnd;                                             \
         prev_ssthresh = ssthresh;                                              \
         prev_srtt = (c)->rec.srtt;                                             \
         prev_rttvar = (c)->rec.rttvar;                                         \
     } while (0)
+#else
+#define log_cc(c)
+#endif
 
 
 extern void __attribute__((nonnull)) init_rec(struct q_conn * const c);

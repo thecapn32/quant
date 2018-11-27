@@ -449,6 +449,31 @@ done:
 }
 
 
+void tx_tlp(struct q_conn * const c)
+{
+    if (unlikely(!has_wnd(c))) {
+        warn(INF, "out of window, cannot send TLP");
+        return;
+    }
+
+    struct pn_space * const pn = pn_for_epoch(c, ep_data);
+    struct pkt_meta * p;
+    struct w_iov * v = 0;
+    splay_foreach_rev (p, pm_by_nr, &pn->sent_pkts) {
+        v = w_iov(c->w, p->is_rtx ? pm_idx(sl_first(&p->rtx)) : pm_idx(p));
+        if (has_frame(v, FRAM_TYPE_CRPT) || has_frame(v, FRAM_TYPE_STRM))
+            break;
+    }
+    ensure(v, "cannot find pkt for TLP");
+    ensure(meta(v).stream, "have stream " FMT_PNR_OUT, meta(v).hdr.nr);
+
+    rtx_pkt(meta(v).stream, v);
+    enc_pkt(meta(v).stream, true, true, v);
+
+    do_tx(c);
+}
+
+
 void tx_ack(struct q_conn * const c, const epoch_t e)
 {
     struct q_stream * const s = get_stream(c, crpt_strm_id(e));
