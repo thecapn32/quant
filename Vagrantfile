@@ -5,6 +5,8 @@ Vagrant.configure("2") do |config|
 
   config.vm.network "private_network", type: "dhcp", auto_config: false
 
+  config.ssh.forward_x11 = true
+
   # hardware configuration of the VM
   config.vm.provider "virtualbox" do |vb|
     vb.gui = false
@@ -49,7 +51,7 @@ Vagrant.configure("2") do |config|
     # install some tools that are needed
     apt-get -y install git cmake ninja-build libev-dev libssl-dev g++ \
       libhttp-parser-dev libbsd-dev pkg-config mercurial dpdk dpdk-dev \
-      libelf-dev
+      libelf-dev google-perftools libgoogle-perftools-dev
 
     # install some tools that are useful
     apt-get -y install tmux fish gdb htop silversearcher-ag valgrind
