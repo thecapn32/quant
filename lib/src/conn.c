@@ -464,12 +464,13 @@ void tx_tlp(struct q_conn * const c)
         if (has_frame(v, FRAM_TYPE_CRPT) || has_frame(v, FRAM_TYPE_STRM))
             break;
     }
-    ensure(v, "cannot find pkt for TLP");
-    ensure(meta(v).stream, "have stream " FMT_PNR_OUT, meta(v).hdr.nr);
+    if (unlikely(v == 0 || meta(v).stream == 0)) {
+        warn(INF, "cannot find pkt for TLP");
+        return;
+    }
 
     rtx_pkt(meta(v).stream, v);
     enc_pkt(meta(v).stream, true, true, v);
-
     do_tx(c);
 }
 
