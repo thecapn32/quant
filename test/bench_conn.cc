@@ -105,9 +105,10 @@ int main(int argc __attribute__((unused)), char ** argv)
     q_bind(w, 55555);
 
     // connect to server
-    const struct sockaddr_in sip = {.sin_family = AF_INET,
-                                    .sin_addr.s_addr = inet_addr("127.0.0.1"),
-                                    .sin_port = htons(55555)};
+    __extension__ const struct sockaddr_in sip = {
+        .sin_family = AF_INET,
+        .sin_port = htons(55555),
+        .sin_addr = {.s_addr = inet_addr("127.0.0.1")}};
     cc = q_connect(w, &sip, "localhost", nullptr, nullptr, true, 0);
     ensure(cc, "is zero");
 
