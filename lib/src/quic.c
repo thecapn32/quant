@@ -259,7 +259,7 @@ bool q_write(struct q_stream * const s,
     struct q_conn * const c = s->c;
     if (unlikely(c->state == conn_qlse || c->state == conn_drng ||
                  c->state == conn_clsd)) {
-        warn(ERR, "%s conn %s is in state %s, can't write", conn_type(c),
+        warn(ERR, "%s conn %s is in state %s, can't write", conn_type(c), cid2str(c->scid), 
              conn_state_str[c->state]);
         return false;
     }
