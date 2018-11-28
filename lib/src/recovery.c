@@ -118,25 +118,18 @@ static void __attribute__((nonnull)) set_ld_timer(struct q_conn * const c)
         }
     }
 
-    // warn(ERR, "to %f, last_sent_rtxable_t %f", to,
-    // c->rec.last_sent_rtxable_t);
     c->rec.ld_alarm.repeat = c->rec.last_sent_rtxable_t + to;
 set_to:
     c->rec.ld_alarm.repeat -= ev_now(loop);
 
     if (c->rec.ld_alarm.repeat <= 0) {
-        warn(ERR, "ignoring %s alarm in %f sec on %s conn %s", type,
+        ev_timer_stop(loop, &c->rec.ld_alarm);
+        ev_invoke(loop, &c->rec.ld_alarm, 0);
+    } else {
+        warn(DBG, "%s alarm in %f sec on %s conn %s", type,
              c->rec.ld_alarm.repeat, conn_type(c), cid2str(c->scid));
-        return;
+        ev_timer_again(loop, &c->rec.ld_alarm);
     }
-
-    warn(DBG, "%s alarm in %f sec on %s conn %s", type, c->rec.ld_alarm.repeat,
-         conn_type(c), cid2str(c->scid));
-
-    ensure(c->rec.ld_alarm.repeat > 0, "%s alarm in %f", type,
-           c->rec.ld_alarm.repeat);
-
-    ev_timer_again(loop, &c->rec.ld_alarm);
 }
 
 
@@ -322,10 +315,8 @@ update_rtt(struct q_conn * const c, const ev_tstamp ack_del)
     // min_rtt = min(min_rtt, latest_rtt)
     c->rec.min_rtt = MIN(c->rec.min_rtt, c->rec.latest_rtt);
 
-    // if (latest_rtt - min_rtt > ack_delay):
-    if (c->rec.latest_rtt - c->rec.min_rtt > ack_del)
-        // latest_rtt -= ack_delay
-        c->rec.latest_rtt -= ack_del;
+    // latest_rtt = max(latest_rtt - ack_delay, min_rtt)
+    c->rec.latest_rtt = MAX(c->rec.latest_rtt - ack_del, c->rec.min_rtt);
 
     // if (smoothed_rtt == 0):
     if (unlikely(is_zero(c->rec.srtt))) {
