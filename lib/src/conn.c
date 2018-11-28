@@ -1013,10 +1013,8 @@ rx_pkts(struct w_iov_sq * const x,
             // we didn't place this pkt in any stream - bye!
             goto drop;
         else if (unlikely(meta(v).stream->state == strm_clsd &&
-                          sq_empty(&meta(v).stream->in))) {
+                          sq_empty(&meta(v).stream->in)))
             free_stream(meta(v).stream);
-            goto drop;
-        }
         goto next;
 
     drop:
