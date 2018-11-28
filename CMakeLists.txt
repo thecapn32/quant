@@ -204,7 +204,7 @@ else()
 
   # check for INTERPROCEDURAL_OPTIMIZATION support
   # (except on older gcc where that breaks)
-  if(CMAKE_COMPILER_IS_GNUCC AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 6.0)
+  if(NOT CMAKE_COMPILER_IS_GNUCC OR CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 6.0)
     include(CheckIPOSupported)
     check_ipo_supported(RESULT IPO)
   else()
@@ -212,8 +212,7 @@ else()
   endif()
 endif()
 
-
-if(APPLE)
+if(APPLE AND NOT IPO)
   find_program(DSYMUTIL dsymutil)
 endif()
 
