@@ -99,16 +99,18 @@ struct q_stream * new_stream(struct q_conn * const c, const int64_t id)
     s->c = c;
     s->id = id;
     strm_to_state(s, strm_open);
-    ensure(splay_insert(streams_by_id, &c->streams_by_id, s) == 0, "inserted");
 
     if (is_uni(id))
         c->lg_sid_uni = MAX(id, c->lg_sid_uni);
     else
         c->lg_sid_bidi = MAX(id, c->lg_sid_bidi);
 
-    if (unlikely(id < 0))
+    if (unlikely(id < 0)) {
+        c->cstreams[strm_epoch(s)] = s;
         return s;
+    }
 
+    ensure(splay_insert(streams_by_id, &c->streams_by_id, s) == 0, "inserted");
     apply_stream_limits(s);
     do_stream_id_fc(c, id);
 
@@ -127,15 +129,16 @@ struct q_stream * new_stream(struct q_conn * const c, const int64_t id)
 void free_stream(struct q_stream * const s)
 {
     struct q_conn * const c = s->c;
-    if (s->id >= 0) {
+    if (likely(s->id >= 0)) {
 #ifndef FUZZING
         warn(DBG, "freeing strm " FMT_SID " on %s conn %s", s->id, conn_type(c),
              cid2str(c->scid));
 #endif
         diet_insert(&c->closed_streams, (uint64_t)s->id, 0);
-    }
+        ensure(splay_remove(streams_by_id, &c->streams_by_id, s), "removed");
+    } else
+        s->c->cstreams[strm_epoch(s)] = 0;
 
-    ensure(splay_remove(streams_by_id, &c->streams_by_id, s), "removed");
     while (!splay_empty(&s->in_ooo)) {
         struct pkt_meta * const p = splay_min(ooo_by_off, &s->in_ooo);
         // warn(ERR, "idx %u", pm_idx(p));

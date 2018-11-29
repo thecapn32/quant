@@ -212,7 +212,7 @@ struct q_conn * q_connect(struct w_engine * const w,
     w_connect(c->sock, peer->sin_addr.s_addr, peer->sin_port);
 
     // start TLS handshake
-    tls_io(get_stream(c, crpt_strm_id(0)), 0);
+    tls_io(c->cstreams[ep_init], 0);
 
     if (early_data) {
         ensure(early_data_stream, "early data without stream pointer");
@@ -259,7 +259,7 @@ bool q_write(struct q_stream * const s,
     struct q_conn * const c = s->c;
     if (unlikely(c->state == conn_qlse || c->state == conn_drng ||
                  c->state == conn_clsd)) {
-        warn(ERR, "%s conn %s is in state %s, can't write", conn_type(c), cid2str(c->scid), 
+        warn(ERR, "%s conn %s is in state %s, can't write", conn_type(c), cid2str(c->scid),
              conn_state_str[c->state]);
         return false;
     }

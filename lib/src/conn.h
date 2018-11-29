@@ -180,8 +180,8 @@ struct q_conn {
     struct sockaddr_in peer; ///< Address of our peer.
     char * peer_name;
 
-    // TODO we might want to maintain pointers to the crypto streams here
-    splay_head(streams_by_id, q_stream) streams_by_id;
+    struct q_stream * cstreams[ep_data + 1];           ///< Crypto "streams".
+    splay_head(streams_by_id, q_stream) streams_by_id; ///< Regular streams.
     struct diet closed_streams;
 
     struct w_sock * sock; ///< File descriptor (socket) for the connection.

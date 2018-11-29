@@ -48,6 +48,7 @@
 #include "quic.h"
 #include "recovery.h"
 #include "stream.h"
+#include "tls.h"
 
 
 #define track_frame(v, ft) bit_set(NUM_FRAM_TYPES, (ft), &meta(v).frames)
@@ -142,14 +143,17 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     uint16_t i = dec_chk(t, &t, v->buf, v->len, pos, sizeof(t), "0x%02x");
 
     int64_t sid = 0;
-    if (t == FRAM_TYPE_CRPT)
-        sid = crpt_strm_id(epoch_for_pkt_type(meta(v).hdr.type));
-    else {
+    if (t == FRAM_TYPE_CRPT) {
+        const epoch_t e = epoch_for_pkt_type(meta(v).hdr.type);
+        sid = crpt_strm_id(e);
+        meta(v).stream = c->cstreams[e];
+    } else {
         i = dec_chk(t, &sid, v->buf, v->len, i, 0, FMT_SID);
         const int64_t max = max_sid(sid, c);
         if (unlikely(sid > max))
             err_close_return(c, ERR_STREAM_ID, t,
                              "sid %" PRId64 " > max %" PRId64, sid, max);
+        meta(v).stream = get_stream(c, sid);
     }
 
     if (is_set(F_STREAM_OFF, t) || t == FRAM_TYPE_CRPT)
@@ -168,7 +172,6 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
 
     meta(v).stream_data_start = i;
     meta(v).stream_data_len = (uint16_t)l;
-    meta(v).stream = get_stream(c, sid);
 
     // deliver data into stream
     bool is_dup = false;
