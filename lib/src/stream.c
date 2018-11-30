@@ -52,7 +52,7 @@ struct q_stream * get_stream(struct q_conn * const c, const int64_t id)
 {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wused-but-marked-unused"
-    const khiter_t k = kh_get(streams, c->streams_by_id, (khint64_t)id);
+    const khiter_t k = kh_get(streams_by_id, c->streams_by_id, (khint64_t)id);
     if (unlikely(k == kh_end(c->streams_by_id)))
         return 0;
     return kh_val(c->streams_by_id, k);
@@ -116,7 +116,8 @@ struct q_stream * new_stream(struct q_conn * const c, const int64_t id)
     int ret;
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wused-but-marked-unused"
-    const khiter_t k = kh_put(streams, c->streams_by_id, (khint64_t)id, &ret);
+    const khiter_t k =
+        kh_put(streams_by_id, c->streams_by_id, (khint64_t)id, &ret);
     ensure(ret >= 0, "inserted");
     kh_val(c->streams_by_id, k) = s;
 #pragma clang diagnostic pop
@@ -147,9 +148,10 @@ void free_stream(struct q_stream * const s)
         diet_insert(&c->closed_streams, (uint64_t)s->id, 0);
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wused-but-marked-unused"
-        const khiter_t k = kh_get(streams, c->streams_by_id, (khint64_t)s->id);
+        const khiter_t k =
+            kh_get(streams_by_id, c->streams_by_id, (khint64_t)s->id);
         ensure(k != kh_end(c->streams_by_id), "found");
-        kh_del(streams, c->streams_by_id, k);
+        kh_del(streams_by_id, c->streams_by_id, k);
 #pragma clang diagnostic pop
     } else
         s->c->cstreams[strm_epoch(s)] = 0;

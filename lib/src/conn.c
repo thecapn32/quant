@@ -1252,7 +1252,7 @@ struct q_conn * new_conn(struct w_engine * const w,
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wused-but-marked-unused"
-    c->streams_by_id = kh_init(streams);
+    c->streams_by_id = kh_init(streams_by_id);
 #pragma clang diagnostic pop
 
     diet_init(&c->closed_streams);
@@ -1394,7 +1394,7 @@ void free_conn(struct q_conn * const c)
         free_stream(s);
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wused-but-marked-unused"
-    kh_destroy(streams, c->streams_by_id);
+    kh_destroy(streams_by_id, c->streams_by_id);
 #pragma clang diagnostic pop
 
     for (epoch_t e = ep_init; e <= ep_data; e++)

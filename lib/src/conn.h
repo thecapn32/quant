@@ -48,7 +48,7 @@
 #include "tls.h"
 
 
-KHASH_MAP_INIT_INT64(streams, struct q_stream *) // NOLINT
+KHASH_MAP_INIT_INT64(streams_by_id, struct q_stream *) // NOLINT
 
 #define streams_foreach(s, h)                                                  \
     for (khiter_t k = kh_begin(h); k != kh_end(h); ++k)                        \
@@ -189,7 +189,7 @@ struct q_conn {
     char * peer_name;
 
     struct q_stream * cstreams[ep_data + 1]; ///< Crypto "streams".
-    khash_t(streams) * streams_by_id;        ///< Regular streams.
+    khash_t(streams_by_id) * streams_by_id;  ///< Regular streams.
     struct diet closed_streams;
 
     struct w_sock * sock; ///< File descriptor (socket) for the connection.
