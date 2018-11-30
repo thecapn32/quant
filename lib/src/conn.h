@@ -37,6 +37,7 @@
 #include <sys/param.h>
 
 #include <ev.h>
+#include <khash.h>
 #include <picotls.h>
 #include <warpcore/warpcore.h>
 
@@ -45,6 +46,13 @@
 #include "quic.h"
 #include "recovery.h"
 #include "tls.h"
+
+
+KHASH_MAP_INIT_INT64(streams, struct q_stream *) // NOLINT
+
+#define streams_foreach(s, h)                                                  \
+    for (khiter_t k = kh_begin(h); k != kh_end(h); ++k)                        \
+        if (kh_exist((h), k) && ((s) = kh_val((h), k)))
 
 
 extern splay_head(conns_by_ipnp, q_conn) conns_by_ipnp;
@@ -181,7 +189,7 @@ struct q_conn {
     char * peer_name;
 
     // TODO we might want to maintain pointers to the crypto streams here
-    splay_head(streams_by_id, q_stream) streams_by_id;
+    khash_t(streams) * streams_by_id;
     struct diet closed_streams;
 
     struct w_sock * sock; ///< File descriptor (socket) for the connection.

@@ -42,6 +42,7 @@
 #include <picotls/openssl.h>
 #endif
 
+#include <khash.h>
 #include <picotls/minicrypto.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
@@ -599,7 +600,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
     // apply these parameter to all current non-crypto streams
     struct q_stream * s;
-    splay_foreach (s, streams_by_id, &c->streams_by_id)
+    streams_foreach (s, c->streams_by_id)
         if (s->id >= 0)
             apply_stream_limits(s);
 

@@ -75,7 +75,7 @@ static void BM_conn(benchmark::State & state)
 }
 
 
-BENCHMARK(BM_conn)->RangeMultiplier(2)->Ranges({{4096, 65535 * 8}})
+BENCHMARK(BM_conn)->RangeMultiplier(2)->Ranges({{4096, 65535 * 16}})
     // ->MinTime(3)
     // ->UseRealTime()
     ;

@@ -406,8 +406,8 @@ void tx(struct q_conn * const c, const uint32_t limit)
 
     do_conn_mgmt(c);
 
-    struct q_stream * s = 0;
-    splay_foreach (s, streams_by_id, &c->streams_by_id) {
+    struct q_stream * s;
+    streams_foreach (s, c->streams_by_id) {
         const bool stream_has_data_to_tx = sq_len(&s->out) > 0 &&
                                            out_fully_acked(s) == false &&
                                            (s->out_una || s->out_nxt);
@@ -605,7 +605,7 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
     c->in_data = c->out_data = 0;
 
     struct q_stream * s;
-    splay_foreach (s, streams_by_id, &c->streams_by_id)
+    streams_foreach (s, c->streams_by_id)
         reset_stream(s, s->id < 0 && (c->try_0rtt == false ||
                                       (strm_epoch(s) != ep_0rtt &&
                                        strm_epoch(s) != ep_data)));
@@ -1233,7 +1233,12 @@ struct q_conn * new_conn(struct w_engine * const w,
         add_dcid(c, dcid);
 
     c->vers = c->vers_initial = vers;
-    splay_init(&c->streams_by_id);
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wused-but-marked-unused"
+    c->streams_by_id = kh_init(streams);
+#pragma clang diagnostic pop
+
     diet_init(&c->closed_streams);
     sq_init(&c->txq);
 
@@ -1368,11 +1373,13 @@ void free_conn(struct q_conn * const c)
     ev_timer_stop(loop, &c->migration_alarm);
     ev_timer_stop(loop, &c->idle_alarm);
 
-    struct q_stream *s, *ns;
-    for (s = splay_min(streams_by_id, &c->streams_by_id); s; s = ns) {
-        ns = splay_next(streams_by_id, &c->streams_by_id, s);
+    struct q_stream * s;
+    streams_foreach (s, c->streams_by_id)
         free_stream(s);
-    }
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wused-but-marked-unused"
+    kh_destroy(streams, c->streams_by_id);
+#pragma clang diagnostic pop
     free_tls(c);
 
     // free packet number spaces

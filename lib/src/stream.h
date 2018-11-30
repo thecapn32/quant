@@ -173,9 +173,6 @@ streams_by_id_cmp(const struct q_stream * const a,
 }
 
 
-SPLAY_PROTOTYPE(streams_by_id, q_stream, node, streams_by_id_cmp)
-
-
 extern struct q_stream * __attribute__((nonnull))
 get_stream(struct q_conn * const c, const int64_t id);
 

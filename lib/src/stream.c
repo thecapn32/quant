@@ -31,6 +31,7 @@
 #include <string.h>
 #include <sys/param.h>
 
+#include <khash.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
@@ -44,16 +45,18 @@
 #undef STRM_STATE
 #define STRM_STATE(k, v) [v] = #k
 
+
 const char * const strm_state_str[] = {STRM_STATES};
-
-
-SPLAY_GENERATE(streams_by_id, q_stream, node, streams_by_id_cmp)
-
 
 struct q_stream * get_stream(struct q_conn * const c, const int64_t id)
 {
-    const struct q_stream which = {.id = id};
-    return splay_find(streams_by_id, &c->streams_by_id, &which);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wused-but-marked-unused"
+    const khiter_t k = kh_get(streams, c->streams_by_id, (khint64_t)id);
+    if (unlikely(k == kh_end(c->streams_by_id)))
+        return 0;
+    return kh_val(c->streams_by_id, k);
+#pragma clang diagnostic pop
 }
 
 
@@ -99,7 +102,14 @@ struct q_stream * new_stream(struct q_conn * const c, const int64_t id)
     s->c = c;
     s->id = id;
     strm_to_state(s, strm_open);
-    ensure(splay_insert(streams_by_id, &c->streams_by_id, s) == 0, "inserted");
+
+    int ret;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wused-but-marked-unused"
+    const khiter_t k = kh_put(streams, c->streams_by_id, (khint64_t)id, &ret);
+    ensure(ret >= 0, "inserted");
+    kh_val(c->streams_by_id, k) = s;
+#pragma clang diagnostic pop
 
     if (is_uni(id))
         c->lg_sid_uni = MAX(id, c->lg_sid_uni);
@@ -135,7 +145,13 @@ void free_stream(struct q_stream * const s)
         diet_insert(&c->closed_streams, (uint64_t)s->id, 0);
     }
 
-    ensure(splay_remove(streams_by_id, &c->streams_by_id, s), "removed");
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wused-but-marked-unused"
+    const khiter_t k = kh_get(streams, c->streams_by_id, (khint64_t)s->id);
+    ensure(k != kh_end(c->streams_by_id), "found");
+    kh_del(streams, c->streams_by_id, k);
+#pragma clang diagnostic pop
+
     while (!splay_empty(&s->in_ooo)) {
         struct pkt_meta * const p = splay_min(ooo_by_off, &s->in_ooo);
         // warn(ERR, "idx %u", pm_idx(p));

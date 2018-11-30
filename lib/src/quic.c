@@ -33,6 +33,7 @@
 #include <sys/types.h>
 
 #include <ev.h>
+#include <khash.h>
 #include <picotls.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
@@ -259,8 +260,8 @@ bool q_write(struct q_stream * const s,
     struct q_conn * const c = s->c;
     if (unlikely(c->state == conn_qlse || c->state == conn_drng ||
                  c->state == conn_clsd)) {
-        warn(ERR, "%s conn %s is in state %s, can't write", conn_type(c), cid2str(c->scid), 
-             conn_state_str[c->state]);
+        warn(ERR, "%s conn %s is in state %s, can't write", conn_type(c),
+             cid2str(c->scid), conn_state_str[c->state]);
         return false;
     }
 
@@ -314,7 +315,7 @@ q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool block)
 again:;
     struct q_stream * s = 0;
     if (c->state == conn_estb) {
-        splay_foreach (s, streams_by_id, &c->streams_by_id)
+        streams_foreach (s, c->streams_by_id)
             if (!sq_empty(&s->in) && s->state != strm_clsd && s->id >= 0)
                 // we found a stream with queued data
                 break;

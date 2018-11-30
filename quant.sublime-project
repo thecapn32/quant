@@ -19,9 +19,9 @@
     "settings":
     {
         "SublimeLinter.linters.clang.I": [
-            "${project_path}/lib/include", "${project_path}/lib/src",
-            "${project_path}/Darwin/lib/include", "${file_path}",
-            "${project_path}/Darwin/external/include",
+            "${project_path}/lib/include", "${project_path}/external/klib",
+            "${project_path}/lib/src", "${project_path}/Darwin/lib/include",
+            "${file_path}", "${project_path}/Darwin/external/include",
         ],
         "SublimeLinter.linters.clang.args": [
             "-fsyntax-only", "-fno-caret-diagnostics", "-std=gnu11", "-Wall",
@@ -29,9 +29,9 @@
             "-Wno-empty-translation-unit", "-Wno-unused-function"
         ],
         "SublimeLinter.linters.clang++.I": [
-            "${project_path}/lib/include", "${project_path}/lib/src",
-            "${project_path}/Darwin/lib/include", "${file_path}",
-            "${project_path}/Darwin/external/include",
+            "${project_path}/lib/include", "${project_path}/external/klib",
+            "${project_path}/lib/src", "${project_path}/Darwin/lib/include",
+            "${file_path}", "${project_path}/Darwin/external/include",
         ],
         "SublimeLinter.linters.clang++.args": [
             "-fsyntax-only", "-fno-caret-diagnostics", "-std=gnu++14", "-Wall",

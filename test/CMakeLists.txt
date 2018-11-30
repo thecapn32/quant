@@ -64,6 +64,7 @@ if(HAVE_BENCHMARK_H)
     target_include_directories(${TARGET}
       SYSTEM PRIVATE
         ${OPENSSL_ROOT_DIR}/include
+        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/external/klib>
       PRIVATE
         ${CMAKE_SOURCE_DIR}/lib/include
         ${CMAKE_BINARY_DIR}/lib/include
