@@ -637,9 +637,9 @@ bool q_peer_has_closed_stream(struct q_stream * const s)
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 void write_to_corpus(const int dir, const void * const data, const size_t len)
 {
-    char file[MAXPATHLEN], rand[16];
-    arc4random_buf(rand, sizeof(rand));
-    strncpy(file, hex2str(rand, sizeof(rand)), MAXPATHLEN);
+    char file[MAXPATHLEN];
+    const uint64_t rand = w_rand();
+    strncpy(file, hex2str(&rand, sizeof(rand)), MAXPATHLEN);
     const int fd =
         openat(dir, file, O_CREAT | O_EXCL | O_WRONLY | O_CLOEXEC, 0644);
     ensure(fd != -1, "cannot open");

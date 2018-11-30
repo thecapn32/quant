@@ -40,8 +40,7 @@ if(NOT WARP_INCLUDE)
 endif()
 
 if("${CMAKE_SYSTEM}" MATCHES "Linux")
-  add_definitions(-D_GNU_SOURCE -DLIBBSD_OVERLAY)
-  include_directories(SYSTEM /usr/include/bsd)
+  add_definitions(-D_GNU_SOURCE)
 endif()
 
 # Build "Debug" type by default

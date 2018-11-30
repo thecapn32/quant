@@ -29,12 +29,20 @@
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
+#ifdef __cplusplus
 extern "C" {
+#endif
+
+#include <picotls/openssl.h>
+
 #include "conn.h" // IWYU pragma: keep
 #include "pkt.h"
 #include "quic.h"
 #include "tls.h" // IWYU pragma: keep
+
+#ifdef __cplusplus
 }
+#endif
 
 
 static struct q_conn * c;
@@ -48,7 +56,7 @@ static void BM_quic_encryption(benchmark::State & state)
     struct w_iov * v = alloc_iov(w, len, 0);
     struct w_iov * x = alloc_iov(w, MAX_PKT_LEN, 0);
 
-    arc4random_buf(v->buf, len);
+    ptls_openssl_random_bytes(v->buf, len);
     meta(v).hdr.type = F_LH_INIT;
     meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
     meta(v).hdr.hdr_len = 16;

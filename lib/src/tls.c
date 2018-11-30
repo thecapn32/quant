@@ -724,7 +724,7 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
         dst->off += quant_commit_hash_len;
 
         // prepend ticket id
-        arc4random_buf(&tid, sizeof(tid));
+        ptls_openssl_random_bytes(&tid, sizeof(tid));
         memcpy(dst->base + dst->off, &tid, sizeof(tid));
         dst->off += sizeof(tid);
 
@@ -1217,7 +1217,7 @@ void init_tls_ctx(const char * const cert,
     tls_ctx.hkdf_label_prefix = HKDF_BASE_LABEL;
     tls_ctx.omit_end_of_early_data = true;
 
-    arc4random_buf(cookie, COOKIE_LEN);
+    ptls_openssl_random_bytes(cookie, COOKIE_LEN);
 
     init_ticket_prot();
 }

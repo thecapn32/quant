@@ -29,16 +29,15 @@
 #include <inttypes.h>
 #include <netinet/in.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 
 #include <ev.h>
 #include <picotls.h>
+#include <picotls/openssl.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
-// #include "bitset.h"
 #include "conn.h"
 #include "diet.h"
 #include "frame.h"
@@ -389,8 +388,8 @@ bool enc_pkt(struct q_stream * const s,
         if (c->is_clnt == false && rtx == false) {
             // this is a new connection; server picks a new random cid
             struct cid nscid = {.len = SERV_SCID_LEN};
-            arc4random_buf(nscid.id, nscid.len);
-            arc4random_buf(nscid.srt, sizeof(nscid.srt));
+            ptls_openssl_random_bytes(nscid.id, nscid.len);
+            ptls_openssl_random_bytes(nscid.srt, sizeof(nscid.srt));
             warn(NTE, "hshk switch to scid %s for %s conn (was %s)",
                  cid2str(&nscid), conn_type(c), cid2str(c->scid));
             cid_cpy(&c->odcid, c->scid);
@@ -432,7 +431,8 @@ bool enc_pkt(struct q_stream * const s,
              meta(v).hdr.flags & F_SH_EXP_MASK);
 #else
         // for giggles, randomize the reserved bits in the short header
-        meta(v).hdr.flags |= arc4random_uniform(F_SH_EXP_MASK);
+        // this doesn't need to be cryptographically random
+        meta(v).hdr.flags |= (w_rand() & F_SH_EXP_MASK);
 #endif
     }
 
@@ -447,7 +447,8 @@ bool enc_pkt(struct q_stream * const s,
         i = enc_lh_cids(c->dcid, c->scid, v, i);
 
         if (meta(v).hdr.type == F_LH_RTRY) {
-            const uint8_t odcil = (uint8_t)(arc4random_uniform(0xf) << 4) |
+            // don't need cryptographically random bit here
+            const uint8_t odcil = (uint8_t)((w_rand() & 0xf) << 4) |
                                   (c->odcid.len ? c->odcid.len - 3 : 0);
             i = enc(v->buf, v->len, i, &odcil, sizeof(odcil), 0, "0x%02x");
             if (c->odcid.len)

@@ -38,6 +38,7 @@
 #include <sys/socket.h>
 
 #include <ev.h>
+#include <picotls/openssl.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
@@ -721,7 +722,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 
         // this is a new connection; server picks a new random cid
         struct cid new_scid = {.len = SERV_SCID_LEN};
-        arc4random_buf(new_scid.id, new_scid.len);
+        ptls_openssl_random_bytes(new_scid.id, new_scid.len);
         update_act_scid(c, &new_scid);
 
         ok = true;
@@ -966,7 +967,8 @@ rx_pkts(struct w_iov_sq * const x,
                 warn(NTE, "pkt came from new peer %s:%u, probing",
                      inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
                 update_ipnp(c, &peer);
-                arc4random_buf(&c->path_chlg_out, sizeof(c->path_chlg_out));
+                ptls_openssl_random_bytes(&c->path_chlg_out,
+                                          sizeof(c->path_chlg_out));
                 c->tx_path_chlg = true;
             }
         }
@@ -1239,8 +1241,8 @@ struct q_conn * new_conn(struct w_engine * const w,
     splay_init(&c->dcids_by_seq);
     if (c->is_clnt) {
         struct cid ndcid = {.len = SERV_SCID_LEN};
-        arc4random_buf(ndcid.id, ndcid.len);
-        arc4random_buf(ndcid.srt, sizeof(ndcid.srt));
+        ptls_openssl_random_bytes(ndcid.id, ndcid.len);
+        ptls_openssl_random_bytes(ndcid.srt, sizeof(ndcid.srt));
         cid_cpy(&c->odcid, &ndcid);
         add_dcid(c, &ndcid);
     } else if (dcid)
@@ -1313,11 +1315,11 @@ struct q_conn * new_conn(struct w_engine * const w,
     struct cid nscid = {0};
     if (c->is_clnt) {
         nscid.len = CLNT_SCID_LEN;
-        arc4random_buf(nscid.id, nscid.len);
+        ptls_openssl_random_bytes(nscid.id, nscid.len);
     } else if (scid)
         cid_cpy(&nscid, scid);
     if (nscid.len) {
-        arc4random_buf(nscid.srt, sizeof(nscid.srt));
+        ptls_openssl_random_bytes(nscid.srt, sizeof(nscid.srt));
         add_scid(c, &nscid);
     }
 

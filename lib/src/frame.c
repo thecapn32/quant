@@ -29,12 +29,12 @@
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
 #include <sys/param.h>
 
 #include <ev.h>
 #include <picotls.h>
+#include <picotls/openssl.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
@@ -1464,8 +1464,8 @@ uint16_t enc_new_cid_frame(struct q_conn * const c,
 
     struct cid ncid = {.seq = ++c->max_cid_seq_out,
                        .len = c->is_clnt ? CLNT_SCID_LEN : SERV_SCID_LEN};
-    arc4random_buf(ncid.id, ncid.len);
-    arc4random_buf(ncid.srt, sizeof(ncid.srt));
+    ptls_openssl_random_bytes(ncid.id, ncid.len);
+    ptls_openssl_random_bytes(ncid.srt, sizeof(ncid.srt));
     add_scid(c, &ncid);
 
     i = enc(v->buf, v->len, i, &ncid.len, sizeof(ncid.len), 0, "%u");

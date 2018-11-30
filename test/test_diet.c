@@ -25,13 +25,14 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <bitstring.h>
 #include <inttypes.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include <warpcore/warpcore.h>
 
+#include "bitset.h"
 #include "diet.h"
 
 
@@ -92,25 +93,24 @@ static void chk(struct diet * const d)
 
 
 #define N 30
+bitset_define(values, N);
 
 int main()
 {
+    srandom((unsigned)time(0));
 #ifndef NDEBUG
     util_dlevel = DLEVEL; // default to maximum compiled-in verbosity
 #endif
     struct diet d = diet_initializer(diet);
-    // cppcheck-suppress unreadVariable
-    bitstr_t bit_decl(values, N);
+    struct values v = bitset_t_initializer(0);
 
     // insert some items
-    int n = 0;
-    while (n != -1) {
-        bit_ffc(values, N, &n); // NOLINT
-        const uint64_t x = arc4random_uniform(N);
-        if (bit_test(values, x) == 0) {
-            bit_set(values, x);
+    while (N != bit_count(N, &v)) {
+        const uint64_t x = (uint64_t)random() % N;
+        if (bit_isset(N, x, &v) == 0) {
+            bit_set(N, x, &v);
 #ifdef DIET_CLASS
-            const uint8_t t = (uint8_t)arc4random_uniform(2);
+            const uint8_t t = (uint8_t)random() % 2;
 #endif
             diet_insert(&d, x,
 #ifdef DIET_CLASS
@@ -128,7 +128,7 @@ int main()
 
     // remove all items
     while (!splay_empty(&d)) {
-        const uint64_t x = arc4random_uniform(N);
+        const uint64_t x = (uint64_t)random() % N;
         struct ival * const i = diet_find(&d, x);
         if (i) {
             diet_remove(&d, x);
