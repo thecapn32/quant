@@ -394,6 +394,37 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
 }
 
 
+static void __attribute__((nonnull))
+tx_stream(struct q_stream * const s, const uint32_t limit)
+{
+    const bool stream_has_data_to_tx = sq_len(&s->out) > 0 &&
+                                       out_fully_acked(s) == false &&
+                                       (s->out_una || s->out_nxt);
+
+    // warn(ERR, "strm id=" FMT_SID ", cnt=%u, has_data=%u, needs_ctrl=%u",
+    // s->id,
+    //      sq_len(&s->out), stream_has_data_to_tx, stream_needs_ctrl(s),
+    //      out_fully_acked(s));
+    // check if we should skip TX on this stream
+    if ( // nothing to send and doesn't need control frames?
+        (stream_has_data_to_tx == false && stream_needs_ctrl(s) == false) ||
+        // unless for 0-RTT, is this a regular stream during conn open?
+        (s->c->try_0rtt == false && s->id >= 0 && s->c->state != conn_estb)) {
+        // warn(ERR, "skip " FMT_SID, s->id);
+        return;
+    }
+
+    warn(DBG, "%s TX on %s conn %s strm " FMT_SID " w/%u pkt%s in queue",
+         stream_has_data_to_tx ? "data" : "ctrl", conn_type(s->c),
+         cid2str(s->c->scid), s->id, sq_len(&s->out), plural(sq_len(&s->out)));
+
+    if (stream_has_data_to_tx && !s->blocked && has_wnd(s->c))
+        tx_stream_data(s, limit);
+    else if (stream_needs_ctrl(s))
+        tx_stream_ctrl(s);
+}
+
+
 void tx(struct q_conn * const c, const uint32_t limit)
 {
     ensure(c->state != conn_drng, "must not TX while draining");
@@ -406,37 +437,20 @@ void tx(struct q_conn * const c, const uint32_t limit)
 
     do_conn_mgmt(c);
 
-    struct q_stream * s;
-    streams_foreach (s, c->streams_by_id) {
-        const bool stream_has_data_to_tx = sq_len(&s->out) > 0 &&
-                                           out_fully_acked(s) == false &&
-                                           (s->out_una || s->out_nxt);
-
-        // warn(ERR, "strm id=" FMT_SID ", cnt=%u, has_data=%u, needs_ctrl=%u",
-        //      s->id, sq_len(&s->out), stream_has_data_to_tx,
-        //      stream_needs_ctrl(s), out_fully_acked(s));
-        // check if we should skip TX on this stream
-        if ( // nothing to send and doesn't need control frames?
-            (stream_has_data_to_tx == false && stream_needs_ctrl(s) == false) ||
-            // unless for 0-RTT, is this a regular stream during conn open?
-            (c->try_0rtt == false && s->id >= 0 && c->state != conn_estb)) {
-            // warn(ERR, "skip " FMT_SID, s->id);
-            continue;
-        }
-
-        warn(DBG, "%s TX on %s conn %s strm " FMT_SID " w/%u pkt%s in queue",
-             stream_has_data_to_tx ? "data" : "ctrl", conn_type(c),
-             cid2str(c->scid), s->id, sq_len(&s->out), plural(sq_len(&s->out)));
-
-        if (stream_has_data_to_tx && !s->blocked && has_wnd(c))
-            tx_stream_data(s, limit);
-        else if (stream_needs_ctrl(s))
-            tx_stream_ctrl(s);
-
+    for (epoch_t e = ep_init; e <= ep_data; e++) {
+        tx_stream(c->cstreams[e], limit);
         if (unlikely(!has_wnd(c)))
-            break;
+            goto out_of_wnd;
     }
 
+    struct q_stream * s;
+    streams_foreach (s, c->streams_by_id) {
+        tx_stream(s, limit);
+        if (unlikely(!has_wnd(c)))
+            goto out_of_wnd;
+    }
+
+out_of_wnd:
     if (sq_empty(&c->txq) || conn_needs_ctrl(c)) {
         // need to send other frame, do it in an ACK
         tx_ack(c, epoch_in(c));
@@ -477,7 +491,6 @@ void tx_tlp(struct q_conn * const c)
 
 void tx_ack(struct q_conn * const c, const epoch_t e)
 {
-    struct q_stream * const s = get_stream(c, crpt_strm_id(e));
     struct pn_space * const pn = pn_for_epoch(c, e);
 
     if (!needs_ack(pn) && !c->tx_rtry && c->state != conn_clsg &&
@@ -485,7 +498,7 @@ void tx_ack(struct q_conn * const c, const epoch_t e)
         return;
 
     struct w_iov * const v = alloc_iov(c->w, 0, 0);
-    enc_pkt(s, false, false, v);
+    enc_pkt(c->cstreams[e], false, false, v);
     do_tx(c);
 }
 
@@ -569,8 +582,7 @@ update_ipnp(struct q_conn * const c, const struct sockaddr_in * const peer)
 
 static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
 {
-    const epoch_t epoch = epoch_in(c);
-    struct q_stream * const s = get_stream(c, crpt_strm_id(epoch));
+    struct q_stream * const s = c->cstreams[epoch_in(c)];
     while (!sq_empty(&s->in)) {
         // take the data out of the crypto stream
         struct w_iov * const iv = sq_first(&s->in);
@@ -604,11 +616,13 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
     // reset FC state
     c->in_data = c->out_data = 0;
 
+    for (epoch_t e = ep_init; e <= ep_data; e++)
+        reset_stream(c->cstreams[e],
+                     c->try_0rtt == false || (e != ep_0rtt && e != ep_data));
+
     struct q_stream * s;
     streams_foreach (s, c->streams_by_id)
-        reset_stream(s, s->id < 0 && (c->try_0rtt == false ||
-                                      (strm_epoch(s) != ep_0rtt &&
-                                       strm_epoch(s) != ep_data)));
+        reset_stream(s, false);
 
     // reset packet number spaces
     const uint64_t lg_sent_ini = c->pn_init.pn.lg_sent;
@@ -621,7 +635,7 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
 
     // reset TLS state and create new CH
     init_tls(c);
-    tls_io(get_stream(c, crpt_strm_id(ep_init)), 0);
+    tls_io(c->cstreams[ep_init], 0);
 }
 
 
@@ -1380,6 +1394,10 @@ void free_conn(struct q_conn * const c)
 #pragma clang diagnostic ignored "-Wused-but-marked-unused"
     kh_destroy(streams, c->streams_by_id);
 #pragma clang diagnostic pop
+
+    for (epoch_t e = ep_init; e <= ep_data; e++)
+        free_stream(c->cstreams[e]);
+
     free_tls(c);
 
     // free packet number spaces

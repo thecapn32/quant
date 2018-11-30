@@ -103,6 +103,16 @@ struct q_stream * new_stream(struct q_conn * const c, const int64_t id)
     s->id = id;
     strm_to_state(s, strm_open);
 
+    if (is_uni(id))
+        c->lg_sid_uni = MAX(id, c->lg_sid_uni);
+    else
+        c->lg_sid_bidi = MAX(id, c->lg_sid_bidi);
+
+    if (unlikely(id < 0)) {
+        c->cstreams[strm_epoch(s)] = s;
+        return s;
+    }
+
     int ret;
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wused-but-marked-unused"
@@ -110,14 +120,6 @@ struct q_stream * new_stream(struct q_conn * const c, const int64_t id)
     ensure(ret >= 0, "inserted");
     kh_val(c->streams_by_id, k) = s;
 #pragma clang diagnostic pop
-
-    if (is_uni(id))
-        c->lg_sid_uni = MAX(id, c->lg_sid_uni);
-    else
-        c->lg_sid_bidi = MAX(id, c->lg_sid_bidi);
-
-    if (unlikely(id < 0))
-        return s;
 
     apply_stream_limits(s);
     do_stream_id_fc(c, id);
@@ -137,20 +139,20 @@ struct q_stream * new_stream(struct q_conn * const c, const int64_t id)
 void free_stream(struct q_stream * const s)
 {
     struct q_conn * const c = s->c;
-    if (s->id >= 0) {
+    if (likely(s->id >= 0)) {
 #ifndef FUZZING
         warn(DBG, "freeing strm " FMT_SID " on %s conn %s", s->id, conn_type(c),
              cid2str(c->scid));
 #endif
         diet_insert(&c->closed_streams, (uint64_t)s->id, 0);
-    }
-
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wused-but-marked-unused"
-    const khiter_t k = kh_get(streams, c->streams_by_id, (khint64_t)s->id);
-    ensure(k != kh_end(c->streams_by_id), "found");
-    kh_del(streams, c->streams_by_id, k);
+        const khiter_t k = kh_get(streams, c->streams_by_id, (khint64_t)s->id);
+        ensure(k != kh_end(c->streams_by_id), "found");
+        kh_del(streams, c->streams_by_id, k);
 #pragma clang diagnostic pop
+    } else
+        s->c->cstreams[strm_epoch(s)] = 0;
 
     while (!splay_empty(&s->in_ooo)) {
         struct pkt_meta * const p = splay_min(ooo_by_off, &s->in_ooo);

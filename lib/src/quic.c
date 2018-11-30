@@ -213,7 +213,7 @@ struct q_conn * q_connect(struct w_engine * const w,
     w_connect(c->sock, peer->sin_addr.s_addr, peer->sin_port);
 
     // start TLS handshake
-    tls_io(get_stream(c, crpt_strm_id(0)), 0);
+    tls_io(c->cstreams[ep_init], 0);
 
     if (early_data) {
         ensure(early_data_stream, "early data without stream pointer");
