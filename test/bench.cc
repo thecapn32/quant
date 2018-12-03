@@ -33,7 +33,7 @@
 extern "C" {
 #endif
 
-#include <picotls/openssl.h>
+#include <picotls/openssl.h> // IWYU pragma: keep
 
 #include "conn.h" // IWYU pragma: keep
 #include "pkt.h"
