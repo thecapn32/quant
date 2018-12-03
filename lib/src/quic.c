@@ -32,6 +32,8 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
+#define klib_unused
+
 #include <ev.h>
 #include <khash.h>
 #include <picotls.h>
@@ -315,8 +317,8 @@ q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool block)
 again:;
     struct q_stream * s = 0;
     if (c->state == conn_estb) {
-        streams_foreach (s, c->streams_by_id)
-            if (!sq_empty(&s->in) && s->state != strm_clsd && s->id >= 0)
+        kh_foreach (s, c->streams_by_id)
+            if (!sq_empty(&s->in) && s->state != strm_clsd)
                 // we found a stream with queued data
                 break;
 
@@ -482,11 +484,8 @@ struct w_engine * q_init(const char * const ifname,
     //        quant_version, warpcore_name, warpcore_version);
 
     // init connection structures
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wused-but-marked-unused"
     conns_by_ipnp = kh_init(conns_by_ipnp);
-#pragma clang diagnostic pop
-    splay_init(&conns_by_id);
+    conns_by_id = kh_init(conns_by_id);
 
     // initialize warpcore on the given interface
     struct w_engine * const w = w_init(ifname, 0, nbufs);
@@ -558,8 +557,9 @@ void q_close_stream(struct q_stream * const s)
 
 void q_close(struct q_conn * const c)
 {
-    warn(WRN, "closing %s conn %s on port %u", conn_type(c), cid2str(c->scid),
-         ntohs(c->sport));
+    if (c->scid)
+        warn(WRN, "closing %s conn %s on port %u", conn_type(c),
+             cid2str(c->scid), ntohs(c->sport));
 
     if (c->state == conn_idle || c->state == conn_clsd ||
         (!c->is_clnt && c->holds_sock))
@@ -581,11 +581,11 @@ done:
 void q_cleanup(struct w_engine * const w)
 {
     // close all connections
-    while (!splay_empty(&conns_by_id)) {
-        struct cid_map * const cm = splay_min(conns_by_id, &conns_by_id);
-        warn(DBG, "closing %s conn %s", conn_type(cm->c), cid2str(&cm->cid));
-        q_close(cm->c);
-    }
+    struct q_conn * c;
+    kh_foreach (c, conns_by_id)
+        q_close(c);
+    kh_foreach (c, conns_by_ipnp)
+        q_close(c);
 
     // stop the event loop
     ev_loop_destroy(loop);
@@ -607,10 +607,8 @@ void q_cleanup(struct w_engine * const w)
                  pm[i].hdr.nr);
     }
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wused-but-marked-unused"
+    kh_destroy(conns_by_id, conns_by_id);
     kh_destroy(conns_by_ipnp, conns_by_ipnp);
-#pragma clang diagnostic pop
 
     free(pm);
     w_cleanup(w);

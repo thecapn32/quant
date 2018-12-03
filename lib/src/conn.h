@@ -42,22 +42,62 @@
 #include <warpcore/warpcore.h>
 
 #include "diet.h"
+#include "fnv1a.h"
 #include "pn.h"
 #include "quic.h"
 #include "recovery.h"
 #include "tls.h"
 
 
+#define cid2str(i)                                                             \
+    __extension__({                                                            \
+        static char _str[2 * (MAX_CID_LEN + sizeof((i)->seq)) + 1] = "0";      \
+        if (i)                                                                 \
+            snprintf(_str, sizeof(_str), "%" PRIu64 ":%s", (i)->seq,           \
+                     hex2str((i)->id, (i)->len));                              \
+        (i) ? _str : "?";                                                      \
+    })
+
+
 KHASH_MAP_INIT_INT64(streams_by_id, struct q_stream *) // NOLINT
 KHASH_MAP_INIT_INT64(conns_by_ipnp, struct q_conn *)   // NOLINT
 
-#define streams_foreach(s, h)                                                  \
-    for (khiter_t k = kh_begin(h); k != kh_end(h); ++k)                        \
-        if (kh_exist((h), k) && ((s) = kh_val((h), k)))
+
+static inline khint_t __attribute__((always_inline, nonnull))
+hash_cid(const struct cid * const id)
+{
+    return fnv1a_32(id->id, id->len);
+}
+
+
+static inline int __attribute__((always_inline, nonnull))
+cid_cmp(const struct cid * const a, const struct cid * const b)
+{
+    return memcmp(&a->len, &b->len, MIN(a->len, b->len) + sizeof(a->len));
+}
+
+static inline int __attribute__((always_inline, nonnull))
+kh_cid_cmp(const struct cid * const a, const struct cid * const b)
+{
+    return cid_cmp(a, b) == 0;
+}
+
+
+KHASH_INIT(conns_by_id, // NOLINT
+           struct cid *,
+           struct q_conn *,
+           1,
+           hash_cid,
+           kh_cid_cmp)
+
+#undef kh_foreach
+#define kh_foreach(v, h)                                                       \
+    for (khiter_t _k = kh_begin(h); _k != kh_end(h); ++_k)                     \
+        if (kh_exist((h), _k) ? ((v) = kh_val((h), _k), 1) : ((v) = 0, 0))
+
 
 extern khash_t(conns_by_ipnp) * conns_by_ipnp;
-
-extern splay_head(conns_by_id, cid_map) conns_by_id;
+extern khash_t(conns_by_id) * conns_by_id;
 
 
 struct transport_params {
@@ -79,12 +119,6 @@ struct transport_params {
     struct cid orig_cid;
 };
 
-
-struct cid_map {
-    splay_entry(cid_map) node;
-    struct cid cid;    ///< Connection ID
-    struct q_conn * c; ///< Connection
-};
 
 sl_head(q_conn_sl, q_conn);
 
@@ -220,16 +254,6 @@ struct q_conn {
 extern struct q_conn_sl c_ready;
 
 
-#define cid2str(i)                                                             \
-    __extension__({                                                            \
-        static char _str[2 * (MAX_CID_LEN + sizeof((i)->seq)) + 1] = "0";      \
-        if (i)                                                                 \
-            snprintf(_str, sizeof(_str), "%" PRIu64 ":%s", (i)->seq,           \
-                     hex2str((i)->id, (i)->len));                              \
-        (i) ? _str : "?";                                                      \
-    })
-
-
 #if !defined(NDEBUG) && !defined(FUZZING)
 #define conn_to_state(c, s)                                                    \
     do {                                                                       \
@@ -286,10 +310,10 @@ extern struct q_conn * new_conn(struct w_engine * const w,
 extern void __attribute__((nonnull)) free_conn(struct q_conn * const c);
 
 extern void __attribute__((nonnull))
-update_act_scid(struct q_conn * const c, const struct cid * const id);
+update_act_scid(struct q_conn * const c, struct cid * const id);
 
 extern void __attribute__((nonnull))
-add_scid(struct q_conn * const c, const struct cid * const id);
+add_scid(struct q_conn * const c, struct cid * const id);
 
 extern void __attribute__((nonnull))
 add_dcid(struct q_conn * const c, const struct cid * const id);
@@ -359,31 +383,10 @@ conn_needs_ctrl(const struct q_conn * const c)
 }
 
 
-static inline int __attribute__((always_inline, nonnull))
-cid_cmp(const struct cid * const a, const struct cid * const b)
-{
-    const int r =
-        memcmp(&a->len, &b->len, MIN(a->len, b->len) + sizeof(a->len));
-    // warn(ERR, "%d = cmp %s len %u and %s len %u", r, cid2str(a), a->len,
-    //      cid2str(b), b->len);
-    ensure(a->len && b->len, "len 0");
-    // compare len and id
-    return r;
-}
-
-
-static inline int __attribute__((always_inline, nonnull))
-conns_by_id_cmp(const struct cid_map * const a, const struct cid_map * const b)
-{
-    return cid_cmp(&a->cid, &b->cid);
-}
-
-
 extern int __attribute__((nonnull))
 conns_by_ipnp_cmp(const struct q_conn * const a, const struct q_conn * const b);
 
 
-SPLAY_PROTOTYPE(conns_by_id, cid_map, node, conns_by_id_cmp)
 SPLAY_PROTOTYPE(cids_by_seq, cid, node_seq, cids_by_seq_cmp)
 SPLAY_PROTOTYPE(cids_by_id, cid, node_id, cid_cmp)
 

@@ -37,6 +37,8 @@
 #include <sys/param.h>
 #include <sys/socket.h>
 
+#define klib_unused
+
 #include <ev.h>
 #include <picotls/openssl.h>
 #include <quant/quant.h>
@@ -57,11 +59,10 @@
 
 const char * const conn_state_str[] = {CONN_STATES};
 
-
 struct q_conn_sl c_ready = sl_head_initializer(c_ready);
-struct conns_by_id conns_by_id = splay_initializer(&conns_by_id);
 
 khash_t(conns_by_ipnp) * conns_by_ipnp;
+khash_t(conns_by_id) * conns_by_id;
 
 
 static inline int __attribute__((nonnull))
@@ -82,7 +83,6 @@ sockaddr_in_cmp(const struct sockaddr_in * const a,
 }
 
 
-SPLAY_GENERATE(conns_by_id, cid_map, node, conns_by_id_cmp)
 SPLAY_GENERATE(cids_by_seq, cid, node_seq, cids_by_seq_cmp)
 SPLAY_GENERATE(cids_by_id, cid, node_id, cid_cmp)
 
@@ -140,9 +140,9 @@ pick_from_server_vers(const struct w_iov * const v)
 
 
 static inline uint64_t __attribute__((const, always_inline))
-mk_conns_by_ipnp_key(const uint16_t sport,
-                     const uint16_t dport,
-                     const uint32_t dip)
+conns_by_ipnp_key(const uint16_t sport,
+                  const uint16_t dport,
+                  const uint32_t dip)
 {
     return (uint64_t)(dip << sizeof(dip)) | (uint64_t)(sport << sizeof(sport)) |
            (uint64_t)dport;
@@ -152,27 +152,23 @@ mk_conns_by_ipnp_key(const uint16_t sport,
 static struct q_conn * __attribute__((nonnull))
 get_conn_by_ipnp(const uint16_t sport, const struct sockaddr_in * const peer)
 {
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wused-but-marked-unused"
     const khiter_t k =
         kh_get(conns_by_ipnp, conns_by_ipnp,
-               (khint64_t)mk_conns_by_ipnp_key(sport, peer->sin_port,
-                                               peer->sin_addr.s_addr));
+               (khint64_t)conns_by_ipnp_key(sport, peer->sin_port,
+                                            peer->sin_addr.s_addr));
     if (unlikely(k == kh_end(conns_by_ipnp)))
         return 0;
     return kh_val(conns_by_ipnp, k);
-#pragma clang diagnostic pop
 }
 
 
 static struct q_conn * __attribute__((nonnull))
-get_conn_by_cid(const struct cid * const scid)
+get_conn_by_cid(struct cid * const scid)
 {
-    if (unlikely(scid->len == 0))
+    const khiter_t k = kh_get(conns_by_id, conns_by_id, scid);
+    if (unlikely(k == kh_end(conns_by_id)))
         return 0;
-    const struct cid_map which = {.cid = *scid};
-    struct cid_map * const cm = splay_find(conns_by_id, &conns_by_id, &which);
-    return cm ? cm->c : 0;
+    return kh_val(conns_by_id, k);
 }
 
 
@@ -181,14 +177,9 @@ switch_scid(struct q_conn * const c, const struct cid * const id)
 {
     struct cid * scid;
 
-    // splay_foreach (scid, cids_by_id, &c->scids_by_id)
-    //     warn(ERR, "%s", cid2str(scid));
-
     scid = splay_find(cids_by_id, &c->scids_by_id, id);
     if (unlikely(scid == 0)) // || scid->seq <= c->scid->seq))
         return false;
-
-    // warn(CRT, "%u vs %u", scid->seq, c->scid->seq);
 
     if (scid->seq <= c->scid->seq)
         return false;
@@ -456,7 +447,7 @@ void tx(struct q_conn * const c, const uint32_t limit)
     }
 
     struct q_stream * s;
-    streams_foreach (s, c->streams_by_id) {
+    kh_foreach (s, c->streams_by_id) {
         tx_stream(s, limit);
         if (unlikely(!has_wnd(c)))
             goto out_of_wnd;
@@ -523,39 +514,52 @@ void tx_w(struct ev_loop * const l __attribute__((unused)),
 }
 
 
-void update_act_scid(struct q_conn * const c, const struct cid * const id)
+static inline void __attribute__((nonnull))
+conns_by_id_ins(struct q_conn * const c, struct cid * const id)
 {
-    warn(NTE, "hshk switch to scid %s for %s conn (was %s)", cid2str(id),
-         conn_type(c), cid2str(c->scid));
-    const struct cid_map which = {.cid = *c->scid};
-    struct cid_map * cm = splay_find(conns_by_id, &conns_by_id, &which);
-    ensure(splay_remove(conns_by_id, &conns_by_id, cm), "removed");
-    cid_cpy(&cm->cid, id);
-    ensure(splay_insert(conns_by_id, &conns_by_id, cm) == 0, "inserted");
+    int ret;
+    const khiter_t k = kh_put(conns_by_id, conns_by_id, id, &ret);
+    ensure(ret >= 0, "inserted");
+    kh_val(conns_by_id, k) = c;
 }
 
 
-void add_scid(struct q_conn * const c, const struct cid * const id)
+static inline void __attribute__((nonnull))
+conns_by_id_del(struct cid * const id)
+{
+    const khiter_t k = kh_get(conns_by_id, conns_by_id, id);
+    ensure(k != kh_end(conns_by_id), "found");
+    kh_del(conns_by_id, conns_by_id, k);
+}
+
+
+void update_act_scid(struct q_conn * const c, struct cid * const id)
+{
+    warn(NTE, "hshk switch to scid %s for %s conn (was %s)", cid2str(id),
+         conn_type(c), cid2str(c->scid));
+    conns_by_id_del(c->scid);
+    cid_cpy(c->scid, id);
+    conns_by_id_ins(c, c->scid);
+}
+
+
+void add_scid(struct q_conn * const c, struct cid * const id)
 {
     ensure(id->len, "len 0");
     struct cid * scid = splay_find(cids_by_seq, &c->scids_by_seq, id);
     ensure(scid == 0, "cid is new");
+    scid = splay_find(cids_by_id, &c->scids_by_id, id);
+    ensure(scid == 0, "cid is new");
 
     // warn(ERR, "new scid %s", cid2str(id));
-    struct cid_map * const cm = calloc(1, sizeof(*cm));
-    ensure(cm, "could not calloc");
-    cm->c = c;
-    cid_cpy(&cm->cid, id);
-    ensure(splay_insert(cids_by_seq, &c->scids_by_seq, &cm->cid) == 0,
-           "inserted");
-    ensure(splay_insert(cids_by_id, &c->scids_by_id, &cm->cid) == 0,
-           "inserted");
+    struct cid * cid = calloc(1, sizeof(*cid));
+    ensure(cid, "could not calloc");
+    cid_cpy(cid, id);
+    ensure(splay_insert(cids_by_seq, &c->scids_by_seq, cid) == 0, "inserted");
+    ensure(splay_insert(cids_by_id, &c->scids_by_id, cid) == 0, "inserted");
     if (c->scid == 0)
-        c->scid = &cm->cid;
-    ensure(splay_insert(conns_by_id, &conns_by_id, cm) == 0, "inserted");
-
-    // splay_foreach (scid, cids_by_id, &c->scids_by_id)
-    //     warn(ERR, "%s", cid2str(scid));
+        c->scid = cid;
+    conns_by_id_ins(c, cid);
 }
 
 
@@ -577,50 +581,42 @@ void add_dcid(struct q_conn * const c, const struct cid * const id)
              conn_type(c), cid2str(c->dcid));
         cid_cpy(dcid, id);
     }
-
-    // splay_foreach (dcid, cids_by_seq, &c->dcids_by_seq)
-    //     warn(ERR, "%s", cid2str(dcid));
 }
 
 
 static inline void __attribute__((nonnull))
-insert_conn_ipnp(struct q_conn * const c)
+conns_by_ipnp_ins(struct q_conn * const c)
 {
     int ret;
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wused-but-marked-unused"
     const khiter_t k =
         kh_put(conns_by_ipnp, conns_by_ipnp,
-               (khint64_t)mk_conns_by_ipnp_key(c->sport, c->peer.sin_port,
-                                               c->peer.sin_addr.s_addr),
+               (khint64_t)conns_by_ipnp_key(c->sport, c->peer.sin_port,
+                                            c->peer.sin_addr.s_addr),
                &ret);
     ensure(ret >= 0, "inserted");
     kh_val(conns_by_ipnp, k) = c;
-#pragma clang diagnostic pop
 }
 
 
 static inline void __attribute__((nonnull))
-delete_conn_ipnp(struct q_conn * const c)
+conns_by_ipnp_del(struct q_conn * const c)
 {
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wused-but-marked-unused"
     const khiter_t k =
         kh_get(conns_by_ipnp, conns_by_ipnp,
-               (khint64_t)mk_conns_by_ipnp_key(c->sport, c->peer.sin_port,
-                                               c->peer.sin_addr.s_addr));
+               (khint64_t)conns_by_ipnp_key(c->sport, c->peer.sin_port,
+                                            c->peer.sin_addr.s_addr));
     ensure(k != kh_end(conns_by_ipnp), "found");
     kh_del(conns_by_ipnp, conns_by_ipnp, k);
-#pragma clang diagnostic pop
 }
 
 
 static void __attribute__((nonnull))
-update_ipnp(struct q_conn * const c, const struct sockaddr_in * const peer)
+conns_by_ipnp_update(struct q_conn * const c,
+                     const struct sockaddr_in * const peer)
 {
-    delete_conn_ipnp(c);
+    conns_by_ipnp_del(c);
     c->peer = *peer;
-    insert_conn_ipnp(c);
+    conns_by_ipnp_ins(c);
 }
 
 
@@ -665,7 +661,7 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
                      c->try_0rtt == false || (e != ep_0rtt && e != ep_data));
 
     struct q_stream * s;
-    streams_foreach (s, c->streams_by_id)
+    kh_foreach (s, c->streams_by_id)
         reset_stream(s, false);
 
     // reset packet number spaces
@@ -764,9 +760,9 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         conn_to_state(c, conn_opng);
 
         // this is a new connection; server picks a new random cid
-        struct cid new_scid = {.len = SERV_SCID_LEN};
-        ptls_openssl_random_bytes(new_scid.id, new_scid.len);
-        update_act_scid(c, &new_scid);
+        struct cid nscid = {.len = SERV_SCID_LEN};
+        ptls_openssl_random_bytes(nscid.id, nscid.len + sizeof(nscid.srt));
+        update_act_scid(c, &nscid);
 
         ok = true;
         break;
@@ -1009,7 +1005,7 @@ rx_pkts(struct w_iov_sq * const x,
             if (sockaddr_in_cmp(&c->peer, &peer) != 0) {
                 warn(NTE, "pkt came from new peer %s:%u, probing",
                      inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
-                update_ipnp(c, &peer);
+                conns_by_ipnp_update(c, &peer);
                 ptls_openssl_random_bytes(&c->path_chlg_out,
                                           sizeof(c->path_chlg_out));
                 c->tx_path_chlg = true;
@@ -1148,7 +1144,6 @@ void err_close(struct q_conn * const c,
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wformat-nonliteral"
     const int ret = vsnprintf(c->err_reason, sizeof(c->err_reason), fmt, ap);
-#pragma clang diagnostic pop
     ensure(ret >= 0, "vsnprintf() failed");
     va_end(ap);
 
@@ -1284,8 +1279,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     splay_init(&c->dcids_by_seq);
     if (c->is_clnt) {
         struct cid ndcid = {.len = SERV_SCID_LEN};
-        ptls_openssl_random_bytes(ndcid.id, ndcid.len);
-        ptls_openssl_random_bytes(ndcid.srt, sizeof(ndcid.srt));
+        ptls_openssl_random_bytes(ndcid.id, ndcid.len + sizeof(ndcid.srt));
         cid_cpy(&c->odcid, &ndcid);
         add_dcid(c, &ndcid);
     } else if (dcid)
@@ -1293,10 +1287,7 @@ struct q_conn * new_conn(struct w_engine * const w,
 
     c->vers = c->vers_initial = vers;
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wused-but-marked-unused"
     c->streams_by_id = kh_init(streams_by_id);
-#pragma clang diagnostic pop
 
     diet_init(&c->closed_streams);
     sq_init(&c->txq);
@@ -1352,7 +1343,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->sport = w_get_sport(c->sock);
 
     // init scid and add connection to global data structures
-    insert_conn_ipnp(c);
+    conns_by_ipnp_ins(c);
     splay_init(&c->scids_by_seq);
     splay_init(&c->scids_by_id);
     struct cid nscid = {0};
@@ -1370,8 +1361,9 @@ struct q_conn * new_conn(struct w_engine * const w,
     for (epoch_t e = ep_init; e <= ep_data; e++)
         new_stream(c, crpt_strm_id(e));
 
-    warn(DBG, "%s conn %s on port %u created", conn_type(c), cid2str(c->scid),
-         ntohs(c->sport));
+    if (nscid.len)
+        warn(DBG, "%s conn %s on port %u created", conn_type(c),
+             cid2str(c->scid), ntohs(c->sport));
 
     conn_to_state(c, conn_idle);
 
@@ -1381,32 +1373,10 @@ struct q_conn * new_conn(struct w_engine * const w,
 
 void free_scid(struct q_conn * const c, struct cid * const id)
 {
-    // struct cid * scid;
-    // splay_foreach (scid, cids_by_id, &c->scids_by_id)
-    //     warn(ERR, "before_by_id %s", cid2str(scid));
-    // splay_foreach (scid, cids_by_seq, &c->scids_by_seq)
-    //     warn(ERR, "before_by_seq %s", cid2str(scid));
-
-    // warn(ERR, "free scid seq %s", cid2str(id));
-
     ensure(splay_remove(cids_by_seq, &c->scids_by_seq, id), "removed");
-
-    // splay_foreach (scid, cids_by_id, &c->scids_by_id)
-    //     warn(ERR, "middle_by_id %s", cid2str(scid));
-    // splay_foreach (scid, cids_by_seq, &c->scids_by_seq)
-    //     warn(ERR, "middle_by_seq %s", cid2str(scid));
-
     ensure(splay_remove(cids_by_id, &c->scids_by_id, id), "removed");
-
-    // splay_foreach (scid, cids_by_id, &c->scids_by_id)
-    //     warn(ERR, "after_by_id %s", cid2str(scid));
-    // splay_foreach (scid, cids_by_seq, &c->scids_by_seq)
-    //     warn(ERR, "after_by_seq %s", cid2str(scid));
-
-    const struct cid_map which = {.cid = *id};
-    struct cid_map * const cm = splay_find(conns_by_id, &conns_by_id, &which);
-    ensure(splay_remove(conns_by_id, &conns_by_id, cm), "removed");
-    free(cm);
+    conns_by_id_del(id);
+    free(id);
 }
 
 
@@ -1433,12 +1403,9 @@ void free_conn(struct q_conn * const c)
     ev_timer_stop(loop, &c->idle_alarm);
 
     struct q_stream * s;
-    streams_foreach (s, c->streams_by_id)
+    kh_foreach (s, c->streams_by_id)
         free_stream(s);
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wused-but-marked-unused"
     kh_destroy(streams_by_id, c->streams_by_id);
-#pragma clang diagnostic pop
 
     for (epoch_t e = ep_init; e <= ep_data; e++)
         free_stream(c->cstreams[e]);
@@ -1456,7 +1423,7 @@ void free_conn(struct q_conn * const c)
     free(c->peer_name);
 
     // remove connection from global lists and free CID splays
-    delete_conn_ipnp(c);
+    conns_by_ipnp_del(c);
 
     while (!splay_empty(&c->scids_by_seq)) {
         struct cid * const id = splay_min(cids_by_seq, &c->scids_by_seq);
