@@ -59,8 +59,9 @@ const char * const conn_state_str[] = {CONN_STATES};
 
 
 struct q_conn_sl c_ready = sl_head_initializer(c_ready);
-struct conns_by_ipnp conns_by_ipnp = splay_initializer(&conns_by_ipnp);
 struct conns_by_id conns_by_id = splay_initializer(&conns_by_id);
+
+khash_t(conns_by_ipnp) * conns_by_ipnp;
 
 
 static inline int __attribute__((nonnull))
@@ -81,14 +82,6 @@ sockaddr_in_cmp(const struct sockaddr_in * const a,
 }
 
 
-int conns_by_ipnp_cmp(const struct q_conn * const a,
-                      const struct q_conn * const b)
-{
-    return sockaddr_in_cmp(&a->peer, &b->peer);
-}
-
-
-SPLAY_GENERATE(conns_by_ipnp, q_conn, node_ipnp, conns_by_ipnp_cmp)
 SPLAY_GENERATE(conns_by_id, cid_map, node, conns_by_id_cmp)
 SPLAY_GENERATE(cids_by_seq, cid, node_seq, cids_by_seq_cmp)
 SPLAY_GENERATE(cids_by_id, cid, node_id, cid_cmp)
@@ -146,11 +139,29 @@ pick_from_server_vers(const struct w_iov * const v)
 }
 
 
+static inline uint64_t __attribute__((const, always_inline))
+mk_conns_by_ipnp_key(const uint16_t sport,
+                     const uint16_t dport,
+                     const uint32_t dip)
+{
+    return (uint64_t)(dip << sizeof(dip)) | (uint64_t)(sport << sizeof(sport)) |
+           (uint64_t)dport;
+}
+
+
 static struct q_conn * __attribute__((nonnull))
 get_conn_by_ipnp(const uint16_t sport, const struct sockaddr_in * const peer)
 {
-    const struct q_conn which = {.peer = *peer, .sport = sport};
-    return splay_find(conns_by_ipnp, &conns_by_ipnp, &which);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wused-but-marked-unused"
+    const khiter_t k =
+        kh_get(conns_by_ipnp, conns_by_ipnp,
+               (khint64_t)mk_conns_by_ipnp_key(sport, peer->sin_port,
+                                               peer->sin_addr.s_addr));
+    if (unlikely(k == kh_end(conns_by_ipnp)))
+        return 0;
+    return kh_val(conns_by_ipnp, k);
+#pragma clang diagnostic pop
 }
 
 
@@ -572,12 +583,44 @@ void add_dcid(struct q_conn * const c, const struct cid * const id)
 }
 
 
+static inline void __attribute__((nonnull))
+insert_conn_ipnp(struct q_conn * const c)
+{
+    int ret;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wused-but-marked-unused"
+    const khiter_t k =
+        kh_put(conns_by_ipnp, conns_by_ipnp,
+               (khint64_t)mk_conns_by_ipnp_key(c->sport, c->peer.sin_port,
+                                               c->peer.sin_addr.s_addr),
+               &ret);
+    ensure(ret >= 0, "inserted");
+    kh_val(conns_by_ipnp, k) = c;
+#pragma clang diagnostic pop
+}
+
+
+static inline void __attribute__((nonnull))
+delete_conn_ipnp(struct q_conn * const c)
+{
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wused-but-marked-unused"
+    const khiter_t k =
+        kh_get(conns_by_ipnp, conns_by_ipnp,
+               (khint64_t)mk_conns_by_ipnp_key(c->sport, c->peer.sin_port,
+                                               c->peer.sin_addr.s_addr));
+    ensure(k != kh_end(conns_by_ipnp), "found");
+    kh_del(conns_by_ipnp, conns_by_ipnp, k);
+#pragma clang diagnostic pop
+}
+
+
 static void __attribute__((nonnull))
 update_ipnp(struct q_conn * const c, const struct sockaddr_in * const peer)
 {
-    ensure(splay_remove(conns_by_ipnp, &conns_by_ipnp, c), "removed");
+    delete_conn_ipnp(c);
     c->peer = *peer;
-    ensure(splay_insert(conns_by_ipnp, &conns_by_ipnp, c) == 0, "inserted");
+    insert_conn_ipnp(c);
 }
 
 
@@ -1309,7 +1352,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->sport = w_get_sport(c->sock);
 
     // init scid and add connection to global data structures
-    splay_insert(conns_by_ipnp, &conns_by_ipnp, c); // no guard, multiples ok
+    insert_conn_ipnp(c);
     splay_init(&c->scids_by_seq);
     splay_init(&c->scids_by_id);
     struct cid nscid = {0};
@@ -1413,7 +1456,7 @@ void free_conn(struct q_conn * const c)
     free(c->peer_name);
 
     // remove connection from global lists and free CID splays
-    ensure(splay_remove(conns_by_ipnp, &conns_by_ipnp, c), "removed");
+    delete_conn_ipnp(c);
 
     while (!splay_empty(&c->scids_by_seq)) {
         struct cid * const id = splay_min(cids_by_seq, &c->scids_by_seq);

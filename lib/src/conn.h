@@ -49,13 +49,14 @@
 
 
 KHASH_MAP_INIT_INT64(streams_by_id, struct q_stream *) // NOLINT
+KHASH_MAP_INIT_INT64(conns_by_ipnp, struct q_conn *)   // NOLINT
 
 #define streams_foreach(s, h)                                                  \
     for (khiter_t k = kh_begin(h); k != kh_end(h); ++k)                        \
         if (kh_exist((h), k) && ((s) = kh_val((h), k)))
 
+extern khash_t(conns_by_ipnp) * conns_by_ipnp;
 
-extern splay_head(conns_by_ipnp, q_conn) conns_by_ipnp;
 extern splay_head(conns_by_id, cid_map) conns_by_id;
 
 
@@ -382,7 +383,6 @@ extern int __attribute__((nonnull))
 conns_by_ipnp_cmp(const struct q_conn * const a, const struct q_conn * const b);
 
 
-SPLAY_PROTOTYPE(conns_by_ipnp, q_conn, node_ipnp, conns_by_ipnp_cmp)
 SPLAY_PROTOTYPE(conns_by_id, cid_map, node, conns_by_id_cmp)
 SPLAY_PROTOTYPE(cids_by_seq, cid, node_seq, cids_by_seq_cmp)
 SPLAY_PROTOTYPE(cids_by_id, cid, node_id, cid_cmp)

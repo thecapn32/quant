@@ -482,7 +482,10 @@ struct w_engine * q_init(const char * const ifname,
     //        quant_version, warpcore_name, warpcore_version);
 
     // init connection structures
-    splay_init(&conns_by_ipnp);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wused-but-marked-unused"
+    conns_by_ipnp = kh_init(conns_by_ipnp);
+#pragma clang diagnostic pop
     splay_init(&conns_by_id);
 
     // initialize warpcore on the given interface
@@ -603,6 +606,11 @@ void q_cleanup(struct w_engine * const w)
             warn(DBG, "buffer %u still in use for pkt %" PRIu64, i,
                  pm[i].hdr.nr);
     }
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wused-but-marked-unused"
+    kh_destroy(conns_by_ipnp, conns_by_ipnp);
+#pragma clang diagnostic pop
 
     free(pm);
     w_cleanup(w);
