@@ -27,6 +27,7 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -44,10 +45,10 @@
 #include <sanitizer/asan_interface.h>
 #endif
 
-#if !defined(NDEBUG) && !defined(FUZZING)
+#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
+    !defined(NO_FUZZER_CORPUS_COLLECTION)
 #include <errno.h>
 #include <fcntl.h>
-#include <signal.h>
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -457,7 +458,8 @@ signal_cb(struct ev_loop * l,
 #endif
 
 
-#if !defined(NDEBUG) && !defined(FUZZING)
+#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
+    !defined(NO_FUZZER_CORPUS_COLLECTION)
 static int __attribute__((nonnull))
 mk_or_open_dir(const char * const path, mode_t mode)
 {
