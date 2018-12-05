@@ -240,11 +240,11 @@ void coalesce(struct w_iov_sq * const q)
 }
 
 
-static uint8_t __attribute__((nonnull))
-needed_pkt_nr_len(struct pn_space * const pn, const uint64_t n)
+static inline uint8_t __attribute__((const))
+needed_pkt_nr_len(const uint64_t lg_acked, const uint64_t n)
 {
     const uint64_t d =
-        (n - (unlikely(pn->lg_acked == UINT64_MAX) ? 0 : pn->lg_acked)) * 2;
+        (n - (unlikely(lg_acked == UINT64_MAX) ? 0 : lg_acked)) * 2;
     if (d <= 0x7F)
         return 1;
     if (d <= 0x3FFF)
@@ -479,7 +479,7 @@ bool enc_pkt(struct q_stream * const s,
 
     if (meta(v).hdr.type != F_LH_RTRY) {
         meta(v).pkt_nr_pos = i;
-        meta(v).pkt_nr_len = needed_pkt_nr_len(pn, meta(v).hdr.nr);
+        meta(v).pkt_nr_len = needed_pkt_nr_len(pn->lg_acked, meta(v).hdr.nr);
         i = enc_pnr(v->buf, v->len, i, &meta(v).hdr.nr, meta(v).pkt_nr_len,
                     "%u");
     }
@@ -640,7 +640,6 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
             return false;
         }
 
-
         meta(v).hdr.hdr_len =
             dec_chk(&meta(v).hdr.dcid.len, xv->buf, xv->len, 5, 1, "0x%02x");
 
@@ -760,14 +759,14 @@ static bool dec_pne(struct w_iov * const xv,
                         sizeof(dec_nr));
 
     struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
-    const uint64_t next = diet_max(&pn->recv) + 1;
-    uint64_t nr = next;
+    uint64_t nr = 0;
     meta(v).pkt_nr_len =
         (uint8_t)dec_pnr(&nr, dec_nr, sizeof(dec_nr), 0, FMT_PNR_IN);
     if (unlikely(meta(v).pkt_nr_len > MAX_PKT_NR_LEN)) {
         warn(DBG, "can't undo PNE");
         return false;
     }
+    meta(v).hdr.hdr_len += meta(v).pkt_nr_len;
 
     // save the raw pkt nr data, in case we need to retry
     memcpy(pn_enc, &xv->buf[meta(v).pkt_nr_pos], MAX_PKT_NR_LEN);
@@ -775,12 +774,17 @@ static bool dec_pne(struct w_iov * const xv,
     // now overwrite with decoded data
     memcpy(&xv->buf[meta(v).pkt_nr_pos], &dec_nr, meta(v).pkt_nr_len);
 
-    const uint8_t lens[] = {0xff, 7, 14, 0xff, 30};
-    const uint64_t alt = nr + (UINT64_C(1) << lens[meta(v).pkt_nr_len]);
-    const uint64_t d1 = next >= nr ? next - nr : nr - next;
-    const uint64_t d2 = next >= alt ? next - alt : alt - next;
-    meta(v).hdr.nr = d1 < d2 ? nr : alt;
-    meta(v).hdr.hdr_len += meta(v).pkt_nr_len;
+    const uint64_t expected_pn = diet_max(&pn->recv) + 1;
+    const uint64_t pn_wins[] = {0, 1 << 7, 1 << 14, 0, 1 << 30};
+    const uint64_t pn_win = pn_wins[meta(v).pkt_nr_len];
+    const uint64_t pn_hwin = pn_win / 2;
+    const uint64_t pn_mask = pn_win - 1;
+
+    meta(v).hdr.nr = (expected_pn & ~pn_mask) | nr;
+    if (meta(v).hdr.nr + pn_hwin <= expected_pn)
+        meta(v).hdr.nr += pn_win;
+    else if (meta(v).hdr.nr > expected_pn + pn_hwin && meta(v).hdr.nr > pn_win)
+        meta(v).hdr.nr -= pn_win;
 
 #ifdef DEBUG_MARSHALL
     warn(DBG, "dec PNE over [%u..%u] w/off %u = " FMT_PNR_IN,

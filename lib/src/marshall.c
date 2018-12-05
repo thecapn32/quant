@@ -197,19 +197,21 @@ uint16_t marshall_enc_pnr(uint8_t * const buf,
     // varint pnr encoding
     switch (enc_len) {
     case 1: {
-        const uint8_t v = *(const uint8_t *)src & ~0x80;
+        const uint8_t v = *(const uint8_t *)src & 0x7f;
         do_enc(v, uint32_t, fmt, "pnr");
         break;
     }
 
     case 2: {
-        const uint16_t v = htons((0x80 << 8) | *(const uint16_t *)src);
+        const uint16_t v =
+            htons((0x80 << 8) | (*(const uint16_t *)src & VARINT2_MAX));
         do_enc(v, uint32_t, fmt, "pnr");
         break;
     }
 
     case 4: {
-        const uint32_t v = htonl((0xc0UL << 24) | *(const uint32_t *)src);
+        const uint32_t v =
+            htonl((0xc0UL << 24) | (*(const uint32_t *)src & VARINT4_MAX));
         do_enc(v, uint32_t, fmt, "pnr");
         break;
     }
