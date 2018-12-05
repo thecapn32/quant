@@ -761,7 +761,8 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 
         // this is a new connection; server picks a new random cid
         struct cid nscid = {.len = SERV_SCID_LEN};
-        ptls_openssl_random_bytes(nscid.id, nscid.len + sizeof(nscid.srt));
+        ptls_openssl_random_bytes(nscid.id,
+                                  sizeof(nscid.id) + sizeof(nscid.srt));
         update_act_scid(c, &nscid);
 
         ok = true;
@@ -1279,7 +1280,9 @@ struct q_conn * new_conn(struct w_engine * const w,
     splay_init(&c->dcids_by_seq);
     if (c->is_clnt) {
         struct cid ndcid = {.len = SERV_SCID_LEN};
-        ptls_openssl_random_bytes(ndcid.id, ndcid.len + sizeof(ndcid.srt));
+        warn(ERR, "%u", sizeof(ndcid.id) + sizeof(ndcid.srt));
+        ptls_openssl_random_bytes(ndcid.id,
+                                  sizeof(ndcid.id) + sizeof(ndcid.srt));
         cid_cpy(&c->odcid, &ndcid);
         add_dcid(c, &ndcid);
     } else if (dcid)
@@ -1349,7 +1352,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     struct cid nscid = {0};
     if (c->is_clnt) {
         nscid.len = CLNT_SCID_LEN;
-        ptls_openssl_random_bytes(nscid.id, nscid.len);
+        ptls_openssl_random_bytes(nscid.id, sizeof(nscid.id));
     } else if (scid)
         cid_cpy(&nscid, scid);
     if (nscid.len) {

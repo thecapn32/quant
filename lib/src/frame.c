@@ -1466,7 +1466,7 @@ uint16_t enc_new_cid_frame(struct q_conn * const c,
 
     struct cid ncid = {.seq = ++c->max_cid_seq_out,
                        .len = c->is_clnt ? CLNT_SCID_LEN : SERV_SCID_LEN};
-    ptls_openssl_random_bytes(ncid.id, ncid.len + sizeof(ncid.srt));
+    ptls_openssl_random_bytes(ncid.id, sizeof(ncid.id) + sizeof(ncid.srt));
     add_scid(c, &ncid);
 
     i = enc(v->buf, v->len, i, &ncid.len, sizeof(ncid.len), 0, "%u");

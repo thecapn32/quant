@@ -390,7 +390,8 @@ bool enc_pkt(struct q_stream * const s,
         if (c->is_clnt == false && rtx == false) {
             // this is a new connection; server picks a new random cid
             struct cid nscid = {.len = SERV_SCID_LEN};
-            ptls_openssl_random_bytes(nscid.id, nscid.len + sizeof(nscid.srt));
+            ptls_openssl_random_bytes(nscid.id,
+                                      sizeof(nscid.id) + sizeof(nscid.srt));
             cid_cpy(&c->odcid, c->scid);
             update_act_scid(c, &nscid);
         }
