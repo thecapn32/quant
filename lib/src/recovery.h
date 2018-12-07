@@ -81,7 +81,7 @@ extern ev_tstamp prev_srtt, prev_rttvar;
             (int64_t)ssthresh - (int64_t)prev_ssthresh;                        \
         const ev_tstamp delta_srtt = (c)->rec.srtt - prev_srtt;                \
         const ev_tstamp delta_rttvar = (c)->rec.rttvar - prev_rttvar;          \
-        warn(NTE,                                                              \
+        warn(DBG,                                                              \
              "in_flight=%" PRIu64 " (%s%+" PRId64 NRM "), cwnd" NRM            \
              "=%" PRIu64 " (%s%+" PRId64 NRM "), ssthresh=%" PRIu64            \
              " (%s%+" PRId64 NRM "), srtt=%f (%s%+f" NRM                       \
