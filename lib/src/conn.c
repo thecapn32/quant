@@ -431,7 +431,8 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
 
 void tx(struct q_conn * const c, const uint32_t limit)
 {
-    ensure(c->state != conn_drng, "must not TX while draining");
+    if (unlikely(c->state == conn_drng))
+        return;
 
     if (unlikely(c->state == conn_qlse))
         enter_closing(c);
@@ -441,11 +442,12 @@ void tx(struct q_conn * const c, const uint32_t limit)
 
     do_conn_mgmt(c);
 
-    for (epoch_t e = ep_init; e <= ep_data; e++) {
-        tx_stream(c->cstreams[e], limit);
-        if (unlikely(!has_wnd(c)))
-            goto out_of_wnd;
-    }
+    if (likely(c->state != conn_clsg))
+        for (epoch_t e = ep_init; e <= ep_data; e++) {
+            tx_stream(c->cstreams[e], limit);
+            if (unlikely(!has_wnd(c)))
+                goto out_of_wnd;
+        }
 
     struct q_stream * s;
     kh_foreach (s, c->streams_by_id) {
