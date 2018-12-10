@@ -41,43 +41,53 @@ static struct w_engine * w;
 static struct q_conn *cc, *sc;
 
 
-static uint32_t io(const uint32_t len)
+static inline uint32_t io(const uint32_t len)
 {
     // reserve a new stream
-    struct q_stream * s = q_rsv_stream(cc, true);
+    struct q_stream * const cs = q_rsv_stream(cc, true);
+    if (unlikely(cs == nullptr))
+        return 0;
 
     // allocate buffers to transmit a packet
     struct w_iov_sq o = w_iov_sq_initializer(o);
     q_alloc(w, &o, len);
 
     // send the data
-    q_write(s, &o, true);
-    q_close_stream(s);
+    q_write(cs, &o, true);
+    q_close_stream(cs);
 
     // read the data
     struct w_iov_sq i = w_iov_sq_initializer(i);
-    s = q_read(sc, &i, true);
-    q_close_stream(s);
+    struct q_stream * const ss = q_read(sc, &i, true);
+    if (likely(ss) && !q_peer_has_closed_stream(ss))
+        q_readall_str(ss, &i);
+    if (likely(ss))
+        q_close_stream(ss);
 
+    const uint32_t ilen = w_iov_sq_len(&i);
     q_free(&i);
     q_free(&o);
 
-    return len;
+    return ilen;
 }
 
 
 static void BM_conn(benchmark::State & state)
 {
     const auto len = uint32_t(state.range(0));
-    for (auto _ : state)
-        benchmark::DoNotOptimize(io(len));
+    for (auto _ : state) {
+        const uint32_t ilen = io(len);
+        if (ilen != len) {
+            state.SkipWithError("error");
+            return;
+        }
+    }
     state.SetBytesProcessed(int64_t(state.iterations() * len)); // NOLINT
 }
 
 
-BENCHMARK(BM_conn)->RangeMultiplier(2)->Ranges({{4096, 65535 * 16}})
-    // ->MinTime(3)
-    // ->UseRealTime()
+BENCHMARK(BM_conn)->RangeMultiplier(2)->Range(1024, 1024 * 1024 * 16)
+    // ->Unit(benchmark::kMillisecond)
     ;
 
 

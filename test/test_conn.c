@@ -27,12 +27,9 @@
 
 #include <arpa/inet.h>
 #include <fcntl.h>
-#include <inttypes.h>
 #include <libgen.h>
 #include <netinet/in.h>
 #include <stdbool.h>
-#include <stdint.h>
-#include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -93,17 +90,10 @@ int main(int argc
 
     // allocate buffers to transmit a packet
     struct w_iov_sq o = w_iov_sq_initializer(o);
-    q_alloc(w, &o, 1024);
+    q_alloc(w, &o, 65536);
     struct w_iov * const ov = sq_first(&o);
 
-    // add some payload data
-    ov->len = (uint16_t)snprintf((char *)ov->buf, 1024,
-                                 "***HELLO, STR %" PRIu64 " ON CONN %s!***",
-                                 q_sid(s), q_cid(cc));
-
     // send the data
-    warn(INF, "writing %u byte%s: %s", ov->len, plural(ov->len),
-         (char *)ov->buf);
     q_write(s, &o, true);
     q_close_stream(s);
 
