@@ -322,6 +322,7 @@ tx_stream_data(struct q_stream * const s, const uint32_t limit)
             s->out_nxt = sq_next(v, next);
 
         if (unlikely(!has_wnd(c) && !c->blocked)) {
+            c->skip_cwnd_ping = false;
             warn(NTE,
                  "cwnd limit reached at in_flight %" PRIu64 " + %u > %" PRIu64,
                  c->rec.in_flight, w_mtu(c->w), c->rec.cwnd);

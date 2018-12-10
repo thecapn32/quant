@@ -491,10 +491,19 @@ bool enc_pkt(struct q_stream * const s,
     if (meta(v).hdr.type == F_LH_RTRY)
         goto tx;
 
+    // XXX can't use has_wnd() here, since in_flight is out of data here
+    if (unlikely(c->rec.in_flight + 2 * w_mtu(c->w) >= c->rec.cwnd &&
+                 c->skip_cwnd_ping == false) &&
+        (rtx || enc_data)) {
+        // force peer to ACK if we're out of window
+        i = enc_ping_frame(v, i);
+        c->skip_cwnd_ping = true;
+    }
+
     if (needs_ack(pn))
         i = enc_ack_frame(c, pn, v, i);
 
-    if (c->state == conn_clsg) {
+    if (unlikely(c->state == conn_clsg)) {
         i = enc_close_frame(c, v, i);
         goto tx;
     }

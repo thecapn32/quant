@@ -180,3 +180,6 @@ enc_retire_cid_frame(struct q_conn * const c,
                      const struct w_iov * const v,
                      const uint16_t pos,
                      struct cid * const dcid);
+
+extern uint16_t __attribute__((nonnull))
+enc_ping_frame(const struct w_iov * const v, const uint16_t pos);

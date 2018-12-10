@@ -1547,3 +1547,12 @@ uint16_t enc_retire_cid_frame(struct q_conn * const c,
 
     return i;
 }
+
+
+uint16_t enc_ping_frame(const struct w_iov * const v, const uint16_t pos)
+{
+    const uint8_t type = FRAM_TYPE_PING;
+    track_frame(v, type);
+    warn(INF, FRAM_OUT "PING" NRM);
+    return enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
+}
