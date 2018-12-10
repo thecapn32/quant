@@ -133,6 +133,20 @@ static void __attribute__((nonnull)) trim_frame(struct pkt_meta * const p)
 }
 
 
+#define handle_unknown_strm(c, sid, type, ret)                                 \
+    do {                                                                       \
+        if (diet_find(&(c)->closed_streams, (uint64_t)(sid))) {                \
+            warn(NTE,                                                          \
+                 "ignoring " #type " frame for closed strm " FMT_SID           \
+                 " on %s conn %s",                                             \
+                 (sid), conn_type(c), cid2str((c)->scid));                     \
+            return (ret);                                                      \
+        }                                                                      \
+        err_close_return(c, ERR_FRAME_ENC, (type), "unknown strm %" PRId64,    \
+                         (sid));                                               \
+    } while (0)
+
+
 static uint16_t __attribute__((nonnull))
 dec_stream_or_crypto_frame(struct q_conn * const c,
                            struct w_iov * const v,
@@ -188,8 +202,9 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
 
     if (unlikely(meta(v).stream == 0)) {
         if (unlikely(diet_find(&c->closed_streams, (uint64_t)sid))) {
-            warn(WRN,
-                 "ignoring frame for closed strm " FMT_SID " on %s conn %s",
+            warn(NTE,
+                 "ignoring STREAM frame for closed strm " FMT_SID
+                 " on %s conn %s",
                  sid, conn_type(c), cid2str(c->scid));
             return meta(v).stream_data_start + meta(v).stream_data_len;
         }
@@ -258,8 +273,14 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
                 strm_to_state(meta(v).stream, meta(v).stream->state <= strm_hcrm
                                                   ? strm_hcrm
                                                   : strm_clsd);
-                maybe_api_return(q_readall_str, meta(v).stream->c,
-                                 meta(v).stream);
+                maybe_api_return(q_readall_str, c, meta(v).stream);
+                if (meta(v).stream->state == strm_clsd)
+                    maybe_api_return(q_close_stream, c, meta(v).stream);
+
+                // ACK the FIN immediately
+                struct pn_space * const pn =
+                    pn_for_pkt_type(c, meta(v).hdr.type);
+                ev_invoke(loop, &pn->ack_alarm, 0);
             }
             if (unlikely(v != last))
                 adj_iov_to_data(last);
@@ -267,9 +288,9 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
 
         if (t != FRAM_TYPE_CRPT) {
             do_stream_fc(meta(v).stream);
-            do_conn_fc(meta(v).stream->c);
-            meta(v).stream->c->have_new_data = true;
-            maybe_api_return(q_read, meta(v).stream->c, 0);
+            do_conn_fc(c);
+            c->have_new_data = true;
+            maybe_api_return(q_read, c, 0);
         }
         goto done;
     }
@@ -347,6 +368,7 @@ uint16_t dec_ack_frame(struct q_conn * const c,
     uint16_t i = dec_chk(t, &t, v->buf, v->len, pos, sizeof(t), "0x%02x");
 
     uint64_t lg_ack = 0;
+    // cppcheck-suppress redundantAssignment
     i = dec_chk(t, &lg_ack, v->buf, v->len, i, 0, FMT_PNR_OUT);
 
     uint64_t ack_delay_raw = 0;
@@ -488,6 +510,7 @@ dec_close_frame(struct q_conn * const c,
         dec_chk(type, &type, v->buf, v->len, pos, sizeof(type), "0x%02x");
 
     uint16_t err_code = 0;
+    // cppcheck-suppress redundantAssignment
     i = dec_chk(type, &err_code, v->buf, v->len, i, sizeof(err_code), "0x%04x");
 
     uint64_t frame_type = 0;
@@ -517,13 +540,14 @@ dec_close_frame(struct q_conn * const c,
              err_code ? RED : NRM, err_code, reas_len, err_code ? RED : NRM,
              reas_len, reas_phr);
 
-    if (c->state != conn_drng) {
-        conn_to_state(c, conn_drng);
-        c->needs_tx = false;
-        enter_closing(c);
-    } else
-        ev_invoke(loop, &c->closing_alarm, 0);
-
+    if (c->state != conn_qlse) {
+        if (c->state != conn_drng) {
+            conn_to_state(c, conn_drng);
+            c->needs_tx = false;
+            enter_closing(c);
+        } else
+            ev_invoke(loop, &c->closing_alarm, 0);
+    }
     return i;
 }
 
@@ -537,23 +561,24 @@ dec_max_stream_data_frame(struct q_conn * const c,
     uint16_t i = dec_chk(FRAM_TYPE_MAX_STRM_DATA, &sid, v->buf, v->len, pos + 1,
                          0, FMT_SID);
 
-    struct q_stream * s = get_stream(c, sid);
-    if (unlikely(s == 0))
-        s = new_stream(c, sid);
-
     uint64_t max = 0;
+    // cppcheck-suppress redundantAssignment
     i = dec_chk(FRAM_TYPE_MAX_STRM_DATA, &max, v->buf, v->len, i, 0,
                 "%" PRIu64);
 
     warn(INF, FRAM_IN "MAX_STREAM_DATA" NRM " id=" FMT_SID " max=%" PRIu64, sid,
          max);
 
+    struct q_stream * const s = get_stream(c, sid);
+    if (unlikely(s == 0))
+        handle_unknown_strm(c, sid, FRAM_TYPE_MAX_STRM_DATA, i);
+
     if (max > s->out_data_max) {
         s->out_data_max = max;
         s->blocked = false;
         c->needs_tx = true;
     } else
-        warn(WRN, "MAX_STREAM_DATA %" PRIu64 " <= current value %" PRIu64, max,
+        warn(NTE, "MAX_STREAM_DATA %" PRIu64 " <= current value %" PRIu64, max,
              s->out_data_max);
 
     return i;
@@ -589,7 +614,7 @@ dec_max_stream_id_frame(struct q_conn * const c,
         maybe_api_return(q_rsv_stream, c, 0);
 
     } else
-        warn(WRN, "RX'ed max_%s_streams %" PRIu64 " <= current value %" PRIu64,
+        warn(NTE, "RX'ed max_%s_streams %" PRIu64 " <= current value %" PRIu64,
              is_uni(max) ? "uni" : "bidi", max, *max_streams);
 
     return i;
@@ -612,7 +637,7 @@ dec_max_data_frame(struct q_conn * const c,
         c->blocked = false;
         c->needs_tx = true;
     } else
-        warn(WRN, "MAX_DATA %" PRIu64 " <= current value %" PRIu64, max,
+        warn(NTE, "MAX_DATA %" PRIu64 " <= current value %" PRIu64, max,
              c->tp_out.max_data);
 
     return i;
@@ -628,16 +653,16 @@ dec_stream_blocked_frame(struct q_conn * const c,
     uint16_t i =
         dec_chk(FRAM_TYPE_STRM_BLCK, &sid, v->buf, v->len, pos + 1, 0, FMT_SID);
 
-    struct q_stream * const s = get_stream(c, sid);
-    if (unlikely(s == 0))
-        err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_STRM_BLCK,
-                         "unknown strm %" PRId64, sid);
-
     uint64_t off = 0;
+    // cppcheck-suppress redundantAssignment
     i = dec_chk(FRAM_TYPE_STRM_BLCK, &off, v->buf, v->len, i, 0, "%" PRIu64);
 
     warn(INF, FRAM_IN "STREAM_BLOCKED" NRM " id=" FMT_SID " off=%" PRIu64, sid,
          off);
+
+    struct q_stream * const s = get_stream(c, sid);
+    if (unlikely(s == 0))
+        handle_unknown_strm(c, sid, FRAM_TYPE_STRM_BLCK, i);
 
     do_stream_fc(s);
     return i;
@@ -697,17 +722,17 @@ dec_stop_sending_frame(struct q_conn * const c,
     uint16_t i =
         dec_chk(FRAM_TYPE_STOP_SEND, &sid, v->buf, v->len, pos + 1, 0, FMT_SID);
 
-    struct q_stream * const s = get_stream(c, sid);
-    if (unlikely(s == 0))
-        err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_STOP_SEND,
-                         "unknown strm %" PRId64, sid);
-
     uint16_t err_code = 0;
+    // cppcheck-suppress redundantAssignment
     i = dec_chk(FRAM_TYPE_STOP_SEND, &err_code, v->buf, v->len, i,
                 sizeof(err_code), "0x%04x");
 
     warn(INF, FRAM_IN "STOP_SENDING" NRM " id=" FMT_SID " err=%s0x%04x" NRM,
          sid, err_code ? RED : NRM, err_code);
+
+    struct q_stream * const s = get_stream(c, sid);
+    if (unlikely(s == 0))
+        handle_unknown_strm(c, sid, FRAM_TYPE_STOP_SEND, i);
 
     return i;
 }
@@ -793,6 +818,7 @@ dec_rst_stream_frame(struct q_conn * const c,
         dec_chk(FRAM_TYPE_RST_STRM, &sid, v->buf, v->len, pos + 1, 0, FMT_SID);
 
     uint16_t err = 0;
+    // cppcheck-suppress redundantAssignment
     i = dec_chk(FRAM_TYPE_RST_STRM, &err, v->buf, v->len, i, sizeof(err),
                 "0x%04x");
 
@@ -806,8 +832,8 @@ dec_rst_stream_frame(struct q_conn * const c,
 
     struct q_stream * const s = get_stream(c, sid);
     if (unlikely(s == 0))
-        err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_RST_STRM,
-                         "unknown strm %" PRId64, sid);
+        handle_unknown_strm(c, sid, FRAM_TYPE_RST_STRM, i);
+
     strm_to_state(s, strm_clsd);
 
     return i;
@@ -892,7 +918,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
         write_to_corpus(corpus_frm_dir, &v->buf[i], v->len - i);
 #endif
 
-    while (i < v->len) {
+    while (likely(i < v->len)) {
         uint8_t type = 0;
         dec_chk(type, &type, v->buf, v->len, i, sizeof(type), "0x%02x");
 
@@ -904,8 +930,8 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
         } else if (type == FRAM_TYPE_CRPT ||
                    (type >= FRAM_TYPE_STRM && type <= FRAM_TYPE_STRM_MAX)) {
 
-            if ((has_frame(v, FRAM_TYPE_CRPT) ||
-                 has_frame(v, FRAM_TYPE_STRM)) &&
+            if (unlikely((has_frame(v, FRAM_TYPE_CRPT) ||
+                          has_frame(v, FRAM_TYPE_STRM))) &&
                 meta(v).stream) {
                 // already had at least one stream or crypto frame in this
                 // packet with non-duplicate data, so generate (another) copy
@@ -1207,7 +1233,7 @@ uint16_t enc_stream_or_crypto_frame(struct q_stream * const s,
     const uint64_t dlen = v->len - meta(v).stream_data_start;
     uint8_t type;
 
-    if (enc_strm) {
+    if (likely(enc_strm)) {
         ensure(!is_set(F_LONG_HDR, meta(v).hdr.flags) ||
                    meta(v).hdr.type == F_LH_0RTT,
                "sid %" PRId64 " in 0x%02x-type pkt", s->id, meta(v).hdr.type);
@@ -1219,11 +1245,9 @@ uint16_t enc_stream_or_crypto_frame(struct q_stream * const s,
                (s->out_data ? F_STREAM_OFF : 0);
 
         // if stream is closed locally and this is last packet, include FIN
-        if ((s->state == strm_hclo || s->state == strm_clsd) &&
-            v == sq_last(&s->out, w_iov, next)) {
+        if (unlikely((s->state == strm_hclo || s->state == strm_clsd) &&
+                     v == sq_last(&s->out, w_iov, next)))
             type |= F_STREAM_FIN;
-            s->tx_fin = false;
-        }
     } else
         type = FRAM_TYPE_CRPT;
 
@@ -1232,16 +1256,17 @@ uint16_t enc_stream_or_crypto_frame(struct q_stream * const s,
     // now that we know how long the stream frame header is, encode it
     uint16_t i = meta(v).stream_header_pos =
         meta(v).stream_data_start - 1 -
-        (enc_strm ? varint_size_needed((uint64_t)s->id) : 0) -
-        (dlen || !enc_strm ? varint_size_needed(dlen) : 0) -
-        (s->out_data || !enc_strm ? varint_size_needed(s->out_data) : 0);
+        (likely(enc_strm) ? varint_size_needed((uint64_t)s->id) : 0) -
+        (dlen || unlikely(!enc_strm) ? varint_size_needed(dlen) : 0) -
+        (s->out_data || unlikely(!enc_strm) ? varint_size_needed(s->out_data)
+                                            : 0);
     ensure(i > pos, "not enough space for stream header (%u > %u)", i, pos);
     i = enc(v->buf, v->len, i, &type, sizeof(type), 0, "0x%02x");
-    if (enc_strm)
+    if (likely(enc_strm))
         i = enc(v->buf, v->len, i, &s->id, 0, 0, FMT_SID);
-    if (s->out_data || !enc_strm)
+    if (s->out_data || unlikely(!enc_strm))
         i = enc(v->buf, v->len, i, &s->out_data, 0, 0, "%" PRIu64);
-    if (dlen || !enc_strm)
+    if (dlen || unlikely(!enc_strm))
         enc(v->buf, v->len, i, &dlen, 0, 0, "%u");
 
     meta(v).stream = s; // remember stream this buf belongs to
@@ -1413,10 +1438,10 @@ uint16_t enc_stream_id_blocked_frame(struct q_conn * const c,
     track_frame(v, type);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
-    const int64_t max_sid = (bidi ? c->next_sid_bidi : c->next_sid_uni) - 4;
-    i = enc(v->buf, v->len, i, &max_sid, 0, 0, "%" PRId64);
+    const int64_t ms = (bidi ? c->next_sid_bidi : c->next_sid_uni) - 4;
+    i = enc(v->buf, v->len, i, &ms, 0, 0, "%" PRId64);
 
-    warn(INF, FRAM_OUT "STREAM_ID_BLOCKED" NRM " sid=" FMT_SID, max_sid);
+    warn(INF, FRAM_OUT "STREAM_ID_BLOCKED" NRM " sid=" FMT_SID, ms);
 
     return i;
 }
