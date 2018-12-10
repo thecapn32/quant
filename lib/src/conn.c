@@ -322,7 +322,7 @@ tx_stream_data(struct q_stream * const s, const uint32_t limit)
             s->out_nxt = sq_next(v, next);
 
         if (unlikely(!has_wnd(c) && !c->blocked)) {
-            warn(CRT,
+            warn(NTE,
                  "cwnd limit reached at in_flight %" PRIu64 " + %u > %" PRIu64,
                  c->rec.in_flight, w_mtu(c->w), c->rec.cwnd);
             break;
@@ -360,10 +360,12 @@ void do_conn_fc(struct q_conn * const c)
     if (c->state == conn_clsg || c->state == conn_drng)
         return;
 
+    const uint64_t inc = INIT_MAX_BIDI_STREAMS * INIT_STRM_DATA_BIDI;
+
     // check if we need to do connection-level flow control
-    if (c->in_data + 2 * MAX_PKT_LEN > c->tp_in.max_data) {
+    if (c->in_data + 2 * MAX_PKT_LEN + inc > c->tp_in.max_data) {
         c->tx_max_data = c->needs_tx = true;
-        c->tp_in.new_max_data = c->tp_in.max_data + 0xA000;
+        c->tp_in.new_max_data = c->tp_in.max_data + 2 * inc;
     }
 }
 
@@ -400,14 +402,13 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
 static void __attribute__((nonnull))
 tx_stream(struct q_stream * const s, const uint32_t limit)
 {
-    const bool stream_has_data_to_tx = sq_len(&s->out) > 0 &&
-                                       out_fully_acked(s) == false &&
-                                       (s->out_una || s->out_nxt);
+    const bool stream_has_data_to_tx =
+        sq_len(&s->out) > 0 && out_fully_acked(s) == false &&
+        ((s->out_una && meta(s->out_una).is_lost) || s->out_nxt);
 
-    // warn(ERR, "strm id=" FMT_SID ", cnt=%u, has_data=%u, needs_ctrl=%u",
-    // s->id,
-    //      sq_len(&s->out), stream_has_data_to_tx, stream_needs_ctrl(s),
-    //      out_fully_acked(s));
+    // warn(ERR, "%s strm id=" FMT_SID ", cnt=%u, has_data=%u, needs_ctrl=%u",
+    //      conn_type(s->c), s->id, sq_len(&s->out), stream_has_data_to_tx,
+    //      stream_needs_ctrl(s), out_fully_acked(s));
     // check if we should skip TX on this stream
     if ( // nothing to send and doesn't need control frames?
         (stream_has_data_to_tx == false && stream_needs_ctrl(s) == false) ||
@@ -824,6 +825,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         break;
 
     case conn_estb:
+    case conn_qlse:
     case conn_clsg:
     case conn_drng:
         if (is_set(F_LONG_HDR, meta(v).hdr.flags) && meta(v).hdr.vers == 0) {
@@ -847,9 +849,6 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
     case conn_clsd:
         warn(NTE, "ignoring pkt for closed %s conn", conn_type(c));
         break;
-
-    default:
-        die("TODO: state %s", conn_state_str[c->state]);
     }
 
     // if packet has anything other than ACK frames, maybe arm the ACK timer
@@ -1280,7 +1279,6 @@ struct q_conn * new_conn(struct w_engine * const w,
     splay_init(&c->dcids_by_seq);
     if (c->is_clnt) {
         struct cid ndcid = {.len = SERV_SCID_LEN};
-        warn(ERR, "%u", sizeof(ndcid.id) + sizeof(ndcid.srt));
         ptls_openssl_random_bytes(ndcid.id,
                                   sizeof(ndcid.id) + sizeof(ndcid.srt));
         cid_cpy(&c->odcid, &ndcid);
@@ -1333,6 +1331,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     // initialize socket and start a TX watcher
     ev_async_init(&c->tx_w, tx_w);
     c->tx_w.data = c;
+    ev_set_priority(&c->tx_w, EV_MAXPRI - 1);
     ev_async_start(loop, &c->tx_w);
 
     c->w = w;
@@ -1340,6 +1339,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     if (c->sock == 0) {
         c->rx_w.data = c->sock = w_bind(w, htons(port), 0);
         ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
+        ev_set_priority(&c->rx_w, EV_MAXPRI);
         ev_io_start(loop, &c->rx_w);
         c->holds_sock = true;
     }

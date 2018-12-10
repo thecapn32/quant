@@ -226,11 +226,12 @@ void do_stream_fc(struct q_stream * const s)
     if (s->c->state != conn_estb || s->id < 0)
         return;
 
-    if (s->in_data + 2 * MAX_PKT_LEN > s->in_data_max) {
+    const uint64_t inc =
+        is_uni(s->id) ? INIT_STRM_DATA_UNI : INIT_STRM_DATA_BIDI;
+
+    if (s->in_data + 2 * MAX_PKT_LEN + inc > s->in_data_max) {
         s->tx_max_stream_data = s->c->needs_tx = true;
-        s->new_in_data_max =
-            s->in_data_max +
-            (is_uni(s->id) ? INIT_STRM_DATA_UNI : INIT_STRM_DATA_BIDI);
+        s->new_in_data_max = s->in_data_max + 2 * inc;
     }
 }
 
@@ -241,13 +242,13 @@ void do_stream_id_fc(struct q_conn * const c, const int64_t sid)
     if (is_srv_ini(sid) == c->is_clnt) {
         // this is a remote stream
         if (is_uni(sid)) {
-            if (sid >> 2 == c->tp_in.max_uni_streams - 1) {
+            if ((sid >> 2) + 1 == c->tp_in.max_uni_streams) {
                 c->tx_max_sid_uni = true;
                 c->tp_in.new_max_uni_streams =
                     c->tp_in.max_uni_streams + INIT_MAX_UNI_STREAMS;
             }
         } else {
-            if (sid >> 2 == c->tp_in.max_bidi_streams - 1) {
+            if ((sid >> 2) + 1 == c->tp_in.max_bidi_streams) {
                 c->tx_max_sid_bidi = true;
                 c->tp_in.new_max_bidi_streams =
                     c->tp_in.max_bidi_streams + INIT_MAX_BIDI_STREAMS;
@@ -257,10 +258,10 @@ void do_stream_id_fc(struct q_conn * const c, const int64_t sid)
     } else {
         // this is a local stream
         if (is_uni(sid)) {
-            if (sid >> 2 == c->tp_out.max_uni_streams - 1)
+            if ((sid >> 2) + 1 == c->tp_out.max_uni_streams)
                 c->sid_blocked_uni = true;
         } else {
-            if (sid >> 2 == c->tp_out.max_bidi_streams - 1)
+            if ((sid >> 2) + 1 == c->tp_out.max_bidi_streams)
                 c->sid_blocked_bidi = true;
         }
     }

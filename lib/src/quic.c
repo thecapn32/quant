@@ -424,22 +424,24 @@ struct q_conn * q_accept(const uint64_t timeout)
 
 struct q_stream * q_rsv_stream(struct q_conn * const c, const bool bidi)
 {
-    if (c->state == conn_drng || c->state == conn_clsd)
+    if (unlikely(c->state == conn_drng || c->state == conn_clsd))
         return 0;
 
     int64_t * const next_sid = bidi ? &c->next_sid_bidi : &c->next_sid_uni;
     int64_t * const max_streams =
         bidi ? &c->tp_out.max_bidi_streams : &c->tp_out.max_uni_streams;
 
-    if (*next_sid >> 2 > *max_streams) {
+    if (unlikely(*next_sid >> 2 > *max_streams)) {
         // we hit the max stream limit, wait for MAX_STREAM_ID frame
         warn(WRN, "MAX_STREAM_ID increase needed for %s (%u > %u)",
              bidi ? "bidi" : "unidir", *next_sid >> 2, *max_streams);
+        if (bidi)
+            c->sid_blocked_bidi = true;
+        else
+            c->sid_blocked_uni = true;
+        // c->needs_tx = true;
         loop_run(q_rsv_stream, c, 0);
     }
-
-    ensure(*next_sid >> 2 <= *max_streams, "sid %u <= max %u", *next_sid >> 2,
-           *max_streams);
 
     return new_stream(c, *next_sid);
 }
@@ -544,16 +546,19 @@ void q_close_stream(struct q_stream * const s)
     struct q_conn * const c = s->c;
     warn(WRN, "closing strm " FMT_SID " state %s on %s conn %s", s->id,
          strm_state_str[s->state], conn_type(c), cid2str(c->scid));
-
-    if (s->state != strm_hclo && s->state != strm_clsd) {
-        strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
-        s->tx_fin = true;
-        ev_async_send(loop, &c->tx_w);
-        loop_run(q_close_stream, c, s);
+    if (s->state != strm_clsd && s->c->state != conn_clsd) {
+        if (sq_empty(&s->out) == false) {
+            const struct w_iov * const last = sq_last(&s->out, w_iov, next);
+            if (is_fin(last) == false) {
+                strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
+                s->tx_fin = true;
+            }
+            ev_async_send(loop, &c->tx_w);
+            loop_run(q_close_stream, c, s);
+        }
     }
 
-    if (s->state == strm_clsd)
-        free_stream(s);
+    free_stream(s);
 }
 
 

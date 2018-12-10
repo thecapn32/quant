@@ -951,18 +951,18 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
 {
     struct q_conn * const c = s->c;
     const size_t in_len = iv ? iv->len : 0;
-    const epoch_t epoch_in = strm_epoch(s);
+    const epoch_t ep_in = strm_epoch(s);
     size_t epoch_off[5] = {0};
     ptls_buffer_t tls_io;
     uint8_t tls_io_buf[4096];
     ptls_buffer_init(&tls_io, tls_io_buf, sizeof(tls_io_buf));
 
     const int ret =
-        ptls_handle_message(c->tls.t, &tls_io, epoch_off, epoch_in,
+        ptls_handle_message(c->tls.t, &tls_io, epoch_off, ep_in,
                             iv ? iv->buf : 0, in_len, &c->tls.tls_hshk_prop);
     // warn(DBG,
     //      "epoch %u, in %u (off %u), gen %u (%u-%u-%u-%u-%u), ret %u, left
-    //      %u", epoch_in, iv ? iv->len : 0, iv ? meta(iv).stream_off : 0,
+    //      %u", ep_in, iv ? iv->len : 0, iv ? meta(iv).stream_off : 0,
     //      tls_io.off, epoch_off[0], epoch_off[1], epoch_off[2], epoch_off[3],
     //      epoch_off[4], ret, iv ? iv->len - in_len : 0);
 

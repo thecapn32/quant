@@ -159,7 +159,8 @@ detect_lost_pkts(struct q_conn * const c, struct pn_space * const pn)
 
         if (time_since_sent > delay_until_lost ||
             delta > kReorderingThreshold) {
-            warn(WRN, "pkt " FMT_PNR_OUT " considered lost", p->hdr.nr);
+            warn(WRN, "0x%02x-type pkt " FMT_PNR_OUT " considered lost",
+                 p->hdr.flags, p->hdr.nr);
             p->is_lost = true;
             // c->needs_tx = true;
 
@@ -372,7 +373,8 @@ void on_ack_received_2(struct q_conn * const c,
         for (struct pkt_meta * p = splay_min(pm_by_nr, &pn->sent_pkts);
              p && p->hdr.nr < sm_new_acked;
              p = splay_next(pm_by_nr, &pn->sent_pkts, p)) {
-            warn(DBG, "pkt " FMT_PNR_OUT " considered lost", p->hdr.nr);
+            warn(DBG, "0x%02x-type pkt " FMT_PNR_OUT " considered lost",
+                 p->hdr.flags, p->hdr.nr);
             p->is_lost = true;
             if (is_ack_only(&p->frames) == false) {
                 // bytes_in_flight -= lost_packet.bytes
@@ -488,7 +490,7 @@ void on_pkt_acked(struct q_conn * const c,
         s->out_una == (orig ? orig : acked_pkt)) {
         // if this ACKs its stream's out_una, move that forward
         sq_foreach_from (s->out_una, &s->out, next)
-            if (meta(s->out_una).is_acked == false)
+            if (orig == 0 && meta(s->out_una).is_acked == false)
                 break;
 
         if (s->out_una == 0) {
