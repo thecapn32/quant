@@ -63,7 +63,7 @@ externalproject_add(picotls
   # UPDATE_COMMAND "" # XXX do not commit with this being empty
   GIT_REPOSITORY https://github.com/h2o/picotls.git
   # GIT_SHALLOW 1 # does not work together with GIT_TAG
-  GIT_TAG c5bbb1cac0f6537b80837c8ba83d1ef892b28c28
+  GIT_TAG d94a67d4d9733fa7b72c331d238c6160298d39b3
   CMAKE_ARGS
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
     -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
