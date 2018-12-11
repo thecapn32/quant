@@ -785,6 +785,7 @@ dec_new_cid_frame(struct q_conn * const c,
         err_close_return(c, ERR_FRAME_ENC, FRAM_TYPE_NEW_CID,
                          "illegal cid len %u", dcid.len);
 
+    // cppcheck-suppress redundantAssignment
     i = dec_chk(FRAM_TYPE_NEW_CID, &dcid.seq, v->buf, v->len, i, 0, "%" PRIu64);
     i = dec_chk_buf(FRAM_TYPE_NEW_CID, dcid.id, v->buf, v->len, i, dcid.len);
     i = dec_chk_buf(FRAM_TYPE_NEW_CID, dcid.srt, v->buf, v->len, i,
