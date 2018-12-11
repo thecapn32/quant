@@ -855,8 +855,9 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
     }
 
     // if packet has anything other than ACK frames, maybe arm the ACK timer
-    if (c->state != conn_drng && c->state != conn_clsd && !c->tx_rtry &&
-        !is_ack_only(&meta(v).frames) && !ev_is_active(&pn->ack_alarm)) {
+    if (c->state != conn_clsg && c->state != conn_drng &&
+        c->state != conn_clsd && !c->tx_rtry && !is_ack_only(&meta(v).frames) &&
+        !ev_is_active(&pn->ack_alarm)) {
         // warn(DBG, "non-ACK frame received, starting epoch %u ACK timer",
         //      epoch_for_pkt_type(meta(v).hdr.type));
         ev_timer_again(loop, &pn->ack_alarm);
@@ -1102,7 +1103,7 @@ void rx(struct ev_loop * const l,
         struct q_conn * const c = sl_first(&crx);
         sl_remove_head(&crx, node_rx_int);
 
-        if (unlikely(c->state != conn_drng))
+        if (likely(c->state != conn_drng))
             // reset idle timeout
             ev_timer_again(l, &c->idle_alarm);
 
