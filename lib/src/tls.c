@@ -1312,7 +1312,8 @@ uint16_t enc_aead(struct q_conn * const c,
     const struct cipher_ctx * const ctx =
         which_cipher_ctx_out(c, meta(v).hdr.flags);
     if (unlikely(ctx == 0 || ctx->aead == 0)) {
-        warn(ERR, "no cipher context");
+        err_close(c, ERR_PROTOCOL_VIOLATION, 0, "0x%02x pkt, no crypto context",
+                  meta(v).hdr.flags);
         return 0;
     }
 
