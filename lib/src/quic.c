@@ -110,18 +110,23 @@ int corpus_pkt_dir, corpus_frm_dir;
 /// @param      conn  The connection to run the event loop for.
 /// @param      strm  The stream to run the event loop for.
 ///
-#define loop_run(func, conn, strm)                                             \
-    do {                                                                       \
-        EV_VERIFY(loop);                                                       \
-        ensure(api_func == 0, "other API call active");                        \
-        api_func = (func_ptr)(&(func));                                        \
-        api_conn = (conn);                                                     \
-        api_strm = (strm);                                                     \
-        /* warn(DBG, #func "(" #conn ", " #strm ") entering event loop"); */   \
-        ev_run(loop, 0);                                                       \
-        api_func = 0;                                                          \
-        api_conn = api_strm = 0;                                               \
-    } while (0)
+static void __attribute__((nonnull(1)))
+do_loop_run(const func_ptr func,
+            struct q_conn * const conn,
+            struct q_stream * const strm)
+{
+    EV_VERIFY(loop);
+    ensure(api_func == 0, "other API call active");
+    api_func = func;
+    api_conn = conn;
+    api_strm = strm;
+    /* warn(DBG, #func "(" #conn ", " #strm ") entering event loop"); */
+    ev_run(loop, 0);
+    api_func = 0;
+    api_conn = api_strm = 0;
+}
+
+#define loop_run(func, conn, strm) do_loop_run((func_ptr)(func), (conn), (strm))
 
 
 void pm_free(struct pkt_meta * const m)

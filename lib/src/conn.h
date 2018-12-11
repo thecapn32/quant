@@ -286,8 +286,6 @@ extern void __attribute__((nonnull)) tx_tlp(struct q_conn * const c);
 extern void __attribute__((nonnull))
 rx(struct ev_loop * const l, ev_io * const rx_w, int e);
 
-extern void * __attribute__((nonnull)) loop_run(void * const arg);
-
 extern void __attribute__((nonnull))
 loop_update(struct ev_loop * const l, ev_async * const w, int e);
 
