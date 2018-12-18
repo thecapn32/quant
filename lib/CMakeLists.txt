@@ -84,7 +84,7 @@ foreach(TARGET ${TARGETS})
       ${OPENSSL_ROOT_DIR}/include
       ${LIBEV_INCLUDE}
       ${WARP_INCLUDE}
-      $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/external/klib>
+      $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/external/klib>
     PRIVATE
       $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/external/include>
   )
