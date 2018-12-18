@@ -70,6 +70,7 @@ externalproject_add(picotls
     -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}
     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
   INSTALL_COMMAND
+    mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/lib &&
     cp -a ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls/include
       ${CMAKE_CURRENT_BINARY_DIR} &&
     cp -a ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/${BUILD_DIR}/${LIBRARY_PREFIX}picotls-minicrypto${LIBRARY_SUFFIX}
