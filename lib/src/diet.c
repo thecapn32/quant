@@ -44,10 +44,9 @@ SPLAY_GENERATE(diet, ival, node, ival_cmp)
 ///
 /// @return     Largest interval underneath @p i.
 ///
-static inline struct ival * find_max(struct ival * const i)
+static inline struct ival * __attribute__((nonnull, always_inline))
+find_max(struct ival * const i)
 {
-    if (i == 0)
-        return 0;
     struct ival * n = i;
     while (splay_right(n, node))
         n = splay_right(n, node);
@@ -61,10 +60,9 @@ static inline struct ival * find_max(struct ival * const i)
 ///
 /// @return     Smallest interval underneath @p i.
 ///
-static inline struct ival * find_min(struct ival * const i)
+static inline struct ival * __attribute__((nonnull, always_inline))
+find_min(struct ival * const i)
 {
-    if (i == 0)
-        return 0;
     struct ival * n = i;
     while (splay_left(n, node))
         n = splay_left(n, node);
@@ -260,6 +258,9 @@ new_ival:
 ///
 void diet_remove(struct diet * const d, const uint64_t n)
 {
+    if (splay_empty(d))
+        return;
+
     // rotate the interval that contains n or is closest to it to the top
     diet_find(d, n);
 
@@ -295,9 +296,8 @@ void diet_remove(struct diet * const d, const uint64_t n)
 
 void diet_free(struct diet * const d)
 {
-    struct ival *i, *next;
-    for (i = splay_min(diet, d); i != 0; i = next) {
-        next = splay_next(diet, d, i);
+    while (!splay_empty(d)) {
+        struct ival * const i = splay_min(diet, d);
         splay_remove(diet, d, i);
         free(i);
     }
