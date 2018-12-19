@@ -1,4 +1,5 @@
 include(ExternalProject)
+include(GNUInstallDirs)
 
 if(BUILD_SHARED_LIBS)
   set(CMAKE_FIND_LIBRARY_PREFIXES ${CMAKE_SHARED_LIBRARY_PREFIX})
