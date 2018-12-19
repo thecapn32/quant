@@ -5,7 +5,7 @@ QUANT is a BSD-licensed C11 implementation of the emerging IETF
 HTTP/2 transport over UDP. QUANT uses the
 [warpcore](https://github.com/NTAP/warpcore) zero-copy  userspace UDP/IPv4 stack
 on top of the [netmap](http://info.iet.unipi.it/~luigi/netmap/) packet I/O
-framework.
+framework. It can also operate over the regular Socket API.
 
 The quant repository is [on GitHub](https://github.com/NTAP/quant), as is
 the [documentation](https://ntap.github.io/quant/).
@@ -41,6 +41,7 @@ To do an
 out-of-source build of warpcore (best practice with `cmake`), do the following
 to build with `make` as a generator:
 
+    git submodule update --init --recursive
     mkdir Debug
     cd Debug
     cmake ..
