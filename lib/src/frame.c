@@ -278,9 +278,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
                     maybe_api_return(q_close_stream, c, meta(v).stream);
 
                 // ACK the FIN immediately
-                struct pn_space * const pn =
-                    pn_for_pkt_type(c, meta(v).hdr.type);
-                ev_invoke(loop, &pn->ack_alarm, 0);
+                c->needs_tx = true;
             }
             if (unlikely(v != last))
                 adj_iov_to_data(last);
@@ -577,8 +575,8 @@ dec_max_stream_data_frame(struct q_conn * const c,
         s->out_data_max = max;
         s->blocked = false;
         c->needs_tx = true;
-    } else
-        warn(NTE, "MAX_STREAM_DATA %" PRIu64 " <= current value %" PRIu64, max,
+    } else if (max < s->out_data_max)
+        warn(NTE, "MAX_STREAM_DATA %" PRIu64 " < current value %" PRIu64, max,
              s->out_data_max);
 
     return i;
@@ -613,8 +611,8 @@ dec_max_stream_id_frame(struct q_conn * const c,
         c->needs_tx = true;
         maybe_api_return(q_rsv_stream, c, 0);
 
-    } else
-        warn(NTE, "RX'ed max_%s_streams %" PRIu64 " <= current value %" PRIu64,
+    } else if ((max >> 2) + 1 < *max_streams)
+        warn(NTE, "RX'ed max_%s_streams %" PRIu64 " < current value %" PRIu64,
              is_uni(max) ? "uni" : "bidi", max, *max_streams);
 
     return i;
@@ -636,8 +634,8 @@ dec_max_data_frame(struct q_conn * const c,
         c->tp_out.max_data = max;
         c->blocked = false;
         c->needs_tx = true;
-    } else
-        warn(NTE, "MAX_DATA %" PRIu64 " <= current value %" PRIu64, max,
+    } else if (max < c->tp_out.max_data)
+        warn(NTE, "MAX_DATA %" PRIu64 " < current value %" PRIu64, max,
              c->tp_out.max_data);
 
     return i;
