@@ -147,7 +147,6 @@ splay_head(cids_by_id, cid);
 
 /// A QUIC connection.
 struct q_conn {
-    splay_entry(q_conn) node_ipnp;
     sl_entry(q_conn) node_rx_int; ///< For maintaining the internal RX queue.
     sl_entry(q_conn) node_rx_ext; ///< For maintaining the external RX queue.
     sl_entry(q_conn) node_aq;     ///< For maintaining the accept queue.
