@@ -65,7 +65,7 @@ int LLVMFuzzerInitialize(int * argc __attribute__((unused)),
 
 int LLVMFuzzerTestOneInput(const uint8_t * data, const size_t size)
 {
-    struct w_iov * const v = q_alloc_iov(w, MAX_PKT_LEN, 0);
+    struct w_iov * const v = alloc_iov(w, MAX_PKT_LEN, 0);
     memcpy(v->buf, data, MIN(size, v->len));
     v->len = (uint16_t)MIN(size, v->len);
     struct w_iov_sq i = w_iov_sq_initializer(i);

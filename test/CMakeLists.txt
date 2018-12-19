@@ -97,6 +97,7 @@ if(HAVE_FUZZER)
         ${CMAKE_BINARY_DIR}/lib/include
         ${CMAKE_SOURCE_DIR}/lib/src
         $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/external/include>
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/external/klib>
       )
     set_target_properties(${TARGET}
       PROPERTIES

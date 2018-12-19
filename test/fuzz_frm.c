@@ -29,6 +29,9 @@
 #include <string.h>
 #include <sys/param.h>
 
+#define klib_unused
+
+#include <khash.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
@@ -66,7 +69,7 @@ int LLVMFuzzerInitialize(int * argc __attribute__((unused)),
 
 int LLVMFuzzerTestOneInput(const uint8_t * data, const size_t size)
 {
-    struct w_iov * v = q_alloc_iov(w, MAX_PKT_LEN, 0);
+    struct w_iov * v = alloc_iov(w, MAX_PKT_LEN, 0);
     memcpy(v->buf, data, MIN(size, v->len));
     v->len = (uint16_t)MIN(size, v->len);
 
@@ -74,10 +77,10 @@ int LLVMFuzzerTestOneInput(const uint8_t * data, const size_t size)
     if (meta(v).stream == 0)
         free_iov(v);
 
-    while (!splay_empty(&c->streams_by_id)) {
-        struct q_stream * const s = splay_min(streams_by_id, &c->streams_by_id);
+    struct q_stream * s;
+    kh_foreach (s, c->streams_by_id)
         free_stream(s);
-    }
+    kh_destroy(streams_by_id, c->streams_by_id);
 
     return 0;
 }

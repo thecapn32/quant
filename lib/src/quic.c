@@ -27,7 +27,6 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -49,6 +48,7 @@
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 #include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <unistd.h>
