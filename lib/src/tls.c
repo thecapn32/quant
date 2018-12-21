@@ -1213,7 +1213,7 @@ void init_tls_ctx(const char * const cert,
         tls_ctx.verify_certificate = &verifier.super;
 #endif
     tls_ctx.get_time = &ptls_get_time;
-    tls_ctx.hkdf_label_prefix = HKDF_BASE_LABEL;
+    tls_ctx.hkdf_label_prefix__obsolete = HKDF_BASE_LABEL;
     tls_ctx.omit_end_of_early_data = true;
 
     ptls_openssl_random_bytes(cookie, COOKIE_LEN);
