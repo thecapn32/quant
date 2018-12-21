@@ -50,6 +50,7 @@ to build with `make` as a generator:
 The default build (per above) is without optimizations and with extensive debug
 logging enabled. In order to build an optimized build, do this:
 
+    git submodule update --init --recursive
     mkdir Release
     cd Release
     cmake -DCMAKE_BUILD_TYPE=Release ..
