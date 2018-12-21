@@ -1339,7 +1339,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     ev_async_start(loop, &c->tx_w);
 
     c->w = w;
-    c->sock = w_get_sock(w, htons(port), 0);
+    c->sock = w_get_sock(w, htons(port));
     if (c->sock == 0) {
         c->rx_w.data = c->sock = w_bind(w, htons(port), 0);
         ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
