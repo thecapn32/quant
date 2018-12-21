@@ -61,11 +61,9 @@ include(CheckCCompilerFlag)
 include(CheckCXXCompilerFlag)
 foreach(FLAG -pipe -march=native -Wextra -Wpedantic -Weverything -Werror
         -fcolor-diagnostics -fdiagnostics-color=always
-        -Wno-missing-braces -Wno-gnu-statement-expression -Wno-extended-offsetof
-        -Wno-redundant-parens -Wno-switch-enum
-        -Wno-missing-field-initializers -Wno-disabled-macro-expansion -Wno-cpp
+        -Wno-disabled-macro-expansion #clang on travis needs this
         -fcomment-block-commands=dotfile
-        )
+        -Wno-missing-braces -Wno-missing-field-initializers)
   string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
   check_c_compiler_flag(${FLAG} ${F})
   if(${F})
@@ -78,7 +76,7 @@ foreach(FLAG -pipe -march=native -Wextra -Wpedantic -Weverything -Werror
 endforeach()
 
 # Set CXX flags
-foreach(FLAG -Wno-c++98-compat -Wno-global-constructors -Wno-c99-extensions)
+foreach(FLAG -Wno-c++98-compat -Wno-global-constructors)
   string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
   check_cxx_compiler_flag(${FLAG} ${F})
   if(${F})
@@ -112,18 +110,21 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
   include(CheckIncludeFile)
   check_include_file(sanitizer/asan_interface.h HAVE_ASAN)
   if(HAVE_ASAN AND NOT NO_SANITIZERS AND NOT CMAKE_GENERATOR STREQUAL Xcode)
-    set(CMAKE_REQUIRED_FLAGS -fsanitize=address)
-    check_c_compiler_flag("" _fsanitize_address)
-    if(_fsanitize_address)
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address")
-      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
+    set(CMAKE_REQUIRED_FLAGS -fsanitize=address,undefined)
+    check_c_compiler_flag("" _fsanitize_address_undefined)
+    if(_fsanitize_address_undefined)
+      string(CONCAT CMAKE_C_FLAGS "${CMAKE_C_FLAGS} "
+              "-fsanitize=address,undefined")
+      string(CONCAT CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} "
+              "-fsanitize=address,undefined")
     endif()
     unset(CMAKE_REQUIRED_FLAGS)
 
     # Set some additional flags for Debug builds
     set(FLAGS -fno-omit-frame-pointer -fsanitize-address-use-after-scope
         -fno-optimize-sibling-calls -fno-common
-        -fsanitize=undefined -fsanitize=integer -fsanitize=nullability
+        -fsanitize=unsigned-integer-overflow
+        -fsanitize=implicit-conversion -fsanitize=nullability
     )
     foreach(FLAG ${FLAGS})
       string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
@@ -169,7 +170,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
       message(STATUS "Found clang-tidy: ${CLANGTIDY}")
       set(CLANG_TIDY_CHECKS *
           -cert-err58-cpp
-          -cppcoreguidelines-no-malloc
           -cppcoreguidelines-owning-memory
           -cppcoreguidelines-pro-bounds-array-to-pointer-decay
           -cppcoreguidelines-pro-bounds-pointer-arithmetic
@@ -181,16 +181,13 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
           -hicpp-braces-around-statements
           -hicpp-multiway-paths-covered
           -hicpp-no-array-decay
-          -hicpp-no-malloc
           -hicpp-signed-bitwise
           -hicpp-vararg
-          -llvm-header-guard
-          -readability-avoid-const-params-in-decls
           -readability-braces-around-statements
       )
       string(REPLACE ";" "," CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS}")
       set(CMAKE_C_CLANG_TIDY ${CLANGTIDY}
-          -header-filter=.* -checks=${CLANG_TIDY_CHECKS}
+          -system-headers -checks=${CLANG_TIDY_CHECKS}
       )
       set(CMAKE_CXX_CLANG_TIDY ${CMAKE_C_CLANG_TIDY})
     endif()
@@ -203,7 +200,8 @@ else()
 
   # check for INTERPROCEDURAL_OPTIMIZATION support
   # (except on older gcc where that breaks)
-  if(NOT CMAKE_COMPILER_IS_GNUCC OR CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 6.0)
+  if(NOT CMAKE_COMPILER_IS_GNUCC
+      OR CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 6.0)
     include(CheckIPOSupported)
     check_ipo_supported(RESULT IPO)
   else()
@@ -227,7 +225,7 @@ if(FUZZER)
     set(CMAKE_CXX_FLAGS
         "${CMAKE_CXX_FLAGS} -fsanitize=fuzzer,address,undefined")
   else()
-    message(WARNING "No fuzzer available")
+    message(FATAL_ERROR "No fuzzer available")
   endif()
 endif()
 
@@ -236,7 +234,6 @@ if(SPINBIT)
 endif()
 
 if(NOT CMAKE_BUILD_TYPE MATCHES Release AND HAVE_PROFILER)
-#  set(CMAKE_C_STANDARD_LIBRARIES "-lprofiler -ltcmalloc")
   set(CMAKE_C_STANDARD_LIBRARIES "-lprofiler")
   set(CMAKE_CXX_STANDARD_LIBRARIES ${CMAKE_C_STANDARD_LIBRARIES})
 endif()
