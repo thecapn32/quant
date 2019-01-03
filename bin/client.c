@@ -267,7 +267,7 @@ int main(int argc, char * argv[])
     bool flip_keys = false;
     int ret = 0;
 
-    while ((ch = getopt(argc, argv, "hi:v:s:t:cu3")) != -1) {
+    while ((ch = getopt(argc, argv, "hi:v:s:t:l:cu3")) != -1) {
         switch (ch) {
         case 'i':
             strncpy(ifname, optarg, sizeof(ifname) - 1);
