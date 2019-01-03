@@ -251,15 +251,8 @@ int main(int argc, char * argv[])
         first_conn = false;
 
         // do we need to q_accept?
-        size_t i = 0;
-        for (; i < num_ports; i++)
-            if (c == conn[i]) {
-                q_accept(0);
-                break;
-            }
-        if (i < num_ports)
-            continue;
-
+        if (q_is_new_serv_conn(c))
+            q_accept(0);
 
         while (1) {
             // do we need to handle a request?

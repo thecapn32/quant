@@ -387,13 +387,8 @@ cancel_api_call(struct ev_loop * const l __attribute__((unused)),
 
 struct q_conn * q_accept(const uint64_t timeout)
 {
-    if (sl_first(&accept_queue)) {
-        struct q_conn * const c = sl_first(&accept_queue);
-        sl_remove_head(&accept_queue, node_aq);
-        warn(WRN, "accepting queued %s conn %s", conn_type(c),
-             cid2str(c->scid));
-        return c;
-    }
+    if (sl_first(&accept_queue))
+        goto accept;
 
     warn(WRN, "waiting for conn on any serv sock (timeout %" PRIu64 " sec)",
          timeout);
@@ -408,18 +403,20 @@ struct q_conn * q_accept(const uint64_t timeout)
     loop_run(q_accept, 0, 0);
 
     if (sl_empty(&accept_queue)) {
-        warn(ERR, "conn not accepted");
+        warn(ERR, "no conn ready for accept");
         return 0;
     }
 
+accept:;
     struct q_conn * const c = sl_first(&accept_queue);
     sl_remove_head(&accept_queue, node_aq);
     ev_timer_again(loop, &c->idle_alarm);
+    c->needs_accept = false;
 
     warn(WRN, "%s conn %s accepted from clnt %s:%u%s, cipher %s", conn_type(c),
          cid2str(c->scid), inet_ntoa(c->peer.sin_addr), ntohs(c->peer.sin_port),
          c->did_0rtt ? " after 0-RTT" : "",
-         c->pn_data.in_1rtt[c->pn_data.in_kyph].aead->algo->name);
+         c->pn_data.out_1rtt[c->pn_data.out_kyph].aead->algo->name);
 
     return c;
 }
@@ -687,4 +684,10 @@ struct q_conn * q_rx_ready(const uint64_t timeout)
         warn(WRN, "%s conn %s ready to rx", conn_type(c), cid2str(c->scid));
     }
     return c;
+}
+
+
+bool q_is_new_serv_conn(const struct q_conn * const c)
+{
+    return c->needs_accept;
 }

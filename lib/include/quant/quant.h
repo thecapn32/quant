@@ -119,6 +119,9 @@ q_readall_stream(struct q_stream * const s, struct w_iov_sq * const q);
 
 extern struct q_conn * q_rx_ready(const uint64_t timeout);
 
+extern bool __attribute__((nonnull))
+q_is_new_serv_conn(const struct q_conn * const c);
+
 #ifdef __cplusplus
 }
 #endif

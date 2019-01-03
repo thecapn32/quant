@@ -175,15 +175,16 @@ struct q_conn {
     uint32_t tx_rtry : 1;          ///< We need to send a RETRY.
     uint32_t have_new_data : 1;    ///< New stream data was enqueued.
     uint32_t in_c_ready : 1;       ///< Connection is listed in c_ready.
+    uint32_t needs_accept : 1;     ///< Need to call q_accept() for connection.
     uint32_t tx_retire_cid : 1;    ///< Send RETIRE_CONNECTION_ID.
     uint32_t do_migration : 1;     ///< Perform a CID migration when possible.
     uint32_t do_key_flip : 1;      ///< Perform a TLS key update.
     uint32_t skip_cwnd_ping : 1;   ///< Skip sending PING to force ACK.
 #ifndef SPINBIT
-    uint32_t : 10;
+    uint32_t : 9;
 #else
     uint32_t next_spin : 1; ///< Spin value to set on next packet sent.
-    uint32_t : 9;
+    uint32_t : 8;
 #endif
 
     uint16_t sport; ///< Local port (in network byte-order).
