@@ -76,8 +76,7 @@ const uint32_t ok_vers[] = {
     0xbabababa, // XXX reserved version to trigger negotiation
 #endif
     0x00001234, // reserved version for inclusion in vneg response
-    0xff000010, // draft-ietf-quic-transport-16
-    0xff00000f, // draft-ietf-quic-transport-15
+    0xff000011, // draft-ietf-quic-transport-17
 };
 
 /// Length of the @p ok_vers array.
