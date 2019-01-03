@@ -340,7 +340,7 @@ int main(int argc, char * argv[])
         if (se->c == 0)
             continue;
 
-        q_readall_str(se->s, &i);
+        q_readall_stream(se->s, &i);
         q_close_stream(se->s);
         if (w_iov_sq_cnt(&i) == 0) {
             // no data read

@@ -348,14 +348,14 @@ again:;
 }
 
 
-void q_readall_str(struct q_stream * const s, struct w_iov_sq * const q)
+void q_readall_stream(struct q_stream * const s, struct w_iov_sq * const q)
 {
     struct q_conn * const c = s->c;
     while (c->state == conn_estb && s->state != strm_hcrm &&
            s->state != strm_clsd) {
         warn(WRN, "reading all on %s conn %s strm " FMT_SID, conn_type(c),
              cid2str(c->scid), s->id);
-        loop_run(q_readall_str, c, s);
+        loop_run(q_readall_stream, c, s);
     }
 
     // return data

@@ -273,7 +273,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
                 strm_to_state(meta(v).stream, meta(v).stream->state <= strm_hcrm
                                                   ? strm_hcrm
                                                   : strm_clsd);
-                maybe_api_return(q_readall_str, c, meta(v).stream);
+                maybe_api_return(q_readall_stream, c, meta(v).stream);
                 if (meta(v).stream->state == strm_clsd)
                     maybe_api_return(q_close_stream, c, meta(v).stream);
 

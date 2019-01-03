@@ -60,7 +60,7 @@ static inline uint32_t io(const uint32_t len)
     struct w_iov_sq i = w_iov_sq_initializer(i);
     struct q_stream * const ss = q_read(sc, &i, true);
     if (likely(ss) && !q_peer_has_closed_stream(ss))
-        q_readall_str(ss, &i);
+        q_readall_stream(ss, &i);
     if (likely(ss))
         q_close_stream(ss);
 

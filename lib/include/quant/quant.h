@@ -110,7 +110,7 @@ extern bool __attribute__((nonnull))
 q_peer_has_closed_stream(struct q_stream * const s);
 
 extern void __attribute__((nonnull))
-q_readall_str(struct q_stream * const s, struct w_iov_sq * const q);
+q_readall_stream(struct q_stream * const s, struct w_iov_sq * const q);
 
 extern struct q_conn * q_rx_ready(const uint64_t timeout);
 
