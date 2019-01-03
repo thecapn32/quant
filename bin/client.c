@@ -276,7 +276,7 @@ int main(int argc, char * argv[])
             strncpy(cache, optarg, sizeof(cache) - 1);
             break;
         case 't':
-            timeout = MIN(IDLE_TIMEOUT_MAX, strtoul(optarg, 0, 10));
+            timeout = MIN(600, strtoul(optarg, 0, 10)); // 10 min
             break;
         case 'l':
             strncpy(tls_log, optarg, sizeof(tls_log) - 1);

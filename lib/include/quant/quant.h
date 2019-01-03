@@ -41,8 +41,6 @@ extern "C" {
 struct w_iov_sq;
 struct q_stream;
 
-#define IDLE_TIMEOUT_MAX 600 // 10 minutes
-
 
 extern struct w_engine * __attribute__((nonnull(1)))
 q_init(const char * const ifname,

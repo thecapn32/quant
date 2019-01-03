@@ -210,7 +210,7 @@ int main(int argc, char * argv[])
                    MAXPORTS);
             break;
         case 't':
-            timeout = MIN(IDLE_TIMEOUT_MAX, strtoul(optarg, 0, 10));
+            timeout = MIN(600, strtoul(optarg, 0, 10)); // 10 min
             break;
         case 'v':
 #ifndef NDEBUG
