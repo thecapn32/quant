@@ -92,8 +92,6 @@ void *api_conn = 0, *api_strm = 0;
 
 struct q_conn_sl accept_queue = sl_head_initializer(accept_queue);
 
-static const uint32_t nbufs = 100000; ///< Number of packet buffers to allocate.
-
 static ev_timer api_alarm;
 
 
@@ -480,12 +478,7 @@ mk_or_open_dir(const char * const path, mode_t mode)
 
 
 struct w_engine * q_init(const char * const ifname,
-                         const char * const cert,
-                         const char * const key,
-                         const char * const cache,
-                         const char * const tls_log,
-                         const bool verify_certs,
-                         const bool flip_keys)
+                         const struct q_conf * const conf)
 {
     // check versions
     // ensure(WARPCORE_VERSION_MAJOR == 0 && WARPCORE_VERSION_MINOR == 12,
@@ -497,7 +490,14 @@ struct w_engine * q_init(const char * const ifname,
     conns_by_id = kh_init(conns_by_id);
 
     // initialize warpcore on the given interface
+    const uint32_t nbufs = conf->num_bufs ? conf->num_bufs : 10000;
+    if (conf->num_bufs == 0)
+        warn(WRN, "using default number of warpcore buffers (%u)", nbufs);
     struct w_engine * const w = w_init(ifname, 0, nbufs);
+    const uint64_t nbufs_ok = sq_len(&w->iov);
+    if (nbufs_ok < nbufs)
+        warn(WRN, "could only allocate %" PRIu64 "/%u warpcore buffers",
+             nbufs_ok, nbufs);
     pm = calloc(nbufs + 1, sizeof(*pm));
     ensure(pm, "could not calloc");
     ASAN_POISON_MEMORY_REGION(pm, (nbufs + 1) * sizeof(*pm));
@@ -520,7 +520,7 @@ struct w_engine * q_init(const char * const ifname,
     warn(INF, "submit bug reports at https://github.com/NTAP/quant/issues");
 
     // initialize TLS context
-    init_tls_ctx(cert, key, cache, tls_log, verify_certs, flip_keys);
+    init_tls_ctx(conf);
 
 #ifndef FUZZING
     // libev seems to need this inside docker to handle Ctrl-C?
@@ -612,7 +612,8 @@ void q_cleanup(struct w_engine * const w)
         free(zo);
     }
 
-    for (uint32_t i = 0; i <= nbufs; i++) {
+    // XXX: all bufs must have been returned for sq_len() to be correct
+    for (uint32_t i = 0; i <= sq_len(&w->iov); i++) {
         ASAN_UNPOISON_MEMORY_REGION(&pm[i], sizeof(pm[i]));
         if (pm[i].hdr.nr)
             warn(DBG, "buffer %u still in use for pkt %" PRIu64, i,

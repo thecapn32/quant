@@ -93,7 +93,7 @@ int main(int argc, char ** argv)
 #ifndef NDEBUG
     util_dlevel = INF;
 #endif
-    w = q_init(i, nullptr, nullptr, nullptr, nullptr, false, false);
+    w = q_init(i, nullptr);
     __extension__ struct cid cid = {
         .len = 4,
 #if defined(__GNUC__) && !defined(__clang__)

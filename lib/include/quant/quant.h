@@ -42,14 +42,19 @@ struct w_iov_sq;
 struct q_stream;
 
 
+struct q_conf {
+    const char * const ticket_store; // ignored for server
+    const char * const tls_cert;     // required for server
+    const char * const tls_key;      // required for server
+    const char * const tls_log;
+    const bool verify_certs;
+    const bool flip_keys;
+    const uint32_t num_bufs;
+};
+
+
 extern struct w_engine * __attribute__((nonnull(1)))
-q_init(const char * const ifname,
-       const char * const cert,
-       const char * const key,
-       const char * const cache,
-       const char * const tls_log,
-       const bool verify_certs,
-       const bool flip_keys);
+q_init(const char * const ifname, const struct q_conf * const conf);
 
 extern void __attribute__((nonnull)) q_cleanup(struct w_engine * const w);
 

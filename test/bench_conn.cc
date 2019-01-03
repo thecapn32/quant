@@ -103,12 +103,14 @@ int main(int argc __attribute__((unused)), char ** argv)
     const int cwd = open(".", O_CLOEXEC);
     ensure(cwd != -1, "cannot open");
     ensure(chdir(dirname(argv[0])) == 0, "cannot chdir");
+    __extension__ const struct q_conf conf = {.tls_cert = "dummy.crt",
+                                              .tls_key = "dummy.key"};
     w = q_init("lo"
 #ifndef __linux__
                "0"
 #endif
                ,
-               "dummy.crt", "dummy.key", nullptr, nullptr, false, true);
+               &conf);
     ensure(fchdir(cwd) == 0, "cannot fchdir");
 
     // bind server socket

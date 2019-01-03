@@ -1124,23 +1124,14 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
 }
 
 
-void init_tls_ctx(const char * const cert,
-                  const char * const key,
-                  const char * const ticket_store,
-                  const char * const tls_log,
-                  const bool verify_certs
-#ifndef PTLS_OPENSSL
-                  __attribute__((unused))
-#endif
-                  ,
-                  const bool flip_keys)
+void init_tls_ctx(const struct q_conf * const conf)
 {
-    do_tls_key_flips = flip_keys;
+    do_tls_key_flips = conf->flip_keys;
 
-    if (key) {
+    if (conf->tls_key) {
 #ifdef PTLS_OPENSSL
-        FILE * const fp = fopen(key, "rbe");
-        ensure(fp, "could not open key %s", key);
+        FILE * const fp = fopen(conf->tls_key, "rbe");
+        ensure(fp, "could not open key %s", conf->tls_key);
         EVP_PKEY * const pkey = PEM_read_PrivateKey(fp, 0, 0, 0);
         fclose(fp);
         ensure(pkey, "failed to load private key");
@@ -1148,18 +1139,20 @@ void init_tls_ctx(const char * const cert,
         EVP_PKEY_free(pkey);
 #else
         // XXX ptls_minicrypto_load_private_key() only works for ECDSA keys
-        const int ret = ptls_minicrypto_load_private_key(&tls_ctx, key);
-        ensure(ret == 0, "could not open key %s", key);
+        const int ret =
+            ptls_minicrypto_load_private_key(&tls_ctx, conf->tls_key);
+        ensure(ret == 0, "could not open key %s", conf->tls_key);
 #endif
     }
 
-    if (cert) {
-        const int ret = ptls_load_certificates(&tls_ctx, cert);
+    if (conf->tls_cert) {
+        const int ret = ptls_load_certificates(&tls_ctx, conf->tls_cert);
         ensure(ret == 0, "ptls_load_certificates");
     }
 
-    if (ticket_store) {
-        strncpy(tickets.file_name, ticket_store, MAXPATHLEN);
+    if (conf->ticket_store) {
+        strncpy(tickets.file_name, conf->ticket_store,
+                sizeof(tickets.file_name));
         tls_ctx.save_ticket = &save_ticket;
         read_tickets();
     } else {
@@ -1169,9 +1162,9 @@ void init_tls_ctx(const char * const cert,
         tls_ctx.require_dhe_on_psk = 0;
     }
 
-    if (tls_log) {
-        tls_log_file = fopen(tls_log, "wbe");
-        ensure(tls_log_file, "could not open TLS log %s", tls_log);
+    if (conf->tls_log) {
+        tls_log_file = fopen(conf->tls_log, "wbe");
+        ensure(tls_log_file, "could not open TLS log %s", conf->tls_log);
     }
 
 #ifdef PTLS_OPENSSL
@@ -1198,7 +1191,7 @@ void init_tls_ctx(const char * const cert,
     tls_ctx.key_exchanges = key_exchanges;
     tls_ctx.on_client_hello = &on_client_hello;
     tls_ctx.update_traffic_key = &update_traffic_key;
-    if (tls_log)
+    if (conf->tls_log)
         tls_ctx.log_secret = &log_secret;
     tls_ctx.random_bytes =
 #ifdef PTLS_OPENSSL
@@ -1209,7 +1202,7 @@ void init_tls_ctx(const char * const cert,
 
 #ifdef PTLS_OPENSSL
     tls_ctx.sign_certificate = &sign_cert.super;
-    if (verify_certs)
+    if (conf->verify_certs)
         tls_ctx.verify_certificate = &verifier.super;
 #endif
     tls_ctx.get_time = &ptls_get_time;

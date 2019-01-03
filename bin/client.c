@@ -304,7 +304,11 @@ int main(int argc, char * argv[])
     }
 
     struct w_engine * const w =
-        q_init(ifname, 0, 0, cache, tls_log, verify_certs, flip_keys);
+        q_init(ifname, &(const struct q_conf){.num_bufs = 100000,
+                                              .ticket_store = cache,
+                                              .tls_log = tls_log,
+                                              .verify_certs = verify_certs,
+                                              .flip_keys = flip_keys});
     struct conn_cache cc = splay_initializer(cc);
     struct http_parser_url u = {0};
 

@@ -36,6 +36,7 @@
 struct q_conn;
 struct w_iov;
 struct q_stream;
+struct q_conf;
 
 
 #define AEAD_LEN 16
@@ -76,12 +77,7 @@ extern void __attribute__((nonnull)) free_tls(struct q_conn * const c);
 extern int __attribute__((nonnull(1)))
 tls_io(struct q_stream * const s, struct w_iov * const iv);
 
-extern void init_tls_ctx(const char * const cert,
-                         const char * const key,
-                         const char * const ticket_store,
-                         const char * const tls_log,
-                         const bool verify_certs,
-                         const bool flip_keys);
+extern void init_tls_ctx(const struct q_conf * const conf);
 
 extern void free_tls_ctx(void);
 
