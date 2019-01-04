@@ -28,7 +28,7 @@
 #include <stdint.h>
 
 
-extern uint16_t __attribute__((const)) varint_size_needed(const uint64_t v);
+extern uint8_t __attribute__((const)) varint_size_needed(const uint64_t v);
 
 #ifndef NDEBUG
 #define DEBUG_MARSHALL

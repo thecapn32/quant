@@ -39,29 +39,32 @@ struct w_iov;
 struct cid;
 
 
-#define FRAM_TYPE_PAD 0x00
-#define FRAM_TYPE_RST_STRM 0x01
-#define FRAM_TYPE_CONN_CLSE 0x02
-#define FRAM_TYPE_APPL_CLSE 0x03
-#define FRAM_TYPE_MAX_DATA 0x04
-#define FRAM_TYPE_MAX_STRM_DATA 0x05
-#define FRAM_TYPE_MAX_SID 0x06
-#define FRAM_TYPE_PING 0x07
-#define FRAM_TYPE_BLCK 0x08
-#define FRAM_TYPE_STRM_BLCK 0x09
-#define FRAM_TYPE_SID_BLCK 0x0a
-#define FRAM_TYPE_NEW_CID 0x0b
-#define FRAM_TYPE_STOP_SEND 0x0c
-#define FRAM_TYPE_RTIR_CID 0x0d
-#define FRAM_TYPE_PATH_CHLG 0x0e
-#define FRAM_TYPE_PATH_RESP 0x0f
-#define FRAM_TYPE_STRM 0x10 // we only encode this type in the frames bitstr_t
-#define FRAM_TYPE_STRM_MAX 0x17
-#define FRAM_TYPE_CRPT 0x18
-#define FRAM_TYPE_NEW_TOKN 0x19
-#define FRAM_TYPE_ACK 0x1a // we only encode this type in the frames bitstr_t
-#define FRAM_TYPE_ACK_ECN 0x1b
-#define NUM_FRAM_TYPES (FRAM_TYPE_ACK_ECN + 1)
+#define FRM_PAD 0x00 ///< PADDING
+#define FRM_PNG 0x01 ///< PING
+#define FRM_ACK 0x02 ///< ACK (only type encoded in the frames bitstr_t)
+#define FRM_ACE 0x03 ///< ACK w/ECN
+#define FRM_RST 0x04 ///< RESET_STREAM
+#define FRM_STP 0x05 ///< STOP_SENDING
+#define FRM_CRY 0x06 ///< CRYPTO
+#define FRM_TOK 0x07 ///< NEW_TOKEN
+#define FRM_STR 0x08 ///< STREAM (only type encoded in the frames bitstr_t)
+#define FRM_STR_MAX 0x0f
+#define FRM_MCD 0x10 ///< MAX_DATA (connection)
+#define FRM_MSD 0x11 ///< MAX_STREAM_DATA
+#define FRM_MSB 0x12 ///< MAX_STREAMS (bidirectional)
+#define FRM_MSU 0x13 ///< MAX_STREAMS (unidirectional)
+#define FRM_CDB 0x14 ///< (connection) DATA_BLOCKED
+#define FRM_SDB 0x15 ///< STREAM_DATA_BLOCKED
+#define FRM_SBB 0x16 ///< STREAMS_BLOCKED (bidirectional)
+#define FRM_SBU 0x17 ///< STREAMS_BLOCKED (unidirectional)
+#define FRM_CID 0x18 ///< NEW_CONNECTION_ID
+#define FRM_RTR 0x19 ///< RETIRE_CONNECTION_ID
+#define FRM_PCL 0x1a ///< PATH_CHALLENGE
+#define FRM_PRP 0x1b ///< PATH_RESPONSE
+#define FRM_CLQ 0x1c ///< CONNECTION_CLOSE (QUIC layer)
+#define FRM_CLA 0x1d ///< CONNECTION_CLOSE (application)
+
+#define NUM_FRAM_TYPES (FRM_CLA + 1)
 
 #define F_STREAM_FIN 0x01
 #define F_STREAM_LEN 0x02
@@ -139,10 +142,10 @@ enc_max_data_frame(struct q_conn * const c,
                    const uint16_t pos);
 
 extern uint16_t __attribute__((nonnull))
-enc_max_stream_id_frame(struct q_conn * const c,
-                        struct w_iov * const v,
-                        const uint16_t pos,
-                        const bool bidi);
+enc_max_streams_frame(struct q_conn * const c,
+                      struct w_iov * const v,
+                      const uint16_t pos,
+                      const bool bidi);
 
 extern uint16_t __attribute__((nonnull))
 enc_stream_blocked_frame(struct q_stream * const s,

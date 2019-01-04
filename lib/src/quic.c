@@ -428,7 +428,7 @@ struct q_stream * q_rsv_stream(struct q_conn * const c, const bool bidi)
 
     int64_t * const next_sid = bidi ? &c->next_sid_bidi : &c->next_sid_uni;
     int64_t * const max_streams =
-        bidi ? &c->tp_out.max_bidi_streams : &c->tp_out.max_uni_streams;
+        bidi ? &c->tp_out.max_streams_bidi : &c->tp_out.max_streams_uni;
 
     if (unlikely(*next_sid >> 2 > *max_streams)) {
         // we hit the max stream limit, wait for MAX_STREAM_ID frame

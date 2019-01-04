@@ -44,10 +44,10 @@
 
 #define LH (HEAD_FORM | HEAD_FIXD)
 #define LH_TYPE_MASK 0x30 ///< long header: packet type mask
-#define LH_INIT 0x0       ///< long header packet type: Initial
-#define LH_0RTT 0x1       ///< long header packet type: 0-RTT Protected
-#define LH_HSHK 0x2       ///< long header packet type: Handshake
-#define LH_RTRY 0x3       ///< long header packet type: Retry
+#define LH_INIT 0x00      ///< long header packet type: Initial
+#define LH_0RTT 0x10      ///< long header packet type: 0-RTT Protected
+#define LH_HSHK 0x20      ///< long header packet type: Handshake
+#define LH_RTRY 0x30      ///< long header packet type: Retry
 #define LH_RSVD_MASK 0x0c ///< long header: reserved bits mask (= 0)
 
 #define SH HEAD_FIXD
@@ -55,10 +55,6 @@
 #define SH_RSVD_MASK 0x18 ///< short header: reserved bits mask (= 0)
 #define SH_KYPH 0x04      ///< short header: key phase bit
 
-// #define SH_EXP_MASK 0x07
-
-
-// #define SH_MASK 0xb8
 
 #define ERR_NONE 0x0
 #define ERR_INTERNAL 0x1
@@ -83,7 +79,7 @@ is_lh(const uint8_t flags)
 static inline uint8_t __attribute__((always_inline, const))
 pkt_type(const uint8_t flags)
 {
-    return is_lh(flags) ? (flags & LH_TYPE_MASK) : SH;
+    return is_lh(flags) ? flags & LH_TYPE_MASK : SH;
 }
 
 

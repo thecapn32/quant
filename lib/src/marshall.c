@@ -59,7 +59,7 @@
 ///
 /// @return     Number of bytes needed in varint encoding (1, 2, 4 or 8).
 ///
-uint16_t varint_size_needed(const uint64_t v)
+uint8_t varint_size_needed(const uint64_t v)
 {
     if (v < 0x40)
         return 1;

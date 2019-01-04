@@ -106,16 +106,16 @@ struct transport_params {
     uint64_t max_strm_data_bidi_remote;
     uint64_t max_data;
     uint64_t new_max_data;
-    int64_t max_uni_streams; // this is count, not a max ID
-    int64_t new_max_uni_streams;
-    int64_t max_bidi_streams; // this is count, not a max ID
-    int64_t new_max_bidi_streams;
+    int64_t max_streams_uni;
+    int64_t new_max_streams_uni;
+    int64_t max_streams_bidi;
+    int64_t new_max_streams_bidi;
+    uint64_t max_ack_del;
     uint16_t max_pkt;
     uint16_t idle_to;
     uint8_t ack_del_exp;
-    uint8_t max_ack_del;
     bool disable_migration;
-    uint8_t _unused;
+    uint8_t _unused[2];
     struct cid orig_cid;
 };
 

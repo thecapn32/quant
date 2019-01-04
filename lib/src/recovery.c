@@ -293,7 +293,7 @@ void on_pkt_sent(struct q_stream * const s, struct w_iov * const v)
     ensure(splay_insert(pm_by_nr, &pn->sent_pkts, &meta(v)) == 0, "inserted");
 
     if (likely(is_ack_only(&meta(v).frames) == false)) {
-        if (unlikely(has_frame(v, FRAM_TYPE_CRPT)))
+        if (unlikely(has_frame(v, FRM_CRY)))
             // is_crypto_packet
             c->rec.last_sent_crypto_t = meta(v).tx_t;
         c->rec.last_sent_rtxable_t = meta(v).tx_t;
@@ -450,12 +450,12 @@ void on_pkt_acked(struct q_conn * const c,
     // rest of function is not from pseudo code
 
     // if this ACKs a CLOSE frame, move to conn_drng
-    if (c->state == conn_clsg && (has_frame(acked_pkt, FRAM_TYPE_CONN_CLSE) ||
-                                  has_frame(acked_pkt, FRAM_TYPE_APPL_CLSE)))
+    if (c->state == conn_clsg &&
+        (has_frame(acked_pkt, FRM_CLQ) || has_frame(acked_pkt, FRM_CLA)))
         conn_to_state(c, conn_drng);
 
     // if this ACKs a current MAX_STREAM_DATA frame, we can stop sending it
-    if (has_frame(acked_pkt, FRAM_TYPE_MAX_STRM_DATA)) {
+    if (has_frame(acked_pkt, FRM_MSD)) {
         struct q_stream * const s =
             get_stream(c, meta(acked_pkt).max_stream_data_sid);
         if (s && s->new_in_data_max == meta(acked_pkt).max_stream_data)
@@ -463,17 +463,17 @@ void on_pkt_acked(struct q_conn * const c,
     }
 
     // if this ACKs the current MAX_DATA frame, we can stop sending it
-    if (has_frame(acked_pkt, FRAM_TYPE_MAX_DATA) &&
+    if (has_frame(acked_pkt, FRM_MCD) &&
         c->tp_in.new_max_data == meta(acked_pkt).max_data)
         c->tx_max_data = false;
 
-    // if this ACKs the current MAX_STREAM_ID frame, we can stop sending it
-    if (has_frame(acked_pkt, FRAM_TYPE_MAX_SID)) {
-        if (c->tp_in.new_max_bidi_streams == meta(acked_pkt).max_bidi_streams)
-            c->tx_max_sid_bidi = false;
-        if (c->tp_in.new_max_uni_streams == meta(acked_pkt).max_uni_streams)
-            c->tx_max_sid_uni = false;
-    }
+    // if this ACKs a current MAX_STREAMS frame, we can stop sending it
+    if (has_frame(acked_pkt, FRM_MSB) &&
+        c->tp_in.new_max_streams_bidi == meta(acked_pkt).max_streams_bidi)
+        c->tx_max_sid_bidi = false;
+    if (has_frame(acked_pkt, FRM_MSU) &&
+        c->tp_in.new_max_streams_uni == meta(acked_pkt).max_streams_uni)
+        c->tx_max_sid_uni = false;
 
     // if this ACK is for a pkt that was RTX'ed, update the record
     struct w_iov * orig = 0;
@@ -512,7 +512,7 @@ void on_pkt_acked(struct q_conn * const c,
     }
 
     // stop ACKing packets that were contained in the ACK frame of this packet
-    if (has_frame(acked_pkt, FRAM_TYPE_ACK))
+    if (has_frame(acked_pkt, FRM_ACK))
         track_acked_pkts(pn, acked_pkt);
 
     if (!is_rtxable(&meta(acked_pkt)))

@@ -298,18 +298,17 @@ enc_other_frames(struct q_stream * const s,
     uint16_t i = pos;
 
     // encode connection control frames
-    if (!c->is_clnt && c->tok_len &&
-        have_space_for(FRAM_TYPE_NEW_TOKN, i, lim)) {
+    if (!c->is_clnt && c->tok_len && have_space_for(FRM_TOK, i, lim)) {
         i = enc_new_token_frame(c, v, i);
         c->tok_len = 0;
     }
 
-    if (c->tx_path_resp && have_space_for(FRAM_TYPE_PATH_RESP, i, lim)) {
+    if (c->tx_path_resp && have_space_for(FRM_PRP, i, lim)) {
         i = enc_path_response_frame(c, v, i);
         c->tx_path_resp = false;
     }
 
-    if (c->tx_retire_cid && have_space_for(FRAM_TYPE_RTIR_CID, i, lim)) {
+    if (c->tx_retire_cid && have_space_for(FRM_RTR, i, lim)) {
         struct cid * rcid = splay_min(cids_by_seq, &c->dcids_by_seq);
         while (rcid && rcid->seq < c->dcid->seq) {
             struct cid * const next =
@@ -322,37 +321,36 @@ enc_other_frames(struct q_stream * const s,
         }
     }
 
-    if (c->tx_path_chlg && have_space_for(FRAM_TYPE_PATH_CHLG, i, lim))
+    if (c->tx_path_chlg && have_space_for(FRM_PCL, i, lim))
         i = enc_path_challenge_frame(c, v, i);
 
-    if (c->tx_ncid && have_space_for(FRAM_TYPE_NEW_CID, i, lim))
+    if (c->tx_ncid && have_space_for(FRM_CID, i, lim))
         i = enc_new_cid_frame(c, v, i);
 
-    if (c->blocked && have_space_for(FRAM_TYPE_BLCK, i, lim))
+    if (c->blocked && have_space_for(FRM_CDB, i, lim))
         i = enc_blocked_frame(c, v, i);
 
-    if (c->tx_max_data && have_space_for(FRAM_TYPE_MAX_DATA, i, lim))
+    if (c->tx_max_data && have_space_for(FRM_MCD, i, lim))
         i = enc_max_data_frame(c, v, i);
 
-    if (c->sid_blocked_bidi && have_space_for(FRAM_TYPE_SID_BLCK, i, lim))
+    if (c->sid_blocked_bidi && have_space_for(FRM_SBB, i, lim))
         i = enc_stream_id_blocked_frame(c, v, i, true);
 
-    if (c->sid_blocked_uni && have_space_for(FRAM_TYPE_SID_BLCK, i, lim))
+    if (c->sid_blocked_uni && have_space_for(FRM_SBB, i, lim))
         i = enc_stream_id_blocked_frame(c, v, i, false);
 
-    if (c->tx_max_sid_bidi && have_space_for(FRAM_TYPE_MAX_SID, i, lim))
-        i = enc_max_stream_id_frame(c, v, i, true);
+    if (c->tx_max_sid_bidi && have_space_for(FRM_MSB, i, lim))
+        i = enc_max_streams_frame(c, v, i, true);
 
-    if (c->tx_max_sid_uni && have_space_for(FRAM_TYPE_MAX_SID, i, lim))
-        i = enc_max_stream_id_frame(c, v, i, false);
+    if (c->tx_max_sid_uni && have_space_for(FRM_MSU, i, lim))
+        i = enc_max_streams_frame(c, v, i, false);
 
     if (s->id >= 0) {
         // encode stream control frames
-        if (s->blocked && have_space_for(FRAM_TYPE_SID_BLCK, i, lim))
+        if (s->blocked && have_space_for(FRM_SBB, i, lim))
             i = enc_stream_blocked_frame(s, v, i);
 
-        if (s->tx_max_stream_data &&
-            have_space_for(FRAM_TYPE_MAX_STRM_DATA, i, lim))
+        if (s->tx_max_stream_data && have_space_for(FRM_MSD, i, lim))
             i = enc_max_stream_data_frame(s, v, i);
     }
 
@@ -365,7 +363,7 @@ bool enc_pkt(struct q_stream * const s,
              const bool enc_data,
              struct w_iov * const v)
 {
-    if (enc_data)
+    if (likely(enc_data))
         // prepend the header by adjusting the buffer offset
         adj_iov_to_start(v);
 
@@ -373,8 +371,7 @@ bool enc_pkt(struct q_stream * const s,
     uint16_t i = 0, len_pos = 0;
 
     const epoch_t epoch = strm_epoch(s);
-    struct pn_space * const pn = pn_for_epoch(c, epoch);
-    meta(v).pn = pn;
+    struct pn_space * const pn = meta(v).pn = pn_for_epoch(c, epoch);
 
     if (unlikely(c->tx_rtry))
         meta(v).hdr.nr = 0;
@@ -630,7 +627,7 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
         xv->user_data = xv->len;
 
     dec_chk(&meta(v).hdr.flags, xv->buf, xv->len, 0, 1, "0x%02x");
-    meta(v).hdr.type = pkt_type(*xv->buf); // XXX can we use this yet?
+    meta(v).hdr.type = pkt_type(*xv->buf);
 
     if (unlikely(is_lh(meta(v).hdr.flags))) {
         dec_chk(&meta(v).hdr.vers, xv->buf, xv->len, 1, 4, "0x%08x");
@@ -715,7 +712,6 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
                 return false;
             }
         }
-
         return true;
     }
 
@@ -802,17 +798,21 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
                            struct q_conn * const c,
                            struct w_iov_sq * const x)
 {
-    const struct cipher_ctx * ctx = which_cipher_ctx_in(c, meta(v).hdr.flags);
+    const struct cipher_ctx * ctx = which_cipher_ctx_in(
+        c,
+        // the pp context does not depend on the SH kyph bit
+        is_lh(meta(v).hdr.flags) ? meta(v).hdr.flags
+                                 : meta(v).hdr.flags & ~SH_KYPH);
     if (unlikely(ctx->pne == 0 || ctx->aead == 0)) {
-        if (is_lh(meta(v).hdr.flags) == false &&
-            is_set(SH_KYPH, meta(v).hdr.flags) != c->pn_data.in_kyph) {
-            // this might be the first key phase flip
-            flip_keys(c, false);
-            ctx = which_cipher_ctx_in(c, meta(v).hdr.flags);
-            if (unlikely(ctx->pne == 0 || ctx->aead == 0))
-                return false;
-        } else
-            return false;
+        // if (is_lh(meta(v).hdr.flags) == false &&
+        //     is_set(SH_KYPH, meta(v).hdr.flags) != c->pn_data.in_kyph) {
+        //     // this might be the first key phase flip
+        //     flip_keys(c, false);
+        //     ctx = which_cipher_ctx_in(c, meta(v).hdr.flags);
+        //     if (unlikely(ctx->pne == 0 || ctx->aead == 0))
+        //         return false;
+        // } else
+        return false;
     }
 
     bool first_try = true;
@@ -823,6 +823,7 @@ try_again:
         return false;
 
     // we can now try and verify the packet protection
+    ctx = which_cipher_ctx_in(c, meta(v).hdr.flags);
     const uint16_t pkt_len = is_lh(meta(v).hdr.flags)
                                  ? meta(v).hdr.hdr_len + meta(v).hdr.len -
                                        pkt_nr_len(meta(v).hdr.flags)
@@ -878,8 +879,8 @@ try_again:
             xv->len = pkt_len;
             // rx() has already removed xv from x, so just insert dup at head
             sq_insert_head(x, dup, next);
-            warn(DBG, "split out coalesced %s pkt of len %u",
-                 pkt_type_str(*dup->buf, &dup->buf[1]), dup->len);
+            warn(DBG, "split out coalesced %s (0x%02x) pkt of len %u",
+                 pkt_type_str(*dup->buf, &dup->buf[1]), *dup->buf, dup->len);
         }
 
     } else {

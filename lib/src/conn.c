@@ -481,7 +481,7 @@ void tx_tlp(struct q_conn * const c)
     struct w_iov * v = 0;
     splay_foreach_rev (p, pm_by_nr, &pn->sent_pkts) {
         v = w_iov(c->w, p->is_rtx ? pm_idx(sl_first(&p->rtx)) : pm_idx(p));
-        if (has_frame(v, FRAM_TYPE_CRPT) || has_frame(v, FRAM_TYPE_STRM))
+        if (has_frame(v, FRM_CRY) || has_frame(v, FRM_STR))
             break;
     }
     if (unlikely(v == 0 || meta(v).stream == 0)) {
@@ -742,7 +742,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             goto done;
 
         // if the CH doesn't include any crypto frames, bail
-        if (has_frame(v, FRAM_TYPE_CRPT) == false) {
+        if (has_frame(v, FRM_CRY) == false) {
             warn(ERR, "initial pkt w/o crypto frames");
             enter_closing(c);
             goto done;
@@ -1326,8 +1326,8 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->tp_in.max_strm_data_uni = INIT_STRM_DATA_UNI;
     c->tp_in.max_strm_data_bidi_local = c->tp_in.max_strm_data_bidi_remote =
         INIT_STRM_DATA_BIDI;
-    c->tp_in.max_bidi_streams = INIT_MAX_BIDI_STREAMS;
-    c->tp_in.max_uni_streams = INIT_MAX_UNI_STREAMS;
+    c->tp_in.max_streams_bidi = INIT_MAX_BIDI_STREAMS;
+    c->tp_in.max_streams_uni = INIT_MAX_UNI_STREAMS;
 
     // initialize recovery state
     init_rec(c);

@@ -26,6 +26,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <assert.h>
+#include <inttypes.h>
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -130,24 +131,23 @@ static FILE * tls_log_file;
 
 static bool do_tls_key_flips = false;
 
-#define TLS_EXT_TYPE_TRANSPORT_PARAMETERS 0xffa5
+#define QUIC_TP 0xffa5
 
-#define TP_INITIAL_MAX_STREAM_DATA_BIDI_LOCAL 0
-#define TP_INITIAL_MAX_DATA 1
-#define TP_INITIAL_MAX_BIDI_STREAMS 2
-#define TP_IDLE_TIMEOUT 3
-// #define TP_PREFERRED_ADDRESS 4
-#define TP_MAX_PACKET_SIZE 5
-#define TP_STATELESS_RESET_TOKEN 6
-#define TP_ACK_DELAY_EXPONENT 7
-#define TP_INITIAL_MAX_UNI_STREAMS 8
-#define TP_DISABLE_MIGRATION 9
-#define TP_INITIAL_MAX_STREAM_DATA_BIDI_REMOTE 10
-#define TP_INITIAL_MAX_STREAM_DATA_UNI 11
-#define TP_MAX_ACK_DELAY 12
-#define TP_ORIGINAL_CONNECTION_ID 13
-
-#define TP_MAX (TP_ORIGINAL_CONNECTION_ID + 1)
+#define TP_OCID 0x00    ///< original_connection_id
+#define TP_IDTO 0x01    ///< idle_timeout
+#define TP_SRT 0x02     ///< stateless_reset_token
+#define TP_MPS 0x03     ///< max_packet_size
+#define TP_IMD 0x04     ///< initial_max_data
+#define TP_IMSD_BL 0x05 ///< initial_max_stream_data_bidi_local
+#define TP_IMSD_BR 0x06 ///< initial_max_stream_data_bidi_remote
+#define TP_IMSD_U 0x07  ///< initial_max_stream_data_uni
+#define TP_IMSB 0x08    ///< initial_max_streams_bidi
+#define TP_IMSU 0x09    ///< initial_max_streams_uni
+#define TP_ADE 0x0a     ///< ack_delay_exponent
+#define TP_MAD 0x0b     ///< max_ack_delay
+#define TP_DMIG 0x0c    ///< disable_migration
+#define TP_PRFA 0x0d    ///< preferred_address
+#define TP_MAX (TP_PRFA + 1)
 
 
 // quicly shim
@@ -339,7 +339,7 @@ static int filter_tp(ptls_t * tls __attribute__((unused)),
                      __attribute__((unused)),
                      uint16_t type)
 {
-    return type == TLS_EXT_TYPE_TRANSPORT_PARAMETERS;
+    return type == QUIC_TP;
 }
 
 
@@ -387,17 +387,23 @@ static uint16_t chk_tp_serv(const struct q_conn * const c,
 }
 
 
-#define dec_tp(var, w)                                                         \
+#define dec_tp(var)                                                            \
+    __extension__({                                                            \
+        uint16_t l;                                                            \
+        i = dec(&l, buf, len, i, sizeof(l), "%u");                             \
+        ensure(l <= sizeof(uint64_t), "invalid len %u", l);                    \
+        if (l)                                                                 \
+            i = dec((var), buf, len, i, 0, "%u");                              \
+        l;                                                                     \
+    })
+
+#define dec_tp_buf(var, w)                                                     \
     __extension__({                                                            \
         uint16_t l;                                                            \
         i = dec(&l, buf, len, i, sizeof(l), "%u");                             \
         ensure(l <= (w), "invalid len %u", l);                                 \
-        if (l) {                                                               \
-            if (l == (w))                                                      \
-                i = dec((var), buf, len, i, (w), "%u");                        \
-            else                                                               \
-                i = dec_buf((var), buf, len, i, l);                            \
-        }                                                                      \
+        if (l)                                                                 \
+            i = dec_buf((var), buf, len, i, l);                                \
         l;                                                                     \
     })
 
@@ -406,7 +412,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                   ptls_handshake_properties_t * properties,
                   ptls_raw_extension_t * slots)
 {
-    ensure(slots[0].type == TLS_EXT_TYPE_TRANSPORT_PARAMETERS, "have tp");
+    ensure(slots[0].type == QUIC_TP, "have tp");
     ensure(slots[1].type == UINT16_MAX, "have end");
 
     // get connection based on properties pointer
@@ -426,9 +432,9 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
     uint16_t tpl;
     i = dec(&tpl, buf, len, i, sizeof(tpl), "%u");
-    if (unlikely(tpl != len - i)) {
-        err_close(c, ERR_TRANSPORT_PARAMETER, FRAM_TYPE_CRPT,
-                  "tp len %u is incorrect", tpl);
+    if (tpl != len - i) {
+        err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY, "tp len %u incorrect",
+                  tpl);
         return 1;
     }
     len = i + tpl;
@@ -451,111 +457,121 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         }
 
         // check if this transport parameter is a duplicate
-        if (unlikely(bit_isset(TP_MAX, tp, &tp_list))) {
-            err_close(c, ERR_TRANSPORT_PARAMETER, FRAM_TYPE_CRPT,
+        if (bit_isset(TP_MAX, tp, &tp_list)) {
+            err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
                       "duplicate tp 0x%04x", tp);
             return 1;
         }
         bit_set(TP_MAX, tp, &tp_list);
 
         switch (tp) {
-        case TP_INITIAL_MAX_STREAM_DATA_UNI:
-            dec_tp(&c->tp_out.max_strm_data_uni, sizeof(uint32_t));
+        case TP_IMSD_U:
+            dec_tp(&c->tp_out.max_strm_data_uni);
             warn(INF, "\tinitial_max_stream_data_uni = %u",
                  c->tp_out.max_strm_data_uni);
             break;
 
-        case TP_INITIAL_MAX_STREAM_DATA_BIDI_LOCAL:
-            dec_tp(&c->tp_out.max_strm_data_bidi_remote, sizeof(uint32_t));
+        case TP_IMSD_BL:
+            dec_tp(&c->tp_out.max_strm_data_bidi_remote);
             warn(INF, "\tinitial_max_stream_data_bidi_local = %u",
                  c->tp_out.max_strm_data_bidi_remote);
             break;
 
-        case TP_INITIAL_MAX_STREAM_DATA_BIDI_REMOTE:
+        case TP_IMSD_BR:
             // this is RX'ed as _remote, but applies to streams we open, so:
-            dec_tp(&c->tp_out.max_strm_data_bidi_local, sizeof(uint32_t));
+            dec_tp(&c->tp_out.max_strm_data_bidi_local);
             warn(INF, "\tinitial_max_stream_data_bidi_remote = %u",
                  c->tp_out.max_strm_data_bidi_local);
             break;
 
-        case TP_INITIAL_MAX_DATA:
-            dec_tp(&c->tp_out.max_data, sizeof(uint32_t));
+        case TP_IMD:
+            dec_tp(&c->tp_out.max_data);
             warn(INF, "\tinitial_max_data = %u", c->tp_out.max_data);
             break;
 
-        case TP_INITIAL_MAX_BIDI_STREAMS:
-            dec_tp(&c->tp_out.max_bidi_streams, sizeof(uint16_t));
-            warn(INF, "\tinitial_max_bidi_streams = %u",
-                 c->tp_out.max_bidi_streams);
+        case TP_IMSB:
+            dec_tp(&c->tp_out.max_streams_bidi);
+            warn(INF, "\tinitial_max_streams_bidi = %u",
+                 c->tp_out.max_streams_bidi);
             break;
 
-        case TP_INITIAL_MAX_UNI_STREAMS:
-            dec_tp(&c->tp_out.max_uni_streams, sizeof(uint16_t));
-            warn(INF, "\tinitial_max_uni_streams = %u",
-                 c->tp_out.max_uni_streams);
+        case TP_IMSU:
+            dec_tp(&c->tp_out.max_streams_uni);
+            warn(INF, "\tinitial_max_streams_uni = %u",
+                 c->tp_out.max_streams_uni);
             break;
 
-        case TP_IDLE_TIMEOUT:
-            dec_tp(&c->tp_out.idle_to, sizeof(uint16_t));
-            warn(INF, "\tidle_timeout = %u", c->tp_out.idle_to);
-            if (c->tp_out.idle_to > 600)
-                warn(ERR, "idle timeout %u > 600", c->tp_out.idle_to);
-            break;
-
-        case TP_MAX_PACKET_SIZE:
-            dec_tp(&c->tp_out.max_pkt, sizeof(uint16_t));
-            warn(INF, "\tmax_packet_size = %u", c->tp_out.max_pkt);
-            if (c->tp_out.max_pkt < 1200 || c->tp_out.max_pkt > 65527)
-                warn(ERR, "tp_out.max_pkt %u invalid", c->tp_out.max_pkt);
-            break;
-
-        case TP_ACK_DELAY_EXPONENT:
-            dec_tp(&c->tp_out.ack_del_exp, sizeof(uint8_t));
-            warn(INF, "\tack_delay_exponent = %u", c->tp_out.ack_del_exp);
-            if (unlikely(c->tp_out.ack_del_exp > 20)) {
-                err_close(c, ERR_TRANSPORT_PARAMETER, FRAM_TYPE_CRPT,
-                          "ack_delay_exponent %u invalid",
-                          c->tp_out.ack_del_exp);
+        case TP_IDTO:;
+            uint64_t idto = 0;
+            dec_tp(&idto);
+            warn(INF, "\tidle_timeout = %" PRIu64, idto);
+            if (idto > 600) {
+                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
+                          "idle_timeout %" PRIu64 " > 600", idto);
                 return 1;
             }
+            c->tp_out.idle_to = (uint16_t)idto;
             break;
 
-        case TP_MAX_ACK_DELAY:
-            dec_tp(&c->tp_out.max_ack_del, sizeof(uint8_t));
-            warn(INF, "\tmax_ack_delay = %u", c->tp_out.max_ack_del);
+        case TP_MPS:;
+            uint64_t mps = 0;
+            dec_tp(&mps);
+            warn(INF, "\tmax_packet_size = %u", mps);
+            if (mps < 1200 || mps > 65527) {
+                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
+                          "tp_out.max_pkt %u invalid", mps);
+                return 1;
+            }
+            c->tp_out.max_pkt = (uint16_t)mps;
             break;
 
-        case TP_ORIGINAL_CONNECTION_ID:
-            if (unlikely(c->is_clnt == false)) {
-                err_close(c, ERR_TRANSPORT_PARAMETER, FRAM_TYPE_CRPT,
+        case TP_ADE:;
+            uint64_t ade = 0;
+            dec_tp(&ade);
+            warn(INF, "\tack_delay_exponent = %" PRIu64, ade);
+            if (ade > 20) {
+                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
+                          "ack_delay_exponent %" PRIu64 " invalid", ade);
+                return 1;
+            }
+            c->tp_out.ack_del_exp = (uint8_t)ade;
+            break;
+
+        case TP_MAD:;
+            dec_tp(&c->tp_out.max_ack_del);
+            warn(INF, "\tmax_ack_delay = %" PRIu64, c->tp_out.max_ack_del);
+            break;
+
+        case TP_OCID:
+            if (c->is_clnt == false) {
+                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
                           "rx original_connection_id tp at serv");
                 return 1;
             }
-            c->tp_out.orig_cid.len = (uint8_t)dec_tp(
+            c->tp_out.orig_cid.len = (uint8_t)dec_tp_buf(
                 &c->tp_out.orig_cid.id, sizeof(c->tp_out.orig_cid.id));
             warn(INF, "\toriginal_connection_id = %s",
                  cid2str(&c->tp_out.orig_cid));
             break;
 
-        case TP_DISABLE_MIGRATION: {
-            uint16_t dummy;
-            dec_tp(&dummy, sizeof(dummy));
+        case TP_DMIG:;
+            uint16_t dmig;
+            dec_tp(&dmig);
             warn(INF, "\tdisable_migration = true");
             c->tp_out.disable_migration = true;
             break;
-        }
 
-        case TP_STATELESS_RESET_TOKEN:
-            if (unlikely(c->is_clnt == false)) {
-                err_close(c, ERR_TRANSPORT_PARAMETER, FRAM_TYPE_CRPT,
+        case TP_SRT:
+            if (c->is_clnt == false) {
+                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
                           "rx original_connection_id tp at serv");
                 return 1;
             }
             uint16_t l;
             i = dec(&l, buf, len, i, sizeof(l), "%u");
             struct cid * const dcid = c->dcid;
-            if (unlikely(l != sizeof(dcid->srt))) {
-                err_close(c, ERR_TRANSPORT_PARAMETER, FRAM_TYPE_CRPT,
+            if (l != sizeof(dcid->srt)) {
+                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
                           "illegal srt len %u", l);
                 return 1;
             }
@@ -566,7 +582,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             break;
 
         default:
-            err_close(c, ERR_TRANSPORT_PARAMETER, FRAM_TYPE_CRPT,
+            err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
                       "unsupported tp 0x%04x", tp);
             return 1;
         }
@@ -575,22 +591,21 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
     ensure(i == len, "out of parameters");
 
-    if (unlikely(i != len)) {
-        err_close(c, ERR_TRANSPORT_PARAMETER, FRAM_TYPE_CRPT,
-                  "tp data left over");
+    if (i != len) {
+        err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY, "tp data left over");
         return 1;
     }
 
     // if we did a RETRY, check that we got orig_cid and it matches
     if (c->is_clnt && c->tok_len) {
         if (c->tp_out.orig_cid.len == 0) {
-            err_close(c, ERR_TRANSPORT_PARAMETER, FRAM_TYPE_CRPT,
+            err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
                       "no original_connection_id tp received");
             return 1;
         }
 
-        if (unlikely(cid_cmp(&c->tp_out.orig_cid, &c->odcid))) {
-            err_close(c, ERR_TRANSPORT_PARAMETER, FRAM_TYPE_CRPT,
+        if (cid_cmp(&c->tp_out.orig_cid, &c->odcid)) {
+            err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
                       "cid mismatch %s != %s", cid2str(&c->tp_out.orig_cid),
                       cid2str(&c->odcid));
             return 1;
@@ -606,16 +621,14 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 }
 
 
-#define enc_tp(c, tp, var, w)                                                  \
+#define enc_tp(c, tp, var)                                                     \
     do {                                                                       \
         const uint16_t param = (tp);                                           \
         i = enc((c)->tls.tp_buf, len, i, &param, sizeof(param), 0, "%u");      \
-        const uint16_t bytes = (w);                                            \
+        const uint16_t bytes = varint_size_needed(var);                        \
         i = enc((c)->tls.tp_buf, len, i, &bytes, sizeof(bytes), 0, "%u");      \
-        if (w) {                                                               \
-            const uint64_t tmp_var = (var);                                    \
-            i = enc((c)->tls.tp_buf, len, i, &tmp_var, bytes, 0, "%u");        \
-        }                                                                      \
+        const uint64_t tmp_var = (var);                                        \
+        i = enc((c)->tls.tp_buf, len, i, &tmp_var, 0, 0, "%u");                \
     } while (0)
 
 
@@ -651,28 +664,23 @@ void init_tp(struct q_conn * const c)
     const uint16_t enc_len_pos = i;
     i += sizeof(uint16_t);
 
-    enc_tp(c, TP_INITIAL_MAX_BIDI_STREAMS, (uint64_t)c->tp_in.max_bidi_streams,
-           sizeof(uint16_t));
-    enc_tp(c, TP_INITIAL_MAX_UNI_STREAMS, (uint64_t)c->tp_in.max_uni_streams,
-           sizeof(uint16_t));
-    enc_tp(c, TP_IDLE_TIMEOUT, c->tp_in.idle_to, sizeof(uint16_t));
-    enc_tp(c, TP_INITIAL_MAX_STREAM_DATA_BIDI_REMOTE,
-           c->tp_in.max_strm_data_bidi_remote, sizeof(uint32_t));
-    enc_tp(c, TP_INITIAL_MAX_STREAM_DATA_BIDI_LOCAL,
-           c->tp_in.max_strm_data_bidi_local, sizeof(uint32_t));
-    enc_tp(c, TP_INITIAL_MAX_STREAM_DATA_UNI, c->tp_in.max_strm_data_uni,
-           sizeof(uint32_t));
-    enc_tp(c, TP_INITIAL_MAX_DATA, c->tp_in.max_data, sizeof(uint32_t));
-    enc_tp(c, TP_ACK_DELAY_EXPONENT, c->tp_in.ack_del_exp, sizeof(uint8_t));
-    enc_tp(c, TP_MAX_ACK_DELAY, c->tp_in.max_ack_del, sizeof(uint8_t));
-    enc_tp(c, TP_MAX_PACKET_SIZE, w_mtu(c->w), sizeof(uint16_t));
+    enc_tp(c, TP_IMSB, (uint64_t)c->tp_in.max_streams_bidi);
+    enc_tp(c, TP_IMSU, (uint64_t)c->tp_in.max_streams_uni);
+    enc_tp(c, TP_IDTO, c->tp_in.idle_to);
+    enc_tp(c, TP_IMSD_BR, c->tp_in.max_strm_data_bidi_remote);
+    enc_tp(c, TP_IMSD_BL, c->tp_in.max_strm_data_bidi_local);
+    enc_tp(c, TP_IMSD_U, c->tp_in.max_strm_data_uni);
+    enc_tp(c, TP_IMD, c->tp_in.max_data);
+    enc_tp(c, TP_ADE, c->tp_in.ack_del_exp);
+    enc_tp(c, TP_MAD, c->tp_in.max_ack_del);
+    enc_tp(c, TP_MPS, w_mtu(c->w));
 
     if (!c->is_clnt) {
         // TODO: change in -13
         struct cid * const scid = c->scid;
-        enc_tp_buf(c, TP_STATELESS_RESET_TOKEN, scid->srt, sizeof(scid->srt));
+        enc_tp_buf(c, TP_SRT, scid->srt, sizeof(scid->srt));
         if (c->odcid.len)
-            enc_tp_buf(c, TP_ORIGINAL_CONNECTION_ID, c->odcid.id, c->odcid.len);
+            enc_tp_buf(c, TP_OCID, c->odcid.id, c->odcid.len);
     }
 
     // encode length of all transport parameters
@@ -681,8 +689,7 @@ void init_tp(struct q_conn * const c)
     enc(c->tls.tp_buf, len, i, &enc_len, 2, 0, "%u");
 
     c->tls.tp_ext[0] = (ptls_raw_extension_t){
-        TLS_EXT_TYPE_TRANSPORT_PARAMETERS,
-        {c->tls.tp_buf, enc_len + enc_len_pos + sizeof(enc_len)}};
+        QUIC_TP, {c->tls.tp_buf, enc_len + enc_len_pos + sizeof(enc_len)}};
     c->tls.tp_ext[1] = (ptls_raw_extension_t){UINT16_MAX};
 }
 
@@ -972,7 +979,7 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
                 c->tls.tls_hshk_prop.client.early_data_accepted_by_peer;
 
     } else if (unlikely(ret != 0 && ret != PTLS_ERROR_IN_PROGRESS)) {
-        err_close(c, ERR_TLS(PTLS_ERROR_TO_ALERT(ret)), FRAM_TYPE_CRPT,
+        err_close(c, ERR_TLS(PTLS_ERROR_TO_ALERT(ret)), FRM_CRY,
                   "picotls error %u", ret);
         return ret;
     }

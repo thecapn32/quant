@@ -62,10 +62,10 @@ struct q_stream * get_stream(struct q_conn * const c, const int64_t id)
 int64_t max_sid(const int64_t sid, const struct q_conn * const c)
 {
     const int64_t max = is_srv_ini(sid) == c->is_clnt
-                            ? (is_uni(sid) ? c->tp_in.max_uni_streams
-                                           : c->tp_in.max_bidi_streams)
-                            : (is_uni(sid) ? c->tp_out.max_uni_streams
-                                           : c->tp_out.max_bidi_streams);
+                            ? (is_uni(sid) ? c->tp_in.max_streams_uni
+                                           : c->tp_in.max_streams_bidi)
+                            : (is_uni(sid) ? c->tp_out.max_streams_uni
+                                           : c->tp_out.max_streams_bidi);
     return unlikely(max == 0)
                ? 0
                : ((max - 1) << 2) | ((STRM_FL_SRV | STRM_FL_UNI) & sid);
@@ -242,26 +242,26 @@ void do_stream_id_fc(struct q_conn * const c, const int64_t sid)
     if (is_srv_ini(sid) == c->is_clnt) {
         // this is a remote stream
         if (is_uni(sid)) {
-            if ((sid >> 2) + 1 == c->tp_in.max_uni_streams) {
+            if ((sid >> 2) + 1 == c->tp_in.max_streams_uni) {
                 c->tx_max_sid_uni = true;
-                c->tp_in.new_max_uni_streams =
-                    c->tp_in.max_uni_streams + INIT_MAX_UNI_STREAMS;
+                c->tp_in.new_max_streams_uni =
+                    c->tp_in.max_streams_uni + INIT_MAX_UNI_STREAMS;
             }
         } else {
-            if ((sid >> 2) + 1 == c->tp_in.max_bidi_streams) {
+            if ((sid >> 2) + 1 == c->tp_in.max_streams_bidi) {
                 c->tx_max_sid_bidi = true;
-                c->tp_in.new_max_bidi_streams =
-                    c->tp_in.max_bidi_streams + INIT_MAX_BIDI_STREAMS;
+                c->tp_in.new_max_streams_bidi =
+                    c->tp_in.max_streams_bidi + INIT_MAX_BIDI_STREAMS;
             }
         }
 
     } else {
         // this is a local stream
         if (is_uni(sid)) {
-            if ((sid >> 2) + 1 == c->tp_out.max_uni_streams)
+            if ((sid >> 2) + 1 == c->tp_out.max_streams_uni)
                 c->sid_blocked_uni = true;
         } else {
-            if ((sid >> 2) + 1 == c->tp_out.max_bidi_streams)
+            if ((sid >> 2) + 1 == c->tp_out.max_streams_bidi)
                 c->sid_blocked_bidi = true;
         }
     }

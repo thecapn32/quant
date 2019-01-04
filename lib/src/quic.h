@@ -130,8 +130,8 @@ struct pkt_meta {
     int64_t max_stream_data_sid; ///< MAX_STREAM_DATA sid, if sent.
     uint64_t max_stream_data;    ///< MAX_STREAM_DATA limit, if sent.
     uint64_t max_data;           ///< MAX_DATA limit, if sent.
-    int64_t max_bidi_streams;    ///< MAX_STREAM_ID bidir limit, if sent.
-    int64_t max_uni_streams;     ///< MAX_STREAM_ID unidir limit, if sent.
+    int64_t max_streams_bidi;    ///< MAX_STREAM_ID bidir limit, if sent.
+    int64_t max_streams_uni;     ///< MAX_STREAM_ID unidir limit, if sent.
     struct frames frames;        ///< Frames present in pkt.
 
     // pm_cpy(false) starts copying from here:
@@ -255,8 +255,7 @@ pm_cpy(struct pkt_meta * const dst,
 static inline bool __attribute__((nonnull))
 is_ack_only(const struct frames * const f)
 {
-    static const struct frames ack_only =
-        bitset_t_initializer(1 << FRAM_TYPE_ACK);
+    static const struct frames ack_only = bitset_t_initializer(1 << FRM_ACK);
     return bit_cmp(NUM_FRAM_TYPES, f, &ack_only) == 0;
 }
 
@@ -265,7 +264,7 @@ static inline bool __attribute__((nonnull))
 is_ack_or_padding_only(const struct frames * const f)
 {
     static const struct frames ack_or_pad_only =
-        bitset_t_initializer(1 << FRAM_TYPE_ACK | 1 << FRAM_TYPE_PAD);
+        bitset_t_initializer(1 << FRM_ACK | 1 << FRM_PAD);
     return is_ack_only(f) || bit_cmp(NUM_FRAM_TYPES, f, &ack_or_pad_only) == 0;
 }
 
