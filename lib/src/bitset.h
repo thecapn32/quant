@@ -73,7 +73,7 @@
 
 #define __bitset_words(_s) (__howmany(_s, _bitset_bits))
 
-#define __bitcountl(x)  __builtin_popcountl((unsigned long)(x))
+#define __bitcountl(x) __builtin_popcountl((unsigned long)(x))
 #pragma clang diagnostic pop
 
 #define bitset_define(t, _s)                                                   \

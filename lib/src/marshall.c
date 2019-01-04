@@ -176,54 +176,6 @@ uint16_t marshall_enc(uint8_t * const buf,
 }
 
 
-uint16_t marshall_enc_pnr(uint8_t * const buf,
-                          const uint16_t buf_len,
-                          const uint16_t pos,
-                          const uint64_t * const src,
-                          const uint8_t enc_len
-#ifdef DEBUG_MARSHALL
-                          ,
-                          const char * const fmt,
-                          const char * const func,
-                          const char * const file,
-                          const unsigned line,
-                          const char * const buf_str,
-                          const char * const src_str
-#endif
-)
-{
-    uint16_t i = pos;
-
-    // varint pnr encoding
-    switch (enc_len) {
-    case 1: {
-        const uint8_t v = *(const uint8_t *)src & 0x7f;
-        do_enc(v, uint32_t, fmt, "pnr");
-        break;
-    }
-
-    case 2: {
-        const uint16_t v =
-            htons((0x80 << 8) | (*(const uint16_t *)src & VARINT2_MAX));
-        do_enc(v, uint32_t, fmt, "pnr");
-        break;
-    }
-
-    case 4: {
-        const uint32_t v =
-            htonl((0xc0UL << 24) | (*(const uint32_t *)src & VARINT4_MAX));
-        do_enc(v, uint32_t, fmt, "pnr");
-        break;
-    }
-
-    default:
-        die("cannot encode length %u", enc_len);
-    }
-
-    return i;
-}
-
-
 uint16_t marshall_enc_buf(uint8_t * const buf,
                           const uint16_t buf_len,
                           const uint16_t pos,
@@ -366,45 +318,6 @@ extern uint16_t marshall_dec(void * const dst,
     default:
         die("cannot decode length %u", dst_len);
     }
-
-    return i;
-}
-
-
-extern uint16_t marshall_dec_pnr(void * const dst,
-                                 const uint8_t * const buf,
-                                 const uint16_t buf_len,
-                                 const uint16_t pos
-#ifdef DEBUG_MARSHALL
-                                 ,
-                                 const char * const fmt,
-                                 const char * const func,
-                                 const char * const file,
-                                 const unsigned line,
-                                 const char * const buf_str,
-                                 const char * const dst_str
-#endif
-)
-{
-    uint16_t i = pos;
-
-    // varint pnr decoding
-    if (buf[pos] < 0x80) {
-        uint8_t v;
-        do_dec(v);
-        *(uint8_t *)dst = v;
-
-    } else if (buf[pos] < 0xc0) {
-        uint16_t v;
-        do_dec(v);
-        *(uint16_t *)dst = ntohs(v) & VARINT2_MAX;
-
-    } else {
-        uint32_t v;
-        do_dec(v);
-        *(uint32_t *)dst = ntohl(v) & VARINT4_MAX;
-    }
-    log_dec(uint32_t, "pnr");
 
     return i;
 }

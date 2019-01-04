@@ -379,7 +379,7 @@ uint16_t dec_ack_frame(struct q_conn * const c,
 
     // handshake pkts always use the default ACK delay exponent
     const uint8_t ade =
-        meta(v).hdr.type == F_LH_INIT && meta(v).hdr.type == F_LH_HSHK
+        meta(v).hdr.type == LH_INIT && meta(v).hdr.type == LH_HSHK
             ? DEF_ACK_DEL_EXP
             : c->tp_in.ack_del_exp;
     const uint64_t ack_delay = ack_delay_raw * (1 << ade);
@@ -1150,7 +1150,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
 
     // handshake pkts always use the default ACK delay exponent
     const uint8_t ade =
-        meta(v).hdr.type <= F_LH_INIT && meta(v).hdr.type >= F_LH_HSHK
+        meta(v).hdr.type <= LH_INIT && meta(v).hdr.type >= LH_HSHK
             ? DEF_ACK_DEL_EXP
             : c->tp_out.ack_del_exp;
     const uint64_t ack_delay =
@@ -1233,8 +1233,7 @@ uint16_t enc_stream_or_crypto_frame(struct q_stream * const s,
     uint8_t type;
 
     if (likely(enc_strm)) {
-        ensure(!is_set(F_LONG_HDR, meta(v).hdr.flags) ||
-                   meta(v).hdr.type == F_LH_0RTT,
+        ensure(is_lh(meta(v).hdr.flags) == false || meta(v).hdr.type == LH_0RTT,
                "sid %" PRId64 " in 0x%02x-type pkt", s->id, meta(v).hdr.type);
 
         ensure(dlen || s->state > strm_open,

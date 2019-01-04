@@ -38,18 +38,27 @@
 #define MAX_PKT_LEN 1252
 #define MIN_INI_LEN 1200
 
-#define F_LONG_HDR 0x80
+#define HEAD_FORM 0x80      ///< header form (1 = long, 0 = short)
+#define HEAD_FIXD 0x40      ///< fixed bit (= 1)
+#define HEAD_PNRL_MASK 0x03 ///< packet number length mask
 
-#define F_LH_INIT 0x7F
-#define F_LH_RTRY 0x7E
-#define F_LH_HSHK 0x7D
-#define F_LH_0RTT 0x7C
+#define LH (HEAD_FORM | HEAD_FIXD)
+#define LH_TYPE_MASK 0x30 ///< long header: packet type mask
+#define LH_INIT 0x0       ///< long header packet type: Initial
+#define LH_0RTT 0x1       ///< long header packet type: 0-RTT Protected
+#define LH_HSHK 0x2       ///< long header packet type: Handshake
+#define LH_RTRY 0x3       ///< long header packet type: Retry
+#define LH_RSVD_MASK 0x0c ///< long header: reserved bits mask (= 0)
 
-#define F_SH_KYPH 0x40
-#define F_SH_EXP_MASK 0x07
-#define F_SH_SPIN 0x04
-#define F_SH 0x30
-#define F_SH_MASK 0xb8
+#define SH HEAD_FIXD
+#define SH_SPIN 0x20      ///< short header: spin bit
+#define SH_RSVD_MASK 0x18 ///< short header: reserved bits mask (= 0)
+#define SH_KYPH 0x04      ///< short header: key phase bit
+
+// #define SH_EXP_MASK 0x07
+
+
+// #define SH_MASK 0xb8
 
 #define ERR_NONE 0x0
 #define ERR_INTERNAL 0x1
@@ -64,23 +73,37 @@
 #define ERR_TLS(type) (0x100 + (type))
 
 
-static inline __attribute__((always_inline, const)) uint8_t
-pkt_type(const uint8_t flags)
+static inline bool __attribute__((always_inline, const))
+is_lh(const uint8_t flags)
 {
-    return flags & (is_set(F_LONG_HDR, flags) ? ~0x80 : F_SH_MASK);
+    return is_set(HEAD_FORM, flags);
 }
 
 
-static inline __attribute__((always_inline, const)) uint8_t
+static inline uint8_t __attribute__((always_inline, const))
+pkt_type(const uint8_t flags)
+{
+    return is_lh(flags) ? (flags & LH_TYPE_MASK) : SH;
+}
+
+
+static inline uint8_t __attribute__((always_inline, const))
+pkt_nr_len(const uint8_t flags)
+{
+    return (flags & HEAD_PNRL_MASK) + 1;
+}
+
+
+static inline uint8_t __attribute__((always_inline, const))
 epoch_for_pkt_type(const uint8_t type)
 {
     switch (type) {
-    case F_LH_INIT:
-    case F_LH_RTRY:
+    case LH_INIT:
+    case LH_RTRY:
         return 0;
-    case F_LH_0RTT:
+    case LH_0RTT:
         return 1;
-    case F_LH_HSHK:
+    case LH_HSHK:
         return 2;
     default:
         return 3;
@@ -88,16 +111,16 @@ epoch_for_pkt_type(const uint8_t type)
 }
 
 
-static inline __attribute__((always_inline, nonnull)) struct pn_space *
+static inline struct pn_space * __attribute__((always_inline, nonnull))
 pn_for_pkt_type(struct q_conn * const c, const uint8_t t)
 {
     switch (t) {
-    case F_LH_INIT:
-    case F_LH_RTRY:
+    case LH_INIT:
+    case LH_RTRY:
         return &c->pn_init.pn;
-    case F_LH_0RTT:
+    case LH_0RTT:
         return &c->pn_data.pn;
-    case F_LH_HSHK:
+    case LH_HSHK:
         return &c->pn_hshk.pn;
     default:
         return &c->pn_data.pn;

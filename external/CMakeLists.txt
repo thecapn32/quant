@@ -148,7 +148,7 @@ externalproject_add(openssl
   UPDATE_COMMAND ""
   # GIT_REPOSITORY https://github.com/openssl/openssl.git
   GIT_REPOSITORY https://github.com/tatsuhiro-t/openssl
-  GIT_TAG quic-draft-15
+  GIT_TAG quic-draft-17
   GIT_SHALLOW 1
   CONFIGURE_COMMAND ./config --prefix=${CMAKE_CURRENT_BINARY_DIR} enable-tls1_3
   BUILD_IN_SOURCE 1
@@ -162,7 +162,7 @@ externalproject_add(ngtcp2
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/ngtcp2/ngtcp2.git
   GIT_SHALLOW 1
-  GIT_TAG draft-15
+  GIT_TAG draft-17
   CMAKE_ARGS
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
     -DOPENSSL_ROOT_DIR=${CMAKE_CURRENT_BINARY_DIR}
@@ -220,7 +220,7 @@ endif()
 # Use picoquic for testing against
 externalproject_add(picoquic
   DEPENDS picotls
-  # UPDATE_COMMAND ""
+  UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/private-octopus/picoquic.git
   GIT_SHALLOW 1
   # GIT_TAG draft-21
@@ -231,7 +231,7 @@ externalproject_add(picoquic
     -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}
     -DPICOTLS_INCLUDE_DIR=${CMAKE_CURRENT_BINARY_DIR}/include
     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-    # -DCMAKE_C_FLAGS="-D_DEBUG"
+    -DCMAKE_C_FLAGS="-D_DEBUG"
   INSTALL_COMMAND ""
   EXCLUDE_FROM_ALL 1
 )

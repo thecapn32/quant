@@ -151,7 +151,7 @@ static bool do_tls_key_flips = false;
 
 
 // quicly shim
-#define HKDF_BASE_LABEL "quic "
+#define AEAD_BASE_LABEL PTLS_HKDF_EXPAND_LABEL_PREFIX "quic "
 #define st_quicly_cipher_context_t cipher_ctx
 #define quicly_hexdump(a, b, c) hex2str(a, b)
 #define QUICLY_DEBUG 0
@@ -180,14 +180,14 @@ static int setup_cipher(struct st_quicly_cipher_context_t * ctx,
     *ctx = (struct st_quicly_cipher_context_t){NULL};
 
     if ((ctx->aead = ptls_aead_new(aead, hash, is_enc, secret,
-                                   HKDF_BASE_LABEL)) == NULL) {
+                                   AEAD_BASE_LABEL)) == NULL) {
         ret = PTLS_ERROR_NO_MEMORY;
         goto Exit;
     }
     if ((ret = ptls_hkdf_expand_label(
              hash, pnekey, aead->ctr_cipher->key_size,
-             ptls_iovec_init(secret, hash->digest_size), "pn",
-             ptls_iovec_init(NULL, 0), HKDF_BASE_LABEL)) != 0)
+             ptls_iovec_init(secret, hash->digest_size), "quic hp",
+             ptls_iovec_init(NULL, 0), NULL)) != 0)
         goto Exit;
     if ((ctx->pne = ptls_cipher_new(aead->ctr_cipher, is_enc, pnekey)) ==
         NULL) {
@@ -235,7 +235,7 @@ static int setup_initial_key(struct st_quicly_cipher_context_t * ctx,
              cs->hash, new_secret ? new_secret : aead_secret,
              cs->hash->digest_size,
              ptls_iovec_init(master_secret, cs->hash->digest_size), label,
-             ptls_iovec_init(NULL, 0), HKDF_BASE_LABEL)) != 0)
+             ptls_iovec_init(NULL, 0), NULL)) != 0)
         goto Exit;
     if ((ret = setup_cipher(ctx, cs->aead, cs->hash, is_enc,
                             new_secret ? new_secret : aead_secret)) != 0)
@@ -255,9 +255,9 @@ static int setup_initial_encryption(struct st_quicly_cipher_context_t * ingress,
                                     ptls_iovec_t cid,
                                     int is_client)
 {
-    static const uint8_t salt[] = {0x9c, 0x10, 0x8f, 0x98, 0x52, 0x0a, 0x5c,
-                                   0x5c, 0x32, 0x96, 0x8e, 0x95, 0x0e, 0x8a,
-                                   0x2c, 0x5f, 0xe0, 0x6d, 0x6c, 0x38};
+    static const uint8_t salt[] = {0xef, 0x4f, 0xb0, 0xab, 0xb4, 0x74, 0x70,
+                                   0xc4, 0x1b, 0xef, 0xcf, 0x80, 0x31, 0x33,
+                                   0x4f, 0xae, 0x48, 0x5e, 0x09, 0xa0};
     static const char * labels[2] = {"client in", "server in"};
     ptls_cipher_suite_t ** cs;
     uint8_t secret[PTLS_MAX_DIGEST_SIZE];
@@ -1205,7 +1205,6 @@ void init_tls_ctx(const struct q_conf * const conf)
         tls_ctx.verify_certificate = &verifier.super;
 #endif
     tls_ctx.get_time = &ptls_get_time;
-    tls_ctx.hkdf_label_prefix__obsolete = HKDF_BASE_LABEL;
     tls_ctx.omit_end_of_early_data = true;
 
     ptls_openssl_random_bytes(cookie, COOKIE_LEN);
@@ -1236,16 +1235,16 @@ static const struct cipher_ctx * __attribute__((nonnull))
 which_cipher_ctx_out(const struct q_conn * const c, const uint8_t flags)
 {
     switch (pkt_type(flags)) {
-    case F_LH_INIT:
-    case F_LH_RTRY:
+    case LH_INIT:
+    case LH_RTRY:
         return &c->pn_init.out;
-    case F_LH_0RTT:
+    case LH_0RTT:
         return &c->pn_data.out_0rtt;
-    case F_LH_HSHK:
+    case LH_HSHK:
         return &c->pn_hshk.out;
     default:
-        // warn(ERR, "out cipher for kyph %u", is_set(F_SH_KYPH, flags));
-        return &c->pn_data.out_1rtt[is_set(F_SH_KYPH, flags)];
+        // warn(ERR, "out cipher for kyph %u", is_set(SH_KYPH, flags));
+        return &c->pn_data.out_1rtt[is_set(SH_KYPH, flags)];
     }
 }
 
@@ -1288,9 +1287,8 @@ uint16_t dec_aead(struct q_conn * const c
     memcpy(v->buf, xv->buf, hdr_len);
 
 #ifdef DEBUG_MARSHALL
-    warn(DBG, "dec %s AEAD over [0..%u] in [%u..%u]", aead_type(c, ctx->aead),
-         hdr_len + len - AEAD_LEN - 1, hdr_len + len - AEAD_LEN,
-         hdr_len + len - 1);
+    warn(DBG, "dec %s AEAD over [%u..%u] in [%u..%u]", aead_type(c, ctx->aead),
+         hdr_len, len - AEAD_LEN - 1, len - AEAD_LEN, len - 1);
 #endif
 
     return hdr_len + len;
@@ -1310,35 +1308,45 @@ uint16_t enc_aead(struct q_conn * const c,
     }
 
     const uint16_t hdr_len = meta(v).hdr.hdr_len;
-    ensure(meta(v).hdr.hdr_len, "meta(v).hdr.hdr_len");
     memcpy(xv->buf, v->buf, hdr_len); // copy pkt header
 
     const uint16_t plen = v->len - hdr_len + AEAD_LEN;
     const uint16_t ret = (uint16_t)ptls_aead_encrypt(
         ctx->aead, &xv->buf[hdr_len], &v->buf[hdr_len], plen - AEAD_LEN,
         meta(v).hdr.nr, v->buf, hdr_len);
-    if (likely(meta(v).pkt_nr_pos)) {
-        // encrypt the packet number
-        uint16_t off = meta(v).pkt_nr_pos + MAX_PKT_NR_LEN;
-        if (unlikely(off + AEAD_LEN > hdr_len + ret))
-            off = hdr_len + ret - AEAD_LEN;
-        ptls_cipher_init(ctx->pne, &xv->buf[off]);
-        ptls_cipher_encrypt(ctx->pne, &xv->buf[meta(v).pkt_nr_pos],
-                            &xv->buf[meta(v).pkt_nr_pos],
-                            hdr_len - meta(v).pkt_nr_pos);
+
+    // apply packet protection
+    const uint16_t pnp = meta(v).pkt_nr_pos;
+    const uint8_t pnl = pkt_nr_len(meta(v).hdr.flags);
+    if (likely(pnp)) {
+        const uint16_t off = pnp + MAX_PKT_NR_LEN;
+
+        uint8_t sample[AEAD_LEN] = {0};
+        memcpy(sample, &xv->buf[off],
+               unlikely(off + AEAD_LEN > hdr_len + ret) ? hdr_len + ret - off
+                                                        : AEAD_LEN);
+        ptls_cipher_init(ctx->pne, sample);
+
+        uint8_t mask[MAX_PKT_NR_LEN + 1];
+        ptls_cipher_encrypt(ctx->pne, mask, mask, sizeof(mask));
+        xv->buf[0] ^=
+            mask[0] & (unlikely(is_lh(meta(v).hdr.flags)) ? 0x0f : 0x1f);
+        for (uint8_t i = 0; i < pnl; i++)
+            xv->buf[pnp + i] ^= mask[1 + i];
+
 #ifdef DEBUG_MARSHALL
         warn(DBG,
-             "enc %s AEAD over [0..%u] in [%u..%u]; PNE over "
-             "[%u..%u] w/off %u",
-             aead_type(c, ctx->aead), hdr_len + plen - AEAD_LEN - 1,
-             hdr_len + plen - AEAD_LEN, hdr_len + plen - 1, meta(v).pkt_nr_pos,
-             meta(v).pkt_nr_pos + meta(v).pkt_nr_len - 1, off);
+             "enc %s AEAD over [%u..%u] in [%u..%u]; PP over "
+             "[0, %u..%u] w/sample off %u",
+             aead_type(c, ctx->aead), hdr_len, hdr_len + plen - AEAD_LEN - 1,
+             hdr_len + plen - AEAD_LEN, hdr_len + plen - 1, pnp, pnp + pnl - 1,
+             off);
 #endif
     }
 #ifdef DEBUG_MARSHALL
     else
-        warn(DBG, "enc %s AEAD over [0..%u] in [%u..%u]",
-             aead_type(c, ctx->aead), hdr_len + plen - AEAD_LEN - 1,
+        warn(DBG, "enc %s AEAD over [%u..%u] in [%u..%u]",
+             aead_type(c, ctx->aead), hdr_len, hdr_len + plen - AEAD_LEN - 1,
              hdr_len + plen - AEAD_LEN, hdr_len + plen - 1);
 #endif
     return hdr_len + ret;

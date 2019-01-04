@@ -56,20 +56,20 @@
 static const char * __attribute__((const))
 pkt_type_str(const uint8_t flags, const uint8_t * const vers)
 {
-    if (is_set(F_LONG_HDR, flags)) {
+    if (is_lh(flags)) {
         if (vers[0] == 0 && vers[1] == 0 && vers[2] == 0 && vers[3] == 0)
             return "Version Negotiation";
         switch (pkt_type(flags)) {
-        case F_LH_INIT:
+        case LH_INIT:
             return "Initial";
-        case F_LH_RTRY:
+        case LH_RTRY:
             return "Retry";
-        case F_LH_HSHK:
+        case LH_HSHK:
             return "Handshake";
-        case F_LH_0RTT:
+        case LH_0RTT:
             return "0-RTT Protected";
         }
-    } else if (is_set(F_SH, flags & F_SH_MASK))
+    } else if (pkt_type(flags) == SH)
         return "Short";
     return RED "Unknown" NRM;
 }
@@ -90,7 +90,7 @@ void log_pkt(const char * const dir,
     inet_ntop(AF_INET, &ip, addr, INET_ADDRSTRLEN);
     const uint16_t prt = ntohs(port);
     if (*dir == 'R') {
-        if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
+        if (is_lh(meta(v).hdr.flags)) {
             if (meta(v).hdr.vers == 0)
                 twarn(NTE,
                       BLD BLU "RX" NRM " from=%s:%u len=%u 0x%02x=" BLU
@@ -100,7 +100,7 @@ void log_pkt(const char * const dir,
                                    (uint8_t *)&meta(v).hdr.vers),
                       meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
                       c2s(&meta(v).hdr.scid));
-            else if (meta(v).hdr.type == F_LH_RTRY)
+            else if (meta(v).hdr.type == LH_RTRY)
                 twarn(
                     NTE,
                     BLD BLU "RX" NRM " from=%s:%u len=%u 0x%02x=" BLU "%s " NRM
@@ -110,7 +110,7 @@ void log_pkt(const char * const dir,
                                  (uint8_t *)&meta(v).hdr.vers),
                     meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
                     c2s(&meta(v).hdr.scid), c2s(odcid), hex2str(tok, tok_len));
-            else if (meta(v).hdr.type == F_LH_INIT)
+            else if (meta(v).hdr.type == LH_INIT)
                 twarn(NTE,
                       BLD BLU
                       "RX" NRM " from=%s:%u len=%u 0x%02x=" BLU "%s " NRM
@@ -138,12 +138,12 @@ void log_pkt(const char * const dir,
                           "kyph=%u dcid=%s nr=" BLU "%" PRIu64,
                   addr, prt, v->len, meta(v).hdr.flags,
                   pkt_type_str(meta(v).hdr.flags, (uint8_t *)&meta(v).hdr.vers),
-                  is_set(F_SH_KYPH, meta(v).hdr.flags), c2s(&meta(v).hdr.dcid),
+                  is_set(SH_KYPH, meta(v).hdr.flags), c2s(&meta(v).hdr.dcid),
                   meta(v).hdr.nr);
 
     } else {
         // on TX, v->len is not yet final/correct, so don't print it
-        if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
+        if (is_lh(meta(v).hdr.flags)) {
             if (meta(v).hdr.vers == 0)
                 twarn(NTE,
                       BLD GRN "TX" NRM " to=%s:%u 0x%02x=" GRN "%s " NRM
@@ -153,7 +153,7 @@ void log_pkt(const char * const dir,
                                    (uint8_t *)&meta(v).hdr.vers),
                       meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
                       c2s(&meta(v).hdr.scid));
-            else if (meta(v).hdr.type == F_LH_RTRY)
+            else if (meta(v).hdr.type == LH_RTRY)
                 twarn(NTE,
                       BLD GRN "TX" NRM " to=%s:%u 0x%02x=" GRN "%s " NRM
                               "vers=0x%08x dcid=%s scid=%s odcid=%s tok=%s",
@@ -163,7 +163,7 @@ void log_pkt(const char * const dir,
                       meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
                       c2s(&meta(v).hdr.scid), c2s(odcid),
                       hex2str(tok, tok_len));
-            else if (meta(v).hdr.type == F_LH_INIT)
+            else if (meta(v).hdr.type == LH_INIT)
                 twarn(NTE,
                       BLD GRN
                       "TX" NRM " to=%s:%u 0x%02x=" GRN "%s " NRM
@@ -191,7 +191,7 @@ void log_pkt(const char * const dir,
                           "kyph=%u dcid=%s nr=" GRN "%" PRIu64,
                   addr, prt, meta(v).hdr.flags,
                   pkt_type_str(meta(v).hdr.flags, (uint8_t *)&meta(v).hdr.vers),
-                  is_set(F_SH_KYPH, meta(v).hdr.flags), c2s(&meta(v).hdr.dcid),
+                  is_set(SH_KYPH, meta(v).hdr.flags), c2s(&meta(v).hdr.dcid),
                   meta(v).hdr.nr);
     }
 }
@@ -201,8 +201,8 @@ void log_pkt(const char * const dir,
 static bool __attribute__((const))
 can_coalesce_pkt_types(const uint8_t a, const uint8_t b)
 {
-    return (a == F_LH_INIT && (b == F_LH_0RTT || b == F_LH_HSHK)) ||
-           (a == F_LH_HSHK && b == F_SH) || (a == F_LH_0RTT && b == F_LH_HSHK);
+    return (a == LH_INIT && (b == LH_0RTT || b == LH_HSHK)) ||
+           (a == LH_HSHK && b == SH) || (a == LH_0RTT && b == LH_HSHK);
 }
 
 
@@ -245,10 +245,12 @@ needed_pkt_nr_len(const uint64_t lg_acked, const uint64_t n)
 {
     const uint64_t d =
         (n - (unlikely(lg_acked == UINT64_MAX) ? 0 : lg_acked)) * 2;
-    if (d <= 0x7F)
+    if (d <= UINT8_MAX)
         return 1;
-    if (d <= 0x3FFF)
+    if (d <= UINT16_MAX)
         return 2;
+    if (d <= (UINT16_MAX << 8 | UINT8_MAX))
+        return 3;
     return 4;
 }
 
@@ -374,9 +376,9 @@ bool enc_pkt(struct q_stream * const s,
     struct pn_space * const pn = pn_for_epoch(c, epoch);
     meta(v).pn = pn;
 
-    if (c->tx_rtry)
+    if (unlikely(c->tx_rtry))
         meta(v).hdr.nr = 0;
-    else if (pn->lg_sent == UINT64_MAX)
+    else if (unlikely(pn->lg_sent == UINT64_MAX))
         // next pkt nr
         meta(v).hdr.nr = pn->lg_sent = 0;
     else
@@ -384,8 +386,8 @@ bool enc_pkt(struct q_stream * const s,
 
     switch (epoch) {
     case ep_init:
-        meta(v).hdr.type = c->tx_rtry ? F_LH_RTRY : F_LH_INIT;
-        meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
+        meta(v).hdr.type = c->tx_rtry ? LH_RTRY : LH_INIT;
+        meta(v).hdr.flags = LH | meta(v).hdr.type;
 
         if (c->is_clnt == false && rtx == false) {
             // this is a new connection; server picks a new random cid
@@ -398,55 +400,47 @@ bool enc_pkt(struct q_stream * const s,
         break;
     case ep_0rtt:
         if (c->is_clnt) {
-            meta(v).hdr.type = F_LH_0RTT;
-            meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
+            meta(v).hdr.type = LH_0RTT;
+            meta(v).hdr.flags = LH | meta(v).hdr.type;
         } else
-            meta(v).hdr.type = meta(v).hdr.flags = F_SH;
+            meta(v).hdr.type = meta(v).hdr.flags = SH;
         break;
     case ep_hshk:
-        meta(v).hdr.type = F_LH_HSHK;
-        meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
+        meta(v).hdr.type = LH_HSHK;
+        meta(v).hdr.flags = LH | meta(v).hdr.type;
         break;
-    case ep_data:
+    case likely(ep_data):
         if (pn == &c->pn_data.pn) {
-            meta(v).hdr.type = meta(v).hdr.flags = F_SH;
-            meta(v).hdr.flags |= c->pn_data.out_kyph ? F_SH_KYPH : 0;
+            meta(v).hdr.type = meta(v).hdr.flags = SH;
+            meta(v).hdr.flags |= c->pn_data.out_kyph ? SH_KYPH : 0;
         } else {
-            meta(v).hdr.type = F_LH_HSHK;
-            meta(v).hdr.flags = F_LONG_HDR | meta(v).hdr.type;
+            meta(v).hdr.type = LH_HSHK;
+            meta(v).hdr.flags = LH | meta(v).hdr.type;
         }
         break;
     }
 
-    if (is_set(F_LONG_HDR, meta(v).hdr.flags) == false) {
-#ifdef SPINBIT
-        // clear spin/vec
-        meta(v).hdr.flags &= ~F_SH_EXP_MASK;
-
+    if (likely(is_lh(meta(v).hdr.flags) == false)) {
         // set spin bit
         if (c->next_spin)
-            meta(v).hdr.flags |= F_SH_SPIN;
-
-        warn(DBG, "setting spin bit to %02x",
-             meta(v).hdr.flags & F_SH_EXP_MASK);
-#else
-        // for giggles, randomize the reserved bits in the short header
-        // this doesn't need to be cryptographically random
-        meta(v).hdr.flags |= (w_rand() & F_SH_EXP_MASK);
-#endif
+            meta(v).hdr.flags |= SH_SPIN;
+        warn(DBG, "setting spin bit to %02x", meta(v).hdr.flags & SH_SPIN);
     }
 
     ensure(meta(v).hdr.nr < (1ULL << 62) - 1, "packet number overflow");
 
+    const uint8_t pnl = needed_pkt_nr_len(pn->lg_acked, meta(v).hdr.nr);
+    meta(v).hdr.flags |= (pnl - 1);
+
     i = enc(v->buf, v->len, 0, &meta(v).hdr.flags, sizeof(meta(v).hdr.flags), 0,
             "0x%02x");
 
-    if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
+    if (unlikely(is_lh(meta(v).hdr.flags))) {
         meta(v).hdr.vers = c->vers;
         i = enc(v->buf, v->len, i, &c->vers, sizeof(c->vers), 0, "0x%08x");
         i = enc_lh_cids(c->dcid, c->scid, v, i);
 
-        if (meta(v).hdr.type == F_LH_RTRY) {
+        if (meta(v).hdr.type == LH_RTRY) {
             // don't need cryptographically random bit here
             const uint8_t odcil = (uint8_t)((w_rand() & 0xf) << 4) |
                                   (c->odcid.len ? c->odcid.len - 3 : 0);
@@ -455,17 +449,17 @@ bool enc_pkt(struct q_stream * const s,
                 i = enc_buf(v->buf, v->len, i, &c->odcid.id, c->odcid.len);
         }
 
-        if (meta(v).hdr.type == F_LH_INIT) {
+        if (meta(v).hdr.type == LH_INIT) {
             const uint64_t tl = c->is_clnt ? c->tok_len : 0;
             i = enc(v->buf, v->len, i, &tl, 0, 0, "%" PRIu64);
         }
 
-        if (((c->is_clnt && meta(v).hdr.type == F_LH_INIT) ||
-             meta(v).hdr.type == F_LH_RTRY) &&
+        if (((c->is_clnt && meta(v).hdr.type == LH_INIT) ||
+             meta(v).hdr.type == LH_RTRY) &&
             c->tok_len)
             i = enc_buf(v->buf, v->len, i, c->tok, c->tok_len);
 
-        if (meta(v).hdr.type != F_LH_RTRY) {
+        if (meta(v).hdr.type != LH_RTRY) {
             // leave space for length field (2 bytes is enough)
             len_pos = i;
             i += 2;
@@ -477,18 +471,16 @@ bool enc_pkt(struct q_stream * const s,
                     meta(v).hdr.dcid.len);
     }
 
-    if (meta(v).hdr.type != F_LH_RTRY) {
+    if (likely(meta(v).hdr.type != LH_RTRY)) {
         meta(v).pkt_nr_pos = i;
-        meta(v).pkt_nr_len = needed_pkt_nr_len(pn->lg_acked, meta(v).hdr.nr);
-        i = enc_pnr(v->buf, v->len, i, &meta(v).hdr.nr, meta(v).pkt_nr_len,
-                    "%u");
+        i = enc(v->buf, v->len, i, &meta(v).hdr.nr, pnl, 0, GRN "%u" NRM);
     }
 
     meta(v).hdr.hdr_len = i;
     log_pkt("TX", v, c->peer.sin_addr.s_addr, c->peer.sin_port,
-            meta(v).hdr.type == F_LH_RTRY ? &c->odcid : 0, c->tok, c->tok_len);
+            meta(v).hdr.type == LH_RTRY ? &c->odcid : 0, c->tok, c->tok_len);
 
-    if (meta(v).hdr.type == F_LH_RTRY)
+    if (unlikely(meta(v).hdr.type == LH_RTRY))
         goto tx;
 
     // XXX can't use has_wnd() here, since in_flight is out of data here
@@ -511,7 +503,7 @@ bool enc_pkt(struct q_stream * const s,
     if (epoch == ep_data || (!c->is_clnt && epoch == ep_0rtt))
         i = enc_other_frames(s, v, i, meta(v).stream_data_start);
 
-    if (rtx) {
+    if (unlikely(rtx)) {
         ensure(is_rtxable(&meta(v)), "is rtxable");
 
         // this is a RTX, pad out until beginning of stream header
@@ -519,24 +511,25 @@ bool enc_pkt(struct q_stream * const s,
         i = meta(v).stream_data_start + meta(v).stream_data_len;
         log_stream_or_crypto_frame(true, v, false, "");
 
-    } else if (enc_data) {
+    } else if (likely(enc_data)) {
         // this is a fresh data/crypto or pure stream FIN packet
         // pad out until stream_data_start and add a stream frame header
         enc_padding_frame(v, i, meta(v).stream_data_start - i);
         i = enc_stream_or_crypto_frame(s, v, i, s->id >= 0);
     }
 
-    if (i < MAX_PKT_LEN - AEAD_LEN && (enc_data || rtx) &&
-        (epoch == ep_data || (!c->is_clnt && epoch == ep_0rtt))) {
+    if (unlikely(i < MAX_PKT_LEN - AEAD_LEN && (enc_data || rtx) &&
+                 (epoch == ep_data || (!c->is_clnt && epoch == ep_0rtt)))) {
         // we can try to stick some more frames in after the stream frame
         v->len = MAX_PKT_LEN - AEAD_LEN;
         i = enc_other_frames(s, v, i, v->len);
     }
 
     if (c->is_clnt && enc_data) {
-        if (c->try_0rtt == false && meta(v).hdr.type == F_LH_INIT)
+        if (unlikely(c->try_0rtt == false && meta(v).hdr.type == LH_INIT))
             i = enc_padding_frame(v, i, MIN_INI_LEN - i - AEAD_LEN);
-        if (c->try_0rtt == true && meta(v).hdr.type == F_LH_0RTT && s->id >= 0)
+        if (unlikely(c->try_0rtt == true && meta(v).hdr.type == LH_0RTT &&
+                     s->id >= 0))
             // if we pad the first 0-RTT pkt, peek at txq to get the CI length
             i = enc_padding_frame(
                 v, i,
@@ -544,13 +537,13 @@ bool enc_pkt(struct q_stream * const s,
                     (sq_first(&c->txq) ? sq_first(&c->txq)->len : 0));
     }
 
-    if (meta(v).hdr.type != F_LH_RTRY)
+    if (likely(meta(v).hdr.type != LH_RTRY))
         ensure(i > meta(v).hdr.hdr_len, "would have sent pkt w/o frames");
 
 tx:
     // for LH pkts, now encode the length
     meta(v).hdr.len = i + AEAD_LEN - meta(v).pkt_nr_pos;
-    if (len_pos) {
+    if (unlikely(len_pos)) {
         const uint64_t len = meta(v).hdr.len;
         enc(v->buf, v->len, len_pos, &len, 0, 2, "%" PRIu64);
     }
@@ -558,37 +551,37 @@ tx:
     v->len = i;
 
     // alloc directly from warpcore for crypto TX - no need for metadata alloc
-    struct w_iov * const x = w_alloc_iov(c->w, 0, 0);
-    ensure(x, "w_alloc_iov failed");
-    // warn(CRT, "w_alloc_iov idx %u (avail %" PRIu64 ") len %u", w_iov_idx(x),
-    //      sq_len(&c->w->iov), x->len);
+    struct w_iov * const xv = w_alloc_iov(c->w, 0, 0);
+    ensure(xv, "w_alloc_iov failed");
+    // warn(CRT, "w_alloc_iov idx %u (avail %" PRIu64 ") len %u", w_iov_idx(xv),
+    //      sq_len(&c->w->iov), xv->len);
 
-    if (meta(v).hdr.type == F_LH_RTRY) {
-        memcpy(x->buf, v->buf, v->len); // copy data
-        x->len = v->len;
+    if (unlikely(meta(v).hdr.type == LH_RTRY)) {
+        memcpy(xv->buf, v->buf, v->len); // copy data
+        xv->len = v->len;
     } else {
-        x->len = enc_aead(c, v, x);
-        if (unlikely(x->len == 0)) {
+        xv->len = enc_aead(c, v, xv);
+        if (unlikely(xv->len == 0)) {
             adj_iov_to_start(v);
             return false;
         }
     }
 
     if (!c->is_clnt) {
-        x->ip = c->peer.sin_addr.s_addr;
-        x->port = c->peer.sin_port;
+        xv->ip = c->peer.sin_addr.s_addr;
+        xv->port = c->peer.sin_port;
     }
-    x->flags = v->flags;
+    xv->flags = v->flags;
 
-    sq_insert_tail(&c->txq, x, next);
-    meta(v).tx_len = x->len;
+    sq_insert_tail(&c->txq, xv, next);
+    meta(v).tx_len = xv->len;
 
-    if (unlikely(meta(v).hdr.type == F_LH_INIT && c->is_clnt &&
+    if (unlikely(meta(v).hdr.type == LH_INIT && c->is_clnt &&
                  meta(v).stream_data_len))
         // adjust v->len to exclude the post-stream padding for CI
         v->len = meta(v).stream_data_start + meta(v).stream_data_len;
 
-    if (enc_data) {
+    if (likely(enc_data)) {
         adj_iov_to_data(v);
         // XXX not clear if changing the len before calling on_pkt_sent is ok
         v->len = meta(v).stream_data_len;
@@ -599,7 +592,7 @@ tx:
         meta(v).is_lost = false;
 
     on_pkt_sent(s, v);
-    if (c->is_clnt && is_set(F_LONG_HDR, meta(v).hdr.flags) == false)
+    if (c->is_clnt && is_lh(meta(v).hdr.flags) == false)
         maybe_flip_keys(c, true);
     return true;
 }
@@ -637,17 +630,10 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
         xv->user_data = xv->len;
 
     dec_chk(&meta(v).hdr.flags, xv->buf, xv->len, 0, 1, "0x%02x");
-    meta(v).hdr.type = pkt_type(*xv->buf);
+    meta(v).hdr.type = pkt_type(*xv->buf); // XXX can we use this yet?
 
-    if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
+    if (unlikely(is_lh(meta(v).hdr.flags))) {
         dec_chk(&meta(v).hdr.vers, xv->buf, xv->len, 1, 4, "0x%08x");
-
-        // check if the packet type/version combo makes sense
-        if (meta(v).hdr.vers &&
-            (meta(v).hdr.type > F_LH_INIT || meta(v).hdr.type < F_LH_0RTT)) {
-            warn(DBG, "illegal LH pkt type 0x%02x", meta(v).hdr.type);
-            return false;
-        }
 
         meta(v).hdr.hdr_len =
             dec_chk(&meta(v).hdr.dcid.len, xv->buf, xv->len, 5, 1, "0x%02x");
@@ -660,13 +646,13 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
         }
 
         // if this is a CI, the dcid len must be >= 8 bytes
-        if (is_clnt == false && unlikely(meta(v).hdr.type == F_LH_INIT &&
-                                         meta(v).hdr.dcid.len < 8)) {
+        if (is_clnt == false &&
+            unlikely(meta(v).hdr.type == LH_INIT && meta(v).hdr.dcid.len < 8)) {
             warn(DBG, "dcid len %u too short", meta(v).hdr.dcid.len);
             return false;
         }
 
-        dec(&meta(v).hdr.scid.len, xv->buf, xv->len, 5, 1, "0x%02x");
+        dec_chk(&meta(v).hdr.scid.len, xv->buf, xv->len, 5, 1, "0x%02x");
         meta(v).hdr.scid.len &= 0x0f;
         if (meta(v).hdr.scid.len) {
             meta(v).hdr.scid.len += 3;
@@ -682,16 +668,16 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
             return true;
         }
 
-        if (meta(v).hdr.type == F_LH_RTRY) {
+        if (meta(v).hdr.type == LH_RTRY) {
             // decode odcid
-            meta(v).hdr.hdr_len = dec(&odcid->len, xv->buf, xv->len,
-                                      meta(v).hdr.hdr_len, 1, "0x%02x");
+            meta(v).hdr.hdr_len = dec_chk(&odcid->len, xv->buf, xv->len,
+                                          meta(v).hdr.hdr_len, 1, "0x%02x");
             odcid->len = (odcid->len & 0x0f) + 3;
             meta(v).hdr.hdr_len = dec_chk_buf(&odcid->id, xv->buf, xv->len,
                                               meta(v).hdr.hdr_len, odcid->len);
         }
 
-        if (meta(v).hdr.type == F_LH_INIT) {
+        if (meta(v).hdr.type == LH_INIT) {
             // decode token
             uint64_t tl = 0;
             meta(v).hdr.hdr_len = dec_chk(&tl, xv->buf, xv->len,
@@ -702,7 +688,7 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
                 warn(ERR, "tok (len %u) present in serv initial", *tok_len);
                 return false;
             }
-        } else if (meta(v).hdr.type == F_LH_RTRY)
+        } else if (meta(v).hdr.type == LH_RTRY)
             *tok_len = xv->len - meta(v).hdr.hdr_len;
 
         if (*tok_len) {
@@ -715,10 +701,10 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
                                               meta(v).hdr.hdr_len, *tok_len);
         }
 
-        if (meta(v).hdr.type != F_LH_RTRY) {
+        if (meta(v).hdr.type != LH_RTRY) {
             uint64_t len = 0;
-            meta(v).hdr.hdr_len =
-                dec(&len, xv->buf, xv->len, meta(v).hdr.hdr_len, 0, "%" PRIu64);
+            meta(v).hdr.hdr_len = dec_chk(&len, xv->buf, xv->len,
+                                          meta(v).hdr.hdr_len, 0, "%" PRIu64);
             if (unlikely(meta(v).hdr.hdr_len == UINT16_MAX))
                 return false;
             meta(v).hdr.len = (uint16_t)len;
@@ -733,12 +719,6 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
         return true;
     }
 
-    // this is possibly a short-header packet
-    if (unlikely(is_set(F_SH, meta(v).hdr.flags & F_SH_MASK) == false)) {
-        warn(DBG, "illegal SH pkt type 0x%02x", meta(v).hdr.flags);
-        return false;
-    }
-
     // this logic depends on picking a SCID with a known length during handshake
     meta(v).hdr.dcid.len = (is_clnt ? CLNT_SCID_LEN : SERV_SCID_LEN);
     meta(v).hdr.hdr_len = dec_chk_buf(&meta(v).hdr.dcid.id, xv->buf, xv->len, 1,
@@ -747,45 +727,41 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
 }
 
 
-static bool dec_pne(struct w_iov * const xv,
-                    struct w_iov * const v,
+static bool undo_pp(struct w_iov * const xv,
+                    const struct w_iov * const v,
                     struct q_conn * const c,
-                    const struct cipher_ctx * const ctx,
-                    uint8_t pn_enc[MAX_PKT_NR_LEN])
+                    const struct cipher_ctx * const ctx)
 {
     // meta(v).hdr.hdr_len holds the offset of the pnr field
-    meta(v).pkt_nr_pos = meta(v).hdr.hdr_len;
-    uint16_t off = meta(v).pkt_nr_pos + MAX_PKT_NR_LEN;
-    const uint16_t len = is_set(F_LONG_HDR, meta(v).hdr.flags)
-                             ? meta(v).pkt_nr_pos + meta(v).hdr.len + AEAD_LEN
-                             : xv->len;
-    if (unlikely(off + AEAD_LEN > len))
-        off = len - AEAD_LEN;
+    const uint16_t pnp = meta(v).pkt_nr_pos = meta(v).hdr.hdr_len;
+    const uint16_t off = pnp + MAX_PKT_NR_LEN;
+    const uint16_t len =
+        is_lh(meta(v).hdr.flags) ? pnp + meta(v).hdr.len + AEAD_LEN : xv->len;
 
-    ptls_cipher_init(ctx->pne, &xv->buf[off]);
-    uint8_t dec_nr[MAX_PKT_NR_LEN];
-    ptls_cipher_encrypt(ctx->pne, dec_nr, &xv->buf[meta(v).pkt_nr_pos],
-                        sizeof(dec_nr));
+    uint8_t sample[AEAD_LEN] = {0};
+    memcpy(sample, &xv->buf[off],
+           unlikely(off + AEAD_LEN > len) ? len - off : AEAD_LEN);
+    ptls_cipher_init(ctx->pne, sample);
+
+    uint8_t mask[MAX_PKT_NR_LEN + 1];
+    ptls_cipher_encrypt(ctx->pne, mask, mask, sizeof(mask));
+    xv->buf[0] ^= mask[0] & (unlikely(is_lh(meta(v).hdr.flags)) ? 0x0f : 0x1f);
+    const uint8_t pnl = pkt_nr_len(xv->buf[0]);
+    for (uint8_t i = 0; i < pnl; i++)
+        xv->buf[pnp + i] ^= mask[1 + i];
+
+    // update meta(v)
+    meta(v).hdr.flags = xv->buf[0];
+    meta(v).hdr.type = pkt_type(xv->buf[0]);
 
     struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
     uint64_t nr = 0;
-    meta(v).pkt_nr_len =
-        (uint8_t)dec_pnr(&nr, dec_nr, sizeof(dec_nr), 0, FMT_PNR_IN);
-    if (unlikely(meta(v).pkt_nr_len > MAX_PKT_NR_LEN)) {
-        warn(DBG, "can't undo PNE");
-        return false;
-    }
-    meta(v).hdr.hdr_len += meta(v).pkt_nr_len;
-
-    // save the raw pkt nr data, in case we need to retry
-    memcpy(pn_enc, &xv->buf[meta(v).pkt_nr_pos], MAX_PKT_NR_LEN);
-
-    // now overwrite with decoded data
-    memcpy(&xv->buf[meta(v).pkt_nr_pos], &dec_nr, meta(v).pkt_nr_len);
+    dec_chk(&nr, xv->buf, xv->len, pnp, pnl, "%u");
+    meta(v).hdr.hdr_len += pnl;
 
     const uint64_t expected_pn = diet_max(&pn->recv) + 1;
     const uint64_t pn_wins[] = {0, 1 << 7, 1 << 14, 0, 1 << 30};
-    const uint64_t pn_win = pn_wins[meta(v).pkt_nr_len];
+    const uint64_t pn_win = pn_wins[pnl];
     const uint64_t pn_hwin = pn_win / 2;
     const uint64_t pn_mask = pn_win - 1;
 
@@ -796,9 +772,8 @@ static bool dec_pne(struct w_iov * const xv,
         meta(v).hdr.nr -= pn_win;
 
 #ifdef DEBUG_MARSHALL
-    warn(DBG, "dec PNE over [%u..%u] w/off %u = " FMT_PNR_IN,
-         meta(v).pkt_nr_pos, meta(v).pkt_nr_pos + meta(v).pkt_nr_len - 1, off,
-         meta(v).hdr.nr);
+    warn(DBG, "undo PP over [0, %u..%u] w/sample off %u = " FMT_PNR_IN, pnp,
+         pnp + pnl - 1, off, meta(v).hdr.nr);
 #endif
 
     return true;
@@ -809,15 +784,15 @@ static const struct cipher_ctx * __attribute__((nonnull))
 which_cipher_ctx_in(const struct q_conn * const c, const uint8_t flags)
 {
     switch (pkt_type(flags)) {
-    case F_LH_INIT:
-    case F_LH_RTRY:
+    case LH_INIT:
+    case LH_RTRY:
         return &c->pn_init.in;
-    case F_LH_0RTT:
+    case LH_0RTT:
         return &c->pn_data.in_0rtt;
-    case F_LH_HSHK:
+    case LH_HSHK:
         return &c->pn_hshk.in;
     default:
-        return &c->pn_data.in_1rtt[is_set(F_SH_KYPH, flags)];
+        return &c->pn_data.in_1rtt[is_set(SH_KYPH, flags)];
     }
 }
 
@@ -829,8 +804,8 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
 {
     const struct cipher_ctx * ctx = which_cipher_ctx_in(c, meta(v).hdr.flags);
     if (unlikely(ctx->pne == 0 || ctx->aead == 0)) {
-        if (is_set(F_LONG_HDR, meta(v).hdr.flags) == false &&
-            is_set(F_SH_KYPH, meta(v).hdr.flags) != c->pn_data.in_kyph) {
+        if (is_lh(meta(v).hdr.flags) == false &&
+            is_set(SH_KYPH, meta(v).hdr.flags) != c->pn_data.in_kyph) {
             // this might be the first key phase flip
             flip_keys(c, false);
             ctx = which_cipher_ctx_in(c, meta(v).hdr.flags);
@@ -844,18 +819,18 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
     uint8_t pn_enc[MAX_PKT_NR_LEN]; // raw (encrypted) packet number data
 
 try_again:
-    if (unlikely(dec_pne(xv, v, c, ctx, pn_enc) == false))
+    if (unlikely(undo_pp(xv, v, c, ctx) == false))
         return false;
 
     // we can now try and verify the packet protection
-    const uint16_t pkt_len =
-        is_set(F_LONG_HDR, meta(v).hdr.flags)
-            ? meta(v).hdr.hdr_len + meta(v).hdr.len - meta(v).pkt_nr_len
-            : xv->len;
+    const uint16_t pkt_len = is_lh(meta(v).hdr.flags)
+                                 ? meta(v).hdr.hdr_len + meta(v).hdr.len -
+                                       pkt_nr_len(meta(v).hdr.flags)
+                                 : xv->len;
     const uint16_t ret = dec_aead(c, xv, v, pkt_len, ctx);
 
     if (unlikely(ret == 0)) {
-        if (likely(is_set(F_LONG_HDR, meta(v).hdr.flags) == false)) {
+        if (likely(is_lh(meta(v).hdr.flags) == false)) {
 
             // AEAD failed; this might be a stateless reset
             if (xv->len > sizeof(c->dcid->srt)) {
@@ -872,7 +847,7 @@ try_again:
             // AEAD failed; this might be due to a key phase flip
             if (likely(first_try == true)) {
                 // check if the key phase may have changed
-                const bool v_kyph = is_set(F_SH_KYPH, meta(v).hdr.flags);
+                const bool v_kyph = is_set(SH_KYPH, meta(v).hdr.flags);
                 if (unlikely(v_kyph != c->pn_data.in_kyph)) {
                     // this packet has a different key phase than we saw before,
                     // so undo PNE decryption and retry with flipped keys
@@ -888,7 +863,7 @@ try_again:
         return false;
     }
 
-    if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
+    if (is_lh(meta(v).hdr.flags)) {
         // check for coalesced packet
         if (pkt_len < xv->len) {
             // TODO check that dcid in split-out version matches orig
@@ -909,20 +884,18 @@ try_again:
 
     } else {
         // check if a key phase flip has been verified
-        const bool v_kyph = is_set(F_SH_KYPH, meta(v).hdr.flags);
+        const bool v_kyph = is_set(SH_KYPH, meta(v).hdr.flags);
         if (unlikely(v_kyph != c->pn_data.in_kyph))
             c->pn_data.in_kyph = v_kyph;
 
-#ifdef SPINBIT
         // short header, spin the bit
         if (meta(v).hdr.nr > diet_max(&(c->pn_data.pn.recv_all))) {
-            c->next_spin = ((meta(v).hdr.flags & F_SH_SPIN) == !c->is_clnt);
+            c->next_spin = ((meta(v).hdr.flags & SH_SPIN) == !c->is_clnt);
             warn(DBG, "%sing spin to 0x%02x", c->is_clnt ? "invert" : "reflect",
                  c->next_spin);
         } else
             warn(DBG, "not updating next_spin: %" PRIu64 " <= %" PRIu64,
                  meta(v).hdr.nr, diet_max(&(c->pn_data.pn.recv_all)));
-#endif
     }
 
     v->len = xv->len - AEAD_LEN;
@@ -948,30 +921,30 @@ void tx_vneg_resp(const struct w_sock * const ws, const struct w_iov * const v)
         return;
     }
 
-    struct w_iov * const x = alloc_iov(ws->w, 0, 0);
+    struct w_iov * const xv = alloc_iov(ws->w, 0, 0);
     struct w_iov_sq q = w_iov_sq_initializer(q);
-    sq_insert_head(&q, x, next);
+    sq_insert_head(&q, xv, next);
 
     warn(INF, "sending vers neg serv response");
-    meta(x).hdr.flags = F_LONG_HDR | (uint8_t)w_rand();
-    uint16_t i = enc(x->buf, x->len, 0, &meta(x).hdr.flags,
-                     sizeof(meta(x).hdr.flags), 0, "0x%02x");
+    meta(xv).hdr.flags = HEAD_FORM | (uint8_t)w_rand();
+    uint16_t i = enc(xv->buf, xv->len, 0, &meta(xv).hdr.flags,
+                     sizeof(meta(xv).hdr.flags), 0, "0x%02x");
 
-    i = enc(x->buf, x->len, i, &meta(x).hdr.vers, sizeof(meta(x).hdr.vers), 0,
-            "0x%08x");
+    i = enc(xv->buf, xv->len, i, &meta(xv).hdr.vers, sizeof(meta(xv).hdr.vers),
+            0, "0x%08x");
 
-    i = enc_lh_cids(&meta(v).hdr.scid, &meta(v).hdr.dcid, x, i);
+    i = enc_lh_cids(&meta(v).hdr.scid, &meta(v).hdr.dcid, xv, i);
 
     for (uint8_t j = 0; j < ok_vers_len; j++)
         if (!is_force_neg_vers(ok_vers[j]))
-            i = enc(x->buf, x->len, i, &ok_vers[j], sizeof(ok_vers[j]), 0,
+            i = enc(xv->buf, xv->len, i, &ok_vers[j], sizeof(ok_vers[j]), 0,
                     "0x%08x");
 
-    x->len = i;
-    x->ip = v->ip;
-    x->port = v->port;
-    x->flags = v->flags;
-    log_pkt("TX", x, x->ip, x->port, 0, 0, 0);
+    xv->len = i;
+    xv->ip = v->ip;
+    xv->port = v->port;
+    xv->flags = v->flags;
+    log_pkt("TX", xv, xv->ip, xv->port, 0, 0, 0);
 
     w_tx(ws, &q);
     while (w_tx_pending(&q))

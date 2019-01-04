@@ -262,8 +262,7 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
     if (unlikely(sq_empty(&c->txq)))
         return;
 
-    if (unlikely(sq_len(&c->txq) > 1 &&
-                 pkt_type(*sq_first(&c->txq)->buf) != F_SH))
+    if (sq_len(&c->txq) > 1 && unlikely(is_lh(*sq_first(&c->txq)->buf)))
         coalesce(&c->txq);
 
     // transmit encrypted/protected packets
@@ -690,12 +689,11 @@ static bool __attribute__((const))
 pkt_ok_for_epoch(const uint8_t flags, const epoch_t epoch)
 {
     switch (epoch) {
-    case ep_init:;
-        const uint8_t type = pkt_type(flags);
-        return type == F_LH_INIT || type == F_LH_RTRY;
+    case ep_init:
+        return pkt_type(flags) == LH_INIT || pkt_type(flags) == LH_RTRY;
     case ep_0rtt:
     case ep_hshk:
-        return is_set(F_LONG_HDR, flags);
+        return is_lh(flags);
     case ep_data:
         return true;
     }
@@ -723,7 +721,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         c->vers = meta(v).hdr.vers;
         if (c->tx_rtry) {
             // tx_rtry is currently always set on port 4434
-            if (meta(v).hdr.type == F_LH_INIT && tok_len) {
+            if (meta(v).hdr.type == LH_INIT && tok_len) {
                 if (verify_rtry_tok(c, tok, tok_len) == false) {
                     warn(ERR, "retry token verification failed");
                     enter_closing(c);
@@ -806,7 +804,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             goto done;
         }
 
-        if (meta(v).hdr.type == F_LH_RTRY) {
+        if (meta(v).hdr.type == LH_RTRY) {
             if (c->tok_len) {
                 // we already had an earlier RETRY on this connection
                 warn(ERR, "rx second RETRY");
@@ -834,14 +832,14 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
     case conn_qlse:
     case conn_clsg:
     case conn_drng:
-        if (is_set(F_LONG_HDR, meta(v).hdr.flags) && meta(v).hdr.vers == 0) {
+        if (is_lh(meta(v).hdr.flags) && meta(v).hdr.vers == 0) {
             // we shouldn't get another vers-neg packet here, ignore
             warn(NTE, "ignoring spurious vneg response");
             goto done;
         }
 
         // ignore 0-RTT packets if we're not doing 0-RTT
-        if (c->did_0rtt == false && meta(v).hdr.type == F_LH_0RTT) {
+        if (c->did_0rtt == false && meta(v).hdr.type == LH_0RTT) {
             warn(NTE, "ignoring 0-RTT pkt");
             goto done;
         }
@@ -941,9 +939,9 @@ rx_pkts(struct w_iov_sq * const x,
         c = get_conn_by_cid(&meta(v).hdr.dcid);
         if (c == 0) {
             c = get_conn_by_ipnp(w_get_sport(ws), &peer);
-            if (is_set(F_LONG_HDR, meta(v).hdr.flags)) {
+            if (is_lh(meta(v).hdr.flags)) {
                 if (!is_clnt) {
-                    if (c && meta(v).hdr.type == F_LH_0RTT) {
+                    if (c && meta(v).hdr.type == LH_0RTT) {
                         if (c->did_0rtt)
                             warn(INF,
                                  "got 0-RTT pkt for orig cid %s, new is %s, "
@@ -956,7 +954,7 @@ rx_pkts(struct w_iov_sq * const x,
                                  cid2str(&meta(v).hdr.dcid), cid2str(c->scid));
                             goto drop;
                         }
-                    } else if (c == 0 && meta(v).hdr.type == F_LH_INIT) {
+                    } else if (c == 0 && meta(v).hdr.type == LH_INIT) {
                         // validate minimum packet size
                         // TODO: actually reject
                         if (xv->user_data < MIN_INI_LEN)
@@ -989,7 +987,7 @@ rx_pkts(struct w_iov_sq * const x,
         } else {
             if (meta(v).hdr.scid.len) {
                 if (cid_cmp(&meta(v).hdr.scid, c->dcid) != 0) {
-                    if (meta(v).hdr.vers && meta(v).hdr.type == F_LH_RTRY &&
+                    if (meta(v).hdr.vers && meta(v).hdr.type == LH_RTRY &&
                         cid_cmp(&odcid, c->dcid) != 0) {
                         log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
                         warn(ERR, "retry dcid mismatch %s != %s, ignoring pkt",
@@ -1024,8 +1022,7 @@ rx_pkts(struct w_iov_sq * const x,
                  cid2str(&meta(v).hdr.dcid), meta(v).hdr.flags);
 #ifndef FUZZING
             // if this is a 0-RTT pkt, track it (may be reordered)
-            if (is_set(F_LONG_HDR, meta(v).hdr.flags) &&
-                meta(v).hdr.type == F_LH_0RTT) {
+            if (meta(v).hdr.type == LH_0RTT) {
                 struct ooo_0rtt * const zo = calloc(1, sizeof(*zo));
                 ensure(zo, "could not calloc");
                 cid_cpy(&zo->cid, &meta(v).hdr.dcid);
@@ -1045,16 +1042,16 @@ rx_pkts(struct w_iov_sq * const x,
             goto drop;
         }
 
-        if ((meta(v).hdr.vers && meta(v).hdr.type != F_LH_RTRY) ||
-            !is_set(F_LONG_HDR, meta(v).hdr.flags))
+        if ((meta(v).hdr.vers && meta(v).hdr.type != LH_RTRY) ||
+            !is_lh(meta(v).hdr.flags))
             if (dec_pkt_hdr_remainder(xv, v, c, x) == false) {
                 v->len = xv->len;
                 log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
                 if (pkt_ok_for_epoch(meta(v).hdr.flags, epoch_in(c)) == true)
-                    err_close(
-                        c, ERR_PROTOCOL_VIOLATION, 0,
-                        "crypto fail on 0x%02x-type %s pkt", meta(v).hdr.flags,
-                        is_set(F_LONG_HDR, meta(v).hdr.flags) ? "LH" : "SH");
+                    err_close(c, ERR_PROTOCOL_VIOLATION, 0,
+                              "crypto fail on 0x%02x-type %s pkt",
+                              meta(v).hdr.flags,
+                              is_lh(meta(v).hdr.flags) ? "LH" : "SH");
                 else
                     warn(ERR,
                          "received invalid %u-byte 0x%02x-type pkt, ignoring",

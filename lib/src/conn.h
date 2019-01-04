@@ -180,12 +180,8 @@ struct q_conn {
     uint32_t do_migration : 1;     ///< Perform a CID migration when possible.
     uint32_t do_key_flip : 1;      ///< Perform a TLS key update.
     uint32_t skip_cwnd_ping : 1;   ///< Skip sending PING to force ACK.
-#ifndef SPINBIT
-    uint32_t : 9;
-#else
-    uint32_t next_spin : 1; ///< Spin value to set on next packet sent.
+    uint32_t next_spin : 1;        ///< Spin value to set on next packet sent.
     uint32_t : 8;
-#endif
 
     uint16_t sport; ///< Local port (in network byte-order).
     uint16_t tok_len;

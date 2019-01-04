@@ -54,9 +54,9 @@
 struct cid {
     splay_entry(cid) node_seq;
     splay_entry(cid) node_id;
-    uint64_t seq;            ///< Connection ID sequence number
+    uint64_t seq; ///< Connection ID sequence number
     /// XXX len must precede id for cid_cmp() over both to work
-    uint8_t len;             ///< Connection ID length
+    uint8_t len; ///< Connection ID length
     /// XXX id must precede srt for ptls_openssl_random_bytes() w/both to work
     uint8_t id[MAX_CID_LEN]; ///< Connection ID
     uint8_t srt[SRT_LEN];    ///< Stateless Reset Token
@@ -141,10 +141,11 @@ struct pkt_meta {
     uint8_t is_lost : 1;  ///< Have we marked this w_iov as lost?
     uint8_t : 5;
 
-    uint8_t pkt_nr_len;  ///< Length of the packet number data.
+    uint8_t _unused;
+
     uint16_t pkt_nr_pos; ///< Offset of the packet number.
 
-    uint8_t _unused[2];
+    uint8_t _unused2[2];
 
     ev_tstamp tx_t;       ///< Transmission timestamp.
     struct pn_space * pn; ///< Packet number space; only set on TX.
