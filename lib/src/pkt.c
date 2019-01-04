@@ -409,7 +409,7 @@ bool enc_pkt(struct q_stream * const s,
         meta(v).hdr.type = LH_HSHK;
         meta(v).hdr.flags = LH | meta(v).hdr.type;
         break;
-    case likely(ep_data):
+    case ep_data:
         if (pn == &c->pn_data.pn) {
             meta(v).hdr.type = meta(v).hdr.flags = SH;
             meta(v).hdr.flags |= c->pn_data.out_kyph ? SH_KYPH : 0;
