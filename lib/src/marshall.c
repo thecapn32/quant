@@ -202,12 +202,7 @@ uint16_t marshall_enc(uint8_t * const buf,
     }
 
     default:
-        ensure(pos + enc_len <= buf_len, "buf len %u exhausted", buf_len);
-        ensure(src, "src is 0");
-        memcpy(&buf[pos], src, enc_len);
-        log_enc(uint8_t, fmt, "buf");
-        i = pos + enc_len;
-        break;
+        die("cannot encode length %u", src_len);
     }
 
     return i;
@@ -234,7 +229,7 @@ uint16_t marshall_enc_buf(uint8_t * const buf,
     ensure(src, "src is 0");
     memcpy(&buf[pos], src, enc_len);
 #ifdef DEBUG_MARSHALL
-    const uint16_t i = pos;
+    const uint16_t i = pos + enc_len;
     log_enc(uint8_t, fmt, "buf");
 #endif
     return pos + enc_len;
@@ -364,15 +359,7 @@ extern uint16_t marshall_dec(void * const dst,
     }
 
     default:
-        if (unlikely(pos + dst_len > buf_len)) {
-            warn_overrun;
-            return UINT16_MAX;
-        }
-
-        memcpy(dst, &buf[pos], dst_len);
-        log_dec(uint8_t, "buf");
-        i = pos + dst_len;
-        break;
+        die("cannot decode length %u", dst_len);
     }
 
     return i;
@@ -402,7 +389,7 @@ extern uint16_t marshall_dec_buf(void * const dst,
 
     memcpy(dst, &buf[pos], dst_len);
 #ifdef DEBUG_MARSHALL
-    const uint16_t i = pos;
+    const uint16_t i = pos + dst_len;
     log_dec(uint8_t, "buf");
 #endif
     return pos + dst_len;

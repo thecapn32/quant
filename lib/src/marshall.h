@@ -31,7 +31,7 @@
 extern uint8_t __attribute__((const)) varint_size_needed(const uint64_t v);
 
 #ifndef NDEBUG
-#define DEBUG_MARSHALL
+// #define DEBUG_MARSHALL
 #endif
 
 
