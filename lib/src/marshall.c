@@ -72,11 +72,41 @@ uint8_t varint_size_needed(const uint64_t v)
 
 
 #ifdef DEBUG_MARSHALL
+
+#define trim_str(str)                                                          \
+    __extension__({                                                            \
+        while (*(str) == '&')                                                  \
+            ++(str);                                                           \
+        size_t len = strlen((str));                                            \
+        while (len && *(str) == '(' && (str)[len - 1] == ')') {                \
+            ++(str);                                                           \
+            len -= 2;                                                          \
+        }                                                                      \
+        while (*(str) == '&') {                                                \
+            ++(str);                                                           \
+            --len;                                                             \
+        }                                                                      \
+        len;                                                                   \
+    })
+
+
 #define log_enc(type, fmt, enc_type)                                           \
-    if (unlikely(DLEVEL >= DBG && util_dlevel >= DBG))                         \
-    util_warn(DBG, false, func, file, line, (fmt),                             \
-              (src_str[0] == '&' ? &src_str[1] : src_str), *(const type *)src, \
-              i - pos, plural(i - pos), (enc_type), buf_str, pos, i - 1)
+    do {                                                                       \
+        if (unlikely(DLEVEL >= DBG && util_dlevel >= DBG)) {                   \
+            const size_t _src_len = trim_str(src_str);                         \
+            const size_t _buf_len = trim_str(buf_str);                         \
+            if (strcmp(enc_type, "buf") == 0)                                  \
+                util_warn(DBG, false, func, file, line, (fmt), _src_len,       \
+                          src_str, hex2str(src, enc_len), i - pos,             \
+                          plural(i - pos), (enc_type), _buf_len, buf_str, pos, \
+                          i - 1);                                              \
+            else                                                               \
+                util_warn(DBG, false, func, file, line, (fmt), _src_len,       \
+                          src_str, *(const type *)src, i - pos,                \
+                          plural(i - pos), (enc_type), _buf_len, buf_str, pos, \
+                          i - 1);                                              \
+        }                                                                      \
+    } while (0)
 #else
 #define log_enc(type, fmt, enc_type)                                           \
     do {                                                                       \
@@ -107,8 +137,8 @@ uint16_t marshall_enc(uint8_t * const buf,
                       const char * const func,
                       const char * const file,
                       const unsigned line,
-                      const char * const buf_str,
-                      const char * const src_str
+                      const char * buf_str,
+                      const char * src_str
 #endif
 )
 {
@@ -154,6 +184,9 @@ uint16_t marshall_enc(uint8_t * const buf,
         break;
     }
 
+    case 3:
+        die("TODO");
+
     case 4: {
         // uint32_t to network byte order
         const uint32_t v = htonl(*(const uint32_t *)src);
@@ -169,7 +202,12 @@ uint16_t marshall_enc(uint8_t * const buf,
     }
 
     default:
-        die("cannot encode length %u", src_len);
+        ensure(pos + enc_len <= buf_len, "buf len %u exhausted", buf_len);
+        ensure(src, "src is 0");
+        memcpy(&buf[pos], src, enc_len);
+        log_enc(uint8_t, fmt, "buf");
+        i = pos + enc_len;
+        break;
     }
 
     return i;
@@ -187,31 +225,36 @@ uint16_t marshall_enc_buf(uint8_t * const buf,
                           const char * const func,
                           const char * const file,
                           const unsigned line,
-                          const char * const buf_str,
-                          const char * const src_str
+                          const char * buf_str,
+                          const char * src_str
 #endif
 )
 {
     ensure(pos + enc_len <= buf_len, "buf len %u exhausted", buf_len);
     ensure(src, "src is 0");
     memcpy(&buf[pos], src, enc_len);
-#ifdef DEBUG_MARSHALL
-    if (unlikely(DLEVEL >= DBG && util_dlevel >= DBG))
-        util_warn(DBG, false, func, file, line, fmt,
-                  (src_str[0] == '&' ? &src_str[1] : src_str),
-                  hex2str(src, enc_len), enc_len, plural(enc_len), "fix",
-                  buf_str, pos, pos + enc_len - 1);
-#endif
+    const uint16_t i = pos;
+    log_enc(uint8_t, fmt, "buf");
     return pos + enc_len;
 }
 
 
 #ifdef DEBUG_MARSHALL
 #define log_dec(type, dec_type)                                                \
-    if (unlikely(DLEVEL >= DBG && util_dlevel >= DBG))                         \
-    util_warn(DBG, false, func, file, line, (fmt), i - pos, plural(i - pos),   \
-              (dec_type), buf_str, pos, i - 1,                                 \
-              (dst_str[0] == '&' ? &dst_str[1] : dst_str), *(const type *)dst)
+    do {                                                                       \
+        if (unlikely(DLEVEL >= DBG && util_dlevel >= DBG)) {                   \
+            const size_t _dst_len = trim_str(dst_str);                         \
+            const size_t _buf_len = trim_str(buf_str);                         \
+            if (strcmp(dec_type, "buf") == 0)                                  \
+                util_warn(DBG, false, func, file, line, (fmt), i - pos,        \
+                          plural(i - pos), (dec_type), _buf_len, buf_str, pos, \
+                          i - 1, _dst_len, dst_str, hex2str(dst, dst_len));    \
+            else                                                               \
+                util_warn(DBG, false, func, file, line, (fmt), i - pos,        \
+                          plural(i - pos), (dec_type), _buf_len, buf_str, pos, \
+                          i - 1, _dst_len, dst_str, *(const type *)dst);       \
+        }                                                                      \
+    } while (0)
 #else
 #define log_dec(type, dec_type)                                                \
     do {                                                                       \
@@ -245,8 +288,8 @@ extern uint16_t marshall_dec(void * const dst,
                              const char * const func,
                              const char * const file,
                              const unsigned line,
-                             const char * const buf_str,
-                             const char * const dst_str
+                             const char * buf_str,
+                             const char * dst_str
 #endif
 )
 {
@@ -297,6 +340,9 @@ extern uint16_t marshall_dec(void * const dst,
         break;
     }
 
+    case 3:
+        die("TODO");
+
     case 4: {
         // uint32_t from network byte order
         uint32_t v;
@@ -316,7 +362,15 @@ extern uint16_t marshall_dec(void * const dst,
     }
 
     default:
-        die("cannot decode length %u", dst_len);
+        if (unlikely(pos + dst_len > buf_len)) {
+            warn_overrun;
+            return UINT16_MAX;
+        }
+
+        memcpy(dst, &buf[pos], dst_len);
+        log_dec(uint8_t, "buf");
+        i = pos + dst_len;
+        break;
     }
 
     return i;
@@ -334,8 +388,8 @@ extern uint16_t marshall_dec_buf(void * const dst,
                                  const char * const func,
                                  const char * const file,
                                  const unsigned line,
-                                 const char * const buf_str,
-                                 const char * const dst_str
+                                 const char * buf_str,
+                                 const char * dst_str
 #endif
 )
 {
@@ -345,12 +399,7 @@ extern uint16_t marshall_dec_buf(void * const dst,
     }
 
     memcpy(dst, &buf[pos], dst_len);
-#ifdef DEBUG_MARSHALL
-    if (unlikely(DLEVEL >= DBG && util_dlevel >= DBG))
-        util_warn(DBG, false, func, file, line, fmt, dst_len, plural(dst_len),
-                  "fix", buf_str, pos, pos + dst_len - 1,
-                  (dst_str[0] == '&' ? &dst_str[1] : dst_str),
-                  hex2str(dst, dst_len));
-#endif
+    const uint16_t i = pos;
+    log_dec(uint8_t, "buf");
     return pos + dst_len;
 }

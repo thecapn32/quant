@@ -63,7 +63,7 @@ extern uint8_t __attribute__((const)) varint_size_needed(const uint64_t v);
 ///
 #define enc(buf, buf_len, pos, src, src_len, enc_len, fmt)                     \
     marshall_enc((buf), (buf_len), (pos), (src), (src_len), (enc_len),         \
-                 "enc %s = " fmt NRM " into %u byte%s (%s) at %s[%u..%u]",     \
+                 "enc %.*s = " fmt NRM " into %u byte%s (%s) at %.*s[%u..%u]", \
                  __func__, __FILE__, __LINE__, #buf, #src)
 #else
 #define enc(buf, buf_len, pos, src, src_len, enc_len, fmt)                     \
@@ -71,21 +71,20 @@ extern uint8_t __attribute__((const)) varint_size_needed(const uint64_t v);
 #endif
 
 
-extern uint16_t __attribute__((nonnull))
-marshall_enc(uint8_t * const buf,
-             const uint16_t buf_len,
-             const uint16_t pos,
-             const void * const src,
-             const uint8_t src_len,
-             const uint8_t enc_len
+extern uint16_t __attribute__((nonnull)) marshall_enc(uint8_t * const buf,
+                                                      const uint16_t buf_len,
+                                                      const uint16_t pos,
+                                                      const void * const src,
+                                                      const uint8_t src_len,
+                                                      const uint8_t enc_len
 #ifdef DEBUG_MARSHALL
-             ,
-             const char * const fmt,
-             const char * const func,
-             const char * const file,
-             const unsigned line,
-             const char * const buf_str,
-             const char * const src_str
+                                                      ,
+                                                      const char * const fmt,
+                                                      const char * const func,
+                                                      const char * const file,
+                                                      const unsigned line,
+                                                      const char * buf_str,
+                                                      const char * src_str
 #endif
 );
 
@@ -105,7 +104,7 @@ marshall_enc(uint8_t * const buf,
 ///
 #define enc_buf(buf, buf_len, pos, src, enc_len)                               \
     marshall_enc_buf((buf), (buf_len), (pos), (src), (enc_len),                \
-                     "enc %s = %s into %u byte%s (%s) at %s[%u..%u]",          \
+                     "enc %.*s = %s into %u byte%s (%s) at %.*s[%u..%u]",      \
                      __func__, __FILE__, __LINE__, #buf, #src)
 #else
 #define enc_buf(buf, buf_len, pos, src, enc_len)                               \
@@ -125,8 +124,8 @@ marshall_enc_buf(uint8_t * const buf,
                  const char * const func,
                  const char * const file,
                  const unsigned line,
-                 const char * const buf_str,
-                 const char * const src_str
+                 const char * buf_str,
+                 const char * src_str
 #endif
 );
 
@@ -152,7 +151,7 @@ marshall_enc_buf(uint8_t * const buf,
 ///
 #define dec(dst, buf, buf_len, pos, dst_len, fmt)                              \
     marshall_dec((dst), (buf), (buf_len), (pos), (dst_len),                    \
-                 "dec %u byte%s (%s) from %s[%u..%u] into %s = " fmt NRM,      \
+                 "dec %u byte%s (%s) from %.*s[%u..%u] into %.*s = " fmt NRM,  \
                  __func__, __FILE__, __LINE__, #buf, #dst)
 #else
 #define dec(dst, buf, buf_len, pos, dst_len, fmt)                              \
@@ -161,20 +160,19 @@ marshall_enc_buf(uint8_t * const buf,
 #endif
 
 
-extern uint16_t __attribute__((nonnull))
-marshall_dec(void * const dst,
-             const uint8_t * const buf,
-             const uint16_t buf_len,
-             const uint16_t pos,
-             const uint8_t dst_len
+extern uint16_t __attribute__((nonnull)) marshall_dec(void * const dst,
+                                                      const uint8_t * const buf,
+                                                      const uint16_t buf_len,
+                                                      const uint16_t pos,
+                                                      const uint8_t dst_len
 #ifdef DEBUG_MARSHALL
-             ,
-             const char * const fmt,
-             const char * const func,
-             const char * const file,
-             const unsigned line,
-             const char * const buf_str,
-             const char * const dst_str
+                                                      ,
+                                                      const char * const fmt,
+                                                      const char * const func,
+                                                      const char * const file,
+                                                      const unsigned line,
+                                                      const char * buf_str,
+                                                      const char * dst_str
 #endif
 );
 
@@ -195,7 +193,7 @@ marshall_dec(void * const dst,
 ///
 #define dec_buf(dst, buf, buf_len, pos, dst_len)                               \
     marshall_dec_buf((dst), (buf), (buf_len), (pos), (dst_len),                \
-                     "dec %u byte%s (%s) from %s[%u..%u] into %s = %s",        \
+                     "dec %u byte%s (%s) from %.*s[%u..%u] into %.*s = %s",    \
                      __func__, __FILE__, __LINE__, #buf, #dst)
 #else
 #define dec_buf(dst, buf, buf_len, pos, dst_len)                               \
@@ -215,7 +213,7 @@ marshall_dec_buf(void * const dst,
                  const char * const func,
                  const char * const file,
                  const unsigned line,
-                 const char * const buf_str,
-                 const char * const dst_str
+                 const char * buf_str,
+                 const char * dst_str
 #endif
 );
