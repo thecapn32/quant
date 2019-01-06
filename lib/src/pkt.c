@@ -607,7 +607,8 @@ tx:
 
 #define dec_chk_buf(dst, buf, buf_len, pos, dst_len)                           \
     __extension__({                                                            \
-        const uint16_t _i = dec_buf((dst), (buf), (buf_len), (pos), dst_len);  \
+        const uint16_t _i =                                                    \
+            dec_buf((dst), (buf), (buf_len), (pos), (dst_len));                \
         if (unlikely(_i == UINT16_MAX))                                        \
             return false;                                                      \
         _i;                                                                    \
@@ -735,8 +736,9 @@ static bool undo_pp(struct w_iov * const xv,
         is_lh(meta(v).hdr.flags) ? pnp + meta(v).hdr.len + AEAD_LEN : xv->len;
 
     uint8_t sample[AEAD_LEN] = {0};
-    memcpy(sample, &xv->buf[off],
-           unlikely(off + AEAD_LEN > len) ? len - off : AEAD_LEN);
+    const uint16_t sample_len =
+        unlikely(off + AEAD_LEN > len) ? len - off : AEAD_LEN;
+    memcpy(sample, &xv->buf[off], sample_len);
     ptls_cipher_init(ctx->pne, sample);
 
     uint8_t mask[MAX_PKT_NR_LEN + 1];
@@ -768,8 +770,8 @@ static bool undo_pp(struct w_iov * const xv,
         meta(v).hdr.nr -= pn_win;
 
 #ifdef DEBUG_MARSHALL
-    warn(DBG, "undo PP over [0, %u..%u] w/sample off %u = " FMT_PNR_IN, pnp,
-         pnp + pnl - 1, off, meta(v).hdr.nr);
+    warn(DBG, "undo PP over [0, %u..%u] w/sample off %u (len %u) = " FMT_PNR_IN,
+         pnp, pnp + pnl - 1, off, sample_len, meta(v).hdr.nr);
 #endif
 
     return true;
