@@ -1469,15 +1469,15 @@ uint16_t enc_new_cid_frame(struct q_conn * const c,
 {
     const uint8_t type = FRM_CID;
     track_frame(v, type);
+    uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
     struct cid ncid = {.seq = ++c->max_cid_seq_out,
                        .len = c->is_clnt ? CLNT_SCID_LEN : SERV_SCID_LEN};
     ptls_openssl_random_bytes(ncid.id, sizeof(ncid.id) + sizeof(ncid.srt));
     add_scid(c, &ncid);
 
-    uint16_t i = enc(v->buf, v->len, pos, &ncid.len, sizeof(ncid.len), 0, "%u");
-    i = enc(v->buf, v->len, i, &type, sizeof(type), 0, "0x%02x");
     i = enc(v->buf, v->len, i, &ncid.seq, 0, 0, "%" PRIu64);
+    i = enc(v->buf, v->len, i, &ncid.len, sizeof(ncid.len), 0, "%u");
     i = enc_buf(v->buf, v->len, i, ncid.id, ncid.len);
     i = enc_buf(v->buf, v->len, i, &ncid.srt, sizeof(ncid.srt));
 
