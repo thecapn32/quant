@@ -233,8 +233,10 @@ uint16_t marshall_enc_buf(uint8_t * const buf,
     ensure(pos + enc_len <= buf_len, "buf len %u exhausted", buf_len);
     ensure(src, "src is 0");
     memcpy(&buf[pos], src, enc_len);
+#ifdef DEBUG_MARSHALL
     const uint16_t i = pos;
     log_enc(uint8_t, fmt, "buf");
+#endif
     return pos + enc_len;
 }
 
@@ -399,7 +401,9 @@ extern uint16_t marshall_dec_buf(void * const dst,
     }
 
     memcpy(dst, &buf[pos], dst_len);
+#ifdef DEBUG_MARSHALL
     const uint16_t i = pos;
     log_dec(uint8_t, "buf");
+#endif
     return pos + dst_len;
 }
