@@ -202,7 +202,7 @@ static int setup_cipher(ptls_cipher_context_t ** hp_ctx,
         char *secret_hex = quicly_hexdump(secret, hash->digest_size, SIZE_MAX),
              *hpkey_hex =
                  quicly_hexdump(hpkey, aead->ctr_cipher->key_size, SIZE_MAX);
-        fprintf(stderr, "%s:\n  aead-secret: %s\n  hp-key: %s\n", __FUNCTION__,
+        fprintf(stderr, "%s:\n  aead-secret: %s\n  hp-key: %s\n", __func__,
                 secret_hex, hpkey_hex);
         // free(secret_hex);
         // free(hpkey_hex);
