@@ -1441,13 +1441,14 @@ void flip_keys(struct q_conn * const c, const bool out)
 
     uint8_t new_secret[PTLS_MAX_DIGEST_SIZE];
     static const char flip_label[] = "traffic upd";
-    dispose_cipher(&c->pn_data.in_1rtt[new_kyph]);
+    if (c->pn_data.in_1rtt[new_kyph].aead)
+        ptls_aead_free(c->pn_data.in_1rtt[new_kyph].aead);
     if (setup_initial_key(&c->pn_data.in_1rtt[new_kyph], cs, c->tls.secret[0],
                           flip_label, 0, new_secret))
         return;
     memcpy(c->tls.secret[0], new_secret, cs->hash->digest_size);
-
-    dispose_cipher(&c->pn_data.out_1rtt[new_kyph]);
+    if (c->pn_data.out_1rtt[new_kyph].aead)
+        ptls_aead_free(c->pn_data.out_1rtt[new_kyph].aead);
     if (setup_initial_key(&c->pn_data.out_1rtt[new_kyph], cs, c->tls.secret[1],
                           flip_label, 1, new_secret) != 0)
         return;
