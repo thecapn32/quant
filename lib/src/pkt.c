@@ -135,10 +135,11 @@ void log_pkt(const char * const dir,
         } else
             twarn(NTE,
                   BLD BLU "RX" NRM " from=%s:%u len=%u 0x%02x=" BLU "%s " NRM
-                          "kyph=%u dcid=%s nr=" BLU "%" PRIu64,
+                          "kyph=%u spin=%u dcid=%s nr=" BLU "%" PRIu64,
                   addr, prt, v->len, meta(v).hdr.flags,
                   pkt_type_str(meta(v).hdr.flags, (uint8_t *)&meta(v).hdr.vers),
-                  is_set(SH_KYPH, meta(v).hdr.flags), c2s(&meta(v).hdr.dcid),
+                  is_set(SH_KYPH, meta(v).hdr.flags),
+                  is_set(SH_SPIN, meta(v).hdr.flags), c2s(&meta(v).hdr.dcid),
                   meta(v).hdr.nr);
 
     } else {
@@ -188,10 +189,11 @@ void log_pkt(const char * const dir,
         } else
             twarn(NTE,
                   BLD GRN "TX" NRM " to=%s:%u 0x%02x=" GRN "%s " NRM
-                          "kyph=%u dcid=%s nr=" GRN "%" PRIu64,
+                          "kyph=%u spin=%u dcid=%s nr=" GRN "%" PRIu64,
                   addr, prt, meta(v).hdr.flags,
                   pkt_type_str(meta(v).hdr.flags, (uint8_t *)&meta(v).hdr.vers),
-                  is_set(SH_KYPH, meta(v).hdr.flags), c2s(&meta(v).hdr.dcid),
+                  is_set(SH_KYPH, meta(v).hdr.flags),
+                  is_set(SH_SPIN, meta(v).hdr.flags), c2s(&meta(v).hdr.dcid),
                   meta(v).hdr.nr);
     }
 }
@@ -417,12 +419,8 @@ bool enc_pkt(struct q_stream * const s,
         break;
     }
 
-    if (likely(is_lh(meta(v).hdr.flags) == false)) {
-        // set spin bit
-        if (c->next_spin)
-            meta(v).hdr.flags |= SH_SPIN;
-        warn(DBG, "setting spin bit to %02x", meta(v).hdr.flags & SH_SPIN);
-    }
+    if (likely(is_lh(meta(v).hdr.flags) == false) && c->next_spin)
+        meta(v).hdr.flags |= SH_SPIN;
 
     ensure(meta(v).hdr.nr < (1ULL << 62) - 1, "packet number overflow");
 
@@ -805,27 +803,31 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
         // the pp context does not depend on the SH kyph bit
         is_lh(meta(v).hdr.flags) ? meta(v).hdr.flags
                                  : meta(v).hdr.flags & ~SH_KYPH);
-    if (unlikely(ctx->pne == 0 || ctx->aead == 0)) {
-        // if (is_lh(meta(v).hdr.flags) == false &&
-        //     is_set(SH_KYPH, meta(v).hdr.flags) != c->pn_data.in_kyph) {
-        //     // this might be the first key phase flip
-        //     flip_keys(c, false);
-        //     ctx = which_cipher_ctx_in(c, meta(v).hdr.flags);
-        //     if (unlikely(ctx->pne == 0 || ctx->aead == 0))
-        //         return false;
-        // } else
+    if (unlikely(ctx->pne == 0 || ctx->aead == 0))
         return false;
-    }
 
-    bool first_try = true;
-    uint8_t pn_enc[MAX_PKT_NR_LEN]; // raw (encrypted) packet number data
-
-try_again:
+    // we can now undo the packet protection
     if (unlikely(undo_pp(xv, v, c, ctx) == false))
         return false;
 
-    // we can now try and verify the packet protection
+    if (unlikely(meta(v).hdr.flags &
+                 (is_lh(meta(v).hdr.flags) ? LH_RSVD_MASK : SH_RSVD_MASK))) {
+        warn(ERR, "reserved bits are non-zero");
+        return false;
+    }
+
+    // we can now try and decrypt the packet
     ctx = which_cipher_ctx_in(c, meta(v).hdr.flags);
+
+    if (likely(is_lh(meta(v).hdr.flags) == false) &&
+        unlikely(is_set(SH_KYPH, meta(v).hdr.flags) != c->pn_data.in_kyph)) {
+        // this might be the first key phase flip
+        flip_keys(c, false);
+        ctx = which_cipher_ctx_in(c, meta(v).hdr.flags);
+        if (unlikely(ctx->pne == 0 || ctx->aead == 0))
+            return false;
+    }
+
     const uint16_t pkt_len = is_lh(meta(v).hdr.flags)
                                  ? meta(v).hdr.hdr_len + meta(v).hdr.len -
                                        pkt_nr_len(meta(v).hdr.flags)
@@ -834,7 +836,6 @@ try_again:
 
     if (unlikely(ret == 0)) {
         if (likely(is_lh(meta(v).hdr.flags) == false)) {
-
             // AEAD failed; this might be a stateless reset
             if (xv->len > sizeof(c->dcid->srt)) {
                 // TODO: srt should have > 20 bytes of random prefix
@@ -844,22 +845,6 @@ try_again:
                          hex2str(c->dcid->srt, sizeof(c->dcid->srt)));
                     conn_to_state(c, conn_drng);
                     return true;
-                }
-            }
-
-            // AEAD failed; this might be due to a key phase flip
-            if (likely(first_try == true)) {
-                // check if the key phase may have changed
-                const bool v_kyph = is_set(SH_KYPH, meta(v).hdr.flags);
-                if (unlikely(v_kyph != c->pn_data.in_kyph)) {
-                    // this packet has a different key phase than we saw before,
-                    // so undo PNE decryption and retry with flipped keys
-                    memcpy(&xv->buf[meta(v).pkt_nr_pos], pn_enc,
-                           sizeof(pn_enc));
-                    flip_keys(c, false);
-                    meta(v).hdr.hdr_len = meta(v).pkt_nr_pos;
-                    first_try = false;
-                    goto try_again;
                 }
             }
         }
@@ -892,13 +877,8 @@ try_again:
             c->pn_data.in_kyph = v_kyph;
 
         // short header, spin the bit
-        if (meta(v).hdr.nr > diet_max(&(c->pn_data.pn.recv_all))) {
+        if (meta(v).hdr.nr > diet_max(&(c->pn_data.pn.recv_all)))
             c->next_spin = ((meta(v).hdr.flags & SH_SPIN) == !c->is_clnt);
-            warn(DBG, "%sing spin to 0x%02x", c->is_clnt ? "invert" : "reflect",
-                 c->next_spin);
-        } else
-            warn(DBG, "not updating next_spin: %" PRIu64 " <= %" PRIu64,
-                 meta(v).hdr.nr, diet_max(&(c->pn_data.pn.recv_all)));
     }
 
     v->len = xv->len - AEAD_LEN;
