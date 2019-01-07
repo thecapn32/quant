@@ -737,10 +737,10 @@ static bool undo_pp(struct w_iov * const xv,
     const uint16_t sample_len =
         unlikely(off + AEAD_LEN > len) ? len - off : AEAD_LEN;
     memcpy(sample, &xv->buf[off], sample_len);
-    ptls_cipher_init(ctx->pne, sample);
+    ptls_cipher_init(ctx->header_protection, sample);
 
     uint8_t mask[MAX_PKT_NR_LEN + 1];
-    ptls_cipher_encrypt(ctx->pne, mask, mask, sizeof(mask));
+    ptls_cipher_encrypt(ctx->header_protection, mask, mask, sizeof(mask));
     xv->buf[0] ^= mask[0] & (unlikely(is_lh(meta(v).hdr.flags)) ? 0x0f : 0x1f);
     const uint8_t pnl = pkt_nr_len(xv->buf[0]);
     for (uint8_t i = 0; i < pnl; i++)
@@ -788,6 +788,7 @@ which_cipher_ctx_in(const struct q_conn * const c, const uint8_t flags)
     case LH_HSHK:
         return &c->pn_hshk.in;
     default:
+        // warn(ERR, "in cipher for kyph %u", is_set(SH_KYPH, flags));
         return &c->pn_data.in_1rtt[is_set(SH_KYPH, flags)];
     }
 }
@@ -803,7 +804,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
         // the pp context does not depend on the SH kyph bit
         is_lh(meta(v).hdr.flags) ? meta(v).hdr.flags
                                  : meta(v).hdr.flags & ~SH_KYPH);
-    if (unlikely(ctx->pne == 0 || ctx->aead == 0))
+    if (unlikely(ctx->header_protection == 0))
         return false;
 
     // we can now undo the packet protection
@@ -817,16 +818,19 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
     }
 
     // we can now try and decrypt the packet
-    ctx = which_cipher_ctx_in(c, meta(v).hdr.flags);
-
     if (likely(is_lh(meta(v).hdr.flags) == false) &&
         unlikely(is_set(SH_KYPH, meta(v).hdr.flags) != c->pn_data.in_kyph)) {
-        // this might be the first key phase flip
-        flip_keys(c, false);
-        ctx = which_cipher_ctx_in(c, meta(v).hdr.flags);
-        if (unlikely(ctx->pne == 0 || ctx->aead == 0))
-            return false;
+        if (c->pn_data.out_kyph == c->pn_data.in_kyph)
+            // this is a peer-initiated key phase flip
+            flip_keys(c, false);
+        else
+            // the peer switched to a key phase that we flipped
+            c->pn_data.in_kyph = c->pn_data.out_kyph;
     }
+
+    ctx = which_cipher_ctx_in(c, meta(v).hdr.flags);
+    if (unlikely(ctx->aead == 0))
+        return false;
 
     const uint16_t pkt_len = is_lh(meta(v).hdr.flags)
                                  ? meta(v).hdr.hdr_len + meta(v).hdr.len -

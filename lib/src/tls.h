@@ -45,7 +45,7 @@ struct q_conf;
 
 struct cipher_ctx {
     ptls_aead_context_t * aead;
-    ptls_cipher_context_t * pne;
+    ptls_cipher_context_t * header_protection;
 };
 
 

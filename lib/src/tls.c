@@ -162,63 +162,68 @@ static void dispose_cipher(struct st_quicly_cipher_context_t * ctx)
 {
     if (ctx->aead)
         ptls_aead_free(ctx->aead);
-    if (ctx->pne)
-        ptls_cipher_free(ctx->pne);
+    if (ctx->header_protection)
+        ptls_cipher_free(ctx->header_protection);
 }
 
 
-// from quicly
-static int setup_cipher(struct st_quicly_cipher_context_t * ctx,
+// from quicly (with mods for key update)
+static int setup_cipher(ptls_cipher_context_t ** hp_ctx,
+                        ptls_aead_context_t ** aead_ctx,
                         ptls_aead_algorithm_t * aead,
                         ptls_hash_algorithm_t * hash,
                         int is_enc,
                         const void * secret)
 {
-    uint8_t pnekey[PTLS_MAX_SECRET_SIZE];
+    uint8_t hpkey[PTLS_MAX_SECRET_SIZE] = {0};
     int ret;
 
-    *ctx = (struct st_quicly_cipher_context_t){NULL};
+    // *hp_ctx = NULL;
+    // *aead_ctx = NULL;
 
-    if ((ctx->aead = ptls_aead_new(aead, hash, is_enc, secret,
-                                   AEAD_BASE_LABEL)) == NULL) {
-        ret = PTLS_ERROR_NO_MEMORY;
-        goto Exit;
+    if (hp_ctx) {
+        if ((ret = ptls_hkdf_expand_label(
+                 hash, hpkey, aead->ctr_cipher->key_size,
+                 ptls_iovec_init(secret, hash->digest_size), "quic hp",
+                 ptls_iovec_init(NULL, 0), NULL)) != 0)
+            goto Exit;
+        if ((*hp_ctx = ptls_cipher_new(aead->ctr_cipher, is_enc, hpkey)) ==
+            NULL) {
+            ret = PTLS_ERROR_NO_MEMORY;
+            goto Exit;
+        }
     }
-    if ((ret = ptls_hkdf_expand_label(
-             hash, pnekey, aead->ctr_cipher->key_size,
-             ptls_iovec_init(secret, hash->digest_size), "quic hp",
-             ptls_iovec_init(NULL, 0), NULL)) != 0)
-        goto Exit;
-    if ((ctx->pne = ptls_cipher_new(aead->ctr_cipher, is_enc, pnekey)) ==
-        NULL) {
+    if ((*aead_ctx = ptls_aead_new(aead, hash, is_enc, secret,
+                                   AEAD_BASE_LABEL)) == NULL) {
         ret = PTLS_ERROR_NO_MEMORY;
         goto Exit;
     }
     if (QUICLY_DEBUG) {
         char *secret_hex = quicly_hexdump(secret, hash->digest_size, SIZE_MAX),
-             *pnekey_hex =
-                 quicly_hexdump(pnekey, aead->ctr_cipher->key_size, SIZE_MAX);
-        fprintf(stderr, "%s:\n  aead-secret: %s\n  pne-key: %s\n", __func__,
-                secret_hex, pnekey_hex);
+             *hpkey_hex =
+                 quicly_hexdump(hpkey, aead->ctr_cipher->key_size, SIZE_MAX);
+        fprintf(stderr, "%s:\n  aead-secret: %s\n  hp-key: %s\n", __FUNCTION__,
+                secret_hex, hpkey_hex);
         // free(secret_hex);
-        // free(pnekey_hex);
+        // free(hpkey_hex);
     }
 
     ret = 0;
 Exit:
     if (ret != 0) {
-        if (ctx->aead != NULL) {
-            ptls_aead_free(ctx->aead);
-            ctx->aead = NULL;
+        if (*aead_ctx != NULL) {
+            ptls_aead_free(*aead_ctx);
+            *aead_ctx = NULL;
         }
-        if (ctx->pne != NULL) {
-            ptls_cipher_free(ctx->pne);
-            ctx->pne = NULL;
+        if (hp_ctx && *hp_ctx != NULL) {
+            ptls_cipher_free(*hp_ctx);
+            *hp_ctx = NULL;
         }
     }
-    ptls_clear_memory(pnekey, sizeof(pnekey));
+    ptls_clear_memory(hpkey, sizeof(hpkey));
     return ret;
 }
+
 
 // from quicly (with mods for key update)
 static int setup_initial_key(struct st_quicly_cipher_context_t * ctx,
@@ -228,22 +233,23 @@ static int setup_initial_key(struct st_quicly_cipher_context_t * ctx,
                              int is_enc,
                              void * new_secret)
 {
-    uint8_t aead_secret[PTLS_MAX_DIGEST_SIZE];
+    uint8_t _aead_secret[PTLS_MAX_DIGEST_SIZE];
+    uint8_t * const aead_secret = new_secret ? new_secret : _aead_secret;
+
     int ret;
 
     if ((ret = ptls_hkdf_expand_label(
-             cs->hash, new_secret ? new_secret : aead_secret,
-             cs->hash->digest_size,
+             cs->hash, aead_secret, cs->hash->digest_size,
              ptls_iovec_init(master_secret, cs->hash->digest_size), label,
              ptls_iovec_init(NULL, 0), NULL)) != 0)
         goto Exit;
-    if ((ret = setup_cipher(ctx, cs->aead, cs->hash, is_enc,
-                            new_secret ? new_secret : aead_secret)) != 0)
+    if ((ret =
+             setup_cipher(new_secret ? 0 : &ctx->header_protection, &ctx->aead,
+                          cs->aead, cs->hash, is_enc, aead_secret)) != 0)
         goto Exit;
 
 Exit:
-    ptls_clear_memory(new_secret ? new_secret : aead_secret,
-                      sizeof(aead_secret));
+    ptls_clear_memory(aead_secret, sizeof(aead_secret));
     return ret;
 }
 
@@ -288,7 +294,6 @@ Exit:
     ptls_clear_memory(secret, sizeof(secret));
     return ret;
 }
-
 
 static int __attribute__((nonnull))
 on_ch(ptls_on_client_hello_t * const self __attribute__((unused)),
@@ -700,8 +705,10 @@ static void init_ticket_prot(void)
     uint8_t output[PTLS_MAX_SECRET_SIZE] = {0};
     memcpy(output, quant_commit_hash,
            MIN(quant_commit_hash_len, sizeof(output)));
-    setup_cipher(&dec_tckt, cs->aead, cs->hash, 0, output);
-    setup_cipher(&enc_tckt, cs->aead, cs->hash, 1, output);
+    setup_cipher(&dec_tckt.header_protection, &dec_tckt.aead, cs->aead,
+                 cs->hash, 0, output);
+    setup_cipher(&enc_tckt.header_protection, &enc_tckt.aead, cs->aead,
+                 cs->hash, 1, output);
     ptls_clear_memory(output, sizeof(output));
 }
 
@@ -1099,21 +1106,21 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
     // warn(CRT, "update_traffic_key %s %u", is_enc ? "tx" : "rx", epoch);
     struct q_conn * const c = *ptls_get_data_ptr(tls);
     ptls_cipher_suite_t * const cipher = ptls_get_cipher(c->tls.t);
-    struct cipher_ctx * cipher_slot;
+    struct cipher_ctx * ctx;
 
     switch (epoch) {
     case ep_0rtt:
-        cipher_slot = is_enc ? &c->pn_data.out_0rtt : &c->pn_data.in_0rtt;
+        ctx = is_enc ? &c->pn_data.out_0rtt : &c->pn_data.in_0rtt;
         break;
 
     case ep_hshk:
-        cipher_slot = is_enc ? &c->pn_hshk.out : &c->pn_hshk.in;
+        ctx = is_enc ? &c->pn_hshk.out : &c->pn_hshk.in;
         break;
 
     case ep_data:
         memcpy(c->tls.secret[is_enc], secret, cipher->hash->digest_size);
-        cipher_slot = is_enc ? &c->pn_data.out_1rtt[c->pn_data.out_kyph]
-                             : &c->pn_data.in_1rtt[c->pn_data.in_kyph];
+        ctx = is_enc ? &c->pn_data.out_1rtt[c->pn_data.out_kyph]
+                     : &c->pn_data.in_1rtt[c->pn_data.in_kyph];
         break;
 
     default:
@@ -1125,8 +1132,8 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
 
     // warn(DBG, "epoch_out %u in %u", c->tls.epoch_out, epoch_in(c));
 
-    return setup_cipher(cipher_slot, cipher->aead, cipher->hash, is_enc,
-                        secret);
+    return setup_cipher(&ctx->header_protection, &ctx->aead, cipher->aead,
+                        cipher->hash, is_enc, secret);
 }
 
 
@@ -1337,10 +1344,10 @@ uint16_t enc_aead(struct q_conn * const c,
                                         ? hdr_len + ret - off
                                         : AEAD_LEN;
         memcpy(sample, &xv->buf[off], sample_len);
-        ptls_cipher_init(ctx->pne, sample);
+        ptls_cipher_init(ctx->header_protection, sample);
 
         uint8_t mask[MAX_PKT_NR_LEN + 1];
-        ptls_cipher_encrypt(ctx->pne, mask, mask, sizeof(mask));
+        ptls_cipher_encrypt(ctx->header_protection, mask, mask, sizeof(mask));
         xv->buf[0] ^=
             mask[0] & (unlikely(is_lh(meta(v).hdr.flags)) ? 0x0f : 0x1f);
         for (uint8_t i = 0; i < pnl; i++)
