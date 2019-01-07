@@ -783,10 +783,9 @@ dec_new_cid_frame(struct q_conn * const c,
     i = dec_chk_buf(FRM_CID, dcid.srt, v->buf, v->len, i, sizeof(dcid.srt));
 
     bool dup = false;
-    if (dcid.seq > c->max_cid_seq_in) {
+    if (splay_find(cids_by_seq, &c->dcids_by_seq, &dcid) == 0)
         add_dcid(c, &dcid);
-        c->max_cid_seq_in = dcid.seq;
-    } else
+    else
         dup = true;
 
     warn(INF,
