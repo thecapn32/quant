@@ -1306,8 +1306,7 @@ uint16_t enc_aead(struct q_conn * const c,
                   const struct w_iov * const v,
                   const struct w_iov * const xv)
 {
-    const struct cipher_ctx * const ctx =
-        which_cipher_ctx_out(c, meta(v).hdr.flags);
+    const struct cipher_ctx * ctx = which_cipher_ctx_out(c, meta(v).hdr.flags);
     if (unlikely(ctx == 0 || ctx->aead == 0)) {
         err_close(c, ERR_PROTOCOL_VIOLATION, 0, "0x%02x pkt, no crypto context",
                   meta(v).hdr.flags);
@@ -1323,15 +1322,21 @@ uint16_t enc_aead(struct q_conn * const c,
         meta(v).hdr.nr, v->buf, hdr_len);
 
     // apply packet protection
+    ctx = which_cipher_ctx_out(
+        c,
+        // the pp context does not depend on the SH kyph bit
+        is_lh(meta(v).hdr.flags) ? meta(v).hdr.flags
+                                 : meta(v).hdr.flags & ~SH_KYPH);
     const uint16_t pnp = meta(v).pkt_nr_pos;
     const uint8_t pnl = pkt_nr_len(meta(v).hdr.flags);
     if (likely(pnp)) {
         const uint16_t off = pnp + MAX_PKT_NR_LEN;
 
         uint8_t sample[AEAD_LEN] = {0};
-        memcpy(sample, &xv->buf[off],
-               unlikely(off + AEAD_LEN > hdr_len + ret) ? hdr_len + ret - off
-                                                        : AEAD_LEN);
+        const uint16_t sample_len = unlikely(off + AEAD_LEN > hdr_len + ret)
+                                        ? hdr_len + ret - off
+                                        : AEAD_LEN;
+        memcpy(sample, &xv->buf[off], sample_len);
         ptls_cipher_init(ctx->pne, sample);
 
         uint8_t mask[MAX_PKT_NR_LEN + 1];
@@ -1344,10 +1349,10 @@ uint16_t enc_aead(struct q_conn * const c,
 #ifdef DEBUG_MARSHALL
         warn(DBG,
              "enc %s AEAD over [%u..%u] in [%u..%u]; PP over "
-             "[0, %u..%u] w/sample off %u",
+             "[0, %u..%u] w/sample off %u (len %u)",
              aead_type(c, ctx->aead), hdr_len, hdr_len + plen - AEAD_LEN - 1,
              hdr_len + plen - AEAD_LEN, hdr_len + plen - 1, pnp, pnp + pnl - 1,
-             off);
+             off, sample_len);
 #endif
     }
 #ifdef DEBUG_MARSHALL
