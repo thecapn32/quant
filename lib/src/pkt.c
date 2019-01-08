@@ -723,16 +723,16 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
 }
 
 
-static bool undo_pp(struct w_iov * const xv,
-                    const struct w_iov * const v,
-                    struct q_conn * const c,
-                    const struct cipher_ctx * const ctx)
+void xor_hp(const struct w_iov * const xv,
+            const struct w_iov * const v,
+            const struct cipher_ctx * const ctx,
+            const uint16_t pkt_nr_pos,
+            const bool is_enc)
 {
-    // meta(v).hdr.hdr_len holds the offset of the pnr field
-    const uint16_t pnp = meta(v).hdr.hdr_len;
-    const uint16_t off = pnp + MAX_PKT_NR_LEN;
-    const uint16_t len =
-        is_lh(meta(v).hdr.flags) ? pnp + meta(v).hdr.len + AEAD_LEN : xv->len;
+    const uint16_t off = pkt_nr_pos + MAX_PKT_NR_LEN;
+    const uint16_t len = is_lh(meta(v).hdr.flags)
+                             ? pkt_nr_pos + meta(v).hdr.len + AEAD_LEN
+                             : xv->len;
 
     uint8_t sample[AEAD_LEN] = {0};
     const uint16_t sample_len =
@@ -740,18 +740,38 @@ static bool undo_pp(struct w_iov * const xv,
     memcpy(sample, &xv->buf[off], sample_len);
     ptls_cipher_init(ctx->header_protection, sample);
 
-    uint8_t mask[MAX_PKT_NR_LEN + 1];
+    uint8_t mask[MAX_PKT_NR_LEN + 1] = {0};
     ptls_cipher_encrypt(ctx->header_protection, mask, mask, sizeof(mask));
-    xv->buf[0] ^= mask[0] & (unlikely(is_lh(meta(v).hdr.flags)) ? 0x0f : 0x1f);
-    const uint8_t pnl = pkt_nr_len(xv->buf[0]);
-    for (uint8_t i = 0; i < pnl; i++)
-        xv->buf[pnp + i] ^= mask[1 + i];
 
-    // update meta(v)
+    const uint8_t pnl = pkt_nr_len(xv->buf[0]);
+    xv->buf[0] ^= mask[0] & (unlikely(is_lh(meta(v).hdr.flags)) ? 0x0f : 0x1f);
+    for (uint8_t i = 0; i < (is_enc ? pnl : pkt_nr_len(xv->buf[0])); i++)
+        xv->buf[pkt_nr_pos + i] ^= mask[1 + i];
+
+#ifdef DEBUG_MARSHALL
+    warn(DBG, "%s HP over [0, %u..%u] w/sample off %u (len %u) = " FMT_PNR_IN,
+         is_enc ? "apply" : "undo", pkt_nr_pos, pkt_nr_pos + pnl - 1, off,
+         sample_len, meta(v).hdr.nr);
+#endif
+}
+
+
+static bool undo_hp(const struct w_iov * const xv,
+                    const struct w_iov * const v,
+                    struct q_conn * const c,
+                    const struct cipher_ctx * const ctx)
+{
+    // meta(v).hdr.hdr_len holds the offset of the pnr field
+    const uint16_t pnp = meta(v).hdr.hdr_len;
+
+    // undo HP and update meta(v)
+    xor_hp(xv, v, ctx, pnp, false);
     meta(v).hdr.flags = xv->buf[0];
     meta(v).hdr.type = pkt_type(xv->buf[0]);
 
+    const uint8_t pnl = pkt_nr_len(xv->buf[0]);
     struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
+
     uint64_t nr = 0;
     dec_chk(&nr, xv->buf, xv->len, pnp, pnl, "%u");
     meta(v).hdr.hdr_len += pnl;
@@ -767,11 +787,6 @@ static bool undo_pp(struct w_iov * const xv,
         meta(v).hdr.nr += pn_win;
     else if (meta(v).hdr.nr > expected_pn + pn_hwin && meta(v).hdr.nr > pn_win)
         meta(v).hdr.nr -= pn_win;
-
-#ifdef DEBUG_MARSHALL
-    warn(DBG, "undo PP over [0, %u..%u] w/sample off %u (len %u) = " FMT_PNR_IN,
-         pnp, pnp + pnl - 1, off, sample_len, meta(v).hdr.nr);
-#endif
 
     return true;
 }
@@ -809,7 +824,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
         return false;
 
     // we can now undo the packet protection
-    if (unlikely(undo_pp(xv, v, c, ctx) == false))
+    if (unlikely(undo_hp(xv, v, c, ctx) == false))
         return false;
 
     const uint8_t rsvd_bits =

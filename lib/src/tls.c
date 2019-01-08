@@ -1335,37 +1335,13 @@ uint16_t enc_aead(struct q_conn * const c,
         // the pp context does not depend on the SH kyph bit
         is_lh(meta(v).hdr.flags) ? meta(v).hdr.flags
                                  : meta(v).hdr.flags & ~SH_KYPH);
-    if (likely(pkt_nr_pos)) {
-        const uint16_t off = pkt_nr_pos + MAX_PKT_NR_LEN;
-
-        uint8_t sample[AEAD_LEN] = {0};
-        const uint16_t sample_len = unlikely(off + AEAD_LEN > hdr_len + ret)
-                                        ? hdr_len + ret - off
-                                        : AEAD_LEN;
-        memcpy(sample, &xv->buf[off], sample_len);
-        ptls_cipher_init(ctx->header_protection, sample);
-
-        uint8_t mask[MAX_PKT_NR_LEN + 1];
-        ptls_cipher_encrypt(ctx->header_protection, mask, mask, sizeof(mask));
-        xv->buf[0] ^=
-            mask[0] & (unlikely(is_lh(meta(v).hdr.flags)) ? 0x0f : 0x1f);
-        for (uint8_t i = 0; i < pkt_nr_len(meta(v).hdr.flags); i++)
-            xv->buf[pkt_nr_pos + i] ^= mask[1 + i];
+    if (likely(pkt_nr_pos))
+        xor_hp(xv, v, ctx, pkt_nr_pos, true);
 
 #ifdef DEBUG_MARSHALL
-        warn(DBG,
-             "enc %s AEAD over [%u..%u] in [%u..%u]; PP over "
-             "[0, %u..%u] w/sample off %u (len %u)",
-             aead_type(c, ctx->aead), hdr_len, hdr_len + plen - AEAD_LEN - 1,
-             hdr_len + plen - AEAD_LEN, hdr_len + plen - 1, pkt_nr_pos,
-             pkt_nr_pos + pkt_nr_len(meta(v).hdr.flags) - 1, off, sample_len);
-#endif
-    }
-#ifdef DEBUG_MARSHALL
-    else
-        warn(DBG, "enc %s AEAD over [%u..%u] in [%u..%u]",
-             aead_type(c, ctx->aead), hdr_len, hdr_len + plen - AEAD_LEN - 1,
-             hdr_len + plen - AEAD_LEN, hdr_len + plen - 1);
+    warn(DBG, "enc %s AEAD over [%u..%u] in [%u..%u]", aead_type(c, ctx->aead),
+         hdr_len, hdr_len + plen - AEAD_LEN - 1, hdr_len + plen - AEAD_LEN,
+         hdr_len + plen - 1);
 #endif
     return hdr_len + ret;
 }
