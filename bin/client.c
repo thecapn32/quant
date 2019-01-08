@@ -105,7 +105,7 @@ static void __attribute__((noreturn, nonnull)) usage(const char * const name,
            timeout);
     printf("\t[-c]\t\tverify TLS certificates; default %s\n",
            verify_certs ? "true" : "false");
-    printf("\t[-u]\tupdate TLS keys; default %s\n",
+    printf("\t[-u]\t\tupdate TLS keys; default %s\n",
            flip_keys ? "true" : "false");
     printf("\t[-3]\t\tsend a static H3 request; default %s\n",
            do_h3 ? "true" : "false");
