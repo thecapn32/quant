@@ -59,7 +59,8 @@ logging enabled. In order to build an optimized build, do this:
 
 ## Docker container
 
-Instead of building quant for yourself, you can also obtain a pre-built Docker container. For example,
+Instead of building quant for yourself, you can also obtain a [pre-built Docker container]
+(https://cloud.docker.com/u/ntap/repository/docker/ntap/quant/). For example,
 
     docker pull ntap/quant:latest
 
