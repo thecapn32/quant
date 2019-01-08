@@ -466,8 +466,9 @@ bool enc_pkt(struct q_stream * const s,
                     meta(v).hdr.dcid.len);
     }
 
+    uint16_t pkt_nr_pos = 0;
     if (likely(meta(v).hdr.type != LH_RTRY)) {
-        meta(v).pkt_nr_pos = i;
+        pkt_nr_pos = i;
         i = enc(v->buf, v->len, i, &meta(v).hdr.nr, pnl, 0, GRN "%u" NRM);
     }
 
@@ -537,7 +538,7 @@ bool enc_pkt(struct q_stream * const s,
 
 tx:
     // for LH pkts, now encode the length
-    meta(v).hdr.len = i + AEAD_LEN - meta(v).pkt_nr_pos;
+    meta(v).hdr.len = i + AEAD_LEN - pkt_nr_pos;
     if (unlikely(len_pos)) {
         const uint64_t len = meta(v).hdr.len;
         enc(v->buf, v->len, len_pos, &len, 0, 2, "%" PRIu64);
@@ -555,7 +556,7 @@ tx:
         memcpy(xv->buf, v->buf, v->len); // copy data
         xv->len = v->len;
     } else {
-        xv->len = enc_aead(c, v, xv);
+        xv->len = enc_aead(c, v, xv, pkt_nr_pos);
         if (unlikely(xv->len == 0)) {
             adj_iov_to_start(v);
             return false;
@@ -728,7 +729,7 @@ static bool undo_pp(struct w_iov * const xv,
                     const struct cipher_ctx * const ctx)
 {
     // meta(v).hdr.hdr_len holds the offset of the pnr field
-    const uint16_t pnp = meta(v).pkt_nr_pos = meta(v).hdr.hdr_len;
+    const uint16_t pnp = meta(v).hdr.hdr_len;
     const uint16_t off = pnp + MAX_PKT_NR_LEN;
     const uint16_t len =
         is_lh(meta(v).hdr.flags) ? pnp + meta(v).hdr.len + AEAD_LEN : xv->len;
@@ -811,9 +812,12 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
     if (unlikely(undo_pp(xv, v, c, ctx) == false))
         return false;
 
-    if (unlikely(meta(v).hdr.flags &
-                 (is_lh(meta(v).hdr.flags) ? LH_RSVD_MASK : SH_RSVD_MASK))) {
-        warn(ERR, "reserved bits are non-zero");
+    const uint8_t rsvd_bits =
+        meta(v).hdr.flags &
+        (is_lh(meta(v).hdr.flags) ? LH_RSVD_MASK : SH_RSVD_MASK);
+    if (unlikely(rsvd_bits)) {
+        warn(ERR, "reserved %s bits are 0x%02x (= non-zero)",
+             is_lh(meta(v).hdr.flags) ? "LH" : "SH", rsvd_bits);
         return false;
     }
 

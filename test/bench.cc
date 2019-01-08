@@ -60,10 +60,9 @@ static void BM_quic_encryption(benchmark::State & state)
     meta(v).hdr.type = LH_INIT;
     meta(v).hdr.flags = HEAD_FORM | meta(v).hdr.type;
     meta(v).hdr.hdr_len = 16;
-    meta(v).pkt_nr_pos = pne * 16;
 
     for (auto _ : state)
-        benchmark::DoNotOptimize(enc_aead(c, v, x));
+        benchmark::DoNotOptimize(enc_aead(c, v, x, pne * 16));
     state.SetBytesProcessed(int64_t(state.iterations() * len)); // NOLINT
 
     free_iov(x);

@@ -135,21 +135,17 @@ struct pkt_meta {
     struct frames frames;        ///< Frames present in pkt.
 
     // pm_cpy(false) starts copying from here:
+    ev_tstamp tx_t;       ///< Transmission timestamp.
+    struct pn_space * pn; ///< Packet number space; only set on TX.
+    struct pkt_hdr hdr;
+
     uint16_t tx_len;      ///< Length of protected packet at TX.
     uint8_t is_rtx : 1;   ///< Does the w_iov hold truncated data?
     uint8_t is_acked : 1; ///< Is the w_iov ACKed?
     uint8_t is_lost : 1;  ///< Have we marked this w_iov as lost?
     uint8_t : 5;
 
-    uint8_t _unused;
-
-    uint16_t pkt_nr_pos; ///< Offset of the packet number.
-
-    uint8_t _unused2[2];
-
-    ev_tstamp tx_t;       ///< Transmission timestamp.
-    struct pn_space * pn; ///< Packet number space; only set on TX.
-    struct pkt_hdr hdr;
+    uint8_t _unused[5];
 };
 
 
@@ -203,7 +199,7 @@ pm_cpy(struct pkt_meta * const dst,
        const bool also_frame_info)
 {
     const size_t off = also_frame_info ? offsetof(struct pkt_meta, stream)
-                                       : offsetof(struct pkt_meta, tx_len);
+                                       : offsetof(struct pkt_meta, tx_t);
     memcpy((uint8_t *)dst + off, (const uint8_t *)src + off,
            sizeof(*dst) - off);
 }

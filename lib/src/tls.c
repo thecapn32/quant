@@ -1311,7 +1311,8 @@ uint16_t dec_aead(struct q_conn * const c
 
 uint16_t enc_aead(struct q_conn * const c,
                   const struct w_iov * const v,
-                  const struct w_iov * const xv)
+                  const struct w_iov * const xv,
+                  const uint16_t pkt_nr_pos)
 {
     const struct cipher_ctx * ctx = which_cipher_ctx_out(c, meta(v).hdr.flags);
     if (unlikely(ctx == 0 || ctx->aead == 0)) {
@@ -1334,10 +1335,8 @@ uint16_t enc_aead(struct q_conn * const c,
         // the pp context does not depend on the SH kyph bit
         is_lh(meta(v).hdr.flags) ? meta(v).hdr.flags
                                  : meta(v).hdr.flags & ~SH_KYPH);
-    const uint16_t pnp = meta(v).pkt_nr_pos;
-    const uint8_t pnl = pkt_nr_len(meta(v).hdr.flags);
-    if (likely(pnp)) {
-        const uint16_t off = pnp + MAX_PKT_NR_LEN;
+    if (likely(pkt_nr_pos)) {
+        const uint16_t off = pkt_nr_pos + MAX_PKT_NR_LEN;
 
         uint8_t sample[AEAD_LEN] = {0};
         const uint16_t sample_len = unlikely(off + AEAD_LEN > hdr_len + ret)
@@ -1350,16 +1349,16 @@ uint16_t enc_aead(struct q_conn * const c,
         ptls_cipher_encrypt(ctx->header_protection, mask, mask, sizeof(mask));
         xv->buf[0] ^=
             mask[0] & (unlikely(is_lh(meta(v).hdr.flags)) ? 0x0f : 0x1f);
-        for (uint8_t i = 0; i < pnl; i++)
-            xv->buf[pnp + i] ^= mask[1 + i];
+        for (uint8_t i = 0; i < pkt_nr_len(meta(v).hdr.flags); i++)
+            xv->buf[pkt_nr_pos + i] ^= mask[1 + i];
 
 #ifdef DEBUG_MARSHALL
         warn(DBG,
              "enc %s AEAD over [%u..%u] in [%u..%u]; PP over "
              "[0, %u..%u] w/sample off %u (len %u)",
              aead_type(c, ctx->aead), hdr_len, hdr_len + plen - AEAD_LEN - 1,
-             hdr_len + plen - AEAD_LEN, hdr_len + plen - 1, pnp, pnp + pnl - 1,
-             off, sample_len);
+             hdr_len + plen - AEAD_LEN, hdr_len + plen - 1, pkt_nr_pos,
+             pkt_nr_pos + pkt_nr_len(meta(v).hdr.flags) - 1, off, sample_len);
 #endif
     }
 #ifdef DEBUG_MARSHALL
