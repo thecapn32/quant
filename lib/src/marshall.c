@@ -114,13 +114,13 @@ uint8_t varint_size_needed(const uint64_t v)
 #endif
 
 
-#define do_enc(var, type, fmt, enc_type)                                       \
+#define do_enc(var, len, type, fmt, enc_type)                                  \
     do {                                                                       \
-        ensure(pos + sizeof(var) <= buf_len,                                   \
-               "can't enc %u byte%s at pos %u - buf len is %u", sizeof(var),   \
-               plural(sizeof(var)), i, buf_len);                               \
-        memcpy(&buf[i], &(var), sizeof(var));                                  \
-        i += sizeof(var);                                                      \
+        ensure(pos + (len) <= buf_len,                                         \
+               "can't enc %u byte%s at pos %u - buf len is %u", (len),         \
+               plural((len)), i, buf_len);                                     \
+        memcpy(&buf[i], &(var), (len));                                        \
+        i += (len);                                                            \
         log_enc(type, (fmt), (enc_type));                                      \
     } while (0)
 
@@ -153,19 +153,19 @@ uint16_t marshall_enc(uint8_t * const buf,
         const uint64_t src64 = *(const uint64_t *)src;
         if (enc_len == 1 || (enc_len == 0 && src64 < 0x40)) {
             const uint8_t v = *(const uint8_t *)src;
-            do_enc(v, uint64_t, fmt, "var");
+            do_enc(v, sizeof(v), uint64_t, fmt, "var");
 
         } else if (enc_len == 2 || (enc_len == 0 && src64 < (0x40 << 8))) {
             const uint16_t v = htons((0x40 << 8) | *(const uint16_t *)src);
-            do_enc(v, uint64_t, fmt, "var");
+            do_enc(v, sizeof(v), uint64_t, fmt, "var");
 
         } else if (enc_len == 4 || (enc_len == 0 && src64 < (0x40 << 24))) {
             const uint32_t v = htonl((0x80UL << 24) | *(const uint32_t *)src);
-            do_enc(v, uint64_t, fmt, "var");
+            do_enc(v, sizeof(v), uint64_t, fmt, "var");
 
         } else {
             const uint64_t v = htonll((0xc0ULL << 56) | src64);
-            do_enc(v, uint64_t, fmt, "var");
+            do_enc(v, sizeof(v), uint64_t, fmt, "var");
         }
         break;
     }
@@ -173,31 +173,35 @@ uint16_t marshall_enc(uint8_t * const buf,
     case 1: {
         // single byte to network byte order
         const uint8_t v = *(const uint8_t *)src;
-        do_enc(v, uint8_t, fmt, "fix");
+        do_enc(v, sizeof(v), uint8_t, fmt, "fix");
         break;
     }
 
     case 2: {
         // uint16_t to network byte order
         const uint16_t v = htons(*(const uint16_t *)src);
-        do_enc(v, uint16_t, fmt, "fix");
+        do_enc(v, sizeof(v), uint16_t, fmt, "fix");
         break;
     }
 
-    case 3:
-        die("TODO");
+    case 3: {
+        // 24 bits of a uint32_t to network byte order
+        const uint32_t v = htonl(*(const uint32_t *)src << 8);
+        do_enc(v, 3, uint32_t, fmt, "fix");
+        break;
+    }
 
     case 4: {
         // uint32_t to network byte order
         const uint32_t v = htonl(*(const uint32_t *)src);
-        do_enc(v, uint32_t, fmt, "fix");
+        do_enc(v, sizeof(v), uint32_t, fmt, "fix");
         break;
     }
 
     case 8: {
         // uint64_t to network byte order
         const uint64_t v = htonll(*(const uint64_t *)src);
-        do_enc(v, uint64_t, fmt, "fix");
+        do_enc(v, sizeof(v), uint64_t, fmt, "fix");
         break;
     }
 
@@ -263,14 +267,14 @@ uint16_t marshall_enc_buf(uint8_t * const buf,
     warn(WRN, "cannot decode from pos %u > buf len %u", pos + 1, buf_len)
 
 
-#define do_dec(var)                                                            \
+#define do_dec(var, len)                                                       \
     do {                                                                       \
-        if (unlikely(pos + sizeof(var) > buf_len)) {                           \
+        if (unlikely(pos + (len) > buf_len)) {                                 \
             warn_overrun;                                                      \
             return UINT16_MAX;                                                 \
         }                                                                      \
-        memcpy(&(var), &buf[i], sizeof(var));                                  \
-        i += sizeof(var);                                                      \
+        memcpy(&(var), &buf[i], (len));                                        \
+        i += (len);                                                            \
     } while (0)
 
 
@@ -298,22 +302,22 @@ extern uint16_t marshall_dec(void * const dst,
         *(uint64_t *)dst = 0;
         if (buf[pos] < 0x40) {
             uint8_t v;
-            do_dec(v);
+            do_dec(v, sizeof(v));
             *(uint8_t *)dst = v;
 
         } else if (buf[pos] < 0x80) {
             uint16_t v;
-            do_dec(v);
+            do_dec(v, sizeof(v));
             *(uint16_t *)dst = ntohs(v) & VARINT2_MAX;
 
         } else if (buf[pos] < 0xc0) {
             uint32_t v;
-            do_dec(v);
+            do_dec(v, sizeof(v));
             *(uint32_t *)dst = ntohl(v) & VARINT4_MAX;
 
         } else {
             uint64_t v;
-            do_dec(v);
+            do_dec(v, sizeof(v));
             *(uint64_t *)dst = ntohll(v) & VARINT8_MAX;
         }
         log_dec(uint64_t, "var");
@@ -322,7 +326,7 @@ extern uint16_t marshall_dec(void * const dst,
     case 1: {
         // single byte from network byte order
         uint8_t v;
-        do_dec(v);
+        do_dec(v, sizeof(v));
         *(uint8_t *)dst = v;
         log_dec(uint8_t, "fix");
         break;
@@ -331,19 +335,25 @@ extern uint16_t marshall_dec(void * const dst,
     case 2: {
         // uint16_t from network byte order
         uint16_t v;
-        do_dec(v);
+        do_dec(v, sizeof(v));
         *(uint16_t *)dst = ntohs(v);
         log_dec(uint16_t, "fix");
         break;
     }
 
-    case 3:
-        die("TODO");
+    case 3: {
+        // uint32_t from 24 bits in network byte order
+        uint32_t v;
+        do_dec(v, 3);
+        *(uint32_t *)dst = ntohl(v << 8);
+        log_dec(uint32_t, "fix");
+        break;
+    }
 
     case 4: {
         // uint32_t from network byte order
         uint32_t v;
-        do_dec(v);
+        do_dec(v, sizeof(v));
         *(uint32_t *)dst = ntohl(v);
         log_dec(uint32_t, "fix");
         break;
@@ -352,7 +362,7 @@ extern uint16_t marshall_dec(void * const dst,
     case 8: {
         // uint64_t from network byte order
         uint64_t v;
-        do_dec(v);
+        do_dec(v, sizeof(v));
         *(uint64_t *)dst = ntohll(v);
         log_dec(uint64_t, "fix");
         break;

@@ -251,7 +251,7 @@ needed_pkt_nr_len(const uint64_t lg_acked, const uint64_t n)
         return 1;
     if (d <= UINT16_MAX)
         return 2;
-    if (d <= (UINT16_MAX << 8 | UINT8_MAX))
+    if (d <= (UINT32_MAX >> 8))
         return 3;
     return 4;
 }
@@ -771,8 +771,7 @@ static bool undo_hp(const struct w_iov * const xv,
     meta(v).hdr.hdr_len += pnl;
 
     const uint64_t expected_pn = diet_max(&pn->recv) + 1;
-    const uint64_t pn_wins[] = {0, 1 << 7, 1 << 14, 0, 1 << 30};
-    const uint64_t pn_win = pn_wins[pnl];
+    const uint64_t pn_win = 1 << (pnl * 8);
     const uint64_t pn_hwin = pn_win / 2;
     const uint64_t pn_mask = pn_win - 1;
 
