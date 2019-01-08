@@ -807,7 +807,6 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         if (meta(v).hdr.type == LH_RTRY) {
             if (c->tok_len) {
                 // we already had an earlier RETRY on this connection
-                warn(ERR, "rx second RETRY");
                 err_close(c, ERR_PROTOCOL_VIOLATION, 0, "rx 2nd retry");
                 goto done;
             }

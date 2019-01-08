@@ -76,22 +76,7 @@ void init_pn(struct pn_space * const pn, struct q_conn * const c)
 }
 
 
-void reset_pn(struct pn_space * const pn)
-{
-    diet_free(&pn->recv);
-    diet_free(&pn->recv_all);
-    diet_free(&pn->acked);
-    diet_init(&pn->recv);
-    diet_init(&pn->recv_all);
-    diet_init(&pn->acked);
-
-    pn->lg_sent = UINT64_MAX;
-    ev_timer_stop(loop, &pn->ack_alarm);
-    pn->ect0_cnt = pn->ect1_cnt = pn->ce_cnt = 0;
-}
-
-
-void free_pn(struct pn_space * const pn)
+static void do_free_pn(struct pn_space * const pn, const bool free_iov)
 {
     ev_timer_stop(loop, &pn->ack_alarm);
 
@@ -99,11 +84,29 @@ void free_pn(struct pn_space * const pn)
     struct pkt_meta * p = splay_min(pm_by_nr, &pn->sent_pkts);
     while (p) {
         struct pkt_meta * const nxt = splay_next(pm_by_nr, &pn->sent_pkts, p);
-        free_iov(w_iov(pn->c->w, pm_idx(p)));
+        if (free_iov)
+            free_iov(w_iov(pn->c->w, pm_idx(p)));
+        else
+            ensure(splay_remove(pm_by_nr, &pn->sent_pkts, p), "removed");
         p = nxt;
     }
 
     diet_free(&pn->recv);
     diet_free(&pn->recv_all);
     diet_free(&pn->acked);
+}
+
+
+void reset_pn(struct pn_space * const pn)
+{
+    do_free_pn(pn, false);
+
+    pn->lg_sent = pn->lg_acked = UINT64_MAX;
+    pn->ect0_cnt = pn->ect1_cnt = pn->ce_cnt = 0;
+}
+
+
+void free_pn(struct pn_space * const pn)
+{
+    do_free_pn(pn, true);
 }

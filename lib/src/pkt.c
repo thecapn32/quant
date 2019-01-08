@@ -385,8 +385,9 @@ bool enc_pkt(struct q_stream * const s,
 
     switch (epoch) {
     case ep_init:
-        meta(v).hdr.type = c->tx_rtry ? LH_RTRY : LH_INIT;
-        meta(v).hdr.flags = LH | meta(v).hdr.type;
+        meta(v).hdr.type = unlikely(c->tx_rtry) ? LH_RTRY : LH_INIT;
+        meta(v).hdr.flags = LH | meta(v).hdr.type |
+                            (unlikely(c->tx_rtry) ? c->odcid.len - 3 : 0);
 
         if (c->is_clnt == false && rtx == false) {
             // this is a new connection; server picks a new random cid
@@ -435,14 +436,8 @@ bool enc_pkt(struct q_stream * const s,
         i = enc(v->buf, v->len, i, &c->vers, sizeof(c->vers), 0, "0x%08x");
         i = enc_lh_cids(c->dcid, c->scid, v, i);
 
-        if (meta(v).hdr.type == LH_RTRY) {
-            // don't need cryptographically random bit here
-            const uint8_t odcil = (uint8_t)((w_rand() & 0xf) << 4) |
-                                  (c->odcid.len ? c->odcid.len - 3 : 0);
-            i = enc(v->buf, v->len, i, &odcil, sizeof(odcil), 0, "0x%02x");
-            if (c->odcid.len)
-                i = enc_buf(v->buf, v->len, i, &c->odcid.id, c->odcid.len);
-        }
+        if (meta(v).hdr.type == LH_RTRY)
+            i = enc_buf(v->buf, v->len, i, &c->odcid.id, c->odcid.len);
 
         if (meta(v).hdr.type == LH_INIT) {
             const uint64_t tl = c->is_clnt ? c->tok_len : 0;
@@ -667,9 +662,7 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
 
         if (meta(v).hdr.type == LH_RTRY) {
             // decode odcid
-            meta(v).hdr.hdr_len = dec_chk(&odcid->len, xv->buf, xv->len,
-                                          meta(v).hdr.hdr_len, 1, "0x%02x");
-            odcid->len = (odcid->len & 0x0f) + 3;
+            odcid->len = (meta(v).hdr.flags & 0x0f) + 3;
             meta(v).hdr.hdr_len = dec_chk_buf(&odcid->id, xv->buf, xv->len,
                                               meta(v).hdr.hdr_len, odcid->len);
         }
