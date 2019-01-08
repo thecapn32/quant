@@ -180,10 +180,9 @@ int main(int argc, char * argv[])
                             "0"
 #endif
         ;
-    char dir[MAXPATHLEN] = "/Users/lars/Sites/lars/output";
-    char cert[MAXPATHLEN] =
-        "/etc/letsencrypt/live/slate.eggert.org/fullchain.pem";
-    char key[MAXPATHLEN] = "/etc/letsencrypt/live/slate.eggert.org/privkey.pem";
+    char dir[MAXPATHLEN] = ".";
+    char cert[MAXPATHLEN] = "test/dummy.crt";
+    char key[MAXPATHLEN] = "test/dummy.key";
     uint16_t port[MAXPORTS] = {4433, 4434};
     size_t num_ports = 0;
     int ch;

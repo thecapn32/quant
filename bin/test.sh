@@ -103,8 +103,7 @@ case $s in
         wquant)
                 sc="vagrant ssh -c \"\
                         /vagrant/Linux/bin/server -i enp0s8 -v5 -p $port \
-                                -c ~/slate.eggert.org/fullchain.pem \
-                                -k ~/slate.eggert.org/privkey.pem \
+                                -c $cert -k $key \
                                 -d /usr/share/doc/valgrind/html\""
                 ;;
         quicly)
