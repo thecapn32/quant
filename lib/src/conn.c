@@ -1444,5 +1444,8 @@ void free_conn(struct q_conn * const c)
     if (c->in_c_ready)
         sl_remove(&c_ready, c, q_conn, node_rx_ext);
 
+    if (c->needs_accept)
+        sl_remove(&accept_queue, c, q_conn, node_aq);
+
     free(c);
 }
