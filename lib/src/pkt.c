@@ -385,10 +385,6 @@ bool enc_pkt(struct q_stream * const s,
 
     switch (epoch) {
     case ep_init:
-        meta(v).hdr.type = unlikely(c->tx_rtry) ? LH_RTRY : LH_INIT;
-        meta(v).hdr.flags = LH | meta(v).hdr.type |
-                            (unlikely(c->tx_rtry) ? c->odcid.len - 3 : 0);
-
         if (c->is_clnt == false && rtx == false) {
             // this is a new connection; server picks a new random cid
             struct cid nscid = {.len = SERV_SCID_LEN};
@@ -397,6 +393,11 @@ bool enc_pkt(struct q_stream * const s,
             cid_cpy(&c->odcid, c->scid);
             update_act_scid(c, &nscid);
         }
+
+        meta(v).hdr.type = unlikely(c->tx_rtry) ? LH_RTRY : LH_INIT;
+        meta(v).hdr.flags = LH | meta(v).hdr.type |
+                            (unlikely(c->tx_rtry) ? c->odcid.len - 3 : 0);
+
         break;
     case ep_0rtt:
         if (c->is_clnt) {
