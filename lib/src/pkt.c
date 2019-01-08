@@ -771,7 +771,7 @@ static bool undo_hp(const struct w_iov * const xv,
     meta(v).hdr.hdr_len += pnl;
 
     const uint64_t expected_pn = diet_max(&pn->recv) + 1;
-    const uint64_t pn_win = 1 << (pnl * 8);
+    const uint64_t pn_win = UINT64_C(1) << (pnl * 8);
     const uint64_t pn_hwin = pn_win / 2;
     const uint64_t pn_mask = pn_win - 1;
 
