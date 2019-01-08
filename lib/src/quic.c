@@ -431,8 +431,8 @@ struct q_stream * q_rsv_stream(struct q_conn * const c, const bool bidi)
         bidi ? &c->tp_out.max_streams_bidi : &c->tp_out.max_streams_uni;
 
     if (unlikely(*next_sid >> 2 > *max_streams)) {
-        // we hit the max stream limit, wait for MAX_STREAM_ID frame
-        warn(WRN, "MAX_STREAM_ID increase needed for %s (%u > %u)",
+        // we hit the max stream limit, wait for MAX_STREAMS frame
+        warn(WRN, "MAX_STREAMS increase needed for %s (%u > %u)",
              bidi ? "bi" : "uni", *next_sid >> 2, *max_streams);
         if (bidi)
             c->sid_blocked_bidi = true;

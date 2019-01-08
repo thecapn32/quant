@@ -156,7 +156,7 @@ function analyze {
         perl -n -e 'BEGIN{$t=-1};
                     /TX.*len=/ and $t=1;
                     /RX.*len=/ and $t=0;
-                    /CLOSE err=0x0000/ && ($t==1 ? $tc=1 : $rc=1);
+                    /CLOSE.*err=0x0000/ && ($t==1 ? $tc=1 : $rc=1);
                     END{exit $tc+$rc};' "$log"
         local ret=$?
         if [ $ret == 2 ]; then
@@ -183,7 +183,7 @@ function analyze {
         fi
 
         perl -n -e '/connected after 0-RTT/ and $x=1;
-                    $x && /CLOSE err=0x0000/ && exit 1;' "$log"
+                    $x && /CLOSE.*err=0x0000/ && exit 1;' "$log"
         [ $? == 1 ] && zrtt[$1]=RZ
         [ ${fail[$1]} ] || rm -f "$log"
 
@@ -200,7 +200,7 @@ function analyze {
         fi
 
         perl -n -e '/RX.*len=.*Retry/ and $x=1;
-                   $x && /CLOSE err=0x0000/ && exit 1;' "$log"
+                   $x && /CLOSE.*err=0x0000/ && exit 1;' "$log"
         [ $? == 1 ] && rtry[$1]=S
         [ ${fail[$1]} ] || rm -f "$log"
 

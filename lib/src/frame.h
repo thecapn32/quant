@@ -148,20 +148,20 @@ enc_max_streams_frame(struct q_conn * const c,
                       const bool bidi);
 
 extern uint16_t __attribute__((nonnull))
-enc_stream_blocked_frame(struct q_stream * const s,
-                         const struct w_iov * const v,
-                         const uint16_t pos);
+enc_stream_data_blocked_frame(struct q_stream * const s,
+                              const struct w_iov * const v,
+                              const uint16_t pos);
 
 extern uint16_t __attribute__((nonnull))
-enc_blocked_frame(struct q_conn * const c,
-                  const struct w_iov * const v,
-                  const uint16_t pos);
+enc_data_blocked_frame(struct q_conn * const c,
+                       const struct w_iov * const v,
+                       const uint16_t pos);
 
 extern uint16_t __attribute__((nonnull))
-enc_stream_id_blocked_frame(struct q_conn * const c,
-                            const struct w_iov * const v,
-                            const uint16_t pos,
-                            const bool bidi);
+enc_streams_blocked_frame(struct q_conn * const c,
+                          const struct w_iov * const v,
+                          const uint16_t pos,
+                          const bool bidi);
 
 extern uint16_t __attribute__((nonnull))
 enc_path_challenge_frame(struct q_conn * const c,

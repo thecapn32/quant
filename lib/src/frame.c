@@ -503,39 +503,38 @@ dec_close_frame(struct q_conn * const c,
                 const uint16_t pos)
 {
     // we need to decode the type byte, since this function handles two types
-    uint8_t type = 0;
-    uint16_t i =
-        dec_chk(type, &type, v->buf, v->len, pos, sizeof(type), "0x%02x");
+    uint8_t t = 0;
+    uint16_t i = dec_chk(t, &t, v->buf, v->len, pos, sizeof(t), "0x%02x");
 
     uint16_t err_code = 0;
     // cppcheck-suppress redundantAssignment
-    i = dec_chk(type, &err_code, v->buf, v->len, i, sizeof(err_code), "0x%04x");
+    i = dec_chk(t, &err_code, v->buf, v->len, i, sizeof(err_code), "0x%04x");
 
     uint64_t frame_type = 0;
-    if (type == FRM_CLQ)
-        i = dec_chk(type, &frame_type, v->buf, v->len, i, 0, "0x%" PRIx64);
+    if (t == FRM_CLQ)
+        i = dec_chk(t, &frame_type, v->buf, v->len, i, 0, "0x%" PRIx64);
 
     uint64_t reas_len = 0;
-    i = dec_chk(type, &reas_len, v->buf, v->len, i, 0, "%" PRIu64);
+    i = dec_chk(t, &reas_len, v->buf, v->len, i, 0, "%" PRIu64);
     if (unlikely(i == UINT16_MAX || reas_len + i > v->len))
-        err_close_return(c, ERR_FRAME_ENC, type, "illegal reason len %u",
+        err_close_return(c, ERR_FRAME_ENC, t, "illegal reason len %u",
                          reas_len);
 
     char reas_phr[UINT16_MAX];
     if (reas_len)
-        i = dec_chk_buf(type, &reas_phr, v->buf, v->len, i, (uint16_t)reas_len);
+        i = dec_chk_buf(t, &reas_phr, v->buf, v->len, i, (uint16_t)reas_len);
 
-    if (type == FRM_CLQ)
+    if (t == FRM_CLQ)
         warn(INF,
-             FRAM_IN "CONNECTION_CLOSE" NRM " err=%s0x%04x " NRM
+             FRAM_IN "CONNECTION_CLOSE" NRM " 0x%02x (quic) err=%s0x%04x " NRM
                      "frame=0x%" PRIx64 " rlen=%" PRIu64 " reason=%s%.*s" NRM,
-             err_code ? RED : NRM, err_code, frame_type, reas_len,
+             t, err_code ? RED : NRM, err_code, frame_type, reas_len,
              err_code ? RED : NRM, reas_len, reas_phr);
     else
         warn(INF,
-             FRAM_IN "APPLICATION_CLOSE" NRM " err=%s0x%04x " NRM
+             FRAM_IN "CONNECTION_CLOSE" NRM " 0x%02x (app) err=%s0x%04x " NRM
                      "rlen=%" PRIu64 " reason=%s%.*s" NRM,
-             err_code ? RED : NRM, err_code, reas_len, err_code ? RED : NRM,
+             t, err_code ? RED : NRM, err_code, reas_len, err_code ? RED : NRM,
              reas_len, reas_phr);
 
     if (c->state != conn_qlse) {
@@ -593,8 +592,8 @@ dec_max_streams_frame(struct q_conn * const c,
     // cppcheck-suppress redundantAssignment
     i = dec_chk(t, &max, v->buf, v->len, i, 0, "%" PRIu64);
 
-    warn(INF, FRAM_IN "MAX_STREAMS" NRM " max=" FMT_SID " (%s)", max,
-         t == FRM_MSU ? "uni" : "bi");
+    warn(INF, FRAM_IN "MAX_STREAMS" NRM " 0x%02x (%s) max=%" PRIu64, t,
+         t == FRM_MSU ? "uni" : "bi", max);
 
     int64_t * const max_streams =
         t == FRM_MSU ? &c->tp_out.max_streams_uni : &c->tp_out.max_streams_bidi;
@@ -640,9 +639,9 @@ dec_max_data_frame(struct q_conn * const c,
 
 
 static uint16_t __attribute__((nonnull))
-dec_stream_blocked_frame(struct q_conn * const c,
-                         const struct w_iov * const v,
-                         const uint16_t pos)
+dec_stream_data_blocked_frame(struct q_conn * const c,
+                              const struct w_iov * const v,
+                              const uint16_t pos)
 {
     int64_t sid = 0;
     uint16_t i = dec_chk(FRM_SDB, &sid, v->buf, v->len, pos + 1, 0, FMT_SID);
@@ -651,8 +650,8 @@ dec_stream_blocked_frame(struct q_conn * const c,
     // cppcheck-suppress redundantAssignment
     i = dec_chk(FRM_SDB, &off, v->buf, v->len, i, 0, "%" PRIu64);
 
-    warn(INF, FRAM_IN "STREAM_BLOCKED" NRM " id=" FMT_SID " off=%" PRIu64, sid,
-         off);
+    warn(INF, FRAM_IN "STREAM_DATA_BLOCKED" NRM " id=" FMT_SID " lim=%" PRIu64,
+         sid, off);
 
     struct q_stream * const s = get_stream(c, sid);
     if (unlikely(s == 0))
@@ -664,14 +663,14 @@ dec_stream_blocked_frame(struct q_conn * const c,
 
 
 static uint16_t __attribute__((nonnull))
-dec_blocked_frame(struct q_conn * const c,
-                  const struct w_iov * const v,
-                  const uint16_t pos)
+dec_data_blocked_frame(struct q_conn * const c,
+                       const struct w_iov * const v,
+                       const uint16_t pos)
 {
     uint64_t off = 0;
     uint16_t i = dec_chk(FRM_CDB, &off, v->buf, v->len, pos + 1, 0, "%" PRIu64);
 
-    warn(INF, FRAM_IN "BLOCKED" NRM " off=%" PRIu64, off);
+    warn(INF, FRAM_IN "DATA_BLOCKED" NRM " lim=%" PRIu64, off);
 
     do_conn_fc(c);
     return i;
@@ -679,22 +678,27 @@ dec_blocked_frame(struct q_conn * const c,
 
 
 static uint16_t __attribute__((nonnull))
-dec_stream_id_blocked_frame(struct q_conn * const c,
-                            const struct w_iov * const v,
-                            const uint16_t pos)
+dec_streams_blocked_frame(struct q_conn * const c,
+                          const struct w_iov * const v,
+                          const uint16_t pos)
 {
-    int64_t sid = 0;
-    uint16_t i = dec_chk(FRM_SBB, &sid, v->buf, v->len, pos + 1, 0, FMT_SID);
+    uint8_t t = 0;
+    uint16_t i = dec_chk(t, &t, v->buf, v->len, pos, sizeof(t), "0x%02x");
 
-    warn(INF, FRAM_IN "STREAM_ID_BLOCKED" NRM " sid=" FMT_SID, sid);
+    int64_t max = 0;
+    // cppcheck-suppress redundantAssignment
+    i = dec_chk(FRM_SBB, &max, v->buf, v->len, i, 0, FMT_SID);
 
-    int64_t * const max_streams = is_uni(sid) ? &c->tp_in.new_max_streams_uni
+    warn(INF, FRAM_IN "STREAMS_BLOCKED" NRM " 0x%02x (%s) max=%" PRIu64, t,
+         t == FRM_SBB ? "bi" : "uni", max);
+
+    int64_t * const max_streams = is_uni(max) ? &c->tp_in.new_max_streams_uni
                                               : &c->tp_in.new_max_streams_bidi;
 
-    if ((sid >> 2) + 1 == *max_streams) {
+    if (max == *max_streams) {
         // let the peer open more streams
         *max_streams += 2;
-        if (is_uni(sid))
+        if (t == FRM_SBU)
             c->tx_max_sid_uni = true;
         else
             c->tx_max_sid_bidi = true;
@@ -800,9 +804,9 @@ dec_new_cid_frame(struct q_conn * const c,
 
 
 static uint16_t __attribute__((nonnull))
-dec_rst_stream_frame(struct q_conn * const c,
-                     const struct w_iov * const v,
-                     const uint16_t pos)
+dec_reset_stream_frame(struct q_conn * const c,
+                       const struct w_iov * const v,
+                       const uint16_t pos)
 {
     int64_t sid = 0;
     uint16_t i = dec_chk(FRM_RST, &sid, v->buf, v->len, pos + 1, 0, FMT_SID);
@@ -815,7 +819,7 @@ dec_rst_stream_frame(struct q_conn * const c,
     i = dec_chk(FRM_RST, &off, v->buf, v->len, i, 0, "%" PRIu64);
 
     warn(INF,
-         FRAM_IN "RST_STREAM" NRM " sid=" FMT_SID " err=%s0x%04x" NRM
+         FRAM_IN "RESET_STREAM" NRM " sid=" FMT_SID " err=%s0x%04x" NRM
                  " off=%" PRIu64,
          sid, err ? RED : NRM, err, off);
 
@@ -950,7 +954,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
                 break;
 
             case FRM_RST:
-                i = dec_rst_stream_frame(c, v, i);
+                i = dec_reset_stream_frame(c, v, i);
                 break;
 
             case FRM_CLQ:
@@ -979,15 +983,15 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
                 break;
 
             case FRM_SDB:
-                i = dec_stream_blocked_frame(c, v, i);
+                i = dec_stream_data_blocked_frame(c, v, i);
                 break;
 
             case FRM_CDB:
-                i = dec_blocked_frame(c, v, i);
+                i = dec_data_blocked_frame(c, v, i);
                 break;
 
             case FRM_SBB:
-                i = dec_stream_id_blocked_frame(c, v, i);
+                i = dec_streams_blocked_frame(c, v, i);
                 break;
 
             case FRM_STP:
@@ -1286,13 +1290,13 @@ uint16_t enc_close_frame(const struct q_conn * const c,
 
     if (type == FRM_CLQ)
         warn(INF,
-             FRAM_OUT "CONNECTION_CLOSE" NRM " err=%s0x%04x" NRM
+             FRAM_OUT "CONNECTION_CLOSE" NRM " (quic) err=%s0x%04x" NRM
                       " frame=0x%02x rlen=%" PRIu64 " reason=%s%.*s" NRM,
              c->err_code ? RED : NRM, c->err_code, c->err_frm, rlen,
              c->err_code ? RED : NRM, rlen, c->err_reason);
     else
         warn(INF,
-             FRAM_OUT "APPLICATION_CLOSE" NRM " err=%s0x%04x" NRM
+             FRAM_OUT "CONNECTION_CLOSE" NRM " (app) err=%s0x%04x" NRM
                       " rlen=%" PRIu64 " reason=%s%.*s" NRM,
              c->err_code ? RED : NRM, c->err_code, rlen,
              c->err_code ? RED : NRM, rlen, c->err_reason);
@@ -1358,8 +1362,8 @@ uint16_t enc_max_streams_frame(struct q_conn * const c,
         bidi ? c->tp_in.new_max_streams_bidi : c->tp_in.new_max_streams_uni;
     i = enc(v->buf, v->len, i, &max, 0, 0, "%" PRId64);
 
-    warn(INF, FRAM_OUT "MAX_STREAMS" NRM " max=" FMT_SID "(%s)", max,
-         bidi ? "bi" : "uni");
+    warn(INF, FRAM_OUT "MAX_STREAMS" NRM " 0x%02x (%s) max=%" PRIu64, type,
+         bidi ? "bi" : "uni", max);
 
     if (bidi) {
         meta(v).max_streams_bidi = c->tp_in.max_streams_bidi =
@@ -1375,9 +1379,9 @@ uint16_t enc_max_streams_frame(struct q_conn * const c,
 }
 
 
-uint16_t enc_stream_blocked_frame(struct q_stream * const s,
-                                  const struct w_iov * const v,
-                                  const uint16_t pos)
+uint16_t enc_stream_data_blocked_frame(struct q_stream * const s,
+                                       const struct w_iov * const v,
+                                       const uint16_t pos)
 {
     const uint8_t type = FRM_SDB;
     track_frame(v, type);
@@ -1386,16 +1390,16 @@ uint16_t enc_stream_blocked_frame(struct q_stream * const s,
     i = enc(v->buf, v->len, i, &s->id, 0, 0, FMT_SID);
     i = enc(v->buf, v->len, i, &s->out_data, 0, 0, "%" PRIu64);
 
-    warn(INF, FRAM_OUT "STREAM_BLOCKED" NRM " id=" FMT_SID " off=%" PRIu64,
+    warn(INF, FRAM_OUT "STREAM_DATA_BLOCKED" NRM " id=" FMT_SID " lim=%" PRIu64,
          s->id, s->out_data);
 
     return i;
 }
 
 
-uint16_t enc_blocked_frame(struct q_conn * const c,
-                           const struct w_iov * const v,
-                           const uint16_t pos)
+uint16_t enc_data_blocked_frame(struct q_conn * const c,
+                                const struct w_iov * const v,
+                                const uint16_t pos)
 {
     const uint8_t type = FRM_CDB;
     track_frame(v, type);
@@ -1404,25 +1408,26 @@ uint16_t enc_blocked_frame(struct q_conn * const c,
     const uint64_t off = c->tp_out.max_data + meta(v).stream_data_len;
     i = enc(v->buf, v->len, i, &off, 0, 0, "%" PRIu64);
 
-    warn(INF, FRAM_OUT "BLOCKED" NRM " off=%" PRIu64, off);
+    warn(INF, FRAM_OUT "DATA_BLOCKED" NRM " lim=%" PRIu64, off);
 
     return i;
 }
 
 
-uint16_t enc_stream_id_blocked_frame(struct q_conn * const c,
-                                     const struct w_iov * const v,
-                                     const uint16_t pos,
-                                     const bool bidi)
+uint16_t enc_streams_blocked_frame(struct q_conn * const c,
+                                   const struct w_iov * const v,
+                                   const uint16_t pos,
+                                   const bool bidi)
 {
-    const uint8_t type = FRM_SBB;
+    const uint8_t type = bidi ? FRM_SBB : FRM_SBU;
     track_frame(v, type);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
-    const int64_t ms = (bidi ? c->next_sid_bidi : c->next_sid_uni) - 4;
-    i = enc(v->buf, v->len, i, &ms, 0, 0, "%" PRId64);
+    const int64_t lim = ((bidi ? c->next_sid_bidi : c->next_sid_uni) - 4) >> 2;
+    i = enc(v->buf, v->len, i, &lim, 0, 0, "%" PRId64);
 
-    warn(INF, FRAM_OUT "STREAM_ID_BLOCKED" NRM " sid=" FMT_SID, ms);
+    warn(INF, FRAM_OUT "STREAMS_BLOCKED" NRM " 0x%02x (%s) lim=%" PRIu64, type,
+         type == FRM_SBB ? "bi" : "uni", lim);
 
     return i;
 }

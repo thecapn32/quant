@@ -330,16 +330,16 @@ enc_other_frames(struct q_stream * const s,
         i = enc_new_cid_frame(c, v, i);
 
     if (c->blocked && have_space_for(FRM_CDB, i, lim))
-        i = enc_blocked_frame(c, v, i);
+        i = enc_data_blocked_frame(c, v, i);
 
     if (c->tx_max_data && have_space_for(FRM_MCD, i, lim))
         i = enc_max_data_frame(c, v, i);
 
     if (c->sid_blocked_bidi && have_space_for(FRM_SBB, i, lim))
-        i = enc_stream_id_blocked_frame(c, v, i, true);
+        i = enc_streams_blocked_frame(c, v, i, true);
 
-    if (c->sid_blocked_uni && have_space_for(FRM_SBB, i, lim))
-        i = enc_stream_id_blocked_frame(c, v, i, false);
+    if (c->sid_blocked_uni && have_space_for(FRM_SBU, i, lim))
+        i = enc_streams_blocked_frame(c, v, i, false);
 
     if (c->tx_max_sid_bidi && have_space_for(FRM_MSB, i, lim))
         i = enc_max_streams_frame(c, v, i, true);
@@ -349,8 +349,8 @@ enc_other_frames(struct q_stream * const s,
 
     if (s->id >= 0) {
         // encode stream control frames
-        if (s->blocked && have_space_for(FRM_SBB, i, lim))
-            i = enc_stream_blocked_frame(s, v, i);
+        if (s->blocked && have_space_for(FRM_SDB, i, lim))
+            i = enc_stream_data_blocked_frame(s, v, i);
 
         if (s->tx_max_stream_data && have_space_for(FRM_MSD, i, lim))
             i = enc_max_stream_data_frame(s, v, i);
