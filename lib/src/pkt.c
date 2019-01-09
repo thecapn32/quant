@@ -895,7 +895,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
 
         // short header, spin the bit
         if (meta(v).hdr.nr > diet_max(&(c->pn_data.pn.recv_all)))
-            c->next_spin = ((meta(v).hdr.flags & SH_SPIN) == !c->is_clnt);
+            c->next_spin = (is_set(SH_SPIN, meta(v).hdr.flags) == !c->is_clnt);
     }
 
     v->len = xv->len - AEAD_LEN;
