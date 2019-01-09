@@ -110,12 +110,12 @@ struct transport_params {
     int64_t new_max_streams_uni;
     int64_t max_streams_bidi;
     int64_t new_max_streams_bidi;
+    uint64_t idle_to;
     uint64_t max_ack_del;
-    uint16_t max_pkt;
-    uint16_t idle_to;
+    uint64_t max_pkt;
     uint8_t ack_del_exp;
     bool disable_migration;
-    uint8_t _unused[2];
+    uint8_t _unused[6];
     struct cid orig_cid;
 };
 

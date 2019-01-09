@@ -506,28 +506,20 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                  c->tp_out.max_streams_uni);
             break;
 
-        case TP_IDTO:;
-            uint64_t idto = 0;
-            dec_tp(&idto);
-            warn(INF, "\tidle_timeout = %" PRIu64, idto);
-            if (idto > 600) {
-                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
-                          "idle_timeout %" PRIu64 " > 600", idto);
-                return 1;
-            }
-            c->tp_out.idle_to = (uint16_t)idto;
+        case TP_IDTO:
+            dec_tp(&c->tp_out.idle_to);
+            warn(INF, "\tidle_timeout = %" PRIu64, c->tp_out.idle_to);
             break;
 
-        case TP_MPS:;
-            uint64_t mps = 0;
-            dec_tp(&mps);
-            warn(INF, "\tmax_packet_size = %u", mps);
-            if (mps < 1200 || mps > 65527) {
+        case TP_MPS:
+            dec_tp(&c->tp_out.max_pkt);
+            warn(INF, "\tmax_packet_size = %u", c->tp_out.max_pkt);
+            if (c->tp_out.max_pkt < 1200) {
                 err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
-                          "tp_out.max_pkt %u invalid", mps);
+                          "tp_out.max_pkt %u invalid (< 1200)",
+                          c->tp_out.max_pkt);
                 return 1;
             }
-            c->tp_out.max_pkt = (uint16_t)mps;
             break;
 
         case TP_ADE:;
