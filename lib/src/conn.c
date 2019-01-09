@@ -405,7 +405,9 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
     }
 
     if (c->tp_out.disable_migration == false && c->do_migration == true) {
-        if (c->is_clnt) {
+        if (c->is_clnt &&
+            // does the peer have a CID for us that they can switch to?
+            splay_count(&c->scids_by_seq) >= 2) {
             const struct cid * const dcid =
                 splay_max(cids_by_seq, &c->dcids_by_seq);
             // if higher-numbered destination CIDs are available, switch to next
@@ -415,9 +417,9 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
                 c->do_migration = false;
                 ev_timer_again(loop, &c->migration_alarm);
             }
-        } else
-            // send new CID if the client doesn't have one remaining
-            c->tx_ncid = (splay_count(&c->scids_by_seq) < 2);
+        }
+        // send new CID if the peer doesn't have one remaining
+        c->tx_ncid = (splay_count(&c->scids_by_seq) < 2);
     }
 }
 
