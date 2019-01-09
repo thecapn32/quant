@@ -912,6 +912,16 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
         uint8_t type = 0;
         dec_chk(type, &type, v->buf, v->len, i, sizeof(type), "0x%02x");
 
+        // check that frame type is allowed in this pkt type
+        if (unlikely(meta(v).hdr.type == LH_INIT ||
+                     meta(v).hdr.type == LH_HSHK) &&
+            unlikely(type != FRM_CRY && type != FRM_ACK && type != FRM_ACE &&
+                     type != FRM_PAD && type != FRM_CLQ && type != FRM_CLA)) {
+            err_close_return(c, ERR_PROTOCOL_VIOLATION, type,
+                             "0x%02x frame not allowed in 0x%02x pkt", type,
+                             meta(v).hdr.type);
+        }
+
         if (pad_start && (type != FRM_PAD || i == v->len - 1)) {
             warn(INF, FRAM_IN "PADDING" NRM " len=%u", i - pad_start);
             pad_start = 0;
