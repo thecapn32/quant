@@ -45,7 +45,7 @@ declare -A servers=(
         [quiche]=quic.tech::4433:4434:/random
         [quicker]=quicker.edm.uhasselt.be::4433:4434:/index.html
         [quicly]=kazuhooku.com::4433:4434:/20000.txt
-        [quinn]=ralith.com::4433:4434:/index.html
+        [quinn]=ralith.com::4433:4434:/100K
         [winquic]=msquic.westus.cloudapp.azure.com::4433:4434:/the-odyssey.txt
 )
 
