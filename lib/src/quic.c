@@ -657,8 +657,15 @@ void write_to_corpus(const int dir, const void * const data, const size_t len)
     strncpy(file, hex2str(&rand, sizeof(rand)), MAXPATHLEN);
     const int fd =
         openat(dir, file, O_CREAT | O_EXCL | O_WRONLY | O_CLOEXEC, 0644);
-    ensure(fd != -1, "cannot open");
-    ensure(write(fd, data, len) != -1, "cannot write %s", file);
+    if (fd == -1) {
+        warn(ERR, "cannot open corpus file %s", file);
+        goto done;
+    }
+    if (write(fd, data, len) == -1) {
+        warn(ERR, "cannot write corpus file %s", file);
+        goto done;
+    }
+done:
     close(fd);
 }
 #endif
