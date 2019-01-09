@@ -854,7 +854,6 @@ dec_retire_cid_frame(struct q_conn * const c,
         if (unlikely(next_scid == 0))
             err_close_return(c, ERR_FRAME_ENC, FRM_RTR, "no next scid");
         c->scid = next_scid;
-        warn(ERR, "next %s", cid2str(c->scid));
     }
 
     free_scid(c, scid);

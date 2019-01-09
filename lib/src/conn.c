@@ -84,7 +84,6 @@ sockaddr_in_cmp(const struct sockaddr_in * const a,
 
 
 SPLAY_GENERATE(cids_by_seq, cid, node_seq, cids_by_seq_cmp)
-SPLAY_GENERATE(cids_by_id, cid, node_id, cid_cmp)
 
 
 bool vers_supported(const uint32_t v)
@@ -172,16 +171,40 @@ get_conn_by_cid(struct cid * const scid)
 }
 
 
-static bool __attribute__((nonnull))
-switch_scid(struct q_conn * const c, const struct cid * const id)
+static inline void __attribute__((nonnull))
+cids_by_id_ins(khash_t(cids_by_id) * const cbi, struct cid * const id)
 {
-    struct cid * scid;
+    int ret;
+    const khiter_t k = kh_put(cids_by_id, cbi, id, &ret);
+    ensure(ret >= 0, "inserted");
+    kh_val(cbi, k) = id;
+}
 
-    scid = splay_find(cids_by_id, &c->scids_by_id, id);
-    if (unlikely(scid == 0)) // || scid->seq <= c->scid->seq))
-        return false;
 
-    if (scid->seq <= c->scid->seq)
+static inline void __attribute__((nonnull))
+cids_by_id_del(khash_t(cids_by_id) * const cbi, struct cid * const id)
+{
+    const khiter_t k = kh_get(cids_by_id, cbi, id);
+    ensure(k != kh_end(cbi), "found");
+    kh_del(cids_by_id, cbi, k);
+}
+
+
+static struct cid * __attribute__((nonnull))
+get_cid_by_id(const khash_t(cids_by_id) * const cbi, struct cid * const id)
+{
+    const khiter_t k = kh_get(cids_by_id, cbi, id);
+    if (unlikely(k == kh_end(cbi)))
+        return 0;
+    return kh_val(cbi, k);
+}
+
+
+static bool __attribute__((nonnull))
+switch_scid(struct q_conn * const c, struct cid * const id)
+{
+    struct cid * const scid = get_cid_by_id(c->scids_by_id, id);
+    if (unlikely(scid == 0) || scid->seq <= c->scid->seq)
         return false;
 
     warn(NTE, "migration to scid %s for %s conn (was %s)", cid2str(scid),
@@ -195,7 +218,7 @@ switch_scid(struct q_conn * const c, const struct cid * const id)
 static void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c)
 {
     const struct cid which = {.seq = c->dcid->seq + 1};
-    struct cid * dcid = splay_find(cids_by_seq, &c->dcids_by_seq, &which);
+    struct cid * const dcid = splay_find(cids_by_seq, &c->dcids_by_seq, &which);
     ensure(dcid, "have dcid");
 
     warn(NTE, "migration to dcid %s for %s conn (was %s)", cid2str(dcid),
@@ -541,7 +564,9 @@ void update_act_scid(struct q_conn * const c, struct cid * const id)
     warn(NTE, "hshk switch to scid %s for %s conn (was %s)", cid2str(id),
          conn_type(c), cid2str(c->scid));
     conns_by_id_del(c->scid);
+    cids_by_id_del(c->scids_by_id, c->scid);
     cid_cpy(c->scid, id);
+    cids_by_id_ins(c->scids_by_id, c->scid);
     conns_by_id_ins(c, c->scid);
 }
 
@@ -551,18 +576,18 @@ void add_scid(struct q_conn * const c, struct cid * const id)
     ensure(id->len, "len 0");
     struct cid * scid = splay_find(cids_by_seq, &c->scids_by_seq, id);
     ensure(scid == 0, "cid is new");
-    scid = splay_find(cids_by_id, &c->scids_by_id, id);
+    scid = get_cid_by_id(c->scids_by_id, id);
     ensure(scid == 0, "cid is new");
 
     // warn(ERR, "new scid %s", cid2str(id));
-    struct cid * cid = calloc(1, sizeof(*cid));
-    ensure(cid, "could not calloc");
-    cid_cpy(cid, id);
-    ensure(splay_insert(cids_by_seq, &c->scids_by_seq, cid) == 0, "inserted");
-    ensure(splay_insert(cids_by_id, &c->scids_by_id, cid) == 0, "inserted");
+    scid = calloc(1, sizeof(*scid));
+    ensure(scid, "could not calloc");
+    cid_cpy(scid, id);
+    ensure(splay_insert(cids_by_seq, &c->scids_by_seq, scid) == 0, "inserted");
+    cids_by_id_ins(c->scids_by_id, scid);
     if (c->scid == 0)
-        c->scid = cid;
-    conns_by_id_ins(c, cid);
+        c->scid = scid;
+    conns_by_id_ins(c, scid);
 }
 
 
@@ -1351,7 +1376,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     // init scid and add connection to global data structures
     conns_by_ipnp_ins(c);
     splay_init(&c->scids_by_seq);
-    splay_init(&c->scids_by_id);
+    c->scids_by_id = kh_init(cids_by_id);
     struct cid nscid = {0};
     if (c->is_clnt) {
         nscid.len = CLNT_SCID_LEN;
@@ -1380,7 +1405,7 @@ struct q_conn * new_conn(struct w_engine * const w,
 void free_scid(struct q_conn * const c, struct cid * const id)
 {
     ensure(splay_remove(cids_by_seq, &c->scids_by_seq, id), "removed");
-    ensure(splay_remove(cids_by_id, &c->scids_by_id, id), "removed");
+    cids_by_id_del(c->scids_by_id, id);
     conns_by_id_del(id);
     free(id);
 }
@@ -1440,6 +1465,8 @@ void free_conn(struct q_conn * const c)
         struct cid * const id = splay_min(cids_by_seq, &c->dcids_by_seq);
         free_dcid(c, id);
     }
+
+    kh_destroy(cids_by_id, c->scids_by_id);
 
     if (c->in_c_ready)
         sl_remove(&c_ready, c, q_conn, node_rx_ext);

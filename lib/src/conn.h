@@ -142,7 +142,13 @@ extern const char * const conn_state_str[];
 
 
 splay_head(cids_by_seq, cid);
-splay_head(cids_by_id, cid);
+
+KHASH_INIT(cids_by_id, // NOLINT
+           struct cid *,
+           struct cid *,
+           1,
+           hash_cid,
+           kh_cid_cmp)
 
 
 /// A QUIC connection.
@@ -151,11 +157,11 @@ struct q_conn {
     sl_entry(q_conn) node_rx_ext; ///< For maintaining the external RX queue.
     sl_entry(q_conn) node_aq;     ///< For maintaining the accept queue.
 
-    struct cids_by_seq dcids_by_seq; ///< Destination CID hash by sequence.
-    struct cids_by_seq scids_by_seq; ///< Source CID hash by sequence.
-    struct cids_by_id scids_by_id;   ///< Source CID hash by ID.
-    struct cid * dcid;               ///< Active destination CID.
-    struct cid * scid;               ///< Active source CID.
+    struct cids_by_seq dcids_by_seq;   ///< Destination CID hash by sequence.
+    struct cids_by_seq scids_by_seq;   ///< Source CID hash by sequence.
+    khash_t(cids_by_id) * scids_by_id; ///< Source CID hash by ID.
+    struct cid * dcid;                 ///< Active destination CID.
+    struct cid * scid;                 ///< Active source CID.
 
     uint32_t holds_sock : 1;       ///< Connection manages a warpcore socket.
     uint32_t is_clnt : 1;          ///< We are the client on this connection.
@@ -253,10 +259,11 @@ extern struct q_conn_sl c_ready;
 #if !defined(NDEBUG) && !defined(FUZZING)
 #define conn_to_state(c, s)                                                    \
     do {                                                                       \
-        warn(DBG, "%s%s conn %s state %s -> " RED "%s" NRM,                    \
-             (c)->state == (s) ? RED BLD "useless transition: " NRM : "",      \
-             conn_type(c), cid2str((c)->scid), conn_state_str[(c)->state],     \
-             conn_state_str[(s)]);                                             \
+        if ((c)->scid)                                                         \
+            warn(DBG, "%s%s conn %s state %s -> " RED "%s" NRM,                \
+                 (c)->state == (s) ? RED BLD "useless transition: " NRM : "",  \
+                 conn_type(c), cid2str((c)->scid), conn_state_str[(c)->state], \
+                 conn_state_str[(s)]);                                         \
         (c)->state = (s);                                                      \
     } while (0)
 #else
@@ -382,7 +389,6 @@ conns_by_ipnp_cmp(const struct q_conn * const a, const struct q_conn * const b);
 
 
 SPLAY_PROTOTYPE(cids_by_seq, cid, node_seq, cids_by_seq_cmp)
-SPLAY_PROTOTYPE(cids_by_id, cid, node_id, cid_cmp)
 
 
 struct ooo_0rtt {
