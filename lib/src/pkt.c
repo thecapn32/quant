@@ -819,16 +819,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
 
     // we can now undo the packet protection
     if (unlikely(undo_hp(xv, v, c, ctx) == false))
-        return false;
-
-    const uint8_t rsvd_bits =
-        meta(v).hdr.flags &
-        (is_lh(meta(v).hdr.flags) ? LH_RSVD_MASK : SH_RSVD_MASK);
-    if (unlikely(rsvd_bits)) {
-        warn(ERR, "reserved %s bits are 0x%02x (= non-zero)",
-             is_lh(meta(v).hdr.flags) ? "LH" : "SH", rsvd_bits);
-        return false;
-    }
+        goto check_if_reset;
 
     // we can now try and decrypt the packet
     if (likely(is_lh(meta(v).hdr.flags) == false) &&
@@ -843,7 +834,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
 
     ctx = which_cipher_ctx_in(c, meta(v).hdr.flags);
     if (unlikely(ctx->aead == 0))
-        return false;
+        goto check_if_reset;
 
     const uint16_t pkt_len = is_lh(meta(v).hdr.flags)
                                  ? meta(v).hdr.hdr_len + meta(v).hdr.len -
@@ -852,19 +843,26 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
     const uint16_t ret = dec_aead(c, xv, v, pkt_len, ctx);
 
     if (unlikely(ret == 0)) {
-        if (likely(is_lh(meta(v).hdr.flags) == false)) {
-            // AEAD failed; this might be a stateless reset
-            if (xv->len > sizeof(c->dcid->srt)) {
-                // TODO: srt should have > 20 bytes of random prefix
-                if (memcmp(&xv->buf[xv->len - sizeof(c->dcid->srt)],
-                           c->dcid->srt, sizeof(c->dcid->srt)) == 0) {
-                    warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
-                         hex2str(c->dcid->srt, sizeof(c->dcid->srt)));
-                    conn_to_state(c, conn_drng);
-                    return true;
-                }
-            }
+    check_if_reset:
+        // AEAD failed; this might be a stateless reset
+        if ((meta(v).hdr.flags & LH) == HEAD_FIXD &&
+            xv->len >= 23 + sizeof(c->dcid->srt) &&
+            memcmp(&xv->buf[xv->len - sizeof(c->dcid->srt)], c->dcid->srt,
+                   sizeof(c->dcid->srt)) == 0) {
+            if (c->state != conn_drng)
+                conn_to_state(c, conn_drng);
+            meta(v).is_reset = true;
+            return true;
         }
+        return false;
+    }
+
+    const uint8_t rsvd_bits =
+        meta(v).hdr.flags &
+        (is_lh(meta(v).hdr.flags) ? LH_RSVD_MASK : SH_RSVD_MASK);
+    if (unlikely(rsvd_bits)) {
+        warn(ERR, "reserved %s bits are 0x%02x (= non-zero)",
+             is_lh(meta(v).hdr.flags) ? "LH" : "SH", rsvd_bits);
         return false;
     }
 

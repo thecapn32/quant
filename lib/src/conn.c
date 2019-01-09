@@ -743,6 +743,12 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 
     log_pkt("RX", v, v->ip, v->port, odcid, tok, tok_len);
 
+    if (unlikely(meta(v).is_reset)) {
+        warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
+             hex2str(c->dcid->srt, sizeof(c->dcid->srt)));
+        goto done;
+    }
+
     switch (c->state) {
     case conn_idle:
         c->vers = meta(v).hdr.vers;
