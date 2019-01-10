@@ -27,6 +27,7 @@
 
 #include "pn.h"
 #include "conn.h"
+#include "stream.h"
 
 
 struct ev_loop;
@@ -60,7 +61,9 @@ void ack_alarm(struct ev_loop * const l __attribute__((unused)),
 }
 
 
-void init_pn(struct pn_space * const pn, struct q_conn * const c)
+void init_pn(struct pn_space * const pn,
+             struct q_conn * const c,
+             const ev_tstamp ack_del)
 {
     diet_init(&pn->recv);
     diet_init(&pn->recv_all);
@@ -71,7 +74,7 @@ void init_pn(struct pn_space * const pn, struct q_conn * const c)
 
     // initialize ACK timeout
     pn->ack_alarm.data = pn;
-    pn->ack_alarm.repeat = kDelayedAckTimeout;
+    pn->ack_alarm.repeat = ack_del;
     ev_init(&pn->ack_alarm, ack_alarm);
 }
 
@@ -109,4 +112,15 @@ void reset_pn(struct pn_space * const pn)
 void free_pn(struct pn_space * const pn)
 {
     do_free_pn(pn, true);
+}
+
+
+void abandon_pn(struct q_conn * const c, const epoch_t e)
+{
+    warn(DBG, "%s abandoning epoch %u packet processing", conn_type(c), e);
+    free_stream(c->cstreams[e]);
+    free_pn(&c->pn_init.pn);
+    dispose_cipher(&c->pn_init.in);
+    dispose_cipher(&c->pn_init.out);
+    c->cstreams[e] = 0;
 }

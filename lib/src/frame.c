@@ -161,6 +161,9 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     int64_t sid = 0;
     if (t == FRM_CRY) {
         const epoch_t e = epoch_for_pkt_type(meta(v).hdr.type);
+        if (unlikely(c->cstreams[e] == 0))
+            err_close_return(c, ERR_STREAM_ID, t,
+                             "epoch %u pkt processing abandoned", e);
         sid = crpt_strm_id(e);
         meta(v).stream = c->cstreams[e];
     } else {

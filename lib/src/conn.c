@@ -469,6 +469,9 @@ void tx(struct q_conn * const c, const uint32_t limit)
 
     if (likely(c->state != conn_clsg))
         for (epoch_t e = ep_init; e <= ep_data; e++) {
+            if (c->cstreams[e] == 0)
+                continue;
+
             tx_stream(c->cstreams[e], limit);
             if (unlikely(!has_wnd(c)))
                 goto out_of_wnd;
@@ -1074,9 +1077,18 @@ rx_pkts(struct w_iov_sq * const x,
             goto drop;
         }
 
-        if ((meta(v).hdr.vers && meta(v).hdr.type != LH_RTRY) ||
-            !is_lh(meta(v).hdr.flags))
-            if (dec_pkt_hdr_remainder(xv, v, c, x) == false) {
+        if (likely((meta(v).hdr.vers && meta(v).hdr.type != LH_RTRY) ||
+                   !is_lh(meta(v).hdr.flags))) {
+            if (unlikely(meta(v).hdr.type == LH_INIT &&
+                         c->cstreams[ep_init] == 0)) {
+                // we already abandoned Initial pkt processing, ignore
+                log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
+                warn(INF,
+                     "ignoring %u-byte 0x%02x-type Initial pkt due to "
+                     "abandoned processing",
+                     v->len, meta(v).hdr.flags);
+                goto drop;
+            } else if (unlikely(dec_pkt_hdr_remainder(xv, v, c, x) == false)) {
                 v->len = xv->len;
                 log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
                 if (pkt_ok_for_epoch(meta(v).hdr.flags, epoch_in(c)) == true)
@@ -1090,6 +1102,7 @@ rx_pkts(struct w_iov_sq * const x,
                          v->len, meta(v).hdr.flags);
                 goto drop;
             }
+        }
 
         // remember that we had a RX event on this connection
         if (!c->had_rx) {
@@ -1228,20 +1241,9 @@ void enter_closing(struct q_conn * const c)
     ev_timer_stop(loop, &c->rec.ld_alarm);
     ev_timer_stop(loop, &c->idle_alarm);
 
-    // stop ACK alarm and (maybe) send any ACKs we still owe the peer
-    for (epoch_t e = ep_init; e <= ep_data; e++) {
-        struct pn_space * const pn = pn_for_epoch(c, e);
-        if ( // don't ACK when we did this already
-            c->state != conn_drng &&
-            // we don't ACK in the 0-RTT packet number space
-            e != ep_0rtt &&
-            // don't ACK here, because there will be in ACK in the CLOSE pkt
-            e != c->tls.epoch_out &&
-            // don't ACK if the timer is not running
-            ev_is_active(&pn->ack_alarm))
-            ev_invoke(loop, &pn->ack_alarm, 0);
-        ev_timer_stop(loop, &pn->ack_alarm);
-    }
+    // stop ACK alarms
+    for (epoch_t e = ep_init; e <= ep_data; e++)
+        ev_timer_stop(loop, &pn_for_epoch(c, e)->ack_alarm);
 
 #ifndef FUZZING
     if ((c->state == conn_idle || c->state == conn_opng) && c->err_code == 0) {
@@ -1325,14 +1327,14 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->vers = c->vers_initial = vers;
 
     c->streams_by_id = kh_init(streams_by_id);
-
+    c->scids_by_id = kh_init(cids_by_id);
     diet_init(&c->closed_streams);
     sq_init(&c->txq);
 
     // initialize packet number spaces
-    init_pn(&c->pn_init.pn, c);
-    init_pn(&c->pn_hshk.pn, c);
-    init_pn(&c->pn_data.pn, c);
+    init_pn(&c->pn_init.pn, c, kDelayedCryptoAckTimeout);
+    init_pn(&c->pn_hshk.pn, c, kDelayedCryptoAckTimeout);
+    init_pn(&c->pn_data.pn, c, kDelayedAckTimeout);
 
     // initialize idle timeout
     c->idle_alarm.data = c;
@@ -1384,7 +1386,6 @@ struct q_conn * new_conn(struct w_engine * const w,
     // init scid and add connection to global data structures
     conns_by_ipnp_ins(c);
     splay_init(&c->scids_by_seq);
-    c->scids_by_id = kh_init(cids_by_id);
     struct cid nscid = {0};
     if (c->is_clnt) {
         nscid.len = CLNT_SCID_LEN;
@@ -1447,7 +1448,8 @@ void free_conn(struct q_conn * const c)
     kh_destroy(streams_by_id, c->streams_by_id);
 
     for (epoch_t e = ep_init; e <= ep_data; e++)
-        free_stream(c->cstreams[e]);
+        if (c->cstreams[e])
+            free_stream(c->cstreams[e]);
 
     free_tls(c);
 

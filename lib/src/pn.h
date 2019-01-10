@@ -100,8 +100,9 @@ pm_by_nr_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
 SPLAY_PROTOTYPE(pm_by_nr, pkt_meta, nr_node, pm_by_nr_cmp)
 
 
-extern void __attribute__((nonnull))
-init_pn(struct pn_space * const pn, struct q_conn * const c);
+extern void __attribute__((nonnull)) init_pn(struct pn_space * const pn,
+                                             struct q_conn * const c,
+                                             const ev_tstamp ack_del);
 
 extern void __attribute__((nonnull)) free_pn(struct pn_space * const pn);
 
@@ -110,6 +111,8 @@ extern void __attribute__((nonnull)) reset_pn(struct pn_space * const pn);
 extern void __attribute__((nonnull))
 ack_alarm(struct ev_loop * const l, ev_timer * const w, int e);
 
+extern void __attribute__((nonnull))
+abandon_pn(struct q_conn * const c, const epoch_t e);
 
 static inline bool __attribute__((nonnull, always_inline))
 needs_ack(struct pn_space * const pn)

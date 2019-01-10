@@ -294,6 +294,7 @@ extern const uint8_t ok_vers_len;
 
 /// The length of the peer’s delayed ack timer (in sec).
 #define kDelayedAckTimeout 0.025
+#define kDelayedCryptoAckTimeout 0.001
 
 /// The default RTT used before an RTT sample is taken (in sec).
 #define kDefaultInitialRtt 0.1

@@ -158,12 +158,16 @@ static bool do_tls_key_flips = false;
 
 
 // from quicly
-static void dispose_cipher(struct st_quicly_cipher_context_t * ctx)
+void dispose_cipher(struct st_quicly_cipher_context_t * ctx)
 {
-    if (ctx->aead)
+    if (ctx->aead) {
         ptls_aead_free(ctx->aead);
-    if (ctx->header_protection)
+        ctx->aead = 0;
+    }
+    if (ctx->header_protection) {
         ptls_cipher_free(ctx->header_protection);
+        ctx->header_protection = 0;
+    }
 }
 
 

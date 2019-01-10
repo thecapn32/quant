@@ -585,8 +585,14 @@ tx:
         meta(v).is_lost = false;
 
     on_pkt_sent(s, v);
-    if (c->is_clnt && is_lh(meta(v).hdr.flags) == false)
-        maybe_flip_keys(c, true);
+
+    if (c->is_clnt) {
+        if (is_lh(meta(v).hdr.flags) == false)
+            maybe_flip_keys(c, true);
+        if (unlikely(meta(v).hdr.type == LH_HSHK && c->cstreams[ep_init]))
+            abandon_pn(c, ep_init);
+    }
+
     return true;
 }
 
@@ -897,6 +903,10 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
     }
 
     v->len = xv->len - AEAD_LEN;
+
+    if (!c->is_clnt &&
+        unlikely(meta(v).hdr.type == LH_HSHK && c->cstreams[ep_init]))
+        abandon_pn(c, ep_init);
 
     // packet protection verified OK
     struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);

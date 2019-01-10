@@ -64,7 +64,8 @@ in_recovery(const struct q_conn * const c, const uint64_t nr)
 static inline bool __attribute__((nonnull))
 crypto_pkts_outstanding(struct q_conn * const c)
 {
-    return out_fully_acked(c->cstreams[ep_init]) == false ||
+    return (c->cstreams[ep_init] &&
+            out_fully_acked(c->cstreams[ep_init]) == false) ||
            out_fully_acked(c->cstreams[ep_hshk]) == false;
 }
 

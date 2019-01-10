@@ -104,3 +104,5 @@ flip_keys(struct q_conn * const c, const bool out);
 
 extern void __attribute__((nonnull))
 maybe_flip_keys(struct q_conn * const c, const bool out);
+
+extern void __attribute__((nonnull)) dispose_cipher(struct cipher_ctx * ctx);
