@@ -53,28 +53,6 @@
 
 
 #ifndef NDEBUG
-static const char * __attribute__((const))
-pkt_type_str(const uint8_t flags, const uint8_t * const vers)
-{
-    if (is_lh(flags)) {
-        if (vers[0] == 0 && vers[1] == 0 && vers[2] == 0 && vers[3] == 0)
-            return "Version Negotiation";
-        switch (pkt_type(flags)) {
-        case LH_INIT:
-            return "Initial";
-        case LH_RTRY:
-            return "Retry";
-        case LH_HSHK:
-            return "Handshake";
-        case LH_0RTT:
-            return "0-RTT Protected";
-        }
-    } else if (pkt_type(flags) == SH)
-        return "Short";
-    return RED "Unknown" NRM;
-}
-
-
 // local version of cid2str that is just hex2str (omits the seq)
 #define c2s(i) hex2str((i)->id, (i)->len)
 
@@ -96,8 +74,7 @@ void log_pkt(const char * const dir,
                       BLD BLU "RX" NRM " from=%s:%u len=%u 0x%02x=" BLU
                               "%s " NRM "vers=0x%08x dcid=%s scid=%s",
                       addr, prt, v->len, meta(v).hdr.flags,
-                      pkt_type_str(meta(v).hdr.flags,
-                                   (uint8_t *)&meta(v).hdr.vers),
+                      pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers),
                       meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
                       c2s(&meta(v).hdr.scid));
             else if (meta(v).hdr.type == LH_RTRY)
@@ -106,8 +83,7 @@ void log_pkt(const char * const dir,
                     BLD BLU "RX" NRM " from=%s:%u len=%u 0x%02x=" BLU "%s " NRM
                             "vers=0x%08x dcid=%s scid=%s odcid=%s tok=%s",
                     addr, prt, v->len, meta(v).hdr.flags,
-                    pkt_type_str(meta(v).hdr.flags,
-                                 (uint8_t *)&meta(v).hdr.vers),
+                    pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers),
                     meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
                     c2s(&meta(v).hdr.scid), c2s(odcid), hex2str(tok, tok_len));
             else if (meta(v).hdr.type == LH_INIT)
@@ -117,8 +93,7 @@ void log_pkt(const char * const dir,
                       "vers=0x%08x dcid=%s scid=%s tok=%s len=%u nr=" BLU
                       "%" PRIu64,
                       addr, prt, v->len, meta(v).hdr.flags,
-                      pkt_type_str(meta(v).hdr.flags,
-                                   (uint8_t *)&meta(v).hdr.vers),
+                      pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers),
                       meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
                       c2s(&meta(v).hdr.scid), hex2str(tok, tok_len),
                       meta(v).hdr.len, meta(v).hdr.nr);
@@ -128,8 +103,7 @@ void log_pkt(const char * const dir,
                       "RX" NRM " from=%s:%u len=%u 0x%02x=" BLU "%s " NRM
                       "vers=0x%08x dcid=%s scid=%s len=%u nr=" BLU "%" PRIu64,
                       addr, prt, v->len, meta(v).hdr.flags,
-                      pkt_type_str(meta(v).hdr.flags,
-                                   (uint8_t *)&meta(v).hdr.vers),
+                      pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers),
                       meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
                       c2s(&meta(v).hdr.scid), meta(v).hdr.len, meta(v).hdr.nr);
         } else
@@ -137,7 +111,7 @@ void log_pkt(const char * const dir,
                   BLD BLU "RX" NRM " from=%s:%u len=%u 0x%02x=" BLU "%s " NRM
                           "kyph=%u spin=%u dcid=%s nr=" BLU "%" PRIu64,
                   addr, prt, v->len, meta(v).hdr.flags,
-                  pkt_type_str(meta(v).hdr.flags, (uint8_t *)&meta(v).hdr.vers),
+                  pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers),
                   is_set(SH_KYPH, meta(v).hdr.flags),
                   is_set(SH_SPIN, meta(v).hdr.flags), c2s(&meta(v).hdr.dcid),
                   meta(v).hdr.nr);
@@ -150,8 +124,7 @@ void log_pkt(const char * const dir,
                       BLD GRN "TX" NRM " to=%s:%u 0x%02x=" GRN "%s " NRM
                               "vers=0x%08x dcid=%s scid=%s",
                       addr, prt, meta(v).hdr.flags,
-                      pkt_type_str(meta(v).hdr.flags,
-                                   (uint8_t *)&meta(v).hdr.vers),
+                      pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers),
                       meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
                       c2s(&meta(v).hdr.scid));
             else if (meta(v).hdr.type == LH_RTRY)
@@ -159,8 +132,7 @@ void log_pkt(const char * const dir,
                       BLD GRN "TX" NRM " to=%s:%u 0x%02x=" GRN "%s " NRM
                               "vers=0x%08x dcid=%s scid=%s odcid=%s tok=%s",
                       addr, prt, meta(v).hdr.flags,
-                      pkt_type_str(meta(v).hdr.flags,
-                                   (uint8_t *)&meta(v).hdr.vers),
+                      pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers),
                       meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
                       c2s(&meta(v).hdr.scid), c2s(odcid),
                       hex2str(tok, tok_len));
@@ -171,8 +143,7 @@ void log_pkt(const char * const dir,
                       "vers=0x%08x dcid=%s scid=%s tok=%s len=%u nr=" GRN
                       "%" PRIu64,
                       addr, prt, meta(v).hdr.flags,
-                      pkt_type_str(meta(v).hdr.flags,
-                                   (uint8_t *)&meta(v).hdr.vers),
+                      pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers),
                       meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
                       c2s(&meta(v).hdr.scid), hex2str(tok, tok_len),
                       meta(v).hdr.len, meta(v).hdr.nr);
@@ -182,8 +153,7 @@ void log_pkt(const char * const dir,
                               "vers=0x%08x dcid=%s scid=%s len=%u nr=" GRN
                               "%" PRIu64,
                       addr, prt, meta(v).hdr.flags,
-                      pkt_type_str(meta(v).hdr.flags,
-                                   (uint8_t *)&meta(v).hdr.vers),
+                      pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers),
                       meta(v).hdr.vers, c2s(&meta(v).hdr.dcid),
                       c2s(&meta(v).hdr.scid), meta(v).hdr.len, meta(v).hdr.nr);
         } else
@@ -191,7 +161,7 @@ void log_pkt(const char * const dir,
                   BLD GRN "TX" NRM " to=%s:%u 0x%02x=" GRN "%s " NRM
                           "kyph=%u spin=%u dcid=%s nr=" GRN "%" PRIu64,
                   addr, prt, meta(v).hdr.flags,
-                  pkt_type_str(meta(v).hdr.flags, (uint8_t *)&meta(v).hdr.vers),
+                  pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers),
                   is_set(SH_KYPH, meta(v).hdr.flags),
                   is_set(SH_SPIN, meta(v).hdr.flags), c2s(&meta(v).hdr.dcid),
                   meta(v).hdr.nr);
@@ -933,7 +903,7 @@ void tx_vneg_resp(const struct w_sock * const ws, const struct w_iov * const v)
     struct w_iov_sq q = w_iov_sq_initializer(q);
     sq_insert_head(&q, xv, next);
 
-    warn(INF, "sending vers neg serv response");
+    warn(INF, "sending vneg serv response");
     meta(xv).hdr.flags = HEAD_FORM | (uint8_t)w_rand();
     uint16_t i = enc(xv->buf, xv->len, 0, &meta(xv).hdr.flags,
                      sizeof(meta(xv).hdr.flags), 0, "0x%02x");

@@ -124,6 +124,33 @@ pn_for_pkt_type(struct q_conn * const c, const uint8_t t)
 }
 
 
+#ifndef NDEBUG
+static inline const char * __attribute__((const, nonnull))
+pkt_type_str(const uint8_t flags, const void * const vers)
+{
+    if (is_lh(flags)) {
+        if (((const uint8_t * const)vers)[0] == 0 &&
+            ((const uint8_t * const)vers)[1] == 0 &&
+            ((const uint8_t * const)vers)[2] == 0 &&
+            ((const uint8_t * const)vers)[3] == 0)
+            return "Version Negotiation";
+        switch (pkt_type(flags)) {
+        case LH_INIT:
+            return "Initial";
+        case LH_RTRY:
+            return "Retry";
+        case LH_HSHK:
+            return "Handshake";
+        case LH_0RTT:
+            return "0-RTT Protected";
+        }
+    } else if (pkt_type(flags) == SH)
+        return "Short";
+    return RED "Unknown" NRM;
+}
+#endif
+
+
 struct q_stream;
 struct w_iov;
 struct w_iov_sq;

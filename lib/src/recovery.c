@@ -39,6 +39,7 @@
 #include "diet.h"
 #include "frame.h"
 #include "marshall.h"
+#include "pkt.h"
 #include "pn.h"
 #include "quic.h"
 #include "recovery.h"
@@ -160,8 +161,8 @@ detect_lost_pkts(struct q_conn * const c, struct pn_space * const pn)
 
         if (time_since_sent > delay_until_lost ||
             delta > kReorderingThreshold) {
-            warn(WRN, "0x%02x-type pkt " FMT_PNR_OUT " considered lost",
-                 p->hdr.flags, p->hdr.nr);
+            warn(WRN, "%s pkt " FMT_PNR_OUT " considered lost",
+                 pkt_type_str(p->hdr.flags, &p->hdr.vers), p->hdr.nr);
             p->is_lost = true;
             // c->needs_tx = true;
 
@@ -374,8 +375,8 @@ void on_ack_received_2(struct q_conn * const c,
         for (struct pkt_meta * p = splay_min(pm_by_nr, &pn->sent_pkts);
              p && p->hdr.nr < sm_new_acked;
              p = splay_next(pm_by_nr, &pn->sent_pkts, p)) {
-            warn(DBG, "0x%02x-type pkt " FMT_PNR_OUT " considered lost",
-                 p->hdr.flags, p->hdr.nr);
+            warn(DBG, "%s pkt " FMT_PNR_OUT " considered lost",
+                 pkt_type_str(p->hdr.flags, &p->hdr.vers), p->hdr.nr);
             p->is_lost = true;
             if (is_ack_only(&p->frames) == false) {
                 // bytes_in_flight -= lost_packet.bytes

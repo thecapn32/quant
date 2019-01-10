@@ -814,7 +814,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             // this is a vneg pkt
             if (c->vers != ok_vers[0]) {
                 // we must have already reacted to a prior vneg pkt
-                warn(INF, "ignoring spurious vers neg response");
+                warn(INF, "ignoring spurious vneg response");
                 goto done;
             }
 
@@ -955,14 +955,13 @@ rx_pkts(struct w_iov_sq * const x,
                                             &tok_len))) {
             // we might still need to send a vneg packet
             if (w_connected(ws) == false) {
-                warn(ERR,
-                     "received invalid %u-byte pkt (type 0x%02x), sending vneg",
-                     v->len, v->buf[0]);
+                warn(ERR, "received invalid %u-byte %s pkt, sending vneg",
+                     v->len,
+                     pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
                 tx_vneg_resp(ws, v);
             } else
-                warn(ERR,
-                     "received invalid %u-byte pkt (type 0x%02x), ignoring",
-                     v->len, v->buf[0]);
+                warn(ERR, "received invalid %u-byte %s pkt), ignoring", v->len,
+                     pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
             // can't log packet, because it may be too short for log_pkt()
             goto drop;
         }
@@ -1053,8 +1052,9 @@ rx_pkts(struct w_iov_sq * const x,
         }
 
         if (c == 0) {
-            warn(INF, "cannot find conn %s for 0x%02x-type pkt",
-                 cid2str(&meta(v).hdr.dcid), meta(v).hdr.flags);
+            warn(INF, "cannot find conn %s for %u-byte %s pkt",
+                 cid2str(&meta(v).hdr.dcid), v->len,
+                 pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
 #ifndef FUZZING
             // if this is a 0-RTT pkt, track it (may be reordered)
             if (meta(v).hdr.type == LH_0RTT) {
@@ -1072,8 +1072,9 @@ rx_pkts(struct w_iov_sq * const x,
             }
 #endif
             log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
-            warn(INF, "ignoring unexpected 0x%02x-type pkt for conn %s",
-                 meta(v).hdr.flags, cid2str(&meta(v).hdr.dcid));
+            warn(INF, "ignoring unexpected %s pkt for conn %s",
+                 pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers),
+                 cid2str(&meta(v).hdr.dcid));
             goto drop;
         }
 
@@ -1083,23 +1084,22 @@ rx_pkts(struct w_iov_sq * const x,
                          c->cstreams[ep_init] == 0)) {
                 // we already abandoned Initial pkt processing, ignore
                 log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
-                warn(INF,
-                     "ignoring %u-byte 0x%02x-type Initial pkt due to "
-                     "abandoned processing",
-                     v->len, meta(v).hdr.flags);
+                warn(INF, "ignoring %u-byte %s pkt due to abandoned processing",
+                     v->len,
+                     pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
                 goto drop;
             } else if (unlikely(dec_pkt_hdr_remainder(xv, v, c, x) == false)) {
                 v->len = xv->len;
                 log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
                 if (pkt_ok_for_epoch(meta(v).hdr.flags, epoch_in(c)) == true)
-                    err_close(c, ERR_PROTOCOL_VIOLATION, 0,
-                              "crypto fail on 0x%02x-type %s pkt",
-                              meta(v).hdr.flags,
-                              is_lh(meta(v).hdr.flags) ? "LH" : "SH");
+                    err_close(
+                        c, ERR_PROTOCOL_VIOLATION, 0,
+                        "crypto fail on %u-byte %s pkt", v->len,
+                        pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
                 else
-                    warn(ERR,
-                         "received invalid %u-byte 0x%02x-type pkt, ignoring",
-                         v->len, meta(v).hdr.flags);
+                    warn(ERR, "received invalid %u-byte %s pkt, ignoring",
+                         v->len,
+                         pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
                 goto drop;
             }
         }

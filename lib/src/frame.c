@@ -1237,7 +1237,8 @@ uint16_t enc_stream_or_crypto_frame(struct q_stream * const s,
 
     if (likely(enc_strm)) {
         ensure(is_lh(meta(v).hdr.flags) == false || meta(v).hdr.type == LH_0RTT,
-               "sid %" PRId64 " in 0x%02x-type pkt", s->id, meta(v).hdr.type);
+               "sid %" PRId64 " in %s pkt", s->id,
+               pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
 
         ensure(dlen || s->state > strm_open,
                "no stream data or need to send FIN");

@@ -91,7 +91,7 @@ struct q_stream {
         if ((s)->id >= 0) {                                                    \
             warn(                                                              \
                 DBG,                                                           \
-                "%s%s conn %s strm " FMT_SID " (%s, %s) state %s -> " YEL   \
+                "%s%s conn %s strm " FMT_SID " (%s, %s) state %s -> " YEL      \
                 "%s" NRM,                                                      \
                 (s)->state == (new_state) ? BLD RED "useless transition: " NRM \
                                           : "",                                \
