@@ -184,10 +184,12 @@ struct q_conn {
     uint32_t needs_accept : 1;     ///< Need to call q_accept() for connection.
     uint32_t tx_retire_cid : 1;    ///< Send RETIRE_CONNECTION_ID.
     uint32_t do_migration : 1;     ///< Perform a CID migration when possible.
-    uint32_t do_key_flip : 1;      ///< Perform a TLS key update.
-    uint32_t skip_cwnd_ping : 1;   ///< Skip sending PING to force ACK.
-    uint32_t next_spin : 1;        ///< Spin value to set on next packet sent.
-    uint32_t : 8;
+    uint32_t key_flips_enabled : 1; ///< Are TLS key updates enabled?
+    uint32_t do_key_flip : 1;       ///< Perform a TLS key update.
+    uint32_t skip_cwnd_ping : 1;    ///< Skip sending PING to force ACK.
+    uint32_t spinbit_enabled : 1;   ///< Is the spinbit enabled?
+    uint32_t next_spin : 1;         ///< Spin value to set on next packet sent.
+    uint32_t : 6;
 
     uint16_t sport; ///< Local port (in network byte-order).
     uint16_t tok_len;
@@ -221,7 +223,7 @@ struct q_conn {
 
     ev_timer idle_alarm;
     ev_timer closing_alarm;
-    ev_timer migration_alarm;
+    ev_timer key_flip_alarm;
 
     struct sockaddr_in peer; ///< Address of our peer.
     char * peer_name;
@@ -271,6 +273,7 @@ extern struct q_conn_sl c_ready;
 #endif
 
 struct ev_loop;
+struct q_conn_conf;
 
 extern bool __attribute__((const)) vers_supported(const uint32_t v);
 
@@ -306,7 +309,7 @@ extern struct q_conn * new_conn(struct w_engine * const w,
                                 const struct sockaddr_in * const peer,
                                 const char * const peer_name,
                                 const uint16_t port,
-                                const uint64_t idle_to);
+                                const struct q_conn_conf * const cc);
 
 extern void __attribute__((nonnull)) free_conn(struct q_conn * const c);
 
@@ -326,6 +329,9 @@ free_scid(struct q_conn * const c, struct cid * const id);
 
 extern void __attribute__((nonnull))
 free_dcid(struct q_conn * const c, struct cid * const id);
+
+extern void __attribute__((nonnull(1)))
+update_conn_conf(struct q_conn * const c, const struct q_conn_conf * const cc);
 
 #ifdef FUZZING
 extern void __attribute__((nonnull)) rx_pkts(struct w_iov_sq * const x,

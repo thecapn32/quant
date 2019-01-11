@@ -47,9 +47,20 @@ struct q_conf {
     const char * const tls_cert;     // required for server
     const char * const tls_key;      // required for server
     const char * const tls_log;
-    const bool verify_certs;
-    const bool flip_keys;
     const uint32_t num_bufs;
+    const uint8_t enable_tls_cert_verify : 1;
+    uint8_t : 7;
+};
+
+
+struct q_conn_conf {
+    const uint64_t idle_timeout;
+    const uint64_t tls_key_update_frequency; // seconds
+    const uint8_t enable_spinbit : 1;
+    const uint8_t enable_udp_zero_checksums : 1;
+    const uint8_t enable_tls_key_updates : 1; // TODO default to on eventually
+    const uint8_t disable_migration : 1;
+    uint8_t : 4;
 };
 
 
@@ -65,14 +76,14 @@ q_connect(struct w_engine * const w,
           struct w_iov_sq * const early_data,
           struct q_stream ** const early_data_stream,
           const bool fin,
-          const uint64_t idle_timeout);
+          const struct q_conn_conf * const conn_conf);
 
 extern void __attribute__((nonnull)) q_close(struct q_conn * const c);
 
 extern struct q_conn * __attribute__((nonnull))
 q_bind(struct w_engine * const w, const uint16_t port);
 
-extern struct q_conn * q_accept(const uint64_t timeout);
+extern struct q_conn * q_accept(const struct q_conn_conf * const conn_conf);
 
 extern bool __attribute__((nonnull))
 q_write(struct q_stream * const s, struct w_iov_sq * const q, const bool fin);

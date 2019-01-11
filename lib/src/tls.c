@@ -129,7 +129,6 @@ static uint8_t cookie[COOKIE_LEN];
 
 static FILE * tls_log_file;
 
-static bool do_tls_key_flips = false;
 
 #define QUIC_TP 0xffa5
 
@@ -1135,8 +1134,6 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
 
 void init_tls_ctx(const struct q_conf * const conf)
 {
-    do_tls_key_flips = conf->flip_keys;
-
     if (conf->tls_key) {
 #ifdef PTLS_OPENSSL
         FILE * const fp = fopen(conf->tls_key, "rbe");
@@ -1211,7 +1208,7 @@ void init_tls_ctx(const struct q_conf * const conf)
 
 #ifdef PTLS_OPENSSL
     tls_ctx.sign_certificate = &sign_cert.super;
-    if (conf->verify_certs)
+    if (conf->enable_tls_cert_verify)
         tls_ctx.verify_certificate = &verifier.super;
 #endif
     tls_ctx.get_time = &ptls_get_time;
@@ -1433,7 +1430,7 @@ void flip_keys(struct q_conn * const c, const bool out)
 
 void maybe_flip_keys(struct q_conn * const c, const bool out)
 {
-    if (unlikely(do_tls_key_flips == false) || likely(c->do_key_flip == false))
+    if (c->key_flips_enabled == false || likely(c->do_key_flip == false))
         return;
 
     if (c->pn_data.out_kyph != c->pn_data.in_kyph)

@@ -391,7 +391,8 @@ bool enc_pkt(struct q_stream * const s,
         break;
     }
 
-    if (likely(is_lh(meta(v).hdr.flags) == false) && c->next_spin)
+    if (c->spinbit_enabled && likely(is_lh(meta(v).hdr.flags) == false) &&
+        c->next_spin)
         meta(v).hdr.flags |= SH_SPIN;
 
     ensure(meta(v).hdr.nr < (1ULL << 62) - 1, "packet number overflow");
@@ -867,8 +868,9 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
         if (unlikely(v_kyph != c->pn_data.in_kyph))
             c->pn_data.in_kyph = v_kyph;
 
-        // short header, spin the bit
-        if (meta(v).hdr.nr > diet_max(&(c->pn_data.pn.recv_all)))
+        if (c->spinbit_enabled &&
+            meta(v).hdr.nr > diet_max(&(c->pn_data.pn.recv_all)))
+            // short header, spin the bit
             c->next_spin = (is_set(SH_SPIN, meta(v).hdr.flags) == !c->is_clnt);
     }
 

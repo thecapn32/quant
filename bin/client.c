@@ -60,6 +60,7 @@ struct conn_cache {
 
 static uint64_t timeout = 10;
 static bool do_h3 = false;
+static bool flip_keys = false;
 
 
 static uint32_t __attribute__((nonnull))
@@ -94,8 +95,7 @@ static void __attribute__((noreturn, nonnull)) usage(const char * const name,
                                                      const char * const ifname,
                                                      const char * const cache,
                                                      const char * const tls_log,
-                                                     const bool verify_certs,
-                                                     const bool flip_keys)
+                                                     const bool verify_certs)
 {
     printf("%s [options] URL\n", name);
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
@@ -189,9 +189,12 @@ get(struct w_engine * const w,
     struct conn_cache_entry * cce = splay_find(conn_cache, cc, &which);
     if (cce == 0) {
         // no, open a new connection
-        struct q_conn * const c =
-            q_connect(w, (struct sockaddr_in *)(void *)peer->ai_addr, dest,
-                      &req, &se->s, true, timeout);
+        struct q_conn * const c = q_connect(
+            w, (struct sockaddr_in *)(void *)peer->ai_addr, dest, &req, &se->s,
+            true,
+            &(struct q_conn_conf){.idle_timeout = timeout,
+                                  .enable_spinbit = true,
+                                  .enable_tls_key_updates = flip_keys});
         if (c == 0) {
             freeaddrinfo(peer);
             return 0;
@@ -264,7 +267,6 @@ int main(int argc, char * argv[])
     char cache[MAXPATHLEN] = "/tmp/" QUANT "-session";
     char tls_log[MAXPATHLEN] = "/tmp/" QUANT "-tlslog";
     bool verify_certs = false;
-    bool flip_keys = false;
     int ret = 0;
 
     while ((ch = getopt(argc, argv, "hi:v:s:t:l:cu3")) != -1) {
@@ -298,17 +300,15 @@ int main(int argc, char * argv[])
         case 'h':
         case '?':
         default:
-            usage(basename(argv[0]), ifname, cache, tls_log, verify_certs,
-                  flip_keys);
+            usage(basename(argv[0]), ifname, cache, tls_log, verify_certs);
         }
     }
 
-    struct w_engine * const w =
-        q_init(ifname, &(const struct q_conf){.num_bufs = 100000,
-                                              .ticket_store = cache,
-                                              .tls_log = tls_log,
-                                              .verify_certs = verify_certs,
-                                              .flip_keys = flip_keys});
+    struct w_engine * const w = q_init(
+        ifname, &(const struct q_conf){.num_bufs = 100000,
+                                       .ticket_store = cache,
+                                       .tls_log = tls_log,
+                                       .enable_tls_cert_verify = verify_certs});
     struct conn_cache cc = splay_initializer(cc);
     struct http_parser_url u = {0};
 

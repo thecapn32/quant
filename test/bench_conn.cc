@@ -121,11 +121,11 @@ int main(int argc __attribute__((unused)), char ** argv)
         .sin_family = AF_INET,
         .sin_port = htons(55555),
         .sin_addr = {.s_addr = inet_addr("127.0.0.1")}};
-    cc = q_connect(w, &sip, "localhost", nullptr, nullptr, true, 0);
+    cc = q_connect(w, &sip, "localhost", nullptr, nullptr, true, nullptr);
     ensure(cc, "is zero");
 
     // accept connection
-    sc = q_accept(0);
+    sc = q_accept(nullptr);
     ensure(sc, "is zero");
 
     benchmark::RunSpecifiedBenchmarks();

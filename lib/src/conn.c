@@ -404,7 +404,8 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
         do_stream_id_fc(c, c->lg_sid_bidi);
     }
 
-    if (c->tp_out.disable_migration == false && c->do_migration == true) {
+    if (likely(c->tp_out.disable_migration == false) &&
+        unlikely(c->do_migration == true)) {
         if (c->is_clnt &&
             // does the peer have a CID for us that they can switch to?
             splay_count(&c->scids_by_seq) >= 2) {
@@ -415,7 +416,7 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
                 use_next_dcid(c);
                 // don't migrate again for a while
                 c->do_migration = false;
-                ev_timer_again(loop, &c->migration_alarm);
+                ev_timer_again(loop, &c->key_flip_alarm);
             }
         }
         // send new CID if the peer doesn't have one remaining
@@ -1206,14 +1207,14 @@ void err_close(struct q_conn * const c,
 
 
 static void __attribute__((nonnull))
-enable_migration(struct ev_loop * const l __attribute__((unused)),
-                 ev_timer * const w,
-                 int e __attribute__((unused)))
+key_flip(struct ev_loop * const l __attribute__((unused)),
+         ev_timer * const w,
+         int e __attribute__((unused)))
 {
     struct q_conn * const c = w->data;
-    c->do_migration = true;
-    c->do_key_flip = true; // XXX we borrow the migration timer for this
-    ev_timer_stop(loop, &c->migration_alarm);
+    c->do_key_flip = c->key_flips_enabled;
+    // XXX we borrow the key flip timer for this
+    c->do_migration = !c->tp_out.disable_migration;
 }
 
 
@@ -1237,9 +1238,10 @@ void enter_closing(struct q_conn * const c)
     if (c->state == conn_clsg)
         return;
 
-    // stop LD and ACK alarms
+    // stop LD, ACK amd ley flip alarms
     ev_timer_stop(loop, &c->rec.ld_alarm);
     ev_timer_stop(loop, &c->idle_alarm);
+    ev_timer_stop(loop, &c->key_flip_alarm);
 
     // stop ACK alarms
     for (epoch_t e = ep_init; e <= ep_data; e++)
@@ -1289,6 +1291,32 @@ idle_alarm(struct ev_loop * const l __attribute__((unused)),
 }
 
 
+void update_conn_conf(struct q_conn * const c,
+                      const struct q_conn_conf * const cc)
+{
+    c->spinbit_enabled = cc ? cc->enable_spinbit : 0;
+
+    // (re)set idle alarm
+    c->idle_alarm.repeat =
+        cc && cc->idle_timeout ? cc->idle_timeout : kIdleTimeout;
+    ev_timer_again(loop, &c->idle_alarm);
+
+    c->tp_out.disable_migration = cc ? cc->disable_migration : false;
+    c->key_flips_enabled = cc ? cc->enable_tls_key_updates : false;
+
+    if (c->tp_out.disable_migration == false || c->key_flips_enabled) {
+        c->key_flip_alarm.repeat = cc ? cc->tls_key_update_frequency : 3;
+        ev_timer_again(loop, &c->key_flip_alarm);
+    }
+
+#ifndef NDEBUG
+    // XXX for testing, do a key flip and a migration ASAP (if enabled)
+    c->do_key_flip = c->key_flips_enabled;
+    c->do_migration = !c->tp_out.disable_migration;
+#endif
+}
+
+
 struct q_conn * new_conn(struct w_engine * const w,
                          const uint32_t vers,
                          const struct cid * const dcid,
@@ -1296,7 +1324,7 @@ struct q_conn * new_conn(struct w_engine * const w,
                          const struct sockaddr_in * const peer,
                          const char * const peer_name,
                          const uint16_t port,
-                         const uint64_t idle_to)
+                         const struct q_conn_conf * const cc)
 {
     struct q_conn * const c = calloc(1, sizeof(*c));
     ensure(c, "could not calloc");
@@ -1325,7 +1353,6 @@ struct q_conn * new_conn(struct w_engine * const w,
         add_dcid(c, dcid);
 
     c->vers = c->vers_initial = vers;
-
     c->streams_by_id = kh_init(streams_by_id);
     c->scids_by_id = kh_init(cids_by_id);
     diet_init(&c->closed_streams);
@@ -1338,19 +1365,15 @@ struct q_conn * new_conn(struct w_engine * const w,
 
     // initialize idle timeout
     c->idle_alarm.data = c;
-    c->idle_alarm.repeat = idle_to ? idle_to : kIdleTimeout;
     ev_init(&c->idle_alarm, idle_alarm);
 
     // initialize closing alarm
     c->closing_alarm.data = c;
     ev_init(&c->closing_alarm, enter_closed);
 
-    // initialize migration alarm
-    c->migration_alarm.data = c;
-    c->migration_alarm.repeat = 3; // seconds (after initial migration)
-    ev_init(&c->migration_alarm, enable_migration);
-    c->do_migration = true;
-    c->do_key_flip = true;
+    // initialize key flip alarm (XXX also abused for migration)
+    c->key_flip_alarm.data = c;
+    ev_init(&c->key_flip_alarm, key_flip);
 
     c->tp_in.ack_del_exp = c->tp_out.ack_del_exp = DEF_ACK_DEL_EXP;
     c->tp_in.max_ack_del = c->tp_out.max_ack_del =
@@ -1375,13 +1398,19 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->w = w;
     c->sock = w_get_sock(w, htons(port));
     if (c->sock == 0) {
-        c->rx_w.data = c->sock = w_bind(w, htons(port), 0);
+        // TODO need to update zero checksums in update_conn_conf() somehow
+        c->rx_w.data = c->sock =
+            w_bind(w, htons(port),
+                   cc && cc->enable_udp_zero_checksums ? W_ZERO_CHKSUM : 0);
         ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
         ev_set_priority(&c->rx_w, EV_MAXPRI);
         ev_io_start(loop, &c->rx_w);
         c->holds_sock = true;
     }
     c->sport = w_get_sport(c->sock);
+
+    if (likely(c->is_clnt || c->holds_sock == false))
+        update_conn_conf(c, cc);
 
     // init scid and add connection to global data structures
     conns_by_ipnp_ins(c);
@@ -1439,7 +1468,7 @@ void free_conn(struct q_conn * const c)
     }
     ev_timer_stop(loop, &c->rec.ld_alarm);
     ev_timer_stop(loop, &c->closing_alarm);
-    ev_timer_stop(loop, &c->migration_alarm);
+    ev_timer_stop(loop, &c->key_flip_alarm);
     ev_timer_stop(loop, &c->idle_alarm);
 
     struct q_stream * s;

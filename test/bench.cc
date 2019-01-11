@@ -101,7 +101,7 @@ int main(int argc, char ** argv)
         .id = "1234"
 #endif
     };
-    c = new_conn(w, 0xff00000e, &cid, &cid, nullptr, "", 55555, 0);
+    c = new_conn(w, 0xff00000e, &cid, &cid, nullptr, "", 55555, nullptr);
     init_tls(c);
     benchmark::RunSpecifiedBenchmarks();
 

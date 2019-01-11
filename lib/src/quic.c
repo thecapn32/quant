@@ -197,12 +197,12 @@ struct q_conn * q_connect(struct w_engine * const w,
                           struct w_iov_sq * const early_data,
                           struct q_stream ** const early_data_stream,
                           const bool fin,
-                          const uint64_t idle_timeout)
+                          const struct q_conn_conf * const conn_conf)
 {
     // make new connection
     const uint vers = ok_vers[0];
     struct q_conn * const c =
-        new_conn(w, vers, 0, 0, peer, peer_name, 0, idle_timeout);
+        new_conn(w, vers, 0, 0, peer, peer_name, 0, conn_conf);
 
     // init TLS
     init_tls(c);
@@ -384,18 +384,18 @@ cancel_api_call(struct ev_loop * const l __attribute__((unused)),
 }
 
 
-struct q_conn * q_accept(const uint64_t timeout)
+struct q_conn * q_accept(const struct q_conn_conf * const conn_conf)
 {
     if (sl_first(&accept_queue))
         goto accept;
 
     warn(WRN, "waiting for conn on any serv sock (timeout %" PRIu64 " sec)",
-         timeout);
+         conn_conf->idle_timeout);
 
-    if (timeout) {
+    if (conn_conf->idle_timeout) {
         if (ev_is_active(&api_alarm))
             ev_timer_stop(loop, &api_alarm);
-        ev_timer_init(&api_alarm, cancel_api_call, timeout, 0);
+        ev_timer_init(&api_alarm, cancel_api_call, conn_conf->idle_timeout, 0);
         ev_timer_start(loop, &api_alarm);
     }
 
@@ -416,6 +416,8 @@ accept:;
          cid2str(c->scid), inet_ntoa(c->peer.sin_addr), ntohs(c->peer.sin_port),
          c->did_0rtt ? " after 0-RTT" : "",
          c->pn_data.out_1rtt[c->pn_data.out_kyph].aead->algo->name);
+
+    update_conn_conf(c, conn_conf);
 
     return c;
 }

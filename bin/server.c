@@ -251,7 +251,10 @@ int main(int argc, char * argv[])
 
         // do we need to q_accept?
         if (q_is_new_serv_conn(c))
-            q_accept(0);
+            q_accept(&(struct q_conn_conf){
+                .idle_timeout = timeout,
+                .enable_spinbit = true,
+            });
 
         while (1) {
             // do we need to handle a request?
