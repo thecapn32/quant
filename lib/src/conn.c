@@ -774,7 +774,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             }
         }
 
-        warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
+        // warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
         if (dec_frames(c, &v) == UINT16_MAX)
             goto done;
 

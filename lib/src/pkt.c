@@ -855,8 +855,8 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
             xv->len = pkt_len;
             // rx() has already removed xv from x, so just insert dup at head
             sq_insert_head(x, dup, next);
-            warn(DBG, "split out coalesced %s (0x%02x) pkt of len %u",
-                 pkt_type_str(*dup->buf, &dup->buf[1]), *dup->buf, dup->len);
+            warn(DBG, "split out coalesced %u-byte %s pkt", dup->len,
+                 pkt_type_str(*dup->buf, &dup->buf[1]));
         }
 
     } else {

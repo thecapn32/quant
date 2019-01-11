@@ -412,11 +412,12 @@ uint16_t dec_ack_frame(struct q_conn * const c,
         if (ack_block_len == 0) {
             if (n == num_blocks + 1)
                 warn(INF,
-                     FRAM_IN "ACK" NRM " lg=" FMT_PNR_OUT " delay=%" PRIu64
-                             " (%" PRIu64 " usec) cnt=%" PRIu64
-                             " block=%" PRIu64 " [" FMT_PNR_OUT "]",
-                     lg_ack, ack_delay_raw, ack_delay, num_blocks,
-                     ack_block_len, lg_ack);
+                     FRAM_IN "ACK" NRM " 0x%02x=%s lg=" FMT_PNR_OUT
+                             " delay=%" PRIu64 " (%" PRIu64
+                             " usec) cnt=%" PRIu64 " block=%" PRIu64
+                             " [" FMT_PNR_OUT "]",
+                     t, t == FRM_ACE ? "ECN" : "", lg_ack, ack_delay_raw,
+                     ack_delay, num_blocks, ack_block_len, lg_ack);
             else
                 warn(INF,
                      FRAM_IN "ACK" NRM " gap=%" PRIu64 " block=%" PRIu64
@@ -425,12 +426,13 @@ uint16_t dec_ack_frame(struct q_conn * const c,
         } else {
             if (n == num_blocks + 1)
                 warn(INF,
-                     FRAM_IN "ACK" NRM " lg=" FMT_PNR_OUT " delay=%" PRIu64
-                             " (%" PRIu64 " usec) cnt=%" PRIu64
-                             " block=%" PRIu64 " [" FMT_PNR_OUT ".." FMT_PNR_OUT
-                             "]",
-                     lg_ack, ack_delay_raw, ack_delay, num_blocks,
-                     ack_block_len, lg_ack_in_block - ack_block_len,
+                     FRAM_IN "ACK" NRM " 0x%02x=%s lg=" FMT_PNR_OUT
+                             " delay=%" PRIu64 " (%" PRIu64
+                             " usec) cnt=%" PRIu64 " block=%" PRIu64
+                             " [" FMT_PNR_OUT ".." FMT_PNR_OUT "]",
+                     t, t == FRM_ACE ? "ECN" : "", lg_ack, ack_delay_raw,
+                     ack_delay, num_blocks, ack_block_len,
+                     lg_ack_in_block - ack_block_len,
                      shorten_ack_nr(lg_ack_in_block, ack_block_len));
             else
                 warn(INF,
@@ -529,13 +531,13 @@ dec_close_frame(struct q_conn * const c,
 
     if (t == FRM_CLQ)
         warn(INF,
-             FRAM_IN "CONNECTION_CLOSE" NRM " 0x%02x (quic) err=%s0x%04x " NRM
+             FRAM_IN "CONNECTION_CLOSE" NRM " 0x%02x=quic err=%s0x%04x " NRM
                      "frame=0x%" PRIx64 " rlen=%" PRIu64 " reason=%s%.*s" NRM,
              t, err_code ? RED : NRM, err_code, frame_type, reas_len,
              err_code ? RED : NRM, reas_len, reas_phr);
     else
         warn(INF,
-             FRAM_IN "CONNECTION_CLOSE" NRM " 0x%02x (app) err=%s0x%04x " NRM
+             FRAM_IN "CONNECTION_CLOSE" NRM " 0x%02x=app err=%s0x%04x " NRM
                      "rlen=%" PRIu64 " reason=%s%.*s" NRM,
              t, err_code ? RED : NRM, err_code, reas_len, err_code ? RED : NRM,
              reas_len, reas_phr);
@@ -595,7 +597,7 @@ dec_max_streams_frame(struct q_conn * const c,
     // cppcheck-suppress redundantAssignment
     i = dec_chk(t, &max, v->buf, v->len, i, 0, "%" PRIu64);
 
-    warn(INF, FRAM_IN "MAX_STREAMS" NRM " 0x%02x (%s) max=%" PRIu64, t,
+    warn(INF, FRAM_IN "MAX_STREAMS" NRM " 0x%02x=%s max=%" PRIu64, t,
          t == FRM_MSU ? "uni" : "bi", max);
 
     int64_t * const max_streams =
@@ -692,7 +694,7 @@ dec_streams_blocked_frame(struct q_conn * const c,
     // cppcheck-suppress redundantAssignment
     i = dec_chk(FRM_SBB, &max, v->buf, v->len, i, 0, FMT_SID);
 
-    warn(INF, FRAM_IN "STREAMS_BLOCKED" NRM " 0x%02x (%s) max=%" PRIu64, t,
+    warn(INF, FRAM_IN "STREAMS_BLOCKED" NRM " 0x%02x=%s max=%" PRIu64, t,
          t == FRM_SBB ? "bi" : "uni", max);
 
     int64_t * const max_streams = is_uni(max) ? &c->tp_in.new_max_streams_uni
@@ -1181,13 +1183,13 @@ uint16_t enc_ack_frame(struct q_conn * const c,
                      gap, ack_block, b->lo, shorten_ack_nr(b->hi, ack_block));
             else
                 warn(INF,
-                     FRAM_OUT "ACK" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64
-                              " (%" PRIu64 " usec) cnt=%" PRIu64
-                              " block=%" PRIu64 " [" FMT_PNR_IN ".." FMT_PNR_IN
-                              "]",
-                     meta(v).lg_acked, ack_delay, ack_delay * (1 << ade),
-                     meta(v).ack_block_cnt, ack_block, b->lo,
-                     shorten_ack_nr(b->hi, ack_block));
+                     FRAM_OUT "ACK" NRM " 0x%02x=%s lg=" FMT_PNR_IN
+                              " delay=%" PRIu64 " (%" PRIu64
+                              " usec) cnt=%" PRIu64 " block=%" PRIu64
+                              " [" FMT_PNR_IN ".." FMT_PNR_IN "]",
+                     type, type == FRM_ACE ? "ECN" : "", meta(v).lg_acked,
+                     ack_delay, ack_delay * (1 << ade), meta(v).ack_block_cnt,
+                     ack_block, b->lo, shorten_ack_nr(b->hi, ack_block));
 
         } else {
             if (prev_lo)
@@ -1197,11 +1199,13 @@ uint16_t enc_ack_frame(struct q_conn * const c,
                      gap, ack_block, b->hi);
             else
                 warn(INF,
-                     FRAM_OUT "ACK" NRM " lg=" FMT_PNR_IN " delay=%" PRIu64
-                              " (%" PRIu64 " usec) cnt=%" PRIu64
-                              " block=%" PRIu64 " [" FMT_PNR_IN "]",
-                     meta(v).lg_acked, ack_delay, ack_delay * (1 << ade),
-                     meta(v).ack_block_cnt, ack_block, meta(v).lg_acked);
+                     FRAM_OUT "ACK" NRM " 0x%02x=%s lg=" FMT_PNR_IN
+                              " delay=%" PRIu64 " (%" PRIu64
+                              " usec) cnt=%" PRIu64 " block=%" PRIu64
+                              " [" FMT_PNR_IN "]",
+                     type, type == FRM_ACE ? "ECN" : "", meta(v).lg_acked,
+                     ack_delay, ack_delay * (1 << ade), meta(v).ack_block_cnt,
+                     ack_block, meta(v).lg_acked);
         }
         i = enc(v->buf, v->len, i, &ack_block, 0, 0, "%" PRIu64);
         prev_lo = b->lo;
@@ -1303,15 +1307,15 @@ uint16_t enc_close_frame(const struct q_conn * const c,
 
     if (type == FRM_CLQ)
         warn(INF,
-             FRAM_OUT "CONNECTION_CLOSE" NRM " (quic) err=%s0x%04x" NRM
+             FRAM_OUT "CONNECTION_CLOSE" NRM " 0x%02x=quic err=%s0x%04x" NRM
                       " frame=0x%02x rlen=%" PRIu64 " reason=%s%.*s" NRM,
-             c->err_code ? RED : NRM, c->err_code, c->err_frm, rlen,
+             type, c->err_code ? RED : NRM, c->err_code, c->err_frm, rlen,
              c->err_code ? RED : NRM, rlen, c->err_reason);
     else
         warn(INF,
-             FRAM_OUT "CONNECTION_CLOSE" NRM " (app) err=%s0x%04x" NRM
+             FRAM_OUT "CONNECTION_CLOSE" NRM " 0x%02x=app err=%s0x%04x" NRM
                       " rlen=%" PRIu64 " reason=%s%.*s" NRM,
-             c->err_code ? RED : NRM, c->err_code, rlen,
+             type, c->err_code ? RED : NRM, c->err_code, rlen,
              c->err_code ? RED : NRM, rlen, c->err_reason);
 
     return i;
@@ -1375,7 +1379,7 @@ uint16_t enc_max_streams_frame(struct q_conn * const c,
         bidi ? c->tp_in.new_max_streams_bidi : c->tp_in.new_max_streams_uni;
     i = enc(v->buf, v->len, i, &max, 0, 0, "%" PRId64);
 
-    warn(INF, FRAM_OUT "MAX_STREAMS" NRM " 0x%02x (%s) max=%" PRIu64, type,
+    warn(INF, FRAM_OUT "MAX_STREAMS" NRM " 0x%02x=%s max=%" PRIu64, type,
          bidi ? "bi" : "uni", max);
 
     if (bidi) {
@@ -1439,7 +1443,7 @@ uint16_t enc_streams_blocked_frame(struct q_conn * const c,
     const int64_t lim = ((bidi ? c->next_sid_bidi : c->next_sid_uni) - 4) >> 2;
     i = enc(v->buf, v->len, i, &lim, 0, 0, "%" PRId64);
 
-    warn(INF, FRAM_OUT "STREAMS_BLOCKED" NRM " 0x%02x (%s) lim=%" PRIu64, type,
+    warn(INF, FRAM_OUT "STREAMS_BLOCKED" NRM " 0x%02x=%s lim=%" PRIu64, type,
          type == FRM_SBB ? "bi" : "uni", lim);
 
     return i;
