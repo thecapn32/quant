@@ -1398,8 +1398,8 @@ bool verify_rtry_tok(struct q_conn * const c,
 void flip_keys(struct q_conn * const c, const bool out)
 {
     const bool new_kyph = !(out ? c->pn_data.out_kyph : c->pn_data.in_kyph);
-    warn(DBG, "flip %s kyph %u -> %u", out ? "out" : "in",
-         out ? c->pn_data.out_kyph : c->pn_data.in_kyph, new_kyph);
+    // warn(DBG, "flip %s kyph %u -> %u", out ? "out" : "in",
+    //      out ? c->pn_data.out_kyph : c->pn_data.in_kyph, new_kyph);
 
     const ptls_cipher_suite_t * const cs = ptls_get_cipher(c->tls.t);
     if (unlikely(cs == 0)) {

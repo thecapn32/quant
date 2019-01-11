@@ -365,9 +365,8 @@ void q_readall_stream(struct q_stream * const s, struct w_iov_sq * const q)
 struct q_conn * q_bind(struct w_engine * const w, const uint16_t port)
 {
     // bind socket and create new embryonic server connection
-    warn(DBG, "binding serv socket on port %u", port);
     struct q_conn * const c = new_conn(w, 0, 0, 0, 0, 0, port, 0);
-    warn(WRN, "bound %s socket on port %u", conn_type(c), port);
+    warn(INF, "bound %s socket on port %u", conn_type(c), port);
     return c;
 }
 

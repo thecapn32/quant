@@ -117,7 +117,7 @@ void free_pn(struct pn_space * const pn)
 
 void abandon_pn(struct q_conn * const c, const epoch_t e)
 {
-    warn(DBG, "%s abandoning epoch %u packet processing", conn_type(c), e);
+    warn(DBG, "abandon %s epoch %u processing", conn_type(c), e);
     free_stream(c->cstreams[e]);
     free_pn(&c->pn_init.pn);
     dispose_cipher(&c->pn_init.in);

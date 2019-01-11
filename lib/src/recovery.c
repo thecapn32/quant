@@ -90,9 +90,9 @@ static void __attribute__((nonnull)) set_ld_timer(struct q_conn * const c)
     }
 
     ev_tstamp to;
-    const char * type = BLD RED "???" NRM;
+    // const char * type = BLD RED "???" NRM;
     if (unlikely(crypto_pkts_outstanding(c))) {
-        type = "crypto RTX";
+        // type = "crypto RTX";
         to = 2 * (unlikely(is_zero(c->rec.srtt)) ? kDefaultInitialRtt
                                                  : c->rec.srtt);
         to = MAX(to, kMinTLPTimeout) * (1 << c->rec.crypto_cnt);
@@ -101,16 +101,16 @@ static void __attribute__((nonnull)) set_ld_timer(struct q_conn * const c)
     }
 
     if (!is_zero(c->rec.loss_t)) {
-        type = "early RTX";
+        // type = "early RTX";
         to = c->rec.loss_t - c->rec.last_sent_rtxable_t;
 
     } else {
-        type = "RTO";
+        // type = "RTO";
         to = c->rec.srtt + (4 * c->rec.rttvar) +
              (c->tp_out.max_ack_del / 1000.0);
         to = MAX(to, kMinRTOTimeout) * (1 << c->rec.rto_cnt);
         if (c->rec.tlp_cnt < kMaxTLPs) {
-            type = "TLP";
+            // type = "TLP";
             const ev_tstamp tlp_to =
                 MAX(1.5 * c->rec.srtt + (c->tp_out.max_ack_del / 1000.0),
                     kMinTLPTimeout);
@@ -126,8 +126,8 @@ set_to:
         ev_timer_stop(loop, &c->rec.ld_alarm);
         ev_invoke(loop, &c->rec.ld_alarm, 0);
     } else {
-        warn(DBG, "%s alarm in %f sec on %s conn %s", type,
-             c->rec.ld_alarm.repeat, conn_type(c), cid2str(c->scid));
+        // warn(DBG, "%s alarm in %f sec on %s conn %s", type,
+        //      c->rec.ld_alarm.repeat, conn_type(c), cid2str(c->scid));
         ev_timer_again(loop, &c->rec.ld_alarm);
     }
 }
@@ -547,6 +547,4 @@ void init_rec(struct q_conn * const c)
 
     c->rec.cwnd = kInitialWindow;
     c->rec.ssthresh = UINT64_MAX;
-
-    log_cc(c);
 }
