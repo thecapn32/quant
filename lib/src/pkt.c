@@ -183,22 +183,19 @@ void coalesce(struct w_iov_sq * const q)
     struct w_iov * v = sq_first(q);
     while (v) {
         struct w_iov * next = sq_next(v, next);
-        uint8_t cur_flags = *v->buf;
-
         struct w_iov * prev = v;
         while (next) {
             struct w_iov * const next_next = sq_next(next, next);
-
             // do we have space? do the packet types make sense to coalesce?
             if (v->len + next->len <= kMaxDatagramSize &&
-                can_coalesce_pkt_types(pkt_type(cur_flags),
+                can_coalesce_pkt_types(pkt_type(*v->buf),
                                        pkt_type(*next->buf))) {
                 // we can coalesce
-                warn(DBG, "coalescing 0x%02x len %u behind 0x%02x len %u",
-                     *next->buf, next->len, cur_flags, v->len);
+                warn(DBG, "coalescing %u-byte %s pkt behind %u-byte %s pkt",
+                     next->len, pkt_type_str(*next->buf, next->buf + 1), v->len,
+                     pkt_type_str(*v->buf, v->buf + 1));
                 memcpy(v->buf + v->len, next->buf, next->len);
                 v->len += next->len;
-                cur_flags = *next->buf;
                 sq_remove_after(q, prev, next);
                 // warn(CRT, "w_free_iov idx %u (avail %" PRIu64 ")",
                 //      w_iov_idx(next), sq_len(&next->w->iov) + 1);
