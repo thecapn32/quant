@@ -173,7 +173,8 @@ extern bool __attribute__((nonnull))
 dec_pkt_hdr_remainder(struct w_iov * const xv,
                       struct w_iov * const v,
                       struct q_conn * const c,
-                      struct w_iov_sq * const x);
+                      struct w_iov_sq * const x,
+                      bool * const decoal);
 
 extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
                                              const bool rtx,

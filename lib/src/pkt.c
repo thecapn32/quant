@@ -593,10 +593,6 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
                            uint16_t * const tok_len)
 
 {
-    // remember original datagram len (unless already set during decoalescing)
-    if (likely(xv->user_data == 0))
-        xv->user_data = xv->len;
-
     dec_chk(&meta(v).hdr.flags, xv->buf, xv->len, 0, 1, "0x%02x");
     meta(v).hdr.type = pkt_type(*xv->buf);
 
@@ -781,8 +777,10 @@ which_cipher_ctx_in(const struct q_conn * const c, const uint8_t flags)
 bool dec_pkt_hdr_remainder(struct w_iov * const xv,
                            struct w_iov * const v,
                            struct q_conn * const c,
-                           struct w_iov_sq * const x)
+                           struct w_iov_sq * const x,
+                           bool * const decoal)
 {
+    *decoal = false;
     const struct cipher_ctx * ctx = which_cipher_ctx_in(
         c,
         // the pp context does not depend on the SH kyph bit
@@ -840,17 +838,14 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
         return false;
     }
 
-    if (is_lh(meta(v).hdr.flags)) {
+    if (unlikely(is_lh(meta(v).hdr.flags))) {
         // check for coalesced packet
-        if (pkt_len < xv->len) {
-            // TODO check that dcid in split-out version matches orig
-
+        if (unlikely(pkt_len < xv->len)) {
+            *decoal = true;
             // allocate new w_iov for coalesced packet and copy it over
             struct w_iov * const dup = w_iov_dup(xv);
             dup->buf += pkt_len;
             dup->len -= pkt_len;
-            // remember coalesced datagram len
-            dup->user_data = xv->len;
             // adjust length of first packet
             xv->len = pkt_len;
             // rx() has already removed xv from x, so just insert dup at head

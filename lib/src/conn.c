@@ -927,6 +927,7 @@ rx_pkts(struct w_iov_sq * const x,
         struct q_conn_sl * const crx,
         const struct w_sock * const ws)
 {
+    struct cid outer_dcid = {0};
     while (!sq_empty(x)) {
         struct w_iov * const xv = sq_first(x);
         sq_remove_head(x, next);
@@ -991,10 +992,11 @@ rx_pkts(struct w_iov_sq * const x,
                         }
                     } else if (c == 0 && meta(v).hdr.type == LH_INIT) {
                         // validate minimum packet size
-                        // TODO: actually reject
-                        if (xv->user_data < MIN_INI_LEN)
-                            warn(ERR, "initial %u-byte pkt too short (< %u)",
-                                 xv->user_data, MIN_INI_LEN);
+                        if (xv->len < MIN_INI_LEN) {
+                            warn(ERR, "%u-byte Initial pkt too short (< %u)",
+                                 xv->len, MIN_INI_LEN);
+                            goto drop;
+                        }
 
                         if (vers_supported(meta(v).hdr.vers) == false ||
                             is_force_neg_vers(meta(v).hdr.vers)) {
@@ -1081,6 +1083,7 @@ rx_pkts(struct w_iov_sq * const x,
 
         if (likely((meta(v).hdr.vers && meta(v).hdr.type != LH_RTRY) ||
                    !is_lh(meta(v).hdr.flags))) {
+            bool decoal;
             if (unlikely(meta(v).hdr.type == LH_INIT &&
                          c->cstreams[ep_init] == 0)) {
                 // we already abandoned Initial pkt processing, ignore
@@ -1089,7 +1092,8 @@ rx_pkts(struct w_iov_sq * const x,
                      v->len,
                      pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
                 goto drop;
-            } else if (unlikely(dec_pkt_hdr_remainder(xv, v, c, x) == false)) {
+            } else if (unlikely(dec_pkt_hdr_remainder(xv, v, c, x, &decoal) ==
+                                false)) {
                 v->len = xv->len;
                 log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
                 if (pkt_ok_for_epoch(meta(v).hdr.flags, epoch_in(c)) == true)
@@ -1103,7 +1107,29 @@ rx_pkts(struct w_iov_sq * const x,
                          pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
                 goto drop;
             }
+
+            // that dcid in split-out coalesced pkt matches outer pkt
+            if (unlikely(decoal) && outer_dcid.len == 0) {
+                // save outer dcid for checking
+                cid_cpy(&outer_dcid, &meta(v).hdr.dcid);
+                goto decoal_done;
+            }
+
+            if (unlikely(outer_dcid.len) &&
+                cid_cmp(&outer_dcid, &meta(v).hdr.dcid) != 0) {
+                warn(ERR,
+                     "outer dcid %s != inner dcid %s during "
+                     "decoalescing, ignoring %s pkt",
+                     cid2str(&outer_dcid), cid2str(&meta(v).hdr.dcid),
+                     pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
+                goto drop;
+            }
+
+            if (likely(decoal == false))
+                // forget outer dcid
+                outer_dcid.len = 0;
         }
+    decoal_done:
 
         // remember that we had a RX event on this connection
         if (!c->had_rx) {
