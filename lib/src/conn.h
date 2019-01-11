@@ -377,7 +377,9 @@ epoch_in(const struct q_conn * const c)
 static inline bool __attribute__((nonnull, always_inline))
 has_wnd(const struct q_conn * const c)
 {
-    return !c->blocked && (c->rec.in_flight + w_mtu(c->w) < c->rec.cwnd);
+    return !c->blocked &&
+           (c->rec.in_flight + (unlikely(c->try_0rtt) ? 0 : w_mtu(c->w)) <
+            c->rec.cwnd);
 }
 
 
