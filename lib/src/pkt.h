@@ -124,7 +124,6 @@ pn_for_pkt_type(struct q_conn * const c, const uint8_t t)
 }
 
 
-#ifndef NDEBUG
 static inline const char * __attribute__((const, nonnull))
 pkt_type_str(const uint8_t flags, const void * const vers)
 {
@@ -148,7 +147,6 @@ pkt_type_str(const uint8_t flags, const void * const vers)
         return "Short";
     return RED "Unknown" NRM;
 }
-#endif
 
 
 struct q_stream;
