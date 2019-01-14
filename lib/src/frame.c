@@ -27,6 +27,7 @@
 
 #include <inttypes.h>
 #include <math.h>
+#include <netinet/ip.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -469,6 +470,14 @@ uint16_t dec_ack_frame(struct q_conn * const c,
                 sm_new_acked = meta(acked).hdr.nr;
 
             on_pkt_acked(c, pn, acked);
+
+            // if the ACK'ed pkt was sent with ECT, verify peer and path support
+            if (likely(acked->flags & IPTOS_ECN_ECT0) &&
+                unlikely(t != FRM_ACE)) {
+                warn(NTE, "ECN verification failed for %s conn %s",
+                     conn_type(c), cid2str(c->scid));
+                c->do_ecn = false;
+            }
 
         skip:
             if (likely(ack > 0))

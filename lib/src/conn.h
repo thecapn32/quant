@@ -189,7 +189,8 @@ struct q_conn {
     uint32_t skip_cwnd_ping : 1;    ///< Skip sending PING to force ACK.
     uint32_t spinbit_enabled : 1;   ///< Is the spinbit enabled?
     uint32_t next_spin : 1;         ///< Spin value to set on next packet sent.
-    uint32_t : 6;
+    uint32_t do_ecn : 1;            ///< ECN is enabled.
+    uint32_t : 5;
 
     uint16_t sport; ///< Local port (in network byte-order).
     uint16_t tok_len;

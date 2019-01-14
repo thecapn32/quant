@@ -1383,6 +1383,7 @@ struct q_conn * new_conn(struct w_engine * const w,
 
     // initialize recovery state
     init_rec(c);
+    c->do_ecn = true;
 
     // initialize socket and start a TX watcher
     ev_async_init(&c->tx_w, tx_w);
