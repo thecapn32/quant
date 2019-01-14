@@ -882,7 +882,6 @@ dec_new_token_frame(struct q_conn * const c,
     if (unlikely(tok_len > (uint64_t)(v->len - i)))
         err_close_return(c, ERR_FRAME_ENC, FRM_TOK, "illegal tok len");
 
-    // TODO: actually do something with the token
     uint8_t tok[MAX_TOK_LEN];
     if (unlikely(tok_len > sizeof(tok)))
         err_close_return(c, ERR_FRAME_ENC, FRM_TOK, "max tok_len is %u, got %u",
@@ -892,7 +891,7 @@ dec_new_token_frame(struct q_conn * const c,
     warn(INF, FRAM_IN "NEW_TOKEN" NRM " len=%" PRIu64 " tok=%s", tok_len,
          hex2str(tok, tok_len));
 
-    // TODO: actually do something with this
+    // TODO: actually do something with the token
 
     return i;
 }

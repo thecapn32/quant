@@ -709,9 +709,7 @@ void init_tp(struct q_conn * const c)
     enc_tp(c, TP_MPS, w_mtu(c->w));
 
     if (!c->is_clnt) {
-        // TODO: change in -13
-        struct cid * const scid = c->scid;
-        enc_tp_buf(c, TP_SRT, scid->srt, sizeof(scid->srt));
+        enc_tp_buf(c, TP_SRT, c->scid->srt, sizeof(c->scid->srt));
         if (c->odcid.len)
             enc_tp_buf(c, TP_OCID, c->odcid.id, c->odcid.len);
     }
@@ -916,14 +914,12 @@ void init_tls(struct q_conn * const c)
         hshk_prop->client.negotiated_protocols.count = 1;
         hshk_prop->client.max_early_data_size = &c->tls.max_early_data;
     } else {
-        // TODO: remove this interop hack eventually
         hshk_prop->server.retry_uses_cookie = 1;
         hshk_prop->server.cookie.key = cookie;
         hshk_prop->server.cookie.additional_data.base = (uint8_t *)&c->peer;
         hshk_prop->server.cookie.additional_data.len = sizeof(c->peer);
+        // TODO: remove this interop hack eventually
         if (ntohs(c->sport) == 4434)
-            // TODO handle differently
-            // hshk_prop->server.enforce_retry = 1;
             c->tx_rtry = true;
     }
 
