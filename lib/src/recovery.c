@@ -221,7 +221,12 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
         detect_lost_pkts(c, pn_for_epoch(c, ep_init));
         detect_lost_pkts(c, pn_for_epoch(c, ep_0rtt));
         detect_lost_pkts(c, pn_for_epoch(c, ep_hshk));
-        c->rec.crypto_cnt++;
+        if (c->rec.crypto_cnt++ >= 2 && c->tls.epoch_out == ep_init &&
+            c->do_ecn) {
+            warn(NTE, "turning off ECN for %s conn %s", conn_type(c),
+                 cid2str(c->scid));
+            c->do_ecn = false;
+        }
         tx(c, 0);
 
     } else if (!is_zero(c->rec.loss_t)) {
