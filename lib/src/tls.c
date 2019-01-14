@@ -351,34 +351,56 @@ static int filter_tp(ptls_t * tls __attribute__((unused)),
 }
 
 
-static uint16_t chk_tp_clnt(const struct q_conn * const c,
+static uint16_t chk_tp_clnt(struct q_conn * const c,
                             const uint8_t * const buf,
                             const uint16_t len,
                             const uint16_t pos)
 {
     uint16_t i = pos;
 
-    uint32_t vers_initial = 0;
-    i = dec(&vers_initial, buf, len, i, sizeof(vers_initial), "0x%08x");
+    uint32_t neg_vers = 0;
+    i = dec(&neg_vers, buf, len, i, sizeof(neg_vers), "0x%08x");
+
+    // validate that the negotiated version is in use
+    if (unlikely(neg_vers != c->vers)) {
+        err_close(c, ERR_VERSION_NEGOTIATION, FRM_CRY,
+                  "neg vers 0x%08x != used vers 0x%08x", neg_vers, c->vers);
+        return 0;
+    }
 
     // parse server versions
     uint8_t n;
     i = dec(&n, buf, len, i, sizeof(n), "%u");
+    const uint16_t vpos = i;
     bool found = false;
-    while (n > 0) {
+    for (uint16_t v = n; v > 0; v -= sizeof(uint32_t)) {
         uint32_t vers = 0;
-        n -= sizeof(vers);
         i = dec(&vers, buf, len, i, sizeof(vers), "0x%08x");
-        found = found ? found : vers == c->vers;
+        if (vers == c->vers)
+            found = true;
     }
-    ensure(found, "negotiated version found in transport parameters");
-    // TODO: validate that version negotiation on these values has same result
+
+    // validate that the negotiated version was found
+    if (unlikely(found == false)) {
+        err_close(c, ERR_VERSION_NEGOTIATION, FRM_CRY,
+                  "neg vers 0x%08x not found in tp", c->vers);
+        return 0;
+    }
+
+    // validate that version negotiation on these values has same result
+    const uint32_t verify_vers = clnt_vneg(&buf[vpos], n);
+    if (unlikely(verify_vers != c->vers)) {
+        err_close(c, ERR_VERSION_NEGOTIATION, FRM_CRY,
+                  "would have picked 0x%08x instead of 0x%08x", verify_vers,
+                  c->vers);
+        return 0;
+    }
 
     return i;
 }
 
 
-static uint16_t chk_tp_serv(const struct q_conn * const c,
+static uint16_t chk_tp_serv(struct q_conn * const c,
                             const uint8_t * const buf,
                             const uint16_t len,
                             const uint16_t pos)
@@ -388,8 +410,11 @@ static uint16_t chk_tp_serv(const struct q_conn * const c,
     uint32_t vers_initial;
     i = dec(&vers_initial, buf, len, i, sizeof(vers_initial), "0x%08x");
 
-    if (c->vers != vers_initial && vers_supported(vers_initial))
-        warn(ERR, "vers_initial 0x%08x is supported - MITM?", vers_initial);
+    if (c->vers != vers_initial && unlikely(vers_supported(vers_initial))) {
+        err_close(c, ERR_VERSION_NEGOTIATION, FRM_CRY,
+                  "vers_initial 0x%08x is supported - MITM?", vers_initial);
+        return 0;
+    }
 
     return i;
 }
@@ -437,6 +462,8 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         i = chk_tp_clnt(c, buf, len, i);
     else
         i = chk_tp_serv(c, buf, len, i);
+    if (unlikely(i == 0))
+        return i;
 
     uint16_t tpl;
     i = dec(&tpl, buf, len, i, sizeof(tpl), "%u");
@@ -653,11 +680,17 @@ void init_tp(struct q_conn * const c)
                 sizeof(c->vers_initial), 0, "0x%08x");
     } else {
         i = enc(c->tls.tp_buf, len, i, &c->vers, sizeof(c->vers), 0, "0x%08x");
-        const uint8_t vl = ok_vers_len * sizeof(ok_vers[0]);
+
+        // don't include "force vneg" versions
+        uint8_t vl = 0;
+        for (uint8_t n = 0; n < ok_vers_len; n++)
+            if (is_force_vneg_vers(ok_vers[n]) == false)
+                vl += sizeof(ok_vers[n]);
         i = enc(c->tls.tp_buf, len, i, &vl, sizeof(vl), 0, "%u");
         for (uint8_t n = 0; n < ok_vers_len; n++)
-            i = enc(c->tls.tp_buf, len, i, &ok_vers[n], sizeof(ok_vers[n]), 0,
-                    "0x%08x");
+            if (is_force_vneg_vers(ok_vers[n]) == false)
+                i = enc(c->tls.tp_buf, len, i, &ok_vers[n], sizeof(ok_vers[n]),
+                        0, "0x%08x");
     }
 
     // keep track of encoded length

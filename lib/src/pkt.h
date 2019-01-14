@@ -64,7 +64,7 @@
 // #define ERR_FINAL_OFFSET 0x6
 #define ERR_FRAME_ENC 0x7
 #define ERR_TRANSPORT_PARAMETER 0x8
-// #define ERR_VERSION_NEGOTIATION 0x9
+#define ERR_VERSION_NEGOTIATION 0x9
 #define ERR_PROTOCOL_VIOLATION 0xa
 #define ERR_TLS(type) (0x100 + (type))
 
@@ -186,6 +186,8 @@ extern void __attribute__((nonnull)) coalesce(struct w_iov_sq * const q);
 extern void __attribute__((nonnull))
 tx_vneg_resp(const struct w_sock * const ws, const struct w_iov * const v);
 
+extern uint32_t __attribute__((nonnull))
+clnt_vneg(const uint8_t * const buf, const uint16_t len);
 
 #ifndef NDEBUG
 extern void __attribute__((nonnull(1, 2)))

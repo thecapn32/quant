@@ -429,7 +429,7 @@ conn_type(const struct q_conn * const c)
 
 
 static inline __attribute__((always_inline, const)) bool
-is_force_neg_vers(const uint32_t vers)
+is_force_vneg_vers(const uint32_t vers)
 {
     return (vers & 0x0f0f0f0f) == 0x0a0a0a0a;
 }

@@ -47,7 +47,6 @@
 #include "conn.h"
 #include "diet.h"
 #include "frame.h"
-#include "marshall.h"
 #include "pkt.h"
 #include "quic.h"
 #include "recovery.h"
@@ -88,7 +87,7 @@ SPLAY_GENERATE(cids_by_seq, cid, node_seq, cids_by_seq_cmp)
 
 bool vers_supported(const uint32_t v)
 {
-    if (is_force_neg_vers(v) || is_rsvd_vers(v))
+    if (is_force_vneg_vers(v) || is_rsvd_vers(v))
         return false;
 
     for (uint8_t i = 0; i < ok_vers_len; i++)
@@ -105,37 +104,6 @@ struct ooo_0rtt_by_cid ooo_0rtt_by_cid = splay_initializer(&ooo_0rtt_by_cid);
 
 
 SPLAY_GENERATE(ooo_0rtt_by_cid, ooo_0rtt, node, ooo_0rtt_by_cid_cmp)
-
-
-static uint32_t __attribute__((nonnull))
-pick_from_server_vers(const struct w_iov * const v)
-{
-    const uint16_t pos = meta(v).hdr.hdr_len;
-    for (uint8_t i = 0; i < ok_vers_len; i++) {
-        if (is_rsvd_vers(ok_vers[i]))
-            // skip over reserved versions in our local list
-            continue;
-
-        for (uint8_t j = 0; j < v->len - pos; j += sizeof(uint32_t)) {
-            uint32_t vers = 0;
-            uint16_t x = j + pos;
-            dec(&vers, v->buf, v->len, x, sizeof(vers), "0x%08x");
-
-            if (is_rsvd_vers(vers))
-                // skip over reserved versions in the server's list
-                continue;
-
-            warn(DBG, "serv prio %ld = 0x%08x; our prio %u = 0x%08x",
-                 j / sizeof(uint32_t), vers, i, ok_vers[i]);
-            if (ok_vers[i] == vers)
-                return vers;
-        }
-    }
-
-    // we're out of matching candidates
-    warn(INF, "no vers in common with serv");
-    return 0;
-}
 
 
 static inline uint64_t __attribute__((const, always_inline))
@@ -820,7 +788,8 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             }
 
             // handle an incoming vers-neg packet
-            const uint32_t try_vers = pick_from_server_vers(v);
+            const uint32_t try_vers = clnt_vneg(&v->buf[meta(v).hdr.hdr_len],
+                                                v->len - meta(v).hdr.hdr_len);
             if (try_vers == 0) {
                 // no version in common with serv
                 enter_closing(c);
@@ -999,7 +968,7 @@ rx_pkts(struct w_iov_sq * const x,
                         }
 
                         if (vers_supported(meta(v).hdr.vers) == false ||
-                            is_force_neg_vers(meta(v).hdr.vers)) {
+                            is_force_vneg_vers(meta(v).hdr.vers)) {
                             log_pkt("RX", v, v->ip, v->port, &odcid, tok,
                                     tok_len);
                             warn(WRN,
