@@ -472,7 +472,7 @@ uint16_t dec_ack_frame(struct q_conn * const c,
             on_pkt_acked(c, pn, acked);
 
             // if the ACK'ed pkt was sent with ECT, verify peer and path support
-            if (likely(acked->flags & IPTOS_ECN_ECT0) &&
+            if (likely(c->do_ecn && acked->flags & IPTOS_ECN_ECT0) &&
                 unlikely(t != FRM_ACE)) {
                 warn(NTE, "ECN verification failed for %s conn %s",
                      conn_type(c), cid2str(c->scid));
@@ -501,8 +501,10 @@ uint16_t dec_ack_frame(struct q_conn * const c,
         i = dec_chk(t, &ect1_cnt, v->buf, v->len, i, 0, "%" PRIu64);
         i = dec_chk(t, &ce_cnt, v->buf, v->len, i, 0, "%" PRIu64);
         warn(INF,
-             FRAM_IN "ECN" NRM " ect0=%" PRIu64 " ect1=%" PRIu64 " ce=%" PRIu64,
-             ect0_cnt, ect1_cnt, ce_cnt);
+             FRAM_IN "ECN" NRM " ect0=%s%" PRIu64 NRM " ect1=%s%" PRIu64 NRM
+                     " ce=%s%" PRIu64 NRM,
+             ect0_cnt ? GRN : NRM, ect0_cnt, ect1_cnt ? GRN : NRM, ect1_cnt,
+             ce_cnt ? GRN : NRM, ce_cnt);
         // TODO: add sanity check whether markings make sense
     }
 
@@ -1225,9 +1227,10 @@ uint16_t enc_ack_frame(struct q_conn * const c,
         i = enc(v->buf, v->len, i, &pn->ect1_cnt, 0, 0, "%" PRIu64);
         i = enc(v->buf, v->len, i, &pn->ce_cnt, 0, 0, "%" PRIu64);
         warn(INF,
-             FRAM_OUT "ECN" NRM " ect0=%" PRIu64 " ect1=%" PRIu64
-                      " ce=%" PRIu64,
-             pn->ect0_cnt, pn->ect1_cnt, pn->ce_cnt);
+             FRAM_OUT "ECN" NRM " ect0=%s%" PRIu64 NRM " ect1=%s%" PRIu64 NRM
+                      " ce=%s%" PRIu64 NRM,
+             pn->ect0_cnt ? BLU : NRM, pn->ect0_cnt, pn->ect1_cnt ? BLU : NRM,
+             pn->ect1_cnt, pn->ce_cnt ? BLU : NRM, pn->ce_cnt);
     }
 
     // warn(DBG, "ACK encoded, stopping epoch %u ACK timer",
