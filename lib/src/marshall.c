@@ -53,24 +53,6 @@
 #endif
 
 
-/// Computes number of bytes need to enccode @p v in QUIC varint encoding.
-///
-/// @param[in]  v     Value to check.
-///
-/// @return     Number of bytes needed in varint encoding (1, 2, 4 or 8).
-///
-uint8_t varint_size_needed(const uint64_t v)
-{
-    if (v < 0x40)
-        return 1;
-    if (v < (0x40 << 8))
-        return 2;
-    if (v < (0x40 << 24))
-        return 4;
-    return 8;
-}
-
-
 #ifdef DEBUG_MARSHALL
 
 #define trim_str(str)                                                          \
@@ -151,19 +133,20 @@ uint16_t marshall_enc(uint8_t * const buf,
     case 0: {
         // varint encoding
         const uint64_t src64 = *(const uint64_t *)src;
-        if (enc_len == 1 || (enc_len == 0 && src64 < 0x40)) {
+        if (enc_len == 1 || (enc_len == 0 && src64 <= VARINT1_MAX)) {
             const uint8_t v = *(const uint8_t *)src;
             do_enc(v, sizeof(v), uint64_t, fmt, "var");
 
-        } else if (enc_len == 2 || (enc_len == 0 && src64 < (0x40 << 8))) {
+        } else if (enc_len == 2 || (enc_len == 0 && src64 <= VARINT2_MAX)) {
             const uint16_t v = htons((0x40 << 8) | *(const uint16_t *)src);
             do_enc(v, sizeof(v), uint64_t, fmt, "var");
 
-        } else if (enc_len == 4 || (enc_len == 0 && src64 < (0x40 << 24))) {
+        } else if (enc_len == 4 || (enc_len == 0 && src64 <= VARINT4_MAX)) {
             const uint32_t v = htonl((0x80UL << 24) | *(const uint32_t *)src);
             do_enc(v, sizeof(v), uint64_t, fmt, "var");
 
         } else {
+            ensure(src64 <= VARINT8_MAX, "varint overflow");
             const uint64_t v = htonll((0xc0ULL << 56) | src64);
             do_enc(v, sizeof(v), uint64_t, fmt, "var");
         }
@@ -300,7 +283,7 @@ extern uint16_t marshall_dec(void * const dst,
     case 0:
         // varint decoding
         *(uint64_t *)dst = 0;
-        if (buf[pos] < 0x40) {
+        if (buf[pos] <= VARINT1_MAX) {
             uint8_t v;
             do_dec(v, sizeof(v));
             *(uint8_t *)dst = v;

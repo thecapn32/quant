@@ -28,8 +28,6 @@
 #include <stdint.h>
 
 
-extern uint8_t __attribute__((const)) varint_size_needed(const uint64_t v);
-
 #ifndef NDEBUG
 // #define DEBUG_MARSHALL
 #endif
@@ -40,6 +38,26 @@ extern uint8_t __attribute__((const)) varint_size_needed(const uint64_t v);
 #define VARINT4_MAX 0x3fffffffUL
 #define VARINT8_MAX 0x3fffffffffffffffULL
 #define VARINT_MAX VARINT8_MAX
+
+
+// Computes number of bytes need to enccode @p v in QUIC varint encoding.
+///
+/// @param[in]  v     Value to check.
+///
+/// @return     Number of bytes needed in varint encoding (1, 2, 4 or 8).
+///
+static inline uint8_t __attribute__((const))
+varint_size_needed(const uint64_t v)
+{
+    if (v <= VARINT1_MAX)
+        return 1;
+    if (v <= VARINT2_MAX)
+        return 2;
+    if (v <= VARINT4_MAX)
+        return 4;
+    return 8;
+}
+
 
 #ifdef DEBUG_MARSHALL
 /// Encodes @p src in host byte-order data into network byte-order at at
