@@ -26,7 +26,7 @@ function run_test() {
         local cmd="$dc run --detach --no-deps -T --service-ports"
         $cmd --name "$base-server" server \
                 server -i eth0 -v5 -d /www \
-                        -c /tls/quant.crt -k /tls/quant.key > /dev/null
+                        -c /tls/dummy.crt -k /tls/dummy.key > /dev/null
         $cmd --name "$base-valve" valve \
                 env PYTHONUNBUFFERED=1 qvalve -ra "$base-server" -r "/$t" \
                         > /dev/null
