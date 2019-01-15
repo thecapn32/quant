@@ -62,7 +62,7 @@ function run_test() {
 
 # if arguments are given, assume they are tests (otherwise run all)
 tests="qvalve-tests/*"
-[ ! -z "$*" ] && tests=$*
+[ -n "$*" ] && tests=$*
 
 for t in $tests; do
         run_test "$t" &
@@ -77,12 +77,6 @@ for t in $tests; do
         status[all]=$((status[all] + 1))
 
         if [ "$ret" = "fail" ]; then
-                # tmux -CC \
-                #     new-session "cat $base-client.log" \; \
-                #     split-window -h "cat $base-valve.log" \; \
-                #     split-window -h "cat $base-server.log" \; \
-                #     set remain-on-exit on
-
                 echo tmux -CC \
                     new-session \"cat $base-client.log\" \\\; \
                     split-window -h \"cat $base-valve.log\" \\\; \
