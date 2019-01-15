@@ -249,19 +249,13 @@ pm_cpy(struct pkt_meta * const dst,
 
 
 static inline bool __attribute__((nonnull))
-is_ack_only(const struct frames * const f)
+is_ack_eliciting(const struct frames * const f)
 {
     static const struct frames ack_only = bitset_t_initializer(1 << FRM_ACK);
-    return bit_cmp(NUM_FRAM_TYPES, f, &ack_only) == 0;
-}
-
-
-static inline bool __attribute__((nonnull))
-is_ack_or_padding_only(const struct frames * const f)
-{
     static const struct frames ack_or_pad_only =
         bitset_t_initializer(1 << FRM_ACK | 1 << FRM_PAD);
-    return is_ack_only(f) || bit_cmp(NUM_FRAM_TYPES, f, &ack_or_pad_only) == 0;
+    return bit_cmp(NUM_FRAM_TYPES, f, &ack_only) &&
+           bit_cmp(NUM_FRAM_TYPES, f, &ack_or_pad_only);
 }
 
 
@@ -279,33 +273,29 @@ extern struct q_conn_sl accept_queue;
 extern const uint32_t ok_vers[];
 extern const uint8_t ok_vers_len;
 
-/// Maximum number of tail loss probes before an RTO fires.
-#define kMaxTLPs 2
+// Maximum reordering in packets before packet threshold loss detection
+// considers a packet lost. The RECOMMENDED value is 3.
+#define kPacketThreshold 3
 
-/// Maximum reordering in packet number space before FACK style loss detection
-/// considers a packet lost.
-#define kReorderingThreshold 3
+// Maximum reordering in time before time threshold loss detection considers a
+// packet lost. Specified as an RTT multiplier. The RECOMMENDED value is 9/8.
+#define kTimeThreshold 1.125
 
-/// Minimum time in the future a tail loss probe alarm may be set for (in sec).
-#define kMinTLPTimeout 0.01
+// Timer granularity. This is a system-dependent value. However, implementations
+// SHOULD use a value no smaller than 1ms.
+#define kGranularity 0.001
 
-/// Minimum time in the future an RTO alarm may be set for (in sec).
-#define kMinRTOTimeout 0.2
+// The RTT used before an RTT sample is taken. The RECOMMENDED value is 100ms.
+#define kInitialRtt 0.1
 
-/// The length of the peer’s delayed ack timer (in sec).
-#define kDelayedAckTimeout 0.025
-#define kDelayedCryptoAckTimeout 0.001
-
-/// The default RTT used before an RTT sample is taken (in sec).
-#define kDefaultInitialRtt 0.1
-
-/// The sender's maximum payload size. Does not include UDP or IP overhead.
-/// The max packet size is used for calculating initial and minimum congestion
+/// The sender's maximum payload size. Does not include UDP or IP overhead. The
+/// max packet size is used for calculating initial and minimum congestion
 /// windows.
 #define kMaxDatagramSize 1200
 
-/// Default limit on the initial amount of outstanding data in bytes. Taken from
-/// [RFC6928].
+/// Default limit on the initial amount of outstanding data in flight, in bytes.
+/// Taken from [RFC6928]. The RECOMMENDED value is the minimum of 10 *
+/// kMaxDatagramSize and max(2* kMaxDatagramSize, 14600)).
 #define kInitialWindow                                                         \
     MIN(10 * kMaxDatagramSize, MAX(2 * kMaxDatagramSize, 14600))
 
@@ -313,10 +303,13 @@ extern const uint8_t ok_vers_len;
 #define kMinimumWindow (2 * kMaxDatagramSize)
 
 /// Reduction in congestion window when a new loss event is detected.
-#define kLossReductionDivisor 2
+#define kLossReductionDivisor 2 // kLossReductionFactor
 
-/// Default conn_idle timeout.
-#define kIdleTimeout 10
+/// Number of consecutive PTOs after which network is considered to be
+/// experiencing persistent congestion. The RECOMMENDED value for
+/// kPersistentCongestionThreshold is 2, which is equivalent to having two TLPs
+/// before an RTO in TCP.
+#define kPersistentCongestionThreshold 2
 
 
 typedef void (*func_ptr)(void);

@@ -207,7 +207,7 @@ static void log_sent_pkts(struct q_conn * const c)
         struct pn_space * const pn = pn_for_epoch(c, e);
         splay_foreach (p, pm_by_nr, &pn->sent_pkts) {
             char tmp[1024] = "";
-            const bool ack_only = is_ack_only(&p->frames);
+            const bool ack_only = !is_ack_eliciting(&p->frames);
             snprintf(tmp, sizeof(tmp), "%s%s" FMT_PNR_OUT "%s ",
                      is_rtxable(p) ? "*" : "", ack_only ? "(" : "",
                      prev == UINT64_MAX
@@ -463,32 +463,6 @@ out_of_wnd:
 done:
     if (!sq_empty(&c->txq))
         do_tx(c);
-}
-
-
-void tx_tlp(struct q_conn * const c)
-{
-    if (unlikely(!has_wnd(c))) {
-        warn(INF, "out of window, cannot send TLP");
-        return;
-    }
-
-    struct pn_space * const pn = pn_for_epoch(c, ep_data);
-    struct pkt_meta * p;
-    struct w_iov * v = 0;
-    splay_foreach_rev (p, pm_by_nr, &pn->sent_pkts) {
-        v = w_iov(c->w, p->is_rtx ? pm_idx(sl_first(&p->rtx)) : pm_idx(p));
-        if (has_frame(v, FRM_CRY) || has_frame(v, FRM_STR))
-            break;
-    }
-    if (unlikely(v == 0 || meta(v).stream == 0)) {
-        warn(INF, "cannot find pkt for TLP");
-        return;
-    }
-
-    rtx_pkt(meta(v).stream, v);
-    enc_pkt(meta(v).stream, true, true, v);
-    do_tx(c);
 }
 
 
@@ -860,11 +834,11 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         break;
     }
 
-    // if packet has anything other than ACK frames, maybe arm the ACK timer
+    // if packet is ACK-eliciting, maybe arm the ACK timer
     if (c->state != conn_clsg && c->state != conn_drng &&
-        c->state != conn_clsd && !c->tx_rtry && !is_ack_only(&meta(v).frames) &&
-        !ev_is_active(&pn->ack_alarm)) {
-        // warn(DBG, "non-ACK frame received, starting epoch %u ACK timer",
+        c->state != conn_clsd && !c->tx_rtry &&
+        is_ack_eliciting(&meta(v).frames) && !ev_is_active(&pn->ack_alarm)) {
+        // warn(DBG, "rx ACK-eliciting frame, starting epoch %u ACK timer",
         //      epoch_for_pkt_type(meta(v).hdr.type));
         ev_timer_again(loop, &pn->ack_alarm);
     }
@@ -1256,7 +1230,7 @@ void enter_closing(struct q_conn * const c)
     if (!ev_is_active(&c->closing_alarm)) {
         // start closing/draining alarm (3 * RTO)
         const ev_tstamp dur =
-            (3 * (is_zero(c->rec.srtt) ? kDefaultInitialRtt : c->rec.srtt) +
+            (3 * (is_zero(c->rec.srtt) ? kInitialRtt : c->rec.srtt) +
              4 * c->rec.rttvar);
         ev_timer_init(&c->closing_alarm, enter_closed, dur, 0);
 #ifndef FUZZING
@@ -1292,8 +1266,8 @@ void update_conn_conf(struct q_conn * const c,
     c->spinbit_enabled = cc ? cc->enable_spinbit : 0;
 
     // (re)set idle alarm
-    c->idle_alarm.repeat =
-        cc && cc->idle_timeout ? cc->idle_timeout : kIdleTimeout;
+    c->idle_alarm.repeat = c->tp_in.idle_to =
+        cc && cc->idle_timeout ? cc->idle_timeout : 10;
     ev_timer_again(loop, &c->idle_alarm);
 
     c->tp_out.disable_migration = cc ? cc->disable_migration : false;
@@ -1353,11 +1327,6 @@ struct q_conn * new_conn(struct w_engine * const w,
     diet_init(&c->closed_streams);
     sq_init(&c->txq);
 
-    // initialize packet number spaces
-    init_pn(&c->pn_init.pn, c, kDelayedCryptoAckTimeout);
-    init_pn(&c->pn_hshk.pn, c, kDelayedCryptoAckTimeout);
-    init_pn(&c->pn_data.pn, c, kDelayedAckTimeout);
-
     // initialize idle timeout
     c->idle_alarm.data = c;
     ev_init(&c->idle_alarm, idle_alarm);
@@ -1370,16 +1339,20 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->key_flip_alarm.data = c;
     ev_init(&c->key_flip_alarm, key_flip);
 
+    // TODO most of these should become configurable via q_conn_conf
     c->tp_in.ack_del_exp = c->tp_out.ack_del_exp = DEF_ACK_DEL_EXP;
-    c->tp_in.max_ack_del = c->tp_out.max_ack_del =
-        (uint8_t)(1000 * kDelayedAckTimeout);
-    c->tp_in.idle_to = kIdleTimeout;
+    c->tp_in.max_ack_del = c->tp_out.max_ack_del = 25;
     c->tp_in.max_data = INIT_MAX_BIDI_STREAMS * INIT_STRM_DATA_BIDI;
     c->tp_in.max_strm_data_uni = INIT_STRM_DATA_UNI;
     c->tp_in.max_strm_data_bidi_local = c->tp_in.max_strm_data_bidi_remote =
         INIT_STRM_DATA_BIDI;
     c->tp_in.max_streams_bidi = INIT_MAX_BIDI_STREAMS;
     c->tp_in.max_streams_uni = INIT_MAX_UNI_STREAMS;
+
+    // initialize packet number spaces
+    init_pn(&c->pn_init.pn, c, 0.001); // 1ms
+    init_pn(&c->pn_hshk.pn, c, 0.001); // 1ms
+    init_pn(&c->pn_data.pn, c, c->tp_out.max_ack_del / 1000.0);
 
     // initialize recovery state
     init_rec(c);

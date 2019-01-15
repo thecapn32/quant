@@ -55,15 +55,18 @@ ev_tstamp prev_srtt = 0, prev_rttvar = 0;
 #endif
 
 
+#define is_crypto_pkt(v) has_frame((v), FRM_CRY)
+
+
 static inline bool __attribute__((nonnull))
-in_recovery(const struct q_conn * const c, const uint64_t nr)
+in_recovery(const struct q_conn * const c, const ev_tstamp sent_t)
 {
-    return nr <= c->rec.eor;
+    return sent_t <= c->rec.rec_start_t;
 }
 
 
 static inline bool __attribute__((nonnull))
-crypto_pkts_outstanding(struct q_conn * const c)
+crypto_pkts_in_flight(struct q_conn * const c)
 {
     return (c->cstreams[ep_init] &&
             out_fully_acked(c->cstreams[ep_init]) == false) ||
@@ -79,46 +82,37 @@ static void __attribute__((nonnull)) set_ld_timer(struct q_conn * const c)
 
     // see SetLossDetectionTimer pseudo code
 
-    // don't arm the alarm if there are no packets with
-    // retransmittable data in flight
-    if (c->rec.in_flight == 0) {
-        ev_timer_stop(loop, &c->rec.ld_alarm);
+    // don't arm the alarm if there are no ack-eliciting packets in flight
+    if (unlikely(c->rec.ack_eliciting_in_flight == 0)) {
 #ifndef FUZZING
-        // warn(DBG, "no RTX-able pkts outstanding, stopping ld_alarm");
+        warn(DBG, "no RTX-able pkts outstanding, stopping ld_alarm");
 #endif
+        ev_timer_stop(loop, &c->rec.ld_alarm);
         return;
     }
 
-    ev_tstamp to;
-    // const char * type = BLD RED "???" NRM;
-    if (unlikely(crypto_pkts_outstanding(c))) {
-        // type = "crypto RTX";
-        to = 2 * (unlikely(is_zero(c->rec.srtt)) ? kDefaultInitialRtt
-                                                 : c->rec.srtt);
-        to = MAX(to, kMinTLPTimeout) * (1 << c->rec.crypto_cnt);
-        c->rec.ld_alarm.repeat = to + c->rec.last_sent_crypto_t;
+    const char * type = BLD RED "???" NRM;
+    if (unlikely(crypto_pkts_in_flight(c))) {
+        type = "crypto RTX";
+        ev_tstamp to =
+            2 * (unlikely(is_zero(c->rec.srtt)) ? kInitialRtt : c->rec.srtt);
+        to = MAX(to, kGranularity) * (1 << c->rec.crypto_cnt);
+        c->rec.ld_alarm.repeat = c->rec.last_sent_crypto_t + to;
         goto set_to;
     }
 
     if (!is_zero(c->rec.loss_t)) {
-        // type = "early RTX";
-        to = c->rec.loss_t - c->rec.last_sent_rtxable_t;
-
-    } else {
-        // type = "RTO";
-        to = c->rec.srtt + (4 * c->rec.rttvar) +
-             (c->tp_out.max_ack_del / 1000.0);
-        to = MAX(to, kMinRTOTimeout) * (1 << c->rec.rto_cnt);
-        if (c->rec.tlp_cnt < kMaxTLPs) {
-            // type = "TLP";
-            const ev_tstamp tlp_to =
-                MAX(1.5 * c->rec.srtt + (c->tp_out.max_ack_del / 1000.0),
-                    kMinTLPTimeout);
-            to = MIN(tlp_to, to);
-        }
+        type = "TT";
+        c->rec.ld_alarm.repeat = c->rec.loss_t;
+        goto set_to;
     }
 
-    c->rec.ld_alarm.repeat = c->rec.last_sent_rtxable_t + to;
+    type = "PTO";
+    ev_tstamp to =
+        c->rec.srtt + (4 * c->rec.rttvar) + (c->tp_out.max_ack_del / 1000.0);
+    to = MAX(to, kGranularity) * (1 << c->rec.pto_cnt);
+    c->rec.ld_alarm.repeat = c->rec.last_sent_ack_elicit_t + to;
+
 set_to:
     c->rec.ld_alarm.repeat -= ev_now(loop);
 
@@ -126,9 +120,31 @@ set_to:
         ev_timer_stop(loop, &c->rec.ld_alarm);
         ev_invoke(loop, &c->rec.ld_alarm, 0);
     } else {
-        // warn(DBG, "%s alarm in %f sec on %s conn %s", type,
-        //      c->rec.ld_alarm.repeat, conn_type(c), cid2str(c->scid));
+        warn(DBG, "%s alarm in %f sec on %s conn %s", type,
+             c->rec.ld_alarm.repeat, conn_type(c), cid2str(c->scid));
         ev_timer_again(loop, &c->rec.ld_alarm);
+    }
+}
+
+
+void congestion_event(struct q_conn * const c, const ev_tstamp lg_lost_tx_t)
+{
+    // CongestionEvent:
+    // Start a new congestion epoch if the last lost packet is past the end of
+    // the previous recovery epoch.
+    if (!in_recovery(c, lg_lost_tx_t)) {
+        // warn(CRT,
+        //      "NEW RECOVERY EPOCH: eor=" FMT_PNR_OUT ", lg_sent=%" PRIu64
+        //      ", lg_lost=%" PRIu64,
+        //      c->rec.eor, pn->lg_sent, largest_lost_packet);
+        c->rec.rec_start_t = ev_now(loop);
+        c->rec.cwnd /= kLossReductionDivisor;
+        c->rec.cwnd = MAX(c->rec.cwnd, kMinimumWindow);
+        c->rec.ssthresh = c->rec.cwnd;
+        // Collapse congestion window if persistent congestion
+        if (c->rec.pto_cnt > kPersistentCongestionThreshold)
+            c->rec.cwnd = kMinimumWindow;
+        // log_cc(c);
     }
 }
 
@@ -136,71 +152,63 @@ set_to:
 static void __attribute__((nonnull))
 detect_lost_pkts(struct q_conn * const c, struct pn_space * const pn)
 {
-    c->rec.loss_t = 0;
-    ev_tstamp delay_until_lost = HUGE_VAL;
-
-    if (pn->lg_acked == pn->lg_sent)
-        // Early retransmit timer.
-        delay_until_lost = 1.125 * MAX(c->rec.latest_rtt, c->rec.srtt);
-
     const ev_tstamp now = ev_now(loop);
-    uint64_t largest_lost_packet = 0;
 
-    struct pkt_meta *p, *nxt;
-    for (p = splay_min(pm_by_nr, &pn->sent_pkts); p && p->hdr.nr < pn->lg_acked;
-         p = nxt) {
+    c->rec.loss_t = 0;
+    const ev_tstamp loss_del =
+        kTimeThreshold * MAX(c->rec.latest_rtt, c->rec.srtt);
+
+    // Packets sent before this time are deemed lost.
+    const ev_tstamp lost_send_t = now - loss_del;
+
+    // Packets with packet numbers before this are deemed lost.
+    const uint64_t lost_pn = pn->lg_acked - kPacketThreshold;
+
+    struct pkt_meta *p, *nxt, *largest_lost_pkt = 0;
+    for (p = splay_min(pm_by_nr, &pn->sent_pkts); p; p = nxt) {
         nxt = splay_next(pm_by_nr, &pn->sent_pkts, p);
+
         if (p->is_acked || p->is_lost)
             continue;
 
-        const ev_tstamp time_since_sent = now - p->tx_t;
-        const uint64_t delta = pn->lg_acked - p->hdr.nr;
+        if (p->hdr.nr > pn->lg_acked)
+            continue;
 
-        // warn(ERR, "delay_until_lost %f (time_since_sent %f)",
-        // delay_until_lost, time_since_sent);
-
-        if (time_since_sent > delay_until_lost ||
-            delta > kReorderingThreshold) {
-            warn(WRN, "%s pkt " FMT_PNR_OUT " considered lost",
-                 pkt_type_str(p->hdr.flags, &p->hdr.vers), p->hdr.nr);
+        // Mark packet as lost, or set time when it should be marked.
+        if (p->tx_t <= lost_send_t ||
+            (pn->lg_acked != UINT64_MAX && p->hdr.nr <= lost_pn)) {
             p->is_lost = true;
-            // c->needs_tx = true;
+            if (largest_lost_pkt == 0 || p->hdr.nr > largest_lost_pkt->hdr.nr)
+                largest_lost_pkt = p;
+        } else if (is_zero(c->rec.loss_t))
+            c->rec.loss_t = p->tx_t + loss_del;
+        else
+            c->rec.loss_t = MIN(c->rec.loss_t, p->tx_t + loss_del);
 
-            // OnPacketsLost:
-            if (is_ack_only(&p->frames) == false) {
+        // OnPacketsLost:
+        if (p->is_lost) {
+            warn(DBG, "%s pkt " FMT_PNR_OUT " considered lost",
+                 pkt_type_str(p->hdr.flags, &p->hdr.vers), p->hdr.nr);
+
+            if (is_ack_eliciting(&p->frames)) {
                 c->rec.in_flight -= p->tx_len;
-                // log_cc(c);
+                c->rec.ack_eliciting_in_flight--;
             }
-            largest_lost_packet = MAX(largest_lost_packet, p->hdr.nr);
+
+            // log_cc(c);
 
             if (p->is_rtx || !is_rtxable(p)) {
                 if (p->is_rtx)
                     // remove from the original w_iov rtx list
                     sl_remove(&sl_first(&p->rtx)->rtx, p, pkt_meta, rtx_next);
                 free_iov(w_iov(c->w, pm_idx(p)));
+                if (largest_lost_pkt == p)
+                    largest_lost_pkt = 0;
             }
-
-        } else if (is_zero(c->rec.loss_t) && !is_inf(delay_until_lost)) {
-            c->rec.loss_t = now + delay_until_lost - time_since_sent;
-            // warn(ERR, "loss_t %f (now %f)", c->rec.loss_t, now);
         }
     }
-
-    // CongestionEvent:
-    // Start a new recovery epoch if the lost packet is larger
-    // than the end of the previous recovery epoch.
-    if (!in_recovery(c, largest_lost_packet)) {
-        // warn(CRT,
-        //      "NEW RECOVERY EPOCH: eor=" FMT_PNR_OUT ", lg_sent=%" PRIu64
-        //      ", lg_lost=%" PRIu64,
-        //      c->rec.eor, pn->lg_sent, largest_lost_packet);
-        c->rec.eor = pn->lg_sent;
-        c->rec.cwnd /= kLossReductionDivisor;
-        c->rec.cwnd = MAX(c->rec.cwnd, kMinimumWindow);
-        c->rec.ssthresh = c->rec.cwnd;
-        // log_cc(c);
-    }
-
+    if (largest_lost_pkt)
+        congestion_event(c, largest_lost_pkt->tx_t);
     log_cc(c);
 }
 
@@ -214,8 +222,8 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
     struct pn_space * const pn = pn_for_epoch(c, c->tls.epoch_out);
     ev_timer_stop(loop, &c->rec.ld_alarm);
 
-    // see OnLossDetectionAlarm pseudo code
-    if (crypto_pkts_outstanding(c)) {
+    // see OnLossDetectionTimeout pseudo code
+    if (crypto_pkts_in_flight(c)) {
         warn(DBG, "crypto RTX #%u on %s conn %s", c->rec.crypto_cnt + 1,
              conn_type(c), cid2str(c->scid));
         detect_lost_pkts(c, pn_for_epoch(c, ep_init));
@@ -230,22 +238,14 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
         tx(c, 0);
 
     } else if (!is_zero(c->rec.loss_t)) {
-        warn(DBG, "early RTX or time loss detection alarm on %s conn %s",
+        warn(DBG, "time thresh loss detection alarm on %s conn %s",
              conn_type(c), cid2str(c->scid));
         detect_lost_pkts(c, pn);
 
-    } else if (c->rec.tlp_cnt < kMaxTLPs) {
-        warn(DBG, "TLP alarm #%u on %s conn %s", c->rec.tlp_cnt, conn_type(c),
-             cid2str(c->scid));
-        c->rec.tlp_cnt++;
-        tx_tlp(c);
-
     } else {
-        warn(DBG, "RTO alarm #%u on %s conn %s", c->rec.rto_cnt, conn_type(c),
+        warn(DBG, "PTO alarm #%u on %s conn %s", c->rec.pto_cnt, conn_type(c),
              cid2str(c->scid));
-        if (c->rec.rto_cnt == 0)
-            pn->lg_sent_before_rto = pn->lg_sent;
-        c->rec.rto_cnt++;
+        c->rec.pto_cnt++;
         tx(c, 2);
     }
 
@@ -290,24 +290,29 @@ void on_pkt_sent(struct q_stream * const s, struct w_iov * const v)
     // these are updated in enc_pkt():
     // * largest_sent_packet
     // * sent_packets[packet_number].packet_number
+    // * sent_packets[packet_number].ack_eliciting
     // * sent_packets[packet_number].bytes
     //
     // these we maintain via the frames bitstr_t in pkt_meta:
     // * sent_packets[packet_number].ack_only
 
+    // sent_packets[packet_number].time_sent = now
     meta(v).tx_t = ev_now(loop);
+
     struct q_conn * const c = s->c;
     struct pn_space * const pn = pn_for_epoch(c, strm_epoch(s));
     ensure(splay_insert(pm_by_nr, &pn->sent_pkts, &meta(v)) == 0, "inserted");
 
-    if (likely(is_ack_only(&meta(v).frames) == false)) {
-        if (unlikely(has_frame(v, FRM_CRY)))
+    if (likely(is_ack_eliciting(&meta(v).frames))) {
+        if (unlikely(is_crypto_pkt(v)))
             // is_crypto_packet
             c->rec.last_sent_crypto_t = meta(v).tx_t;
-        c->rec.last_sent_rtxable_t = meta(v).tx_t;
-        // warn(ERR, "last_sent_rtxable_t %f", c->rec.last_sent_rtxable_t);
+        c->rec.last_sent_ack_elicit_t = meta(v).tx_t;
+        // warn(ERR, "last_sent_ack_elicit_t %f",
+        // c->rec.last_sent_ack_elicit_t);
 
         c->rec.in_flight += meta(v).tx_len; // OnPacketSentCC
+        c->rec.ack_eliciting_in_flight++;
         log_cc(c);
         set_ld_timer(c);
     }
@@ -322,8 +327,11 @@ update_rtt(struct q_conn * const c, const ev_tstamp ack_del)
     // min_rtt = min(min_rtt, latest_rtt)
     c->rec.min_rtt = MIN(c->rec.min_rtt, c->rec.latest_rtt);
 
+    // ack_delay = min(ack_delay, max_ack_delay)
+    const ev_tstamp ad = MIN(ack_del, c->tp_out.max_ack_del);
+
     // latest_rtt = max(latest_rtt - ack_delay, min_rtt)
-    c->rec.latest_rtt = MAX(c->rec.latest_rtt - ack_del, c->rec.min_rtt);
+    c->rec.latest_rtt = MAX(c->rec.latest_rtt - ad, c->rec.min_rtt);
 
     // if (smoothed_rtt == 0):
     if (unlikely(is_zero(c->rec.srtt))) {
@@ -351,53 +359,29 @@ void on_ack_received_1(struct q_conn * const c,
 {
     // implements first part of OnAckReceived pseudocode
 
-    // largest_acked_packet = ack.largest_acked
-    pn->lg_acked = meta(lg_ack).hdr.nr;
+    // largest_acked_packet = max(largest_acked_packet, ack.largest_acked)
+    pn->lg_acked = MAX(pn->lg_acked, meta(lg_ack).hdr.nr);
 
     // latest_rtt = now - sent_packets[ack.largest_acked].time
     c->rec.latest_rtt = ev_now(loop) - meta(lg_ack).tx_t;
 
     // UpdateRtt(latest_rtt, ack.ack_delay)
     update_rtt(c, ack_del / 1000000.0); // ack_del is passed in usec
+
+    // TODO
+    // Process ECN information if present.
+    // if (ACK frame contains ECN information):
+    //   ProcessECN(ack)
 }
 
 
-void on_ack_received_2(struct q_conn * const c,
-                       struct pn_space * const pn,
-                       const uint64_t sm_new_acked)
+void on_ack_received_2(struct q_conn * const c, struct pn_space * const pn)
 {
     // implements second part of OnAckReceived pseudocode
 
-    // if (rto_count > 0 && sm_new_acked > largest_sent_before_rto):
-    if (c->rec.rto_cnt > 0 && sm_new_acked &&
-        sm_new_acked > pn->lg_sent_before_rto) {
-        // OnRetransmissionTimeoutVerified(smallest_newly_acked)
-
-        // congestion_window = kMinimumWindow
-        c->rec.cwnd = kMinimumWindow;
-
-        // for (sent_packet: sent_packets):
-        //   if (sent_packet.packet_number < packet_number):
-        for (struct pkt_meta * p = splay_min(pm_by_nr, &pn->sent_pkts);
-             p && p->hdr.nr < sm_new_acked;
-             p = splay_next(pm_by_nr, &pn->sent_pkts, p)) {
-            warn(DBG, "%s pkt " FMT_PNR_OUT " considered lost",
-                 pkt_type_str(p->hdr.flags, &p->hdr.vers), p->hdr.nr);
-            p->is_lost = true;
-            if (is_ack_only(&p->frames) == false) {
-                // bytes_in_flight -= lost_packet.bytes
-                ensure(c->rec.in_flight, "in_flight is zero");
-                c->rec.in_flight -= p->tx_len;
-                // XXX: sent_packets.remove(sent_packet.packet_number)
-                // log_cc(c);
-            }
-        }
-    }
-
     // crypto_count = 0
-    // tlp_count = 0
-    // rto_count = 0
-    c->rec.crypto_cnt = c->rec.tlp_cnt = c->rec.rto_cnt = 0;
+    // pto_count = 0
+    c->rec.crypto_cnt = c->rec.pto_cnt = 0;
 
     detect_lost_pkts(c, pn);
     set_ld_timer(c);
@@ -405,8 +389,6 @@ void on_ack_received_2(struct q_conn * const c,
     // XXX since we likely reduced in_flight during the ACK parsing, we can TX
     if (likely(has_wnd(c)))
         c->needs_tx = true;
-
-    // TODO: ProcessECN(ack)
 }
 
 
@@ -420,7 +402,7 @@ on_pkt_acked_cc(struct q_conn * const c, struct w_iov * const acked_pkt)
         c->rec.in_flight -= meta(acked_pkt).tx_len;
 
     // if (!InRecovery(acked_packet.packet_number)):
-    if (in_recovery(c, meta(acked_pkt).hdr.nr) == false) {
+    if (in_recovery(c, meta(acked_pkt).tx_t) == false) {
         // if (congestion_window < ssthresh):
         if (c->rec.cwnd < c->rec.ssthresh)
             // congestion_window += acked_packet.bytes
@@ -446,8 +428,8 @@ void on_pkt_acked(struct q_conn * const c,
     // implements OnPacketAcked pseudo code
     // warn(ERR, "ACK " FMT_PNR_OUT, meta(acked_pkt).hdr.nr);
 
-    // if (!acked_packet.is_ack_only):
-    if (is_ack_only(&meta(acked_pkt).frames) == false)
+    // if (acked_packet.ack_eliciting):
+    if (is_ack_eliciting(&meta(acked_pkt).frames))
         on_pkt_acked_cc(c, acked_pkt);
 
     // sent_packets.remove(acked_packet.packet_number)
@@ -498,7 +480,7 @@ void on_pkt_acked(struct q_conn * const c,
         s->out_una == (orig ? orig : acked_pkt)) {
         // if this ACKs its stream's out_una, move that forward
         sq_foreach_from (s->out_una, &s->out, next)
-            if (orig == 0 && meta(s->out_una).is_acked == false)
+            if (meta(s->out_una).is_acked == false)
                 break;
 
         if (s->out_una == 0) {

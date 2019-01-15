@@ -287,8 +287,6 @@ tx(struct q_conn * const c, const uint32_t limit);
 extern void __attribute__((nonnull))
 tx_ack(struct q_conn * const c, const epoch_t e);
 
-extern void __attribute__((nonnull)) tx_tlp(struct q_conn * const c);
-
 extern void __attribute__((nonnull))
 rx(struct ev_loop * const l, ev_io * const rx_w, int e);
 

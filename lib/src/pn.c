@@ -27,6 +27,7 @@
 
 #include "pn.h"
 #include "conn.h"
+#include "recovery.h"
 #include "stream.h"
 
 
@@ -79,7 +80,9 @@ void init_pn(struct pn_space * const pn,
 }
 
 
-static void do_free_pn(struct pn_space * const pn, const bool free_iov)
+static void do_free_pn(struct pn_space * const pn,
+                       const bool free_iov,
+                       const bool remove_iov)
 {
     ev_timer_stop(loop, &pn->ack_alarm);
 
@@ -87,9 +90,13 @@ static void do_free_pn(struct pn_space * const pn, const bool free_iov)
     struct pkt_meta * p = splay_min(pm_by_nr, &pn->sent_pkts);
     while (p) {
         struct pkt_meta * const nxt = splay_next(pm_by_nr, &pn->sent_pkts, p);
+        if (is_ack_eliciting(&p->frames)) {
+            pn->c->rec.in_flight -= p->tx_len;
+            pn->c->rec.ack_eliciting_in_flight--;
+        }
         if (free_iov)
             free_iov(w_iov(pn->c->w, pm_idx(p)));
-        else
+        else if (remove_iov)
             ensure(splay_remove(pm_by_nr, &pn->sent_pkts, p), "removed");
         p = nxt;
     }
@@ -102,7 +109,7 @@ static void do_free_pn(struct pn_space * const pn, const bool free_iov)
 
 void reset_pn(struct pn_space * const pn)
 {
-    do_free_pn(pn, false);
+    do_free_pn(pn, false, true);
 
     pn->lg_sent = pn->lg_acked = UINT64_MAX;
     pn->ect0_cnt = pn->ect1_cnt = pn->ce_cnt = 0;
@@ -111,15 +118,15 @@ void reset_pn(struct pn_space * const pn)
 
 void free_pn(struct pn_space * const pn)
 {
-    do_free_pn(pn, true);
+    do_free_pn(pn, true, false);
 }
 
 
 void abandon_pn(struct q_conn * const c, const epoch_t e)
 {
     warn(DBG, "abandon %s epoch %u processing", conn_type(c), e);
+    do_free_pn(&c->pn_init.pn, false, false);
     free_stream(c->cstreams[e]);
-    free_pn(&c->pn_init.pn);
     dispose_cipher(&c->pn_init.in);
     dispose_cipher(&c->pn_init.out);
     c->cstreams[e] = 0;

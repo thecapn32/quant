@@ -117,6 +117,6 @@ abandon_pn(struct q_conn * const c, const epoch_t e);
 static inline bool __attribute__((nonnull, always_inline))
 needs_ack(struct pn_space * const pn)
 {
-    return !diet_empty(&pn->recv) && !is_ack_or_padding_only(&pn->rx_frames) &&
+    return !diet_empty(&pn->recv) && is_ack_eliciting(&pn->rx_frames) &&
            ev_is_active(&pn->ack_alarm);
 }

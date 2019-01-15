@@ -394,7 +394,7 @@ uint16_t dec_ack_frame(struct q_conn * const c,
     i = dec_chk(t, &num_blocks, v->buf, v->len, i, 0, "%" PRIu64);
 
     uint64_t lg_ack_in_block = lg_ack;
-    uint64_t sm_new_acked = UINT64_MAX;
+    ev_tstamp lg_acked_tx_t = 0;
     for (uint64_t n = num_blocks + 1; n > 0; n--) {
         uint64_t gap = 0;
         uint64_t ack_block_len = 0;
@@ -461,18 +461,17 @@ uint16_t dec_ack_frame(struct q_conn * const c,
                 goto skip;
             }
 
-            if (unlikely(ack == lg_ack))
+            if (unlikely(ack == lg_ack) &&
+                is_ack_eliciting(&meta(acked).frames)) {
                 // call this only for the largest ACK in the frame
                 on_ack_received_1(c, pn, acked, ack_delay);
-
-            // this emulates FindSmallestNewlyAcked() from -recovery
-            if (sm_new_acked > ack)
-                sm_new_acked = meta(acked).hdr.nr;
+                lg_acked_tx_t = meta(acked).tx_t;
+            }
 
             on_pkt_acked(c, pn, acked);
 
             // if the ACK'ed pkt was sent with ECT, verify peer and path support
-            if (likely(c->do_ecn && acked->flags & IPTOS_ECN_ECT0) &&
+            if (likely(c->do_ecn && is_set(IPTOS_ECN_ECT0, acked->flags)) &&
                 unlikely(t != FRM_ACE)) {
                 warn(NTE, "ECN verification failed for %s conn %s",
                      conn_type(c), cid2str(c->scid));
@@ -494,9 +493,9 @@ uint16_t dec_ack_frame(struct q_conn * const c,
         }
     }
 
-    uint64_t ect0_cnt = 0, ect1_cnt = 0, ce_cnt = 0;
     if (t == FRM_ACE) {
         // decode ECN
+        uint64_t ect0_cnt = 0, ect1_cnt = 0, ce_cnt = 0;
         i = dec_chk(t, &ect0_cnt, v->buf, v->len, i, 0, "%" PRIu64);
         i = dec_chk(t, &ect1_cnt, v->buf, v->len, i, 0, "%" PRIu64);
         i = dec_chk(t, &ce_cnt, v->buf, v->len, i, 0, "%" PRIu64);
@@ -506,9 +505,15 @@ uint16_t dec_ack_frame(struct q_conn * const c,
              ect0_cnt ? GRN : NRM, ect0_cnt, ect1_cnt ? GRN : NRM, ect1_cnt,
              ce_cnt ? GRN : NRM, ce_cnt);
         // TODO: add sanity check whether markings make sense
+
+        // ProcessECN
+        if (ce_cnt > pn->ce_cnt) {
+            pn->ce_cnt = ce_cnt;
+            congestion_event(c, lg_acked_tx_t);
+        }
     }
 
-    on_ack_received_2(c, pn, sm_new_acked);
+    on_ack_received_2(c, pn);
     return i;
 }
 
@@ -1153,8 +1158,8 @@ uint16_t enc_ack_frame(struct q_conn * const c,
                        struct w_iov * const v,
                        const uint16_t pos)
 {
-    const bool enc_ecn = pn->ect0_cnt || pn->ect1_cnt || pn->ce_cnt;
-    const uint8_t type = enc_ecn ? FRM_ACE : FRM_ACK;
+    const uint8_t type =
+        (pn->ect0_cnt || pn->ect1_cnt || pn->ce_cnt) ? FRM_ACE : FRM_ACK;
     track_frame(v, FRM_ACK);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
@@ -1221,7 +1226,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
         prev_lo = b->lo;
     }
 
-    if (enc_ecn) {
+    if (type == FRM_ACE) {
         // encode ECN
         i = enc(v->buf, v->len, i, &pn->ect0_cnt, 0, 0, "%" PRIu64);
         i = enc(v->buf, v->len, i, &pn->ect1_cnt, 0, 0, "%" PRIu64);

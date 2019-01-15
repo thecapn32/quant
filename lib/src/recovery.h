@@ -42,26 +42,35 @@ struct pn_space;
 
 struct recovery {
     // LD state
-    ev_timer ld_alarm;   // loss_detection_alarm
+    ev_timer ld_alarm;   // loss_detection_timer
     uint16_t crypto_cnt; // crypto_count
-    uint16_t tlp_cnt;    // tlp_count
-    uint16_t rto_cnt;    // rto_count
+    uint16_t pto_cnt;    // pto_count
 
-    uint8_t _unused2[2];
+    uint8_t _unused2[4];
 
-    ev_tstamp last_sent_crypto_t;  // time_of_last_sent_crypto_packet
-    ev_tstamp last_sent_rtxable_t; // time_of_last_sent_retransmittable_packet
-    ev_tstamp min_rtt;             // min_rtt
-    ev_tstamp latest_rtt;          // latest_rtt
-    ev_tstamp srtt;                // smoothed_rtt
-    ev_tstamp rttvar;              // rttvar
-    ev_tstamp loss_t;              // loss_time
+    ev_tstamp last_sent_ack_elicit_t; // time_of_last_sent_ack_eliciting_packet
+    ev_tstamp last_sent_crypto_t;     // time_of_last_sent_crypto_packet
+
+    // largest_sent_packet -> pn->lg_sent
+    // largest_acked_packet -> pn->lg_acked
+
+    ev_tstamp latest_rtt; // latest_rtt
+    ev_tstamp srtt;       // smoothed_rtt
+    ev_tstamp rttvar;     // rttvar
+    ev_tstamp min_rtt;    // min_rtt
+
+    // max_ack_delay -> c->tp_out.max_ack_del
+
+    ev_tstamp loss_t; // loss_time
+
+    uint64_t ack_eliciting_in_flight; // nr of ACK-eliciting pkts inflight
 
     // CC state
-    uint64_t in_flight; // bytes_in_flight
-    uint64_t cwnd;      // congestion_window
-    uint64_t eor;       // end_of_recovery
-    uint64_t ssthresh;
+    uint64_t ce_cnt;       // ecn_ce_counter
+    uint64_t in_flight;    // bytes_in_flight
+    uint64_t cwnd;         // congestion_window
+    ev_tstamp rec_start_t; // recovery_start_time
+    uint64_t ssthresh;     // sshtresh
 };
 
 
@@ -81,22 +90,24 @@ extern ev_tstamp prev_srtt, prev_rttvar;
             (int64_t)ssthresh - (int64_t)prev_ssthresh;                        \
         const ev_tstamp delta_srtt = (c)->rec.srtt - prev_srtt;                \
         const ev_tstamp delta_rttvar = (c)->rec.rttvar - prev_rttvar;          \
-        warn(DBG,                                                              \
-             "in_flight=%" PRIu64 " (%s%+" PRId64 NRM "), cwnd" NRM            \
-             "=%" PRIu64 " (%s%+" PRId64 NRM "), ssthresh=%" PRIu64            \
-             " (%s%+" PRId64 NRM "), srtt=%f (%s%+f" NRM                       \
-             "), rttvar=%f (%s%+f" NRM ")",                                    \
-             (c)->rec.in_flight,                                               \
-             delta_in_flight > 0 ? GRN : delta_in_flight < 0 ? RED : "",       \
-             delta_in_flight, (c)->rec.cwnd,                                   \
-             delta_cwnd > 0 ? GRN : delta_cwnd < 0 ? RED : "", delta_cwnd,     \
-             ssthresh,                                                         \
-             delta_ssthresh > 0 ? GRN : delta_ssthresh < 0 ? RED : "",         \
-             delta_ssthresh, (c)->rec.srtt,                                    \
-             delta_srtt > 0 ? GRN : delta_srtt < 0 ? RED : "", delta_srtt,     \
-             (c)->rec.rttvar,                                                  \
-             delta_rttvar > 0 ? GRN : delta_rttvar < 0 ? RED : "",             \
-             delta_rttvar);                                                    \
+        if (delta_in_flight || delta_cwnd || delta_ssthresh ||                 \
+            !is_zero(delta_srtt) || !is_zero(delta_rttvar))                    \
+            warn(DBG,                                                          \
+                 "in_flight=%" PRIu64 " (%s%+" PRId64 NRM "), cwnd" NRM        \
+                 "=%" PRIu64 " (%s%+" PRId64 NRM "), ssthresh=%" PRIu64        \
+                 " (%s%+" PRId64 NRM "), srtt=%f (%s%+f" NRM                   \
+                 "), rttvar=%f (%s%+f" NRM ")",                                \
+                 (c)->rec.in_flight,                                           \
+                 delta_in_flight > 0 ? GRN : delta_in_flight < 0 ? RED : "",   \
+                 delta_in_flight, (c)->rec.cwnd,                               \
+                 delta_cwnd > 0 ? GRN : delta_cwnd < 0 ? RED : "", delta_cwnd, \
+                 ssthresh,                                                     \
+                 delta_ssthresh > 0 ? GRN : delta_ssthresh < 0 ? RED : "",     \
+                 delta_ssthresh, (c)->rec.srtt,                                \
+                 delta_srtt > 0 ? GRN : delta_srtt < 0 ? RED : "", delta_srtt, \
+                 (c)->rec.rttvar,                                              \
+                 delta_rttvar > 0 ? GRN : delta_rttvar < 0 ? RED : "",         \
+                 delta_rttvar);                                                \
         prev_in_flight = (c)->rec.in_flight;                                   \
         prev_cwnd = (c)->rec.cwnd;                                             \
         prev_ssthresh = ssthresh;                                              \
@@ -119,10 +130,8 @@ on_ack_received_1(struct q_conn * const c,
                   struct w_iov * const lg_ack,
                   const uint64_t ack_del);
 
-extern void __attribute__((nonnull(1, 2)))
-on_ack_received_2(struct q_conn * const c,
-                  struct pn_space * const pn,
-                  const uint64_t sm_new_acked);
+extern void __attribute__((nonnull))
+on_ack_received_2(struct q_conn * const c, struct pn_space * const pn);
 
 extern void __attribute__((nonnull))
 on_pkt_acked(struct q_conn * const c,
@@ -133,3 +142,6 @@ extern struct w_iov * __attribute__((nonnull))
 find_sent_pkt(struct q_conn * const c,
               struct pn_space * const pn,
               const uint64_t nr);
+
+extern void __attribute__((nonnull))
+congestion_event(struct q_conn * const c, const ev_tstamp lg_lost_tx_t);
