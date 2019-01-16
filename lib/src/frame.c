@@ -54,6 +54,9 @@
 #include "tls.h"
 
 
+// TODO: check error conditions and codes more thoroughly
+
+
 #define track_frame(v, ft) bit_set(NUM_FRAM_TYPES, (ft), &meta(v).frames)
 
 #define err_close_return(c, code, ...)                                         \
@@ -143,8 +146,8 @@ static void __attribute__((nonnull)) trim_frame(struct pkt_meta * const p)
                  (sid), conn_type(c), cid2str((c)->scid));                     \
             return (ret);                                                      \
         }                                                                      \
-        err_close_return(c, ERR_FRAME_ENC, (type), "unknown strm %" PRId64,    \
-                         (sid));                                               \
+        err_close_return(c, ERR_PROTOCOL_VIOLATION, (type),                    \
+                         "unknown strm %" PRId64, (sid));                      \
     } while (0)
 
 
@@ -214,7 +217,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
         }
 
         if (unlikely(is_srv_ini(sid) != c->is_clnt))
-            err_close_return(c, ERR_FRAME_ENC, t,
+            err_close_return(c, ERR_PROTOCOL_VIOLATION, t,
                              "got sid %" PRId64 " but am %s", sid,
                              conn_type(c));
 
@@ -801,8 +804,8 @@ dec_new_cid_frame(struct q_conn * const c,
     i = dec_chk(FRM_CID, &dcid.len, v->buf, v->len, i, sizeof(dcid.len), "%u");
 
     if (unlikely(dcid.len < 4 || dcid.len > MAX_CID_LEN))
-        err_close_return(c, ERR_FRAME_ENC, FRM_CID, "illegal cid len %u",
-                         dcid.len);
+        err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_CID,
+                         "illegal cid len %u", dcid.len);
 
     i = dec_chk_buf(FRM_CID, dcid.id, v->buf, v->len, i, dcid.len);
     i = dec_chk_buf(FRM_CID, dcid.srt, v->buf, v->len, i, sizeof(dcid.srt));
@@ -867,13 +870,13 @@ dec_retire_cid_frame(struct q_conn * const c,
 
     struct cid * const scid = splay_find(cids_by_seq, &c->scids_by_seq, &which);
     if (unlikely(scid == 0))
-        err_close_return(c, ERR_FRAME_ENC, FRM_RTR, "no cid seq %" PRIu64,
-                         which.seq);
+        err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_RTR,
+                         "no cid seq %" PRIu64, which.seq);
     else if (c->scid->seq == scid->seq) {
         struct cid * const next_scid =
             splay_next(cids_by_seq, &c->scids_by_seq, scid);
         if (unlikely(next_scid == 0))
-            err_close_return(c, ERR_FRAME_ENC, FRM_RTR, "no next scid");
+            err_close_return(c, ERR_INTERNAL, FRM_RTR, "no next scid");
         c->scid = next_scid;
     }
 
