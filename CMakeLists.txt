@@ -32,13 +32,6 @@ endif()
 find_package(OpenSSL)
 string(REGEX REPLACE "/include$" "" OPENSSL_ROOT_DIR ${OPENSSL_INCLUDE_DIR})
 
-find_library(WARP_LIB NAMES sockcore warpcore)
-find_path(WARP_INCLUDE warpcore/warpcore.h)
-add_library(warpcore STATIC IMPORTED GLOBAL)
-if(NOT WARP_INCLUDE)
-  set(WARP_INCLUDE ${CMAKE_CURRENT_BINARY_DIR}/external/include)
-endif()
-
 if("${CMAKE_SYSTEM}" MATCHES "Linux")
   add_definitions(-D_GNU_SOURCE)
 endif()
@@ -243,7 +236,7 @@ set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELEASE} -g3")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO}")
 
 # set debug level
-add_definitions(-DDLEVEL=${DLEVEL})
+add_definitions("-UDLEVEL -DDLEVEL=${DLEVEL}")
 
 add_subdirectory(bin)
 add_subdirectory(doc)

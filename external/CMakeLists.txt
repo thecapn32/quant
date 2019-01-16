@@ -1,105 +1,4 @@
 include(ExternalProject)
-include(GNUInstallDirs)
-
-if(BUILD_SHARED_LIBS)
-  set(CMAKE_FIND_LIBRARY_PREFIXES ${CMAKE_SHARED_LIBRARY_PREFIX})
-  set(CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_SHARED_LIBRARY_SUFFIX})
-  set(LIBRARY_PREFIX ${CMAKE_SHARED_LIBRARY_PREFIX})
-  set(LIBRARY_SUFFIX ${CMAKE_SHARED_LIBRARY_SUFFIX})
-else()
-  set(CMAKE_FIND_LIBRARY_PREFIXES ${CMAKE_STATIC_LIBRARY_PREFIX})
-  set(CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_STATIC_LIBRARY_SUFFIX})
-  set(LIBRARY_PREFIX ${CMAKE_STATIC_LIBRARY_PREFIX})
-  set(LIBRARY_SUFFIX ${CMAKE_STATIC_LIBRARY_SUFFIX})
-endif()
-
-find_package(Git)
-if(NOT GIT_FOUND)
-  message(FATAL_ERROR "git is required for building")
-endif()
-
-# fix for https://github.com/NTAP/quant/issues/7
-file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include)
-
-if(NOT WARP_LIB OR NOT WARP_INCLUDE)
-  if(NO_SANITIZERS)
-    set(NO_SANITIZERS_FLAGS "-DNO_SANITIZERS=True")
-  endif()
-
-  externalproject_add(warp
-    # UPDATE_COMMAND "" # XXX do not commit with this being empty
-    GIT_REPOSITORY https://github.com/NTAP/warpcore.git
-    # GIT_SHALLOW 1 # does not work together with GIT_TAG
-    GIT_TAG a67fd92026dc5ff48d73db7e4424ee551dd176d8
-    CMAKE_ARGS
-      -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
-      -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-      -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-      -DDLEVEL=WRN
-      -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-      -DBUILD_DOCUMENTATION=FALSE
-      ${NO_SANITIZERS_FLAGS}
-    BUILD_BYPRODUCTS
-      ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}/${LIBRARY_PREFIX}warpcore${LIBRARY_SUFFIX}
-      ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}/${LIBRARY_PREFIX}sockcore${LIBRARY_SUFFIX}
-  )
-  add_dependencies(warpcore warp)
-  # set(WARP_LIB ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}/${LIBRARY_PREFIX}warpcore${LIBRARY_SUFFIX})
-  # if(NOT EXISTS ${WARP_LIB})
-    set(WARP_LIB ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}/${LIBRARY_PREFIX}sockcore${LIBRARY_SUFFIX})
-  # endif()
-  set(WARP_INCLUDE ${CMAKE_CURRENT_BINARY_DIR}/include)
-endif()
-
-set_target_properties(warpcore PROPERTIES
-  IMPORTED_LOCATION ${WARP_LIB}
-  INTERFACE_INCLUDE_DIRECTORIES ${WARP_INCLUDE}
-  INTERFACE_LINK_LIBRARIES dl
-)
-
-if(CMAKE_GENERATOR STREQUAL Xcode)
-  set(BUILD_DIR ${CMAKE_BUILD_TYPE})
-endif()
-
-externalproject_add(picotls
-  # UPDATE_COMMAND "" # XXX do not commit with this being empty
-  GIT_REPOSITORY https://github.com/h2o/picotls.git
-  # GIT_SHALLOW 1 # does not work together with GIT_TAG
-  GIT_TAG 2c621e360fc47245aa95e2e7c4bc0cadad3476ab
-  CMAKE_ARGS
-    -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-    -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-    -DOPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR}
-    -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-  INSTALL_COMMAND
-    mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/lib &&
-    cp -a ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls/include
-      ${CMAKE_CURRENT_BINARY_DIR} &&
-    cp -a ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/${BUILD_DIR}/${LIBRARY_PREFIX}picotls-minicrypto${LIBRARY_SUFFIX}
-      ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/${BUILD_DIR}/${LIBRARY_PREFIX}picotls-openssl${LIBRARY_SUFFIX}
-      ${CMAKE_CURRENT_BINARY_DIR}/picotls-prefix/src/picotls-build/${BUILD_DIR}/${LIBRARY_PREFIX}picotls-core${LIBRARY_SUFFIX}
-      ${CMAKE_CURRENT_BINARY_DIR}/lib
-  BUILD_BYPRODUCTS
-    ${CMAKE_CURRENT_BINARY_DIR}/lib/${LIBRARY_PREFIX}picotls-minicrypto${LIBRARY_SUFFIX}
-    ${CMAKE_CURRENT_BINARY_DIR}/lib/${LIBRARY_PREFIX}picotls-openssl${LIBRARY_SUFFIX}
-    ${CMAKE_CURRENT_BINARY_DIR}/lib/${LIBRARY_PREFIX}picotls-core${LIBRARY_SUFFIX}
-)
-
-foreach(TARGET ptls-core ptls-minicrypto ptls-openssl)
-  add_library(${TARGET} STATIC IMPORTED GLOBAL)
-  string(REGEX REPLACE "ptls" "picotls" LIBNAME ${TARGET})
-  set_target_properties(${TARGET}
-    PROPERTIES
-      IMPORTED_LOCATION
-        ${CMAKE_CURRENT_BINARY_DIR}/lib/${LIBRARY_PREFIX}${LIBNAME}${LIBRARY_SUFFIX}
-      INTERFACE_INCLUDE_DIRECTORIES
-        "${CMAKE_CURRENT_BINARY_DIR}/include;${OPENSSL_ROOT_DIR}/include"
-      INTERFACE_LINK_LIBRARIES "${OPENSSL_LIBRARIES}"
-      INTERFACE_POSITION_INDEPENDENT_CODE True
-  )
-  add_dependencies(${TARGET} picotls)
-endforeach()
-
 
 set(GOPATH ${CMAKE_CURRENT_BINARY_DIR}/go)
 
@@ -219,7 +118,7 @@ endif()
 
 # Use picoquic for testing against
 externalproject_add(picoquic
-  DEPENDS picotls
+  # DEPENDS picotls
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/private-octopus/picoquic.git
   GIT_SHALLOW 1
@@ -297,7 +196,7 @@ externalproject_add(quicker
 
 set(TRACKER github.com/QUIC-Tracker/quic-tracker)
 externalproject_add(quic-tracker
-  DEPENDS picotls
+  # DEPENDS picotls
   DOWNLOAD_COMMAND env GOPATH=${GOPATH} CGO_CFLAGS=-I${OPENSSL_ROOT_DIR}/include CGO_LDFLAGS=-L${OPENSSL_ROOT_DIR}/lib go get ${TRACKER} || true
   UPDATE_COMMAND ""
   CONFIGURE_COMMAND sed -i "" -e "s/make check//g $<SEMICOLON> s|go build|GOPATH=${GOPATH} CGO_CFLAGS=-I${OPENSSL_ROOT_DIR}/include CGO_LDFLAGS=-L${OPENSSL_ROOT_DIR}/lib go build|g" ${GOPATH}/src/${TRACKER}/../../mpiraux/pigotls/Makefile
@@ -310,5 +209,5 @@ externalproject_add(quic-tracker
 # grep '^[^#]*_add' ../external/CMakeLists.txt | cut -f2 -d\( | sort | fmt -w 60
 add_custom_target(ext-all DEPENDS
   ats minq mozquic ngtcp2 node nspr nss openssl picoquic
-  picotls quic-tracker quicker quicly warp
+  quic-tracker quicker quicly
 )

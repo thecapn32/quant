@@ -1,3 +1,9 @@
 [submodule "external/klib"]
-	path = external/klib
+	path = lib/deps/klib
 	url = https://github.com/attractivechaos/klib.git
+[submodule "lib/deps/warpcore"]
+	path = lib/deps/warpcore
+	url = https://github.com/NTAP/warpcore.git
+[submodule "lib/deps/picotls"]
+	path = lib/deps/picotls
+	url = https://github.com/h2o/picotls.git

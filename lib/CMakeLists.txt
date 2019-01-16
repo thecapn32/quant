@@ -35,19 +35,31 @@ configure_file(include/${PROJECT_NAME}/config.h.in
                include/${PROJECT_NAME}/config.h)
 configure_file(src/config.c.in src/config.c)
 
+add_subdirectory(deps)
+
+# find_library(WARP_LIB NAMES sockcore warpcore)
+# find_path(WARP_INCLUDE warpcore/warpcore.h)
+# add_library(warpcore STATIC IMPORTED GLOBAL)
+# if(NOT WARP_INCLUDE)
+#   set(WARP_INCLUDE ${CMAKE_CURRENT_BINARY_DIR}/external/include)
+# endif()
+
+
 include(GNUInstallDirs)
 
 if(OpenSSL_FOUND)
   add_definitions(-DPTLS_OPENSSL)
-  set(PTLS_OPENSSL ptls-openssl)
+  set(PTLS_OPENSSL picotls-openssl)
 endif()
+
+message(STATUS ${OPENSSL_LIBRARIES})
 
 add_library(common
   OBJECT
     src/pkt.c src/frame.c src/quic.c src/stream.c src/conn.c src/pn.c
     src/diet.c src/util.c src/tls.c src/recovery.c src/marshall.c
 )
-add_dependencies(common warpcore ptls-core ${PTLS_OPENSSL} ptls-minicrypto)
+add_dependencies(common sockcore picotls-core ${PTLS_OPENSSL} picotls-minicrypto)
 
 add_library(lib${PROJECT_NAME}
             $<TARGET_OBJECTS:common> ${CMAKE_CURRENT_BINARY_DIR}/src/config.c)
@@ -75,7 +87,7 @@ endif()
 
 set(TARGETS common lib${PROJECT_NAME})
 foreach(TARGET ${TARGETS})
-  add_dependencies(${TARGET} warpcore ptls-core ${PTLS_OPENSSL} ptls-minicrypto)
+  add_dependencies(${TARGET} sockcore picotls-core ${PTLS_OPENSSL} picotls-minicrypto)
   target_include_directories(${TARGET}
     SYSTEM PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -83,10 +95,10 @@ foreach(TARGET ${TARGETS})
     SYSTEM PRIVATE
       ${OPENSSL_ROOT_DIR}/include
       ${LIBEV_INCLUDE}
-      ${WARP_INCLUDE}
-      $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/external/klib>
-    PRIVATE
-      $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/external/include>
+      $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/klib>
+      $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/picotls/include>
+      $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/warpcore/lib/include>
+      $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/lib/deps/warpcore/lib/include>
   )
 
   set_target_properties(${TARGET}
@@ -101,7 +113,8 @@ foreach(TARGET ${TARGETS})
 
   if(NOT ${TARGET} MATCHES "common")
     target_link_libraries(${TARGET}
-      m warpcore ptls-core ${PTLS_OPENSSL} ptls-minicrypto ${LIBEV_LIB})
+      m sockcore picotls-core ${PTLS_OPENSSL} ${OPENSSL_LIBRARIES}
+      picotls-minicrypto ${LIBEV_LIB})
     install(TARGETS ${TARGET}
       EXPORT ${TARGET}
       ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}

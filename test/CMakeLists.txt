@@ -10,8 +10,8 @@ foreach(TARGET diet conn)
     SYSTEM PRIVATE
       ${LIBEV_INCLUDE}
     PRIVATE
-      ${CMAKE_BINARY_DIR}/external/include
-      ${CMAKE_SOURCE_DIR}/lib/src
+      ${PROJECT_BINARY_DIR}/external/include
+      ${PROJECT_SOURCE_DIR}/lib/src
   )
   if(DSYMUTIL)
     add_custom_command(TARGET test_${TARGET} POST_BUILD
@@ -37,18 +37,18 @@ if(NOT HAVE_BENCHMARK_H AND (DEFINED ENV{BENCHMARKING} OR BENCHMARKING))
     GIT_SHALLOW 1
     GIT_TAG v1.4.1
     CMAKE_ARGS
-      -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}
+      -DCMAKE_INSTALL_PREFIX=${PROJECT_BINARY_DIR}
       -DCMAKE_BUILD_TYPE=Release -DBENCHMARK_ENABLE_GTEST_TESTS=OFF
-    BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/lib/libbenchmark.a
+    BUILD_BYPRODUCTS ${PROJECT_BINARY_DIR}/lib/libbenchmark.a
   )
 
-  file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/include ${CMAKE_BINARY_DIR}/lib)
+  file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/include ${PROJECT_BINARY_DIR}/lib)
 
   add_library(benchmark STATIC IMPORTED GLOBAL)
 
   set_target_properties(benchmark PROPERTIES
-    IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/lib/libbenchmark.a
-    INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_BINARY_DIR}/include
+    IMPORTED_LOCATION ${PROJECT_BINARY_DIR}/lib/libbenchmark.a
+    INTERFACE_INCLUDE_DIRECTORIES ${PROJECT_BINARY_DIR}/include
     POSITION_INDEPENDENT_CODE ON
     INTERPROCEDURAL_OPTIMIZATION ${IPO}
   )
@@ -64,13 +64,19 @@ if(HAVE_BENCHMARK_H)
     target_include_directories(${TARGET}
       SYSTEM PRIVATE
         ${OPENSSL_ROOT_DIR}/include
-        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/external/klib>
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/external/klib>
       PRIVATE
-        ${CMAKE_SOURCE_DIR}/lib/include
-        ${CMAKE_BINARY_DIR}/lib/include
-        ${CMAKE_SOURCE_DIR}/lib/src
-        $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/external/include>
-      )
+        ${PROJECT_SOURCE_DIR}/lib/include
+        ${PROJECT_BINARY_DIR}/lib/include
+        ${PROJECT_SOURCE_DIR}/lib/src
+      SYSTEM PRIVATE
+        ${OPENSSL_ROOT_DIR}/include
+        ${LIBEV_INCLUDE}
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/klib>
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/picotls/include>
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/warpcore/lib/include>
+        $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/lib/deps/warpcore/lib/include>
+        )
     set_target_properties(${TARGET}
       PROPERTIES
         POSITION_INDEPENDENT_CODE ON
@@ -93,10 +99,10 @@ if(HAVE_FUZZER)
       SYSTEM PRIVATE
         ${OPENSSL_ROOT_DIR}/include
       PRIVATE
-        ${CMAKE_SOURCE_DIR}/lib/include
-        ${CMAKE_BINARY_DIR}/lib/include
-        ${CMAKE_SOURCE_DIR}/lib/src
-        $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/external/include>
+        ${PROJECT_SOURCE_DIR}/lib/include
+        ${PROJECT_BINARY_DIR}/lib/include
+        ${PROJECT_SOURCE_DIR}/lib/src
+        $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/external/include>
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/external/klib>
       )
     set_target_properties(${TARGET}
