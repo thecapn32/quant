@@ -1,26 +1,29 @@
 # QUANT – QUIC Userspace Accelerated Network Transfers
 
 QUANT is a BSD-licensed C11 implementation of the emerging IETF
-[QUIC](https://quicwg.github.io/) standard for a new
-HTTP/2 transport over UDP. QUANT uses the
-[warpcore](https://github.com/NTAP/warpcore) zero-copy  userspace UDP/IPv4 stack
+[QUIC](https://quicwg.github.io/) standard for a new transport protocol over
+UDP, intending to support the new HTTP/3 standard. QUANT uses the
+[warpcore](https://github.com/NTAP/warpcore) zero-copy userspace UDP/IPv4 stack
 on top of the [netmap](http://info.iet.unipi.it/~luigi/netmap/) packet I/O
 framework. It can also operate over the regular Socket API.
 
 The quant repository is [on GitHub](https://github.com/NTAP/quant), as is
-the [documentation](https://ntap.github.io/quant/).
+the (limited) [documentation](https://ntap.github.io/quant/).
 
-We use [picotls](https://github.com/h2o/picotls) for its [TLS
+quant uses [picotls](https://github.com/h2o/picotls) for its [TLS
 1.3](https://datatracker.ietf.org/doc/draft-ietf-tls-tls13/) implementation.
-Picotls will be built automatically.
+quant also uses [klib](https://github.com/attractivechaos/klib) for some data structures and functions. These dependencies will be built automatically.
 
 
 ## Prerequisites
 
-We use the [cmake](https://cmake.org/) build system.
+quant uses the [cmake](https://cmake.org/) build system and
+[Doxygen](http://www.doxygen.nl/) to generate the documentation.
 
-We use [libev](http://software.schmorp.de/pkg/libev.html) as a basis for the
-event loop that underlies this implementation.
+quant uses [libev](http://software.schmorp.de/pkg/libev.html) as a basis for the
+event loop that underlies this implementation, and
+[http-parser](https://github.com/nodejs/http-parser) for the example HTTP/0.9
+client and server.
 
 So you need to install some dependencies. On the Mac, the easiest way is via
 [Homebrew](http://brew.sh/), so install that first. Then, do
@@ -38,7 +41,7 @@ On Darwin, you *must* also install the Xcode command line tools first:
 
 ## Building
 To do an
-out-of-source build of warpcore (best practice with `cmake`), do the following
+out-of-source build of quant (best practice with `cmake`), do the following
 to build with `make` as a generator:
 
     git submodule update --init --recursive
@@ -74,7 +77,7 @@ examples in `bin`. They explain their usage when called with a `-h` argument.
 The current interop status of quant against [other
 stacks](https://github.com/quicwg/base-drafts/wiki/Implementations) is captured
 in [this
-spreadsheet](https://docs.google.com/spreadsheets/d/1D0tW89vOoaScs3IY9RGC0UesWGAwE6xyLk0l4JtvTVg/edit?usp=sharing).
+spreadsheet](https://docs.google.com/spreadsheets/d/1D0tW89vOoaScs3IY9RGC0UesWGAwE6xyLk0l4JtvTVg/edit#gid=11370678).
 
 At the moment, development happens in branches other than `master`, which are
 numbered according to the [IETF Internet Drafts](https://quicwg.github.io/) they
