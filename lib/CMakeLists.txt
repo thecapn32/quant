@@ -37,13 +37,11 @@ configure_file(src/config.c.in src/config.c)
 
 add_subdirectory(deps)
 
-# find_library(WARP_LIB NAMES sockcore warpcore)
-# find_path(WARP_INCLUDE warpcore/warpcore.h)
-# add_library(warpcore STATIC IMPORTED GLOBAL)
-# if(NOT WARP_INCLUDE)
-#   set(WARP_INCLUDE ${CMAKE_CURRENT_BINARY_DIR}/external/include)
-# endif()
-
+if(TARGET warpcore)
+  add_library(warp ALIAS warpcore)
+else()
+  add_library(warp ALIAS sockcore)
+endif()
 
 include(GNUInstallDirs)
 
@@ -59,7 +57,7 @@ add_library(common
     src/pkt.c src/frame.c src/quic.c src/stream.c src/conn.c src/pn.c
     src/diet.c src/util.c src/tls.c src/recovery.c src/marshall.c
 )
-add_dependencies(common sockcore picotls-core ${PTLS_OPENSSL} picotls-minicrypto)
+add_dependencies(common warp picotls-core ${PTLS_OPENSSL} picotls-minicrypto)
 
 add_library(lib${PROJECT_NAME}
             $<TARGET_OBJECTS:common> ${CMAKE_CURRENT_BINARY_DIR}/src/config.c)
@@ -87,7 +85,7 @@ endif()
 
 set(TARGETS common lib${PROJECT_NAME})
 foreach(TARGET ${TARGETS})
-  add_dependencies(${TARGET} sockcore picotls-core ${PTLS_OPENSSL} picotls-minicrypto)
+  add_dependencies(${TARGET} warp picotls-core ${PTLS_OPENSSL} picotls-minicrypto)
   target_include_directories(${TARGET}
     SYSTEM PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -113,7 +111,7 @@ foreach(TARGET ${TARGETS})
 
   if(NOT ${TARGET} MATCHES "common")
     target_link_libraries(${TARGET}
-      m sockcore picotls-core ${PTLS_OPENSSL} ${OPENSSL_LIBRARIES}
+      m warp picotls-core ${PTLS_OPENSSL} ${OPENSSL_LIBRARIES}
       picotls-minicrypto ${LIBEV_LIB})
     install(TARGETS ${TARGET}
       EXPORT ${TARGET}
