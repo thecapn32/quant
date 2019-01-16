@@ -24,7 +24,6 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <net/if.h>
-#include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/param.h>
@@ -60,7 +59,7 @@ int LLVMFuzzerInitialize(int * argc __attribute__((unused)),
 #ifndef NDEBUG
     util_dlevel = DBG;
 #endif
-    w = q_init(i, 0, 0, 0, 0, false, true);
+    w = q_init(i, 0);
     c = new_conn(w, 0, 0, 0, 0, 0, 0, 0);
 
     return 0;

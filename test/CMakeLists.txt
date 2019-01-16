@@ -102,8 +102,12 @@ if(HAVE_FUZZER)
         ${PROJECT_SOURCE_DIR}/lib/include
         ${PROJECT_BINARY_DIR}/lib/include
         ${PROJECT_SOURCE_DIR}/lib/src
-        $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/external/include>
-        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/external/klib>
+        ${OPENSSL_ROOT_DIR}/include
+        ${LIBEV_INCLUDE}
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/klib>
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/picotls/include>
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/warpcore/lib/include>
+        $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/lib/deps/warpcore/lib/include>
       )
     set_target_properties(${TARGET}
       PROPERTIES
