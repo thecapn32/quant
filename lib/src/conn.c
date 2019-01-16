@@ -658,6 +658,8 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
 }
 
 
+
+#ifndef NDEBUG
 static bool __attribute__((const))
 pkt_ok_for_epoch(const uint8_t flags, const epoch_t epoch)
 {
@@ -671,6 +673,7 @@ pkt_ok_for_epoch(const uint8_t flags, const epoch_t epoch)
         return true;
     }
 }
+#endif
 
 
 static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
