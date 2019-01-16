@@ -111,8 +111,8 @@ conns_by_ipnp_key(const uint16_t sport,
                   const uint16_t dport,
                   const uint32_t dip)
 {
-    return (uint64_t)(dip << sizeof(dip)) | (uint64_t)(sport << sizeof(sport)) |
-           (uint64_t)dport;
+    return ((uint64_t)dip << sizeof(dip) * 8) |
+           ((uint64_t)sport << sizeof(sport) * 8) | (uint64_t)dport;
 }
 
 
@@ -918,49 +918,44 @@ rx_pkts(struct w_iov_sq * const x,
         c = get_conn_by_cid(&meta(v).hdr.dcid);
         if (c == 0) {
             c = get_conn_by_ipnp(w_get_sport(ws), &peer);
-            if (is_lh(meta(v).hdr.flags)) {
-                if (!is_clnt) {
-                    if (c && meta(v).hdr.type == LH_0RTT) {
-                        if (c->did_0rtt)
-                            warn(INF,
-                                 "got 0-RTT pkt for orig cid %s, new is %s, "
-                                 "accepting",
-                                 cid2str(&meta(v).hdr.dcid), cid2str(c->scid));
-                        else {
-                            warn(WRN,
-                                 "got 0-RTT pkt for orig cid %s, new is %s, "
-                                 "but rejected 0-RTT, ignoring",
-                                 cid2str(&meta(v).hdr.dcid), cid2str(c->scid));
-                            goto drop;
-                        }
-                    } else if (c == 0 && meta(v).hdr.type == LH_INIT) {
-                        // validate minimum packet size
-                        if (xv->len < MIN_INI_LEN) {
-                            warn(ERR, "%u-byte Initial pkt too short (< %u)",
-                                 xv->len, MIN_INI_LEN);
-                            goto drop;
-                        }
-
-                        if (vers_supported(meta(v).hdr.vers) == false ||
-                            is_force_vneg_vers(meta(v).hdr.vers)) {
-                            log_pkt("RX", v, v->ip, v->port, &odcid, tok,
-                                    tok_len);
-                            warn(WRN,
-                                 "clnt-requested vers 0x%08x not supported",
-                                 meta(v).hdr.vers);
-                            tx_vneg_resp(ws, v);
-                            goto drop;
-                        }
-
-                        warn(NTE,
-                             "new serv conn on port %u from %s:%u w/cid=%s",
-                             ntohs(w_get_sport(ws)), inet_ntoa(peer.sin_addr),
-                             ntohs(peer.sin_port), cid2str(&meta(v).hdr.dcid));
-                        c = new_conn(w_engine(ws), meta(v).hdr.vers,
-                                     &meta(v).hdr.scid, &meta(v).hdr.dcid,
-                                     &peer, 0, ntohs(w_get_sport(ws)), 0);
-                        init_tls(c);
+            if (likely(is_lh(meta(v).hdr.flags)) && !is_clnt) {
+                if (c && meta(v).hdr.type == LH_0RTT) {
+                    if (c->did_0rtt)
+                        warn(INF,
+                             "got 0-RTT pkt for orig cid %s, new is %s, "
+                             "accepting",
+                             cid2str(&meta(v).hdr.dcid), cid2str(c->scid));
+                    else {
+                        warn(WRN,
+                             "got 0-RTT pkt for orig cid %s, new is %s, "
+                             "but rejected 0-RTT, ignoring",
+                             cid2str(&meta(v).hdr.dcid), cid2str(c->scid));
+                        goto drop;
                     }
+                } else if (c == 0 && meta(v).hdr.type == LH_INIT) {
+                    // validate minimum packet size
+                    if (xv->len < MIN_INI_LEN) {
+                        warn(ERR, "%u-byte Initial pkt too short (< %u)",
+                             xv->len, MIN_INI_LEN);
+                        goto drop;
+                    }
+
+                    if (vers_supported(meta(v).hdr.vers) == false ||
+                        is_force_vneg_vers(meta(v).hdr.vers)) {
+                        log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
+                        warn(WRN, "clnt-requested vers 0x%08x not supported",
+                             meta(v).hdr.vers);
+                        tx_vneg_resp(ws, v);
+                        goto drop;
+                    }
+
+                    warn(NTE, "new serv conn on port %u from %s:%u w/cid=%s",
+                         ntohs(w_get_sport(ws)), inet_ntoa(peer.sin_addr),
+                         ntohs(peer.sin_port), cid2str(&meta(v).hdr.dcid));
+                    c = new_conn(w_engine(ws), meta(v).hdr.vers,
+                                 &meta(v).hdr.scid, &meta(v).hdr.dcid, &peer, 0,
+                                 ntohs(w_get_sport(ws)), 0);
+                    init_tls(c);
                 }
             }
 
@@ -1039,15 +1034,12 @@ rx_pkts(struct w_iov_sq * const x,
                                 false)) {
                 v->len = xv->len;
                 log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
-                if (pkt_ok_for_epoch(meta(v).hdr.flags, epoch_in(c)) == true)
-                    err_close(
-                        c, ERR_PROTOCOL_VIOLATION, 0,
-                        "crypto fail on %u-byte %s pkt", v->len,
-                        pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
-                else
-                    warn(ERR, "received invalid %u-byte %s pkt, ignoring",
-                         v->len,
-                         pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
+                warn(ERR, "%s %u-byte %s pkt, ignoring",
+                     pkt_ok_for_epoch(meta(v).hdr.flags, epoch_in(c))
+                         ? "crypto fail on"
+                         : "rx invalid",
+                     v->len,
+                     pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
                 goto drop;
             }
 
