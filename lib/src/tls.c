@@ -913,6 +913,24 @@ void init_tls(struct q_conn * const c)
         hshk_prop->client.negotiated_protocols.list = &alpn[0];
         hshk_prop->client.negotiated_protocols.count = 1;
         hshk_prop->client.max_early_data_size = &c->tls.max_early_data;
+
+        // try to find an existing session ticket
+        struct tls_ticket which = {.sni = c->peer_name,
+                                   .alpn = (char *)alpn[0].base};
+        struct tls_ticket * t = splay_find(tickets_by_peer, &tickets, &which);
+        if (t == 0) {
+            // if we couldn't find a ticket, try without an alpn
+            which.alpn = "";
+            t = splay_find(tickets_by_peer, &tickets, &which);
+        }
+        if (t) {
+            hshk_prop->client.session_ticket =
+                ptls_iovec_init(t->ticket, t->ticket_len);
+            memcpy(&c->tp_out, &t->tp, sizeof(t->tp));
+            c->vers_initial = c->vers = t->vers;
+            c->try_0rtt = 1;
+        }
+
     } else {
         hshk_prop->server.retry_uses_cookie = 1;
         hshk_prop->server.cookie.key = cookie;
@@ -921,23 +939,6 @@ void init_tls(struct q_conn * const c)
         // TODO: remove this interop hack eventually
         if (ntohs(c->sport) == 4434)
             c->tx_rtry = true;
-    }
-
-    // try to find an existing session ticket
-    struct tls_ticket which = {.sni = c->peer_name,
-                               .alpn = (char *)alpn[0].base};
-    struct tls_ticket * t = splay_find(tickets_by_peer, &tickets, &which);
-    if (t == 0) {
-        // if we couldn't find a ticket, try without an alpn
-        which.alpn = "";
-        t = splay_find(tickets_by_peer, &tickets, &which);
-    }
-    if (t) {
-        hshk_prop->client.session_ticket =
-            ptls_iovec_init(t->ticket, t->ticket_len);
-        memcpy(&c->tp_out, &t->tp, sizeof(t->tp));
-        c->vers_initial = c->vers = t->vers;
-        c->try_0rtt = 1;
     }
 
     init_prot(c);
