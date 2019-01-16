@@ -602,8 +602,10 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
 
         meta(v).hdr.hdr_len =
             dec_chk(&meta(v).hdr.dcid.len, xv->buf, xv->len, 5, 1, "0x%02x");
-
+        meta(v).hdr.scid.len = meta(v).hdr.dcid.len;
         meta(v).hdr.dcid.len >>= 4;
+        meta(v).hdr.scid.len &= 0x0f;
+
         if (meta(v).hdr.dcid.len) {
             meta(v).hdr.dcid.len += 3;
             meta(v).hdr.hdr_len = dec_chk_buf(&meta(v).hdr.dcid.id, xv->buf,
@@ -617,8 +619,6 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
             return false;
         }
 
-        dec_chk(&meta(v).hdr.scid.len, xv->buf, xv->len, 5, 1, "0x%02x");
-        meta(v).hdr.scid.len &= 0x0f;
         if (meta(v).hdr.scid.len) {
             meta(v).hdr.scid.len += 3;
             meta(v).hdr.hdr_len =
@@ -696,9 +696,8 @@ void xor_hp(const struct w_iov * const xv,
             const bool is_enc)
 {
     const uint16_t off = pkt_nr_pos + MAX_PKT_NR_LEN;
-    const uint16_t len = is_lh(meta(v).hdr.flags)
-                             ? pkt_nr_pos + meta(v).hdr.len + AEAD_LEN
-                             : xv->len;
+    const uint16_t len =
+        is_lh(meta(v).hdr.flags) ? pkt_nr_pos + meta(v).hdr.len : xv->len;
 
     uint8_t sample[AEAD_LEN] = {0};
     const uint16_t sample_len =
@@ -709,15 +708,16 @@ void xor_hp(const struct w_iov * const xv,
     uint8_t mask[MAX_PKT_NR_LEN + 1] = {0};
     ptls_cipher_encrypt(ctx->header_protection, mask, mask, sizeof(mask));
 
-    const uint8_t pnl = pkt_nr_len(xv->buf[0]);
+    const uint8_t orig_flags = xv->buf[0];
     xv->buf[0] ^= mask[0] & (unlikely(is_lh(meta(v).hdr.flags)) ? 0x0f : 0x1f);
-    for (uint8_t i = 0; i < (is_enc ? pnl : pkt_nr_len(xv->buf[0])); i++)
+    const uint8_t pnl = pkt_nr_len(is_enc ? orig_flags : xv->buf[0]);
+    for (uint8_t i = 0; i < pnl; i++)
         xv->buf[pkt_nr_pos + i] ^= mask[1 + i];
 
 #ifdef DEBUG_MARSHALL
-    warn(DBG, "%s HP over [0, %u..%u] w/sample off %u (len %u) = " FMT_PNR_IN,
+    warn(DBG, "%s HP over [0, %u..%u] w/sample off %u (len %u)",
          is_enc ? "apply" : "undo", pkt_nr_pos, pkt_nr_pos + pnl - 1, off,
-         sample_len, meta(v).hdr.nr);
+         sample_len);
 #endif
 }
 
