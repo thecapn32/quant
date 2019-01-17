@@ -93,7 +93,7 @@ int main(int argc, char ** argv)
     util_dlevel = INF;
 #endif
     w = q_init(i, nullptr);
-    struct cid cid = {nullptr};
+    struct cid cid = {};
     cid.len = 4;
     memcpy(cid.id, "1234", cid.len);
     c = new_conn(w, 0xff00000e, &cid, &cid, nullptr, "", 55555, nullptr);

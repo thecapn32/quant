@@ -103,8 +103,7 @@ int main(int argc __attribute__((unused)), char ** argv)
     const int cwd = open(".", O_CLOEXEC);
     ensure(cwd != -1, "cannot open");
     ensure(chdir(dirname(argv[0])) == 0, "cannot chdir");
-    __extension__ const struct q_conf conf = {.tls_cert = "dummy.crt",
-                                              .tls_key = "dummy.key"};
+    const struct q_conf conf = {nullptr, "dummy.crt", "dummy.key"};
     w = q_init("lo"
 #ifndef __linux__
                "0"
@@ -117,10 +116,10 @@ int main(int argc __attribute__((unused)), char ** argv)
     q_bind(w, 55555);
 
     // connect to server
-    __extension__ const struct sockaddr_in sip = {
-        .sin_family = AF_INET,
-        .sin_port = htons(55555),
-        .sin_addr = {.s_addr = inet_addr("127.0.0.1")}};
+    struct sockaddr_in sip = {};
+    sip.sin_family = AF_INET;
+    sip.sin_port = htons(55555);
+    sip.sin_addr.s_addr = inet_addr("127.0.0.1");
     cc = q_connect(w, &sip, "localhost", nullptr, nullptr, true, nullptr);
     ensure(cc, "is zero");
 
