@@ -672,8 +672,9 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
                 return false;
             meta(v).hdr.len = (uint16_t)len;
 
-            // the len cannot be larger than the rx'ed pkt
-            if (unlikely(meta(v).hdr.len + meta(v).hdr.hdr_len > xv->len)) {
+            // sanity check len
+            if (unlikely(meta(v).hdr.len + meta(v).hdr.hdr_len > xv->len ||
+                         meta(v).hdr.len < meta(v).hdr.hdr_len)) {
                 warn(DBG, "len %u invalid", meta(v).hdr.len);
                 return false;
             }
