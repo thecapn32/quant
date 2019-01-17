@@ -58,8 +58,9 @@ static void BM_quic_encryption(benchmark::State & state)
 
     ptls_openssl_random_bytes(v->buf, len);
     meta(v).hdr.type = LH_INIT;
-    meta(v).hdr.flags = HEAD_FORM | meta(v).hdr.type;
+    meta(v).hdr.flags = LH | meta(v).hdr.type;
     meta(v).hdr.hdr_len = 16;
+    meta(v).hdr.len = len;
 
     for (auto _ : state)
         benchmark::DoNotOptimize(enc_aead(c, v, x, pne * 16));
