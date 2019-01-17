@@ -23,7 +23,6 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <net/if.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/param.h>
@@ -39,47 +38,55 @@
 #include <pkt.h>
 #include <quic.h>
 #include <stream.h>
+#include <tls.h>
 
 
 extern int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size);
-extern int LLVMFuzzerInitialize(int * argc, char *** argv);
-
 
 static void * w;
 static struct q_conn * c;
 
-int LLVMFuzzerInitialize(int * argc __attribute__((unused)),
-                         char *** argv __attribute__((unused)))
-{
-    char i[IFNAMSIZ] = "lo"
-#ifndef __linux__
-                       "0"
-#endif
-        ;
-#ifndef NDEBUG
-    util_dlevel = DBG;
-#endif
-    w = q_init(i, 0);
-    c = new_conn(w, 0, 0, 0, 0, 0, 0, 0);
 
+static int init(void)
+{
+    w = q_init("lo"
+#ifndef __linux__
+               "0"
+#endif
+               ,
+               0);
+    c = new_conn(w, 0xcacacaca, 0, 0, 0, "fuzzer", 0, 0);
+    init_tls(c);
     return 0;
 }
 
 
 int LLVMFuzzerTestOneInput(const uint8_t * data, const size_t size)
 {
-    struct w_iov * v = alloc_iov(w, MAX_PKT_LEN, 0);
-    memcpy(v->buf, data, MIN(size, v->len));
-    v->len = (uint16_t)MIN(size, v->len);
+    static int needs_init = 1;
+    if (needs_init)
+        needs_init = init();
 
+    struct w_iov_sq i = w_iov_sq_initializer(i);
+    q_alloc(w, &i, MAX_PKT_LEN);
+    struct w_iov * v = sq_first(&i);
+    v->len = (uint16_t)MIN(size, v->len);
+    memcpy(v->buf, data, v->len);
+
+    struct w_iov * const orig_v = v;
     dec_frames(c, &v);
     if (meta(v).stream == 0)
         free_iov(v);
+    if (orig_v != v && meta(orig_v).stream == 0)
+        free_iov(orig_v);
 
     struct q_stream * s;
     kh_foreach (s, c->streams_by_id)
         free_stream(s);
-    kh_destroy(streams_by_id, c->streams_by_id);
+
+    for (epoch_t e = ep_init; e <= ep_data; e++)
+        if (c->cstreams[e])
+            free_stream(c->cstreams[e]);
 
     return 0;
 }

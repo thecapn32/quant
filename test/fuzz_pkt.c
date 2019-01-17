@@ -33,45 +33,42 @@
 
 #include <conn.h>
 #include <pkt.h>
-#include <quic.h>
+#include <tls.h>
 
 
 extern int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size);
-extern int LLVMFuzzerInitialize(int * argc, char *** argv);
-
 
 static void * w;
 static struct q_conn * c;
 
 
-int LLVMFuzzerInitialize(int * argc __attribute__((unused)),
-                         char *** argv __attribute__((unused)))
+static int init(void)
 {
-    char i[IFNAMSIZ] = "lo"
+    w = q_init("lo"
 #ifndef __linux__
-                       "0"
+               "0"
 #endif
-        ;
-#ifndef NDEBUG
-    util_dlevel = DBG;
-#endif
-    w = q_init(i, 0);
-    c = new_conn(w, 0, 0, 0, 0, 0, 0, 0);
-
+               ,
+               0);
+    c = new_conn(w, 0xcacacaca, 0, 0, 0, "fuzzer", 0, 0);
+    init_tls(c);
     return 0;
 }
 
 
 int LLVMFuzzerTestOneInput(const uint8_t * data, const size_t size)
 {
-    struct w_iov * const v = alloc_iov(w, MAX_PKT_LEN, 0);
-    memcpy(v->buf, data, MIN(size, v->len));
-    v->len = (uint16_t)MIN(size, v->len);
+    static int needs_init = 1;
+    if (needs_init)
+        needs_init = init();
+
     struct w_iov_sq i = w_iov_sq_initializer(i);
-    sq_insert_head(&i, v, next);
+    q_alloc(w, &i, MAX_PKT_LEN);
+    struct w_iov * const v = sq_first(&i);
+    v->len = (uint16_t)MIN(size, v->len);
+    memcpy(v->buf, data, v->len);
 
     rx_pkts(&i, &(struct q_conn_sl){0}, c->sock);
-    free_iov(v);
 
     return 0;
 }
