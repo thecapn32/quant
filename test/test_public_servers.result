@@ -6,7 +6,7 @@ minq
 mozquic
 mvfst
 ngtcp2    *         V    H    D    C    RZ   S    M
-ngx_quic
+ngx_quic  *         V    H    D    C
 pandora
 picoquic  *         V    H    D    C    RZ   S    M    U
 quant     *         V    H    D    C    RZ   S    M    U
