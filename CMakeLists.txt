@@ -56,7 +56,9 @@ foreach(FLAG -pipe -march=native -Wextra -Wpedantic -Weverything -Werror
         -fcolor-diagnostics -fdiagnostics-color=always
         -Wno-disabled-macro-expansion #clang on travis needs this
         -fcomment-block-commands=dotfile
-        -Wno-missing-braces -Wno-missing-field-initializers)
+        -Wno-missing-braces -Wno-missing-field-initializers
+        -fsanitize=memory -fsanitize-memory-track-origins
+        -fsanitize-memory-use-after-dtor)
   string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
   check_c_compiler_flag(${FLAG} ${F})
   if(${F})
