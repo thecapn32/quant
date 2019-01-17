@@ -323,6 +323,8 @@ size_t diet_to_str(char * const str, const size_t len, struct diet * const d)
         if (i->lo != i->hi)
             pos += (size_t)snprintf(&str[pos], len - pos, "-%" PRIu64, i->hi);
         pos += (size_t)snprintf(&str[pos], len - pos, ", ");
+        if (pos >= len)
+            break;
     }
     if (pos > 2) {
         pos -= 2;

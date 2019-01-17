@@ -546,7 +546,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             warn(INF, "\tmax_packet_size = %u", c->tp_out.max_pkt);
             if (c->tp_out.max_pkt < 1200) {
                 err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
-                          "tp_out.max_pkt %u invalid (< 1200)",
+                          "tp_out.max_pkt %" PRIu64 " invalid (< 1200)",
                           c->tp_out.max_pkt);
                 return 1;
             }

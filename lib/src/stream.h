@@ -131,6 +131,7 @@ crpt_strm_id(const epoch_t epoch)
     case ep_data:
         return -1;
     }
+    die("unhandled epoch %u", epoch);
 }
 
 

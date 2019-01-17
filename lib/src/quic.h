@@ -171,7 +171,7 @@ splay_head(ooo_by_off, pkt_meta);
 SPLAY_PROTOTYPE(ooo_by_off, pkt_meta, off_node, ooo_by_off_cmp)
 
 
-extern struct pkt_meta * pm;
+extern struct pkt_meta * pkt_meta;
 
 
 /// Return the pkt_meta entry for a given w_iov.
@@ -180,7 +180,7 @@ extern struct pkt_meta * pm;
 ///
 /// @return     Pointer to the pkt_meta entry for the w_iov.
 ///
-#define meta(v) pm[w_iov_idx(v)]
+#define meta(v) pkt_meta[w_iov_idx(v)]
 
 
 /// Return the w_iov index of a given pkt_meta.
@@ -190,7 +190,7 @@ extern struct pkt_meta * pm;
 /// @return     Index of the struct w_iov the struct pkt_meta holds meta data
 ///             for.
 ///
-#define pm_idx(m) (uint32_t)((m)-pm)
+#define pm_idx(m) (uint32_t)((m)-pkt_meta)
 
 
 static inline void __attribute__((nonnull))

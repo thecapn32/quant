@@ -83,7 +83,7 @@ const uint32_t ok_vers[] = {
 const uint8_t ok_vers_len = sizeof(ok_vers) / sizeof(ok_vers[0]);
 
 
-struct pkt_meta * pm = 0;
+struct pkt_meta * pkt_meta = 0;
 struct ev_loop * loop = 0;
 
 func_ptr api_func = 0;
@@ -495,9 +495,9 @@ struct w_engine * q_init(const char * const ifname,
     if (nbufs_ok < nbufs)
         warn(WRN, "could only allocate %" PRIu64 "/%u warpcore buffers",
              nbufs_ok, nbufs);
-    pm = calloc(nbufs + 1, sizeof(*pm));
-    ensure(pm, "could not calloc");
-    ASAN_POISON_MEMORY_REGION(pm, (nbufs + 1) * sizeof(*pm));
+    pkt_meta = calloc(nbufs + 1, sizeof(*pkt_meta));
+    ensure(pkt_meta, "could not calloc");
+    ASAN_POISON_MEMORY_REGION(pkt_meta, (nbufs + 1) * sizeof(*pkt_meta));
 
     // initialize the event loop (prefer kqueue and epoll)
     loop = ev_default_loop(ev_recommended_backends() | EVBACKEND_KQUEUE |
@@ -611,16 +611,16 @@ void q_cleanup(struct w_engine * const w)
 
     // XXX: all bufs must have been returned for sq_len() to be correct
     for (uint32_t i = 0; i <= sq_len(&w->iov); i++) {
-        ASAN_UNPOISON_MEMORY_REGION(&pm[i], sizeof(pm[i]));
-        if (pm[i].hdr.nr)
+        ASAN_UNPOISON_MEMORY_REGION(&pkt_meta[i], sizeof(pkt_meta[i]));
+        if (pkt_meta[i].hdr.nr)
             warn(DBG, "buffer %u still in use for pkt %" PRIu64, i,
-                 pm[i].hdr.nr);
+                 pkt_meta[i].hdr.nr);
     }
 
     kh_destroy(conns_by_id, conns_by_id);
     kh_destroy(conns_by_ipnp, conns_by_ipnp);
 
-    free(pm);
+    free(pkt_meta);
     w_cleanup(w);
 
 #if !defined(NDEBUG) && !defined(FUZZING) &&                                   \

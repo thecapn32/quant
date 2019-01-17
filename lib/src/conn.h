@@ -351,6 +351,7 @@ pn_for_epoch(struct q_conn * const c, const epoch_t e)
     case ep_data:
         return &c->pn_data.pn;
     }
+    die("unhandled epoch %u", e);
 }
 
 
