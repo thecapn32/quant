@@ -1358,8 +1358,9 @@ uint16_t enc_aead(struct q_conn * const c,
         // the pp context does not depend on the SH kyph bit
         is_lh(meta(v).hdr.flags) ? meta(v).hdr.flags
                                  : meta(v).hdr.flags & ~SH_KYPH);
-    if (likely(pkt_nr_pos))
-        xor_hp(xv, v, ctx, pkt_nr_pos, true);
+    if (likely(pkt_nr_pos) &&
+        unlikely(xor_hp(xv, v, ctx, pkt_nr_pos, true) == false))
+        return 0;
 
 #ifdef DEBUG_MARSHALL
     warn(DBG, "enc %s AEAD over [%u..%u] in [%u..%u]", aead_type(c, ctx->aead),

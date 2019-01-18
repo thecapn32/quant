@@ -673,8 +673,7 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
             meta(v).hdr.len = (uint16_t)len;
 
             // sanity check len
-            if (unlikely(meta(v).hdr.len + meta(v).hdr.hdr_len > xv->len ||
-                         meta(v).hdr.len < meta(v).hdr.hdr_len)) {
+            if (unlikely(meta(v).hdr.len + meta(v).hdr.hdr_len > xv->len)) {
                 warn(DBG, "len %u invalid", meta(v).hdr.len);
                 return false;
             }
@@ -690,7 +689,7 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
 }
 
 
-void xor_hp(const struct w_iov * const xv,
+bool xor_hp(const struct w_iov * const xv,
             const struct w_iov * const v,
             const struct cipher_ctx * const ctx,
             const uint16_t pkt_nr_pos,
@@ -699,6 +698,8 @@ void xor_hp(const struct w_iov * const xv,
     const uint16_t off = pkt_nr_pos + MAX_PKT_NR_LEN;
     const uint16_t len =
         is_lh(meta(v).hdr.flags) ? pkt_nr_pos + meta(v).hdr.len : xv->len;
+    if (unlikely(off > len))
+        return false;
 
     uint8_t sample[AEAD_LEN] = {0};
     const uint16_t sample_len =
@@ -720,6 +721,8 @@ void xor_hp(const struct w_iov * const xv,
          is_enc ? "apply" : "undo", pkt_nr_pos, pkt_nr_pos + pnl - 1, off,
          sample_len);
 #endif
+
+    return true;
 }
 
 
@@ -732,7 +735,9 @@ static bool undo_hp(const struct w_iov * const xv,
     const uint16_t pnp = meta(v).hdr.hdr_len;
 
     // undo HP and update meta(v)
-    xor_hp(xv, v, ctx, pnp, false);
+    if (unlikely(xor_hp(xv, v, ctx, pnp, false) == false))
+        return false;
+
     meta(v).hdr.flags = xv->buf[0];
     meta(v).hdr.type = pkt_type(xv->buf[0]);
 

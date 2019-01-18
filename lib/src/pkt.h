@@ -155,7 +155,7 @@ struct w_iov_sq;
 struct w_sock;
 struct cipher_ctx;
 
-extern void __attribute__((nonnull)) xor_hp(const struct w_iov * const xv,
+extern bool __attribute__((nonnull)) xor_hp(const struct w_iov * const xv,
                                             const struct w_iov * const v,
                                             const struct cipher_ctx * const ctx,
                                             const uint16_t pkt_nr_pos,
