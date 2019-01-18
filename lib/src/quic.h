@@ -87,8 +87,8 @@ sl_head(pm_sl, pkt_meta);
 
 struct pkt_hdr {
     uint64_t nr;
-    uint16_t len;     ///< Length of entire QUIC header.
-    uint16_t hdr_len; ///< Content of length field in long header.
+    uint16_t len;     ///< Content of length field in long header.
+    uint16_t hdr_len; ///< Length of entire QUIC header.
     uint32_t vers;
     struct cid dcid;
     struct cid scid;
