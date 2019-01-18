@@ -1,5 +1,7 @@
 include(ExternalProject)
 
+find_package(OpenSSL)
+
 set(GOPATH ${CMAKE_CURRENT_BINARY_DIR}/go)
 
 # # Use quic-go for testing against, rather than proto-quic monster
@@ -196,12 +198,19 @@ externalproject_add(quicker
 
 set(TRACKER github.com/QUIC-Tracker/quic-tracker)
 externalproject_add(quic-tracker
-  # DEPENDS picotls
-  DOWNLOAD_COMMAND env GOPATH=${GOPATH} CGO_CFLAGS=-I${OPENSSL_ROOT_DIR}/include CGO_LDFLAGS=-L${OPENSSL_ROOT_DIR}/lib go get ${TRACKER} || true
+  DOWNLOAD_COMMAND
+    env GOPATH=${GOPATH}
+      CGO_CFLAGS=-I${OPENSSL_ROOT_DIR}/include
+      CGO_LDFLAGS=-L${OPENSSL_ROOT_DIR}/lib go get ${TRACKER} || true
   UPDATE_COMMAND ""
-  CONFIGURE_COMMAND sed -i "" -e "s/make check//g $<SEMICOLON> s|go build|GOPATH=${GOPATH} CGO_CFLAGS=-I${OPENSSL_ROOT_DIR}/include CGO_LDFLAGS=-L${OPENSSL_ROOT_DIR}/lib go build|g" ${GOPATH}/src/${TRACKER}/../../mpiraux/pigotls/Makefile
-  BUILD_COMMAND cd ${GOPATH}/src/${TRACKER}/../../mpiraux/pigotls && env OPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR} gmake
-  INSTALL_COMMAND echo env GOPATH=${GOPATH} CGO_CFLAGS=-I${OPENSSL_ROOT_DIR}/include CGO_LDFLAGS=-L${OPENSSL_ROOT_DIR}/lib go run ${GOPATH}/src/${TRACKER}/bin/scenario/scenario_runner.go
+  CONFIGURE_COMMAND
+    sed -i "" -e "s/make check//g $<SEMICOLON> s|go build|GOPATH=${GOPATH} CGO_CFLAGS=-I${OPENSSL_ROOT_DIR}/include CGO_LDFLAGS=-L${OPENSSL_ROOT_DIR}/lib go build|g" ${GOPATH}/src/${TRACKER}/../../mpiraux/pigotls/Makefile
+  BUILD_COMMAND
+    cd ${GOPATH}/src/${TRACKER}/../../mpiraux/pigotls &&
+    env OPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR} make &&
+    cd ${GOPATH}/src/${TRACKER}/../../mpiraux/ls-qpack-go &&
+    env OPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR} make
+  INSTALL_COMMAND ""
   EXCLUDE_FROM_ALL 1
 )
 
