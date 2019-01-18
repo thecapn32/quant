@@ -207,9 +207,9 @@ externalproject_add(quic-tracker
     sed -i "" -e "s/make check//g $<SEMICOLON> s|go build|GOPATH=${GOPATH} CGO_CFLAGS=-I${OPENSSL_ROOT_DIR}/include CGO_LDFLAGS=-L${OPENSSL_ROOT_DIR}/lib go build|g" ${GOPATH}/src/${TRACKER}/../../mpiraux/pigotls/Makefile
   BUILD_COMMAND
     cd ${GOPATH}/src/${TRACKER}/../../mpiraux/pigotls &&
-    env OPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR} make &&
+    env GOPATH=${GOPATH} OPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR} make &&
     cd ${GOPATH}/src/${TRACKER}/../../mpiraux/ls-qpack-go &&
-    env OPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR} make
+    env GOPATH=${GOPATH} OPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR} make
   INSTALL_COMMAND ""
   EXCLUDE_FROM_ALL 1
 )
