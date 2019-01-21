@@ -91,7 +91,7 @@ case $c in
                         CGO_CFLAGS=-I/usr/local/opt/openssl@1.1/include \
                         CGO_LDFLAGS=-L/usr/local/opt/openssl@1.1/lib \
                     go run $(pwd)/external/go/src/github.com/QUIC-Tracker/quic-tracker/bin/test_suite/scenario_runner.go \
-                        -interface lo0 -host $addr:$port -scenario flow_control"
+                        -interface lo0 -host $addr:$port -scenario stop_sending"
                 ;;
 esac
 

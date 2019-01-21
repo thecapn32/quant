@@ -33,7 +33,7 @@ EOF
 mkdir -p @CMAKE_BINARY_DIR@
 cd @CMAKE_BINARY_DIR@ || exit
 prev=$(git rev-list HEAD -n 1)
-git pull
+git pull --recurse-submodules
 if [ "$prev" = "$(git rev-list HEAD -n 1)" ]; then
         cmake -GNinja -DNO_FUZZER_CORPUS_COLLECTION=True ..
         ninja
