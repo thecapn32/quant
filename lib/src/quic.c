@@ -681,6 +681,7 @@ struct q_conn * q_rx_ready(const uint64_t timeout)
             ev_timer_init(&api_alarm, cancel_api_call, timeout, 0);
             ev_timer_start(loop, &api_alarm);
         }
+        warn(WRN, "waiting for conn to get ready to rx");
         loop_run(q_rx_ready, 0, 0);
     }
 
@@ -689,7 +690,9 @@ struct q_conn * q_rx_ready(const uint64_t timeout)
         sl_remove_head(&c_ready, node_rx_ext);
         c->have_new_data = c->in_c_ready = false;
         warn(WRN, "%s conn %s ready to rx", conn_type(c), cid2str(c->scid));
-    }
+    } else
+        warn(WRN, "no conn ready to rx");
+
     return c;
 }
 
