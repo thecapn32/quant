@@ -114,7 +114,7 @@ void log_stream_or_crypto_frame(const bool rtx,
                                                                       : "",
              is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id, max_sid(s->id, c),
              meta(v).stream_off, in ? s->in_data_max : s->out_data_max,
-             meta(v).stream_data_len, in ? c->in_data : c->out_data,
+             meta(v).stream_data_len, in ? c->in_data_str : c->out_data_str,
              in ? c->tp_in.max_data : c->tp_out.max_data,
              rtx ? REV BLD GRN "[RTX]" NRM " " : "", in ? "[" : "", kind,
              in ? "]" : "");

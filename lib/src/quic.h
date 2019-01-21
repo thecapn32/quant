@@ -138,7 +138,7 @@ struct pkt_meta {
     struct pn_space * pn; ///< Packet number space; only set on TX.
     struct pkt_hdr hdr;
 
-    uint16_t tx_len;      ///< Length of protected packet at TX.
+    uint16_t udp_len;     ///< Length of protected UDP packet at TX/RX.
     uint8_t is_rtx : 1;   ///< Does the w_iov hold truncated data?
     uint8_t is_acked : 1; ///< Is the w_iov ACKed?
     uint8_t is_lost : 1;  ///< Have we marked this w_iov as lost?

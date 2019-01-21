@@ -128,7 +128,7 @@ do_loop_run(const func_ptr func,
 
 void pm_free(struct pkt_meta * const m)
 {
-    if (m->pn && m->tx_len && m->is_acked == false) {
+    if (m->pn && m->udp_len && m->is_acked == false) {
         ensure(splay_remove(pm_by_nr, &m->pn->sent_pkts, m), "removed");
         diet_insert(&m->pn->acked, m->hdr.nr, ev_now(loop));
     }
@@ -283,6 +283,7 @@ bool q_write(struct q_stream * const s,
     }
 
     // add to stream
+    const uint64_t prev_out_data = s->out_data;
     concat_out(s, q);
     if (fin)
         strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
@@ -291,11 +292,17 @@ bool q_write(struct q_stream * const s,
     ev_async_send(loop, &s->c->tx_w);
     loop_run(q_write, s->c, s);
 
+    // how much data did we write?
+    const uint64_t data_written =
+        s->out_una && meta(s->out_una).udp_len
+            ? meta(s->out_una).stream_off - prev_out_data
+            : (s->out_nxt ? s->out_data - prev_out_data : qlen);
+
     // move data back
     sq_concat(q, &s->out);
 
-    warn(WRN, "wrote %u byte%s on %s conn %s strm " FMT_SID " %s", qlen,
-         plural(qlen), conn_type(c), cid2str(c->scid), s->id,
+    warn(WRN, "wrote %u byte%s on %s conn %s strm " FMT_SID " %s", data_written,
+         plural(data_written), conn_type(c), cid2str(c->scid), s->id,
          fin ? "and closed" : "");
 
     // TODO these can be removed eventually
@@ -304,7 +311,7 @@ bool q_write(struct q_stream * const s,
     ensure(w_iov_sq_cnt(q) == qcnt, "payload corrupted, %u != %u",
            w_iov_sq_cnt(q), qcnt);
 
-    return true;
+    return data_written == qlen;
 }
 
 

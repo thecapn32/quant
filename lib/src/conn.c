@@ -270,22 +270,24 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
 }
 
 
-static void __attribute__((nonnull))
+static bool __attribute__((nonnull))
 tx_stream_data(struct q_stream * const s, const uint32_t limit)
 {
     uint32_t encoded = 0;
     struct w_iov * v = s->out_una;
     struct q_conn * const c = s->c;
     sq_foreach_from (v, &s->out, next) {
-        ensure(has_wnd(c), "in_flight %" PRIu64 " vs. cwnd %" PRIu64,
-               c->rec.in_flight, c->rec.cwnd);
+        if (unlikely(has_wnd(c, v->len) == false)) {
+            c->skip_cwnd_ping = false;
+            break;
+        }
 
         if (unlikely(meta(v).is_acked)) {
             // warn(INF, "skip ACK'ed pkt " FMT_PNR_OUT, meta(v).hdr.nr);
             continue;
         }
 
-        if (meta(v).tx_len && meta(v).is_lost == false) {
+        if (meta(v).udp_len && meta(v).is_lost == false) {
             // warn(INF, "skip non-lost TX'ed pkt " FMT_PNR_OUT,
             // meta(v).hdr.nr);
             continue;
@@ -299,7 +301,7 @@ tx_stream_data(struct q_stream * const s, const uint32_t limit)
             if (s->id >= 0 &&
                 s->out_data + v->len + w_mtu(c->w) > s->out_data_max)
                 s->blocked = true;
-            if (c->out_data + v->len + w_mtu(c->w) > c->tp_out.max_data)
+            if (c->out_data_str + v->len + w_mtu(c->w) > c->tp_out.max_data)
                 c->blocked = true;
         }
 
@@ -310,14 +312,6 @@ tx_stream_data(struct q_stream * const s, const uint32_t limit)
         if (likely(meta(v).is_lost == false))
             // update the stream's out_nxt pointer
             s->out_nxt = sq_next(v, next);
-
-        if (unlikely(!has_wnd(c) && !c->blocked)) {
-            c->skip_cwnd_ping = false;
-            warn(NTE,
-                 "cwnd limit reached at in_flight %" PRIu64 " + %u > %" PRIu64,
-                 c->rec.in_flight, w_mtu(c->w), c->rec.cwnd);
-            break;
-        }
 
         if (unlikely(s->blocked || c->blocked))
             break;
@@ -331,6 +325,7 @@ tx_stream_data(struct q_stream * const s, const uint32_t limit)
 #ifndef NDEBUG
     log_sent_pkts(c);
 #endif
+    return encoded > 0;
 }
 
 
@@ -354,7 +349,7 @@ void do_conn_fc(struct q_conn * const c)
     const uint64_t inc = INIT_MAX_BIDI_STREAMS * INIT_STRM_DATA_BIDI;
 
     // check if we need to do connection-level flow control
-    if (c->in_data + 2 * MAX_PKT_LEN + inc > c->tp_in.max_data) {
+    if (c->in_data_str + 2 * MAX_PKT_LEN + inc > c->tp_in.max_data) {
         c->tx_max_data = c->needs_tx = true;
         c->tp_in.new_max_data = c->tp_in.max_data + 2 * inc;
     }
@@ -393,7 +388,7 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
 }
 
 
-static void __attribute__((nonnull))
+static bool __attribute__((nonnull))
 tx_stream(struct q_stream * const s, const uint32_t limit)
 {
     const bool stream_has_data_to_tx =
@@ -409,17 +404,19 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
         // unless for 0-RTT, is this a regular stream during conn open?
         (s->c->try_0rtt == false && s->id >= 0 && s->c->state != conn_estb)) {
         // warn(ERR, "skip " FMT_SID, s->id);
-        return;
+        return true;
     }
 
     warn(DBG, "%s TX on %s conn %s strm " FMT_SID " w/%u pkt%s in queue",
          stream_has_data_to_tx ? "data" : "ctrl", conn_type(s->c),
          cid2str(s->c->scid), s->id, sq_len(&s->out), plural(sq_len(&s->out)));
 
-    if (stream_has_data_to_tx && !s->blocked && has_wnd(s->c))
-        tx_stream_data(s, limit);
-    else if (stream_needs_ctrl(s))
+    if (stream_has_data_to_tx && !s->blocked)
+        return tx_stream_data(s, limit);
+    // XXX OFFSET_ESTB is not correct, should be size of ctrl pkt
+    if (stream_needs_ctrl(s) && likely(has_pval_wnd(s->c, OFFSET_ESTB)))
         tx_stream_ctrl(s);
+    return false;
 }
 
 
@@ -440,18 +437,14 @@ void tx(struct q_conn * const c, const uint32_t limit)
         for (epoch_t e = ep_init; e <= ep_data; e++) {
             if (c->cstreams[e] == 0)
                 continue;
-
-            tx_stream(c->cstreams[e], limit);
-            if (unlikely(!has_wnd(c)))
+            if (tx_stream(c->cstreams[e], limit) == false)
                 goto out_of_wnd;
         }
 
     struct q_stream * s;
-    kh_foreach (s, c->streams_by_id) {
-        tx_stream(s, limit);
-        if (unlikely(!has_wnd(c)))
+    kh_foreach (s, c->streams_by_id)
+        if (tx_stream(s, limit) == false)
             goto out_of_wnd;
-    }
 
 out_of_wnd:
     if (sq_empty(&c->txq) || conn_needs_ctrl(c)) {
@@ -633,7 +626,7 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
     init_rec(c);
 
     // reset FC state
-    c->in_data = c->out_data = 0;
+    c->in_data_str = c->out_data_str = 0;
 
     for (epoch_t e = ep_init; e <= ep_data; e++)
         reset_stream(c->cstreams[e],
@@ -656,7 +649,6 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
     init_tls(c);
     tls_io(c->cstreams[ep_init], 0);
 }
-
 
 
 #ifndef NDEBUG
@@ -691,6 +683,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
     struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
 
     log_pkt("RX", v, v->ip, v->port, odcid, tok, tok_len);
+    c->in_data += meta(v).udp_len;
 
     if (unlikely(meta(v).is_reset)) {
         warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
@@ -719,6 +712,8 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             }
         }
 
+        // this is a new connection
+
         // warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
         if (dec_frames(c, &v) == UINT16_MAX)
             goto done;
@@ -746,11 +741,14 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         }
         conn_to_state(c, conn_opng);
 
-        // this is a new connection; server picks a new random cid
+        // server picks a new random cid
         struct cid nscid = {.len = SERV_SCID_LEN};
         ptls_openssl_random_bytes(nscid.id,
                                   sizeof(nscid.id) + sizeof(nscid.srt));
         update_act_scid(c, &nscid);
+
+        // server limits response to 3x incoming pkt
+        c->path_val_win = 3 * meta(v).udp_len;
 
         ok = true;
         break;
@@ -1353,6 +1351,8 @@ struct q_conn * new_conn(struct w_engine * const w,
     // initialize recovery state
     init_rec(c);
     c->do_ecn = true;
+    if (c->is_clnt)
+        c->path_val_win = UINT64_MAX;
 
     // initialize socket and start a TX watcher
     ev_async_init(&c->tx_w, tx_w);

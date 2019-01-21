@@ -53,7 +53,8 @@ void ack_alarm(struct ev_loop * const l __attribute__((unused)),
                int e __attribute__((unused)))
 {
     struct pn_space * const pn = w->data;
-    if (needs_ack(pn)) {
+    // XXX OFFSET_ESTB is not correct, should be size of ACK
+    if (needs_ack(pn) && has_pval_wnd(pn->c, OFFSET_ESTB)) {
         warn(DBG, "ACK timer fired on %s conn %s epoch %u", conn_type(pn->c),
              cid2str(pn->c->scid), epoch_for_pn(pn));
         tx_ack(pn->c, epoch_for_pn(pn));
@@ -91,7 +92,7 @@ static void do_free_pn(struct pn_space * const pn,
     while (p) {
         struct pkt_meta * const nxt = splay_next(pm_by_nr, &pn->sent_pkts, p);
         if (is_ack_eliciting(&p->frames)) {
-            pn->c->rec.in_flight -= p->tx_len;
+            pn->c->rec.in_flight -= p->udp_len;
             pn->c->rec.ack_eliciting_in_flight--;
         }
         if (free_iov)

@@ -166,7 +166,7 @@ void track_bytes_in(struct q_stream * const s, const uint64_t n)
 {
     if (s->id >= 0)
         // crypto "streams" don't count
-        s->c->in_data += n;
+        s->c->in_data_str += n;
     s->in_data += n;
 }
 
@@ -175,7 +175,7 @@ void track_bytes_out(struct q_stream * const s, const uint64_t n)
 {
     if (s->id >= 0)
         // crypto "streams" don't count
-        s->c->out_data += n;
+        s->c->out_data_str += n;
     s->out_data += n;
 }
 

@@ -191,8 +191,9 @@ detect_lost_pkts(struct q_conn * const c, struct pn_space * const pn)
                  pkt_type_str(p->hdr.flags, &p->hdr.vers), p->hdr.nr);
 
             if (is_ack_eliciting(&p->frames)) {
-                c->rec.in_flight -= p->tx_len;
+                c->rec.in_flight -= p->udp_len;
                 c->rec.ack_eliciting_in_flight--;
+                c->needs_tx = true;
             }
 
             // log_cc(c);
@@ -311,7 +312,7 @@ void on_pkt_sent(struct q_stream * const s, struct w_iov * const v)
         // warn(ERR, "last_sent_ack_elicit_t %f",
         // c->rec.last_sent_ack_elicit_t);
 
-        c->rec.in_flight += meta(v).tx_len; // OnPacketSentCC
+        c->rec.in_flight += meta(v).udp_len; // OnPacketSentCC
         c->rec.ack_eliciting_in_flight++;
         log_cc(c);
         set_ld_timer(c);
@@ -385,10 +386,6 @@ void on_ack_received_2(struct q_conn * const c, struct pn_space * const pn)
 
     detect_lost_pkts(c, pn);
     set_ld_timer(c);
-
-    // XXX since we likely reduced in_flight during the ACK parsing, we can TX
-    if (likely(has_wnd(c)))
-        c->needs_tx = true;
 }
 
 
@@ -399,19 +396,19 @@ on_pkt_acked_cc(struct q_conn * const c, struct w_iov * const acked_pkt)
 
     // bytes_in_flight -= acked_packet.bytes
     if (meta(acked_pkt).is_lost == false)
-        c->rec.in_flight -= meta(acked_pkt).tx_len;
+        c->rec.in_flight -= meta(acked_pkt).udp_len;
 
     // if (!InRecovery(acked_packet.packet_number)):
     if (in_recovery(c, meta(acked_pkt).tx_t) == false) {
         // if (congestion_window < ssthresh):
         if (c->rec.cwnd < c->rec.ssthresh)
             // congestion_window += acked_packet.bytes
-            c->rec.cwnd += meta(acked_pkt).tx_len;
+            c->rec.cwnd += meta(acked_pkt).udp_len;
         else
             // congestion_window += kMaxDatagramSize * acked_packet.bytes /
             // congestion_window
             c->rec.cwnd +=
-                kMaxDatagramSize * meta(acked_pkt).tx_len / c->rec.cwnd;
+                kMaxDatagramSize * meta(acked_pkt).udp_len / c->rec.cwnd;
 
         // XXX clamp cwnd
         // c->rec.cwnd = MAX(c->rec.cwnd, 128 * 1024);

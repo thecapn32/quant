@@ -219,8 +219,12 @@ struct q_conn {
     struct transport_params tp_in;  ///< Transport parameters for RX.
     struct transport_params tp_out; ///< Transport parameters for TX.
 
-    uint64_t in_data;
-    uint64_t out_data;
+    uint64_t in_data_str;  ///< Current inbound aggregate stream data.
+    uint64_t out_data_str; ///< Current outbound aggregate stream data.
+
+    uint64_t path_val_win; ///< Window for path validation.
+    uint64_t in_data;      ///< Current inbound connection data.
+    uint64_t out_data;     ///< Current outbound connection data.
 
     ev_timer idle_alarm;
     ev_timer closing_alarm;
@@ -375,15 +379,6 @@ epoch_in(const struct q_conn * const c)
 
 
 static inline bool __attribute__((nonnull, always_inline))
-has_wnd(const struct q_conn * const c)
-{
-    return !c->blocked &&
-           (c->rec.in_flight + (unlikely(c->try_0rtt) ? 0 : w_mtu(c->w)) <
-            c->rec.cwnd);
-}
-
-
-static inline bool __attribute__((nonnull, always_inline))
 conn_needs_ctrl(const struct q_conn * const c)
 {
     return epoch_in(c) == ep_data &&
@@ -453,4 +448,39 @@ static inline __attribute__((always_inline, const)) bool
 is_inf(const ev_tstamp t)
 {
     return fpclassify(t) == FP_INFINITE;
+}
+
+
+static inline bool __attribute__((nonnull, always_inline))
+has_pval_wnd(const struct q_conn * const c, const uint16_t len)
+{
+    if (unlikely(c->out_data + len >= c->path_val_win)) {
+        warn(DBG,
+             "%s conn %s path val lim reached: %" PRIu64 " + %u >= %" PRIu64,
+             conn_type(c), cid2str(c->scid), c->out_data, len, c->path_val_win);
+        return false;
+    }
+
+    return true;
+}
+
+
+static inline bool __attribute__((nonnull, always_inline))
+has_wnd(const struct q_conn * const c, const uint16_t len)
+{
+    if (unlikely(c->blocked)) {
+        warn(DBG, "%s conn %s is blocked", conn_type(c), cid2str(c->scid));
+        return false;
+    }
+
+    if (unlikely(c->rec.in_flight + len >= c->rec.cwnd)) {
+        warn(DBG,
+             "%s conn %s cwnd lim reached: in_flight % " PRIu64
+             " + %u >= % " PRIu64,
+             conn_type(c), cid2str(c->scid), c->rec.in_flight, len,
+             c->rec.cwnd);
+        return false;
+    }
+
+    return has_pval_wnd(c, len);
 }
