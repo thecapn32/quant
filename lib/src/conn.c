@@ -168,21 +168,6 @@ get_cid_by_id(const khash_t(cids_by_id) * const cbi, struct cid * const id)
 }
 
 
-static bool __attribute__((nonnull))
-switch_scid(struct q_conn * const c, struct cid * const id)
-{
-    struct cid * const scid = get_cid_by_id(c->scids_by_id, id);
-    if (unlikely(scid == 0) || scid->seq <= c->scid->seq)
-        return false;
-
-    warn(NTE, "migration to scid %s for %s conn (was %s)", cid2str(scid),
-         conn_type(c), cid2str(c->scid));
-
-    c->scid = scid;
-    return true;
-}
-
-
 static void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c)
 {
     const struct cid which = {.seq = c->dcid->seq + 1};
@@ -975,12 +960,24 @@ rx_pkts(struct w_iov_sq * const x,
                 }
             }
 
-            if (cid_cmp(&meta(v).hdr.dcid, c->scid) != 0)
-                if (switch_scid(c, &meta(v).hdr.dcid) == false) {
-                    warn(ERR, "unknown or stale scid %s, ignoring pkt",
+            if (cid_cmp(&meta(v).hdr.dcid, c->scid) != 0) {
+                struct cid * const scid =
+                    get_cid_by_id(c->scids_by_id, &meta(v).hdr.dcid);
+                if (unlikely(scid == 0)) {
+                    log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
+                    warn(ERR, "unknown scid %s, ignoring pkt",
                          cid2str(&meta(v).hdr.dcid));
                     goto drop;
                 }
+
+                if (scid->seq < c->scid->seq)
+                    warn(DBG, "pkt has prev scid %s, accepting", cid2str(scid));
+                else {
+                    warn(NTE, "migration to scid %s for %s conn (was %s)",
+                         cid2str(scid), conn_type(c), cid2str(c->scid));
+                    c->scid = scid;
+                }
+            }
 
             // check if this pkt came from a new source IP and/or port
             if (sockaddr_in_cmp(&c->peer, &peer) != 0) {
