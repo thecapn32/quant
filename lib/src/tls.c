@@ -817,7 +817,7 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
                           ptls_iovec_t src)
 {
     struct q_conn * const c = *ptls_get_data_ptr(tls);
-    warn(NTE, "saving 0-RTT tickets to %s", tickets.file_name);
+    warn(NTE, "saving TLS tickets to %s", tickets.file_name);
 
     FILE * const fp = fopen(tickets.file_name, "wbe");
     ensure(fp, "could not open ticket file %s", tickets.file_name);
@@ -864,7 +864,7 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
     // write all tickets
     // XXX this currently dumps the entire cache to file on each connection!
     splay_foreach (t, tickets_by_peer, &tickets) {
-        warn(INF, "writing 0-RTT ticket for %s conn %s (%s %s)", conn_type(c),
+        warn(INF, "writing TLS ticket for %s conn %s (%s %s)", conn_type(c),
              cid2str(c->scid), t->sni, t->alpn);
 
         size_t len = strlen(t->sni) + 1;
@@ -1044,11 +1044,11 @@ static void read_tickets()
 {
     FILE * const fp = fopen(tickets.file_name, "rbe");
     if (fp == 0) {
-        warn(WRN, "could not read 0-RTT tickets from %s", tickets.file_name);
+        warn(WRN, "could not read TLS tickets from %s", tickets.file_name);
         return;
     }
 
-    warn(INF, "reading 0-RTT tickets from %s", tickets.file_name);
+    warn(INF, "reading TLS tickets from %s", tickets.file_name);
 
     // read and verify git hash
     size_t hash_len;
@@ -1057,7 +1057,7 @@ static void read_tickets()
     ensure(fread(buf, sizeof(uint8_t), hash_len, fp), "fread");
     if (hash_len != quant_commit_hash_len ||
         memcmp(buf, quant_commit_hash, hash_len) != 0) {
-        warn(WRN, "0-RTT tickets were stored by different %s version, removing",
+        warn(WRN, "TLS tickets were stored by different %s version, removing",
              quant_name);
         ensure(unlink(tickets.file_name) == 0, "unlink");
         goto done;
@@ -1091,7 +1091,7 @@ static void read_tickets()
         ensure(fread(t->ticket, sizeof(*t->ticket), len, fp), "fread");
 
         ensure(splay_insert(tickets_by_peer, &tickets, t) == 0, "inserted");
-        warn(INF, "got 0-RTT ticket %s %s", t->sni, t->alpn);
+        warn(INF, "got TLS ticket %s %s", t->sni, t->alpn);
     }
 
 done:
