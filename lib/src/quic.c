@@ -341,12 +341,13 @@ again:;
         }
     }
 
-    // return data
-    if (s) {
+    if (s && s->state == strm_clsd)
+        // return data
         sq_concat(q, &s->in);
-        warn(WRN, "read %u byte%s on %s conn %s strm " FMT_SID, w_iov_sq_len(q),
-             plural(w_iov_sq_len(q)), conn_type(c), cid2str(c->scid), s->id);
-    }
+
+    warn(WRN, "read %u byte%s on %s conn %s strm " FMT_SID, w_iov_sq_len(q),
+         plural(w_iov_sq_len(q)), conn_type(c), cid2str(c->scid),
+         s ? s->id : -1);
 
     return s;
 }
@@ -362,8 +363,10 @@ void q_readall_stream(struct q_stream * const s, struct w_iov_sq * const q)
         loop_run(q_readall_stream, c, s);
     }
 
-    // return data
-    sq_concat(q, &s->in);
+    if (s->state == strm_clsd)
+        // return data
+        sq_concat(q, &s->in);
+
     warn(WRN, "read %u byte%s on %s conn %s strm " FMT_SID, w_iov_sq_len(q),
          plural(w_iov_sq_len(q)), conn_type(c), cid2str(c->scid), s->id);
 }
