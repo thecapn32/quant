@@ -298,9 +298,6 @@ tx_ack(struct q_conn * const c, const epoch_t e);
 extern void __attribute__((nonnull))
 rx(struct ev_loop * const l, ev_io * const rx_w, int e);
 
-extern void __attribute__((nonnull))
-loop_update(struct ev_loop * const l, ev_async * const w, int e);
-
 extern void __attribute__((nonnull)) err_close(struct q_conn * const c,
                                                const uint16_t code,
                                                const uint8_t frm,
