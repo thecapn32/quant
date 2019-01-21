@@ -413,6 +413,11 @@ void tx(struct q_conn * const c, const uint32_t limit)
     if (unlikely(c->state == conn_qlse))
         enter_closing(c);
 
+    if (unlikely(c->state == conn_opng) && c->is_clnt && c->try_0rtt &&
+        c->pn_data.out_0rtt.aead == 0)
+        // if we have no 0-rtt keys here, the ticket didn't have any - disable
+        c->try_0rtt = false;
+
     if (unlikely(c->blocked))
         goto done;
 
