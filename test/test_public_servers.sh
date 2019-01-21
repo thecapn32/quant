@@ -49,7 +49,7 @@ declare -A servers=(
         [winquic]=msquic.westus.cloudapp.azure.com::4433:4434:/the-odyssey.txt
 )
 
-results=(live fail vneg hshk data clse zrtt rtry migr kyph)
+results=(live fail vneg hshk data clse rsmt zrtt rtry migr kyph)
 declare -A ${results[@]}
 
 
@@ -89,7 +89,7 @@ function test_server {
                 "https://${info[0]}:${info[2]}${info[4]}" 2>&1 | \
                 $sed -r "$sed_pattern" > "$log_base.1rtt.log"
 
-        # consecutive 0rtt run
+        # consecutive rsmt/0rtt run
         bin/client $opts ${info[1]} \
                 "https://${info[0]}:${info[2]}${info[4]}" 2>&1 | \
                 $sed -r "$sed_pattern" > "$log_base.0rtt.log"
@@ -170,7 +170,7 @@ function analyze {
         [ $? == 1 ] && migr[$1]=M
         [ ${fail[$1]} ] || rm -f "$log"
 
-        # analyze 0rtt
+        # analyze rsmt and 0rtt
         local log="/tmp/$script.$1.$pid.0rtt.log"
         check_fail "$1" "$log"
 
@@ -182,9 +182,13 @@ function analyze {
                 return
         fi
 
+        perl -n -e '/new 0-RTT clnt conn/ and $x=1;
+                    $x && /CLOSE.*err=0x0000/ && exit 1;' "$log"
+        [ $? == 1 ] && rsmt[$1]=R
+
         perl -n -e '/connected after 0-RTT/ and $x=1;
                     $x && /CLOSE.*err=0x0000/ && exit 1;' "$log"
-        [ $? == 1 ] && zrtt[$1]=RZ
+        [ $? == 1 ] && zrtt[$1]=Z
         [ ${fail[$1]} ] || rm -f "$log"
 
         # analyze rtry
