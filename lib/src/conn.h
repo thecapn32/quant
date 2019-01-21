@@ -237,9 +237,13 @@ struct q_conn {
     khash_t(streams_by_id) * streams_by_id;  ///< Regular streams.
     struct diet closed_streams;
 
-    struct w_sock * sock; ///< File descriptor (socket) for the connection.
-    ev_io rx_w;           ///< RX watcher.
-    ev_async tx_w;        ///< TX watcher.
+    struct w_sock * sock;     ///< File descriptor (socket) for the connection.
+    struct w_sockopt sockopt; ///< Socket options.
+
+    uint8_t _unused[4];
+
+    ev_io rx_w;    ///< RX watcher.
+    ev_async tx_w; ///< TX watcher.
 
     struct recovery rec; ///< Loss recovery state.
     struct tls tls;      ///< TLS state.

@@ -1347,7 +1347,7 @@ struct q_conn * new_conn(struct w_engine * const w,
 
     // initialize recovery state
     init_rec(c);
-    c->do_ecn = true;
+    c->do_ecn = c->sockopt.enable_ecn = true;
     if (c->is_clnt)
         c->path_val_win = UINT64_MAX;
 
@@ -1361,9 +1361,9 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->sock = w_get_sock(w, htons(port));
     if (c->sock == 0) {
         // TODO need to update zero checksums in update_conn_conf() somehow
-        c->rx_w.data = c->sock =
-            w_bind(w, htons(port),
-                   cc && cc->enable_udp_zero_checksums ? W_ZERO_CHKSUM : 0);
+        c->sockopt.enable_udp_zero_checksums =
+            cc && cc->enable_udp_zero_checksums;
+        c->rx_w.data = c->sock = w_bind(w, htons(port), &c->sockopt);
         ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
         ev_set_priority(&c->rx_w, EV_MAXPRI);
         ev_io_start(loop, &c->rx_w);
