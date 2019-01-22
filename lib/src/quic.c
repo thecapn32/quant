@@ -529,7 +529,8 @@ struct w_engine * q_init(const char * const ifname,
     // initialize TLS context
     init_tls_ctx(conf);
 
-#if !defined(FUZZING) && !defined(NO_FUZZER_CORPUS_COLLECTION)
+#if !defined(FUZZING) && !defined(NO_FUZZER_CORPUS_COLLECTION) &&              \
+    !defined(__linux__)
     // libev seems to need this inside docker to handle Ctrl-C?
     /// but the fuzzer doesn't like it
     static ev_signal signal_w;
