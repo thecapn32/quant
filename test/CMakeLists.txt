@@ -29,9 +29,21 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/dummy.key
 )
 
 if(HAVE_BENCHMARK_H)
-  foreach(TARGET bench bench_conn)
-    add_executable(${TARGET} ${TARGET}.cc)
-    target_link_libraries(${TARGET} PUBLIC benchmark pthread libquant)
+  set(TARGETS bench bench_conn)
+  if(HAVE_NETMAP_H)
+    set(TARGETS ${TARGETS} bench-warp bench_conn-warp)
+  endif()
+
+  foreach(TARGET ${TARGETS})
+    if(${TARGET} MATCHES ".*-warp")
+      string(REGEX REPLACE "-warp$" "" SOURCE ${TARGET})
+      add_executable(${TARGET} ${SOURCE}.cc)
+      target_link_libraries(${TARGET} PUBLIC benchmark pthread libquant-warp)
+    else()
+      add_executable(${TARGET} ${TARGET}.cc)
+      target_link_libraries(${TARGET} PUBLIC benchmark pthread libquant)
+    endif()
+
     target_include_directories(${TARGET}
       SYSTEM PRIVATE
         ${OPENSSL_ROOT_DIR}/include

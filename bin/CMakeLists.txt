@@ -19,18 +19,32 @@ find_package_handle_standard_args(http-parser
   DEFAULT_MSG HTTP_PARSER_LIB HTTP_PARSER_INCLUDE
 )
 
-foreach(TARGET client server)
-  add_executable(${TARGET} ${TARGET}.c)
+set(TARGETS client server)
+if(HAVE_NETMAP_H)
+  set(TARGETS ${TARGETS} client-warp server-warp)
+endif()
+
+foreach(TARGET ${TARGETS})
+  if(${TARGET} MATCHES ".*-warp")
+    string(REGEX REPLACE "-warp$" "" SOURCE ${TARGET})
+    add_executable(${TARGET} ${SOURCE}.c)
+    target_link_libraries(${TARGET} lib${PROJECT_NAME}-warp ${HTTP_PARSER_LIB})
+  else()
+    add_executable(${TARGET} ${TARGET}.c)
+    target_link_libraries(${TARGET} lib${PROJECT_NAME} ${HTTP_PARSER_LIB})
+  endif()
+
   target_include_directories(${TARGET} SYSTEM PRIVATE ${HTTP_PARSER_INCLUDE})
-  target_link_libraries(${TARGET} lib${PROJECT_NAME} ${HTTP_PARSER_LIB})
+
   if(DSYMUTIL)
     add_custom_command(TARGET ${TARGET} POST_BUILD
       COMMAND ${DSYMUTIL} ARGS $<TARGET_FILE:${TARGET}>
     )
   endif()
+
+  install(TARGETS ${TARGET} DESTINATION bin)
 endforeach()
 
 add_custom_target(${PROJECT_NAME} DEPENDS client server)
 
-install(TARGETS client server DESTINATION bin)
 
