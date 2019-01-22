@@ -341,7 +341,7 @@ again:;
         }
     }
 
-    if (s && s->state == strm_clsd)
+    if (s && (s->state == strm_clsd || s->state == strm_hcrm))
         // return data
         sq_concat(q, &s->in);
 
@@ -363,7 +363,7 @@ void q_readall_stream(struct q_stream * const s, struct w_iov_sq * const q)
         loop_run(q_readall_stream, c, s);
     }
 
-    if (s->state == strm_clsd)
+    if (s->state == strm_clsd || s->state == strm_hcrm)
         // return data
         sq_concat(q, &s->in);
 
