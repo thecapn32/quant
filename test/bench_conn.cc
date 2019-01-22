@@ -86,7 +86,7 @@ static void BM_conn(benchmark::State & state)
 }
 
 
-BENCHMARK(BM_conn)->RangeMultiplier(2)->Range(1024, 1024 * 1024 * 16)
+BENCHMARK(BM_conn)->RangeMultiplier(2)->Range(1024, 1024 * 1024 * 2)
     // ->Unit(benchmark::kMillisecond)
     ;
 
