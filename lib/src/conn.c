@@ -1122,7 +1122,7 @@ void rx(struct ev_loop * const l,
             tx(c, 0);
 
         // clear the helper flags set above
-        c->needs_tx = c->had_rx = false;
+        c->had_rx = false;
 
         if (unlikely(c->tx_rtry))
             // if we sent a retry, forget the entire connection existed
