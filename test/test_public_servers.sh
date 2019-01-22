@@ -49,7 +49,7 @@ declare -A servers=(
         [winquic]=msquic.westus.cloudapp.azure.com::4433:4434:/the-odyssey.txt
 )
 
-results=(live fail vneg hshk data clse rsmt zrtt rtry migr kyph)
+results=(live fail vneg hshk data clse rsmt zrtt rtry migr kyph http)
 declare -A ${results[@]}
 
 
@@ -107,6 +107,12 @@ function test_server {
                 $sed -r "$sed_pattern" > "$log_base.kyph.log"
         rm -f "$cache"
 
+        # h3 run
+        bin/client $opts ${info[1]} -3 \
+                "https://${info[0]}:${info[2]}${info[4]}" 2>&1 | \
+                $sed -r "$sed_pattern" > "$log_base.h3.log"
+        rm -f "$cache"
+
         printf "%s " "$s"
 }
 
@@ -119,8 +125,9 @@ function check_fail {
                 echo "Test with $1 crashed (log $log):"
                 tail -n 10 "$log"
                 echo
-                return
+                return 1
         fi
+        return 0
 
 }
 
@@ -174,14 +181,6 @@ function analyze {
         local log="/tmp/$script.$1.$pid.0rtt.log"
         check_fail "$1" "$log"
 
-        if [ $? == 1 ]; then
-                fail[$1]="X"
-                echo "0-RTT test with $1 crashed:"
-                tail -n 20 "$log"
-                echo
-                return
-        fi
-
         perl -n -e '/new 0-RTT clnt conn/ and $x=1;
                     $x && /CLOSE.*err=0x0000/ && exit 1;' "$log"
         [ $? == 1 ] && rsmt[$1]=R
@@ -195,14 +194,6 @@ function analyze {
         local log="/tmp/$script.$1.$pid.rtry.log"
         check_fail "$1" "$log"
 
-        if [ $? == 1 ]; then
-                fail[$1]="X"
-                echo "retry test with $1 crashed:"
-                tail -n 20 "$log"
-                echo
-                return
-        fi
-
         perl -n -e '/RX.*len=.*Retry/ and $x=1;
                    $x && /CLOSE.*err=0x0000/ && exit 1;' "$log"
         [ $? == 1 ] && rtry[$1]=S
@@ -212,17 +203,19 @@ function analyze {
         local log="/tmp/$script.$1.$pid.kyph.log"
         check_fail "$1" "$log"
 
-        if [ $? == 1 ]; then
-                fail[$1]="X"
-                echo "key-update test with $1 crashed:"
-                tail -n 20 "$log"
-                echo
-                return
-        fi
-
         perl -n -e '/TX.*Short kyph=1/ and $x=1;
                    $x && /RX.*Short kyph=1/ && exit 1;' "$log"
         [ $? == 1 ] && kyph[$1]=U
+        [ ${fail[$1]} ] || rm -f "$log"
+
+        # analyze h3
+        local log="/tmp/$script.$1.$pid.h3.log"
+        check_fail "$1" "$log"
+
+        perl -n -e '/idle timeout on clnt conn/ && exit 0;
+                    /read (.*) bytes on clnt conn/ &&
+                            ($1 > 0 ? exit 1 : next);' "$log"
+        [ $? == 1 ] && http[$1]=3
         [ ${fail[$1]} ] || rm -f "$log"
 }
 
