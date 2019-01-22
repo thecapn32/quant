@@ -286,7 +286,7 @@ extern const uint8_t ok_vers_len;
 #define kGranularity 0.001
 
 // The RTT used before an RTT sample is taken. The RECOMMENDED value is 100ms.
-#define kInitialRtt 0.1
+#define kInitialRtt (3 * 0.1) // TODO reduce this once we deal with spurious RTO
 
 /// The sender's maximum payload size. Does not include UDP or IP overhead. The
 /// max packet size is used for calculating initial and minimum congestion
