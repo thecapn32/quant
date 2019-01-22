@@ -242,6 +242,7 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
         warn(DBG, "time thresh loss detection alarm on %s conn %s",
              conn_type(c), cid2str(c->scid));
         detect_lost_pkts(c, pn);
+        tx(c, 0); // XXX this is not in the pseudo code
 
     } else {
         warn(DBG, "PTO alarm #%u on %s conn %s", c->rec.pto_cnt, conn_type(c),
