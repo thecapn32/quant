@@ -262,11 +262,6 @@ tx_stream_data(struct q_stream * const s, const uint32_t limit)
     struct w_iov * v = s->out_una;
     struct q_conn * const c = s->c;
     sq_foreach_from (v, &s->out, next) {
-        if (unlikely(has_wnd(c, v->len) == false)) {
-            c->skip_cwnd_ping = false;
-            break;
-        }
-
         if (unlikely(meta(v).is_acked)) {
             // warn(INF, "skip ACK'ed pkt " FMT_PNR_OUT, meta(v).hdr.nr);
             continue;

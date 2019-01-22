@@ -452,18 +452,8 @@ bool enc_pkt(struct q_stream * const s,
         goto tx;
     }
 
-    if (epoch == ep_data || (!c->is_clnt && epoch == ep_0rtt)) {
-        // XXX can't use has_wnd() here, since in_flight is out of data here
-        if (unlikely(c->rec.in_flight + 2 * w_mtu(c->w) >= c->rec.cwnd &&
-                     c->skip_cwnd_ping == false) &&
-            (rtx || enc_data)) {
-            // force peer to ACK if we're out of window
-            i = enc_ping_frame(v, i);
-            c->skip_cwnd_ping = true;
-        }
-
+    if (epoch == ep_data || (!c->is_clnt && epoch == ep_0rtt))
         i = enc_other_frames(s, v, i, meta(v).stream_data_start);
-    }
 
     if (unlikely(rtx)) {
         ensure(is_rtxable(&meta(v)), "is rtxable");
