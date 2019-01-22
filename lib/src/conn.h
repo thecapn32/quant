@@ -53,8 +53,8 @@
     __extension__({                                                            \
         static char _str[2 * (MAX_CID_LEN + sizeof((i)->seq)) + 1] = "0";      \
         if (i)                                                                 \
-            snprintf(_str, sizeof(_str), "%" PRIu64 ":%s", (i)->seq,           \
-                     hex2str((i)->id, (i)->len));                              \
+            snprintf(_str, sizeof(_str), "%" PRIu64 ":%.*s", (i)->seq,         \
+                     2 * (i)->len, hex2str((i)->id, (i)->len));                \
         (i) ? _str : "?";                                                      \
     })
 
