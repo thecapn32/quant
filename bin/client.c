@@ -211,6 +211,8 @@ get(struct w_engine * const w,
         if (do_h3) {
             // we need to open a uni stream for an empty H/3 SETTINGS frame
             struct q_stream * const ss = q_rsv_stream(cce->c, false);
+            if (ss == 0)
+                return 0;
             static const uint8_t h3_empty_settings[] = {0x43, 0x00, 0x04};
             // XXX lsquic doesn't like a FIN on this stream
             q_write_str(w, ss, (const char *)h3_empty_settings,
@@ -220,6 +222,8 @@ get(struct w_engine * const w,
 
     } else {
         se->s = q_rsv_stream(cce->c, true);
+        if (se->s == 0)
+            return 0;
         q_write(se->s, &req, true);
     }
     se->c = cce->c;
