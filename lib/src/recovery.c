@@ -353,6 +353,11 @@ void on_ack_received_2(struct q_conn * const c, struct pn_space * const pn)
     c->rec.crypto_cnt = c->rec.pto_cnt = 0;
     detect_lost_pkts(c, pn);
     set_ld_timer(c);
+
+    // not part of pseudo code
+
+    if (has_wnd(c, 0))
+        c->needs_tx = true;
 }
 
 
