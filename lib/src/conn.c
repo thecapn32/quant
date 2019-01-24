@@ -436,8 +436,16 @@ void tx(struct q_conn * const c, const uint32_t limit)
     if (unlikely(c->state == conn_drng))
         return;
 
-    if (unlikely(c->state == conn_qlse))
+    if (unlikely(c->state == conn_qlse)) {
         enter_closing(c);
+        tx_ack(c, ep_data);
+        goto done;
+    }
+
+    if (unlikely(c->tx_rtry)) {
+        tx_ack(c, ep_init);
+        goto done;
+    }
 
     if (unlikely(c->state == conn_opng) && c->is_clnt && c->try_0rtt &&
         c->pn_data.out_0rtt.aead == 0)
@@ -454,20 +462,13 @@ void tx(struct q_conn * const c, const uint32_t limit)
             if (c->cstreams[e] == 0)
                 continue;
             if (tx_stream(c->cstreams[e], limit) == false)
-                goto out_of_wnd;
+                goto done;
         }
 
     struct q_stream * s;
     kh_foreach (s, c->streams_by_id)
         if (tx_stream(s, limit) == false)
-            goto out_of_wnd;
-
-out_of_wnd:
-    if (sq_empty(&c->txq) && c->state == conn_clsg) {
-        // need to send other frame, do it in an ACK
-        tx_ack(c, ep_data);
-        return;
-    }
+            break;;
 
 done:
     if (!sq_empty(&c->txq))
