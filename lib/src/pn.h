@@ -108,5 +108,5 @@ abandon_pn(struct q_conn * const c, const epoch_t e);
 
 typedef enum { no_ack = 0, del_ack = 1, imm_ack = 2 } ack_t;
 
-extern ack_t __attribute__((nonnull, always_inline))
+extern ack_t __attribute__((nonnull))
 needs_ack(const struct pn_space * const pn);
