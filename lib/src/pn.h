@@ -27,10 +27,8 @@
 
 #pragma once
 
-#include <stdbool.h>
 #include <stdint.h>
 
-#include <ev.h>
 #include <warpcore/warpcore.h>
 
 #include "diet.h"
@@ -39,7 +37,6 @@
 
 
 struct q_conn;
-struct ev_loop;
 
 
 splay_head(pm_by_nr, pkt_meta);
@@ -50,16 +47,14 @@ struct pn_space {
     struct diet recv_all; ///< All received packet numbers.
     struct diet acked;    ///< Sent packet numbers already ACKed.
 
-    /// Sent-but-unACKed packets. The @p buf and @p len fields of the w_iov
-    /// structs are relative to any stream or crypto data.
-    ///
     struct pm_by_nr sent_pkts; // sent_packets
 
     uint64_t lg_sent;            // largest_sent_packet
     uint64_t lg_acked;           // largest_acked_packet
     uint64_t lg_sent_before_rto; // largest_sent_before_rto
 
-    ev_timer ack_alarm;
+    uint64_t pkts_rxed_since_last_ack_tx;
+
     struct q_conn * c;
 
     struct frames rx_frames; ///< Frame types received since last ACK.
@@ -100,23 +95,18 @@ pm_by_nr_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
 SPLAY_PROTOTYPE(pm_by_nr, pkt_meta, nr_node, pm_by_nr_cmp)
 
 
-extern void __attribute__((nonnull)) init_pn(struct pn_space * const pn,
-                                             struct q_conn * const c,
-                                             const ev_tstamp ack_del);
+extern void __attribute__((nonnull))
+init_pn(struct pn_space * const pn, struct q_conn * const c);
 
 extern void __attribute__((nonnull)) free_pn(struct pn_space * const pn);
 
 extern void __attribute__((nonnull)) reset_pn(struct pn_space * const pn);
 
 extern void __attribute__((nonnull))
-ack_alarm(struct ev_loop * const l, ev_timer * const w, int e);
-
-extern void __attribute__((nonnull))
 abandon_pn(struct q_conn * const c, const epoch_t e);
 
-static inline bool __attribute__((nonnull, always_inline))
-needs_ack(struct pn_space * const pn)
-{
-    return !diet_empty(&pn->recv) && is_ack_eliciting(&pn->rx_frames) &&
-           ev_is_active(&pn->ack_alarm);
-}
+
+typedef enum { no_ack = 0, del_ack = 1, imm_ack = 2 } ack_t;
+
+extern ack_t __attribute__((nonnull, always_inline))
+needs_ack(const struct pn_space * const pn);

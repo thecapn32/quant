@@ -61,6 +61,7 @@ ev_tstamp prev_srtt = 0, prev_rttvar = 0;
 static inline bool __attribute__((nonnull))
 in_recovery(const struct q_conn * const c, const ev_tstamp sent_t)
 {
+    // see InRecovery() pseudo code
     return sent_t <= c->rec.rec_start_t;
 }
 
@@ -76,17 +77,15 @@ crypto_pkts_in_flight(struct q_conn * const c)
 
 static void __attribute__((nonnull)) set_ld_timer(struct q_conn * const c)
 {
+    // see SetLossDetectionTimer() pseudo code
+
     if (c->state == conn_clsg || c->state == conn_drng)
         // don't do LD while draining
         return;
 
-    // see SetLossDetectionTimer pseudo code
-
     // don't arm the alarm if there are no ack-eliciting packets in flight
     if (unlikely(c->rec.ack_eliciting_in_flight == 0)) {
-#ifndef FUZZING
-        warn(DBG, "no RTX-able pkts outstanding, stopping ld_alarm");
-#endif
+        // warn(DBG, "no RTX-able pkts outstanding, stopping ld_alarm");
         ev_timer_stop(loop, &c->rec.ld_alarm);
         return;
     }
@@ -127,24 +126,18 @@ set_to:
 }
 
 
-void congestion_event(struct q_conn * const c, const ev_tstamp lg_lost_tx_t)
+void congestion_event(struct q_conn * const c, const ev_tstamp sent_t)
 {
-    // CongestionEvent:
-    // Start a new congestion epoch if the last lost packet is past the end of
-    // the previous recovery epoch.
-    if (!in_recovery(c, lg_lost_tx_t)) {
-        // warn(CRT,
-        //      "NEW RECOVERY EPOCH: eor=" FMT_PNR_OUT ", lg_sent=%" PRIu64
-        //      ", lg_lost=%" PRIu64,
-        //      c->rec.eor, pn->lg_sent, largest_lost_packet);
+    // see CongestionEvent() pseudo code
+
+    if (!in_recovery(c, sent_t)) {
         c->rec.rec_start_t = ev_now(loop);
         c->rec.cwnd /= kLossReductionDivisor;
         c->rec.cwnd = MAX(c->rec.cwnd, kMinimumWindow);
         c->rec.ssthresh = c->rec.cwnd;
-        // Collapse congestion window if persistent congestion
+
         if (c->rec.pto_cnt > kPersistentCongestionThreshold)
             c->rec.cwnd = kMinimumWindow;
-        // log_cc(c);
     }
 }
 
@@ -193,7 +186,6 @@ detect_lost_pkts(struct q_conn * const c, struct pn_space * const pn)
             if (is_ack_eliciting(&p->frames)) {
                 c->rec.in_flight -= p->udp_len;
                 c->rec.ack_eliciting_in_flight--;
-                c->needs_tx = true;
             }
 
             // log_cc(c);
@@ -270,11 +262,13 @@ track_acked_pkts(struct pn_space * const pn, struct w_iov * const v)
         uint64_t ack = lg_ack_in_block;
         while (ack_block_len >= lg_ack_in_block - ack) {
             diet_remove(&pn->recv, ack);
-            if (likely(ack > 0))
+            if (unlikely(ack > 0))
                 ack--;
             else
                 break;
         }
+        // warn(ERR, "stop including %" PRIu64 "-%" PRIu64, lg_ack_in_block,
+        // ack);
 
         if (n > 1) {
             uint64_t gap = 0;
@@ -289,16 +283,8 @@ track_acked_pkts(struct pn_space * const pn, struct w_iov * const v)
 
 void on_pkt_sent(struct q_stream * const s, struct w_iov * const v)
 {
-    // these are updated in enc_pkt():
-    // * largest_sent_packet
-    // * sent_packets[packet_number].packet_number
-    // * sent_packets[packet_number].ack_eliciting
-    // * sent_packets[packet_number].bytes
-    //
-    // these we maintain via the frames bitstr_t in pkt_meta:
-    // * sent_packets[packet_number].ack_only
+    // see OnPacketSent() pseudo code
 
-    // sent_packets[packet_number].time_sent = now
     meta(v).tx_t = ev_now(loop);
 
     struct q_conn * const c = s->c;
@@ -310,9 +296,6 @@ void on_pkt_sent(struct q_stream * const s, struct w_iov * const v)
             // is_crypto_packet
             c->rec.last_sent_crypto_t = meta(v).tx_t;
         c->rec.last_sent_ack_elicit_t = meta(v).tx_t;
-        // warn(ERR, "last_sent_ack_elicit_t %f",
-        // c->rec.last_sent_ack_elicit_t);
-
         c->rec.in_flight += meta(v).udp_len; // OnPacketSentCC
         c->rec.ack_eliciting_in_flight++;
         log_cc(c);
@@ -322,35 +305,24 @@ void on_pkt_sent(struct q_stream * const s, struct w_iov * const v)
 
 
 static void __attribute__((nonnull))
-update_rtt(struct q_conn * const c, const ev_tstamp ack_del)
+update_rtt(struct q_conn * const c, ev_tstamp ack_del)
 {
-    // implements UpdateRtt pseudocode
+    // see UpdateRtt() pseudo code
 
-    // min_rtt = min(min_rtt, latest_rtt)
     c->rec.min_rtt = MIN(c->rec.min_rtt, c->rec.latest_rtt);
+    ack_del = MIN(ack_del, c->tp_out.max_ack_del);
 
-    // ack_delay = min(ack_delay, max_ack_delay)
-    const ev_tstamp ad = MIN(ack_del, c->tp_out.max_ack_del);
+    if (c->rec.latest_rtt - c->rec.min_rtt > ack_del)
+        c->rec.latest_rtt -= ack_del;
 
-    // latest_rtt = max(latest_rtt - ack_delay, min_rtt)
-    c->rec.latest_rtt = MAX(c->rec.latest_rtt - ad, c->rec.min_rtt);
-
-    // if (smoothed_rtt == 0):
     if (unlikely(is_zero(c->rec.srtt))) {
-        // smoothed_rtt = latest_rtt
         c->rec.srtt = c->rec.latest_rtt;
-        // rttvar = latest_rtt / 2
         c->rec.rttvar = c->rec.latest_rtt / 2;
     } else {
-        // rttvar_sample = abs(smoothed_rtt - latest_rtt)
         const ev_tstamp rttvar_sample = fabs(c->rec.srtt - c->rec.latest_rtt);
-        // rttvar = 3/4 * rttvar + 1/4 * rttvar_sample
         c->rec.rttvar = .75 * c->rec.rttvar + .25 * rttvar_sample;
-        // smoothed_rtt = 7/8 * smoothed_rtt + 1/8 * latest_rtt
         c->rec.srtt = .875 * c->rec.srtt + .125 * c->rec.latest_rtt;
     }
-
-    // log_cc(c);
 }
 
 
@@ -359,32 +331,25 @@ void on_ack_received_1(struct q_conn * const c,
                        struct w_iov * const lg_ack,
                        const uint64_t ack_del)
 {
-    // implements first part of OnAckReceived pseudocode
+    // see OnAckReceived() pseudo code
 
-    // largest_acked_packet = max(largest_acked_packet, ack.largest_acked)
     pn->lg_acked = MAX(pn->lg_acked, meta(lg_ack).hdr.nr);
 
-    // latest_rtt = now - sent_packets[ack.largest_acked].time
-    c->rec.latest_rtt = ev_now(loop) - meta(lg_ack).tx_t;
+    // we're only called for the largest ACK'ed
+    if (is_ack_eliciting(&meta(lg_ack).frames)) {
+        c->rec.latest_rtt = ev_now(loop) - meta(lg_ack).tx_t;
+        update_rtt(c, ack_del / 1000000.0); // ack_del is passed in usec
+    }
 
-    // UpdateRtt(latest_rtt, ack.ack_delay)
-    update_rtt(c, ack_del / 1000000.0); // ack_del is passed in usec
-
-    // TODO
-    // Process ECN information if present.
-    // if (ACK frame contains ECN information):
-    //   ProcessECN(ack)
+    // ProcessECN() is done in dec_ack_frame()
 }
 
 
 void on_ack_received_2(struct q_conn * const c, struct pn_space * const pn)
 {
-    // implements second part of OnAckReceived pseudocode
+    // see OnAckReceived() pseudo code
 
-    // crypto_count = 0
-    // pto_count = 0
     c->rec.crypto_cnt = c->rec.pto_cnt = 0;
-
     detect_lost_pkts(c, pn);
     set_ld_timer(c);
 }
@@ -393,29 +358,18 @@ void on_ack_received_2(struct q_conn * const c, struct pn_space * const pn)
 static void __attribute__((nonnull))
 on_pkt_acked_cc(struct q_conn * const c, struct w_iov * const acked_pkt)
 {
-    // implement OnPacketAckedCC pseudocode
+    // OnPacketAckedCC
 
-    // bytes_in_flight -= acked_packet.bytes
-    if (meta(acked_pkt).is_lost == false)
-        c->rec.in_flight -= meta(acked_pkt).udp_len;
+    c->rec.in_flight -= meta(acked_pkt).udp_len;
+    c->rec.ack_eliciting_in_flight--;
 
-    // if (!InRecovery(acked_packet.packet_number)):
-    if (in_recovery(c, meta(acked_pkt).tx_t) == false) {
-        // if (congestion_window < ssthresh):
-        if (c->rec.cwnd < c->rec.ssthresh)
-            // congestion_window += acked_packet.bytes
-            c->rec.cwnd += meta(acked_pkt).udp_len;
-        else
-            // congestion_window += kMaxDatagramSize * acked_packet.bytes /
-            // congestion_window
-            c->rec.cwnd +=
-                kMaxDatagramSize * meta(acked_pkt).udp_len / c->rec.cwnd;
+    if (in_recovery(c, meta(acked_pkt).tx_t))
+        return;
 
-        // XXX clamp cwnd
-        // c->rec.cwnd = MAX(c->rec.cwnd, 128 * 1024);
-    }
-
-    // log_cc(c);
+    if (c->rec.cwnd < c->rec.ssthresh)
+        c->rec.cwnd += meta(acked_pkt).udp_len;
+    else
+        c->rec.cwnd += kMaxDatagramSize * meta(acked_pkt).udp_len / c->rec.cwnd;
 }
 
 
@@ -423,14 +377,11 @@ void on_pkt_acked(struct q_conn * const c,
                   struct pn_space * const pn,
                   struct w_iov * const acked_pkt)
 {
-    // implements OnPacketAcked pseudo code
-    // warn(ERR, "ACK " FMT_PNR_OUT, meta(acked_pkt).hdr.nr);
+    // see OnPacketAcked() pseudo code
 
-    // if (acked_packet.ack_eliciting):
     if (is_ack_eliciting(&meta(acked_pkt).frames))
         on_pkt_acked_cc(c, acked_pkt);
 
-    // sent_packets.remove(acked_packet.packet_number)
     diet_insert(&pn->acked, meta(acked_pkt).hdr.nr, ev_now(loop));
     ensure(splay_remove(pm_by_nr, &pn->sent_pkts, &meta(acked_pkt)), "removed");
     meta(acked_pkt).is_acked = true;
@@ -446,22 +397,32 @@ void on_pkt_acked(struct q_conn * const c,
     if (has_frame(acked_pkt, FRM_MSD)) {
         struct q_stream * const s =
             get_stream(c, meta(acked_pkt).max_stream_data_sid);
-        if (s && s->new_in_data_max == meta(acked_pkt).max_stream_data)
+        if (s && s->new_in_data_max == meta(acked_pkt).max_stream_data) {
+            // update the stream
+            s->in_data_max = s->new_in_data_max;
             s->tx_max_stream_data = false;
+        }
     }
 
     // if this ACKs the current MAX_DATA frame, we can stop sending it
     if (has_frame(acked_pkt, FRM_MCD) &&
-        c->tp_in.new_max_data == meta(acked_pkt).max_data)
+        c->tp_in.new_max_data == meta(acked_pkt).max_data) {
+        // update connection
+        c->tp_in.max_data = c->tp_in.new_max_data;
         c->tx_max_data = false;
+    }
 
     // if this ACKs a current MAX_STREAMS frame, we can stop sending it
     if (has_frame(acked_pkt, FRM_MSB) &&
-        c->tp_in.new_max_streams_bidi == meta(acked_pkt).max_streams_bidi)
+        c->tp_in.new_max_streams_bidi == meta(acked_pkt).max_streams_bidi) {
+        c->tp_in.max_streams_bidi = c->tp_in.new_max_streams_bidi;
         c->tx_max_sid_bidi = false;
+    }
     if (has_frame(acked_pkt, FRM_MSU) &&
-        c->tp_in.new_max_streams_uni == meta(acked_pkt).max_streams_uni)
+        c->tp_in.new_max_streams_uni == meta(acked_pkt).max_streams_uni) {
+        c->tp_in.max_streams_uni = c->tp_in.new_max_streams_uni;
         c->tx_max_sid_uni = false;
+    }
 
     // if this ACK is for a pkt that was RTX'ed, update the record
     struct w_iov * orig = 0;
@@ -500,8 +461,10 @@ void on_pkt_acked(struct q_conn * const c,
     }
 
     // stop ACKing packets that were contained in the ACK frame of this packet
-    if (has_frame(acked_pkt, FRM_ACK))
+    if (has_frame(acked_pkt, FRM_ACK)) {
+        // warn(ERR, "%" PRIu64 " had ACK frame", meta(acked_pkt).hdr.nr);
         track_acked_pkts(pn, acked_pkt);
+    }
 
     if (!is_rtxable(&meta(acked_pkt)))
         free_iov(acked_pkt);
@@ -524,13 +487,12 @@ void init_rec(struct q_conn * const c)
     if (ev_is_active(&c->rec.ld_alarm))
         ev_timer_stop(loop, &c->rec.ld_alarm);
 
+    // zero all, then reset
     memset(&c->rec, 0, sizeof(c->rec));
-
-    c->rec.min_rtt = HUGE_VAL;
-
-    c->rec.ld_alarm.data = c;
-    ev_init(&c->rec.ld_alarm, on_ld_alarm);
 
     c->rec.cwnd = kInitialWindow;
     c->rec.ssthresh = UINT64_MAX;
+    c->rec.min_rtt = HUGE_VAL;
+    c->rec.ld_alarm.data = c;
+    ev_init(&c->rec.ld_alarm, on_ld_alarm);
 }

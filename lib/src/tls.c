@@ -1155,8 +1155,6 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
     if (is_enc)
         c->tls.epoch_out = (uint8_t)epoch;
 
-    // warn(DBG, "epoch_out %u in %u", c->tls.epoch_out, epoch_in(c));
-
     return setup_cipher(&ctx->header_protection, &ctx->aead, cipher->aead,
                         cipher->hash, is_enc, secret);
 }

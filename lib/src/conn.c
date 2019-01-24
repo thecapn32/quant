@@ -39,7 +39,10 @@
 
 #define klib_unused
 
+// IWYU pragma: no_include <picotls/../picotls.h>
+
 #include <ev.h>
+#include <picotls.h> // IWYU pragma: keep
 #include <picotls/openssl.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
@@ -104,6 +107,25 @@ struct ooo_0rtt_by_cid ooo_0rtt_by_cid = splay_initializer(&ooo_0rtt_by_cid);
 
 
 SPLAY_GENERATE(ooo_0rtt_by_cid, ooo_0rtt, node, ooo_0rtt_by_cid_cmp)
+
+
+static inline epoch_t __attribute__((always_inline, nonnull))
+epoch_in(const struct q_conn * const c)
+{
+    const size_t epoch = ptls_get_read_epoch(c->tls.t);
+    switch (epoch) {
+    case 0:
+        return ep_init;
+    case 1:
+        return ep_0rtt;
+    case 2:
+        return ep_hshk;
+    case 3:
+        return ep_data;
+    default:
+        die("unhandled epoch %u", epoch);
+    }
+}
 
 
 static inline uint64_t __attribute__((const, always_inline))
@@ -317,7 +339,6 @@ static void __attribute__((nonnull)) tx_stream_ctrl(struct q_stream * const s)
         sq_insert_tail(&s->out, v, next);
     }
     enc_pkt(s, false, s->tx_fin, v);
-    do_tx(s->c);
 }
 
 
@@ -326,12 +347,10 @@ void do_conn_fc(struct q_conn * const c)
     if (c->state == conn_clsg || c->state == conn_drng)
         return;
 
-    const uint64_t inc = INIT_MAX_BIDI_STREAMS * INIT_STRM_DATA_BIDI;
-
     // check if we need to do connection-level flow control
-    if (c->in_data_str + 2 * MAX_PKT_LEN + inc > c->tp_in.max_data) {
-        c->tx_max_data = c->needs_tx = true;
-        c->tp_in.new_max_data = c->tp_in.max_data + 2 * inc;
+    if (c->in_data_str * 2 > c->tp_in.max_data) {
+        c->tx_max_data = true;
+        c->tp_in.new_max_data = c->tp_in.max_data * 2;
     }
 }
 
@@ -394,9 +413,21 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
     if (stream_has_data_to_tx && !s->blocked)
         return tx_stream_data(s, limit);
     // XXX OFFSET_ESTB is not correct, should be size of ctrl pkt
-    if (stream_needs_ctrl(s) && likely(has_pval_wnd(s->c, OFFSET_ESTB)))
+    if (stream_needs_ctrl(s) && likely(has_pval_wnd(s->c, OFFSET_ESTB))) {
         tx_stream_ctrl(s);
+        return true;
+    }
     return false;
+}
+
+
+static void __attribute__((nonnull))
+tx_ack(struct q_conn * const c, const epoch_t e)
+{
+    do_conn_mgmt(c);
+    struct w_iov * const v = alloc_iov(c->w, 0, 0);
+    enc_pkt(c->cstreams[e], false, false, v);
+    do_tx(c);
 }
 
 
@@ -432,9 +463,9 @@ void tx(struct q_conn * const c, const uint32_t limit)
             goto out_of_wnd;
 
 out_of_wnd:
-    if (sq_empty(&c->txq) || conn_needs_ctrl(c)) {
+    if (sq_empty(&c->txq) && c->state == conn_clsg) {
         // need to send other frame, do it in an ACK
-        tx_ack(c, epoch_in(c));
+        tx_ack(c, ep_data);
         return;
     }
 
@@ -442,21 +473,6 @@ done:
     if (!sq_empty(&c->txq))
         do_tx(c);
 }
-
-
-void tx_ack(struct q_conn * const c, const epoch_t e)
-{
-    struct pn_space * const pn = pn_for_epoch(c, e);
-
-    if (!needs_ack(pn) && !c->tx_rtry && c->state != conn_clsg &&
-        !conn_needs_ctrl(c))
-        return;
-
-    struct w_iov * const v = alloc_iov(c->w, 0, 0);
-    enc_pkt(c->cstreams[e], false, false, v);
-    do_tx(c);
-}
-
 
 void tx_w(struct ev_loop * const l __attribute__((unused)),
           ev_async * const w,
@@ -607,15 +623,12 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
 static void __attribute__((nonnull))
 vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
 {
-    // reset CC state
-    init_rec(c);
-
     // reset FC state
     c->in_data_str = c->out_data_str = 0;
 
     for (epoch_t e = ep_init; e <= ep_data; e++)
-        reset_stream(c->cstreams[e],
-                     c->try_0rtt == false || (e != ep_0rtt && e != ep_data));
+        if (c->cstreams[e])
+            reset_stream(c->cstreams[e], true);
 
     struct q_stream * s;
     kh_foreach (s, c->streams_by_id)
@@ -629,6 +642,9 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
     if (is_vneg)
         // we need to continue in the pkt nr sequence
         c->pn_init.pn.lg_sent = lg_sent_ini;
+
+    // reset CC state
+    init_rec(c);
 
     // reset TLS state and create new CH
     init_tls(c);
@@ -820,16 +836,10 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         break;
     }
 
-    // if packet is ACK-eliciting, maybe arm the ACK timer
-    if (c->state != conn_clsg && c->state != conn_drng &&
-        c->state != conn_clsd && !c->tx_rtry &&
-        is_ack_eliciting(&meta(v).frames) && !ev_is_active(&pn->ack_alarm)) {
-        // warn(DBG, "rx ACK-eliciting frame, starting epoch %u ACK timer",
-        //      epoch_for_pkt_type(meta(v).hdr.type));
-        ev_timer_again(loop, &pn->ack_alarm);
-    }
-
 done:
+    if (unlikely(ok == false))
+        return false;
+
     // update ECN info
     switch (v->flags & IPTOS_ECN_MASK) {
     case IPTOS_ECN_ECT1:
@@ -843,7 +853,10 @@ done:
         break;
     }
 
-    return ok;
+    if (is_ack_eliciting(&meta(v).frames))
+        pn->pkts_rxed_since_last_ack_tx++;
+
+    return true;
 }
 
 
@@ -1067,6 +1080,7 @@ rx_pkts(struct w_iov_sq * const x,
         // remember that we had a RX event on this connection
         if (!c->had_rx) {
             c->had_rx = true;
+            c->epoch_in_before_rx = epoch_in(c);
             sl_insert_head(crx, c, node_rx_int);
         }
 
@@ -1091,9 +1105,8 @@ rx_pkts(struct w_iov_sq * const x,
 }
 
 
-void rx(struct ev_loop * const l,
-        ev_io * const rx_w,
-        int e __attribute__((unused)))
+static void
+rx(struct ev_loop * const l, ev_io * const rx_w, int _e __attribute__((unused)))
 {
     // read from NIC
     struct w_sock * const ws = rx_w->data;
@@ -1108,16 +1121,35 @@ void rx(struct ev_loop * const l,
         struct q_conn * const c = sl_first(&crx);
         sl_remove_head(&crx, node_rx_int);
 
-        if (likely(c->state != conn_drng))
-            // reset idle timeout
-            ev_timer_again(l, &c->idle_alarm);
-
-        // is a TX needed for this connection?
-        if (c->needs_tx && likely(c->state != conn_drng))
-            tx(c, 0);
-
         // clear the helper flags set above
         c->had_rx = false;
+
+        if (unlikely(c->state == conn_drng))
+            continue;
+
+        // reset idle timeout
+        ev_timer_again(l, &c->idle_alarm);
+
+        // is a TX needed for this connection?
+        if (c->needs_tx)
+            tx(c, 0);
+        else
+            for (epoch_t e = c->epoch_in_before_rx; e <= ep_data; e++) {
+                if (c->cstreams[e] == 0 || e == ep_0rtt)
+                    // we don't ACK in abandoned and 0rtt pn spaces
+                    continue;
+                struct pn_space * const pn = pn_for_epoch(c, e);
+                switch (needs_ack(pn)) {
+                case imm_ack:
+                    tx_ack(c, e);
+                    break;
+                case del_ack:
+                    ev_timer_again(loop, &c->ack_alarm);
+                    break;
+                case no_ack:
+                    break;
+                }
+            }
 
         if (unlikely(c->tx_rtry))
             // if we sent a retry, forget the entire connection existed
@@ -1198,14 +1230,11 @@ void enter_closing(struct q_conn * const c)
     if (c->state == conn_clsg)
         return;
 
-    // stop LD, ACK amd ley flip alarms
+    // stop alarms
     ev_timer_stop(loop, &c->rec.ld_alarm);
     ev_timer_stop(loop, &c->idle_alarm);
     ev_timer_stop(loop, &c->key_flip_alarm);
-
-    // stop ACK alarms
-    for (epoch_t e = ep_init; e <= ep_data; e++)
-        ev_timer_stop(loop, &pn_for_epoch(c, e)->ack_alarm);
+    ev_timer_stop(loop, &c->ack_alarm);
 
 #ifndef FUZZING
     if ((c->state == conn_idle || c->state == conn_opng) && c->err_code == 0) {
@@ -1248,6 +1277,17 @@ idle_alarm(struct ev_loop * const l __attribute__((unused)),
 
     conn_to_state(c, conn_drng);
     enter_closing(c);
+}
+
+
+static void __attribute__((nonnull))
+ack_alarm(struct ev_loop * const l __attribute__((unused)),
+          ev_timer * const w,
+          int e __attribute__((unused)))
+{
+    struct q_conn * const c = w->data;
+    warn(DBG, "ACK timer fired on %s conn %s", conn_type(c), cid2str(c->scid));
+    tx_ack(c, ep_data);
 }
 
 
@@ -1300,6 +1340,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     // init next CIDs
     c->next_sid_bidi = c->is_clnt ? 0 : STRM_FL_SRV;
     c->next_sid_uni = c->is_clnt ? STRM_FL_UNI : STRM_FL_UNI | STRM_FL_SRV;
+    c->tx_ncid = true;
 
     // init dcid
     splay_init(&c->dcids_by_seq);
@@ -1330,6 +1371,11 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->key_flip_alarm.data = c;
     ev_init(&c->key_flip_alarm, key_flip);
 
+    // initialize ACK timeout
+    c->ack_alarm.data = c;
+    c->ack_alarm.repeat = c->tp_out.max_ack_del / 1000.0;
+    ev_init(&c->ack_alarm, ack_alarm);
+
     // TODO most of these should become configurable via q_conn_conf
     c->tp_in.ack_del_exp = c->tp_out.ack_del_exp = DEF_ACK_DEL_EXP;
     c->tp_in.max_ack_del = c->tp_out.max_ack_del = 25;
@@ -1341,9 +1387,9 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->tp_in.max_streams_uni = INIT_MAX_UNI_STREAMS;
 
     // initialize packet number spaces
-    init_pn(&c->pn_init.pn, c, 0.001); // 1ms
-    init_pn(&c->pn_hshk.pn, c, 0.001); // 1ms
-    init_pn(&c->pn_data.pn, c, c->tp_out.max_ack_del / 1000.0);
+    init_pn(&c->pn_init.pn, c);
+    init_pn(&c->pn_hshk.pn, c);
+    init_pn(&c->pn_data.pn, c);
 
     // initialize recovery state
     init_rec(c);
@@ -1390,7 +1436,8 @@ struct q_conn * new_conn(struct w_engine * const w,
 
     // create crypto streams
     for (epoch_t e = ep_init; e <= ep_data; e++)
-        new_stream(c, crpt_strm_id(e));
+        if (e != ep_0rtt)
+            new_stream(c, crpt_strm_id(e));
 
     if (nscid.len)
         warn(DBG, "%s conn %s on port %u created", conn_type(c),
@@ -1432,6 +1479,7 @@ void free_conn(struct q_conn * const c)
     ev_timer_stop(loop, &c->closing_alarm);
     ev_timer_stop(loop, &c->key_flip_alarm);
     ev_timer_stop(loop, &c->idle_alarm);
+    ev_timer_stop(loop, &c->ack_alarm);
 
     struct q_stream * s;
     kh_foreach (s, c->streams_by_id)

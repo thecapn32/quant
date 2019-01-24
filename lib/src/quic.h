@@ -286,7 +286,7 @@ extern const uint8_t ok_vers_len;
 #define kGranularity 0.001
 
 // The RTT used before an RTT sample is taken. The RECOMMENDED value is 100ms.
-#define kInitialRtt (3 * 0.1) // TODO reduce this once we deal with spurious RTO
+#define kInitialRtt 0.1
 
 /// The sender's maximum payload size. Does not include UDP or IP overhead. The
 /// max packet size is used for calculating initial and minimum congestion
@@ -382,14 +382,15 @@ extern void *api_conn, *api_strm;
     })
 
 
-extern void __attribute__((nonnull)) pm_free(struct pkt_meta * const m);
+extern void __attribute__((nonnull))
+pm_free(struct pkt_meta * const m, const bool do_free);
 
 
 #define free_iov(v)                                                            \
     do {                                                                       \
         /* warn(CRT, "free_iov idx %u (avail %" PRIu64 ") nr %" PRIu64,        \
              w_iov_idx(v), sq_len(&(v)->w->iov) + 1, meta(v).hdr.nr); */       \
-        pm_free(&meta(v));                                                     \
+        pm_free(&meta(v), true);                                               \
         memset(&meta(v), 0, sizeof(meta(v)));                                  \
         ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));                  \
         w_free_iov(v);                                                         \

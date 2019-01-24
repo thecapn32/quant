@@ -126,7 +126,7 @@ do_loop_run(const func_ptr func,
 #define loop_run(func, conn, strm) do_loop_run((func_ptr)(func), (conn), (strm))
 
 
-void pm_free(struct pkt_meta * const m)
+void pm_free(struct pkt_meta * const m, const bool do_free)
 {
     if (m->pn && m->udp_len && m->is_acked == false) {
         ensure(splay_remove(pm_by_nr, &m->pn->sent_pkts, m), "removed");
@@ -146,9 +146,11 @@ void pm_free(struct pkt_meta * const m)
             ensure(splay_remove(pm_by_nr, &rm->pn->sent_pkts, rm), "removed");
             diet_insert(&rm->pn->acked, rm->hdr.nr, ev_now(loop));
         }
-        w_free_iov(w_iov(rm->pn->c->w, pm_idx(rm)));
-        memset(rm, 0, sizeof(*rm));
-        ASAN_POISON_MEMORY_REGION(rm, sizeof(*rm));
+        if (do_free) {
+            w_free_iov(w_iov(rm->pn->c->w, pm_idx(rm)));
+            memset(rm, 0, sizeof(*rm));
+            ASAN_POISON_MEMORY_REGION(rm, sizeof(*rm));
+        }
         rm = next_rm;
     }
 }
@@ -247,12 +249,6 @@ struct q_conn * q_connect(struct w_engine * const w,
     warn(WRN, "%s conn %s connected%s, cipher %s", conn_type(c),
          cid2str(c->scid), c->did_0rtt ? " after 0-RTT" : "",
          c->pn_data.out_1rtt[c->pn_data.out_kyph].aead->algo->name);
-
-    // if (c->try_0rtt == true && c->did_0rtt == false) {
-    //     // 0-RTT failed, RTX early data straight away
-    //     reset_stream(*early_data_stream, false);
-    //     ev_async_send(loop, &c->tx_w);
-    // }
 
     return c;
 }
@@ -437,6 +433,14 @@ struct q_stream * q_rsv_stream(struct q_conn * const c, const bool bidi)
     if (unlikely(c->state == conn_drng || c->state == conn_clsd))
         return 0;
 
+    const uint64_t msd =
+        bidi ? c->tp_out.max_strm_data_bidi_local : c->tp_out.max_strm_data_uni;
+
+    if (unlikely(msd == 0)) {
+        warn(WRN, "peer hasn't allowed %s streams", bidi ? "bi" : "uni");
+        return 0;
+    }
+
     int64_t * const next_sid = bidi ? &c->next_sid_bidi : &c->next_sid_uni;
     int64_t * const max_streams =
         bidi ? &c->tp_out.max_streams_bidi : &c->tp_out.max_streams_uni;
@@ -449,7 +453,6 @@ struct q_stream * q_rsv_stream(struct q_conn * const c, const bool bidi)
             c->sid_blocked_bidi = true;
         else
             c->sid_blocked_uni = true;
-        // c->needs_tx = true;
         loop_run(q_rsv_stream, c, 0);
     }
 

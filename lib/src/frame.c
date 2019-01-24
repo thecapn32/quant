@@ -285,7 +285,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
                     maybe_api_return(q_close_stream, c, meta(v).stream);
 
                 // ACK the FIN immediately
-                c->needs_tx = true;
+                // c->needs_tx = true;
             }
             if (unlikely(v != last))
                 adj_iov_to_data(last);
@@ -471,7 +471,8 @@ uint16_t dec_ack_frame(struct q_conn * const c,
                 lg_acked_tx_t = meta(acked).tx_t;
             }
 
-            on_pkt_acked(c, pn, acked);
+            if (meta(acked).is_lost == false)
+                on_pkt_acked(c, pn, acked);
 
             // if the ACK'ed pkt was sent with ECT, verify peer and path support
             if (likely(c->do_ecn && is_set(IPTOS_ECN_ECT0, acked->flags)) &&
@@ -564,7 +565,7 @@ dec_close_frame(struct q_conn * const c,
     if (c->state != conn_qlse) {
         if (c->state != conn_drng) {
             conn_to_state(c, conn_drng);
-            c->needs_tx = false;
+            // c->needs_tx = false;
             enter_closing(c);
         } else
             ev_invoke(loop, &c->closing_alarm, 0);
@@ -595,7 +596,7 @@ dec_max_stream_data_frame(struct q_conn * const c,
     if (max > s->out_data_max) {
         s->out_data_max = max;
         s->blocked = false;
-        c->needs_tx = true;
+        // c->needs_tx = true;
     } else if (max < s->out_data_max)
         warn(NTE, "MAX_STREAM_DATA %" PRIu64 " < current value %" PRIu64, max,
              s->out_data_max);
@@ -628,7 +629,7 @@ dec_max_streams_frame(struct q_conn * const c,
             c->sid_blocked_uni = false;
         else
             c->sid_blocked_bidi = false;
-        c->needs_tx = true;
+        // c->needs_tx = true;
         maybe_api_return(q_rsv_stream, c, 0);
 
     } else if (max < *max_streams)
@@ -653,7 +654,7 @@ dec_max_data_frame(struct q_conn * const c,
     if (max > c->tp_out.max_data) {
         c->tp_out.max_data = max;
         c->blocked = false;
-        c->needs_tx = true;
+        // c->needs_tx = true;
     } else if (max < c->tp_out.max_data)
         warn(NTE, "MAX_DATA %" PRIu64 " < current value %" PRIu64, max,
              c->tp_out.max_data);
@@ -726,7 +727,7 @@ dec_streams_blocked_frame(struct q_conn * const c,
             c->tx_max_sid_uni = true;
         else
             c->tx_max_sid_bidi = true;
-        c->needs_tx = true;
+        // c->needs_tx = true;
     }
 
     return i;
@@ -768,7 +769,8 @@ dec_path_challenge_frame(struct q_conn * const c,
     warn(INF, FRAM_IN "PATH_CHALLENGE" NRM " data=%" PRIx64, c->path_chlg_in);
 
     c->path_resp_out = c->path_chlg_in;
-    c->needs_tx = c->tx_path_resp = true;
+    // c->needs_tx =
+    c->tx_path_resp = true;
 
     return i;
 }
@@ -997,7 +999,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
             case FRM_PNG:
                 warn(INF, FRAM_IN "PING" NRM);
                 // PING frames need to be ACK'ed
-                c->needs_tx = true;
+                // c->needs_tx = true;
                 i++;
                 break;
 
@@ -1241,10 +1243,9 @@ uint16_t enc_ack_frame(struct q_conn * const c,
              pn->ect1_cnt, pn->ce_cnt ? BLU : NRM, pn->ce_cnt);
     }
 
-    // warn(DBG, "ACK encoded, stopping epoch %u ACK timer",
-    //      epoch_for_pkt_type(meta(v).hdr.type));
-    ev_timer_stop(loop, &pn->ack_alarm);
+    ev_timer_stop(loop, &c->ack_alarm);
     bit_zero(NUM_FRAM_TYPES, &pn->rx_frames);
+    pn->pkts_rxed_since_last_ack_tx = 0;
 
     return i;
 }
@@ -1358,9 +1359,6 @@ uint16_t enc_max_stream_data_frame(struct q_stream * const s,
     warn(INF, FRAM_OUT "MAX_STREAM_DATA" NRM " id=" FMT_SID " max=%" PRIu64,
          s->id, s->new_in_data_max);
 
-    // update the stream
-    s->in_data_max = s->new_in_data_max;
-
     return i;
 }
 
@@ -1377,9 +1375,6 @@ uint16_t enc_max_data_frame(struct q_conn * const c,
     meta(v).max_data = c->tp_in.new_max_data;
 
     warn(INF, FRAM_OUT "MAX_DATA" NRM " max=%" PRIu64, c->tp_in.new_max_data);
-
-    // update connection
-    c->tp_in.max_data = c->tp_in.new_max_data;
 
     return i;
 }
@@ -1401,15 +1396,10 @@ uint16_t enc_max_streams_frame(struct q_conn * const c,
     warn(INF, FRAM_OUT "MAX_STREAMS" NRM " 0x%02x=%s max=%" PRIu64, type,
          bidi ? "bi" : "uni", max);
 
-    if (bidi) {
-        meta(v).max_streams_bidi = c->tp_in.max_streams_bidi =
-            c->tp_in.new_max_streams_bidi;
-        c->tx_max_sid_bidi = false;
-    } else {
-        meta(v).max_streams_uni = c->tp_in.max_streams_uni =
-            c->tp_in.new_max_streams_uni;
-        c->tx_max_sid_uni = false;
-    }
+    if (bidi)
+        meta(v).max_streams_bidi = c->tp_in.new_max_streams_bidi;
+    else
+        meta(v).max_streams_uni = c->tp_in.new_max_streams_uni;
 
     return i;
 }

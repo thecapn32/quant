@@ -200,23 +200,25 @@ void reset_stream(struct q_stream * const s, const bool forget)
         s->out_nxt = s->out_una = 0;
         q_free(&s->in);
         q_free(&s->out);
-
-    } else {
-        //
-        struct w_iov * v = s->out_una;
-        sq_foreach_from (v, &s->out, next) {
-            if (v == s->out_nxt)
-                break;
-            // remove trailing padding
-            v->len = meta(v).stream_data_len;
-        }
-
-        s->out_nxt = s->out_una = sq_first(&s->out);
-
-        // reset pkt meta
-        reset_pm(&s->in);
-        reset_pm(&s->out);
+        return;
     }
+
+    struct w_iov * v = s->out_una;
+    sq_foreach_from (v, &s->out, next) {
+        if (v == s->out_nxt)
+            break;
+
+        // remove trailing padding
+        v->len = meta(v).stream_data_len;
+
+        // remove the pkt and any RTXs from sent_pkts
+        pm_free(&meta(v), false);
+    }
+    s->out_nxt = s->out_una = sq_first(&s->out);
+
+    // reset pkt meta
+    reset_pm(&s->in);
+    reset_pm(&s->out);
 }
 
 
@@ -225,12 +227,9 @@ void do_stream_fc(struct q_stream * const s)
     if (unlikely(s->c->state != conn_estb || s->id < 0))
         return;
 
-    const uint64_t inc =
-        is_uni(s->id) ? INIT_STRM_DATA_UNI : INIT_STRM_DATA_BIDI;
-
     if (s->in_data * 2 > s->in_data_max) {
         s->tx_max_stream_data = s->c->needs_tx = true;
-        s->new_in_data_max = s->in_data_max + 2 * inc;
+        s->new_in_data_max = s->in_data_max * 2;
     }
 }
 

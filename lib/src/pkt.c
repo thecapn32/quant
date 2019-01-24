@@ -444,7 +444,7 @@ bool enc_pkt(struct q_stream * const s,
     if (unlikely(meta(v).hdr.type == LH_RTRY))
         goto tx;
 
-    if (needs_ack(pn))
+    if (needs_ack(pn) != no_ack)
         i = enc_ack_frame(c, pn, v, i);
 
     if (unlikely(c->state == conn_clsg)) {

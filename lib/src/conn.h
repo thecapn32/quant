@@ -38,7 +38,6 @@
 
 #include <ev.h>
 #include <khash.h>
-#include <picotls.h>
 #include <warpcore/warpcore.h>
 
 #include "diet.h"
@@ -228,6 +227,7 @@ struct q_conn {
     ev_timer idle_alarm;
     ev_timer closing_alarm;
     ev_timer key_flip_alarm;
+    ev_timer ack_alarm;
 
     struct sockaddr_in peer; ///< Address of our peer.
     char * peer_name;
@@ -239,7 +239,7 @@ struct q_conn {
     struct w_sock * sock;     ///< File descriptor (socket) for the connection.
     struct w_sockopt sockopt; ///< Socket options.
 
-    uint8_t _unused[4];
+    epoch_t epoch_in_before_rx;
 
     ev_io rx_w;    ///< RX watcher.
     ev_async tx_w; ///< TX watcher.
@@ -290,12 +290,6 @@ tx_w(struct ev_loop * const l, ev_async * const w, int e);
 
 extern void __attribute__((nonnull))
 tx(struct q_conn * const c, const uint32_t limit);
-
-extern void __attribute__((nonnull))
-tx_ack(struct q_conn * const c, const epoch_t e);
-
-extern void __attribute__((nonnull))
-rx(struct ev_loop * const l, ev_io * const rx_w, int e);
 
 extern void __attribute__((nonnull)) err_close(struct q_conn * const c,
                                                const uint16_t code,
@@ -348,42 +342,13 @@ pn_for_epoch(struct q_conn * const c, const epoch_t e)
     switch (e) {
     case ep_init:
         return &c->pn_init.pn;
-    case ep_0rtt:
-        return &c->pn_data.pn;
     case ep_hshk:
         return &c->pn_hshk.pn;
+    case ep_0rtt:
     case ep_data:
         return &c->pn_data.pn;
     }
     die("unhandled epoch %u", e);
-}
-
-
-static inline epoch_t __attribute__((always_inline, nonnull))
-epoch_in(const struct q_conn * const c)
-{
-    const size_t epoch = ptls_get_read_epoch(c->tls.t);
-    switch (epoch) {
-    case 0:
-        return ep_init;
-    case 1:
-        return ep_0rtt;
-    case 2:
-        return ep_hshk;
-    case 3:
-        return ep_data;
-    default:
-        die("unhandled epoch %u", epoch);
-    }
-}
-
-
-static inline bool __attribute__((nonnull, always_inline))
-conn_needs_ctrl(const struct q_conn * const c)
-{
-    return epoch_in(c) == ep_data &&
-           (c->tx_max_data || c->tx_max_sid_bidi || c->tx_path_resp ||
-            c->tx_path_chlg || c->tx_ncid || c->tx_retire_cid || c->blocked);
 }
 
 

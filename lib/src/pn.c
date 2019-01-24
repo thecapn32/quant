@@ -25,47 +25,17 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include "pn.h"
+#include <stdbool.h>
+
 #include "conn.h"
-#include "recovery.h"
+#include "pn.h"
 #include "stream.h"
-
-
-struct ev_loop;
 
 
 SPLAY_GENERATE(pm_by_nr, pkt_meta, nr_node, pm_by_nr_cmp)
 
 
-static inline __attribute__((always_inline, nonnull)) epoch_t
-epoch_for_pn(const struct pn_space * pn)
-{
-    if (pn == &pn->c->pn_init.pn)
-        return ep_init;
-    if (pn == &pn->c->pn_hshk.pn)
-        return ep_hshk;
-    return pn->c->state == conn_opng ? ep_0rtt : ep_data;
-}
-
-
-void ack_alarm(struct ev_loop * const l __attribute__((unused)),
-               ev_timer * const w,
-               int e __attribute__((unused)))
-{
-    struct pn_space * const pn = w->data;
-    // XXX OFFSET_ESTB is not correct, should be size of ACK
-    if (needs_ack(pn) && has_pval_wnd(pn->c, OFFSET_ESTB)) {
-        warn(DBG, "ACK timer fired on %s conn %s epoch %u", conn_type(pn->c),
-             cid2str(pn->c->scid), epoch_for_pn(pn));
-        tx_ack(pn->c, epoch_for_pn(pn));
-    }
-    ev_timer_stop(loop, &pn->ack_alarm);
-}
-
-
-void init_pn(struct pn_space * const pn,
-             struct q_conn * const c,
-             const ev_tstamp ack_del)
+void init_pn(struct pn_space * const pn, struct q_conn * const c)
 {
     diet_init(&pn->recv);
     diet_init(&pn->recv_all);
@@ -73,35 +43,11 @@ void init_pn(struct pn_space * const pn,
     splay_init(&pn->sent_pkts);
     pn->lg_sent = pn->lg_acked = UINT64_MAX;
     pn->c = c;
-
-    // initialize ACK timeout
-    pn->ack_alarm.data = pn;
-    pn->ack_alarm.repeat = ack_del;
-    ev_init(&pn->ack_alarm, ack_alarm);
 }
 
 
-static void do_free_pn(struct pn_space * const pn,
-                       const bool free_iov,
-                       const bool remove_iov)
+void free_pn(struct pn_space * const pn)
 {
-    ev_timer_stop(loop, &pn->ack_alarm);
-
-    // free any remaining buffers
-    struct pkt_meta * p = splay_min(pm_by_nr, &pn->sent_pkts);
-    while (p) {
-        struct pkt_meta * const nxt = splay_next(pm_by_nr, &pn->sent_pkts, p);
-        if (is_ack_eliciting(&p->frames)) {
-            pn->c->rec.in_flight -= p->udp_len;
-            pn->c->rec.ack_eliciting_in_flight--;
-        }
-        if (free_iov)
-            free_iov(w_iov(pn->c->w, pm_idx(p)));
-        else if (remove_iov)
-            ensure(splay_remove(pm_by_nr, &pn->sent_pkts, p), "removed");
-        p = nxt;
-    }
-
     diet_free(&pn->recv);
     diet_free(&pn->recv_all);
     diet_free(&pn->acked);
@@ -110,25 +56,49 @@ static void do_free_pn(struct pn_space * const pn,
 
 void reset_pn(struct pn_space * const pn)
 {
-    do_free_pn(pn, false, true);
-
+    free_pn(pn);
     pn->lg_sent = pn->lg_acked = UINT64_MAX;
     pn->ect0_cnt = pn->ect1_cnt = pn->ce_cnt = 0;
-}
-
-
-void free_pn(struct pn_space * const pn)
-{
-    do_free_pn(pn, true, false);
 }
 
 
 void abandon_pn(struct q_conn * const c, const epoch_t e)
 {
     warn(DBG, "abandon %s epoch %u processing", conn_type(c), e);
-    do_free_pn(&c->pn_init.pn, false, false);
+    free_pn(&c->pn_init.pn);
     free_stream(c->cstreams[e]);
     dispose_cipher(&c->pn_init.in);
     dispose_cipher(&c->pn_init.out);
     c->cstreams[e] = 0;
+}
+
+
+ack_t needs_ack(const struct pn_space * const pn)
+{
+    const bool have_ack_eliciting = is_ack_eliciting(&pn->rx_frames);
+    if (have_ack_eliciting == false) {
+        // warn(ERR, "no_ack: have_ack_eliciting == false");
+        return no_ack;
+    }
+
+    const bool rxed_one_or_more = pn->pkts_rxed_since_last_ack_tx >= 1;
+    if (rxed_one_or_more == false) {
+        // warn(ERR, "no_ack: rxed_one_or_more == false");
+        return no_ack;
+    }
+
+    const bool in_hshk = &pn->c->pn_data.pn != pn;
+    if (in_hshk) {
+        // warn(ERR, "imm_ack: in_hshk");
+        return imm_ack;
+    }
+
+    const bool rxed_two_or_more = pn->pkts_rxed_since_last_ack_tx >= 2;
+    if (rxed_two_or_more) {
+        // warn(ERR, "imm_ack: rxed_two_or_more");
+        return imm_ack;
+    }
+
+    // warn(ERR, "del_ack");
+    return del_ack;
 }

@@ -144,4 +144,4 @@ find_sent_pkt(struct q_conn * const c,
               const uint64_t nr);
 
 extern void __attribute__((nonnull))
-congestion_event(struct q_conn * const c, const ev_tstamp lg_lost_tx_t);
+congestion_event(struct q_conn * const c, const ev_tstamp sent_t);
