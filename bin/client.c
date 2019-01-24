@@ -370,6 +370,9 @@ int main(int argc, char * argv[])
         uint32_t n = 0;
         sq_foreach (v, &i, next) {
             ensure(write(fd, v->buf, v->len) != -1, "cannot write");
+            // XXX the strnlen() test is super-hacky
+            if (do_h3 && n == 0 && strnlen((char *)v->buf, v->len) == v->len)
+                warn(WRN, "no h3 payload");
             if (n < 4 || v == sq_last(&i, w_iov, next)) {
                 // don't print newlines to console log
                 for (uint16_t p = 0; p < v->len; p++)

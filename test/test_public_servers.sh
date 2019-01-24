@@ -155,8 +155,7 @@ function analyze {
                     /RX.*len=.*Short/ && $x && exit 1;' "$log"
         [ $? == 1 ] && hshk[$1]=H
 
-        perl -n -e '/idle timeout on clnt conn/ && exit 0;
-                    /read (.*) bytes on clnt conn/ &&
+        perl -n -e '/read (.*) bytes on clnt conn/ &&
                             ($1 > 0 ? exit 1 : next);' "$log"
         [ $? == 1 ] && data[$1]=D
 
@@ -212,9 +211,10 @@ function analyze {
         local log="/tmp/$script.$1.$pid.h3.log"
         check_fail "$1" "$log"
 
-        perl -n -e '/idle timeout on clnt conn/ && exit 0;
-                    /read (.*) bytes on clnt conn/ &&
-                            ($1 > 0 ? exit 1 : next);' "$log"
+        perl -n -e 'BEGIN{$t=-1};
+                    /read (.*) bytes on clnt conn/ and ($1 > 0 ? $t=1 : next);
+                    /no h3 payload/ and $t=-1;
+                    END{exit $t};' "$log"
         [ $? == 1 ] && http[$1]=3
         [ ${fail[$1]} ] || rm -f "$log"
 }
