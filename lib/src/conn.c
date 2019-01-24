@@ -1393,7 +1393,7 @@ struct q_conn * new_conn(struct w_engine * const w,
 
     // initialize recovery state
     init_rec(c);
-    c->do_ecn = c->sockopt.enable_ecn = true;
+    c->sockopt.enable_ecn = true;
     if (c->is_clnt)
         c->path_val_win = UINT64_MAX;
 

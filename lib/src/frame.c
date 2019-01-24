@@ -475,11 +475,13 @@ uint16_t dec_ack_frame(struct q_conn * const c,
                 on_pkt_acked(c, pn, acked);
 
             // if the ACK'ed pkt was sent with ECT, verify peer and path support
-            if (likely(c->do_ecn && is_set(IPTOS_ECN_ECT0, acked->flags)) &&
+            if (likely(c->sockopt.enable_ecn &&
+                       is_set(IPTOS_ECN_ECT0, acked->flags)) &&
                 unlikely(t != FRM_ACE)) {
                 warn(NTE, "ECN verification failed for %s conn %s",
                      conn_type(c), cid2str(c->scid));
-                c->do_ecn = false;
+                c->sockopt.enable_ecn = false;
+                w_set_sockopt(c->sock, &c->sockopt);
             }
 
         skip:

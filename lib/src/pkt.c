@@ -523,7 +523,9 @@ tx:
         xv->ip = c->peer.sin_addr.s_addr;
         xv->port = c->peer.sin_port;
     }
-    xv->flags = v->flags |= likely(c->do_ecn) ? IPTOS_ECN_ECT0 : 0;
+    // track the flags manually, since warpcore sets them on the xv and it'd
+    // require another loop to copy them over
+    xv->flags = v->flags |= likely(c->sockopt.enable_ecn) ? IPTOS_ECN_ECT0 : 0;
 
     sq_insert_tail(&c->txq, xv, next);
     meta(v).udp_len = xv->len;
