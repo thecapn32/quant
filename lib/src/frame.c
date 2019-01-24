@@ -386,7 +386,7 @@ uint16_t dec_ack_frame(struct q_conn * const c,
 
     // handshake pkts always use the default ACK delay exponent
     const uint64_t ade =
-        meta(v).hdr.type == LH_INIT && meta(v).hdr.type == LH_HSHK
+        meta(v).hdr.type == LH_INIT || meta(v).hdr.type == LH_HSHK
             ? DEF_ACK_DEL_EXP
             : c->tp_in.ack_del_exp;
     const uint64_t ack_delay = ack_delay_raw * (1 << ade);

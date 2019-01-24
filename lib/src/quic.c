@@ -460,7 +460,8 @@ struct q_stream * q_rsv_stream(struct q_conn * const c, const bool bidi)
 }
 
 
-#if !defined(FUZZING) && !defined(NO_FUZZER_CORPUS_COLLECTION)
+#if !defined(FUZZING) && !defined(NO_FUZZER_CORPUS_COLLECTION) &&              \
+    !defined(__linux__)
 static void __attribute__((noreturn))
 signal_cb(struct ev_loop * l,
           ev_signal * w,
