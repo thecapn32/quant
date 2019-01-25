@@ -40,12 +40,6 @@
 /// Functional Programming, Vol. 8, No. 6, pp. 627–632, 1998.
 /// https://web.engr.oregonstate.edu/~erwig/papers/abstracts.html#JFP98
 ///
-/// This implementation extends the basic diet structure by adding a "class"
-/// field to each interval. Only intervals of the same class can be merged. This
-/// can be enabled by compiling with DIET_CLASS defined. (This was used by quant
-/// to handle ACKs for different packet types, which is no longer needed with
-/// different packet number spaces in -13 and beyond.)
-///
 /// It also maintains a timestamp of the last insert operation into an @p ival,
 /// for the purposes of calculating the ACK delay.
 
@@ -57,10 +51,6 @@ struct ival {
     uint64_t lo;            ///< Lower bound of the interval.
     uint64_t hi;            ///< Upper bound of the interval.
     ev_tstamp t;            ///< Time stamp of last insert into this interval.
-#ifdef DIET_CLASS
-    uint8_t c; ///< Interval class.
-    uint8_t _unused[7];
-#endif
 };
 
 
@@ -95,12 +85,8 @@ SPLAY_PROTOTYPE(diet, ival, node, ival_cmp)
 
 extern struct ival * diet_find(struct diet * const d, const uint64_t n);
 
-extern struct ival * __attribute__((nonnull)) diet_insert(struct diet * const d,
-                                                          const uint64_t n,
-#ifdef DIET_CLASS
-                                                          const uint8_t c,
-#endif
-                                                          const ev_tstamp t);
+extern struct ival * __attribute__((nonnull))
+diet_insert(struct diet * const d, const uint64_t n, const ev_tstamp t);
 
 extern void __attribute__((nonnull))
 diet_remove(struct diet * const d, const uint64_t n);
@@ -144,15 +130,6 @@ diet_empty(const struct diet * const d)
 {
     return splay_empty(d);
 }
-
-
-#ifdef DIET_CLASS
-inline uint8_t __attribute__((nonnull, always_inline))
-diet_class(const struct ival * const i)
-{
-    return i->c;
-}
-#endif
 
 
 inline ev_tstamp __attribute__((nonnull, always_inline))

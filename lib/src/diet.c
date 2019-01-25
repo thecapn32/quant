@@ -96,23 +96,15 @@ struct ival * diet_find(struct diet * const d, const uint64_t n)
 /// Helper function to create a zero-width interval containing (only) @p n.
 ///
 /// @param[in]  n     Integer.
-// @param[in]  c     Class.
 /// @param[in]  t     Timestamp.
 ///
 /// @return     Newly allocated ival struct [n..n] of type @p t.
 ///
-static inline struct ival * make_ival(const uint64_t n,
-#ifdef DIET_CLASS
-                                      const uint8_t c,
-#endif
-                                      const ev_tstamp t)
+static inline struct ival * make_ival(const uint64_t n, const ev_tstamp t)
 {
     struct ival * const i = calloc(1, sizeof(*i));
     ensure(i, "could not calloc");
     i->lo = i->hi = n;
-#ifdef DIET_CLASS
-    i->c = c;
-#endif
     i->t = t;
     splay_left(i, node) = splay_right(i, node) = 0;
     return i;
@@ -146,17 +138,12 @@ static inline void trace(struct ival * const i)
 ///
 /// @param      d     Diet tree.
 /// @param[in]  n     Integer.
-// @param[in]  c     Class.
 /// @param[in]  t     Timestamp.
 ///
 /// @return     Pointer to ival containing @p n.
 ///
-struct ival * diet_insert(struct diet * const d,
-                          const uint64_t n,
-#ifdef DIET_CLASS
-                          const uint8_t c,
-#endif
-                          const ev_tstamp t)
+struct ival *
+diet_insert(struct diet * const d, const uint64_t n, const ev_tstamp t)
 {
     if (splay_empty(d))
         goto new_ival;
@@ -172,29 +159,17 @@ struct ival * diet_insert(struct diet * const d,
     if (n < splay_root(d)->lo) {
         struct ival * const max = find_max(splay_left(splay_root(d), node));
 
-        if (n + 1 == splay_root(d)->lo
-#ifdef DIET_CLASS
-            && c == splay_root(d)->c
-#endif
-        )
+        if (n + 1 == splay_root(d)->lo)
             // we can expand the root to include n
             splay_root(d)->lo--;
-        else if (max && max->hi + 1 == n
-#ifdef DIET_CLASS
-                 && c == max->c
-#endif
-        )
+        else if (max && max->hi + 1 == n)
             // we can expand the max child to include n
             max->hi++;
         else
             goto new_ival;
 
         // check if we can merge the new root with its max left child
-        if (max && max->hi == splay_root(d)->lo - 1
-#ifdef DIET_CLASS
-            && max->c == splay_root(d)->c
-#endif
-        ) {
+        if (max && max->hi == splay_root(d)->lo - 1) {
             splay_right(max, node) = splay_right(splay_root(d), node);
             max->hi = splay_root(d)->hi;
             struct ival * const old_root = splay_root(d);
@@ -209,29 +184,17 @@ struct ival * diet_insert(struct diet * const d,
     if (n > splay_root(d)->hi) {
         struct ival * const min = find_min(splay_right(splay_root(d), node));
 
-        if (n == splay_root(d)->hi + 1
-#ifdef DIET_CLASS
-            && c == splay_root(d)->c
-#endif
-        )
+        if (n == splay_root(d)->hi + 1)
             // we can expand the root to include n
             splay_root(d)->hi++;
-        else if (min && min->lo - 1 == n
-#ifdef DIET_CLASS
-                 && c == min->c
-#endif
-        )
+        else if (min && min->lo - 1 == n)
             // we can expand the min child to include n
             min->lo--;
         else
             goto new_ival;
 
         // check if we can merge the new root with its min right child
-        if (min && min->lo == splay_root(d)->hi + 1
-#ifdef DIET_CLASS
-            && min->c == splay_root(d)->c
-#endif
-        ) {
+        if (min && min->lo == splay_root(d)->hi + 1) {
             splay_left(min, node) = splay_left(splay_root(d), node);
             min->lo = splay_root(d)->lo;
             struct ival * const old_root = splay_root(d);
@@ -245,11 +208,7 @@ struct ival * diet_insert(struct diet * const d,
 
     struct ival * i; // clang doesn't like this statement after the label?
 new_ival:
-    i = make_ival(n,
-#ifdef DIET_CLASS
-                  c,
-#endif
-                  t);
+    i = make_ival(n, t);
     splay_insert(diet, d, i);
     return i;
 }
@@ -282,11 +241,7 @@ void diet_remove(struct diet * const d, const uint64_t n)
         splay_root(d)->hi--;
     } else {
         // split interval
-        struct ival * const i = make_ival(splay_root(d)->lo,
-#ifdef DIET_CLASS
-                                          splay_root(d)->c,
-#endif
-                                          splay_root(d)->t);
+        struct ival * const i = make_ival(splay_root(d)->lo, splay_root(d)->t);
         splay_count(d)++;
         i->hi = n - 1;
         splay_root(d)->lo = n + 1;
@@ -314,12 +269,7 @@ size_t diet_to_str(char * const str, const size_t len, struct diet * const d)
     size_t pos = 0;
     str[0] = 0;
     splay_foreach (i, diet, d) {
-        pos +=
-#ifdef DIET_CLASS
-            (size_t)snprintf(&str[pos], len - pos, "%u.%" PRIu64, i->c, i->lo);
-#else
-            (size_t)snprintf(&str[pos], len - pos, "%" PRIu64, i->lo);
-#endif
+        pos += (size_t)snprintf(&str[pos], len - pos, "%" PRIu64, i->lo);
         if (i->lo != i->hi)
             pos += (size_t)snprintf(&str[pos], len - pos, "-%" PRIu64, i->hi);
         pos += (size_t)snprintf(&str[pos], len - pos, ", ");
