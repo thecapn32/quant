@@ -1084,9 +1084,11 @@ rx_pkts(struct w_iov_sq * const x,
         // remember that we had a RX event on this connection
         if (!c->had_rx) {
             c->had_rx = true;
-            c->epoch_in_before_rx = epoch_in(c);
             sl_insert_head(crx, c, node_rx_int);
-        }
+            c->min_rx_epoch = epoch_for_pkt_type(meta(v).hdr.type);
+        } else
+            c->min_rx_epoch =
+                MIN(c->min_rx_epoch, epoch_for_pkt_type(meta(v).hdr.type));
 
         if (rx_pkt(c, v, x, &odcid, tok, tok_len))
             rx_crypto(c);
@@ -1139,7 +1141,7 @@ rx(struct ev_loop * const l, ev_io * const rx_w, int _e __attribute__((unused)))
         if (c->needs_tx)
             tx(c, 0); // this clears c->needs_tx
 
-        for (epoch_t e = c->epoch_in_before_rx; e <= ep_data; e++) {
+        for (epoch_t e = c->min_rx_epoch; e <= ep_data; e++) {
             if (c->cstreams[e] == 0 || e == ep_0rtt ||
                 (needed_tx && e == epoch_in(c)))
                 // don't ACK abandoned and 0rtt pn spaces, or if we TX'ed above

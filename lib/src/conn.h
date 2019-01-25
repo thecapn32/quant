@@ -238,7 +238,7 @@ struct q_conn {
     struct w_sock * sock;     ///< File descriptor (socket) for the connection.
     struct w_sockopt sockopt; ///< Socket options.
 
-    epoch_t epoch_in_before_rx;
+    epoch_t min_rx_epoch;
 
     ev_io rx_w;    ///< RX watcher.
     ev_async tx_w; ///< TX watcher.
