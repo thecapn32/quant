@@ -283,9 +283,6 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
                 maybe_api_return(q_readall_stream, c, meta(v).stream);
                 if (meta(v).stream->state == strm_clsd)
                     maybe_api_return(q_close_stream, c, meta(v).stream);
-
-                // ACK the FIN immediately
-                // c->needs_tx = true;
             }
             if (unlikely(v != last))
                 adj_iov_to_data(last);
@@ -598,7 +595,6 @@ dec_max_stream_data_frame(struct q_conn * const c,
     if (max > s->out_data_max) {
         s->out_data_max = max;
         s->blocked = false;
-        // c->needs_tx = true;
     } else if (max < s->out_data_max)
         warn(NTE, "MAX_STREAM_DATA %" PRIu64 " < current value %" PRIu64, max,
              s->out_data_max);
@@ -631,7 +627,6 @@ dec_max_streams_frame(struct q_conn * const c,
             c->sid_blocked_uni = false;
         else
             c->sid_blocked_bidi = false;
-        // c->needs_tx = true;
         maybe_api_return(q_rsv_stream, c, 0);
 
     } else if (max < *max_streams)
@@ -656,7 +651,6 @@ dec_max_data_frame(struct q_conn * const c,
     if (max > c->tp_out.max_data) {
         c->tp_out.max_data = max;
         c->blocked = false;
-        // c->needs_tx = true;
     } else if (max < c->tp_out.max_data)
         warn(NTE, "MAX_DATA %" PRIu64 " < current value %" PRIu64, max,
              c->tp_out.max_data);
@@ -729,7 +723,6 @@ dec_streams_blocked_frame(struct q_conn * const c,
             c->tx_max_sid_uni = true;
         else
             c->tx_max_sid_bidi = true;
-        // c->needs_tx = true;
     }
 
     return i;
@@ -1000,8 +993,6 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
 
             case FRM_PNG:
                 warn(INF, FRAM_IN "PING" NRM);
-                // PING frames need to be ACK'ed
-                // c->needs_tx = true;
                 i++;
                 break;
 
