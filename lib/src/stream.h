@@ -59,8 +59,8 @@ extern const char * const strm_state_str[];
 
 
 struct q_stream {
-    splay_entry(q_stream) node;
-    struct q_conn * c;
+    struct q_conn * c; ///< Connection this stream is a part of.
+    int64_t id;        ///< Stream ID.
 
     struct w_iov_sq out;    ///< Tail queue containing outbound data.
     struct w_iov * out_una; ///< Lowest un-ACK'ed data chunk.
@@ -75,8 +75,8 @@ struct q_stream {
     uint64_t in_data;         ///< In-order stream data received (total).
     uint64_t in_data_off;     ///< Next in-order stream data offset expected.
 
-    int64_t id;
-    strm_state_t state;
+    strm_state_t state; ///< Stream state.
+
     uint8_t tx_max_stream_data : 1; ///< We need to open the receive window.
     uint8_t blocked : 1;            ///< We are receive-window-blocked.
     uint8_t tx_fin : 1;             ///< We need to send a FIN.
