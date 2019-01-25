@@ -289,8 +289,8 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
         }
 
         if (t != FRM_CRY) {
-            do_stream_fc(meta(v).stream);
-            do_conn_fc(c);
+            do_stream_fc(meta(v).stream, 0);
+            do_conn_fc(c, 0);
             c->have_new_data = true;
             maybe_api_return(q_read, c, 0);
         }
@@ -623,12 +623,7 @@ dec_max_streams_frame(struct q_conn * const c,
 
     if (max > *max_streams) {
         *max_streams = max;
-        if (t == FRM_MSU)
-            c->sid_blocked_uni = false;
-        else
-            c->sid_blocked_bidi = false;
         maybe_api_return(q_rsv_stream, c, 0);
-
     } else if (max < *max_streams)
         warn(NTE, "RX'ed max_%s_streams %" PRIu64 " < current value %" PRIu64,
              t == FRM_MSU ? "uni" : "bidi", max, *max_streams);
@@ -678,7 +673,7 @@ dec_stream_data_blocked_frame(struct q_conn * const c,
     if (unlikely(s == 0))
         handle_unknown_strm(c, sid, FRM_SDB, i);
 
-    do_stream_fc(s);
+    do_stream_fc(s, 0);
     return i;
 }
 
@@ -693,7 +688,7 @@ dec_data_blocked_frame(struct q_conn * const c,
 
     warn(INF, FRAM_IN "DATA_BLOCKED" NRM " lim=%" PRIu64, off);
 
-    do_conn_fc(c);
+    do_conn_fc(c, 0);
     return i;
 }
 
@@ -713,17 +708,7 @@ dec_streams_blocked_frame(struct q_conn * const c,
     warn(INF, FRAM_IN "STREAMS_BLOCKED" NRM " 0x%02x=%s max=%" PRIu64, t,
          t == FRM_SBB ? "bi" : "uni", max);
 
-    int64_t * const max_streams = is_uni(max) ? &c->tp_in.new_max_streams_uni
-                                              : &c->tp_in.new_max_streams_bidi;
-
-    if (max == *max_streams) {
-        // let the peer open more streams
-        *max_streams += 2;
-        if (t == FRM_SBU)
-            c->tx_max_sid_uni = true;
-        else
-            c->tx_max_sid_bidi = true;
-    }
+    do_stream_id_fc(c, max, t == FRM_SBB, false);
 
     return i;
 }
@@ -1085,6 +1070,10 @@ uint16_t max_frame_len(const uint8_t type)
     case FRM_PNG:
         break;
 
+        // these are always first, so assume there is enough space
+        // case FRM_ACE:
+        // case FRM_ACK:
+
     case FRM_RST:
         len += sizeof(uint64_t) + sizeof(uint16_t) + sizeof(uint64_t);
         break;
@@ -1092,26 +1081,6 @@ uint16_t max_frame_len(const uint8_t type)
         // these two are never combined with stream frames, so no need to check
         // case FRM_CLQ:
         // case FRM_CLA:
-
-    case FRM_MSB:
-    case FRM_MSU:
-    case FRM_MCD:
-    case FRM_CDB:
-    case FRM_SBB:
-    case FRM_RTR:
-    case FRM_PCL:
-    case FRM_PRP:
-        len += sizeof(uint64_t);
-        break;
-
-    case FRM_MSD:
-    case FRM_SDB:
-        len += sizeof(uint64_t) + sizeof(uint64_t);
-        break;
-
-    case FRM_CID:
-        len += sizeof(uint64_t) + MAX_CID_LEN + SRT_LEN;
-        break;
 
     case FRM_STP:
         len += sizeof(uint64_t) + sizeof(uint16_t);
@@ -1126,9 +1095,26 @@ uint16_t max_frame_len(const uint8_t type)
         len += sizeof(uint64_t) + PTLS_MAX_DIGEST_SIZE + MAX_CID_LEN;
         break;
 
-        // these are always first, so assume there is enough space
-        // case FRM_ACE:
-        // case FRM_ACK:
+    case FRM_MCD:
+    case FRM_MSB:
+    case FRM_MSU:
+    case FRM_CDB:
+    case FRM_SBB:
+    case FRM_SBU:
+    case FRM_RTR:
+    case FRM_PCL:
+    case FRM_PRP:
+        len += sizeof(uint64_t);
+        break;
+
+    case FRM_MSD:
+    case FRM_SDB:
+        len += sizeof(uint64_t) + sizeof(uint64_t);
+        break;
+
+    case FRM_CID:
+        len += sizeof(uint64_t) + sizeof(uint8_t) + MAX_CID_LEN + SRT_LEN;
+        break;
 
     default:
         die("unhandled frame type 0x%02x", type);
@@ -1346,12 +1332,13 @@ uint16_t enc_max_stream_data_frame(struct q_stream * const s,
     i = enc(v->buf, v->len, i, &s->id, 0, 0, FMT_SID);
     meta(v).max_stream_data_sid = s->id;
 
-    i = enc(v->buf, v->len, i, &s->new_in_data_max, 0, 0, "%" PRIu64);
-    meta(v).max_stream_data = s->new_in_data_max;
+    i = enc(v->buf, v->len, i, &s->in_data_max, 0, 0, "%" PRIu64);
+    meta(v).max_stream_data = s->in_data_max;
 
     warn(INF, FRAM_OUT "MAX_STREAM_DATA" NRM " id=" FMT_SID " max=%" PRIu64,
-         s->id, s->new_in_data_max);
+         s->id, s->in_data_max);
 
+    s->tx_max_stream_data = false;
     return i;
 }
 
@@ -1364,11 +1351,12 @@ uint16_t enc_max_data_frame(struct q_conn * const c,
     track_frame(v, type);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
-    i = enc(v->buf, v->len, i, &c->tp_in.new_max_data, 0, 0, "%" PRIu64);
-    meta(v).max_data = c->tp_in.new_max_data;
+    i = enc(v->buf, v->len, i, &c->tp_in.max_data, 0, 0, "%" PRIu64);
+    meta(v).max_data = c->tp_in.max_data;
 
-    warn(INF, FRAM_OUT "MAX_DATA" NRM " max=%" PRIu64, c->tp_in.new_max_data);
+    warn(INF, FRAM_OUT "MAX_DATA" NRM " max=%" PRIu64, c->tp_in.max_data);
 
+    c->tx_max_data = false;
     return i;
 }
 
@@ -1383,17 +1371,16 @@ uint16_t enc_max_streams_frame(struct q_conn * const c,
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
     const int64_t max =
-        bidi ? c->tp_in.new_max_streams_bidi : c->tp_in.new_max_streams_uni;
+        bidi ? c->tp_in.max_streams_bidi : c->tp_in.max_streams_uni;
     i = enc(v->buf, v->len, i, &max, 0, 0, "%" PRId64);
 
     warn(INF, FRAM_OUT "MAX_STREAMS" NRM " 0x%02x=%s max=%" PRIu64, type,
          bidi ? "bi" : "uni", max);
 
     if (bidi)
-        meta(v).max_streams_bidi = c->tp_in.new_max_streams_bidi;
+        c->tx_max_sid_bidi = false;
     else
-        meta(v).max_streams_uni = c->tp_in.new_max_streams_uni;
-
+        c->tx_max_sid_uni = false;
     return i;
 }
 
@@ -1410,7 +1397,7 @@ uint16_t enc_stream_data_blocked_frame(struct q_stream * const s,
     i = enc(v->buf, v->len, i, &s->out_data, 0, 0, "%" PRIu64);
 
     warn(INF, FRAM_OUT "STREAM_DATA_BLOCKED" NRM " id=" FMT_SID " lim=%" PRIu64,
-         s->id, s->out_data);
+         s->id, s->out_data_max);
 
     return i;
 }
@@ -1442,11 +1429,17 @@ uint16_t enc_streams_blocked_frame(struct q_conn * const c,
     track_frame(v, type);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
-    const int64_t lim = ((bidi ? c->next_sid_bidi : c->next_sid_uni) - 4) >> 2;
+    const int64_t lim =
+        bidi ? c->tp_out.max_streams_bidi : c->tp_out.max_streams_uni;
     i = enc(v->buf, v->len, i, &lim, 0, 0, "%" PRId64);
 
     warn(INF, FRAM_OUT "STREAMS_BLOCKED" NRM " 0x%02x=%s lim=%" PRIu64, type,
          type == FRM_SBB ? "bi" : "uni", lim);
+
+    if (bidi)
+        c->sid_blocked_bidi = false;
+    else
+        c->sid_blocked_uni = false;
 
     return i;
 }

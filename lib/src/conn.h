@@ -104,11 +104,8 @@ struct transport_params {
     uint64_t max_strm_data_bidi_local;
     uint64_t max_strm_data_bidi_remote;
     uint64_t max_data;
-    uint64_t new_max_data;
     int64_t max_streams_uni;
-    int64_t new_max_streams_uni;
     int64_t max_streams_bidi;
-    int64_t new_max_streams_bidi;
     uint64_t idle_to;
     uint64_t max_ack_del;
     uint64_t max_pkt;
@@ -210,8 +207,8 @@ struct q_conn {
     int64_t next_sid_bidi; ///< Next unidir stream ID to use on q_rsv_stream().
     int64_t next_sid_uni;  ///< Next bidi stream ID to use on q_rsv_stream().
 
-    int64_t lg_sid_bidi; ///< Largest unidir stream ID in use.
-    int64_t lg_sid_uni;  ///< Largest bidi stream ID in use.
+    int64_t cnt_bidi; ///< Number of unidir stream IDs in use.
+    int64_t cnt_uni;  ///< Number of bidi stream IDs in use.
 
     struct transport_params tp_in;  ///< Transport parameters for RX.
     struct transport_params tp_out; ///< Transport parameters for TX.
@@ -318,7 +315,8 @@ add_scid(struct q_conn * const c, struct cid * const id);
 extern void __attribute__((nonnull))
 add_dcid(struct q_conn * const c, const struct cid * const id);
 
-extern void __attribute__((nonnull)) do_conn_fc(struct q_conn * const c);
+extern void __attribute__((nonnull))
+do_conn_fc(struct q_conn * const c, const uint16_t len);
 
 extern void __attribute__((nonnull))
 free_scid(struct q_conn * const c, struct cid * const id);

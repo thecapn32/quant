@@ -39,6 +39,7 @@
 
 #include "conn.h"
 #include "diet.h"
+#include "pkt.h"
 #include "quic.h"
 #include "stream.h"
 
@@ -86,8 +87,8 @@ void apply_stream_limits(struct q_stream * const s)
             : (is_uni(s->id) ? c->tp_out.max_strm_data_uni
                              : c->tp_out.max_strm_data_bidi_local);
 
-    // if limit is less than an MTU, we are already blocked
-    s->blocked = s->out_data_max < w_mtu(c->w);
+    if (s->id >= 0)
+        do_stream_fc(s, 0);
 }
 
 
@@ -101,10 +102,11 @@ struct q_stream * new_stream(struct q_conn * const c, const int64_t id)
     s->id = id;
     strm_to_state(s, strm_open);
 
+    const int64_t cnt = (id >> 2) + 1;
     if (is_uni(id))
-        c->lg_sid_uni = MAX(id, c->lg_sid_uni);
+        c->cnt_uni = MAX(cnt, c->cnt_uni);
     else
-        c->lg_sid_bidi = MAX(id, c->lg_sid_bidi);
+        c->cnt_bidi = MAX(cnt, c->cnt_bidi);
 
     if (unlikely(id < 0)) {
         c->cstreams[strm_epoch(s)] = s;
@@ -118,9 +120,10 @@ struct q_stream * new_stream(struct q_conn * const c, const int64_t id)
     kh_val(c->streams_by_id, k) = s;
 
     apply_stream_limits(s);
-    do_stream_id_fc(c, id);
+    const bool is_local = (is_srv_ini(id) != c->is_clnt);
+    do_stream_id_fc(c, cnt, !is_uni(id), is_local);
 
-    if (is_srv_ini(id) != c->is_clnt) {
+    if (is_local) {
         // this is a local stream
         if (is_uni(id))
             c->next_sid_uni += 4;
@@ -222,45 +225,45 @@ void reset_stream(struct q_stream * const s, const bool forget)
 }
 
 
-void do_stream_fc(struct q_stream * const s)
+void do_stream_fc(struct q_stream * const s, const uint16_t len)
 {
-    if (unlikely(s->c->state != conn_estb || s->id < 0))
-        return;
+    ensure(s->id >= 0, "fc doesn't apply to crypto streams");
+
+    if (len)
+        s->blocked = (s->out_data + len + MAX_PKT_LEN > s->out_data_max);
 
     if (s->in_data * 2 > s->in_data_max) {
-        s->tx_max_stream_data = s->c->needs_tx = true;
-        s->new_in_data_max = s->in_data_max * 2;
+        s->tx_max_stream_data = true;
+        s->in_data_max *= 2;
     }
 }
 
 
-void do_stream_id_fc(struct q_conn * const c, const int64_t sid)
+void do_stream_id_fc(struct q_conn * const c,
+                     const int64_t cnt,
+                     const bool bidi,
+                     const bool local)
 {
-
-    if (is_srv_ini(sid) == c->is_clnt) {
-        // this is a remote stream
-        if (is_uni(sid)) {
-            if ((sid >> 2) + 1 == c->tp_in.max_streams_uni) {
-                c->tx_max_sid_uni = true;
-                c->tp_in.new_max_streams_uni =
-                    c->tp_in.max_streams_uni + INIT_MAX_UNI_STREAMS;
-            }
-        } else {
-            if ((sid >> 2) + 1 == c->tp_in.max_streams_bidi) {
-                c->tx_max_sid_bidi = true;
-                c->tp_in.new_max_streams_bidi =
-                    c->tp_in.max_streams_bidi + INIT_MAX_BIDI_STREAMS;
-            }
-        }
-
-    } else {
+    if (local) {
         // this is a local stream
-        if (is_uni(sid)) {
-            if ((sid >> 2) + 1 == c->tp_out.max_streams_uni)
-                c->sid_blocked_uni = true;
-        } else {
-            if ((sid >> 2) + 1 == c->tp_out.max_streams_bidi)
-                c->sid_blocked_bidi = true;
+        if (bidi)
+            c->sid_blocked_bidi = (cnt == c->tp_out.max_streams_bidi);
+        else
+            c->sid_blocked_uni =
+                (c->tp_out.max_streams_uni && cnt == c->tp_out.max_streams_uni);
+        return;
+    }
+
+    // this is a remote stream
+    if (bidi) {
+        if (cnt == c->tp_in.max_streams_bidi) {
+            c->tx_max_sid_bidi = true;
+            c->tp_in.max_streams_bidi += INIT_MAX_BIDI_STREAMS;
+        }
+    } else {
+        if (cnt == c->tp_in.max_streams_uni) {
+            c->tx_max_sid_uni = true;
+            c->tp_in.max_streams_uni += INIT_MAX_UNI_STREAMS;
         }
     }
 }

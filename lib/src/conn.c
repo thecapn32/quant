@@ -301,13 +301,9 @@ tx_stream_data(struct q_stream * const s, const uint32_t limit)
         if (unlikely(meta(v).is_lost))
             rtx_pkt(s, v);
 
-        if (likely(c->state == conn_estb)) {
-            // add one MTU, so we can still encode this stream frame
-            if (s->id >= 0 &&
-                s->out_data + v->len + w_mtu(c->w) > s->out_data_max)
-                s->blocked = true;
-            if (c->out_data_str + v->len + w_mtu(c->w) > c->tp_out.max_data)
-                c->blocked = true;
+        if (likely(c->state == conn_estb && s->id >= 0)) {
+            do_stream_fc(s, v->len);
+            do_conn_fc(c, v->len);
         }
 
         if (unlikely(enc_pkt(s, meta(v).is_lost, true, v) == false))
@@ -345,15 +341,18 @@ static void __attribute__((nonnull)) tx_stream_ctrl(struct q_stream * const s)
 }
 
 
-void do_conn_fc(struct q_conn * const c)
+void do_conn_fc(struct q_conn * const c, const uint16_t len)
 {
-    if (c->state == conn_clsg || c->state == conn_drng)
+    if (unlikely(c->state == conn_clsg || c->state == conn_drng))
         return;
+
+    if (len && c->out_data_str + len + MAX_PKT_LEN > c->tp_out.max_data)
+        c->blocked = true;
 
     // check if we need to do connection-level flow control
     if (c->in_data_str * 2 > c->tp_in.max_data) {
         c->tx_max_data = true;
-        c->tp_in.new_max_data = c->tp_in.max_data * 2;
+        c->tp_in.max_data *= 2;
     }
 }
 
@@ -364,9 +363,9 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
         return;
 
     // do we need to make more stream IDs available?
-    if (unlikely(c->state != conn_estb)) {
-        do_stream_id_fc(c, c->lg_sid_uni);
-        do_stream_id_fc(c, c->lg_sid_bidi);
+    if (likely(c->state == conn_estb)) {
+        do_stream_id_fc(c, c->cnt_uni, false, true);
+        do_stream_id_fc(c, c->cnt_bidi, true, true);
     }
 
     if (likely(c->tp_out.disable_migration == false) &&
@@ -1365,6 +1364,16 @@ struct q_conn * new_conn(struct w_engine * const w,
     diet_init(&c->closed_streams);
     sq_init(&c->txq);
 
+    // TODO most of these should become configurable via q_conn_conf
+    c->tp_in.ack_del_exp = c->tp_out.ack_del_exp = DEF_ACK_DEL_EXP;
+    c->tp_in.max_ack_del = c->tp_out.max_ack_del = 25;
+    c->tp_in.max_data = INIT_MAX_BIDI_STREAMS * INIT_STRM_DATA_BIDI;
+    c->tp_in.max_strm_data_uni = INIT_STRM_DATA_UNI;
+    c->tp_in.max_strm_data_bidi_local = c->tp_in.max_strm_data_bidi_remote =
+        2 * INIT_STRM_DATA_BIDI;
+    c->tp_in.max_streams_bidi = INIT_MAX_BIDI_STREAMS;
+    c->tp_in.max_streams_uni = INIT_MAX_UNI_STREAMS;
+
     // initialize idle timeout
     c->idle_alarm.data = c;
     ev_init(&c->idle_alarm, idle_alarm);
@@ -1381,16 +1390,6 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->ack_alarm.data = c;
     c->ack_alarm.repeat = c->tp_out.max_ack_del / 1000.0;
     ev_init(&c->ack_alarm, ack_alarm);
-
-    // TODO most of these should become configurable via q_conn_conf
-    c->tp_in.ack_del_exp = c->tp_out.ack_del_exp = DEF_ACK_DEL_EXP;
-    c->tp_in.max_ack_del = c->tp_out.max_ack_del = 25;
-    c->tp_in.max_data = INIT_MAX_BIDI_STREAMS * INIT_STRM_DATA_BIDI;
-    c->tp_in.max_strm_data_uni = INIT_STRM_DATA_UNI;
-    c->tp_in.max_strm_data_bidi_local = c->tp_in.max_strm_data_bidi_remote =
-        INIT_STRM_DATA_BIDI;
-    c->tp_in.max_streams_bidi = INIT_MAX_BIDI_STREAMS;
-    c->tp_in.max_streams_uni = INIT_MAX_UNI_STREAMS;
 
     // initialize packet number spaces
     init_pn(&c->pn_init.pn, c);

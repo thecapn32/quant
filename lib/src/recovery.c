@@ -399,37 +399,6 @@ void on_pkt_acked(struct q_conn * const c,
         (has_frame(acked_pkt, FRM_CLQ) || has_frame(acked_pkt, FRM_CLA)))
         conn_to_state(c, conn_drng);
 
-    // if this ACKs a current MAX_STREAM_DATA frame, we can stop sending it
-    if (has_frame(acked_pkt, FRM_MSD)) {
-        struct q_stream * const s =
-            get_stream(c, meta(acked_pkt).max_stream_data_sid);
-        if (s && s->new_in_data_max == meta(acked_pkt).max_stream_data) {
-            // update the stream
-            s->in_data_max = s->new_in_data_max;
-            s->tx_max_stream_data = false;
-        }
-    }
-
-    // if this ACKs the current MAX_DATA frame, we can stop sending it
-    if (has_frame(acked_pkt, FRM_MCD) &&
-        c->tp_in.new_max_data == meta(acked_pkt).max_data) {
-        // update connection
-        c->tp_in.max_data = c->tp_in.new_max_data;
-        c->tx_max_data = false;
-    }
-
-    // if this ACKs a current MAX_STREAMS frame, we can stop sending it
-    if (has_frame(acked_pkt, FRM_MSB) &&
-        c->tp_in.new_max_streams_bidi == meta(acked_pkt).max_streams_bidi) {
-        c->tp_in.max_streams_bidi = c->tp_in.new_max_streams_bidi;
-        c->tx_max_sid_bidi = false;
-    }
-    if (has_frame(acked_pkt, FRM_MSU) &&
-        c->tp_in.new_max_streams_uni == meta(acked_pkt).max_streams_uni) {
-        c->tp_in.max_streams_uni = c->tp_in.new_max_streams_uni;
-        c->tx_max_sid_uni = false;
-    }
-
     // if this ACK is for a pkt that was RTX'ed, update the record
     struct w_iov * orig = 0;
     if (meta(acked_pkt).is_rtx) {
@@ -449,8 +418,6 @@ void on_pkt_acked(struct q_conn * const c,
                 break;
 
         if (s->out_una == 0) {
-            warn(DBG, "stream " FMT_SID " fully acked", s->id);
-
             // a q_write may be done
             maybe_api_return(q_write, c, s);
             if (s->id >= 0 && c->did_0rtt)
