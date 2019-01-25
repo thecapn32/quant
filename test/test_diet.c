@@ -37,7 +37,12 @@
 
 
 static void trace(struct diet * const d,
-                  const uint64_t x
+                  const uint64_t lo
+#ifdef NDEBUG
+                  __attribute__((unused))
+#endif
+                  ,
+                  const uint64_t hi
 #ifdef NDEBUG
                   __attribute__((unused))
 #endif
@@ -50,7 +55,12 @@ static void trace(struct diet * const d,
 {
     char str[8192];
     diet_to_str(str, sizeof(str), d);
-    warn(DBG, "cnt %" PRIu64 ", %s %" PRIu64 ": %s", diet_cnt(d), op, x, str);
+    if (lo == hi)
+        warn(DBG, "cnt %" PRIu64 ", %s %" PRIu64 ": %s", diet_cnt(d), op, lo,
+             str);
+    else
+        warn(DBG, "cnt %" PRIu64 ", %s %" PRIu64 "-%" PRIu64 ": %s",
+             diet_cnt(d), op, lo, hi, str);
 
     uint64_t c = 0;
     char * s = str;
@@ -90,7 +100,7 @@ int main()
         if (bit_isset(N, x, &v) == 0) {
             bit_set(N, x, &v);
             diet_insert(&d, x, 0);
-            trace(&d, x, "ins");
+            trace(&d, x, x, "ins");
             chk(&d);
         }
     }
@@ -100,8 +110,15 @@ int main()
         const uint64_t x = (uint64_t)random() % N;
         struct ival * const i = diet_find(&d, x);
         if (i) {
-            diet_remove(&d, x);
-            trace(&d, x, "rem");
+            if (random() % 2) {
+                const uint64_t lo = x > 0 ? x - 1 : x;
+                const uint64_t hi = x + (random() % 10);
+                diet_remove_ival(&d, &(struct ival){.lo = lo, .hi = hi});
+                trace(&d, lo, hi, "rem_ival");
+            } else {
+                diet_remove(&d, x);
+                trace(&d, x, x, "rem");
+            }
             chk(&d);
         }
     }

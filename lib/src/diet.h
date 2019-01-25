@@ -91,6 +91,9 @@ diet_insert(struct diet * const d, const uint64_t n, const ev_tstamp t);
 extern void __attribute__((nonnull))
 diet_remove(struct diet * const d, const uint64_t n);
 
+extern void __attribute__((nonnull))
+diet_remove_ival(struct diet * const d, const struct ival * const i);
+
 extern void __attribute__((nonnull)) diet_free(struct diet * const d);
 
 extern size_t __attribute__((nonnull))

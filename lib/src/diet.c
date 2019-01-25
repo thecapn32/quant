@@ -206,11 +206,24 @@ diet_insert(struct diet * const d, const uint64_t n, const ev_tstamp t)
         return splay_root(d);
     }
 
-    struct ival * i; // clang doesn't like this statement after the label?
-new_ival:
-    i = make_ival(n, t);
+new_ival:;
+    struct ival * const i = make_ival(n, t);
     splay_insert(diet, d, i);
     return i;
+}
+
+
+static void __attribute__((nonnull))
+split_root(struct diet * const d, const uint64_t lo, const uint64_t hi)
+{
+    struct ival * const i = make_ival(splay_root(d)->lo, splay_root(d)->t);
+    splay_count(d)++;
+    i->hi = lo - 1;
+    splay_root(d)->lo = hi + 1;
+    splay_left(i, node) = splay_left(splay_root(d), node);
+    splay_left(splay_root(d), node) = 0;
+    splay_right(i, node) = splay_root(d);
+    splay_root(d) = i;
 }
 
 
@@ -239,17 +252,69 @@ void diet_remove(struct diet * const d, const uint64_t n)
     } else if (n == splay_root(d)->hi) {
         // adjust hi bound
         splay_root(d)->hi--;
-    } else {
-        // split interval
-        struct ival * const i = make_ival(splay_root(d)->lo, splay_root(d)->t);
-        splay_count(d)++;
-        i->hi = n - 1;
-        splay_root(d)->lo = n + 1;
-        splay_left(i, node) = splay_left(splay_root(d), node);
-        splay_left(splay_root(d), node) = 0;
-        splay_right(i, node) = splay_root(d);
-        splay_root(d) = i;
+    } else
+        split_root(d, n, n);
+}
+
+
+void diet_remove_ival(struct diet * const d, const struct ival * const i)
+{
+    uint64_t lo = i->lo;
+    uint64_t hi = i->hi;
+
+again:
+    if (splay_empty(d))
+        return;
+
+    // rotate the interval that contains n or is closest to it to the top
+    diet_splay(d, i);
+
+    if (hi < splay_root(d)->lo || lo > splay_root(d)->hi)
+        return;
+
+    if (lo > splay_root(d)->lo) {
+        if (hi < splay_root(d)->hi) {
+            split_root(d, lo, hi);
+            return;
+        }
+
+        if (hi > splay_root(d)->hi) {
+            const uint64_t root_hi = splay_root(d)->hi;
+            splay_root(d)->hi = lo - 1;
+            lo = root_hi + 1;
+            goto again;
+        }
+
+        splay_root(d)->hi = lo - 1;
+        return;
     }
+
+    if (lo < splay_root(d)->lo) {
+        if (hi < splay_root(d)->hi) {
+            const uint64_t root_lo = splay_root(d)->lo;
+            splay_root(d)->lo = hi + 1;
+            hi = root_lo - 1;
+            goto again;
+        }
+
+        if (hi > splay_root(d)->hi) {
+            splay_remove(diet, d, splay_root(d));
+            goto again;
+        }
+
+        hi = splay_root(d)->lo - 1;
+        splay_remove(diet, d, splay_root(d));
+        goto again;
+    }
+
+
+    if (hi < splay_root(d)->hi) {
+        splay_root(d)->lo = hi + 1;
+        return;
+    }
+    hi = splay_root(d)->hi + 1;
+    splay_remove(diet, d, splay_root(d));
+    goto again;
 }
 
 
