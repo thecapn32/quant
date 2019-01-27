@@ -32,7 +32,7 @@ declare -A servers=(
         #[tag]=name:flags:port:retry-ports:URL
         # [apple]=10.26.178.21::4433:4434:/index.html
         [ats]=quic.ogre.com::4433:4434:/en/latest/
-        [f5]=208.85.208.226::4433:4434:/file15k
+        [f5]=208.85.208.226::4433:4433:/file15k
         [lsquic]=http3-test.litespeedtech.com:-3:4433:4434:/
         [minq]=minq.dev.mozaws.net::4433:4434:/index.html
         [mozquic]=mozquic.ducksong.com::4433:4434:/index.html
@@ -155,8 +155,8 @@ function analyze {
                     /RX.*len=.*Short/ && $x && exit 1;' "$log"
         [ $? == 1 ] && hshk[$1]=H
 
-        perl -n -e '/read (.*) bytes on clnt conn/ &&
-                            ($1 > 0 ? exit 1 : next);' "$log"
+        perl -n -e '/read (.*) bytes on clnt conn/ and ($1 > 0 ? $t=1 : next);
+                    $t && /CLOSE.*err=0x0000/ && exit 1;' "$log"
         [ $? == 1 ] && data[$1]=D
 
         perl -n -e 'BEGIN{$t=-1};
@@ -211,10 +211,9 @@ function analyze {
         local log="/tmp/$script.$1.$pid.h3.log"
         check_fail "$1" "$log"
 
-        perl -n -e 'BEGIN{$t=-1};
-                    /read (.*) bytes on clnt conn/ and ($1 > 0 ? $t=1 : next);
-                    /no h3 payload/ and $t=-1;
-                    END{exit $t};' "$log"
+        perl -n -e '/read (.*) bytes on clnt conn/ and ($1 > 0 ? $t=1 : next);
+                    /no h3 payload/ and $t=0;
+                    $t && /CLOSE.*err=0x0000/ && exit 1;' "$log"
         [ $? == 1 ] && http[$1]=3
         [ ${fail[$1]} ] || rm -f "$log"
 }
