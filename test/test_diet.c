@@ -55,12 +55,14 @@ static void trace(struct diet * const d,
 {
     char str[8192];
     diet_to_str(str, sizeof(str), d);
+#ifndef NDEBUG
     if (lo == hi)
         warn(DBG, "cnt %" PRIu64 ", %s %" PRIu64 ": %s", diet_cnt(d), op, lo,
              str);
     else
         warn(DBG, "cnt %" PRIu64 ", %s %" PRIu64 "-%" PRIu64 ": %s",
              diet_cnt(d), op, lo, hi, str);
+#endif
 
     uint64_t c = 0;
     char * s = str;
