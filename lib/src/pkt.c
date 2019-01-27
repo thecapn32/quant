@@ -259,12 +259,11 @@ have_space_for(const uint8_t type, const uint16_t pos, const uint16_t limit)
 
 
 static uint16_t __attribute__((nonnull))
-enc_other_frames(struct q_stream * const s,
+enc_other_frames(struct q_conn * const c,
                  struct w_iov * const v,
                  const uint16_t pos,
                  const uint16_t lim)
 {
-    struct q_conn * const c = s->c;
     uint16_t i = pos;
 
     // encode connection control frames
@@ -315,11 +314,14 @@ enc_other_frames(struct q_stream * const s,
     if (c->tx_max_sid_uni && have_space_for(FRM_MSU, i, lim))
         i = enc_max_streams_frame(c, v, i, false);
 
-    if (s->id >= 0) {
+    while (!sl_empty(&c->need_ctrl)) {
+        // XXX this assumes we can encode all the ctrl frames
+        struct q_stream * const s = sl_first(&c->need_ctrl);
+        sl_remove_head(&c->need_ctrl, node_ctrl);
+        s->in_ctrl = false;
         // encode stream control frames
         if (s->blocked && have_space_for(FRM_SDB, i, lim))
             i = enc_stream_data_blocked_frame(s, v, i);
-
         if (s->tx_max_stream_data && have_space_for(FRM_MSD, i, lim))
             i = enc_max_stream_data_frame(s, v, i);
     }
@@ -453,7 +455,7 @@ bool enc_pkt(struct q_stream * const s,
     }
 
     if (epoch == ep_data || (!c->is_clnt && epoch == ep_0rtt))
-        i = enc_other_frames(s, v, i, meta(v).stream_data_start);
+        i = enc_other_frames(c, v, i, meta(v).stream_data_start);
 
     if (unlikely(rtx)) {
         ensure(is_rtxable(&meta(v)), "is rtxable");
@@ -474,7 +476,7 @@ bool enc_pkt(struct q_stream * const s,
                  (epoch == ep_data || (!c->is_clnt && epoch == ep_0rtt)))) {
         // we can try to stick some more frames in after the stream frame
         v->len = MAX_PKT_LEN - AEAD_LEN;
-        i = enc_other_frames(s, v, i, v->len);
+        i = enc_other_frames(c, v, i, v->len);
     }
 
     if (c->is_clnt && enc_data) {

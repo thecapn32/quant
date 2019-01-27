@@ -40,8 +40,8 @@
 #define STRM_FL_SRV 0x01
 #define STRM_FL_UNI 0x02
 
-#define INIT_STRM_DATA_BIDI 65535
-#define INIT_STRM_DATA_UNI 65535
+#define INIT_STRM_DATA_BIDI 0xffff
+#define INIT_STRM_DATA_UNI 0x7fff
 #define INIT_MAX_UNI_STREAMS 2
 #define INIT_MAX_BIDI_STREAMS 6 // XXX picoquic won't respect a lower count
 
@@ -59,6 +59,8 @@ extern const char * const strm_state_str[];
 
 
 struct q_stream {
+    sl_entry(q_stream) node_ctrl;
+
     struct q_conn * c; ///< Connection this stream is a part of.
     int64_t id;        ///< Stream ID.
 
@@ -76,10 +78,11 @@ struct q_stream {
 
     strm_state_t state; ///< Stream state.
 
+    uint8_t in_ctrl : 1; ///< Stream is in connections "needs ctrl" list.
     uint8_t tx_max_stream_data : 1; ///< We need to open the receive window.
     uint8_t blocked : 1;            ///< We are receive-window-blocked.
-    uint8_t tx_fin : 1;             ///< We need to send a FIN.
-    uint8_t : 5;
+    uint8_t : 4;
+    uint8_t tx_fin : 1; ///< We need to send a FIN. (Not handled w/needs_ctrl).
     uint8_t _unused[3];
 };
 
@@ -159,7 +162,7 @@ strm_epoch(const struct q_stream * const s)
 
 
 static inline bool __attribute__((nonnull, always_inline))
-stream_needs_ctrl(const struct q_stream * const s)
+needs_ctrl(const struct q_stream * const s)
 {
     return s->tx_fin || s->tx_max_stream_data || s->blocked;
 }
@@ -170,6 +173,26 @@ streams_by_id_cmp(const struct q_stream * const a,
                   const struct q_stream * const b)
 {
     return (a->id > b->id) - (a->id < b->id);
+}
+
+
+static inline void __attribute__((nonnull, always_inline))
+need_ctrl_ins(struct q_stream * const s)
+{
+    if (needs_ctrl(s) && s->in_ctrl == false) {
+        sl_insert_head(&s->c->need_ctrl, s, node_ctrl);
+        s->in_ctrl = true;
+    }
+}
+
+
+static inline void __attribute__((nonnull, always_inline))
+need_ctrl_del(struct q_stream * const s)
+{
+    if (needs_ctrl(s) == false && s->in_ctrl) {
+        sl_remove(&s->c->need_ctrl, s, q_stream, node_ctrl);
+        s->in_ctrl = false;
+    }
 }
 
 

@@ -468,8 +468,7 @@ uint16_t dec_ack_frame(struct q_conn * const c,
                 lg_acked_tx_t = meta(acked).tx_t;
             }
 
-            if (meta(acked).is_lost == false)
-                on_pkt_acked(c, pn, acked);
+            on_pkt_acked(c, pn, acked);
 
             // if the ACK'ed pkt was sent with ECT, verify peer and path support
             if (likely(c->sockopt.enable_ecn &&
@@ -490,9 +489,10 @@ uint16_t dec_ack_frame(struct q_conn * const c,
 
         if (n > 1) {
             i = dec_chk(t, &gap, v->buf, v->len, i, 0, "%" PRIu64);
-            if (unlikely(ack <= gap))
-                err_close_return(c, ERR_FRAME_ENC, t, "ACK gap %" PRIu64, gap);
-            lg_ack_in_block = ack - gap - 1;
+            // if (unlikely(ack <= gap))
+            //     err_close_return(c, ERR_FRAME_ENC, t, "ACK gap %" PRIu64,
+            //     gap);
+            lg_ack_in_block = lg_ack_in_block - ack_block_len - gap - 2;
         }
     }
 
@@ -595,6 +595,7 @@ dec_max_stream_data_frame(struct q_conn * const c,
     if (max > s->out_data_max) {
         s->out_data_max = max;
         s->blocked = false;
+        need_ctrl_del(s);
     } else if (max < s->out_data_max)
         warn(NTE, "MAX_STREAM_DATA %" PRIu64 " < current value %" PRIu64, max,
              s->out_data_max);
@@ -674,6 +675,10 @@ dec_stream_data_blocked_frame(struct q_conn * const c,
         handle_unknown_strm(c, sid, FRM_SDB, i);
 
     do_stream_fc(s, 0);
+    // because do_stream_fc() only sets this when increasing the FC window
+    s->tx_max_stream_data = true;
+    need_ctrl_ins(s);
+
     return i;
 }
 
@@ -689,6 +694,9 @@ dec_data_blocked_frame(struct q_conn * const c,
     warn(INF, FRAM_IN "DATA_BLOCKED" NRM " lim=%" PRIu64, off);
 
     do_conn_fc(c, 0);
+    // because do_conn_fc() only sets this when increasing the FC window
+    c->tx_max_data = true;
+
     return i;
 }
 

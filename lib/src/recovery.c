@@ -232,10 +232,8 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
         tx(c, 0);
 
     } else if (!is_zero(c->rec.loss_t)) {
-        warn(DBG, "time thresh loss detection alarm on %s conn %s",
-             conn_type(c), cid2str(c->scid));
+        warn(DBG, "TT alarm on %s conn %s", conn_type(c), cid2str(c->scid));
         detect_lost_pkts(c, pn);
-        tx(c, 0); // XXX this is not in the pseudo code
 
     } else {
         warn(DBG, "PTO alarm #%u on %s conn %s", c->rec.pto_cnt, conn_type(c),
@@ -253,28 +251,19 @@ track_acked_pkts(struct pn_space * const pn, struct w_iov * const v)
 {
     adj_iov_to_start(v);
 
-    // this is the same loop as in dec_ack_frame() - keep changes in sync
+    // this is a similar loop as in dec_ack_frame() - keep changes in sync
     uint64_t lg_ack_in_block = meta(v).lg_acked;
     uint16_t i = meta(v).ack_block_pos;
     for (uint64_t n = meta(v).ack_block_cnt + 1; n > 0; n--) {
         uint64_t ack_block_len = 0;
         i = dec(&ack_block_len, v->buf, v->len, i, 0, "%" PRIu64);
-
-        uint64_t ack = lg_ack_in_block;
-        while (ack_block_len >= lg_ack_in_block - ack) {
-            diet_remove(&pn->recv, ack);
-            if (unlikely(ack > 0))
-                ack--;
-            else
-                break;
-        }
-        // warn(ERR, "stop including %" PRIu64 "-%" PRIu64, lg_ack_in_block,
-        // ack);
-
+        diet_remove_ival(&pn->recv, &(const struct ival){
+                                        .lo = lg_ack_in_block - ack_block_len,
+                                        .hi = lg_ack_in_block});
         if (n > 1) {
             uint64_t gap = 0;
             i = dec(&gap, v->buf, v->len, i, 0, "%" PRIu64);
-            lg_ack_in_block = ack - gap - 1;
+            lg_ack_in_block = lg_ack_in_block - ack_block_len - gap - 2;
         }
     }
 
@@ -385,7 +374,8 @@ void on_pkt_acked(struct q_conn * const c,
 {
     // see OnPacketAcked() pseudo code
 
-    if (is_ack_eliciting(&meta(acked_pkt).frames))
+    if (is_ack_eliciting(&meta(acked_pkt).frames) &&
+        meta(acked_pkt).is_lost == false)
         on_pkt_acked_cc(c, acked_pkt);
 
     diet_insert(&pn->acked, meta(acked_pkt).hdr.nr, ev_now(loop));
@@ -394,10 +384,10 @@ void on_pkt_acked(struct q_conn * const c,
 
     // rest of function is not from pseudo code
 
-    // if this ACKs a CLOSE frame, move to conn_drng
-    if (c->state == conn_clsg &&
-        (has_frame(acked_pkt, FRM_CLQ) || has_frame(acked_pkt, FRM_CLA)))
-        conn_to_state(c, conn_drng);
+    // // if this ACKs a CLOSE frame, move to conn_drng
+    // if (c->state == conn_clsg &&
+    //     (has_frame(acked_pkt, FRM_CLQ) || has_frame(acked_pkt, FRM_CLA)))
+    //     conn_to_state(c, conn_drng);
 
     // if this ACK is for a pkt that was RTX'ed, update the record
     struct w_iov * orig = 0;

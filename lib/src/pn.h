@@ -106,7 +106,7 @@ extern void __attribute__((nonnull))
 abandon_pn(struct q_conn * const c, const epoch_t e);
 
 
-typedef enum { no_ack = 0, del_ack = 1, imm_ack = 2 } ack_t;
+typedef enum { no_ack = 0, grat_ack = 1, del_ack = 2, imm_ack = 3 } ack_t;
 
 extern ack_t __attribute__((nonnull))
 needs_ack(const struct pn_space * const pn);

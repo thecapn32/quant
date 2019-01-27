@@ -231,6 +231,7 @@ struct q_conn {
     struct q_stream * cstreams[ep_data + 1]; ///< Crypto "streams".
     khash_t(streams_by_id) * streams_by_id;  ///< Regular streams.
     struct diet closed_streams;
+    sl_head(, q_stream) need_ctrl;
 
     struct w_sock * sock;     ///< File descriptor (socket) for the connection.
     struct w_sockopt sockopt; ///< Socket options.

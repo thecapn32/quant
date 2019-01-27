@@ -75,16 +75,16 @@ void abandon_pn(struct q_conn * const c, const epoch_t e)
 
 ack_t needs_ack(const struct pn_space * const pn)
 {
-    const bool have_ack_eliciting = is_ack_eliciting(&pn->rx_frames);
-    if (have_ack_eliciting == false) {
-        // warn(ERR, "no_ack: have_ack_eliciting == false");
-        return no_ack;
-    }
-
     const bool rxed_one_or_more = pn->pkts_rxed_since_last_ack_tx >= 1;
     if (rxed_one_or_more == false) {
         // warn(ERR, "no_ack: rxed_one_or_more == false");
         return no_ack;
+    }
+
+    const bool have_ack_eliciting = is_ack_eliciting(&pn->rx_frames);
+    if (have_ack_eliciting == false) {
+        // warn(ERR, "grat_ack: have_ack_eliciting == false");
+        return grat_ack;
     }
 
     const bool in_hshk = &pn->c->pn_data.pn != pn;

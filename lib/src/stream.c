@@ -229,13 +229,15 @@ void do_stream_fc(struct q_stream * const s, const uint16_t len)
 {
     ensure(s->id >= 0, "fc doesn't apply to crypto streams");
 
-    if (len)
-        s->blocked = (s->out_data + len + MAX_PKT_LEN > s->out_data_max);
+    if (len && s->out_data + len + MAX_PKT_LEN > s->out_data_max)
+        s->blocked = true;
 
     if (s->in_data * 2 > s->in_data_max) {
         s->tx_max_stream_data = true;
         s->in_data_max *= 2;
     }
+
+    need_ctrl_ins(s);
 }
 
 

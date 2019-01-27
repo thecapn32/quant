@@ -330,17 +330,6 @@ tx_stream_data(struct q_stream * const s, const uint32_t limit)
 }
 
 
-static void __attribute__((nonnull)) tx_stream_ctrl(struct q_stream * const s)
-{
-    struct w_iov * const v = alloc_iov(s->c->w, 0, s->tx_fin ? OFFSET_ESTB : 0);
-    if (s->tx_fin) {
-        v->len = 0;
-        sq_insert_tail(&s->out, v, next);
-    }
-    enc_pkt(s, false, s->tx_fin, v);
-}
-
-
 void do_conn_fc(struct q_conn * const c, const uint16_t len)
 {
     if (unlikely(c->state == conn_clsg || c->state == conn_drng))
@@ -398,27 +387,22 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
 
     // warn(ERR, "%s strm id=" FMT_SID ", cnt=%u, has_data=%u, needs_ctrl=%u",
     //      conn_type(s->c), s->id, sq_len(&s->out), stream_has_data_to_tx,
-    //      stream_needs_ctrl(s), out_fully_acked(s));
+    //      needs_ctrl(s), out_fully_acked(s));
     // check if we should skip TX on this stream
-    if ( // nothing to send and doesn't need control frames?
-        (stream_has_data_to_tx == false && stream_needs_ctrl(s) == false) ||
+    if (stream_has_data_to_tx == false ||
         // unless for 0-RTT, is this a regular stream during conn open?
-        (s->c->try_0rtt == false && s->id >= 0 && s->c->state != conn_estb)) {
+        unlikely(s->c->try_0rtt == false && s->id >= 0 &&
+                 s->c->state != conn_estb)) {
         // warn(ERR, "skip " FMT_SID, s->id);
         return true;
     }
 
-    warn(DBG, "%s TX on %s conn %s strm " FMT_SID " w/%u pkt%s in queue",
-         stream_has_data_to_tx ? "data" : "ctrl", conn_type(s->c),
-         cid2str(s->c->scid), s->id, sq_len(&s->out), plural(sq_len(&s->out)));
+    warn(DBG, "TX on %s conn %s strm " FMT_SID " w/%u pkt%s in queue",
+         conn_type(s->c), cid2str(s->c->scid), s->id, sq_len(&s->out),
+         plural(sq_len(&s->out)));
 
     if (stream_has_data_to_tx && !s->blocked)
         return tx_stream_data(s, limit);
-    // XXX OFFSET_ESTB is not correct, should be size of ctrl pkt
-    if (stream_needs_ctrl(s) && likely(has_pval_wnd(s->c, OFFSET_ESTB))) {
-        tx_stream_ctrl(s);
-        return true;
-    }
     return false;
 }
 
@@ -856,8 +840,7 @@ done:
         break;
     }
 
-    if (is_ack_eliciting(&meta(v).frames))
-        pn->pkts_rxed_since_last_ack_tx++;
+    pn->pkts_rxed_since_last_ack_tx++;
 
     return true;
 }
@@ -1152,6 +1135,7 @@ rx(struct ev_loop * const l, ev_io * const rx_w, int _e __attribute__((unused)))
                 ev_timer_again(loop, &c->ack_alarm);
                 break;
             case no_ack:
+            case grat_ack:
                 break;
             }
         }
@@ -1370,7 +1354,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->tp_in.max_data = INIT_MAX_BIDI_STREAMS * INIT_STRM_DATA_BIDI;
     c->tp_in.max_strm_data_uni = INIT_STRM_DATA_UNI;
     c->tp_in.max_strm_data_bidi_local = c->tp_in.max_strm_data_bidi_remote =
-        2 * INIT_STRM_DATA_BIDI;
+        INIT_STRM_DATA_BIDI;
     c->tp_in.max_streams_bidi = INIT_MAX_BIDI_STREAMS;
     c->tp_in.max_streams_uni = INIT_MAX_UNI_STREAMS;
 
