@@ -416,6 +416,7 @@ tx_ack(struct q_conn * const c, const epoch_t e)
     struct w_iov * const v = alloc_iov(c->w, 0, 0);
     enc_pkt(c->cstreams[e], false, false, v);
     do_tx(c);
+    free_iov(v);
 }
 
 
