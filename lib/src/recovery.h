@@ -95,8 +95,8 @@ extern ev_tstamp prev_srtt, prev_rttvar;
             warn(DBG,                                                          \
                  "in_flight=%" PRIu64 " (%s%+" PRId64 NRM "), cwnd" NRM        \
                  "=%" PRIu64 " (%s%+" PRId64 NRM "), ssthresh=%" PRIu64        \
-                 " (%s%+" PRId64 NRM "), srtt=%f (%s%+f" NRM                   \
-                 "), rttvar=%f (%s%+f" NRM ")",                                \
+                 " (%s%+" PRId64 NRM "), srtt=%.3f (%s%+.3f" NRM               \
+                 "), rttvar=%.3f (%s%+.3f" NRM ")",                            \
                  (c)->rec.in_flight,                                           \
                  delta_in_flight > 0 ? GRN : delta_in_flight < 0 ? RED : "",   \
                  delta_in_flight, (c)->rec.cwnd,                               \
