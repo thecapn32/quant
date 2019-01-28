@@ -30,7 +30,7 @@
 
 declare -A servers=(
         #[tag]=name:flags:port:retry-ports:URL
-        # [apple]=10.26.178.21::4433:4434:/index.html
+        [apple]=172.30.197.241::4433:4434:/index.html
         [ats]=quic.ogre.com::4433:4434:/en/latest/
         [f5]=208.85.208.226::4433:4433:/file15k
         [lsquic]=http3-test.litespeedtech.com:-3:4433:4434:/
@@ -244,6 +244,6 @@ for s in "${sorted[@]}"; do
 done
 
 expand -t 5 "$tmp" | sponge "$tmp"
-# cat "$tmp"
+cat "$tmp"
 wdiff -n "$(dirname $0)/$script.result" "$tmp" | $colordiff
 rm -f "$tmp"
