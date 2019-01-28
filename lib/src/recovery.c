@@ -143,7 +143,9 @@ void congestion_event(struct q_conn * const c, const ev_tstamp sent_t)
 
 
 static void __attribute__((nonnull))
-detect_lost_pkts(struct q_conn * const c, struct pn_space * const pn)
+detect_lost_pkts(struct q_conn * const c,
+                 struct pn_space * const pn,
+                 const bool do_cc)
 {
     const ev_tstamp now = ev_now(loop);
 
@@ -200,7 +202,7 @@ detect_lost_pkts(struct q_conn * const c, struct pn_space * const pn)
             }
         }
     }
-    if (largest_lost_pkt)
+    if (do_cc && largest_lost_pkt)
         congestion_event(c, largest_lost_pkt->tx_t);
     log_cc(c);
 }
@@ -219,9 +221,9 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
     if (crypto_pkts_in_flight(c)) {
         warn(DBG, "crypto RTX #%u on %s conn %s", c->rec.crypto_cnt + 1,
              conn_type(c), cid2str(c->scid));
-        detect_lost_pkts(c, pn_for_epoch(c, ep_init));
-        detect_lost_pkts(c, pn_for_epoch(c, ep_0rtt));
-        detect_lost_pkts(c, pn_for_epoch(c, ep_hshk));
+        detect_lost_pkts(c, pn_for_epoch(c, ep_init), false);
+        detect_lost_pkts(c, pn_for_epoch(c, ep_0rtt), false);
+        detect_lost_pkts(c, pn_for_epoch(c, ep_hshk), false);
         if (c->rec.crypto_cnt++ >= 2 && c->tls.epoch_out == ep_init &&
             c->sockopt.enable_ecn) {
             warn(NTE, "turning off ECN for %s conn %s", conn_type(c),
@@ -232,8 +234,9 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
         tx(c, 0);
 
     } else if (!is_zero(c->rec.loss_t)) {
-        warn(DBG, "TT alarm ep %u on %s conn %s", c->tls.epoch_out, conn_type(c), cid2str(c->scid));
-        detect_lost_pkts(c, pn);
+        warn(DBG, "TT alarm ep %u on %s conn %s", c->tls.epoch_out,
+             conn_type(c), cid2str(c->scid));
+        detect_lost_pkts(c, pn, true);
         tx(c, 0);
 
     } else {
@@ -341,7 +344,7 @@ void on_ack_received_2(struct q_conn * const c, struct pn_space * const pn)
     // see OnAckReceived() pseudo code
 
     c->rec.crypto_cnt = c->rec.pto_cnt = 0;
-    detect_lost_pkts(c, pn);
+    detect_lost_pkts(c, pn, true);
     set_ld_timer(c);
 
     // not part of pseudo code
