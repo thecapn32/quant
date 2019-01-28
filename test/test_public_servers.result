@@ -11,6 +11,7 @@ ngx_quic  *         V    H    D    C    R
 pandora
 picoquic  *         V    H    D    C    R    Z    S    M    U
 quant     *         V    H    D    C    R    Z    S    M    U
+quic-go   *         V    H    D    C              S
 quiche    *         V    H    D    C    R         S
 quicker
 quicly    *         V    H    D    C    R    Z

@@ -42,6 +42,7 @@ declare -A servers=(
         [pandora]=pandora.cm.in.tum.de::4433:4434:/index.html
         [picoquic]=test.privateoctopus.com::4433:4434:/20000
         [quant]=quant.eggert.org::4433:4434:/20000
+        [quic-go]=172.30.197.239::4433:4433:/10000
         [quiche]=quic.tech::4433:4433:/random
         [quicker]=quicker.edm.uhasselt.be::4433:4434:/index.html
         [quicly]=kazuhooku.com::4433:4434:/20000.txt
