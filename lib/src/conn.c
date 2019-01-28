@@ -277,59 +277,6 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
 }
 
 
-static bool __attribute__((nonnull))
-tx_stream_data(struct q_stream * const s, const uint32_t limit)
-{
-    uint32_t encoded = 0;
-    struct w_iov * v = s->out_una;
-    struct q_conn * const c = s->c;
-    sq_foreach_from (v, &s->out, next) {
-        if (unlikely(has_wnd(c, v->len) == false))
-            break;
-
-        if (unlikely(meta(v).is_acked)) {
-            // warn(INF, "skip ACK'ed pkt " FMT_PNR_OUT, meta(v).hdr.nr);
-            continue;
-        }
-
-        if (meta(v).udp_len && meta(v).is_lost == false) {
-            // warn(INF, "skip non-lost TX'ed pkt " FMT_PNR_OUT,
-            // meta(v).hdr.nr);
-            continue;
-        }
-
-        if (unlikely(meta(v).is_lost))
-            rtx_pkt(s, v);
-
-        if (likely(c->state == conn_estb && s->id >= 0)) {
-            do_stream_fc(s, v->len);
-            do_conn_fc(c, v->len);
-        }
-
-        if (unlikely(enc_pkt(s, meta(v).is_lost, true, v) == false))
-            continue;
-        encoded++;
-
-        if (likely(meta(v).is_lost == false))
-            // update the stream's out_nxt pointer
-            s->out_nxt = sq_next(v, next);
-
-        if (unlikely(s->blocked || c->blocked))
-            break;
-
-        if (unlikely(limit && encoded == limit)) {
-            warn(NTE, "tx limit %u reached", limit);
-            break;
-        }
-    }
-
-#ifndef NDEBUG
-    log_sent_pkts(c);
-#endif
-    return encoded > 0;
-}
-
-
 void do_conn_fc(struct q_conn * const c, const uint16_t len)
 {
     if (unlikely(c->state == conn_clsg || c->state == conn_drng))
@@ -381,31 +328,75 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
 static bool __attribute__((nonnull))
 tx_stream(struct q_stream * const s, const uint32_t limit)
 {
+    struct q_conn * const c = s->c;
     const bool stream_has_data_to_tx =
         sq_len(&s->out) > 0 && out_fully_acked(s) == false &&
         ((s->out_una && meta(s->out_una).is_lost) || s->out_nxt);
 
     // warn(ERR,
     //      "%s strm id=" FMT_SID
-    //      ", cnt=%u, has_data=%u, needs_ctrl=%u, fully_acked=%u",
-    //      conn_type(s->c), s->id, sq_len(&s->out), stream_has_data_to_tx,
-    //      needs_ctrl(s), out_fully_acked(s));
+    //      ", cnt=%u, has_data=%u, needs_ctrl=%u, blocked=%u, fully_acked=%u",
+    //      conn_type(c), s->id, sq_len(&s->out), stream_has_data_to_tx,
+    //      needs_ctrl(s), s->blocked, out_fully_acked(s));
+
     // check if we should skip TX on this stream
-    if (stream_has_data_to_tx == false ||
+    if (stream_has_data_to_tx == false || s->blocked ||
         // unless for 0-RTT, is this a regular stream during conn open?
-        unlikely(s->c->try_0rtt == false && s->id >= 0 &&
-                 s->c->state != conn_estb)) {
+        unlikely(c->try_0rtt == false && s->id >= 0 && c->state != conn_estb)) {
         // warn(ERR, "skip " FMT_SID, s->id);
         return true;
     }
 
     warn(DBG, "TX on %s conn %s strm " FMT_SID " w/%u pkt%s in queue",
-         conn_type(s->c), cid2str(s->c->scid), s->id, sq_len(&s->out),
+         conn_type(c), cid2str(c->scid), s->id, sq_len(&s->out),
          plural(sq_len(&s->out)));
 
-    if (stream_has_data_to_tx && !s->blocked)
-        return tx_stream_data(s, limit);
-    return false;
+    uint32_t encoded = 0;
+    struct w_iov * v = s->out_una;
+    sq_foreach_from (v, &s->out, next) {
+        if (unlikely(has_wnd(c, v->len) == false))
+            break;
+
+        if (unlikely(meta(v).is_acked)) {
+            // warn(INF, "skip ACK'ed pkt " FMT_PNR_OUT, meta(v).hdr.nr);
+            continue;
+        }
+
+        if (meta(v).udp_len && meta(v).is_lost == false) {
+            // warn(INF, "skip non-lost TX'ed pkt " FMT_PNR_OUT,
+            // meta(v).hdr.nr);
+            continue;
+        }
+
+        if (unlikely(meta(v).is_lost))
+            rtx_pkt(s, v);
+
+        if (likely(c->state == conn_estb && s->id >= 0)) {
+            do_stream_fc(s, v->len);
+            do_conn_fc(c, v->len);
+        }
+
+        if (unlikely(enc_pkt(s, meta(v).is_lost, true, v) == false))
+            continue;
+        encoded++;
+
+        if (likely(meta(v).is_lost == false))
+            // update the stream's out_nxt pointer
+            s->out_nxt = sq_next(v, next);
+
+        if (unlikely(s->blocked || c->blocked))
+            break;
+
+        if (unlikely(limit && encoded == limit)) {
+            warn(NTE, "tx limit %u reached", limit);
+            break;
+        }
+    }
+
+#ifndef NDEBUG
+    log_sent_pkts(c);
+#endif
+    return encoded > 0;
 }
 
 
