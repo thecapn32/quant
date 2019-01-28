@@ -337,7 +337,7 @@ again:;
         }
     }
 
-    if (s && (s->state == strm_clsd || s->state == strm_hcrm))
+    if (s)
         // return data
         sq_concat(q, &s->in);
 
