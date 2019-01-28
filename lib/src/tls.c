@@ -1010,7 +1010,8 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
                 c->try_0rtt &&
                 c->tls.tls_hshk_prop.client.early_data_accepted_by_peer;
 
-    } else if (unlikely(ret != 0 && ret != PTLS_ERROR_IN_PROGRESS)) {
+    } else if (ret != 0 && ret != PTLS_ERROR_IN_PROGRESS &&
+               ret != PTLS_ERROR_STATELESS_RETRY) {
         err_close(c, ERR_TLS(PTLS_ERROR_TO_ALERT(ret)), FRM_CRY,
                   "picotls error %u", ret);
         return ret;
