@@ -490,13 +490,17 @@ conns_by_id_del(struct cid * const id)
 }
 
 
-void update_act_scid(struct q_conn * const c, struct cid * const id)
+static void __attribute__((nonnull)) update_act_scid(struct q_conn * const c)
 {
-    warn(NTE, "hshk switch to scid %s for %s conn (was %s)", cid2str(id),
-         conn_type(c), cid2str(c->scid));
+    // server picks a new random cid
+    struct cid nscid = {.len = SERV_SCID_LEN};
+    ptls_openssl_random_bytes(nscid.id, sizeof(nscid.id) + sizeof(nscid.srt));
+    cid_cpy(&c->odcid, c->scid);
+    warn(NTE, "hshk switch to scid %s for %s %s conn (was %s)", cid2str(&nscid),
+         conn_state_str[c->state], conn_type(c), cid2str(c->scid));
     conns_by_id_del(c->scid);
     cids_by_id_del(c->scids_by_id, c->scid);
-    cid_cpy(c->scid, id);
+    cid_cpy(c->scid, &nscid);
     cids_by_id_ins(c->scids_by_id, c->scid);
     conns_by_id_ins(c, c->scid);
 }
@@ -698,6 +702,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
                 // send a RETRY
                 make_rtry_tok(c);
                 c->needs_tx = true;
+                update_act_scid(c);
                 goto done;
             }
         }
@@ -731,14 +736,11 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         }
         conn_to_state(c, conn_opng);
 
-        // server picks a new random cid
-        struct cid nscid = {.len = SERV_SCID_LEN};
-        ptls_openssl_random_bytes(nscid.id,
-                                  sizeof(nscid.id) + sizeof(nscid.srt));
-        update_act_scid(c, &nscid);
-
         // server limits response to 3x incoming pkt
         c->path_val_win = 3 * meta(v).udp_len;
+
+        // server picks a new random cid
+        update_act_scid(c);
 
         ok = true;
         break;

@@ -308,9 +308,6 @@ extern struct q_conn * new_conn(struct w_engine * const w,
 extern void __attribute__((nonnull)) free_conn(struct q_conn * const c);
 
 extern void __attribute__((nonnull))
-update_act_scid(struct q_conn * const c, struct cid * const id);
-
-extern void __attribute__((nonnull))
 add_scid(struct q_conn * const c, struct cid * const id);
 
 extern void __attribute__((nonnull))
