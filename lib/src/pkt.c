@@ -446,7 +446,7 @@ bool enc_pkt(struct q_stream * const s,
         i = enc_other_frames(c, v, i, meta(v).stream_data_start);
 
     if (unlikely(rtx)) {
-        ensure(is_rtxable(&meta(v)), "is rtxable");
+        ensure(has_stream_data(&meta(v)), "is rtxable");
 
         // this is a RTX, pad out until beginning of stream header
         enc_padding_frame(v, i, meta(v).stream_header_pos - i);

@@ -245,7 +245,7 @@ pm_cpy(struct pkt_meta * const dst,
     })
 
 
-#define is_rtxable(p) (p)->stream_header_pos
+#define has_stream_data(p) (p)->stream_header_pos
 
 
 static inline bool __attribute__((nonnull))

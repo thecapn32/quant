@@ -192,7 +192,7 @@ detect_lost_pkts(struct q_conn * const c,
 
             // log_cc(c);
 
-            if (p->is_rtx || !is_rtxable(p)) {
+            if (p->is_rtx || !has_stream_data(p)) {
                 if (p->is_rtx)
                     // remove from the original w_iov rtx list
                     sl_remove(&sl_first(&p->rtx)->rtx, p, pkt_meta, rtx_next);
@@ -433,7 +433,7 @@ void on_pkt_acked(struct q_conn * const c,
         track_acked_pkts(pn, acked_pkt);
     }
 
-    if (!is_rtxable(&meta(acked_pkt)))
+    if (!has_stream_data(&meta(acked_pkt)))
         free_iov(acked_pkt);
 }
 

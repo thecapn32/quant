@@ -216,7 +216,7 @@ static void log_sent_pkts(struct q_conn * const c)
             char tmp[1024] = "";
             const bool ack_only = !is_ack_eliciting(&p->frames);
             snprintf(tmp, sizeof(tmp), "%s%s" FMT_PNR_OUT "%s ",
-                     is_rtxable(p) ? "*" : "", ack_only ? "(" : "",
+                     has_stream_data(p) ? "*" : "", ack_only ? "(" : "",
                      prev == UINT64_MAX
                          ? p->hdr.nr
                          : shorten_ack_nr(p->hdr.nr, p->hdr.nr - prev),
