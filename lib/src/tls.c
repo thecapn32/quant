@@ -124,9 +124,6 @@ static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 static struct cipher_ctx dec_tckt;
 static struct cipher_ctx enc_tckt;
 
-#define COOKIE_LEN 64
-static uint8_t cookie[COOKIE_LEN];
-
 static FILE * tls_log_file;
 
 
@@ -932,10 +929,6 @@ void init_tls(struct q_conn * const c)
         }
 
     } else {
-        hshk_prop->server.retry_uses_cookie = 1;
-        hshk_prop->server.cookie.key = cookie;
-        hshk_prop->server.cookie.additional_data.base = (uint8_t *)&c->peer;
-        hshk_prop->server.cookie.additional_data.len = sizeof(c->peer);
         // TODO: remove this interop hack eventually
         if (ntohs(c->sport) == 4434)
             c->tx_rtry = true;
@@ -1242,8 +1235,6 @@ void init_tls_ctx(const struct q_conf * const conf)
 #endif
     tls_ctx.get_time = &ptls_get_time;
     tls_ctx.omit_end_of_early_data = true;
-
-    ptls_openssl_random_bytes(cookie, COOKIE_LEN);
 
     init_ticket_prot();
 }
