@@ -937,6 +937,10 @@ rx_pkts(struct w_iov_sq * const x,
                                  &meta(v).hdr.scid, &meta(v).hdr.dcid, &peer, 0,
                                  ntohs(w_get_sport(ws)), 0);
                     init_tls(c);
+
+                    // TODO: remove this interop hack eventually
+                    if (ntohs(c->sport) == 4434)
+                        c->tx_rtry = true;
                 }
             }
 

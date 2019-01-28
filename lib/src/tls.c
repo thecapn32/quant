@@ -48,16 +48,6 @@
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
-#if defined(HAVE_ENDIAN_H)
-// e.g., Linux
-#include <endian.h>
-#elif defined(HAVE_SYS_ENDIAN_H)
-// e.g., FreeBSD
-#include <sys/endian.h>
-#else
-#include <arpa/inet.h>
-#endif
-
 #include "bitset.h"
 #include "conn.h"
 #include "frame.h"
@@ -928,10 +918,6 @@ void init_tls(struct q_conn * const c)
             c->try_0rtt = 1;
         }
 
-    } else {
-        // TODO: remove this interop hack eventually
-        if (ntohs(c->sport) == 4434)
-            c->tx_rtry = true;
     }
 
     init_prot(c);
