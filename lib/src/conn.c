@@ -385,7 +385,9 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
         sq_len(&s->out) > 0 && out_fully_acked(s) == false &&
         ((s->out_una && meta(s->out_una).is_lost) || s->out_nxt);
 
-    // warn(ERR, "%s strm id=" FMT_SID ", cnt=%u, has_data=%u, needs_ctrl=%u",
+    // warn(ERR,
+    //      "%s strm id=" FMT_SID
+    //      ", cnt=%u, has_data=%u, needs_ctrl=%u, fully_acked=%u",
     //      conn_type(s->c), s->id, sq_len(&s->out), stream_has_data_to_tx,
     //      needs_ctrl(s), out_fully_acked(s));
     // check if we should skip TX on this stream

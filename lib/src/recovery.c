@@ -232,8 +232,9 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
         tx(c, 0);
 
     } else if (!is_zero(c->rec.loss_t)) {
-        warn(DBG, "TT alarm on %s conn %s", conn_type(c), cid2str(c->scid));
+        warn(DBG, "TT alarm ep %u on %s conn %s", c->tls.epoch_out, conn_type(c), cid2str(c->scid));
         detect_lost_pkts(c, pn);
+        tx(c, 0);
 
     } else {
         warn(DBG, "PTO alarm #%u on %s conn %s", c->rec.pto_cnt, conn_type(c),

@@ -126,14 +126,13 @@ crpt_strm_id(const epoch_t epoch)
     switch (epoch) {
     case ep_init:
         return -4;
-    case ep_0rtt:
-        return -3;
     case ep_hshk:
         return -2;
     case ep_data:
         return -1;
+    case ep_0rtt:
+        die("unhandled epoch %u", epoch);
     }
-    die("unhandled epoch %u", epoch);
 }
 
 
@@ -144,8 +143,6 @@ strm_epoch(const struct q_stream * const s)
         switch (s->id) {
         case -4:
             return ep_init;
-        case -3:
-            return ep_0rtt;
         case -2:
             return ep_hshk;
         case -1:
