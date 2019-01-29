@@ -331,7 +331,7 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
     struct q_conn * const c = s->c;
     const bool stream_has_data_to_tx =
         sq_len(&s->out) > 0 && out_fully_acked(s) == false &&
-        ((s->out_una && meta(s->out_una).is_lost) || s->out_nxt);
+        ((s->out_una && (meta(s->out_una).is_lost || limit)) || s->out_nxt);
 
     // warn(ERR,
     //      "%s strm id=" FMT_SID
@@ -362,13 +362,13 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
             continue;
         }
 
-        if (meta(v).udp_len && meta(v).is_lost == false) {
+        if (limit == 0 && meta(v).udp_len && meta(v).is_lost == false) {
             // warn(INF, "skip non-lost TX'ed pkt " FMT_PNR_OUT,
             // meta(v).hdr.nr);
             continue;
         }
 
-        if (unlikely(meta(v).is_lost))
+        if (unlikely(meta(v).is_lost || limit))
             rtx_pkt(s, v);
 
         if (likely(c->state == conn_estb && s->id >= 0)) {
@@ -376,7 +376,7 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
             do_conn_fc(c, v->len);
         }
 
-        if (unlikely(enc_pkt(s, meta(v).is_lost, true, v) == false))
+        if (unlikely(enc_pkt(s, meta(v).is_lost || limit, true, v) == false))
             continue;
         encoded++;
 
