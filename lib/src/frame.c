@@ -1011,6 +1011,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
                 break;
 
             case FRM_SBB:
+            case FRM_SBU:
                 i = dec_streams_blocked_frame(c, v, i);
                 break;
 
