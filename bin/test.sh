@@ -93,6 +93,11 @@ case $c in
                     go run $(pwd)/external/go/src/github.com/QUIC-Tracker/quic-tracker/bin/test_suite/scenario_runner.go \
                         -interface lo0 -host $addr:$port -scenario stop_sending"
                 ;;
+        quic-go)
+                cc="env GOPATH=$(pwd)/external/go go run \
+                        external/go/src/github.com/lucas-clemente/quic-go/h09/client/main.go \
+                        $addr:$port"
+                ;;
 esac
 
 # commands to run the different servers on  $addr:$port

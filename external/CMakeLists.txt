@@ -4,16 +4,17 @@ find_package(OpenSSL)
 
 set(GOPATH ${CMAKE_CURRENT_BINARY_DIR}/go)
 
-# # Use quic-go for testing against, rather than proto-quic monster
-# set(QUICGO github.com/lucas-clemente/quic-go)
-# externalproject_add(quic-go
-#   DOWNLOAD_COMMAND env GOPATH=${GOPATH} go get ${QUICGO}
-#   CONFIGURE_COMMAND ""
-#   BUILD_COMMAND
-#     cd ${GOPATH}/src/${QUICGO} && env GOPATH=${GOPATH} go get -t -u ./...
-#   INSTALL_COMMAND ""
-#   EXCLUDE_FROM_ALL 1
-# )
+# Use quic-go for testing against, rather than proto-quic monster
+set(QUICGO github.com/lucas-clemente/quic-go)
+externalproject_add(quic-go
+  DOWNLOAD_COMMAND env GOPATH=${GOPATH} go get ${QUICGO}
+  # UPDATE_COMMAND env GOPATH=${GOPATH} go get -u ${QUICGO}
+  CONFIGURE_COMMAND cd ${GOPATH}/src/${QUICGO} && git checkout http09
+  BUILD_COMMAND
+    cd ${GOPATH}/src/${QUICGO} && env GOPATH=${GOPATH} go get -t -u ./...
+  INSTALL_COMMAND ""
+  EXCLUDE_FROM_ALL 1
+)
 
 
 # Use minq for testing against
@@ -219,5 +220,5 @@ externalproject_add(quic-tracker
 # grep '^[^#]*_add' ../external/CMakeLists.txt | cut -f2 -d\( | sort | fmt -w 60
 add_custom_target(ext-all DEPENDS
   ats minq mozquic ngtcp2 node nspr nss openssl picoquic
-  quic-tracker quicker quicly
+  quic-go quic-tracker quicker quicly
 )
