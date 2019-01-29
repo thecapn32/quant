@@ -29,25 +29,25 @@
 
 
 declare -A servers=(
-        #[tag]=name:flags:port:retry-ports:URL
-        [apple]=172.30.197.241::4433:4434:/index.html
-        [ats]=quic.ogre.com::4433:4434:/en/latest/
-        [f5]=208.85.208.226::4433:4433:/file15k
-        [lsquic]=http3-test.litespeedtech.com:-3:4433:4434:/
-        [minq]=minq.dev.mozaws.net::4433:4434:/index.html
-        [mozquic]=mozquic.ducksong.com::4433:4434:/index.html
-        [mvfst]=fb.mvfst.net::4433:4434:/index.html
-        [ngtcp2]=nghttp2.org::4433:4434:/blog/
-        [ngx_quic]=cloudflare-quic.com::443:4434:/index.html
-        [pandora]=pandora.cm.in.tum.de::4433:4434:/index.html
-        [picoquic]=test.privateoctopus.com::4433:4434:/20000
-        [quant]=quant.eggert.org::4433:4434:/20000
-        [quic-go]=172.30.197.239::4433:4433:/10000
-        [quiche]=quic.tech::4433:4433:/random
-        [quicker]=quicker.edm.uhasselt.be::4433:4434:/index.html
-        [quicly]=kazuhooku.com::4433:4434:/20000.txt
-        [quinn]=ralith.com::4433:4434:/100K
-        [winquic]=msquic.westus.cloudapp.azure.com::4433:4434:/the-odyssey.txt
+        #[tag]=name:flags:port:retry-port:h3-port:URL
+        [apple]=172.30.197.241::4433:4434:4433:/index.html
+        [ats]=quic.ogre.com::4433:4434:4433:/en/latest/
+        [f5]=208.85.208.226::4433:4433:4433:/file15k
+        [lsquic]=http3-test.litespeedtech.com:-3:4433:4434:4433:/
+        [minq]=minq.dev.mozaws.net::4433:4434:4433:/index.html
+        [mozquic]=mozquic.ducksong.com::4433:4434:4433:/index.html
+        [mvfst]=fb.mvfst.net::4433:4434:4433:/index.html
+        [ngtcp2]=nghttp2.org::4433:4434:4433:/blog/
+        [ngx_quic]=cloudflare-quic.com::443:4434:4433:/index.html
+        [pandora]=pandora.cm.in.tum.de::4433:4434:4433:/index.html
+        [picoquic]=test.privateoctopus.com::4433:4434:4433:/20000
+        [quant]=quant.eggert.org::4433:4434:4433:/20000
+        [quic-go]=172.30.197.239::4433:4433:4433:/10000
+        [quiche]=quic.tech::4433:4433:4433:/random
+        [quicker]=quicker.edm.uhasselt.be::4433:4434:4433:/index.html
+        [quicly]=kazuhooku.com::4433:4434:8443:/20000.txt
+        [quinn]=ralith.com::4433:4434:4433:/100K
+        [winquic]=msquic.westus.cloudapp.azure.com::4433:4434:4433:/the-odyssey.txt
 )
 
 results=(live fail vneg hshk data clse rsmt zrtt rtry migr kyph http)
@@ -83,34 +83,34 @@ function test_server {
         local log_base="/tmp/$script.$1.$pid"
 
         IFS=':' read -ra info <<< "${servers[$1]}"
-        # 0=name, 1=port, 2=retry-port, 3=URL
+        # 0=name, 1=flags, 2=port, 3=retry-port, 4=h3-port, 5=URL
 
         # initial 1rtt run
         bin/client $opts ${info[1]} \
-                "https://${info[0]}:${info[2]}${info[4]}" 2>&1 | \
+                "https://${info[0]}:${info[2]}${info[5]}" 2>&1 | \
                 $sed -r "$sed_pattern" > "$log_base.1rtt.log"
 
         # consecutive rsmt/0rtt run
         bin/client $opts ${info[1]} \
-                "https://${info[0]}:${info[2]}${info[4]}" 2>&1 | \
+                "https://${info[0]}:${info[2]}${info[5]}" 2>&1 | \
                 $sed -r "$sed_pattern" > "$log_base.0rtt.log"
         rm -f "$cache"
 
         # rtry run
         bin/client $opts ${info[1]} \
-                "https://${info[0]}:${info[3]}${info[4]}" 2>&1 | \
+                "https://${info[0]}:${info[3]}${info[5]}" 2>&1 | \
                 $sed -r "$sed_pattern" > "$log_base.rtry.log"
         rm -f "$cache"
 
         # key update run
         bin/client $opts ${info[1]} -u \
-                "https://${info[0]}:${info[2]}${info[4]}" 2>&1 | \
+                "https://${info[0]}:${info[2]}${info[5]}" 2>&1 | \
                 $sed -r "$sed_pattern" > "$log_base.kyph.log"
         rm -f "$cache"
 
         # h3 run
         bin/client $opts ${info[1]} -3 \
-                "https://${info[0]}:${info[2]}${info[4]}" 2>&1 | \
+                "https://${info[0]}:${info[4]}${info[5]}" 2>&1 | \
                 $sed -r "$sed_pattern" > "$log_base.h3.log"
         rm -f "$cache"
 
