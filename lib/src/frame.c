@@ -166,7 +166,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     if (t == FRM_CRY) {
         const epoch_t e = epoch_for_pkt_type(meta(v).hdr.type);
         if (unlikely(c->cstreams[e] == 0))
-            err_close_return(c, ERR_STREAM_ID, t,
+            err_close_return(c, ERR_STREAM_STATE, t,
                              "epoch %u pkt processing abandoned", e);
         sid = crpt_strm_id(e);
         meta(v).stream = c->cstreams[e];
@@ -178,6 +178,12 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
                              "sid %" PRId64 " > max %" PRId64, sid, max);
         meta(v).stream = get_stream(c, sid);
     }
+
+    if (unlikely(meta(v).stream->state == strm_hcrm ||
+                 meta(v).stream->state == strm_clsd))
+        err_close_return(c, ERR_STREAM_STATE, t, "stream %" PRIu64 " is %s",
+                         meta(v).stream->id,
+                         strm_state_str[meta(v).stream->state]);
 
     if (is_set(F_STREAM_OFF, t) || t == FRM_CRY)
         i = dec_chk(t, &meta(v).stream_off, v->buf, v->len, i, 0, "%" PRIu64);
