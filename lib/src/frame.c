@@ -224,18 +224,18 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
         meta(v).stream = new_stream(c, sid);
     }
 
-    if (unlikely(meta(v).stream->state == strm_hcrm ||
-                 meta(v).stream->state == strm_clsd))
-        err_close_return(c, ERR_STREAM_STATE, t, "stream %" PRIu64 " is %s",
-                         meta(v).stream->id,
-                         strm_state_str[meta(v).stream->state]);
-
     // best case: new in-order data
     if (meta(v).stream->in_data_off >= meta(v).stream_off &&
         meta(v).stream->in_data_off <= meta(v).stream_off +
                                            meta(v).stream_data_len -
                                            (meta(v).stream_data_len ? 1 : 0)) {
         kind = "seq";
+
+        if (unlikely(meta(v).stream->state == strm_hcrm ||
+                     meta(v).stream->state == strm_clsd))
+            err_close_return(c, ERR_STREAM_STATE, t, "stream %" PRIu64 " is %s",
+                             meta(v).stream->id,
+                             strm_state_str[meta(v).stream->state]);
 
         if (unlikely(meta(v).stream->in_data_off > meta(v).stream_off))
             // already-received data at the beginning of the frame, trim
@@ -313,6 +313,12 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
 
     // data is out of order - check if it overlaps with already stored ooo data
     kind = YEL "ooo" NRM;
+    if (unlikely(meta(v).stream->state == strm_hcrm ||
+                 meta(v).stream->state == strm_clsd))
+        err_close_return(c, ERR_STREAM_STATE, t, "stream %" PRIu64 " is %s",
+                         meta(v).stream->id,
+                         strm_state_str[meta(v).stream->state]);
+
     struct pkt_meta * p = splay_min(ooo_by_off, &meta(v).stream->in_ooo);
     while (p && p->stream_off + p->stream_data_len - 1 < meta(v).stream_off)
         p = splay_next(ooo_by_off, &meta(v).stream->in_ooo, p);
