@@ -186,10 +186,12 @@ static void __attribute__((nonnull)) reset_pm(const struct w_iov_sq * const q)
 {
     struct w_iov * v;
     sq_foreach (v, q, next) {
-        // don't reset stream_data_start!
+        // don't reset stream_data_start and is_fin
+        const bool fin = meta(v).is_fin;
         memset(&meta(v), 0, offsetof(struct pkt_meta, stream_data_start));
         memset(&meta(v).stream_data_len, 0,
                sizeof(meta(v)) - offsetof(struct pkt_meta, stream_data_len));
+        meta(v).is_fin = fin;
     }
 }
 
