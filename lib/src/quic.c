@@ -225,8 +225,11 @@ struct q_conn * q_connect(struct w_engine * const w,
     if (early_data && !sq_empty(early_data)) {
         ensure(early_data_stream, "early data without stream pointer");
         // queue up early data
-        if (fin)
-            meta(sq_last(early_data, w_iov, next)).is_fin = true;
+        if (fin) {
+            struct w_iov * const last = sq_last(early_data, w_iov, next);
+            ensure(last, "got last buffer");
+            meta(last).is_fin = true;
+        }
         *early_data_stream = new_stream(c, c->next_sid_bidi);
         concat_out(*early_data_stream, early_data);
     } else if (early_data_stream)
@@ -286,8 +289,11 @@ bool q_write(struct q_stream * const s,
     }
 
     // add to stream
-    if (fin)
-        meta(sq_last(q, w_iov, next)).is_fin = true;
+    if (fin) {
+        struct w_iov * const last = sq_last(q, w_iov, next);
+        ensure(last, "got last buffer");
+        meta(last).is_fin = true;
+    }
     const uint64_t prev_out_data = s->out_data;
     concat_out(s, q);
 
@@ -578,12 +584,14 @@ void q_close_stream(struct q_stream * const s)
         if (sq_empty(&s->out)) {
             struct w_iov_sq q = w_iov_sq_initializer(q);
             alloc_off(c->w, &q, 1, DATA_OFFSET);
-            ensure(!sq_empty(&q), "could not alloc");
-            sq_last(&q, w_iov, next)->len = 0;
+            struct w_iov * const last = sq_last(&q, w_iov, next);
+            ensure(last, "got last buffer");
+            last->len = 0;
             concat_out(s, &q);
         }
-        ensure(!sq_empty(&s->out), "not empty");
-        meta(sq_last(&s->out, w_iov, next)).is_fin = true;
+        struct w_iov * const last = sq_last(&s->out, w_iov, next);
+        ensure(last, "got last buffer");
+        meta(last).is_fin = true;
         s->state = (s->state == strm_hcrm ? strm_clsd : strm_hclo);
 
         ev_async_send(loop, &c->tx_w);
