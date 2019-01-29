@@ -81,8 +81,7 @@ struct q_stream {
     uint8_t in_ctrl : 1; ///< Stream is in connections "needs ctrl" list.
     uint8_t tx_max_stream_data : 1; ///< We need to open the receive window.
     uint8_t blocked : 1;            ///< We are receive-window-blocked.
-    uint8_t : 4;
-    uint8_t tx_fin : 1; ///< We need to send a FIN. (Not handled w/needs_ctrl).
+    uint8_t : 5;
     uint8_t _unused[3];
 };
 
@@ -161,7 +160,7 @@ strm_epoch(const struct q_stream * const s)
 static inline bool __attribute__((nonnull, always_inline))
 needs_ctrl(const struct q_stream * const s)
 {
-    return s->tx_fin || s->tx_max_stream_data || s->blocked;
+    return s->tx_max_stream_data || s->blocked;
 }
 
 

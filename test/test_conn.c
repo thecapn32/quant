@@ -87,7 +87,7 @@ int main(int argc
     ensure(sc, "is zero");
 
     // reserve a new stream
-    struct q_stream * s = q_rsv_stream(cc, true);
+    struct q_stream * const cs = q_rsv_stream(cc, true);
 
     // allocate buffers to transmit a packet
     struct w_iov_sq o = w_iov_sq_initializer(o);
@@ -95,16 +95,16 @@ int main(int argc
     struct w_iov * const ov = sq_first(&o);
 
     // send the data
-    q_write(s, &o, true);
-    q_close_stream(s);
+    q_write(cs, &o, true);
 
     // read the data
     struct w_iov_sq i = w_iov_sq_initializer(i);
-    s = q_read(sc, &i, true);
+    struct q_stream * const ss = q_read(sc, &i, true);
     struct w_iov * const iv = sq_first(&i);
     ensure(strncmp((char *)ov->buf, (char *)iv->buf, ov->len) == 0,
            "data mismatch");
-    q_close_stream(s);
+    q_close_stream(ss);
+    q_close_stream(cs);
 
     q_free(&i);
     q_free(&o);

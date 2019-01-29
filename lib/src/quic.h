@@ -143,7 +143,8 @@ struct pkt_meta {
     uint8_t is_acked : 1; ///< Is the w_iov ACKed?
     uint8_t is_lost : 1;  ///< Have we marked this w_iov as lost?
     uint8_t is_reset : 1; ///< This packet is a stateless reset.
-    uint8_t : 4;
+    uint8_t is_fin : 1;   ///< This packet has a stream FIN bit.
+    uint8_t : 3;
 
     uint8_t _unused[5];
 };

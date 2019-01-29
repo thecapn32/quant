@@ -1265,8 +1265,7 @@ uint16_t enc_stream_or_crypto_frame(struct q_stream * const s,
                (s->out_data ? F_STREAM_OFF : 0);
 
         // if stream is closed locally and this is last packet, include FIN
-        if (unlikely((s->state == strm_hclo || s->state == strm_clsd) &&
-                     v == sq_last(&s->out, w_iov, next)))
+        if (unlikely((meta(v).is_fin)))
             type |= F_STREAM_FIN;
     } else
         type = FRM_CRY;

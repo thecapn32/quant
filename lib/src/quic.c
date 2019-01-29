@@ -222,16 +222,15 @@ struct q_conn * q_connect(struct w_engine * const w,
     // start TLS handshake
     tls_io(c->cstreams[ep_init], 0);
 
-    if (early_data) {
+    if (early_data && !sq_empty(early_data)) {
         ensure(early_data_stream, "early data without stream pointer");
         // queue up early data
+        if (fin)
+            meta(sq_last(early_data, w_iov, next)).is_fin = true;
         *early_data_stream = new_stream(c, c->next_sid_bidi);
         concat_out(*early_data_stream, early_data);
-        if (fin)
-            strm_to_state(*early_data_stream,
-                          (*early_data_stream)->state == strm_hcrm ? strm_clsd
-                                                                   : strm_hclo);
-    }
+    } else if (early_data_stream)
+        *early_data_stream = 0;
 
     ev_async_send(loop, &c->tx_w);
 
@@ -240,6 +239,11 @@ struct q_conn * q_connect(struct w_engine * const w,
          ntohs(peer->sin_port));
     conn_to_state(c, conn_opng);
     loop_run(q_connect, c, 0);
+
+    if (fin && early_data_stream && *early_data_stream)
+        strm_to_state(*early_data_stream,
+                      (*early_data_stream)->state == strm_hcrm ? strm_clsd
+                                                               : strm_hclo);
 
     if (c->state != conn_estb) {
         warn(WRN, "%s conn %s not connected", conn_type(c), cid2str(c->scid));
@@ -266,6 +270,9 @@ bool q_write(struct q_stream * const s,
         return false;
     }
 
+    if (unlikely(sq_empty(q)))
+        return false;
+
     const uint32_t qlen = w_iov_sq_len(q);
     const uint64_t qcnt = w_iov_sq_cnt(q);
     warn(WRN, "writing %u byte%s in %u buf%s on %s conn %s strm " FMT_SID " %s",
@@ -279,10 +286,10 @@ bool q_write(struct q_stream * const s,
     }
 
     // add to stream
+    if (fin)
+        meta(sq_last(q, w_iov, next)).is_fin = true;
     const uint64_t prev_out_data = s->out_data;
     concat_out(s, q);
-    if (fin)
-        strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
 
     // kick TX watcher
     ev_async_send(loop, &s->c->tx_w);
@@ -296,6 +303,9 @@ bool q_write(struct q_stream * const s,
 
     // move data back
     sq_concat(q, &s->out);
+
+    if (fin)
+        strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
 
     warn(WRN, "wrote %u byte%s on %s conn %s strm " FMT_SID " %s", data_written,
          plural(data_written), conn_type(c), cid2str(c->scid), s->id,
@@ -560,19 +570,24 @@ struct w_engine * q_init(const char * const ifname,
 
 void q_close_stream(struct q_stream * const s)
 {
-    struct q_conn * const c = s->c;
-    warn(WRN, "closing strm " FMT_SID " state %s on %s conn %s", s->id,
-         strm_state_str[s->state], conn_type(c), cid2str(c->scid));
     if (s->state != strm_clsd && s->c->state != conn_clsd) {
-        if (sq_empty(&s->out) == false) {
-            const struct w_iov * const last = sq_last(&s->out, w_iov, next);
-            if (is_fin(last) == false) {
-                strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
-                s->tx_fin = true;
-            }
-            ev_async_send(loop, &c->tx_w);
-            loop_run(q_close_stream, c, s);
+        struct q_conn * const c = s->c;
+        warn(WRN, "closing strm " FMT_SID " state %s on %s conn %s", s->id,
+             strm_state_str[s->state], conn_type(c), cid2str(c->scid));
+
+        if (sq_empty(&s->out)) {
+            struct w_iov_sq q = w_iov_sq_initializer(q);
+            alloc_off(c->w, &q, 1, DATA_OFFSET);
+            ensure(!sq_empty(&q), "could not alloc");
+            sq_last(&q, w_iov, next)->len = 0;
+            concat_out(s, &q);
         }
+        ensure(!sq_empty(&s->out), "not empty");
+        meta(sq_last(&s->out, w_iov, next)).is_fin = true;
+        s->state = (s->state == strm_hcrm ? strm_clsd : strm_hclo);
+
+        ev_async_send(loop, &c->tx_w);
+        loop_run(q_close_stream, c, s);
     }
 
     free_stream(s);
