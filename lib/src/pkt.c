@@ -431,6 +431,14 @@ bool enc_pkt(struct q_stream * const s,
     log_pkt("TX", v, c->peer.sin_addr.s_addr, c->peer.sin_port,
             meta(v).hdr.type == LH_RTRY ? &c->odcid : 0, c->tok, c->tok_len);
 
+    // sanity check
+    if (unlikely((is_lh(meta(v).hdr.flags) && i >= OFFSET_HSHK) ||
+                 !is_lh(meta(v).hdr.flags) && i >= OFFSET_ESTB)) {
+        warn(ERR, "pkt header %u >= offset %u", i,
+             is_lh(meta(v).hdr.flags) ? OFFSET_HSHK : OFFSET_ESTB);
+        return false;
+    }
+
     if (unlikely(meta(v).hdr.type == LH_RTRY))
         goto tx;
 
