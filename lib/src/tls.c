@@ -917,7 +917,6 @@ void init_tls(struct q_conn * const c)
             c->vers_initial = c->vers = t->vers;
             c->try_0rtt = 1;
         }
-
     }
 
     init_prot(c);
@@ -1003,7 +1002,8 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
             continue;
         // warn(DBG, "epoch %u: off %u len %u", e, epoch_off[e], out_len);
         struct w_iov_sq o = w_iov_sq_initializer(o);
-        alloc_off(w_engine(c->sock), &o, (uint32_t)out_len, OFFSET_HSHK);
+        alloc_off(w_engine(c->sock), &o, (uint32_t)out_len,
+                  DATA_OFFSET + c->tok_len);
         const uint8_t * data = tls_io.base + epoch_off[e];
         struct w_iov * ov = 0;
         sq_foreach (ov, &o, next) {

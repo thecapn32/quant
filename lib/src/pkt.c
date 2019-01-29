@@ -432,10 +432,10 @@ bool enc_pkt(struct q_stream * const s,
             meta(v).hdr.type == LH_RTRY ? &c->odcid : 0, c->tok, c->tok_len);
 
     // sanity check
-    if (unlikely((is_lh(meta(v).hdr.flags) && i >= OFFSET_HSHK) ||
-                 !is_lh(meta(v).hdr.flags) && i >= OFFSET_ESTB)) {
-        warn(ERR, "pkt header %u >= offset %u", i,
-             is_lh(meta(v).hdr.flags) ? OFFSET_HSHK : OFFSET_ESTB);
+    if (unlikely(meta(v).hdr.hdr_len >=
+                 DATA_OFFSET + (is_lh(meta(v).hdr.flags) ? c->tok_len : 0))) {
+        warn(ERR, "pkt header %u >= offset %u", meta(v).hdr.hdr_len,
+             DATA_OFFSET + (is_lh(meta(v).hdr.flags) ? c->tok_len : 0));
         return false;
     }
 

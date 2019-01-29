@@ -777,11 +777,9 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             }
 
             // handle an incoming retry packet
-            vneg_or_rtry_resp(c, false);
-
             c->tok_len = tok_len;
             memcpy(c->tok, tok, c->tok_len);
-
+            vneg_or_rtry_resp(c, false);
             warn(INF, "handling serv stateless retry w/tok %s",
                  hex2str(c->tok, c->tok_len));
             goto done;

@@ -177,7 +177,7 @@ void q_alloc(struct w_engine * const w,
              const size_t len)
 {
     ensure(len <= UINT32_MAX, "len %u too long", len);
-    alloc_off(w, q, (uint32_t)len, OFFSET_ESTB);
+    alloc_off(w, q, (uint32_t)len, DATA_OFFSET);
 }
 
 
