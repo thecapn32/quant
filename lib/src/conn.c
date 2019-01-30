@@ -632,7 +632,7 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
     init_rec(c);
 
     // reset TLS state and create new CH
-    init_tls(c);
+    init_tls(c, (char *)c->tls.alpn.base);
     tls_io(c->cstreams[ep_init], 0);
 }
 
@@ -934,7 +934,7 @@ rx_pkts(struct w_iov_sq * const x,
                     c = new_conn(w_engine(ws), meta(v).hdr.vers,
                                  &meta(v).hdr.scid, &meta(v).hdr.dcid, &peer, 0,
                                  ntohs(w_get_sport(ws)), 0);
-                    init_tls(c);
+                    init_tls(c, 0);
 
                     // TODO: remove this interop hack eventually
                     if (ntohs(c->sport) == 4434)
@@ -1477,7 +1477,7 @@ void free_conn(struct q_conn * const c)
         if (c->cstreams[e])
             free_stream(c->cstreams[e]);
 
-    free_tls(c);
+    free_tls(c, false);
 
     // free packet number spaces
     free_pn(&c->pn_init.pn);

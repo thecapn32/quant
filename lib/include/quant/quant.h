@@ -54,6 +54,7 @@ struct q_conf {
 
 
 struct q_conn_conf {
+    const char * const alpn; // required for client
     const uint64_t idle_timeout;
     const uint64_t tls_key_update_frequency; // seconds
     const uint8_t enable_spinbit : 1;

@@ -54,6 +54,7 @@ typedef enum { ep_init = 0, ep_0rtt = 1, ep_hshk = 2, ep_data = 3 } epoch_t;
 
 struct tls {
     ptls_t * t;
+    ptls_iovec_t alpn;
     uint8_t secret[2][PTLS_MAX_DIGEST_SIZE];
     ptls_raw_extension_t tp_ext[2];
     ptls_handshake_properties_t tls_hshk_prop;
@@ -68,11 +69,13 @@ extern ptls_context_t tls_ctx;
 
 extern void __attribute__((nonnull)) init_prot(struct q_conn * const c);
 
-extern void __attribute__((nonnull)) init_tls(struct q_conn * const c);
+extern void __attribute__((nonnull(1)))
+init_tls(struct q_conn * const c, const char * const alpn);
 
 extern void __attribute__((nonnull)) init_tp(struct q_conn * const c);
 
-extern void __attribute__((nonnull)) free_tls(struct q_conn * const c);
+extern void __attribute__((nonnull))
+free_tls(struct q_conn * const c, const bool keep_alpn);
 
 extern int __attribute__((nonnull(1)))
 tls_io(struct q_stream * const s, struct w_iov * const iv);

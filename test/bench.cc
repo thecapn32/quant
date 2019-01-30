@@ -98,7 +98,7 @@ int main(int argc, char ** argv)
     cid.len = 4;
     memcpy(cid.id, "1234", cid.len);
     c = new_conn(w, 0xff00000e, &cid, &cid, nullptr, "", 55555, nullptr);
-    init_tls(c);
+    init_tls(c, nullptr);
     benchmark::RunSpecifiedBenchmarks();
 
     q_cleanup(w);

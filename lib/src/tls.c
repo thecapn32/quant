@@ -107,8 +107,9 @@ static ptls_openssl_sign_certificate_t sign_cert = {0};
 static ptls_openssl_verify_certificate_t verifier = {0};
 #endif
 
-// client always tries to negotiate first entry
-static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-17", 5}};
+// first entry is client default, if not otherwise specified
+static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-17", 5},
+                                    {(uint8_t *)"h3-17", 5}};
 static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 
 static struct cipher_ctx dec_tckt;
@@ -879,11 +880,11 @@ static ptls_save_ticket_t save_ticket = {.cb = save_ticket_cb};
 static ptls_encrypt_ticket_t encrypt_ticket = {.cb = encrypt_ticket_cb};
 
 
-void init_tls(struct q_conn * const c)
+void init_tls(struct q_conn * const c, const char * const clnt_alpn)
 {
     if (c->tls.t)
         // we are re-initializing during version negotiation
-        free_tls(c);
+        free_tls(c, true);
     ensure((c->tls.t = ptls_new(&tls_ctx, !c->is_clnt)) != 0, "ptls_new");
     *ptls_get_data_ptr(c->tls.t) = c;
     if (c->is_clnt)
@@ -897,13 +898,22 @@ void init_tls(struct q_conn * const c)
     hshk_prop->collected_extensions = chk_tp;
 
     if (c->is_clnt) {
-        hshk_prop->client.negotiated_protocols.list = &alpn[0];
+        if (clnt_alpn == 0 || *clnt_alpn == 0) {
+            c->tls.alpn = alpn[0];
+            warn(NTE, "using default ALPN %.*s", c->tls.alpn.len,
+                 c->tls.alpn.base);
+        } else if (clnt_alpn != (char *)c->tls.alpn.base) {
+            free(c->tls.alpn.base);
+            c->tls.alpn = ptls_iovec_init(strdup(clnt_alpn), strlen(clnt_alpn));
+        }
+        hshk_prop->client.negotiated_protocols.list = &c->tls.alpn;
         hshk_prop->client.negotiated_protocols.count = 1;
         hshk_prop->client.max_early_data_size = &c->tls.max_early_data;
 
         // try to find an existing session ticket
         struct tls_ticket which = {.sni = c->peer_name,
-                                   .alpn = (char *)alpn[0].base};
+                                   // this works, because of strdup() allocation
+                                   .alpn = (char *)c->tls.alpn.base};
         struct tls_ticket * t = splay_find(tickets_by_peer, &tickets, &which);
         if (t == 0) {
             // if we couldn't find a ticket, try without an alpn
@@ -938,12 +948,14 @@ static void __attribute__((nonnull)) free_prot(struct q_conn * const c)
 }
 
 
-void free_tls(struct q_conn * const c)
+void free_tls(struct q_conn * const c, const bool keep_alpn)
 {
     if (c->tls.t)
         ptls_free(c->tls.t);
     ptls_clear_memory(c->tls.secret, sizeof(c->tls.secret));
     free_prot(c);
+    if (keep_alpn == false && c->tls.alpn.base != alpn[0].base)
+        free(c->tls.alpn.base);
 }
 
 

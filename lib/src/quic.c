@@ -207,7 +207,7 @@ struct q_conn * q_connect(struct w_engine * const w,
         new_conn(w, vers, 0, 0, peer, peer_name, 0, conn_conf);
 
     // init TLS
-    init_tls(c);
+    init_tls(c, conn_conf ? conn_conf->alpn : 0);
     init_tp(c);
 
     warn(WRN, "new %u-RTT %s conn %s to %s:%u, %u byte%s queued for TX",

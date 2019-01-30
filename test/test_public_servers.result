@@ -5,11 +5,11 @@ f5        *         V    H    D    C    R         S
 lsquic    *         V    H    D    C              S    M         3
 minq
 mozquic
-mvfst
+mvfst     *         V    H    D    C                             3
 ngtcp2    *         V    H    D    C    R    Z    S    M    U
 ngx_quic  *         V    H    D    C    R
 pandora
-picoquic  *         V    H    D    C    R    Z    S    M    U
+picoquic  *         V    H    D    C    R    Z    S    M    U    3
 quant     *         V    H    D    C    R    Z    S    M    U
 quic-go   *         V    H    D    C              S
 quiche    *         V    H    D    C    R         S
