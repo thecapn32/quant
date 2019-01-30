@@ -1259,22 +1259,6 @@ which_cipher_ctx_out(const struct q_conn * const c, const uint8_t flags)
 }
 
 
-#if !defined(NDEBUG) && defined(DEBUG_MARSHALL)
-#define aead_type(c, a)                                                        \
-    ((a) == (c)->pn_init.in.aead || (a) == (c)->pn_init.out.aead               \
-         ? "Initial"                                                           \
-         : ((a) == (c)->pn_hshk.in.aead || (a) == (c)->pn_hshk.out.aead        \
-                ? "Handshake"                                                  \
-                : ((a) == (c)->pn_data.in_0rtt.aead ||                         \
-                           (a) == (c)->pn_data.out_0rtt.aead                   \
-                       ? "0-RTT"                                               \
-                       : ((a) == (c)->pn_data.in_1rtt[0].aead ||               \
-                                  (a) == (c)->pn_data.out_1rtt[0].aead         \
-                              ? "1-RTT (0)"                                    \
-                              : "1-RTT (1)"))))
-#endif
-
-
 uint16_t dec_aead(struct q_conn * const c
 #ifndef DEBUG_MARSHALL
                   __attribute__((unused))
@@ -1297,8 +1281,9 @@ uint16_t dec_aead(struct q_conn * const c
     memcpy(v->buf, xv->buf, hdr_len);
 
 #ifdef DEBUG_MARSHALL
-    warn(DBG, "dec %s AEAD over [%u..%u] in [%u..%u]", aead_type(c, ctx->aead),
-         hdr_len, len - AEAD_LEN - 1, len - AEAD_LEN, len - 1);
+    warn(DBG, "dec %s AEAD over [%u..%u] in [%u..%u]",
+         pkt_type_str(meta(v).hdr.type, &meta(v).hdr.vers), hdr_len,
+         len - AEAD_LEN - 1, len - AEAD_LEN, len - 1);
 #endif
 
     return hdr_len + len;
@@ -1312,8 +1297,8 @@ uint16_t enc_aead(struct q_conn * const c,
 {
     const struct cipher_ctx * ctx = which_cipher_ctx_out(c, meta(v).hdr.flags);
     if (unlikely(ctx == 0 || ctx->aead == 0)) {
-        err_close(c, ERR_PROTOCOL_VIOLATION, 0, "0x%02x pkt, no crypto context",
-                  meta(v).hdr.flags);
+        warn(NTE, "no %s crypto context",
+             pkt_type_str(meta(v).hdr.type, &meta(v).hdr.vers));
         return 0;
     }
 
@@ -1336,8 +1321,9 @@ uint16_t enc_aead(struct q_conn * const c,
         return 0;
 
 #ifdef DEBUG_MARSHALL
-    warn(DBG, "enc %s AEAD over [%u..%u] in [%u..%u]", aead_type(c, ctx->aead),
-         hdr_len, hdr_len + plen - AEAD_LEN - 1, hdr_len + plen - AEAD_LEN,
+    warn(DBG, "enc %s AEAD over [%u..%u] in [%u..%u]",
+         pkt_type_str(meta(v).hdr.type, &meta(v).hdr.vers), hdr_len,
+         hdr_len + plen - AEAD_LEN - 1, hdr_len + plen - AEAD_LEN,
          hdr_len + plen - 1);
 #endif
     return hdr_len + ret;
