@@ -25,6 +25,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <arpa/inet.h>
 #include <assert.h>
 #include <inttypes.h>
 #include <netinet/in.h>
@@ -34,6 +35,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/param.h>
+#include <sys/socket.h>
 #include <unistd.h>
 
 #ifdef PTLS_OPENSSL
@@ -410,22 +412,22 @@ static uint16_t chk_tp_serv(struct q_conn * const c,
 
 #define dec_tp(var)                                                            \
     __extension__({                                                            \
-        uint16_t l;                                                            \
-        i = dec(&l, buf, len, i, sizeof(l), "%u");                             \
-        ensure(l <= sizeof(uint64_t), "invalid len %u", l);                    \
-        if (l)                                                                 \
+        uint16_t _l;                                                           \
+        i = dec(&_l, buf, len, i, sizeof(_l), "%u");                           \
+        ensure(_l <= sizeof(uint64_t), "invalid len %u", _l);                  \
+        if (_l)                                                                \
             i = dec((var), buf, len, i, 0, "%u");                              \
-        l;                                                                     \
+        _l;                                                                    \
     })
 
 #define dec_tp_buf(var, w)                                                     \
     __extension__({                                                            \
-        uint16_t l;                                                            \
-        i = dec(&l, buf, len, i, sizeof(l), "%u");                             \
-        ensure(l <= (w), "invalid len %u", l);                                 \
-        if (l)                                                                 \
-            i = dec_buf((var), buf, len, i, l);                                \
-        l;                                                                     \
+        uint16_t _l;                                                           \
+        i = dec(&_l, buf, len, i, sizeof(_l), "%u");                           \
+        ensure(_l <= (w), "invalid len %u", _l);                               \
+        if (_l)                                                                \
+            i = dec_buf((var), buf, len, i, _l);                               \
+        _l;                                                                    \
     })
 
 
@@ -579,7 +581,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         case TP_SRT:
             if (c->is_clnt == false) {
                 err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
-                          "rx original_connection_id tp at serv");
+                          "rx stateless_reset_token tp at serv");
                 return 1;
             }
             uint16_t l;
@@ -594,6 +596,43 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             warn(INF, "\tstateless_reset_token = %s",
                  hex2str(dcid->srt, sizeof(dcid->srt)));
             i += sizeof(dcid->srt);
+            break;
+
+        case TP_PRFA:
+            i = dec(&l, buf, len, i, sizeof(l), "%u");
+
+            struct pref_addr * const pa = &c->tp_out.pref_addr;
+            i = dec(&pa->ip_vers, buf, len, i, sizeof(pa->ip_vers), "%u");
+            i = dec(&pa->ip_len, buf, len, i, sizeof(pa->ip_len), "%u");
+
+            if ((pa->ip_vers != 4 || pa->ip_len != 4) &&
+                (pa->ip_vers != 6 || pa->ip_len != 16)) {
+                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
+                          "IPv%u len %u illegal", pa->ip_vers, pa->ip_len);
+                return 1;
+            }
+
+            memcpy(&pa->ip, &buf[i], pa->ip_len);
+            i += pa->ip_len;
+
+            i = dec(&pa->port, buf, len, i, sizeof(pa->port), "%u");
+
+            i = dec(&pa->cid.len, buf, len, i, sizeof(pa->cid.len), "%u");
+            memcpy(pa->cid.id, &buf[i], pa->cid.len);
+            i += pa->cid.len;
+            pa->cid.seq = 1;
+            add_dcid(c, &pa->cid);
+
+            memcpy(pa->cid.srt, &buf[i], sizeof(pa->cid.srt));
+            i += sizeof(pa->cid.srt);
+
+            char ipstr[INET6_ADDRSTRLEN];
+            inet_ntop(pa->ip_vers == 4 ? AF_INET : AF_INET6, &pa->ip, ipstr,
+                      sizeof(ipstr));
+            warn(INF, "\tpreferred_address = IPv%u %s%s%s:%u cid %s srt %s",
+                 pa->ip_vers, pa->ip_vers == 6 ? "[" : "", ipstr,
+                 pa->ip_vers == 6 ? "]" : "", pa->port, cid2str(&pa->cid),
+                 hex2str(&pa->cid.srt, sizeof(pa->cid.srt)));
             break;
 
         default:

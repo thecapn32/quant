@@ -99,6 +99,20 @@ extern khash_t(conns_by_ipnp) * conns_by_ipnp;
 extern khash_t(conns_by_id) * conns_by_id;
 
 
+struct pref_addr {
+    uint8_t ip_vers;
+    uint8_t ip_len;
+    uint8_t _unused[2];
+    union {
+        struct in_addr addr4;
+        struct in6_addr addr6;
+    } ip;
+    uint16_t port;
+    uint8_t _unused2[2];
+    struct cid cid;
+};
+
+
 struct transport_params {
     uint64_t max_strm_data_uni;
     uint64_t max_strm_data_bidi_local;
@@ -112,6 +126,7 @@ struct transport_params {
     uint8_t ack_del_exp;
     bool disable_migration;
     uint8_t _unused[6];
+    struct pref_addr pref_addr;
     struct cid orig_cid;
 };
 

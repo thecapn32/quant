@@ -375,14 +375,15 @@ int main(int argc, char * argv[])
             if (do_h3 && n == 0 && strnlen((char *)v->buf, v->len) == v->len)
                 warn(WRN, "no h3 payload");
             if (n < 4 || v == sq_last(&i, w_iov, next)) {
-                // don't print newlines to console log
-                for (uint16_t p = 0; p < v->len; p++)
-                    if (v->buf[p] == '\n' || v->buf[p] == '\r')
-                        v->buf[p] = ' ';
                 if (do_h3)
                     hexdump(v->buf, v->len);
-                else
+                else {
+                    // don't print newlines to console log
+                    for (uint16_t p = 0; p < v->len; p++)
+                        if (v->buf[p] == '\n' || v->buf[p] == '\r')
+                            v->buf[p] = ' ';
                     printf("%.*s", v->len, v->buf);
+                }
             } else
                 printf(".");
             n++;
