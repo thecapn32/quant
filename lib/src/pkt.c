@@ -816,7 +816,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
                                  ? meta(v).hdr.hdr_len + meta(v).hdr.len -
                                        pkt_nr_len(meta(v).hdr.flags)
                                  : xv->len;
-    const uint16_t ret = dec_aead(c, xv, v, pkt_len, ctx);
+    const uint16_t ret = dec_aead(xv, v, pkt_len, ctx);
 
     if (unlikely(ret == 0)) {
     check_if_reset:

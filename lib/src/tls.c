@@ -1271,12 +1271,7 @@ which_cipher_ctx_out(const struct q_conn * const c, const uint8_t flags)
 }
 
 
-uint16_t dec_aead(struct q_conn * const c
-#ifndef DEBUG_MARSHALL
-                  __attribute__((unused))
-#endif
-                  ,
-                  const struct w_iov * const xv,
+uint16_t dec_aead(const struct w_iov * const xv,
                   const struct w_iov * const v,
                   const uint16_t len,
                   const struct cipher_ctx * const ctx)

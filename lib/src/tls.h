@@ -85,8 +85,7 @@ extern void init_tls_ctx(const struct q_conf * const conf);
 extern void free_tls_ctx(void);
 
 extern uint16_t __attribute__((nonnull))
-dec_aead(struct q_conn * const c,
-         const struct w_iov * const xv,
+dec_aead(const struct w_iov * const xv,
          const struct w_iov * const v,
          const uint16_t len,
          const struct cipher_ctx * const ctx);
