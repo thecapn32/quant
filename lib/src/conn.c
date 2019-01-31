@@ -765,9 +765,9 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         }
 
         if (unlikely(meta(v).hdr.vers != c->vers)) {
-            warn(ERR, "serv responded with vers 0x%08x to our CI w/vers 0x%08x",
+            warn(ERR,
+                 "serv response w/vers 0x%08x to CI w/vers 0x%08x, ignoring",
                  meta(v).hdr.vers, c->vers);
-            err_close(c, ERR_PROTOCOL_VIOLATION, 0, "wrong vers in SH");
             goto done;
         }
 
