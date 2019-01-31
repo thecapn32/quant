@@ -251,11 +251,11 @@ pm_cpy(struct pkt_meta * const dst,
 static inline bool __attribute__((nonnull))
 is_ack_eliciting(const struct frames * const f)
 {
-    static const struct frames ack_only = bitset_t_initializer(1 << FRM_ACK);
-    static const struct frames ack_or_pad_only =
+    static const struct frames ack_or_pad =
         bitset_t_initializer(1 << FRM_ACK | 1 << FRM_PAD);
-    return bit_cmp(NUM_FRAM_TYPES, f, &ack_only) &&
-           bit_cmp(NUM_FRAM_TYPES, f, &ack_or_pad_only);
+    struct frames not_ack_or_pad = *f;
+    bit_nand(NUM_FRAM_TYPES, &not_ack_or_pad, &ack_or_pad);
+    return !bit_empty(NUM_FRAM_TYPES, &not_ack_or_pad);
 }
 
 
