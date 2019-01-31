@@ -353,7 +353,7 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
     uint32_t encoded = 0;
     struct w_iov * v = s->out_una;
     sq_foreach_from (v, &s->out, next) {
-        if (unlikely(has_wnd(c, v->len) == false))
+        if (unlikely(has_wnd(c, v->len) == false && limit == 0))
             break;
 
         if (unlikely(meta(v).is_acked)) {
