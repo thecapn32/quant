@@ -305,7 +305,7 @@ bool q_write(struct q_stream * const s,
     const uint64_t data_written =
         s->out_una && meta(s->out_una).udp_len
             ? meta(s->out_una).stream_off - prev_out_data
-            : (s->out_nxt ? s->out_data - prev_out_data : qlen);
+            : qlen;
 
     // move data back
     sq_concat(q, &s->out);
@@ -369,9 +369,6 @@ void q_readall_stream(struct q_stream * const s, struct w_iov_sq * const q)
 {
     struct q_conn * const c = s->c;
 
-    if (s->state == strm_hcrm || s->state == strm_clsd)
-        return;
-
     while (c->state == conn_estb && s->state != strm_hcrm &&
            s->state != strm_clsd) {
         warn(WRN, "reading all on %s conn %s strm " FMT_SID, conn_type(c),
@@ -379,12 +376,13 @@ void q_readall_stream(struct q_stream * const s, struct w_iov_sq * const q)
         loop_run(q_readall_stream, c, s);
     }
 
-    if (s->state == strm_clsd || s->state == strm_hcrm)
-        // return data
-        sq_concat(q, &s->in);
+    if (!sq_empty(&s->in))
+        warn(WRN, "read %u byte%s on %s conn %s strm " FMT_SID,
+             w_iov_sq_len(&s->in), plural(w_iov_sq_len(&s->in)), conn_type(c),
+             cid2str(c->scid), s->id);
 
-    warn(WRN, "read %u byte%s on %s conn %s strm " FMT_SID, w_iov_sq_len(q),
-         plural(w_iov_sq_len(q)), conn_type(c), cid2str(c->scid), s->id);
+    // return data
+    sq_concat(q, &s->in);
 }
 
 
@@ -456,10 +454,8 @@ struct q_stream * q_rsv_stream(struct q_conn * const c, const bool bidi)
     const uint64_t msd =
         bidi ? c->tp_out.max_strm_data_bidi_local : c->tp_out.max_strm_data_uni;
 
-    if (unlikely(msd == 0)) {
+    if (unlikely(msd == 0))
         warn(WRN, "peer hasn't allowed %s streams", bidi ? "bi" : "uni");
-        return 0;
-    }
 
     int64_t * const next_sid = bidi ? &c->next_sid_bidi : &c->next_sid_uni;
     int64_t * const max_streams =

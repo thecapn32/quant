@@ -66,7 +66,6 @@ struct q_stream {
 
     struct w_iov_sq out;    ///< Tail queue containing outbound data.
     struct w_iov * out_una; ///< Lowest un-ACK'ed data chunk.
-    struct w_iov * out_nxt; ///< Lowest unsent data chunk.
     uint64_t out_data;      ///< Current outbound stream offset (= data sent).
     uint64_t out_data_max;  ///< Outbound max_stream_data.
 
@@ -173,24 +172,20 @@ streams_by_id_cmp(const struct q_stream * const a,
 
 
 static inline void __attribute__((nonnull, always_inline))
-need_ctrl_ins(struct q_stream * const s)
+need_ctrl_update(struct q_stream * const s)
 {
-    if (needs_ctrl(s) && s->in_ctrl == false) {
-        sl_insert_head(&s->c->need_ctrl, s, node_ctrl);
-        s->in_ctrl = true;
+    if (needs_ctrl(s)) {
+        if (s->in_ctrl == false) {
+            sl_insert_head(&s->c->need_ctrl, s, node_ctrl);
+            s->in_ctrl = true;
+        }
+    } else {
+        if (s->in_ctrl) {
+            sl_remove(&s->c->need_ctrl, s, q_stream, node_ctrl);
+            s->in_ctrl = false;
+        }
     }
 }
-
-
-static inline void __attribute__((nonnull, always_inline))
-need_ctrl_del(struct q_stream * const s)
-{
-    if (needs_ctrl(s) == false && s->in_ctrl) {
-        sl_remove(&s->c->need_ctrl, s, q_stream, node_ctrl);
-        s->in_ctrl = false;
-    }
-}
-
 
 extern struct q_stream * __attribute__((nonnull))
 get_stream(struct q_conn * const c, const int64_t id);

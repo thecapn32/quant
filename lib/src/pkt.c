@@ -331,6 +331,7 @@ enc_other_frames(struct q_conn * const c,
 bool enc_pkt(struct q_stream * const s,
              const bool rtx,
              const bool enc_data,
+             const bool force_tx,
              struct w_iov * const v)
 {
     if (likely(enc_data))
@@ -487,8 +488,10 @@ bool enc_pkt(struct q_stream * const s,
                     (sq_first(&c->txq) ? sq_first(&c->txq)->len : 0));
     }
 
-    if (likely(meta(v).hdr.type != LH_RTRY))
-        ensure(i > meta(v).hdr.hdr_len, "would have sent pkt w/o frames");
+    if (unlikely(force_tx && i == meta(v).hdr.hdr_len))
+        i = enc_ping_frame(v, i);
+
+    ensure(i > meta(v).hdr.hdr_len, "would have sent pkt w/o frames");
 
 tx:
     // for LH pkts, now encode the length

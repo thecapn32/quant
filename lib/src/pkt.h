@@ -178,6 +178,7 @@ dec_pkt_hdr_remainder(struct w_iov * const xv,
 extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
                                              const bool rtx,
                                              const bool enc_data,
+                                             const bool force_tx,
                                              struct w_iov * const v);
 
 extern void __attribute__((nonnull)) coalesce(struct w_iov_sq * const q);

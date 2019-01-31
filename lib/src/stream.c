@@ -202,7 +202,7 @@ void reset_stream(struct q_stream * const s, const bool forget)
     s->in_data_off = s->in_data = s->out_data = 0;
 
     if (forget) {
-        s->out_nxt = s->out_una = 0;
+        s->out_una = 0;
         q_free(&s->in);
         q_free(&s->out);
         return;
@@ -210,16 +210,15 @@ void reset_stream(struct q_stream * const s, const bool forget)
 
     struct w_iov * v = s->out_una;
     sq_foreach_from (v, &s->out, next) {
-        if (v == s->out_nxt)
-            break;
+        if (meta(v).udp_len) {
+            // remove trailing padding
+            v->len = meta(v).stream_data_len;
 
-        // remove trailing padding
-        v->len = meta(v).stream_data_len;
-
-        // remove the pkt and any RTXs from sent_pkts
-        pm_free(&meta(v), false);
+            // remove the pkt and any RTXs from sent_pkts
+            pm_free(&meta(v), false);
+        }
     }
-    s->out_nxt = s->out_una = sq_first(&s->out);
+    s->out_una = sq_first(&s->out);
 
     // reset pkt meta
     reset_pm(&s->in);
@@ -229,17 +228,14 @@ void reset_stream(struct q_stream * const s, const bool forget)
 
 void do_stream_fc(struct q_stream * const s, const uint16_t len)
 {
-    ensure(s->id >= 0, "fc doesn't apply to crypto streams");
-
-    if (len && s->out_data + len + MAX_PKT_LEN > s->out_data_max)
-        s->blocked = true;
+    s->blocked = (s->out_data + len + MAX_PKT_LEN > s->out_data_max);
 
     if (s->in_data * 2 > s->in_data_max) {
         s->tx_max_stream_data = true;
         s->in_data_max *= 2;
     }
 
-    need_ctrl_ins(s);
+    need_ctrl_update(s);
 }
 
 
@@ -275,9 +271,6 @@ void do_stream_id_fc(struct q_conn * const c,
 
 void concat_out(struct q_stream * const s, struct w_iov_sq * const q)
 {
-    if (s->out_nxt == 0)
-        s->out_nxt = sq_first(q);
-
     if (s->out_una == 0)
         s->out_una = sq_first(q);
 

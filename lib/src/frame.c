@@ -614,7 +614,7 @@ dec_max_stream_data_frame(struct q_conn * const c,
     if (max > s->out_data_max) {
         s->out_data_max = max;
         s->blocked = false;
-        need_ctrl_del(s);
+        need_ctrl_update(s);
     } else if (max < s->out_data_max)
         warn(NTE, "MAX_STREAM_DATA %" PRIu64 " < current value %" PRIu64, max,
              s->out_data_max);
@@ -696,7 +696,7 @@ dec_stream_data_blocked_frame(struct q_conn * const c,
     do_stream_fc(s, 0);
     // because do_stream_fc() only sets this when increasing the FC window
     s->tx_max_stream_data = true;
-    need_ctrl_ins(s);
+    need_ctrl_update(s);
 
     return i;
 }
