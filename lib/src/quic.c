@@ -368,6 +368,10 @@ again:;
 void q_readall_stream(struct q_stream * const s, struct w_iov_sq * const q)
 {
     struct q_conn * const c = s->c;
+
+    if (s->state == strm_hcrm || s->state == strm_clsd)
+        return;
+
     while (c->state == conn_estb && s->state != strm_hcrm &&
            s->state != strm_clsd) {
         warn(WRN, "reading all on %s conn %s strm " FMT_SID, conn_type(c),
@@ -578,8 +582,8 @@ void q_close_stream(struct q_stream * const s)
 {
     if (s->state != strm_clsd && s->c->state != conn_clsd) {
         struct q_conn * const c = s->c;
-        warn(WRN, "closing strm " FMT_SID " state %s on %s conn %s", s->id,
-             strm_state_str[s->state], conn_type(c), cid2str(c->scid));
+        warn(WRN, "closing strm " FMT_SID " on %s conn %s", s->id, conn_type(c),
+             cid2str(c->scid));
 
         if (sq_empty(&s->out)) {
             struct w_iov_sq q = w_iov_sq_initializer(q);
