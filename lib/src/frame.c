@@ -197,13 +197,13 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     meta(v).stream_data_len = (uint16_t)l;
 
     // deliver data into stream
-    bool is_dup = false;
+    bool ignore = false;
     const char * kind = BLD RED "???" NRM;
 
     if (unlikely(meta(v).stream_data_len == 0 && !is_set(F_STREAM_FIN, t))) {
         warn(WRN, "zero-len stream/crypto frame on sid " FMT_SID ", ignoring",
              sid);
-        is_dup = true;
+        ignore = true;
         goto done;
     }
 
@@ -232,10 +232,14 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
         kind = "seq";
 
         if (unlikely(meta(v).stream->state == strm_hcrm ||
-                     meta(v).stream->state == strm_clsd))
-            err_close_return(c, ERR_STREAM_STATE, t, "stream %" PRIu64 " is %s",
-                             meta(v).stream->id,
-                             strm_state_str[meta(v).stream->state]);
+                     meta(v).stream->state == strm_clsd)) {
+            warn(NTE,
+                 "ignoring STREAM frame for %s strm " FMT_SID " on %s conn %s",
+                 strm_state_str[meta(v).stream->state], sid, conn_type(c),
+                 cid2str(c->scid));
+            ignore = true;
+            goto done;
+        }
 
         if (unlikely(meta(v).stream->in_data_off > meta(v).stream_off))
             // already-received data at the beginning of the frame, trim
@@ -307,17 +311,20 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     if (meta(v).stream_off + meta(v).stream_data_len <=
         meta(v).stream->in_data_off) {
         kind = RED "dup" NRM;
-        is_dup = true;
+        ignore = true;
         goto done;
     }
 
     // data is out of order - check if it overlaps with already stored ooo data
     kind = YEL "ooo" NRM;
     if (unlikely(meta(v).stream->state == strm_hcrm ||
-                 meta(v).stream->state == strm_clsd))
-        err_close_return(c, ERR_STREAM_STATE, t, "stream %" PRIu64 " is %s",
-                         meta(v).stream->id,
-                         strm_state_str[meta(v).stream->state]);
+                 meta(v).stream->state == strm_clsd)) {
+        warn(NTE, "ignoring STREAM frame for %s strm " FMT_SID " on %s conn %s",
+             strm_state_str[meta(v).stream->state], sid, conn_type(c),
+             cid2str(c->scid));
+        ignore = true;
+        goto done;
+    }
 
     struct pkt_meta * p = splay_min(ooo_by_off, &meta(v).stream->in_ooo);
     while (p && p->stream_off + p->stream_data_len - 1 < meta(v).stream_off)
@@ -330,7 +337,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
         warn(ERR, "[%u..%u] have existing overlapping ooo data [%u..%u]",
              meta(v).stream_off, meta(v).stream_off + meta(v).stream_data_len,
              p->stream_off, p->stream_off + p->stream_data_len - 1);
-        is_dup = true;
+        ignore = true;
         goto done;
     }
 
@@ -352,7 +359,7 @@ done:
                          meta(v).stream_off + meta(v).stream_data_len - 1,
                          meta(v).stream->in_data_max);
 
-    if (is_dup)
+    if (ignore)
         // this indicates to callers that the w_iov was not placed in a stream
         meta(v).stream = 0;
 
