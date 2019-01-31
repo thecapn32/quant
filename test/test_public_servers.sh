@@ -34,17 +34,17 @@ declare -A servers=(
         [ats]=quic.ogre.com::4433:4434:4433:/en/latest/
         [f5]=208.85.208.226::4433:4433:4433:/file15k
         [lsquic]=http3-test.litespeedtech.com:-3:4433:4434:4433:/
-        [minq]=minq.dev.mozaws.net::4433:4434:4433:/index.html
-        [mozquic]=mozquic.ducksong.com::4433:4434:4433:/index.html
+        # [minq]=minq.dev.mozaws.net::4433:4434:4433:/index.html
+        # [mozquic]=mozquic.ducksong.com::4433:4434:4433:/index.html
         [mvfst]=fb.mvfst.net::4433:4434:4433:/index.html
         [ngtcp2]=nghttp2.org::4433:4434:4433:/blog/
         [ngx_quic]=cloudflare-quic.com::443:4434:4433:/index.html
-        [pandora]=pandora.cm.in.tum.de::4433:4434:4433:/index.html
+        # [pandora]=pandora.cm.in.tum.de::4433:4434:4433:/index.html
         [picoquic]=test.privateoctopus.com::4433:4434:4433:/20000
         [quant]=quant.eggert.org::4433:4434:4433:/20000
         # [quic-go]=172.30.197.239::4433:4433:4433:/10000
         [quiche]=quic.tech::4433:4433:4433:/random
-        [quicker]=quicker.edm.uhasselt.be::4433:4434:4433:/index.html
+        # [quicker]=quicker.edm.uhasselt.be::4433:4434:4433:/index.html
         [quicly]=kazuhooku.com::4433:4433:8443:/20000.txt
         [quinn]=ralith.com::4433:4434:4433:/100K
         [winquic]=msquic.westus.cloudapp.azure.com::4433:4434:4433:/the-odyssey.txt
@@ -245,6 +245,6 @@ for s in "${sorted[@]}"; do
 done
 
 expand -t 5 "$tmp" | sponge "$tmp"
-cat "$tmp"
+# cat "$tmp"
 wdiff -n "$(dirname $0)/$script.result" "$tmp" | $colordiff
 rm -f "$tmp"
