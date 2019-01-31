@@ -668,7 +668,6 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
                                             const uint16_t tok_len)
 {
     bool ok = false;
-    struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
 
     log_pkt("RX", v, v->ip, v->port, odcid, tok, tok_len);
     c->in_data += meta(v).udp_len;
@@ -742,6 +741,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
     case conn_opng:
         if (meta(v).hdr.vers == 0) {
             // this is a vneg pkt
+            meta(v).hdr.nr = UINT64_MAX;
             if (c->vers != ok_vers[0]) {
                 // we must have already reacted to a prior vneg pkt
                 warn(INF, "ignoring spurious vneg response");
@@ -761,6 +761,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             c->vers = try_vers;
             warn(INF, "serv didn't like vers 0x%08x, retrying with 0x%08x",
                  c->vers_initial, c->vers);
+            ok = true;
             goto done;
         }
 
@@ -772,6 +773,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         }
 
         if (meta(v).hdr.type == LH_RTRY) {
+            meta(v).hdr.nr = UINT64_MAX;
             if (c->tok_len) {
                 // we already had an earlier RETRY on this connection
                 err_close(c, ERR_PROTOCOL_VIOLATION, 0, "rx 2nd retry");
@@ -782,8 +784,9 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             c->tok_len = tok_len;
             memcpy(c->tok, tok, c->tok_len);
             vneg_or_rtry_resp(c, false);
-            warn(INF, "handling serv stateless retry w/tok %s",
+            warn(INF, "handling serv retry w/tok %s",
                  hex2str(c->tok, c->tok_len));
+            ok = true;
             goto done;
         }
 
@@ -823,20 +826,22 @@ done:
     if (unlikely(ok == false))
         return false;
 
-    // update ECN info
-    switch (v->flags & IPTOS_ECN_MASK) {
-    case IPTOS_ECN_ECT1:
-        pn->ect1_cnt++;
-        break;
-    case IPTOS_ECN_ECT0:
-        pn->ect0_cnt++;
-        break;
-    case IPTOS_ECN_CE:
-        pn->ce_cnt++;
-        break;
+    if (likely(meta(v).hdr.nr != UINT64_MAX)) {
+        struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
+        // update ECN info
+        switch (v->flags & IPTOS_ECN_MASK) {
+        case IPTOS_ECN_ECT1:
+            pn->ect1_cnt++;
+            break;
+        case IPTOS_ECN_ECT0:
+            pn->ect0_cnt++;
+            break;
+        case IPTOS_ECN_CE:
+            pn->ce_cnt++;
+            break;
+        }
+        pn->pkts_rxed_since_last_ack_tx++;
     }
-
-    pn->pkts_rxed_since_last_ack_tx++;
 
     return true;
 }
@@ -1063,17 +1068,18 @@ rx_pkts(struct w_iov_sq * const x,
         }
     decoal_done:
 
-        // remember that we had a RX event on this connection
-        if (!c->had_rx) {
-            c->had_rx = true;
-            sl_insert_head(crx, c, node_rx_int);
-            c->min_rx_epoch = epoch_for_pkt_type(meta(v).hdr.type);
-        } else
-            c->min_rx_epoch =
-                MIN(c->min_rx_epoch, epoch_for_pkt_type(meta(v).hdr.type));
-
-        if (rx_pkt(c, v, x, &odcid, tok, tok_len))
+        if (rx_pkt(c, v, x, &odcid, tok, tok_len)) {
             rx_crypto(c);
+
+            // remember that we had a RX event on this connection
+            if (!c->had_rx) {
+                c->had_rx = true;
+                sl_insert_head(crx, c, node_rx_int);
+                c->min_rx_epoch = epoch_for_pkt_type(meta(v).hdr.type);
+            } else
+                c->min_rx_epoch =
+                    MIN(c->min_rx_epoch, epoch_for_pkt_type(meta(v).hdr.type));
+        }
 
         if (meta(v).stream == 0)
             // we didn't place this pkt in any stream - bye!

@@ -114,10 +114,9 @@ pn_for_pkt_type(struct q_conn * const c, const uint8_t t)
     case LH_INIT:
     case LH_RTRY:
         return &c->pn_init.pn;
-    case LH_0RTT:
-        return &c->pn_data.pn;
     case LH_HSHK:
         return &c->pn_hshk.pn;
+    case LH_0RTT:
     default:
         return &c->pn_data.pn;
     }

@@ -27,7 +27,9 @@
 
 #include <stdbool.h>
 
+#include "bitset.h"
 #include "conn.h"
+#include "frame.h"
 #include "pn.h"
 #include "stream.h"
 
@@ -59,6 +61,8 @@ void reset_pn(struct pn_space * const pn)
     free_pn(pn);
     pn->lg_sent = pn->lg_acked = UINT64_MAX;
     pn->ect0_cnt = pn->ect1_cnt = pn->ce_cnt = 0;
+    pn->pkts_rxed_since_last_ack_tx = 0;
+    bit_zero(NUM_FRAM_TYPES, &pn->rx_frames);
 }
 
 
