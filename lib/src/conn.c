@@ -445,7 +445,8 @@ void tx(struct q_conn * const c, const uint32_t limit)
                 goto done;
         }
 
-    struct q_stream * s; // cppcheck-suppress variableScope
+    // cppcheck-suppress variableScope
+    struct q_stream * s;
     kh_foreach (s, c->streams_by_id)
         if (tx_stream(s, limit) == false)
             break;
@@ -615,7 +616,8 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
         if (c->cstreams[e])
             reset_stream(c->cstreams[e], true);
 
-    struct q_stream * s; // cppcheck-suppress variableScope
+    // cppcheck-suppress variableScope
+    struct q_stream * s;
     kh_foreach (s, c->streams_by_id)
         reset_stream(s, false);
 
@@ -1468,7 +1470,8 @@ void free_conn(struct q_conn * const c)
     ev_timer_stop(loop, &c->idle_alarm);
     ev_timer_stop(loop, &c->ack_alarm);
 
-    struct q_stream * s; // cppcheck-suppress variableScope
+    // cppcheck-suppress variableScope
+    struct q_stream * s;
     kh_foreach (s, c->streams_by_id)
         free_stream(s);
     kh_destroy(streams_by_id, c->streams_by_id);
