@@ -29,8 +29,8 @@
 
 
 declare -A servers=(
-        #[tag]=name:flags:port:retry-port:h3-port:URL
-        [apple]=172.30.197.241::4433:4434:4433:/index.html
+        # [tag]=name:flags:port:retry-port:h3-port:URL
+        # [apple]=172.30.197.241::4433:4434:4433:/index.html
         [ats]=quic.ogre.com::4433:4434:4433:/en/latest/
         [f5]=208.85.208.226::4433:4433:4433:/file15k
         [lsquic]=http3-test.litespeedtech.com:-3:4433:4434:4433:/
@@ -42,10 +42,10 @@ declare -A servers=(
         [pandora]=pandora.cm.in.tum.de::4433:4434:4433:/index.html
         [picoquic]=test.privateoctopus.com::4433:4434:4433:/20000
         [quant]=quant.eggert.org::4433:4434:4433:/20000
-        [quic-go]=172.30.197.239::4433:4433:4433:/10000
+        # [quic-go]=172.30.197.239::4433:4433:4433:/10000
         [quiche]=quic.tech::4433:4433:4433:/random
         [quicker]=quicker.edm.uhasselt.be::4433:4434:4433:/index.html
-        [quicly]=kazuhooku.com::4433:4434:8443:/20000.txt
+        [quicly]=kazuhooku.com::4433:4433:8443:/20000.txt
         [quinn]=ralith.com::4433:4434:4433:/100K
         [winquic]=msquic.westus.cloudapp.azure.com::4433:4434:4433:/the-odyssey.txt
 )
