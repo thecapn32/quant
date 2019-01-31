@@ -54,15 +54,15 @@ static inline uint32_t io(const uint32_t len)
 
     // send the data
     q_write(cs, &o, true);
-    q_close_stream(cs);
 
     // read the data
     struct w_iov_sq i = w_iov_sq_initializer(i);
     struct q_stream * const ss = q_read(sc, &i, true);
-    if (likely(ss) && !q_peer_has_closed_stream(ss))
+    if (likely(ss)) {
         q_readall_stream(ss, &i);
-    if (likely(ss))
         q_close_stream(ss);
+    }
+    q_close_stream(cs);
 
     const uint32_t ilen = w_iov_sq_len(&i);
     q_free(&i);
@@ -96,7 +96,7 @@ BENCHMARK(BM_conn)->RangeMultiplier(2)->Range(1024, 1024 * 1024 * 2)
 int main(int argc __attribute__((unused)), char ** argv)
 {
 #ifndef NDEBUG
-    util_dlevel = ERR; // default to maximum compiled-in verbosity
+    util_dlevel = DBG; // default to maximum compiled-in verbosity
 #endif
 
     // init
