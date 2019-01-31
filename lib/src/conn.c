@@ -214,13 +214,12 @@ static void log_sent_pkts(struct q_conn * const c)
         struct pn_space * const pn = pn_for_epoch(c, e);
         splay_foreach (p, pm_by_nr, &pn->sent_pkts) {
             char tmp[1024] = "";
-            const bool ack_only = !is_ack_eliciting(&p->frames);
-            snprintf(tmp, sizeof(tmp), "%s%s" FMT_PNR_OUT "%s ",
-                     has_stream_data(p) ? "*" : "", ack_only ? "(" : "",
+            snprintf(tmp, sizeof(tmp), "%s%s" FMT_PNR_OUT NRM " ",
+                     has_stream_data(p) ? REV : "",
+                     is_ack_eliciting(&p->frames) ? BLD : "",
                      prev == UINT64_MAX
                          ? p->hdr.nr
-                         : shorten_ack_nr(p->hdr.nr, p->hdr.nr - prev),
-                     ack_only ? ")" : "");
+                         : shorten_ack_nr(p->hdr.nr, p->hdr.nr - prev));
             strncat(sent_pkts_buf, tmp,
                     sizeof(sent_pkts_buf) - strlen(sent_pkts_buf) - 1);
             prev = p->hdr.nr;
