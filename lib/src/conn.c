@@ -694,7 +694,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
                 warn(INF, "sending retry");
                 // send a RETRY
                 make_rtry_tok(c);
-                c->needs_tx = true;
+                ok = c->needs_tx = true;
                 update_act_scid(c);
                 goto done;
             }
