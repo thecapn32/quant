@@ -99,8 +99,8 @@
 #define do_enc(var, len, type, fmt, enc_type)                                  \
     do {                                                                       \
         ensure(pos + (len) <= buf_len,                                         \
-               "can't enc %u byte%s at pos %u - buf len is %u", (len),         \
-               plural((len)), i, buf_len);                                     \
+               "can't enc %zu byte%s at pos %u - buf len is %u",               \
+               (size_t)(len), plural((len)), i, buf_len);                      \
         memcpy(&buf[i], &(var), (len));                                        \
         i += (len);                                                            \
         log_enc(type, (fmt), (enc_type));                                      \

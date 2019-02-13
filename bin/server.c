@@ -95,7 +95,7 @@ static int send_err(const struct cb_data * const d, const uint16_t code)
     default:
         msg = "500 Internal Server Error";
     }
-    warn(ERR, msg);
+    warn(ERR, "%s", msg);
 
     q_write_str(d->w, d->s, msg, strlen(msg), true);
     return 0;
@@ -106,8 +106,8 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
 {
     (void)parser;
     const struct cb_data * const d = parser->data;
-    warn(INF, "conn %s str %u serving URL %.*s", q_cid(d->c), q_sid(d->s),
-         (int)len, at);
+    warn(INF, "conn %s str %" PRId64 " serving URL %.*s", q_cid(d->c),
+         q_sid(d->s), (int)len, at);
 
     char path[MAXPATHLEN] = ".";
     strncpy(&path[*at == '/' ? 1 : 0], at, MIN(len, sizeof(path) - 1));
@@ -117,13 +117,14 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
         return send_err(d, 403);
 
     // check if this is a "GET /n" request for random data
-    uint32_t n = (uint32_t)MIN(UINT32_MAX, strtoul(&path[2], 0, 10));
+    const uint64_t n = (uint32_t)MIN(UINT64_MAX, strtoul(&path[2], 0, 10));
     if (n) {
         struct w_iov_sq out = w_iov_sq_initializer(out);
         q_alloc(d->w, &out, n);
         // check whether we managed to allow enough buffers
         if (w_iov_sq_len(&out) != n) {
-            warn(ERR, "could only allocate %u/%u bytes of buffer",
+            warn(ERR,
+                 "could only allocate %" PRIu64 "/%" PRIu64 " bytes of buffer",
                  w_iov_sq_len(&out), n);
             q_free(&out);
             return send_err(d, 500);
@@ -274,7 +275,7 @@ int main(int argc, char * argv[])
                 const size_t parsed = http_parser_execute(
                     &parser, &settings, (char *)v->buf, v->len);
                 if (parsed != v->len) {
-                    warn(ERR, "HTTP parser error: %.*s", v->len - parsed,
+                    warn(ERR, "HTTP parser error: %.*s", (int)(v->len - parsed),
                          &v->buf[parsed]);
                     ret = 1;
                     break;

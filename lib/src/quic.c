@@ -176,7 +176,7 @@ void q_alloc(struct w_engine * const w,
              struct w_iov_sq * const q,
              const size_t len)
 {
-    ensure(len <= UINT32_MAX, "len %u too long", len);
+    ensure(len <= UINT32_MAX, "len %zu too long", len);
     alloc_off(w, q, (uint32_t)len, DATA_OFFSET);
 }
 
@@ -210,7 +210,8 @@ struct q_conn * q_connect(struct w_engine * const w,
     init_tls(c, conn_conf ? conn_conf->alpn : 0);
     init_tp(c);
 
-    warn(WRN, "new %u-RTT %s conn %s to %s:%u, %u byte%s queued for TX",
+    warn(WRN,
+         "new %u-RTT %s conn %s to %s:%u, %" PRIu64 " byte%s queued for TX",
          c->try_0rtt ? 0 : 1, conn_type(c), cid2str(c->scid),
          inet_ntoa(peer->sin_addr), ntohs(peer->sin_port),
          early_data ? w_iov_sq_len(early_data) : 0,
@@ -276,9 +277,11 @@ bool q_write(struct q_stream * const s,
     if (unlikely(sq_empty(q)))
         return false;
 
-    const uint32_t qlen = w_iov_sq_len(q);
+    const uint64_t qlen = w_iov_sq_len(q);
     const uint64_t qcnt = w_iov_sq_cnt(q);
-    warn(WRN, "writing %u byte%s in %u buf%s on %s conn %s strm " FMT_SID " %s",
+    warn(WRN,
+         "writing %" PRIu64 " byte%s in %" PRIu64
+         " buf%s on %s conn %s strm " FMT_SID " %s",
          qlen, plural(qlen), qcnt, plural(qcnt), conn_type(c), cid2str(c->scid),
          s->id, fin ? "and closing" : "");
 
@@ -313,15 +316,17 @@ bool q_write(struct q_stream * const s,
     if (fin)
         strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
 
-    warn(WRN, "wrote %u byte%s on %s conn %s strm " FMT_SID " %s", data_written,
-         plural(data_written), conn_type(c), cid2str(c->scid), s->id,
-         fin ? "and closed" : "");
+    warn(WRN, "wrote %" PRIu64 " byte%s on %s conn %s strm " FMT_SID " %s",
+         data_written, plural(data_written), conn_type(c), cid2str(c->scid),
+         s->id, fin ? "and closed" : "");
 
     // TODO these can be removed eventually
-    ensure(w_iov_sq_len(q) == qlen, "payload corrupted, %u != %u",
-           w_iov_sq_len(q), qlen);
-    ensure(w_iov_sq_cnt(q) == qcnt, "payload corrupted, %u != %u",
-           w_iov_sq_cnt(q), qcnt);
+    ensure(w_iov_sq_len(q) == qlen,
+           "payload corrupted, %" PRIu64 " != %" PRIu64 "", w_iov_sq_len(q),
+           qlen);
+    ensure(w_iov_sq_cnt(q) == qcnt,
+           "payload corrupted, %" PRIu64 " != %" PRIu64 "", w_iov_sq_cnt(q),
+           qcnt);
 
     return data_written == qlen;
 }
@@ -357,9 +362,9 @@ again:;
         // return data
         sq_concat(q, &s->in);
 
-    warn(WRN, "read %u byte%s on %s conn %s strm " FMT_SID, w_iov_sq_len(q),
-         plural(w_iov_sq_len(q)), conn_type(c), cid2str(c->scid),
-         s ? s->id : -1);
+    warn(WRN, "read %" PRIu64 " byte%s on %s conn %s strm " FMT_SID,
+         w_iov_sq_len(q), plural(w_iov_sq_len(q)), conn_type(c),
+         cid2str(c->scid), s ? s->id : -1);
 
     return s;
 }
@@ -377,7 +382,7 @@ void q_readall_stream(struct q_stream * const s, struct w_iov_sq * const q)
     }
 
     if (!sq_empty(&s->in))
-        warn(WRN, "read %u byte%s on %s conn %s strm " FMT_SID,
+        warn(WRN, "read %" PRIu64 " byte%s on %s conn %s strm " FMT_SID,
              w_iov_sq_len(&s->in), plural(w_iov_sq_len(&s->in)), conn_type(c),
              cid2str(c->scid), s->id);
 
@@ -463,7 +468,7 @@ struct q_stream * q_rsv_stream(struct q_conn * const c, const bool bidi)
 
     if (unlikely(*next_sid >> 2 > *max_streams)) {
         // we hit the max stream limit, wait for MAX_STREAMS frame
-        warn(WRN, "MAX_STREAMS increase needed for %s (%u > %u)",
+        warn(WRN, "need %s MAX_STREAMS increase (%" PRId64 " > %" PRId64 ")",
              bidi ? "bi" : "uni", *next_sid >> 2, *max_streams);
         if (bidi)
             c->sid_blocked_bidi = true;

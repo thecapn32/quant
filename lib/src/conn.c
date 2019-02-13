@@ -123,7 +123,7 @@ epoch_in(const struct q_conn * const c)
     case 3:
         return ep_data;
     default:
-        die("unhandled epoch %u", epoch);
+        die("unhandled epoch %zu", epoch);
     }
 }
 
@@ -344,7 +344,7 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
         return true;
     }
 
-    warn(DBG, "TX on %s conn %s strm " FMT_SID " w/%u pkt%s in queue",
+    warn(DBG, "TX on %s conn %s strm " FMT_SID " w/%" PRIu64 " pkt%s in queue",
          conn_type(c), cid2str(c->scid), s->id, sq_len(&s->out),
          plural(sq_len(&s->out)));
 
@@ -1397,7 +1397,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     ev_async_start(loop, &c->tx_w);
 
     c->w = w;
-    c->sock = w_get_sock(w, htons(port));
+    c->sock = w_get_sock(w, w->ip, htons(port), 0, 0);
     if (c->sock == 0) {
         // TODO need to update zero checksums in update_conn_conf() somehow
         c->sockopt.enable_udp_zero_checksums =

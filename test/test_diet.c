@@ -27,8 +27,6 @@
 
 #include <inttypes.h>
 #include <stdint.h>
-#include <stdlib.h>
-#include <time.h>
 
 #include <warpcore/warpcore.h>
 
@@ -68,7 +66,8 @@ static void trace(struct diet * const d,
     char * s = str;
     while (*s)
         c += *(s++) == ',';
-    ensure(str[0] == 0 || c + 1 == diet_cnt(d), "%u %u", c + 1, diet_cnt(d));
+    ensure(str[0] == 0 || c + 1 == diet_cnt(d), "%" PRIu64 " %" PRIu64 "",
+           c + 1, diet_cnt(d));
 }
 
 
@@ -89,7 +88,7 @@ bitset_define(values, N);
 
 int main()
 {
-    srandom((unsigned)time(0));
+    w_init_rand();
 #ifndef NDEBUG
     util_dlevel = DLEVEL; // default to maximum compiled-in verbosity
 #endif
@@ -98,7 +97,7 @@ int main()
 
     // insert some items
     while (N != bit_count(N, &v)) {
-        const uint64_t x = (uint64_t)random() % N;
+        const uint64_t x = w_rand_uniform(N);
         if (bit_isset(N, x, &v) == 0) {
             bit_set(N, x, &v);
             diet_insert(&d, x, 0);
@@ -109,13 +108,13 @@ int main()
 
     // remove all items
     while (!splay_empty(&d)) {
-        const uint64_t x = (uint64_t)random() % N;
+        const uint64_t x = w_rand_uniform(N);
         struct ival * const i = diet_find(&d, x);
         if (i) {
-            // if (random() % 2) {
-            const uint64_t lodiff = random() % 3;
+            // if (w_rand_uniform(2)) {
+            const uint64_t lodiff = w_rand_uniform(3);
             const uint64_t lo = x - (x > lodiff ? lodiff : 0);
-            const uint64_t hi = x + (random() % 3);
+            const uint64_t hi = x + w_rand_uniform(3);
             diet_remove_ival(&d, &(struct ival){.lo = lo, .hi = hi});
             trace(&d, lo, hi, "rem_ival");
             // } else {
@@ -125,7 +124,8 @@ int main()
             chk(&d);
         }
     }
-    ensure(diet_cnt(&d) == 0, "incorrect node count %u != 0", diet_cnt(&d));
+    ensure(diet_cnt(&d) == 0, "incorrect node count %" PRIu64 " != 0",
+           diet_cnt(&d));
 
     return 0;
 }

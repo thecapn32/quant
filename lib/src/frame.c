@@ -258,8 +258,8 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
             if (unlikely(p->stream_off + p->stream_data_len <
                          meta(v).stream->in_data_off)) {
                 // right edge of p < left edge of stream
-                warn(WRN, "drop stale frame [%u..%u]", p->stream_off,
-                     p->stream_off + p->stream_data_len);
+                warn(WRN, "drop stale frame [%" PRIu64 "..%" PRIu64 "]",
+                     p->stream_off, p->stream_off + p->stream_data_len);
                 ensure(splay_remove(ooo_by_off, &meta(v).stream->in_ooo, p),
                        "removed");
                 p = nxt;
@@ -334,7 +334,9 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     if (p &&
         p->stream_off <= meta(v).stream_off + meta(v).stream_data_len - 1) {
         // left edge of p <= right edge of v
-        warn(ERR, "[%u..%u] have existing overlapping ooo data [%u..%u]",
+        warn(ERR,
+             "[%" PRIu64 "..%" PRIu64
+             "] have existing overlapping ooo data [%" PRIu64 "..%" PRIu64 "]",
              meta(v).stream_off, meta(v).stream_off + meta(v).stream_data_len,
              p->stream_off, p->stream_off + p->stream_data_len - 1);
         ignore = true;
@@ -572,13 +574,13 @@ dec_close_frame(struct q_conn * const c,
              FRAM_IN "CONNECTION_CLOSE" NRM " 0x%02x=quic err=%s0x%04x " NRM
                      "frame=0x%" PRIx64 " rlen=%" PRIu64 " reason=%s%.*s" NRM,
              t, err_code ? RED : NRM, err_code, frame_type, reas_len,
-             err_code ? RED : NRM, reas_len, reas_phr);
+             err_code ? RED : NRM, (int)reas_len, reas_phr);
     else
         warn(INF,
              FRAM_IN "CONNECTION_CLOSE" NRM " 0x%02x=app err=%s0x%04x " NRM
                      "rlen=%" PRIu64 " reason=%s%.*s" NRM,
              t, err_code ? RED : NRM, err_code, reas_len, err_code ? RED : NRM,
-             reas_len, reas_phr);
+             (int)reas_len, reas_phr);
 
     if (c->state != conn_qlse) {
         if (c->state != conn_drng) {
@@ -1336,13 +1338,13 @@ uint16_t enc_close_frame(const struct q_conn * const c,
              FRAM_OUT "CONNECTION_CLOSE" NRM " 0x%02x=quic err=%s0x%04x" NRM
                       " frame=0x%02x rlen=%" PRIu64 " reason=%s%.*s" NRM,
              type, c->err_code ? RED : NRM, c->err_code, c->err_frm, rlen,
-             c->err_code ? RED : NRM, rlen, c->err_reason);
+             c->err_code ? RED : NRM, (int)rlen, c->err_reason);
     else
         warn(INF,
              FRAM_OUT "CONNECTION_CLOSE" NRM " 0x%02x=app err=%s0x%04x" NRM
                       " rlen=%" PRIu64 " reason=%s%.*s" NRM,
              type, c->err_code ? RED : NRM, c->err_code, rlen,
-             c->err_code ? RED : NRM, rlen, c->err_reason);
+             c->err_code ? RED : NRM, (int)rlen, c->err_reason);
 
     return i;
 }

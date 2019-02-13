@@ -27,6 +27,7 @@
 
 #pragma once
 
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -146,7 +147,7 @@ strm_epoch(const struct q_stream * const s)
         case -1:
             return ep_data;
         default:
-            die("illegal sid %d", s->id);
+            die("illegal sid %" PRId64, s->id);
         }
 
     if (unlikely(s->c->state == conn_opng))

@@ -41,7 +41,7 @@ static struct w_engine * w;
 static struct q_conn *cc, *sc;
 
 
-static inline uint32_t io(const uint32_t len)
+static inline uint64_t io(const uint64_t len)
 {
     // reserve a new stream
     struct q_stream * const cs = q_rsv_stream(cc, true);
@@ -64,7 +64,7 @@ static inline uint32_t io(const uint32_t len)
     }
     q_close_stream(cs);
 
-    const uint32_t ilen = w_iov_sq_len(&i);
+    const uint64_t ilen = w_iov_sq_len(&i);
     q_free(&i);
     q_free(&o);
 
@@ -74,9 +74,9 @@ static inline uint32_t io(const uint32_t len)
 
 static void BM_conn(benchmark::State & state)
 {
-    const auto len = uint32_t(state.range(0));
+    const auto len = uint64_t(state.range(0));
     for (auto _ : state) {
-        const uint32_t ilen = io(len);
+        const uint64_t ilen = io(len);
         if (ilen != len) {
             state.SkipWithError("error");
             return;

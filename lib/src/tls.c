@@ -295,7 +295,7 @@ on_ch(ptls_on_client_hello_t * const self __attribute__((unused)),
 {
     if (params->server_name.len) {
         // TODO verify the SNI instead of accepting whatever the client sent
-        warn(INF, "\tSNI = %.*s", params->server_name.len,
+        warn(INF, "\tSNI = %.*s", (int)params->server_name.len,
              params->server_name.base);
         ensure(ptls_set_server_name(tls, (const char *)params->server_name.base,
                                     params->server_name.len) == 0,
@@ -318,7 +318,7 @@ on_ch(ptls_on_client_hello_t * const self __attribute__((unused)),
 
     if (j == alpn_cnt) {
         warn(WRN, "\tALPN = %.*s (and maybe others, none supported, ignoring)",
-             params->negotiated_protocols.list[0].len,
+             (int)params->negotiated_protocols.list[0].len,
              params->negotiated_protocols.list[0].base);
         return 0;
     }
@@ -326,7 +326,7 @@ on_ch(ptls_on_client_hello_t * const self __attribute__((unused)),
 done:
     // mark this ALPN as negotiated
     ptls_set_negotiated_protocol(tls, (char *)alpn[j].base, alpn[j].len);
-    warn(INF, "\tALPN = %.*s", alpn[j].len, alpn[j].base);
+    warn(INF, "\tALPN = %.*s", (int)alpn[j].len, alpn[j].base);
 
     return 0;
 }
@@ -492,37 +492,37 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         switch (tp) {
         case TP_IMSD_U:
             dec_tp(&c->tp_out.max_strm_data_uni);
-            warn(INF, "\tinitial_max_stream_data_uni = %u",
+            warn(INF, "\tinitial_max_stream_data_uni = %" PRIu64,
                  c->tp_out.max_strm_data_uni);
             break;
 
         case TP_IMSD_BL:
             dec_tp(&c->tp_out.max_strm_data_bidi_remote);
-            warn(INF, "\tinitial_max_stream_data_bidi_local = %u",
+            warn(INF, "\tinitial_max_stream_data_bidi_local = %" PRIu64,
                  c->tp_out.max_strm_data_bidi_remote);
             break;
 
         case TP_IMSD_BR:
             // this is RX'ed as _remote, but applies to streams we open, so:
             dec_tp(&c->tp_out.max_strm_data_bidi_local);
-            warn(INF, "\tinitial_max_stream_data_bidi_remote = %u",
+            warn(INF, "\tinitial_max_stream_data_bidi_remote = %" PRIu64,
                  c->tp_out.max_strm_data_bidi_local);
             break;
 
         case TP_IMD:
             dec_tp(&c->tp_out.max_data);
-            warn(INF, "\tinitial_max_data = %u", c->tp_out.max_data);
+            warn(INF, "\tinitial_max_data = %" PRIu64, c->tp_out.max_data);
             break;
 
         case TP_IMSB:
             dec_tp(&c->tp_out.max_streams_bidi);
-            warn(INF, "\tinitial_max_streams_bidi = %u",
+            warn(INF, "\tinitial_max_streams_bidi = %" PRIu64,
                  c->tp_out.max_streams_bidi);
             break;
 
         case TP_IMSU:
             dec_tp(&c->tp_out.max_streams_uni);
-            warn(INF, "\tinitial_max_streams_uni = %u",
+            warn(INF, "\tinitial_max_streams_uni = %" PRIu64,
                  c->tp_out.max_streams_uni);
             break;
 
@@ -533,7 +533,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
         case TP_MPS:
             dec_tp(&c->tp_out.max_pkt);
-            warn(INF, "\tmax_packet_size = %u", c->tp_out.max_pkt);
+            warn(INF, "\tmax_packet_size = %" PRIu64, c->tp_out.max_pkt);
             if (c->tp_out.max_pkt < 1200) {
                 err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
                           "tp_out.max_pkt %" PRIu64 " invalid (< 1200)",
@@ -940,7 +940,7 @@ void init_tls(struct q_conn * const c, const char * const clnt_alpn)
     if (c->is_clnt) {
         if (clnt_alpn == 0 || *clnt_alpn == 0) {
             c->tls.alpn = alpn[0];
-            warn(NTE, "using default ALPN %.*s", c->tls.alpn.len,
+            warn(NTE, "using default ALPN %.*s", (int)c->tls.alpn.len,
                  c->tls.alpn.base);
         } else if (clnt_alpn != (char *)c->tls.alpn.base) {
             free(c->tls.alpn.base);
@@ -1178,7 +1178,7 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
         break;
 
     default:
-        die("epoch %u unknown", epoch);
+        die("epoch %zu unknown", epoch);
     }
 
     if (is_enc)

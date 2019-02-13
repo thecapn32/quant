@@ -41,7 +41,6 @@
 #include <warpcore/warpcore.h>
 
 #include "diet.h"
-#include "fnv1a.h"
 #include "pn.h"
 #include "quic.h"
 #include "recovery.h"
@@ -450,8 +449,8 @@ has_wnd(const struct q_conn * const c, const uint16_t len)
 
     if (unlikely(c->rec.in_flight + len >= c->rec.cwnd)) {
         warn(DBG,
-             "%s conn %s cwnd lim reached: in_flight % " PRIu64
-             " + %u >= % " PRIu64,
+             "%s conn %s cwnd lim reached: in_flight %" PRIu64
+             " + %u >= %" PRIu64,
              conn_type(c), cid2str(c->scid), c->rec.in_flight, len,
              c->rec.cwnd);
         return false;
