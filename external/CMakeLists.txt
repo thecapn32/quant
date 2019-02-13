@@ -198,6 +198,17 @@ externalproject_add(quicker
 )
 
 
+# Use quinn for testing against
+externalproject_add(quinn
+  UPDATE_COMMAND ""
+  GIT_REPOSITORY https://github.com/djc/quinn.git
+  GIT_SHALLOW 1
+  # GIT_TAG add_quicker_support-tls-d28
+  BUILD_IN_SOURCE 1
+  EXCLUDE_FROM_ALL 1
+)
+
+
 set(TRACKER github.com/QUIC-Tracker/quic-tracker)
 externalproject_add(quic-tracker
   DOWNLOAD_COMMAND
