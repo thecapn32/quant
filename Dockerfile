@@ -14,7 +14,7 @@ FROM alpine:latest
 COPY --from=0 /dst /
 COPY --from=0 /2048-master /www
 COPY --from=0 /src/Debug/test/dummy.* /tls/
-RUN apk add --no-cache libcrypto1.0 http-parser libev ethtool
+RUN apk add --no-cache openssl http-parser libev ethtool
 EXPOSE 4433/UDP
 CMD ["/bin/server", "-i", "eth0", "-d", "/www", \
         "-c", "/tls/dummy.crt", "-k", "/tls/dummy.key"]
