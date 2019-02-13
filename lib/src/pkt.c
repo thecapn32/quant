@@ -493,7 +493,12 @@ bool enc_pkt(struct q_stream * const s,
 
     ensure(i > meta(v).hdr.hdr_len, "would have sent pkt w/o frames");
 
-tx:
+tx:;
+    // make sure we have enough frame bytes for the header protection sample
+    const uint16_t pnp_dist = i - pkt_nr_pos;
+    if (unlikely(pnp_dist < 4))
+        i = enc_padding_frame(v, i, 4 - pnp_dist);
+
     // for LH pkts, now encode the length
     meta(v).hdr.len = i + AEAD_LEN - pkt_nr_pos;
     if (unlikely(len_pos)) {
@@ -513,8 +518,8 @@ tx:
         memcpy(xv->buf, v->buf, v->len); // copy data
         xv->len = v->len;
     } else {
-        xv->len = enc_aead(c, v, xv, pkt_nr_pos);
-        if (unlikely(xv->len == 0)) {
+        const uint16_t ret = enc_aead(c, v, xv, pkt_nr_pos);
+        if (unlikely(ret == 0)) {
             adj_iov_to_start(v);
             return false;
         }
@@ -689,7 +694,7 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
 }
 
 
-bool xor_hp(const struct w_iov * const xv,
+bool xor_hp(struct w_iov * const xv,
             const struct w_iov * const v,
             const struct cipher_ctx * const ctx,
             const uint16_t pkt_nr_pos,
@@ -698,15 +703,10 @@ bool xor_hp(const struct w_iov * const xv,
     const uint16_t off = pkt_nr_pos + MAX_PKT_NR_LEN;
     const uint16_t len =
         is_lh(meta(v).hdr.flags) ? pkt_nr_pos + meta(v).hdr.len : xv->len;
-    if (unlikely(off > len))
+    if (unlikely(off + AEAD_LEN > len))
         return false;
 
-    uint8_t sample[AEAD_LEN] = {0};
-    const uint16_t sample_len =
-        unlikely(off + AEAD_LEN > len) ? len - off : AEAD_LEN;
-    memcpy(sample, &xv->buf[off], sample_len);
-    ptls_cipher_init(ctx->header_protection, sample);
-
+    ptls_cipher_init(ctx->header_protection, &xv->buf[off]);
     uint8_t mask[MAX_PKT_NR_LEN + 1] = {0};
     ptls_cipher_encrypt(ctx->header_protection, mask, mask, sizeof(mask));
 
@@ -717,16 +717,15 @@ bool xor_hp(const struct w_iov * const xv,
         xv->buf[pkt_nr_pos + i] ^= mask[1 + i];
 
 #ifdef DEBUG_MARSHALL
-    warn(DBG, "%s HP over [0, %u..%u] w/sample off %u (len %u)",
-         is_enc ? "apply" : "undo", pkt_nr_pos, pkt_nr_pos + pnl - 1, off,
-         sample_len);
+    warn(DBG, "%s HP over [0, %u..%u] w/sample off %u",
+         is_enc ? "apply" : "undo", pkt_nr_pos, pkt_nr_pos + pnl - 1, off);
 #endif
 
     return true;
 }
 
 
-static bool undo_hp(const struct w_iov * const xv,
+static bool undo_hp(struct w_iov * const xv,
                     const struct w_iov * const v,
                     struct q_conn * const c,
                     const struct cipher_ctx * const ctx)

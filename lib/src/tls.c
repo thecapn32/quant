@@ -1339,7 +1339,7 @@ uint16_t dec_aead(const struct w_iov * const xv,
 
 uint16_t enc_aead(struct q_conn * const c,
                   const struct w_iov * const v,
-                  const struct w_iov * const xv,
+                  struct w_iov * const xv,
                   const uint16_t pkt_nr_pos)
 {
     const struct cipher_ctx * ctx = which_cipher_ctx_out(c, meta(v).hdr.flags);
@@ -1353,9 +1353,9 @@ uint16_t enc_aead(struct q_conn * const c,
     memcpy(xv->buf, v->buf, hdr_len); // copy pkt header
 
     const uint16_t plen = v->len - hdr_len + AEAD_LEN;
-    const uint16_t ret = (uint16_t)ptls_aead_encrypt(
-        ctx->aead, &xv->buf[hdr_len], &v->buf[hdr_len], plen - AEAD_LEN,
-        meta(v).hdr.nr, v->buf, hdr_len);
+    xv->len = hdr_len + (uint16_t)ptls_aead_encrypt(
+                            ctx->aead, &xv->buf[hdr_len], &v->buf[hdr_len],
+                            plen - AEAD_LEN, meta(v).hdr.nr, v->buf, hdr_len);
 
     // apply packet protection
     ctx = which_cipher_ctx_out(
@@ -1373,7 +1373,7 @@ uint16_t enc_aead(struct q_conn * const c,
          hdr_len + plen - AEAD_LEN - 1, hdr_len + plen - AEAD_LEN,
          hdr_len + plen - 1);
 #endif
-    return hdr_len + ret;
+    return xv->len;
 }
 
 

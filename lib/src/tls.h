@@ -92,7 +92,7 @@ dec_aead(const struct w_iov * const xv,
 
 extern uint16_t __attribute__((nonnull)) enc_aead(struct q_conn * const c,
                                                   const struct w_iov * const v,
-                                                  const struct w_iov * const xv,
+                                                  struct w_iov * const xv,
                                                   const uint16_t pkt_nr_pos);
 
 extern void __attribute__((nonnull)) make_rtry_tok(struct q_conn * const c);
