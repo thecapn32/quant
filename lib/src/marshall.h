@@ -91,20 +91,25 @@ varint_size_needed(const uint64_t v)
 #endif
 
 
-extern uint16_t __attribute__((nonnull)) marshall_enc(uint8_t * const buf,
-                                                      const uint16_t buf_len,
-                                                      const uint16_t pos,
-                                                      const void * const src,
-                                                      const uint8_t src_len,
-                                                      const uint8_t enc_len
+extern uint16_t __attribute__((nonnull
 #ifdef DEBUG_MARSHALL
-                                                      ,
-                                                      const char * const fmt,
-                                                      const char * const func,
-                                                      const char * const file,
-                                                      const unsigned line,
-                                                      const char * buf_str,
-                                                      const char * src_str
+                               ,
+                               format(printf, 7, 0)
+#endif
+                                   )) marshall_enc(uint8_t * const buf,
+                                                   const uint16_t buf_len,
+                                                   const uint16_t pos,
+                                                   const void * const src,
+                                                   const uint8_t src_len,
+                                                   const uint8_t enc_len
+#ifdef DEBUG_MARSHALL
+                                                   ,
+                                                   const char * const fmt,
+                                                   const char * const func,
+                                                   const char * const file,
+                                                   const unsigned line,
+                                                   const char * buf_str,
+                                                   const char * src_str
 #endif
 );
 
@@ -132,20 +137,25 @@ extern uint16_t __attribute__((nonnull)) marshall_enc(uint8_t * const buf,
 #endif
 
 
-extern uint16_t __attribute__((nonnull))
-marshall_enc_buf(uint8_t * const buf,
-                 const uint16_t buf_len,
-                 const uint16_t pos,
-                 const void * const src,
-                 const uint16_t enc_len
+extern uint16_t __attribute__((nonnull
 #ifdef DEBUG_MARSHALL
-                 ,
-                 const char * const fmt,
-                 const char * const func,
-                 const char * const file,
-                 const unsigned line,
-                 const char * buf_str,
-                 const char * src_str
+                               ,
+                               format(printf, 6, 0)
+#endif
+
+                                   )) marshall_enc_buf(uint8_t * const buf,
+                                                       const uint16_t buf_len,
+                                                       const uint16_t pos,
+                                                       const void * const src,
+                                                       const uint16_t enc_len
+#ifdef DEBUG_MARSHALL
+                                                       ,
+                                                       const char * const fmt,
+                                                       const char * const func,
+                                                       const char * const file,
+                                                       const unsigned line,
+                                                       const char * buf_str,
+                                                       const char * src_str
 #endif
 );
 
@@ -180,19 +190,24 @@ marshall_enc_buf(uint8_t * const buf,
 #endif
 
 
-extern uint16_t __attribute__((nonnull)) marshall_dec(void * const dst,
-                                                      const uint8_t * const buf,
-                                                      const uint16_t buf_len,
-                                                      const uint16_t pos,
-                                                      const uint8_t dst_len
+extern uint16_t __attribute__((nonnull
 #ifdef DEBUG_MARSHALL
-                                                      ,
-                                                      const char * const fmt,
-                                                      const char * const func,
-                                                      const char * const file,
-                                                      const unsigned line,
-                                                      const char * buf_str,
-                                                      const char * dst_str
+                               ,
+                               format(printf, 6, 0)
+#endif
+                                   )) marshall_dec(void * const dst,
+                                                   const uint8_t * const buf,
+                                                   const uint16_t buf_len,
+                                                   const uint16_t pos,
+                                                   const uint8_t dst_len
+#ifdef DEBUG_MARSHALL
+                                                   ,
+                                                   const char * const fmt,
+                                                   const char * const func,
+                                                   const char * const file,
+                                                   const unsigned line,
+                                                   const char * buf_str,
+                                                   const char * dst_str
 #endif
 );
 
@@ -221,7 +236,13 @@ extern uint16_t __attribute__((nonnull)) marshall_dec(void * const dst,
 #endif
 
 
-extern uint16_t __attribute__((nonnull))
+extern uint16_t __attribute__((nonnull
+#ifdef DEBUG_MARSHALL
+                               ,
+                               format(printf, 6, 0)
+#endif
+
+                                   ))
 marshall_dec_buf(void * const dst,
                  const uint8_t * const buf,
                  const uint16_t buf_len,

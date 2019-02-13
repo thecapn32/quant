@@ -75,6 +75,8 @@
 #define log_enc(type, fmt, enc_type)                                           \
     do {                                                                       \
         if (unlikely(DLEVEL >= DBG && util_dlevel >= DBG)) {                   \
+            _Pragma("clang diagnostic push");                                  \
+            _Pragma("clang diagnostic ignored \"-Wformat-nonliteral\"");       \
             const size_t _src_len = trim_str(src_str);                         \
             const size_t _buf_len = trim_str(buf_str);                         \
             if (strcmp(enc_type, "buf") == 0)                                  \
@@ -87,6 +89,7 @@
                           src_str, *(const type *)src, i - pos,                \
                           plural(i - pos), (enc_type), _buf_len, buf_str, pos, \
                           i - 1);                                              \
+            _Pragma("clang diagnostic pop");                                   \
         }                                                                      \
     } while (0)
 #else
@@ -227,6 +230,8 @@ uint16_t marshall_enc_buf(uint8_t * const buf,
 #define log_dec(type, dec_type)                                                \
     do {                                                                       \
         if (unlikely(DLEVEL >= DBG && util_dlevel >= DBG)) {                   \
+            _Pragma("clang diagnostic push");                                  \
+            _Pragma("clang diagnostic ignored \"-Wformat-nonliteral\"");       \
             const size_t _dst_len = trim_str(dst_str);                         \
             const size_t _buf_len = trim_str(buf_str);                         \
             if (strcmp(dec_type, "buf") == 0)                                  \
@@ -237,6 +242,7 @@ uint16_t marshall_enc_buf(uint8_t * const buf,
                 util_warn(DBG, false, func, file, line, (fmt), i - pos,        \
                           plural(i - pos), (dec_type), _buf_len, buf_str, pos, \
                           i - 1, _dst_len, dst_str, *(const type *)dst);       \
+            _Pragma("clang diagnostic pop");                                   \
         }                                                                      \
     } while (0)
 #else
