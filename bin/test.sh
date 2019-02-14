@@ -100,7 +100,7 @@ case $c in
                 ;;
         quinn)
                 cc="cd external/quinn-prefix/src/quinn; \
-                        cargo run -- $addr"
+                        cargo run --bin main -- $addr"
                 ;;
 esac
 
