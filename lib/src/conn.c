@@ -331,8 +331,8 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
     const bool has_data = (sq_len(&s->out) && out_fully_acked(s) == false);
 
     // warn(ERR,
-    //      "%s strm id=" FMT_SID
-    //      ", cnt=%u, has_data=%u, needs_ctrl=%u, blocked=%u, fully_acked=%u",
+    //      "%s strm id=" FMT_SID ", cnt=%" PRIu64
+    //      ", has_data=%u, needs_ctrl=%u, blocked=%u, fully_acked=%u",
     //      conn_type(c), s->id, sq_len(&s->out), has_data, needs_ctrl(s),
     //      s->blocked, out_fully_acked(s));
 
@@ -350,9 +350,12 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
 
     uint32_t encoded = 0;
     struct w_iov * v = s->out_una;
+    bool wnd_full = false;
     sq_foreach_from (v, &s->out, next) {
-        if (unlikely(has_wnd(c, v->len) == false && limit == 0))
+        if (unlikely(has_wnd(c, v->len) == false && limit == 0)) {
+            wnd_full = true;
             break;
+        }
 
         if (unlikely(meta(v).is_acked)) {
             // warn(INF, "skip ACK'ed pkt " FMT_PNR_OUT, meta(v).hdr.nr);
@@ -391,18 +394,20 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
 #ifndef NDEBUG
     log_sent_pkts(c);
 #endif
-    return (unlikely(limit) && encoded == limit) || encoded > 0;
+    return (unlikely(limit) && encoded == limit) || wnd_full == false;
 }
 
 
 static void __attribute__((nonnull))
-tx_ack(struct q_conn * const c, const epoch_t e)
+tx_ack(struct q_conn * const c, const epoch_t e, const bool tx_ack_eliciting)
 {
     do_conn_mgmt(c);
     struct w_iov * const v = alloc_iov(c->w, 0, 0);
-    enc_pkt(c->cstreams[e], false, false, true, v);
+    enc_pkt(c->cstreams[e], false, false, tx_ack_eliciting, v);
     do_tx(c);
-    free_iov(v);
+    if (is_ack_eliciting(&meta(v).frames) == false)
+        // enc_pkt() can end up encoding ACK eliciting frames, so check
+        free_iov(v);
 }
 
 
@@ -413,12 +418,12 @@ void tx(struct q_conn * const c, const uint32_t limit)
 
     if (unlikely(c->state == conn_qlse)) {
         enter_closing(c);
-        tx_ack(c, ep_data);
+        tx_ack(c, ep_data, false);
         goto done;
     }
 
     if (unlikely(c->tx_rtry)) {
-        tx_ack(c, ep_init);
+        tx_ack(c, ep_init, false);
         goto done;
     }
 
@@ -446,13 +451,17 @@ void tx(struct q_conn * const c, const uint32_t limit)
         if (tx_stream(s, limit) == false)
             break;
 
-done:
-    if (unlikely(sq_empty(&c->txq))) {
-        if (unlikely(limit) || !sl_empty(&c->need_ctrl))
-            tx_ack(c, c->tls.epoch_out);
-    } else
+done:;
+    // make sure we send enough packets when we're called with a limit
+    uint64_t sent = sq_len(&c->txq);
+    if (likely(sent))
         do_tx(c);
+    while (unlikely(limit) && sent < limit) {
+        tx_ack(c, c->tls.epoch_out, true);
+        sent++;
+    }
 }
+
 
 void tx_w(struct ev_loop * const l __attribute__((unused)),
           ev_async * const w,
@@ -1133,7 +1142,7 @@ rx(struct ev_loop * const l, ev_io * const rx_w, int _e __attribute__((unused)))
             struct pn_space * const pn = pn_for_epoch(c, e);
             switch (needs_ack(pn)) {
             case imm_ack:
-                tx_ack(c, e);
+                tx_ack(c, e, false);
                 break;
             case del_ack:
                 ev_timer_again(loop, &c->ack_alarm);
@@ -1280,7 +1289,7 @@ ack_alarm(struct ev_loop * const l __attribute__((unused)),
 {
     struct q_conn * const c = w->data;
     warn(DBG, "ACK timer fired on %s conn %s", conn_type(c), cid2str(c->scid));
-    tx_ack(c, ep_data);
+    tx_ack(c, ep_data, false);
 }
 
 

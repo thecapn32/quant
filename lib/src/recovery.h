@@ -63,11 +63,10 @@ struct recovery {
 
     ev_tstamp loss_t; // loss_time
 
-    uint64_t ack_eliciting_in_flight; // nr of ACK-eliciting pkts inflight
-
     // CC state
     uint64_t ce_cnt;       // ecn_ce_counter
     uint64_t in_flight;    // bytes_in_flight
+    uint64_t ae_in_flight; // nr of ACK-eliciting pkts inflight
     uint64_t cwnd;         // congestion_window
     ev_tstamp rec_start_t; // recovery_start_time
     uint64_t ssthresh;     // sshtresh

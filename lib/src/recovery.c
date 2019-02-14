@@ -84,15 +84,15 @@ static void __attribute__((nonnull)) set_ld_timer(struct q_conn * const c)
         return;
 
     // don't arm the alarm if there are no ack-eliciting packets in flight
-    if (unlikely(c->rec.ack_eliciting_in_flight == 0)) {
+    if (unlikely(c->rec.ae_in_flight == 0)) {
         // warn(DBG, "no RTX-able pkts outstanding, stopping ld_alarm");
         ev_timer_stop(loop, &c->rec.ld_alarm);
         return;
     }
 
-    const char * type = BLD RED "???" NRM;
+    // const char * type = BLD RED "???" NRM;
     if (unlikely(crypto_pkts_in_flight(c))) {
-        type = "crypto RTX";
+        // type = "crypto RTX";
         ev_tstamp to =
             2 * (unlikely(is_zero(c->rec.srtt)) ? kInitialRtt : c->rec.srtt);
         to = MAX(to, kGranularity) * (1 << c->rec.crypto_cnt);
@@ -101,12 +101,12 @@ static void __attribute__((nonnull)) set_ld_timer(struct q_conn * const c)
     }
 
     if (!is_zero(c->rec.loss_t)) {
-        type = "TT";
+        // type = "TT";
         c->rec.ld_alarm.repeat = c->rec.loss_t;
         goto set_to;
     }
 
-    type = "PTO";
+    // type = "PTO";
     ev_tstamp to =
         c->rec.srtt + (4 * c->rec.rttvar) + (c->tp_out.max_ack_del / 1000.0);
     to = MAX(to, kGranularity) * (1 << c->rec.pto_cnt);
@@ -115,14 +115,13 @@ static void __attribute__((nonnull)) set_ld_timer(struct q_conn * const c)
 set_to:
     c->rec.ld_alarm.repeat -= ev_now(loop);
 
-    if (c->rec.ld_alarm.repeat <= 0) {
-        ev_timer_stop(loop, &c->rec.ld_alarm);
+    // warn(DBG, "%s alarm in %f sec on %s conn %s", type,
+    //      c->rec.ld_alarm.repeat < 0 ? 0 : c->rec.ld_alarm.repeat,
+    //      conn_type(c), cid2str(c->scid));
+    if (c->rec.ld_alarm.repeat <= 0)
         ev_invoke(loop, &c->rec.ld_alarm, 0);
-    } else {
-        warn(DBG, "%s alarm in %f sec on %s conn %s", type,
-             c->rec.ld_alarm.repeat, conn_type(c), cid2str(c->scid));
+    else
         ev_timer_again(loop, &c->rec.ld_alarm);
-    }
 }
 
 
@@ -171,9 +170,10 @@ detect_lost_pkts(struct q_conn * const c,
 
         // Mark packet as lost, or set time when it should be marked.
         if (p->tx_t <= lost_send_t ||
-            (pn->lg_acked != UINT64_MAX && p->hdr.nr <= lost_pn)) {
+            (likely(pn->lg_acked != UINT64_MAX) && p->hdr.nr <= lost_pn)) {
             p->is_lost = true;
-            if (largest_lost_pkt == 0 || p->hdr.nr > largest_lost_pkt->hdr.nr)
+            if (unlikely(largest_lost_pkt == 0) ||
+                p->hdr.nr > largest_lost_pkt->hdr.nr)
                 largest_lost_pkt = p;
         } else if (is_zero(c->rec.loss_t))
             c->rec.loss_t = p->tx_t + loss_del;
@@ -187,10 +187,10 @@ detect_lost_pkts(struct q_conn * const c,
 
             if (is_ack_eliciting(&p->frames)) {
                 c->rec.in_flight -= p->udp_len;
-                c->rec.ack_eliciting_in_flight--;
+                c->rec.ae_in_flight--;
             }
 
-            // log_cc(c);
+            log_cc(c);
 
             if (p->is_rtx || !has_stream_data(p)) {
                 if (p->is_rtx)
@@ -222,7 +222,6 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
         warn(DBG, "crypto RTX #%u on %s conn %s", c->rec.crypto_cnt + 1,
              conn_type(c), cid2str(c->scid));
         detect_lost_pkts(c, pn_for_epoch(c, ep_init), false);
-        detect_lost_pkts(c, pn_for_epoch(c, ep_0rtt), false);
         detect_lost_pkts(c, pn_for_epoch(c, ep_hshk), false);
         if (c->rec.crypto_cnt++ >= 2 && c->tls.epoch_out == ep_init &&
             c->sockopt.enable_ecn) {
@@ -237,7 +236,6 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
         warn(DBG, "TT alarm ep %u on %s conn %s", c->tls.epoch_out,
              conn_type(c), cid2str(c->scid));
         detect_lost_pkts(c, pn, true);
-        tx(c, 0);
 
     } else {
         warn(DBG, "PTO alarm #%u on %s conn %s", c->rec.pto_cnt, conn_type(c),
@@ -246,7 +244,7 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
         tx(c, 2);
     }
 
-    // XXX this is called in on_pkt_sent(): set_ld_timer(c);
+    set_ld_timer(c);
 }
 
 
@@ -291,7 +289,7 @@ void on_pkt_sent(struct q_stream * const s, struct w_iov * const v)
             c->rec.last_sent_crypto_t = meta(v).tx_t;
         c->rec.last_sent_ack_elicit_t = meta(v).tx_t;
         c->rec.in_flight += meta(v).udp_len; // OnPacketSentCC
-        c->rec.ack_eliciting_in_flight++;
+        c->rec.ae_in_flight++;
         log_cc(c);
         set_ld_timer(c);
     }
@@ -347,9 +345,9 @@ void on_ack_received_2(struct q_conn * const c, struct pn_space * const pn)
     detect_lost_pkts(c, pn, true);
     set_ld_timer(c);
 
-    // not part of pseudo code
+    // not part of pseudo code - causes TX to resume when the window opens
 
-    if (has_wnd(c, 0))
+    if (has_wnd(c, c->w->mtu))
         c->needs_tx = true;
 }
 
@@ -360,7 +358,7 @@ on_pkt_acked_cc(struct q_conn * const c, struct w_iov * const acked_pkt)
     // OnPacketAckedCC
 
     c->rec.in_flight -= meta(acked_pkt).udp_len;
-    c->rec.ack_eliciting_in_flight--;
+    c->rec.ae_in_flight--;
 
     if (in_recovery(c, meta(acked_pkt).tx_t))
         return;
@@ -377,7 +375,6 @@ void on_pkt_acked(struct q_conn * const c,
                   struct w_iov * const acked_pkt)
 {
     // see OnPacketAcked() pseudo code
-
     if (is_ack_eliciting(&meta(acked_pkt).frames) &&
         meta(acked_pkt).is_lost == false)
         on_pkt_acked_cc(c, acked_pkt);
