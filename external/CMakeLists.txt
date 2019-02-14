@@ -204,6 +204,9 @@ externalproject_add(quinn
   GIT_REPOSITORY https://github.com/djc/quinn.git
   GIT_SHALLOW 1
   # GIT_TAG add_quicker_support-tls-d28
+  CONFIGURE_COMMAND ""
+  BUILD_COMMAND ""
+  INSTALL_COMMAND ""
   BUILD_IN_SOURCE 1
   EXCLUDE_FROM_ALL 1
 )

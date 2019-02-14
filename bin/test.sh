@@ -98,6 +98,10 @@ case $c in
                         external/go/src/github.com/lucas-clemente/quic-go/h09/client/main.go \
                         $addr:$port"
                 ;;
+        quinn)
+                cc="cd external/quinn-prefix/src/quinn; \
+                        cargo run -- $addr"
+                ;;
 esac
 
 # commands to run the different servers on  $addr:$port
