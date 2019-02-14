@@ -259,13 +259,6 @@ is_ack_eliciting(const struct frames * const f)
 }
 
 
-static inline bool __attribute__((nonnull)) is_fin(const struct w_iov * const v)
-{
-    return meta(v).stream_header_pos != 0 &&
-           is_set(F_STREAM_FIN, *(v->buf + meta(v).stream_header_pos));
-}
-
-
 extern struct ev_loop * loop;
 extern struct q_conn_sl accept_queue;
 

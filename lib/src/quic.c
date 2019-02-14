@@ -381,13 +381,16 @@ void q_readall_stream(struct q_stream * const s, struct w_iov_sq * const q)
         loop_run(q_readall_stream, c, s);
     }
 
-    if (!sq_empty(&s->in))
-        warn(WRN, "read %" PRIu64 " byte%s on %s conn %s strm " FMT_SID,
+    if (!sq_empty(&s->in)) {
+        struct w_iov * const last = sq_last(&s->in, w_iov, next);
+        warn(WRN, "read %" PRIu64 " byte%s on %s conn %s strm " FMT_SID " %s",
              w_iov_sq_len(&s->in), plural(w_iov_sq_len(&s->in)), conn_type(c),
-             cid2str(c->scid), s->id);
+             cid2str(c->scid), s->id, meta(last).is_fin ? "" : "(FIN missing)");
 
-    // return data
-    sq_concat(q, &s->in);
+        if (meta(last).is_fin)
+            // return data
+            sq_concat(q, &s->in);
+    }
 }
 
 

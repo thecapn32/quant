@@ -171,6 +171,8 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
         sid = crpt_strm_id(e);
         meta(v).stream = c->cstreams[e];
     } else {
+        if (unlikely(is_set(F_STREAM_FIN, t)))
+            meta(v).is_fin = true;
         i = dec_chk(t, &sid, v->buf, v->len, i, 0, FMT_SID);
         const int64_t max = max_sid(sid, c);
         if (unlikely(sid > max))
@@ -286,7 +288,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
         if (last) {
             if (unlikely(v != last))
                 adj_iov_to_start(last);
-            if (is_fin(last)) {
+            if (meta(last).is_fin) {
                 strm_to_state(meta(v).stream, meta(v).stream->state <= strm_hcrm
                                                   ? strm_hcrm
                                                   : strm_clsd);

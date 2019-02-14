@@ -421,7 +421,7 @@ void on_pkt_acked(struct q_conn * const c,
 
     if (s) {
         adj_iov_to_start(acked_pkt);
-        if (is_fin(acked_pkt))
+        if (unlikely(meta(acked_pkt).is_fin))
             // this ACKs a FIN
             maybe_api_return(q_close_stream, c, s);
         adj_iov_to_data(acked_pkt);
