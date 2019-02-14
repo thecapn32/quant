@@ -166,7 +166,7 @@ cids_by_id_ins(khash_t(cids_by_id) * const cbi, struct cid * const id)
 {
     int ret;
     const khiter_t k = kh_put(cids_by_id, cbi, id, &ret);
-    ensure(ret >= 0, "inserted");
+    ensure(ret >= 1, "inserted");
     kh_val(cbi, k) = id;
 }
 
@@ -476,7 +476,7 @@ conns_by_id_ins(struct q_conn * const c, struct cid * const id)
 {
     int ret;
     const khiter_t k = kh_put(conns_by_id, conns_by_id, id, &ret);
-    ensure(ret >= 0, "inserted");
+    ensure(ret >= 1, "inserted");
     kh_val(conns_by_id, k) = c;
 }
 
@@ -556,7 +556,7 @@ conns_by_ipnp_ins(struct q_conn * const c)
                (khint64_t)conns_by_ipnp_key(c->sport, c->peer.sin_port,
                                             c->peer.sin_addr.s_addr),
                &ret);
-    ensure(ret >= 0, "inserted");
+    ensure(ret >= 1, "inserted");
     kh_val(conns_by_ipnp, k) = c;
 }
 

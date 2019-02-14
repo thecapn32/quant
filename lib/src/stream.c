@@ -116,7 +116,7 @@ struct q_stream * new_stream(struct q_conn * const c, const int64_t id)
     int ret;
     const khiter_t k =
         kh_put(streams_by_id, c->streams_by_id, (khint64_t)id, &ret);
-    ensure(ret >= 0, "inserted");
+    ensure(ret >= 1, "inserted");
     kh_val(c->streams_by_id, k) = s;
 
     apply_stream_limits(s);
