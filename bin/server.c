@@ -235,16 +235,22 @@ int main(int argc, char * argv[])
         ifname, &(const struct q_conf){
                     .num_bufs = 100000, .tls_cert = cert, .tls_key = key});
     struct q_conn * conn[MAXPORTS];
+    size_t bound = 0;
     for (size_t i = 0; i < num_ports; i++) {
         conn[i] = q_bind(w, port[i]);
-        warn(DBG, "%s waiting on %s port %d", basename(argv[0]), ifname,
-             port[i]);
+        if (conn[i]) {
+            warn(DBG, "%s waiting on %s port %d", basename(argv[0]), ifname,
+                 port[i]);
+            bound++;
+        } else
+            warn(ERR, "%s failed to bind to %s port %d", basename(argv[0]),
+                 ifname, port[i]);
     }
 
     bool first_conn = true;
     http_parser_settings settings = {.on_url = serve_cb};
 
-    while (1) {
+    while (bound) {
         struct q_conn * c = q_rx_ready(first_conn ? 0 : timeout);
         if (c == 0)
             break;

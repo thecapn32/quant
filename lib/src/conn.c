@@ -1405,23 +1405,6 @@ struct q_conn * new_conn(struct w_engine * const w,
     ev_set_priority(&c->tx_w, EV_MAXPRI - 1);
     ev_async_start(loop, &c->tx_w);
 
-    c->w = w;
-    c->sock = w_get_sock(w, w->ip, htons(port), 0, 0);
-    if (c->sock == 0) {
-        // TODO need to update zero checksums in update_conn_conf() somehow
-        c->sockopt.enable_udp_zero_checksums =
-            cc && cc->enable_udp_zero_checksums;
-        c->rx_w.data = c->sock = w_bind(w, htons(port), &c->sockopt);
-        ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
-        ev_set_priority(&c->rx_w, EV_MAXPRI);
-        ev_io_start(loop, &c->rx_w);
-        c->holds_sock = true;
-    }
-    c->sport = w_get_sport(c->sock);
-
-    if (likely(c->is_clnt || c->holds_sock == false))
-        update_conn_conf(c, cc);
-
     // init scid and add connection to global data structures
     conns_by_ipnp_ins(c);
     splay_init(&c->scids_by_seq);
@@ -1435,6 +1418,27 @@ struct q_conn * new_conn(struct w_engine * const w,
         ptls_openssl_random_bytes(nscid.srt, sizeof(nscid.srt));
         add_scid(c, &nscid);
     }
+
+    c->w = w;
+    c->sock = w_get_sock(w, w->ip, htons(port), 0, 0);
+    if (c->sock == 0) {
+        // TODO need to update zero checksums in update_conn_conf() somehow
+        c->sockopt.enable_udp_zero_checksums =
+            cc && cc->enable_udp_zero_checksums;
+        c->rx_w.data = c->sock = w_bind(w, htons(port), &c->sockopt);
+        if (unlikely(c->sock == 0)) {
+            free_conn(c);
+            return 0;
+        }
+        ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
+        ev_set_priority(&c->rx_w, EV_MAXPRI);
+        ev_io_start(loop, &c->rx_w);
+        c->holds_sock = true;
+    }
+    c->sport = w_get_sport(c->sock);
+
+    if (likely(c->is_clnt || c->holds_sock == false))
+        update_conn_conf(c, cc);
 
     // create crypto streams
     for (epoch_t e = ep_init; e <= ep_data; e++)

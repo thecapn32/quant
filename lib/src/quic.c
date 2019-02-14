@@ -398,7 +398,8 @@ struct q_conn * q_bind(struct w_engine * const w, const uint16_t port)
 {
     // bind socket and create new embryonic server connection
     struct q_conn * const c = new_conn(w, 0, 0, 0, 0, 0, port, 0);
-    warn(INF, "bound %s socket on port %u", conn_type(c), port);
+    if (likely(c))
+        warn(INF, "bound %s socket to port %u", conn_type(c), port);
     return c;
 }
 
