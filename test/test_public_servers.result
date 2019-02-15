@@ -6,7 +6,7 @@ mvfst     *         v
 ngtcp2    *         v
 ngx_quic  *         v
 picoquic  *         V    H    D    C    R    Z    S    M    U    3
-quant     *         v
+quant     *         V    H    D    C    R    Z    S    M    U
 quiche    *         v
 quicly    *         v
 quinn     *         V    H    D    C    R         S    M    U
