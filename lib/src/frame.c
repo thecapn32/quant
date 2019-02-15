@@ -146,8 +146,8 @@ static void __attribute__((nonnull)) trim_frame(struct pkt_meta * const p)
                  (sid), conn_type(c), cid2str((c)->scid));                     \
             return (ret);                                                      \
         }                                                                      \
-        err_close_return(c, ERR_PROTOCOL_VIOLATION, (type),                    \
-                         "unknown strm %" PRId64, (sid));                      \
+        err_close_return(c, ERR_STREAM_STATE, (type), "unknown strm %" PRId64, \
+                         (sid));                                               \
     } while (0)
 
 
