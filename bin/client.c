@@ -192,7 +192,7 @@ get(struct w_engine * const w,
         struct q_conn * const c = q_connect(
             w, (struct sockaddr_in *)(void *)peer->ai_addr, dest, &req, &se->s,
             true,
-            &(struct q_conn_conf){.alpn = do_h3 ? "h3-17" : "hq-17",
+            &(struct q_conn_conf){.alpn = do_h3 ? "h3-18" : "hq-18",
                                   .idle_timeout = timeout,
                                   .enable_spinbit = true,
                                   .enable_tls_key_updates = flip_keys});

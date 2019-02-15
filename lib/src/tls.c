@@ -110,8 +110,8 @@ static ptls_openssl_verify_certificate_t verifier = {0};
 #endif
 
 // first entry is client default, if not otherwise specified
-static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-17", 5},
-                                    {(uint8_t *)"h3-17", 5}};
+static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-18", 5},
+                                    {(uint8_t *)"h3-18", 5}};
 static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 
 static struct cipher_ctx dec_tckt;
