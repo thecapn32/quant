@@ -456,7 +456,8 @@ done:;
     uint64_t sent = sq_len(&c->txq);
     if (likely(sent))
         do_tx(c);
-    while (unlikely(limit) && sent < limit) {
+    while ((unlikely(limit) && sent < limit) ||
+           (c->tx_path_chlg && sent == 0)) {
         tx_ack(c, c->tls.epoch_out, true);
         sent++;
     }
@@ -910,7 +911,8 @@ rx_pkts(struct w_iov_sq * const x,
 
         c = get_conn_by_cid(&meta(v).hdr.dcid);
         if (c == 0) {
-            c = get_conn_by_ipnp(w_get_sport(ws), &peer);
+            if (meta(v).hdr.dcid.len == 0)
+                c = get_conn_by_ipnp(w_get_sport(ws), &peer);
             if (likely(is_lh(meta(v).hdr.flags)) && !is_clnt) {
                 if (c && meta(v).hdr.type == LH_0RTT) {
                     if (c->did_0rtt)
@@ -925,7 +927,7 @@ rx_pkts(struct w_iov_sq * const x,
                              cid2str(&meta(v).hdr.dcid), cid2str(c->scid));
                         goto drop;
                     }
-                } else if (c == 0 && meta(v).hdr.type == LH_INIT) {
+                } else if (meta(v).hdr.type == LH_INIT) {
                     // validate minimum packet size
                     if (xv->len < MIN_INI_LEN) {
                         warn(ERR, "%u-byte Initial pkt too short (< %u)",
@@ -994,7 +996,8 @@ rx_pkts(struct w_iov_sq * const x,
             if (sockaddr_in_cmp(&c->peer, &peer) != 0) {
                 warn(NTE, "pkt came from new peer %s:%u, probing",
                      inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
-                conns_by_ipnp_update(c, &peer);
+                if (c->dcid->len == 0)
+                    conns_by_ipnp_update(c, &peer);
                 ptls_openssl_random_bytes(&c->path_chlg_out,
                                           sizeof(c->path_chlg_out));
                 c->tx_path_chlg = true;
@@ -1427,7 +1430,8 @@ struct q_conn * new_conn(struct w_engine * const w,
         update_conn_conf(c, cc);
 
     // init scid and add connection to global data structures
-    conns_by_ipnp_ins(c);
+    if (dcid == 0 || dcid->len == 0)
+        conns_by_ipnp_ins(c);
     splay_init(&c->scids_by_seq);
     struct cid nscid = {0};
     if (c->is_clnt) {
@@ -1515,7 +1519,8 @@ void free_conn(struct q_conn * const c)
     free(c->peer_name);
 
     // remove connection from global lists and free CID splays
-    conns_by_ipnp_del(c);
+    if (c->dcid == 0 || c->dcid->len == 0)
+        conns_by_ipnp_del(c);
 
     while (!splay_empty(&c->scids_by_seq)) {
         struct cid * const id = splay_min(cids_by_seq, &c->scids_by_seq);

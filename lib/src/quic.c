@@ -638,9 +638,9 @@ void q_cleanup(struct w_engine * const w)
 {
     // close all connections
     struct q_conn * c;
-    kh_foreach (c, conns_by_id)
-        q_close(c);
     kh_foreach (c, conns_by_ipnp)
+        q_close(c);
+    kh_foreach (c, conns_by_id)
         q_close(c);
 
     // stop the event loop
