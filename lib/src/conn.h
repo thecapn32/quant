@@ -94,15 +94,9 @@ extern khash_t(conns_by_id) * conns_by_id;
 
 
 struct pref_addr {
-    uint8_t ip_vers;
-    uint8_t ip_len;
-    uint8_t _unused[2];
-    union {
-        struct in_addr addr4;
-        struct in6_addr addr6;
-    } ip;
-    uint16_t port;
-    uint8_t _unused2[2];
+    struct sockaddr_in addr4;
+    struct sockaddr_in6 addr6;
+    uint8_t _unused[4];
     struct cid cid;
 };
 

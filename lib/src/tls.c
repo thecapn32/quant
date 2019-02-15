@@ -36,6 +36,7 @@
 #include <string.h>
 #include <sys/param.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #ifdef PTLS_OPENSSL
@@ -554,9 +555,15 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             c->tp_out.ack_del_exp = (uint8_t)ade;
             break;
 
-        case TP_MAD:;
+        case TP_MAD:
             dec_tp(&c->tp_out.max_ack_del);
             warn(INF, "\tmax_ack_delay = %" PRIu64, c->tp_out.max_ack_del);
+            if (c->tp_out.max_ack_del > (1 << 14)) {
+                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
+                          "max_ack_delay %" PRIu64 " invalid",
+                          c->tp_out.max_ack_del);
+                return 1;
+            }
             break;
 
         case TP_OCID:
@@ -602,21 +609,14 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             i = dec(&l, buf, len, i, sizeof(l), "%u");
 
             struct pref_addr * const pa = &c->tp_out.pref_addr;
-            i = dec(&pa->ip_vers, buf, len, i, sizeof(pa->ip_vers), "%u");
-            i = dec(&pa->ip_len, buf, len, i, sizeof(pa->ip_len), "%u");
-
-            if ((pa->ip_vers != 4 || pa->ip_len != 4) &&
-                (pa->ip_vers != 6 || pa->ip_len != 16)) {
-                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
-                          "IPv%u len %u illegal", pa->ip_vers, pa->ip_len);
-                return 1;
-            }
-
-            memcpy(&pa->ip, &buf[i], pa->ip_len);
-            i += pa->ip_len;
-
-            i = dec(&pa->port, buf, len, i, sizeof(pa->port), "%u");
-
+            memcpy(&pa->addr4.sin_addr, &buf[i], sizeof(pa->addr4.sin_addr));
+            i += sizeof(pa->addr4.sin_addr);
+            memcpy(&pa->addr4.sin_port, &buf[i], sizeof(pa->addr4.sin_port));
+            i += sizeof(pa->addr4.sin_port);
+            memcpy(&pa->addr6.sin6_addr, &buf[i], sizeof(pa->addr6.sin6_addr));
+            i += sizeof(pa->addr6.sin6_addr);
+            memcpy(&pa->addr6.sin6_port, &buf[i], sizeof(pa->addr6.sin6_port));
+            i += sizeof(pa->addr6.sin6_port);
             i = dec(&pa->cid.len, buf, len, i, sizeof(pa->cid.len), "%u");
             memcpy(pa->cid.id, &buf[i], pa->cid.len);
             i += pa->cid.len;
@@ -626,12 +626,13 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             memcpy(pa->cid.srt, &buf[i], sizeof(pa->cid.srt));
             i += sizeof(pa->cid.srt);
 
-            char ipstr[INET6_ADDRSTRLEN];
-            inet_ntop(pa->ip_vers == 4 ? AF_INET : AF_INET6, &pa->ip, ipstr,
-                      sizeof(ipstr));
-            warn(INF, "\tpreferred_address = IPv%u %s%s%s:%u cid %s srt %s",
-                 pa->ip_vers, pa->ip_vers == 6 ? "[" : "", ipstr,
-                 pa->ip_vers == 6 ? "]" : "", pa->port, cid2str(&pa->cid),
+            char ip4str[INET_ADDRSTRLEN], ip6str[INET6_ADDRSTRLEN];
+            inet_ntop(AF_INET, &pa->addr4, ip4str, sizeof(ip4str));
+            inet_ntop(AF_INET6, &pa->addr6, ip6str, sizeof(ip6str));
+            warn(INF,
+                 "\tpreferred_address = IPv4 %s:%u IPv6 [%s]:%u cid %s srt %s",
+                 ip4str, ntohs(pa->addr4.sin_port), ip6str,
+                 ntohs(pa->addr6.sin6_port), cid2str(&pa->cid),
                  hex2str(&pa->cid.srt, sizeof(pa->cid.srt)));
             break;
 
