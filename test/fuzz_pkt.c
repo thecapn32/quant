@@ -50,7 +50,7 @@ static int init(void)
                ,
                0);
     c = new_conn(w, 0xcacacaca, 0, 0, 0, "fuzzer", 0, 0);
-    init_tls(c);
+    init_tls(c, 0);
     return 0;
 }
 
