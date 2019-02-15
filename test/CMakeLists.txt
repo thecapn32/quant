@@ -21,10 +21,16 @@ foreach(TARGET diet conn)
   add_test(test_${TARGET} test_${TARGET})
 endforeach()
 
-add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/dummy.key
+add_custom_command(
+  OUTPUT
+    ${CMAKE_CURRENT_BINARY_DIR}/dummy.key
     ${CMAKE_CURRENT_BINARY_DIR}/dummy.crt
-  COMMAND openssl ARGS req -batch -new -newkey rsa:2048 -sha256 -days 9365
-    -nodes -x509 -subj "/" -keyout ${CMAKE_CURRENT_BINARY_DIR}/dummy.key
+  COMMAND
+    ${OPENSSL_ROOT_DIR}/bin/openssl
+  ARGS
+    req -batch -new -newkey rsa:2048 -sha256 -days 9365
+    -nodes -x509 -subj "/" -addext "subjectAltName = DNS:example.org"
+    -keyout ${CMAKE_CURRENT_BINARY_DIR}/dummy.key
     -out ${CMAKE_CURRENT_BINARY_DIR}/dummy.crt
 )
 
