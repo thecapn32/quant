@@ -31,7 +31,7 @@ add_custom_command(
     req -batch -new -newkey rsa:2048 -sha256 -days 9365
     -nodes -x509 -subj "/" -addext "subjectAltName = DNS:example.org"
     -keyout ${CMAKE_CURRENT_BINARY_DIR}/dummy.key
-    -out ${CMAKE_CURRENT_BINARY_DIR}/dummy.crt
+    -out ${CMAKE_CURRENT_BINARY_DIR}/dummy.crt || true
 )
 
 if(HAVE_BENCHMARK_H)
