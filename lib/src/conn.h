@@ -88,11 +88,6 @@ KHASH_INIT(conns_by_id, // NOLINT
            hash_cid,
            kh_cid_cmp)
 
-#undef kh_foreach
-#define kh_foreach(v, h)                                                       \
-    for (khiter_t _k = kh_begin(h); _k != kh_end(h); ++_k)                     \
-        if (kh_exist((h), _k) ? ((v) = kh_val((h), _k), 1) : ((v) = 0, 0))
-
 
 extern khash_t(conns_by_ipnp) * conns_by_ipnp;
 extern khash_t(conns_by_id) * conns_by_id;

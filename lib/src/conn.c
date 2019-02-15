@@ -445,11 +445,11 @@ void tx(struct q_conn * const c, const uint32_t limit)
                 goto done;
         }
 
-    // cppcheck-suppress variableScope
     struct q_stream * s;
-    kh_foreach (s, c->streams_by_id)
+    kh_foreach_value(c->streams_by_id, s, {
         if (tx_stream(s, limit) == false)
             break;
+    });
 
 done:;
     // make sure we send enough packets when we're called with a limit
@@ -624,10 +624,8 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
         if (c->cstreams[e])
             reset_stream(c->cstreams[e], true);
 
-    // cppcheck-suppress variableScope
     struct q_stream * s;
-    kh_foreach (s, c->streams_by_id)
-        reset_stream(s, false);
+    kh_foreach_value(c->streams_by_id, s, { reset_stream(s, false); });
 
     // reset packet number spaces
     const uint64_t lg_sent_ini = c->pn_init.pn.lg_sent;
@@ -1496,10 +1494,8 @@ void free_conn(struct q_conn * const c)
     ev_timer_stop(loop, &c->idle_alarm);
     ev_timer_stop(loop, &c->ack_alarm);
 
-    // cppcheck-suppress variableScope
     struct q_stream * s;
-    kh_foreach (s, c->streams_by_id)
-        free_stream(s);
+    kh_foreach_value(c->streams_by_id, s, { free_stream(s); });
     kh_destroy(streams_by_id, c->streams_by_id);
 
     for (epoch_t e = ep_init; e <= ep_data; e++)

@@ -344,10 +344,11 @@ q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool block)
 again:;
     struct q_stream * s = 0;
     if (c->state == conn_estb) {
-        kh_foreach (s, c->streams_by_id)
+        kh_foreach_value(c->streams_by_id, s, {
             if (!sq_empty(&s->in) && s->state != strm_clsd)
                 // we found a stream with queued data
                 break;
+        });
 
         if (s == 0 && block) {
             // no data queued on any stream, wait for new data
@@ -638,10 +639,8 @@ void q_cleanup(struct w_engine * const w)
 {
     // close all connections
     struct q_conn * c;
-    kh_foreach (c, conns_by_ipnp)
-        q_close(c);
-    kh_foreach (c, conns_by_id)
-        q_close(c);
+    kh_foreach_value(conns_by_ipnp, c, { q_close(c); });
+    kh_foreach_value(conns_by_id, c, { q_close(c); });
 
     // stop the event loop
     ev_loop_destroy(loop);
