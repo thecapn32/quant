@@ -219,7 +219,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
         }
 
         if (unlikely(is_srv_ini(sid) != c->is_clnt))
-            err_close_return(c, ERR_PROTOCOL_VIOLATION, t,
+            err_close_return(c, ERR_STREAM_STATE, t,
                              "got sid %" PRId64 " but am %s", sid,
                              conn_type(c));
 
