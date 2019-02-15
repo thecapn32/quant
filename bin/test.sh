@@ -107,7 +107,8 @@ esac
 # commands to run the different servers on  $addr:$port
 case $s in
         quant)
-                sc="bin/server -v5 -c $cert -k $key -i $iface -p $port -d $dir"
+                sc="bin/server -v5 -c $cert -k $key -i $iface \
+                    -p 4433 -p 4434 -p $port -d $dir"
                 ;;
         wquant)
                 sc="vagrant ssh -c \"\
