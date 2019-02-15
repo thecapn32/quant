@@ -1405,22 +1405,22 @@ struct q_conn * new_conn(struct w_engine * const w,
     ev_async_start(loop, &c->tx_w);
 
     c->w = w;
-    c->sock = w_get_sock(w, w->ip, htons(port), 0, 0);
+    c->sock = w_get_sock(w, w->ip, htons(port),
+                         c->is_clnt && peer ? peer->sin_addr.s_addr : 0,
+                         c->is_clnt && peer ? peer->sin_port : 0);
     if (c->sock == 0) {
         // TODO need to update zero checksums in update_conn_conf() somehow
         c->sockopt.enable_udp_zero_checksums =
             cc && cc->enable_udp_zero_checksums;
         c->rx_w.data = c->sock = w_bind(w, htons(port), &c->sockopt);
-        if (unlikely(c->sock == 0)) {
-            kh_destroy(cids_by_id, c->scids_by_id);
-            free(c);
-            return 0;
-        }
+        if (unlikely(c->sock == 0))
+            goto fail;
         ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
         ev_set_priority(&c->rx_w, EV_MAXPRI);
         ev_io_start(loop, &c->rx_w);
         c->holds_sock = true;
-    }
+    } else if (unlikely(peer == 0))
+        goto fail;
     c->sport = w_get_sport(c->sock);
 
     if (likely(c->is_clnt || c->holds_sock == false))
@@ -1451,8 +1451,12 @@ struct q_conn * new_conn(struct w_engine * const w,
              cid2str(c->scid), ntohs(c->sport));
 
     conn_to_state(c, conn_idle);
-
     return c;
+
+fail:
+    kh_destroy(cids_by_id, c->scids_by_id);
+    free(c);
+    return 0;
 }
 
 
