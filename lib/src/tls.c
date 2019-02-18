@@ -29,6 +29,7 @@
 #include <assert.h>
 #include <inttypes.h>
 #include <netinet/in.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -1127,23 +1128,21 @@ done:
 }
 
 
-static void fprinthex(FILE * const fp, const ptls_iovec_t vec)
+static void __attribute__((format(printf, 4, 5)))
+log_event_cb(ptls_log_event_t * const self __attribute__((unused)),
+             ptls_t * const tls,
+             const char * const type,
+             const char * fmt,
+             ...)
 {
-    for (size_t i = 0; i != vec.len; ++i)
-        fprintf(fp, "%02x", vec.base[i]);
-}
+    fprintf(tls_log_file, "%s %s ", type,
+            hex2str(ptls_get_client_random(tls).base, PTLS_HELLO_RANDOM_SIZE));
 
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(tls_log_file, fmt, args);
+    va_end(args);
 
-static void log_secret_cb(ptls_log_secret_t * const self
-                          __attribute__((unused)),
-                          ptls_t * const tls,
-                          const char * const label,
-                          ptls_iovec_t secret)
-{
-    fprintf(tls_log_file, "%s ", label);
-    fprinthex(tls_log_file, ptls_get_client_random(tls));
-    fprintf(tls_log_file, " ");
-    fprinthex(tls_log_file, secret);
     fprintf(tls_log_file, "\n");
     fflush(tls_log_file);
 }
@@ -1240,7 +1239,7 @@ void init_tls_ctx(const struct q_conf * const conf)
 #endif
         &ptls_minicrypto_x25519, 0};
     static ptls_on_client_hello_t on_client_hello = {on_ch};
-    static ptls_log_secret_t log_secret = {log_secret_cb};
+    static ptls_log_event_t log_event = {log_event_cb};
     static ptls_update_traffic_key_t update_traffic_key = {
         update_traffic_key_cb};
 
@@ -1254,7 +1253,7 @@ void init_tls_ctx(const struct q_conf * const conf)
     tls_ctx.on_client_hello = &on_client_hello;
     tls_ctx.update_traffic_key = &update_traffic_key;
     if (conf && conf->tls_log)
-        tls_ctx.log_secret = &log_secret;
+        tls_ctx.log_event = &log_event;
     tls_ctx.random_bytes =
 #ifdef PTLS_OPENSSL
         ptls_openssl_random_bytes;
