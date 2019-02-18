@@ -69,10 +69,10 @@ Instead of building quant for yourself, you can also obtain a [pre-built Docker 
 
 should download the latest build on the `master` branch. The docker container by default exposes a QUIC server on port 4433 that can serve `/index.html` and possibly other resources.
 
-To map the upd port, run the docker container with
+To map the UDP port, run the docker container with
 
     docker run -p4433:4433/udp ntap/quant
-    
+
 
 ## Testing
 
