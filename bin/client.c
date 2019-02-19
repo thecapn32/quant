@@ -61,6 +61,7 @@ struct conn_cache {
 static uint64_t timeout = 10;
 static bool do_h3 = false;
 static bool flip_keys = false;
+static bool zlen_cids = false;
 
 
 static uint32_t __attribute__((nonnull))
@@ -109,6 +110,8 @@ static void __attribute__((noreturn, nonnull)) usage(const char * const name,
            flip_keys ? "true" : "false");
     printf("\t[-3]\t\tsend a static H3 request; default %s\n",
            do_h3 ? "true" : "false");
+    printf("\t[-z]\t\tuse zero-length source connection IDs; default %s\n",
+           zlen_cids ? "true" : "false");
 #ifndef NDEBUG
     printf("\t[-v verbosity]\tverbosity level (0-%d, default %d)\n", DLEVEL,
            util_dlevel);
@@ -189,13 +192,14 @@ get(struct w_engine * const w,
     struct conn_cache_entry * cce = splay_find(conn_cache, cc, &which);
     if (cce == 0) {
         // no, open a new connection
-        struct q_conn * const c = q_connect(
-            w, (struct sockaddr_in *)(void *)peer->ai_addr, dest, &req, &se->s,
-            true,
-            &(struct q_conn_conf){.alpn = do_h3 ? "h3-18" : "hq-18",
-                                  .idle_timeout = timeout,
-                                  .enable_spinbit = true,
-                                  .enable_tls_key_updates = flip_keys});
+        struct q_conn * const c =
+            q_connect(w, (struct sockaddr_in *)(void *)peer->ai_addr, dest,
+                      &req, &se->s, true,
+                      &(struct q_conn_conf){.alpn = do_h3 ? "h3-18" : "hq-18",
+                                            .idle_timeout = timeout,
+                                            .enable_spinbit = true,
+                                            .enable_tls_key_updates = flip_keys,
+                                            .enable_zero_len_cid = zlen_cids});
         if (c == 0) {
             freeaddrinfo(peer);
             return 0;
@@ -274,7 +278,7 @@ int main(int argc, char * argv[])
     bool verify_certs = false;
     int ret = 0;
 
-    while ((ch = getopt(argc, argv, "hi:v:s:t:l:cu3")) != -1) {
+    while ((ch = getopt(argc, argv, "hi:v:s:t:l:cu3z")) != -1) {
         switch (ch) {
         case 'i':
             strncpy(ifname, optarg, sizeof(ifname) - 1);
@@ -296,6 +300,9 @@ int main(int argc, char * argv[])
             break;
         case '3':
             do_h3 = true;
+            break;
+        case 'z':
+            zlen_cids = true;
             break;
         case 'v':
 #ifndef NDEBUG

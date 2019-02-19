@@ -304,7 +304,7 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
     }
 
     if (likely(c->tp_out.disable_migration == false) &&
-        unlikely(c->do_migration == true)) {
+        unlikely(c->do_migration == true) && c->scid) {
         if (c->is_clnt &&
             // does the peer have a CID for us that they can switch to?
             splay_count(&c->scids_by_seq) >= 2) {
@@ -883,13 +883,19 @@ rx_pkts(struct w_iov_sq * const x,
         v->port = xv->port;
         v->flags = xv->flags;
 
+        const struct sockaddr_in peer = {.sin_family = AF_INET,
+                                         .sin_port = v->port,
+                                         .sin_addr = {.s_addr = v->ip}};
+
         const bool is_clnt = w_connected(ws);
         struct q_conn * c = 0;
+        struct q_conn * const c_ipnp = get_conn_by_ipnp(w_get_sport(ws), &peer);
         struct cid odcid;
         uint8_t tok[MAX_PKT_LEN];
         uint16_t tok_len = 0;
-        if (unlikely(!dec_pkt_hdr_beginning(xv, v, is_clnt, &odcid, tok,
-                                            &tok_len))) {
+        if (unlikely(!dec_pkt_hdr_beginning(
+                xv, v, is_clnt, &odcid, tok, &tok_len,
+                is_clnt ? (c_ipnp ? 0 : CLNT_SCID_LEN) : SERV_SCID_LEN))) {
             // we might still need to send a vneg packet
             if (w_connected(ws) == false) {
                 warn(ERR, "received invalid %u-byte %s pkt, sending vneg",
@@ -903,75 +909,70 @@ rx_pkts(struct w_iov_sq * const x,
             goto drop;
         }
 
-        const struct sockaddr_in peer = {.sin_family = AF_INET,
-                                         .sin_port = v->port,
-                                         .sin_addr = {.s_addr = v->ip}};
-
         c = get_conn_by_cid(&meta(v).hdr.dcid);
-        if (c == 0) {
-            if (meta(v).hdr.dcid.len == 0)
-                c = get_conn_by_ipnp(w_get_sport(ws), &peer);
-            if (likely(is_lh(meta(v).hdr.flags)) && !is_clnt) {
-                if (c && meta(v).hdr.type == LH_0RTT) {
-                    if (c->did_0rtt)
-                        warn(INF,
-                             "got 0-RTT pkt for orig cid %s, new is %s, "
-                             "accepting",
-                             cid2str(&meta(v).hdr.dcid), cid2str(c->scid));
-                    else {
-                        warn(WRN,
-                             "got 0-RTT pkt for orig cid %s, new is %s, "
-                             "but rejected 0-RTT, ignoring",
-                             cid2str(&meta(v).hdr.dcid), cid2str(c->scid));
-                        goto drop;
-                    }
-                } else if (meta(v).hdr.type == LH_INIT) {
-                    // validate minimum packet size
-                    if (xv->len < MIN_INI_LEN) {
-                        warn(ERR, "%u-byte Initial pkt too short (< %u)",
-                             xv->len, MIN_INI_LEN);
-                        goto drop;
-                    }
-
-                    if (vers_supported(meta(v).hdr.vers) == false ||
-                        is_force_vneg_vers(meta(v).hdr.vers)) {
-                        log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
-                        warn(WRN, "clnt-requested vers 0x%08x not supported",
-                             meta(v).hdr.vers);
-                        tx_vneg_resp(ws, v);
-                        goto drop;
-                    }
-
-                    warn(NTE, "new serv conn on port %u from %s:%u w/cid=%s",
-                         ntohs(w_get_sport(ws)), inet_ntoa(peer.sin_addr),
-                         ntohs(peer.sin_port), cid2str(&meta(v).hdr.dcid));
-                    c = new_conn(w_engine(ws), meta(v).hdr.vers,
-                                 &meta(v).hdr.scid, &meta(v).hdr.dcid, &peer, 0,
-                                 ntohs(w_get_sport(ws)), 0);
-                    init_tls(c, 0);
-
-                    // TODO: remove this interop hack eventually
-                    if (ntohs(c->sport) == 4434)
-                        c->tx_rtry = true;
+        if (c == 0 && meta(v).hdr.dcid.len == 0)
+            c = c_ipnp;
+        if (likely(is_lh(meta(v).hdr.flags)) && !is_clnt) {
+            if (c && meta(v).hdr.type == LH_0RTT) {
+                if (c->did_0rtt)
+                    warn(INF,
+                         "got 0-RTT pkt for orig cid %s, new is %s, "
+                         "accepting",
+                         cid2str(&meta(v).hdr.dcid), cid2str(c->scid));
+                else {
+                    warn(WRN,
+                         "got 0-RTT pkt for orig cid %s, new is %s, "
+                         "but rejected 0-RTT, ignoring",
+                         cid2str(&meta(v).hdr.dcid), cid2str(c->scid));
+                    goto drop;
                 }
+            } else if (meta(v).hdr.type == LH_INIT) {
+                // validate minimum packet size
+                if (xv->len < MIN_INI_LEN) {
+                    warn(ERR, "%u-byte Initial pkt too short (< %u)", xv->len,
+                         MIN_INI_LEN);
+                    goto drop;
+                }
+
+                if (vers_supported(meta(v).hdr.vers) == false ||
+                    is_force_vneg_vers(meta(v).hdr.vers)) {
+                    log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
+                    warn(WRN, "clnt-requested vers 0x%08x not supported",
+                         meta(v).hdr.vers);
+                    tx_vneg_resp(ws, v);
+                    goto drop;
+                }
+
+                warn(NTE, "new serv conn on port %u from %s:%u w/cid=%s",
+                     ntohs(w_get_sport(ws)), inet_ntoa(peer.sin_addr),
+                     ntohs(peer.sin_port), cid2str(&meta(v).hdr.dcid));
+                c = new_conn(w_engine(ws), meta(v).hdr.vers, &meta(v).hdr.scid,
+                             &meta(v).hdr.dcid, &peer, 0,
+                             ntohs(w_get_sport(ws)), 0);
+                init_tls(c, 0);
+
+                // TODO: remove this interop hack eventually
+                if (ntohs(c->sport) == 4434)
+                    c->tx_rtry = true;
+            }
+        }
+
+        if (c) {
+            if (meta(v).hdr.scid.len &&
+                cid_cmp(&meta(v).hdr.scid, c->dcid) != 0) {
+                if (meta(v).hdr.vers && meta(v).hdr.type == LH_RTRY &&
+                    cid_cmp(&odcid, c->dcid) != 0) {
+                    log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
+                    warn(ERR, "retry dcid mismatch %s != %s, ignoring pkt",
+                         hex2str(&odcid.id, odcid.len), cid2str(c->dcid));
+                    goto drop;
+                }
+                if (c->state == conn_opng)
+                    add_dcid(c, &meta(v).hdr.scid);
             }
 
-        } else {
-            if (meta(v).hdr.scid.len) {
-                if (cid_cmp(&meta(v).hdr.scid, c->dcid) != 0) {
-                    if (meta(v).hdr.vers && meta(v).hdr.type == LH_RTRY &&
-                        cid_cmp(&odcid, c->dcid) != 0) {
-                        log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
-                        warn(ERR, "retry dcid mismatch %s != %s, ignoring pkt",
-                             hex2str(&odcid.id, odcid.len), cid2str(c->dcid));
-                        goto drop;
-                    }
-                    if (c->state == conn_opng)
-                        add_dcid(c, &meta(v).hdr.scid);
-                }
-            }
-
-            if (cid_cmp(&meta(v).hdr.dcid, c->scid) != 0) {
+            if (meta(v).hdr.dcid.len &&
+                cid_cmp(&meta(v).hdr.dcid, c->scid) != 0) {
                 struct cid * const scid =
                     get_cid_by_id(c->scids_by_id, &meta(v).hdr.dcid);
                 if (unlikely(scid == 0)) {
@@ -1343,12 +1344,12 @@ struct q_conn * new_conn(struct w_engine * const w,
     // init next CIDs
     c->next_sid_bidi = c->is_clnt ? 0 : STRM_FL_SRV;
     c->next_sid_uni = c->is_clnt ? STRM_FL_UNI : STRM_FL_UNI | STRM_FL_SRV;
-    c->tx_ncid = true;
 
     // init dcid
     splay_init(&c->dcids_by_seq);
     if (c->is_clnt) {
-        struct cid ndcid = {.len = SERV_SCID_LEN};
+        struct cid ndcid = {.len =
+                                8 + (uint8_t)w_rand_uniform(MAX_CID_LEN - 7)};
         ptls_openssl_random_bytes(ndcid.id,
                                   sizeof(ndcid.id) + sizeof(ndcid.srt));
         cid_cpy(&c->odcid, &ndcid);
@@ -1428,19 +1429,20 @@ struct q_conn * new_conn(struct w_engine * const w,
         update_conn_conf(c, cc);
 
     // init scid and add connection to global data structures
-    if (dcid == 0 || dcid->len == 0)
-        conns_by_ipnp_ins(c);
     splay_init(&c->scids_by_seq);
     struct cid nscid = {0};
     if (c->is_clnt) {
-        nscid.len = CLNT_SCID_LEN;
-        ptls_openssl_random_bytes(nscid.id, sizeof(nscid.id));
+        nscid.len = cc && cc->enable_zero_len_cid ? 0 : CLNT_SCID_LEN;
+        if (nscid.len)
+            ptls_openssl_random_bytes(nscid.id, sizeof(nscid.id));
     } else if (scid)
         cid_cpy(&nscid, scid);
     if (nscid.len) {
         ptls_openssl_random_bytes(nscid.srt, sizeof(nscid.srt));
         add_scid(c, &nscid);
     }
+    if (c->scid == 0)
+        conns_by_ipnp_ins(c);
 
     // create crypto streams
     c->streams_by_id = kh_init(streams_by_id);
@@ -1515,7 +1517,7 @@ void free_conn(struct q_conn * const c)
     free(c->peer_name);
 
     // remove connection from global lists and free CID splays
-    if (c->dcid == 0 || c->dcid->len == 0)
+    if (c->scid == 0)
         conns_by_ipnp_del(c);
 
     while (!splay_empty(&c->scids_by_seq)) {

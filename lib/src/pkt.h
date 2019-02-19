@@ -166,7 +166,8 @@ dec_pkt_hdr_beginning(struct w_iov * const xv,
                       const bool is_clnt,
                       struct cid * const odcid,
                       uint8_t * const tok,
-                      uint16_t * const tok_len);
+                      uint16_t * const tok_len,
+                      const uint8_t dcid_len);
 
 extern bool __attribute__((nonnull))
 dec_pkt_hdr_remainder(struct w_iov * const xv,

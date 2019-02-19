@@ -223,14 +223,15 @@ needed_pkt_nr_len(const uint64_t lg_acked, const uint64_t n)
 }
 
 
-static uint16_t __attribute__((nonnull))
+static uint16_t __attribute__((nonnull(1, 3)))
 enc_lh_cids(const struct cid * const dcid,
             const struct cid * const scid,
             struct w_iov * const v,
             const uint16_t pos)
 {
     cid_cpy(&meta(v).hdr.dcid, dcid);
-    cid_cpy(&meta(v).hdr.scid, scid);
+    if (scid)
+        cid_cpy(&meta(v).hdr.scid, scid);
     const uint8_t cil =
         (uint8_t)((meta(v).hdr.dcid.len ? meta(v).hdr.dcid.len - 3 : 0) << 4) |
         (uint8_t)(meta(v).hdr.scid.len ? meta(v).hdr.scid.len - 3 : 0);
@@ -592,7 +593,8 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
                            const bool is_clnt,
                            struct cid * const odcid,
                            uint8_t * const tok,
-                           uint16_t * const tok_len)
+                           uint16_t * const tok_len,
+                           const uint8_t dcid_len)
 
 {
     meta(v).udp_len = xv->len;
@@ -615,18 +617,18 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
                                               xv->len, 6, meta(v).hdr.dcid.len);
         }
 
-        // if this is a CI, the dcid len must be >= 8 bytes
-        if (is_clnt == false &&
-            unlikely(meta(v).hdr.type == LH_INIT && meta(v).hdr.dcid.len < 8)) {
-            warn(DBG, "dcid len %u too short", meta(v).hdr.dcid.len);
-            return false;
-        }
-
         if (meta(v).hdr.scid.len) {
             meta(v).hdr.scid.len += 3;
             meta(v).hdr.hdr_len =
                 dec_chk_buf(&meta(v).hdr.scid.id, xv->buf, xv->len,
                             meta(v).hdr.hdr_len, meta(v).hdr.scid.len);
+        }
+
+        // if this is a CI, the dcid len must be >= 8 bytes
+        if (is_clnt == false &&
+            unlikely(meta(v).hdr.type == LH_INIT && meta(v).hdr.dcid.len < 8)) {
+            warn(DBG, "dcid len %u too short", meta(v).hdr.dcid.len);
+            return false;
         }
 
         if (meta(v).hdr.vers == 0) {
@@ -685,7 +687,7 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
     }
 
     // this logic depends on picking a SCID with a known length during handshake
-    meta(v).hdr.dcid.len = (is_clnt ? CLNT_SCID_LEN : SERV_SCID_LEN);
+    meta(v).hdr.dcid.len = dcid_len;
     meta(v).hdr.hdr_len = dec_chk_buf(&meta(v).hdr.dcid.id, xv->buf, xv->len, 1,
                                       meta(v).hdr.dcid.len);
     return true;

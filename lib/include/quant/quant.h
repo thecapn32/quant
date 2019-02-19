@@ -61,7 +61,8 @@ struct q_conn_conf {
     const uint8_t enable_udp_zero_checksums : 1;
     const uint8_t enable_tls_key_updates : 1; // TODO default to on eventually
     const uint8_t disable_migration : 1;
-    uint8_t : 4;
+    const uint8_t enable_zero_len_cid : 1;
+    uint8_t : 3;
 };
 
 
