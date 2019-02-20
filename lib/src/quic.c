@@ -29,6 +29,7 @@
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <time.h>
@@ -101,8 +102,30 @@ int corpus_pkt_dir, corpus_frm_dir;
 #endif
 
 
-/// Run the event loop for the API function @p func with connection @p conn and
-/// (optionally, if non-zero) stream @p strm.
+#ifndef NDEBUG
+#define bps(bytes, secs)                                                       \
+    __extension__({                                                            \
+        static char _str[32];                                                  \
+        const double _bps = (bytes)*8 / (secs);                                \
+        if (_bps > 1000000000)                                                 \
+            snprintf(_str, sizeof(_str), "%.3f Gb/s", _bps / 1000000000);      \
+        else if (_bps > 1000000)                                               \
+            snprintf(_str, sizeof(_str), "%.3f Mb/s", _bps / 1000000);         \
+        else if (_bps > 1000)                                                  \
+            snprintf(_str, sizeof(_str), "%.3f Kb/s", _bps / 1000);            \
+        else                                                                   \
+            snprintf(_str, sizeof(_str), "%.3f b/s", _bps);                    \
+        _str;                                                                  \
+    })
+
+
+#define timespec_to_double(diff)                                               \
+    ((double)(diff).tv_sec + (double)(diff).tv_nsec / 1000000000)
+#endif
+
+
+/// Run the event loop for the API function @p func with connection @p conn
+/// and (optionally, if non-zero) stream @p strm.
 ///
 /// @param      func  The API function to run the event loop for.
 /// @param      conn  The connection to run the event loop for.
@@ -301,9 +324,21 @@ bool q_write(struct q_stream * const s,
     const uint64_t prev_out_data = s->out_data;
     concat_out(s, q);
 
+#ifndef NDEBUG
+    struct timespec before;
+    clock_gettime(CLOCK_MONOTONIC, &before);
+#endif
+
     // kick TX watcher
     ev_async_send(loop, &s->c->tx_w);
     loop_run(q_write, s->c, s);
+
+#ifndef NDEBUG
+    struct timespec after, diff;
+    clock_gettime(CLOCK_MONOTONIC, &after);
+    timespec_sub(&after, &before, &diff);
+    const double elapsed = timespec_to_double(diff);
+#endif
 
     // how much data did we write?
     const uint64_t data_written =
@@ -317,9 +352,12 @@ bool q_write(struct q_stream * const s,
     if (fin)
         strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
 
-    warn(WRN, "wrote %" PRIu64 " byte%s on %s conn %s strm " FMT_SID " %s",
-         data_written, plural(data_written), conn_type(c), cid2str(c->scid),
-         s->id, fin ? "and closed" : "");
+    warn(WRN,
+         "wrote %" PRIu64 " byte%s in %.3f sec (%s) on %s conn %s strm " FMT_SID
+         " %s",
+         data_written, plural(data_written), elapsed,
+         bps(data_written, elapsed), conn_type(c), cid2str(c->scid), s->id,
+         fin ? "and closed" : "");
 
     // TODO these can be removed eventually
     ensure(w_iov_sq_len(q) == qlen,
@@ -342,6 +380,11 @@ q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool block)
     warn(WRN, "%sblocking read on %s conn %s", block ? "" : "non-",
          conn_type(c), cid2str(c->scid));
 
+#ifndef NDEBUG
+    struct timespec before;
+    clock_gettime(CLOCK_MONOTONIC, &before);
+#endif
+
 again:;
     struct q_stream * s = 0;
     if (c->state == conn_estb) {
@@ -360,13 +403,22 @@ again:;
         }
     }
 
+#ifndef NDEBUG
+    struct timespec after, diff;
+    clock_gettime(CLOCK_MONOTONIC, &after);
+    timespec_sub(&after, &before, &diff);
+    const double elapsed = timespec_to_double(diff);
+#endif
+
     if (s)
         // return data
         sq_concat(q, &s->in);
 
-    warn(WRN, "read %" PRIu64 " byte%s on %s conn %s strm " FMT_SID,
-         w_iov_sq_len(q), plural(w_iov_sq_len(q)), conn_type(c),
-         cid2str(c->scid), s ? s->id : -1);
+    warn(WRN,
+         "read %" PRIu64 " byte%s in %.3f sec (%s) on %s conn %s strm " FMT_SID,
+         w_iov_sq_len(q), plural(w_iov_sq_len(q)), elapsed,
+         bps(w_iov_sq_len(q), elapsed), conn_type(c), cid2str(c->scid),
+         s ? s->id : -1);
 
     return s;
 }
@@ -376,6 +428,11 @@ void q_readall_stream(struct q_stream * const s, struct w_iov_sq * const q)
 {
     struct q_conn * const c = s->c;
 
+#ifndef NDEBUG
+    struct timespec before;
+    clock_gettime(CLOCK_MONOTONIC, &before);
+#endif
+
     while (c->state == conn_estb && s->state != strm_hcrm &&
            s->state != strm_clsd) {
         warn(WRN, "reading all on %s conn %s strm " FMT_SID, conn_type(c),
@@ -383,11 +440,21 @@ void q_readall_stream(struct q_stream * const s, struct w_iov_sq * const q)
         loop_run(q_readall_stream, c, s);
     }
 
+#ifndef NDEBUG
+    struct timespec after, diff;
+    clock_gettime(CLOCK_MONOTONIC, &after);
+    timespec_sub(&after, &before, &diff);
+    const double elapsed = timespec_to_double(diff);
+#endif
+
     if (!sq_empty(&s->in)) {
         struct w_iov * const last = sq_last(&s->in, w_iov, next);
-        warn(WRN, "read %" PRIu64 " byte%s on %s conn %s strm " FMT_SID " %s",
-             w_iov_sq_len(&s->in), plural(w_iov_sq_len(&s->in)), conn_type(c),
-             cid2str(c->scid), s->id, meta(last).is_fin ? "" : "(FIN missing)");
+        warn(WRN,
+             "read %" PRIu64
+             " byte%s in %.3f sec (%s) on %s conn %s strm " FMT_SID " %s",
+             w_iov_sq_len(&s->in), plural(w_iov_sq_len(&s->in)), elapsed,
+             bps(w_iov_sq_len(&s->in), elapsed), conn_type(c), cid2str(c->scid),
+             s->id, meta(last).is_fin ? "" : "(FIN missing)");
 
         if (meta(last).is_fin)
             // return data
