@@ -32,7 +32,7 @@
 #include <stdint.h>
 
 #include <ev.h>
-#include <warpcore/warpcore.h>
+#include <quant/quant.h>
 
 
 /// This is a C adaptation of the "discrete interval encoding tree" (DIET) data

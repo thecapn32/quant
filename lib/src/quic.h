@@ -35,6 +35,7 @@
 #include <sys/param.h>
 
 #include <ev.h>
+#include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
 #ifdef HAVE_ASAN

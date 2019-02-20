@@ -37,6 +37,8 @@ extern "C" {
 #include <sys/socket.h>
 
 #include <quant/config.h> // IWYU pragma: export
+#include <quant/tree.h> // IWYU pragma: export
+
 
 struct w_iov_sq;
 struct q_stream;

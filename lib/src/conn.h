@@ -38,6 +38,7 @@
 
 #include <ev.h>
 #include <khash.h>
+#include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
 #include "diet.h"
@@ -281,7 +282,6 @@ extern struct q_conn_sl c_ready;
 #endif
 
 struct ev_loop;
-struct q_conn_conf;
 
 extern bool __attribute__((const)) vers_supported(const uint32_t v);
 

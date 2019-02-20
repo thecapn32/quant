@@ -33,6 +33,8 @@
 #include "pn.h"
 #include "stream.h"
 
+#include <warpcore/warpcore.h>
+
 
 SPLAY_GENERATE(pm_by_nr, pkt_meta, nr_node, pm_by_nr_cmp)
 

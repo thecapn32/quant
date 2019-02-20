@@ -29,7 +29,7 @@
 
 #include <stdint.h>
 
-#include <warpcore/warpcore.h>
+#include <quant/quant.h>
 
 #include "diet.h"
 #include "quic.h"
