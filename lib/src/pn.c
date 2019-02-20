@@ -55,6 +55,11 @@ void free_pn(struct pn_space * const pn)
     diet_free(&pn->recv);
     diet_free(&pn->recv_all);
     diet_free(&pn->acked);
+
+    while (!splay_empty(&pn->sent_pkts)) {
+        struct pkt_meta * const p = splay_min(pm_by_nr, &pn->sent_pkts);
+        free_iov(w_iov(pn->c->w, pm_idx(p)));
+    }
 }
 
 
