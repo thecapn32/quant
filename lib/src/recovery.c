@@ -385,11 +385,6 @@ void on_pkt_acked(struct q_conn * const c,
 
     // rest of function is not from pseudo code
 
-    // // if this ACKs a CLOSE frame, move to conn_drng
-    // if (c->state == conn_clsg &&
-    //     (has_frame(acked_pkt, FRM_CLQ) || has_frame(acked_pkt, FRM_CLA)))
-    //     conn_to_state(c, conn_drng);
-
     // if this ACK is for a pkt that was RTX'ed, update the record
     struct w_iov * orig = 0;
     if (meta(acked_pkt).is_rtx) {
@@ -425,10 +420,8 @@ void on_pkt_acked(struct q_conn * const c,
     }
 
     // stop ACKing packets that were contained in the ACK frame of this packet
-    if (has_frame(acked_pkt, FRM_ACK)) {
-        // warn(ERR, "%" PRIu64 " had ACK frame", meta(acked_pkt).hdr.nr);
+    if (has_frame(acked_pkt, FRM_ACK))
         track_acked_pkts(pn, acked_pkt);
-    }
 
     if (!has_stream_data(&meta(acked_pkt)))
         free_iov(acked_pkt);
