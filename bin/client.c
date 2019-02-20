@@ -386,6 +386,10 @@ int main(int argc, char * argv[])
         uint32_t n = 0;
         sq_foreach (v, &i, next) {
             ensure(write(fd, v->buf, v->len) != -1, "cannot write");
+            if (w_iov_sq_cnt(&i) > 1000)
+                // don't print large responses
+                continue;
+
             // XXX the strnlen() test is super-hacky
             if (do_h3 && n == 0 && strnlen((char *)v->buf, v->len) == v->len)
                 warn(WRN, "no h3 payload");
@@ -403,7 +407,8 @@ int main(int argc, char * argv[])
                 printf(".");
             n++;
         }
-        printf("\n");
+        if (w_iov_sq_cnt(&i) <= 1000)
+            printf("\n");
         close(fd);
         q_free(&i);
     }
