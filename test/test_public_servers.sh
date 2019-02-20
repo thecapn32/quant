@@ -156,7 +156,7 @@ function analyze {
                     /RX.*len=.*Short/ && $x && exit 1;' "$log"
         [ $? == 1 ] && hshk[$1]=H
 
-        perl -n -e '/read (.*) bytes on clnt conn/ and ($1 > 0 ? $t=1 : next);
+        perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $t=1 : next);
                     $t && /CLOSE.*err=0x0000/ && exit 1;' "$log"
         [ $? == 1 ] && data[$1]=D
 
@@ -212,7 +212,7 @@ function analyze {
         local log="/tmp/$script.$1.$pid.h3.log"
         check_fail "$1" "$log"
 
-        perl -n -e '/read (.*) bytes on clnt conn/ and ($1 > 0 ? $t=1 : next);
+        perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $t=1 : next);
                     /no h3 payload/ and $t=0;
                     $t && /CLOSE.*err=0x0000/ && exit 1;' "$log"
         [ $? == 1 ] && http[$1]=3
