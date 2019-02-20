@@ -112,16 +112,16 @@ int main()
         const uint64_t x = w_rand_uniform(N);
         struct ival * const i = diet_find(&d, x);
         if (i) {
-            // if (w_rand_uniform(2)) {
-            const uint64_t lodiff = w_rand_uniform(3);
-            const uint64_t lo = x - (x > lodiff ? lodiff : 0);
-            const uint64_t hi = x + w_rand_uniform(3);
-            diet_remove_ival(&d, &(struct ival){.lo = lo, .hi = hi});
-            trace(&d, lo, hi, "rem_ival");
-            // } else {
-            //     diet_remove(&d, x);
-            //     trace(&d, x, x, "rem");
-            // }
+            if (w_rand_uniform(2)) {
+                const uint64_t lodiff = w_rand_uniform(3);
+                const uint64_t lo = x - (x > lodiff ? lodiff : 0);
+                const uint64_t hi = x + w_rand_uniform(3);
+                diet_remove_ival(&d, &(struct ival){.lo = lo, .hi = hi});
+                trace(&d, lo, hi, "rem_ival");
+            } else {
+                diet_remove(&d, x);
+                trace(&d, x, x, "rem");
+            }
             chk(&d);
         }
     }

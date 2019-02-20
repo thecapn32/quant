@@ -74,8 +74,8 @@ find_min(struct ival * const i)
 }
 
 
-/// Pointer to the interval containing @p n in diet tree @p t. Also has the side
-/// effect of splaying the closest interval to @p n to the root of @p t.
+/// Pointer to the interval containing @p n in diet tree @p d. Also has the side
+/// effect of splaying the closest interval to @p n to the root of @p d.
 ///
 /// @param      d     Diet tree.
 /// @param[in]  n     Integer.
@@ -93,12 +93,12 @@ struct ival * diet_find(struct diet * const d, const uint64_t n)
 }
 
 
-/// Helper function to create a zero-width interval containing (only) @p n.
+/// Helper function to allocate an interval [n..n] containing only @p n.
 ///
 /// @param[in]  n     Integer.
 /// @param[in]  t     Timestamp.
 ///
-/// @return     Newly allocated ival struct [n..n] of type @p t.
+/// @return     Newly allocated ival struct [n..n].
 ///
 static inline struct ival * make_ival(const uint64_t n, const ev_tstamp t)
 {
@@ -106,35 +106,11 @@ static inline struct ival * make_ival(const uint64_t n, const ev_tstamp t)
     ensure(i, "could not calloc");
     i->lo = i->hi = n;
     i->t = t;
-    splay_left(i, node) = splay_right(i, node) = 0;
     return i;
 }
 
 
-#if 0
-static int l = 0;
-static inline void trace(struct ival * const i)
-{
-    if (i == 0) {
-        fprintf(stderr, "\n");
-        return;
-    }
-    fprintf(stderr, "%u.%" PRIu64 "-%" PRIu64 "\n", i->c, i->lo, i->hi);
-    l++;
-    for (int ll = 0; ll < l; ll++)
-        fprintf(stderr, "\t");
-    fprintf(stderr, "left: ");
-    trace(splay_left(i, node));
-    for (int ll = 0; ll < l; ll++)
-        fprintf(stderr, "\t");
-    fprintf(stderr, "right: ");
-    trace(splay_right(i, node));
-    l--;
-}
-#endif
-
-
-/// Inserts integer @p n of type @p t into the diet tree @p t.
+/// Inserts integer @p n of type into the diet tree @p d.
 ///
 /// @param      d     Diet tree.
 /// @param[in]  n     Integer.
@@ -213,6 +189,13 @@ new_ival:;
 }
 
 
+/// Splits the root of the diet tree @p d, removing the interval [lo..hi] from
+/// it.
+///
+/// @param      d     Diet tree.
+/// @param[in]  lo    The lower value of the interval to be removed.
+/// @param[in]  hi    The upper value of the interface to be remove.
+///
 static void __attribute__((nonnull))
 split_root(struct diet * const d, const uint64_t lo, const uint64_t hi)
 {
@@ -227,7 +210,7 @@ split_root(struct diet * const d, const uint64_t lo, const uint64_t hi)
 }
 
 
-/// Remove integer @p n from the intervals stored in diet tree @p t.
+/// Remove integer @p n from the intervals stored in diet tree @p d.
 ///
 /// @param      d     Diet tree.
 /// @param[in]  n     Integer.
@@ -257,6 +240,11 @@ void diet_remove(struct diet * const d, const uint64_t n)
 }
 
 
+/// Remove interval @p i from diet tree @p d.
+///
+/// @param      d     Diet tree.
+/// @param[in]  i     Interval.
+///
 void diet_remove_ival(struct diet * const d, const struct ival * const i)
 {
     uint64_t lo = i->lo;
@@ -297,27 +285,29 @@ again:
             goto again;
         }
 
-        if (hi > splay_root(d)->hi) {
-            splay_remove(diet, d, splay_root(d));
-            goto again;
-        }
-
-        hi = splay_root(d)->lo - 1;
-        splay_remove(diet, d, splay_root(d));
-        goto again;
+        if (hi <= splay_root(d)->hi)
+            hi = splay_root(d)->lo - 1;
+        goto free_root;
     }
-
 
     if (hi < splay_root(d)->hi) {
         splay_root(d)->lo = hi + 1;
         return;
     }
     hi = splay_root(d)->hi + 1;
-    splay_remove(diet, d, splay_root(d));
+
+free_root:;
+    struct ival * const old_root = splay_root(d);
+    splay_remove(diet, d, old_root);
+    free(old_root);
     goto again;
 }
 
 
+/// Free the diet tree @p d and all its intervals.
+///
+/// @param      d     Diet tree.
+///
 void diet_free(struct diet * const d)
 {
     while (!splay_empty(d)) {
