@@ -423,10 +423,8 @@ uint16_t dec_ack_frame(struct q_conn * const c,
         uint64_t ack_block_len = 0;
         i = dec_chk(t, &ack_block_len, v->buf, v->len, i, 0, "%" PRIu64);
 
-        // TODO: figure out a better way to handle huge ACK blocks
         if (unlikely(ack_block_len > UINT16_MAX))
-            err_close_return(c, ERR_FRAME_ENC, t, "ACK block len %" PRIu64,
-                             ack_block_len);
+            warn(WRN, "ACK block len %" PRIu64, ack_block_len);
 
         if (unlikely(ack_block_len > lg_ack_in_block))
             err_close_return(c, ERR_FRAME_ENC, t, "ACK block len %" PRIu64,
