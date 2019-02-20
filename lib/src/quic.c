@@ -57,7 +57,6 @@
 #endif
 
 #include "conn.h"
-#include "diet.h"
 #include "pkt.h"
 #include "pn.h"
 #include "quic.h"
@@ -106,7 +105,8 @@ int corpus_pkt_dir, corpus_frm_dir;
 #define bps(bytes, secs)                                                       \
     __extension__({                                                            \
         static char _str[32];                                                  \
-        const double _bps = (bytes)*8 / (secs);                                \
+        const double _bps =                                                    \
+            (bytes) && !is_zero(secs) ? (bytes)*8 / (secs) : 0;                \
         if (_bps > 1000000000)                                                 \
             snprintf(_str, sizeof(_str), "%.3f Gb/s", _bps / 1000000000);      \
         else if (_bps > 1000000)                                               \
@@ -152,10 +152,8 @@ do_loop_run(const func_ptr func,
 
 void pm_free(struct pkt_meta * const m, const bool do_free)
 {
-    if (m->pn && m->udp_len && m->is_acked == false) {
+    if (m->pn && m->is_acked == false)
         ensure(splay_remove(pm_by_nr, &m->pn->sent_pkts, m), "removed");
-        diet_insert(&m->pn->acked, m->hdr.nr, ev_now(loop));
-    }
 
     if (m->is_rtx)
         return;
@@ -166,10 +164,8 @@ void pm_free(struct pkt_meta * const m, const bool do_free)
         ensure(rm->is_rtx, "is an RTX");
         sl_remove_head(&m->rtx, rtx_next);
         struct pkt_meta * const next_rm = sl_next(rm, rtx_next);
-        if (rm->is_acked == false) {
+        if (rm->is_acked == false)
             ensure(splay_remove(pm_by_nr, &rm->pn->sent_pkts, rm), "removed");
-            diet_insert(&rm->pn->acked, rm->hdr.nr, ev_now(loop));
-        }
         if (do_free) {
             w_free_iov(w_iov(rm->pn->c->w, pm_idx(rm)));
             memset(rm, 0, sizeof(*rm));
