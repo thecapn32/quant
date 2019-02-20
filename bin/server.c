@@ -55,7 +55,8 @@ static void __attribute__((noreturn)) usage(const char * const name,
                                             const char * const dir,
                                             const char * const cert,
                                             const char * const key,
-                                            const uint64_t timeout)
+                                            const uint64_t timeout,
+                                            const uint64_t num_bufs)
 {
     printf("%s [options]\n", name);
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
@@ -65,6 +66,10 @@ static void __attribute__((noreturn)) usage(const char * const name,
     printf("\t[-k key]\tTLS key; default %s\n", key);
     printf("\t[-t timeout]\tidle timeout in seconds; default %" PRIu64 "\n",
            timeout);
+    printf(
+        "\t[-b bufs]\tnumber of network buffers to allocate; default %" PRIu64
+        "\n",
+        num_bufs);
 #ifndef NDEBUG
     printf("\t[-v verbosity]\tverbosity level (0-%d, default %d)\n", DLEVEL,
            util_dlevel);
@@ -186,10 +191,11 @@ int main(int argc, char * argv[])
     char key[MAXPATHLEN] = "test/dummy.key";
     uint16_t port[MAXPORTS] = {4433, 4434};
     size_t num_ports = 0;
+    uint64_t num_bufs = 100000;
     int ch;
     int ret = 0;
 
-    while ((ch = getopt(argc, argv, "hi:p:d:v:c:k:t:")) != -1) {
+    while ((ch = getopt(argc, argv, "hi:p:d:v:c:k:t:b:")) != -1) {
         switch (ch) {
         case 'i':
             strncpy(ifname, optarg, sizeof(ifname) - 1);
@@ -212,6 +218,9 @@ int main(int argc, char * argv[])
         case 't':
             timeout = MIN(600, strtoul(optarg, 0, 10)); // 10 min
             break;
+        case 'b':
+            num_bufs = MAX(1000, MIN(strtoul(optarg, 0, 10), UINT32_MAX));
+            break;
         case 'v':
 #ifndef NDEBUG
             util_dlevel = (short)MIN(DLEVEL, strtoul(optarg, 0, 10));
@@ -220,7 +229,8 @@ int main(int argc, char * argv[])
         case 'h':
         case '?':
         default:
-            usage(basename(argv[0]), ifname, port[0], dir, cert, key, timeout);
+            usage(basename(argv[0]), ifname, port[0], dir, cert, key, timeout,
+                  num_bufs);
         }
     }
 
@@ -233,7 +243,7 @@ int main(int argc, char * argv[])
 
     struct w_engine * const w = q_init(
         ifname, &(const struct q_conf){
-                    .num_bufs = 100000, .tls_cert = cert, .tls_key = key});
+                    .num_bufs = num_bufs, .tls_cert = cert, .tls_key = key});
     struct q_conn * conn[MAXPORTS];
     size_t bound = 0;
     for (size_t i = 0; i < num_ports; i++) {

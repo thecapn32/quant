@@ -59,6 +59,7 @@ struct conn_cache {
 
 
 static uint64_t timeout = 10;
+static uint64_t num_bufs = 100000;
 static bool do_h3 = false;
 static bool flip_keys = false;
 static bool zlen_cids = false;
@@ -112,6 +113,10 @@ static void __attribute__((noreturn, nonnull)) usage(const char * const name,
            do_h3 ? "true" : "false");
     printf("\t[-z]\t\tuse zero-length source connection IDs; default %s\n",
            zlen_cids ? "true" : "false");
+    printf(
+        "\t[-b bufs]\tnumber of network buffers to allocate; default %" PRIu64
+        "\n",
+        num_bufs);
 #ifndef NDEBUG
     printf("\t[-v verbosity]\tverbosity level (0-%d, default %d)\n", DLEVEL,
            util_dlevel);
@@ -278,7 +283,7 @@ int main(int argc, char * argv[])
     bool verify_certs = false;
     int ret = 0;
 
-    while ((ch = getopt(argc, argv, "hi:v:s:t:l:cu3z")) != -1) {
+    while ((ch = getopt(argc, argv, "hi:v:s:t:l:cu3zb:")) != -1) {
         switch (ch) {
         case 'i':
             strncpy(ifname, optarg, sizeof(ifname) - 1);
@@ -288,6 +293,9 @@ int main(int argc, char * argv[])
             break;
         case 't':
             timeout = MIN(600, strtoul(optarg, 0, 10)); // 10 min
+            break;
+        case 'b':
+            num_bufs = MAX(1000, MIN(strtoul(optarg, 0, 10), UINT32_MAX));
             break;
         case 'l':
             strncpy(tls_log, optarg, sizeof(tls_log) - 1);
@@ -317,7 +325,7 @@ int main(int argc, char * argv[])
     }
 
     struct w_engine * const w = q_init(
-        ifname, &(const struct q_conf){.num_bufs = 100000,
+        ifname, &(const struct q_conf){.num_bufs = num_bufs,
                                        .ticket_store = cache,
                                        .tls_log = tls_log,
                                        .enable_tls_cert_verify = verify_certs});

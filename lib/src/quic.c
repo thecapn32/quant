@@ -527,13 +527,11 @@ struct w_engine * q_init(const char * const ifname,
     conns_by_id = kh_init(conns_by_id);
 
     // initialize warpcore on the given interface
-    const uint32_t nbufs = conf && conf->num_bufs ? conf->num_bufs : 10000;
-    if (conf == 0 || conf->num_bufs == 0)
-        warn(WRN, "using default number of warpcore buffers (%u)", nbufs);
+    const uint64_t nbufs = conf && conf->num_bufs ? conf->num_bufs : 10000;
     struct w_engine * const w = w_init(ifname, 0, nbufs);
     const uint64_t nbufs_ok = sq_len(&w->iov);
     if (nbufs_ok < nbufs)
-        warn(WRN, "could only allocate %" PRIu64 "/%u warpcore buffers",
+        warn(WRN, "only allocated %" PRIu64 "/%" PRIu64 " warpcore buffers",
              nbufs_ok, nbufs);
     pkt_meta = calloc(nbufs + 1, sizeof(*pkt_meta));
     ensure(pkt_meta, "could not calloc");
