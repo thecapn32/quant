@@ -405,9 +405,7 @@ tx_ack(struct q_conn * const c, const epoch_t e, const bool tx_ack_eliciting)
     struct w_iov * const v = alloc_iov(c->w, 0, 0);
     enc_pkt(c->cstreams[e], false, false, tx_ack_eliciting, v);
     do_tx(c);
-    if (is_ack_eliciting(&meta(v).frames) == false)
-        // enc_pkt() can end up encoding ACK eliciting frames, so check
-        free_iov(v);
+    // don't free the packet - it needs to stay in sent_pkts for ACK tracking
 }
 
 
