@@ -491,11 +491,11 @@ uint16_t dec_ack_frame(struct q_conn * const c,
             if (unlikely(ack == lg_ack) &&
                 is_ack_eliciting(&meta(acked).frames)) {
                 // call this only for the largest ACK in the frame
-                on_ack_received_1(c, pn, acked, ack_delay);
+                on_ack_received_1(pn, acked, ack_delay);
                 lg_acked_tx_t = meta(acked).tx_t;
             }
 
-            on_pkt_acked(c, pn, acked);
+            on_pkt_acked(pn, acked);
 
             // if the ACK'ed pkt was sent with ECT, verify peer and path support
             if (likely(c->sockopt.enable_ecn &&
@@ -516,9 +516,6 @@ uint16_t dec_ack_frame(struct q_conn * const c,
 
         if (n > 1) {
             i = dec_chk(t, &gap, v->buf, v->len, i, 0, "%" PRIu64);
-            // if (unlikely(ack <= gap))
-            //     err_close_return(c, ERR_FRAME_ENC, t, "ACK gap %" PRIu64,
-            //     gap);
             lg_ack_in_block = lg_ack_in_block - ack_block_len - gap - 2;
         }
     }
@@ -543,7 +540,7 @@ uint16_t dec_ack_frame(struct q_conn * const c,
         }
     }
 
-    on_ack_received_2(c, pn);
+    on_ack_received_2(pn);
     return i;
 }
 
@@ -1173,8 +1170,7 @@ uint16_t enc_padding_frame(struct w_iov * const v,
 }
 
 
-uint16_t enc_ack_frame(struct q_conn * const c,
-                       struct pn_space * const pn,
+uint16_t enc_ack_frame(struct pn_space * const pn,
                        struct w_iov * const v,
                        const uint16_t pos)
 {
@@ -1189,6 +1185,7 @@ uint16_t enc_ack_frame(struct q_conn * const c,
     i = enc(v->buf, v->len, i, &meta(v).lg_acked, 0, 0, FMT_PNR_IN);
 
     // handshake pkts always use the default ACK delay exponent
+    struct q_conn * const c = pn->c;
     const uint64_t ade =
         meta(v).hdr.type <= LH_INIT && meta(v).hdr.type >= LH_HSHK
             ? DEF_ACK_DEL_EXP

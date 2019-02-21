@@ -102,8 +102,7 @@ enc_padding_frame(struct w_iov * const v,
                   const uint16_t len);
 
 extern uint16_t __attribute__((nonnull))
-enc_ack_frame(struct q_conn * const c,
-              struct pn_space * const pn,
+enc_ack_frame(struct pn_space * const pn,
               struct w_iov * const v,
               const uint16_t pos);
 

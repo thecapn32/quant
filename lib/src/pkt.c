@@ -448,7 +448,7 @@ bool enc_pkt(struct q_stream * const s,
         goto tx;
 
     if (needs_ack(pn) != no_ack)
-        i = enc_ack_frame(c, pn, v, i);
+        i = enc_ack_frame(pn, v, i);
 
     if (unlikely(c->state == conn_clsg))
         i = enc_close_frame(c, v, i);

@@ -143,15 +143,14 @@ void congestion_event(struct q_conn * const c, const ev_tstamp sent_t)
 
 
 static void __attribute__((nonnull))
-detect_lost_pkts(struct q_conn * const c,
-                 struct pn_space * const pn,
-                 const bool do_cc)
+detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
 {
     if (pn->sent_pkts == 0)
         // abandoned PN
         return;
 
     const ev_tstamp now = ev_now(loop);
+    struct q_conn * const c = pn->c;
 
     c->rec.loss_t = 0;
     const ev_tstamp loss_del =
@@ -220,8 +219,8 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
     if (crypto_pkts_in_flight(c)) {
         warn(DBG, "crypto RTX #%u on %s conn %s", c->rec.crypto_cnt + 1,
              conn_type(c), cid2str(c->scid));
-        detect_lost_pkts(c, pn_for_epoch(c, ep_init), false);
-        detect_lost_pkts(c, pn_for_epoch(c, ep_hshk), false);
+        detect_lost_pkts(pn_for_epoch(c, ep_init), false);
+        detect_lost_pkts(pn_for_epoch(c, ep_hshk), false);
         if (c->rec.crypto_cnt++ >= 2 && c->tls.epoch_out == ep_init &&
             c->sockopt.enable_ecn) {
             warn(NTE, "turning off ECN for %s conn %s", conn_type(c),
@@ -234,7 +233,7 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
     } else if (!is_zero(c->rec.loss_t)) {
         warn(DBG, "TT alarm ep %u on %s conn %s", c->tls.epoch_out,
              conn_type(c), cid2str(c->scid));
-        detect_lost_pkts(c, pn, true);
+        detect_lost_pkts(pn, true);
 
     } else {
         warn(DBG, "PTO alarm #%u on %s conn %s", c->rec.pto_cnt, conn_type(c),
@@ -317,13 +316,12 @@ update_rtt(struct q_conn * const c, ev_tstamp ack_del)
 }
 
 
-void on_ack_received_1(struct q_conn * const c,
-                       struct pn_space * const pn,
+void on_ack_received_1(struct pn_space * const pn,
                        struct w_iov * const lg_ack,
                        const uint64_t ack_del)
 {
     // see OnAckReceived() pseudo code
-
+    struct q_conn * const c = pn->c;
     pn->lg_acked = MAX(pn->lg_acked, meta(lg_ack).hdr.nr);
 
     // we're only called for the largest ACK'ed
@@ -336,12 +334,13 @@ void on_ack_received_1(struct q_conn * const c,
 }
 
 
-void on_ack_received_2(struct q_conn * const c, struct pn_space * const pn)
+void on_ack_received_2(struct pn_space * const pn)
 {
     // see OnAckReceived() pseudo code
 
+    struct q_conn * const c = pn->c;
     c->rec.crypto_cnt = c->rec.pto_cnt = 0;
-    detect_lost_pkts(c, pn, true);
+    detect_lost_pkts(pn, true);
     set_ld_timer(c);
 
     // not part of pseudo code - causes TX to resume when the window opens
@@ -369,11 +368,10 @@ on_pkt_acked_cc(struct q_conn * const c, struct w_iov * const acked_pkt)
 }
 
 
-void on_pkt_acked(struct q_conn * const c,
-                  struct pn_space * const pn,
-                  struct w_iov * const acked_pkt)
+void on_pkt_acked(struct pn_space * const pn, struct w_iov * const acked_pkt)
 {
     // see OnPacketAcked() pseudo code
+    struct q_conn * const c = pn->c;
     if (is_ack_eliciting(&meta(acked_pkt).frames) &&
         meta(acked_pkt).is_lost == false)
         on_pkt_acked_cc(c, acked_pkt);

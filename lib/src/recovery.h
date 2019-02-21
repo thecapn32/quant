@@ -124,18 +124,15 @@ extern void __attribute__((nonnull))
 on_pkt_sent(struct q_stream * const s, struct w_iov * const v);
 
 extern void __attribute__((nonnull))
-on_ack_received_1(struct q_conn * const c,
-                  struct pn_space * const pn,
+on_ack_received_1(struct pn_space * const pn,
                   struct w_iov * const lg_ack,
                   const uint64_t ack_del);
 
 extern void __attribute__((nonnull))
-on_ack_received_2(struct q_conn * const c, struct pn_space * const pn);
+on_ack_received_2(struct pn_space * const pn);
 
 extern void __attribute__((nonnull))
-on_pkt_acked(struct q_conn * const c,
-             struct pn_space * const pn,
-             struct w_iov * const acked_pkt);
+on_pkt_acked(struct pn_space * const pn, struct w_iov * const acked_pkt);
 
 extern void __attribute__((nonnull))
 congestion_event(struct q_conn * const c, const ev_tstamp sent_t);
