@@ -137,10 +137,5 @@ on_pkt_acked(struct q_conn * const c,
              struct pn_space * const pn,
              struct w_iov * const acked_pkt);
 
-extern struct w_iov * __attribute__((nonnull))
-find_sent_pkt(struct q_conn * const c,
-              struct pn_space * const pn,
-              const uint64_t nr);
-
 extern void __attribute__((nonnull))
 congestion_event(struct q_conn * const c, const ev_tstamp sent_t);

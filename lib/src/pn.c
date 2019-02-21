@@ -27,16 +27,51 @@
 
 #include <stdbool.h>
 
+#define klib_unused
+
+#include <khash.h>
+#include <warpcore/warpcore.h>
+
+#ifdef HAVE_ASAN
+#include <sanitizer/asan_interface.h>
+#else
+#define ASAN_POISON_MEMORY_REGION(x, y)
+#define ASAN_UNPOISON_MEMORY_REGION(x, y)
+#endif
+
 #include "bitset.h"
 #include "conn.h"
 #include "frame.h"
 #include "pn.h"
 #include "stream.h"
 
-#include <warpcore/warpcore.h>
+
+void pm_by_nr_del(khash_t(pm_by_nr) * const pbn,
+                  const struct pkt_meta * const p)
+{
+    const khiter_t k = kh_get(pm_by_nr, pbn, p->hdr.nr);
+    ensure(k != kh_end(pbn), "found");
+    kh_del(pm_by_nr, pbn, k);
+}
 
 
-SPLAY_GENERATE(pm_by_nr, pkt_meta, nr_node, pm_by_nr_cmp)
+void pm_by_nr_ins(khash_t(pm_by_nr) * const pbn, struct pkt_meta * const p)
+{
+    int ret;
+    const khiter_t k = kh_put(pm_by_nr, pbn, p->hdr.nr, &ret);
+    ensure(ret >= 1, "inserted");
+    kh_val(pbn, k) = p;
+}
+
+
+struct w_iov * find_sent_pkt(const struct pn_space * const pn,
+                             const uint64_t nr)
+{
+    const khiter_t k = kh_get(pm_by_nr, pn->sent_pkts, nr);
+    if (unlikely(k == kh_end(pn->sent_pkts)))
+        return 0;
+    return w_iov(pn->c->w, pm_idx(kh_val(pn->sent_pkts, k)));
+}
 
 
 void init_pn(struct pn_space * const pn, struct q_conn * const c)
@@ -44,7 +79,7 @@ void init_pn(struct pn_space * const pn, struct q_conn * const c)
     diet_init(&pn->recv);
     diet_init(&pn->recv_all);
     diet_init(&pn->acked);
-    splay_init(&pn->sent_pkts);
+    pn->sent_pkts = kh_init(pm_by_nr);
     pn->lg_sent = pn->lg_acked = UINT64_MAX;
     pn->c = c;
 }
@@ -52,9 +87,12 @@ void init_pn(struct pn_space * const pn, struct q_conn * const c)
 
 void free_pn(struct pn_space * const pn)
 {
-    while (!splay_empty(&pn->sent_pkts)) {
-        struct pkt_meta * const p = splay_min(pm_by_nr, &pn->sent_pkts);
-        free_iov(w_iov(pn->c->w, pm_idx(p)));
+    if (pn->sent_pkts) {
+        struct pkt_meta * p;
+        kh_foreach_value(pn->sent_pkts, p,
+                         { free_iov(w_iov(pn->c->w, pm_idx(p))); });
+        kh_destroy(pm_by_nr, pn->sent_pkts);
+        pn->sent_pkts = 0;
     }
 
     diet_free(&pn->recv);
@@ -66,6 +104,7 @@ void free_pn(struct pn_space * const pn)
 void reset_pn(struct pn_space * const pn)
 {
     free_pn(pn);
+    pn->sent_pkts = kh_init(pm_by_nr);
     pn->lg_sent = pn->lg_acked = UINT64_MAX;
     pn->ect0_cnt = pn->ect1_cnt = pn->ce_cnt = 0;
     pn->pkts_rxed_since_last_ack_tx = 0;

@@ -374,7 +374,8 @@ done:
 }
 
 
-uint64_t shorten_ack_nr(const uint64_t ack, const uint64_t diff)
+static uint64_t __attribute__((const))
+shorten_ack_nr(const uint64_t ack, const uint64_t diff)
 {
     ensure(diff, "no diff between ACK %" PRIu64 " and diff %" PRIu64, ack,
            diff);
@@ -469,7 +470,7 @@ uint16_t dec_ack_frame(struct q_conn * const c,
 
         uint64_t ack = lg_ack_in_block;
         while (ack_block_len >= lg_ack_in_block - ack) {
-            struct w_iov * const acked = find_sent_pkt(c, pn, ack);
+            struct w_iov * const acked = find_sent_pkt(pn, ack);
             if (unlikely(acked == 0)) {
 #ifndef FUZZING
                 // this is just way too noisy when fuzzing

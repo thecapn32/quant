@@ -32,6 +32,7 @@
 #include <sys/param.h>
 
 #include <ev.h>
+#include <khash.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
@@ -146,6 +147,10 @@ detect_lost_pkts(struct q_conn * const c,
                  struct pn_space * const pn,
                  const bool do_cc)
 {
+    if (pn->sent_pkts == 0)
+        // abandoned PN
+        return;
+
     const ev_tstamp now = ev_now(loop);
 
     c->rec.loss_t = 0;
@@ -158,10 +163,8 @@ detect_lost_pkts(struct q_conn * const c,
     // Packets with packet numbers before this are deemed lost.
     const uint64_t lost_pn = pn->lg_acked - kPacketThreshold;
 
-    struct pkt_meta *p, *nxt, *largest_lost_pkt = 0;
-    for (p = splay_min(pm_by_nr, &pn->sent_pkts); p; p = nxt) {
-        nxt = splay_next(pm_by_nr, &pn->sent_pkts, p);
-
+    struct pkt_meta *p, *largest_lost_pkt = 0;
+    kh_foreach_value(pn->sent_pkts, p, {
         if (p->is_acked || p->is_lost)
             continue;
 
@@ -192,16 +195,12 @@ detect_lost_pkts(struct q_conn * const c,
 
             log_cc(c);
 
-            if (p->is_rtx || !has_stream_data(p)) {
-                if (p->is_rtx)
-                    // remove from the original w_iov rtx list
-                    sl_remove(&sl_first(&p->rtx)->rtx, p, pkt_meta, rtx_next);
-                // don't free pkt - stays in sent_pkts for ACK tracking
-                if (largest_lost_pkt == p)
-                    largest_lost_pkt = 0;
-            }
+            if (p->is_rtx)
+                // remove from the original w_iov rtx list
+                sl_remove(&sl_first(&p->rtx)->rtx, p, pkt_meta, rtx_next);
+            // don't free pkt - stays in sent_pkts for ACK tracking
         }
-    }
+    });
     if (do_cc && largest_lost_pkt)
         congestion_event(c, largest_lost_pkt->tx_t);
     log_cc(c);
@@ -281,7 +280,7 @@ void on_pkt_sent(struct q_stream * const s, struct w_iov * const v)
 
     struct q_conn * const c = s->c;
     struct pn_space * const pn = pn_for_epoch(c, strm_epoch(s));
-    ensure(splay_insert(pm_by_nr, &pn->sent_pkts, &meta(v)) == 0, "inserted");
+    pm_by_nr_ins(pn->sent_pkts, &meta(v));
 
     if (likely(is_ack_eliciting(&meta(v).frames))) {
         if (unlikely(is_crypto_pkt(v)))
@@ -380,7 +379,7 @@ void on_pkt_acked(struct q_conn * const c,
         on_pkt_acked_cc(c, acked_pkt);
 
     diet_insert(&pn->acked, meta(acked_pkt).hdr.nr, ev_now(loop));
-    ensure(splay_remove(pm_by_nr, &pn->sent_pkts, &meta(acked_pkt)), "removed");
+    pm_by_nr_del(pn->sent_pkts, &meta(acked_pkt));
     meta(acked_pkt).is_acked = true;
 
     // rest of function is not from pseudo code
@@ -425,17 +424,6 @@ void on_pkt_acked(struct q_conn * const c,
 
     if (!has_stream_data(&meta(acked_pkt)))
         free_iov(acked_pkt);
-}
-
-
-struct w_iov * find_sent_pkt(struct q_conn * const c,
-                             struct pn_space * const pn,
-                             const uint64_t nr)
-{
-    const struct pkt_meta which = {.hdr.nr = nr};
-    const struct pkt_meta * const p =
-        splay_find(pm_by_nr, &pn->sent_pkts, &which);
-    return p ? w_iov(c->w, pm_idx(p)) : 0;
 }
 
 

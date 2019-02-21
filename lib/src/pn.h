@@ -29,7 +29,7 @@
 
 #include <stdint.h>
 
-#include <quant/quant.h>
+#include <khash.h>
 
 #include "diet.h"
 #include "quic.h"
@@ -39,15 +39,14 @@
 struct q_conn;
 
 
-splay_head(pm_by_nr, pkt_meta);
-
+KHASH_MAP_INIT_INT64(pm_by_nr, struct pkt_meta *) // NOLINTS
 
 struct pn_space {
     struct diet recv; ///< Received packet numbers still needing to be ACKed.
     struct diet recv_all; ///< All received packet numbers.
     struct diet acked;    ///< Sent packet numbers already ACKed.
 
-    struct pm_by_nr sent_pkts; // sent_packets
+    khash_t(pm_by_nr) * sent_pkts; // sent_packets
 
     uint64_t lg_sent;            // largest_sent_packet
     uint64_t lg_acked;           // largest_acked_packet
@@ -85,15 +84,22 @@ struct pn_data_space {
 };
 
 
-static inline int __attribute__((nonnull, always_inline))
-pm_by_nr_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
-{
-    return (a->hdr.nr > b->hdr.nr) - (a->hdr.nr < b->hdr.nr);
-}
+// static inline int __attribute__((nonnull, always_inline))
+// pm_by_nr_cmp(const struct pkt_meta * const a, const struct pkt_meta * const
+// b)
+// {
+//     return (a->hdr.nr > b->hdr.nr) - (a->hdr.nr < b->hdr.nr);
+// }
 
 
-SPLAY_PROTOTYPE(pm_by_nr, pkt_meta, nr_node, pm_by_nr_cmp)
+extern void __attribute__((nonnull))
+pm_by_nr_del(khash_t(pm_by_nr) * const pbn, const struct pkt_meta * const p);
 
+extern void __attribute__((nonnull))
+pm_by_nr_ins(khash_t(pm_by_nr) * const pbn, struct pkt_meta * const p);
+
+extern struct w_iov * __attribute__((nonnull))
+find_sent_pkt(const struct pn_space * const pn, const uint64_t nr);
 
 extern void __attribute__((nonnull))
 init_pn(struct pn_space * const pn, struct q_conn * const c);

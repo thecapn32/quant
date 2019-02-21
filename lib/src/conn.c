@@ -208,25 +208,27 @@ static void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c)
 static void log_sent_pkts(struct q_conn * const c)
 {
     for (epoch_t e = ep_init; e < ep_data; e++) {
-        char sent_pkts_buf[1024] = "";
-        uint64_t prev = UINT64_MAX;
-        struct pkt_meta * p = 0;
         struct pn_space * const pn = pn_for_epoch(c, e);
-        splay_foreach (p, pm_by_nr, &pn->sent_pkts) {
-            char tmp[1024] = "";
-            snprintf(tmp, sizeof(tmp), "%s%s" FMT_PNR_OUT NRM " ",
-                     has_stream_data(p) ? REV : "",
-                     is_ack_eliciting(&p->frames) ? BLD : "",
-                     prev == UINT64_MAX
-                         ? p->hdr.nr
-                         : shorten_ack_nr(p->hdr.nr, p->hdr.nr - prev));
-            strncat(sent_pkts_buf, tmp,
-                    sizeof(sent_pkts_buf) - strlen(sent_pkts_buf) - 1);
-            prev = p->hdr.nr;
-        }
-        if (sent_pkts_buf[0])
-            warn(DBG, "epoch %u%s unacked: %s", e, e == 1 ? "/3" : "",
-                 sent_pkts_buf);
+        if (pn->sent_pkts == 0)
+            // abandoned PN
+            continue;
+        char buf[0xffff];
+        int pos = 0;
+        struct pkt_meta * p;
+        kh_foreach_value(pn->sent_pkts, p, {
+            if ((size_t)pos >= sizeof(buf)) {
+                buf[sizeof(buf) - 2] = buf[sizeof(buf) - 3] =
+                    buf[sizeof(buf) - 4] = '.';
+                buf[sizeof(buf) - 1] = 0;
+                break;
+            }
+            pos += snprintf(&buf[pos], sizeof(buf) - (size_t)pos,
+                            "%s%s" FMT_PNR_OUT NRM " ",
+                            has_stream_data(p) ? REV : "",
+                            is_ack_eliciting(&p->frames) ? BLD : "", p->hdr.nr);
+        });
+        if (pos)
+            warn(DBG, "epoch %u%s unacked: %s", e, e == 1 ? "/3" : "", buf);
     }
 }
 #endif
@@ -246,9 +248,8 @@ rtx_pkt(struct q_stream * const s, struct w_iov * const v)
     sl_insert_head(&meta(r).rtx, &meta(v), rtx_next);
 
     // we reinsert meta(v) with its new pkt nr in on_pkt_sent()
-    ensure(splay_remove(pm_by_nr, &meta(v).pn->sent_pkts, &meta(v)), "removed");
-    ensure(splay_insert(pm_by_nr, &meta(r).pn->sent_pkts, &meta(r)) == 0,
-           "inserted");
+    pm_by_nr_del(meta(v).pn->sent_pkts, &meta(v));
+    pm_by_nr_ins(meta(r).pn->sent_pkts, &meta(r));
 }
 
 
@@ -391,10 +392,6 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
         }
     }
 
-#ifndef NDEBUG
-    if (util_dlevel == DBG)
-        log_sent_pkts(c);
-#endif
     return (unlikely(limit) && encoded == limit) || wnd_full == false;
 }
 
@@ -460,6 +457,11 @@ done:;
         tx_ack(c, c->tls.epoch_out, true);
         sent++;
     }
+
+#ifndef NDEBUG
+    if (util_dlevel == DBG)
+        log_sent_pkts(c);
+#endif
 }
 
 
@@ -562,7 +564,7 @@ conns_by_ipnp_ins(struct q_conn * const c)
 
 
 static inline void __attribute__((nonnull))
-conns_by_ipnp_del(struct q_conn * const c)
+conns_by_ipnp_del(const struct q_conn * const c)
 {
     const khiter_t k =
         kh_get(conns_by_ipnp, conns_by_ipnp,
@@ -925,7 +927,7 @@ rx_pkts(struct w_iov_sq * const x,
                          cid2str(&meta(v).hdr.dcid), cid2str(c->scid));
                     goto drop;
                 }
-            } else if (meta(v).hdr.type == LH_INIT) {
+            } else if (meta(v).hdr.type == LH_INIT && c == 0) {
                 // validate minimum packet size
                 if (xv->len < MIN_INI_LEN) {
                     warn(ERR, "%u-byte Initial pkt too short (< %u)", xv->len,
@@ -1388,11 +1390,6 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->ack_alarm.repeat = c->tp_out.max_ack_del / 1000.0;
     ev_init(&c->ack_alarm, ack_alarm);
 
-    // initialize packet number spaces
-    init_pn(&c->pn_init.pn, c);
-    init_pn(&c->pn_hshk.pn, c);
-    init_pn(&c->pn_data.pn, c);
-
     // initialize recovery state
     init_rec(c);
     c->sockopt.enable_ecn = true;
@@ -1426,6 +1423,11 @@ struct q_conn * new_conn(struct w_engine * const w,
 
     if (likely(c->is_clnt || c->holds_sock == false))
         update_conn_conf(c, cc);
+
+    // initialize packet number spaces
+    init_pn(&c->pn_init.pn, c);
+    init_pn(&c->pn_hshk.pn, c);
+    init_pn(&c->pn_data.pn, c);
 
     // init scid and add connection to global data structures
     splay_init(&c->scids_by_seq);

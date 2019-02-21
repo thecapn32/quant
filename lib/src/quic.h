@@ -109,7 +109,6 @@ bitset_define(frames, NUM_FRAM_TYPES);
 /// Packet meta-data information associated with w_iov buffers
 struct pkt_meta {
     // XXX need to potentially change pm_cpy() below if fields are reordered
-    splay_entry(pkt_meta) nr_node;
     splay_entry(pkt_meta) off_node;
     sl_entry(pkt_meta) rtx_next;
     struct pm_sl rtx; ///< List of pkt_meta structs of previous TXs.

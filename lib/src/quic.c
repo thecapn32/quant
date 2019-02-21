@@ -130,7 +130,7 @@ do_loop_run(const func_ptr func,
 void pm_free(struct pkt_meta * const m, const bool do_free)
 {
     if (m->pn && m->is_acked == false)
-        ensure(splay_remove(pm_by_nr, &m->pn->sent_pkts, m), "removed");
+        pm_by_nr_del(m->pn->sent_pkts, m);
 
     if (m->is_rtx)
         return;
@@ -142,7 +142,7 @@ void pm_free(struct pkt_meta * const m, const bool do_free)
         sl_remove_head(&m->rtx, rtx_next);
         struct pkt_meta * const next_rm = sl_next(rm, rtx_next);
         if (rm->is_acked == false)
-            ensure(splay_remove(pm_by_nr, &rm->pn->sent_pkts, rm), "removed");
+            pm_by_nr_del(rm->pn->sent_pkts, rm);
         if (do_free) {
             w_free_iov(w_iov(rm->pn->c->w, pm_idx(rm)));
             memset(rm, 0, sizeof(*rm));
