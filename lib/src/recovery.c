@@ -196,7 +196,7 @@ detect_lost_pkts(struct q_conn * const c,
                 if (p->is_rtx)
                     // remove from the original w_iov rtx list
                     sl_remove(&sl_first(&p->rtx)->rtx, p, pkt_meta, rtx_next);
-                free_iov(w_iov(c->w, pm_idx(p)));
+                // don't free pkt - stays in sent_pkts for ACK tracking
                 if (largest_lost_pkt == p)
                     largest_lost_pkt = 0;
             }
