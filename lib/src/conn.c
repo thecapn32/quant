@@ -392,7 +392,8 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
     }
 
 #ifndef NDEBUG
-    log_sent_pkts(c);
+    if (util_dlevel == DBG)
+        log_sent_pkts(c);
 #endif
     return (unlikely(limit) && encoded == limit) || wnd_full == false;
 }

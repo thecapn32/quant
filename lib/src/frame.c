@@ -94,6 +94,9 @@ void log_stream_or_crypto_frame(const bool rtx,
                                 const bool in,
                                 const char * const kind)
 {
+    if (util_dlevel < INF)
+        return;
+
     const struct q_stream * const s = meta(v).stream;
     const struct q_conn * const c = s->c;
     const uint8_t type = v->buf[meta(v).stream_header_pos];

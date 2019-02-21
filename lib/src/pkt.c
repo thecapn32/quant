@@ -63,6 +63,9 @@ void log_pkt(const char * const dir,
              const uint8_t * const tok,
              const uint16_t tok_len)
 {
+    if (util_dlevel < NTE)
+        return;
+
     char addr[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &ip, addr, INET_ADDRSTRLEN);
     const uint16_t prt = ntohs(port);
