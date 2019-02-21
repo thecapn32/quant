@@ -38,6 +38,7 @@
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <http_parser.h>
@@ -60,6 +61,7 @@ struct conn_cache {
 
 static uint64_t timeout = 10;
 static uint64_t num_bufs = 100000;
+static uint64_t reps = 1;
 static bool do_h3 = false;
 static bool flip_keys = false;
 static bool zlen_cids = false;
@@ -87,7 +89,8 @@ struct stream_entry {
     sl_entry(stream_entry) next;
     struct q_conn * c;
     struct q_stream * s;
-    char * url;
+    const char * url;
+    struct timespec get_t;
 };
 
 
@@ -100,7 +103,7 @@ static void __attribute__((noreturn, nonnull)) usage(const char * const name,
                                                      const char * const tls_log,
                                                      const bool verify_certs)
 {
-    printf("%s [options] URL\n", name);
+    printf("%s [options] URL [URL...]\n", name);
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
     printf("\t[-s cache]\tTLS 0-RTT state cache; default %s\n", cache);
     printf("\t[-l log]\tlog file for TLS keys; default %s\n", tls_log);
@@ -116,6 +119,8 @@ static void __attribute__((noreturn, nonnull)) usage(const char * const name,
            zlen_cids ? "true" : "false");
     printf("\t[-w]\t\twrite retrieved objects to disk; default %s\n",
            write_files ? "true" : "false");
+    printf("\t[-r reps]\trepetitions for all URLs; default %" PRIu64 "\n",
+           reps);
     printf(
         "\t[-b bufs]\tnumber of network buffers to allocate; default %" PRIu64
         "\n",
@@ -145,13 +150,26 @@ set_from_url(char * const var,
     }
 }
 
+
 static struct q_conn * __attribute__((nonnull))
-get(struct w_engine * const w,
-    struct conn_cache * const cc,
-    const char * const dest,
-    const char * const port,
-    const char * const path)
+get(const char * const url,
+    struct w_engine * const w,
+    struct conn_cache * const cc)
 {
+    // parse and verify the URIs passed on the command line
+    struct http_parser_url u = {0};
+    http_parser_parse_url(url, strlen(url), 0, &u);
+    ensure((u.field_set & (1 << UF_USERINFO)) == 0 &&
+               (u.field_set & (1 << UF_QUERY)) == 0 &&
+               (u.field_set & (1 << UF_FRAGMENT)) == 0,
+           "unsupported URL components");
+
+    // extract relevant info from URL
+    char dest[1024], port[64], path[2048];
+    set_from_url(dest, sizeof(dest), url, &u, UF_HOST, "localhost");
+    set_from_url(port, sizeof(port), url, &u, UF_PORT, "4433");
+    set_from_url(path, sizeof(path), url, &u, UF_PATH, "/index.html");
+
     struct addrinfo * peer;
     const struct addrinfo hints = {.ai_family = PF_INET,
                                    .ai_socktype = SOCK_DGRAM,
@@ -199,6 +217,7 @@ get(struct w_engine * const w,
         .dst = *(struct sockaddr_in *)&peer->ai_addr};
     struct conn_cache_entry * cce = splay_find(conn_cache, cc, &which);
     if (cce == 0) {
+        clock_gettime(CLOCK_MONOTONIC, &se->get_t);
         // no, open a new connection
         struct q_conn * const c =
             q_connect(w, (struct sockaddr_in *)(void *)peer->ai_addr, dest,
@@ -213,17 +232,9 @@ get(struct w_engine * const w,
             return 0;
         }
 
-        cce = calloc(1, sizeof(*cce));
-        ensure(cce, "calloc failed");
-        cce->c = c;
-
-        // insert into connection cache
-        cce->dst = *(struct sockaddr_in *)&peer->ai_addr;
-        splay_insert(conn_cache, cc, cce);
-
         if (do_h3) {
             // we need to open a uni stream for an empty H/3 SETTINGS frame
-            struct q_stream * const ss = q_rsv_stream(cce->c, false);
+            struct q_stream * const ss = q_rsv_stream(c, false);
             if (ss == 0)
                 return 0;
             static const uint8_t h3_empty_settings[] = {0x43, 0x00, 0x04};
@@ -233,28 +244,35 @@ get(struct w_engine * const w,
             // q_close_stream(ss);
         }
 
+        cce = calloc(1, sizeof(*cce));
+        ensure(cce, "calloc failed");
+        cce->c = c;
+
+        // insert into connection cache
+        cce->dst = *(struct sockaddr_in *)&peer->ai_addr;
+        splay_insert(conn_cache, cc, cce);
+
     } else {
         se->s = q_rsv_stream(cce->c, true);
         if (se->s == 0)
             return 0;
+        clock_gettime(CLOCK_MONOTONIC, &se->get_t);
         q_write(se->s, &req, true);
     }
+
     se->c = cce->c;
-    se->url = strdup(path);
-
+    se->url = url;
     freeaddrinfo(peer);
-
     return cce->c; // NOLINT
 }
 
 
 static void __attribute__((nonnull)) free_cc(struct conn_cache * const cc)
 {
-    struct conn_cache_entry *i, *next;
-    for (i = splay_min(conn_cache, cc); i != 0; i = next) {
-        next = splay_next(conn_cache, cc, i);
-        splay_remove(conn_cache, cc, i);
-        free(i);
+    while (!splay_empty(cc)) {
+        struct conn_cache_entry * const cce = splay_min(conn_cache, cc);
+        splay_remove(conn_cache, cc, cce);
+        free(cce);
     }
 }
 
@@ -264,7 +282,6 @@ static void free_sl(void)
     struct stream_entry *i = 0, *tmp = 0;
     sl_foreach_safe (i, &sl, next, tmp) {
         sl_remove(&sl, i, stream_entry, next);
-        free(i->url);
         free(i);
     }
 }
@@ -286,7 +303,7 @@ int main(int argc, char * argv[])
     bool verify_certs = false;
     int ret = 0;
 
-    while ((ch = getopt(argc, argv, "hi:v:s:t:l:cu3zb:w")) != -1) {
+    while ((ch = getopt(argc, argv, "hi:v:s:t:l:cu3zb:wr:")) != -1) {
         switch (ch) {
         case 'i':
             strncpy(ifname, optarg, sizeof(ifname) - 1);
@@ -299,6 +316,9 @@ int main(int argc, char * argv[])
             break;
         case 'b':
             num_bufs = MAX(1000, MIN(strtoul(optarg, 0, 10), UINT32_MAX));
+            break;
+        case 'r':
+            reps = MAX(1, MIN(strtoul(optarg, 0, 10), UINT64_MAX));
             break;
         case 'l':
             strncpy(tls_log, optarg, sizeof(tls_log) - 1);
@@ -336,88 +356,100 @@ int main(int argc, char * argv[])
                                        .tls_log = tls_log,
                                        .enable_tls_cert_verify = verify_certs});
     struct conn_cache cc = splay_initializer(cc);
-    struct http_parser_url u = {0};
 
-    while (optind < argc) {
-        // parse and verify the URIs passed on the command line
-        const char * const url = argv[optind++];
-        http_parser_parse_url(url, strlen(url), 0, &u);
-        ensure((u.field_set & (1 << UF_USERINFO)) == 0 &&
-                   (u.field_set & (1 << UF_QUERY)) == 0 &&
-                   (u.field_set & (1 << UF_FRAGMENT)) == 0,
-               "unsupported URL components");
-
-        // extract relevant info from URL
-        char dest[1024], port[64], path[2048];
-        set_from_url(dest, sizeof(dest), url, &u, UF_HOST, "localhost");
-        set_from_url(port, sizeof(port), url, &u, UF_PORT, "4433");
-        set_from_url(path, sizeof(path), url, &u, UF_PATH, "/index.html");
-
-        // open a new connection, or get an open one
-        warn(INF, "%s retrieving %s", basename(argv[0]), url);
-        if (get(w, &cc, dest, port, path) == 0) {
-            // q_connect() failed
-            ret = 1;
-            goto done;
-        }
-    }
-
-    // collect the replies
-    struct stream_entry * se = 0;
-    sl_foreach (se, &sl, next) {
-        // read HTTP/0.9 reply and dump it to stdout
-        struct w_iov_sq i = w_iov_sq_initializer(i);
-        if (se->c == 0)
-            continue;
-
-        q_readall_stream(se->s, &i);
-        q_close_stream(se->s);
-        if (w_iov_sq_cnt(&i) == 0) {
-            // no data read
-            ret = 1;
-            goto done;
+    if (reps > 1)
+        puts("size\ttime\t\tbps\t\turl");
+    for (uint64_t r = 1; r <= reps; r++) {
+        int url_idx = optind;
+        while (url_idx < argc) {
+            // open a new connection, or get an open one
+            warn(INF, "%s retrieving %s", basename(argv[0]), argv[url_idx]);
+            if (get(argv[url_idx++], w, &cc) == 0) {
+                // q_connect() failed
+                ret = 1;
+                goto done;
+            }
         }
 
-        char * const slash = strrchr(se->url, '/');
-        if (slash && *(slash + 1) == 0)
-            // this URL ends in a slash, so strip that to name the file
-            *slash = 0;
-        const int fd =
-            open(*basename(se->url) == 0 ? "index.html" : basename(se->url),
-                 O_CREAT | O_WRONLY | O_CLOEXEC, S_IRUSR | S_IWUSR | S_IRGRP);
-        ensure(fd != -1, "cannot open %s", basename(se->url));
-
-        // save the object, and print its first three packets to stdout
-        struct w_iov * v;
-        uint32_t n = 0;
-        sq_foreach (v, &i, next) {
-            if (write_files)
-                ensure(write(fd, v->buf, v->len) != -1, "cannot write");
-            if (w_iov_sq_cnt(&i) > 1000)
-                // don't print large responses
+        // collect the replies
+        struct stream_entry * se = sl_first(&sl);
+        while (se) {
+            // read HTTP/0.9 reply and dump it to stdout
+            struct w_iov_sq i = w_iov_sq_initializer(i);
+            if (se->c == 0) {
+                se = sl_next(se, next);
                 continue;
+            }
+            q_readall_stream(se->s, &i);
 
-            // XXX the strnlen() test is super-hacky
-            if (do_h3 && n == 0 && strnlen((char *)v->buf, v->len) == v->len)
-                warn(WRN, "no h3 payload");
-            if (n < 4 || v == sq_last(&i, w_iov, next)) {
-                if (do_h3)
-                    hexdump(v->buf, v->len);
-                else {
-                    // don't print newlines to console log
-                    for (uint16_t p = 0; p < v->len; p++)
-                        if (v->buf[p] == '\n' || v->buf[p] == '\r')
-                            v->buf[p] = ' ';
-                    printf("%.*s", v->len, v->buf);
-                }
-            } else
-                printf(".");
-            n++;
+            if (reps > 1) {
+                struct timespec after, diff;
+                clock_gettime(CLOCK_MONOTONIC, &after);
+                timespec_sub(&after, &se->get_t, &diff);
+                const double elapsed = timespec_to_double(diff);
+                printf("%" PRIu64 "\t%f\t\"%s\"\t%s\n", w_iov_sq_len(&i),
+                       elapsed, bps(w_iov_sq_len(&i), elapsed), se->url);
+            }
+
+            q_close_stream(se->s);
+            if (w_iov_sq_cnt(&i) == 0) {
+                // no data read
+                ret = 1;
+                goto done;
+            }
+
+            char * const slash = strrchr(se->url, '/');
+            if (slash && *(slash + 1) == 0)
+                // this URL ends in a slash, so strip that to name the file
+                *slash = 0;
+            int fd = 0;
+            if (write_files) {
+                fd = open(*basename(se->url) == 0 ? "index.html"
+                                                  : basename(se->url),
+                          O_CREAT | O_WRONLY | O_CLOEXEC,
+                          S_IRUSR | S_IWUSR | S_IRGRP);
+                ensure(fd != -1, "cannot open %s", basename(se->url));
+            }
+
+            // save the object, and print its first three packets to stdout
+            struct w_iov * v;
+            uint32_t n = 0;
+            sq_foreach (v, &i, next) {
+                if (write_files)
+                    ensure(write(fd, v->buf, v->len) != -1, "cannot write");
+                if (w_iov_sq_cnt(&i) > 100 || reps > 1)
+                    // don't print large responses, or repeated ones
+                    continue;
+
+                // XXX the strnlen() test is super-hacky
+                if (do_h3 && n == 0 &&
+                    strnlen((char *)v->buf, v->len) == v->len)
+                    warn(WRN, "no h3 payload");
+                if (n < 4 || v == sq_last(&i, w_iov, next)) {
+                    if (do_h3)
+                        hexdump(v->buf, v->len);
+                    else {
+                        // don't print newlines to console log
+                        for (uint16_t p = 0; p < v->len; p++)
+                            if (v->buf[p] == '\n' || v->buf[p] == '\r')
+                                v->buf[p] = ' ';
+                        printf("%.*s", v->len, v->buf);
+                    }
+                } else
+                    printf(".");
+                n++;
+            }
+            if (w_iov_sq_cnt(&i) <= 100 && reps == 1)
+                printf("\n");
+            if (write_files)
+                close(fd);
+            q_free(&i);
+
+            struct stream_entry * prev_se = se;
+            se = sl_next(se, next);
+            sl_remove_head(&sl, next);
+            free(prev_se);
         }
-        if (w_iov_sq_cnt(&i) <= 1000)
-            printf("\n");
-        close(fd);
-        q_free(&i);
     }
 
 done:
