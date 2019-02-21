@@ -34,9 +34,6 @@
 
 #ifdef HAVE_ASAN
 #include <sanitizer/asan_interface.h>
-#else
-#define ASAN_POISON_MEMORY_REGION(x, y)
-#define ASAN_UNPOISON_MEMORY_REGION(x, y)
 #endif
 
 #include "bitset.h"

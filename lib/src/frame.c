@@ -374,6 +374,7 @@ done:
 }
 
 
+#ifndef NDEBUG
 static uint64_t __attribute__((const))
 shorten_ack_nr(const uint64_t ack, const uint64_t diff)
 {
@@ -386,6 +387,7 @@ shorten_ack_nr(const uint64_t ack, const uint64_t diff)
         div *= 10;
     return ack % div;
 }
+#endif
 
 
 uint16_t dec_ack_frame(struct q_conn * const c,
