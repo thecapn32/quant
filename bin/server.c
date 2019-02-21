@@ -303,7 +303,6 @@ int main(int argc, char * argv[])
             }
             q_free(&q);
         }
-        q_close(c);
     }
 
     q_cleanup(w);
