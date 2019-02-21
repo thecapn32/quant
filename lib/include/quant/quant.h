@@ -31,6 +31,7 @@
 extern "C" {
 #endif
 
+#include <math.h>
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -136,6 +137,27 @@ extern struct q_conn * q_rx_ready(const uint64_t timeout);
 
 extern bool __attribute__((nonnull))
 q_is_new_serv_conn(const struct q_conn * const c);
+
+
+#define bps(bytes, secs)                                                       \
+    __extension__({                                                            \
+        static char _str[32];                                                  \
+        const double _bps =                                                    \
+            (bytes) && (fpclassify(secs) != FP_ZERO) ? (bytes)*8 / (secs) : 0; \
+        if (_bps > 1000000000)                                                 \
+            snprintf(_str, sizeof(_str), "%.3f Gb/s", _bps / 1000000000);      \
+        else if (_bps > 1000000)                                               \
+            snprintf(_str, sizeof(_str), "%.3f Mb/s", _bps / 1000000);         \
+        else if (_bps > 1000)                                                  \
+            snprintf(_str, sizeof(_str), "%.3f Kb/s", _bps / 1000);            \
+        else                                                                   \
+            snprintf(_str, sizeof(_str), "%.3f b/s", _bps);                    \
+        _str;                                                                  \
+    })
+
+
+#define timespec_to_double(diff)                                               \
+    ((double)(diff).tv_sec + (double)(diff).tv_nsec / 1000000000)
 
 #ifdef __cplusplus
 }

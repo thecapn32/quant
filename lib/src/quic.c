@@ -26,10 +26,10 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <arpa/inet.h>
+#include <math.h>
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <time.h>
@@ -98,29 +98,6 @@ static ev_timer api_alarm;
 #if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 int corpus_pkt_dir, corpus_frm_dir;
-#endif
-
-
-#ifndef NDEBUG
-#define bps(bytes, secs)                                                       \
-    __extension__({                                                            \
-        static char _str[32];                                                  \
-        const double _bps =                                                    \
-            (bytes) && !is_zero(secs) ? (bytes)*8 / (secs) : 0;                \
-        if (_bps > 1000000000)                                                 \
-            snprintf(_str, sizeof(_str), "%.3f Gb/s", _bps / 1000000000);      \
-        else if (_bps > 1000000)                                               \
-            snprintf(_str, sizeof(_str), "%.3f Mb/s", _bps / 1000000);         \
-        else if (_bps > 1000)                                                  \
-            snprintf(_str, sizeof(_str), "%.3f Kb/s", _bps / 1000);            \
-        else                                                                   \
-            snprintf(_str, sizeof(_str), "%.3f b/s", _bps);                    \
-        _str;                                                                  \
-    })
-
-
-#define timespec_to_double(diff)                                               \
-    ((double)(diff).tv_sec + (double)(diff).tv_nsec / 1000000000)
 #endif
 
 
