@@ -63,6 +63,7 @@ static uint64_t num_bufs = 100000;
 static bool do_h3 = false;
 static bool flip_keys = false;
 static bool zlen_cids = false;
+static bool write_files = false;
 
 
 static uint32_t __attribute__((nonnull))
@@ -113,6 +114,8 @@ static void __attribute__((noreturn, nonnull)) usage(const char * const name,
            do_h3 ? "true" : "false");
     printf("\t[-z]\t\tuse zero-length source connection IDs; default %s\n",
            zlen_cids ? "true" : "false");
+    printf("\t[-w]\t\twrite retrieved objects to disk; default %s\n",
+           write_files ? "true" : "false");
     printf(
         "\t[-b bufs]\tnumber of network buffers to allocate; default %" PRIu64
         "\n",
@@ -283,7 +286,7 @@ int main(int argc, char * argv[])
     bool verify_certs = false;
     int ret = 0;
 
-    while ((ch = getopt(argc, argv, "hi:v:s:t:l:cu3zb:")) != -1) {
+    while ((ch = getopt(argc, argv, "hi:v:s:t:l:cu3zb:w")) != -1) {
         switch (ch) {
         case 'i':
             strncpy(ifname, optarg, sizeof(ifname) - 1);
@@ -311,6 +314,9 @@ int main(int argc, char * argv[])
             break;
         case 'z':
             zlen_cids = true;
+            break;
+        case 'w':
+            write_files = true;
             break;
         case 'v':
 #ifndef NDEBUG
@@ -385,7 +391,8 @@ int main(int argc, char * argv[])
         struct w_iov * v;
         uint32_t n = 0;
         sq_foreach (v, &i, next) {
-            ensure(write(fd, v->buf, v->len) != -1, "cannot write");
+            if (write_files)
+                ensure(write(fd, v->buf, v->len) != -1, "cannot write");
             if (w_iov_sq_cnt(&i) > 1000)
                 // don't print large responses
                 continue;
