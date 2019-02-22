@@ -378,12 +378,12 @@ done:
 static uint64_t __attribute__((const))
 shorten_ack_nr(const uint64_t ack, const uint64_t diff)
 {
-    ensure(diff, "no diff between ACK %" PRIu64 " and diff %" PRIu64, ack,
-           diff);
+    if (unlikely(diff == 0))
+        return ack;
 
     uint64_t div = (uint64_t)(powl(ceill(log10l(diff)), 10));
     div = MAX(10, div);
-    if ((ack - diff) % div + diff >= div)
+    while ((ack - diff) % div + diff >= div)
         div *= 10;
     return ack % div;
 }
