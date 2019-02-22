@@ -35,6 +35,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/param.h>
+#include <sys/socket.h>
 
 #include <ev.h>
 #include <khash.h>
@@ -95,9 +96,8 @@ extern khash_t(conns_by_id) * conns_by_id;
 
 
 struct pref_addr {
-    struct sockaddr_in addr4;
-    struct sockaddr_in6 addr6;
-    uint8_t _unused[4];
+    struct sockaddr_storage addr4;
+    struct sockaddr_storage addr6;
     struct cid cid;
 };
 

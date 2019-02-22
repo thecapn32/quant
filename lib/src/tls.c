@@ -25,7 +25,6 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <arpa/inet.h>
 #include <assert.h>
 #include <inttypes.h>
 #include <netinet/in.h>
@@ -39,6 +38,10 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#ifndef NDEBUG
+#include <netdb.h>
+#endif
 
 #ifdef PTLS_OPENSSL
 #include <openssl/evp.h>
@@ -610,14 +613,23 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             i = dec(&l, buf, len, i, sizeof(l), "%u");
 
             struct pref_addr * const pa = &c->tp_out.pref_addr;
-            memcpy(&pa->addr4.sin_addr, &buf[i], sizeof(pa->addr4.sin_addr));
-            i += sizeof(pa->addr4.sin_addr);
-            memcpy(&pa->addr4.sin_port, &buf[i], sizeof(pa->addr4.sin_port));
-            i += sizeof(pa->addr4.sin_port);
-            memcpy(&pa->addr6.sin6_addr, &buf[i], sizeof(pa->addr6.sin6_addr));
-            i += sizeof(pa->addr6.sin6_addr);
-            memcpy(&pa->addr6.sin6_port, &buf[i], sizeof(pa->addr6.sin6_port));
-            i += sizeof(pa->addr6.sin6_port);
+            struct sockaddr_in * const pa4 =
+                (struct sockaddr_in *)&c->tp_out.pref_addr.addr4;
+            struct sockaddr_in6 * const pa6 =
+                (struct sockaddr_in6 *)&c->tp_out.pref_addr.addr6;
+
+            pa4->sin_family = AF_INET;
+            memcpy(&pa4->sin_addr, &buf[i], sizeof(pa4->sin_addr));
+            i += sizeof(pa4->sin_addr);
+            memcpy(&pa4->sin_port, &buf[i], sizeof(pa4->sin_port));
+            i += sizeof(pa4->sin_port);
+
+            pa6->sin6_family = AF_INET6;
+            memcpy(&pa6->sin6_addr, &buf[i], sizeof(pa6->sin6_addr));
+            i += sizeof(pa6->sin6_addr);
+            memcpy(&pa6->sin6_port, &buf[i], sizeof(pa6->sin6_port));
+            i += sizeof(pa6->sin6_port);
+
             i = dec(&pa->cid.len, buf, len, i, sizeof(pa->cid.len), "%u");
             memcpy(pa->cid.id, &buf[i], pa->cid.len);
             i += pa->cid.len;
@@ -627,14 +639,32 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             memcpy(pa->cid.srt, &buf[i], sizeof(pa->cid.srt));
             i += sizeof(pa->cid.srt);
 
-            char ip4str[INET_ADDRSTRLEN], ip6str[INET6_ADDRSTRLEN];
-            inet_ntop(AF_INET, &pa->addr4, ip4str, sizeof(ip4str));
-            inet_ntop(AF_INET6, &pa->addr6, ip6str, sizeof(ip6str));
+#ifndef NDEBUG
+            char ip4[NI_MAXHOST], port4[NI_MAXSERV];
+            int err = getnameinfo((struct sockaddr *)pa4, sizeof(*pa4), ip4,
+                                  sizeof(ip4), port4, sizeof(port4),
+                                  NI_NUMERICHOST | NI_NUMERICSERV);
+            if (unlikely(err)) {
+                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY, "%s",
+                          gai_strerror(err));
+                return 1;
+            }
+
+            char ip6[NI_MAXHOST], port6[NI_MAXSERV];
+            err = getnameinfo((struct sockaddr *)pa6, sizeof(*pa6), ip6,
+                              sizeof(ip6), port6, sizeof(port6),
+                              NI_NUMERICHOST | NI_NUMERICSERV);
+            if (unlikely(err)) {
+                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY, "%s",
+                          gai_strerror(err));
+                return 1;
+            }
+
             warn(INF,
-                 "\tpreferred_address = IPv4 %s:%u IPv6 [%s]:%u cid %s srt %s",
-                 ip4str, ntohs(pa->addr4.sin_port), ip6str,
-                 ntohs(pa->addr6.sin6_port), cid2str(&pa->cid),
+                 "\tpreferred_address = IPv4=%s:%s IPv6=[%s]:%s cid=%s srt=%s",
+                 ip4, port4, ip6, port6, cid2str(&pa->cid),
                  hex2str(&pa->cid.srt, sizeof(pa->cid.srt)));
+#endif
             break;
 
         default:
