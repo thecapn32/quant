@@ -26,6 +26,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <arpa/inet.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <stdarg.h>
@@ -68,20 +69,26 @@ khash_t(conns_by_id) * conns_by_id;
 
 
 static inline int __attribute__((nonnull))
-sockaddr_in_cmp(const struct sockaddr_in * const a,
-                const struct sockaddr_in * const b)
+sockaddr_cmp(const struct sockaddr * const a, const struct sockaddr * const b)
 {
-    int diff =
-        (a->sin_family > b->sin_family) - (a->sin_family < b->sin_family);
+    int diff = (a->sa_family > b->sa_family) - (a->sa_family < b->sa_family);
     if (diff)
         return diff;
 
-    diff = (a->sin_port > b->sin_port) - (a->sin_port < b->sin_port);
-    if (diff)
-        return diff;
-
-    return (a->sin_addr.s_addr > b->sin_addr.s_addr) -
-           (a->sin_addr.s_addr < b->sin_addr.s_addr);
+    switch (a->sa_family) {
+    case AF_INET:;
+        const struct sockaddr_in * const a4 =
+            (const struct sockaddr_in *)(const void *)a;
+        const struct sockaddr_in * const b4 =
+            (const struct sockaddr_in *)(const void *)b;
+        diff = (a4->sin_port > b4->sin_port) - (a4->sin_port < b4->sin_port);
+        if (diff)
+            return diff;
+        return (a4->sin_addr.s_addr > b4->sin_addr.s_addr) -
+               (a4->sin_addr.s_addr < b4->sin_addr.s_addr);
+    default:
+        die("unsupported address family");
+    }
 }
 
 
@@ -129,22 +136,22 @@ epoch_in(const struct q_conn * const c)
 
 
 static inline uint64_t __attribute__((const, always_inline))
-conns_by_ipnp_key(const uint16_t sport,
-                  const uint16_t dport,
-                  const uint32_t dip)
+conns_by_ipnp_key(const uint16_t sport, const struct sockaddr * const dst)
 {
+    const struct sockaddr_in * const addr4 =
+        (const struct sockaddr_in *)(const void *)dst;
+    const uint16_t dport = addr4->sin_port;
+    const uint32_t dip = addr4->sin_addr.s_addr;
     return ((uint64_t)dip << sizeof(dip) * 8) |
            ((uint64_t)sport << sizeof(sport) * 8) | (uint64_t)dport;
 }
 
 
 static struct q_conn * __attribute__((nonnull))
-get_conn_by_ipnp(const uint16_t sport, const struct sockaddr_in * const peer)
+get_conn_by_ipnp(const uint16_t sport, const struct sockaddr * const peer)
 {
-    const khiter_t k =
-        kh_get(conns_by_ipnp, conns_by_ipnp,
-               (khint64_t)conns_by_ipnp_key(sport, peer->sin_port,
-                                            peer->sin_addr.s_addr));
+    const khiter_t k = kh_get(conns_by_ipnp, conns_by_ipnp,
+                              (khint64_t)conns_by_ipnp_key(sport, peer));
     if (unlikely(k == kh_end(conns_by_ipnp)))
         return 0;
     return kh_val(conns_by_ipnp, k);
@@ -553,11 +560,10 @@ static inline void __attribute__((nonnull))
 conns_by_ipnp_ins(struct q_conn * const c)
 {
     int ret;
-    const khiter_t k =
-        kh_put(conns_by_ipnp, conns_by_ipnp,
-               (khint64_t)conns_by_ipnp_key(c->sport, c->peer.sin_port,
-                                            c->peer.sin_addr.s_addr),
-               &ret);
+    const khiter_t k = kh_put(
+        conns_by_ipnp, conns_by_ipnp,
+        (khint64_t)conns_by_ipnp_key(c->sport, (struct sockaddr *)&c->peer),
+        &ret);
     ensure(ret >= 1, "inserted");
     kh_val(conns_by_ipnp, k) = c;
 }
@@ -566,10 +572,9 @@ conns_by_ipnp_ins(struct q_conn * const c)
 static inline void __attribute__((nonnull))
 conns_by_ipnp_del(const struct q_conn * const c)
 {
-    const khiter_t k =
-        kh_get(conns_by_ipnp, conns_by_ipnp,
-               (khint64_t)conns_by_ipnp_key(c->sport, c->peer.sin_port,
-                                            c->peer.sin_addr.s_addr));
+    const khiter_t k = kh_get(conns_by_ipnp, conns_by_ipnp,
+                              (khint64_t)conns_by_ipnp_key(
+                                  c->sport, (const struct sockaddr *)&c->peer));
     ensure(k != kh_end(conns_by_ipnp), "found");
     kh_del(conns_by_ipnp, conns_by_ipnp, k);
 }
@@ -577,10 +582,10 @@ conns_by_ipnp_del(const struct q_conn * const c)
 
 static void __attribute__((nonnull))
 conns_by_ipnp_update(struct q_conn * const c,
-                     const struct sockaddr_in * const peer)
+                     const struct sockaddr * const peer)
 {
     conns_by_ipnp_del(c);
-    c->peer = *peer;
+    memcpy(&c->peer, peer, sizeof(*peer));
     conns_by_ipnp_ins(c);
 }
 
@@ -676,7 +681,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 {
     bool ok = false;
 
-    log_pkt("RX", v, v->ip, v->port, odcid, tok, tok_len);
+    log_pkt("RX", v, (struct sockaddr *)&v->addr, odcid, tok, tok_len);
     c->in_data += meta(v).udp_len;
 
     if (unlikely(meta(v).is_reset)) {
@@ -880,17 +885,13 @@ rx_pkts(struct w_iov_sq * const x,
 
         // allocate new w_iov for the (eventual) unencrypted data and meta-data
         struct w_iov * const v = alloc_iov(ws->w, 0, 0);
-        v->ip = xv->ip;
-        v->port = xv->port;
+        v->addr = xv->addr;
         v->flags = xv->flags;
-
-        const struct sockaddr_in peer = {.sin_family = AF_INET,
-                                         .sin_port = v->port,
-                                         .sin_addr = {.s_addr = v->ip}};
 
         const bool is_clnt = w_connected(ws);
         struct q_conn * c = 0;
-        struct q_conn * const c_ipnp = get_conn_by_ipnp(w_get_sport(ws), &peer);
+        struct q_conn * const c_ipnp =
+            get_conn_by_ipnp(w_get_sport(ws), (struct sockaddr *)&v->addr);
         struct cid odcid;
         uint8_t tok[MAX_PKT_LEN];
         uint16_t tok_len = 0;
@@ -937,18 +938,28 @@ rx_pkts(struct w_iov_sq * const x,
 
                 if (vers_supported(meta(v).hdr.vers) == false ||
                     is_force_vneg_vers(meta(v).hdr.vers)) {
-                    log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
+                    log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
+                            tok_len);
                     warn(WRN, "clnt-requested vers 0x%08x not supported",
                          meta(v).hdr.vers);
                     tx_vneg_resp(ws, v);
                     goto drop;
                 }
 
-                warn(NTE, "new serv conn on port %u from %s:%u w/cid=%s",
-                     ntohs(w_get_sport(ws)), inet_ntoa(peer.sin_addr),
-                     ntohs(peer.sin_port), cid2str(&meta(v).hdr.dcid));
+#ifndef NDEBUG
+                char ip[NI_MAXHOST], port[NI_MAXSERV];
+                ensure(getnameinfo((struct sockaddr *)&v->addr, sizeof(v->addr),
+                                   ip, sizeof(ip), port, sizeof(port),
+                                   NI_NUMERICHOST | NI_NUMERICSERV) == 0,
+                       "getnameinfo");
+
+                warn(NTE, "new serv conn on port %u from %s:%s w/cid=%s",
+                     ntohs(w_get_sport(ws)), ip, port,
+                     cid2str(&meta(v).hdr.dcid));
+#endif
+
                 c = new_conn(w_engine(ws), meta(v).hdr.vers, &meta(v).hdr.scid,
-                             &meta(v).hdr.dcid, &peer, 0,
+                             &meta(v).hdr.dcid, (struct sockaddr *)&v->addr, 0,
                              ntohs(w_get_sport(ws)), 0);
                 init_tls(c, 0);
 
@@ -963,7 +974,8 @@ rx_pkts(struct w_iov_sq * const x,
                 cid_cmp(&meta(v).hdr.scid, c->dcid) != 0) {
                 if (meta(v).hdr.vers && meta(v).hdr.type == LH_RTRY &&
                     cid_cmp(&odcid, c->dcid) != 0) {
-                    log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
+                    log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
+                            tok_len);
                     warn(ERR, "retry dcid mismatch %s != %s, ignoring pkt",
                          hex2str(&odcid.id, odcid.len), cid2str(c->dcid));
                     goto drop;
@@ -977,7 +989,8 @@ rx_pkts(struct w_iov_sq * const x,
                 struct cid * const scid =
                     get_cid_by_id(c->scids_by_id, &meta(v).hdr.dcid);
                 if (unlikely(scid == 0)) {
-                    log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
+                    log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
+                            tok_len);
                     warn(ERR, "unknown scid %s, ignoring pkt",
                          cid2str(&meta(v).hdr.dcid));
                     goto drop;
@@ -993,11 +1006,19 @@ rx_pkts(struct w_iov_sq * const x,
             }
 
             // check if this pkt came from a new source IP and/or port
-            if (sockaddr_in_cmp(&c->peer, &peer) != 0) {
-                warn(NTE, "pkt came from new peer %s:%u, probing",
-                     inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
+            if (sockaddr_cmp((struct sockaddr *)&c->peer,
+                             (struct sockaddr *)&v->addr) != 0) {
+#ifndef NDEBUG
+                char ip[NI_MAXHOST], port[NI_MAXSERV];
+                ensure(getnameinfo((struct sockaddr *)&v->addr, sizeof(v->addr),
+                                   ip, sizeof(ip), port, sizeof(port),
+                                   NI_NUMERICHOST | NI_NUMERICSERV) == 0,
+                       "getnameinfo");
+
+                warn(NTE, "pkt came from new peer %s:%s, probing", ip, port);
+#endif
                 if (c->dcid->len == 0)
-                    conns_by_ipnp_update(c, &peer);
+                    conns_by_ipnp_update(c, (struct sockaddr *)&v->addr);
                 ptls_openssl_random_bytes(&c->path_chlg_out,
                                           sizeof(c->path_chlg_out));
                 c->tx_path_chlg = true;
@@ -1018,13 +1039,14 @@ rx_pkts(struct w_iov_sq * const x,
                 zo->t = ev_now(loop);
                 ensure(splay_insert(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo) == 0,
                        "inserted");
-                log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
+                log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
+                        tok_len);
                 warn(INF, "caching 0-RTT pkt for unknown conn %s",
                      cid2str(&meta(v).hdr.dcid));
                 goto next;
             }
 #endif
-            log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
+            log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok, tok_len);
             warn(INF, "ignoring unexpected %s pkt for conn %s",
                  pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers),
                  cid2str(&meta(v).hdr.dcid));
@@ -1037,7 +1059,8 @@ rx_pkts(struct w_iov_sq * const x,
             if (unlikely(meta(v).hdr.type == LH_INIT &&
                          c->cstreams[ep_init] == 0)) {
                 // we already abandoned Initial pkt processing, ignore
-                log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
+                log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
+                        tok_len);
                 warn(INF, "ignoring %u-byte %s pkt due to abandoned processing",
                      v->len,
                      pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
@@ -1045,7 +1068,8 @@ rx_pkts(struct w_iov_sq * const x,
             } else if (unlikely(dec_pkt_hdr_remainder(xv, v, c, x, &decoal) ==
                                 false)) {
                 v->len = xv->len;
-                log_pkt("RX", v, v->ip, v->port, &odcid, tok, tok_len);
+                log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
+                        tok_len);
                 warn(ERR, "%s %u-byte %s pkt, ignoring",
                      pkt_ok_for_epoch(meta(v).hdr.flags, epoch_in(c))
                          ? "crypto fail on"
@@ -1326,7 +1350,7 @@ struct q_conn * new_conn(struct w_engine * const w,
                          const uint32_t vers,
                          const struct cid * const dcid,
                          const struct cid * const scid,
-                         const struct sockaddr_in * const peer,
+                         const struct sockaddr * const peer,
                          const char * const peer_name,
                          const uint16_t port,
                          const struct q_conn_conf * const cc)
@@ -1335,7 +1359,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     ensure(c, "could not calloc");
 
     if (peer)
-        c->peer = *peer;
+        memcpy(&c->peer, peer, sizeof(*peer));
 
     if (peer_name) {
         c->is_clnt = true;
@@ -1403,9 +1427,11 @@ struct q_conn * new_conn(struct w_engine * const w,
     ev_async_start(loop, &c->tx_w);
 
     c->w = w;
+    const struct sockaddr_in * const addr4 =
+        (const struct sockaddr_in *)(const void *)peer;
     c->sock = w_get_sock(w, w->ip, htons(port),
-                         c->is_clnt && peer ? peer->sin_addr.s_addr : 0,
-                         c->is_clnt && peer ? peer->sin_port : 0);
+                         c->is_clnt && addr4 ? addr4->sin_addr.s_addr : 0,
+                         c->is_clnt && addr4 ? addr4->sin_port : 0);
     if (c->sock == 0) {
         // TODO need to update zero checksums in update_conn_conf() somehow
         c->sockopt.enable_udp_zero_checksums =

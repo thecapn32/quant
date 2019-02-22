@@ -29,7 +29,6 @@
 
 #include <inttypes.h>
 #include <math.h>
-#include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -229,7 +228,7 @@ struct q_conn {
     ev_timer key_flip_alarm;
     ev_timer ack_alarm;
 
-    struct sockaddr_in peer; ///< Address of our peer.
+    struct sockaddr_storage peer; ///< Address of our peer.
     char * peer_name;
 
     struct q_stream * cstreams[ep_data + 1]; ///< Crypto "streams".
@@ -303,7 +302,7 @@ extern struct q_conn * new_conn(struct w_engine * const w,
                                 const uint32_t vers,
                                 const struct cid * const dcid,
                                 const struct cid * const scid,
-                                const struct sockaddr_in * const peer,
+                                const struct sockaddr * const peer,
                                 const char * const peer_name,
                                 const uint16_t port,
                                 const struct q_conn_conf * const cc);

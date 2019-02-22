@@ -27,7 +27,7 @@
 
 #include <arpa/inet.h>
 #include <math.h>
-#include <netinet/in.h>
+#include <netdb.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -191,7 +191,7 @@ void q_free(struct w_iov_sq * const q)
 
 
 struct q_conn * q_connect(struct w_engine * const w,
-                          const struct sockaddr_in * const peer,
+                          const struct sockaddr * const peer,
                           const char * const peer_name,
                           struct w_iov_sq * const early_data,
                           struct q_stream ** const early_data_stream,
@@ -207,15 +207,21 @@ struct q_conn * q_connect(struct w_engine * const w,
     init_tls(c, conn_conf ? conn_conf->alpn : 0);
     init_tp(c);
 
+#ifndef NDEBUG
+    char ip[NI_MAXHOST], port[NI_MAXSERV];
+    ensure(getnameinfo(peer, sizeof(*peer), ip, sizeof(ip), port, sizeof(port),
+                       NI_NUMERICHOST | NI_NUMERICSERV) == 0,
+           "getnameinfo");
+
     warn(WRN,
-         "new %u-RTT %s conn %s to %s:%u, %" PRIu64 " byte%s queued for TX",
-         c->try_0rtt ? 0 : 1, conn_type(c), cid2str(c->scid),
-         inet_ntoa(peer->sin_addr), ntohs(peer->sin_port),
+         "new %u-RTT %s conn %s to %s:%s, %" PRIu64 " byte%s queued for TX",
+         c->try_0rtt ? 0 : 1, conn_type(c), cid2str(c->scid), ip, port,
          early_data ? w_iov_sq_len(early_data) : 0,
          plural(early_data ? w_iov_sq_len(early_data) : 0));
+#endif
 
     ev_timer_again(loop, &c->idle_alarm);
-    w_connect(c->sock, peer->sin_addr.s_addr, peer->sin_port);
+    w_connect(c->sock, peer);
 
     // start TLS handshake
     tls_io(c->cstreams[ep_init], 0);
@@ -235,9 +241,8 @@ struct q_conn * q_connect(struct w_engine * const w,
 
     ev_async_send(loop, &c->tx_w);
 
-    warn(DBG, "waiting for connect to complete on %s conn %s to %s:%u",
-         conn_type(c), cid2str(c->scid), inet_ntoa(peer->sin_addr),
-         ntohs(peer->sin_port));
+    warn(DBG, "waiting for connect to complete on %s conn %s to %s:%s",
+         conn_type(c), cid2str(c->scid), ip, port);
     conn_to_state(c, conn_opng);
     loop_run(q_connect, c, 0);
 
@@ -486,13 +491,19 @@ accept:;
     ev_timer_again(loop, &c->idle_alarm);
     c->needs_accept = false;
 
-    warn(WRN, "%s conn %s accepted from clnt %s:%u%s, cipher %s", conn_type(c),
-         cid2str(c->scid), inet_ntoa(c->peer.sin_addr), ntohs(c->peer.sin_port),
-         c->did_0rtt ? " after 0-RTT" : "",
+#ifndef NDEBUG
+    char ip[NI_MAXHOST], port[NI_MAXSERV];
+    ensure(getnameinfo((struct sockaddr *)&c->peer, sizeof(c->peer), ip,
+                       sizeof(ip), port, sizeof(port),
+                       NI_NUMERICHOST | NI_NUMERICSERV) == 0,
+           "getnameinfo");
+
+    warn(WRN, "%s conn %s accepted from clnt %s:%s%s, cipher %s", conn_type(c),
+         cid2str(c->scid), ip, port, c->did_0rtt ? " after 0-RTT" : "",
          c->pn_data.out_1rtt[c->pn_data.out_kyph].aead->algo->name);
+#endif
 
     update_conn_conf(c, conn_conf);
-
     return c;
 }
 

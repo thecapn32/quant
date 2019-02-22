@@ -33,6 +33,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/param.h>
+#include <sys/socket.h>
 
 #include <ev.h>
 #include <quant/quant.h>
@@ -417,8 +418,7 @@ w_iov_dup(const struct w_iov * const v)
     // w_iov_idx(vdup), sq_len(&v->w->iov), vdup->len);
     ASAN_UNPOISON_MEMORY_REGION(&meta(vdup), sizeof(meta(vdup)));
     memcpy(vdup->buf, v->buf, v->len);
-    vdup->ip = v->ip;
-    vdup->port = v->port;
+    memcpy(&vdup->addr, &v->addr, sizeof(v->addr));
     vdup->flags = v->flags;
     return vdup;
 }

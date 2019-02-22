@@ -153,6 +153,7 @@ struct w_iov;
 struct w_iov_sq;
 struct w_sock;
 struct cipher_ctx;
+struct sockaddr;
 
 extern bool __attribute__((nonnull)) xor_hp(struct w_iov * const xv,
                                             const struct w_iov * const v,
@@ -191,11 +192,10 @@ extern uint32_t __attribute__((nonnull))
 clnt_vneg(const uint8_t * const buf, const uint16_t len);
 
 #ifndef NDEBUG
-extern void __attribute__((nonnull(1, 2)))
+extern void __attribute__((nonnull(1, 2, 3)))
 log_pkt(const char * const dir,
         const struct w_iov * const v,
-        const uint32_t ip,
-        const uint16_t port,
+        const struct sockaddr * const addr,
         const struct cid * const odcid,
         const uint8_t * const tok,
         const uint16_t tok_len);

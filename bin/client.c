@@ -220,8 +220,7 @@ get(const char * const url,
         clock_gettime(CLOCK_MONOTONIC, &se->get_t);
         // no, open a new connection
         struct q_conn * const c =
-            q_connect(w, (struct sockaddr_in *)(void *)peer->ai_addr, dest,
-                      &req, &se->s, true,
+            q_connect(w, peer->ai_addr, dest, &req, &se->s, true,
                       &(struct q_conn_conf){.alpn = do_h3 ? "h3-18" : "hq-18",
                                             .idle_timeout = timeout,
                                             .enable_spinbit = true,

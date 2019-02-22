@@ -1415,7 +1415,7 @@ prep_hash_ctx(const struct q_conn * const c,
 
     // hash our git commit hash and the peer IP address
     hc->update(hc, quant_commit_hash, quant_commit_hash_len);
-    hc->update(hc, &c->peer.sin_addr, sizeof(c->peer.sin_addr));
+    hc->update(hc, &c->peer, sizeof(c->peer));
 
     return hc;
 }
