@@ -127,32 +127,6 @@ do_loop_run(const func_ptr func,
 #define loop_run(func, conn, strm) do_loop_run((func_ptr)(func), (conn), (strm))
 
 
-void pm_free(struct pkt_meta * const m, const bool do_free)
-{
-    if (m->pn && m->is_acked == false)
-        pm_by_nr_del(m->pn->sent_pkts, m);
-
-    if (m->has_rtx)
-        return;
-
-    struct pkt_meta * rm = sl_first(&m->rtx);
-    while (rm) {
-        // warn(CRT, "free rtx iov idx %u nr %" PRIu64, pm_idx(rm), rm->hdr.nr);
-        ensure(rm->has_rtx, "was RTX'ed");
-        sl_remove_head(&m->rtx, rtx_next);
-        struct pkt_meta * const next_rm = sl_next(rm, rtx_next);
-        if (rm->is_acked == false)
-            pm_by_nr_del(rm->pn->sent_pkts, rm);
-        if (do_free) {
-            w_free_iov(w_iov(rm->pn->c->w, pm_idx(rm)));
-            memset(rm, 0, sizeof(*rm));
-            ASAN_POISON_MEMORY_REGION(rm, sizeof(*rm));
-        }
-        rm = next_rm;
-    }
-}
-
-
 void alloc_off(struct w_engine * const w,
                struct w_iov_sq * const q,
                const uint32_t len,
@@ -180,12 +154,10 @@ void q_alloc(struct w_engine * const w,
 
 void q_free(struct w_iov_sq * const q)
 {
-    struct w_iov * v = sq_first(q);
-    while (v) {
+    while (!sq_empty(q)) {
+        struct w_iov * const v = sq_first(q);
         sq_remove_head(q, next);
-        struct w_iov * const next = sq_next(v, next);
         free_iov(v);
-        v = next;
     }
 }
 

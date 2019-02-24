@@ -424,6 +424,7 @@ uint16_t dec_ack_frame(struct q_conn * const c,
 
     uint64_t lg_ack_in_block = lg_ack;
     ev_tstamp lg_acked_tx_t = 0;
+    bool got_new_ack = false;
     for (uint64_t n = num_blocks + 1; n > 0; n--) {
         uint64_t gap = 0;
         uint64_t ack_block_len = 0;
@@ -476,9 +477,11 @@ uint16_t dec_ack_frame(struct q_conn * const c,
             if (unlikely(acked == 0)) {
 #ifndef FUZZING
                 // this is just way too noisy when fuzzing
-                if (unlikely(diet_find(&pn->acked, ack) == 0))
-                    warn(ERR, "got ACK for pkt " FMT_PNR_OUT " never sent",
-                         ack);
+                if (unlikely(diet_find(&pn->acked, ack) == 0 &&
+                             diet_find(&pn->lost, ack) == 0))
+                    err_close_return(
+                        c, ERR_PROTOCOL_VIOLATION, t,
+                        "got ACK for pkt " FMT_PNR_OUT " never sent", ack);
 #endif
                 goto skip;
             }
@@ -488,6 +491,7 @@ uint16_t dec_ack_frame(struct q_conn * const c,
                 goto skip;
             }
 
+            got_new_ack = true;
             if (unlikely(ack == lg_ack) &&
                 is_ack_eliciting(&meta(acked).frames)) {
                 // call this only for the largest ACK in the frame
@@ -540,7 +544,8 @@ uint16_t dec_ack_frame(struct q_conn * const c,
         }
     }
 
-    on_ack_received_2(pn);
+    if (got_new_ack)
+        on_ack_received_2(pn);
     return i;
 }
 
@@ -585,14 +590,11 @@ dec_close_frame(struct q_conn * const c,
              t, err_code ? RED : NRM, err_code, reas_len, err_code ? RED : NRM,
              (int)reas_len, reas_phr);
 
-    if (c->state != conn_qlse) {
-        if (c->state != conn_drng) {
-            conn_to_state(c, conn_drng);
-            // c->needs_tx = false;
-            enter_closing(c);
-        } else
-            ev_invoke(loop, &c->closing_alarm, 0);
-    }
+    if (c->state != conn_drng)
+        enter_closing(c);
+    else
+        ev_invoke(loop, &c->closing_alarm, 0);
+
     return i;
 }
 

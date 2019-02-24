@@ -66,6 +66,8 @@ struct cid;
 
 #define NUM_FRAM_TYPES (FRM_CLA + 1)
 
+bitset_define(frames, NUM_FRAM_TYPES);
+
 #define F_STREAM_FIN 0x01
 #define F_STREAM_LEN 0x02
 #define F_STREAM_OFF 0x04

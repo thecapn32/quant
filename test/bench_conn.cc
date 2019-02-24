@@ -120,8 +120,8 @@ int main(int argc __attribute__((unused)), char ** argv)
     sip.sin_family = AF_INET;
     sip.sin_port = htons(55555);
     sip.sin_addr.s_addr = inet_addr("127.0.0.1");
-    cc = q_connect(w, reinterpret_cast<struct sockaddr *>(&sip), "localhost",
-                   nullptr, nullptr, true, nullptr);
+    cc = q_connect(w, reinterpret_cast<struct sockaddr *>(&sip), // NOLINT
+                   "localhost", nullptr, nullptr, true, nullptr);
     ensure(cc, "is zero");
 
     // accept connection

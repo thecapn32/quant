@@ -1056,9 +1056,10 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
         ptls_handle_message(c->tls.t, &tls_io, epoch_off, ep_in,
                             iv ? iv->buf : 0, in_len, &c->tls.tls_hshk_prop);
     // warn(DBG,
-    //      "epoch %u, in %u (off %u), gen %u (%u-%u-%u-%u-%u), ret %u, left
-    //      %u", ep_in, iv ? iv->len : 0, iv ? meta(iv).stream_off : 0,
-    //      tls_io.off, epoch_off[0], epoch_off[1], epoch_off[2], epoch_off[3],
+    //      "epoch %u, in %d (off %" PRIu64
+    //      "), gen %lu (%lu-%lu-%lu-%lu-%lu), ret %d, left %lu",
+    //      ep_in, iv ? iv->len : 0, iv ? meta(iv).stream_off : 0, tls_io.off,
+    //      epoch_off[0], epoch_off[1], epoch_off[2], epoch_off[3],
     //      epoch_off[4], ret, iv ? iv->len - in_len : 0);
 
     if (ret == 0 && c->state != conn_estb) {
@@ -1082,7 +1083,7 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
         const size_t out_len = epoch_off[e + 1] - epoch_off[e];
         if (out_len == 0)
             continue;
-        // warn(DBG, "epoch %u: off %u len %u", e, epoch_off[e], out_len);
+        // warn(DBG, "epoch %u: off %lu len %lu", e, epoch_off[e], out_len);
         struct w_iov_sq o = w_iov_sq_initializer(o);
         alloc_off(w_engine(c->sock), &o, (uint32_t)out_len,
                   DATA_OFFSET + c->tok_len);

@@ -223,6 +223,7 @@ static void log_sent_pkts(struct q_conn * const c)
         int pos = 0;
         struct pkt_meta * p;
         kh_foreach_value(pn->sent_pkts, p, {
+            // cppcheck-suppress unsignedLessThanZero
             if ((size_t)pos >= sizeof(buf)) {
                 buf[sizeof(buf) - 2] = buf[sizeof(buf) - 3] =
                     buf[sizeof(buf) - 4] = '.';
@@ -235,7 +236,8 @@ static void log_sent_pkts(struct q_conn * const c)
                             is_ack_eliciting(&p->frames) ? BLD : "", p->hdr.nr);
         });
         if (pos)
-            warn(DBG, "epoch %u%s unacked: %s", e, e == 1 ? "/3" : "", buf);
+            warn(DBG, "%s epoch %u%s unacked: %s", conn_type(c), e,
+                 e == 1 ? "/3" : "", buf);
     }
 }
 #endif
@@ -244,18 +246,24 @@ static void log_sent_pkts(struct q_conn * const c)
 static void __attribute__((nonnull))
 rtx_pkt(struct q_stream * const s, struct w_iov * const v)
 {
-    ensure(meta(v).has_rtx == false, "cannot RTX an RTX stand-in");
+    if (meta(v).is_lost)
+        return;
+
+    // ensure(meta(v).has_rtx == false, "cannot RTX an RTX stand-in");
+    // ensure(find_sent_pkt(meta(v).pn, meta(v).hdr.nr) == 0,
+    //        "still in sent_pkts");
+
     // on RTX, remember orig pkt meta data
     const uint16_t data_start = meta(v).stream_data_start;
     struct w_iov * const r = alloc_iov(s->c->w, 0, data_start);
     pm_cpy(&meta(r), &meta(v), true); // copy pkt meta data
     memcpy(r->buf - data_start, v->buf - data_start, data_start);
+    meta(r).stream = 0;
     meta(r).has_rtx = true;
     sl_insert_head(&meta(v).rtx, &meta(r), rtx_next);
     sl_insert_head(&meta(r).rtx, &meta(v), rtx_next);
 
     // we reinsert meta(v) with its new pkt nr in on_pkt_sent()
-    pm_by_nr_del(meta(v).pn->sent_pkts, &meta(v));
     pm_by_nr_ins(meta(r).pn->sent_pkts, &meta(r));
 }
 
@@ -281,6 +289,11 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
     w_free(&c->txq);
     // warn(CRT, "w_free %" PRIu64 " (avail %" PRIu64 "->%" PRIu64 ")", sql,
     // avail, sq_len(&c->w->iov));
+
+#ifndef NDEBUG
+    if (util_dlevel == DBG)
+        log_sent_pkts(c);
+#endif
 }
 
 
@@ -377,8 +390,15 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
         }
 
         const bool do_rtx = meta(v).is_lost || (limit && meta(v).udp_len);
-        if (unlikely(do_rtx))
+        if (unlikely(do_rtx)) {
+            if (meta(v).is_lost == false) {
+                // rtx_pkt expects the pkt to have been removed from sent_pkts
+                diet_insert(&meta(v).pn->lost, meta(v).hdr.nr, (ev_tstamp)NAN);
+                pm_by_nr_del(meta(v).pn->sent_pkts, &meta(v));
+                meta(v).is_lost = true;
+            }
             rtx_pkt(s, v);
+        }
 
         if (likely(c->state == conn_estb && s->id >= 0)) {
             do_stream_fc(s, v->len);
@@ -464,11 +484,6 @@ done:;
         tx_ack(c, c->tls.epoch_out, true);
         sent++;
     }
-
-#ifndef NDEBUG
-    if (util_dlevel == DBG)
-        log_sent_pkts(c);
-#endif
 }
 
 
@@ -594,6 +609,7 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
 {
     struct q_stream * const s = c->cstreams[epoch_in(c)];
     while (!sq_empty(&s->in)) {
+        // TODO: ooo crypto data is not freed immediately
         // take the data out of the crypto stream
         struct w_iov * const iv = sq_first(&s->in);
         sq_remove_head(&s->in, next);
@@ -638,6 +654,7 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
     reset_pn(&c->pn_init.pn);
     reset_pn(&c->pn_hshk.pn);
     reset_pn(&c->pn_data.pn);
+
     if (is_vneg)
         // we need to continue in the pkt nr sequence
         c->pn_init.pn.lg_sent = lg_sent_ini;
@@ -1172,7 +1189,8 @@ rx(struct ev_loop * const l, ev_io * const rx_w, int _e __attribute__((unused)))
                 tx_ack(c, e, false);
                 break;
             case del_ack:
-                ev_timer_again(loop, &c->ack_alarm);
+                if (likely(c->state != conn_clsg))
+                    ev_timer_again(loop, &c->ack_alarm);
                 break;
             case no_ack:
             case grat_ack:

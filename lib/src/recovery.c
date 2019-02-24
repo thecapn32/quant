@@ -142,6 +142,17 @@ void congestion_event(struct q_conn * const c, const ev_tstamp sent_t)
 }
 
 
+static void __attribute__((nonnull)) unregister_rtx(struct pm_sl * rtx)
+{
+    while (!sl_empty(rtx)) {
+        struct pkt_meta * const pm = sl_first(rtx);
+        sl_remove_head(rtx, rtx_next);
+        sl_remove_head(&pm->rtx, rtx_next);
+        ensure(sl_empty(&pm->rtx), "not empty");
+    }
+}
+
+
 static void __attribute__((nonnull))
 detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
 {
@@ -149,23 +160,23 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
         // abandoned PN
         return;
 
-    const ev_tstamp now = ev_now(loop);
     struct q_conn * const c = pn->c;
-
     c->rec.loss_t = 0;
     const ev_tstamp loss_del =
         kTimeThreshold * MAX(c->rec.latest_rtt, c->rec.srtt);
 
     // Packets sent before this time are deemed lost.
-    const ev_tstamp lost_send_t = now - loss_del;
+    const ev_tstamp lost_send_t = ev_now(loop) - loss_del;
 
     // Packets with packet numbers before this are deemed lost.
     const uint64_t lost_pn = pn->lg_acked - kPacketThreshold;
 
     struct pkt_meta *p, *largest_lost_pkt = 0;
+    ev_tstamp largest_lost_tx_t = 0;
+
     kh_foreach_value(pn->sent_pkts, p, {
-        if (p->is_acked || p->is_lost)
-            continue;
+        ensure(p->is_acked == false, "ACKed pkt in sent_pkts");
+        ensure(p->is_lost == false, "lost pkt in sent_pkts");
 
         if (p->hdr.nr > pn->lg_acked)
             continue;
@@ -174,9 +185,12 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
         if (p->tx_t <= lost_send_t ||
             (likely(pn->lg_acked != UINT64_MAX) && p->hdr.nr <= lost_pn)) {
             p->is_lost = true;
+            // cppcheck-suppress knownConditionTrueFalse
             if (unlikely(largest_lost_pkt == 0) ||
-                p->hdr.nr > largest_lost_pkt->hdr.nr)
+                p->hdr.nr > largest_lost_pkt->hdr.nr) {
                 largest_lost_pkt = p;
+                largest_lost_tx_t = largest_lost_pkt->tx_t;
+            }
         } else if (is_zero(c->rec.loss_t))
             c->rec.loss_t = p->tx_t + loss_del;
         else
@@ -184,7 +198,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
 
         // OnPacketsLost:
         if (p->is_lost) {
-            warn(DBG, "%s pkt " FMT_PNR_OUT " considered lost",
+            warn(DBG, "%s %s pkt " FMT_PNR_OUT " considered lost", conn_type(c),
                  pkt_type_str(p->hdr.flags, &p->hdr.vers), p->hdr.nr);
 
             if (is_ack_eliciting(&p->frames)) {
@@ -192,16 +206,15 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
                 c->rec.ae_in_flight--;
             }
 
-            log_cc(c);
-
+            diet_insert(&pn->lost, p->hdr.nr, (ev_tstamp)NAN);
+            pm_by_nr_del(pn->sent_pkts, p);
             if (p->has_rtx)
-                // remove from the original w_iov rtx list
-                sl_remove(&sl_first(&p->rtx)->rtx, p, pkt_meta, rtx_next);
-            // don't free pkt - stays in sent_pkts for ACK tracking
+                unregister_rtx(&p->rtx);
         }
     });
+
     if (do_cc && largest_lost_pkt)
-        congestion_event(c, largest_lost_pkt->tx_t);
+        congestion_event(c, largest_lost_tx_t);
     log_cc(c);
 }
 
@@ -376,25 +389,44 @@ void on_pkt_acked(struct pn_space * const pn, struct w_iov * const acked_pkt)
         meta(acked_pkt).is_lost == false)
         on_pkt_acked_cc(c, acked_pkt);
 
-    diet_insert(&pn->acked, meta(acked_pkt).hdr.nr, ev_now(loop));
-    pm_by_nr_del(pn->sent_pkts, &meta(acked_pkt));
-    meta(acked_pkt).is_acked = true;
-
     // rest of function is not from pseudo code
+    struct pkt_meta * meta_acked = &meta(acked_pkt);
+
+    diet_insert(&pn->acked, meta_acked->hdr.nr, (ev_tstamp)NAN);
+    pm_by_nr_del(pn->sent_pkts, meta_acked);
+
+    // stop ACKing packets that were contained in the ACK frame of this packet
+    if (has_frame(acked_pkt, FRM_ACK))
+        track_acked_pkts(pn, acked_pkt);
 
     // if this ACK is for a pkt that was RTX'ed, update the record
-    struct w_iov * orig = 0;
-    if (meta(acked_pkt).has_rtx) {
-        struct pkt_meta * const r = sl_first(&meta(acked_pkt).rtx);
-        ensure(sl_next(r, rtx_next) == 0, "rtx chain corrupt");
-        warn(DBG, FMT_PNR_OUT " was RTX'ed as " FMT_PNR_OUT,
-             meta(acked_pkt).hdr.nr, r->hdr.nr);
-        orig = w_iov(c->w, pm_idx(r));
+    struct pkt_meta * const meta_rtx = sl_first(&meta_acked->rtx);
+    if (meta_rtx) {
+        if (meta_acked->has_rtx) {
+            // ensure(meta_acked->is_lost, "meta_acked->is_lost");
+            // ensure(sl_next(meta_rtx, rtx_next) == 0, "rtx chain corrupt");
+
+            // remove RTX info
+            warn(DBG, "%s pkt " FMT_PNR_OUT " was RTX'ed as " FMT_PNR_OUT,
+                 conn_type(c), meta_acked->hdr.nr, meta_rtx->hdr.nr);
+            unregister_rtx(&meta_rtx->rtx);
+
+            // treat the RTX'ed data has ACK'ed, use stand-in w_iov for RTX info
+            const uint64_t acked_nr = meta_acked->hdr.nr;
+            pm_by_nr_del(pn->sent_pkts, meta_rtx);
+            meta_acked->hdr.nr = meta_rtx->hdr.nr;
+            meta_rtx->hdr.nr = acked_nr;
+            pm_by_nr_ins(pn->sent_pkts, meta_acked);
+            meta_acked = meta_rtx;
+        } else
+            unregister_rtx(&meta_acked->rtx);
     }
 
-    struct q_stream * const s = meta(acked_pkt).stream;
-    if (s && (orig == 0 || meta(orig).is_acked == false) &&
-        s->out_una == (orig ? orig : acked_pkt)) {
+
+    meta_acked->is_acked = true;
+
+    struct q_stream * const s = meta_acked->stream;
+    if (s) {
         // if this ACKs its stream's out_una, move that forward
         sq_foreach_from (s->out_una, &s->out, next)
             if (meta(s->out_una).is_acked == false)
@@ -406,21 +438,11 @@ void on_pkt_acked(struct pn_space * const pn, struct w_iov * const acked_pkt)
             if (s->id >= 0 && c->did_0rtt)
                 maybe_api_return(q_connect, c, 0);
         }
-    }
 
-    if (s) {
-        adj_iov_to_start(acked_pkt);
-        if (unlikely(meta(acked_pkt).is_fin))
+        if (unlikely(meta_acked->is_fin))
             // this ACKs a FIN
             maybe_api_return(q_close_stream, c, s);
-        adj_iov_to_data(acked_pkt);
-    }
-
-    // stop ACKing packets that were contained in the ACK frame of this packet
-    if (has_frame(acked_pkt, FRM_ACK))
-        track_acked_pkts(pn, acked_pkt);
-
-    if (!has_stream_data(&meta(acked_pkt)))
+    } else
         free_iov(acked_pkt);
 }
 

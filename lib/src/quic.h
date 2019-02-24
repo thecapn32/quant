@@ -48,6 +48,7 @@
 
 #include "bitset.h"
 #include "frame.h"
+#include "pn.h"
 
 
 #define MAX_CID_LEN 18
@@ -102,9 +103,6 @@ struct pkt_hdr {
 
 
 #define MAX_PKT_NR_LEN 4
-
-
-bitset_define(frames, NUM_FRAM_TYPES);
 
 
 /// Packet meta-data information associated with w_iov buffers
@@ -376,31 +374,42 @@ extern void *api_conn, *api_strm;
     })
 
 
-extern void __attribute__((nonnull))
-pm_free(struct pkt_meta * const m, const bool do_free);
+static inline void __attribute__((nonnull)) free_iov(struct w_iov * const v)
+{
+    // warn(CRT, "free_iov idx %u (avail %" PRIu64 ") nr=%" PRIu64,
+    // w_iov_idx(v), sq_len(&v->w->iov) + 1, meta(v).hdr.nr);
+
+    if (meta(v).pn && meta(v).pn->sent_pkts &&
+        find_sent_pkt(meta(v).pn, meta(v).hdr.nr))
+        pm_by_nr_del(meta(v).pn->sent_pkts, &meta(v));
+
+    struct pkt_meta * rm = sl_first(&meta(v).rtx);
+    while (rm) {
+        // ensure(rm->has_rtx, "was RTX'ed");
+        sl_remove_head(&meta(v).rtx, rtx_next);
+        struct pkt_meta * const next_rm = sl_next(rm, rtx_next);
+        pm_by_nr_del(rm->pn->sent_pkts, rm);
+        free_iov(w_iov(v->w, pm_idx(rm)));
+        rm = next_rm;
+    }
+
+    memset(&meta(v), 0, sizeof(meta(v)));
+    ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
+    w_free_iov(v);
+}
 
 
-#define free_iov(v)                                                            \
-    do {                                                                       \
-        /* warn(CRT, "free_iov idx %u (avail %" PRIu64 ") nr %" PRIu64,        \
-             w_iov_idx(v), sq_len(&(v)->w->iov) + 1, meta(v).hdr.nr); */       \
-        pm_free(&meta(v), true);                                               \
-        memset(&meta(v), 0, sizeof(meta(v)));                                  \
-        ASAN_POISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));                  \
-        w_free_iov(v);                                                         \
-    } while (0)
-
-
-#define alloc_iov(w, l, off)                                                   \
-    __extension__({                                                            \
-        struct w_iov * _v = w_alloc_iov((w), (l), (off));                      \
-        ensure(_v, "w_alloc_iov failed");                                      \
-        ASAN_UNPOISON_MEMORY_REGION(&meta(_v), sizeof(meta(_v)));              \
-        meta(_v).stream_data_start = (off);                                    \
-        /* warn(CRT, "alloc_iov idx %u (avail %" PRIu64 ") len %u off %u",     \
-             w_iov_idx(_v), sq_len(&(w)->iov), _v->len, (off)); */             \
-        _v;                                                                    \
-    })
+static inline struct w_iov * __attribute__((nonnull))
+alloc_iov(struct w_engine * const w, const uint16_t len, const uint16_t off)
+{
+    struct w_iov * const v = w_alloc_iov(w, len, off);
+    ensure(v, "w_alloc_iov failed");
+    ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
+    meta(v).stream_data_start = off;
+    // warn(CRT, "alloc_iov idx %u (avail %" PRIu64 ") len %u off %u",
+    //      w_iov_idx(v), sq_len(&w->iov), v->len, off);
+    return v;
+}
 
 
 extern void __attribute__((nonnull)) alloc_off(struct w_engine * const w,

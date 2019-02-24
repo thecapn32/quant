@@ -25,6 +25,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <math.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -33,6 +34,7 @@
 
 #define klib_unused
 
+#include <ev.h>
 #include <khash.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
@@ -143,7 +145,7 @@ void free_stream(struct q_stream * const s)
         warn(DBG, "freeing strm " FMT_SID " on %s conn %s", s->id, conn_type(c),
              cid2str(c->scid));
 #endif
-        diet_insert(&c->closed_streams, (uint64_t)s->id, 0);
+        diet_insert(&c->closed_streams, (uint64_t)s->id, (ev_tstamp)NAN);
         const khiter_t k =
             kh_get(streams_by_id, c->streams_by_id, (khint64_t)s->id);
         ensure(k != kh_end(c->streams_by_id), "found");
@@ -153,10 +155,10 @@ void free_stream(struct q_stream * const s)
 
     while (!splay_empty(&s->in_ooo)) {
         struct pkt_meta * const p = splay_min(ooo_by_off, &s->in_ooo);
-        // warn(ERR, "idx %u", pm_idx(p));
         ensure(splay_remove(ooo_by_off, &s->in_ooo, p), "removed");
         free_iov(w_iov(c->w, pm_idx(p)));
     }
+
     q_free(&s->out);
     q_free(&s->in);
 
@@ -182,10 +184,25 @@ void track_bytes_out(struct q_stream * const s, const uint64_t n)
 }
 
 
-static void __attribute__((nonnull)) reset_pm(const struct w_iov_sq * const q)
+void reset_stream(struct q_stream * const s, const bool forget)
 {
-    struct w_iov * v;
-    sq_foreach (v, q, next) {
+    // reset stream offsets
+    s->in_data_off = s->in_data = s->out_data = 0;
+
+    if (forget)
+        s->out_una = 0;
+
+    struct w_iov * v = s->out_una;
+    sq_foreach_from (v, &s->out, next) {
+        if (meta(v).pn)
+            // remove trailing padding
+            v->len = meta(v).stream_data_len;
+
+        // XXX do we need the "while(rm)" loop from free_iov here?
+
+        if (forget)
+            continue;
+
         // don't reset stream_data_start and is_fin
         const bool fin = meta(v).is_fin;
         memset(&meta(v), 0, offsetof(struct pkt_meta, stream_data_start));
@@ -193,36 +210,11 @@ static void __attribute__((nonnull)) reset_pm(const struct w_iov_sq * const q)
                sizeof(meta(v)) - offsetof(struct pkt_meta, stream_data_len));
         meta(v).is_fin = fin;
     }
-}
-
-
-void reset_stream(struct q_stream * const s, const bool forget)
-{
-    // reset stream offsets
-    s->in_data_off = s->in_data = s->out_data = 0;
 
     if (forget) {
-        s->out_una = 0;
-        q_free(&s->in);
         q_free(&s->out);
-        return;
+        q_free(&s->in);
     }
-
-    struct w_iov * v = s->out_una;
-    sq_foreach_from (v, &s->out, next) {
-        if (meta(v).udp_len) {
-            // remove trailing padding
-            v->len = meta(v).stream_data_len;
-
-            // remove the pkt and any RTXs from sent_pkts
-            pm_free(&meta(v), false);
-        }
-    }
-    s->out_una = sq_first(&s->out);
-
-    // reset pkt meta
-    reset_pm(&s->in);
-    reset_pm(&s->out);
 }
 
 

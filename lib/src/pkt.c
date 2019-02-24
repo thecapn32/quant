@@ -26,6 +26,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <inttypes.h>
+#include <math.h>
 #include <netdb.h>
 #include <netinet/ip.h>
 #include <stdint.h>
@@ -887,7 +888,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
     }
 
     diet_insert(&pn->recv, meta(v).hdr.nr, ev_now(loop));
-    diet_insert(&pn->recv_all, meta(v).hdr.nr, ev_now(loop));
+    diet_insert(&pn->recv_all, meta(v).hdr.nr, (ev_tstamp)NAN);
 
     return true;
 }

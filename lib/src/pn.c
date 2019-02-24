@@ -32,14 +32,11 @@
 #include <khash.h>
 #include <warpcore/warpcore.h>
 
-#ifdef HAVE_ASAN
-#include <sanitizer/asan_interface.h>
-#endif
-
 #include "bitset.h"
 #include "conn.h"
 #include "frame.h"
 #include "pn.h"
+#include "quic.h"
 #include "stream.h"
 
 
@@ -76,6 +73,7 @@ void init_pn(struct pn_space * const pn, struct q_conn * const c)
     diet_init(&pn->recv);
     diet_init(&pn->recv_all);
     diet_init(&pn->acked);
+    diet_init(&pn->lost);
     pn->sent_pkts = kh_init(pm_by_nr);
     pn->lg_sent = pn->lg_acked = UINT64_MAX;
     pn->c = c;
@@ -86,8 +84,11 @@ void free_pn(struct pn_space * const pn)
 {
     if (pn->sent_pkts) {
         struct pkt_meta * p;
-        kh_foreach_value(pn->sent_pkts, p,
-                         { free_iov(w_iov(pn->c->w, pm_idx(p))); });
+        kh_foreach_value(pn->sent_pkts, p, {
+            // TX'ed but non-RTX'ed pkts are freed when their stream is freed
+            if (p->has_rtx || !has_stream_data(p))
+                free_iov(w_iov(pn->c->w, pm_idx(p)));
+        });
         kh_destroy(pm_by_nr, pn->sent_pkts);
         pn->sent_pkts = 0;
     }
@@ -95,6 +96,7 @@ void free_pn(struct pn_space * const pn)
     diet_free(&pn->recv);
     diet_free(&pn->recv_all);
     diet_free(&pn->acked);
+    diet_free(&pn->lost);
 }
 
 
@@ -112,8 +114,8 @@ void reset_pn(struct pn_space * const pn)
 void abandon_pn(struct q_conn * const c, const epoch_t e)
 {
     warn(DBG, "abandon %s epoch %u processing", conn_type(c), e);
-    free_stream(c->cstreams[e]);
     free_pn(&c->pn_init.pn);
+    free_stream(c->cstreams[e]);
     dispose_cipher(&c->pn_init.in);
     dispose_cipher(&c->pn_init.out);
     c->cstreams[e] = 0;

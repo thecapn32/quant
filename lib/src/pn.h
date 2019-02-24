@@ -32,10 +32,11 @@
 #include <khash.h>
 
 #include "diet.h"
-#include "quic.h"
+#include "frame.h"
 #include "tls.h"
 
 
+struct pkt_meta;
 struct q_conn;
 
 
@@ -45,6 +46,7 @@ struct pn_space {
     struct diet recv; ///< Received packet numbers still needing to be ACKed.
     struct diet recv_all; ///< All received packet numbers.
     struct diet acked;    ///< Sent packet numbers already ACKed.
+    struct diet lost;     ///< Sent packet numbers declared lost.
 
     khash_t(pm_by_nr) * sent_pkts; // sent_packets
 
