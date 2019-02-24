@@ -244,13 +244,13 @@ static void log_sent_pkts(struct q_conn * const c)
 static void __attribute__((nonnull))
 rtx_pkt(struct q_stream * const s, struct w_iov * const v)
 {
-    ensure(meta(v).is_rtx == false, "cannot RTX an RTX");
+    ensure(meta(v).has_rtx == false, "cannot RTX an RTX stand-in");
     // on RTX, remember orig pkt meta data
     const uint16_t data_start = meta(v).stream_data_start;
     struct w_iov * const r = alloc_iov(s->c->w, 0, data_start);
     pm_cpy(&meta(r), &meta(v), true); // copy pkt meta data
     memcpy(r->buf - data_start, v->buf - data_start, data_start);
-    meta(r).is_rtx = true;
+    meta(r).has_rtx = true;
     sl_insert_head(&meta(v).rtx, &meta(r), rtx_next);
     sl_insert_head(&meta(r).rtx, &meta(v), rtx_next);
 

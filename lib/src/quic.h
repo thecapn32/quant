@@ -140,7 +140,7 @@ struct pkt_meta {
     struct pkt_hdr hdr;
 
     uint16_t udp_len;     ///< Length of protected UDP packet at TX/RX.
-    uint8_t is_rtx : 1;   ///< Does the w_iov hold truncated data?
+    uint8_t has_rtx : 1;  ///< Does the w_iov hold truncated data?
     uint8_t is_acked : 1; ///< Is the w_iov ACKed?
     uint8_t is_lost : 1;  ///< Have we marked this w_iov as lost?
     uint8_t is_reset : 1; ///< This packet is a stateless reset.

@@ -132,13 +132,13 @@ void pm_free(struct pkt_meta * const m, const bool do_free)
     if (m->pn && m->is_acked == false)
         pm_by_nr_del(m->pn->sent_pkts, m);
 
-    if (m->is_rtx)
+    if (m->has_rtx)
         return;
 
     struct pkt_meta * rm = sl_first(&m->rtx);
     while (rm) {
         // warn(CRT, "free rtx iov idx %u nr %" PRIu64, pm_idx(rm), rm->hdr.nr);
-        ensure(rm->is_rtx, "is an RTX");
+        ensure(rm->has_rtx, "was RTX'ed");
         sl_remove_head(&m->rtx, rtx_next);
         struct pkt_meta * const next_rm = sl_next(rm, rtx_next);
         if (rm->is_acked == false)

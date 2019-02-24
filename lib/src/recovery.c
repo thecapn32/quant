@@ -194,7 +194,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
 
             log_cc(c);
 
-            if (p->is_rtx)
+            if (p->has_rtx)
                 // remove from the original w_iov rtx list
                 sl_remove(&sl_first(&p->rtx)->rtx, p, pkt_meta, rtx_next);
             // don't free pkt - stays in sent_pkts for ACK tracking
@@ -384,7 +384,7 @@ void on_pkt_acked(struct pn_space * const pn, struct w_iov * const acked_pkt)
 
     // if this ACK is for a pkt that was RTX'ed, update the record
     struct w_iov * orig = 0;
-    if (meta(acked_pkt).is_rtx) {
+    if (meta(acked_pkt).has_rtx) {
         struct pkt_meta * const r = sl_first(&meta(acked_pkt).rtx);
         ensure(sl_next(r, rtx_next) == 0, "rtx chain corrupt");
         warn(DBG, FMT_PNR_OUT " was RTX'ed as " FMT_PNR_OUT,
