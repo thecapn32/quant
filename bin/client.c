@@ -438,7 +438,7 @@ int main(int argc, char * argv[])
                     printf(".");
                 n++;
             }
-            if (w_iov_sq_cnt(&i) <= 100 && reps == 1)
+            if (do_h3 == false && w_iov_sq_cnt(&i) <= 100 && reps == 1)
                 printf("\n");
             if (write_files)
                 close(fd);
