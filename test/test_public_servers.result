@@ -3,7 +3,7 @@ ats       *         V    H    D    C    R    Z    S    M         3
 f5        *         v
 lsquic    *         v
 mvfst     *         v
-ngtcp2    *         v
+ngtcp2    *         V    H    D    C    R    Z    S    M    U
 ngx_quic  *         v
 picoquic  *         V    H    D    C    R    Z    S    M    U    3
 quant     *         V    H    D    C    R    Z    S    M    U
