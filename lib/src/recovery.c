@@ -213,8 +213,10 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
         }
     });
 
-    if (do_cc && largest_lost_pkt)
+    if (do_cc && largest_lost_pkt) {
         congestion_event(c, largest_lost_tx_t);
+        c->needs_tx = true;
+    }
     log_cc(c);
 }
 
