@@ -33,6 +33,11 @@
 #include <string.h>
 #include <sys/param.h>
 
+#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
+    !defined(NO_FUZZER_CORPUS_COLLECTION)
+#include <sys/socket.h>
+#endif
+
 // IWYU pragma: no_include <picotls/../picotls.h>
 
 #include <ev.h>
@@ -941,8 +946,8 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
 
 #if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
-    // when called from the fuzzer, v->ip is zero
-    if (v->ip)
+    // when called from the fuzzer, v->addr.ss_family is zero
+    if (v->addr.ss_family)
         write_to_corpus(corpus_frm_dir, &v->buf[i], v->len - i);
 #endif
 

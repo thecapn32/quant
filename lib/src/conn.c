@@ -280,8 +280,11 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
 
     // transmit encrypted/protected packets
     w_tx(c->sock, &c->txq);
-    while (w_tx_pending(&c->txq))
+    w_nic_tx(c->w);
+    while (w_tx_pending(&c->txq)) {
+        w_nic_rx(c->w, 0);
         w_nic_tx(c->w);
+    }
 
     // txq was allocated straight from warpcore, no metadata needs to be freed
     // const uint64_t avail = sq_len(&c->w->iov);
@@ -895,8 +898,8 @@ rx_pkts(struct w_iov_sq * const x,
 
 #if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
-        // when called from the fuzzer, v->ip is zero
-        if (xv->ip)
+        // when called from the fuzzer, v->addr.ss_family is zero
+        if (xv->addr.ss_family)
             write_to_corpus(corpus_pkt_dir, xv->buf, xv->len);
 #endif
 
