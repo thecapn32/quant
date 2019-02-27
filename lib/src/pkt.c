@@ -491,7 +491,9 @@ bool enc_pkt(struct q_stream * const s,
     }
 
     if (unlikely(tx_ack_eliciting && !is_ack_eliciting(&meta(v).frames)))
-        i = enc_ping_frame(v, i);
+        // we can only do this for SH pkts
+        if (meta(v).hdr.type == SH)
+            i = enc_ping_frame(v, i);
 
     ensure(i > meta(v).hdr.hdr_len, "would have sent pkt w/o frames");
 
