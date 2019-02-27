@@ -47,7 +47,7 @@ declare -A servers=(
         # [quicker]=quicker.edm.uhasselt.be::4433:4434:4433:/index.html
         [quicly]=kazuhooku.com::4433:4433:8443:/20000.txt
         [quinn]=ralith.com::4433:4434:4433:/100K
-        [winquic]=msquic.westus.cloudapp.azure.com::4433:4434:4433:/the-odyssey.txt
+        [winquic]=msquic.westus.cloudapp.azure.com::4433:4434:4433:/draft-ietf-quic-http-11.txt
 )
 
 results=(live fail vneg hshk data clse rsmt zrtt rtry migr kyph http)
@@ -175,7 +175,7 @@ function analyze {
         perl -n -e '/dec_new_cid_frame.*NEW_CONNECTION_ID/ and $n=1;
                     /migration to dcid/ && $n && exit 1;' "$log"
         [ $? == 1 ] && migr[$1]=M
-        [ ${fail[$1]} ] || rm -f "$log"
+        # [ ${fail[$1]} ] || rm -f "$log"
 
         # analyze rsmt and 0rtt
         local log="/tmp/$script.$1.$pid.0rtt.log"
