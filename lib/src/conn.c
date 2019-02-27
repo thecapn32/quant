@@ -482,8 +482,7 @@ done:;
     uint64_t sent = sq_len(&c->txq);
     if (likely(sent))
         do_tx(c);
-    while ((unlikely(limit) && sent < limit) ||
-           (c->tx_path_chlg && sent == 0)) {
+    while ((unlikely(limit) && sent < limit) || (c->needs_tx && sent == 0)) {
         tx_ack(c, c->tls.epoch_out, true);
         sent++;
     }
@@ -1120,19 +1119,20 @@ rx_pkts(struct w_iov_sq * const x,
                 // forget outer dcid
                 outer_dcid.len = 0;
         }
+
     decoal_done:
-
-        if (rx_pkt(c, v, x, &odcid, tok, tok_len)) {
+        if (likely(rx_pkt(c, v, x, &odcid, tok, tok_len))) {
             rx_crypto(c);
+            c->min_rx_epoch =
+                c->had_rx
+                    ? MIN(c->min_rx_epoch, epoch_for_pkt_type(meta(v).hdr.type))
+                    : epoch_for_pkt_type(meta(v).hdr.type);
+        }
 
-            // remember that we had a RX event on this connection
-            if (!c->had_rx) {
-                c->had_rx = true;
-                sl_insert_head(crx, c, node_rx_int);
-                c->min_rx_epoch = epoch_for_pkt_type(meta(v).hdr.type);
-            } else
-                c->min_rx_epoch =
-                    MIN(c->min_rx_epoch, epoch_for_pkt_type(meta(v).hdr.type));
+        // remember that we had a RX event on this connection
+        if (!c->had_rx) {
+            c->had_rx = true;
+            sl_insert_head(crx, c, node_rx_int);
         }
 
         if (meta(v).stream == 0)
