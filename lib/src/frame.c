@@ -145,18 +145,33 @@ static void __attribute__((nonnull)) trim_frame(struct pkt_meta * const p)
 }
 
 
-#define handle_unknown_strm(c, sid, type, ret)                                 \
-    do {                                                                       \
-        if (diet_find(&(c)->closed_streams, (uint64_t)(sid))) {                \
-            warn(NTE,                                                          \
-                 "ignoring " #type " frame for closed strm " FMT_SID           \
-                 " on %s conn %s",                                             \
-                 (sid), conn_type(c), cid2str((c)->scid));                     \
-            return (ret);                                                      \
-        }                                                                      \
-        err_close_return(c, ERR_STREAM_STATE, (type), "unknown strm %" PRId64, \
-                         (sid));                                               \
-    } while (0)
+static struct q_stream * __attribute__((nonnull))
+get_and_validate_strm(struct q_conn * const c,
+                      const int64_t sid,
+                      const uint8_t type,
+                      const bool ok_when_writer)
+{
+    if (is_uni(sid) && unlikely(is_srv_ini(sid) ==
+                                (ok_when_writer ? c->is_clnt : !c->is_clnt)))
+        err_close(c, ERR_STREAM_STATE, type,
+                  "got frame 0x%02x for uni sid %" PRId64 " but am %s", type,
+                  sid, conn_type(c));
+    else {
+        struct q_stream * const s = get_stream(c, sid);
+        if (unlikely(s == 0)) {
+            if (unlikely(diet_find(&c->closed_streams, (uint64_t)sid)))
+                warn(NTE,
+                     "ignoring 0x%02x frame for closed strm " FMT_SID
+                     " on %s conn %s",
+                     type, sid, conn_type(c), cid2str(c->scid));
+            else
+                err_close(c, ERR_STREAM_STATE, type, "unknown strm %" PRId64,
+                          sid);
+        }
+        return s;
+    }
+    return 0;
+}
 
 
 static uint16_t __attribute__((nonnull))
@@ -595,9 +610,10 @@ dec_close_frame(struct q_conn * const c,
              t, err_code ? RED : NRM, err_code, reas_len, err_code ? RED : NRM,
              (int)reas_len, reas_phr);
 
-    if (c->state != conn_drng)
+    if (c->state != conn_drng) {
+        conn_to_state(c, c->state == conn_clsg ? conn_drng : conn_qlse);
         enter_closing(c);
-    else
+    } else
         ev_invoke(loop, &c->closing_alarm, 0);
 
     return i;
@@ -619,9 +635,9 @@ dec_max_stream_data_frame(struct q_conn * const c,
     warn(INF, FRAM_IN "MAX_STREAM_DATA" NRM " id=" FMT_SID " max=%" PRIu64, sid,
          max);
 
-    struct q_stream * const s = get_stream(c, sid);
-    if (unlikely(s == 0))
-        handle_unknown_strm(c, sid, FRM_MSD, i);
+    struct q_stream * const s = get_and_validate_strm(c, sid, FRM_MSD, true);
+    if (unlikely(s == 0 && c->err_code))
+        return UINT16_MAX;
 
     if (max > s->out_data_max) {
         s->out_data_max = max;
@@ -701,9 +717,9 @@ dec_stream_data_blocked_frame(struct q_conn * const c,
     warn(INF, FRAM_IN "STREAM_DATA_BLOCKED" NRM " id=" FMT_SID " lim=%" PRIu64,
          sid, off);
 
-    struct q_stream * const s = get_stream(c, sid);
-    if (unlikely(s == 0))
-        handle_unknown_strm(c, sid, FRM_SDB, i);
+    struct q_stream * const s = get_and_validate_strm(c, sid, FRM_SDB, false);
+    if (unlikely(s == 0 && c->err_code))
+        return UINT16_MAX;
 
     do_stream_fc(s, 0);
     // because do_stream_fc() only sets this when increasing the FC window
@@ -769,9 +785,9 @@ dec_stop_sending_frame(struct q_conn * const c,
     warn(INF, FRAM_IN "STOP_SENDING" NRM " id=" FMT_SID " err=%s0x%04x" NRM,
          sid, err_code ? RED : NRM, err_code);
 
-    struct q_stream * const s = get_stream(c, sid);
-    if (unlikely(s == 0))
-        handle_unknown_strm(c, sid, FRM_STP, i);
+    struct q_stream * const s = get_and_validate_strm(c, sid, FRM_STP, true);
+    if (unlikely(s == 0 && c->err_code))
+        return UINT16_MAX;
 
     return i;
 }
@@ -868,9 +884,9 @@ dec_reset_stream_frame(struct q_conn * const c,
                  " off=%" PRIu64,
          sid, err ? RED : NRM, err, off);
 
-    struct q_stream * const s = get_stream(c, sid);
-    if (unlikely(s == 0))
-        handle_unknown_strm(c, sid, FRM_RST, i);
+    struct q_stream * const s = get_and_validate_strm(c, sid, FRM_RST, false);
+    if (unlikely(s == 0 && c->err_code))
+        return UINT16_MAX;
 
     strm_to_state(s, strm_clsd);
 
