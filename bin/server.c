@@ -97,6 +97,9 @@ static int send_err(const struct cb_data * const d, const uint16_t code)
     case 404:
         msg = "404 Not Found";
         break;
+    case 505:
+        msg = "505 HTTP Version Not Supported";
+        break;
     default:
         msg = "500 Internal Server Error";
     }
@@ -293,6 +296,7 @@ int main(int argc, char * argv[])
                 if (parsed != v->len) {
                     warn(ERR, "HTTP parser error: %.*s", (int)(v->len - parsed),
                          &v->buf[parsed]);
+                    send_err(&d, 505);
                     ret = 1;
                     break;
                 }
