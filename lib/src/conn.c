@@ -374,10 +374,9 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
 
     uint32_t encoded = 0;
     struct w_iov * v = s->out_una;
-    bool wnd_full = false;
     sq_foreach_from (v, &s->out, next) {
         if (unlikely(has_wnd(c, v->len) == false && limit == 0)) {
-            wnd_full = true;
+            c->no_wnd = true;
             break;
         }
 
@@ -422,7 +421,7 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
         }
     }
 
-    return (unlikely(limit) && encoded == limit) || wnd_full == false;
+    return (unlikely(limit) && encoded == limit) || c->no_wnd == false;
 }
 
 
@@ -483,7 +482,7 @@ done:;
     if (likely(sent))
         do_tx(c);
     while ((unlikely(limit) && sent < limit) || (c->needs_tx && sent == 0)) {
-        tx_ack(c, c->tls.epoch_out, true);
+        tx_ack(c, c->tls.epoch_out, limit && sent < limit);
         sent++;
     }
 }

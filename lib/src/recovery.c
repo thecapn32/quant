@@ -360,8 +360,10 @@ void on_ack_received_2(struct pn_space * const pn)
 
     // not part of pseudo code - causes TX to resume when the window opens
 
-    if (has_wnd(c, c->w->mtu))
+    if (has_wnd(c, c->w->mtu) && c->no_wnd) {
+        c->no_wnd = false;
         c->needs_tx = true;
+    }
 }
 
 
