@@ -37,6 +37,7 @@
 #include "frame.h"
 #include "pn.h"
 #include "quic.h"
+#include "recovery.h"
 #include "stream.h"
 
 
@@ -85,6 +86,11 @@ void free_pn(struct pn_space * const pn)
     if (pn->sent_pkts) {
         struct pkt_meta * p;
         kh_foreach_value(pn->sent_pkts, p, {
+            // let's take all pkts out of in_flight here
+            if (is_ack_eliciting(&p->frames)) {
+                pn->c->rec.in_flight -= p->udp_len;
+                pn->c->rec.ae_in_flight--;
+            }
             // TX'ed but non-RTX'ed pkts are freed when their stream is freed
             if (p->has_rtx || !has_stream_data(p))
                 free_iov(w_iov(pn->c->w, pm_idx(p)));
