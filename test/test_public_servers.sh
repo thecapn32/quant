@@ -172,10 +172,10 @@ function analyze {
                 clse[$1]=C #c
         fi
 
-        perl -n -e '/dec_new_cid_frame.*NEW_CONNECTION_ID/ and $n=1;
+        perl -n -e '/dec_new_cid_frame.*NEW_CONNECTION_ID|preferred_address.*cid=1:/ and $n=1;
                     /migration to dcid/ && $n && exit 1;' "$log"
         [ $? == 1 ] && migr[$1]=M
-        # [ ${fail[$1]} ] || rm -f "$log"
+        [ ${fail[$1]} ] || rm -f "$log"
 
         # analyze rsmt and 0rtt
         local log="/tmp/$script.$1.$pid.0rtt.log"
