@@ -138,7 +138,6 @@ void log_stream_or_crypto_frame(const bool rtx,
 static void __attribute__((nonnull)) trim_frame(struct pkt_meta * const p)
 {
     const uint64_t diff = p->stream->in_data_off - p->stream_off;
-    // warn(ERR, "diff=%" PRIu64, diff);
     p->stream_off += diff;
     p->stream_data_start += diff;
     p->stream_data_len -= diff;
@@ -804,7 +803,6 @@ dec_path_challenge_frame(struct q_conn * const c,
     warn(INF, FRAM_IN "PATH_CHALLENGE" NRM " data=%" PRIx64, c->path_chlg_in);
 
     c->path_resp_out = c->path_chlg_in;
-    // c->needs_tx =
     c->tx_path_resp = true;
 
     return i;
