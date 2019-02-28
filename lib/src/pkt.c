@@ -495,7 +495,8 @@ bool enc_pkt(struct q_stream * const s,
         if (meta(v).hdr.type == SH)
             i = enc_ping_frame(v, i);
 
-    ensure(i > meta(v).hdr.hdr_len, "would have sent pkt w/o frames");
+    ensure(i > meta(v).hdr.hdr_len, "would have sent %s pkt w/o frames",
+           pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
 
 tx:;
     // make sure we have enough frame bytes for the header protection sample
