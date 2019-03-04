@@ -425,14 +425,17 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
 }
 
 
-static void __attribute__((nonnull))
+static bool __attribute__((nonnull))
 tx_ack(struct q_conn * const c, const epoch_t e, const bool tx_ack_eliciting)
 {
     do_conn_mgmt(c);
+    if (unlikely(c->cstreams[e] == 0))
+        return false;
     struct w_iov * const v = alloc_iov(c->w, 0, 0);
     enc_pkt(c->cstreams[e], false, false, tx_ack_eliciting, v);
     do_tx(c);
     // don't free the packet - it needs to stay in sent_pkts for ACK tracking
+    return true;
 }
 
 
@@ -482,8 +485,12 @@ done:;
     if (likely(sent))
         do_tx(c);
     while ((unlikely(limit) && sent < limit) || (c->needs_tx && sent == 0)) {
-        tx_ack(c, c->tls.epoch_out, limit && sent < limit);
-        sent++;
+        if (likely(tx_ack(c, c->tls.epoch_out, limit && sent < limit)))
+            sent++;
+        else {
+            warn(WRN, "no ACK sent");
+            break;
+        }
     }
 }
 

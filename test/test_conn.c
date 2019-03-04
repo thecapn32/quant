@@ -111,7 +111,7 @@ int main(int argc
     q_free(&o);
 
     // close connections
-    q_close(cc);
-    q_close(sc);
+    q_close(cc, 0, 0);
+    q_close(sc, 0, 0);
     q_cleanup(w);
 }

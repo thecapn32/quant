@@ -634,11 +634,20 @@ void q_close_stream(struct q_stream * const s)
 }
 
 
-void q_close(struct q_conn * const c)
+void q_close(struct q_conn * const c,
+             const uint16_t code,
+             const char * const reason)
 {
     if (c->scid)
-        warn(WRN, "closing %s conn %s on port %u", conn_type(c),
-             cid2str(c->scid), ntohs(c->sport));
+        warn(WRN, "closing %s conn %s on port %u w/err %s0x%04x (%s)" NRM,
+             conn_type(c), cid2str(c->scid), ntohs(c->sport), code ? RED : NRM,
+             code, reason);
+
+    c->err_code = code;
+    if (reason) {
+        strncpy(c->err_reason, reason, MAX_ERR_REASON_LEN);
+        c->err_reason_len = (uint8_t)strnlen(reason, MAX_ERR_REASON_LEN);
+    }
 
     if (c->state == conn_idle || c->state == conn_clsd ||
         (!c->is_clnt && c->holds_sock))
@@ -662,9 +671,9 @@ done:
         struct q_conn * c;                                                     \
         kh_foreach_value((kh), c, {                                            \
             if (c->scid)                                                       \
-                q_close(c);                                                    \
+                q_close(c, 0, 0);                                              \
         });                                                                    \
-        kh_foreach_value((kh), c, { q_close(c); });                            \
+        kh_foreach_value((kh), c, { q_close(c, 0, 0); });                      \
     } while (0)
 
 

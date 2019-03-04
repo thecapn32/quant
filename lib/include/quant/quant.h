@@ -83,7 +83,9 @@ q_connect(struct w_engine * const w,
           const bool fin,
           const struct q_conn_conf * const conn_conf);
 
-extern void __attribute__((nonnull)) q_close(struct q_conn * const c);
+extern void __attribute__((nonnull(1))) q_close(struct q_conn * const c,
+                                                const uint16_t code,
+                                                const char * const reason);
 
 extern struct q_conn * __attribute__((nonnull))
 q_bind(struct w_engine * const w, const uint16_t port);

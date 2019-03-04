@@ -609,11 +609,13 @@ dec_close_frame(struct q_conn * const c,
              t, err_code ? RED : NRM, err_code, reas_len, err_code ? RED : NRM,
              (int)reas_len, reas_phr);
 
-    if (c->state != conn_drng) {
-        conn_to_state(c, c->state == conn_clsg ? conn_drng : conn_qlse);
-        enter_closing(c);
-    } else
+    if (c->state == conn_drng)
         ev_invoke(loop, &c->closing_alarm, 0);
+    else {
+        if (c->state == conn_clsg)
+            conn_to_state(c, conn_drng);
+        enter_closing(c);
+    }
 
     return i;
 }
@@ -1346,7 +1348,7 @@ uint16_t enc_close_frame(const struct q_conn * const c,
                          struct w_iov * const v,
                          const uint16_t pos)
 {
-    const uint8_t type = c->err_code == 0 ? FRM_CLA : FRM_CLQ;
+    const uint8_t type = c->err_frm == 0 ? FRM_CLA : FRM_CLQ;
     track_frame(v, type);
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 

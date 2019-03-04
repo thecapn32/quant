@@ -106,10 +106,8 @@ static int send_err(const struct cb_data * const d, const uint16_t code)
     default:
         msg = "500 Internal Server Error";
     }
-    warn(ERR, "%s", msg);
-
-    q_write_str(d->w, d->s, msg, strlen(msg), true);
-    return 0;
+    q_close(d->c, 0x0003, msg);
+    return code;
 }
 
 
@@ -279,41 +277,39 @@ int main(int argc, char * argv[])
                 .enable_spinbit = true,
             });
 
-        while (1) {
-            // do we need to handle a request?
-            struct cb_data d = {.c = c, .w = w, .dir = dir_fd};
-            http_parser parser = {.data = &d};
+        // do we need to handle a request?
+        struct cb_data d = {.c = c, .w = w, .dir = dir_fd};
+        http_parser parser = {.data = &d};
 
-            http_parser_init(&parser, HTTP_REQUEST);
-            struct w_iov_sq q = w_iov_sq_initializer(q);
-            struct q_stream * s = q_read(c, &q, false);
+        http_parser_init(&parser, HTTP_REQUEST);
+        struct w_iov_sq q = w_iov_sq_initializer(q);
+        struct q_stream * s = q_read(c, &q, false);
 
-            if (sq_empty(&q))
+        if (sq_empty(&q))
+            break;
+
+        d.s = s;
+        struct w_iov * v = 0;
+        sq_foreach (v, &q, next) {
+            const size_t parsed =
+                http_parser_execute(&parser, &settings, (char *)v->buf, v->len);
+            if (parsed != v->len) {
+                warn(ERR, "HTTP parser error: %.*s", (int)(v->len - parsed),
+                     &v->buf[parsed]);
+                // XXX the strnlen() test is super-hacky
+                if (strnlen((char *)v->buf, v->len) == v->len)
+                    send_err(&d, 400);
+                else
+                    send_err(&d, 505);
+                ret = 1;
                 break;
-
-            d.s = s;
-            struct w_iov * v = 0;
-            sq_foreach (v, &q, next) {
-                const size_t parsed = http_parser_execute(
-                    &parser, &settings, (char *)v->buf, v->len);
-                if (parsed != v->len) {
-                    warn(ERR, "HTTP parser error: %.*s", (int)(v->len - parsed),
-                         &v->buf[parsed]);
-                    // XXX the strnlen() test is super-hacky
-                    if (strnlen((char *)v->buf, v->len) == v->len)
-                        send_err(&d, 400);
-                    else
-                        send_err(&d, 505);
-                    ret = 1;
-                    break;
-                }
-                if (q_peer_has_closed_stream(s)) {
-                    q_close_stream(s);
-                    break;
-                }
             }
-            q_free(&q);
+            if (q_peer_has_closed_stream(s)) {
+                q_close_stream(s);
+                break;
+            }
         }
+        q_free(&q);
     }
 
     q_cleanup(w);

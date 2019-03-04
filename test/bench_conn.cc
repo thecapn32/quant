@@ -131,7 +131,7 @@ int main(int argc __attribute__((unused)), char ** argv)
     benchmark::RunSpecifiedBenchmarks();
 
     // close connections
-    q_close(cc);
-    q_close(sc);
+    q_close(cc, 0, nullptr);
+    q_close(sc, 0, nullptr);
     q_cleanup(w);
 }
