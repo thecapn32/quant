@@ -91,6 +91,9 @@ static int send_err(const struct cb_data * const d, const uint16_t code)
 {
     const char * msg;
     switch (code) {
+    case 400:
+        msg = "400 Bad Request";
+        break;
     case 403:
         msg = "403 Forbidden";
         break;
@@ -296,7 +299,11 @@ int main(int argc, char * argv[])
                 if (parsed != v->len) {
                     warn(ERR, "HTTP parser error: %.*s", (int)(v->len - parsed),
                          &v->buf[parsed]);
-                    send_err(&d, 505);
+                    // XXX the strnlen() test is super-hacky
+                    if (strnlen((char *)v->buf, v->len) == v->len)
+                        send_err(&d, 400);
+                    else
+                        send_err(&d, 505);
                     ret = 1;
                     break;
                 }
