@@ -438,9 +438,10 @@ bool enc_pkt(struct q_stream * const s,
 
     // sanity check
     if (unlikely(meta(v).hdr.hdr_len >=
-                 DATA_OFFSET + (is_lh(meta(v).hdr.flags) ? c->tok_len : 0))) {
+                 DATA_OFFSET +
+                     (is_lh(meta(v).hdr.flags) ? c->tok_len + 16 : 0))) {
         warn(ERR, "pkt header %u >= offset %u", meta(v).hdr.hdr_len,
-             DATA_OFFSET + (is_lh(meta(v).hdr.flags) ? c->tok_len : 0));
+             DATA_OFFSET + (is_lh(meta(v).hdr.flags) ? c->tok_len + 16 : 0));
         return false;
     }
 
