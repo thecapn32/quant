@@ -640,7 +640,10 @@ dec_max_stream_data_frame(struct q_conn * const c,
 
     if (max > s->out_data_max) {
         s->out_data_max = max;
-        s->blocked = false;
+        if (s->blocked) {
+            s->blocked = false;
+            c->needs_tx = true;
+        }
         need_ctrl_update(s);
     } else if (max < s->out_data_max)
         warn(NTE, "MAX_STREAM_DATA %" PRIu64 " < current value %" PRIu64, max,
