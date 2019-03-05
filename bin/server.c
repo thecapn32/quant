@@ -87,12 +87,15 @@ struct cb_data {
 };
 
 
-static int send_err(const struct cb_data * const d, const uint16_t code)
+static bool send_err(const struct cb_data * const d, const uint16_t code)
 {
     const char * msg;
+    bool close = false;
+
     switch (code) {
     case 400:
         msg = "400 Bad Request";
+        close = true;
         break;
     case 403:
         msg = "403 Forbidden";
@@ -102,12 +105,17 @@ static int send_err(const struct cb_data * const d, const uint16_t code)
         break;
     case 505:
         msg = "505 HTTP Version Not Supported";
+        close = true;
         break;
     default:
         msg = "500 Internal Server Error";
     }
-    q_close(d->c, 0x0003, msg);
-    return code;
+
+    if (close)
+        q_close(d->c, 0x0003, msg);
+    else
+        q_write_str(d->w, d->s, msg, strlen(msg), true);
+    return close;
 }
 
 
@@ -277,39 +285,49 @@ int main(int argc, char * argv[])
                 .enable_spinbit = true,
             });
 
-        // do we need to handle a request?
-        struct cb_data d = {.c = c, .w = w, .dir = dir_fd};
-        http_parser parser = {.data = &d};
+        while (1) {
+            // do we need to handle a request?
+            struct cb_data d = {.c = c, .w = w, .dir = dir_fd};
+            http_parser parser = {.data = &d};
 
-        http_parser_init(&parser, HTTP_REQUEST);
-        struct w_iov_sq q = w_iov_sq_initializer(q);
-        struct q_stream * s = q_read(c, &q, false);
+            http_parser_init(&parser, HTTP_REQUEST);
+            struct w_iov_sq q = w_iov_sq_initializer(q);
+            struct q_stream * s = q_read(c, &q, false);
 
-        if (sq_empty(&q))
-            break;
-
-        d.s = s;
-        struct w_iov * v = 0;
-        sq_foreach (v, &q, next) {
-            const size_t parsed =
-                http_parser_execute(&parser, &settings, (char *)v->buf, v->len);
-            if (parsed != v->len) {
-                warn(ERR, "HTTP parser error: %.*s", (int)(v->len - parsed),
-                     &v->buf[parsed]);
-                // XXX the strnlen() test is super-hacky
-                if (strnlen((char *)v->buf, v->len) == v->len)
-                    send_err(&d, 400);
-                else
-                    send_err(&d, 505);
-                ret = 1;
+            if (sq_empty(&q))
+                // no more streams with pending reqs, try next conn
                 break;
+
+            if (q_is_uni_stream(s)) {
+                warn(NTE, "can't serve request on uni stream");
+
+            } else {
+                d.s = s;
+                struct w_iov * v = 0;
+                sq_foreach (v, &q, next) {
+                    const size_t parsed = http_parser_execute(
+                        &parser, &settings, (char *)v->buf, v->len);
+                    if (parsed != v->len) {
+                        warn(ERR, "HTTP parser error: %.*s",
+                             (int)(v->len - parsed), &v->buf[parsed]);
+                        // XXX the strnlen() test is super-hacky
+                        if (strnlen((char *)v->buf, v->len) == v->len)
+                            send_err(&d, 400);
+                        else
+                            send_err(&d, 505);
+                        ret = 1;
+                        q_free(&q);
+                        goto err;
+                    }
+                    if (q_peer_has_closed_stream(s)) {
+                        q_close_stream(s);
+                        break;
+                    }
+                }
             }
-            if (q_peer_has_closed_stream(s)) {
-                q_close_stream(s);
-                break;
-            }
+            q_free(&q);
         }
-        q_free(&q);
+    err:;
     }
 
     q_cleanup(w);
