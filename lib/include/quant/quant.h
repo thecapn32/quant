@@ -140,6 +140,9 @@ extern struct q_conn * q_rx_ready(const uint64_t timeout);
 extern bool __attribute__((nonnull))
 q_is_new_serv_conn(const struct q_conn * const c);
 
+extern bool __attribute__((nonnull))
+q_is_uni_stream(const struct q_stream * const s);
+
 
 #define bps(bytes, secs)                                                       \
     __extension__({                                                            \

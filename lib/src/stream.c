@@ -268,3 +268,9 @@ void concat_out(struct q_stream * const s, struct w_iov_sq * const q)
 
     sq_concat(&s->out, q);
 }
+
+
+bool q_is_uni_stream(const struct q_stream * const s)
+{
+    return is_uni(s->id);
+}
