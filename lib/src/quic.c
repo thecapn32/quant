@@ -637,9 +637,9 @@ void q_close(struct q_conn * const c,
              const char * const reason)
 {
     if (c->scid)
-        warn(WRN, "closing %s conn %s on port %u w/err %s0x%04x (%s)" NRM,
+        warn(WRN, "closing %s conn %s on port %u w/err %s0x%04x%s%s%s" NRM,
              conn_type(c), cid2str(c->scid), ntohs(c->sport), code ? RED : NRM,
-             code, reason);
+             code, reason ? " (" : "", reason ? reason : "", reason ? ")" : "");
 
     c->err_code = code;
     if (reason) {
