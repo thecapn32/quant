@@ -79,7 +79,6 @@ function test_server {
         # run quant client and produce a pure ASCII log for post-processing
         local cache="/tmp/$script.$1.$pid.cache"
         local opts="-i $iface -t6 -v5 -s $cache"
-        local sed_pattern='s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]//g'
         local log_base="/tmp/$script.$1.$pid"
 
         IFS=':' read -ra info <<< "${servers[$1]}"
@@ -87,31 +86,31 @@ function test_server {
 
         # initial 1rtt run
         bin/client $opts ${info[1]} \
-                "https://${info[0]}:${info[2]}${info[5]}" 2>&1 | \
-                $sed -r "$sed_pattern" > "$log_base.1rtt.log"
+                "https://${info[0]}:${info[2]}${info[5]}" \
+                > "$log_base.1rtt.log" 2>&1
 
         # consecutive rsmt/0rtt run
         bin/client $opts ${info[1]} \
-                "https://${info[0]}:${info[2]}${info[5]}" 2>&1 | \
-                $sed -r "$sed_pattern" > "$log_base.0rtt.log"
+                "https://${info[0]}:${info[2]}${info[5]}" \
+                > "$log_base.0rtt.log" 2>&1
         rm -f "$cache"
 
         # rtry run
         bin/client $opts ${info[1]} \
-                "https://${info[0]}:${info[3]}${info[5]}" 2>&1 | \
-                $sed -r "$sed_pattern" > "$log_base.rtry.log"
+                "https://${info[0]}:${info[3]}${info[5]}" \
+                > "$log_base.rtry.log" 2>&1
         rm -f "$cache"
 
         # key update run
         bin/client $opts ${info[1]} -u \
-                "https://${info[0]}:${info[2]}${info[5]}" 2>&1 | \
-                $sed -r "$sed_pattern" > "$log_base.kyph.log"
+                "https://${info[0]}:${info[2]}${info[5]}" \
+                > "$log_base.kyph.log" 2>&1
         rm -f "$cache"
 
         # h3 run
         bin/client $opts ${info[1]} -3 \
-                "https://${info[0]}:${info[4]}${info[5]}" 2>&1 | \
-                $sed -r "$sed_pattern" > "$log_base.h3.log"
+                "https://${info[0]}:${info[4]}${info[5]}" \
+                > "$log_base.h3.log" 2>&1
         rm -f "$cache"
 
         printf "%s " "$s"
@@ -134,11 +133,13 @@ function check_fail {
 
 
 function analyze {
+        local sed_pattern='s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]//g'
+
         # analyze 1rtt
         local log="/tmp/$script.$1.$pid.1rtt.log"
         check_fail "$1" "$log"
 
-        perl -n -e '/RX.*len=/ && exit 1;' "$log"
+        $sed -r "$sed_pattern" "$log" | perl -n -e '/RX.*len=/ && exit 1;'
         [ $? == 1 ] && live[$1]="*"
 
         perl -n -e 'BEGIN{$v=-1};
@@ -152,19 +153,22 @@ function analyze {
                 vneg[$1]=v
         fi
 
-        perl -n -e '/TX.*Short kyph/ and $x=1;
-                    /RX.*len=.*Short/ && $x && exit 1;' "$log"
+        $sed -r "$sed_pattern" "$log" | \
+                perl -n -e '/TX.*Short kyph/ and $x=1;
+                    /RX.*len=.*Short/ && $x && exit 1;'
         [ $? == 1 ] && hshk[$1]=H
 
-        perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $t=1 : next);
-                    $t && /CLOSE.*err=0x0000/ && exit 1;' "$log"
+        $sed -r "$sed_pattern" "$log" | \
+                perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $t=1 : next);
+                    $t && /CLOSE.*err=0x0000/ && exit 1;'
         [ $? == 1 ] && data[$1]=D
 
-        perl -n -e 'BEGIN{$t=-1};
+        $sed -r "$sed_pattern" "$log" | \
+                perl -n -e 'BEGIN{$t=-1};
                     /TX.*len=/ and $t=1;
                     /RX.*len=/ and $t=0;
                     /CLOSE.*err=0x0000/ && ($t==1 ? $tc=1 : $rc=1);
-                    END{exit $tc+$rc};' "$log"
+                    END{exit $tc+$rc};'
         local ret=$?
         if [ $ret == 2 ]; then
                 clse[$1]=C
@@ -172,8 +176,9 @@ function analyze {
                 clse[$1]=C #c
         fi
 
-        perl -n -e '/dec_new_cid_frame.*NEW_CONNECTION_ID|preferred_address.*cid=1:/ and $n=1;
-                    /migration to dcid/ && $n && exit 1;' "$log"
+        $sed -r "$sed_pattern" "$log" | \
+                perl -n -e '/dec_new_cid_frame.*NEW_CONNECTION_ID|preferred_address.*cid=1:/ and $n=1;
+                    /migration to dcid/ && $n && exit 1;'
         [ $? == 1 ] && migr[$1]=M
         [ ${fail[$1]} ] || rm -f "$log"
 
@@ -181,12 +186,14 @@ function analyze {
         local log="/tmp/$script.$1.$pid.0rtt.log"
         check_fail "$1" "$log"
 
-        perl -n -e '/new 0-RTT clnt conn/ and $x=1;
-                    $x && /CLOSE.*err=0x0000/ && exit 1;' "$log"
+        $sed -r "$sed_pattern" "$log" | \
+                perl -n -e '/new 0-RTT clnt conn/ and $x=1;
+                    $x && /CLOSE.*err=0x0000/ && exit 1;'
         [ $? == 1 ] && rsmt[$1]=R
 
-        perl -n -e '/connected after 0-RTT/ and $x=1;
-                    $x && /CLOSE.*err=0x0000/ && exit 1;' "$log"
+        $sed -r "$sed_pattern" "$log" | \
+                perl -n -e '/connected after 0-RTT/ and $x=1;
+                    $x && /CLOSE.*err=0x0000/ && exit 1;'
         [ $? == 1 ] && zrtt[$1]=Z
         [ ${fail[$1]} ] || rm -f "$log"
 
@@ -194,8 +201,9 @@ function analyze {
         local log="/tmp/$script.$1.$pid.rtry.log"
         check_fail "$1" "$log"
 
-        perl -n -e '/RX.*len=.*Retry/ and $x=1;
-                   $x && /CLOSE.*err=0x0000/ && exit 1;' "$log"
+        $sed -r "$sed_pattern" "$log" | \
+                perl -n -e '/RX.*len=.*Retry/ and $x=1;
+                   $x && /CLOSE.*err=0x0000/ && exit 1;'
         [ $? == 1 ] && rtry[$1]=S
         [ ${fail[$1]} ] || rm -f "$log"
 
@@ -203,8 +211,9 @@ function analyze {
         local log="/tmp/$script.$1.$pid.kyph.log"
         check_fail "$1" "$log"
 
-        perl -n -e '/TX.*Short kyph=1/ and $x=1;
-                   $x && /RX.*Short kyph=1/ && exit 1;' "$log"
+        $sed -r "$sed_pattern" "$log" | \
+                perl -n -e '/TX.*Short kyph=1/ and $x=1;
+                   $x && /RX.*Short kyph=1/ && exit 1;'
         [ $? == 1 ] && kyph[$1]=U
         [ ${fail[$1]} ] || rm -f "$log"
 
@@ -212,9 +221,10 @@ function analyze {
         local log="/tmp/$script.$1.$pid.h3.log"
         check_fail "$1" "$log"
 
-        perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $t=1 : next);
+        $sed -r "$sed_pattern" "$log" | \
+                perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $t=1 : next);
                     /no h3 payload/ and $t=0;
-                    $t && /CLOSE.*err=0x0000/ && exit 1;' "$log"
+                    $t && /CLOSE.*err=0x0000/ && exit 1;'
         [ $? == 1 ] && http[$1]=3
         [ ${fail[$1]} ] || rm -f "$log"
 }
