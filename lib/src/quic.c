@@ -548,6 +548,7 @@ struct w_engine * q_init(const char * const ifname,
     // init connection structures
     conns_by_ipnp = kh_init(conns_by_ipnp);
     conns_by_id = kh_init(conns_by_id);
+    conns_by_srt = kh_init(conns_by_srt);
 
     // initialize warpcore on the given interface
     const uint64_t nbufs = conf && conf->num_bufs ? conf->num_bufs : 10000;
@@ -680,6 +681,7 @@ void q_cleanup(struct w_engine * const w)
     // close all connections
     ordered_close(conns_by_id);
     ordered_close(conns_by_ipnp);
+    ordered_close(conns_by_srt);
 
     // stop the event loop
     ev_loop_destroy(loop);
@@ -704,6 +706,7 @@ void q_cleanup(struct w_engine * const w)
 
     kh_destroy(conns_by_id, conns_by_id);
     kh_destroy(conns_by_ipnp, conns_by_ipnp);
+    kh_destroy(conns_by_srt, conns_by_srt);
 
     free(pkt_meta);
     w_cleanup(w);

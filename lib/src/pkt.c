@@ -786,6 +786,27 @@ which_cipher_ctx_in(const struct q_conn * const c, const uint8_t flags)
 }
 
 
+struct q_conn * is_srt(const struct w_iov * const xv,
+                       const struct w_iov * const v)
+{
+    if ((meta(v).hdr.flags & LH) != HEAD_FIXD || xv->len < 23 + SRT_LEN)
+        return 0;
+
+    uint8_t * const srt = &xv->buf[xv->len - SRT_LEN];
+    struct q_conn * const c = get_conn_by_srt(srt);
+
+    if (c && c->state != conn_drng) {
+        meta(v).is_reset = true;
+        warn(DBG, "stateless reset for %s conn %s", conn_type(c),
+             cid2str(c->scid));
+        conn_to_state(c, conn_drng);
+        enter_closing(c);
+        return c;
+    }
+    return 0;
+}
+
+
 bool dec_pkt_hdr_remainder(struct w_iov * const xv,
                            struct w_iov * const v,
                            struct q_conn * const c,
@@ -803,7 +824,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
 
     // we can now undo the packet protection
     if (unlikely(undo_hp(xv, v, c, ctx) == false))
-        goto check_if_reset;
+        return is_srt(xv, v);
 
     // we can now try and decrypt the packet
     if (likely(is_lh(meta(v).hdr.flags) == false) &&
@@ -818,7 +839,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
 
     ctx = which_cipher_ctx_in(c, meta(v).hdr.flags);
     if (unlikely(ctx->aead == 0))
-        goto check_if_reset;
+        return is_srt(xv, v);
 
     const uint16_t pkt_len = is_lh(meta(v).hdr.flags)
                                  ? meta(v).hdr.hdr_len + meta(v).hdr.len -
@@ -826,20 +847,8 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
                                  : xv->len;
     const uint16_t ret = dec_aead(xv, v, pkt_len, ctx);
 
-    if (unlikely(ret == 0)) {
-    check_if_reset:
-        // AEAD failed; this might be a stateless reset
-        if ((meta(v).hdr.flags & LH) == HEAD_FIXD &&
-            xv->len >= 23 + sizeof(c->dcid->srt) &&
-            memcmp(&xv->buf[xv->len - sizeof(c->dcid->srt)], c->dcid->srt,
-                   sizeof(c->dcid->srt)) == 0) {
-            if (c->state != conn_drng)
-                conn_to_state(c, conn_drng);
-            meta(v).is_reset = true;
-            return true;
-        }
-        return false;
-    }
+    if (unlikely(ret == 0))
+        return is_srt(xv, v);
 
     const uint8_t rsvd_bits =
         meta(v).hdr.flags &
@@ -886,10 +895,8 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
 
     // packet protection verified OK
     struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
-    if (diet_find(&pn->recv_all, meta(v).hdr.nr)) {
-        warn(ERR, "duplicate pkt nr " FMT_PNR_IN ", ignoring", meta(v).hdr.nr);
-        return false;
-    }
+    if (diet_find(&pn->recv_all, meta(v).hdr.nr))
+        return is_srt(xv, v);
 
     diet_insert(&pn->recv, meta(v).hdr.nr, ev_now(loop));
     diet_insert(&pn->recv_all, meta(v).hdr.nr, (ev_tstamp)NAN);

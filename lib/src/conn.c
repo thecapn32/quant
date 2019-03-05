@@ -66,6 +66,7 @@ struct q_conn_sl c_ready = sl_head_initializer(c_ready);
 
 khash_t(conns_by_ipnp) * conns_by_ipnp;
 khash_t(conns_by_id) * conns_by_id;
+khash_t(conns_by_srt) * conns_by_srt;
 
 
 static inline int __attribute__((nonnull))
@@ -165,6 +166,15 @@ get_conn_by_cid(struct cid * const scid)
     if (unlikely(k == kh_end(conns_by_id)))
         return 0;
     return kh_val(conns_by_id, k);
+}
+
+
+struct q_conn * get_conn_by_srt(uint8_t * const srt)
+{
+    const khiter_t k = kh_get(conns_by_srt, conns_by_srt, srt);
+    if (unlikely(k == kh_end(conns_by_srt)))
+        return 0;
+    return kh_val(conns_by_srt, k);
 }
 
 
@@ -503,6 +513,24 @@ void tx_w(struct ev_loop * const l __attribute__((unused)),
 }
 
 
+void conns_by_srt_ins(struct q_conn * const c, uint8_t * const srt)
+{
+    int ret;
+    const khiter_t k = kh_put(conns_by_srt, conns_by_srt, srt, &ret);
+    ensure(ret >= 1, "inserted");
+    kh_val(conns_by_srt, k) = c;
+}
+
+
+static inline void __attribute__((nonnull))
+conns_by_srt_del(uint8_t * const srt)
+{
+    const khiter_t k = kh_get(conns_by_srt, conns_by_srt, srt);
+    ensure(k != kh_end(conns_by_srt), "found");
+    kh_del(conns_by_srt, conns_by_srt, k);
+}
+
+
 static inline void __attribute__((nonnull))
 conns_by_id_ins(struct q_conn * const c, struct cid * const id)
 {
@@ -567,15 +595,18 @@ void add_dcid(struct q_conn * const c, const struct cid * const id)
         dcid = calloc(1, sizeof(*dcid));
         ensure(dcid, "could not calloc");
         cid_cpy(dcid, id);
-        ensure(splay_insert(cids_by_seq, &c->dcids_by_seq, dcid) == 0,
-               "inserted");
+        static const uint8_t zero_srt[SRT_LEN] = {0};
+        if (memcmp(dcid->srt, zero_srt, SRT_LEN) != 0)
+            conns_by_srt_ins(c, dcid->srt);
         if (c->dcid == 0)
             c->dcid = dcid;
     } else {
         warn(NTE, "hshk switch to dcid %s for %s conn (was %s)", cid2str(id),
              conn_type(c), cid2str(c->dcid));
+        ensure(splay_remove(cids_by_seq, &c->dcids_by_seq, dcid), "removed");
         cid_cpy(dcid, id);
     }
+    ensure(splay_insert(cids_by_seq, &c->dcids_by_seq, dcid) == 0, "inserted");
 }
 
 
@@ -708,12 +739,6 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 
     log_pkt("RX", v, (struct sockaddr *)&v->addr, odcid, tok, tok_len);
     c->in_data += meta(v).udp_len;
-
-    if (unlikely(meta(v).is_reset)) {
-        warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
-             hex2str(c->dcid->srt, sizeof(c->dcid->srt)));
-        goto done;
-    }
 
     switch (c->state) {
     case conn_idle:
@@ -1051,9 +1076,6 @@ rx_pkts(struct w_iov_sq * const x,
         }
 
         if (c == 0) {
-            warn(INF, "cannot find conn %s for %u-byte %s pkt",
-                 cid2str(&meta(v).hdr.dcid), v->len,
-                 pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
 #ifndef FUZZING
             // if this is a 0-RTT pkt, track it (may be reordered)
             if (meta(v).hdr.type == LH_0RTT) {
@@ -1072,9 +1094,16 @@ rx_pkts(struct w_iov_sq * const x,
             }
 #endif
             log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok, tok_len);
-            warn(INF, "ignoring unexpected %s pkt for conn %s",
-                 pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers),
-                 cid2str(&meta(v).hdr.dcid));
+
+            if (is_srt(xv, v)) {
+                warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
+                     hex2str(&xv->buf[xv->len - SRT_LEN], SRT_LEN));
+                goto next;
+            }
+
+            warn(INF, "cannot find conn %s for %u-byte %s pkt, ignoring",
+                 cid2str(&meta(v).hdr.dcid), v->len,
+                 pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
             goto drop;
         }
 
@@ -1095,12 +1124,16 @@ rx_pkts(struct w_iov_sq * const x,
                 v->len = xv->len;
                 log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
                         tok_len);
-                warn(ERR, "%s %u-byte %s pkt, ignoring",
-                     pkt_ok_for_epoch(meta(v).hdr.flags, epoch_in(c))
-                         ? "crypto fail on"
-                         : "rx invalid",
-                     v->len,
-                     pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
+                if (meta(v).is_reset)
+                    warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
+                         hex2str(&xv->buf[xv->len - SRT_LEN], SRT_LEN));
+                else
+                    warn(ERR, "%s %u-byte %s pkt, ignoring",
+                         pkt_ok_for_epoch(meta(v).hdr.flags, epoch_in(c))
+                             ? "crypto fail on"
+                             : "rx invalid",
+                         v->len,
+                         pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
                 goto drop;
             }
 
@@ -1402,8 +1435,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     if (c->is_clnt) {
         struct cid ndcid = {.len =
                                 8 + (uint8_t)w_rand_uniform(MAX_CID_LEN - 7)};
-        ptls_openssl_random_bytes(ndcid.id,
-                                  sizeof(ndcid.id) + sizeof(ndcid.srt));
+        ptls_openssl_random_bytes(ndcid.id, sizeof(ndcid.id));
         cid_cpy(&c->odcid, &ndcid);
         add_dcid(c, &ndcid);
     } else if (dcid)
@@ -1529,6 +1561,9 @@ void free_scid(struct q_conn * const c, struct cid * const id)
 
 void free_dcid(struct q_conn * const c, struct cid * const id)
 {
+    static const uint8_t zero_srt[SRT_LEN] = {0};
+    if (memcmp(id->srt, zero_srt, SRT_LEN) != 0)
+        conns_by_srt_del(id->srt);
     ensure(splay_remove(cids_by_seq, &c->dcids_by_seq, id), "removed");
     free(id);
 }

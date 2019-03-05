@@ -86,8 +86,26 @@ kh_cid_cmp(const struct cid * const a, const struct cid * const b)
 KHASH_INIT(conns_by_id, struct cid *, struct q_conn *, 1, hash_cid, kh_cid_cmp)
 
 
+static inline khint_t __attribute__((always_inline, nonnull))
+hash_srt(const uint8_t * const srt)
+{
+    return fnv1a_32(srt, SRT_LEN);
+}
+
+
+static inline int __attribute__((always_inline, nonnull))
+kh_srt_cmp(const uint8_t * const a, const uint8_t * const b)
+{
+    return memcmp(a, b, SRT_LEN) == 0;
+}
+
+
+KHASH_INIT(conns_by_srt, uint8_t *, struct q_conn *, 1, hash_srt, kh_srt_cmp)
+
+
 extern khash_t(conns_by_ipnp) * conns_by_ipnp;
 extern khash_t(conns_by_id) * conns_by_id;
+extern khash_t(conns_by_srt) * conns_by_srt;
 
 
 struct pref_addr {
@@ -318,6 +336,13 @@ free_dcid(struct q_conn * const c, struct cid * const id);
 
 extern void __attribute__((nonnull(1)))
 update_conn_conf(struct q_conn * const c, const struct q_conn_conf * const cc);
+
+extern struct q_conn * __attribute__((nonnull))
+get_conn_by_srt(uint8_t * const srt);
+
+extern void __attribute__((nonnull))
+conns_by_srt_ins(struct q_conn * const c, uint8_t * const srt);
+
 
 #ifdef FUZZING
 extern void __attribute__((nonnull)) rx_pkts(struct w_iov_sq * const x,
