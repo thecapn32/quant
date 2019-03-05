@@ -58,8 +58,8 @@
     })
 
 
-KHASH_MAP_INIT_INT64(streams_by_id, struct q_stream *) // NOLINT
-KHASH_MAP_INIT_INT64(conns_by_ipnp, struct q_conn *)   // NOLINT
+KHASH_MAP_INIT_INT64(streams_by_id, struct q_stream *)
+KHASH_MAP_INIT_INT64(conns_by_ipnp, struct q_conn *)
 
 
 static inline khint_t __attribute__((always_inline, nonnull))
@@ -75,6 +75,7 @@ cid_cmp(const struct cid * const a, const struct cid * const b)
     return memcmp(&a->len, &b->len, MIN(a->len, b->len) + sizeof(a->len));
 }
 
+
 static inline int __attribute__((always_inline, nonnull))
 kh_cid_cmp(const struct cid * const a, const struct cid * const b)
 {
@@ -82,12 +83,7 @@ kh_cid_cmp(const struct cid * const a, const struct cid * const b)
 }
 
 
-KHASH_INIT(conns_by_id, // NOLINT
-           struct cid *,
-           struct q_conn *,
-           1,
-           hash_cid,
-           kh_cid_cmp)
+KHASH_INIT(conns_by_id, struct cid *, struct q_conn *, 1, hash_cid, kh_cid_cmp)
 
 
 extern khash_t(conns_by_ipnp) * conns_by_ipnp;
@@ -142,12 +138,7 @@ extern const char * const conn_state_str[];
 
 splay_head(cids_by_seq, cid);
 
-KHASH_INIT(cids_by_id, // NOLINT
-           struct cid *,
-           struct cid *,
-           1,
-           hash_cid,
-           kh_cid_cmp)
+KHASH_INIT(cids_by_id, struct cid *, struct cid *, 1, hash_cid, kh_cid_cmp)
 
 
 /// A QUIC connection.
@@ -348,10 +339,6 @@ pn_for_epoch(struct q_conn * const c, const epoch_t e)
     }
     die("unhandled epoch %u", e);
 }
-
-
-extern int __attribute__((nonnull))
-conns_by_ipnp_cmp(const struct q_conn * const a, const struct q_conn * const b);
 
 
 SPLAY_PROTOTYPE(cids_by_seq, cid, node_seq, cids_by_seq_cmp)

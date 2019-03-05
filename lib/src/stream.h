@@ -164,14 +164,6 @@ needs_ctrl(const struct q_stream * const s)
 }
 
 
-static inline int __attribute__((nonnull, always_inline))
-streams_by_id_cmp(const struct q_stream * const a,
-                  const struct q_stream * const b)
-{
-    return (a->id > b->id) - (a->id < b->id);
-}
-
-
 static inline void __attribute__((nonnull, always_inline))
 need_ctrl_update(struct q_stream * const s)
 {

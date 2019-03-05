@@ -40,7 +40,8 @@ struct pkt_meta;
 struct q_conn;
 
 
-KHASH_MAP_INIT_INT64(pm_by_nr, struct pkt_meta *) // NOLINTS
+KHASH_MAP_INIT_INT64(pm_by_nr, struct pkt_meta *)
+
 
 struct pn_space {
     struct diet recv; ///< Received packet numbers still needing to be ACKed.
@@ -84,14 +85,6 @@ struct pn_data_space {
     uint8_t : 6;
     uint8_t _unused[7];
 };
-
-
-// static inline int __attribute__((nonnull, always_inline))
-// pm_by_nr_cmp(const struct pkt_meta * const a, const struct pkt_meta * const
-// b)
-// {
-//     return (a->hdr.nr > b->hdr.nr) - (a->hdr.nr < b->hdr.nr);
-// }
 
 
 extern void __attribute__((nonnull))
