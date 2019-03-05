@@ -16,5 +16,6 @@ COPY --from=0 /2048-master /www
 COPY --from=0 /src/Debug/test/dummy.* /tls/
 RUN apk add --no-cache openssl http-parser libev ethtool
 EXPOSE 4433/UDP
+EXPOSE 4434/UDP
 CMD ["/bin/server", "-i", "eth0", "-d", "/www", \
         "-c", "/tls/dummy.crt", "-k", "/tls/dummy.key"]
