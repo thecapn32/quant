@@ -378,9 +378,10 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
         return true;
     }
 
-    warn(DBG, "TX on %s conn %s strm " FMT_SID " w/%" PRIu64 " pkt%s in queue",
-         conn_type(c), cid2str(c->scid), s->id, sq_len(&s->out),
-         plural(sq_len(&s->out)));
+    // warn(DBG, "TX on %s conn %s strm " FMT_SID " w/%" PRIu64 " pkt%s in
+    // queue",
+    //      conn_type(c), cid2str(c->scid), s->id, sq_len(&s->out),
+    //      plural(sq_len(&s->out)));
 
     uint32_t encoded = 0;
     struct w_iov * v = s->out_una;
