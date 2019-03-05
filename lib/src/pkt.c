@@ -453,8 +453,7 @@ bool enc_pkt(struct q_stream * const s,
 
     if (unlikely(c->state == conn_clsg))
         i = enc_close_frame(c, v, i);
-
-    if (epoch == ep_data || (!c->is_clnt && epoch == ep_0rtt))
+    else if (epoch == ep_data || (!c->is_clnt && epoch == ep_0rtt))
         i = enc_other_frames(c, v, i, meta(v).stream_data_start);
 
     if (unlikely(rtx)) {
