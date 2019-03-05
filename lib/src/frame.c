@@ -858,7 +858,7 @@ dec_new_cid_frame(struct q_conn * const c,
 
     warn(INF,
          FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu64
-                 " len=%u dcid=%s tok=%s%s",
+                 " len=%u dcid=%s srt=%s%s",
          dcid.seq, dcid.len, cid2str(&dcid),
          hex2str(dcid.srt, sizeof(dcid.srt)),
          dup ? " [" RED "dup" NRM "]" : "");
@@ -1557,7 +1557,7 @@ uint16_t enc_new_cid_frame(struct q_conn * const c,
 
     warn(INF,
          FRAM_OUT "NEW_CONNECTION_ID" NRM " seq=%" PRIx64
-                  " len=%u cid=%s tok=%s",
+                  " len=%u cid=%s srt=%s",
          ncid.seq, ncid.len, cid2str(&ncid),
          hex2str(ncid.srt, sizeof(ncid.srt)));
 
