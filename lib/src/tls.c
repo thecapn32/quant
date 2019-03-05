@@ -606,6 +606,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             memcpy(dcid->srt, &buf[i], sizeof(dcid->srt));
             warn(INF, "\tstateless_reset_token = %s",
                  hex2str(dcid->srt, sizeof(dcid->srt)));
+            conns_by_srt_ins(c, dcid->srt);
             i += sizeof(dcid->srt);
             break;
 
@@ -634,9 +635,9 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             memcpy(pa->cid.id, &buf[i], pa->cid.len);
             i += pa->cid.len;
             pa->cid.seq = 1;
+            memcpy(pa->cid.srt, &buf[i], sizeof(pa->cid.srt));
             add_dcid(c, &pa->cid);
 
-            memcpy(pa->cid.srt, &buf[i], sizeof(pa->cid.srt));
             i += sizeof(pa->cid.srt);
 
 #ifndef NDEBUG
