@@ -27,11 +27,13 @@
 
 #include <inttypes.h>
 #include <math.h>
+#include <netdb.h>
 #include <netinet/ip.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/param.h>
+#include <sys/socket.h>
 
 #if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
@@ -824,8 +826,31 @@ dec_path_response_frame(struct q_conn * const c,
 
     warn(INF, FRAM_IN "PATH_RESPONSE" NRM " data=%" PRIx64, c->path_resp_in);
 
-    if (c->path_resp_in == c->path_chlg_out)
+    if (c->path_resp_in != c->path_chlg_out)
+        err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_PRP,
+                         "PATH_RESPONSE %" PRIx64 " != %" PRIx64,
+                         c->path_resp_in, c->path_chlg_out);
+
+    if (c->tx_path_chlg) {
+#ifndef NDEBUG
+        char ip[NI_MAXHOST], port[NI_MAXSERV], migr_ip[NI_MAXHOST],
+            migr_port[NI_MAXSERV];
+        ensure(getnameinfo((struct sockaddr *)&c->peer, sizeof(c->peer), ip,
+                           sizeof(ip), port, sizeof(port),
+                           NI_NUMERICHOST | NI_NUMERICSERV) == 0,
+               "getnameinfo");
+        ensure(getnameinfo((struct sockaddr *)&c->migr_peer,
+                           sizeof(c->migr_peer), migr_ip, sizeof(migr_ip),
+                           migr_port, sizeof(migr_port),
+                           NI_NUMERICHOST | NI_NUMERICSERV) == 0,
+               "getnameinfo");
+
+        warn(NTE, "migration from %s:%s to %s:%s complete", ip, port, migr_ip,
+             migr_port);
+#endif
         c->tx_path_chlg = false;
+        c->peer = c->migr_peer;
+    }
 
     return i;
 }

@@ -339,9 +339,8 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
 
     if (likely(c->tp_out.disable_migration == false) &&
         unlikely(c->do_migration == true) && c->scid) {
-        if (c->is_clnt &&
-            // does the peer have a CID for us that they can switch to?
-            splay_count(&c->scids_by_seq) >= 2) {
+        if (splay_count(&c->scids_by_seq) >= 2) {
+            // the peer has a CID for us that they can switch to
             const struct cid * const dcid =
                 splay_max(cids_by_seq, &c->dcids_by_seq);
             // if higher-numbered destination CIDs are available, switch to next
@@ -1064,7 +1063,10 @@ rx_pkts(struct w_iov_sq * const x,
 
             // check if this pkt came from a new source IP and/or port
             if (sockaddr_cmp((struct sockaddr *)&c->peer,
-                             (struct sockaddr *)&v->addr) != 0) {
+                             (struct sockaddr *)&v->addr) != 0 &&
+                (c->tx_path_chlg == false ||
+                 sockaddr_cmp((struct sockaddr *)&c->migr_peer,
+                              (struct sockaddr *)&v->addr) != 0)) {
 #ifndef NDEBUG
                 char ip[NI_MAXHOST], port[NI_MAXSERV];
                 ensure(getnameinfo((struct sockaddr *)&v->addr, sizeof(v->addr),
@@ -1078,6 +1080,7 @@ rx_pkts(struct w_iov_sq * const x,
                     conns_by_ipnp_update(c, (struct sockaddr *)&v->addr);
                 ptls_openssl_random_bytes(&c->path_chlg_out,
                                           sizeof(c->path_chlg_out));
+                c->migr_peer = v->addr;
                 c->tx_path_chlg = true;
             }
         }

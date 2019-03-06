@@ -238,7 +238,8 @@ struct q_conn {
     ev_timer key_flip_alarm;
     ev_timer ack_alarm;
 
-    struct sockaddr_storage peer; ///< Address of our peer.
+    struct sockaddr_storage peer;      ///< Address of our peer.
+    struct sockaddr_storage migr_peer; ///< Peer's desired migration address.
     char * peer_name;
 
     struct q_stream * cstreams[ep_data + 1]; ///< Crypto "streams".
