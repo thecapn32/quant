@@ -183,7 +183,7 @@ cids_by_id_ins(khash_t(cids_by_id) * const cbi, struct cid * const id)
 {
     int ret;
     const khiter_t k = kh_put(cids_by_id, cbi, id, &ret);
-    ensure(ret >= 1, "inserted");
+    ensure(ret >= 1, "inserted returned %d", ret);
     kh_val(cbi, k) = id;
 }
 
@@ -518,7 +518,7 @@ void conns_by_srt_ins(struct q_conn * const c, uint8_t * const srt)
 {
     int ret;
     const khiter_t k = kh_put(conns_by_srt, conns_by_srt, srt, &ret);
-    ensure(ret >= 1, "inserted");
+    ensure(ret >= 1, "inserted returned %d", ret);
     kh_val(conns_by_srt, k) = c;
 }
 
@@ -537,7 +537,7 @@ conns_by_id_ins(struct q_conn * const c, struct cid * const id)
 {
     int ret;
     const khiter_t k = kh_put(conns_by_id, conns_by_id, id, &ret);
-    ensure(ret >= 1, "inserted");
+    ensure(ret >= 1, "inserted returned %d", ret);
     kh_val(conns_by_id, k) = c;
 }
 
@@ -564,6 +564,10 @@ static void __attribute__((nonnull)) update_act_scid(struct q_conn * const c)
     cid_cpy(c->scid, &nscid);
     cids_by_id_ins(c->scids_by_id, c->scid);
     conns_by_id_ins(c, c->scid);
+
+    // we need to keep accepting the client-chosen odcid for 0-RTT pkts
+    cids_by_id_ins(c->scids_by_id, &c->odcid);
+    conns_by_id_ins(c, &c->odcid);
 }
 
 
@@ -619,7 +623,7 @@ conns_by_ipnp_ins(struct q_conn * const c)
         conns_by_ipnp, conns_by_ipnp,
         (khint64_t)conns_by_ipnp_key(c->sport, (struct sockaddr *)&c->peer),
         &ret);
-    ensure(ret >= 1, "inserted");
+    ensure(ret >= 1, "inserted returned %d", ret);
     kh_val(conns_by_ipnp, k) = c;
 }
 
@@ -802,6 +806,8 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         break;
 
     case conn_opng:
+        // this state is currently only in effect on the client
+
         if (meta(v).hdr.vers == 0) {
             // this is a vneg pkt
             meta(v).hdr.nr = UINT64_MAX;
@@ -1047,7 +1053,7 @@ rx_pkts(struct w_iov_sq * const x,
                     goto drop;
                 }
 
-                if (scid->seq < c->scid->seq)
+                if (scid->seq <= c->scid->seq)
                     warn(DBG, "pkt has prev scid %s, accepting", cid2str(scid));
                 else {
                     warn(NTE, "migration to scid %s for %s conn (was %s)",
@@ -1609,6 +1615,12 @@ void free_conn(struct q_conn * const c)
     // remove connection from global lists and free CID splays
     if (c->scid == 0)
         conns_by_ipnp_del(c);
+
+    if (c->is_clnt == false && c->odcid.len) {
+        // TODO: we should stop accepting pkts on the client odcid earlier
+        cids_by_id_del(c->scids_by_id, &c->odcid);
+        conns_by_id_del(&c->odcid);
+    }
 
     while (!splay_empty(&c->scids_by_seq)) {
         struct cid * const id = splay_min(cids_by_seq, &c->scids_by_seq);
