@@ -563,10 +563,6 @@ tx:;
             maybe_flip_keys(c, true);
         if (unlikely(meta(v).hdr.type == LH_HSHK && c->cstreams[ep_init]))
             abandon_pn(c, ep_init);
-    } else if (unlikely(meta(v).hdr.type == LH_HSHK && c->cstreams[ep_init])) {
-        // server can assume path is validated
-        warn(DBG, "clnt path validated");
-        c->path_val_win = UINT64_MAX;
     }
 
     return true;
@@ -889,8 +885,13 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
     v->len = xv->len - AEAD_LEN;
 
     if (!c->is_clnt &&
-        unlikely(meta(v).hdr.type == LH_HSHK && c->cstreams[ep_init]))
+        unlikely(meta(v).hdr.type == LH_HSHK && c->cstreams[ep_init])) {
         abandon_pn(c, ep_init);
+
+        // server can assume path is validated
+        warn(DBG, "clnt path validated");
+        c->path_val_win = UINT64_MAX;
+    }
 
     // packet protection verified OK
     struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
