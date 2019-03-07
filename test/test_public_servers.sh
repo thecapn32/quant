@@ -191,7 +191,7 @@ function analyze {
         $sed -r "$sed_pattern" "$log" | \
                 perl -n -e '/TX.*spin=1/ and $n=1;
                     $n && /RX.*spin=1/ && exit 1;'
-        [ $? == 1 ] && spin[$1]=I
+        [ $? == 1 ] && spin[$1]=P
         [ ${fail[$1]} ] || rm -f "$log"
 
         # analyze rsmt and 0rtt
