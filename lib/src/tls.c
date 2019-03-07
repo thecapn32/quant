@@ -43,15 +43,13 @@
 #include <netdb.h>
 #endif
 
-#ifdef PTLS_OPENSSL
+// IWYU pragma: no_include <picotls/../picotls.h>
+
+#include <khash.h>
 #include <openssl/evp.h>
 #include <openssl/ossl_typ.h>
 #include <openssl/pem.h>
 #include <picotls/openssl.h>
-#endif
-
-#include <khash.h>
-#include <picotls/minicrypto.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
@@ -64,13 +62,6 @@
 #include "quic.h"
 #include "stream.h"
 #include "tls.h"
-
-
-#ifdef PTLS_OPENSSL
-#define CIPHER_SUITE ptls_openssl_aes128gcmsha256
-#else
-#define CIPHER_SUITE ptls_minicrypto_aes128gcmsha256
-#endif
 
 
 struct tls_ticket {
@@ -109,10 +100,8 @@ SPLAY_GENERATE(tickets_by_peer, tls_ticket, node, tls_ticket_cmp)
 ptls_context_t tls_ctx = {0};
 static struct tickets_by_peer tickets = {splay_initializer(tickets), {"\0"}};
 
-#ifdef PTLS_OPENSSL
 static ptls_openssl_sign_certificate_t sign_cert = {0};
 static ptls_openssl_verify_certificate_t verifier = {0};
-#endif
 
 // first entry is client default, if not otherwise specified
 static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-18", 5},
@@ -786,7 +775,7 @@ void init_tp(struct q_conn * const c)
 
 static void init_ticket_prot(void)
 {
-    const ptls_cipher_suite_t * const cs = &CIPHER_SUITE;
+    const ptls_cipher_suite_t * const cs = &ptls_openssl_aes128gcmsha256;
     uint8_t output[PTLS_MAX_SECRET_SIZE] = {0};
     memcpy(output, quant_commit_hash,
            MIN(quant_commit_hash_len, sizeof(output)));
@@ -1037,7 +1026,7 @@ void init_prot(struct q_conn * const c)
     const ptls_iovec_t cid = {
         .base = (uint8_t *)(c->is_clnt ? &dcid->id : &scid->id),
         .len = c->is_clnt ? dcid->len : scid->len};
-    ptls_cipher_suite_t * cs = &CIPHER_SUITE;
+    ptls_cipher_suite_t * cs = &ptls_openssl_aes128gcmsha256;
     setup_initial_encryption(&c->pn_init.in, &c->pn_init.out, &cs, cid,
                              c->is_clnt);
 }
@@ -1222,7 +1211,6 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
 void init_tls_ctx(const struct q_conf * const conf)
 {
     if (conf && conf->tls_key) {
-#ifdef PTLS_OPENSSL
         FILE * const fp = fopen(conf->tls_key, "rbe");
         ensure(fp, "could not open key %s", conf->tls_key);
         EVP_PKEY * const pkey = PEM_read_PrivateKey(fp, 0, 0, 0);
@@ -1230,12 +1218,6 @@ void init_tls_ctx(const struct q_conf * const conf)
         ensure(pkey, "failed to load private key");
         ptls_openssl_init_sign_certificate(&sign_cert, pkey);
         EVP_PKEY_free(pkey);
-#else
-        // XXX ptls_minicrypto_load_private_key() only works for ECDSA keys
-        const int ret =
-            ptls_minicrypto_load_private_key(&tls_ctx, conf->tls_key);
-        ensure(ret == 0, "could not open key %s", conf->tls_key);
-#endif
     }
 
     if (conf && conf->tls_cert) {
@@ -1260,44 +1242,26 @@ void init_tls_ctx(const struct q_conf * const conf)
         ensure(tls_log_file, "could not open TLS log %s", conf->tls_log);
     }
 
-#ifdef PTLS_OPENSSL
     ensure(ptls_openssl_init_verify_certificate(&verifier, 0) == 0,
            "ptls_openssl_init_verify_certificate");
-#endif
 
     static ptls_key_exchange_algorithm_t * key_exchanges[] = {
-#ifdef PTLS_OPENSSL
-        &ptls_openssl_secp256r1,
-#endif
-        &ptls_minicrypto_x25519, 0};
+        &ptls_openssl_secp256r1, &ptls_openssl_x25519, 0};
     static ptls_on_client_hello_t on_client_hello = {on_ch};
     static ptls_log_event_t log_event = {log_event_cb};
     static ptls_update_traffic_key_t update_traffic_key = {
         update_traffic_key_cb};
 
-    tls_ctx.cipher_suites =
-#ifdef PTLS_OPENSSL
-        ptls_openssl_cipher_suites;
-#else
-        ptls_minicrypto_cipher_suites;
-#endif
+    tls_ctx.cipher_suites = ptls_openssl_cipher_suites;
     tls_ctx.key_exchanges = key_exchanges;
     tls_ctx.on_client_hello = &on_client_hello;
     tls_ctx.update_traffic_key = &update_traffic_key;
     if (conf && conf->tls_log)
         tls_ctx.log_event = &log_event;
-    tls_ctx.random_bytes =
-#ifdef PTLS_OPENSSL
-        ptls_openssl_random_bytes;
-#else
-        ptls_minicrypto_random_bytes;
-#endif
-
-#ifdef PTLS_OPENSSL
+    tls_ctx.random_bytes = ptls_openssl_random_bytes;
     tls_ctx.sign_certificate = &sign_cert.super;
     if (conf && conf->enable_tls_cert_verify)
         tls_ctx.verify_certificate = &verifier.super;
-#endif
     tls_ctx.get_time = &ptls_get_time;
     tls_ctx.omit_end_of_early_data = true;
 
@@ -1425,7 +1389,7 @@ prep_hash_ctx(const struct q_conn * const c,
 
 void make_rtry_tok(struct q_conn * const c)
 {
-    const ptls_cipher_suite_t * const cs = &CIPHER_SUITE;
+    const ptls_cipher_suite_t * const cs = &ptls_openssl_aes128gcmsha256;
     ptls_hash_context_t * const hc = prep_hash_ctx(c, cs);
 
     // hash current scid
@@ -1444,7 +1408,7 @@ bool verify_rtry_tok(struct q_conn * const c,
                      const uint8_t * const tok,
                      const uint16_t tok_len)
 {
-    const ptls_cipher_suite_t * const cs = &CIPHER_SUITE;
+    const ptls_cipher_suite_t * const cs = &ptls_openssl_aes128gcmsha256;
     ptls_hash_context_t * const hc = prep_hash_ctx(c, cs);
 
     // hash current cid included in token

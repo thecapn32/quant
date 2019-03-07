@@ -43,13 +43,6 @@ endif()
 
 include(GNUInstallDirs)
 
-if(OpenSSL_FOUND)
-  add_definitions(-DPTLS_OPENSSL)
-  set(PTLS_OPENSSL picotls-openssl)
-endif()
-
-message(STATUS ${OPENSSL_LIBRARIES})
-
 add_library(common
   OBJECT
     src/pkt.c src/frame.c src/quic.c src/stream.c src/conn.c src/pn.c
@@ -94,8 +87,7 @@ foreach(TARGET ${TARGETS})
     )
 
     target_link_libraries(${TARGET}
-      m picotls-core ${PTLS_OPENSSL} ${OPENSSL_LIBRARIES}
-      picotls-minicrypto ${LIBEV_LIB})
+      m picotls-core picotls-openssl ${OPENSSL_LIBRARIES} ${LIBEV_LIB})
 
     if(${TARGET} MATCHES ".*quant")
       install(DIRECTORY include/${PROJECT_NAME}

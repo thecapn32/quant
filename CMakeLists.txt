@@ -29,7 +29,7 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
   set(CMAKE_PREFIX_PATH /usr/local/opt/openssl@1.1 /usr/local/opt/openssl)
 endif()
 
-find_package(OpenSSL)
+find_package(OpenSSL REQUIRED)
 string(REGEX REPLACE "/include$" "" OPENSSL_ROOT_DIR ${OPENSSL_INCLUDE_DIR})
 
 if("${CMAKE_SYSTEM}" MATCHES "Linux")
