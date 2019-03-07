@@ -40,17 +40,17 @@ declare -A servers=(
         [ngtcp2]=nghttp2.org::4433:4434:4433:/blog/
         [ngx_quic]=cloudflare-quic.com::443:4434:4433:/index.html
         # [pandora]=pandora.cm.in.tum.de::4433:4434:4433:/index.html
-        [picoquic]=test.privateoctopus.com::4433:4434:4433:/20000
-        [quant]=quant.eggert.org::4433:4434:4433:/20000
+        [picoquic]=test.privateoctopus.com::4433:4434:4433:/40000
+        [quant]=quant.eggert.org::4433:4434:4433:/40000
         # [quic-go]=172.30.197.239::4433:4433:4433:/10000
         [quiche]=quic.tech::4433:4433:4433:/random
         # [quicker]=quicker.edm.uhasselt.be::4433:4434:4433:/index.html
-        [quicly]=kazuhooku.com::4433:4433:8443:/20000.txt
+        [quicly]=kazuhooku.com::4433:4433:8443:/40000.txt
         [quinn]=ralith.com::4433:4434:4433:/100K
         [winquic]=msquic.westus.cloudapp.azure.com::4433:4434:4433:/draft-ietf-quic-http-11.txt
 )
 
-results=(live fail vneg hshk data clse rsmt zrtt rtry migr bind kyph http)
+results=(live fail vneg hshk data clse rsmt zrtt rtry migr bind kyph http spin)
 declare -A ${results[@]}
 
 
@@ -186,6 +186,12 @@ function analyze {
                 perl -n -e '/dec_new_cid_frame.*NEW_CONNECTION_ID|preferred_address.*cid=1:/ and $n=1;
                     /migration to dcid/ && $n && exit 1;'
         [ $? == 1 ] && migr[$1]=M
+
+        # analyze spin
+        $sed -r "$sed_pattern" "$log" | \
+                perl -n -e '/TX.*spin=1/ and $n=1;
+                    $n && /RX.*spin=1/ && exit 1;'
+        [ $? == 1 ] && spin[$1]=I
         [ ${fail[$1]} ] || rm -f "$log"
 
         # analyze rsmt and 0rtt
