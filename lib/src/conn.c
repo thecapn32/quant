@@ -37,6 +37,7 @@
 #include <string.h>
 #include <sys/param.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 
 #define klib_unused
 
@@ -136,23 +137,28 @@ epoch_in(const struct q_conn * const c)
 }
 
 
-static inline uint64_t __attribute__((const, always_inline))
-conns_by_ipnp_key(const uint16_t sport, const struct sockaddr * const dst)
+static inline uint64_t __attribute__((nonnull, always_inline))
+conns_by_ipnp_key(const struct sockaddr * const src,
+                  const struct sockaddr * const dst)
 {
-    const struct sockaddr_in * const addr4 =
+    const struct sockaddr_in * const src4 =
+        (const struct sockaddr_in *)(const void *)src;
+    const struct sockaddr_in * const dst4 =
         (const struct sockaddr_in *)(const void *)dst;
-    const uint16_t dport = addr4->sin_port;
-    const uint32_t dip = addr4->sin_addr.s_addr;
-    return ((uint64_t)dip << sizeof(dip) * 8) |
-           ((uint64_t)sport << sizeof(sport) * 8) | (uint64_t)dport;
+
+    return ((uint64_t)dst4->sin_addr.s_addr
+            << sizeof(dst4->sin_addr.s_addr) * 8) |
+           ((uint64_t)src4->sin_port << sizeof(src4->sin_port) * 8) |
+           (uint64_t)dst4->sin_port;
 }
 
 
 static struct q_conn * __attribute__((nonnull))
-get_conn_by_ipnp(const uint16_t sport, const struct sockaddr * const peer)
+get_conn_by_ipnp(const struct sockaddr * const src,
+                 const struct sockaddr * const dst)
 {
     const khiter_t k = kh_get(conns_by_ipnp, conns_by_ipnp,
-                              (khint64_t)conns_by_ipnp_key(sport, peer));
+                              (khint64_t)conns_by_ipnp_key(src, dst));
     if (unlikely(k == kh_end(conns_by_ipnp)))
         return 0;
     return kh_val(conns_by_ipnp, k);
@@ -618,10 +624,11 @@ static inline void __attribute__((nonnull))
 conns_by_ipnp_ins(struct q_conn * const c)
 {
     int ret;
-    const khiter_t k = kh_put(
-        conns_by_ipnp, conns_by_ipnp,
-        (khint64_t)conns_by_ipnp_key(c->sport, (struct sockaddr *)&c->peer),
-        &ret);
+    const khiter_t k =
+        kh_put(conns_by_ipnp, conns_by_ipnp,
+               (khint64_t)conns_by_ipnp_key(w_get_addr(c->sock, true),
+                                            (struct sockaddr *)&c->peer),
+               &ret);
     ensure(ret >= 1, "inserted returned %d", ret);
     kh_val(conns_by_ipnp, k) = c;
 }
@@ -630,9 +637,10 @@ conns_by_ipnp_ins(struct q_conn * const c)
 static inline void __attribute__((nonnull))
 conns_by_ipnp_del(const struct q_conn * const c)
 {
-    const khiter_t k = kh_get(conns_by_ipnp, conns_by_ipnp,
-                              (khint64_t)conns_by_ipnp_key(
-                                  c->sport, (const struct sockaddr *)&c->peer));
+    const khiter_t k =
+        kh_get(conns_by_ipnp, conns_by_ipnp,
+               (khint64_t)conns_by_ipnp_key(w_get_addr(c->sock, true),
+                                            (const struct sockaddr *)&c->peer));
     ensure(k != kh_end(conns_by_ipnp), "found");
     kh_del(conns_by_ipnp, conns_by_ipnp, k);
 }
@@ -947,7 +955,7 @@ rx_pkts(struct w_iov_sq * const x,
         const bool is_clnt = w_connected(ws);
         struct q_conn * c = 0;
         struct q_conn * const c_ipnp =
-            get_conn_by_ipnp(w_get_sport(ws), (struct sockaddr *)&v->addr);
+            get_conn_by_ipnp(w_get_addr(ws, true), (struct sockaddr *)&v->addr);
         struct cid odcid;
         uint8_t tok[MAX_PKT_LEN];
         uint16_t tok_len = 0;
@@ -1002,6 +1010,10 @@ rx_pkts(struct w_iov_sq * const x,
                     goto drop;
                 }
 
+                const uint16_t sport =
+                    ((const struct sockaddr_in *)(const void *)w_get_addr(ws,
+                                                                          true))
+                        ->sin_port;
 #ifndef NDEBUG
                 char ip[NI_MAXHOST], port[NI_MAXSERV];
                 ensure(getnameinfo((struct sockaddr *)&v->addr, sizeof(v->addr),
@@ -1010,17 +1022,15 @@ rx_pkts(struct w_iov_sq * const x,
                        "getnameinfo");
 
                 warn(NTE, "new serv conn on port %u from %s:%s w/cid=%s",
-                     ntohs(w_get_sport(ws)), ip, port,
-                     cid2str(&meta(v).hdr.dcid));
+                     ntohs(sport), ip, port, cid2str(&meta(v).hdr.dcid));
 #endif
-
                 c = new_conn(w_engine(ws), meta(v).hdr.vers, &meta(v).hdr.scid,
                              &meta(v).hdr.dcid, (struct sockaddr *)&v->addr, 0,
-                             ntohs(w_get_sport(ws)), 0);
+                             sport, 0);
                 init_tls(c, 0);
 
                 // TODO: remove this interop hack eventually
-                if (ntohs(c->sport) == 4434)
+                if (ntohs(sport) == 4434)
                     c->tx_rtry = true;
             }
         }
@@ -1498,14 +1508,14 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->w = w;
     const struct sockaddr_in * const addr4 =
         (const struct sockaddr_in *)(const void *)peer;
-    c->sock = w_get_sock(w, w->ip, htons(port),
+    c->sock = w_get_sock(w, w->ip, port,
                          c->is_clnt && addr4 ? addr4->sin_addr.s_addr : 0,
                          c->is_clnt && addr4 ? addr4->sin_port : 0);
     if (c->sock == 0) {
         // TODO need to update zero checksums in update_conn_conf() somehow
         c->sockopt.enable_udp_zero_checksums =
             cc && cc->enable_udp_zero_checksums;
-        c->rx_w.data = c->sock = w_bind(w, htons(port), &c->sockopt);
+        c->rx_w.data = c->sock = w_bind(w, port, &c->sockopt);
         if (unlikely(c->sock == 0))
             goto fail;
         ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
@@ -1514,7 +1524,6 @@ struct q_conn * new_conn(struct w_engine * const w,
         c->holds_sock = true;
     } else if (unlikely(peer == 0))
         goto fail;
-    c->sport = w_get_sport(c->sock);
 
     if (likely(c->is_clnt || c->holds_sock == false))
         update_conn_conf(c, cc);
@@ -1548,7 +1557,7 @@ struct q_conn * new_conn(struct w_engine * const w,
 
     if (nscid.len)
         warn(DBG, "%s conn %s on port %u created", conn_type(c),
-             cid2str(c->scid), ntohs(c->sport));
+             cid2str(c->scid), ntohs(port));
 
     conn_to_state(c, conn_idle);
     return c;
@@ -1584,11 +1593,6 @@ void free_conn(struct q_conn * const c)
     // exit any active API call on the connection
     maybe_api_return(c, 0);
 
-    if (c->holds_sock) {
-        // only close the socket for the final server connection
-        ev_io_stop(loop, &c->rx_w);
-        w_close(c->sock);
-    }
     ev_timer_stop(loop, &c->rec.ld_alarm);
     ev_timer_stop(loop, &c->closing_alarm);
     ev_timer_stop(loop, &c->key_flip_alarm);
@@ -1636,6 +1640,12 @@ void free_conn(struct q_conn * const c)
     }
 
     kh_destroy(cids_by_id, c->scids_by_id);
+
+    if (c->holds_sock) {
+        // only close the socket for the final server connection
+        ev_io_stop(loop, &c->rx_w);
+        w_close(c->sock);
+    }
 
     if (c->in_c_ready)
         sl_remove(&c_ready, c, q_conn, node_rx_ext);

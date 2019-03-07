@@ -151,7 +151,7 @@ typedef enum { CONN_STATES } conn_state_t;
 extern const char * const conn_state_str[];
 
 #define MAX_TOK_LEN 512
-#define MAX_ERR_REASON_LEN 128 // keep < 256, since err_reason_len is uint8_t
+#define MAX_ERR_REASON_LEN 64 // keep < 256, since err_reason_len is uint8_t
 
 
 splay_head(cids_by_seq, cid);
@@ -199,15 +199,7 @@ struct q_conn {
     uint32_t no_wnd : 1;            ///< TX is stalled by lack of window.
     uint32_t : 6;
 
-    uint16_t sport; ///< Local port (in network byte-order).
-    uint16_t tok_len;
-
     conn_state_t state; ///< State of the connection.
-
-    uint16_t err_code;
-    uint8_t err_frm;
-    uint8_t err_reason_len;
-    char err_reason[MAX_ERR_REASON_LEN];
 
     struct w_engine * w; ///< Underlying warpcore engine.
 
@@ -270,7 +262,14 @@ struct q_conn {
 
     struct w_iov_sq txq;
 
-    uint8_t tok[MAX_TOK_LEN]; // some stacks send ungodly large tokens
+    uint16_t err_code;
+    uint8_t err_frm;
+    uint8_t err_reason_len;
+    char err_reason[MAX_ERR_REASON_LEN];
+
+    uint16_t tok_len;
+    uint8_t tok[MAX_TOK_LEN + 2]; // some stacks send ungodly large tokens
+                                  // XXX +2 for alignment
 };
 
 

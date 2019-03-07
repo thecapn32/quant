@@ -28,6 +28,7 @@
 #include <arpa/inet.h>
 #include <math.h>
 #include <netdb.h>
+#include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -416,7 +417,7 @@ void q_readall_stream(struct q_stream * const s, struct w_iov_sq * const q)
 struct q_conn * q_bind(struct w_engine * const w, const uint16_t port)
 {
     // bind socket and create new embryonic server connection
-    struct q_conn * const c = new_conn(w, 0, 0, 0, 0, 0, port, 0);
+    struct q_conn * const c = new_conn(w, 0, 0, 0, 0, 0, htons(port), 0);
     if (likely(c))
         warn(INF, "bound %s socket to port %u", conn_type(c), port);
     return c;
@@ -639,8 +640,12 @@ void q_close(struct q_conn * const c,
 {
     if (c->scid)
         warn(WRN, "closing %s conn %s on port %u w/err %s0x%04x%s%s%s" NRM,
-             conn_type(c), cid2str(c->scid), ntohs(c->sport), code ? RED : NRM,
-             code, reason ? " (" : "", reason ? reason : "", reason ? ")" : "");
+             conn_type(c), cid2str(c->scid),
+             ntohs(((const struct sockaddr_in *)(const void *)w_get_addr(
+                        c->sock, true))
+                       ->sin_port),
+             code ? RED : NRM, code, reason ? " (" : "", reason ? reason : "",
+             reason ? ")" : "");
 
     c->err_code = code;
     if (reason) {
