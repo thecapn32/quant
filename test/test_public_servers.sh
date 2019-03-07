@@ -31,13 +31,13 @@
 declare -A servers=(
         # [tag]=name:flags:port:retry-port:h3-port:URL
         # [apple]=172.30.197.241::4433:4434:4433:/index.html
-        [ats]=quic.ogre.com::4433:4434:4433:/en/latest/
-        [f5]=208.85.208.226::4433:4433:4433:/file15k
+        [ats]=quic.ogre.com::4433:4434:4433:/en/latest/_static/jquery.js
+        [f5]=208.85.208.226::4433:4433:4433:/file50k
         [lsquic]=http3-test.litespeedtech.com:-3:4433:4434:4433:/
         # [minq]=minq.dev.mozaws.net::4433:4434:4433:/index.html
         # [mozquic]=mozquic.ducksong.com::4433:4434:4433:/index.html
         [mvfst]=fb.mvfst.net::4433:4434:4433:/index.html
-        [ngtcp2]=nghttp2.org::4433:4434:4433:/blog/
+        [ngtcp2]=nghttp2.org::4433:4434:4433:/documentation/
         [ngx_quic]=cloudflare-quic.com::443:4434:4433:/index.html
         # [pandora]=pandora.cm.in.tum.de::4433:4434:4433:/index.html
         [picoquic]=test.privateoctopus.com::4433:4434:4433:/40000
