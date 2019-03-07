@@ -810,7 +810,7 @@ dec_path_challenge_frame(struct q_conn * const c,
     warn(INF, FRAM_IN "PATH_CHALLENGE" NRM " data=%" PRIx64, c->path_chlg_in);
 
     c->path_resp_out = c->path_chlg_in;
-    c->tx_path_resp = true;
+    c->needs_tx = c->tx_path_resp = true;
 
     return i;
 }
@@ -826,12 +826,12 @@ dec_path_response_frame(struct q_conn * const c,
 
     warn(INF, FRAM_IN "PATH_RESPONSE" NRM " data=%" PRIx64, c->path_resp_in);
 
-    if (c->path_resp_in != c->path_chlg_out)
+    if (unlikely(c->path_resp_in != c->path_chlg_out))
         err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_PRP,
                          "PATH_RESPONSE %" PRIx64 " != %" PRIx64,
                          c->path_resp_in, c->path_chlg_out);
 
-    if (c->tx_path_chlg) {
+    if (likely(c->tx_path_chlg)) {
 #ifndef NDEBUG
         char ip[NI_MAXHOST], port[NI_MAXSERV], migr_ip[NI_MAXHOST],
             migr_port[NI_MAXSERV];

@@ -228,7 +228,7 @@ static void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c)
 
 
 #ifndef NDEBUG
-static void log_sent_pkts(struct q_conn * const c)
+static void __attribute__((nonnull)) log_sent_pkts(struct q_conn * const c)
 {
     for (epoch_t e = ep_init; e < ep_data; e++) {
         struct pn_space * const pn = pn_for_epoch(c, e);
@@ -1010,10 +1010,7 @@ rx_pkts(struct w_iov_sq * const x,
                     goto drop;
                 }
 
-                const uint16_t sport =
-                    ((const struct sockaddr_in *)(const void *)w_get_addr(ws,
-                                                                          true))
-                        ->sin_port;
+                const uint16_t sport = get_sport(ws);
 #ifndef NDEBUG
                 char ip[NI_MAXHOST], port[NI_MAXSERV];
                 ensure(getnameinfo((struct sockaddr *)&v->addr, sizeof(v->addr),
@@ -1091,7 +1088,7 @@ rx_pkts(struct w_iov_sq * const x,
                 ptls_openssl_random_bytes(&c->path_chlg_out,
                                           sizeof(c->path_chlg_out));
                 c->migr_peer = v->addr;
-                c->tx_path_chlg = true;
+                c->needs_tx = c->tx_path_chlg = true;
             }
         }
 
@@ -1212,8 +1209,9 @@ rx_pkts(struct w_iov_sq * const x,
 }
 
 
-static void
-rx(struct ev_loop * const l, ev_io * const rx_w, int _e __attribute__((unused)))
+void rx(struct ev_loop * const l,
+        ev_io * const rx_w,
+        int _e __attribute__((unused)))
 {
     // read from NIC
     struct w_sock * const ws = rx_w->data;
@@ -1557,7 +1555,7 @@ struct q_conn * new_conn(struct w_engine * const w,
 
     if (nscid.len)
         warn(DBG, "%s conn %s on port %u created", conn_type(c),
-             cid2str(c->scid), ntohs(port));
+             cid2str(c->scid), ntohs(get_sport(c->sock)));
 
     conn_to_state(c, conn_idle);
     return c;

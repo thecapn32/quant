@@ -51,6 +51,8 @@ struct conn_cache_entry {
     struct sockaddr_in dst;
     struct q_conn * c;
     splay_entry(conn_cache_entry) node;
+    bool rebound;
+    uint8_t _unused[7];
 };
 
 
@@ -66,6 +68,7 @@ static bool do_h3 = false;
 static bool flip_keys = false;
 static bool zlen_cids = false;
 static bool write_files = false;
+static bool rebind = false;
 
 
 static uint32_t __attribute__((nonnull))
@@ -125,6 +128,8 @@ static void __attribute__((noreturn, nonnull)) usage(const char * const name,
         "\t[-b bufs]\tnumber of network buffers to allocate; default %" PRIu64
         "\n",
         num_bufs);
+    printf("\t[-n]\t\tsimulate a NAT rebinding for each URL; default %s\n",
+           rebind ? "true" : "false");
 #ifndef NDEBUG
     printf("\t[-v verbosity]\tverbosity level (0-%d, default %d)\n", DLEVEL,
            util_dlevel);
@@ -216,11 +221,13 @@ get(const char * const url,
     const struct conn_cache_entry which = {
         .dst = *(struct sockaddr_in *)&peer->ai_addr};
     struct conn_cache_entry * cce = splay_find(conn_cache, cc, &which);
+    const bool opened_new = cce == 0;
     if (cce == 0) {
         clock_gettime(CLOCK_MONOTONIC, &se->get_t);
         // no, open a new connection
         struct q_conn * const c =
-            q_connect(w, peer->ai_addr, dest, &req, &se->s, true,
+            q_connect(w, peer->ai_addr, dest, rebind ? 0 : &req,
+                      rebind ? 0 : &se->s, true,
                       &(struct q_conn_conf){.alpn = do_h3 ? "h3-18" : "hq-18",
                                             .idle_timeout = timeout,
                                             .enable_spinbit = true,
@@ -240,7 +247,6 @@ get(const char * const url,
             // XXX lsquic doesn't like a FIN on this stream
             q_write_str(w, ss, (const char *)h3_empty_settings,
                         sizeof(h3_empty_settings), false);
-            // q_close_stream(ss);
         }
 
         cce = calloc(1, sizeof(*cce));
@@ -250,13 +256,18 @@ get(const char * const url,
         // insert into connection cache
         cce->dst = *(struct sockaddr_in *)&peer->ai_addr;
         splay_insert(conn_cache, cc, cce);
+    }
 
-    } else {
+    if (opened_new == false || (rebind && cce->rebound == false)) {
         se->s = q_rsv_stream(cce->c, true);
-        if (se->s == 0)
-            return 0;
-        clock_gettime(CLOCK_MONOTONIC, &se->get_t);
-        q_write(se->s, &req, true);
+        if (se->s) {
+            clock_gettime(CLOCK_MONOTONIC, &se->get_t);
+            q_write(se->s, &req, true);
+            if (rebind && cce->rebound == false) {
+                q_rebind_sock(cce->c);
+                cce->rebound = true; // only rebind once
+            }
+        }
     }
 
     se->c = cce->c;
@@ -302,7 +313,7 @@ int main(int argc, char * argv[])
     bool verify_certs = false;
     int ret = 0;
 
-    while ((ch = getopt(argc, argv, "hi:v:s:t:l:cu3zb:wr:")) != -1) {
+    while ((ch = getopt(argc, argv, "hi:v:s:t:l:cu3zb:wr:n")) != -1) {
         switch (ch) {
         case 'i':
             strncpy(ifname, optarg, sizeof(ifname) - 1);
@@ -336,6 +347,9 @@ int main(int argc, char * argv[])
             break;
         case 'w':
             write_files = true;
+            break;
+        case 'n':
+            rebind = true;
             break;
         case 'v':
 #ifndef NDEBUG

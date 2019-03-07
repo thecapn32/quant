@@ -50,7 +50,7 @@ declare -A servers=(
         [winquic]=msquic.westus.cloudapp.azure.com::4433:4434:4433:/draft-ietf-quic-http-11.txt
 )
 
-results=(live fail vneg hshk data clse rsmt zrtt rtry migr kyph http)
+results=(live fail vneg hshk data clse rsmt zrtt rtry migr bind kyph http)
 declare -A ${results[@]}
 
 
@@ -111,6 +111,12 @@ function test_server {
         bin/client $opts ${info[1]} -3 \
                 "https://${info[0]}:${info[4]}${info[5]}" \
                 > "$log_base.h3.log" 2>&1
+        rm -f "$cache"
+
+        # NAT rebinding run
+        bin/client $opts ${info[1]} -n \
+                "https://${info[0]}:${info[2]}${info[5]}" \
+                > "$log_base.nat.log" 2>&1
         rm -f "$cache"
 
         printf "%s " "$s"
@@ -226,6 +232,19 @@ function analyze {
                     /no h3 payload/ and $t=0;
                     $t && /CLOSE.*err=0x0000/ && exit 1;'
         [ $? == 1 ] && http[$1]=3
+        [ ${fail[$1]} ] || rm -f "$log"
+
+        # analyze NAT rebind
+        local log="/tmp/$script.$1.$pid.nat.log"
+        check_fail "$1" "$log"
+
+        $sed -r "$sed_pattern" "$log" | \
+                perl -n -e '/NAT rebinding/ and $t=1;
+                    /dec_path.*PATH_CHALLENGE/ and $t==1 and $t=2;
+                    /enc_path.*PATH_RESPONSE/ and $t==2 and $t=3;
+                    /read (.*) bytes.*on clnt conn/ and $t==3 and ($1 > 0 ? $t=4 : next);
+                    $t==4 && /CLOSE.*err=0x0000/ && exit 1;'
+        [ $? == 1 ] && bind[$1]=B
         [ ${fail[$1]} ] || rm -f "$log"
 }
 

@@ -28,7 +28,6 @@
 #include <arpa/inet.h>
 #include <math.h>
 #include <netdb.h>
-#include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -179,6 +178,9 @@ struct q_conn * q_connect(struct w_engine * const w,
     // init TLS
     init_tls(c, conn_conf ? conn_conf->alpn : 0);
     init_tp(c);
+
+    // if we have no early data, we're not trying 0-RTT
+    c->try_0rtt &= early_data && early_data_stream;
 
 #ifndef NDEBUG
     char ip[NI_MAXHOST], port[NI_MAXSERV];
@@ -640,10 +642,7 @@ void q_close(struct q_conn * const c,
 {
     if (c->scid)
         warn(WRN, "closing %s conn %s on port %u w/err %s0x%04x%s%s%s" NRM,
-             conn_type(c), cid2str(c->scid),
-             ntohs(((const struct sockaddr_in *)(const void *)w_get_addr(
-                        c->sock, true))
-                       ->sin_port),
+             conn_type(c), cid2str(c->scid), ntohs(get_sport(c->sock)),
              code ? RED : NRM, code, reason ? " (" : "", reason ? reason : "",
              reason ? ")" : "");
 
@@ -793,4 +792,47 @@ struct q_conn * q_rx_ready(const uint64_t timeout)
 bool q_is_new_serv_conn(const struct q_conn * const c)
 {
     return c->needs_accept;
+}
+
+
+void q_rebind_sock(struct q_conn * const c)
+{
+    ensure(c->is_clnt, "can only rebind w_sock on client");
+
+    struct w_sock * const new_sock = w_bind(c->w, 0, &c->sockopt);
+    if (new_sock == 0)
+        // could not open new w_sock, can't rebind
+        return;
+
+#ifndef NDEBUG
+    char old_ip[NI_MAXHOST], old_port[NI_MAXSERV];
+    const struct sockaddr * src = w_get_addr(c->sock, true);
+    ensure(getnameinfo(src, sizeof(*src), old_ip, sizeof(old_ip), old_port,
+                       sizeof(old_port), NI_NUMERICHOST | NI_NUMERICSERV) == 0,
+           "getnameinfo");
+#endif
+
+    // close the current w_sock
+    ev_io_stop(loop, &c->rx_w);
+    w_close(c->sock);
+
+    // switch to new w_sock
+    c->rx_w.data = c->sock = new_sock;
+    ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
+    ev_set_priority(&c->rx_w, EV_MAXPRI);
+    ev_io_start(loop, &c->rx_w);
+    w_connect(c->sock, (struct sockaddr *)&c->peer);
+
+#ifndef NDEBUG
+    char new_ip[NI_MAXHOST], new_port[NI_MAXSERV];
+    src = w_get_addr(c->sock, true);
+    ensure(getnameinfo(src, sizeof(*src), new_ip, sizeof(new_ip), new_port,
+                       sizeof(new_port), NI_NUMERICHOST | NI_NUMERICSERV) == 0,
+           "getnameinfo");
+
+    warn(NTE, "simulated NAT rebinding for %s conn %s from %s:%s to %s:%s",
+         conn_type(c), cid2str(c->scid), old_ip, old_port, new_ip, new_port);
+#endif
+
+    tx(c, 1);
 }

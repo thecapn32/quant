@@ -29,6 +29,7 @@
 
 #include <inttypes.h>
 #include <math.h>
+#include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -343,6 +344,9 @@ get_conn_by_srt(uint8_t * const srt);
 extern void __attribute__((nonnull))
 conns_by_srt_ins(struct q_conn * const c, uint8_t * const srt);
 
+extern void __attribute__((nonnull))
+rx(struct ev_loop * const l, ev_io * const rx_w, int _e);
+
 
 #ifdef FUZZING
 extern void __attribute__((nonnull)) rx_pkts(struct w_iov_sq * const x,
@@ -458,4 +462,11 @@ has_wnd(const struct q_conn * const c, const uint16_t len)
     }
 
     return has_pval_wnd(c, len);
+}
+
+
+static inline uint16_t get_sport(const struct w_sock * const sock)
+{
+    return ((const struct sockaddr_in *)(const void *)w_get_addr(sock, true))
+        ->sin_port;
 }

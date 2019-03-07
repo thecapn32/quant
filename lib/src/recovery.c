@@ -76,6 +76,17 @@ crypto_pkts_in_flight(struct q_conn * const c)
 }
 
 
+static inline void __attribute__((nonnull)) maybe_tx(struct q_conn * const c)
+{
+    if (has_wnd(c, c->w->mtu) == false)
+        return;
+
+    c->no_wnd = false;
+    // don't set c->needs_tx = true, since it's not clear we must TX
+    tx(c, 0);
+}
+
+
 static void __attribute__((nonnull)) set_ld_timer(struct q_conn * const c)
 {
     // see SetLossDetectionTimer() pseudo code
@@ -213,10 +224,9 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
         }
     });
 
-    if (do_cc && largest_lost_pkt) {
+    if (do_cc && largest_lost_pkt)
         congestion_event(c, largest_lost_tx_t);
-        c->needs_tx = true;
-    }
+
     log_cc(c);
 }
 
@@ -249,6 +259,9 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
         warn(DBG, "TT alarm ep %u on %s conn %s", c->tls.epoch_out,
              conn_type(c), cid2str(c->scid));
         detect_lost_pkts(pn, true);
+
+        // this is not part of pseudo code - causes TX to resume
+        maybe_tx(c);
 
     } else {
         warn(DBG, "PTO alarm #%u on %s conn %s", c->rec.pto_cnt, conn_type(c),
@@ -303,8 +316,9 @@ void on_pkt_sent(struct q_stream * const s, struct w_iov * const v)
         c->rec.last_sent_ack_elicit_t = meta(v).tx_t;
         c->rec.in_flight += meta(v).udp_len; // OnPacketSentCC
         c->rec.ae_in_flight++;
-        log_cc(c);
         set_ld_timer(c);
+
+        log_cc(c);
     }
 }
 
@@ -359,11 +373,7 @@ void on_ack_received_2(struct pn_space * const pn)
     set_ld_timer(c);
 
     // not part of pseudo code - causes TX to resume when the window opens
-
-    if (has_wnd(c, c->w->mtu) && c->no_wnd) {
-        c->no_wnd = false;
-        c->needs_tx = true;
-    }
+    maybe_tx(c);
 }
 
 
