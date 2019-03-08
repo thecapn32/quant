@@ -51,6 +51,7 @@ addons:
       - llvm-toolchain-xenial-5.0
       - llvm-toolchain-xenial-6.0
       - llvm-toolchain-xenial-7
+      - carsten-uppenbrink-net
     packages:
       - g++-4.9
       - g++-7
