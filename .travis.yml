@@ -63,6 +63,7 @@ addons:
       - libev-dev
       - libhttp-parser-dev
       - libbsd-dev
+      - openssl
   coverity_scan:
     project:
       name: "NTAP/$PROJECT"
