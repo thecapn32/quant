@@ -89,7 +89,11 @@ sockaddr_cmp(const struct sockaddr * const a, const struct sockaddr * const b)
         return (a4->sin_addr.s_addr > b4->sin_addr.s_addr) -
                (a4->sin_addr.s_addr < b4->sin_addr.s_addr);
     default:
+#ifndef FUZZING
         die("unsupported address family");
+#else
+        return memcmp(a->sa_data, b->sa_data, sizeof(a->sa_data));
+#endif
     }
 }
 
@@ -964,10 +968,20 @@ rx_pkts(struct w_iov_sq * const x,
                 is_clnt ? (c_ipnp ? 0 : CLNT_SCID_LEN) : SERV_SCID_LEN))) {
             // we might still need to send a vneg packet
             if (w_connected(ws) == false) {
-                warn(ERR, "received invalid %u-byte %s pkt, sending vneg",
-                     v->len,
-                     pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
-                tx_vneg_resp(ws, v);
+                if (meta(v).hdr.scid.len == 0 || meta(v).hdr.scid.len >= 4) {
+                    warn(ERR, "received invalid %u-byte %s pkt, sending vneg",
+                         v->len,
+                         pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
+                    tx_vneg_resp(ws, v);
+                } else {
+                    warn(ERR,
+                         "received invalid %u-byte %s pkt w/invalid scid len "
+                         "%u, ignoring",
+                         v->len,
+                         pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers),
+                         meta(v).hdr.scid.len);
+                    goto drop;
+                }
             } else
                 warn(ERR, "received invalid %u-byte %s pkt), ignoring", v->len,
                      pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));

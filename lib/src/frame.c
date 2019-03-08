@@ -454,8 +454,9 @@ uint16_t dec_ack_frame(struct q_conn * const c,
         uint64_t ack_block_len = 0;
         i = dec_chk(t, &ack_block_len, v->buf, v->len, i, 0, "%" PRIu64);
 
-        if (unlikely(ack_block_len > UINT16_MAX))
-            warn(WRN, "ACK block len %" PRIu64, ack_block_len);
+        if (unlikely(ack_block_len > (UINT16_MAX << 4)))
+            err_close_return(c, ERR_INTERNAL, t, "ACK block len %" PRIu64,
+                             ack_block_len);
 
         if (unlikely(ack_block_len > lg_ack_in_block))
             err_close_return(c, ERR_FRAME_ENC, t, "ACK block len %" PRIu64,
@@ -544,7 +545,10 @@ uint16_t dec_ack_frame(struct q_conn * const c,
 
         if (n > 1) {
             i = dec_chk(t, &gap, v->buf, v->len, i, 0, "%" PRIu64);
-            lg_ack_in_block = lg_ack_in_block - ack_block_len - gap - 2;
+            if (unlikely((lg_ack_in_block - ack_block_len) <= gap + 2))
+                err_close_return(c, ERR_PROTOCOL_VIOLATION, t,
+                                 "illegal ACK frame");
+            lg_ack_in_block = (lg_ack_in_block - ack_block_len) - gap - 2;
         }
     }
 
