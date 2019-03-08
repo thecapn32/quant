@@ -48,10 +48,8 @@ addons:
     update: true
     sources:
       - ubuntu-toolchain-r-test
-      - llvm-toolchain-xenial-5.0
       - llvm-toolchain-xenial-6.0
       - llvm-toolchain-xenial-7
-      - carsten-uppenbrink-net
     packages:
       - g++-4.9
       - g++-7
@@ -64,7 +62,7 @@ addons:
       - libev-dev
       - libhttp-parser-dev
       - libbsd-dev
-      - openssl
+      - cmake
   coverity_scan:
     project:
       name: "NTAP/$PROJECT"
@@ -85,8 +83,11 @@ before_install:
   # manually install latest cmake
   - |
     travis_retry wget \
-      -q https://cmake.org/files/v3.11/cmake-3.11.1-Linux-x86_64.sh
-    sh cmake-3.11.1-Linux-x86_64.sh --skip-license
+      -q https://www.openssl.org/source/openssl-1.1.1b.tar.gz
+    tar xf openssl-1.1.1b.tar.gz
+    cd openssl-1.1.1b
+    ./config --openssldir=/usr/local
+    make install
 
 script:
   - |
@@ -95,7 +96,7 @@ script:
     rm -rf build
     mkdir build
     cd build
-    ../bin/cmake -DCMAKE_C_COMPILER=$MYCC -DCMAKE_CXX_COMPILER=$MYCXX \
+    cmake -DCMAKE_C_COMPILER=$MYCC -DCMAKE_CXX_COMPILER=$MYCXX \
       -DCMAKE_BUILD_TYPE=$BUILD -DCMAKE_INSTALL_PREFIX:PATH=/tmp \
       -DNO_SANITIZERS=True -DFUZZER=$FUZZ ..
     make
