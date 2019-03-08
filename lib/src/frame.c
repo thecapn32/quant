@@ -158,13 +158,16 @@ get_and_validate_strm(struct q_conn * const c,
                   "got frame 0x%02x for uni sid %" PRId64 " but am %s", type,
                   sid, conn_type(c));
     else {
-        struct q_stream * const s = get_stream(c, sid);
+        struct q_stream * s = get_stream(c, sid);
         if (unlikely(s == 0)) {
             if (unlikely(diet_find(&c->closed_streams, (uint64_t)sid)))
                 warn(NTE,
                      "ignoring 0x%02x frame for closed strm " FMT_SID
                      " on %s conn %s",
                      type, sid, conn_type(c), cid2str(c->scid));
+            else if (type == FRM_MSD || type == FRM_STP)
+                // we are supposed to open closed streams on RX of these frames
+                s = new_stream(c, sid);
             else
                 err_close(c, ERR_STREAM_STATE, type, "unknown strm %" PRId64,
                           sid);
