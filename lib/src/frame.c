@@ -639,7 +639,7 @@ dec_max_stream_data_frame(struct q_conn * const c,
          max);
 
     struct q_stream * const s = get_and_validate_strm(c, sid, FRM_MSD, true);
-    if (unlikely(s == 0 && c->err_code))
+    if (unlikely(s == 0))
         return UINT16_MAX;
 
     if (max > s->out_data_max) {
@@ -724,7 +724,7 @@ dec_stream_data_blocked_frame(struct q_conn * const c,
          sid, off);
 
     struct q_stream * const s = get_and_validate_strm(c, sid, FRM_SDB, false);
-    if (unlikely(s == 0 && c->err_code))
+    if (unlikely(s == 0))
         return UINT16_MAX;
 
     do_stream_fc(s, 0);
@@ -792,7 +792,7 @@ dec_stop_sending_frame(struct q_conn * const c,
          sid, err_code ? RED : NRM, err_code);
 
     struct q_stream * const s = get_and_validate_strm(c, sid, FRM_STP, true);
-    if (unlikely(s == 0 && c->err_code))
+    if (unlikely(s == 0))
         return UINT16_MAX;
 
     return i;
@@ -913,7 +913,7 @@ dec_reset_stream_frame(struct q_conn * const c,
          sid, err ? RED : NRM, err, off);
 
     struct q_stream * const s = get_and_validate_strm(c, sid, FRM_RST, false);
-    if (unlikely(s == 0 && c->err_code))
+    if (unlikely(s == 0))
         return UINT16_MAX;
 
     strm_to_state(s, strm_clsd);
