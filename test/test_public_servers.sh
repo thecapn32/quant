@@ -50,7 +50,7 @@ declare -A servers=(
         [winquic]=msquic.westus.cloudapp.azure.com::4433:4434:4433:/draft-ietf-quic-http-11.txt
 )
 
-results=(live fail vneg hshk data clse rsmt zrtt rtry migr bind kyph http spin)
+results=(live fail vneg hshk data clse rsmt zrtt rtry migr bind kyph http spin aecn)
 declare -A ${results[@]}
 
 
@@ -192,6 +192,12 @@ function analyze {
                 perl -n -e '/TX.*spin=1/ and $n=1;
                     $n && /RX.*spin=1/ && exit 1;'
         [ $? == 1 ] && spin[$1]=P
+
+        # analyze ECN
+        $sed -r "$sed_pattern" "$log" | \
+                perl -n -e '/ECN verification failed/ and $n=-1;
+                    $n==0 && /dec_ack_frame.*ECN ect0=/ && exit 1;'
+        [ $? == 1 ] && aecn[$1]=E
         [ ${fail[$1]} ] || rm -f "$log"
 
         # analyze rsmt and 0rtt
