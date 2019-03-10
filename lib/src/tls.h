@@ -28,7 +28,6 @@
 #pragma once
 
 #include <stdbool.h>
-#include <stddef.h>
 #include <stdint.h>
 
 #include <picotls.h>
@@ -41,6 +40,28 @@ struct q_conf;
 
 #define AEAD_LEN 16
 #define MAX_HASH_LEN 32 // SHA256
+
+
+#ifdef FUZZING
+
+#include <string.h>
+
+static inline void __attribute__((nonnull))
+nonrandom_bytes(void * const buf, const size_t len)
+{
+    memset(buf, 'Q', len);
+}
+
+#define rand_bytes nonrandom_bytes
+
+#else
+
+#include <picotls/openssl.h>
+#include <stddef.h>
+
+#define rand_bytes ptls_openssl_random_bytes
+
+#endif
 
 
 struct cipher_ctx {

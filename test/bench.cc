@@ -56,7 +56,7 @@ static void BM_quic_encryption(benchmark::State & state)
     struct w_iov * v = alloc_iov(w, len, 0);
     struct w_iov * x = alloc_iov(w, MAX_PKT_LEN, 0);
 
-    ptls_openssl_random_bytes(v->buf, len);
+    rand_bytes(v->buf, len);
     meta(v).hdr.type = LH_INIT;
     meta(v).hdr.flags = LH | meta(v).hdr.type;
     meta(v).hdr.hdr_len = 16;

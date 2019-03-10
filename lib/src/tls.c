@@ -43,8 +43,6 @@
 #include <netdb.h>
 #endif
 
-// IWYU pragma: no_include <picotls/../picotls.h>
-
 #include <khash.h>
 #include <openssl/evp.h>
 #include <openssl/ossl_typ.h>
@@ -810,7 +808,7 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
         dst->off += quant_commit_hash_len;
 
         // prepend ticket id
-        ptls_openssl_random_bytes(&tid, sizeof(tid));
+        rand_bytes(&tid, sizeof(tid));
         memcpy(dst->base + dst->off, &tid, sizeof(tid));
         dst->off += sizeof(tid);
 
@@ -1258,7 +1256,7 @@ void init_tls_ctx(const struct q_conf * const conf)
     tls_ctx.update_traffic_key = &update_traffic_key;
     if (conf && conf->tls_log)
         tls_ctx.log_event = &log_event;
-    tls_ctx.random_bytes = ptls_openssl_random_bytes;
+    tls_ctx.random_bytes = rand_bytes;
     tls_ctx.sign_certificate = &sign_cert.super;
     if (conf && conf->enable_tls_cert_verify)
         tls_ctx.verify_certificate = &verifier.super;

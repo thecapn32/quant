@@ -59,7 +59,7 @@ struct cid {
     uint64_t seq; ///< Connection ID sequence number
     /// XXX len must precede id for cid_cmp() over both to work
     uint8_t len; ///< Connection ID length
-    /// XXX id must precede srt for ptls_openssl_random_bytes() w/both to work
+    /// XXX id must precede srt for rand_bytes() w/both to work
     uint8_t id[MAX_CID_LEN]; ///< Connection ID
     uint8_t srt[SRT_LEN];    ///< Stateless Reset Token
     uint8_t retired : 1;

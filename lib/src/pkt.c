@@ -33,8 +33,10 @@
 #include <string.h>
 #include <sys/socket.h>
 
+// IWYU pragma: no_include <picotls/../picotls.h>
+
 #include <ev.h>
-#include <picotls.h>
+#include <picotls.h> // IWYU pragma: keep
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 

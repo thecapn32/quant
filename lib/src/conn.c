@@ -45,7 +45,6 @@
 
 #include <ev.h>
 #include <picotls.h> // IWYU pragma: keep
-#include <picotls/openssl.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
@@ -56,6 +55,7 @@
 #include "quic.h"
 #include "recovery.h"
 #include "stream.h"
+#include "tls.h"
 
 
 #undef CONN_STATE
@@ -564,7 +564,7 @@ static void __attribute__((nonnull)) update_act_scid(struct q_conn * const c)
 {
     // server picks a new random cid
     struct cid nscid = {.len = SERV_SCID_LEN};
-    ptls_openssl_random_bytes(nscid.id, sizeof(nscid.id) + sizeof(nscid.srt));
+    rand_bytes(nscid.id, sizeof(nscid.id) + sizeof(nscid.srt));
     cid_cpy(&c->odcid, c->scid);
     warn(NTE, "hshk switch to scid %s for %s %s conn (was %s)", cid2str(&nscid),
          conn_state_str[c->state], conn_type(c), cid2str(c->scid));
@@ -1099,8 +1099,7 @@ rx_pkts(struct w_iov_sq * const x,
 #endif
                 if (c->dcid->len == 0)
                     conns_by_ipnp_update(c, (struct sockaddr *)&v->addr);
-                ptls_openssl_random_bytes(&c->path_chlg_out,
-                                          sizeof(c->path_chlg_out));
+                rand_bytes(&c->path_chlg_out, sizeof(c->path_chlg_out));
                 c->migr_peer = v->addr;
                 c->needs_tx = c->tx_path_chlg = true;
             }
@@ -1467,7 +1466,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     if (c->is_clnt) {
         struct cid ndcid = {.len =
                                 8 + (uint8_t)w_rand_uniform(MAX_CID_LEN - 7)};
-        ptls_openssl_random_bytes(ndcid.id, sizeof(ndcid.id));
+        rand_bytes(ndcid.id, sizeof(ndcid.id));
         cid_cpy(&c->odcid, &ndcid);
         add_dcid(c, &ndcid);
     } else if (dcid)
@@ -1551,11 +1550,11 @@ struct q_conn * new_conn(struct w_engine * const w,
     if (c->is_clnt) {
         nscid.len = cc && cc->enable_zero_len_cid ? 0 : CLNT_SCID_LEN;
         if (nscid.len)
-            ptls_openssl_random_bytes(nscid.id, sizeof(nscid.id));
+            rand_bytes(nscid.id, sizeof(nscid.id));
     } else if (scid)
         cid_cpy(&nscid, scid);
     if (nscid.len) {
-        ptls_openssl_random_bytes(nscid.srt, sizeof(nscid.srt));
+        rand_bytes(nscid.srt, sizeof(nscid.srt));
         add_scid(c, &nscid);
     }
     if (c->scid == 0)
