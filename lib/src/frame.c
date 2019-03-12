@@ -544,13 +544,14 @@ uint16_t dec_ack_frame(struct q_conn * const c,
 
         if (n > 1) {
             i = dec_chk(t, &gap, v->buf, v->len, i, 0, "%" PRIu64);
-            warn(DBG,
-                 "lg_ack_in_block=%" PRIu64 ", ack_block_len=%" PRIu64
-                 ", gap=%" PRIu64,
-                 lg_ack_in_block, ack_block_len, -gap);
-            if (unlikely((lg_ack_in_block - ack_block_len) <= gap + 2))
+            if (unlikely((lg_ack_in_block - ack_block_len) < gap + 2)) {
+                warn(DBG,
+                     "lg_ack_in_block=%" PRIu64 ", ack_block_len=%" PRIu64
+                     ", gap=%" PRIu64,
+                     lg_ack_in_block, ack_block_len, -gap);
                 err_close_return(c, ERR_PROTOCOL_VIOLATION, t,
                                  "illegal ACK frame");
+            }
             lg_ack_in_block = (lg_ack_in_block - ack_block_len) - gap - 2;
         }
     }
