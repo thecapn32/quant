@@ -116,8 +116,6 @@ struct pkt_meta {
     struct q_stream * stream;   ///< Stream this data was written on.
     uint64_t stream_off;        ///< Stream data offset.
     uint16_t stream_header_pos; ///< Offset of stream frame header.
-
-    // XXX reset_pm() depends on the following two being in order:
     uint16_t stream_data_start; ///< Offset of first byte of stream frame data.
     uint16_t stream_data_len;   ///< Length of last stream frame data.
 
