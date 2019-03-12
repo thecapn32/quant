@@ -26,7 +26,6 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <math.h>
-#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -203,12 +202,17 @@ void reset_stream(struct q_stream * const s, const bool forget)
         if (forget)
             continue;
 
-        // don't reset stream_data_start and is_fin
+        // don't reset stream-data-related fields
+        // TODO: redo this with offsetof magic
         const bool fin = meta(v).is_fin;
-        memset(&meta(v), 0, offsetof(struct pkt_meta, stream_data_start));
-        memset(&meta(v).stream_data_len, 0,
-               sizeof(meta(v)) - offsetof(struct pkt_meta, stream_data_len));
+        const uint16_t shp = meta(v).stream_header_pos;
+        const uint16_t sds = meta(v).stream_data_start;
+        const uint16_t sdl = meta(v).stream_data_len;
+        memset(&meta(v), 0, sizeof(struct pkt_meta));
         meta(v).is_fin = fin;
+        meta(v).stream_header_pos = shp;
+        meta(v).stream_data_start = sds;
+        meta(v).stream_data_len = sdl;
     }
 
     if (forget) {
