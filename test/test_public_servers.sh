@@ -47,7 +47,7 @@ declare -A servers=(
         # [quicker]=quicker.edm.uhasselt.be::4433:4434:4433:/index.html
         [quicly]=kazuhooku.com::4433:4433:8443:/40000.txt
         [quinn]=ralith.com::4433:4434:4433:/100K
-        [winquic]=msquic.westus.cloudapp.azure.com::4433:4434:4433:/draft-ietf-quic-http-11.txt
+        [winquic]=quic.westus.cloudapp.azure.com::4433:4434:4433:/draft-ietf-quic-http-11.txt
 )
 
 results=(live fail vneg hshk data clse rsmt zrtt rtry migr bind kyph http spin aecn)
