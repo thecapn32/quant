@@ -50,7 +50,7 @@ externalproject_add(openssl
   UPDATE_COMMAND ""
   # GIT_REPOSITORY https://github.com/openssl/openssl.git
   GIT_REPOSITORY https://github.com/tatsuhiro-t/openssl
-  GIT_TAG quic-draft-17
+  GIT_TAG quic-draft-18
   GIT_SHALLOW 1
   CONFIGURE_COMMAND ./config --prefix=${CMAKE_CURRENT_BINARY_DIR} enable-tls1_3
   BUILD_IN_SOURCE 1
@@ -64,7 +64,7 @@ externalproject_add(ngtcp2
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/ngtcp2/ngtcp2.git
   GIT_SHALLOW 1
-  GIT_TAG draft-17
+  GIT_TAG draft-18
   CMAKE_ARGS
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
     -DOPENSSL_ROOT_DIR=${CMAKE_CURRENT_BINARY_DIR}
