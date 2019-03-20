@@ -26,7 +26,6 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <inttypes.h>
-#include <math.h>
 #include <netdb.h>
 #include <netinet/ip.h>
 #include <stdint.h>
@@ -35,7 +34,6 @@
 
 // IWYU pragma: no_include <picotls/../picotls.h>
 
-#include <ev.h>
 #include <picotls.h> // IWYU pragma: keep
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
@@ -903,9 +901,6 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
     struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
     if (diet_find(&pn->recv_all, meta(v).hdr.nr))
         return is_srt(xv, v);
-
-    diet_insert(&pn->recv, meta(v).hdr.nr, ev_now(loop));
-    diet_insert(&pn->recv_all, meta(v).hdr.nr, (ev_tstamp)NAN);
 
     return true;
 }

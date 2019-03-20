@@ -1087,45 +1087,6 @@ rx_pkts(struct w_iov_sq * const x,
                     c->scid = scid;
                 }
             }
-
-            // check if this pkt came from a new source IP and/or port
-            if (sockaddr_cmp((struct sockaddr *)&c->peer,
-                             (struct sockaddr *)&v->addr) != 0 &&
-                (c->tx_path_chlg == false ||
-                 sockaddr_cmp((struct sockaddr *)&c->migr_peer,
-                              (struct sockaddr *)&v->addr) != 0)) {
-#ifndef NDEBUG
-                char ip[NI_MAXHOST], port[NI_MAXSERV];
-                ensure(getnameinfo((struct sockaddr *)&v->addr, sizeof(v->addr),
-                                   ip, sizeof(ip), port, sizeof(port),
-                                   NI_NUMERICHOST | NI_NUMERICSERV) == 0,
-                       "getnameinfo");
-
-#endif
-
-                if (meta(v).hdr.nr <= diet_max(&(c->pn_data.pn.recv_all))) {
-                    log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
-                            tok_len);
-                    warn(NTE,
-                         "pkt from new peer %s:%s, nr " FMT_PNR_IN
-                         " <= max " FMT_PNR_IN ", ignoring",
-                         ip, port, meta(v).hdr.nr,
-                         diet_max(&(c->pn_data.pn.recv_all)));
-                    goto drop;
-                }
-
-                warn(NTE,
-                     "pkt from new peer %s:%s, nr " FMT_PNR_IN
-                     " > max " FMT_PNR_IN ", probing",
-                     ip, port, meta(v).hdr.nr,
-                     diet_max(&(c->pn_data.pn.recv_all)));
-
-                if (c->dcid->len == 0)
-                    conns_by_ipnp_update(c, (struct sockaddr *)&v->addr);
-                rand_bytes(&c->path_chlg_out, sizeof(c->path_chlg_out));
-                c->migr_peer = v->addr;
-                c->needs_tx = c->tx_path_chlg = true;
-            }
         }
 
         if (c == 0) {
@@ -1212,6 +1173,45 @@ rx_pkts(struct w_iov_sq * const x,
             if (likely(decoal == false))
                 // forget outer dcid
                 outer_dcid.len = 0;
+
+            // check if this pkt came from a new source IP and/or port
+            if (sockaddr_cmp((struct sockaddr *)&c->peer,
+                             (struct sockaddr *)&v->addr) != 0 &&
+                (c->tx_path_chlg == false ||
+                 sockaddr_cmp((struct sockaddr *)&c->migr_peer,
+                              (struct sockaddr *)&v->addr) != 0)) {
+#ifndef NDEBUG
+                char ip[NI_MAXHOST], port[NI_MAXSERV];
+                ensure(getnameinfo((struct sockaddr *)&v->addr, sizeof(v->addr),
+                                   ip, sizeof(ip), port, sizeof(port),
+                                   NI_NUMERICHOST | NI_NUMERICSERV) == 0,
+                       "getnameinfo");
+
+#endif
+
+                if (meta(v).hdr.nr <= diet_max(&(c->pn_data.pn.recv_all))) {
+                    log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
+                            tok_len);
+                    warn(NTE,
+                         "pkt from new peer %s:%s, nr " FMT_PNR_IN
+                         " <= max " FMT_PNR_IN ", ignoring",
+                         ip, port, meta(v).hdr.nr,
+                         diet_max(&(c->pn_data.pn.recv_all)));
+                    goto drop;
+                }
+
+                warn(NTE,
+                     "pkt from new peer %s:%s, nr " FMT_PNR_IN
+                     " > max " FMT_PNR_IN ", probing",
+                     ip, port, meta(v).hdr.nr,
+                     diet_max(&(c->pn_data.pn.recv_all)));
+
+                if (c->dcid->len == 0)
+                    conns_by_ipnp_update(c, (struct sockaddr *)&v->addr);
+                rand_bytes(&c->path_chlg_out, sizeof(c->path_chlg_out));
+                c->migr_peer = v->addr;
+                c->needs_tx = c->tx_path_chlg = true;
+            }
         }
 
     decoal_done:
@@ -1221,6 +1221,10 @@ rx_pkts(struct w_iov_sq * const x,
                 c->had_rx
                     ? MIN(c->min_rx_epoch, epoch_for_pkt_type(meta(v).hdr.type))
                     : epoch_for_pkt_type(meta(v).hdr.type);
+
+            struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
+            diet_insert(&pn->recv, meta(v).hdr.nr, ev_now(loop));
+            diet_insert(&pn->recv_all, meta(v).hdr.nr, (ev_tstamp)NAN);
         }
 
         // remember that we had a RX event on this connection
