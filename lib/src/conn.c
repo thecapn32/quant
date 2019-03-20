@@ -1222,9 +1222,13 @@ rx_pkts(struct w_iov_sq * const x,
                     ? MIN(c->min_rx_epoch, epoch_for_pkt_type(meta(v).hdr.type))
                     : epoch_for_pkt_type(meta(v).hdr.type);
 
-            struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
-            diet_insert(&pn->recv, meta(v).hdr.nr, ev_now(loop));
-            diet_insert(&pn->recv_all, meta(v).hdr.nr, (ev_tstamp)NAN);
+            if (likely((meta(v).hdr.vers && meta(v).hdr.type != LH_RTRY) ||
+                       !is_lh(meta(v).hdr.flags))) {
+                struct pn_space * const pn =
+                    pn_for_pkt_type(c, meta(v).hdr.type);
+                diet_insert(&pn->recv, meta(v).hdr.nr, ev_now(loop));
+                diet_insert(&pn->recv_all, meta(v).hdr.nr, (ev_tstamp)NAN);
+            }
         }
 
         // remember that we had a RX event on this connection

@@ -182,7 +182,7 @@ struct q_conn * q_connect(struct w_engine * const w,
     init_tp(c);
 
     // if we have no early data, we're not trying 0-RTT
-    c->try_0rtt &= early_data && early_data_stream;
+    c->try_0rtt = early_data && early_data_stream;
 
 #ifndef NDEBUG
     char ip[NI_MAXHOST], port[NI_MAXSERV];

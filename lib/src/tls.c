@@ -983,8 +983,8 @@ void init_tls(struct q_conn * const c, const char * const clnt_alpn)
                 ptls_iovec_init(t->ticket, t->ticket_len);
             memcpy(&c->tp_out, &t->tp, sizeof(t->tp));
             c->vers_initial = c->vers = t->vers;
-            c->try_0rtt = 1;
-        }
+        } else
+            c->try_0rtt = false;
     }
 
     init_prot(c);
@@ -1053,8 +1053,8 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
     if (ret == 0 && c->state != conn_estb) {
         if (ptls_is_psk_handshake(c->tls.t) && c->is_clnt)
             c->did_0rtt = c->try_0rtt &&
-                          c->tls.tls_hshk_prop.client.early_data_acceptance ==
-                              PTLS_EARLY_DATA_ACCEPTED;
+                          (c->tls.tls_hshk_prop.client.early_data_acceptance ==
+                           PTLS_EARLY_DATA_ACCEPTED);
 
     } else if (ret != 0 && ret != PTLS_ERROR_IN_PROGRESS &&
                ret != PTLS_ERROR_STATELESS_RETRY) {
@@ -1233,6 +1233,7 @@ void init_tls_ctx(const struct q_conf * const conf)
         tls_ctx.max_early_data_size = 0xffffffff;
         tls_ctx.ticket_lifetime = 60 * 60 * 24;
         tls_ctx.require_dhe_on_psk = 0;
+        tls_ctx.omit_end_of_early_data = 1;
     }
 
     if (conf && conf->tls_log) {
