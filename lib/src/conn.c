@@ -1372,8 +1372,8 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
 
     // terminate whatever API call is currently active
     maybe_api_return(c, 0);
-    maybe_api_return(q_accept, 0, 0);
-    maybe_api_return(q_rx_ready, 0, 0);
+    // maybe_api_return(q_accept, 0, 0);
+    // maybe_api_return(q_rx_ready, 0, 0);
 }
 
 
