@@ -1052,9 +1052,9 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
 
     if (ret == 0 && c->state != conn_estb) {
         if (ptls_is_psk_handshake(c->tls.t) && c->is_clnt)
-            c->did_0rtt =
-                c->try_0rtt &&
-                c->tls.tls_hshk_prop.client.early_data_accepted_by_peer;
+            c->did_0rtt = c->try_0rtt &&
+                          c->tls.tls_hshk_prop.client.early_data_acceptance ==
+                              PTLS_EARLY_DATA_ACCEPTED;
 
     } else if (ret != 0 && ret != PTLS_ERROR_IN_PROGRESS &&
                ret != PTLS_ERROR_STATELESS_RETRY) {
