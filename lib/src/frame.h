@@ -82,13 +82,15 @@ bitset_define(frames, NUM_FRAM_TYPES);
 #define has_frame(v, ft) bit_isset(NUM_FRAM_TYPES, (ft), &meta(v).frames)
 
 #ifdef NDEBUG
-#define log_stream_or_crypto_frame(rtx, v, in, kind)                           \
+#define log_stream_or_crypto_frame(...)                                        \
     do {                                                                       \
     } while (0)
 #else
-extern void __attribute__((nonnull))
-log_stream_or_crypto_frame(const bool rtx,
+extern void __attribute__((nonnull(1, 3)))
+log_stream_or_crypto_frame(const struct q_conn * const c,
+                           const bool rtx,
                            const struct w_iov * const v,
+                           const int64_t sid,
                            const bool in,
                            const char * const kind);
 #endif

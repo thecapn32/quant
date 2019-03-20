@@ -468,7 +468,7 @@ bool enc_pkt(struct q_stream * const s,
         // this is a RTX, pad out until beginning of stream header
         enc_padding_frame(v, i, meta(v).stream_header_pos - i);
         i = meta(v).stream_data_start + meta(v).stream_data_len;
-        log_stream_or_crypto_frame(true, v, false, "");
+        log_stream_or_crypto_frame(c, true, v, s->id, false, "");
 
     } else if (likely(enc_data)) {
         // this is a fresh data/crypto or pure stream FIN packet

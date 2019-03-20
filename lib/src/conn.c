@@ -974,6 +974,8 @@ rx_pkts(struct w_iov_sq * const x,
                          pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
                     tx_vneg_resp(ws, v);
                 } else {
+                    log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
+                            tok_len);
                     warn(ERR,
                          "received invalid %u-byte %s pkt w/invalid scid len "
                          "%u, ignoring",
@@ -1000,6 +1002,8 @@ rx_pkts(struct w_iov_sq * const x,
                          "accepting",
                          cid2str(&meta(v).hdr.dcid), cid2str(c->scid));
                 else {
+                    log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
+                            tok_len);
                     warn(WRN,
                          "got 0-RTT pkt for orig cid %s, new is %s, "
                          "but rejected 0-RTT, ignoring",
@@ -1009,6 +1013,8 @@ rx_pkts(struct w_iov_sq * const x,
             } else if (meta(v).hdr.type == LH_INIT && c == 0) {
                 // validate minimum packet size
                 if (xv->len < MIN_INI_LEN) {
+                    log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
+                            tok_len);
                     warn(ERR, "%u-byte Initial pkt too short (< %u)", xv->len,
                          MIN_INI_LEN);
                     goto drop;
@@ -1098,6 +1104,8 @@ rx_pkts(struct w_iov_sq * const x,
 #endif
 
                 if (meta(v).hdr.nr <= diet_max(&(c->pn_data.pn.recv_all))) {
+                    log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
+                            tok_len);
                     warn(NTE,
                          "pkt from new peer %s:%s, nr " FMT_PNR_IN
                          " <= max " FMT_PNR_IN ", ignoring",
@@ -1191,6 +1199,8 @@ rx_pkts(struct w_iov_sq * const x,
 
             if (unlikely(outer_dcid.len) &&
                 cid_cmp(&outer_dcid, &meta(v).hdr.dcid) != 0) {
+                log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
+                        tok_len);
                 warn(ERR,
                      "outer dcid %s != inner dcid %s during "
                      "decoalescing, ignoring %s pkt",
@@ -1354,9 +1364,8 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
 
     // terminate whatever API call is currently active
     maybe_api_return(c, 0);
-    // TODO it looks like we don't need to cancel these calls anymore
-    // maybe_api_return(q_accept, 0, 0);
-    // maybe_api_return(q_rx_ready, 0, 0);
+    maybe_api_return(q_accept, 0, 0);
+    maybe_api_return(q_rx_ready, 0, 0);
 }
 
 

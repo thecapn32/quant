@@ -95,19 +95,22 @@
 
 
 #ifndef NDEBUG
-void log_stream_or_crypto_frame(const bool rtx,
+void log_stream_or_crypto_frame(const struct q_conn * const c,
+                                const bool rtx,
                                 const struct w_iov * const v,
+                                const int64_t sid,
                                 const bool in,
-                                const char * const kind)
+                                const char * kind)
 {
     if (util_dlevel < INF)
         return;
 
     const struct q_stream * const s = meta(v).stream;
-    const struct q_conn * const c = s->c;
     const uint8_t type = v->buf[meta(v).stream_header_pos];
+    if (kind == 0)
+        kind = BLD RED "invalid" NRM;
 
-    if (s->id >= 0)
+    if (sid >= 0)
         warn(INF,
              "%sSTREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID "/%" PRIu64
              " off=%" PRIu64 "/%" PRIu64 " len=%u coff=%" PRIu64 "/%" PRIu64
@@ -121,8 +124,9 @@ void log_stream_or_crypto_frame(const bool rtx,
              is_set(F_STREAM_LEN, type) ? "LEN" : "",
              is_set(F_STREAM_LEN, type) && is_set(F_STREAM_OFF, type) ? "|"
                                                                       : "",
-             is_set(F_STREAM_OFF, type) ? "OFF" : "", s->id, max_sid(s->id, c),
-             meta(v).stream_off, in ? s->in_data_max : s->out_data_max,
+             is_set(F_STREAM_OFF, type) ? "OFF" : "", sid, max_sid(sid, c),
+             meta(v).stream_off,
+             in ? (s ? s->in_data_max : 0) : (s ? s->out_data_max : 0),
              meta(v).stream_data_len, in ? c->in_data_str : c->out_data_str,
              in ? c->tp_in.max_data : c->tp_out.max_data,
              rtx ? REV BLD GRN "[RTX]" NRM " " : "", in ? "[" : "", kind,
@@ -197,14 +201,8 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
         sid = crpt_strm_id(e);
         meta(v).stream = c->cstreams[e];
     } else {
-        if (unlikely(is_set(F_STREAM_FIN, t)))
-            meta(v).is_fin = true;
+        meta(v).is_fin = is_set(F_STREAM_FIN, t);
         i = dec_chk(t, &sid, v->buf, v->len, i, 0, FMT_SID);
-        const int64_t max = max_sid(sid, c);
-        if (unlikely(sid > max))
-            err_close_return(c, ERR_STREAM_ID, t,
-                             "sid %" PRId64 " > max %" PRId64, sid, max);
-        meta(v).stream = get_stream(c, sid);
     }
 
     if (is_set(F_STREAM_OFF, t) || t == FRM_CRY)
@@ -221,12 +219,19 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
         // stream data extends to end of packet
         l = v->len - i;
 
+    const int64_t max = max_sid(sid, c);
+    if (unlikely(sid > max)) {
+        log_stream_or_crypto_frame(c, false, v, sid, true, 0);
+        err_close_return(c, ERR_STREAM_ID, t, "sid %" PRId64 " > max %" PRId64,
+                         sid, max);
+    }
+    meta(v).stream = get_stream(c, sid);
     meta(v).stream_data_start = i;
     meta(v).stream_data_len = (uint16_t)l;
 
     // deliver data into stream
     bool ignore = false;
-    const char * kind = BLD RED "???" NRM;
+    const char * kind = 0;
 
     if (unlikely(meta(v).stream_data_len == 0 && !is_set(F_STREAM_FIN, t))) {
         warn(WRN, "zero-len stream/crypto frame on sid " FMT_SID ", ignoring",
@@ -244,10 +249,12 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
             return meta(v).stream_data_start + meta(v).stream_data_len;
         }
 
-        if (unlikely(is_srv_ini(sid) != c->is_clnt))
+        if (unlikely(is_srv_ini(sid) != c->is_clnt)) {
+            log_stream_or_crypto_frame(c, false, v, sid, true, 0);
             err_close_return(c, ERR_STREAM_STATE, t,
                              "got sid %" PRId64 " but am %s", sid,
                              conn_type(c));
+        }
 
         meta(v).stream = new_stream(c, sid);
     }
@@ -377,7 +384,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
            "inserted");
 
 done:
-    log_stream_or_crypto_frame(false, v, true, kind);
+    log_stream_or_crypto_frame(c, false, v, sid, true, kind);
 
     if (meta(v).stream && t != FRM_CRY &&
         meta(v).stream_off + meta(v).stream_data_len >
@@ -1372,7 +1379,7 @@ uint16_t enc_stream_or_crypto_frame(struct q_stream * const s,
     meta(v).stream_data_len = (uint16_t)dlen;
     meta(v).stream_off = s->out_data;
 
-    log_stream_or_crypto_frame(false, v, false, "");
+    log_stream_or_crypto_frame(s->c, false, v, s->id, false, "");
     track_bytes_out(s, dlen);
     ensure(!enc_strm || s->out_data < s->out_data_max, "exceeded fc window");
 
