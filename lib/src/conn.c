@@ -1095,8 +1095,23 @@ rx_pkts(struct w_iov_sq * const x,
                                    NI_NUMERICHOST | NI_NUMERICSERV) == 0,
                        "getnameinfo");
 
-                warn(NTE, "pkt came from new peer %s:%s, probing", ip, port);
 #endif
+
+                if (meta(v).hdr.nr <= diet_max(&(c->pn_data.pn.recv_all))) {
+                    warn(NTE,
+                         "pkt from new peer %s:%s, nr " FMT_PNR_IN
+                         " <= max " FMT_PNR_IN ", ignoring",
+                         ip, port, meta(v).hdr.nr,
+                         diet_max(&(c->pn_data.pn.recv_all)));
+                    goto drop;
+                }
+
+                warn(NTE,
+                     "pkt from new peer %s:%s, nr " FMT_PNR_IN
+                     " > max " FMT_PNR_IN ", probing",
+                     ip, port, meta(v).hdr.nr,
+                     diet_max(&(c->pn_data.pn.recv_all)));
+
                 if (c->dcid->len == 0)
                     conns_by_ipnp_update(c, (struct sockaddr *)&v->addr);
                 rand_bytes(&c->path_chlg_out, sizeof(c->path_chlg_out));
