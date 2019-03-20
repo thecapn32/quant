@@ -435,8 +435,8 @@ cancel_api_call(struct ev_loop * const l __attribute__((unused)),
 {
     warn(DBG, "canceling API call");
     ev_timer_stop(loop, &api_alarm);
-    // maybe_api_return(q_accept, 0, 0);
-    // maybe_api_return(q_rx_ready, 0, 0);
+    maybe_api_return(q_accept, 0, 0);
+    maybe_api_return(q_rx_ready, 0, 0);
 }
 
 
