@@ -193,7 +193,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     uint16_t i = dec_chk(t, &t, v->buf, v->len, pos, sizeof(t), "0x%02x");
 
     int64_t sid = 0;
-    if (t == FRM_CRY) {
+    if (unlikely(t == FRM_CRY)) {
         const epoch_t e = epoch_for_pkt_type(meta(v).hdr.type);
         if (unlikely(c->cstreams[e] == 0))
             err_close_return(c, ERR_STREAM_STATE, t,
@@ -203,15 +203,16 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     } else {
         meta(v).is_fin = is_set(F_STREAM_FIN, t);
         i = dec_chk(t, &sid, v->buf, v->len, i, 0, FMT_SID);
+        meta(v).stream = get_stream(c, sid);
     }
 
-    if (is_set(F_STREAM_OFF, t) || t == FRM_CRY)
+    if (is_set(F_STREAM_OFF, t) || unlikely(t == FRM_CRY))
         i = dec_chk(t, &meta(v).stream_off, v->buf, v->len, i, 0, "%" PRIu64);
     else
         meta(v).stream_off = 0;
 
     uint64_t l = 0;
-    if (is_set(F_STREAM_LEN, t) || t == FRM_CRY) {
+    if (is_set(F_STREAM_LEN, t) || unlikely(t == FRM_CRY)) {
         i = dec_chk(t, &l, v->buf, v->len, i, 0, "%" PRIu64);
         if (unlikely(l > (uint64_t)v->len - i))
             err_close_return(c, ERR_FRAME_ENC, t, "illegal strm len");
@@ -225,7 +226,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
         err_close_return(c, ERR_STREAM_ID, t, "sid %" PRId64 " > max %" PRId64,
                          sid, max);
     }
-    meta(v).stream = get_stream(c, sid);
+
     meta(v).stream_data_start = i;
     meta(v).stream_data_len = (uint16_t)l;
 
