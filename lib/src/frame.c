@@ -847,33 +847,37 @@ dec_path_response_frame(struct q_conn * const c,
 
     warn(INF, FRAM_IN "PATH_RESPONSE" NRM " data=%" PRIx64, c->path_resp_in);
 
-    if (unlikely(c->path_resp_in != c->path_chlg_out))
-        err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_PRP,
-                         "PATH_RESPONSE %" PRIx64 " != %" PRIx64,
-                         c->path_resp_in, c->path_chlg_out);
-
-    if (likely(c->tx_path_chlg)) {
-#ifndef NDEBUG
-        char ip[NI_MAXHOST];
-        char port[NI_MAXSERV];
-        char migr_ip[NI_MAXHOST];
-        char migr_port[NI_MAXSERV];
-        ensure(getnameinfo((struct sockaddr *)&c->peer, sizeof(c->peer), ip,
-                           sizeof(ip), port, sizeof(port),
-                           NI_NUMERICHOST | NI_NUMERICSERV) == 0,
-               "getnameinfo");
-        ensure(getnameinfo((struct sockaddr *)&c->migr_peer,
-                           sizeof(c->migr_peer), migr_ip, sizeof(migr_ip),
-                           migr_port, sizeof(migr_port),
-                           NI_NUMERICHOST | NI_NUMERICSERV) == 0,
-               "getnameinfo");
-
-        warn(NTE, "migration from %s:%s to %s:%s complete", ip, port, migr_ip,
-             migr_port);
-#endif
-        c->tx_path_chlg = false;
-        c->peer = c->migr_peer;
+    if (unlikely(c->tx_path_chlg == false)) {
+        warn(NTE, "unexpected PATH_RESPONSE %" PRIx64 ", ignoring",
+             c->path_resp_in);
+        return i;
     }
+
+    if (unlikely(c->path_resp_in != c->path_chlg_out)) {
+        warn(NTE, "PATH_RESPONSE %" PRIx64 " != %" PRIx64 ", ignoring",
+             c->path_resp_in, c->path_chlg_out);
+        return i;
+    }
+
+#ifndef NDEBUG
+    char ip[NI_MAXHOST];
+    char port[NI_MAXSERV];
+    char migr_ip[NI_MAXHOST];
+    char migr_port[NI_MAXSERV];
+    ensure(getnameinfo((struct sockaddr *)&c->peer, sizeof(c->peer), ip,
+                       sizeof(ip), port, sizeof(port),
+                       NI_NUMERICHOST | NI_NUMERICSERV) == 0,
+           "getnameinfo");
+    ensure(getnameinfo((struct sockaddr *)&c->migr_peer, sizeof(c->migr_peer),
+                       migr_ip, sizeof(migr_ip), migr_port, sizeof(migr_port),
+                       NI_NUMERICHOST | NI_NUMERICSERV) == 0,
+           "getnameinfo");
+
+    warn(NTE, "migration from %s:%s to %s:%s complete", ip, port, migr_ip,
+         migr_port);
+#endif
+    c->tx_path_chlg = false;
+    c->peer = c->migr_peer;
 
     return i;
 }
