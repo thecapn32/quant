@@ -271,6 +271,8 @@ struct q_conn {
     uint16_t tok_len;
     uint8_t tok[MAX_TOK_LEN + 2]; // some stacks send ungodly large tokens
                                   // XXX +2 for alignment
+
+    struct q_conn_info i;
 };
 
 
@@ -347,6 +349,8 @@ conns_by_srt_ins(struct q_conn * const c, uint8_t * const srt);
 extern void __attribute__((nonnull))
 rx(struct ev_loop * const l, ev_io * const rx_w, int _e);
 
+extern void __attribute__((nonnull))
+conn_info_populate(struct q_conn * const c);
 
 #ifdef FUZZING
 extern void __attribute__((nonnull)) rx_pkts(struct w_iov_sq * const x,

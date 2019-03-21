@@ -266,7 +266,10 @@ static void __attribute__((nonnull)) log_sent_pkts(struct q_conn * const c)
 static void __attribute__((nonnull))
 rtx_pkt(struct q_stream * const s, struct w_iov * const v)
 {
+    s->c->i.pkts_out_rtx++;
+
     if (meta(v).is_lost)
+        // we don't need to do the steps above is the pkt is lost already
         return;
 
     // ensure(meta(v).has_rtx == false, "cannot RTX an RTX stand-in");
@@ -294,6 +297,8 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
 
     if (unlikely(sq_empty(&c->txq)))
         return;
+
+    c->i.pkts_out += sq_len(&c->txq);
 
     if (sq_len(&c->txq) > 1 && unlikely(is_lh(*sq_first(&c->txq)->buf)))
         coalesce(&c->txq);
@@ -958,6 +963,7 @@ rx_pkts(struct w_iov_sq * const x,
         v->addr = xv->addr;
         v->flags = xv->flags;
 
+        bool pkt_valid = false;
         const bool is_clnt = w_connected(ws);
         struct q_conn * c = 0;
         struct q_conn * const c_ipnp =
@@ -1055,7 +1061,7 @@ rx_pkts(struct w_iov_sq * const x,
             }
         }
 
-        if (c) {
+        if (likely(c)) {
             if (meta(v).hdr.scid.len &&
                 cid_cmp(&meta(v).hdr.scid, c->dcid) != 0) {
                 if (meta(v).hdr.vers && meta(v).hdr.type == LH_RTRY &&
@@ -1090,9 +1096,8 @@ rx_pkts(struct w_iov_sq * const x,
                     c->scid = scid;
                 }
             }
-        }
 
-        if (c == 0) {
+        } else {
 #ifndef FUZZING
             // if this is a 0-RTT pkt, track it (may be reordered)
             if (meta(v).hdr.type == LH_0RTT) {
@@ -1233,6 +1238,7 @@ rx_pkts(struct w_iov_sq * const x,
                 diet_insert(&pn->recv, meta(v).hdr.nr, ev_now(loop));
                 diet_insert(&pn->recv_all, meta(v).hdr.nr, (ev_tstamp)NAN);
             }
+            pkt_valid = true;
         }
 
         // remember that we had a RX event on this connection
@@ -1252,6 +1258,12 @@ rx_pkts(struct w_iov_sq * const x,
     drop:
         free_iov(v);
     next:
+        if (likely(c)) {
+            if (likely(pkt_valid))
+                c->i.pkts_in_valid++;
+            else
+                c->i.pkts_in_invalid++;
+        }
         // warn(CRT, "w_free_iov idx %u (avail %" PRIu64 ")", w_iov_idx(xv),
         //      sq_len(&xv->w->iov) + 1);
         w_free_iov(xv);
@@ -1701,4 +1713,14 @@ void free_conn(struct q_conn * const c)
         sl_remove(&accept_queue, c, q_conn, node_aq);
 
     free(c);
+}
+
+
+void conn_info_populate(struct q_conn * const c)
+{
+    // fill some q_conn_info fields based on other conn fields
+    c->i.cwnd = c->rec.cwnd;
+    c->i.ssthresh = c->rec.ssthresh;
+    c->i.rtt = c->rec.srtt;
+    c->i.rttvar = c->rec.rttvar;
 }

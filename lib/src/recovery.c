@@ -197,6 +197,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
         if (p->tx_t <= lost_send_t ||
             (likely(pn->lg_acked != UINT64_MAX) && p->hdr.nr <= lost_pn)) {
             p->is_lost = true;
+            c->i.pkts_out_lost++;
             // cppcheck-suppress knownConditionTrueFalse
             if (unlikely(largest_lost_pkt == 0) ||
                 p->hdr.nr > largest_lost_pkt->hdr.nr) {
@@ -255,6 +256,7 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
             w_set_sockopt(c->sock, &c->sockopt);
         }
         tx(c, 0);
+        c->i.pto_cnt++;
 
     } else if (!is_zero(c->rec.loss_t)) {
         warn(DBG, "TT alarm ep %u on %s conn %s", c->tls.epoch_out,
@@ -268,6 +270,7 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
         warn(DBG, "PTO alarm #%u on %s conn %s", c->rec.pto_cnt, conn_type(c),
              cid2str(c->scid));
         c->rec.pto_cnt++;
+        c->i.pto_cnt++;
         tx(c, 2);
     }
 

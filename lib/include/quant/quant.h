@@ -69,6 +69,22 @@ struct q_conn_conf {
 };
 
 
+struct q_conn_info {
+    uint64_t pkts_in_valid;
+    uint64_t pkts_in_invalid;
+
+    uint64_t pkts_out;
+    uint64_t pkts_out_lost;
+    uint64_t pkts_out_rtx;
+
+    double rtt;
+    double rttvar;
+    uint64_t cwnd;
+    uint64_t ssthresh;
+    uint64_t pto_cnt;
+};
+
+
 extern struct w_engine * __attribute__((nonnull(1)))
 q_init(const char * const ifname, const struct q_conf * const conf);
 
@@ -144,6 +160,9 @@ extern bool __attribute__((nonnull))
 q_is_uni_stream(const struct q_stream * const s);
 
 extern void __attribute__((nonnull)) q_rebind_sock(struct q_conn * const c);
+
+extern void __attribute__((nonnull))
+q_info(const struct q_conn * const c, struct q_conn_info * const ci);
 
 
 #define bps(bytes, secs)                                                       \

@@ -672,6 +672,22 @@ void q_close(struct q_conn * const c,
     loop_run(q_close, c, 0);
 
 done:
+    if (c->scid) {
+        conn_info_populate(c);
+        warn(INF, "%s conn %s stats:", conn_type(c), cid2str(c->scid));
+        warn(INF, "\tpkts_in_valid = %s%" PRIu64 NRM,
+             c->i.pkts_in_valid ? NRM : BLD RED, c->i.pkts_in_valid);
+        warn(INF, "\tpkts_in_invalid = %s%" PRIu64 NRM,
+             c->i.pkts_in_invalid ? BLD RED : NRM, c->i.pkts_in_invalid);
+        warn(INF, "\tpkts_out = %" PRIu64, c->i.pkts_out);
+        warn(INF, "\tpkts_out_lost = %" PRIu64, c->i.pkts_out_lost);
+        warn(INF, "\tpkts_out_rtx = %" PRIu64, c->i.pkts_out_rtx);
+        warn(INF, "\trtt = %.3f", c->i.rtt);
+        warn(INF, "\trttvar = %.3f", c->i.rttvar);
+        warn(INF, "\tcwnd = %" PRIu64, c->i.cwnd);
+        warn(INF, "\tssthresh = %" PRIu64, c->i.ssthresh);
+        warn(INF, "\tpto_cnt = %" PRIu64, c->i.pto_cnt);
+    }
     free_conn(c);
 }
 
@@ -844,4 +860,10 @@ void q_rebind_sock(struct q_conn * const c)
 #endif
 
     tx(c, 1);
+}
+
+
+void q_info(const struct q_conn * const c, struct q_conn_info * const ci)
+{
+    memcpy(ci, &c->i, sizeof(*ci));
 }
