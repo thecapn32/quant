@@ -64,7 +64,8 @@ void log_pkt(const char * const dir,
     if (util_dlevel < NTE)
         return;
 
-    char ip[NI_MAXHOST], port[NI_MAXSERV];
+    char ip[NI_MAXHOST];
+    char port[NI_MAXSERV];
     ensure(getnameinfo(addr, sizeof(*addr), ip, sizeof(ip), port, sizeof(port),
                        NI_NUMERICHOST | NI_NUMERICSERV) == 0,
            "getnameinfo");
@@ -345,7 +346,8 @@ bool enc_pkt(struct q_stream * const s,
         adj_iov_to_start(v);
 
     struct q_conn * const c = s->c;
-    uint16_t i = 0, len_pos = 0;
+    uint16_t i = 0;
+    uint16_t len_pos = 0;
 
     const epoch_t epoch = strm_epoch(s);
     struct pn_space * const pn = meta(v).pn = pn_for_epoch(c, epoch);
@@ -948,7 +950,7 @@ uint32_t clnt_vneg(const uint8_t * const buf, const uint16_t len)
             // skip over reserved and vneg-trigger versions in our local list
             continue;
 
-        for (uint8_t j = 0; j < len - pos; j += sizeof(ok_vers[0])) {
+        for (uint16_t j = 0; j < len - pos; j += sizeof(ok_vers[0])) {
             uint32_t vers = 0;
             dec(&vers, buf, len, pos + j, sizeof(vers), "0x%08x");
 

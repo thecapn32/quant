@@ -83,7 +83,7 @@ BENCHMARK(BM_quic_encryption)
 
 int main(int argc, char ** argv)
 {
-    char i[IFNAMSIZ] = "lo"
+    char i[IFNAMSIZ] = "lo" // NOLINT
 #ifndef __linux__
                        "0"
 #endif

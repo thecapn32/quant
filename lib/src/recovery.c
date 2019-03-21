@@ -182,7 +182,8 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
     // Packets with packet numbers before this are deemed lost.
     const uint64_t lost_pn = pn->lg_acked - kPacketThreshold;
 
-    struct pkt_meta *p, *largest_lost_pkt = 0;
+    struct pkt_meta * p;
+    struct pkt_meta * largest_lost_pkt = 0;
     ev_tstamp largest_lost_tx_t = 0;
 
     kh_foreach_value(pn->sent_pkts, p, {

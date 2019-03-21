@@ -184,9 +184,9 @@ static int setup_cipher(ptls_cipher_context_t ** hp_ctx,
         goto Exit;
     }
     if (QUICLY_DEBUG) {
-        char *secret_hex = quicly_hexdump(secret, hash->digest_size, SIZE_MAX),
-             *hpkey_hex =
-                 quicly_hexdump(hpkey, aead->ctr_cipher->key_size, SIZE_MAX);
+        char * secret_hex = quicly_hexdump(secret, hash->digest_size, SIZE_MAX);
+        char * hpkey_hex =
+            quicly_hexdump(hpkey, aead->ctr_cipher->key_size, SIZE_MAX);
         fprintf(stderr, "%s:\n  aead-secret: %s\n  hp-key: %s\n", __func__,
                 secret_hex, hpkey_hex);
         // free(secret_hex);
@@ -628,7 +628,8 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             i += sizeof(pa->cid.srt);
 
 #ifndef NDEBUG
-            char ip4[NI_MAXHOST], port4[NI_MAXSERV];
+            char ip4[NI_MAXHOST];
+            char port4[NI_MAXSERV];
             int err = getnameinfo((struct sockaddr *)pa4, sizeof(*pa4), ip4,
                                   sizeof(ip4), port4, sizeof(port4),
                                   NI_NUMERICHOST | NI_NUMERICSERV);
@@ -638,7 +639,8 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                 return 1;
             }
 
-            char ip6[NI_MAXHOST], port6[NI_MAXSERV];
+            char ip6[NI_MAXHOST];
+            char port6[NI_MAXSERV];
             err = getnameinfo((struct sockaddr *)pa6, sizeof(*pa6), ip6,
                               sizeof(ip6), port6, sizeof(port6),
                               NI_NUMERICHOST | NI_NUMERICSERV);
@@ -1274,7 +1276,8 @@ void free_tls_ctx(void)
     dispose_cipher(&enc_tckt);
 
     // free ticket cache
-    struct tls_ticket *t, *tmp;
+    struct tls_ticket * t;
+    struct tls_ticket * tmp;
     for (t = splay_min(tickets_by_peer, &tickets); t != 0; t = tmp) {
         tmp = splay_next(tickets_by_peer, &tickets, t);
         ensure(splay_remove(tickets_by_peer, &tickets, t), "removed");

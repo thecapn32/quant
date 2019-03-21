@@ -54,7 +54,8 @@ include(CheckCCompilerFlag)
 include(CheckCXXCompilerFlag)
 foreach(FLAG -pipe -march=native -Wextra -Wpedantic -Weverything -Werror
         -fcolor-diagnostics -fdiagnostics-color=always
-        -Wno-disabled-macro-expansion #clang on travis needs this
+        -Wno-disabled-macro-expansion # clang on travis needs this
+        -Wno-extra-semi-stmt # the kh_foreach* macros need this
         -fcomment-block-commands=dotfile
         -Wno-missing-braces -Wno-missing-field-initializers
         -fsanitize=memory -fsanitize-memory-track-origins
@@ -165,6 +166,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
       message(STATUS "Found clang-tidy: ${CLANGTIDY}")
       set(CLANG_TIDY_CHECKS *
           -cert-err58-cpp
+          -cppcoreguidelines-avoid-magic-numbers
+          -cppcoreguidelines-macro-usage
           -cppcoreguidelines-owning-memory
           -cppcoreguidelines-pro-bounds-array-to-pointer-decay
           -cppcoreguidelines-pro-bounds-pointer-arithmetic
@@ -179,6 +182,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
           -hicpp-signed-bitwise
           -hicpp-vararg
           -readability-braces-around-statements
+          -readability-magic-numbers
       )
       string(REPLACE ";" "," CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS}")
       set(CMAKE_C_CLANG_TIDY ${CLANGTIDY}

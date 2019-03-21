@@ -170,7 +170,9 @@ get(const char * const url,
            "unsupported URL components");
 
     // extract relevant info from URL
-    char dest[1024], port[64], path[2048];
+    char dest[1024];
+    char port[64];
+    char path[2048];
     set_from_url(dest, sizeof(dest), url, &u, UF_HOST, "localhost");
     set_from_url(port, sizeof(port), url, &u, UF_PORT, "4433");
     set_from_url(path, sizeof(path), url, &u, UF_PATH, "/index.html");
@@ -289,7 +291,8 @@ static void __attribute__((nonnull)) free_cc(struct conn_cache * const cc)
 
 static void free_sl(void)
 {
-    struct stream_entry *i = 0, *tmp = 0;
+    struct stream_entry * i = 0;
+    struct stream_entry * tmp = 0;
     sl_foreach_safe (i, &sl, next, tmp) {
         sl_remove(&sl, i, stream_entry, next);
         free(i);
@@ -396,7 +399,8 @@ int main(int argc, char * argv[])
             q_readall_stream(se->s, &i);
 
             if (reps > 1) {
-                struct timespec after, diff;
+                struct timespec after;
+                struct timespec diff;
                 clock_gettime(CLOCK_MONOTONIC, &after);
                 timespec_sub(&after, &se->get_t, &diff);
                 const double elapsed = timespec_to_double(diff);

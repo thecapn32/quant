@@ -152,7 +152,7 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
         char c = 'A';
         sq_foreach (v, &out, next) {
             memset(v->buf, c, v->len);
-            c = (c == 'Z' ? 'A' : c + 1);
+            c = (char)(c == 'Z' ? 'A' : c + 1);
         }
         q_write(d->s, &out, true);
         q_free(&out);

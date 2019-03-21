@@ -185,7 +185,8 @@ struct q_conn * q_connect(struct w_engine * const w,
     c->try_0rtt = early_data && early_data_stream;
 
 #ifndef NDEBUG
-    char ip[NI_MAXHOST], port[NI_MAXSERV];
+    char ip[NI_MAXHOST];
+    char port[NI_MAXSERV];
     ensure(getnameinfo(peer, sizeof(*peer), ip, sizeof(ip), port, sizeof(port),
                        NI_NUMERICHOST | NI_NUMERICSERV) == 0,
            "getnameinfo");
@@ -289,7 +290,8 @@ bool q_write(struct q_stream * const s,
     loop_run(q_write, s->c, s);
 
 #ifndef NDEBUG
-    struct timespec after, diff;
+    struct timespec after;
+    struct timespec diff;
     clock_gettime(CLOCK_MONOTONIC, &after);
     timespec_sub(&after, &before, &diff);
     const double elapsed = timespec_to_double(diff);
@@ -359,7 +361,8 @@ again:;
     }
 
 #ifndef NDEBUG
-    struct timespec after, diff;
+    struct timespec after;
+    struct timespec diff;
     clock_gettime(CLOCK_MONOTONIC, &after);
     timespec_sub(&after, &before, &diff);
     const double elapsed = timespec_to_double(diff);
@@ -396,7 +399,8 @@ void q_readall_stream(struct q_stream * const s, struct w_iov_sq * const q)
     }
 
 #ifndef NDEBUG
-    struct timespec after, diff;
+    struct timespec after;
+    struct timespec diff;
     clock_gettime(CLOCK_MONOTONIC, &after);
     timespec_sub(&after, &before, &diff);
     const double elapsed = timespec_to_double(diff);
@@ -469,7 +473,8 @@ accept:;
     c->needs_accept = false;
 
 #ifndef NDEBUG
-    char ip[NI_MAXHOST], port[NI_MAXSERV];
+    char ip[NI_MAXHOST];
+    char port[NI_MAXSERV];
     ensure(getnameinfo((struct sockaddr *)&c->peer, sizeof(c->peer), ip,
                        sizeof(ip), port, sizeof(port),
                        NI_NUMERICHOST | NI_NUMERICSERV) == 0,
@@ -703,10 +708,10 @@ void q_cleanup(struct w_engine * const w)
     }
 
     // XXX: all bufs must have been returned for sq_len() to be correct
-    for (uint32_t i = 0; i <= sq_len(&w->iov); i++) {
+    for (uint64_t i = 0; i <= sq_len(&w->iov); i++) {
         ASAN_UNPOISON_MEMORY_REGION(&pkt_meta[i], sizeof(pkt_meta[i]));
         if (pkt_meta[i].hdr.nr)
-            warn(DBG, "buffer %u still in use for pkt %" PRIu64, i,
+            warn(DBG, "buffer %" PRIu64 " still in use for pkt %" PRIu64, i,
                  pkt_meta[i].hdr.nr);
     }
 
@@ -807,7 +812,8 @@ void q_rebind_sock(struct q_conn * const c)
         return;
 
 #ifndef NDEBUG
-    char old_ip[NI_MAXHOST], old_port[NI_MAXSERV];
+    char old_ip[NI_MAXHOST];
+    char old_port[NI_MAXSERV];
     const struct sockaddr * src = w_get_addr(c->sock, true);
     ensure(getnameinfo(src, sizeof(*src), old_ip, sizeof(old_ip), old_port,
                        sizeof(old_port), NI_NUMERICHOST | NI_NUMERICSERV) == 0,
@@ -826,7 +832,8 @@ void q_rebind_sock(struct q_conn * const c)
     w_connect(c->sock, (struct sockaddr *)&c->peer);
 
 #ifndef NDEBUG
-    char new_ip[NI_MAXHOST], new_port[NI_MAXSERV];
+    char new_ip[NI_MAXHOST];
+    char new_port[NI_MAXSERV];
     src = w_get_addr(c->sock, true);
     ensure(getnameinfo(src, sizeof(*src), new_ip, sizeof(new_ip), new_port,
                        sizeof(new_port), NI_NUMERICHOST | NI_NUMERICSERV) == 0,

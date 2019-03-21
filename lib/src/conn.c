@@ -1032,7 +1032,8 @@ rx_pkts(struct w_iov_sq * const x,
 
                 const uint16_t sport = get_sport(ws);
 #ifndef NDEBUG
-                char ip[NI_MAXHOST], port[NI_MAXSERV];
+                char ip[NI_MAXHOST];
+                char port[NI_MAXSERV];
                 ensure(getnameinfo((struct sockaddr *)&v->addr, sizeof(v->addr),
                                    ip, sizeof(ip), port, sizeof(port),
                                    NI_NUMERICHOST | NI_NUMERICSERV) == 0,
@@ -1181,7 +1182,8 @@ rx_pkts(struct w_iov_sq * const x,
                  sockaddr_cmp((struct sockaddr *)&c->migr_peer,
                               (struct sockaddr *)&v->addr) != 0)) {
 #ifndef NDEBUG
-                char ip[NI_MAXHOST], port[NI_MAXSERV];
+                char ip[NI_MAXHOST];
+                char port[NI_MAXSERV];
                 ensure(getnameinfo((struct sockaddr *)&v->addr, sizeof(v->addr),
                                    ip, sizeof(ip), port, sizeof(port),
                                    NI_NUMERICHOST | NI_NUMERICSERV) == 0,

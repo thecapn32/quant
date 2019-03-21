@@ -74,7 +74,8 @@ static void trace(struct diet * const d,
 
 static void chk(struct diet * const d)
 {
-    struct ival *i, *next;
+    struct ival * i;
+    struct ival * next;
     for (i = splay_min(diet, d); i != 0; i = next) {
         next = splay_next(diet, d, i);
         ensure(next == 0 || i->hi + 1 < next->lo,

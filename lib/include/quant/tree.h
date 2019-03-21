@@ -263,7 +263,10 @@
                                                                                \
     void name##_splay(struct name * const head, const struct type * const elm) \
     {                                                                          \
-        struct type __node, *__left, *__right, *__tmp;                         \
+        struct type __node;                                                    \
+        struct type * __left;                                                  \
+        struct type * __right;                                                 \
+        struct type * __tmp;                                                   \
         int __comp;                                                            \
                                                                                \
         splay_left(&__node, field) = splay_right(&__node, field) = NULL;       \
@@ -300,7 +303,10 @@
      */                                                                        \
     void name##_splay_minmax(struct name * head, int __comp)                   \
     {                                                                          \
-        struct type __node, *__left, *__right, *__tmp;                         \
+        struct type __node;                                                    \
+        struct type * __left;                                                  \
+        struct type * __right;                                                 \
+        struct type * __tmp;                                                   \
                                                                                \
         splay_left(&__node, field) = splay_right(&__node, field) = NULL;       \
         __left = __right = &__node;                                            \

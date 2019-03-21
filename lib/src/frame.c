@@ -566,7 +566,9 @@ uint16_t dec_ack_frame(struct q_conn * const c,
 
     if (t == FRM_ACE) {
         // decode ECN
-        uint64_t ect0_cnt = 0, ect1_cnt = 0, ce_cnt = 0;
+        uint64_t ect0_cnt = 0;
+        uint64_t ect1_cnt = 0;
+        uint64_t ce_cnt = 0;
         i = dec_chk(t, &ect0_cnt, v->buf, v->len, i, 0, "%" PRIu64);
         i = dec_chk(t, &ect1_cnt, v->buf, v->len, i, 0, "%" PRIu64);
         i = dec_chk(t, &ce_cnt, v->buf, v->len, i, 0, "%" PRIu64);
@@ -852,8 +854,10 @@ dec_path_response_frame(struct q_conn * const c,
 
     if (likely(c->tx_path_chlg)) {
 #ifndef NDEBUG
-        char ip[NI_MAXHOST], port[NI_MAXSERV], migr_ip[NI_MAXHOST],
-            migr_port[NI_MAXSERV];
+        char ip[NI_MAXHOST];
+        char port[NI_MAXSERV];
+        char migr_ip[NI_MAXHOST];
+        char migr_port[NI_MAXSERV];
         ensure(getnameinfo((struct sockaddr *)&c->peer, sizeof(c->peer), ip,
                            sizeof(ip), port, sizeof(port),
                            NI_NUMERICHOST | NI_NUMERICSERV) == 0,
