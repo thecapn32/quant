@@ -1,5 +1,8 @@
 # QUANT – QUIC Userspace Accelerated Network Transfers
 
+[![Build Status](https://travis-ci.org/NTAP/quant.svg?branch=master)](https://travis-ci.org/NTAP/quant)
+[![Total alerts](https://img.shields.io/lgtm/alerts/g/NTAP/quant.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/NTAP/quant/alerts/)
+
 QUANT is a BSD-licensed C11 implementation of the emerging IETF
 [QUIC](https://quicwg.github.io/) standard for a new transport protocol over
 UDP, intending to support the new HTTP/3 standard. QUANT uses the
