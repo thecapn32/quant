@@ -718,7 +718,9 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
     init_rec(c);
 
     // reset TLS state and create new CH
+    const bool should_try_0rtt = c->try_0rtt;
     init_tls(c, (char *)c->tls.alpn.base);
+    c->try_0rtt = should_try_0rtt;
     tls_io(c->cstreams[ep_init], 0);
 }
 

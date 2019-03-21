@@ -985,8 +985,8 @@ void init_tls(struct q_conn * const c, const char * const clnt_alpn)
                 ptls_iovec_init(t->ticket, t->ticket_len);
             memcpy(&c->tp_out, &t->tp, sizeof(t->tp));
             c->vers_initial = c->vers = t->vers;
-        } else
-            c->try_0rtt = false;
+            c->try_0rtt = true;
+        }
     }
 
     init_prot(c);
