@@ -132,6 +132,7 @@ crpt_strm_id(const epoch_t epoch)
     case ep_0rtt:
         die("unhandled epoch %u", epoch);
     }
+    // lgtm[cpp/missing-return]
 }
 
 
