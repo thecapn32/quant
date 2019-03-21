@@ -87,7 +87,7 @@ static inline void __attribute__((nonnull)) maybe_tx(struct q_conn * const c)
 }
 
 
-static void __attribute__((nonnull)) set_ld_timer(struct q_conn * const c)
+void set_ld_timer(struct q_conn * const c)
 {
     // see SetLossDetectionTimer() pseudo code
 

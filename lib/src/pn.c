@@ -125,6 +125,8 @@ void abandon_pn(struct q_conn * const c, const epoch_t e)
     dispose_cipher(&c->pn_init.in);
     dispose_cipher(&c->pn_init.out);
     c->cstreams[e] = 0;
+    // we need to kill the timer if there are no pkts outstanding
+    set_ld_timer(c);
 }
 
 

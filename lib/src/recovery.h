@@ -136,3 +136,5 @@ on_pkt_acked(struct pn_space * const pn, struct w_iov * const acked_pkt);
 
 extern void __attribute__((nonnull))
 congestion_event(struct q_conn * const c, const ev_tstamp sent_t);
+
+extern void __attribute__((nonnull)) set_ld_timer(struct q_conn * const c);
