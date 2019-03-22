@@ -1091,6 +1091,18 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
 }
 
 
+static void __attribute__((nonnull)) free_ticket(struct tls_ticket * const t)
+{
+    if (t->sni)
+        free(t->sni);
+    if (t->alpn)
+        free(t->alpn);
+    if (t->ticket)
+        free(t->ticket);
+    free(t);
+}
+
+
 static void read_tickets()
 {
     FILE * const fp = fopen(tickets.file_name, "rbe");
@@ -1103,9 +1115,11 @@ static void read_tickets()
 
     // read and verify git hash
     size_t hash_len;
-    ensure(fread(&hash_len, sizeof(quant_commit_hash_len), 1, fp), "fread");
+    if (fread(&hash_len, sizeof(quant_commit_hash_len), 1, fp) != 1)
+        goto done;
     uint8_t buf[8192];
-    ensure(fread(buf, sizeof(uint8_t), hash_len, fp), "fread");
+    if (fread(buf, sizeof(uint8_t), hash_len, fp) != hash_len)
+        goto done;
     if (hash_len != quant_commit_hash_len ||
         memcmp(buf, quant_commit_hash, hash_len) != 0) {
         warn(WRN, "TLS tickets were stored by different %s version, removing",
@@ -1125,24 +1139,35 @@ static void read_tickets()
         ensure(t, "calloc");
         t->sni = calloc(1, len);
         ensure(t->sni, "calloc");
-        ensure(fread(t->sni, sizeof(*t->sni), len, fp), "fread");
+        if (fread(t->sni, sizeof(*t->sni), len, fp) != len)
+            goto abort;
 
-        ensure(fread(&len, sizeof(len), 1, fp), "fread");
+        if (fread(&len, sizeof(len), 1, fp) != 1)
+            goto abort;
         t->alpn = calloc(1, len);
         ensure(t->alpn, "calloc");
-        ensure(fread(t->alpn, sizeof(*t->alpn), len, fp), "fread");
+        if (fread(t->alpn, sizeof(*t->alpn), len, fp) != len)
+            goto abort;
 
-        ensure(fread(&t->tp, sizeof(t->tp), 1, fp), "fread");
-        ensure(fread(&t->vers, sizeof(t->vers), 1, fp), "fread");
+        if (fread(&t->tp, sizeof(t->tp), 1, fp) != 1)
+            goto abort;
+        if (fread(&t->vers, sizeof(t->vers), 1, fp) != 1)
+            goto abort;
 
-        ensure(fread(&len, sizeof(len), 1, fp), "fread");
+        if (fread(&len, sizeof(len), 1, fp) != 1)
+            goto abort;
         t->ticket_len = len;
         t->ticket = calloc(len, sizeof(*t->ticket));
         ensure(t->ticket, "calloc");
-        ensure(fread(t->ticket, sizeof(*t->ticket), len, fp), "fread");
+        if (fread(t->ticket, sizeof(*t->ticket), len, fp) != len)
+            goto abort;
 
         ensure(splay_insert(tickets_by_peer, &tickets, t) == 0, "inserted");
         warn(INF, "got TLS ticket %s %s", t->sni, t->alpn);
+        continue;
+    abort:
+        free_ticket(t);
+        break;
     }
 
 done:
@@ -1282,10 +1307,7 @@ void free_tls_ctx(void)
     for (t = splay_min(tickets_by_peer, &tickets); t != 0; t = tmp) {
         tmp = splay_next(tickets_by_peer, &tickets, t);
         ensure(splay_remove(tickets_by_peer, &tickets, t), "removed");
-        free(t->sni);
-        free(t->alpn);
-        free(t->ticket);
-        free(t);
+        free_ticket(t);
     }
 }
 
