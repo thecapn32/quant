@@ -52,7 +52,6 @@
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 #include <errno.h>
 #include <fcntl.h>
-#include <signal.h>
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <unistd.h>

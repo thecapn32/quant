@@ -35,11 +35,6 @@
 #include <sys/param.h>
 #include <sys/socket.h>
 
-#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
-    !defined(NO_FUZZER_CORPUS_COLLECTION)
-#include <sys/socket.h>
-#endif
-
 // IWYU pragma: no_include <picotls/../picotls.h>
 
 #include <ev.h>
