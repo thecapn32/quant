@@ -468,7 +468,8 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         if (tp >= TP_MAX) {
             uint16_t unknown_len;
             i = dec(&unknown_len, buf, len, i, sizeof(unknown_len), "%u");
-            warn(WRN, "skipping unknown tp 0x%04x w/len %u", tp, unknown_len);
+            warn(WRN, "\t" BLD RED "unknown tp" NRM " (0x%04x w/len %u) = %s",
+                 tp, unknown_len, hex2str(&buf[i], unknown_len));
             i += unknown_len;
             continue;
         }
