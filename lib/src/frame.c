@@ -935,7 +935,7 @@ dec_reset_stream_frame(struct q_conn * const c,
     i = dec_chk(FRM_RST, &off, v->buf, v->len, i, 0, "%" PRIu64);
 
     warn(INF,
-         FRAM_IN "RESET_STREAM" NRM " sid=" FMT_SID " err=%s0x%04x" NRM
+         FRAM_IN "RESET_STREAM" NRM " id=" FMT_SID " err=%s0x%04x" NRM
                  " off=%" PRIu64,
          sid, err ? RED : NRM, err, off);
 
