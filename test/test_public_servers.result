@@ -1,10 +1,10 @@
           live fail vneg hshk data clse rsmt zrtt rtry migr bind kyph http spin aecn
 ats       *         V    H    D    C    R    Z    S    M              3
 f5        *         V    H    D    C    R         S
-lsquic    *         V    H    D    C    R    Z    S    M              3         E
-mvfst     *         v
+lsquic    *         V    H    D    C    R    Z    S    M              3    P    E
+mvfst     *         V                                                 3
 ngtcp2    *         V    H    D    C    R    Z    S    M    B    U
-ngx_quic  *         V    H    D    C    R
+ngx_quic  *         V    H    D    C    R                             3
 picoquic  *         V    H    D    C    R    Z    S    M    B    U    3    P
 quant     *         V    H    D    C    R    Z    S    M    B    U         P    E
 quiche    *         V    H    D    C    R         S                   3
