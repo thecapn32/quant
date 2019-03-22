@@ -41,7 +41,10 @@
 #include <time.h>
 #include <unistd.h>
 
+#define klib_unused
+
 #include <http_parser.h>
+#include <khash.h>
 
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
@@ -50,15 +53,15 @@
 struct conn_cache_entry {
     struct sockaddr_in dst;
     struct q_conn * c;
-    splay_entry(conn_cache_entry) node;
     bool rebound;
     uint8_t _unused[7];
 };
 
 
-struct conn_cache {
-    splay_head(, conn_cache_entry);
-};
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
+KHASH_MAP_INIT_INT64(conn_cache, struct conn_cache_entry *) // NOLINT
+#pragma clang diagnostic pop
 
 
 static uint64_t timeout = 10;
@@ -71,23 +74,6 @@ static bool write_files = false;
 static bool rebind = false;
 
 
-static uint32_t __attribute__((nonnull))
-conn_cmp(const struct conn_cache_entry * const a,
-         const struct conn_cache_entry * const b)
-{
-    const uint32_t diff = (a->dst.sin_addr.s_addr > b->dst.sin_addr.s_addr) -
-                          (a->dst.sin_addr.s_addr < b->dst.sin_addr.s_addr);
-    if (diff)
-        return diff;
-    return (a->dst.sin_port > b->dst.sin_port) -
-           (a->dst.sin_port < b->dst.sin_port);
-}
-
-
-SPLAY_PROTOTYPE(conn_cache, conn_cache_entry, node, conn_cmp)
-SPLAY_GENERATE(conn_cache, conn_cache_entry, node, conn_cmp)
-
-
 struct stream_entry {
     sl_entry(stream_entry) next;
     struct q_conn * c;
@@ -98,6 +84,18 @@ struct stream_entry {
 
 
 static sl_head(stream_list, stream_entry) sl = sl_head_initializer(sl);
+
+
+static inline uint64_t __attribute__((nonnull, always_inline))
+conn_cache_key(const struct sockaddr * const sock)
+{
+    const struct sockaddr_in * const sock4 =
+        (const struct sockaddr_in *)(const void *)sock;
+
+    return ((uint64_t)sock4->sin_addr.s_addr
+            << sizeof(sock4->sin_addr.s_addr) * 8) |
+           (uint64_t)sock4->sin_port;
+}
 
 
 static void __attribute__((noreturn, nonnull)) usage(const char * const name,
@@ -157,9 +155,7 @@ set_from_url(char * const var,
 
 
 static struct q_conn * __attribute__((nonnull))
-get(const char * const url,
-    struct w_engine * const w,
-    struct conn_cache * const cc)
+get(const char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
 {
     // parse and verify the URIs passed on the command line
     struct http_parser_url u = {0};
@@ -220,9 +216,9 @@ get(const char * const url,
     }
 
     // do we have a connection open to this peer?
-    const struct conn_cache_entry which = {
-        .dst = *(struct sockaddr_in *)&peer->ai_addr};
-    struct conn_cache_entry * cce = splay_find(conn_cache, cc, &which);
+    khiter_t k = kh_get(conn_cache, cc, conn_cache_key(peer->ai_addr));
+    struct conn_cache_entry * cce =
+        (k == kh_end(cc) ? 0 : kh_val(cc, k)); // NOLINT
     const bool opened_new = cce == 0;
     if (cce == 0) {
         clock_gettime(CLOCK_MONOTONIC, &se->get_t);
@@ -257,7 +253,10 @@ get(const char * const url,
 
         // insert into connection cache
         cce->dst = *(struct sockaddr_in *)&peer->ai_addr;
-        splay_insert(conn_cache, cc, cce);
+        int ret;
+        k = kh_put(conn_cache, cc, conn_cache_key(peer->ai_addr), &ret);
+        ensure(ret >= 1, "inserted returned %d", ret);
+        kh_val(cc, k) = cce;
     }
 
     if (opened_new == false || (rebind && cce->rebound == false)) {
@@ -279,13 +278,11 @@ get(const char * const url,
 }
 
 
-static void __attribute__((nonnull)) free_cc(struct conn_cache * const cc)
+static void __attribute__((nonnull)) free_cc(khash_t(conn_cache) * cc)
 {
-    while (!splay_empty(cc)) {
-        struct conn_cache_entry * const cce = splay_min(conn_cache, cc);
-        splay_remove(conn_cache, cc, cce);
-        free(cce);
-    }
+    struct conn_cache_entry * cce;
+    kh_foreach_value(cc, cce, { free(cce); });
+    kh_destroy(conn_cache, cc);
 }
 
 
@@ -371,7 +368,7 @@ int main(int argc, char * argv[])
                                        .ticket_store = cache,
                                        .tls_log = tls_log,
                                        .enable_tls_cert_verify = verify_certs});
-    struct conn_cache cc = splay_initializer(cc);
+    khash_t(conn_cache) * cc = kh_init(conn_cache);
 
     if (reps > 1)
         puts("size\ttime\t\tbps\t\turl");
@@ -380,7 +377,7 @@ int main(int argc, char * argv[])
         while (url_idx < argc) {
             // open a new connection, or get an open one
             warn(INF, "%s retrieving %s", basename(argv[0]), argv[url_idx]);
-            if (get(argv[url_idx++], w, &cc) == 0) {
+            if (get(argv[url_idx++], w, cc) == 0) {
                 // q_connect() failed
                 ret = 1;
                 goto done;
@@ -471,7 +468,7 @@ int main(int argc, char * argv[])
 
 done:
     q_cleanup(w);
-    free_cc(&cc);
+    free_cc(cc);
     free_sl();
     warn(DBG, "%s exiting", basename(argv[0]));
     return ret;

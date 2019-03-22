@@ -34,7 +34,11 @@ foreach(TARGET ${TARGETS})
     target_link_libraries(${TARGET} lib${PROJECT_NAME} ${HTTP_PARSER_LIB})
   endif()
 
-  target_include_directories(${TARGET} SYSTEM PRIVATE ${HTTP_PARSER_INCLUDE})
+  target_include_directories(${TARGET}
+    SYSTEM PRIVATE
+      ${HTTP_PARSER_INCLUDE}
+      $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/klib>
+  )
 
   if(DSYMUTIL)
     add_custom_command(TARGET ${TARGET} POST_BUILD
