@@ -30,7 +30,7 @@
 
 declare -A servers=(
     # [tag]=name:flags:port:retry-port:h3-port:URL
-    # [apple]=172.30.197.241::4433:4434:4433:/index.html
+    [apple]=31.133.146.185::4433:4434:4433:/50k
     [ats]=quic.ogre.com::4433:4434:4433:/en/latest/_static/jquery.js
     [f5]=208.85.208.226::4433:4433:4433:/file50k
     [lsquic]=http3-test.litespeedtech.com:-3:4433:4434:4433:/
@@ -69,7 +69,7 @@ script=$(basename -s .sh "$0")
 rm -f /tmp/"$script"*
 
 function test_server {
-    # run quant client and produce a pure ASCII log for post-processing
+    # run quant client and save a log for post-processing
     local opts="-i $iface -t4 -v5"
     local log_base="/tmp/$script.$1.$pid"
 
