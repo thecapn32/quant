@@ -8,6 +8,6 @@ ngx_quic  *         V    H    D    C    R                             3
 picoquic  *         V    H    D    C    R    Z    S    M    B    U    3    P
 quant     *         V    H    D    C    R    Z    S    M    B    U         P    E
 quiche    *         V    H    D    C    R         S                   3
-quicly    *         v
+quicly    *         V    H    D    C    R    Z
 quinn     *         V    H    D    C    R    Z    S    M    B    U         P    E
 winquic   *         V    H    D    C    R    Z    S                   3    P
