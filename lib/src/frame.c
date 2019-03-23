@@ -230,8 +230,9 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
     const char * kind = 0;
 
     if (unlikely(meta(v).stream_data_len == 0 && !is_set(F_STREAM_FIN, t))) {
-        warn(WRN, "zero-len stream/crypto frame on sid " FMT_SID ", ignoring",
-             sid);
+        // warn(WRN, "zero-len stream/crypto frame on sid " FMT_SID ",
+        // ignoring",
+        //      sid);
         ignore = true;
         goto done;
     }
