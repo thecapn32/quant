@@ -299,7 +299,8 @@ int main(int argc, char * argv[])
                 break;
 
             if (q_is_uni_stream(s)) {
-                warn(NTE, "can't serve request on uni stream");
+                warn(NTE, "can't serve request on uni stream: %.*s",
+                     sq_first(&q)->len, sq_first(&q)->buf);
 
             } else {
                 d.s = s;
