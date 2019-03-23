@@ -867,7 +867,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             meta(v).hdr.nr = UINT64_MAX;
             if (c->tok_len) {
                 // we already had an earlier RETRY on this connection
-                err_close(c, ERR_PROTOCOL_VIOLATION, 0, "rx 2nd retry");
+                warn(INF, "already handled a retry, ignoring");
                 goto done;
             }
 
