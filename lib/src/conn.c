@@ -748,6 +748,7 @@ pkt_ok_for_epoch(const uint8_t flags, const epoch_t epoch)
 
 
 static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
+                                            const struct w_sock * const ws,
                                             struct w_iov * v,
                                             struct w_iov_sq * const x,
                                             const struct cid * const odcid
@@ -765,27 +766,30 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 
     switch (c->state) {
     case conn_idle:
+        // this is a new connection
         c->vers = meta(v).hdr.vers;
-        if (c->tx_rtry) {
-            // tx_rtry is currently always set on port 4434
+
+        // TODO: remove this interop hack eventually
+        if (ntohs(get_sport(ws)) == 4434) {
             if (meta(v).hdr.type == LH_INIT && tok_len) {
                 if (verify_rtry_tok(c, tok, tok_len) == false) {
                     warn(ERR, "retry token verification failed");
                     enter_closing(c);
                     goto done;
-                } else
-                    c->tx_rtry = false;
+                }
             } else {
+                if (c->tx_rtry) {
+                    warn(DBG, "already tx'ing retry, ignoring");
+                    goto done;
+                }
                 warn(INF, "sending retry");
                 // send a RETRY
                 make_rtry_tok(c);
-                ok = c->needs_tx = true;
+                ok = c->needs_tx = c->tx_rtry = true;
                 update_act_scid(c);
                 goto done;
             }
         }
-
-        // this is a new connection
 
         // warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
         if (dec_frames(c, &v) == UINT16_MAX)
@@ -1038,7 +1042,6 @@ rx_pkts(struct w_iov_sq * const x,
                     goto drop;
                 }
 
-                const uint16_t sport = get_sport(ws);
 #ifndef NDEBUG
                 char ip[NI_MAXHOST];
                 char port[NI_MAXSERV];
@@ -1048,16 +1051,13 @@ rx_pkts(struct w_iov_sq * const x,
                        "getnameinfo");
 
                 warn(NTE, "new serv conn on port %u from %s:%s w/cid=%s",
-                     ntohs(sport), ip, port, cid2str(&meta(v).hdr.dcid));
+                     ntohs(get_sport(ws)), ip, port,
+                     cid2str(&meta(v).hdr.dcid));
 #endif
                 c = new_conn(w_engine(ws), meta(v).hdr.vers, &meta(v).hdr.scid,
                              &meta(v).hdr.dcid, (struct sockaddr *)&v->addr, 0,
-                             sport, 0);
+                             get_sport(ws), 0);
                 init_tls(c, 0);
-
-                // TODO: remove this interop hack eventually
-                if (ntohs(sport) == 4434)
-                    c->tx_rtry = true;
             }
         }
 
@@ -1224,7 +1224,7 @@ rx_pkts(struct w_iov_sq * const x,
         }
 
     decoal_done:
-        if (likely(rx_pkt(c, v, x, &odcid, tok, tok_len))) {
+        if (likely(rx_pkt(c, ws, v, x, &odcid, tok, tok_len))) {
             rx_crypto(c);
             c->min_rx_epoch =
                 c->had_rx
