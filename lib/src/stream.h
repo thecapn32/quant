@@ -122,7 +122,7 @@ out_fully_acked(const struct q_stream * const s)
 static inline int64_t __attribute__((always_inline, const))
 crpt_strm_id(const epoch_t epoch)
 {
-    switch (epoch) {
+    switch (epoch) { // lgtm [cpp/missing-return]
     case ep_init:
         return -4;
     case ep_hshk:
@@ -132,7 +132,6 @@ crpt_strm_id(const epoch_t epoch)
     case ep_0rtt:
         die("unhandled epoch %u", epoch);
     }
-    // lgtm[cpp/missing-return]
 }
 
 
