@@ -862,7 +862,8 @@ void q_rebind_sock(struct q_conn * const c)
 }
 
 
-void q_info(const struct q_conn * const c, struct q_conn_info * const ci)
+void q_info(struct q_conn * const c, struct q_conn_info * const ci)
 {
+    conn_info_populate(c);
     memcpy(ci, &c->i, sizeof(*ci));
 }

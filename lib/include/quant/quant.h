@@ -162,7 +162,7 @@ q_is_uni_stream(const struct q_stream * const s);
 extern void __attribute__((nonnull)) q_rebind_sock(struct q_conn * const c);
 
 extern void __attribute__((nonnull))
-q_info(const struct q_conn * const c, struct q_conn_info * const ci);
+q_info(struct q_conn * const c, struct q_conn_info * const ci);
 
 
 #define bps(bytes, secs)                                                       \
