@@ -243,7 +243,8 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
                  "ignoring STREAM frame for closed strm " FMT_SID
                  " on %s conn %s",
                  sid, conn_type(c), cid2str(c->scid));
-            return meta(v).stream_data_start + meta(v).stream_data_len;
+            ignore = true;
+            goto done;
         }
 
         if (unlikely(is_srv_ini(sid) != c->is_clnt)) {
