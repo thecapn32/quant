@@ -30,7 +30,7 @@
 
 declare -A servers=(
     # [tag]=name:flags:port:retry-port:h3-port:URL
-    [apple]=31.133.146.185::4433:4434:4433:/50k
+    # [apple]=31.133.146.185::4433:4434:4433:/50k
     [ats]=quic.ogre.com::4433:4434:4433:/en/latest/_static/jquery.js
     [f5]=208.85.208.226::4433:4433:4433:/file50k
     [lsquic]=http3-test.litespeedtech.com:-3:4433:4434:4433:/
@@ -42,7 +42,7 @@ declare -A servers=(
     # [pandora]=pandora.cm.in.tum.de::4433:4434:4433:/index.html
     [picoquic]=test.privateoctopus.com::4433:4434:4433:/40000
     [quant]=quant.eggert.org::4433:4434:4433:/40000
-    # [quic-go]=172.30.197.239::4433:4433:4433:/10000
+    # [quic-go]=31.133.128.156::4433:4433:4433:/40000
     [quiche]=quic.tech::4433:4433:8443:/random
     # [quicker]=quicker.edm.uhasselt.be::4433:4434:4433:/index.html
     [quicly]=kazuhooku.com::4433:4433:8443:/40000.txt
