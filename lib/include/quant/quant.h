@@ -119,6 +119,8 @@ q_rsv_stream(struct q_conn * const c, const bool bidi);
 
 extern void __attribute__((nonnull)) q_close_stream(struct q_stream * const s);
 
+extern void __attribute__((nonnull)) q_free_stream(struct q_stream * const s);
+
 extern void __attribute__((nonnull))
 q_alloc(struct w_engine * const w, struct w_iov_sq * const q, const size_t len);
 
@@ -146,12 +148,15 @@ extern void __attribute__((nonnull)) q_write_file(struct w_engine * const w,
                                                   const bool fin);
 
 extern bool __attribute__((nonnull))
-q_peer_has_closed_stream(struct q_stream * const s);
+q_is_stream_closed(const struct q_stream * const s);
+
+extern bool __attribute__((nonnull))
+q_is_conn_closed(const struct q_conn * const c);
 
 extern void __attribute__((nonnull))
 q_readall_stream(struct q_stream * const s, struct w_iov_sq * const q);
 
-extern struct q_conn * q_rx_ready(const uint64_t timeout);
+extern struct q_conn * q_ready(const uint64_t timeout);
 
 extern bool __attribute__((nonnull))
 q_is_new_serv_conn(const struct q_conn * const c);

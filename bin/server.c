@@ -273,7 +273,7 @@ int main(int argc, char * argv[])
     http_parser_settings settings = {.on_url = serve_cb};
 
     while (bound) {
-        struct q_conn * c = q_rx_ready(first_conn ? 0 : timeout);
+        struct q_conn * c = q_ready(first_conn ? 0 : timeout);
         if (c == 0)
             break;
         first_conn = false;
@@ -284,6 +284,11 @@ int main(int argc, char * argv[])
                 .idle_timeout = timeout,
                 .enable_spinbit = true,
             });
+
+        if (q_is_conn_closed(c)) {
+            q_close(c, 0, 0);
+            continue;
+        }
 
         while (1) {
             // do we need to handle a request?
@@ -320,8 +325,8 @@ int main(int argc, char * argv[])
                         q_free(&q);
                         goto err;
                     }
-                    if (q_peer_has_closed_stream(s)) {
-                        q_close_stream(s);
+                    if (q_is_stream_closed(s)) {
+                        q_free_stream(s);
                         break;
                     }
                 }

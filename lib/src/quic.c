@@ -367,15 +367,17 @@ again:;
     const double elapsed = timespec_to_double(diff);
 #endif
 
-    if (s)
+    if (s) {
         // return data
         sq_concat(q, &s->in);
 
-    warn(WRN,
-         "read %" PRIu64 " byte%s in %.3f sec (%s) on %s conn %s strm " FMT_SID,
-         w_iov_sq_len(q), plural(w_iov_sq_len(q)), elapsed,
-         bps(w_iov_sq_len(q), elapsed), conn_type(c), cid2str(c->scid),
-         s ? s->id : -1);
+        warn(WRN,
+             "read %" PRIu64
+             " byte%s in %.3f sec (%s) on %s conn %s strm " FMT_SID,
+             w_iov_sq_len(q), plural(w_iov_sq_len(q)), elapsed,
+             bps(w_iov_sq_len(q), elapsed), conn_type(c), cid2str(c->scid),
+             s->id);
+    }
 
     return s;
 }
@@ -439,7 +441,7 @@ cancel_api_call(struct ev_loop * const l __attribute__((unused)),
     warn(DBG, "canceling API call");
     ev_timer_stop(loop, &api_alarm);
     maybe_api_return(q_accept, 0, 0);
-    maybe_api_return(q_rx_ready, 0, 0);
+    maybe_api_return(q_ready, 0, 0);
 }
 
 
@@ -642,6 +644,12 @@ void q_close_stream(struct q_stream * const s)
 }
 
 
+void q_free_stream(struct q_stream * const s)
+{
+    free_stream(s);
+}
+
+
 void q_close(struct q_conn * const c,
              const uint16_t code,
              const char * const reason)
@@ -757,9 +765,15 @@ uint64_t q_sid(const struct q_stream * const s)
 }
 
 
-bool q_peer_has_closed_stream(struct q_stream * const s)
+bool q_is_stream_closed(const struct q_stream * const s)
 {
     return s->state == strm_clsd;
+}
+
+
+bool q_is_conn_closed(const struct q_conn * const c)
+{
+    return c->state == conn_clsd;
 }
 
 
@@ -786,7 +800,7 @@ done:
 #endif
 
 
-struct q_conn * q_rx_ready(const uint64_t timeout)
+struct q_conn * q_ready(const uint64_t timeout)
 {
     if (sl_empty(&c_ready)) {
         if (timeout) {
@@ -795,15 +809,20 @@ struct q_conn * q_rx_ready(const uint64_t timeout)
             ev_timer_init(&api_alarm, cancel_api_call, timeout, 0);
             ev_timer_start(loop, &api_alarm);
         }
-        warn(WRN, "waiting for conn to get ready to rx");
-        loop_run(q_rx_ready, 0, 0);
+        warn(WRN, "waiting for conn to get ready");
+        loop_run(q_ready, 0, 0);
     }
 
     struct q_conn * const c = sl_first(&c_ready);
     if (c) {
         sl_remove_head(&c_ready, node_rx_ext);
         c->have_new_data = c->in_c_ready = false;
-        warn(WRN, "%s conn %s ready to rx", conn_type(c), cid2str(c->scid));
+        char * op = "rx";
+        if (c->needs_accept)
+            op = "accept";
+        else if (c->state == conn_clsd)
+            op = "close";
+        warn(WRN, "%s conn %s ready to %s", conn_type(c), cid2str(c->scid), op);
     } else
         warn(WRN, "no conn ready to rx");
 

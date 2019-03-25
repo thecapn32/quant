@@ -305,11 +305,8 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
 
     // transmit encrypted/protected packets
     w_tx(c->sock, &c->txq);
-    w_nic_tx(c->w);
-    while (w_tx_pending(&c->txq)) {
-        w_nic_rx(c->w, 0);
+    while (w_tx_pending(&c->txq))
         w_nic_tx(c->w);
-    }
 
     // txq was allocated straight from warpcore, no metadata needs to be freed
     // const uint64_t avail = sq_len(&c->w->iov);
@@ -1277,7 +1274,7 @@ void rx(struct ev_loop * const l,
 {
     // read from NIC
     struct w_sock * const ws = rx_w->data;
-    w_nic_rx(w_engine(ws), -1);
+    w_nic_rx(w_engine(ws), 0);
     struct w_iov_sq x = w_iov_sq_initializer(x);
     struct q_conn_sl crx = sl_head_initializer(crx);
     w_rx(ws, &x);
@@ -1327,7 +1324,7 @@ void rx(struct ev_loop * const l,
             if (!c->in_c_ready) {
                 sl_insert_head(&c_ready, c, node_rx_ext);
                 c->in_c_ready = true;
-                maybe_api_return(q_rx_ready, 0, 0);
+                maybe_api_return(q_ready, 0, 0);
             }
         }
     }
@@ -1386,10 +1383,15 @@ enter_closed(struct ev_loop * const l __attribute__((unused)),
     struct q_conn * const c = w->data;
     conn_to_state(c, conn_clsd);
 
+    if (!c->in_c_ready) {
+        sl_insert_head(&c_ready, c, node_rx_ext);
+        c->in_c_ready = true;
+    }
+
     // terminate whatever API call is currently active
     maybe_api_return(c, 0);
     // maybe_api_return(q_accept, 0, 0);
-    // maybe_api_return(q_rx_ready, 0, 0);
+    maybe_api_return(q_ready, 0, 0);
 }
 
 
