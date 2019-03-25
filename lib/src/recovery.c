@@ -144,8 +144,7 @@ void congestion_event(struct q_conn * const c, const ev_tstamp sent_t)
     if (!in_recovery(c, sent_t)) {
         c->rec.rec_start_t = ev_now(loop);
         c->rec.cwnd /= kLossReductionDivisor;
-        c->rec.cwnd = MAX(c->rec.cwnd, kMinimumWindow);
-        c->rec.ssthresh = c->rec.cwnd;
+        c->rec.ssthresh = c->rec.cwnd = MAX(c->rec.cwnd, kMinimumWindow);
 
         if (c->rec.pto_cnt > kPersistentCongestionThreshold)
             c->rec.cwnd = kMinimumWindow;
@@ -184,7 +183,6 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
 
     struct pkt_meta * p;
     struct pkt_meta * largest_lost_pkt = 0;
-    ev_tstamp largest_lost_tx_t = 0;
 
     kh_foreach_value(pn->sent_pkts, p, {
         ensure(p->is_acked == false, "ACKed pkt in sent_pkts");
@@ -200,10 +198,8 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
             c->i.pkts_out_lost++;
             // cppcheck-suppress knownConditionTrueFalse
             if (unlikely(largest_lost_pkt == 0) ||
-                p->hdr.nr > largest_lost_pkt->hdr.nr) {
+                p->hdr.nr > largest_lost_pkt->hdr.nr)
                 largest_lost_pkt = p;
-                largest_lost_tx_t = largest_lost_pkt->tx_t;
-            }
         } else if (is_zero(c->rec.loss_t))
             c->rec.loss_t = p->tx_t + loss_del;
         else
@@ -227,7 +223,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
     });
 
     if (do_cc && largest_lost_pkt)
-        congestion_event(c, largest_lost_tx_t);
+        congestion_event(c, largest_lost_pkt->tx_t);
 
     log_cc(c);
 }
