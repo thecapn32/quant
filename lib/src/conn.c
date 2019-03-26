@@ -1291,12 +1291,13 @@ void rx(struct ev_loop * const l,
         if (unlikely(c->state == conn_drng))
             continue;
 
-        // reset idle timeout
-        ev_timer_again(l, &c->idle_alarm);
-
         // is a TX needed for this connection?
-        if (c->needs_tx)
+        if (c->needs_tx) {
+            // reset idle timeout
+            ev_timer_again(l, &c->idle_alarm);
+
             tx(c, 0); // this clears c->needs_tx if we TX'ed
+        }
 
         for (epoch_t e = c->min_rx_epoch; e <= ep_data; e++) {
             if (c->cstreams[e] == 0 || e == ep_0rtt)
