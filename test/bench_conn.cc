@@ -23,10 +23,11 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-
 #include <arpa/inet.h>
 #include <cstdint>
 #include <fcntl.h>
+#include <iomanip>
+#include <iostream>
 #include <libgen.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -39,6 +40,19 @@
 
 static struct w_engine * w;
 static struct q_conn *cc, *sc;
+
+
+static void log(const struct q_conn_info * const cci,
+                const struct q_conn_info * const sci)
+{
+    std::cout << std::fixed << std::setprecision(4)
+              << "C: i=" << cci->pkts_in_valid << " o=" << cci->pkts_out
+              << " ol=" << cci->pkts_out_lost << " pto=" << cci->pto_cnt
+              << " cwnd=" << cci->cwnd << "\t"
+              << "S: i=" << sci->pkts_in_valid << " o=" << sci->pkts_out
+              << " ol=" << sci->pkts_out_lost << " pto=" << sci->pto_cnt
+              << " cwnd=" << sci->cwnd << std::endl;
+}
 
 
 static inline uint64_t io(const uint64_t len)
@@ -67,6 +81,12 @@ static inline uint64_t io(const uint64_t len)
     const uint64_t ilen = w_iov_sq_len(&i);
     q_free(&i);
     q_free(&o);
+
+    struct q_conn_info cci = {0};
+    struct q_conn_info sci = {0};
+    q_info(cc, &cci);
+    q_info(sc, &sci);
+    log(&cci, &sci);
 
     return ilen;
 }
