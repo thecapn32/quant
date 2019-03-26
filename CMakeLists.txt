@@ -7,9 +7,12 @@ include(CMakePushCheckState)
 cmake_reset_check_state()
 include(CheckSymbolExists)
 
+
 # See if we have google benchmark
 include(CheckCXXSymbolExists)
 set(CMAKE_REQUIRED_LIBRARIES benchmark)
+set(CMAKE_REQUIRED_INCLUDES /usr/local/include)
+set(CMAKE_REQUIRED_LINK_OPTIONS -L/usr/local/lib)
 check_cxx_symbol_exists(benchmark::Initialize benchmark/benchmark.h
                         HAVE_BENCHMARK_H)
 cmake_reset_check_state()
@@ -17,12 +20,17 @@ cmake_reset_check_state()
 # See if we have google gperftools
 include(CheckSymbolExists)
 set(CMAKE_REQUIRED_LIBRARIES profiler)
+set(CMAKE_REQUIRED_INCLUDES /usr/local/include)
+set(CMAKE_REQUIRED_LINK_OPTIONS -L/usr/local/lib)
 check_symbol_exists(ProfilerStart gperftools/profiler.h
                     HAVE_PROFILER)
 cmake_reset_check_state()
 
 check_symbol_exists(htobe64 endian.h HAVE_ENDIAN_H)
 check_symbol_exists(htobe64 sys/endian.h HAVE_SYS_ENDIAN_H)
+
+include_directories(AFTER SYSTEM /usr/local/include)
+link_directories(AFTER /usr/local/lib)
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
   # on Darwin, try and pick up openssl from homebrew
