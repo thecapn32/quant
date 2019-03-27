@@ -305,12 +305,13 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
 
     // transmit encrypted/protected packets
     w_tx(c->sock, &c->txq);
-    while (w_tx_pending(&c->txq))
+    do
         w_nic_tx(c->w);
+    while (w_tx_pending(&c->txq));
 
-    // txq was allocated straight from warpcore, no metadata needs to be freed
-    // const uint64_t avail = sq_len(&c->w->iov);
-    // const uint64_t sql = sq_len(&c->txq);
+    // txq was allocated straight from warpcore, no metadata needs to be
+    // freed const uint64_t avail = sq_len(&c->w->iov); const uint64_t sql =
+    // sq_len(&c->txq);
     w_free(&c->txq);
     // warn(CRT, "w_free %" PRIu64 " (avail %" PRIu64 "->%" PRIu64 ")", sql,
     // avail, sq_len(&c->w->iov));
@@ -454,10 +455,7 @@ tx_ack(struct q_conn * const c, const epoch_t e, const bool tx_ack_eliciting)
     if (unlikely(c->cstreams[e] == 0))
         return false;
     struct w_iov * const v = alloc_iov(c->w, 0, 0);
-    enc_pkt(c->cstreams[e], false, false, tx_ack_eliciting, v);
-    do_tx(c);
-    // don't free the packet - it needs to stay in sent_pkts for ACK tracking
-    return true;
+    return enc_pkt(c->cstreams[e], false, false, tx_ack_eliciting, v);
 }
 
 
@@ -504,8 +502,6 @@ void tx(struct q_conn * const c, const uint32_t limit)
 done:;
     // make sure we send enough packets when we're called with a limit
     uint64_t sent = sq_len(&c->txq);
-    if (likely(sent))
-        do_tx(c);
     while ((unlikely(limit) && sent < limit) || (c->needs_tx && sent == 0)) {
         if (likely(tx_ack(c, c->tls.epoch_out, limit && sent < limit)))
             sent++;
@@ -514,6 +510,8 @@ done:;
             break;
         }
     }
+    if (likely(sent))
+        do_tx(c);
 }
 
 
@@ -1307,6 +1305,7 @@ void rx(struct ev_loop * const l,
             switch (needs_ack(pn)) {
             case imm_ack:
                 tx_ack(c, e, false);
+                do_tx(c);
                 break;
             case del_ack:
                 if (likely(c->state != conn_clsg))
@@ -1459,6 +1458,7 @@ ack_alarm(struct ev_loop * const l __attribute__((unused)),
     struct q_conn * const c = w->data;
     warn(DBG, "ACK timer fired on %s conn %s", conn_type(c), cid2str(c->scid));
     tx_ack(c, ep_data, false);
+    do_tx(c);
 }
 
 
