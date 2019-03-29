@@ -496,19 +496,17 @@ struct q_stream * q_rsv_stream(struct q_conn * const c, const bool bidi)
     if (unlikely(c->state == conn_drng || c->state == conn_clsd))
         return 0;
 
-    const uint64_t msd =
-        bidi ? c->tp_out.max_strm_data_bidi_local : c->tp_out.max_strm_data_uni;
+    const int64_t * const max_streams =
+        bidi ? &c->tp_out.max_streams_bidi : &c->tp_out.max_streams_uni;
 
-    if (unlikely(msd == 0))
+    if (unlikely(*max_streams == 0))
         warn(WRN, "peer hasn't allowed %s streams", bidi ? "bi" : "uni");
 
     int64_t * const next_sid = bidi ? &c->next_sid_bidi : &c->next_sid_uni;
-    int64_t * const max_streams =
-        bidi ? &c->tp_out.max_streams_bidi : &c->tp_out.max_streams_uni;
 
-    if (unlikely(*next_sid >> 2 > *max_streams)) {
+    if (unlikely(*next_sid >> 2 >= *max_streams)) {
         // we hit the max stream limit, wait for MAX_STREAMS frame
-        warn(WRN, "need %s MAX_STREAMS increase (%" PRId64 " > %" PRId64 ")",
+        warn(WRN, "need %s MAX_STREAMS increase (%" PRId64 " >= %" PRId64 ")",
              bidi ? "bi" : "uni", *next_sid >> 2, *max_streams);
         if (bidi)
             c->sid_blocked_bidi = true;
@@ -517,6 +515,7 @@ struct q_stream * q_rsv_stream(struct q_conn * const c, const bool bidi)
         loop_run(q_rsv_stream, c, 0);
     }
 
+    // stream blocking is handled by new_stream
     return new_stream(c, *next_sid);
 }
 

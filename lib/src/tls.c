@@ -747,11 +747,13 @@ void init_tp(struct q_conn * const c)
     i += sizeof(uint16_t);
 
     enc_tp(c, TP_IMSB, (uint64_t)c->tp_in.max_streams_bidi);
-    enc_tp(c, TP_IMSU, (uint64_t)c->tp_in.max_streams_uni);
+    if (c->is_clnt) {
+        enc_tp(c, TP_IMSU, (uint64_t)c->tp_in.max_streams_uni);
+        enc_tp(c, TP_IMSD_U, c->tp_in.max_strm_data_uni);
+    }
     enc_tp(c, TP_IDTO, c->tp_in.idle_to);
     enc_tp(c, TP_IMSD_BR, c->tp_in.max_strm_data_bidi_remote);
     enc_tp(c, TP_IMSD_BL, c->tp_in.max_strm_data_bidi_local);
-    enc_tp(c, TP_IMSD_U, c->tp_in.max_strm_data_uni);
     enc_tp(c, TP_IMD, c->tp_in.max_data);
     enc_tp(c, TP_ADE, c->tp_in.ack_del_exp);
     enc_tp(c, TP_MAD, c->tp_in.max_ack_del);
