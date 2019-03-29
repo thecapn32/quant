@@ -389,7 +389,7 @@ done:
             meta(v).stream->in_data_max)
         err_close_return(c, ERR_FLOW_CONTROL, 0,
                          "stream %" PRIu64 " off %" PRIu64
-                         " > in_data_max %" PRIu64,
+                         " >= in_data_max %" PRIu64,
                          meta(v).stream->id,
                          meta(v).stream_off + meta(v).stream_data_len - 1,
                          meta(v).stream->in_data_max);
