@@ -474,3 +474,9 @@ static inline uint16_t get_sport(const struct w_sock * const sock)
     return ((const struct sockaddr_in *)(const void *)w_get_addr(sock, true))
         ->sin_port;
 }
+
+
+static inline bool needs_more_ncids(const struct q_conn * const c)
+{
+    return splay_count(&c->scids_by_seq) <= 8;
+}

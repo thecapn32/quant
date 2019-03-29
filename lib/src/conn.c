@@ -364,8 +364,8 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
                 ev_timer_again(loop, &c->key_flip_alarm);
             }
         }
-        // send new CID if the peer doesn't have one remaining
-        c->tx_ncid = (splay_count(&c->scids_by_seq) < 2);
+        // send new CIDs if the peer doesn't have sufficient remaining
+        c->tx_ncid = needs_more_ncids(c);
     }
 }
 

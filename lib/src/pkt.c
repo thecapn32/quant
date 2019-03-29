@@ -252,6 +252,7 @@ enc_lh_cids(const struct cid * const dcid,
 
 static bool __attribute__((nonnull)) can_enc(const struct w_iov * const v,
                                              const uint8_t type,
+                                             const bool one_per_pkt,
                                              const uint16_t pos,
                                              const uint16_t limit)
 {
@@ -259,7 +260,7 @@ static bool __attribute__((nonnull)) can_enc(const struct w_iov * const v,
     // if (has_space == false)
     //     warn(DBG, "missing %u bytes to encode 0x%02x frame",
     //          pos + max_frame_len(type) - limit, type);
-    return likely(!has_frame(v, type)) && has_space;
+    return (one_per_pkt == false || has_frame(v, type) == false) && has_space;
 }
 
 
@@ -272,17 +273,17 @@ enc_other_frames(struct q_conn * const c,
     uint16_t i = pos;
 
     // encode connection control frames
-    if (!c->is_clnt && c->tok_len && can_enc(v, FRM_TOK, i, lim)) {
+    if (!c->is_clnt && c->tok_len && can_enc(v, FRM_TOK, true, i, lim)) {
         i = enc_new_token_frame(c, v, i);
         c->tok_len = 0;
     }
 
-    if (c->tx_path_resp && can_enc(v, FRM_PRP, i, lim)) {
+    if (c->tx_path_resp && can_enc(v, FRM_PRP, true, i, lim)) {
         i = enc_path_response_frame(c, v, i);
         c->tx_path_resp = false;
     }
 
-    if (c->tx_retire_cid && can_enc(v, FRM_RTR, i, lim)) {
+    if (c->tx_retire_cid && can_enc(v, FRM_RTR, true, i, lim)) {
         struct cid * rcid = splay_min(cids_by_seq, &c->dcids_by_seq);
         while (rcid && rcid->seq < c->dcid->seq) {
             struct cid * const next =
@@ -295,28 +296,30 @@ enc_other_frames(struct q_conn * const c,
         }
     }
 
-    if (c->tx_path_chlg && can_enc(v, FRM_PCL, i, lim))
+    if (c->tx_path_chlg && can_enc(v, FRM_PCL, true, i, lim))
         i = enc_path_challenge_frame(c, v, i);
 
-    if (c->tx_ncid && can_enc(v, FRM_CID, i, lim))
+    while (c->tx_ncid && can_enc(v, FRM_CID, false, i, lim)) {
         i = enc_new_cid_frame(c, v, i);
+        c->tx_ncid = needs_more_ncids(c);
+    }
 
-    if (c->blocked && can_enc(v, FRM_CDB, i, lim))
+    if (c->blocked && can_enc(v, FRM_CDB, true, i, lim))
         i = enc_data_blocked_frame(c, v, i);
 
-    if (c->tx_max_data && can_enc(v, FRM_MCD, i, lim))
+    if (c->tx_max_data && can_enc(v, FRM_MCD, true, i, lim))
         i = enc_max_data_frame(c, v, i);
 
-    if (c->sid_blocked_bidi && can_enc(v, FRM_SBB, i, lim))
+    if (c->sid_blocked_bidi && can_enc(v, FRM_SBB, true, i, lim))
         i = enc_streams_blocked_frame(c, v, i, true);
 
-    if (c->sid_blocked_uni && can_enc(v, FRM_SBU, i, lim))
+    if (c->sid_blocked_uni && can_enc(v, FRM_SBU, true, i, lim))
         i = enc_streams_blocked_frame(c, v, i, false);
 
-    if (c->tx_max_sid_bidi && can_enc(v, FRM_MSB, i, lim))
+    if (c->tx_max_sid_bidi && can_enc(v, FRM_MSB, true, i, lim))
         i = enc_max_streams_frame(c, v, i, true);
 
-    if (c->tx_max_sid_uni && can_enc(v, FRM_MSU, i, lim))
+    if (c->tx_max_sid_uni && can_enc(v, FRM_MSU, true, i, lim))
         i = enc_max_streams_frame(c, v, i, false);
 
     while (!sl_empty(&c->need_ctrl)) {
@@ -325,9 +328,9 @@ enc_other_frames(struct q_conn * const c,
         sl_remove_head(&c->need_ctrl, node_ctrl);
         s->in_ctrl = false;
         // encode stream control frames
-        if (s->blocked && can_enc(v, FRM_SDB, i, lim))
+        if (s->blocked && can_enc(v, FRM_SDB, true, i, lim))
             i = enc_stream_data_blocked_frame(s, v, i);
-        if (s->tx_max_stream_data && can_enc(v, FRM_MSD, i, lim))
+        if (s->tx_max_stream_data && can_enc(v, FRM_MSD, true, i, lim))
             i = enc_max_stream_data_frame(s, v, i);
     }
 
