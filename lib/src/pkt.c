@@ -670,9 +670,10 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
             *tok_len = xv->len - meta(v).hdr.hdr_len;
 
         if (*tok_len) {
-            if (unlikely(*tok_len + meta(v).hdr.hdr_len > xv->len)) {
+            if (unlikely(*tok_len >= MAX_TOK_LEN ||
+                         *tok_len + meta(v).hdr.hdr_len > xv->len)) {
                 // corrupt token len
-                warn(DBG, "tok_len %u invalid", *tok_len);
+                warn(DBG, "tok_len %u invalid (max %u)", *tok_len, MAX_TOK_LEN);
                 return false;
             }
             meta(v).hdr.hdr_len = dec_chk_buf(tok, xv->buf, xv->len,
