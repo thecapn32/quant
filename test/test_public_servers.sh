@@ -268,6 +268,6 @@ for s in "${sorted[@]}"; do
 done
 
 expand -t 5 "$tmp" | sponge "$tmp"
-cat "$tmp"
+# cat "$tmp"
 wdiff -n "$(dirname $0)/$script.result" "$tmp" | $colordiff
 rm -f "$tmp"
