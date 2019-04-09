@@ -410,26 +410,29 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         switch (tp) {
         case TP_IMSD_U:
             dec_tp(&c->tp_out.max_strm_data_uni);
-            warn(INF, "\tinitial_max_stream_data_uni = %" PRIu64,
+            warn(INF, "\tinitial_max_stream_data_uni = %" PRIu64 " [bytes]",
                  c->tp_out.max_strm_data_uni);
             break;
 
         case TP_IMSD_BL:
             dec_tp(&c->tp_out.max_strm_data_bidi_remote);
-            warn(INF, "\tinitial_max_stream_data_bidi_local = %" PRIu64,
+            warn(INF,
+                 "\tinitial_max_stream_data_bidi_local = %" PRIu64 " [bytes]",
                  c->tp_out.max_strm_data_bidi_remote);
             break;
 
         case TP_IMSD_BR:
             // this is RX'ed as _remote, but applies to streams we open, so:
             dec_tp(&c->tp_out.max_strm_data_bidi_local);
-            warn(INF, "\tinitial_max_stream_data_bidi_remote = %" PRIu64,
+            warn(INF,
+                 "\tinitial_max_stream_data_bidi_remote = %" PRIu64 " [bytes]",
                  c->tp_out.max_strm_data_bidi_local);
             break;
 
         case TP_IMD:
             dec_tp(&c->tp_out.max_data);
-            warn(INF, "\tinitial_max_data = %" PRIu64, c->tp_out.max_data);
+            warn(INF, "\tinitial_max_data = %" PRIu64 " [bytes]",
+                 c->tp_out.max_data);
             break;
 
         case TP_IMSB:
@@ -451,7 +454,8 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
         case TP_MPS:
             dec_tp(&c->tp_out.max_pkt);
-            warn(INF, "\tmax_packet_size = %" PRIu64, c->tp_out.max_pkt);
+            warn(INF, "\tmax_packet_size = %" PRIu64 " [bytes]",
+                 c->tp_out.max_pkt);
             if (c->tp_out.max_pkt < 1200) {
                 err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
                           "tp_out.max_pkt %" PRIu64 " invalid (< 1200)",
@@ -474,7 +478,8 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
         case TP_MAD:
             dec_tp(&c->tp_out.max_ack_del);
-            warn(INF, "\tmax_ack_delay = %" PRIu64, c->tp_out.max_ack_del);
+            warn(INF, "\tmax_ack_delay = %" PRIu64 " [ms]",
+                 c->tp_out.max_ack_del);
             if (c->tp_out.max_ack_del > (1 << 14)) {
                 err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
                           "max_ack_delay %" PRIu64 " invalid",
