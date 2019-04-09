@@ -665,6 +665,13 @@ void init_tp(struct q_conn * const c)
     enc_tp(c, TP_MAD, c->tp_in.max_ack_del);
     enc_tp(c, TP_MPS, w_mtu(c->w));
 
+    // add a grease tp
+    uint8_t grease[18];
+    rand_bytes(&grease, sizeof(grease));
+    const uint16_t grease_type = 0xff00 + grease[0];
+    const uint16_t grease_len = grease[1] & 0x0f;
+    enc_tp_buf(c, grease_type, &grease[2], grease_len);
+
     // encode length of all transport parameters
     const uint16_t enc_len = i - sizeof(uint16_t);
     i = 0;
