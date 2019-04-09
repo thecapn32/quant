@@ -392,8 +392,9 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         if (tp >= TP_MAX) {
             uint16_t unknown_len;
             i = dec(&unknown_len, buf, len, i, sizeof(unknown_len), "%u");
-            warn(WRN, "\t" BLD RED "unknown tp" NRM " (0x%04x w/len %u) = %s",
-                 tp, unknown_len, hex2str(&buf[i], unknown_len));
+            warn(WRN, "\t" BLD "%s tp" NRM " (0x%04x w/len %u) = %s",
+                 (tp & 0xff00) == 0xff00 ? YEL "private" : RED "unknown", tp,
+                 unknown_len, hex2str(&buf[i], unknown_len));
             i += unknown_len;
             continue;
         }
@@ -648,29 +649,79 @@ void init_tp(struct q_conn * const c)
     uint16_t i = sizeof(uint16_t);
     const uint16_t len = sizeof(c->tls.tp_buf);
 
-    if (c->is_clnt) {
-        enc_tp(c, TP_IMSU, (uint64_t)c->tp_in.max_streams_uni);
-        enc_tp(c, TP_IMSD_U, c->tp_in.max_strm_data_uni);
-    } else {
-        enc_tp_buf(c, TP_SRT, c->scid->srt, sizeof(c->scid->srt));
-        if (c->odcid.len)
-            enc_tp_buf(c, TP_OCID, c->odcid.id, c->odcid.len);
-    }
-    enc_tp(c, TP_IMSB, (uint64_t)c->tp_in.max_streams_bidi);
-    enc_tp(c, TP_IDTO, c->tp_in.idle_to);
-    enc_tp(c, TP_IMSD_BR, c->tp_in.max_strm_data_bidi_remote);
-    enc_tp(c, TP_IMSD_BL, c->tp_in.max_strm_data_bidi_local);
-    enc_tp(c, TP_IMD, c->tp_in.max_data);
-    enc_tp(c, TP_ADE, c->tp_in.ack_del_exp);
-    enc_tp(c, TP_MAD, c->tp_in.max_ack_del);
-    enc_tp(c, TP_MPS, w_mtu(c->w));
-
     // add a grease tp
     uint8_t grease[18];
     rand_bytes(&grease, sizeof(grease));
     const uint16_t grease_type = 0xff00 + grease[0];
     const uint16_t grease_len = grease[1] & 0x0f;
-    enc_tp_buf(c, grease_type, &grease[2], grease_len);
+
+    uint16_t tp_order[TP_MAX + 1] = {TP_OCID, TP_IDTO,    TP_SRT,     TP_MPS,
+                                     TP_IMD,  TP_IMSD_BL, TP_IMSD_BR, TP_IMSD_U,
+                                     TP_IMSB, TP_IMSU,    TP_ADE,     TP_MAD,
+                                     TP_DMIG, TP_PRFA,    grease_type};
+
+    // modern version of Fisher-Yates
+    // https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle#The_modern_algorithm
+    for (size_t j = TP_MAX; j >= 1; j--) {
+        const size_t r = w_rand_uniform(j);
+        const uint16_t tmp = tp_order[r];
+        tp_order[r] = tp_order[j];
+        tp_order[j] = tmp;
+    }
+
+    for (size_t j = 0; j <= TP_MAX; j++)
+        switch (tp_order[j]) {
+        case TP_IMSU:
+            if (c->is_clnt)
+                enc_tp(c, TP_IMSU, (uint64_t)c->tp_in.max_streams_uni);
+            break;
+        case TP_IMSD_U:
+            if (c->is_clnt)
+                enc_tp(c, TP_IMSD_U, c->tp_in.max_strm_data_uni);
+            break;
+        case TP_SRT:
+            if (!c->is_clnt)
+                enc_tp_buf(c, TP_SRT, c->scid->srt, sizeof(c->scid->srt));
+            break;
+        case TP_OCID:
+            if (!c->is_clnt && c->odcid.len)
+                enc_tp_buf(c, TP_OCID, c->odcid.id, c->odcid.len);
+            break;
+        case TP_IMSB:
+            enc_tp(c, TP_IMSB, (uint64_t)c->tp_in.max_streams_bidi);
+            break;
+        case TP_IDTO:
+            enc_tp(c, TP_IDTO, c->tp_in.idle_to);
+            break;
+        case TP_IMSD_BR:
+            enc_tp(c, TP_IMSD_BR, c->tp_in.max_strm_data_bidi_remote);
+            break;
+        case TP_IMSD_BL:
+            enc_tp(c, TP_IMSD_BL, c->tp_in.max_strm_data_bidi_local);
+            break;
+        case TP_IMD:
+            enc_tp(c, TP_IMD, c->tp_in.max_data);
+            break;
+        case TP_ADE:
+            enc_tp(c, TP_ADE, c->tp_in.ack_del_exp);
+            break;
+        case TP_MAD:
+            enc_tp(c, TP_MAD, c->tp_in.max_ack_del);
+            break;
+        case TP_MPS:
+            enc_tp(c, TP_MPS, w_mtu(c->w));
+            break;
+        case TP_PRFA:
+        case TP_DMIG:
+            // TODO: unhandled
+            break;
+        default:
+            if (tp_order[j] == grease_type)
+                enc_tp_buf(c, grease_type, &grease[2], grease_len);
+            else
+                die("unknown tp 0x%04x", tp_order[j]);
+            break;
+        }
 
     // encode length of all transport parameters
     const uint16_t enc_len = i - sizeof(uint16_t);
