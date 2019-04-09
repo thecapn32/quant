@@ -62,6 +62,9 @@ Vagrant.configure("2") do |config|
         # change shell to fish
         chsh -s /usr/bin/fish vagrant
 
+        # increase UDP buffer limit
+        echo 'net.core.rmem_max=1048576' > /etc/sysctl.conf
+
         # get Linux kernel sources, for building netmap
         apt-get source linux
 
