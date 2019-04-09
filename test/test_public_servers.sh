@@ -37,7 +37,7 @@ declare -A servers=(
     # [minq]=minq.dev.mozaws.net::4433:4434:4433:/index.html
     # [mozquic]=mozquic.ducksong.com::4433:4434:4433:/index.html
     [mvfst]=fb.mvfst.net::4433:4434:4433:/index.html
-    [ngtcp2]=nghttp2.org::4433:4434:4433:/documentation/
+    [ngtcp2]=nghttp2.org:-3:4433:4434:4433:/40000
     [ngx_quic]=cloudflare-quic.com:-3:443:443:443:/index.html
     # [pandora]=pandora.cm.in.tum.de::4433:4434:4433:/index.html
     [picoquic]=test.privateoctopus.com::4433:4434:4433:/40000
@@ -268,6 +268,6 @@ for s in "${sorted[@]}"; do
 done
 
 expand -t 5 "$tmp" | sponge "$tmp"
-# cat "$tmp"
+cat "$tmp"
 wdiff -n "$(dirname $0)/$script.result" "$tmp" | $colordiff
 rm -f "$tmp"

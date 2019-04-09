@@ -50,7 +50,7 @@ externalproject_add(openssl
   UPDATE_COMMAND ""
   # GIT_REPOSITORY https://github.com/openssl/openssl.git
   GIT_REPOSITORY https://github.com/tatsuhiro-t/openssl
-  GIT_TAG quic-draft-18
+  GIT_TAG quic-draft-19
   GIT_SHALLOW 1
   CONFIGURE_COMMAND ./config --prefix=${CMAKE_CURRENT_BINARY_DIR} enable-tls1_3
   BUILD_IN_SOURCE 1
@@ -59,16 +59,29 @@ externalproject_add(openssl
   EXCLUDE_FROM_ALL 1
 )
 
+externalproject_add(nghttp3
+  UPDATE_COMMAND ""
+  GIT_REPOSITORY https://github.com/ngtcp2/nghttp3
+  GIT_SHALLOW 1
+  PATCH_COMMAND autoreconf -i
+  CONFIGURE_COMMAND ./configure --prefix=${CMAKE_CURRENT_BINARY_DIR} --enable-lib-only
+  BUILD_IN_SOURCE 1
+  BUILD_COMMAND make -j8
+  INSTALL_COMMAND make install
+  EXCLUDE_FROM_ALL 1
+)
+
 externalproject_add(ngtcp2
-  DEPENDS openssl
+  DEPENDS openssl nghttp3
   UPDATE_COMMAND ""
   GIT_REPOSITORY https://github.com/ngtcp2/ngtcp2.git
   GIT_SHALLOW 1
-  GIT_TAG draft-18
+  GIT_TAG draft-19
   CMAKE_ARGS
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
     -DOPENSSL_ROOT_DIR=${CMAKE_CURRENT_BINARY_DIR}
     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+    -DCMAKE_PREFIX_PATH=${CMAKE_CURRENT_BINARY_DIR}
     -DENABLE_DEBUG=ON -DENABLE_ASAN=ON
   BUILD_IN_SOURCE 1
   INSTALL_COMMAND ""

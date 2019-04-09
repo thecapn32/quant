@@ -48,6 +48,10 @@ extern const char @PROJECT_NAME@_name[];
 /// The version of this library.
 extern const char @PROJECT_NAME@_version[];
 
+/// The IETF QUIC draft version implemented by the library.
+#define DRAFT_VERSION @PROJECT_VERSION_PATCH@
+#define DRAFT_VERSION_STRING "@PROJECT_VERSION_PATCH@"
+
 extern const uint8_t @PROJECT_NAME@_commit_hash_abbrev[];
 extern const size_t @PROJECT_NAME@_commit_hash_abbrev_len;
 

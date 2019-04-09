@@ -51,6 +51,7 @@
 #include "conn.h"
 #include "diet.h"
 #include "frame.h"
+#include "marshall.h"
 #include "pkt.h"
 #include "quic.h"
 #include "recovery.h"
@@ -68,6 +69,13 @@ struct q_conn_sl c_ready = sl_head_initializer(c_ready);
 khash_t(conns_by_ipnp) * conns_by_ipnp;
 khash_t(conns_by_id) * conns_by_id;
 khash_t(conns_by_srt) * conns_by_srt;
+
+
+static inline __attribute__((always_inline, const)) bool
+is_force_vneg_vers(const uint32_t vers)
+{
+    return (vers & 0x0f0f0f0f) == 0x0a0a0a0a;
+}
 
 
 static inline int __attribute__((nonnull))
@@ -101,9 +109,9 @@ sockaddr_cmp(const struct sockaddr * const a, const struct sockaddr * const b)
 SPLAY_GENERATE(cids_by_seq, cid, node_seq, cids_by_seq_cmp)
 
 
-bool vers_supported(const uint32_t v)
+static bool __attribute__((const)) vers_supported(const uint32_t v)
 {
-    if (is_force_vneg_vers(v) || is_rsvd_vers(v))
+    if (is_force_vneg_vers(v))
         return false;
 
     for (uint8_t i = 0; i < ok_vers_len; i++)
@@ -113,6 +121,36 @@ bool vers_supported(const uint32_t v)
     // we're out of matching candidates
     warn(INF, "no vers in common");
     return false;
+}
+
+
+static uint32_t __attribute__((nonnull))
+clnt_vneg(const uint8_t * const buf, const uint16_t len)
+{
+    uint16_t pos = 0;
+    for (uint8_t i = 0; i < ok_vers_len; i++) {
+        if (is_force_vneg_vers(ok_vers[i]))
+            // skip over reserved and vneg-trigger versions in our local list
+            continue;
+
+        for (uint16_t j = 0; j < len - pos; j += sizeof(ok_vers[0])) {
+            uint32_t vers = 0;
+            dec(&vers, buf, len, pos + j, sizeof(vers), "0x%08x");
+
+            if (is_force_vneg_vers(vers))
+                // skip over reserved and vneg-trigger versions in server's list
+                continue;
+
+            warn(DBG, "serv prio %ld = 0x%08x; our prio %u = 0x%08x",
+                 j / sizeof(vers), vers, i, ok_vers[i]);
+            if (ok_vers[i] == vers)
+                return vers;
+        }
+    }
+
+    // we're out of matching candidates
+    warn(INF, "no vers in common with serv");
+    return 0;
 }
 
 
@@ -290,6 +328,41 @@ rtx_pkt(struct q_stream * const s, struct w_iov * const v)
 
     // we reinsert meta(v) with its new pkt nr in on_pkt_sent()
     pm_by_nr_ins(meta(r).pn->sent_pkts, &meta(r));
+}
+
+
+static void __attribute__((nonnull))
+tx_vneg_resp(const struct w_sock * const ws, const struct w_iov * const v)
+{
+    struct w_iov * const xv = alloc_iov(ws->w, 0, 0);
+    struct w_iov_sq q = w_iov_sq_initializer(q);
+    sq_insert_head(&q, xv, next);
+
+    warn(INF, "sending vneg serv response");
+    meta(xv).hdr.flags = HEAD_FORM | (uint8_t)w_rand();
+    uint16_t i = enc(xv->buf, xv->len, 0, &meta(xv).hdr.flags,
+                     sizeof(meta(xv).hdr.flags), 0, "0x%02x");
+
+    i = enc(xv->buf, xv->len, i, &meta(xv).hdr.vers, sizeof(meta(xv).hdr.vers),
+            0, "0x%08x");
+
+    i = enc_lh_cids(&meta(v).hdr.scid, &meta(v).hdr.dcid, xv, i);
+
+    for (uint8_t j = 0; j < ok_vers_len; j++)
+        if (!is_force_vneg_vers(ok_vers[j]))
+            i = enc(xv->buf, xv->len, i, &ok_vers[j], sizeof(ok_vers[j]), 0,
+                    "0x%08x");
+
+    xv->len = i;
+    xv->addr = v->addr;
+    xv->flags = v->flags;
+    log_pkt("TX", xv, (struct sockaddr *)&xv->addr, 0, 0, 0);
+
+    w_tx(ws, &q);
+    while (w_tx_pending(&q))
+        w_nic_tx(ws->w);
+
+    q_free(&q);
 }
 
 
@@ -1470,8 +1543,10 @@ void update_conn_conf(struct q_conn * const c,
     c->spin_enabled = cc ? cc->enable_spinbit : 0;
 
     // (re)set idle alarm
-    c->idle_alarm.repeat = c->tp_in.idle_to =
-        cc && cc->idle_timeout ? cc->idle_timeout : 10;
+    c->tp_in.idle_to =
+        cc && cc->idle_timeout ? cc->idle_timeout : 10 * MSECS_PER_SEC;
+    c->idle_alarm.repeat = (double)c->tp_in.idle_to / MSECS_PER_SEC;
+
     ev_timer_again(loop, &c->idle_alarm);
 
     c->tp_out.disable_migration = cc ? cc->disable_migration : false;

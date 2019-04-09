@@ -102,8 +102,8 @@ static ptls_openssl_sign_certificate_t sign_cert = {0};
 static ptls_openssl_verify_certificate_t verifier = {0};
 
 // first entry is client default, if not otherwise specified
-static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-18", 5},
-                                    {(uint8_t *)"h3-18", 5}};
+static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-" DRAFT_VERSION_STRING, 5},
+                                    {(uint8_t *)"h3-" DRAFT_VERSION_STRING, 5}};
 static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 
 static struct cipher_ctx dec_tckt;
@@ -333,75 +333,6 @@ static int filter_tp(ptls_t * tls __attribute__((unused)),
 }
 
 
-static uint16_t chk_tp_clnt(struct q_conn * const c,
-                            const uint8_t * const buf,
-                            const uint16_t len,
-                            const uint16_t pos)
-{
-    uint16_t i = pos;
-
-    uint32_t neg_vers = 0;
-    i = dec(&neg_vers, buf, len, i, sizeof(neg_vers), "0x%08x");
-
-    // validate that the negotiated version is in use
-    if (unlikely(neg_vers != c->vers)) {
-        err_close(c, ERR_VERSION_NEGOTIATION, FRM_CRY,
-                  "neg vers 0x%08x != used vers 0x%08x", neg_vers, c->vers);
-        return 0;
-    }
-
-    // parse server versions
-    uint8_t n;
-    i = dec(&n, buf, len, i, sizeof(n), "%u");
-    const uint16_t vpos = i;
-    bool found = false;
-    for (uint16_t v = n; v > 0; v -= sizeof(uint32_t)) {
-        uint32_t vers = 0;
-        i = dec(&vers, buf, len, i, sizeof(vers), "0x%08x");
-        if (vers == c->vers)
-            found = true;
-    }
-
-    // validate that the negotiated version was found
-    if (unlikely(found == false)) {
-        err_close(c, ERR_VERSION_NEGOTIATION, FRM_CRY,
-                  "neg vers 0x%08x not found in tp", c->vers);
-        return 0;
-    }
-
-    // validate that version negotiation on these values has same result
-    const uint32_t verify_vers = clnt_vneg(&buf[vpos], n);
-    if (unlikely(verify_vers != c->vers)) {
-        err_close(c, ERR_VERSION_NEGOTIATION, FRM_CRY,
-                  "would have picked 0x%08x instead of 0x%08x", verify_vers,
-                  c->vers);
-        return 0;
-    }
-
-    return i;
-}
-
-
-static uint16_t chk_tp_serv(struct q_conn * const c,
-                            const uint8_t * const buf,
-                            const uint16_t len,
-                            const uint16_t pos)
-{
-    uint16_t i = pos;
-
-    uint32_t vers_initial;
-    i = dec(&vers_initial, buf, len, i, sizeof(vers_initial), "0x%08x");
-
-    if (c->vers != vers_initial && unlikely(vers_supported(vers_initial))) {
-        err_close(c, ERR_VERSION_NEGOTIATION, FRM_CRY,
-                  "vers_initial 0x%08x is supported - MITM?", vers_initial);
-        return 0;
-    }
-
-    return i;
-}
-
-
 #define dec_tp(var)                                                            \
     __extension__({                                                            \
         uint16_t _l;                                                           \
@@ -439,13 +370,6 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
     const uint8_t * const buf = slots[0].data.base;
     uint16_t len = (uint16_t)slots[0].data.len;
     uint16_t i = 0;
-
-    if (c->is_clnt)
-        i = chk_tp_clnt(c, buf, len, i);
-    else
-        i = chk_tp_serv(c, buf, len, i);
-    if (unlikely(i == 0))
-        return i;
 
     uint16_t tpl;
     i = dec(&tpl, buf, len, i, sizeof(tpl), "%u");
@@ -521,7 +445,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
         case TP_IDTO:
             dec_tp(&c->tp_out.idle_to);
-            warn(INF, "\tidle_timeout = %" PRIu64, c->tp_out.idle_to);
+            warn(INF, "\tidle_timeout = %" PRIu64 " [ms]", c->tp_out.idle_to);
             break;
 
         case TP_MPS:
@@ -721,36 +645,18 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
 void init_tp(struct q_conn * const c)
 {
-    uint16_t i = 0;
+    uint16_t i = sizeof(uint16_t);
     const uint16_t len = sizeof(c->tls.tp_buf);
 
     if (c->is_clnt) {
-        i = enc(c->tls.tp_buf, len, i, &c->vers_initial,
-                sizeof(c->vers_initial), 0, "0x%08x");
-    } else {
-        i = enc(c->tls.tp_buf, len, i, &c->vers, sizeof(c->vers), 0, "0x%08x");
-
-        // don't include "force vneg" versions
-        uint8_t vl = 0;
-        for (uint8_t n = 0; n < ok_vers_len; n++)
-            if (is_force_vneg_vers(ok_vers[n]) == false)
-                vl += sizeof(ok_vers[n]);
-        i = enc(c->tls.tp_buf, len, i, &vl, sizeof(vl), 0, "%u");
-        for (uint8_t n = 0; n < ok_vers_len; n++)
-            if (is_force_vneg_vers(ok_vers[n]) == false)
-                i = enc(c->tls.tp_buf, len, i, &ok_vers[n], sizeof(ok_vers[n]),
-                        0, "0x%08x");
-    }
-
-    // keep track of encoded length
-    const uint16_t enc_len_pos = i;
-    i += sizeof(uint16_t);
-
-    enc_tp(c, TP_IMSB, (uint64_t)c->tp_in.max_streams_bidi);
-    if (c->is_clnt) {
         enc_tp(c, TP_IMSU, (uint64_t)c->tp_in.max_streams_uni);
         enc_tp(c, TP_IMSD_U, c->tp_in.max_strm_data_uni);
+    } else {
+        enc_tp_buf(c, TP_SRT, c->scid->srt, sizeof(c->scid->srt));
+        if (c->odcid.len)
+            enc_tp_buf(c, TP_OCID, c->odcid.id, c->odcid.len);
     }
+    enc_tp(c, TP_IMSB, (uint64_t)c->tp_in.max_streams_bidi);
     enc_tp(c, TP_IDTO, c->tp_in.idle_to);
     enc_tp(c, TP_IMSD_BR, c->tp_in.max_strm_data_bidi_remote);
     enc_tp(c, TP_IMSD_BL, c->tp_in.max_strm_data_bidi_local);
@@ -759,19 +665,13 @@ void init_tp(struct q_conn * const c)
     enc_tp(c, TP_MAD, c->tp_in.max_ack_del);
     enc_tp(c, TP_MPS, w_mtu(c->w));
 
-    if (!c->is_clnt) {
-        enc_tp_buf(c, TP_SRT, c->scid->srt, sizeof(c->scid->srt));
-        if (c->odcid.len)
-            enc_tp_buf(c, TP_OCID, c->odcid.id, c->odcid.len);
-    }
-
     // encode length of all transport parameters
-    const uint16_t enc_len = i - enc_len_pos - sizeof(enc_len);
-    i = enc_len_pos;
-    enc(c->tls.tp_buf, len, i, &enc_len, 2, 0, "%u");
+    const uint16_t enc_len = i - sizeof(uint16_t);
+    i = 0;
+    enc(c->tls.tp_buf, len, i, &enc_len, sizeof(uint16_t), 0, "%u");
 
     c->tls.tp_ext[0] = (ptls_raw_extension_t){
-        QUIC_TP, {c->tls.tp_buf, enc_len + enc_len_pos + sizeof(enc_len)}};
+        QUIC_TP, {c->tls.tp_buf, enc_len + sizeof(uint16_t)}};
     c->tls.tp_ext[1] = (ptls_raw_extension_t){UINT16_MAX};
 }
 

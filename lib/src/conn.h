@@ -295,8 +295,6 @@ extern struct q_conn_sl c_ready;
 
 struct ev_loop;
 
-extern bool __attribute__((const)) vers_supported(const uint32_t v);
-
 extern void __attribute__((nonnull))
 tx_w(struct ev_loop * const l, ev_async * const w, int e);
 
@@ -403,20 +401,6 @@ static inline __attribute__((always_inline, nonnull)) const char *
 conn_type(const struct q_conn * const c)
 {
     return c->is_clnt ? "clnt" : "serv";
-}
-
-
-static inline __attribute__((always_inline, const)) bool
-is_force_vneg_vers(const uint32_t vers)
-{
-    return (vers & 0x0f0f0f0f) == 0x0a0a0a0a;
-}
-
-
-static inline __attribute__((always_inline, const)) bool
-is_rsvd_vers(const uint32_t vers)
-{
-    return (vers & 0xffff0000) == 0x00000000;
 }
 
 

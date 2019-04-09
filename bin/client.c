@@ -193,7 +193,7 @@ get(const char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
     if (do_h3) {
         // use a canned H/3 request that is equivalent of "GET /40000"
         static const uint8_t h3_get_40k[] = {
-            0x35, 0x01, 0x00, 0x00, 0xd1, 0xd7, 0x51, 0x06, 0x2f, 0x34, 0x30,
+            0x01, 0x35, 0x00, 0x00, 0xd1, 0xd7, 0x51, 0x06, 0x2f, 0x34, 0x30,
             0x30, 0x30, 0x30, 0x50, 0x15, 0x77, 0x77, 0x77, 0x2e, 0x6c, 0x69,
             0x74, 0x65, 0x73, 0x70, 0x65, 0x65, 0x64, 0x74, 0x65, 0x63, 0x68,
             0x2e, 0x63, 0x6f, 0x6d, 0x5f, 0x50, 0x0f, 0x4c, 0x61, 0x72, 0x73,
@@ -215,14 +215,15 @@ get(const char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
     if (cce == 0) {
         clock_gettime(CLOCK_MONOTONIC, &se->get_t);
         // no, open a new connection
-        struct q_conn * const c =
-            q_connect(w, peer->ai_addr, dest, rebind ? 0 : &req,
-                      rebind ? 0 : &se->s, true,
-                      &(struct q_conn_conf){.alpn = do_h3 ? "h3-18" : "hq-18",
-                                            .idle_timeout = timeout,
-                                            .enable_spinbit = true,
-                                            .enable_tls_key_updates = flip_keys,
-                                            .enable_zero_len_cid = zlen_cids});
+        struct q_conn * const c = q_connect(
+            w, peer->ai_addr, dest, rebind ? 0 : &req, rebind ? 0 : &se->s,
+            true,
+            &(struct q_conn_conf){.alpn = do_h3 ? "h3-" DRAFT_VERSION_STRING
+                                                : "hq-" DRAFT_VERSION_STRING,
+                                  .idle_timeout = timeout * 1000,
+                                  .enable_spinbit = true,
+                                  .enable_tls_key_updates = flip_keys,
+                                  .enable_zero_len_cid = zlen_cids});
         if (c == 0) {
             freeaddrinfo(peer);
             return 0;
@@ -381,7 +382,7 @@ int main(int argc, char * argv[])
         while (se) {
             // read HTTP/0.9 reply and dump it to stdout
             struct w_iov_sq i = w_iov_sq_initializer(i);
-            if (se->c == 0) {
+            if (se->c == 0 || se->s == 0) {
                 se = sl_next(se, next);
                 continue;
             }

@@ -75,10 +75,10 @@ SPLAY_GENERATE(ooo_by_off, pkt_meta, off_node, ooo_by_off_cmp)
 /// QUIC version supported by this implementation in order of preference.
 const uint32_t ok_vers[] = {
 #ifndef NDEBUG
-    0xbabababa, // XXX reserved version to trigger negotiation
+    0xbabababa, // reserved version to trigger negotiation, TODO: randomize
 #endif
-    0x00001234, // reserved version for inclusion in vneg response
-    0xff000012, // draft-ietf-quic-transport-18
+    0x45474700 + DRAFT_VERSION, // quant private version -xx
+    0xff000000 + DRAFT_VERSION, // draft-ietf-quic-transport-xx
 };
 
 /// Length of the @p ok_vers array.
@@ -450,13 +450,14 @@ struct q_conn * q_accept(const struct q_conn_conf * const conn_conf)
     if (sl_first(&accept_queue))
         goto accept;
 
-    warn(WRN, "waiting for conn on any serv sock (timeout %" PRIu64 " sec)",
-         conn_conf->idle_timeout);
+    warn(WRN, "waiting for conn on any serv sock (timeout %f sec)",
+         (double)conn_conf->idle_timeout / MSECS_PER_SEC);
 
     if (conn_conf->idle_timeout) {
         if (ev_is_active(&api_alarm))
             ev_timer_stop(loop, &api_alarm);
-        ev_timer_init(&api_alarm, cancel_api_call, conn_conf->idle_timeout, 0);
+        ev_timer_init(&api_alarm, cancel_api_call,
+                      (double)conn_conf->idle_timeout / MSECS_PER_SEC, 0);
         ev_timer_start(loop, &api_alarm);
     }
 
@@ -805,7 +806,8 @@ struct q_conn * q_ready(const uint64_t timeout)
         if (timeout) {
             if (ev_is_active(&api_alarm))
                 ev_timer_stop(loop, &api_alarm);
-            ev_timer_init(&api_alarm, cancel_api_call, timeout, 0);
+            ev_timer_init(&api_alarm, cancel_api_call,
+                          (double)timeout * MSECS_PER_SEC, 0);
             ev_timer_start(loop, &api_alarm);
         }
         warn(WRN, "waiting for conn to get ready");

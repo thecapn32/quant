@@ -64,10 +64,9 @@ case $c in
                 ;;
         ngtcp2)
                 touch /tmp/ngtcp2-session /tmp/ngtcp2-tp
-                cc="echo GET $path | \
-                        external/ngtcp2-prefix/src/ngtcp2/examples/client -s \
+                cc="external/ngtcp2-prefix/src/ngtcp2/examples/client -s \
                         -i $addr $port --session-file=/tmp/ngtcp2-session \
-                        --tp-file=/tmp/ngtcp2-tp"
+                        --tp-file=/tmp/ngtcp2-tp https://$addr:$port$path"
                 ;;
         mozquic)
                 cc="env MOZQUIC_LOG=all:9 \

@@ -227,11 +227,10 @@ needed_pkt_nr_len(const uint64_t lg_acked, const uint64_t n)
 }
 
 
-static uint16_t __attribute__((nonnull(1, 3)))
-enc_lh_cids(const struct cid * const dcid,
-            const struct cid * const scid,
-            struct w_iov * const v,
-            const uint16_t pos)
+uint16_t enc_lh_cids(const struct cid * const dcid,
+                     const struct cid * const scid,
+                     struct w_iov * const v,
+                     const uint16_t pos)
 {
     cid_cpy(&meta(v).hdr.dcid, dcid);
     if (scid)
@@ -908,67 +907,4 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
         return is_srt(xv, v);
 
     return true;
-}
-
-
-void tx_vneg_resp(const struct w_sock * const ws, const struct w_iov * const v)
-{
-    struct w_iov * const xv = alloc_iov(ws->w, 0, 0);
-    struct w_iov_sq q = w_iov_sq_initializer(q);
-    sq_insert_head(&q, xv, next);
-
-    warn(INF, "sending vneg serv response");
-    meta(xv).hdr.flags = HEAD_FORM | (uint8_t)w_rand();
-    uint16_t i = enc(xv->buf, xv->len, 0, &meta(xv).hdr.flags,
-                     sizeof(meta(xv).hdr.flags), 0, "0x%02x");
-
-    i = enc(xv->buf, xv->len, i, &meta(xv).hdr.vers, sizeof(meta(xv).hdr.vers),
-            0, "0x%08x");
-
-    i = enc_lh_cids(&meta(v).hdr.scid, &meta(v).hdr.dcid, xv, i);
-
-    for (uint8_t j = 0; j < ok_vers_len; j++)
-        if (!is_force_vneg_vers(ok_vers[j]))
-            i = enc(xv->buf, xv->len, i, &ok_vers[j], sizeof(ok_vers[j]), 0,
-                    "0x%08x");
-
-    xv->len = i;
-    xv->addr = v->addr;
-    xv->flags = v->flags;
-    log_pkt("TX", xv, (struct sockaddr *)&xv->addr, 0, 0, 0);
-
-    w_tx(ws, &q);
-    while (w_tx_pending(&q))
-        w_nic_tx(ws->w);
-
-    q_free(&q);
-}
-
-
-uint32_t clnt_vneg(const uint8_t * const buf, const uint16_t len)
-{
-    uint16_t pos = 0;
-    for (uint8_t i = 0; i < ok_vers_len; i++) {
-        if (is_rsvd_vers(ok_vers[i]) || is_force_vneg_vers(ok_vers[i]))
-            // skip over reserved and vneg-trigger versions in our local list
-            continue;
-
-        for (uint16_t j = 0; j < len - pos; j += sizeof(ok_vers[0])) {
-            uint32_t vers = 0;
-            dec(&vers, buf, len, pos + j, sizeof(vers), "0x%08x");
-
-            if (is_rsvd_vers(vers) || is_force_vneg_vers(vers))
-                // skip over reserved and vneg-trigger versions in server's list
-                continue;
-
-            warn(DBG, "serv prio %ld = 0x%08x; our prio %u = 0x%08x",
-                 j / sizeof(vers), vers, i, ok_vers[i]);
-            if (ok_vers[i] == vers)
-                return vers;
-        }
-    }
-
-    // we're out of matching candidates
-    warn(INF, "no vers in common with serv");
-    return 0;
 }

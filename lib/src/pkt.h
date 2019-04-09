@@ -64,7 +64,6 @@
 // #define ERR_FINAL_SIZE 0x6
 #define ERR_FRAME_ENC 0x7
 #define ERR_TRANSPORT_PARAMETER 0x8
-#define ERR_VERSION_NEGOTIATION 0x9
 #define ERR_PROTOCOL_VIOLATION 0xa
 #define ERR_TLS(type) (0x100 + (type))
 
@@ -151,7 +150,6 @@ pkt_type_str(const uint8_t flags, const void * const vers)
 struct q_stream;
 struct w_iov;
 struct w_iov_sq;
-struct w_sock;
 struct cipher_ctx;
 struct sockaddr;
 
@@ -188,11 +186,11 @@ extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
 
 extern void __attribute__((nonnull)) coalesce(struct w_iov_sq * const q);
 
-extern void __attribute__((nonnull))
-tx_vneg_resp(const struct w_sock * const ws, const struct w_iov * const v);
-
-extern uint32_t __attribute__((nonnull))
-clnt_vneg(const uint8_t * const buf, const uint16_t len);
+extern uint16_t __attribute__((nonnull(1, 3)))
+enc_lh_cids(const struct cid * const dcid,
+            const struct cid * const scid,
+            struct w_iov * const v,
+            const uint16_t pos);
 
 #ifndef NDEBUG
 extern void __attribute__((nonnull(1, 2, 3)))

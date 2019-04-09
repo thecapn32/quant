@@ -53,6 +53,7 @@
 
 #define MAX_CID_LEN 18
 #define SRT_LEN 16
+#define MSECS_PER_SEC 1000
 
 struct cid {
     splay_entry(cid) node_seq;

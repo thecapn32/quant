@@ -273,7 +273,7 @@ int main(int argc, char * argv[])
     http_parser_settings settings = {.on_url = serve_cb};
 
     while (bound) {
-        struct q_conn * c = q_ready(first_conn ? 0 : timeout);
+        struct q_conn * c = q_ready(first_conn ? 0 : timeout * 1000);
         if (c == 0)
             break;
         first_conn = false;
@@ -281,7 +281,7 @@ int main(int argc, char * argv[])
         // do we need to q_accept?
         if (q_is_new_serv_conn(c))
             q_accept(&(struct q_conn_conf){
-                .idle_timeout = timeout,
+                .idle_timeout = timeout * 1000,
                 .enable_spinbit = true,
             });
 
