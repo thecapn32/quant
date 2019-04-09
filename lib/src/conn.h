@@ -195,8 +195,8 @@ struct q_conn {
     uint32_t do_migration : 1;     ///< Perform a CID migration when possible.
     uint32_t key_flips_enabled : 1; ///< Are TLS key updates enabled?
     uint32_t do_key_flip : 1;       ///< Perform a TLS key update.
-    uint32_t spinbit_enabled : 1;   ///< Is the spinbit enabled?
-    uint32_t next_spin : 1;         ///< Spin value to set on next packet sent.
+    uint32_t spin_enabled : 1;      ///< Is the spinbit enabled?
+    uint32_t spin : 1;              ///< Spin value to set on next packet sent.
     uint32_t no_wnd : 1;            ///< TX is stalled by lack of window.
     uint32_t : 6;
 

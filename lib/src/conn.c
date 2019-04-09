@@ -226,6 +226,8 @@ static void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c)
     warn(NTE, "migration to dcid %s for %s conn (was %s)", cid2str(dcid),
          conn_type(c), cid2str(c->dcid));
 
+    if (c->spin_enabled)
+        c->spin = 0; // need to reset spin value
     c->tx_retire_cid = c->dcid->retired = true;
     c->dcid = dcid;
 }
@@ -1465,7 +1467,7 @@ ack_alarm(struct ev_loop * const l __attribute__((unused)),
 void update_conn_conf(struct q_conn * const c,
                       const struct q_conn_conf * const cc)
 {
-    c->spinbit_enabled = cc ? cc->enable_spinbit : 0;
+    c->spin_enabled = cc ? cc->enable_spinbit : 0;
 
     // (re)set idle alarm
     c->idle_alarm.repeat = c->tp_in.idle_to =
