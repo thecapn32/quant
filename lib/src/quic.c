@@ -807,7 +807,7 @@ struct q_conn * q_ready(const uint64_t timeout)
             if (ev_is_active(&api_alarm))
                 ev_timer_stop(loop, &api_alarm);
             ev_timer_init(&api_alarm, cancel_api_call,
-                          (double)timeout * MSECS_PER_SEC, 0);
+                          (double)timeout / MSECS_PER_SEC, 0);
             ev_timer_start(loop, &api_alarm);
         }
         warn(WRN, "waiting for conn to get ready");
