@@ -259,7 +259,8 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
              conn_type(c), cid2str(c->scid));
         detect_lost_pkts(pn, true);
 
-        // this is not part of pseudo code - causes TX to resume
+        // XXX: this will be part of the -20 pseudo code - causes TX to resume
+        tx(c, 1);
         maybe_tx(c);
 
     } else {
