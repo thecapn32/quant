@@ -664,14 +664,8 @@ static void __attribute__((nonnull)) update_act_scid(struct q_conn * const c)
 
 void add_scid(struct q_conn * const c, struct cid * const id)
 {
-    ensure(id->len, "len 0");
-    struct cid * scid = splay_find(cids_by_seq, &c->scids_by_seq, id);
-    ensure(scid == 0, "cid is new");
-    scid = get_cid_by_id(c->scids_by_id, id);
-    ensure(scid == 0, "cid is new");
-
     // warn(ERR, "new scid %s", cid2str(id));
-    scid = calloc(1, sizeof(*scid));
+    struct cid * const scid = calloc(1, sizeof(*scid));
     ensure(scid, "could not calloc");
     cid_cpy(scid, id);
     ensure(splay_insert(cids_by_seq, &c->scids_by_seq, scid) == 0, "inserted");
@@ -685,7 +679,6 @@ void add_scid(struct q_conn * const c, struct cid * const id)
 void add_dcid(struct q_conn * const c, const struct cid * const id)
 {
     struct cid * dcid = splay_find(cids_by_seq, &c->dcids_by_seq, id);
-
     if (dcid == 0) {
         // warn(ERR, "new dcid %s", cid2str(id));
         dcid = calloc(1, sizeof(*dcid));
@@ -773,6 +766,59 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
 }
 
 
+static void __attribute__((nonnull)) free_cids(struct q_conn * const c)
+{
+    if (c->is_clnt == false && c->odcid.len) {
+        // TODO: we should stop accepting pkts on the client odcid earlier
+        cids_by_id_del(c->scids_by_id, &c->odcid);
+        conns_by_id_del(&c->odcid);
+    }
+
+    while (!splay_empty(&c->scids_by_seq)) {
+        struct cid * const id = splay_min(cids_by_seq, &c->scids_by_seq);
+        free_scid(c, id);
+    }
+
+    while (!splay_empty(&c->dcids_by_seq)) {
+        struct cid * const id = splay_min(cids_by_seq, &c->dcids_by_seq);
+        free_dcid(c, id);
+    }
+
+    c->scid = c->dcid = 0;
+}
+
+
+static void __attribute__((nonnull(1))) new_cids(struct q_conn * const c,
+                                                 const bool zero_len_scid,
+                                                 const struct cid * const dcid,
+                                                 const struct cid * const scid)
+{
+    // init dcid
+    if (c->is_clnt) {
+        struct cid ndcid = {.len =
+                                8 + (uint8_t)w_rand_uniform(MAX_CID_LEN - 7)};
+        rand_bytes(ndcid.id, sizeof(ndcid.id));
+        cid_cpy(&c->odcid, &ndcid);
+        add_dcid(c, &ndcid);
+    } else if (dcid)
+        add_dcid(c, dcid);
+
+    // init scid and add connection to global data structures
+    struct cid nscid = {0};
+    if (c->is_clnt) {
+        nscid.len = zero_len_scid ? 0 : CLNT_SCID_LEN;
+        if (nscid.len)
+            rand_bytes(nscid.id, sizeof(nscid.id));
+    } else if (scid)
+        cid_cpy(&nscid, scid);
+    if (nscid.len) {
+        rand_bytes(nscid.srt, sizeof(nscid.srt));
+        add_scid(c, &nscid);
+    } else if (c->scid == 0)
+        conns_by_ipnp_ins(c);
+}
+
+
 static void __attribute__((nonnull))
 vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
 {
@@ -787,14 +833,16 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
     kh_foreach_value(c->streams_by_id, s, { reset_stream(s, false); });
 
     // reset packet number spaces
-    const uint64_t lg_sent_ini = c->pn_init.pn.lg_sent;
     reset_pn(&c->pn_init.pn);
     reset_pn(&c->pn_hshk.pn);
     reset_pn(&c->pn_data.pn);
 
-    if (is_vneg)
-        // we need to continue in the pkt nr sequence
-        c->pn_init.pn.lg_sent = lg_sent_ini;
+    if (is_vneg) {
+        // reset CIDs
+        const bool zero_len_scid = c->scid->len == 0;
+        free_cids(c);
+        new_cids(c, zero_len_scid, 0, 0);
+    }
 
     // reset CC state
     init_rec(c);
@@ -1613,23 +1661,37 @@ struct q_conn * new_conn(struct w_engine * const w,
         ensure(c->peer_name = strdup(peer_name), "could not dup peer_name");
     }
 
-    // init next CIDs
+    // initialize socket
+    c->w = w;
+    const struct sockaddr_in * const addr4 =
+        (const struct sockaddr_in *)(const void *)peer;
+    c->sock = w_get_sock(w, w->ip, port,
+                         c->is_clnt && addr4 ? addr4->sin_addr.s_addr : 0,
+                         c->is_clnt && addr4 ? addr4->sin_port : 0);
+    if (c->sock == 0) {
+        c->sockopt.enable_ecn = true;
+        // TODO need to update zero checksums in update_conn_conf() somehow
+        c->sockopt.enable_udp_zero_checksums =
+            cc && cc->enable_udp_zero_checksums;
+        c->rx_w.data = c->sock = w_bind(w, port, &c->sockopt);
+        if (unlikely(c->sock == 0))
+            goto fail;
+        ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
+        ev_set_priority(&c->rx_w, EV_MAXPRI);
+        ev_io_start(loop, &c->rx_w);
+        c->holds_sock = true;
+    } else if (unlikely(peer == 0))
+        goto fail;
+
+    // init CIDs
     c->next_sid_bidi = c->is_clnt ? 0 : STRM_FL_SRV;
     c->next_sid_uni = c->is_clnt ? STRM_FL_UNI : STRM_FL_UNI | STRM_FL_SRV;
-
-    // init dcid
     splay_init(&c->dcids_by_seq);
-    if (c->is_clnt) {
-        struct cid ndcid = {.len =
-                                8 + (uint8_t)w_rand_uniform(MAX_CID_LEN - 7)};
-        rand_bytes(ndcid.id, sizeof(ndcid.id));
-        cid_cpy(&c->odcid, &ndcid);
-        add_dcid(c, &ndcid);
-    } else if (dcid)
-        add_dcid(c, dcid);
+    splay_init(&c->scids_by_seq);
+    c->scids_by_id = kh_init(cids_by_id);
+    new_cids(c, cc && cc->enable_zero_len_cid, dcid, scid);
 
     c->vers = c->vers_initial = vers;
-    c->scids_by_id = kh_init(cids_by_id);
     diet_init(&c->closed_streams);
     sq_init(&c->txq);
 
@@ -1657,40 +1719,19 @@ struct q_conn * new_conn(struct w_engine * const w,
 
     // initialize ACK timeout
     c->ack_alarm.data = c;
-    c->ack_alarm.repeat = c->tp_out.max_ack_del / 1000.0;
+    c->ack_alarm.repeat = (double)c->tp_out.max_ack_del / MSECS_PER_SEC;
     ev_init(&c->ack_alarm, ack_alarm);
 
     // initialize recovery state
     init_rec(c);
-    c->sockopt.enable_ecn = true;
     if (c->is_clnt)
         c->path_val_win = UINT64_MAX;
 
-    // initialize socket and start a TX watcher
+    // start a TX watcher
     ev_async_init(&c->tx_w, tx_w);
     c->tx_w.data = c;
     ev_set_priority(&c->tx_w, EV_MAXPRI - 1);
     ev_async_start(loop, &c->tx_w);
-
-    c->w = w;
-    const struct sockaddr_in * const addr4 =
-        (const struct sockaddr_in *)(const void *)peer;
-    c->sock = w_get_sock(w, w->ip, port,
-                         c->is_clnt && addr4 ? addr4->sin_addr.s_addr : 0,
-                         c->is_clnt && addr4 ? addr4->sin_port : 0);
-    if (c->sock == 0) {
-        // TODO need to update zero checksums in update_conn_conf() somehow
-        c->sockopt.enable_udp_zero_checksums =
-            cc && cc->enable_udp_zero_checksums;
-        c->rx_w.data = c->sock = w_bind(w, port, &c->sockopt);
-        if (unlikely(c->sock == 0))
-            goto fail;
-        ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
-        ev_set_priority(&c->rx_w, EV_MAXPRI);
-        ev_io_start(loop, &c->rx_w);
-        c->holds_sock = true;
-    } else if (unlikely(peer == 0))
-        goto fail;
 
     if (likely(c->is_clnt || c->holds_sock == false))
         update_conn_conf(c, cc);
@@ -1700,29 +1741,13 @@ struct q_conn * new_conn(struct w_engine * const w,
     init_pn(&c->pn_hshk.pn, c);
     init_pn(&c->pn_data.pn, c);
 
-    // init scid and add connection to global data structures
-    splay_init(&c->scids_by_seq);
-    struct cid nscid = {0};
-    if (c->is_clnt) {
-        nscid.len = cc && cc->enable_zero_len_cid ? 0 : CLNT_SCID_LEN;
-        if (nscid.len)
-            rand_bytes(nscid.id, sizeof(nscid.id));
-    } else if (scid)
-        cid_cpy(&nscid, scid);
-    if (nscid.len) {
-        rand_bytes(nscid.srt, sizeof(nscid.srt));
-        add_scid(c, &nscid);
-    }
-    if (c->scid == 0)
-        conns_by_ipnp_ins(c);
-
     // create crypto streams
     c->streams_by_id = kh_init(streams_by_id);
     for (epoch_t e = ep_init; e <= ep_data; e++)
         if (e != ep_0rtt)
             new_stream(c, crpt_strm_id(e));
 
-    if (nscid.len)
+    if (c->scid)
         warn(DBG, "%s conn %s on port %u created", conn_type(c),
              cid2str(c->scid), ntohs(get_sport(c->sock)));
 
@@ -1730,7 +1755,6 @@ struct q_conn * new_conn(struct w_engine * const w,
     return c;
 
 fail:
-    kh_destroy(cids_by_id, c->scids_by_id);
     free(c);
     return 0;
 }
@@ -1786,26 +1810,10 @@ void free_conn(struct q_conn * const c)
     diet_free(&c->closed_streams);
     free(c->peer_name);
 
-    // remove connection from global lists and free CID splays
+    // remove connection from global lists and free CIDs
     if (c->scid == 0)
         conns_by_ipnp_del(c);
-
-    if (c->is_clnt == false && c->odcid.len) {
-        // TODO: we should stop accepting pkts on the client odcid earlier
-        cids_by_id_del(c->scids_by_id, &c->odcid);
-        conns_by_id_del(&c->odcid);
-    }
-
-    while (!splay_empty(&c->scids_by_seq)) {
-        struct cid * const id = splay_min(cids_by_seq, &c->scids_by_seq);
-        free_scid(c, id);
-    }
-
-    while (!splay_empty(&c->dcids_by_seq)) {
-        struct cid * const id = splay_min(cids_by_seq, &c->dcids_by_seq);
-        free_dcid(c, id);
-    }
-
+    free_cids(c);
     kh_destroy(cids_by_id, c->scids_by_id);
 
     if (c->holds_sock) {
