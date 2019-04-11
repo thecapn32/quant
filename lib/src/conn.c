@@ -1443,6 +1443,8 @@ void rx(struct ev_loop * const l,
         // is a TX needed for this connection?
         if (c->needs_tx) {
             // reset idle timeout
+            c->idle_alarm.repeat = MAX((double)c->tp_in.idle_to / MSECS_PER_SEC,
+                                       3 * c->rec.ld_alarm.repeat);
             ev_timer_again(l, &c->idle_alarm);
 
             tx(c, 0); // this clears c->needs_tx if we TX'ed
