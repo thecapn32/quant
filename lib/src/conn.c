@@ -72,9 +72,16 @@ khash_t(conns_by_srt) * conns_by_srt;
 
 
 static inline __attribute__((always_inline, const)) bool
-is_force_vneg_vers(const uint32_t vers)
+is_vneg_vers(const uint32_t vers)
 {
     return (vers & 0x0f0f0f0f) == 0x0a0a0a0a;
+}
+
+
+static inline __attribute__((always_inline, const)) bool
+is_draft_vers(const uint32_t vers)
+{
+    return (vers & 0xff000000) == 0xff000000;
 }
 
 
@@ -111,7 +118,7 @@ SPLAY_GENERATE(cids_by_seq, cid, node_seq, cids_by_seq_cmp)
 
 static bool __attribute__((const)) vers_supported(const uint32_t v)
 {
-    if (is_force_vneg_vers(v))
+    if (is_vneg_vers(v))
         return false;
 
     for (uint8_t i = 0; i < ok_vers_len; i++)
@@ -129,7 +136,7 @@ clnt_vneg(const uint8_t * const buf, const uint16_t len)
 {
     uint16_t pos = 0;
     for (uint8_t i = 0; i < ok_vers_len; i++) {
-        if (is_force_vneg_vers(ok_vers[i]))
+        if (is_vneg_vers(ok_vers[i]))
             // skip over reserved and vneg-trigger versions in our local list
             continue;
 
@@ -137,7 +144,7 @@ clnt_vneg(const uint8_t * const buf, const uint16_t len)
             uint32_t vers = 0;
             dec(&vers, buf, len, pos + j, sizeof(vers), "0x%08x");
 
-            if (is_force_vneg_vers(vers))
+            if (is_vneg_vers(vers))
                 // skip over reserved and vneg-trigger versions in server's list
                 continue;
 
@@ -349,7 +356,7 @@ tx_vneg_resp(const struct w_sock * const ws, const struct w_iov * const v)
     i = enc_lh_cids(&meta(v).hdr.scid, &meta(v).hdr.dcid, xv, i);
 
     for (uint8_t j = 0; j < ok_vers_len; j++)
-        if (!is_force_vneg_vers(ok_vers[j]))
+        if (!is_vneg_vers(ok_vers[j]))
             i = enc(xv->buf, xv->len, i, &ok_vers[j], sizeof(ok_vers[j]), 0,
                     "0x%08x");
 
@@ -909,7 +916,28 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
                 goto done;
             }
 
-            // handle an incoming vers-neg packet
+            // check that the rx'ed CIDs match our tx'ed CIDs
+            const bool rx_scid_ok = !cid_cmp(&meta(v).hdr.scid, c->dcid);
+            const bool rxed_dcid_ok = !cid_cmp(&meta(v).hdr.dcid, c->scid);
+            if (rx_scid_ok == false || rxed_dcid_ok == false) {
+                warn(
+                    INF, "vneg %ccid mismatch: rx %s != %s",
+                    rx_scid_ok ? 'd' : 's',
+                    cid2str(rx_scid_ok ? &meta(v).hdr.dcid : &meta(v).hdr.scid),
+                    cid2str(rx_scid_ok ? c->scid : c->dcid));
+                enter_closing(c);
+                goto done;
+            }
+
+            // only do vneg for draft and vneg versions
+            if (is_vneg_vers(c->vers) == false &&
+                is_draft_vers(c->vers) == false) {
+                warn(ERR, "must not vneg for tx vers 0x%08x", c->vers);
+                enter_closing(c);
+                goto done;
+            }
+
+            // handle an incoming vneg packet
             const uint32_t try_vers = clnt_vneg(&v->buf[meta(v).hdr.hdr_len],
                                                 v->len - meta(v).hdr.hdr_len);
             if (try_vers == 0) {
@@ -961,7 +989,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
     case conn_clsg:
     case conn_drng:
         if (is_lh(meta(v).hdr.flags) && meta(v).hdr.vers == 0) {
-            // we shouldn't get another vers-neg packet here, ignore
+            // we shouldn't get another vneg packet here, ignore
             warn(NTE, "ignoring spurious vneg response");
             goto done;
         }
@@ -1103,7 +1131,7 @@ rx_pkts(struct w_iov_sq * const x,
                 }
 
                 if (vers_supported(meta(v).hdr.vers) == false ||
-                    is_force_vneg_vers(meta(v).hdr.vers)) {
+                    is_vneg_vers(meta(v).hdr.vers)) {
                     log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
                             tok_len);
                     warn(WRN, "clnt-requested vers 0x%08x not supported",
