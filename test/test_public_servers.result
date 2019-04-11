@@ -5,7 +5,7 @@ lsquic    *         V    H    D    C    R    Z    S    M              3    P    
 mvfst     *         v
 ngtcp2    *         V    H    D    C    R    Z    S    M    B    U    3
 ngx_quic  *         v
-picoquic  *         v
+picoquic  *         V    H    D    C    R    Z    S    M    B    U    3    P
 quant     *         V    H    D    C    R    Z    S    M    B    U         P    E
 quiche    *         v
 quicly    *         v
