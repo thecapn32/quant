@@ -980,8 +980,8 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             // only do vneg for draft and vneg versions
             if (is_vneg_vers(c->vers) == false &&
                 is_draft_vers(c->vers) == false) {
-                warn(ERR, "must not vneg for tx vers 0x%08x", c->vers);
-                enter_closing(c);
+                err_close(c, ERR_PROTOCOL_VIOLATION, 0,
+                          "must not vneg for tx vers 0x%08x", c->vers);
                 goto done;
             }
 
