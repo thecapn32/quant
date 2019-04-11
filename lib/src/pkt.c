@@ -857,8 +857,9 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
         meta(v).hdr.flags &
         (is_lh(meta(v).hdr.flags) ? LH_RSVD_MASK : SH_RSVD_MASK);
     if (unlikely(rsvd_bits)) {
-        warn(ERR, "reserved %s bits are 0x%02x (= non-zero)",
-             is_lh(meta(v).hdr.flags) ? "LH" : "SH", rsvd_bits);
+        err_close(c, ERR_PROTOCOL_VIOLATION, 0,
+                  "reserved %s bits are 0x%02x (= non-zero)",
+                  is_lh(meta(v).hdr.flags) ? "LH" : "SH", rsvd_bits);
         return false;
     }
 
