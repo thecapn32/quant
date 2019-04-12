@@ -373,6 +373,8 @@ tx_vneg_resp(const struct w_sock * const ws, const struct w_iov * const v)
 
 static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
 {
+    log_cc(c); // do it here instead of in on_pkt_sent()
+
     c->needs_tx = false;
 
     if (unlikely(sq_empty(&c->txq)))

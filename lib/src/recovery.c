@@ -365,7 +365,7 @@ void on_pkt_sent(struct q_stream * const s, struct w_iov * const v)
     }
 
     set_ld_timer(c);
-    log_cc(c);
+    // log_cc(c);
 }
 
 
