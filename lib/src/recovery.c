@@ -166,7 +166,7 @@ set_to:
     //      c->rec.ld_alarm.repeat < 0 ? 0 : c->rec.ld_alarm.repeat,
     //      conn_type(c), cid2str(c->scid));
     if (c->rec.ld_alarm.repeat <= 0)
-        ev_invoke(loop, &c->rec.ld_alarm, 0);
+        ev_invoke(loop, &c->rec.ld_alarm, true);
     else
         ev_timer_again(loop, &c->rec.ld_alarm);
 }
@@ -215,11 +215,13 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
     const ev_tstamp lost_send_t = ev_now(loop) - loss_del;
 
     // Packets with packet numbers before this are deemed lost.
-    const uint64_t lost_pn = pn->lg_acked - kPacketThreshold;
+    const uint64_t lost_pn = unlikely(pn->lg_acked == UINT64_MAX)
+                                 ? 0
+                                 : pn->lg_acked - kPacketThreshold;
 
     struct pkt_meta * p;
     struct pkt_meta * largest_lost_pkt = 0;
-
+    bool in_flight_lost = false;
     kh_foreach_value(pn->sent_pkts, p, {
         ensure(p->is_acked == false, "ACKed pkt in sent_pkts");
         ensure(p->is_lost == false, "lost pkt in sent_pkts");
@@ -228,27 +230,30 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
             continue;
 
         // Mark packet as lost, or set time when it should be marked.
-        if (p->tx_t <= lost_send_t ||
-            (likely(pn->lg_acked != UINT64_MAX) && p->hdr.nr <= lost_pn)) {
+        if (p->tx_t <= lost_send_t || p->hdr.nr <= lost_pn) {
             p->is_lost = true;
+            in_flight_lost |= p->in_flight;
             c->i.pkts_out_lost++;
             // cppcheck-suppress knownConditionTrueFalse
             if (unlikely(largest_lost_pkt == 0) ||
                 p->hdr.nr > largest_lost_pkt->hdr.nr)
                 largest_lost_pkt = p;
-        } else if (is_zero(pn->loss_t))
-            pn->loss_t = p->tx_t + loss_del;
-        else
-            pn->loss_t = MIN(pn->loss_t, p->tx_t + loss_del);
+        } else {
+            if (is_zero(pn->loss_t))
+                pn->loss_t = p->tx_t + loss_del;
+            else
+                pn->loss_t = MIN(pn->loss_t, p->tx_t + loss_del);
+        }
 
-        // OnPacketsLost:
+        // OnPacketsLost
         if (p->is_lost) {
             warn(DBG, "%s %s pkt " FMT_PNR_OUT " considered lost", conn_type(c),
                  pkt_type_str(p->hdr.flags, &p->hdr.vers), p->hdr.nr);
 
-            if (is_ack_eliciting(&p->frames)) {
+            if (p->in_flight) {
                 c->rec.in_flight -= p->udp_len;
-                c->rec.ae_in_flight--;
+                if (p->ack_eliciting)
+                    c->rec.ae_in_flight--;
             }
 
             diet_insert(&pn->lost, p->hdr.nr, (ev_tstamp)NAN);
@@ -258,7 +263,8 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
         }
     });
 
-    if (do_cc && largest_lost_pkt)
+    // OnPacketsLost
+    if (do_cc && in_flight_lost && largest_lost_pkt)
         congestion_event(c, largest_lost_pkt->tx_t);
 
     log_cc(c);
@@ -268,7 +274,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
 static void __attribute__((nonnull))
 on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
             ev_timer * const w,
-            int e __attribute__((unused)))
+            int direct)
 {
     struct q_conn * const c = w->data;
     ev_timer_stop(loop, &c->rec.ld_alarm);
@@ -314,7 +320,9 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
         tx(c, 2);
     }
 
-    set_ld_timer(c);
+    if (!direct)
+        // we were called via set_ld_timer, so don't call it again
+        set_ld_timer(c);
 }
 
 
@@ -343,29 +351,30 @@ track_acked_pkts(struct pn_space * const pn, struct w_iov * const v)
 }
 
 
-void on_pkt_sent(struct q_stream * const s, struct w_iov * const v)
+void on_pkt_sent(struct pn_space * const pn, struct w_iov * const v)
 {
     // see OnPacketSent() pseudo code
 
-    meta(v).tx_t = ev_now(loop);
-
-    struct q_conn * const c = s->c;
-    struct pn_space * const pn = pn_for_epoch(c, strm_epoch(s));
     pm_by_nr_ins(pn->sent_pkts, &meta(v));
+    // nr is set in enc_pkt()
+    meta(v).tx_t = ev_now(loop);
+    // ack_eliciting is set in enc_pkt()
+    meta(v).in_flight = meta(v).ack_eliciting || has_frame(v, FRM_PAD);
 
-    // NOTE: since all our pkts have some PADDING, they all increase in_flight
-
-    if (likely(is_ack_eliciting(&meta(v).frames))) {
+    struct q_conn * const c = pn->c;
+    if (likely(meta(v).in_flight)) {
         if (unlikely(is_crypto_pkt(v)))
-            // is_crypto_packet
             c->rec.last_sent_crypto_t = meta(v).tx_t;
-        c->rec.last_sent_ack_elicit_t = meta(v).tx_t;
-        c->rec.in_flight += meta(v).udp_len; // OnPacketSentCC
-        c->rec.ae_in_flight++;
+        if (likely(meta(v).ack_eliciting)) {
+            c->rec.last_sent_ack_elicit_t = meta(v).tx_t;
+            c->rec.ae_in_flight++;
+        }
+
+        // OnPacketSentCC
+        c->rec.in_flight += meta(v).udp_len;
     }
 
     set_ld_timer(c);
-    // log_cc(c);
 }
 
 
@@ -400,7 +409,7 @@ void on_ack_received_1(struct pn_space * const pn,
     pn->lg_acked = MAX(pn->lg_acked, meta(lg_ack).hdr.nr);
 
     // we're only called for the largest ACK'ed
-    if (is_ack_eliciting(&meta(lg_ack).frames)) {
+    if (meta(lg_ack).ack_eliciting) {
         c->rec.latest_rtt = ev_now(loop) - meta(lg_ack).tx_t;
         update_rtt(c, ack_del / 1000000.0); // ack_del is passed in usec
     }
@@ -429,10 +438,13 @@ on_pkt_acked_cc(struct q_conn * const c, struct w_iov * const acked_pkt)
     // OnPacketAckedCC
 
     c->rec.in_flight -= meta(acked_pkt).udp_len;
-    c->rec.ae_in_flight--;
+    if (meta(acked_pkt).ack_eliciting)
+        c->rec.ae_in_flight--;
 
     if (in_recovery(c, meta(acked_pkt).tx_t))
         return;
+
+    // TODO: Do not increase congestion window in recovery period.
 
     if (c->rec.cwnd < c->rec.ssthresh)
         c->rec.cwnd += meta(acked_pkt).udp_len;
@@ -445,8 +457,7 @@ void on_pkt_acked(struct pn_space * const pn, struct w_iov * const acked_pkt)
 {
     // see OnPacketAcked() pseudo code
     struct q_conn * const c = pn->c;
-    if (is_ack_eliciting(&meta(acked_pkt).frames) &&
-        meta(acked_pkt).is_lost == false)
+    if (meta(acked_pkt).in_flight && meta(acked_pkt).is_lost == false)
         on_pkt_acked_cc(c, acked_pkt);
 
     struct pkt_meta * meta_acked = &meta(acked_pkt);

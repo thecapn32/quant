@@ -320,6 +320,7 @@ dec_stream_or_crypto_frame(struct q_conn * const c,
             if (unlikely(v != last))
                 adj_iov_to_start(last);
             if (meta(last).is_fin) {
+                c->imm_ack = true;
                 strm_to_state(meta(v).stream, meta(v).stream->state <= strm_hcrm
                                                   ? strm_hcrm
                                                   : strm_clsd);
@@ -521,8 +522,7 @@ uint16_t dec_ack_frame(struct q_conn * const c,
             }
 
             got_new_ack = true;
-            if (unlikely(ack == lg_ack) &&
-                is_ack_eliciting(&meta(acked).frames)) {
+            if (unlikely(ack == lg_ack) && meta(acked).ack_eliciting) {
                 // call this only for the largest ACK in the frame
                 on_ack_received_1(pn, acked, ack_delay);
                 lg_acked_tx_t = meta(acked).tx_t;
@@ -1333,6 +1333,7 @@ uint16_t enc_ack_frame(struct pn_space * const pn,
     ev_timer_stop(loop, &c->ack_alarm);
     bit_zero(NUM_FRAM_TYPES, &pn->rx_frames);
     pn->pkts_rxed_since_last_ack_tx = 0;
+    c->imm_ack = false;
 
     return i;
 }

@@ -36,7 +36,6 @@
 #include "quic.h"
 
 struct q_conn;
-struct q_stream;
 struct pn_space;
 
 
@@ -126,7 +125,7 @@ struct recovery {
 extern void __attribute__((nonnull)) init_rec(struct q_conn * const c);
 
 extern void __attribute__((nonnull))
-on_pkt_sent(struct q_stream * const s, struct w_iov * const v);
+on_pkt_sent(struct pn_space * const pn, struct w_iov * const v);
 
 extern void __attribute__((nonnull))
 on_ack_received_1(struct pn_space * const pn,

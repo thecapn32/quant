@@ -178,13 +178,15 @@ struct pkt_meta {
     struct pn_space * pn; ///< Packet number space; only set on TX.
     struct pkt_hdr hdr;   ///< Parsed packet header.
 
-    uint16_t udp_len;     ///< Length of protected UDP packet at TX/RX.
-    uint8_t has_rtx : 1;  ///< Does the w_iov hold truncated data?
-    uint8_t is_acked : 1; ///< Is the w_iov ACKed?
-    uint8_t is_lost : 1;  ///< Have we marked this w_iov as lost?
-    uint8_t is_reset : 1; ///< This packet is a stateless reset.
-    uint8_t is_fin : 1;   ///< This packet has a stream FIN bit.
-    uint8_t : 3;
+    uint16_t udp_len;          ///< Length of protected UDP packet at TX/RX.
+    uint8_t has_rtx : 1;       ///< Does the w_iov hold truncated data?
+    uint8_t is_acked : 1;      ///< Is the w_iov ACKed?
+    uint8_t is_lost : 1;       ///< Have we marked this w_iov as lost?
+    uint8_t is_reset : 1;      ///< This packet is a stateless reset.
+    uint8_t is_fin : 1;        ///< This packet has a stream FIN bit.
+    uint8_t in_flight : 1;     ///< Does this pkt count towards in_flight?
+    uint8_t ack_eliciting : 1; ///< Is this packet ACK-eliciting?
+    uint8_t : 1;
 
     uint8_t _unused[5];
 };

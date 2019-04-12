@@ -500,10 +500,13 @@ bool enc_pkt(struct q_stream * const s,
                     (sq_first(&c->txq) ? sq_first(&c->txq)->len : 0));
     }
 
-    if (unlikely(tx_ack_eliciting && !is_ack_eliciting(&meta(v).frames)))
+    meta(v).ack_eliciting = is_ack_eliciting(&meta(v).frames);
+    if (unlikely(tx_ack_eliciting) && meta(v).ack_eliciting == false)
         // we can only do this for SH pkts
-        if (meta(v).hdr.type == SH)
+        if (meta(v).hdr.type == SH) {
             i = enc_ping_frame(v, i);
+            meta(v).ack_eliciting = true;
+        }
 
     ensure(i > meta(v).hdr.hdr_len, "would have sent %s pkt w/o frames",
            pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
@@ -566,7 +569,7 @@ tx:;
         // we did an RTX and this is no longer lost
         meta(v).is_lost = false;
 
-    on_pkt_sent(s, v);
+    on_pkt_sent(pn, v);
 
     if (c->is_clnt) {
         if (is_lh(meta(v).hdr.flags) == false)

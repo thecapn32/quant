@@ -87,9 +87,10 @@ void free_pn(struct pn_space * const pn)
         struct pkt_meta * p;
         kh_foreach_value(pn->sent_pkts, p, {
             // let's take all pkts out of in_flight here
-            if (is_ack_eliciting(&p->frames)) {
+            if (p->in_flight) {
                 pn->c->rec.in_flight -= p->udp_len;
-                pn->c->rec.ae_in_flight--;
+                if (p->ack_eliciting)
+                    pn->c->rec.ae_in_flight--;
             }
             // TX'ed but non-RTX'ed pkts are freed when their stream is freed
             if (p->has_rtx || !has_stream_data(p))
@@ -132,30 +133,43 @@ void abandon_pn(struct q_conn * const c, const epoch_t e)
 
 ack_t needs_ack(const struct pn_space * const pn)
 {
+    struct q_conn * const c = pn->c;
+
+    if (unlikely(c->imm_ack)) {
+        // warn(ERR, "%s conn %s: imm_ack: forced", conn_type(c),
+        //      cid2str(c->scid));
+        return imm_ack;
+    }
+
     const bool rxed_one_or_more = pn->pkts_rxed_since_last_ack_tx >= 1;
     if (rxed_one_or_more == false) {
-        // warn(ERR, "no_ack: rxed_one_or_more == false");
+        // warn(ERR, "%s conn %s: no_ack: rxed_one_or_more == false",
+        // conn_type(c),
+        //      cid2str(c->scid));
         return no_ack;
     }
 
     const bool have_ack_eliciting = is_ack_eliciting(&pn->rx_frames);
     if (have_ack_eliciting == false) {
-        // warn(ERR, "grat_ack: have_ack_eliciting == false");
+        // warn(ERR, "%s conn %s: grat_ack: have_ack_eliciting == false",
+        //      conn_type(c), cid2str(c->scid));
         return grat_ack;
     }
 
-    const bool in_hshk = &pn->c->pn_data.pn != pn;
+    const bool in_hshk = &c->pn_data.pn != pn;
     if (in_hshk) {
-        // warn(ERR, "imm_ack: in_hshk");
+        // warn(ERR, "%s conn %s: imm_ack: in_hshk", conn_type(c),
+        //      cid2str(c->scid));
         return imm_ack;
     }
 
     const bool rxed_two_or_more = pn->pkts_rxed_since_last_ack_tx >= 2;
     if (rxed_two_or_more) {
-        // warn(ERR, "imm_ack: rxed_two_or_more");
+        // warn(ERR, "%s conn %s: imm_ack: rxed_two_or_more", conn_type(c),
+        //      cid2str(c->scid));
         return imm_ack;
     }
 
-    // warn(ERR, "del_ack");
+    // warn(ERR, "%s conn %s: del_ack", conn_type(c), cid2str(c->scid));
     return del_ack;
 }

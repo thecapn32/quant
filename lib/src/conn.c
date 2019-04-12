@@ -298,7 +298,7 @@ static void __attribute__((nonnull)) log_sent_pkts(struct q_conn * const c)
             pos += snprintf(&buf[pos], sizeof(buf) - (size_t)pos,
                             "%s%s" FMT_PNR_OUT NRM " ",
                             has_stream_data(p) ? REV : "",
-                            is_ack_eliciting(&p->frames) ? BLD : "", p->hdr.nr);
+                            p->ack_eliciting ? BLD : "", p->hdr.nr);
         });
         if (pos)
             warn(DBG, "%s epoch %u%s unacked: %s", conn_type(c), e,

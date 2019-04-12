@@ -198,7 +198,8 @@ struct q_conn {
     uint32_t spin_enabled : 1;      ///< Is the spinbit enabled?
     uint32_t spin : 1;              ///< Spin value to set on next packet sent.
     uint32_t no_wnd : 1;            ///< TX is stalled by lack of window.
-    uint32_t : 6;
+    uint32_t imm_ack : 1;           ///< Force an immediate ACK.
+    uint32_t : 5;
 
     conn_state_t state; ///< State of the connection.
 
