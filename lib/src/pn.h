@@ -29,6 +29,7 @@
 
 #include <stdint.h>
 
+#include <ev.h>
 #include <khash.h>
 
 #include "diet.h"
@@ -54,6 +55,8 @@ struct pn_space {
     uint64_t lg_sent;            // largest_sent_packet
     uint64_t lg_acked;           // largest_acked_packet
     uint64_t lg_sent_before_rto; // largest_sent_before_rto
+
+    ev_tstamp loss_t; // loss_time
 
     uint64_t pkts_rxed_since_last_ack_tx;
 

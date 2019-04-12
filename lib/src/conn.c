@@ -1440,15 +1440,14 @@ void rx(struct ev_loop * const l,
         if (unlikely(c->state == conn_drng))
             continue;
 
-        // is a TX needed for this connection?
-        if (c->needs_tx) {
-            // reset idle timeout
-            c->idle_alarm.repeat = MAX((double)c->tp_in.idle_to / MSECS_PER_SEC,
-                                       3 * c->rec.ld_alarm.repeat);
-            ev_timer_again(l, &c->idle_alarm);
+        // reset idle timeout
+        c->idle_alarm.repeat = MAX((double)c->tp_in.idle_to / MSECS_PER_SEC,
+                                   3 * c->rec.ld_alarm.repeat);
+        ev_timer_again(l, &c->idle_alarm);
 
+        // is a TX needed for this connection?
+        if (c->needs_tx)
             tx(c, 0); // this clears c->needs_tx if we TX'ed
-        }
 
         for (epoch_t e = c->min_rx_epoch; e <= ep_data; e++) {
             if (c->cstreams[e] == 0 || e == ep_0rtt)

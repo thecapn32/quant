@@ -298,9 +298,9 @@ extern const uint8_t ok_vers_len;
 
 /// Number of consecutive PTOs after which network is considered to be
 /// experiencing persistent congestion. The RECOMMENDED value for
-/// kPersistentCongestionThreshold is 2, which is equivalent to having two TLPs
+/// kPersistentCongestionThreshold is 3, which is equivalent to having two TLPs
 /// before an RTO in TCP.
-#define kPersistentCongestionThreshold 2
+#define kPersistentCongestionThreshold 3
 
 
 typedef void (*func_ptr)(void);
