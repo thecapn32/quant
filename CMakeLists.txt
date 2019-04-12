@@ -60,7 +60,7 @@ set(CMAKE_C_STANDARD 11)
 # Set general compile flags, if they are supported
 include(CheckCCompilerFlag)
 include(CheckCXXCompilerFlag)
-foreach(FLAG -pipe -march=native -Wextra -Wpedantic -Weverything -Werror
+foreach(FLAG -pipe -Wextra -Wpedantic -Weverything -Werror
         -fcolor-diagnostics -fdiagnostics-color=always
         -Wno-disabled-macro-expansion # clang on travis needs this
         -Wno-extra-semi-stmt # the kh_foreach* macros need this
@@ -242,7 +242,7 @@ if(NOT CMAKE_BUILD_TYPE MATCHES Release AND HAVE_PROFILER)
 endif()
 
 # flags for "Release" builds
-set(CMAKE_C_FLAGS_RELEASE "-DNDEBUG -Ofast")
+set(CMAKE_C_FLAGS_RELEASE "-DNDEBUG -Ofast -march=native")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE}")
 
 # flags for "RelWithDebInfo" builds
