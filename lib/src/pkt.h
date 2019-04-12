@@ -68,28 +68,25 @@
 #define ERR_TLS(type) (0x100 + (type))
 
 
-static inline bool __attribute__((always_inline, const))
-is_lh(const uint8_t flags)
+static inline bool __attribute__((const)) is_lh(const uint8_t flags)
 {
     return is_set(HEAD_FORM, flags);
 }
 
 
-static inline uint8_t __attribute__((always_inline, const))
-pkt_type(const uint8_t flags)
+static inline uint8_t __attribute__((const)) pkt_type(const uint8_t flags)
 {
     return is_lh(flags) ? flags & LH_TYPE_MASK : SH;
 }
 
 
-static inline uint8_t __attribute__((always_inline, const))
-pkt_nr_len(const uint8_t flags)
+static inline uint8_t __attribute__((const)) pkt_nr_len(const uint8_t flags)
 {
     return (flags & HEAD_PNRL_MASK) + 1;
 }
 
 
-static inline uint8_t __attribute__((always_inline, const))
+static inline uint8_t __attribute__((const))
 epoch_for_pkt_type(const uint8_t type)
 {
     switch (type) {
@@ -106,7 +103,7 @@ epoch_for_pkt_type(const uint8_t type)
 }
 
 
-static inline struct pn_space * __attribute__((always_inline, nonnull))
+static inline struct pn_space * __attribute__((nonnull))
 pn_for_pkt_type(struct q_conn * const c, const uint8_t t)
 {
     switch (t) {

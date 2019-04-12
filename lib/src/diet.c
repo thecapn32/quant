@@ -44,8 +44,7 @@ SPLAY_GENERATE(diet, ival, node, ival_cmp)
 ///
 /// @return     Largest interval underneath @p i.
 ///
-static inline struct ival * __attribute__((always_inline))
-find_max(struct ival * const i)
+static inline struct ival * find_max(struct ival * const i)
 {
     if (i == 0)
         return 0;
@@ -62,8 +61,7 @@ find_max(struct ival * const i)
 ///
 /// @return     Smallest interval underneath @p i.
 ///
-static inline struct ival * __attribute__((always_inline))
-find_min(struct ival * const i)
+static inline struct ival * find_min(struct ival * const i)
 {
     if (i == 0)
         return 0;

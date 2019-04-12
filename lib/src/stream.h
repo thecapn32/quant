@@ -112,15 +112,14 @@ struct q_stream {
 #define is_srv_ini(id) is_set(STRM_FL_SRV, (id))
 
 
-static inline bool __attribute__((nonnull, always_inline))
+static inline bool __attribute__((nonnull))
 out_fully_acked(const struct q_stream * const s)
 {
     return s->out_una == 0;
 }
 
 
-static inline int64_t __attribute__((always_inline, const))
-crpt_strm_id(const epoch_t epoch)
+static inline int64_t __attribute__((const)) crpt_strm_id(const epoch_t epoch)
 {
     switch (epoch) { // lgtm [cpp/missing-return]
     case ep_init:
@@ -135,7 +134,7 @@ crpt_strm_id(const epoch_t epoch)
 }
 
 
-static inline epoch_t __attribute__((nonnull, always_inline))
+static inline epoch_t __attribute__((nonnull))
 strm_epoch(const struct q_stream * const s)
 {
     if (unlikely(s->id < 0))
@@ -157,14 +156,14 @@ strm_epoch(const struct q_stream * const s)
 }
 
 
-static inline bool __attribute__((nonnull, always_inline))
+static inline bool __attribute__((nonnull))
 needs_ctrl(const struct q_stream * const s)
 {
     return s->tx_max_stream_data || s->blocked;
 }
 
 
-static inline void __attribute__((nonnull, always_inline))
+static inline void __attribute__((nonnull))
 need_ctrl_update(struct q_stream * const s)
 {
     if (needs_ctrl(s)) {

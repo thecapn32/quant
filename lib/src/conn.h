@@ -63,21 +63,21 @@ KHASH_MAP_INIT_INT64(streams_by_id, struct q_stream *)
 KHASH_MAP_INIT_INT64(conns_by_ipnp, struct q_conn *)
 
 
-static inline khint_t __attribute__((always_inline, nonnull))
+static inline khint_t __attribute__((nonnull))
 hash_cid(const struct cid * const id)
 {
     return fnv1a_32(id->id, id->len);
 }
 
 
-static inline int __attribute__((always_inline, nonnull))
+static inline int __attribute__((nonnull))
 cid_cmp(const struct cid * const a, const struct cid * const b)
 {
     return memcmp(&a->len, &b->len, MIN(a->len, b->len) + sizeof(a->len));
 }
 
 
-static inline int __attribute__((always_inline, nonnull))
+static inline int __attribute__((nonnull))
 kh_cid_cmp(const struct cid * const a, const struct cid * const b)
 {
     return cid_cmp(a, b) == 0;
@@ -87,14 +87,14 @@ kh_cid_cmp(const struct cid * const a, const struct cid * const b)
 KHASH_INIT(conns_by_id, struct cid *, struct q_conn *, 1, hash_cid, kh_cid_cmp)
 
 
-static inline khint_t __attribute__((always_inline, nonnull))
+static inline khint_t __attribute__((nonnull))
 hash_srt(const uint8_t * const srt)
 {
     return fnv1a_32(srt, SRT_LEN);
 }
 
 
-static inline int __attribute__((always_inline, nonnull))
+static inline int __attribute__((nonnull))
 kh_srt_cmp(const uint8_t * const a, const uint8_t * const b)
 {
     return memcmp(a, b, SRT_LEN) == 0;
@@ -356,7 +356,7 @@ extern void __attribute__((nonnull)) rx_pkts(struct w_iov_sq * const x,
                                              const struct w_sock * const ws);
 #endif
 
-static inline struct pn_space * __attribute__((always_inline, nonnull))
+static inline struct pn_space * __attribute__((nonnull))
 pn_for_epoch(struct q_conn * const c, const epoch_t e)
 {
     switch (e) {
@@ -386,7 +386,7 @@ struct ooo_0rtt {
 extern splay_head(ooo_0rtt_by_cid, ooo_0rtt) ooo_0rtt_by_cid;
 
 
-static inline int __attribute__((always_inline, nonnull))
+static inline int __attribute__((nonnull))
 ooo_0rtt_by_cid_cmp(const struct ooo_0rtt * const a,
                     const struct ooo_0rtt * const b)
 {
@@ -397,28 +397,20 @@ ooo_0rtt_by_cid_cmp(const struct ooo_0rtt * const a,
 SPLAY_PROTOTYPE(ooo_0rtt_by_cid, ooo_0rtt, node, ooo_0rtt_by_cid_cmp)
 
 
-static inline __attribute__((always_inline, nonnull)) const char *
+static inline __attribute__((nonnull)) const char *
 conn_type(const struct q_conn * const c)
 {
     return c->is_clnt ? "clnt" : "serv";
 }
 
 
-static inline __attribute__((always_inline, const)) bool
-is_zero(const ev_tstamp t)
+static inline __attribute__((const)) bool is_zero(const ev_tstamp t)
 {
     return fpclassify(t) == FP_ZERO;
 }
 
 
-static inline __attribute__((always_inline, const)) bool
-is_inf(const ev_tstamp t)
-{
-    return fpclassify(t) == FP_INFINITE;
-}
-
-
-static inline bool __attribute__((nonnull, always_inline))
+static inline bool __attribute__((nonnull))
 has_pval_wnd(const struct q_conn * const c, const uint16_t len)
 {
     if (unlikely(c->out_data + len >= c->path_val_win)) {
@@ -432,7 +424,7 @@ has_pval_wnd(const struct q_conn * const c, const uint16_t len)
 }
 
 
-static inline bool __attribute__((nonnull, always_inline))
+static inline bool __attribute__((nonnull))
 has_wnd(const struct q_conn * const c, const uint16_t len)
 {
     if (unlikely(c->blocked)) {

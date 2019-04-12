@@ -62,7 +62,7 @@ struct ival {
 /// @return     Zero if a is in b or b is in a. Negative if a's lower bound is
 ///             less than b's lower bound, positive otherwise.
 ///
-static inline int __attribute__((nonnull, always_inline))
+static inline int __attribute__((nonnull))
 ival_cmp(const struct ival * const a, const struct ival * const b)
 {
     if ((a->lo >= b->lo && a->lo <= b->hi) ||
@@ -100,42 +100,40 @@ extern size_t __attribute__((nonnull))
 diet_to_str(char * const str, const size_t len, struct diet * const d);
 
 
-static inline struct ival * __attribute__((nonnull, always_inline))
+static inline struct ival * __attribute__((nonnull))
 diet_max_ival(struct diet * const d)
 {
     return splay_empty(d) ? 0 : splay_max(diet, d);
 }
 
 
-static inline struct ival * __attribute__((nonnull, always_inline))
+static inline struct ival * __attribute__((nonnull))
 diet_min_ival(struct diet * const d)
 {
     return splay_empty(d) ? 0 : splay_min(diet, d);
 }
 
 
-static inline uint64_t __attribute__((nonnull, always_inline))
-diet_max(struct diet * const d)
+static inline uint64_t __attribute__((nonnull)) diet_max(struct diet * const d)
 {
     return splay_empty(d) ? 0 : splay_max(diet, d)->hi;
 }
 
 
-static inline uint64_t __attribute__((nonnull, always_inline))
-diet_min(struct diet * const d)
+static inline uint64_t __attribute__((nonnull)) diet_min(struct diet * const d)
 {
     return splay_empty(d) ? 0 : splay_min(diet, d)->lo;
 }
 
 
-inline bool __attribute__((nonnull, always_inline))
+static inline bool __attribute__((nonnull))
 diet_empty(const struct diet * const d)
 {
     return splay_empty(d);
 }
 
 
-inline ev_tstamp __attribute__((nonnull, always_inline))
+static inline ev_tstamp __attribute__((nonnull))
 diet_timestamp(const struct ival * const i)
 {
     return i->t;

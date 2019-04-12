@@ -86,7 +86,7 @@ struct stream_entry {
 static sl_head(stream_list, stream_entry) sl = sl_head_initializer(sl);
 
 
-static inline uint64_t __attribute__((nonnull, always_inline))
+static inline uint64_t __attribute__((nonnull))
 conn_cache_key(const struct sockaddr * const sock)
 {
     const struct sockaddr_in * const sock4 =

@@ -71,15 +71,13 @@ khash_t(conns_by_id) * conns_by_id;
 khash_t(conns_by_srt) * conns_by_srt;
 
 
-static inline __attribute__((always_inline, const)) bool
-is_vneg_vers(const uint32_t vers)
+static inline __attribute__((const)) bool is_vneg_vers(const uint32_t vers)
 {
     return (vers & 0x0f0f0f0f) == 0x0a0a0a0a;
 }
 
 
-static inline __attribute__((always_inline, const)) bool
-is_draft_vers(const uint32_t vers)
+static inline __attribute__((const)) bool is_draft_vers(const uint32_t vers)
 {
     return (vers & 0xff000000) == 0xff000000;
 }
@@ -167,7 +165,7 @@ struct ooo_0rtt_by_cid ooo_0rtt_by_cid = splay_initializer(&ooo_0rtt_by_cid);
 SPLAY_GENERATE(ooo_0rtt_by_cid, ooo_0rtt, node, ooo_0rtt_by_cid_cmp)
 
 
-static inline epoch_t __attribute__((always_inline, nonnull))
+static inline epoch_t __attribute__((nonnull))
 epoch_in(const struct q_conn * const c)
 {
     const size_t epoch = ptls_get_read_epoch(c->tls.t);
@@ -186,7 +184,7 @@ epoch_in(const struct q_conn * const c)
 }
 
 
-static inline uint64_t __attribute__((nonnull, always_inline))
+static inline uint64_t __attribute__((nonnull))
 conns_by_ipnp_key(const struct sockaddr * const src,
                   const struct sockaddr * const dst)
 {
