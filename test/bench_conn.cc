@@ -26,8 +26,8 @@
 #include <arpa/inet.h>
 #include <cstdint>
 #include <fcntl.h>
-#include <iomanip>
-#include <iostream>
+// #include <iomanip>
+// #include <iostream>
 #include <libgen.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -42,17 +42,24 @@ static struct w_engine * w;
 static struct q_conn *cc, *sc;
 
 
-static void log(const struct q_conn_info * const cci,
-                const struct q_conn_info * const sci)
-{
-    std::cout << std::fixed << std::setprecision(4)
-              << "C: i=" << cci->pkts_in_valid << " o=" << cci->pkts_out
-              << " ol=" << cci->pkts_out_lost << " pto=" << cci->pto_cnt
-              << " cwnd=" << cci->cwnd << "\t"
-              << "S: i=" << sci->pkts_in_valid << " o=" << sci->pkts_out
-              << " ol=" << sci->pkts_out_lost << " pto=" << sci->pto_cnt
-              << " cwnd=" << sci->cwnd << std::endl;
-}
+// static void log(const struct q_conn_info * const cci,
+//                 const struct q_conn_info * const sci)
+// {
+//     static uint64_t c_ol_old = 0;
+//     static uint64_t s_ol_old = 0;
+
+//     if (cci->pkts_out_lost != c_ol_old || sci->pkts_out_lost != s_ol_old) {
+//         std::cout << std::fixed << std::setprecision(4)
+//                   << "C: i=" << cci->pkts_in_valid << " o=" << cci->pkts_out
+//                   << " ol=" << cci->pkts_out_lost << " pto=" << cci->pto_cnt
+//                   << " cwnd=" << cci->cwnd << "\t"
+//                   << "S: i=" << sci->pkts_in_valid << " o=" << sci->pkts_out
+//                   << " ol=" << sci->pkts_out_lost << " pto=" << sci->pto_cnt
+//                   << " cwnd=" << sci->cwnd << std::endl;
+//         c_ol_old = cci->pkts_out_lost;
+//         s_ol_old = sci->pkts_out_lost;
+//     }
+// }
 
 
 static inline uint64_t io(const uint64_t len)
@@ -86,7 +93,7 @@ static inline uint64_t io(const uint64_t len)
     struct q_conn_info sci = {0};
     q_info(cc, &cci);
     q_info(sc, &sci);
-    log(&cci, &sci);
+    // log(&cci, &sci);
 
     return ilen;
 }
@@ -106,7 +113,7 @@ static void BM_conn(benchmark::State & state)
 }
 
 
-BENCHMARK(BM_conn)->RangeMultiplier(2)->Range(1024, 1024 * 1024 * 2)
+BENCHMARK(BM_conn)->RangeMultiplier(2)->Range(1024, 1024 * 1024 * 32)
     // ->Unit(benchmark::kMillisecond)
     ;
 
@@ -116,14 +123,15 @@ BENCHMARK(BM_conn)->RangeMultiplier(2)->Range(1024, 1024 * 1024 * 2)
 int main(int argc __attribute__((unused)), char ** argv)
 {
 #ifndef NDEBUG
-    util_dlevel = DBG; // default to maximum compiled-in verbosity
+    util_dlevel = INF; // default to maximum compiled-in verbosity
 #endif
 
     // init
     const int cwd = open(".", O_CLOEXEC);
     ensure(cwd != -1, "cannot open");
     ensure(chdir(dirname(argv[0])) == 0, "cannot chdir");
-    const struct q_conf conf = {nullptr, "dummy.crt", "dummy.key"};
+    const struct q_conf conf = {nullptr, "dummy.crt", "dummy.key", nullptr,
+                                1000000};
     w = q_init("lo"
 #ifndef __linux__
                "0"
