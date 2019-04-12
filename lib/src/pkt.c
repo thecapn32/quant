@@ -50,6 +50,9 @@
 #include "tls.h"
 
 
+#define MAX_PKT_NR_LEN 4 ///< Maximum packet number length allowed by spec.
+
+
 #ifndef NDEBUG
 // local version of cid2str that is just hex2str (omits the seq)
 #define c2s(i) hex2str((i)->id, (i)->len)

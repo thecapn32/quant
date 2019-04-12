@@ -51,7 +51,7 @@
 
 #define cid2str(i)                                                             \
     __extension__({                                                            \
-        static char _str[2 * (MAX_CID_LEN + sizeof((i)->seq)) + 1] = "0";      \
+        static char _str[2 * (CID_LEN_MAX + sizeof((i)->seq)) + 1] = "0";      \
         if (i)                                                                 \
             snprintf(_str, sizeof(_str), "%" PRIu64 ":%.*s", (i)->seq,         \
                      2 * (i)->len, hex2str((i)->id, (i)->len));                \

@@ -645,7 +645,7 @@ conns_by_id_del(struct cid * const id)
 static void __attribute__((nonnull)) update_act_scid(struct q_conn * const c)
 {
     // server picks a new random cid
-    struct cid nscid = {.len = SERV_SCID_LEN};
+    struct cid nscid = {.len = SCID_LEN_SERV};
     rand_bytes(nscid.id, sizeof(nscid.id) + sizeof(nscid.srt));
     cid_cpy(&c->odcid, c->scid);
     warn(NTE, "hshk switch to scid %s for %s %s conn (was %s)", cid2str(&nscid),
@@ -796,7 +796,7 @@ static void __attribute__((nonnull(1))) new_cids(struct q_conn * const c,
     // init dcid
     if (c->is_clnt) {
         struct cid ndcid = {.len =
-                                8 + (uint8_t)w_rand_uniform(MAX_CID_LEN - 7)};
+                                8 + (uint8_t)w_rand_uniform(CID_LEN_MAX - 7)};
         rand_bytes(ndcid.id, sizeof(ndcid.id));
         cid_cpy(&c->odcid, &ndcid);
         add_dcid(c, &ndcid);
@@ -806,7 +806,7 @@ static void __attribute__((nonnull(1))) new_cids(struct q_conn * const c,
     // init scid and add connection to global data structures
     struct cid nscid = {0};
     if (c->is_clnt) {
-        nscid.len = zero_len_scid ? 0 : CLNT_SCID_LEN;
+        nscid.len = zero_len_scid ? 0 : SCID_LEN_CLNT;
         if (nscid.len)
             rand_bytes(nscid.id, sizeof(nscid.id));
     } else if (scid)
@@ -1123,7 +1123,7 @@ rx_pkts(struct w_iov_sq * const x,
         uint16_t tok_len = 0;
         if (unlikely(!dec_pkt_hdr_beginning(
                 xv, v, is_clnt, &odcid, tok, &tok_len,
-                is_clnt ? (c_ipnp ? 0 : CLNT_SCID_LEN) : SERV_SCID_LEN))) {
+                is_clnt ? (c_ipnp ? 0 : SCID_LEN_CLNT) : SCID_LEN_SERV))) {
             // we might still need to send a vneg packet
             if (w_connected(ws) == false) {
                 if (meta(v).hdr.scid.len == 0 || meta(v).hdr.scid.len >= 4) {

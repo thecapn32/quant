@@ -46,223 +46,19 @@
 #define ASAN_UNPOISON_MEMORY_REGION(x, y)
 #endif
 
-#include "bitset.h"
 #include "frame.h"
 #include "pn.h"
 
 
-#define MAX_CID_LEN 18
-#define SRT_LEN 16
-#define MSECS_PER_SEC 1000
-
-struct cid {
-    splay_entry(cid) node_seq;
-    uint64_t seq; ///< Connection ID sequence number
-    /// XXX len must precede id for cid_cmp() over both to work
-    uint8_t len; ///< Connection ID length
-    /// XXX id must precede srt for rand_bytes() w/both to work
-    uint8_t id[MAX_CID_LEN]; ///< Connection ID
-    uint8_t srt[SRT_LEN];    ///< Stateless Reset Token
-    uint8_t retired : 1;
-    uint8_t : 7;
-    uint8_t _unused[4];
-};
-
-
-static inline int __attribute__((nonnull))
-cids_by_seq_cmp(const struct cid * const a, const struct cid * const b)
-{
-    return (a->seq > b->seq) - (a->seq < b->seq);
-}
-
-
-static inline void __attribute__((nonnull))
-cid_cpy(struct cid * const dst, const struct cid * const src)
-{
-    memcpy((uint8_t *)dst + offsetof(struct cid, seq),
-           (const uint8_t *)src + offsetof(struct cid, seq),
-           sizeof(struct cid) - offsetof(struct cid, seq) -
-               sizeof(src->_unused));
-}
-
-
-sl_head(pm_sl, pkt_meta);
-
-
-struct pkt_hdr {
-    uint64_t nr;
-    uint16_t len;     ///< Content of length field in long header.
-    uint16_t hdr_len; ///< Length of entire QUIC header.
-    uint32_t vers;
-    struct cid dcid;
-    struct cid scid;
-    uint8_t flags; // first byte of packet
-    uint8_t type;
-    uint8_t _unused[6];
-    // we do not store any token of LH packets in the metadata anymore
-};
-
-
-#define MAX_PKT_NR_LEN 4
-
-
-/// Packet meta-data information associated with w_iov buffers
-struct pkt_meta {
-    // XXX need to potentially change pm_cpy() below if fields are reordered
-    splay_entry(pkt_meta) off_node;
-    sl_entry(pkt_meta) rtx_next;
-    struct pm_sl rtx; ///< List of pkt_meta structs of previous TXs.
-
-    // pm_cpy(true) starts copying from here:
-    struct q_stream * stream;   ///< Stream this data was written on.
-    uint64_t stream_off;        ///< Stream data offset.
-    uint16_t stream_header_pos; ///< Offset of stream frame header.
-    uint16_t stream_data_start; ///< Offset of first byte of stream frame data.
-    uint16_t stream_data_len;   ///< Length of last stream frame data.
-
-    uint16_t ack_block_pos; ///< Offset of first ACK block (for TX'ed pkt).
-    uint64_t lg_acked; ///< "Largest Acknowledged" in ACK block (for TX'ed pkt).
-    uint64_t ack_block_cnt; ///< "ACK Block Count" in ACK block (for TX'ed pkt).
-
-    int64_t max_stream_data_sid; ///< MAX_STREAM_DATA sid, if sent.
-    uint64_t max_stream_data;    ///< MAX_STREAM_DATA limit, if sent.
-    uint64_t max_data;           ///< MAX_DATA limit, if sent.
-    int64_t max_streams_bidi;    ///< MAX_STREAM_ID bidir limit, if sent.
-    int64_t max_streams_uni;     ///< MAX_STREAM_ID unidir limit, if sent.
-    struct frames frames;        ///< Frames present in pkt.
-
-    // pm_cpy(false) starts copying from here:
-    ev_tstamp tx_t;       ///< Transmission timestamp.
-    struct pn_space * pn; ///< Packet number space; only set on TX.
-    struct pkt_hdr hdr;
-
-    uint16_t udp_len;     ///< Length of protected UDP packet at TX/RX.
-    uint8_t has_rtx : 1;  ///< Does the w_iov hold truncated data?
-    uint8_t is_acked : 1; ///< Is the w_iov ACKed?
-    uint8_t is_lost : 1;  ///< Have we marked this w_iov as lost?
-    uint8_t is_reset : 1; ///< This packet is a stateless reset.
-    uint8_t is_fin : 1;   ///< This packet has a stream FIN bit.
-    uint8_t : 3;
-
-    uint8_t _unused[5];
-};
-
-
-/// Is flag @p f set in flags variable @p v?
-///
-/// @param      f     Flag.
-/// @param      v     Variable.
-///
-/// @return     True if set, false otherwise.
-///
-#define is_set(f, v) (((v) & (f)) == (f))
-
-
-static inline int __attribute__((nonnull, always_inline))
-ooo_by_off_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
-{
-    return (a->stream_off > b->stream_off) - (a->stream_off < b->stream_off);
-}
-
-
-splay_head(ooo_by_off, pkt_meta);
-
-SPLAY_PROTOTYPE(ooo_by_off, pkt_meta, off_node, ooo_by_off_cmp)
-
-
-extern struct pkt_meta * pkt_meta;
-
-
-/// Return the pkt_meta entry for a given w_iov.
-///
-/// @param      v     Pointer to a w_iov.
-///
-/// @return     Pointer to the pkt_meta entry for the w_iov.
-///
-#define meta(v) pkt_meta[w_iov_idx(v)]
-
-
-/// Return the w_iov index of a given pkt_meta.
-///
-/// @param      m     Pointer to a pkt_meta entry.
-///
-/// @return     Index of the struct w_iov the struct pkt_meta holds meta data
-///             for.
-///
-#define pm_idx(m) (uint32_t)((m)-pkt_meta)
-
-
-static inline void __attribute__((nonnull))
-pm_cpy(struct pkt_meta * const dst,
-       const struct pkt_meta * const src,
-       const bool also_frame_info)
-{
-    const size_t off = also_frame_info ? offsetof(struct pkt_meta, stream)
-                                       : offsetof(struct pkt_meta, tx_t);
-    memcpy((uint8_t *)dst + off, (const uint8_t *)src + off,
-           sizeof(*dst) - off);
-}
-
-
 #define DATA_OFFSET 48 ///< Offsets of stream frame payload data we TX.
 
-#define PATH_CHLG_LIMIT 2
+#define MSECS_PER_SEC 1000 ///< Milliseconds per second.
 
-#define CLNT_SCID_LEN 4
-#define SERV_SCID_LEN 8
+#define CID_LEN_MAX 18  ///< Maximum CID length allowed by spec.
+#define SCID_LEN_CLNT 4 ///< Default client source CID length.
+#define SCID_LEN_SERV 8 ///< Default server source CID length.
+#define SRT_LEN 16      ///< Stateless reset token length allowed by spec.
 
-#define adj_iov_to_start(v)                                                    \
-    do {                                                                       \
-        (v)->buf -= meta(v).stream_data_start;                                 \
-        (v)->len += meta(v).stream_data_start;                                 \
-    } while (0)
-
-
-#define adj_iov_to_data(v)                                                     \
-    do {                                                                       \
-        (v)->buf += meta(v).stream_data_start;                                 \
-        (v)->len -= meta(v).stream_data_start;                                 \
-    } while (0)
-
-
-#define hex2str(buf, len)                                                      \
-    __extension__({                                                            \
-        static char _str[2 * 64 + 1] = "0";                                    \
-        static const char _hex_str[] = "0123456789abcdef";                     \
-        int _j;                                                                \
-        for (_j = 0; (unsigned long)_j < (unsigned long)(len) && _j < 64;      \
-             _j++) {                                                           \
-            _str[_j * 2] =                                                     \
-                _hex_str[(((const uint8_t *)(buf))[_j] >> 4) & 0x0f];          \
-            _str[_j * 2 + 1] = _hex_str[((const uint8_t *)(buf))[_j] & 0x0f];  \
-        }                                                                      \
-        if (_j == 64)                                                          \
-            _str[_j * 2 - 1] = _str[_j * 2 - 2] = _str[_j * 2 - 3] = '.';      \
-        _str[_j * 2] = 0;                                                      \
-        _str;                                                                  \
-    })
-
-
-#define has_stream_data(p) (p)->stream_header_pos
-
-
-static inline bool __attribute__((nonnull))
-is_ack_eliciting(const struct frames * const f)
-{
-    static const struct frames ack_or_pad =
-        bitset_t_initializer(1 << FRM_ACK | 1 << FRM_PAD);
-    struct frames not_ack_or_pad = *f;
-    bit_nand(NUM_FRAM_TYPES, &not_ack_or_pad, &ack_or_pad);
-    return !bit_empty(NUM_FRAM_TYPES, &not_ack_or_pad);
-}
-
-
-extern struct ev_loop * loop;
-extern struct q_conn_sl accept_queue;
-
-/// The versions of QUIC supported by this implementation
-extern const uint32_t ok_vers[];
-extern const uint8_t ok_vers_len;
 
 // Maximum reordering in packets before packet threshold loss detection
 // considers a packet lost. The RECOMMENDED value is 3.
@@ -303,9 +99,185 @@ extern const uint8_t ok_vers_len;
 #define kPersistentCongestionThreshold 3
 
 
+#define NRM "\x1B[0m" ///< ANSI escape sequence: reset all to normal
+#define BLD "\x1B[1m" ///< ANSI escape sequence: bold
+// #define DIM "\x1B[2m"   ///< ANSI escape sequence: dim
+// #define ULN "\x1B[3m"   ///< ANSI escape sequence: underline
+// #define BLN "\x1B[5m"   ///< ANSI escape sequence: blink
+#define REV "\x1B[7m" ///< ANSI escape sequence: reverse
+// #define HID "\x1B[8m"   ///< ANSI escape sequence: hidden
+// #define BLK "\x1B[30m"  ///< ANSI escape sequence: black
+#define RED "\x1B[31m" ///< ANSI escape sequence: red
+#define GRN "\x1B[32m" ///< ANSI escape sequence: green
+#define YEL "\x1B[33m" ///< ANSI escape sequence: yellow
+#define BLU "\x1B[34m" ///< ANSI escape sequence: blue
+#define MAG "\x1B[35m" ///< ANSI escape sequence: magenta
+#define CYN "\x1B[36m" ///< ANSI escape sequence: cyan
+// #define WHT "\x1B[37m"  ///< ANSI escape sequence: white
+
+#define FMT_PNR_IN BLU "%" PRIu64 NRM
+#define FMT_PNR_OUT GRN "%" PRIu64 NRM
+#define FMT_SID BLD YEL "%" PRId64 NRM
+
+
+struct cid {
+    splay_entry(cid) node_seq;
+    uint64_t seq; ///< Connection ID sequence number
+    /// XXX len must precede id for cid_cmp() over both to work
+    uint8_t len; ///< Connection ID length
+    /// XXX id must precede srt for rand_bytes() over both to work
+    uint8_t id[CID_LEN_MAX]; ///< Connection ID
+    uint8_t srt[SRT_LEN];    ///< Stateless Reset Token
+    uint8_t retired : 1;     ///< Did we retire this CID?
+    uint8_t : 7;
+    uint8_t _unused[4];
+};
+
+
+struct pkt_hdr {
+    uint64_t nr;      ///< Packet number.
+    uint16_t len;     ///< Content of length field in long header.
+    uint16_t hdr_len; ///< Length of entire QUIC header.
+    uint32_t vers;    ///< QUIC version in long header.
+    struct cid dcid;  ///< Destination CID.
+    struct cid scid;  ///< Source CID.
+    uint8_t flags;    ///< First (raw) byte of packet.
+    uint8_t type;     ///< Parsed packet type.
+    uint8_t _unused[6];
+    // we do not store any token of LH packets in the metadata anymore
+};
+
+
+/// Packet meta-data information associated with w_iov buffers
+struct pkt_meta {
+    // XXX need to potentially change pm_cpy() below if fields are reordered
+    splay_entry(pkt_meta) off_node;
+    sl_entry(pkt_meta) rtx_next;
+    sl_head(pm_sl, pkt_meta) rtx; ///< List of pkt_meta structs of previous TXs.
+
+    // pm_cpy(true) starts copying from here:
+    struct q_stream * stream;   ///< Stream this data was written on.
+    uint64_t stream_off;        ///< Stream data offset.
+    uint16_t stream_header_pos; ///< Offset of stream frame header.
+    uint16_t stream_data_start; ///< Offset of first byte of stream frame data.
+    uint16_t stream_data_len;   ///< Length of last stream frame data.
+
+    uint16_t ack_block_pos; ///< Offset of first ACK block (for TX'ed pkt).
+    uint64_t lg_acked; ///< "Largest Acknowledged" in ACK block (for TX'ed pkt).
+    uint64_t ack_block_cnt; ///< "ACK Block Count" in ACK block (for TX'ed pkt).
+
+    int64_t max_stream_data_sid; ///< MAX_STREAM_DATA sid, if sent.
+    uint64_t max_stream_data;    ///< MAX_STREAM_DATA limit, if sent.
+    uint64_t max_data;           ///< MAX_DATA limit, if sent.
+    int64_t max_streams_bidi;    ///< MAX_STREAM_ID bidir limit, if sent.
+    int64_t max_streams_uni;     ///< MAX_STREAM_ID unidir limit, if sent.
+    struct frames frames;        ///< Frames present in pkt.
+
+    // pm_cpy(false) starts copying from here:
+    ev_tstamp tx_t;       ///< Transmission timestamp.
+    struct pn_space * pn; ///< Packet number space; only set on TX.
+    struct pkt_hdr hdr;   ///< Parsed packet header.
+
+    uint16_t udp_len;     ///< Length of protected UDP packet at TX/RX.
+    uint8_t has_rtx : 1;  ///< Does the w_iov hold truncated data?
+    uint8_t is_acked : 1; ///< Is the w_iov ACKed?
+    uint8_t is_lost : 1;  ///< Have we marked this w_iov as lost?
+    uint8_t is_reset : 1; ///< This packet is a stateless reset.
+    uint8_t is_fin : 1;   ///< This packet has a stream FIN bit.
+    uint8_t : 3;
+
+    uint8_t _unused[5];
+};
+
+
+extern struct pkt_meta * pkt_meta;
+extern struct ev_loop * loop;
+extern struct q_conn_sl accept_queue;
+
+/// The versions of QUIC supported by this implementation
+extern const uint32_t ok_vers[];
+extern const uint8_t ok_vers_len;
+
 typedef void (*func_ptr)(void);
 extern func_ptr api_func;
 extern void *api_conn, *api_strm;
+
+extern void __attribute__((nonnull)) alloc_off(struct w_engine * const w,
+                                               struct w_iov_sq * const q,
+                                               const uint32_t len,
+                                               const uint16_t off);
+
+#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
+    !defined(NO_FUZZER_CORPUS_COLLECTION)
+extern int corpus_pkt_dir, corpus_frm_dir;
+
+extern void __attribute__((nonnull))
+write_to_corpus(const int dir, const void * const data, const size_t len);
+#endif
+
+
+/// Is flag @p f set in flags variable @p v?
+///
+/// @param      f     Flag.
+/// @param      v     Variable.
+///
+/// @return     True if set, false otherwise.
+///
+#define is_set(f, v) (((v) & (f)) == (f))
+
+
+/// Return the pkt_meta entry for a given w_iov.
+///
+/// @param      v     Pointer to a w_iov.
+///
+/// @return     Pointer to the pkt_meta entry for the w_iov.
+///
+#define meta(v) pkt_meta[w_iov_idx(v)]
+
+
+/// Return the w_iov index of a given pkt_meta.
+///
+/// @param      m     Pointer to a pkt_meta entry.
+///
+/// @return     Index of the struct w_iov the struct pkt_meta holds meta data
+///             for.
+///
+#define pm_idx(m) (uint32_t)((m)-pkt_meta)
+
+
+#define adj_iov_to_start(v)                                                    \
+    do {                                                                       \
+        (v)->buf -= meta(v).stream_data_start;                                 \
+        (v)->len += meta(v).stream_data_start;                                 \
+    } while (0)
+
+
+#define adj_iov_to_data(v)                                                     \
+    do {                                                                       \
+        (v)->buf += meta(v).stream_data_start;                                 \
+        (v)->len -= meta(v).stream_data_start;                                 \
+    } while (0)
+
+
+#define hex2str(buf, len)                                                      \
+    __extension__({                                                            \
+        static char _str[2 * 64 + 1] = "0";                                    \
+        static const char _hex_str[] = "0123456789abcdef";                     \
+        int _j;                                                                \
+        for (_j = 0; (unsigned long)_j < (unsigned long)(len) && _j < 64;      \
+             _j++) {                                                           \
+            _str[_j * 2] =                                                     \
+                _hex_str[(((const uint8_t *)(buf))[_j] >> 4) & 0x0f];          \
+            _str[_j * 2 + 1] = _hex_str[((const uint8_t *)(buf))[_j] & 0x0f];  \
+        }                                                                      \
+        if (_j == 64)                                                          \
+            _str[_j * 2 - 1] = _str[_j * 2 - 2] = _str[_j * 2 - 3] = '.';      \
+        _str[_j * 2] = 0;                                                      \
+        _str;                                                                  \
+    })
+
+
+#define has_stream_data(p) (p)->stream_header_pos
 
 
 #ifndef NDEBUG
@@ -411,12 +383,6 @@ alloc_iov(struct w_engine * const w, const uint16_t len, const uint16_t off)
 }
 
 
-extern void __attribute__((nonnull)) alloc_off(struct w_engine * const w,
-                                               struct w_iov_sq * const q,
-                                               const uint32_t len,
-                                               const uint16_t off);
-
-
 static inline struct w_iov * __attribute__((nonnull))
 w_iov_dup(const struct w_iov * const v)
 {
@@ -432,32 +398,42 @@ w_iov_dup(const struct w_iov * const v)
 }
 
 
-#define NRM "\x1B[0m" ///< ANSI escape sequence: reset all to normal
-#define BLD "\x1B[1m" ///< ANSI escape sequence: bold
-// #define DIM "\x1B[2m"   ///< ANSI escape sequence: dim
-// #define ULN "\x1B[3m"   ///< ANSI escape sequence: underline
-// #define BLN "\x1B[5m"   ///< ANSI escape sequence: blink
-#define REV "\x1B[7m" ///< ANSI escape sequence: reverse
-// #define HID "\x1B[8m"   ///< ANSI escape sequence: hidden
-// #define BLK "\x1B[30m"  ///< ANSI escape sequence: black
-#define RED "\x1B[31m" ///< ANSI escape sequence: red
-#define GRN "\x1B[32m" ///< ANSI escape sequence: green
-#define YEL "\x1B[33m" ///< ANSI escape sequence: yellow
-#define BLU "\x1B[34m" ///< ANSI escape sequence: blue
-#define MAG "\x1B[35m" ///< ANSI escape sequence: magenta
-#define CYN "\x1B[36m" ///< ANSI escape sequence: cyan
-// #define WHT "\x1B[37m"  ///< ANSI escape sequence: white
-
-#define FMT_PNR_IN BLU "%" PRIu64 NRM
-#define FMT_PNR_OUT GRN "%" PRIu64 NRM
-
-#define FMT_SID BLD YEL "%" PRId64 NRM
+static inline int __attribute__((nonnull))
+cids_by_seq_cmp(const struct cid * const a, const struct cid * const b)
+{
+    return (a->seq > b->seq) - (a->seq < b->seq);
+}
 
 
-#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
-    !defined(NO_FUZZER_CORPUS_COLLECTION)
-extern int corpus_pkt_dir, corpus_frm_dir;
+static inline void __attribute__((nonnull))
+cid_cpy(struct cid * const dst, const struct cid * const src)
+{
+    memcpy((uint8_t *)dst + offsetof(struct cid, seq),
+           (const uint8_t *)src + offsetof(struct cid, seq),
+           sizeof(struct cid) - offsetof(struct cid, seq) -
+               sizeof(src->_unused));
+}
 
-extern void __attribute__((nonnull))
-write_to_corpus(const int dir, const void * const data, const size_t len);
-#endif
+
+static inline void __attribute__((nonnull))
+pm_cpy(struct pkt_meta * const dst,
+       const struct pkt_meta * const src,
+       const bool also_frame_info)
+{
+    const size_t off = also_frame_info ? offsetof(struct pkt_meta, stream)
+                                       : offsetof(struct pkt_meta, tx_t);
+    memcpy((uint8_t *)dst + off, (const uint8_t *)src + off,
+           sizeof(*dst) - off);
+}
+
+
+static inline int __attribute__((nonnull))
+ooo_by_off_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
+{
+    return (a->stream_off > b->stream_off) - (a->stream_off < b->stream_off);
+}
+
+
+splay_head(ooo_by_off, pkt_meta);
+
+SPLAY_PROTOTYPE(ooo_by_off, pkt_meta, off_node, ooo_by_off_cmp)

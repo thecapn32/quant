@@ -186,3 +186,14 @@ enc_retire_cid_frame(struct q_conn * const c,
 
 extern uint16_t __attribute__((nonnull))
 enc_ping_frame(const struct w_iov * const v, const uint16_t pos);
+
+
+static inline bool __attribute__((nonnull))
+is_ack_eliciting(const struct frames * const f)
+{
+    static const struct frames ack_or_pad =
+        bitset_t_initializer(1 << FRM_ACK | 1 << FRM_PAD);
+    struct frames not_ack_or_pad = *f;
+    bit_nand(NUM_FRAM_TYPES, &not_ack_or_pad, &ack_or_pad);
+    return !bit_empty(NUM_FRAM_TYPES, &not_ack_or_pad);
+}

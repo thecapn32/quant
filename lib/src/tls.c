@@ -1404,7 +1404,7 @@ bool verify_rtry_tok(struct q_conn * const c,
     // hash current cid included in token
     hc->update(hc, tok + cs->hash->digest_size,
                tok_len - cs->hash->digest_size);
-    uint8_t buf[MAX_HASH_LEN + MAX_CID_LEN];
+    uint8_t buf[MAX_HASH_LEN + CID_LEN_MAX];
     hc->final(hc, buf, PTLS_HASH_FINAL_MODE_FREE);
 
     if (memcmp(buf, tok, cs->hash->digest_size) == 0) {

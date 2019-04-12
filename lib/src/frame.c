@@ -892,7 +892,7 @@ dec_new_cid_frame(struct q_conn * const c,
     // cppcheck-suppress redundantAssignment
     i = dec_chk(FRM_CID, &dcid.len, v->buf, v->len, i, sizeof(dcid.len), "%u");
 
-    if (unlikely(dcid.len < 4 || dcid.len > MAX_CID_LEN))
+    if (unlikely(dcid.len < 4 || dcid.len > CID_LEN_MAX))
         err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_CID,
                          "illegal cid len %u", dcid.len);
 
@@ -1200,7 +1200,7 @@ uint16_t max_frame_len(const uint8_t type)
 
     case FRM_TOK:
         // only true on TX; update when make_rtry_tok() changes
-        len += sizeof(uint64_t) + PTLS_MAX_DIGEST_SIZE + MAX_CID_LEN;
+        len += sizeof(uint64_t) + PTLS_MAX_DIGEST_SIZE + CID_LEN_MAX;
         break;
 
     case FRM_MCD:
@@ -1221,7 +1221,7 @@ uint16_t max_frame_len(const uint8_t type)
         break;
 
     case FRM_CID:
-        len += sizeof(uint64_t) + sizeof(uint8_t) + MAX_CID_LEN + SRT_LEN;
+        len += sizeof(uint64_t) + sizeof(uint8_t) + CID_LEN_MAX + SRT_LEN;
         break;
 
     default:
@@ -1262,7 +1262,7 @@ uint16_t enc_ack_frame(struct pn_space * const pn,
     // handshake pkts always use the default ACK delay exponent
     struct q_conn * const c = pn->c;
     const uint64_t ade =
-        meta(v).hdr.type <= LH_INIT && meta(v).hdr.type >= LH_HSHK
+        meta(v).hdr.type == LH_INIT || meta(v).hdr.type == LH_HSHK
             ? DEF_ACK_DEL_EXP
             : c->tp_out.ack_del_exp;
     const uint64_t ack_delay =
@@ -1595,7 +1595,7 @@ uint16_t enc_new_cid_frame(struct q_conn * const c,
     uint16_t i = enc(v->buf, v->len, pos, &type, sizeof(type), 0, "0x%02x");
 
     struct cid ncid = {.seq = ++c->max_cid_seq_out,
-                       .len = c->is_clnt ? CLNT_SCID_LEN : SERV_SCID_LEN};
+                       .len = c->is_clnt ? SCID_LEN_CLNT : SCID_LEN_SERV};
     rand_bytes(ncid.id, sizeof(ncid.id) + sizeof(ncid.srt));
     add_scid(c, &ncid);
 
