@@ -472,8 +472,8 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
         return true;
     }
 
-    // warn(DBG, "TX on %s conn %s strm " FMT_SID " w/%" PRIu64 " pkt%s in queue
-    // ",
+    // warn(DBG, "TX on %s conn %s strm " FMT_SID " w/%" PRIu64 " pkt%s in
+    // queue",
     //      conn_type(c), cid2str(c->scid), s->id, sq_len(&s->out),
     //      plural(sq_len(&s->out)));
 
@@ -1099,7 +1099,7 @@ rx_pkts(struct w_iov_sq * const x,
         sq_remove_head(x, next);
 
         // warn(DBG, "rx idx %u (avail %" PRIu64 ") len %u type 0x%02x",
-        //      (xv)->idx, sq_len(&xv->w->iov), xv->len, *xv->buf);
+        //      w_iov_idx(xv), sq_len(&xv->w->iov), xv->len, *xv->buf);
 
 #if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
@@ -1410,7 +1410,7 @@ rx_pkts(struct w_iov_sq * const x,
             else
                 c->i.pkts_in_invalid++;
         }
-        // warn(CRT, "w_free_iov idx %u (avail %" PRIu64 ")", (xv)->idx,
+        // warn(CRT, "w_free_iov idx %u (avail %" PRIu64 ")", w_iov_idx(xv),
         //      sq_len(&xv->w->iov) + 1);
         w_free_iov(xv);
     }

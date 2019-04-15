@@ -234,7 +234,7 @@ write_to_corpus(const int dir, const void * const data, const size_t len);
 ///
 /// @return     Pointer to the pkt_meta entry for the w_iov.
 ///
-#define meta(v) pkt_meta[v->idx]
+#define meta(v) pkt_meta[w_iov_idx(v)]
 
 
 /// Return the w_iov index of a given pkt_meta.
@@ -350,7 +350,7 @@ write_to_corpus(const int dir, const void * const data, const size_t len);
 static inline void __attribute__((nonnull)) free_iov(struct w_iov * const v)
 {
     // warn(CRT, "free_iov idx %u (avail %" PRIu64 ") nr=%" PRIu64,
-    // (v)->idx, sq_len(&v->w->iov) + 1, meta(v).hdr.nr);
+    // w_iov_idx(v), sq_len(&v->w->iov) + 1, meta(v).hdr.nr);
 
     if (meta(v).pn && meta(v).pn->sent_pkts &&
         find_sent_pkt(meta(v).pn, meta(v).hdr.nr))
@@ -380,7 +380,7 @@ alloc_iov(struct w_engine * const w, const uint16_t len, const uint16_t off)
     ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
     meta(v).stream_data_start = off;
     // warn(CRT, "alloc_iov idx %u (avail %" PRIu64 ") len %u off %u",
-    //      (v)->idx, sq_len(&w->iov), v->len, off);
+    //      w_iov_idx(v), sq_len(&w->iov), v->len, off);
     return v;
 }
 
@@ -391,7 +391,7 @@ w_iov_dup(const struct w_iov * const v)
     struct w_iov * const vdup = w_alloc_iov(v->w, v->len, 0);
     ensure(vdup, "w_alloc_iov failed");
     // warn(CRT, "w_alloc_iov idx %u (avail %" PRIu64 ") len %u",
-    // (vdup)->idx, sq_len(&v->w->iov), vdup->len);
+    // w_iov_idx(vdup), sq_len(&v->w->iov), vdup->len);
     ASAN_UNPOISON_MEMORY_REGION(&meta(vdup), sizeof(meta(vdup)));
     memcpy(vdup->buf, v->buf, v->len);
     memcpy(&vdup->addr, &v->addr, sizeof(v->addr));
