@@ -138,7 +138,7 @@ void alloc_off(struct w_engine * const w,
     sq_foreach (v, q, next) {
         ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
         meta(v).stream_data_start = off;
-        // warn(CRT, "q_alloc idx %u (avail %" PRIu64 ") len %u", w_iov_idx(v),
+        // warn(CRT, "q_alloc idx %u (avail %" PRIu64 ") len %u", (v)->idx,
         //      sq_len(&w->iov), v->len);
     }
 }
