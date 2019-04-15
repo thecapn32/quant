@@ -1036,16 +1036,17 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
         if (pad_start && (type != FRM_PAD || i == v->len - 1)) {
             warn(INF, FRAM_IN "PADDING" NRM " len=%u", i - pad_start);
             pad_start = 0;
-            track_frame(v, type);
+        }
 
-        } else if (type == FRM_CRY ||
-                   (type >= FRM_STR && type <= FRM_STR_MAX)) {
-
+        switch (type) {
+        case FRM_CRY:
+        case FRM_STR ... FRM_STR_MAX:
             if (unlikely((has_frame(v, FRM_CRY) || has_frame(v, FRM_STR))) &&
                 meta(v).stream) {
                 // already had at least one stream or crypto frame in this
-                // packet with non-duplicate data, so generate (another) copy
-                // warn(DBG, "addtl stream or crypto frame at pos %u, copy", i);
+                // packet with non-duplicate data, so generate (another)
+                // copy warn(DBG, "addtl stream or crypto frame at pos %u,
+                // copy", i);
                 struct w_iov * const vdup = w_iov_dup(v);
                 pm_cpy(&meta(vdup), &meta(v), false);
                 // adjust w_iov start and len to stream frame data
@@ -1054,104 +1055,101 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
                 // continue parsing in the copied w_iov
                 v = *vv = vdup;
             }
-
-            // this is the first stream frame in this packet
             i = dec_stream_or_crypto_frame(c, v, i);
-            // stream frames have multiple types, so don't enc "type"
-            track_frame(v, type == FRM_CRY ? FRM_CRY : FRM_STR);
+            type = type == FRM_CRY ? FRM_CRY : FRM_STR;
+            break;
 
-        } else {
-            switch (type) {
-            case FRM_ACE:
-                type = FRM_ACK; // only enc FRM_ACK in bitstr_t
-                // fallthrough
-            case FRM_ACK:
-                i = dec_ack_frame(c, v, i);
-                break;
+        case FRM_ACE:
+            type = FRM_ACK; // only enc FRM_ACK in bitstr_t
+            // fallthrough
+        case FRM_ACK:
+            i = dec_ack_frame(c, v, i);
+            break;
 
-            case FRM_PAD:
-                pad_start = pad_start ? pad_start : i;
-                i++;
-                break;
-
-            case FRM_RST:
-                i = dec_reset_stream_frame(c, v, i);
-                break;
-
-            case FRM_CLQ:
-            case FRM_CLA:
-                i = dec_close_frame(c, v, i);
-                break;
-
-            case FRM_PNG:
-                warn(INF, FRAM_IN "PING" NRM);
-                i++;
-                break;
-
-            case FRM_MSD:
-                i = dec_max_stream_data_frame(c, v, i);
-                break;
-
-            case FRM_MSB:
-            case FRM_MSU:
-                i = dec_max_streams_frame(c, v, i);
-                break;
-
-            case FRM_MCD:
-                i = dec_max_data_frame(c, v, i);
-                break;
-
-            case FRM_SDB:
-                i = dec_stream_data_blocked_frame(c, v, i);
-                break;
-
-            case FRM_CDB:
-                i = dec_data_blocked_frame(c, v, i);
-                break;
-
-            case FRM_SBB:
-            case FRM_SBU:
-                i = dec_streams_blocked_frame(c, v, i);
-                break;
-
-            case FRM_STP:
-                i = dec_stop_sending_frame(c, v, i);
-                break;
-
-            case FRM_PCL:
-                i = dec_path_challenge_frame(c, v, i);
-                break;
-
-            case FRM_PRP:
-                i = dec_path_response_frame(c, v, i);
-                break;
-
-            case FRM_CID:
-                i = dec_new_cid_frame(c, v, i);
-                break;
-
-            case FRM_TOK:
-                i = dec_new_token_frame(c, v, i);
-                break;
-
-            case FRM_RTR:
-                i = dec_retire_cid_frame(c, v, i);
-                break;
-
-            default:
-                err_close_return(c, ERR_FRAME_ENC, type,
-                                 "unknown frame type 0x%02x at pos %u", type,
-                                 i);
-            }
-
-            if (likely(i < UINT16_MAX))
-                // record this frame type in the meta data
+        case FRM_PAD:
+            if (unlikely(pad_start == 0)) {
+                pad_start = i;
                 track_frame(v, type);
+            }
+            i++;
+            break;
+
+        case FRM_RST:
+            i = dec_reset_stream_frame(c, v, i);
+            break;
+
+        case FRM_CLQ:
+        case FRM_CLA:
+            i = dec_close_frame(c, v, i);
+            break;
+
+        case FRM_PNG:
+            warn(INF, FRAM_IN "PING" NRM);
+            i++;
+            break;
+
+        case FRM_MSD:
+            i = dec_max_stream_data_frame(c, v, i);
+            break;
+
+        case FRM_MSB:
+        case FRM_MSU:
+            i = dec_max_streams_frame(c, v, i);
+            break;
+
+        case FRM_MCD:
+            i = dec_max_data_frame(c, v, i);
+            break;
+
+        case FRM_SDB:
+            i = dec_stream_data_blocked_frame(c, v, i);
+            break;
+
+        case FRM_CDB:
+            i = dec_data_blocked_frame(c, v, i);
+            break;
+
+        case FRM_SBB:
+        case FRM_SBU:
+            i = dec_streams_blocked_frame(c, v, i);
+            break;
+
+        case FRM_STP:
+            i = dec_stop_sending_frame(c, v, i);
+            break;
+
+        case FRM_PCL:
+            i = dec_path_challenge_frame(c, v, i);
+            break;
+
+        case FRM_PRP:
+            i = dec_path_response_frame(c, v, i);
+            break;
+
+        case FRM_CID:
+            i = dec_new_cid_frame(c, v, i);
+            break;
+
+        case FRM_TOK:
+            i = dec_new_token_frame(c, v, i);
+            break;
+
+        case FRM_RTR:
+            i = dec_retire_cid_frame(c, v, i);
+            break;
+
+        default:
+            err_close_return(c, ERR_FRAME_ENC, type,
+                             "unknown frame type 0x%02x at pos %u", type, i);
         }
 
         if (unlikely(i == UINT16_MAX))
             // there was an error parsing a frame
             return UINT16_MAX;
+
+        if (type != FRM_PAD)
+            // record this frame type in the meta data
+            track_frame(v, type);
     }
 
     if (meta(v).stream_data_start) {
