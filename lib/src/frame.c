@@ -1036,6 +1036,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
         if (pad_start && (type != FRM_PAD || i == v->len - 1)) {
             warn(INF, FRAM_IN "PADDING" NRM " len=%u", i - pad_start);
             pad_start = 0;
+            track_frame(v, type);
 
         } else if (type == FRM_CRY ||
                    (type >= FRM_STR && type <= FRM_STR_MAX)) {
@@ -1069,10 +1070,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
                 break;
 
             case FRM_PAD:
-                if (unlikely(pad_start == 0)) {
-                    pad_start = i;
-                    track_frame(v, type);
-                }
+                pad_start = pad_start ? pad_start : i;
                 i++;
                 break;
 
@@ -1146,7 +1144,7 @@ uint16_t dec_frames(struct q_conn * const c, struct w_iov ** vv)
                                  i);
             }
 
-            if (type != FRM_PAD && likely(i < UINT16_MAX))
+            if (likely(i < UINT16_MAX))
                 // record this frame type in the meta data
                 track_frame(v, type);
         }
