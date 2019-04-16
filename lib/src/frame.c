@@ -1036,7 +1036,14 @@ dec_frames(struct q_conn * const c, struct w_iov ** vv, struct pkt_meta ** mm)
 
         switch (type) {
         case FRM_CRY:
-        case FRM_STR ... FRM_STR_MAX:
+        case FRM_STR:
+        case FRM_STR_09:
+        case FRM_STR_0a:
+        case FRM_STR_0b:
+        case FRM_STR_0c:
+        case FRM_STR_0d:
+        case FRM_STR_0e:
+        case FRM_STR_0f:
             if (unlikely((has_frame(m, FRM_CRY) || has_frame(m, FRM_STR))) &&
                 m->stream) {
                 // already had at least one stream or crypto frame in this

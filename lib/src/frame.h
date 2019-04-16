@@ -48,7 +48,14 @@ struct cid;
 #define FRM_CRY 0x06 ///< CRYPTO
 #define FRM_TOK 0x07 ///< NEW_TOKEN
 #define FRM_STR 0x08 ///< STREAM (only type encoded in the frames bitstr_t)
-#define FRM_STR_MAX 0x0f
+#define FRM_STR_09 0x09
+#define FRM_STR_0a 0x0a
+#define FRM_STR_0b 0x0b
+#define FRM_STR_0c 0x0c
+#define FRM_STR_0d 0x0d
+#define FRM_STR_0e 0x0e
+#define FRM_STR_0f 0x0f
+#define FRM_STR_MAX FRM_STR_0f
 #define FRM_MCD 0x10 ///< MAX_DATA (connection)
 #define FRM_MSD 0x11 ///< MAX_STREAM_DATA
 #define FRM_MSB 0x12 ///< MAX_STREAMS (bidirectional)
