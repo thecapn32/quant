@@ -124,19 +124,16 @@ struct recovery {
 
 extern void __attribute__((nonnull)) init_rec(struct q_conn * const c);
 
-extern void __attribute__((nonnull))
-on_pkt_sent(struct pn_space * const pn, struct w_iov * const v);
+extern void __attribute__((nonnull)) on_pkt_sent(struct pkt_meta * const m);
 
 extern void __attribute__((nonnull))
-on_ack_received_1(struct pn_space * const pn,
-                  struct w_iov * const lg_ack,
-                  const uint64_t ack_del);
+on_ack_received_1(struct pkt_meta * const lg_ack, const uint64_t ack_del);
 
 extern void __attribute__((nonnull))
 on_ack_received_2(struct pn_space * const pn);
 
 extern void __attribute__((nonnull))
-on_pkt_acked(struct pn_space * const pn, struct w_iov * const acked_pkt);
+on_pkt_acked(struct w_iov * const acked_pkt, struct pkt_meta * meta_acked);
 
 extern void __attribute__((nonnull))
 congestion_event(struct q_conn * const c, const ev_tstamp sent_t);

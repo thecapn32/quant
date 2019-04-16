@@ -308,50 +308,56 @@ static void __attribute__((nonnull)) log_sent_pkts(struct q_conn * const c)
 #endif
 
 
-static void __attribute__((nonnull))
-rtx_pkt(struct q_stream * const s, struct w_iov * const v)
+static void __attribute__((nonnull)) rtx_pkt(struct q_stream * const s,
+                                             struct w_iov * const v,
+                                             struct pkt_meta * const m)
 {
     s->c->i.pkts_out_rtx++;
 
-    if (meta(v).is_lost)
+    if (m->is_lost)
         // we don't need to do the steps above is the pkt is lost already
         return;
 
-    // ensure(meta(v).has_rtx == false, "cannot RTX an RTX stand-in");
-    // ensure(find_sent_pkt(meta(v).pn, meta(v).hdr.nr) == 0,
+    // ensure(m->has_rtx == false, "cannot RTX an RTX stand-in");
+    // ensure(find_sent_pkt(m->pn, m->hdr.nr) == 0,
     //        "still in sent_pkts");
 
     // on RTX, remember orig pkt meta data
-    const uint16_t data_start = meta(v).stream_data_start;
-    struct w_iov * const r = alloc_iov(s->c->w, 0, data_start);
-    pm_cpy(&meta(r), &meta(v), true); // copy pkt meta data
+    const uint16_t data_start = m->stream_data_start;
+    struct pkt_meta * mr;
+    struct w_iov * const r = alloc_iov(s->c->w, 0, data_start, &mr);
+    pm_cpy(mr, m, true); // copy pkt meta data
     memcpy(r->buf - data_start, v->buf - data_start, data_start);
-    meta(r).stream = 0;
-    meta(r).has_rtx = true;
-    sl_insert_head(&meta(v).rtx, &meta(r), rtx_next);
-    sl_insert_head(&meta(r).rtx, &meta(v), rtx_next);
+    mr->stream = 0;
+    mr->has_rtx = true;
+    sl_insert_head(&m->rtx, mr, rtx_next);
+    sl_insert_head(&mr->rtx, m, rtx_next);
 
-    // we reinsert meta(v) with its new pkt nr in on_pkt_sent()
-    pm_by_nr_ins(meta(r).pn->sent_pkts, &meta(r));
+    // we reinsert m with its new pkt nr in on_pkt_sent()
+    pm_by_nr_ins(mr->pn->sent_pkts, mr);
 }
 
 
 static void __attribute__((nonnull))
-tx_vneg_resp(const struct w_sock * const ws, const struct w_iov * const v)
+tx_vneg_resp(const struct w_sock * const ws,
+             const struct w_iov * const v,
+             struct pkt_meta * const m)
 {
-    struct w_iov * const xv = alloc_iov(ws->w, 0, 0);
+    struct pkt_meta * mx;
+    struct w_iov * const xv = alloc_iov(ws->w, 0, 0, &mx);
+
     struct w_iov_sq q = w_iov_sq_initializer(q);
     sq_insert_head(&q, xv, next);
 
     warn(INF, "sending vneg serv response");
-    meta(xv).hdr.flags = HEAD_FORM | (uint8_t)w_rand();
-    uint16_t i = enc(xv->buf, xv->len, 0, &meta(xv).hdr.flags,
-                     sizeof(meta(xv).hdr.flags), 0, "0x%02x");
+    mx->hdr.flags = HEAD_FORM | (uint8_t)w_rand();
+    uint16_t i = enc(xv->buf, xv->len, 0, &mx->hdr.flags, sizeof(mx->hdr.flags),
+                     0, "0x%02x");
 
-    i = enc(xv->buf, xv->len, i, &meta(xv).hdr.vers, sizeof(meta(xv).hdr.vers),
-            0, "0x%08x");
+    i = enc(xv->buf, xv->len, i, &mx->hdr.vers, sizeof(mx->hdr.vers), 0,
+            "0x%08x");
 
-    i = enc_lh_cids(&meta(v).hdr.scid, &meta(v).hdr.dcid, xv, i);
+    i = enc_lh_cids(&m->hdr.scid, &m->hdr.dcid, xv, mx, i);
 
     for (uint8_t j = 0; j < ok_vers_len; j++)
         if (!is_vneg_vers(ok_vers[j]))
@@ -480,31 +486,32 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
     uint32_t encoded = 0;
     struct w_iov * v = s->out_una;
     sq_foreach_from (v, &s->out, next) {
+        struct pkt_meta * const m = &meta(v); // meta use OK
         if (unlikely(has_wnd(c, v->len) == false && limit == 0)) {
             c->no_wnd = true;
             break;
         }
 
-        if (unlikely(meta(v).is_acked)) {
-            // warn(INF, "skip ACK'ed pkt " FMT_PNR_OUT, meta(v).hdr.nr);
+        if (unlikely(m->is_acked)) {
+            // warn(INF, "skip ACK'ed pkt " FMT_PNR_OUT, m->hdr.nr);
             continue;
         }
 
-        if (limit == 0 && meta(v).udp_len && meta(v).is_lost == false) {
+        if (limit == 0 && m->udp_len && m->is_lost == false) {
             // warn(INF, "skip non-lost TX'ed pkt " FMT_PNR_OUT,
-            // meta(v).hdr.nr);
+            // m->hdr.nr);
             continue;
         }
 
-        const bool do_rtx = meta(v).is_lost || (limit && meta(v).udp_len);
+        const bool do_rtx = m->is_lost || (limit && m->udp_len);
         if (unlikely(do_rtx)) {
-            if (meta(v).is_lost == false) {
+            if (m->is_lost == false) {
                 // rtx_pkt expects the pkt to have been removed from sent_pkts
-                diet_insert(&meta(v).pn->lost, meta(v).hdr.nr, (ev_tstamp)NAN);
-                pm_by_nr_del(meta(v).pn->sent_pkts, &meta(v));
-                meta(v).is_lost = true;
+                diet_insert(&m->pn->lost, m->hdr.nr, (ev_tstamp)NAN);
+                pm_by_nr_del(m->pn->sent_pkts, m);
+                m->is_lost = true;
             }
-            rtx_pkt(s, v);
+            rtx_pkt(s, v, m);
         }
 
         if (likely(c->state == conn_estb && s->id >= 0)) {
@@ -512,7 +519,7 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
             do_conn_fc(c, v->len);
         }
 
-        if (unlikely(enc_pkt(s, do_rtx, true, limit > 0, v) == false))
+        if (unlikely(enc_pkt(s, do_rtx, true, limit > 0, v, m) == false))
             // XXX do we need to undo rtx_pkt() here?
             continue;
         encoded++;
@@ -536,8 +543,10 @@ tx_ack(struct q_conn * const c, const epoch_t e, const bool tx_ack_eliciting)
     do_conn_mgmt(c);
     if (unlikely(c->cstreams[e] == 0))
         return false;
-    struct w_iov * const v = alloc_iov(c->w, 0, 0);
-    return enc_pkt(c->cstreams[e], false, false, tx_ack_eliciting, v);
+
+    struct pkt_meta * m;
+    struct w_iov * const v = alloc_iov(c->w, 0, 0, &m);
+    return enc_pkt(c->cstreams[e], false, false, tx_ack_eliciting, v, m);
 }
 
 
@@ -741,11 +750,11 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
     while (!sq_empty(&s->in)) {
         // TODO: ooo crypto data is not freed immediately
         // take the data out of the crypto stream
-        struct w_iov * const iv = sq_first(&s->in);
+        struct w_iov * const v = sq_first(&s->in);
         sq_remove_head(&s->in, next);
-        meta(iv).stream = 0;
+        meta(v).stream = 0; // meta use OK
         // and process it
-        if (tls_io(s, iv))
+        if (tls_io(s, v))
             continue;
 
         if (c->state == conn_idle || c->state == conn_opng) {
@@ -875,6 +884,7 @@ pkt_ok_for_epoch(const uint8_t flags, const epoch_t epoch)
 static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
                                             const struct w_sock * const ws,
                                             struct w_iov * v,
+                                            struct pkt_meta * m,
                                             struct w_iov_sq * const x,
                                             const struct cid * const odcid
 #ifdef NDEBUG
@@ -887,16 +897,16 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
     bool ok = false;
 
     log_pkt("RX", v, (struct sockaddr *)&v->addr, odcid, tok, tok_len);
-    c->in_data += meta(v).udp_len;
+    c->in_data += m->udp_len;
 
     switch (c->state) {
     case conn_idle:
         // this is a new connection
-        c->vers = meta(v).hdr.vers;
+        c->vers = m->hdr.vers;
 
         // TODO: remove this interop hack eventually
         if (ntohs(get_sport(ws)) == 4434) {
-            if (meta(v).hdr.type == LH_INIT && tok_len) {
+            if (m->hdr.type == LH_INIT && tok_len) {
                 if (verify_rtry_tok(c, tok, tok_len) == false) {
                     warn(ERR, "retry token verification failed");
                     enter_closing(c);
@@ -917,11 +927,11 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         }
 
         // warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
-        if (dec_frames(c, &v) == UINT16_MAX)
+        if (dec_frames(c, &v, &m) == UINT16_MAX)
             goto done;
 
         // if the CH doesn't include any crypto frames, bail
-        if (has_frame(v, FRM_CRY) == false) {
+        if (has_frame(m, FRM_CRY) == false) {
             warn(ERR, "initial pkt w/o crypto frames");
             enter_closing(c);
             goto done;
@@ -930,7 +940,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         init_tp(c);
 
         // check if any reordered 0-RTT packets are cached for this CID
-        const struct ooo_0rtt which = {.cid = meta(v).hdr.dcid};
+        const struct ooo_0rtt which = {.cid = m->hdr.dcid};
         struct ooo_0rtt * const zo =
             splay_find(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, &which);
         if (zo) {
@@ -944,7 +954,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
         conn_to_state(c, conn_opng);
 
         // server limits response to 3x incoming pkt
-        c->path_val_win = 3 * meta(v).udp_len;
+        c->path_val_win = 3 * m->udp_len;
 
         // server picks a new random cid
         update_act_scid(c);
@@ -955,9 +965,9 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
     case conn_opng:
         // this state is currently only in effect on the client
 
-        if (meta(v).hdr.vers == 0) {
+        if (m->hdr.vers == 0) {
             // this is a vneg pkt
-            meta(v).hdr.nr = UINT64_MAX;
+            m->hdr.nr = UINT64_MAX;
             if (c->vers != ok_vers[0]) {
                 // we must have already reacted to a prior vneg pkt
                 warn(INF, "ignoring spurious vneg response");
@@ -965,14 +975,13 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             }
 
             // check that the rx'ed CIDs match our tx'ed CIDs
-            const bool rx_scid_ok = !cid_cmp(&meta(v).hdr.scid, c->dcid);
-            const bool rxed_dcid_ok = !cid_cmp(&meta(v).hdr.dcid, c->scid);
+            const bool rx_scid_ok = !cid_cmp(&m->hdr.scid, c->dcid);
+            const bool rxed_dcid_ok = !cid_cmp(&m->hdr.dcid, c->scid);
             if (rx_scid_ok == false || rxed_dcid_ok == false) {
-                warn(
-                    INF, "vneg %ccid mismatch: rx %s != %s",
-                    rx_scid_ok ? 'd' : 's',
-                    cid2str(rx_scid_ok ? &meta(v).hdr.dcid : &meta(v).hdr.scid),
-                    cid2str(rx_scid_ok ? c->scid : c->dcid));
+                warn(INF, "vneg %ccid mismatch: rx %s != %s",
+                     rx_scid_ok ? 'd' : 's',
+                     cid2str(rx_scid_ok ? &m->hdr.dcid : &m->hdr.scid),
+                     cid2str(rx_scid_ok ? c->scid : c->dcid));
                 enter_closing(c);
                 goto done;
             }
@@ -986,8 +995,8 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             }
 
             // handle an incoming vneg packet
-            const uint32_t try_vers = clnt_vneg(&v->buf[meta(v).hdr.hdr_len],
-                                                v->len - meta(v).hdr.hdr_len);
+            const uint32_t try_vers =
+                clnt_vneg(&v->buf[m->hdr.hdr_len], v->len - m->hdr.hdr_len);
             if (try_vers == 0) {
                 // no version in common with serv
                 enter_closing(c);
@@ -1002,15 +1011,15 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
             goto done;
         }
 
-        if (unlikely(meta(v).hdr.vers != c->vers)) {
+        if (unlikely(m->hdr.vers != c->vers)) {
             warn(ERR,
                  "serv response w/vers 0x%08x to CI w/vers 0x%08x, ignoring",
-                 meta(v).hdr.vers, c->vers);
+                 m->hdr.vers, c->vers);
             goto done;
         }
 
-        if (meta(v).hdr.type == LH_RTRY) {
-            meta(v).hdr.nr = UINT64_MAX;
+        if (m->hdr.type == LH_RTRY) {
+            m->hdr.nr = UINT64_MAX;
             if (c->tok_len) {
                 // we already had an earlier RETRY on this connection
                 warn(INF, "already handled a retry, ignoring");
@@ -1029,26 +1038,26 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
 
         // server accepted version -
         // if we get here, this should be a regular server-hello
-        ok = (dec_frames(c, &v) != UINT16_MAX);
+        ok = (dec_frames(c, &v, &m) != UINT16_MAX);
         break;
 
     case conn_estb:
     case conn_qlse:
     case conn_clsg:
     case conn_drng:
-        if (is_lh(meta(v).hdr.flags) && meta(v).hdr.vers == 0) {
+        if (is_lh(m->hdr.flags) && m->hdr.vers == 0) {
             // we shouldn't get another vneg packet here, ignore
             warn(NTE, "ignoring spurious vneg response");
             goto done;
         }
 
         // ignore 0-RTT packets if we're not doing 0-RTT
-        if (c->did_0rtt == false && meta(v).hdr.type == LH_0RTT) {
+        if (c->did_0rtt == false && m->hdr.type == LH_0RTT) {
             warn(NTE, "ignoring 0-RTT pkt");
             goto done;
         }
 
-        if (dec_frames(c, &v) == UINT16_MAX)
+        if (dec_frames(c, &v, &m) == UINT16_MAX)
             goto done;
 
         ok = true;
@@ -1063,8 +1072,8 @@ done:
     if (unlikely(ok == false))
         return false;
 
-    if (likely(meta(v).hdr.nr != UINT64_MAX)) {
-        struct pn_space * const pn = pn_for_pkt_type(c, meta(v).hdr.type);
+    if (likely(m->hdr.nr != UINT64_MAX)) {
+        struct pn_space * const pn = pn_for_pkt_type(c, m->hdr.type);
         // update ECN info
         switch (v->flags & IPTOS_ECN_MASK) {
         case IPTOS_ECN_ECT1:
@@ -1109,7 +1118,8 @@ rx_pkts(struct w_iov_sq * const x,
 #endif
 
         // allocate new w_iov for the (eventual) unencrypted data and meta-data
-        struct w_iov * const v = alloc_iov(ws->w, 0, 0);
+        struct pkt_meta * m;
+        struct w_iov * const v = alloc_iov(ws->w, 0, 0, &m);
         v->addr = xv->addr;
         v->flags = xv->flags;
 
@@ -1122,53 +1132,51 @@ rx_pkts(struct w_iov_sq * const x,
         uint8_t tok[MAX_PKT_LEN];
         uint16_t tok_len = 0;
         if (unlikely(!dec_pkt_hdr_beginning(
-                xv, v, is_clnt, &odcid, tok, &tok_len,
+                xv, v, m, is_clnt, &odcid, tok, &tok_len,
                 is_clnt ? (c_ipnp ? 0 : SCID_LEN_CLNT) : SCID_LEN_SERV))) {
             // we might still need to send a vneg packet
             if (w_connected(ws) == false) {
-                if (meta(v).hdr.scid.len == 0 || meta(v).hdr.scid.len >= 4) {
+                if (m->hdr.scid.len == 0 || m->hdr.scid.len >= 4) {
                     warn(ERR, "received invalid %u-byte %s pkt, sending vneg",
-                         v->len,
-                         pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
-                    tx_vneg_resp(ws, v);
+                         v->len, pkt_type_str(m->hdr.flags, &m->hdr.vers));
+                    tx_vneg_resp(ws, v, m);
                 } else {
                     log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
                             tok_len);
                     warn(ERR,
                          "received invalid %u-byte %s pkt w/invalid scid len "
                          "%u, ignoring",
-                         v->len,
-                         pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers),
-                         meta(v).hdr.scid.len);
+                         v->len, pkt_type_str(m->hdr.flags, &m->hdr.vers),
+                         m->hdr.scid.len);
                     goto drop;
                 }
             } else
                 warn(ERR, "received invalid %u-byte %s pkt), ignoring", v->len,
-                     pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
+                     pkt_type_str(m->hdr.flags, &m->hdr.vers));
             // can't log packet, because it may be too short for log_pkt()
             goto drop;
         }
 
-        c = get_conn_by_cid(&meta(v).hdr.dcid);
-        if (c == 0 && meta(v).hdr.dcid.len == 0)
+        c = get_conn_by_cid(&m->hdr.dcid);
+        if (c == 0 && m->hdr.dcid.len == 0)
             c = c_ipnp;
-        if (likely(is_lh(meta(v).hdr.flags)) && !is_clnt) {
-            if (c && meta(v).hdr.type == LH_0RTT) {
+        if (likely(is_lh(m->hdr.flags)) && !is_clnt) {
+            if (c && m->hdr.type == LH_0RTT) {
                 if (c->did_0rtt)
                     warn(INF,
                          "got 0-RTT pkt for orig cid %s, new is %s, "
                          "accepting",
-                         cid2str(&meta(v).hdr.dcid), cid2str(c->scid));
+                         cid2str(&m->hdr.dcid), cid2str(c->scid));
                 else {
                     log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
                             tok_len);
                     warn(WRN,
                          "got 0-RTT pkt for orig cid %s, new is %s, "
                          "but rejected 0-RTT, ignoring",
-                         cid2str(&meta(v).hdr.dcid), cid2str(c->scid));
+                         cid2str(&m->hdr.dcid), cid2str(c->scid));
                     goto drop;
                 }
-            } else if (meta(v).hdr.type == LH_INIT && c == 0) {
+            } else if (m->hdr.type == LH_INIT && c == 0) {
                 // validate minimum packet size
                 if (xv->len < MIN_INI_LEN) {
                     log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
@@ -1178,13 +1186,13 @@ rx_pkts(struct w_iov_sq * const x,
                     goto drop;
                 }
 
-                if (vers_supported(meta(v).hdr.vers) == false ||
-                    is_vneg_vers(meta(v).hdr.vers)) {
+                if (vers_supported(m->hdr.vers) == false ||
+                    is_vneg_vers(m->hdr.vers)) {
                     log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
                             tok_len);
                     warn(WRN, "clnt-requested vers 0x%08x not supported",
-                         meta(v).hdr.vers);
-                    tx_vneg_resp(ws, v);
+                         m->hdr.vers);
+                    tx_vneg_resp(ws, v, m);
                     goto drop;
                 }
 
@@ -1197,20 +1205,18 @@ rx_pkts(struct w_iov_sq * const x,
                        "getnameinfo");
 
                 warn(NTE, "new serv conn on port %u from %s:%s w/cid=%s",
-                     ntohs(get_sport(ws)), ip, port,
-                     cid2str(&meta(v).hdr.dcid));
+                     ntohs(get_sport(ws)), ip, port, cid2str(&m->hdr.dcid));
 #endif
-                c = new_conn(w_engine(ws), meta(v).hdr.vers, &meta(v).hdr.scid,
-                             &meta(v).hdr.dcid, (struct sockaddr *)&v->addr, 0,
+                c = new_conn(w_engine(ws), m->hdr.vers, &m->hdr.scid,
+                             &m->hdr.dcid, (struct sockaddr *)&v->addr, 0,
                              get_sport(ws), 0);
                 init_tls(c, 0);
             }
         }
 
         if (likely(c)) {
-            if (meta(v).hdr.scid.len &&
-                cid_cmp(&meta(v).hdr.scid, c->dcid) != 0) {
-                if (meta(v).hdr.vers && meta(v).hdr.type == LH_RTRY &&
+            if (m->hdr.scid.len && cid_cmp(&m->hdr.scid, c->dcid) != 0) {
+                if (m->hdr.vers && m->hdr.type == LH_RTRY &&
                     cid_cmp(&odcid, c->dcid) != 0) {
                     log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
                             tok_len);
@@ -1219,18 +1225,17 @@ rx_pkts(struct w_iov_sq * const x,
                     goto drop;
                 }
                 if (c->state == conn_opng)
-                    add_dcid(c, &meta(v).hdr.scid);
+                    add_dcid(c, &m->hdr.scid);
             }
 
-            if (meta(v).hdr.dcid.len &&
-                cid_cmp(&meta(v).hdr.dcid, c->scid) != 0) {
+            if (m->hdr.dcid.len && cid_cmp(&m->hdr.dcid, c->scid) != 0) {
                 struct cid * const scid =
-                    get_cid_by_id(c->scids_by_id, &meta(v).hdr.dcid);
+                    get_cid_by_id(c->scids_by_id, &m->hdr.dcid);
                 if (unlikely(scid == 0)) {
                     log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
                             tok_len);
                     warn(ERR, "unknown scid %s, ignoring pkt",
-                         cid2str(&meta(v).hdr.dcid));
+                         cid2str(&m->hdr.dcid));
                     goto drop;
                 }
 
@@ -1246,10 +1251,10 @@ rx_pkts(struct w_iov_sq * const x,
         } else {
 #ifndef FUZZING
             // if this is a 0-RTT pkt, track it (may be reordered)
-            if (meta(v).hdr.type == LH_0RTT) {
+            if (m->hdr.type == LH_0RTT) {
                 struct ooo_0rtt * const zo = calloc(1, sizeof(*zo));
                 ensure(zo, "could not calloc");
-                cid_cpy(&zo->cid, &meta(v).hdr.dcid);
+                cid_cpy(&zo->cid, &m->hdr.dcid);
                 zo->v = v;
                 zo->t = ev_now(loop);
                 ensure(splay_insert(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo) == 0,
@@ -1257,70 +1262,67 @@ rx_pkts(struct w_iov_sq * const x,
                 log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
                         tok_len);
                 warn(INF, "caching 0-RTT pkt for unknown conn %s",
-                     cid2str(&meta(v).hdr.dcid));
+                     cid2str(&m->hdr.dcid));
                 goto next;
             }
 #endif
             log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok, tok_len);
 
-            if (is_srt(xv, v)) {
+            if (is_srt(xv, m)) {
                 warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
                      hex2str(&xv->buf[xv->len - SRT_LEN], SRT_LEN));
                 goto next;
             }
 
             warn(INF, "cannot find conn %s for %u-byte %s pkt, ignoring",
-                 cid2str(&meta(v).hdr.dcid), v->len,
-                 pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
+                 cid2str(&m->hdr.dcid), v->len,
+                 pkt_type_str(m->hdr.flags, &m->hdr.vers));
             goto drop;
         }
 
-        if (likely((meta(v).hdr.vers && meta(v).hdr.type != LH_RTRY) ||
-                   !is_lh(meta(v).hdr.flags))) {
+        if (likely((m->hdr.vers && m->hdr.type != LH_RTRY) ||
+                   !is_lh(m->hdr.flags))) {
             bool decoal;
-            if (unlikely(meta(v).hdr.type == LH_INIT &&
-                         c->cstreams[ep_init] == 0)) {
+            if (unlikely(m->hdr.type == LH_INIT && c->cstreams[ep_init] == 0)) {
                 // we already abandoned Initial pkt processing, ignore
                 log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
                         tok_len);
                 warn(INF, "ignoring %u-byte %s pkt due to abandoned processing",
-                     v->len,
-                     pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
+                     v->len, pkt_type_str(m->hdr.flags, &m->hdr.vers));
                 goto drop;
-            } else if (unlikely(dec_pkt_hdr_remainder(xv, v, c, x, &decoal) ==
-                                false)) {
+            } else if (unlikely(dec_pkt_hdr_remainder(xv, v, m, c, x,
+                                                      &decoal) == false)) {
                 v->len = xv->len;
                 log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
                         tok_len);
-                if (meta(v).is_reset)
+                if (m->is_reset)
                     warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
                          hex2str(&xv->buf[xv->len - SRT_LEN], SRT_LEN));
                 else
                     warn(ERR, "%s %u-byte %s pkt, ignoring",
-                         pkt_ok_for_epoch(meta(v).hdr.flags, epoch_in(c))
+                         pkt_ok_for_epoch(m->hdr.flags, epoch_in(c))
                              ? "crypto fail on"
                              : "rx invalid",
-                         v->len,
-                         pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
+                         v->len, pkt_type_str(m->hdr.flags, &m->hdr.vers));
                 goto drop;
             }
 
             // that dcid in split-out coalesced pkt matches outer pkt
             if (unlikely(decoal) && outer_dcid.len == 0) {
                 // save outer dcid for checking
-                cid_cpy(&outer_dcid, &meta(v).hdr.dcid);
+                cid_cpy(&outer_dcid, &m->hdr.dcid);
                 goto decoal_done;
             }
 
             if (unlikely(outer_dcid.len) &&
-                cid_cmp(&outer_dcid, &meta(v).hdr.dcid) != 0) {
+                cid_cmp(&outer_dcid, &m->hdr.dcid) != 0) {
                 log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
                         tok_len);
                 warn(ERR,
                      "outer dcid %s != inner dcid %s during "
                      "decoalescing, ignoring %s pkt",
-                     cid2str(&outer_dcid), cid2str(&meta(v).hdr.dcid),
-                     pkt_type_str(meta(v).hdr.flags, &meta(v).hdr.vers));
+                     cid2str(&outer_dcid), cid2str(&m->hdr.dcid),
+                     pkt_type_str(m->hdr.flags, &m->hdr.vers));
                 goto drop;
             }
 
@@ -1344,13 +1346,13 @@ rx_pkts(struct w_iov_sq * const x,
 
 #endif
 
-                if (meta(v).hdr.nr <= diet_max(&(c->pn_data.pn.recv_all))) {
+                if (m->hdr.nr <= diet_max(&(c->pn_data.pn.recv_all))) {
                     log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
                             tok_len);
                     warn(NTE,
                          "pkt from new peer %s:%s, nr " FMT_PNR_IN
                          " <= max " FMT_PNR_IN ", ignoring",
-                         ip, port, meta(v).hdr.nr,
+                         ip, port, m->hdr.nr,
                          diet_max(&(c->pn_data.pn.recv_all)));
                     goto drop;
                 }
@@ -1358,8 +1360,7 @@ rx_pkts(struct w_iov_sq * const x,
                 warn(NTE,
                      "pkt from new peer %s:%s, nr " FMT_PNR_IN
                      " > max " FMT_PNR_IN ", probing",
-                     ip, port, meta(v).hdr.nr,
-                     diet_max(&(c->pn_data.pn.recv_all)));
+                     ip, port, m->hdr.nr, diet_max(&(c->pn_data.pn.recv_all)));
 
                 if (c->dcid->len == 0)
                     conns_by_ipnp_update(c, (struct sockaddr *)&v->addr);
@@ -1370,19 +1371,17 @@ rx_pkts(struct w_iov_sq * const x,
         }
 
     decoal_done:
-        if (likely(rx_pkt(c, ws, v, x, &odcid, tok, tok_len))) {
+        if (likely(rx_pkt(c, ws, v, m, x, &odcid, tok, tok_len))) {
             rx_crypto(c);
-            c->min_rx_epoch =
-                c->had_rx
-                    ? MIN(c->min_rx_epoch, epoch_for_pkt_type(meta(v).hdr.type))
-                    : epoch_for_pkt_type(meta(v).hdr.type);
+            c->min_rx_epoch = c->had_rx ? MIN(c->min_rx_epoch,
+                                              epoch_for_pkt_type(m->hdr.type))
+                                        : epoch_for_pkt_type(m->hdr.type);
 
-            if (likely((meta(v).hdr.vers && meta(v).hdr.type != LH_RTRY) ||
-                       !is_lh(meta(v).hdr.flags))) {
-                struct pn_space * const pn =
-                    pn_for_pkt_type(c, meta(v).hdr.type);
-                diet_insert(&pn->recv, meta(v).hdr.nr, ev_now(loop));
-                diet_insert(&pn->recv_all, meta(v).hdr.nr, (ev_tstamp)NAN);
+            if (likely((m->hdr.vers && m->hdr.type != LH_RTRY) ||
+                       !is_lh(m->hdr.flags))) {
+                struct pn_space * const pn = pn_for_pkt_type(c, m->hdr.type);
+                diet_insert(&pn->recv, m->hdr.nr, ev_now(loop));
+                diet_insert(&pn->recv_all, m->hdr.nr, (ev_tstamp)NAN);
             }
             pkt_valid = true;
         }
@@ -1393,16 +1392,16 @@ rx_pkts(struct w_iov_sq * const x,
             sl_insert_head(crx, c, node_rx_int);
         }
 
-        if (meta(v).stream == 0)
+        if (m->stream == 0)
             // we didn't place this pkt in any stream - bye!
             goto drop;
-        else if (unlikely(meta(v).stream->state == strm_clsd &&
-                          sq_empty(&meta(v).stream->in)))
-            free_stream(meta(v).stream);
+        else if (unlikely(m->stream->state == strm_clsd &&
+                          sq_empty(&m->stream->in)))
+            free_stream(m->stream);
         goto next;
 
     drop:
-        free_iov(v);
+        free_iov(v, m);
     next:
         if (likely(c)) {
             if (likely(pkt_valid))

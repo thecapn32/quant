@@ -1297,24 +1297,25 @@ which_cipher_ctx_out(const struct q_conn * const c, const uint8_t flags)
 
 uint16_t dec_aead(const struct w_iov * const xv,
                   const struct w_iov * const v,
+                  const struct pkt_meta * const m,
                   const uint16_t len,
                   const struct cipher_ctx * const ctx)
 {
-    const uint16_t hdr_len = meta(v).hdr.hdr_len;
+    const uint16_t hdr_len = m->hdr.hdr_len;
     if (unlikely(hdr_len == 0 || hdr_len > len))
         return 0;
 
     const size_t ret =
         ptls_aead_decrypt(ctx->aead, &v->buf[hdr_len], &xv->buf[hdr_len],
-                          len - hdr_len, meta(v).hdr.nr, xv->buf, hdr_len);
+                          len - hdr_len, m->hdr.nr, xv->buf, hdr_len);
     if (unlikely(ret == SIZE_MAX))
         return 0;
     memcpy(v->buf, xv->buf, hdr_len);
 
 #ifdef DEBUG_MARSHALL
     warn(DBG, "dec %s AEAD over [%u..%u] in [%u..%u]",
-         pkt_type_str(meta(v).hdr.type, &meta(v).hdr.vers), hdr_len,
-         len - AEAD_LEN - 1, len - AEAD_LEN, len - 1);
+         pkt_type_str(m->hdr.type, &m->hdr.vers), hdr_len, len - AEAD_LEN - 1,
+         len - AEAD_LEN, len - 1);
 #endif
 
     return hdr_len + len;
@@ -1323,37 +1324,37 @@ uint16_t dec_aead(const struct w_iov * const xv,
 
 uint16_t enc_aead(struct q_conn * const c,
                   const struct w_iov * const v,
+                  const struct pkt_meta * const m,
                   struct w_iov * const xv,
                   const uint16_t pkt_nr_pos)
 {
-    const struct cipher_ctx * ctx = which_cipher_ctx_out(c, meta(v).hdr.flags);
+    const struct cipher_ctx * ctx = which_cipher_ctx_out(c, m->hdr.flags);
     if (unlikely(ctx == 0 || ctx->aead == 0)) {
         warn(NTE, "no %s crypto context",
-             pkt_type_str(meta(v).hdr.type, &meta(v).hdr.vers));
+             pkt_type_str(m->hdr.type, &m->hdr.vers));
         return 0;
     }
 
-    const uint16_t hdr_len = meta(v).hdr.hdr_len;
+    const uint16_t hdr_len = m->hdr.hdr_len;
     memcpy(xv->buf, v->buf, hdr_len); // copy pkt header
 
     const uint16_t plen = v->len - hdr_len + AEAD_LEN;
     xv->len = hdr_len + (uint16_t)ptls_aead_encrypt(
                             ctx->aead, &xv->buf[hdr_len], &v->buf[hdr_len],
-                            plen - AEAD_LEN, meta(v).hdr.nr, v->buf, hdr_len);
+                            plen - AEAD_LEN, m->hdr.nr, v->buf, hdr_len);
 
     // apply packet protection
     ctx = which_cipher_ctx_out(
         c,
         // the pp context does not depend on the SH kyph bit
-        is_lh(meta(v).hdr.flags) ? meta(v).hdr.flags
-                                 : meta(v).hdr.flags & ~SH_KYPH);
+        is_lh(m->hdr.flags) ? m->hdr.flags : m->hdr.flags & ~SH_KYPH);
     if (likely(pkt_nr_pos) &&
-        unlikely(xor_hp(xv, v, ctx, pkt_nr_pos, true) == false))
+        unlikely(xor_hp(xv, m, ctx, pkt_nr_pos, true) == false))
         return 0;
 
 #ifdef DEBUG_MARSHALL
     warn(DBG, "enc %s AEAD over [%u..%u] in [%u..%u]",
-         pkt_type_str(meta(v).hdr.type, &meta(v).hdr.vers), hdr_len,
+         pkt_type_str(m->hdr.type, &m->hdr.vers), hdr_len,
          hdr_len + plen - AEAD_LEN - 1, hdr_len + plen - AEAD_LEN,
          hdr_len + plen - 1);
 #endif

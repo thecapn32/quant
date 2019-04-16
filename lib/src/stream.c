@@ -155,7 +155,7 @@ void free_stream(struct q_stream * const s)
     while (!splay_empty(&s->in_ooo)) {
         struct pkt_meta * const p = splay_min(ooo_by_off, &s->in_ooo);
         ensure(splay_remove(ooo_by_off, &s->in_ooo, p), "removed");
-        free_iov(w_iov(c->w, pm_idx(p)));
+        free_iov(w_iov(c->w, pm_idx(p)), p);
     }
 
     q_free(&s->out);
@@ -193,9 +193,10 @@ void reset_stream(struct q_stream * const s, const bool forget)
 
     struct w_iov * v = s->out_una;
     sq_foreach_from (v, &s->out, next) {
-        if (meta(v).pn)
+        struct pkt_meta * const m = &meta(v); // meta use OK
+        if (m->pn)
             // remove trailing padding
-            v->len = meta(v).stream_data_len;
+            v->len = m->stream_data_len;
 
         // XXX do we need the "while(rm)" loop from free_iov here?
 
@@ -204,15 +205,15 @@ void reset_stream(struct q_stream * const s, const bool forget)
 
         // don't reset stream-data-related fields
         // TODO: redo this with offsetof magic
-        const bool fin = meta(v).is_fin;
-        const uint16_t shp = meta(v).stream_header_pos;
-        const uint16_t sds = meta(v).stream_data_start;
-        const uint16_t sdl = meta(v).stream_data_len;
-        memset(&meta(v), 0, sizeof(struct pkt_meta));
-        meta(v).is_fin = fin;
-        meta(v).stream_header_pos = shp;
-        meta(v).stream_data_start = sds;
-        meta(v).stream_data_len = sdl;
+        const bool fin = m->is_fin;
+        const uint16_t shp = m->stream_header_pos;
+        const uint16_t sds = m->stream_data_start;
+        const uint16_t sdl = m->stream_data_len;
+        memset(m, 0, sizeof(*m));
+        m->is_fin = fin;
+        m->stream_header_pos = shp;
+        m->stream_data_start = sds;
+        m->stream_data_len = sdl;
     }
 
     if (forget) {

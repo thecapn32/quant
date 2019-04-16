@@ -50,7 +50,7 @@
 
 struct ev_loop;
 
-#define is_crypto_pkt(v) has_frame((v), FRM_CRY)
+#define is_crypto_pkt(m) has_frame((m), FRM_CRY)
 
 
 static inline bool __attribute__((nonnull))
@@ -327,19 +327,20 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
 
 
 static inline void __attribute__((nonnull))
-track_acked_pkts(struct pn_space * const pn, struct w_iov * const v)
+track_acked_pkts(struct w_iov * const v, struct pkt_meta * const m)
 {
-    adj_iov_to_start(v);
+    adj_iov_to_start(v, m);
 
     // this is a similar loop as in dec_ack_frame() - keep changes in sync
-    uint64_t lg_ack_in_block = meta(v).lg_acked;
-    uint16_t i = meta(v).ack_block_pos;
-    for (uint64_t n = meta(v).ack_block_cnt + 1; n > 0; n--) {
+    uint64_t lg_ack_in_block = m->lg_acked;
+    uint16_t i = m->ack_block_pos;
+    for (uint64_t n = m->ack_block_cnt + 1; n > 0; n--) {
         uint64_t ack_block_len = 0;
         i = dec(&ack_block_len, v->buf, v->len, i, 0, "%" PRIu64);
-        diet_remove_ival(&pn->recv, &(const struct ival){
-                                        .lo = lg_ack_in_block - ack_block_len,
-                                        .hi = lg_ack_in_block});
+        diet_remove_ival(
+            &m->pn->recv,
+            &(const struct ival){.lo = lg_ack_in_block - ack_block_len,
+                                 .hi = lg_ack_in_block});
         if (n > 1) {
             uint64_t gap = 0;
             i = dec(&gap, v->buf, v->len, i, 0, "%" PRIu64);
@@ -347,31 +348,33 @@ track_acked_pkts(struct pn_space * const pn, struct w_iov * const v)
         }
     }
 
-    adj_iov_to_data(v);
+    adj_iov_to_data(v, m);
 }
 
 
-void on_pkt_sent(struct pn_space * const pn, struct w_iov * const v)
+void on_pkt_sent(struct pkt_meta * const m)
 {
+    m->txed = true;
+
     // see OnPacketSent() pseudo code
 
-    pm_by_nr_ins(pn->sent_pkts, &meta(v));
+    pm_by_nr_ins(m->pn->sent_pkts, m);
     // nr is set in enc_pkt()
-    meta(v).tx_t = ev_now(loop);
+    m->tx_t = ev_now(loop);
     // ack_eliciting is set in enc_pkt()
-    meta(v).in_flight = meta(v).ack_eliciting || has_frame(v, FRM_PAD);
+    m->in_flight = m->ack_eliciting || has_frame(m, FRM_PAD);
 
-    struct q_conn * const c = pn->c;
-    if (likely(meta(v).in_flight)) {
-        if (unlikely(is_crypto_pkt(v)))
-            c->rec.last_sent_crypto_t = meta(v).tx_t;
-        if (likely(meta(v).ack_eliciting)) {
-            c->rec.last_sent_ack_elicit_t = meta(v).tx_t;
+    struct q_conn * const c = m->pn->c;
+    if (likely(m->in_flight)) {
+        if (unlikely(is_crypto_pkt(m)))
+            c->rec.last_sent_crypto_t = m->tx_t;
+        if (likely(m->ack_eliciting)) {
+            c->rec.last_sent_ack_elicit_t = m->tx_t;
             c->rec.ae_in_flight++;
         }
 
         // OnPacketSentCC
-        c->rec.in_flight += meta(v).udp_len;
+        c->rec.in_flight += m->udp_len;
     }
 
     set_ld_timer(c);
@@ -400,17 +403,16 @@ update_rtt(struct q_conn * const c, ev_tstamp ack_del)
 }
 
 
-void on_ack_received_1(struct pn_space * const pn,
-                       struct w_iov * const lg_ack,
-                       const uint64_t ack_del)
+void on_ack_received_1(struct pkt_meta * const lg_ack, const uint64_t ack_del)
 {
     // see OnAckReceived() pseudo code
+    struct pn_space * const pn = lg_ack->pn;
     struct q_conn * const c = pn->c;
-    pn->lg_acked = MAX(pn->lg_acked, meta(lg_ack).hdr.nr);
+    pn->lg_acked = MAX(pn->lg_acked, lg_ack->hdr.nr);
 
     // we're only called for the largest ACK'ed
-    if (meta(lg_ack).ack_eliciting) {
-        c->rec.latest_rtt = ev_now(loop) - meta(lg_ack).tx_t;
+    if (lg_ack->ack_eliciting) {
+        c->rec.latest_rtt = ev_now(loop) - lg_ack->tx_t;
         update_rtt(c, ack_del / 1000000.0); // ack_del is passed in usec
     }
 
@@ -433,42 +435,42 @@ void on_ack_received_2(struct pn_space * const pn)
 
 
 static void __attribute__((nonnull))
-on_pkt_acked_cc(struct q_conn * const c, struct w_iov * const acked_pkt)
+on_pkt_acked_cc(const struct pkt_meta * meta_acked)
 {
     // OnPacketAckedCC
-
-    c->rec.in_flight -= meta(acked_pkt).udp_len;
-    if (meta(acked_pkt).ack_eliciting)
+    struct q_conn * const c = meta_acked->pn->c;
+    c->rec.in_flight -= meta_acked->udp_len;
+    if (meta_acked->ack_eliciting)
         c->rec.ae_in_flight--;
 
-    if (in_recovery(c, meta(acked_pkt).tx_t))
+    if (in_recovery(c, meta_acked->tx_t))
         return;
 
     // TODO: Do not increase congestion window in recovery period.
 
     if (c->rec.cwnd < c->rec.ssthresh)
-        c->rec.cwnd += meta(acked_pkt).udp_len;
+        c->rec.cwnd += meta_acked->udp_len;
     else
-        c->rec.cwnd += kMaxDatagramSize * meta(acked_pkt).udp_len / c->rec.cwnd;
+        c->rec.cwnd += kMaxDatagramSize * meta_acked->udp_len / c->rec.cwnd;
 }
 
 
-void on_pkt_acked(struct pn_space * const pn, struct w_iov * const acked_pkt)
+void on_pkt_acked(struct w_iov * const acked_pkt, struct pkt_meta * meta_acked)
 {
     // see OnPacketAcked() pseudo code
+    struct pn_space * const pn = meta_acked->pn;
     struct q_conn * const c = pn->c;
-    if (meta(acked_pkt).in_flight && meta(acked_pkt).is_lost == false)
-        on_pkt_acked_cc(c, acked_pkt);
+    if (meta_acked->in_flight && meta_acked->is_lost == false)
+        on_pkt_acked_cc(meta_acked);
 
-    struct pkt_meta * meta_acked = &meta(acked_pkt);
     diet_insert(&pn->acked, meta_acked->hdr.nr, (ev_tstamp)NAN);
     pm_by_nr_del(pn->sent_pkts, meta_acked);
 
     // rest of function is not from pseudo code
 
     // stop ACKing packets that were contained in the ACK frame of this packet
-    if (has_frame(acked_pkt, FRM_ACK))
-        track_acked_pkts(pn, acked_pkt);
+    if (has_frame(meta_acked, FRM_ACK))
+        track_acked_pkts(acked_pkt, meta_acked);
 
     // if this ACK is for a pkt that was RTX'ed, update the record
     struct pkt_meta * const meta_rtx = sl_first(&meta_acked->rtx);
@@ -499,7 +501,7 @@ void on_pkt_acked(struct pn_space * const pn, struct w_iov * const acked_pkt)
     if (s) {
         // if this ACKs its stream's out_una, move that forward
         sq_foreach_from (s->out_una, &s->out, next)
-            if (meta(s->out_una).is_acked == false)
+            if (meta(s->out_una).is_acked == false) // meta use OK
                 break;
 
         if (s->out_una == 0) {
@@ -513,7 +515,7 @@ void on_pkt_acked(struct pn_space * const pn, struct w_iov * const acked_pkt)
             // this ACKs a FIN
             maybe_api_return(q_close_stream, c, s);
     } else
-        free_iov(acked_pkt);
+        free_iov(acked_pkt, meta_acked);
 }
 
 

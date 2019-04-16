@@ -136,8 +136,9 @@ void alloc_off(struct w_engine * const w,
     w_alloc_len(w, q, len, MAX_PKT_LEN - AEAD_LEN - off, off);
     struct w_iov * v = 0;
     sq_foreach (v, q, next) {
-        ASAN_UNPOISON_MEMORY_REGION(&meta(v), sizeof(meta(v)));
-        meta(v).stream_data_start = off;
+        struct pkt_meta * const m = &meta(v); // meta use OK
+        ASAN_UNPOISON_MEMORY_REGION(m, sizeof(*m));
+        m->stream_data_start = off;
         // warn(CRT, "q_alloc idx %u (avail %" PRIu64 ") len %u", w_iov_idx(v),
         //      sq_len(&w->iov), v->len);
     }
@@ -158,8 +159,16 @@ void q_free(struct w_iov_sq * const q)
     while (!sq_empty(q)) {
         struct w_iov * const v = sq_first(q);
         sq_remove_head(q, next);
-        free_iov(v);
+        free_iov(v, &meta(v)); // meta use OK
     }
+}
+
+
+static void __attribute__((nonnull)) mark_fin(struct w_iov_sq * const q)
+{
+    struct w_iov * const last = sq_last(q, w_iov, next);
+    ensure(last, "got last buffer");
+    meta(last).is_fin = true; // meta use OK
 }
 
 
@@ -206,11 +215,8 @@ struct q_conn * q_connect(struct w_engine * const w,
     if (early_data && !sq_empty(early_data)) {
         ensure(early_data_stream, "early data without stream pointer");
         // queue up early data
-        if (fin) {
-            struct w_iov * const last = sq_last(early_data, w_iov, next);
-            ensure(last, "got last buffer");
-            meta(last).is_fin = true;
-        }
+        if (fin)
+            mark_fin(early_data);
         *early_data_stream = new_stream(c, c->next_sid_bidi);
         concat_out(*early_data_stream, early_data);
     } else if (early_data_stream)
@@ -271,11 +277,8 @@ bool q_write(struct q_stream * const s,
     }
 
     // add to stream
-    if (fin) {
-        struct w_iov * const last = sq_last(q, w_iov, next);
-        ensure(last, "got last buffer");
-        meta(last).is_fin = true;
-    }
+    if (fin)
+        mark_fin(q);
     const uint64_t prev_out_data = s->out_data;
     concat_out(s, q);
 
@@ -298,8 +301,8 @@ bool q_write(struct q_stream * const s,
 
     // how much data did we write?
     const uint64_t data_written =
-        s->out_una && meta(s->out_una).udp_len
-            ? meta(s->out_una).stream_off - prev_out_data
+        s->out_una && meta(s->out_una).udp_len            // meta use OK
+            ? meta(s->out_una).stream_off - prev_out_data // meta use OK
             : qlen;
 
     // move data back
@@ -409,14 +412,15 @@ void q_readall_stream(struct q_stream * const s, struct w_iov_sq * const q)
 
     if (!sq_empty(&s->in)) {
         struct w_iov * const last = sq_last(&s->in, w_iov, next);
+        const struct pkt_meta * const m_last = &meta(last); // meta use OK
         warn(WRN,
              "read %" PRIu64
              " byte%s in %.3f sec (%s) on %s conn %s strm " FMT_SID " %s",
              w_iov_sq_len(&s->in), plural(w_iov_sq_len(&s->in)), elapsed,
              bps(w_iov_sq_len(&s->in), elapsed), conn_type(c), cid2str(c->scid),
-             s->id, meta(last).is_fin ? "" : "(FIN missing)");
+             s->id, m_last->is_fin ? "" : "(FIN missing)");
 
-        if (meta(last).is_fin)
+        if (m_last->is_fin)
             // return data
             sq_concat(q, &s->in);
     }
@@ -631,9 +635,7 @@ void q_close_stream(struct q_stream * const s)
             last->len = 0;
             concat_out(s, &q);
         }
-        struct w_iov * const last = sq_last(&s->out, w_iov, next);
-        ensure(last, "got last buffer");
-        meta(last).is_fin = true;
+        mark_fin(&s->out);
         s->state = (s->state == strm_hcrm ? strm_clsd : strm_hclo);
 
         ev_async_send(loop, &c->tx_w);

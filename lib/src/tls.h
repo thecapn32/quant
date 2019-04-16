@@ -88,6 +88,8 @@ struct tls {
 /// TLS context.
 extern ptls_context_t tls_ctx;
 
+struct pkt_meta;
+
 extern void __attribute__((nonnull)) init_prot(struct q_conn * const c);
 
 extern void __attribute__((nonnull(1)))
@@ -108,13 +110,16 @@ extern void free_tls_ctx(void);
 extern uint16_t __attribute__((nonnull))
 dec_aead(const struct w_iov * const xv,
          const struct w_iov * const v,
+         const struct pkt_meta * const m,
          const uint16_t len,
          const struct cipher_ctx * const ctx);
 
-extern uint16_t __attribute__((nonnull)) enc_aead(struct q_conn * const c,
-                                                  const struct w_iov * const v,
-                                                  struct w_iov * const xv,
-                                                  const uint16_t pkt_nr_pos);
+extern uint16_t __attribute__((nonnull))
+enc_aead(struct q_conn * const c,
+         const struct w_iov * const v,
+         const struct pkt_meta * const m,
+         struct w_iov * const xv,
+         const uint16_t pkt_nr_pos);
 
 extern void __attribute__((nonnull)) make_rtry_tok(struct q_conn * const c);
 

@@ -94,7 +94,7 @@ void free_pn(struct pn_space * const pn)
             }
             // TX'ed but non-RTX'ed pkts are freed when their stream is freed
             if (p->has_rtx || !has_stream_data(p))
-                free_iov(w_iov(pn->c->w, pm_idx(p)));
+                free_iov(w_iov(pn->c->w, pm_idx(p)), p);
         });
         kh_destroy(pm_by_nr, pn->sent_pkts);
         pn->sent_pkts = 0;

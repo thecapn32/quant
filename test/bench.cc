@@ -53,21 +53,24 @@ static void BM_quic_encryption(benchmark::State & state)
 {
     const auto len = uint16_t(state.range(0));
     const auto pne = uint16_t(state.range(1));
-    struct w_iov * v = alloc_iov(w, len, 0);
-    struct w_iov * x = alloc_iov(w, MAX_PKT_LEN, 0);
+
+    struct pkt_meta * m;
+    struct w_iov * v = alloc_iov(w, len, 0, &m);
+    struct pkt_meta * mx;
+    struct w_iov * x = alloc_iov(w, MAX_PKT_LEN, 0, &mx);
 
     rand_bytes(v->buf, len);
-    meta(v).hdr.type = LH_INIT;
-    meta(v).hdr.flags = LH | meta(v).hdr.type;
-    meta(v).hdr.hdr_len = 16;
-    meta(v).hdr.len = len;
+    m->hdr.type = LH_INIT;
+    m->hdr.flags = LH | m->hdr.type;
+    m->hdr.hdr_len = 16;
+    m->hdr.len = len;
 
     for (auto _ : state)
-        benchmark::DoNotOptimize(enc_aead(c, v, x, pne * 16));
+        benchmark::DoNotOptimize(enc_aead(c, v, m, x, pne * 16));
     state.SetBytesProcessed(int64_t(state.iterations() * len)); // NOLINT
 
-    free_iov(x);
-    free_iov(v);
+    free_iov(x, mx);
+    free_iov(v, m);
 }
 
 

@@ -151,7 +151,7 @@ struct cipher_ctx;
 struct sockaddr;
 
 extern bool __attribute__((nonnull)) xor_hp(struct w_iov * const xv,
-                                            const struct w_iov * const v,
+                                            const struct pkt_meta * const m,
                                             const struct cipher_ctx * const ctx,
                                             const uint16_t pkt_nr_pos,
                                             const bool is_enc);
@@ -159,6 +159,7 @@ extern bool __attribute__((nonnull)) xor_hp(struct w_iov * const xv,
 extern bool __attribute__((nonnull))
 dec_pkt_hdr_beginning(struct w_iov * const xv,
                       struct w_iov * const v,
+                      struct pkt_meta * const m,
                       const bool is_clnt,
                       struct cid * const odcid,
                       uint8_t * const tok,
@@ -168,18 +169,20 @@ dec_pkt_hdr_beginning(struct w_iov * const xv,
 extern bool __attribute__((nonnull))
 dec_pkt_hdr_remainder(struct w_iov * const xv,
                       struct w_iov * const v,
+                      struct pkt_meta * const m,
                       struct q_conn * const c,
                       struct w_iov_sq * const x,
                       bool * const decoal);
 
 extern struct q_conn * __attribute__((nonnull))
-is_srt(const struct w_iov * const xv, const struct w_iov * const v);
+is_srt(const struct w_iov * const xv, struct pkt_meta * const m);
 
 extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
                                              const bool rtx,
                                              const bool enc_data,
                                              const bool tx_ack_eliciting,
-                                             struct w_iov * const v);
+                                             struct w_iov * const v,
+                                             struct pkt_meta * const m);
 
 extern void __attribute__((nonnull)) coalesce(struct w_iov_sq * const q);
 
@@ -187,6 +190,7 @@ extern uint16_t __attribute__((nonnull(1, 3)))
 enc_lh_cids(const struct cid * const dcid,
             const struct cid * const scid,
             struct w_iov * const v,
+            struct pkt_meta * const m,
             const uint16_t pos);
 
 #ifndef NDEBUG
