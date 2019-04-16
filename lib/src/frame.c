@@ -445,6 +445,9 @@ uint16_t dec_ack_frame(const struct w_iov * const v,
     uint64_t num_blocks = 0;
     i = dec_chk(t, &num_blocks, v->buf, v->len, i, 0, "%" PRIu64);
 
+    const struct ival * const cum_ack_ival = diet_min_ival(&m->pn->acked);
+    const uint64_t cum_ack = cum_ack_ival ? cum_ack_ival->hi : UINT64_MAX;
+
     uint64_t lg_ack_in_block = lg_ack;
     ev_tstamp lg_acked_tx_t = 0;
     bool got_new_ack = false;
@@ -497,6 +500,10 @@ uint16_t dec_ack_frame(const struct w_iov * const v,
 
         uint64_t ack = lg_ack_in_block;
         while (ack_block_len >= lg_ack_in_block - ack) {
+
+            if (likely(cum_ack != UINT64_MAX) && ack <= cum_ack)
+                goto skip;
+
             struct pkt_meta * m_acked;
             struct w_iov * const acked = find_sent_pkt(m->pn, ack, &m_acked);
             if (unlikely(acked == 0)) {
@@ -508,11 +515,6 @@ uint16_t dec_ack_frame(const struct w_iov * const v,
                         c, ERR_PROTOCOL_VIOLATION, t,
                         "got ACK for pkt " FMT_PNR_OUT " never sent", ack);
 #endif
-                goto skip;
-            }
-
-            if (unlikely(m_acked->is_acked)) {
-                warn(WRN, "repeated ACK for " FMT_PNR_OUT ", ignoring", ack);
                 goto skip;
             }
 
