@@ -1368,7 +1368,9 @@ rx_pkts(struct w_iov_sq * const x,
                 c->migr_peer = v->addr;
                 c->needs_tx = c->tx_path_chlg = true;
             }
-        }
+        } else
+            // this is a vneg or rtry pkt, dec_pkt_hdr_remainder not called
+            m->pn = &c->pn_init.pn;
 
     decoal_done:
         if (likely(rx_pkt(ws, v, m, x, &odcid, tok, tok_len))) {

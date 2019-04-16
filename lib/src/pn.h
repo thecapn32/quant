@@ -97,7 +97,9 @@ extern void __attribute__((nonnull))
 pm_by_nr_ins(khash_t(pm_by_nr) * const pbn, struct pkt_meta * const p);
 
 extern struct w_iov * __attribute__((nonnull))
-find_sent_pkt(const struct pn_space * const pn, const uint64_t nr);
+find_sent_pkt(const struct pn_space * const pn,
+              const uint64_t nr,
+              struct pkt_meta ** const m);
 
 extern void __attribute__((nonnull))
 init_pn(struct pn_space * const pn, struct q_conn * const c);

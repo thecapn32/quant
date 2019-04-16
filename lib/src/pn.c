@@ -60,12 +60,14 @@ void pm_by_nr_ins(khash_t(pm_by_nr) * const pbn, struct pkt_meta * const p)
 
 
 struct w_iov * find_sent_pkt(const struct pn_space * const pn,
-                             const uint64_t nr)
+                             const uint64_t nr,
+                             struct pkt_meta ** const m)
 {
     const khiter_t k = kh_get(pm_by_nr, pn->sent_pkts, nr);
     if (unlikely(k == kh_end(pn->sent_pkts)))
         return 0;
-    return w_iov(pn->c->w, pm_idx(kh_val(pn->sent_pkts, k)));
+    *m = kh_val(pn->sent_pkts, k);
+    return w_iov(pn->c->w, pm_idx(*m));
 }
 
 

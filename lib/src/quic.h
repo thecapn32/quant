@@ -341,7 +341,8 @@ free_iov(struct w_iov * const v, struct pkt_meta * const m)
     //      sq_len(&v->w->iov) + 1, m->hdr.nr);
 
     if (m->txed) {
-        if (m->pn->sent_pkts && find_sent_pkt(m->pn, m->hdr.nr))
+        struct pkt_meta * tmp;
+        if (m->pn->sent_pkts && find_sent_pkt(m->pn, m->hdr.nr, &tmp))
             pm_by_nr_del(m->pn->sent_pkts, m);
 
         struct pkt_meta * rm = sl_first(&m->rtx);

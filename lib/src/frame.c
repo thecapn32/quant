@@ -497,7 +497,8 @@ uint16_t dec_ack_frame(const struct w_iov * const v,
 
         uint64_t ack = lg_ack_in_block;
         while (ack_block_len >= lg_ack_in_block - ack) {
-            struct w_iov * const acked = find_sent_pkt(m->pn, ack);
+            struct pkt_meta * m_acked;
+            struct w_iov * const acked = find_sent_pkt(m->pn, ack, &m_acked);
             if (unlikely(acked == 0)) {
 #ifndef FUZZING
                 // this is just way too noisy when fuzzing
@@ -510,7 +511,6 @@ uint16_t dec_ack_frame(const struct w_iov * const v,
                 goto skip;
             }
 
-            struct pkt_meta * const m_acked = &meta(acked); // meta use OK
             if (unlikely(m_acked->is_acked)) {
                 warn(WRN, "repeated ACK for " FMT_PNR_OUT ", ignoring", ack);
                 goto skip;
