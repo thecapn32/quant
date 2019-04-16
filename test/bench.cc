@@ -23,6 +23,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <arpa/inet.h>
 #include <net/if.h>
 
 #include <benchmark/benchmark.h>
@@ -37,6 +38,7 @@ extern "C" {
 
 #include "conn.h" // IWYU pragma: keep
 #include "pkt.h"
+#include "pn.h" // IWYU pragma: keep
 #include "quic.h"
 #include "tls.h" // IWYU pragma: keep
 
@@ -64,9 +66,10 @@ static void BM_quic_encryption(benchmark::State & state)
     m->hdr.flags = LH | m->hdr.type;
     m->hdr.hdr_len = 16;
     m->hdr.len = len;
+    m->pn = &c->pn_init.pn;
 
     for (auto _ : state)
-        benchmark::DoNotOptimize(enc_aead(c, v, m, x, pne * 16));
+        benchmark::DoNotOptimize(enc_aead(v, m, x, pne * 16));
     state.SetBytesProcessed(int64_t(state.iterations() * len)); // NOLINT
 
     free_iov(x, mx);
@@ -100,7 +103,7 @@ int main(int argc, char ** argv)
     struct cid cid = {};
     cid.len = 4;
     memcpy(cid.id, "1234", cid.len);
-    c = new_conn(w, 0xff00000e, &cid, &cid, nullptr, "", 55555, nullptr);
+    c = new_conn(w, 0xff00000e, &cid, &cid, nullptr, "", htons(55555), nullptr);
     init_tls(c, nullptr);
     benchmark::RunSpecifiedBenchmarks();
 

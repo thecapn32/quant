@@ -881,8 +881,7 @@ pkt_ok_for_epoch(const uint8_t flags, const epoch_t epoch)
 #endif
 
 
-static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
-                                            const struct w_sock * const ws,
+static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
                                             struct w_iov * v,
                                             struct pkt_meta * m,
                                             struct w_iov_sq * const x,
@@ -894,6 +893,7 @@ static bool __attribute__((nonnull)) rx_pkt(struct q_conn * const c,
                                             const uint8_t * const tok,
                                             const uint16_t tok_len)
 {
+    struct q_conn * const c = m->pn->c;
     bool ok = false;
 
     log_pkt("RX", v, (struct sockaddr *)&v->addr, odcid, tok, tok_len);
@@ -1371,7 +1371,7 @@ rx_pkts(struct w_iov_sq * const x,
         }
 
     decoal_done:
-        if (likely(rx_pkt(c, ws, v, m, x, &odcid, tok, tok_len))) {
+        if (likely(rx_pkt(ws, v, m, x, &odcid, tok, tok_len))) {
             rx_crypto(c);
             c->min_rx_epoch = c->had_rx ? MIN(c->min_rx_epoch,
                                               epoch_for_pkt_type(m->hdr.type))

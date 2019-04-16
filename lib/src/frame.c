@@ -178,11 +178,11 @@ get_and_validate_strm(struct q_conn * const c,
 
 
 static uint16_t __attribute__((nonnull))
-dec_stream_or_crypto_frame(struct q_conn * const c,
-                           struct w_iov * const v,
+dec_stream_or_crypto_frame(struct w_iov * const v,
                            struct pkt_meta * const m,
                            const uint16_t pos)
 {
+    struct q_conn * const c = m->pn->c;
     m->stream_header_pos = pos;
 
     // decode the type byte, to check whether this is a stream or crypto frame
@@ -415,12 +415,12 @@ shorten_ack_nr(const uint64_t ack, const uint64_t diff)
 #endif
 
 
-uint16_t dec_ack_frame(struct q_conn * const c,
-                       const struct w_iov * const v,
+uint16_t dec_ack_frame(const struct w_iov * const v,
                        const struct pkt_meta * const m,
                        const uint16_t pos)
 {
     // we need to decode the type byte, to check for ACK_ECN
+    struct q_conn * const c = m->pn->c;
     uint8_t t = 0;
     uint16_t i = dec_chk(t, &t, v->buf, v->len, pos, sizeof(t), "0x%02x");
 
@@ -1053,7 +1053,7 @@ dec_frames(struct q_conn * const c, struct w_iov ** vv, struct pkt_meta ** mm)
                 v = *vv = vdup;
                 m = *mm = mdup;
             }
-            i = dec_stream_or_crypto_frame(c, v, m, i);
+            i = dec_stream_or_crypto_frame(v, m, i);
             type = type == FRM_CRY ? FRM_CRY : FRM_STR;
             break;
 
@@ -1061,7 +1061,7 @@ dec_frames(struct q_conn * const c, struct w_iov ** vv, struct pkt_meta ** mm)
             type = FRM_ACK; // only enc FRM_ACK in bitstr_t
             // fallthrough
         case FRM_ACK:
-            i = dec_ack_frame(c, v, m, i);
+            i = dec_ack_frame(v, m, i);
             break;
 
         case FRM_PAD:

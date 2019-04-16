@@ -530,7 +530,7 @@ tx:;
         memcpy(xv->buf, v->buf, v->len); // copy data
         xv->len = v->len;
     } else {
-        const uint16_t ret = enc_aead(c, v, m, xv, pkt_nr_pos);
+        const uint16_t ret = enc_aead(v, m, xv, pkt_nr_pos);
         if (unlikely(ret == 0)) {
             adj_iov_to_start(v, m);
             return false;

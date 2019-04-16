@@ -191,8 +191,7 @@ enc_ping_frame(const struct w_iov * const v,
                const uint16_t pos);
 
 extern uint16_t __attribute__((nonnull))
-dec_ack_frame(struct q_conn * const c,
-              const struct w_iov * const v,
+dec_ack_frame(const struct w_iov * const v,
               const struct pkt_meta * const m,
               const uint16_t pos);
 

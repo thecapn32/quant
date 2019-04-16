@@ -115,8 +115,7 @@ dec_aead(const struct w_iov * const xv,
          const struct cipher_ctx * const ctx);
 
 extern uint16_t __attribute__((nonnull))
-enc_aead(struct q_conn * const c,
-         const struct w_iov * const v,
+enc_aead(const struct w_iov * const v,
          const struct pkt_meta * const m,
          struct w_iov * const xv,
          const uint16_t pkt_nr_pos);

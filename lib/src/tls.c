@@ -1322,12 +1322,12 @@ uint16_t dec_aead(const struct w_iov * const xv,
 }
 
 
-uint16_t enc_aead(struct q_conn * const c,
-                  const struct w_iov * const v,
+uint16_t enc_aead(const struct w_iov * const v,
                   const struct pkt_meta * const m,
                   struct w_iov * const xv,
                   const uint16_t pkt_nr_pos)
 {
+    struct q_conn * const c = m->pn->c;
     const struct cipher_ctx * ctx = which_cipher_ctx_out(c, m->hdr.flags);
     if (unlikely(ctx == 0 || ctx->aead == 0)) {
         warn(NTE, "no %s crypto context",
