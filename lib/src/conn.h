@@ -297,10 +297,7 @@ extern struct q_conn_sl c_ready;
 struct ev_loop;
 
 extern void __attribute__((nonnull))
-tx_w(struct ev_loop * const l, ev_async * const w, int e);
-
-extern void __attribute__((nonnull))
-tx(struct q_conn * const c, const uint32_t limit);
+tx(struct ev_loop * const l, ev_async * const w, int param);
 
 extern void __attribute__((nonnull)) err_close(struct q_conn * const c,
                                                const uint16_t code,

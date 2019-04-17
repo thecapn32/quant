@@ -94,7 +94,7 @@ static inline void __attribute__((nonnull)) maybe_tx(struct q_conn * const c)
 
     c->no_wnd = false;
     // don't set c->needs_tx = true, since it's not clear we must TX
-    tx(c, 0);
+    ev_feed_event(loop, &c->tx_w, 0);
 }
 
 static inline struct pn_space * __attribute__((nonnull))
@@ -289,8 +289,7 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
         detect_lost_pkts(pn, true);
 
         // XXX: this will be part of the -20 pseudo code - causes TX to resume
-        tx(c, 1);
-        maybe_tx(c);
+        ev_invoke(loop, &c->tx_w, 1);
 
     } else if (crypto_pkts_in_flight(c)) {
         warn(DBG, "crypto RTX #%u on %s conn %s", c->rec.crypto_cnt + 1,
@@ -304,12 +303,12 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
             c->sockopt.enable_ecn = false;
             w_set_sockopt(c->sock, &c->sockopt);
         }
-        tx(c, 0);
+        ev_invoke(loop, &c->tx_w, 0);
         c->i.pto_cnt++;
 
     } else if (have_keys(c, ep_data) == false) {
         // XXX this doesn't quite implement the pseudo code
-        tx(c, 1);
+        ev_invoke(loop, &c->tx_w, 1);
         c->rec.crypto_cnt++;
 
     } else {
@@ -317,7 +316,7 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
              cid2str(c->scid));
         c->rec.pto_cnt++;
         c->i.pto_cnt++;
-        tx(c, 2);
+        ev_invoke(loop, &c->tx_w, 2);
     }
 
     if (!direct)

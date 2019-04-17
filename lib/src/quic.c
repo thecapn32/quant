@@ -222,7 +222,7 @@ struct q_conn * q_connect(struct w_engine * const w,
     } else if (early_data_stream)
         *early_data_stream = 0;
 
-    ev_async_send(loop, &c->tx_w);
+    ev_feed_event(loop, &c->tx_w, 0);
 
     warn(DBG, "waiting for connect to complete on %s conn %s to %s:%s",
          conn_type(c), cid2str(c->scid), ip, port);
@@ -288,7 +288,7 @@ bool q_write(struct q_stream * const s,
 #endif
 
     // kick TX watcher
-    ev_async_send(loop, &s->c->tx_w);
+    ev_feed_event(loop, &c->tx_w, 0);
     loop_run(q_write, s->c, s);
 
 #ifndef NDEBUG
@@ -638,7 +638,7 @@ void q_close_stream(struct q_stream * const s)
         mark_fin(&s->out);
         s->state = (s->state == strm_hcrm ? strm_clsd : strm_hclo);
 
-        ev_async_send(loop, &c->tx_w);
+        ev_feed_event(loop, &c->tx_w, 0);
         loop_run(q_close_stream, c, s);
     }
 
@@ -675,7 +675,7 @@ void q_close(struct q_conn * const c,
 
     if (c->state != conn_drng) {
         conn_to_state(c, conn_qlse);
-        ev_async_send(loop, &c->tx_w);
+        ev_feed_event(loop, &c->tx_w, 0);
     }
 
     loop_run(q_close, c, 0);
@@ -880,7 +880,7 @@ void q_rebind_sock(struct q_conn * const c)
          conn_type(c), cid2str(c->scid), old_ip, old_port, new_ip, new_port);
 #endif
 
-    tx(c, 1);
+    ev_feed_event(loop, &c->tx_w, 1);
 }
 
 

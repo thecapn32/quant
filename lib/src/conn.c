@@ -466,9 +466,9 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
 
     // warn(ERR,
     //      "%s strm id=" FMT_SID ", cnt=%" PRIu64
-    //      ", has_data=%u, needs_ctrl=%u, blocked=%u, fully_acked=%u",
-    //      conn_type(c), s->id, sq_len(&s->out), has_data, needs_ctrl(s),
-    //      s->blocked, out_fully_acked(s));
+    //      ", has_data=%u, needs_ctrl=%u, blocked=%u, fully_acked=%u,
+    //      limit=%u", conn_type(c), s->id, sq_len(&s->out), has_data,
+    //      needs_ctrl(s), s->blocked, out_fully_acked(s), limit);
 
     // check if we should skip TX on this stream
     if (has_data == false || s->blocked ||
@@ -498,8 +498,7 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
         }
 
         if (limit == 0 && m->udp_len && m->is_lost == false) {
-            // warn(INF, "skip non-lost TX'ed pkt " FMT_PNR_OUT,
-            // m->hdr.nr);
+            // warn(INF, "skip non-lost TX'ed pkt " FMT_PNR_OUT, m->hdr.nr);
             continue;
         }
 
@@ -550,8 +549,13 @@ tx_ack(struct q_conn * const c, const epoch_t e, const bool tx_ack_eliciting)
 }
 
 
-void tx(struct q_conn * const c, const uint32_t limit)
+void tx(struct ev_loop * const l __attribute__((unused)),
+        ev_async * const w,
+        int param)
 {
+    struct q_conn * const c = w->data;
+    const uint32_t limit = (uint32_t)param;
+
     if (unlikely(c->state == conn_drng))
         return;
 
@@ -591,7 +595,7 @@ void tx(struct q_conn * const c, const uint32_t limit)
     });
 
 done:;
-    // make sure we send enough packets when we're called with a limit
+    // make sure we sent enough packets when we're called with a limit
     uint64_t sent = sq_len(&c->txq);
     while ((unlikely(limit) && sent < limit) || (c->needs_tx && sent == 0)) {
         if (likely(tx_ack(c, c->tls.epoch_out, limit && sent < limit)))
@@ -603,14 +607,6 @@ done:;
     }
     if (likely(sent))
         do_tx(c);
-}
-
-
-void tx_w(struct ev_loop * const l __attribute__((unused)),
-          ev_async * const w,
-          int e __attribute__((unused)))
-{
-    tx(w->data, 0);
 }
 
 
@@ -1448,7 +1444,7 @@ void rx(struct ev_loop * const l,
 
         // is a TX needed for this connection?
         if (c->needs_tx)
-            tx(c, 0); // this clears c->needs_tx if we TX'ed
+            ev_invoke(loop, &c->tx_w, 0); // clears c->needs_tx if we TX'ed
 
         for (epoch_t e = c->min_rx_epoch; e <= ep_data; e++) {
             if (c->cstreams[e] == 0 || e == ep_0rtt)
@@ -1730,7 +1726,7 @@ struct q_conn * new_conn(struct w_engine * const w,
         c->path_val_win = UINT64_MAX;
 
     // start a TX watcher
-    ev_async_init(&c->tx_w, tx_w);
+    ev_async_init(&c->tx_w, tx);
     c->tx_w.data = c;
     ev_set_priority(&c->tx_w, EV_MAXPRI - 1);
     ev_async_start(loop, &c->tx_w);
