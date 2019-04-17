@@ -147,6 +147,7 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
             return send_err(d, 500);
         }
 
+#ifndef NDEBUG
         // randomize data
         struct w_iov * v = 0;
         char c = 'A';
@@ -154,6 +155,8 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
             memset(v->buf, c, v->len);
             c = (char)(c == 'Z' ? 'A' : c + 1);
         }
+#endif
+
         q_write(d->s, &out, true);
         q_free(&out);
         return 0;
