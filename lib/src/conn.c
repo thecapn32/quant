@@ -1453,6 +1453,7 @@ void rx(struct ev_loop * const l,
             struct pn_space * const pn = pn_for_epoch(c, e);
             switch (needs_ack(pn)) {
             case imm_ack:
+                // TODO: find a way to push this from the RX to TX path
                 tx_ack(c, e, false);
                 do_tx(c);
                 break;
