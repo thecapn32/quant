@@ -130,24 +130,22 @@ static bool __attribute__((const)) vers_supported(const uint32_t v)
 
 
 static uint32_t __attribute__((nonnull))
-clnt_vneg(const uint8_t * const buf, const uint16_t len)
+clnt_vneg(const uint8_t * const pos, const uint8_t * const end)
 {
-    uint16_t pos = 0;
     for (uint8_t i = 0; i < ok_vers_len; i++) {
         if (is_vneg_vers(ok_vers[i]))
-            // skip over reserved and vneg-trigger versions in our local list
             continue;
 
-        for (uint16_t j = 0; j < len - pos; j += sizeof(ok_vers[0])) {
+        const uint8_t * p = pos;
+        while (p + sizeof(ok_vers[0]) <= end) {
             uint32_t vers = 0;
-            dec(&vers, buf, len, pos + j, sizeof(vers), "0x%08x");
-
+            dec4(&vers, &p, end);
             if (is_vneg_vers(vers))
-                // skip over reserved and vneg-trigger versions in server's list
                 continue;
 
             warn(DBG, "serv prio %ld = 0x%08x; our prio %u = 0x%08x",
-                 j / sizeof(vers), vers, i, ok_vers[i]);
+                 (unsigned long)(p - pos) / sizeof(vers), vers, i, ok_vers[i]);
+
             if (ok_vers[i] == vers)
                 return vers;
         }
@@ -351,20 +349,18 @@ tx_vneg_resp(const struct w_sock * const ws,
 
     warn(INF, "sending vneg serv response");
     mx->hdr.flags = HEAD_FORM | (uint8_t)w_rand();
-    uint16_t i = enc(xv->buf, xv->len, 0, &mx->hdr.flags, sizeof(mx->hdr.flags),
-                     0, "0x%02x");
 
-    i = enc(xv->buf, xv->len, i, &mx->hdr.vers, sizeof(mx->hdr.vers), 0,
-            "0x%08x");
-
-    i = enc_lh_cids(&m->hdr.scid, &m->hdr.dcid, xv, mx, i);
+    uint8_t * pos = xv->buf;
+    const uint8_t * end = xv->buf + xv->len;
+    enc1(&pos, end, mx->hdr.flags);
+    enc4(&pos, end, mx->hdr.vers);
+    enc_lh_cids(&pos, end, mx, &m->hdr.scid, &m->hdr.dcid);
 
     for (uint8_t j = 0; j < ok_vers_len; j++)
         if (!is_vneg_vers(ok_vers[j]))
-            i = enc(xv->buf, xv->len, i, &ok_vers[j], sizeof(ok_vers[j]), 0,
-                    "0x%08x");
+            enc4(&pos, end, ok_vers[j]);
 
-    xv->len = i;
+    xv->len = (uint16_t)(pos - xv->buf);
     xv->addr = v->addr;
     xv->flags = v->flags;
     log_pkt("TX", xv, (struct sockaddr *)&xv->addr, 0, 0, 0);
@@ -923,7 +919,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
         }
 
         // warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
-        if (dec_frames(c, &v, &m) == UINT16_MAX)
+        if (dec_frames(c, &v, &m) == false)
             goto done;
 
         // if the CH doesn't include any crypto frames, bail
@@ -992,7 +988,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
 
             // handle an incoming vneg packet
             const uint32_t try_vers =
-                clnt_vneg(&v->buf[m->hdr.hdr_len], v->len - m->hdr.hdr_len);
+                clnt_vneg(v->buf + m->hdr.hdr_len, v->buf + v->len);
             if (try_vers == 0) {
                 // no version in common with serv
                 enter_closing(c);
@@ -1034,7 +1030,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
 
         // server accepted version -
         // if we get here, this should be a regular server-hello
-        ok = (dec_frames(c, &v, &m) != UINT16_MAX);
+        ok = dec_frames(c, &v, &m);
         break;
 
     case conn_estb:
@@ -1053,7 +1049,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
             goto done;
         }
 
-        if (dec_frames(c, &v, &m) == UINT16_MAX)
+        if (dec_frames(c, &v, &m) == false)
             goto done;
 
         ok = true;

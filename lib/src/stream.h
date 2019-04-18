@@ -202,7 +202,7 @@ extern void __attribute__((nonnull))
 do_stream_fc(struct q_stream * const s, const uint16_t len);
 
 extern void __attribute__((nonnull)) do_stream_id_fc(struct q_conn * const c,
-                                                     const int64_t cnt,
+                                                     const uint64_t cnt,
                                                      const bool bidi,
                                                      const bool local);
 

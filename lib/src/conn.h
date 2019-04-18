@@ -121,8 +121,8 @@ struct transport_params {
     uint64_t max_strm_data_bidi_local;
     uint64_t max_strm_data_bidi_remote;
     uint64_t max_data;
-    int64_t max_streams_uni;
-    int64_t max_streams_bidi;
+    uint64_t max_streams_uni;
+    uint64_t max_streams_bidi;
     uint64_t idle_to;
     uint64_t max_ack_del;
     uint64_t max_pkt;
@@ -214,8 +214,8 @@ struct q_conn {
     int64_t next_sid_bidi; ///< Next unidir stream ID to use on q_rsv_stream().
     int64_t next_sid_uni;  ///< Next bidi stream ID to use on q_rsv_stream().
 
-    int64_t cnt_bidi; ///< Number of unidir stream IDs in use.
-    int64_t cnt_uni;  ///< Number of bidi stream IDs in use.
+    uint64_t cnt_bidi; ///< Number of unidir stream IDs in use.
+    uint64_t cnt_uni;  ///< Number of bidi stream IDs in use.
 
     struct transport_params tp_in;  ///< Transport parameters for RX.
     struct transport_params tp_out; ///< Transport parameters for TX.

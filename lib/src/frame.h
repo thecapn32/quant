@@ -88,6 +88,8 @@ bitset_define(frames, NUM_FRAM_TYPES);
 
 #define has_frame(m, ft) bit_isset(NUM_FRAM_TYPES, (ft), &(m)->frames)
 
+struct pkt_meta;
+
 #ifdef NDEBUG
 #define log_stream_or_crypto_frame(...)                                        \
     do {                                                                       \
@@ -95,113 +97,105 @@ bitset_define(frames, NUM_FRAM_TYPES);
 #else
 extern void __attribute__((nonnull(2)))
 log_stream_or_crypto_frame(const bool is_rtx,
-                           const struct w_iov * const v,
+                           const struct pkt_meta * const m,
+                           const uint8_t fl,
                            const int64_t sid,
                            const bool in,
                            const char * const kind);
 #endif
 
-struct pkt_meta;
-
-extern uint16_t __attribute__((nonnull))
+extern bool __attribute__((nonnull))
 dec_frames(struct q_conn * const c, struct w_iov ** vv, struct pkt_meta ** mm);
 
 extern uint16_t __attribute__((const)) max_frame_len(const uint8_t type);
 
-extern uint16_t __attribute__((nonnull))
-enc_padding_frame(struct w_iov * const v,
+extern void __attribute__((nonnull))
+enc_padding_frame(uint8_t ** pos,
+                  const uint8_t * const end,
                   struct pkt_meta * const m,
-                  const uint16_t pos,
                   const uint16_t len);
 
-extern uint16_t __attribute__((nonnull))
-enc_ack_frame(struct pn_space * const pn,
-              struct w_iov * const v,
-              struct pkt_meta * const m,
-              const uint16_t pos);
+extern void __attribute__((nonnull)) enc_ack_frame(uint8_t ** pos,
+                                                   const uint8_t * const start,
+                                                   const uint8_t * const end,
+                                                   struct pkt_meta * const m,
+                                                   struct pn_space * const pn);
 
-extern uint16_t __attribute__((nonnull))
-enc_stream_or_crypto_frame(struct q_stream * const s,
-                           struct w_iov * const v,
+extern void __attribute__((nonnull))
+enc_stream_or_crypto_frame(uint8_t ** pos,
+                           const uint8_t * const end,
                            struct pkt_meta * const m,
-                           const uint16_t pos,
+                           struct w_iov * const v,
+                           struct q_stream * const s,
                            const bool enc_strm);
 
-extern uint16_t __attribute__((nonnull))
-enc_close_frame(struct w_iov * const v,
-                struct pkt_meta * const m,
-                const uint16_t pos);
+extern void __attribute__((nonnull)) enc_close_frame(uint8_t ** pos,
+                                                     const uint8_t * const end,
+                                                     struct pkt_meta * const m);
 
-extern uint16_t __attribute__((nonnull))
-enc_path_response_frame(const struct w_iov * const v,
-                        struct pkt_meta * const m,
-                        const uint16_t pos);
+extern void __attribute__((nonnull))
+enc_path_response_frame(uint8_t ** pos,
+                        const uint8_t * const end,
+                        struct pkt_meta * const m);
 
-extern uint16_t __attribute__((nonnull))
-enc_max_stream_data_frame(struct q_stream * const s,
-                          struct w_iov * const v,
+extern void __attribute__((nonnull))
+enc_max_stream_data_frame(uint8_t ** pos,
+                          const uint8_t * const end,
                           struct pkt_meta * const m,
-                          const uint16_t pos);
+                          struct q_stream * const s);
 
-extern uint16_t __attribute__((nonnull))
-enc_max_data_frame(struct w_iov * const v,
-                   struct pkt_meta * const m,
-                   const uint16_t pos);
+extern void __attribute__((nonnull))
+enc_max_data_frame(uint8_t ** pos,
+                   const uint8_t * const end,
+                   struct pkt_meta * const m);
 
-extern uint16_t __attribute__((nonnull))
-enc_max_streams_frame(struct w_iov * const v,
+extern void __attribute__((nonnull))
+enc_max_streams_frame(uint8_t ** pos,
+                      const uint8_t * const end,
                       struct pkt_meta * const m,
-                      const uint16_t pos,
                       const bool bidi);
 
-extern uint16_t __attribute__((nonnull))
-enc_stream_data_blocked_frame(struct q_stream * const s,
-                              const struct w_iov * const v,
+extern void __attribute__((nonnull))
+enc_stream_data_blocked_frame(uint8_t ** pos,
+                              const uint8_t * const end,
                               struct pkt_meta * const m,
-                              const uint16_t pos);
+                              struct q_stream * const s);
 
-extern uint16_t __attribute__((nonnull))
-enc_data_blocked_frame(const struct w_iov * const v,
-                       struct pkt_meta * const m,
-                       const uint16_t pos);
+extern void __attribute__((nonnull))
+enc_data_blocked_frame(uint8_t ** pos,
+                       const uint8_t * const end,
+                       struct pkt_meta * const m);
 
-extern uint16_t __attribute__((nonnull))
-enc_streams_blocked_frame(const struct w_iov * const v,
+extern void __attribute__((nonnull))
+enc_streams_blocked_frame(uint8_t ** pos,
+                          const uint8_t * const end,
                           struct pkt_meta * const m,
-                          const uint16_t pos,
                           const bool bidi);
 
-extern uint16_t __attribute__((nonnull))
-enc_path_challenge_frame(const struct w_iov * const v,
-                         struct pkt_meta * const m,
-                         const uint16_t pos);
+extern void __attribute__((nonnull))
+enc_path_challenge_frame(uint8_t ** pos,
+                         const uint8_t * const end,
+                         struct pkt_meta * const m);
 
-extern uint16_t __attribute__((nonnull))
-enc_new_cid_frame(const struct w_iov * const v,
-                  struct pkt_meta * const m,
-                  const uint16_t pos);
+extern void __attribute__((nonnull))
+enc_new_cid_frame(uint8_t ** pos,
+                  const uint8_t * const end,
+                  struct pkt_meta * const m);
 
-extern uint16_t __attribute__((nonnull))
-enc_new_token_frame(const struct w_iov * const v,
-                    struct pkt_meta * const m,
-                    const uint16_t pos);
+extern void __attribute__((nonnull))
+enc_new_token_frame(uint8_t ** pos,
+                    const uint8_t * const end,
+                    struct pkt_meta * const m);
 
-extern uint16_t __attribute__((nonnull))
-enc_retire_cid_frame(const struct w_iov * const v,
+extern void __attribute__((nonnull))
+enc_retire_cid_frame(uint8_t ** pos,
+                     const uint8_t * const end,
                      struct pkt_meta * const m,
-                     const uint16_t pos,
                      struct cid * const dcid);
 
-extern uint16_t __attribute__((nonnull))
-enc_ping_frame(const struct w_iov * const v,
-               struct pkt_meta * const m,
-               const uint16_t pos);
-
-extern uint16_t __attribute__((nonnull))
-dec_ack_frame(const struct w_iov * const v,
-              const struct pkt_meta * const m,
-              const uint16_t pos);
-
+extern void __attribute__((nonnull)) enc_ping_frame(uint8_t ** pos,
+                                                    const uint8_t * const end,
+                                                    struct pkt_meta * const m);
 
 static inline bool __attribute__((nonnull))
 is_ack_eliciting(const struct frames * const f)

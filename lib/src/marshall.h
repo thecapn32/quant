@@ -27,19 +27,28 @@
 
 #pragma once
 
+#include <arpa/inet.h>
+#include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 
+#include <warpcore/warpcore.h>
 
 #ifndef NDEBUG
-// #define DEBUG_MARSHALL
+#define DEBUG_MARSHALL
 #endif
 
 
-#define VARINT1_MAX 0x3fU
-#define VARINT2_MAX 0x3FFFU
-#define VARINT4_MAX 0x3fffffffUL
-#define VARINT8_MAX 0x3fffffffffffffffULL
+#define VARINT1_MAX 0x3f
+#define VARINT2_MAX UINT16_C(0x3FFF)
+#define VARINT4_MAX UINT32_C(0x3fffffff)
+#define VARINT8_MAX UINT64_C(0x3fffffffffffffff)
 #define VARINT_MAX VARINT8_MAX
+
+#define VARINT_MASK UINT64_C(0xc000000000000000)
+#define VARINT_MASK8 UINT64_C(0x3fffffffc0000000)
+#define VARINT_MASK4 UINT64_C(0x000000003fffc000)
+#define VARINT_MASK2 UINT64_C(0x0000000000003fc0)
 
 
 // Computes number of bytes need to enccode @p v in QUIC varint encoding.
@@ -48,8 +57,7 @@
 ///
 /// @return     Number of bytes needed in varint encoding (1, 2, 4 or 8).
 ///
-static inline uint8_t __attribute__((const))
-varint_size_needed(const uint64_t v)
+static inline uint8_t __attribute__((const)) varint_size(const uint64_t v)
 {
     if (v <= VARINT1_MAX)
         return 1;
@@ -61,200 +69,261 @@ varint_size_needed(const uint64_t v)
 }
 
 
-#ifdef DEBUG_MARSHALL
-/// Encodes @p src in host byte-order data into network byte-order at at
-/// position @p pos of buffer @p buf (which has total length @p buf_len), using
-/// printf format string @p fmt to format the data for debug logging.
-///
-/// @p src_len must be sizeof(src) for fixed-length encoding, or zero for
-/// "varint" encoding, in which case @p src must be uint64_t. In the latter
-/// case, if @p enc_len is zero, the "varint" encoding will use the minimal
-/// number of bytes necessary, otherwise, it will encode into @p enc_len bytes.
-///
-/// @param      buf      Buffer to encode into.
-/// @param      buf_len  Buffer length.
-/// @param      pos      Buffer position to start encoding from.
-/// @param      src      Source data.
-/// @param      src_len  Length of @p src (zero means "varint" encoding).
-/// @param      enc_len  Length to encode (only affects "varint" encoding).
-/// @param      fmt      Printf format for debug logging.
-///
-/// @return     Buffer offset of byte following the encoded data.
-///
-#define enc(buf, buf_len, pos, src, src_len, enc_len, fmt)                     \
-    marshall_enc((buf), (buf_len), (pos), (src), (src_len), (enc_len),         \
-                 "enc %.*s = " fmt NRM " into %u byte%s (%s) at %.*s[%u..%u]", \
-                 __func__, __FILE__, __LINE__, #buf, #src)
-#else
-#define enc(buf, buf_len, pos, src, src_len, enc_len, fmt)                     \
-    marshall_enc((buf), (buf_len), (pos), (src), (src_len), (enc_len))
-#endif
+static inline void __attribute__((nonnull))
+enc1(uint8_t ** pos, const uint8_t * const end, const uint8_t val)
+{
+    ensure(*pos + sizeof(val) <= end, "buffer overflow");
+    **pos = val;
+    *pos += sizeof(val);
+}
 
 
-extern uint16_t __attribute__((nonnull
-#ifdef DEBUG_MARSHALL
-                               ,
-                               format(printf, 7, 0)
-#endif
-                                   )) marshall_enc(uint8_t * const buf,
-                                                   const uint16_t buf_len,
-                                                   const uint16_t pos,
-                                                   const void * const src,
-                                                   const uint8_t src_len,
-                                                   const uint8_t enc_len
-#ifdef DEBUG_MARSHALL
-                                                   ,
-                                                   const char * const fmt,
-                                                   const char * const func,
-                                                   const char * const file,
-                                                   const unsigned line,
-                                                   const char * buf_str,
-                                                   const char * src_str
-#endif
-);
+static inline void __attribute__((nonnull))
+enc2(uint8_t ** pos, const uint8_t * const end, const uint16_t val)
+{
+    ensure(*pos + sizeof(val) <= end, "buffer overflow");
+    const uint16_t v = htons(val);
+    memcpy(*pos, &v, sizeof(v));
+    *pos += sizeof(val);
+}
 
 
-#ifdef DEBUG_MARSHALL
-/// Encodes @p src raw data into position @p pos of buffer @p buf (which has
-/// total length @p buf_len), using printf format string @p fmt to format the
-/// data for debug logging.
-///
-/// @param      buf      Buffer to encode into.
-/// @param      buf_len  Buffer length.
-/// @param      pos      Buffer position to start encoding from.
-/// @param      src      Source data.
-/// @param      enc_len  Length to encode.
-///
-/// @return     Buffer offset of byte following the encoded data.
-///
-#define enc_buf(buf, buf_len, pos, src, enc_len)                               \
-    marshall_enc_buf((buf), (buf_len), (pos), (src), (enc_len),                \
-                     "enc %.*s = %s into %u byte%s (%s) at %.*s[%u..%u]",      \
-                     __func__, __FILE__, __LINE__, #buf, #src)
-#else
-#define enc_buf(buf, buf_len, pos, src, enc_len)                               \
-    marshall_enc_buf((buf), (buf_len), (pos), (src), (enc_len))
-#endif
+static inline void __attribute__((nonnull))
+enc3(uint8_t ** pos, const uint8_t * const end, const uint32_t val)
+{
+    ensure(*pos + 3 <= end, "buffer overflow");
+    const uint32_t v = htonl(val);
+    memcpy(*pos, &v, 3);
+    *pos += 3;
+}
 
 
-extern uint16_t __attribute__((nonnull
-#ifdef DEBUG_MARSHALL
-                               ,
-                               format(printf, 6, 0)
-#endif
-
-                                   )) marshall_enc_buf(uint8_t * const buf,
-                                                       const uint16_t buf_len,
-                                                       const uint16_t pos,
-                                                       const void * const src,
-                                                       const uint16_t enc_len
-#ifdef DEBUG_MARSHALL
-                                                       ,
-                                                       const char * const fmt,
-                                                       const char * const func,
-                                                       const char * const file,
-                                                       const unsigned line,
-                                                       const char * buf_str,
-                                                       const char * src_str
-#endif
-);
+static inline void __attribute__((nonnull))
+enc4(uint8_t ** pos, const uint8_t * const end, const uint32_t val)
+{
+    ensure(*pos + sizeof(val) <= end, "buffer overflow");
+    const uint32_t v = htonl(val);
+    memcpy(*pos, &v, sizeof(v));
+    *pos += sizeof(val);
+}
 
 
-#ifdef DEBUG_MARSHALL
-/// Decodes @p dst_len bytes (if given, otherwise varint encoding is assumed) of
-/// network byte-order data starting at position @p pos of buffer @p buf (which
-/// has total length @p buf_len) info variable @p dst in host byte-order, using
-/// printf format string @p fmt to format the data for debug logging.
-///
-/// For varint decoding (@p dst_len is zero), @p dst *must* point to an
-/// uint64_t.
-///
-/// @param      dst      Destination to decode into.
-/// @param      buf      Buffer to decode from.
-/// @param      buf_len  Buffer length.
-/// @param      pos      Buffer position to start decoding from.
-/// @param      dst_len  Length to decode. Zero for varint decoding.
-/// @param      fmt      Printf format for debug logging.
-///
-/// @return     Buffer offset of byte following the decoded data, or UINT16_MAX
-///             if the decoding failed.
-///
-#define dec(dst, buf, buf_len, pos, dst_len, fmt)                              \
-    marshall_dec((dst), (buf), (buf_len), (pos), (dst_len),                    \
-                 "dec %u byte%s (%s) from %.*s[%u..%u] into %.*s = " fmt NRM,  \
-                 __func__, __FILE__, __LINE__, #buf, #dst)
-#else
-#define dec(dst, buf, buf_len, pos, dst_len, fmt)                              \
-    marshall_dec((dst), (buf), (buf_len), (pos), (dst_len))
-
-#endif
+static inline void __attribute__((nonnull))
+enc8(uint8_t ** pos, const uint8_t * const end, const uint64_t val)
+{
+    ensure(*pos + sizeof(val) <= end, "buffer overflow");
+    const uint64_t v = htonll(val);
+    memcpy(*pos, &v, sizeof(v));
+    *pos += sizeof(val);
+}
 
 
-extern uint16_t __attribute__((nonnull
-#ifdef DEBUG_MARSHALL
-                               ,
-                               format(printf, 6, 0)
-#endif
-                                   )) marshall_dec(void * const dst,
-                                                   const uint8_t * const buf,
-                                                   const uint16_t buf_len,
-                                                   const uint16_t pos,
-                                                   const uint8_t dst_len
-#ifdef DEBUG_MARSHALL
-                                                   ,
-                                                   const char * const fmt,
-                                                   const char * const func,
-                                                   const char * const file,
-                                                   const unsigned line,
-                                                   const char * buf_str,
-                                                   const char * dst_str
-#endif
-);
+static inline void __attribute__((nonnull))
+encv(uint8_t ** pos, const uint8_t * const end, const uint64_t val)
+{
+    ensure((val & VARINT_MASK) == 0, "value overflow");
+
+    if ((val & VARINT_MASK8) != 0) {
+        ensure(*pos + 8 <= end, "buffer overflow");
+        *(*pos + 0) = ((val >> 56) & 0x3f) + 0xc0;
+        *(*pos + 1) = (val >> 48) & 0xff;
+        *(*pos + 2) = (val >> 40) & 0xff;
+        *(*pos + 3) = (val >> 32) & 0xff;
+        *(*pos + 4) = (val >> 24) & 0xff;
+        *(*pos + 5) = (val >> 16) & 0xff;
+        *(*pos + 6) = (val >> 8) & 0xff;
+        *(*pos + 7) = val & 0xff;
+        *pos += 8;
+        return;
+    }
+
+    if ((val & VARINT_MASK4) != 0) {
+        ensure(*pos + 4 <= end, "buffer overflow");
+        *(*pos + 0) = ((val >> 24) & 0x3f) + 0x80;
+        *(*pos + 1) = (val >> 16) & 0xff;
+        *(*pos + 2) = (val >> 8) & 0xff;
+        *(*pos + 3) = val & 0xff;
+        *pos += 4;
+        return;
+    }
+
+    if ((val & VARINT_MASK2) != 0) {
+        ensure(*pos + 2 <= end, "buffer overflow");
+        *(*pos + 0) = ((val >> 8) & 0x3f) + 0x40;
+        *(*pos + 1) = val & 0xff;
+        *pos += 2;
+        return;
+    }
+
+    ensure(*pos + 1 <= end, "buffer overflow");
+    **pos = val & 0x3f;
+    *pos += 1;
+}
 
 
-#ifdef DEBUG_MARSHALL
-/// Decodes @p dst_len bytes of raw data starting at position @p pos of buffer
-/// @p buf (which has total length @p buf_len) info variable @p dst, using
-/// printf format string @p fmt to format the data for debug logging.
-///
-/// @param      dst      Destination to decode into.
-/// @param      buf      Buffer to decode from.
-/// @param      buf_len  Buffer length.
-/// @param      pos      Buffer position to start decoding from.
-/// @param      dst_len  Length to decode. Zero for varint decoding.
-///
-/// @return     Buffer offset of byte following the decoded data, or UINT16_MAX
-///             if the decoding failed.
-///
-#define dec_buf(dst, buf, buf_len, pos, dst_len)                               \
-    marshall_dec_buf((dst), (buf), (buf_len), (pos), (dst_len),                \
-                     "dec %u byte%s (%s) from %.*s[%u..%u] into %.*s = %s",    \
-                     __func__, __FILE__, __LINE__, #buf, #dst)
-#else
-#define dec_buf(dst, buf, buf_len, pos, dst_len)                               \
-    marshall_dec_buf((dst), (buf), (buf_len), (pos), (dst_len))
-#endif
+static inline void __attribute__((nonnull)) encvl(uint8_t ** pos,
+                                                  const uint8_t * const end,
+                                                  const uint64_t val,
+                                                  const uint8_t len)
+{
+    const uint8_t len_needed = varint_size(val);
+    ensure(len_needed <= len, "value/len mismatch");
+
+    if (len_needed == len) {
+        encv(pos, end, val);
+        return;
+    }
+
+    if (len == 2) {
+        enc1(pos, end, 0x40);
+        enc1(pos, end, (uint8_t)val);
+        return;
+    }
+
+    if (len == 4) {
+        enc1(pos, end, 0x80);
+        enc1(pos, end, 0x00);
+        enc2(pos, end, (uint16_t)val);
+        return;
+    }
+
+    if (len == 8) {
+        enc1(pos, end, 0xC0);
+        enc1(pos, end, 0x00);
+        enc2(pos, end, 0x00);
+        enc4(pos, end, (uint32_t)val);
+        return;
+    }
+}
 
 
-extern uint16_t __attribute__((nonnull
-#ifdef DEBUG_MARSHALL
-                               ,
-                               format(printf, 6, 0)
-#endif
+static inline void __attribute__((nonnull)) encb(uint8_t ** pos,
+                                                 const uint8_t * const end,
+                                                 const uint8_t * const val,
+                                                 const uint16_t len)
+{
+    ensure(*pos + len <= end, "buffer overflow");
+    memcpy(*pos, val, len);
+    *pos += len;
+}
 
-                                   ))
-marshall_dec_buf(void * const dst,
-                 const uint8_t * const buf,
-                 const uint16_t buf_len,
-                 const uint16_t pos,
-                 const uint16_t dst_len
-#ifdef DEBUG_MARSHALL
-                 ,
-                 const char * const fmt,
-                 const char * const func,
-                 const char * const file,
-                 const unsigned line,
-                 const char * buf_str,
-                 const char * dst_str
-#endif
-);
+
+static inline bool __attribute__((nonnull))
+dec1(uint8_t * const val, const uint8_t ** const pos, const uint8_t * const end)
+{
+    if (unlikely(*pos + sizeof(*val) > end))
+        return false;
+    *val = **pos;
+    *pos += sizeof(*val);
+    return true;
+}
+
+
+static inline bool __attribute__((nonnull)) dec2(uint16_t * const val,
+                                                 const uint8_t ** const pos,
+                                                 const uint8_t * const end)
+{
+    if (unlikely(*pos + sizeof(*val) > end))
+        return false;
+    memcpy(val, *pos, sizeof(*val));
+    *val = ntohs(*val);
+    *pos += sizeof(*val);
+    return true;
+}
+
+
+static inline bool __attribute__((nonnull)) dec3(uint32_t * const val,
+                                                 const uint8_t ** const pos,
+                                                 const uint8_t * const end)
+{
+    if (unlikely(*pos + 3 > end))
+        return false;
+    memcpy(val, *pos, 3);
+    *val = ntohs(*val);
+    *pos += 3;
+    return true;
+}
+
+
+static inline bool __attribute__((nonnull)) dec4(uint32_t * const val,
+                                                 const uint8_t ** const pos,
+                                                 const uint8_t * const end)
+{
+    if (unlikely(*pos + sizeof(*val) > end))
+        return false;
+    memcpy(val, *pos, sizeof(*val));
+    *val = ntohl(*val);
+    *pos += sizeof(*val);
+    return true;
+}
+
+
+static inline bool __attribute__((nonnull)) dec8(uint64_t * const val,
+                                                 const uint8_t ** const pos,
+                                                 const uint8_t * const end)
+{
+    if (unlikely(*pos + sizeof(*val) > end))
+        return false;
+    memcpy(val, *pos, sizeof(*val));
+    *val = ntohll(*val);
+    *pos += sizeof(*val);
+    return true;
+}
+
+
+static inline bool __attribute__((nonnull)) decv(uint64_t * const val,
+                                                 const uint8_t ** const pos,
+                                                 const uint8_t * const end)
+{
+    switch (**pos & 0xc0) {
+    case 0xc0:
+        if (unlikely(*pos + 8 > end))
+            return false;
+        *val =
+            ((uint64_t)(*(*pos + 0) & 0x3f) << 56) +
+            ((uint64_t)(*(*pos + 1)) << 48) + ((uint64_t)(*(*pos + 1)) << 48) +
+            ((uint64_t)(*(*pos + 2)) << 40) + ((uint64_t)(*(*pos + 3)) << 32) +
+            ((uint64_t)(*(*pos + 4)) << 24) + ((uint64_t)(*(*pos + 5)) << 16) +
+            ((uint64_t)(*(*pos + 6)) << 8) + ((uint64_t)(*(*pos + 7)) << 0);
+        *pos += 8;
+        return true;
+
+    case 0x80:
+        if (unlikely(*pos + 4 > end))
+            return false;
+        *val = ((uint64_t)(*(*pos + 0) & 0x3f) << 24) +
+               ((uint64_t)(*(*pos + 1)) << 16) +
+               ((uint64_t)(*(*pos + 2)) << 8) + ((uint64_t)(*(*pos + 3)) << 0);
+        *pos += 4;
+        return true;
+
+    case 0x40:
+        if (unlikely(*pos + 2 > end))
+            return false;
+        *val = ((uint64_t)(*(*pos + 0) & 0x3f) << 8) + (uint64_t)(*(*pos + 1));
+        *pos += 2;
+        return true;
+
+    case 0x00:
+        if (unlikely(*pos + 1 > end))
+            return false;
+        *val = (**pos) & 0x3f;
+        *pos += 1;
+        return true;
+    }
+
+    return false;
+}
+
+
+static inline bool __attribute__((nonnull)) decb(uint8_t * const val,
+                                                 const uint8_t ** const pos,
+                                                 const uint8_t * const end,
+                                                 const uint16_t len)
+{
+    if (unlikely(*pos + len > end))
+        return false;
+    memcpy(val, *pos, len);
+    *pos += len;
+    return true;
+}

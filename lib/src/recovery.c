@@ -127,18 +127,18 @@ void set_ld_timer(struct q_conn * const c)
 
     // see SetLossDetectionTimer() pseudo code
 
-    // const char * type = BLD RED "???" NRM;
+    const char * type = BLD RED "???" NRM;
     ev_tstamp loss_t;
     earliest_loss_t(c, &loss_t);
 
     if (!is_zero(loss_t)) {
-        // type = "TT";
+        type = "TT";
         c->rec.ld_alarm.repeat = loss_t;
         goto set_to;
     }
 
     if (unlikely(crypto_pkts_in_flight(c) || have_keys(c, ep_data) == false)) {
-        // type = "crypto RTX";
+        type = "crypto RTX";
         ev_tstamp to =
             2 * (unlikely(is_zero(c->rec.srtt)) ? kInitialRtt : c->rec.srtt);
         to = MAX(to, kGranularity) * (1 << c->rec.crypto_cnt);
@@ -148,12 +148,12 @@ void set_ld_timer(struct q_conn * const c)
 
     // don't arm the alarm if there are no ack-eliciting packets in flight
     if (unlikely(c->rec.ae_in_flight == 0)) {
-        // warn(DBG, "no RTX-able pkts outstanding, stopping ld_alarm");
+        warn(DBG, "no RTX-able pkts outstanding, stopping ld_alarm");
         ev_timer_stop(loop, &c->rec.ld_alarm);
         return;
     }
 
-    // type = "PTO";
+    type = "PTO";
     ev_tstamp to = c->rec.srtt + MAX(4 * c->rec.rttvar, kGranularity) +
                    (double)c->tp_out.max_ack_del / MSECS_PER_SEC;
     to = MAX(to, kGranularity) * (1 << c->rec.pto_cnt);
@@ -162,9 +162,9 @@ void set_ld_timer(struct q_conn * const c)
 set_to:
     c->rec.ld_alarm.repeat -= ev_now(loop);
 
-    // warn(DBG, "%s alarm in %f sec on %s conn %s", type,
-    //      c->rec.ld_alarm.repeat < 0 ? 0 : c->rec.ld_alarm.repeat,
-    //      conn_type(c), cid2str(c->scid));
+    warn(DBG, "%s alarm in %f sec on %s conn %s", type,
+         c->rec.ld_alarm.repeat < 0 ? 0 : c->rec.ld_alarm.repeat, conn_type(c),
+         cid2str(c->scid));
     if (c->rec.ld_alarm.repeat <= 0)
         ev_invoke(loop, &c->rec.ld_alarm, true);
     else
@@ -329,20 +329,21 @@ static inline void __attribute__((nonnull))
 track_acked_pkts(struct w_iov * const v, struct pkt_meta * const m)
 {
     adj_iov_to_start(v, m);
+    const uint8_t * pos = v->buf + m->ack_block_pos;
+    const uint8_t * const end = v->buf + v->len;
 
     // this is a similar loop as in dec_ack_frame() - keep changes in sync
     uint64_t lg_ack_in_block = m->lg_acked;
-    uint16_t i = m->ack_block_pos;
     for (uint64_t n = m->ack_block_cnt + 1; n > 0; n--) {
         uint64_t ack_block_len = 0;
-        i = dec(&ack_block_len, v->buf, v->len, i, 0, "%" PRIu64);
+        decv(&ack_block_len, &pos, end);
         diet_remove_ival(
             &m->pn->recv,
             &(const struct ival){.lo = lg_ack_in_block - ack_block_len,
                                  .hi = lg_ack_in_block});
         if (n > 1) {
             uint64_t gap = 0;
-            i = dec(&gap, v->buf, v->len, i, 0, "%" PRIu64);
+            decv(&gap, &pos, end);
             lg_ack_in_block = lg_ack_in_block - ack_block_len - gap - 2;
         }
     }

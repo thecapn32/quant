@@ -74,22 +74,21 @@ void log_pkt(const char * const dir,
            "getnameinfo");
 
     const struct pkt_meta * const m = &meta(v); // meta use OK
+    const char * const pts = pkt_type_str(m->hdr.flags, &m->hdr.vers);
     if (*dir == 'R') {
         if (is_lh(m->hdr.flags)) {
             if (m->hdr.vers == 0)
                 twarn(NTE,
                       BLD BLU "RX" NRM " from=%s:%s len=%u 0x%02x=" BLU
                               "%s " NRM "vers=0x%08x dcid=%s scid=%s",
-                      ip, port, v->len, m->hdr.flags,
-                      pkt_type_str(m->hdr.flags, &m->hdr.vers), m->hdr.vers,
+                      ip, port, v->len, m->hdr.flags, pts, m->hdr.vers,
                       c2s(&m->hdr.dcid), c2s(&m->hdr.scid));
             else if (m->hdr.type == LH_RTRY)
                 twarn(NTE,
                       BLD BLU "RX" NRM " from=%s:%s len=%u 0x%02x=" BLU
                               "%s " NRM
                               "vers=0x%08x dcid=%s scid=%s odcid=%s tok=%s",
-                      ip, port, v->len, m->hdr.flags,
-                      pkt_type_str(m->hdr.flags, &m->hdr.vers), m->hdr.vers,
+                      ip, port, v->len, m->hdr.flags, pts, m->hdr.vers,
                       c2s(&m->hdr.dcid), c2s(&m->hdr.scid), c2s(odcid),
                       hex2str(tok, tok_len));
             else if (m->hdr.type == LH_INIT)
@@ -98,8 +97,7 @@ void log_pkt(const char * const dir,
                       "RX" NRM " from=%s:%s len=%u 0x%02x=" BLU "%s " NRM
                       "vers=0x%08x dcid=%s scid=%s tok=%s len=%u nr=" BLU
                       "%" PRIu64,
-                      ip, port, v->len, m->hdr.flags,
-                      pkt_type_str(m->hdr.flags, &m->hdr.vers), m->hdr.vers,
+                      ip, port, v->len, m->hdr.flags, pts, m->hdr.vers,
                       c2s(&m->hdr.dcid), c2s(&m->hdr.scid),
                       hex2str(tok, tok_len), m->hdr.len, m->hdr.nr);
             else
@@ -107,16 +105,14 @@ void log_pkt(const char * const dir,
                       BLD BLU
                       "RX" NRM " from=%s:%s len=%u 0x%02x=" BLU "%s " NRM
                       "vers=0x%08x dcid=%s scid=%s len=%u nr=" BLU "%" PRIu64,
-                      ip, port, v->len, m->hdr.flags,
-                      pkt_type_str(m->hdr.flags, &m->hdr.vers), m->hdr.vers,
+                      ip, port, v->len, m->hdr.flags, pts, m->hdr.vers,
                       c2s(&m->hdr.dcid), c2s(&m->hdr.scid), m->hdr.len,
                       m->hdr.nr);
         } else
             twarn(NTE,
                   BLD BLU "RX" NRM " from=%s:%s len=%u 0x%02x=" BLU "%s " NRM
                           "kyph=%u spin=%u dcid=%s nr=" BLU "%" PRIu64,
-                  ip, port, v->len, m->hdr.flags,
-                  pkt_type_str(m->hdr.flags, &m->hdr.vers),
+                  ip, port, v->len, m->hdr.flags, pts,
                   is_set(SH_KYPH, m->hdr.flags), is_set(SH_SPIN, m->hdr.flags),
                   c2s(&m->hdr.dcid), m->hdr.nr);
 
@@ -127,15 +123,13 @@ void log_pkt(const char * const dir,
                 twarn(NTE,
                       BLD GRN "TX" NRM " to=%s:%s 0x%02x=" GRN "%s " NRM
                               "vers=0x%08x dcid=%s scid=%s",
-                      ip, port, m->hdr.flags,
-                      pkt_type_str(m->hdr.flags, &m->hdr.vers), m->hdr.vers,
+                      ip, port, m->hdr.flags, pts, m->hdr.vers,
                       c2s(&m->hdr.dcid), c2s(&m->hdr.scid));
             else if (m->hdr.type == LH_RTRY)
                 twarn(NTE,
                       BLD GRN "TX" NRM " to=%s:%s 0x%02x=" GRN "%s " NRM
                               "vers=0x%08x dcid=%s scid=%s odcid=%s tok=%s",
-                      ip, port, m->hdr.flags,
-                      pkt_type_str(m->hdr.flags, &m->hdr.vers), m->hdr.vers,
+                      ip, port, m->hdr.flags, pts, m->hdr.vers,
                       c2s(&m->hdr.dcid), c2s(&m->hdr.scid), c2s(odcid),
                       hex2str(tok, tok_len));
             else if (m->hdr.type == LH_INIT)
@@ -144,8 +138,7 @@ void log_pkt(const char * const dir,
                       "TX" NRM " to=%s:%s 0x%02x=" GRN "%s " NRM
                       "vers=0x%08x dcid=%s scid=%s tok=%s len=%u nr=" GRN
                       "%" PRIu64,
-                      ip, port, m->hdr.flags,
-                      pkt_type_str(m->hdr.flags, &m->hdr.vers), m->hdr.vers,
+                      ip, port, m->hdr.flags, pts, m->hdr.vers,
                       c2s(&m->hdr.dcid), c2s(&m->hdr.scid),
                       hex2str(tok, tok_len), m->hdr.len, m->hdr.nr);
             else
@@ -153,18 +146,15 @@ void log_pkt(const char * const dir,
                       BLD GRN "TX" NRM " to=%s:%s 0x%02x=" GRN "%s " NRM
                               "vers=0x%08x dcid=%s scid=%s len=%u nr=" GRN
                               "%" PRIu64,
-                      ip, port, m->hdr.flags,
-                      pkt_type_str(m->hdr.flags, &m->hdr.vers), m->hdr.vers,
+                      ip, port, m->hdr.flags, pts, m->hdr.vers,
                       c2s(&m->hdr.dcid), c2s(&m->hdr.scid), m->hdr.len,
                       m->hdr.nr);
         } else
             twarn(NTE,
                   BLD GRN "TX" NRM " to=%s:%s 0x%02x=" GRN "%s " NRM
                           "kyph=%u spin=%u dcid=%s nr=" GRN "%" PRIu64,
-                  ip, port, m->hdr.flags,
-                  pkt_type_str(m->hdr.flags, &m->hdr.vers),
-                  is_set(SH_KYPH, m->hdr.flags), is_set(SH_SPIN, m->hdr.flags),
-                  c2s(&m->hdr.dcid), m->hdr.nr);
+                  ip, port, m->hdr.flags, pts, is_set(SH_KYPH, m->hdr.flags),
+                  is_set(SH_SPIN, m->hdr.flags), c2s(&m->hdr.dcid), m->hdr.nr);
     }
 }
 #endif
@@ -224,11 +214,11 @@ needed_pkt_nr_len(const uint64_t lg_acked, const uint64_t n)
 }
 
 
-uint16_t enc_lh_cids(const struct cid * const dcid,
-                     const struct cid * const scid,
-                     struct w_iov * const v,
-                     struct pkt_meta * const m,
-                     const uint16_t pos)
+void enc_lh_cids(uint8_t ** pos,
+                 const uint8_t * const end,
+                 struct pkt_meta * const m,
+                 const struct cid * const dcid,
+                 const struct cid * const scid)
 {
     cid_cpy(&m->hdr.dcid, dcid);
     if (scid)
@@ -236,87 +226,80 @@ uint16_t enc_lh_cids(const struct cid * const dcid,
     const uint8_t cil =
         (uint8_t)((m->hdr.dcid.len ? m->hdr.dcid.len - 3 : 0) << 4) |
         (uint8_t)(m->hdr.scid.len ? m->hdr.scid.len - 3 : 0);
-    uint16_t i = enc(v->buf, v->len, pos, &cil, sizeof(cil), 0, "0x%02x");
+    enc1(pos, end, cil);
     if (m->hdr.dcid.len)
-        i = enc_buf(v->buf, v->len, i, &m->hdr.dcid.id, m->hdr.dcid.len);
+        encb(pos, end, m->hdr.dcid.id, m->hdr.dcid.len);
     if (m->hdr.scid.len)
-        i = enc_buf(v->buf, v->len, i, &m->hdr.scid.id, m->hdr.scid.len);
-    return i;
+        encb(pos, end, m->hdr.scid.id, m->hdr.scid.len);
 }
 
 
-static bool __attribute__((nonnull)) can_enc(const struct pkt_meta * const m,
+static bool __attribute__((nonnull)) can_enc(uint8_t ** const pos,
+                                             const uint8_t * const end,
+                                             const struct pkt_meta * const m,
                                              const uint8_t type,
-                                             const bool one_per_pkt,
-                                             const uint16_t pos,
-                                             const uint16_t limit)
+                                             const bool one_per_pkt)
 {
-    const bool has_space = limit == 0 || pos + max_frame_len(type) < limit;
-    // if (has_space == false)
-    //     warn(DBG, "missing %u bytes to encode 0x%02x frame",
-    //          pos + max_frame_len(type) - limit, type);
+    const bool has_space = *pos + max_frame_len(type) <= end;
     return (one_per_pkt == false || has_frame(m, type) == false) && has_space;
 }
 
 
-static uint16_t __attribute__((nonnull))
-enc_other_frames(struct w_iov * const v,
-                 struct pkt_meta * const m,
-                 const uint16_t pos,
-                 const uint16_t lim)
+static void __attribute__((nonnull)) enc_other_frames(uint8_t ** pos,
+                                                      const uint8_t * const end,
+                                                      struct pkt_meta * const m)
 {
-    uint16_t i = pos;
     struct q_conn * const c = m->pn->c;
 
     // encode connection control frames
-    if (!c->is_clnt && c->tok_len && can_enc(m, FRM_TOK, true, i, lim)) {
-        i = enc_new_token_frame(v, m, i);
+    if (!c->is_clnt && c->tok_len && can_enc(pos, end, m, FRM_TOK, true)) {
+        enc_new_token_frame(pos, end, m);
         c->tok_len = 0;
     }
 
-    if (c->tx_path_resp && can_enc(m, FRM_PRP, true, i, lim)) {
-        i = enc_path_response_frame(v, m, i);
+    if (c->tx_path_resp && can_enc(pos, end, m, FRM_PRP, true)) {
+        enc_path_response_frame(pos, end, m);
         c->tx_path_resp = false;
     }
 
-    if (c->tx_retire_cid && can_enc(m, FRM_RTR, true, i, lim)) {
+    if (c->tx_retire_cid && can_enc(pos, end, m, FRM_RTR, true)) {
         struct cid * rcid = splay_min(cids_by_seq, &c->dcids_by_seq);
         while (rcid && rcid->seq < c->dcid->seq) {
             struct cid * const next =
                 splay_next(cids_by_seq, &c->dcids_by_seq, rcid);
             if (rcid->retired) {
-                i = enc_retire_cid_frame(v, m, i, rcid);
+                enc_retire_cid_frame(pos, end, m, rcid);
                 free_dcid(c, rcid);
             }
             rcid = next;
         }
     }
 
-    if (c->tx_path_chlg && can_enc(m, FRM_PCL, true, i, lim))
-        i = enc_path_challenge_frame(v, m, i);
+    if (c->tx_path_chlg && can_enc(pos, end, m, FRM_PCL, true))
+        enc_path_challenge_frame(pos, end, m);
 
-    while (c->tx_ncid && can_enc(m, FRM_CID, false, i, lim)) {
-        i = enc_new_cid_frame(v, m, i);
+    while (c->tx_ncid && can_enc(pos, end, m, FRM_CID, false)) {
+        enc_new_cid_frame(pos, end, m);
         c->tx_ncid = needs_more_ncids(c);
     }
 
-    if (c->blocked && can_enc(m, FRM_CDB, true, i, lim))
-        i = enc_data_blocked_frame(v, m, i);
+    if (c->blocked && can_enc(pos, end, m, FRM_CDB, true))
+        enc_data_blocked_frame(pos, end, m);
 
-    if (c->tx_max_data && can_enc(m, FRM_MCD, true, i, lim))
-        i = enc_max_data_frame(v, m, i);
+    if (c->tx_max_data && can_enc(pos, end, m, FRM_MCD, true))
+        enc_max_data_frame(pos, end, m);
 
-    if (c->sid_blocked_bidi && can_enc(m, FRM_SBB, true, i, lim))
-        i = enc_streams_blocked_frame(v, m, i, true);
+    if (c->sid_blocked_bidi && can_enc(pos, end, m, FRM_SBB, true))
+        enc_streams_blocked_frame(pos, end, m, true);
 
-    if (c->sid_blocked_uni && can_enc(m, FRM_SBU, true, i, lim))
-        i = enc_streams_blocked_frame(v, m, i, false);
+    if (c->sid_blocked_uni && can_enc(pos, end, m, FRM_SBU, true))
+        enc_streams_blocked_frame(pos, end, m, false);
 
-    if (c->tx_max_sid_bidi && can_enc(m, FRM_MSB, true, i, lim))
-        i = enc_max_streams_frame(v, m, i, true);
+    if (c->tx_max_sid_bidi && can_enc(pos, end, m, FRM_MSB, true))
+        enc_max_streams_frame(pos, end, m, true);
 
-    if (c->tx_max_sid_uni && can_enc(m, FRM_MSU, true, i, lim))
-        i = enc_max_streams_frame(v, m, i, false);
+    if (c->tx_max_sid_uni && can_enc(pos, end, m, FRM_MSU, true))
+        enc_max_streams_frame(pos, end, m, false);
 
     while (!sl_empty(&c->need_ctrl)) {
         // XXX this assumes we can encode all the ctrl frames
@@ -324,13 +307,11 @@ enc_other_frames(struct w_iov * const v,
         sl_remove_head(&c->need_ctrl, node_ctrl);
         s->in_ctrl = false;
         // encode stream control frames
-        if (s->blocked && can_enc(m, FRM_SDB, true, i, lim))
-            i = enc_stream_data_blocked_frame(s, v, m, i);
-        if (s->tx_max_stream_data && can_enc(m, FRM_MSD, true, i, lim))
-            i = enc_max_stream_data_frame(s, v, m, i);
+        if (s->blocked && can_enc(pos, end, m, FRM_SDB, true))
+            enc_stream_data_blocked_frame(pos, end, m, s);
+        if (s->tx_max_stream_data && can_enc(pos, end, m, FRM_MSD, true))
+            enc_max_stream_data_frame(pos, end, m, s);
     }
-
-    return i;
 }
 
 
@@ -347,8 +328,7 @@ bool enc_pkt(struct q_stream * const s,
         adj_iov_to_start(v, m);
 
     struct q_conn * const c = s->c;
-    uint16_t i = 0;
-    uint16_t len_pos = 0;
+    uint8_t * len_pos = 0;
 
     const epoch_t epoch = strm_epoch(s);
     struct pn_space * const pn = m->pn = pn_for_epoch(c, epoch);
@@ -397,45 +377,58 @@ bool enc_pkt(struct q_stream * const s,
     const uint8_t pnl = needed_pkt_nr_len(pn->lg_acked, m->hdr.nr);
     m->hdr.flags |= (pnl - 1);
 
-    i = enc(v->buf, v->len, 0, &m->hdr.flags, sizeof(m->hdr.flags), 0,
-            "0x%02x");
+    uint8_t * pos = v->buf;
+    const uint8_t * const end =
+        v->buf + (enc_data ? m->stream_data_start : v->len);
+    enc1(&pos, end, m->hdr.flags);
 
     if (unlikely(is_lh(m->hdr.flags))) {
         m->hdr.vers = c->vers;
-        i = enc(v->buf, v->len, i, &c->vers, sizeof(c->vers), 0, "0x%08x");
-        i = enc_lh_cids(c->dcid, c->scid, v, m, i);
+        enc4(&pos, end, m->hdr.vers);
+        enc_lh_cids(&pos, end, m, c->dcid, c->scid);
 
-        if (m->hdr.type == LH_RTRY)
-            i = enc_buf(v->buf, v->len, i, &c->odcid.id, c->odcid.len);
+        if (unlikely(m->hdr.type == LH_RTRY))
+            encb(&pos, end, c->odcid.id, c->odcid.len);
 
-        if (m->hdr.type == LH_INIT) {
-            const uint64_t tl = c->is_clnt ? c->tok_len : 0;
-            i = enc(v->buf, v->len, i, &tl, 0, 0, "%" PRIu64);
-        }
+        if (m->hdr.type == LH_INIT)
+            encv(&pos, end, c->is_clnt ? c->tok_len : 0);
 
         if (((c->is_clnt && m->hdr.type == LH_INIT) ||
              m->hdr.type == LH_RTRY) &&
             c->tok_len)
-            i = enc_buf(v->buf, v->len, i, c->tok, c->tok_len);
+            encb(&pos, end, c->tok, c->tok_len);
 
         if (m->hdr.type != LH_RTRY) {
             // leave space for length field (2 bytes is enough)
-            len_pos = i;
-            i += 2;
+            len_pos = pos;
+            pos += 2;
         }
 
     } else {
         cid_cpy(&m->hdr.dcid, c->dcid);
-        i = enc_buf(v->buf, v->len, i, &m->hdr.dcid.id, m->hdr.dcid.len);
+        encb(&pos, end, m->hdr.dcid.id, m->hdr.dcid.len);
     }
 
-    uint16_t pkt_nr_pos = 0;
+    uint8_t * pkt_nr_pos = 0;
     if (likely(m->hdr.type != LH_RTRY)) {
-        pkt_nr_pos = i;
-        i = enc(v->buf, v->len, i, &m->hdr.nr, pnl, 0, GRN "%u" NRM);
+        pkt_nr_pos = pos;
+        switch ((pnl - 1) & HEAD_PNRL_MASK) {
+        case 0:
+            enc1(&pos, end, m->hdr.nr & UINT64_C(0xff));
+            break;
+        case 1:
+            enc2(&pos, end, m->hdr.nr & UINT64_C(0xffff));
+            break;
+        case 2:
+            enc3(&pos, end, m->hdr.nr & UINT64_C(0xffffff));
+            break;
+        case 3:
+            enc4(&pos, end, m->hdr.nr & UINT64_C(0xffffffff));
+            break;
+        }
     }
 
-    m->hdr.hdr_len = i;
+    m->hdr.hdr_len = (uint16_t)(pos - v->buf);
     v->addr = unlikely(c->tx_path_chlg) ? c->migr_peer : c->peer;
 
     log_pkt("TX", v, (struct sockaddr *)&v->addr,
@@ -453,72 +446,74 @@ bool enc_pkt(struct q_stream * const s,
         goto tx;
 
     if (needs_ack(pn) != no_ack)
-        i = enc_ack_frame(pn, v, m, i);
+        enc_ack_frame(&pos, v->buf, end, m, pn);
 
     if (unlikely(c->state == conn_clsg))
-        i = enc_close_frame(v, m, i);
+        enc_close_frame(&pos, end, m);
     else if (epoch == ep_data || (!c->is_clnt && epoch == ep_0rtt))
-        i = enc_other_frames(v, m, i, m->stream_data_start);
+        // TODO calc stream hdr len and subtract
+        enc_other_frames(&pos, end, m);
 
     if (unlikely(rtx)) {
         ensure(has_stream_data(m), "is rtxable");
 
         // this is a RTX, pad out until beginning of stream header
-        enc_padding_frame(v, m, i, m->stream_header_pos - i);
-        i = m->stream_data_start + m->stream_data_len;
-        log_stream_or_crypto_frame(true, v, s->id, false, "");
+        enc_padding_frame(&pos, end, m,
+                          m->stream_header_pos - (uint16_t)(pos - v->buf));
+        pos = v->buf + m->stream_data_start + m->stream_data_len;
+        log_stream_or_crypto_frame(true, m, v->buf[m->stream_header_pos], s->id,
+                                   false, "");
 
     } else if (likely(enc_data)) {
         // this is a fresh data/crypto or pure stream FIN packet
         // pad out until stream_data_start and add a stream frame header
-        enc_padding_frame(v, m, i, m->stream_data_start - i);
-        i = enc_stream_or_crypto_frame(s, v, m, i, s->id >= 0);
+        enc_padding_frame(&pos, end, m,
+                          m->stream_data_start - (uint16_t)(pos - v->buf));
+        enc_stream_or_crypto_frame(&pos, end, m, v, s, s->id >= 0);
     }
 
-    if (unlikely(i < MAX_PKT_LEN - AEAD_LEN && (enc_data || rtx) &&
-                 (epoch == ep_data || (!c->is_clnt && epoch == ep_0rtt)))) {
+    if (unlikely((pos - v->buf) < MAX_PKT_LEN - AEAD_LEN && (enc_data || rtx) &&
+                 (epoch == ep_data || (!c->is_clnt && epoch == ep_0rtt))))
         // we can try to stick some more frames in after the stream frame
-        v->len = MAX_PKT_LEN - AEAD_LEN;
-        i = enc_other_frames(v, m, i, v->len);
-    }
+        enc_other_frames(&pos, v->buf + MAX_PKT_LEN - AEAD_LEN, m);
 
     if (c->is_clnt && enc_data) {
-        if (unlikely(c->try_0rtt == false && m->hdr.type == LH_INIT))
-            i = enc_padding_frame(v, m, i, MIN_INI_LEN - i - AEAD_LEN);
+        if (unlikely(c->try_0rtt == false && m->hdr.type == LH_INIT)) {
+            const uint8_t * const max_end = v->buf + MIN_INI_LEN - AEAD_LEN;
+            enc_padding_frame(&pos, max_end, m, (uint16_t)(max_end - pos));
+        }
         if (unlikely(c->try_0rtt == true && m->hdr.type == LH_0RTT &&
-                     s->id >= 0))
+                     s->id >= 0)) {
             // if we pad the first 0-RTT pkt, peek at txq to get the CI length
-            i = enc_padding_frame(
-                v, m, i,
-                MIN_INI_LEN - i - AEAD_LEN -
-                    (sq_first(&c->txq) ? sq_first(&c->txq)->len : 0));
+            const uint8_t * const max_end =
+                v->buf + MIN_INI_LEN - AEAD_LEN -
+                (sq_first(&c->txq) ? sq_first(&c->txq)->len : 0);
+            enc_padding_frame(&pos, max_end, m, (uint16_t)(max_end - pos));
+        }
     }
 
     m->ack_eliciting = is_ack_eliciting(&m->frames);
-    if (unlikely(tx_ack_eliciting) && m->ack_eliciting == false)
-        // we can only do this for SH pkts
-        if (m->hdr.type == SH) {
-            i = enc_ping_frame(v, m, i);
-            m->ack_eliciting = true;
-        }
+    if (unlikely(tx_ack_eliciting) && m->ack_eliciting == false &&
+        m->hdr.type == SH) {
+        enc_ping_frame(&pos, end, m);
+        m->ack_eliciting = true;
+    }
 
-    ensure(i > m->hdr.hdr_len, "would have sent %s pkt w/o frames",
+    ensure((pos - v->buf) > m->hdr.hdr_len, "would have sent %s pkt w/o frames",
            pkt_type_str(m->hdr.flags, &m->hdr.vers));
 
 tx:;
     // make sure we have enough frame bytes for the header protection sample
-    const uint16_t pnp_dist = i - pkt_nr_pos;
+    const uint16_t pnp_dist = (uint16_t)(pos - pkt_nr_pos);
     if (unlikely(pnp_dist < 4))
-        i = enc_padding_frame(v, m, i, 4 - pnp_dist);
+        enc_padding_frame(&pos, end, m, 4 - pnp_dist);
 
     // for LH pkts, now encode the length
-    m->hdr.len = i + AEAD_LEN - pkt_nr_pos;
-    if (unlikely(len_pos)) {
-        const uint64_t len = m->hdr.len;
-        enc(v->buf, v->len, len_pos, &len, 0, 2, "%" PRIu64);
-    }
+    m->hdr.len = (uint16_t)(pos - pkt_nr_pos) + AEAD_LEN;
+    if (unlikely(len_pos))
+        encvl(&len_pos, len_pos + 2, m->hdr.len, 2);
 
-    v->len = i;
+    v->len = (uint16_t)(pos - v->buf);
 
     // alloc directly from warpcore for crypto TX - no need for metadata alloc
     struct w_iov * const xv = w_alloc_iov(c->w, 0, 0);
@@ -530,7 +525,8 @@ tx:;
         memcpy(xv->buf, v->buf, v->len); // copy data
         xv->len = v->len;
     } else {
-        const uint16_t ret = enc_aead(v, m, xv, pkt_nr_pos);
+        const uint16_t ret =
+            enc_aead(v, m, xv, (uint16_t)(pkt_nr_pos - v->buf));
         if (unlikely(ret == 0)) {
             adj_iov_to_start(v, m);
             return false;
@@ -554,7 +550,8 @@ tx:;
 
     if (likely(enc_data)) {
         adj_iov_to_data(v, m);
-        // XXX not clear if changing the len before calling on_pkt_sent is ok
+        // XXX not clear if changing the len before calling on_pkt_sent is
+        // ok
         v->len = m->stream_data_len;
     }
 
@@ -575,24 +572,46 @@ tx:;
 }
 
 
-#define dec_chk(dst, buf, buf_len, pos, dst_len, ...)                          \
-    __extension__({                                                            \
-        const uint16_t _i =                                                    \
-            dec((dst), (buf), (buf_len), (pos), (dst_len), __VA_ARGS__);       \
-        if (unlikely(_i == UINT16_MAX))                                        \
+#define dec1_chk(val, pos, end)                                                \
+    do {                                                                       \
+        if (unlikely(dec1((val), (pos), (end)) == false))                      \
             return false;                                                      \
-        _i;                                                                    \
-    })
+    } while (0)
 
 
-#define dec_chk_buf(dst, buf, buf_len, pos, dst_len)                           \
-    __extension__({                                                            \
-        const uint16_t _i =                                                    \
-            dec_buf((dst), (buf), (buf_len), (pos), (dst_len));                \
-        if (unlikely(_i == UINT16_MAX))                                        \
+#define dec2_chk(val, pos, end)                                                \
+    do {                                                                       \
+        if (unlikely(dec2((val), (pos), (end)) == false))                      \
             return false;                                                      \
-        _i;                                                                    \
-    })
+    } while (0)
+
+
+#define dec3_chk(val, pos, end)                                                \
+    do {                                                                       \
+        if (unlikely(dec3((val), (pos), (end)) == false))                      \
+            return false;                                                      \
+    } while (0)
+
+
+#define dec4_chk(val, pos, end)                                                \
+    do {                                                                       \
+        if (unlikely(dec4((val), (pos), (end)) == false))                      \
+            return false;                                                      \
+    } while (0)
+
+
+#define decv_chk(val, pos, end)                                                \
+    do {                                                                       \
+        if (unlikely(decv((val), (pos), (end)) == false))                      \
+            return false;                                                      \
+    } while (0)
+
+
+#define decb_chk(val, pos, end, len)                                           \
+    do {                                                                       \
+        if (unlikely(decb((val), (pos), (end), (len)) == false))               \
+            return false;                                                      \
+    } while (0)
 
 
 bool dec_pkt_hdr_beginning(struct w_iov * const xv,
@@ -605,30 +624,30 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
                            const uint8_t dcid_len)
 
 {
+    const uint8_t * pos = xv->buf;
+    const uint8_t * const end = xv->buf + xv->len;
+
     m->udp_len = xv->len;
 
-    dec_chk(&m->hdr.flags, xv->buf, xv->len, 0, 1, "0x%02x");
-    m->hdr.type = pkt_type(*xv->buf);
+    dec1_chk(&m->hdr.flags, &pos, end);
+    m->hdr.type = pkt_type(m->hdr.flags);
 
     if (unlikely(is_lh(m->hdr.flags))) {
-        dec_chk(&m->hdr.vers, xv->buf, xv->len, 1, 4, "0x%08x");
+        dec4_chk(&m->hdr.vers, &pos, end);
+        dec1_chk(&m->hdr.dcid.len, &pos, end);
 
-        m->hdr.hdr_len =
-            dec_chk(&m->hdr.dcid.len, xv->buf, xv->len, 5, 1, "0x%02x");
         m->hdr.scid.len = m->hdr.dcid.len;
         m->hdr.dcid.len >>= 4;
         m->hdr.scid.len &= 0x0f;
 
         if (m->hdr.dcid.len) {
             m->hdr.dcid.len += 3;
-            m->hdr.hdr_len = dec_chk_buf(&m->hdr.dcid.id, xv->buf, xv->len, 6,
-                                         m->hdr.dcid.len);
+            decb_chk(m->hdr.dcid.id, &pos, end, m->hdr.dcid.len);
         }
 
         if (m->hdr.scid.len) {
             m->hdr.scid.len += 3;
-            m->hdr.hdr_len = dec_chk_buf(&m->hdr.scid.id, xv->buf, xv->len,
-                                         m->hdr.hdr_len, m->hdr.scid.len);
+            decb_chk(m->hdr.scid.id, &pos, end, m->hdr.scid.len);
         }
 
         // if this is a CI, the dcid len must be >= 8 bytes
@@ -642,29 +661,27 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
             // version negotiation packet - copy raw
             memcpy(v->buf, xv->buf, xv->len);
             v->len = xv->len;
-            return true;
+            goto done;
         }
 
         if (m->hdr.type == LH_RTRY) {
             // decode odcid
             odcid->len = (m->hdr.flags & 0x0f) + 3;
-            m->hdr.hdr_len = dec_chk_buf(&odcid->id, xv->buf, xv->len,
-                                         m->hdr.hdr_len, odcid->len);
+            decb_chk(odcid->id, &pos, end, odcid->len);
         }
 
         if (m->hdr.type == LH_INIT) {
             // decode token
-            uint64_t tl = 0;
-            m->hdr.hdr_len =
-                dec_chk(&tl, xv->buf, xv->len, m->hdr.hdr_len, 0, "%" PRIu64);
-            *tok_len = (uint16_t)tl;
+            uint64_t tmp = 0;
+            decv_chk(&tmp, &pos, end);
+            *tok_len = (uint16_t)tmp;
             if (is_clnt && *tok_len) {
                 // server initial pkts must have no tokens
                 warn(ERR, "tok (len %u) present in serv initial", *tok_len);
                 return false;
             }
         } else if (m->hdr.type == LH_RTRY)
-            *tok_len = xv->len - m->hdr.hdr_len;
+            *tok_len = (uint16_t)(end - pos);
 
         if (*tok_len) {
             if (unlikely(*tok_len >= MAX_TOK_LEN ||
@@ -673,31 +690,28 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
                 warn(DBG, "tok_len %u invalid (max %u)", *tok_len, MAX_TOK_LEN);
                 return false;
             }
-            m->hdr.hdr_len =
-                dec_chk_buf(tok, xv->buf, xv->len, m->hdr.hdr_len, *tok_len);
+            decb_chk(tok, &pos, end, *tok_len);
         }
 
         if (m->hdr.type != LH_RTRY) {
-            uint64_t len = 0;
-            m->hdr.hdr_len =
-                dec_chk(&len, xv->buf, xv->len, m->hdr.hdr_len, 0, "%" PRIu64);
-            if (unlikely(m->hdr.hdr_len == UINT16_MAX))
-                return false;
-            m->hdr.len = (uint16_t)len;
-
+            uint64_t tmp = 0;
+            decv_chk(&tmp, &pos, end);
+            m->hdr.len = (uint16_t)tmp;
             // sanity check len
             if (unlikely(m->hdr.len + m->hdr.hdr_len > xv->len)) {
                 warn(DBG, "len %u invalid", m->hdr.len);
                 return false;
             }
         }
-        return true;
+
+    } else {
+        // this logic depends on picking a SCID w/known length during handshake
+        m->hdr.dcid.len = dcid_len;
+        decb_chk(m->hdr.dcid.id, &pos, end, m->hdr.dcid.len);
     }
 
-    // this logic depends on picking a SCID with a known length during handshake
-    m->hdr.dcid.len = dcid_len;
-    m->hdr.hdr_len =
-        dec_chk_buf(&m->hdr.dcid.id, xv->buf, xv->len, 1, m->hdr.dcid.len);
+done:
+    m->hdr.hdr_len = (uint16_t)(pos - xv->buf);
     return true;
 }
 
@@ -724,7 +738,7 @@ bool xor_hp(struct w_iov * const xv,
     for (uint8_t i = 0; i < pnl; i++)
         xv->buf[pkt_nr_pos + i] ^= mask[1 + i];
 
-#ifdef DEBUG_MARSHALL
+#if 0
     warn(DBG, "%s HP over [0, %u..%u] w/sample off %u",
          is_enc ? "apply" : "undo", pkt_nr_pos, pkt_nr_pos + pnl - 1, off);
 #endif
@@ -737,21 +751,37 @@ static bool undo_hp(struct w_iov * const xv,
                     struct pkt_meta * const m,
                     const struct cipher_ctx * const ctx)
 {
-    // m->hdr.hdr_len holds the offset of the pnr field
-    const uint16_t pnp = m->hdr.hdr_len;
-
-    // undo HP and update meta
-    if (unlikely(xor_hp(xv, m, ctx, pnp, false) == false))
+    // undo HP and update meta; m->hdr.hdr_len holds the offset of the pnr field
+    if (unlikely(xor_hp(xv, m, ctx, m->hdr.hdr_len, false) == false))
         return false;
 
     m->hdr.flags = xv->buf[0];
     m->hdr.type = pkt_type(xv->buf[0]);
-
     const uint8_t pnl = pkt_nr_len(xv->buf[0]);
     struct pn_space * const pn = pn_for_pkt_type(m->pn->c, m->hdr.type);
+    const uint8_t * pnp = xv->buf + m->hdr.hdr_len;
 
-    uint64_t nr = 0;
-    dec_chk(&nr, xv->buf, xv->len, pnp, pnl, "%u");
+    switch (xv->buf[0] & HEAD_PNRL_MASK) {
+    case 0:;
+        uint8_t tmp1;
+        dec1_chk(&tmp1, &pnp, pnp + pnl);
+        m->hdr.nr = tmp1;
+        break;
+    case 1:;
+        uint16_t tmp2;
+        dec2_chk(&tmp2, &pnp, pnp + pnl);
+        m->hdr.nr = tmp2;
+        break;
+    case 2:;
+        uint32_t tmp34;
+        dec3_chk(&tmp34, &pnp, pnp + pnl);
+        m->hdr.nr = tmp34;
+        break;
+    case 3:
+        dec4_chk(&tmp34, &pnp, pnp + pnl);
+        m->hdr.nr = tmp34;
+        break;
+    }
     m->hdr.hdr_len += pnl;
 
     const uint64_t expected_pn = diet_max(&pn->recv) + 1;
@@ -759,7 +789,7 @@ static bool undo_hp(struct w_iov * const xv,
     const uint64_t pn_hwin = pn_win / 2;
     const uint64_t pn_mask = pn_win - 1;
 
-    m->hdr.nr = (expected_pn & ~pn_mask) | nr;
+    m->hdr.nr |= (expected_pn & ~pn_mask);
     if (m->hdr.nr + pn_hwin <= expected_pn)
         m->hdr.nr += pn_win;
     else if (m->hdr.nr > expected_pn + pn_hwin && m->hdr.nr > pn_win)
@@ -851,7 +881,6 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
                                                        pkt_nr_len(m->hdr.flags)
                                                  : xv->len;
     const uint16_t ret = dec_aead(xv, v, m, pkt_len, ctx);
-
     if (unlikely(ret == 0))
         return is_srt(xv, m);
 

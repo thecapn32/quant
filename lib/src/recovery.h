@@ -93,7 +93,7 @@ struct recovery {
         const ev_tstamp delta_srtt = (c)->rec.srtt - (c)->rec.prev_srtt;       \
         const ev_tstamp delta_rttvar = (c)->rec.rttvar - (c)->rec.prev_rttvar; \
         if (delta_in_flight || delta_cwnd || delta_ssthresh ||                 \
-            !is_zero(delta_srtt) || !is_zero(delta_rttvar))                    \
+            !is_zero(delta_srtt) || !is_zero(delta_rttvar)) {                  \
             warn(DBG,                                                          \
                  "%s conn %s: in_flight=%" PRIu64 " (%s%+" PRId64 NRM          \
                  "), cwnd" NRM "=%" PRIu64 " (%s%+" PRId64 NRM                 \
@@ -111,11 +111,12 @@ struct recovery {
                  (c)->rec.rttvar,                                              \
                  delta_rttvar > 0 ? GRN : delta_rttvar < 0 ? RED : "",         \
                  delta_rttvar);                                                \
-        (c)->rec.prev_in_flight = (c)->rec.in_flight;                          \
-        (c)->rec.prev_cwnd = (c)->rec.cwnd;                                    \
-        (c)->rec.prev_ssthresh = ssthresh;                                     \
-        (c)->rec.prev_srtt = (c)->rec.srtt;                                    \
-        (c)->rec.prev_rttvar = (c)->rec.rttvar;                                \
+            (c)->rec.prev_in_flight = (c)->rec.in_flight;                      \
+            (c)->rec.prev_cwnd = (c)->rec.cwnd;                                \
+            (c)->rec.prev_ssthresh = ssthresh;                                 \
+            (c)->rec.prev_srtt = (c)->rec.srtt;                                \
+            (c)->rec.prev_rttvar = (c)->rec.rttvar;                            \
+        }                                                                      \
     } while (0)
 #else
 #define log_cc(c)

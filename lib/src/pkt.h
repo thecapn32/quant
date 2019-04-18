@@ -186,12 +186,12 @@ extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
 
 extern void __attribute__((nonnull)) coalesce(struct w_iov_sq * const q);
 
-extern uint16_t __attribute__((nonnull(1, 3)))
-enc_lh_cids(const struct cid * const dcid,
-            const struct cid * const scid,
-            struct w_iov * const v,
+extern void __attribute__((nonnull(1, 2, 3, 4)))
+enc_lh_cids(uint8_t ** pos,
+            const uint8_t * const end,
             struct pkt_meta * const m,
-            const uint16_t pos);
+            const struct cid * const dcid,
+            const struct cid * const scid);
 
 #ifndef NDEBUG
 extern void __attribute__((nonnull(1, 2, 3)))

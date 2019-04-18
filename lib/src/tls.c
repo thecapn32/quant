@@ -333,25 +333,18 @@ static int filter_tp(ptls_t * tls __attribute__((unused)),
 }
 
 
-#define dec_tp(var)                                                            \
-    __extension__({                                                            \
-        uint16_t _l;                                                           \
-        i = dec(&_l, buf, len, i, sizeof(_l), "%u");                           \
-        ensure(_l <= sizeof(uint64_t), "invalid len %u", _l);                  \
-        if (_l)                                                                \
-            i = dec((var), buf, len, i, 0, "%u");                              \
-        _l;                                                                    \
-    })
-
-#define dec_tp_buf(var, w)                                                     \
-    __extension__({                                                            \
-        uint16_t _l;                                                           \
-        i = dec(&_l, buf, len, i, sizeof(_l), "%u");                           \
-        ensure(_l <= (w), "invalid len %u", _l);                               \
-        if (_l)                                                                \
-            i = dec_buf((var), buf, len, i, _l);                               \
-        _l;                                                                    \
-    })
+static bool __attribute__((nonnull))
+dec_tp(uint64_t * const val, const uint8_t ** pos, const uint8_t * const end)
+{
+    uint16_t len;
+    if (dec2(&len, pos, end) == false)
+        return false;
+    if (len) {
+        *val = 0;
+        decv(val, pos, end);
+    }
+    return true;
+}
 
 
 static int chk_tp(ptls_t * tls __attribute__((unused)),
@@ -367,35 +360,36 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                  offsetof(struct q_conn, tls));
 
     // set up parsing
-    const uint8_t * const buf = slots[0].data.base;
-    uint16_t len = (uint16_t)slots[0].data.len;
-    uint16_t i = 0;
+    const uint8_t * pos = (const uint8_t *)slots[0].data.base;
+    const uint8_t * const end = pos + slots[0].data.len;
 
     uint16_t tpl;
-    i = dec(&tpl, buf, len, i, sizeof(tpl), "%u");
-    if (tpl != len - i) {
+    if (dec2(&tpl, &pos, end) == false)
+        return 1;
+    if (tpl != slots[0].data.len - sizeof(tpl)) {
         err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY, "tp len %u incorrect",
                   tpl);
         return 1;
     }
-    len = i + tpl;
 
     // keep track of which transport parameters we've seen before
     bitset_define(tp_list, TP_MAX);
     struct tp_list tp_list = bitset_t_initializer(0);
 
-    while (i < len) {
-        uint16_t tp = 0;
-        i = dec(&tp, buf, len, i, sizeof(tp), "0x%04x");
+    while (pos < end) {
+        uint16_t tp;
+        if (dec2(&tp, &pos, end) == false)
+            return 1;
 
         // skip unknown TPs
         if (tp >= TP_MAX) {
             uint16_t unknown_len;
-            i = dec(&unknown_len, buf, len, i, sizeof(unknown_len), "%u");
+            if (dec2(&unknown_len, &pos, end) == false)
+                return 1;
             warn(WRN, "\t" BLD "%s tp" NRM " (0x%04x w/len %u) = %s",
                  (tp & 0xff00) == 0xff00 ? YEL "private" : RED "unknown", tp,
-                 unknown_len, hex2str(&buf[i], unknown_len));
-            i += unknown_len;
+                 unknown_len, hex2str(pos, unknown_len));
+            pos += unknown_len;
             continue;
         }
 
@@ -409,13 +403,16 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
         switch (tp) {
         case TP_IMSD_U:
-            dec_tp(&c->tp_out.max_strm_data_uni);
+            if (dec_tp(&c->tp_out.max_strm_data_uni, &pos, end) == false)
+                return 1;
             warn(INF, "\tinitial_max_stream_data_uni = %" PRIu64 " [bytes]",
                  c->tp_out.max_strm_data_uni);
             break;
 
         case TP_IMSD_BL:
-            dec_tp(&c->tp_out.max_strm_data_bidi_remote);
+            if (dec_tp(&c->tp_out.max_strm_data_bidi_remote, &pos, end) ==
+                false)
+                return 1;
             warn(INF,
                  "\tinitial_max_stream_data_bidi_local = %" PRIu64 " [bytes]",
                  c->tp_out.max_strm_data_bidi_remote);
@@ -423,37 +420,43 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
         case TP_IMSD_BR:
             // this is RX'ed as _remote, but applies to streams we open, so:
-            dec_tp(&c->tp_out.max_strm_data_bidi_local);
+            if (dec_tp(&c->tp_out.max_strm_data_bidi_local, &pos, end) == false)
+                return 1;
             warn(INF,
                  "\tinitial_max_stream_data_bidi_remote = %" PRIu64 " [bytes]",
                  c->tp_out.max_strm_data_bidi_local);
             break;
 
         case TP_IMD:
-            dec_tp(&c->tp_out.max_data);
+            if (dec_tp(&c->tp_out.max_data, &pos, end) == false)
+                return 1;
             warn(INF, "\tinitial_max_data = %" PRIu64 " [bytes]",
                  c->tp_out.max_data);
             break;
 
         case TP_IMSB:
-            dec_tp(&c->tp_out.max_streams_bidi);
+            if (dec_tp(&c->tp_out.max_streams_bidi, &pos, end) == false)
+                return 1;
             warn(INF, "\tinitial_max_streams_bidi = %" PRIu64,
                  c->tp_out.max_streams_bidi);
             break;
 
         case TP_IMSU:
-            dec_tp(&c->tp_out.max_streams_uni);
+            if (dec_tp(&c->tp_out.max_streams_uni, &pos, end) == false)
+                return 1;
             warn(INF, "\tinitial_max_streams_uni = %" PRIu64,
                  c->tp_out.max_streams_uni);
             break;
 
         case TP_IDTO:
-            dec_tp(&c->tp_out.idle_to);
+            if (dec_tp(&c->tp_out.idle_to, &pos, end) == false)
+                return 1;
             warn(INF, "\tidle_timeout = %" PRIu64 " [ms]", c->tp_out.idle_to);
             break;
 
         case TP_MPS:
-            dec_tp(&c->tp_out.max_pkt);
+            if (dec_tp(&c->tp_out.max_pkt, &pos, end) == false)
+                return 1;
             warn(INF, "\tmax_packet_size = %" PRIu64 " [bytes]",
                  c->tp_out.max_pkt);
             if (c->tp_out.max_pkt < 1200) {
@@ -465,8 +468,9 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             break;
 
         case TP_ADE:;
-            uint64_t ade = 0;
-            dec_tp(&ade);
+            uint64_t ade = DEF_ACK_DEL_EXP;
+            if (dec_tp(&ade, &pos, end) == false)
+                return 1;
             warn(INF, "\tack_delay_exponent = %" PRIu64, ade);
             if (ade > 20) {
                 err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
@@ -477,7 +481,8 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             break;
 
         case TP_MAD:
-            dec_tp(&c->tp_out.max_ack_del);
+            if (dec_tp(&c->tp_out.max_ack_del, &pos, end) == false)
+                return 1;
             warn(INF, "\tmax_ack_delay = %" PRIu64 " [ms]",
                  c->tp_out.max_ack_del);
             if (c->tp_out.max_ack_del > (1 << 14)) {
@@ -494,15 +499,22 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                           "rx original_connection_id tp at serv");
                 return 1;
             }
-            c->tp_out.orig_cid.len = (uint8_t)dec_tp_buf(
-                &c->tp_out.orig_cid.id, sizeof(c->tp_out.orig_cid.id));
+
+            uint16_t len;
+            if (dec2(&len, &pos, end) == false)
+                return 1;
+            if (len) {
+                decb(c->tp_out.orig_cid.id, &pos, end, len);
+                c->tp_out.orig_cid.len = (uint8_t)len;
+            }
             warn(INF, "\toriginal_connection_id = %s",
                  cid2str(&c->tp_out.orig_cid));
             break;
 
         case TP_DMIG:;
-            uint16_t dmig;
-            dec_tp(&dmig);
+            uint64_t dmig;
+            if (dec_tp(&dmig, &pos, end) == false)
+                return 1;
             warn(INF, "\tdisable_migration = true");
             c->tp_out.disable_migration = true;
             break;
@@ -514,22 +526,24 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                 return 1;
             }
             uint16_t l;
-            i = dec(&l, buf, len, i, sizeof(l), "%u");
+            if (dec2(&l, &pos, end) == false)
+                return 1;
             struct cid * const dcid = c->dcid;
             if (l != sizeof(dcid->srt)) {
                 err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
                           "illegal srt len %u", l);
                 return 1;
             }
-            memcpy(dcid->srt, &buf[i], sizeof(dcid->srt));
+            memcpy(dcid->srt, pos, sizeof(dcid->srt));
             warn(INF, "\tstateless_reset_token = %s",
                  hex2str(dcid->srt, sizeof(dcid->srt)));
             conns_by_srt_ins(c, dcid->srt);
-            i += sizeof(dcid->srt);
+            pos += sizeof(dcid->srt);
             break;
 
         case TP_PRFA:
-            i = dec(&l, buf, len, i, sizeof(l), "%u");
+            if (dec2(&l, &pos, end) == false)
+                return 1;
 
             struct pref_addr * const pa = &c->tp_out.pref_addr;
             struct sockaddr_in * const pa4 =
@@ -538,25 +552,25 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                 (struct sockaddr_in6 *)&c->tp_out.pref_addr.addr6;
 
             pa4->sin_family = AF_INET;
-            memcpy(&pa4->sin_addr, &buf[i], sizeof(pa4->sin_addr));
-            i += sizeof(pa4->sin_addr);
-            memcpy(&pa4->sin_port, &buf[i], sizeof(pa4->sin_port));
-            i += sizeof(pa4->sin_port);
+            memcpy(&pa4->sin_addr, pos, sizeof(pa4->sin_addr));
+            pos += sizeof(pa4->sin_addr);
+            memcpy(&pa4->sin_port, pos, sizeof(pa4->sin_port));
+            pos += sizeof(pa4->sin_port);
 
             pa6->sin6_family = AF_INET6;
-            memcpy(&pa6->sin6_addr, &buf[i], sizeof(pa6->sin6_addr));
-            i += sizeof(pa6->sin6_addr);
-            memcpy(&pa6->sin6_port, &buf[i], sizeof(pa6->sin6_port));
-            i += sizeof(pa6->sin6_port);
+            memcpy(&pa6->sin6_addr, pos, sizeof(pa6->sin6_addr));
+            pos += sizeof(pa6->sin6_addr);
+            memcpy(&pa6->sin6_port, pos, sizeof(pa6->sin6_port));
+            pos += sizeof(pa6->sin6_port);
 
-            i = dec(&pa->cid.len, buf, len, i, sizeof(pa->cid.len), "%u");
-            memcpy(pa->cid.id, &buf[i], pa->cid.len);
-            i += pa->cid.len;
+            dec1(&pa->cid.len, &pos, end);
+            memcpy(pa->cid.id, pos, pa->cid.len);
+            pos += pa->cid.len;
             pa->cid.seq = 1;
-            memcpy(pa->cid.srt, &buf[i], sizeof(pa->cid.srt));
+            memcpy(pa->cid.srt, pos, sizeof(pa->cid.srt));
             add_dcid(c, &pa->cid);
 
-            i += sizeof(pa->cid.srt);
+            pos += sizeof(pa->cid.srt);
 
 #ifndef NDEBUG
             char ip4[NI_MAXHOST];
@@ -595,14 +609,6 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         }
     }
 
-
-    ensure(i == len, "out of parameters");
-
-    if (i != len) {
-        err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY, "tp data left over");
-        return 1;
-    }
-
     // if we did a RETRY, check that we got orig_cid and it matches
     if (c->is_clnt && c->tok_len) {
         if (c->tp_out.orig_cid.len == 0) {
@@ -627,32 +633,34 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 }
 
 
-#define enc_tp(c, tp, var)                                                     \
-    do {                                                                       \
-        const uint16_t param = (tp);                                           \
-        i = enc((c)->tls.tp_buf, len, i, &param, sizeof(param), 0, "%u");      \
-        const uint16_t bytes = varint_size_needed(var);                        \
-        i = enc((c)->tls.tp_buf, len, i, &bytes, sizeof(bytes), 0, "%u");      \
-        const uint64_t tmp_var = (var);                                        \
-        i = enc((c)->tls.tp_buf, len, i, &tmp_var, 0, 0, "%u");                \
-    } while (0)
+static void __attribute__((nonnull)) enc_tp(uint8_t ** pos,
+                                            const uint8_t * const end,
+                                            const uint16_t tp,
+                                            const uint64_t val)
+{
+    enc2(pos, end, tp);
+    enc2(pos, end, varint_size(val));
+    encv(pos, end, val);
+}
 
 
-#define enc_tp_buf(c, tp, var, w)                                              \
-    do {                                                                       \
-        const uint16_t param = (tp);                                           \
-        i = enc((c)->tls.tp_buf, len, i, &param, sizeof(param), 0, "%u");      \
-        const uint16_t bytes = (w);                                            \
-        i = enc((c)->tls.tp_buf, len, i, &bytes, sizeof(bytes), 0, "%u");      \
-        if (w)                                                                 \
-            i = enc_buf((c)->tls.tp_buf, len, i, (var), (w));                  \
-    } while (0)
+static void __attribute__((nonnull)) encb_tp(uint8_t ** pos,
+                                             const uint8_t * const end,
+                                             const uint16_t tp,
+                                             const uint8_t * const val,
+                                             const uint16_t len)
+{
+    enc2(pos, end, tp);
+    enc2(pos, end, len);
+    if (len)
+        encb(pos, end, val, len);
+}
 
 
 void init_tp(struct q_conn * const c)
 {
-    uint16_t i = sizeof(uint16_t);
-    const uint16_t len = sizeof(c->tls.tp_buf);
+    uint8_t * pos = c->tls.tp_buf + sizeof(uint16_t);
+    const uint8_t * end = &c->tls.tp_buf[sizeof(c->tls.tp_buf)];
 
     // add a grease tp
     uint8_t grease[18];
@@ -678,43 +686,43 @@ void init_tp(struct q_conn * const c)
         switch (tp_order[j]) {
         case TP_IMSU:
             if (c->is_clnt)
-                enc_tp(c, TP_IMSU, (uint64_t)c->tp_in.max_streams_uni);
+                enc_tp(&pos, end, TP_IMSU, c->tp_in.max_streams_uni);
             break;
         case TP_IMSD_U:
             if (c->is_clnt)
-                enc_tp(c, TP_IMSD_U, c->tp_in.max_strm_data_uni);
+                enc_tp(&pos, end, TP_IMSD_U, c->tp_in.max_strm_data_uni);
             break;
         case TP_SRT:
             if (!c->is_clnt)
-                enc_tp_buf(c, TP_SRT, c->scid->srt, sizeof(c->scid->srt));
+                encb_tp(&pos, end, TP_SRT, c->scid->srt, sizeof(c->scid->srt));
             break;
         case TP_OCID:
             if (!c->is_clnt && c->odcid.len)
-                enc_tp_buf(c, TP_OCID, c->odcid.id, c->odcid.len);
+                encb_tp(&pos, end, TP_OCID, c->odcid.id, c->odcid.len);
             break;
         case TP_IMSB:
-            enc_tp(c, TP_IMSB, (uint64_t)c->tp_in.max_streams_bidi);
+            enc_tp(&pos, end, TP_IMSB, c->tp_in.max_streams_bidi);
             break;
         case TP_IDTO:
-            enc_tp(c, TP_IDTO, c->tp_in.idle_to);
+            enc_tp(&pos, end, TP_IDTO, c->tp_in.idle_to);
             break;
         case TP_IMSD_BR:
-            enc_tp(c, TP_IMSD_BR, c->tp_in.max_strm_data_bidi_remote);
+            enc_tp(&pos, end, TP_IMSD_BR, c->tp_in.max_strm_data_bidi_remote);
             break;
         case TP_IMSD_BL:
-            enc_tp(c, TP_IMSD_BL, c->tp_in.max_strm_data_bidi_local);
+            enc_tp(&pos, end, TP_IMSD_BL, c->tp_in.max_strm_data_bidi_local);
             break;
         case TP_IMD:
-            enc_tp(c, TP_IMD, c->tp_in.max_data);
+            enc_tp(&pos, end, TP_IMD, c->tp_in.max_data);
             break;
         case TP_ADE:
-            enc_tp(c, TP_ADE, c->tp_in.ack_del_exp);
+            enc_tp(&pos, end, TP_ADE, c->tp_in.ack_del_exp);
             break;
         case TP_MAD:
-            enc_tp(c, TP_MAD, c->tp_in.max_ack_del);
+            enc_tp(&pos, end, TP_MAD, c->tp_in.max_ack_del);
             break;
         case TP_MPS:
-            enc_tp(c, TP_MPS, w_mtu(c->w));
+            enc_tp(&pos, end, TP_MPS, w_mtu(c->w));
             break;
         case TP_PRFA:
         case TP_DMIG:
@@ -722,16 +730,16 @@ void init_tp(struct q_conn * const c)
             break;
         default:
             if (tp_order[j] == grease_type)
-                enc_tp_buf(c, grease_type, &grease[2], grease_len);
+                encb_tp(&pos, end, grease_type, &grease[2], grease_len);
             else
                 die("unknown tp 0x%04x", tp_order[j]);
             break;
         }
 
     // encode length of all transport parameters
-    const uint16_t enc_len = i - sizeof(uint16_t);
-    i = 0;
-    enc(c->tls.tp_buf, len, i, &enc_len, sizeof(uint16_t), 0, "%u");
+    const uint16_t enc_len = (uint16_t)(pos - c->tls.tp_buf) - sizeof(uint16_t);
+    pos = c->tls.tp_buf;
+    enc2(&pos, end, enc_len);
 
     c->tls.tp_ext[0] = (ptls_raw_extension_t){
         QUIC_TP, {c->tls.tp_buf, enc_len + sizeof(uint16_t)}};
@@ -789,7 +797,8 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
                           dec_tckt.aead->algo->tag_size ||
             memcmp(src.base, quant_commit_hash, quant_commit_hash_len) != 0) {
             warn(WRN,
-                 "could not verify 0-RTT session ticket for %s conn %s (%s %s)",
+                 "could not verify 0-RTT session ticket for %s conn %s (%s "
+                 "%s)",
                  conn_type(c), cid2str(c->scid), ptls_get_server_name(tls),
                  ptls_get_negotiated_protocol(tls));
             c->did_0rtt = false;
@@ -806,11 +815,11 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
                                            src_base, src_len, tid, 0, 0);
 
         if (n > src_len) {
-            warn(
-                WRN,
-                "could not decrypt 0-RTT session ticket for %s conn %s (%s %s)",
-                conn_type(c), cid2str(c->scid), ptls_get_server_name(tls),
-                ptls_get_negotiated_protocol(tls));
+            warn(WRN,
+                 "could not decrypt 0-RTT session ticket for %s conn %s "
+                 "(%s %s)",
+                 conn_type(c), cid2str(c->scid), ptls_get_server_name(tls),
+                 ptls_get_negotiated_protocol(tls));
             c->did_0rtt = false;
             return -1;
         }
@@ -1014,9 +1023,9 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
     // warn(DBG,
     //      "epoch %u, in %d (off %" PRIu64
     //      "), gen %lu (%lu-%lu-%lu-%lu-%lu), ret %d, left %lu",
-    //      ep_in, iv ? iv->len : 0, iv ? meta(iv).stream_off : 0, tls_io.off,
-    //      epoch_off[0], epoch_off[1], epoch_off[2], epoch_off[3],
-    //      epoch_off[4], ret, iv ? iv->len - in_len : 0);
+    //      ep_in, iv ? iv->len : 0, iv ? meta(iv).stream_off : 0,
+    //      tls_io.off, epoch_off[0], epoch_off[1], epoch_off[2],
+    //      epoch_off[3], epoch_off[4], ret, iv ? iv->len - in_len : 0);
 
     if (ret == 0 && c->state != conn_estb) {
         if (ptls_is_psk_handshake(c->tls.t) && c->is_clnt)
@@ -1312,9 +1321,9 @@ uint16_t dec_aead(const struct w_iov * const xv,
         return 0;
     memcpy(v->buf, xv->buf, hdr_len);
 
-#ifdef DEBUG_MARSHALL
+#if 0
     warn(DBG, "dec %s AEAD over [%u..%u] in [%u..%u]",
-         pkt_type_str(m->hdr.type, &m->hdr.vers), hdr_len, len - AEAD_LEN - 1,
+         pkt_type_str(m->hdr.flags, &m->hdr.vers), hdr_len, len - AEAD_LEN - 1,
          len - AEAD_LEN, len - 1);
 #endif
 
@@ -1331,7 +1340,7 @@ uint16_t enc_aead(const struct w_iov * const v,
     const struct cipher_ctx * ctx = which_cipher_ctx_out(c, m->hdr.flags);
     if (unlikely(ctx == 0 || ctx->aead == 0)) {
         warn(NTE, "no %s crypto context",
-             pkt_type_str(m->hdr.type, &m->hdr.vers));
+             pkt_type_str(m->hdr.flags, &m->hdr.vers));
         return 0;
     }
 
@@ -1352,9 +1361,9 @@ uint16_t enc_aead(const struct w_iov * const v,
         unlikely(xor_hp(xv, m, ctx, pkt_nr_pos, true) == false))
         return 0;
 
-#ifdef DEBUG_MARSHALL
+#if 0
     warn(DBG, "enc %s AEAD over [%u..%u] in [%u..%u]",
-         pkt_type_str(m->hdr.type, &m->hdr.vers), hdr_len,
+         pkt_type_str(m->hdr.flags, &m->hdr.vers), hdr_len,
          hdr_len + plen - AEAD_LEN - 1, hdr_len + plen - AEAD_LEN,
          hdr_len + plen - 1);
 #endif

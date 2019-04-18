@@ -62,14 +62,14 @@ struct q_stream * get_stream(struct q_conn * const c, const int64_t id)
 
 int64_t max_sid(const int64_t sid, const struct q_conn * const c)
 {
-    const int64_t max = is_srv_ini(sid) == c->is_clnt
-                            ? (is_uni(sid) ? c->tp_in.max_streams_uni
-                                           : c->tp_in.max_streams_bidi)
-                            : (is_uni(sid) ? c->tp_out.max_streams_uni
-                                           : c->tp_out.max_streams_bidi);
-    return unlikely(max == 0)
-               ? 0
-               : ((max - 1) << 2) | ((STRM_FL_SRV | STRM_FL_UNI) & sid);
+    const uint64_t max = is_srv_ini(sid) == c->is_clnt
+                             ? (is_uni(sid) ? c->tp_in.max_streams_uni
+                                            : c->tp_in.max_streams_bidi)
+                             : (is_uni(sid) ? c->tp_out.max_streams_uni
+                                            : c->tp_out.max_streams_bidi);
+    return unlikely(max == 0) ? 0
+                              : (int64_t)((max - 1) << 2) |
+                                    ((STRM_FL_SRV | STRM_FL_UNI) & sid);
 }
 
 
@@ -103,7 +103,7 @@ struct q_stream * new_stream(struct q_conn * const c, const int64_t id)
     s->id = id;
     strm_to_state(s, strm_open);
 
-    const int64_t cnt = (id >> 2) + 1;
+    const uint64_t cnt = (uint64_t)((id >> 2) + 1);
     if (is_uni(id))
         c->cnt_uni = MAX(cnt, c->cnt_uni);
     else
@@ -237,7 +237,7 @@ void do_stream_fc(struct q_stream * const s, const uint16_t len)
 
 
 void do_stream_id_fc(struct q_conn * const c,
-                     const int64_t cnt,
+                     const uint64_t cnt,
                      const bool bidi,
                      const bool local)
 {
