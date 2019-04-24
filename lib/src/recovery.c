@@ -121,9 +121,9 @@ earliest_loss_t_pn(struct q_conn * const c)
 
 void set_ld_timer(struct q_conn * const c)
 {
-    // if (c->state == conn_clsg || c->state == conn_drng)
-    //     // don't do LD while draining
-    //     return;
+    if (c->state == conn_idle || c->state == conn_clsg || c->state == conn_drng)
+        // don't do LD while idle or draining
+        return;
 
     // see SetLossDetectionTimer() pseudo code
 
