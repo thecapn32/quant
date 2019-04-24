@@ -92,7 +92,7 @@ static inline void __attribute__((nonnull))
 enc3(uint8_t ** pos, const uint8_t * const end, const uint32_t val)
 {
     ensure(*pos + 3 <= end, "buffer overflow: %lu", end - *pos);
-    const uint32_t v = htonl(val);
+    const uint32_t v = htonl(val << 8);
     memcpy(*pos, &v, 3);
     *pos += 3;
 }
@@ -239,7 +239,7 @@ static inline bool __attribute__((nonnull)) dec3(uint32_t * const val,
     if (unlikely(*pos + 3 > end))
         return false;
     memcpy(val, *pos, 3);
-    *val = ntohs(*val);
+    *val = ntohl(*val << 8);
     *pos += 3;
     return true;
 }
