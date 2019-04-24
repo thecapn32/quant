@@ -594,7 +594,7 @@ done:;
     // make sure we sent enough packets when we're called with a limit
     uint64_t sent = sq_len(&c->txq);
     while ((unlikely(limit) && sent < limit) || (c->needs_tx && sent == 0)) {
-        if (likely(tx_ack(c, c->tls.epoch_out, limit && sent < limit)))
+        if (likely(tx_ack(c, ep_data, limit && sent < limit)))
             sent++;
         else {
             warn(WRN, "no ACK sent");

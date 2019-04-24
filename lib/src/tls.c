@@ -1200,9 +1200,6 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
         die("epoch %zu unknown", epoch);
     }
 
-    if (is_enc)
-        c->tls.epoch_out = (uint8_t)epoch;
-
     return setup_cipher(&ctx->header_protection, &ctx->aead, cipher->aead,
                         cipher->hash, is_enc, secret);
 }
