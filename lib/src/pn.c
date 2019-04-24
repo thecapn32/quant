@@ -125,21 +125,15 @@ void reset_pn(struct pn_space * const pn)
 
 void abandon_pn(struct pn_space * const pn)
 {
+    ensure(pn->type != pn_data, "cannot abandon pn_data");
+
     warn(DBG, "abandoning %s %s processing", conn_type(pn->c),
          pn_type_str(pn->type));
     free_pn(pn);
 
-    epoch_t e;
-    switch (pn->type) {
-    case pn_init:
-        e = ep_init;
-        break;
-    case pn_hshk:
+    epoch_t e = ep_init;
+    if (unlikely(pn->type == pn_hshk))
         e = ep_hshk;
-        break;
-    case pn_data:
-        die("cannot abandon pn_data");
-    }
     free_stream(pn->c->cstreams[e]);
     pn->c->cstreams[e] = 0;
     pn->loss_t = 0; // important for earliest_loss_t_pn
