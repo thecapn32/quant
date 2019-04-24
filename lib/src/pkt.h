@@ -31,9 +31,8 @@
 #include <stdint.h>
 
 #include "conn.h"
-#include "pn.h"
 #include "quic.h"
-
+#include "tls.h"
 
 #define MAX_PKT_LEN 1252
 #define MIN_INI_LEN 1200
@@ -86,19 +85,19 @@ static inline uint8_t __attribute__((const)) pkt_nr_len(const uint8_t flags)
 }
 
 
-static inline uint8_t __attribute__((const))
+static inline epoch_t __attribute__((const))
 epoch_for_pkt_type(const uint8_t type)
 {
     switch (type) {
     case LH_INIT:
     case LH_RTRY:
-        return 0;
+        return ep_init;
     case LH_0RTT:
-        return 1;
+        return ep_0rtt;
     case LH_HSHK:
-        return 2;
+        return ep_hshk;
     default:
-        return 3;
+        return ep_data;
     }
 }
 
@@ -106,16 +105,7 @@ epoch_for_pkt_type(const uint8_t type)
 static inline struct pn_space * __attribute__((nonnull))
 pn_for_pkt_type(struct q_conn * const c, const uint8_t t)
 {
-    switch (t) {
-    case LH_INIT:
-    case LH_RTRY:
-        return &c->pn_init.pn;
-    case LH_HSHK:
-        return &c->pn_hshk.pn;
-    case LH_0RTT:
-    default:
-        return &c->pn_data.pn;
-    }
+    return pn_for_epoch(c, epoch_for_pkt_type(t));
 }
 
 
@@ -147,7 +137,6 @@ pkt_type_str(const uint8_t flags, const void * const vers)
 struct q_stream;
 struct w_iov;
 struct w_iov_sq;
-struct cipher_ctx;
 struct sockaddr;
 
 extern bool __attribute__((nonnull)) xor_hp(struct w_iov * const xv,

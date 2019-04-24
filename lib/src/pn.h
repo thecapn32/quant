@@ -44,6 +44,40 @@ struct q_conn;
 KHASH_MAP_INIT_INT64(pm_by_nr, struct pkt_meta *)
 
 
+struct pn_hshk {
+    struct cipher_ctx in;
+    struct cipher_ctx out;
+};
+
+
+struct pn_data {
+    struct cipher_ctx in_0rtt;
+    struct cipher_ctx out_0rtt;
+    struct cipher_ctx in_1rtt[2];
+    struct cipher_ctx out_1rtt[2];
+    uint8_t in_kyph : 1;  ///< Last seen inbound key phase bit.
+    uint8_t out_kyph : 1; ///< Current outbound key phase bit.
+    uint8_t : 6;
+    uint8_t _unused[7];
+};
+
+
+typedef enum { pn_init = 0, pn_hshk = 1, pn_data = 2 } pn_t;
+
+
+static inline const char * __attribute__((const)) pn_type_str(const pn_t type)
+{
+    switch (type) {
+    case pn_init:
+        return "Initial";
+    case pn_hshk:
+        return "Handshake";
+    case pn_data:
+        return "Data";
+    }
+}
+
+
 struct pn_space {
     struct diet recv; ///< Received packet numbers still needing to be ACKed.
     struct diet recv_all; ///< All received packet numbers.
@@ -67,26 +101,15 @@ struct pn_space {
     uint64_t ect0_cnt;
     uint64_t ect1_cnt;
     uint64_t ce_cnt;
-};
 
+    pn_t type;
 
-struct pn_hshk_space {
-    struct pn_space pn;
-    struct cipher_ctx in;
-    struct cipher_ctx out;
-};
+    uint8_t _unused[4];
 
-
-struct pn_data_space {
-    struct pn_space pn;
-    struct cipher_ctx in_0rtt;
-    struct cipher_ctx out_0rtt;
-    struct cipher_ctx in_1rtt[2];
-    struct cipher_ctx out_1rtt[2];
-    uint8_t in_kyph : 1;  ///< Last seen inbound key phase bit.
-    uint8_t out_kyph : 1; ///< Current outbound key phase bit.
-    uint8_t : 6;
-    uint8_t _unused[7];
+    union {
+        struct pn_hshk early;
+        struct pn_data data;
+    };
 };
 
 
@@ -102,14 +125,13 @@ find_sent_pkt(const struct pn_space * const pn,
               struct pkt_meta ** const m);
 
 extern void __attribute__((nonnull))
-init_pn(struct pn_space * const pn, struct q_conn * const c);
+init_pn(struct pn_space * const pn, struct q_conn * const c, const pn_t type);
 
 extern void __attribute__((nonnull)) free_pn(struct pn_space * const pn);
 
 extern void __attribute__((nonnull)) reset_pn(struct pn_space * const pn);
 
-extern void __attribute__((nonnull))
-abandon_pn(struct q_conn * const c, const epoch_t e);
+extern void __attribute__((nonnull)) abandon_pn(struct pn_space * const pn);
 
 
 typedef enum { no_ack = 0, grat_ack = 1, del_ack = 2, imm_ack = 3 } ack_t;

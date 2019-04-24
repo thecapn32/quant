@@ -359,18 +359,12 @@ bool enc_pkt(struct q_stream * const s,
         m->hdr.flags = LH | m->hdr.type;
         break;
     case ep_data:
-        if (pn == &c->pn_data.pn) {
-            m->hdr.type = m->hdr.flags = SH;
-            m->hdr.flags |= c->pn_data.out_kyph ? SH_KYPH : 0;
-        } else {
-            m->hdr.type = LH_HSHK;
-            m->hdr.flags = LH | m->hdr.type;
-        }
+        m->hdr.type = m->hdr.flags = SH;
+        m->hdr.flags |= pn->data.out_kyph ? SH_KYPH : 0;
+        if (c->spin_enabled && c->spin)
+            m->hdr.flags |= SH_SPIN;
         break;
     }
-
-    if (c->spin_enabled && likely(is_lh(m->hdr.flags) == false) && c->spin)
-        m->hdr.flags |= SH_SPIN;
 
     ensure(m->hdr.nr < (1ULL << 62) - 1, "packet number overflow");
 
@@ -565,7 +559,7 @@ tx:;
         if (is_lh(m->hdr.flags) == false)
             maybe_flip_keys(c, true);
         if (unlikely(m->hdr.type == LH_HSHK && c->cstreams[ep_init]))
-            abandon_pn(c, ep_init);
+            abandon_pn(&c->pns[ep_init]);
     }
 
     return true;
@@ -801,24 +795,23 @@ static bool undo_hp(struct w_iov * const xv,
 
 static const struct cipher_ctx * __attribute__((nonnull))
 which_cipher_ctx_in(struct q_conn * const c,
-                    const uint8_t flags,
-                    struct pkt_meta * const m)
+                    struct pkt_meta * const m,
+                    const bool kyph)
 {
-    switch (pkt_type(flags)) {
+    switch (m->hdr.type) {
     case LH_INIT:
     case LH_RTRY:
-        m->pn = &c->pn_init.pn;
-        return &c->pn_init.in;
+        m->pn = &c->pns[pn_init];
+        return &m->pn->early.in;
     case LH_0RTT:
-        m->pn = &c->pn_data.pn;
-        return &c->pn_data.in_0rtt;
+        m->pn = &c->pns[pn_data];
+        return &m->pn->data.in_0rtt;
     case LH_HSHK:
-        m->pn = &c->pn_hshk.pn;
-        return &c->pn_hshk.in;
+        m->pn = &c->pns[pn_hshk];
+        return &m->pn->early.in;
     default:
-        // warn(ERR, "in cipher for kyph %u", is_set(SH_KYPH, flags));
-        m->pn = &c->pn_data.pn;
-        return &c->pn_data.in_1rtt[is_set(SH_KYPH, flags)];
+        m->pn = &c->pns[pn_data];
+        return &m->pn->data.in_1rtt[kyph ? is_set(SH_KYPH, m->hdr.flags) : 0];
     }
 }
 
@@ -851,10 +844,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
                            bool * const decoal)
 {
     *decoal = false;
-    const struct cipher_ctx * ctx = which_cipher_ctx_in(
-        c,
-        // the pp context does not depend on the SH kyph bit
-        is_lh(m->hdr.flags) ? m->hdr.flags : m->hdr.flags & ~SH_KYPH, m);
+    const struct cipher_ctx * ctx = which_cipher_ctx_in(c, m, false);
     if (unlikely(ctx->header_protection == 0))
         return false;
 
@@ -863,17 +853,19 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
         return is_srt(xv, m);
 
     // we can now try and decrypt the packet
+    struct pn_space * const pn = &c->pns[pn_data];
+    struct pn_data * const pnd = &pn->data;
     if (likely(is_lh(m->hdr.flags) == false) &&
-        unlikely(is_set(SH_KYPH, m->hdr.flags) != c->pn_data.in_kyph)) {
-        if (c->pn_data.out_kyph == c->pn_data.in_kyph)
+        unlikely(is_set(SH_KYPH, m->hdr.flags) != pnd->in_kyph)) {
+        if (pnd->out_kyph == pnd->in_kyph)
             // this is a peer-initiated key phase flip
             flip_keys(c, false);
         else
             // the peer switched to a key phase that we flipped
-            c->pn_data.in_kyph = c->pn_data.out_kyph;
+            pnd->in_kyph = pnd->out_kyph;
     }
 
-    ctx = which_cipher_ctx_in(c, m->hdr.flags, m);
+    ctx = which_cipher_ctx_in(c, m, true);
     if (unlikely(ctx->aead == 0))
         return is_srt(xv, m);
 
@@ -912,10 +904,10 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
     } else {
         // check if a key phase flip has been verified
         const bool v_kyph = is_set(SH_KYPH, m->hdr.flags);
-        if (unlikely(v_kyph != c->pn_data.in_kyph))
-            c->pn_data.in_kyph = v_kyph;
+        if (unlikely(v_kyph != pnd->in_kyph))
+            pnd->in_kyph = v_kyph;
 
-        if (c->spin_enabled && m->hdr.nr > diet_max(&(c->pn_data.pn.recv_all)))
+        if (c->spin_enabled && m->hdr.nr > diet_max(&pn->recv_all))
             // short header, spin the bit
             c->spin = (is_set(SH_SPIN, m->hdr.flags) == !c->is_clnt);
     }
@@ -924,7 +916,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
 
     if (!c->is_clnt &&
         unlikely(m->hdr.type == LH_HSHK && c->cstreams[ep_init])) {
-        abandon_pn(c, ep_init);
+        abandon_pn(&c->pns[pn_init]);
 
         // server can assume path is validated
         warn(DBG, "clnt path validated");
@@ -932,8 +924,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
     }
 
     // packet protection verified OK
-    struct pn_space * const pn = pn_for_pkt_type(c, m->hdr.type);
-    if (diet_find(&pn->recv_all, m->hdr.nr))
+    if (diet_find(&pn_for_pkt_type(c, m->hdr.type)->recv_all, m->hdr.nr))
         return is_srt(xv, m);
 
     return true;

@@ -72,7 +72,7 @@ static inline uint8_t __attribute__((const)) varint_size(const uint64_t v)
 static inline void __attribute__((nonnull))
 enc1(uint8_t ** pos, const uint8_t * const end, const uint8_t val)
 {
-    ensure(*pos + sizeof(val) <= end, "buffer overflow");
+    ensure(*pos + sizeof(val) <= end, "buffer overflow: %lu", end - *pos);
     **pos = val;
     *pos += sizeof(val);
 }
@@ -81,7 +81,7 @@ enc1(uint8_t ** pos, const uint8_t * const end, const uint8_t val)
 static inline void __attribute__((nonnull))
 enc2(uint8_t ** pos, const uint8_t * const end, const uint16_t val)
 {
-    ensure(*pos + sizeof(val) <= end, "buffer overflow");
+    ensure(*pos + sizeof(val) <= end, "buffer overflow: %lu", end - *pos);
     const uint16_t v = htons(val);
     memcpy(*pos, &v, sizeof(v));
     *pos += sizeof(val);
@@ -91,7 +91,7 @@ enc2(uint8_t ** pos, const uint8_t * const end, const uint16_t val)
 static inline void __attribute__((nonnull))
 enc3(uint8_t ** pos, const uint8_t * const end, const uint32_t val)
 {
-    ensure(*pos + 3 <= end, "buffer overflow");
+    ensure(*pos + 3 <= end, "buffer overflow: %lu", end - *pos);
     const uint32_t v = htonl(val);
     memcpy(*pos, &v, 3);
     *pos += 3;
@@ -101,7 +101,7 @@ enc3(uint8_t ** pos, const uint8_t * const end, const uint32_t val)
 static inline void __attribute__((nonnull))
 enc4(uint8_t ** pos, const uint8_t * const end, const uint32_t val)
 {
-    ensure(*pos + sizeof(val) <= end, "buffer overflow");
+    ensure(*pos + sizeof(val) <= end, "buffer overflow: %lu", end - *pos);
     const uint32_t v = htonl(val);
     memcpy(*pos, &v, sizeof(v));
     *pos += sizeof(val);
@@ -111,7 +111,7 @@ enc4(uint8_t ** pos, const uint8_t * const end, const uint32_t val)
 static inline void __attribute__((nonnull))
 enc8(uint8_t ** pos, const uint8_t * const end, const uint64_t val)
 {
-    ensure(*pos + sizeof(val) <= end, "buffer overflow");
+    ensure(*pos + sizeof(val) <= end, "buffer overflow: %lu", end - *pos);
     const uint64_t v = htonll(val);
     memcpy(*pos, &v, sizeof(v));
     *pos += sizeof(val);
@@ -121,10 +121,10 @@ enc8(uint8_t ** pos, const uint8_t * const end, const uint64_t val)
 static inline void __attribute__((nonnull))
 encv(uint8_t ** pos, const uint8_t * const end, const uint64_t val)
 {
-    ensure((val & VARINT_MASK) == 0, "value overflow");
+    ensure((val & VARINT_MASK) == 0, "value overflow: %" PRIu64, val);
 
     if ((val & VARINT_MASK8) != 0) {
-        ensure(*pos + 8 <= end, "buffer overflow");
+        ensure(*pos + 8 <= end, "buffer overflow: %lu", end - *pos);
         *(*pos + 0) = ((val >> 56) & 0x3f) + 0xc0;
         *(*pos + 1) = (val >> 48) & 0xff;
         *(*pos + 2) = (val >> 40) & 0xff;
@@ -138,7 +138,7 @@ encv(uint8_t ** pos, const uint8_t * const end, const uint64_t val)
     }
 
     if ((val & VARINT_MASK4) != 0) {
-        ensure(*pos + 4 <= end, "buffer overflow");
+        ensure(*pos + 4 <= end, "buffer overflow: %lu", end - *pos);
         *(*pos + 0) = ((val >> 24) & 0x3f) + 0x80;
         *(*pos + 1) = (val >> 16) & 0xff;
         *(*pos + 2) = (val >> 8) & 0xff;
@@ -148,14 +148,14 @@ encv(uint8_t ** pos, const uint8_t * const end, const uint64_t val)
     }
 
     if ((val & VARINT_MASK2) != 0) {
-        ensure(*pos + 2 <= end, "buffer overflow");
+        ensure(*pos + 2 <= end, "buffer overflow: %lu", end - *pos);
         *(*pos + 0) = ((val >> 8) & 0x3f) + 0x40;
         *(*pos + 1) = val & 0xff;
         *pos += 2;
         return;
     }
 
-    ensure(*pos + 1 <= end, "buffer overflow");
+    ensure(*pos + 1 <= end, "buffer overflow: %lu", end - *pos);
     **pos = val & 0x3f;
     *pos += 1;
 }
@@ -202,7 +202,7 @@ static inline void __attribute__((nonnull)) encb(uint8_t ** pos,
                                                  const uint8_t * const val,
                                                  const uint16_t len)
 {
-    ensure(*pos + len <= end, "buffer overflow");
+    ensure(*pos + len <= end, "buffer overflow: %lu", end - *pos);
     memcpy(*pos, val, len);
     *pos += len;
 }

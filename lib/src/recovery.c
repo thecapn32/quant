@@ -61,7 +61,7 @@ in_recovery(const struct q_conn * const c, const ev_tstamp sent_t)
 }
 
 
-static inline bool __attribute__((nonnull))
+static bool __attribute__((nonnull))
 crypto_pkts_in_flight(struct q_conn * const c)
 {
     return (c->cstreams[ep_init] &&
@@ -70,24 +70,23 @@ crypto_pkts_in_flight(struct q_conn * const c)
 }
 
 
-static inline bool __attribute__((nonnull))
-have_keys(const struct q_conn * const c, const epoch_t e)
+static bool __attribute__((nonnull))
+have_keys(struct q_conn * const c, const pn_t t)
 {
-    switch (e) {
-    case ep_init:
-        return c->pn_init.in.aead && c->pn_init.out.aead;
-    case ep_hshk:
-        return c->pn_hshk.in.aead && c->pn_hshk.out.aead;
-    case ep_0rtt:
-    case ep_data:
-        return (c->pn_data.in_1rtt[0].aead && c->pn_data.out_1rtt[0].aead) ||
-               (c->pn_data.in_1rtt[1].aead && c->pn_data.out_1rtt[1].aead);
+    const struct pn_space * const pn = &c->pns[t];
+    switch (t) {
+    case pn_init:
+    case pn_hshk:
+        return pn->early.in.aead && pn->early.out.aead;
+    case pn_data:
+        return (pn->data.in_1rtt[0].aead && pn->data.out_1rtt[0].aead) ||
+               (pn->data.in_1rtt[1].aead && pn->data.out_1rtt[1].aead);
     }
-    die("unhandled epoch %u", e);
+    die("unhandled pn %s", pn_type_str(t));
 }
 
 
-static inline void __attribute__((nonnull)) maybe_tx(struct q_conn * const c)
+static void __attribute__((nonnull)) maybe_tx(struct q_conn * const c)
 {
     if (has_wnd(c, c->w->mtu) == false)
         return;
@@ -97,24 +96,25 @@ static inline void __attribute__((nonnull)) maybe_tx(struct q_conn * const c)
     ev_feed_event(loop, &c->tx_w, 0);
 }
 
-static inline struct pn_space * __attribute__((nonnull))
-earliest_loss_t(struct q_conn * const c, ev_tstamp * const loss_t)
+static struct pn_space * __attribute__((nonnull))
+earliest_loss_t_pn(struct q_conn * const c)
 {
-    struct pn_space * pn = &c->pn_init.pn;
-    *loss_t = pn->loss_t;
+    struct pn_space * pn = &c->pns[pn_init];
+    ev_tstamp loss_t = pn->loss_t;
 
-    if (!is_zero(c->pn_hshk.pn.loss_t) &&
-        (is_zero(*loss_t) || c->pn_hshk.pn.loss_t < *loss_t)) {
-        pn = &c->pn_hshk.pn;
-        *loss_t = pn->loss_t;
+    struct pn_space * const pn_h = &c->pns[pn_hshk];
+    if (is_zero(pn_h->loss_t) == false &&
+        (is_zero(loss_t) || pn_h->loss_t < loss_t)) {
+        loss_t = pn_h->loss_t;
+        pn = pn_h;
     }
 
-    if (!is_zero(c->pn_data.pn.loss_t) &&
-        (is_zero(*loss_t) || c->pn_data.pn.loss_t < *loss_t)) {
-        pn = &c->pn_data.pn;
-        *loss_t = pn->loss_t;
+    struct pn_space * const pn_d = &c->pns[pn_data];
+    if (is_zero(pn_d->loss_t) == false &&
+        (is_zero(loss_t) || pn_d->loss_t < loss_t)) {
+        // loss_t = pn_d->loss_t;
+        pn = pn_d;
     }
-
     return pn;
 }
 
@@ -128,16 +128,15 @@ void set_ld_timer(struct q_conn * const c)
     // see SetLossDetectionTimer() pseudo code
 
     const char * type = BLD RED "???" NRM;
-    ev_tstamp loss_t;
-    earliest_loss_t(c, &loss_t);
+    const struct pn_space * const pn = earliest_loss_t_pn(c);
 
-    if (!is_zero(loss_t)) {
+    if (!is_zero(pn->loss_t)) {
         type = "TT";
-        c->rec.ld_alarm.repeat = loss_t;
+        c->rec.ld_alarm.repeat = pn->loss_t;
         goto set_to;
     }
 
-    if (unlikely(crypto_pkts_in_flight(c) || have_keys(c, ep_data) == false)) {
+    if (unlikely(crypto_pkts_in_flight(c) || have_keys(c, pn_data) == false)) {
         type = "crypto RTX";
         ev_tstamp to =
             2 * (unlikely(is_zero(c->rec.srtt)) ? kInitialRtt : c->rec.srtt);
@@ -280,12 +279,11 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
     ev_timer_stop(loop, &c->rec.ld_alarm);
 
     // see OnLossDetectionTimeout pseudo code
-    ev_tstamp loss_t;
-    struct pn_space * const pn = earliest_loss_t(c, &loss_t);
+    struct pn_space * const pn = earliest_loss_t_pn(c);
 
-    if (!is_zero(loss_t)) {
-        warn(DBG, "TT alarm ep %u on %s conn %s", c->tls.epoch_out,
-             conn_type(c), cid2str(c->scid));
+    if (!is_zero(pn->loss_t)) {
+        warn(DBG, "TT alarm pn %u on %s conn %s", pn->type, conn_type(c),
+             cid2str(c->scid));
         detect_lost_pkts(pn, true);
 
         // XXX: this will be part of the -20 pseudo code - causes TX to resume
@@ -294,10 +292,10 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
     } else if (crypto_pkts_in_flight(c)) {
         warn(DBG, "crypto RTX #%u on %s conn %s", c->rec.crypto_cnt + 1,
              conn_type(c), cid2str(c->scid));
-        detect_lost_pkts(pn_for_epoch(c, ep_init), false);
-        detect_lost_pkts(pn_for_epoch(c, ep_hshk), false);
-        if (c->rec.crypto_cnt++ >= 2 && c->tls.epoch_out == ep_init &&
-            c->sockopt.enable_ecn) {
+        detect_lost_pkts(&c->pns[pn_init], false);
+        detect_lost_pkts(&c->pns[pn_hshk], false);
+        detect_lost_pkts(&c->pns[pn_data], false);
+        if (c->rec.crypto_cnt++ >= 2 && c->sockopt.enable_ecn) {
             warn(NTE, "turning off ECN for %s conn %s", conn_type(c),
                  cid2str(c->scid));
             c->sockopt.enable_ecn = false;
@@ -306,7 +304,7 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
         ev_invoke(loop, &c->tx_w, 0);
         c->i.pto_cnt++;
 
-    } else if (have_keys(c, ep_data) == false) {
+    } else if (have_keys(c, pn_data) == false) {
         // XXX this doesn't quite implement the pseudo code
         ev_invoke(loop, &c->tx_w, 1);
         c->rec.crypto_cnt++;
@@ -325,7 +323,7 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
 }
 
 
-static inline void __attribute__((nonnull))
+static void __attribute__((nonnull))
 track_acked_pkts(struct w_iov * const v, struct pkt_meta * const m)
 {
     adj_iov_to_start(v, m);

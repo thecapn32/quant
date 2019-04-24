@@ -167,18 +167,8 @@ static inline epoch_t __attribute__((nonnull))
 epoch_in(const struct q_conn * const c)
 {
     const size_t epoch = ptls_get_read_epoch(c->tls.t);
-    switch (epoch) {
-    case 0:
-        return ep_init;
-    case 1:
-        return ep_0rtt;
-    case 2:
-        return ep_hshk;
-    case 3:
-        return ep_data;
-    default:
-        die("unhandled epoch %zu", epoch);
-    }
+    ensure(epoch <= ep_data, "unhandled epoch %zu", epoch);
+    return (epoch_t)epoch;
 }
 
 
@@ -277,8 +267,8 @@ static void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c)
 #ifndef NDEBUG
 static void __attribute__((nonnull)) log_sent_pkts(struct q_conn * const c)
 {
-    for (epoch_t e = ep_init; e < ep_data; e++) {
-        struct pn_space * const pn = pn_for_epoch(c, e);
+    for (pn_t t = pn_init; t <= pn_data; t++) {
+        struct pn_space * const pn = &c->pns[t];
         if (pn->sent_pkts == 0)
             // abandoned PN
             continue;
@@ -299,8 +289,7 @@ static void __attribute__((nonnull)) log_sent_pkts(struct q_conn * const c)
                             p->ack_eliciting ? BLD : "", p->hdr.nr);
         });
         if (pos)
-            warn(DBG, "%s epoch %u%s unacked: %s", conn_type(c), e,
-                 e == 1 ? "/3" : "", buf);
+            warn(DBG, "%s %s unacked: %s", conn_type(c), pn_type_str(t), buf);
     }
 }
 #endif
@@ -567,7 +556,7 @@ void tx(struct ev_loop * const l __attribute__((unused)),
     }
 
     if (unlikely(c->state == conn_opng) && c->is_clnt && c->try_0rtt &&
-        c->pn_data.out_0rtt.aead == 0)
+        c->pns[pn_data].data.out_0rtt.aead == 0)
         // if we have no 0-rtt keys here, the ticket didn't have any - disable
         c->try_0rtt = false;
 
@@ -833,10 +822,9 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
     struct q_stream * s;
     kh_foreach_value(c->streams_by_id, s, { reset_stream(s, false); });
 
-    // reset packet number spaces
-    reset_pn(&c->pn_init.pn);
-    reset_pn(&c->pn_hshk.pn);
-    reset_pn(&c->pn_data.pn);
+    // free packet number spaces
+    for (pn_t t = pn_init; t <= pn_data; t++)
+        reset_pn(&c->pns[t]);
 
     if (is_vneg) {
         // reset CIDs
@@ -1338,21 +1326,21 @@ rx_pkts(struct w_iov_sq * const x,
 
 #endif
 
-                if (m->hdr.nr <= diet_max(&(c->pn_data.pn.recv_all))) {
+                struct pn_space * const pn = &c->pns[pn_data];
+                if (m->hdr.nr <= diet_max(&pn->recv_all)) {
                     log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
                             tok_len);
                     warn(NTE,
                          "pkt from new peer %s:%s, nr " FMT_PNR_IN
                          " <= max " FMT_PNR_IN ", ignoring",
-                         ip, port, m->hdr.nr,
-                         diet_max(&(c->pn_data.pn.recv_all)));
+                         ip, port, m->hdr.nr, diet_max(&pn->recv_all));
                     goto drop;
                 }
 
                 warn(NTE,
                      "pkt from new peer %s:%s, nr " FMT_PNR_IN
                      " > max " FMT_PNR_IN ", probing",
-                     ip, port, m->hdr.nr, diet_max(&(c->pn_data.pn.recv_all)));
+                     ip, port, m->hdr.nr, diet_max(&pn->recv_all));
 
                 if (c->dcid->len == 0)
                     conns_by_ipnp_update(c, (struct sockaddr *)&v->addr);
@@ -1362,7 +1350,7 @@ rx_pkts(struct w_iov_sq * const x,
             }
         } else
             // this is a vneg or rtry pkt, dec_pkt_hdr_remainder not called
-            m->pn = &c->pn_init.pn;
+            m->pn = &c->pns[pn_init];
 
     decoal_done:
         if (likely(rx_pkt(ws, v, m, x, &odcid, tok, tok_len))) {
@@ -1732,9 +1720,8 @@ struct q_conn * new_conn(struct w_engine * const w,
         update_conn_conf(c, cc);
 
     // initialize packet number spaces
-    init_pn(&c->pn_init.pn, c);
-    init_pn(&c->pn_hshk.pn, c);
-    init_pn(&c->pn_data.pn, c);
+    for (pn_t t = pn_init; t <= pn_data; t++)
+        init_pn(&c->pns[t], c, t);
 
     // create crypto streams
     c->streams_by_id = kh_init(streams_by_id);
@@ -1789,6 +1776,7 @@ void free_conn(struct q_conn * const c)
     kh_foreach_value(c->streams_by_id, s, { free_stream(s); });
     kh_destroy(streams_by_id, c->streams_by_id);
 
+    // free crypto streams
     for (epoch_t e = ep_init; e <= ep_data; e++)
         if (c->cstreams[e])
             free_stream(c->cstreams[e]);
@@ -1796,9 +1784,8 @@ void free_conn(struct q_conn * const c)
     free_tls(c, false);
 
     // free packet number spaces
-    free_pn(&c->pn_init.pn);
-    free_pn(&c->pn_hshk.pn);
-    free_pn(&c->pn_data.pn);
+    for (pn_t t = pn_init; t <= pn_data; t++)
+        free_pn(&c->pns[t]);
 
     ev_async_stop(loop, &c->tx_w);
 

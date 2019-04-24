@@ -970,16 +970,16 @@ void init_tls(struct q_conn * const c, const char * const clnt_alpn)
 
 static void __attribute__((nonnull)) free_prot(struct q_conn * const c)
 {
-    dispose_cipher(&c->pn_init.in);
-    dispose_cipher(&c->pn_init.out);
-    dispose_cipher(&c->pn_hshk.in);
-    dispose_cipher(&c->pn_hshk.out);
-    dispose_cipher(&c->pn_data.in_0rtt);
-    dispose_cipher(&c->pn_data.out_0rtt);
-    dispose_cipher(&c->pn_data.in_1rtt[0]);
-    dispose_cipher(&c->pn_data.out_1rtt[0]);
-    dispose_cipher(&c->pn_data.in_1rtt[1]);
-    dispose_cipher(&c->pn_data.out_1rtt[1]);
+    dispose_cipher(&c->pns[pn_init].early.in);
+    dispose_cipher(&c->pns[pn_init].early.out);
+    dispose_cipher(&c->pns[pn_hshk].early.in);
+    dispose_cipher(&c->pns[pn_hshk].early.out);
+    dispose_cipher(&c->pns[pn_data].data.in_0rtt);
+    dispose_cipher(&c->pns[pn_data].data.out_0rtt);
+    dispose_cipher(&c->pns[pn_data].data.in_1rtt[0]);
+    dispose_cipher(&c->pns[pn_data].data.out_1rtt[0]);
+    dispose_cipher(&c->pns[pn_data].data.in_1rtt[1]);
+    dispose_cipher(&c->pns[pn_data].data.out_1rtt[1]);
 }
 
 
@@ -1002,7 +1002,8 @@ void init_prot(struct q_conn * const c)
         .base = (uint8_t *)(c->is_clnt ? &dcid->id : &scid->id),
         .len = c->is_clnt ? dcid->len : scid->len};
     ptls_cipher_suite_t * cs = &ptls_openssl_aes128gcmsha256;
-    setup_initial_encryption(&c->pn_init.in, &c->pn_init.out, &cs, cid,
+    struct pn_space * const pn = &c->pns[pn_init];
+    setup_initial_encryption(&pn->early.in, &pn->early.out, &cs, cid,
                              c->is_clnt);
 }
 
@@ -1179,21 +1180,22 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
     // warn(CRT, "update_traffic_key %s %u", is_enc ? "tx" : "rx", epoch);
     struct q_conn * const c = *ptls_get_data_ptr(tls);
     ptls_cipher_suite_t * const cipher = ptls_get_cipher(c->tls.t);
-    struct cipher_ctx * ctx;
+    struct pn_space * const pn = pn_for_epoch(c, (epoch_t)epoch);
 
+    struct cipher_ctx * ctx;
     switch (epoch) {
     case ep_0rtt:
-        ctx = is_enc ? &c->pn_data.out_0rtt : &c->pn_data.in_0rtt;
+        ctx = is_enc ? &pn->data.out_0rtt : &pn->data.in_0rtt;
         break;
 
     case ep_hshk:
-        ctx = is_enc ? &c->pn_hshk.out : &c->pn_hshk.in;
+        ctx = is_enc ? &pn->early.out : &pn->early.in;
         break;
 
     case ep_data:
         memcpy(c->tls.secret[is_enc], secret, cipher->hash->digest_size);
-        ctx = is_enc ? &c->pn_data.out_1rtt[c->pn_data.out_kyph]
-                     : &c->pn_data.in_1rtt[c->pn_data.in_kyph];
+        ctx = is_enc ? &pn->data.out_1rtt[pn->data.out_kyph]
+                     : &pn->data.in_1rtt[pn->data.in_kyph];
         break;
 
     default:
@@ -1283,20 +1285,18 @@ void free_tls_ctx(void)
 }
 
 
-static const struct cipher_ctx * __attribute__((nonnull))
-which_cipher_ctx_out(const struct q_conn * const c, const uint8_t flags)
+static inline const struct cipher_ctx * __attribute__((nonnull))
+which_cipher_ctx_out(const struct pkt_meta * const m, const bool kyph)
 {
-    switch (pkt_type(flags)) {
+    switch (m->hdr.type) {
     case LH_INIT:
     case LH_RTRY:
-        return &c->pn_init.out;
-    case LH_0RTT:
-        return &c->pn_data.out_0rtt;
     case LH_HSHK:
-        return &c->pn_hshk.out;
+        return &m->pn->early.out;
+    case LH_0RTT:
+        return &m->pn->data.out_0rtt;
     default:
-        // warn(ERR, "out cipher for kyph %u", is_set(SH_KYPH, flags));
-        return &c->pn_data.out_1rtt[is_set(SH_KYPH, flags)];
+        return &m->pn->data.out_1rtt[kyph ? is_set(SH_KYPH, m->hdr.flags) : 0];
     }
 }
 
@@ -1333,8 +1333,7 @@ uint16_t enc_aead(const struct w_iov * const v,
                   struct w_iov * const xv,
                   const uint16_t pkt_nr_pos)
 {
-    struct q_conn * const c = m->pn->c;
-    const struct cipher_ctx * ctx = which_cipher_ctx_out(c, m->hdr.flags);
+    const struct cipher_ctx * ctx = which_cipher_ctx_out(m, true);
     if (unlikely(ctx == 0 || ctx->aead == 0)) {
         warn(NTE, "no %s crypto context",
              pkt_type_str(m->hdr.flags, &m->hdr.vers));
@@ -1350,10 +1349,7 @@ uint16_t enc_aead(const struct w_iov * const v,
                             plen - AEAD_LEN, m->hdr.nr, v->buf, hdr_len);
 
     // apply packet protection
-    ctx = which_cipher_ctx_out(
-        c,
-        // the pp context does not depend on the SH kyph bit
-        is_lh(m->hdr.flags) ? m->hdr.flags : m->hdr.flags & ~SH_KYPH);
+    ctx = which_cipher_ctx_out(m, false);
     if (likely(pkt_nr_pos) &&
         unlikely(xor_hp(xv, m, ctx, pkt_nr_pos, true) == false))
         return 0;
@@ -1425,9 +1421,10 @@ bool verify_rtry_tok(struct q_conn * const c,
 
 void flip_keys(struct q_conn * const c, const bool out)
 {
-    const bool new_kyph = !(out ? c->pn_data.out_kyph : c->pn_data.in_kyph);
+    struct pn_data * const pnd = &c->pns[pn_data].data;
+    const bool new_kyph = !(out ? pnd->out_kyph : pnd->in_kyph);
     // warn(DBG, "flip %s kyph %u -> %u", out ? "out" : "in",
-    //      out ? c->pn_data.out_kyph : c->pn_data.in_kyph, new_kyph);
+    //      out ? pnd->out_kyph : pnd->in_kyph, new_kyph);
 
     const ptls_cipher_suite_t * const cs = ptls_get_cipher(c->tls.t);
     if (unlikely(cs == 0)) {
@@ -1437,22 +1434,22 @@ void flip_keys(struct q_conn * const c, const bool out)
 
     uint8_t new_secret[PTLS_MAX_DIGEST_SIZE];
     static const char flip_label[] = "traffic upd";
-    if (c->pn_data.in_1rtt[new_kyph].aead)
-        ptls_aead_free(c->pn_data.in_1rtt[new_kyph].aead);
-    if (setup_initial_key(&c->pn_data.in_1rtt[new_kyph], cs, c->tls.secret[0],
+    if (pnd->in_1rtt[new_kyph].aead)
+        ptls_aead_free(pnd->in_1rtt[new_kyph].aead);
+    if (setup_initial_key(&pnd->in_1rtt[new_kyph], cs, c->tls.secret[0],
                           flip_label, 0, new_secret))
         return;
     memcpy(c->tls.secret[0], new_secret, cs->hash->digest_size);
-    if (c->pn_data.out_1rtt[new_kyph].aead)
-        ptls_aead_free(c->pn_data.out_1rtt[new_kyph].aead);
-    if (setup_initial_key(&c->pn_data.out_1rtt[new_kyph], cs, c->tls.secret[1],
+    if (pnd->out_1rtt[new_kyph].aead)
+        ptls_aead_free(pnd->out_1rtt[new_kyph].aead);
+    if (setup_initial_key(&pnd->out_1rtt[new_kyph], cs, c->tls.secret[1],
                           flip_label, 1, new_secret) != 0)
         return;
     memcpy(c->tls.secret[1], new_secret, cs->hash->digest_size);
 
     if (out == false)
-        c->pn_data.in_kyph = new_kyph;
-    c->pn_data.out_kyph = new_kyph;
+        pnd->in_kyph = new_kyph;
+    pnd->out_kyph = new_kyph;
 }
 
 
@@ -1461,7 +1458,8 @@ void maybe_flip_keys(struct q_conn * const c, const bool out)
     if (c->key_flips_enabled == false || likely(c->do_key_flip == false))
         return;
 
-    if (c->pn_data.out_kyph != c->pn_data.in_kyph)
+    struct pn_data * const pnd = &c->pns[pn_data].data;
+    if (pnd->out_kyph != pnd->in_kyph)
         return;
 
     flip_keys(c, out);

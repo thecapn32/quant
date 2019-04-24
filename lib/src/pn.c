@@ -71,7 +71,9 @@ struct w_iov * find_sent_pkt(const struct pn_space * const pn,
 }
 
 
-void init_pn(struct pn_space * const pn, struct q_conn * const c)
+void init_pn(struct pn_space * const pn,
+             struct q_conn * const c,
+             const pn_t type)
 {
     diet_init(&pn->recv);
     diet_init(&pn->recv_all);
@@ -80,6 +82,7 @@ void init_pn(struct pn_space * const pn, struct q_conn * const c)
     pn->sent_pkts = kh_init(pm_by_nr);
     pn->lg_sent = pn->lg_acked = UINT64_MAX;
     pn->c = c;
+    pn->type = type;
 }
 
 
@@ -120,16 +123,32 @@ void reset_pn(struct pn_space * const pn)
 }
 
 
-void abandon_pn(struct q_conn * const c, const epoch_t e)
+void abandon_pn(struct pn_space * const pn)
 {
-    warn(DBG, "abandon %s epoch %u processing", conn_type(c), e);
-    free_pn(&c->pn_init.pn);
-    free_stream(c->cstreams[e]);
-    dispose_cipher(&c->pn_init.in);
-    dispose_cipher(&c->pn_init.out);
-    c->cstreams[e] = 0;
+    warn(DBG, "abandoning %s %s processing", conn_type(pn->c),
+         pn_type_str(pn->type));
+    free_pn(pn);
+
+    epoch_t e;
+    switch (pn->type) {
+    case pn_init:
+        e = ep_init;
+        break;
+    case pn_hshk:
+        e = ep_hshk;
+        break;
+    case pn_data:
+        die("cannot abandon pn_data");
+    }
+    free_stream(pn->c->cstreams[e]);
+    pn->c->cstreams[e] = 0;
+    pn->loss_t = 0; // important for earliest_loss_t_pn
+
+    dispose_cipher(&pn->early.in);
+    dispose_cipher(&pn->early.out);
+
     // we need to kill the timer if there are no pkts outstanding
-    set_ld_timer(c);
+    set_ld_timer(pn->c);
 }
 
 
@@ -158,7 +177,7 @@ ack_t needs_ack(const struct pn_space * const pn)
         return grat_ack;
     }
 
-    const bool in_hshk = &c->pn_data.pn != pn;
+    const bool in_hshk = pn->type != pn_data;
     if (in_hshk) {
         // warn(ERR, "%s conn %s: imm_ack: in_hshk", conn_type(c),
         //      cid2str(c->scid));

@@ -208,8 +208,7 @@ struct q_conn {
     uint32_t vers;         ///< QUIC version in use for this connection.
     uint32_t vers_initial; ///< QUIC version first negotiated.
 
-    struct pn_hshk_space pn_init, pn_hshk;
-    struct pn_data_space pn_data;
+    struct pn_space pns[pn_data + 1];
 
     int64_t next_sid_bidi; ///< Next unidir stream ID to use on q_rsv_stream().
     int64_t next_sid_uni;  ///< Next bidi stream ID to use on q_rsv_stream().
@@ -359,12 +358,12 @@ pn_for_epoch(struct q_conn * const c, const epoch_t e)
 {
     switch (e) {
     case ep_init:
-        return &c->pn_init.pn;
+        return &c->pns[pn_init];
     case ep_hshk:
-        return &c->pn_hshk.pn;
+        return &c->pns[pn_hshk];
     case ep_0rtt:
     case ep_data:
-        return &c->pn_data.pn;
+        return &c->pns[pn_data];
     }
     die("unhandled epoch %u", e);
 }

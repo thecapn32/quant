@@ -245,9 +245,12 @@ struct q_conn * q_connect(struct w_engine * const w,
         return 0;
     }
 
+#ifndef NDEBUG
+    struct pn_data * const pnd = &c->pns[pn_data].data;
     warn(WRN, "%s conn %s connected%s, cipher %s", conn_type(c),
          cid2str(c->scid), c->did_0rtt ? " after 0-RTT" : "",
-         c->pn_data.out_1rtt[c->pn_data.out_kyph].aead->algo->name);
+         pnd->out_1rtt[pnd->out_kyph].aead->algo->name);
+#endif
 
     return c;
 }
@@ -492,9 +495,10 @@ accept:;
                        NI_NUMERICHOST | NI_NUMERICSERV) == 0,
            "getnameinfo");
 
+    struct pn_data * const pnd = &c->pns[pn_data].data;
     warn(WRN, "%s conn %s accepted from clnt %s:%s%s, cipher %s", conn_type(c),
          cid2str(c->scid), ip, port, c->did_0rtt ? " after 0-RTT" : "",
-         c->pn_data.out_1rtt[c->pn_data.out_kyph].aead->algo->name);
+         pnd->out_1rtt[pnd->out_kyph].aead->algo->name);
 #endif
 
     update_conn_conf(c, conn_conf);
