@@ -58,6 +58,7 @@
 #endif
 
 #include "conn.h"
+#include "diet.h"
 #include "pkt.h"
 #include "pn.h"
 #include "quic.h"
@@ -159,7 +160,12 @@ void q_free(struct w_iov_sq * const q)
     while (!sq_empty(q)) {
         struct w_iov * const v = sq_first(q);
         sq_remove_head(q, next);
-        free_iov(v, &meta(v)); // meta use OK
+        struct pkt_meta * const m = &meta(v); // meta use OK
+        if (m->txed && m->is_lost == false && m->is_acked == false) {
+            m->is_lost = true;
+            diet_insert(&m->pn->lost, m->hdr.nr, (ev_tstamp)NAN);
+        }
+        free_iov(v, &meta(v));
     }
 }
 
