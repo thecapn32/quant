@@ -1615,7 +1615,7 @@ void enc_new_cid_frame(uint8_t ** pos,
     encb(pos, end, ncid.srt, sizeof(ncid.srt));
 
     warn(INF,
-         FRAM_OUT "NEW_CONNECTION_ID" NRM " seq=%" PRIx64
+         FRAM_OUT "NEW_CONNECTION_ID" NRM " seq=%" PRIu64
                   " len=%u cid=%s srt=%s",
          ncid.seq, ncid.len, cid2str(&ncid),
          hex2str(ncid.srt, sizeof(ncid.srt)));
