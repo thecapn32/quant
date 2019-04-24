@@ -10,7 +10,7 @@ s=${2:-quant}
 
 # port to run servers on
 addr=127.0.0.1
-port=4434 # mozquic server can only run on 4433 at the moment
+port=4433 # mozquic server can only run on 4433 at the moment
 path=/20000
 dir=/Users/lars/Sites/lars/output/papers
 cert=test/dummy.crt

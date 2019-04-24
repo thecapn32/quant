@@ -1026,7 +1026,7 @@ bool dec_frames(struct q_conn * const c,
     !defined(NO_FUZZER_CORPUS_COLLECTION)
     // when called from the fuzzer, v->addr.ss_family is zero
     if (v->addr.ss_family)
-        write_to_corpus(corpus_frm_dir, &v->buf[i], v->len - i);
+        write_to_corpus(corpus_frm_dir, pos, (size_t)(end - pos));
 #endif
 
     while (likely(pos < end)) {
