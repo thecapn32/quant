@@ -272,10 +272,16 @@ static void __attribute__((nonnull)) log_sent_pkts(struct q_conn * const c)
         if (pn->sent_pkts == 0)
             // abandoned PN
             continue;
-        char buf[0xffff];
-        int pos = 0;
+
+        struct diet unacked = diet_initializer(unacked);
         struct pkt_meta * p;
-        kh_foreach_value(pn->sent_pkts, p, {
+        kh_foreach_value(pn->sent_pkts, p,
+                         diet_insert(&unacked, p->hdr.nr, (ev_tstamp)NAN));
+
+        char buf[512];
+        int pos = 0;
+        struct ival * i = 0;
+        diet_foreach (i, diet, &unacked) {
             // cppcheck-suppress unsignedLessThanZero
             if ((size_t)pos >= sizeof(buf)) {
                 buf[sizeof(buf) - 2] = buf[sizeof(buf) - 3] =
@@ -283,11 +289,17 @@ static void __attribute__((nonnull)) log_sent_pkts(struct q_conn * const c)
                 buf[sizeof(buf) - 1] = 0;
                 break;
             }
-            pos += snprintf(&buf[pos], sizeof(buf) - (size_t)pos,
-                            "%s%s" FMT_PNR_OUT NRM " ",
-                            has_stream_data(p) ? REV : "",
-                            p->ack_eliciting ? BLD : "", p->hdr.nr);
-        });
+
+            if (i->lo == i->hi)
+                pos += snprintf(&buf[pos], sizeof(buf) - (size_t)pos,
+                                FMT_PNR_OUT "%s", i->lo,
+                                splay_next(diet, &unacked, i) ? ", " : "");
+            else
+                pos += snprintf(&buf[pos], sizeof(buf) - (size_t)pos,
+                                FMT_PNR_OUT ".." FMT_PNR_OUT "%s", i->lo, i->hi,
+                                splay_next(diet, &unacked, i) ? ", " : "");
+        }
+
         if (pos)
             warn(DBG, "%s %s unacked: %s", conn_type(c), pn_type_str(t), buf);
     }
