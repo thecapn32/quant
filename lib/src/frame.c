@@ -899,18 +899,16 @@ dec_new_cid_frame(const uint8_t ** pos,
     decv_chk(&dcid.seq, pos, end, c, FRM_CID);
     dec1_chk(&dcid.len, pos, end, c, FRM_CID);
 
-    if (unlikely(dcid.len < 4 || dcid.len > CID_LEN_MAX))
+    if (unlikely(dcid.len < CID_LEN_MIN || dcid.len > CID_LEN_MAX))
         err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_CID,
                          "illegal cid len %u", dcid.len);
 
     decb_chk(dcid.id, pos, end, dcid.len, c, FRM_CID);
     decb_chk(dcid.srt, pos, end, sizeof(dcid.srt), c, FRM_CID);
 
-    bool dup = false;
-    if (splay_find(cids_by_seq, &c->dcids_by_seq, &dcid) == 0)
+    const bool dup = splay_find(cids_by_seq, &c->dcids_by_seq, &dcid);
+    if (dup == false)
         add_dcid(c, &dcid);
-    else
-        dup = true;
 
     warn(INF,
          FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu64

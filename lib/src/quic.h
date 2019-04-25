@@ -54,6 +54,7 @@
 
 #define MSECS_PER_SEC 1000 ///< Milliseconds per second.
 
+#define CID_LEN_MIN 4   ///< Minimum CID length allowed by spec.
 #define CID_LEN_MAX 18  ///< Maximum CID length allowed by spec.
 #define SCID_LEN_CLNT 4 ///< Default client source CID length.
 #define SCID_LEN_SERV 8 ///< Default server source CID length.
