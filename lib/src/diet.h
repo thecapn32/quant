@@ -80,6 +80,8 @@ splay_head(diet, ival);
 #define diet_cnt splay_count
 #define diet_foreach splay_foreach
 #define diet_foreach_rev splay_foreach_rev
+#define diet_next splay_next
+#define diet_prev splay_prev
 
 
 SPLAY_PROTOTYPE(diet, ival, node, ival_cmp)
