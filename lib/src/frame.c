@@ -1296,7 +1296,7 @@ void enc_ack_frame(uint8_t ** pos,
     m->ack_block_pos = (uint16_t)(*pos - start);
 
     uint64_t prev_lo = 0;
-    splay_foreach_rev (b, diet, &pn->recv) {
+    diet_foreach_rev (b, diet, &pn->recv) {
         uint64_t gap = 0;
         if (prev_lo) {
             gap = prev_lo - b->hi - 2;
