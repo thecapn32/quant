@@ -321,7 +321,7 @@ size_t diet_to_str(char * const str, const size_t len, struct diet * const d)
     struct ival * i = 0;
     size_t pos = 0;
     str[0] = 0;
-    splay_foreach (i, diet, d) {
+    diet_foreach (i, diet, d) {
         pos += (size_t)snprintf(&str[pos], len - pos, "%" PRIu64, i->lo);
         if (i->lo != i->hi)
             pos += (size_t)snprintf(&str[pos], len - pos, "-%" PRIu64, i->hi);

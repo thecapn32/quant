@@ -75,9 +75,11 @@ ival_cmp(const struct ival * const a, const struct ival * const b)
 splay_head(diet, ival);
 
 
-#define diet_initializer(d) splay_initializer(d)
-#define diet_init(d) splay_init(d)
-#define diet_cnt(d) splay_count(d)
+#define diet_initializer splay_initializer
+#define diet_init splay_init
+#define diet_cnt splay_count
+#define diet_foreach splay_foreach
+#define diet_foreach_rev splay_foreach_rev
 
 
 SPLAY_PROTOTYPE(diet, ival, node, ival_cmp)
