@@ -299,6 +299,7 @@ static void __attribute__((nonnull)) log_sent_pkts(struct q_conn * const c)
                                 FMT_PNR_OUT ".." FMT_PNR_OUT "%s", i->lo, i->hi,
                                 splay_next(diet, &unacked, i) ? ", " : "");
         }
+        diet_free(&unacked);
 
         if (pos)
             warn(DBG, "%s %s unacked: %s", conn_type(c), pn_type_str(t), buf);
