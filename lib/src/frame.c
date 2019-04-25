@@ -247,16 +247,18 @@ dec_stream_or_crypto_frame(const uint8_t type,
         // warn(WRN, "zero-len strm/crypt frame on sid " FMT_SID ", ignoring",
         //      sid);
         ignore = true;
+        kind = "ign";
         goto done;
     }
 
     if (unlikely(m->stream == 0)) {
         if (unlikely(diet_find(&c->closed_streams, (uint64_t)sid))) {
-            warn(NTE,
-                 "ignoring STREAM frame for closed strm " FMT_SID
-                 " on %s conn %s",
-                 sid, conn_type(c), cid2str(c->scid));
+            // warn(NTE,
+            //      "ignoring STREAM frame for closed strm " FMT_SID
+            //      " on %s conn %s",
+            //      sid, conn_type(c), cid2str(c->scid));
             ignore = true;
+            kind = "ign";
             goto done;
         }
 
@@ -368,6 +370,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
              strm_state_str[m->stream->state], sid, conn_type(c),
              cid2str(c->scid));
         ignore = true;
+        kind = "ign";
         goto done;
     }
 
@@ -384,6 +387,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
              m->stream_off, m->stream_off + m->stream_data_len, p->stream_off,
              p->stream_off + p->stream_data_len - 1);
         ignore = true;
+        kind = "ign";
         goto done;
     }
 
