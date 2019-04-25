@@ -41,8 +41,8 @@
 #define STRM_FL_SRV 0x01
 #define STRM_FL_UNI 0x02
 
-#define INIT_STRM_DATA_BIDI 0xffff
-#define INIT_STRM_DATA_UNI 0x7fff
+#define INIT_STRM_DATA_BIDI UINT64_C(0xffff)
+#define INIT_STRM_DATA_UNI UINT64_C(0x7ff)
 #define INIT_MAX_UNI_STREAMS 3
 #define INIT_MAX_BIDI_STREAMS 6 // XXX picoquic won't respect a lower count
 
@@ -166,18 +166,15 @@ needs_ctrl(const struct q_stream * const s)
 static inline void __attribute__((nonnull))
 need_ctrl_update(struct q_stream * const s)
 {
-    if (needs_ctrl(s)) {
-        if (s->in_ctrl == false) {
+    if (unlikely(needs_ctrl(s) != s->in_ctrl)) {
+        if (s->in_ctrl == false)
             sl_insert_head(&s->c->need_ctrl, s, node_ctrl);
-            s->in_ctrl = true;
-        }
-    } else {
-        if (s->in_ctrl) {
+        else
             sl_remove(&s->c->need_ctrl, s, q_stream, node_ctrl);
-            s->in_ctrl = false;
-        }
+        s->in_ctrl = !s->in_ctrl;
     }
 }
+
 
 extern struct q_stream * __attribute__((nonnull))
 get_stream(struct q_conn * const c, const int64_t id);
