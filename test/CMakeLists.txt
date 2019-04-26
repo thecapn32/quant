@@ -50,6 +50,10 @@ if(HAVE_BENCHMARK_H)
       target_link_libraries(${TARGET} PUBLIC benchmark pthread libquant)
     endif()
 
+    if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin" AND CMAKE_COMPILER_IS_GNUCC)
+      target_link_options(${TARGET} PUBLIC -lc++)
+    endif()
+
     target_include_directories(${TARGET}
       SYSTEM PRIVATE
         ${OPENSSL_ROOT_DIR}/include
