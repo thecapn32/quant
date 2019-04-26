@@ -1133,7 +1133,7 @@ static void read_tickets()
 
         if (fread(&len, sizeof(len), 1, fp) != 1)
             goto abort;
-        ensure(len <= 256, "ticket_len %lu too long", len);
+        ensure(len <= 8192, "ticket_len %lu too long", len);
         t->ticket_len = len;
         t->ticket = calloc(len, sizeof(*t->ticket));
         ensure(t->ticket, "calloc");
