@@ -148,9 +148,9 @@ void abandon_pn(struct pn_space * const pn)
 
 ack_t needs_ack(const struct pn_space * const pn)
 {
-    struct q_conn * const c = pn->c;
+    // struct q_conn * const c = pn->c;
 
-    if (unlikely(c->imm_ack)) {
+    if (unlikely(pn->imm_ack)) {
         // warn(ERR, "%s conn %s: imm_ack: forced", conn_type(c),
         //      cid2str(c->scid));
         return imm_ack;

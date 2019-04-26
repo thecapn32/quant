@@ -104,7 +104,8 @@ struct pn_space {
 
     pn_t type;
 
-    uint8_t _unused[4];
+    uint32_t imm_ack : 1; ///< Force an immediate ACK.
+    uint32_t : 31;
 
     union {
         struct pn_hshk early;

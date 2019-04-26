@@ -334,7 +334,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
             if (unlikely(v != last))
                 adj_iov_to_start(last, m_last);
             if (m_last->is_fin) {
-                c->imm_ack = true;
+                m->pn->imm_ack = true;
                 strm_to_state(m->stream, m->stream->state <= strm_hcrm
                                              ? strm_hcrm
                                              : strm_clsd);
@@ -1360,7 +1360,7 @@ void enc_ack_frame(uint8_t ** pos,
     ev_timer_stop(loop, &c->ack_alarm);
     bit_zero(NUM_FRAM_TYPES, &pn->rx_frames);
     pn->pkts_rxed_since_last_ack_tx = 0;
-    c->imm_ack = false;
+    pn->imm_ack = false;
     track_frame(m, FRM_ACK);
 }
 
