@@ -1109,6 +1109,7 @@ static void read_tickets()
         if (fread(&len, sizeof(len), 1, fp) != 1)
             // we read all the tickets
             break;
+        ensure(len <= 256, "SNI len %lu too long", len);
 
         struct tls_ticket * const t = calloc(1, sizeof(*t));
         ensure(t, "calloc");
@@ -1119,6 +1120,7 @@ static void read_tickets()
 
         if (fread(&len, sizeof(len), 1, fp) != 1)
             goto abort;
+        ensure(len <= 256, "ALPN len %lu too long", len);
         t->alpn = calloc(1, len);
         ensure(t->alpn, "calloc");
         if (fread(t->alpn, sizeof(*t->alpn), len, fp) != len)
@@ -1131,6 +1133,7 @@ static void read_tickets()
 
         if (fread(&len, sizeof(len), 1, fp) != 1)
             goto abort;
+        ensure(len <= 256, "ticket_len %lu too long", len);
         t->ticket_len = len;
         t->ticket = calloc(len, sizeof(*t->ticket));
         ensure(t->ticket, "calloc");

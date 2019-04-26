@@ -67,7 +67,7 @@ typedef enum { pn_init = 0, pn_hshk = 1, pn_data = 2 } pn_t;
 
 static inline const char * __attribute__((const)) pn_type_str(const pn_t type)
 {
-    switch (type) {
+    switch (type) { // lgtm [cpp/missing-return]
     case pn_init:
         return "Initial";
     case pn_hshk:
