@@ -4,7 +4,7 @@ Vagrant.configure("2") do |config|
       config.vm.hostname = "node#{i}"
 
       # OS to use for the VM
-      config.vm.box = "ubuntu/cosmic64"
+      config.vm.box = "ubuntu/disco64"
 
       config.vm.network "private_network", type: "dhcp"
 
