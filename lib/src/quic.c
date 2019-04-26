@@ -95,7 +95,7 @@ void *api_conn = 0, *api_strm = 0;
 struct q_conn_sl accept_queue = sl_head_initializer(accept_queue);
 
 static ev_timer api_alarm;
-
+static uint64_t num_bufs;
 
 #if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
@@ -576,15 +576,15 @@ struct w_engine * q_init(const char * const ifname,
     conns_by_srt = kh_init(conns_by_srt);
 
     // initialize warpcore on the given interface
-    const uint64_t nbufs = conf && conf->num_bufs ? conf->num_bufs : 10000;
-    struct w_engine * const w = w_init(ifname, 0, nbufs);
-    const uint64_t nbufs_ok = sq_len(&w->iov);
-    if (nbufs_ok < nbufs)
+    num_bufs = conf && conf->num_bufs ? conf->num_bufs : 10000;
+    struct w_engine * const w = w_init(ifname, 0, num_bufs);
+    const uint64_t num_bufs_ok = sq_len(&w->iov);
+    if (num_bufs_ok < num_bufs)
         warn(WRN, "only allocated %" PRIu64 "/%" PRIu64 " warpcore buffers",
-             nbufs_ok, nbufs);
-    pkt_meta = calloc(nbufs + 1, sizeof(*pkt_meta));
+             num_bufs_ok, num_bufs);
+    pkt_meta = calloc(num_bufs + 1, sizeof(*pkt_meta));
     ensure(pkt_meta, "could not calloc");
-    ASAN_POISON_MEMORY_REGION(pkt_meta, (nbufs + 1) * sizeof(*pkt_meta));
+    ASAN_POISON_MEMORY_REGION(pkt_meta, (num_bufs + 1) * sizeof(*pkt_meta));
 
     // initialize the event loop (prefer kqueue and epoll)
     loop = ev_default_loop(ev_recommended_backends() | EVBACKEND_KQUEUE |
@@ -742,11 +742,13 @@ void q_cleanup(struct w_engine * const w)
         free(zo);
     }
 
-    // XXX: all bufs must have been returned for sq_len() to be correct
-    for (uint64_t i = 0; i <= sq_len(&w->iov); i++) {
+    for (uint64_t i = 0; i <= num_bufs; i++) {
         ASAN_UNPOISON_MEMORY_REGION(&pkt_meta[i], sizeof(pkt_meta[i]));
         if (pkt_meta[i].hdr.nr)
-            warn(DBG, "buffer %" PRIu64 " still in use for pkt %" PRIu64, i,
+            warn(DBG,
+                 "buffer %" PRIu64 " still in use for %cX'ed %s pkt %" PRIu64,
+                 i, pkt_meta[i].txed ? 'T' : 'R',
+                 pkt_type_str(pkt_meta[i].hdr.flags, &pkt_meta[i].hdr.vers),
                  pkt_meta[i].hdr.nr);
     }
 
