@@ -221,34 +221,36 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
     uint64_t lg_lost = UINT64_MAX;
     ev_tstamp lg_lost_tx_t = 0;
     bool in_flight_lost = false;
-    struct pkt_meta * p;
-    kh_foreach_value(pn->sent_pkts, p, {
-        ensure(p->acked == false, "ACKed pkt in sent_pkts");
-        ensure(p->lost == false, "lost pkt in sent_pkts");
+    struct pkt_meta * m;
+    kh_foreach_value(pn->sent_pkts, m, {
+        ensure(m->acked == false, "ACKed %s pkt %" PRIu64 " in sent_pkts",
+               pkt_type_str(m->hdr.flags, &m->hdr.vers), m->hdr.nr);
+        ensure(m->lost == false, "lost %s pkt %" PRIu64 " in sent_pkts",
+               pkt_type_str(m->hdr.flags, &m->hdr.vers), m->hdr.nr);
 
-        if (p->hdr.nr > pn->lg_acked)
+        if (m->hdr.nr > pn->lg_acked)
             continue;
 
         // Mark packet as lost, or set time when it should be marked.
-        if (p->tx_t <= lost_send_t || p->hdr.nr <= lost_pn) {
-            p->lost = true;
-            in_flight_lost |= p->in_flight;
+        if (m->tx_t <= lost_send_t || m->hdr.nr <= lost_pn) {
+            m->lost = true;
+            in_flight_lost |= m->in_flight;
             c->i.pkts_out_lost++;
             // cppcheck-suppress knownConditionTrueFalse
-            if (unlikely(lg_lost == UINT64_MAX) || p->hdr.nr > lg_lost) {
-                lg_lost = p->hdr.nr;
-                lg_lost_tx_t = p->tx_t;
+            if (unlikely(lg_lost == UINT64_MAX) || m->hdr.nr > lg_lost) {
+                lg_lost = m->hdr.nr; // cppcheck-suppress unreadVariable
+                lg_lost_tx_t = m->tx_t;
             }
         } else {
             if (is_zero(pn->loss_t))
-                pn->loss_t = p->tx_t + loss_del;
+                pn->loss_t = m->tx_t + loss_del;
             else
-                pn->loss_t = MIN(pn->loss_t, p->tx_t + loss_del);
+                pn->loss_t = MIN(pn->loss_t, m->tx_t + loss_del);
         }
 
         // OnPacketsLost
-        if (p->lost)
-            on_pkt_lost(p);
+        if (m->lost)
+            on_pkt_lost(m);
     });
 
     // OnPacketsLost

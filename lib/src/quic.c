@@ -47,6 +47,9 @@
 
 #ifdef HAVE_ASAN
 #include <sanitizer/asan_interface.h>
+#else
+#define ASAN_POISON_MEMORY_REGION(x, y)
+#define ASAN_UNPOISON_MEMORY_REGION(x, y)
 #endif
 
 #if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
@@ -815,10 +818,10 @@ void q_cleanup(struct w_engine * const w)
         free(zo);
     }
 
+#ifdef HAVE_ASAN
     for (uint64_t i = 0; i < num_bufs; i++) {
         struct pkt_meta * const m = &pkt_meta[i];
         if (__asan_address_is_poisoned(m) == false) {
-            hexdump(m, sizeof(*m));
             warn(DBG,
                  "buffer %" PRIu64 " still in use for %cX'ed %s pkt %" PRIu64,
                  i, m->txed ? 'T' : 'R',
@@ -826,6 +829,7 @@ void q_cleanup(struct w_engine * const w)
                  m->hdr.vers || m->hdr.type != LH_RTRY ? m->hdr.nr : 0);
         }
     }
+#endif
 
     kh_destroy(conns_by_id, conns_by_id);
     kh_destroy(conns_by_ipnp, conns_by_ipnp);

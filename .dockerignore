@@ -1,4 +1,5 @@
 .git
+corpus_*
 Darwin*
 Debug
 FreeBSD*
