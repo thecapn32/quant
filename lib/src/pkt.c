@@ -187,8 +187,12 @@ void coalesce(struct w_iov_sq * const q)
                 memcpy(v->buf + v->len, next->buf, next->len);
                 v->len += next->len;
                 sq_remove_after(q, prev, next);
-                // warn(CRT, "w_free_iov idx %u (avail %" PRIu64 ")",
-                //      w_iov_idx(next), sq_len(&next->w->iov) + 1);
+
+#ifdef DEBUG_BUFFERS
+                warn(CRT, "w_free_iov idx %u (avail %" PRIu64 ")",
+                     w_iov_idx(next), sq_len(&next->w->iov) + 1);
+#endif
+
                 w_free_iov(next);
             } else
                 prev = next;
@@ -512,8 +516,11 @@ tx:;
     // alloc directly from warpcore for crypto TX - no need for metadata alloc
     struct w_iov * const xv = w_alloc_iov(c->w, 0, 0);
     ensure(xv, "w_alloc_iov failed");
-    // warn(CRT, "w_alloc_iov idx %u (avail %" PRIu64 ") len %u", w_iov_idx(xv),
-    //      sq_len(&c->w->iov), xv->len);
+
+#ifdef DEBUG_BUFFERS
+    warn(CRT, "w_alloc_iov idx %u (avail %" PRIu64 ") len %u", w_iov_idx(xv),
+         sq_len(&c->w->iov), xv->len);
+#endif
 
     if (unlikely(m->hdr.type == LH_RTRY)) {
         memcpy(xv->buf, v->buf, v->len); // copy data
@@ -551,7 +558,7 @@ tx:;
 
     if (unlikely(rtx))
         // we did an RTX and this is no longer lost
-        m->is_lost = false;
+        m->lost = false;
 
     on_pkt_sent(m);
 
@@ -890,9 +897,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
         if (unlikely(pkt_len < xv->len)) {
             *decoal = true;
             // allocate new w_iov for coalesced packet and copy it over
-            struct w_iov * const dup = w_iov_dup(xv, &(struct pkt_meta *){0});
-            dup->buf += pkt_len;
-            dup->len -= pkt_len;
+            struct w_iov * const dup = w_iov_dup(xv, 0, pkt_len);
             // adjust length of first packet
             xv->len = pkt_len;
             // rx() has already removed xv from x, so just insert dup at head

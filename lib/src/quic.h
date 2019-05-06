@@ -33,22 +33,15 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/param.h>
-#include <sys/socket.h>
 
 #include <ev.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
-#ifdef HAVE_ASAN
-#include <sanitizer/asan_interface.h>
-#else
-#define ASAN_POISON_MEMORY_REGION(x, y)
-#define ASAN_UNPOISON_MEMORY_REGION(x, y)
-#endif
-
 #include "frame.h"
-#include "pn.h"
 
+
+#define DEBUG_BUFFERS
 
 #define DATA_OFFSET 48 ///< Offsets of stream frame payload data we TX.
 
@@ -153,8 +146,9 @@ struct pkt_hdr {
 struct pkt_meta {
     // XXX need to potentially change pm_cpy() below if fields are reordered
     splay_entry(pkt_meta) off_node;
-    sl_entry(pkt_meta) rtx_next;
-    sl_head(pm_sl, pkt_meta) rtx; ///< List of pkt_meta structs of previous TXs.
+    // sl_entry(pkt_meta) rtx_next;
+    // sl_head(pm_sl, pkt_meta) rtx; ///< List of pkt_meta structs of previous
+    // TXs.
 
     // pm_cpy(true) starts copying from here:
     struct q_stream * stream;   ///< Stream this data was written on.
@@ -181,13 +175,14 @@ struct pkt_meta {
 
     uint16_t udp_len;          ///< Length of protected UDP packet at TX/RX.
     uint8_t has_rtx : 1;       ///< Does the w_iov hold truncated data?
-    uint8_t is_acked : 1;      ///< Is the w_iov ACKed?
-    uint8_t is_lost : 1;       ///< Have we marked this w_iov as lost?
     uint8_t is_reset : 1;      ///< This packet is a stateless reset.
     uint8_t is_fin : 1;        ///< This packet has a stream FIN bit.
     uint8_t in_flight : 1;     ///< Does this pkt count towards in_flight?
     uint8_t ack_eliciting : 1; ///< Is this packet ACK-eliciting?
-    uint8_t txed : 1;          ///< Did we TX this pkt?
+
+    uint8_t acked : 1; ///< Was this packet ACKed?
+    uint8_t lost : 1;  ///< Have we marked this packet as lost?
+    uint8_t txed : 1;  ///< Did we TX this pkt?
 
     uint8_t _unused[5];
 };
@@ -209,6 +204,23 @@ extern void __attribute__((nonnull)) alloc_off(struct w_engine * const w,
                                                struct w_iov_sq * const q,
                                                const uint32_t len,
                                                const uint16_t off);
+
+extern void __attribute__((nonnull))
+free_iov(struct w_iov * const v, struct pkt_meta * const m);
+
+
+extern struct w_iov * __attribute__((nonnull))
+alloc_iov(struct w_engine * const w,
+          const uint16_t len,
+          const uint16_t off,
+          struct pkt_meta ** const m);
+
+
+extern struct w_iov * __attribute__((nonnull(1)))
+w_iov_dup(const struct w_iov * const v,
+          struct pkt_meta ** const mdup,
+          const uint16_t off);
+
 
 #if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
@@ -332,68 +344,6 @@ write_to_corpus(const int dir, const void * const data, const size_t len);
         }                                                                      \
         api_func == 0;                                                         \
     })
-
-
-static inline void __attribute__((nonnull))
-free_iov(struct w_iov * const v, struct pkt_meta * const m)
-{
-    // warn(CRT, "free_iov idx %u (avail %" PRIu64 ") nr=%" PRIu64,
-    // w_iov_idx(v),
-    //      sq_len(&v->w->iov) + 1, m->hdr.nr);
-
-    if (m->txed) {
-        struct pkt_meta * tmp;
-        if (m->pn->sent_pkts && find_sent_pkt(m->pn, m->hdr.nr, &tmp))
-            pm_by_nr_del(m->pn->sent_pkts, m);
-
-        struct pkt_meta * rm = sl_first(&m->rtx);
-        while (rm) {
-            // ensure(rm->has_rtx, "was RTX'ed");
-            sl_remove_head(&m->rtx, rtx_next);
-            struct pkt_meta * const next_rm = sl_next(rm, rtx_next);
-            pm_by_nr_del(rm->pn->sent_pkts, rm);
-            free_iov(w_iov(v->w, pm_idx(rm)), rm);
-            rm = next_rm;
-        }
-    }
-
-    memset(m, 0, sizeof(*m));
-    ASAN_POISON_MEMORY_REGION(m, sizeof(*m));
-    w_free_iov(v);
-}
-
-
-static inline struct w_iov * __attribute__((nonnull))
-alloc_iov(struct w_engine * const w,
-          const uint16_t len,
-          const uint16_t off,
-          struct pkt_meta ** const m)
-{
-    struct w_iov * const v = w_alloc_iov(w, len, off);
-    ensure(v, "w_alloc_iov failed");
-    *m = &meta(v); // meta use OK
-    ASAN_UNPOISON_MEMORY_REGION(*m, sizeof(**m));
-    (*m)->stream_data_start = off;
-    // warn(CRT, "alloc_iov idx %u (avail %" PRIu64 ") len %u off %u",
-    //      w_iov_idx(v), sq_len(&w->iov), v->len, off);
-    return v;
-}
-
-
-static inline struct w_iov * __attribute__((nonnull))
-w_iov_dup(const struct w_iov * const v, struct pkt_meta ** const mdup)
-{
-    struct w_iov * const vdup = w_alloc_iov(v->w, v->len, 0);
-    ensure(vdup, "w_alloc_iov failed");
-    // warn(CRT, "w_alloc_iov idx %u (avail %" PRIu64 ") len %u",
-    // w_iov_idx(vdup), sq_len(&v->w->iov), vdup->len);
-    *mdup = &meta(vdup); // meta use OK
-    ASAN_UNPOISON_MEMORY_REGION(*mdup, sizeof(**mdup));
-    memcpy(vdup->buf, v->buf, v->len);
-    memcpy(&vdup->addr, &v->addr, sizeof(v->addr));
-    vdup->flags = v->flags;
-    return vdup;
-}
 
 
 static inline int __attribute__((nonnull))

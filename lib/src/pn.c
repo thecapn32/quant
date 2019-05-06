@@ -89,17 +89,18 @@ void init_pn(struct pn_space * const pn,
 void free_pn(struct pn_space * const pn)
 {
     if (pn->sent_pkts) {
-        struct pkt_meta * p;
-        kh_foreach_value(pn->sent_pkts, p, {
+        struct pkt_meta * m;
+        kh_foreach_value(pn->sent_pkts, m, {
             // let's take all pkts out of in_flight here
-            if (p->in_flight) {
-                pn->c->rec.in_flight -= p->udp_len;
-                if (p->ack_eliciting)
+            if (m->in_flight) {
+                pn->c->rec.in_flight -= m->udp_len;
+                if (m->ack_eliciting)
                     pn->c->rec.ae_in_flight--;
             }
+
             // TX'ed but non-RTX'ed pkts are freed when their stream is freed
-            if (p->has_rtx || !has_stream_data(p))
-                free_iov(w_iov(pn->c->w, pm_idx(p)), p);
+            if (m->has_rtx || !has_stream_data(m))
+                free_iov(w_iov(pn->c->w, pm_idx(m)), m);
         });
         kh_destroy(pm_by_nr, pn->sent_pkts);
         pn->sent_pkts = 0;

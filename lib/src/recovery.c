@@ -187,15 +187,15 @@ void congestion_event(struct q_conn * const c, const ev_tstamp sent_t)
 }
 
 
-static void __attribute__((nonnull)) unregister_rtx(struct pm_sl * rtx)
-{
-    while (!sl_empty(rtx)) {
-        struct pkt_meta * const pm = sl_first(rtx);
-        sl_remove_head(rtx, rtx_next);
-        sl_remove_head(&pm->rtx, rtx_next);
-        ensure(sl_empty(&pm->rtx), "not empty");
-    }
-}
+// static void __attribute__((nonnull)) unregister_rtx(struct pm_sl * rtx)
+// {
+//     while (!sl_empty(rtx)) {
+//         struct pkt_meta * const pm = sl_first(rtx);
+//         sl_remove_head(rtx, rtx_next);
+//         sl_remove_head(&pm->rtx, rtx_next);
+//         ensure(sl_empty(&pm->rtx), "not empty");
+//     }
+// }
 
 
 static void __attribute__((nonnull))
@@ -218,25 +218,27 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
                                  ? 0
                                  : pn->lg_acked - kPacketThreshold;
 
-    struct pkt_meta * p;
-    struct pkt_meta * largest_lost_pkt = 0;
+    uint64_t lg_lost = UINT64_MAX;
+    ev_tstamp lg_lost_tx_t = 0;
     bool in_flight_lost = false;
+    struct pkt_meta * p;
     kh_foreach_value(pn->sent_pkts, p, {
-        ensure(p->is_acked == false, "ACKed pkt in sent_pkts");
-        ensure(p->is_lost == false, "lost pkt in sent_pkts");
+        ensure(p->acked == false, "ACKed pkt in sent_pkts");
+        ensure(p->lost == false, "lost pkt in sent_pkts");
 
         if (p->hdr.nr > pn->lg_acked)
             continue;
 
         // Mark packet as lost, or set time when it should be marked.
         if (p->tx_t <= lost_send_t || p->hdr.nr <= lost_pn) {
-            p->is_lost = true;
+            p->lost = true;
             in_flight_lost |= p->in_flight;
             c->i.pkts_out_lost++;
             // cppcheck-suppress knownConditionTrueFalse
-            if (unlikely(largest_lost_pkt == 0) ||
-                p->hdr.nr > largest_lost_pkt->hdr.nr)
-                largest_lost_pkt = p;
+            if (unlikely(lg_lost == UINT64_MAX) || p->hdr.nr > lg_lost) {
+                lg_lost = p->hdr.nr;
+                lg_lost_tx_t = p->tx_t;
+            }
         } else {
             if (is_zero(pn->loss_t))
                 pn->loss_t = p->tx_t + loss_del;
@@ -245,26 +247,13 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
         }
 
         // OnPacketsLost
-        if (p->is_lost) {
-            warn(DBG, "%s %s pkt " FMT_PNR_OUT " considered lost", conn_type(c),
-                 pkt_type_str(p->hdr.flags, &p->hdr.vers), p->hdr.nr);
-
-            if (p->in_flight) {
-                c->rec.in_flight -= p->udp_len;
-                if (p->ack_eliciting)
-                    c->rec.ae_in_flight--;
-            }
-
-            diet_insert(&pn->lost, p->hdr.nr, (ev_tstamp)NAN);
-            pm_by_nr_del(pn->sent_pkts, p);
-            if (p->has_rtx)
-                unregister_rtx(&p->rtx);
-        }
+        if (p->lost)
+            on_pkt_lost(p);
     });
 
     // OnPacketsLost
-    if (do_cc && in_flight_lost && largest_lost_pkt)
-        congestion_event(c, largest_lost_pkt->tx_t);
+    if (do_cc && in_flight_lost)
+        congestion_event(c, lg_lost_tx_t);
 
     log_cc(c);
 }
@@ -305,6 +294,9 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
         c->i.pto_cnt++;
 
     } else if (have_keys(c, pn_data) == false) {
+        warn(DBG, "anti-deadlock RTX #%u on %s conn %s", c->rec.crypto_cnt + 1,
+             conn_type(c), cid2str(c->scid));
+
         // XXX this doesn't quite implement the pseudo code
         ev_invoke(loop, &c->tx_w, 1);
         c->rec.crypto_cnt++;
@@ -458,7 +450,7 @@ void on_pkt_acked(struct w_iov * const acked_pkt, struct pkt_meta * meta_acked)
     // see OnPacketAcked() pseudo code
     struct pn_space * const pn = meta_acked->pn;
     struct q_conn * const c = pn->c;
-    if (meta_acked->in_flight && meta_acked->is_lost == false)
+    if (meta_acked->in_flight && meta_acked->lost == false)
         on_pkt_acked_cc(meta_acked);
 
     diet_insert(&pn->acked, meta_acked->hdr.nr, (ev_tstamp)NAN);
@@ -470,50 +462,87 @@ void on_pkt_acked(struct w_iov * const acked_pkt, struct pkt_meta * meta_acked)
     if (has_frame(meta_acked, FRM_ACK))
         track_acked_pkts(acked_pkt, meta_acked);
 
-    // if this ACK is for a pkt that was RTX'ed, update the record
-    struct pkt_meta * const meta_rtx = sl_first(&meta_acked->rtx);
-    if (meta_rtx) {
-        if (meta_acked->has_rtx) {
-            // ensure(meta_acked->is_lost, "meta_acked->is_lost");
-            // ensure(sl_next(meta_rtx, rtx_next) == 0, "rtx chain corrupt");
+    // // if this ACK is for a pkt that was RTX'ed, update the record
+    // struct pkt_meta * const meta_rtx = sl_first(&meta_acked->rtx);
+    // if (meta_rtx) {
+    //     if (meta_acked->has_rtx) {
+    //         // ensure(meta_acked->lost, "meta_acked->lost");
+    //         // ensure(sl_next(meta_rtx, rtx_next) == 0, "rtx chain corrupt");
 
-            // remove RTX info
-            warn(DBG, "%s pkt " FMT_PNR_OUT " was RTX'ed as " FMT_PNR_OUT,
-                 conn_type(c), meta_acked->hdr.nr, meta_rtx->hdr.nr);
-            unregister_rtx(&meta_rtx->rtx);
+    //         // remove RTX info
+    //         warn(DBG, "%s pkt " FMT_PNR_OUT " was RTX'ed as " FMT_PNR_OUT,
+    //              conn_type(c), meta_acked->hdr.nr, meta_rtx->hdr.nr);
+    //         unregister_rtx(&meta_rtx->rtx);
 
-            // treat the RTX'ed data has ACK'ed, use stand-in w_iov for RTX info
-            const uint64_t acked_nr = meta_acked->hdr.nr;
-            pm_by_nr_del(pn->sent_pkts, meta_rtx);
-            meta_acked->hdr.nr = meta_rtx->hdr.nr;
-            meta_rtx->hdr.nr = acked_nr;
-            pm_by_nr_ins(pn->sent_pkts, meta_acked);
-            meta_acked = meta_rtx;
-        } else
-            unregister_rtx(&meta_acked->rtx);
-    }
+    //         // treat the RTX'ed data has ACK'ed, use stand-in w_iov for RTX
+    //         info const uint64_t acked_nr = meta_acked->hdr.nr;
+    //         pm_by_nr_del(pn->sent_pkts, meta_rtx);
+    //         meta_acked->hdr.nr = meta_rtx->hdr.nr;
+    //         meta_rtx->hdr.nr = acked_nr;
+    //         pm_by_nr_ins(pn->sent_pkts, meta_acked);
+    //         meta_acked = meta_rtx;
+    //     } else
+    //         unregister_rtx(&meta_acked->rtx);
+    // }
 
-    meta_acked->is_acked = true;
+    meta_acked->acked = true;
 
     struct q_stream * const s = meta_acked->stream;
     if (s) {
-        // if this ACKs its stream's out_una, move that forward
-        sq_foreach_from (s->out_una, &s->out, next)
-            if (meta(s->out_una).is_acked == false) // meta use OK
-                break;
-
-        if (s->out_una == 0) {
-            // a q_write may be done
-            maybe_api_return(q_write, c, s);
-            if (s->id >= 0 && c->did_0rtt)
-                maybe_api_return(q_connect, c, 0);
-        }
-
         if (unlikely(meta_acked->is_fin))
             // this ACKs a FIN
             maybe_api_return(q_close_stream, c, s);
+
+        // if this ACKs its stream's out_una, move that forward
+        struct w_iov * tmp;
+        sq_foreach_from_safe (s->out_una, &s->out, next, tmp) {
+            struct pkt_meta * const mou = &meta(s->out_una); // meta use OK
+            if (mou->acked == false)
+                break;
+            // if this ACKs a crypto packet, we can free it
+            if (unlikely(s->id < 0 && mou->lost == false)) {
+                sq_remove(&s->out, s->out_una, w_iov, next);
+                free_iov(s->out_una, mou);
+            }
+        }
+
+        if (s->id >= 0 && s->out_una == 0) {
+            // a q_write may be done
+            maybe_api_return(q_write, c, s);
+            if (c->did_0rtt)
+                maybe_api_return(q_connect, c, 0);
+        }
+
     } else
         free_iov(acked_pkt, meta_acked);
+}
+
+
+void on_pkt_lost(struct pkt_meta * const m)
+{
+    struct pn_space * const pn = m->pn;
+    struct q_conn * const c = pn->c;
+
+    warn(DBG, "%s %s pkt " FMT_PNR_OUT " considered lost", conn_type(c),
+         pkt_type_str(m->hdr.flags, &m->hdr.vers), m->hdr.nr);
+
+    if (m->in_flight) {
+        c->rec.in_flight -= m->udp_len;
+        if (m->ack_eliciting)
+            c->rec.ae_in_flight--;
+    }
+
+    // rest of function is not from pseudo code
+
+    diet_insert(&pn->lost, m->hdr.nr, (ev_tstamp)NAN);
+    pm_by_nr_del(pn->sent_pkts, m);
+
+    if (m->has_rtx)
+        die("has RTX");
+    //     unregister_rtx(&m->rtx);
+
+    if (m->stream == 0)
+        free_iov(w_iov(c->w, pm_idx(m)), m);
 }
 
 

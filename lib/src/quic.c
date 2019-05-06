@@ -31,6 +31,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <sys/socket.h>
 #include <sys/types.h>
 #include <time.h>
 
@@ -58,7 +59,6 @@
 #endif
 
 #include "conn.h"
-#include "diet.h"
 #include "pkt.h"
 #include "pn.h"
 #include "quic.h"
@@ -140,9 +140,87 @@ void alloc_off(struct w_engine * const w,
         struct pkt_meta * const m = &meta(v); // meta use OK
         ASAN_UNPOISON_MEMORY_REGION(m, sizeof(*m));
         m->stream_data_start = off;
-        // warn(CRT, "q_alloc idx %u (avail %" PRIu64 ") len %u", w_iov_idx(v),
-        //      sq_len(&w->iov), v->len);
+
+#ifdef DEBUG_BUFFERS
+        warn(CRT, "q_alloc idx %u (avail %" PRIu64 ") len %u", w_iov_idx(v),
+             sq_len(&w->iov), v->len);
+#endif
     }
+}
+
+
+void free_iov(struct w_iov * const v, struct pkt_meta * const m)
+{
+#ifdef DEBUG_BUFFERS
+    warn(CRT, "free_iov idx %u (avail %" PRIu64 ") %s %cX'ed pkt nr=%" PRIu64,
+         w_iov_idx(v), sq_len(&v->w->iov) + 1,
+         pkt_type_str(m->hdr.flags, &m->hdr.vers), m->txed ? 'T' : 'R',
+         m->hdr.vers || m->hdr.type != LH_RTRY ? m->hdr.nr : 0);
+#endif
+
+    if (m->txed) {
+        if ((m->acked || m->lost) == false && m->pn->sent_pkts)
+            pm_by_nr_del(m->pn->sent_pkts, m);
+
+        //     if (m->has_rtx)
+
+        //     struct pkt_meta * rm = sl_first(&m->rtx);
+        //     while (rm) {
+        //         // ensure(rm->has_rtx, "was RTX'ed");
+        //         sl_remove_head(&m->rtx, rtx_next);
+        //         struct pkt_meta * const next_rm = sl_next(rm, rtx_next);
+        //         pm_by_nr_del(rm->pn->sent_pkts, rm);
+        //         free_iov(w_iov(v->w, pm_idx(rm)), rm);
+        //         rm = next_rm;
+        //     }
+    }
+
+    memset(m, 0, sizeof(*m));
+    ASAN_POISON_MEMORY_REGION(m, sizeof(*m));
+    w_free_iov(v);
+}
+
+
+struct w_iov * alloc_iov(struct w_engine * const w,
+                         const uint16_t len,
+                         const uint16_t off,
+                         struct pkt_meta ** const m)
+{
+    struct w_iov * const v = w_alloc_iov(w, len, off);
+    ensure(v, "w_alloc_iov failed");
+    *m = &meta(v); // meta use OK
+    ASAN_UNPOISON_MEMORY_REGION(*m, sizeof(**m));
+    (*m)->stream_data_start = off;
+
+#ifdef DEBUG_BUFFERS
+    warn(CRT, "alloc_iov idx %u (avail %" PRIu64 ") len %u off %u",
+         w_iov_idx(v), sq_len(&w->iov), v->len, off);
+#endif
+
+    return v;
+}
+
+
+struct w_iov * w_iov_dup(const struct w_iov * const v,
+                         struct pkt_meta ** const mdup,
+                         const uint16_t off)
+{
+    struct w_iov * const vdup = w_alloc_iov(v->w, v->len - off, 0);
+    ensure(vdup, "w_alloc_iov failed");
+
+#ifdef DEBUG_BUFFERS
+    warn(CRT, "w_alloc_iov idx %u (avail %" PRIu64 ") len %u", w_iov_idx(vdup),
+         sq_len(&v->w->iov), vdup->len);
+#endif
+
+    if (mdup) {
+        *mdup = &meta(vdup); // meta use OK
+        ASAN_UNPOISON_MEMORY_REGION(*mdup, sizeof(**mdup));
+    }
+    memcpy(vdup->buf, v->buf + off, v->len - off);
+    memcpy(&vdup->addr, &v->addr, sizeof(v->addr));
+    vdup->flags = v->flags;
+    return vdup;
 }
 
 
@@ -160,12 +238,7 @@ void q_free(struct w_iov_sq * const q)
     while (!sq_empty(q)) {
         struct w_iov * const v = sq_first(q);
         sq_remove_head(q, next);
-        struct pkt_meta * const m = &meta(v); // meta use OK
-        if (m->txed && m->is_lost == false && m->is_acked == false) {
-            m->is_lost = true;
-            diet_insert(&m->pn->lost, m->hdr.nr, (ev_tstamp)NAN);
-        }
-        free_iov(v, &meta(v));
+        free_iov(v, &meta(v)); // meta use OK
     }
 }
 
@@ -582,9 +655,9 @@ struct w_engine * q_init(const char * const ifname,
     if (num_bufs_ok < num_bufs)
         warn(WRN, "only allocated %" PRIu64 "/%" PRIu64 " warpcore buffers",
              num_bufs_ok, num_bufs);
-    pkt_meta = calloc(num_bufs + 1, sizeof(*pkt_meta));
+    pkt_meta = calloc(num_bufs, sizeof(*pkt_meta));
     ensure(pkt_meta, "could not calloc");
-    ASAN_POISON_MEMORY_REGION(pkt_meta, (num_bufs + 1) * sizeof(*pkt_meta));
+    ASAN_POISON_MEMORY_REGION(pkt_meta, num_bufs * sizeof(*pkt_meta));
 
     // initialize the event loop (prefer kqueue and epoll)
     loop = ev_default_loop(ev_recommended_backends() | EVBACKEND_KQUEUE |
@@ -742,14 +815,16 @@ void q_cleanup(struct w_engine * const w)
         free(zo);
     }
 
-    for (uint64_t i = 0; i <= num_bufs; i++) {
-        ASAN_UNPOISON_MEMORY_REGION(&pkt_meta[i], sizeof(pkt_meta[i]));
-        if (pkt_meta[i].hdr.nr)
+    for (uint64_t i = 0; i < num_bufs; i++) {
+        struct pkt_meta * const m = &pkt_meta[i];
+        if (__asan_address_is_poisoned(m) == false) {
+            hexdump(m, sizeof(*m));
             warn(DBG,
                  "buffer %" PRIu64 " still in use for %cX'ed %s pkt %" PRIu64,
-                 i, pkt_meta[i].txed ? 'T' : 'R',
-                 pkt_type_str(pkt_meta[i].hdr.flags, &pkt_meta[i].hdr.vers),
-                 pkt_meta[i].hdr.nr);
+                 i, m->txed ? 'T' : 'R',
+                 pkt_type_str(m->hdr.flags, &m->hdr.vers),
+                 m->hdr.vers || m->hdr.type != LH_RTRY ? m->hdr.nr : 0);
+        }
     }
 
     kh_destroy(conns_by_id, conns_by_id);

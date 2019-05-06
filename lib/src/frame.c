@@ -324,6 +324,10 @@ dec_stream_or_crypto_frame(const uint8_t type,
             sq_insert_tail(&m->stream->in, w_iov(c->w, pm_idx(p)), next);
             m->stream->in_data_off += p->stream_data_len;
             ensure(splay_remove(ooo_by_off, &m->stream->in_ooo, p), "removed");
+
+            // mark ooo crypto data for freeing by rx_crypto()
+            if (p->stream->id < 0)
+                p->stream = 0;
             p = nxt;
         }
 
@@ -1067,16 +1071,14 @@ bool dec_frames(struct q_conn * const c,
                 // already had at least one stream or crypto frame in this
                 // packet with non-duplicate data, so generate (another) copy
                 warn(DBG, "addtl stream or crypto frame, copy");
+                const uint16_t off = (uint16_t)(pos - v->buf - 1);
                 struct pkt_meta * mdup;
-                struct w_iov * const vdup = w_iov_dup(v, &mdup);
+                struct w_iov * const vdup = w_iov_dup(v, &mdup, off);
                 pm_cpy(mdup, m, false);
                 // adjust w_iov start and len to stream frame data
-                const uint16_t off = (uint16_t)(pos - v->buf - 1);
                 v->buf += m->stream_data_start;
                 v->len = m->stream_data_len;
                 // continue parsing in the copied w_iov
-                vdup->buf += off;
-                vdup->len -= off;
                 v = *vv = vdup;
                 m = *mm = mdup;
                 pos = v->buf + 1;

@@ -308,33 +308,26 @@ static void __attribute__((nonnull)) log_sent_pkts(struct q_conn * const c)
 #endif
 
 
-static void __attribute__((nonnull)) rtx_pkt(struct q_stream * const s,
-                                             struct w_iov * const v,
-                                             struct pkt_meta * const m)
+static void __attribute__((nonnull))
+rtx_pkt(struct w_iov * const v, struct pkt_meta * const m)
 {
-    s->c->i.pkts_out_rtx++;
+    struct q_conn * const c = m->pn->c;
+    c->i.pkts_out_rtx++;
 
-    if (m->is_lost)
-        // we don't need to do the steps above is the pkt is lost already
+    if (m->lost)
+        // we don't need to do the steps below if the pkt is lost already
         return;
-
-    // ensure(m->has_rtx == false, "cannot RTX an RTX stand-in");
-    // ensure(find_sent_pkt(m->pn, m->hdr.nr) == 0,
-    //        "still in sent_pkts");
 
     // on RTX, remember orig pkt meta data
     const uint16_t data_start = m->stream_data_start;
     struct pkt_meta * mr;
-    struct w_iov * const r = alloc_iov(s->c->w, 0, data_start, &mr);
+    struct w_iov * const r = alloc_iov(c->w, 0, data_start, &mr);
     pm_cpy(mr, m, true); // copy pkt meta data
     memcpy(r->buf - data_start, v->buf - data_start, data_start);
     mr->stream = 0;
     mr->has_rtx = true;
-    sl_insert_head(&m->rtx, mr, rtx_next);
-    sl_insert_head(&mr->rtx, m, rtx_next);
-
-    // we reinsert m with its new pkt nr in on_pkt_sent()
-    pm_by_nr_ins(mr->pn->sent_pkts, mr);
+    // sl_insert_head(&m->rtx, mr, rtx_next);
+    // sl_insert_head(&mr->rtx, m, rtx_next);
 }
 
 
@@ -395,12 +388,18 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
         w_nic_tx(c->w);
     while (w_tx_pending(&c->txq));
 
-    // txq was allocated straight from warpcore, no metadata needs to be
-    // freed const uint64_t avail = sq_len(&c->w->iov); const uint64_t sql =
-    // sq_len(&c->txq);
+#ifdef DEBUG_BUFFERS
+    const uint64_t avail = sq_len(&c->w->iov);
+    const uint64_t sql = sq_len(&c->txq);
+#endif
+
+    // txq was allocated straight from warpcore, no metadata needs to be freed
     w_free(&c->txq);
-    // warn(CRT, "w_free %" PRIu64 " (avail %" PRIu64 "->%" PRIu64 ")", sql,
-    // avail, sq_len(&c->w->iov));
+
+#ifdef DEBUG_BUFFERS
+    warn(CRT, "w_free %" PRIu64 " (avail %" PRIu64 "->%" PRIu64 ")", sql, avail,
+         sq_len(&c->w->iov));
+#endif
 
 #ifndef NDEBUG
     if (util_dlevel == DBG)
@@ -490,25 +489,14 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
             break;
         }
 
-        if (unlikely(m->is_acked)) {
+        if (unlikely(m->acked)) {
             // warn(INF, "skip ACK'ed pkt " FMT_PNR_OUT, m->hdr.nr);
             continue;
         }
 
-        if (limit == 0 && m->udp_len && m->is_lost == false) {
+        if (limit == 0 && m->udp_len && m->lost == false) {
             // warn(INF, "skip non-lost TX'ed pkt " FMT_PNR_OUT, m->hdr.nr);
             continue;
-        }
-
-        const bool do_rtx = m->is_lost || (limit && m->udp_len);
-        if (unlikely(do_rtx)) {
-            if (m->is_lost == false) {
-                // rtx_pkt expects the pkt to have been removed from sent_pkts
-                diet_insert(&m->pn->lost, m->hdr.nr, (ev_tstamp)NAN);
-                pm_by_nr_del(m->pn->sent_pkts, m);
-                m->is_lost = true;
-            }
-            rtx_pkt(s, v, m);
         }
 
         if (likely(c->state == conn_estb && s->id >= 0)) {
@@ -516,8 +504,11 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
             do_conn_fc(c, v->len);
         }
 
+        const bool do_rtx = m->lost || (limit && m->udp_len);
+        if (unlikely(do_rtx))
+            rtx_pkt(v, m);
+
         if (unlikely(enc_pkt(s, do_rtx, true, limit > 0, v, m) == false))
-            // XXX do we need to undo rtx_pkt() here?
             continue;
         encoded++;
 
@@ -587,10 +578,8 @@ void tx(struct ev_loop * const l __attribute__((unused)),
         }
 
     struct q_stream * s;
-    kh_foreach_value(c->streams_by_id, s, {
-        if (tx_stream(s, limit) == false)
-            break;
-    });
+    kh_foreach_value(c->streams_by_id, s,
+                     if (tx_stream(s, limit) == false) break);
 
 done:;
     // make sure we sent enough packets when we're called with a limit
@@ -742,13 +731,20 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
 {
     struct q_stream * const s = c->cstreams[epoch_in(c)];
     while (!sq_empty(&s->in)) {
-        // TODO: ooo crypto data is not freed immediately
         // take the data out of the crypto stream
         struct w_iov * const v = sq_first(&s->in);
         sq_remove_head(&s->in, next);
-        meta(v).stream = 0; // meta use OK
-        // and process it
-        if (tls_io(s, v))
+
+        // ooo crypto pkts have stream cleared by dec_stream_or_crypto_frame()
+        struct pkt_meta * const m = &meta(v); // meta use OK
+        const bool free_ooo = m->stream == 0;
+        // mark this (potential in-order) pkt for freeing in rx_pkts()
+        m->stream = 0;
+
+        const int ret = tls_io(s, v);
+        if (free_ooo)
+            free_iov(v, m);
+        if (ret)
             continue;
 
         if (c->state == conn_idle || c->state == conn_opng) {
@@ -833,9 +829,9 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
             reset_stream(c->cstreams[e], true);
 
     struct q_stream * s;
-    kh_foreach_value(c->streams_by_id, s, { reset_stream(s, false); });
+    kh_foreach_value(c->streams_by_id, s, reset_stream(s, false));
 
-    // free packet number spaces
+    // reset packet number spaces
     for (pn_t t = pn_init; t <= pn_data; t++)
         reset_pn(&c->pns[t]);
 
@@ -1100,8 +1096,10 @@ rx_pkts(struct w_iov_sq * const x,
         struct w_iov * const xv = sq_first(x);
         sq_remove_head(x, next);
 
-        // warn(DBG, "rx idx %u (avail %" PRIu64 ") len %u type 0x%02x",
-        //      w_iov_idx(xv), sq_len(&xv->w->iov), xv->len, *xv->buf);
+#ifdef DEBUG_BUFFERS
+        warn(DBG, "rx idx %u (avail %" PRIu64 ") len %u type 0x%02x",
+             w_iov_idx(xv), sq_len(&xv->w->iov), xv->len, *xv->buf);
+#endif
 
 #if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
@@ -1244,7 +1242,7 @@ rx_pkts(struct w_iov_sq * const x,
         } else {
 #ifndef FUZZING
             // if this is a 0-RTT pkt, track it (may be reordered)
-            if (m->hdr.type == LH_0RTT) {
+            if (m->hdr.type == LH_0RTT && m->hdr.vers) {
                 struct ooo_0rtt * const zo = calloc(1, sizeof(*zo));
                 ensure(zo, "could not calloc");
                 cid_cpy(&zo->cid, &m->hdr.dcid);
@@ -1404,8 +1402,12 @@ rx_pkts(struct w_iov_sq * const x,
             else
                 c->i.pkts_in_invalid++;
         }
-        // warn(CRT, "w_free_iov idx %u (avail %" PRIu64 ")", w_iov_idx(xv),
-        //      sq_len(&xv->w->iov) + 1);
+
+#ifdef DEBUG_BUFFERS
+        warn(CRT, "w_free_iov idx %u (avail %" PRIu64 ")", w_iov_idx(xv),
+             sq_len(&xv->w->iov) + 1);
+#endif
+
         w_free_iov(xv);
     }
 }
