@@ -33,6 +33,7 @@ declare -A servers=(
     # [apple]=31.133.146.185::4433:4434:4433:/50k
     [ats]=quic.ogre.com::4433:4434:4433:/en/latest/_static/jquery.js
     [f5]=208.85.208.226::4433:4433:4433:/file50k
+    [google]=quic.rocks::4433:4434:4433:/40000
     [lsquic]=http3-test.litespeedtech.com:-3:4433:4434:4433:/
     # [minq]=minq.dev.mozaws.net::4433:4434:4433:/index.html
     # [mozquic]=mozquic.ducksong.com::4433:4434:4433:/index.html
