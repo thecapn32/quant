@@ -160,7 +160,6 @@ void free_stream(struct q_stream * const s)
 
     q_free(&s->out);
     q_free(&s->in);
-
     free(s);
 }
 
@@ -185,11 +184,18 @@ void track_bytes_out(struct q_stream * const s, const uint64_t n)
 
 void reset_stream(struct q_stream * const s, const bool forget)
 {
+    // warn(DBG, "reset strm %u " FMT_SID " on %s conn %s", forget, s->id,
+    //      conn_type(s->c), cid2str(s->c->scid));
+
     // reset stream offsets
     s->in_data_off = s->in_data = s->out_data = 0;
 
-    if (forget)
+    if (forget) {
         s->out_una = 0;
+        q_free(&s->out);
+        q_free(&s->in);
+        return;
+    }
 
     struct w_iov * v = s->out_una;
     sq_foreach_from (v, &s->out, next) {
@@ -197,11 +203,6 @@ void reset_stream(struct q_stream * const s, const bool forget)
         if (m->pn)
             // remove trailing padding
             v->len = m->stream_data_len;
-
-        // XXX do we need the "while(rm)" loop from free_iov here?
-
-        if (forget)
-            continue;
 
         // don't reset stream-data-related fields
         // TODO: redo this with offsetof magic
@@ -214,11 +215,6 @@ void reset_stream(struct q_stream * const s, const bool forget)
         m->stream_header_pos = shp;
         m->stream_data_start = sds;
         m->stream_data_len = sdl;
-    }
-
-    if (forget) {
-        q_free(&s->out);
-        q_free(&s->in);
     }
 }
 
