@@ -97,7 +97,7 @@ q_connect(struct w_engine * const w,
           struct w_iov_sq * const early_data,
           struct q_stream ** const early_data_stream,
           const bool fin,
-          const struct q_conn_conf * const conn_conf);
+          const struct q_conn_conf * const conf);
 
 extern void __attribute__((nonnull(1))) q_close(struct q_conn * const c,
                                                 const uint16_t code,
@@ -106,7 +106,7 @@ extern void __attribute__((nonnull(1))) q_close(struct q_conn * const c,
 extern struct q_conn * __attribute__((nonnull))
 q_bind(struct w_engine * const w, const uint16_t port);
 
-extern struct q_conn * q_accept(const struct q_conn_conf * const conn_conf);
+extern struct q_conn * q_accept(const struct q_conn_conf * const conf);
 
 extern bool __attribute__((nonnull))
 q_write(struct q_stream * const s, struct w_iov_sq * const q, const bool fin);

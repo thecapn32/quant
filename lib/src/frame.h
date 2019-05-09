@@ -71,9 +71,9 @@ struct cid;
 #define FRM_CLQ 0x1c ///< CONNECTION_CLOSE (QUIC layer)
 #define FRM_CLA 0x1d ///< CONNECTION_CLOSE (application)
 
-#define NUM_FRAM_TYPES (FRM_CLA + 1)
+#define FRM_MAX (FRM_CLA + 1)
 
-bitset_define(frames, NUM_FRAM_TYPES);
+bitset_define(frames, FRM_MAX);
 
 #define F_STREAM_FIN 0x01
 #define F_STREAM_LEN 0x02
@@ -86,7 +86,7 @@ bitset_define(frames, NUM_FRAM_TYPES);
 #define FRAM_OUT BLD GRN
 #endif
 
-#define has_frame(m, ft) bit_isset(NUM_FRAM_TYPES, (ft), &(m)->frames)
+#define has_frame(m, ft) bit_isset(FRM_MAX, (ft), &(m)->frames)
 
 struct pkt_meta;
 
@@ -202,7 +202,7 @@ is_ack_eliciting(const struct frames * const f)
 {
     static const struct frames ack_or_pad =
         bitset_t_initializer(1 << FRM_ACK | 1 << FRM_PAD);
-    struct frames not_ack_or_pad = *f;
-    bit_nand(NUM_FRAM_TYPES, &not_ack_or_pad, &ack_or_pad);
-    return !bit_empty(NUM_FRAM_TYPES, &not_ack_or_pad);
+    struct frames not_ack_or_pad = bitset_t_initializer(0);
+    bit_nand2(FRM_MAX, &not_ack_or_pad, f, &ack_or_pad);
+    return !bit_empty(FRM_MAX, &not_ack_or_pad);
 }

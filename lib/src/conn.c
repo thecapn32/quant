@@ -250,9 +250,9 @@ get_cid_by_id(const khash_t(cids_by_id) * const cbi, struct cid * const id)
 
 static void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c)
 {
-    const struct cid which = {.seq = c->dcid->seq + 1};
-    struct cid * const dcid = splay_find(cids_by_seq, &c->dcids_by_seq, &which);
-    ensure(dcid, "have dcid");
+    struct cid * const dcid =
+        splay_next(cids_by_seq, &c->dcids_by_seq, c->dcid);
+    ensure(dcid, "can't switch from dcid %" PRIu64, c->dcid->seq);
 
     warn(NTE, "migration to dcid %s for %s conn (was %s)", cid2str(dcid),
          conn_type(c), cid2str(c->dcid));
@@ -274,15 +274,14 @@ static void __attribute__((nonnull)) log_sent_pkts(struct q_conn * const c)
             continue;
 
         struct diet unacked = diet_initializer(unacked);
-        struct pkt_meta * p;
-        kh_foreach_value(pn->sent_pkts, p,
-                         diet_insert(&unacked, p->hdr.nr, (ev_tstamp)NAN));
+        struct pkt_meta * m;
+        kh_foreach_value(pn->sent_pkts, m,
+                         diet_insert(&unacked, m->hdr.nr, (ev_tstamp)NAN));
 
         char buf[512];
         int pos = 0;
         struct ival * i = 0;
         diet_foreach (i, diet, &unacked) {
-            // cppcheck-suppress unsignedLessThanZero
             if ((size_t)pos >= sizeof(buf)) {
                 buf[sizeof(buf) - 2] = buf[sizeof(buf) - 3] =
                     buf[sizeof(buf) - 4] = '.';
@@ -320,14 +319,16 @@ rtx_pkt(struct w_iov * const v, struct pkt_meta * const m)
 
     // on RTX, remember orig pkt meta data
     const uint16_t data_start = m->stream_data_start;
-    struct pkt_meta * mr;
-    struct w_iov * const r = alloc_iov(c->w, 0, data_start, &mr);
-    pm_cpy(mr, m, true); // copy pkt meta data
-    memcpy(r->buf - data_start, v->buf - data_start, data_start);
-    mr->stream = 0;
-    mr->has_rtx = true;
-    // sl_insert_head(&m->rtx, mr, rtx_next);
-    // sl_insert_head(&mr->rtx, m, rtx_next);
+    struct pkt_meta * m_orig;
+    struct w_iov * const v_orig = alloc_iov(c->w, 0, data_start, &m_orig);
+    pm_cpy(m_orig, m, true);
+    memcpy(v_orig->buf - data_start, v->buf - data_start, data_start);
+    m_orig->has_rtx = true;
+    sl_insert_head(&m->rtx, m_orig, rtx_next);
+    sl_insert_head(&m_orig->rtx, m, rtx_next);
+    pm_by_nr_del(m->pn->sent_pkts, m);
+    // we reinsert m with its new pkt nr in on_pkt_sent()
+    pm_by_nr_ins(m_orig->pn->sent_pkts, m_orig);
 }
 
 
@@ -370,7 +371,9 @@ tx_vneg_resp(const struct w_sock * const ws,
 
 static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
 {
-    log_cc(c); // do it here instead of in on_pkt_sent()
+    // do it here instead of in on_pkt_sent()
+    set_ld_timer(c);
+    log_cc(c);
 
     c->needs_tx = false;
 
@@ -388,7 +391,7 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
         w_nic_tx(c->w);
     while (w_tx_pending(&c->txq));
 
-#ifdef DEBUG_BUFFERS
+#if defined(DEBUG_BUFFERS) && !defined(NDEBUG)
     const uint64_t avail = sq_len(&c->w->iov);
     const uint64_t sql = sq_len(&c->txq);
 #endif
@@ -397,7 +400,7 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
     w_free(&c->txq);
 
 #ifdef DEBUG_BUFFERS
-    warn(CRT, "w_free %" PRIu64 " (avail %" PRIu64 "->%" PRIu64 ")", sql, avail,
+    warn(DBG, "w_free %" PRIu64 " (avail %" PRIu64 "->%" PRIu64 ")", sql, avail,
          sq_len(&c->w->iov));
 #endif
 
@@ -459,43 +462,54 @@ static bool __attribute__((nonnull))
 tx_stream(struct q_stream * const s, const uint32_t limit)
 {
     struct q_conn * const c = s->c;
+
     const bool has_data = (sq_len(&s->out) && out_fully_acked(s) == false);
 
-    // warn(ERR,
-    //      "%s strm id=" FMT_SID ", cnt=%" PRIu64
-    //      ", has_data=%u, needs_ctrl=%u, blocked=%u, fully_acked=%u,
-    //      limit=%u", conn_type(c), s->id, sq_len(&s->out), has_data,
-    //      needs_ctrl(s), s->blocked, out_fully_acked(s), limit);
+#ifdef DEBUG_STREAMS
+    warn(ERR,
+         "%s strm id=" FMT_SID ", cnt=%" PRIu64
+         ", has_data=%u, needs_ctrl=%u, blocked=%u, fully_acked=%u, "
+         "limit=%u",
+         conn_type(c), s->id, sq_len(&s->out), has_data, needs_ctrl(s),
+         s->blocked, out_fully_acked(s), limit);
+#endif
 
     // check if we should skip TX on this stream
     if (has_data == false || s->blocked ||
         // unless for 0-RTT, is this a regular stream during conn open?
         unlikely(c->try_0rtt == false && s->id >= 0 && c->state != conn_estb)) {
-        // warn(ERR, "skip " FMT_SID, s->id);
+#ifdef DEBUG_STREAMS
+        warn(ERR, "skip " FMT_SID, s->id);
+#endif
         return true;
     }
 
-    // warn(DBG, "TX on %s conn %s strm " FMT_SID " w/%" PRIu64 " pkt%s in
-    // queue",
-    //      conn_type(c), cid2str(c->scid), s->id, sq_len(&s->out),
-    //      plural(sq_len(&s->out)));
+#ifdef DEBUG_STREAMS
+    warn(DBG, "TX on %s conn %s strm " FMT_SID " w/%" PRIu64 " pkt%s in queue ",
+         conn_type(c), cid2str(c->scid), s->id, sq_len(&s->out),
+         plural(sq_len(&s->out)));
+#endif
 
     uint32_t encoded = 0;
     struct w_iov * v = s->out_una;
     sq_foreach_from (v, &s->out, next) {
-        struct pkt_meta * const m = &meta(v); // meta use OK
+        struct pkt_meta * const m = &meta(v);
         if (unlikely(has_wnd(c, v->len) == false && limit == 0)) {
             c->no_wnd = true;
             break;
         }
 
         if (unlikely(m->acked)) {
-            // warn(INF, "skip ACK'ed pkt " FMT_PNR_OUT, m->hdr.nr);
+#ifdef DEBUG_STREAMS
+            warn(INF, "skip ACK'ed pkt " FMT_PNR_OUT, m->hdr.nr);
+#endif
             continue;
         }
 
         if (limit == 0 && m->udp_len && m->lost == false) {
-            // warn(INF, "skip non-lost TX'ed pkt " FMT_PNR_OUT, m->hdr.nr);
+#ifdef DEBUG_STREAMS
+            warn(INF, "skip non-lost TX'ed pkt " FMT_PNR_OUT, m->hdr.nr);
+#endif
             continue;
         }
 
@@ -516,7 +530,9 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
             break;
 
         if (unlikely(limit && encoded == limit)) {
+#ifdef DEBUG_STREAMS
             warn(DBG, "tx limit %u reached", limit);
+#endif
             break;
         }
     }
@@ -578,8 +594,16 @@ void tx(struct ev_loop * const l __attribute__((unused)),
         }
 
     struct q_stream * s;
-    kh_foreach_value(c->streams_by_id, s,
-                     if (tx_stream(s, limit) == false) break);
+    kh_foreach_value(c->streams_by_id, s, {
+        if (unlikely(s->blocked)) {
+            // since stream is blocked, need to do stream ctrl via ACK
+            need_ctrl_update(s);
+            tx_ack(c, strm_epoch(s), false);
+            goto done;
+        }
+        if (tx_stream(s, limit) == false)
+            break;
+    });
 
 done:;
     // make sure we sent enough packets when we're called with a limit
@@ -736,7 +760,7 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
         sq_remove_head(&s->in, next);
 
         // ooo crypto pkts have stream cleared by dec_stream_or_crypto_frame()
-        struct pkt_meta * const m = &meta(v); // meta use OK
+        struct pkt_meta * const m = &meta(v);
         const bool free_ooo = m->stream == 0;
         // mark this (potential in-order) pkt for freeing in rx_pkts()
         m->stream = 0;
@@ -1271,8 +1295,7 @@ rx_pkts(struct w_iov_sq * const x,
             goto drop;
         }
 
-        if (likely((m->hdr.vers && m->hdr.type != LH_RTRY) ||
-                   !is_lh(m->hdr.flags))) {
+        if (likely(has_pkt_nr(m->hdr.flags, m->hdr.vers))) {
             bool decoal;
             if (unlikely(m->hdr.type == LH_INIT && c->cstreams[ep_init] == 0)) {
                 // we already abandoned Initial pkt processing, ignore
@@ -1370,8 +1393,7 @@ rx_pkts(struct w_iov_sq * const x,
                                               epoch_for_pkt_type(m->hdr.type))
                                         : epoch_for_pkt_type(m->hdr.type);
 
-            if (likely((m->hdr.vers && m->hdr.type != LH_RTRY) ||
-                       !is_lh(m->hdr.flags))) {
+            if (likely(has_pkt_nr(m->hdr.flags, m->hdr.vers))) {
                 struct pn_space * const pn = pn_for_pkt_type(c, m->hdr.type);
                 diet_insert(&pn->recv, m->hdr.nr, ev_now(loop));
                 diet_insert(&pn->recv_all, m->hdr.nr, (ev_tstamp)NAN);
@@ -1404,10 +1426,9 @@ rx_pkts(struct w_iov_sq * const x,
         }
 
 #ifdef DEBUG_BUFFERS
-        warn(CRT, "w_free_iov idx %u (avail %" PRIu64 ")", w_iov_idx(xv),
+        warn(DBG, "w_free_iov idx %u (avail %" PRIu64 ")", w_iov_idx(xv),
              sq_len(&xv->w->iov) + 1);
 #endif
-
         w_free_iov(xv);
     }
 }
@@ -1559,7 +1580,7 @@ void enter_closing(struct q_conn * const c)
     if ((c->state == conn_idle || c->state == conn_opng) && c->err_code == 0) {
 #endif
         // no need to go closing->draining in these cases
-        ev_invoke(loop, &c->closing_alarm, 0);
+        ev_feed_event(loop, &c->closing_alarm, 0);
         return;
 #ifndef FUZZING
     }
@@ -1574,8 +1595,10 @@ void enter_closing(struct q_conn * const c)
         ev_timer_init(&c->closing_alarm, enter_closed, dur, 0);
 #ifndef FUZZING
         ev_timer_start(loop, &c->closing_alarm);
+#ifdef DEBUG_TIMERS
         warn(DBG, "closing/draining alarm in %f sec on %s conn %s", dur,
              conn_type(c), cid2str(c->scid));
+#endif
 #endif
     }
 
@@ -1592,8 +1615,9 @@ idle_alarm(struct ev_loop * const l __attribute__((unused)),
            int e __attribute__((unused)))
 {
     struct q_conn * const c = w->data;
+#ifdef DEBUG_TIMERS
     warn(DBG, "idle timeout on %s conn %s", conn_type(c), cid2str(c->scid));
-
+#endif
     conn_to_state(c, conn_drng);
     enter_closing(c);
 }
@@ -1605,29 +1629,30 @@ ack_alarm(struct ev_loop * const l __attribute__((unused)),
           int e __attribute__((unused)))
 {
     struct q_conn * const c = w->data;
+#ifdef DEBUG_TIMERS
     warn(DBG, "ACK timer fired on %s conn %s", conn_type(c), cid2str(c->scid));
+#endif
     tx_ack(c, ep_data, false);
     do_tx(c);
 }
 
 
-void update_conn_conf(struct q_conn * const c,
-                      const struct q_conn_conf * const cc)
+void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
 {
-    c->spin_enabled = cc ? cc->enable_spinbit : 0;
+    c->spin_enabled = conf ? conf->enable_spinbit : 0;
 
     // (re)set idle alarm
     c->tp_in.idle_to =
-        cc && cc->idle_timeout ? cc->idle_timeout : 10 * MSECS_PER_SEC;
+        conf && conf->idle_timeout ? conf->idle_timeout : 10 * MSECS_PER_SEC;
     c->idle_alarm.repeat = (double)c->tp_in.idle_to / MSECS_PER_SEC;
 
     ev_timer_again(loop, &c->idle_alarm);
 
-    c->tp_out.disable_migration = cc ? cc->disable_migration : false;
-    c->key_flips_enabled = cc ? cc->enable_tls_key_updates : false;
+    c->tp_out.disable_migration = conf ? conf->disable_migration : false;
+    c->key_flips_enabled = conf ? conf->enable_tls_key_updates : false;
 
     if (c->tp_out.disable_migration == false || c->key_flips_enabled) {
-        c->key_flip_alarm.repeat = cc ? cc->tls_key_update_frequency : 3;
+        c->key_flip_alarm.repeat = conf ? conf->tls_key_update_frequency : 3;
         ev_timer_again(loop, &c->key_flip_alarm);
     }
 
@@ -1646,7 +1671,7 @@ struct q_conn * new_conn(struct w_engine * const w,
                          const struct sockaddr * const peer,
                          const char * const peer_name,
                          const uint16_t port,
-                         const struct q_conn_conf * const cc)
+                         const struct q_conn_conf * const conf)
 {
     struct q_conn * const c = calloc(1, sizeof(*c));
     ensure(c, "could not calloc");
@@ -1670,7 +1695,7 @@ struct q_conn * new_conn(struct w_engine * const w,
         c->sockopt.enable_ecn = true;
         // TODO need to update zero checksums in update_conn_conf() somehow
         c->sockopt.enable_udp_zero_checksums =
-            cc && cc->enable_udp_zero_checksums;
+            conf && conf->enable_udp_zero_checksums;
         c->rx_w.data = c->sock = w_bind(w, port, &c->sockopt);
         if (unlikely(c->sock == 0))
             goto fail;
@@ -1687,7 +1712,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     splay_init(&c->dcids_by_seq);
     splay_init(&c->scids_by_seq);
     c->scids_by_id = kh_init(cids_by_id);
-    new_cids(c, cc && cc->enable_zero_len_cid, dcid, scid);
+    new_cids(c, conf && conf->enable_zero_len_cid, dcid, scid);
 
     c->vers = c->vers_initial = vers;
     diet_init(&c->closed_streams);
@@ -1732,7 +1757,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     ev_async_start(loop, &c->tx_w);
 
     if (likely(c->is_clnt || c->holds_sock == false))
-        update_conn_conf(c, cc);
+        update_conf(c, conf);
 
     // initialize packet number spaces
     for (pn_t t = pn_init; t <= pn_data; t++)

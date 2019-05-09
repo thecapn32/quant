@@ -312,7 +312,7 @@ extern struct q_conn * new_conn(struct w_engine * const w,
                                 const struct sockaddr * const peer,
                                 const char * const peer_name,
                                 const uint16_t port,
-                                const struct q_conn_conf * const cc);
+                                const struct q_conn_conf * const conf);
 
 extern void __attribute__((nonnull)) free_conn(struct q_conn * const c);
 
@@ -332,7 +332,7 @@ extern void __attribute__((nonnull))
 free_dcid(struct q_conn * const c, struct cid * const id);
 
 extern void __attribute__((nonnull(1)))
-update_conn_conf(struct q_conn * const c, const struct q_conn_conf * const cc);
+update_conf(struct q_conn * const c, const struct q_conn_conf * const conf);
 
 extern struct q_conn * __attribute__((nonnull))
 get_conn_by_srt(uint8_t * const srt);

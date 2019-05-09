@@ -134,6 +134,13 @@ pkt_type_str(const uint8_t flags, const void * const vers)
 }
 
 
+static inline bool __attribute__((const))
+has_pkt_nr(const uint8_t flags, const uint32_t vers)
+{
+    return is_lh(flags) == false || (vers && pkt_type(flags) != LH_RTRY);
+}
+
+
 struct q_stream;
 struct w_iov;
 struct w_iov_sq;

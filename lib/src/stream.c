@@ -199,7 +199,7 @@ void reset_stream(struct q_stream * const s, const bool forget)
 
     struct w_iov * v = s->out_una;
     sq_foreach_from (v, &s->out, next) {
-        struct pkt_meta * const m = &meta(v); // meta use OK
+        struct pkt_meta * const m = &meta(v);
         if (m->pn)
             // remove trailing padding
             v->len = m->stream_data_len;

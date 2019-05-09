@@ -73,7 +73,7 @@ void log_pkt(const char * const dir,
                        NI_NUMERICHOST | NI_NUMERICSERV) == 0,
            "getnameinfo");
 
-    const struct pkt_meta * const m = &meta(v); // meta use OK
+    const struct pkt_meta * const m = &meta(v);
     const char * const pts = pkt_type_str(m->hdr.flags, &m->hdr.vers);
     if (*dir == 'R') {
         if (is_lh(m->hdr.flags)) {
@@ -189,10 +189,9 @@ void coalesce(struct w_iov_sq * const q)
                 sq_remove_after(q, prev, next);
 
 #ifdef DEBUG_BUFFERS
-                warn(CRT, "w_free_iov idx %u (avail %" PRIu64 ")",
+                warn(DBG, "w_free_iov idx %u (avail %" PRIu64 ")",
                      w_iov_idx(next), sq_len(&next->w->iov) + 1);
 #endif
-
                 w_free_iov(next);
             } else
                 prev = next;
@@ -516,9 +515,8 @@ tx:;
     // alloc directly from warpcore for crypto TX - no need for metadata alloc
     struct w_iov * const xv = w_alloc_iov(c->w, 0, 0);
     ensure(xv, "w_alloc_iov failed");
-
 #ifdef DEBUG_BUFFERS
-    warn(CRT, "w_alloc_iov idx %u (avail %" PRIu64 ") len %u", w_iov_idx(xv),
+    warn(DBG, "w_alloc_iov idx %u (avail %" PRIu64 ") len %u", w_iov_idx(xv),
          sq_len(&c->w->iov), xv->len);
 #endif
 

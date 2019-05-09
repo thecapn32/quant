@@ -31,11 +31,16 @@
 #include <string.h>
 #include <sys/param.h>
 
+#ifndef NDEBUG
+#include <stdio.h>
+#endif
+
 #include <ev.h>
 #include <khash.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
+#include "bitset.h"
 #include "conn.h"
 #include "diet.h"
 #include "frame.h"
@@ -96,6 +101,7 @@ static void __attribute__((nonnull)) maybe_tx(struct q_conn * const c)
     ev_feed_event(loop, &c->tx_w, 0);
 }
 
+
 static struct pn_space * __attribute__((nonnull))
 earliest_loss_t_pn(struct q_conn * const c)
 {
@@ -125,19 +131,25 @@ void set_ld_timer(struct q_conn * const c)
         // don't do LD while idle or draining
         return;
 
-    // see SetLossDetectionTimer() pseudo code
+        // see SetLossDetectionTimer() pseudo code
 
+#ifdef DEBUG_TIMERS
     const char * type = BLD RED "???" NRM;
+#endif
     const struct pn_space * const pn = earliest_loss_t_pn(c);
 
     if (!is_zero(pn->loss_t)) {
+#ifdef DEBUG_TIMERS
         type = "TT";
+#endif
         c->rec.ld_alarm.repeat = pn->loss_t;
         goto set_to;
     }
 
     if (unlikely(crypto_pkts_in_flight(c) || have_keys(c, pn_data) == false)) {
+#ifdef DEBUG_TIMERS
         type = "crypto RTX";
+#endif
         ev_tstamp to =
             2 * (unlikely(is_zero(c->rec.srtt)) ? kInitialRtt : c->rec.srtt);
         to = MAX(to, kGranularity) * (1 << c->rec.crypto_cnt);
@@ -147,12 +159,17 @@ void set_ld_timer(struct q_conn * const c)
 
     // don't arm the alarm if there are no ack-eliciting packets in flight
     if (unlikely(c->rec.ae_in_flight == 0)) {
-        warn(DBG, "no RTX-able pkts outstanding, stopping ld_alarm");
+#ifdef DEBUG_TIMERS
+        warn(DBG, "no RTX-able pkts in flight, stopping ld_alarm on %s conn %s",
+             conn_type(c), cid2str(c->scid));
+#endif
         ev_timer_stop(loop, &c->rec.ld_alarm);
         return;
     }
 
+#ifdef DEBUG_TIMERS
     type = "PTO";
+#endif
     ev_tstamp to = c->rec.srtt + MAX(4 * c->rec.rttvar, kGranularity) +
                    (double)c->tp_out.max_ack_del / MSECS_PER_SEC;
     to = MAX(to, kGranularity) * (1 << c->rec.pto_cnt);
@@ -161,11 +178,12 @@ void set_ld_timer(struct q_conn * const c)
 set_to:
     c->rec.ld_alarm.repeat -= ev_now(loop);
 
-    warn(DBG, "%s alarm in %f sec on %s conn %s", type,
-         c->rec.ld_alarm.repeat < 0 ? 0 : c->rec.ld_alarm.repeat, conn_type(c),
-         cid2str(c->scid));
+#ifdef DEBUG_TIMERS
+    warn(DBG, "%s alarm in %f sec on %s conn %s", type, c->rec.ld_alarm.repeat,
+         conn_type(c), cid2str(c->scid));
+#endif
     if (c->rec.ld_alarm.repeat <= 0)
-        ev_invoke(loop, &c->rec.ld_alarm, true);
+        ev_feed_event(loop, &c->rec.ld_alarm, true);
     else
         ev_timer_again(loop, &c->rec.ld_alarm);
 }
@@ -187,15 +205,67 @@ void congestion_event(struct q_conn * const c, const ev_tstamp sent_t)
 }
 
 
-// static void __attribute__((nonnull)) unregister_rtx(struct pm_sl * rtx)
-// {
-//     while (!sl_empty(rtx)) {
-//         struct pkt_meta * const pm = sl_first(rtx);
-//         sl_remove_head(rtx, rtx_next);
-//         sl_remove_head(&pm->rtx, rtx_next);
-//         ensure(sl_empty(&pm->rtx), "not empty");
-//     }
-// }
+static void __attribute__((nonnull)) on_pkt_lost(struct pkt_meta * const m)
+{
+    struct pn_space * const pn = m->pn;
+    struct q_conn * const c = pn->c;
+
+    if (m->in_flight) {
+        c->rec.in_flight -= m->udp_len;
+        if (m->ack_eliciting)
+            c->rec.ae_in_flight--;
+    }
+
+    // rest of function is not from pseudo code
+
+    // if we lost connection or stream control frames, possibly RTX them
+
+    // static const struct frames conn_ctrl = bitset_t_initializer(
+    //     1 << FRM_TOK | 1 << FRM_CDB | 1 << FRM_CID | 1 << FRM_RTR);
+    static const struct frames all_ctrl =
+        bitset_t_initializer(1 << FRM_RST | 1 << FRM_STP | 1 << FRM_TOK |
+                             1 << FRM_CDB | 1 << FRM_SDB | 1 << FRM_SBB |
+                             1 << FRM_SBU | 1 << FRM_CID | 1 << FRM_RTR);
+    struct frames result = bitset_t_initializer(0);
+    bit_and2(FRM_MAX, &result, &all_ctrl, &m->frames);
+    bool rtx = false;
+    while (bit_empty(FRM_MAX, &result) == false) {
+        rtx = true;
+        const unsigned int i = (unsigned int)(bit_ffs(FRM_MAX, &result) - 1);
+        bit_clr(FRM_MAX, i, &result);
+
+        switch (i) {
+        case FRM_SDB:
+            warn(ERR, "pkt %" PRIu64 " FRM_SDB LOST: %" PRIu64, m->hdr.nr,
+                 m->stream_data_blocked);
+            break;
+        default:
+            warn(ERR, "pkt %" PRIu64 " CONTROL LOST: 0x%02x", m->hdr.nr, i);
+        }
+    }
+
+    static const struct frames strm_ctrl =
+        bitset_t_initializer(1 << FRM_RST | 1 << FRM_STP | 1 << FRM_SDB |
+                             1 << FRM_SBB | 1 << FRM_SBU);
+    struct frames is_strm_ctrl = bitset_t_initializer(0);
+    bit_and2(FRM_MAX, &is_strm_ctrl, &strm_ctrl, &m->frames);
+    if (rtx && bit_empty(FRM_MAX, &is_strm_ctrl) == false)
+        need_ctrl_update(m->stream);
+
+    diet_insert(&pn->lost, m->hdr.nr, (ev_tstamp)NAN);
+    m->lost = true;
+    pm_by_nr_del(pn->sent_pkts, m);
+
+    if (m->stream == 0 || m->has_rtx)
+        free_iov(w_iov(c->w, pm_idx(m)), m);
+}
+
+
+#ifndef NDEBUG
+#define NDEBUG_diet_insert diet_insert
+#else
+#define NDEBUG_diet_insert(a, b, c)
+#endif
 
 
 static void __attribute__((nonnull))
@@ -218,15 +288,21 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
                                  ? 0
                                  : pn->lg_acked - kPacketThreshold;
 
+#ifndef NDEBUG
+    struct diet lost = diet_initializer(lost);
+#endif
     uint64_t lg_lost = UINT64_MAX;
     ev_tstamp lg_lost_tx_t = 0;
     bool in_flight_lost = false;
     struct pkt_meta * m;
     kh_foreach_value(pn->sent_pkts, m, {
-        ensure(m->acked == false, "ACKed %s pkt %" PRIu64 " in sent_pkts",
-               pkt_type_str(m->hdr.flags, &m->hdr.vers), m->hdr.nr);
-        ensure(m->lost == false, "lost %s pkt %" PRIu64 " in sent_pkts",
-               pkt_type_str(m->hdr.flags, &m->hdr.vers), m->hdr.nr);
+        // TODO these ensures should not execute for release builds
+        ensure(m->acked == false, "%s ACKed %s pkt %" PRIu64 " in sent_pkts",
+               conn_type(c), pkt_type_str(m->hdr.flags, &m->hdr.vers),
+               m->hdr.nr);
+        ensure(m->lost == false, "%s lost %s pkt %" PRIu64 " in sent_pkts",
+               conn_type(c), pkt_type_str(m->hdr.flags, &m->hdr.vers),
+               m->hdr.nr);
 
         if (m->hdr.nr > pn->lg_acked)
             continue;
@@ -236,9 +312,9 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
             m->lost = true;
             in_flight_lost |= m->in_flight;
             c->i.pkts_out_lost++;
-            // cppcheck-suppress knownConditionTrueFalse
             if (unlikely(lg_lost == UINT64_MAX) || m->hdr.nr > lg_lost) {
-                lg_lost = m->hdr.nr; // cppcheck-suppress unreadVariable
+                // cppcheck-suppress unreadVariable
+                lg_lost = m->hdr.nr;
                 lg_lost_tx_t = m->tx_t;
             }
         } else {
@@ -249,9 +325,39 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
         }
 
         // OnPacketsLost
-        if (m->lost)
+        if (m->lost) {
+            NDEBUG_diet_insert(&lost, m->hdr.nr, (ev_tstamp)NAN);
             on_pkt_lost(m);
+        }
     });
+
+#ifndef NDEBUG
+    char buf[512];
+    int pos = 0;
+    struct ival * i = 0;
+    diet_foreach (i, diet, &lost) {
+        if ((size_t)pos >= sizeof(buf)) {
+            buf[sizeof(buf) - 2] = buf[sizeof(buf) - 3] = buf[sizeof(buf) - 4] =
+                '.';
+            buf[sizeof(buf) - 1] = 0;
+            break;
+        }
+
+        if (i->lo == i->hi)
+            pos +=
+                snprintf(&buf[pos], sizeof(buf) - (size_t)pos, FMT_PNR_OUT "%s",
+                         i->lo, splay_next(diet, &lost, i) ? ", " : "");
+        else
+            pos += snprintf(&buf[pos], sizeof(buf) - (size_t)pos,
+                            FMT_PNR_OUT ".." FMT_PNR_OUT "%s", i->lo, i->hi,
+                            splay_next(diet, &lost, i) ? ", " : "");
+    }
+    diet_free(&lost);
+
+    if (pos)
+        warn(DBG, "%s %s lost: %s", conn_type(c), pn_type_str(pn->type), buf);
+
+#endif
 
     // OnPacketsLost
     if (do_cc && in_flight_lost)
@@ -273,16 +379,20 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
     struct pn_space * const pn = earliest_loss_t_pn(c);
 
     if (!is_zero(pn->loss_t)) {
+#ifdef DEBUG_TIMERS
         warn(DBG, "TT alarm pn %u on %s conn %s", pn->type, conn_type(c),
              cid2str(c->scid));
+#endif
         detect_lost_pkts(pn, true);
 
         // XXX: this will be part of the -20 pseudo code - causes TX to resume
-        ev_invoke(loop, &c->tx_w, 1);
+        ev_feed_event(loop, &c->tx_w, 1);
 
     } else if (crypto_pkts_in_flight(c)) {
+#ifdef DEBUG_TIMERS
         warn(DBG, "crypto RTX #%u on %s conn %s", c->rec.crypto_cnt + 1,
              conn_type(c), cid2str(c->scid));
+#endif
         detect_lost_pkts(&c->pns[pn_init], false);
         detect_lost_pkts(&c->pns[pn_hshk], false);
         detect_lost_pkts(&c->pns[pn_data], false);
@@ -292,23 +402,26 @@ on_ld_alarm(struct ev_loop * const l __attribute__((unused)),
             c->sockopt.enable_ecn = false;
             w_set_sockopt(c->sock, &c->sockopt);
         }
-        ev_invoke(loop, &c->tx_w, 0);
+        ev_feed_event(loop, &c->tx_w, 0);
         c->i.pto_cnt++;
 
     } else if (have_keys(c, pn_data) == false) {
+#ifdef DEBUG_TIMERS
         warn(DBG, "anti-deadlock RTX #%u on %s conn %s", c->rec.crypto_cnt + 1,
              conn_type(c), cid2str(c->scid));
-
+#endif
         // XXX this doesn't quite implement the pseudo code
-        ev_invoke(loop, &c->tx_w, 1);
+        ev_feed_event(loop, &c->tx_w, 1);
         c->rec.crypto_cnt++;
 
     } else {
+#ifdef DEBUG_TIMERS
         warn(DBG, "PTO alarm #%u on %s conn %s", c->rec.pto_cnt, conn_type(c),
              cid2str(c->scid));
+#endif
         c->rec.pto_cnt++;
         c->i.pto_cnt++;
-        ev_invoke(loop, &c->tx_w, 2);
+        ev_feed_event(loop, &c->tx_w, 2);
     }
 
     if (!direct)
@@ -369,7 +482,7 @@ void on_pkt_sent(struct pkt_meta * const m)
         c->rec.in_flight += m->udp_len;
     }
 
-    set_ld_timer(c);
+    // we call set_ld_timer(c) once for a TX'ed burst in do_tx() instead of here
 }
 
 
@@ -427,78 +540,86 @@ void on_ack_received_2(struct pn_space * const pn)
 
 
 static void __attribute__((nonnull))
-on_pkt_acked_cc(const struct pkt_meta * meta_acked)
+on_pkt_acked_cc(const struct pkt_meta * const m)
 {
     // OnPacketAckedCC
-    struct q_conn * const c = meta_acked->pn->c;
-    c->rec.in_flight -= meta_acked->udp_len;
-    if (meta_acked->ack_eliciting)
+    struct q_conn * const c = m->pn->c;
+    c->rec.in_flight -= m->udp_len;
+    if (m->ack_eliciting)
         c->rec.ae_in_flight--;
 
-    if (in_recovery(c, meta_acked->tx_t))
+    if (in_recovery(c, m->tx_t))
         return;
 
     // TODO: Do not increase congestion window in recovery period.
 
     if (c->rec.cwnd < c->rec.ssthresh)
-        c->rec.cwnd += meta_acked->udp_len;
+        c->rec.cwnd += m->udp_len;
     else
-        c->rec.cwnd += kMaxDatagramSize * meta_acked->udp_len / c->rec.cwnd;
+        c->rec.cwnd += kMaxDatagramSize * m->udp_len / c->rec.cwnd;
 }
 
 
-void on_pkt_acked(struct w_iov * const acked_pkt, struct pkt_meta * meta_acked)
+void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
 {
     // see OnPacketAcked() pseudo code
-    struct pn_space * const pn = meta_acked->pn;
+    struct pn_space * const pn = m->pn;
     struct q_conn * const c = pn->c;
-    if (meta_acked->in_flight && meta_acked->lost == false)
-        on_pkt_acked_cc(meta_acked);
-
-    diet_insert(&pn->acked, meta_acked->hdr.nr, (ev_tstamp)NAN);
-    pm_by_nr_del(pn->sent_pkts, meta_acked);
+    if (m->in_flight && m->lost == false)
+        on_pkt_acked_cc(m);
+    diet_insert(&pn->acked, m->hdr.nr, (ev_tstamp)NAN);
+    pm_by_nr_del(pn->sent_pkts, m);
 
     // rest of function is not from pseudo code
 
-    // stop ACKing packets that were contained in the ACK frame of this packet
-    if (has_frame(meta_acked, FRM_ACK))
-        track_acked_pkts(acked_pkt, meta_acked);
+    // stop ACK'ing packets contained in the ACK frame of this packet
+    if (has_frame(m, FRM_ACK))
+        track_acked_pkts(v, m);
 
-    // // if this ACK is for a pkt that was RTX'ed, update the record
-    // struct pkt_meta * const meta_rtx = sl_first(&meta_acked->rtx);
-    // if (meta_rtx) {
-    //     if (meta_acked->has_rtx) {
-    //         // ensure(meta_acked->lost, "meta_acked->lost");
-    //         // ensure(sl_next(meta_rtx, rtx_next) == 0, "rtx chain corrupt");
+    struct pkt_meta * const m_rtx = sl_first(&m->rtx);
+    if (unlikely(m_rtx)) {
+        // this ACKs a pkt with prior or later RTXs
+        if (m->has_rtx) {
+            // this ACKs a pkt that was since (again) RTX'ed
+            warn(DBG, "%s %s pkt " FMT_PNR_OUT " was RTX'ed as " FMT_PNR_OUT,
+                 conn_type(c), pkt_type_str(m->hdr.flags, &m->hdr.vers),
+                 m->hdr.nr, m_rtx->hdr.nr);
+#ifndef NDEBUG
+            ensure(sl_next(m_rtx, rtx_next) == 0, "RTX chain corrupt");
+#endif
+            if (m_rtx->acked == false) {
+                // treat RTX'ed data as ACK'ed; use stand-in w_iov for RTX info
+                const uint64_t acked_nr = m->hdr.nr;
+                pm_by_nr_del(pn->sent_pkts, m_rtx);
+                m->hdr.nr = m_rtx->hdr.nr;
+                m_rtx->hdr.nr = acked_nr;
+                m->has_rtx = false;
+                m_rtx->has_rtx = true;
+                pm_by_nr_ins(pn->sent_pkts, m);
+                m = m_rtx;
+                // XXX caller will not be aware that we mucked around with m!
+            }
+        } else {
+            // this ACKs the last ("real") RTX of a packet
+            warn(CRT, "pkt nr=%" PRIu64 " was earlier TX'ed as %" PRIu64,
+                 has_pkt_nr(m->hdr.flags, m->hdr.vers) ? m->hdr.nr : 0,
+                 has_pkt_nr(m_rtx->hdr.flags, m_rtx->hdr.vers) ? m_rtx->hdr.nr
+                                                               : 0);
+        }
+    }
 
-    //         // remove RTX info
-    //         warn(DBG, "%s pkt " FMT_PNR_OUT " was RTX'ed as " FMT_PNR_OUT,
-    //              conn_type(c), meta_acked->hdr.nr, meta_rtx->hdr.nr);
-    //         unregister_rtx(&meta_rtx->rtx);
+    m->acked = true;
 
-    //         // treat the RTX'ed data has ACK'ed, use stand-in w_iov for RTX
-    //         info const uint64_t acked_nr = meta_acked->hdr.nr;
-    //         pm_by_nr_del(pn->sent_pkts, meta_rtx);
-    //         meta_acked->hdr.nr = meta_rtx->hdr.nr;
-    //         meta_rtx->hdr.nr = acked_nr;
-    //         pm_by_nr_ins(pn->sent_pkts, meta_acked);
-    //         meta_acked = meta_rtx;
-    //     } else
-    //         unregister_rtx(&meta_acked->rtx);
-    // }
-
-    meta_acked->acked = true;
-
-    struct q_stream * const s = meta_acked->stream;
+    struct q_stream * const s = m->stream;
     if (s) {
-        if (unlikely(meta_acked->is_fin))
+        if (unlikely(m->is_fin))
             // this ACKs a FIN
             maybe_api_return(q_close_stream, c, s);
 
         // if this ACKs its stream's out_una, move that forward
         struct w_iov * tmp;
         sq_foreach_from_safe (s->out_una, &s->out, next, tmp) {
-            struct pkt_meta * const mou = &meta(s->out_una); // meta use OK
+            struct pkt_meta * const mou = &meta(s->out_una);
             if (mou->acked == false)
                 break;
             // if this ACKs a crypto packet, we can free it
@@ -516,35 +637,7 @@ void on_pkt_acked(struct w_iov * const acked_pkt, struct pkt_meta * meta_acked)
         }
 
     } else
-        free_iov(acked_pkt, meta_acked);
-}
-
-
-void on_pkt_lost(struct pkt_meta * const m)
-{
-    struct pn_space * const pn = m->pn;
-    struct q_conn * const c = pn->c;
-
-    warn(DBG, "%s %s pkt " FMT_PNR_OUT " considered lost", conn_type(c),
-         pkt_type_str(m->hdr.flags, &m->hdr.vers), m->hdr.nr);
-
-    if (m->in_flight) {
-        c->rec.in_flight -= m->udp_len;
-        if (m->ack_eliciting)
-            c->rec.ae_in_flight--;
-    }
-
-    // rest of function is not from pseudo code
-
-    diet_insert(&pn->lost, m->hdr.nr, (ev_tstamp)NAN);
-    pm_by_nr_del(pn->sent_pkts, m);
-
-    if (m->has_rtx)
-        die("has RTX");
-    //     unregister_rtx(&m->rtx);
-
-    if (m->stream == 0)
-        free_iov(w_iov(c->w, pm_idx(m)), m);
+        free_iov(v, m);
 }
 
 

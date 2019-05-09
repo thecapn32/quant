@@ -123,7 +123,6 @@ do_loop_run(const func_ptr func,
     api_func = func;
     api_conn = conn;
     api_strm = strm;
-    /* warn(DBG, #func "(" #conn ", " #strm ") entering event loop"); */
     ev_run(loop, 0);
     api_func = 0;
     api_conn = api_strm = 0;
@@ -140,12 +139,12 @@ void alloc_off(struct w_engine * const w,
     w_alloc_len(w, q, len, MAX_PKT_LEN - AEAD_LEN - off, off);
     struct w_iov * v = 0;
     sq_foreach (v, q, next) {
-        struct pkt_meta * const m = &meta(v); // meta use OK
+        struct pkt_meta * const m = &meta(v);
         ASAN_UNPOISON_MEMORY_REGION(m, sizeof(*m));
         m->stream_data_start = off;
 
 #ifdef DEBUG_BUFFERS
-        warn(CRT, "q_alloc idx %u (avail %" PRIu64 ") len %u", w_iov_idx(v),
+        warn(DBG, "idx %u (avail %" PRIu64 ") len %u", w_iov_idx(v),
              sq_len(&w->iov), v->len);
 #endif
     }
@@ -155,27 +154,48 @@ void alloc_off(struct w_engine * const w,
 void free_iov(struct w_iov * const v, struct pkt_meta * const m)
 {
 #ifdef DEBUG_BUFFERS
-    warn(CRT, "free_iov idx %u (avail %" PRIu64 ") %s %cX'ed pkt nr=%" PRIu64,
-         w_iov_idx(v), sq_len(&v->w->iov) + 1,
-         pkt_type_str(m->hdr.flags, &m->hdr.vers), m->txed ? 'T' : 'R',
-         m->hdr.vers || m->hdr.type != LH_RTRY ? m->hdr.nr : 0);
+    warn(DBG, "idx %u (avail %" PRIu64 ") %cX'ed %s pkt nr=%" PRIu64,
+         w_iov_idx(v), sq_len(&v->w->iov) + 1, m->txed ? 'T' : 'R',
+         pkt_type_str(m->hdr.flags, &m->hdr.vers),
+         has_pkt_nr(m->hdr.flags, m->hdr.vers) ? m->hdr.nr : 0);
 #endif
 
     if (m->txed) {
         if ((m->acked || m->lost) == false && m->pn->sent_pkts)
             pm_by_nr_del(m->pn->sent_pkts, m);
 
-        //     if (m->has_rtx)
+        struct pkt_meta * m_rtx = sl_first(&m->rtx);
+        if (unlikely(m_rtx)) {
+            // this pkt has prior or later RTXs
+            if (m->has_rtx) {
+                // this pkt has a later RTX
+#ifdef DEBUG_BUFFERS
+                warn(DBG, "pkt nr=%" PRIu64 " was RTX'ed as %" PRIu64,
+                     has_pkt_nr(m->hdr.flags, m->hdr.vers) ? m->hdr.nr : 0,
+                     has_pkt_nr(m_rtx->hdr.flags, m_rtx->hdr.vers)
+                         ? m_rtx->hdr.nr
+                         : 0);
+#endif
+                sl_remove(&m_rtx->rtx, m, pkt_meta, rtx_next);
 
-        //     struct pkt_meta * rm = sl_first(&m->rtx);
-        //     while (rm) {
-        //         // ensure(rm->has_rtx, "was RTX'ed");
-        //         sl_remove_head(&m->rtx, rtx_next);
-        //         struct pkt_meta * const next_rm = sl_next(rm, rtx_next);
-        //         pm_by_nr_del(rm->pn->sent_pkts, rm);
-        //         free_iov(w_iov(v->w, pm_idx(rm)), rm);
-        //         rm = next_rm;
-        //     }
+            } else {
+                // this is the last ("real") RTX of a packet
+                while (m_rtx) {
+#ifdef DEBUG_BUFFERS
+                    warn(DBG,
+                         "pkt nr=%" PRIu64 " was earlier TX'ed as %" PRIu64,
+                         has_pkt_nr(m->hdr.flags, m->hdr.vers) ? m->hdr.nr : 0,
+                         has_pkt_nr(m_rtx->hdr.flags, m_rtx->hdr.vers)
+                             ? m_rtx->hdr.nr
+                             : 0);
+#endif
+                    ensure(m_rtx->has_rtx, "was RTX'ed");
+                    sl_remove_head(&m->rtx, rtx_next);
+                    sl_remove_head(&m_rtx->rtx, rtx_next);
+                    m_rtx = sl_next(m_rtx, rtx_next);
+                }
+            }
+        }
     }
 
     memset(m, 0, sizeof(*m));
@@ -191,12 +211,12 @@ struct w_iov * alloc_iov(struct w_engine * const w,
 {
     struct w_iov * const v = w_alloc_iov(w, len, off);
     ensure(v, "w_alloc_iov failed");
-    *m = &meta(v); // meta use OK
+    *m = &meta(v);
     ASAN_UNPOISON_MEMORY_REGION(*m, sizeof(**m));
     (*m)->stream_data_start = off;
 
 #ifdef DEBUG_BUFFERS
-    warn(CRT, "alloc_iov idx %u (avail %" PRIu64 ") len %u off %u",
+    warn(DBG, "alloc_iov idx %u (avail %" PRIu64 ") len %u off %u",
          w_iov_idx(v), sq_len(&w->iov), v->len, off);
 #endif
 
@@ -212,12 +232,12 @@ struct w_iov * w_iov_dup(const struct w_iov * const v,
     ensure(vdup, "w_alloc_iov failed");
 
 #ifdef DEBUG_BUFFERS
-    warn(CRT, "w_alloc_iov idx %u (avail %" PRIu64 ") len %u", w_iov_idx(vdup),
+    warn(DBG, "w_alloc_iov idx %u (avail %" PRIu64 ") len %u", w_iov_idx(vdup),
          sq_len(&v->w->iov), vdup->len);
 #endif
 
     if (mdup) {
-        *mdup = &meta(vdup); // meta use OK
+        *mdup = &meta(vdup);
         ASAN_UNPOISON_MEMORY_REGION(*mdup, sizeof(**mdup));
     }
     memcpy(vdup->buf, v->buf + off, v->len - off);
@@ -241,7 +261,7 @@ void q_free(struct w_iov_sq * const q)
     while (!sq_empty(q)) {
         struct w_iov * const v = sq_first(q);
         sq_remove_head(q, next);
-        free_iov(v, &meta(v)); // meta use OK
+        free_iov(v, &meta(v));
     }
 }
 
@@ -250,7 +270,7 @@ static void __attribute__((nonnull)) mark_fin(struct w_iov_sq * const q)
 {
     struct w_iov * const last = sq_last(q, w_iov, next);
     ensure(last, "got last buffer");
-    meta(last).is_fin = true; // meta use OK
+    meta(last).is_fin = true;
 }
 
 
@@ -260,15 +280,14 @@ struct q_conn * q_connect(struct w_engine * const w,
                           struct w_iov_sq * const early_data,
                           struct q_stream ** const early_data_stream,
                           const bool fin,
-                          const struct q_conn_conf * const conn_conf)
+                          const struct q_conn_conf * const conf)
 {
     // make new connection
     const uint vers = ok_vers[0];
-    struct q_conn * const c =
-        new_conn(w, vers, 0, 0, peer, peer_name, 0, conn_conf);
+    struct q_conn * const c = new_conn(w, vers, 0, 0, peer, peer_name, 0, conf);
 
     // init TLS
-    init_tls(c, conn_conf ? conn_conf->alpn : 0);
+    init_tls(c, conf ? conf->alpn : 0);
     init_tp(c);
 
     // if we have no early data, we're not trying 0-RTT
@@ -386,8 +405,8 @@ bool q_write(struct q_stream * const s,
 
     // how much data did we write?
     const uint64_t data_written =
-        s->out_una && meta(s->out_una).udp_len            // meta use OK
-            ? meta(s->out_una).stream_off - prev_out_data // meta use OK
+        s->out_una && meta(s->out_una).udp_len
+            ? meta(s->out_una).stream_off - prev_out_data
             : qlen;
 
     // move data back
@@ -497,7 +516,7 @@ void q_readall_stream(struct q_stream * const s, struct w_iov_sq * const q)
 
     if (!sq_empty(&s->in)) {
         struct w_iov * const last = sq_last(&s->in, w_iov, next);
-        const struct pkt_meta * const m_last = &meta(last); // meta use OK
+        const struct pkt_meta * const m_last = &meta(last);
         warn(WRN,
              "read %" PRIu64
              " byte%s in %.3f sec (%s) on %s conn %s strm " FMT_SID " %s",
@@ -534,19 +553,19 @@ cancel_api_call(struct ev_loop * const l __attribute__((unused)),
 }
 
 
-struct q_conn * q_accept(const struct q_conn_conf * const conn_conf)
+struct q_conn * q_accept(const struct q_conn_conf * const conf)
 {
     if (sl_first(&accept_queue))
         goto accept;
 
     warn(WRN, "waiting for conn on any serv sock (timeout %f sec)",
-         (double)conn_conf->idle_timeout / MSECS_PER_SEC);
+         conf ? (double)conf->idle_timeout / MSECS_PER_SEC : 0);
 
-    if (conn_conf->idle_timeout) {
+    if (conf && conf->idle_timeout) {
         if (ev_is_active(&api_alarm))
             ev_timer_stop(loop, &api_alarm);
         ev_timer_init(&api_alarm, cancel_api_call,
-                      (double)conn_conf->idle_timeout / MSECS_PER_SEC, 0);
+                      (double)conf->idle_timeout / MSECS_PER_SEC, 0);
         ev_timer_start(loop, &api_alarm);
     }
 
@@ -577,7 +596,7 @@ accept:;
          pnd->out_1rtt[pnd->out_kyph].aead->algo->name);
 #endif
 
-    update_conn_conf(c, conn_conf);
+    update_conf(c, conf);
     return c;
 }
 
@@ -826,7 +845,7 @@ void q_cleanup(struct w_engine * const w)
                  "buffer %" PRIu64 " still in use for %cX'ed %s pkt %" PRIu64,
                  i, m->txed ? 'T' : 'R',
                  pkt_type_str(m->hdr.flags, &m->hdr.vers),
-                 m->hdr.vers || m->hdr.type != LH_RTRY ? m->hdr.nr : 0);
+                 has_pkt_nr(m->hdr.flags, m->hdr.vers) ? m->hdr.nr : 0);
         }
     }
 #endif

@@ -134,9 +134,7 @@ extern void __attribute__((nonnull))
 on_ack_received_2(struct pn_space * const pn);
 
 extern void __attribute__((nonnull))
-on_pkt_acked(struct w_iov * const acked_pkt, struct pkt_meta * meta_acked);
-
-extern void __attribute__((nonnull)) on_pkt_lost(struct pkt_meta * const m);
+on_pkt_acked(struct w_iov * const v, struct pkt_meta * m);
 
 extern void __attribute__((nonnull))
 congestion_event(struct q_conn * const c, const ev_tstamp sent_t);

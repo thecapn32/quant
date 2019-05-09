@@ -41,7 +41,9 @@
 #include "frame.h"
 
 
-#define DEBUG_BUFFERS
+// #define DEBUG_BUFFERS ///< Set to log buffer use details.
+// #define DEBUG_STREAMS ///< Set to log stream scheduling details.
+// #define DEBUG_TIMERS  ///< Set to log timer details.
 
 #define DATA_OFFSET 48 ///< Offsets of stream frame payload data we TX.
 
@@ -146,9 +148,8 @@ struct pkt_hdr {
 struct pkt_meta {
     // XXX need to potentially change pm_cpy() below if fields are reordered
     splay_entry(pkt_meta) off_node;
-    // sl_entry(pkt_meta) rtx_next;
-    // sl_head(pm_sl, pkt_meta) rtx; ///< List of pkt_meta structs of previous
-    // TXs.
+    sl_entry(pkt_meta) rtx_next;
+    sl_head(pm_sl, pkt_meta) rtx; ///< List of pkt_meta structs of previous TXs.
 
     // pm_cpy(true) starts copying from here:
     struct q_stream * stream;   ///< Stream this data was written on.
@@ -161,12 +162,15 @@ struct pkt_meta {
     uint64_t lg_acked; ///< "Largest Acknowledged" in ACK block (for TX'ed pkt).
     uint64_t ack_block_cnt; ///< "ACK Block Count" in ACK block (for TX'ed pkt).
 
-    int64_t max_stream_data_sid; ///< MAX_STREAM_DATA sid, if sent.
-    uint64_t max_stream_data;    ///< MAX_STREAM_DATA limit, if sent.
-    uint64_t max_data;           ///< MAX_DATA limit, if sent.
-    int64_t max_streams_bidi;    ///< MAX_STREAM_ID bidir limit, if sent.
-    int64_t max_streams_uni;     ///< MAX_STREAM_ID unidir limit, if sent.
-    struct frames frames;        ///< Frames present in pkt.
+    int64_t max_stream_data_sid;  ///< MAX_STREAM_DATA sid, if sent.
+    uint64_t max_stream_data;     ///< MAX_STREAM_DATA limit, if sent.
+    uint64_t max_data;            ///< MAX_DATA limit, if sent.
+    int64_t max_streams_bidi;     ///< MAX_STREAM_ID bidir limit, if sent.
+    int64_t max_streams_uni;      ///< MAX_STREAM_ID unidir limit, if sent.
+    uint64_t stream_data_blocked; ///< STREAM_DATA_BLOCKED value, if sent.
+    uint64_t data_blocked;        ///< DATA_BLOCKED value, if sent.
+
+    struct frames frames; ///< Frames present in pkt.
 
     // pm_cpy(false) starts copying from here:
     ev_tstamp tx_t;       ///< Transmission timestamp; only set on TX.

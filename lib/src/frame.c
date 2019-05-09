@@ -58,7 +58,7 @@
 // TODO: check error conditions and codes more thoroughly
 
 
-#define track_frame(m, ft) bit_set(NUM_FRAM_TYPES, (ft), &(m)->frames)
+#define track_frame(m, ft) bit_set(FRM_MAX, (ft), &(m)->frames)
 
 #define err_close_return(c, code, ...)                                         \
     do {                                                                       \
@@ -334,7 +334,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
         // check if we have delivered a FIN, and act on it if we did
         struct w_iov * const last = sq_last(&m->stream->in, w_iov, next);
         if (last) {
-            const struct pkt_meta * const m_last = &meta(last); // meta use OK
+            const struct pkt_meta * const m_last = &meta(last);
             if (unlikely(v != last))
                 adj_iov_to_start(last, m_last);
             if (m_last->is_fin) {
@@ -648,7 +648,7 @@ dec_close_frame(const uint8_t type,
              err_code ? RED : NRM, (int)reas_len, reas_phr);
 
     if (c->state == conn_drng)
-        ev_invoke(loop, &c->closing_alarm, 0);
+        ev_feed_event(loop, &c->closing_alarm, 0);
     else {
         if (c->state == conn_clsg)
             conn_to_state(c, conn_drng);
@@ -1188,7 +1188,7 @@ bool dec_frames(struct q_conn * const c,
 
     // track outstanding frame types in the pn space
     struct pn_space * const pn = pn_for_pkt_type(c, m->hdr.type);
-    bit_or(NUM_FRAM_TYPES, &pn->rx_frames, &m->frames);
+    bit_or(FRM_MAX, &pn->rx_frames, &m->frames);
 
     return true;
 }
@@ -1360,7 +1360,7 @@ void enc_ack_frame(uint8_t ** pos,
     }
 
     ev_timer_stop(loop, &c->ack_alarm);
-    bit_zero(NUM_FRAM_TYPES, &pn->rx_frames);
+    bit_zero(FRM_MAX, &pn->rx_frames);
     pn->pkts_rxed_since_last_ack_tx = 0;
     pn->imm_ack = false;
     track_frame(m, FRM_ACK);
@@ -1527,10 +1527,11 @@ void enc_stream_data_blocked_frame(uint8_t ** pos,
 {
     enc1(pos, end, FRM_SDB);
     encv(pos, end, (uint64_t)s->id);
-    encv(pos, end, s->out_data);
+    m->stream_data_blocked = s->out_data_max;
+    encv(pos, end, m->stream_data_blocked);
 
     warn(INF, FRAM_OUT "STREAM_DATA_BLOCKED" NRM " id=" FMT_SID " lim=%" PRIu64,
-         s->id, s->out_data_max);
+         s->id, m->stream_data_blocked);
 
     track_frame(m, FRM_SDB);
 }
@@ -1542,10 +1543,10 @@ void enc_data_blocked_frame(uint8_t ** pos,
 {
     enc1(pos, end, FRM_CDB);
 
-    const uint64_t off = m->pn->c->tp_out.max_data + m->stream_data_len;
-    encv(pos, end, off);
+    m->data_blocked = m->pn->c->tp_out.max_data + m->stream_data_len;
+    encv(pos, end, m->data_blocked);
 
-    warn(INF, FRAM_OUT "DATA_BLOCKED" NRM " lim=%" PRIu64, off);
+    warn(INF, FRAM_OUT "DATA_BLOCKED" NRM " lim=%" PRIu64, m->data_blocked);
 
     track_frame(m, FRM_CDB);
 }
