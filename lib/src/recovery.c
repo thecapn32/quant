@@ -220,8 +220,9 @@ static void __attribute__((nonnull)) on_pkt_lost(struct pkt_meta * const m)
 
     // if we lost connection or stream control frames, possibly RTX them
 
-    // static const struct frames conn_ctrl = bitset_t_initializer(
-    //     1 << FRM_TOK | 1 << FRM_CDB | 1 << FRM_CID | 1 << FRM_RTR);
+    // static const struct frames conn_ctrl =
+    //     bitset_t_initializer(1 << FRM_TOK | 1 << FRM_CDB | 1 << FRM_SBB |
+    //                          1 << FRM_SBU | 1 << FRM_CID | 1 << FRM_RTR);
     static const struct frames all_ctrl =
         bitset_t_initializer(1 << FRM_RST | 1 << FRM_STP | 1 << FRM_TOK |
                              1 << FRM_CDB | 1 << FRM_SDB | 1 << FRM_SBB |
@@ -245,8 +246,7 @@ static void __attribute__((nonnull)) on_pkt_lost(struct pkt_meta * const m)
     }
 
     static const struct frames strm_ctrl =
-        bitset_t_initializer(1 << FRM_RST | 1 << FRM_STP | 1 << FRM_SDB |
-                             1 << FRM_SBB | 1 << FRM_SBU);
+        bitset_t_initializer(1 << FRM_RST | 1 << FRM_STP | 1 << FRM_SDB);
     struct frames is_strm_ctrl = bitset_t_initializer(0);
     bit_and2(FRM_MAX, &is_strm_ctrl, &strm_ctrl, &m->frames);
     if (rtx && bit_empty(FRM_MAX, &is_strm_ctrl) == false)
