@@ -142,10 +142,10 @@ clnt_vneg(const uint8_t * const pos, const uint8_t * const end)
             dec4(&vers, &p, end);
             if (is_vneg_vers(vers))
                 continue;
-
+#ifdef DEBUG_EXTRA
             warn(DBG, "serv prio %ld = 0x%08x; our prio %u = 0x%08x",
                  (unsigned long)(p - pos) / sizeof(vers), vers, i, ok_vers[i]);
-
+#endif
             if (ok_vers[i] == vers)
                 return vers;
         }
@@ -797,10 +797,13 @@ static void __attribute__((nonnull)) free_cids(struct q_conn * const c)
         conns_by_id_del(&c->odcid);
     }
 
-    while (!splay_empty(&c->scids_by_seq)) {
-        struct cid * const id = splay_min(cids_by_seq, &c->scids_by_seq);
-        free_scid(c, id);
-    }
+    if (c->scid == 0)
+        conns_by_ipnp_del(c);
+    else
+        while (!splay_empty(&c->scids_by_seq)) {
+            struct cid * const id = splay_min(cids_by_seq, &c->scids_by_seq);
+            free_scid(c, id);
+        }
 
     while (!splay_empty(&c->dcids_by_seq)) {
         struct cid * const id = splay_min(cids_by_seq, &c->dcids_by_seq);
@@ -861,9 +864,8 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
 
     if (is_vneg) {
         // reset CIDs
-        const bool zero_len_scid = c->scid->len == 0;
         free_cids(c);
-        new_cids(c, zero_len_scid, 0, 0);
+        new_cids(c, c->scid == 0, 0, 0);
     }
 
     // reset CC state
@@ -989,7 +991,8 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
 
             // check that the rx'ed CIDs match our tx'ed CIDs
             const bool rx_scid_ok = !cid_cmp(&m->hdr.scid, c->dcid);
-            const bool rxed_dcid_ok = !cid_cmp(&m->hdr.dcid, c->scid);
+            const bool rxed_dcid_ok =
+                m->hdr.dcid.len == 0 || !cid_cmp(&m->hdr.dcid, c->scid);
             if (rx_scid_ok == false || rxed_dcid_ok == false) {
                 warn(INF, "vneg %ccid mismatch: rx %s != %s",
                      rx_scid_ok ? 'd' : 's',
@@ -1727,6 +1730,7 @@ struct q_conn * new_conn(struct w_engine * const w,
         INIT_STRM_DATA_BIDI;
     c->tp_in.max_streams_bidi = INIT_MAX_BIDI_STREAMS;
     c->tp_in.max_streams_uni = INIT_MAX_UNI_STREAMS;
+    c->tp_in.max_pkt = w_mtu(c->w);
 
     // initialize idle timeout
     c->idle_alarm.data = c;
@@ -1833,8 +1837,6 @@ void free_conn(struct q_conn * const c)
     free(c->peer_name);
 
     // remove connection from global lists and free CIDs
-    if (c->scid == 0)
-        conns_by_ipnp_del(c);
     free_cids(c);
     kh_destroy(cids_by_id, c->scids_by_id);
 

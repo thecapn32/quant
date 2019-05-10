@@ -689,49 +689,102 @@ void init_tp(struct q_conn * const c)
                 enc_tp(&pos, end, TP_IMSU, c->tp_in.max_streams_uni);
             break;
         case TP_IMSD_U:
-            if (c->is_clnt)
+            if (c->is_clnt) {
                 enc_tp(&pos, end, TP_IMSD_U, c->tp_in.max_strm_data_uni);
+#ifdef DEBUG_EXTRA
+                warn(INF, "\tinitial_max_stream_data_uni = %" PRIu64 " [bytes]",
+                     c->tp_in.max_strm_data_uni);
+#endif
+            }
             break;
         case TP_SRT:
-            if (!c->is_clnt)
+            if (!c->is_clnt) {
                 encb_tp(&pos, end, TP_SRT, c->scid->srt, sizeof(c->scid->srt));
+#ifdef DEBUG_EXTRA
+                warn(INF, "\tstateless_reset_token = %s",
+                     hex2str(c->scid->srt, sizeof(c->scid->srt)));
+#endif
+            }
             break;
         case TP_OCID:
-            if (!c->is_clnt && c->odcid.len)
+            if (!c->is_clnt && c->odcid.len) {
                 encb_tp(&pos, end, TP_OCID, c->odcid.id, c->odcid.len);
+#ifdef DEBUG_EXTRA
+                warn(INF, "\toriginal_connection_id = %s",
+                     cid2str(&c->tp_in.orig_cid));
+#endif
+            }
             break;
         case TP_IMSB:
             enc_tp(&pos, end, TP_IMSB, c->tp_in.max_streams_bidi);
+#ifdef DEBUG_EXTRA
+            warn(INF, "\tinitial_max_streams_bidi = %" PRIu64,
+                 c->tp_in.max_streams_bidi);
+#endif
             break;
         case TP_IDTO:
             enc_tp(&pos, end, TP_IDTO, c->tp_in.idle_to);
+#ifdef DEBUG_EXTRA
+            warn(INF, "\tidle_timeout = %" PRIu64 " [ms]", c->tp_in.idle_to);
+#endif
             break;
         case TP_IMSD_BR:
             enc_tp(&pos, end, TP_IMSD_BR, c->tp_in.max_strm_data_bidi_remote);
+#ifdef DEBUG_EXTRA
+            warn(INF,
+                 "\tinitial_max_stream_data_bidi_remote = %" PRIu64 " [bytes]",
+                 c->tp_in.max_strm_data_bidi_remote);
+#endif
             break;
         case TP_IMSD_BL:
             enc_tp(&pos, end, TP_IMSD_BL, c->tp_in.max_strm_data_bidi_local);
+#ifdef DEBUG_EXTRA
+            warn(INF,
+                 "\tinitial_max_stream_data_bidi_local = %" PRIu64 " [bytes]",
+                 c->tp_in.max_strm_data_bidi_remote);
+#endif
             break;
         case TP_IMD:
             enc_tp(&pos, end, TP_IMD, c->tp_in.max_data);
+#ifdef DEBUG_EXTRA
+            warn(INF, "\tinitial_max_data = %" PRIu64 " [bytes]",
+                 c->tp_in.max_data);
+#endif
             break;
         case TP_ADE:
             enc_tp(&pos, end, TP_ADE, c->tp_in.ack_del_exp);
+#ifdef DEBUG_EXTRA
+            warn(INF, "\tack_delay_exponent = %u", c->tp_in.ack_del_exp);
+#endif
             break;
         case TP_MAD:
             enc_tp(&pos, end, TP_MAD, c->tp_in.max_ack_del);
+#ifdef DEBUG_EXTRA
+            warn(INF, "\tmax_ack_delay = %" PRIu64 " [ms]",
+                 c->tp_in.max_ack_del);
+#endif
             break;
         case TP_MPS:
-            enc_tp(&pos, end, TP_MPS, w_mtu(c->w));
+            enc_tp(&pos, end, TP_MPS, c->tp_in.max_pkt);
+#ifdef DEBUG_EXTRA
+            warn(INF, "\tmax_packet_size = %" PRIu64 " [bytes]",
+                 c->tp_in.max_pkt);
+#endif
             break;
         case TP_PRFA:
         case TP_DMIG:
             // TODO: unhandled
             break;
         default:
-            if (tp_order[j] == grease_type)
+            if (tp_order[j] == grease_type) {
                 encb_tp(&pos, end, grease_type, &grease[2], grease_len);
-            else
+#ifdef DEBUG_EXTRA
+                warn(WRN, "\t" BLD "%s tp" NRM " (0x%04x w/len %u) = %s",
+                     (grease_type & 0xff00) == 0xff00 ? YEL "private"
+                                                      : RED "unknown",
+                     grease_type, grease_len, hex2str(&grease[2], grease_len));
+#endif
+            } else
                 die("unknown tp 0x%04x", tp_order[j]);
             break;
         }
