@@ -1,13 +1,13 @@
           live fail vneg hshk data clse rsmt zrtt rtry migr bind kyph http spin aecn
 ats       *         v
 f5        *         V    H    D    C    R         S                   3         E
-google
+google    *         V
 lsquic    *         V    H    D    C    R    Z    S    M              3    P    E
 mvfst     *         V    H    D    C    R                             3
 ngtcp2    *         V    H    D    C    R    Z    S    M    B    U    3
 ngx_quic  *         V    H    D    C    R                             3
 picoquic  *         V    H    D    C    R    Z    S    M    B    U    3    P
-quant     *         v
+quant     *         V    H    D    C    R    Z    S    M    B    U         P    E
 quiche    *         V    H    D    C    R         S                   3
 quicly    *         v
 quinn     *         V    H    D    C    R    Z    S    M    B    U         P    E

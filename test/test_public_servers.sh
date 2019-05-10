@@ -33,7 +33,7 @@ declare -A servers=(
     # [apple]=31.133.146.185::4433:4434:4433:/50k
     [ats]=quic.ogre.com::4433:4434:4433:/en/latest/_static/jquery.js
     [f5]=208.85.208.226::4433:4433:4433:/file50k
-    [google]=quic.rocks::4433:4434:4433:/40000
+    [google]=quic.rocks:-z:4433:4434:4433:/40000
     [lsquic]=http3-test.litespeedtech.com:-3:4433:4434:4433:/
     # [minq]=minq.dev.mozaws.net::4433:4434:4433:/index.html
     # [mozquic]=mozquic.ducksong.com::4433:4434:4433:/index.html
@@ -52,6 +52,7 @@ declare -A servers=(
 )
 
 results=(live fail vneg hshk data clse rsmt zrtt rtry migr bind kyph http spin aecn)
+[ -n "$1" ] && results+=(perf t_h2 t_hq)
 declare -A ${results[@]}
 
 
@@ -68,6 +69,7 @@ fi
 pid=$$
 script=$(basename -s .sh "$0")
 rm -f /tmp/"$script"*
+
 
 function test_server {
     # run quant client and save a log for post-processing
@@ -104,6 +106,47 @@ function test_server {
         "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.nat.log" 2>&1 &
 
     wait
+    printf "%s " "$s"
+}
+
+
+function bench_server {
+    IFS=':' read -ra info <<< "${servers[$1]}"
+    # 0=name, 1=flags, 2=port, 3=retry-port, 4=h3-port, 5=URL
+
+    local size=5000000
+    local log_base="/tmp/$script.$1.$pid.bench"
+    local h2_out="$log_base.h2.out"
+    local h2
+    h2=$({ time -p curl -s -o "$h2_out" \
+                 "https://${info[0]}/$size"; } 2>&1)
+    h2=$(echo "$h2" | fmt | cut -d' ' -f2)
+    h2_size=$(stat -q "$h2_out" | cut -d' ' -f8)
+    rm -f "$h2_out"
+    if [ "$h2_size" = $size ]; then
+        t_h2[$1]=$h2
+
+        local opts="-i $iface -t4 -v0"
+        local hq_out="$log_base.hq.out"
+        mkdir "$hq_out"
+        local wd
+        wd=$(pwd)
+        pushd "$hq_out" > /dev/null || exit
+        local hq
+        hq=$({ time -p $wd/bin/client $opts ${info[1]} -s /dev/null -w \
+                     "https://${info[0]}:${info[3]}/$size"; } 2>&1)
+        hq=$(echo "$hq" | fmt | cut -d' ' -f2)
+        hq_size=$(stat -q "$size" | cut -d' ' -f8)
+        popd > /dev/null || exit
+        rm -rf "$hq_out"
+
+        if [ "$hq_size" = $size ]; then
+            t_hq[$1]=$hq
+
+            perf[$1]=$(perl -mList::Util=max -e "print 'T' if abs($hq - $h2) <= max($hq, $h2) * .1")
+        fi
+    fi
+
     printf "%s " "$s"
 }
 
@@ -243,11 +286,19 @@ function analyze {
     [ ${fail[$1]} ] || rm -f "$log"
 }
 
+
 printf "Testing servers: "
 for s in "${!servers[@]}"; do
     test_server "$s" &
 done
 wait
+
+if [ -n "$1" ]; then
+    printf "\\nBenchmarking servers: "
+    for s in "${!servers[@]}"; do
+        bench_server "$s"
+    done
+fi
 printf "\\n\\n"
 
 tmp=$(mktemp)
@@ -270,5 +321,5 @@ done
 
 expand -t 5 "$tmp" | sponge "$tmp"
 cat "$tmp"
-wdiff -n "$(dirname $0)/$script.result" "$tmp" | $colordiff
+[ -n "$1" ] || wdiff -n "$(dirname $0)/$script.result" "$tmp" | $colordiff
 rm -f "$tmp"
