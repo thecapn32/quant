@@ -904,7 +904,7 @@ dec_new_cid_frame(const uint8_t ** pos,
                   const struct pkt_meta * const m)
 {
     struct q_conn * const c = m->pn->c;
-    struct cid dcid = {.seq = 0};
+    struct cid dcid = {.seq = 0, .has_srt = true};
     decv_chk(&dcid.seq, pos, end, c, FRM_CID);
     dec1_chk(&dcid.len, pos, end, c, FRM_CID);
 

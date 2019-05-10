@@ -661,7 +661,7 @@ conns_by_id_del(struct cid * const id)
 static void __attribute__((nonnull)) update_act_scid(struct q_conn * const c)
 {
     // server picks a new random cid
-    struct cid nscid = {.len = SCID_LEN_SERV};
+    struct cid nscid = {.len = SCID_LEN_SERV, .has_srt = true};
     rand_bytes(nscid.id, sizeof(nscid.id) + sizeof(nscid.srt));
     cid_cpy(&c->odcid, c->scid);
     warn(NTE, "hshk switch to scid %s for %s %s conn (was %s)", cid2str(&nscid),
@@ -680,7 +680,6 @@ static void __attribute__((nonnull)) update_act_scid(struct q_conn * const c)
 
 void add_scid(struct q_conn * const c, struct cid * const id)
 {
-    // warn(ERR, "new scid %s", cid2str(id));
     struct cid * const scid = calloc(1, sizeof(*scid));
     ensure(scid, "could not calloc");
     cid_cpy(scid, id);
@@ -696,21 +695,20 @@ void add_dcid(struct q_conn * const c, const struct cid * const id)
 {
     struct cid * dcid = splay_find(cids_by_seq, &c->dcids_by_seq, id);
     if (dcid == 0) {
-        // warn(ERR, "new dcid %s", cid2str(id));
         dcid = calloc(1, sizeof(*dcid));
         ensure(dcid, "could not calloc");
-        cid_cpy(dcid, id);
-        static const uint8_t zero_srt[SRT_LEN] = {0};
-        if (memcmp(dcid->srt, zero_srt, SRT_LEN) != 0)
-            conns_by_srt_ins(c, dcid->srt);
         if (c->dcid == 0)
             c->dcid = dcid;
     } else {
         warn(NTE, "hshk switch to dcid %s for %s conn (was %s)", cid2str(id),
              conn_type(c), cid2str(c->dcid));
         ensure(splay_remove(cids_by_seq, &c->dcids_by_seq, dcid), "removed");
-        cid_cpy(dcid, id);
+        if (dcid->has_srt)
+            conns_by_srt_del(dcid->srt);
     }
+    cid_cpy(dcid, id);
+    if (id->has_srt)
+        conns_by_srt_ins(c, dcid->srt);
     ensure(splay_insert(cids_by_seq, &c->dcids_by_seq, dcid) == 0, "inserted");
 }
 
@@ -826,7 +824,7 @@ static void __attribute__((nonnull(1))) new_cids(struct q_conn * const c,
                 8 +
                 // XXX workaround for gquic, which requires 8-byte dcids
                 (zero_len_scid ? 0 : (uint8_t)w_rand_uniform(CID_LEN_MAX - 7))};
-        rand_bytes(ndcid.id, sizeof(ndcid.id));
+        rand_bytes(ndcid.id, sizeof(ndcid.id) + sizeof(ndcid.srt));
         cid_cpy(&c->odcid, &ndcid);
         add_dcid(c, &ndcid);
     } else if (dcid)
@@ -837,13 +835,17 @@ static void __attribute__((nonnull(1))) new_cids(struct q_conn * const c,
     if (c->is_clnt) {
         nscid.len = zero_len_scid ? 0 : SCID_LEN_CLNT;
         if (nscid.len)
-            rand_bytes(nscid.id, sizeof(nscid.id));
-    } else if (scid)
+            rand_bytes(nscid.id, sizeof(nscid.id) + sizeof(nscid.srt));
+    } else if (scid) {
         cid_cpy(&nscid, scid);
-    if (nscid.len) {
-        rand_bytes(nscid.srt, sizeof(nscid.srt));
+        if (nscid.has_srt == false) {
+            rand_bytes(nscid.srt, sizeof(nscid.srt));
+            nscid.has_srt = true;
+        }
+    }
+    if (nscid.len)
         add_scid(c, &nscid);
-    } else if (c->scid == 0)
+    else if (c->scid == 0)
         conns_by_ipnp_ins(c);
 }
 
@@ -1801,8 +1803,7 @@ void free_scid(struct q_conn * const c, struct cid * const id)
 
 void free_dcid(struct q_conn * const c, struct cid * const id)
 {
-    static const uint8_t zero_srt[SRT_LEN] = {0};
-    if (memcmp(id->srt, zero_srt, SRT_LEN) != 0)
+    if (id->has_srt)
         conns_by_srt_del(id->srt);
     ensure(splay_remove(cids_by_seq, &c->dcids_by_seq, id), "removed");
     free(id);

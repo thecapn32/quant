@@ -34,7 +34,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/param.h>
 #include <sys/socket.h>
 
 #include <ev.h>
@@ -73,7 +72,8 @@ hash_cid(const struct cid * const id)
 static inline int __attribute__((nonnull))
 cid_cmp(const struct cid * const a, const struct cid * const b)
 {
-    return memcmp(&a->len, &b->len, MIN(a->len, b->len) + sizeof(a->len));
+    // if the lengths are different, memcmp will fail on the first byte
+    return memcmp(&a->len, &b->len, a->len + sizeof(a->len));
 }
 
 

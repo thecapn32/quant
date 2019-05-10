@@ -42,7 +42,7 @@
 
 
 // #define DEBUG_BUFFERS ///< Set to log buffer use details.
-// #define DEBUG_EXTRA   ///< Set to log various extra details.
+// #define DEBUG_EXTRA ///< Set to log various extra details.
 // #define DEBUG_STREAMS ///< Set to log stream scheduling details.
 // #define DEBUG_TIMERS  ///< Set to log timer details.
 
@@ -126,7 +126,8 @@ struct cid {
     uint8_t id[CID_LEN_MAX]; ///< Connection ID
     uint8_t srt[SRT_LEN];    ///< Stateless Reset Token
     uint8_t retired : 1;     ///< Did we retire this CID?
-    uint8_t : 7;
+    uint8_t has_srt : 1;     ///< Is the SRT field valid?
+    uint8_t : 6;
     uint8_t _unused[4];
 };
 

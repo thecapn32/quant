@@ -535,6 +535,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                 return 1;
             }
             memcpy(dcid->srt, pos, sizeof(dcid->srt));
+            dcid->has_srt = true;
             warn(INF, "\tstateless_reset_token = %s",
                  hex2str(dcid->srt, sizeof(dcid->srt)));
             conns_by_srt_ins(c, dcid->srt);
