@@ -86,7 +86,7 @@ struct q_stream {
 };
 
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) && defined(DEBUG_EXTRA) && !defined(FUZZING)
 #define strm_to_state(s, new_state)                                            \
     do {                                                                       \
         if ((s)->id >= 0) {                                                    \

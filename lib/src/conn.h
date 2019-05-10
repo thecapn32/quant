@@ -277,8 +277,7 @@ struct q_conn {
 
 extern struct q_conn_sl c_ready;
 
-
-#if !defined(NDEBUG) && !defined(FUZZING)
+#if !defined(NDEBUG) && defined(DEBUG_EXTRA) && !defined(FUZZING)
 #define conn_to_state(c, s)                                                    \
     do {                                                                       \
         if ((c)->scid)                                                         \

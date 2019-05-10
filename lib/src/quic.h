@@ -309,6 +309,13 @@ write_to_corpus(const int dir, const void * const data, const size_t len);
     __extension__(OVERLOADED_MACRO(maybe_api_return, __VA_ARGS__))
 
 
+#ifdef DEBUG_EXTRA
+#define DEBUG_EXTRA_warn warn
+#else
+#define DEBUG_EXTRA_warn(...)
+#endif
+
+
 /// If current API function and argument match @p func and @p arg - and @p strm
 /// if it is non-zero - exit the event loop.
 ///
@@ -324,8 +331,8 @@ write_to_corpus(const int dir, const void * const data, const size_t len);
         if (api_func == (func_ptr)(&(func)) && api_conn == (conn) &&           \
             ((strm) == 0 || api_strm == (strm))) {                             \
             ev_break(loop, EVBREAK_ALL);                                       \
-            warn(DBG,                                                          \
-                 #func "(" #conn ", " #strm ") done, exiting event loop");     \
+            DEBUG_EXTRA_warn(DBG, #func "(" #conn ", " #strm                   \
+                                        ") done, exiting event loop");         \
             api_func = api_conn = api_strm = 0;                                \
         }                                                                      \
         api_func == 0;                                                         \
@@ -345,7 +352,8 @@ write_to_corpus(const int dir, const void * const data, const size_t len);
         EV_VERIFY(loop);                                                       \
         if (api_conn == (conn) && ((strm) == 0 || api_strm == (strm))) {       \
             ev_break(loop, EVBREAK_ALL);                                       \
-            warn(DBG, "<any>(" #conn ", " #strm ") done, exiting event loop"); \
+            DEBUG_EXTRA_warn(DBG, "<any>(" #conn ", " #strm                    \
+                                  ") done, exiting event loop");               \
             api_func = api_conn = api_strm = 0;                                \
         }                                                                      \
         api_func == 0;                                                         \
