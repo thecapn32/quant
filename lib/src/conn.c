@@ -797,7 +797,6 @@ static void __attribute__((nonnull)) free_cids(struct q_conn * const c)
 
     if (c->scid == 0)
         conns_by_ipnp_del(c);
-
     while (!splay_empty(&c->scids_by_seq)) {
         struct cid * const id = splay_min(cids_by_seq, &c->scids_by_seq);
         free_scid(c, id);
