@@ -531,9 +531,10 @@ dec_ack_frame(const uint8_t type,
                 // this is just way too noisy when fuzzing
                 if (unlikely(diet_find(&m->pn->acked, ack) == 0 &&
                              diet_find(&m->pn->lost, ack) == 0))
-                    err_close_return(
-                        c, ERR_PROTOCOL_VIOLATION, type,
-                        "got ACK for pkt " FMT_PNR_OUT " never sent", ack);
+                    err_close_return(c, ERR_PROTOCOL_VIOLATION, type,
+                                     "got ACK for %s pkt " FMT_PNR_OUT
+                                     " never sent",
+                                     pn_type_str(m->pn->type), ack);
 #endif
                 goto skip;
             }
