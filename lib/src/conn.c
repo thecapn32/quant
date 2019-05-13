@@ -1442,7 +1442,8 @@ void rx(struct ev_loop * const l,
                 do_tx(c);
                 break;
             case del_ack:
-                if (likely(c->state != conn_clsg))
+                if (ev_is_active(&c->ack_alarm) == false &&
+                    likely(c->state != conn_clsg))
                     ev_timer_again(loop, &c->ack_alarm);
                 break;
             case no_ack:
