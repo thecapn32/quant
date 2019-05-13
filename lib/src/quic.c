@@ -969,7 +969,8 @@ void q_rebind_sock(struct q_conn * const c)
 
     // close the current w_sock
     ev_io_stop(loop, &c->rx_w);
-    conns_by_ipnp_del(c);
+    if (c->scid == 0)
+        conns_by_ipnp_del(c);
     w_close(c->sock);
 
     // switch to new w_sock
@@ -978,7 +979,8 @@ void q_rebind_sock(struct q_conn * const c)
     ev_set_priority(&c->rx_w, EV_MAXPRI);
     ev_io_start(loop, &c->rx_w);
     w_connect(c->sock, (struct sockaddr *)&c->peer);
-    conns_by_ipnp_ins(c);
+    if (c->scid == 0)
+        conns_by_ipnp_ins(c);
 
 #ifndef NDEBUG
     char new_ip[NI_MAXHOST];
