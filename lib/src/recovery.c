@@ -523,7 +523,7 @@ update_rtt(struct q_conn * const c, ev_tstamp ack_del)
     }
 
     c->rec.min_rtt = MIN(c->rec.min_rtt, c->rec.latest_rtt);
-    ack_del = MIN(ack_del, c->tp_out.max_ack_del);
+    ack_del = MIN(ack_del, (double)c->tp_out.max_ack_del / MSECS_PER_SEC);
 
     const ev_tstamp adj_rtt = c->rec.latest_rtt > c->rec.min_rtt + ack_del
                                   ? c->rec.latest_rtt - ack_del
