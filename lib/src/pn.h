@@ -96,7 +96,8 @@ struct pn_space {
 
     struct q_conn * c;
 
-    struct frames rx_frames; ///< Frame types received since last ACK.
+    struct frames rx_frames; ///< Frame types RX'ed since last ACK TX.
+    struct frames tx_frames; ///< Frame types TX'ed since last ACK RX.
 
     uint64_t ect0_cnt;
     uint64_t ect1_cnt;

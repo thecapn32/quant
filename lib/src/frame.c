@@ -441,7 +441,8 @@ dec_ack_frame(const uint8_t type,
               const uint8_t * const end,
               const struct pkt_meta * const m)
 {
-    struct q_conn * const c = m->pn->c;
+    struct pn_space * const pn = m->pn;
+    struct q_conn * const c = pn->c;
 
     uint64_t lg_ack = 0;
     decv_chk(&lg_ack, pos, end, c, type);
@@ -463,7 +464,7 @@ dec_ack_frame(const uint8_t type,
     uint64_t num_blocks = 0;
     decv_chk(&num_blocks, pos, end, c, type);
 
-    const struct ival * const cum_ack_ival = diet_min_ival(&m->pn->acked);
+    const struct ival * const cum_ack_ival = diet_min_ival(&pn->acked);
     const uint64_t cum_ack = cum_ack_ival ? cum_ack_ival->hi : UINT64_MAX;
 
     uint64_t lg_ack_in_block = lg_ack;
@@ -525,22 +526,22 @@ dec_ack_frame(const uint8_t type,
                 goto skip;
 
             struct pkt_meta * m_acked;
-            struct w_iov * const acked = find_sent_pkt(m->pn, ack, &m_acked);
+            struct w_iov * const acked = find_sent_pkt(pn, ack, &m_acked);
             if (unlikely(acked == 0)) {
 #ifndef FUZZING
                 // this is just way too noisy when fuzzing
-                if (unlikely(diet_find(&m->pn->acked, ack) == 0 &&
-                             diet_find(&m->pn->lost, ack) == 0))
+                if (unlikely(diet_find(&pn->acked, ack) == 0 &&
+                             diet_find(&pn->lost, ack) == 0))
                     err_close_return(c, ERR_PROTOCOL_VIOLATION, type,
                                      "got ACK for %s pkt " FMT_PNR_OUT
                                      " never sent",
-                                     pn_type_str(m->pn->type), ack);
+                                     pn_type_str(pn->type), ack);
 #endif
                 goto skip;
             }
 
             got_new_ack = true;
-            if (unlikely(ack == lg_ack) && m_acked->ack_eliciting) {
+            if (unlikely(ack == lg_ack)) {
                 // call this only for the largest ACK in the frame
                 on_ack_received_1(m_acked, ack_delay);
                 lg_acked_tx_t = m_acked->tx_t;
@@ -595,14 +596,16 @@ dec_ack_frame(const uint8_t type,
         // TODO: add sanity check whether markings make sense
 
         // ProcessECN
-        if (ce_cnt > m->pn->ce_cnt) {
-            m->pn->ce_cnt = ce_cnt;
+        if (ce_cnt > pn->ce_cnt) {
+            pn->ce_cnt = ce_cnt;
             congestion_event(c, lg_acked_tx_t);
         }
     }
 
     if (got_new_ack)
-        on_ack_received_2(m->pn);
+        on_ack_received_2(pn);
+
+    bit_zero(FRM_MAX, &pn->tx_frames);
     return true;
 }
 

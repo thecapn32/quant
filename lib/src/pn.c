@@ -121,6 +121,7 @@ void reset_pn(struct pn_space * const pn)
     pn->ect0_cnt = pn->ect1_cnt = pn->ce_cnt = 0;
     pn->pkts_rxed_since_last_ack_tx = 0;
     bit_zero(FRM_MAX, &pn->rx_frames);
+    bit_zero(FRM_MAX, &pn->tx_frames);
 }
 
 
@@ -165,9 +166,9 @@ ack_t needs_ack(const struct pn_space * const pn)
         return no_ack;
     }
 
-    const bool have_ack_eliciting = is_ack_eliciting(&pn->rx_frames);
-    if (have_ack_eliciting == false) {
-        // warn(ERR, "%s conn %s: grat_ack: have_ack_eliciting == false",
+    const bool rxed_ack_eliciting = is_ack_eliciting(&pn->rx_frames);
+    if (rxed_ack_eliciting == false) {
+        // warn(ERR, "%s conn %s: grat_ack: rxed_ack_eliciting == false",
         //      conn_type(c), cid2str(c->scid));
         return grat_ack;
     }

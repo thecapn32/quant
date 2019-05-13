@@ -70,7 +70,7 @@
 #define kGranularity 0.001
 
 // The RTT used before an RTT sample is taken. The RECOMMENDED value is 100ms.
-#define kInitialRtt 0.1
+#define kInitialRtt 0.5
 
 /// The sender's maximum payload size. Does not include UDP or IP overhead. The
 /// max packet size is used for calculating initial and minimum congestion
@@ -79,9 +79,9 @@
 
 /// Default limit on the initial amount of outstanding data in flight, in bytes.
 /// Taken from [RFC6928]. The RECOMMENDED value is the minimum of 10 *
-/// kMaxDatagramSize and max(2* kMaxDatagramSize, 14600)).
+/// kMaxDatagramSize and max(2* kMaxDatagramSize, 14720)).
 #define kInitialWindow                                                         \
-    MIN(10 * kMaxDatagramSize, MAX(2 * kMaxDatagramSize, 14600))
+    MIN(10 * kMaxDatagramSize, MAX(2 * kMaxDatagramSize, 14720))
 
 /// Minimum congestion window in bytes.
 #define kMinimumWindow (2 * kMaxDatagramSize)
@@ -328,8 +328,8 @@ write_to_corpus(const int dir, const void * const data, const size_t len);
 #define maybe_api_return3(func, conn, strm)                                    \
     __extension__({                                                            \
         EV_VERIFY(loop);                                                       \
-        if (api_func == (func_ptr)(&(func)) && api_conn == (conn) &&           \
-            ((strm) == 0 || api_strm == (strm))) {                             \
+        if (unlikely(api_func == (func_ptr)(&(func)) && api_conn == (conn) &&  \
+                     ((strm) == 0 || api_strm == (strm)))) {                   \
             ev_break(loop, EVBREAK_ALL);                                       \
             DEBUG_EXTRA_warn(DBG, #func "(" #conn ", " #strm                   \
                                         ") done, exiting event loop");         \
@@ -350,7 +350,8 @@ write_to_corpus(const int dir, const void * const data, const size_t len);
 #define maybe_api_return2(conn, strm)                                          \
     __extension__({                                                            \
         EV_VERIFY(loop);                                                       \
-        if (api_conn == (conn) && ((strm) == 0 || api_strm == (strm))) {       \
+        if (unlikely(api_conn == (conn) &&                                     \
+                     ((strm) == 0 || api_strm == (strm)))) {                   \
             ev_break(loop, EVBREAK_ALL);                                       \
             DEBUG_EXTRA_warn(DBG, "<any>(" #conn ", " #strm                    \
                                   ") done, exiting event loop");               \

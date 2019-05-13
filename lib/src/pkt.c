@@ -38,6 +38,7 @@
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
+#include "bitset.h"
 #include "conn.h"
 #include "diet.h"
 #include "frame.h"
@@ -559,6 +560,7 @@ tx:;
         m->lost = false;
 
     on_pkt_sent(m);
+    bit_or(FRM_MAX, &pn->tx_frames, &m->frames);
 
     if (c->is_clnt) {
         if (is_lh(m->hdr.flags) == false)
