@@ -30,15 +30,14 @@
 #include <stdint.h>
 
 #include <ev.h>
-#include <khash.h>
 
+#include "conn.h"
 #include "diet.h"
 #include "frame.h"
 #include "tls.h"
 
 
 struct pkt_meta;
-struct q_conn;
 
 
 KHASH_MAP_INIT_INT64(pm_by_nr, struct pkt_meta *)

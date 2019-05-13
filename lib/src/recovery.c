@@ -35,6 +35,8 @@
 #include <stdio.h>
 #endif
 
+#define klib_unused
+
 #include <ev.h>
 #include <khash.h>
 #include <quant/quant.h>

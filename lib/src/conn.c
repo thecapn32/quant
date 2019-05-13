@@ -37,9 +37,6 @@
 #include <string.h>
 #include <sys/param.h>
 #include <sys/socket.h>
-#include <sys/types.h>
-
-#define klib_unused
 
 // IWYU pragma: no_include <picotls/../picotls.h>
 
@@ -53,6 +50,7 @@
 #include "frame.h"
 #include "marshall.h"
 #include "pkt.h"
+#include "pn.h"
 #include "quic.h"
 #include "recovery.h"
 #include "stream.h"
@@ -169,22 +167,6 @@ epoch_in(const struct q_conn * const c)
     const size_t epoch = ptls_get_read_epoch(c->tls.t);
     ensure(epoch <= ep_data, "unhandled epoch %zu", epoch);
     return (epoch_t)epoch;
-}
-
-
-static inline uint64_t __attribute__((nonnull))
-conns_by_ipnp_key(const struct sockaddr * const src,
-                  const struct sockaddr * const dst)
-{
-    const struct sockaddr_in * const src4 =
-        (const struct sockaddr_in *)(const void *)src;
-    const struct sockaddr_in * const dst4 =
-        (const struct sockaddr_in *)(const void *)dst;
-
-    return ((uint64_t)dst4->sin_addr.s_addr
-            << sizeof(dst4->sin_addr.s_addr) * 8) |
-           ((uint64_t)src4->sin_port << sizeof(src4->sin_port) * 8) |
-           (uint64_t)dst4->sin_port;
 }
 
 
@@ -710,32 +692,6 @@ void add_dcid(struct q_conn * const c, const struct cid * const id)
     if (id->has_srt)
         conns_by_srt_ins(c, dcid->srt);
     ensure(splay_insert(cids_by_seq, &c->dcids_by_seq, dcid) == 0, "inserted");
-}
-
-
-static inline void __attribute__((nonnull))
-conns_by_ipnp_ins(struct q_conn * const c)
-{
-    int ret;
-    const khiter_t k =
-        kh_put(conns_by_ipnp, conns_by_ipnp,
-               (khint64_t)conns_by_ipnp_key(w_get_addr(c->sock, true),
-                                            (struct sockaddr *)&c->peer),
-               &ret);
-    ensure(ret >= 1, "inserted returned %d", ret);
-    kh_val(conns_by_ipnp, k) = c;
-}
-
-
-static inline void __attribute__((nonnull))
-conns_by_ipnp_del(const struct q_conn * const c)
-{
-    const khiter_t k =
-        kh_get(conns_by_ipnp, conns_by_ipnp,
-               (khint64_t)conns_by_ipnp_key(w_get_addr(c->sock, true),
-                                            (const struct sockaddr *)&c->peer));
-    ensure(k != kh_end(conns_by_ipnp), "found");
-    kh_del(conns_by_ipnp, conns_by_ipnp, k);
 }
 
 

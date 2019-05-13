@@ -43,7 +43,6 @@
 #include <netdb.h>
 #endif
 
-#include <khash.h>
 #include <openssl/evp.h>
 #include <openssl/ossl_typ.h>
 #include <openssl/pem.h>
