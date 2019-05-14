@@ -206,20 +206,21 @@ void congestion_event(struct q_conn * const c, const ev_tstamp sent_t)
 
 
 static bool __attribute__((nonnull))
-in_persistent_cong(struct pn_space * const pn, const uint64_t lg_lost)
+in_persistent_cong(struct pn_space * const pn __attribute__((unused)),
+                   const uint64_t lg_lost __attribute__((unused)))
 {
-    struct q_conn * const c = pn->c;
+    // struct q_conn * const c = pn->c;
 
-    // see InPersistentCongestion() pseudo code
-    const ev_tstamp cong_period =
-        kPersistentCongestionThreshold *
-        (c->rec.srtt + MAX(4 * c->rec.rttvar, kGranularity) +
-         (double)c->tp_out.max_ack_del / MSECS_PER_SEC);
+    // // see InPersistentCongestion() pseudo code
+    // const ev_tstamp cong_period =
+    //     kPersistentCongestionThreshold *
+    //     (c->rec.srtt + MAX(4 * c->rec.rttvar, kGranularity) +
+    //      (double)c->tp_out.max_ack_del / MSECS_PER_SEC);
 
-    const struct ival * const i = diet_find(&pn->lost, lg_lost);
-    warn(DBG,
-         "lg_lost_ival %" PRIu64 "-%" PRIu64 ", lg_lost %" PRIu64 ", period %f",
-         i->lo, i->hi, lg_lost, cong_period);
+    // const struct ival * const i = diet_find(&pn->lost, lg_lost);
+    // warn(DBG,
+    //      "lg_lost_ival %" PRIu64 "-%" PRIu64 ", lg_lost %" PRIu64 ", period
+    //      %f", i->lo, i->hi, lg_lost, cong_period);
     // return i->lo + cong_period < lg_lost;
     return false;
 }
@@ -281,8 +282,6 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
     if (unlikely(pn->sent_pkts == 0))
         // abandoned PN
         return;
-
-    ensure(pn->lg_acked != UINT64_MAX, "lg_acked is uninitialized");
 
     struct q_conn * const c = pn->c;
     pn->loss_t = 0;
