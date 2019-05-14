@@ -48,7 +48,8 @@
 
 #define DATA_OFFSET 48 ///< Offsets of stream frame payload data we TX.
 
-#define MSECS_PER_SEC 1000 ///< Milliseconds per second.
+#define MSECS_PER_SEC 1000    ///< Milliseconds per second.
+#define USECS_PER_SEC 1000000 ///< Microseconds per second.
 
 #define CID_LEN_MIN 4   ///< Minimum CID length allowed by spec.
 #define CID_LEN_MAX 18  ///< Maximum CID length allowed by spec.

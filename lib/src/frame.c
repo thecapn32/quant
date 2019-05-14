@@ -1298,7 +1298,8 @@ void enc_ack_frame(uint8_t ** pos,
                              ? DEF_ACK_DEL_EXP
                              : c->tp_out.ack_del_exp;
     const uint64_t ack_delay =
-        (uint64_t)((ev_now(loop) - diet_timestamp(b)) * 1000000) / (1 << ade);
+        (uint64_t)((ev_now(loop) - diet_timestamp(b)) * USECS_PER_SEC) /
+        (1 << ade);
     encv(pos, end, ack_delay);
 
     m->ack_block_cnt = diet_cnt(&pn->recv) - 1;

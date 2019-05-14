@@ -211,6 +211,7 @@ in_persistent_cong(struct pn_space * const pn, const uint64_t lg_lost)
     struct q_conn * const c = pn->c;
 
     // see InPersistentCongestion() pseudo code
+    log_cc(c);
     const ev_tstamp pto = c->rec.srtt + MAX(4 * c->rec.rttvar, kGranularity) +
                           (double)c->tp_out.max_ack_del / MSECS_PER_SEC;
     const uint64_t cong_period =
@@ -543,7 +544,7 @@ void on_ack_received_1(struct pkt_meta * const lg_ack, const uint64_t ack_del)
 
     if (is_ack_eliciting(&lg_ack->pn->tx_frames)) {
         c->rec.latest_rtt = ev_now(loop) - lg_ack->tx_t;
-        update_rtt(c, ack_del / 1000000.0); // ack_del is passed in usec
+        update_rtt(c, (double)ack_del / USECS_PER_SEC);
     }
 
     // ProcessECN() is done in dec_ack_frame()
