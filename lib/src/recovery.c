@@ -57,7 +57,7 @@
 
 struct ev_loop;
 
-#define is_crypto_pkt(m) has_frame((m), FRM_CRY)
+#define is_crypto_pkt(m) has_frame((m)->frames, FRM_CRY)
 
 
 static inline bool __attribute__((nonnull))
@@ -493,7 +493,7 @@ void on_pkt_sent(struct pkt_meta * const m)
     // nr is set in enc_pkt()
     m->tx_t = now;
     // ack_eliciting is set in enc_pkt()
-    m->in_flight = m->ack_eliciting || has_frame(m, FRM_PAD);
+    m->in_flight = m->ack_eliciting || has_frame(m->frames, FRM_PAD);
     // size is set in enc_pkt()
 
     struct q_conn * const c = m->pn->c;
@@ -596,7 +596,7 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
     // rest of function is not from pseudo code
 
     // stop ACK'ing packets contained in the ACK frame of this packet
-    if (has_frame(m, FRM_ACK))
+    if (has_frame(m->frames, FRM_ACK))
         track_acked_pkts(v, m);
 
     struct pkt_meta * const m_rtx = sl_first(&m->rtx);

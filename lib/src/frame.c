@@ -1069,8 +1069,10 @@ bool dec_frames(struct q_conn * const c,
         case FRM_STR_0c:
         case FRM_STR_0d:
         case FRM_STR_0e:
-        case FRM_STR_0f:
-            if (unlikely((has_frame(m, FRM_CRY) || has_frame(m, FRM_STR))) &&
+        case FRM_STR_0f:;
+            static const struct frames cry_or_str =
+                bitset_t_initializer(1 << FRM_CRY | 1 << FRM_STR);
+            if (unlikely(bit_overlap(FRM_MAX, &m->frames, &cry_or_str)) &&
                 m->stream) {
                 // already had at least one stream or crypto frame in this
                 // packet with non-duplicate data, so generate (another) copy

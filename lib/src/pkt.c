@@ -245,7 +245,7 @@ static bool __attribute__((nonnull)) can_enc(uint8_t ** const pos,
                                              const bool one_per_pkt)
 {
     const bool has_space = *pos + max_frame_len(type) <= end;
-    return (one_per_pkt == false || has_frame(m, type) == false) && has_space;
+    return (one_per_pkt && has_frame(m->frames, type)) == false && has_space;
 }
 
 

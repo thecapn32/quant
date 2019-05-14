@@ -180,7 +180,8 @@ ack_t needs_ack(const struct pn_space * const pn)
         return grat_ack;
     }
 
-    const bool in_hshk = pn->type != pn_data;
+    const bool in_hshk =
+        pn->type != pn_data || has_frame(pn->rx_frames, FRM_CRY);
     if (in_hshk) {
 #ifdef DEBUG_EXTRA
         warn(DBG, "%s conn %s: imm_ack: in_hshk", conn_type(c),

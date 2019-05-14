@@ -907,7 +907,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
             goto done;
 
         // if the CH doesn't include any crypto frames, bail
-        if (has_frame(m, FRM_CRY) == false) {
+        if (has_frame(m->frames, FRM_CRY) == false) {
             warn(ERR, "initial pkt w/o crypto frames");
             enter_closing(c);
             goto done;

@@ -86,7 +86,7 @@ bitset_define(frames, FRM_MAX);
 #define FRAM_OUT BLD GRN
 #endif
 
-#define has_frame(m, ft) bit_isset(FRM_MAX, (ft), &(m)->frames)
+#define has_frame(frames, type) bit_isset(FRM_MAX, (type), &(frames))
 
 struct pkt_meta;
 
