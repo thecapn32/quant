@@ -182,8 +182,8 @@ set_to:
     c->rec.ld_alarm.repeat -= ev_now(loop);
 
 #ifdef DEBUG_TIMERS
-    warn(DBG, "%s alarm in %f sec on %s conn %s", type, c->rec.ld_alarm.repeat,
-         conn_type(c), cid2str(c->scid));
+    warn(DBG, "%s %s alarm in %f sec on %s conn %s", pn_type_str(pn->type),
+         type, c->rec.ld_alarm.repeat, conn_type(c), cid2str(c->scid));
 #endif
     if (c->rec.ld_alarm.repeat <= 0)
         ev_feed_event(loop, &c->rec.ld_alarm, true);
@@ -211,18 +211,17 @@ in_persistent_cong(struct pn_space * const pn, const uint64_t lg_lost)
     struct q_conn * const c = pn->c;
 
     // see InPersistentCongestion() pseudo code
-    log_cc(c);
-    const ev_tstamp pto = c->rec.srtt + MAX(4 * c->rec.rttvar, kGranularity) +
-                          (double)c->tp_out.max_ack_del / MSECS_PER_SEC;
-    const uint64_t cong_period =
-        (uint64_t)(pto * kPersistentCongestionThreshold);
+    const ev_tstamp cong_period =
+        kPersistentCongestionThreshold *
+        (c->rec.srtt + MAX(4 * c->rec.rttvar, kGranularity) +
+         (double)c->tp_out.max_ack_del / MSECS_PER_SEC);
 
     const struct ival * const i = diet_find(&pn->lost, lg_lost);
     warn(DBG,
-         "lg_lost_ival %" PRIu64 "-%" PRIu64 ", lg_lost %" PRIu64
-         ", period %" PRIu64 ", pto %f",
-         i->lo, i->hi, lg_lost, cong_period, pto);
-    return i->lo + cong_period < lg_lost;
+         "lg_lost_ival %" PRIu64 "-%" PRIu64 ", lg_lost %" PRIu64 ", period %f",
+         i->lo, i->hi, lg_lost, cong_period);
+    // return i->lo + cong_period < lg_lost;
+    return false;
 }
 
 
@@ -248,29 +247,14 @@ static void __attribute__((nonnull)) on_pkt_lost(struct pkt_meta * const m)
         bitset_t_initializer(1 << FRM_RST | 1 << FRM_STP | 1 << FRM_TOK |
                              1 << FRM_CDB | 1 << FRM_SDB | 1 << FRM_SBB |
                              1 << FRM_SBU | 1 << FRM_CID | 1 << FRM_RTR);
-    struct frames result = bitset_t_initializer(0);
-    bit_and2(FRM_MAX, &result, &all_ctrl, &m->frames);
-    bool rtx = false;
-    while (bit_empty(FRM_MAX, &result) == false) {
-        rtx = true;
-        const unsigned int i = (unsigned int)(bit_ffs(FRM_MAX, &result) - 1);
-        bit_clr(FRM_MAX, i, &result);
-
-        switch (i) {
-        case FRM_SDB:
-            warn(DBG, "pkt %" PRIu64 " FRM_SDB LOST: %" PRIu64, m->hdr.nr,
-                 m->stream_data_blocked);
-            break;
-        default:
-            warn(DBG, "pkt %" PRIu64 " CONTROL LOST: 0x%02x", m->hdr.nr, i);
-        }
-    }
+    if (bit_overlap(FRM_MAX, &all_ctrl, &m->frames))
+        for (uint32_t i = 0; i < FRM_MAX; i++)
+            if (has_frame(m->frames, i))
+                warn(DBG, "pkt %" PRIu64 " CONTROL LOST: 0x%02x", m->hdr.nr, i);
 
     static const struct frames strm_ctrl =
         bitset_t_initializer(1 << FRM_RST | 1 << FRM_STP | 1 << FRM_SDB);
-    struct frames is_strm_ctrl = bitset_t_initializer(0);
-    bit_and2(FRM_MAX, &is_strm_ctrl, &strm_ctrl, &m->frames);
-    if (rtx && bit_empty(FRM_MAX, &is_strm_ctrl) == false)
+    if (bit_overlap(FRM_MAX, &strm_ctrl, &m->frames))
         need_ctrl_update(m->stream);
 
     diet_insert(&pn->lost, m->hdr.nr, (ev_tstamp)NAN);
@@ -343,7 +327,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
                 lg_lost_tx_t = m->tx_t;
             }
         } else {
-            if (is_zero(pn->loss_t))
+            if (unlikely(is_zero(pn->loss_t)))
                 pn->loss_t = m->tx_t + loss_del;
             else
                 pn->loss_t = MIN(pn->loss_t, m->tx_t + loss_del);
@@ -408,8 +392,8 @@ on_ld_timeout(struct ev_loop * const l __attribute__((unused)),
 
     if (!is_zero(pn->loss_t)) {
 #ifdef DEBUG_TIMERS
-        warn(DBG, "TT alarm pn %u on %s conn %s", pn->type, conn_type(c),
-             cid2str(c->scid));
+        warn(DBG, "%s TT alarm on %s conn %s", pn_type_str(pn->type),
+             conn_type(c), cid2str(c->scid));
 #endif
         detect_lost_pkts(pn, true);
     } else if (have_unacked_crypto_data(c)) {
