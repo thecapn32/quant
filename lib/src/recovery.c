@@ -282,6 +282,8 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
         // abandoned PN
         return;
 
+    ensure(pn->lg_acked != UINT64_MAX, "lg_acked is uninitialized");
+
     struct q_conn * const c = pn->c;
     pn->loss_t = 0;
 
@@ -291,11 +293,6 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
 
     // Packets sent before this time are deemed lost.
     const ev_tstamp lost_send_t = ev_now(loop) - loss_del;
-
-    // Packets with packet numbers before this are deemed lost.
-    const uint64_t lost_pn = unlikely(pn->lg_acked == UINT64_MAX)
-                                 ? 0
-                                 : pn->lg_acked - kPacketThreshold;
 
 #ifndef NDEBUG
     struct diet lost = diet_initializer(lost);
@@ -317,7 +314,8 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
             continue;
 
         // Mark packet as lost, or set time when it should be marked.
-        if (m->tx_t <= lost_send_t || m->hdr.nr <= lost_pn) {
+        if (m->tx_t <= lost_send_t ||
+            pn->lg_acked >= m->hdr.nr + kPacketThreshold) {
             m->lost = true;
             in_flight_lost |= m->in_flight;
             c->i.pkts_out_lost++;
@@ -524,7 +522,9 @@ void on_ack_received_1(struct pkt_meta * const lg_ack, const uint64_t ack_del)
     // see OnAckReceived() pseudo code
     struct pn_space * const pn = lg_ack->pn;
     struct q_conn * const c = pn->c;
-    pn->lg_acked = MAX(pn->lg_acked, lg_ack->hdr.nr);
+    pn->lg_acked = unlikely(pn->lg_acked == UINT64_MAX)
+                       ? lg_ack->hdr.nr
+                       : MAX(pn->lg_acked, lg_ack->hdr.nr);
 
     if (is_ack_eliciting(&lg_ack->pn->tx_frames)) {
         c->rec.latest_rtt = ev_now(loop) - lg_ack->tx_t;
