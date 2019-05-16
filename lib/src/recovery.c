@@ -250,8 +250,17 @@ static void __attribute__((nonnull)) on_pkt_lost(struct pkt_meta * const m)
                              1 << FRM_SBU | 1 << FRM_CID | 1 << FRM_RTR);
     if (bit_overlap(FRM_MAX, &all_ctrl, &m->frames))
         for (uint32_t i = 0; i < FRM_MAX; i++)
-            if (has_frame(m->frames, i))
-                warn(DBG, "pkt %" PRIu64 " CONTROL LOST: 0x%02x", m->hdr.nr, i);
+            if (has_frame(m->frames, i) && bit_isset(FRM_MAX, i, &all_ctrl)) {
+                warn(DBG, "%s pkt %" PRIu64 " CONTROL LOST: 0x%02x",
+                     pkt_type_str(m->hdr.flags, &m->hdr.vers), m->hdr.nr, i);
+                switch (i) {
+                case FRM_CID:
+                    c->max_cid_seq_out = m->min_cid_seq - 1;
+                    break;
+                default:
+                    die("unhandled RTX of 0x%02x frame", i);
+                }
+            }
 
     static const struct frames strm_ctrl =
         bitset_t_initializer(1 << FRM_RST | 1 << FRM_STP | 1 << FRM_SDB);

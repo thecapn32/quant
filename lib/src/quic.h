@@ -172,6 +172,7 @@ struct pkt_meta {
     int64_t max_streams_uni;      ///< MAX_STREAM_ID unidir limit, if sent.
     uint64_t stream_data_blocked; ///< STREAM_DATA_BLOCKED value, if sent.
     uint64_t data_blocked;        ///< DATA_BLOCKED value, if sent.
+    uint64_t min_cid_seq; ///< Smallest NEW_CONNECTION_ID seq in pkt, if sent.
 
     struct frames frames; ///< Frames present in pkt.
 

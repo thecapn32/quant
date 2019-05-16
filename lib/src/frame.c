@@ -1615,22 +1615,34 @@ void enc_new_cid_frame(uint8_t ** pos,
                        struct pkt_meta * const m)
 {
     struct q_conn * const c = m->pn->c;
+
+    const struct cid * const max_scid =
+        splay_max(cids_by_seq, &c->scids_by_seq);
     struct cid ncid = {.seq = ++c->max_cid_seq_out,
                        .len = c->is_clnt ? SCID_LEN_CLNT : SCID_LEN_SERV};
-    rand_bytes(ncid.id, sizeof(ncid.id) + sizeof(ncid.srt));
-    add_scid(c, &ncid);
+
+    struct cid * enc_cid = &ncid;
+    if (max_scid && ncid.seq <= max_scid->seq)
+        enc_cid = splay_find(cids_by_seq, &c->scids_by_seq, &ncid);
+    else {
+        rand_bytes(ncid.id, sizeof(ncid.id) + sizeof(ncid.srt));
+        add_scid(c, &ncid);
+    }
+
+    m->min_cid_seq = m->min_cid_seq == 0 ? enc_cid->seq : m->min_cid_seq;
 
     enc1(pos, end, FRM_CID);
-    encv(pos, end, ncid.seq);
-    enc1(pos, end, ncid.len);
-    encb(pos, end, ncid.id, ncid.len);
-    encb(pos, end, ncid.srt, sizeof(ncid.srt));
+    encv(pos, end, enc_cid->seq);
+    enc1(pos, end, enc_cid->len);
+    encb(pos, end, enc_cid->id, enc_cid->len);
+    encb(pos, end, enc_cid->srt, sizeof(enc_cid->srt));
 
     warn(INF,
          FRAM_OUT "NEW_CONNECTION_ID" NRM " seq=%" PRIu64
-                  " len=%u cid=%s srt=%s",
-         ncid.seq, ncid.len, cid2str(&ncid),
-         hex2str(ncid.srt, sizeof(ncid.srt)));
+                  " len=%u cid=%s srt=%s %s",
+         enc_cid->seq, enc_cid->len, cid2str(enc_cid),
+         hex2str(enc_cid->srt, sizeof(enc_cid->srt)),
+         enc_cid == &ncid ? "" : BLD REV GRN "[RTX]" NRM);
 
     track_frame(m, FRM_CID);
 }

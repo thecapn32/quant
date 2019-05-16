@@ -450,9 +450,12 @@ static inline uint16_t get_sport(const struct w_sock * const sock)
 }
 
 
-static inline bool needs_more_ncids(const struct q_conn * const c)
+static inline bool needs_more_ncids(struct q_conn * const c)
 {
-    return splay_count(&c->scids_by_seq) <= 8;
+    const struct cid * const max_scid =
+        splay_max(cids_by_seq, &c->scids_by_seq);
+    return splay_count(&c->scids_by_seq) <= 8 ||
+           (max_scid && c->max_cid_seq_out < max_scid->seq);
 }
 
 
