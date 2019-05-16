@@ -6,7 +6,7 @@ ADD https://github.com/gabrielecirulli/2048/archive/master.zip /
 RUN unzip /master.zip -d /
 ADD . /src
 WORKDIR /src/Debug
-RUN cmake -GNinja -DNO_SANITIZERS=True -DNO_FUZZER_CORPUS_COLLECTION=True \
+RUN cmake -GNinja -DNO_FUZZER_CORPUS_COLLECTION=True \
         -DCMAKE_INSTALL_PREFIX=/dst ..
 RUN ninja install
 
