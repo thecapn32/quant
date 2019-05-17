@@ -433,9 +433,12 @@ int main(int argc, char * argv[])
                     strnlen((char *)v->buf, v->len) == v->len)
                     warn(WRN, "no h3 payload");
                 if (n < 4 || v == sq_last(&i, w_iov, next)) {
-                    if (do_h3)
-                        hexdump(v->buf, v->len);
-                    else {
+                    if (do_h3) {
+#ifndef NDEBUG
+                        if (util_dlevel == DBG)
+                            hexdump(v->buf, v->len);
+#endif
+                    } else {
                         // don't print newlines to console log
                         for (uint16_t p = 0; p < v->len; p++)
                             if (v->buf[p] == '\n' || v->buf[p] == '\r')
