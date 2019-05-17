@@ -155,10 +155,23 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
             memset(v->buf, c, v->len);
             c = (char)(c == 'Z' ? 'A' : c + 1);
         }
+
+        // for the two "benchmark objects", reduce logging
+        const short orig_dlevel = util_dlevel;
+        if (n == 5000000 || n == 10000000) {
+            warn(NTE, "reducing log level for benchmark object transfer");
+            util_dlevel = WRN;
+        }
 #endif
 
         q_write(d->s, &out, true);
         q_free(&out);
+
+#ifndef NDEBUG
+        if (n == 5000000 || n == 10000000)
+            util_dlevel = orig_dlevel;
+#endif
+
         return 0;
     }
 
