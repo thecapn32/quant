@@ -525,17 +525,18 @@ dec_ack_frame(const uint8_t type,
             if (likely(cum_ack != UINT64_MAX) && ack <= cum_ack)
                 goto skip;
 
+            if (diet_find(&pn->acked, ack) || diet_find(&pn->lost, ack))
+                goto skip;
+
             struct pkt_meta * m_acked;
             struct w_iov * const acked = find_sent_pkt(pn, ack, &m_acked);
             if (unlikely(acked == 0)) {
 #ifndef FUZZING
                 // this is just way too noisy when fuzzing
-                if (unlikely(diet_find(&pn->acked, ack) == 0 &&
-                             diet_find(&pn->lost, ack) == 0))
-                    err_close_return(c, ERR_PROTOCOL_VIOLATION, type,
-                                     "got ACK for %s pkt " FMT_PNR_OUT
-                                     " never sent",
-                                     pn_type_str(pn->type), ack);
+                err_close_return(c, ERR_PROTOCOL_VIOLATION, type,
+                                 "got ACK for %s pkt " FMT_PNR_OUT
+                                 " never sent",
+                                 pn_type_str(pn->type), ack);
 #endif
                 goto skip;
             }
