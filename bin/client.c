@@ -223,6 +223,7 @@ get(const char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
                                   .idle_timeout = timeout * 1000,
                                   .enable_spinbit = true,
                                   .enable_tls_key_updates = flip_keys,
+				  .enable_udp_zero_checksums = true,
                                   .enable_zero_len_cid = zlen_cids});
         if (c == 0) {
             freeaddrinfo(peer);

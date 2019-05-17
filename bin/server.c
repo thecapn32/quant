@@ -299,6 +299,7 @@ int main(int argc, char * argv[])
             q_accept(&(struct q_conn_conf){
                 .idle_timeout = timeout * 1000,
                 .enable_spinbit = true,
+		.enable_udp_zero_checksums = true
             });
 
         if (q_is_conn_closed(c)) {
