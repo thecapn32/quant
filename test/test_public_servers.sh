@@ -76,7 +76,7 @@ export UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1
 
 function test_server {
     # run quant client and save a log for post-processing
-    local opts="-i $iface -t4 -v5"
+    local opts="-i $iface -t3 -v5"
     local log_base="/tmp/$script.$1.$pid"
 
     IFS=':' read -ra info <<< "${servers[$1]}"
@@ -121,7 +121,7 @@ function bench_server {
     local log_base="/tmp/$script.$1.$pid.bench"
     local h2_out="$log_base.h2.out"
     local h2
-    h2=$({ time -p curl -s -o "$h2_out" \
+    h2=$({ time -p curl -s -o "$h2_out" --connect-timeout 3 \
                  "https://${info[0]}/$size"; } 2>&1)
     h2=$(echo "$h2" | fmt | cut -d' ' -f2)
     h2_size=$(stat -q "$h2_out" | cut -d' ' -f8)
@@ -129,7 +129,7 @@ function bench_server {
     if [ "$h2_size" = $size ]; then
         t_h2[$1]=$h2
 
-        local opts="-i $iface -t4 -v0"
+        local opts="-i $iface -t3 -v0"
         local hq_out="$log_base.hq.out"
         mkdir "$hq_out"
         local wd
@@ -137,7 +137,7 @@ function bench_server {
         pushd "$hq_out" > /dev/null || exit
         local hq
         hq=$({ time -p $wd/bin/client $opts ${info[1]} -s /dev/null -w \
-                     "https://${info[0]}:${info[3]}/$size"; } 2>&1)
+                     "https://${info[0]}:${info[2]}/$size"; } 2>&1)
         hq=$(echo "$hq" | fmt | cut -d' ' -f2)
         hq_size=$(stat -q "$size" | cut -d' ' -f8)
         popd > /dev/null || exit
