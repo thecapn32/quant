@@ -932,5 +932,12 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
     if (diet_find(&pn_for_pkt_type(c, m->hdr.type)->recv_all, m->hdr.nr))
         return is_srt(xv, m);
 
+    // check if we need to send an immediate ACK
+    if (unlikely(diet_empty(&m->pn->recv_all) == false &&
+                     m->hdr.nr < diet_max(&m->pn->recv_all) ||
+                 (xv->flags & IPTOS_ECN_MASK) == IPTOS_ECN_CE))
+        // XXX: this also sends an imm_ack if the reor is "fixed" within a burst
+        m->pn->imm_ack = true;
+
     return true;
 }

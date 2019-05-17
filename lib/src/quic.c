@@ -168,9 +168,9 @@ void free_iov(struct w_iov * const v, struct pkt_meta * const m)
         if (unlikely(m_rtx)) {
             // this pkt has prior or later RTXs
             if (m->has_rtx) {
-                // this pkt has a later RTX
+                // this pkt has an RTX
 #ifdef DEBUG_BUFFERS
-                warn(DBG, "pkt nr=%" PRIu64 " was RTX'ed as %" PRIu64,
+                warn(DBG, "pkt nr=%" PRIu64 " has RTX %" PRIu64,
                      has_pkt_nr(m->hdr.flags, m->hdr.vers) ? m->hdr.nr : 0,
                      has_pkt_nr(m_rtx->hdr.flags, m_rtx->hdr.vers)
                          ? m_rtx->hdr.nr
@@ -182,8 +182,7 @@ void free_iov(struct w_iov * const v, struct pkt_meta * const m)
                 // this is the last ("real") RTX of a packet
                 while (m_rtx) {
 #ifdef DEBUG_BUFFERS
-                    warn(DBG,
-                         "pkt nr=%" PRIu64 " was earlier TX'ed as %" PRIu64,
+                    warn(DBG, "pkt nr=%" PRIu64 " was also TX'ed as %" PRIu64,
                          has_pkt_nr(m->hdr.flags, m->hdr.vers) ? m->hdr.nr : 0,
                          has_pkt_nr(m_rtx->hdr.flags, m_rtx->hdr.vers)
                              ? m_rtx->hdr.nr

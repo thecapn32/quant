@@ -111,15 +111,15 @@ earliest_loss_t_pn(struct q_conn * const c)
     ev_tstamp loss_t = pn->loss_t;
 
     struct pn_space * const pn_h = &c->pns[pn_hshk];
-    if (is_zero(pn_h->loss_t) == false &&
-        (is_zero(loss_t) || pn_h->loss_t < loss_t)) {
+    if (pn->sent_pkts == 0 || (is_zero(pn_h->loss_t) == false &&
+                               (is_zero(loss_t) || pn_h->loss_t < loss_t))) {
         loss_t = pn_h->loss_t;
         pn = pn_h;
     }
 
     struct pn_space * const pn_d = &c->pns[pn_data];
-    if (is_zero(pn_d->loss_t) == false &&
-        (is_zero(loss_t) || pn_d->loss_t < loss_t)) {
+    if (pn->sent_pkts == 0 || (is_zero(pn_d->loss_t) == false &&
+                               (is_zero(loss_t) || pn_d->loss_t < loss_t))) {
         // loss_t = pn_d->loss_t;
         pn = pn_d;
     }
@@ -608,8 +608,6 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
                 pm_by_nr_del(pn->sent_pkts, m_rtx);
                 m->hdr.nr = m_rtx->hdr.nr;
                 m_rtx->hdr.nr = acked_nr;
-                m->has_rtx = false;
-                m_rtx->has_rtx = true;
                 pm_by_nr_ins(pn->sent_pkts, m);
                 m = m_rtx;
                 // XXX caller will not be aware that we mucked around with m!
@@ -626,7 +624,7 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
     m->acked = true;
 
     struct q_stream * const s = m->stream;
-    if (s) {
+    if (s && m->has_rtx == false) {
         if (unlikely(m->is_fin))
             // this ACKs a FIN
             maybe_api_return(q_close_stream, c, s);

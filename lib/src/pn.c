@@ -150,7 +150,7 @@ void abandon_pn(struct pn_space * const pn)
 
 ack_t needs_ack(const struct pn_space * const pn)
 {
-#ifdef DEBUG_EXTRA
+#if defined(DEBUG_EXTRA) && !defined(NDEBUG)
     struct q_conn * const c = pn->c;
 #endif
 
