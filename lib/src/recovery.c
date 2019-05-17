@@ -107,21 +107,22 @@ static void __attribute__((nonnull)) maybe_tx(struct q_conn * const c)
 static struct pn_space * __attribute__((nonnull))
 earliest_loss_t_pn(struct q_conn * const c)
 {
-    struct pn_space * pn = &c->pns[pn_init];
-    ev_tstamp loss_t = pn->loss_t;
+    ev_tstamp loss_t = 0;
+    struct pn_space * pn = 0;
+    for (pn_t t = pn_init; t <= pn_data; t++) {
+        if (c->pns[t].sent_pkts == 0)
+            // abandoned pn space
+            continue;
 
-    struct pn_space * const pn_h = &c->pns[pn_hshk];
-    if (pn->sent_pkts == 0 || (is_zero(pn_h->loss_t) == false &&
-                               (is_zero(loss_t) || pn_h->loss_t < loss_t))) {
-        loss_t = pn_h->loss_t;
-        pn = pn_h;
-    }
+        if (is_ack_eliciting(&c->pns[t].tx_frames) == false)
+            // no ACK-eliciting frames outstanding
+            continue;
 
-    struct pn_space * const pn_d = &c->pns[pn_data];
-    if (pn->sent_pkts == 0 || (is_zero(pn_d->loss_t) == false &&
-                               (is_zero(loss_t) || pn_d->loss_t < loss_t))) {
-        // loss_t = pn_d->loss_t;
-        pn = pn_d;
+        if (pn == 0 ||
+            (is_zero(c->pns[t].loss_t) == false && c->pns[t].loss_t < loss_t)) {
+            pn = &c->pns[t];
+            loss_t = pn->loss_t;
+        }
     }
     return pn;
 }
@@ -140,7 +141,7 @@ void set_ld_timer(struct q_conn * const c)
 #endif
     const struct pn_space * const pn = earliest_loss_t_pn(c);
 
-    if (!is_zero(pn->loss_t)) {
+    if (pn && !is_zero(pn->loss_t)) {
 #ifdef DEBUG_TIMERS
         type = "TT";
 #endif
@@ -182,8 +183,8 @@ set_to:
     c->rec.ld_alarm.repeat -= ev_now(loop);
 
 #ifdef DEBUG_TIMERS
-    warn(DBG, "%s %s alarm in %f sec on %s conn %s", pn_type_str(pn->type),
-         type, c->rec.ld_alarm.repeat, conn_type(c), cid2str(c->scid));
+    warn(DBG, "%s alarm in %f sec on %s conn %s", type, c->rec.ld_alarm.repeat,
+         conn_type(c), cid2str(c->scid));
 #endif
     if (c->rec.ld_alarm.repeat <= 0)
         ev_feed_event(loop, &c->rec.ld_alarm, true);
@@ -399,7 +400,7 @@ on_ld_timeout(struct ev_loop * const l __attribute__((unused)),
     // see OnLossDetectionTimeout pseudo code
     struct pn_space * const pn = earliest_loss_t_pn(c);
 
-    if (!is_zero(pn->loss_t)) {
+    if (pn && !is_zero(pn->loss_t)) {
 #ifdef DEBUG_TIMERS
         warn(DBG, "%s TT alarm on %s conn %s", pn_type_str(pn->type),
              conn_type(c), cid2str(c->scid));
