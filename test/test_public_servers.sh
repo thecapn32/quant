@@ -53,7 +53,11 @@ declare -A servers=(
 )
 
 results=(live fail vneg hshk data clse rsmt zrtt rtry migr bind kyph http spin aecn)
-[ -n "$1" ] && results+=(perf t_h2 t_hq)
+
+if [ -n "$1" ]; then
+    results+=(perf t_h2 t_hq)
+    benchmarking=1
+fi
 declare -A ${results[@]}
 
 
@@ -76,7 +80,7 @@ export UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1
 
 function test_server {
     # run quant client and save a log for post-processing
-    local opts="-i $iface -t3 -v5"
+    local opts="-i $iface -t3 -v5 -l /dev/null"
     local log_base="/tmp/$script.$1.$pid"
 
     IFS=':' read -ra info <<< "${servers[$1]}"
@@ -90,7 +94,7 @@ function test_server {
     bin/client $opts -s "$cache" ${info[1]} \
         "https://${info[0]}:${info[2]}${info[5]}" \
         > "$log_base.0rtt.log" 2>&1 ; \
-    rm -f "$cache" &
+    [ -z "$benchmarking" ] && rm -f "$cache" &
 
     # rtry run
     bin/client $opts ${info[1]} -s /dev/null \
@@ -129,19 +133,20 @@ function bench_server {
     if [ "$h2_size" = $size ]; then
         t_h2[$1]=$h2
 
-        local opts="-i $iface -t3 -v0"
+        local cache="/tmp/$script.$1.$pid.cache"
+        local opts="-i $iface -t3 -v0 -l /dev/null"
         local hq_out="$log_base.hq.out"
         mkdir "$hq_out"
         local wd
         wd=$(pwd)
         pushd "$hq_out" > /dev/null || exit
         local hq
-        hq=$({ time -p $wd/bin/client $opts ${info[1]} -s /dev/null -w \
+        hq=$({ time -p $wd/bin/client $opts ${info[1]} -s "$cache" -w \
                      "https://${info[0]}:${info[2]}/$size"; } 2>&1)
         hq=$(echo "$hq" | fmt | cut -d' ' -f2)
         hq_size=$(stat -q "$size" | cut -d' ' -f8)
         popd > /dev/null || exit
-        rm -rf "$hq_out"
+        rm -rf "$hq_out" "$cache"
 
         if [ "$hq_size" = $size ]; then
             t_hq[$1]=$hq
@@ -296,7 +301,7 @@ for s in "${!servers[@]}"; do
 done
 wait
 
-if [ -n "$1" ]; then
+if [ -n "$benchmarking" ]; then
     printf "\\nBenchmarking: "
     for s in "${!servers[@]}"; do
         bench_server "$s"
@@ -324,5 +329,6 @@ done
 
 expand -t 5 "$tmp" | sponge "$tmp"
 cat "$tmp"
-[ -n "$1" ] || wdiff -n "$(dirname $0)/$script.result" "$tmp" | $colordiff
+[ -n "$benchmarking" ] || \
+    wdiff -n "$(dirname $0)/$script.result" "$tmp" | $colordiff
 rm -f "$tmp"
