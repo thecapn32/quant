@@ -1045,13 +1045,14 @@ bool dec_frames(struct q_conn * const c,
         dec1_chk(&type, &pos, end, c, 0);
 
         // check that frame type is allowed in this pkt type
+        static const struct frames lh_ok =
+            bitset_t_initializer(1 << FRM_CRY | 1 << FRM_ACK | 1 << FRM_ACE |
+                                 1 << FRM_PAD | 1 << FRM_CLQ | 1 << FRM_CLA);
         if (unlikely((m->hdr.type == LH_INIT || m->hdr.type == LH_HSHK) &&
-                     type != FRM_CRY && type != FRM_ACK && type != FRM_ACE &&
-                     type != FRM_PAD && type != FRM_CLQ && type != FRM_CLA)) {
+                     bit_isset(FRM_MAX, type, &lh_ok) == false))
             err_close_return(c, ERR_PROTOCOL_VIOLATION, type,
                              "0x%02x frame not allowed in 0x%02x pkt", type,
                              m->hdr.type);
-        }
 
         if (pad_start && (type != FRM_PAD || pos == end)) {
             warn(INF, FRAM_IN "PADDING" NRM " len=%u",
