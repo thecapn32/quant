@@ -258,8 +258,9 @@ static void __attribute__((nonnull)) on_pkt_lost(struct pkt_meta * const m)
                 case FRM_CID:
                     c->max_cid_seq_out = m->min_cid_seq - 1;
                     break;
+                case FRM_CDB:
                 case FRM_SDB:
-                    // STREAM_DATA_BLOCKED is RTX'ed automatically
+                    // DATA_BLOCKED and STREAM_DATA_BLOCKED RTX'ed automatically
                     break;
                 default:
                     die("unhandled RTX of 0x%02x frame", i);
