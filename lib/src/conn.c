@@ -1620,6 +1620,10 @@ void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
         ev_timer_again(loop, &c->key_flip_alarm);
     }
 
+    c->sockopt.enable_udp_zero_checksums =
+        conf && conf->enable_udp_zero_checksums;
+    w_set_sockopt(c->sock, &c->sockopt);
+
 #ifndef NDEBUG
     // XXX for testing, do a key flip and a migration ASAP (if enabled)
     c->do_key_flip = c->key_flips_enabled;
@@ -1657,7 +1661,6 @@ struct q_conn * new_conn(struct w_engine * const w,
                          c->is_clnt && addr4 ? addr4->sin_port : 0);
     if (c->sock == 0) {
         c->sockopt.enable_ecn = true;
-        // TODO need to update zero checksums in update_conn_conf() somehow
         c->sockopt.enable_udp_zero_checksums =
             conf && conf->enable_udp_zero_checksums;
         c->rx_w.data = c->sock = w_bind(w, port, &c->sockopt);
