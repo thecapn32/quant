@@ -121,11 +121,11 @@ function bench_server {
     IFS=':' read -ra info <<< "${servers[$1]}"
     # 0=name, 1=flags, 2=port, 3=retry-port, 4=h3-port, 5=URL
 
-    local size=5000000
+    local size=10000000
     local log_base="/tmp/$script.$1.$pid.bench"
     local h2_out="$log_base.h2.out"
     local h2
-    h2=$({ time -p curl -s -o "$h2_out" --connect-timeout 3 \
+    h2=$({ time -p curl -s -o "$h2_out" --connect-timeout 3 --max-time 10 \
                  "https://${info[0]}/$size"; } 2>&1)
     h2=$(echo "$h2" | fmt | cut -d' ' -f2)
     h2_size=$(stat -q "$h2_out" | cut -d' ' -f8)
@@ -329,6 +329,6 @@ done
 
 expand -t 5 "$tmp" | sponge "$tmp"
 cat "$tmp"
-[ -n "$benchmarking" ] || \
+# [ -n "$benchmarking" ] || \
     wdiff -n "$(dirname $0)/$script.result" "$tmp" | $colordiff
 rm -f "$tmp"
