@@ -1693,11 +1693,11 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->tp_in.ack_del_exp = c->tp_out.ack_del_exp = DEF_ACK_DEL_EXP;
     c->tp_in.max_ack_del = c->tp_out.max_ack_del = 25;
     c->tp_in.max_data = INIT_MAX_BIDI_STREAMS * INIT_STRM_DATA_BIDI;
-    c->tp_in.max_strm_data_uni = INIT_STRM_DATA_UNI;
+    c->tp_in.max_strm_data_uni = c->is_clnt ? INIT_STRM_DATA_UNI : 0;
     c->tp_in.max_strm_data_bidi_local = c->tp_in.max_strm_data_bidi_remote =
         INIT_STRM_DATA_BIDI;
     c->tp_in.max_streams_bidi = INIT_MAX_BIDI_STREAMS;
-    c->tp_in.max_streams_uni = INIT_MAX_UNI_STREAMS;
+    c->tp_in.max_streams_uni = c->is_clnt ? INIT_MAX_UNI_STREAMS : 0;
     c->tp_in.max_pkt = w_mtu(c->w);
 
     // initialize idle timeout

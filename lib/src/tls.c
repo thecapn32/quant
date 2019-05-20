@@ -685,11 +685,11 @@ void init_tp(struct q_conn * const c)
     for (size_t j = 0; j <= TP_MAX; j++)
         switch (tp_order[j]) {
         case TP_IMSU:
-            if (c->is_clnt)
+            if (c->tp_in.max_streams_uni)
                 enc_tp(&pos, end, TP_IMSU, c->tp_in.max_streams_uni);
             break;
         case TP_IMSD_U:
-            if (c->is_clnt) {
+            if (c->tp_in.max_strm_data_uni) {
                 enc_tp(&pos, end, TP_IMSD_U, c->tp_in.max_strm_data_uni);
 #ifdef DEBUG_EXTRA
                 warn(INF, "\tinitial_max_stream_data_uni = %" PRIu64 " [bytes]",
