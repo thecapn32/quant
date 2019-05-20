@@ -65,6 +65,7 @@
 #include "pkt.h"
 #include "pn.h"
 #include "quic.h"
+#include "recovery.h"
 #include "stream.h"
 #include "tls.h"
 
@@ -162,7 +163,7 @@ void free_iov(struct w_iov * const v, struct pkt_meta * const m)
 
     if (m->txed) {
         if ((m->acked || m->lost) == false && m->pn->sent_pkts)
-            pm_by_nr_del(m->pn->sent_pkts, m);
+            on_pkt_lost(m);
 
         struct pkt_meta * m_rtx = sl_first(&m->rtx);
         if (unlikely(m_rtx)) {

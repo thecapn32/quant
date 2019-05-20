@@ -1631,6 +1631,7 @@ void enc_new_cid_frame(uint8_t ** pos,
         add_scid(c, &ncid);
     }
 
+    // XXX Jari crashes here
     m->min_cid_seq = m->min_cid_seq == 0 ? enc_cid->seq : m->min_cid_seq;
 
     enc1(pos, end, FRM_CID);

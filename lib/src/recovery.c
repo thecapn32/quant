@@ -227,7 +227,7 @@ in_persistent_cong(struct pn_space * const pn __attribute__((unused)),
 }
 
 
-static void __attribute__((nonnull)) on_pkt_lost(struct pkt_meta * const m)
+void on_pkt_lost(struct pkt_meta * const m)
 {
     struct pn_space * const pn = m->pn;
     struct q_conn * const c = pn->c;
@@ -263,7 +263,7 @@ static void __attribute__((nonnull)) on_pkt_lost(struct pkt_meta * const m)
                     // DATA_BLOCKED and STREAM_DATA_BLOCKED RTX'ed automatically
                     break;
                 default:
-                    die("unhandled RTX of 0x%02x frame", i);
+                    warn(CRT, "unhandled RTX of 0x%02x frame", i);
                 }
             }
 
@@ -275,9 +275,6 @@ static void __attribute__((nonnull)) on_pkt_lost(struct pkt_meta * const m)
     diet_insert(&pn->lost, m->hdr.nr, (ev_tstamp)NAN);
     m->lost = true;
     pm_by_nr_del(pn->sent_pkts, m);
-
-    if (m->stream == 0 || m->has_rtx)
-        free_iov(w_iov(c->w, pm_idx(m)), m);
 }
 
 
@@ -348,6 +345,8 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
         if (m->lost) {
             DEBUG_diet_insert(&lost, m->hdr.nr, (ev_tstamp)NAN);
             on_pkt_lost(m);
+            if (m->stream == 0 || m->has_rtx)
+                free_iov(w_iov(c->w, pm_idx(m)), m);
         }
     });
 

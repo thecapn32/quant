@@ -1352,7 +1352,6 @@ rx_pkts(struct w_iov_sq * const x,
 
     decoal_done:
         if (likely(rx_pkt(ws, v, m, x, &odcid, tok, tok_len))) {
-            rx_crypto(c);
             c->min_rx_epoch = c->had_rx ? MIN(c->min_rx_epoch,
                                               epoch_for_pkt_type(m->hdr.type))
                                         : epoch_for_pkt_type(m->hdr.type);
@@ -1363,6 +1362,7 @@ rx_pkts(struct w_iov_sq * const x,
                 diet_insert(&pn->recv_all, m->hdr.nr, (ev_tstamp)NAN);
             }
             pkt_valid = true;
+            rx_crypto(c);
         }
 
         // remember that we had a RX event on this connection
@@ -1422,9 +1422,12 @@ void rx(struct ev_loop * const l,
             continue;
 
         // reset idle timeout
-        c->idle_alarm.repeat = MAX((double)c->tp_in.idle_to / MSECS_PER_SEC,
-                                   3 * c->rec.ld_alarm.repeat);
-        ev_timer_again(l, &c->idle_alarm);
+        if (likely(c->pns[pn_data].data.out_kyph ==
+                   c->pns[pn_data].data.in_kyph)) {
+            c->idle_alarm.repeat = MAX((double)c->tp_in.idle_to / MSECS_PER_SEC,
+                                       3 * c->rec.ld_alarm.repeat);
+            ev_timer_again(l, &c->idle_alarm);
+        }
 
         // is a TX needed for this connection?
         if (c->needs_tx)
