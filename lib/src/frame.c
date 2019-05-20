@@ -404,7 +404,7 @@ done:
 
     if (m->stream && type != FRM_CRY &&
         m->stream_off + m->stream_data_len > m->stream->in_data_max)
-        err_close_return(c, ERR_FLOW_CONTROL, 0,
+        err_close_return(c, ERR_FLOW_CONTROL, type,
                          "stream %" PRIu64 " off %" PRIu64
                          " >= in_data_max %" PRIu64,
                          m->stream->id, m->stream_off + m->stream_data_len - 1,
