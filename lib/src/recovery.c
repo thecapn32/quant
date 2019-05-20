@@ -268,7 +268,8 @@ void on_pkt_lost(struct pkt_meta * const m)
             }
 
     static const struct frames strm_ctrl =
-        bitset_t_initializer(1 << FRM_RST | 1 << FRM_STP | 1 << FRM_SDB);
+        // FRM_SDB is automatically RTX'ed XXX fix this mess
+        bitset_t_initializer(1 << FRM_RST | 1 << FRM_STP /*| 1 << FRM_SDB*/);
     if (bit_overlap(FRM_MAX, &strm_ctrl, &m->frames))
         need_ctrl_update(m->stream);
 

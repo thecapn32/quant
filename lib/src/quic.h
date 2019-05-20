@@ -41,8 +41,8 @@
 #include "frame.h"
 
 
-#define DEBUG_BUFFERS ///< Set to log buffer use details.
-#define DEBUG_EXTRA   ///< Set to log various extra details.
+// #define DEBUG_BUFFERS ///< Set to log buffer use details.
+// #define DEBUG_EXTRA   ///< Set to log various extra details.
 // #define DEBUG_STREAMS ///< Set to log stream scheduling details.
 // #define DEBUG_TIMERS  ///< Set to log timer details.
 

@@ -705,7 +705,8 @@ conns_by_ipnp_update(struct q_conn * const c,
 }
 
 
-static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
+static void __attribute__((nonnull))
+rx_crypto(struct q_conn * const c, const struct pkt_meta * const m_cur)
 {
     struct q_stream * const s = c->cstreams[epoch_in(c)];
     while (!sq_empty(&s->in)) {
@@ -720,7 +721,7 @@ static void __attribute__((nonnull)) rx_crypto(struct q_conn * const c)
         m->stream = 0;
 
         const int ret = tls_io(s, v);
-        if (free_ooo)
+        if (free_ooo && m != m_cur)
             free_iov(v, m);
         if (ret)
             continue;
@@ -1352,6 +1353,7 @@ rx_pkts(struct w_iov_sq * const x,
 
     decoal_done:
         if (likely(rx_pkt(ws, v, m, x, &odcid, tok, tok_len))) {
+            rx_crypto(c, m);
             c->min_rx_epoch = c->had_rx ? MIN(c->min_rx_epoch,
                                               epoch_for_pkt_type(m->hdr.type))
                                         : epoch_for_pkt_type(m->hdr.type);
@@ -1362,7 +1364,6 @@ rx_pkts(struct w_iov_sq * const x,
                 diet_insert(&pn->recv_all, m->hdr.nr, (ev_tstamp)NAN);
             }
             pkt_valid = true;
-            rx_crypto(c);
         }
 
         // remember that we had a RX event on this connection
