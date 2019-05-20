@@ -31,7 +31,7 @@
 declare -A servers=(
     # [tag]=name:flags:port:retry-port:h3-port:URL
     [aioquic]=quic.aiortc.org::4433:4434:4433:/40000
-    # [apple]=31.133.146.185::4433:4434:4433:/50k
+    [apple]=192.168.203.142::4433:4434:4433:/1m
     [ats]=quic.ogre.com::4433:4434:4433:/en/latest/_static/jquery.js
     [f5]=208.85.208.226::4433:4433:4433:/file50k
     [google]=quic.rocks:-z:4433:4434:4433:/40000
