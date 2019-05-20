@@ -31,9 +31,9 @@
 declare -A servers=(
     # [tag]=name:flags:port:retry-port:h3-port:URL
     [aioquic]=quic.aiortc.org::4433:4434:4433:/40000
-    [apple]=192.168.203.142::4433:4434:4433:/1m
+    [apple]=192.168.203.142::4433:4434:4433:/40000
     [ats]=quic.ogre.com::4433:4434:4433:/en/latest/_static/jquery.js
-    [f5]=208.85.208.226::4433:4433:4433:/file50k
+    [f5]=208.85.208.226::4433:4433:4433:/file50K
     [google]=quic.rocks:-z:4433:4434:4433:/40000
     [lsquic]=http3-test.litespeedtech.com:-3:4433:4434:4433:/
     # [minq]=minq.dev.mozaws.net::4433:4434:4433:/index.html
@@ -44,7 +44,7 @@ declare -A servers=(
     # [pandora]=pandora.cm.in.tum.de::4433:4434:4433:/index.html
     [picoquic]=test.privateoctopus.com::4433:4434:4433:/40000
     [quant]=quant.eggert.org::4433:4434:4433:/40000
-    # [quic-go]=31.133.128.156::4433:4433:4433:/40000
+    [quic-go]=quic.seemann.io:-3:443:443:443:/40000
     [quiche]=quic.tech::4433:4433:8443:/random
     # [quicker]=quicker.edm.uhasselt.be::4433:4434:4433:/index.html
     [quicly]=kazuhooku.com::4433:4433:8443:/40000.txt
@@ -129,6 +129,7 @@ function bench_server {
                  "https://${info[0]}/$size"; } 2>&1)
     h2=$(echo "$h2" | fmt | cut -d' ' -f2)
     h2_size=$(stat -q "$h2_out" | cut -d' ' -f8)
+    echo $h2_size
     rm -f "$h2_out"
     if [ "$h2_size" = $size ]; then
         t_h2[$1]=$h2
@@ -145,6 +146,7 @@ function bench_server {
                      "https://${info[0]}:${info[2]}/$size"; } 2>&1)
         hq=$(echo "$hq" | fmt | cut -d' ' -f2)
         hq_size=$(stat -q "$size" | cut -d' ' -f8)
+        echo $hq_size
         popd > /dev/null || exit
         rm -rf "$hq_out" "$cache"
 
