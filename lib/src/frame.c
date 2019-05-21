@@ -1624,9 +1624,11 @@ void enc_new_cid_frame(uint8_t ** pos,
                        .len = c->is_clnt ? SCID_LEN_CLNT : SCID_LEN_SERV};
 
     struct cid * enc_cid = &ncid;
-    if (max_scid && ncid.seq <= max_scid->seq)
+    if (max_scid && ncid.seq <= max_scid->seq) {
         enc_cid = splay_find(cids_by_seq, &c->scids_by_seq, &ncid);
-    else {
+        ensure(enc_cid, "max_scid->seq %" PRIu64 " ncid.seq %" PRIu64,
+               max_scid->seq, ncid.seq);
+    } else {
         rand_bytes(ncid.id, sizeof(ncid.id) + sizeof(ncid.srt));
         add_scid(c, &ncid);
     }

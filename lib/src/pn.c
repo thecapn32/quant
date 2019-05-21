@@ -124,7 +124,6 @@ void abandon_pn(struct pn_space * const pn)
 
     warn(DBG, "abandoning %s %s processing", conn_type(pn->c),
          pn_type_str(pn->type));
-    free_pn(pn);
 
     epoch_t e = ep_init;
     if (unlikely(pn->type == pn_hshk))
@@ -133,6 +132,7 @@ void abandon_pn(struct pn_space * const pn)
     pn->c->cstreams[e] = 0;
     pn->loss_t = 0; // important for earliest_loss_t_pn
 
+    free_pn(pn);
     dispose_cipher(&pn->early.in);
     dispose_cipher(&pn->early.out);
 
