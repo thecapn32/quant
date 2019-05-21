@@ -237,7 +237,7 @@ get(const char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
             struct q_stream * const ss = q_rsv_stream(c, false);
             if (ss == 0)
                 return 0;
-            static const uint8_t h3_empty_settings[] = {0x43, 0x00, 0x04};
+            static const uint8_t h3_empty_settings[] = {0x04, 0x00};
             // XXX lsquic doesn't like a FIN on this stream
             q_write_str(w, ss, (const char *)h3_empty_settings,
                         sizeof(h3_empty_settings), false);
@@ -433,7 +433,8 @@ int main(int argc, char * argv[])
 
                 // XXX the strnlen() test is super-hacky
                 if (do_h3 && n == 0 &&
-                    strnlen((char *)v->buf, v->len) == v->len)
+                    (v->buf[0] != 0x01 && v->buf[0] != 0xff &&
+                     strnlen((char *)v->buf, v->len) == v->len))
                     warn(WRN, "no h3 payload");
                 if (n < 4 || v == sq_last(&i, w_iov, next)) {
                     if (do_h3) {
