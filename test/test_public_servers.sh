@@ -44,7 +44,7 @@ declare -A servers=(
     # [pandora]=pandora.cm.in.tum.de::4433:4434:4433:/index.html
     [picoquic]=test.privateoctopus.com::4433:4434:4433:/40000
     [quant]=quant.eggert.org::4433:4434:4433:/40000
-    [quic-go]=quic.seemann.io:-3:443:443:443:/40000
+    [quic-go]=quic.seemann.io:-3:443:443:443:/dynamic/40000
     [quiche]=quic.tech::4433:4433:8443:/random
     # [quicker]=quicker.edm.uhasselt.be::4433:4434:4433:/index.html
     [quicly]=kazuhooku.com::4433:4433:8443:/40000.txt
@@ -121,17 +121,20 @@ function bench_server {
     IFS=':' read -ra info <<< "${servers[$1]}"
     # 0=name, 1=flags, 2=port, 3=retry-port, 4=h3-port, 5=URL
 
-    local size=10000000
+    local size=5000000
     local log_base="/tmp/$script.$1.$pid.bench"
     local h2_out="$log_base.h2.out"
     local h2
-    h2=$({ time -p curl -s -o "$h2_out" --connect-timeout 3 --max-time 10 \
-                 "https://${info[0]}/$size"; } 2>&1)
+    local ext
+    [ "$s" = "winquic" ] && ext=.txt
+    # echo time -p curl -k -s -o "$h2_out" --max-time 30 "https://${info[0]}/$size$ext"
+    h2=$({ time -p curl -k -s -o "$h2_out" --max-time 30 \
+                 "https://${info[0]}/$size$ext"; } 2>&1)
     h2=$(echo "$h2" | fmt | cut -d' ' -f2)
     h2_size=$(stat -q "$h2_out" | cut -d' ' -f8)
-    echo $h2_size
+    # echo H2:$h2_size
     rm -f "$h2_out"
-    if [ "$h2_size" = $size ]; then
+    if [ -n "$h2_size" ] && [ "$h2_size" -ge $size ]; then
         t_h2[$1]=$h2
 
         local cache="/tmp/$script.$1.$pid.cache"
@@ -142,15 +145,16 @@ function bench_server {
         wd=$(pwd)
         pushd "$hq_out" > /dev/null || exit
         local hq
+        # echo time -p $wd/bin/client $opts ${info[1]} -s "$cache" -w "https://${info[0]}:${info[2]}/$size"
         hq=$({ time -p $wd/bin/client $opts ${info[1]} -s "$cache" -w \
                      "https://${info[0]}:${info[2]}/$size"; } 2>&1)
         hq=$(echo "$hq" | fmt | cut -d' ' -f2)
         hq_size=$(stat -q "$size" | cut -d' ' -f8)
-        echo $hq_size
+        # echo HQ:$hq_size
         popd > /dev/null || exit
         rm -rf "$hq_out" "$cache"
 
-        if [ "$hq_size" = $size ]; then
+        if [ -n "$hq_size" ] && [ "$hq_size" -ge $size ]; then
             t_hq[$1]=$hq
 
             perf[$1]=$(perl -mList::Util=max -e "print 'T' if abs($hq - $h2) <= max($hq, $h2) * .1")
@@ -163,12 +167,12 @@ function bench_server {
 
 function check_fail {
     local log="$2"
-    if ! grep -q -E 'assertion failed|AddressSanitizer|runtime error' "$log"; then
+    if ! grep -q -E 'dec_close.*err=0x[^0][^0][^0][^0]|assertion failed|AddressSanitizer|runtime error' "$log"; then
         return 0
     fi
 
     fail[$1]="X"
-    echo "Test with $1 crashed (log $log):"
+    echo "Test with $1 failed (log $log):"
     tail -n 10 "$log"
     echo
     return 1
@@ -202,15 +206,14 @@ function analyze {
 
     gsed "$sed_pattern" "$log" | \
         perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $x=1 : next);
-            $x && /CLOSE.*err=0x0000/ && exit 1;'
+            /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
+            $x && /enc_close.*err=0x0000/ && exit 1;'
     [ $? == 1 ] && data[$1]=D
 
     gsed "$sed_pattern" "$log" | \
-        perl -n -e 'BEGIN{$x=-1};
-            /TX.*len=/ and $x=1;
-            /RX.*len=/ and $x=0;
-            /CLOSE.*err=0x0000/ && ($x==1 ? $xc=1 : $rc=1);
-            END{exit $xc+$rc};'
+        perl -n -e '/dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x++ : next);
+            /enc_close.*err=0x0000/ and $x++;
+            END{exit $x};'
     local ret=$?
     if [ $ret == 2 ]; then
         clse[$1]=C
@@ -234,7 +237,8 @@ function analyze {
         perl -n -e '/ECN verification failed/ and $n=-1;
             $n==0 && /dec_ack_frame.*ECN ect0=/ && exit 1;'
     [ $? == 1 ] && aecn[$1]=E
-    [ ${fail[$1]} ] || rm -f "$log"
+    [ ${fail[$1]} ] || [ -z ${hshk[$1]} ] || [ -z ${data[$1]} ] \
+        || [ -z ${clse[$1]} ] || rm -f "$log"
 
     # analyze rsmt and 0rtt
     local log="/tmp/$script.$1.$pid.0rtt.log"
@@ -242,14 +246,16 @@ function analyze {
 
     gsed "$sed_pattern" "$log" | \
         perl -n -e '/new 0-RTT clnt conn/ and $x=1;
-            $x && /CLOSE.*err=0x0000/ && exit 1;'
+            /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
+            $x && /enc_close.*err=0x0000/ && exit 1;'
     [ $? == 1 ] && rsmt[$1]=R
 
     gsed "$sed_pattern" "$log" | \
         perl -n -e '/connected after 0-RTT/ and $x=1;
-            $x && /CLOSE.*err=0x0000/ && exit 1;'
+            /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
+            $x && /enc_close.*err=0x0000/ && exit 1;'
     [ $? == 1 ] && zrtt[$1]=Z
-    [ ${fail[$1]} ] || rm -f "$log"
+    [ ${fail[$1]} ] || [ -z ${rsmt[$1]} ] || [ -z ${zrtt[$1]} ] || rm -f "$log"
 
     # analyze rtry
     local log="/tmp/$script.$1.$pid.rtry.log"
@@ -257,9 +263,10 @@ function analyze {
 
     gsed "$sed_pattern" "$log" | \
         perl -n -e '/RX.*len=.*Retry/ and $x=1;
-           $x && /CLOSE.*err=0x0000/ && exit 1;'
+            /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
+           $x && /enc_close.*err=0x0000/ && exit 1;'
     [ $? == 1 ] && rtry[$1]=S
-    [ ${fail[$1]} ] || rm -f "$log"
+    [ ${fail[$1]} ] || [ -z ${rtry[$1]} ] || rm -f "$log"
 
     # analyze key update
     local log="/tmp/$script.$1.$pid.kyph.log"
@@ -267,9 +274,10 @@ function analyze {
 
     gsed "$sed_pattern" "$log" | \
         perl -n -e '/TX.*Short kyph=1/ and $x=1;
+            /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
            $x && /RX.*Short kyph=1/ && exit 1;'
     [ $? == 1 ] && kyph[$1]=U
-    [ ${fail[$1]} ] || rm -f "$log"
+    [ ${fail[$1]} ] || [ -z ${kyph[$1]} ] || rm -f "$log"
 
     # analyze h3
     local log="/tmp/$script.$1.$pid.h3.log"
@@ -278,9 +286,10 @@ function analyze {
     gsed "$sed_pattern" "$log" | \
         perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $x=1 : next);
             /no h3 payload/ and $x=0;
-            $x && /CLOSE.*err=0x0000/ && exit 1;'
+            /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
+            $x && /enc_close.*err=0x0000/ && exit 1;'
     [ $? == 1 ] && http[$1]=3
-    [ ${fail[$1]} ] || rm -f "$log"
+    [ ${fail[$1]} ] || [ -z ${http[$1]} ] || rm -f "$log"
 
     # analyze NAT rebind
     local log="/tmp/$script.$1.$pid.nat.log"
@@ -291,9 +300,10 @@ function analyze {
             /dec_path.*PATH_CHALLENGE/ and $x==1 and $x=2;
             /enc_path.*PATH_RESPONSE/ and $x==2 and $x=3;
             /read (.*) bytes.*on clnt conn/ and $x==3 and ($1 > 0 ? $x=4 : next);
-            $x==4 && /CLOSE.*err=0x0000/ && exit 1;'
+            /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
+            $x==4 && /enc_close.*err=0x0000/ && exit 1;'
     [ $? == 1 ] && bind[$1]=B
-    [ ${fail[$1]} ] || rm -f "$log"
+    [ ${fail[$1]} ] || [ -z ${bind[$1]} ] || rm -f "$log"
 }
 
 
