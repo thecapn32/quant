@@ -157,6 +157,8 @@ extern const char * const conn_state_str[];
 #define MAX_TOK_LEN 512
 #define MAX_ERR_REASON_LEN 64 // keep < 256, since err_reason_len is uint8_t
 
+#define DEF_ACK_DEL_EXP 3
+#define DEF_MAX_ACK_DEL 25 // ms
 
 splay_head(cids_by_seq, cid);
 

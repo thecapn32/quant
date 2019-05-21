@@ -1700,7 +1700,7 @@ struct q_conn * new_conn(struct w_engine * const w,
 
     // TODO most of these should become configurable via q_conn_conf
     c->tp_in.ack_del_exp = c->tp_out.ack_del_exp = DEF_ACK_DEL_EXP;
-    c->tp_in.max_ack_del = c->tp_out.max_ack_del = 25;
+    c->tp_in.max_ack_del = c->tp_out.max_ack_del = DEF_MAX_ACK_DEL;
     c->tp_in.max_data = INIT_MAX_BIDI_STREAMS * INIT_STRM_DATA_BIDI;
     c->tp_in.max_strm_data_uni = c->is_clnt ? INIT_STRM_DATA_UNI : 0;
     c->tp_in.max_strm_data_bidi_local = c->tp_in.max_strm_data_bidi_remote =
