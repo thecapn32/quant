@@ -46,6 +46,10 @@
 #include <http_parser.h>
 #include <khash.h>
 
+#include <picoquic/h3zero.h>   // IWYU pragma: keep
+#include <picoquic/picoquic.h> // IWYU pragma: keep
+
+#include <picoquic/democlient.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
@@ -191,14 +195,12 @@ get(const char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
 
     struct w_iov_sq req = w_iov_sq_initializer(req);
     if (do_h3) {
-        // use a canned H/3 request that is equivalent of "GET /40000"
-        static const uint8_t h3_get_40k[] = {
-            0x01, 0x35, 0x00, 0x00, 0xd1, 0xd7, 0x51, 0x06, 0x2f, 0x34, 0x30,
-            0x30, 0x30, 0x30, 0x50, 0x15, 0x77, 0x77, 0x77, 0x2e, 0x6c, 0x69,
-            0x74, 0x65, 0x73, 0x70, 0x65, 0x65, 0x64, 0x74, 0x65, 0x63, 0x68,
-            0x2e, 0x63, 0x6f, 0x6d, 0x5f, 0x50, 0x0f, 0x4c, 0x61, 0x72, 0x73,
-            0x20, 0x45, 0x67, 0x67, 0x65, 0x72, 0x74, 0x2f, 0x32, 0x2e, 0x30};
-        q_chunk_str(w, (const char *)h3_get_40k, sizeof(h3_get_40k), &req);
+        q_alloc(w, &req, 1024);
+        struct w_iov * const v = sq_first(&req);
+        size_t consumed;
+        h3zero_client_create_stream_request(v->buf, v->len, (uint8_t *)path,
+                                            strlen(path), &consumed, dest);
+        v->len = (uint16_t)consumed;
     } else {
         // assemble an HTTP/0.9 request
         char req_str[MAXPATHLEN + 6];
@@ -223,7 +225,7 @@ get(const char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
                                   .idle_timeout = timeout * 1000,
                                   .enable_spinbit = true,
                                   .enable_tls_key_updates = flip_keys,
-				  .enable_udp_zero_checksums = true,
+                                  .enable_udp_zero_checksums = true,
                                   .enable_zero_len_cid = zlen_cids});
         if (c == 0) {
             freeaddrinfo(peer);

@@ -21,3 +21,17 @@ set(DLEVEL "WRN")
 
 add_subdirectory(warpcore)
 
+
+set(PTLS_CORE_LIBRARY
+  ${CMAKE_CURRENT_BINARY_DIR}/picotls/libpicotls-core.a
+)
+
+set(PTLS_MINICRYPTO_LIBRARY
+  ${CMAKE_CURRENT_BINARY_DIR}/picotls/libpicotls-minicrypto.a
+)
+
+set(PTLS_OPENSSL_LIBRARY
+  ${CMAKE_CURRENT_BINARY_DIR}/picotls/libpicotls-openssl.a
+)
+
+add_subdirectory(picoquic)

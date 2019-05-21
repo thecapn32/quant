@@ -28,16 +28,27 @@ foreach(TARGET ${TARGETS})
   if(${TARGET} MATCHES ".*-warp")
     string(REGEX REPLACE "-warp$" "" SOURCE ${TARGET})
     add_executable(${TARGET} ${SOURCE}.c)
-    target_link_libraries(${TARGET} lib${PROJECT_NAME}-warp ${HTTP_PARSER_LIB})
+    target_link_libraries(${TARGET}
+      lib${PROJECT_NAME}-warp
+      ${HTTP_PARSER_LIB}
+      picoquic-core
+      picotls-minicrypto
+    )
   else()
     add_executable(${TARGET} ${TARGET}.c)
-    target_link_libraries(${TARGET} lib${PROJECT_NAME} ${HTTP_PARSER_LIB})
+    target_link_libraries(${TARGET}
+      lib${PROJECT_NAME}
+      ${HTTP_PARSER_LIB}
+      picoquic-core
+      picotls-minicrypto
+    )
   endif()
 
   target_include_directories(${TARGET}
     SYSTEM PRIVATE
       ${HTTP_PARSER_INCLUDE}
       $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/klib>
+      $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/picoquic>
   )
 
   if(DSYMUTIL)
