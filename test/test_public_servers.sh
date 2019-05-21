@@ -36,17 +36,15 @@ declare -A servers=(
     [f5]=208.85.208.226::4433:4433:4433:/file50K
     [google]=quic.rocks:-z:4433:4434:4433:/40000
     [lsquic]=http3-test.litespeedtech.com:-3:4433:4434:4433:/
-    # [minq]=minq.dev.mozaws.net::4433:4434:4433:/index.html
-    # [mozquic]=mozquic.ducksong.com::4433:4434:4433:/index.html
     [mvfst]=fb.mvfst.net::4433:4434:4433:/index.html
     [ngtcp2]=nghttp2.org:-3:4433:4434:4433:/40000
     [ngx_quic]=cloudflare-quic.com:-3:443:443:443:/index.html
-    # [pandora]=pandora.cm.in.tum.de::4433:4434:4433:/index.html
+    [pandora]=pandora.cm.in.tum.de::4433:4434:4433:/index.html
     [picoquic]=test.privateoctopus.com::4433:4434:4433:/40000
     [quant]=quant.eggert.org::4433:4434:4433:/40000
     [quic-go]=quic.seemann.io:-3:443:443:443:/dynamic/40000
     [quiche]=quic.tech::4433:4433:8443:/random
-    # [quicker]=quicker.edm.uhasselt.be::4433:4434:4433:/index.html
+    [quicker]=quicker.edm.uhasselt.be::4433:4434:4433:/index.html
     [quicly]=kazuhooku.com::4433:4433:8443:/40000.txt
     [quinn]=ralith.com::4433:4434:4433:/100K
     [winquic]=quic.westus.cloudapp.azure.com::4433:4434:443:/draft-ietf-quic-http-11.txt
@@ -124,15 +122,17 @@ function bench_server {
     local size=5000000
     local log_base="/tmp/$script.$1.$pid.bench"
     local h2_out="$log_base.h2.out"
-    local h2
-    local ext
+    local h2 ext prefix
+
+    # special cases for some servers
     [ "$s" = "winquic" ] && ext=.txt
-    # echo time -p curl -k -s -o "$h2_out" --max-time 30 "https://${info[0]}/$size$ext"
-    h2=$({ time -p curl -k -s -o "$h2_out" --max-time 30 \
-                 "https://${info[0]}/$size$ext"; } 2>&1)
+    [ "$s" = "quic-go" ] && prefix=dynamic/
+
+    h2=$({ time -p curl -k -s -o "$h2_out" --max-time 10 --connect-timeout 2 \
+                 "https://${info[0]}/$prefix$size$ext"; } 2>&1)
+    # echo $s H2:$h2
     h2=$(echo "$h2" | fmt | cut -d' ' -f2)
     h2_size=$(stat -q "$h2_out" | cut -d' ' -f8)
-    # echo H2:$h2_size
     rm -f "$h2_out"
     if [ -n "$h2_size" ] && [ "$h2_size" -ge $size ]; then
         t_h2[$1]=$h2
@@ -140,23 +140,20 @@ function bench_server {
         local cache="/tmp/$script.$1.$pid.cache"
         local opts="-i $iface -t3 -v0 -l /dev/null"
         local hq_out="$log_base.hq.out"
+        local wd hq
         mkdir "$hq_out"
-        local wd
         wd=$(pwd)
         pushd "$hq_out" > /dev/null || exit
-        local hq
-        # echo time -p $wd/bin/client $opts ${info[1]} -s "$cache" -w "https://${info[0]}:${info[2]}/$size"
         hq=$({ time -p $wd/bin/client $opts ${info[1]} -s "$cache" -w \
-                     "https://${info[0]}:${info[2]}/$size"; } 2>&1)
+                     "https://${info[0]}:${info[2]}/$prefix$size"; } 2>&1)
+        # echo $s HQ:$hq
         hq=$(echo "$hq" | fmt | cut -d' ' -f2)
         hq_size=$(stat -q "$size" | cut -d' ' -f8)
-        # echo HQ:$hq_size
         popd > /dev/null || exit
         rm -rf "$hq_out" "$cache"
 
         if [ -n "$hq_size" ] && [ "$hq_size" -ge $size ]; then
             t_hq[$1]=$hq
-
             perf[$1]=$(perl -mList::Util=max -e "print 'T' if abs($hq - $h2) <= max($hq, $h2) * .1")
         fi
     fi
