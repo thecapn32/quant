@@ -1373,12 +1373,12 @@ rx_pkts(struct w_iov_sq * const x,
                 diet_insert(&pn->recv_all, m->hdr.nr, (ev_tstamp)NAN);
             }
             pkt_valid = true;
-        }
 
-        // remember that we had a RX event on this connection
-        if (!c->had_rx) {
-            c->had_rx = true;
-            sl_insert_head(crx, c, node_rx_int);
+            // remember that we had a RX event on this connection
+            if (!c->had_rx) {
+                c->had_rx = true;
+                sl_insert_head(crx, c, node_rx_int);
+            }
         }
 
         if (m->stream == 0)
