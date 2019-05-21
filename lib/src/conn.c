@@ -607,7 +607,15 @@ void conns_by_srt_ins(struct q_conn * const c, uint8_t * const srt)
 {
     int ret;
     const khiter_t k = kh_put(conns_by_srt, conns_by_srt, srt, &ret);
-    ensure(ret >= 1, "inserted returned %d", ret);
+    if (unlikely(ret == 0)) {
+        if (kh_val(conns_by_srt, k) != c)
+            die("srt %s already in use by different conn %s",
+                hex2str(srt, SRT_LEN), cid2str(kh_val(conns_by_srt, k)->scid));
+        else {
+            warn(WRN, "srt %s already used for conn", hex2str(srt, SRT_LEN));
+            return;
+        }
+    }
     kh_val(conns_by_srt, k) = c;
 }
 
@@ -616,8 +624,9 @@ static inline void __attribute__((nonnull))
 conns_by_srt_del(uint8_t * const srt)
 {
     const khiter_t k = kh_get(conns_by_srt, conns_by_srt, srt);
-    ensure(k != kh_end(conns_by_srt), "found");
-    kh_del(conns_by_srt, conns_by_srt, k);
+    if (likely(k != kh_end(conns_by_srt)))
+        // if peer is reusing SRTs w/different CIDs, it may already be deleted
+        kh_del(conns_by_srt, conns_by_srt, k);
 }
 
 
