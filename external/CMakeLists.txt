@@ -17,20 +17,6 @@ externalproject_add(quic-go
 )
 
 
-# Use minq for testing against
-set(MINQ github.com/ekr/minq)
-set(MINQDEPS github.com/bifurcation/mint github.com/cloudflare/cfssl/helpers)
-externalproject_add(minq
-  DOWNLOAD_COMMAND env GOPATH=${GOPATH} go get ${MINQ} ${MINQDEPS}
-  UPDATE_COMMAND ""
-  # UPDATE_COMMAND env GOPATH=${GOPATH} go get -u ${MINQ} ${MINQDEPS}
-  CONFIGURE_COMMAND ""
-  BUILD_COMMAND cd ${GOPATH}/src/${MINQ} && env GOPATH=${GOPATH} go test
-  INSTALL_COMMAND ""
-  EXCLUDE_FROM_ALL 1
-)
-
-
 # Use quicly for testing against
 externalproject_add(quicly
   # UPDATE_COMMAND ""
@@ -87,49 +73,6 @@ externalproject_add(ngtcp2
   INSTALL_COMMAND ""
   EXCLUDE_FROM_ALL 1
 )
-
-
-find_package(Hg)
-if(HG_FOUND)
-  # Use mozquic for testing against
-  externalproject_add(nspr
-    UPDATE_COMMAND ""
-    SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/mozquic-prefix/src/nspr
-    CONFIGURE_COMMAND ""
-    HG_REPOSITORY https://hg.mozilla.org/projects/nspr
-    BUILD_COMMAND ""
-    INSTALL_COMMAND ""
-    EXCLUDE_FROM_ALL 1
-  )
-
-  externalproject_add(nss
-    DEPENDS nspr
-    UPDATE_COMMAND ""
-    SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/mozquic-prefix/src/nss
-    GIT_REPOSITORY https://github.com/nss-dev/nss.git
-    GIT_SHALLOW 1
-    # GIT_TAG origin/NSS_3_36_BRANCH
-    CONFIGURE_COMMAND ""
-    BUILD_COMMAND make nss_build_all USE_64=1
-    BUILD_IN_SOURCE 1
-    INSTALL_COMMAND ""
-    EXCLUDE_FROM_ALL 1
-  )
-
-  externalproject_add(mozquic
-    DEPENDS nss
-    UPDATE_COMMAND ""
-    GIT_REPOSITORY https://github.com/mcmanus/mozquic.git
-    # GIT_TAG draft-11
-    GIT_SHALLOW 1
-    PATCH_COMMAND sed -i "" -e "s/-Werror//g $<SEMICOLON> s|include/nspr|include|g" Makefile
-    CONFIGURE_COMMAND ""
-    BUILD_IN_SOURCE 1
-    BUILD_COMMAND make -j8
-    INSTALL_COMMAND ""
-    EXCLUDE_FROM_ALL 1
-  )
-endif()
 
 
 # Use picoquic for testing against

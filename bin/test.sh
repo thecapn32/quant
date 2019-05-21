@@ -10,7 +10,7 @@ s=${2:-quant}
 
 # port to run servers on
 addr=127.0.0.1
-port=4433 # mozquic server can only run on 4433 at the moment
+port=4433
 path=/20000
 dir=/Users/lars/Sites/lars/output/papers
 cert=test/dummy.crt
@@ -56,25 +56,11 @@ case $c in
                         -l /tmp/quicly-c.log -s /tmp/quicly-session -n -v \
                         -p $path $addr $port"
                 ;;
-        minq)
-                cc="env MINQ_LOG=aead,connection,ack,handshake,tls,server,udp \
-                        GOPATH=$(pwd)/external/go go run \
-                        external/go/src/github.com/ekr/minq/bin/client/main.go \
-                        -addr $addr:$port -http $path"
-                ;;
         ngtcp2)
                 touch /tmp/ngtcp2-session /tmp/ngtcp2-tp
                 cc="external/ngtcp2-prefix/src/ngtcp2/examples/client -s \
                         -i $addr $port --session-file=/tmp/ngtcp2-session \
                         --tp-file=/tmp/ngtcp2-tp https://$addr:$port$path"
-                ;;
-        mozquic)
-                cc="env MOZQUIC_LOG=all:9 \
-                        MOZQUIC_NSS_CONFIG=external/mozquic-prefix/src/mozquic/sample/nss-config \
-                        DYLD_LIBRARY_PATH=external/mozquic-prefix/src/dist/$(cat external/mozquic-prefix/src/dist/latest)/lib \
-                        external/mozquic-prefix/src/mozquic/client \
-                                -peer $addr:$port -get $path \
-                                -ignorePKI -send-close"
                 ;;
         picoquic)
                 cc="external/picoquic-prefix/src/picoquic/picoquicdemo \
@@ -120,23 +106,9 @@ case $s in
                         -l /tmp/quicly-s.log -v \
                         -k $key -c $cert $addr $port"
                 ;;
-        minq)
-                sc="env MINQ_LOG=aead,connection,ack,handshake,tls,server,udp \
-                        GOPATH=$(pwd)/external/go go run \
-                        external/go/src/github.com/ekr/minq/bin/server/main.go \
-                        -addr $addr:$port -http -key $key -stateless-reset \
-                        -cert $cert -server-name $addr"
-                ;;
         ngtcp2)
                 sc="external/ngtcp2-prefix/src/ngtcp2/examples/server -s \
                         -d $dir $addr $port $key $cert"
-                ;;
-        mozquic)
-                sc="env MOZQUIC_LOG=all:9 \
-                        MOZQUIC_NSS_CONFIG=external/mozquic-prefix/src/mozquic/sample/nss-config \
-                        DYLD_LIBRARY_PATH=external/mozquic-prefix/src/dist/$(cat external/mozquic-prefix/src/dist/latest)/lib \
-                        external/mozquic-prefix/src/mozquic/server \
-                        -ignorePKI -send-close -0rtt"
                 ;;
         picoquic)
                 sc="external/picoquic-prefix/src/picoquic/picoquicdemo \
