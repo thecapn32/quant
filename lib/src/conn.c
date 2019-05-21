@@ -708,7 +708,8 @@ static void __attribute__((nonnull))
 conns_by_ipnp_update(struct q_conn * const c,
                      const struct sockaddr * const peer)
 {
-    conns_by_ipnp_del(c);
+    if (c->scid == 0)
+        conns_by_ipnp_del(c);
     memcpy(&c->peer, peer, sizeof(*peer));
     conns_by_ipnp_ins(c);
 }
