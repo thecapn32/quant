@@ -1620,7 +1620,10 @@ void enc_new_cid_frame(uint8_t ** pos,
 
     const struct cid * const max_scid =
         splay_max(cids_by_seq, &c->scids_by_seq);
-    struct cid ncid = {.seq = ++c->max_cid_seq_out,
+    const struct cid * const min_scid =
+        splay_min(cids_by_seq, &c->scids_by_seq);
+    c->max_cid_seq_out = MAX(min_scid->seq, c->max_cid_seq_out + 1);
+    struct cid ncid = {.seq = c->max_cid_seq_out,
                        .len = c->is_clnt ? SCID_LEN_CLNT : SCID_LEN_SERV};
 
     struct cid * enc_cid = &ncid;
@@ -1633,7 +1636,6 @@ void enc_new_cid_frame(uint8_t ** pos,
         add_scid(c, &ncid);
     }
 
-    // XXX Jari crashes here
     m->min_cid_seq = m->min_cid_seq == 0 ? enc_cid->seq : m->min_cid_seq;
 
     enc1(pos, end, FRM_CID);
