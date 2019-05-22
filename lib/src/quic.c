@@ -949,7 +949,7 @@ bool q_is_new_serv_conn(const struct q_conn * const c)
 }
 
 
-void q_rebind_sock(struct q_conn * const c)
+void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
 {
     ensure(c->is_clnt, "can only rebind w_sock on client");
 
@@ -982,6 +982,10 @@ void q_rebind_sock(struct q_conn * const c)
     if (c->scid == 0)
         conns_by_ipnp_ins(c);
 
+    if (use_new_dcid)
+        // switch to new dcid
+        use_next_dcid(c);
+
 #ifndef NDEBUG
     char new_ip[NI_MAXHOST];
     char new_port[NI_MAXSERV];
@@ -990,8 +994,9 @@ void q_rebind_sock(struct q_conn * const c)
                        sizeof(new_port), NI_NUMERICHOST | NI_NUMERICSERV) == 0,
            "getnameinfo");
 
-    warn(NTE, "simulated NAT rebinding for %s conn %s from %s:%s to %s:%s",
-         conn_type(c), cid2str(c->scid), old_ip, old_port, new_ip, new_port);
+    warn(NTE, "simulated %s for %s conn %s from %s:%s to %s:%s",
+         use_new_dcid ? "conn migration" : "NAT rebinding", conn_type(c),
+         cid2str(c->scid), old_ip, old_port, new_ip, new_port);
 #endif
 
     ev_feed_event(loop, &c->tx_w, 1);

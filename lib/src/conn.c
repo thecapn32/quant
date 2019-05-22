@@ -230,7 +230,7 @@ get_cid_by_id(const khash_t(cids_by_id) * const cbi, struct cid * const id)
 }
 
 
-static void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c)
+void use_next_dcid(struct q_conn * const c)
 {
     struct cid * const dcid =
         splay_next(cids_by_seq, &c->dcids_by_seq, c->dcid);

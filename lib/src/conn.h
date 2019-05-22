@@ -350,6 +350,8 @@ rx(struct ev_loop * const l, ev_io * const rx_w, int _e);
 extern void __attribute__((nonnull))
 conn_info_populate(struct q_conn * const c);
 
+extern void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c);
+
 #ifdef FUZZING
 extern void __attribute__((nonnull)) rx_pkts(struct w_iov_sq * const x,
                                              struct q_conn_sl * const crx,

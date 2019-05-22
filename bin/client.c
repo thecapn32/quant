@@ -76,6 +76,7 @@ static bool flip_keys = false;
 static bool zlen_cids = false;
 static bool write_files = false;
 static bool rebind = false;
+static bool migrate = false;
 
 
 struct stream_entry {
@@ -130,7 +131,8 @@ static void __attribute__((noreturn, nonnull)) usage(const char * const name,
         "\t[-b bufs]\tnumber of network buffers to allocate; default %" PRIu64
         "\n",
         num_bufs);
-    printf("\t[-n]\t\tsimulate a NAT rebinding for each URL; default %s\n",
+    printf("\t[-n]\t\tsimulate NAT rebind (use twice for \"real\" migration); "
+           "default %s\n",
            rebind ? "true" : "false");
 #ifndef NDEBUG
     printf("\t[-v verbosity]\tverbosity level (0-%d, default %d)\n", DLEVEL,
@@ -261,7 +263,7 @@ get(const char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
             clock_gettime(CLOCK_MONOTONIC, &se->get_t);
             q_write(se->s, &req, true);
             if (rebind && cce->rebound == false) {
-                q_rebind_sock(cce->c);
+                q_rebind_sock(cce->c, migrate);
                 cce->rebound = true; // only rebind once
             }
         }
@@ -345,6 +347,8 @@ int main(int argc, char * argv[])
             write_files = true;
             break;
         case 'n':
+            if (rebind)
+                migrate = true;
             rebind = true;
             break;
         case 'v':

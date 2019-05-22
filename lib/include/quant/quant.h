@@ -164,7 +164,8 @@ q_is_new_serv_conn(const struct q_conn * const c);
 extern bool __attribute__((nonnull))
 q_is_uni_stream(const struct q_stream * const s);
 
-extern void __attribute__((nonnull)) q_rebind_sock(struct q_conn * const c);
+extern void __attribute__((nonnull))
+q_rebind_sock(struct q_conn * const c, const bool use_new_dcid);
 
 extern void __attribute__((nonnull))
 q_info(struct q_conn * const c, struct q_conn_info * const ci);
