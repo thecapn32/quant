@@ -1078,7 +1078,9 @@ bool dec_frames(struct q_conn * const c,
                 m->stream) {
                 // already had at least one stream or crypto frame in this
                 // packet with non-duplicate data, so generate (another) copy
+#ifdef DEBUG_EXTRA
                 warn(DBG, "addtl stream or crypto frame, copy");
+#endif
                 const uint16_t off = (uint16_t)(pos - v->buf - 1);
                 struct pkt_meta * mdup;
                 struct w_iov * const vdup = w_iov_dup(v, &mdup, off);
