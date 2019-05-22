@@ -251,12 +251,12 @@ void do_stream_id_fc(struct q_conn * const c,
     if (bidi) {
         if (cnt == c->tp_in.max_streams_bidi) {
             c->tx_max_sid_bidi = true;
-            c->tp_in.max_streams_bidi += INIT_MAX_BIDI_STREAMS;
+            c->tp_in.max_streams_bidi *= 2;
         }
     } else {
         if (cnt == c->tp_in.max_streams_uni) {
             c->tx_max_sid_uni = true;
-            c->tp_in.max_streams_uni += INIT_MAX_UNI_STREAMS;
+            c->tp_in.max_streams_uni *= 2;
         }
     }
 }
