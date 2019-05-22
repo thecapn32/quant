@@ -806,23 +806,13 @@ done:
 }
 
 
-#define ordered_close(kh)                                                      \
-    do {                                                                       \
-        struct q_conn * c;                                                     \
-        kh_foreach_value((kh), c, {                                            \
-            if (c->scid)                                                       \
-                q_close(c, 0, 0);                                              \
-        });                                                                    \
-        kh_foreach_value((kh), c, { q_close(c, 0, 0); });                      \
-    } while (0)
-
-
 void q_cleanup(struct w_engine * const w)
 {
     // close all connections
-    ordered_close(conns_by_id);
-    ordered_close(conns_by_ipnp);
-    ordered_close(conns_by_srt);
+    struct q_conn * c;
+    kh_foreach_value(conns_by_id, c, { q_close(c, 0, 0); });
+    kh_foreach_value(conns_by_ipnp, c, { q_close(c, 0, 0); });
+    kh_foreach_value(conns_by_srt, c, { q_close(c, 0, 0); });
 
     // stop the event loop
     ev_loop_destroy(loop);

@@ -705,17 +705,6 @@ void add_dcid(struct q_conn * const c, const struct cid * const id)
 
 
 static void __attribute__((nonnull))
-conns_by_ipnp_update(struct q_conn * const c,
-                     const struct sockaddr * const peer)
-{
-    if (c->scid == 0)
-        conns_by_ipnp_del(c);
-    memcpy(&c->peer, peer, sizeof(*peer));
-    conns_by_ipnp_ins(c);
-}
-
-
-static void __attribute__((nonnull))
 rx_crypto(struct q_conn * const c, const struct pkt_meta * const m_cur)
 {
     struct q_stream * const s = c->cstreams[epoch_in(c)];
@@ -1116,8 +1105,10 @@ rx_pkts(struct w_iov_sq * const x,
         bool pkt_valid = false;
         const bool is_clnt = w_connected(ws);
         struct q_conn * c = 0;
-        struct q_conn * const c_ipnp =
-            get_conn_by_ipnp(w_get_addr(ws, true), (struct sockaddr *)&v->addr);
+        struct q_conn * const c_ipnp = // only our client can use zero-len cids
+            is_clnt ? get_conn_by_ipnp(w_get_addr(ws, true),
+                                       (struct sockaddr *)&v->addr)
+                    : 0;
         struct cid odcid;
         uint8_t tok[MAX_PKT_LEN];
         uint16_t tok_len = 0;
@@ -1351,8 +1342,6 @@ rx_pkts(struct w_iov_sq * const x,
                      " > max " FMT_PNR_IN ", probing",
                      ip, port, m->hdr.nr, diet_max(&pn->recv_all));
 
-                if (c->dcid->len == 0)
-                    conns_by_ipnp_update(c, (struct sockaddr *)&v->addr);
                 rand_bytes(&c->path_chlg_out, sizeof(c->path_chlg_out));
                 c->migr_peer = v->addr;
                 c->needs_tx = c->tx_path_chlg = true;
