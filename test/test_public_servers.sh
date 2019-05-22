@@ -120,16 +120,19 @@ function bench_server {
     # 0=name, 1=flags, 2=port, 3=retry-port, 4=h3-port, 5=URL
 
     local size=5000000
+    local obj=$size
     local log_base="/tmp/$script.$1.$pid.bench"
     local h2_out="$log_base.h2.out"
-    local h2 ext prefix
+    local h2 h2ext hqext prefix h2port
 
     # special cases for some servers
-    [ "$s" = "winquic" ] && ext=.txt
+    [ "$s" = "winquic" ] && h2ext=.txt
     [ "$s" = "quic-go" ] && prefix=dynamic/
+    [ "$s" = "quicly" ] && h2port=:8443 && hqext=.txt
+    [ "$s" = "ngx_quic" ] && obj=5MB.png
 
-    h2=$({ time -p curl -k -s -o "$h2_out" --max-time 10 --connect-timeout 2 \
-                 "https://${info[0]}/$prefix$size$ext"; } 2>&1)
+    h2=$({ time -p curl -k -s -o "$h2_out" --max-time 30 --connect-timeout 2 \
+                 "https://${info[0]}$h2port/$prefix$obj$h2ext"; } 2>&1)
     # echo $s H2:$h2
     h2=$(echo "$h2" | fmt | cut -d' ' -f2)
     h2_size=$(stat -q "$h2_out" | cut -d' ' -f8)
@@ -145,17 +148,21 @@ function bench_server {
         wd=$(pwd)
         pushd "$hq_out" > /dev/null || exit
         hq=$({ time -p $wd/bin/client $opts ${info[1]} -s "$cache" -w \
-                     "https://${info[0]}:${info[2]}/$prefix$size"; } 2>&1)
+                     "https://${info[0]}:${info[2]}/$prefix$obj$hqext"; } 2>&1)
         # echo $s HQ:$hq
         hq=$(echo "$hq" | fmt | cut -d' ' -f2)
-        hq_size=$(stat -q "$size" | cut -d' ' -f8)
+        hq_size=$(stat -q "$obj$hqext" | cut -d' ' -f8)
         popd > /dev/null || exit
         rm -rf "$hq_out" "$cache"
 
         if [ -n "$hq_size" ] && [ "$hq_size" -ge $size ]; then
             t_hq[$1]=$hq
             perf[$1]=$(perl -mList::Util=max -e "print 'T' if abs($hq - $h2) <= max($hq, $h2) * .1")
+        # else
+        #     echo $s HQ size:$hq_size
         fi
+    # else
+    #     echo $s H2 size:$h2_size
     fi
 
     printf "%s " "$s"
