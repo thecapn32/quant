@@ -899,7 +899,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
             // allocate new w_iov for coalesced packet and copy it over
             struct w_iov * const dup = w_iov_dup(xv, 0, pkt_len);
             // adjust length of first packet
-            xv->len = pkt_len;
+            m->udp_len = xv->len = pkt_len;
             // rx() has already removed xv from x, so just insert dup at head
             sq_insert_head(x, dup, next);
             warn(DBG, "split out coalesced %u-byte %s pkt", dup->len,
