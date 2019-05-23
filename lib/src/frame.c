@@ -1025,6 +1025,18 @@ dec_new_token_frame(const uint8_t ** pos,
 }
 
 
+#ifndef NDEBUG
+static void log_pad(const uint16_t len)
+{
+    warn(INF, FRAM_IN "PADDING" NRM " len=%u", len);
+}
+#else
+#define log_pad(...)                                                           \
+    do {                                                                       \
+    } while (0)
+#endif
+
+
 bool dec_frames(struct q_conn * const c,
                 struct w_iov ** vv,
                 struct pkt_meta ** mm)
@@ -1046,21 +1058,18 @@ bool dec_frames(struct q_conn * const c,
         uint8_t type;
         dec1_chk(&type, &pos, end, c, 0);
 
-        // special-case for optimized parsing of padding
-        if (type != FRM_PAD || unlikely(pos == end)) {
-            if (pad_start) {
-                warn(INF, FRAM_IN "PADDING" NRM " len=%u",
-                     (uint16_t)(pos - pad_start + 1));
-                pad_start = 0;
-                if (unlikely(pos == end))
-                    continue;
-            }
-        } else {
+        // special-case for optimized parsing of padding ranges
+        if (type == FRM_PAD) {
             if (unlikely(pad_start == 0)) {
                 pad_start = pos;
                 track_frame(m, FRM_PAD);
             }
             continue;
+        } else {
+            if (pad_start) {
+                log_pad((uint16_t)(pos - pad_start + 1));
+                pad_start = 0;
+            }
         }
 
         // check that frame type is allowed in this pkt type
@@ -1193,6 +1202,9 @@ bool dec_frames(struct q_conn * const c,
         track_frame(m, type);
     }
 
+    if (pad_start)
+        log_pad((uint16_t)(pos - pad_start + 1));
+
     if (m->stream_data_start) {
         // adjust w_iov start and len to stream frame data
         v->buf += m->stream_data_start;
@@ -1225,9 +1237,8 @@ uint16_t max_frame_len(const uint8_t type)
         len += sizeof(uint64_t) + sizeof(uint16_t) + sizeof(uint64_t);
         break;
 
-        // these two are never combined with stream frames, so no need to check
-        // case FRM_CLQ:
-        // case FRM_CLA:
+        // these two are never combined with stream frames, so no need to
+        // check case FRM_CLQ: case FRM_CLA:
 
     case FRM_STP:
         len += sizeof(uint64_t) + sizeof(uint16_t);
