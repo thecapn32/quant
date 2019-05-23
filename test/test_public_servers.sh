@@ -123,17 +123,19 @@ function bench_server {
     local obj=$size
     local log_base="/tmp/$script.$1.$pid.bench"
     local h2_out="$log_base.h2.out"
-    local h2 h2ext hqext prefix h2port
+    local h2 ext prefix port host
+    host=${info[0]}
+    port=443
 
     # special cases for some servers
-    [ "$s" = "winquic" ] && h2ext=.txt
+    [ "$s" = "winquic" ] && ext=.txt
     [ "$s" = "quic-go" ] && prefix=dynamic/
-    [ "$s" = "quicly" ] && h2port=:8443 && hqext=.txt
+    [ "$s" = "quicly" ] && port=8443
     [ "$s" = "ngx_quic" ] && obj=5MB.png
+    [ "$s" = "lsquic" ] && host=http3check.net && prefix=test/
 
     h2=$({ time -p curl -k -s -o "$h2_out" --max-time 30 --connect-timeout 2 \
-                 "https://${info[0]}$h2port/$prefix$obj$h2ext"; } 2>&1)
-    # echo $s H2:$h2
+                 "https://$host:$port/$prefix$obj$ext"; } 2>&1)
     h2=$(echo "$h2" | fmt | cut -d' ' -f2)
     h2_size=$(stat -q "$h2_out" | cut -d' ' -f8)
     rm -f "$h2_out"
@@ -144,12 +146,19 @@ function bench_server {
         local opts="-i $iface -t3 -v0 -l /dev/null"
         local hq_out="$log_base.hq.out"
         local wd hq
+        ext=""
+        prefix=""
+        host=${info[0]}
+        port=${info[2]}
+
+        [ "$s" = "quicly" ] && ext=.txt
+        [ "$s" = "lsquic" ] && port=4435
+
         mkdir "$hq_out"
         wd=$(pwd)
         pushd "$hq_out" > /dev/null || exit
         hq=$({ time -p $wd/bin/client $opts ${info[1]} -s "$cache" -w \
-                     "https://${info[0]}:${info[2]}/$prefix$obj$hqext"; } 2>&1)
-        # echo $s HQ:$hq
+                     "https://$host:$port/$prefix$obj$ext"; } 2>&1)
         hq=$(echo "$hq" | fmt | cut -d' ' -f2)
         hq_size=$(stat -q "$obj$hqext" | cut -d' ' -f8)
         popd > /dev/null || exit
@@ -158,11 +167,7 @@ function bench_server {
         if [ -n "$hq_size" ] && [ "$hq_size" -ge $size ]; then
             t_hq[$1]=$hq
             perf[$1]=$(perl -mList::Util=max -e "print 'T' if abs($hq - $h2) <= max($hq, $h2) * .1")
-        # else
-        #     echo $s HQ size:$hq_size
         fi
-    # else
-    #     echo $s H2 size:$h2_size
     fi
 
     printf "%s " "$s"
