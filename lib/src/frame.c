@@ -523,7 +523,8 @@ dec_ack_frame(const uint8_t type,
         while (ack_block_len >= lg_ack_in_block - ack) {
 
             if (likely(cum_ack != UINT64_MAX) && ack <= cum_ack)
-                goto skip;
+                // we can skip the remainder of this block entirely
+                goto next_block;
 
             if (diet_find(&pn->acked, ack) || diet_find(&pn->lost, ack))
                 goto skip;
@@ -567,6 +568,7 @@ dec_ack_frame(const uint8_t type,
                 break;
         }
 
+    next_block:
         if (n > 1) {
             decv_chk(&gap, pos, end, c, type);
             if (unlikely((lg_ack_in_block - ack_block_len) < gap + 2)) {
