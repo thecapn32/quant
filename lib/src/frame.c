@@ -1047,6 +1047,21 @@ bool dec_frames(struct q_conn * const c,
         uint8_t type;
         dec1_chk(&type, &pos, end, c, 0);
 
+        // special-case for optimized parsing of padding
+        if (type != FRM_PAD || pos == end) {
+            if (pad_start) {
+                warn(INF, FRAM_IN "PADDING" NRM " len=%u",
+                     (uint16_t)(pos - pad_start));
+                pad_start = 0;
+            }
+        } else {
+            if (unlikely(pad_start == 0)) {
+                pad_start = pos;
+                track_frame(m, FRM_PAD);
+            }
+            continue;
+        }
+
         // check that frame type is allowed in this pkt type
         static const struct frames lh_ok =
             bitset_t_initializer(1 << FRM_CRY | 1 << FRM_ACK | 1 << FRM_ACE |
@@ -1056,12 +1071,6 @@ bool dec_frames(struct q_conn * const c,
             err_close_return(c, ERR_PROTOCOL_VIOLATION, type,
                              "0x%02x frame not allowed in 0x%02x pkt", type,
                              m->hdr.type);
-
-        if (pad_start && (type != FRM_PAD || pos == end)) {
-            warn(INF, FRAM_IN "PADDING" NRM " len=%u",
-                 (uint16_t)(pos - pad_start));
-            pad_start = 0;
-        }
 
         bool ok;
         switch (type) {
@@ -1104,14 +1113,6 @@ bool dec_frames(struct q_conn * const c,
         case FRM_ACK:
             ok = dec_ack_frame(type, &pos, end, m);
             type = FRM_ACK; // only enc FRM_ACK in bitstr_t
-            break;
-
-        case FRM_PAD:
-            if (unlikely(pad_start == 0)) {
-                pad_start = pos;
-                track_frame(m, FRM_PAD);
-            }
-            ok = true;
             break;
 
         case FRM_RST:
@@ -1187,9 +1188,8 @@ bool dec_frames(struct q_conn * const c,
             // there was an error parsing a frame
             return false;
 
-        if (type != FRM_PAD)
-            // record this frame type in the meta data
-            track_frame(m, type);
+        // record this frame type in the meta data
+        track_frame(m, type);
     }
 
     if (m->stream_data_start) {
