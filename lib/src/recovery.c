@@ -227,16 +227,22 @@ in_persistent_cong(struct pn_space * const pn __attribute__((unused)),
 }
 
 
+static void remove_from_in_flight(const struct pkt_meta * const m)
+{
+    struct q_conn * const c = m->pn->c;
+    c->rec.in_flight -= m->udp_len;
+    if (m->ack_eliciting)
+        c->rec.ae_in_flight--;
+}
+
+
 void on_pkt_lost(struct pkt_meta * const m)
 {
     struct pn_space * const pn = m->pn;
     struct q_conn * const c = pn->c;
 
-    if (m->in_flight) {
-        c->rec.in_flight -= m->udp_len;
-        if (m->ack_eliciting)
-            c->rec.ae_in_flight--;
-    }
+    if (m->in_flight)
+        remove_from_in_flight(m);
 
     // rest of function is not from pseudo code
 
@@ -563,11 +569,9 @@ static void __attribute__((nonnull))
 on_pkt_acked_cc(const struct pkt_meta * const m)
 {
     // OnPacketAckedCC
-    struct q_conn * const c = m->pn->c;
-    c->rec.in_flight -= m->udp_len;
-    if (m->ack_eliciting)
-        c->rec.ae_in_flight--;
+    remove_from_in_flight(m);
 
+    struct q_conn * const c = m->pn->c;
     if (in_cong_recovery(c, m->tx_t))
         return;
 

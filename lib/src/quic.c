@@ -405,7 +405,7 @@ bool q_write(struct q_stream * const s,
 
     // how much data did we write?
     const uint64_t data_written =
-        s->out_una && meta(s->out_una).udp_len
+        s->out_una && meta(s->out_una).txed
             ? meta(s->out_una).stream_off - prev_out_data
             : qlen;
 

@@ -488,7 +488,7 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
             continue;
         }
 
-        if (limit == 0 && m->udp_len && m->lost == false) {
+        if (limit == 0 && m->txed && m->lost == false) {
 #ifdef DEBUG_STREAMS
             warn(INF, "skip non-lost TX'ed pkt " FMT_PNR_OUT, m->hdr.nr);
 #endif
@@ -500,7 +500,7 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
             do_conn_fc(c, v->len);
         }
 
-        const bool do_rtx = m->lost || (limit && m->udp_len);
+        const bool do_rtx = m->lost || (limit && m->txed);
         if (unlikely(do_rtx))
             rtx_pkt(v, m);
 
