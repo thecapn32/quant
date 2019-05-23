@@ -1043,16 +1043,17 @@ bool dec_frames(struct q_conn * const c,
 #endif
 
     while (likely(pos < end)) {
-        // warn(ERR, "i=%ld", pos - v->buf);
         uint8_t type;
         dec1_chk(&type, &pos, end, c, 0);
 
         // special-case for optimized parsing of padding
-        if (type != FRM_PAD || pos == end) {
+        if (type != FRM_PAD || unlikely(pos == end)) {
             if (pad_start) {
                 warn(INF, FRAM_IN "PADDING" NRM " len=%u",
-                     (uint16_t)(pos - pad_start));
+                     (uint16_t)(pos - pad_start + 1));
                 pad_start = 0;
+                if (unlikely(pos == end))
+                    continue;
             }
         } else {
             if (unlikely(pad_start == 0)) {
