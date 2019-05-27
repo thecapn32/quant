@@ -27,6 +27,7 @@
 
 #include <fcntl.h>
 #include <inttypes.h>
+#include <math.h>
 #include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -84,7 +85,9 @@ struct stream_entry {
     struct q_conn * c;
     struct q_stream * s;
     const char * url;
-    struct timespec get_t;
+    struct timespec req_t;
+    struct timespec rep_t;
+    struct w_iov_sq rep;
 };
 
 
@@ -193,6 +196,7 @@ get(const char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
     // add to stream list
     struct stream_entry * se = calloc(1, sizeof(*se));
     ensure(se, "calloc failed");
+    sq_init(&se->rep);
     sl_insert_head(&sl, se, next);
 
     struct w_iov_sq req = w_iov_sq_initializer(req);
@@ -217,14 +221,14 @@ get(const char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
         (k == kh_end(cc) ? 0 : kh_val(cc, k)); // NOLINT
     const bool opened_new = cce == 0;
     if (cce == 0) {
-        clock_gettime(CLOCK_MONOTONIC, &se->get_t);
+        clock_gettime(CLOCK_MONOTONIC, &se->req_t);
         // no, open a new connection
         struct q_conn * const c = q_connect(
             w, peer->ai_addr, dest, rebind ? 0 : &req, rebind ? 0 : &se->s,
             true,
             &(struct q_conn_conf){.alpn = do_h3 ? "h3-" DRAFT_VERSION_STRING
                                                 : "hq-" DRAFT_VERSION_STRING,
-                                  .idle_timeout = timeout * 1000,
+                                  .idle_timeout = timeout * MSECS_PER_SEC,
                                   .enable_spinbit = true,
                                   .enable_tls_key_updates = flip_keys,
                                   .enable_udp_zero_checksums = true,
@@ -260,7 +264,7 @@ get(const char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
     if (opened_new == false || (rebind && cce->rebound == false)) {
         se->s = q_rsv_stream(cce->c, true);
         if (se->s) {
-            clock_gettime(CLOCK_MONOTONIC, &se->get_t);
+            clock_gettime(CLOCK_MONOTONIC, &se->req_t);
             q_write(se->s, &req, true);
             if (rebind && cce->rebound == false) {
                 q_rebind_sock(cce->c, migrate);
@@ -284,14 +288,25 @@ static void __attribute__((nonnull)) free_cc(khash_t(conn_cache) * cc)
 }
 
 
+static void free_se(struct stream_entry * const se)
+{
+    q_free(&se->rep);
+    free(se);
+}
+
+
+static void free_sl_head(void)
+{
+    struct stream_entry * const se = sl_first(&sl);
+    sl_remove_head(&sl, next);
+    free_se(se);
+}
+
+
 static void free_sl(void)
 {
-    struct stream_entry * i = 0;
-    struct stream_entry * tmp = 0;
-    sl_foreach_safe (i, &sl, next, tmp) {
-        sl_remove(&sl, i, stream_entry, next);
-        free(i);
-    }
+    while (sl_empty(&sl) == false)
+        free_sl_head();
 }
 
 
@@ -377,40 +392,57 @@ int main(int argc, char * argv[])
         while (url_idx < argc) {
             // open a new connection, or get an open one
             warn(INF, "%s retrieving %s", basename(argv[0]), argv[url_idx]);
-            if (get(argv[url_idx++], w, cc) == 0) {
-                // q_connect() failed
-                ret = 1;
-                goto done;
-            }
+            get(argv[url_idx++], w, cc);
         }
 
         // collect the replies
-        struct stream_entry * se = sl_first(&sl);
-        while (se) {
-            // read HTTP/0.9 reply and dump it to stdout
-            struct w_iov_sq i = w_iov_sq_initializer(i);
-            if (se->c == 0 || se->s == 0) {
-                se = sl_next(se, next);
-                continue;
-            }
-            q_readall_stream(se->s, &i);
+        bool all_closed;
+        do {
+            all_closed = true;
+            bool rxed_new = false;
+            struct stream_entry * se = 0;
+            struct stream_entry * tmp = 0;
+            sl_foreach_safe (se, &sl, next, tmp) {
+                if (se->c == 0 || se->s == 0 || q_is_conn_closed(se->c)) {
+                    sl_remove(&sl, se, stream_entry, next);
+                    free_se(se);
+                    continue;
+                }
 
-            if (reps > 1) {
-                struct timespec after;
-                struct timespec diff;
-                clock_gettime(CLOCK_MONOTONIC, &after);
-                timespec_sub(&after, &se->get_t, &diff);
-                const double elapsed = timespec_to_double(diff);
-                printf("%" PRIu64 "\t%f\t\"%s\"\t%s\n", w_iov_sq_len(&i),
-                       elapsed, bps(w_iov_sq_len(&i), elapsed), se->url);
+                rxed_new |= q_read_stream(se->s, &se->rep, false);
+
+                const bool is_closed = q_peer_closed_stream(se->s);
+                all_closed &= is_closed;
+                if (is_closed)
+                    clock_gettime(CLOCK_MONOTONIC, &se->rep_t);
             }
 
-            q_close_stream(se->s);
-            if (w_iov_sq_cnt(&i) == 0) {
-                // no data read
-                ret = 1;
-                goto done;
-            }
+            if (rxed_new == false && q_ready(timeout * MSECS_PER_SEC) == 0)
+                break;
+
+        } while (all_closed == false);
+
+        // print/save the replies
+        while (sl_empty(&sl) == false) {
+            struct stream_entry * const se = sl_first(&sl);
+            ret |= w_iov_sq_cnt(&se->rep) == 0;
+
+#ifndef NDEBUG
+            struct timespec diff;
+            timespec_sub(&se->rep_t, &se->req_t, &diff);
+            const double elapsed = timespec_to_double(diff);
+            warn(WRN,
+                 "read %" PRIu64
+                 " byte%s in %.3f sec (%s) on conn %s strm %" PRIu64,
+                 w_iov_sq_len(&se->rep), plural(w_iov_sq_len(&se->rep)),
+                 elapsed < 0 ? 0 : elapsed,
+                 bps(w_iov_sq_len(&se->rep), elapsed), q_cid(se->c),
+                 q_sid(se->s));
+
+            if (reps > 1)
+                printf("%" PRIu64 "\t%f\t\"%s\"\t%s\n", w_iov_sq_len(&se->rep),
+                       elapsed, bps(w_iov_sq_len(&se->rep), elapsed), se->url);
+#endif
 
             char * const slash = strrchr(se->url, '/');
             if (slash && *(slash + 1) == 0)
@@ -428,10 +460,10 @@ int main(int argc, char * argv[])
             // save the object, and print its first three packets to stdout
             struct w_iov * v;
             uint32_t n = 0;
-            sq_foreach (v, &i, next) {
+            sq_foreach (v, &se->rep, next) {
                 if (write_files)
                     ensure(write(fd, v->buf, v->len) != -1, "cannot write");
-                if (w_iov_sq_cnt(&i) > 100 || reps > 1)
+                if (w_iov_sq_cnt(&se->rep) > 100 || reps > 1)
                     // don't print large responses, or repeated ones
                     continue;
 
@@ -440,7 +472,7 @@ int main(int argc, char * argv[])
                     (v->buf[0] != 0x01 && v->buf[0] != 0xff &&
                      strnlen((char *)v->buf, v->len) == v->len))
                     warn(WRN, "no h3 payload");
-                if (n < 4 || v == sq_last(&i, w_iov, next)) {
+                if (n < 4 || v == sq_last(&se->rep, w_iov, next)) {
                     if (do_h3) {
 #ifndef NDEBUG
                         if (util_dlevel == DBG)
@@ -457,20 +489,15 @@ int main(int argc, char * argv[])
                     printf(".");
                 n++;
             }
-            if (do_h3 == false && w_iov_sq_cnt(&i) <= 100 && reps == 1)
+            if (do_h3 == false && w_iov_sq_cnt(&se->rep) <= 100 && reps == 1)
                 printf("\n");
             if (write_files)
                 close(fd);
-            q_free(&i);
 
-            struct stream_entry * prev_se = se;
-            se = sl_next(se, next);
-            sl_remove_head(&sl, next);
-            free(prev_se);
+            free_sl_head();
         }
     }
 
-done:
     q_cleanup(w);
     free_cc(cc);
     free_sl();

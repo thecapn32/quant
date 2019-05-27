@@ -1374,7 +1374,7 @@ uint16_t dec_aead(const struct w_iov * const xv,
         return 0;
     memcpy(v->buf, xv->buf, hdr_len);
 
-#ifdef DEBUG_EXTRA
+#ifdef DEBUG_PROT
     warn(DBG, "dec %s AEAD over [%u..%u] in [%u..%u]",
          pkt_type_str(m->hdr.flags, &m->hdr.vers), hdr_len, len - AEAD_LEN - 1,
          len - AEAD_LEN, len - 1);
@@ -1410,7 +1410,7 @@ uint16_t enc_aead(const struct w_iov * const v,
         unlikely(xor_hp(xv, m, ctx, pkt_nr_pos, true) == false))
         return 0;
 
-#ifdef DEBUG_EXTRA
+#ifdef DEBUG_PROT
     warn(DBG, "enc %s AEAD over [%u..%u] in [%u..%u]",
          pkt_type_str(m->hdr.flags, &m->hdr.vers), hdr_len,
          hdr_len + plen - AEAD_LEN - 1, hdr_len + plen - AEAD_LEN,

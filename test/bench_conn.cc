@@ -80,7 +80,7 @@ static inline uint64_t io(const uint64_t len)
     struct w_iov_sq i = w_iov_sq_initializer(i);
     struct q_stream * const ss = q_read(sc, &i, true);
     if (likely(ss)) {
-        q_readall_stream(ss, &i);
+        q_read_stream(ss, &i, true);
         q_close_stream(ss);
     }
     q_close_stream(cs);

@@ -44,7 +44,7 @@ export UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1
 case $c in
         quant)
                 cc="bin/client -v5 -i $iface -u \
-                        https://$addr:$port$path" # https://$addr:$port$path"
+                        https://$addr:$port$path https://$addr:$port$path"
                 ;;
         wquant)
                 cc="vagrant ssh -c \"\
@@ -76,7 +76,7 @@ case $c in
                         CGO_CFLAGS=-I/usr/local/opt/openssl@1.1/include \
                         CGO_LDFLAGS=-L/usr/local/opt/openssl@1.1/lib \
                     go run $(pwd)/external/go/src/github.com/QUIC-Tracker/quic-tracker/bin/test_suite/scenario_runner.go \
-                        -interface lo0 -host $addr:$port -scenario address_validation"
+                        -interface lo0 -host $addr:$port -scenario http_get_on_uni_stream"
                 ;;
         quic-go)
                 cc="env GOPATH=$(pwd)/external/go go run \

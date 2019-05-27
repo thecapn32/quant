@@ -342,7 +342,6 @@ dec_stream_or_crypto_frame(const uint8_t type,
                 strm_to_state(m->stream, m->stream->state <= strm_hcrm
                                              ? strm_hcrm
                                              : strm_clsd);
-                maybe_api_return(q_readall_stream, c, m->stream);
                 if (m->stream->state == strm_clsd)
                     maybe_api_return(q_close_stream, c, m->stream);
             }
@@ -355,6 +354,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
             do_conn_fc(c, 0);
             c->have_new_data = true;
             maybe_api_return(q_read, c, 0);
+            maybe_api_return(q_read_stream, c, m->stream);
         }
         goto done;
     }
@@ -1065,12 +1065,12 @@ bool dec_frames(struct q_conn * const c,
                 track_frame(m, FRM_PAD);
             }
             continue;
-        } else {
-            if (pad_start) {
-                log_pad((uint16_t)(pos - pad_start + 1));
-                pad_start = 0;
-            }
         }
+        if (pad_start) {
+            log_pad((uint16_t)(pos - pad_start + 1));
+            pad_start = 0;
+        }
+
 
         // check that frame type is allowed in this pkt type
         static const struct frames lh_ok =

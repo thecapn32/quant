@@ -44,12 +44,10 @@
 // #define DEBUG_BUFFERS ///< Set to log buffer use details.
 // #define DEBUG_EXTRA   ///< Set to log various extra details.
 // #define DEBUG_STREAMS ///< Set to log stream scheduling details.
-// #define DEBUG_TIMERS  ///< Set to log timer details.
+// #define DEBUG_TIMERS ///< Set to log timer details.
+// #define DEBUG_PROT   ///< Set to log packet protection/encryption details.
 
 #define DATA_OFFSET 48 ///< Offsets of stream frame payload data we TX.
-
-#define MSECS_PER_SEC 1000    ///< Milliseconds per second.
-#define USECS_PER_SEC 1000000 ///< Microseconds per second.
 
 #define CID_LEN_MIN 4   ///< Minimum CID length allowed by spec.
 #define CID_LEN_MAX 18  ///< Maximum CID length allowed by spec.

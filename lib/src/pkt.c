@@ -739,7 +739,7 @@ bool xor_hp(struct w_iov * const xv,
     for (uint8_t i = 0; i < pnl; i++)
         xv->buf[pkt_nr_pos + i] ^= mask[1 + i];
 
-#ifdef DEBUG_EXTRA
+#ifdef DEBUG_PROT
     warn(DBG, "%s HP over [0, %u..%u] w/sample off %u",
          is_enc ? "apply" : "undo", pkt_nr_pos, pkt_nr_pos + pnl - 1, off);
 #endif

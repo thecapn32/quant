@@ -112,7 +112,7 @@ extern bool __attribute__((nonnull))
 q_write(struct q_stream * const s, struct w_iov_sq * const q, const bool fin);
 
 extern struct q_stream * __attribute__((nonnull))
-q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool block);
+q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool all);
 
 extern struct q_stream * __attribute__((nonnull))
 q_rsv_stream(struct q_conn * const c, const bool bidi);
@@ -151,10 +151,14 @@ extern bool __attribute__((nonnull))
 q_is_stream_closed(const struct q_stream * const s);
 
 extern bool __attribute__((nonnull))
+q_peer_closed_stream(const struct q_stream * const s);
+
+extern bool __attribute__((nonnull))
 q_is_conn_closed(const struct q_conn * const c);
 
-extern void __attribute__((nonnull))
-q_readall_stream(struct q_stream * const s, struct w_iov_sq * const q);
+extern bool __attribute__((nonnull)) q_read_stream(struct q_stream * const s,
+                                                   struct w_iov_sq * const q,
+                                                   const bool all);
 
 extern struct q_conn * q_ready(const uint64_t timeout);
 
@@ -171,17 +175,22 @@ extern void __attribute__((nonnull))
 q_info(struct q_conn * const c, struct q_conn_info * const ci);
 
 
+#define MSECS_PER_SEC 1000       ///< Milliseconds per second.
+#define USECS_PER_SEC 1000000    ///< Microseconds per second.
+#define NSECS_PER_SEC 1000000000 ///< Microseconds per second.
+
+
 #define bps(bytes, secs)                                                       \
     __extension__({                                                            \
         static char _str[32];                                                  \
         const double _bps =                                                    \
             (bytes) && (fpclassify(secs) != FP_ZERO) ? (bytes)*8 / (secs) : 0; \
-        if (_bps > 1000000000)                                                 \
-            snprintf(_str, sizeof(_str), "%.3f Gb/s", _bps / 1000000000);      \
-        else if (_bps > 1000000)                                               \
-            snprintf(_str, sizeof(_str), "%.3f Mb/s", _bps / 1000000);         \
-        else if (_bps > 1000)                                                  \
-            snprintf(_str, sizeof(_str), "%.3f Kb/s", _bps / 1000);            \
+        if (_bps > NSECS_PER_SEC)                                              \
+            snprintf(_str, sizeof(_str), "%.3f Gb/s", _bps / NSECS_PER_SEC);   \
+        else if (_bps > USECS_PER_SEC)                                         \
+            snprintf(_str, sizeof(_str), "%.3f Mb/s", _bps / USECS_PER_SEC);   \
+        else if (_bps > MSECS_PER_SEC)                                         \
+            snprintf(_str, sizeof(_str), "%.3f Kb/s", _bps / MSECS_PER_SEC);   \
         else                                                                   \
             snprintf(_str, sizeof(_str), "%.3f b/s", _bps);                    \
         _str;                                                                  \
@@ -189,7 +198,7 @@ q_info(struct q_conn * const c, struct q_conn_info * const ci);
 
 
 #define timespec_to_double(diff)                                               \
-    ((double)(diff).tv_sec + (double)(diff).tv_nsec / 1000000000)
+    ((double)(diff).tv_sec + (double)(diff).tv_nsec / NSECS_PER_SEC)
 
 #ifdef __cplusplus
 }

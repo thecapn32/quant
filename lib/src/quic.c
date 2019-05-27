@@ -325,8 +325,8 @@ struct q_conn * q_connect(struct w_engine * const w,
 
     ev_feed_event(loop, &c->tx_w, 0);
 
-    warn(DBG, "waiting for connect to complete on %s conn %s to %s:%s",
-         conn_type(c), cid2str(c->scid), ip, port);
+    warn(DBG, "waiting for connect on %s conn %s to %s:%s", conn_type(c),
+         cid2str(c->scid), ip, port);
     conn_to_state(c, conn_opng);
     loop_run(q_connect, c, 0);
 
@@ -366,6 +366,7 @@ bool q_write(struct q_stream * const s,
     if (unlikely(sq_empty(q)))
         return false;
 
+#ifndef NDEBUG
     const uint64_t qlen = w_iov_sq_len(q);
     const uint64_t qcnt = w_iov_sq_cnt(q);
     warn(WRN,
@@ -373,85 +374,28 @@ bool q_write(struct q_stream * const s,
          " buf%s on %s conn %s strm " FMT_SID " %s",
          qlen, plural(qlen), qcnt, plural(qcnt), conn_type(c), cid2str(c->scid),
          s->id, fin ? "and closing" : "");
-
-    if (s->state >= strm_hclo) {
-        warn(ERR, "%s conn %s strm " FMT_SID " is in state %s, can't write",
-             conn_type(c), cid2str(c->scid), s->id, strm_state_str[s->state]);
-        return false;
-    }
+#endif
 
     // add to stream
-    if (fin)
+    if (fin) {
         mark_fin(q);
-    const uint64_t prev_out_data = s->out_data;
+        strm_to_state(s, strm_hclo);
+    }
     concat_out(s, q);
-
-#ifndef NDEBUG
-    struct timespec before;
-    clock_gettime(CLOCK_MONOTONIC, &before);
-#endif
 
     // kick TX watcher
     ev_feed_event(loop, &c->tx_w, 0);
-    loop_run(q_write, s->c, s);
-
-#ifndef NDEBUG
-    struct timespec after;
-    struct timespec diff;
-    clock_gettime(CLOCK_MONOTONIC, &after);
-    timespec_sub(&after, &before, &diff);
-    const double elapsed = timespec_to_double(diff);
-#endif
-
-    // how much data did we write?
-    const uint64_t data_written =
-        s->out_una && meta(s->out_una).txed
-            ? meta(s->out_una).stream_off - prev_out_data
-            : qlen;
-
-    // move data back
-    sq_concat(q, &s->out);
-
-    if (fin)
-        strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
-
-    warn(WRN,
-         "wrote %" PRIu64 " byte%s in %.3f sec (%s) on %s conn %s strm " FMT_SID
-         " %s",
-         data_written, plural(data_written), elapsed,
-         bps(data_written, elapsed), conn_type(c), cid2str(c->scid), s->id,
-         fin ? "and closed" : "");
-
-    // TODO these can be removed eventually
-    ensure(w_iov_sq_len(q) == qlen,
-           "payload corrupted, %" PRIu64 " != %" PRIu64 "", w_iov_sq_len(q),
-           qlen);
-    ensure(w_iov_sq_cnt(q) == qcnt,
-           "payload corrupted, %" PRIu64 " != %" PRIu64 "", w_iov_sq_cnt(q),
-           qcnt);
-
-    return data_written == qlen;
+    return true;
 }
 
 
 struct q_stream *
 q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool block)
 {
-    if (c->state == conn_clsd)
-        return 0;
-
-    warn(WRN, "%sblocking read on %s conn %s", block ? "" : "non-",
-         conn_type(c), cid2str(c->scid));
-
-#ifndef NDEBUG
-    struct timespec before;
-    clock_gettime(CLOCK_MONOTONIC, &before);
-#endif
-
-again:;
     struct q_stream * s = 0;
-    if (c->state == conn_estb) {
+    do {
         kh_foreach_value(c->streams_by_id, s, {
+            warn(ERR, "%"PRId64, s->id);
             if (!sq_empty(&s->in) && s->state != strm_clsd)
                 // we found a stream with queued data
                 break;
@@ -459,52 +403,41 @@ again:;
 
         if (s == 0 && block) {
             // no data queued on any stream, wait for new data
-            warn(WRN, "waiting for data on any stream on %s conn %s",
-                 conn_type(c), cid2str(c->scid));
+            warn(WRN, "waiting to read on any strm on %s conn %s", conn_type(c),
+                 cid2str(c->scid));
             loop_run(q_read, c, 0);
-            goto again;
         }
-    }
+    } while (s == 0 && block);
 
-#ifndef NDEBUG
-    struct timespec after;
-    struct timespec diff;
-    clock_gettime(CLOCK_MONOTONIC, &after);
-    timespec_sub(&after, &before, &diff);
-    const double elapsed = timespec_to_double(diff);
-#endif
-
-    if (s) {
-        // return data
-        sq_concat(q, &s->in);
-
-        warn(WRN,
-             "read %" PRIu64
-             " byte%s in %.3f sec (%s) on %s conn %s strm " FMT_SID,
-             w_iov_sq_len(q), plural(w_iov_sq_len(q)), elapsed,
-             bps(w_iov_sq_len(q), elapsed), conn_type(c), cid2str(c->scid),
-             s->id);
-    }
+    if (s)
+        q_read_stream(s, q, false);
 
     return s;
 }
 
 
-void q_readall_stream(struct q_stream * const s, struct w_iov_sq * const q)
+bool q_read_stream(struct q_stream * const s,
+                   struct w_iov_sq * const q,
+                   const bool all)
 {
     struct q_conn * const c = s->c;
+    if (unlikely(c->state != conn_estb))
+        return 0;
 
 #ifndef NDEBUG
     struct timespec before;
     clock_gettime(CLOCK_MONOTONIC, &before);
 #endif
 
-    while (c->state == conn_estb && s->state != strm_hcrm &&
-           s->state != strm_clsd) {
+    if (q_peer_closed_stream(s) == false && all) {
         warn(WRN, "reading all on %s conn %s strm " FMT_SID, conn_type(c),
              cid2str(c->scid), s->id);
-        loop_run(q_readall_stream, c, s);
+    again:
+        loop_run(q_read_stream, c, s);
     }
+
+    if (sq_empty(&s->in))
+        return false;
 
 #ifndef NDEBUG
     struct timespec after;
@@ -514,20 +447,27 @@ void q_readall_stream(struct q_stream * const s, struct w_iov_sq * const q)
     const double elapsed = timespec_to_double(diff);
 #endif
 
-    if (!sq_empty(&s->in)) {
-        struct w_iov * const last = sq_last(&s->in, w_iov, next);
-        const struct pkt_meta * const m_last = &meta(last);
+    struct w_iov * const last = sq_last(&s->in, w_iov, next);
+    const struct pkt_meta * const m_last = &meta(last);
+    if (all) {
         warn(WRN,
-             "read %" PRIu64
-             " byte%s in %.3f sec (%s) on %s conn %s strm " FMT_SID " %s",
-             w_iov_sq_len(&s->in), plural(w_iov_sq_len(&s->in)), elapsed,
+             "read %" PRIu64 " new byte%s %sin %.3f sec (%s) on %s "
+             "conn %s strm " FMT_SID,
+             w_iov_sq_len(&s->in), plural(w_iov_sq_len(&s->in)),
+             m_last->is_fin ? "(and FIN) " : "", elapsed,
              bps(w_iov_sq_len(&s->in), elapsed), conn_type(c), cid2str(c->scid),
-             s->id, m_last->is_fin ? "" : "(FIN missing)");
+             s->id);
+        if (m_last->is_fin == false)
+            goto again;
+    } else
+        warn(WRN, "read %" PRIu64 " new byte%s %son %s conn %s strm " FMT_SID,
+             w_iov_sq_len(&s->in), plural(w_iov_sq_len(&s->in)),
+             m_last->is_fin ? "(and FIN) " : "", conn_type(c), cid2str(c->scid),
+             s->id);
 
-        if (m_last->is_fin)
-            // return data
-            sq_concat(q, &s->in);
-    }
+    // return data
+    sq_concat(q, &s->in);
+    return true;
 }
 
 
@@ -870,6 +810,12 @@ uint64_t q_sid(const struct q_stream * const s)
 bool q_is_stream_closed(const struct q_stream * const s)
 {
     return s->state == strm_clsd;
+}
+
+
+bool q_peer_closed_stream(const struct q_stream * const s)
+{
+    return s->state == strm_hcrm || s->state == strm_clsd;
 }
 
 
