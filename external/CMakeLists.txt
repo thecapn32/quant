@@ -176,7 +176,7 @@ externalproject_add(quic-tracker
       CGO_LDFLAGS=-L${OPENSSL_ROOT_DIR}/lib go get ${TRACKER} || true
   UPDATE_COMMAND ""
   CONFIGURE_COMMAND
-    sed -i "" -e "s/make check//g $<SEMICOLON> s|go build|GOPATH=${GOPATH} CGO_CFLAGS=-I${OPENSSL_ROOT_DIR}/include CGO_LDFLAGS=-L${OPENSSL_ROOT_DIR}/lib go build|g" ${GOPATH}/src/${TRACKER}/../../mpiraux/pigotls/Makefile
+    sed -i "" -e "s|go build|GOPATH=${GOPATH} CGO_CFLAGS=-I${OPENSSL_ROOT_DIR}/include CGO_LDFLAGS=-L${OPENSSL_ROOT_DIR}/lib go build|g" ${GOPATH}/src/${TRACKER}/../../mpiraux/pigotls/Makefile
   BUILD_COMMAND
     cd ${GOPATH}/src/${TRACKER}/../../mpiraux/pigotls &&
     env GOPATH=${GOPATH} OPENSSL_ROOT_DIR=${OPENSSL_ROOT_DIR} make &&
