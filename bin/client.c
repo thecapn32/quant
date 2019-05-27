@@ -461,6 +461,7 @@ int main(int argc, char * argv[])
             struct w_iov * v;
             uint32_t n = 0;
             sq_foreach (v, &se->rep, next) {
+                const bool is_last = v == sq_last(&se->rep, w_iov, next);
                 if (write_files)
                     ensure(write(fd, v->buf, v->len) != -1, "cannot write");
                 if (w_iov_sq_cnt(&se->rep) > 100 || reps > 1)
@@ -472,7 +473,7 @@ int main(int argc, char * argv[])
                     (v->buf[0] != 0x01 && v->buf[0] != 0xff &&
                      strnlen((char *)v->buf, v->len) == v->len))
                     warn(WRN, "no h3 payload");
-                if (n < 4 || v == sq_last(&se->rep, w_iov, next)) {
+                if (n < 4 || is_last) {
                     if (do_h3) {
 #ifndef NDEBUG
                         if (util_dlevel == DBG)
@@ -483,14 +484,14 @@ int main(int argc, char * argv[])
                         for (uint16_t p = 0; p < v->len; p++)
                             if (v->buf[p] == '\n' || v->buf[p] == '\r')
                                 v->buf[p] = ' ';
-                        printf("%.*s", v->len, v->buf);
+                        printf("%.*s%s", v->len, v->buf, is_last ? "\n" : "");
+                        if (is_last)
+                            fflush(stdout);
                     }
                 } else
                     printf(".");
                 n++;
             }
-            if (do_h3 == false && w_iov_sq_cnt(&se->rep) <= 100 && reps == 1)
-                printf("\n");
             if (write_files)
                 close(fd);
 
