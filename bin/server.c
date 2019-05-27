@@ -150,10 +150,10 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
 #ifndef NDEBUG
         // randomize data
         struct w_iov * v = 0;
-        char c = 'A';
+        uint8_t c = 'A' + (uint8_t)w_rand_uniform(26);
         sq_foreach (v, &out, next) {
             memset(v->buf, c, v->len);
-            c = (char)(c == 'Z' ? 'A' : c + 1);
+            c = unlikely(c == 'Z') ? 'A' : c + 1;
         }
 
         // for the two "benchmark objects", reduce logging
