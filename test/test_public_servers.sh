@@ -56,7 +56,6 @@ if [ -n "$1" ]; then
     results+=(perf t_h2 t_hq)
     benchmarking=1
 fi
-declare -A ${results[@]}
 
 
 iface=$(route get default | grep interface: | cut -f2 -d: | tr -d "[:space:]")
@@ -120,6 +119,7 @@ function bench_server {
     local size=5000000
     local obj=$size
     local log_base="/tmp/$script.$pid.$1.bench"
+    local ret_base="/tmp/$script.$pid.$1.ret"
     local h2_out="$log_base.h2.out"
     local h2 ext prefix port host
     host=${info[0]}
@@ -132,13 +132,13 @@ function bench_server {
     [ "$s" = "ngx_quic" ] && obj=5MB.png
     [ "$s" = "lsquic" ] && host=http3check.net && prefix=test/
 
-    h2=$({ time -p curl -k -s -o "$h2_out" --max-time 30 --connect-timeout 2 \
+    h2=$({ time -p curl -k -s -o "$h2_out" --max-time 10 --connect-timeout 2 \
                  "https://$host:$port/$prefix$obj$ext"; } 2>&1)
     h2=$(echo "$h2" | fmt | cut -d' ' -f2)
     h2_size=$(stat -q "$h2_out" | cut -d' ' -f8)
     rm -f "$h2_out"
     if [ -n "$h2_size" ] && [ "$h2_size" -ge $size ]; then
-        t_h2[$1]=$h2
+        echo "$h2" > "$ret_base.t_h2"
 
         local cache="/tmp/$script.$pid.$1.cache"
         local opts="-i $iface -t3 -v0 -l /dev/null"
@@ -163,8 +163,8 @@ function bench_server {
         rm -rf "$hq_out" "$cache"
 
         if [ -n "$hq_size" ] && [ "$hq_size" -ge $size ]; then
-            t_hq[$1]=$hq
-            perf[$1]=$(perl -mList::Util=max -e "print 'T' if abs($hq - $h2) <= max($hq, $h2) * .1")
+            echo "$hq" > "$ret_base.t_hq"
+            perl -mList::Util=max -e "print 'T' if abs($hq - $h2) <= max($hq, $h2) * .1" > "$ret_base.perf"
         fi
     fi
 
