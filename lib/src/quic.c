@@ -845,7 +845,9 @@ struct q_conn * q_ready(const uint64_t timeout)
                           (double)timeout / MSECS_PER_SEC, 0);
             ev_timer_start(loop, &api_alarm);
         }
+#ifdef DEBUG_EXTRA
         warn(WRN, "waiting for conn to get ready");
+#endif
         loop_run(q_ready, 0, 0);
     }
 
@@ -853,14 +855,17 @@ struct q_conn * q_ready(const uint64_t timeout)
     if (c) {
         sl_remove_head(&c_ready, node_rx_ext);
         c->have_new_data = c->in_c_ready = false;
+#if !defined(NDEBUG) && defined(DEBUG_EXTRA)
         char * op = "rx";
         if (c->needs_accept)
             op = "accept";
         else if (c->state == conn_clsd)
             op = "close";
         warn(WRN, "%s conn %s ready to %s", conn_type(c), cid2str(c->scid), op);
-    } else
+    } else {
         warn(WRN, "no conn ready to rx");
+#endif
+    }
 
     return c;
 }
