@@ -79,36 +79,34 @@ export UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1
 function test_server {
     # run quant client and save a log for post-processing
     local opts="-i $iface -t3 -v5 -l /dev/null"
-    local log_base="/tmp/$script.$1.$pid"
+    local log_base="/tmp/$script.$pid.$1.log"
 
     IFS=':' read -ra info <<< "${servers[$1]}"
     # 0=name, 1=flags, 2=port, 3=retry-port, 4=h3-port, 5=URL
 
     # initial 1rtt run followed by consecutive rsmt/0rtt run
-    local cache="/tmp/$script.$1.$pid.cache"
+    local cache="/tmp/$script.$pid.$1.cache"
     bin/client $opts -s "$cache" ${info[1]} \
-        "https://${info[0]}:${info[2]}${info[5]}" \
-        > "$log_base.1rtt.log" 2>&1 ; \
+        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.1rtt" 2>&1 ; \
     bin/client $opts -s "$cache" ${info[1]} \
-        "https://${info[0]}:${info[2]}${info[5]}" \
-        > "$log_base.0rtt.log" 2>&1 ; \
+        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.0rtt" 2>&1 ; \
     [ -z "$benchmarking" ] && rm -f "$cache" &
 
     # rtry run
     bin/client $opts ${info[1]} -s /dev/null \
-        "https://${info[0]}:${info[3]}${info[5]}" > "$log_base.rtry.log" 2>&1 &
+        "https://${info[0]}:${info[3]}${info[5]}" > "$log_base.rtry" 2>&1 &
 
     # key update run
     bin/client $opts ${info[1]} -s /dev/null -u \
-        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.kyph.log" 2>&1 &
+        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.kyph" 2>&1 &
 
     # h3 run
     bin/client $opts ${info[1]} -s /dev/null -3 \
-        "https://${info[0]}:${info[4]}${info[5]}" > "$log_base.h3.log" 2>&1 &
+        "https://${info[0]}:${info[4]}${info[5]}" > "$log_base.h3" 2>&1 &
 
     # NAT rebinding run
     bin/client $opts ${info[1]} -s /dev/null -n \
-        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.nat.log" 2>&1 &
+        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.nat" 2>&1 &
 
     wait
     printf "%s " "$s"
@@ -121,7 +119,7 @@ function bench_server {
 
     local size=5000000
     local obj=$size
-    local log_base="/tmp/$script.$1.$pid.bench"
+    local log_base="/tmp/$script.$pid.$1.bench"
     local h2_out="$log_base.h2.out"
     local h2 ext prefix port host
     host=${info[0]}
@@ -142,7 +140,7 @@ function bench_server {
     if [ -n "$h2_size" ] && [ "$h2_size" -ge $size ]; then
         t_h2[$1]=$h2
 
-        local cache="/tmp/$script.$1.$pid.cache"
+        local cache="/tmp/$script.$pid.$1.cache"
         local opts="-i $iface -t3 -v0 -l /dev/null"
         local hq_out="$log_base.hq.out"
         local wd hq
@@ -180,7 +178,8 @@ function check_fail {
         return 0
     fi
 
-    fail[$1]="X"
+    local ret_base="/tmp/$script.$pid.$1.ret"
+    echo X > "$ret_base.fail"
     echo "Test with $1 failed (log $log):"
     tail -n 10 "$log"
     echo
@@ -189,130 +188,142 @@ function check_fail {
 
 
 function analyze {
+    local ret_base="/tmp/$script.$pid.$1.ret"
+    local log_base="/tmp/$script.$pid.$1.log"
     local sed_pattern='s,\x1B\[[0-9;]*[a-zA-Z],,g'
 
     # analyze 1rtt
-    local log="/tmp/$script.$1.$pid.1rtt.log"
-    check_fail "$1" "$log"
+    local log="$log_base.1rtt"
+    local log_strip="$log.strip"
+    gsed "$sed_pattern" "$log" > "$log_strip"
+    check_fail "$1" "$log_strip"
 
-    gsed "$sed_pattern" "$log" | grep -E -q 'RX.*len=' && live[$1]="*"
+    grep -E -q 'RX.*len=' "$log_strip" && echo \* > "$ret_base.live"
 
     perl -n -e 'BEGIN{$v=-1};
                 /0xbabababa, retrying with/ and $v=1;
                 /no vers in common/ and $v=0;
-                END{exit $v};' "$log"
-    local ret=$?
-    if [ $ret == 1 ]; then
-        vneg[$1]=V
-    elif [ $ret == 0 ]; then
-        vneg[$1]=v
+                END{exit $v};' "$log_strip"
+    local r=$?
+    if [ $r -eq 1 ]; then
+        echo V > "$ret_base.vneg"
+    elif [ $r -eq 0 ]; then
+        echo v > "$ret_base.vneg"
     fi
 
-    gsed "$sed_pattern" "$log" | \
-        perl -n -e '/TX.*Short kyph/ and $x=1;
-            /RX.*len=.*Short/ && $x && exit 1;'
-    [ $? == 1 ] && hshk[$1]=H
+    perl -n -e '/TX.*Short kyph/ and $x=1;
+        /RX.*len=.*Short/ && $x && exit 1;' "$log_strip"
+    [ $? -eq 1 ] && echo H > "$ret_base.hshk"
 
-    gsed "$sed_pattern" "$log" | \
-        perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $x=1 : next);
-            /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
-            $x && /enc_close.*err=0x0000/ && exit 1;'
-    [ $? == 1 ] && data[$1]=D
+    perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $x=1 : next);
+        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
+        $x && /enc_close.*err=0x0000/ && exit 1;' "$log_strip"
+    [ $? -eq 1 ] && echo D > "$ret_base.data"
 
-    gsed "$sed_pattern" "$log" | \
-        perl -n -e '/dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x++ : next);
-            /enc_close.*err=0x0000/ and $x++;
-            END{exit $x};'
-    local ret=$?
-    if [ $ret == 2 ]; then
-        clse[$1]=C
-    elif [ $ret == 1 ]; then
-        clse[$1]=C #c
+    perl -n -e 'BEGIN{$x=0};
+        /dec_close.*err=0x([^ ]*)/ and ($1 eq "0000" ? $x++ : next);
+        /enc_close.*err=0x0000/ and $x++;
+        END{exit $x};' "$log_strip"
+    local r=$?
+    if [ $r -ge 2 ]; then
+        echo C > "$ret_base.clse"
+    elif [ $r -eq 1 ]; then
+        echo C > "$ret_base.clse" # c
     fi
 
-    gsed "$sed_pattern" "$log" | \
-        perl -n -e '/dec_new_cid_frame.*NEW_CONNECTION_ID|preferred_address.*cid=1:/ and $n=1;
-            /migration to dcid/ && $n && exit 1;'
-    [ $? == 1 ] && migr[$1]=M
+    perl -n -e '/dec_new_cid_frame.*NEW_CONNECTION_ID|preferred_address.*cid=1:/ and $n=1;
+        /migration to dcid/ && $n && exit 1;' "$log_strip"
+    [ $? -eq 1 ] && echo M > "$ret_base.migr"
 
     # analyze spin
-    gsed "$sed_pattern" "$log" | \
-        perl -n -e '/TX.*spin=1/ and $n=1;
-            $n && /RX.*spin=1/ && exit 1;'
-    [ $? == 1 ] && spin[$1]=P
+    perl -n -e '/TX.*spin=1/ and $n=1;
+        $n && /RX.*spin=1/ && exit 1;' "$log_strip"
+    [ $? -eq 1 ] && echo P > "$ret_base.spin"
 
     # analyze ECN
-    gsed "$sed_pattern" "$log" | \
-        perl -n -e '/ECN verification failed/ and $n=-1;
-            $n==0 && /dec_ack_frame.*ECN ect0=/ && exit 1;'
-    [ $? == 1 ] && aecn[$1]=E
-    [ ${fail[$1]} ] || [ -z ${hshk[$1]} ] || [ -z ${data[$1]} ] \
-        || [ -z ${clse[$1]} ] || rm -f "$log"
+    perl -n -e '/ECN verification failed/ and $n=-1;
+        $n==0 && /dec_ack_frame.*ECN ect0=/ && exit 1;' "$log_strip"
+    [ $? -eq 1 ] && echo E > "$ret_base.aecn"
+    [ ! -s "$ret_base.fail" ] || [ ! -s "$ret_base.hshk" ] || \
+        [ ! -s "$ret_base.data" ] || [ ! -s "$ret_base.clse" ] || rm -f "$log"
+    rm -f "$log_strip"
 
     # analyze rsmt and 0rtt
-    local log="/tmp/$script.$1.$pid.0rtt.log"
-    check_fail "$1" "$log"
+    local log="$log_base.0rtt"
+    local log_strip="$log.strip"
+    gsed "$sed_pattern" "$log" > "$log_strip"
+    check_fail "$1" "$log_strip"
 
-    gsed "$sed_pattern" "$log" | \
-        perl -n -e '/new 0-RTT clnt conn/ and $x=1;
-            /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
-            $x && /enc_close.*err=0x0000/ && exit 1;'
-    [ $? == 1 ] && rsmt[$1]=R
+    perl -n -e '/new 0-RTT clnt conn/ and $x=1;
+        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
+        $x && /enc_close.*err=0x0000/ && exit 1;' "$log_strip"
+    [ $? -eq 1 ] && echo R > "$ret_base.rsmt"
 
-    gsed "$sed_pattern" "$log" | \
-        perl -n -e '/connected after 0-RTT/ and $x=1;
-            /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
-            $x && /enc_close.*err=0x0000/ && exit 1;'
-    [ $? == 1 ] && zrtt[$1]=Z
-    [ ${fail[$1]} ] || [ -z ${rsmt[$1]} ] || [ -z ${zrtt[$1]} ] || rm -f "$log"
+    perl -n -e '/connected after 0-RTT/ and $x=1;
+        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
+        $x && /enc_close.*err=0x0000/ && exit 1;' "$log_strip"
+    [ $? -eq 1 ] && echo Z > "$ret_base.zrtt"
+    [ ! -s "$ret_base.fail" ] || [ ! -s "$ret_base.rsmt" ] || \
+        [ ! -s "$ret_base.zrtt" ] || rm -f "$log"
+    rm -f "$log_strip"
 
     # analyze rtry
-    local log="/tmp/$script.$1.$pid.rtry.log"
-    check_fail "$1" "$log"
+    local log="$log_base.rtry"
+    local log_strip="$log.strip"
+    gsed "$sed_pattern" "$log" > "$log_strip"
+    check_fail "$1" "$log_strip"
 
-    gsed "$sed_pattern" "$log" | \
-        perl -n -e '/RX.*len=.*Retry/ and $x=1;
-            /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
-           $x && /enc_close.*err=0x0000/ && exit 1;'
-    [ $? == 1 ] && rtry[$1]=S
-    [ ${fail[$1]} ] || [ -z ${rtry[$1]} ] || rm -f "$log"
+    perl -n -e '/RX.*len=.*Retry/ and $x=1;
+        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
+       $x && /enc_close.*err=0x0000/ && exit 1;' "$log_strip"
+    [ $? -eq 1 ] && echo S > "$ret_base.rtry"
+    [ ! -s "$ret_base.fail" ] || [ ! -s "$ret_base.rtry" ] || rm -f "$log"
+    rm -f "$log_strip"
 
     # analyze key update
-    local log="/tmp/$script.$1.$pid.kyph.log"
-    check_fail "$1" "$log"
+    local log="$log_base.kyph"
+    local log_strip="$log.strip"
+    gsed "$sed_pattern" "$log" > "$log_strip"
+    check_fail "$1" "$log_strip"
 
-    gsed "$sed_pattern" "$log" | \
-        perl -n -e '/TX.*Short kyph=1/ and $x=1;
-            /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
-           $x && /RX.*Short kyph=1/ && exit 1;'
-    [ $? == 1 ] && kyph[$1]=U
-    [ ${fail[$1]} ] || [ -z ${kyph[$1]} ] || rm -f "$log"
+    perl -n -e '/TX.*Short kyph=1/ and $x=1;
+        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
+       $x && /RX.*Short kyph=1/ && exit 1;' "$log_strip"
+    [ $? -eq 1 ] && echo U > "$ret_base.kyph"
+    [ ! -s "$ret_base.fail" ] || [ ! -s "$ret_base.kyph" ] || rm -f "$log"
+    rm -f "$log_strip"
 
     # analyze h3
-    local log="/tmp/$script.$1.$pid.h3.log"
-    check_fail "$1" "$log"
+    local log="$log_base.h3"
+    local log_strip="$log.strip"
+    gsed "$sed_pattern" "$log" > "$log_strip"
+    check_fail "$1" "$log_strip"
 
-    gsed "$sed_pattern" "$log" | \
-        perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $x=1 : next);
-            /no h3 payload/ and $x=0;
-            /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
-            $x && /enc_close.*err=0x0000/ && exit 1;'
-    [ $? == 1 ] && http[$1]=3
-    [ ${fail[$1]} ] || [ -z ${http[$1]} ] || rm -f "$log"
+    perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $x=1 : next);
+        /no h3 payload/ and $x=0;
+        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
+        $x && /enc_close.*err=0x0000/ && exit 1;' "$log_strip"
+    [ $? -eq 1 ] && echo 3 > "$ret_base.http"
+    [ ! -s "$ret_base.fail" ] || [ ! -s "$ret_base.http" ] || rm -f "$log"
+    rm -f "$log_strip"
 
     # analyze NAT rebind
-    local log="/tmp/$script.$1.$pid.nat.log"
-    check_fail "$1" "$log"
+    local log="$log_base.nat"
+    local log_strip="$log.strip"
+    gsed "$sed_pattern" "$log" > "$log_strip"
+    check_fail "$1" "$log_strip"
 
-    gsed "$sed_pattern" "$log" | \
-        perl -n -e '/NAT rebinding/ and $x=1;
-            /dec_path.*PATH_CHALLENGE/ and $x==1 and $x=2;
-            /enc_path.*PATH_RESPONSE/ and $x==2 and $x=3;
-            /read (.*) bytes.*on clnt conn/ and $x==3 and ($1 > 0 ? $x=4 : next);
-            /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
-            $x==4 && /enc_close.*err=0x0000/ && exit 1;'
-    [ $? == 1 ] && bind[$1]=B
-    [ ${fail[$1]} ] || [ -z ${bind[$1]} ] || rm -f "$log"
+    perl -n -e '/NAT rebinding/ and $x=1;
+        /dec_path.*PATH_CHALLENGE/ and $x==1 and $x=2;
+        /enc_path.*PATH_RESPONSE/ and $x==2 and $x=3;
+        /read (.*) bytes.*on clnt conn/ and $x==3 and ($1 > 0 ? $x=4 : next);
+        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
+        $x==4 && /enc_close.*err=0x0000/ && exit 1;' "$log_strip"
+    [ $? -eq 1 ] && echo B > "$ret_base.bind"
+    [ ! -s "$ret_base.fail" ] || [ ! -s "$ret_base.bind" ] || rm -f "$log"
+    rm -f "$log_strip"
+
+    printf "%s " "$s"
 }
 
 
@@ -328,6 +339,13 @@ if [ -n "$benchmarking" ]; then
         bench_server "$s"
     done
 fi
+
+printf "\\nAnalyzing: "
+for s in "${!servers[@]}"; do
+    analyze "$s" &
+done
+wait
+
 printf "\\n\\n"
 
 tmp=$(mktemp)
@@ -338,18 +356,25 @@ done
 printf "\\n" >> "$tmp"
 
 mapfile -d '' sorted < <(printf '%s\0' "${!servers[@]}" | sort -z)
+ret_base="/tmp/$script.$pid"
 for s in "${sorted[@]}"; do
     printf "%-8s\\t" "$s" >> "$tmp"
-    analyze "$s"
     for r in "${results[@]}"; do
-        v=$r[$s]
-        printf "%s\\t" "${!v}" >> "$tmp"
+        ret=$ret_base.$s.ret.$r
+        if [ -s "$ret" ]; then
+            v=$(cat "$ret")
+        else
+            v=""
+        fi
+        rm -f "$ret"
+        printf "%s\\t" "$v" >> "$tmp"
     done
     printf "\\n" >> "$tmp"
 done
 
 expand -t 5 "$tmp" | sponge "$tmp"
-cat "$tmp"
-# [ -n "$benchmarking" ] || \
-    wdiff -n "$(dirname $0)/$script.result" "$tmp" | $colordiff
+if ! diff -wq "$(dirname $0)/$script.result" "$tmp" > /dev/null; then
+    cat "$tmp"
+fi
+wdiff -n "$(dirname $0)/$script.result" "$tmp" | $colordiff
 rm -f "$tmp"
