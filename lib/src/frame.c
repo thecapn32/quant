@@ -654,12 +654,14 @@ dec_close_frame(const uint8_t type,
              type, err_code ? RED : NRM, err_code, reas_len,
              err_code ? RED : NRM, (int)reas_len, reas_phr);
 
-    if (c->state == conn_drng || (c->is_clnt && c->state == conn_clsg))
+    if (c->state == conn_drng)
         ev_feed_event(loop, &c->closing_alarm, 0);
     else {
-        if (c->state == conn_clsg)
+        if (c->is_clnt) {
             conn_to_state(c, conn_drng);
-        enter_closing(c);
+            ev_feed_event(loop, &c->closing_alarm, 0);
+        } else
+            enter_closing(c);
     }
 
     return true;
