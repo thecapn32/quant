@@ -326,6 +326,10 @@ int main(int argc, char * argv[])
                 d.s = s;
                 struct w_iov * v = 0;
                 sq_foreach (v, &q, next) {
+                    if (v->len == 0)
+                        // skip empty bufs (such as pure FINs)
+                        continue;
+
                     const size_t parsed = http_parser_execute(
                         &parser, &settings, (char *)v->buf, v->len);
                     if (parsed != v->len) {
