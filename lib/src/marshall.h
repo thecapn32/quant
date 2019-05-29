@@ -59,21 +59,23 @@
 #define VARINT_MASK2 UINT64_C(0x0000000000003fc0)
 
 
-// Computes number of bytes need to enccode @p v in QUIC varint encoding.
+/// Computes number of bytes need to enccode @p v in QUIC varint encoding.
 ///
-/// @param[in]  v     Value to check.
+/// @param[in]  val   Value to check.
 ///
 /// @return     Number of bytes needed in varint encoding (1, 2, 4 or 8).
 ///
-static inline uint8_t __attribute__((const)) varint_size(const uint64_t v)
+static inline uint8_t __attribute__((const)) varint_size(const uint64_t val)
 {
-    if (v <= VARINT1_MAX)
-        return 1;
-    if (v <= VARINT2_MAX)
-        return 2;
-    if (v <= VARINT4_MAX)
+    ensure((val & VARINT_MASK) == 0, "value overflow: %" PRIu64, val);
+
+    if ((val & VARINT_MASK8) != 0)
+        return 8;
+    if ((val & VARINT_MASK4) != 0)
         return 4;
-    return 8;
+    if ((val & VARINT_MASK2) != 0)
+        return 2;
+    return 1;
 }
 
 
