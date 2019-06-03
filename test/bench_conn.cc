@@ -81,9 +81,9 @@ static inline uint64_t io(const uint64_t len)
     struct q_stream * const ss = q_read(sc, &i, true);
     if (likely(ss)) {
         q_read_stream(ss, &i, true);
-        q_close_stream(ss);
+        q_free_stream(ss);
     }
-    q_close_stream(cs);
+    q_free_stream(cs);
 
     const uint64_t ilen = w_iov_sq_len(&i);
     q_free(&i);

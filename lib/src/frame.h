@@ -120,12 +120,19 @@ extern void __attribute__((nonnull)) enc_ack_frame(uint8_t ** pos,
                                                    struct pn_space * const pn);
 
 extern void __attribute__((nonnull))
+calc_lens_of_stream_or_crypto_frame(const struct pkt_meta * const m,
+                                    const struct w_iov * const v,
+                                    const struct q_stream * const s,
+                                    uint16_t * const hlen,
+                                    uint16_t * const dlen);
+
+extern void __attribute__((nonnull))
 enc_stream_or_crypto_frame(uint8_t ** pos,
                            const uint8_t * const end,
                            struct pkt_meta * const m,
                            struct w_iov * const v,
                            struct q_stream * const s,
-                           const bool enc_strm);
+                           const uint16_t dlen);
 
 extern void __attribute__((nonnull)) enc_close_frame(uint8_t ** pos,
                                                      const uint8_t * const end,

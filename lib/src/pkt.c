@@ -377,7 +377,7 @@ bool enc_pkt(struct q_stream * const s,
 
     uint8_t * pos = v->buf;
     const uint8_t * const end =
-        v->buf + (enc_data ? m->stream_data_start : v->len);
+        v->buf + (enc_data ? m->stream_data_pos : v->len);
     enc1(&pos, end, m->hdr.flags);
 
     if (unlikely(is_lh(m->hdr.flags))) {
@@ -458,16 +458,21 @@ bool enc_pkt(struct q_stream * const s,
         // this is a RTX, pad out until beginning of stream header
         enc_padding_frame(&pos, end, m,
                           m->stream_header_pos - (uint16_t)(pos - v->buf));
-        pos = v->buf + m->stream_data_start + m->stream_data_len;
+        pos = v->buf + m->stream_data_pos + m->stream_data_len;
         log_stream_or_crypto_frame(true, m, v->buf[m->stream_header_pos], s->id,
                                    false, "");
 
     } else if (likely(enc_data)) {
         // this is a fresh data/crypto or pure stream FIN packet
-        // pad out until stream_data_start and add a stream frame header
+        uint16_t hlen;
+        uint16_t dlen;
+        calc_lens_of_stream_or_crypto_frame(m, v, s, &hlen, &dlen);
+        ensure(pos + hlen < v->buf + m->stream_data_pos,
+               "would overwrite previous frame at pos %lu", pos - v->buf);
+        // pad out any remaining space before stream header
         enc_padding_frame(&pos, end, m,
-                          m->stream_data_start - (uint16_t)(pos - v->buf));
-        enc_stream_or_crypto_frame(&pos, end, m, v, s, s->id >= 0);
+                          m->stream_data_pos - hlen - (uint16_t)(pos - v->buf));
+        enc_stream_or_crypto_frame(&pos, end, m, v, s, dlen);
     }
 
     if (unlikely((pos - v->buf) < MAX_PKT_LEN - AEAD_LEN && (enc_data || rtx) &&
@@ -546,7 +551,7 @@ tx:;
 
     if (unlikely(m->hdr.type == LH_INIT && c->is_clnt && m->stream_data_len))
         // adjust v->len to exclude the post-stream padding for CI
-        v->len = m->stream_data_start + m->stream_data_len;
+        v->len = m->stream_data_pos + m->stream_data_len;
 
     if (likely(enc_data)) {
         adj_iov_to_data(v, m);
@@ -555,9 +560,11 @@ tx:;
         v->len = m->stream_data_len;
     }
 
-    if (unlikely(rtx))
+    if (unlikely(rtx && m->lost)) {
         // we did an RTX and this is no longer lost
         m->lost = false;
+        m->stream->lost_cnt--;
+    }
 
     on_pkt_sent(m);
     bit_or(FRM_MAX, &pn->tx_frames, &m->frames);

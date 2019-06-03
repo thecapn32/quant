@@ -300,7 +300,7 @@ rtx_pkt(struct w_iov * const v, struct pkt_meta * const m)
         return;
 
     // on RTX, remember orig pkt meta data
-    const uint16_t data_start = m->stream_data_start;
+    const uint16_t data_start = m->stream_data_pos;
     struct pkt_meta * m_orig;
     struct w_iov * const v_orig = alloc_iov(c->w, 0, data_start, &m_orig);
     pm_cpy(m_orig, m, true);
@@ -450,14 +450,15 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
 #ifdef DEBUG_STREAMS
     warn(ERR,
          "%s strm id=" FMT_SID ", cnt=%" PRIu64
-         ", has_data=%u, needs_ctrl=%u, blocked=%u, fully_acked=%u, "
+         ", has_data=%u, needs_ctrl=%u, blocked=%u, lost_cnt=%" PRIu64
+         ", fully_acked=%u, "
          "limit=%u",
          conn_type(c), s->id, sq_len(&s->out), has_data, needs_ctrl(s),
-         s->blocked, out_fully_acked(s), limit);
+         s->blocked, s->lost_cnt, out_fully_acked(s), limit);
 #endif
 
     // check if we should skip TX on this stream
-    if (has_data == false || s->blocked ||
+    if (has_data == false || (s->blocked && s->lost_cnt == 0) ||
         // unless for 0-RTT, is this a regular stream during conn open?
         unlikely(c->try_0rtt == false && s->id >= 0 && c->state != conn_estb)) {
 #ifdef DEBUG_STREAMS
@@ -482,14 +483,14 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
         }
 
         if (unlikely(m->acked)) {
-#ifdef DEBUG_STREAMS
+#ifdef DEBUG_EXTRA
             warn(INF, "skip ACK'ed pkt " FMT_PNR_OUT, m->hdr.nr);
 #endif
             continue;
         }
 
         if (limit == 0 && m->txed && m->lost == false) {
-#ifdef DEBUG_STREAMS
+#ifdef DEBUG_EXTRA
             warn(INF, "skip non-lost TX'ed pkt " FMT_PNR_OUT, m->hdr.nr);
 #endif
             continue;
@@ -577,12 +578,6 @@ void tx(struct ev_loop * const l __attribute__((unused)),
 
     struct q_stream * s;
     kh_foreach_value(c->streams_by_id, s, {
-        if (unlikely(s->blocked)) {
-            // since stream is blocked, need to do stream ctrl via ACK
-            need_ctrl_update(s);
-            tx_ack(c, strm_epoch(s), false);
-            goto done;
-        }
         if (tx_stream(s, limit) == false)
             break;
     });
@@ -902,7 +897,9 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
             }
         }
 
-        // warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
+#ifdef DEBUG_EXTRA
+        warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
+#endif
         if (dec_frames(c, &v, &m) == false)
             goto done;
 

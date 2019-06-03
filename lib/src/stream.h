@@ -76,6 +76,7 @@ struct q_stream {
     uint64_t in_data;         ///< In-order stream data received (total).
     uint64_t in_data_off;     ///< Next in-order stream data offset expected.
 
+    uint64_t lost_cnt;  ///< Number of pkts in out that are marked lost.
     strm_state_t state; ///< Stream state.
 
     uint8_t in_ctrl : 1; ///< Stream is in connections "needs ctrl" list.
@@ -86,7 +87,7 @@ struct q_stream {
 };
 
 
-#if !defined(NDEBUG) && defined(DEBUG_EXTRA) && !defined(FUZZING)
+#if !defined(NDEBUG) && defined(DEBUG_STREAM) && !defined(FUZZING)
 #define strm_to_state(s, new_state)                                            \
     do {                                                                       \
         if ((s)->id >= 0) {                                                    \

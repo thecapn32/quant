@@ -1074,13 +1074,14 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
     const int ret =
         ptls_handle_message(c->tls.t, &tls_io, epoch_off, ep_in,
                             iv ? iv->buf : 0, in_len, &c->tls.tls_hshk_prop);
-    // warn(DBG,
-    //      "epoch %u, in %d (off %" PRIu64
-    //      "), gen %lu (%lu-%lu-%lu-%lu-%lu), ret %d, left %lu",
-    //      ep_in, iv ? iv->len : 0, iv ? meta(iv).stream_off : 0,
-    //      tls_io.off, epoch_off[0], epoch_off[1], epoch_off[2],
-    //      epoch_off[3], epoch_off[4], ret, iv ? iv->len - in_len : 0);
-
+#ifdef DEBUG_PROT
+    warn(DBG,
+         "epoch %u, in %d (off %" PRIu64
+         "), gen %lu (%lu-%lu-%lu-%lu-%lu), ret %d, left %lu",
+         ep_in, iv ? iv->len : 0, iv ? meta(iv).stream_off : 0, tls_io.off,
+         epoch_off[0], epoch_off[1], epoch_off[2], epoch_off[3], epoch_off[4],
+         ret, iv ? iv->len - in_len : 0);
+#endif
     if (ret == 0 && c->state != conn_estb) {
         if (ptls_is_psk_handshake(c->tls.t) && c->is_clnt)
             c->did_0rtt = c->try_0rtt &&
@@ -1102,7 +1103,9 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
         const size_t out_len = epoch_off[e + 1] - epoch_off[e];
         if (out_len == 0)
             continue;
-        // warn(DBG, "epoch %u: off %lu len %lu", e, epoch_off[e], out_len);
+#ifdef DEBUG_PROT
+        warn(DBG, "epoch %u: off %lu len %lu", e, epoch_off[e], out_len);
+#endif
         struct w_iov_sq o = w_iov_sq_initializer(o);
         alloc_off(w_engine(c->sock), &o, (uint32_t)out_len,
                   DATA_OFFSET + c->tok_len);
@@ -1233,7 +1236,9 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
                                  const size_t epoch,
                                  const void * const secret)
 {
-    // warn(CRT, "update_traffic_key %s %u", is_enc ? "tx" : "rx", epoch);
+#ifdef DEBUG_PROT
+    warn(CRT, "update_traffic_key %s %u", is_enc ? "tx" : "rx", epoch);
+#endif
     struct q_conn * const c = *ptls_get_data_ptr(tls);
     ptls_cipher_suite_t * const cipher = ptls_get_cipher(c->tls.t);
     struct pn_space * const pn = pn_for_epoch(c, (epoch_t)epoch);
@@ -1479,9 +1484,10 @@ void flip_keys(struct q_conn * const c, const bool out)
 {
     struct pn_data * const pnd = &c->pns[pn_data].data;
     const bool new_kyph = !(out ? pnd->out_kyph : pnd->in_kyph);
-    // warn(DBG, "flip %s kyph %u -> %u", out ? "out" : "in",
-    //      out ? pnd->out_kyph : pnd->in_kyph, new_kyph);
-
+#ifdef DEBUG_PROT
+    warn(DBG, "flip %s kyph %u -> %u", out ? "out" : "in",
+         out ? pnd->out_kyph : pnd->in_kyph, new_kyph);
+#endif
     const ptls_cipher_suite_t * const cs = ptls_get_cipher(c->tls.t);
     if (unlikely(cs == 0)) {
         warn(ERR, "cannot obtain cipher suite");

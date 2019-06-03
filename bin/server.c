@@ -49,6 +49,14 @@
 struct q_conn;
 
 
+#ifndef NDEBUG
+static bool __attribute__((const)) is_bench_obj(const uint64_t len)
+{
+    return len == 5000000 || len == 10000000;
+}
+#endif
+
+
 static void __attribute__((noreturn)) usage(const char * const name,
                                             const char * const ifname,
                                             const uint16_t port,
@@ -83,6 +91,7 @@ struct cb_data {
     struct q_conn * c;
     struct w_engine * w;
     int dir;
+    // short dlevel;
     uint32_t _dummy;
 };
 
@@ -117,6 +126,11 @@ static bool send_err(const struct cb_data * const d, const uint16_t code)
         q_write_str(d->w, d->s, msg, strlen(msg), true);
     return close;
 }
+
+
+#ifndef NDEBUG
+static uint64_t bench_cnt = 0;
+#endif
 
 
 static int serve_cb(http_parser * parser, const char * at, size_t len)
@@ -157,20 +171,14 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
         }
 
         // for the two "benchmark objects", reduce logging
-        const short orig_dlevel = util_dlevel;
-        if (n == 5000000 || n == 10000000) {
+        if (is_bench_obj(n)) {
             warn(NTE, "reducing log level for benchmark object transfer");
             util_dlevel = WRN;
+            bench_cnt++;
         }
 #endif
 
         q_write(d->s, &out, true);
-        q_free(&out);
-
-#ifndef NDEBUG
-        if (n == 5000000 || n == 10000000)
-            util_dlevel = orig_dlevel;
-#endif
 
         return 0;
     }
@@ -207,7 +215,8 @@ int main(int argc, char * argv[])
 {
     uint64_t timeout = 10;
 #ifndef NDEBUG
-    util_dlevel = DLEVEL; // default to maximum compiled-in verbosity
+    short ini_dlevel = util_dlevel =
+        DLEVEL; // default to maximum compiled-in verbosity
 #endif
     char ifname[IFNAMSIZ] = "lo"
 #ifndef __linux__
@@ -251,7 +260,8 @@ int main(int argc, char * argv[])
             break;
         case 'v':
 #ifndef NDEBUG
-            util_dlevel = (short)MIN(DLEVEL, strtoul(optarg, 0, 10));
+            ini_dlevel = util_dlevel =
+                (short)MIN(DLEVEL, strtoul(optarg, 0, 10));
 #endif
             break;
         case 'h':
@@ -291,7 +301,7 @@ int main(int argc, char * argv[])
     while (bound) {
         struct q_conn * c = q_ready(first_conn ? 0 : timeout * 1000);
         if (c == 0)
-            break;
+            continue;
         first_conn = false;
 
         // do we need to q_accept?
@@ -314,9 +324,26 @@ int main(int argc, char * argv[])
             struct w_iov_sq q = w_iov_sq_initializer(q);
             struct q_stream * s = q_read(c, &q, false);
 
-            if (sq_empty(&q))
-                // no more streams with pending reqs, try next conn
-                break;
+            if (sq_empty(&q)) {
+                if (s && q_is_stream_closed(s)) {
+                    // retrieve the TX'ed request
+                    q_stream_get_written(s, &q);
+#ifndef NDEBUG
+                    // if we wrote a "benchmark objects", increase logging
+                    const uint64_t len = w_iov_sq_len(&q);
+                    if (is_bench_obj(len) && --bench_cnt == 0) {
+                        util_dlevel = ini_dlevel;
+                        warn(NTE, "increasing log level after benchmark object "
+                                  "transfer");
+                    }
+#endif
+                    q_free_stream(s);
+                    q_free(&q);
+                    continue;
+                } else
+                    // no more streams with pending reqs, try next conn
+                    break;
+            }
 
             if (q_is_uni_stream(s)) {
                 warn(NTE, "can't serve request on uni stream: %.*s",
@@ -332,27 +359,22 @@ int main(int argc, char * argv[])
 
                     const size_t parsed = http_parser_execute(
                         &parser, &settings, (char *)v->buf, v->len);
-                    if (parsed != v->len) {
-                        warn(ERR, "HTTP parser error: %.*s",
-                             (int)(v->len - parsed), &v->buf[parsed]);
-                        // XXX the strnlen() test is super-hacky
-                        if (strnlen((char *)v->buf, v->len) == v->len)
-                            send_err(&d, 400);
-                        else
-                            send_err(&d, 505);
-                        ret = 1;
-                        q_free(&q);
-                        goto err;
-                    }
-                    if (q_is_stream_closed(s)) {
-                        q_free_stream(s);
-                        break;
-                    }
+                    if (parsed == v->len)
+                        continue;
+
+                    warn(ERR, "HTTP parser error: %.*s", (int)(v->len - parsed),
+                         &v->buf[parsed]);
+                    // XXX the strnlen() test is super-hacky
+                    if (strnlen((char *)v->buf, v->len) == v->len)
+                        send_err(&d, 400);
+                    else
+                        send_err(&d, 505);
+                    ret = 1;
+                    break;
                 }
             }
             q_free(&q);
         }
-    err:;
     }
 
     q_cleanup(w);

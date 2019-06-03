@@ -281,6 +281,8 @@ void on_pkt_lost(struct pkt_meta * const m)
 
     diet_insert(&pn->lost, m->hdr.nr, (ev_tstamp)NAN);
     m->lost = true;
+    if (m->stream)
+        m->stream->lost_cnt++;
     pm_by_nr_del(pn->sent_pkts, m);
 }
 
@@ -634,10 +636,6 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
 
     struct q_stream * const s = m->stream;
     if (s && m->has_rtx == false) {
-        if (unlikely(m->is_fin))
-            // this ACKs a FIN
-            maybe_api_return(q_close_stream, c, s);
-
         // if this ACKs its stream's out_una, move that forward
         struct w_iov * tmp;
         sq_foreach_from_safe (s->out_una, &s->out, next, tmp) {
@@ -652,8 +650,11 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
         }
 
         if (s->id >= 0 && s->out_una == 0) {
-            // a q_write may be done
-            maybe_api_return(q_write, c, s);
+            if (unlikely(m->is_fin || c->did_0rtt)) {
+                // this ACKs a FIN
+                c->have_new_data = true;
+                strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
+            }
             if (c->did_0rtt)
                 maybe_api_return(q_connect, c, 0);
         }

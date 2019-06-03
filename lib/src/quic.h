@@ -156,7 +156,7 @@ struct pkt_meta {
     struct q_stream * stream;   ///< Stream this data was written on.
     uint64_t stream_off;        ///< Stream data offset.
     uint16_t stream_header_pos; ///< Offset of stream frame header.
-    uint16_t stream_data_start; ///< Offset of first byte of stream frame data.
+    uint16_t stream_data_pos;   ///< Offset of first byte of stream frame data.
     uint16_t stream_data_len;   ///< Length of last stream frame data.
 
     uint16_t ack_block_pos; ///< Offset of first ACK block (for TX'ed pkt).
@@ -400,16 +400,16 @@ ooo_by_off_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
 static inline void __attribute__((nonnull))
 adj_iov_to_start(struct w_iov * const v, const struct pkt_meta * const m)
 {
-    v->buf -= m->stream_data_start;
-    v->len += m->stream_data_start;
+    v->buf -= m->stream_data_pos;
+    v->len += m->stream_data_pos;
 }
 
 
 static inline void __attribute__((nonnull))
 adj_iov_to_data(struct w_iov * const v, const struct pkt_meta * const m)
 {
-    v->buf += m->stream_data_start;
-    v->len -= m->stream_data_start;
+    v->buf += m->stream_data_pos;
+    v->len -= m->stream_data_pos;
 }
 
 

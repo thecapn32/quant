@@ -87,6 +87,7 @@ struct stream_entry {
     const char * url;
     struct timespec req_t;
     struct timespec rep_t;
+    struct w_iov_sq req;
     struct w_iov_sq rep;
 };
 
@@ -199,10 +200,10 @@ get(const char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
     sq_init(&se->rep);
     sl_insert_head(&sl, se, next);
 
-    struct w_iov_sq req = w_iov_sq_initializer(req);
+    sq_init(&se->req);
     if (do_h3) {
-        q_alloc(w, &req, 1024);
-        struct w_iov * const v = sq_first(&req);
+        q_alloc(w, &se->req, 1024);
+        struct w_iov * const v = sq_first(&se->req);
         size_t consumed;
         h3zero_client_create_stream_request(v->buf, v->len, (uint8_t *)path,
                                             strlen(path), &consumed, dest);
@@ -212,7 +213,7 @@ get(const char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
         char req_str[MAXPATHLEN + 6];
         const int req_str_len =
             snprintf(req_str, sizeof(req_str), "GET %s\r\n", path);
-        q_chunk_str(w, req_str, (uint32_t)req_str_len, &req);
+        q_chunk_str(w, req_str, (uint32_t)req_str_len, &se->req);
     }
 
     // do we have a connection open to this peer?
@@ -224,7 +225,7 @@ get(const char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
         clock_gettime(CLOCK_MONOTONIC, &se->req_t);
         // no, open a new connection
         struct q_conn * const c = q_connect(
-            w, peer->ai_addr, dest, rebind ? 0 : &req, rebind ? 0 : &se->s,
+            w, peer->ai_addr, dest, rebind ? 0 : &se->req, rebind ? 0 : &se->s,
             true,
             &(struct q_conn_conf){.alpn = do_h3 ? "h3-" DRAFT_VERSION_STRING
                                                 : "hq-" DRAFT_VERSION_STRING,
@@ -265,7 +266,7 @@ get(const char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
         se->s = q_rsv_stream(cce->c, true);
         if (se->s) {
             clock_gettime(CLOCK_MONOTONIC, &se->req_t);
-            q_write(se->s, &req, true);
+            q_write(se->s, &se->req, true);
             if (rebind && cce->rebound == false) {
                 q_rebind_sock(cce->c, migrate);
                 cce->rebound = true; // only rebind once
@@ -290,6 +291,7 @@ static void __attribute__((nonnull)) free_cc(khash_t(conn_cache) * cc)
 
 static void free_se(struct stream_entry * const se)
 {
+    q_free(&se->req);
     q_free(&se->rep);
     free(se);
 }
@@ -444,6 +446,9 @@ int main(int argc, char * argv[])
                        elapsed, bps(w_iov_sq_len(&se->rep), elapsed), se->url);
 #endif
 
+            // retrieve the TX'ed request
+            q_stream_get_written(se->s, &se->req);
+
             char * const slash = strrchr(se->url, '/');
             if (slash && *(slash + 1) == 0)
                 // this URL ends in a slash, so strip that to name the file
@@ -495,6 +500,7 @@ int main(int argc, char * argv[])
             if (write_files)
                 close(fd);
 
+            q_free_stream(se->s);
             free_sl_head();
         }
     }

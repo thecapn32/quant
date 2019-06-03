@@ -141,7 +141,7 @@ void alloc_off(struct w_engine * const w,
     sq_foreach (v, q, next) {
         struct pkt_meta * const m = &meta(v);
         ASAN_UNPOISON_MEMORY_REGION(m, sizeof(*m));
-        m->stream_data_start = off;
+        m->stream_data_pos = off;
 
 #ifdef DEBUG_BUFFERS
         warn(DBG, "idx %u (avail %" PRIu64 ") len %u", w_iov_idx(v),
@@ -212,7 +212,7 @@ struct w_iov * alloc_iov(struct w_engine * const w,
     ensure(v, "w_alloc_iov failed");
     *m = &meta(v);
     ASAN_UNPOISON_MEMORY_REGION(*m, sizeof(**m));
-    (*m)->stream_data_start = off;
+    (*m)->stream_data_pos = off;
 
 #ifdef DEBUG_BUFFERS
     warn(DBG, "alloc_iov idx %u (avail %" PRIu64 ") len %u off %u",
@@ -362,8 +362,19 @@ bool q_write(struct q_stream * const s,
         return false;
     }
 
-    if (unlikely(sq_empty(q)))
+    if (unlikely(s->state == strm_hclo || s->state == strm_clsd)) {
+        warn(ERR, "%s conn %s strm " FMT_SID " is in state %s, can't write",
+             conn_type(c), cid2str(c->scid), s->id, strm_state_str[s->state]);
         return false;
+    }
+
+    // add to stream
+    if (fin) {
+        if (sq_empty(q))
+            alloc_off(c->w, q, 1, DATA_OFFSET);
+        mark_fin(q);
+        // strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
+    }
 
 #ifndef NDEBUG
     const uint64_t qlen = w_iov_sq_len(q);
@@ -375,11 +386,6 @@ bool q_write(struct q_stream * const s,
          conn_type(c), cid2str(c->scid), s->id);
 #endif
 
-    // add to stream
-    if (fin) {
-        mark_fin(q);
-        strm_to_state(s, strm_hclo);
-    }
     concat_out(s, q);
 
     // kick TX watcher
@@ -394,7 +400,7 @@ q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool all)
     struct q_stream * s = 0;
     do {
         kh_foreach_value(c->streams_by_id, s, {
-            if (!sq_empty(&s->in) && s->state != strm_clsd)
+            if (!sq_empty(&s->in) || s->state == strm_clsd)
                 // we found a stream with queued data
                 break;
         });
@@ -407,7 +413,7 @@ q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool all)
         }
     } while (s == 0 && all);
 
-    if (s)
+    if (s && s->state != strm_clsd)
         q_read_stream(s, q, false);
 
     return s;
@@ -473,7 +479,9 @@ cancel_api_call(struct ev_loop * const l __attribute__((unused)),
                 ev_timer * const w __attribute__((unused)),
                 int e __attribute__((unused)))
 {
+#ifdef DEBUG_EXTRA
     warn(DBG, "canceling API call");
+#endif
     ev_timer_stop(loop, &api_alarm);
     maybe_api_return(q_accept, 0, 0);
     maybe_api_return(q_ready, 0, 0);
@@ -654,33 +662,32 @@ struct w_engine * q_init(const char * const ifname,
 
 void q_close_stream(struct q_stream * const s)
 {
-    if (s->state != strm_clsd && s->c->state != conn_clsd) {
-        struct q_conn * const c = s->c;
-        warn(WRN, "closing strm " FMT_SID " on %s conn %s", s->id, conn_type(c),
-             cid2str(c->scid));
-
-        if (sq_empty(&s->out)) {
-            struct w_iov_sq q = w_iov_sq_initializer(q);
-            alloc_off(c->w, &q, 1, DATA_OFFSET);
-            struct w_iov * const last = sq_last(&q, w_iov, next);
-            ensure(last, "got last buffer");
-            last->len = 0;
-            concat_out(s, &q);
-        }
-        mark_fin(&s->out);
-        s->state = (s->state == strm_hcrm ? strm_clsd : strm_hclo);
-
-        ev_feed_event(loop, &c->tx_w, 0);
-        loop_run(q_close_stream, c, s);
-    }
-
-    free_stream(s);
+    warn(WRN, "closing strm " FMT_SID " on %s conn %s", s->id, conn_type(s->c),
+         cid2str(s->c->scid));
+    struct w_iov_sq q = w_iov_sq_initializer(q);
+    q_write(s, &q, true);
 }
 
 
 void q_free_stream(struct q_stream * const s)
 {
     free_stream(s);
+}
+
+
+void q_stream_get_written(struct q_stream * const s, struct w_iov_sq * const q)
+{
+    if (s->out_una == 0) {
+        sq_concat(q, &s->out);
+        return;
+    }
+
+    struct w_iov * v = sq_first(&s->out);
+    while (v != s->out_una) {
+        sq_remove_head(&s->out, next);
+        sq_insert_tail(q, v, next);
+        v = sq_first(&s->out);
+    }
 }
 
 

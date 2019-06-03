@@ -184,11 +184,13 @@ void track_bytes_out(struct q_stream * const s, const uint64_t n)
 
 void reset_stream(struct q_stream * const s, const bool forget)
 {
-    // warn(DBG, "reset strm %u " FMT_SID " on %s conn %s", forget, s->id,
-    //      conn_type(s->c), cid2str(s->c->scid));
+#ifdef DEBUG_STREAM
+    warn(DBG, "reset strm %u " FMT_SID " on %s conn %s", forget, s->id,
+         conn_type(s->c), cid2str(s->c->scid));
+#endif
 
-    // reset stream offsets
-    s->in_data_off = s->in_data = s->out_data = 0;
+    // reset stream offsets and other data
+    s->lost_cnt = s->in_data_off = s->in_data = s->out_data = 0;
 
     if (forget) {
         s->out_una = 0;
@@ -208,12 +210,12 @@ void reset_stream(struct q_stream * const s, const bool forget)
         // TODO: redo this with offsetof magic
         const bool fin = m->is_fin;
         const uint16_t shp = m->stream_header_pos;
-        const uint16_t sds = m->stream_data_start;
+        const uint16_t sds = m->stream_data_pos;
         const uint16_t sdl = m->stream_data_len;
         memset(m, 0, sizeof(*m));
         m->is_fin = fin;
         m->stream_header_pos = shp;
-        m->stream_data_start = sds;
+        m->stream_data_pos = sds;
         m->stream_data_len = sdl;
     }
 }

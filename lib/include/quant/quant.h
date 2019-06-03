@@ -122,6 +122,9 @@ extern void __attribute__((nonnull)) q_close_stream(struct q_stream * const s);
 extern void __attribute__((nonnull)) q_free_stream(struct q_stream * const s);
 
 extern void __attribute__((nonnull))
+q_stream_get_written(struct q_stream * const s, struct w_iov_sq * const q);
+
+extern void __attribute__((nonnull))
 q_alloc(struct w_engine * const w, struct w_iov_sq * const q, const size_t len);
 
 extern void __attribute__((nonnull)) q_free(struct w_iov_sq * const q);

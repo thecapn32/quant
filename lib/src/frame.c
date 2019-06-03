@@ -154,7 +154,7 @@ static void __attribute__((nonnull)) trim_frame(struct pkt_meta * const p)
 {
     const uint64_t diff = p->stream->in_data_off - p->stream_off;
     p->stream_off += diff;
-    p->stream_data_start += diff;
+    p->stream_data_pos += diff;
     p->stream_data_len -= diff;
 }
 
@@ -236,7 +236,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
                          "sid %" PRId64 " > max %" PRId64, sid, max);
     }
 
-    m->stream_data_start = (uint16_t)(*pos - v->buf);
+    m->stream_data_pos = (uint16_t)(*pos - v->buf);
     m->stream_data_len = (uint16_t)l;
 
     // deliver data into stream
@@ -244,8 +244,10 @@ dec_stream_or_crypto_frame(const uint8_t type,
     const char * kind = 0;
 
     if (unlikely(m->stream_data_len == 0 && !is_set(F_STREAM_FIN, type))) {
-        // warn(WRN, "zero-len strm/crypt frame on sid " FMT_SID ", ignoring",
-        //      sid);
+#ifdef DEBUG_EXTRA
+        warn(WRN, "zero-len strm/crypt frame on sid " FMT_SID ", ignoring",
+             sid);
+#endif
         ignore = true;
         kind = "ign";
         goto done;
@@ -253,10 +255,12 @@ dec_stream_or_crypto_frame(const uint8_t type,
 
     if (unlikely(m->stream == 0)) {
         if (unlikely(diet_find(&c->closed_streams, (uint64_t)sid))) {
-            // warn(NTE,
-            //      "ignoring STREAM frame for closed strm " FMT_SID
-            //      " on %s conn %s",
-            //      sid, conn_type(c), cid2str(c->scid));
+#ifdef DEBUG_STREAMS
+            warn(NTE,
+                 "ignoring STREAM frame for closed strm " FMT_SID
+                 " on %s conn %s",
+                 sid, conn_type(c), cid2str(c->scid));
+#endif
             ignore = true;
             kind = "ign";
             goto done;
@@ -342,8 +346,6 @@ dec_stream_or_crypto_frame(const uint8_t type,
                 strm_to_state(m->stream, m->stream->state <= strm_hcrm
                                              ? strm_hcrm
                                              : strm_clsd);
-                if (m->stream->state == strm_clsd)
-                    maybe_api_return(q_close_stream, c, m->stream);
             }
             if (unlikely(v != last))
                 adj_iov_to_data(last, m_last);
@@ -414,7 +416,7 @@ done:
         // this indicates to callers that the w_iov was not placed in a stream
         m->stream = 0;
 
-    *pos = &v->buf[m->stream_data_start + m->stream_data_len];
+    *pos = &v->buf[m->stream_data_pos + m->stream_data_len];
     return true;
 }
 
@@ -1079,10 +1081,11 @@ bool dec_frames(struct q_conn * const c,
             bitset_t_initializer(1 << FRM_CRY | 1 << FRM_ACK | 1 << FRM_ACE |
                                  1 << FRM_PAD | 1 << FRM_CLQ | 1 << FRM_CLA);
         if (unlikely((m->hdr.type == LH_INIT || m->hdr.type == LH_HSHK) &&
+                     type < FRM_MAX &&
                      bit_isset(FRM_MAX, type, &lh_ok) == false))
             err_close_return(c, ERR_PROTOCOL_VIOLATION, type,
-                             "0x%02x frame not allowed in 0x%02x pkt", type,
-                             m->hdr.type);
+                             "0x%02x frame not allowed in %s pkt", type,
+                             pkt_type_str(m->hdr.flags, &m->hdr.vers));
 
         bool ok;
         switch (type) {
@@ -1109,7 +1112,7 @@ bool dec_frames(struct q_conn * const c,
                 struct w_iov * const vdup = w_iov_dup(v, &mdup, off);
                 pm_cpy(mdup, m, false);
                 // adjust w_iov start and len to stream frame data
-                v->buf += m->stream_data_start;
+                v->buf += m->stream_data_pos;
                 v->len = m->stream_data_len;
                 // continue parsing in the copied w_iov
                 v = *vv = vdup;
@@ -1192,8 +1195,10 @@ bool dec_frames(struct q_conn * const c,
             break;
 
         default:
+            hexdump(v->buf, v->len);
             err_close_return(c, ERR_FRAME_ENC, type,
-                             "unknown frame type 0x%02x", type);
+                             "unknown frame type 0x%02x at pos %u", type,
+                             pos - v->buf);
         }
 
         if (unlikely(ok == false))
@@ -1207,9 +1212,9 @@ bool dec_frames(struct q_conn * const c,
     if (pad_start)
         log_pad((uint16_t)(pos - pad_start + 1));
 
-    if (m->stream_data_start) {
+    if (m->stream_data_pos) {
         // adjust w_iov start and len to stream frame data
-        v->buf += m->stream_data_start;
+        v->buf += m->stream_data_pos;
         v->len = m->stream_data_len;
     }
 
@@ -1291,7 +1296,7 @@ void enc_padding_frame(uint8_t ** pos,
 {
     if (unlikely(len == 0))
         return;
-    ensure(*pos + len <= end, "buffer overflow");
+    ensure(*pos + len <= end, "buffer overflow w/len %u", len);
     memset(*pos, FRM_PAD, len);
     *pos += len;
     warn(INF, FRAM_OUT "PADDING" NRM " len=%u", len);
@@ -1394,62 +1399,66 @@ void enc_ack_frame(uint8_t ** pos,
 }
 
 
+void calc_lens_of_stream_or_crypto_frame(const struct pkt_meta * const m,
+                                         const struct w_iov * const v,
+                                         const struct q_stream * const s,
+                                         uint16_t * const hlen,
+                                         uint16_t * const dlen)
+{
+    const uint16_t stream_data_len = (uint16_t)(v->len - m->stream_data_pos);
+    const bool enc_strm = s->id >= 0;
+
+    *hlen = 1; // type byte
+    if (likely(enc_strm))
+        *hlen += varint_size((uint64_t)s->id);
+    if (likely(s->out_data || !enc_strm))
+        *hlen += varint_size(s->out_data);
+    *dlen = likely(enc_strm) &&
+                    stream_data_len == MAX_PKT_LEN - AEAD_LEN - DATA_OFFSET
+                ? 0
+                : stream_data_len;
+    if (*dlen)
+        *hlen += varint_size(*dlen);
+}
+
+
 void enc_stream_or_crypto_frame(uint8_t ** pos,
                                 const uint8_t * const end,
                                 struct pkt_meta * const m,
                                 struct w_iov * const v,
                                 struct q_stream * const s,
-                                const bool enc_strm)
+                                const uint16_t dlen)
 {
-    const uint64_t dlen = v->len - m->stream_data_start;
-    uint8_t type = FRM_CRY;
+    const bool enc_strm = s->id >= 0;
+    uint8_t type = likely(enc_strm) ? FRM_STR : FRM_CRY;
 
-    if (likely(enc_strm)) {
-        ensure(is_lh(m->hdr.flags) == false || m->hdr.type == LH_0RTT,
-               "sid %" PRId64 " in %s pkt", s->id,
-               pkt_type_str(m->hdr.flags, &m->hdr.vers));
+    m->stream = s;
+    m->stream_data_len = v->len - m->stream_data_pos;
+    m->stream_off = s->out_data;
+    m->stream_header_pos = (uint16_t)(*pos - v->buf);
 
-        ensure(dlen || s->state > strm_open,
-               "no stream data or need to send FIN");
-
-        type = FRM_STR | (dlen ? F_STREAM_LEN : 0) |
-               (s->out_data ? F_STREAM_OFF : 0);
-
-        // if stream is closed locally and this is last packet, include FIN
-        if (unlikely(m->is_fin))
-            type |= F_STREAM_FIN;
-    }
-
-    *pos = v->buf + m->stream_data_start;
-    if (dlen || unlikely(!enc_strm)) {
-        *pos -= varint_size(dlen);
-        uint8_t * const p = *pos;
-        encv(pos, end, dlen);
-        *pos = p;
-    }
-    if (s->out_data || unlikely(!enc_strm)) {
-        *pos -= varint_size(s->out_data);
-        uint8_t * const p = *pos;
-        encv(pos, end, s->out_data);
-        *pos = p;
-    }
-    if (likely(enc_strm)) {
-        *pos -= varint_size((uint64_t)s->id);
-        uint8_t * const p = *pos;
+    (*pos)++;
+    if (likely(enc_strm))
         encv(pos, end, (uint64_t)s->id);
-        *pos = p;
+    if (m->stream_off || unlikely(!enc_strm)) {
+        if (likely(enc_strm))
+            type |= F_STREAM_OFF;
+        encv(pos, end, m->stream_off);
     }
-    m->stream_header_pos = (uint16_t)(--(*pos) - v->buf);
+    if (dlen) {
+        if (likely(enc_strm))
+            type |= F_STREAM_LEN;
+        encv(pos, end, dlen);
+    }
+    if (likely(enc_strm) && unlikely(m->is_fin))
+        type |= F_STREAM_FIN;
+    *pos = v->buf + m->stream_header_pos;
     enc1(pos, end, type);
 
-    m->stream = s; // remember stream this buf belongs to
-    m->stream_data_len = (uint16_t)dlen;
-    m->stream_off = s->out_data;
-    *pos = v->buf + m->stream_data_start + m->stream_data_len;
-
+    *pos = v->buf + m->stream_data_pos + m->stream_data_len;
     log_stream_or_crypto_frame(false, m, type, s->id, false, "");
-    track_bytes_out(s, dlen);
-    ensure(!enc_strm || s->out_data < s->out_data_max, "exceeded fc window");
+    track_bytes_out(s, m->stream_data_len);
+    ensure(!enc_strm || m->stream_off < s->out_data_max, "exceeded fc window");
     track_frame(m, type == FRM_CRY ? FRM_CRY : FRM_STR);
 }
 
