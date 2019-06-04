@@ -161,8 +161,10 @@ void free_iov(struct w_iov * const v, struct pkt_meta * const m)
 #endif
 
     if (m->txed) {
-        if (m->acked == false && m->lost == false && m->pn->sent_pkts)
+        if (m->acked == false && m->lost == false && m->pn->sent_pkts) {
+            m->strm = 0;
             on_pkt_lost(m);
+        }
 
         struct pkt_meta * m_rtx = sl_first(&m->rtx);
         if (unlikely(m_rtx)) {
