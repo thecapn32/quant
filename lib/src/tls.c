@@ -1263,6 +1263,19 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
         die("epoch %zu unknown", epoch);
     }
 
+    if (tls_ctx.log_event) {
+        static const char * const log_labels[2][4] = {
+            {0, "QUIC_CLIENT_EARLY_TRAFFIC_SECRET",
+             "QUIC_CLIENT_HANDSHAKE_TRAFFIC_SECRET",
+             "QUIC_CLIENT_TRAFFIC_SECRET_0"},
+            {0, 0, "QUIC_SERVER_HANDSHAKE_TRAFFIC_SECRET",
+             "QUIC_SERVER_TRAFFIC_SECRET_0"}};
+
+        tls_ctx.log_event->cb(tls_ctx.log_event, tls,
+                              log_labels[ptls_is_server(tls) == is_enc][epoch],
+                              "%s", hex2str(secret, cipher->hash->digest_size));
+    }
+
     return setup_cipher(&ctx->header_protection, &ctx->aead, cipher->aead,
                         cipher->hash, is_enc, secret);
 }
