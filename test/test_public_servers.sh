@@ -180,7 +180,7 @@ function check_fail {
 
     local ret_base="/tmp/$script.$pid.$1.ret"
     echo X > "$ret_base.fail"
-    echo "Test with $1 failed (log $log):"
+    echo "Test with $1 failed (log $3):"
     tail -n 10 "$log"
     echo
     return 1
@@ -196,7 +196,7 @@ function analyze {
     local log="$log_base.1rtt"
     local log_strip="$log.strip"
     gsed "$sed_pattern" "$log" > "$log_strip"
-    check_fail "$1" "$log_strip"
+    check_fail "$1" "$log_strip" "$log"
 
     grep -E -q 'RX.*len=' "$log_strip" && echo \* > "$ret_base.live"
 
@@ -252,7 +252,7 @@ function analyze {
     local log="$log_base.0rtt"
     local log_strip="$log.strip"
     gsed "$sed_pattern" "$log" > "$log_strip"
-    check_fail "$1" "$log_strip"
+    check_fail "$1" "$log_strip" "$log"
 
     perl -n -e '/new 0-RTT clnt conn/ and $x=1;
         /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
@@ -271,7 +271,7 @@ function analyze {
     local log="$log_base.rtry"
     local log_strip="$log.strip"
     gsed "$sed_pattern" "$log" > "$log_strip"
-    check_fail "$1" "$log_strip"
+    check_fail "$1" "$log_strip" "$log"
 
     perl -n -e '/RX.*len=.*Retry/ and $x=1;
         /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
@@ -284,7 +284,7 @@ function analyze {
     local log="$log_base.kyph"
     local log_strip="$log.strip"
     gsed "$sed_pattern" "$log" > "$log_strip"
-    check_fail "$1" "$log_strip"
+    check_fail "$1" "$log_strip" "$log"
 
     perl -n -e '/TX.*Short kyph=1/ and $x=1;
         /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
@@ -297,7 +297,7 @@ function analyze {
     local log="$log_base.h3"
     local log_strip="$log.strip"
     gsed "$sed_pattern" "$log" > "$log_strip"
-    check_fail "$1" "$log_strip"
+    check_fail "$1" "$log_strip" "$log"
 
     perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $x=1 : next);
         /no h3 payload/ and $x=0;
@@ -311,7 +311,7 @@ function analyze {
     local log="$log_base.nat"
     local log_strip="$log.strip"
     gsed "$sed_pattern" "$log" > "$log_strip"
-    check_fail "$1" "$log_strip"
+    check_fail "$1" "$log_strip" "$log"
 
     perl -n -e '/NAT rebinding/ and $x=1;
         /dec_path.*PATH_CHALLENGE/ and $x==1 and $x=2;
