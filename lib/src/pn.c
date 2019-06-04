@@ -77,8 +77,7 @@ void init_pn(struct pn_space * const pn,
 {
     diet_init(&pn->recv);
     diet_init(&pn->recv_all);
-    diet_init(&pn->acked);
-    diet_init(&pn->lost);
+    diet_init(&pn->acked_or_lost);
     pn->sent_pkts = kh_init(pm_by_nr);
     pn->lg_sent = pn->lg_acked = UINT64_MAX;
     pn->c = c;
@@ -101,8 +100,7 @@ void free_pn(struct pn_space * const pn)
 
     diet_free(&pn->recv);
     diet_free(&pn->recv_all);
-    diet_free(&pn->acked);
-    diet_free(&pn->lost);
+    diet_free(&pn->acked_or_lost);
 }
 
 

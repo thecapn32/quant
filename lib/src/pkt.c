@@ -34,6 +34,7 @@
 
 // IWYU pragma: no_include <picotls/../picotls.h>
 
+#include <ev.h>
 #include <picotls.h> // IWYU pragma: keep
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
@@ -443,8 +444,13 @@ bool enc_pkt(struct q_stream * const s,
     if (unlikely(m->hdr.type == LH_RTRY))
         goto tx;
 
-    if (needs_ack(pn) != no_ack)
-        enc_ack_frame(&pos, v->buf, end, m, pn);
+    if (needs_ack(pn) != no_ack) {
+        // XXX 8 is an arbitrary value - fix this
+        if (enc_data == false || diet_cnt(&pn->recv) <= 8)
+            enc_ack_frame(&pos, v->buf, end, m, pn);
+        else
+            ev_feed_event(loop, &c->ack_alarm, 0);
+    }
 
     if (unlikely(c->state == conn_clsg))
         enc_close_frame(&pos, end, m);
@@ -453,8 +459,6 @@ bool enc_pkt(struct q_stream * const s,
         enc_other_frames(&pos, end, m);
 
     if (unlikely(rtx)) {
-        ensure(has_stream_data(m), "is rtxable");
-
         // this is a RTX, pad out until beginning of stream header
         enc_padding_frame(&pos, end, m,
                           m->stream_header_pos - (uint16_t)(pos - v->buf));
@@ -467,8 +471,9 @@ bool enc_pkt(struct q_stream * const s,
         uint16_t hlen;
         uint16_t dlen;
         calc_lens_of_stream_or_crypto_frame(m, v, s, &hlen, &dlen);
-        ensure(pos + hlen < v->buf + m->stream_data_pos,
-               "would overwrite previous frame at pos %lu", pos - v->buf);
+        if (unlikely(pos + hlen >= v->buf + m->stream_data_pos))
+            // if the stream header would overflow a previous frame, kill *all*
+            pos = v->buf + m->hdr.hdr_len;
         // pad out any remaining space before stream header
         enc_padding_frame(&pos, end, m,
                           m->stream_data_pos - hlen - (uint16_t)(pos - v->buf));

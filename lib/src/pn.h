@@ -79,9 +79,8 @@ static inline const char * __attribute__((const)) pn_type_str(const pn_t type)
 
 struct pn_space {
     struct diet recv; ///< Received packet numbers still needing to be ACKed.
-    struct diet recv_all; ///< All received packet numbers.
-    struct diet acked;    ///< Sent packet numbers already ACKed.
-    struct diet lost;     ///< Sent packet numbers declared lost.
+    struct diet recv_all;      ///< All received packet numbers.
+    struct diet acked_or_lost; ///< Sent packet numbers already ACKed (or lost).
 
     khash_t(pm_by_nr) * sent_pkts; // sent_packets
 

@@ -340,9 +340,10 @@ int main(int argc, char * argv[])
                     q_free_stream(s);
                     q_free(&q);
                     continue;
-                } else
-                    // no more streams with pending reqs, try next conn
-                    break;
+                }
+
+                // no more streams with pending reqs, try next conn
+                break;
             }
 
             if (q_is_uni_stream(s)) {

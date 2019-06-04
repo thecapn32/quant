@@ -1493,6 +1493,7 @@ void err_close(struct q_conn * const c,
     c->err_reason_len =
         (uint8_t)MIN((unsigned long)ret + 1, sizeof(c->err_reason));
     c->err_frm = frm;
+    c->needs_tx = true;
     enter_closing(c);
 }
 

@@ -466,7 +466,7 @@ dec_ack_frame(const uint8_t type,
     uint64_t num_blocks = 0;
     decv_chk(&num_blocks, pos, end, c, type);
 
-    const struct ival * const cum_ack_ival = diet_min_ival(&pn->acked);
+    const struct ival * const cum_ack_ival = diet_min_ival(&pn->acked_or_lost);
     const uint64_t cum_ack = cum_ack_ival ? cum_ack_ival->hi : UINT64_MAX;
 
     uint64_t lg_ack_in_block = lg_ack;
@@ -523,13 +523,12 @@ dec_ack_frame(const uint8_t type,
 
         uint64_t ack = lg_ack_in_block;
         while (ack_block_len >= lg_ack_in_block - ack) {
-
             if (likely(cum_ack != UINT64_MAX) && ack <= cum_ack)
                 // we can skip the remainder of this block entirely
                 goto next_block;
 
-            if (diet_find(&pn->acked, ack) || diet_find(&pn->lost, ack))
-                goto skip;
+            if (diet_find(&pn->acked_or_lost, ack))
+                goto next_ack;
 
             struct pkt_meta * m_acked;
             struct w_iov * const acked = find_sent_pkt(pn, ack, &m_acked);
@@ -537,11 +536,10 @@ dec_ack_frame(const uint8_t type,
 #ifndef FUZZING
                 // this is just way too noisy when fuzzing
                 err_close_return(c, ERR_PROTOCOL_VIOLATION, type,
-                                 "got ACK for %s pkt " FMT_PNR_OUT
-                                 " never sent",
+                                 "got ACK for %s pkt %" PRIu64 " never sent",
                                  pn_type_str(pn->type), ack);
 #endif
-                goto skip;
+                goto next_ack;
             }
 
             got_new_ack = true;
@@ -563,7 +561,7 @@ dec_ack_frame(const uint8_t type,
                 w_set_sockopt(c->sock, &c->sockopt);
             }
 
-        skip:
+        next_ack:
             if (likely(ack > 0))
                 ack--;
             else
@@ -581,7 +579,7 @@ dec_ack_frame(const uint8_t type,
                 err_close_return(c, ERR_PROTOCOL_VIOLATION, type,
                                  "illegal ACK frame");
             }
-            lg_ack_in_block = (lg_ack_in_block - ack_block_len) - gap - 2;
+            lg_ack_in_block -= ack_block_len + gap + 2;
         }
     }
 
@@ -1311,7 +1309,7 @@ void enc_ack_frame(uint8_t ** pos,
                    struct pn_space * const pn)
 {
     const uint8_t type =
-        (pn->ect0_cnt || pn->ect1_cnt || pn->ce_cnt) ? FRM_ACE : FRM_ACK;
+        likely(pn->ect0_cnt || pn->ect1_cnt || pn->ce_cnt) ? FRM_ACE : FRM_ACK;
     enc1(pos, end, type);
 
     struct ival * b = diet_max_ival(&pn->recv);

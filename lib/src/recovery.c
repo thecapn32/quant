@@ -246,6 +246,8 @@ void on_pkt_lost(struct pkt_meta * const m)
 
     // rest of function is not from pseudo code
 
+    diet_insert(&pn->acked_or_lost, m->hdr.nr, (ev_tstamp)NAN);
+
     // if we lost connection or stream control frames, possibly RTX them
 
     // static const struct frames conn_ctrl =
@@ -279,7 +281,6 @@ void on_pkt_lost(struct pkt_meta * const m)
     if (bit_overlap(FRM_MAX, &strm_ctrl, &m->frames))
         need_ctrl_update(m->stream);
 
-    diet_insert(&pn->lost, m->hdr.nr, (ev_tstamp)NAN);
     m->lost = true;
     if (m->stream)
         m->stream->lost_cnt++;
@@ -477,7 +478,7 @@ track_acked_pkts(struct w_iov * const v, struct pkt_meta * const m)
         if (n > 1) {
             uint64_t gap = 0;
             decv(&gap, &pos, end);
-            lg_ack_in_block = lg_ack_in_block - ack_block_len - gap - 2;
+            lg_ack_in_block -= ack_block_len + gap + 2;
         }
     }
 
@@ -593,7 +594,7 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
     struct q_conn * const c = pn->c;
     if (m->in_flight && m->lost == false)
         on_pkt_acked_cc(m);
-    diet_insert(&pn->acked, m->hdr.nr, (ev_tstamp)NAN);
+    diet_insert(&pn->acked_or_lost, m->hdr.nr, (ev_tstamp)NAN);
     pm_by_nr_del(pn->sent_pkts, m);
 
     // rest of function is not from pseudo code
