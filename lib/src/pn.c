@@ -91,7 +91,7 @@ void free_pn(struct pn_space * const pn)
         struct pkt_meta * m;
         kh_foreach_value(pn->sent_pkts, m, {
             // TX'ed but non-RTX'ed pkts are freed when their stream is freed
-            if (m->has_rtx || !has_stream_data(m))
+            if (m->has_rtx || !has_strm_data(m))
                 free_iov(w_iov(pn->c->w, pm_idx(m)), m);
         });
         kh_destroy(pm_by_nr, pn->sent_pkts);
@@ -126,8 +126,8 @@ void abandon_pn(struct pn_space * const pn)
     epoch_t e = ep_init;
     if (unlikely(pn->type == pn_hshk))
         e = ep_hshk;
-    free_stream(pn->c->cstreams[e]);
-    pn->c->cstreams[e] = 0;
+    free_stream(pn->c->cstrms[e]);
+    pn->c->cstrms[e] = 0;
     pn->loss_t = 0; // important for earliest_loss_t_pn
 
     free_pn(pn);
@@ -171,8 +171,7 @@ ack_t needs_ack(const struct pn_space * const pn)
         return grat_ack;
     }
 
-    const bool in_hshk =
-        pn->type != pn_data || has_frame(pn->rx_frames, FRM_CRY);
+    const bool in_hshk = pn->type != pn_data || has_frm(pn->rx_frames, FRM_CRY);
     if (in_hshk) {
 #ifdef DEBUG_EXTRA
         warn(DBG, "%s conn %s: %s imm_ack: in_hshk", conn_type(c),

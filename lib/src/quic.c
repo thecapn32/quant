@@ -141,7 +141,7 @@ void alloc_off(struct w_engine * const w,
     sq_foreach (v, q, next) {
         struct pkt_meta * const m = &meta(v);
         ASAN_UNPOISON_MEMORY_REGION(m, sizeof(*m));
-        m->stream_data_pos = off;
+        m->strm_data_pos = off;
 
 #ifdef DEBUG_BUFFERS
         warn(DBG, "idx %u (avail %" PRIu64 ") len %u", w_iov_idx(v),
@@ -212,7 +212,7 @@ struct w_iov * alloc_iov(struct w_engine * const w,
     ensure(v, "w_alloc_iov failed");
     *m = &meta(v);
     ASAN_UNPOISON_MEMORY_REGION(*m, sizeof(**m));
-    (*m)->stream_data_pos = off;
+    (*m)->strm_data_pos = off;
 
 #ifdef DEBUG_BUFFERS
     warn(DBG, "alloc_iov idx %u (avail %" PRIu64 ") len %u off %u",
@@ -310,7 +310,7 @@ struct q_conn * q_connect(struct w_engine * const w,
     w_connect(c->sock, peer);
 
     // start TLS handshake
-    tls_io(c->cstreams[ep_init], 0);
+    tls_io(c->cstrms[ep_init], 0);
 
     if (early_data && !sq_empty(early_data)) {
         ensure(early_data_stream, "early data without stream pointer");
@@ -399,7 +399,7 @@ q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool all)
 {
     struct q_stream * s = 0;
     do {
-        kh_foreach_value(c->streams_by_id, s, {
+        kh_foreach_value(c->strms_by_id, s, {
             if (!sq_empty(&s->in) || s->state == strm_clsd)
                 // we found a stream with queued data
                 break;
@@ -542,7 +542,7 @@ struct q_stream * q_rsv_stream(struct q_conn * const c, const bool bidi)
         return 0;
 
     const uint64_t * const max_streams =
-        bidi ? &c->tp_out.max_streams_bidi : &c->tp_out.max_streams_uni;
+        bidi ? &c->tp_out.max_strms_bidi : &c->tp_out.max_strms_uni;
 
     if (unlikely(*max_streams == 0))
         warn(WRN, "peer hasn't allowed %s streams", bidi ? "bi" : "uni");

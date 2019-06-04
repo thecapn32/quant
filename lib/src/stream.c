@@ -53,20 +53,20 @@ const char * const strm_state_str[] = {STRM_STATES};
 
 struct q_stream * get_stream(struct q_conn * const c, const int64_t id)
 {
-    const khiter_t k = kh_get(streams_by_id, c->streams_by_id, (khint64_t)id);
-    if (unlikely(k == kh_end(c->streams_by_id)))
+    const khiter_t k = kh_get(strms_by_id, c->strms_by_id, (khint64_t)id);
+    if (unlikely(k == kh_end(c->strms_by_id)))
         return 0;
-    return kh_val(c->streams_by_id, k);
+    return kh_val(c->strms_by_id, k);
 }
 
 
 int64_t max_sid(const int64_t sid, const struct q_conn * const c)
 {
-    const uint64_t max = is_srv_ini(sid) == c->is_clnt
-                             ? (is_uni(sid) ? c->tp_in.max_streams_uni
-                                            : c->tp_in.max_streams_bidi)
-                             : (is_uni(sid) ? c->tp_out.max_streams_uni
-                                            : c->tp_out.max_streams_bidi);
+    const uint64_t max =
+        is_srv_ini(sid) == c->is_clnt
+            ? (is_uni(sid) ? c->tp_in.max_strms_uni : c->tp_in.max_strms_bidi)
+            : (is_uni(sid) ? c->tp_out.max_strms_uni
+                           : c->tp_out.max_strms_bidi);
     return unlikely(max == 0) ? 0
                               : (int64_t)((max - 1) << 2) |
                                     ((STRM_FL_SRV | STRM_FL_UNI) & sid);
@@ -110,15 +110,14 @@ struct q_stream * new_stream(struct q_conn * const c, const int64_t id)
         c->cnt_bidi = MAX(cnt, c->cnt_bidi);
 
     if (unlikely(id < 0)) {
-        c->cstreams[strm_epoch(s)] = s;
+        c->cstrms[strm_epoch(s)] = s;
         return s;
     }
 
     int ret;
-    const khiter_t k =
-        kh_put(streams_by_id, c->streams_by_id, (khint64_t)id, &ret);
+    const khiter_t k = kh_put(strms_by_id, c->strms_by_id, (khint64_t)id, &ret);
     ensure(ret >= 1, "inserted");
-    kh_val(c->streams_by_id, k) = s;
+    kh_val(c->strms_by_id, k) = s;
 
     apply_stream_limits(s);
     const bool is_local = (is_srv_ini(id) != c->is_clnt);
@@ -144,13 +143,13 @@ void free_stream(struct q_stream * const s)
         warn(DBG, "freeing strm " FMT_SID " on %s conn %s", s->id, conn_type(c),
              cid2str(c->scid));
 #endif
-        diet_insert(&c->closed_streams, (uint64_t)s->id, (ev_tstamp)NAN);
+        diet_insert(&c->clsd_strms, (uint64_t)s->id, (ev_tstamp)NAN);
         const khiter_t k =
-            kh_get(streams_by_id, c->streams_by_id, (khint64_t)s->id);
-        ensure(k != kh_end(c->streams_by_id), "found");
-        kh_del(streams_by_id, c->streams_by_id, k);
+            kh_get(strms_by_id, c->strms_by_id, (khint64_t)s->id);
+        ensure(k != kh_end(c->strms_by_id), "found");
+        kh_del(strms_by_id, c->strms_by_id, k);
     } else
-        s->c->cstreams[strm_epoch(s)] = 0;
+        s->c->cstrms[strm_epoch(s)] = 0;
 
     while (!splay_empty(&s->in_ooo)) {
         struct pkt_meta * const p = splay_min(ooo_by_off, &s->in_ooo);
@@ -204,19 +203,19 @@ void reset_stream(struct q_stream * const s, const bool forget)
         struct pkt_meta * const m = &meta(v);
         if (m->pn)
             // remove trailing padding
-            v->len = m->stream_data_len;
+            v->len = m->strm_data_len;
 
         // don't reset stream-data-related fields
         // TODO: redo this with offsetof magic
         const bool fin = m->is_fin;
-        const uint16_t shp = m->stream_header_pos;
-        const uint16_t sds = m->stream_data_pos;
-        const uint16_t sdl = m->stream_data_len;
+        const uint16_t shp = m->strm_frm_pos;
+        const uint16_t sds = m->strm_data_pos;
+        const uint16_t sdl = m->strm_data_len;
         memset(m, 0, sizeof(*m));
         m->is_fin = fin;
-        m->stream_header_pos = shp;
-        m->stream_data_pos = sds;
-        m->stream_data_len = sdl;
+        m->strm_frm_pos = shp;
+        m->strm_data_pos = sds;
+        m->strm_data_len = sdl;
     }
 }
 
@@ -226,7 +225,7 @@ void do_stream_fc(struct q_stream * const s, const uint16_t len)
     s->blocked = (s->out_data + len + MAX_PKT_LEN > s->out_data_max);
 
     if (s->in_data * 2 > s->in_data_max) {
-        s->tx_max_stream_data = true;
+        s->tx_max_strm_data = true;
         s->in_data_max *= 2;
     }
 
@@ -242,23 +241,23 @@ void do_stream_id_fc(struct q_conn * const c,
     if (local) {
         // this is a local stream
         if (bidi)
-            c->sid_blocked_bidi = (cnt == c->tp_out.max_streams_bidi);
+            c->sid_blocked_bidi = (cnt == c->tp_out.max_strms_bidi);
         else
             c->sid_blocked_uni =
-                (c->tp_out.max_streams_uni && cnt == c->tp_out.max_streams_uni);
+                (c->tp_out.max_strms_uni && cnt == c->tp_out.max_strms_uni);
         return;
     }
 
     // this is a remote stream
     if (bidi) {
-        if (cnt == c->tp_in.max_streams_bidi) {
+        if (cnt == c->tp_in.max_strms_bidi) {
             c->tx_max_sid_bidi = true;
-            c->tp_in.max_streams_bidi *= 2;
+            c->tp_in.max_strms_bidi *= 2;
         }
     } else {
-        if (cnt == c->tp_in.max_streams_uni) {
+        if (cnt == c->tp_in.max_strms_uni) {
             c->tx_max_sid_uni = true;
-            c->tp_in.max_streams_uni *= 2;
+            c->tp_in.max_strms_uni *= 2;
         }
     }
 }

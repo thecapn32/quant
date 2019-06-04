@@ -300,7 +300,7 @@ rtx_pkt(struct w_iov * const v, struct pkt_meta * const m)
         return;
 
     // on RTX, remember orig pkt meta data
-    const uint16_t data_start = m->stream_data_pos;
+    const uint16_t data_start = m->strm_data_pos;
     struct pkt_meta * m_orig;
     struct w_iov * const v_orig = alloc_iov(c->w, 0, data_start, &m_orig);
     pm_cpy(m_orig, m, true);
@@ -528,12 +528,12 @@ static bool __attribute__((nonnull))
 tx_ack(struct q_conn * const c, const epoch_t e, const bool tx_ack_eliciting)
 {
     do_conn_mgmt(c);
-    if (unlikely(c->cstreams[e] == 0))
+    if (unlikely(c->cstrms[e] == 0))
         return false;
 
     struct pkt_meta * m;
     struct w_iov * const v = alloc_iov(c->w, 0, 0, &m);
-    return enc_pkt(c->cstreams[e], false, false, tx_ack_eliciting, v, m);
+    return enc_pkt(c->cstrms[e], false, false, tx_ack_eliciting, v, m);
 }
 
 
@@ -570,14 +570,14 @@ void tx(struct ev_loop * const l __attribute__((unused)),
 
     if (likely(c->state != conn_clsg))
         for (epoch_t e = ep_init; e <= ep_data; e++) {
-            if (c->cstreams[e] == 0)
+            if (c->cstrms[e] == 0)
                 continue;
-            if (tx_stream(c->cstreams[e], limit) == false)
+            if (tx_stream(c->cstrms[e], limit) == false)
                 goto done;
         }
 
     struct q_stream * s;
-    kh_foreach_value(c->streams_by_id, s, {
+    kh_foreach_value(c->strms_by_id, s, {
         if (tx_stream(s, limit) == false)
             break;
     });
@@ -702,7 +702,7 @@ void add_dcid(struct q_conn * const c, const struct cid * const id)
 static void __attribute__((nonnull))
 rx_crypto(struct q_conn * const c, const struct pkt_meta * const m_cur)
 {
-    struct q_stream * const s = c->cstreams[epoch_in(c)];
+    struct q_stream * const s = c->cstrms[epoch_in(c)];
     while (!sq_empty(&s->in)) {
         // take the data out of the crypto stream
         struct w_iov * const v = sq_first(&s->in);
@@ -710,9 +710,9 @@ rx_crypto(struct q_conn * const c, const struct pkt_meta * const m_cur)
 
         // ooo crypto pkts have stream cleared by dec_stream_or_crypto_frame()
         struct pkt_meta * const m = &meta(v);
-        const bool free_ooo = m->stream == 0;
+        const bool free_ooo = m->strm == 0;
         // mark this (potential in-order) pkt for freeing in rx_pkts()
-        m->stream = 0;
+        m->strm = 0;
 
         const int ret = tls_io(s, v);
         if (free_ooo && m != m_cur)
@@ -807,11 +807,11 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
     c->in_data_str = c->out_data_str = 0;
 
     for (epoch_t e = ep_init; e <= ep_data; e++)
-        if (c->cstreams[e])
-            reset_stream(c->cstreams[e], true);
+        if (c->cstrms[e])
+            reset_stream(c->cstrms[e], true);
 
     struct q_stream * s;
-    kh_foreach_value(c->streams_by_id, s, reset_stream(s, false));
+    kh_foreach_value(c->strms_by_id, s, reset_stream(s, false));
 
     // reset packet number spaces
     for (pn_t t = pn_init; t <= pn_data; t++)
@@ -831,7 +831,7 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
     const bool should_try_0rtt = c->try_0rtt;
     init_tls(c, (char *)c->tls.alpn.base);
     c->try_0rtt = should_try_0rtt;
-    tls_io(c->cstreams[ep_init], 0);
+    tls_io(c->cstrms[ep_init], 0);
 }
 
 
@@ -904,7 +904,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
             goto done;
 
         // if the CH doesn't include any crypto frames, bail
-        if (has_frame(m->frames, FRM_CRY) == false) {
+        if (has_frm(m->frms, FRM_CRY) == false) {
             warn(ERR, "initial pkt w/o crypto frames");
             enter_closing(c);
             goto done;
@@ -1260,7 +1260,7 @@ rx_pkts(struct w_iov_sq * const x,
 
         if (likely(has_pkt_nr(m->hdr.flags, m->hdr.vers))) {
             bool decoal;
-            if (unlikely(m->hdr.type == LH_INIT && c->cstreams[ep_init] == 0)) {
+            if (unlikely(m->hdr.type == LH_INIT && c->cstrms[ep_init] == 0)) {
                 // we already abandoned Initial pkt processing, ignore
                 log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
                         tok_len);
@@ -1368,12 +1368,12 @@ rx_pkts(struct w_iov_sq * const x,
             }
         }
 
-        if (m->stream == 0)
+        if (m->strm == 0)
             // we didn't place this pkt in any stream - bye!
             goto drop;
-        else if (unlikely(m->stream->state == strm_clsd &&
-                          sq_empty(&m->stream->in)))
-            free_stream(m->stream);
+        else if (unlikely(m->strm->state == strm_clsd &&
+                          sq_empty(&m->strm->in)))
+            free_stream(m->strm);
         goto next;
 
     drop:
@@ -1431,7 +1431,7 @@ void rx(struct ev_loop * const l,
             ev_invoke(loop, &c->tx_w, 0); // clears c->needs_tx if we TX'ed
 
         for (epoch_t e = c->min_rx_epoch; e <= ep_data; e++) {
-            if (c->cstreams[e] == 0 || e == ep_0rtt)
+            if (c->cstrms[e] == 0 || e == ep_0rtt)
                 // don't ACK abandoned and 0rtt pn spaces
                 continue;
             struct pn_space * const pn = pn_for_epoch(c, e);
@@ -1683,7 +1683,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     new_cids(c, conf && conf->enable_zero_len_cid, dcid, scid);
 
     c->vers = c->vers_initial = vers;
-    diet_init(&c->closed_streams);
+    diet_init(&c->clsd_strms);
     sq_init(&c->txq);
 
     // TODO most of these should become configurable via q_conn_conf
@@ -1693,8 +1693,8 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->tp_in.max_strm_data_uni = c->is_clnt ? INIT_STRM_DATA_UNI : 0;
     c->tp_in.max_strm_data_bidi_local = c->tp_in.max_strm_data_bidi_remote =
         INIT_STRM_DATA_BIDI;
-    c->tp_in.max_streams_bidi = INIT_MAX_BIDI_STREAMS;
-    c->tp_in.max_streams_uni = c->is_clnt ? INIT_MAX_UNI_STREAMS : 0;
+    c->tp_in.max_strms_bidi = INIT_MAX_BIDI_STREAMS;
+    c->tp_in.max_strms_uni = c->is_clnt ? INIT_MAX_UNI_STREAMS : 0;
     c->tp_in.max_pkt = w_mtu(c->w);
 
     // initialize idle timeout
@@ -1733,7 +1733,7 @@ struct q_conn * new_conn(struct w_engine * const w,
         init_pn(&c->pns[t], c, t);
 
     // create crypto streams
-    c->streams_by_id = kh_init(streams_by_id);
+    c->strms_by_id = kh_init(strms_by_id);
     for (epoch_t e = ep_init; e <= ep_data; e++)
         if (e != ep_0rtt)
             new_stream(c, crpt_strm_id(e));
@@ -1781,13 +1781,13 @@ void free_conn(struct q_conn * const c)
     ev_timer_stop(loop, &c->ack_alarm);
 
     struct q_stream * s;
-    kh_foreach_value(c->streams_by_id, s, { free_stream(s); });
-    kh_destroy(streams_by_id, c->streams_by_id);
+    kh_foreach_value(c->strms_by_id, s, { free_stream(s); });
+    kh_destroy(strms_by_id, c->strms_by_id);
 
     // free crypto streams
     for (epoch_t e = ep_init; e <= ep_data; e++)
-        if (c->cstreams[e])
-            free_stream(c->cstreams[e]);
+        if (c->cstrms[e])
+            free_stream(c->cstrms[e]);
 
     free_tls(c, false);
 
@@ -1797,7 +1797,7 @@ void free_conn(struct q_conn * const c)
 
     ev_async_stop(loop, &c->tx_w);
 
-    diet_free(&c->closed_streams);
+    diet_free(&c->clsd_strms);
     free(c->peer_name);
 
     // remove connection from global lists and free CIDs

@@ -68,11 +68,11 @@ struct q_stream {
     struct w_iov_sq out;    ///< Tail queue containing outbound data.
     struct w_iov * out_una; ///< Lowest un-ACK'ed data chunk.
     uint64_t out_data;      ///< Current outbound stream offset (= data sent).
-    uint64_t out_data_max;  ///< Outbound max_stream_data.
+    uint64_t out_data_max;  ///< Outbound max_strm_data.
 
     struct w_iov_sq in;       ///< Tail queue containing inbound data.
     struct ooo_by_off in_ooo; ///< Out-of-order inbound data.
-    uint64_t in_data_max;     ///< Inbound max_stream_data.
+    uint64_t in_data_max;     ///< Inbound max_strm_data.
     uint64_t in_data;         ///< In-order stream data received (total).
     uint64_t in_data_off;     ///< Next in-order stream data offset expected.
 
@@ -80,8 +80,8 @@ struct q_stream {
     strm_state_t state; ///< Stream state.
 
     uint8_t in_ctrl : 1; ///< Stream is in connections "needs ctrl" list.
-    uint8_t tx_max_stream_data : 1; ///< We need to open the receive window.
-    uint8_t blocked : 1;            ///< We are receive-window-blocked.
+    uint8_t tx_max_strm_data : 1; ///< We need to open the receive window.
+    uint8_t blocked : 1;          ///< We are receive-window-blocked.
     uint8_t : 5;
     uint8_t _unused[3];
 };
@@ -160,7 +160,7 @@ strm_epoch(const struct q_stream * const s)
 static inline bool __attribute__((nonnull))
 needs_ctrl(const struct q_stream * const s)
 {
-    return s->tx_max_stream_data || s->blocked;
+    return s->tx_max_strm_data || s->blocked;
 }
 
 

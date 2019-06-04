@@ -84,11 +84,11 @@ int LLVMFuzzerTestOneInput(const uint8_t * data, const size_t size)
         free_iov(orig_v);
 
     struct q_stream * s;
-    kh_foreach_value(c->streams_by_id, s, { free_stream(s); });
+    kh_foreach_value(c->strms_by_id, s, { free_stream(s); });
 
     for (epoch_t e = ep_init; e <= ep_data; e++)
-        if (c->cstreams[e])
-            free_stream(c->cstreams[e]);
+        if (c->cstrms[e])
+            free_stream(c->cstrms[e]);
 
     return 0;
 }

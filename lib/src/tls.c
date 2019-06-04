@@ -434,17 +434,17 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             break;
 
         case TP_IMSB:
-            if (dec_tp(&c->tp_out.max_streams_bidi, &pos, end) == false)
+            if (dec_tp(&c->tp_out.max_strms_bidi, &pos, end) == false)
                 return 1;
             warn(INF, "\tinitial_max_streams_bidi = %" PRIu64,
-                 c->tp_out.max_streams_bidi);
+                 c->tp_out.max_strms_bidi);
             break;
 
         case TP_IMSU:
-            if (dec_tp(&c->tp_out.max_streams_uni, &pos, end) == false)
+            if (dec_tp(&c->tp_out.max_strms_uni, &pos, end) == false)
                 return 1;
             warn(INF, "\tinitial_max_streams_uni = %" PRIu64,
-                 c->tp_out.max_streams_uni);
+                 c->tp_out.max_strms_uni);
             break;
 
         case TP_IDTO:
@@ -627,7 +627,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
     // apply these parameter to all current non-crypto streams
     struct q_stream * s;
-    kh_foreach_value(c->streams_by_id, s, apply_stream_limits(s));
+    kh_foreach_value(c->strms_by_id, s, apply_stream_limits(s));
 
     return 0;
 }
@@ -685,8 +685,8 @@ void init_tp(struct q_conn * const c)
     for (size_t j = 0; j <= TP_MAX; j++)
         switch (tp_order[j]) {
         case TP_IMSU:
-            if (c->tp_in.max_streams_uni)
-                enc_tp(&pos, end, TP_IMSU, c->tp_in.max_streams_uni);
+            if (c->tp_in.max_strms_uni)
+                enc_tp(&pos, end, TP_IMSU, c->tp_in.max_strms_uni);
             break;
         case TP_IMSD_U:
             if (c->tp_in.max_strm_data_uni) {
@@ -716,10 +716,10 @@ void init_tp(struct q_conn * const c)
             }
             break;
         case TP_IMSB:
-            enc_tp(&pos, end, TP_IMSB, c->tp_in.max_streams_bidi);
+            enc_tp(&pos, end, TP_IMSB, c->tp_in.max_strms_bidi);
 #ifdef DEBUG_EXTRA
             warn(INF, "\tinitial_max_streams_bidi = %" PRIu64,
-                 c->tp_in.max_streams_bidi);
+                 c->tp_in.max_strms_bidi);
 #endif
             break;
         case TP_IDTO:
@@ -1078,7 +1078,7 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
     warn(DBG,
          "epoch %u, in %d (off %" PRIu64
          "), gen %lu (%lu-%lu-%lu-%lu-%lu), ret %d, left %lu",
-         ep_in, iv ? iv->len : 0, iv ? meta(iv).stream_off : 0, tls_io.off,
+         ep_in, iv ? iv->len : 0, iv ? meta(iv).strm_off : 0, tls_io.off,
          epoch_off[0], epoch_off[1], epoch_off[2], epoch_off[3], epoch_off[4],
          ret, iv ? iv->len - in_len : 0);
 #endif
@@ -1115,7 +1115,7 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
             memcpy(ov->buf, data, ov->len);
             data += ov->len;
         }
-        concat_out(c->cstreams[e], &o);
+        concat_out(c->cstrms[e], &o);
         c->needs_tx = true;
     }
     return ret;

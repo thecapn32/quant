@@ -61,7 +61,7 @@
     })
 
 
-KHASH_MAP_INIT_INT64(streams_by_id, struct q_stream *)
+KHASH_MAP_INIT_INT64(strms_by_id, struct q_stream *)
 KHASH_MAP_INIT_INT64(conns_by_ipnp, struct q_conn *)
 
 
@@ -124,8 +124,8 @@ struct transport_params {
     uint64_t max_strm_data_bidi_local;
     uint64_t max_strm_data_bidi_remote;
     uint64_t max_data;
-    uint64_t max_streams_uni;
-    uint64_t max_streams_bidi;
+    uint64_t max_strms_uni;
+    uint64_t max_strms_bidi;
     uint64_t idle_to;
     uint64_t max_ack_del;
     uint64_t max_pkt;
@@ -239,9 +239,9 @@ struct q_conn {
     struct sockaddr_storage migr_peer; ///< Peer's desired migration address.
     char * peer_name;
 
-    struct q_stream * cstreams[ep_data + 1]; ///< Crypto "streams".
-    khash_t(streams_by_id) * streams_by_id;  ///< Regular streams.
-    struct diet closed_streams;
+    struct q_stream * cstrms[ep_data + 1]; ///< Crypto "streams".
+    khash_t(strms_by_id) * strms_by_id;    ///< Regular streams.
+    struct diet clsd_strms;
     sl_head(, q_stream) need_ctrl;
 
     struct w_sock * sock;     ///< File descriptor (socket) for the connection.

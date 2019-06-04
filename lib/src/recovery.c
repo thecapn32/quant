@@ -57,7 +57,7 @@
 
 struct ev_loop;
 
-#define is_crypto_pkt(m) has_frame((m)->frames, FRM_CRY)
+#define is_crypto_pkt(m) has_frm((m)->frms, FRM_CRY)
 
 
 static inline bool __attribute__((nonnull))
@@ -71,9 +71,9 @@ in_cong_recovery(const struct q_conn * const c, const ev_tstamp sent_t)
 static bool __attribute__((nonnull))
 have_unacked_crypto_data(struct q_conn * const c)
 {
-    return (c->cstreams[ep_init] &&
-            out_fully_acked(c->cstreams[ep_init]) == false) ||
-           out_fully_acked(c->cstreams[ep_hshk]) == false;
+    return (c->cstrms[ep_init] &&
+            out_fully_acked(c->cstrms[ep_init]) == false) ||
+           out_fully_acked(c->cstrms[ep_hshk]) == false;
 }
 
 
@@ -257,9 +257,9 @@ void on_pkt_lost(struct pkt_meta * const m)
         bitset_t_initializer(1 << FRM_RST | 1 << FRM_STP | 1 << FRM_TOK |
                              1 << FRM_CDB | 1 << FRM_SDB | 1 << FRM_SBB |
                              1 << FRM_SBU | 1 << FRM_CID | 1 << FRM_RTR);
-    if (bit_overlap(FRM_MAX, &all_ctrl, &m->frames))
+    if (bit_overlap(FRM_MAX, &all_ctrl, &m->frms))
         for (uint32_t i = 0; i < FRM_MAX; i++)
-            if (has_frame(m->frames, i) && bit_isset(FRM_MAX, i, &all_ctrl)) {
+            if (has_frm(m->frms, i) && bit_isset(FRM_MAX, i, &all_ctrl)) {
                 warn(DBG, "%s pkt %" PRIu64 " CONTROL LOST: 0x%02x",
                      pkt_type_str(m->hdr.flags, &m->hdr.vers), m->hdr.nr, i);
                 switch (i) {
@@ -278,12 +278,12 @@ void on_pkt_lost(struct pkt_meta * const m)
     static const struct frames strm_ctrl =
         // FRM_SDB is automatically RTX'ed XXX fix this mess
         bitset_t_initializer(1 << FRM_RST | 1 << FRM_STP /*| 1 << FRM_SDB*/);
-    if (bit_overlap(FRM_MAX, &strm_ctrl, &m->frames))
-        need_ctrl_update(m->stream);
+    if (bit_overlap(FRM_MAX, &strm_ctrl, &m->frms))
+        need_ctrl_update(m->strm);
 
     m->lost = true;
-    if (m->stream)
-        m->stream->lost_cnt++;
+    if (m->strm)
+        m->strm->lost_cnt++;
     pm_by_nr_del(pn->sent_pkts, m);
 }
 
@@ -355,7 +355,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
         if (m->lost) {
             DEBUG_diet_insert(&lost, m->hdr.nr, (ev_tstamp)NAN);
             on_pkt_lost(m);
-            if (m->stream == 0 || m->has_rtx)
+            if (m->strm == 0 || m->has_rtx)
                 free_iov(w_iov(c->w, pm_idx(m)), m);
         }
     });
@@ -463,12 +463,12 @@ static void __attribute__((nonnull))
 track_acked_pkts(struct w_iov * const v, struct pkt_meta * const m)
 {
     adj_iov_to_start(v, m);
-    const uint8_t * pos = v->buf + m->ack_block_pos;
+    const uint8_t * pos = v->buf + m->ack_frm_pos;
     const uint8_t * const end = v->buf + v->len;
 
     // this is a similar loop as in dec_ack_frame() - keep changes in sync
     uint64_t lg_ack_in_block = m->lg_acked;
-    for (uint64_t n = m->ack_block_cnt + 1; n > 0; n--) {
+    for (uint64_t n = m->ack_rng_cnt + 1; n > 0; n--) {
         uint64_t ack_block_len = 0;
         decv(&ack_block_len, &pos, end);
         diet_remove_ival(
@@ -497,7 +497,7 @@ void on_pkt_sent(struct pkt_meta * const m)
     // nr is set in enc_pkt()
     m->tx_t = now;
     // ack_eliciting is set in enc_pkt()
-    m->in_flight = m->ack_eliciting || has_frame(m->frames, FRM_PAD);
+    m->in_flight = m->ack_eliciting || has_frm(m->frms, FRM_PAD);
     // size is set in enc_pkt()
 
     struct q_conn * const c = m->pn->c;
@@ -600,7 +600,7 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
     // rest of function is not from pseudo code
 
     // stop ACK'ing packets contained in the ACK frame of this packet
-    if (has_frame(m->frames, FRM_ACK))
+    if (has_frm(m->frms, FRM_ACK))
         track_acked_pkts(v, m);
 
     struct pkt_meta * const m_rtx = sl_first(&m->rtx);
@@ -635,7 +635,7 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
 
     m->acked = true;
 
-    struct q_stream * const s = m->stream;
+    struct q_stream * const s = m->strm;
     if (s && m->has_rtx == false) {
         // if this ACKs its stream's out_una, move that forward
         struct w_iov * tmp;

@@ -246,7 +246,7 @@ static bool __attribute__((nonnull)) can_enc(uint8_t ** const pos,
                                              const bool one_per_pkt)
 {
     const bool has_space = *pos + max_frame_len(type) <= end;
-    return (one_per_pkt && has_frame(m->frames, type)) == false && has_space;
+    return (one_per_pkt && has_frm(m->frms, type)) == false && has_space;
 }
 
 
@@ -301,10 +301,10 @@ static void __attribute__((nonnull)) enc_other_frames(uint8_t ** pos,
         enc_streams_blocked_frame(pos, end, m, false);
 
     if (c->tx_max_sid_bidi && can_enc(pos, end, m, FRM_MSB, true))
-        enc_max_streams_frame(pos, end, m, true);
+        enc_max_strms_frame(pos, end, m, true);
 
     if (c->tx_max_sid_uni && can_enc(pos, end, m, FRM_MSU, true))
-        enc_max_streams_frame(pos, end, m, false);
+        enc_max_strms_frame(pos, end, m, false);
 
     while (!sl_empty(&c->need_ctrl)) {
         // XXX this assumes we can encode all the ctrl frames
@@ -313,9 +313,9 @@ static void __attribute__((nonnull)) enc_other_frames(uint8_t ** pos,
         s->in_ctrl = false;
         // encode stream control frames
         if (s->blocked && can_enc(pos, end, m, FRM_SDB, true))
-            enc_stream_data_blocked_frame(pos, end, m, s);
-        if (s->tx_max_stream_data && can_enc(pos, end, m, FRM_MSD, true))
-            enc_max_stream_data_frame(pos, end, m, s);
+            enc_strm_data_blocked_frame(pos, end, m, s);
+        if (s->tx_max_strm_data && can_enc(pos, end, m, FRM_MSD, true))
+            enc_max_strm_data_frame(pos, end, m, s);
     }
 }
 
@@ -377,8 +377,7 @@ bool enc_pkt(struct q_stream * const s,
     m->hdr.flags |= (pnl - 1);
 
     uint8_t * pos = v->buf;
-    const uint8_t * const end =
-        v->buf + (enc_data ? m->stream_data_pos : v->len);
+    const uint8_t * const end = v->buf + (enc_data ? m->strm_data_pos : v->len);
     enc1(&pos, end, m->hdr.flags);
 
     if (unlikely(is_lh(m->hdr.flags))) {
@@ -461,9 +460,9 @@ bool enc_pkt(struct q_stream * const s,
     if (unlikely(rtx)) {
         // this is a RTX, pad out until beginning of stream header
         enc_padding_frame(&pos, end, m,
-                          m->stream_header_pos - (uint16_t)(pos - v->buf));
-        pos = v->buf + m->stream_data_pos + m->stream_data_len;
-        log_stream_or_crypto_frame(true, m, v->buf[m->stream_header_pos], s->id,
+                          m->strm_frm_pos - (uint16_t)(pos - v->buf));
+        pos = v->buf + m->strm_data_pos + m->strm_data_len;
+        log_stream_or_crypto_frame(true, m, v->buf[m->strm_frm_pos], s->id,
                                    false, "");
 
     } else if (likely(enc_data)) {
@@ -471,12 +470,12 @@ bool enc_pkt(struct q_stream * const s,
         uint16_t hlen;
         uint16_t dlen;
         calc_lens_of_stream_or_crypto_frame(m, v, s, &hlen, &dlen);
-        if (unlikely(pos + hlen >= v->buf + m->stream_data_pos))
+        if (unlikely(pos + hlen >= v->buf + m->strm_data_pos))
             // if the stream header would overflow a previous frame, kill *all*
             pos = v->buf + m->hdr.hdr_len;
         // pad out any remaining space before stream header
         enc_padding_frame(&pos, end, m,
-                          m->stream_data_pos - hlen - (uint16_t)(pos - v->buf));
+                          m->strm_data_pos - hlen - (uint16_t)(pos - v->buf));
         enc_stream_or_crypto_frame(&pos, end, m, v, s, dlen);
     }
 
@@ -500,7 +499,7 @@ bool enc_pkt(struct q_stream * const s,
         }
     }
 
-    m->ack_eliciting = is_ack_eliciting(&m->frames);
+    m->ack_eliciting = is_ack_eliciting(&m->frms);
     if (unlikely(tx_ack_eliciting) && m->ack_eliciting == false &&
         m->hdr.type == SH) {
         enc_ping_frame(&pos, end, m);
@@ -554,30 +553,30 @@ tx:;
     m->udp_len = xv->len;
     c->out_data += m->udp_len;
 
-    if (unlikely(m->hdr.type == LH_INIT && c->is_clnt && m->stream_data_len))
+    if (unlikely(m->hdr.type == LH_INIT && c->is_clnt && m->strm_data_len))
         // adjust v->len to exclude the post-stream padding for CI
-        v->len = m->stream_data_pos + m->stream_data_len;
+        v->len = m->strm_data_pos + m->strm_data_len;
 
     if (likely(enc_data)) {
         adj_iov_to_data(v, m);
         // XXX not clear if changing the len before calling on_pkt_sent is
         // ok
-        v->len = m->stream_data_len;
+        v->len = m->strm_data_len;
     }
 
     if (unlikely(rtx && m->lost)) {
         // we did an RTX and this is no longer lost
         m->lost = false;
-        m->stream->lost_cnt--;
+        m->strm->lost_cnt--;
     }
 
     on_pkt_sent(m);
-    bit_or(FRM_MAX, &pn->tx_frames, &m->frames);
+    bit_or(FRM_MAX, &pn->tx_frames, &m->frms);
 
     if (c->is_clnt) {
         if (is_lh(m->hdr.flags) == false)
             maybe_flip_keys(c, true);
-        if (unlikely(m->hdr.type == LH_HSHK && c->cstreams[ep_init]))
+        if (unlikely(m->hdr.type == LH_HSHK && c->cstrms[ep_init]))
             abandon_pn(&c->pns[ep_init]);
     }
 
@@ -931,8 +930,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
 
     v->len = xv->len - AEAD_LEN;
 
-    if (!c->is_clnt &&
-        unlikely(m->hdr.type == LH_HSHK && c->cstreams[ep_init])) {
+    if (!c->is_clnt && unlikely(m->hdr.type == LH_HSHK && c->cstrms[ep_init])) {
         abandon_pn(&c->pns[pn_init]);
 
         // server can assume path is validated

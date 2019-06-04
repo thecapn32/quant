@@ -58,7 +58,7 @@
 // TODO: check error conditions and codes more thoroughly
 
 
-#define track_frame(m, ft) bit_set(FRM_MAX, (ft), &(m)->frames)
+#define track_frame(m, ft) bit_set(FRM_MAX, (ft), &(m)->frms)
 
 #define err_close_return(c, code, ...)                                         \
     do {                                                                       \
@@ -118,7 +118,7 @@ void log_stream_or_crypto_frame(const bool rtx,
         return;
 
     const struct q_conn * const c = m->pn->c;
-    const struct q_stream * const s = m->stream;
+    const struct q_stream * const s = m->strm;
     if (kind == 0)
         kind = BLD RED "invalid" NRM;
 
@@ -135,15 +135,15 @@ void log_stream_or_crypto_frame(const bool rtx,
              is_set(F_STREAM_LEN, fl) ? "LEN" : "",
              is_set(F_STREAM_LEN, fl) && is_set(F_STREAM_OFF, fl) ? "|" : "",
              is_set(F_STREAM_OFF, fl) ? "OFF" : "", sid, max_sid(sid, c),
-             m->stream_off,
+             m->strm_off,
              in ? (s ? s->in_data_max : 0) : (s ? s->out_data_max : 0),
-             m->stream_data_len, in ? c->in_data_str : c->out_data_str,
+             m->strm_data_len, in ? c->in_data_str : c->out_data_str,
              in ? c->tp_in.max_data : c->tp_out.max_data,
              rtx ? REV BLD GRN "[RTX]" NRM " " : "", in ? "[" : "", kind,
              in ? "]" : "");
     else
         warn(INF, "%sCRYPTO" NRM " off=%" PRIu64 " len=%u %s%s%s%s",
-             in ? FRAM_IN : FRAM_OUT, m->stream_off, m->stream_data_len,
+             in ? FRAM_IN : FRAM_OUT, m->strm_off, m->strm_data_len,
              rtx ? REV BLD GRN "[RTX]" NRM " " : "", in ? "[" : "", kind,
              in ? "]" : "");
 }
@@ -152,10 +152,10 @@ void log_stream_or_crypto_frame(const bool rtx,
 
 static void __attribute__((nonnull)) trim_frame(struct pkt_meta * const p)
 {
-    const uint64_t diff = p->stream->in_data_off - p->stream_off;
-    p->stream_off += diff;
-    p->stream_data_pos += diff;
-    p->stream_data_len -= diff;
+    const uint64_t diff = p->strm->in_data_off - p->strm_off;
+    p->strm_off += diff;
+    p->strm_data_pos += diff;
+    p->strm_data_len -= diff;
 }
 
 
@@ -173,7 +173,7 @@ get_and_validate_strm(struct q_conn * const c,
     else {
         struct q_stream * s = get_stream(c, sid);
         if (unlikely(s == 0)) {
-            if (unlikely(diet_find(&c->closed_streams, (uint64_t)sid)))
+            if (unlikely(diet_find(&c->clsd_strms, (uint64_t)sid)))
                 warn(NTE,
                      "ignoring 0x%02x frame for closed strm " FMT_SID
                      " on %s conn %s",
@@ -199,26 +199,26 @@ dec_stream_or_crypto_frame(const uint8_t type,
                            struct w_iov * const v)
 {
     struct q_conn * const c = m->pn->c;
-    m->stream_header_pos = (uint16_t)(*pos - v->buf) - 1;
+    m->strm_frm_pos = (uint16_t)(*pos - v->buf) - 1;
 
     int64_t sid = 0;
     if (unlikely(type == FRM_CRY)) {
         const epoch_t e = epoch_for_pkt_type(m->hdr.type);
-        if (unlikely(c->cstreams[e] == 0))
+        if (unlikely(c->cstrms[e] == 0))
             err_close_return(c, ERR_STREAM_STATE, type,
                              "epoch %u pkt processing abandoned", e);
         sid = crpt_strm_id(e);
-        m->stream = c->cstreams[e];
+        m->strm = c->cstrms[e];
     } else {
         m->is_fin = is_set(F_STREAM_FIN, type);
         decv_chk((uint64_t *)&sid, pos, end, c, type);
-        m->stream = get_stream(c, sid);
+        m->strm = get_stream(c, sid);
     }
 
     if (is_set(F_STREAM_OFF, type) || unlikely(type == FRM_CRY))
-        decv_chk(&m->stream_off, pos, end, c, type);
+        decv_chk(&m->strm_off, pos, end, c, type);
     else
-        m->stream_off = 0;
+        m->strm_off = 0;
 
     uint64_t l = 0;
     if (is_set(F_STREAM_LEN, type) || unlikely(type == FRM_CRY)) {
@@ -236,14 +236,14 @@ dec_stream_or_crypto_frame(const uint8_t type,
                          "sid %" PRId64 " > max %" PRId64, sid, max);
     }
 
-    m->stream_data_pos = (uint16_t)(*pos - v->buf);
-    m->stream_data_len = (uint16_t)l;
+    m->strm_data_pos = (uint16_t)(*pos - v->buf);
+    m->strm_data_len = (uint16_t)l;
 
     // deliver data into stream
     bool ignore = false;
     const char * kind = 0;
 
-    if (unlikely(m->stream_data_len == 0 && !is_set(F_STREAM_FIN, type))) {
+    if (unlikely(m->strm_data_len == 0 && !is_set(F_STREAM_FIN, type))) {
 #ifdef DEBUG_EXTRA
         warn(WRN, "zero-len strm/crypt frame on sid " FMT_SID ", ignoring",
              sid);
@@ -253,8 +253,8 @@ dec_stream_or_crypto_frame(const uint8_t type,
         goto done;
     }
 
-    if (unlikely(m->stream == 0)) {
-        if (unlikely(diet_find(&c->closed_streams, (uint64_t)sid))) {
+    if (unlikely(m->strm == 0)) {
+        if (unlikely(diet_find(&c->clsd_strms, (uint64_t)sid))) {
 #ifdef DEBUG_STREAMS
             warn(NTE,
                  "ignoring STREAM frame for closed strm " FMT_SID
@@ -273,96 +273,95 @@ dec_stream_or_crypto_frame(const uint8_t type,
                              conn_type(c));
         }
 
-        m->stream = new_stream(c, sid);
+        m->strm = new_stream(c, sid);
     }
 
     // best case: new in-order data
-    if (m->stream->in_data_off >= m->stream_off &&
-        m->stream->in_data_off <=
-            m->stream_off + m->stream_data_len - (m->stream_data_len ? 1 : 0)) {
+    if (m->strm->in_data_off >= m->strm_off &&
+        m->strm->in_data_off <=
+            m->strm_off + m->strm_data_len - (m->strm_data_len ? 1 : 0)) {
         kind = "seq";
 
-        if (unlikely(m->stream->state == strm_hcrm ||
-                     m->stream->state == strm_clsd)) {
+        if (unlikely(m->strm->state == strm_hcrm ||
+                     m->strm->state == strm_clsd)) {
             warn(NTE,
                  "ignoring STREAM frame for %s strm " FMT_SID " on %s conn %s",
-                 strm_state_str[m->stream->state], sid, conn_type(c),
+                 strm_state_str[m->strm->state], sid, conn_type(c),
                  cid2str(c->scid));
             ignore = true;
             goto done;
         }
 
-        if (unlikely(m->stream->in_data_off > m->stream_off))
+        if (unlikely(m->strm->in_data_off > m->strm_off))
             // already-received data at the beginning of the frame, trim
             trim_frame(m);
 
-        track_bytes_in(m->stream, m->stream_data_len);
-        m->stream->in_data_off += m->stream_data_len;
-        sq_insert_tail(&m->stream->in, v, next);
+        track_bytes_in(m->strm, m->strm_data_len);
+        m->strm->in_data_off += m->strm_data_len;
+        sq_insert_tail(&m->strm->in, v, next);
 
         // check if a hole has been filled that lets us dequeue ooo data
-        struct pkt_meta * p = splay_min(ooo_by_off, &m->stream->in_ooo);
+        struct pkt_meta * p = splay_min(ooo_by_off, &m->strm->in_ooo);
         while (p) {
             struct pkt_meta * const nxt =
-                splay_next(ooo_by_off, &m->stream->in_ooo, p);
+                splay_next(ooo_by_off, &m->strm->in_ooo, p);
 
-            if (unlikely(p->stream_off + p->stream_data_len <
-                         m->stream->in_data_off)) {
+            if (unlikely(p->strm_off + p->strm_data_len <
+                         m->strm->in_data_off)) {
                 // right edge of p < left edge of stream
                 warn(WRN, "drop stale frame [%" PRIu64 "..%" PRIu64 "]",
-                     p->stream_off, p->stream_off + p->stream_data_len);
-                ensure(splay_remove(ooo_by_off, &m->stream->in_ooo, p),
+                     p->strm_off, p->strm_off + p->strm_data_len);
+                ensure(splay_remove(ooo_by_off, &m->strm->in_ooo, p),
                        "removed");
                 p = nxt;
                 continue;
             }
 
             // right edge of p >= left edge of stream
-            if (p->stream_off > m->stream->in_data_off)
+            if (p->strm_off > m->strm->in_data_off)
                 // also left edge of p > left edge of stream: still a gap
                 break;
 
             // left edge of p <= left edge of stream: overlap, trim & enqueue
-            if (unlikely(p->stream->in_data_off > p->stream_off))
+            if (unlikely(p->strm->in_data_off > p->strm_off))
                 trim_frame(p);
-            sq_insert_tail(&m->stream->in, w_iov(c->w, pm_idx(p)), next);
-            m->stream->in_data_off += p->stream_data_len;
-            ensure(splay_remove(ooo_by_off, &m->stream->in_ooo, p), "removed");
+            sq_insert_tail(&m->strm->in, w_iov(c->w, pm_idx(p)), next);
+            m->strm->in_data_off += p->strm_data_len;
+            ensure(splay_remove(ooo_by_off, &m->strm->in_ooo, p), "removed");
 
             // mark ooo crypto data for freeing by rx_crypto()
-            if (p->stream->id < 0)
-                p->stream = 0;
+            if (p->strm->id < 0)
+                p->strm = 0;
             p = nxt;
         }
 
         // check if we have delivered a FIN, and act on it if we did
-        struct w_iov * const last = sq_last(&m->stream->in, w_iov, next);
+        struct w_iov * const last = sq_last(&m->strm->in, w_iov, next);
         if (last) {
             const struct pkt_meta * const m_last = &meta(last);
             if (unlikely(v != last))
                 adj_iov_to_start(last, m_last);
             if (m_last->is_fin) {
                 m->pn->imm_ack = true;
-                strm_to_state(m->stream, m->stream->state <= strm_hcrm
-                                             ? strm_hcrm
-                                             : strm_clsd);
+                strm_to_state(m->strm, m->strm->state <= strm_hcrm ? strm_hcrm
+                                                                   : strm_clsd);
             }
             if (unlikely(v != last))
                 adj_iov_to_data(last, m_last);
         }
 
         if (type != FRM_CRY) {
-            do_stream_fc(m->stream, 0);
+            do_stream_fc(m->strm, 0);
             do_conn_fc(c, 0);
             c->have_new_data = true;
             maybe_api_return(q_read, c, 0);
-            maybe_api_return(q_read_stream, c, m->stream);
+            maybe_api_return(q_read_stream, c, m->strm);
         }
         goto done;
     }
 
     // data is a complete duplicate
-    if (m->stream_off + m->stream_data_len <= m->stream->in_data_off) {
+    if (m->strm_off + m->strm_data_len <= m->strm->in_data_off) {
         kind = RED "dup" NRM;
         ignore = true;
         goto done;
@@ -370,53 +369,52 @@ dec_stream_or_crypto_frame(const uint8_t type,
 
     // data is out of order - check if it overlaps with already stored ooo data
     kind = YEL "ooo" NRM;
-    if (unlikely(m->stream->state == strm_hcrm ||
-                 m->stream->state == strm_clsd)) {
+    if (unlikely(m->strm->state == strm_hcrm || m->strm->state == strm_clsd)) {
         warn(NTE, "ignoring STREAM frame for %s strm " FMT_SID " on %s conn %s",
-             strm_state_str[m->stream->state], sid, conn_type(c),
+             strm_state_str[m->strm->state], sid, conn_type(c),
              cid2str(c->scid));
         ignore = true;
         kind = "ign";
         goto done;
     }
 
-    struct pkt_meta * p = splay_min(ooo_by_off, &m->stream->in_ooo);
-    while (p && p->stream_off + p->stream_data_len - 1 < m->stream_off)
-        p = splay_next(ooo_by_off, &m->stream->in_ooo, p);
+    struct pkt_meta * p = splay_min(ooo_by_off, &m->strm->in_ooo);
+    while (p && p->strm_off + p->strm_data_len - 1 < m->strm_off)
+        p = splay_next(ooo_by_off, &m->strm->in_ooo, p);
 
     // right edge of p >= left edge of v
-    if (p && p->stream_off <= m->stream_off + m->stream_data_len - 1) {
+    if (p && p->strm_off <= m->strm_off + m->strm_data_len - 1) {
         // left edge of p <= right edge of v
         warn(ERR,
              "[%" PRIu64 "..%" PRIu64
              "] have existing overlapping ooo data [%" PRIu64 "..%" PRIu64 "]",
-             m->stream_off, m->stream_off + m->stream_data_len, p->stream_off,
-             p->stream_off + p->stream_data_len - 1);
+             m->strm_off, m->strm_off + m->strm_data_len, p->strm_off,
+             p->strm_off + p->strm_data_len - 1);
         ignore = true;
         kind = "ign";
         goto done;
     }
 
     // this ooo data doesn't overlap with anything
-    track_bytes_in(m->stream, m->stream_data_len);
-    ensure(splay_insert(ooo_by_off, &m->stream->in_ooo, m) == 0, "inserted");
+    track_bytes_in(m->strm, m->strm_data_len);
+    ensure(splay_insert(ooo_by_off, &m->strm->in_ooo, m) == 0, "inserted");
 
 done:
     log_stream_or_crypto_frame(false, m, type, sid, true, kind);
 
-    if (m->stream && type != FRM_CRY &&
-        m->stream_off + m->stream_data_len > m->stream->in_data_max)
+    if (m->strm && type != FRM_CRY &&
+        m->strm_off + m->strm_data_len > m->strm->in_data_max)
         err_close_return(c, ERR_FLOW_CONTROL, type,
                          "stream %" PRIu64 " off %" PRIu64
                          " >= in_data_max %" PRIu64,
-                         m->stream->id, m->stream_off + m->stream_data_len - 1,
-                         m->stream->in_data_max);
+                         m->strm->id, m->strm_off + m->strm_data_len - 1,
+                         m->strm->in_data_max);
 
     if (ignore)
         // this indicates to callers that the w_iov was not placed in a stream
-        m->stream = 0;
+        m->strm = 0;
 
-    *pos = &v->buf[m->stream_data_pos + m->stream_data_len];
+    *pos = &v->buf[m->strm_data_pos + m->strm_data_len];
     return true;
 }
 
@@ -669,9 +667,9 @@ dec_close_frame(const uint8_t type,
 
 
 static bool __attribute__((nonnull))
-dec_max_stream_data_frame(const uint8_t ** pos,
-                          const uint8_t * const end,
-                          const struct pkt_meta * const m)
+dec_max_strm_data_frame(const uint8_t ** pos,
+                        const uint8_t * const end,
+                        const struct pkt_meta * const m)
 {
     struct q_conn * const c = m->pn->c;
     int64_t sid = 0;
@@ -703,10 +701,10 @@ dec_max_stream_data_frame(const uint8_t ** pos,
 
 
 static bool __attribute__((nonnull))
-dec_max_streams_frame(const uint8_t type,
-                      const uint8_t ** pos,
-                      const uint8_t * const end,
-                      const struct pkt_meta * const m)
+dec_max_strms_frame(const uint8_t type,
+                    const uint8_t ** pos,
+                    const uint8_t * const end,
+                    const struct pkt_meta * const m)
 {
     struct q_conn * const c = m->pn->c;
 
@@ -716,9 +714,8 @@ dec_max_streams_frame(const uint8_t type,
     warn(INF, FRAM_IN "MAX_STREAMS" NRM " 0x%02x=%s max=%" PRIu64, type,
          type == FRM_MSU ? "uni" : "bi", max);
 
-    uint64_t * const max_streams = type == FRM_MSU
-                                       ? &c->tp_out.max_streams_uni
-                                       : &c->tp_out.max_streams_bidi;
+    uint64_t * const max_streams =
+        type == FRM_MSU ? &c->tp_out.max_strms_uni : &c->tp_out.max_strms_bidi;
 
     if (max > *max_streams) {
         *max_streams = max;
@@ -754,9 +751,9 @@ dec_max_data_frame(const uint8_t ** pos,
 
 
 static bool __attribute__((nonnull))
-dec_stream_data_blocked_frame(const uint8_t ** pos,
-                              const uint8_t * const end,
-                              const struct pkt_meta * const m)
+dec_strm_data_blocked_frame(const uint8_t ** pos,
+                            const uint8_t * const end,
+                            const struct pkt_meta * const m)
 {
     struct q_conn * const c = m->pn->c;
     int64_t sid = 0;
@@ -774,7 +771,7 @@ dec_stream_data_blocked_frame(const uint8_t ** pos,
 
     do_stream_fc(s, 0);
     // because do_stream_fc() only sets this when increasing the FC window
-    s->tx_max_stream_data = true;
+    s->tx_max_strm_data = true;
     need_ctrl_update(s);
 
     return true;
@@ -1098,8 +1095,8 @@ bool dec_frames(struct q_conn * const c,
         case FRM_STR_0f:;
             static const struct frames cry_or_str =
                 bitset_t_initializer(1 << FRM_CRY | 1 << FRM_STR);
-            if (unlikely(bit_overlap(FRM_MAX, &m->frames, &cry_or_str)) &&
-                m->stream) {
+            if (unlikely(bit_overlap(FRM_MAX, &m->frms, &cry_or_str)) &&
+                m->strm) {
                 // already had at least one stream or crypto frame in this
                 // packet with non-duplicate data, so generate (another) copy
 #ifdef DEBUG_EXTRA
@@ -1110,8 +1107,8 @@ bool dec_frames(struct q_conn * const c,
                 struct w_iov * const vdup = w_iov_dup(v, &mdup, off);
                 pm_cpy(mdup, m, false);
                 // adjust w_iov start and len to stream frame data
-                v->buf += m->stream_data_pos;
-                v->len = m->stream_data_len;
+                v->buf += m->strm_data_pos;
+                v->len = m->strm_data_len;
                 // continue parsing in the copied w_iov
                 v = *vv = vdup;
                 m = *mm = mdup;
@@ -1143,12 +1140,12 @@ bool dec_frames(struct q_conn * const c,
             break;
 
         case FRM_MSD:
-            ok = dec_max_stream_data_frame(&pos, end, m);
+            ok = dec_max_strm_data_frame(&pos, end, m);
             break;
 
         case FRM_MSB:
         case FRM_MSU:
-            ok = dec_max_streams_frame(type, &pos, end, m);
+            ok = dec_max_strms_frame(type, &pos, end, m);
             break;
 
         case FRM_MCD:
@@ -1156,7 +1153,7 @@ bool dec_frames(struct q_conn * const c,
             break;
 
         case FRM_SDB:
-            ok = dec_stream_data_blocked_frame(&pos, end, m);
+            ok = dec_strm_data_blocked_frame(&pos, end, m);
             break;
 
         case FRM_CDB:
@@ -1210,15 +1207,15 @@ bool dec_frames(struct q_conn * const c,
     if (pad_start)
         log_pad((uint16_t)(pos - pad_start + 1));
 
-    if (m->stream_data_pos) {
+    if (m->strm_data_pos) {
         // adjust w_iov start and len to stream frame data
-        v->buf += m->stream_data_pos;
-        v->len = m->stream_data_len;
+        v->buf += m->strm_data_pos;
+        v->len = m->strm_data_len;
     }
 
     // track outstanding frame types in the pn space
     struct pn_space * const pn = pn_for_pkt_type(c, m->hdr.type);
-    bit_or(FRM_MAX, &pn->rx_frames, &m->frames);
+    bit_or(FRM_MAX, &pn->rx_frames, &m->frms);
 
     return true;
 }
@@ -1327,9 +1324,9 @@ void enc_ack_frame(uint8_t ** pos,
         (1 << ade);
     encv(pos, end, ack_delay);
 
-    m->ack_block_cnt = diet_cnt(&pn->recv) - 1;
-    encv(pos, end, m->ack_block_cnt);
-    m->ack_block_pos = (uint16_t)(*pos - start);
+    m->ack_rng_cnt = diet_cnt(&pn->recv) - 1;
+    encv(pos, end, m->ack_rng_cnt);
+    m->ack_frm_pos = (uint16_t)(*pos - start);
 
     uint64_t prev_lo = 0;
     diet_foreach_rev (b, diet, &pn->recv) {
@@ -1353,7 +1350,7 @@ void enc_ack_frame(uint8_t ** pos,
                               " usec) cnt=%" PRIu64 " block=%" PRIu64
                               " [" FMT_PNR_IN ".." FMT_PNR_IN "]",
                      type, type == FRM_ACE ? "ECN" : "", m->lg_acked, ack_delay,
-                     ack_delay * (1 << ade), m->ack_block_cnt, ack_block, b->lo,
+                     ack_delay * (1 << ade), m->ack_rng_cnt, ack_block, b->lo,
                      shorten_ack_nr(b->hi, ack_block));
 
         } else {
@@ -1369,7 +1366,7 @@ void enc_ack_frame(uint8_t ** pos,
                               " usec) cnt=%" PRIu64 " block=%" PRIu64
                               " [" FMT_PNR_IN "]",
                      type, type == FRM_ACE ? "ECN" : "", m->lg_acked, ack_delay,
-                     ack_delay * (1 << ade), m->ack_block_cnt, ack_block,
+                     ack_delay * (1 << ade), m->ack_rng_cnt, ack_block,
                      m->lg_acked);
         }
 #endif
@@ -1403,7 +1400,7 @@ void calc_lens_of_stream_or_crypto_frame(const struct pkt_meta * const m,
                                          uint16_t * const hlen,
                                          uint16_t * const dlen)
 {
-    const uint16_t stream_data_len = (uint16_t)(v->len - m->stream_data_pos);
+    const uint16_t strm_data_len = (uint16_t)(v->len - m->strm_data_pos);
     const bool enc_strm = s->id >= 0;
 
     *hlen = 1; // type byte
@@ -1412,9 +1409,9 @@ void calc_lens_of_stream_or_crypto_frame(const struct pkt_meta * const m,
     if (likely(s->out_data || !enc_strm))
         *hlen += varint_size(s->out_data);
     *dlen = likely(enc_strm) &&
-                    stream_data_len == MAX_PKT_LEN - AEAD_LEN - DATA_OFFSET
+                    strm_data_len == MAX_PKT_LEN - AEAD_LEN - DATA_OFFSET
                 ? 0
-                : stream_data_len;
+                : strm_data_len;
     if (*dlen)
         *hlen += varint_size(*dlen);
 }
@@ -1430,18 +1427,18 @@ void enc_stream_or_crypto_frame(uint8_t ** pos,
     const bool enc_strm = s->id >= 0;
     uint8_t type = likely(enc_strm) ? FRM_STR : FRM_CRY;
 
-    m->stream = s;
-    m->stream_data_len = v->len - m->stream_data_pos;
-    m->stream_off = s->out_data;
-    m->stream_header_pos = (uint16_t)(*pos - v->buf);
+    m->strm = s;
+    m->strm_data_len = v->len - m->strm_data_pos;
+    m->strm_off = s->out_data;
+    m->strm_frm_pos = (uint16_t)(*pos - v->buf);
 
     (*pos)++;
     if (likely(enc_strm))
         encv(pos, end, (uint64_t)s->id);
-    if (m->stream_off || unlikely(!enc_strm)) {
+    if (m->strm_off || unlikely(!enc_strm)) {
         if (likely(enc_strm))
             type |= F_STREAM_OFF;
-        encv(pos, end, m->stream_off);
+        encv(pos, end, m->strm_off);
     }
     if (dlen) {
         if (likely(enc_strm))
@@ -1450,13 +1447,13 @@ void enc_stream_or_crypto_frame(uint8_t ** pos,
     }
     if (likely(enc_strm) && unlikely(m->is_fin))
         type |= F_STREAM_FIN;
-    *pos = v->buf + m->stream_header_pos;
+    *pos = v->buf + m->strm_frm_pos;
     enc1(pos, end, type);
 
-    *pos = v->buf + m->stream_data_pos + m->stream_data_len;
+    *pos = v->buf + m->strm_data_pos + m->strm_data_len;
     log_stream_or_crypto_frame(false, m, type, s->id, false, "");
-    track_bytes_out(s, m->stream_data_len);
-    ensure(!enc_strm || m->stream_off < s->out_data_max, "exceeded fc window");
+    track_bytes_out(s, m->strm_data_len);
+    ensure(!enc_strm || m->strm_off < s->out_data_max, "exceeded fc window");
     track_frame(m, type == FRM_CRY ? FRM_CRY : FRM_STR);
 }
 
@@ -1496,10 +1493,10 @@ void enc_close_frame(uint8_t ** pos,
 }
 
 
-void enc_max_stream_data_frame(uint8_t ** pos,
-                               const uint8_t * const end,
-                               struct pkt_meta * const m,
-                               struct q_stream * const s)
+void enc_max_strm_data_frame(uint8_t ** pos,
+                             const uint8_t * const end,
+                             struct pkt_meta * const m,
+                             struct q_stream * const s)
 {
     enc1(pos, end, FRM_MSD);
     encv(pos, end, (uint64_t)s->id);
@@ -1508,9 +1505,9 @@ void enc_max_stream_data_frame(uint8_t ** pos,
     warn(INF, FRAM_OUT "MAX_STREAM_DATA" NRM " id=" FMT_SID " max=%" PRIu64,
          s->id, s->in_data_max);
 
-    m->max_stream_data_sid = s->id;
-    m->max_stream_data = s->in_data_max;
-    s->tx_max_stream_data = false;
+    m->max_strm_data_sid = s->id;
+    m->max_strm_data = s->in_data_max;
+    s->tx_max_strm_data = false;
     track_frame(m, FRM_MSD);
 }
 
@@ -1531,16 +1528,16 @@ void enc_max_data_frame(uint8_t ** pos,
 }
 
 
-void enc_max_streams_frame(uint8_t ** pos,
-                           const uint8_t * const end,
-                           struct pkt_meta * const m,
-                           const bool bidi)
+void enc_max_strms_frame(uint8_t ** pos,
+                         const uint8_t * const end,
+                         struct pkt_meta * const m,
+                         const bool bidi)
 {
     struct q_conn * const c = m->pn->c;
     const uint8_t type = bidi ? FRM_MSB : FRM_MSU;
     enc1(pos, end, type);
     const uint64_t max =
-        bidi ? c->tp_in.max_streams_bidi : c->tp_in.max_streams_uni;
+        bidi ? c->tp_in.max_strms_bidi : c->tp_in.max_strms_uni;
     encv(pos, end, max);
 
     warn(INF, FRAM_OUT "MAX_STREAMS" NRM " 0x%02x=%s max=%" PRIu64, type,
@@ -1554,18 +1551,18 @@ void enc_max_streams_frame(uint8_t ** pos,
 }
 
 
-void enc_stream_data_blocked_frame(uint8_t ** pos,
-                                   const uint8_t * const end,
-                                   struct pkt_meta * const m,
-                                   struct q_stream * const s)
+void enc_strm_data_blocked_frame(uint8_t ** pos,
+                                 const uint8_t * const end,
+                                 struct pkt_meta * const m,
+                                 struct q_stream * const s)
 {
     enc1(pos, end, FRM_SDB);
     encv(pos, end, (uint64_t)s->id);
-    m->stream_data_blocked = s->out_data_max;
-    encv(pos, end, m->stream_data_blocked);
+    m->strm_data_blocked = s->out_data_max;
+    encv(pos, end, m->strm_data_blocked);
 
     warn(INF, FRAM_OUT "STREAM_DATA_BLOCKED" NRM " id=" FMT_SID " lim=%" PRIu64,
-         s->id, m->stream_data_blocked);
+         s->id, m->strm_data_blocked);
 
     track_frame(m, FRM_SDB);
 }
@@ -1577,7 +1574,7 @@ void enc_data_blocked_frame(uint8_t ** pos,
 {
     enc1(pos, end, FRM_CDB);
 
-    m->data_blocked = m->pn->c->tp_out.max_data + m->stream_data_len;
+    m->data_blocked = m->pn->c->tp_out.max_data + m->strm_data_len;
     encv(pos, end, m->data_blocked);
 
     warn(INF, FRAM_OUT "DATA_BLOCKED" NRM " lim=%" PRIu64, m->data_blocked);
@@ -1595,7 +1592,7 @@ void enc_streams_blocked_frame(uint8_t ** pos,
     const uint8_t type = bidi ? FRM_SBB : FRM_SBU;
     enc1(pos, end, type);
     const uint64_t lim =
-        bidi ? c->tp_out.max_streams_bidi : c->tp_out.max_streams_uni;
+        bidi ? c->tp_out.max_strms_bidi : c->tp_out.max_strms_uni;
     encv(pos, end, lim);
 
     warn(INF, FRAM_OUT "STREAMS_BLOCKED" NRM " 0x%02x=%s lim=%" PRIu64, type,

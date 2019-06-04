@@ -84,7 +84,7 @@ bitset_define(frames, FRM_MAX);
 #define FRAM_OUT BLD GRN
 #endif
 
-#define has_frame(frames, type) bit_isset(FRM_MAX, (type), &(frames))
+#define has_frm(frames, type) bit_isset(FRM_MAX, (type), &(frames))
 
 struct pkt_meta;
 
@@ -144,10 +144,10 @@ enc_path_response_frame(uint8_t ** pos,
                         struct pkt_meta * const m);
 
 extern void __attribute__((nonnull))
-enc_max_stream_data_frame(uint8_t ** pos,
-                          const uint8_t * const end,
-                          struct pkt_meta * const m,
-                          struct q_stream * const s);
+enc_max_strm_data_frame(uint8_t ** pos,
+                        const uint8_t * const end,
+                        struct pkt_meta * const m,
+                        struct q_stream * const s);
 
 extern void __attribute__((nonnull))
 enc_max_data_frame(uint8_t ** pos,
@@ -155,16 +155,16 @@ enc_max_data_frame(uint8_t ** pos,
                    struct pkt_meta * const m);
 
 extern void __attribute__((nonnull))
-enc_max_streams_frame(uint8_t ** pos,
-                      const uint8_t * const end,
-                      struct pkt_meta * const m,
-                      const bool bidi);
+enc_max_strms_frame(uint8_t ** pos,
+                    const uint8_t * const end,
+                    struct pkt_meta * const m,
+                    const bool bidi);
 
 extern void __attribute__((nonnull))
-enc_stream_data_blocked_frame(uint8_t ** pos,
-                              const uint8_t * const end,
-                              struct pkt_meta * const m,
-                              struct q_stream * const s);
+enc_strm_data_blocked_frame(uint8_t ** pos,
+                            const uint8_t * const end,
+                            struct pkt_meta * const m,
+                            struct q_stream * const s);
 
 extern void __attribute__((nonnull))
 enc_data_blocked_frame(uint8_t ** pos,

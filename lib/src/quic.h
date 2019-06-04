@@ -153,26 +153,26 @@ struct pkt_meta {
     sl_head(pm_sl, pkt_meta) rtx; ///< List of pkt_meta structs of previous TXs.
 
     // pm_cpy(true) starts copying from here:
-    struct q_stream * stream;   ///< Stream this data was written on.
-    uint64_t stream_off;        ///< Stream data offset.
-    uint16_t stream_header_pos; ///< Offset of stream frame header.
-    uint16_t stream_data_pos;   ///< Offset of first byte of stream frame data.
-    uint16_t stream_data_len;   ///< Length of last stream frame data.
+    struct q_stream * strm; ///< Stream this data was written on.
+    uint64_t strm_off;      ///< Stream data offset.
+    uint16_t strm_frm_pos;  ///< Offset of stream frame header.
+    uint16_t strm_data_pos; ///< Offset of first byte of stream frame data.
+    uint16_t strm_data_len; ///< Length of last stream frame data.
 
-    uint16_t ack_block_pos; ///< Offset of first ACK block (for TX'ed pkt).
+    uint16_t ack_frm_pos; ///< Offset of first ACK block (for TX'ed pkt).
     uint64_t lg_acked; ///< "Largest Acknowledged" in ACK block (for TX'ed pkt).
-    uint64_t ack_block_cnt; ///< "ACK Block Count" in ACK block (for TX'ed pkt).
+    uint64_t ack_rng_cnt; ///< "ACK Range Count" in ACK block (for TX'ed pkt).
 
-    int64_t max_stream_data_sid;  ///< MAX_STREAM_DATA sid, if sent.
-    uint64_t max_stream_data;     ///< MAX_STREAM_DATA limit, if sent.
-    uint64_t max_data;            ///< MAX_DATA limit, if sent.
-    int64_t max_streams_bidi;     ///< MAX_STREAM_ID bidir limit, if sent.
-    int64_t max_streams_uni;      ///< MAX_STREAM_ID unidir limit, if sent.
-    uint64_t stream_data_blocked; ///< STREAM_DATA_BLOCKED value, if sent.
-    uint64_t data_blocked;        ///< DATA_BLOCKED value, if sent.
+    int64_t max_strm_data_sid;  ///< MAX_STREAM_DATA sid, if sent.
+    uint64_t max_strm_data;     ///< MAX_STREAM_DATA limit, if sent.
+    uint64_t max_data;          ///< MAX_DATA limit, if sent.
+    int64_t max_strms_bidi;     ///< MAX_STREAM_ID bidir limit, if sent.
+    int64_t max_strms_uni;      ///< MAX_STREAM_ID unidir limit, if sent.
+    uint64_t strm_data_blocked; ///< STREAM_DATA_BLOCKED value, if sent.
+    uint64_t data_blocked;      ///< DATA_BLOCKED value, if sent.
     uint64_t min_cid_seq; ///< Smallest NEW_CONNECTION_ID seq in pkt, if sent.
 
-    struct frames frames; ///< Frames present in pkt.
+    struct frames frms; ///< Frames present in pkt.
 
     // pm_cpy(false) starts copying from here:
     ev_tstamp tx_t;       ///< Transmission timestamp; only set on TX.
@@ -284,7 +284,7 @@ write_to_corpus(const int dir, const void * const data, const size_t len);
     })
 
 
-#define has_stream_data(p) (p)->stream_header_pos
+#define has_strm_data(p) (p)->strm_frm_pos
 
 
 #ifndef NDEBUG
@@ -383,7 +383,7 @@ pm_cpy(struct pkt_meta * const dst,
        const struct pkt_meta * const src,
        const bool also_frame_info)
 {
-    const size_t off = also_frame_info ? offsetof(struct pkt_meta, stream)
+    const size_t off = also_frame_info ? offsetof(struct pkt_meta, strm)
                                        : offsetof(struct pkt_meta, tx_t);
     memcpy((uint8_t *)dst + off, (const uint8_t *)src + off,
            sizeof(*dst) - off);
@@ -393,23 +393,23 @@ pm_cpy(struct pkt_meta * const dst,
 static inline int __attribute__((nonnull))
 ooo_by_off_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
 {
-    return (a->stream_off > b->stream_off) - (a->stream_off < b->stream_off);
+    return (a->strm_off > b->strm_off) - (a->strm_off < b->strm_off);
 }
 
 
 static inline void __attribute__((nonnull))
 adj_iov_to_start(struct w_iov * const v, const struct pkt_meta * const m)
 {
-    v->buf -= m->stream_data_pos;
-    v->len += m->stream_data_pos;
+    v->buf -= m->strm_data_pos;
+    v->len += m->strm_data_pos;
 }
 
 
 static inline void __attribute__((nonnull))
 adj_iov_to_data(struct w_iov * const v, const struct pkt_meta * const m)
 {
-    v->buf += m->stream_data_pos;
-    v->len -= m->stream_data_pos;
+    v->buf += m->strm_data_pos;
+    v->len -= m->strm_data_pos;
 }
 
 
