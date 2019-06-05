@@ -133,8 +133,6 @@ static FILE * tls_log_file;
 // quicly shim
 #define AEAD_BASE_LABEL PTLS_HKDF_EXPAND_LABEL_PREFIX "quic "
 #define st_quicly_cipher_context_t cipher_ctx
-#define quicly_hexdump(a, b, c) hex2str(a, b)
-#define QUICLY_DEBUG 0
 
 
 // from quicly
@@ -182,15 +180,11 @@ static int setup_cipher(ptls_cipher_context_t ** hp_ctx,
         ret = PTLS_ERROR_NO_MEMORY;
         goto Exit;
     }
-    if (QUICLY_DEBUG) {
-        char * secret_hex = quicly_hexdump(secret, hash->digest_size, SIZE_MAX);
-        char * hpkey_hex =
-            quicly_hexdump(hpkey, aead->ctr_cipher->key_size, SIZE_MAX);
-        fprintf(stderr, "%s:\n  aead-secret: %s\n  hp-key: %s\n", __func__,
-                secret_hex, hpkey_hex);
-        // free(secret_hex);
-        // free(hpkey_hex);
-    }
+
+#ifdef DEBUG_PROT
+    warn(NTE, "aead-secret: %s, hp-key: %s", hex2str(secret, hash->digest_size),
+         hex2str(hpkey, aead->ctr_cipher->key_size));
+#endif
 
     ret = 0;
 Exit:
@@ -1237,7 +1231,7 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
                                  const void * const secret)
 {
 #ifdef DEBUG_PROT
-    warn(CRT, "update_traffic_key %s %u", is_enc ? "tx" : "rx", epoch);
+    warn(CRT, "update_traffic_key %s %lu", is_enc ? "tx" : "rx", epoch);
 #endif
     struct q_conn * const c = *ptls_get_data_ptr(tls);
     ptls_cipher_suite_t * const cipher = ptls_get_cipher(c->tls.t);
@@ -1312,7 +1306,7 @@ void init_tls_ctx(const struct q_conf * const conf)
     }
 
     if (conf && conf->tls_log) {
-        tls_log_file = fopen(conf->tls_log, "wbe");
+        tls_log_file = fopen(conf->tls_log, "abe");
         ensure(tls_log_file, "could not open TLS log %s", conf->tls_log);
     }
 
