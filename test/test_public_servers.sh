@@ -48,6 +48,7 @@ declare -A servers=(
     [quicly]=kazuhooku.com::4433:4433:8443:/40000.txt
     [quinn]=ralith.com::4433:4434:4433:/100K
     [winquic]=quic.westus.cloudapp.azure.com::4433:4434:443:/draft-ietf-quic-http-11.txt
+    # [local]=localhost::4433:4434:4433:/40000
 )
 
 results=(live fail vneg hshk data clse rsmt zrtt rtry migr bind kyph http spin aecn)
@@ -244,8 +245,8 @@ function analyze {
     perl -n -e '/ECN verification failed/ and $n=-1;
         $n==0 && /dec_ack_frame.*ECN ect0=/ && exit 1;' "$log_strip"
     [ $? -eq 1 ] && echo E > "$ret_base.aecn"
-    [ ! -s "$ret_base.fail" ] || [ ! -s "$ret_base.hshk" ] || \
-        [ ! -s "$ret_base.data" ] || [ ! -s "$ret_base.clse" ] || rm -f "$log"
+    [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.hshk" ] && \
+        [ -s "$ret_base.data" ] && [ -s "$ret_base.clse" ] && rm -f "$log"
     rm -f "$log_strip"
 
     # analyze rsmt and 0rtt
@@ -263,8 +264,8 @@ function analyze {
         /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
         $x && /enc_close.*err=0x0000/ && exit 1;' "$log_strip"
     [ $? -eq 1 ] && echo Z > "$ret_base.zrtt"
-    [ ! -s "$ret_base.fail" ] || [ ! -s "$ret_base.rsmt" ] || \
-        [ ! -s "$ret_base.zrtt" ] || rm -f "$log"
+    [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.rsmt" ] && \
+        [ -s "$ret_base.zrtt" ] && rm -f "$log"
     rm -f "$log_strip"
 
     # analyze rtry
@@ -277,7 +278,7 @@ function analyze {
         /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
        $x && /enc_close.*err=0x0000/ && exit 1;' "$log_strip"
     [ $? -eq 1 ] && echo S > "$ret_base.rtry"
-    [ ! -s "$ret_base.fail" ] || [ ! -s "$ret_base.rtry" ] || rm -f "$log"
+    [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.rtry" ] && rm -f "$log"
     rm -f "$log_strip"
 
     # analyze key update
@@ -290,7 +291,7 @@ function analyze {
         /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
        $x && /RX.*Short kyph=1/ && exit 1;' "$log_strip"
     [ $? -eq 1 ] && echo U > "$ret_base.kyph"
-    [ ! -s "$ret_base.fail" ] || [ ! -s "$ret_base.kyph" ] || rm -f "$log"
+    [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.kyph" ] && rm -f "$log"
     rm -f "$log_strip"
 
     # analyze h3
@@ -304,7 +305,7 @@ function analyze {
         /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
         $x && /enc_close.*err=0x0000/ && exit 1;' "$log_strip"
     [ $? -eq 1 ] && echo 3 > "$ret_base.http"
-    [ ! -s "$ret_base.fail" ] || [ ! -s "$ret_base.http" ] || rm -f "$log"
+    [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.http" ] && rm -f "$log"
     rm -f "$log_strip"
 
     # analyze NAT rebind
@@ -320,7 +321,7 @@ function analyze {
         /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
         $x==4 && /enc_close.*err=0x0000/ && exit 1;' "$log_strip"
     [ $? -eq 1 ] && echo B > "$ret_base.bind"
-    [ ! -s "$ret_base.fail" ] || [ ! -s "$ret_base.bind" ] || rm -f "$log"
+    [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.bind" ] && rm -f "$log"
     rm -f "$log_strip"
 
     printf "%s " "$s"
