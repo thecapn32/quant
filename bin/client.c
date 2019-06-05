@@ -419,8 +419,12 @@ int main(int argc, char * argv[])
                     clock_gettime(CLOCK_MONOTONIC, &se->rep_t);
             }
 
-            if (rxed_new == false && q_ready(timeout * MSECS_PER_SEC) == 0)
-                break;
+            if (rxed_new == false) {
+                struct q_conn * c;
+                q_ready(timeout * MSECS_PER_SEC, &c);
+                if (c == 0)
+                    break;
+            }
 
         } while (all_closed == false);
 

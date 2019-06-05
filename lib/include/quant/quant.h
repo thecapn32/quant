@@ -163,7 +163,7 @@ extern bool __attribute__((nonnull)) q_read_stream(struct q_stream * const s,
                                                    struct w_iov_sq * const q,
                                                    const bool all);
 
-extern struct q_conn * q_ready(const uint64_t timeout);
+extern bool q_ready(const uint64_t timeout, struct q_conn ** const ready);
 
 extern bool __attribute__((nonnull))
 q_is_new_serv_conn(const struct q_conn * const c);

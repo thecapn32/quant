@@ -253,7 +253,7 @@ int main(int argc, char * argv[])
                    MAXPORTS);
             break;
         case 't':
-            timeout = MIN(600, strtoul(optarg, 0, 10)); // 10 min
+            timeout = MIN(600, strtoul(optarg, 0, 10)); // 10 min = 600 sec
             break;
         case 'b':
             num_bufs = MAX(1000, MIN(strtoul(optarg, 0, 10), UINT32_MAX));
@@ -292,84 +292,87 @@ int main(int argc, char * argv[])
     bool first_conn = true;
     http_parser_settings settings = {.on_url = serve_cb};
 
-    while (likely(ret == 0)) {
-        struct q_conn * c = q_ready(first_conn ? 0 : timeout * 1000);
-        if (c == 0)
+    while (1) {
+        struct q_conn * c;
+        const bool have_active =
+            q_ready(first_conn ? 0 : timeout * MSECS_PER_SEC, &c);
+        if (c == 0) {
+            if (have_active == false)
+                break;
             continue;
+        }
         first_conn = false;
 
         // do we need to q_accept?
         if (q_is_new_serv_conn(c))
-            q_accept(&(struct q_conn_conf){.idle_timeout = timeout * 1000,
-                                           .enable_spinbit = true,
-                                           .enable_udp_zero_checksums = true});
+            q_accept(
+                &(struct q_conn_conf){.idle_timeout = timeout * MSECS_PER_SEC,
+                                      .enable_spinbit = true,
+                                      .enable_udp_zero_checksums = true});
 
         if (q_is_conn_closed(c)) {
             q_close(c, 0, 0);
             continue;
         }
 
-        while (likely(ret == 0)) {
-            // do we need to handle a request?
-            struct cb_data d = {.c = c, .w = w, .dir = dir_fd};
-            http_parser parser = {.data = &d};
+        // do we need to handle a request?
+        struct cb_data d = {.c = c, .w = w, .dir = dir_fd};
+        http_parser parser = {.data = &d};
 
-            http_parser_init(&parser, HTTP_REQUEST);
-            struct w_iov_sq q = w_iov_sq_initializer(q);
-            struct q_stream * s = q_read(c, &q, false);
+        http_parser_init(&parser, HTTP_REQUEST);
+        struct w_iov_sq q = w_iov_sq_initializer(q);
+        struct q_stream * s = q_read(c, &q, false);
 
-            if (sq_empty(&q)) {
-                if (s && q_is_stream_closed(s)) {
-                    // retrieve the TX'ed request
-                    q_stream_get_written(s, &q);
+        if (sq_empty(&q)) {
+            if (s && q_is_stream_closed(s)) {
+                // retrieve the TX'ed request
+                q_stream_get_written(s, &q);
 #ifndef NDEBUG
-                    // if we wrote a "benchmark objects", increase logging
-                    const uint64_t len = w_iov_sq_len(&q);
-                    if (is_bench_obj(len) && --bench_cnt == 0) {
-                        util_dlevel = ini_dlevel;
-                        warn(NTE, "increasing log level after benchmark object "
-                                  "transfer");
-                    }
+                // if we wrote a "benchmark objects", increase logging
+                const uint64_t len = w_iov_sq_len(&q);
+                if (is_bench_obj(len) && --bench_cnt == 0) {
+                    util_dlevel = ini_dlevel;
+                    warn(NTE, "increasing log level after benchmark object "
+                              "transfer");
+                }
 #endif
-                    q_free_stream(s);
-                    q_free(&q);
-                    continue;
-                }
-
-                // no more streams with pending reqs, try next conn
-                break;
+                q_free_stream(s);
+                q_free(&q);
+                continue;
             }
 
-            if (q_is_uni_stream(s)) {
-                warn(NTE, "can't serve request on uni stream: %.*s",
-                     sq_first(&q)->len, sq_first(&q)->buf);
-
-            } else {
-                d.s = s;
-                struct w_iov * v = 0;
-                sq_foreach (v, &q, next) {
-                    if (v->len == 0)
-                        // skip empty bufs (such as pure FINs)
-                        continue;
-
-                    const size_t parsed = http_parser_execute(
-                        &parser, &settings, (char *)v->buf, v->len);
-                    if (parsed == v->len)
-                        continue;
-
-                    warn(ERR, "HTTP parser error: %.*s", (int)(v->len - parsed),
-                         &v->buf[parsed]);
-                    // XXX the strnlen() test is super-hacky
-                    if (strnlen((char *)v->buf, v->len) == v->len)
-                        send_err(&d, 400);
-                    else
-                        send_err(&d, 505);
-                    ret = 1;
-                    break;
-                }
-            }
-            q_free(&q);
+            // no more streams with pending reqs, try next conn
+            continue;
         }
+
+        if (q_is_uni_stream(s)) {
+            warn(NTE, "can't serve request on uni stream: %.*s",
+                 sq_first(&q)->len, sq_first(&q)->buf);
+
+        } else {
+            d.s = s;
+            struct w_iov * v = 0;
+            sq_foreach (v, &q, next) {
+                if (v->len == 0)
+                    // skip empty bufs (such as pure FINs)
+                    continue;
+
+                const size_t parsed = http_parser_execute(
+                    &parser, &settings, (char *)v->buf, v->len);
+                if (parsed == v->len)
+                    continue;
+
+                warn(ERR, "HTTP parser error: %.*s", (int)(v->len - parsed),
+                     &v->buf[parsed]);
+                // XXX the strnlen() test is super-hacky
+                if (strnlen((char *)v->buf, v->len) == v->len)
+                    send_err(&d, 400);
+                else
+                    send_err(&d, 505);
+                ret = 1;
+            }
+        }
+        q_free(&q);
     }
 
     q_cleanup(w);

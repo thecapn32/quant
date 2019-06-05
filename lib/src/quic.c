@@ -844,7 +844,7 @@ done:
 #endif
 
 
-struct q_conn * q_ready(const uint64_t timeout)
+bool q_ready(const uint64_t timeout, struct q_conn ** const ready)
 {
     if (sl_empty(&c_ready)) {
         if (timeout) {
@@ -875,8 +875,9 @@ struct q_conn * q_ready(const uint64_t timeout)
         warn(WRN, "no conn ready to rx");
 #endif
     }
-
-    return c;
+    if (ready)
+        *ready = c;
+    return kh_size(conns_by_srt);
 }
 
 
