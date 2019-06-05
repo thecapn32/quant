@@ -433,10 +433,13 @@ int main(int argc, char * argv[])
             struct stream_entry * const se = sl_first(&sl);
             ret |= w_iov_sq_cnt(&se->rep) == 0;
 
-#ifndef NDEBUG
             struct timespec diff;
             timespec_sub(&se->rep_t, &se->req_t, &diff);
             const double elapsed = timespec_to_double(diff);
+            if (reps > 1)
+                printf("%" PRIu64 "\t%f\t\"%s\"\t%s\n", w_iov_sq_len(&se->rep),
+                       elapsed, bps(w_iov_sq_len(&se->rep), elapsed), se->url);
+#ifndef NDEBUG
             warn(WRN,
                  "read %" PRIu64
                  " byte%s in %.3f sec (%s) on conn %s strm %" PRIu64,
@@ -444,10 +447,6 @@ int main(int argc, char * argv[])
                  elapsed < 0 ? 0 : elapsed,
                  bps(w_iov_sq_len(&se->rep), elapsed), q_cid(se->c),
                  q_sid(se->s));
-
-            if (reps > 1)
-                printf("%" PRIu64 "\t%f\t\"%s\"\t%s\n", w_iov_sq_len(&se->rep),
-                       elapsed, bps(w_iov_sq_len(&se->rep), elapsed), se->url);
 #endif
 
             // retrieve the TX'ed request
