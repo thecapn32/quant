@@ -4,10 +4,10 @@
         {
             "path": ".",
             "file_include_patterns": [
-                "*.c", "*.cc", "*.h", "*.sh", "*.txt", "*.dot", "*.imp", "*.in",
-                "*.result", "*.yml", "*.md", "*.sublime-project",
-                ".gitignore", ".clang-format", ".editorconfig", ".dockerignore",
-                "Vagrantfile", "Dockerfile"
+                "*.c", "*.cc", "*.cpp", "*.h", "*.sh", "*.txt", "*.dot",
+                "*.imp", "*.in", "*.result", "*.yml", "*.md", "*.mk",
+                "*.sublime-project", ".gitignore", ".clang-format",
+                ".editorconfig", ".dockerignore", "Vagrantfile", "Dockerfile"
             ],
             "folder_exclude_patterns": [
                 ".git", ".vagrant", "Darwin*", "Linux*",

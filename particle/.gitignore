@@ -1,0 +1,4 @@
+bin/*
+*.bin
+firmware/deps
+firmware/warpcore/*
