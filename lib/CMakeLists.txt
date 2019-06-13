@@ -86,8 +86,13 @@ foreach(TARGET ${TARGETS})
         INTERPROCEDURAL_OPTIMIZATION ${IPO}
     )
 
+    if(NOT WITH_MINICRYPTO)
+      set(CRYPTOLIBS picotls-openssl ${OPENSSL_LIBRARIES})
+    else()
+      set(CRYPTOLIBS picotls-minicrypto)
+    endif()
     target_link_libraries(${TARGET}
-      m picotls-core picotls-openssl ${OPENSSL_LIBRARIES} ${LIBEV_LIB})
+      m picotls-core ${CRYPTOLIBS} ${LIBEV_LIB})
 
     if(${TARGET} MATCHES ".*quant")
       install(DIRECTORY include/${PROJECT_NAME}

@@ -33,6 +33,7 @@ foreach(TARGET ${TARGETS})
       ${HTTP_PARSER_LIB}
       picoquic-core
       picotls-minicrypto
+      picotls-openssl
     )
   else()
     add_executable(${TARGET} ${TARGET}.c)
@@ -41,6 +42,7 @@ foreach(TARGET ${TARGETS})
       ${HTTP_PARSER_LIB}
       picoquic-core
       picotls-minicrypto
+      picotls-openssl
     )
   endif()
 

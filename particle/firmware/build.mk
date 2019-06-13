@@ -2,13 +2,16 @@ INCLUDE_DIRS+=$(SOURCE_PATH)
 CPPSRC+=main.cpp
 
 DEPS=lib/deps
+LIBEV=$(DEPS)/libev
 KLIB=$(DEPS)/klib
-PICOQUIC=$(DEPS)/picoquic
+KLIB=$(DEPS)/klib
 PICOTLS=$(DEPS)/picotls
 WARPCORE=$(DEPS)/warpcore/lib
 
 INCLUDE_DIRS+=\
 	$(SOURCE_PATH)/lib/include \
+	$(SOURCE_PATH)/$(LIBEV) \
+	$(SOURCE_PATH)/$(PICOTLS)/include \
 	$(SOURCE_PATH)/$(WARPCORE)/include \
 	$(SOURCE_PATH)/$(WARPCORE)/deps/klib
 
@@ -26,7 +29,7 @@ QUANT_SRC+=\
 
 CSRC+=$(WARP_SRC) $(QUANT_SRC)
 
-EXTRA_CFLAGS+=-Wno-unknown-pragmas -Werror
+EXTRA_CFLAGS+=-Wno-unknown-pragmas -Werror -DNO_FUZZER_CORPUS_COLLECTION
 
 # TODO: figure out how to do this using make rules
 $(shell	cd $(SOURCE_PATH) && ln -sf ../../lib)

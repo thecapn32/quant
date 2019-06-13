@@ -32,7 +32,6 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <time.h>
 
 #define klib_unused
 
@@ -58,6 +57,12 @@
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
+
+#ifdef PARTICLE
+#define NI_MAXHOST 64
+#define NI_MAXSERV 16
+#define O_CLOEXEC 0
 #endif
 
 #include "conn.h"
@@ -430,11 +435,6 @@ bool q_read_stream(struct q_stream * const s,
     if (unlikely(c->state != conn_estb))
         return 0;
 
-#ifndef NDEBUG
-    struct timespec before;
-    clock_gettime(CLOCK_MONOTONIC, &before);
-#endif
-
     if (q_peer_closed_stream(s) == false && all) {
         warn(WRN, "reading all on %s conn %s strm " FMT_SID, conn_type(c),
              cid2str(c->scid), s->id);
@@ -586,7 +586,7 @@ static int __attribute__((nonnull))
 mk_or_open_dir(const char * const path, mode_t mode)
 {
     int fd = mkdir(path, mode);
-    ensure(fd == 0 || fd == -1 && errno == EEXIST, "mkdir %s", path);
+    ensure(fd == 0 || (fd == -1 && errno == EEXIST), "mkdir %s", path);
     fd = open(path, O_RDONLY | O_CLOEXEC);
     ensure(fd != -1, "open %s", path);
     return fd;

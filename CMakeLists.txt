@@ -43,6 +43,10 @@ endif()
 find_package(OpenSSL 1.1.0 REQUIRED)
 string(REGEX REPLACE "/include$" "" OPENSSL_ROOT_DIR ${OPENSSL_INCLUDE_DIR})
 
+if(NOT WITH_MINICRYPTO)
+  add_definitions(-DWITH_OPENSSL)
+endif()
+
 if("${CMAKE_SYSTEM}" MATCHES "Linux")
   add_definitions(-D_GNU_SOURCE)
 endif()

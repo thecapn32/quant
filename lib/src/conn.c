@@ -1098,6 +1098,7 @@ rx_pkts(struct w_iov_sq * const x,
         struct w_iov * const v = alloc_iov(ws->w, 0, 0, &m);
         v->addr = xv->addr;
         v->flags = xv->flags;
+        v->len = xv->len; // this is just so that log_pkt can show the rx len
 
         bool pkt_valid = false;
         const bool is_clnt = w_connected(ws);

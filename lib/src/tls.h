@@ -56,10 +56,15 @@ nonrandom_bytes(void * const buf, const size_t len)
 
 #else
 
-#include <picotls/openssl.h>
 #include <stddef.h>
 
+#ifdef WITH_OPENSSL
+#include <picotls/openssl.h>
 #define rand_bytes ptls_openssl_random_bytes
+#else
+#include <picotls/minicrypto.h>
+#define rand_bytes ptls_minicrypto_random_bytes
+#endif
 
 #endif
 

@@ -10,3 +10,6 @@
 [submodule "lib/deps/picoquic"]
 	path = lib/deps/picoquic
 	url = https://github.com/private-octopus/picoquic.git
+[submodule "lib/deps/libev"]
+	path = lib/deps/libev
+	url = https://git.lighttpd.net/libev.git

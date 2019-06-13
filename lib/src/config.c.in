@@ -28,7 +28,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <@PROJECT_NAME@/@PROJECT_NAME@.h>
+#include <@PROJECT_NAME@/@PROJECT_NAME@.h> // IWYU pragma: keep
 
 
 /// The name of this library.
