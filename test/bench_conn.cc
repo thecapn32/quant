@@ -123,7 +123,7 @@ BENCHMARK(BM_conn)->RangeMultiplier(2)->Range(1024, 1024 * 1024 * 32)
 int main(int argc __attribute__((unused)), char ** argv)
 {
 #ifndef NDEBUG
-    util_dlevel = DBG; // default to maximum compiled-in verbosity
+    util_dlevel = WRN; // default to maximum compiled-in verbosity
 #endif
 
     // init
