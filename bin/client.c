@@ -206,7 +206,7 @@ get(const char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
         struct w_iov * const v = sq_first(&se->req);
         size_t consumed;
         h3zero_client_create_stream_request(v->buf, v->len, (uint8_t *)path,
-                                            strlen(path), &consumed, dest);
+                                            strlen(path), 0, dest, &consumed);
         v->len = (uint16_t)consumed;
     } else {
         // assemble an HTTP/0.9 request
