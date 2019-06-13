@@ -52,7 +52,7 @@ case $c in
                                 https://$addr:44433$path\""
                 ;;
         quicly)
-                cc="external/quicly-prefix/src/quicly-build/cli \
+                cc="external/quicly-prefix/src/quicly-build/cli -n \
                         -l /tmp/quicly-c.log -s /tmp/quicly-session -n -v \
                         -p $path $addr $port"
                 ;;
