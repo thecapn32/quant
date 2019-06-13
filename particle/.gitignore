@@ -1,4 +1,5 @@
 bin/*
 *.bin
-firmware/deps
+firmware/lib
+firmware/quant/*
 firmware/warpcore/*
