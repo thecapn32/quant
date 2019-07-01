@@ -27,7 +27,6 @@
 
 #include <fcntl.h>
 #include <inttypes.h>
-#include <math.h>
 #include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>

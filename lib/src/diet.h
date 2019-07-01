@@ -31,8 +31,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <ev.h>
 #include <quant/quant.h>
+
+// IWYU pragma: no_include "../deps/libev/ev.h"
+
+#include "event.h" // IWYU pragma: keep
 
 
 /// This is a C adaptation of the "discrete interval encoding tree" (DIET) data

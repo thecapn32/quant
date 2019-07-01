@@ -39,13 +39,15 @@
 
 #define klib_unused
 
-#include <ev.h>
 #include <khash.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
+// IWYU pragma: no_include "../deps/libev/ev.h"
+
 #include "diet.h"
-#include "pn.h" // IWYU pragma: keep
+#include "event.h" // IWYU pragma: keep
+#include "pn.h"    // IWYU pragma: keep
 #include "quic.h"
 #include "recovery.h"
 #include "tls.h"
@@ -296,10 +298,8 @@ extern struct q_conn_sl c_ready;
 #define conn_to_state(c, s) (c)->state = (s)
 #endif
 
-struct ev_loop;
 
-extern void __attribute__((nonnull))
-tx(struct ev_loop * const l, ev_async * const w, int param);
+extern void __attribute__((nonnull)) tx(ev_async * const w, int param);
 
 extern void __attribute__((nonnull)) err_close(struct q_conn * const c,
                                                const uint16_t code,
@@ -344,8 +344,7 @@ get_conn_by_srt(uint8_t * const srt);
 extern void __attribute__((nonnull))
 conns_by_srt_ins(struct q_conn * const c, uint8_t * const srt);
 
-extern void __attribute__((nonnull))
-rx(struct ev_loop * const l, ev_io * const rx_w, int _e);
+extern void __attribute__((nonnull)) rx(ev_io * const rx_w, int _e);
 
 extern void __attribute__((nonnull))
 conn_info_populate(struct q_conn * const c);

@@ -33,13 +33,15 @@
 
 #define klib_unused
 
-#include <ev.h>
 #include <khash.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
+// IWYU pragma: no_include "../deps/libev/ev.h"
+
 #include "conn.h"
 #include "diet.h"
+#include "event.h" // IWYU pragma: keep
 #include "pkt.h"
 #include "quic.h"
 #include "stream.h"

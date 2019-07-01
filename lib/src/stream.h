@@ -33,7 +33,7 @@
 
 #include <warpcore/warpcore.h>
 
-#include "conn.h" // IWYU pragma: keep
+#include "conn.h"
 #include "quic.h"
 #include "tls.h"
 

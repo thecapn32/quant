@@ -37,7 +37,6 @@
 
 #define klib_unused
 
-#include <ev.h>
 #include <khash.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
@@ -45,6 +44,7 @@
 #include "bitset.h"
 #include "conn.h"
 #include "diet.h"
+#include "event.h" // IWYU pragma: keep
 #include "frame.h"
 #include "marshall.h"
 #include "pkt.h"
@@ -54,8 +54,6 @@
 #include "stream.h"
 #include "tls.h"
 
-
-struct ev_loop;
 
 #define is_crypto_pkt(m) has_frm((m)->frms, FRM_CRY)
 
@@ -100,7 +98,7 @@ static void __attribute__((nonnull)) maybe_tx(struct q_conn * const c)
 
     c->no_wnd = false;
     // don't set c->needs_tx = true, since it's not clear we must TX
-    ev_feed_event(loop, &c->tx_w, 0);
+    ev_feed_event(&c->tx_w, 0);
 }
 
 
@@ -167,7 +165,7 @@ void set_ld_timer(struct q_conn * const c)
         warn(DBG, "no RTX-able pkts in flight, stopping ld_alarm on %s conn %s",
              conn_type(c), cid2str(c->scid));
 #endif
-        ev_timer_stop(loop, &c->rec.ld_alarm);
+        ev_timer_stop(&c->rec.ld_alarm);
         return;
     }
 
@@ -180,16 +178,16 @@ void set_ld_timer(struct q_conn * const c)
     c->rec.ld_alarm.repeat = c->rec.last_sent_ack_elicit_t + to;
 
 set_to:
-    c->rec.ld_alarm.repeat -= ev_now(loop);
+    c->rec.ld_alarm.repeat -= ev_now();
 
 #ifdef DEBUG_TIMERS
     warn(DBG, "%s alarm in %f sec on %s conn %s", type, c->rec.ld_alarm.repeat,
          conn_type(c), cid2str(c->scid));
 #endif
     if (c->rec.ld_alarm.repeat <= 0)
-        ev_feed_event(loop, &c->rec.ld_alarm, true);
+        ev_feed_event(&c->rec.ld_alarm, true);
     else
-        ev_timer_again(loop, &c->rec.ld_alarm);
+        ev_timer_again(&c->rec.ld_alarm);
 }
 
 
@@ -200,7 +198,7 @@ void congestion_event(struct q_conn * const c, const ev_tstamp sent_t)
     if (in_cong_recovery(c, sent_t))
         return;
 
-    c->rec.rec_start_t = ev_now(loop);
+    c->rec.rec_start_t = ev_now();
     c->rec.cwnd /= kLossReductionDivisor;
     c->rec.ssthresh = c->rec.cwnd = MAX(c->rec.cwnd, kMinimumWindow);
 }
@@ -312,7 +310,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
         MAX(kGranularity, kTimeThreshold * MAX(c->rec.latest_rtt, c->rec.srtt));
 
     // Packets sent before this time are deemed lost.
-    const ev_tstamp lost_send_t = ev_now(loop) - loss_del;
+    const ev_tstamp lost_send_t = ev_now() - loss_del;
 
 #ifndef NDEBUG
     struct diet lost = diet_initializer(lost);
@@ -400,12 +398,10 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
 
 
 static void __attribute__((nonnull))
-on_ld_timeout(struct ev_loop * const l __attribute__((unused)),
-              ev_timer * const w,
-              int direct)
+on_ld_timeout(ev_timer * const w, int direct)
 {
     struct q_conn * const c = w->data;
-    ev_timer_stop(loop, &c->rec.ld_alarm);
+    ev_timer_stop(&c->rec.ld_alarm);
 
     // see OnLossDetectionTimeout pseudo code
     struct pn_space * const pn = earliest_loss_t_pn(c);
@@ -430,7 +426,7 @@ on_ld_timeout(struct ev_loop * const l __attribute__((unused)),
             c->sockopt.enable_ecn = false;
             w_set_sockopt(c->sock, &c->sockopt);
         }
-        ev_feed_event(loop, &c->tx_w, 0);
+        ev_feed_event(&c->tx_w, 0);
         c->i.pto_cnt++;
 
     } else if (have_keys(c, pn_data) == false) {
@@ -440,7 +436,7 @@ on_ld_timeout(struct ev_loop * const l __attribute__((unused)),
 #endif
 
         // XXX this doesn't quite implement the pseudo code
-        ev_feed_event(loop, &c->tx_w, 1);
+        ev_feed_event(&c->tx_w, 1);
         c->rec.crypto_cnt++;
 
     } else {
@@ -450,7 +446,7 @@ on_ld_timeout(struct ev_loop * const l __attribute__((unused)),
 #endif
         c->rec.pto_cnt++;
         c->i.pto_cnt++;
-        ev_feed_event(loop, &c->tx_w, 2);
+        ev_feed_event(&c->tx_w, 2);
     }
 
     if (!direct)
@@ -492,7 +488,7 @@ void on_pkt_sent(struct pkt_meta * const m)
 
     // see OnPacketSent() pseudo code
 
-    const ev_tstamp now = ev_now(loop);
+    const ev_tstamp now = ev_now();
     pm_by_nr_ins(m->pn->sent_pkts, m);
     // nr is set in enc_pkt()
     m->tx_t = now;
@@ -549,7 +545,7 @@ void on_ack_received_1(struct pkt_meta * const lg_ack, const uint64_t ack_del)
                        : MAX(pn->lg_acked, lg_ack->hdr.nr);
 
     if (is_ack_eliciting(&lg_ack->pn->tx_frames)) {
-        c->rec.latest_rtt = ev_now(loop) - lg_ack->tx_t;
+        c->rec.latest_rtt = ev_now() - lg_ack->tx_t;
         update_rtt(c, (double)ack_del / USECS_PER_SEC);
     }
 
@@ -668,7 +664,7 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
 void init_rec(struct q_conn * const c)
 {
     if (ev_is_active(&c->rec.ld_alarm))
-        ev_timer_stop(loop, &c->rec.ld_alarm);
+        ev_timer_stop(&c->rec.ld_alarm);
 
     // zero all, then reset
     memset(&c->rec, 0, sizeof(c->rec));

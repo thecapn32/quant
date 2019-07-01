@@ -37,14 +37,16 @@
 
 // IWYU pragma: no_include <picotls/../picotls.h>
 
-#include <ev.h>
 #include <picotls.h> // IWYU pragma: keep
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
+// IWYU pragma: no_include "../deps/libev/ev.h"
+
 #include "bitset.h"
 #include "conn.h"
 #include "diet.h"
+#include "event.h" // IWYU pragma: keep
 #include "frame.h"
 #include "marshall.h"
 #include "pkt.h"
@@ -653,11 +655,11 @@ dec_close_frame(const uint8_t type,
              err_code ? RED : NRM, (int)reas_len, reas_phr);
 
     if (c->state == conn_drng)
-        ev_feed_event(loop, &c->closing_alarm, 0);
+        ev_feed_event(&c->closing_alarm, 0);
     else {
         if (c->is_clnt) {
             conn_to_state(c, conn_drng);
-            ev_feed_event(loop, &c->closing_alarm, 0);
+            ev_feed_event(&c->closing_alarm, 0);
         } else
             enter_closing(c);
     }
@@ -1320,8 +1322,7 @@ void enc_ack_frame(uint8_t ** pos,
                              ? DEF_ACK_DEL_EXP
                              : c->tp_out.ack_del_exp;
     const uint64_t ack_delay =
-        (uint64_t)((ev_now(loop) - diet_timestamp(b)) * USECS_PER_SEC) /
-        (1 << ade);
+        (uint64_t)((ev_now() - diet_timestamp(b)) * USECS_PER_SEC) / (1 << ade);
     encv(pos, end, ack_delay);
 
     m->ack_rng_cnt = diet_cnt(&pn->recv) - 1;
@@ -1386,7 +1387,7 @@ void enc_ack_frame(uint8_t ** pos,
              pn->ect1_cnt, pn->ce_cnt ? BLU : NRM, pn->ce_cnt);
     }
 
-    ev_timer_stop(loop, &c->ack_alarm);
+    ev_timer_stop(&c->ack_alarm);
     bit_zero(FRM_MAX, &pn->rx_frames);
     pn->pkts_rxed_since_last_ack_tx = 0;
     pn->imm_ack = false;

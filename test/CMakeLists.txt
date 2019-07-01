@@ -7,8 +7,6 @@ foreach(TARGET diet conn)
     ${CMAKE_CURRENT_BINARY_DIR}/dummy.key ${CMAKE_CURRENT_BINARY_DIR}/dummy.crt)
   target_link_libraries(test_${TARGET} lib${PROJECT_NAME})
   target_include_directories(test_${TARGET}
-    SYSTEM PRIVATE
-      ${LIBEV_INCLUDE}
     PRIVATE
       ${PROJECT_BINARY_DIR}/external/include
       ${PROJECT_SOURCE_DIR}/lib/src
@@ -64,7 +62,6 @@ if(HAVE_BENCHMARK_H)
         ${PROJECT_SOURCE_DIR}/lib/src
       SYSTEM PRIVATE
         ${OPENSSL_ROOT_DIR}/include
-        ${LIBEV_INCLUDE}
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/klib>
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/picotls/include>
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/warpcore/lib/include>
@@ -96,7 +93,6 @@ if(HAVE_FUZZER)
         ${PROJECT_BINARY_DIR}/lib/include
         ${PROJECT_SOURCE_DIR}/lib/src
         ${OPENSSL_ROOT_DIR}/include
-        ${LIBEV_INCLUDE}
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/klib>
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/picotls/include>
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/warpcore/lib/include>

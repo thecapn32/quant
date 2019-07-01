@@ -30,12 +30,13 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include <warpcore/warpcore.h>
+
 #include "bitset.h"
 
 struct pn_space;
 struct q_conn;
 struct q_stream;
-struct w_iov;
 struct cid;
 
 

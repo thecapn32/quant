@@ -30,9 +30,11 @@
 #include <inttypes.h>
 #include <stdint.h>
 
-#include <ev.h>
 #include <warpcore/warpcore.h>
 
+// IWYU pragma: no_include "../deps/libev/ev.h"
+
+#include "event.h" // IWYU pragma: keep
 #include "quic.h"
 
 struct q_conn;

@@ -29,10 +29,15 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <sys/socket.h>
+
+#include <warpcore/warpcore.h>
 
 #include "conn.h"
 #include "quic.h"
+#include "stream.h"
 #include "tls.h"
+
 
 #define MAX_PKT_LEN 1252
 #define MIN_INI_LEN 1200
@@ -140,11 +145,6 @@ has_pkt_nr(const uint8_t flags, const uint32_t vers)
     return is_lh(flags) == false || (vers && pkt_type(flags) != LH_RTRY);
 }
 
-
-struct q_stream;
-struct w_iov;
-struct w_iov_sq;
-struct sockaddr;
 
 extern bool __attribute__((nonnull)) xor_hp(struct w_iov * const xv,
                                             const struct pkt_meta * const m,

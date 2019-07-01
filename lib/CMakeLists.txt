@@ -46,7 +46,7 @@ include(GNUInstallDirs)
 add_library(common
   OBJECT
     src/pkt.c src/frame.c src/quic.c src/stream.c src/conn.c src/pn.c
-    src/diet.c src/util.c src/tls.c src/recovery.c
+    src/diet.c src/util.c src/tls.c src/recovery.c src/event.c
 )
 
 set(TARGETS common lib${PROJECT_NAME} ${WARP})
@@ -61,13 +61,6 @@ foreach(TARGET ${TARGETS})
     else()
       target_link_libraries(${TARGET} sockcore)
     endif()
-
-    find_library(LIBEV_LIB NAMES ev)
-    if(NOT LIBEV_LIB)
-      message(FATAL_ERROR "libev not found")
-    endif()
-    find_path(LIBEV_INCLUDE ev.h PATH_SUFFIXES include/ev include)
-    find_package_handle_standard_args(libev DEFAULT_MSG LIBEV_LIB LIBEV_INCLUDE)
 
     if(DSYMUTIL AND BUILD_SHARED_LIBS)
       add_custom_command(TARGET ${TARGET} POST_BUILD
@@ -91,8 +84,7 @@ foreach(TARGET ${TARGETS})
     else()
       set(CRYPTOLIBS picotls-minicrypto)
     endif()
-    target_link_libraries(${TARGET}
-      m picotls-core ${CRYPTOLIBS} ${LIBEV_LIB})
+    target_link_libraries(${TARGET} m picotls-core ${CRYPTOLIBS})
 
     if(${TARGET} MATCHES ".*quant")
       install(DIRECTORY include/${PROJECT_NAME}
@@ -117,7 +109,6 @@ foreach(TARGET ${TARGETS})
       $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
     SYSTEM PRIVATE
       ${OPENSSL_ROOT_DIR}/include
-      ${LIBEV_INCLUDE}
       $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/klib>
       $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/picotls/include>
       $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/warpcore/lib/include>

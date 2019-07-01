@@ -31,11 +31,10 @@
 #include <stdint.h>
 
 #include <picotls.h>
+#include <quant/quant.h>
+#include <warpcore/warpcore.h>
 
-struct q_conn;
-struct w_iov;
-struct q_stream;
-struct q_conf;
+#include "quic.h"
 
 
 #define AEAD_LEN 16

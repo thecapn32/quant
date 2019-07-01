@@ -40,13 +40,15 @@
 
 // IWYU pragma: no_include <picotls/../picotls.h>
 
-#include <ev.h>
 #include <picotls.h> // IWYU pragma: keep
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
+// IWYU pragma: no_include "../deps/libev/ev.h"
+
 #include "conn.h"
 #include "diet.h"
+#include "event.h" // IWYU pragma: keep
 #include "frame.h"
 #include "marshall.h"
 #include "pkt.h"
@@ -431,7 +433,7 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
                 use_next_dcid(c);
                 // don't migrate again for a while
                 c->do_migration = false;
-                ev_timer_again(loop, &c->key_flip_alarm);
+                ev_timer_again(&c->key_flip_alarm);
             }
         }
         // send new CIDs if the peer doesn't have sufficient remaining
@@ -537,9 +539,7 @@ tx_ack(struct q_conn * const c, const epoch_t e, const bool tx_ack_eliciting)
 }
 
 
-void tx(struct ev_loop * const l __attribute__((unused)),
-        ev_async * const w,
-        int param)
+void tx(ev_async * const w, int param)
 {
     struct q_conn * const c = w->data;
     const uint32_t limit = (uint32_t)param;
@@ -918,7 +918,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
             splay_find(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, &which);
         if (zo) {
             warn(INF, "have reordered 0-RTT pkt (t=%f sec) for %s conn %s",
-                 ev_now(loop) - zo->t, conn_type(c), cid2str(c->scid));
+                 ev_now() - zo->t, conn_type(c), cid2str(c->scid));
             ensure(splay_remove(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo),
                    "removed");
             sq_insert_head(x, zo->v, next);
@@ -1235,7 +1235,7 @@ rx_pkts(struct w_iov_sq * const x,
                 ensure(zo, "could not calloc");
                 cid_cpy(&zo->cid, &m->hdr.dcid);
                 zo->v = v;
-                zo->t = ev_now(loop);
+                zo->t = ev_now();
                 ensure(splay_insert(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo) == 0,
                        "inserted");
                 log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
@@ -1357,7 +1357,7 @@ rx_pkts(struct w_iov_sq * const x,
 
             if (likely(has_pkt_nr(m->hdr.flags, m->hdr.vers))) {
                 struct pn_space * const pn = pn_for_pkt_type(c, m->hdr.type);
-                diet_insert(&pn->recv, m->hdr.nr, ev_now(loop));
+                diet_insert(&pn->recv, m->hdr.nr, ev_now());
                 diet_insert(&pn->recv_all, m->hdr.nr, (ev_tstamp)NAN);
             }
             pkt_valid = true;
@@ -1396,9 +1396,7 @@ rx_pkts(struct w_iov_sq * const x,
 }
 
 
-void rx(struct ev_loop * const l,
-        ev_io * const rx_w,
-        int _e __attribute__((unused)))
+void rx(ev_io * const rx_w, int _e __attribute__((unused)))
 {
     // read from NIC
     struct w_sock * const ws = rx_w->data;
@@ -1424,12 +1422,12 @@ void rx(struct ev_loop * const l,
                    c->pns[pn_data].data.in_kyph)) {
             c->idle_alarm.repeat = MAX((double)c->tp_in.idle_to / MSECS_PER_SEC,
                                        3 * c->rec.ld_alarm.repeat);
-            ev_timer_again(l, &c->idle_alarm);
+            ev_timer_again(&c->idle_alarm);
         }
 
         // is a TX needed for this connection?
         if (c->needs_tx)
-            ev_invoke(loop, &c->tx_w, 0); // clears c->needs_tx if we TX'ed
+            ev_invoke(&c->tx_w, 0); // clears c->needs_tx if we TX'ed
 
         for (epoch_t e = c->min_rx_epoch; e <= ep_data; e++) {
             if (c->cstrms[e] == 0 || e == ep_0rtt)
@@ -1444,7 +1442,7 @@ void rx(struct ev_loop * const l,
                 break;
             case del_ack:
                 if (likely(c->state != conn_clsg))
-                    ev_timer_again(loop, &c->ack_alarm);
+                    ev_timer_again(&c->ack_alarm);
                 break;
             case no_ack:
             case grat_ack:
@@ -1500,9 +1498,7 @@ void err_close(struct q_conn * const c,
 
 
 static void __attribute__((nonnull))
-key_flip(struct ev_loop * const l __attribute__((unused)),
-         ev_timer * const w,
-         int e __attribute__((unused)))
+key_flip(ev_timer * const w, int e __attribute__((unused)))
 {
     struct q_conn * const c = w->data;
     c->do_key_flip = c->key_flips_enabled;
@@ -1512,9 +1508,7 @@ key_flip(struct ev_loop * const l __attribute__((unused)),
 
 
 static void __attribute__((nonnull))
-enter_closed(struct ev_loop * const l __attribute__((unused)),
-             ev_timer * const w,
-             int e __attribute__((unused)))
+enter_closed(ev_timer * const w, int e __attribute__((unused)))
 {
     struct q_conn * const c = w->data;
     conn_to_state(c, conn_clsd);
@@ -1537,16 +1531,16 @@ void enter_closing(struct q_conn * const c)
         return;
 
     // stop alarms
-    ev_timer_stop(loop, &c->rec.ld_alarm);
-    ev_timer_stop(loop, &c->idle_alarm);
-    ev_timer_stop(loop, &c->key_flip_alarm);
-    ev_timer_stop(loop, &c->ack_alarm);
+    ev_timer_stop(&c->rec.ld_alarm);
+    ev_timer_stop(&c->idle_alarm);
+    ev_timer_stop(&c->key_flip_alarm);
+    ev_timer_stop(&c->ack_alarm);
 
 #ifndef FUZZING
     if ((c->state == conn_idle || c->state == conn_opng) && c->err_code == 0) {
 #endif
         // no need to go closing->draining in these cases
-        ev_feed_event(loop, &c->closing_alarm, 0);
+        ev_feed_event(&c->closing_alarm, 0);
         return;
 #ifndef FUZZING
     }
@@ -1560,7 +1554,7 @@ void enter_closing(struct q_conn * const c)
              4 * c->rec.rttvar);
         ev_timer_init(&c->closing_alarm, enter_closed, dur, 0);
 #ifndef FUZZING
-        ev_timer_start(loop, &c->closing_alarm);
+        ev_timer_start(&c->closing_alarm);
 #ifdef DEBUG_TIMERS
         warn(DBG, "closing/draining alarm in %f sec on %s conn %s", dur,
              conn_type(c), cid2str(c->scid));
@@ -1576,9 +1570,7 @@ void enter_closing(struct q_conn * const c)
 
 
 static void __attribute__((nonnull))
-idle_alarm(struct ev_loop * const l __attribute__((unused)),
-           ev_timer * const w,
-           int e __attribute__((unused)))
+idle_alarm(ev_timer * const w, int e __attribute__((unused)))
 {
     struct q_conn * const c = w->data;
 #ifdef DEBUG_TIMERS
@@ -1590,9 +1582,7 @@ idle_alarm(struct ev_loop * const l __attribute__((unused)),
 
 
 static void __attribute__((nonnull))
-ack_alarm(struct ev_loop * const l __attribute__((unused)),
-          ev_timer * const w,
-          int e __attribute__((unused)))
+ack_alarm(ev_timer * const w, int e __attribute__((unused)))
 {
     struct q_conn * const c = w->data;
 #ifdef DEBUG_TIMERS
@@ -1612,14 +1602,14 @@ void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
         conf && conf->idle_timeout ? conf->idle_timeout : 10 * MSECS_PER_SEC;
     c->idle_alarm.repeat = (double)c->tp_in.idle_to / MSECS_PER_SEC;
 
-    ev_timer_again(loop, &c->idle_alarm);
+    ev_timer_again(&c->idle_alarm);
 
     c->tp_out.disable_migration = conf ? conf->disable_migration : false;
     c->key_flips_enabled = conf ? conf->enable_tls_key_updates : false;
 
     if (c->tp_out.disable_migration == false || c->key_flips_enabled) {
         c->key_flip_alarm.repeat = conf ? conf->tls_key_update_frequency : 3;
-        ev_timer_again(loop, &c->key_flip_alarm);
+        ev_timer_again(&c->key_flip_alarm);
     }
 
     c->sockopt.enable_udp_zero_checksums =
@@ -1670,7 +1660,7 @@ struct q_conn * new_conn(struct w_engine * const w,
             goto fail;
         ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
         ev_set_priority(&c->rx_w, EV_MAXPRI);
-        ev_io_start(loop, &c->rx_w);
+        ev_io_start(&c->rx_w);
         c->holds_sock = true;
     } else if (unlikely(peer == 0))
         goto fail;
@@ -1724,7 +1714,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     ev_async_init(&c->tx_w, tx);
     c->tx_w.data = c;
     ev_set_priority(&c->tx_w, EV_MAXPRI - 1);
-    ev_async_start(loop, &c->tx_w);
+    ev_async_start(&c->tx_w);
 
     if (likely(c->is_clnt || c->holds_sock == false))
         update_conf(c, conf);
@@ -1775,11 +1765,11 @@ void free_conn(struct q_conn * const c)
     // exit any active API call on the connection
     maybe_api_return(c, 0);
 
-    ev_timer_stop(loop, &c->rec.ld_alarm);
-    ev_timer_stop(loop, &c->closing_alarm);
-    ev_timer_stop(loop, &c->key_flip_alarm);
-    ev_timer_stop(loop, &c->idle_alarm);
-    ev_timer_stop(loop, &c->ack_alarm);
+    ev_timer_stop(&c->rec.ld_alarm);
+    ev_timer_stop(&c->closing_alarm);
+    ev_timer_stop(&c->key_flip_alarm);
+    ev_timer_stop(&c->idle_alarm);
+    ev_timer_stop(&c->ack_alarm);
 
     struct q_stream * s;
     kh_foreach_value(c->strms_by_id, s, { free_stream(s); });
@@ -1796,7 +1786,7 @@ void free_conn(struct q_conn * const c)
     for (pn_t t = pn_init; t <= pn_data; t++)
         free_pn(&c->pns[t]);
 
-    ev_async_stop(loop, &c->tx_w);
+    ev_async_stop(&c->tx_w);
 
     diet_free(&c->clsd_strms);
     free(c->peer_name);
@@ -1807,7 +1797,7 @@ void free_conn(struct q_conn * const c)
 
     if (c->holds_sock) {
         // only close the socket for the final server connection
-        ev_io_stop(loop, &c->rx_w);
+        ev_io_stop(&c->rx_w);
         w_close(c->sock);
     }
 

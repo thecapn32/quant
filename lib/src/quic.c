@@ -37,7 +37,6 @@
 
 // IWYU pragma: no_include <picotls/../picotls.h>
 
-#include <ev.h>
 #include <khash.h>
 #include <picotls.h> // IWYU pragma: keep
 #include <quant/quant.h>
@@ -65,7 +64,10 @@
 #define O_CLOEXEC 0
 #endif
 
+#include "event.h" // IWYU pragma: keep
+
 #include "conn.h"
+#include "event.h" // IWYU pragma: keep
 #include "pkt.h"
 #include "pn.h"
 #include "quic.h"
@@ -73,8 +75,6 @@
 #include "stream.h"
 #include "tls.h"
 
-
-struct ev_loop;
 
 SPLAY_GENERATE(ooo_by_off, pkt_meta, off_node, ooo_by_off_cmp)
 
@@ -95,7 +95,6 @@ const uint8_t ok_vers_len = sizeof(ok_vers) / sizeof(ok_vers[0]);
 
 
 struct pkt_meta * pkt_meta = 0;
-struct ev_loop * loop = 0;
 
 func_ptr api_func = 0;
 void *api_conn = 0, *api_strm = 0;
@@ -123,12 +122,11 @@ do_loop_run(const func_ptr func,
             struct q_conn * const conn,
             struct q_stream * const strm)
 {
-    EV_VERIFY(loop);
     ensure(api_func == 0, "other API call active");
     api_func = func;
     api_conn = conn;
     api_strm = strm;
-    ev_run(loop, 0);
+    ev_run(0);
     api_func = 0;
     api_conn = api_strm = 0;
 }
@@ -313,7 +311,7 @@ struct q_conn * q_connect(struct w_engine * const w,
          plural(early_data ? w_iov_sq_len(early_data) : 0));
 #endif
 
-    ev_timer_again(loop, &c->idle_alarm);
+    ev_timer_again(&c->idle_alarm);
     w_connect(c->sock, peer);
 
     // start TLS handshake
@@ -329,7 +327,7 @@ struct q_conn * q_connect(struct w_engine * const w,
     } else if (early_data_stream)
         *early_data_stream = 0;
 
-    ev_feed_event(loop, &c->tx_w, 0);
+    ev_feed_event(&c->tx_w, 0);
 
     warn(DBG, "waiting for connect on %s conn %s to %s:%s", conn_type(c),
          cid2str(c->scid), ip, port);
@@ -396,7 +394,7 @@ bool q_write(struct q_stream * const s,
     concat_out(s, q);
 
     // kick TX watcher
-    ev_feed_event(loop, &c->tx_w, 0);
+    ev_feed_event(&c->tx_w, 0);
     return true;
 }
 
@@ -477,14 +475,13 @@ struct q_conn * q_bind(struct w_engine * const w, const uint16_t port)
 
 
 static void __attribute__((nonnull))
-cancel_api_call(struct ev_loop * const l __attribute__((unused)),
-                ev_timer * const w __attribute__((unused)),
+cancel_api_call(ev_timer * const w __attribute__((unused)),
                 int e __attribute__((unused)))
 {
 #ifdef DEBUG_EXTRA
     warn(DBG, "canceling API call");
 #endif
-    ev_timer_stop(loop, &api_alarm);
+    ev_timer_stop(&api_alarm);
     maybe_api_return(q_accept, 0, 0);
     maybe_api_return(q_ready, 0, 0);
 }
@@ -500,10 +497,10 @@ struct q_conn * q_accept(const struct q_conn_conf * const conf)
 
     if (conf && conf->idle_timeout) {
         if (ev_is_active(&api_alarm))
-            ev_timer_stop(loop, &api_alarm);
+            ev_timer_stop(&api_alarm);
         ev_timer_init(&api_alarm, cancel_api_call,
                       (double)conf->idle_timeout / MSECS_PER_SEC, 0);
-        ev_timer_start(loop, &api_alarm);
+        ev_timer_start(&api_alarm);
     }
 
     loop_run(q_accept, 0, 0);
@@ -516,7 +513,7 @@ struct q_conn * q_accept(const struct q_conn_conf * const conf)
 accept:;
     struct q_conn * const c = sl_first(&accept_queue);
     sl_remove_head(&accept_queue, node_aq);
-    ev_timer_again(loop, &c->idle_alarm);
+    ev_timer_again(&c->idle_alarm);
     c->needs_accept = false;
 
 #ifndef NDEBUG
@@ -597,11 +594,6 @@ mk_or_open_dir(const char * const path, mode_t mode)
 struct w_engine * q_init(const char * const ifname,
                          const struct q_conf * const conf)
 {
-    // check versions
-    // ensure(WARPCORE_VERSION_MAJOR == 0 && WARPCORE_VERSION_MINOR == 12,
-    //        "%s version %s not compatible with %s version %s", quant_name,
-    //        quant_version, warpcore_name, warpcore_version);
-
     // init connection structures
     conns_by_ipnp = kh_init(conns_by_ipnp);
     conns_by_id = kh_init(conns_by_id);
@@ -619,8 +611,8 @@ struct w_engine * q_init(const char * const ifname,
     ASAN_POISON_MEMORY_REGION(pkt_meta, num_bufs * sizeof(*pkt_meta));
 
     // initialize the event loop (prefer kqueue and epoll)
-    loop = ev_default_loop(ev_recommended_backends() | EVBACKEND_KQUEUE |
-                           EVBACKEND_EPOLL);
+    ev_default_loop(ev_recommended_backends() | EVBACKEND_KQUEUE |
+                    EVBACKEND_EPOLL);
 
 #ifndef NDEBUG
     static const char * ev_backend_str[] = {
@@ -631,8 +623,7 @@ struct w_engine * q_init(const char * const ifname,
 
     warn(INF, "%s/%s %s/%s with libev/%s %u.%u ready", quant_name,
          w->backend_name, quant_version, QUANT_COMMIT_HASH_ABBREV_STR,
-         ev_backend_str[ev_backend(loop)], ev_version_major(),
-         ev_version_minor());
+         ev_backend_str[ev_backend()], ev_version_major(), ev_version_minor());
     warn(INF, "submit bug reports at https://github.com/NTAP/quant/issues");
 
     // initialize TLS context
@@ -644,7 +635,7 @@ struct w_engine * q_init(const char * const ifname,
     static ev_signal signal_w;
     signal_w.data = w;
     ev_signal_init(&signal_w, signal_cb, SIGINT);
-    ev_signal_start(loop, &signal_w);
+    ev_signal_start(&signal_w);
 #endif
 
 #if !defined(NDEBUG) && !defined(NO_FUZZER_CORPUS_COLLECTION)
@@ -716,7 +707,7 @@ void q_close(struct q_conn * const c,
 
     if (c->state != conn_drng) {
         conn_to_state(c, conn_qlse);
-        ev_feed_event(loop, &c->tx_w, 0);
+        ev_feed_event(&c->tx_w, 0);
     }
 
     loop_run(q_close, c, 0);
@@ -751,7 +742,7 @@ void q_cleanup(struct w_engine * const w)
     kh_foreach_value(conns_by_srt, c, { q_close(c, 0, 0); });
 
     // stop the event loop
-    ev_loop_destroy(loop);
+    ev_loop_destroy();
 
     free_tls_ctx();
 
@@ -849,10 +840,10 @@ bool q_ready(const uint64_t timeout, struct q_conn ** const ready)
     if (sl_empty(&c_ready)) {
         if (timeout) {
             if (ev_is_active(&api_alarm))
-                ev_timer_stop(loop, &api_alarm);
+                ev_timer_stop(&api_alarm);
             ev_timer_init(&api_alarm, cancel_api_call,
                           (double)timeout / MSECS_PER_SEC, 0);
-            ev_timer_start(loop, &api_alarm);
+            ev_timer_start(&api_alarm);
         }
 #ifdef DEBUG_EXTRA
         warn(WRN, "waiting for conn to get ready");
@@ -906,7 +897,7 @@ void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
 #endif
 
     // close the current w_sock
-    ev_io_stop(loop, &c->rx_w);
+    ev_io_stop(&c->rx_w);
     if (c->scid == 0)
         conns_by_ipnp_del(c);
     w_close(c->sock);
@@ -915,7 +906,7 @@ void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
     c->rx_w.data = c->sock = new_sock;
     ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
     ev_set_priority(&c->rx_w, EV_MAXPRI);
-    ev_io_start(loop, &c->rx_w);
+    ev_io_start(&c->rx_w);
     w_connect(c->sock, (struct sockaddr *)&c->peer);
     if (c->scid == 0)
         conns_by_ipnp_ins(c);
@@ -937,7 +928,7 @@ void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
          cid2str(c->scid), old_ip, old_port, new_ip, new_port);
 #endif
 
-    ev_feed_event(loop, &c->tx_w, 1);
+    ev_feed_event(&c->tx_w, 1);
 }
 
 

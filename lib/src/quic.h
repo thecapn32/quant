@@ -34,10 +34,12 @@
 #include <string.h>
 #include <sys/param.h>
 
-#include <ev.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
+// IWYU pragma: no_include "../deps/libev/ev.h"
+
+#include "event.h" // IWYU pragma: keep
 #include "frame.h"
 
 
@@ -195,7 +197,6 @@ struct pkt_meta {
 
 
 extern struct pkt_meta * pkt_meta;
-extern struct ev_loop * loop;
 extern struct q_conn_sl accept_queue;
 
 /// The versions of QUIC supported by this implementation
@@ -287,15 +288,6 @@ write_to_corpus(const int dir, const void * const data, const size_t len);
 #define has_strm_data(p) (p)->strm_frm_pos
 
 
-#ifndef NDEBUG
-#define EV_VERIFY(l) ev_verify(l)
-#else
-#define EV_VERIFY(l)                                                           \
-    do {                                                                       \
-    } while (0)
-#endif
-
-
 // see https://stackoverflow.com/a/45600545/2240756
 //
 #define OVERLOADED_MACRO(M, ...) OVR(M, CNT_ARGS(__VA_ARGS__))(__VA_ARGS__)
@@ -327,10 +319,9 @@ write_to_corpus(const int dir, const void * const data, const size_t len);
 ///
 #define maybe_api_return3(func, conn, strm)                                    \
     __extension__({                                                            \
-        EV_VERIFY(loop);                                                       \
         if (unlikely(api_func == (func_ptr)(&(func)) && api_conn == (conn) &&  \
                      ((strm) == 0 || api_strm == (strm)))) {                   \
-            ev_break(loop, EVBREAK_ALL);                                       \
+            ev_break(EVBREAK_ALL);                                             \
             DEBUG_EXTRA_warn(DBG, #func "(" #conn ", " #strm                   \
                                         ") done, exiting event loop");         \
             api_func = api_conn = api_strm = 0;                                \
@@ -349,10 +340,9 @@ write_to_corpus(const int dir, const void * const data, const size_t len);
 ///
 #define maybe_api_return2(conn, strm)                                          \
     __extension__({                                                            \
-        EV_VERIFY(loop);                                                       \
         if (unlikely(api_conn == (conn) &&                                     \
                      ((strm) == 0 || api_strm == (strm)))) {                   \
-            ev_break(loop, EVBREAK_ALL);                                       \
+            ev_break(EVBREAK_ALL);                                             \
             DEBUG_EXTRA_warn(DBG, "<any>(" #conn ", " #strm                    \
                                   ") done, exiting event loop");               \
             api_func = api_conn = api_strm = 0;                                \
