@@ -40,6 +40,7 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
+#include <errno.h>
 
 #define klib_unused
 
@@ -168,7 +169,12 @@ get(const char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
 {
     // parse and verify the URIs passed on the command line
     struct http_parser_url u = {0};
-    http_parser_parse_url(url, strlen(url), 0, &u);
+    if (http_parser_parse_url(url, strlen(url), 0, &u)) {
+        warn(ERR, "http_parser_parse_url: %s",
+             http_errno_description((enum http_errno)errno));
+        return 0;
+    }
+
     ensure((u.field_set & (1 << UF_USERINFO)) == 0 &&
                (u.field_set & (1 << UF_QUERY)) == 0 &&
                (u.field_set & (1 << UF_FRAGMENT)) == 0,
