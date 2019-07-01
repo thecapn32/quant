@@ -35,6 +35,7 @@
 
 #if defined(__linux__)
 #define EV_USE_EPOLL 1
+#define EV_SIGNAL_ENABLE 1
 #elif defined(__APPLE__) || defined(__FreeBSD__)
 #define EV_USE_KQUEUE 1
 #endif

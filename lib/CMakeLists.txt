@@ -49,6 +49,9 @@ add_library(common
     src/diet.c src/util.c src/tls.c src/recovery.c src/event.c
 )
 
+set_source_files_properties(src/event.c PROPERTIES COMPILE_FLAGS -Wno-error)
+
+
 set(TARGETS common lib${PROJECT_NAME} ${WARP})
 foreach(TARGET ${TARGETS})
   if(NOT ${TARGET} MATCHES "common")

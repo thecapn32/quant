@@ -25,6 +25,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <net/if.h>
@@ -40,7 +41,6 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
-#include <errno.h>
 
 #define klib_unused
 

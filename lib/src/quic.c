@@ -566,11 +566,9 @@ struct q_stream * q_rsv_stream(struct q_conn * const c, const bool bidi)
 
 #if !defined(FUZZING) && defined(__linux__)
 static void __attribute__((noreturn))
-signal_cb(struct ev_loop * l,
-          ev_signal * w,
-          int revents __attribute__((unused)))
+signal_cb(ev_signal * w, int revents __attribute__((unused)))
 {
-    ev_break(l, EVBREAK_ALL);
+    ev_break(EVBREAK_ALL);
     w_cleanup(w->data);
     exit(0);
 }

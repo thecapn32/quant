@@ -59,7 +59,6 @@ addons:
       - clang-7
       - doxygen
       - graphviz
-      - libev-dev
       - libhttp-parser-dev
       - libbsd-dev
       - cmake

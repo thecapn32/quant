@@ -49,5 +49,13 @@
 #pragma clang diagnostic ignored "-Wunused-parameter"
 #pragma clang diagnostic ignored "-Wunused-value"
 #pragma clang diagnostic ignored "-Wused-but-marked-unused"
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+#pragma GCC diagnostic ignored "-Wsign-compare"
+#pragma GCC diagnostic ignored "-Wextra"
+
 #include "../deps/libev/ev.c"
+
+#pragma GCC diagnostic pop
 #pragma clang diagnostic pop
