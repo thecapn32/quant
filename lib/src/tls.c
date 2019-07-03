@@ -28,7 +28,6 @@
 #include <assert.h>
 #include <inttypes.h>
 #include <netinet/in.h>
-#include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -37,14 +36,20 @@
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+
+#ifndef NO_TLS_TICKETS
 #include <unistd.h>
+#endif
+
+#ifndef NO_TLS_LOG
+#include <stdarg.h>
+#endif
 
 #ifndef NDEBUG
 #include <netdb.h>
 #endif
 
 #ifdef PARTICLE
-#define MAXPATHLEN 1
 #define gai_strerror(x) "getnameinfo"
 #endif
 
@@ -83,7 +88,7 @@
 #include "tls.h"
 
 
-#ifndef PARTICLE
+#ifndef NO_TLS_TICKETS
 struct tls_ticket {
     char * sni;
     char * alpn;
@@ -118,7 +123,9 @@ SPLAY_PROTOTYPE(tickets_by_peer, tls_ticket, node, tls_ticket_cmp)
 SPLAY_GENERATE(tickets_by_peer, tls_ticket, node, tls_ticket_cmp)
 
 static struct tickets_by_peer tickets = {splay_initializer(tickets), {"\0"}};
+#endif
 
+#ifndef NO_TLS_LOG
 static FILE * tls_log_file;
 #endif
 
@@ -910,7 +917,7 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
 }
 
 
-#ifndef PARTICLE
+#ifndef NO_TLS_TICKETS
 static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
                           ptls_t * tls,
                           ptls_iovec_t src)
@@ -1023,7 +1030,7 @@ void init_tls(struct q_conn * const c, const char * const clnt_alpn)
         hshk_prop->client.negotiated_protocols.count = 1;
         hshk_prop->client.max_early_data_size = &c->tls.max_early_data;
 
-#ifndef PARTICLE
+#ifndef NO_TLS_TICKETS
         // try to find an existing session ticket
         struct tls_ticket which = {.sni = c->peer_name,
                                    // this works, because of strdup() allocation
@@ -1149,7 +1156,7 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
 }
 
 
-#ifndef PARTICLE
+#ifndef NO_TLS_TICKETS
 static void __attribute__((nonnull)) free_ticket(struct tls_ticket * const t)
 {
     if (t->sni)
@@ -1238,7 +1245,7 @@ done:
 #endif
 
 
-#ifndef PARTICLE
+#ifndef NO_TLS_LOG
 static void __attribute__((format(printf, 4, 5)))
 log_event_cb(ptls_log_event_t * const self __attribute__((unused)),
              ptls_t * const tls,
@@ -1336,7 +1343,7 @@ void init_tls_ctx(const struct q_conf * const conf)
 #endif
 
     if (conf && conf->ticket_store) {
-#ifndef PARTICLE
+#ifndef NO_TLS_TICKETS
         strncpy(tickets.file_name, conf->ticket_store,
                 sizeof(tickets.file_name));
         tls_ctx.save_ticket = &save_ticket;
@@ -1347,10 +1354,9 @@ void init_tls_ctx(const struct q_conf * const conf)
         tls_ctx.max_early_data_size = 0xffffffff;
         tls_ctx.ticket_lifetime = 60 * 60 * 24;
         tls_ctx.require_dhe_on_psk = 0;
-        tls_ctx.omit_end_of_early_data = 1;
     }
 
-#ifndef PARTICLE
+#ifndef NO_TLS_LOG
     if (conf && conf->tls_log) {
         tls_log_file = fopen(conf->tls_log, "abe");
         ensure(tls_log_file, "could not open TLS log %s", conf->tls_log);
@@ -1389,7 +1395,7 @@ void free_tls_ctx(void)
     dispose_cipher(&dec_tckt);
     dispose_cipher(&enc_tckt);
 
-#ifndef PARTICLE
+#ifndef NO_TLS_TICKETS
     // free ticket cache
     struct tls_ticket * t;
     struct tls_ticket * tmp;

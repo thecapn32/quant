@@ -57,7 +57,8 @@ CSRC+=$(WARP_SRC) $(PICOTLS_SRC) $(QUANT_SRC)
 # -DNDEBUG
 EXTRA_CFLAGS+=-DNO_FUZZER_CORPUS_COLLECTION -Wno-error -Wno-parentheses \
 	-Wno-unused-function -Wno-comment -Wno-undef -Wno-unknown-pragmas \
-	-Wno-unused-but-set-variable -DNO_OOO_0RTT \
+	-Wno-unused-but-set-variable -DNO_OOO_0RTT -DNO_TLS_TICKETS \
+	-DNO_TLS_LOG \
 	-DEXTERNAL_READ_ENTROPY -DLOG_COMPILE_TIME_LEVEL=LOG_LEVEL_NONE -DNDEBUG
 
 # TODO: figure out how to do this using make rules
