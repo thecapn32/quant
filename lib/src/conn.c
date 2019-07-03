@@ -163,10 +163,11 @@ clnt_vneg(const uint8_t * const pos, const uint8_t * const end)
 }
 
 
+#ifndef NO_OOO_0RTT
 struct ooo_0rtt_by_cid ooo_0rtt_by_cid = splay_initializer(&ooo_0rtt_by_cid);
 
-
 SPLAY_GENERATE(ooo_0rtt_by_cid, ooo_0rtt, node, ooo_0rtt_by_cid_cmp)
+#endif
 
 
 static inline epoch_t __attribute__((nonnull))
@@ -864,7 +865,11 @@ pkt_ok_for_epoch(const uint8_t flags, const epoch_t epoch)
 static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
                                             struct w_iov * v,
                                             struct pkt_meta * m,
-                                            struct w_iov_sq * const x,
+                                            struct w_iov_sq * const x
+#ifdef NO_OOO_0RTT
+                                            __attribute__((unused))
+#endif
+                                            ,
                                             const struct cid * const odcid
 #ifdef NDEBUG
                                             __attribute__((unused))
@@ -921,6 +926,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
 
         init_tp(c);
 
+#ifndef NO_OOO_0RTT
         // check if any reordered 0-RTT packets are cached for this CID
         const struct ooo_0rtt which = {.cid = m->hdr.dcid};
         struct ooo_0rtt * const zo =
@@ -933,6 +939,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
             sq_insert_head(x, zo->v, next);
             free(zo);
         }
+#endif
         conn_to_state(c, conn_opng);
 
         // server limits response to 3x incoming pkt
@@ -1237,7 +1244,7 @@ rx_pkts(struct w_iov_sq * const x,
             }
 
         } else {
-#ifndef FUZZING
+#if !defined(FUZZING) && !defined(NO_OOO_0RTT)
             // if this is a 0-RTT pkt, track it (may be reordered)
             if (m->hdr.type == LH_0RTT && m->hdr.vers) {
                 struct ooo_0rtt * const zo = calloc(1, sizeof(*zo));

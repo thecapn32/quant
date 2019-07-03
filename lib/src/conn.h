@@ -367,7 +367,7 @@ pn_for_epoch(struct q_conn * const c, const epoch_t e)
 
 SPLAY_PROTOTYPE(cids_by_seq, cid, node_seq, cids_by_seq_cmp)
 
-
+#ifndef NO_OOO_0RTT
 struct ooo_0rtt {
     splay_entry(ooo_0rtt) node;
     struct cid cid;   ///< CID of 0-RTT pkt
@@ -388,7 +388,7 @@ ooo_0rtt_by_cid_cmp(const struct ooo_0rtt * const a,
 
 
 SPLAY_PROTOTYPE(ooo_0rtt_by_cid, ooo_0rtt, node, ooo_0rtt_by_cid_cmp)
-
+#endif
 
 static inline __attribute__((nonnull)) const char *
 conn_type(const struct q_conn * const c)

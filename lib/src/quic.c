@@ -738,6 +738,7 @@ void q_cleanup(struct w_engine * const w)
 
     free_tls_ctx();
 
+#ifndef NO_OOO_0RTT
     // free 0-RTT reordering cache
     while (!splay_empty(&ooo_0rtt_by_cid)) {
         struct ooo_0rtt * const zo =
@@ -745,6 +746,7 @@ void q_cleanup(struct w_engine * const w)
         ensure(splay_remove(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo), "removed");
         free(zo);
     }
+#endif
 
 #ifdef HAVE_ASAN
     for (uint64_t i = 0; i < num_bufs; i++) {
