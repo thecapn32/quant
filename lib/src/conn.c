@@ -255,7 +255,7 @@ void use_next_dcid(struct q_conn * const c)
 }
 
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) && !defined(PARTICLE)
 static void __attribute__((nonnull)) log_sent_pkts(struct q_conn * const c)
 {
     for (pn_t t = pn_init; t <= pn_data; t++) {
@@ -395,9 +395,9 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
          sq_len(&c->w->iov));
 #endif
 
-#ifndef NDEBUG
-    // if (util_dlevel == DBG)
-    log_sent_pkts(c);
+#if !defined(NDEBUG) && !defined(PARTICLE)
+    if (util_dlevel == DBG)
+        log_sent_pkts(c);
 #endif
 }
 
