@@ -129,7 +129,7 @@ q_alloc(struct w_engine * const w, struct w_iov_sq * const q, const size_t len);
 
 extern void __attribute__((nonnull)) q_free(struct w_iov_sq * const q);
 
-extern char * __attribute__((nonnull)) q_cid(struct q_conn * const c);
+extern const char * __attribute__((nonnull)) q_cid(struct q_conn * const c);
 
 extern uint64_t __attribute__((nonnull)) q_sid(const struct q_stream * const s);
 
@@ -176,11 +176,6 @@ q_rebind_sock(struct q_conn * const c, const bool use_new_dcid);
 
 extern void __attribute__((nonnull))
 q_info(struct q_conn * const c, struct q_conn_info * const ci);
-
-
-#define MSECS_PER_SEC 1000       ///< Milliseconds per second.
-#define USECS_PER_SEC 1000000    ///< Microseconds per second.
-#define NSECS_PER_SEC 1000000000 ///< Microseconds per second.
 
 
 #define bps(bytes, secs)                                                       \

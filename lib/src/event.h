@@ -28,21 +28,28 @@
 #pragma once
 
 #define EV_STANDALONE 1
-
 #define EV_FEATURES 0
-#define EV_ASYNC_ENABLE 1
 #define EV_NO_THREADS 1
+#define EV_USE_NANOSLEEP 1
 
 #if defined(__linux__)
 #define EV_USE_EPOLL 1
 #define EV_SIGNAL_ENABLE 1
 #elif defined(__APPLE__) || defined(__FreeBSD__)
 #define EV_USE_KQUEUE 1
+#elif defined(PARTICLE)
+#define EV_AVOID_STDIO 1
 #endif
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wpadded"
 #pragma clang diagnostic ignored "-Wundef"
 #pragma clang diagnostic ignored "-Wunused-value"
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wundef"
+#pragma GCC diagnostic ignored "-Wunused-value"
 #include "../deps/libev/ev.h" // IWYU pragma: export
+#pragma GCC diagnostic push
+
 #pragma clang diagnostic pop

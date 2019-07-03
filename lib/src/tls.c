@@ -43,6 +43,10 @@
 #include <netdb.h>
 #endif
 
+#ifdef PARTICLE
+#define MAXPATHLEN 1
+#define gai_strerror(x) "getnameinfo"
+#endif
 
 #ifdef WITH_OPENSSL
 #include <openssl/evp.h>
@@ -79,6 +83,7 @@
 #include "tls.h"
 
 
+#ifndef PARTICLE
 struct tls_ticket {
     char * sni;
     char * alpn;
@@ -112,8 +117,13 @@ tls_ticket_cmp(const struct tls_ticket * const a,
 SPLAY_PROTOTYPE(tickets_by_peer, tls_ticket, node, tls_ticket_cmp)
 SPLAY_GENERATE(tickets_by_peer, tls_ticket, node, tls_ticket_cmp)
 
-ptls_context_t tls_ctx = {0};
 static struct tickets_by_peer tickets = {splay_initializer(tickets), {"\0"}};
+
+static FILE * tls_log_file;
+#endif
+
+
+ptls_context_t tls_ctx = {0};
 
 static sign_certificate_t sign_cert = {0};
 #ifdef WITH_OPENSSL
@@ -127,8 +137,6 @@ static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 
 static struct cipher_ctx dec_tckt;
 static struct cipher_ctx enc_tckt;
-
-static FILE * tls_log_file;
 
 
 #define QUIC_TP 0xffa5
@@ -612,7 +620,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             warn(INF,
                  "\tpreferred_address = IPv4=%s:%s IPv6=[%s]:%s cid=%s srt=%s",
                  ip4, port4, ip6, port6, cid2str(&pa->cid),
-                 hex2str(&pa->cid.srt, sizeof(pa->cid.srt)));
+                 hex2str(pa->cid.srt, sizeof(pa->cid.srt)));
 #endif
             break;
 
@@ -902,6 +910,7 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
 }
 
 
+#ifndef PARTICLE
 static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
                           ptls_t * tls,
                           ptls_iovec_t src)
@@ -979,6 +988,8 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
 
 
 static ptls_save_ticket_t save_ticket = {.cb = save_ticket_cb};
+#endif
+
 static ptls_encrypt_ticket_t encrypt_ticket = {.cb = encrypt_ticket_cb};
 
 
@@ -1012,6 +1023,7 @@ void init_tls(struct q_conn * const c, const char * const clnt_alpn)
         hshk_prop->client.negotiated_protocols.count = 1;
         hshk_prop->client.max_early_data_size = &c->tls.max_early_data;
 
+#ifndef PARTICLE
         // try to find an existing session ticket
         struct tls_ticket which = {.sni = c->peer_name,
                                    // this works, because of strdup() allocation
@@ -1029,6 +1041,7 @@ void init_tls(struct q_conn * const c, const char * const clnt_alpn)
             c->vers_initial = c->vers = t->vers;
             c->try_0rtt = true;
         }
+#endif
     }
 
     init_prot(c);
@@ -1136,6 +1149,7 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
 }
 
 
+#ifndef PARTICLE
 static void __attribute__((nonnull)) free_ticket(struct tls_ticket * const t)
 {
     if (t->sni)
@@ -1221,8 +1235,10 @@ static void read_tickets()
 done:
     fclose(fp);
 }
+#endif
 
 
+#ifndef PARTICLE
 static void __attribute__((format(printf, 4, 5)))
 log_event_cb(ptls_log_event_t * const self __attribute__((unused)),
              ptls_t * const tls,
@@ -1241,6 +1257,7 @@ log_event_cb(ptls_log_event_t * const self __attribute__((unused)),
     fprintf(tls_log_file, "\n");
     fflush(tls_log_file);
 }
+#endif
 
 
 static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
@@ -1257,7 +1274,7 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
     ptls_cipher_suite_t * const cipher = ptls_get_cipher(c->tls.t);
     struct pn_space * const pn = pn_for_epoch(c, (epoch_t)epoch);
 
-    struct cipher_ctx * ctx;
+    struct cipher_ctx * ctx = 0;
     switch (epoch) {
     case ep_0rtt:
         ctx = is_enc ? &pn->data.out_0rtt : &pn->data.in_0rtt;
@@ -1311,16 +1328,20 @@ void init_tls_ctx(const struct q_conf * const conf)
            "ptls_openssl_init_verify_certificate");
 #endif
 
+#ifndef PARTICLE
     if (conf && conf->tls_cert) {
         const int ret = ptls_load_certificates(&tls_ctx, conf->tls_cert);
         ensure(ret == 0, "ptls_load_certificates");
     }
+#endif
 
     if (conf && conf->ticket_store) {
+#ifndef PARTICLE
         strncpy(tickets.file_name, conf->ticket_store,
                 sizeof(tickets.file_name));
         tls_ctx.save_ticket = &save_ticket;
         read_tickets();
+#endif
     } else {
         tls_ctx.encrypt_ticket = &encrypt_ticket;
         tls_ctx.max_early_data_size = 0xffffffff;
@@ -1329,15 +1350,20 @@ void init_tls_ctx(const struct q_conf * const conf)
         tls_ctx.omit_end_of_early_data = 1;
     }
 
+#ifndef PARTICLE
     if (conf && conf->tls_log) {
         tls_log_file = fopen(conf->tls_log, "abe");
         ensure(tls_log_file, "could not open TLS log %s", conf->tls_log);
     }
 
+    static ptls_log_event_t log_event = {log_event_cb};
+    if (conf && conf->tls_log)
+        tls_ctx.log_event = &log_event;
+#endif
+
     static ptls_key_exchange_algorithm_t * key_exchanges[] = {&secp256r1,
                                                               &x25519, 0};
     static ptls_on_client_hello_t on_client_hello = {on_ch};
-    static ptls_log_event_t log_event = {log_event_cb};
     static ptls_update_traffic_key_t update_traffic_key = {
         update_traffic_key_cb};
 
@@ -1345,8 +1371,6 @@ void init_tls_ctx(const struct q_conf * const conf)
     tls_ctx.key_exchanges = key_exchanges;
     tls_ctx.on_client_hello = &on_client_hello;
     tls_ctx.update_traffic_key = &update_traffic_key;
-    if (conf && conf->tls_log)
-        tls_ctx.log_event = &log_event;
     tls_ctx.random_bytes = rand_bytes;
     tls_ctx.sign_certificate = &sign_cert.super;
 #ifdef WITH_OPENSSL
@@ -1365,6 +1389,7 @@ void free_tls_ctx(void)
     dispose_cipher(&dec_tckt);
     dispose_cipher(&enc_tckt);
 
+#ifndef PARTICLE
     // free ticket cache
     struct tls_ticket * t;
     struct tls_ticket * tmp;
@@ -1373,6 +1398,7 @@ void free_tls_ctx(void)
         ensure(splay_remove(tickets_by_peer, &tickets, t), "removed");
         free_ticket(t);
     }
+#endif
 }
 
 

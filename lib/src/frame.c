@@ -28,12 +28,15 @@
 #include <inttypes.h>
 #include <math.h>
 #include <netdb.h>
-#include <netinet/ip.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/param.h>
 #include <sys/socket.h>
+
+#ifndef PARTICLE
+#include <netinet/ip.h>
+#endif
 
 // IWYU pragma: no_include <picotls/../picotls.h>
 
@@ -116,8 +119,8 @@ void log_stream_or_crypto_frame(const bool rtx,
                                 const bool in,
                                 const char * kind)
 {
-    if (util_dlevel < INF)
-        return;
+    // if (util_dlevel != INF && util_dlevel != DBG)
+    //     return;
 
     const struct q_conn * const c = m->pn->c;
     const struct q_stream * const s = m->strm;

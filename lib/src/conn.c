@@ -27,8 +27,6 @@
 
 #include <arpa/inet.h>
 #include <netdb.h>
-#include <netinet/in.h>
-#include <netinet/ip.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -37,6 +35,11 @@
 #include <string.h>
 #include <sys/param.h>
 #include <sys/socket.h>
+
+#ifndef PARTICLE
+#include <netinet/in.h>
+#include <netinet/ip.h>
+#endif
 
 // IWYU pragma: no_include <picotls/../picotls.h>
 
@@ -104,6 +107,9 @@ sockaddr_cmp(const struct sockaddr * const a, const struct sockaddr * const b)
     default:
 #ifndef FUZZING
         die("unsupported address family");
+#ifdef PARTICLE
+        return 0; // old gcc doesn't seem to understand "noreturn" attribute
+#endif
 #else
         return memcmp(a->sa_data, b->sa_data, sizeof(a->sa_data));
 #endif
@@ -389,8 +395,8 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
 #endif
 
 #ifndef NDEBUG
-    if (util_dlevel == DBG)
-        log_sent_pkts(c);
+    // if (util_dlevel == DBG)
+    log_sent_pkts(c);
 #endif
 }
 
@@ -539,7 +545,7 @@ tx_ack(struct q_conn * const c, const epoch_t e, const bool tx_ack_eliciting)
 }
 
 
-void tx(ev_async * const w, int param)
+void tx(ev_io * const w, int param)
 {
     struct q_conn * const c = w->data;
     const uint32_t limit = (uint32_t)param;
@@ -848,6 +854,9 @@ pkt_ok_for_epoch(const uint8_t flags, const epoch_t epoch)
     case ep_data:
         return true;
     }
+#ifdef PARTICLE
+    return false; // old gcc doesn't seem to understand "noreturn" attribute
+#endif
 }
 #endif
 
@@ -1200,7 +1209,7 @@ rx_pkts(struct w_iov_sq * const x,
                     log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
                             tok_len);
                     warn(ERR, "retry dcid mismatch %s != %s, ignoring pkt",
-                         hex2str(&odcid.id, odcid.len), cid2str(c->dcid));
+                         hex2str(odcid.id, odcid.len), cid2str(c->dcid));
                     goto drop;
                 }
                 if (c->state == conn_opng)
@@ -1659,7 +1668,6 @@ struct q_conn * new_conn(struct w_engine * const w,
         if (unlikely(c->sock == 0))
             goto fail;
         ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
-        ev_set_priority(&c->rx_w, EV_MAXPRI);
         ev_io_start(&c->rx_w);
         c->holds_sock = true;
     } else if (unlikely(peer == 0))
@@ -1711,10 +1719,8 @@ struct q_conn * new_conn(struct w_engine * const w,
         c->path_val_win = UINT64_MAX;
 
     // start a TX watcher
-    ev_async_init(&c->tx_w, tx);
+    ev_io_init(&c->tx_w, tx, w_fd(c->sock), EV_WRITE);
     c->tx_w.data = c;
-    ev_set_priority(&c->tx_w, EV_MAXPRI - 1);
-    ev_async_start(&c->tx_w);
 
     if (likely(c->is_clnt || c->holds_sock == false))
         update_conf(c, conf);
@@ -1786,7 +1792,7 @@ void free_conn(struct q_conn * const c)
     for (pn_t t = pn_init; t <= pn_data; t++)
         free_pn(&c->pns[t]);
 
-    ev_async_stop(&c->tx_w);
+    ev_io_stop(&c->tx_w);
 
     diet_free(&c->clsd_strms);
     free(c->peer_name);
@@ -1818,4 +1824,14 @@ void conn_info_populate(struct q_conn * const c)
     c->i.ssthresh = c->rec.ssthresh;
     c->i.rtt = c->rec.srtt;
     c->i.rttvar = c->rec.rttvar;
+}
+
+
+const char * cid2str(const struct cid * const id)
+{
+    static char str[2 * (CID_LEN_MAX + sizeof(id->seq)) + 1] = "?";
+    if (id)
+        snprintf(str, sizeof(str), "%" PRIu64 ":%.*s", id->seq, 2 * id->len,
+                 hex2str(id->id, id->len));
+    return str;
 }

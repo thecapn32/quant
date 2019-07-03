@@ -57,6 +57,17 @@
 #define SCID_LEN_SERV 8 ///< Default server source CID length.
 #define SRT_LEN 16      ///< Stateless reset token length allowed by spec.
 
+#ifdef PARTICLE
+#define IPTOS_ECN_NOTECT 0x00 // not-ECT
+#define IPTOS_ECN_ECT1 0x01   // ECN-capable transport (1)
+#define IPTOS_ECN_ECT0 0x02   // ECN-capable transport (0)
+#define IPTOS_ECN_CE 0x03     // congestion experienced
+#define IPTOS_ECN_MASK 0x03   // ECN field mask
+
+#define NI_MAXHOST 64
+#define NI_MAXSERV 16
+#define O_CLOEXEC 0
+#endif
 
 // Maximum reordering in packets before packet threshold loss detection
 // considers a packet lost. The RECOMMENDED value is 3.
@@ -267,22 +278,8 @@ write_to_corpus(const int dir, const void * const data, const size_t len);
 #define pm_idx(m) (uint32_t)((m)-pkt_meta)
 
 
-#define hex2str(buf, len)                                                      \
-    __extension__({                                                            \
-        static char _str[2 * 128 + 1] = "0";                                   \
-        static const char _hex_str[] = "0123456789abcdef";                     \
-        int _j;                                                                \
-        for (_j = 0; (unsigned long)_j < (unsigned long)(len) && _j < 128;     \
-             _j++) {                                                           \
-            _str[_j * 2] =                                                     \
-                _hex_str[(((const uint8_t *)(buf))[_j] >> 4) & 0x0f];          \
-            _str[_j * 2 + 1] = _hex_str[((const uint8_t *)(buf))[_j] & 0x0f];  \
-        }                                                                      \
-        if (_j == 128)                                                         \
-            _str[_j * 2 - 1] = _str[_j * 2 - 2] = _str[_j * 2 - 3] = '.';      \
-        _str[_j * 2] = 0;                                                      \
-        _str;                                                                  \
-    })
+extern const char * __attribute__((nonnull))
+hex2str(const uint8_t * const buf, const size_t len);
 
 
 #define has_strm_data(p) (p)->strm_frm_pos

@@ -58,12 +58,6 @@
 #include <unistd.h>
 #endif
 
-#ifdef PARTICLE
-#define NI_MAXHOST 64
-#define NI_MAXSERV 16
-#define O_CLOEXEC 0
-#endif
-
 #include "event.h" // IWYU pragma: keep
 
 #include "conn.h"
@@ -780,7 +774,7 @@ void q_cleanup(struct w_engine * const w)
 }
 
 
-char * q_cid(struct q_conn * const c)
+const char * q_cid(struct q_conn * const c)
 {
     return cid2str(c->scid);
 }
@@ -903,7 +897,6 @@ void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
     // switch to new w_sock
     c->rx_w.data = c->sock = new_sock;
     ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
-    ev_set_priority(&c->rx_w, EV_MAXPRI);
     ev_io_start(&c->rx_w);
     w_connect(c->sock, (struct sockaddr *)&c->peer);
     if (c->scid == 0)
@@ -934,4 +927,20 @@ void q_info(struct q_conn * const c, struct q_conn_info * const ci)
 {
     conn_info_populate(c);
     memcpy(ci, &c->i, sizeof(*ci));
+}
+
+
+const char * hex2str(const uint8_t * const buf, const size_t len)
+{
+    static char s[2 * 128 + 1] = "0";
+    static const char hex[] = "0123456789abcdef";
+    size_t i;
+    for (i = 0; i < len && i < 128; i++) {
+        s[i * 2] = hex[(buf[i] >> 4) & 0x0f];
+        s[i * 2 + 1] = hex[buf[i] & 0x0f];
+    }
+    if (i == 128)
+        s[i * 2 - 1] = s[i * 2 - 2] = s[i * 2 - 3] = '.';
+    s[i * 2] = 0;
+    return s;
 }

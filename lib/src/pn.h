@@ -76,6 +76,9 @@ static inline const char * __attribute__((const)) pn_type_str(const pn_t type)
     case pn_data:
         return "Data";
     }
+#ifdef PARTICLE
+    return ""; // old gcc doesn't seem to understand "noreturn" attribute
+#endif
 }
 
 

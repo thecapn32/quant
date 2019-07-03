@@ -2,34 +2,63 @@ INCLUDE_DIRS+=$(SOURCE_PATH)
 CPPSRC+=main.cpp
 
 DEPS=lib/deps
-LIBEV=$(DEPS)/libev
-KLIB=$(DEPS)/klib
-KLIB=$(DEPS)/klib
 PICOTLS=$(DEPS)/picotls
 WARPCORE=$(DEPS)/warpcore/lib
 
 INCLUDE_DIRS+=\
-	$(SOURCE_PATH)/lib/include \
-	$(SOURCE_PATH)/$(LIBEV) \
+	$(SOURCE_PATH)/$(PICOTLS)/deps/cifra/src \
+	$(SOURCE_PATH)/$(PICOTLS)/deps/cifra/src/ext \
+	$(SOURCE_PATH)/$(PICOTLS)/deps/micro-ecc \
 	$(SOURCE_PATH)/$(PICOTLS)/include \
+	$(SOURCE_PATH)/$(WARPCORE)/deps/klib \
 	$(SOURCE_PATH)/$(WARPCORE)/include \
-	$(SOURCE_PATH)/$(WARPCORE)/deps/klib
+	$(SOURCE_PATH)/lib/include
+
+PICOTLS_SRC+=\
+	$(PICOTLS)/deps/cifra/src/aes.c \
+	$(PICOTLS)/deps/cifra/src/blockwise.c \
+	$(PICOTLS)/deps/cifra/src/chacha20.c \
+	$(PICOTLS)/deps/cifra/src/curve25519.c \
+	$(PICOTLS)/deps/cifra/src/drbg.c \
+	$(PICOTLS)/deps/cifra/src/gcm.c \
+	$(PICOTLS)/deps/cifra/src/gf128.c \
+	$(PICOTLS)/deps/cifra/src/modes.c \
+	$(PICOTLS)/deps/cifra/src/poly1305.c \
+	$(PICOTLS)/deps/cifra/src/sha256.c \
+	$(PICOTLS)/deps/cifra/src/sha512.c \
+	$(PICOTLS)/deps/micro-ecc/uECC.c \
+	$(PICOTLS)/lib/cifra.c \
+	$(PICOTLS)/lib/picotls.c \
+	$(PICOTLS)/lib/uecc.c
 
 WARP_SRC+=\
-	warpcore/config.c \
 	$(WARPCORE)/src/backend_sock.c \
 	$(WARPCORE)/src/plat.c \
 	$(WARPCORE)/src/util.c \
-	$(WARPCORE)/src/warpcore.c
+	$(WARPCORE)/src/warpcore.c \
+	warpcore/config.c
 
 QUANT_SRC+=\
-	quant/config.c \
-	lib/src/quic.c
+	lib/src/conn.c \
+	lib/src/diet.c \
+	lib/src/event.c \
+	lib/src/frame.c \
+	lib/src/pkt.c \
+	lib/src/pn.c \
+	lib/src/quic.c \
+	lib/src/recovery.c \
+	lib/src/stream.c \
+	lib/src/tls.c \
+	quant/config.c
 
 
-CSRC+=$(WARP_SRC) $(QUANT_SRC)
+CSRC+=$(WARP_SRC) $(PICOTLS_SRC) $(QUANT_SRC)
 
-EXTRA_CFLAGS+=-Wno-unknown-pragmas -Werror -DNO_FUZZER_CORPUS_COLLECTION
+# -DNDEBUG
+EXTRA_CFLAGS+=-DNO_FUZZER_CORPUS_COLLECTION -Wno-error -Wno-parentheses \
+	-Wno-unused-function -Wno-comment -Wno-undef -Wno-unknown-pragmas \
+	-Wno-unused-but-set-variable \
+	-DEXTERNAL_READ_ENTROPY -DLOG_COMPILE_TIME_LEVEL=LOG_LEVEL_NONE -DNDEBUG
 
 # TODO: figure out how to do this using make rules
 $(shell	cd $(SOURCE_PATH) && ln -sf ../../lib)

@@ -32,7 +32,6 @@
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -51,16 +50,6 @@
 #include "quic.h"
 #include "recovery.h"
 #include "tls.h"
-
-
-#define cid2str(i)                                                             \
-    __extension__({                                                            \
-        static char _str[2 * (CID_LEN_MAX + sizeof((i)->seq)) + 1] = "0";      \
-        if (i)                                                                 \
-            snprintf(_str, sizeof(_str), "%" PRIu64 ":%.*s", (i)->seq,         \
-                     2 * (i)->len, hex2str((i)->id, (i)->len));                \
-        (i) ? _str : "?";                                                      \
-    })
 
 
 KHASH_MAP_INIT_INT64(strms_by_id, struct q_stream *)
@@ -251,8 +240,8 @@ struct q_conn {
 
     epoch_t min_rx_epoch;
 
-    ev_io rx_w;    ///< RX watcher.
-    ev_async tx_w; ///< TX watcher.
+    ev_io rx_w; ///< RX watcher.
+    ev_io tx_w; ///< TX watcher.
 
     struct recovery rec; ///< Loss recovery state.
     struct tls tls;      ///< TLS state.
@@ -299,7 +288,9 @@ extern struct q_conn_sl c_ready;
 #endif
 
 
-extern void __attribute__((nonnull)) tx(ev_async * const w, int param);
+extern const char * cid2str(const struct cid * const id);
+
+extern void __attribute__((nonnull)) tx(ev_io * const w, int param);
 
 extern void __attribute__((nonnull)) err_close(struct q_conn * const c,
                                                const uint16_t code,
@@ -370,6 +361,7 @@ pn_for_epoch(struct q_conn * const c, const epoch_t e)
         return &c->pns[pn_data];
     }
     die("unhandled epoch %u", e);
+    return 0;
 }
 
 

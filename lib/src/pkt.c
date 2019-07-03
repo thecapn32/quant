@@ -27,10 +27,13 @@
 
 #include <inttypes.h>
 #include <netdb.h>
-#include <netinet/ip.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/socket.h>
+
+#ifndef PARTICLE
+#include <netinet/ip.h>
+#endif
 
 // IWYU pragma: no_include <picotls/../picotls.h>
 
@@ -68,8 +71,8 @@ void log_pkt(const char * const dir,
              const uint8_t * const tok,
              const uint16_t tok_len)
 {
-    if (util_dlevel < NTE)
-        return;
+    // if (util_dlevel != NTE && util_dlevel != INF && util_dlevel != DBG)
+    //     return;
 
     char ip[NI_MAXHOST];
     char port[NI_MAXSERV];
@@ -945,9 +948,9 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
         return is_srt(xv, m);
 
     // check if we need to send an immediate ACK
-    if (unlikely(diet_empty(&m->pn->recv_all) == false &&
-                     m->hdr.nr < diet_max(&m->pn->recv_all) ||
-                 (xv->flags & IPTOS_ECN_MASK) == IPTOS_ECN_CE))
+    if ((unlikely(diet_empty(&m->pn->recv_all) == false &&
+                  m->hdr.nr < diet_max(&m->pn->recv_all)) ||
+         (xv->flags & IPTOS_ECN_MASK) == IPTOS_ECN_CE))
         // XXX: this also sends an imm_ack if the reor is "fixed" within a burst
         m->pn->imm_ack = true;
 

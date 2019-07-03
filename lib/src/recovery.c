@@ -88,6 +88,9 @@ have_keys(struct q_conn * const c, const pn_t t)
                (pn->data.in_1rtt[1].aead && pn->data.out_1rtt[1].aead);
     }
     die("unhandled pn %s", pn_type_str(t));
+#ifdef PARTICLE
+    return false; // old gcc doesn't seem to understand "noreturn" attribute
+#endif
 }
 
 

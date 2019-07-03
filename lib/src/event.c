@@ -27,6 +27,65 @@
 
 #include "event.h"
 
+#ifdef PARTICLE
+#include <logging.h>
+#include <rng_hal.h>
+#include <socket_hal.h>
+#include <warpcore/warpcore.h>
+
+uid_t __attribute__((const)) geteuid(void)
+{
+    return 0;
+}
+
+uid_t __attribute__((const)) getuid(void)
+{
+    return 0;
+}
+
+gid_t __attribute__((const)) getegid(void)
+{
+    return 0;
+}
+
+gid_t __attribute__((const)) getgid(void)
+{
+    return 0;
+}
+
+ssize_t write(int fildes, const void * buf, size_t nbyte)
+{
+    LOG_WRITE(ERROR, buf, nbyte);
+    return nbyte;
+}
+
+int nanosleep(const struct timespec * rqtp, struct timespec * rmtp)
+{
+    static int sock = 0;
+    if (unlikely(sock == 0))
+        sock = socket(AF_INET, SOCK_RAW, 0);
+
+    struct timeval tv;
+    TIMESPEC_TO_TIMEVAL(&tv, rqtp);
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
+    recv(sock, 0, 0, 0);
+    return 0;
+}
+
+void read_entropy(uint8_t * entropy, size_t size)
+{
+    while (size >= sizeof(uint32_t)) {
+        *((uint32_t *)entropy) = HAL_RNG_GetRandomNumber();
+        entropy += sizeof(uint32_t);
+        size -= sizeof(uint32_t);
+    }
+    while (size-- > 0) {
+        *entropy++ = HAL_RNG_GetRandomNumber();
+    }
+}
+#endif
+
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wbitwise-op-parentheses"
 #pragma clang diagnostic ignored "-Wcast-align"
@@ -51,9 +110,10 @@
 #pragma clang diagnostic ignored "-Wused-but-marked-unused"
 
 #pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wextra"
 #pragma GCC diagnostic ignored "-Wpedantic"
 #pragma GCC diagnostic ignored "-Wsign-compare"
-#pragma GCC diagnostic ignored "-Wextra"
+#pragma GCC diagnostic ignored "-Wunused-variable"
 
 #include "../deps/libev/ev.c"
 
