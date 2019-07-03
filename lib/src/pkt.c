@@ -90,7 +90,8 @@ void log_pkt(const char * const dir,
                               "%s " NRM "vers=0x%08x dcid=%s scid=%s",
                       ip, port, v->len, m->hdr.flags, pts, m->hdr.vers,
                       c2s(&m->hdr.dcid), c2s(&m->hdr.scid));
-            else if (m->hdr.type == LH_RTRY)
+            else if (m->hdr.type == LH_RTRY) {
+                ensure(odcid, "need odcid");
                 twarn(NTE,
                       BLD BLU "RX" NRM " from=%s:%s len=%u 0x%02x=" BLU
                               "%s " NRM
@@ -98,7 +99,7 @@ void log_pkt(const char * const dir,
                       ip, port, v->len, m->hdr.flags, pts, m->hdr.vers,
                       c2s(&m->hdr.dcid), c2s(&m->hdr.scid), c2s(odcid),
                       hex2str(tok, tok_len));
-            else if (m->hdr.type == LH_INIT)
+            } else if (m->hdr.type == LH_INIT)
                 twarn(NTE,
                       BLD BLU
                       "RX" NRM " from=%s:%s len=%u 0x%02x=" BLU "%s " NRM
@@ -132,14 +133,15 @@ void log_pkt(const char * const dir,
                               "vers=0x%08x dcid=%s scid=%s",
                       ip, port, m->hdr.flags, pts, m->hdr.vers,
                       c2s(&m->hdr.dcid), c2s(&m->hdr.scid));
-            else if (m->hdr.type == LH_RTRY)
+            else if (m->hdr.type == LH_RTRY) {
+                ensure(odcid, "need odcid");
                 twarn(NTE,
                       BLD GRN "TX" NRM " to=%s:%s 0x%02x=" GRN "%s " NRM
                               "vers=0x%08x dcid=%s scid=%s odcid=%s tok=%s",
                       ip, port, m->hdr.flags, pts, m->hdr.vers,
                       c2s(&m->hdr.dcid), c2s(&m->hdr.scid), c2s(odcid),
                       hex2str(tok, tok_len));
-            else if (m->hdr.type == LH_INIT)
+            } else if (m->hdr.type == LH_INIT)
                 twarn(NTE,
                       BLD GRN
                       "TX" NRM " to=%s:%s 0x%02x=" GRN "%s " NRM
