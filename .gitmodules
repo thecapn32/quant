@@ -6,7 +6,7 @@
 	url = https://github.com/NTAP/warpcore.git
 [submodule "lib/deps/picotls"]
 	path = lib/deps/picotls
-	url = https://github.com/h2o/picotls.git
+	url = https://github.com/larseggert/picotls.git
 [submodule "lib/deps/picoquic"]
 	path = lib/deps/picoquic
 	url = https://github.com/private-octopus/picoquic.git
