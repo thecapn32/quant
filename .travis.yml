@@ -50,6 +50,7 @@ addons:
       - ubuntu-toolchain-r-test
       - llvm-toolchain-xenial-6.0
       - llvm-toolchain-xenial-7
+      - ppa:carsten-uppenbrink-net/openssl
     packages:
       - g++-4.9
       - g++-7
@@ -62,7 +63,7 @@ addons:
       - libhttp-parser-dev
       - libbsd-dev
       - cmake
-      - openssl-dev
+      - openssl
   coverity_scan:
     project:
       name: "NTAP/$PROJECT"
