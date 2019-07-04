@@ -10,8 +10,7 @@ UDP, intending to support the new HTTP/3 standard. QUANT uses the
 on top of the [netmap](http://info.iet.unipi.it/~luigi/netmap/) packet I/O
 framework. It can also operate over the regular Socket API.
 
-The quant repository is [on GitHub](https://github.com/NTAP/quant), as is
-the (limited) [documentation](https://ntap.github.io/quant/).
+The quant repository is [on GitHub](https://github.com/NTAP/quant).
 
 quant uses [picotls](https://github.com/h2o/picotls) for its [TLS
 1.3](https://datatracker.ietf.org/doc/draft-ietf-tls-tls13/) implementation.
