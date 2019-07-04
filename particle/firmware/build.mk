@@ -17,15 +17,11 @@ INCLUDE_DIRS+=\
 PICOTLS_SRC+=\
 	$(PICOTLS)/deps/cifra/src/aes.c \
 	$(PICOTLS)/deps/cifra/src/blockwise.c \
-	$(PICOTLS)/deps/cifra/src/chacha20.c \
-	$(PICOTLS)/deps/cifra/src/curve25519.c \
 	$(PICOTLS)/deps/cifra/src/drbg.c \
 	$(PICOTLS)/deps/cifra/src/gcm.c \
 	$(PICOTLS)/deps/cifra/src/gf128.c \
 	$(PICOTLS)/deps/cifra/src/modes.c \
-	$(PICOTLS)/deps/cifra/src/poly1305.c \
 	$(PICOTLS)/deps/cifra/src/sha256.c \
-	$(PICOTLS)/deps/cifra/src/sha512.c \
 	$(PICOTLS)/deps/micro-ecc/uECC.c \
 	$(PICOTLS)/lib/cifra.c \
 	$(PICOTLS)/lib/picotls.c \
@@ -43,6 +39,7 @@ QUANT_SRC+=\
 	lib/src/diet.c \
 	lib/src/event.c \
 	lib/src/frame.c \
+	lib/src/marshall.c \
 	lib/src/pkt.c \
 	lib/src/pn.c \
 	lib/src/quic.c \
@@ -55,11 +52,11 @@ QUANT_SRC+=\
 CSRC+=$(WARP_SRC) $(PICOTLS_SRC) $(QUANT_SRC)
 
 # -DNDEBUG
-EXTRA_CFLAGS+=-DNO_FUZZER_CORPUS_COLLECTION -Wno-error -Wno-parentheses \
-	-Wno-unused-function -Wno-comment -Wno-undef -Wno-unknown-pragmas \
-	-Wno-unused-but-set-variable -DNO_OOO_0RTT -DNO_TLS_TICKETS \
-	-DNO_TLS_LOG \
-	-DEXTERNAL_READ_ENTROPY -DLOG_COMPILE_TIME_LEVEL=LOG_LEVEL_NONE -DNDEBUG
+EXTRA_CFLAGS+=-Wno-error -Wno-parentheses -Wno-unused-function -Wno-comment \
+	-Wno-undef -Wno-unknown-pragmas -Wno-unused-but-set-variable \
+	-DNO_FUZZER_CORPUS_COLLECTION -DNO_OOO_0RTT -DNO_TLS_TICKETS \
+	-DNO_TLS_LOG -DMINIMAL_CIPHERS -DNO_ERR_REASONS \
+	-DEXTERNAL_READ_ENTROPY -DLOG_COMPILE_TIME_LEVEL=LOG_LEVEL_ALL
 
 # TODO: figure out how to do this using make rules
 $(shell	cd $(SOURCE_PATH) && ln -sf ../../lib)

@@ -1368,7 +1368,10 @@ void init_tls_ctx(const struct q_conf * const conf)
 #endif
 
     static ptls_key_exchange_algorithm_t * key_exchanges[] = {&secp256r1,
-                                                              &x25519, 0};
+#ifndef PARTICLE
+                                                              &x25519,
+#endif
+                                                              0};
     static ptls_on_client_hello_t on_client_hello = {on_ch};
     static ptls_update_traffic_key_t update_traffic_key = {
         update_traffic_key_cb};

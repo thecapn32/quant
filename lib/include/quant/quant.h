@@ -35,7 +35,10 @@ extern "C" {
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
+
+#ifndef PARTICLE
 #include <sys/socket.h>
+#endif
 
 #include <quant/config.h> // IWYU pragma: export
 #include <quant/tree.h>   // IWYU pragma: export

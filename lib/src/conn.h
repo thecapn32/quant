@@ -260,8 +260,10 @@ struct q_conn {
 
     uint16_t err_code;
     uint8_t err_frm;
+#ifndef NO_ERR_REASONS
     uint8_t err_reason_len;
     char err_reason[MAX_ERR_REASON_LEN];
+#endif
 
     uint16_t tok_len;
     uint8_t tok[MAX_TOK_LEN + 2]; // some stacks send ungodly large tokens
@@ -292,11 +294,26 @@ extern const char * cid2str(const struct cid * const id);
 
 extern void __attribute__((nonnull)) tx(ev_io * const w, int param);
 
-extern void __attribute__((nonnull)) err_close(struct q_conn * const c,
-                                               const uint16_t code,
-                                               const uint8_t frm,
-                                               const char * const fmt,
-                                               ...);
+
+#ifdef NO_ERR_REASONS
+#define err_close(c, code, frm, ...) err_close_noreason(c, code, frm)
+#endif
+
+extern void __attribute__((nonnull))
+#ifndef NO_ERR_REASONS
+err_close
+#else
+err_close_noreason
+#endif
+    (struct q_conn * const c,
+     const uint16_t code,
+     const uint8_t frm
+#ifndef NO_ERR_REASONS
+     ,
+     const char * const fmt,
+     ...
+#endif
+    );
 
 extern void __attribute__((nonnull)) enter_closing(struct q_conn * const c);
 

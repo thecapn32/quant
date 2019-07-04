@@ -486,8 +486,8 @@ struct q_conn * q_accept(const struct q_conn_conf * const conf)
     if (sl_first(&accept_queue))
         goto accept;
 
-    warn(WRN, "waiting for conn on any serv sock (timeout %f sec)",
-         conf ? (double)conf->idle_timeout / MSECS_PER_SEC : 0);
+    warn(WRN, "waiting for conn on any serv sock (timeout %" PRIu64 " ms)",
+         conf ? conf->idle_timeout : 0);
 
     if (conf && conf->idle_timeout) {
         if (ev_is_active(&api_alarm))
@@ -687,10 +687,12 @@ void q_close(struct q_conn * const c,
              reason ? ")" : "");
 
     c->err_code = code;
+#ifndef NO_ERR_REASONS
     if (reason) {
         strncpy(c->err_reason, reason, MAX_ERR_REASON_LEN);
         c->err_reason_len = (uint8_t)strnlen(reason, MAX_ERR_REASON_LEN);
     }
+#endif
 
     if (c->state == conn_idle || c->state == conn_clsd ||
         (!c->is_clnt && c->holds_sock))

@@ -31,33 +31,40 @@
 #include <logging.h>
 #include <rng_hal.h>
 #include <socket_hal.h>
+#include <sys/socket.h>
 #include <warpcore/warpcore.h>
+
 
 uid_t __attribute__((const)) geteuid(void)
 {
     return 0;
 }
 
+
 uid_t __attribute__((const)) getuid(void)
 {
     return 0;
 }
+
 
 gid_t __attribute__((const)) getegid(void)
 {
     return 0;
 }
 
+
 gid_t __attribute__((const)) getgid(void)
 {
     return 0;
 }
+
 
 ssize_t write(int fildes, const void * buf, size_t nbyte)
 {
     LOG_WRITE(ERROR, buf, nbyte);
     return nbyte;
 }
+
 
 int nanosleep(const struct timespec * rqtp, struct timespec * rmtp)
 {
@@ -73,6 +80,9 @@ int nanosleep(const struct timespec * rqtp, struct timespec * rmtp)
     return 0;
 }
 
+
+// FIXME: this should move to a more appropriate place
+
 void read_entropy(uint8_t * entropy, size_t size)
 {
     while (size >= sizeof(uint32_t)) {
@@ -85,6 +95,7 @@ void read_entropy(uint8_t * entropy, size_t size)
     }
 }
 #endif
+
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wbitwise-op-parentheses"
@@ -115,7 +126,14 @@ void read_entropy(uint8_t * entropy, size_t size)
 #pragma GCC diagnostic ignored "-Wsign-compare"
 #pragma GCC diagnostic ignored "-Wunused-variable"
 
+#if !defined(NDEBUG) && defined(PARTICLE)
+#define EV_NDEBUG
+#define NDEBUG
+#endif
 #include "../deps/libev/ev.c"
+#ifdef EV_NDEBUG
+#undef NDEBUG
+#endif
 
 #pragma GCC diagnostic pop
 #pragma clang diagnostic pop

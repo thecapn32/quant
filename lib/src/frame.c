@@ -1473,9 +1473,18 @@ void enc_close_frame(uint8_t ** pos,
     enc2(pos, end, c->err_code);
     if (type == FRM_CLQ)
         enc1(pos, end, c->err_frm);
-    encv(pos, end, c->err_reason_len);
-    if (c->err_reason_len)
-        encb(pos, end, (const uint8_t *)c->err_reason, c->err_reason_len);
+
+#ifndef NO_ERR_REASONS
+    const uint8_t err_reason_len = c->err_reason_len;
+    const char * const err_reason = c->err_reason;
+#else
+    const uint8_t err_reason_len = 0;
+    const char err_reason[0];
+#endif
+
+    encv(pos, end, err_reason_len);
+    if (err_reason_len)
+        encb(pos, end, (const uint8_t *)err_reason, err_reason_len);
 
 #ifndef NDEBUG
     if (type == FRM_CLQ)
@@ -1483,14 +1492,14 @@ void enc_close_frame(uint8_t ** pos,
              FRAM_OUT "CONNECTION_CLOSE" NRM " 0x%02x=quic err=%s0x%04x" NRM
                       " frame=0x%02x rlen=%u reason=%s%.*s" NRM,
              type, c->err_code ? RED : NRM, c->err_code, c->err_frm,
-             c->err_reason_len, c->err_code ? RED : NRM, (int)c->err_reason_len,
-             c->err_reason);
+             err_reason_len, c->err_code ? RED : NRM, (int)err_reason_len,
+             err_reason);
     else
         warn(INF,
              FRAM_OUT "CONNECTION_CLOSE" NRM " 0x%02x=app err=%s0x%04x" NRM
                       " rlen=%u reason=%s%.*s" NRM,
-             type, c->err_code ? RED : NRM, c->err_code, c->err_reason_len,
-             c->err_code ? RED : NRM, (int)c->err_reason_len, c->err_reason);
+             type, c->err_code ? RED : NRM, c->err_code, err_reason_len,
+             c->err_code ? RED : NRM, (int)err_reason_len, err_reason);
 #endif
 
     track_frame(m, type);

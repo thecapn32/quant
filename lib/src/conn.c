@@ -1480,20 +1480,33 @@ void rx(ev_io * const rx_w, int _e __attribute__((unused)))
 }
 
 
-void err_close(struct q_conn * const c,
+void
+#ifndef NO_ERR_REASONS
+err_close
+#else
+err_close_noreason
+#endif
+(struct q_conn * const c,
                const uint16_t code,
-               const uint8_t frm,
+               const uint8_t frm
+#ifndef NO_ERR_REASONS
+               ,
                const char * const fmt,
-               ...)
+               ...
+#endif
+)
 {
 #ifndef FUZZING
     if (unlikely(c->err_code)) {
+#ifndef NO_ERR_REASONS
         warn(WRN, "ignoring new err 0x%04x; existing err is 0x%04x (%s) ", code,
              c->err_code, c->err_reason);
+#endif
         return;
     }
 #endif
 
+#ifndef NO_ERR_REASONS
     va_list ap;
     va_start(ap, fmt);
 
@@ -1504,9 +1517,10 @@ void err_close(struct q_conn * const c,
     va_end(ap);
 
     warn(ERR, "%s", c->err_reason);
-    c->err_code = code;
     c->err_reason_len =
         (uint8_t)MIN((unsigned long)ret + 1, sizeof(c->err_reason));
+#endif
+    c->err_code = code;
     c->err_frm = frm;
     c->needs_tx = true;
     enter_closing(c);
