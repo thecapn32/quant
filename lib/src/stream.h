@@ -31,6 +31,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
 #include "conn.h"
@@ -58,6 +59,9 @@ typedef enum { STRM_STATES } strm_state_t;
 
 extern const char * const strm_state_str[];
 
+splay_head(ooo_by_off, pkt_meta);
+
+SPLAY_PROTOTYPE(ooo_by_off, pkt_meta, off_node, ooo_by_off_cmp)
 
 struct q_stream {
     sl_entry(q_stream) node_ctrl;
@@ -70,11 +74,13 @@ struct q_stream {
     uint64_t out_data;      ///< Current outbound stream offset (= data sent).
     uint64_t out_data_max;  ///< Outbound max_strm_data.
 
-    struct w_iov_sq in;       ///< Tail queue containing inbound data.
+    struct w_iov_sq in; ///< Tail queue containing inbound data.
+#ifndef NO_OOO_DATA
     struct ooo_by_off in_ooo; ///< Out-of-order inbound data.
-    uint64_t in_data_max;     ///< Inbound max_strm_data.
-    uint64_t in_data;         ///< In-order stream data received (total).
-    uint64_t in_data_off;     ///< Next in-order stream data offset expected.
+#endif
+    uint64_t in_data_max; ///< Inbound max_strm_data.
+    uint64_t in_data;     ///< In-order stream data received (total).
+    uint64_t in_data_off; ///< Next in-order stream data offset expected.
 
     uint64_t lost_cnt;  ///< Number of pkts in out that are marked lost.
     strm_state_t state; ///< Stream state.

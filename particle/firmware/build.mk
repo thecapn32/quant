@@ -55,8 +55,9 @@ CSRC+=$(WARP_SRC) $(PICOTLS_SRC) $(QUANT_SRC)
 EXTRA_CFLAGS+=-Wno-error -Wno-parentheses -Wno-unused-function -Wno-comment \
 	-Wno-undef -Wno-unknown-pragmas -Wno-unused-but-set-variable \
 	-DNO_FUZZER_CORPUS_COLLECTION -DNO_OOO_0RTT -DNO_TLS_TICKETS \
-	-DNO_TLS_LOG -DMINIMAL_CIPHERS -DNO_ERR_REASONS \
-	-DEXTERNAL_READ_ENTROPY -DLOG_COMPILE_TIME_LEVEL=LOG_LEVEL_ALL
+	-DNO_TLS_LOG -DMINIMAL_CIPHERS -DNO_ERR_REASONS -DNDEBUG \
+	-DEXTERNAL_READ_ENTROPY -DNO_OOO_DATA \
+	-DLOG_COMPILE_TIME_LEVEL=LOG_LEVEL_ALL
 
 # TODO: figure out how to do this using make rules
 $(shell	cd $(SOURCE_PATH) && ln -sf ../../lib)

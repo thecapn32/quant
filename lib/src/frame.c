@@ -305,6 +305,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
         m->strm->in_data_off += m->strm_data_len;
         sq_insert_tail(&m->strm->in, v, next);
 
+#ifndef NO_OOO_DATA
         // check if a hole has been filled that lets us dequeue ooo data
         struct pkt_meta * p = splay_min(ooo_by_off, &m->strm->in_ooo);
         while (p) {
@@ -339,6 +340,9 @@ dec_stream_or_crypto_frame(const uint8_t type,
                 p->strm = 0;
             p = nxt;
         }
+#else
+        ignore = true;
+#endif
 
         // check if we have delivered a FIN, and act on it if we did
         struct w_iov * const last = sq_last(&m->strm->in, w_iov, next);
@@ -372,6 +376,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
         goto done;
     }
 
+#ifndef NO_OOO_DATA
     // data is out of order - check if it overlaps with already stored ooo data
     kind = YEL "ooo" NRM;
     if (unlikely(m->strm->state == strm_hcrm || m->strm->state == strm_clsd)) {
@@ -403,6 +408,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
     // this ooo data doesn't overlap with anything
     track_bytes_in(m->strm, m->strm_data_len);
     ensure(splay_insert(ooo_by_off, &m->strm->in_ooo, m) == 0, "inserted");
+#endif
 
 done:
     log_stream_or_crypto_frame(false, m, type, sid, true, kind);

@@ -70,8 +70,6 @@
 #include "tls.h"
 
 
-SPLAY_GENERATE(ooo_by_off, pkt_meta, off_node, ooo_by_off_cmp)
-
 // TODO: many of these globals should move to a per-engine struct
 
 

@@ -47,6 +47,9 @@
 #include "stream.h"
 
 
+SPLAY_GENERATE(ooo_by_off, pkt_meta, off_node, ooo_by_off_cmp)
+
+
 #undef STRM_STATE
 #define STRM_STATE(k, v) [v] = #k
 
@@ -153,11 +156,13 @@ void free_stream(struct q_stream * const s)
     } else
         s->c->cstrms[strm_epoch(s)] = 0;
 
+#ifndef NO_OOO_DATA
     while (!splay_empty(&s->in_ooo)) {
         struct pkt_meta * const p = splay_min(ooo_by_off, &s->in_ooo);
         ensure(splay_remove(ooo_by_off, &s->in_ooo, p), "removed");
         free_iov(w_iov(c->w, pm_idx(p)), p);
     }
+#endif
 
     q_free(&s->out);
     q_free(&s->in);

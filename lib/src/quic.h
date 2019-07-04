@@ -400,6 +400,3 @@ adj_iov_to_data(struct w_iov * const v, const struct pkt_meta * const m)
 }
 
 
-splay_head(ooo_by_off, pkt_meta);
-
-SPLAY_PROTOTYPE(ooo_by_off, pkt_meta, off_node, ooo_by_off_cmp)
