@@ -146,7 +146,7 @@ int main(int argc __attribute__((unused)), char ** argv)
     // connect to server
     struct sockaddr_in sip = {};
     sip.sin_family = AF_INET;
-    sip.sin_port = htons(55555);
+    sip.sin_port = bswap16(55555);
     sip.sin_addr.s_addr = inet_addr("127.0.0.1");
     cc = q_connect(w, reinterpret_cast<struct sockaddr *>(&sip), // NOLINT
                    "localhost", nullptr, nullptr, true, nullptr);

@@ -25,7 +25,6 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <arpa/inet.h>
 #include <netdb.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -459,7 +458,7 @@ bool q_read_stream(struct q_stream * const s,
 struct q_conn * q_bind(struct w_engine * const w, const uint16_t port)
 {
     // bind socket and create new embryonic server connection
-    struct q_conn * const c = new_conn(w, 0, 0, 0, 0, 0, htons(port), 0);
+    struct q_conn * const c = new_conn(w, 0, 0, 0, 0, 0, bswap16(port), 0);
     if (likely(c))
         warn(INF, "bound %s socket to port %u", conn_type(c), port);
     return c;
@@ -680,7 +679,7 @@ void q_close(struct q_conn * const c,
 {
     if (c->scid)
         warn(WRN, "closing %s conn %s on port %u w/err %s0x%04x%s%s%s" NRM,
-             conn_type(c), cid2str(c->scid), ntohs(get_sport(c->sock)),
+             conn_type(c), cid2str(c->scid), bswap16(get_sport(c->sock)),
              code ? RED : NRM, code, reason ? " (" : "", reason ? reason : "",
              reason ? ")" : "");
 

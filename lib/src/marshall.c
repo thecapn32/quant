@@ -25,7 +25,6 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <arpa/inet.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -35,27 +34,6 @@
 #include <warpcore/warpcore.h>
 
 #include "marshall.h"
-
-#if defined(HAVE_ENDIAN_H)
-// e.g., Linux
-#include <endian.h>
-#define ntohll be64toh
-#define htonll htobe64
-#elif defined(HAVE_SYS_ENDIAN_H)
-// e.g., FreeBSD
-#include <sys/endian.h>
-#define ntohll be64toh
-#define htonll htobe64
-#elif defined(PARTICLE)
-#ifdef __BIG_ENDIAN__
-#define htonll(x) (x)
-#define ntohll(x) (x)
-#else
-#define htonll(x) (((uint64_t)htonl((x)&0xFFFFFFFF) << 32) | htonl((x) >> 32))
-#define ntohll(x) (((uint64_t)ntohl((x)&0xFFFFFFFF) << 32) | ntohl((x) >> 32))
-#endif
-#endif
-
 
 // #define VARINT1_MAX 0x3f
 // #define VARINT2_MAX UINT16_C(0x3FFF)
@@ -100,7 +78,7 @@ void enc1(uint8_t ** pos, const uint8_t * const end, const uint8_t val)
 void enc2(uint8_t ** pos, const uint8_t * const end, const uint16_t val)
 {
     ensure(*pos + sizeof(val) <= end, "buffer overflow: %lu", end - *pos);
-    const uint16_t v = htons(val);
+    const uint16_t v = bswap16(val);
     memcpy(*pos, &v, sizeof(v));
     *pos += sizeof(val);
 }
@@ -109,7 +87,7 @@ void enc2(uint8_t ** pos, const uint8_t * const end, const uint16_t val)
 void enc3(uint8_t ** pos, const uint8_t * const end, const uint32_t val)
 {
     ensure(*pos + 3 <= end, "buffer overflow: %lu", end - *pos);
-    const uint32_t v = htonl(val << 8);
+    const uint32_t v = bswap32(val << 8);
     memcpy(*pos, &v, 3);
     *pos += 3;
 }
@@ -118,7 +96,7 @@ void enc3(uint8_t ** pos, const uint8_t * const end, const uint32_t val)
 void enc4(uint8_t ** pos, const uint8_t * const end, const uint32_t val)
 {
     ensure(*pos + sizeof(val) <= end, "buffer overflow: %lu", end - *pos);
-    const uint32_t v = htonl(val);
+    const uint32_t v = bswap32(val);
     memcpy(*pos, &v, sizeof(v));
     *pos += sizeof(val);
 }
@@ -127,7 +105,7 @@ void enc4(uint8_t ** pos, const uint8_t * const end, const uint32_t val)
 void enc8(uint8_t ** pos, const uint8_t * const end, const uint64_t val)
 {
     ensure(*pos + sizeof(val) <= end, "buffer overflow: %lu", end - *pos);
-    const uint64_t v = htonll(val);
+    const uint64_t v = bswap64(val);
     memcpy(*pos, &v, sizeof(v));
     *pos += sizeof(val);
 }
@@ -241,7 +219,7 @@ bool dec2(uint16_t * const val,
     if (unlikely(*pos + sizeof(*val) > end))
         return false;
     memcpy(val, *pos, sizeof(*val));
-    *val = ntohs(*val);
+    *val = bswap16(*val);
     *pos += sizeof(*val);
     return true;
 }
@@ -254,7 +232,7 @@ bool dec3(uint32_t * const val,
     if (unlikely(*pos + 3 > end))
         return false;
     memcpy(val, *pos, 3);
-    *val = ntohl(*val << 8);
+    *val = bswap32(*val << 8);
     *pos += 3;
     return true;
 }
@@ -267,7 +245,7 @@ bool dec4(uint32_t * const val,
     if (unlikely(*pos + sizeof(*val) > end))
         return false;
     memcpy(val, *pos, sizeof(*val));
-    *val = ntohl(*val);
+    *val = bswap32(*val);
     *pos += sizeof(*val);
     return true;
 }
@@ -280,7 +258,7 @@ bool dec8(uint64_t * const val,
     if (unlikely(*pos + sizeof(*val) > end))
         return false;
     memcpy(val, *pos, sizeof(*val));
-    *val = ntohll(*val);
+    *val = bswap64(*val);
     *pos += sizeof(*val);
     return true;
 }

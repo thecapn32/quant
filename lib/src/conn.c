@@ -25,7 +25,6 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <arpa/inet.h>
 #include <netdb.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -890,7 +889,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
         c->vers = m->hdr.vers;
 
         // TODO: remove this interop hack eventually
-        if (ntohs(get_sport(ws)) == 4434) {
+        if (bswap16(get_sport(ws)) == 4434) {
             if (m->hdr.type == LH_INIT && tok_len) {
                 if (verify_rtry_tok(c, tok, tok_len) == false) {
                     warn(ERR, "retry token verification failed");
@@ -1200,7 +1199,7 @@ rx_pkts(struct w_iov_sq * const x,
                        "getnameinfo");
 
                 warn(NTE, "new serv conn on port %u from %s:%s w/cid=%s",
-                     ntohs(get_sport(ws)), ip, port, cid2str(&m->hdr.dcid));
+                     bswap16(get_sport(ws)), ip, port, cid2str(&m->hdr.dcid));
 #endif
                 c = new_conn(w_engine(ws), m->hdr.vers, &m->hdr.scid,
                              &m->hdr.dcid, (struct sockaddr *)&v->addr, 0,
@@ -1758,7 +1757,7 @@ struct q_conn * new_conn(struct w_engine * const w,
 
     if (c->scid)
         warn(DBG, "%s conn %s on port %u created", conn_type(c),
-             cid2str(c->scid), ntohs(get_sport(c->sock)));
+             cid2str(c->scid), bswap16(get_sport(c->sock)));
 
     conn_to_state(c, conn_idle);
     return c;

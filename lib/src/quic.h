@@ -391,5 +391,3 @@ adj_iov_to_data(struct w_iov * const v, const struct pkt_meta * const m)
     v->buf += m->strm_data_pos;
     v->len -= m->strm_data_pos;
 }
-
-

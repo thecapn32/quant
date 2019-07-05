@@ -47,7 +47,9 @@
 #include "stream.h"
 
 
+#ifndef NO_OOO_DATA
 SPLAY_GENERATE(ooo_by_off, pkt_meta, off_node, ooo_by_off_cmp)
+#endif
 
 
 #undef STRM_STATE
