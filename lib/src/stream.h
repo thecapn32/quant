@@ -59,9 +59,20 @@ typedef enum { STRM_STATES } strm_state_t;
 
 extern const char * const strm_state_str[];
 
+
+#ifndef NO_OOO_DATA
+static inline int __attribute__((nonnull))
+ooo_by_off_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
+{
+    return (a->strm_off > b->strm_off) - (a->strm_off < b->strm_off);
+}
+
+
 splay_head(ooo_by_off, pkt_meta);
 
 SPLAY_PROTOTYPE(ooo_by_off, pkt_meta, off_node, ooo_by_off_cmp)
+#endif
+
 
 struct q_stream {
     sl_entry(q_stream) node_ctrl;

@@ -377,13 +377,6 @@ pm_cpy(struct pkt_meta * const dst,
 }
 
 
-static inline int __attribute__((nonnull))
-ooo_by_off_cmp(const struct pkt_meta * const a, const struct pkt_meta * const b)
-{
-    return (a->strm_off > b->strm_off) - (a->strm_off < b->strm_off);
-}
-
-
 static inline void __attribute__((nonnull))
 adj_iov_to_start(struct w_iov * const v, const struct pkt_meta * const m)
 {
