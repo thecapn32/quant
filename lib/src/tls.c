@@ -50,7 +50,23 @@
 #endif
 
 #ifdef PARTICLE
+#include <rng_hal.h>
+
 #define gai_strerror(x) "getnameinfo"
+
+void ptls_minicrypto_random_bytes(void * buf, size_t len)
+{
+    while (len >= sizeof(uint32_t)) {
+        *((uint32_t *)buf) = HAL_RNG_GetRandomNumber();
+        buf += sizeof(uint32_t);
+        len -= sizeof(uint32_t);
+    }
+    while (len > 0) {
+        *((uint8_t *)buf) = HAL_RNG_GetRandomNumber();
+        buf += sizeof(uint8_t);
+        len -= sizeof(uint8_t);
+    }
+}
 #endif
 
 #ifdef WITH_OPENSSL
@@ -67,7 +83,13 @@
 #else
 #include <picotls/minicrypto.h>
 
+#ifndef PARTICLE
 #define cipher_suite ptls_minicrypto_cipher_suites
+#else
+static ptls_cipher_suite_t * cipher_suite[] = {&ptls_minicrypto_aes128gcmsha256,
+                                               0};
+#endif
+
 #define aes128gcmsha256 ptls_minicrypto_aes128gcmsha256
 #define secp256r1 ptls_minicrypto_secp256r1
 #define x25519 ptls_minicrypto_x25519

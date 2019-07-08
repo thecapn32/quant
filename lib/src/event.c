@@ -29,7 +29,6 @@
 
 #ifdef PARTICLE
 #include <logging.h>
-#include <rng_hal.h>
 #include <socket_hal.h>
 #include <sys/socket.h>
 #include <warpcore/warpcore.h>
@@ -78,21 +77,6 @@ int nanosleep(const struct timespec * rqtp, struct timespec * rmtp)
 
     recv(sock, 0, 0, 0);
     return 0;
-}
-
-
-// FIXME: this should move to a more appropriate place
-
-void read_entropy(uint8_t * entropy, size_t size)
-{
-    while (size >= sizeof(uint32_t)) {
-        *((uint32_t *)entropy) = HAL_RNG_GetRandomNumber();
-        entropy += sizeof(uint32_t);
-        size -= sizeof(uint32_t);
-    }
-    while (size-- > 0) {
-        *entropy++ = HAL_RNG_GetRandomNumber();
-    }
 }
 #endif
 
