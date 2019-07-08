@@ -84,16 +84,16 @@ addons:
     build_command: cov-build make VERBOSE=1
     branch_pattern: coverity
 
-# before_install:
-#   # manually install latest openssl
-#   - |
-#     travis_retry wget \
-#       -q https://www.openssl.org/source/openssl-1.1.1b.tar.gz
-#     tar xf openssl-1.1.1b.tar.gz
-#     cd openssl-1.1.1b
-#     ./config --openssldir=/usr/local
-#     sudo make -s install
-#     sudo ldconfig /usr/local/lib
+before_install:
+  # manually install latest openssl
+  - |
+    travis_retry wget \
+      -q https://www.openssl.org/source/openssl-1.1.1b.tar.gz
+    tar xf openssl-1.1.1b.tar.gz
+    cd openssl-1.1.1b
+    ./config --openssldir=/usr/local
+    sudo make -s install
+    sudo ldconfig /usr/local/lib
 
 script:
   - |
