@@ -611,9 +611,11 @@ void conns_by_srt_ins(struct q_conn * const c, uint8_t * const srt)
     if (unlikely(ret == 0)) {
         if (kh_val(conns_by_srt, k) != c)
             die("srt %s already in use by different conn %s",
-                hex2str(srt, SRT_LEN), cid2str(kh_val(conns_by_srt, k)->scid));
+                hex2str(srt, SRT_LEN, SRT_LEN),
+                cid2str(kh_val(conns_by_srt, k)->scid));
         else {
-            warn(WRN, "srt %s already used for conn", hex2str(srt, SRT_LEN));
+            warn(WRN, "srt %s already used for conn",
+                 hex2str(srt, SRT_LEN, SRT_LEN));
             return;
         }
     }
@@ -1020,7 +1022,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
             memcpy(c->tok, tok, c->tok_len);
             vneg_or_rtry_resp(c, false);
             warn(INF, "handling serv retry w/tok %s",
-                 hex2str(c->tok, c->tok_len));
+                 hex2str(c->tok, c->tok_len, MAX_TOK_LEN));
             ok = true;
             goto done;
         }
@@ -1215,7 +1217,8 @@ rx_pkts(struct w_iov_sq * const x,
                     log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
                             tok_len);
                     warn(ERR, "retry dcid mismatch %s != %s, ignoring pkt",
-                         hex2str(odcid.id, odcid.len), cid2str(c->dcid));
+                         hex2str(odcid.id, odcid.len, CID_LEN_MAX),
+                         cid2str(c->dcid));
                     goto drop;
                 }
                 if (c->state == conn_opng)
@@ -1264,7 +1267,7 @@ rx_pkts(struct w_iov_sq * const x,
 
             if (is_srt(xv, m)) {
                 warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
-                     hex2str(&xv->buf[xv->len - SRT_LEN], SRT_LEN));
+                     hex2str(&xv->buf[xv->len - SRT_LEN], SRT_LEN, SRT_LEN));
                 goto next;
             }
 
@@ -1289,8 +1292,9 @@ rx_pkts(struct w_iov_sq * const x,
                 log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
                         tok_len);
                 if (m->is_reset)
-                    warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
-                         hex2str(&xv->buf[xv->len - SRT_LEN], SRT_LEN));
+                    warn(
+                        INF, BLU BLD "STATELESS RESET" NRM " token=%s",
+                        hex2str(&xv->buf[xv->len - SRT_LEN], SRT_LEN, SRT_LEN));
                 else
                     warn(ERR, "%s %u-byte %s pkt, ignoring",
                          pkt_ok_for_epoch(m->hdr.flags, epoch_in(c))
@@ -1852,6 +1856,6 @@ const char * cid2str(const struct cid * const id)
     static char str[2 * (CID_LEN_MAX + sizeof(id->seq)) + 1] = "?";
     if (id)
         snprintf(str, sizeof(str), "%" PRIu64 ":%.*s", id->seq, 2 * id->len,
-                 hex2str(id->id, id->len));
+                 hex2str(id->id, id->len, CID_LEN_MAX));
     return str;
 }

@@ -939,7 +939,7 @@ dec_new_cid_frame(const uint8_t ** pos,
          FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu64
                  " len=%u dcid=%s srt=%s%s",
          dcid.seq, dcid.len, cid2str(&dcid),
-         hex2str(dcid.srt, sizeof(dcid.srt)),
+         hex2str(dcid.srt, sizeof(dcid.srt), SRT_LEN),
          dup ? " [" RED "dup" NRM "]" : "");
 
     return true;
@@ -1027,7 +1027,7 @@ dec_new_token_frame(const uint8_t ** pos,
     decb_chk(tok, pos, end, (uint16_t)tok_len, c, FRM_TOK);
 
     warn(INF, FRAM_IN "NEW_TOKEN" NRM " len=%" PRIu64 " tok=%s", tok_len,
-         hex2str(tok, tok_len));
+         hex2str(tok, tok_len, MAX_TOK_LEN));
 
     // TODO: actually do something with the token
 
@@ -1689,7 +1689,7 @@ void enc_new_cid_frame(uint8_t ** pos,
          FRAM_OUT "NEW_CONNECTION_ID" NRM " seq=%" PRIu64
                   " len=%u cid=%s srt=%s %s",
          enc_cid->seq, enc_cid->len, cid2str(enc_cid),
-         hex2str(enc_cid->srt, sizeof(enc_cid->srt)),
+         hex2str(enc_cid->srt, sizeof(enc_cid->srt), SRT_LEN),
          enc_cid == &ncid ? "" : BLD REV GRN "[RTX]" NRM);
 
     track_frame(m, FRM_CID);
@@ -1706,7 +1706,7 @@ void enc_new_token_frame(uint8_t ** pos,
     encb(pos, end, c->tok, c->tok_len);
 
     warn(INF, FRAM_OUT "NEW_TOKEN" NRM " len=%u tok=%s", c->tok_len,
-         hex2str(c->tok, c->tok_len));
+         hex2str(c->tok, c->tok_len, MAX_TOK_LEN));
 
     track_frame(m, FRM_TOK);
 }

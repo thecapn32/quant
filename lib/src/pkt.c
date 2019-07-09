@@ -62,7 +62,7 @@
 
 #ifndef NDEBUG
 // local version of cid2str that is just hex2str (omits the seq)
-#define c2s(i) hex2str((i)->id, (i)->len)
+#define c2s(i) hex2str((i)->id, (i)->len, CID_LEN_MAX)
 
 void log_pkt(const char * const dir,
              const struct w_iov * const v,
@@ -82,6 +82,7 @@ void log_pkt(const char * const dir,
 
     const struct pkt_meta * const m = &meta(v);
     const char * const pts = pkt_type_str(m->hdr.flags, &m->hdr.vers);
+
     if (*dir == 'R') {
         if (is_lh(m->hdr.flags)) {
             if (m->hdr.vers == 0)
@@ -98,16 +99,16 @@ void log_pkt(const char * const dir,
                               "vers=0x%08x dcid=%s scid=%s odcid=%s tok=%s",
                       ip, port, v->len, m->hdr.flags, pts, m->hdr.vers,
                       c2s(&m->hdr.dcid), c2s(&m->hdr.scid), c2s(odcid),
-                      hex2str(tok, tok_len));
+                      hex2str(tok, tok_len, MAX_TOK_LEN));
             } else if (m->hdr.type == LH_INIT)
-                twarn(NTE,
-                      BLD BLU
-                      "RX" NRM " from=%s:%s len=%u 0x%02x=" BLU "%s " NRM
-                      "vers=0x%08x dcid=%s scid=%s tok=%s len=%u nr=" BLU
-                      "%" PRIu64,
-                      ip, port, v->len, m->hdr.flags, pts, m->hdr.vers,
-                      c2s(&m->hdr.dcid), c2s(&m->hdr.scid),
-                      hex2str(tok, tok_len), m->hdr.len, m->hdr.nr);
+                twarn(
+                    NTE,
+                    BLD BLU "RX" NRM " from=%s:%s len=%u 0x%02x=" BLU "%s " NRM
+                            "vers=0x%08x dcid=%s scid=%s tok=%s len=%u nr=" BLU
+                            "%" PRIu64,
+                    ip, port, v->len, m->hdr.flags, pts, m->hdr.vers,
+                    c2s(&m->hdr.dcid), c2s(&m->hdr.scid),
+                    hex2str(tok, tok_len, MAX_TOK_LEN), m->hdr.len, m->hdr.nr);
             else
                 twarn(NTE,
                       BLD BLU
@@ -140,16 +141,16 @@ void log_pkt(const char * const dir,
                               "vers=0x%08x dcid=%s scid=%s odcid=%s tok=%s",
                       ip, port, m->hdr.flags, pts, m->hdr.vers,
                       c2s(&m->hdr.dcid), c2s(&m->hdr.scid), c2s(odcid),
-                      hex2str(tok, tok_len));
+                      hex2str(tok, tok_len, MAX_TOK_LEN));
             } else if (m->hdr.type == LH_INIT)
-                twarn(NTE,
-                      BLD GRN
-                      "TX" NRM " to=%s:%s 0x%02x=" GRN "%s " NRM
-                      "vers=0x%08x dcid=%s scid=%s tok=%s len=%u nr=" GRN
-                      "%" PRIu64,
-                      ip, port, m->hdr.flags, pts, m->hdr.vers,
-                      c2s(&m->hdr.dcid), c2s(&m->hdr.scid),
-                      hex2str(tok, tok_len), m->hdr.len, m->hdr.nr);
+                twarn(
+                    NTE,
+                    BLD GRN "TX" NRM " to=%s:%s 0x%02x=" GRN "%s " NRM
+                            "vers=0x%08x dcid=%s scid=%s tok=%s len=%u nr=" GRN
+                            "%" PRIu64,
+                    ip, port, m->hdr.flags, pts, m->hdr.vers, c2s(&m->hdr.dcid),
+                    c2s(&m->hdr.scid), hex2str(tok, tok_len, MAX_TOK_LEN),
+                    m->hdr.len, m->hdr.nr);
             else
                 twarn(NTE,
                       BLD GRN "TX" NRM " to=%s:%s 0x%02x=" GRN "%s " NRM

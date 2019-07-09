@@ -239,8 +239,9 @@ static int setup_cipher(ptls_cipher_context_t ** hp_ctx,
     }
 
 #ifdef DEBUG_PROT
-    warn(NTE, "aead-secret: %s, hp-key: %s", hex2str(secret, hash->digest_size),
-         hex2str(hpkey, aead->ctr_cipher->key_size));
+    warn(NTE, "aead-secret: %s, hp-key: %s",
+         hex2str(secret, hash->digest_size, PTLS_MAX_DIGEST_SIZE),
+         hex2str(hpkey, aead->ctr_cipher->key_size, PTLS_MAX_SECRET_SIZE));
 #endif
 
     ret = 0;
@@ -438,7 +439,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                 return 1;
             warn(WRN, "\t" BLD "%s tp" NRM " (0x%04x w/len %u) = %s",
                  (tp & 0xff00) == 0xff00 ? YEL "private" : RED "unknown", tp,
-                 unknown_len, hex2str(pos, unknown_len));
+                 unknown_len, hex2str(pos, unknown_len, MAX_PKT_LEN));
             pos += unknown_len;
             continue;
         }
@@ -587,7 +588,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             memcpy(dcid->srt, pos, sizeof(dcid->srt));
             dcid->has_srt = true;
             warn(INF, "\tstateless_reset_token = %s",
-                 hex2str(dcid->srt, sizeof(dcid->srt)));
+                 hex2str(dcid->srt, sizeof(dcid->srt), SRT_LEN));
             conns_by_srt_ins(c, dcid->srt);
             pos += sizeof(dcid->srt);
             break;
@@ -649,7 +650,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             warn(INF,
                  "\tpreferred_address = IPv4=%s:%s IPv6=[%s]:%s cid=%s srt=%s",
                  ip4, port4, ip6, port6, cid2str(&pa->cid),
-                 hex2str(pa->cid.srt, sizeof(pa->cid.srt)));
+                 hex2str(pa->cid.srt, sizeof(pa->cid.srt), SRT_LEN));
 #endif
             break;
 
@@ -753,7 +754,7 @@ void init_tp(struct q_conn * const c)
                 encb_tp(&pos, end, TP_SRT, c->scid->srt, sizeof(c->scid->srt));
 #ifdef DEBUG_EXTRA
                 warn(INF, "\tstateless_reset_token = %s",
-                     hex2str(c->scid->srt, sizeof(c->scid->srt)));
+                     hex2str(c->scid->srt, sizeof(c->scid->srt), SRT_LEN));
 #endif
             }
             break;
@@ -833,7 +834,8 @@ void init_tp(struct q_conn * const c)
                 warn(WRN, "\t" BLD "%s tp" NRM " (0x%04x w/len %u) = %s",
                      (grease_type & 0xff00) == 0xff00 ? YEL "private"
                                                       : RED "unknown",
-                     grease_type, grease_len, hex2str(&grease[2], grease_len));
+                     grease_type, grease_len,
+                     hex2str(&grease[2], grease_len, MAX_PKT_LEN));
 #endif
             } else
                 die("unknown tp 0x%04x", tp_order[j]);
@@ -1276,7 +1278,8 @@ log_event_cb(ptls_log_event_t * const self __attribute__((unused)),
              ...)
 {
     fprintf(tls_log_file, "%s %s ", type,
-            hex2str(ptls_get_client_random(tls).base, PTLS_HELLO_RANDOM_SIZE));
+            hex2str(ptls_get_client_random(tls).base, PTLS_HELLO_RANDOM_SIZE,
+                    PTLS_HELLO_RANDOM_SIZE));
 
     va_list args;
     va_start(args, fmt);
@@ -1330,9 +1333,10 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
             {0, 0, "SERVER_HANDSHAKE_TRAFFIC_SECRET",
              "SERVER_TRAFFIC_SECRET_0"}};
 
-        tls_ctx.log_event->cb(tls_ctx.log_event, tls,
-                              log_labels[ptls_is_server(tls) == is_enc][epoch],
-                              "%s", hex2str(secret, cipher->hash->digest_size));
+        tls_ctx.log_event->cb(
+            tls_ctx.log_event, tls,
+            log_labels[ptls_is_server(tls) == is_enc][epoch], "%s",
+            hex2str(secret, cipher->hash->digest_size, PTLS_MAX_DIGEST_SIZE));
     }
 
     return setup_cipher(&ctx->header_protection, &ctx->aead, cipher->aead,
@@ -1555,7 +1559,7 @@ bool verify_rtry_tok(struct q_conn * const c,
     // hash current cid included in token
     hc->update(hc, tok + cs->hash->digest_size,
                tok_len - cs->hash->digest_size);
-    uint8_t buf[MAX_HASH_LEN + CID_LEN_MAX];
+    uint8_t buf[PTLS_MAX_DIGEST_SIZE + CID_LEN_MAX];
     hc->final(hc, buf, PTLS_HASH_FINAL_MODE_FREE);
 
     if (memcmp(buf, tok, cs->hash->digest_size) == 0) {

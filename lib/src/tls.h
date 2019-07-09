@@ -38,7 +38,6 @@
 
 
 #define AEAD_LEN 16
-#define MAX_HASH_LEN 32 // SHA256
 
 
 #ifdef FUZZING

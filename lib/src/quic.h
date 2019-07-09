@@ -278,8 +278,18 @@ write_to_corpus(const int dir, const void * const data, const size_t len);
 #define pm_idx(m) (uint32_t)((m)-pkt_meta)
 
 
-extern const char * __attribute__((nonnull))
-hex2str(const uint8_t * const buf, const size_t len);
+#define hex2str(src, len_src, len_buf)                                         \
+    __extension__({                                                            \
+        static char _hex[(len_buf)*2 + 1];                                     \
+        hex2str_impl((src), (len_src), _hex, sizeof(_hex));                    \
+        _hex;                                                                  \
+    })
+
+
+extern char * __attribute__((nonnull)) hex2str_impl(const uint8_t * const src,
+                                                    const size_t len_src,
+                                                    char * const dst,
+                                                    const size_t len_dst);
 
 
 #define has_strm_data(p) (p)->strm_frm_pos

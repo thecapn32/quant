@@ -931,17 +931,19 @@ void q_info(struct q_conn * const c, struct q_conn_info * const ci)
 }
 
 
-const char * hex2str(const uint8_t * const buf, const size_t len)
+char * hex2str_impl(const uint8_t * const src,
+                    const size_t len_src,
+                    char * const dst,
+                    const size_t len_dst)
 {
-    static char s[2 * 128 + 1] = "0";
+    ensure(len_dst >= len_src * 2 + 1, "overflow %lu < %lu", len_dst,
+           len_src * 2 + 1);
     static const char hex[] = "0123456789abcdef";
     size_t i;
-    for (i = 0; i < len && i < 128; i++) {
-        s[i * 2] = hex[(buf[i] >> 4) & 0x0f];
-        s[i * 2 + 1] = hex[buf[i] & 0x0f];
+    for (i = 0; i < len_src; i++) {
+        dst[i * 2] = hex[(src[i] >> 4) & 0x0f];
+        dst[i * 2 + 1] = hex[src[i] & 0x0f];
     }
-    if (i == 128)
-        s[i * 2 - 1] = s[i * 2 - 2] = s[i * 2 - 3] = '.';
-    s[i * 2] = 0;
-    return s;
+    dst[i * 2] = 0;
+    return dst;
 }
