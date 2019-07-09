@@ -811,7 +811,8 @@ void write_to_corpus(const int dir, const void * const data, const size_t len)
 {
     char file[MAXPATHLEN];
     const uint64_t rand = w_rand();
-    strncpy(file, hex2str((const uint8_t *)&rand, sizeof(rand)), MAXPATHLEN);
+    strncpy(file, hex2str((const uint8_t *)&rand, sizeof(rand), sizeof(rand)),
+            MAXPATHLEN);
     const int fd =
         openat(dir, file, O_CREAT | O_EXCL | O_WRONLY | O_CLOEXEC, 0644);
     if (fd == -1) {
