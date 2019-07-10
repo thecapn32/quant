@@ -110,12 +110,6 @@ struct q_stream * new_stream(struct q_conn * const c, const int64_t id)
     s->id = id;
     strm_to_state(s, strm_open);
 
-    const uint64_t cnt = (uint64_t)((id >> 2) + 1);
-    if (is_uni(id))
-        c->cnt_uni = MAX(cnt, c->cnt_uni);
-    else
-        c->cnt_bidi = MAX(cnt, c->cnt_bidi);
-
     if (unlikely(id < 0)) {
         c->cstrms[strm_epoch(s)] = s;
         return s;
@@ -128,15 +122,17 @@ struct q_stream * new_stream(struct q_conn * const c, const int64_t id)
 
     apply_stream_limits(s);
     const bool is_local = (is_srv_ini(id) != c->is_clnt);
-    do_stream_id_fc(c, cnt, !is_uni(id), is_local);
-
+    const uint64_t cnt = (uint64_t)((id >> 2) + 1);
     if (is_local) {
-        // this is a local stream
-        if (is_uni(id))
+        if (is_uni(id)) {
+            c->cnt_uni = MAX(cnt, c->cnt_uni);
             c->next_sid_uni += 4;
-        else
+        } else {
             c->next_sid_bidi += 4;
+            c->cnt_bidi = MAX(cnt, c->cnt_bidi);
+        }
     }
+    do_stream_id_fc(c, cnt, !is_uni(id), is_local);
 
     return s;
 }
