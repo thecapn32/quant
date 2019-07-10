@@ -490,7 +490,7 @@ struct q_conn * q_accept(const struct q_conn_conf * const conf)
         if (ev_is_active(&api_alarm))
             ev_timer_stop(&api_alarm);
         ev_timer_init(&api_alarm, cancel_api_call,
-                      (double)conf->idle_timeout / MSECS_PER_SEC, 0);
+                      (ev_tstamp)conf->idle_timeout / MSECS_PER_SEC, 0);
         ev_timer_start(&api_alarm);
     }
 
@@ -836,7 +836,7 @@ bool q_ready(const uint64_t timeout, struct q_conn ** const ready)
             if (ev_is_active(&api_alarm))
                 ev_timer_stop(&api_alarm);
             ev_timer_init(&api_alarm, cancel_api_call,
-                          (double)timeout / MSECS_PER_SEC, 0);
+                          (ev_tstamp)timeout / MSECS_PER_SEC, 0);
             ev_timer_start(&api_alarm);
         }
 #ifdef DEBUG_EXTRA

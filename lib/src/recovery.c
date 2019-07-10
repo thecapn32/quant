@@ -673,7 +673,12 @@ void init_rec(struct q_conn * const c)
     memset(&c->rec, 0, sizeof(c->rec));
 
     c->rec.cwnd = kInitialWindow;
-    c->rec.ssthresh = UINT64_MAX;
+    c->rec.ssthresh =
+#ifndef PARTICLE
+        UINT64_MAX;
+#else
+        UINT32_MAX;
+#endif
     c->rec.min_rtt = HUGE_VAL;
     c->rec.ld_alarm.data = c;
     ev_init(&c->rec.ld_alarm, on_ld_timeout);

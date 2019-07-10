@@ -1475,8 +1475,9 @@ void rx(ev_io * const rx_w, int _e __attribute__((unused)))
         // reset idle timeout
         if (likely(c->pns[pn_data].data.out_kyph ==
                    c->pns[pn_data].data.in_kyph)) {
-            c->idle_alarm.repeat = MAX((double)c->tp_in.idle_to / MSECS_PER_SEC,
-                                       3 * c->rec.ld_alarm.repeat);
+            c->idle_alarm.repeat =
+                MAX((ev_tstamp)c->tp_in.idle_to / MSECS_PER_SEC,
+                    3 * c->rec.ld_alarm.repeat);
             ev_timer_again(&c->idle_alarm);
         }
 
@@ -1669,7 +1670,7 @@ void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
     // (re)set idle alarm
     c->tp_in.idle_to =
         conf && conf->idle_timeout ? conf->idle_timeout : 10 * MSECS_PER_SEC;
-    c->idle_alarm.repeat = (double)c->tp_in.idle_to / MSECS_PER_SEC;
+    c->idle_alarm.repeat = (ev_tstamp)c->tp_in.idle_to / MSECS_PER_SEC;
 
     ev_timer_again(&c->idle_alarm);
 
@@ -1772,7 +1773,7 @@ struct q_conn * new_conn(struct w_engine * const w,
 
     // initialize ACK timeout
     c->ack_alarm.data = c;
-    c->ack_alarm.repeat = (double)c->tp_out.max_ack_del / MSECS_PER_SEC;
+    c->ack_alarm.repeat = (ev_tstamp)c->tp_out.max_ack_del / MSECS_PER_SEC;
     ev_init(&c->ack_alarm, ack_alarm);
 
     // initialize recovery state
