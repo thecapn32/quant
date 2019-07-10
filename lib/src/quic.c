@@ -810,7 +810,7 @@ bool q_is_conn_closed(const struct q_conn * const c)
 void write_to_corpus(const int dir, const void * const data, const size_t len)
 {
     char file[MAXPATHLEN];
-    const uint64_t rand = w_rand();
+    const uint64_t rand = w_rand64();
     strncpy(file, hex2str((const uint8_t *)&rand, sizeof(rand), sizeof(rand)),
             MAXPATHLEN);
     const int fd =
