@@ -63,12 +63,20 @@ struct recovery {
     // max_ack_delay -> c->tp_out.max_ack_del
 
     // CC state
+    ev_tstamp rec_start_t; // recovery_start_time
+#ifndef PARTICLE
     uint64_t ce_cnt;       // ecn_ce_counter
     uint64_t in_flight;    // bytes_in_flight
     uint64_t ae_in_flight; // nr of ACK-eliciting pkts inflight
     uint64_t cwnd;         // congestion_window
-    ev_tstamp rec_start_t; // recovery_start_time
     uint64_t ssthresh;     // sshtresh
+#else
+    uint32_t ce_cnt;
+    uint32_t in_flight;
+    uint32_t ae_in_flight;
+    uint32_t cwnd;
+    uint32_t ssthresh;
+#endif
 
 #ifndef NDEBUG
     // these are only used in log_cc below

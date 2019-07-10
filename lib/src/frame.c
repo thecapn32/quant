@@ -470,7 +470,7 @@ dec_ack_frame(const uint8_t type,
     const uint64_t ade = m->hdr.type == LH_INIT || m->hdr.type == LH_HSHK
                              ? DEF_ACK_DEL_EXP
                              : c->tp_in.ack_del_exp;
-    const uint64_t ack_delay = ack_delay_raw * (1 << ade);
+    const uint64_t ack_delay = ack_delay_raw << ade;
 
     uint64_t num_blocks = 0;
     decv_chk(&num_blocks, pos, end, c, type);
@@ -1337,7 +1337,7 @@ void enc_ack_frame(uint8_t ** pos,
                              ? DEF_ACK_DEL_EXP
                              : c->tp_out.ack_del_exp;
     const uint64_t ack_delay =
-        (uint64_t)((ev_now() - diet_timestamp(b)) * USECS_PER_SEC) / (1 << ade);
+        (uint64_t)((ev_now() - diet_timestamp(b)) * USECS_PER_SEC) >> ade;
     encv(pos, end, ack_delay);
 
     m->ack_rng_cnt = diet_cnt(&pn->recv) - 1;
@@ -1366,7 +1366,7 @@ void enc_ack_frame(uint8_t ** pos,
                               " usec) cnt=%" PRIu64 " block=%" PRIu64
                               " [" FMT_PNR_IN ".." FMT_PNR_IN "]",
                      type, type == FRM_ACE ? "ECN" : "", m->lg_acked, ack_delay,
-                     ack_delay * (1 << ade), m->ack_rng_cnt, ack_block, b->lo,
+                     ack_delay << ade, m->ack_rng_cnt, ack_block, b->lo,
                      shorten_ack_nr(b->hi, ack_block));
 
         } else {
@@ -1382,8 +1382,7 @@ void enc_ack_frame(uint8_t ** pos,
                               " usec) cnt=%" PRIu64 " block=%" PRIu64
                               " [" FMT_PNR_IN "]",
                      type, type == FRM_ACE ? "ECN" : "", m->lg_acked, ack_delay,
-                     ack_delay * (1 << ade), m->ack_rng_cnt, ack_block,
-                     m->lg_acked);
+                     ack_delay << ade, m->ack_rng_cnt, ack_block, m->lg_acked);
         }
 #endif
         encv(pos, end, ack_block);
