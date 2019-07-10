@@ -2,6 +2,7 @@ INCLUDE_DIRS+=$(SOURCE_PATH)
 CPPSRC+=main.cpp
 
 DEPS=lib/deps
+KLIB=$(DEPS)/klib
 PICOTLS=$(DEPS)/picotls
 WARPCORE=$(DEPS)/warpcore/lib
 
@@ -10,7 +11,7 @@ INCLUDE_DIRS+=\
 	$(SOURCE_PATH)/$(PICOTLS)/deps/cifra/src/ext \
 	$(SOURCE_PATH)/$(PICOTLS)/deps/micro-ecc \
 	$(SOURCE_PATH)/$(PICOTLS)/include \
-	$(SOURCE_PATH)/$(WARPCORE)/deps/klib \
+	$(SOURCE_PATH)/${KLIB} \
 	$(SOURCE_PATH)/$(WARPCORE)/include \
 	$(SOURCE_PATH)/lib/include
 
@@ -24,7 +25,7 @@ PICOTLS_SRC+=\
 	$(PICOTLS)/deps/cifra/src/sha256.c \
 	$(PICOTLS)/deps/cifra/src/sha512.c \
 	$(PICOTLS)/deps/micro-ecc/uECC.c \
-	$(PICOTLS)/lib/cifra/aes.c \
+	$(PICOTLS)/lib/cifra/aes128.c \
 	$(PICOTLS)/lib/picotls.c \
 	$(PICOTLS)/lib/uecc.c
 
@@ -55,9 +56,10 @@ CSRC+=$(WARP_SRC) $(PICOTLS_SRC) $(QUANT_SRC)
 # -DNDEBUG
 EXTRA_CFLAGS+=-Wno-error -Wno-parentheses -Wno-unused-function -Wno-comment \
 	-Wno-undef -Wno-unknown-pragmas -Wno-unused-but-set-variable \
-	-DLOG_COMPILE_TIME_LEVEL=LOG_LEVEL_ALL -DNDEBUG \
+	-DLOG_COMPILE_TIME_LEVEL=LOG_LEVEL_NONE -DNDEBUG \
+	-DEV_TSTAMP_T=float -Dkdouble=float \
 	-DNO_FUZZER_CORPUS_COLLECTION -DNO_OOO_0RTT -DNO_TLS_TICKETS \
-	-DNO_TLS_LOG -DNO_ERR_REASONS -DNO_OOO_DATA \
+	-DNO_TLS_LOG -DNO_ERR_REASONS -DNO_OOO_DATA -DNO_MIGRATION \
 	-D'ntoh16(x)=__builtin_bswap16(*(uint16_t*)(x))' \
 	-D'ntoh24(x)=__builtin_bswap16(*(uint16_t*)(x)) << 8 | (x)[2]' \
 	-D'ntoh32(x)=__builtin_bswap32(*(uint32_t*)(x))' \

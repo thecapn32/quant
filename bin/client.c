@@ -58,8 +58,10 @@
 struct conn_cache_entry {
     struct sockaddr_in dst;
     struct q_conn * c;
+#ifndef NO_MIGRATION
     bool rebound;
     uint8_t _unused[7];
+#endif
 };
 
 
@@ -76,8 +78,10 @@ static bool do_h3 = false;
 static bool flip_keys = false;
 static bool zlen_cids = false;
 static bool write_files = false;
+#ifndef NO_MIGRATION
 static bool rebind = false;
 static bool migrate = false;
+#endif
 
 
 struct stream_entry {
@@ -135,9 +139,11 @@ static void __attribute__((noreturn, nonnull)) usage(const char * const name,
         "\t[-b bufs]\tnumber of network buffers to allocate; default %" PRIu64
         "\n",
         num_bufs);
+#ifndef NO_MIGRATION
     printf("\t[-n]\t\tsimulate NAT rebind (use twice for \"real\" migration); "
            "default %s\n",
            rebind ? "true" : "false");
+#endif
 #ifndef NDEBUG
     printf("\t[-v verbosity]\tverbosity level (0-%d, default %d)\n", DLEVEL,
            util_dlevel);
@@ -230,7 +236,12 @@ get(const char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
         clock_gettime(CLOCK_MONOTONIC, &se->req_t);
         // no, open a new connection
         struct q_conn * const c = q_connect(
-            w, peer->ai_addr, dest, rebind ? 0 : &se->req, rebind ? 0 : &se->s,
+            w, peer->ai_addr, dest,
+#ifndef NO_MIGRATION
+            rebind ? 0 : &se->req, rebind ? 0 : &se->s,
+#else
+            0, 0,
+#endif
             true,
             &(struct q_conn_conf){.alpn = do_h3 ? "h3-" DRAFT_VERSION_STRING
                                                 : "hq-" DRAFT_VERSION_STRING,
@@ -267,15 +278,21 @@ get(const char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
         kh_val(cc, k) = cce;
     }
 
-    if (opened_new == false || (rebind && cce->rebound == false)) {
+    if (opened_new == false
+#ifndef NO_MIGRATION
+        || (rebind && cce->rebound == false)
+#endif
+    ) {
         se->s = q_rsv_stream(cce->c, true);
         if (se->s) {
             clock_gettime(CLOCK_MONOTONIC, &se->req_t);
             q_write(se->s, &se->req, true);
+#ifndef NO_MIGRATION
             if (rebind && cce->rebound == false) {
                 q_rebind_sock(cce->c, migrate);
                 cce->rebound = true; // only rebind once
             }
+#endif
         }
     }
 
@@ -333,7 +350,12 @@ int main(int argc, char * argv[])
     bool verify_certs = false;
     int ret = 0;
 
-    while ((ch = getopt(argc, argv, "hi:v:s:t:l:cu3zb:wr:n")) != -1) {
+    while ((ch = getopt(argc, argv,
+                        "hi:v:s:t:l:cu3zb:wr:"
+#ifndef NO_MIGRATION
+                        "n"
+#endif
+                        )) != -1) {
         switch (ch) {
         case 'i':
             strncpy(ifname, optarg, sizeof(ifname) - 1);
@@ -368,11 +390,13 @@ int main(int argc, char * argv[])
         case 'w':
             write_files = true;
             break;
+#ifndef NO_MIGRATION
         case 'n':
             if (rebind)
                 migrate = true;
             rebind = true;
             break;
+#endif
         case 'v':
 #ifndef NDEBUG
             util_dlevel = (short)MIN(DLEVEL, strtoul(optarg, 0, 10));

@@ -931,9 +931,14 @@ dec_new_cid_frame(const uint8_t ** pos,
     decb_chk(dcid.id, pos, end, dcid.len, c, FRM_CID);
     decb_chk(dcid.srt, pos, end, sizeof(dcid.srt), c, FRM_CID);
 
-    const bool dup = splay_find(cids_by_seq, &c->dcids_by_seq, &dcid);
+    const bool dup =
+#ifndef NO_MIGRATION
+        splay_find(cids_by_seq, &c->dcids_by_seq, &dcid);
     if (dup == false)
         add_dcid(c, &dcid);
+#else
+        false;
+#endif
 
     warn(INF,
          FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu64
@@ -987,6 +992,7 @@ dec_retire_cid_frame(const uint8_t ** pos,
 
     warn(INF, FRAM_IN "RETIRE_CONNECTION_ID" NRM " seq=%" PRIu64, which.seq);
 
+#ifndef NO_MIGRATION
     struct cid * const scid = splay_find(cids_by_seq, &c->scids_by_seq, &which);
     if (unlikely(scid == 0))
         err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_RTR,
@@ -1003,7 +1009,7 @@ dec_retire_cid_frame(const uint8_t ** pos,
 
     // rx of RETIRE_CONNECTION_ID means we should send more
     c->tx_ncid = true;
-
+#endif
     return true;
 }
 
@@ -1653,6 +1659,7 @@ void enc_path_challenge_frame(uint8_t ** pos,
 }
 
 
+#ifndef NO_MIGRATION
 void enc_new_cid_frame(uint8_t ** pos,
                        const uint8_t * const end,
                        struct pkt_meta * const m)
@@ -1694,6 +1701,7 @@ void enc_new_cid_frame(uint8_t ** pos,
 
     track_frame(m, FRM_CID);
 }
+#endif
 
 
 void enc_new_token_frame(uint8_t ** pos,

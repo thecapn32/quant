@@ -115,8 +115,9 @@ sockaddr_cmp(const struct sockaddr * const a, const struct sockaddr * const b)
     }
 }
 
-
+#ifndef NO_MIGRATION
 SPLAY_GENERATE(cids_by_seq, cid, node_seq, cids_by_seq_cmp)
+#endif
 
 
 static bool __attribute__((const)) vers_supported(const uint32_t v)
@@ -209,6 +210,7 @@ struct q_conn * get_conn_by_srt(uint8_t * const srt)
 }
 
 
+#ifndef NO_MIGRATION
 static inline void __attribute__((nonnull))
 cids_by_id_ins(khash_t(cids_by_id) * const cbi, struct cid * const id)
 {
@@ -252,6 +254,7 @@ void use_next_dcid(struct q_conn * const c)
     c->tx_retire_cid = c->dcid->retired = true;
     c->dcid = dcid;
 }
+#endif
 
 
 #if !defined(NDEBUG) && !defined(PARTICLE)
@@ -428,6 +431,7 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
         do_stream_id_fc(c, c->cnt_bidi, true, true);
     }
 
+#ifndef NO_MIGRATION
     if (likely(c->tp_out.disable_migration == false) &&
         unlikely(c->do_migration == true) && c->scid) {
         if (splay_count(&c->scids_by_seq) >= 2) {
@@ -445,6 +449,7 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
         // send new CIDs if the peer doesn't have sufficient remaining
         c->tx_ncid = needs_more_ncids(c);
     }
+#endif
 }
 
 
@@ -661,13 +666,19 @@ static void __attribute__((nonnull)) update_act_scid(struct q_conn * const c)
     warn(NTE, "hshk switch to scid %s for %s %s conn (was %s)", cid2str(&nscid),
          conn_state_str[c->state], conn_type(c), cid2str(c->scid));
     conns_by_id_del(c->scid);
+#ifndef NO_MIGRATION
     cids_by_id_del(c->scids_by_id, c->scid);
+#endif
     cid_cpy(c->scid, &nscid);
+#ifndef NO_MIGRATION
     cids_by_id_ins(c->scids_by_id, c->scid);
+#endif
     conns_by_id_ins(c, c->scid);
 
     // we need to keep accepting the client-chosen odcid for 0-RTT pkts
+#ifndef NO_MIGRATION
     cids_by_id_ins(c->scids_by_id, &c->odcid);
+#endif
     conns_by_id_ins(c, &c->odcid);
 }
 
@@ -677,8 +688,10 @@ void add_scid(struct q_conn * const c, struct cid * const id)
     struct cid * const scid = calloc(1, sizeof(*scid));
     ensure(scid, "could not calloc");
     cid_cpy(scid, id);
+#ifndef NO_MIGRATION
     ensure(splay_insert(cids_by_seq, &c->scids_by_seq, scid) == 0, "inserted");
     cids_by_id_ins(c->scids_by_id, scid);
+#endif
     if (c->scid == 0)
         c->scid = scid;
     conns_by_id_ins(c, scid);
@@ -687,7 +700,12 @@ void add_scid(struct q_conn * const c, struct cid * const id)
 
 void add_dcid(struct q_conn * const c, const struct cid * const id)
 {
-    struct cid * dcid = splay_find(cids_by_seq, &c->dcids_by_seq, id);
+    struct cid * dcid =
+#ifndef NO_MIGRATION
+        splay_find(cids_by_seq, &c->dcids_by_seq, id);
+#else
+        c->dcid;
+#endif
     if (dcid == 0) {
         dcid = calloc(1, sizeof(*dcid));
         ensure(dcid, "could not calloc");
@@ -696,14 +714,18 @@ void add_dcid(struct q_conn * const c, const struct cid * const id)
     } else {
         warn(NTE, "hshk switch to dcid %s for %s conn (was %s)", cid2str(id),
              conn_type(c), cid2str(c->dcid));
+#ifndef NO_MIGRATION
         ensure(splay_remove(cids_by_seq, &c->dcids_by_seq, dcid), "removed");
+#endif
         if (dcid->has_srt)
             conns_by_srt_del(dcid->srt);
     }
     cid_cpy(dcid, id);
     if (id->has_srt)
         conns_by_srt_ins(c, dcid->srt);
+#ifndef NO_MIGRATION
     ensure(splay_insert(cids_by_seq, &c->dcids_by_seq, dcid) == 0, "inserted");
+#endif
 }
 
 
@@ -750,12 +772,15 @@ static void __attribute__((nonnull)) free_cids(struct q_conn * const c)
 {
     if (c->is_clnt == false && c->odcid.len) {
         // TODO: we should stop accepting pkts on the client odcid earlier
+#ifndef NO_MIGRATION
         cids_by_id_del(c->scids_by_id, &c->odcid);
+#endif
         conns_by_id_del(&c->odcid);
     }
 
     if (c->scid == 0)
         conns_by_ipnp_del(c);
+#ifndef NO_MIGRATION
     while (!splay_empty(&c->scids_by_seq)) {
         struct cid * const id = splay_min(cids_by_seq, &c->scids_by_seq);
         free_scid(c, id);
@@ -765,6 +790,12 @@ static void __attribute__((nonnull)) free_cids(struct q_conn * const c)
         struct cid * const id = splay_min(cids_by_seq, &c->dcids_by_seq);
         free_dcid(c, id);
     }
+#else
+    if (c->scid)
+        free_scid(c, c->scid);
+    if (c->dcid)
+        free_dcid(c, c->dcid);
+#endif
 
     c->scid = c->dcid = 0;
 }
@@ -1227,7 +1258,11 @@ rx_pkts(struct w_iov_sq * const x,
 
             if (m->hdr.dcid.len && cid_cmp(&m->hdr.dcid, c->scid) != 0) {
                 struct cid * const scid =
+#ifndef NO_MIGRATION
                     get_cid_by_id(c->scids_by_id, &m->hdr.dcid);
+#else
+                    c->scid;
+#endif
                 if (unlikely(scid == 0)) {
                     log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
                             tok_len);
@@ -1700,9 +1735,11 @@ struct q_conn * new_conn(struct w_engine * const w,
     // init CIDs
     c->next_sid_bidi = c->is_clnt ? 0 : STRM_FL_SRV;
     c->next_sid_uni = c->is_clnt ? STRM_FL_UNI : STRM_FL_UNI | STRM_FL_SRV;
+#ifndef NO_MIGRATION
     splay_init(&c->dcids_by_seq);
     splay_init(&c->scids_by_seq);
     c->scids_by_id = kh_init(cids_by_id);
+#endif
     new_cids(c, conf && conf->enable_zero_len_cid, dcid, scid);
 
     c->vers = c->vers_initial = vers;
@@ -1772,20 +1809,34 @@ fail:
 }
 
 
-void free_scid(struct q_conn * const c, struct cid * const id)
+void free_scid(struct q_conn * const c
+#ifdef NO_MIGRATION
+               __attribute__((unused))
+#endif
+               ,
+               struct cid * const id)
 {
+#ifndef NO_MIGRATION
     ensure(splay_remove(cids_by_seq, &c->scids_by_seq, id), "removed");
     cids_by_id_del(c->scids_by_id, id);
+#endif
     conns_by_id_del(id);
     free(id);
 }
 
 
-void free_dcid(struct q_conn * const c, struct cid * const id)
+void free_dcid(struct q_conn * const c
+#ifdef NO_MIGRATION
+               __attribute__((unused))
+#endif
+               ,
+               struct cid * const id)
 {
     if (id->has_srt)
         conns_by_srt_del(id->srt);
+#ifndef NO_MIGRATION
     ensure(splay_remove(cids_by_seq, &c->dcids_by_seq, id), "removed");
+#endif
     free(id);
 }
 
@@ -1823,7 +1874,9 @@ void free_conn(struct q_conn * const c)
 
     // remove connection from global lists and free CIDs
     free_cids(c);
+#ifndef NO_MIGRATION
     kh_destroy(cids_by_id, c->scids_by_id);
+#endif
 
     if (c->holds_sock) {
         // only close the socket for the final server connection

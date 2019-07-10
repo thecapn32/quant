@@ -872,6 +872,7 @@ bool q_is_new_serv_conn(const struct q_conn * const c)
 }
 
 
+#ifndef NO_MIGRATION
 void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
 {
     ensure(c->is_clnt, "can only rebind w_sock on client");
@@ -923,6 +924,7 @@ void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
 
     ev_feed_event(&c->tx_w, 1);
 }
+#endif
 
 
 void q_info(struct q_conn * const c, struct q_conn_info * const ci)

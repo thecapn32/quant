@@ -38,7 +38,9 @@
 // IWYU pragma: no_include <picotls/../picotls.h>
 
 #include <picotls.h> // IWYU pragma: keep
+#ifndef NO_MIGRATION
 #include <quant/quant.h>
+#endif
 #include <warpcore/warpcore.h>
 
 // IWYU pragma: no_include "../deps/libev/ev.h"
@@ -270,6 +272,7 @@ static void __attribute__((nonnull)) enc_other_frames(uint8_t ** pos,
         c->tok_len = 0;
     }
 
+#ifndef NO_MIGRATION
     if (c->tx_path_resp && can_enc(pos, end, m, FRM_PRP, true)) {
         enc_path_response_frame(pos, end, m);
         c->tx_path_resp = false;
@@ -295,6 +298,7 @@ static void __attribute__((nonnull)) enc_other_frames(uint8_t ** pos,
         enc_new_cid_frame(pos, end, m);
         c->tx_ncid = needs_more_ncids(c);
     }
+#endif
 
     if (c->blocked && can_enc(pos, end, m, FRM_CDB, true))
         enc_data_blocked_frame(pos, end, m);

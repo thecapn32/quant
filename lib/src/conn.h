@@ -151,10 +151,11 @@ extern const char * const conn_state_str[];
 #define DEF_ACK_DEL_EXP 3
 #define DEF_MAX_ACK_DEL 25 // ms
 
+#ifndef NO_MIGRATION
 splay_head(cids_by_seq, cid);
 
 KHASH_INIT(cids_by_id, struct cid *, struct cid *, 1, hash_cid, kh_cid_cmp)
-
+#endif
 
 /// A QUIC connection.
 struct q_conn {
@@ -162,11 +163,13 @@ struct q_conn {
     sl_entry(q_conn) node_rx_ext; ///< For maintaining the external RX queue.
     sl_entry(q_conn) node_aq;     ///< For maintaining the accept queue.
 
+#ifndef NO_MIGRATION
     struct cids_by_seq dcids_by_seq;   ///< Destination CID hash by sequence.
     struct cids_by_seq scids_by_seq;   ///< Source CID hash by sequence.
     khash_t(cids_by_id) * scids_by_id; ///< Source CID hash by ID.
-    struct cid * dcid;                 ///< Active destination CID.
-    struct cid * scid;                 ///< Active source CID.
+#endif
+    struct cid * dcid; ///< Active destination CID.
+    struct cid * scid; ///< Active source CID.
 
     uint32_t holds_sock : 1;       ///< Connection manages a warpcore socket.
     uint32_t is_clnt : 1;          ///< We are the client on this connection.
@@ -382,7 +385,15 @@ pn_for_epoch(struct q_conn * const c, const epoch_t e)
 }
 
 
+static inline int __attribute__((nonnull))
+cids_by_seq_cmp(const struct cid * const a, const struct cid * const b)
+{
+    return (a->seq > b->seq) - (a->seq < b->seq);
+}
+
+#ifndef NO_MIGRATION
 SPLAY_PROTOTYPE(cids_by_seq, cid, node_seq, cids_by_seq_cmp)
+#endif
 
 #ifndef NO_OOO_0RTT
 struct ooo_0rtt {
@@ -455,19 +466,34 @@ has_wnd(const struct q_conn * const c, const uint16_t len)
 }
 
 
-static inline uint16_t get_sport(const struct w_sock * const sock)
+static inline uint16_t __attribute__((nonnull))
+get_sport(const struct w_sock * const sock)
 {
     return ((const struct sockaddr_in *)(const void *)w_get_addr(sock, true))
         ->sin_port;
 }
 
 
-static inline bool needs_more_ncids(struct q_conn * const c)
+static inline bool __attribute__((
+#ifndef NO_MIGRATION
+    nonnull
+#else
+    const
+#endif
+    )) needs_more_ncids(struct q_conn * const c
+#ifdef NO_MIGRATION
+                        __attribute__((unused))
+#endif
+)
 {
+#ifndef NO_MIGRATION
     const struct cid * const max_scid =
         splay_max(cids_by_seq, &c->scids_by_seq);
     return splay_count(&c->scids_by_seq) <= 8 ||
            (max_scid && c->max_cid_seq_out < max_scid->seq);
+#else
+    return false;
+#endif
 }
 
 

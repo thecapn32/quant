@@ -12,4 +12,4 @@
 	url = https://github.com/private-octopus/picoquic.git
 [submodule "lib/deps/libev"]
 	path = lib/deps/libev
-	url = https://git.lighttpd.net/libev.git
+	url = https://salsa.debian.org/debian/libev.git

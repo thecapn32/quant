@@ -358,13 +358,6 @@ extern char * __attribute__((nonnull)) hex2str_impl(const uint8_t * const src,
     })
 
 
-static inline int __attribute__((nonnull))
-cids_by_seq_cmp(const struct cid * const a, const struct cid * const b)
-{
-    return (a->seq > b->seq) - (a->seq < b->seq);
-}
-
-
 static inline void __attribute__((nonnull))
 cid_cpy(struct cid * const dst, const struct cid * const src)
 {
