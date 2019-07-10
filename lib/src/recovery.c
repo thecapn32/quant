@@ -533,7 +533,13 @@ update_rtt(struct q_conn * const c, ev_tstamp ack_del)
                                   ? c->rec.latest_rtt - ack_del
                                   : c->rec.latest_rtt;
 
-    c->rec.rttvar = .75 * c->rec.rttvar + .25 * fabs(c->rec.srtt - adj_rtt);
+    c->rec.rttvar = .75 * c->rec.rttvar + .25 *
+#ifndef PARTICLE
+                                              fabs
+#else
+                                              fabsf
+#endif
+                                              (c->rec.srtt - adj_rtt);
     c->rec.srtt = .875 * c->rec.srtt + .125 * adj_rtt;
 }
 
