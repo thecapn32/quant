@@ -808,12 +808,8 @@ static void __attribute__((nonnull(1))) new_cids(struct q_conn * const c,
 {
     // init dcid
     if (c->is_clnt) {
-        struct cid ndcid = {
-            .len =
-                8 +
-                // XXX workaround for gquic, which requires 8-byte dcids
-                (zero_len_scid ? 0
-                               : (uint8_t)w_rand_uniform32(CID_LEN_MAX - 7))};
+        struct cid ndcid = {.len =
+                                8 + (uint8_t)w_rand_uniform32(CID_LEN_MAX - 7)};
         rand_bytes(ndcid.id, sizeof(ndcid.id) + sizeof(ndcid.srt));
         cid_cpy(&c->odcid, &ndcid);
         add_dcid(c, &ndcid);
