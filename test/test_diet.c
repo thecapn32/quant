@@ -99,7 +99,7 @@ int main()
 
     // insert some items
     while (N != bit_count(N, &v)) {
-        const uint64_t x = w_rand_uniform(N);
+        const uint64_t x = w_rand_uniform64(N);
         if (bit_isset(N, x, &v) == 0) {
             bit_set(N, x, &v);
             diet_insert(&d, x, 0);
@@ -110,13 +110,13 @@ int main()
 
     // remove all items
     while (!splay_empty(&d)) {
-        const uint64_t x = w_rand_uniform(N);
+        const uint64_t x = w_rand_uniform64(N);
         struct ival * const i = diet_find(&d, x);
         if (i) {
-            if (w_rand_uniform(2)) {
-                const uint64_t lodiff = w_rand_uniform(3);
+            if (w_rand_uniform64(2)) {
+                const uint64_t lodiff = w_rand_uniform64(3);
                 const uint64_t lo = x - (x > lodiff ? lodiff : 0);
-                const uint64_t hi = x + w_rand_uniform(3);
+                const uint64_t hi = x + w_rand_uniform64(3);
                 diet_remove_ival(&d, &(struct ival){.lo = lo, .hi = hi});
                 trace(&d, lo, hi, "rem_ival");
             } else {

@@ -337,7 +337,7 @@ tx_vneg_resp(const struct w_sock * const ws,
     sq_insert_head(&q, xv, next);
 
     warn(INF, "sending vneg serv response");
-    mx->hdr.flags = HEAD_FORM | (uint8_t)w_rand();
+    mx->hdr.flags = HEAD_FORM | (uint8_t)w_rand_uniform32(UINT8_MAX);
 
     uint8_t * pos = xv->buf;
     const uint8_t * end = xv->buf + xv->len;
@@ -812,7 +812,8 @@ static void __attribute__((nonnull(1))) new_cids(struct q_conn * const c,
             .len =
                 8 +
                 // XXX workaround for gquic, which requires 8-byte dcids
-                (zero_len_scid ? 0 : (uint8_t)w_rand_uniform(CID_LEN_MAX - 7))};
+                (zero_len_scid ? 0
+                               : (uint8_t)w_rand_uniform32(CID_LEN_MAX - 7))};
         rand_bytes(ndcid.id, sizeof(ndcid.id) + sizeof(ndcid.srt));
         cid_cpy(&c->odcid, &ndcid);
         add_dcid(c, &ndcid);

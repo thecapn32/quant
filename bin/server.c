@@ -164,7 +164,7 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
 #ifndef NDEBUG
         // randomize data
         struct w_iov * v = 0;
-        uint8_t c = 'A' + (uint8_t)w_rand_uniform(26);
+        uint8_t c = 'A' + (uint8_t)w_rand_uniform32(26);
         sq_foreach (v, &out, next) {
             memset(v->buf, c, v->len);
             c = unlikely(c == 'Z') ? 'A' : c + 1;

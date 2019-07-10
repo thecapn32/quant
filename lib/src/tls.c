@@ -728,7 +728,7 @@ void init_tp(struct q_conn * const c)
     // modern version of Fisher-Yates
     // https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle#The_modern_algorithm
     for (size_t j = TP_MAX; j >= 1; j--) {
-        const size_t r = w_rand_uniform(j);
+        const size_t r = w_rand_uniform32((uint32_t)j);
         const uint16_t tmp = tp_order[r];
         tp_order[r] = tp_order[j];
         tp_order[j] = tmp;
