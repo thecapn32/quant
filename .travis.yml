@@ -30,6 +30,11 @@ env:
     - BUILD=Release  MYCC=clang-8    MYCXX=clang++-8      FUZZ=1
 
     - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8   CFLAGS="-DNO_OOO_0RTT"
+    - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8   CFLAGS="-DNO_TLS_TICKETS"
+    - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8   CFLAGS="-DNO_TLS_LOG"
+    - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8   CFLAGS="-DNO_ERR_REASONS"
+    - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8   CFLAGS="-DNO_OOO_DATA"
+    - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8   CFLAGS="-DNO_MIGRATION"
 
   global:
     - PROJECT=quant
