@@ -1502,7 +1502,7 @@ void enc_close_frame(uint8_t ** pos,
     const char * const err_reason = c->err_reason;
 #else
     const uint8_t err_reason_len = 0;
-    const char err_reason[0];
+    const char err_reason[] = "";
 #endif
 
     encv(pos, end, err_reason_len);
