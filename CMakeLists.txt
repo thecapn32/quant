@@ -117,7 +117,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     add_definitions(-DNO_FUZZER_CORPUS_COLLECTION)
   endif()
 
-  if(NOT NO_SANITIZERS)
+  if(NOT DEFINED ENV{CONTINUOUS_INTEGRATION} AND NOT DEFINED ENV{DOCKER})
     # See if we can use the address sanitizer
     include(CheckIncludeFile)
     check_include_file(sanitizer/asan_interface.h HAVE_ASAN)
@@ -150,62 +150,61 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
         endif()
       endforeach()
     endif()
-  endif()
 
-  find_program(CPPCHECK NAMES cppcheck)
-  if(CPPCHECK)
-    message(STATUS "Found cppcheck: ${CPPCHECK}")
-    set(CMAKE_C_CPPCHECK ${CPPCHECK} -q --inline-suppr
-        --enable=warning,style,performance,portability
-        --suppress=duplicateValueTernary
-        -I external/include -I lib/include -I ${PROJECT_SOURCE_DIR}/lib/include
-    )
-    set(CMAKE_CXX_CPPCHECK ${CMAKE_C_CPPCHECK})
-  endif()
-
-  # Use include-what-you-use to check #includes, if it's installed
-  find_program(IWYU NAMES include-what-you-use iwyu)
-  if(IWYU)
-    message(STATUS "Found include-what-you-use: ${IWYU}")
-    string(TOLOWER ${CMAKE_SYSTEM_NAME} CMAKE_SYSTEM_NAME_LC)
-    set(CMAKE_C_INCLUDE_WHAT_YOU_USE
-        ${IWYU} -Xiwyu --no_fwd_decls -Xiwyu
-        --mapping_file=${PROJECT_SOURCE_DIR}/misc/${CMAKE_SYSTEM_NAME_LC}.imp)
-    set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE ${CMAKE_C_INCLUDE_WHAT_YOU_USE})
-  endif()
-
-  if(CMAKE_C_COMPILER_ID MATCHES "Clang" AND
-      CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    # Use clang-tidy for extra warnings, if it's installed
-    find_program(CLANGTIDY NAMES clang-tidy clang-tidy50 clang-tidy40
-                 clang-tidy39 clang-tidy38 clang-tidy37)
-    if(CLANGTIDY)
-      message(STATUS "Found clang-tidy: ${CLANGTIDY}")
-      set(CLANG_TIDY_CHECKS *
-          -cert-err58-cpp
-          -cppcoreguidelines-avoid-magic-numbers
-          -cppcoreguidelines-macro-usage
-          -cppcoreguidelines-owning-memory
-          -cppcoreguidelines-pro-bounds-array-to-pointer-decay
-          -cppcoreguidelines-pro-bounds-pointer-arithmetic
-          -cppcoreguidelines-pro-type-vararg
-          -fuchsia-statically-constructed-objects
-          -google-readability-braces-around-statements
-          -google-readability-todo
-          -google-runtime-references
-          -hicpp-braces-around-statements
-          -hicpp-multiway-paths-covered
-          -hicpp-no-array-decay
-          -hicpp-signed-bitwise
-          -hicpp-vararg
-          -readability-braces-around-statements
-          -readability-magic-numbers
+    find_program(CPPCHECK NAMES cppcheck)
+    if(CPPCHECK)
+      message(STATUS "Found cppcheck: ${CPPCHECK}")
+      set(CMAKE_C_CPPCHECK ${CPPCHECK} -q --inline-suppr
+          --enable=warning,style,performance,portability
+          --suppress=duplicateValueTernary
+          -I external/include -I lib/include -I ${PROJECT_SOURCE_DIR}/lib/include
       )
-      string(REPLACE ";" "," CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS}")
-      set(CMAKE_C_CLANG_TIDY ${CLANGTIDY}
-          -system-headers -checks=${CLANG_TIDY_CHECKS}
-      )
-      set(CMAKE_CXX_CLANG_TIDY ${CMAKE_C_CLANG_TIDY})
+      set(CMAKE_CXX_CPPCHECK ${CMAKE_C_CPPCHECK})
+    endif()
+
+    # Use include-what-you-use to check #includes, if it's installed
+    find_program(IWYU NAMES include-what-you-use iwyu)
+    if(IWYU)
+      message(STATUS "Found include-what-you-use: ${IWYU}")
+      string(TOLOWER ${CMAKE_SYSTEM_NAME} CMAKE_SYSTEM_NAME_LC)
+      set(CMAKE_C_INCLUDE_WHAT_YOU_USE
+          ${IWYU} -Xiwyu --no_fwd_decls -Xiwyu
+          --mapping_file=${PROJECT_SOURCE_DIR}/misc/${CMAKE_SYSTEM_NAME_LC}.imp)
+      set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE ${CMAKE_C_INCLUDE_WHAT_YOU_USE})
+    endif()
+
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang" AND
+        CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+      # Use clang-tidy for extra warnings, if it's installed
+      find_program(CLANGTIDY NAMES clang-tidy)
+      if(CLANGTIDY)
+        message(STATUS "Found clang-tidy: ${CLANGTIDY}")
+        set(CLANG_TIDY_CHECKS *
+            -cert-err58-cpp
+            -cppcoreguidelines-avoid-magic-numbers
+            -cppcoreguidelines-macro-usage
+            -cppcoreguidelines-owning-memory
+            -cppcoreguidelines-pro-bounds-array-to-pointer-decay
+            -cppcoreguidelines-pro-bounds-pointer-arithmetic
+            -cppcoreguidelines-pro-type-vararg
+            -fuchsia-statically-constructed-objects
+            -google-readability-braces-around-statements
+            -google-readability-todo
+            -google-runtime-references
+            -hicpp-braces-around-statements
+            -hicpp-multiway-paths-covered
+            -hicpp-no-array-decay
+            -hicpp-signed-bitwise
+            -hicpp-vararg
+            -readability-braces-around-statements
+            -readability-magic-numbers
+        )
+        string(REPLACE ";" "," CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS}")
+        set(CMAKE_C_CLANG_TIDY ${CLANGTIDY}
+            -system-headers -checks=${CLANG_TIDY_CHECKS}
+        )
+        set(CMAKE_CXX_CLANG_TIDY ${CMAKE_C_CLANG_TIDY})
+      endif()
     endif()
   endif()
 else()
