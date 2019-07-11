@@ -555,17 +555,6 @@ struct q_stream * q_rsv_stream(struct q_conn * const c, const bool bidi)
 }
 
 
-#if !defined(FUZZING) && defined(__linux__)
-static void __attribute__((noreturn))
-signal_cb(ev_signal * w, int revents __attribute__((unused)))
-{
-    ev_break(EVBREAK_ALL);
-    w_cleanup(w->data);
-    exit(0);
-}
-#endif
-
-
 #if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 static int __attribute__((nonnull))
@@ -617,15 +606,6 @@ struct w_engine * q_init(const char * const ifname,
 
     // initialize TLS context
     init_tls_ctx(conf);
-
-#if !defined(FUZZING) && defined(__linux__)
-    // libev seems to need this inside docker to handle Ctrl-C?
-    /// but the fuzzer doesn't like it
-    static ev_signal signal_w;
-    signal_w.data = w;
-    ev_signal_init(&signal_w, signal_cb, SIGINT);
-    ev_signal_start(&signal_w);
-#endif
 
 #if !defined(NDEBUG) && !defined(NO_FUZZER_CORPUS_COLLECTION)
 #ifdef FUZZING
