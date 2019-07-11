@@ -26,13 +26,16 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <inttypes.h>
-#include <netdb.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/socket.h>
 
 #ifndef PARTICLE
 #include <netinet/ip.h>
+#endif
+
+#ifndef FUZZING
+#include <netdb.h>
 #endif
 
 // IWYU pragma: no_include <picotls/../picotls.h>
@@ -68,7 +71,11 @@
 
 void log_pkt(const char * const dir,
              const struct w_iov * const v,
-             const struct sockaddr * const addr,
+             const struct sockaddr * const addr
+#ifdef FUZZING
+             __attribute__((unused))
+#endif
+             ,
              const struct cid * const odcid,
              const uint8_t * const tok,
              const uint16_t tok_len)
@@ -76,11 +83,16 @@ void log_pkt(const char * const dir,
     // if (util_dlevel != NTE && util_dlevel != INF && util_dlevel != DBG)
     //     return;
 
+#ifndef FUZZING
     char ip[NI_MAXHOST];
     char port[NI_MAXSERV];
     ensure(getnameinfo(addr, sizeof(*addr), ip, sizeof(ip), port, sizeof(port),
                        NI_NUMERICHOST | NI_NUMERICSERV) == 0,
            "getnameinfo");
+#else
+    const char ip[] = "0.0.0.0";
+    const char port[] = "0";
+#endif
 
     const struct pkt_meta * const m = &meta(v);
     const char * const pts = pkt_type_str(m->hdr.flags, &m->hdr.vers);

@@ -203,7 +203,10 @@ dec_stream_or_crypto_frame(const uint8_t type,
                            struct pkt_meta * const m,
                            struct w_iov * const v)
 {
-    struct q_conn * const c = m->pn->c;
+    struct pn_space * const pn = m->pn;
+    if (unlikely(pn == 0))
+        return false;
+    struct q_conn * const c = pn->c;
     m->strm_frm_pos = (uint16_t)(*pos - v->buf) - 1;
 
     int64_t sid = 0;
@@ -453,6 +456,8 @@ dec_ack_frame(const uint8_t type,
               const struct pkt_meta * const m)
 {
     struct pn_space * const pn = m->pn;
+    if (unlikely(pn == 0))
+        return false;
     struct q_conn * const c = pn->c;
 
     uint64_t lg_ack = 0;
@@ -628,7 +633,10 @@ dec_close_frame(const uint8_t type,
                 const uint8_t * const end,
                 const struct pkt_meta * const m)
 {
-    struct q_conn * const c = m->pn->c;
+    struct pn_space * const pn = m->pn;
+    if (unlikely(pn == 0))
+        return false;
+    struct q_conn * const c = pn->c;
 
     uint16_t err_code;
     dec2_chk(&err_code, pos, end, c, type);
@@ -1207,15 +1215,17 @@ bool dec_frames(struct q_conn * const c,
             break;
 
         default:
-            hexdump(v->buf, v->len);
             err_close_return(c, ERR_FRAME_ENC, type,
-                             "unknown frame type 0x%02x at pos %u", type,
+                             "unknown 0x%02x frame at pos %u", type,
                              pos - v->buf);
         }
 
-        if (unlikely(ok == false))
+        if (unlikely(ok == false)) {
             // there was an error parsing a frame
+            warn(ERR, "error parsing 0x%02x frame at pos %lu", type,
+                 pos - v->buf);
             return false;
+        }
 
         // record this frame type in the meta data
         track_frame(m, type);
@@ -1294,7 +1304,7 @@ uint16_t max_frame_len(const uint8_t type)
         break;
 
     default:
-        die("unhandled frame type 0x%02x", type);
+        die("unhandled 0x%02x frame", type);
     }
 
     return len;

@@ -354,9 +354,11 @@ tx_vneg_resp(const struct w_sock * const ws,
     xv->flags = v->flags;
     log_pkt("TX", xv, (struct sockaddr *)&xv->addr, 0, 0, 0);
 
+#ifndef FUZZING
     w_tx(ws, &q);
     while (w_tx_pending(&q))
         w_nic_tx(ws->w);
+#endif
 
     q_free(&q);
 }
@@ -378,11 +380,13 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
     if (sq_len(&c->txq) > 1 && unlikely(is_lh(*sq_first(&c->txq)->buf)))
         coalesce(&c->txq);
 
+#ifndef FUZZING
     // transmit encrypted/protected packets
     w_tx(c->sock, &c->txq);
     do
         w_nic_tx(c->w);
     while (w_tx_pending(&c->txq));
+#endif
 
 #if defined(DEBUG_BUFFERS) && !defined(NDEBUG)
     const uint64_t avail = sq_len(&c->w->iov);
@@ -1152,7 +1156,7 @@ rx_pkts(struct w_iov_sq * const x,
             is_clnt ? get_conn_by_ipnp(w_get_addr(ws, true),
                                        (struct sockaddr *)&v->addr)
                     : 0;
-        struct cid odcid;
+        struct cid odcid = {.len = 0};
         uint8_t tok[MAX_PKT_LEN];
         uint16_t tok_len = 0;
         if (unlikely(!dec_pkt_hdr_beginning(
