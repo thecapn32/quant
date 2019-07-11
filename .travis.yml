@@ -29,6 +29,13 @@ env:
     - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8      FUZZ=1
     - BUILD=Release  MYCC=clang-8    MYCXX=clang++-8      FUZZ=1
 
+
+    - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8   CFLAGS="-DDEBUG_BUFFERS"
+    - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8   CFLAGS="-DDEBUG_EXTRA"
+    - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8   CFLAGS="-DDEBUG_STREAMS"
+    - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8   CFLAGS="-DDEBUG_TIMERS"
+    - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8   CFLAGS="-DDEBUG_PROT"
+
     - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8   CFLAGS="-DNO_OOO_0RTT"
     - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8   CFLAGS="-DNO_TLS_TICKETS"
     - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8   CFLAGS="-DNO_TLS_LOG"
