@@ -188,7 +188,7 @@ void track_bytes_out(struct q_stream * const s, const uint64_t n)
 
 void reset_stream(struct q_stream * const s, const bool forget)
 {
-#ifdef DEBUG_STREAM
+#ifdef DEBUG_STREAMS
     warn(DBG, "reset strm %u " FMT_SID " on %s conn %s", forget, s->id,
          conn_type(s->c), cid2str(s->c->scid));
 #endif

@@ -45,7 +45,7 @@
 #define INIT_STRM_DATA_BIDI UINT64_C(0xffff)
 #define INIT_STRM_DATA_UNI UINT64_C(0x7ff)
 #define INIT_MAX_UNI_STREAMS 3
-#define INIT_MAX_BIDI_STREAMS 6 // XXX picoquic won't respect a lower count
+#define INIT_MAX_BIDI_STREAMS 3
 
 #define STRM_STATE(k, v) k = v
 #define STRM_STATES                                                            \
@@ -104,7 +104,7 @@ struct q_stream {
 };
 
 
-#if !defined(NDEBUG) && defined(DEBUG_STREAM) && !defined(FUZZING)
+#if !defined(NDEBUG) && defined(DEBUG_STREAMS) && !defined(FUZZING)
 #define strm_to_state(s, new_state)                                            \
     do {                                                                       \
         if ((s)->id >= 0) {                                                    \
@@ -119,10 +119,15 @@ struct q_stream {
                 is_srv_ini((s)->id) ? "serv" : "clnt",                         \
                 strm_state_str[(s)->state], strm_state_str[(new_state)]);      \
         }                                                                      \
-        (s)->state = (new_state);                                              \
+        if (likely((s)->state != strm_clsd))                                   \
+            (s)->state = (new_state);                                          \
     } while (0)
 #else
-#define strm_to_state(s, new_state) (s)->state = (new_state)
+#define strm_to_state(s, new_state)                                            \
+    do {                                                                       \
+        if (likely((s)->state != strm_clsd))                                   \
+            (s)->state = (new_state);                                          \
+    } while (0)
 #endif
 
 
