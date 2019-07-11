@@ -599,8 +599,8 @@ struct w_engine * q_init(const char * const ifname,
     ensure(pkt_meta, "could not calloc");
     ASAN_POISON_MEMORY_REGION(pkt_meta, num_bufs * sizeof(*pkt_meta));
 
-    // initialize the event loop (prefer kqueue and epoll)
-    ev_default_loop(ev_recommended_backends() | EVBACKEND_KQUEUE |
+    // initialize the event loop
+    ev_default_loop(EVFLAG_NOENV | EVFLAG_NOSIGMASK | EVBACKEND_KQUEUE |
                     EVBACKEND_EPOLL);
 
 #ifndef NDEBUG
