@@ -2,7 +2,7 @@
 aioquic   *         V    H    D    C    R    Z    S    M    B    U         P
 ats       *         V    H    D    C    R    Z    S    M    B         3
 f5
-google    *         V    H                                            3
+google    *         V    H    D    C    R                             3
 lsquic    *         V    H    D    C    R    Z    S    M    B    U    3    P    E
 mvfst     *         V    H    D    C    R                             3
 ngtcp2    *         V    H    D    C    R    Z    S    M         U    3
