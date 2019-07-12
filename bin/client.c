@@ -407,6 +407,7 @@ int main(int argc, char * argv[])
         ifname, &(const struct q_conf){
                     .conn_conf = &(
                         struct q_conn_conf){.enable_tls_key_updates = flip_keys,
+                                            .enable_spinbit = true,
                                             .enable_zero_len_cid = zlen_cids},
                     .num_bufs = num_bufs,
                     .ticket_store = cache,
