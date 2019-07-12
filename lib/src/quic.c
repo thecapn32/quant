@@ -167,7 +167,7 @@ void free_iov(struct w_iov * const v, struct pkt_meta * const m)
     if (m->txed) {
         if (m->acked == false && m->lost == false && m->pn->sent_pkts) {
             m->strm = 0;
-            on_pkt_lost(m);
+            on_pkt_lost(m, false);
         }
 
         struct pkt_meta * m_rtx = sl_first(&m->rtx);
@@ -194,6 +194,7 @@ void free_iov(struct w_iov * const v, struct pkt_meta * const m)
                              ? m_rtx->hdr.nr
                              : 0);
 #endif
+                    m_rtx->strm = 0;
                     ensure(m_rtx->has_rtx, "was RTX'ed");
                     sl_remove_head(&m->rtx, rtx_next);
                     sl_remove_head(&m_rtx->rtx, rtx_next);

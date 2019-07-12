@@ -237,7 +237,7 @@ static void remove_from_in_flight(const struct pkt_meta * const m)
 }
 
 
-void on_pkt_lost(struct pkt_meta * const m)
+void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
 {
     struct pn_space * const pn = m->pn;
     struct q_conn * const c = pn->c;
@@ -249,38 +249,43 @@ void on_pkt_lost(struct pkt_meta * const m)
 
     diet_insert(&pn->acked_or_lost, m->hdr.nr, (ev_tstamp)NAN);
 
-    // if we lost connection or stream control frames, possibly RTX them
+    if (is_lost) {
+        // if we lost connection or stream control frames, possibly RTX them
 
-    // static const struct frames conn_ctrl =
-    //     bitset_t_initializer(1 << FRM_TOK | 1 << FRM_CDB | 1 << FRM_SBB |
-    //                          1 << FRM_SBU | 1 << FRM_CID | 1 << FRM_RTR);
-    static const struct frames all_ctrl =
-        bitset_t_initializer(1 << FRM_RST | 1 << FRM_STP | 1 << FRM_TOK |
-                             1 << FRM_CDB | 1 << FRM_SDB | 1 << FRM_SBB |
-                             1 << FRM_SBU | 1 << FRM_CID | 1 << FRM_RTR);
-    if (bit_overlap(FRM_MAX, &all_ctrl, &m->frms))
-        for (uint32_t i = 0; i < FRM_MAX; i++)
-            if (has_frm(m->frms, i) && bit_isset(FRM_MAX, i, &all_ctrl)) {
-                warn(DBG, "%s pkt %" PRIu64 " CONTROL LOST: 0x%02x",
-                     pkt_type_str(m->hdr.flags, &m->hdr.vers), m->hdr.nr, i);
-                switch (i) {
-                case FRM_CID:
-                    c->max_cid_seq_out = m->min_cid_seq - 1;
-                    break;
-                case FRM_CDB:
-                case FRM_SDB:
-                    // DATA_BLOCKED and STREAM_DATA_BLOCKED RTX'ed automatically
-                    break;
-                default:
-                    warn(CRT, "unhandled RTX of 0x%02x frame", i);
+        // static const struct frames conn_ctrl =
+        //     bitset_t_initializer(1 << FRM_TOK | 1 << FRM_CDB | 1 << FRM_SBB |
+        //                          1 << FRM_SBU | 1 << FRM_CID | 1 << FRM_RTR);
+        static const struct frames all_ctrl =
+            bitset_t_initializer(1 << FRM_RST | 1 << FRM_STP | 1 << FRM_TOK |
+                                 1 << FRM_CDB | 1 << FRM_SDB | 1 << FRM_SBB |
+                                 1 << FRM_SBU | 1 << FRM_CID | 1 << FRM_RTR);
+        if (bit_overlap(FRM_MAX, &all_ctrl, &m->frms))
+            for (uint32_t i = 0; i < FRM_MAX; i++)
+                if (has_frm(m->frms, i) && bit_isset(FRM_MAX, i, &all_ctrl)) {
+                    warn(DBG, "%s pkt %" PRIu64 " CONTROL LOST: 0x%02x",
+                         pkt_type_str(m->hdr.flags, &m->hdr.vers), m->hdr.nr,
+                         i);
+                    switch (i) {
+                    case FRM_CID:
+                        c->max_cid_seq_out = m->min_cid_seq - 1;
+                        break;
+                    case FRM_CDB:
+                    case FRM_SDB:
+                        // DATA_BLOCKED and STREAM_DATA_BLOCKED RTX'ed
+                        // automatically
+                        break;
+                    default:
+                        warn(CRT, "unhandled RTX of 0x%02x frame", i);
+                    }
                 }
-            }
 
-    static const struct frames strm_ctrl =
-        // FRM_SDB is automatically RTX'ed XXX fix this mess
-        bitset_t_initializer(1 << FRM_RST | 1 << FRM_STP /*| 1 << FRM_SDB*/);
-    if (bit_overlap(FRM_MAX, &strm_ctrl, &m->frms))
-        need_ctrl_update(m->strm);
+        static const struct frames strm_ctrl =
+            // FRM_SDB is automatically RTX'ed XXX fix this mess
+            bitset_t_initializer(1 << FRM_RST |
+                                 1 << FRM_STP /*| 1 << FRM_SDB*/);
+        if (bit_overlap(FRM_MAX, &strm_ctrl, &m->frms))
+            need_ctrl_update(m->strm);
+    }
 
     m->lost = true;
     if (m->strm)
@@ -355,7 +360,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
         // OnPacketsLost
         if (m->lost) {
             DEBUG_diet_insert(&lost, m->hdr.nr, (ev_tstamp)NAN);
-            on_pkt_lost(m);
+            on_pkt_lost(m, true);
             if (m->strm == 0 || m->has_rtx)
                 free_iov(w_iov(c->w, pm_idx(m)), m);
         }

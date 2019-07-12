@@ -28,6 +28,7 @@
 #pragma once
 
 #include <inttypes.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 #include <warpcore/warpcore.h>
@@ -151,4 +152,5 @@ congestion_event(struct q_conn * const c, const ev_tstamp sent_t);
 
 extern void __attribute__((nonnull)) set_ld_timer(struct q_conn * const c);
 
-extern void __attribute__((nonnull)) on_pkt_lost(struct pkt_meta * const m);
+extern void __attribute__((nonnull))
+on_pkt_lost(struct pkt_meta * const m, const bool is_lost);
