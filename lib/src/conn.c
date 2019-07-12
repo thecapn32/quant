@@ -1527,7 +1527,7 @@ err_close
 err_close_noreason
 #endif
 (struct q_conn * const c,
-               const uint16_t code,
+               const uint64_t code,
                const uint8_t frm
 #ifndef NO_ERR_REASONS
                ,
@@ -1539,8 +1539,10 @@ err_close_noreason
 #ifndef FUZZING
     if (unlikely(c->err_code)) {
 #ifndef NO_ERR_REASONS
-        warn(WRN, "ignoring new err 0x%04x; existing err is 0x%04x (%s) ", code,
-             c->err_code, c->err_reason);
+        warn(WRN,
+             "ignoring new err 0x%" PRIx64 "; existing err is 0x%" PRIx64
+             " (%s) ",
+             code, c->err_code, c->err_reason);
 #endif
         return;
     }
@@ -1755,19 +1757,6 @@ struct q_conn * new_conn(struct w_engine * const w,
     diet_init(&c->clsd_strms);
     sq_init(&c->txq);
 
-    // TODO most of these should become configurable via q_conn_conf
-    c->tp_in.max_pkt = w_mtu(c->w);
-    c->tp_in.ack_del_exp = c->tp_out.ack_del_exp = DEF_ACK_DEL_EXP;
-    c->tp_in.max_ack_del = c->tp_out.max_ack_del = DEF_MAX_ACK_DEL;
-    c->tp_in.max_strm_data_uni = c->is_clnt ? INIT_STRM_DATA_UNI : 0;
-    c->tp_in.max_strms_uni = c->is_clnt ? INIT_MAX_UNI_STREAMS : 0;
-    c->tp_in.max_strms_bidi =
-        c->is_clnt ? INIT_MAX_BIDI_STREAMS * 2 : INIT_MAX_BIDI_STREAMS;
-    c->tp_in.max_strm_data_bidi_local = c->tp_in.max_strm_data_bidi_remote =
-        c->is_clnt ? INIT_STRM_DATA_BIDI : INIT_STRM_DATA_BIDI / 2;
-    c->tp_in.max_data =
-        c->tp_in.max_strms_bidi * c->tp_in.max_strm_data_bidi_local;
-
     // initialize idle timeout
     c->idle_alarm.data = c;
     ev_init(&c->idle_alarm, idle_alarm);
@@ -1796,6 +1785,21 @@ struct q_conn * new_conn(struct w_engine * const w,
 
     if (likely(c->is_clnt || c->holds_sock == false))
         update_conf(c, conf);
+
+    // TODO most of these should become configurable via q_conn_conf
+    c->tp_in.max_pkt = w_mtu(c->w);
+    c->tp_in.ack_del_exp = c->tp_out.ack_del_exp = DEF_ACK_DEL_EXP;
+    c->tp_in.max_ack_del = c->tp_out.max_ack_del = DEF_MAX_ACK_DEL;
+    c->tp_in.max_strm_data_uni = c->is_clnt ? INIT_STRM_DATA_UNI : 0;
+    c->tp_in.max_strms_uni = c->is_clnt ? INIT_MAX_UNI_STREAMS : 0;
+    c->tp_in.max_strms_bidi =
+        c->is_clnt ? INIT_MAX_BIDI_STREAMS * 2 : INIT_MAX_BIDI_STREAMS;
+    c->tp_in.max_strm_data_bidi_local = c->tp_in.max_strm_data_bidi_remote =
+        c->is_clnt ? INIT_STRM_DATA_BIDI : INIT_STRM_DATA_BIDI / 2;
+    c->tp_in.max_data =
+        c->tp_in.max_strms_bidi * c->tp_in.max_strm_data_bidi_local;
+    c->tp_in.act_cid_lim =
+        c->tp_in.disable_migration ? 0 : (c->is_clnt ? 4 : 2);
 
     // initialize packet number spaces
     for (pn_t t = pn_init; t <= pn_data; t++)

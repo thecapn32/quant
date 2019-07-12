@@ -120,9 +120,9 @@ struct transport_params {
     uint64_t idle_to;
     uint64_t max_ack_del;
     uint64_t max_pkt;
+    uint64_t act_cid_lim;
     uint8_t ack_del_exp;
     bool disable_migration;
-    uint8_t _unused[6];
     struct pref_addr pref_addr;
     struct cid orig_cid;
 };
@@ -261,7 +261,7 @@ struct q_conn {
 
     struct w_iov_sq txq;
 
-    uint16_t err_code;
+    uint64_t err_code;
     uint8_t err_frm;
 #ifndef NO_ERR_REASONS
     uint8_t err_reason_len;
@@ -320,7 +320,7 @@ err_close
 err_close_noreason
 #endif
     (struct q_conn * const c,
-     const uint16_t code,
+     const uint64_t code,
      const uint8_t frm
 #ifndef NO_ERR_REASONS
      ,
@@ -500,7 +500,7 @@ static inline bool __attribute__((
 #ifndef NO_MIGRATION
     const struct cid * const max_scid =
         splay_max(cids_by_seq, &c->scids_by_seq);
-    return splay_count(&c->scids_by_seq) <= 8 ||
+    return splay_count(&c->scids_by_seq) <= c->tp_out.act_cid_lim ||
            (max_scid && c->max_cid_seq_out < max_scid->seq);
 #else
     return false;

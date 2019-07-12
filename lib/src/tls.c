@@ -184,7 +184,8 @@ static struct cipher_ctx enc_tckt;
 #define TP_MAD 0x0b     ///< max_ack_delay
 #define TP_DMIG 0x0c    ///< disable_migration
 #define TP_PRFA 0x0d    ///< preferred_address
-#define TP_MAX (TP_PRFA + 1)
+#define TP_ACIL 0x0e    ///< active_connection_id_limit
+#define TP_MAX (TP_ACIL + 1)
 
 
 // quicly shim
@@ -297,9 +298,10 @@ static int setup_initial_encryption(struct st_quicly_cipher_context_t * ingress,
                                     ptls_iovec_t cid,
                                     int is_client)
 {
-    static const uint8_t salt[] = {0xef, 0x4f, 0xb0, 0xab, 0xb4, 0x74, 0x70,
-                                   0xc4, 0x1b, 0xef, 0xcf, 0x80, 0x31, 0x33,
-                                   0x4f, 0xae, 0x48, 0x5e, 0x09, 0xa0};
+
+    static const uint8_t salt[] = {0x7f, 0xbc, 0xdb, 0x0e, 0x7c, 0x66, 0xbb,
+                                   0xe9, 0x19, 0x3a, 0x96, 0xcd, 0x21, 0x51,
+                                   0x9e, 0xbd, 0x7a, 0x02, 0x64, 0x4a};
     static const char * labels[2] = {"client in", "server in"};
     ptls_cipher_suite_t ** cs;
     uint8_t secret[PTLS_MAX_DIGEST_SIZE];
@@ -654,6 +656,13 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 #endif
             break;
 
+        case TP_ACIL:
+            if (dec_tp(&c->tp_out.act_cid_lim, &pos, end) == false)
+                return 1;
+            warn(INF, "\tactive_connection_id_limit = %" PRIu64,
+                 c->tp_out.act_cid_lim);
+            break;
+
         default:
             err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
                       "unsupported tp 0x%04x", tp);
@@ -720,10 +729,10 @@ void init_tp(struct q_conn * const c)
     const uint16_t grease_type = 0xff00 + grease[0];
     const uint16_t grease_len = grease[1] & 0x0f;
 
-    uint16_t tp_order[TP_MAX + 1] = {TP_OCID, TP_IDTO,    TP_SRT,     TP_MPS,
-                                     TP_IMD,  TP_IMSD_BL, TP_IMSD_BR, TP_IMSD_U,
-                                     TP_IMSB, TP_IMSU,    TP_ADE,     TP_MAD,
-                                     TP_DMIG, TP_PRFA,    grease_type};
+    uint16_t tp_order[TP_MAX + 1] = {
+        TP_OCID,    TP_IDTO,   TP_SRT,  TP_MPS,     TP_IMD, TP_IMSD_BL,
+        TP_IMSD_BR, TP_IMSD_U, TP_IMSB, TP_IMSU,    TP_ADE, TP_MAD,
+        TP_DMIG,    TP_PRFA,   TP_ACIL, grease_type};
 
     // modern version of Fisher-Yates
     // https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle#The_modern_algorithm
@@ -822,6 +831,15 @@ void init_tp(struct q_conn * const c)
             warn(INF, "\tmax_packet_size = %" PRIu64 " [bytes]",
                  c->tp_in.max_pkt);
 #endif
+            break;
+        case TP_ACIL:
+            if (c->tp_in.disable_migration == false) {
+                enc_tp(&pos, end, TP_ACIL, c->tp_in.act_cid_lim);
+#ifdef DEBUG_EXTRA
+                warn(INF, "\tactive_connection_id_limit = %" PRIu64,
+                     c->tp_in.act_cid_lim);
+#endif
+            }
             break;
         case TP_PRFA:
             // TODO: unhandled
@@ -999,7 +1017,7 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
     memcpy(t->ticket, src.base, src.len);
 
     // write all tickets
-    // XXX this currently dumps the entire cache to file on each connection!
+    // FIXME this currently dumps the entire cache to file on each connection!
     splay_foreach (t, tickets_by_peer, &tickets) {
         warn(INF, "writing TLS ticket for %s conn %s (%s %s)", conn_type(c),
              cid2str(c->scid), t->sni, t->alpn);

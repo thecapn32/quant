@@ -52,7 +52,7 @@
 #define DATA_OFFSET 48 ///< Offsets of stream frame payload data we TX.
 
 #define CID_LEN_MIN 4   ///< Minimum CID length allowed by spec.
-#define CID_LEN_MAX 18  ///< Maximum CID length allowed by spec.
+#define CID_LEN_MAX 20  ///< Maximum CID length allowed by spec.
 #define SCID_LEN_CLNT 4 ///< Default client source CID length.
 #define SCID_LEN_SERV 8 ///< Default server source CID length.
 #define SRT_LEN 16      ///< Stateless reset token length allowed by spec.
@@ -132,6 +132,7 @@
 struct cid {
     splay_entry(cid) node_seq;
     uint64_t seq; ///< Connection ID sequence number
+    uint64_t rpt; ///< Retire prior to
     /// XXX len must precede id for cid_cmp() over both to work
     uint8_t len; ///< Connection ID length
     /// XXX id must precede srt for rand_bytes() over both to work

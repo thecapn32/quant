@@ -80,12 +80,12 @@
     } while (0)
 
 
-#define dec2_chk(val, pos, end, c, type)                                       \
-    do {                                                                       \
-        if (unlikely(dec2((val), (pos), (end)) == false))                      \
-            err_close_return((c), ERR_FRAME_ENC, (type), "dec4 %s in %s:%u",   \
-                             #val, __FILE__, __LINE__);                        \
-    } while (0)
+// #define dec2_chk(val, pos, end, c, type)                                       \
+//     do {                                                                       \
+//         if (unlikely(dec2((val), (pos), (end)) == false))                      \
+//             err_close_return((c), ERR_FRAME_ENC, (type), "dec4 %s in %s:%u",   \
+//                              #val, __FILE__, __LINE__);                        \
+//     } while (0)
 
 
 #define dec8_chk(val, pos, end, c, type)                                       \
@@ -638,8 +638,8 @@ dec_close_frame(const uint8_t type,
         return false;
     struct q_conn * const c = pn->c;
 
-    uint16_t err_code;
-    dec2_chk(&err_code, pos, end, c, type);
+    uint64_t err_code;
+    decv_chk(&err_code, pos, end, c, type);
 
     uint64_t frame_type = 0;
     if (type == FRM_CLQ)
@@ -651,7 +651,7 @@ dec_close_frame(const uint8_t type,
         err_close_return(c, ERR_FRAME_ENC, type, "illegal reason len %u",
                          reas_len);
 
-    char reas_phr[2048]; // XXX
+    char reas_phr[2048]; // FIXME: should be limited by MTU (or something)
     if (unlikely(reas_len > sizeof(reas_phr)))
         err_close_return(c, ERR_INTERNAL, type, "reason_phr too long %u",
                          reas_len);
@@ -660,14 +660,14 @@ dec_close_frame(const uint8_t type,
 
     if (type == FRM_CLQ)
         warn(INF,
-             FRAM_IN "CONNECTION_CLOSE" NRM " 0x%02x=quic err=%s0x%04x " NRM
-                     "frame=0x%" PRIx64 " rlen=%" PRIu64 " reason=%s%.*s" NRM,
+             FRAM_IN "CONNECTION_CLOSE" NRM " 0x%02x=quic err=%s0x%" PRIx64 NRM
+                     " frame=0x%" PRIx64 " rlen=%" PRIu64 " reason=%s%.*s" NRM,
              type, err_code ? RED : NRM, err_code, frame_type, reas_len,
              err_code ? RED : NRM, (int)reas_len, reas_phr);
     else
         warn(INF,
-             FRAM_IN "CONNECTION_CLOSE" NRM " 0x%02x=app err=%s0x%04x " NRM
-                     "rlen=%" PRIu64 " reason=%s%.*s" NRM,
+             FRAM_IN "CONNECTION_CLOSE" NRM " 0x%02x=app err=%s0x%" PRIx64 NRM
+                     " rlen=%" PRIu64 " reason=%s%.*s" NRM,
              type, err_code ? RED : NRM, err_code, reas_len,
              err_code ? RED : NRM, (int)reas_len, reas_phr);
 
@@ -845,10 +845,10 @@ dec_stop_sending_frame(const uint8_t ** pos,
     int64_t sid = 0;
     decv_chk((uint64_t *)&sid, pos, end, c, FRM_STP);
 
-    uint16_t err_code;
-    dec2_chk(&err_code, pos, end, c, FRM_STP);
+    uint64_t err_code;
+    decv_chk(&err_code, pos, end, c, FRM_STP);
 
-    warn(INF, FRAM_IN "STOP_SENDING" NRM " id=" FMT_SID " err=%s0x%04x" NRM,
+    warn(INF, FRAM_IN "STOP_SENDING" NRM " id=" FMT_SID " err=%s0x%" PRIx64 NRM,
          sid, err_code ? RED : NRM, err_code);
 
     struct q_stream * const s = get_and_validate_strm(c, sid, FRM_STP, true);
@@ -930,6 +930,12 @@ dec_new_cid_frame(const uint8_t ** pos,
     struct q_conn * const c = m->pn->c;
     struct cid dcid = {.seq = 0, .has_srt = true};
     decv_chk(&dcid.seq, pos, end, c, FRM_CID);
+    decv_chk(&dcid.rpt, pos, end, c, FRM_CID);
+
+    if (unlikely(dcid.rpt > dcid.seq))
+        err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_CID, "illegal rpt %u",
+                         dcid.rpt);
+
     dec1_chk(&dcid.len, pos, end, c, FRM_CID);
 
     if (unlikely(dcid.len < CID_LEN_MIN || dcid.len > CID_LEN_MAX))
@@ -949,11 +955,13 @@ dec_new_cid_frame(const uint8_t ** pos,
 #endif
 
     warn(INF,
-         FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu64
+         FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu64 " rpt=%" PRIu64
                  " len=%u dcid=%s srt=%s%s",
-         dcid.seq, dcid.len, cid2str(&dcid),
+         dcid.seq, dcid.rpt, dcid.len, cid2str(&dcid),
          hex2str(dcid.srt, sizeof(dcid.srt), SRT_LEN),
          dup ? " [" RED "dup" NRM "]" : "");
+
+    // FIXME: retire cids
 
     return true;
 }
@@ -968,16 +976,16 @@ dec_reset_stream_frame(const uint8_t ** pos,
     int64_t sid = 0;
     decv_chk((uint64_t *)&sid, pos, end, c, FRM_RST);
 
-    uint16_t err;
-    dec2_chk(&err, pos, end, c, FRM_RST);
+    uint64_t err_code;
+    decv_chk(&err_code, pos, end, c, FRM_RST);
 
     uint64_t off = 0;
     decv_chk(&off, pos, end, c, FRM_RST);
 
     warn(INF,
-         FRAM_IN "RESET_STREAM" NRM " id=" FMT_SID " err=%s0x%04x" NRM
+         FRAM_IN "RESET_STREAM" NRM " id=" FMT_SID " err=%s0x%" PRIx64 NRM
                  " off=%" PRIu64,
-         sid, err ? RED : NRM, err, off);
+         sid, err_code ? RED : NRM, err_code, off);
 
     struct q_stream * const s = get_and_validate_strm(c, sid, FRM_RST, false);
     if (unlikely(s == 0))
@@ -1493,7 +1501,7 @@ void enc_close_frame(uint8_t ** pos,
     const uint8_t type = c->err_frm == 0 ? FRM_CLA : FRM_CLQ;
 
     enc1(pos, end, type);
-    enc2(pos, end, c->err_code);
+    encv(pos, end, c->err_code);
     if (type == FRM_CLQ)
         enc1(pos, end, c->err_frm);
 
@@ -1512,14 +1520,14 @@ void enc_close_frame(uint8_t ** pos,
 #ifndef NDEBUG
     if (type == FRM_CLQ)
         warn(INF,
-             FRAM_OUT "CONNECTION_CLOSE" NRM " 0x%02x=quic err=%s0x%04x" NRM
+             FRAM_OUT "CONNECTION_CLOSE" NRM " 0x%02x=quic err=%s0x%" PRIx64 NRM
                       " frame=0x%02x rlen=%u reason=%s%.*s" NRM,
              type, c->err_code ? RED : NRM, c->err_code, c->err_frm,
              err_reason_len, c->err_code ? RED : NRM, (int)err_reason_len,
              err_reason);
     else
         warn(INF,
-             FRAM_OUT "CONNECTION_CLOSE" NRM " 0x%02x=app err=%s0x%04x" NRM
+             FRAM_OUT "CONNECTION_CLOSE" NRM " 0x%02x=app err=%s0x%" PRIx64 NRM
                       " rlen=%u reason=%s%.*s" NRM,
              type, c->err_code ? RED : NRM, c->err_code, err_reason_len,
              c->err_code ? RED : NRM, (int)err_reason_len, err_reason);
@@ -1685,6 +1693,8 @@ void enc_new_cid_frame(uint8_t ** pos,
     struct cid ncid = {.seq = c->max_cid_seq_out,
                        .len = c->is_clnt ? SCID_LEN_CLNT : SCID_LEN_SERV};
 
+    // FIXME: add rpt
+
     struct cid * enc_cid = &ncid;
     if (max_scid && ncid.seq <= max_scid->seq) {
         enc_cid = splay_find(cids_by_seq, &c->scids_by_seq, &ncid);
@@ -1699,14 +1709,15 @@ void enc_new_cid_frame(uint8_t ** pos,
 
     enc1(pos, end, FRM_CID);
     encv(pos, end, enc_cid->seq);
+    encv(pos, end, enc_cid->rpt);
     enc1(pos, end, enc_cid->len);
     encb(pos, end, enc_cid->id, enc_cid->len);
     encb(pos, end, enc_cid->srt, sizeof(enc_cid->srt));
 
     warn(INF,
-         FRAM_OUT "NEW_CONNECTION_ID" NRM " seq=%" PRIu64
+         FRAM_OUT "NEW_CONNECTION_ID" NRM " seq=%" PRIu64 " rpt=%" PRIu64
                   " len=%u cid=%s srt=%s %s",
-         enc_cid->seq, enc_cid->len, cid2str(enc_cid),
+         enc_cid->seq, enc_cid->rpt, enc_cid->len, cid2str(enc_cid),
          hex2str(enc_cid->srt, sizeof(enc_cid->srt), SRT_LEN),
          enc_cid == &ncid ? "" : BLD REV GRN "[RTX]" NRM);
 

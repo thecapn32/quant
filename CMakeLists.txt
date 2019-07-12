@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.9)
 
-project(quant VERSION 0.0.20 LANGUAGES C CXX)
+project(quant VERSION 0.0.22 LANGUAGES C CXX)
 
 # Check for dependencies before mucking with the compiler flags
 include(CMakePushCheckState)

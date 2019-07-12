@@ -218,12 +218,12 @@ function analyze {
 
     perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $x=1 : next);
         /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
-        $x && /enc_close.*err=0x0000/ && exit 1;' "$log_strip"
+        $x && /enc_close.*err=0x0/ && exit 1;' "$log_strip"
     [ $? -eq 1 ] && echo D > "$ret_base.data"
 
     perl -n -e 'BEGIN{$x=0};
         /dec_close.*err=0x([^ ]*)/ and ($1 eq "0000" ? $x++ : next);
-        /enc_close.*err=0x0000/ and $x++;
+        /enc_close.*err=0x0/ and $x++;
         END{exit $x};' "$log_strip"
     local r=$?
     if [ $r -ge 2 ]; then
@@ -257,12 +257,12 @@ function analyze {
 
     perl -n -e '/new 0-RTT clnt conn/ and $x=1;
         /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
-        $x && /enc_close.*err=0x0000/ && exit 1;' "$log_strip"
+        $x && /enc_close.*err=0x0/ && exit 1;' "$log_strip"
     [ $? -eq 1 ] && echo R > "$ret_base.rsmt"
 
     perl -n -e '/connected after 0-RTT/ and $x=1;
         /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
-        $x && /enc_close.*err=0x0000/ && exit 1;' "$log_strip"
+        $x && /enc_close.*err=0x0/ && exit 1;' "$log_strip"
     [ $? -eq 1 ] && echo Z > "$ret_base.zrtt"
     [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.rsmt" ] && \
         [ -s "$ret_base.zrtt" ] && rm -f "$log"
@@ -276,7 +276,7 @@ function analyze {
 
     perl -n -e '/RX.*len=.*Retry/ and $x=1;
         /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
-       $x && /enc_close.*err=0x0000/ && exit 1;' "$log_strip"
+       $x && /enc_close.*err=0x0/ && exit 1;' "$log_strip"
     [ $? -eq 1 ] && echo S > "$ret_base.rtry"
     [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.rtry" ] && rm -f "$log"
     rm -f "$log_strip"
@@ -303,7 +303,7 @@ function analyze {
     perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $x=1 : next);
         /no h3 payload/ and $x=0;
         /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
-        $x && /enc_close.*err=0x0000/ && exit 1;' "$log_strip"
+        $x && /enc_close.*err=0x0/ && exit 1;' "$log_strip"
     [ $? -eq 1 ] && echo 3 > "$ret_base.http"
     [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.http" ] && rm -f "$log"
     rm -f "$log_strip"
@@ -319,7 +319,7 @@ function analyze {
         /enc_path.*PATH_RESPONSE/ and $x==2 and $x=3;
         /read (.*) bytes.*on clnt conn/ and $x==3 and ($1 > 0 ? $x=4 : next);
         /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
-        $x==4 && /enc_close.*err=0x0000/ && exit 1;' "$log_strip"
+        $x==4 && /enc_close.*err=0x0/ && exit 1;' "$log_strip"
     [ $? -eq 1 ] && echo B > "$ret_base.bind"
     [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.bind" ] && rm -f "$log"
     rm -f "$log_strip"

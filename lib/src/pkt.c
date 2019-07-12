@@ -250,12 +250,10 @@ void enc_lh_cids(uint8_t ** pos,
     cid_cpy(&m->hdr.dcid, dcid);
     if (scid)
         cid_cpy(&m->hdr.scid, scid);
-    const uint8_t cil =
-        (uint8_t)((m->hdr.dcid.len ? m->hdr.dcid.len - 3 : 0) << 4) |
-        (uint8_t)(m->hdr.scid.len ? m->hdr.scid.len - 3 : 0);
-    enc1(pos, end, cil);
+    enc1(pos, end, m->hdr.dcid.len);
     if (m->hdr.dcid.len)
         encb(pos, end, m->hdr.dcid.id, m->hdr.dcid.len);
+    enc1(pos, end, m->hdr.scid.len);
     if (m->hdr.scid.len)
         encb(pos, end, m->hdr.scid.id, m->hdr.scid.len);
 }
@@ -374,7 +372,8 @@ bool enc_pkt(struct q_stream * const s,
     case ep_init:
         m->hdr.type = unlikely(c->tx_rtry) ? LH_RTRY : LH_INIT;
         m->hdr.flags =
-            LH | m->hdr.type | (unlikely(c->tx_rtry) ? c->odcid.len - 3 : 0);
+            LH | m->hdr.type |
+            (unlikely(c->tx_rtry) ? (uint8_t)w_rand_uniform32(0x0f) : 0);
         break;
     case ep_0rtt:
         if (c->is_clnt) {
@@ -409,8 +408,10 @@ bool enc_pkt(struct q_stream * const s,
         enc4(&pos, end, m->hdr.vers);
         enc_lh_cids(&pos, end, m, c->dcid, c->scid);
 
-        if (unlikely(m->hdr.type == LH_RTRY))
+        if (unlikely(m->hdr.type == LH_RTRY)) {
+            enc1(&pos, end, c->odcid.len);
             encb(&pos, end, c->odcid.id, c->odcid.len);
+        }
 
         if (m->hdr.type == LH_INIT)
             encv(&pos, end, c->is_clnt ? c->tok_len : 0);
@@ -468,7 +469,7 @@ bool enc_pkt(struct q_stream * const s,
         goto tx;
 
     if (needs_ack(pn) != no_ack) {
-        // XXX 8 is an arbitrary value - fix this
+        // FIXME: 8 is an arbitrary value
         if (enc_data == false || diet_cnt(&pn->recv) <= 8)
             enc_ack_frame(&pos, v->buf, end, m, pn);
         else
@@ -583,8 +584,7 @@ tx:;
 
     if (likely(enc_data)) {
         adj_iov_to_data(v, m);
-        // XXX not clear if changing the len before calling on_pkt_sent is
-        // ok
+        // XXX not clear if changing the len before calling on_pkt_sent is ok
         v->len = m->strm_data_len;
     }
 
@@ -672,19 +672,22 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
         dec4_chk(&m->hdr.vers, &pos, end);
         dec1_chk(&m->hdr.dcid.len, &pos, end);
 
-        m->hdr.scid.len = m->hdr.dcid.len;
-        m->hdr.dcid.len >>= 4;
-        m->hdr.scid.len &= 0x0f;
+        if (unlikely(m->hdr.vers && m->hdr.dcid.len > CID_LEN_MAX)) {
+            warn(DBG, "illegal dcid len %u", m->hdr.dcid.len);
+            return false;
+        }
 
-        if (m->hdr.dcid.len) {
-            m->hdr.dcid.len += 3;
+        if (m->hdr.dcid.len)
             decb_chk(m->hdr.dcid.id, &pos, end, m->hdr.dcid.len);
+
+        dec1_chk(&m->hdr.scid.len, &pos, end);
+        if (unlikely(m->hdr.vers && m->hdr.scid.len > CID_LEN_MAX)) {
+            warn(DBG, "illegal scid len %u", m->hdr.scid.len);
+            return false;
         }
 
-        if (m->hdr.scid.len) {
-            m->hdr.scid.len += 3;
+        if (m->hdr.scid.len)
             decb_chk(m->hdr.scid.id, &pos, end, m->hdr.scid.len);
-        }
 
         // if this is a CI, the dcid len must be >= 8 bytes
         if (is_clnt == false &&
@@ -702,7 +705,7 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
 
         if (m->hdr.type == LH_RTRY) {
             // decode odcid
-            odcid->len = (m->hdr.flags & 0x0f) + 3;
+            dec1_chk(&odcid->len, &pos, end);
             decb_chk(odcid->id, &pos, end, odcid->len);
         }
 
@@ -860,7 +863,7 @@ which_cipher_ctx_in(struct q_conn * const c,
 
 struct q_conn * is_srt(const struct w_iov * const xv, struct pkt_meta * const m)
 {
-    if ((m->hdr.flags & LH) != HEAD_FIXD || xv->len < 23 + SRT_LEN)
+    if ((m->hdr.flags & LH) != HEAD_FIXD || xv->len < MIN_SRT_PKT_LEN)
         return 0;
 
     uint8_t * const srt = &xv->buf[xv->len - SRT_LEN];
