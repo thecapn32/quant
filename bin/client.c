@@ -243,13 +243,7 @@ get(const char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
             0, 0,
 #endif
             true,
-            &(struct q_conn_conf){.alpn = do_h3 ? "h3-" DRAFT_VERSION_STRING
-                                                : "hq-" DRAFT_VERSION_STRING,
-                                  .idle_timeout = timeout * MSECS_PER_SEC,
-                                  .enable_spinbit = true,
-                                  .enable_tls_key_updates = flip_keys,
-                                  .enable_udp_zero_checksums = true,
-                                  .enable_zero_len_cid = zlen_cids});
+            do_h3 ? "h3-" DRAFT_VERSION_STRING : "hq-" DRAFT_VERSION_STRING, 0);
         if (c == 0) {
             freeaddrinfo(peer);
             return 0;
@@ -410,10 +404,14 @@ int main(int argc, char * argv[])
     }
 
     struct w_engine * const w = q_init(
-        ifname, &(const struct q_conf){.num_bufs = num_bufs,
-                                       .ticket_store = cache,
-                                       .tls_log = tls_log,
-                                       .enable_tls_cert_verify = verify_certs});
+        ifname, &(const struct q_conf){
+                    .conn_conf = &(
+                        struct q_conn_conf){.enable_tls_key_updates = flip_keys,
+                                            .enable_zero_len_cid = zlen_cids},
+                    .num_bufs = num_bufs,
+                    .ticket_store = cache,
+                    .tls_log = tls_log,
+                    .enable_tls_cert_verify = verify_certs});
     khash_t(conn_cache) * cc = kh_init(conn_cache);
 
     if (reps > 1)

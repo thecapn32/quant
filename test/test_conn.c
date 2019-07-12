@@ -79,8 +79,8 @@ int main(int argc
     const struct sockaddr_in sip = {.sin_family = AF_INET,
                                     .sin_addr.s_addr = inet_addr("127.0.0.1"),
                                     .sin_port = bswap16(55555)};
-    struct q_conn * const cc =
-        q_connect(w, (const struct sockaddr *)&sip, "localhost", 0, 0, true, 0);
+    struct q_conn * const cc = q_connect(w, (const struct sockaddr *)&sip,
+                                         "localhost", 0, 0, true, 0, 0);
     ensure(cc, "is zero");
 
     // accept connection

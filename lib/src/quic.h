@@ -44,7 +44,7 @@
 
 
 // #define DEBUG_BUFFERS ///< Set to log buffer use details.
-// #define DEBUG_EXTRA   ///< Set to log various extra details.
+// #define DEBUG_EXTRA ///< Set to log various extra details.
 // #define DEBUG_STREAMS ///< Set to log stream scheduling details.
 // #define DEBUG_TIMERS ///< Set to log timer details.
 // #define DEBUG_PROT   ///< Set to log packet protection/encryption details.
@@ -209,6 +209,7 @@ struct pkt_meta {
 
 extern struct pkt_meta * pkt_meta;
 extern struct q_conn_sl accept_queue;
+extern struct q_conn_conf default_conn_conf;
 
 /// The versions of QUIC supported by this implementation
 extern const uint32_t ok_vers[];

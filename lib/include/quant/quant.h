@@ -48,19 +48,7 @@ struct w_iov_sq;
 struct q_stream;
 
 
-struct q_conf {
-    const char * const ticket_store; // ignored for server
-    const char * const tls_cert;     // required for server
-    const char * const tls_key;      // required for server
-    const char * const tls_log;
-    const uint64_t num_bufs;
-    const uint8_t enable_tls_cert_verify : 1;
-    uint8_t : 7;
-};
-
-
 struct q_conn_conf {
-    const char * const alpn; // required for client
     const uint64_t idle_timeout;
     const uint64_t tls_key_update_frequency; // seconds
     const uint8_t enable_spinbit : 1;
@@ -69,6 +57,18 @@ struct q_conn_conf {
     const uint8_t disable_migration : 1;
     const uint8_t enable_zero_len_cid : 1;
     uint8_t : 3;
+};
+
+
+struct q_conf {
+    const struct q_conn_conf * const conn_conf;
+    const char * const ticket_store; // ignored for server
+    const char * const tls_cert;     // required for server
+    const char * const tls_key;      // required for server
+    const char * const tls_log;
+    const uint64_t num_bufs;
+    const uint8_t enable_tls_cert_verify : 1;
+    uint8_t : 7;
 };
 
 
@@ -100,6 +100,7 @@ q_connect(struct w_engine * const w,
           struct w_iov_sq * const early_data,
           struct q_stream ** const early_data_stream,
           const bool fin,
+          const char * const alpn,
           const struct q_conn_conf * const conf);
 
 extern void __attribute__((nonnull(1))) q_close(struct q_conn * const c,

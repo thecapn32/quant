@@ -824,8 +824,15 @@ void init_tp(struct q_conn * const c)
 #endif
             break;
         case TP_PRFA:
-        case TP_DMIG:
             // TODO: unhandled
+            break;
+        case TP_DMIG:
+            if (c->tp_in.disable_migration) {
+                enc_tp(&pos, end, TP_DMIG, c->tp_in.disable_migration);
+#ifdef DEBUG_EXTRA
+                warn(INF, "\tdisable_migration = true");
+#endif
+            }
             break;
         default:
             if (tp_order[j] == grease_type) {

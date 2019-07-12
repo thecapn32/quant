@@ -86,6 +86,15 @@ const uint8_t ok_vers_len = sizeof(ok_vers) / sizeof(ok_vers[0]);
 
 
 struct pkt_meta * pkt_meta = 0;
+struct q_conn_conf default_conn_conf = {.idle_timeout = 10 * MSECS_PER_SEC,
+                                        .enable_udp_zero_checksums = true,
+                                        .enable_spinbit =
+#ifndef NDEBUG
+                                            true
+#else
+                                            false
+#endif
+};
 
 func_ptr api_func = 0;
 void *api_conn = 0, *api_strm = 0;
@@ -93,7 +102,7 @@ void *api_conn = 0, *api_strm = 0;
 struct q_conn_sl accept_queue = sl_head_initializer(accept_queue);
 
 static ev_timer api_alarm;
-static uint64_t num_bufs;
+static uint64_t num_bufs = 0;
 
 #if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
@@ -275,6 +284,7 @@ struct q_conn * q_connect(struct w_engine * const w,
                           struct w_iov_sq * const early_data,
                           struct q_stream ** const early_data_stream,
                           const bool fin,
+                          const char * const alpn,
                           const struct q_conn_conf * const conf)
 {
     // make new connection
@@ -282,7 +292,7 @@ struct q_conn * q_connect(struct w_engine * const w,
     struct q_conn * const c = new_conn(w, vers, 0, 0, peer, peer_name, 0, conf);
 
     // init TLS
-    init_tls(c, conf ? conf->alpn : 0);
+    init_tls(c, alpn);
     init_tp(c);
 
     // if we have no early data, we're not trying 0-RTT
@@ -576,6 +586,10 @@ struct w_engine * q_init(const char * const ifname,
     conns_by_ipnp = kh_init(conns_by_ipnp);
     conns_by_id = kh_init(conns_by_id);
     conns_by_srt = kh_init(conns_by_srt);
+
+    if (conf && conf->conn_conf)
+        // remember default connection configuration
+        memcpy(&default_conn_conf, conf->conn_conf, sizeof(default_conn_conf));
 
     // initialize warpcore on the given interface
     num_bufs = conf && conf->num_bufs ? conf->num_bufs : 10000;

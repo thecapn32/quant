@@ -305,10 +305,7 @@ int main(int argc, char * argv[])
 
         // do we need to q_accept?
         if (q_is_new_serv_conn(c))
-            q_accept(
-                &(struct q_conn_conf){.idle_timeout = timeout * MSECS_PER_SEC,
-                                      .enable_spinbit = true,
-                                      .enable_udp_zero_checksums = true});
+            q_accept(0);
 
         if (q_is_conn_closed(c)) {
             q_close(c, 0, 0);

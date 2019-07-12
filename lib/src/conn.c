@@ -1572,8 +1572,10 @@ key_flip(ev_timer * const w, int e __attribute__((unused)))
 {
     struct q_conn * const c = w->data;
     c->do_key_flip = c->key_flips_enabled;
+#ifndef NO_MIGRATION
     // XXX we borrow the key flip timer for this
     c->do_migration = !c->tp_out.disable_migration;
+#endif
 }
 
 
@@ -1663,33 +1665,40 @@ ack_alarm(ev_timer * const w, int e __attribute__((unused)))
 }
 
 
+#define get_conf(x) conf ? conf->x : default_conn_conf.x
+
 void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
 {
-    c->spin_enabled = conf ? conf->enable_spinbit : 0;
+    c->spin_enabled = get_conf(enable_spinbit);
 
     // (re)set idle alarm
-    c->tp_in.idle_to =
-        conf && conf->idle_timeout ? conf->idle_timeout : 10 * MSECS_PER_SEC;
+    c->tp_in.idle_to = get_conf(idle_timeout);
     c->idle_alarm.repeat = (ev_tstamp)c->tp_in.idle_to / MSECS_PER_SEC;
 
     ev_timer_again(&c->idle_alarm);
 
-    c->tp_out.disable_migration = conf ? conf->disable_migration : false;
-    c->key_flips_enabled = conf ? conf->enable_tls_key_updates : false;
+    c->tp_in.disable_migration =
+#ifndef NO_MIGRATION
+        get_conf(disable_migration);
+#else
+        true;
+#endif
+    c->key_flips_enabled = get_conf(enable_tls_key_updates);
 
     if (c->tp_out.disable_migration == false || c->key_flips_enabled) {
-        c->key_flip_alarm.repeat = conf ? conf->tls_key_update_frequency : 3;
+        c->key_flip_alarm.repeat = get_conf(tls_key_update_frequency);
         ev_timer_again(&c->key_flip_alarm);
     }
 
-    c->sockopt.enable_udp_zero_checksums =
-        conf && conf->enable_udp_zero_checksums;
+    c->sockopt.enable_udp_zero_checksums = get_conf(enable_udp_zero_checksums);
     w_set_sockopt(c->sock, &c->sockopt);
 
 #ifndef NDEBUG
     // XXX for testing, do a key flip and a migration ASAP (if enabled)
     c->do_key_flip = c->key_flips_enabled;
+#ifndef NO_MIGRATION
     c->do_migration = !c->tp_out.disable_migration;
+#endif
 #endif
 }
 
@@ -1724,7 +1733,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     if (c->sock == 0) {
         c->sockopt.enable_ecn = true;
         c->sockopt.enable_udp_zero_checksums =
-            conf && conf->enable_udp_zero_checksums;
+            get_conf(enable_udp_zero_checksums);
         c->rx_w.data = c->sock = w_bind(w, port, &c->sockopt);
         if (unlikely(c->sock == 0))
             goto fail;
@@ -1742,7 +1751,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     splay_init(&c->scids_by_seq);
     c->scids_by_id = kh_init(cids_by_id);
 #endif
-    new_cids(c, conf && conf->enable_zero_len_cid, dcid, scid);
+    new_cids(c, get_conf(enable_zero_len_cid), dcid, scid);
 
     c->vers = c->vers_initial = vers;
     diet_init(&c->clsd_strms);
