@@ -1648,7 +1648,6 @@ idle_alarm(ev_timer * const w, int e __attribute__((unused)))
 #ifdef DEBUG_TIMERS
     warn(DBG, "idle timeout on %s conn %s", conn_type(c), cid2str(c->scid));
 #endif
-    conn_to_state(c, conn_drng);
     enter_closing(c);
 }
 
@@ -1665,32 +1664,31 @@ ack_alarm(ev_timer * const w, int e __attribute__((unused)))
 }
 
 
-#define get_conf(x) conf ? conf->x : default_conn_conf.x
-
 void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
 {
-    c->spin_enabled = get_conf(enable_spinbit);
+    c->spin_enabled = get_conf_uncond(conf, enable_spinbit);
 
     // (re)set idle alarm
-    c->tp_in.idle_to = get_conf(idle_timeout);
+    c->tp_in.idle_to = get_conf(conf, idle_timeout);
     c->idle_alarm.repeat = (ev_tstamp)c->tp_in.idle_to / MSECS_PER_SEC;
 
     ev_timer_again(&c->idle_alarm);
 
     c->tp_in.disable_migration =
 #ifndef NO_MIGRATION
-        get_conf(disable_migration);
+        get_conf_uncond(conf, disable_migration);
 #else
         true;
 #endif
-    c->key_flips_enabled = get_conf(enable_tls_key_updates);
+    c->key_flips_enabled = get_conf_uncond(conf, enable_tls_key_updates);
 
     if (c->tp_out.disable_migration == false || c->key_flips_enabled) {
-        c->key_flip_alarm.repeat = get_conf(tls_key_update_frequency);
+        c->key_flip_alarm.repeat = get_conf(conf, tls_key_update_frequency);
         ev_timer_again(&c->key_flip_alarm);
     }
 
-    c->sockopt.enable_udp_zero_checksums = get_conf(enable_udp_zero_checksums);
+    c->sockopt.enable_udp_zero_checksums =
+        get_conf_uncond(conf, enable_udp_zero_checksums);
     w_set_sockopt(c->sock, &c->sockopt);
 
 #ifndef NDEBUG
@@ -1733,7 +1731,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     if (c->sock == 0) {
         c->sockopt.enable_ecn = true;
         c->sockopt.enable_udp_zero_checksums =
-            get_conf(enable_udp_zero_checksums);
+            get_conf_uncond(conf, enable_udp_zero_checksums);
         c->rx_w.data = c->sock = w_bind(w, port, &c->sockopt);
         if (unlikely(c->sock == 0))
             goto fail;
@@ -1751,7 +1749,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     splay_init(&c->scids_by_seq);
     c->scids_by_id = kh_init(cids_by_id);
 #endif
-    new_cids(c, get_conf(enable_zero_len_cid), dcid, scid);
+    new_cids(c, get_conf(conf, enable_zero_len_cid), dcid, scid);
 
     c->vers = c->vers_initial = vers;
     diet_init(&c->clsd_strms);

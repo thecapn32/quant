@@ -358,6 +358,13 @@ extern char * __attribute__((nonnull)) hex2str_impl(const uint8_t * const src,
     })
 
 
+#define get_conf(conf, val)                                                    \
+    (conf) && (conf)->val ? (conf)->val : default_conn_conf.val
+
+
+#define get_conf_uncond(conf, val) (conf) ? (conf)->val : default_conn_conf.val
+
+
 static inline void __attribute__((nonnull))
 cid_cpy(struct cid * const dst, const struct cid * const src)
 {

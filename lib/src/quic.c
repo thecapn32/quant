@@ -88,6 +88,7 @@ const uint8_t ok_vers_len = sizeof(ok_vers) / sizeof(ok_vers[0]);
 struct pkt_meta * pkt_meta = 0;
 struct q_conn_conf default_conn_conf = {.idle_timeout = 10 * MSECS_PER_SEC,
                                         .enable_udp_zero_checksums = true,
+                                        .tls_key_update_frequency = 3,
                                         .enable_spinbit =
 #ifndef NDEBUG
                                             true
@@ -493,14 +494,16 @@ struct q_conn * q_accept(const struct q_conn_conf * const conf)
     if (sl_first(&accept_queue))
         goto accept;
 
-    warn(WRN, "waiting for conn on any serv sock (timeout %" PRIu64 " ms)",
-         conf ? conf->idle_timeout : 0);
+    const uint64_t idle_to = get_conf(conf, idle_timeout);
 
-    if (conf && conf->idle_timeout) {
+    warn(WRN, "waiting for conn on any serv sock (timeout %" PRIu64 " ms)",
+         idle_to);
+
+    if (idle_to) {
         if (ev_is_active(&api_alarm))
             ev_timer_stop(&api_alarm);
         ev_timer_init(&api_alarm, cancel_api_call,
-                      (ev_tstamp)conf->idle_timeout / MSECS_PER_SEC, 0);
+                      (ev_tstamp)idle_to / MSECS_PER_SEC, 0);
         ev_timer_start(&api_alarm);
     }
 
@@ -587,9 +590,23 @@ struct w_engine * q_init(const char * const ifname,
     conns_by_id = kh_init(conns_by_id);
     conns_by_srt = kh_init(conns_by_srt);
 
-    if (conf && conf->conn_conf)
-        // remember default connection configuration
-        memcpy(&default_conn_conf, conf->conn_conf, sizeof(default_conn_conf));
+    if (conf && conf->conn_conf) {
+        // update default connection configuration
+        default_conn_conf.idle_timeout =
+            get_conf(conf->conn_conf, idle_timeout);
+        default_conn_conf.tls_key_update_frequency =
+            get_conf(conf->conn_conf, tls_key_update_frequency);
+        default_conn_conf.enable_spinbit =
+            get_conf_uncond(conf->conn_conf, enable_spinbit);
+        default_conn_conf.enable_udp_zero_checksums =
+            get_conf_uncond(conf->conn_conf, enable_udp_zero_checksums);
+        default_conn_conf.enable_tls_key_updates =
+            get_conf_uncond(conf->conn_conf, enable_tls_key_updates);
+        default_conn_conf.disable_migration =
+            get_conf_uncond(conf->conn_conf, disable_migration);
+        default_conn_conf.enable_zero_len_cid =
+            get_conf_uncond(conf->conn_conf, enable_zero_len_cid);
+    }
 
     // initialize warpcore on the given interface
     num_bufs = conf && conf->num_bufs ? conf->num_bufs : 10000;

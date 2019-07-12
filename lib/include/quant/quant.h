@@ -49,13 +49,13 @@ struct q_stream;
 
 
 struct q_conn_conf {
-    const uint64_t idle_timeout;
-    const uint64_t tls_key_update_frequency; // seconds
-    const uint8_t enable_spinbit : 1;
-    const uint8_t enable_udp_zero_checksums : 1;
-    const uint8_t enable_tls_key_updates : 1; // TODO default to on eventually
-    const uint8_t disable_migration : 1;
-    const uint8_t enable_zero_len_cid : 1;
+    uint64_t idle_timeout;
+    uint64_t tls_key_update_frequency; // seconds
+    uint8_t enable_spinbit : 1;
+    uint8_t enable_udp_zero_checksums : 1;
+    uint8_t enable_tls_key_updates : 1; // TODO default to on eventually
+    uint8_t disable_migration : 1;
+    uint8_t enable_zero_len_cid : 1;
     uint8_t : 3;
 };
 
@@ -66,8 +66,8 @@ struct q_conf {
     const char * const tls_cert;     // required for server
     const char * const tls_key;      // required for server
     const char * const tls_log;
-    const uint64_t num_bufs;
-    const uint8_t enable_tls_cert_verify : 1;
+    uint64_t num_bufs;
+    uint8_t enable_tls_cert_verify : 1;
     uint8_t : 7;
 };
 
