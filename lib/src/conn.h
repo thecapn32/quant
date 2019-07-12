@@ -293,7 +293,18 @@ extern struct q_conn_sl c_ready;
 #endif
 
 
-extern const char * cid2str(const struct cid * const id);
+#define cid2str(id)                                                            \
+    __extension__({                                                            \
+        static char _hex[2 * (CID_LEN_MAX + sizeof((id)->seq)) + 1] = "?";     \
+        cid2str_impl((id), _hex, sizeof(_hex));                                \
+    })
+
+
+extern char * __attribute__((nonnull(2)))
+cid2str_impl(const struct cid * const id,
+             char * const dst,
+             const size_t len_dst);
+
 
 extern void __attribute__((nonnull)) tx(ev_io * const w, int param);
 

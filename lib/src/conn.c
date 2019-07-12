@@ -1915,11 +1915,11 @@ void conn_info_populate(struct q_conn * const c)
 }
 
 
-const char * cid2str(const struct cid * const id)
+char * cid2str_impl(const struct cid * const id,
+                    char * const dst,
+                    const size_t len_dst)
 {
-    static char str[2 * (CID_LEN_MAX + sizeof(id->seq)) + 1] = "?";
-    if (id)
-        snprintf(str, sizeof(str), "%" PRIu64 ":%.*s", id->seq, 2 * id->len,
-                 hex2str(id->id, id->len, CID_LEN_MAX));
-    return str;
+    snprintf(dst, len_dst, "%" PRIu64 ":%.*s", id->seq, 2 * id->len,
+             hex2str(id->id, id->len, CID_LEN_MAX));
+    return dst;
 }

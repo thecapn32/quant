@@ -283,7 +283,6 @@ write_to_corpus(const int dir, const void * const data, const size_t len);
     __extension__({                                                            \
         static char _hex[(len_buf)*2 + 1];                                     \
         hex2str_impl((src), (len_src), _hex, sizeof(_hex));                    \
-        _hex;                                                                  \
     })
 
 
