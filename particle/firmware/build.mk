@@ -53,12 +53,11 @@ QUANT_SRC+=\
 
 CSRC+=$(WARP_SRC) $(PICOTLS_SRC) $(QUANT_SRC)
 
-# -DNDEBUG
-EXTRA_CFLAGS+=-fsingle-precision-constant \
+# -DNDEBUG -fsingle-precision-constant -DEV_TSTAMP_T=float -Dkfloat=float
+EXTRA_CFLAGS+= \
 	-Wno-error -Wno-parentheses -Wno-unused-function -Wno-comment \
 	-Wno-undef -Wno-unknown-pragmas -Wno-unused-but-set-variable \
 	-DLOG_COMPILE_TIME_LEVEL=LOG_LEVEL_WARN \
-	-DEV_TSTAMP_T=float -Dkfloat=float \
 	-DNO_FUZZER_CORPUS_COLLECTION -DNO_OOO_0RTT -DNO_TLS_TICKETS \
 	-DNO_TLS_LOG -DNO_ERR_REASONS -DNO_OOO_DATA -DNO_MIGRATION \
 	-D'ntoh16(x)=__builtin_bswap16(*(uint16_t*)(x))' \
