@@ -175,7 +175,7 @@ function bench_server {
 
 function check_fail {
     local log="$2"
-    if ! grep -q -E 'dec_close.*err=0x[^0][^0][^0][^0]|assertion failed|AddressSanitizer|runtime error|ABORT:' "$log"; then
+    if ! grep -q -E 'dec_close.*err=0x[^0] |assertion failed|AddressSanitizer|runtime error|ABORT:' "$log"; then
         return 0
     fi
 

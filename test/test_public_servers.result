@@ -9,7 +9,7 @@ ngtcp2    *         V    H    D    C    R    Z    S    M         U    3
 ngx_quic
 pandora
 picoquic  *         V    H    D    C    R    Z    S    M    B    U    3    P
-quant
+quant     *    X    V    H    D    C    R    Z    S    M    B    U         P    E
 quic-go
 quiche
 quicker
