@@ -647,16 +647,13 @@ dec_close_frame(const uint8_t type,
 
     uint64_t reas_len = 0;
     decv_chk(&reas_len, pos, end, c, type);
-    if (unlikely(reas_len > (uint64_t)(end - *pos)))
-        err_close_return(c, ERR_FRAME_ENC, type, "illegal reason len %u",
-                         reas_len);
+
+    const uint16_t act_reas_len =
+        (uint16_t)MIN(reas_len, (uint16_t)(end - *pos));
 
     char reas_phr[2048]; // FIXME: should be limited by MTU (or something)
-    if (unlikely(reas_len > sizeof(reas_phr)))
-        err_close_return(c, ERR_INTERNAL, type, "reason_phr too long %u",
-                         reas_len);
-    if (reas_len)
-        decb_chk((uint8_t *)reas_phr, pos, end, (uint16_t)reas_len, c, type);
+    if (act_reas_len)
+        decb_chk((uint8_t *)reas_phr, pos, end, act_reas_len, c, type);
 
     if (type == FRM_CLQ)
         warn(INF,
@@ -670,6 +667,10 @@ dec_close_frame(const uint8_t type,
                      " rlen=%" PRIu64 " reason=%s%.*s" NRM,
              type, err_code ? RED : NRM, err_code, reas_len,
              err_code ? RED : NRM, (int)reas_len, reas_phr);
+
+    if (unlikely(reas_len > (uint64_t)(end - *pos)))
+        err_close_return(c, ERR_FRAME_ENC, type, "illegal reason len %u",
+                         reas_len);
 
     if (c->state == conn_drng)
         ev_feed_event(&c->closing_alarm, 0);
@@ -949,9 +950,13 @@ dec_new_cid_frame(const uint8_t ** pos,
          hex2str(dcid.srt, sizeof(dcid.srt), SRT_LEN),
          dup ? " [" RED "dup" NRM "]" : "");
 
-    if (unlikely(splay_count(&c->dcids_by_seq) >= c->tp_in.act_cid_lim))
-        err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_CID, "illegal seq %u",
-                         dcid.seq);
+
+    const uint64_t max_act_cids =
+        c->tp_in.act_cid_lim + (c->tp_out.pref_addr.cid.len ? 1 : 0);
+    if (unlikely(splay_count(&c->dcids_by_seq) > max_act_cids))
+        err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_CID,
+                         "illegal seq %u (have %" PRIu64 "/%" PRIu64 ")",
+                         dcid.seq, splay_count(&c->dcids_by_seq), max_act_cids);
 
     if (unlikely(dcid.rpt > dcid.seq))
         err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_CID, "illegal rpt %u",
@@ -1042,17 +1047,16 @@ dec_new_token_frame(const uint8_t ** pos,
     uint64_t tok_len = 0;
     decv_chk(&tok_len, pos, end, c, FRM_TOK);
 
-    if (unlikely(tok_len > (uint64_t)(end - *pos)))
-        err_close_return(c, ERR_FRAME_ENC, FRM_TOK, "illegal tok len");
+    const uint64_t act_tok_len = MIN(tok_len, (uint64_t)(end - *pos));
 
     uint8_t tok[MAX_TOK_LEN];
-    if (unlikely(tok_len > sizeof(tok)))
-        err_close_return(c, ERR_FRAME_ENC, FRM_TOK, "max tok_len is %u, got %u",
-                         sizeof(tok), tok_len);
-    decb_chk(tok, pos, end, (uint16_t)tok_len, c, FRM_TOK);
+    decb_chk(tok, pos, end, (uint16_t)act_tok_len, c, FRM_TOK);
 
     warn(INF, FRAM_IN "NEW_TOKEN" NRM " len=%" PRIu64 " tok=%s", tok_len,
          hex2str(tok, tok_len, MAX_TOK_LEN));
+
+    if (unlikely(tok_len > (uint64_t)(end - *pos)))
+        err_close_return(c, ERR_FRAME_ENC, FRM_TOK, "illegal tok len");
 
     // TODO: actually do something with the token
 
