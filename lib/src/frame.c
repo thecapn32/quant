@@ -931,25 +931,13 @@ dec_new_cid_frame(const uint8_t ** pos,
     struct cid dcid = {.seq = 0, .has_srt = true};
     decv_chk(&dcid.seq, pos, end, c, FRM_CID);
     decv_chk(&dcid.rpt, pos, end, c, FRM_CID);
-
-    if (unlikely(dcid.rpt > dcid.seq))
-        err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_CID, "illegal rpt %u",
-                         dcid.rpt);
-
     dec1_chk(&dcid.len, pos, end, c, FRM_CID);
-
-    if (unlikely(dcid.len < CID_LEN_MIN || dcid.len > CID_LEN_MAX))
-        err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_CID,
-                         "illegal cid len %u", dcid.len);
-
     decb_chk(dcid.id, pos, end, dcid.len, c, FRM_CID);
     decb_chk(dcid.srt, pos, end, sizeof(dcid.srt), c, FRM_CID);
 
     const bool dup =
 #ifndef NO_MIGRATION
         splay_find(cids_by_seq, &c->dcids_by_seq, &dcid);
-    if (dup == false)
-        add_dcid(c, &dcid);
 #else
         false;
 #endif
@@ -960,6 +948,21 @@ dec_new_cid_frame(const uint8_t ** pos,
          dcid.seq, dcid.rpt, dcid.len, cid2str(&dcid),
          hex2str(dcid.srt, sizeof(dcid.srt), SRT_LEN),
          dup ? " [" RED "dup" NRM "]" : "");
+
+    if (unlikely(splay_count(&c->dcids_by_seq) >= c->tp_in.act_cid_lim))
+        err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_CID, "illegal seq %u",
+                         dcid.seq);
+
+    if (unlikely(dcid.rpt > dcid.seq))
+        err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_CID, "illegal rpt %u",
+                         dcid.rpt);
+
+    if (unlikely(dcid.len < CID_LEN_MIN || dcid.len > CID_LEN_MAX))
+        err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_CID, "illegal len %u",
+                         dcid.len);
+
+    if (dup == false)
+        add_dcid(c, &dcid);
 
     // FIXME: retire cids
 

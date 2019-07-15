@@ -33,6 +33,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 
@@ -500,7 +501,8 @@ static inline bool __attribute__((
 #ifndef NO_MIGRATION
     const struct cid * const max_scid =
         splay_max(cids_by_seq, &c->scids_by_seq);
-    return splay_count(&c->scids_by_seq) <= c->tp_out.act_cid_lim ||
+    return splay_count(&c->scids_by_seq) <
+               MIN(c->tp_out.act_cid_lim, c->tp_in.act_cid_lim) ||
            (max_scid && c->max_cid_seq_out < max_scid->seq);
 #else
     return false;
