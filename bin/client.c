@@ -28,6 +28,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -39,6 +40,7 @@
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/uio.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -328,6 +330,35 @@ static void free_sl(void)
 }
 
 
+static void __attribute__((nonnull))
+write_object(struct stream_entry * const se)
+{
+    char * const slash = strrchr(se->url, '/');
+    if (slash && *(slash + 1) == 0)
+        // this URL ends in a slash, so strip that to name the file
+        *slash = 0;
+
+    const int fd =
+        open(*basename(se->url) == 0 ? "index.html" : basename(se->url),
+             O_CREAT | O_WRONLY | O_CLOEXEC, S_IRUSR | S_IWUSR | S_IRGRP);
+    ensure(fd != -1, "cannot open %s", basename(se->url));
+
+    struct iovec vec[IOV_MAX];
+    struct w_iov * v = sq_first(&se->rep);
+    int i = 0;
+    while (v) {
+        vec[i].iov_base = v->buf;
+        vec[i].iov_len = v->len;
+        if (++i == IOV_MAX || sq_next(v, next) == 0) {
+            ensure(writev(fd, vec, i) != -1, "cannot writev");
+            i = 0;
+        }
+        v = sq_next(v, next);
+    }
+    close(fd);
+}
+
+
 int main(int argc, char * argv[])
 {
 #ifndef NDEBUG
@@ -480,26 +511,14 @@ int main(int argc, char * argv[])
             // retrieve the TX'ed request
             q_stream_get_written(se->s, &se->req);
 
-            char * const slash = strrchr(se->url, '/');
-            if (slash && *(slash + 1) == 0)
-                // this URL ends in a slash, so strip that to name the file
-                *slash = 0;
-            int fd = 0;
-            if (write_files) {
-                fd = open(*basename(se->url) == 0 ? "index.html"
-                                                  : basename(se->url),
-                          O_CREAT | O_WRONLY | O_CLOEXEC,
-                          S_IRUSR | S_IWUSR | S_IRGRP);
-                ensure(fd != -1, "cannot open %s", basename(se->url));
-            }
+            if (write_files)
+                write_object(se);
 
             // save the object, and print its first three packets to stdout
             struct w_iov * v;
             uint32_t n = 0;
             sq_foreach (v, &se->rep, next) {
                 const bool is_last = v == sq_last(&se->rep, w_iov, next);
-                if (write_files)
-                    ensure(write(fd, v->buf, v->len) != -1, "cannot write");
                 if (w_iov_sq_cnt(&se->rep) > 100 || reps > 1)
                     // don't print large responses, or repeated ones
                     continue;
@@ -528,8 +547,6 @@ int main(int argc, char * argv[])
                     printf(".");
                 n++;
             }
-            if (write_files)
-                close(fd);
 
             q_free_stream(se->s);
             free_sl_head();
