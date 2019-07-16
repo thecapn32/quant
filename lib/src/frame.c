@@ -1366,7 +1366,10 @@ void enc_ack_frame(uint8_t ** pos,
                              : c->tp_out.ack_del_exp;
     const uint64_t ack_delay =
         (uint64_t)(
-            (uint32_t)((ev_now() - diet_timestamp(b)) * USECS_PER_SEC)) >>
+#ifdef PARTICLE
+            (uint32_t)
+#endif
+                ((ev_now() - diet_timestamp(b)) * USECS_PER_SEC)) >>
         ade;
     encv(pos, end, ack_delay);
 
