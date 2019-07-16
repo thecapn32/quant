@@ -812,7 +812,7 @@ dec_data_blocked_frame(const uint8_t ** pos,
     // because do_conn_fc() only sets this when increasing the FC window
     c->tx_max_data = true;
 
-    return false;
+    return true;
 }
 
 
@@ -1238,12 +1238,11 @@ bool dec_frames(struct q_conn * const c,
                              pos - v->buf);
         }
 
-        if (unlikely(ok == false)) {
+        if (unlikely(ok == false))
             // there was an error parsing a frame
-            warn(ERR, "error parsing 0x%02x frame at pos %lu", type,
-                 pos - v->buf);
-            return false;
-        }
+            err_close_return(c, ERR_FRAME_ENC, type,
+                             "error parsing 0x%02x frame at pos %lu", type,
+                             pos - v->buf);
 
         // record this frame type in the meta data
         track_frame(m, type);
