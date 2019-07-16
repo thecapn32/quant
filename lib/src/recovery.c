@@ -231,6 +231,8 @@ in_persistent_cong(struct pn_space * const pn __attribute__((unused)),
 static void remove_from_in_flight(const struct pkt_meta * const m)
 {
     struct q_conn * const c = m->pn->c;
+    ensure(c->rec.in_flight >= m->udp_len, "in_flight underrun %" PRIu64,
+           m->udp_len - c->rec.in_flight);
     c->rec.in_flight -= m->udp_len;
     if (m->ack_eliciting)
         c->rec.ae_in_flight--;
@@ -630,6 +632,9 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
                 pm_by_nr_del(pn->sent_pkts, m_rtx);
                 m->hdr.nr = m_rtx->hdr.nr;
                 m_rtx->hdr.nr = acked_nr;
+                const uint16_t acked_udp_len = m->udp_len;
+                m->udp_len = m_rtx->udp_len;
+                m_rtx->udp_len = acked_udp_len;
                 pm_by_nr_ins(pn->sent_pkts, m);
                 m = m_rtx;
                 // XXX caller will not be aware that we mucked around with m!
