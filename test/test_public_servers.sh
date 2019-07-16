@@ -88,6 +88,12 @@ function test_server {
     local cache="/tmp/$script.$pid.$1.cache"
     bin/client $opts -s "$cache" ${info[1]} \
         "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.1rtt" 2>&1 ; \
+
+    if ! grep -E -q 'RX.*len=' "$log_base.1rtt"; then
+        # server seems down, skip the rest of the tests
+        return
+    fi
+
     bin/client $opts -s "$cache" ${info[1]} \
         "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.0rtt" 2>&1 ; \
     [ -z "$benchmarking" ] && rm -f "$cache" &
@@ -200,6 +206,7 @@ function analyze {
     check_fail "$1" "$log_strip" "$log"
 
     grep -E -q 'RX.*len=' "$log_strip" && echo \* > "$ret_base.live"
+    [ ! -s "$ret_base.live" ] && return
 
     perl -n -e 'BEGIN{$v=-1};
                 /0xbabababa, retrying with/ and $v=1;
