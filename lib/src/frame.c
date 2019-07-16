@@ -668,9 +668,8 @@ dec_close_frame(const uint8_t type,
              type, err_code ? RED : NRM, err_code, reas_len,
              err_code ? RED : NRM, (int)reas_len, reas_phr);
 
-    if (unlikely(reas_len > (uint64_t)(end - *pos)))
-        err_close_return(c, ERR_FRAME_ENC, type, "illegal reason len %u",
-                         reas_len);
+    if (unlikely(reas_len != act_reas_len))
+        err_close_return(c, ERR_FRAME_ENC, type, "illegal reason len");
 
     if (c->state == conn_drng)
         ev_feed_event(&c->closing_alarm, 0);
@@ -950,7 +949,7 @@ dec_new_cid_frame(const uint8_t ** pos,
          hex2str(dcid.srt, sizeof(dcid.srt), SRT_LEN),
          dup ? " [" RED "dup" NRM "]" : "");
 
-
+#ifndef NO_MIGRATION
     const uint64_t max_act_cids =
         c->tp_in.act_cid_lim + (c->tp_out.pref_addr.cid.len ? 1 : 0);
     if (unlikely(splay_count(&c->dcids_by_seq) > max_act_cids))
@@ -969,7 +968,11 @@ dec_new_cid_frame(const uint8_t ** pos,
     if (dup == false)
         add_dcid(c, &dcid);
 
-    // FIXME: retire cids
+        // FIXME: retire cids
+#else
+    err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_CID,
+                     "migration disabled but got NEW_CONNECTION_ID");
+#endif
 
     return true;
 }
@@ -1055,7 +1058,7 @@ dec_new_token_frame(const uint8_t ** pos,
     warn(INF, FRAM_IN "NEW_TOKEN" NRM " len=%" PRIu64 " tok=%s", tok_len,
          hex2str(tok, tok_len, MAX_TOK_LEN));
 
-    if (unlikely(tok_len > (uint64_t)(end - *pos)))
+    if (unlikely(tok_len != act_tok_len))
         err_close_return(c, ERR_FRAME_ENC, FRM_TOK, "illegal tok len");
 
     // TODO: actually do something with the token
