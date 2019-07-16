@@ -144,7 +144,7 @@ function bench_server {
     [ "$s" = "ngx_quic" ] && obj=5MB.png
     [ "$s" = "lsquic" ] && host=http3check.net && prefix=test/
 
-    h2=$({ time -p curl -k -s -o "$h2_out" --max-time 10 --connect-timeout 2 \
+    h2=$({ time -p curl -k -s -o "$h2_out" --max-time 20 --connect-timeout 2 \
                  "https://$host:$port/$prefix$obj$ext"; } 2>&1)
     h2=$(echo "$h2" | fmt | cut -d' ' -f2)
     h2_size=$(stat -q "$h2_out" | cut -d' ' -f8)
@@ -153,7 +153,7 @@ function bench_server {
         echo "$h2" > "$ret_base.t_h2"
 
         local cache="/tmp/$script.$pid.$1.cache"
-        local opts="-i $iface -t3 -v0 -l /dev/null"
+        local opts="-i $iface -t3 -v3 -l /dev/null"
         local hq_out="$log_base.hq.out"
         local wd hq
         ext=""
@@ -168,7 +168,8 @@ function bench_server {
         wd=$(pwd)
         pushd "$hq_out" > /dev/null || exit
         hq=$({ time -p $wd/bin/client $opts ${info[1]} -s "$cache" -w \
-                     "https://$host:$port/$prefix$obj$ext"; } 2>&1)
+                     "https://$host:$port/$prefix$obj$ext" \
+                     > "$log_base.log" 2>&1 ; } 2>&1)
         hq=$(echo "$hq" | fmt | cut -d' ' -f2)
         hq_size=$(stat -q "$obj$hqext" | cut -d' ' -f8)
         popd > /dev/null || exit
