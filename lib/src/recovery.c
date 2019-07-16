@@ -562,7 +562,9 @@ void on_ack_received_1(struct pkt_meta * const lg_ack, const uint64_t ack_del)
 
     if (is_ack_eliciting(&lg_ack->pn->tx_frames)) {
         c->rec.latest_rtt = ev_now() - lg_ack->tx_t;
-        update_rtt(c, (ev_tstamp)ack_del / USECS_PER_SEC);
+        update_rtt(c, likely(pn->type == pn_data)
+                          ? (ev_tstamp)ack_del / USECS_PER_SEC
+                          : 0);
     }
 
     // ProcessECN() is done in dec_ack_frame()
