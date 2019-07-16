@@ -132,6 +132,11 @@ function bench_server {
     host=${info[0]}
     port=443
 
+    if ! grep -E -q 'RX.*len=' "/tmp/$script.$pid.$1.log.1rtt"; then
+        # server seems down, skip benchmark
+        return
+    fi
+
     # special cases for some servers
     [ "$s" = "winquic" ] && ext=.txt
     [ "$s" = "quic-go" ] && prefix=dynamic/
@@ -169,7 +174,8 @@ function bench_server {
         popd > /dev/null || exit
         rm -rf "$hq_out" "$cache"
 
-        if [ -n "$hq_size" ] && [ "$hq_size" -ge $size ]; then
+        if [ -n "$h2_size" ] && [ -n "$hq_size" ] && \
+            [ "$hq_size" -ge $size ]; then
             echo "$hq" > "$ret_base.t_hq"
             perl -mList::Util=max -e "print 'T' if abs($hq - $h2) <= max($hq, $h2) * .1" > "$ret_base.perf"
         fi
