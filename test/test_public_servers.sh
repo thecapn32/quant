@@ -71,7 +71,7 @@ fi
 
 pid=$$
 script=$(basename -s .sh "$0")
-rm -f /tmp/"$script"*
+rm -rf /tmp/"$script"*
 
 export ASAN_OPTIONS=strict_string_checks=1:strict_init_order=1:detect_stack_use_after_return=1:detect_leaks=1:check_initialization_order=1:sleep_before_dying=30:alloc_dealloc_mismatch=1:detect_invalid_pointer_pairs=1:print_stacktrace=1:halt_on_error=1
 export UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1:suppressions=../misc/gcc-ubsan-suppressions.txt
@@ -175,9 +175,9 @@ function bench_server {
         rm -rf "$hq_out" "$cache"
 
         if [ -n "$h2_size" ] && [ -n "$hq_size" ] && \
-            [ "$hq_size" -ge $size ]; then
+            [ "$hq_size" -ge "$size" ]; then
             echo "$hq" > "$ret_base.t_hq"
-            perl -mList::Util=max -e "print 'T' if abs($hq - $h2) <= max($hq, $h2) * .1" > "$ret_base.perf"
+            perl -e "print 'T' if $h2 * 1.1 >= $hq" > "$ret_base.perf"
         fi
     fi
 
