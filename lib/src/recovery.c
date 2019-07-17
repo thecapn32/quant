@@ -472,19 +472,24 @@ track_acked_pkts(struct w_iov * const v, struct pkt_meta * const m)
     const uint8_t * pos = v->buf + m->ack_frm_pos;
     const uint8_t * const end = v->buf + v->len;
 
+    uint64_t lg_ack = 0;
+    decv(&lg_ack, &pos, end);
+    uint64_t ack_delay = 0;
+    decv(&ack_delay, &pos, end);
+    uint64_t ack_rng_cnt = 0;
+    decv(&ack_rng_cnt, &pos, end);
+
     // this is a similar loop as in dec_ack_frame() - keep changes in sync
-    uint64_t lg_ack_in_block = m->lg_acked;
-    for (uint64_t n = m->ack_rng_cnt + 1; n > 0; n--) {
+    for (uint64_t n = ack_rng_cnt + 1; n > 0; n--) {
         uint64_t ack_block_len = 0;
         decv(&ack_block_len, &pos, end);
         diet_remove_ival(
             &m->pn->recv,
-            &(const struct ival){.lo = lg_ack_in_block - ack_block_len,
-                                 .hi = lg_ack_in_block});
+            &(const struct ival){.lo = lg_ack - ack_block_len, .hi = lg_ack});
         if (n > 1) {
             uint64_t gap = 0;
             decv(&gap, &pos, end);
-            lg_ack_in_block -= ack_block_len + gap + 2;
+            lg_ack -= ack_block_len + gap + 2;
         }
     }
 

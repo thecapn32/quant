@@ -1349,14 +1349,15 @@ void enc_ack_frame(uint8_t ** pos,
                    struct pkt_meta * const m,
                    struct pn_space * const pn)
 {
+    m->ack_frm_pos = (uint16_t)(*pos - start);
+
     const uint8_t type =
         likely(pn->ect0_cnt || pn->ect1_cnt || pn->ce_cnt) ? FRM_ACE : FRM_ACK;
     enc1(pos, end, type);
 
-    struct ival * b = diet_max_ival(&pn->recv);
-    ensure(b, "nothing to ACK");
-    m->lg_acked = b->hi;
-    encv(pos, end, m->lg_acked);
+    const struct ival * const first_rng = diet_max_ival(&pn->recv);
+    ensure(first_rng, "nothing to ACK");
+    encv(pos, end, first_rng->hi);
 
     // handshake pkts always use the default ACK delay exponent
     struct q_conn * const c = pn->c;
@@ -1368,15 +1369,14 @@ void enc_ack_frame(uint8_t ** pos,
 #ifdef PARTICLE
             (uint32_t)
 #endif
-                ((ev_now() - diet_timestamp(b)) * USECS_PER_SEC)) >>
+                ((ev_now() - diet_timestamp(first_rng)) * USECS_PER_SEC)) >>
         ade;
     encv(pos, end, ack_delay);
-
-    m->ack_rng_cnt = diet_cnt(&pn->recv) - 1;
-    encv(pos, end, m->ack_rng_cnt);
-    m->ack_frm_pos = (uint16_t)(*pos - start);
+    const uint64_t ack_rng_cnt = diet_cnt(&pn->recv) - 1;
+    encv(pos, end, ack_rng_cnt);
 
     uint64_t prev_lo = 0;
+    struct ival * b;
     diet_foreach_rev (b, diet, &pn->recv) {
         uint64_t gap = 0;
         if (prev_lo) {
@@ -1397,8 +1397,8 @@ void enc_ack_frame(uint8_t ** pos,
                               " delay=%" PRIu64 " (%" PRIu64
                               " usec) cnt=%" PRIu64 " block=%" PRIu64
                               " [" FMT_PNR_IN ".." FMT_PNR_IN "]",
-                     type, type == FRM_ACE ? "ECN" : "", m->lg_acked, ack_delay,
-                     ack_delay << ade, m->ack_rng_cnt, ack_block, b->lo,
+                     type, type == FRM_ACE ? "ECN" : "", first_rng->hi,
+                     ack_delay, ack_delay << ade, ack_rng_cnt, ack_block, b->lo,
                      shorten_ack_nr(b->hi, ack_block));
 
         } else {
@@ -1413,8 +1413,9 @@ void enc_ack_frame(uint8_t ** pos,
                               " delay=%" PRIu64 " (%" PRIu64
                               " usec) cnt=%" PRIu64 " block=%" PRIu64
                               " [" FMT_PNR_IN "]",
-                     type, type == FRM_ACE ? "ECN" : "", m->lg_acked, ack_delay,
-                     ack_delay << ade, m->ack_rng_cnt, ack_block, m->lg_acked);
+                     type, type == FRM_ACE ? "ECN" : "", first_rng->hi,
+                     ack_delay, ack_delay << ade, ack_rng_cnt, ack_block,
+                     first_rng->hi);
         }
 #endif
         encv(pos, end, ack_block);
