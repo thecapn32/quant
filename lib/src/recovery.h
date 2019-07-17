@@ -41,6 +41,26 @@ struct q_conn;
 struct pn_space;
 
 
+#ifndef PARTICLE
+typedef uint64_t cc_state_t;
+#else
+typedef uint32_t cc_state_t;
+#endif
+
+
+struct cc_state {
+    ev_tstamp latest_rtt; // latest_rtt
+    ev_tstamp min_rtt;    // min_rtt
+    ev_tstamp rttvar;     // rttvar
+    ev_tstamp srtt;       // smoothed_rtt
+
+    cc_state_t ae_in_flight; // nr of ACK-eliciting pkts inflight
+    cc_state_t cwnd;         // congestion_window
+    cc_state_t in_flight;    // bytes_in_flight
+    cc_state_t ssthresh;     // sshtresh
+};
+
+
 struct recovery {
     // LD state
     ev_timer ld_alarm;   // loss_detection_timer
@@ -54,46 +74,18 @@ struct recovery {
 
     // largest_sent_packet -> pn->lg_sent
     // largest_acked_packet -> pn->lg_acked
-
-    ev_tstamp latest_rtt; // latest_rtt
-    ev_tstamp srtt;       // smoothed_rtt
-    ev_tstamp rttvar;     // rttvar
-    ev_tstamp min_rtt;    // min_rtt
-
     // max_ack_delay -> c->tp_out.max_ack_del
 
     // CC state
-    ev_tstamp rec_start_t; // recovery_start_time
-#ifndef PARTICLE
-    uint64_t ce_cnt;       // ecn_ce_counter
-    uint64_t in_flight;    // bytes_in_flight
-    uint64_t ae_in_flight; // nr of ACK-eliciting pkts inflight
-    uint64_t cwnd;         // congestion_window
-    uint64_t ssthresh;     // sshtresh
-#else
-    uint32_t ce_cnt;
-    uint32_t in_flight;
-    uint32_t ae_in_flight;
-    uint32_t cwnd;
-    uint32_t ssthresh;
-#endif
+    ev_tstamp rec_start_t;   // recovery_start_time
+    cc_state_t ae_in_flight; // nr of ACK-eliciting pkts inflight
 
-#ifndef NDEBUG
-    // these are only used in log_cc below
-    uint64_t prev_in_flight;
-    uint64_t prev_cwnd;
-    uint64_t prev_ssthresh;
-    ev_tstamp prev_srtt;
-    ev_tstamp prev_rttvar;
-#endif
+    struct cc_state cur;
+    struct cc_state prev;
 };
 
 
-#ifndef NDEBUG
 extern void __attribute__((nonnull)) log_cc(struct q_conn * const c);
-#else
-#define log_cc(...)
-#endif
 
 extern void __attribute__((nonnull)) init_rec(struct q_conn * const c);
 

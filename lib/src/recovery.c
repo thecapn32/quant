@@ -134,38 +134,36 @@ earliest_loss_t_pn(struct q_conn * const c)
 void log_cc(struct q_conn * const c)
 {
     const uint64_t ssthresh =
-        c->rec.ssthresh == UINT64_MAX ? 0 : c->rec.ssthresh;
+        c->rec.cur.ssthresh == UINT64_MAX ? 0 : c->rec.cur.ssthresh;
     const int64_t delta_in_flight =
-        (int64_t)c->rec.in_flight - (int64_t)c->rec.prev_in_flight;
-    const int64_t delta_cwnd = (int64_t)c->rec.cwnd - (int64_t)c->rec.prev_cwnd;
+        (int64_t)c->rec.cur.in_flight - (int64_t)c->rec.prev.in_flight;
+    const int64_t delta_cwnd =
+        (int64_t)c->rec.cur.cwnd - (int64_t)c->rec.prev.cwnd;
     const int64_t delta_ssthresh =
-        (int64_t)ssthresh - (int64_t)c->rec.prev_ssthresh;
-    const ev_tstamp delta_srtt = c->rec.srtt - c->rec.prev_srtt;
-    const ev_tstamp delta_rttvar = c->rec.rttvar - c->rec.prev_rttvar;
+        (int64_t)ssthresh - (int64_t)c->rec.prev.ssthresh;
+    const ev_tstamp delta_srtt = c->rec.cur.srtt - c->rec.prev.srtt;
+    const ev_tstamp delta_rttvar = c->rec.cur.rttvar - c->rec.prev.rttvar;
     if (delta_in_flight || delta_cwnd || delta_ssthresh ||
         !is_zero(delta_srtt) || !is_zero(delta_rttvar)) {
-        qlog_recovery("METRIC_UPDATE", "DEFAULT", c);
         warn(DBG,
              "%s conn %s: in_flight=%" PRIu64 " (%s%+" PRId64 NRM "), cwnd" NRM
              "=%" PRIu64 " (%s%+" PRId64 NRM "), ssthresh=%" PRIu64
              " (%s%+" PRId64 NRM "), srtt=%.3f (%s%+.3f" NRM
              "), rttvar=%.3f (%s%+.3f" NRM ")",
-             conn_type(c), cid2str(c->scid), c->rec.in_flight,
+             conn_type(c), cid2str(c->scid), c->rec.cur.in_flight,
              delta_in_flight > 0 ? GRN : delta_in_flight < 0 ? RED : "",
-             delta_in_flight, c->rec.cwnd,
+             delta_in_flight, c->rec.cur.cwnd,
              delta_cwnd > 0 ? GRN : delta_cwnd < 0 ? RED : "", delta_cwnd,
              ssthresh, delta_ssthresh > 0 ? GRN : delta_ssthresh < 0 ? RED : "",
-             delta_ssthresh, c->rec.srtt,
+             delta_ssthresh, c->rec.cur.srtt,
              delta_srtt > 0 ? GRN : delta_srtt < 0 ? RED : "", delta_srtt,
-             c->rec.rttvar,
+             c->rec.cur.rttvar,
              delta_rttvar > 0 ? GRN : delta_rttvar < 0 ? RED : "",
              delta_rttvar);
-        c->rec.prev_in_flight = c->rec.in_flight;
-        c->rec.prev_cwnd = c->rec.cwnd;
-        c->rec.prev_ssthresh = ssthresh;
-        c->rec.prev_srtt = c->rec.srtt;
-        c->rec.prev_rttvar = c->rec.rttvar;
     }
+
+    qlog_recovery("METRIC_UPDATE", "DEFAULT", c);
+    c->rec.prev = c->rec.cur;
 }
 
 void set_ld_timer(struct q_conn * const c)
@@ -195,7 +193,8 @@ void set_ld_timer(struct q_conn * const c)
         type = "crypto RTX";
 #endif
         ev_tstamp to =
-            2 * (unlikely(is_zero(c->rec.srtt)) ? kInitialRtt : c->rec.srtt);
+            2 * (unlikely(is_zero(c->rec.cur.srtt)) ? kInitialRtt
+                                                    : c->rec.cur.srtt);
         to = MAX(to, kGranularity) * (1 << c->rec.crypto_cnt);
         c->rec.ld_alarm.repeat = c->rec.last_sent_crypto_t + to;
         goto set_to;
@@ -214,7 +213,7 @@ void set_ld_timer(struct q_conn * const c)
 #ifdef DEBUG_TIMERS
     type = "PTO";
 #endif
-    ev_tstamp to = c->rec.srtt + MAX(4 * c->rec.rttvar, kGranularity) +
+    ev_tstamp to = c->rec.cur.srtt + MAX(4 * c->rec.cur.rttvar, kGranularity) +
                    (ev_tstamp)c->tp_out.max_ack_del / MSECS_PER_SEC;
     to *= 1 << c->rec.pto_cnt;
     c->rec.ld_alarm.repeat = c->rec.last_sent_ack_elicit_t + to;
@@ -241,8 +240,9 @@ void congestion_event(struct q_conn * const c, const ev_tstamp sent_t)
         return;
 
     c->rec.rec_start_t = ev_now();
-    c->rec.cwnd /= kLossReductionDivisor;
-    c->rec.ssthresh = c->rec.cwnd = MAX(c->rec.cwnd, kMinimumWindow);
+    c->rec.cur.cwnd /= kLossReductionDivisor;
+    c->rec.cur.ssthresh = c->rec.cur.cwnd =
+        MAX(c->rec.cur.cwnd, kMinimumWindow);
 }
 
 
@@ -255,7 +255,7 @@ in_persistent_cong(struct pn_space * const pn __attribute__((unused)),
     // // see InPersistentCongestion() pseudo code
     // const ev_tstamp cong_period =
     //     kPersistentCongestionThreshold *
-    //     (c->rec.srtt + MAX(4 * c->rec.rttvar, kGranularity) +
+    //     (c->rec.cur.srtt + MAX(4 * c->rec.cur.rttvar, kGranularity) +
     //      (ev_tstamp)c->tp_out.max_ack_del / MSECS_PER_SEC);
 
     // const struct ival * const i = diet_find(&pn->lost, lg_lost);
@@ -270,9 +270,9 @@ in_persistent_cong(struct pn_space * const pn __attribute__((unused)),
 static void remove_from_in_flight(const struct pkt_meta * const m)
 {
     struct q_conn * const c = m->pn->c;
-    ensure(c->rec.in_flight >= m->udp_len, "in_flight underrun %" PRIu64,
-           m->udp_len - c->rec.in_flight);
-    c->rec.in_flight -= m->udp_len;
+    ensure(c->rec.cur.in_flight >= m->udp_len, "in_flight underrun %" PRIu64,
+           m->udp_len - c->rec.cur.in_flight);
+    c->rec.cur.in_flight -= m->udp_len;
     if (m->ack_eliciting)
         c->rec.ae_in_flight--;
 }
@@ -356,7 +356,8 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
 
     // Minimum time of kGranularity before packets are deemed lost.
     const ev_tstamp loss_del =
-        MAX(kGranularity, kTimeThreshold * MAX(c->rec.latest_rtt, c->rec.srtt));
+        MAX(kGranularity,
+            kTimeThreshold * MAX(c->rec.cur.latest_rtt, c->rec.cur.srtt));
 
     // Packets sent before this time are deemed lost.
     const ev_tstamp lost_send_t = ev_now() - loss_del;
@@ -438,7 +439,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
     if (do_cc && in_flight_lost) {
         congestion_event(c, lg_lost_tx_t);
         if (in_persistent_cong(pn, lg_lost))
-            c->rec.cwnd = kMinimumWindow;
+            c->rec.cur.cwnd = kMinimumWindow;
     }
 
     log_cc(c);
@@ -560,7 +561,7 @@ void on_pkt_sent(struct pkt_meta * const m)
         }
 
         // OnPacketSentCC
-        c->rec.in_flight += m->udp_len;
+        c->rec.cur.in_flight += m->udp_len;
     }
 
     // we call set_ld_timer(c) once for a TX'ed burst in do_tx() instead of here
@@ -571,27 +572,29 @@ static void __attribute__((nonnull))
 update_rtt(struct q_conn * const c, ev_tstamp ack_del)
 {
     // see UpdateRtt() pseudo code
-    if (unlikely(is_zero(c->rec.srtt))) {
-        c->rec.min_rtt = c->rec.srtt = c->rec.latest_rtt;
-        c->rec.rttvar = c->rec.latest_rtt / 2;
+    if (unlikely(is_zero(c->rec.cur.srtt))) {
+        c->rec.cur.min_rtt = c->rec.cur.srtt = c->rec.cur.latest_rtt;
+        c->rec.cur.rttvar = c->rec.cur.latest_rtt / 2;
         return;
     }
 
-    c->rec.min_rtt = MIN(c->rec.min_rtt, c->rec.latest_rtt);
+    c->rec.cur.min_rtt = MIN(c->rec.cur.min_rtt, c->rec.cur.latest_rtt);
     ack_del = MIN(ack_del, (ev_tstamp)c->tp_out.max_ack_del / MSECS_PER_SEC);
 
-    const ev_tstamp adj_rtt = c->rec.latest_rtt > c->rec.min_rtt + ack_del
-                                  ? c->rec.latest_rtt - ack_del
-                                  : c->rec.latest_rtt;
+    const ev_tstamp adj_rtt =
+        c->rec.cur.latest_rtt > c->rec.cur.min_rtt + ack_del
+            ? c->rec.cur.latest_rtt - ack_del
+            : c->rec.cur.latest_rtt;
 
-    c->rec.rttvar = .75 * c->rec.rttvar + .25 *
+    c->rec.cur.rttvar =
+        .75 * c->rec.cur.rttvar + .25 *
 #ifndef PARTICLE
-                                              fabs
+                                      fabs
 #else
-                                              fabsf
+                                      fabsf
 #endif
-                                              (c->rec.srtt - adj_rtt);
-    c->rec.srtt = .875 * c->rec.srtt + .125 * adj_rtt;
+                                      (c->rec.cur.srtt - adj_rtt);
+    c->rec.cur.srtt = .875 * c->rec.cur.srtt + .125 * adj_rtt;
 }
 
 
@@ -605,7 +608,7 @@ void on_ack_received_1(struct pkt_meta * const lg_ack, const uint64_t ack_del)
                        : MAX(pn->lg_acked, lg_ack->hdr.nr);
 
     if (is_ack_eliciting(&lg_ack->pn->tx_frames)) {
-        c->rec.latest_rtt = ev_now() - lg_ack->t;
+        c->rec.cur.latest_rtt = ev_now() - lg_ack->t;
         update_rtt(c, likely(pn->type == pn_data)
                           ? (ev_tstamp)ack_del / USECS_PER_SEC
                           : 0);
@@ -638,10 +641,10 @@ on_pkt_acked_cc(const struct pkt_meta * const m)
 
     // TODO: IsAppLimited check
 
-    if (c->rec.cwnd < c->rec.ssthresh)
-        c->rec.cwnd += m->udp_len;
+    if (c->rec.cur.cwnd < c->rec.cur.ssthresh)
+        c->rec.cur.cwnd += m->udp_len;
     else
-        c->rec.cwnd += (kMaxDatagramSize * m->udp_len) / c->rec.cwnd;
+        c->rec.cur.cwnd += (kMaxDatagramSize * m->udp_len) / c->rec.cur.cwnd;
 }
 
 
@@ -734,14 +737,14 @@ void init_rec(struct q_conn * const c)
     // zero all, then reset
     memset(&c->rec, 0, sizeof(c->rec));
 
-    c->rec.cwnd = kInitialWindow;
-    c->rec.ssthresh =
+    c->rec.cur.cwnd = kInitialWindow;
+    c->rec.cur.ssthresh =
 #ifndef PARTICLE
         UINT64_MAX;
 #else
         UINT32_MAX;
 #endif
-    c->rec.min_rtt = HUGE_VAL;
+    c->rec.cur.min_rtt = HUGE_VAL;
     c->rec.ld_alarm.data = c;
     ev_init(&c->rec.ld_alarm, on_ld_timeout);
 }

@@ -142,7 +142,7 @@ struct cid {
     uint8_t retired : 1;     ///< Did we retire this CID?
     uint8_t has_srt : 1;     ///< Is the SRT field valid?
     uint8_t : 6;
-    uint8_t _unused[4];
+    uint8_t _unused[2];
 };
 
 

@@ -122,10 +122,11 @@ struct transport_params {
     uint64_t max_ack_del;
     uint64_t max_pkt;
     uint64_t act_cid_lim;
-    uint8_t ack_del_exp;
-    bool disable_migration;
     struct pref_addr pref_addr;
     struct cid orig_cid;
+    uint8_t ack_del_exp;
+    bool disable_migration;
+    uint8_t _unused[6];
 };
 
 
@@ -262,6 +263,8 @@ struct q_conn {
 
     struct w_iov_sq txq;
 
+    struct q_conn_info i;
+
     uint64_t err_code;
     uint8_t err_frm;
 #ifndef NO_ERR_REASONS
@@ -269,11 +272,10 @@ struct q_conn {
     char err_reason[MAX_ERR_REASON_LEN];
 #endif
 
-    uint16_t tok_len;
-    uint8_t tok[MAX_TOK_LEN + 2]; // some stacks send ungodly large tokens
-                                  // XXX +2 for alignment
 
-    struct q_conn_info i;
+    uint16_t tok_len;
+    uint8_t tok[MAX_TOK_LEN + 4]; // some stacks send ungodly large tokens
+                                  // XXX +4 for alignment
 };
 
 
@@ -465,12 +467,12 @@ has_wnd(const struct q_conn * const c, const uint16_t len)
         return false;
     }
 
-    if (unlikely(c->rec.in_flight + len >= c->rec.cwnd)) {
+    if (unlikely(c->rec.cur.in_flight + len >= c->rec.cur.cwnd)) {
         warn(DBG,
              "%s conn %s cwnd lim reached: in_flight %" PRIu64
              " + %u >= %" PRIu64,
-             conn_type(c), cid2str(c->scid), c->rec.in_flight, len,
-             c->rec.cwnd);
+             conn_type(c), cid2str(c->scid), c->rec.cur.in_flight, len,
+             c->rec.cur.cwnd);
         return false;
     }
 

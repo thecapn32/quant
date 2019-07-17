@@ -844,6 +844,7 @@ dec_stop_sending_frame(const uint8_t ** pos,
                        const uint8_t * const end,
                        const struct pkt_meta * const m)
 {
+    hexdump(*pos, end - *pos);
     struct q_conn * const c = m->pn->c;
     int64_t sid = 0;
     decv_chk((uint64_t *)&sid, pos, end, c, FRM_STP);

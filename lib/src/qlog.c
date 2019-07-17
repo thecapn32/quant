@@ -163,23 +163,32 @@ void qlog_recovery(const char * const evt,
     fprintf(qlog, "%s[%" PRIu64 ",\"RECOVERY\",\"%s\",\"%s\",{",
             likely(prev_event) ? "," : "", to_usec(t - qlog_ref_t), evt, trg);
     int prev_metric = 0;
-    if (c->rec.in_flight != c->rec.prev_in_flight)
+    if (c->rec.cur.in_flight != c->rec.prev.in_flight)
         prev_metric = fprintf(qlog, "%s\"bytes_in_flight\":%" PRIu64,
-                              prev_metric ? "," : "", c->rec.in_flight);
-    if (c->rec.cwnd != c->rec.prev_cwnd)
+                              prev_metric ? "," : "", c->rec.cur.in_flight);
+    if (c->rec.cur.cwnd != c->rec.prev.cwnd)
         prev_metric = fprintf(qlog, "%s\"cwnd\":%" PRIu64,
-                              prev_metric ? "," : "", c->rec.cwnd);
-    if (c->rec.ssthresh != c->rec.prev_ssthresh &&
-        c->rec.ssthresh != UINT64_MAX)
+                              prev_metric ? "," : "", c->rec.cur.cwnd);
+    if (c->rec.cur.ssthresh != c->rec.prev.ssthresh &&
+        c->rec.cur.ssthresh != UINT64_MAX)
         prev_metric = fprintf(qlog, "%s\"ssthresh\":%" PRIu64,
-                              prev_metric ? "," : "", c->rec.ssthresh);
-    if (to_usec(c->rec.srtt) != to_usec(c->rec.prev_srtt))
+                              prev_metric ? "," : "", c->rec.cur.ssthresh);
+    if (to_usec(c->rec.cur.srtt) != to_usec(c->rec.prev.srtt))
         prev_metric = fprintf(qlog, "%s\"smoothed_rtt\":%" PRIu64,
-                              prev_metric ? "," : "", to_usec(c->rec.srtt));
-    if (to_usec(c->rec.rttvar) != to_usec(c->rec.prev_rttvar))
+                              prev_metric ? "," : "", to_usec(c->rec.cur.srtt));
+    if (c->rec.cur.min_rtt != HUGE_VAL &&
+        to_usec(c->rec.cur.min_rtt) != to_usec(c->rec.prev.min_rtt))
+        prev_metric =
+            fprintf(qlog, "%s\"min_rtt\":%" PRIu64, prev_metric ? "," : "",
+                    to_usec(c->rec.cur.min_rtt));
+    if (to_usec(c->rec.cur.latest_rtt) != to_usec(c->rec.prev.latest_rtt))
+        prev_metric =
+            fprintf(qlog, "%s\"latest_rtt\":%" PRIu64, prev_metric ? "," : "",
+                    to_usec(c->rec.cur.latest_rtt));
+    if (to_usec(c->rec.cur.rttvar) != to_usec(c->rec.prev.rttvar))
         // prev_metric =
         fprintf(qlog, "%s\"rtt_variance\":%" PRIu64, prev_metric ? "," : "",
-                to_usec(c->rec.rttvar));
+                to_usec(c->rec.cur.rttvar));
     fputs("}]", qlog);
 
     prev_event = true;

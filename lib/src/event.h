@@ -41,14 +41,12 @@
 #endif
 
 #pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wpadded"
 #pragma clang diagnostic ignored "-Wundef"
-#pragma clang diagnostic ignored "-Wunused-value"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wundef"
-#pragma GCC diagnostic ignored "-Wunused-value"
-#include "../deps/libev/ev.h" // IWYU pragma: export
-#pragma GCC diagnostic push
 
+#include "../deps/libev/ev.h" // IWYU pragma: export
+
+#pragma GCC diagnostic push
 #pragma clang diagnostic pop

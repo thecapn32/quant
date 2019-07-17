@@ -1630,8 +1630,8 @@ void enter_closing(struct q_conn * const c)
     if (!ev_is_active(&c->closing_alarm)) {
         // start closing/draining alarm (3 * RTO)
         const ev_tstamp dur =
-            (3 * (is_zero(c->rec.srtt) ? kInitialRtt : c->rec.srtt) +
-             4 * c->rec.rttvar);
+            (3 * (is_zero(c->rec.cur.srtt) ? kInitialRtt : c->rec.cur.srtt) +
+             4 * c->rec.cur.rttvar);
         ev_timer_init(&c->closing_alarm, enter_closed, dur, 0);
 #ifndef FUZZING
         ev_timer_start(&c->closing_alarm);
@@ -1918,10 +1918,10 @@ void free_conn(struct q_conn * const c)
 void conn_info_populate(struct q_conn * const c)
 {
     // fill some q_conn_info fields based on other conn fields
-    c->i.cwnd = c->rec.cwnd;
-    c->i.ssthresh = c->rec.ssthresh;
-    c->i.rtt = c->rec.srtt;
-    c->i.rttvar = c->rec.rttvar;
+    c->i.cwnd = c->rec.cur.cwnd;
+    c->i.ssthresh = c->rec.cur.ssthresh;
+    c->i.rtt = c->rec.cur.srtt;
+    c->i.rttvar = c->rec.cur.rttvar;
 }
 
 
