@@ -63,6 +63,7 @@
 #include "event.h" // IWYU pragma: keep
 #include "pkt.h"
 #include "pn.h"
+#include "qlog.h"
 #include "quic.h"
 #include "recovery.h"
 #include "stream.h"
@@ -109,6 +110,9 @@ static uint64_t num_bufs = 0;
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 int corpus_pkt_dir, corpus_frm_dir;
 #endif
+
+FILE * qlog = 0;
+ev_tstamp qlog_ref_t;
 
 
 /// Run the event loop for the API function @p func with connection @p conn
@@ -650,6 +654,23 @@ struct w_engine * q_init(const char * const ifname,
 #endif
 #endif
 
+    if (conf && conf->qlog && *conf->qlog) {
+        qlog = fopen(conf->qlog, "we");
+        ensure(qlog, "fopen %s", conf->qlog);
+        qlog_ref_t = ev_now();
+        fprintf(
+            qlog,
+            "{"
+            "\"qlog_version\":\"draft-00\","
+            "\"title\":\"%s %s qlog\","
+            "\"traces\":["
+            "{\"configuration\":{\"time_units\":\"us\"},\"common_fields\":{"
+            "\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":%" PRIu64 "},"
+            "\"event_fields\":[\"relative_time\",\"CATEGORY\",\"EVENT_TYPE\","
+            "\"TRIGGER\",\"DATA\"],\"events\":[",
+            quant_name, quant_version, to_usec(qlog_ref_t));
+    }
+
     return w;
 }
 
@@ -784,6 +805,10 @@ void q_cleanup(struct w_engine * const w)
     close(corpus_pkt_dir);
     close(corpus_frm_dir);
 #endif
+    if (qlog) {
+        fputs("]}]}", qlog);
+        fclose(qlog);
+    }
 }
 
 

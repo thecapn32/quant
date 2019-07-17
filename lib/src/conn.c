@@ -55,6 +55,7 @@
 #include "marshall.h"
 #include "pkt.h"
 #include "pn.h"
+#include "qlog.h"
 #include "quic.h"
 #include "recovery.h"
 #include "stream.h"
@@ -349,10 +350,11 @@ tx_vneg_resp(const struct w_sock * const ws,
         if (!is_vneg_vers(ok_vers[j]))
             enc4(&pos, end, ok_vers[j]);
 
-    xv->len = (uint16_t)(pos - xv->buf);
+    mx->udp_len = xv->len = (uint16_t)(pos - xv->buf);
     xv->addr = v->addr;
     xv->flags = v->flags;
     log_pkt("TX", xv, (struct sockaddr *)&xv->addr, 0, 0, 0);
+    qlog_transport("PACKET_SENT", "DEFAULT", xv, mx);
 
 #ifndef FUZZING
     w_tx(ws, &q);
@@ -1112,6 +1114,7 @@ done:
         pn->pkts_rxed_since_last_ack_tx++;
     }
 
+    qlog_transport("PACKET_RECEIVED", "DEFAULT", v, m);
     return true;
 }
 
@@ -1148,6 +1151,7 @@ rx_pkts(struct w_iov_sq * const x,
         v->addr = xv->addr;
         v->flags = xv->flags;
         v->len = xv->len; // this is just so that log_pkt can show the rx len
+        m->t = ev_now();
 
         bool pkt_valid = false;
         const bool is_clnt = w_connected(ws);
@@ -1289,7 +1293,7 @@ rx_pkts(struct w_iov_sq * const x,
                 ensure(zo, "could not calloc");
                 cid_cpy(&zo->cid, &m->hdr.dcid);
                 zo->v = v;
-                zo->t = ev_now();
+                zo->t = m->t;
                 ensure(splay_insert(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo) == 0,
                        "inserted");
                 log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
@@ -1412,7 +1416,7 @@ rx_pkts(struct w_iov_sq * const x,
 
             if (likely(has_pkt_nr(m->hdr.flags, m->hdr.vers))) {
                 struct pn_space * const pn = pn_for_pkt_type(c, m->hdr.type);
-                diet_insert(&pn->recv, m->hdr.nr, ev_now());
+                diet_insert(&pn->recv, m->hdr.nr, m->t);
                 diet_insert(&pn->recv_all, m->hdr.nr, (ev_tstamp)NAN);
             }
             pkt_valid = true;
@@ -1433,6 +1437,8 @@ rx_pkts(struct w_iov_sq * const x,
         goto next;
 
     drop:
+        if (pkt_valid == false)
+            qlog_transport("PACKET_DROPPED", "DEFAULT", v, m);
         free_iov(v, m);
     next:
         if (likely(c)) {

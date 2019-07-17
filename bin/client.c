@@ -117,10 +117,12 @@ static void __attribute__((noreturn, nonnull)) usage(const char * const name,
                                                      const char * const ifname,
                                                      const char * const cache,
                                                      const char * const tls_log,
+                                                     const char * const qlog,
                                                      const bool verify_certs)
 {
     printf("%s [options] URL [URL...]\n", name);
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
+    printf("\t[-q log]\twrite qlog events to file; default %s\n", qlog);
     printf("\t[-s cache]\tTLS 0-RTT state cache; default %s\n", cache);
     printf("\t[-l log]\tlog file for TLS keys; default %s\n", tls_log);
     printf("\t[-t timeout]\tidle timeout in seconds; default %" PRIu64 "\n",
@@ -372,11 +374,12 @@ int main(int argc, char * argv[])
     int ch;
     char cache[MAXPATHLEN] = "/tmp/" QUANT "-session";
     char tls_log[MAXPATHLEN] = "/tmp/" QUANT "-tlslog";
+    char qlog[MAXPATHLEN] = "/tmp/" QUANT "-client.qlog";
     bool verify_certs = false;
     int ret = 0;
 
     while ((ch = getopt(argc, argv,
-                        "hi:v:s:t:l:cu3zb:wr:"
+                        "hi:v:s:t:l:cu3zb:wr:q:"
 #ifndef NO_MIGRATION
                         "n"
 #endif
@@ -387,6 +390,9 @@ int main(int argc, char * argv[])
             break;
         case 's':
             strncpy(cache, optarg, sizeof(cache) - 1);
+            break;
+        case 'q':
+            strncpy(qlog, optarg, sizeof(qlog) - 1);
             break;
         case 't':
             timeout = MIN(600, strtoul(optarg, 0, 10)); // 10 min
@@ -430,7 +436,8 @@ int main(int argc, char * argv[])
         case 'h':
         case '?':
         default:
-            usage(basename(argv[0]), ifname, cache, tls_log, verify_certs);
+            usage(basename(argv[0]), ifname, cache, tls_log, qlog,
+                  verify_certs);
         }
     }
 
@@ -440,6 +447,7 @@ int main(int argc, char * argv[])
                         struct q_conn_conf){.enable_tls_key_updates = flip_keys,
                                             .enable_spinbit = true,
                                             .enable_zero_len_cid = zlen_cids},
+                    .qlog = qlog,
                     .num_bufs = num_bufs,
                     .ticket_store = cache,
                     .tls_log = tls_log,

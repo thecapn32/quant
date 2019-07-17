@@ -66,6 +66,7 @@ struct q_conf {
     const char * const tls_cert;     // required for server
     const char * const tls_key;      // required for server
     const char * const tls_log;
+    const char * const qlog;
     uint64_t num_bufs;
     uint8_t enable_tls_cert_verify : 1;
     uint8_t : 7;

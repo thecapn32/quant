@@ -25,6 +25,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <inttypes.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -49,6 +50,7 @@
 #include "marshall.h"
 #include "pkt.h"
 #include "pn.h"
+#include "qlog.h"
 #include "quic.h"
 #include "recovery.h"
 #include "stream.h"
@@ -128,6 +130,43 @@ earliest_loss_t_pn(struct q_conn * const c)
     return pn;
 }
 
+
+void log_cc(struct q_conn * const c)
+{
+    const uint64_t ssthresh =
+        c->rec.ssthresh == UINT64_MAX ? 0 : c->rec.ssthresh;
+    const int64_t delta_in_flight =
+        (int64_t)c->rec.in_flight - (int64_t)c->rec.prev_in_flight;
+    const int64_t delta_cwnd = (int64_t)c->rec.cwnd - (int64_t)c->rec.prev_cwnd;
+    const int64_t delta_ssthresh =
+        (int64_t)ssthresh - (int64_t)c->rec.prev_ssthresh;
+    const ev_tstamp delta_srtt = c->rec.srtt - c->rec.prev_srtt;
+    const ev_tstamp delta_rttvar = c->rec.rttvar - c->rec.prev_rttvar;
+    if (delta_in_flight || delta_cwnd || delta_ssthresh ||
+        !is_zero(delta_srtt) || !is_zero(delta_rttvar)) {
+        qlog_recovery("METRIC_UPDATE", "DEFAULT", c);
+        warn(DBG,
+             "%s conn %s: in_flight=%" PRIu64 " (%s%+" PRId64 NRM "), cwnd" NRM
+             "=%" PRIu64 " (%s%+" PRId64 NRM "), ssthresh=%" PRIu64
+             " (%s%+" PRId64 NRM "), srtt=%.3f (%s%+.3f" NRM
+             "), rttvar=%.3f (%s%+.3f" NRM ")",
+             conn_type(c), cid2str(c->scid), c->rec.in_flight,
+             delta_in_flight > 0 ? GRN : delta_in_flight < 0 ? RED : "",
+             delta_in_flight, c->rec.cwnd,
+             delta_cwnd > 0 ? GRN : delta_cwnd < 0 ? RED : "", delta_cwnd,
+             ssthresh, delta_ssthresh > 0 ? GRN : delta_ssthresh < 0 ? RED : "",
+             delta_ssthresh, c->rec.srtt,
+             delta_srtt > 0 ? GRN : delta_srtt < 0 ? RED : "", delta_srtt,
+             c->rec.rttvar,
+             delta_rttvar > 0 ? GRN : delta_rttvar < 0 ? RED : "",
+             delta_rttvar);
+        c->rec.prev_in_flight = c->rec.in_flight;
+        c->rec.prev_cwnd = c->rec.cwnd;
+        c->rec.prev_ssthresh = ssthresh;
+        c->rec.prev_srtt = c->rec.srtt;
+        c->rec.prev_rttvar = c->rec.rttvar;
+    }
+}
 
 void set_ld_timer(struct q_conn * const c)
 {
@@ -342,7 +381,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
             continue;
 
         // Mark packet as lost, or set time when it should be marked.
-        if (m->tx_t <= lost_send_t ||
+        if (m->t <= lost_send_t ||
             pn->lg_acked >= m->hdr.nr + kPacketThreshold) {
             m->lost = true;
             in_flight_lost |= m->in_flight;
@@ -350,13 +389,13 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
             if (unlikely(lg_lost == UINT64_MAX) || m->hdr.nr > lg_lost) {
                 // cppcheck-suppress unreadVariable
                 lg_lost = m->hdr.nr;
-                lg_lost_tx_t = m->tx_t;
+                lg_lost_tx_t = m->t;
             }
         } else {
             if (unlikely(is_zero(pn->loss_t)))
-                pn->loss_t = m->tx_t + loss_del;
+                pn->loss_t = m->t + loss_del;
             else
-                pn->loss_t = MIN(pn->loss_t, m->tx_t + loss_del);
+                pn->loss_t = MIN(pn->loss_t, m->t + loss_del);
         }
 
         // OnPacketsLost
@@ -481,15 +520,15 @@ track_acked_pkts(struct w_iov * const v, struct pkt_meta * const m)
 
     // this is a similar loop as in dec_ack_frame() - keep changes in sync
     for (uint64_t n = ack_rng_cnt + 1; n > 0; n--) {
-        uint64_t ack_block_len = 0;
-        decv(&ack_block_len, &pos, end);
+        uint64_t ack_rng = 0;
+        decv(&ack_rng, &pos, end);
         diet_remove_ival(
             &m->pn->recv,
-            &(const struct ival){.lo = lg_ack - ack_block_len, .hi = lg_ack});
+            &(const struct ival){.lo = lg_ack - ack_rng, .hi = lg_ack});
         if (n > 1) {
             uint64_t gap = 0;
             decv(&gap, &pos, end);
-            lg_ack -= ack_block_len + gap + 2;
+            lg_ack -= ack_rng + gap + 2;
         }
     }
 
@@ -506,7 +545,7 @@ void on_pkt_sent(struct pkt_meta * const m)
     const ev_tstamp now = ev_now();
     pm_by_nr_ins(m->pn->sent_pkts, m);
     // nr is set in enc_pkt()
-    m->tx_t = now;
+    m->t = now;
     // ack_eliciting is set in enc_pkt()
     m->in_flight = m->ack_eliciting || has_frm(m->frms, FRM_PAD);
     // size is set in enc_pkt()
@@ -566,7 +605,7 @@ void on_ack_received_1(struct pkt_meta * const lg_ack, const uint64_t ack_del)
                        : MAX(pn->lg_acked, lg_ack->hdr.nr);
 
     if (is_ack_eliciting(&lg_ack->pn->tx_frames)) {
-        c->rec.latest_rtt = ev_now() - lg_ack->tx_t;
+        c->rec.latest_rtt = ev_now() - lg_ack->t;
         update_rtt(c, likely(pn->type == pn_data)
                           ? (ev_tstamp)ack_del / USECS_PER_SEC
                           : 0);
@@ -594,7 +633,7 @@ on_pkt_acked_cc(const struct pkt_meta * const m)
     remove_from_in_flight(m);
 
     struct q_conn * const c = m->pn->c;
-    if (in_cong_recovery(c, m->tx_t))
+    if (in_cong_recovery(c, m->t))
         return;
 
     // TODO: IsAppLimited check

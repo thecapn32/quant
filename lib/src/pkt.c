@@ -56,6 +56,7 @@
 #include "marshall.h"
 #include "pkt.h"
 #include "pn.h"
+#include "qlog.h"
 #include "quic.h"
 #include "recovery.h"
 #include "stream.h"
@@ -80,9 +81,6 @@ void log_pkt(const char * const dir,
              const uint8_t * const tok,
              const uint16_t tok_len)
 {
-    // if (util_dlevel != NTE && util_dlevel != INF && util_dlevel != DBG)
-    //     return;
-
 #ifndef FUZZING
     char ip[NI_MAXHOST];
     char port[NI_MAXSERV];
@@ -595,6 +593,7 @@ tx:;
     }
 
     on_pkt_sent(m);
+    qlog_transport("PACKET_SENT", "DEFAULT", v, m);
     bit_or(FRM_MAX, &pn->tx_frames, &m->frms);
 
     if (c->is_clnt) {

@@ -27,7 +27,6 @@
 
 #pragma once
 
-#include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -91,48 +90,10 @@ struct recovery {
 
 
 #ifndef NDEBUG
-#define log_cc(c)                                                              \
-    do {                                                                       \
-        const uint64_t ssthresh =                                              \
-            (c)->rec.ssthresh == UINT64_MAX ? 0 : (c)->rec.ssthresh;           \
-        const int64_t delta_in_flight =                                        \
-            (int64_t)(c)->rec.in_flight - (int64_t)(c)->rec.prev_in_flight;    \
-        const int64_t delta_cwnd =                                             \
-            (int64_t)(c)->rec.cwnd - (int64_t)(c)->rec.prev_cwnd;              \
-        const int64_t delta_ssthresh =                                         \
-            (int64_t)ssthresh - (int64_t)(c)->rec.prev_ssthresh;               \
-        const ev_tstamp delta_srtt = (c)->rec.srtt - (c)->rec.prev_srtt;       \
-        const ev_tstamp delta_rttvar = (c)->rec.rttvar - (c)->rec.prev_rttvar; \
-        if (delta_in_flight || delta_cwnd || delta_ssthresh ||                 \
-            !is_zero(delta_srtt) || !is_zero(delta_rttvar)) {                  \
-            warn(DBG,                                                          \
-                 "%s conn %s: in_flight=%" PRIu64 " (%s%+" PRId64 NRM          \
-                 "), cwnd" NRM "=%" PRIu64 " (%s%+" PRId64 NRM                 \
-                 "), ssthresh=%" PRIu64 " (%s%+" PRId64 NRM                    \
-                 "), srtt=%.3f (%s%+.3f" NRM "), rttvar=%.3f (%s%+.3f" NRM     \
-                 ")",                                                          \
-                 conn_type(c), cid2str((c)->scid), (c)->rec.in_flight,         \
-                 delta_in_flight > 0 ? GRN : delta_in_flight < 0 ? RED : "",   \
-                 delta_in_flight, (c)->rec.cwnd,                               \
-                 delta_cwnd > 0 ? GRN : delta_cwnd < 0 ? RED : "", delta_cwnd, \
-                 ssthresh,                                                     \
-                 delta_ssthresh > 0 ? GRN : delta_ssthresh < 0 ? RED : "",     \
-                 delta_ssthresh, (c)->rec.srtt,                                \
-                 delta_srtt > 0 ? GRN : delta_srtt < 0 ? RED : "", delta_srtt, \
-                 (c)->rec.rttvar,                                              \
-                 delta_rttvar > 0 ? GRN : delta_rttvar < 0 ? RED : "",         \
-                 delta_rttvar);                                                \
-            (c)->rec.prev_in_flight = (c)->rec.in_flight;                      \
-            (c)->rec.prev_cwnd = (c)->rec.cwnd;                                \
-            (c)->rec.prev_ssthresh = ssthresh;                                 \
-            (c)->rec.prev_srtt = (c)->rec.srtt;                                \
-            (c)->rec.prev_rttvar = (c)->rec.rttvar;                            \
-        }                                                                      \
-    } while (0)
+extern void __attribute__((nonnull)) log_cc(struct q_conn * const c);
 #else
-#define log_cc(c)
+#define log_cc(...)
 #endif
-
 
 extern void __attribute__((nonnull)) init_rec(struct q_conn * const c);
 

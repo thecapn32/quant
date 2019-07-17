@@ -31,6 +31,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/param.h>
 
@@ -171,9 +172,9 @@ struct pkt_meta {
     uint64_t strm_off;      ///< Stream data offset.
     uint16_t strm_frm_pos;  ///< Offset of stream frame header.
     uint16_t strm_data_pos; ///< Offset of first byte of stream frame data.
-    uint16_t strm_data_len; ///< Length of last stream frame data.
+    uint16_t strm_data_len; ///< Length of stream frame data.
 
-    uint16_t ack_frm_pos; ///< Offset of (first, on RX) ACK frame.
+    uint16_t ack_frm_pos; ///< Offset of (first, on RX) ACK frame (+1 for type).
 
     int64_t max_strm_data_sid;  ///< MAX_STREAM_DATA sid, if sent.
     uint64_t max_strm_data;     ///< MAX_STREAM_DATA limit, if sent.
@@ -187,7 +188,7 @@ struct pkt_meta {
     struct frames frms; ///< Frames present in pkt.
 
     // pm_cpy(false) starts copying from here:
-    ev_tstamp tx_t;       ///< Transmission timestamp; only set on TX.
+    ev_tstamp t;          ///< TX or RX timestamp.
     struct pn_space * pn; ///< Packet number space.
     struct pkt_hdr hdr;   ///< Parsed packet header.
 
@@ -217,6 +218,9 @@ extern const uint8_t ok_vers_len;
 typedef void (*func_ptr)(void);
 extern func_ptr api_func;
 extern void *api_conn, *api_strm;
+
+extern FILE * qlog;
+extern ev_tstamp qlog_ref_t;
 
 extern void __attribute__((nonnull)) alloc_off(struct w_engine * const w,
                                                struct w_iov_sq * const q,
@@ -380,7 +384,7 @@ pm_cpy(struct pkt_meta * const dst,
        const bool also_frame_info)
 {
     const size_t off = also_frame_info ? offsetof(struct pkt_meta, strm)
-                                       : offsetof(struct pkt_meta, tx_t);
+                                       : offsetof(struct pkt_meta, t);
     memcpy((uint8_t *)dst + off, (const uint8_t *)src + off,
            sizeof(*dst) - off);
 }

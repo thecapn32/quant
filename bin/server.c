@@ -59,6 +59,7 @@ static bool __attribute__((const)) is_bench_obj(const uint64_t len)
 
 static void __attribute__((noreturn)) usage(const char * const name,
                                             const char * const ifname,
+                                            const char * const qlog,
                                             const uint16_t port,
                                             const char * const dir,
                                             const char * const cert,
@@ -69,6 +70,7 @@ static void __attribute__((noreturn)) usage(const char * const name,
     printf("%s [options]\n", name);
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
     printf("\t[-p port]\tdestination port; default %d\n", port);
+    printf("\t[-q log]\twrite qlog events to file; default %s\n", qlog);
     printf("\t[-d dir]\tserver root directory; default %s\n", dir);
     printf("\t[-c cert]\tTLS certificate; default %s\n", cert);
     printf("\t[-k key]\tTLS key; default %s\n", key);
@@ -226,14 +228,18 @@ int main(int argc, char * argv[])
     char dir[MAXPATHLEN] = ".";
     char cert[MAXPATHLEN] = "test/dummy.crt";
     char key[MAXPATHLEN] = "test/dummy.key";
+    char qlog[MAXPATHLEN] = "/tmp/" QUANT "-server.qlog";
     uint16_t port[MAXPORTS] = {4433, 4434};
     size_t num_ports = 0;
     uint64_t num_bufs = 100000;
     int ch;
     int ret = 0;
 
-    while ((ch = getopt(argc, argv, "hi:p:d:v:c:k:t:b:")) != -1) {
+    while ((ch = getopt(argc, argv, "hi:p:d:v:c:k:t:b:q:")) != -1) {
         switch (ch) {
+        case 'q':
+            strncpy(qlog, optarg, sizeof(qlog) - 1);
+            break;
         case 'i':
             strncpy(ifname, optarg, sizeof(ifname) - 1);
             break;
@@ -267,8 +273,8 @@ int main(int argc, char * argv[])
         case 'h':
         case '?':
         default:
-            usage(basename(argv[0]), ifname, port[0], dir, cert, key, timeout,
-                  num_bufs);
+            usage(basename(argv[0]), ifname, qlog, port[0], dir, cert, key,
+                  timeout, num_bufs);
         }
     }
 
@@ -279,9 +285,11 @@ int main(int argc, char * argv[])
     const int dir_fd = open(dir, O_RDONLY | O_CLOEXEC);
     ensure(dir_fd != -1, "%s does not exist", dir);
 
-    struct w_engine * const w = q_init(
-        ifname, &(const struct q_conf){
-                    .num_bufs = num_bufs, .tls_cert = cert, .tls_key = key});
+    struct w_engine * const w =
+        q_init(ifname, &(const struct q_conf){.qlog = qlog,
+                                              .num_bufs = num_bufs,
+                                              .tls_cert = cert,
+                                              .tls_key = key});
     struct q_conn * conn[MAXPORTS];
     for (size_t i = 0; i < num_ports; i++) {
         conn[i] = q_bind(w, port[i]);

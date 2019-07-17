@@ -130,7 +130,7 @@ int main(int argc __attribute__((unused)), char ** argv)
     const int cwd = open(".", O_CLOEXEC);
     ensure(cwd != -1, "cannot open");
     ensure(chdir(dirname(argv[0])) == 0, "cannot chdir");
-    const struct q_conf conf = {nullptr,     nullptr, "dummy.crt",
+    const struct q_conf conf = {nullptr,     nullptr, nullptr, "dummy.crt",
                                 "dummy.key", nullptr, 1000000};
     w = q_init("lo"
 #ifndef __linux__

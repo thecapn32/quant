@@ -10,8 +10,8 @@ s=${2:-quant}
 
 # port to run servers on
 addr=127.0.0.1
-port=4433
-path=/20000
+port=4434
+path=/40000
 dir=/Users/lars/Sites/lars/output/papers
 cert=test/dummy.crt
 key=test/dummy.key
@@ -44,7 +44,8 @@ export UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1:suppressions=../misc/gcc
 case $c in
         quant)
                 cc="bin/client -v5 -i $iface -u \
-                        https://$addr:$port$path https://$addr:$port$path"
+                        https://$addr:$port$path
+                        #https://$addr:$port$path"
                 ;;
         wquant)
                 cc="vagrant ssh -c \"\
