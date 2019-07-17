@@ -754,6 +754,7 @@ done:
         warn(INF, "\tpto_cnt = %" PRIu64, c->i.pto_cnt);
     }
     free_conn(c);
+    fflush(qlog);
 }
 
 
