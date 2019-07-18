@@ -49,7 +49,7 @@
 
 static bool prev_event = false;
 
-static ev_tstamp qlog_ref_t = 0;
+static ev_tstamp qlog_ref_t = -HUGE_VAL;
 
 
 static const char * __attribute__((const, nonnull))
@@ -83,17 +83,22 @@ static uint64_t __attribute__((const)) to_usec(const ev_tstamp t)
 }
 
 
-static void qlog_common()
+static bool qlog_common()
 {
-    const ev_tstamp t = ev_now();
+    if (qlog_ref_t < 0)
+        return false;
+
     fprintf(qlog, "%s[%" PRIu64, likely(prev_event) ? "," : "",
-            to_usec(t - qlog_ref_t));
+            to_usec(ev_now() - qlog_ref_t));
+
+    return true;
 }
 
 
 void qlog_init()
 {
-    if (qlog && is_zero(qlog_ref_t)) {
+    if (qlog && qlog_ref_t < 0) {
+        warn(ERR, "INIT");
         qlog_ref_t = ev_now();
         fprintf(
             qlog,
@@ -124,11 +129,12 @@ void qlog_transport(const qlog_pkt_evt_t evt,
                     struct w_iov * const v,
                     const struct pkt_meta * const m)
 {
+    if (qlog_common() == false)
+        return;
+
     static const char * const evt_str[] = {[pkt_tx] = "PACKET_SENT",
                                            [pkt_rx] = "PACKET_RECEIVED",
                                            [pkt_dp] = "PACKET_DROPPED"};
-
-    qlog_common();
     fprintf(qlog,
             ",\"TRANSPORT\",\"%s\",\"%s\",{\"packet_type\":\"%"
             "s\",\"header\":{\"packet_size\":%u",
@@ -206,9 +212,10 @@ void qlog_recovery(const qlog_rec_evt_t evt,
                    const char * const trg,
                    const struct q_conn * const c)
 {
-    static const char * const evt_str[] = {[rec_mu] = "METRIC_UPDATE"};
+    if (qlog_common() == false)
+        return;
 
-    qlog_common();
+    static const char * const evt_str[] = {[rec_mu] = "METRIC_UPDATE"};
     fprintf(qlog, ",\"RECOVERY\",\"%s\",\"%s\",{", evt_str[evt], trg);
     int prev_metric = 0;
     if (c->rec.cur.in_flight != c->rec.prev.in_flight)
