@@ -162,7 +162,7 @@ void log_cc(struct q_conn * const c)
              delta_rttvar);
     }
 
-    qlog_recovery("METRIC_UPDATE", "DEFAULT", c);
+    qlog_recovery(rec_mu, "DEFAULT", c);
     c->rec.prev = c->rec.cur;
 }
 

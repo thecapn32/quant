@@ -40,13 +40,19 @@ extern void qlog_init(void);
 
 extern void qlog_close(void);
 
+
+typedef enum { pkt_tx, pkt_rx, pkt_dp } qlog_pkt_evt_t;
+
 extern void __attribute__((nonnull))
-qlog_transport(const char * const evt,
+qlog_transport(const qlog_pkt_evt_t evt,
                const char * const trg,
                struct w_iov * const v,
                const struct pkt_meta * const m);
 
+
+typedef enum { rec_mu } qlog_rec_evt_t;
+
 extern void __attribute__((nonnull))
-qlog_recovery(const char * const evt,
+qlog_recovery(const qlog_rec_evt_t evt,
               const char * const trg,
               const struct q_conn * const c);

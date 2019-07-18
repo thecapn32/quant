@@ -357,7 +357,7 @@ tx_vneg_resp(const struct w_sock * const ws,
     xv->addr = v->addr;
     xv->flags = v->flags;
     log_pkt("TX", xv, (struct sockaddr *)&xv->addr, 0, 0, 0);
-    qlog_transport("PACKET_SENT", "DEFAULT", xv, mx);
+    qlog_transport(pkt_tx, "DEFAULT", xv, mx);
 
 #ifndef FUZZING
     w_tx(ws, &q);
@@ -1117,7 +1117,7 @@ done:
         pn->pkts_rxed_since_last_ack_tx++;
     }
 
-    qlog_transport("PACKET_RECEIVED", "DEFAULT", v, m);
+    qlog_transport(pkt_tx, "DEFAULT", v, m);
     return true;
 }
 
@@ -1441,7 +1441,7 @@ rx_pkts(struct w_iov_sq * const x,
 
     drop:
         if (pkt_valid == false)
-            qlog_transport("PACKET_DROPPED", "DEFAULT", v, m);
+            qlog_transport(pkt_dp, "DEFAULT", v, m);
         free_iov(v, m);
     next:
         if (likely(c)) {

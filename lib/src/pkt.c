@@ -593,7 +593,7 @@ tx:;
     }
 
     on_pkt_sent(m);
-    qlog_transport("PACKET_SENT", "DEFAULT", v, m);
+    qlog_transport(pkt_tx, "DEFAULT", v, m);
     bit_or(FRM_MAX, &pn->tx_frames, &m->frms);
 
     if (c->is_clnt) {
