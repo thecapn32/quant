@@ -1493,6 +1493,9 @@ void rx(ev_io * const rx_w, int _e __attribute__((unused)))
             c->idle_alarm.repeat =
                 MAX((ev_tstamp)c->tp_in.idle_to / MSECS_PER_SEC,
                     3 * c->rec.ld_alarm.repeat);
+#ifdef DEBUG_TIMERS
+            warn(DBG, "next idle alarm in %f sec", c->idle_alarm.repeat);
+#endif
             ev_timer_again(&c->idle_alarm);
         }
 
@@ -1686,7 +1689,7 @@ void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
     c->spin_enabled = get_conf_uncond(conf, enable_spinbit);
 
     // (re)set idle alarm
-    c->tp_in.idle_to = get_conf(conf, idle_timeout);
+    c->tp_in.idle_to = get_conf(conf, idle_timeout) * MSECS_PER_SEC;
     c->idle_alarm.repeat = (ev_tstamp)c->tp_in.idle_to / MSECS_PER_SEC;
 
     ev_timer_again(&c->idle_alarm);

@@ -446,6 +446,7 @@ int main(int argc, char * argv[])
                     .conn_conf = &(
                         struct q_conn_conf){.enable_tls_key_updates = flip_keys,
                                             .enable_spinbit = true,
+                                            .idle_timeout = timeout,
                                             .enable_zero_len_cid = zlen_cids},
                     .qlog = qlog,
                     .num_bufs = num_bufs,

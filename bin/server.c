@@ -285,11 +285,13 @@ int main(int argc, char * argv[])
     const int dir_fd = open(dir, O_RDONLY | O_CLOEXEC);
     ensure(dir_fd != -1, "%s does not exist", dir);
 
-    struct w_engine * const w =
-        q_init(ifname, &(const struct q_conf){.qlog = qlog,
-                                              .num_bufs = num_bufs,
-                                              .tls_cert = cert,
-                                              .tls_key = key});
+    struct w_engine * const w = q_init(
+        ifname, &(const struct q_conf){
+                    .conn_conf = &(struct q_conn_conf){.idle_timeout = timeout},
+                    .qlog = qlog,
+                    .num_bufs = num_bufs,
+                    .tls_cert = cert,
+                    .tls_key = key});
     struct q_conn * conn[MAXPORTS];
     for (size_t i = 0; i < num_ports; i++) {
         conn[i] = q_bind(w, port[i]);
