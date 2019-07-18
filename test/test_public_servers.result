@@ -4,7 +4,7 @@ ats
 f5
 google
 lsquic
-mvfst     *         V    H    D    C                                  3
+mvfst     *         V    H    D    C    R    Z                        3
 ngtcp2    *         V    H    D    C    R    Z    S    M         U    3
 ngx_quic
 pandora
@@ -14,5 +14,5 @@ quic-go
 quiche
 quicker
 quicly
-quinn     *         V    H    D    C    R    Z    S    M    B    U         P    E
+quinn     *         V    H    D    C    R         S    M    B    U         P    E
 winquic   *         V    H    D    C    R    Z    S              U         P
