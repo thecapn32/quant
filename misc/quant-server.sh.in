@@ -29,6 +29,7 @@ IndexIgnoreReset ON
 IndexOptions FancyIndexing SuppressIcon
 IndexOrderDefault Descending Date
 RewriteRule ^log$ /$(basename "$new") [R]
+Header add Access-Control-Allow-Origin "*"
 EOF
 
 mkdir -p @CMAKE_BINARY_DIR@
