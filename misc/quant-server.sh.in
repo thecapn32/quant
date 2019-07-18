@@ -7,16 +7,17 @@ function make_name() {
         local path cid
         path=$(dirname "$1")
         cid=$(grep -o 'new serv conn.*cid=[^ ]*' "$1" | cut -f2 -d= | cut -f2 -d: | head -n1)
-        echo "$path/$cid.html"
+        echo "$path/$cid"
 }
 
 export PATH="$PATH:~/bin"
 
-name=/var/www/html/log.html
-new=$(make_name $name)
+name=/var/www/html/log
+new=$(make_name "$name.html")
 # %N only works on Linux
-[ -f "$new" ] && new="$new-"$(date +%N)
-mv "$name" "$new"
+[ -f "$new.html" ] && new="$new-"$(date +%N)
+mv "$name.html" "$new.html"
+mv "$name.qlog" "$new.qlog"
 
 # send email if we crashed
 if grep -E -i -q 'assertion failed|AddressSanitizer|runtime error|ACK_ECN' "$new"; then
@@ -50,4 +51,5 @@ bin/server -v5 -i eth0 -p 443 -p 4433 -p 4434 \
     -d /usr/share/apache2/default-site \
     -c /etc/letsencrypt/live/quant.eggert.org/fullchain.pem \
     -k /etc/letsencrypt/live/quant.eggert.org/privkey.pem \
-    2>&1 | aha -s > "$name"
+    -q "$name.qlog" \
+    2>&1 | aha -s > "$name.html"
