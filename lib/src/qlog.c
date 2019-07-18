@@ -98,7 +98,6 @@ static bool qlog_common()
 void qlog_init()
 {
     if (qlog && qlog_ref_t < 0) {
-        warn(ERR, "INIT");
         qlog_ref_t = ev_now();
         fprintf(
             qlog,
