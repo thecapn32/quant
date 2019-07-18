@@ -462,6 +462,7 @@ on_ld_timeout(ev_timer * const w, int direct)
              conn_type(c), cid2str(c->scid));
 #endif
         detect_lost_pkts(pn, true);
+        goto set_timer; // otherwise no PTO will happen
     } else if (have_unacked_crypto_data(c)) {
 #ifdef DEBUG_TIMERS
         warn(DBG, "crypto RTX #%u on %s conn %s", c->rec.crypto_cnt + 1,
@@ -500,7 +501,7 @@ on_ld_timeout(ev_timer * const w, int direct)
     }
 
     if (!direct)
-        // we were called via set_ld_timer, so don't call it again
+    set_timer:
         set_ld_timer(c);
 }
 
