@@ -26,7 +26,6 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <netdb.h>
-#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -34,6 +33,10 @@
 #include <string.h>
 #include <sys/param.h>
 #include <sys/socket.h>
+
+#ifndef NO_ERR_REASONS
+#include <stdarg.h>
+#endif
 
 #ifndef PARTICLE
 #include <netinet/in.h>

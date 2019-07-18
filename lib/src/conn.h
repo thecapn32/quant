@@ -270,8 +270,9 @@ struct q_conn {
 #ifndef NO_ERR_REASONS
     uint8_t err_reason_len;
     char err_reason[MAX_ERR_REASON_LEN];
+#else
+    uint8_t _unused;
 #endif
-
 
     uint16_t tok_len;
     uint8_t tok[MAX_TOK_LEN + 4]; // some stacks send ungodly large tokens
