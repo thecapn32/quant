@@ -29,7 +29,9 @@ IndexIgnoreReset ON
 IndexOptions FancyIndexing SuppressIcon
 IndexOrderDefault Descending Date
 RewriteRule ^log$ /$(basename "$new") [R]
-Header add Access-Control-Allow-Origin "*"
+Header set Access-Control-Allow-Origin "*"
+Header set Access-Control-Allow-Methods "GET,PUT,POST,DELETE"
+Header set Access-Control-Allow-Headers "Content-Type, Authorization"
 EOF
 
 mkdir -p @CMAKE_BINARY_DIR@
