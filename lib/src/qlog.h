@@ -27,6 +27,8 @@
 
 #pragma once
 
+#ifndef NO_QLOG
+
 #include <warpcore/warpcore.h>
 
 // IWYU pragma: no_include "../deps/libev/ev.h"
@@ -56,3 +58,12 @@ extern void __attribute__((nonnull))
 qlog_recovery(const qlog_rec_evt_t evt,
               const char * const trg,
               const struct q_conn * const c);
+
+#else
+
+#define qlog_close()
+#define qlog_init()
+#define qlog_recovery(...)
+#define qlog_transport(...)
+
+#endif

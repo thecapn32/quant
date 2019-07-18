@@ -1118,12 +1118,14 @@ done:
         pn->pkts_rxed_since_last_ack_tx++;
     }
 
+#ifndef NO_QLOG
     // if pkt has STREAM or CRYPTO frame but no strm pointer, it's a dup
     static const struct frames qlog_dup_chk =
         bitset_t_initializer(1 << FRM_CRY | 1 << FRM_STR);
     const bool dup_strm =
         bit_overlap(FRM_MAX, &m->frms, &qlog_dup_chk) && m->strm == 0;
     qlog_transport(dup_strm ? pkt_dp : pkt_rx, "DEFAULT", v, m);
+#endif
     return true;
 }
 

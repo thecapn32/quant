@@ -111,7 +111,9 @@ static uint64_t num_bufs = 0;
 int corpus_pkt_dir, corpus_frm_dir;
 #endif
 
+#ifndef NO_QLOG
 FILE * qlog = 0;
+#endif
 
 
 /// Run the event loop for the API function @p func with connection @p conn
@@ -653,10 +655,12 @@ struct w_engine * q_init(const char * const ifname,
 #endif
 #endif
 
+#ifndef NO_QLOG
     if (conf && conf->qlog && *conf->qlog) {
         qlog = fopen(conf->qlog, "we");
         ensure(qlog, "fopen %s", conf->qlog);
     }
+#endif
 
     return w;
 }
@@ -741,7 +745,9 @@ done:
         warn(INF, "\tpto_cnt = %" PRIu64, c->i.pto_cnt);
     }
     free_conn(c);
+#ifndef NO_QLOG
     fflush(qlog);
+#endif
 }
 
 

@@ -57,9 +57,11 @@ CSRC+=$(WARP_SRC) $(PICOTLS_SRC) $(QUANT_SRC)
 EXTRA_CFLAGS+= \
 	-Wno-error -Wno-parentheses -Wno-unused-function -Wno-comment \
 	-Wno-undef -Wno-unknown-pragmas -Wno-unused-but-set-variable \
+	-Wno-unused-value \
 	-DLOG_COMPILE_TIME_LEVEL=LOG_LEVEL_WARN \
 	-DNO_FUZZER_CORPUS_COLLECTION -DNO_OOO_0RTT -DNO_TLS_TICKETS \
 	-DNO_TLS_LOG -DNO_ERR_REASONS -DNO_OOO_DATA -DNO_MIGRATION \
+	-DNO_QLOG \
 	-D'ntoh16(x)=__builtin_bswap16(*(uint16_t*)(x))' \
 	-D'ntoh24(x)=__builtin_bswap16(*(uint16_t*)(x)) << 8 | (x)[2]' \
 	-D'ntoh32(x)=__builtin_bswap32(*(uint32_t*)(x))' \

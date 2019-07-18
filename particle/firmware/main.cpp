@@ -60,7 +60,7 @@ void warpcore_transaction()
 
 void quic_transaction()
 {
-    const struct q_conf qc = {0, 0, 0, 0, 0, 20, false};
+    const struct q_conf qc = {0, 0, 0, 0, 0, 0, 20, false};
     struct w_engine * const w = q_init("wl3", &qc);
     const char peername[] = "quant.eggert.org";
     struct addrinfo * const peer = resolve(peername, "4433");
