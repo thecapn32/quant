@@ -51,6 +51,7 @@
 
 // IWYU pragma: no_include "../deps/libev/ev.h"
 
+#include "bitset.h"
 #include "conn.h"
 #include "diet.h"
 #include "event.h" // IWYU pragma: keep
@@ -1117,7 +1118,12 @@ done:
         pn->pkts_rxed_since_last_ack_tx++;
     }
 
-    qlog_transport(pkt_tx, "DEFAULT", v, m);
+    // if pkt has STREAM or CRYPTO frame but no strm pointer, it's a dup
+    static const struct frames qlog_dup_chk =
+        bitset_t_initializer(1 << FRM_CRY | 1 << FRM_STR);
+    const bool dup_strm =
+        bit_overlap(FRM_MAX, &m->frms, &qlog_dup_chk) && m->strm == 0;
+    qlog_transport(dup_strm ? pkt_dp : pkt_rx, "DEFAULT", v, m);
     return true;
 }
 

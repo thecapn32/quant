@@ -138,6 +138,9 @@ void qlog_transport(const qlog_pkt_evt_t evt,
         fprintf(qlog, ",\"packet_number\":%" PRIu64, m->hdr.nr);
     fputs("}", qlog);
 
+    if (evt == pkt_dp)
+        goto done;
+
     static const struct frames qlog_frm =
         bitset_t_initializer(1 << FRM_ACK | 1 << FRM_STR);
     if (bit_overlap(FRM_MAX, &m->frms, &qlog_frm) == false)
