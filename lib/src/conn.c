@@ -1820,9 +1820,11 @@ struct q_conn * new_conn(struct w_engine * const w,
         if (e != ep_0rtt)
             new_stream(c, crpt_strm_id(e));
 
-    if (c->scid)
+    if (c->scid) {
+        qlog_init();
         warn(DBG, "%s conn %s on port %u created", conn_type(c),
              cid2str(c->scid), bswap16(get_sport(c->sock)));
+    }
 
     conn_to_state(c, conn_idle);
     return c;

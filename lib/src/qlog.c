@@ -31,6 +31,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
 // IWYU pragma: no_include "../deps/libev/ev.h"
@@ -47,6 +48,8 @@
 
 
 static bool prev_event = false;
+
+static ev_tstamp qlog_ref_t = 0;
 
 
 static inline const char * __attribute__((const, nonnull))
@@ -74,9 +77,37 @@ qlog_pkt_type_str(const uint8_t flags, const void * const vers)
 }
 
 
-uint64_t to_usec(const ev_tstamp t)
+static inline uint64_t __attribute__((const)) to_usec(const ev_tstamp t)
 {
     return (uint64_t)llround(t * USECS_PER_SEC);
+}
+
+
+void qlog_init()
+{
+    if (qlog && is_zero(qlog_ref_t)) {
+        qlog_ref_t = ev_now();
+        fprintf(
+            qlog,
+            "{"
+            "\"qlog_version\":\"draft-00\","
+            "\"title\":\"%s %s qlog\","
+            "\"traces\":["
+            "{\"configuration\":{\"time_units\":\"us\"},\"common_fields\":{"
+            "\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":%" PRIu64 "},"
+            "\"event_fields\":[\"relative_time\",\"CATEGORY\",\"EVENT_TYPE\","
+            "\"TRIGGER\",\"DATA\"],\"events\":[",
+            quant_name, quant_version, to_usec(qlog_ref_t));
+    }
+}
+
+
+void qlog_close()
+{
+    if (qlog) {
+        fputs("]}]}", qlog);
+        fclose(qlog);
+    }
 }
 
 

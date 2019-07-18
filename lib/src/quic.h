@@ -220,7 +220,7 @@ extern func_ptr api_func;
 extern void *api_conn, *api_strm;
 
 extern FILE * qlog;
-extern ev_tstamp qlog_ref_t;
+
 
 extern void __attribute__((nonnull)) alloc_off(struct w_engine * const w,
                                                struct w_iov_sq * const q,

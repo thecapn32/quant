@@ -27,8 +27,6 @@
 
 #pragma once
 
-#include <stdint.h>
-
 #include <warpcore/warpcore.h>
 
 // IWYU pragma: no_include "../deps/libev/ev.h"
@@ -38,7 +36,9 @@
 #include "quic.h"
 
 
-extern uint64_t __attribute__((const)) to_usec(const ev_tstamp t);
+extern void qlog_init(void);
+
+extern void qlog_close(void);
 
 extern void __attribute__((nonnull))
 qlog_transport(const char * const evt,
