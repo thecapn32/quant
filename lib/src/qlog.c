@@ -25,6 +25,8 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#ifndef NO_QLOG
+
 #include <inttypes.h>
 #include <math.h>
 #include <stdbool.h>
@@ -247,3 +249,5 @@ void qlog_recovery(const qlog_rec_evt_t evt,
 
     prev_event = true;
 }
+
+#endif
