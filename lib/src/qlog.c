@@ -134,8 +134,8 @@ void qlog_transport(const char * const evt,
         for (uint64_t n = ack_rng_cnt + 1; n > 0; n--) {
             uint64_t ack_rng = 0;
             decv(&ack_rng, &pos, end);
-            fprintf(qlog, "%s[%" PRIu64 ",%" PRIu64 "]", n > 1 ? "," : "",
-                    lg_ack - ack_rng, lg_ack);
+            fprintf(qlog, "%s[%" PRIu64 ",%" PRIu64 "]",
+                    (n <= ack_rng_cnt ? "," : ""), lg_ack - ack_rng, lg_ack);
             if (n > 1) {
                 uint64_t gap = 0;
                 decv(&gap, &pos, end);
