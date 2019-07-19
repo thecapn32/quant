@@ -36,7 +36,7 @@ declare -A servers=(
     [f5]=204.134.187.194:-3:4433:4433:4433:/file50K
     [google]=quic.rocks:-3:4433:4434:4433:/
     [lsquic]=http3-test.litespeedtech.com:-3:4433:4434:4433:/40000
-    [mvfst]=fb.mvfst.net::4433:4434:4433:/index.html
+    [mvfst]=fb.mvfst.net::4433:4434:4433:/40000
     [ngtcp2]=nghttp2.org:-3:4433:4434:4433:/40000
     [ngx_quic]=cloudflare-quic.com:-3:443:443:443:/index.html
     [pandora]=pandora.cm.in.tum.de::4433:4434:4433:/index.html
@@ -51,7 +51,7 @@ declare -A servers=(
     # [local]=localhost::4433:4434:4433:/40000
 )
 
-results=(live fail vneg hshk data clse rsmt zrtt rtry migr bind kyph http spin aecn)
+results=(live fail vneg hshk data clse rsmt zrtt rtry migr bind kyph spin aecn http)
 
 if [ -n "$1" ]; then
     results+=(perf t_h2 t_hq)
