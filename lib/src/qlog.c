@@ -250,4 +250,8 @@ void qlog_recovery(const qlog_rec_evt_t evt,
     prev_event = true;
 }
 
+#else
+
+static void * _unused __attribute__((unused));
+
 #endif
