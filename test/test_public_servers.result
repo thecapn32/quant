@@ -1,7 +1,7 @@
           live fail vneg hshk data clse rsmt zrtt rtry migr bind kyph http spin aecn
 aioquic
 ats
-f5
+f5        *         V    H    D    C    R         S              U    3
 google
 lsquic
 mvfst     *         V    H    D    C    R    Z                        3
@@ -15,4 +15,4 @@ quiche
 quicker
 quicly
 quinn     *         V    H    D    C    R         S    M    B    U         P    E
-winquic   *         V    H    D    C    R    Z    S              U         P
+winquic   *         V    H    D    C    R    Z    S              U    3    P
