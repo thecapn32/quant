@@ -330,6 +330,7 @@ int main(int argc, char * argv[])
         http_parser parser = {.data = &d};
 
         http_parser_init(&parser, HTTP_REQUEST);
+    again:;
         struct w_iov_sq q = w_iov_sq_initializer(q);
         struct q_stream * s = q_read(c, &q, false);
 
@@ -348,7 +349,7 @@ int main(int argc, char * argv[])
 #endif
                 q_free_stream(s);
                 q_free(&q);
-                continue;
+                goto again;
             }
 
             // no more streams with pending reqs, try next conn
