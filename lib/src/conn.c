@@ -1582,6 +1582,7 @@ err_close_noreason
     c->err_reason_len =
         (uint8_t)MIN((unsigned long)ret + 1, sizeof(c->err_reason));
 #endif
+    conn_to_state(c, conn_qlse);
     c->err_code = code;
     c->err_frm = frm;
     c->needs_tx = true;
@@ -1659,6 +1660,7 @@ void enter_closing(struct q_conn * const c)
     if (c->state != conn_drng) {
         c->needs_tx = true;
         conn_to_state(c, conn_clsg);
+        ev_feed_event(&c->tx_w, 0);
     }
 }
 
