@@ -728,7 +728,7 @@ void q_close(struct q_conn * const c,
     loop_run(q_close, c, 0);
 
 done:
-    if (c->scid) {
+    if (c->scid && c->i.pkts_in_valid > 0) {
         conn_info_populate(c);
         warn(INF, "%s conn %s stats:", conn_type(c), cid2str(c->scid));
         warn(INF, "\tpkts_in_valid = %s%" PRIu64 NRM,
