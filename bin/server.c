@@ -375,6 +375,7 @@ int main(int argc, char * argv[])
 
                 warn(ERR, "HTTP parser error: %.*s", (int)(v->len - parsed),
                      &v->buf[parsed]);
+                hexdump(v->buf, v->len);
                 // XXX the strnlen() test is super-hacky
                 if (strnlen((char *)v->buf, v->len) == v->len)
                     send_err(&d, 400);
