@@ -349,8 +349,9 @@ int main(int argc, char * argv[])
 #endif
                 q_free_stream(s);
                 q_free(&q);
+                goto again;
             }
-            goto again;
+            continue;
         }
 
         if (q_is_uni_stream(s)) {
