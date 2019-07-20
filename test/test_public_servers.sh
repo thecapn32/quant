@@ -171,7 +171,7 @@ function bench_server {
                      "https://$host:$port/$prefix$obj$ext" \
                      > "$log_base.log" 2>&1 ; } 2>&1)
         hq=$(echo "$hq" | fmt | cut -d' ' -f2)
-        hq_size=$(stat -q "$obj$hqext" | cut -d' ' -f8)
+        hq_size=$(stat -q "$obj$ext" | cut -d' ' -f8)
         popd > /dev/null || exit
         rm -rf "$hq_out" "$cache"
 
@@ -194,7 +194,7 @@ function check_fail {
 
     local ret_base="/tmp/$script.$pid.$1.ret"
     echo X > "$ret_base.fail"
-    echo "Test with $1 failed (log $3):"
+    echo "Test with $1 failed (log $3)"
     # tail -n 10 "$log"
     # echo
     return 1
