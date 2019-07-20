@@ -31,9 +31,9 @@
 declare -A servers=(
     # [tag]=name:flags:port:retry-port:h3-port:URL
     [aioquic]=quic.aiortc.org::4433:4434:4433:/40000
-    # [apple]=192.168.203.142::4433:4433:4433:/40000
+    [apple]=31.133.129.48::8443:8443:8443:/40000
     [ats]=quic.ogre.com::4433:4434:4433:/en/latest/_static/jquery.js
-    [f5]=204.134.187.194:-3:4433:4433:4433:/file50K
+    [f5]=204.134.187.194::4433:4433:4433:/file50K
     [google]=quic.rocks:-3:4433:4434:4433:/
     [lsquic]=http3-test.litespeedtech.com:-3:4433:4434:4433:/40000
     [mvfst]=fb.mvfst.net::4433:4434:4433:/40000
@@ -188,15 +188,15 @@ function bench_server {
 
 function check_fail {
     local log="$2"
-    if ! grep -q -E 'dec_close.*0x1c=quic err=0x[^0] |assertion failed|AddressSanitizer|runtime error|ABORT:' "$log"; then
+    if ! grep -q -E '_close_frame.*0x1c=quic err=0x[^0] |assertion failed|AddressSanitizer|runtime error|ABORT:' "$log"; then
         return 0
     fi
 
     local ret_base="/tmp/$script.$pid.$1.ret"
     echo X > "$ret_base.fail"
     echo "Test with $1 failed (log $3):"
-    tail -n 10 "$log"
-    echo
+    # tail -n 10 "$log"
+    # echo
     return 1
 }
 
