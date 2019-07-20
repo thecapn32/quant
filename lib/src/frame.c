@@ -932,11 +932,15 @@ dec_new_cid_frame(const uint8_t ** pos,
 {
     struct q_conn * const c = m->pn->c;
     struct cid dcid = {.seq = 0, .has_srt = true};
+
     decv_chk(&dcid.seq, pos, end, c, FRM_CID);
     decv_chk(&dcid.rpt, pos, end, c, FRM_CID);
     dec1_chk(&dcid.len, pos, end, c, FRM_CID);
-    decb_chk(dcid.id, pos, end, dcid.len, c, FRM_CID);
-    decb_chk(dcid.srt, pos, end, sizeof(dcid.srt), c, FRM_CID);
+
+    if (likely(dcid.len >= CID_LEN_MIN && dcid.len <= CID_LEN_MAX)) {
+        decb_chk(dcid.id, pos, end, dcid.len, c, FRM_CID);
+        decb_chk(dcid.srt, pos, end, sizeof(dcid.srt), c, FRM_CID);
+    }
 
     const bool dup =
 #ifndef NO_MIGRATION
