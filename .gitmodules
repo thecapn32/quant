@@ -1,15 +1,15 @@
 [submodule "external/klib"]
-	path = lib/deps/klib
-	url = https://github.com/attractivechaos/klib.git
+        path = lib/deps/klib
+        url = https://github.com/attractivechaos/klib.git
 [submodule "lib/deps/warpcore"]
-	path = lib/deps/warpcore
-	url = https://github.com/NTAP/warpcore.git
+        path = lib/deps/warpcore
+        url = https://github.com/NTAP/warpcore.git
 [submodule "lib/deps/picotls"]
-	path = lib/deps/picotls
-	url = https://github.com/larseggert/picotls.git
+        path = lib/deps/picotls
+        url = https://github.com/h2o/picotls.git
 [submodule "lib/deps/picoquic"]
-	path = lib/deps/picoquic
-	url = https://github.com/private-octopus/picoquic.git
+        path = lib/deps/picoquic
+        url = https://github.com/private-octopus/picoquic.git
 [submodule "lib/deps/libev"]
-	path = lib/deps/libev
-	url = https://salsa.debian.org/debian/libev.git
+        path = lib/deps/libev
+        url = https://salsa.debian.org/debian/libev.git
