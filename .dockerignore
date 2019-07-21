@@ -1,8 +1,8 @@
-.git
-corpus_*
-Darwin*
-Debug
-FreeBSD*
-lib/include/net
-Linux*
-Release
+*
+!CMakeLists.txt
+!bin
+!doc
+!external
+!lib
+!misc
+!test

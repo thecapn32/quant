@@ -117,7 +117,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     add_definitions(-DNO_FUZZER_CORPUS_COLLECTION)
   endif()
 
-  if(NOT DEFINED ENV{CONTINUOUS_INTEGRATION} AND NOT DEFINED ENV{DOCKER})
+  if(NOT DEFINED ENV{CONTINUOUS_INTEGRATION} AND NOT DOCKER)
     # See if we can use the address sanitizer
     include(CheckIncludeFile)
     check_include_file(sanitizer/asan_interface.h HAVE_ASAN)
