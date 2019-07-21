@@ -31,10 +31,10 @@
 
 // IWYU pragma: no_include "../deps/libev/ev.h"
 
-#include "conn.h"
 #include "diet.h"
 #include "event.h" // IWYU pragma: keep
 #include "frame.h"
+#include "hash.h"
 #include "quic.h"
 #include "tls.h"
 

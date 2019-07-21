@@ -31,9 +31,6 @@
 #include <string.h>
 #include <sys/param.h>
 
-#define klib_unused
-
-#include <khash.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
@@ -42,6 +39,7 @@
 #include "conn.h"
 #include "diet.h"
 #include "event.h" // IWYU pragma: keep
+#include "hash.h"
 #include "pkt.h"
 #include "quic.h"
 #include "stream.h"

@@ -35,6 +35,7 @@
 // IWYU pragma: no_include "../deps/libev/ev.h"
 
 #include "event.h" // IWYU pragma: keep
+#include "pn.h"
 #include "quic.h"
 
 struct q_conn;

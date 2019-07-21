@@ -102,6 +102,7 @@ static ptls_cipher_suite_t * cipher_suite[] = {&ptls_minicrypto_aes128gcmsha256,
 #include "bitset.h"
 #include "conn.h"
 #include "frame.h"
+#include "hash.h"
 #include "marshall.h"
 #include "pkt.h"
 #include "pn.h"

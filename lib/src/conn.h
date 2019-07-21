@@ -37,9 +37,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#define klib_unused
-
-#include <khash.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
@@ -47,7 +44,8 @@
 
 #include "diet.h"
 #include "event.h" // IWYU pragma: keep
-#include "pn.h"    // IWYU pragma: keep
+#include "hash.h"
+#include "pn.h" // IWYU pragma: keep
 #include "quic.h"
 #include "recovery.h"
 #include "tls.h"

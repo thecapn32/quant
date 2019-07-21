@@ -36,9 +36,6 @@
 #include <stdio.h>
 #endif
 
-#define klib_unused
-
-#include <khash.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
@@ -47,6 +44,7 @@
 #include "diet.h"
 #include "event.h" // IWYU pragma: keep
 #include "frame.h"
+#include "hash.h"
 #include "marshall.h"
 #include "pkt.h"
 #include "pn.h"

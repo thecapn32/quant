@@ -32,11 +32,8 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#define klib_unused
-
 // IWYU pragma: no_include <picotls/../picotls.h>
 
-#include <khash.h>
 #include <picotls.h> // IWYU pragma: keep
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
@@ -61,6 +58,7 @@
 
 #include "conn.h"
 #include "event.h" // IWYU pragma: keep
+#include "hash.h"
 #include "pkt.h"
 #include "pn.h"
 #include "qlog.h"

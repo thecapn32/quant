@@ -27,14 +27,12 @@
 
 #include <stdbool.h>
 
-#define klib_unused
-
-#include <khash.h>
 #include <warpcore/warpcore.h>
 
 #include "bitset.h"
 #include "conn.h"
 #include "frame.h"
+#include "hash.h"
 #include "pn.h"
 #include "quic.h"
 #include "recovery.h"
