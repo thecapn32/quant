@@ -1602,11 +1602,21 @@ key_flip(ev_timer * const w, int e __attribute__((unused)))
 }
 
 
+static void __attribute__((nonnull)) stop_all_alarms(struct q_conn * const c)
+{
+    ev_timer_stop(&c->rec.ld_alarm);
+    ev_timer_stop(&c->idle_alarm);
+    ev_timer_stop(&c->key_flip_alarm);
+    ev_timer_stop(&c->ack_alarm);
+}
+
+
 static void __attribute__((nonnull))
 enter_closed(ev_timer * const w, int e __attribute__((unused)))
 {
     struct q_conn * const c = w->data;
     conn_to_state(c, conn_clsd);
+    stop_all_alarms(c);
 
     if (!c->in_c_ready) {
         sl_insert_head(&c_ready, c, node_rx_ext);
@@ -1625,11 +1635,7 @@ void enter_closing(struct q_conn * const c)
     if (c->state == conn_clsg)
         return;
 
-    // stop alarms
-    ev_timer_stop(&c->rec.ld_alarm);
-    ev_timer_stop(&c->idle_alarm);
-    ev_timer_stop(&c->key_flip_alarm);
-    ev_timer_stop(&c->ack_alarm);
+    stop_all_alarms(c);
 
 #ifndef FUZZING
     if ((c->state == conn_idle || c->state == conn_opng) && c->err_code == 0) {
