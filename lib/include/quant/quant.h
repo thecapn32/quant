@@ -105,7 +105,7 @@ q_connect(struct w_engine * const w,
           const struct q_conn_conf * const conf);
 
 extern void __attribute__((nonnull(1))) q_close(struct q_conn * const c,
-                                                const uint16_t code,
+                                                const uint64_t code,
                                                 const char * const reason);
 
 extern struct q_conn * __attribute__((nonnull))

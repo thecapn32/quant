@@ -696,11 +696,12 @@ void q_stream_get_written(struct q_stream * const s, struct w_iov_sq * const q)
 
 
 void q_close(struct q_conn * const c,
-             const uint16_t code,
+             const uint64_t code,
              const char * const reason)
 {
     if (c->scid)
-        warn(WRN, "closing %s conn %s on port %u w/err %s0x%04x%s%s%s" NRM,
+        warn(WRN,
+             "closing %s conn %s on port %u w/err %s0x%" PRIx64 "%s%s%s" NRM,
              conn_type(c), cid2str(c->scid), bswap16(get_sport(c->sock)),
              code ? RED : NRM, code, reason ? " (" : "", reason ? reason : "",
              reason ? ")" : "");
