@@ -705,7 +705,7 @@ dec_max_strm_data_frame(const uint8_t ** pos,
 
     struct q_stream * const s = get_and_validate_strm(c, sid, FRM_MSD, true);
     if (unlikely(s == 0))
-        return false;
+        return true;
 
     if (max > s->out_data_max) {
         s->out_data_max = max;
@@ -789,7 +789,7 @@ dec_strm_data_blocked_frame(const uint8_t ** pos,
 
     struct q_stream * const s = get_and_validate_strm(c, sid, FRM_SDB, false);
     if (unlikely(s == 0))
-        return false;
+        return true;
 
     do_stream_fc(s, 0);
     // because do_stream_fc() only sets this when increasing the FC window
@@ -856,7 +856,7 @@ dec_stop_sending_frame(const uint8_t ** pos,
 
     struct q_stream * const s = get_and_validate_strm(c, sid, FRM_STP, true);
     if (unlikely(s == 0))
-        return false;
+        return true;
 
     return true;
 }
@@ -1007,7 +1007,7 @@ dec_reset_stream_frame(const uint8_t ** pos,
 
     struct q_stream * const s = get_and_validate_strm(c, sid, FRM_RST, false);
     if (unlikely(s == 0))
-        return false;
+        return true;
 
     strm_to_state(s, strm_clsd);
 
