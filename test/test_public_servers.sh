@@ -30,10 +30,10 @@
 
 declare -A servers=(
     # [tag]=name:flags:port:retry-port:h3-port:URL
-    [aioquic]=quic.aiortc.org::4433:4434:4433:/40000
+    [aioquic]=quic.aiortc.org::4433:4434:443:/40000
     [apple]=31.133.129.48::8443:8443:8443:/40000
     [ats]=quic.ogre.com::4433:4434:4433:/en/latest/_static/jquery.js
-    [f5]=204.134.187.194::4433:4433:4433:/file50K
+    [f5]=f5quic.com::4433:4433:4433:/50000
     [google]=quic.rocks:-3:4433:4434:4433:/
     [lsquic]=http3-test.litespeedtech.com:-3:4433:4434:4433:/40000
     [mvfst]=fb.mvfst.net::4433:4434:4433:/40000
@@ -188,7 +188,7 @@ function bench_server {
 
 function check_fail {
     local log="$2"
-    if ! grep -q -E '_close_frame.*0x1c=quic err=0x[^0] |assertion failed|AddressSanitizer|runtime error|ABORT:' "$log"; then
+    if ! grep -q -E 'hexdump|STATELESS|_close_frame.*0x1c=quic err=0x[^0] |assertion failed|AddressSanitizer|runtime error|ABORT:' "$log"; then
         return 0
     fi
 
@@ -261,7 +261,7 @@ function analyze {
     [ $? -eq 1 ] && echo E > "$ret_base.aecn"
     [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.hshk" ] && \
         [ -s "$ret_base.data" ] && [ -s "$ret_base.clse" ] && rm -f "$log"
-    rm -f "$log_strip"
+    # rm -f "$log_strip"
 
     # analyze rsmt and 0rtt
     local log="$log_base.0rtt"
