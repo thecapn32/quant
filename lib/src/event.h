@@ -30,7 +30,8 @@
 #define EV_STANDALONE 1
 #define EV_FEATURES 0
 #define EV_NO_THREADS 1
-#define EV_USE_NANOSLEEP 1
+#define EV_COMPAT3 0
+#define EV_USE_MONOTONIC 1
 
 #if defined(__linux__)
 #define EV_USE_EPOLL 1
@@ -38,6 +39,7 @@
 #define EV_USE_KQUEUE 1
 #elif defined(PARTICLE)
 #define EV_AVOID_STDIO 1
+#define EV_USE_POLL 1
 #endif
 
 #pragma clang diagnostic push
@@ -45,6 +47,8 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wundef"
+#pragma GCC diagnostic ignored "-Wunused-function"
+#pragma GCC diagnostic ignored "-Wunused-variable"
 
 #include "../deps/libev/ev.h" // IWYU pragma: export
 

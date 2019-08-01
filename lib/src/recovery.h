@@ -42,23 +42,16 @@ struct q_conn;
 struct pn_space;
 
 
-#ifndef PARTICLE
-typedef uint64_t cc_state_t;
-#else
-typedef uint32_t cc_state_t;
-#endif
-
-
 struct cc_state {
     ev_tstamp latest_rtt; // latest_rtt
     ev_tstamp min_rtt;    // min_rtt
     ev_tstamp rttvar;     // rttvar
     ev_tstamp srtt;       // smoothed_rtt
 
-    cc_state_t ae_in_flight; // nr of ACK-eliciting pkts inflight
-    cc_state_t cwnd;         // congestion_window
-    cc_state_t in_flight;    // bytes_in_flight
-    cc_state_t ssthresh;     // sshtresh
+    uint64_t ae_in_flight; // nr of ACK-eliciting pkts inflight
+    uint64_t cwnd;         // congestion_window
+    uint64_t in_flight;    // bytes_in_flight
+    uint64_t ssthresh;     // sshtresh
 };
 
 
@@ -78,8 +71,8 @@ struct recovery {
     // max_ack_delay -> c->tp_out.max_ack_del
 
     // CC state
-    ev_tstamp rec_start_t;   // recovery_start_time
-    cc_state_t ae_in_flight; // nr of ACK-eliciting pkts inflight
+    ev_tstamp rec_start_t; // recovery_start_time
+    uint64_t ae_in_flight; // nr of ACK-eliciting pkts inflight
 
     struct cc_state cur;
     struct cc_state prev;

@@ -27,6 +27,7 @@
 
 #include <fcntl.h>
 #include <inttypes.h>
+#include <libgen.h>
 #include <net/if.h>
 #include <stdbool.h>
 #include <stdint.h>

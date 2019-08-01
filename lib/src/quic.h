@@ -109,6 +109,7 @@
 #define kPersistentCongestionThreshold 3
 
 
+#ifndef PARTICLE
 #define NRM "\x1B[0m" ///< ANSI escape sequence: reset all to normal
 #define BLD "\x1B[1m" ///< ANSI escape sequence: bold
 // #define DIM "\x1B[2m"   ///< ANSI escape sequence: dim
@@ -124,6 +125,17 @@
 #define MAG "\x1B[35m" ///< ANSI escape sequence: magenta
 #define CYN "\x1B[36m" ///< ANSI escape sequence: cyan
 // #define WHT "\x1B[37m"  ///< ANSI escape sequence: white
+#else
+#define NRM ""
+#define BLD ""
+#define REV ""
+#define RED ""
+#define GRN ""
+#define YEL ""
+#define BLU ""
+#define MAG ""
+#define CYN ""
+#endif
 
 #define FMT_PNR_IN BLU "%" PRIu64 NRM
 #define FMT_PNR_OUT GRN "%" PRIu64 NRM
@@ -244,7 +256,7 @@ w_iov_dup(const struct w_iov * const v,
           const uint16_t off);
 
 
-#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
+#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE)) && !defined(FUZZING) &&     \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 extern int corpus_pkt_dir, corpus_frm_dir;
 

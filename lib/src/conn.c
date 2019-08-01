@@ -262,7 +262,7 @@ void use_next_dcid(struct q_conn * const c)
 #endif
 
 
-#if !defined(NDEBUG) && !defined(PARTICLE)
+#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE)) && !defined(PARTICLE)
 static void __attribute__((nonnull)) log_sent_pkts(struct q_conn * const c)
 {
     for (pn_t t = pn_init; t <= pn_data; t++) {
@@ -394,7 +394,7 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
     while (w_tx_pending(&c->txq));
 #endif
 
-#if defined(DEBUG_BUFFERS) && !defined(NDEBUG)
+#if defined(DEBUG_BUFFERS) && (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE))
     const uint64_t avail = sq_len(&c->w->iov);
     const uint64_t sql = sq_len(&c->txq);
 #endif
@@ -407,7 +407,7 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
          sq_len(&c->w->iov));
 #endif
 
-#if !defined(NDEBUG) && !defined(PARTICLE)
+#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE)) && !defined(PARTICLE)
     if (util_dlevel == DBG)
         log_sent_pkts(c);
 #endif
@@ -881,7 +881,7 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
 }
 
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
 static bool __attribute__((const))
 pkt_ok_for_epoch(const uint8_t flags, const epoch_t epoch)
 {
@@ -910,7 +910,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
 #endif
                                             ,
                                             const struct cid * const odcid
-#ifdef NDEBUG
+#if defined(NDEBUG) && !defined(NDEBUG_OVERRIDE)
                                             __attribute__((unused))
 #endif
                                             ,
@@ -944,7 +944,8 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
                 warn(INF, "sending retry");
                 // send a RETRY
                 make_rtry_tok(c);
-                ok = c->needs_tx = c->tx_rtry = true;
+                ok = true;
+                c->needs_tx = c->tx_rtry = true;
                 update_act_scid(c);
                 goto done;
             }
@@ -1149,7 +1150,7 @@ rx_pkts(struct w_iov_sq * const x,
              w_iov_idx(xv), sq_len(&xv->w->iov), xv->len, *xv->buf);
 #endif
 
-#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
+#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE)) && !defined(FUZZING) &&     \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
         // when called from the fuzzer, v->addr.ss_family is zero
         if (xv->addr.ss_family)
@@ -1239,7 +1240,7 @@ rx_pkts(struct w_iov_sq * const x,
                     goto drop;
                 }
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
                 char ip[NI_MAXHOST];
                 char port[NI_MAXSERV];
                 ensure(getnameinfo((struct sockaddr *)&v->addr, sizeof(v->addr),
@@ -1325,6 +1326,7 @@ rx_pkts(struct w_iov_sq * const x,
             warn(INF, "cannot find conn %s for %u-byte %s pkt, ignoring",
                  cid2str(&m->hdr.dcid), v->len,
                  pkt_type_str(m->hdr.flags, &m->hdr.vers));
+            // hexdump(v->buf, v->len);
             goto drop;
         }
 
@@ -1384,14 +1386,14 @@ rx_pkts(struct w_iov_sq * const x,
                 (c->tx_path_chlg == false ||
                  sockaddr_cmp((struct sockaddr *)&c->migr_peer,
                               (struct sockaddr *)&v->addr) != 0)) {
-#ifndef NDEBUG
+
+#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
                 char ip[NI_MAXHOST];
                 char port[NI_MAXSERV];
                 ensure(getnameinfo((struct sockaddr *)&v->addr, sizeof(v->addr),
                                    ip, sizeof(ip), port, sizeof(port),
                                    NI_NUMERICHOST | NI_NUMERICSERV) == 0,
                        "getnameinfo");
-
 #endif
 
                 struct pn_space * const pn = &c->pns[pn_data];
@@ -1721,7 +1723,7 @@ void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
         get_conf_uncond(conf, enable_udp_zero_checksums);
     w_set_sockopt(c->sock, &c->sockopt);
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
     // XXX for testing, do a key flip and a migration ASAP (if enabled)
     c->do_key_flip = c->key_flips_enabled;
 #ifndef NO_MIGRATION
@@ -1779,7 +1781,8 @@ struct q_conn * new_conn(struct w_engine * const w,
     splay_init(&c->scids_by_seq);
     c->scids_by_id = kh_init(cids_by_id);
 #endif
-    new_cids(c, get_conf(conf, enable_zero_len_cid), dcid, scid);
+    const bool zero_len_scid = get_conf(conf, enable_zero_len_cid);
+    new_cids(c, zero_len_scid, dcid, scid);
 
     c->vers = c->vers_initial = vers;
     diet_init(&c->clsd_strms);
@@ -1953,7 +1956,8 @@ char * cid2str_impl(const struct cid * const id,
                     char * const dst,
                     const size_t len_dst)
 {
-    snprintf(dst, len_dst, "%" PRIu64 ":%.*s", id->seq, 2 * id->len,
-             hex2str(id->id, id->len, CID_LEN_MAX));
+    if (id)
+        snprintf(dst, len_dst, "%" PRIu64 ":%.*s", id->seq, 2 * id->len,
+                 hex2str(id->id, id->len, CID_LEN_MAX));
     return dst;
 }

@@ -45,14 +45,12 @@
 #include <stdarg.h>
 #endif
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
 #include <netdb.h>
 #endif
 
 #ifdef PARTICLE
 #include <rng_hal.h>
-
-#define gai_strerror(x) "getnameinfo"
 
 void ptls_minicrypto_random_bytes(void * buf, size_t len)
 {
@@ -628,7 +626,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
             pos += sizeof(pa->cid.srt);
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
             char ip4[NI_MAXHOST];
             char port4[NI_MAXSERV];
             int err = getnameinfo((struct sockaddr *)pa4, sizeof(*pa4), ip4,
@@ -894,6 +892,7 @@ static void init_ticket_prot(void)
 }
 
 
+#ifndef NO_TLS_TICKETS
 static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
                              __attribute__((unused)),
                              ptls_t * tls,
@@ -968,7 +967,6 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
 }
 
 
-#ifndef NO_TLS_TICKETS
 static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
                           ptls_t * tls,
                           ptls_iovec_t src)
@@ -1046,9 +1044,9 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
 
 
 static ptls_save_ticket_t save_ticket = {.cb = save_ticket_cb};
-#endif
 
 static ptls_encrypt_ticket_t encrypt_ticket = {.cb = encrypt_ticket_cb};
+#endif
 
 
 void init_tls(struct q_conn * const c, const char * const clnt_alpn)
@@ -1403,7 +1401,9 @@ void init_tls_ctx(const struct q_conf * const conf)
         read_tickets();
 #endif
     } else {
+#ifndef NO_TLS_TICKETS
         tls_ctx.encrypt_ticket = &encrypt_ticket;
+#endif
         tls_ctx.max_early_data_size = 0xffffffff;
         tls_ctx.ticket_lifetime = 60 * 60 * 24;
         tls_ctx.require_dhe_on_psk = 0;

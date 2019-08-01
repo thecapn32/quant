@@ -28,6 +28,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <libgen.h>
 #include <limits.h>
 #include <net/if.h>
 #include <netdb.h>
@@ -90,7 +91,7 @@ struct stream_entry {
     sl_entry(stream_entry) next;
     struct q_conn * c;
     struct q_stream * s;
-    const char * url;
+    char * url;
     struct timespec req_t;
     struct timespec rep_t;
     struct w_iov_sq req;
@@ -175,7 +176,7 @@ set_from_url(char * const var,
 
 
 static struct q_conn * __attribute__((nonnull))
-get(const char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
+get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
 {
     // parse and verify the URIs passed on the command line
     struct http_parser_url u = {0};

@@ -45,7 +45,7 @@
 #define ASAN_UNPOISON_MEMORY_REGION(x, y)
 #endif
 
-#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
+#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE)) && !defined(FUZZING) &&     \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 #include <errno.h>
 #include <fcntl.h>
@@ -73,7 +73,7 @@
 
 /// QUIC version supported by this implementation in order of preference.
 const uint32_t ok_vers[] = {
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
     0xbabababa, // reserved version to trigger negotiation, TODO: randomize
 #endif
     0x45474700 + DRAFT_VERSION, // quant private version -xx
@@ -89,7 +89,7 @@ struct q_conn_conf default_conn_conf = {.idle_timeout = 10 * MSECS_PER_SEC,
                                         .enable_udp_zero_checksums = true,
                                         .tls_key_update_frequency = 3,
                                         .enable_spinbit =
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
                                             true
 #else
                                             false
@@ -104,7 +104,7 @@ struct q_conn_sl accept_queue = sl_head_initializer(accept_queue);
 static ev_timer api_alarm;
 static uint64_t num_bufs = 0;
 
-#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
+#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE)) && !defined(FUZZING) &&     \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 int corpus_pkt_dir, corpus_frm_dir;
 #endif
@@ -121,10 +121,9 @@ FILE * qlog = 0;
 /// @param      conn  The connection to run the event loop for.
 /// @param      strm  The stream to run the event loop for.
 ///
-static void __attribute__((nonnull(1)))
-do_loop_run(const func_ptr func,
-            struct q_conn * const conn,
-            struct q_stream * const strm)
+static void __attribute__((nonnull(1))) loop_run(const func_ptr func,
+                                                 struct q_conn * const conn,
+                                                 struct q_stream * const strm)
 {
     ensure(api_func == 0, "other API call active");
     api_func = func;
@@ -134,8 +133,6 @@ do_loop_run(const func_ptr func,
     api_func = 0;
     api_conn = api_strm = 0;
 }
-
-#define loop_run(func, conn, strm) do_loop_run((func_ptr)(func), (conn), (strm))
 
 
 void alloc_off(struct w_engine * const w,
@@ -303,12 +300,12 @@ struct q_conn * q_connect(struct w_engine * const w,
     // if we have no early data, we're not trying 0-RTT
     c->try_0rtt &= early_data && early_data_stream;
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
     char ip[NI_MAXHOST];
     char port[NI_MAXSERV];
-    ensure(getnameinfo(peer, sizeof(*peer), ip, sizeof(ip), port, sizeof(port),
-                       NI_NUMERICHOST | NI_NUMERICSERV) == 0,
-           "getnameinfo");
+    const int err = getnameinfo(peer, sizeof(*peer), ip, sizeof(ip), port,
+                                sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
+    ensure(err == 0, "getnameinfo %d", err);
 
     warn(WRN,
          "new %u-RTT %s conn %s to %s:%s, %" PRIu64 " byte%s queued for TX",
@@ -316,6 +313,7 @@ struct q_conn * q_connect(struct w_engine * const w,
          early_data ? w_iov_sq_len(early_data) : 0,
          plural(early_data ? w_iov_sq_len(early_data) : 0));
 #endif
+
 
     ev_timer_again(&c->idle_alarm);
     w_connect(c->sock, peer);
@@ -338,7 +336,7 @@ struct q_conn * q_connect(struct w_engine * const w,
     warn(DBG, "waiting for connect on %s conn %s to %s:%s", conn_type(c),
          cid2str(c->scid), ip, port);
     conn_to_state(c, conn_opng);
-    loop_run(q_connect, c, 0);
+    loop_run((func_ptr)q_connect, c, 0);
 
     if (fin && early_data_stream && *early_data_stream)
         strm_to_state(*early_data_stream,
@@ -350,7 +348,7 @@ struct q_conn * q_connect(struct w_engine * const w,
         return 0;
     }
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
     struct pn_data * const pnd = &c->pns[pn_data].data;
     warn(WRN, "%s conn %s connected%s, cipher %s", conn_type(c),
          cid2str(c->scid), c->did_0rtt ? " after 0-RTT" : "",
@@ -387,7 +385,7 @@ bool q_write(struct q_stream * const s,
         // strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
     }
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
     const uint64_t qlen = w_iov_sq_len(q);
     const uint64_t qcnt = w_iov_sq_cnt(q);
     warn(WRN,
@@ -420,7 +418,7 @@ q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool all)
             // no data queued on any stream, wait for new data
             warn(WRN, "waiting to read on any strm on %s conn %s", conn_type(c),
                  cid2str(c->scid));
-            loop_run(q_read, c, 0);
+            loop_run((func_ptr)q_read, c, 0);
         }
     } while (s == 0 && all);
 
@@ -443,7 +441,7 @@ bool q_read_stream(struct q_stream * const s,
         warn(WRN, "reading all on %s conn %s strm " FMT_SID, conn_type(c),
              cid2str(c->scid), s->id);
     again:
-        loop_run(q_read_stream, c, s);
+        loop_run((func_ptr)q_read_stream, c, s);
     }
 
     if (sq_empty(&s->in))
@@ -452,7 +450,7 @@ bool q_read_stream(struct q_stream * const s,
     struct w_iov * const last = sq_last(&s->in, w_iov, next);
     const struct pkt_meta * const m_last = &meta(last);
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
     const uint64_t qlen = w_iov_sq_len(&s->in);
     const uint64_t qcnt = w_iov_sq_cnt(&s->in);
     warn(WRN,
@@ -511,7 +509,7 @@ struct q_conn * q_accept(const struct q_conn_conf * const conf)
         ev_timer_start(&api_alarm);
     }
 
-    loop_run(q_accept, 0, 0);
+    loop_run((func_ptr)q_accept, 0, 0);
 
     if (sl_empty(&accept_queue)) {
         warn(ERR, "no conn ready for accept");
@@ -524,7 +522,7 @@ accept:;
     ev_timer_again(&c->idle_alarm);
     c->needs_accept = false;
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
     char ip[NI_MAXHOST];
     char port[NI_MAXSERV];
     ensure(getnameinfo((struct sockaddr *)&c->peer, sizeof(c->peer), ip,
@@ -564,7 +562,7 @@ struct q_stream * q_rsv_stream(struct q_conn * const c, const bool bidi)
             c->sid_blocked_bidi = true;
         else
             c->sid_blocked_uni = true;
-        loop_run(q_rsv_stream, c, 0);
+        loop_run((func_ptr)q_rsv_stream, c, 0);
     }
 
     // stream blocking is handled by new_stream
@@ -572,7 +570,7 @@ struct q_stream * q_rsv_stream(struct q_conn * const c, const bool bidi)
 }
 
 
-#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
+#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE)) && !defined(FUZZING) &&     \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 static int __attribute__((nonnull))
 mk_or_open_dir(const char * const path, mode_t mode)
@@ -624,10 +622,15 @@ struct w_engine * q_init(const char * const ifname,
     ASAN_POISON_MEMORY_REGION(pkt_meta, num_bufs * sizeof(*pkt_meta));
 
     // initialize the event loop
-    ev_default_loop(EVFLAG_NOENV | EVFLAG_NOSIGMASK | EVBACKEND_KQUEUE |
-                    EVBACKEND_EPOLL);
+    ev_default_loop(EVFLAG_NOENV | EVFLAG_NOSIGMASK |
+#ifndef PARTICLE
+                    EVBACKEND_KQUEUE | EVBACKEND_EPOLL
+#else
+                    EVBACKEND_POLL
+#endif
+    );
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
     static const char * ev_backend_str[] = {
         [EVBACKEND_SELECT] = "select",   [EVBACKEND_POLL] = "poll",
         [EVBACKEND_EPOLL] = "epoll",     [EVBACKEND_KQUEUE] = "kqueue",
@@ -642,7 +645,8 @@ struct w_engine * q_init(const char * const ifname,
     // initialize TLS context
     init_tls_ctx(conf);
 
-#if !defined(NDEBUG) && !defined(NO_FUZZER_CORPUS_COLLECTION)
+#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE)) &&                          \
+    !defined(NO_FUZZER_CORPUS_COLLECTION)
 #ifdef FUZZING
     warn(CRT, "%s compiled for fuzzing - will not communicate", quant_name);
 #else
@@ -724,7 +728,7 @@ void q_close(struct q_conn * const c,
         ev_feed_event(&c->tx_w, 0);
     }
 
-    loop_run(q_close, c, 0);
+    loop_run((func_ptr)q_close, c, 0);
 
 done:
     if (c->scid && c->i.pkts_in_valid > 0) {
@@ -793,7 +797,7 @@ void q_cleanup(struct w_engine * const w)
     free(pkt_meta);
     w_cleanup(w);
 
-#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
+#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE)) && !defined(FUZZING) &&     \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
     close(corpus_pkt_dir);
     close(corpus_frm_dir);
@@ -832,7 +836,7 @@ bool q_is_conn_closed(const struct q_conn * const c)
 }
 
 
-#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
+#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE)) && !defined(FUZZING) &&     \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 void write_to_corpus(const int dir, const void * const data, const size_t len)
 {
@@ -869,14 +873,14 @@ bool q_ready(const uint64_t timeout, struct q_conn ** const ready)
 #ifdef DEBUG_EXTRA
         warn(WRN, "waiting for conn to get ready");
 #endif
-        loop_run(q_ready, 0, 0);
+        loop_run((func_ptr)q_ready, 0, 0);
     }
 
     struct q_conn * const c = sl_first(&c_ready);
     if (c) {
         sl_remove_head(&c_ready, node_rx_ext);
         c->have_new_data = c->in_c_ready = false;
-#if !defined(NDEBUG) && defined(DEBUG_EXTRA)
+#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE)) && defined(DEBUG_EXTRA)
         char * op = "rx";
         if (c->needs_accept)
             op = "accept";
@@ -909,7 +913,7 @@ void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
         // could not open new w_sock, can't rebind
         return;
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
     char old_ip[NI_MAXHOST];
     char old_port[NI_MAXSERV];
     const struct sockaddr * src = w_get_addr(c->sock, true);
@@ -936,7 +940,7 @@ void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
         // switch to new dcid
         use_next_dcid(c);
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
     char new_ip[NI_MAXHOST];
     char new_port[NI_MAXSERV];
     src = w_get_addr(c->sock, true);

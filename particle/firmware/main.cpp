@@ -9,9 +9,14 @@
 #include "warpcore/warpcore.h"
 
 SYSTEM_MODE(MANUAL);
+// SYSTEM_THREAD(ENABLED);
 
 static SerialDebugOutput serial;
 static const int led = D7;
+
+
+// don't use entropy from cloud
+void random_seed_from_cloud(unsigned int seed) {}
 
 
 struct addrinfo * resolve(const char * const name, const char * const port)
@@ -68,6 +73,7 @@ void quic_transaction()
                                         "hq-" DRAFT_VERSION_STRING, 0);
     ensure(c, "could not open connection");
     freeaddrinfo(peer);
+    q_cleanup(w);
 }
 
 
@@ -75,11 +81,11 @@ void button_action()
 {
     Serial.begin(9600);
     delay(1000);
-    digitalWrite(led, HIGH);
 
     WiFi.on();
     WiFi.connect(WIFI_CONNECT_SKIP_LISTEN);
     waitUntil(WiFi.ready);
+    digitalWrite(led, HIGH);
 
     // warpcore_transaction();
     quic_transaction();
@@ -91,7 +97,13 @@ void button_action()
 
 void setup()
 {
+    // let's gather some entropy and seed the RNG
+    const int temp = analogRead(A0);
+    const int volt = analogRead(BATT);
+    randomSeed(((temp << 12) | volt));
+
     pinMode(led, OUTPUT);
+    button_action();
 }
 
 

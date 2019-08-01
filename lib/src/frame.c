@@ -80,14 +80,6 @@
     } while (0)
 
 
-// #define dec2_chk(val, pos, end, c, type)                                       \
-//     do {                                                                       \
-//         if (unlikely(dec2((val), (pos), (end)) == false))                      \
-//             err_close_return((c), ERR_FRAME_ENC, (type), "dec4 %s in %s:%u",   \
-//                              #val, __FILE__, __LINE__);                        \
-//     } while (0)
-
-
 #define dec8_chk(val, pos, end, c, type)                                       \
     do {                                                                       \
         if (unlikely(dec8((val), (pos), (end)) == false))                      \
@@ -111,7 +103,7 @@
     } while (0)
 
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
 void log_stream_or_crypto_frame(const bool rtx,
                                 const struct pkt_meta * const m,
                                 const uint8_t fl,
@@ -433,7 +425,7 @@ done:
 }
 
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
 static uint64_t __attribute__((const))
 shorten_ack_nr(const uint64_t ack, const uint64_t diff)
 {
@@ -504,7 +496,7 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
             err_close_return(c, ERR_FRAME_ENC, type, "ACK rng len %" PRIu64,
                              " > lg_ack %" PRIu64, ack_rng, lg_ack);
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
         if (ack_rng == 0) {
             if (n == ack_rng_cnt + 1)
                 warn(INF,
@@ -901,7 +893,7 @@ dec_path_response_frame(const uint8_t ** pos,
         return true;
     }
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
     char ip[NI_MAXHOST];
     char port[NI_MAXSERV];
     char migr_ip[NI_MAXHOST];
@@ -1074,7 +1066,7 @@ dec_new_token_frame(const uint8_t ** pos,
 }
 
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
 static void log_pad(const uint16_t len)
 {
     warn(INF, FRAM_IN "PADDING" NRM " len=%u", len);
@@ -1097,7 +1089,7 @@ bool dec_frames(struct q_conn * const c,
     const uint8_t * end = v->buf + v->len;
     const uint8_t * pad_start = 0;
 
-#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
+#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE)) && !defined(FUZZING) &&     \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
     // when called from the fuzzer, v->addr.ss_family is zero
     if (v->addr.ss_family)
@@ -1392,7 +1384,7 @@ void enc_ack_frame(uint8_t ** pos,
             encv(pos, end, gap);
         }
         const uint64_t ack_rng = b->hi - b->lo;
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
         if (ack_rng) {
             if (prev_lo)
                 warn(INF,
@@ -1538,7 +1530,7 @@ void enc_close_frame(uint8_t ** pos,
     if (err_reason_len)
         encb(pos, end, (const uint8_t *)err_reason, err_reason_len);
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
     if (type == FRM_CLQ)
         warn(INF,
              FRAM_OUT "CONNECTION_CLOSE" NRM " 0x%02x=quic err=%s0x%" PRIx64 NRM

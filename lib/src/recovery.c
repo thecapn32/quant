@@ -32,7 +32,7 @@
 #include <string.h>
 #include <sys/param.h>
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
 #include <stdio.h>
 #endif
 
@@ -333,7 +333,7 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
 }
 
 
-#ifndef NDEBUG
+#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE))
 #define DEBUG_diet_insert diet_insert
 #define DEBUG_ensure ensure
 #else
@@ -360,7 +360,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
     // Packets sent before this time are deemed lost.
     const ev_tstamp lost_send_t = ev_now() - loss_del;
 
-#ifndef NDEBUG
+#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE))
     struct diet lost = diet_initializer(lost);
 #endif
     uint64_t lg_lost = UINT64_MAX;
@@ -406,7 +406,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
         }
     });
 
-#ifndef NDEBUG
+#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE))
     char buf[512];
     int pos = 0;
     struct ival * i = 0;
@@ -671,7 +671,7 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
             warn(DBG, "%s %s pkt " FMT_PNR_OUT " was RTX'ed as " FMT_PNR_OUT,
                  conn_type(c), pkt_type_str(m->hdr.flags, &m->hdr.vers),
                  m->hdr.nr, m_rtx->hdr.nr);
-#ifndef NDEBUG
+#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE))
             ensure(sl_next(m_rtx, rtx_next) == 0, "RTX chain corrupt");
 #endif
             if (m_rtx->acked == false) {

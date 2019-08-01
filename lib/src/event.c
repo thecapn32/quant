@@ -28,11 +28,8 @@
 #include "event.h"
 
 #ifdef PARTICLE
-#include <logging.h>
-#include <socket_hal.h>
 #include <sys/socket.h>
 #include <warpcore/warpcore.h>
-
 
 uid_t __attribute__((const)) geteuid(void)
 {
@@ -64,20 +61,8 @@ ssize_t write(int fildes, const void * buf, size_t nbyte)
     return nbyte;
 }
 
+#define strerror(x) ""
 
-int nanosleep(const struct timespec * rqtp, struct timespec * rmtp)
-{
-    static int sock = 0;
-    if (unlikely(sock == 0))
-        sock = socket(AF_INET, SOCK_RAW, 0);
-
-    struct timeval tv;
-    TIMESPEC_TO_TIMEVAL(&tv, rqtp);
-    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-
-    recv(sock, 0, 0, 0);
-    return 0;
-}
 #endif
 
 
@@ -105,19 +90,14 @@ int nanosleep(const struct timespec * rqtp, struct timespec * rmtp)
 #pragma clang diagnostic ignored "-Wused-but-marked-unused"
 
 #pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcomment"
 #pragma GCC diagnostic ignored "-Wextra"
+#pragma GCC diagnostic ignored "-Wparentheses"
 #pragma GCC diagnostic ignored "-Wpedantic"
 #pragma GCC diagnostic ignored "-Wsign-compare"
 #pragma GCC diagnostic ignored "-Wunused-variable"
 
-#if !defined(NDEBUG) && defined(PARTICLE)
-#define EV_NDEBUG
-#define NDEBUG
-#endif
 #include "../deps/libev/ev.c"
-#ifdef EV_NDEBUG
-#undef NDEBUG
-#endif
 
 #pragma GCC diagnostic pop
 #pragma clang diagnostic pop

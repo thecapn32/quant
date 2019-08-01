@@ -66,7 +66,7 @@
 #define MAX_PKT_NR_LEN 4 ///< Maximum packet number length allowed by spec.
 
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
 // local version of cid2str that is just hex2str (omits the seq)
 #define c2s(i) hex2str((i)->id, (i)->len, CID_LEN_MAX)
 
@@ -117,22 +117,23 @@ void log_pkt(const char * const dir,
                     NTE,
                     BLD BLU "RX" NRM " from=%s:%s len=%u 0x%02x=" BLU "%s " NRM
                             "vers=0x%08x dcid=%s scid=%s tok=%s len=%u nr=" BLU
-                            "%" PRIu64,
+                            "%" PRIu64 NRM,
                     ip, port, v->len, m->hdr.flags, pts, m->hdr.vers,
                     c2s(&m->hdr.dcid), c2s(&m->hdr.scid),
                     hex2str(tok, tok_len, MAX_TOK_LEN), m->hdr.len, m->hdr.nr);
             else
                 twarn(NTE,
-                      BLD BLU
-                      "RX" NRM " from=%s:%s len=%u 0x%02x=" BLU "%s " NRM
-                      "vers=0x%08x dcid=%s scid=%s len=%u nr=" BLU "%" PRIu64,
+                      BLD BLU "RX" NRM " from=%s:%s len=%u 0x%02x=" BLU
+                              "%s " NRM
+                              "vers=0x%08x dcid=%s scid=%s len=%u nr=" BLU
+                              "%" PRIu64 NRM,
                       ip, port, v->len, m->hdr.flags, pts, m->hdr.vers,
                       c2s(&m->hdr.dcid), c2s(&m->hdr.scid), m->hdr.len,
                       m->hdr.nr);
         } else
             twarn(NTE,
                   BLD BLU "RX" NRM " from=%s:%s len=%u 0x%02x=" BLU "%s " NRM
-                          "kyph=%u spin=%u dcid=%s nr=" BLU "%" PRIu64,
+                          "kyph=%u spin=%u dcid=%s nr=" BLU "%" PRIu64 NRM,
                   ip, port, v->len, m->hdr.flags, pts,
                   is_set(SH_KYPH, m->hdr.flags), is_set(SH_SPIN, m->hdr.flags),
                   c2s(&m->hdr.dcid), m->hdr.nr);
@@ -159,7 +160,7 @@ void log_pkt(const char * const dir,
                     NTE,
                     BLD GRN "TX" NRM " to=%s:%s 0x%02x=" GRN "%s " NRM
                             "vers=0x%08x dcid=%s scid=%s tok=%s len=%u nr=" GRN
-                            "%" PRIu64,
+                            "%" PRIu64 NRM,
                     ip, port, m->hdr.flags, pts, m->hdr.vers, c2s(&m->hdr.dcid),
                     c2s(&m->hdr.scid), hex2str(tok, tok_len, MAX_TOK_LEN),
                     m->hdr.len, m->hdr.nr);
@@ -167,14 +168,14 @@ void log_pkt(const char * const dir,
                 twarn(NTE,
                       BLD GRN "TX" NRM " to=%s:%s 0x%02x=" GRN "%s " NRM
                               "vers=0x%08x dcid=%s scid=%s len=%u nr=" GRN
-                              "%" PRIu64,
+                              "%" PRIu64 NRM,
                       ip, port, m->hdr.flags, pts, m->hdr.vers,
                       c2s(&m->hdr.dcid), c2s(&m->hdr.scid), m->hdr.len,
                       m->hdr.nr);
         } else
             twarn(NTE,
                   BLD GRN "TX" NRM " to=%s:%s 0x%02x=" GRN "%s " NRM
-                          "kyph=%u spin=%u dcid=%s nr=" GRN "%" PRIu64,
+                          "kyph=%u spin=%u dcid=%s nr=" GRN "%" PRIu64 NRM,
                   ip, port, m->hdr.flags, pts, is_set(SH_KYPH, m->hdr.flags),
                   is_set(SH_SPIN, m->hdr.flags), c2s(&m->hdr.dcid), m->hdr.nr);
     }

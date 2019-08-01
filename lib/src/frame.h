@@ -80,19 +80,15 @@ bitset_define(frames, FRM_MAX);
 #define F_STREAM_LEN 0x02
 #define F_STREAM_OFF 0x04
 
-#ifndef NDEBUG
 #define FRAM_IN BLD BLU
 #define FRAM_OUT BLD GRN
-#endif
 
 #define has_frm(frames, type) bit_isset(FRM_MAX, (type), &(frames))
 
 struct pkt_meta;
 
-#ifdef NDEBUG
-#define log_stream_or_crypto_frame(...)                                        \
-    do {                                                                       \
-    } while (0)
+#if defined(NDEBUG) && !defined(NDEBUG_OVERRIDE)
+#define log_stream_or_crypto_frame(...)
 #else
 extern void __attribute__((nonnull(2)))
 log_stream_or_crypto_frame(const bool is_rtx,
