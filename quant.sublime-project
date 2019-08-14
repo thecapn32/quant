@@ -6,8 +6,9 @@
             "file_include_patterns": [
                 "*.c", "*.cc", "*.cpp", "*.h", "*.sh", "*.txt", "*.dot",
                 "*.imp", "*.in", "*.result", "*.yml", "*.md", "*.mk",
-                "*.sublime-project", ".gitignore", ".clang-format",
-                ".editorconfig", ".dockerignore", "Vagrantfile", "Dockerfile"
+                ".gitignore", ".gitmodules", ".clang-format", ".editorconfig",
+                ".dockerignore", "Vagrantfile", "*.r", "*.py",
+                "*.sublime-project"
             ],
             "folder_exclude_patterns": [
                 ".git", ".vagrant", "Darwin*", "Linux*",

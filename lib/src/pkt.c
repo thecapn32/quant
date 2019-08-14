@@ -66,9 +66,7 @@
 #define MAX_PKT_NR_LEN 4 ///< Maximum packet number length allowed by spec.
 
 
-#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
-// local version of cid2str that is just hex2str (omits the seq)
-#define c2s(i) hex2str((i)->id, (i)->len, CID_LEN_MAX)
+#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
 
 void log_pkt(const char * const dir,
              const struct w_iov * const v,
@@ -94,49 +92,51 @@ void log_pkt(const char * const dir,
 
     const struct pkt_meta * const m = &meta(v);
     const char * const pts = pkt_type_str(m->hdr.flags, &m->hdr.vers);
+    const char * const dcid_str =
+        hex2str(m->hdr.dcid.id, m->hdr.dcid.len, CID_LEN_MAX);
+    const char * const scid_str =
+        hex2str(m->hdr.scid.id, m->hdr.scid.len, CID_LEN_MAX);
+    const char * const odcid_str =
+        odcid ? hex2str(odcid->id, odcid->len, CID_LEN_MAX) : 0;
+    const char * const tok_str = tok ? hex2str(tok, tok_len, MAX_TOK_LEN) : 0;
 
     if (*dir == 'R') {
         if (is_lh(m->hdr.flags)) {
             if (m->hdr.vers == 0)
                 twarn(NTE,
                       BLD BLU "RX" NRM " from=%s:%s len=%u 0x%02x=" BLU
-                              "%s " NRM "vers=0x%08x dcid=%s scid=%s",
+                              "%s " NRM "vers=0x%0" PRIx32 " dcid=%s scid=%s",
                       ip, port, v->len, m->hdr.flags, pts, m->hdr.vers,
-                      c2s(&m->hdr.dcid), c2s(&m->hdr.scid));
-            else if (m->hdr.type == LH_RTRY) {
-                ensure(odcid, "need odcid");
+                      dcid_str, scid_str);
+            else if (m->hdr.type == LH_RTRY)
                 twarn(NTE,
                       BLD BLU "RX" NRM " from=%s:%s len=%u 0x%02x=" BLU
-                              "%s " NRM
-                              "vers=0x%08x dcid=%s scid=%s odcid=%s tok=%s",
+                              "%s " NRM "vers=0x%0" PRIx32
+                              " dcid=%s scid=%s odcid=%s tok=%s",
                       ip, port, v->len, m->hdr.flags, pts, m->hdr.vers,
-                      c2s(&m->hdr.dcid), c2s(&m->hdr.scid), c2s(odcid),
-                      hex2str(tok, tok_len, MAX_TOK_LEN));
-            } else if (m->hdr.type == LH_INIT)
-                twarn(
-                    NTE,
-                    BLD BLU "RX" NRM " from=%s:%s len=%u 0x%02x=" BLU "%s " NRM
-                            "vers=0x%08x dcid=%s scid=%s tok=%s len=%u nr=" BLU
-                            "%" PRIu64 NRM,
-                    ip, port, v->len, m->hdr.flags, pts, m->hdr.vers,
-                    c2s(&m->hdr.dcid), c2s(&m->hdr.scid),
-                    hex2str(tok, tok_len, MAX_TOK_LEN), m->hdr.len, m->hdr.nr);
+                      dcid_str, scid_str, odcid_str, tok_str);
+            else if (m->hdr.type == LH_INIT)
+                twarn(NTE,
+                      BLD BLU "RX" NRM " from=%s:%s len=%u 0x%02x=" BLU
+                              "%s " NRM "vers=0x%0" PRIx32
+                              " dcid=%s scid=%s tok=%s len=%u nr=" BLU
+                              "%" PRIu NRM,
+                      ip, port, v->len, m->hdr.flags, pts, m->hdr.vers,
+                      dcid_str, scid_str, tok_str, m->hdr.len, m->hdr.nr);
             else
                 twarn(NTE,
                       BLD BLU "RX" NRM " from=%s:%s len=%u 0x%02x=" BLU
-                              "%s " NRM
-                              "vers=0x%08x dcid=%s scid=%s len=%u nr=" BLU
-                              "%" PRIu64 NRM,
+                              "%s " NRM "vers=0x%0" PRIx32
+                              " dcid=%s scid=%s len=%u nr=" BLU "%" PRIu NRM,
                       ip, port, v->len, m->hdr.flags, pts, m->hdr.vers,
-                      c2s(&m->hdr.dcid), c2s(&m->hdr.scid), m->hdr.len,
-                      m->hdr.nr);
+                      dcid_str, scid_str, m->hdr.len, m->hdr.nr);
         } else
             twarn(NTE,
                   BLD BLU "RX" NRM " from=%s:%s len=%u 0x%02x=" BLU "%s " NRM
-                          "kyph=%u spin=%u dcid=%s nr=" BLU "%" PRIu64 NRM,
+                          "kyph=%u spin=%u dcid=%s nr=" BLU "%" PRIu NRM,
                   ip, port, v->len, m->hdr.flags, pts,
                   is_set(SH_KYPH, m->hdr.flags), is_set(SH_SPIN, m->hdr.flags),
-                  c2s(&m->hdr.dcid), m->hdr.nr);
+                  dcid_str, m->hdr.nr);
 
     } else {
         // on TX, v->len is not yet final/correct, so don't print it
@@ -144,40 +144,37 @@ void log_pkt(const char * const dir,
             if (m->hdr.vers == 0)
                 twarn(NTE,
                       BLD GRN "TX" NRM " to=%s:%s 0x%02x=" GRN "%s " NRM
-                              "vers=0x%08x dcid=%s scid=%s",
-                      ip, port, m->hdr.flags, pts, m->hdr.vers,
-                      c2s(&m->hdr.dcid), c2s(&m->hdr.scid));
-            else if (m->hdr.type == LH_RTRY) {
-                ensure(odcid, "need odcid");
+                              "vers=0x%0" PRIx32 " dcid=%s scid=%s",
+                      ip, port, m->hdr.flags, pts, m->hdr.vers, dcid_str,
+                      scid_str);
+            else if (m->hdr.type == LH_RTRY)
                 twarn(NTE,
                       BLD GRN "TX" NRM " to=%s:%s 0x%02x=" GRN "%s " NRM
-                              "vers=0x%08x dcid=%s scid=%s odcid=%s tok=%s",
-                      ip, port, m->hdr.flags, pts, m->hdr.vers,
-                      c2s(&m->hdr.dcid), c2s(&m->hdr.scid), c2s(odcid),
-                      hex2str(tok, tok_len, MAX_TOK_LEN));
-            } else if (m->hdr.type == LH_INIT)
-                twarn(
-                    NTE,
-                    BLD GRN "TX" NRM " to=%s:%s 0x%02x=" GRN "%s " NRM
-                            "vers=0x%08x dcid=%s scid=%s tok=%s len=%u nr=" GRN
-                            "%" PRIu64 NRM,
-                    ip, port, m->hdr.flags, pts, m->hdr.vers, c2s(&m->hdr.dcid),
-                    c2s(&m->hdr.scid), hex2str(tok, tok_len, MAX_TOK_LEN),
-                    m->hdr.len, m->hdr.nr);
+                              "vers=0x%0" PRIx32
+                              " dcid=%s scid=%s odcid=%s tok=%s",
+                      ip, port, m->hdr.flags, pts, m->hdr.vers, dcid_str,
+                      scid_str, odcid_str, tok_str);
+            else if (m->hdr.type == LH_INIT)
+                twarn(NTE,
+                      BLD GRN "TX" NRM " to=%s:%s 0x%02x=" GRN "%s " NRM
+                              "vers=0x%0" PRIx32
+                              " dcid=%s scid=%s tok=%s len=%u nr=" GRN
+                              "%" PRIu NRM,
+                      ip, port, m->hdr.flags, pts, m->hdr.vers, dcid_str,
+                      scid_str, tok_str, m->hdr.len, m->hdr.nr);
             else
                 twarn(NTE,
                       BLD GRN "TX" NRM " to=%s:%s 0x%02x=" GRN "%s " NRM
-                              "vers=0x%08x dcid=%s scid=%s len=%u nr=" GRN
-                              "%" PRIu64 NRM,
-                      ip, port, m->hdr.flags, pts, m->hdr.vers,
-                      c2s(&m->hdr.dcid), c2s(&m->hdr.scid), m->hdr.len,
-                      m->hdr.nr);
+                              "vers=0x%0" PRIx32
+                              " dcid=%s scid=%s len=%u nr=" GRN "%" PRIu NRM,
+                      ip, port, m->hdr.flags, pts, m->hdr.vers, dcid_str,
+                      scid_str, m->hdr.len, m->hdr.nr);
         } else
             twarn(NTE,
                   BLD GRN "TX" NRM " to=%s:%s 0x%02x=" GRN "%s " NRM
-                          "kyph=%u spin=%u dcid=%s nr=" GRN "%" PRIu64 NRM,
+                          "kyph=%u spin=%u dcid=%s nr=" GRN "%" PRIu NRM,
                   ip, port, m->hdr.flags, pts, is_set(SH_KYPH, m->hdr.flags),
-                  is_set(SH_SPIN, m->hdr.flags), c2s(&m->hdr.dcid), m->hdr.nr);
+                  is_set(SH_SPIN, m->hdr.flags), dcid_str, m->hdr.nr);
     }
 }
 #endif
@@ -212,7 +209,7 @@ void coalesce(struct w_iov_sq * const q)
                 sq_remove_after(q, prev, next);
 
 #ifdef DEBUG_BUFFERS
-                warn(DBG, "w_free_iov idx %u (avail %" PRIu64 ")",
+                warn(DBG, "w_free_iov idx %" PRIu32 " (avail %" PRIu ")",
                      w_iov_idx(next), sq_len(&next->w->iov) + 1);
 #endif
                 w_free_iov(next);
@@ -226,10 +223,10 @@ void coalesce(struct w_iov_sq * const q)
 
 
 static inline uint8_t __attribute__((const))
-needed_pkt_nr_len(const uint64_t lg_acked, const uint64_t n)
+needed_pkt_nr_len(const uint_t lg_acked, const uint64_t n)
 {
     const uint64_t d =
-        (n - (unlikely(lg_acked == UINT64_MAX) ? 0 : lg_acked)) * 2;
+        (n - (unlikely(lg_acked == UINT_T_MAX) ? 0 : lg_acked)) * 2;
     if (d <= UINT8_MAX)
         return 1;
     if (d <= UINT16_MAX)
@@ -348,7 +345,6 @@ bool enc_pkt(struct q_stream * const s,
              struct w_iov * const v,
              struct pkt_meta * const m)
 {
-
     if (likely(enc_data))
         // prepend the header by adjusting the buffer offset
         adj_iov_to_start(v, m);
@@ -361,7 +357,7 @@ bool enc_pkt(struct q_stream * const s,
 
     if (unlikely(c->tx_rtry))
         m->hdr.nr = 0;
-    else if (unlikely(pn->lg_sent == UINT64_MAX))
+    else if (unlikely(pn->lg_sent == UINT_T_MAX))
         // next pkt nr
         m->hdr.nr = pn->lg_sent = 0;
     else
@@ -392,8 +388,6 @@ bool enc_pkt(struct q_stream * const s,
             m->hdr.flags |= SH_SPIN;
         break;
     }
-
-    ensure(m->hdr.nr < (1ULL << 62) - 1, "packet number overflow");
 
     const uint8_t pnl = needed_pkt_nr_len(pn->lg_acked, m->hdr.nr);
     m->hdr.flags |= (pnl - 1);
@@ -550,8 +544,8 @@ tx:;
     struct w_iov * const xv = w_alloc_iov(c->w, 0, 0);
     ensure(xv, "w_alloc_iov failed");
 #ifdef DEBUG_BUFFERS
-    warn(DBG, "w_alloc_iov idx %u (avail %" PRIu64 ") len %u", w_iov_idx(xv),
-         sq_len(&c->w->iov), xv->len);
+    warn(DBG, "w_alloc_iov idx %" PRIu32 " (avail %" PRIu ") len %u",
+         w_iov_idx(xv), sq_len(&c->w->iov), xv->len);
 #endif
 
     if (unlikely(m->hdr.type == LH_RTRY)) {
@@ -964,7 +958,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
 
         // server can assume path is validated
         warn(DBG, "clnt path validated");
-        c->path_val_win = UINT64_MAX;
+        c->path_val_win = UINT_T_MAX;
     }
 
     // packet protection verified OK

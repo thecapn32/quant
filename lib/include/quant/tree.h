@@ -86,10 +86,11 @@
  */
 
 #define splay_head(name, type)                                                 \
-    struct name {                                                              \
+    _Pragma("clang diagnostic push")                                           \
+        _Pragma("clang diagnostic ignored \"-Wpadded\"") struct name {         \
         struct type * sph_root; /* root of the tree */                         \
-        uint64_t sph_cnt;       /* number of nodes in the tree */              \
-    }
+        uint_t sph_cnt;         /* number of nodes in the tree */              \
+    } _Pragma("clang diagnostic pop")
 
 #define splay_initializer(root)                                                \
     {                                                                          \

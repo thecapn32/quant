@@ -36,21 +36,30 @@ extern "C" {
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifndef PARTICLE
-#include <sys/socket.h>
+#include <quant/config.h>      // IWYU pragma: export
+#include <quant/tree.h>        // IWYU pragma: export
+#include <warpcore/warpcore.h> // IWYU pragma: export
+
+#ifdef HAVE_64BIT
+typedef double tm_t;
+#define TM_T(x) x
+#define TM_T_HUGE HUGE_VAL
+#define TM_T_ABS fabs
+#else
+typedef float tm_t;
+// cppcheck-suppress preprocessorErrorDirective
+#define TM_T(x) x##f
+#define TM_T_HUGE HUGE_VALF
+#define TM_T_ABS fabsf
 #endif
-
-#include <quant/config.h> // IWYU pragma: export
-#include <quant/tree.h>   // IWYU pragma: export
-
 
 struct w_iov_sq;
 struct q_stream;
 
 
 struct q_conn_conf {
-    uint64_t idle_timeout;             // seconds
-    uint64_t tls_key_update_frequency; // seconds
+    uint_t idle_timeout;             // seconds
+    uint_t tls_key_update_frequency; // seconds
     uint8_t enable_spinbit : 1;
     uint8_t enable_udp_zero_checksums : 1;
     uint8_t enable_tls_key_updates : 1; // TODO default to on eventually
@@ -67,25 +76,25 @@ struct q_conf {
     const char * const tls_key;      // required for server
     const char * const tls_log;
     const char * const qlog;
-    uint64_t num_bufs;
+    uint32_t num_bufs;
     uint8_t enable_tls_cert_verify : 1;
     uint8_t : 7;
 };
 
 
 struct q_conn_info {
-    uint64_t pkts_in_valid;
-    uint64_t pkts_in_invalid;
+    uint_t pkts_in_valid;
+    uint_t pkts_in_invalid;
 
-    uint64_t pkts_out;
-    uint64_t pkts_out_lost;
-    uint64_t pkts_out_rtx;
+    uint_t pkts_out;
+    uint_t pkts_out_lost;
+    uint_t pkts_out_rtx;
 
-    double rtt;
-    double rttvar;
-    uint64_t cwnd;
-    uint64_t ssthresh;
-    uint64_t pto_cnt;
+    tm_t rtt;
+    tm_t rttvar;
+    uint_t cwnd;
+    uint_t ssthresh;
+    uint_t pto_cnt;
 };
 
 
@@ -136,7 +145,7 @@ extern void __attribute__((nonnull)) q_free(struct w_iov_sq * const q);
 
 extern const char * __attribute__((nonnull)) q_cid(struct q_conn * const c);
 
-extern uint64_t __attribute__((nonnull)) q_sid(const struct q_stream * const s);
+extern uint_t __attribute__((nonnull)) q_sid(const struct q_stream * const s);
 
 extern void __attribute__((nonnull)) q_chunk_str(struct w_engine * const w,
                                                  const char * const str,
@@ -168,7 +177,7 @@ extern bool __attribute__((nonnull)) q_read_stream(struct q_stream * const s,
                                                    struct w_iov_sq * const q,
                                                    const bool all);
 
-extern bool q_ready(const uint64_t timeout, struct q_conn ** const ready);
+extern bool q_ready(const uint_t timeout, struct q_conn ** const ready);
 
 extern bool __attribute__((nonnull))
 q_is_new_serv_conn(const struct q_conn * const c);
@@ -188,7 +197,7 @@ q_info(struct q_conn * const c, struct q_conn_info * const ci);
 #define bps(bytes, secs)                                                       \
     __extension__({                                                            \
         static char _str[32];                                                  \
-        const double _bps =                                                    \
+        const tm_t _bps =                                                      \
             (bytes) && (fpclassify(secs) != FP_ZERO) ? (bytes)*8 / (secs) : 0; \
         if (_bps > NSECS_PER_SEC)                                              \
             snprintf(_str, sizeof(_str), "%.3f Gb/s", _bps / NSECS_PER_SEC);   \
@@ -202,8 +211,8 @@ q_info(struct q_conn * const c, struct q_conn_info * const ci);
     })
 
 
-#define timespec_to_double(diff)                                               \
-    ((double)(diff).tv_sec + (double)(diff).tv_nsec / NSECS_PER_SEC)
+#define timespec_to_tm_t(diff)                                                 \
+    ((tm_t)(diff).tv_sec + (tm_t)(diff).tv_nsec / NSECS_PER_SEC)
 
 #ifdef __cplusplus
 }

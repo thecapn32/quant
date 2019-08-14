@@ -27,9 +27,6 @@
 #include <string.h>
 #include <sys/param.h>
 
-#define klib_unused
-
-#include <khash.h>
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 

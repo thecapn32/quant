@@ -81,7 +81,7 @@ qlog_pkt_type_str(const uint8_t flags, const void * const vers)
 
 static uint64_t __attribute__((const)) to_usec(const ev_tstamp t)
 {
-    return (uint64_t)llround(t * USECS_PER_SEC);
+    return (uint64_t)(t * USECS_PER_SEC);
 }
 
 
@@ -142,7 +142,7 @@ void qlog_transport(const qlog_pkt_evt_t evt,
             evt_str[evt], trg, qlog_pkt_type_str(m->hdr.flags, &m->hdr.vers),
             m->udp_len);
     if (is_lh(m->hdr.flags) == false || (m->hdr.vers && m->hdr.type != LH_RTRY))
-        fprintf(qlog, ",\"packet_number\":%" PRIu64, m->hdr.nr);
+        fprintf(qlog, ",\"packet_number\":%" PRIu, m->hdr.nr);
     fputs("}", qlog);
 
     if (evt == pkt_dp)
@@ -157,8 +157,8 @@ void qlog_transport(const qlog_pkt_evt_t evt,
     int prev_frame = 0;
     if (has_frm(m->frms, FRM_STR)) {
         prev_frame = fprintf(qlog,
-                             "%s{\"frame_type\": \"STREAM\",\"id\": %" PRId64
-                             ",\"length\": %u,\"offset\": %" PRIu64,
+                             "%s{\"frame_type\": \"STREAM\",\"id\": %" PRId
+                             ",\"length\": %u,\"offset\": %" PRIu,
                              prev_frame ? "," : "", m->strm->id,
                              m->strm_data_len, m->strm_off);
         if (m->is_fin)
@@ -180,7 +180,7 @@ void qlog_transport(const qlog_pkt_evt_t evt,
 
         // prev_frame =
         fprintf(qlog,
-                "%s{\"frame_type\": \"ACK\",\"ack_delay\": %" PRId64
+                "%s{\"frame_type\": \"ACK\",\"ack_delay\": %" PRIu64
                 ",\"acked_ranges\":[",
                 prev_frame ? "," : "", ack_delay);
 
@@ -220,31 +220,35 @@ void qlog_recovery(const qlog_rec_evt_t evt,
     fprintf(qlog, ",\"RECOVERY\",\"%s\",\"%s\",{", evt_str[evt], trg);
     int prev_metric = 0;
     if (c->rec.cur.in_flight != c->rec.prev.in_flight)
-        prev_metric = fprintf(qlog, "%s\"bytes_in_flight\":%" PRIu64,
+        prev_metric = fprintf(qlog, "%s\"bytes_in_flight\":%" PRIu,
                               prev_metric ? "," : "", c->rec.cur.in_flight);
     if (c->rec.cur.cwnd != c->rec.prev.cwnd)
-        prev_metric = fprintf(qlog, "%s\"cwnd\":%" PRIu64,
-                              prev_metric ? "," : "", c->rec.cur.cwnd);
-    if (c->rec.cur.ssthresh != c->rec.prev.ssthresh &&
-        c->rec.cur.ssthresh != UINT64_MAX)
-        prev_metric = fprintf(qlog, "%s\"ssthresh\":%" PRIu64,
+        prev_metric = fprintf(qlog, "%s\"cwnd\":%" PRIu, prev_metric ? "," : "",
+                              c->rec.cur.cwnd);
+    if (c->rec.cur.ssthresh != UINT_T_MAX &&
+        c->rec.cur.ssthresh != c->rec.prev.ssthresh)
+        prev_metric = fprintf(qlog, "%s\"ssthresh\":%" PRIu,
                               prev_metric ? "," : "", c->rec.cur.ssthresh);
-    if (to_usec(c->rec.cur.srtt) != to_usec(c->rec.prev.srtt))
-        prev_metric = fprintf(qlog, "%s\"smoothed_rtt\":%" PRIu64,
-                              prev_metric ? "," : "", to_usec(c->rec.cur.srtt));
-    if (c->rec.cur.min_rtt != HUGE_VAL &&
-        to_usec(c->rec.cur.min_rtt) != to_usec(c->rec.prev.min_rtt))
+    if (TM_T_ABS(c->rec.cur.srtt - c->rec.prev.srtt) < TM_T(1.) / USECS_PER_SEC)
+        prev_metric =
+            fprintf(qlog, "%s\"smoothed_rtt\":%" PRIu64, prev_metric ? "," : "",
+                    to_usec((double)c->rec.cur.srtt));
+    if (c->rec.cur.min_rtt < TM_T_HUGE &&
+        TM_T_ABS(c->rec.cur.min_rtt - c->rec.prev.min_rtt) <
+            TM_T(1.) / USECS_PER_SEC)
         prev_metric =
             fprintf(qlog, "%s\"min_rtt\":%" PRIu64, prev_metric ? "," : "",
-                    to_usec(c->rec.cur.min_rtt));
-    if (to_usec(c->rec.cur.latest_rtt) != to_usec(c->rec.prev.latest_rtt))
+                    to_usec((double)c->rec.cur.min_rtt));
+    if (TM_T_ABS(c->rec.cur.latest_rtt - c->rec.prev.latest_rtt) <
+        TM_T(1.) / USECS_PER_SEC)
         prev_metric =
             fprintf(qlog, "%s\"latest_rtt\":%" PRIu64, prev_metric ? "," : "",
-                    to_usec(c->rec.cur.latest_rtt));
-    if (to_usec(c->rec.cur.rttvar) != to_usec(c->rec.prev.rttvar))
+                    to_usec((double)c->rec.cur.latest_rtt));
+    if (TM_T_ABS(c->rec.cur.rttvar - c->rec.prev.rttvar) <
+        TM_T(1.) / USECS_PER_SEC)
         // prev_metric =
         fprintf(qlog, "%s\"rtt_variance\":%" PRIu64, prev_metric ? "," : "",
-                to_usec(c->rec.cur.rttvar));
+                to_usec((double)c->rec.cur.rttvar));
     fputs("}]", qlog);
 
     prev_event = true;

@@ -26,7 +26,6 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <fcntl.h>
-#include <inttypes.h>
 #include <libgen.h>
 #include <net/if.h>
 #include <stdbool.h>
@@ -45,13 +44,12 @@
 #include <http_parser.h>
 
 #include <quant/quant.h>
-#include <warpcore/warpcore.h>
 
 struct q_conn;
 
 
 #ifndef NDEBUG
-static bool __attribute__((const)) is_bench_obj(const uint64_t len)
+static bool __attribute__((const)) is_bench_obj(const uint_t len)
 {
     return len == 5000000 || len == 10000000;
 }
@@ -65,9 +63,18 @@ static void __attribute__((noreturn)) usage(const char * const name,
                                             const char * const dir,
                                             const char * const cert,
                                             const char * const key,
-                                            const uint64_t timeout,
-                                            const uint64_t num_bufs)
+                                            const uint32_t timeout,
+                                            const uint32_t num_bufs)
 {
+    for (size_t e = 0; e < sizeof(uint64_t) * 8; e++) {
+        const uint64_t x = UINT64_C(1) << e;
+
+        uint64_t next = (uint64_t)(powl(10, ceill(log10l(x))));
+
+        printf("%zu %" PRIu64 " 0x%" PRIx64 " %" PRIu64 "\n", e, x, x, next);
+
+    }
+
     printf("%s [options]\n", name);
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
     printf("\t[-p port]\tdestination port; default %d\n", port);
@@ -75,12 +82,9 @@ static void __attribute__((noreturn)) usage(const char * const name,
     printf("\t[-d dir]\tserver root directory; default %s\n", dir);
     printf("\t[-c cert]\tTLS certificate; default %s\n", cert);
     printf("\t[-k key]\tTLS key; default %s\n", key);
-    printf("\t[-t timeout]\tidle timeout in seconds; default %" PRIu64 "\n",
-           timeout);
-    printf(
-        "\t[-b bufs]\tnumber of network buffers to allocate; default %" PRIu64
-        "\n",
-        num_bufs);
+    printf("\t[-t timeout]\tidle timeout in seconds; default %u\n", timeout);
+    printf("\t[-b bufs]\tnumber of network buffers to allocate; default %u\n ",
+           num_bufs);
 #ifndef NDEBUG
     printf("\t[-v verbosity]\tverbosity level (0-%d, default %d)\n", DLEVEL,
            util_dlevel);
@@ -132,7 +136,7 @@ static bool send_err(const struct cb_data * const d, const uint16_t code)
 
 
 #ifndef NDEBUG
-static uint64_t bench_cnt = 0;
+static uint32_t bench_cnt = 0;
 #endif
 
 
@@ -140,7 +144,7 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
 {
     (void)parser;
     const struct cb_data * const d = parser->data;
-    warn(INF, "conn %s str %" PRId64 " serving URL %.*s", q_cid(d->c),
+    warn(INF, "conn %s str %" PRId " serving URL %.*s", q_cid(d->c),
          q_sid(d->s), (int)len, at);
 
     char path[MAXPATHLEN] = ".";
@@ -151,14 +155,13 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
         return send_err(d, 403);
 
     // check if this is a "GET /n" request for random data
-    const uint64_t n = (uint32_t)MIN(UINT64_MAX, strtoul(&path[2], 0, 10));
+    const uint32_t n = (uint32_t)strtoul(&path[2], 0, 10);
     if (n) {
         struct w_iov_sq out = w_iov_sq_initializer(out);
         q_alloc(d->w, &out, n);
         // check whether we managed to allow enough buffers
         if (w_iov_sq_len(&out) != n) {
-            warn(ERR,
-                 "could only allocate %" PRIu64 "/%" PRIu64 " bytes of buffer",
+            warn(ERR, "could only allocate %" PRIu "/%u bytes of buffer",
                  w_iov_sq_len(&out), n);
             q_free(&out);
             return send_err(d, 500);
@@ -216,7 +219,7 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
 
 int main(int argc, char * argv[])
 {
-    uint64_t timeout = 10;
+    uint32_t timeout = 10;
 #ifndef NDEBUG
     short ini_dlevel = util_dlevel =
         DLEVEL; // default to maximum compiled-in verbosity
@@ -232,7 +235,7 @@ int main(int argc, char * argv[])
     char qlog[MAXPATHLEN] = "/tmp/" QUANT "-server.qlog";
     uint16_t port[MAXPORTS] = {4433, 4434};
     size_t num_ports = 0;
-    uint64_t num_bufs = 100000;
+    uint32_t num_bufs = 100000;
     int ch;
     int ret = 0;
 
@@ -260,10 +263,11 @@ int main(int argc, char * argv[])
                    MAXPORTS);
             break;
         case 't':
-            timeout = MIN(600, strtoul(optarg, 0, 10)); // 10 min = 600 sec
+            timeout =
+                MIN(600, (uint32_t)strtoul(optarg, 0, 10)); // 10 min = 600 sec
             break;
         case 'b':
-            num_bufs = MAX(1000, MIN(strtoul(optarg, 0, 10), UINT32_MAX));
+            num_bufs = MAX(1000, (uint32_t)strtoul(optarg, 0, 10));
             break;
         case 'v':
 #ifndef NDEBUG
@@ -341,7 +345,7 @@ int main(int argc, char * argv[])
                 q_stream_get_written(s, &q);
 #ifndef NDEBUG
                 // if we wrote a "benchmark objects", increase logging
-                const uint64_t len = w_iov_sq_len(&q);
+                const uint_t len = w_iov_sq_len(&q);
                 if (is_bench_obj(len) && --bench_cnt == 0) {
                     util_dlevel = ini_dlevel;
                     warn(NTE, "increasing log level after benchmark object "

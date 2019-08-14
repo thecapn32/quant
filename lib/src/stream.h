@@ -27,12 +27,10 @@
 
 #pragma once
 
-#include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
 
 #include <quant/quant.h>
-#include <warpcore/warpcore.h>
 
 #include "conn.h"
 #include "quic.h"
@@ -42,8 +40,8 @@
 #define STRM_FL_SRV 0x01
 #define STRM_FL_UNI 0x02
 
-#define INIT_STRM_DATA_BIDI UINT64_C(0xffff)
-#define INIT_STRM_DATA_UNI UINT64_C(0x7ff)
+#define INIT_STRM_DATA_BIDI 0xffff
+#define INIT_STRM_DATA_UNI 0x7ff
 #define INIT_MAX_UNI_STREAMS 3
 #define INIT_MAX_BIDI_STREAMS 3
 
@@ -78,33 +76,41 @@ struct q_stream {
     sl_entry(q_stream) node_ctrl;
 
     struct q_conn * c; ///< Connection this stream is a part of.
-    int64_t id;        ///< Stream ID.
 
     struct w_iov_sq out;    ///< Tail queue containing outbound data.
     struct w_iov * out_una; ///< Lowest un-ACK'ed data chunk.
-    uint64_t out_data;      ///< Current outbound stream offset (= data sent).
-    uint64_t out_data_max;  ///< Outbound max_strm_data.
 
     struct w_iov_sq in; ///< Tail queue containing inbound data.
 #ifndef NO_OOO_DATA
     struct ooo_by_off in_ooo; ///< Out-of-order inbound data.
 #endif
-    uint64_t in_data_max; ///< Inbound max_strm_data.
-    uint64_t in_data;     ///< In-order stream data received (total).
-    uint64_t in_data_off; ///< Next in-order stream data offset expected.
 
-    uint64_t lost_cnt;  ///< Number of pkts in out that are marked lost.
+    dint_t id; ///< Stream ID.
+
+    uint_t out_data;     ///< Current outbound stream offset (= data sent).
+    uint_t out_data_max; ///< Outbound max_strm_data.
+
+    uint_t in_data_max; ///< Inbound max_strm_data.
+    uint_t in_data;     ///< In-order stream data received (total).
+    uint_t in_data_off; ///< Next in-order stream data offset expected.
+
+    uint_t lost_cnt;    ///< Number of pkts in out that are marked lost.
     strm_state_t state; ///< Stream state.
 
     uint8_t in_ctrl : 1; ///< Stream is in connections "needs ctrl" list.
     uint8_t tx_max_strm_data : 1; ///< We need to open the receive window.
     uint8_t blocked : 1;          ///< We are receive-window-blocked.
     uint8_t : 5;
+
+#ifdef HAVE_64BIT
     uint8_t _unused[3];
+#else
+    uint8_t _unused[7];
+#endif
 };
 
 
-#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE)) &&                          \
+#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) &&                         \
     defined(DEBUG_STREAMS) && !defined(FUZZING)
 #define strm_to_state(s, new_state)                                            \
     do {                                                                       \
@@ -143,7 +149,7 @@ out_fully_acked(const struct q_stream * const s)
 }
 
 
-static inline int64_t __attribute__((const)) crpt_strm_id(const epoch_t epoch)
+static inline dint_t __attribute__((const)) crpt_strm_id(const epoch_t epoch)
 {
     switch (epoch) { // lgtm [cpp/missing-return]
     case ep_init:
@@ -173,7 +179,7 @@ strm_epoch(const struct q_stream * const s)
         case -1:
             return ep_data;
         default:
-            die("illegal sid %" PRId64, s->id);
+            die("illegal sid %" PRId, s->id);
         }
 
     if (unlikely(s->c->is_clnt == true && s->c->state == conn_opng))
@@ -204,17 +210,17 @@ need_ctrl_update(struct q_stream * const s)
 
 
 extern struct q_stream * __attribute__((nonnull))
-get_stream(struct q_conn * const c, const int64_t id);
+get_stream(struct q_conn * const c, const dint_t id);
 
-extern struct q_stream * new_stream(struct q_conn * const c, const int64_t id);
+extern struct q_stream * new_stream(struct q_conn * const c, const dint_t id);
 
 extern void __attribute__((nonnull)) free_stream(struct q_stream * const s);
 
 extern void __attribute__((nonnull))
-track_bytes_in(struct q_stream * const s, const uint64_t n);
+track_bytes_in(struct q_stream * const s, const uint_t n);
 
 extern void __attribute__((nonnull))
-track_bytes_out(struct q_stream * const s, const uint64_t n);
+track_bytes_out(struct q_stream * const s, const uint_t n);
 
 extern void __attribute__((nonnull))
 reset_stream(struct q_stream * const s, const bool forget);
@@ -226,12 +232,12 @@ extern void __attribute__((nonnull))
 do_stream_fc(struct q_stream * const s, const uint16_t len);
 
 extern void __attribute__((nonnull)) do_stream_id_fc(struct q_conn * const c,
-                                                     const uint64_t cnt,
+                                                     const uint_t cnt,
                                                      const bool bidi,
                                                      const bool local);
 
 extern void __attribute__((nonnull))
 concat_out(struct q_stream * const s, struct w_iov_sq * const q);
 
-extern int64_t __attribute__((nonnull))
-max_sid(const int64_t sid, const struct q_conn * const c);
+extern dint_t __attribute__((nonnull))
+max_sid(const dint_t sid, const struct q_conn * const c);

@@ -25,23 +25,19 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <inttypes.h>
-#include <stdint.h>
-
 #include <quant/quant.h>
-#include <warpcore/warpcore.h>
 
 #include "bitset.h"
 #include "diet.h"
 
 
 static void trace(struct diet * const d,
-                  const uint64_t lo
+                  const uint_t lo
 #ifdef NDEBUG
                   __attribute__((unused))
 #endif
                   ,
-                  const uint64_t hi
+                  const uint_t hi
 #ifdef NDEBUG
                   __attribute__((unused))
 #endif
@@ -56,19 +52,18 @@ static void trace(struct diet * const d,
     diet_to_str(str, sizeof(str), d);
 #ifndef NDEBUG
     if (lo == hi)
-        warn(DBG, "cnt %" PRIu64 ", %s %" PRIu64 ": %s", diet_cnt(d), op, lo,
-             str);
+        warn(DBG, "cnt %" PRIu ", %s %" PRIu ": %s", diet_cnt(d), op, lo, str);
     else
-        warn(DBG, "cnt %" PRIu64 ", %s %" PRIu64 "-%" PRIu64 ": %s",
-             diet_cnt(d), op, lo, hi, str);
+        warn(DBG, "cnt %" PRIu ", %s %" PRIu "-%" PRIu ": %s", diet_cnt(d), op,
+             lo, hi, str);
 #endif
 
-    uint64_t c = 0;
+    uint_t c = 0;
     char * s = str;
     while (*s)
         c += *(s++) == ',';
-    ensure(str[0] == 0 || c + 1 == diet_cnt(d), "%" PRIu64 " %" PRIu64 "",
-           c + 1, diet_cnt(d));
+    ensure(str[0] == 0 || c + 1 == diet_cnt(d), "%" PRIu " %" PRIu "", c + 1,
+           diet_cnt(d));
 }
 
 
@@ -79,8 +74,8 @@ static void chk(struct diet * const d)
     for (i = splay_min(diet, d); i != 0; i = next) {
         next = splay_next(diet, d, i);
         ensure(next == 0 || i->hi + 1 < next->lo,
-               "%" PRIu64 "-%" PRIu64 " %" PRIu64 "-%" PRIu64, i->lo, i->hi,
-               next->lo, next->hi);
+               "%" PRIu "-%" PRIu " %" PRIu "-%" PRIu, i->lo, i->hi, next->lo,
+               next->hi);
     }
 }
 
@@ -99,7 +94,7 @@ int main()
 
     // insert some items
     while (N != bit_count(N, &v)) {
-        const uint64_t x = w_rand_uniform64(N);
+        const uint_t x = w_rand_uniform32(N);
         if (bit_isset(N, x, &v) == 0) {
             bit_set(N, x, &v);
             diet_insert(&d, x, 0);
@@ -110,13 +105,13 @@ int main()
 
     // remove all items
     while (!splay_empty(&d)) {
-        const uint64_t x = w_rand_uniform64(N);
+        const uint_t x = w_rand_uniform32(N);
         struct ival * const i = diet_find(&d, x);
         if (i) {
-            if (w_rand_uniform64(2)) {
-                const uint64_t lodiff = w_rand_uniform64(3);
-                const uint64_t lo = x - (x > lodiff ? lodiff : 0);
-                const uint64_t hi = x + w_rand_uniform64(3);
+            if (w_rand_uniform32(2)) {
+                const uint_t lodiff = w_rand_uniform32(3);
+                const uint_t lo = x - (x > lodiff ? lodiff : 0);
+                const uint_t hi = x + w_rand_uniform32(3);
                 diet_remove_ival(&d, &(struct ival){.lo = lo, .hi = hi});
                 trace(&d, lo, hi, "rem_ival");
             } else {
@@ -126,7 +121,7 @@ int main()
             chk(&d);
         }
     }
-    ensure(diet_cnt(&d) == 0, "incorrect node count %" PRIu64 " != 0",
+    ensure(diet_cnt(&d) == 0, "incorrect node count %" PRIu " != 0",
            diet_cnt(&d));
 
     return 0;

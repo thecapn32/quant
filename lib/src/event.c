@@ -28,6 +28,7 @@
 #include "event.h"
 
 #ifdef PARTICLE
+#include <logging.h>
 #include <sys/socket.h>
 #include <warpcore/warpcore.h>
 

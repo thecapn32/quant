@@ -1,6 +1,3 @@
-[submodule "external/klib"]
-        path = lib/deps/klib
-        url = https://github.com/larseggert/klib.git
 [submodule "lib/deps/warpcore"]
         path = lib/deps/warpcore
         url = https://github.com/NTAP/warpcore.git

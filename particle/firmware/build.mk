@@ -2,7 +2,6 @@ INCLUDE_DIRS+=$(SOURCE_PATH)
 CPPSRC+=main.cpp
 
 DEPS=lib/deps
-KLIB=$(DEPS)/klib
 PICOTLS=$(DEPS)/picotls
 WARPCORE=$(DEPS)/warpcore/lib
 
@@ -11,7 +10,6 @@ INCLUDE_DIRS+=\
 	$(SOURCE_PATH)/$(PICOTLS)/deps/cifra/src/ext \
 	$(SOURCE_PATH)/$(PICOTLS)/deps/micro-ecc \
 	$(SOURCE_PATH)/$(PICOTLS)/include \
-	$(SOURCE_PATH)/${KLIB} \
 	$(SOURCE_PATH)/$(WARPCORE)/include \
 	$(SOURCE_PATH)/lib/include
 
@@ -54,10 +52,10 @@ QUANT_SRC+=\
 CSRC+=$(WARP_SRC) $(PICOTLS_SRC) $(QUANT_SRC)
 
 EXTRA_CFLAGS+= \
-	-foptimize-strlen \
+	-foptimize-strlen -ffast-math \
 	-Wno-error -Wno-parentheses -Wno-undef -Wno-unknown-pragmas \
 	-Wno-unused-value \
-	-DDLEVEL=INF -DNDEBUG -DNDEBUG_OVERRIDE \
+	-DDLEVEL=INF -DNDEBUG -DNDEBUG_WITH_DLOG \
 	-DNO_FUZZER_CORPUS_COLLECTION -DNO_OOO_0RTT -DNO_TLS_TICKETS \
 	-DNO_TLS_LOG -DNO_ERR_REASONS -DNO_OOO_DATA -DNO_MIGRATION \
 	-DNO_QLOG \
@@ -69,7 +67,7 @@ EXTRA_CFLAGS+= \
 # TODO: figure out how to do this using make rules
 $(shell	cd $(SOURCE_PATH) && ln -sf ../../lib)
 
-QUANT_VERSION:=$(shell grep 'warpcore.*VERSION' $(SOURCE_PATH)/../../$(WARPCORE)/CMakeLists.txt | cut -d' ' -f3)
+WARPCORE_VERSION:=$(shell grep 'warpcore.*VERSION' $(SOURCE_PATH)/../../$(WARPCORE)/../CMakeLists.txt | cut -d' ' -f3)
 $(shell	mkdir -p $(SOURCE_PATH)/warpcore)
 $(shell [ -s $(SOURCE_PATH)/warpcore/config.c ] || \
 	sed -E -e 's|@PROJECT_NAME@|warpcore|g; s|@PROJECT_NAME_UC@|WARPCORE|g; s|@PROJECT_VERSION@|$(WARPCORE_VERSION)|g;' \

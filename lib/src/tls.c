@@ -26,7 +26,6 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <assert.h>
-#include <inttypes.h>
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -45,7 +44,7 @@
 #include <stdarg.h>
 #endif
 
-#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
+#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
 #include <netdb.h>
 #endif
 
@@ -95,12 +94,10 @@ static ptls_cipher_suite_t * cipher_suite[] = {&ptls_minicrypto_aes128gcmsha256,
 #endif
 
 #include <quant/quant.h>
-#include <warpcore/warpcore.h>
 
 #include "bitset.h"
 #include "conn.h"
 #include "frame.h"
-#include "hash.h"
 #include "marshall.h"
 #include "pkt.h"
 #include "pn.h"
@@ -387,14 +384,15 @@ static int filter_tp(ptls_t * tls __attribute__((unused)),
 
 
 static bool __attribute__((nonnull))
-dec_tp(uint64_t * const val, const uint8_t ** pos, const uint8_t * const end)
+dec_tp(uint_t * const val, const uint8_t ** pos, const uint8_t * const end)
 {
     uint16_t len;
     if (dec2(&len, pos, end) == false)
         return false;
     if (len) {
-        *val = 0;
-        decv(val, pos, end);
+        uint64_t v = 0;
+        decv(&v, pos, end);
+        *val = (uint_t)v;
     }
     return true;
 }
@@ -458,7 +456,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         case TP_IMSD_U:
             if (dec_tp(&c->tp_out.max_strm_data_uni, &pos, end) == false)
                 return 1;
-            warn(INF, "\tinitial_max_stream_data_uni = %" PRIu64 " [bytes]",
+            warn(INF, "\tinitial_max_stream_data_uni = %" PRIu " [bytes]",
                  c->tp_out.max_strm_data_uni);
             break;
 
@@ -467,7 +465,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                 false)
                 return 1;
             warn(INF,
-                 "\tinitial_max_stream_data_bidi_local = %" PRIu64 " [bytes]",
+                 "\tinitial_max_stream_data_bidi_local = %" PRIu " [bytes]",
                  c->tp_out.max_strm_data_bidi_remote);
             break;
 
@@ -476,58 +474,58 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             if (dec_tp(&c->tp_out.max_strm_data_bidi_local, &pos, end) == false)
                 return 1;
             warn(INF,
-                 "\tinitial_max_stream_data_bidi_remote = %" PRIu64 " [bytes]",
+                 "\tinitial_max_stream_data_bidi_remote = %" PRIu " [bytes]",
                  c->tp_out.max_strm_data_bidi_local);
             break;
 
         case TP_IMD:
             if (dec_tp(&c->tp_out.max_data, &pos, end) == false)
                 return 1;
-            warn(INF, "\tinitial_max_data = %" PRIu64 " [bytes]",
+            warn(INF, "\tinitial_max_data = %" PRIu " [bytes]",
                  c->tp_out.max_data);
             break;
 
         case TP_IMSB:
             if (dec_tp(&c->tp_out.max_strms_bidi, &pos, end) == false)
                 return 1;
-            warn(INF, "\tinitial_max_streams_bidi = %" PRIu64,
+            warn(INF, "\tinitial_max_streams_bidi = %" PRIu,
                  c->tp_out.max_strms_bidi);
             break;
 
         case TP_IMSU:
             if (dec_tp(&c->tp_out.max_strms_uni, &pos, end) == false)
                 return 1;
-            warn(INF, "\tinitial_max_streams_uni = %" PRIu64,
+            warn(INF, "\tinitial_max_streams_uni = %" PRIu,
                  c->tp_out.max_strms_uni);
             break;
 
         case TP_IDTO:
             if (dec_tp(&c->tp_out.idle_to, &pos, end) == false)
                 return 1;
-            warn(INF, "\tidle_timeout = %" PRIu64 " [ms]", c->tp_out.idle_to);
+            warn(INF, "\tidle_timeout = %" PRIu " [ms]", c->tp_out.idle_to);
             break;
 
         case TP_MPS:
             if (dec_tp(&c->tp_out.max_pkt, &pos, end) == false)
                 return 1;
-            warn(INF, "\tmax_packet_size = %" PRIu64 " [bytes]",
+            warn(INF, "\tmax_packet_size = %" PRIu " [bytes]",
                  c->tp_out.max_pkt);
             if (c->tp_out.max_pkt < 1200) {
                 err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
-                          "tp_out.max_pkt %" PRIu64 " invalid (< 1200)",
+                          "tp_out.max_pkt %" PRIu " invalid (< 1200)",
                           c->tp_out.max_pkt);
                 return 1;
             }
             break;
 
         case TP_ADE:;
-            uint64_t ade = DEF_ACK_DEL_EXP;
+            uint_t ade = DEF_ACK_DEL_EXP;
             if (dec_tp(&ade, &pos, end) == false)
                 return 1;
-            warn(INF, "\tack_delay_exponent = %" PRIu64, ade);
+            warn(INF, "\tack_delay_exponent = %" PRIu, ade);
             if (ade > 20) {
                 err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
-                          "ack_delay_exponent %" PRIu64 " invalid", ade);
+                          "ack_delay_exponent %" PRIu " invalid", ade);
                 return 1;
             }
             c->tp_out.ack_del_exp = (uint8_t)ade;
@@ -536,11 +534,11 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         case TP_MAD:
             if (dec_tp(&c->tp_out.max_ack_del, &pos, end) == false)
                 return 1;
-            warn(INF, "\tmax_ack_delay = %" PRIu64 " [ms]",
+            warn(INF, "\tmax_ack_delay = %" PRIu " [ms]",
                  c->tp_out.max_ack_del);
             if (c->tp_out.max_ack_del > (1 << 14)) {
                 err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
-                          "max_ack_delay %" PRIu64 " invalid",
+                          "max_ack_delay %" PRIu " invalid",
                           c->tp_out.max_ack_del);
                 return 1;
             }
@@ -565,7 +563,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             break;
 
         case TP_DMIG:;
-            uint64_t dmig;
+            uint_t dmig;
             if (dec_tp(&dmig, &pos, end) == false)
                 return 1;
             warn(INF, "\tdisable_migration = true");
@@ -626,7 +624,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
             pos += sizeof(pa->cid.srt);
 
-#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
+#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
             char ip4[NI_MAXHOST];
             char port4[NI_MAXSERV];
             int err = getnameinfo((struct sockaddr *)pa4, sizeof(*pa4), ip4,
@@ -659,7 +657,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         case TP_ACIL:
             if (dec_tp(&c->tp_out.act_cid_lim, &pos, end) == false)
                 return 1;
-            warn(INF, "\tactive_connection_id_limit = %" PRIu64,
+            warn(INF, "\tactive_connection_id_limit = %" PRIu,
                  c->tp_out.act_cid_lim);
             break;
 
@@ -697,7 +695,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 static void __attribute__((nonnull)) enc_tp(uint8_t ** pos,
                                             const uint8_t * const end,
                                             const uint16_t tp,
-                                            const uint64_t val)
+                                            const uint_t val)
 {
     enc2(pos, end, tp);
     enc2(pos, end, varint_size(val));
@@ -753,7 +751,7 @@ void init_tp(struct q_conn * const c)
             if (c->tp_in.max_strm_data_uni) {
                 enc_tp(&pos, end, TP_IMSD_U, c->tp_in.max_strm_data_uni);
 #ifdef DEBUG_EXTRA
-                warn(INF, "\tinitial_max_stream_data_uni = %" PRIu64 " [bytes]",
+                warn(INF, "\tinitial_max_stream_data_uni = %" PRIu " [bytes]",
                      c->tp_in.max_strm_data_uni);
 #endif
             }
@@ -779,21 +777,21 @@ void init_tp(struct q_conn * const c)
         case TP_IMSB:
             enc_tp(&pos, end, TP_IMSB, c->tp_in.max_strms_bidi);
 #ifdef DEBUG_EXTRA
-            warn(INF, "\tinitial_max_streams_bidi = %" PRIu64,
+            warn(INF, "\tinitial_max_streams_bidi = %" PRIu,
                  c->tp_in.max_strms_bidi);
 #endif
             break;
         case TP_IDTO:
             enc_tp(&pos, end, TP_IDTO, c->tp_in.idle_to);
 #ifdef DEBUG_EXTRA
-            warn(INF, "\tidle_timeout = %" PRIu64 " [ms]", c->tp_in.idle_to);
+            warn(INF, "\tidle_timeout = %" PRIu " [ms]", c->tp_in.idle_to);
 #endif
             break;
         case TP_IMSD_BR:
             enc_tp(&pos, end, TP_IMSD_BR, c->tp_in.max_strm_data_bidi_remote);
 #ifdef DEBUG_EXTRA
             warn(INF,
-                 "\tinitial_max_stream_data_bidi_remote = %" PRIu64 " [bytes]",
+                 "\tinitial_max_stream_data_bidi_remote = %" PRIu " [bytes]",
                  c->tp_in.max_strm_data_bidi_remote);
 #endif
             break;
@@ -801,14 +799,14 @@ void init_tp(struct q_conn * const c)
             enc_tp(&pos, end, TP_IMSD_BL, c->tp_in.max_strm_data_bidi_local);
 #ifdef DEBUG_EXTRA
             warn(INF,
-                 "\tinitial_max_stream_data_bidi_local = %" PRIu64 " [bytes]",
+                 "\tinitial_max_stream_data_bidi_local = %" PRIu " [bytes]",
                  c->tp_in.max_strm_data_bidi_remote);
 #endif
             break;
         case TP_IMD:
             enc_tp(&pos, end, TP_IMD, c->tp_in.max_data);
 #ifdef DEBUG_EXTRA
-            warn(INF, "\tinitial_max_data = %" PRIu64 " [bytes]",
+            warn(INF, "\tinitial_max_data = %" PRIu " [bytes]",
                  c->tp_in.max_data);
 #endif
             break;
@@ -821,14 +819,13 @@ void init_tp(struct q_conn * const c)
         case TP_MAD:
             enc_tp(&pos, end, TP_MAD, c->tp_in.max_ack_del);
 #ifdef DEBUG_EXTRA
-            warn(INF, "\tmax_ack_delay = %" PRIu64 " [ms]",
-                 c->tp_in.max_ack_del);
+            warn(INF, "\tmax_ack_delay = %" PRIu " [ms]", c->tp_in.max_ack_del);
 #endif
             break;
         case TP_MPS:
             enc_tp(&pos, end, TP_MPS, c->tp_in.max_pkt);
 #ifdef DEBUG_EXTRA
-            warn(INF, "\tmax_packet_size = %" PRIu64 " [bytes]",
+            warn(INF, "\tmax_packet_size = %" PRIu " [bytes]",
                  c->tp_in.max_pkt);
 #endif
             break;
@@ -836,7 +833,7 @@ void init_tp(struct q_conn * const c)
             if (c->tp_in.disable_migration == false) {
                 enc_tp(&pos, end, TP_ACIL, c->tp_in.act_cid_lim);
 #ifdef DEBUG_EXTRA
-                warn(INF, "\tactive_connection_id_limit = %" PRIu64,
+                warn(INF, "\tactive_connection_id_limit = %" PRIu,
                      c->tp_in.act_cid_lim);
 #endif
             }
@@ -1159,9 +1156,9 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
                             iv ? iv->buf : 0, in_len, &c->tls.tls_hshk_prop);
 #ifdef DEBUG_PROT
     warn(DBG,
-         "epoch %u, in %d (off %" PRIu64
-         "), gen %lu (%lu-%lu-%lu-%lu-%lu), ret %d, left %lu",
-         ep_in, iv ? iv->len : 0, iv ? meta(iv).strm_off : 0, tls_io.off,
+         "epoch %u, in %zu (off %" PRIu
+         "), gen %zu (%zu-%zu-%zu-%zu-%zu), ret %d, left %zu",
+         ep_in, (size_t)(iv ? iv->len : 0), iv ? meta(iv).strm_off : 0, tls_io.off,
          epoch_off[0], epoch_off[1], epoch_off[2], epoch_off[3], epoch_off[4],
          ret, iv ? iv->len - in_len : 0);
 #endif
@@ -1187,7 +1184,7 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
         if (out_len == 0)
             continue;
 #ifdef DEBUG_PROT
-        warn(DBG, "epoch %u: off %lu len %lu", e, epoch_off[e], out_len);
+        warn(DBG, "epoch %u: off %zu len %zu", e, epoch_off[e], out_len);
 #endif
         struct w_iov_sq o = w_iov_sq_initializer(o);
         alloc_off(w_engine(c->sock), &o, (uint32_t)out_len,
@@ -1325,7 +1322,7 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
                                  const void * const secret)
 {
 #ifdef DEBUG_PROT
-    warn(CRT, "update_traffic_key %s %lu", is_enc ? "tx" : "rx", epoch);
+    warn(CRT, "update_traffic_key %s %zu", is_enc ? "tx" : "rx", epoch);
 #endif
     struct q_conn * const c = *ptls_get_data_ptr(tls);
     ptls_cipher_suite_t * const cipher = ptls_get_cipher(c->tls.t);

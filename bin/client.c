@@ -27,7 +27,6 @@
 
 #include <errno.h>
 #include <fcntl.h>
-#include <inttypes.h>
 #include <libgen.h>
 #include <limits.h>
 #include <net/if.h>
@@ -48,14 +47,12 @@
 #define klib_unused
 
 #include <http_parser.h>
-#include <khash.h>
 
 #include <picoquic/h3zero.h>   // IWYU pragma: keep
 #include <picoquic/picoquic.h> // IWYU pragma: keep
 
 #include <picoquic/democlient.h>
 #include <quant/quant.h>
-#include <warpcore/warpcore.h>
 
 
 struct conn_cache_entry {
@@ -70,13 +67,13 @@ struct conn_cache_entry {
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-function"
-KHASH_MAP_INIT_INT64(conn_cache, struct conn_cache_entry *) // NOLINT
+KHASH_MAP_INIT_INT64(conn_cache, struct conn_cache_entry *)
 #pragma clang diagnostic pop
 
 
-static uint64_t timeout = 10;
-static uint64_t num_bufs = 100000;
-static uint64_t reps = 1;
+static uint32_t timeout = 10;
+static uint32_t num_bufs = 100000;
+static uint32_t reps = 1;
 static bool do_h3 = false;
 static bool flip_keys = false;
 static bool zlen_cids = false;
@@ -126,8 +123,7 @@ static void __attribute__((noreturn, nonnull)) usage(const char * const name,
     printf("\t[-q log]\twrite qlog events to file; default %s\n", qlog);
     printf("\t[-s cache]\tTLS 0-RTT state cache; default %s\n", cache);
     printf("\t[-l log]\tlog file for TLS keys; default %s\n", tls_log);
-    printf("\t[-t timeout]\tidle timeout in seconds; default %" PRIu64 "\n",
-           timeout);
+    printf("\t[-t timeout]\tidle timeout in seconds; default %u\n", timeout);
     printf("\t[-c]\t\tverify TLS certificates; default %s\n",
            verify_certs ? "true" : "false");
     printf("\t[-u]\t\tupdate TLS keys; default %s\n",
@@ -138,12 +134,9 @@ static void __attribute__((noreturn, nonnull)) usage(const char * const name,
            zlen_cids ? "true" : "false");
     printf("\t[-w]\t\twrite retrieved objects to disk; default %s\n",
            write_files ? "true" : "false");
-    printf("\t[-r reps]\trepetitions for all URLs; default %" PRIu64 "\n",
-           reps);
-    printf(
-        "\t[-b bufs]\tnumber of network buffers to allocate; default %" PRIu64
-        "\n",
-        num_bufs);
+    printf("\t[-r reps]\trepetitions for all URLs; default %u\n", reps);
+    printf("\t[-b bufs]\tnumber of network buffers to allocate; default %u\n",
+           num_bufs);
 #ifndef NO_MIGRATION
     printf("\t[-n]\t\tsimulate NAT rebind (use twice for \"real\" migration); "
            "default %s\n",
@@ -396,13 +389,14 @@ int main(int argc, char * argv[])
             strncpy(qlog, optarg, sizeof(qlog) - 1);
             break;
         case 't':
-            timeout = MIN(600, strtoul(optarg, 0, 10)); // 10 min
+            timeout = (uint32_t)MIN(600, strtoul(optarg, 0, 10)); // 10 min
             break;
         case 'b':
-            num_bufs = MAX(1000, MIN(strtoul(optarg, 0, 10), UINT32_MAX));
+            num_bufs =
+                (uint32_t)MAX(1000, MIN(strtoul(optarg, 0, 10), UINT32_MAX));
             break;
         case 'r':
-            reps = MAX(1, MIN(strtoul(optarg, 0, 10), UINT64_MAX));
+            reps = (uint32_t)MAX(1, MIN(strtoul(optarg, 0, 10), UINT32_MAX));
             break;
         case 'l':
             strncpy(tls_log, optarg, sizeof(tls_log) - 1);
@@ -504,18 +498,17 @@ int main(int argc, char * argv[])
 
             struct timespec diff;
             timespec_sub(&se->rep_t, &se->req_t, &diff);
-            const double elapsed = timespec_to_double(diff);
+            const double elapsed = timespec_to_tm_t(diff);
             if (reps > 1)
-                printf("%" PRIu64 "\t%f\t\"%s\"\t%s\n", w_iov_sq_len(&se->rep),
+                printf("%" PRIu "\t%f\t\"%s\"\t%s\n", w_iov_sq_len(&se->rep),
                        elapsed, bps(w_iov_sq_len(&se->rep), elapsed), se->url);
 #ifndef NDEBUG
-            warn(WRN,
-                 "read %" PRIu64
-                 " byte%s in %.3f sec (%s) on conn %s strm %" PRIu64,
-                 w_iov_sq_len(&se->rep), plural(w_iov_sq_len(&se->rep)),
-                 elapsed < 0 ? 0 : elapsed,
-                 bps(w_iov_sq_len(&se->rep), elapsed), q_cid(se->c),
-                 q_sid(se->s));
+            warn(
+                WRN,
+                "read %" PRIu " byte%s in %.3f sec (%s) on conn %s strm %" PRIu,
+                w_iov_sq_len(&se->rep), plural(w_iov_sq_len(&se->rep)),
+                elapsed < 0 ? 0 : elapsed, bps(w_iov_sq_len(&se->rep), elapsed),
+                q_cid(se->c), q_sid(se->s));
 #endif
 
             // retrieve the TX'ed request

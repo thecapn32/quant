@@ -55,14 +55,12 @@ if(HAVE_BENCHMARK_H)
     target_include_directories(${TARGET}
       SYSTEM PRIVATE
         ${OPENSSL_ROOT_DIR}/include
-        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/external/klib>
       PRIVATE
         ${PROJECT_SOURCE_DIR}/lib/include
         ${PROJECT_BINARY_DIR}/lib/include
         ${PROJECT_SOURCE_DIR}/lib/src
       SYSTEM PRIVATE
         ${OPENSSL_ROOT_DIR}/include
-        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/klib>
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/picotls/include>
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/warpcore/lib/include>
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/lib/deps/warpcore/lib/include>
@@ -93,7 +91,6 @@ if(HAVE_FUZZER)
         ${PROJECT_BINARY_DIR}/lib/include
         ${PROJECT_SOURCE_DIR}/lib/src
         ${OPENSSL_ROOT_DIR}/include
-        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/klib>
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/picotls/include>
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/warpcore/lib/include>
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/lib/deps/warpcore/lib/include>

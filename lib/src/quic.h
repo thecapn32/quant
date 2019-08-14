@@ -27,7 +27,6 @@
 
 #pragma once
 
-#include <inttypes.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -36,7 +35,6 @@
 #include <sys/param.h>
 
 #include <quant/quant.h>
-#include <warpcore/warpcore.h>
 
 // IWYU pragma: no_include "../deps/libev/ev.h"
 
@@ -57,6 +55,7 @@
 #define SCID_LEN_CLNT 4 ///< Default client source CID length.
 #define SCID_LEN_SERV 8 ///< Default server source CID length.
 #define SRT_LEN 16      ///< Stateless reset token length allowed by spec.
+#define PATH_CHLG_LEN 8 ///< Length of a path challenge.
 
 #ifdef PARTICLE
 #define IPTOS_ECN_NOTECT 0x00 // not-ECT
@@ -76,14 +75,14 @@
 
 // Maximum reordering in time before time threshold loss detection considers a
 // packet lost. Specified as an RTT multiplier. The RECOMMENDED value is 9/8.
-#define kTimeThreshold 1.125
+#define kTimeThreshold TM_T(1.125)
 
 // Timer granularity. This is a system-dependent value. However, implementations
 // SHOULD use a value no smaller than 1ms.
-#define kGranularity 0.001
+#define kGranularity TM_T(0.001)
 
 // The RTT used before an RTT sample is taken. The RECOMMENDED value is 100ms.
-#define kInitialRtt 0.5
+#define kInitialRtt TM_T(0.5)
 
 /// The sender's maximum payload size. Does not include UDP or IP overhead. The
 /// max packet size is used for calculating initial and minimum congestion
@@ -137,15 +136,15 @@
 #define CYN ""
 #endif
 
-#define FMT_PNR_IN BLU "%" PRIu64 NRM
-#define FMT_PNR_OUT GRN "%" PRIu64 NRM
-#define FMT_SID BLD YEL "%" PRId64 NRM
+#define FMT_PNR_IN BLU "%" PRIu NRM
+#define FMT_PNR_OUT GRN "%" PRIu NRM
+#define FMT_SID BLD YEL "%" PRId NRM
 
 
 struct cid {
     splay_entry(cid) node_seq;
-    uint64_t seq; ///< Connection ID sequence number
-    uint64_t rpt; ///< Retire prior to
+    uint_t seq; ///< Connection ID sequence number
+    uint_t rpt; ///< Retire prior to
     /// XXX len must precede id for cid_cmp() over both to work
     uint8_t len; ///< Connection ID length
     /// XXX id must precede srt for rand_bytes() over both to work
@@ -159,16 +158,21 @@ struct cid {
 
 
 struct pkt_hdr {
-    uint64_t nr;      ///< Packet number.
+    struct cid dcid;  ///< Destination CID.
+    struct cid scid;  ///< Source CID.
+    uint_t nr;        ///< Packet number.
     uint16_t len;     ///< Content of length field in long header.
     uint16_t hdr_len; ///< Length of entire QUIC header.
     uint32_t vers;    ///< QUIC version in long header.
-    struct cid dcid;  ///< Destination CID.
-    struct cid scid;  ///< Source CID.
     uint8_t flags;    ///< First (raw) byte of packet.
     uint8_t type;     ///< Parsed packet type.
-    uint8_t _unused[6];
     // we do not store any token of LH packets in the metadata anymore
+
+#ifdef HAVE_64BIT
+    uint8_t _unused[6];
+#else
+    uint8_t _unused[2];
+#endif
 };
 
 
@@ -180,29 +184,32 @@ struct pkt_meta {
     sl_head(pm_sl, pkt_meta) rtx; ///< List of pkt_meta structs of previous TXs.
 
     // pm_cpy(true) starts copying from here:
+    struct frames frms;     ///< Frames present in pkt.
     struct q_stream * strm; ///< Stream this data was written on.
-    uint64_t strm_off;      ///< Stream data offset.
+    uint_t strm_off;        ///< Stream data offset.
     uint16_t strm_frm_pos;  ///< Offset of stream frame header.
     uint16_t strm_data_pos; ///< Offset of first byte of stream frame data.
     uint16_t strm_data_len; ///< Length of stream frame data.
 
     uint16_t ack_frm_pos; ///< Offset of (first, on RX) ACK frame (+1 for type).
 
-    int64_t max_strm_data_sid;  ///< MAX_STREAM_DATA sid, if sent.
-    uint64_t max_strm_data;     ///< MAX_STREAM_DATA limit, if sent.
-    uint64_t max_data;          ///< MAX_DATA limit, if sent.
-    int64_t max_strms_bidi;     ///< MAX_STREAM_ID bidir limit, if sent.
-    int64_t max_strms_uni;      ///< MAX_STREAM_ID unidir limit, if sent.
-    uint64_t strm_data_blocked; ///< STREAM_DATA_BLOCKED value, if sent.
-    uint64_t data_blocked;      ///< DATA_BLOCKED value, if sent.
-    uint64_t min_cid_seq; ///< Smallest NEW_CONNECTION_ID seq in pkt, if sent.
+    dint_t max_strm_data_sid; ///< MAX_STREAM_DATA sid, if sent.
+    uint_t max_strm_data;     ///< MAX_STREAM_DATA limit, if sent.
+    uint_t max_data;          ///< MAX_DATA limit, if sent.
+    dint_t max_strms_bidi;    ///< MAX_STREAM_ID bidir limit, if sent.
+    dint_t max_strms_uni;     ///< MAX_STREAM_ID unidir limit, if sent.
+    uint_t strm_data_blocked; ///< STREAM_DATA_BLOCKED value, if sent.
+    uint_t data_blocked;      ///< DATA_BLOCKED value, if sent.
+    uint_t min_cid_seq; ///< Smallest NEW_CONNECTION_ID seq in pkt, if sent.
 
-    struct frames frms; ///< Frames present in pkt.
+#ifndef HAVE_64BIT
+    uint8_t _unused[4];
+#endif
 
     // pm_cpy(false) starts copying from here:
-    ev_tstamp t;          ///< TX or RX timestamp.
     struct pn_space * pn; ///< Packet number space.
     struct pkt_hdr hdr;   ///< Parsed packet header.
+    tm_t t;               ///< TX or RX timestamp.
 
     uint16_t udp_len;          ///< Length of protected UDP packet at TX/RX.
     uint8_t has_rtx : 1;       ///< Does the w_iov hold truncated data?
@@ -215,7 +222,11 @@ struct pkt_meta {
     uint8_t lost : 1;  ///< Have we marked this packet as lost?
     uint8_t txed : 1;  ///< Did we TX this pkt?
 
-    uint8_t _unused[5];
+#ifdef HAVE_64BIT
+    uint8_t _unused2[5];
+#else
+    uint8_t _unused2[1];
+#endif
 };
 
 
@@ -256,7 +267,7 @@ w_iov_dup(const struct w_iov * const v,
           const uint16_t off);
 
 
-#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE)) && !defined(FUZZING) &&     \
+#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) && !defined(FUZZING) &&    \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 extern int corpus_pkt_dir, corpus_frm_dir;
 
@@ -385,8 +396,7 @@ cid_cpy(struct cid * const dst, const struct cid * const src)
 {
     memcpy((uint8_t *)dst + offsetof(struct cid, seq),
            (const uint8_t *)src + offsetof(struct cid, seq),
-           sizeof(struct cid) - offsetof(struct cid, seq) -
-               sizeof(src->_unused));
+           sizeof(struct cid) - offsetof(struct cid, seq));
 }
 
 
@@ -395,8 +405,8 @@ pm_cpy(struct pkt_meta * const dst,
        const struct pkt_meta * const src,
        const bool also_frame_info)
 {
-    const size_t off = also_frame_info ? offsetof(struct pkt_meta, strm)
-                                       : offsetof(struct pkt_meta, t);
+    const size_t off = also_frame_info ? offsetof(struct pkt_meta, frms)
+                                       : offsetof(struct pkt_meta, pn);
     memcpy((uint8_t *)dst + off, (const uint8_t *)src + off,
            sizeof(*dst) - off);
 }

@@ -1,12 +1,12 @@
-#ifndef NDEBUG
-#define DEBUG_BUILD
-#endif
+// #ifndef NDEBUG
+// #define DEBUG_BUILD
+// #endif
 
 #include <Particle.h>
 #include <netdb.h>
 
 #include "quant/quant.h"
-#include "warpcore/warpcore.h"
+// #include "warpcore/warpcore.h"
 
 SYSTEM_MODE(MANUAL);
 // SYSTEM_THREAD(ENABLED);
@@ -65,9 +65,9 @@ void warpcore_transaction()
 
 void quic_transaction()
 {
-    const struct q_conf qc = {0, 0, 0, 0, 0, 0, 20, false};
+    const struct q_conf qc = {0, 0, 0, 0, 0, 0, 10, false};
     struct w_engine * const w = q_init("wl3", &qc);
-    const char peername[] = "quant.eggert.org";
+    const char peername[] = "172.19.235.111";
     struct addrinfo * const peer = resolve(peername, "4433");
     struct q_conn * const c = q_connect(w, peer->ai_addr, peername, 0, 0, true,
                                         "hq-" DRAFT_VERSION_STRING, 0);

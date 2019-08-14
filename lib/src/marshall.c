@@ -30,8 +30,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include <quant/quant.h> // IWYU pragma: keep
-#include <warpcore/warpcore.h>
+#include <quant/quant.h>
 
 #include "marshall.h"
 
@@ -69,7 +68,7 @@ uint8_t varint_size(const uint64_t val)
 
 void enc1(uint8_t ** pos, const uint8_t * const end, const uint8_t val)
 {
-    ensure(*pos + sizeof(val) <= end, "buffer overflow: %lu", end - *pos);
+    ensure(*pos + sizeof(val) <= end, "buffer overflow: %zu", end - *pos);
     **pos = val;
     *pos += sizeof(val);
 }
@@ -77,7 +76,7 @@ void enc1(uint8_t ** pos, const uint8_t * const end, const uint8_t val)
 
 void enc2(uint8_t ** pos, const uint8_t * const end, const uint16_t val)
 {
-    ensure(*pos + sizeof(val) <= end, "buffer overflow: %lu", end - *pos);
+    ensure(*pos + sizeof(val) <= end, "buffer overflow: %zu", end - *pos);
     const uint16_t v = bswap16(val);
     memcpy(*pos, &v, sizeof(v));
     *pos += sizeof(val);
@@ -86,7 +85,7 @@ void enc2(uint8_t ** pos, const uint8_t * const end, const uint16_t val)
 
 void enc3(uint8_t ** pos, const uint8_t * const end, const uint32_t val)
 {
-    ensure(*pos + 3 <= end, "buffer overflow: %lu", end - *pos);
+    ensure(*pos + 3 <= end, "buffer overflow: %zu", end - *pos);
     const uint32_t v = bswap32(val << 8);
     memcpy(*pos, &v, 3);
     *pos += 3;
@@ -95,7 +94,7 @@ void enc3(uint8_t ** pos, const uint8_t * const end, const uint32_t val)
 
 void enc4(uint8_t ** pos, const uint8_t * const end, const uint32_t val)
 {
-    ensure(*pos + sizeof(val) <= end, "buffer overflow: %lu", end - *pos);
+    ensure(*pos + sizeof(val) <= end, "buffer overflow: %zu", end - *pos);
     const uint32_t v = bswap32(val);
     memcpy(*pos, &v, sizeof(v));
     *pos += sizeof(val);
@@ -104,7 +103,7 @@ void enc4(uint8_t ** pos, const uint8_t * const end, const uint32_t val)
 
 void enc8(uint8_t ** pos, const uint8_t * const end, const uint64_t val)
 {
-    ensure(*pos + sizeof(val) <= end, "buffer overflow: %lu", end - *pos);
+    ensure(*pos + sizeof(val) <= end, "buffer overflow: %zu", end - *pos);
     const uint64_t v = bswap64(val);
     memcpy(*pos, &v, sizeof(v));
     *pos += sizeof(val);
@@ -116,7 +115,7 @@ void encv(uint8_t ** pos, const uint8_t * const end, const uint64_t val)
     ensure((val & VARINT_MASK) == 0, "value overflow: %" PRIu64, val);
 
     if ((val & VARINT_MASK8) != 0) {
-        ensure(*pos + 8 <= end, "buffer overflow: %lu", end - *pos);
+        ensure(*pos + 8 <= end, "buffer overflow: %zu", end - *pos);
         *(*pos + 0) = ((val >> 56) & 0x3f) + 0xc0;
         *(*pos + 1) = (val >> 48) & 0xff;
         *(*pos + 2) = (val >> 40) & 0xff;
@@ -130,7 +129,7 @@ void encv(uint8_t ** pos, const uint8_t * const end, const uint64_t val)
     }
 
     if ((val & VARINT_MASK4) != 0) {
-        ensure(*pos + 4 <= end, "buffer overflow: %lu", end - *pos);
+        ensure(*pos + 4 <= end, "buffer overflow: %zu", end - *pos);
         *(*pos + 0) = ((val >> 24) & 0x3f) + 0x80;
         *(*pos + 1) = (val >> 16) & 0xff;
         *(*pos + 2) = (val >> 8) & 0xff;
@@ -140,14 +139,14 @@ void encv(uint8_t ** pos, const uint8_t * const end, const uint64_t val)
     }
 
     if ((val & VARINT_MASK2) != 0) {
-        ensure(*pos + 2 <= end, "buffer overflow: %lu", end - *pos);
+        ensure(*pos + 2 <= end, "buffer overflow: %zu", end - *pos);
         *(*pos + 0) = ((val >> 8) & 0x3f) + 0x40;
         *(*pos + 1) = val & 0xff;
         *pos += 2;
         return;
     }
 
-    ensure(*pos + 1 <= end, "buffer overflow: %lu", end - *pos);
+    ensure(*pos + 1 <= end, "buffer overflow: %zu", end - *pos);
     **pos = val & 0x3f;
     *pos += 1;
 }
@@ -194,7 +193,7 @@ void encb(uint8_t ** pos,
           const uint8_t * const val,
           const uint16_t len)
 {
-    ensure(*pos + len <= end, "buffer overflow: %lu", end - *pos);
+    ensure(*pos + len <= end, "buffer overflow: %zu", end - *pos);
     memcpy(*pos, val, len);
     *pos += len;
 }
@@ -272,6 +271,9 @@ bool decv(uint64_t * const val,
     case 0xc0:
         if (unlikely(*pos + 8 > end))
             return false;
+#ifndef HAVE_64BIT
+        return false;
+#else
         *val =
             ((uint64_t)(*(*pos + 0) & 0x3f) << 56) +
             ((uint64_t)(*(*pos + 1)) << 48) + ((uint64_t)(*(*pos + 1)) << 48) +
@@ -280,7 +282,7 @@ bool decv(uint64_t * const val,
             ((uint64_t)(*(*pos + 6)) << 8) + ((uint64_t)(*(*pos + 7)) << 0);
         *pos += 8;
         return true;
-
+#endif
     case 0x80:
         if (unlikely(*pos + 4 > end))
             return false;

@@ -25,6 +25,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <inttypes.h>
 #include <netdb.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -47,7 +48,6 @@
 
 #include <picotls.h> // IWYU pragma: keep
 #include <quant/quant.h>
-#include <warpcore/warpcore.h>
 
 // IWYU pragma: no_include "../deps/libev/ev.h"
 
@@ -154,7 +154,8 @@ clnt_vneg(const uint8_t * const pos, const uint8_t * const end)
             if (is_vneg_vers(vers))
                 continue;
 #ifdef DEBUG_EXTRA
-            warn(DBG, "serv prio %ld = 0x%08x; our prio %u = 0x%08x",
+            warn(DBG,
+                 "serv prio %ld = 0x%0" PRIx32 "; our prio %u = 0x%0" PRIx32,
                  (unsigned long)(p - pos) / sizeof(vers), vers, i, ok_vers[i]);
 #endif
             if (ok_vers[i] == vers)
@@ -249,7 +250,7 @@ void use_next_dcid(struct q_conn * const c)
 {
     struct cid * const dcid =
         splay_next(cids_by_seq, &c->dcids_by_seq, c->dcid);
-    ensure(dcid, "can't switch from dcid %" PRIu64, c->dcid->seq);
+    ensure(dcid, "can't switch from dcid %" PRIu, c->dcid->seq);
 
     warn(NTE, "migration to dcid %s for %s conn (was %s)", cid2str(dcid),
          conn_type(c), cid2str(c->dcid));
@@ -262,7 +263,7 @@ void use_next_dcid(struct q_conn * const c)
 #endif
 
 
-#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE)) && !defined(PARTICLE)
+#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG))
 static void __attribute__((nonnull)) log_sent_pkts(struct q_conn * const c)
 {
     for (pn_t t = pn_init; t <= pn_data; t++) {
@@ -274,7 +275,7 @@ static void __attribute__((nonnull)) log_sent_pkts(struct q_conn * const c)
         struct diet unacked = diet_initializer(unacked);
         struct pkt_meta * m;
         kh_foreach_value(pn->sent_pkts, m,
-                         diet_insert(&unacked, m->hdr.nr, (ev_tstamp)NAN));
+                         diet_insert(&unacked, m->hdr.nr, (tm_t)NAN));
 
         char buf[512];
         int pos = 0;
@@ -299,7 +300,7 @@ static void __attribute__((nonnull)) log_sent_pkts(struct q_conn * const c)
         diet_free(&unacked);
 
         if (pos)
-            warn(DBG, "%s %s unacked: %s", conn_type(c), pn_type_str(t), buf);
+            warn(INF, "%s %s unacked: %s", conn_type(c), pn_type_str(t), buf);
     }
 }
 #endif
@@ -385,7 +386,6 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
 
     if (sq_len(&c->txq) > 1 && unlikely(is_lh(*sq_first(&c->txq)->buf)))
         coalesce(&c->txq);
-
 #ifndef FUZZING
     // transmit encrypted/protected packets
     w_tx(c->sock, &c->txq);
@@ -394,23 +394,20 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
     while (w_tx_pending(&c->txq));
 #endif
 
-#if defined(DEBUG_BUFFERS) && (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE))
-    const uint64_t avail = sq_len(&c->w->iov);
-    const uint64_t sql = sq_len(&c->txq);
+#if defined(DEBUG_BUFFERS) && (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG))
+    const uint_t avail = sq_len(&c->w->iov);
+    const uint_t sql = sq_len(&c->txq);
 #endif
 
     // txq was allocated straight from warpcore, no metadata needs to be freed
     w_free(&c->txq);
 
 #ifdef DEBUG_BUFFERS
-    warn(DBG, "w_free %" PRIu64 " (avail %" PRIu64 "->%" PRIu64 ")", sql, avail,
+    warn(DBG, "w_free %" PRIu " (avail %" PRIu "->%" PRIu ")", sql, avail,
          sq_len(&c->w->iov));
 #endif
 
-#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE)) && !defined(PARTICLE)
-    if (util_dlevel == DBG)
-        log_sent_pkts(c);
-#endif
+    log_sent_pkts(c);
 }
 
 
@@ -472,10 +469,10 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
 
 #ifdef DEBUG_STREAMS
     warn(ERR,
-         "%s strm id=" FMT_SID ", cnt=%" PRIu64
-         ", has_data=%u, needs_ctrl=%u, blocked=%u, lost_cnt=%" PRIu64
+         "%s strm id=" FMT_SID ", cnt=%" PRIu
+         ", has_data=%u, needs_ctrl=%u, blocked=%u, lost_cnt=%" PRIu
          ", fully_acked=%u, "
-         "limit=%u",
+         "limit=%" PRIu32,
          conn_type(c), s->id, sq_len(&s->out), has_data, needs_ctrl(s),
          s->blocked, s->lost_cnt, out_fully_acked(s), limit);
 #endif
@@ -491,7 +488,7 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
     }
 
 #ifdef DEBUG_STREAMS
-    warn(DBG, "TX on %s conn %s strm " FMT_SID " w/%" PRIu64 " pkt%s in queue ",
+    warn(INF, "TX on %s conn %s strm " FMT_SID " w/%" PRIu " pkt%s in queue ",
          conn_type(c), cid2str(c->scid), s->id, sq_len(&s->out),
          plural(sq_len(&s->out)));
 #endif
@@ -537,7 +534,7 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
 
         if (unlikely(limit && encoded == limit)) {
 #ifdef DEBUG_STREAMS
-            warn(DBG, "tx limit %u reached", limit);
+            warn(INF, "tx limit %" PRIu32 " reached", limit);
 #endif
             break;
         }
@@ -605,7 +602,7 @@ void tx(ev_io * const w, int param)
 
 done:;
     // make sure we sent enough packets when we're called with a limit
-    uint64_t sent = sq_len(&c->txq);
+    uint_t sent = sq_len(&c->txq);
     while ((unlikely(limit) && sent < limit) || (c->needs_tx && sent == 0)) {
         if (likely(tx_ack(c, ep_data, limit && sent < limit)))
             sent++;
@@ -881,7 +878,7 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
 }
 
 
-#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
+#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
 static bool __attribute__((const))
 pkt_ok_for_epoch(const uint8_t flags, const epoch_t epoch)
 {
@@ -910,7 +907,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
 #endif
                                             ,
                                             const struct cid * const odcid
-#if defined(NDEBUG) && !defined(NDEBUG_OVERRIDE)
+#if defined(NDEBUG) && !defined(NDEBUG_WITH_DLOG)
                                             __attribute__((unused))
 #endif
                                             ,
@@ -952,7 +949,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
         }
 
 #ifdef DEBUG_EXTRA
-        warn(INF, "supporting clnt-requested vers 0x%08x", c->vers);
+        warn(INF, "supporting clnt-requested vers 0x%0" PRIx32, c->vers);
 #endif
         if (dec_frames(c, &v, &m) == false)
             goto done;
@@ -972,8 +969,8 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
         struct ooo_0rtt * const zo =
             splay_find(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, &which);
         if (zo) {
-            warn(INF, "have reordered 0-RTT pkt (t=%f sec) for %s conn %s",
-                 ev_now() - zo->t, conn_type(c), cid2str(c->scid));
+            warn(INF, "have reordered 0-RTT pkt for %s conn %s", conn_type(c),
+                 cid2str(c->scid));
             ensure(splay_remove(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo),
                    "removed");
             sq_insert_head(x, zo->v, next);
@@ -996,7 +993,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
 
         if (m->hdr.vers == 0) {
             // this is a vneg pkt
-            m->hdr.nr = UINT64_MAX;
+            m->hdr.nr = UINT_T_MAX;
             if (c->vers != ok_vers[0]) {
                 // we must have already reacted to a prior vneg pkt
                 warn(INF, "ignoring spurious vneg response");
@@ -1020,7 +1017,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
             if (is_vneg_vers(c->vers) == false &&
                 is_draft_vers(c->vers) == false) {
                 err_close(c, ERR_PROTOCOL_VIOLATION, 0,
-                          "must not vneg for tx vers 0x%08x", c->vers);
+                          "must not vneg for tx vers 0x%0" PRIx32, c->vers);
                 goto done;
             }
 
@@ -1035,7 +1032,9 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
 
             vneg_or_rtry_resp(c, true);
             c->vers = try_vers;
-            warn(INF, "serv didn't like vers 0x%08x, retrying with 0x%08x",
+            warn(INF,
+                 "serv didn't like vers 0x%0" PRIx32
+                 ", retrying with 0x%0" PRIx32 "",
                  c->vers_initial, c->vers);
             ok = true;
             goto done;
@@ -1043,13 +1042,14 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
 
         if (unlikely(m->hdr.vers != c->vers)) {
             warn(ERR,
-                 "serv response w/vers 0x%08x to CI w/vers 0x%08x, ignoring",
+                 "serv response w/vers 0x%0" PRIx32 " to CI w/vers 0x%0" PRIx32
+                 ", ignoring",
                  m->hdr.vers, c->vers);
             goto done;
         }
 
         if (m->hdr.type == LH_RTRY) {
-            m->hdr.nr = UINT64_MAX;
+            m->hdr.nr = UINT_T_MAX;
             if (c->tok_len) {
                 // we already had an earlier RETRY on this connection
                 warn(INF, "already handled a retry, ignoring");
@@ -1102,7 +1102,7 @@ done:
     if (unlikely(ok == false))
         return false;
 
-    if (likely(m->hdr.nr != UINT64_MAX)) {
+    if (likely(m->hdr.nr != UINT_T_MAX)) {
         struct pn_space * const pn = pn_for_pkt_type(c, m->hdr.type);
         // update ECN info
         switch (v->flags & IPTOS_ECN_MASK) {
@@ -1146,11 +1146,11 @@ rx_pkts(struct w_iov_sq * const x,
         sq_remove_head(x, next);
 
 #ifdef DEBUG_BUFFERS
-        warn(DBG, "rx idx %u (avail %" PRIu64 ") len %u type 0x%02x",
+        warn(DBG, "rx idx %" PRIu32 " (avail %" PRIu ") len %u type 0x%02x",
              w_iov_idx(xv), sq_len(&xv->w->iov), xv->len, *xv->buf);
 #endif
 
-#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE)) && !defined(FUZZING) &&     \
+#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) && !defined(FUZZING) &&    \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
         // when called from the fuzzer, v->addr.ss_family is zero
         if (xv->addr.ss_family)
@@ -1163,7 +1163,7 @@ rx_pkts(struct w_iov_sq * const x,
         v->addr = xv->addr;
         v->flags = xv->flags;
         v->len = xv->len; // this is just so that log_pkt can show the rx len
-        m->t = ev_now();
+        m->t = (tm_t)ev_now();
 
         bool pkt_valid = false;
         const bool is_clnt = w_connected(ws);
@@ -1234,13 +1234,14 @@ rx_pkts(struct w_iov_sq * const x,
                     is_vneg_vers(m->hdr.vers)) {
                     log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
                             tok_len);
-                    warn(WRN, "clnt-requested vers 0x%08x not supported",
+                    warn(WRN,
+                         "clnt-requested vers 0x%0" PRIx32 " not supported",
                          m->hdr.vers);
                     tx_vneg_resp(ws, v, m);
                     goto drop;
                 }
 
-#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
+#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
                 char ip[NI_MAXHOST];
                 char port[NI_MAXSERV];
                 ensure(getnameinfo((struct sockaddr *)&v->addr, sizeof(v->addr),
@@ -1305,7 +1306,6 @@ rx_pkts(struct w_iov_sq * const x,
                 ensure(zo, "could not calloc");
                 cid_cpy(&zo->cid, &m->hdr.dcid);
                 zo->v = v;
-                zo->t = m->t;
                 ensure(splay_insert(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo) == 0,
                        "inserted");
                 log_pkt("RX", v, (struct sockaddr *)&v->addr, &odcid, tok,
@@ -1387,7 +1387,7 @@ rx_pkts(struct w_iov_sq * const x,
                  sockaddr_cmp((struct sockaddr *)&c->migr_peer,
                               (struct sockaddr *)&v->addr) != 0)) {
 
-#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
+#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
                 char ip[NI_MAXHOST];
                 char port[NI_MAXSERV];
                 ensure(getnameinfo((struct sockaddr *)&v->addr, sizeof(v->addr),
@@ -1430,7 +1430,7 @@ rx_pkts(struct w_iov_sq * const x,
             if (likely(has_pkt_nr(m->hdr.flags, m->hdr.vers))) {
                 struct pn_space * const pn = pn_for_pkt_type(c, m->hdr.type);
                 diet_insert(&pn->recv, m->hdr.nr, m->t);
-                diet_insert(&pn->recv_all, m->hdr.nr, (ev_tstamp)NAN);
+                diet_insert(&pn->recv_all, m->hdr.nr, (tm_t)NAN);
             }
             pkt_valid = true;
 
@@ -1462,7 +1462,7 @@ rx_pkts(struct w_iov_sq * const x,
         }
 
 #ifdef DEBUG_BUFFERS
-        warn(DBG, "w_free_iov idx %u (avail %" PRIu64 ")", w_iov_idx(xv),
+        warn(DBG, "w_free_iov idx %" PRIu32 " (avail %" PRIu ")", w_iov_idx(xv),
              sq_len(&xv->w->iov) + 1);
 #endif
         w_free_iov(xv);
@@ -1549,7 +1549,7 @@ err_close
 err_close_noreason
 #endif
 (struct q_conn * const c,
-               const uint64_t code,
+               const uint_t code,
                const uint8_t frm
 #ifndef NO_ERR_REASONS
                ,
@@ -1562,8 +1562,7 @@ err_close_noreason
     if (unlikely(c->err_code)) {
 #ifndef NO_ERR_REASONS
         warn(WRN,
-             "ignoring new err 0x%" PRIx64 "; existing err is 0x%" PRIx64
-             " (%s) ",
+             "ignoring new err 0x%" PRIx "; existing err is 0x%" PRIx " (%s) ",
              code, c->err_code, c->err_reason);
 #endif
         return;
@@ -1652,9 +1651,10 @@ void enter_closing(struct q_conn * const c)
     // if we're going closing->draining, don't start the timer again
     if (!ev_is_active(&c->closing_alarm)) {
         // start closing/draining alarm (3 * RTO)
-        const ev_tstamp dur =
-            (3 * (is_zero(c->rec.cur.srtt) ? kInitialRtt : c->rec.cur.srtt) +
-             4 * c->rec.cur.rttvar);
+        const ev_tstamp dur = (ev_tstamp)(
+            3 * (is_zero(c->rec.cur.srtt) ? kInitialRtt
+                                          : (ev_tstamp)c->rec.cur.srtt) +
+            4 * (ev_tstamp)c->rec.cur.rttvar);
         ev_timer_init(&c->closing_alarm, enter_closed, dur, 0);
 #ifndef FUZZING
         ev_timer_start(&c->closing_alarm);
@@ -1723,7 +1723,7 @@ void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
         get_conf_uncond(conf, enable_udp_zero_checksums);
     w_set_sockopt(c->sock, &c->sockopt);
 
-#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
+#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
     // XXX for testing, do a key flip and a migration ASAP (if enabled)
     c->do_key_flip = c->key_flips_enabled;
 #ifndef NO_MIGRATION
@@ -1808,7 +1808,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     // initialize recovery state
     init_rec(c);
     if (c->is_clnt)
-        c->path_val_win = UINT64_MAX;
+        c->path_val_win = UINT_T_MAX;
 
     // start a TX watcher
     ev_io_init(&c->tx_w, tx, w_fd(c->sock), EV_WRITE);
@@ -1957,7 +1957,7 @@ char * cid2str_impl(const struct cid * const id,
                     const size_t len_dst)
 {
     if (id)
-        snprintf(dst, len_dst, "%" PRIu64 ":%.*s", id->seq, 2 * id->len,
+        snprintf(dst, len_dst, "%" PRIu ":%.*s", id->seq, 2 * id->len,
                  hex2str(id->id, id->len, CID_LEN_MAX));
     return dst;
 }

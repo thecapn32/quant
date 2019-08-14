@@ -27,12 +27,9 @@
 
 #include <stdbool.h>
 
-#include <warpcore/warpcore.h>
-
 #include "bitset.h"
 #include "conn.h"
 #include "frame.h"
-#include "hash.h"
 #include "pn.h"
 #include "quic.h"
 #include "recovery.h"
@@ -58,7 +55,7 @@ void pm_by_nr_ins(khash_t(pm_by_nr) * const pbn, struct pkt_meta * const p)
 
 
 struct w_iov * find_sent_pkt(const struct pn_space * const pn,
-                             const uint64_t nr,
+                             const uint_t nr,
                              struct pkt_meta ** const m)
 {
     const khiter_t k = kh_get(pm_by_nr, pn->sent_pkts, nr);
@@ -77,7 +74,7 @@ void init_pn(struct pn_space * const pn,
     diet_init(&pn->recv_all);
     diet_init(&pn->acked_or_lost);
     pn->sent_pkts = kh_init(pm_by_nr);
-    pn->lg_sent = pn->lg_acked = UINT64_MAX;
+    pn->lg_sent = pn->lg_acked = UINT_T_MAX;
     pn->c = c;
     pn->type = type;
 }
@@ -106,7 +103,7 @@ void reset_pn(struct pn_space * const pn)
 {
     free_pn(pn);
     pn->sent_pkts = kh_init(pm_by_nr);
-    pn->lg_sent = pn->lg_acked = UINT64_MAX;
+    pn->lg_sent = pn->lg_acked = UINT_T_MAX;
     pn->ect0_cnt = pn->ect1_cnt = pn->ce_cnt = 0;
     pn->pkts_rxed_since_last_ack_tx = 0;
     bit_zero(FRM_MAX, &pn->rx_frames);
@@ -139,7 +136,7 @@ void abandon_pn(struct pn_space * const pn)
 
 ack_t needs_ack(const struct pn_space * const pn)
 {
-#if defined(DEBUG_EXTRA) && (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE))
+#if defined(DEBUG_EXTRA) && (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG))
     struct q_conn * const c = pn->c;
 #endif
 

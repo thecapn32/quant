@@ -27,7 +27,6 @@
 
 #pragma once
 
-#include <inttypes.h>
 #include <math.h>
 #include <netinet/in.h>
 #include <stdbool.h>
@@ -38,14 +37,12 @@
 #include <sys/types.h>
 
 #include <quant/quant.h>
-#include <warpcore/warpcore.h>
 
 // IWYU pragma: no_include "../deps/libev/ev.h"
 
 #include "diet.h"
 #include "event.h" // IWYU pragma: keep
-#include "hash.h"
-#include "pn.h" // IWYU pragma: keep
+#include "pn.h"    // IWYU pragma: keep
 #include "quic.h"
 #include "recovery.h"
 #include "tls.h"
@@ -110,16 +107,16 @@ struct pref_addr {
 
 
 struct transport_params {
-    uint64_t max_strm_data_uni;
-    uint64_t max_strm_data_bidi_local;
-    uint64_t max_strm_data_bidi_remote;
-    uint64_t max_data;
-    uint64_t max_strms_uni;
-    uint64_t max_strms_bidi;
-    uint64_t idle_to;
-    uint64_t max_ack_del;
-    uint64_t max_pkt;
-    uint64_t act_cid_lim;
+    uint_t max_strm_data_uni;
+    uint_t max_strm_data_bidi_local;
+    uint_t max_strm_data_bidi_remote;
+    uint_t max_data;
+    uint_t max_strms_uni;
+    uint_t max_strms_bidi;
+    uint_t idle_to;
+    uint_t max_ack_del;
+    uint_t max_pkt;
+    uint_t act_cid_lim;
     struct pref_addr pref_addr;
     struct cid orig_cid;
     uint8_t ack_del_exp;
@@ -145,7 +142,7 @@ typedef enum { CONN_STATES } conn_state_t;
 
 extern const char * const conn_state_str[];
 
-#define MAX_TOK_LEN 512
+#define MAX_TOK_LEN 256
 #define MAX_ERR_REASON_LEN 64 // keep < 256, since err_reason_len is uint8_t
 
 #define DEF_ACK_DEL_EXP 3
@@ -203,26 +200,13 @@ struct q_conn {
 
     struct w_engine * w; ///< Underlying warpcore engine.
 
+    ev_io rx_w; ///< RX watcher.
+    ev_io tx_w; ///< TX watcher.
+
     uint32_t vers;         ///< QUIC version in use for this connection.
     uint32_t vers_initial; ///< QUIC version first negotiated.
 
     struct pn_space pns[pn_data + 1];
-
-    int64_t next_sid_bidi; ///< Next unidir stream ID to use on q_rsv_stream().
-    int64_t next_sid_uni;  ///< Next bidi stream ID to use on q_rsv_stream().
-
-    uint64_t cnt_bidi; ///< Number of unidir stream IDs in use.
-    uint64_t cnt_uni;  ///< Number of bidi stream IDs in use.
-
-    struct transport_params tp_in;  ///< Transport parameters for RX.
-    struct transport_params tp_out; ///< Transport parameters for TX.
-
-    uint64_t in_data_str;  ///< Current inbound aggregate stream data.
-    uint64_t out_data_str; ///< Current outbound aggregate stream data.
-
-    uint64_t path_val_win; ///< Window for path validation.
-    uint64_t in_data;      ///< Current inbound connection data.
-    uint64_t out_data;     ///< Current outbound connection data.
 
     ev_timer idle_alarm;
     ev_timer closing_alarm;
@@ -238,24 +222,37 @@ struct q_conn {
     struct diet clsd_strms;
     sl_head(, q_stream) need_ctrl;
 
-    struct w_sock * sock;     ///< File descriptor (socket) for the connection.
-    struct w_sockopt sockopt; ///< Socket options.
+    struct w_sock * sock; ///< File descriptor (socket) for the connection.
 
-    epoch_t min_rx_epoch;
-
-    ev_io rx_w; ///< RX watcher.
-    ev_io tx_w; ///< TX watcher.
+    struct transport_params tp_in;  ///< Transport parameters for RX.
+    struct transport_params tp_out; ///< Transport parameters for TX.
 
     struct recovery rec; ///< Loss recovery state.
     struct tls tls;      ///< TLS state.
 
-    uint64_t path_chlg_in;
-    uint64_t path_resp_out;
+    dint_t next_sid_bidi; ///< Next unidir stream ID to use on q_rsv_stream().
+    dint_t next_sid_uni;  ///< Next bidi stream ID to use on q_rsv_stream().
 
-    uint64_t path_chlg_out;
-    uint64_t path_resp_in;
+    uint_t cnt_bidi; ///< Number of unidir stream IDs in use.
+    uint_t cnt_uni;  ///< Number of bidi stream IDs in use.
 
-    uint64_t max_cid_seq_out;
+    uint_t in_data_str;  ///< Current inbound aggregate stream data.
+    uint_t out_data_str; ///< Current outbound aggregate stream data.
+
+    uint_t path_val_win; ///< Window for path validation.
+    uint_t in_data;      ///< Current inbound connection data.
+    uint_t out_data;     ///< Current outbound connection data.
+
+    epoch_t min_rx_epoch;
+
+    uint8_t path_chlg_in[PATH_CHLG_LEN];
+    uint8_t path_resp_out[PATH_CHLG_LEN];
+
+    uint8_t path_chlg_out[PATH_CHLG_LEN];
+    uint8_t path_resp_in[PATH_CHLG_LEN];
+
+    struct w_sockopt sockopt; ///< Socket options.
+    uint_t max_cid_seq_out;
 
     struct cid odcid; ///< Original destination CID of first Initial.
 
@@ -263,7 +260,7 @@ struct q_conn {
 
     struct q_conn_info i;
 
-    uint64_t err_code;
+    uint_t err_code;
     uint8_t err_frm;
 #ifndef NO_ERR_REASONS
     uint8_t err_reason_len;
@@ -273,14 +270,18 @@ struct q_conn {
 #endif
 
     uint16_t tok_len;
-    uint8_t tok[MAX_TOK_LEN + 4]; // some stacks send ungodly large tokens
-                                  // XXX +4 for alignment
+    uint8_t tok[MAX_TOK_LEN]; // some stacks send ungodly large tokens
+
+#ifdef HAVE_64BIT
+    uint8_t _unused[4];
+#else
+#endif
 };
 
 
 extern struct q_conn_sl c_ready;
 
-#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE)) && defined(DEBUG_EXTRA) &&  \
+#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) && defined(DEBUG_EXTRA) && \
     !defined(FUZZING)
 #define conn_to_state(c, s)                                                    \
     do {                                                                       \
@@ -323,7 +324,7 @@ err_close
 err_close_noreason
 #endif
     (struct q_conn * const c,
-     const uint64_t code,
+     const uint_t code,
      const uint8_t frm
 #ifndef NO_ERR_REASONS
      ,
@@ -414,7 +415,6 @@ struct ooo_0rtt {
     splay_entry(ooo_0rtt) node;
     struct cid cid;   ///< CID of 0-RTT pkt
     struct w_iov * v; ///< the buffer containing the 0-RTT pkt
-    ev_tstamp t;      ///< Insertion time
 };
 
 
@@ -439,7 +439,7 @@ conn_type(const struct q_conn * const c)
 }
 
 
-static inline __attribute__((const)) bool is_zero(const ev_tstamp t)
+static inline __attribute__((const)) bool is_zero(const tm_t t)
 {
     return fpclassify(t) == FP_ZERO;
 }
@@ -449,8 +449,7 @@ static inline bool __attribute__((nonnull))
 has_pval_wnd(const struct q_conn * const c, const uint16_t len)
 {
     if (unlikely(c->out_data + len >= c->path_val_win)) {
-        warn(DBG,
-             "%s conn %s path val lim reached: %" PRIu64 " + %u >= %" PRIu64,
+        warn(DBG, "%s conn %s path val lim reached: %" PRIu " + %u >= %" PRIu,
              conn_type(c), cid2str(c->scid), c->out_data, len, c->path_val_win);
         return false;
     }
@@ -469,8 +468,7 @@ has_wnd(const struct q_conn * const c, const uint16_t len)
 
     if (unlikely(c->rec.cur.in_flight + len >= c->rec.cur.cwnd)) {
         warn(DBG,
-             "%s conn %s cwnd lim reached: in_flight %" PRIu64
-             " + %u >= %" PRIu64,
+             "%s conn %s cwnd lim reached: in_flight %" PRIu " + %u >= %" PRIu,
              conn_type(c), cid2str(c->scid), c->rec.cur.in_flight, len,
              c->rec.cur.cwnd);
         return false;

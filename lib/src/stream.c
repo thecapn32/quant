@@ -32,14 +32,12 @@
 #include <sys/param.h>
 
 #include <quant/quant.h>
-#include <warpcore/warpcore.h>
 
 // IWYU pragma: no_include "../deps/libev/ev.h"
 
 #include "conn.h"
 #include "diet.h"
 #include "event.h" // IWYU pragma: keep
-#include "hash.h"
 #include "pkt.h"
 #include "quic.h"
 #include "stream.h"
@@ -56,7 +54,7 @@ SPLAY_GENERATE(ooo_by_off, pkt_meta, off_node, ooo_by_off_cmp)
 
 const char * const strm_state_str[] = {STRM_STATES};
 
-struct q_stream * get_stream(struct q_conn * const c, const int64_t id)
+struct q_stream * get_stream(struct q_conn * const c, const dint_t id)
 {
     const khiter_t k = kh_get(strms_by_id, c->strms_by_id, (khint64_t)id);
     if (unlikely(k == kh_end(c->strms_by_id)))
@@ -65,16 +63,16 @@ struct q_stream * get_stream(struct q_conn * const c, const int64_t id)
 }
 
 
-int64_t max_sid(const int64_t sid, const struct q_conn * const c)
+dint_t max_sid(const dint_t sid, const struct q_conn * const c)
 {
-    const uint64_t max =
+    const uint_t max =
         is_srv_ini(sid) == c->is_clnt
             ? (is_uni(sid) ? c->tp_in.max_strms_uni : c->tp_in.max_strms_bidi)
             : (is_uni(sid) ? c->tp_out.max_strms_uni
                            : c->tp_out.max_strms_bidi);
-    return unlikely(max == 0) ? 0
-                              : (int64_t)((max - 1) << 2) |
-                                    ((STRM_FL_SRV | STRM_FL_UNI) & sid);
+    return unlikely(max == 0)
+               ? 0
+               : (dint_t)((max - 1) << 2) | ((STRM_FL_SRV | STRM_FL_UNI) & sid);
 }
 
 
@@ -98,7 +96,7 @@ void apply_stream_limits(struct q_stream * const s)
 }
 
 
-struct q_stream * new_stream(struct q_conn * const c, const int64_t id)
+struct q_stream * new_stream(struct q_conn * const c, const dint_t id)
 {
     struct q_stream * const s = calloc(1, sizeof(*s));
     ensure(s, "could not calloc q_stream");
@@ -120,7 +118,7 @@ struct q_stream * new_stream(struct q_conn * const c, const int64_t id)
 
     apply_stream_limits(s);
     const bool is_local = (is_srv_ini(id) != c->is_clnt);
-    const uint64_t cnt = (uint64_t)((id >> 2) + 1);
+    const uint_t cnt = (uint_t)((id >> 2) + 1);
     if (is_local) {
         if (is_uni(id)) {
             c->cnt_uni = MAX(cnt, c->cnt_uni);
@@ -144,7 +142,7 @@ void free_stream(struct q_stream * const s)
         warn(DBG, "freeing strm " FMT_SID " on %s conn %s", s->id, conn_type(c),
              cid2str(c->scid));
 #endif
-        diet_insert(&c->clsd_strms, (uint64_t)s->id, (ev_tstamp)NAN);
+        diet_insert(&c->clsd_strms, (uint_t)s->id, (ev_tstamp)NAN);
         const khiter_t k =
             kh_get(strms_by_id, c->strms_by_id, (khint64_t)s->id);
         ensure(k != kh_end(c->strms_by_id), "found");
@@ -166,7 +164,7 @@ void free_stream(struct q_stream * const s)
 }
 
 
-void track_bytes_in(struct q_stream * const s, const uint64_t n)
+void track_bytes_in(struct q_stream * const s, const uint_t n)
 {
     if (likely(s->id >= 0))
         // crypto "streams" don't count
@@ -175,7 +173,7 @@ void track_bytes_in(struct q_stream * const s, const uint64_t n)
 }
 
 
-void track_bytes_out(struct q_stream * const s, const uint64_t n)
+void track_bytes_out(struct q_stream * const s, const uint_t n)
 {
     if (likely(s->id >= 0))
         // crypto "streams" don't count
@@ -237,7 +235,7 @@ void do_stream_fc(struct q_stream * const s, const uint16_t len)
 
 
 void do_stream_id_fc(struct q_conn * const c,
-                     const uint64_t cnt,
+                     const uint_t cnt,
                      const bool bidi,
                      const bool local)
 {

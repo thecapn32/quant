@@ -40,7 +40,6 @@
 #endif
 
 #include <quant/quant.h>
-#include <warpcore/warpcore.h>
 
 
 int main(int argc

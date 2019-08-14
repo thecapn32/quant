@@ -30,7 +30,6 @@
 #include <unistd.h>
 
 #include <quant/quant.h>
-#include <warpcore/warpcore.h>
 
 struct q_stream;
 

@@ -49,7 +49,6 @@ foreach(TARGET ${TARGETS})
   target_include_directories(${TARGET}
     SYSTEM PRIVATE
       ${HTTP_PARSER_INCLUDE}
-      $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/klib>
       $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/picoquic>
   )
 

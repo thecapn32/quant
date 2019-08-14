@@ -112,7 +112,6 @@ foreach(TARGET ${TARGETS})
       $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
     SYSTEM PRIVATE
       ${OPENSSL_ROOT_DIR}/include
-      $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/klib>
       $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/picotls/include>
       $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/warpcore/lib/include>
       $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/lib/deps/warpcore/lib/include>

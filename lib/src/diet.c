@@ -25,12 +25,10 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <inttypes.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <warpcore/warpcore.h>
+#include <quant/quant.h>
 
 #include "diet.h"
 
@@ -80,7 +78,7 @@ static inline struct ival * find_min(struct ival * const i)
 ///
 /// @return     Pointer to the ival structure containing @p i; zero otherwise.
 ///
-struct ival * diet_find(struct diet * const d, const uint64_t n)
+struct ival * diet_find(struct diet * const d, const uint_t n)
 {
     if (splay_empty(d))
         return 0;
@@ -98,7 +96,7 @@ struct ival * diet_find(struct diet * const d, const uint64_t n)
 ///
 /// @return     Newly allocated ival struct [n..n].
 ///
-static inline struct ival * make_ival(const uint64_t n, const ev_tstamp t)
+static inline struct ival * make_ival(const uint_t n, const tm_t t)
 {
     struct ival * const i = calloc(1, sizeof(*i));
     ensure(i, "could not calloc");
@@ -116,8 +114,7 @@ static inline struct ival * make_ival(const uint64_t n, const ev_tstamp t)
 ///
 /// @return     Pointer to ival containing @p n.
 ///
-struct ival *
-diet_insert(struct diet * const d, const uint64_t n, const ev_tstamp t)
+struct ival * diet_insert(struct diet * const d, const uint_t n, const tm_t t)
 {
     if (splay_empty(d))
         goto new_ival;
@@ -195,7 +192,7 @@ new_ival:;
 /// @param[in]  hi    The upper value of the interface to be remove.
 ///
 static void __attribute__((nonnull))
-split_root(struct diet * const d, const uint64_t lo, const uint64_t hi)
+split_root(struct diet * const d, const uint_t lo, const uint_t hi)
 {
     struct ival * const i = make_ival(splay_root(d)->lo, splay_root(d)->t);
     splay_count(d)++;
@@ -213,7 +210,7 @@ split_root(struct diet * const d, const uint64_t lo, const uint64_t hi)
 /// @param      d     Diet tree.
 /// @param[in]  n     Integer.
 ///
-void diet_remove(struct diet * const d, const uint64_t n)
+void diet_remove(struct diet * const d, const uint_t n)
 {
     if (splay_empty(d))
         return;
@@ -245,8 +242,8 @@ void diet_remove(struct diet * const d, const uint64_t n)
 ///
 void diet_remove_ival(struct diet * const d, const struct ival * const i)
 {
-    uint64_t lo = i->lo;
-    uint64_t hi = i->hi;
+    uint_t lo = i->lo;
+    uint_t hi = i->hi;
 
 again:
     if (splay_empty(d))
@@ -265,7 +262,7 @@ again:
         }
 
         if (hi > splay_root(d)->hi) {
-            const uint64_t root_hi = splay_root(d)->hi;
+            const uint_t root_hi = splay_root(d)->hi;
             splay_root(d)->hi = lo - 1;
             lo = root_hi + 1;
             goto again;
@@ -277,7 +274,7 @@ again:
 
     if (lo < splay_root(d)->lo) {
         if (hi < splay_root(d)->hi) {
-            const uint64_t root_lo = splay_root(d)->lo;
+            const uint_t root_lo = splay_root(d)->lo;
             splay_root(d)->lo = hi + 1;
             hi = root_lo - 1;
             goto again;
@@ -322,9 +319,9 @@ size_t diet_to_str(char * const str, const size_t len, struct diet * const d)
     size_t pos = 0;
     str[0] = 0;
     diet_foreach (i, diet, d) {
-        pos += (size_t)snprintf(&str[pos], len - pos, "%" PRIu64, i->lo);
+        pos += (size_t)snprintf(&str[pos], len - pos, "%" PRIu, i->lo);
         if (i->lo != i->hi)
-            pos += (size_t)snprintf(&str[pos], len - pos, "-%" PRIu64, i->hi);
+            pos += (size_t)snprintf(&str[pos], len - pos, "-%" PRIu, i->hi);
         pos += (size_t)snprintf(&str[pos], len - pos, ", ");
         if (pos >= len)
             break;

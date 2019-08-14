@@ -25,6 +25,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <inttypes.h>
 #include <netdb.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -36,7 +37,6 @@
 
 #include <picotls.h> // IWYU pragma: keep
 #include <quant/quant.h>
-#include <warpcore/warpcore.h>
 
 #ifdef HAVE_ASAN
 #include <sanitizer/asan_interface.h>
@@ -45,7 +45,7 @@
 #define ASAN_UNPOISON_MEMORY_REGION(x, y)
 #endif
 
-#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE)) && !defined(FUZZING) &&     \
+#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) && !defined(FUZZING) &&    \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 #include <errno.h>
 #include <fcntl.h>
@@ -58,7 +58,6 @@
 
 #include "conn.h"
 #include "event.h" // IWYU pragma: keep
-#include "hash.h"
 #include "pkt.h"
 #include "pn.h"
 #include "qlog.h"
@@ -73,7 +72,7 @@
 
 /// QUIC version supported by this implementation in order of preference.
 const uint32_t ok_vers[] = {
-#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
+#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
     0xbabababa, // reserved version to trigger negotiation, TODO: randomize
 #endif
     0x45474700 + DRAFT_VERSION, // quant private version -xx
@@ -89,7 +88,7 @@ struct q_conn_conf default_conn_conf = {.idle_timeout = 10 * MSECS_PER_SEC,
                                         .enable_udp_zero_checksums = true,
                                         .tls_key_update_frequency = 3,
                                         .enable_spinbit =
-#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
+#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
                                             true
 #else
                                             false
@@ -102,9 +101,9 @@ void *api_conn = 0, *api_strm = 0;
 struct q_conn_sl accept_queue = sl_head_initializer(accept_queue);
 
 static ev_timer api_alarm;
-static uint64_t num_bufs = 0;
+static uint32_t num_bufs = 0;
 
-#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE)) && !defined(FUZZING) &&     \
+#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) && !defined(FUZZING) &&    \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 int corpus_pkt_dir, corpus_frm_dir;
 #endif
@@ -148,7 +147,7 @@ void alloc_off(struct w_engine * const w,
         m->strm_data_pos = off;
 
 #ifdef DEBUG_BUFFERS
-        warn(DBG, "idx %u (avail %" PRIu64 ") len %u", w_iov_idx(v),
+        warn(DBG, "idx %" PRIu32 " (avail %" PRIu ") len %u", w_iov_idx(v),
              sq_len(&w->iov), v->len);
 #endif
     }
@@ -158,7 +157,7 @@ void alloc_off(struct w_engine * const w,
 void free_iov(struct w_iov * const v, struct pkt_meta * const m)
 {
 #ifdef DEBUG_BUFFERS
-    warn(DBG, "idx %u (avail %" PRIu64 ") %cX'ed %s pkt nr=%" PRIu64,
+    warn(DBG, "idx %" PRIu32 " (avail %" PRIu ") %cX'ed %s pkt nr=%" PRIu,
          w_iov_idx(v), sq_len(&v->w->iov) + 1, m->txed ? 'T' : 'R',
          pkt_type_str(m->hdr.flags, &m->hdr.vers),
          has_pkt_nr(m->hdr.flags, m->hdr.vers) ? m->hdr.nr : 0);
@@ -176,7 +175,7 @@ void free_iov(struct w_iov * const v, struct pkt_meta * const m)
             if (m->has_rtx) {
                 // this pkt has an RTX
 #ifdef DEBUG_BUFFERS
-                warn(DBG, "pkt nr=%" PRIu64 " has RTX %" PRIu64,
+                warn(DBG, "pkt nr=%" PRIu " has RTX %" PRIu,
                      has_pkt_nr(m->hdr.flags, m->hdr.vers) ? m->hdr.nr : 0,
                      has_pkt_nr(m_rtx->hdr.flags, m_rtx->hdr.vers)
                          ? m_rtx->hdr.nr
@@ -188,7 +187,7 @@ void free_iov(struct w_iov * const v, struct pkt_meta * const m)
                 // this is the last ("real") RTX of a packet
                 while (m_rtx) {
 #ifdef DEBUG_BUFFERS
-                    warn(DBG, "pkt nr=%" PRIu64 " was also TX'ed as %" PRIu64,
+                    warn(DBG, "pkt nr=%" PRIu " was also TX'ed as %" PRIu,
                          has_pkt_nr(m->hdr.flags, m->hdr.vers) ? m->hdr.nr : 0,
                          has_pkt_nr(m_rtx->hdr.flags, m_rtx->hdr.vers)
                              ? m_rtx->hdr.nr
@@ -222,7 +221,7 @@ struct w_iov * alloc_iov(struct w_engine * const w,
     (*m)->strm_data_pos = off;
 
 #ifdef DEBUG_BUFFERS
-    warn(DBG, "alloc_iov idx %u (avail %" PRIu64 ") len %u off %u",
+    warn(DBG, "alloc_iov idx %" PRIu32 " (avail %" PRIu ") len %u off %u",
          w_iov_idx(v), sq_len(&w->iov), v->len, off);
 #endif
 
@@ -238,8 +237,8 @@ struct w_iov * w_iov_dup(const struct w_iov * const v,
     ensure(vdup, "w_alloc_iov failed");
 
 #ifdef DEBUG_BUFFERS
-    warn(DBG, "w_alloc_iov idx %u (avail %" PRIu64 ") len %u", w_iov_idx(vdup),
-         sq_len(&v->w->iov), vdup->len);
+    warn(DBG, "w_alloc_iov idx %" PRIu32 " (avail %" PRIu ") len %u",
+         w_iov_idx(vdup), sq_len(&v->w->iov), vdup->len);
 #endif
 
     if (mdup) {
@@ -300,15 +299,14 @@ struct q_conn * q_connect(struct w_engine * const w,
     // if we have no early data, we're not trying 0-RTT
     c->try_0rtt &= early_data && early_data_stream;
 
-#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
+#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
     char ip[NI_MAXHOST];
     char port[NI_MAXSERV];
     const int err = getnameinfo(peer, sizeof(*peer), ip, sizeof(ip), port,
                                 sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
     ensure(err == 0, "getnameinfo %d", err);
 
-    warn(WRN,
-         "new %u-RTT %s conn %s to %s:%s, %" PRIu64 " byte%s queued for TX",
+    warn(WRN, "new %u-RTT %s conn %s to %s:%s, %" PRIu " byte%s queued for TX",
          c->try_0rtt ? 0 : 1, conn_type(c), cid2str(c->scid), ip, port,
          early_data ? w_iov_sq_len(early_data) : 0,
          plural(early_data ? w_iov_sq_len(early_data) : 0));
@@ -348,7 +346,7 @@ struct q_conn * q_connect(struct w_engine * const w,
         return 0;
     }
 
-#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
+#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
     struct pn_data * const pnd = &c->pns[pn_data].data;
     warn(WRN, "%s conn %s connected%s, cipher %s", conn_type(c),
          cid2str(c->scid), c->did_0rtt ? " after 0-RTT" : "",
@@ -385,11 +383,11 @@ bool q_write(struct q_stream * const s,
         // strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
     }
 
-#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
-    const uint64_t qlen = w_iov_sq_len(q);
-    const uint64_t qcnt = w_iov_sq_cnt(q);
+#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
+    const uint_t qlen = w_iov_sq_len(q);
+    const uint_t qcnt = w_iov_sq_cnt(q);
     warn(WRN,
-         "writing %" PRIu64 " byte%s %sin %" PRIu64
+         "writing %" PRIu " byte%s %sin %" PRIu
          " buf%s on %s conn %s strm " FMT_SID,
          qlen, plural(qlen), fin ? "(and FIN) " : "", qcnt, plural(qcnt),
          conn_type(c), cid2str(c->scid), s->id);
@@ -450,11 +448,11 @@ bool q_read_stream(struct q_stream * const s,
     struct w_iov * const last = sq_last(&s->in, w_iov, next);
     const struct pkt_meta * const m_last = &meta(last);
 
-#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
-    const uint64_t qlen = w_iov_sq_len(&s->in);
-    const uint64_t qcnt = w_iov_sq_cnt(&s->in);
+#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
+    const uint_t qlen = w_iov_sq_len(&s->in);
+    const uint_t qcnt = w_iov_sq_cnt(&s->in);
     warn(WRN,
-         "read %" PRIu64 " new byte%s %sin %" PRIu64 " buf%s on %s "
+         "read %" PRIu " new byte%s %sin %" PRIu " buf%s on %s "
          "conn %s strm " FMT_SID,
          qlen, plural(qlen), m_last->is_fin ? "(and FIN) " : "", qcnt,
          plural(qcnt), conn_type(c), cid2str(c->scid), s->id);
@@ -496,9 +494,9 @@ struct q_conn * q_accept(const struct q_conn_conf * const conf)
     if (sl_first(&accept_queue))
         goto accept;
 
-    const uint64_t idle_to = get_conf(conf, idle_timeout);
+    const uint_t idle_to = get_conf(conf, idle_timeout);
 
-    warn(WRN, "waiting for conn on any serv sock (timeout %" PRIu64 " ms)",
+    warn(WRN, "waiting for conn on any serv sock (timeout %" PRIu " ms)",
          idle_to);
 
     if (idle_to) {
@@ -522,7 +520,7 @@ accept:;
     ev_timer_again(&c->idle_alarm);
     c->needs_accept = false;
 
-#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
+#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
     char ip[NI_MAXHOST];
     char port[NI_MAXSERV];
     ensure(getnameinfo((struct sockaddr *)&c->peer, sizeof(c->peer), ip,
@@ -546,17 +544,17 @@ struct q_stream * q_rsv_stream(struct q_conn * const c, const bool bidi)
     if (unlikely(c->state == conn_drng || c->state == conn_clsd))
         return 0;
 
-    const uint64_t * const max_streams =
+    const uint_t * const max_streams =
         bidi ? &c->tp_out.max_strms_bidi : &c->tp_out.max_strms_uni;
 
     if (unlikely(*max_streams == 0))
         warn(WRN, "peer hasn't allowed %s streams", bidi ? "bi" : "uni");
 
-    int64_t * const next_sid = bidi ? &c->next_sid_bidi : &c->next_sid_uni;
-    const uint64_t next = (uint64_t)(*next_sid >> 2);
+    dint_t * const next_sid = bidi ? &c->next_sid_bidi : &c->next_sid_uni;
+    const uint_t next = (uint_t)(*next_sid >> 2);
     if (unlikely(next >= *max_streams)) {
         // we hit the max stream limit, wait for MAX_STREAMS frame
-        warn(WRN, "need %s MAX_STREAMS increase (%" PRIu64 " >= %" PRIu64 ")",
+        warn(WRN, "need %s MAX_STREAMS increase (%" PRIu " >= %" PRIu ")",
              bidi ? "bi" : "uni", next, *max_streams);
         if (bidi)
             c->sid_blocked_bidi = true;
@@ -570,7 +568,7 @@ struct q_stream * q_rsv_stream(struct q_conn * const c, const bool bidi)
 }
 
 
-#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE)) && !defined(FUZZING) &&     \
+#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) && !defined(FUZZING) &&    \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 static int __attribute__((nonnull))
 mk_or_open_dir(const char * const path, mode_t mode)
@@ -613,9 +611,9 @@ struct w_engine * q_init(const char * const ifname,
     // initialize warpcore on the given interface
     num_bufs = conf && conf->num_bufs ? conf->num_bufs : 10000;
     struct w_engine * const w = w_init(ifname, 0, num_bufs);
-    const uint64_t num_bufs_ok = sq_len(&w->iov);
+    const uint_t num_bufs_ok = sq_len(&w->iov);
     if (num_bufs_ok < num_bufs)
-        warn(WRN, "only allocated %" PRIu64 "/%" PRIu64 " warpcore buffers",
+        warn(WRN, "only allocated %" PRIu "/%" PRIu32 " warpcore buffers ",
              num_bufs_ok, num_bufs);
     pkt_meta = calloc(num_bufs, sizeof(*pkt_meta));
     ensure(pkt_meta, "could not calloc");
@@ -630,7 +628,7 @@ struct w_engine * q_init(const char * const ifname,
 #endif
     );
 
-#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
+#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
     static const char * ev_backend_str[] = {
         [EVBACKEND_SELECT] = "select",   [EVBACKEND_POLL] = "poll",
         [EVBACKEND_EPOLL] = "epoll",     [EVBACKEND_KQUEUE] = "kqueue",
@@ -645,7 +643,7 @@ struct w_engine * q_init(const char * const ifname,
     // initialize TLS context
     init_tls_ctx(conf);
 
-#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE)) &&                          \
+#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) &&                         \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 #ifdef FUZZING
     warn(CRT, "%s compiled for fuzzing - will not communicate", quant_name);
@@ -710,7 +708,7 @@ void q_close(struct q_conn * const c,
              code ? RED : NRM, code, reason ? " (" : "", reason ? reason : "",
              reason ? ")" : "");
 
-    c->err_code = code;
+    c->err_code = (uint_t)code;
 #ifndef NO_ERR_REASONS
     if (reason) {
         strncpy(c->err_reason, reason, MAX_ERR_REASON_LEN);
@@ -734,18 +732,18 @@ done:
     if (c->scid && c->i.pkts_in_valid > 0) {
         conn_info_populate(c);
         warn(INF, "%s conn %s stats:", conn_type(c), cid2str(c->scid));
-        warn(INF, "\tpkts_in_valid = %s%" PRIu64 NRM,
+        warn(INF, "\tpkts_in_valid = %s%" PRIu NRM,
              c->i.pkts_in_valid ? NRM : BLD RED, c->i.pkts_in_valid);
-        warn(INF, "\tpkts_in_invalid = %s%" PRIu64 NRM,
+        warn(INF, "\tpkts_in_invalid = %s%" PRIu NRM,
              c->i.pkts_in_invalid ? BLD RED : NRM, c->i.pkts_in_invalid);
-        warn(INF, "\tpkts_out = %" PRIu64, c->i.pkts_out);
-        warn(INF, "\tpkts_out_lost = %" PRIu64, c->i.pkts_out_lost);
-        warn(INF, "\tpkts_out_rtx = %" PRIu64, c->i.pkts_out_rtx);
+        warn(INF, "\tpkts_out = %" PRIu, c->i.pkts_out);
+        warn(INF, "\tpkts_out_lost = %" PRIu, c->i.pkts_out_lost);
+        warn(INF, "\tpkts_out_rtx = %" PRIu, c->i.pkts_out_rtx);
         warn(INF, "\trtt = %.3f", c->i.rtt);
         warn(INF, "\trttvar = %.3f", c->i.rttvar);
-        warn(INF, "\tcwnd = %" PRIu64, c->i.cwnd);
-        warn(INF, "\tssthresh = %" PRIu64, c->i.ssthresh);
-        warn(INF, "\tpto_cnt = %" PRIu64, c->i.pto_cnt);
+        warn(INF, "\tcwnd = %" PRIu, c->i.cwnd);
+        warn(INF, "\tssthresh = %" PRIu, c->i.ssthresh);
+        warn(INF, "\tpto_cnt = %" PRIu, c->i.pto_cnt);
     }
     free_conn(c);
 #ifndef NO_QLOG
@@ -778,11 +776,10 @@ void q_cleanup(struct w_engine * const w)
 #endif
 
 #ifdef HAVE_ASAN
-    for (uint64_t i = 0; i < num_bufs; i++) {
+    for (uint_t i = 0; i < num_bufs; i++) {
         struct pkt_meta * const m = &pkt_meta[i];
         if (__asan_address_is_poisoned(m) == false) {
-            warn(DBG,
-                 "buffer %" PRIu64 " still in use for %cX'ed %s pkt %" PRIu64,
+            warn(DBG, "buffer %" PRIu " still in use for %cX'ed %s pkt %" PRIu,
                  i, m->txed ? 'T' : 'R',
                  pkt_type_str(m->hdr.flags, &m->hdr.vers),
                  has_pkt_nr(m->hdr.flags, m->hdr.vers) ? m->hdr.nr : 0);
@@ -797,7 +794,7 @@ void q_cleanup(struct w_engine * const w)
     free(pkt_meta);
     w_cleanup(w);
 
-#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE)) && !defined(FUZZING) &&     \
+#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) && !defined(FUZZING) &&    \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
     close(corpus_pkt_dir);
     close(corpus_frm_dir);
@@ -812,9 +809,9 @@ const char * q_cid(struct q_conn * const c)
 }
 
 
-uint64_t q_sid(const struct q_stream * const s)
+uint_t q_sid(const struct q_stream * const s)
 {
-    return (uint64_t)s->id;
+    return (uint_t)s->id;
 }
 
 
@@ -836,7 +833,7 @@ bool q_is_conn_closed(const struct q_conn * const c)
 }
 
 
-#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE)) && !defined(FUZZING) &&     \
+#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) && !defined(FUZZING) &&    \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 void write_to_corpus(const int dir, const void * const data, const size_t len)
 {
@@ -860,7 +857,7 @@ done:
 #endif
 
 
-bool q_ready(const uint64_t timeout, struct q_conn ** const ready)
+bool q_ready(const uint_t timeout, struct q_conn ** const ready)
 {
     if (sl_empty(&c_ready)) {
         if (timeout) {
@@ -880,7 +877,7 @@ bool q_ready(const uint64_t timeout, struct q_conn ** const ready)
     if (c) {
         sl_remove_head(&c_ready, node_rx_ext);
         c->have_new_data = c->in_c_ready = false;
-#if (!defined(NDEBUG) || defined(NDEBUG_OVERRIDE)) && defined(DEBUG_EXTRA)
+#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) && defined(DEBUG_EXTRA)
         char * op = "rx";
         if (c->needs_accept)
             op = "accept";
@@ -913,7 +910,7 @@ void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
         // could not open new w_sock, can't rebind
         return;
 
-#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
+#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
     char old_ip[NI_MAXHOST];
     char old_port[NI_MAXSERV];
     const struct sockaddr * src = w_get_addr(c->sock, true);
@@ -940,7 +937,7 @@ void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
         // switch to new dcid
         use_next_dcid(c);
 
-#if !defined(NDEBUG) || defined(NDEBUG_OVERRIDE)
+#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
     char new_ip[NI_MAXHOST];
     char new_port[NI_MAXSERV];
     src = w_get_addr(c->sock, true);
@@ -970,7 +967,7 @@ char * hex2str_impl(const uint8_t * const src,
                     char * const dst,
                     const size_t len_dst)
 {
-    ensure(len_dst >= len_src * 2 + 1, "overflow %lu < %lu", len_dst,
+    ensure(len_dst >= len_src * 2 + 1, "overflow %zu < %zu", len_dst,
            len_src * 2 + 1);
     static const char hex[] = "0123456789abcdef";
     size_t i;

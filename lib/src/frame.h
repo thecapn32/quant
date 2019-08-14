@@ -87,14 +87,14 @@ bitset_define(frames, FRM_MAX);
 
 struct pkt_meta;
 
-#if defined(NDEBUG) && !defined(NDEBUG_OVERRIDE)
+#if defined(NDEBUG) && !defined(NDEBUG_WITH_DLOG)
 #define log_stream_or_crypto_frame(...)
 #else
 extern void __attribute__((nonnull(2)))
 log_stream_or_crypto_frame(const bool is_rtx,
                            const struct pkt_meta * const m,
                            const uint8_t fl,
-                           const int64_t sid,
+                           const dint_t sid,
                            const bool in,
                            const char * const kind);
 #endif

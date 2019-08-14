@@ -32,7 +32,6 @@
 
 #include <picotls.h>
 #include <quant/quant.h>
-#include <warpcore/warpcore.h>
 
 #include "quic.h"
 

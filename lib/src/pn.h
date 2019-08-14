@@ -29,12 +29,13 @@
 
 #include <stdint.h>
 
+#include <quant/quant.h>
+
 // IWYU pragma: no_include "../deps/libev/ev.h"
 
 #include "diet.h"
 #include "event.h" // IWYU pragma: keep
 #include "frame.h"
-#include "hash.h"
 #include "quic.h"
 #include "tls.h"
 
@@ -83,38 +84,42 @@ static inline const char * __attribute__((const)) pn_type_str(const pn_t type)
 
 
 struct pn_space {
+    struct q_conn * c;
+
+    struct frames rx_frames; ///< Frame types RX'ed since last ACK TX.
+    struct frames tx_frames; ///< Frame types TX'ed since last ACK RX.
+
     struct diet recv; ///< Received packet numbers still needing to be ACKed.
     struct diet recv_all;      ///< All received packet numbers.
     struct diet acked_or_lost; ///< Sent packet numbers already ACKed (or lost).
 
     khash_t(pm_by_nr) * sent_pkts; // sent_packets
 
-    uint64_t lg_sent;            // largest_sent_packet
-    uint64_t lg_acked;           // largest_acked_packet
-    uint64_t lg_sent_before_rto; // largest_sent_before_rto
+    uint_t lg_sent;            // largest_sent_packet
+    uint_t lg_acked;           // largest_acked_packet
+    uint_t lg_sent_before_rto; // largest_sent_before_rto
 
-    ev_tstamp loss_t; // loss_time
+    uint_t pkts_rxed_since_last_ack_tx;
 
-    uint64_t pkts_rxed_since_last_ack_tx;
+    uint_t ect0_cnt;
+    uint_t ect1_cnt;
+    uint_t ce_cnt;
 
-    struct q_conn * c;
-
-    struct frames rx_frames; ///< Frame types RX'ed since last ACK TX.
-    struct frames tx_frames; ///< Frame types TX'ed since last ACK RX.
-
-    uint64_t ect0_cnt;
-    uint64_t ect1_cnt;
-    uint64_t ce_cnt;
+    tm_t loss_t; // loss_time
 
     pn_t type;
 
-    uint32_t imm_ack : 1; ///< Force an immediate ACK.
-    uint32_t : 31;
+    uint8_t _unused[3];
+
+    uint8_t imm_ack : 1; ///< Force an immediate ACK.
+    uint8_t : 7;
 
     union {
         struct pn_hshk early;
         struct pn_data data;
     };
+
+    // uint8_t _unused2[7];
 };
 
 
@@ -126,7 +131,7 @@ pm_by_nr_ins(khash_t(pm_by_nr) * const pbn, struct pkt_meta * const p);
 
 extern struct w_iov * __attribute__((nonnull))
 find_sent_pkt(const struct pn_space * const pn,
-              const uint64_t nr,
+              const uint_t nr,
               struct pkt_meta ** const m);
 
 extern void __attribute__((nonnull))

@@ -29,7 +29,6 @@
 
 #include <stdbool.h>
 #include <stddef.h>
-#include <stdint.h>
 
 #include <quant/quant.h>
 
@@ -51,9 +50,12 @@
 ///
 struct ival {
     splay_entry(ival) node; ///< Splay tree node data.
-    uint64_t lo;            ///< Lower bound of the interval.
-    uint64_t hi;            ///< Upper bound of the interval.
-    ev_tstamp t;            ///< Time stamp of last insert into this interval.
+    uint_t lo;              ///< Lower bound of the interval.
+    uint_t hi;              ///< Upper bound of the interval.
+    tm_t t;                 ///< Time stamp of last insert into this interval.
+#ifndef HAVE_64BIT
+    uint8_t _unused[4];
+#endif
 };
 
 
@@ -90,13 +92,13 @@ splay_head(diet, ival);
 SPLAY_PROTOTYPE(diet, ival, node, ival_cmp)
 
 
-extern struct ival * diet_find(struct diet * const d, const uint64_t n);
+extern struct ival * diet_find(struct diet * const d, const uint_t n);
 
 extern struct ival * __attribute__((nonnull))
-diet_insert(struct diet * const d, const uint64_t n, const ev_tstamp t);
+diet_insert(struct diet * const d, const uint_t n, const tm_t t);
 
 extern void __attribute__((nonnull))
-diet_remove(struct diet * const d, const uint64_t n);
+diet_remove(struct diet * const d, const uint_t n);
 
 extern void __attribute__((nonnull))
 diet_remove_ival(struct diet * const d, const struct ival * const i);
@@ -121,13 +123,13 @@ diet_min_ival(struct diet * const d)
 }
 
 
-static inline uint64_t __attribute__((nonnull)) diet_max(struct diet * const d)
+static inline uint_t __attribute__((nonnull)) diet_max(struct diet * const d)
 {
     return splay_empty(d) ? 0 : splay_max(diet, d)->hi;
 }
 
 
-static inline uint64_t __attribute__((nonnull)) diet_min(struct diet * const d)
+static inline uint_t __attribute__((nonnull)) diet_min(struct diet * const d)
 {
     return splay_empty(d) ? 0 : splay_min(diet, d)->lo;
 }
@@ -140,7 +142,7 @@ diet_empty(const struct diet * const d)
 }
 
 
-static inline ev_tstamp __attribute__((nonnull))
+static inline tm_t __attribute__((nonnull))
 diet_timestamp(const struct ival * const i)
 {
     return i->t;
