@@ -688,7 +688,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
     // apply these parameter to all current non-crypto streams
     struct q_stream * s;
-    kh_foreach_value(c->strms_by_id, s, apply_stream_limits(s));
+    kh_foreach_value(&c->strms_by_id, s, apply_stream_limits(s));
 
     return 0;
 }

@@ -93,7 +93,7 @@ struct pn_space {
     struct diet recv_all;      ///< All received packet numbers.
     struct diet acked_or_lost; ///< Sent packet numbers already ACKed (or lost).
 
-    khash_t(pm_by_nr) * sent_pkts; // sent_packets
+    khash_t(pm_by_nr) sent_pkts; // sent_packets
 
     uint_t lg_sent;            // largest_sent_packet
     uint_t lg_acked;           // largest_acked_packet
@@ -111,8 +111,9 @@ struct pn_space {
 
     uint8_t _unused[3];
 
-    uint8_t imm_ack : 1; ///< Force an immediate ACK.
-    uint8_t : 7;
+    uint8_t imm_ack : 1;   ///< Force an immediate ACK.
+    uint8_t abandoned : 1; ///< Has this PN space been abandoned.
+    uint8_t : 6;
 
     union {
         struct pn_hshk early;

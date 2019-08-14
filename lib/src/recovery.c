@@ -107,8 +107,7 @@ earliest_loss_t_pn(struct q_conn * const c)
     tm_t loss_t = 0;
     struct pn_space * pn = 0;
     for (pn_t t = pn_init; t <= pn_data; t++) {
-        if (c->pns[t].sent_pkts == 0)
-            // abandoned pn space
+        if (c->pns[t].abandoned)
             continue;
 
         if (is_ack_eliciting(&c->pns[t].tx_frames) == false)
@@ -326,7 +325,7 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
     m->lost = true;
     if (m->strm)
         m->strm->lost_cnt++;
-    pm_by_nr_del(pn->sent_pkts, m);
+    pm_by_nr_del(&pn->sent_pkts, m);
 }
 
 
@@ -342,8 +341,7 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
 static void __attribute__((nonnull))
 detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
 {
-    if (unlikely(pn->sent_pkts == 0))
-        // abandoned PN
+    if (unlikely(pn->abandoned))
         return;
 
     struct q_conn * const c = pn->c;
@@ -351,8 +349,8 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
 
     // Minimum time of kGranularity before packets are deemed lost.
     const tm_t loss_del =
-        MAX((tm_t)kGranularity,
-            (tm_t)kTimeThreshold * MAX(c->rec.cur.latest_rtt, c->rec.cur.srtt));
+        MAX(kGranularity,
+            kTimeThreshold * MAX(c->rec.cur.latest_rtt, c->rec.cur.srtt));
 
     // Packets sent before this time are deemed lost.
     const tm_t lost_send_t = (tm_t)ev_now() - loss_del;
@@ -364,7 +362,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
     tm_t lg_lost_tx_t = 0;
     bool in_flight_lost = false;
     struct pkt_meta * m;
-    kh_foreach_value(pn->sent_pkts, m, {
+    kh_foreach_value(&pn->sent_pkts, m, {
         // TODO these ensures should not execute for release builds
         DEBUG_ensure(m->acked == false,
                      "%s ACKed %s pkt %" PRIu " in sent_pkts", conn_type(c),
@@ -540,7 +538,7 @@ void on_pkt_sent(struct pkt_meta * const m)
     // see OnPacketSent() pseudo code
 
     const tm_t now = (tm_t)ev_now();
-    pm_by_nr_ins(m->pn->sent_pkts, m);
+    pm_by_nr_ins(&m->pn->sent_pkts, m);
     // nr is set in enc_pkt()
     m->t = now;
     // ack_eliciting is set in enc_pkt()
@@ -644,7 +642,7 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
     if (m->in_flight && m->lost == false)
         on_pkt_acked_cc(m);
     diet_insert(&pn->acked_or_lost, m->hdr.nr, (tm_t)NAN);
-    pm_by_nr_del(pn->sent_pkts, m);
+    pm_by_nr_del(&pn->sent_pkts, m);
 
     // rest of function is not from pseudo code
 
@@ -666,13 +664,13 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
             if (m_rtx->acked == false) {
                 // treat RTX'ed data as ACK'ed; use stand-in w_iov for RTX info
                 const uint_t acked_nr = m->hdr.nr;
-                pm_by_nr_del(pn->sent_pkts, m_rtx);
+                pm_by_nr_del(&pn->sent_pkts, m_rtx);
                 m->hdr.nr = m_rtx->hdr.nr;
                 m_rtx->hdr.nr = acked_nr;
                 const uint16_t acked_udp_len = m->udp_len;
                 m->udp_len = m_rtx->udp_len;
                 m_rtx->udp_len = acked_udp_len;
-                pm_by_nr_ins(pn->sent_pkts, m);
+                pm_by_nr_ins(&pn->sent_pkts, m);
                 m = m_rtx;
                 // XXX caller will not be aware that we mucked around with m!
             }

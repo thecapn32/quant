@@ -94,9 +94,9 @@ kh_srt_cmp(const uint8_t * const a, const uint8_t * const b)
 KHASH_INIT(conns_by_srt, uint8_t *, struct q_conn *, 1, hash_srt, kh_srt_cmp)
 
 
-extern khash_t(conns_by_ipnp) * conns_by_ipnp;
-extern khash_t(conns_by_id) * conns_by_id;
-extern khash_t(conns_by_srt) * conns_by_srt;
+extern khash_t(conns_by_ipnp) conns_by_ipnp;
+extern khash_t(conns_by_id) conns_by_id;
+extern khash_t(conns_by_srt) conns_by_srt;
 
 
 struct pref_addr {
@@ -161,9 +161,9 @@ struct q_conn {
     sl_entry(q_conn) node_aq;     ///< For maintaining the accept queue.
 
 #ifndef NO_MIGRATION
-    struct cids_by_seq dcids_by_seq;   ///< Destination CID hash by sequence.
-    struct cids_by_seq scids_by_seq;   ///< Source CID hash by sequence.
-    khash_t(cids_by_id) * scids_by_id; ///< Source CID hash by ID.
+    struct cids_by_seq dcids_by_seq; ///< Destination CID hash by sequence.
+    struct cids_by_seq scids_by_seq; ///< Source CID hash by sequence.
+    khash_t(cids_by_id) scids_by_id; ///< Source CID hash by ID.
 #endif
     struct cid * dcid; ///< Active destination CID.
     struct cid * scid; ///< Active source CID.
@@ -218,7 +218,7 @@ struct q_conn {
     char * peer_name;
 
     struct q_stream * cstrms[ep_data + 1]; ///< Crypto "streams".
-    khash_t(strms_by_id) * strms_by_id;    ///< Regular streams.
+    khash_t(strms_by_id) strms_by_id;      ///< Regular streams.
     struct diet clsd_strms;
     sl_head(, q_stream) need_ctrl;
 
@@ -531,12 +531,12 @@ conns_by_ipnp_ins(struct q_conn * const c)
 {
     int ret;
     const khiter_t k =
-        kh_put(conns_by_ipnp, conns_by_ipnp,
+        kh_put(conns_by_ipnp, &conns_by_ipnp,
                (khint64_t)conns_by_ipnp_key(w_get_addr(c->sock, true),
                                             (struct sockaddr *)&c->peer),
                &ret);
     ensure(ret >= 1, "inserted returned %d", ret);
-    kh_val(conns_by_ipnp, k) = c;
+    kh_val(&conns_by_ipnp, k) = c;
 }
 
 
@@ -544,9 +544,9 @@ static inline void __attribute__((nonnull))
 conns_by_ipnp_del(const struct q_conn * const c)
 {
     const khiter_t k =
-        kh_get(conns_by_ipnp, conns_by_ipnp,
+        kh_get(conns_by_ipnp, &conns_by_ipnp,
                (khint64_t)conns_by_ipnp_key(w_get_addr(c->sock, true),
                                             (const struct sockaddr *)&c->peer));
-    ensure(k != kh_end(conns_by_ipnp), "found");
-    kh_del(conns_by_ipnp, conns_by_ipnp, k);
+    ensure(k != kh_end(&conns_by_ipnp), "found");
+    kh_del(conns_by_ipnp, &conns_by_ipnp, k);
 }

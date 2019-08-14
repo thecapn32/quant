@@ -164,7 +164,8 @@ void free_iov(struct w_iov * const v, struct pkt_meta * const m)
 #endif
 
     if (m->txed) {
-        if (m->acked == false && m->lost == false && m->pn->sent_pkts) {
+        if (m->acked == false && m->lost == false &&
+            m->pn->abandoned == false) {
             m->strm = 0;
             on_pkt_lost(m, false);
         }
@@ -406,7 +407,7 @@ q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool all)
 {
     struct q_stream * s = 0;
     do {
-        kh_foreach_value(c->strms_by_id, s, {
+        kh_foreach_value(&c->strms_by_id, s, {
             if (!sq_empty(&s->in) || s->state == strm_clsd)
                 // we found a stream with queued data
                 break;
@@ -585,11 +586,6 @@ mk_or_open_dir(const char * const path, mode_t mode)
 struct w_engine * q_init(const char * const ifname,
                          const struct q_conf * const conf)
 {
-    // init connection structures
-    conns_by_ipnp = kh_init(conns_by_ipnp);
-    conns_by_id = kh_init(conns_by_id);
-    conns_by_srt = kh_init(conns_by_srt);
-
     if (conf && conf->conn_conf) {
         // update default connection configuration
         default_conn_conf.idle_timeout =
@@ -756,9 +752,9 @@ void q_cleanup(struct w_engine * const w)
 {
     // close all connections
     struct q_conn * c;
-    kh_foreach_value(conns_by_id, c, { q_close(c, 0, 0); });
-    kh_foreach_value(conns_by_ipnp, c, { q_close(c, 0, 0); });
-    kh_foreach_value(conns_by_srt, c, { q_close(c, 0, 0); });
+    kh_foreach_value(&conns_by_id, c, { q_close(c, 0, 0); });
+    kh_foreach_value(&conns_by_ipnp, c, { q_close(c, 0, 0); });
+    kh_foreach_value(&conns_by_srt, c, { q_close(c, 0, 0); });
 
     // stop the event loop
     ev_loop_destroy();
@@ -787,9 +783,9 @@ void q_cleanup(struct w_engine * const w)
     }
 #endif
 
-    kh_destroy(conns_by_id, conns_by_id);
-    kh_destroy(conns_by_ipnp, conns_by_ipnp);
-    kh_destroy(conns_by_srt, conns_by_srt);
+    kh_release(conns_by_id, &conns_by_id);
+    kh_release(conns_by_ipnp, &conns_by_ipnp);
+    kh_release(conns_by_srt, &conns_by_srt);
 
     free(pkt_meta);
     w_cleanup(w);
@@ -890,7 +886,7 @@ bool q_ready(const uint_t timeout, struct q_conn ** const ready)
     }
     if (ready)
         *ready = c;
-    return kh_size(conns_by_srt);
+    return kh_size(&conns_by_srt);
 }
 
 

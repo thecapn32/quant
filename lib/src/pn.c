@@ -26,6 +26,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <stdbool.h>
+#include <string.h>
 
 #include "bitset.h"
 #include "conn.h"
@@ -58,10 +59,10 @@ struct w_iov * find_sent_pkt(const struct pn_space * const pn,
                              const uint_t nr,
                              struct pkt_meta ** const m)
 {
-    const khiter_t k = kh_get(pm_by_nr, pn->sent_pkts, nr);
-    if (unlikely(k == kh_end(pn->sent_pkts)))
+    const khiter_t k = kh_get(pm_by_nr, &pn->sent_pkts, nr);
+    if (unlikely(k == kh_end(&pn->sent_pkts)))
         return 0;
-    *m = kh_val(pn->sent_pkts, k);
+    *m = kh_val(&pn->sent_pkts, k);
     return w_iov(pn->c->w, pm_idx(*m));
 }
 
@@ -73,24 +74,24 @@ void init_pn(struct pn_space * const pn,
     diet_init(&pn->recv);
     diet_init(&pn->recv_all);
     diet_init(&pn->acked_or_lost);
-    pn->sent_pkts = kh_init(pm_by_nr);
     pn->lg_sent = pn->lg_acked = UINT_T_MAX;
     pn->c = c;
     pn->type = type;
+    pn->abandoned = false;
 }
 
 
 void free_pn(struct pn_space * const pn)
 {
-    if (pn->sent_pkts) {
+    if (pn->abandoned == false) {
         struct pkt_meta * m;
-        kh_foreach_value(pn->sent_pkts, m, {
+        kh_foreach_value(&pn->sent_pkts, m, {
             // TX'ed but non-RTX'ed pkts are freed when their stream is freed
             if (m->has_rtx || !has_strm_data(m))
                 free_iov(w_iov(pn->c->w, pm_idx(m)), m);
         });
-        kh_destroy(pm_by_nr, pn->sent_pkts);
-        pn->sent_pkts = 0;
+        kh_release(pm_by_nr, &pn->sent_pkts);
+        pn->abandoned = true;
     }
 
     diet_free(&pn->recv);
@@ -102,10 +103,11 @@ void free_pn(struct pn_space * const pn)
 void reset_pn(struct pn_space * const pn)
 {
     free_pn(pn);
-    pn->sent_pkts = kh_init(pm_by_nr);
+    memset(&pn->sent_pkts, 0, sizeof(pn->sent_pkts));
     pn->lg_sent = pn->lg_acked = UINT_T_MAX;
     pn->ect0_cnt = pn->ect1_cnt = pn->ce_cnt = 0;
     pn->pkts_rxed_since_last_ack_tx = 0;
+    pn->abandoned = false;
     bit_zero(FRM_MAX, &pn->rx_frames);
     bit_zero(FRM_MAX, &pn->tx_frames);
 }

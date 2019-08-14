@@ -56,10 +56,10 @@ const char * const strm_state_str[] = {STRM_STATES};
 
 struct q_stream * get_stream(struct q_conn * const c, const dint_t id)
 {
-    const khiter_t k = kh_get(strms_by_id, c->strms_by_id, (khint64_t)id);
-    if (unlikely(k == kh_end(c->strms_by_id)))
+    const khiter_t k = kh_get(strms_by_id, &c->strms_by_id, (khint64_t)id);
+    if (unlikely(k == kh_end(&c->strms_by_id)))
         return 0;
-    return kh_val(c->strms_by_id, k);
+    return kh_val(&c->strms_by_id, k);
 }
 
 
@@ -112,9 +112,10 @@ struct q_stream * new_stream(struct q_conn * const c, const dint_t id)
     }
 
     int ret;
-    const khiter_t k = kh_put(strms_by_id, c->strms_by_id, (khint64_t)id, &ret);
+    const khiter_t k =
+        kh_put(strms_by_id, &c->strms_by_id, (khint64_t)id, &ret);
     ensure(ret >= 1, "inserted");
-    kh_val(c->strms_by_id, k) = s;
+    kh_val(&c->strms_by_id, k) = s;
 
     apply_stream_limits(s);
     const bool is_local = (is_srv_ini(id) != c->is_clnt);
@@ -144,9 +145,9 @@ void free_stream(struct q_stream * const s)
 #endif
         diet_insert(&c->clsd_strms, (uint_t)s->id, (ev_tstamp)NAN);
         const khiter_t k =
-            kh_get(strms_by_id, c->strms_by_id, (khint64_t)s->id);
-        ensure(k != kh_end(c->strms_by_id), "found");
-        kh_del(strms_by_id, c->strms_by_id, k);
+            kh_get(strms_by_id, &c->strms_by_id, (khint64_t)s->id);
+        ensure(k != kh_end(&c->strms_by_id), "found");
+        kh_del(strms_by_id, &c->strms_by_id, k);
     } else
         s->c->cstrms[strm_epoch(s)] = 0;
 

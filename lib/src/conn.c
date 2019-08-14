@@ -73,9 +73,9 @@ const char * const conn_state_str[] = {CONN_STATES};
 
 struct q_conn_sl c_ready = sl_head_initializer(c_ready);
 
-khash_t(conns_by_ipnp) * conns_by_ipnp;
-khash_t(conns_by_id) * conns_by_id;
-khash_t(conns_by_srt) * conns_by_srt;
+khash_t(conns_by_ipnp) conns_by_ipnp = {0};
+khash_t(conns_by_id) conns_by_id = {0};
+khash_t(conns_by_srt) conns_by_srt = {0};
 
 
 static inline __attribute__((const)) bool is_vneg_vers(const uint32_t vers)
@@ -189,30 +189,30 @@ static struct q_conn * __attribute__((nonnull))
 get_conn_by_ipnp(const struct sockaddr * const src,
                  const struct sockaddr * const dst)
 {
-    const khiter_t k = kh_get(conns_by_ipnp, conns_by_ipnp,
+    const khiter_t k = kh_get(conns_by_ipnp, &conns_by_ipnp,
                               (khint64_t)conns_by_ipnp_key(src, dst));
-    if (unlikely(k == kh_end(conns_by_ipnp)))
+    if (unlikely(k == kh_end(&conns_by_ipnp)))
         return 0;
-    return kh_val(conns_by_ipnp, k);
+    return kh_val(&conns_by_ipnp, k);
 }
 
 
 static struct q_conn * __attribute__((nonnull))
 get_conn_by_cid(struct cid * const scid)
 {
-    const khiter_t k = kh_get(conns_by_id, conns_by_id, scid);
-    if (unlikely(k == kh_end(conns_by_id)))
+    const khiter_t k = kh_get(conns_by_id, &conns_by_id, scid);
+    if (unlikely(k == kh_end(&conns_by_id)))
         return 0;
-    return kh_val(conns_by_id, k);
+    return kh_val(&conns_by_id, k);
 }
 
 
 struct q_conn * get_conn_by_srt(uint8_t * const srt)
 {
-    const khiter_t k = kh_get(conns_by_srt, conns_by_srt, srt);
-    if (unlikely(k == kh_end(conns_by_srt)))
+    const khiter_t k = kh_get(conns_by_srt, &conns_by_srt, srt);
+    if (unlikely(k == kh_end(&conns_by_srt)))
         return 0;
-    return kh_val(conns_by_srt, k);
+    return kh_val(&conns_by_srt, k);
 }
 
 
@@ -268,13 +268,12 @@ static void __attribute__((nonnull)) log_sent_pkts(struct q_conn * const c)
 {
     for (pn_t t = pn_init; t <= pn_data; t++) {
         struct pn_space * const pn = &c->pns[t];
-        if (pn->sent_pkts == 0)
-            // abandoned PN
+        if (pn->abandoned)
             continue;
 
         struct diet unacked = diet_initializer(unacked);
         struct pkt_meta * m;
-        kh_foreach_value(pn->sent_pkts, m,
+        kh_foreach_value(&pn->sent_pkts, m,
                          diet_insert(&unacked, m->hdr.nr, (tm_t)NAN));
 
         char buf[512];
@@ -327,9 +326,9 @@ rtx_pkt(struct w_iov * const v, struct pkt_meta * const m)
     m_orig->has_rtx = true;
     sl_insert_head(&m->rtx, m_orig, rtx_next);
     sl_insert_head(&m_orig->rtx, m, rtx_next);
-    pm_by_nr_del(m->pn->sent_pkts, m);
+    pm_by_nr_del(&m->pn->sent_pkts, m);
     // we reinsert m with its new pkt nr in on_pkt_sent()
-    pm_by_nr_ins(m_orig->pn->sent_pkts, m_orig);
+    pm_by_nr_ins(&m_orig->pn->sent_pkts, m_orig);
 }
 
 
@@ -597,7 +596,7 @@ void tx(ev_io * const w, int param)
         }
 
     struct q_stream * s;
-    kh_foreach_value(c->strms_by_id, s, {
+    kh_foreach_value(&c->strms_by_id, s, {
         if (tx_stream(s, limit) == false)
             break;
     });
@@ -621,29 +620,29 @@ done:;
 void conns_by_srt_ins(struct q_conn * const c, uint8_t * const srt)
 {
     int ret;
-    const khiter_t k = kh_put(conns_by_srt, conns_by_srt, srt, &ret);
+    const khiter_t k = kh_put(conns_by_srt, &conns_by_srt, srt, &ret);
     if (unlikely(ret == 0)) {
-        if (kh_val(conns_by_srt, k) != c)
+        if (kh_val(&conns_by_srt, k) != c)
             die("srt %s already in use by different conn %s",
                 hex2str(srt, SRT_LEN, SRT_LEN),
-                cid2str(kh_val(conns_by_srt, k)->scid));
+                cid2str(kh_val(&conns_by_srt, k)->scid));
         else {
             warn(WRN, "srt %s already used for conn",
                  hex2str(srt, SRT_LEN, SRT_LEN));
             return;
         }
     }
-    kh_val(conns_by_srt, k) = c;
+    kh_val(&conns_by_srt, k) = c;
 }
 
 
 static inline void __attribute__((nonnull))
 conns_by_srt_del(uint8_t * const srt)
 {
-    const khiter_t k = kh_get(conns_by_srt, conns_by_srt, srt);
-    if (likely(k != kh_end(conns_by_srt)))
+    const khiter_t k = kh_get(conns_by_srt, &conns_by_srt, srt);
+    if (likely(k != kh_end(&conns_by_srt)))
         // if peer is reusing SRTs w/different CIDs, it may already be deleted
-        kh_del(conns_by_srt, conns_by_srt, k);
+        kh_del(conns_by_srt, &conns_by_srt, k);
 }
 
 
@@ -651,18 +650,18 @@ static inline void __attribute__((nonnull))
 conns_by_id_ins(struct q_conn * const c, struct cid * const id)
 {
     int ret;
-    const khiter_t k = kh_put(conns_by_id, conns_by_id, id, &ret);
+    const khiter_t k = kh_put(conns_by_id, &conns_by_id, id, &ret);
     ensure(ret >= 1, "inserted returned %d", ret);
-    kh_val(conns_by_id, k) = c;
+    kh_val(&conns_by_id, k) = c;
 }
 
 
 static inline void __attribute__((nonnull))
 conns_by_id_del(struct cid * const id)
 {
-    const khiter_t k = kh_get(conns_by_id, conns_by_id, id);
-    ensure(k != kh_end(conns_by_id), "found");
-    kh_del(conns_by_id, conns_by_id, k);
+    const khiter_t k = kh_get(conns_by_id, &conns_by_id, id);
+    ensure(k != kh_end(&conns_by_id), "found");
+    kh_del(conns_by_id, &conns_by_id, k);
 }
 
 
@@ -676,17 +675,17 @@ static void __attribute__((nonnull)) update_act_scid(struct q_conn * const c)
          conn_state_str[c->state], conn_type(c), cid2str(c->scid));
     conns_by_id_del(c->scid);
 #ifndef NO_MIGRATION
-    cids_by_id_del(c->scids_by_id, c->scid);
+    cids_by_id_del(&c->scids_by_id, c->scid);
 #endif
     cid_cpy(c->scid, &nscid);
 #ifndef NO_MIGRATION
-    cids_by_id_ins(c->scids_by_id, c->scid);
+    cids_by_id_ins(&c->scids_by_id, c->scid);
 #endif
     conns_by_id_ins(c, c->scid);
 
     // we need to keep accepting the client-chosen odcid for 0-RTT pkts
 #ifndef NO_MIGRATION
-    cids_by_id_ins(c->scids_by_id, &c->odcid);
+    cids_by_id_ins(&c->scids_by_id, &c->odcid);
 #endif
     conns_by_id_ins(c, &c->odcid);
 }
@@ -699,7 +698,7 @@ void add_scid(struct q_conn * const c, struct cid * const id)
     cid_cpy(scid, id);
 #ifndef NO_MIGRATION
     ensure(splay_insert(cids_by_seq, &c->scids_by_seq, scid) == 0, "inserted");
-    cids_by_id_ins(c->scids_by_id, scid);
+    cids_by_id_ins(&c->scids_by_id, scid);
 #endif
     if (c->scid == 0)
         c->scid = scid;
@@ -782,7 +781,7 @@ static void __attribute__((nonnull)) free_cids(struct q_conn * const c)
     if (c->is_clnt == false && c->odcid.len) {
         // TODO: we should stop accepting pkts on the client odcid earlier
 #ifndef NO_MIGRATION
-        cids_by_id_del(c->scids_by_id, &c->odcid);
+        cids_by_id_del(&c->scids_by_id, &c->odcid);
 #endif
         conns_by_id_del(&c->odcid);
     }
@@ -856,7 +855,7 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
             reset_stream(c->cstrms[e], true);
 
     struct q_stream * s;
-    kh_foreach_value(c->strms_by_id, s, reset_stream(s, false));
+    kh_foreach_value(&c->strms_by_id, s, reset_stream(s, false));
 
     // reset packet number spaces
     for (pn_t t = pn_init; t <= pn_data; t++)
@@ -1279,7 +1278,7 @@ rx_pkts(struct w_iov_sq * const x,
             if (m->hdr.dcid.len && cid_cmp(&m->hdr.dcid, c->scid) != 0) {
                 struct cid * const scid =
 #ifndef NO_MIGRATION
-                    get_cid_by_id(c->scids_by_id, &m->hdr.dcid);
+                    get_cid_by_id(&c->scids_by_id, &m->hdr.dcid);
 #else
                     c->scid;
 #endif
@@ -1781,7 +1780,6 @@ struct q_conn * new_conn(struct w_engine * const w,
 #ifndef NO_MIGRATION
     splay_init(&c->dcids_by_seq);
     splay_init(&c->scids_by_seq);
-    c->scids_by_id = kh_init(cids_by_id);
 #endif
     const bool zero_len_scid = get_conf(conf, enable_zero_len_cid);
     new_cids(c, zero_len_scid, dcid, scid);
@@ -1839,7 +1837,6 @@ struct q_conn * new_conn(struct w_engine * const w,
         init_pn(&c->pns[t], c, t);
 
     // create crypto streams
-    c->strms_by_id = kh_init(strms_by_id);
     for (epoch_t e = ep_init; e <= ep_data; e++)
         if (e != ep_0rtt)
             new_stream(c, crpt_strm_id(e));
@@ -1868,7 +1865,7 @@ void free_scid(struct q_conn * const c
 {
 #ifndef NO_MIGRATION
     ensure(splay_remove(cids_by_seq, &c->scids_by_seq, id), "removed");
-    cids_by_id_del(c->scids_by_id, id);
+    cids_by_id_del(&c->scids_by_id, id);
 #endif
     conns_by_id_del(id);
     free(id);
@@ -1903,8 +1900,8 @@ void free_conn(struct q_conn * const c)
     ev_timer_stop(&c->ack_alarm);
 
     struct q_stream * s;
-    kh_foreach_value(c->strms_by_id, s, { free_stream(s); });
-    kh_destroy(strms_by_id, c->strms_by_id);
+    kh_foreach_value(&c->strms_by_id, s, { free_stream(s); });
+    kh_release(strms_by_id, &c->strms_by_id);
 
     // free crypto streams
     for (epoch_t e = ep_init; e <= ep_data; e++)
@@ -1925,7 +1922,7 @@ void free_conn(struct q_conn * const c)
     // remove connection from global lists and free CIDs
     free_cids(c);
 #ifndef NO_MIGRATION
-    kh_destroy(cids_by_id, c->scids_by_id);
+    kh_release(cids_by_id, &c->scids_by_id);
 #endif
 
     if (c->holds_sock) {
