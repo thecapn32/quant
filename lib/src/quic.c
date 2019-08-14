@@ -256,7 +256,7 @@ void q_alloc(struct w_engine * const w,
              struct w_iov_sq * const q,
              const size_t len)
 {
-    ensure(len <= UINT32_MAX, "len %zu too long", len);
+    ensure(len <= UINT32_MAX, "len %lu too long", len);
     alloc_off(w, q, (uint32_t)len, DATA_OFFSET);
 }
 
@@ -967,8 +967,8 @@ char * hex2str_impl(const uint8_t * const src,
                     char * const dst,
                     const size_t len_dst)
 {
-    ensure(len_dst >= len_src * 2 + 1, "overflow %zu < %zu", len_dst,
-           len_src * 2 + 1);
+    ensure(len_dst >= len_src * 2 + 1, "overflow %lu < %lu",
+           (unsigned long)len_dst, (unsigned long)len_src * 2 + 1);
     static const char hex[] = "0123456789abcdef";
     size_t i;
     for (i = 0; i < len_src; i++) {

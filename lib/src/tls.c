@@ -51,6 +51,8 @@
 #ifdef PARTICLE
 #include <rng_hal.h>
 
+#define gai_strerror(x) ""
+
 void ptls_minicrypto_random_bytes(void * buf, size_t len)
 {
     while (len >= sizeof(uint32_t)) {
@@ -1156,11 +1158,13 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
                             iv ? iv->buf : 0, in_len, &c->tls.tls_hshk_prop);
 #ifdef DEBUG_PROT
     warn(DBG,
-         "epoch %u, in %zu (off %" PRIu
-         "), gen %zu (%zu-%zu-%zu-%zu-%zu), ret %d, left %zu",
-         ep_in, (size_t)(iv ? iv->len : 0), iv ? meta(iv).strm_off : 0, tls_io.off,
-         epoch_off[0], epoch_off[1], epoch_off[2], epoch_off[3], epoch_off[4],
-         ret, iv ? iv->len - in_len : 0);
+         "epoch %u, in %lu (off %" PRIu
+         "), gen %lu (%lu-%lu-%lu-%lu-%lu), ret %d, left %lu",
+         ep_in, (unsigned long)(iv ? iv->len : 0), iv ? meta(iv).strm_off : 0,
+         (unsigned long)tls_io.off, (unsigned long)epoch_off[0],
+         (unsigned long)epoch_off[1], (unsigned long)epoch_off[2],
+         (unsigned long)epoch_off[3], (unsigned long)epoch_off[4], ret,
+         (unsigned long)(iv ? iv->len - in_len : 0));
 #endif
     if (ret == 0 && c->state != conn_estb) {
         if (ptls_is_psk_handshake(c->tls.t) && c->is_clnt)
@@ -1184,7 +1188,8 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
         if (out_len == 0)
             continue;
 #ifdef DEBUG_PROT
-        warn(DBG, "epoch %u: off %zu len %zu", e, epoch_off[e], out_len);
+        warn(DBG, "epoch %u: off %lu len %lu", e, (unsigned long)epoch_off[e],
+             (unsigned long)out_len);
 #endif
         struct w_iov_sq o = w_iov_sq_initializer(o);
         alloc_off(w_engine(c->sock), &o, (uint32_t)out_len,
@@ -1322,7 +1327,8 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
                                  const void * const secret)
 {
 #ifdef DEBUG_PROT
-    warn(CRT, "update_traffic_key %s %zu", is_enc ? "tx" : "rx", epoch);
+    warn(CRT, "update_traffic_key %s %lu", is_enc ? "tx" : "rx",
+         (unsigned long)epoch);
 #endif
     struct q_conn * const c = *ptls_get_data_ptr(tls);
     ptls_cipher_suite_t * const cipher = ptls_get_cipher(c->tls.t);
@@ -1345,7 +1351,7 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
         break;
 
     default:
-        die("epoch %zu unknown", epoch);
+        die("epoch %lu unknown", (unsigned long)epoch);
     }
 
     if (tls_ctx.log_event) {

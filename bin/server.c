@@ -66,15 +66,6 @@ static void __attribute__((noreturn)) usage(const char * const name,
                                             const uint32_t timeout,
                                             const uint32_t num_bufs)
 {
-    for (size_t e = 0; e < sizeof(uint64_t) * 8; e++) {
-        const uint64_t x = UINT64_C(1) << e;
-
-        uint64_t next = (uint64_t)(powl(10, ceill(log10l(x))));
-
-        printf("%zu %" PRIu64 " 0x%" PRIx64 " %" PRIu64 "\n", e, x, x, next);
-
-    }
-
     printf("%s [options]\n", name);
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
     printf("\t[-p port]\tdestination port; default %d\n", port);

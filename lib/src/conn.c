@@ -180,7 +180,7 @@ static inline epoch_t __attribute__((nonnull))
 epoch_in(const struct q_conn * const c)
 {
     const size_t epoch = ptls_get_read_epoch(c->tls.t);
-    ensure(epoch <= ep_data, "unhandled epoch %zu", epoch);
+    ensure(epoch <= ep_data, "unhandled epoch %lu", (unsigned long)epoch);
     return (epoch_t)epoch;
 }
 
@@ -303,6 +303,8 @@ static void __attribute__((nonnull)) log_sent_pkts(struct q_conn * const c)
             warn(INF, "%s %s unacked: %s", conn_type(c), pn_type_str(t), buf);
     }
 }
+#else
+#define log_sent_pkts(...)
 #endif
 
 

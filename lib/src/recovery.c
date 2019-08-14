@@ -134,7 +134,8 @@ void log_cc(struct q_conn * const c)
     const dint_t delta_cwnd =
         (dint_t)c->rec.cur.cwnd - (dint_t)c->rec.prev.cwnd;
     const dint_t delta_ssthresh =
-        (dint_t)ssthresh - (dint_t)c->rec.prev.ssthresh;
+        (dint_t)ssthresh -
+        (dint_t)(c->rec.prev.ssthresh == UINT_T_MAX ? 0 : c->rec.prev.ssthresh);
     const tm_t delta_srtt = c->rec.cur.srtt - c->rec.prev.srtt;
     const tm_t delta_rttvar = c->rec.cur.rttvar - c->rec.prev.rttvar;
     if (delta_in_flight || delta_cwnd || delta_ssthresh ||
