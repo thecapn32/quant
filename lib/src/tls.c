@@ -85,8 +85,8 @@ void ptls_minicrypto_random_bytes(void * buf, size_t len)
 #ifndef PARTICLE
 #define cipher_suite ptls_minicrypto_cipher_suites
 #else
-static ptls_cipher_suite_t * cipher_suite[] = {&ptls_minicrypto_aes128gcmsha256,
-                                               0};
+static const ptls_cipher_suite_t * cipher_suite[] = {
+    &ptls_minicrypto_aes128gcmsha256, 0};
 #endif
 
 #define aes128gcmsha256 ptls_minicrypto_aes128gcmsha256
@@ -152,8 +152,8 @@ static FILE * tls_log_file;
 
 ptls_context_t tls_ctx = {0};
 
-static sign_certificate_t sign_cert = {0};
 #ifdef WITH_OPENSSL
+static sign_certificate_t sign_cert = {0};
 static ptls_openssl_verify_certificate_t verifier = {0};
 #endif
 
@@ -1176,7 +1176,8 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
                ret != PTLS_ERROR_STATELESS_RETRY) {
         err_close(c, ERR_TLS(PTLS_ERROR_TO_ALERT(ret)), FRM_CRY,
                   "picotls error %u", ret);
-        return ret;
+        abort();
+        // return ret;
     }
 
     if (tls_io.off == 0)
@@ -1374,8 +1375,8 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
 
 void init_tls_ctx(const struct q_conf * const conf)
 {
-#ifdef WITH_OPENSSL
     if (conf && conf->tls_key) {
+#ifdef WITH_OPENSSL
         FILE * const fp = fopen(conf->tls_key, "rbe");
         ensure(fp, "could not open key %s", conf->tls_key);
         EVP_PKEY * const pkey = PEM_read_PrivateKey(fp, 0, 0, 0);
@@ -1383,8 +1384,15 @@ void init_tls_ctx(const struct q_conf * const conf)
         ensure(pkey, "failed to load private key");
         ptls_openssl_init_sign_certificate(&sign_cert, pkey);
         EVP_PKEY_free(pkey);
+#elif !defined(PARTICLE)
+        // XXX ptls_minicrypto_load_private_key() only works for ECDSA keys
+        const int ret =
+            ptls_minicrypto_load_private_key(&tls_ctx, conf->tls_key);
+        ensure(ret == 0, "could not open key %s", conf->tls_key);
+#endif
     }
 
+#ifdef WITH_OPENSSL
     ensure(ptls_openssl_init_verify_certificate(&verifier, 0) == 0,
            "ptls_openssl_init_verify_certificate");
 #endif
@@ -1437,8 +1445,8 @@ void init_tls_ctx(const struct q_conf * const conf)
     tls_ctx.on_client_hello = &on_client_hello;
     tls_ctx.update_traffic_key = &update_traffic_key;
     tls_ctx.random_bytes = rand_bytes;
-    tls_ctx.sign_certificate = &sign_cert.super;
 #ifdef WITH_OPENSSL
+    tls_ctx.sign_certificate = &sign_cert.super;
     if (conf && conf->enable_tls_cert_verify)
         tls_ctx.verify_certificate = &verifier.super;
 #endif

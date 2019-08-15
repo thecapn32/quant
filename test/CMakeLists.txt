@@ -22,14 +22,24 @@ endforeach()
 add_custom_command(
   OUTPUT
     ${CMAKE_CURRENT_BINARY_DIR}/dummy.key
-    ${CMAKE_CURRENT_BINARY_DIR}/dummy.crt
   COMMAND
     ${OPENSSL_ROOT_DIR}/bin/openssl
   ARGS
-    req -batch -new -newkey rsa:2048 -sha256 -days 9365
+    ecparam -out ${CMAKE_CURRENT_BINARY_DIR}/dummy.key
+    -noout -name secp256r1 -genkey
+)
+
+add_custom_command(
+  OUTPUT
+    ${CMAKE_CURRENT_BINARY_DIR}/dummy.crt
+  DEPENDS
+    ${CMAKE_CURRENT_BINARY_DIR}/dummy.key
+  COMMAND
+    ${OPENSSL_ROOT_DIR}/bin/openssl
+  ARGS
+    req -batch -new -key ${CMAKE_CURRENT_BINARY_DIR}/dummy.key -days 9365
     -nodes -x509 -subj "/" -addext "subjectAltName = DNS:example.org"
-    -keyout ${CMAKE_CURRENT_BINARY_DIR}/dummy.key
-    -out ${CMAKE_CURRENT_BINARY_DIR}/dummy.crt || true
+    -out ${CMAKE_CURRENT_BINARY_DIR}/dummy.crt
 )
 
 if(HAVE_BENCHMARK_H)
