@@ -92,7 +92,6 @@ static const ptls_cipher_suite_t * cipher_suite[] = {
 #define aes128gcmsha256 ptls_minicrypto_aes128gcmsha256
 #define secp256r1 ptls_minicrypto_secp256r1
 #define x25519 ptls_minicrypto_x25519
-#define sign_certificate_t ptls_minicrypto_secp256r1sha256_sign_certificate_t
 #endif
 
 #include <quant/quant.h>
