@@ -30,7 +30,7 @@
 
 declare -A servers=(
     # [tag]=name:flags:port:retry-port:h3-port:URL
-    [aioquic]=quic.aiortc.org::4433:4434:443:/40000
+    [aioquic]=quic.aiortc.org::4433:4434:4433:/40000
     # [apple]=31.133.129.48::8443:8443:8443:/40000
     [ats]=quic.ogre.com::4433:4434:4433:/en/latest/_static/jquery.js
     [f5]=f5quic.com::4433:4433:4433:/50000
