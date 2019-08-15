@@ -1142,7 +1142,6 @@ bool dec_frames(struct q_conn * const c,
             pad_start = 0;
         }
 
-
         // check that frame type is allowed in this pkt type
         static const struct frames lh_ok =
             bitset_t_initializer(1 << FRM_CRY | 1 << FRM_ACK | 1 << FRM_ACE |

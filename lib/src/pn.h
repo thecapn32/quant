@@ -112,15 +112,13 @@ struct pn_space {
     uint8_t _unused[3];
 
     uint8_t imm_ack : 1;   ///< Force an immediate ACK.
-    uint8_t abandoned : 1; ///< Has this PN space been abandoned.
+    uint8_t abandoned : 1; ///< Has this PN space been abandoned?
     uint8_t : 6;
 
     union {
         struct pn_hshk early;
         struct pn_data data;
     };
-
-    // uint8_t _unused2[7];
 };
 
 
