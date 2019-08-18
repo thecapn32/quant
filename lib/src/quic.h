@@ -30,23 +30,19 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
 #include <sys/param.h>
 
 #include <quant/quant.h>
 
-// IWYU pragma: no_include "../deps/libev/ev.h"
-
-#include "event.h" // IWYU pragma: keep
 #include "frame.h"
 
 
 // #define DEBUG_BUFFERS ///< Set to log buffer use details.
-// #define DEBUG_EXTRA ///< Set to log various extra details.
+// #define DEBUG_EXTRA   ///< Set to log various extra details.
 // #define DEBUG_STREAMS ///< Set to log stream scheduling details.
-// #define DEBUG_TIMERS ///< Set to log timer details.
-// #define DEBUG_PROT   ///< Set to log packet protection/encryption details.
+// #define DEBUG_TIMERS  ///< Set to log timer details.
+// #define DEBUG_PROT    ///< Set to log packet protection/encryption details.
 
 #define DATA_OFFSET 48 ///< Offsets of stream frame payload data we TX.
 
@@ -75,14 +71,14 @@
 
 // Maximum reordering in time before time threshold loss detection considers a
 // packet lost. Specified as an RTT multiplier. The RECOMMENDED value is 9/8.
-#define kTimeThreshold TM_T(1.125)
+#define kTimeThreshold 1.125
 
 // Timer granularity. This is a system-dependent value. However, implementations
 // SHOULD use a value no smaller than 1ms.
-#define kGranularity TM_T(0.001)
+#define kGranularity 1 * NS_PER_MS
 
 // The RTT used before an RTT sample is taken. The RECOMMENDED value is 100ms.
-#define kInitialRtt TM_T(0.5)
+#define kInitialRtt 500 * NS_PER_MS
 
 /// The sender's maximum payload size. Does not include UDP or IP overhead. The
 /// max packet size is used for calculating initial and minimum congestion
@@ -238,12 +234,6 @@ extern struct q_conn_conf default_conn_conf;
 extern const uint32_t ok_vers[];
 extern const uint8_t ok_vers_len;
 
-typedef void (*func_ptr)(void);
-extern func_ptr api_func;
-extern void *api_conn, *api_strm;
-
-extern FILE * qlog;
-
 
 extern void __attribute__((nonnull)) alloc_off(struct w_engine * const w,
                                                struct w_iov_sq * const q,
@@ -319,69 +309,6 @@ extern char * __attribute__((nonnull)) hex2str_impl(const uint8_t * const src,
 
 
 #define has_strm_data(p) (p)->strm_frm_pos
-
-
-// see https://stackoverflow.com/a/45600545/2240756
-//
-#define OVERLOADED_MACRO(M, ...) OVR(M, CNT_ARGS(__VA_ARGS__))(__VA_ARGS__)
-#define OVR(macro_name, nargs) OVR_EXPAND(macro_name, nargs)
-#define OVR_EXPAND(macro_name, nargs) macro_name##nargs
-#define CNT_ARGS(...) ARG_MATCH(__VA_ARGS__, 9, 8, 7, 6, 5, 4, 3, 2, 1)
-#define ARG_MATCH(_1, _2, _3, _4, _5, _6, _7, _8, _9, N, ...) N
-
-
-#define maybe_api_return(...)                                                  \
-    __extension__(OVERLOADED_MACRO(maybe_api_return, __VA_ARGS__))
-
-
-#ifdef DEBUG_EXTRA
-#define DEBUG_EXTRA_warn warn
-#else
-#define DEBUG_EXTRA_warn(...)
-#endif
-
-
-/// If current API function and argument match @p func and @p arg - and @p strm
-/// if it is non-zero - exit the event loop.
-///
-/// @param      func  The API function to potentially return to.
-/// @param      conn  The connection to check API activity on.
-/// @param      strm  The stream to check API activity on.
-///
-/// @return     True if the event loop was exited.
-///
-#define maybe_api_return3(func, conn, strm)                                    \
-    __extension__({                                                            \
-        if (unlikely(api_func == (func_ptr)(&(func)) && api_conn == (conn) &&  \
-                     ((strm) == 0 || api_strm == (strm)))) {                   \
-            ev_break(EVBREAK_ALL);                                             \
-            DEBUG_EXTRA_warn(DBG, #func "(" #conn ", " #strm                   \
-                                        ") done, exiting event loop");         \
-            api_func = api_conn = api_strm = 0;                                \
-        }                                                                      \
-        api_func == 0;                                                         \
-    })
-
-
-/// If current API argument matches @p arg - and @p strm if it is non-zero -
-/// exit the event loop (for any active API function).
-///
-/// @param      conn  The connection to check API activity on.
-/// @param      strm  The stream to check API activity on.
-///
-/// @return     True if the event loop was exited.
-///
-#define maybe_api_return2(conn, strm)                                          \
-    __extension__({                                                            \
-        if (unlikely(api_conn == (conn) &&                                     \
-                     ((strm) == 0 || api_strm == (strm)))) {                   \
-            ev_break(EVBREAK_ALL);                                             \
-            DEBUG_EXTRA_warn(DBG, "<any>(" #conn ", " #strm                    \
-                                  ") done, exiting event loop");               \
-            api_func = api_conn = api_strm = 0;                                \
-        }                                                                      \
-        api_func == 0;                                                         \
-    })
 
 
 #define get_conf(conf, val)                                                    \

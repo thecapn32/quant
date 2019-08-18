@@ -29,6 +29,7 @@
 #include <fcntl.h>
 #include <libgen.h>
 #include <limits.h>
+#include <math.h>
 #include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -53,6 +54,27 @@
 
 #include <picoquic/democlient.h>
 #include <quant/quant.h>
+
+
+#define timespec_to_double(diff)                                               \
+    ((double)(diff).tv_sec + (double)(diff).tv_nsec / NS_PER_S)
+
+
+#define bps(bytes, secs)                                                       \
+    __extension__({                                                            \
+        static char _str[32];                                                  \
+        const double _bps =                                                    \
+            (bytes) && (fpclassify(secs) != FP_ZERO) ? (bytes)*8 / (secs) : 0; \
+        if (_bps > NS_PER_S)                                                   \
+            snprintf(_str, sizeof(_str), "%.3f Gb/s", _bps / NS_PER_S);        \
+        else if (_bps > US_PER_S)                                              \
+            snprintf(_str, sizeof(_str), "%.3f Mb/s", _bps / US_PER_S);        \
+        else if (_bps > MS_PER_S)                                              \
+            snprintf(_str, sizeof(_str), "%.3f Kb/s", _bps / MS_PER_S);        \
+        else                                                                   \
+            snprintf(_str, sizeof(_str), "%.3f b/s", _bps);                    \
+        _str;                                                                  \
+    })
 
 
 struct conn_cache_entry {
@@ -484,7 +506,7 @@ int main(int argc, char * argv[])
 
             if (rxed_new == false) {
                 struct q_conn * c;
-                q_ready(timeout * MSECS_PER_SEC, &c);
+                q_ready(w, timeout * NS_PER_S, &c);
                 if (c == 0)
                     break;
             }
@@ -498,7 +520,7 @@ int main(int argc, char * argv[])
 
             struct timespec diff;
             timespec_sub(&se->rep_t, &se->req_t, &diff);
-            const double elapsed = timespec_to_tm_t(diff);
+            const double elapsed = timespec_to_double(diff);
             if (reps > 1)
                 printf("%" PRIu "\t%f\t\"%s\"\t%s\n", w_iov_sq_len(&se->rep),
                        elapsed, bps(w_iov_sq_len(&se->rep), elapsed), se->url);

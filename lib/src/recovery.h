@@ -31,10 +31,8 @@
 #include <stdint.h>
 
 #include <quant/quant.h>
+#include <timeout.h>
 
-// IWYU pragma: no_include "../deps/libev/ev.h"
-
-#include "event.h" // IWYU pragma: keep
 #include "pn.h"
 #include "quic.h"
 
@@ -56,7 +54,8 @@ struct cc_state {
 
 
 struct recovery {
-    ev_timer ld_alarm; // loss_detection_timer
+    struct timeout ld_alarm; // loss_detection_timer
+    timeout_t ld_alarm_val;
 
     // LD state
     tm_t last_sent_ack_elicit_t; // time_of_last_sent_ack_eliciting_packet

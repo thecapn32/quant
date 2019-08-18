@@ -29,6 +29,7 @@
 #include <netdb.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -37,6 +38,7 @@
 
 #include <picotls.h> // IWYU pragma: keep
 #include <quant/quant.h>
+#include <timeout.h>
 
 #ifdef HAVE_ASAN
 #include <sanitizer/asan_interface.h>
@@ -54,10 +56,8 @@
 #include <unistd.h>
 #endif
 
-#include "event.h" // IWYU pragma: keep
-
 #include "conn.h"
-#include "event.h" // IWYU pragma: keep
+#include "loop.h"
 #include "pkt.h"
 #include "pn.h"
 #include "qlog.h"
@@ -84,7 +84,7 @@ const uint8_t ok_vers_len = sizeof(ok_vers) / sizeof(ok_vers[0]);
 
 
 struct pkt_meta * pkt_meta = 0;
-struct q_conn_conf default_conn_conf = {.idle_timeout = 10 * MSECS_PER_SEC,
+struct q_conn_conf default_conn_conf = {.idle_timeout = 10 * MS_PER_S,
                                         .enable_udp_zero_checksums = true,
                                         .tls_key_update_frequency = 3,
                                         .enable_spinbit =
@@ -95,43 +95,16 @@ struct q_conn_conf default_conn_conf = {.idle_timeout = 10 * MSECS_PER_SEC,
 #endif
 };
 
-func_ptr api_func = 0;
-void *api_conn = 0, *api_strm = 0;
-
 struct q_conn_sl accept_queue = sl_head_initializer(accept_queue);
 
-static ev_timer api_alarm;
+static struct timeout api_alarm = TIMEOUT_INITIALIZER(0);
+
 static uint32_t num_bufs = 0;
 
 #if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) && !defined(FUZZING) &&    \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 int corpus_pkt_dir, corpus_frm_dir;
 #endif
-
-#ifndef NO_QLOG
-FILE * qlog = 0;
-#endif
-
-
-/// Run the event loop for the API function @p func with connection @p conn
-/// and (optionally, if non-zero) stream @p strm.
-///
-/// @param      func  The API function to run the event loop for.
-/// @param      conn  The connection to run the event loop for.
-/// @param      strm  The stream to run the event loop for.
-///
-static void __attribute__((nonnull(1))) loop_run(const func_ptr func,
-                                                 struct q_conn * const conn,
-                                                 struct q_stream * const strm)
-{
-    ensure(api_func == 0, "other API call active");
-    api_func = func;
-    api_conn = conn;
-    api_strm = strm;
-    ev_run(0);
-    api_func = 0;
-    api_conn = api_strm = 0;
-}
 
 
 void alloc_off(struct w_engine * const w,
@@ -313,8 +286,7 @@ struct q_conn * q_connect(struct w_engine * const w,
          plural(early_data ? w_iov_sq_len(early_data) : 0));
 #endif
 
-
-    ev_timer_again(&c->idle_alarm);
+    restart_idle_alarm(c);
     w_connect(c->sock, peer);
 
     // start TLS handshake
@@ -330,12 +302,12 @@ struct q_conn * q_connect(struct w_engine * const w,
     } else if (early_data_stream)
         *early_data_stream = 0;
 
-    ev_feed_event(&c->tx_w, 0);
+    timeouts_add(w->data, &c->tx_w, 0);
 
     warn(DBG, "waiting for connect on %s conn %s to %s:%s", conn_type(c),
          cid2str(c->scid), ip, port);
     conn_to_state(c, conn_opng);
-    loop_run((func_ptr)q_connect, c, 0);
+    loop_run(w, (func_ptr)q_connect, c, 0);
 
     if (fin && early_data_stream && *early_data_stream)
         strm_to_state(*early_data_stream,
@@ -397,7 +369,7 @@ bool q_write(struct q_stream * const s,
     concat_out(s, q);
 
     // kick TX watcher
-    ev_feed_event(&c->tx_w, 0);
+    timeouts_add(c->w->data, &c->tx_w, 0);
     return true;
 }
 
@@ -417,7 +389,7 @@ q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool all)
             // no data queued on any stream, wait for new data
             warn(WRN, "waiting to read on any strm on %s conn %s", conn_type(c),
                  cid2str(c->scid));
-            loop_run((func_ptr)q_read, c, 0);
+            loop_run(c->w, (func_ptr)q_read, c, 0);
         }
     } while (s == 0 && all);
 
@@ -440,7 +412,7 @@ bool q_read_stream(struct q_stream * const s,
         warn(WRN, "reading all on %s conn %s strm " FMT_SID, conn_type(c),
              cid2str(c->scid), s->id);
     again:
-        loop_run((func_ptr)q_read_stream, c, s);
+        loop_run(c->w, (func_ptr)q_read_stream, c, s);
     }
 
     if (sq_empty(&s->in))
@@ -477,20 +449,32 @@ struct q_conn * q_bind(struct w_engine * const w, const uint16_t port)
 }
 
 
-static void __attribute__((nonnull))
-cancel_api_call(ev_timer * const w __attribute__((unused)),
-                int e __attribute__((unused)))
+static void cancel_api_call(struct w_engine * const w)
 {
+    warn(CRT, "expired");
+
 #ifdef DEBUG_EXTRA
     warn(DBG, "canceling API call");
 #endif
-    ev_timer_stop(&api_alarm);
+    timeouts_del(w->data, &api_alarm);
     maybe_api_return(q_accept, 0, 0);
     maybe_api_return(q_ready, 0, 0);
 }
 
 
-struct q_conn * q_accept(const struct q_conn_conf * const conf)
+static void __attribute__((nonnull))
+restart_api_alarm(struct w_engine * const w, const uint64_t nsec)
+{
+#ifdef DEBUG_TIMERS
+    warn(DBG, "next API alarm in %f sec", nsec / (double)NS_PER_S);
+#endif
+
+    timeouts_add(w->data, &api_alarm, nsec);
+}
+
+
+struct q_conn * q_accept(struct w_engine * const w,
+                         const struct q_conn_conf * const conf)
 {
     if (sl_first(&accept_queue))
         goto accept;
@@ -500,15 +484,10 @@ struct q_conn * q_accept(const struct q_conn_conf * const conf)
     warn(WRN, "waiting for conn on any serv sock (timeout %" PRIu " ms)",
          idle_to);
 
-    if (idle_to) {
-        if (ev_is_active(&api_alarm))
-            ev_timer_stop(&api_alarm);
-        ev_timer_init(&api_alarm, cancel_api_call,
-                      (ev_tstamp)idle_to / MSECS_PER_SEC, 0);
-        ev_timer_start(&api_alarm);
-    }
+    if (idle_to)
+        restart_api_alarm(w, idle_to * NS_PER_MS);
 
-    loop_run((func_ptr)q_accept, 0, 0);
+    loop_run(w, (func_ptr)q_accept, 0, 0);
 
     if (sl_empty(&accept_queue)) {
         warn(ERR, "no conn ready for accept");
@@ -518,7 +497,7 @@ struct q_conn * q_accept(const struct q_conn_conf * const conf)
 accept:;
     struct q_conn * const c = sl_first(&accept_queue);
     sl_remove_head(&accept_queue, node_aq);
-    ev_timer_again(&c->idle_alarm);
+    restart_idle_alarm(c);
     c->needs_accept = false;
 
 #if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
@@ -561,7 +540,7 @@ struct q_stream * q_rsv_stream(struct q_conn * const c, const bool bidi)
             c->sid_blocked_bidi = true;
         else
             c->sid_blocked_uni = true;
-        loop_run((func_ptr)q_rsv_stream, c, 0);
+        loop_run(c->w, (func_ptr)q_rsv_stream, c, 0);
     }
 
     // stream blocking is handled by new_stream
@@ -616,25 +595,16 @@ struct w_engine * q_init(const char * const ifname,
     ASAN_POISON_MEMORY_REGION(pkt_meta, num_bufs * sizeof(*pkt_meta));
 
     // initialize the event loop
-    ev_default_loop(EVFLAG_NOENV | EVFLAG_NOSIGMASK |
+    int err;
+    w->data = timeouts_open(TIMEOUT_nHZ, &err);
+    timeouts_update(w->data, w_now());
+    timeout_setcb(&api_alarm, cancel_api_call, w);
+
+    warn(INF, "%s/%s %s/%s ready", quant_name, w->backend_name, quant_version,
+         QUANT_COMMIT_HASH_ABBREV_STR);
 #ifndef PARTICLE
-                    EVBACKEND_KQUEUE | EVBACKEND_EPOLL
-#else
-                    EVBACKEND_POLL
-#endif
-    );
-
-#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
-    static const char * ev_backend_str[] = {
-        [EVBACKEND_SELECT] = "select",   [EVBACKEND_POLL] = "poll",
-        [EVBACKEND_EPOLL] = "epoll",     [EVBACKEND_KQUEUE] = "kqueue",
-        [EVBACKEND_DEVPOLL] = "devpoll", [EVBACKEND_PORT] = "port"};
-#endif
-
-    warn(INF, "%s/%s %s/%s with libev/%s %u.%u ready", quant_name,
-         w->backend_name, quant_version, QUANT_COMMIT_HASH_ABBREV_STR,
-         ev_backend_str[ev_backend()], ev_version_major(), ev_version_minor());
     warn(INF, "submit bug reports at https://github.com/NTAP/quant/issues");
+#endif
 
     // initialize TLS context
     init_tls_ctx(conf);
@@ -719,10 +689,10 @@ void q_close(struct q_conn * const c,
 
     if (c->state != conn_drng) {
         conn_to_state(c, conn_qlse);
-        ev_feed_event(&c->tx_w, 0);
+        timeouts_add(c->w->data, &c->tx_w, 0);
     }
 
-    loop_run((func_ptr)q_close, c, 0);
+    loop_run(c->w, (func_ptr)q_close, c, 0);
 
 done:
     if (c->scid && c->i.pkts_in_valid > 0) {
@@ -735,8 +705,8 @@ done:
         warn(INF, "\tpkts_out = %" PRIu, c->i.pkts_out);
         warn(INF, "\tpkts_out_lost = %" PRIu, c->i.pkts_out_lost);
         warn(INF, "\tpkts_out_rtx = %" PRIu, c->i.pkts_out_rtx);
-        warn(INF, "\trtt = %.3f", c->i.rtt);
-        warn(INF, "\trttvar = %.3f", c->i.rttvar);
+        warn(INF, "\trtt = %.3f", c->i.rtt / (double)NS_PER_S);
+        warn(INF, "\trttvar = %.3f", c->i.rttvar / (double)NS_PER_S);
         warn(INF, "\tcwnd = %" PRIu, c->i.cwnd);
         warn(INF, "\tssthresh = %" PRIu, c->i.ssthresh);
         warn(INF, "\tpto_cnt = %" PRIu, c->i.pto_cnt);
@@ -757,7 +727,7 @@ void q_cleanup(struct w_engine * const w)
     kh_foreach_value(&conns_by_srt, c, { q_close(c, 0, 0); });
 
     // stop the event loop
-    ev_loop_destroy();
+    timeouts_close(w->data);
 
     free_tls_ctx();
 
@@ -853,20 +823,17 @@ done:
 #endif
 
 
-bool q_ready(const uint_t timeout, struct q_conn ** const ready)
+bool q_ready(struct w_engine * const w,
+             const uint_t nsec,
+             struct q_conn ** const ready)
 {
     if (sl_empty(&c_ready)) {
-        if (timeout) {
-            if (ev_is_active(&api_alarm))
-                ev_timer_stop(&api_alarm);
-            ev_timer_init(&api_alarm, cancel_api_call,
-                          (ev_tstamp)timeout / MSECS_PER_SEC, 0);
-            ev_timer_start(&api_alarm);
-        }
+        if (nsec)
+            restart_api_alarm(w, nsec);
 #ifdef DEBUG_EXTRA
         warn(WRN, "waiting for conn to get ready");
 #endif
-        loop_run((func_ptr)q_ready, 0, 0);
+        loop_run(w, (func_ptr)q_ready, 0, 0);
     }
 
     struct q_conn * const c = sl_first(&c_ready);
@@ -916,15 +883,10 @@ void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
 #endif
 
     // close the current w_sock
-    ev_io_stop(&c->rx_w);
     if (c->scid == 0)
         conns_by_ipnp_del(c);
     w_close(c->sock);
-
-    // switch to new w_sock
-    c->rx_w.data = c->sock = new_sock;
-    ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
-    ev_io_start(&c->rx_w);
+    c->sock = new_sock;
     w_connect(c->sock, (struct sockaddr *)&c->peer);
     if (c->scid == 0)
         conns_by_ipnp_ins(c);
@@ -946,7 +908,7 @@ void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
          cid2str(c->scid), old_ip, old_port, new_ip, new_port);
 #endif
 
-    ev_feed_event(&c->tx_w, 1);
+    timeouts_add(c->w->data, &c->tx_w, 0);
 }
 #endif
 

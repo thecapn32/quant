@@ -304,7 +304,7 @@ int main(int argc, char * argv[])
     while (1) {
         struct q_conn * c;
         const bool have_active =
-            q_ready(first_conn ? 0 : timeout * MSECS_PER_SEC, &c);
+            q_ready(w, first_conn ? 0 : timeout * NS_PER_S, &c);
         if (c == 0) {
             if (have_active == false)
                 break;
@@ -314,7 +314,7 @@ int main(int argc, char * argv[])
 
         // do we need to q_accept?
         if (q_is_new_serv_conn(c))
-            q_accept(0);
+            q_accept(w, 0);
 
         if (q_is_conn_closed(c)) {
             q_close(c, 0, 0);
