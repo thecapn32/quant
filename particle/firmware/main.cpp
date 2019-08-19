@@ -52,7 +52,7 @@ void warpcore_transaction()
     warn(DBG, "pkt tx: %s", v->buf);
 
     struct w_iov_sq i = w_iov_sq_initializer(i);
-    if (w_nic_rx(w, 1 * MSECS_PER_SEC)) {
+    if (w_nic_rx(w, 1 * MS_PER_S)) {
         w_rx(s, &i);
         warn(DBG, "pkt rx");
     }

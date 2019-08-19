@@ -3,6 +3,7 @@ CPPSRC+=main.cpp
 
 DEPS=lib/deps
 PICOTLS=$(DEPS)/picotls
+TIMEOUT=$(DEPS)/timeout
 WARPCORE=$(DEPS)/warpcore/lib
 
 INCLUDE_DIRS+=\
@@ -10,6 +11,7 @@ INCLUDE_DIRS+=\
 	$(SOURCE_PATH)/$(PICOTLS)/deps/cifra/src/ext \
 	$(SOURCE_PATH)/$(PICOTLS)/deps/micro-ecc \
 	$(SOURCE_PATH)/$(PICOTLS)/include \
+	$(SOURCE_PATH)/$(TIMEOUT) \
 	$(SOURCE_PATH)/$(WARPCORE)/include \
 	$(SOURCE_PATH)/lib/include
 
@@ -27,6 +29,9 @@ PICOTLS_SRC+=\
 	$(PICOTLS)/lib/picotls.c \
 	$(PICOTLS)/lib/uecc.c
 
+TIMEOUT_SRC+=\
+	$(TIMEOUT)/timeout.c
+
 WARP_SRC+=\
 	$(WARPCORE)/src/backend_sock.c \
 	$(WARPCORE)/src/plat.c \
@@ -37,8 +42,8 @@ WARP_SRC+=\
 QUANT_SRC+=\
 	lib/src/conn.c \
 	lib/src/diet.c \
-	lib/src/event.c \
 	lib/src/frame.c \
+	lib/src/loop.c \
 	lib/src/marshall.c \
 	lib/src/pkt.c \
 	lib/src/pn.c \
@@ -49,7 +54,7 @@ QUANT_SRC+=\
 	quant/config.c
 
 
-CSRC+=$(WARP_SRC) $(PICOTLS_SRC) $(QUANT_SRC)
+CSRC+=$(WARP_SRC) $(PICOTLS_SRC) $(TIMEOUT_SRC) $(QUANT_SRC)
 
 EXTRA_CFLAGS+= \
 	-foptimize-strlen -ffast-math \

@@ -824,7 +824,7 @@ done:
 
 
 bool q_ready(struct w_engine * const w,
-             const uint_t nsec,
+             const uint64_t nsec,
              struct q_conn ** const ready)
 {
     if (sl_empty(&c_ready)) {
