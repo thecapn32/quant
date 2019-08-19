@@ -39,18 +39,6 @@ extern "C" {
 #include <quant/tree.h>        // IWYU pragma: export
 #include <warpcore/warpcore.h> // IWYU pragma: export
 
-#ifdef HAVE_64BIT
-typedef uint64_t tm_t;
-// #define TM_T(x) x
-// #define TM_T_HUGE HUGE_VAL
-// #define TM_T_ABS fabs
-#else
-typedef uint32_t tm_t;
-// cppcheck-suppress preprocessorErrorDirective
-// #define TM_T(x) x##f
-// #define TM_T_HUGE HUGE_VALF
-// #define TM_T_ABS fabsf
-#endif
 
 struct w_iov_sq;
 struct q_stream;
@@ -89,8 +77,8 @@ struct q_conn_info {
     uint_t pkts_out_lost;
     uint_t pkts_out_rtx;
 
-    tm_t rtt;
-    tm_t rttvar;
+    float rtt;
+    float rttvar;
     uint_t cwnd;
     uint_t ssthresh;
     uint_t pto_cnt;

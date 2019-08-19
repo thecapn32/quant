@@ -29,9 +29,9 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include <quant/quant.h>
-#include <timeout.h>
 
 
 /// This is a C adaptation of the "discrete interval encoding tree" (DIET) data
@@ -49,7 +49,7 @@ struct ival {
     splay_entry(ival) node; ///< Splay tree node data.
     uint_t lo;              ///< Lower bound of the interval.
     uint_t hi;              ///< Upper bound of the interval.
-    timeout_t t;            ///< Time stamp of last insert into this interval.
+    uint64_t t;             ///< Time stamp of last insert into this interval.
 #ifndef HAVE_64BIT
     uint8_t _unused[4];
 #endif
@@ -92,7 +92,7 @@ SPLAY_PROTOTYPE(diet, ival, node, ival_cmp)
 extern struct ival * diet_find(struct diet * const d, const uint_t n);
 
 extern struct ival * __attribute__((nonnull))
-diet_insert(struct diet * const d, const uint_t n, const timeout_t t);
+diet_insert(struct diet * const d, const uint_t n, const uint64_t t);
 
 extern void __attribute__((nonnull))
 diet_remove(struct diet * const d, const uint_t n);
@@ -139,7 +139,7 @@ diet_empty(const struct diet * const d)
 }
 
 
-static inline timeout_t __attribute__((nonnull))
+static inline uint64_t __attribute__((nonnull))
 diet_timestamp(const struct ival * const i)
 {
     return i->t;

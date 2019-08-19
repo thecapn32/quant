@@ -41,10 +41,10 @@ struct pn_space;
 
 
 struct cc_state {
-    tm_t latest_rtt; // latest_rtt
-    tm_t min_rtt;    // min_rtt
-    tm_t rttvar;     // rttvar
-    tm_t srtt;       // smoothed_rtt
+    uint_t latest_rtt; // latest_rtt
+    uint_t min_rtt;    // min_rtt
+    uint_t rttvar;     // rttvar
+    uint_t srtt;       // smoothed_rtt
 
     uint_t ae_in_flight; // nr of ACK-eliciting pkts inflight
     uint_t cwnd;         // congestion_window
@@ -58,8 +58,8 @@ struct recovery {
     timeout_t ld_alarm_val;
 
     // LD state
-    tm_t last_sent_ack_elicit_t; // time_of_last_sent_ack_eliciting_packet
-    tm_t last_sent_crypto_t;     // time_of_last_sent_crypto_packet
+    uint64_t last_sent_ack_elicit_t; // time_of_last_sent_ack_eliciting_packet
+    uint64_t last_sent_crypto_t;     // time_of_last_sent_crypto_packet
 
     uint16_t crypto_cnt; // crypto_count
     uint16_t pto_cnt;    // pto_count
@@ -73,7 +73,7 @@ struct recovery {
 #endif
 
     // CC state
-    tm_t rec_start_t;    // recovery_start_time
+    uint64_t rec_start_t;    // recovery_start_time
     uint_t ae_in_flight; // nr of ACK-eliciting pkts inflight
 
     struct cc_state cur;
@@ -101,7 +101,7 @@ extern void __attribute__((nonnull))
 on_pkt_acked(struct w_iov * const v, struct pkt_meta * m);
 
 extern void __attribute__((nonnull))
-congestion_event(struct q_conn * const c, const tm_t sent_t);
+congestion_event(struct q_conn * const c, const uint64_t sent_t);
 
 extern void __attribute__((nonnull)) set_ld_timer(struct q_conn * const c);
 

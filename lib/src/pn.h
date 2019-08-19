@@ -102,7 +102,7 @@ struct pn_space {
     uint_t ect1_cnt;
     uint_t ce_cnt;
 
-    tm_t loss_t; // loss_time
+    uint64_t loss_t; // loss_time
 
     pn_t type;
 

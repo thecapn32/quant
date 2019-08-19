@@ -55,7 +55,7 @@
 
 
 static inline bool __attribute__((nonnull))
-in_cong_recovery(const struct q_conn * const c, const tm_t sent_t)
+in_cong_recovery(const struct q_conn * const c, const uint64_t sent_t)
 {
     // see InRecovery() pseudo code
     return sent_t <= c->rec.rec_start_t;
@@ -105,7 +105,7 @@ static void __attribute__((nonnull)) maybe_tx(struct q_conn * const c)
 static struct pn_space * __attribute__((nonnull))
 earliest_loss_t_pn(struct q_conn * const c)
 {
-    tm_t loss_t = 0;
+    uint64_t loss_t = 0;
     struct pn_space * pn = 0;
     for (pn_t t = pn_init; t <= pn_data; t++) {
         if (c->pns[t].abandoned)
@@ -234,7 +234,7 @@ set_to:;
 }
 
 
-void congestion_event(struct q_conn * const c, const tm_t sent_t)
+void congestion_event(struct q_conn * const c, const uint64_t sent_t)
 {
     // see CongestionEvent() pseudo code
 
@@ -255,10 +255,10 @@ in_persistent_cong(struct pn_space * const pn __attribute__((unused)),
     // struct q_conn * const c = pn->c;
 
     // // see InPersistentCongestion() pseudo code
-    // const tm_t cong_period =
+    // const uint64_t cong_period =
     //     kPersistentCongestionThreshold *
     //     (c->rec.cur.srtt + MAX(4 * c->rec.cur.rttvar, kGranularity) +
-    //      (tm_t)c->tp_out.max_ack_del * NS_PER_MS);
+    //      c->tp_out.max_ack_del * NS_PER_MS);
 
     // const struct ival * const i = diet_find(&pn->lost, lg_lost);
     // warn(DBG,
@@ -356,18 +356,17 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
     pn->loss_t = 0;
 
     // Minimum time of kGranularity before packets are deemed lost.
-    const tm_t loss_del =
-        MAX(kGranularity, (tm_t)(kTimeThreshold *
-                                 MAX(c->rec.cur.latest_rtt, c->rec.cur.srtt)));
+    const uint64_t loss_del =
+        MAX(kGranularity, 9 * MAX(c->rec.cur.latest_rtt, c->rec.cur.srtt) / 8);
 
     // Packets sent before this time are deemed lost.
-    const tm_t lost_send_t = loop_now() - loss_del;
+    const uint64_t lost_send_t = loop_now() - loss_del;
 
 #if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG))
     struct diet lost = diet_initializer(lost);
 #endif
     uint_t lg_lost = UINT_T_MAX;
-    tm_t lg_lost_tx_t = 0;
+    uint64_t lg_lost_tx_t = 0;
     bool in_flight_lost = false;
     struct pkt_meta * m;
     kh_foreach_value(&pn->sent_pkts, m, {
@@ -546,7 +545,7 @@ void on_pkt_sent(struct pkt_meta * const m)
 
     // see OnPacketSent() pseudo code
 
-    const tm_t now = loop_now();
+    const uint64_t now = loop_now();
     pm_by_nr_ins(&m->pn->sent_pkts, m);
     // nr is set in enc_pkt()
     m->t = now;
@@ -572,7 +571,7 @@ void on_pkt_sent(struct pkt_meta * const m)
 
 
 static void __attribute__((nonnull))
-update_rtt(struct q_conn * const c, tm_t ack_del)
+update_rtt(struct q_conn * const c, uint_t ack_del)
 {
     // see UpdateRtt() pseudo code
     if (unlikely(c->rec.cur.srtt == 0)) {
@@ -582,15 +581,21 @@ update_rtt(struct q_conn * const c, tm_t ack_del)
     }
 
     c->rec.cur.min_rtt = MIN(c->rec.cur.min_rtt, c->rec.cur.latest_rtt);
-    ack_del = MIN(ack_del, (tm_t)c->tp_out.max_ack_del) * NS_PER_MS;
+    ack_del = MIN(ack_del, c->tp_out.max_ack_del) * NS_PER_MS;
 
-    const tm_t adj_rtt = c->rec.cur.latest_rtt > c->rec.cur.min_rtt + ack_del
-                             ? c->rec.cur.latest_rtt - ack_del
-                             : c->rec.cur.latest_rtt;
+    const uint_t adj_rtt = c->rec.cur.latest_rtt > c->rec.cur.min_rtt + ack_del
+                               ? c->rec.cur.latest_rtt - ack_del
+                               : c->rec.cur.latest_rtt;
 
-    c->rec.cur.rttvar =
-        (3 * c->rec.cur.rttvar / 4) +
-        (uint64_t)llabs((int64_t)c->rec.cur.srtt - (int64_t)adj_rtt) / 4;
+    c->rec.cur.rttvar = 3 * c->rec.cur.rttvar / 4 +
+                        (uint_t)
+#ifdef HAVE_64BIT
+                                llabs
+#else
+                                labs
+#endif
+                            ((dint_t)c->rec.cur.srtt - (dint_t)adj_rtt) /
+                            4;
     c->rec.cur.srtt = (7 * c->rec.cur.srtt / 8) + adj_rtt / 8;
 }
 

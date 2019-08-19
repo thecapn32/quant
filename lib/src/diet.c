@@ -96,7 +96,7 @@ struct ival * diet_find(struct diet * const d, const uint_t n)
 ///
 /// @return     Newly allocated ival struct [n..n].
 ///
-static inline struct ival * make_ival(const uint_t n, const timeout_t t)
+static inline struct ival * make_ival(const uint_t n, const uint64_t t)
 {
     struct ival * const i = calloc(1, sizeof(*i));
     ensure(i, "could not calloc");
@@ -114,7 +114,8 @@ static inline struct ival * make_ival(const uint_t n, const timeout_t t)
 ///
 /// @return     Pointer to ival containing @p n.
 ///
-struct ival * diet_insert(struct diet * const d, const uint_t n, const timeout_t t)
+struct ival *
+diet_insert(struct diet * const d, const uint_t n, const uint64_t t)
 {
     if (splay_empty(d))
         goto new_ival;

@@ -502,7 +502,7 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
     const uint_t cum_ack = cum_ack_ival ? cum_ack_ival->hi : UINT_T_MAX;
 
     uint_t lg_ack = lg_ack_in_frm;
-    tm_t lg_ack_in_frm_t = 0;
+    uint64_t lg_ack_in_frm_t = 0;
     bool got_new_ack = false;
     for (uint_t n = ack_rng_cnt + 1; n > 0; n--) {
         uint_t gap = 0;

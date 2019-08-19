@@ -71,7 +71,7 @@
 
 // Maximum reordering in time before time threshold loss detection considers a
 // packet lost. Specified as an RTT multiplier. The RECOMMENDED value is 9/8.
-#define kTimeThreshold 1.125
+// #define kTimeThreshold 1.125
 
 // Timer granularity. This is a system-dependent value. However, implementations
 // SHOULD use a value no smaller than 1ms.
@@ -205,7 +205,7 @@ struct pkt_meta {
     // pm_cpy(false) starts copying from here:
     struct pn_space * pn; ///< Packet number space.
     struct pkt_hdr hdr;   ///< Parsed packet header.
-    tm_t t;               ///< TX or RX timestamp.
+    uint64_t t;           ///< TX or RX timestamp.
 
     uint16_t udp_len;          ///< Length of protected UDP packet at TX/RX.
     uint8_t has_rtx : 1;       ///< Does the w_iov hold truncated data?
