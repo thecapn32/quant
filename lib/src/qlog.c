@@ -81,7 +81,7 @@ qlog_pkt_type_str(const uint8_t flags, const void * const vers)
 
 static uint64_t __attribute__((const)) to_usec(const ev_tstamp t)
 {
-    return (uint64_t)(t * USECS_PER_SEC);
+    return (uint64_t)(t * US_PER_S);
 }
 
 
@@ -229,23 +229,23 @@ void qlog_recovery(const qlog_rec_evt_t evt,
         c->rec.cur.ssthresh != c->rec.prev.ssthresh)
         prev_metric = fprintf(qlog, "%s\"ssthresh\":%" PRIu,
                               prev_metric ? "," : "", c->rec.cur.ssthresh);
-    if (TM_T_ABS(c->rec.cur.srtt - c->rec.prev.srtt) < TM_T(1.) / USECS_PER_SEC)
+    if (TM_T_ABS(c->rec.cur.srtt - c->rec.prev.srtt) < TM_T(1.) / US_PER_S)
         prev_metric =
             fprintf(qlog, "%s\"smoothed_rtt\":%" PRIu64, prev_metric ? "," : "",
                     to_usec((double)c->rec.cur.srtt));
     if (c->rec.cur.min_rtt < TM_T_HUGE &&
         TM_T_ABS(c->rec.cur.min_rtt - c->rec.prev.min_rtt) <
-            TM_T(1.) / USECS_PER_SEC)
+            TM_T(1.) / US_PER_S)
         prev_metric =
             fprintf(qlog, "%s\"min_rtt\":%" PRIu64, prev_metric ? "," : "",
                     to_usec((double)c->rec.cur.min_rtt));
     if (TM_T_ABS(c->rec.cur.latest_rtt - c->rec.prev.latest_rtt) <
-        TM_T(1.) / USECS_PER_SEC)
+        TM_T(1.) / US_PER_S)
         prev_metric =
             fprintf(qlog, "%s\"latest_rtt\":%" PRIu64, prev_metric ? "," : "",
                     to_usec((double)c->rec.cur.latest_rtt));
     if (TM_T_ABS(c->rec.cur.rttvar - c->rec.prev.rttvar) <
-        TM_T(1.) / USECS_PER_SEC)
+        TM_T(1.) / US_PER_S)
         // prev_metric =
         fprintf(qlog, "%s\"rtt_variance\":%" PRIu64, prev_metric ? "," : "",
                 to_usec((double)c->rec.cur.rttvar));

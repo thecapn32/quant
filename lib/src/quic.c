@@ -84,7 +84,7 @@ const uint8_t ok_vers_len = sizeof(ok_vers) / sizeof(ok_vers[0]);
 
 
 struct pkt_meta * pkt_meta = 0;
-struct q_conn_conf default_conn_conf = {.idle_timeout = 10 * MSECS_PER_SEC,
+struct q_conn_conf default_conn_conf = {.idle_timeout = 10 * MS_PER_S,
                                         .enable_udp_zero_checksums = true,
                                         .tls_key_update_frequency = 3,
                                         .enable_spinbit =
@@ -504,7 +504,7 @@ struct q_conn * q_accept(const struct q_conn_conf * const conf)
         if (ev_is_active(&api_alarm))
             ev_timer_stop(&api_alarm);
         ev_timer_init(&api_alarm, cancel_api_call,
-                      (ev_tstamp)idle_to / MSECS_PER_SEC, 0);
+                      (ev_tstamp)idle_to / MS_PER_S, 0);
         ev_timer_start(&api_alarm);
     }
 
@@ -860,7 +860,7 @@ bool q_ready(const uint_t timeout, struct q_conn ** const ready)
             if (ev_is_active(&api_alarm))
                 ev_timer_stop(&api_alarm);
             ev_timer_init(&api_alarm, cancel_api_call,
-                          (ev_tstamp)timeout / MSECS_PER_SEC, 0);
+                          (ev_tstamp)timeout / MS_PER_S, 0);
             ev_timer_start(&api_alarm);
         }
 #ifdef DEBUG_EXTRA

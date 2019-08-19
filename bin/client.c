@@ -484,7 +484,7 @@ int main(int argc, char * argv[])
 
             if (rxed_new == false) {
                 struct q_conn * c;
-                q_ready(timeout * MSECS_PER_SEC, &c);
+                q_ready(timeout * MS_PER_S, &c);
                 if (c == 0)
                     break;
             }

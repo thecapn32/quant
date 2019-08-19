@@ -199,12 +199,12 @@ q_info(struct q_conn * const c, struct q_conn_info * const ci);
         static char _str[32];                                                  \
         const tm_t _bps =                                                      \
             (bytes) && (fpclassify(secs) != FP_ZERO) ? (bytes)*8 / (secs) : 0; \
-        if (_bps > NSECS_PER_SEC)                                              \
-            snprintf(_str, sizeof(_str), "%.3f Gb/s", _bps / NSECS_PER_SEC);   \
-        else if (_bps > USECS_PER_SEC)                                         \
-            snprintf(_str, sizeof(_str), "%.3f Mb/s", _bps / USECS_PER_SEC);   \
-        else if (_bps > MSECS_PER_SEC)                                         \
-            snprintf(_str, sizeof(_str), "%.3f Kb/s", _bps / MSECS_PER_SEC);   \
+        if (_bps > NS_PER_S)                                              \
+            snprintf(_str, sizeof(_str), "%.3f Gb/s", _bps / NS_PER_S);   \
+        else if (_bps > US_PER_S)                                         \
+            snprintf(_str, sizeof(_str), "%.3f Mb/s", _bps / US_PER_S);   \
+        else if (_bps > MS_PER_S)                                         \
+            snprintf(_str, sizeof(_str), "%.3f Kb/s", _bps / MS_PER_S);   \
         else                                                                   \
             snprintf(_str, sizeof(_str), "%.3f b/s", _bps);                    \
         _str;                                                                  \
@@ -212,7 +212,7 @@ q_info(struct q_conn * const c, struct q_conn_info * const ci);
 
 
 #define timespec_to_tm_t(diff)                                                 \
-    ((tm_t)(diff).tv_sec + (tm_t)(diff).tv_nsec / NSECS_PER_SEC)
+    ((tm_t)(diff).tv_sec + (tm_t)(diff).tv_nsec / NS_PER_S)
 
 #ifdef __cplusplus
 }

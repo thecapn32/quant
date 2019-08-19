@@ -1496,7 +1496,7 @@ void rx(ev_io * const rx_w, int _e __attribute__((unused)))
         if (likely(c->pns[pn_data].data.out_kyph ==
                    c->pns[pn_data].data.in_kyph)) {
             c->idle_alarm.repeat =
-                MAX((ev_tstamp)c->tp_in.idle_to / MSECS_PER_SEC,
+                MAX((ev_tstamp)c->tp_in.idle_to / MS_PER_S,
                     3 * c->rec.ld_alarm.repeat);
 #ifdef DEBUG_TIMERS
             warn(DBG, "next idle alarm in %f sec", c->idle_alarm.repeat);
@@ -1702,8 +1702,8 @@ void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
     c->spin_enabled = get_conf_uncond(conf, enable_spinbit);
 
     // (re)set idle alarm
-    c->tp_in.idle_to = get_conf(conf, idle_timeout) * MSECS_PER_SEC;
-    c->idle_alarm.repeat = (ev_tstamp)c->tp_in.idle_to / MSECS_PER_SEC;
+    c->tp_in.idle_to = get_conf(conf, idle_timeout) * MS_PER_S;
+    c->idle_alarm.repeat = (ev_tstamp)c->tp_in.idle_to / MS_PER_S;
 
     ev_timer_again(&c->idle_alarm);
 
@@ -1802,7 +1802,7 @@ struct q_conn * new_conn(struct w_engine * const w,
 
     // initialize ACK timeout
     c->ack_alarm.data = c;
-    c->ack_alarm.repeat = (ev_tstamp)c->tp_out.max_ack_del / MSECS_PER_SEC;
+    c->ack_alarm.repeat = (ev_tstamp)c->tp_out.max_ack_del / MS_PER_S;
     ev_init(&c->ack_alarm, ack_alarm);
 
     // initialize recovery state

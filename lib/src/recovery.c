@@ -208,7 +208,7 @@ void set_ld_timer(struct q_conn * const c)
 #endif
     ev_tstamp to = (ev_tstamp)c->rec.cur.srtt +
                    MAX(4 * (ev_tstamp)c->rec.cur.rttvar, kGranularity) +
-                   (ev_tstamp)c->tp_out.max_ack_del / MSECS_PER_SEC;
+                   (ev_tstamp)c->tp_out.max_ack_del / MS_PER_S;
     to *= 1 << c->rec.pto_cnt;
     c->rec.ld_alarm.repeat = (ev_tstamp)c->rec.last_sent_ack_elicit_t + to;
 
@@ -250,7 +250,7 @@ in_persistent_cong(struct pn_space * const pn __attribute__((unused)),
     // const tm_t cong_period =
     //     kPersistentCongestionThreshold *
     //     (c->rec.cur.srtt + MAX(4 * c->rec.cur.rttvar, kGranularity) +
-    //      (tm_t)c->tp_out.max_ack_del / MSECS_PER_SEC);
+    //      (tm_t)c->tp_out.max_ack_del / MS_PER_S);
 
     // const struct ival * const i = diet_find(&pn->lost, lg_lost);
     // warn(DBG,
@@ -573,7 +573,7 @@ update_rtt(struct q_conn * const c, tm_t ack_del)
     }
 
     c->rec.cur.min_rtt = MIN(c->rec.cur.min_rtt, c->rec.cur.latest_rtt);
-    ack_del = MIN(ack_del, (tm_t)c->tp_out.max_ack_del / MSECS_PER_SEC);
+    ack_del = MIN(ack_del, (tm_t)c->tp_out.max_ack_del / MS_PER_S);
 
     const tm_t adj_rtt = c->rec.cur.latest_rtt > c->rec.cur.min_rtt + ack_del
                              ? c->rec.cur.latest_rtt - ack_del
@@ -597,7 +597,7 @@ void on_ack_received_1(struct pkt_meta * const lg_ack, const uint_t ack_del)
     if (is_ack_eliciting(&lg_ack->pn->tx_frames)) {
         c->rec.cur.latest_rtt = (tm_t)ev_now() - lg_ack->t;
         update_rtt(
-            c, likely(pn->type == pn_data) ? (tm_t)ack_del / USECS_PER_SEC : 0);
+            c, likely(pn->type == pn_data) ? (tm_t)ack_del / US_PER_S : 0);
     }
 
     // ProcessECN() is done in dec_ack_frame()

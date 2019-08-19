@@ -1394,7 +1394,7 @@ void enc_ack_frame(uint8_t ** pos,
                            : c->tp_out.ack_del_exp;
     const uint_t ack_delay =
         (uint_t)(((ev_now() - (ev_tstamp)diet_timestamp(first_rng)) *
-                  USECS_PER_SEC)) >>
+                  US_PER_S)) >>
         ade;
     encv(pos, end, ack_delay);
     const uint_t ack_rng_cnt = diet_cnt(&pn->recv) - 1;
