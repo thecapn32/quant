@@ -46,11 +46,13 @@ include(GNUInstallDirs)
 add_library(common
   OBJECT
     src/pkt.c src/frame.c src/quic.c src/stream.c src/conn.c src/pn.c src/qlog.c
-    src/diet.c src/util.c src/tls.c src/recovery.c src/event.c src/marshall.c
+    src/diet.c src/util.c src/tls.c src/recovery.c src/marshall.c src/loop.c
+    ${PROJECT_SOURCE_DIR}/lib/deps/timeout/timeout.c
 )
 
-set_source_files_properties(src/event.c PROPERTIES COMPILE_FLAGS -Wno-error)
-
+set_source_files_properties(${PROJECT_SOURCE_DIR}/lib/deps/timeout/timeout.c
+  PROPERTIES COMPILE_FLAGS -Wno-error
+)
 
 set(TARGETS common lib${PROJECT_NAME} ${WARP})
 foreach(TARGET ${TARGETS})
@@ -112,6 +114,7 @@ foreach(TARGET ${TARGETS})
       $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
     SYSTEM PRIVATE
       ${OPENSSL_ROOT_DIR}/include
+      $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/timeout>
       $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/picotls/include>
       $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/warpcore/lib/include>
       $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/lib/deps/warpcore/lib/include>

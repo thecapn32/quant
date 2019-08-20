@@ -25,9 +25,9 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <sys/param.h>
 
 #if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
@@ -39,8 +39,8 @@
 #include "bitset.h"
 #include "conn.h"
 #include "diet.h"
-#include "event.h" // IWYU pragma: keep
 #include "frame.h"
+#include "loop.h"
 #include "marshall.h"
 #include "pkt.h"
 #include "pn.h"
@@ -55,7 +55,7 @@
 
 
 static inline bool __attribute__((nonnull))
-in_cong_recovery(const struct q_conn * const c, const tm_t sent_t)
+in_cong_recovery(const struct q_conn * const c, const uint64_t sent_t)
 {
     // see InRecovery() pseudo code
     return sent_t <= c->rec.rec_start_t;
@@ -97,14 +97,15 @@ static void __attribute__((nonnull)) maybe_tx(struct q_conn * const c)
 
     c->no_wnd = false;
     // don't set c->needs_tx = true, since it's not clear we must TX
-    ev_feed_event(&c->tx_w, 0);
+    c->tx_limit = 0;
+    timeouts_add(c->w->data, &c->tx_w, 0);
 }
 
 
 static struct pn_space * __attribute__((nonnull))
 earliest_loss_t_pn(struct q_conn * const c)
 {
-    tm_t loss_t = 0;
+    uint64_t loss_t = 0;
     struct pn_space * pn = 0;
     for (pn_t t = pn_init; t <= pn_data; t++) {
         if (c->pns[t].abandoned)
@@ -114,8 +115,7 @@ earliest_loss_t_pn(struct q_conn * const c)
             // no ACK-eliciting frames outstanding
             continue;
 
-        if (pn == 0 ||
-            (is_zero(c->pns[t].loss_t) == false && c->pns[t].loss_t < loss_t)) {
+        if (pn == 0 || (c->pns[t].loss_t && c->pns[t].loss_t < loss_t)) {
             pn = &c->pns[t];
             loss_t = pn->loss_t;
         }
@@ -135,10 +135,12 @@ void log_cc(struct q_conn * const c)
     const dint_t delta_ssthresh =
         (dint_t)ssthresh -
         (dint_t)(c->rec.prev.ssthresh == UINT_T_MAX ? 0 : c->rec.prev.ssthresh);
-    const tm_t delta_srtt = c->rec.cur.srtt - c->rec.prev.srtt;
-    const tm_t delta_rttvar = c->rec.cur.rttvar - c->rec.prev.rttvar;
-    if (delta_in_flight || delta_cwnd || delta_ssthresh ||
-        !is_zero(delta_srtt) || !is_zero(delta_rttvar)) {
+    const int64_t delta_srtt =
+        (int64_t)c->rec.cur.srtt - (int64_t)c->rec.prev.srtt;
+    const int64_t delta_rttvar =
+        (int64_t)c->rec.cur.rttvar - (int64_t)c->rec.prev.rttvar;
+    if (delta_in_flight || delta_cwnd || delta_ssthresh || delta_srtt ||
+        delta_rttvar) {
         warn(DBG,
              "%s conn %s: in_flight=%" PRIu " (%s%+" PRId NRM "), cwnd" NRM
              "=%" PRIu " (%s%+" PRId NRM "), ssthresh=%" PRIu " (%s%+" PRId NRM
@@ -148,11 +150,12 @@ void log_cc(struct q_conn * const c)
              delta_in_flight, c->rec.cur.cwnd,
              delta_cwnd > 0 ? GRN : delta_cwnd < 0 ? RED : "", delta_cwnd,
              ssthresh, delta_ssthresh > 0 ? GRN : delta_ssthresh < 0 ? RED : "",
-             delta_ssthresh, c->rec.cur.srtt,
-             delta_srtt > 0 ? GRN : delta_srtt < 0 ? RED : "", delta_srtt,
-             c->rec.cur.rttvar,
+             delta_ssthresh, c->rec.cur.srtt / (double)NS_PER_S,
+             delta_srtt > 0 ? GRN : delta_srtt < 0 ? RED : "",
+             delta_srtt / (double)NS_PER_S,
+             c->rec.cur.rttvar / (double)NS_PER_S,
              delta_rttvar > 0 ? GRN : delta_rttvar < 0 ? RED : "",
-             delta_rttvar);
+             delta_rttvar / (double)NS_PER_S);
     }
 
     qlog_recovery(rec_mu, "DEFAULT", c);
@@ -172,11 +175,11 @@ void set_ld_timer(struct q_conn * const c)
 #endif
     const struct pn_space * const pn = earliest_loss_t_pn(c);
 
-    if (pn && !is_zero(pn->loss_t)) {
+    if (pn && pn->loss_t) {
 #ifdef DEBUG_TIMERS
         type = "TT";
 #endif
-        c->rec.ld_alarm.repeat = (ev_tstamp)pn->loss_t;
+        c->rec.ld_alarm_val = pn->loss_t;
         goto set_to;
     }
 
@@ -185,11 +188,10 @@ void set_ld_timer(struct q_conn * const c)
 #ifdef DEBUG_TIMERS
         type = "crypto RTX";
 #endif
-        ev_tstamp to = 2 * (unlikely(is_zero(c->rec.cur.srtt))
-                                ? kInitialRtt
-                                : (ev_tstamp)c->rec.cur.srtt);
+        timeout_t to = 2 * (unlikely(c->rec.cur.srtt == 0) ? kInitialRtt
+                                                           : c->rec.cur.srtt);
         to = MAX(to, kGranularity) * (1 << c->rec.crypto_cnt);
-        c->rec.ld_alarm.repeat = (ev_tstamp)c->rec.last_sent_crypto_t + to;
+        c->rec.ld_alarm_val = c->rec.last_sent_crypto_t + to;
         goto set_to;
     }
 
@@ -199,41 +201,47 @@ void set_ld_timer(struct q_conn * const c)
         warn(DBG, "no RTX-able pkts in flight, stopping ld_alarm on %s conn %s",
              conn_type(c), cid2str(c->scid));
 #endif
-        ev_timer_stop(&c->rec.ld_alarm);
+        timeouts_del(c->w->data, &c->rec.ld_alarm);
         return;
     }
 
 #ifdef DEBUG_TIMERS
     type = "PTO";
 #endif
-    ev_tstamp to = (ev_tstamp)c->rec.cur.srtt +
-                   MAX(4 * (ev_tstamp)c->rec.cur.rttvar, kGranularity) +
-                   (ev_tstamp)c->tp_out.max_ack_del / MS_PER_S;
+    timeout_t to = c->rec.cur.srtt + MAX(4 * c->rec.cur.rttvar, kGranularity) +
+                   c->tp_out.max_ack_del * NS_PER_MS;
     to *= 1 << c->rec.pto_cnt;
-    c->rec.ld_alarm.repeat = (ev_tstamp)c->rec.last_sent_ack_elicit_t + to;
+    c->rec.ld_alarm_val = c->rec.last_sent_ack_elicit_t + to;
 
-set_to:
-    c->rec.ld_alarm.repeat -= ev_now();
+set_to:;
+    const uint64_t now = loop_now();
+    if (unlikely(c->rec.ld_alarm_val < now)) {
+#ifdef DEBUG_TIMERS
+        warn(WRN, "%s alarm expired %f sec ago", type,
+             ((int64_t)c->rec.ld_alarm_val - (int64_t)now) / (double)NS_PER_S);
+#endif
+        c->rec.ld_alarm_val = 0;
+    } else
+        c->rec.ld_alarm_val -= now;
 
 #ifdef DEBUG_TIMERS
-    warn(DBG, "%s alarm in %f sec on %s conn %s", type, c->rec.ld_alarm.repeat,
-         conn_type(c), cid2str(c->scid));
+    warn(DBG, "%s alarm in %f sec on %s conn %s", type,
+         c->rec.ld_alarm_val / (double)NS_PER_S, conn_type(c),
+         cid2str(c->scid));
 #endif
-    if (c->rec.ld_alarm.repeat <= 0)
-        ev_feed_event(&c->rec.ld_alarm, true);
-    else
-        ev_timer_again(&c->rec.ld_alarm);
+    timeouts_add(c->w->data, &c->rec.ld_alarm,
+                 c->rec.ld_alarm_val <= 0 ? 0 : c->rec.ld_alarm_val);
 }
 
 
-void congestion_event(struct q_conn * const c, const tm_t sent_t)
+void congestion_event(struct q_conn * const c, const uint64_t sent_t)
 {
     // see CongestionEvent() pseudo code
 
     if (in_cong_recovery(c, sent_t))
         return;
 
-    c->rec.rec_start_t = (tm_t)ev_now();
+    c->rec.rec_start_t = loop_now();
     c->rec.cur.cwnd /= kLossReductionDivisor;
     c->rec.cur.ssthresh = c->rec.cur.cwnd =
         MAX(c->rec.cur.cwnd, kMinimumWindow);
@@ -247,10 +255,10 @@ in_persistent_cong(struct pn_space * const pn __attribute__((unused)),
     // struct q_conn * const c = pn->c;
 
     // // see InPersistentCongestion() pseudo code
-    // const tm_t cong_period =
+    // const uint64_t cong_period =
     //     kPersistentCongestionThreshold *
     //     (c->rec.cur.srtt + MAX(4 * c->rec.cur.rttvar, kGranularity) +
-    //      (tm_t)c->tp_out.max_ack_del / MS_PER_S);
+    //      c->tp_out.max_ack_del * NS_PER_MS);
 
     // const struct ival * const i = diet_find(&pn->lost, lg_lost);
     // warn(DBG,
@@ -282,7 +290,7 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
 
     // rest of function is not from pseudo code
 
-    diet_insert(&pn->acked_or_lost, m->hdr.nr, (tm_t)NAN);
+    diet_insert(&pn->acked_or_lost, m->hdr.nr, 0);
 
     if (is_lost) {
         // if we lost connection or stream control frames, possibly RTX them
@@ -348,18 +356,17 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
     pn->loss_t = 0;
 
     // Minimum time of kGranularity before packets are deemed lost.
-    const tm_t loss_del =
-        MAX(kGranularity,
-            kTimeThreshold * MAX(c->rec.cur.latest_rtt, c->rec.cur.srtt));
+    const uint64_t loss_del =
+        MAX(kGranularity, 9 * MAX(c->rec.cur.latest_rtt, c->rec.cur.srtt) / 8);
 
     // Packets sent before this time are deemed lost.
-    const tm_t lost_send_t = (tm_t)ev_now() - loss_del;
+    const uint64_t lost_send_t = loop_now() - loss_del;
 
 #if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG))
     struct diet lost = diet_initializer(lost);
 #endif
     uint_t lg_lost = UINT_T_MAX;
-    tm_t lg_lost_tx_t = 0;
+    uint64_t lg_lost_tx_t = 0;
     bool in_flight_lost = false;
     struct pkt_meta * m;
     kh_foreach_value(&pn->sent_pkts, m, {
@@ -386,7 +393,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
                 lg_lost_tx_t = m->t;
             }
         } else {
-            if (unlikely(is_zero(pn->loss_t)))
+            if (unlikely(!pn->loss_t))
                 pn->loss_t = m->t + loss_del;
             else
                 pn->loss_t = MIN(pn->loss_t, m->t + loss_del);
@@ -394,7 +401,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
 
         // OnPacketsLost
         if (m->lost) {
-            DEBUG_diet_insert(&lost, m->hdr.nr, (tm_t)NAN);
+            DEBUG_diet_insert(&lost, m->hdr.nr, 0);
             on_pkt_lost(m, true);
             if (m->strm == 0 || m->has_rtx)
                 free_iov(w_iov(c->w, pm_idx(m)), m);
@@ -440,16 +447,14 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
 }
 
 
-static void __attribute__((nonnull))
-on_ld_timeout(ev_timer * const w, int direct)
+static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
 {
-    struct q_conn * const c = w->data;
-    ev_timer_stop(&c->rec.ld_alarm);
+    // timeouts_del(c->w->data, &c->rec.ld_alarm);
 
     // see OnLossDetectionTimeout pseudo code
     struct pn_space * const pn = earliest_loss_t_pn(c);
 
-    if (pn && !is_zero(pn->loss_t)) {
+    if (pn && pn->loss_t) {
 #ifdef DEBUG_TIMERS
         warn(DBG, "%s TT alarm on %s conn %s", pn_type_str(pn->type),
              conn_type(c), cid2str(c->scid));
@@ -470,7 +475,8 @@ on_ld_timeout(ev_timer * const w, int direct)
             c->sockopt.enable_ecn = false;
             w_set_sockopt(c->sock, &c->sockopt);
         }
-        ev_feed_event(&c->tx_w, 0);
+        c->tx_limit = 0;
+        timeouts_add(c->w->data, &c->tx_w, 0);
         c->i.pto_cnt++;
 
     } else if (have_keys(c, pn_data) == false) {
@@ -480,7 +486,8 @@ on_ld_timeout(ev_timer * const w, int direct)
 #endif
 
         // XXX this doesn't quite implement the pseudo code
-        ev_feed_event(&c->tx_w, 1);
+        c->tx_limit = 1;
+        timeouts_add(c->w->data, &c->tx_w, 0);
         c->rec.crypto_cnt++;
 
     } else {
@@ -490,10 +497,11 @@ on_ld_timeout(ev_timer * const w, int direct)
 #endif
         c->rec.pto_cnt++;
         c->i.pto_cnt++;
-        ev_feed_event(&c->tx_w, 2);
+        c->tx_limit = 2;
+        timeouts_add(c->w->data, &c->tx_w, 0);
     }
 
-    if (!direct)
+    if (timeout_expired(&c->rec.ld_alarm))
     set_timer:
         set_ld_timer(c);
 }
@@ -537,7 +545,7 @@ void on_pkt_sent(struct pkt_meta * const m)
 
     // see OnPacketSent() pseudo code
 
-    const tm_t now = (tm_t)ev_now();
+    const uint64_t now = loop_now();
     pm_by_nr_ins(&m->pn->sent_pkts, m);
     // nr is set in enc_pkt()
     m->t = now;
@@ -563,25 +571,32 @@ void on_pkt_sent(struct pkt_meta * const m)
 
 
 static void __attribute__((nonnull))
-update_rtt(struct q_conn * const c, tm_t ack_del)
+update_rtt(struct q_conn * const c, uint_t ack_del)
 {
     // see UpdateRtt() pseudo code
-    if (unlikely(is_zero(c->rec.cur.srtt))) {
+    if (unlikely(c->rec.cur.srtt == 0)) {
         c->rec.cur.min_rtt = c->rec.cur.srtt = c->rec.cur.latest_rtt;
         c->rec.cur.rttvar = c->rec.cur.latest_rtt / 2;
         return;
     }
 
     c->rec.cur.min_rtt = MIN(c->rec.cur.min_rtt, c->rec.cur.latest_rtt);
-    ack_del = MIN(ack_del, (tm_t)c->tp_out.max_ack_del / MS_PER_S);
+    ack_del = MIN(ack_del, c->tp_out.max_ack_del) * NS_PER_MS;
 
-    const tm_t adj_rtt = c->rec.cur.latest_rtt > c->rec.cur.min_rtt + ack_del
-                             ? c->rec.cur.latest_rtt - ack_del
-                             : c->rec.cur.latest_rtt;
+    const uint_t adj_rtt = c->rec.cur.latest_rtt > c->rec.cur.min_rtt + ack_del
+                               ? c->rec.cur.latest_rtt - ack_del
+                               : c->rec.cur.latest_rtt;
 
-    c->rec.cur.rttvar = TM_T(.75) * c->rec.cur.rttvar +
-                        TM_T(.25) * TM_T_ABS(c->rec.cur.srtt - adj_rtt);
-    c->rec.cur.srtt = TM_T(.875) * c->rec.cur.srtt + TM_T(.125) * adj_rtt;
+    c->rec.cur.rttvar = 3 * c->rec.cur.rttvar / 4 +
+                        (uint_t)
+#ifdef HAVE_64BIT
+                                llabs
+#else
+                                labs
+#endif
+                            ((dint_t)c->rec.cur.srtt - (dint_t)adj_rtt) /
+                            4;
+    c->rec.cur.srtt = (7 * c->rec.cur.srtt / 8) + adj_rtt / 8;
 }
 
 
@@ -595,9 +610,8 @@ void on_ack_received_1(struct pkt_meta * const lg_ack, const uint_t ack_del)
                        : MAX(pn->lg_acked, lg_ack->hdr.nr);
 
     if (is_ack_eliciting(&lg_ack->pn->tx_frames)) {
-        c->rec.cur.latest_rtt = (tm_t)ev_now() - lg_ack->t;
-        update_rtt(
-            c, likely(pn->type == pn_data) ? (tm_t)ack_del / US_PER_S : 0);
+        c->rec.cur.latest_rtt = loop_now() - lg_ack->t;
+        update_rtt(c, likely(pn->type == pn_data) ? ack_del : 0);
     }
 
     // ProcessECN() is done in dec_ack_frame()
@@ -641,7 +655,7 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
     struct q_conn * const c = pn->c;
     if (m->in_flight && m->lost == false)
         on_pkt_acked_cc(m);
-    diet_insert(&pn->acked_or_lost, m->hdr.nr, (tm_t)NAN);
+    diet_insert(&pn->acked_or_lost, m->hdr.nr, 0);
     pm_by_nr_del(&pn->sent_pkts, m);
 
     // rest of function is not from pseudo code
@@ -717,13 +731,12 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
 
 void init_rec(struct q_conn * const c)
 {
-    if (ev_is_active(&c->rec.ld_alarm))
-        ev_timer_stop(&c->rec.ld_alarm);
+    if (timeout_pending(&c->rec.ld_alarm))
+        timeouts_del(c->w->data, &c->rec.ld_alarm);
 
     c->rec.cur = (struct cc_state){
-        .cwnd = kInitialWindow, .ssthresh = UINT_T_MAX, .min_rtt = TM_T_HUGE};
+        .cwnd = kInitialWindow, .ssthresh = UINT_T_MAX, .min_rtt = UINT_T_MAX};
     c->rec.prev = c->rec.cur;
 
-    c->rec.ld_alarm.data = c;
-    ev_init(&c->rec.ld_alarm, on_ld_timeout);
+    timeout_setcb(&c->rec.ld_alarm, on_ld_timeout, c);
 }

@@ -28,7 +28,6 @@
 #ifndef NO_QLOG
 
 #include <inttypes.h>
-#include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -36,11 +35,9 @@
 #include <quant/quant.h>
 #include <warpcore/warpcore.h>
 
-// IWYU pragma: no_include "../deps/libev/ev.h"
-
 #include "bitset.h"
-#include "event.h" // IWYU pragma: keep
 #include "frame.h"
+#include "loop.h"
 #include "marshall.h"
 #include "pkt.h"
 #include "qlog.h"
@@ -49,9 +46,11 @@
 #include "stream.h"
 
 
+FILE * qlog = 0;
+
 static bool prev_event = false;
 
-static ev_tstamp qlog_ref_t = -HUGE_VAL;
+static uint64_t qlog_ref_t = 0;
 
 
 static const char * __attribute__((const, nonnull))
@@ -79,28 +78,28 @@ qlog_pkt_type_str(const uint8_t flags, const void * const vers)
 }
 
 
-static uint64_t __attribute__((const)) to_usec(const ev_tstamp t)
+static uint64_t __attribute__((const)) to_usec(const uint64_t t)
 {
-    return (uint64_t)(t * US_PER_S);
+    return t / NS_PER_US;
 }
 
 
 static bool qlog_common()
 {
-    if (qlog_ref_t < 0)
+    if (qlog_ref_t == 0)
         return false;
 
     fprintf(qlog, "%s[%" PRIu64, likely(prev_event) ? "," : "",
-            to_usec(ev_now() - qlog_ref_t));
+            to_usec(loop_now() - qlog_ref_t));
 
     return true;
 }
 
 
-void qlog_init()
+void qlog_init(void)
 {
-    if (qlog && qlog_ref_t < 0) {
-        qlog_ref_t = ev_now();
+    if (qlog && qlog_ref_t == 0) {
+        qlog_ref_t = loop_now();
         fprintf(
             qlog,
             "{"
@@ -116,7 +115,7 @@ void qlog_init()
 }
 
 
-void qlog_close()
+void qlog_close(void)
 {
     if (qlog) {
         fputs("]}]}", qlog);
@@ -229,26 +228,22 @@ void qlog_recovery(const qlog_rec_evt_t evt,
         c->rec.cur.ssthresh != c->rec.prev.ssthresh)
         prev_metric = fprintf(qlog, "%s\"ssthresh\":%" PRIu,
                               prev_metric ? "," : "", c->rec.cur.ssthresh);
-    if (TM_T_ABS(c->rec.cur.srtt - c->rec.prev.srtt) < TM_T(1.) / US_PER_S)
-        prev_metric =
-            fprintf(qlog, "%s\"smoothed_rtt\":%" PRIu64, prev_metric ? "," : "",
-                    to_usec((double)c->rec.cur.srtt));
-    if (c->rec.cur.min_rtt < TM_T_HUGE &&
-        TM_T_ABS(c->rec.cur.min_rtt - c->rec.prev.min_rtt) <
-            TM_T(1.) / US_PER_S)
+    if (c->rec.cur.srtt != c->rec.prev.srtt)
+        prev_metric = fprintf(qlog, "%s\"smoothed_rtt\":%" PRIu64,
+                              prev_metric ? "," : "", to_usec(c->rec.cur.srtt));
+    if (c->rec.cur.min_rtt < UINT_T_MAX &&
+        c->rec.cur.min_rtt != c->rec.prev.min_rtt)
         prev_metric =
             fprintf(qlog, "%s\"min_rtt\":%" PRIu64, prev_metric ? "," : "",
-                    to_usec((double)c->rec.cur.min_rtt));
-    if (TM_T_ABS(c->rec.cur.latest_rtt - c->rec.prev.latest_rtt) <
-        TM_T(1.) / US_PER_S)
+                    to_usec(c->rec.cur.min_rtt));
+    if (c->rec.cur.latest_rtt != c->rec.prev.latest_rtt)
         prev_metric =
             fprintf(qlog, "%s\"latest_rtt\":%" PRIu64, prev_metric ? "," : "",
-                    to_usec((double)c->rec.cur.latest_rtt));
-    if (TM_T_ABS(c->rec.cur.rttvar - c->rec.prev.rttvar) <
-        TM_T(1.) / US_PER_S)
+                    to_usec(c->rec.cur.latest_rtt));
+    if (c->rec.cur.rttvar != c->rec.prev.rttvar)
         // prev_metric =
         fprintf(qlog, "%s\"rtt_variance\":%" PRIu64, prev_metric ? "," : "",
-                to_usec((double)c->rec.cur.rttvar));
+                to_usec(c->rec.cur.rttvar));
     fputs("}]", qlog);
 
     prev_event = true;

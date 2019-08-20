@@ -44,14 +44,12 @@
 #ifndef NO_MIGRATION
 #include <quant/quant.h>
 #endif
+#include <timeout.h>
 #include <warpcore/warpcore.h>
-
-// IWYU pragma: no_include "../deps/libev/ev.h"
 
 #include "bitset.h"
 #include "conn.h"
 #include "diet.h"
-#include "event.h" // IWYU pragma: keep
 #include "frame.h"
 #include "marshall.h"
 #include "pkt.h"
@@ -466,7 +464,7 @@ bool enc_pkt(struct q_stream * const s,
         if (enc_data == false || diet_cnt(&pn->recv) <= 8)
             enc_ack_frame(&pos, v->buf, end, m, pn);
         else
-            ev_feed_event(&c->ack_alarm, 0);
+            timeouts_add(c->w->data, &c->ack_alarm, 0);
     }
 
     if (unlikely(c->state == conn_clsg))

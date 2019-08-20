@@ -10,3 +10,6 @@
 [submodule "lib/deps/libev"]
         path = lib/deps/libev
         url = https://salsa.debian.org/debian/libev.git
+[submodule "lib/deps/timeout"]
+	path = lib/deps/timeout
+	url = https://github.com/wahern/timeout.git

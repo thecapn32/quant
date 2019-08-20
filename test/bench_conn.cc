@@ -153,7 +153,7 @@ int main(int argc __attribute__((unused)), char ** argv)
     ensure(cc, "is zero");
 
     // accept connection
-    sc = q_accept(nullptr);
+    sc = q_accept(w, nullptr);
     ensure(sc, "is zero");
 
     benchmark::RunSpecifiedBenchmarks();

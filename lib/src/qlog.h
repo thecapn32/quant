@@ -28,22 +28,22 @@
 #pragma once
 
 #ifndef NO_QLOG
+#include <stdio.h>
 
 #include <warpcore/warpcore.h>
 
-// IWYU pragma: no_include "../deps/libev/ev.h"
-
 #include "conn.h"
-#include "event.h" // IWYU pragma: keep
 #include "quic.h"
+
+
+typedef enum { pkt_tx, pkt_rx, pkt_dp } qlog_pkt_evt_t;
+
+extern FILE * qlog;
 
 
 extern void qlog_init(void);
 
 extern void qlog_close(void);
-
-
-typedef enum { pkt_tx, pkt_rx, pkt_dp } qlog_pkt_evt_t;
 
 extern void __attribute__((nonnull))
 qlog_transport(const qlog_pkt_evt_t evt,

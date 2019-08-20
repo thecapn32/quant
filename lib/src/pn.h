@@ -31,10 +31,7 @@
 
 #include <quant/quant.h>
 
-// IWYU pragma: no_include "../deps/libev/ev.h"
-
 #include "diet.h"
-#include "event.h" // IWYU pragma: keep
 #include "frame.h"
 #include "quic.h"
 #include "tls.h"
@@ -105,7 +102,7 @@ struct pn_space {
     uint_t ect1_cnt;
     uint_t ce_cnt;
 
-    tm_t loss_t; // loss_time
+    uint64_t loss_t; // loss_time
 
     pn_t type;
 

@@ -27,7 +27,6 @@
 
 #pragma once
 
-#include <math.h>
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -37,12 +36,10 @@
 #include <sys/types.h>
 
 #include <quant/quant.h>
-
-// IWYU pragma: no_include "../deps/libev/ev.h"
+#include <timeout.h>
 
 #include "diet.h"
-#include "event.h" // IWYU pragma: keep
-#include "pn.h"    // IWYU pragma: keep
+#include "pn.h" // IWYU pragma: keep
 #include "quic.h"
 #include "recovery.h"
 #include "tls.h"
@@ -200,18 +197,17 @@ struct q_conn {
 
     struct w_engine * w; ///< Underlying warpcore engine.
 
-    ev_io rx_w; ///< RX watcher.
-    ev_io tx_w; ///< TX watcher.
+    struct timeout tx_w; ///< TX watcher.
 
     uint32_t vers;         ///< QUIC version in use for this connection.
     uint32_t vers_initial; ///< QUIC version first negotiated.
 
     struct pn_space pns[pn_data + 1];
 
-    ev_timer idle_alarm;
-    ev_timer closing_alarm;
-    ev_timer key_flip_alarm;
-    ev_timer ack_alarm;
+    struct timeout idle_alarm;
+    struct timeout closing_alarm;
+    struct timeout key_flip_alarm;
+    struct timeout ack_alarm;
 
     struct sockaddr_storage peer;      ///< Address of our peer.
     struct sockaddr_storage migr_peer; ///< Peer's desired migration address.
@@ -272,10 +268,9 @@ struct q_conn {
     uint16_t tok_len;
     uint8_t tok[MAX_TOK_LEN]; // some stacks send ungodly large tokens
 
-#ifdef HAVE_64BIT
-    uint8_t _unused2[4];
-#else
-#endif
+    uint32_t tx_limit;
+
+    timeout_t tls_key_update_frequency;
 };
 
 
@@ -310,7 +305,7 @@ cid2str_impl(const struct cid * const id,
              const size_t len_dst);
 
 
-extern void __attribute__((nonnull)) tx(ev_io * const w, int param);
+extern void __attribute__((nonnull)) tx(struct q_conn * const c);
 
 
 #ifdef NO_ERR_REASONS
@@ -370,12 +365,15 @@ get_conn_by_srt(uint8_t * const srt);
 extern void __attribute__((nonnull))
 conns_by_srt_ins(struct q_conn * const c, uint8_t * const srt);
 
-extern void __attribute__((nonnull)) rx(ev_io * const rx_w, int _e);
+extern void __attribute__((nonnull)) rx(struct w_sock * const ws);
 
 extern void __attribute__((nonnull))
 conn_info_populate(struct q_conn * const c);
 
 extern void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c);
+
+extern void __attribute__((nonnull))
+restart_idle_alarm(struct q_conn * const c);
 
 #ifdef FUZZING
 extern void __attribute__((nonnull)) rx_pkts(struct w_iov_sq * const x,
@@ -436,12 +434,6 @@ static inline __attribute__((nonnull)) const char *
 conn_type(const struct q_conn * const c)
 {
     return c->is_clnt ? "clnt" : "serv";
-}
-
-
-static inline __attribute__((const)) bool is_zero(const tm_t t)
-{
-    return fpclassify(t) == FP_ZERO;
 }
 
 

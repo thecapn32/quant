@@ -31,7 +31,6 @@
 extern "C" {
 #endif
 
-#include <math.h>
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -40,18 +39,6 @@ extern "C" {
 #include <quant/tree.h>        // IWYU pragma: export
 #include <warpcore/warpcore.h> // IWYU pragma: export
 
-#ifdef HAVE_64BIT
-typedef double tm_t;
-#define TM_T(x) x
-#define TM_T_HUGE HUGE_VAL
-#define TM_T_ABS fabs
-#else
-typedef float tm_t;
-// cppcheck-suppress preprocessorErrorDirective
-#define TM_T(x) x##f
-#define TM_T_HUGE HUGE_VALF
-#define TM_T_ABS fabsf
-#endif
 
 struct w_iov_sq;
 struct q_stream;
@@ -90,8 +77,8 @@ struct q_conn_info {
     uint_t pkts_out_lost;
     uint_t pkts_out_rtx;
 
-    tm_t rtt;
-    tm_t rttvar;
+    float rtt;
+    float rttvar;
     uint_t cwnd;
     uint_t ssthresh;
     uint_t pto_cnt;
@@ -120,7 +107,8 @@ extern void __attribute__((nonnull(1))) q_close(struct q_conn * const c,
 extern struct q_conn * __attribute__((nonnull))
 q_bind(struct w_engine * const w, const uint16_t port);
 
-extern struct q_conn * q_accept(const struct q_conn_conf * const conf);
+extern struct q_conn * q_accept(struct w_engine * const w,
+                                const struct q_conn_conf * const conf);
 
 extern bool __attribute__((nonnull))
 q_write(struct q_stream * const s, struct w_iov_sq * const q, const bool fin);
@@ -177,7 +165,9 @@ extern bool __attribute__((nonnull)) q_read_stream(struct q_stream * const s,
                                                    struct w_iov_sq * const q,
                                                    const bool all);
 
-extern bool q_ready(const uint_t timeout, struct q_conn ** const ready);
+extern bool q_ready(struct w_engine * const w,
+                    const uint64_t nsec,
+                    struct q_conn ** const ready);
 
 extern bool __attribute__((nonnull))
 q_is_new_serv_conn(const struct q_conn * const c);
@@ -192,27 +182,6 @@ q_rebind_sock(struct q_conn * const c, const bool use_new_dcid);
 
 extern void __attribute__((nonnull))
 q_info(struct q_conn * const c, struct q_conn_info * const ci);
-
-
-#define bps(bytes, secs)                                                       \
-    __extension__({                                                            \
-        static char _str[32];                                                  \
-        const tm_t _bps =                                                      \
-            (bytes) && (fpclassify(secs) != FP_ZERO) ? (bytes)*8 / (secs) : 0; \
-        if (_bps > NS_PER_S)                                              \
-            snprintf(_str, sizeof(_str), "%.3f Gb/s", _bps / NS_PER_S);   \
-        else if (_bps > US_PER_S)                                         \
-            snprintf(_str, sizeof(_str), "%.3f Mb/s", _bps / US_PER_S);   \
-        else if (_bps > MS_PER_S)                                         \
-            snprintf(_str, sizeof(_str), "%.3f Kb/s", _bps / MS_PER_S);   \
-        else                                                                   \
-            snprintf(_str, sizeof(_str), "%.3f b/s", _bps);                    \
-        _str;                                                                  \
-    })
-
-
-#define timespec_to_tm_t(diff)                                                 \
-    ((tm_t)(diff).tv_sec + (tm_t)(diff).tv_nsec / NS_PER_S)
 
 #ifdef __cplusplus
 }

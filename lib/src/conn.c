@@ -48,14 +48,13 @@
 
 #include <picotls.h> // IWYU pragma: keep
 #include <quant/quant.h>
-
-// IWYU pragma: no_include "../deps/libev/ev.h"
+#include <timeout.h>
 
 #include "bitset.h"
 #include "conn.h"
 #include "diet.h"
-#include "event.h" // IWYU pragma: keep
 #include "frame.h"
+#include "loop.h"
 #include "marshall.h"
 #include "pkt.h"
 #include "pn.h"
@@ -274,7 +273,7 @@ static void __attribute__((nonnull)) log_sent_pkts(struct q_conn * const c)
         struct diet unacked = diet_initializer(unacked);
         struct pkt_meta * m;
         kh_foreach_value(&pn->sent_pkts, m,
-                         diet_insert(&unacked, m->hdr.nr, (tm_t)NAN));
+                         diet_insert(&unacked, m->hdr.nr, 0));
 
         char buf[512];
         int pos = 0;
@@ -412,6 +411,19 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
 }
 
 
+static void __attribute__((nonnull))
+restart_key_flip_alarm(struct q_conn * const c)
+{
+    const timeout_t t = c->tls_key_update_frequency * NS_PER_S;
+
+#ifdef DEBUG_TIMERS
+    warn(DBG, "next key flip alarm in %f sec", t / (double)NS_PER_S);
+#endif
+
+    timeouts_add(c->w->data, &c->key_flip_alarm, t);
+}
+
+
 void do_conn_fc(struct q_conn * const c, const uint16_t len)
 {
     if (unlikely(c->state == conn_clsg || c->state == conn_drng))
@@ -451,7 +463,7 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
                 use_next_dcid(c);
                 // don't migrate again for a while
                 c->do_migration = false;
-                ev_timer_again(&c->key_flip_alarm);
+                restart_key_flip_alarm(c);
             }
         }
         // send new CIDs if the peer doesn't have sufficient remaining
@@ -461,8 +473,7 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
 }
 
 
-static bool __attribute__((nonnull))
-tx_stream(struct q_stream * const s, const uint32_t limit)
+static bool __attribute__((nonnull)) tx_stream(struct q_stream * const s)
 {
     struct q_conn * const c = s->c;
 
@@ -475,7 +486,7 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
          ", fully_acked=%u, "
          "limit=%" PRIu32,
          conn_type(c), s->id, sq_len(&s->out), has_data, needs_ctrl(s),
-         s->blocked, s->lost_cnt, out_fully_acked(s), limit);
+         s->blocked, s->lost_cnt, out_fully_acked(s), c->tx_limit);
 #endif
 
     // check if we should skip TX on this stream
@@ -498,7 +509,7 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
     struct w_iov * v = s->out_una;
     sq_foreach_from (v, &s->out, next) {
         struct pkt_meta * const m = &meta(v);
-        if (unlikely(has_wnd(c, v->len) == false && limit == 0)) {
+        if (unlikely(has_wnd(c, v->len) == false && c->tx_limit == 0)) {
             c->no_wnd = true;
             break;
         }
@@ -510,7 +521,7 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
             continue;
         }
 
-        if (limit == 0 && m->txed && m->lost == false) {
+        if (c->tx_limit == 0 && m->txed && m->lost == false) {
 #ifdef DEBUG_EXTRA
             warn(INF, "skip non-lost TX'ed pkt " FMT_PNR_OUT, m->hdr.nr);
 #endif
@@ -522,26 +533,27 @@ tx_stream(struct q_stream * const s, const uint32_t limit)
             do_conn_fc(c, v->len);
         }
 
-        const bool do_rtx = m->lost || (limit && m->txed);
+        const bool do_rtx = m->lost || (c->tx_limit && m->txed);
         if (unlikely(do_rtx))
             rtx_pkt(v, m);
 
-        if (unlikely(enc_pkt(s, do_rtx, true, limit > 0, v, m) == false))
+        if (unlikely(enc_pkt(s, do_rtx, true, c->tx_limit > 0, v, m) == false))
             continue;
         encoded++;
 
         if (unlikely(s->blocked || c->blocked))
             break;
 
-        if (unlikely(limit && encoded == limit)) {
+        if (unlikely(c->tx_limit && encoded == c->tx_limit)) {
 #ifdef DEBUG_STREAMS
-            warn(INF, "tx limit %" PRIu32 " reached", limit);
+            warn(INF, "tx limit %" PRIu32 " reached", c->tx_limit);
 #endif
             break;
         }
     }
 
-    return (unlikely(limit) && encoded == limit) || c->no_wnd == false;
+    return (unlikely(c->tx_limit) && encoded == c->tx_limit) ||
+           c->no_wnd == false;
 }
 
 
@@ -558,10 +570,9 @@ tx_ack(struct q_conn * const c, const epoch_t e, const bool tx_ack_eliciting)
 }
 
 
-void tx(ev_io * const w, int param)
+void tx(struct q_conn * const c)
 {
-    struct q_conn * const c = w->data;
-    const uint32_t limit = (uint32_t)param;
+    timeouts_del(c->w->data, &c->tx_w);
 
     if (unlikely(c->state == conn_drng))
         return;
@@ -591,21 +602,22 @@ void tx(ev_io * const w, int param)
         for (epoch_t e = ep_init; e <= ep_data; e++) {
             if (c->cstrms[e] == 0)
                 continue;
-            if (tx_stream(c->cstrms[e], limit) == false)
+            if (tx_stream(c->cstrms[e]) == false)
                 goto done;
         }
 
     struct q_stream * s;
     kh_foreach_value(&c->strms_by_id, s, {
-        if (tx_stream(s, limit) == false)
+        if (tx_stream(s) == false)
             break;
     });
 
 done:;
-    // make sure we sent enough packets when we're called with a limit
+    // make sure we sent enough packets when we have a TX limit
     uint_t sent = sq_len(&c->txq);
-    while ((unlikely(limit) && sent < limit) || (c->needs_tx && sent == 0)) {
-        if (likely(tx_ack(c, ep_data, limit && sent < limit)))
+    while ((unlikely(c->tx_limit) && sent < c->tx_limit) ||
+           (c->needs_tx && sent == 0)) {
+        if (likely(tx_ack(c, ep_data, c->tx_limit && sent < c->tx_limit)))
             sent++;
         else {
             warn(WRN, "no ACK sent");
@@ -1164,7 +1176,7 @@ rx_pkts(struct w_iov_sq * const x,
         v->addr = xv->addr;
         v->flags = xv->flags;
         v->len = xv->len; // this is just so that log_pkt can show the rx len
-        m->t = (tm_t)ev_now();
+        m->t = loop_now();
 
         bool pkt_valid = false;
         const bool is_clnt = w_connected(ws);
@@ -1431,7 +1443,7 @@ rx_pkts(struct w_iov_sq * const x,
             if (likely(has_pkt_nr(m->hdr.flags, m->hdr.vers))) {
                 struct pn_space * const pn = pn_for_pkt_type(c, m->hdr.type);
                 diet_insert(&pn->recv, m->hdr.nr, m->t);
-                diet_insert(&pn->recv_all, m->hdr.nr, (tm_t)NAN);
+                diet_insert(&pn->recv_all, m->hdr.nr, 0);
             }
             pkt_valid = true;
 
@@ -1471,11 +1483,33 @@ rx_pkts(struct w_iov_sq * const x,
 }
 
 
-void rx(ev_io * const rx_w, int _e __attribute__((unused)))
+void restart_idle_alarm(struct q_conn * const c)
 {
-    // read from NIC
-    struct w_sock * const ws = rx_w->data;
-    w_nic_rx(w_engine(ws), 0);
+    const timeout_t t =
+        MAX(c->tp_in.idle_to * NS_PER_MS, 3 * c->rec.ld_alarm_val);
+
+#ifdef DEBUG_TIMERS
+    warn(DBG, "next idle alarm in %f sec %" PRIu64, t / (double)NS_PER_S, t);
+#endif
+
+    timeouts_add(c->w->data, &c->idle_alarm, t);
+}
+
+
+static void __attribute__((nonnull)) restart_ack_alarm(struct q_conn * const c)
+{
+    const timeout_t t = c->tp_out.max_ack_del * NS_PER_MS;
+
+#ifdef DEBUG_TIMERS
+    warn(DBG, "next ACK alarm in %f sec", t / (double)NS_PER_S);
+#endif
+
+    timeouts_add(c->w->data, &c->ack_alarm, t);
+}
+
+
+void rx(struct w_sock * const ws)
+{
     struct w_iov_sq x = w_iov_sq_initializer(x);
     struct q_conn_sl crx = sl_head_initializer(crx);
     w_rx(ws, &x);
@@ -1494,19 +1528,14 @@ void rx(ev_io * const rx_w, int _e __attribute__((unused)))
 
         // reset idle timeout
         if (likely(c->pns[pn_data].data.out_kyph ==
-                   c->pns[pn_data].data.in_kyph)) {
-            c->idle_alarm.repeat =
-                MAX((ev_tstamp)c->tp_in.idle_to / MS_PER_S,
-                    3 * c->rec.ld_alarm.repeat);
-#ifdef DEBUG_TIMERS
-            warn(DBG, "next idle alarm in %f sec", c->idle_alarm.repeat);
-#endif
-            ev_timer_again(&c->idle_alarm);
-        }
+                   c->pns[pn_data].data.in_kyph))
+            restart_idle_alarm(c);
 
         // is a TX needed for this connection?
-        if (c->needs_tx)
-            ev_invoke(&c->tx_w, 0); // clears c->needs_tx if we TX'ed
+        if (c->needs_tx) {
+            c->tx_limit = 0;
+            tx(c); // clears c->needs_tx if we TX'ed
+        }
 
         for (epoch_t e = c->min_rx_epoch; e <= ep_data; e++) {
             if (c->cstrms[e] == 0 || e == ep_0rtt)
@@ -1521,7 +1550,7 @@ void rx(ev_io * const rx_w, int _e __attribute__((unused)))
                 break;
             case del_ack:
                 if (likely(c->state != conn_clsg))
-                    ev_timer_again(&c->ack_alarm);
+                    restart_ack_alarm(c);
                 break;
             case no_ack:
             case grat_ack:
@@ -1592,10 +1621,8 @@ err_close_noreason
 }
 
 
-static void __attribute__((nonnull))
-key_flip(ev_timer * const w, int e __attribute__((unused)))
+static void __attribute__((nonnull)) key_flip(struct q_conn * const c)
 {
-    struct q_conn * const c = w->data;
     c->do_key_flip = c->key_flips_enabled;
 #ifndef NO_MIGRATION
     // XXX we borrow the key flip timer for this
@@ -1606,17 +1633,16 @@ key_flip(ev_timer * const w, int e __attribute__((unused)))
 
 static void __attribute__((nonnull)) stop_all_alarms(struct q_conn * const c)
 {
-    ev_timer_stop(&c->rec.ld_alarm);
-    ev_timer_stop(&c->idle_alarm);
-    ev_timer_stop(&c->key_flip_alarm);
-    ev_timer_stop(&c->ack_alarm);
+    timeouts_del(c->w->data, &c->rec.ld_alarm);
+    timeouts_del(c->w->data, &c->idle_alarm);
+    timeouts_del(c->w->data, &c->key_flip_alarm);
+    timeouts_del(c->w->data, &c->ack_alarm);
+    timeouts_del(c->w->data, &c->closing_alarm);
 }
 
 
-static void __attribute__((nonnull))
-enter_closed(ev_timer * const w, int e __attribute__((unused)))
+static void __attribute__((nonnull)) enter_closed(struct q_conn * const c)
 {
-    struct q_conn * const c = w->data;
     conn_to_state(c, conn_clsd);
     stop_all_alarms(c);
 
@@ -1627,7 +1653,6 @@ enter_closed(ev_timer * const w, int e __attribute__((unused)))
 
     // terminate whatever API call is currently active
     maybe_api_return(c, 0);
-    // maybe_api_return(q_accept, 0, 0);
     maybe_api_return(q_ready, 0, 0);
 }
 
@@ -1643,41 +1668,37 @@ void enter_closing(struct q_conn * const c)
     if ((c->state == conn_idle || c->state == conn_opng) && c->err_code == 0) {
 #endif
         // no need to go closing->draining in these cases
-        ev_feed_event(&c->closing_alarm, 0);
+        timeouts_add(c->w->data, &c->closing_alarm, 0);
         return;
 #ifndef FUZZING
     }
 #endif
 
-    // if we're going closing->draining, don't start the timer again
-    if (!ev_is_active(&c->closing_alarm)) {
-        // start closing/draining alarm (3 * RTO)
-        const ev_tstamp dur = (ev_tstamp)(
-            3 * (is_zero(c->rec.cur.srtt) ? kInitialRtt
-                                          : (ev_tstamp)c->rec.cur.srtt) +
-            4 * (ev_tstamp)c->rec.cur.rttvar);
-        ev_timer_init(&c->closing_alarm, enter_closed, dur, 0);
 #ifndef FUZZING
-        ev_timer_start(&c->closing_alarm);
+    // if we're going closing->draining, don't start the timer again
+    if (timeout_pending(&c->closing_alarm) == false) {
+        // start closing/draining alarm (3 * RTO)
+        const timeout_t dur =
+            3 * (c->rec.cur.srtt == 0 ? kInitialRtt : c->rec.cur.srtt) +
+            4 * c->rec.cur.rttvar;
+        timeouts_add(c->w->data, &c->closing_alarm, dur);
 #ifdef DEBUG_TIMERS
-        warn(DBG, "closing/draining alarm in %f sec on %s conn %s", dur,
-             conn_type(c), cid2str(c->scid));
-#endif
+        warn(DBG, "closing/draining alarm in %f sec on %s conn %s",
+             dur / (double)NS_PER_S, conn_type(c), cid2str(c->scid));
 #endif
     }
+#endif
 
     if (c->state != conn_drng) {
         c->needs_tx = true;
         conn_to_state(c, conn_clsg);
-        ev_feed_event(&c->tx_w, 0);
+        timeouts_add(c->w->data, &c->tx_w, 0);
     }
 }
 
 
-static void __attribute__((nonnull))
-idle_alarm(ev_timer * const w, int e __attribute__((unused)))
+static void __attribute__((nonnull)) idle_alarm(struct q_conn * const c)
 {
-    struct q_conn * const c = w->data;
 #ifdef DEBUG_TIMERS
     warn(DBG, "idle timeout on %s conn %s", conn_type(c), cid2str(c->scid));
 #endif
@@ -1685,10 +1706,8 @@ idle_alarm(ev_timer * const w, int e __attribute__((unused)))
 }
 
 
-static void __attribute__((nonnull))
-ack_alarm(ev_timer * const w, int e __attribute__((unused)))
+static void __attribute__((nonnull)) ack_alarm(struct q_conn * const c)
 {
-    struct q_conn * const c = w->data;
 #ifdef DEBUG_TIMERS
     warn(DBG, "ACK timer fired on %s conn %s", conn_type(c), cid2str(c->scid));
 #endif
@@ -1703,9 +1722,7 @@ void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
 
     // (re)set idle alarm
     c->tp_in.idle_to = get_conf(conf, idle_timeout) * MS_PER_S;
-    c->idle_alarm.repeat = (ev_tstamp)c->tp_in.idle_to / MS_PER_S;
-
-    ev_timer_again(&c->idle_alarm);
+    restart_idle_alarm(c);
 
     c->tp_in.disable_migration =
 #ifndef NO_MIGRATION
@@ -1716,8 +1733,8 @@ void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
     c->key_flips_enabled = get_conf_uncond(conf, enable_tls_key_updates);
 
     if (c->tp_out.disable_migration == false || c->key_flips_enabled) {
-        c->key_flip_alarm.repeat = get_conf(conf, tls_key_update_frequency);
-        ev_timer_again(&c->key_flip_alarm);
+        c->tls_key_update_frequency = get_conf(conf, tls_key_update_frequency);
+        restart_key_flip_alarm(c);
     }
 
     c->sockopt.enable_udp_zero_checksums =
@@ -1765,11 +1782,9 @@ struct q_conn * new_conn(struct w_engine * const w,
         c->sockopt.enable_ecn = true;
         c->sockopt.enable_udp_zero_checksums =
             get_conf_uncond(conf, enable_udp_zero_checksums);
-        c->rx_w.data = c->sock = w_bind(w, port, &c->sockopt);
+        c->sock = w_bind(w, port, &c->sockopt);
         if (unlikely(c->sock == 0))
             goto fail;
-        ev_io_init(&c->rx_w, rx, w_fd(c->sock), EV_READ);
-        ev_io_start(&c->rx_w);
         c->holds_sock = true;
     } else if (unlikely(peer == 0))
         goto fail;
@@ -1789,21 +1804,16 @@ struct q_conn * new_conn(struct w_engine * const w,
     sq_init(&c->txq);
 
     // initialize idle timeout
-    c->idle_alarm.data = c;
-    ev_init(&c->idle_alarm, idle_alarm);
+    timeout_setcb(&c->idle_alarm, idle_alarm, c);
 
     // initialize closing alarm
-    c->closing_alarm.data = c;
-    ev_init(&c->closing_alarm, enter_closed);
+    timeout_setcb(&c->closing_alarm, enter_closed, c);
 
     // initialize key flip alarm (XXX also abused for migration)
-    c->key_flip_alarm.data = c;
-    ev_init(&c->key_flip_alarm, key_flip);
+    timeout_setcb(&c->key_flip_alarm, key_flip, c);
 
     // initialize ACK timeout
-    c->ack_alarm.data = c;
-    c->ack_alarm.repeat = (ev_tstamp)c->tp_out.max_ack_del / MS_PER_S;
-    ev_init(&c->ack_alarm, ack_alarm);
+    timeout_setcb(&c->ack_alarm, ack_alarm, c);
 
     // initialize recovery state
     init_rec(c);
@@ -1811,8 +1821,8 @@ struct q_conn * new_conn(struct w_engine * const w,
         c->path_val_win = UINT_T_MAX;
 
     // start a TX watcher
-    ev_io_init(&c->tx_w, tx, w_fd(c->sock), EV_WRITE);
-    c->tx_w.data = c;
+    timeout_init(&c->tx_w, TIMEOUT_ABS);
+    timeout_setcb(&c->tx_w, tx, c);
 
     if (likely(c->is_clnt || c->holds_sock == false))
         update_conf(c, conf);
@@ -1893,11 +1903,7 @@ void free_conn(struct q_conn * const c)
     // exit any active API call on the connection
     maybe_api_return(c, 0);
 
-    ev_timer_stop(&c->rec.ld_alarm);
-    ev_timer_stop(&c->closing_alarm);
-    ev_timer_stop(&c->key_flip_alarm);
-    ev_timer_stop(&c->idle_alarm);
-    ev_timer_stop(&c->ack_alarm);
+    stop_all_alarms(c);
 
     struct q_stream * s;
     kh_foreach_value(&c->strms_by_id, s, { free_stream(s); });
@@ -1914,7 +1920,7 @@ void free_conn(struct q_conn * const c)
     for (pn_t t = pn_init; t <= pn_data; t++)
         free_pn(&c->pns[t]);
 
-    ev_io_stop(&c->tx_w);
+    timeouts_del(c->w->data, &c->tx_w);
 
     diet_free(&c->clsd_strms);
     free(c->peer_name);
@@ -1925,11 +1931,9 @@ void free_conn(struct q_conn * const c)
     kh_release(cids_by_id, &c->scids_by_id);
 #endif
 
-    if (c->holds_sock) {
+    if (c->holds_sock)
         // only close the socket for the final server connection
-        ev_io_stop(&c->rx_w);
         w_close(c->sock);
-    }
 
     if (c->in_c_ready)
         sl_remove(&c_ready, c, q_conn, node_rx_ext);

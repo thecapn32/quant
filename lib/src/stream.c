@@ -25,7 +25,6 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,11 +32,8 @@
 
 #include <quant/quant.h>
 
-// IWYU pragma: no_include "../deps/libev/ev.h"
-
 #include "conn.h"
 #include "diet.h"
-#include "event.h" // IWYU pragma: keep
 #include "pkt.h"
 #include "quic.h"
 #include "stream.h"
@@ -143,7 +139,7 @@ void free_stream(struct q_stream * const s)
         warn(DBG, "freeing strm " FMT_SID " on %s conn %s", s->id, conn_type(c),
              cid2str(c->scid));
 #endif
-        diet_insert(&c->clsd_strms, (uint_t)s->id, (ev_tstamp)NAN);
+        diet_insert(&c->clsd_strms, (uint_t)s->id, 0);
         const khiter_t k =
             kh_get(strms_by_id, &c->strms_by_id, (khint64_t)s->id);
         ensure(k != kh_end(&c->strms_by_id), "found");

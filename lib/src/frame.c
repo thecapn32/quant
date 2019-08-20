@@ -40,15 +40,14 @@
 
 #include <picotls.h> // IWYU pragma: keep
 #include <quant/quant.h>
+#include <timeout.h>
 #include <warpcore/warpcore.h>
-
-// IWYU pragma: no_include "../deps/libev/ev.h"
 
 #include "bitset.h"
 #include "conn.h"
 #include "diet.h"
-#include "event.h" // IWYU pragma: keep
 #include "frame.h"
+#include "loop.h"
 #include "marshall.h"
 #include "pkt.h"
 #include "pn.h"
@@ -503,7 +502,7 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
     const uint_t cum_ack = cum_ack_ival ? cum_ack_ival->hi : UINT_T_MAX;
 
     uint_t lg_ack = lg_ack_in_frm;
-    tm_t lg_ack_in_frm_t = 0;
+    uint64_t lg_ack_in_frm_t = 0;
     bool got_new_ack = false;
     for (uint_t n = ack_rng_cnt + 1; n > 0; n--) {
         uint_t gap = 0;
@@ -687,11 +686,11 @@ dec_close_frame(const uint8_t type,
         err_close_return(c, ERR_FRAME_ENC, type, "illegal reason len");
 
     if (c->state == conn_drng)
-        ev_feed_event(&c->closing_alarm, 0);
+        timeouts_add(c->w->data, &c->closing_alarm, 0);
     else {
         if (c->is_clnt) {
             conn_to_state(c, conn_drng);
-            ev_feed_event(&c->closing_alarm, 0);
+            timeouts_add(c->w->data, &c->closing_alarm, 0);
         } else
             enter_closing(c);
     }
@@ -1393,9 +1392,7 @@ void enc_ack_frame(uint8_t ** pos,
                            ? DEF_ACK_DEL_EXP
                            : c->tp_out.ack_del_exp;
     const uint_t ack_delay =
-        (uint_t)(((ev_now() - (ev_tstamp)diet_timestamp(first_rng)) *
-                  US_PER_S)) >>
-        ade;
+        (uint_t)((loop_now() - diet_timestamp(first_rng)) / NS_PER_MS) >> ade;
     encv(pos, end, ack_delay);
     const uint_t ack_rng_cnt = diet_cnt(&pn->recv) - 1;
     encv(pos, end, ack_rng_cnt);
@@ -1457,7 +1454,7 @@ void enc_ack_frame(uint8_t ** pos,
              pn->ect1_cnt, pn->ce_cnt ? BLU : NRM, pn->ce_cnt);
     }
 
-    ev_timer_stop(&c->ack_alarm);
+    timeouts_del(c->w->data, &c->ack_alarm);
     bit_zero(FRM_MAX, &pn->rx_frames);
     pn->pkts_rxed_since_last_ack_tx = 0;
     pn->imm_ack = false;
