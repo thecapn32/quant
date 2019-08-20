@@ -451,8 +451,6 @@ struct q_conn * q_bind(struct w_engine * const w, const uint16_t port)
 
 static void cancel_api_call(struct w_engine * const w)
 {
-    warn(CRT, "expired");
-
 #ifdef DEBUG_EXTRA
     warn(DBG, "canceling API call");
 #endif
