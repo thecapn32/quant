@@ -596,8 +596,8 @@ struct w_engine * q_init(const char * const ifname,
     timeouts_update(w->data, w_now());
     timeout_setcb(&api_alarm, cancel_api_call, w);
 
-    warn(INF, "%s/%s %s/%s ready", quant_name, w->backend_name, quant_version,
-         QUANT_COMMIT_HASH_ABBREV_STR);
+    warn(INF, "%s/%s (%s) %s/%s ready", quant_name, w->backend_name,
+         w->backend_variant, quant_version, QUANT_COMMIT_HASH_ABBREV_STR);
 #ifndef PARTICLE
     warn(INF, "submit bug reports at https://github.com/NTAP/quant/issues");
 #endif
