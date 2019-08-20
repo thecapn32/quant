@@ -23,12 +23,24 @@ endforeach()
 
 add_custom_command(
   OUTPUT
-    ${CMAKE_CURRENT_BINARY_DIR}/dummy.key
+    ${CMAKE_CURRENT_BINARY_DIR}/dummy.eckey
   COMMAND
     ${OPENSSL_ROOT_DIR}/bin/openssl
   ARGS
-    ecparam -out ${CMAKE_CURRENT_BINARY_DIR}/dummy.key
+    ecparam -out ${CMAKE_CURRENT_BINARY_DIR}/dummy.eckey
     -noout -name secp256r1 -genkey
+)
+
+add_custom_command(
+  OUTPUT
+    ${CMAKE_CURRENT_BINARY_DIR}/dummy.key
+  DEPENDS
+    ${CMAKE_CURRENT_BINARY_DIR}/dummy.eckey
+  COMMAND
+    ${OPENSSL_ROOT_DIR}/bin/openssl
+  ARGS
+    pkcs8 -topk8 -inform pem -in ${CMAKE_CURRENT_BINARY_DIR}/dummy.eckey
+    -nocrypt -out ${CMAKE_CURRENT_BINARY_DIR}/dummy.key
 )
 
 add_custom_command(
