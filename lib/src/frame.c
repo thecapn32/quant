@@ -1392,7 +1392,7 @@ void enc_ack_frame(uint8_t ** pos,
                            ? DEF_ACK_DEL_EXP
                            : c->tp_out.ack_del_exp;
     const uint_t ack_delay =
-        (uint_t)((loop_now() - diet_timestamp(first_rng)) / NS_PER_MS) >> ade;
+        NS_TO_MS(loop_now() - diet_timestamp(first_rng)) >> ade;
     encv(pos, end, ack_delay);
     const uint_t ack_rng_cnt = diet_cnt(&pn->recv) - 1;
     encv(pos, end, ack_rng_cnt);
