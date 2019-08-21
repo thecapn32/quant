@@ -579,7 +579,7 @@ void tx(struct q_conn * const c)
 
     if (unlikely(c->state == conn_qlse)) {
         enter_closing(c);
-        tx_ack(c, ep_data, false);
+        tx_ack(c, epoch_in(c), false);
         goto done;
     }
 
@@ -617,7 +617,7 @@ done:;
     uint_t sent = sq_len(&c->txq);
     while ((unlikely(c->tx_limit) && sent < c->tx_limit) ||
            (c->needs_tx && sent == 0)) {
-        if (likely(tx_ack(c, ep_data, c->tx_limit && sent < c->tx_limit)))
+        if (likely(tx_ack(c, epoch_in(c), c->tx_limit && sent < c->tx_limit)))
             sent++;
         else {
             warn(WRN, "no ACK sent");

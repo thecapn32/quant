@@ -1173,10 +1173,9 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
 
     } else if (ret != 0 && ret != PTLS_ERROR_IN_PROGRESS &&
                ret != PTLS_ERROR_STATELESS_RETRY) {
-        err_close(c, ERR_TLS(PTLS_ERROR_TO_ALERT(ret)), FRM_CRY,
-                  "picotls error %u", ret);
-        abort();
-        // return ret;
+        err_close(c, ERR_TLS(PTLS_ERROR_TO_ALERT(ret)), FRM_CRY, "TLS error %u",
+                  ret);
+        return ret;
     }
 
     if (tls_io.off == 0)
