@@ -1711,8 +1711,9 @@ static void __attribute__((nonnull)) ack_alarm(struct q_conn * const c)
 #ifdef DEBUG_TIMERS
     warn(DBG, "ACK timer fired on %s conn %s", conn_type(c), cid2str(c->scid));
 #endif
-    tx_ack(c, ep_data, false);
-    do_tx(c);
+    if (needs_ack(&c->pns[pn_data]) != no_ack)
+        if (tx_ack(c, ep_data, false))
+            do_tx(c);
 }
 
 
