@@ -1489,7 +1489,7 @@ void restart_idle_alarm(struct q_conn * const c)
         MAX(c->tp_in.idle_to * NS_PER_MS, 3 * c->rec.ld_alarm_val);
 
 #ifdef DEBUG_TIMERS
-    warn(DBG, "next idle alarm in %f sec %" PRIu64, t / (double)NS_PER_S, t);
+    warn(DBG, "next idle alarm in %f sec", t / (double)NS_PER_S);
 #endif
 
     timeouts_add(c->w->data, &c->idle_alarm, t);
