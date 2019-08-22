@@ -484,9 +484,7 @@ static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
         warn(DBG, "anti-deadlock RTX #%u on %s conn %s", c->rec.crypto_cnt + 1,
              conn_type(c), cid2str(c->scid));
 #endif
-
-        // XXX this doesn't quite implement the pseudo code
-        c->tx_limit = 1;
+        c->tx_limit = have_keys(c, pn_hshk) ? 1 : 2;
         timeouts_add(c->w->data, &c->tx_w, 0);
         c->rec.crypto_cnt++;
 

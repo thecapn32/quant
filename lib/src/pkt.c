@@ -522,8 +522,9 @@ bool enc_pkt(struct q_stream * const s,
         m->ack_eliciting = true;
     }
 
-    ensure((pos - v->buf) > m->hdr.hdr_len, "would have sent %s pkt w/o frames",
-           pkt_type_str(m->hdr.flags, &m->hdr.vers));
+    // gotta send something, anything
+    if (unlikely(pos - v->buf == m->hdr.hdr_len))
+        enc_ack_frame(&pos, v->buf, end, m, pn);
 
 tx:;
     // make sure we have enough frame bytes for the header protection sample
