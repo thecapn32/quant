@@ -49,7 +49,8 @@ extern void __attribute__((nonnull))
 qlog_transport(const qlog_pkt_evt_t evt,
                const char * const trg,
                struct w_iov * const v,
-               const struct pkt_meta * const m);
+               const struct pkt_meta * const m,
+               const struct cid * const gid);
 
 
 typedef enum { rec_mu } qlog_rec_evt_t;
@@ -57,12 +58,13 @@ typedef enum { rec_mu } qlog_rec_evt_t;
 extern void __attribute__((nonnull))
 qlog_recovery(const qlog_rec_evt_t evt,
               const char * const trg,
-              const struct q_conn * const c);
+              const struct q_conn * const c,
+              const struct cid * const gid);
 
 #else
 
 #define qlog_close()
-#define qlog_init()
+#define qlog_init(...)
 #define qlog_recovery(...)
 #define qlog_transport(...)
 

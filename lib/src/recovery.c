@@ -158,7 +158,7 @@ void log_cc(struct q_conn * const c)
              delta_rttvar / (double)NS_PER_S);
     }
 
-    qlog_recovery(rec_mu, "DEFAULT", c);
+    qlog_recovery(rec_mu, "DEFAULT", c, &c->odcid);
     c->rec.prev = c->rec.cur;
 }
 

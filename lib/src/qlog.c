@@ -84,13 +84,14 @@ static uint64_t __attribute__((const)) to_usec(const uint64_t t)
 }
 
 
-static bool qlog_common()
+static bool qlog_common(const struct cid * const gid)
 {
     if (qlog_ref_t == 0)
         return false;
 
-    fprintf(qlog, "%s[%" PRIu64, likely(prev_event) ? "," : "",
-            to_usec(loop_now() - qlog_ref_t));
+    fprintf(qlog, "%s[%" PRIu64 ",\"%s\"", likely(prev_event) ? "," : "",
+            to_usec(loop_now() - qlog_ref_t),
+            hex2str(gid->id, gid->len, CID_LEN_MAX));
 
     return true;
 }
@@ -100,19 +101,20 @@ void qlog_init(const struct q_conn * const c)
 {
     if (qlog && qlog_ref_t == 0) {
         qlog_ref_t = loop_now();
-        fprintf(
-            qlog,
-            "{"
-            "\"qlog_version\":\"draft-00\","
-            "\"title\":\"%s %s qlog\","
-            "\"traces\":["
-            "\"vantage_point\":{\"type\":\"%s\"},"
-            "{\"configuration\":{\"time_units\":\"us\"},\"common_fields\":{"
-            "\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":%" PRIu64 "},"
-            "\"event_fields\":[\"relative_time\",\"CATEGORY\",\"EVENT_TYPE\","
-            "\"TRIGGER\",\"DATA\"],\"events\":[",
-            quant_name, quant_version, c->is_clnt ? "CLIENT" : "SERVER",
-            to_usec(qlog_ref_t));
+        fprintf(qlog,
+                "{"
+                "\"qlog_version\":\"draft-00\","
+                "\"title\":\"%s %s qlog\","
+                "\"traces\":[{"
+                "\"vantage_point\":{\"type\":\"%s\"},"
+                "\"configuration\":{\"time_units\":\"us\"},\"common_fields\":{"
+                "\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":%" PRIu64
+                "},"
+                "\"event_fields\":[\"relative_time\",\"group_id\",\"CATEGORY\","
+                "\"EVENT_TYPE\","
+                "\"TRIGGER\",\"DATA\"],\"events\":[",
+                quant_name, quant_version, c->is_clnt ? "CLIENT" : "SERVER",
+                to_usec(qlog_ref_t));
     }
 }
 
@@ -129,9 +131,10 @@ void qlog_close(void)
 void qlog_transport(const qlog_pkt_evt_t evt,
                     const char * const trg,
                     struct w_iov * const v,
-                    const struct pkt_meta * const m)
+                    const struct pkt_meta * const m,
+                    const struct cid * const gid)
 {
-    if (qlog_common() == false)
+    if (qlog_common(gid) == false)
         return;
 
     static const char * const evt_str[] = {[pkt_tx] = "PACKET_SENT",
@@ -212,9 +215,10 @@ done:
 
 void qlog_recovery(const qlog_rec_evt_t evt,
                    const char * const trg,
-                   const struct q_conn * const c)
+                   const struct q_conn * const c,
+                   const struct cid * const gid)
 {
-    if (qlog_common() == false)
+    if (qlog_common(gid) == false)
         return;
 
     static const char * const evt_str[] = {[rec_mu] = "METRIC_UPDATE"};

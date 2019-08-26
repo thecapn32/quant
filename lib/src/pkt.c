@@ -587,7 +587,7 @@ tx:;
     }
 
     on_pkt_sent(m);
-    qlog_transport(pkt_tx, "DEFAULT", v, m);
+    qlog_transport(pkt_tx, "DEFAULT", v, m, &c->odcid);
     bit_or(FRM_MAX, &pn->tx_frames, &m->frms);
 
     if (c->is_clnt) {

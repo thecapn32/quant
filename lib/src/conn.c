@@ -331,6 +331,13 @@ rtx_pkt(struct w_iov * const v, struct pkt_meta * const m)
 }
 
 
+static void __attribute__((nonnull)) mk_rand_cid(struct cid * const cid)
+{
+    cid->len = 8 + (uint8_t)w_rand_uniform32(CID_LEN_MAX - 7);
+    rand_bytes(cid->id, sizeof(cid->id) + sizeof(cid->srt));
+}
+
+
 static void __attribute__((nonnull))
 tx_vneg_resp(const struct w_sock * const ws,
              const struct w_iov * const v,
@@ -359,7 +366,9 @@ tx_vneg_resp(const struct w_sock * const ws,
     xv->addr = v->addr;
     xv->flags = v->flags;
     log_pkt("TX", xv, (struct sockaddr *)&xv->addr, 0, 0, 0);
-    qlog_transport(pkt_tx, "DEFAULT", xv, mx);
+    struct cid gid;
+    mk_rand_cid(&gid);
+    qlog_transport(pkt_tx, "DEFAULT", xv, mx, &gid);
 
 #ifndef FUZZING
     w_tx(ws, &q);
@@ -828,9 +837,8 @@ static void __attribute__((nonnull(1))) new_cids(struct q_conn * const c,
 {
     // init dcid
     if (c->is_clnt) {
-        struct cid ndcid = {.len =
-                                8 + (uint8_t)w_rand_uniform32(CID_LEN_MAX - 7)};
-        rand_bytes(ndcid.id, sizeof(ndcid.id) + sizeof(ndcid.srt));
+        struct cid ndcid;
+        mk_rand_cid(&ndcid);
         cid_cpy(&c->odcid, &ndcid);
         add_dcid(c, &ndcid);
     } else if (dcid)
@@ -1138,7 +1146,7 @@ done:
         bitset_t_initializer(1 << FRM_CRY | 1 << FRM_STR);
     const bool dup_strm =
         bit_overlap(FRM_MAX, &m->frms, &qlog_dup_chk) && m->strm == 0;
-    qlog_transport(dup_strm ? pkt_dp : pkt_rx, "DEFAULT", v, m);
+    qlog_transport(dup_strm ? pkt_dp : pkt_rx, "DEFAULT", v, m, &c->odcid);
 #endif
     return true;
 }
@@ -1464,7 +1472,7 @@ rx_pkts(struct w_iov_sq * const x,
 
     drop:
         if (pkt_valid == false)
-            qlog_transport(pkt_dp, "DEFAULT", v, m);
+            qlog_transport(pkt_dp, "DEFAULT", v, m, &m->hdr.dcid);
         free_iov(v, m);
     next:
         if (likely(c)) {
