@@ -41,7 +41,7 @@ typedef enum { pkt_tx, pkt_rx, pkt_dp } qlog_pkt_evt_t;
 extern FILE * qlog;
 
 
-extern void qlog_init(void);
+extern void qlog_init(const struct q_conn * const c);
 
 extern void qlog_close(void);
 

@@ -96,7 +96,7 @@ static bool qlog_common()
 }
 
 
-void qlog_init(void)
+void qlog_init(const struct q_conn * const c)
 {
     if (qlog && qlog_ref_t == 0) {
         qlog_ref_t = loop_now();
@@ -106,11 +106,13 @@ void qlog_init(void)
             "\"qlog_version\":\"draft-00\","
             "\"title\":\"%s %s qlog\","
             "\"traces\":["
+            "\"vantage_point\":{\"type\":\"%s\"},"
             "{\"configuration\":{\"time_units\":\"us\"},\"common_fields\":{"
             "\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":%" PRIu64 "},"
             "\"event_fields\":[\"relative_time\",\"CATEGORY\",\"EVENT_TYPE\","
             "\"TRIGGER\",\"DATA\"],\"events\":[",
-            quant_name, quant_version, to_usec(qlog_ref_t));
+            quant_name, quant_version, c->is_clnt ? "CLIENT" : "SERVER",
+            to_usec(qlog_ref_t));
     }
 }
 

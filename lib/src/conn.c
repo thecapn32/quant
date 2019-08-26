@@ -1853,7 +1853,8 @@ struct q_conn * new_conn(struct w_engine * const w,
             new_stream(c, crpt_strm_id(e));
 
     if (c->scid) {
-        qlog_init();
+        // FIXME: first connection sets the type for all future connections
+        qlog_init(c);
         warn(DBG, "%s conn %s on port %u created", conn_type(c),
              cid2str(c->scid), bswap16(get_sport(c->sock)));
     }

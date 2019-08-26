@@ -42,6 +42,8 @@ extern void * api_conn;
 extern void * api_strm;
 
 
+extern void loop_init(void);
+
 extern uint64_t loop_now(void);
 
 extern void loop_break(void);

@@ -50,6 +50,12 @@ void loop_break(void)
 }
 
 
+void loop_init(void)
+{
+    now = w_now();
+}
+
+
 uint64_t loop_now(void)
 {
     return now;

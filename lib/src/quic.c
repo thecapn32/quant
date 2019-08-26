@@ -591,9 +591,10 @@ struct w_engine * q_init(const char * const ifname,
     ASAN_POISON_MEMORY_REGION(pkt_meta, num_bufs * sizeof(*pkt_meta));
 
     // initialize the event loop
+    loop_init();
     int err;
     w->data = timeouts_open(TIMEOUT_nHZ, &err);
-    timeouts_update(w->data, w_now());
+    timeouts_update(w->data, loop_now());
     timeout_setcb(&api_alarm, cancel_api_call, w);
 
     warn(INF, "%s/%s (%s) %s/%s ready", quant_name, w->backend_name,
