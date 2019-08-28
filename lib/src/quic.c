@@ -84,7 +84,7 @@ const uint8_t ok_vers_len = sizeof(ok_vers) / sizeof(ok_vers[0]);
 
 
 struct pkt_meta * pkt_meta = 0;
-struct q_conn_conf default_conn_conf = {.idle_timeout = 10 * MS_PER_S,
+struct q_conn_conf default_conn_conf = {.idle_timeout = 10,
                                         .enable_udp_zero_checksums = true,
                                         .tls_key_update_frequency = 3,
                                         .enable_spinbit =
@@ -230,7 +230,7 @@ void q_alloc(struct w_engine * const w,
              struct w_iov_sq * const q,
              const size_t len)
 {
-    ensure(len <= UINT32_MAX, "len %lu too long", len);
+    ensure(len <= UINT32_MAX, "len %zu too long", len);
     alloc_off(w, q, (uint32_t)len, DATA_OFFSET);
 }
 

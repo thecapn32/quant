@@ -1494,7 +1494,7 @@ rx_pkts(struct w_iov_sq * const x,
 void restart_idle_alarm(struct q_conn * const c)
 {
     const timeout_t t =
-        MAX(c->tp_in.idle_to * NS_PER_MS, 3 * c->rec.ld_alarm_val);
+        MAX((timeout_t)c->tp_in.idle_to * NS_PER_MS, 3 * c->rec.ld_alarm_val);
 
 #ifdef DEBUG_TIMERS
     warn(DBG, "next idle alarm in %f sec", t / (double)NS_PER_S);
