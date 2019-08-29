@@ -139,8 +139,8 @@ typedef enum { CONN_STATES } conn_state_t;
 
 extern const char * const conn_state_str[];
 
-#define MAX_TOK_LEN 256
-#define MAX_ERR_REASON_LEN 64 // keep < 256, since err_reason_len is uint8_t
+#define MAX_TOK_LEN 128
+#define MAX_ERR_REASON_LEN 32 // keep < 256, since err_reason_len is uint8_t
 
 #define DEF_ACK_DEL_EXP 3
 #define DEF_MAX_ACK_DEL 25 // ms

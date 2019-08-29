@@ -60,8 +60,8 @@
 #define IPTOS_ECN_CE 0x03     // congestion experienced
 #define IPTOS_ECN_MASK 0x03   // ECN field mask
 
-#define NI_MAXHOST 64
-#define NI_MAXSERV 16
+#define NI_MAXHOST 16
+#define NI_MAXSERV 6
 #define O_CLOEXEC 0
 #endif
 
