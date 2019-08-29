@@ -50,6 +50,7 @@
 
 #ifdef PARTICLE
 #include <rng_hal.h>
+#include <uECC.h>
 
 #define gai_strerror(x) ""
 
@@ -66,7 +67,14 @@ void ptls_minicrypto_random_bytes(void * buf, size_t len)
         len -= sizeof(uint8_t);
     }
 }
+
+static int uecc_rng(uint8_t * dest, unsigned size)
+{
+    ptls_minicrypto_random_bytes(dest, size);
+    return 1;
+}
 #endif
+
 
 #ifdef WITH_OPENSSL
 #include <openssl/evp.h>
@@ -1373,6 +1381,11 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
 
 void init_tls_ctx(const struct q_conf * const conf)
 {
+#ifdef PARTICLE
+    // the picotls minicrypto backend depends on this
+    uECC_set_rng(uecc_rng);
+#endif
+
     if (conf && conf->tls_key) {
 #ifdef WITH_OPENSSL
         FILE * const fp = fopen(conf->tls_key, "rbe");
