@@ -7,7 +7,7 @@
                 "*.c", "*.cc", "*.cpp", "*.h", "*.sh", "*.txt", "*.dot",
                 "*.imp", "*.in", "*.result", "*.yml", "*.md", "*.mk",
                 ".gitignore", ".gitmodules", ".clang-format", ".editorconfig",
-                ".dockerignore", "Vagrantfile", "*.r", "*.py",
+                ".dockerignore", "Vagrantfile", "*.r", "*.py", "*.inc",
                 "*.sublime-project"
             ],
             "folder_exclude_patterns": [
