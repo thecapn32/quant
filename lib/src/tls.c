@@ -246,9 +246,11 @@ static int setup_cipher(ptls_cipher_context_t ** hp_ctx,
     }
 
 #ifdef DEBUG_PROT
-    warn(NTE, "aead-secret: %s, hp-key: %s",
-         hex2str(secret, hash->digest_size, PTLS_MAX_DIGEST_SIZE),
-         hex2str(hpkey, aead->ctr_cipher->key_size, PTLS_MAX_SECRET_SIZE));
+    char secret_str[hex_str_len(PTLS_MAX_DIGEST_SIZE)];
+    char hpkey_str[hex_str_len(PTLS_MAX_DIGEST_SIZE)];
+    hex2str(secret, hash->digest_size, secret_str, sizeof(secret_str));
+    hex2str(hpkey, aead->ctr_cipher->key_size, hpkey_str, sizeof(hpkey_str));
+    warn(NTE, "aead-secret: %s, hp-key: %s", secret_str, hpkey_str);
 #endif
 
     ret = 0;
@@ -446,9 +448,11 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             uint16_t unknown_len;
             if (dec2(&unknown_len, &pos, end) == false)
                 return 1;
+            char hex[hex_str_len(sizeof(c->tls.tp_buf))];
+            hex2str(pos, unknown_len, hex, sizeof(hex));
             warn(WRN, "\t" BLD "%s tp" NRM " (0x%04x w/len %u) = %s",
                  (tp & 0xff00) == 0xff00 ? YEL "private" : RED "unknown", tp,
-                 unknown_len, hex2str(pos, unknown_len, MAX_PKT_LEN));
+                 unknown_len, hex);
             pos += unknown_len;
             continue;
         }
@@ -567,8 +571,8 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                 decb(c->tp_out.orig_cid.id, &pos, end, len);
                 c->tp_out.orig_cid.len = (uint8_t)len;
             }
-            warn(INF, "\toriginal_connection_id = %s",
-                 cid2str(&c->tp_out.orig_cid));
+            mk_cid_str(&c->tp_out.orig_cid, orig_cid_str);
+            warn(INF, "\toriginal_connection_id = %s", orig_cid_str);
             break;
 
         case TP_DMIG:;
@@ -596,8 +600,10 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             }
             memcpy(dcid->srt, pos, sizeof(dcid->srt));
             dcid->has_srt = true;
-            warn(INF, "\tstateless_reset_token = %s",
-                 hex2str(dcid->srt, sizeof(dcid->srt), SRT_LEN));
+            {
+                mk_srt_str(dcid->srt, srt_str);
+                warn(INF, "\tstateless_reset_token = %s", srt_str);
+            }
             conns_by_srt_ins(c, dcid->srt);
             pos += sizeof(dcid->srt);
             break;
@@ -656,10 +662,11 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                 return 1;
             }
 
+            mk_cid_str(&pa->cid, cid_str);
+            mk_srt_str(pa->cid.srt, srt_str);
             warn(INF,
                  "\tpreferred_address = IPv4=%s:%s IPv6=[%s]:%s cid=%s srt=%s",
-                 ip4, port4, ip6, port6, cid2str(&pa->cid),
-                 hex2str(pa->cid.srt, sizeof(pa->cid.srt), SRT_LEN));
+                 ip4, port4, ip6, port6, cid_str, srt_str);
 #endif
             break;
 
@@ -686,9 +693,10 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         }
 
         if (cid_cmp(&c->tp_out.orig_cid, &c->odcid)) {
+            mk_cid_str(&c->tp_out.orig_cid, orig_cid_str);
+            mk_cid_str(&c->odcid, odcid_str);
             err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
-                      "cid mismatch %s != %s", cid2str(&c->tp_out.orig_cid),
-                      cid2str(&c->odcid));
+                      "cid mismatch %s != %s", orig_cid_str, odcid_str);
             return 1;
         }
     }
@@ -769,8 +777,8 @@ void init_tp(struct q_conn * const c)
             if (!c->is_clnt) {
                 encb_tp(&pos, end, TP_SRT, c->scid->srt, sizeof(c->scid->srt));
 #ifdef DEBUG_EXTRA
-                warn(INF, "\tstateless_reset_token = %s",
-                     hex2str(c->scid->srt, sizeof(c->scid->srt), SRT_LEN));
+                mk_srt_str(c->scid->srt, srt_str);
+                warn(INF, "\tstateless_reset_token = %s", srt_str);
 #endif
             }
             break;
@@ -778,8 +786,8 @@ void init_tp(struct q_conn * const c)
             if (!c->is_clnt && c->odcid.len) {
                 encb_tp(&pos, end, TP_OCID, c->odcid.id, c->odcid.len);
 #ifdef DEBUG_EXTRA
-                warn(INF, "\toriginal_connection_id = %s",
-                     cid2str(&c->tp_in.orig_cid));
+                mk_cid_str(&c->tp_in.orig_cid, orig_cid_str);
+                warn(INF, "\toriginal_connection_id = %s", orig_cid_str);
 #endif
             }
             break;
@@ -862,11 +870,12 @@ void init_tp(struct q_conn * const c)
             if (tp_order[j] == grease_type) {
                 encb_tp(&pos, end, grease_type, &grease[2], grease_len);
 #ifdef DEBUG_EXTRA
+                char grease_str[hex_str_len(sizeof(c->tls.tp_buf))];
+                hex2str(&grease[2], grease_len, grease_str, sizeof(grease_str));
                 warn(WRN, "\t" BLD "%s tp" NRM " (0x%04x w/len %u) = %s",
                      (grease_type & 0xff00) == 0xff00 ? YEL "private"
                                                       : RED "unknown",
-                     grease_type, grease_len,
-                     hex2str(&grease[2], grease_len, MAX_PKT_LEN));
+                     grease_type, grease_len, grease_str);
 #endif
             } else
                 die("unknown tp 0x%04x", tp_order[j]);
@@ -912,9 +921,10 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
                                      enc_tckt.aead->algo->tag_size))
         return -1;
 
+    mk_cid_str(c->scid, scid_str);
     if (is_encrypt) {
         warn(INF, "creating new 0-RTT session ticket for %s conn %s (%s %s)",
-             conn_type(c), cid2str(c->scid), ptls_get_server_name(tls),
+             conn_type(c), scid_str, ptls_get_server_name(tls),
              ptls_get_negotiated_protocol(tls));
 
         // prepend git commit hash
@@ -937,7 +947,7 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
             warn(WRN,
                  "could not verify 0-RTT session ticket for %s conn %s (%s "
                  "%s)",
-                 conn_type(c), cid2str(c->scid), ptls_get_server_name(tls),
+                 conn_type(c), scid_str, ptls_get_server_name(tls),
                  ptls_get_negotiated_protocol(tls));
             c->did_0rtt = false;
             return -1;
@@ -956,7 +966,7 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
             warn(WRN,
                  "could not decrypt 0-RTT session ticket for %s conn %s "
                  "(%s %s)",
-                 conn_type(c), cid2str(c->scid), ptls_get_server_name(tls),
+                 conn_type(c), scid_str, ptls_get_server_name(tls),
                  ptls_get_negotiated_protocol(tls));
             c->did_0rtt = false;
             return -1;
@@ -964,7 +974,7 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
         dst->off += n;
 
         warn(INF, "verified 0-RTT session ticket for %s conn %s (%s %s)",
-             conn_type(c), cid2str(c->scid), ptls_get_server_name(tls),
+             conn_type(c), scid_str, ptls_get_server_name(tls),
              ptls_get_negotiated_protocol(tls));
         c->did_0rtt = true;
     }
@@ -1024,9 +1034,10 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
 
     // write all tickets
     // FIXME this currently dumps the entire cache to file on each connection!
+    mk_cid_str(c->scid, scid_str);
     splay_foreach (t, tickets_by_peer, &tickets) {
         warn(INF, "writing TLS ticket for %s conn %s (%s %s)", conn_type(c),
-             cid2str(c->scid), t->sni, t->alpn);
+             scid_str, t->sni, t->alpn);
 
         size_t len = strlen(t->sni) + 1;
         ensure(fwrite(&len, sizeof(len), 1, fp), "fwrite");
@@ -1311,9 +1322,10 @@ log_event_cb(ptls_log_event_t * const self __attribute__((unused)),
              const char * fmt,
              ...)
 {
-    fprintf(tls_log_file, "%s %s ", type,
-            hex2str(ptls_get_client_random(tls).base, PTLS_HELLO_RANDOM_SIZE,
-                    PTLS_HELLO_RANDOM_SIZE));
+    char output[hex_str_len(PTLS_HELLO_RANDOM_SIZE)];
+    hex2str(ptls_get_client_random(tls).base, PTLS_HELLO_RANDOM_SIZE, output,
+            sizeof(output));
+    fprintf(tls_log_file, "%s %s ", type, output);
 
     va_list args;
     va_start(args, fmt);
@@ -1368,10 +1380,12 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
             {0, 0, "SERVER_HANDSHAKE_TRAFFIC_SECRET",
              "SERVER_TRAFFIC_SECRET_0"}};
 
-        tls_ctx.log_event->cb(
-            tls_ctx.log_event, tls,
-            log_labels[ptls_is_server(tls) == is_enc][epoch], "%s",
-            hex2str(secret, cipher->hash->digest_size, PTLS_MAX_DIGEST_SIZE));
+        char secret_str[hex_str_len(PTLS_MAX_DIGEST_SIZE)];
+        hex2str(secret, cipher->hash->digest_size, secret_str,
+                sizeof(secret_str));
+        tls_ctx.log_event->cb(tls_ctx.log_event, tls,
+                              log_labels[ptls_is_server(tls) == is_enc][epoch],
+                              "%s", secret_str);
     }
 
     return setup_cipher(&ctx->header_protection, &ctx->aead, cipher->aead,

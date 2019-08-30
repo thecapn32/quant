@@ -141,11 +141,12 @@ void log_cc(struct q_conn * const c)
         (int64_t)c->rec.cur.rttvar - (int64_t)c->rec.prev.rttvar;
     if (delta_in_flight || delta_cwnd || delta_ssthresh || delta_srtt ||
         delta_rttvar) {
+        mk_cid_str(c->scid, scid_str);
         warn(DBG,
              "%s conn %s: in_flight=%" PRIu " (%s%+" PRId NRM "), cwnd" NRM
              "=%" PRIu " (%s%+" PRId NRM "), ssthresh=%" PRIu " (%s%+" PRId NRM
              "), srtt=%.3f (%s%+.3f" NRM "), rttvar=%.3f (%s%+.3f" NRM ")",
-             conn_type(c), cid2str(c->scid), c->rec.cur.in_flight,
+             conn_type(c), scid_str, c->rec.cur.in_flight,
              delta_in_flight > 0 ? GRN : delta_in_flight < 0 ? RED : "",
              delta_in_flight, c->rec.cur.cwnd,
              delta_cwnd > 0 ? GRN : delta_cwnd < 0 ? RED : "", delta_cwnd,
@@ -172,6 +173,7 @@ void set_ld_timer(struct q_conn * const c)
 
 #ifdef DEBUG_TIMERS
     const char * type = BLD RED "???" NRM;
+    mk_cid_str(c->scid, scid_str);
 #endif
     const struct pn_space * const pn = earliest_loss_t_pn(c);
 
@@ -199,7 +201,7 @@ void set_ld_timer(struct q_conn * const c)
     if (unlikely(c->rec.ae_in_flight == 0)) {
 #ifdef DEBUG_TIMERS
         warn(DBG, "no RTX-able pkts in flight, stopping ld_alarm on %s conn %s",
-             conn_type(c), cid2str(c->scid));
+             conn_type(c), scid_str);
 #endif
         timeouts_del(c->w->data, &c->rec.ld_alarm);
         return;
@@ -226,8 +228,7 @@ set_to:;
 
 #ifdef DEBUG_TIMERS
     warn(DBG, "%s alarm in %f sec on %s conn %s", type,
-         c->rec.ld_alarm_val / (double)NS_PER_S, conn_type(c),
-         cid2str(c->scid));
+         c->rec.ld_alarm_val / (double)NS_PER_S, conn_type(c), scid_str);
 #endif
     timeouts_add(c->w->data, &c->rec.ld_alarm,
                  c->rec.ld_alarm_val <= 0 ? 0 : c->rec.ld_alarm_val);
@@ -454,24 +455,24 @@ static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
     // see OnLossDetectionTimeout pseudo code
     struct pn_space * const pn = earliest_loss_t_pn(c);
 
+    mk_cid_str(c->scid, scid_str);
     if (pn && pn->loss_t) {
 #ifdef DEBUG_TIMERS
         warn(DBG, "%s TT alarm on %s conn %s", pn_type_str(pn->type),
-             conn_type(c), cid2str(c->scid));
+             conn_type(c), scid_str);
 #endif
         detect_lost_pkts(pn, true);
         goto set_timer; // otherwise no PTO will happen
     } else if (have_unacked_crypto_data(c)) {
 #ifdef DEBUG_TIMERS
         warn(DBG, "crypto RTX #%u on %s conn %s", c->rec.crypto_cnt + 1,
-             conn_type(c), cid2str(c->scid));
+             conn_type(c), scid_str);
 #endif
         detect_lost_pkts(&c->pns[pn_init], false);
         detect_lost_pkts(&c->pns[pn_hshk], false);
         detect_lost_pkts(&c->pns[pn_data], false);
         if (c->rec.crypto_cnt++ >= 2 && c->sockopt.enable_ecn) {
-            warn(NTE, "turning off ECN for %s conn %s", conn_type(c),
-                 cid2str(c->scid));
+            warn(NTE, "turning off ECN for %s conn %s", conn_type(c), scid_str);
             c->sockopt.enable_ecn = false;
             w_set_sockopt(c->sock, &c->sockopt);
         }
@@ -482,7 +483,7 @@ static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
     } else if (have_keys(c, pn_data) == false) {
 #ifdef DEBUG_TIMERS
         warn(DBG, "anti-deadlock RTX #%u on %s conn %s", c->rec.crypto_cnt + 1,
-             conn_type(c), cid2str(c->scid));
+             conn_type(c), scid_str);
 #endif
         c->tx_limit = have_keys(c, pn_hshk) ? 1 : 2;
         timeouts_add(c->w->data, &c->tx_w, 0);
@@ -491,7 +492,7 @@ static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
     } else {
 #ifdef DEBUG_TIMERS
         warn(DBG, "PTO alarm #%u on %s conn %s", c->rec.pto_cnt, conn_type(c),
-             cid2str(c->scid));
+             scid_str);
 #endif
         c->rec.pto_cnt++;
         c->i.pto_cnt++;

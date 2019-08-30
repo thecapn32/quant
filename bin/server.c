@@ -135,8 +135,10 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
 {
     (void)parser;
     const struct cb_data * const d = parser->data;
-    warn(INF, "conn %s str %" PRId " serving URL %.*s", q_cid(d->c),
-         q_sid(d->s), (int)len, at);
+    char cid_str[64];
+    q_cid(d->c, cid_str, sizeof(cid_str));
+    warn(INF, "conn %s str %" PRId " serving URL %.*s", cid_str, q_sid(d->s),
+         (int)len, at);
 
     char path[MAXPATHLEN] = ".";
     strncpy(&path[*at == '/' ? 1 : 0], at, MIN(len, sizeof(path) - 1));

@@ -73,8 +73,8 @@ struct recovery {
 #endif
 
     // CC state
-    uint64_t rec_start_t;    // recovery_start_time
-    uint_t ae_in_flight; // nr of ACK-eliciting pkts inflight
+    uint64_t rec_start_t; // recovery_start_time
+    uint_t ae_in_flight;  // nr of ACK-eliciting pkts inflight
 
     struct cc_state cur;
     struct cc_state prev;

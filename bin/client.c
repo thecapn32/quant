@@ -525,12 +525,14 @@ int main(int argc, char * argv[])
                 printf("%" PRIu "\t%f\t\"%s\"\t%s\n", w_iov_sq_len(&se->rep),
                        elapsed, bps(w_iov_sq_len(&se->rep), elapsed), se->url);
 #ifndef NDEBUG
-            warn(
-                WRN,
-                "read %" PRIu " byte%s in %.3f sec (%s) on conn %s strm %" PRIu,
-                w_iov_sq_len(&se->rep), plural(w_iov_sq_len(&se->rep)),
-                elapsed < 0 ? 0 : elapsed, bps(w_iov_sq_len(&se->rep), elapsed),
-                q_cid(se->c), q_sid(se->s));
+            char cid_str[64];
+            q_cid(se->c, cid_str, sizeof(cid_str));
+            warn(WRN,
+                 "read %" PRIu
+                 " byte%s in %.3f sec (%s) on conn %s strm %" PRIu,
+                 w_iov_sq_len(&se->rep), plural(w_iov_sq_len(&se->rep)),
+                 elapsed < 0 ? 0 : elapsed,
+                 bps(w_iov_sq_len(&se->rep), elapsed), cid_str, q_sid(se->s));
 #endif
 
             // retrieve the TX'ed request

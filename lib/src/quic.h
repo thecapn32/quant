@@ -30,6 +30,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/param.h>
 
@@ -40,9 +41,9 @@
 
 // #define DEBUG_BUFFERS ///< Set to log buffer use details.
 // #define DEBUG_EXTRA   ///< Set to log various extra details.
-// #define DEBUG_STREAMS ///< Set to log stream scheduling details.
-// #define DEBUG_TIMERS  ///< Set to log timer details.
-// #define DEBUG_PROT    ///< Set to log packet protection/encryption details.
+#define DEBUG_STREAMS ///< Set to log stream scheduling details.
+// #define DEBUG_TIMERS ///< Set to log timer details.
+// #define DEBUG_PROT   ///< Set to log packet protection/encryption details.
 
 #define DATA_OFFSET 48 ///< Offsets of stream frame payload data we TX.
 
@@ -295,17 +296,33 @@ write_to_corpus(const int dir, const void * const data, const size_t len);
 #define pm_idx(m) (uint32_t)((m)-pkt_meta)
 
 
-#define hex2str(src, len_src, len_buf)                                         \
-    __extension__({                                                            \
-        static char _hex[(len_buf)*2 + 1];                                     \
-        hex2str_impl((src), (len_src), _hex, sizeof(_hex));                    \
-    })
+extern char * __attribute__((nonnull)) hex2str(const uint8_t * const src,
+                                               const size_t len_src,
+                                               char * const dst,
+                                               const size_t len_dst);
 
+#define hex_str_len(x) ((x)*2 + 1)
 
-extern char * __attribute__((nonnull)) hex2str_impl(const uint8_t * const src,
-                                                    const size_t len_src,
-                                                    char * const dst,
-                                                    const size_t len_dst);
+#define mk_cid_str(cid, str)                                                   \
+    char str[hex_str_len(2 * sizeof((cid)->seq) + CID_LEN_MAX)];               \
+    if (likely(cid)) {                                                         \
+        const int _n = snprintf(str, sizeof(str), "%" PRIu ":", (cid)->seq);   \
+        hex2str((cid)->id, (cid)->len, &str[_n], sizeof(str) - (size_t)_n);    \
+    }
+
+#define mk_path_chlg_str(path_chlg, str)                                       \
+    char str[hex_str_len(PATH_CHLG_LEN)];                                      \
+    hex2str((path_chlg), sizeof(path_chlg), str, sizeof(str))
+
+#define mk_srt_str(srt, str)                                                   \
+    char str[hex_str_len(SRT_LEN)];                                            \
+    hex2str((srt), sizeof(srt), str, sizeof(str))
+
+#define mk_tok_str(tok, tok_len, str)                                          \
+    char str[hex_str_len(MAX_TOK_LEN)];                                        \
+    if (likely(tok)) {                                                         \
+        hex2str((tok), (tok_len), str, sizeof(str));                           \
+    }
 
 
 #define has_strm_data(p) (p)->strm_frm_pos

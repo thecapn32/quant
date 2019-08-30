@@ -140,12 +140,13 @@ ack_t needs_ack(const struct pn_space * const pn)
 {
 #if defined(DEBUG_EXTRA) && (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG))
     struct q_conn * const c = pn->c;
+    mk_cid_str(c->scid, scid_str);
 #endif
 
     if (unlikely(pn->imm_ack)) {
 #ifdef DEBUG_EXTRA
-        warn(DBG, "%s conn %s: %s imm_ack: forced", conn_type(c),
-             cid2str(c->scid), pn_type_str(pn->type));
+        warn(DBG, "%s conn %s: %s imm_ack: forced", conn_type(c), scid_str,
+             pn_type_str(pn->type));
 #endif
         return imm_ack;
     }
@@ -154,7 +155,7 @@ ack_t needs_ack(const struct pn_space * const pn)
     if (rxed_one_or_more == false) {
 #ifdef DEBUG_EXTRA
         warn(DBG, "%s conn %s: %s no_ack: rxed_one_or_more == false",
-             conn_type(c), cid2str(c->scid), pn_type_str(pn->type));
+             conn_type(c), scid_str, pn_type_str(pn->type));
 #endif
         return no_ack;
     }
@@ -163,7 +164,7 @@ ack_t needs_ack(const struct pn_space * const pn)
     if (rxed_ack_eliciting == false) {
 #ifdef DEBUG_EXTRA
         warn(DBG, "%s conn %s: %s grat_ack: rxed_ack_eliciting == false",
-             conn_type(c), cid2str(c->scid), pn_type_str(pn->type));
+             conn_type(c), scid_str, pn_type_str(pn->type));
 #endif
         return grat_ack;
     }
@@ -171,8 +172,8 @@ ack_t needs_ack(const struct pn_space * const pn)
     const bool in_hshk = pn->type != pn_data || has_frm(pn->rx_frames, FRM_CRY);
     if (in_hshk) {
 #ifdef DEBUG_EXTRA
-        warn(DBG, "%s conn %s: %s imm_ack: in_hshk", conn_type(c),
-             cid2str(c->scid), pn_type_str(pn->type));
+        warn(DBG, "%s conn %s: %s imm_ack: in_hshk", conn_type(c), scid_str,
+             pn_type_str(pn->type));
 #endif
         return imm_ack;
     }
@@ -181,13 +182,13 @@ ack_t needs_ack(const struct pn_space * const pn)
     if (rxed_two_or_more) {
 #ifdef DEBUG_EXTRA
         warn(DBG, "%s conn %s: %s imm_ack: rxed_two_or_more", conn_type(c),
-             cid2str(c->scid), pn_type_str(pn->type));
+             scid_str, pn_type_str(pn->type));
 #endif
         return imm_ack;
     }
 
 #ifdef DEBUG_EXTRA
-    warn(DBG, "%s conn %s: %s del_ack", conn_type(c), cid2str(c->scid),
+    warn(DBG, "%s conn %s: %s del_ack", conn_type(c), scid_str,
          pn_type_str(pn->type));
 #endif
     return del_ack;

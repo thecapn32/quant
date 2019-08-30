@@ -273,6 +273,10 @@ struct q_conn * q_connect(struct w_engine * const w,
     // if we have no early data, we're not trying 0-RTT
     c->try_0rtt &= early_data && early_data_stream;
 
+    warn(ERR, "%p", (void*)early_data);
+    warn(ERR, "%p", (void*)early_data_stream);
+    warn(ERR, "%u", c->try_0rtt);
+
 #if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
     char ip[NI_MAXHOST];
     char port[NI_MAXSERV];
@@ -280,8 +284,9 @@ struct q_conn * q_connect(struct w_engine * const w,
                                 sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
     ensure(err == 0, "getnameinfo %d", err);
 
+    mk_cid_str(c->scid, scid_str);
     warn(WRN, "new %u-RTT %s conn %s to %s:%s, %" PRIu " byte%s queued for TX",
-         c->try_0rtt ? 0 : 1, conn_type(c), cid2str(c->scid), ip, port,
+         c->try_0rtt ? 0 : 1, conn_type(c), scid_str, ip, port,
          early_data ? w_iov_sq_len(early_data) : 0,
          plural(early_data ? w_iov_sq_len(early_data) : 0));
 #endif
@@ -305,7 +310,7 @@ struct q_conn * q_connect(struct w_engine * const w,
     timeouts_add(w->data, &c->tx_w, 0);
 
     warn(DBG, "waiting for connect on %s conn %s to %s:%s", conn_type(c),
-         cid2str(c->scid), ip, port);
+         scid_str, ip, port);
     conn_to_state(c, conn_opng);
     loop_run(w, (func_ptr)q_connect, c, 0);
 
@@ -315,14 +320,14 @@ struct q_conn * q_connect(struct w_engine * const w,
                                                                : strm_hclo);
 
     if (c->state != conn_estb) {
-        warn(WRN, "%s conn %s not connected", conn_type(c), cid2str(c->scid));
+        warn(WRN, "%s conn %s not connected", conn_type(c), scid_str);
         return 0;
     }
 
 #if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
     struct pn_data * const pnd = &c->pns[pn_data].data;
-    warn(WRN, "%s conn %s connected%s, cipher %s", conn_type(c),
-         cid2str(c->scid), c->did_0rtt ? " after 0-RTT" : "",
+    warn(WRN, "%s conn %s connected%s, cipher %s", conn_type(c), scid_str,
+         c->did_0rtt ? " after 0-RTT" : "",
          pnd->out_1rtt[pnd->out_kyph].aead->algo->name);
 #endif
 
@@ -335,16 +340,17 @@ bool q_write(struct q_stream * const s,
              const bool fin)
 {
     struct q_conn * const c = s->c;
+    mk_cid_str(c->scid, scid_str);
     if (unlikely(c->state == conn_qlse || c->state == conn_drng ||
                  c->state == conn_clsd)) {
         warn(ERR, "%s conn %s is in state %s, can't write", conn_type(c),
-             cid2str(c->scid), conn_state_str[c->state]);
+             scid_str, conn_state_str[c->state]);
         return false;
     }
 
     if (unlikely(s->state == strm_hclo || s->state == strm_clsd)) {
         warn(ERR, "%s conn %s strm " FMT_SID " is in state %s, can't write",
-             conn_type(c), cid2str(c->scid), s->id, strm_state_str[s->state]);
+             conn_type(c), scid_str, s->id, strm_state_str[s->state]);
         return false;
     }
 
@@ -363,7 +369,7 @@ bool q_write(struct q_stream * const s,
          "writing %" PRIu " byte%s %sin %" PRIu
          " buf%s on %s conn %s strm " FMT_SID,
          qlen, plural(qlen), fin ? "(and FIN) " : "", qcnt, plural(qcnt),
-         conn_type(c), cid2str(c->scid), s->id);
+         conn_type(c), scid_str, s->id);
 #endif
 
     concat_out(s, q);
@@ -387,8 +393,9 @@ q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool all)
 
         if (s == 0 && all) {
             // no data queued on any stream, wait for new data
+            mk_cid_str(c->scid, scid_str);
             warn(WRN, "waiting to read on any strm on %s conn %s", conn_type(c),
-                 cid2str(c->scid));
+                 scid_str);
             loop_run(c->w, (func_ptr)q_read, c, 0);
         }
     } while (s == 0 && all);
@@ -408,9 +415,10 @@ bool q_read_stream(struct q_stream * const s,
     if (unlikely(c->state != conn_estb))
         return 0;
 
+    mk_cid_str(c->scid, scid_str);
     if (q_peer_closed_stream(s) == false && all) {
         warn(WRN, "reading all on %s conn %s strm " FMT_SID, conn_type(c),
-             cid2str(c->scid), s->id);
+             scid_str, s->id);
     again:
         loop_run(c->w, (func_ptr)q_read_stream, c, s);
     }
@@ -428,7 +436,7 @@ bool q_read_stream(struct q_stream * const s,
          "read %" PRIu " new byte%s %sin %" PRIu " buf%s on %s "
          "conn %s strm " FMT_SID,
          qlen, plural(qlen), m_last->is_fin ? "(and FIN) " : "", qcnt,
-         plural(qcnt), conn_type(c), cid2str(c->scid), s->id);
+         plural(qcnt), conn_type(c), scid_str, s->id);
 #endif
 
     sq_concat(q, &s->in);
@@ -505,8 +513,9 @@ accept:;
            "getnameinfo");
 
     struct pn_data * const pnd = &c->pns[pn_data].data;
+    mk_cid_str(c->scid, scid_str);
     warn(WRN, "%s conn %s accepted from clnt %s:%s%s, cipher %s", conn_type(c),
-         cid2str(c->scid), ip, port, c->did_0rtt ? " after 0-RTT" : "",
+         scid_str, ip, port, c->did_0rtt ? " after 0-RTT" : "",
          pnd->out_1rtt[pnd->out_kyph].aead->algo->name);
 #endif
 
@@ -631,8 +640,9 @@ struct w_engine * q_init(const char * const ifname,
 
 void q_close_stream(struct q_stream * const s)
 {
+    mk_cid_str(s->c->scid, scid_str);
     warn(WRN, "closing strm " FMT_SID " on %s conn %s", s->id, conn_type(s->c),
-         cid2str(s->c->scid));
+         scid_str);
     struct w_iov_sq q = w_iov_sq_initializer(q);
     q_write(s, &q, true);
 }
@@ -664,10 +674,11 @@ void q_close(struct q_conn * const c,
              const uint64_t code,
              const char * const reason)
 {
+    mk_cid_str(c->scid, scid_str);
     if (c->scid)
         warn(WRN,
              "closing %s conn %s on port %u w/err %s0x%" PRIx64 "%s%s%s" NRM,
-             conn_type(c), cid2str(c->scid), bswap16(get_sport(c->sock)),
+             conn_type(c), scid_str, bswap16(get_sport(c->sock)),
              code ? RED : NRM, code, reason ? " (" : "", reason ? reason : "",
              reason ? ")" : "");
 
@@ -694,7 +705,7 @@ void q_close(struct q_conn * const c,
 done:
     if (c->scid && c->i.pkts_in_valid > 0) {
         conn_info_populate(c);
-        warn(INF, "%s conn %s stats:", conn_type(c), cid2str(c->scid));
+        warn(INF, "%s conn %s stats:", conn_type(c), scid_str);
         warn(INF, "\tpkts_in_valid = %s%" PRIu NRM,
              c->i.pkts_in_valid ? NRM : BLD RED, c->i.pkts_in_valid);
         warn(INF, "\tpkts_in_invalid = %s%" PRIu NRM,
@@ -766,9 +777,17 @@ void q_cleanup(struct w_engine * const w)
 }
 
 
-const char * q_cid(struct q_conn * const c)
+const char *
+q_cid(struct q_conn * const c, char * const buf, const size_t buf_len)
 {
-    return cid2str(c->scid);
+    ensure(buf_len >= hex_str_len(CID_LEN_MAX),
+           "buf too short (need at least %lu)",
+           (unsigned long)hex_str_len(CID_LEN_MAX));
+    if (likely(c->scid))
+        hex2str(c->scid->id, c->scid->len, buf, buf_len);
+    else
+        *buf = 0;
+    return buf;
 }
 
 
@@ -800,10 +819,9 @@ bool q_is_conn_closed(const struct q_conn * const c)
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 void write_to_corpus(const int dir, const void * const data, const size_t len)
 {
-    char file[MAXPATHLEN];
     const uint64_t rand = w_rand64();
-    strncpy(file, hex2str((const uint8_t *)&rand, sizeof(rand), sizeof(rand)),
-            MAXPATHLEN);
+    char file[MAXPATHLEN];
+    hex2str((const uint8_t *)&rand, sizeof(rand), file, sizeof(file));
     const int fd =
         openat(dir, file, O_CREAT | O_EXCL | O_WRONLY | O_CLOEXEC, 0644);
     if (fd == -1) {
@@ -843,7 +861,8 @@ bool q_ready(struct w_engine * const w,
             op = "accept";
         else if (c->state == conn_clsd)
             op = "close";
-        warn(WRN, "%s conn %s ready to %s", conn_type(c), cid2str(c->scid), op);
+        mk_cid_str(c->scid, scid_str);
+        warn(WRN, "%s conn %s ready to %s", conn_type(c), scid_str, op);
     } else {
         warn(WRN, "no conn ready to rx");
 #endif
@@ -900,9 +919,10 @@ void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
                        sizeof(new_port), NI_NUMERICHOST | NI_NUMERICSERV) == 0,
            "getnameinfo");
 
+    mk_cid_str(c->scid, scid_str);
     warn(NTE, "simulated %s for %s conn %s from %s:%s to %s:%s",
          use_new_dcid ? "conn migration" : "NAT rebinding", conn_type(c),
-         cid2str(c->scid), old_ip, old_port, new_ip, new_port);
+         scid_str, old_ip, old_port, new_ip, new_port);
 #endif
 
     timeouts_add(c->w->data, &c->tx_w, 0);
@@ -917,13 +937,13 @@ void q_info(struct q_conn * const c, struct q_conn_info * const ci)
 }
 
 
-char * hex2str_impl(const uint8_t * const src,
-                    const size_t len_src,
-                    char * const dst,
-                    const size_t len_dst)
+char * hex2str(const uint8_t * const src,
+               const size_t len_src,
+               char * const dst,
+               const size_t len_dst)
 {
-    ensure(len_dst >= len_src * 2 + 1, "overflow %lu < %lu",
-           (unsigned long)len_dst, (unsigned long)len_src * 2 + 1);
+    ensure(len_dst >= hex_str_len(len_src), "overflow %lu < %lu",
+           (unsigned long)len_dst, (unsigned long)hex_str_len(len_src));
     static const char hex[] = "0123456789abcdef";
     size_t i;
     for (i = 0; i < len_src; i++) {
