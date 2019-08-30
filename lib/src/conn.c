@@ -275,7 +275,11 @@ static void __attribute__((nonnull)) log_sent_pkts(struct q_conn * const c)
         kh_foreach_value(&pn->sent_pkts, m,
                          diet_insert(&unacked, m->hdr.nr, 0));
 
+#ifndef PARTICLE
         char buf[512];
+#else
+        char buf[64];
+#endif
         int pos = 0;
         struct ival * i = 0;
         diet_foreach (i, diet, &unacked) {
