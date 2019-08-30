@@ -75,19 +75,19 @@ void __attribute__((nonnull(1))) loop_run(struct w_engine * const w,
 
     while (likely(break_loop == false)) {
         now = w_now();
-        timeouts_update(w->data, now);
+        timeouts_update(ped(w)->wheel, now);
 
         struct timeout * t;
-        TIMEOUTS_FOREACH (t, w->data, TIMEOUTS_EXPIRED)
+        TIMEOUTS_FOREACH (t, ped(w)->wheel, TIMEOUTS_EXPIRED)
             (*t->callback.fn)(t->callback.arg);
 
         if (break_loop)
             break;
 
-        bool do_rx = w_nic_rx(w, (int64_t)timeouts_timeout(w->data));
+        bool do_rx = w_nic_rx(w, (int64_t)timeouts_timeout(ped(w)->wheel));
 
         now = w_now();
-        timeouts_update(w->data, now);
+        timeouts_update(ped(w)->wheel, now);
 
         while (do_rx) {
             struct w_sock_slist sl = w_sock_slist_initializer(sl);

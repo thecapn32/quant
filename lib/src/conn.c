@@ -435,7 +435,7 @@ restart_key_flip_alarm(struct q_conn * const c)
     warn(DBG, "next key flip alarm in %f sec", t / (double)NS_PER_S);
 #endif
 
-    timeouts_add(c->w->data, &c->key_flip_alarm, t);
+    timeouts_add(ped(c->w)->wheel, &c->key_flip_alarm, t);
 }
 
 
@@ -588,7 +588,7 @@ tx_ack(struct q_conn * const c, const epoch_t e, const bool tx_ack_eliciting)
 
 void tx(struct q_conn * const c)
 {
-    timeouts_del(c->w->data, &c->tx_w);
+    timeouts_del(ped(c->w)->wheel, &c->tx_w);
 
     if (unlikely(c->state == conn_drng))
         return;
@@ -1521,7 +1521,7 @@ void restart_idle_alarm(struct q_conn * const c)
     warn(DBG, "next idle alarm in %f sec", t / (double)NS_PER_S);
 #endif
 
-    timeouts_add(c->w->data, &c->idle_alarm, t);
+    timeouts_add(ped(c->w)->wheel, &c->idle_alarm, t);
 }
 
 
@@ -1533,7 +1533,7 @@ static void __attribute__((nonnull)) restart_ack_alarm(struct q_conn * const c)
     warn(DBG, "next ACK alarm in %f sec", t / (double)NS_PER_S);
 #endif
 
-    timeouts_add(c->w->data, &c->ack_alarm, t);
+    timeouts_add(ped(c->w)->wheel, &c->ack_alarm, t);
 }
 
 
@@ -1662,11 +1662,11 @@ static void __attribute__((nonnull)) key_flip(struct q_conn * const c)
 
 static void __attribute__((nonnull)) stop_all_alarms(struct q_conn * const c)
 {
-    timeouts_del(c->w->data, &c->rec.ld_alarm);
-    timeouts_del(c->w->data, &c->idle_alarm);
-    timeouts_del(c->w->data, &c->key_flip_alarm);
-    timeouts_del(c->w->data, &c->ack_alarm);
-    timeouts_del(c->w->data, &c->closing_alarm);
+    timeouts_del(ped(c->w)->wheel, &c->rec.ld_alarm);
+    timeouts_del(ped(c->w)->wheel, &c->idle_alarm);
+    timeouts_del(ped(c->w)->wheel, &c->key_flip_alarm);
+    timeouts_del(ped(c->w)->wheel, &c->ack_alarm);
+    timeouts_del(ped(c->w)->wheel, &c->closing_alarm);
 }
 
 
@@ -1697,7 +1697,7 @@ void enter_closing(struct q_conn * const c)
     if ((c->state == conn_idle || c->state == conn_opng) && c->err_code == 0) {
 #endif
         // no need to go closing->draining in these cases
-        timeouts_add(c->w->data, &c->closing_alarm, 0);
+        timeouts_add(ped(c->w)->wheel, &c->closing_alarm, 0);
         return;
 #ifndef FUZZING
     }
@@ -1710,7 +1710,7 @@ void enter_closing(struct q_conn * const c)
         const timeout_t dur =
             3 * (c->rec.cur.srtt == 0 ? kInitialRtt : c->rec.cur.srtt) +
             4 * c->rec.cur.rttvar;
-        timeouts_add(c->w->data, &c->closing_alarm, dur);
+        timeouts_add(ped(c->w)->wheel, &c->closing_alarm, dur);
 #ifdef DEBUG_TIMERS
         mk_cid_str(DBG, c->scid, scid_str);
         warn(DBG, "closing/draining alarm in %f sec on %s conn %s",
@@ -1722,7 +1722,7 @@ void enter_closing(struct q_conn * const c)
     if (c->state != conn_drng) {
         c->needs_tx = true;
         conn_to_state(c, conn_clsg);
-        timeouts_add(c->w->data, &c->tx_w, 0);
+        timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
     }
 }
 
@@ -1955,7 +1955,7 @@ void free_conn(struct q_conn * const c)
     for (pn_t t = pn_init; t <= pn_data; t++)
         free_pn(&c->pns[t]);
 
-    timeouts_del(c->w->data, &c->tx_w);
+    timeouts_del(ped(c->w)->wheel, &c->tx_w);
 
     diet_free(&c->clsd_strms);
     free(c->peer_name);

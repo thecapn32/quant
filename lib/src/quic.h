@@ -138,6 +138,14 @@
 #define FMT_SID BLD YEL "%" PRId NRM
 
 
+struct per_engine_data {
+    struct timeouts * wheel;
+};
+
+
+#define ped(w) ((struct per_engine_data *)((w)->data))
+
+
 struct cid {
     splay_entry(cid) node_seq;
     uint_t seq; ///< Connection ID sequence number

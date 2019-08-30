@@ -686,11 +686,11 @@ dec_close_frame(const uint8_t type,
         err_close_return(c, ERR_FRAME_ENC, type, "illegal reason len");
 
     if (c->state == conn_drng)
-        timeouts_add(c->w->data, &c->closing_alarm, 0);
+        timeouts_add(ped(c->w)->wheel, &c->closing_alarm, 0);
     else {
         if (c->is_clnt) {
             conn_to_state(c, conn_drng);
-            timeouts_add(c->w->data, &c->closing_alarm, 0);
+            timeouts_add(ped(c->w)->wheel, &c->closing_alarm, 0);
         } else
             enter_closing(c);
     }
@@ -1449,7 +1449,7 @@ void enc_ack_frame(uint8_t ** pos,
              pn->ect1_cnt, pn->ce_cnt ? BLU : NRM, pn->ce_cnt);
     }
 
-    timeouts_del(c->w->data, &c->ack_alarm);
+    timeouts_del(ped(c->w)->wheel, &c->ack_alarm);
     bit_zero(FRM_MAX, &pn->rx_frames);
     pn->pkts_rxed_since_last_ack_tx = 0;
     pn->imm_ack = false;

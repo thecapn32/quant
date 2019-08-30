@@ -98,7 +98,7 @@ static void __attribute__((nonnull)) maybe_tx(struct q_conn * const c)
     c->no_wnd = false;
     // don't set c->needs_tx = true, since it's not clear we must TX
     c->tx_limit = 0;
-    timeouts_add(c->w->data, &c->tx_w, 0);
+    timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
 }
 
 
@@ -203,7 +203,7 @@ void set_ld_timer(struct q_conn * const c)
         warn(DBG, "no RTX-able pkts in flight, stopping ld_alarm on %s conn %s",
              conn_type(c), scid_str);
 #endif
-        timeouts_del(c->w->data, &c->rec.ld_alarm);
+        timeouts_del(ped(c->w)->wheel, &c->rec.ld_alarm);
         return;
     }
 
@@ -230,7 +230,7 @@ set_to:;
     warn(DBG, "%s alarm in %f sec on %s conn %s", type,
          c->rec.ld_alarm_val / (double)NS_PER_S, conn_type(c), scid_str);
 #endif
-    timeouts_add(c->w->data, &c->rec.ld_alarm,
+    timeouts_add(ped(c->w)->wheel, &c->rec.ld_alarm,
                  c->rec.ld_alarm_val <= 0 ? 0 : c->rec.ld_alarm_val);
 }
 
@@ -450,7 +450,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
 
 static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
 {
-    // timeouts_del(c->w->data, &c->rec.ld_alarm);
+    // timeouts_del(ped(c->w)->wheel, &c->rec.ld_alarm);
 
     // see OnLossDetectionTimeout pseudo code
     struct pn_space * const pn = earliest_loss_t_pn(c);
@@ -477,7 +477,7 @@ static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
             w_set_sockopt(c->sock, &c->sockopt);
         }
         c->tx_limit = 0;
-        timeouts_add(c->w->data, &c->tx_w, 0);
+        timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
         c->i.pto_cnt++;
 
     } else if (have_keys(c, pn_data) == false) {
@@ -486,7 +486,7 @@ static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
              conn_type(c), scid_str);
 #endif
         c->tx_limit = have_keys(c, pn_hshk) ? 1 : 2;
-        timeouts_add(c->w->data, &c->tx_w, 0);
+        timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
         c->rec.crypto_cnt++;
 
     } else {
@@ -497,7 +497,7 @@ static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
         c->rec.pto_cnt++;
         c->i.pto_cnt++;
         c->tx_limit = 2;
-        timeouts_add(c->w->data, &c->tx_w, 0);
+        timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
     }
 
     if (timeout_expired(&c->rec.ld_alarm))
@@ -731,7 +731,7 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
 void init_rec(struct q_conn * const c)
 {
     if (timeout_pending(&c->rec.ld_alarm))
-        timeouts_del(c->w->data, &c->rec.ld_alarm);
+        timeouts_del(ped(c->w)->wheel, &c->rec.ld_alarm);
 
     c->rec.cur = (struct cc_state){
         .cwnd = kInitialWindow, .ssthresh = UINT_T_MAX, .min_rtt = UINT_T_MAX};

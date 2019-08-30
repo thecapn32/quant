@@ -462,7 +462,7 @@ bool enc_pkt(struct q_stream * const s,
         if (enc_data == false || diet_cnt(&pn->recv) <= 8)
             enc_ack_frame(&pos, v->buf, end, m, pn);
         else
-            timeouts_add(c->w->data, &c->ack_alarm, 0);
+            timeouts_add(ped(c->w)->wheel, &c->ack_alarm, 0);
     }
 
     if (unlikely(c->state == conn_clsg))

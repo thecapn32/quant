@@ -303,7 +303,7 @@ struct q_conn * q_connect(struct w_engine * const w,
     } else if (early_data_stream)
         *early_data_stream = 0;
 
-    timeouts_add(w->data, &c->tx_w, 0);
+    timeouts_add(ped(w)->wheel, &c->tx_w, 0);
 
     warn(DBG, "waiting for connect on %s conn %s to %s:%s", conn_type(c),
          scid_str, ip, port);
@@ -371,7 +371,7 @@ bool q_write(struct q_stream * const s,
     concat_out(s, q);
 
     // kick TX watcher
-    timeouts_add(c->w->data, &c->tx_w, 0);
+    timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
     return true;
 }
 
@@ -458,7 +458,7 @@ static void cancel_api_call(struct w_engine * const w)
 #ifdef DEBUG_EXTRA
     warn(DBG, "canceling API call");
 #endif
-    timeouts_del(w->data, &api_alarm);
+    timeouts_del(ped(w)->wheel, &api_alarm);
     maybe_api_return(q_accept, 0, 0);
     maybe_api_return(q_ready, 0, 0);
 }
@@ -471,7 +471,7 @@ restart_api_alarm(struct w_engine * const w, const uint64_t nsec)
     warn(DBG, "next API alarm in %f sec", nsec / (double)NS_PER_S);
 #endif
 
-    timeouts_add(w->data, &api_alarm, nsec);
+    timeouts_add(ped(w)->wheel, &api_alarm, nsec);
 }
 
 
@@ -591,6 +591,10 @@ struct w_engine * q_init(const char * const ifname,
     if (num_bufs_ok < num_bufs)
         warn(WRN, "only allocated %" PRIu "/%" PRIu32 " warpcore buffers ",
              num_bufs_ok, num_bufs);
+
+    w->data = calloc(1, sizeof(struct engine_globals));
+    ensure(w->data, "could not calloc");
+
     pkt_meta = calloc(num_bufs, sizeof(*pkt_meta));
     ensure(pkt_meta, "could not calloc");
     ASAN_POISON_MEMORY_REGION(pkt_meta, num_bufs * sizeof(*pkt_meta));
@@ -598,8 +602,8 @@ struct w_engine * q_init(const char * const ifname,
     // initialize the event loop
     loop_init();
     int err;
-    w->data = timeouts_open(TIMEOUT_nHZ, &err);
-    timeouts_update(w->data, loop_now());
+    ped(w)->wheel = timeouts_open(TIMEOUT_nHZ, &err);
+    timeouts_update(ped(w)->wheel, loop_now());
     timeout_setcb(&api_alarm, cancel_api_call, w);
 
     warn(INF, "%s/%s (%s) %s/%s ready", quant_name, w->backend_name,
@@ -693,7 +697,7 @@ void q_close(struct q_conn * const c,
 
     if (c->state != conn_drng) {
         conn_to_state(c, conn_qlse);
-        timeouts_add(c->w->data, &c->tx_w, 0);
+        timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
     }
 
     loop_run(c->w, (func_ptr)q_close, c, 0);
@@ -731,7 +735,7 @@ void q_cleanup(struct w_engine * const w)
     kh_foreach_value(&conns_by_srt, c, { q_close(c, 0, 0); });
 
     // stop the event loop
-    timeouts_close(w->data);
+    timeouts_close(ped(w)->wheel);
 
     free_tls_ctx();
 
@@ -762,6 +766,7 @@ void q_cleanup(struct w_engine * const w)
     kh_release(conns_by_srt, &conns_by_srt);
 
     free(pkt_meta);
+    free(w->data);
     w_cleanup(w);
 
 #if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) && !defined(FUZZING) &&    \
@@ -921,7 +926,7 @@ void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
          scid_str, old_ip, old_port, new_ip, new_port);
 #endif
 
-    timeouts_add(c->w->data, &c->tx_w, 0);
+    timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
 }
 #endif
 
