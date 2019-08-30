@@ -273,10 +273,6 @@ struct q_conn * q_connect(struct w_engine * const w,
     // if we have no early data, we're not trying 0-RTT
     c->try_0rtt &= early_data && early_data_stream;
 
-    warn(ERR, "%p", (void *)early_data);
-    warn(ERR, "%p", (void *)early_data_stream);
-    warn(ERR, "%u", c->try_0rtt);
-
 #if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
     char ip[NI_MAXHOST];
     char port[NI_MAXSERV];
