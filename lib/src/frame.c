@@ -161,7 +161,7 @@ get_and_validate_strm(struct q_conn * const c,
         struct q_stream * s = get_stream(c, sid);
         if (unlikely(s == 0)) {
             if (unlikely(diet_find(&c->clsd_strms, (uint_t)sid))) {
-                mk_cid_str(c->scid, scid_str);
+                mk_cid_str(NTE, c->scid, scid_str);
                 warn(NTE,
                      "ignoring 0x%02x frame for closed strm " FMT_SID
                      " on %s conn %s",
@@ -244,10 +244,10 @@ dec_stream_or_crypto_frame(const uint8_t type,
         goto done;
     }
 
+    mk_cid_str(NTE, c->scid, scid_str);
     if (unlikely(m->strm == 0)) {
         if (unlikely(diet_find(&c->clsd_strms, (uint_t)sid))) {
 #ifdef DEBUG_STREAMS
-            mk_cid_str(c->scid, scid_str);
             warn(NTE,
                  "ignoring STREAM frame for closed strm " FMT_SID
                  " on %s conn %s",
@@ -275,7 +275,6 @@ dec_stream_or_crypto_frame(const uint8_t type,
 
         if (unlikely(m->strm->state == strm_hcrm ||
                      m->strm->state == strm_clsd)) {
-            mk_cid_str(c->scid, scid_str);
             warn(NTE,
                  "ignoring STREAM frame for %s strm " FMT_SID " on %s conn %s",
                  strm_state_str[m->strm->state], sid, conn_type(c), scid_str);
@@ -366,7 +365,6 @@ dec_stream_or_crypto_frame(const uint8_t type,
     // data is out of order - check if it overlaps with already stored ooo data
     kind = YEL "ooo" NRM;
     if (unlikely(m->strm->state == strm_hcrm || m->strm->state == strm_clsd)) {
-        mk_cid_str(c->scid, scid_str);
         warn(NTE, "ignoring STREAM frame for %s strm " FMT_SID " on %s conn %s",
              strm_state_str[m->strm->state], sid, conn_type(c), scid_str);
         ignore = true;
@@ -586,7 +584,7 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
             if (likely(c->sockopt.enable_ecn &&
                        is_set(IPTOS_ECN_ECT0, acked->flags)) &&
                 unlikely(type != FRM_ACE)) {
-                mk_cid_str(c->scid, scid_str);
+                mk_cid_str(NTE, c->scid, scid_str);
                 warn(NTE, "ECN verification failed for %s conn %s",
                      conn_type(c), scid_str);
                 c->sockopt.enable_ecn = false;
@@ -883,7 +881,7 @@ dec_path_challenge_frame(const uint8_t ** pos,
     struct q_conn * const c = m->pn->c;
     decb_chk(c->path_chlg_in, pos, end, PATH_CHLG_LEN, c, FRM_PCL);
 
-    mk_path_chlg_str(c->path_chlg_in, pci_str);
+    mk_path_chlg_str(INF, c->path_chlg_in, pci_str);
     warn(INF, FRAM_IN "PATH_CHALLENGE" NRM " data=%s", pci_str);
 
     memcpy(c->path_resp_out, c->path_chlg_in, PATH_CHLG_LEN);
@@ -901,7 +899,7 @@ dec_path_response_frame(const uint8_t ** pos,
     struct q_conn * const c = m->pn->c;
     decb_chk(c->path_resp_in, pos, end, PATH_CHLG_LEN, c, FRM_PRP);
 
-    mk_path_chlg_str(c->path_resp_in, pri_str);
+    mk_path_chlg_str(NTE, c->path_resp_in, pri_str);
     warn(INF, FRAM_IN "PATH_RESPONSE" NRM " data=%s", pri_str);
 
     if (unlikely(c->tx_path_chlg == false)) {
@@ -910,7 +908,7 @@ dec_path_response_frame(const uint8_t ** pos,
     }
 
     if (unlikely(c->path_resp_in != c->path_chlg_out)) {
-        mk_path_chlg_str(c->path_chlg_out, pco_str);
+        mk_path_chlg_str(NTE, c->path_chlg_out, pco_str);
         warn(NTE, "PATH_RESPONSE %s != %s, ignoring", pri_str, pco_str);
         return true;
     }
@@ -963,8 +961,8 @@ dec_new_cid_frame(const uint8_t ** pos,
         false;
 #endif
 
-    mk_srt_str(dcid.srt, srt_str);
-    mk_cid_str(&dcid, dcid_str);
+    mk_srt_str(INF, dcid.srt, srt_str);
+    mk_cid_str(INF, &dcid, dcid_str);
     warn(INF,
          FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu " rpt=%" PRIu
                  " len=%u dcid=%s srt=%s%s",
@@ -1078,7 +1076,7 @@ dec_new_token_frame(const uint8_t ** pos,
     uint8_t tok[MAX_TOK_LEN];
     decb_chk(tok, pos, end, (uint16_t)act_tok_len, c, FRM_TOK);
 
-    mk_tok_str(tok, tok_len, tok_str);
+    mk_tok_str(INF, tok, tok_len, tok_str);
     warn(INF, FRAM_IN "NEW_TOKEN" NRM " len=%" PRIu " tok=%s", tok_len,
          tok_str);
 
@@ -1687,7 +1685,7 @@ void enc_path_response_frame(uint8_t ** pos,
     enc1(pos, end, FRM_PRP);
     encb(pos, end, c->path_resp_out, sizeof(c->path_resp_out));
 
-    mk_path_chlg_str(c->path_resp_out, pro_str);
+    mk_path_chlg_str(INF, c->path_resp_out, pro_str);
     warn(INF, FRAM_OUT "PATH_RESPONSE" NRM " data=%s", pro_str);
 
     track_frame(m, FRM_PRP);
@@ -1702,7 +1700,7 @@ void enc_path_challenge_frame(uint8_t ** pos,
     enc1(pos, end, FRM_PCL);
     encb(pos, end, c->path_chlg_out, sizeof(c->path_chlg_out));
 
-    mk_path_chlg_str(c->path_resp_out, pco_str);
+    mk_path_chlg_str(INF, c->path_resp_out, pco_str);
     warn(INF, FRAM_OUT "PATH_CHALLENGE" NRM " data=%s", pco_str);
 
     track_frame(m, FRM_PCL);
@@ -1745,8 +1743,8 @@ void enc_new_cid_frame(uint8_t ** pos,
     encb(pos, end, enc_cid->id, enc_cid->len);
     encb(pos, end, enc_cid->srt, sizeof(enc_cid->srt));
 
-    mk_srt_str(enc_cid->srt, srt_str);
-    mk_cid_str(enc_cid, enc_cid_str);
+    mk_srt_str(INF, enc_cid->srt, srt_str);
+    mk_cid_str(INF, enc_cid, enc_cid_str);
     warn(INF,
          FRAM_OUT "NEW_CONNECTION_ID" NRM " seq=%" PRIu " rpt=%" PRIu
                   " len=%u cid=%s srt=%s %s",
@@ -1767,7 +1765,7 @@ void enc_new_token_frame(uint8_t ** pos,
     encv(pos, end, c->tok_len);
     encb(pos, end, c->tok, c->tok_len);
 
-    mk_tok_str(c->tok, c->tok_len, tok_str);
+    mk_tok_str(INF, c->tok, c->tok_len, tok_str);
     warn(INF, FRAM_OUT "NEW_TOKEN" NRM " len=%u tok=%s", c->tok_len, tok_str);
 
     track_frame(m, FRM_TOK);

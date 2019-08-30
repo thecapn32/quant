@@ -281,7 +281,7 @@ extern struct q_conn_sl c_ready;
 #define conn_to_state(c, s)                                                    \
     do {                                                                       \
         if ((c)->scid) {                                                       \
-            mk_cid_str((c)->scid, _scid_str);                                  \
+            mk_cid_str(DBG, (c)->scid, _scid_str);                             \
             warn(DBG, "%s%s conn %s state %s -> " RED "%s" NRM,                \
                  (c)->state == (s) ? RED BLD "useless transition: " NRM : "",  \
                  conn_type(c), _scid_str, conn_state_str[(c)->state],          \
@@ -430,7 +430,7 @@ static inline bool __attribute__((nonnull))
 has_pval_wnd(const struct q_conn * const c, const uint16_t len)
 {
     if (unlikely(c->out_data + len >= c->path_val_win)) {
-        mk_cid_str(c->scid, scid_str);
+        mk_cid_str(DBG, c->scid, scid_str);
         warn(DBG, "%s conn %s path val lim reached: %" PRIu " + %u >= %" PRIu,
              conn_type(c), scid_str, c->out_data, len, c->path_val_win);
         return false;
@@ -443,7 +443,7 @@ has_pval_wnd(const struct q_conn * const c, const uint16_t len)
 static inline bool __attribute__((nonnull))
 has_wnd(const struct q_conn * const c, const uint16_t len)
 {
-    mk_cid_str(c->scid, scid_str);
+    mk_cid_str(DBG, c->scid, scid_str);
     if (unlikely(c->blocked)) {
         warn(DBG, "%s conn %s is blocked", conn_type(c), scid_str);
         return false;

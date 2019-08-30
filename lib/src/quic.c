@@ -273,8 +273,8 @@ struct q_conn * q_connect(struct w_engine * const w,
     // if we have no early data, we're not trying 0-RTT
     c->try_0rtt &= early_data && early_data_stream;
 
-    warn(ERR, "%p", (void*)early_data);
-    warn(ERR, "%p", (void*)early_data_stream);
+    warn(ERR, "%p", (void *)early_data);
+    warn(ERR, "%p", (void *)early_data_stream);
     warn(ERR, "%u", c->try_0rtt);
 
 #if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
@@ -284,7 +284,7 @@ struct q_conn * q_connect(struct w_engine * const w,
                                 sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
     ensure(err == 0, "getnameinfo %d", err);
 
-    mk_cid_str(c->scid, scid_str);
+    mk_cid_str(WRN, c->scid, scid_str);
     warn(WRN, "new %u-RTT %s conn %s to %s:%s, %" PRIu " byte%s queued for TX",
          c->try_0rtt ? 0 : 1, conn_type(c), scid_str, ip, port,
          early_data ? w_iov_sq_len(early_data) : 0,
@@ -340,7 +340,7 @@ bool q_write(struct q_stream * const s,
              const bool fin)
 {
     struct q_conn * const c = s->c;
-    mk_cid_str(c->scid, scid_str);
+    mk_cid_str(ERR, c->scid, scid_str);
     if (unlikely(c->state == conn_qlse || c->state == conn_drng ||
                  c->state == conn_clsd)) {
         warn(ERR, "%s conn %s is in state %s, can't write", conn_type(c),
@@ -393,7 +393,7 @@ q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool all)
 
         if (s == 0 && all) {
             // no data queued on any stream, wait for new data
-            mk_cid_str(c->scid, scid_str);
+            mk_cid_str(WRN, c->scid, scid_str);
             warn(WRN, "waiting to read on any strm on %s conn %s", conn_type(c),
                  scid_str);
             loop_run(c->w, (func_ptr)q_read, c, 0);
@@ -415,7 +415,7 @@ bool q_read_stream(struct q_stream * const s,
     if (unlikely(c->state != conn_estb))
         return 0;
 
-    mk_cid_str(c->scid, scid_str);
+    mk_cid_str(WRN, c->scid, scid_str);
     if (q_peer_closed_stream(s) == false && all) {
         warn(WRN, "reading all on %s conn %s strm " FMT_SID, conn_type(c),
              scid_str, s->id);
@@ -513,7 +513,7 @@ accept:;
            "getnameinfo");
 
     struct pn_data * const pnd = &c->pns[pn_data].data;
-    mk_cid_str(c->scid, scid_str);
+    mk_cid_str(WRN, c->scid, scid_str);
     warn(WRN, "%s conn %s accepted from clnt %s:%s%s, cipher %s", conn_type(c),
          scid_str, ip, port, c->did_0rtt ? " after 0-RTT" : "",
          pnd->out_1rtt[pnd->out_kyph].aead->algo->name);
@@ -640,7 +640,7 @@ struct w_engine * q_init(const char * const ifname,
 
 void q_close_stream(struct q_stream * const s)
 {
-    mk_cid_str(s->c->scid, scid_str);
+    mk_cid_str(WRN, s->c->scid, scid_str);
     warn(WRN, "closing strm " FMT_SID " on %s conn %s", s->id, conn_type(s->c),
          scid_str);
     struct w_iov_sq q = w_iov_sq_initializer(q);
@@ -674,7 +674,7 @@ void q_close(struct q_conn * const c,
              const uint64_t code,
              const char * const reason)
 {
-    mk_cid_str(c->scid, scid_str);
+    mk_cid_str(WRN, c->scid, scid_str);
     if (c->scid)
         warn(WRN,
              "closing %s conn %s on port %u w/err %s0x%" PRIx64 "%s%s%s" NRM,
@@ -861,7 +861,7 @@ bool q_ready(struct w_engine * const w,
             op = "accept";
         else if (c->state == conn_clsd)
             op = "close";
-        mk_cid_str(c->scid, scid_str);
+        mk_cid_str(WRN, c->scid, scid_str);
         warn(WRN, "%s conn %s ready to %s", conn_type(c), scid_str, op);
     } else {
         warn(WRN, "no conn ready to rx");
@@ -919,7 +919,7 @@ void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
                        sizeof(new_port), NI_NUMERICHOST | NI_NUMERICSERV) == 0,
            "getnameinfo");
 
-    mk_cid_str(c->scid, scid_str);
+    mk_cid_str(NTE, c->scid, scid_str);
     warn(NTE, "simulated %s for %s conn %s from %s:%s to %s:%s",
          use_new_dcid ? "conn migration" : "NAT rebinding", conn_type(c),
          scid_str, old_ip, old_port, new_ip, new_port);

@@ -141,7 +141,7 @@ void log_cc(struct q_conn * const c)
         (int64_t)c->rec.cur.rttvar - (int64_t)c->rec.prev.rttvar;
     if (delta_in_flight || delta_cwnd || delta_ssthresh || delta_srtt ||
         delta_rttvar) {
-        mk_cid_str(c->scid, scid_str);
+        mk_cid_str(DBG, c->scid, scid_str);
         warn(DBG,
              "%s conn %s: in_flight=%" PRIu " (%s%+" PRId NRM "), cwnd" NRM
              "=%" PRIu " (%s%+" PRId NRM "), ssthresh=%" PRIu " (%s%+" PRId NRM
@@ -173,7 +173,7 @@ void set_ld_timer(struct q_conn * const c)
 
 #ifdef DEBUG_TIMERS
     const char * type = BLD RED "???" NRM;
-    mk_cid_str(c->scid, scid_str);
+    mk_cid_str(DBG, c->scid, scid_str);
 #endif
     const struct pn_space * const pn = earliest_loss_t_pn(c);
 
@@ -455,7 +455,7 @@ static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
     // see OnLossDetectionTimeout pseudo code
     struct pn_space * const pn = earliest_loss_t_pn(c);
 
-    mk_cid_str(c->scid, scid_str);
+    mk_cid_str(NTE, c->scid, scid_str);
     if (pn && pn->loss_t) {
 #ifdef DEBUG_TIMERS
         warn(DBG, "%s TT alarm on %s conn %s", pn_type_str(pn->type),

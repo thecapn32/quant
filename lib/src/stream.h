@@ -115,7 +115,7 @@ struct q_stream {
 #define strm_to_state(s, new_state)                                            \
     do {                                                                       \
         if ((s)->id >= 0) {                                                    \
-            mk_cid_str((s)->c->scid, _scid_str);                               \
+            mk_cid_str(DBG, (s)->c->scid, _scid_str);                          \
             warn(DBG,                                                          \
                  "%s%s conn %s strm " FMT_SID " (%s, %s) state %s -> " YEL     \
                  "%s" NRM,                                                     \

@@ -140,7 +140,7 @@ ack_t needs_ack(const struct pn_space * const pn)
 {
 #if defined(DEBUG_EXTRA) && (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG))
     struct q_conn * const c = pn->c;
-    mk_cid_str(c->scid, scid_str);
+    mk_cid_str(DBG, c->scid, scid_str);
 #endif
 
     if (unlikely(pn->imm_ack)) {

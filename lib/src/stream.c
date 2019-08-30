@@ -136,7 +136,7 @@ void free_stream(struct q_stream * const s)
     struct q_conn * const c = s->c;
     if (likely(s->id >= 0)) {
 #ifndef FUZZING
-        mk_cid_str(c->scid, scid_str);
+        mk_cid_str(DBG, c->scid, scid_str);
         warn(DBG, "freeing strm " FMT_SID " on %s conn %s", s->id, conn_type(c),
              scid_str);
 #endif
@@ -183,7 +183,7 @@ void track_bytes_out(struct q_stream * const s, const uint_t n)
 void reset_stream(struct q_stream * const s, const bool forget)
 {
 #ifdef DEBUG_STREAMS
-    mk_cid_str(s->c->scid, scid_str);
+    mk_cid_str(DBG, s->c->scid, scid_str);
     warn(DBG, "reset strm %u " FMT_SID " on %s conn %s", forget, s->id,
          conn_type(s->c), scid_str);
 #endif

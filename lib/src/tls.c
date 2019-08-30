@@ -571,7 +571,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                 decb(c->tp_out.orig_cid.id, &pos, end, len);
                 c->tp_out.orig_cid.len = (uint8_t)len;
             }
-            mk_cid_str(&c->tp_out.orig_cid, orig_cid_str);
+            mk_cid_str(INF, &c->tp_out.orig_cid, orig_cid_str);
             warn(INF, "\toriginal_connection_id = %s", orig_cid_str);
             break;
 
@@ -601,7 +601,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             memcpy(dcid->srt, pos, sizeof(dcid->srt));
             dcid->has_srt = true;
             {
-                mk_srt_str(dcid->srt, srt_str);
+                mk_srt_str(INF, dcid->srt, srt_str);
                 warn(INF, "\tstateless_reset_token = %s", srt_str);
             }
             conns_by_srt_ins(c, dcid->srt);
@@ -662,8 +662,8 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                 return 1;
             }
 
-            mk_cid_str(&pa->cid, cid_str);
-            mk_srt_str(pa->cid.srt, srt_str);
+            mk_cid_str(INF, &pa->cid, cid_str);
+            mk_srt_str(INF, pa->cid.srt, srt_str);
             warn(INF,
                  "\tpreferred_address = IPv4=%s:%s IPv6=[%s]:%s cid=%s srt=%s",
                  ip4, port4, ip6, port6, cid_str, srt_str);
@@ -693,10 +693,8 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         }
 
         if (cid_cmp(&c->tp_out.orig_cid, &c->odcid)) {
-            mk_cid_str(&c->tp_out.orig_cid, orig_cid_str);
-            mk_cid_str(&c->odcid, odcid_str);
             err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
-                      "cid mismatch %s != %s", orig_cid_str, odcid_str);
+                      "cid/odcid mismatch");
             return 1;
         }
     }
@@ -777,7 +775,7 @@ void init_tp(struct q_conn * const c)
             if (!c->is_clnt) {
                 encb_tp(&pos, end, TP_SRT, c->scid->srt, sizeof(c->scid->srt));
 #ifdef DEBUG_EXTRA
-                mk_srt_str(c->scid->srt, srt_str);
+                mk_srt_str(INF, c->scid->srt, srt_str);
                 warn(INF, "\tstateless_reset_token = %s", srt_str);
 #endif
             }
@@ -786,7 +784,7 @@ void init_tp(struct q_conn * const c)
             if (!c->is_clnt && c->odcid.len) {
                 encb_tp(&pos, end, TP_OCID, c->odcid.id, c->odcid.len);
 #ifdef DEBUG_EXTRA
-                mk_cid_str(&c->tp_in.orig_cid, orig_cid_str);
+                mk_cid_str(INF, &c->tp_in.orig_cid, orig_cid_str);
                 warn(INF, "\toriginal_connection_id = %s", orig_cid_str);
 #endif
             }
@@ -921,7 +919,7 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
                                      enc_tckt.aead->algo->tag_size))
         return -1;
 
-    mk_cid_str(c->scid, scid_str);
+    mk_cid_str(WRN, c->scid, scid_str);
     if (is_encrypt) {
         warn(INF, "creating new 0-RTT session ticket for %s conn %s (%s %s)",
              conn_type(c), scid_str, ptls_get_server_name(tls),
@@ -1034,7 +1032,7 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
 
     // write all tickets
     // FIXME this currently dumps the entire cache to file on each connection!
-    mk_cid_str(c->scid, scid_str);
+    mk_cid_str(INF, c->scid, scid_str);
     splay_foreach (t, tickets_by_peer, &tickets) {
         warn(INF, "writing TLS ticket for %s conn %s (%s %s)", conn_type(c),
              scid_str, t->sni, t->alpn);

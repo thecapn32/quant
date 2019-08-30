@@ -41,9 +41,9 @@
 
 // #define DEBUG_BUFFERS ///< Set to log buffer use details.
 // #define DEBUG_EXTRA   ///< Set to log various extra details.
-#define DEBUG_STREAMS ///< Set to log stream scheduling details.
-// #define DEBUG_TIMERS ///< Set to log timer details.
-// #define DEBUG_PROT   ///< Set to log packet protection/encryption details.
+// #define DEBUG_STREAMS ///< Set to log stream scheduling details.
+// #define DEBUG_TIMERS  ///< Set to log timer details.
+// #define DEBUG_PROT    ///< Set to log packet protection/encryption details.
 
 #define DATA_OFFSET 48 ///< Offsets of stream frame payload data we TX.
 
@@ -303,24 +303,30 @@ extern char * __attribute__((nonnull)) hex2str(const uint8_t * const src,
 
 #define hex_str_len(x) ((x)*2 + 1)
 
-#define mk_cid_str(cid, str)                                                   \
-    char str[hex_str_len(2 * sizeof((cid)->seq) + CID_LEN_MAX)];               \
-    if (likely(cid)) {                                                         \
+#define mk_cid_str(lvl, cid, str)                                              \
+    char str[DLEVEL >= (lvl)                                                   \
+                 ? hex_str_len(2 * sizeof((cid)->seq) + CID_LEN_MAX)           \
+                 : 1];                                                         \
+    if (unlikely(DLEVEL >= (lvl)) && likely(cid)) {                            \
         const int _n = snprintf(str, sizeof(str), "%" PRIu ":", (cid)->seq);   \
         hex2str((cid)->id, (cid)->len, &str[_n], sizeof(str) - (size_t)_n);    \
     }
 
-#define mk_path_chlg_str(path_chlg, str)                                       \
-    char str[hex_str_len(PATH_CHLG_LEN)];                                      \
+#define mk_path_chlg_str(lvl, path_chlg, str)                                  \
+    char str[DLEVEL >= (lvl) ? hex_str_len(PATH_CHLG_LEN) : 1];                \
+    if (unlikely(DLEVEL >= (lvl)))                                             \
     hex2str((path_chlg), sizeof(path_chlg), str, sizeof(str))
 
-#define mk_srt_str(srt, str)                                                   \
-    char str[hex_str_len(SRT_LEN)];                                            \
+
+#define mk_srt_str(lvl, srt, str)                                              \
+    char str[DLEVEL >= (lvl) ? hex_str_len(SRT_LEN) : 1];                      \
+    if (unlikely(DLEVEL >= (lvl)))                                             \
     hex2str((srt), sizeof(srt), str, sizeof(str))
 
-#define mk_tok_str(tok, tok_len, str)                                          \
-    char str[hex_str_len(MAX_TOK_LEN)];                                        \
-    if (likely(tok)) {                                                         \
+
+#define mk_tok_str(lvl, tok, tok_len, str)                                     \
+    char str[DLEVEL >= (lvl) ? hex_str_len(MAX_TOK_LEN) : 1];                  \
+    if (unlikely(DLEVEL >= (lvl)) && likely(tok)) {                            \
         hex2str((tok), (tok_len), str, sizeof(str));                           \
     }
 
