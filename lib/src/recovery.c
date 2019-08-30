@@ -405,7 +405,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
             DEBUG_diet_insert(&lost, m->hdr.nr, 0);
             on_pkt_lost(m, true);
             if (m->strm == 0 || m->has_rtx)
-                free_iov(w_iov(c->w, pm_idx(m)), m);
+                free_iov(w_iov(c->w, pm_idx(c->w, m)), m);
         }
     });
 

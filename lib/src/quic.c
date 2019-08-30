@@ -83,7 +83,6 @@ const uint32_t ok_vers[] = {
 const uint8_t ok_vers_len = sizeof(ok_vers) / sizeof(ok_vers[0]);
 
 
-struct pkt_meta * pkt_meta = 0;
 struct q_conn_conf default_conn_conf = {.idle_timeout = 10,
                                         .enable_udp_zero_checksums = true,
                                         .tls_key_update_frequency = 3,
@@ -592,12 +591,13 @@ struct w_engine * q_init(const char * const ifname,
         warn(WRN, "only allocated %" PRIu "/%" PRIu32 " warpcore buffers ",
              num_bufs_ok, num_bufs);
 
-    w->data = calloc(1, sizeof(struct engine_globals));
+    w->data = calloc(1, sizeof(struct per_engine_data));
     ensure(w->data, "could not calloc");
 
-    pkt_meta = calloc(num_bufs, sizeof(*pkt_meta));
-    ensure(pkt_meta, "could not calloc");
-    ASAN_POISON_MEMORY_REGION(pkt_meta, num_bufs * sizeof(*pkt_meta));
+    ped(w)->pkt_meta = calloc(num_bufs, sizeof(*ped(w)->pkt_meta));
+    ensure(ped(w)->pkt_meta, "could not calloc");
+    ASAN_POISON_MEMORY_REGION(ped(w)->pkt_meta,
+                              num_bufs * sizeof(*ped(w)->pkt_meta));
 
     // initialize the event loop
     loop_init();
@@ -751,7 +751,7 @@ void q_cleanup(struct w_engine * const w)
 
 #ifdef HAVE_ASAN
     for (uint_t i = 0; i < num_bufs; i++) {
-        struct pkt_meta * const m = &pkt_meta[i];
+        struct pkt_meta * const m = &ped(w)->pkt_meta[i];
         if (__asan_address_is_poisoned(m) == false) {
             warn(DBG, "buffer %" PRIu " still in use for %cX'ed %s pkt %" PRIu,
                  i, m->txed ? 'T' : 'R',
@@ -765,7 +765,7 @@ void q_cleanup(struct w_engine * const w)
     kh_release(conns_by_ipnp, &conns_by_ipnp);
     kh_release(conns_by_srt, &conns_by_srt);
 
-    free(pkt_meta);
+    free(ped(w)->pkt_meta);
     free(w->data);
     w_cleanup(w);
 

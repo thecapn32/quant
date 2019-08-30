@@ -63,7 +63,7 @@ struct w_iov * find_sent_pkt(const struct pn_space * const pn,
     if (unlikely(k == kh_end(&pn->sent_pkts)))
         return 0;
     *m = kh_val(&pn->sent_pkts, k);
-    return w_iov(pn->c->w, pm_idx(*m));
+    return w_iov(pn->c->w, pm_idx(pn->c->w, *m));
 }
 
 
@@ -88,7 +88,7 @@ void free_pn(struct pn_space * const pn)
         kh_foreach_value(&pn->sent_pkts, m, {
             // TX'ed but non-RTX'ed pkts are freed when their stream is freed
             if (m->has_rtx || !has_strm_data(m))
-                free_iov(w_iov(pn->c->w, pm_idx(m)), m);
+                free_iov(w_iov(pn->c->w, pm_idx(pn->c->w, m)), m);
         });
         kh_release(pm_by_nr, &pn->sent_pkts);
         pn->abandoned = true;

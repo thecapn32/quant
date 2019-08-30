@@ -138,14 +138,6 @@
 #define FMT_SID BLD YEL "%" PRId NRM
 
 
-struct per_engine_data {
-    struct timeouts * wheel;
-};
-
-
-#define ped(w) ((struct per_engine_data *)((w)->data))
-
-
 struct cid {
     splay_entry(cid) node_seq;
     uint_t seq; ///< Connection ID sequence number
@@ -235,7 +227,15 @@ struct pkt_meta {
 };
 
 
-extern struct pkt_meta * pkt_meta;
+struct per_engine_data {
+    struct timeouts * wheel;
+    struct pkt_meta * pkt_meta;
+};
+
+
+#define ped(w) ((struct per_engine_data *)((w)->data))
+
+
 extern struct q_conn_sl accept_queue;
 extern struct q_conn_conf default_conn_conf;
 
@@ -291,17 +291,18 @@ write_to_corpus(const int dir, const void * const data, const size_t len);
 ///
 /// @return     Pointer to the pkt_meta entry for the w_iov.
 ///
-#define meta(v) pkt_meta[w_iov_idx(v)]
+#define meta(v) ped((v)->w)->pkt_meta[w_iov_idx(v)]
 
 
 /// Return the w_iov index of a given pkt_meta.
 ///
+/// @param      w     Pointer to warpcore engine.
 /// @param      m     Pointer to a pkt_meta entry.
 ///
 /// @return     Index of the struct w_iov the struct pkt_meta holds meta data
 ///             for.
 ///
-#define pm_idx(m) (uint32_t)((m)-pkt_meta)
+#define pm_idx(w, m) (uint32_t)((m)-ped(w)->pkt_meta)
 
 
 extern char * __attribute__((nonnull)) hex2str(const uint8_t * const src,

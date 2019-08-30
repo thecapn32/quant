@@ -152,7 +152,7 @@ void free_stream(struct q_stream * const s)
     while (!splay_empty(&s->in_ooo)) {
         struct pkt_meta * const p = splay_min(ooo_by_off, &s->in_ooo);
         ensure(splay_remove(ooo_by_off, &s->in_ooo, p), "removed");
-        free_iov(w_iov(c->w, pm_idx(p)), p);
+        free_iov(w_iov(c->w, pm_idx(c->w, p)), p);
     }
 #endif
 

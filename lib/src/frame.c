@@ -316,7 +316,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
             // left edge of p <= left edge of stream: overlap, trim & enqueue
             if (unlikely(p->strm->in_data_off > p->strm_off))
                 trim_frame(p);
-            sq_insert_tail(&m->strm->in, w_iov(c->w, pm_idx(p)), next);
+            sq_insert_tail(&m->strm->in, w_iov(c->w, pm_idx(c->w, p)), next);
             m->strm->in_data_off += p->strm_data_len;
             ensure(splay_remove(ooo_by_off, &m->strm->in_ooo, p), "removed");
 
