@@ -1391,12 +1391,6 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
 }
 
 
-static uint64_t get_time(ptls_get_time_t * self __attribute__((unused)))
-{
-    return w_now();
-}
-
-
 void init_tls_ctx(const struct q_conf * const conf)
 {
 #ifdef PARTICLE
@@ -1465,13 +1459,12 @@ void init_tls_ctx(const struct q_conf * const conf)
                                                               &x25519,
 #endif
                                                               0};
-    static ptls_get_time_t get_time_cb = {get_time};
     static ptls_on_client_hello_t on_client_hello = {on_ch};
     static ptls_update_traffic_key_t update_traffic_key = {
         update_traffic_key_cb};
 
     tls_ctx.omit_end_of_early_data = true;
-    tls_ctx.get_time = &get_time_cb;
+    tls_ctx.get_time = &ptls_get_time; // needs to be absolute time
     tls_ctx.cipher_suites = cipher_suite;
     tls_ctx.key_exchanges = key_exchanges;
     tls_ctx.on_client_hello = &on_client_hello;
