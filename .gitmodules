@@ -9,4 +9,4 @@
         url = https://github.com/private-octopus/picoquic.git
 [submodule "lib/deps/timeout"]
 	path = lib/deps/timeout
-	url = https://github.com/wahern/timeout.git
+	url = https://github.com/larseggert/timeout.git
