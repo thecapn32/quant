@@ -168,8 +168,10 @@ static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-" DRAFT_VERSION_STRING, 5},
                                     {(uint8_t *)"h3-" DRAFT_VERSION_STRING, 5}};
 static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 
+#ifndef NO_TLS_TICKETS
 static struct cipher_ctx dec_tckt;
 static struct cipher_ctx enc_tckt;
+#endif
 
 
 #define QUIC_TP 0xffa5
@@ -889,6 +891,7 @@ void init_tp(struct q_conn * const c)
 }
 
 
+#ifndef NO_TLS_TICKETS
 static void init_ticket_prot(void)
 {
     const ptls_cipher_suite_t * const cs = &aes128gcmsha256;
@@ -903,7 +906,6 @@ static void init_ticket_prot(void)
 }
 
 
-#ifndef NO_TLS_TICKETS
 static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
                              __attribute__((unused)),
                              ptls_t * tls,
@@ -1476,16 +1478,18 @@ void init_tls_ctx(const struct q_conf * const conf,
         tls_ctx->verify_certificate = &verifier.super;
 #endif
 
+#ifndef NO_TLS_TICKETS
     init_ticket_prot();
+#endif
 }
 
 
 void free_tls_ctx(ptls_context_t * const tls_ctx)
 {
+#ifndef NO_TLS_TICKETS
     dispose_cipher(&dec_tckt);
     dispose_cipher(&enc_tckt);
 
-#ifndef NO_TLS_TICKETS
     // free ticket cache
     struct tls_ticket * t;
     struct tls_ticket * tmp;
