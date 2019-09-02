@@ -86,9 +86,6 @@ struct tls {
 };
 
 
-/// TLS context.
-extern ptls_context_t tls_ctx;
-
 struct pkt_meta;
 
 extern void __attribute__((nonnull)) init_prot(struct q_conn * const c);
@@ -104,9 +101,11 @@ free_tls(struct q_conn * const c, const bool keep_alpn);
 extern int __attribute__((nonnull(1)))
 tls_io(struct q_stream * const s, struct w_iov * const iv);
 
-extern void init_tls_ctx(const struct q_conf * const conf);
+extern void __attribute__((nonnull(2)))
+init_tls_ctx(const struct q_conf * const conf, ptls_context_t * const tls_ctx);
 
-extern void free_tls_ctx(void);
+extern void __attribute__((nonnull))
+free_tls_ctx(ptls_context_t * const tls_ctx);
 
 extern uint16_t __attribute__((nonnull))
 dec_aead(const struct w_iov * const xv,

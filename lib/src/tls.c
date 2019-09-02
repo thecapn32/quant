@@ -157,8 +157,6 @@ static FILE * tls_log_file;
 #endif
 
 
-ptls_context_t tls_ctx = {0};
-
 #ifdef WITH_OPENSSL
 static sign_certificate_t sign_cert = {0};
 static ptls_openssl_verify_certificate_t verifier = {0};
@@ -1069,7 +1067,8 @@ void init_tls(struct q_conn * const c, const char * const clnt_alpn)
     if (c->tls.t)
         // we are re-initializing during version negotiation
         free_tls(c, true);
-    ensure((c->tls.t = ptls_new(&tls_ctx, !c->is_clnt)) != 0, "ptls_new");
+    ensure((c->tls.t = ptls_new(&ped(c->w)->tls_ctx, !c->is_clnt)) != 0,
+           "ptls_new");
     *ptls_get_data_ptr(c->tls.t) = c;
     if (c->is_clnt)
         ensure(ptls_set_server_name(c->tls.t, c->peer_name, 0) == 0,
@@ -1371,7 +1370,7 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
         die("epoch %lu unknown", (unsigned long)epoch);
     }
 
-    if (tls_ctx.log_event) {
+    if (ped(c->w)->tls_ctx.log_event) {
         static const char * const log_labels[2][4] = {
             {0, "CLIENT_EARLY_TRAFFIC_SECRET",
              "CLIENT_HANDSHAKE_TRAFFIC_SECRET", "CLIENT_TRAFFIC_SECRET_0"},
@@ -1381,9 +1380,9 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
         char secret_str[hex_str_len(PTLS_MAX_DIGEST_SIZE)];
         hex2str(secret, cipher->hash->digest_size, secret_str,
                 sizeof(secret_str));
-        tls_ctx.log_event->cb(tls_ctx.log_event, tls,
-                              log_labels[ptls_is_server(tls) == is_enc][epoch],
-                              "%s", secret_str);
+        ped(c->w)->tls_ctx.log_event->cb(
+            ped(c->w)->tls_ctx.log_event, tls,
+            log_labels[ptls_is_server(tls) == is_enc][epoch], "%s", secret_str);
     }
 
     return setup_cipher(&ctx->header_protection, &ctx->aead, cipher->aead,
@@ -1391,7 +1390,8 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
 }
 
 
-void init_tls_ctx(const struct q_conf * const conf)
+void init_tls_ctx(const struct q_conf * const conf,
+                  ptls_context_t * const tls_ctx)
 {
 #ifdef PARTICLE
     // the picotls minicrypto backend depends on this
@@ -1410,7 +1410,7 @@ void init_tls_ctx(const struct q_conf * const conf)
 #elif !defined(PARTICLE)
         // XXX ptls_minicrypto_load_private_key() only works for ECDSA keys
         const int ret =
-            ptls_minicrypto_load_private_key(&tls_ctx, conf->tls_key);
+            ptls_minicrypto_load_private_key(tls_ctx, conf->tls_key);
         ensure(ret == 0, "could not open key %s", conf->tls_key);
 #endif
     }
@@ -1422,7 +1422,7 @@ void init_tls_ctx(const struct q_conf * const conf)
 
 #ifndef PARTICLE
     if (conf && conf->tls_cert) {
-        const int ret = ptls_load_certificates(&tls_ctx, conf->tls_cert);
+        const int ret = ptls_load_certificates(tls_ctx, conf->tls_cert);
         ensure(ret == 0, "ptls_load_certificates");
     }
 #endif
@@ -1431,16 +1431,16 @@ void init_tls_ctx(const struct q_conf * const conf)
 #ifndef NO_TLS_TICKETS
         strncpy(tickets.file_name, conf->ticket_store,
                 sizeof(tickets.file_name));
-        tls_ctx.save_ticket = &save_ticket;
+        tls_ctx->save_ticket = &save_ticket;
         read_tickets();
 #endif
     } else {
 #ifndef NO_TLS_TICKETS
-        tls_ctx.encrypt_ticket = &encrypt_ticket;
+        tls_ctx->encrypt_ticket = &encrypt_ticket;
 #endif
-        tls_ctx.max_early_data_size = 0xffffffff;
-        tls_ctx.ticket_lifetime = 60 * 60 * 24;
-        tls_ctx.require_dhe_on_psk = 0;
+        tls_ctx->max_early_data_size = 0xffffffff;
+        tls_ctx->ticket_lifetime = 60 * 60 * 24;
+        tls_ctx->require_dhe_on_psk = 0;
     }
 
 #ifndef NO_TLS_LOG
@@ -1451,7 +1451,7 @@ void init_tls_ctx(const struct q_conf * const conf)
 
     static ptls_log_event_t log_event = {log_event_cb};
     if (conf && conf->tls_log)
-        tls_ctx.log_event = &log_event;
+        tls_ctx->log_event = &log_event;
 #endif
 
     static ptls_key_exchange_algorithm_t * key_exchanges[] = {&secp256r1,
@@ -1463,24 +1463,24 @@ void init_tls_ctx(const struct q_conf * const conf)
     static ptls_update_traffic_key_t update_traffic_key = {
         update_traffic_key_cb};
 
-    tls_ctx.omit_end_of_early_data = true;
-    tls_ctx.get_time = &ptls_get_time; // needs to be absolute time
-    tls_ctx.cipher_suites = cipher_suite;
-    tls_ctx.key_exchanges = key_exchanges;
-    tls_ctx.on_client_hello = &on_client_hello;
-    tls_ctx.update_traffic_key = &update_traffic_key;
-    tls_ctx.random_bytes = rand_bytes;
+    tls_ctx->omit_end_of_early_data = true;
+    tls_ctx->get_time = &ptls_get_time; // needs to be absolute time
+    tls_ctx->cipher_suites = cipher_suite;
+    tls_ctx->key_exchanges = key_exchanges;
+    tls_ctx->on_client_hello = &on_client_hello;
+    tls_ctx->update_traffic_key = &update_traffic_key;
+    tls_ctx->random_bytes = rand_bytes;
 #ifdef WITH_OPENSSL
-    tls_ctx.sign_certificate = &sign_cert.super;
+    tls_ctx->sign_certificate = &sign_cert.super;
     if (conf && conf->enable_tls_cert_verify)
-        tls_ctx.verify_certificate = &verifier.super;
+        tls_ctx->verify_certificate = &verifier.super;
 #endif
 
     init_ticket_prot();
 }
 
 
-void free_tls_ctx(void)
+void free_tls_ctx(ptls_context_t * const tls_ctx)
 {
     dispose_cipher(&dec_tckt);
     dispose_cipher(&enc_tckt);
@@ -1495,6 +1495,10 @@ void free_tls_ctx(void)
         free_ticket(t);
     }
 #endif
+
+    for (size_t i = 0; i < tls_ctx->certificates.count; i++)
+        free(tls_ctx->certificates.list[i].base);
+    free(tls_ctx->certificates.list);
 }
 
 

@@ -613,7 +613,7 @@ struct w_engine * q_init(const char * const ifname,
 #endif
 
     // initialize TLS context
-    init_tls_ctx(conf);
+    init_tls_ctx(conf, &ped(w)->tls_ctx);
 
 #if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) &&                         \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
@@ -737,8 +737,6 @@ void q_cleanup(struct w_engine * const w)
     // stop the event loop
     timeouts_close(ped(w)->wheel);
 
-    free_tls_ctx();
-
 #ifndef NO_OOO_0RTT
     // free 0-RTT reordering cache
     while (!splay_empty(&ooo_0rtt_by_cid)) {
@@ -765,6 +763,7 @@ void q_cleanup(struct w_engine * const w)
     kh_release(conns_by_ipnp, &conns_by_ipnp);
     kh_release(conns_by_srt, &conns_by_srt);
 
+    free_tls_ctx(&ped(w)->tls_ctx);
     free(ped(w)->pkt_meta);
     free(w->data);
     w_cleanup(w);

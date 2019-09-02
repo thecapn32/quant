@@ -34,6 +34,10 @@
 #include <string.h>
 #include <sys/param.h>
 
+// IWYU pragma: no_include <picotls/../picotls.h>
+
+#include <picotls.h> // IWYU pragma: keep
+
 #include <quant/quant.h>
 
 #include "frame.h"
@@ -230,6 +234,7 @@ struct pkt_meta {
 struct per_engine_data {
     struct timeouts * wheel;
     struct pkt_meta * pkt_meta;
+    ptls_context_t tls_ctx;
 };
 
 
