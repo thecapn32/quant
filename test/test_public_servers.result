@@ -5,7 +5,7 @@ f5        *         V    H    D    C    R         S              U         E    
 google    *         V    H    D    C    R                                       3
 lsquic    *         V    H    D    C    R    Z    S    M    B    U    P    E    3
 mvfst     *         V    H    D    C    R    Z                                  3
-ngtcp2    *         V    H    D    C    R    Z    S    M         U              3
+ngtcp2    *         V    H    D    C    R    Z    S    M    B    U              3
 ngx_quic  *         V    H    D    C                                            3
 pandora   *         V    H    D    C              S
 picoquic  *         V    H    D    C    R    Z    S    M    B    U    P         3
@@ -14,5 +14,5 @@ quic-go
 quiche    *         V    H    D    C    R         S                             3
 quicker
 quicly    *         V    H    D    C    R    Z
-quinn     *         V    H    D    C    R         S    M    B    U    P    E
+quinn     *         V    H    D    C    R    Z    S    M    B    U    P    E
 winquic   *         V    H    D    C    R    Z    S              U    P         3
