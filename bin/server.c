@@ -327,8 +327,8 @@ int main(int argc, char * argv[])
         struct cb_data d = {.c = c, .w = w, .dir = dir_fd};
         http_parser parser = {.data = &d};
 
+    again:
         http_parser_init(&parser, HTTP_REQUEST);
-    again:;
         struct w_iov_sq q = w_iov_sq_initializer(q);
         struct q_stream * s = q_read(c, &q, false);
 
@@ -366,18 +366,18 @@ int main(int argc, char * argv[])
 
                 const size_t parsed = http_parser_execute(
                     &parser, &settings, (char *)v->buf, v->len);
-                if (parsed == v->len)
-                    continue;
-
-                warn(ERR, "HTTP parser error: %.*s", (int)(v->len - parsed),
-                     &v->buf[parsed]);
-                hexdump(v->buf, v->len);
-                // XXX the strnlen() test is super-hacky
-                if (strnlen((char *)v->buf, v->len) == v->len)
-                    send_err(&d, 400);
-                else
-                    send_err(&d, 505);
-                ret = 1;
+                if (parsed != v->len) {
+                    warn(ERR, "HTTP parser error: %.*s", (int)(v->len - parsed),
+                         &v->buf[parsed]);
+                    hexdump(v->buf, v->len);
+                    // XXX the strnlen() test is super-hacky
+                    if (strnlen((char *)v->buf, v->len) == v->len)
+                        send_err(&d, 400);
+                    else
+                        send_err(&d, 505);
+                    ret = 1;
+                }
+                goto again;
             }
         }
         q_free(&q);
