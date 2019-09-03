@@ -230,8 +230,7 @@ set_to:;
     warn(DBG, "%s alarm in %f sec on %s conn %s", type,
          c->rec.ld_alarm_val / (double)NS_PER_S, conn_type(c), scid_str);
 #endif
-    timeouts_add(ped(c->w)->wheel, &c->rec.ld_alarm,
-                 c->rec.ld_alarm_val <= 0 ? 0 : c->rec.ld_alarm_val);
+    timeouts_add(ped(c->w)->wheel, &c->rec.ld_alarm, c->rec.ld_alarm_val);
 }
 
 
