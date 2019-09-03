@@ -509,7 +509,7 @@ static bool __attribute__((nonnull)) tx_stream(struct q_stream * const s)
         // unless for 0-RTT, is this a regular stream during conn open?
         unlikely(c->try_0rtt == false && s->id >= 0 && c->state != conn_estb)) {
 #ifdef DEBUG_STREAMS
-        warn(ERR, "skip " FMT_SID " %u %u", s->id, c->try_0rtt, c->state);
+        warn(ERR, "skip " FMT_SID, s->id);
 #endif
         return true;
     }
@@ -848,7 +848,7 @@ static void __attribute__((nonnull(1))) new_cids(struct q_conn * const c,
 {
     // init dcid
     if (c->is_clnt) {
-        struct cid ndcid;
+        struct cid ndcid = {0};
         mk_rand_cid(&ndcid);
         cid_cpy(&c->odcid, &ndcid);
         add_dcid(c, &ndcid);
@@ -1751,27 +1751,28 @@ static void __attribute__((nonnull)) ack_alarm(struct q_conn * const c)
 
 void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
 {
-    c->spin_enabled = get_conf_uncond(conf, enable_spinbit);
+    c->spin_enabled = get_conf_uncond(c->w, conf, enable_spinbit);
 
     // (re)set idle alarm
-    c->tp_in.idle_to = get_conf(conf, idle_timeout) * MS_PER_S;
+    c->tp_in.idle_to = get_conf(c->w, conf, idle_timeout) * MS_PER_S;
     restart_idle_alarm(c);
 
     c->tp_in.disable_migration =
 #ifndef NO_MIGRATION
-        get_conf_uncond(conf, disable_migration);
+        get_conf_uncond(c->w, conf, disable_migration);
 #else
         true;
 #endif
-    c->key_flips_enabled = get_conf_uncond(conf, enable_tls_key_updates);
+    c->key_flips_enabled = get_conf_uncond(c->w, conf, enable_tls_key_updates);
 
     if (c->tp_out.disable_migration == false || c->key_flips_enabled) {
-        c->tls_key_update_frequency = get_conf(conf, tls_key_update_frequency);
+        c->tls_key_update_frequency =
+            get_conf(c->w, conf, tls_key_update_frequency);
         restart_key_flip_alarm(c);
     }
 
     c->sockopt.enable_udp_zero_checksums =
-        get_conf_uncond(conf, enable_udp_zero_checksums);
+        get_conf_uncond(c->w, conf, enable_udp_zero_checksums);
     w_set_sockopt(c->sock, &c->sockopt);
 
 #if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
@@ -1814,7 +1815,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     if (c->sock == 0) {
         c->sockopt.enable_ecn = true;
         c->sockopt.enable_udp_zero_checksums =
-            get_conf_uncond(conf, enable_udp_zero_checksums);
+            get_conf_uncond(c->w, conf, enable_udp_zero_checksums);
         c->sock = w_bind(w, port, &c->sockopt);
         if (unlikely(c->sock == 0))
             goto fail;
@@ -1829,7 +1830,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     splay_init(&c->dcids_by_seq);
     splay_init(&c->scids_by_seq);
 #endif
-    const bool zero_len_scid = get_conf(conf, enable_zero_len_cid);
+    const bool zero_len_scid = get_conf(c->w, conf, enable_zero_len_cid);
     new_cids(c, zero_len_scid, dcid, scid);
 
     c->vers = c->vers_initial = vers;

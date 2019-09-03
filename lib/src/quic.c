@@ -83,22 +83,9 @@ const uint32_t ok_vers[] = {
 const uint8_t ok_vers_len = sizeof(ok_vers) / sizeof(ok_vers[0]);
 
 
-struct q_conn_conf default_conn_conf = {.idle_timeout = 10,
-                                        .enable_udp_zero_checksums = true,
-                                        .tls_key_update_frequency = 3,
-                                        .enable_spinbit =
-#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
-                                            true
-#else
-                                            false
-#endif
-};
-
 struct q_conn_sl accept_queue = sl_head_initializer(accept_queue);
 
 static struct timeout api_alarm = TIMEOUT_INITIALIZER(0);
-
-static uint32_t num_bufs = 0;
 
 #if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) && !defined(FUZZING) &&    \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
@@ -480,7 +467,7 @@ struct q_conn * q_accept(struct w_engine * const w,
     if (sl_first(&accept_queue))
         goto accept;
 
-    const uint_t idle_to = get_conf(conf, idle_timeout);
+    const uint_t idle_to = get_conf(w, conf, idle_timeout);
     warn(WRN, "waiting for conn on any serv sock (timeout %" PRIu " ms)",
          idle_to);
     if (idle_to)
@@ -565,26 +552,8 @@ mk_or_open_dir(const char * const path, mode_t mode)
 struct w_engine * q_init(const char * const ifname,
                          const struct q_conf * const conf)
 {
-    if (conf && conf->conn_conf) {
-        // update default connection configuration
-        default_conn_conf.idle_timeout =
-            get_conf(conf->conn_conf, idle_timeout);
-        default_conn_conf.tls_key_update_frequency =
-            get_conf(conf->conn_conf, tls_key_update_frequency);
-        default_conn_conf.enable_spinbit =
-            get_conf_uncond(conf->conn_conf, enable_spinbit);
-        default_conn_conf.enable_udp_zero_checksums =
-            get_conf_uncond(conf->conn_conf, enable_udp_zero_checksums);
-        default_conn_conf.enable_tls_key_updates =
-            get_conf_uncond(conf->conn_conf, enable_tls_key_updates);
-        default_conn_conf.disable_migration =
-            get_conf_uncond(conf->conn_conf, disable_migration);
-        default_conn_conf.enable_zero_len_cid =
-            get_conf_uncond(conf->conn_conf, enable_zero_len_cid);
-    }
-
     // initialize warpcore on the given interface
-    num_bufs = conf && conf->num_bufs ? conf->num_bufs : 10000;
+    const uint32_t num_bufs = conf && conf->num_bufs ? conf->num_bufs : 10000;
     struct w_engine * const w = w_init(ifname, 0, num_bufs);
     const uint_t num_bufs_ok = sq_len(&w->iov);
     if (num_bufs_ok < num_bufs)
@@ -598,6 +567,37 @@ struct w_engine * q_init(const char * const ifname,
     ensure(ped(w)->pkt_meta, "could not calloc");
     ASAN_POISON_MEMORY_REGION(ped(w)->pkt_meta,
                               num_bufs * sizeof(*ped(w)->pkt_meta));
+    ped(w)->num_bufs = num_bufs;
+
+    ped(w)->default_conn_conf = (struct q_conn_conf)
+    {
+        .idle_timeout = 10, .enable_udp_zero_checksums = true,
+        .tls_key_update_frequency = 3,
+        .enable_spinbit =
+#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
+            true
+#else
+            false
+#endif
+    };
+
+    if (conf && conf->conn_conf) {
+        // update default connection configuration
+        ped(w)->default_conn_conf.idle_timeout =
+            get_conf(w, conf->conn_conf, idle_timeout);
+        ped(w)->default_conn_conf.tls_key_update_frequency =
+            get_conf(w, conf->conn_conf, tls_key_update_frequency);
+        ped(w)->default_conn_conf.enable_spinbit =
+            get_conf_uncond(w, conf->conn_conf, enable_spinbit);
+        ped(w)->default_conn_conf.enable_udp_zero_checksums =
+            get_conf_uncond(w, conf->conn_conf, enable_udp_zero_checksums);
+        ped(w)->default_conn_conf.enable_tls_key_updates =
+            get_conf_uncond(w, conf->conn_conf, enable_tls_key_updates);
+        ped(w)->default_conn_conf.disable_migration =
+            get_conf_uncond(w, conf->conn_conf, disable_migration);
+        ped(w)->default_conn_conf.enable_zero_len_cid =
+            get_conf_uncond(w, conf->conn_conf, enable_zero_len_cid);
+    }
 
     // initialize the event loop
     loop_init();
@@ -748,7 +748,7 @@ void q_cleanup(struct w_engine * const w)
 #endif
 
 #ifdef HAVE_ASAN
-    for (uint_t i = 0; i < num_bufs; i++) {
+    for (uint_t i = 0; i < ped(w)->num_bufs; i++) {
         struct pkt_meta * const m = &ped(w)->pkt_meta[i];
         if (__asan_address_is_poisoned(m) == false) {
             warn(DBG, "buffer %" PRIu " still in use for %cX'ed %s pkt %" PRIu,

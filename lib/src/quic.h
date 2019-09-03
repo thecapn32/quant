@@ -235,6 +235,9 @@ struct per_engine_data {
     struct timeouts * wheel;
     struct pkt_meta * pkt_meta;
     ptls_context_t tls_ctx;
+    struct q_conn_conf default_conn_conf;
+    uint32_t num_bufs;
+    uint8_t _unused[4];
 };
 
 
@@ -242,7 +245,6 @@ struct per_engine_data {
 
 
 extern struct q_conn_sl accept_queue;
-extern struct q_conn_conf default_conn_conf;
 
 /// The versions of QUIC supported by this implementation
 extern const uint32_t ok_vers[];
@@ -348,11 +350,12 @@ extern char * __attribute__((nonnull)) hex2str(const uint8_t * const src,
 #define has_strm_data(p) (p)->strm_frm_pos
 
 
-#define get_conf(conf, val)                                                    \
-    (conf) && (conf)->val ? (conf)->val : default_conn_conf.val
+#define get_conf(w, conf, val)                                                 \
+    (conf) && (conf)->val ? (conf)->val : ped(w)->default_conn_conf.val
 
 
-#define get_conf_uncond(conf, val) (conf) ? (conf)->val : default_conn_conf.val
+#define get_conf_uncond(w, conf, val)                                          \
+    (conf) ? (conf)->val : ped(w)->default_conn_conf.val
 
 
 static inline void __attribute__((nonnull))
