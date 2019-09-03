@@ -4,7 +4,7 @@ ats       *         V    H    D    C    R    Z    S                             
 f5        *         V    H    D    C    R         S              U         E    3
 google    *         V    H    D    C    R                                       3
 lsquic    *         V    H    D    C    R    Z    S    M    B    U    P    E    3
-mvfst     *         V    H    D    C    R    Z                                  3
+mvfst     *    X    V    H    D    C    R    Z                                  3
 ngtcp2    *         V    H    D    C    R    Z    S    M    B    U              3
 ngx_quic  *         V    H    D    C                                            3
 pandora   *         V    H    D    C              S
