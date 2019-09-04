@@ -1027,7 +1027,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
         if (m->hdr.vers == 0) {
             // this is a vneg pkt
             m->hdr.nr = UINT_T_MAX;
-            if (c->vers != ok_vers[0]) {
+            if (c->vers != c->vers_initial) {
                 // we must have already reacted to a prior vneg pkt
                 warn(INF, "ignoring spurious vneg response");
                 goto done;
@@ -1289,9 +1289,9 @@ rx_pkts(struct w_iov_sq * const x,
                 warn(NTE, "new serv conn on port %u from %s:%s w/cid=%s",
                      bswap16(get_sport(ws)), ip, port, dcid_str);
 #endif
-                c = new_conn(w_engine(ws), m->hdr.vers, &m->hdr.scid,
-                             &m->hdr.dcid, (struct sockaddr *)&v->addr, 0,
-                             get_sport(ws), 0);
+                c = new_conn(w_engine(ws), &m->hdr.scid, &m->hdr.dcid,
+                             (struct sockaddr *)&v->addr, 0, get_sport(ws),
+                             &(struct q_conn_conf){.version = m->hdr.vers});
                 init_tls(c, 0);
             }
         }
@@ -1786,7 +1786,6 @@ void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
 
 
 struct q_conn * new_conn(struct w_engine * const w,
-                         const uint32_t vers,
                          const struct cid * const dcid,
                          const struct cid * const scid,
                          const struct sockaddr * const peer,
@@ -1833,7 +1832,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     const bool zero_len_scid = get_conf(c->w, conf, enable_zero_len_cid);
     new_cids(c, zero_len_scid, dcid, scid);
 
-    c->vers = c->vers_initial = vers;
+    c->vers = c->vers_initial = get_conf(c->w, conf, version);
     diet_init(&c->clsd_strms);
     sq_init(&c->txq);
 

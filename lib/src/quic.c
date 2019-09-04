@@ -32,7 +32,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
-#include <sys/types.h>
 
 // IWYU pragma: no_include <picotls/../picotls.h>
 
@@ -249,8 +248,7 @@ struct q_conn * q_connect(struct w_engine * const w,
                           const struct q_conn_conf * const conf)
 {
     // make new connection
-    const uint vers = ok_vers[0];
-    struct q_conn * const c = new_conn(w, vers, 0, 0, peer, peer_name, 0, conf);
+    struct q_conn * const c = new_conn(w, 0, 0, peer, peer_name, 0, conf);
 
     // init TLS
     init_tls(c, alpn);
@@ -432,7 +430,7 @@ bool q_read_stream(struct q_stream * const s,
 struct q_conn * q_bind(struct w_engine * const w, const uint16_t port)
 {
     // bind socket and create new embryonic server connection
-    struct q_conn * const c = new_conn(w, 0, 0, 0, 0, 0, bswap16(port), 0);
+    struct q_conn * const c = new_conn(w, 0, 0, 0, 0, bswap16(port), 0);
     if (likely(c))
         warn(INF, "bound %s socket to port %u", conn_type(c), port);
     return c;
@@ -572,7 +570,7 @@ struct w_engine * q_init(const char * const ifname,
     ped(w)->default_conn_conf = (struct q_conn_conf)
     {
         .idle_timeout = 10, .enable_udp_zero_checksums = true,
-        .tls_key_update_frequency = 3,
+        .tls_key_update_frequency = 3, .version = ok_vers[0],
         .enable_spinbit =
 #if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
             true
@@ -583,6 +581,8 @@ struct w_engine * q_init(const char * const ifname,
 
     if (conf && conf->conn_conf) {
         // update default connection configuration
+        ped(w)->default_conn_conf.version =
+            get_conf(w, conf->conn_conf, version);
         ped(w)->default_conn_conf.idle_timeout =
             get_conf(w, conf->conn_conf, idle_timeout);
         ped(w)->default_conn_conf.tls_key_update_frequency =

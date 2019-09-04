@@ -320,7 +320,6 @@ err_close_noreason
 extern void __attribute__((nonnull)) enter_closing(struct q_conn * const c);
 
 extern struct q_conn * new_conn(struct w_engine * const w,
-                                const uint32_t vers,
                                 const struct cid * const dcid,
                                 const struct cid * const scid,
                                 const struct sockaddr * const peer,
