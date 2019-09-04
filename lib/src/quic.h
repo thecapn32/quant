@@ -323,7 +323,7 @@ extern char * __attribute__((nonnull)) hex2str(const uint8_t * const src,
 #define mk_cid_str(lvl, cid, str)                                              \
     char str[DLEVEL >= (lvl)                                                   \
                  ? hex_str_len(2 * sizeof((cid)->seq) + CID_LEN_MAX)           \
-                 : 1];                                                         \
+                 : 1] = "";                                                    \
     if (unlikely(DLEVEL >= (lvl)) && likely(cid)) {                            \
         const int _n = snprintf(str, sizeof(str), "%" PRIu ":", (cid)->seq);   \
         hex2str((cid)->id, (cid)->len, &str[_n], sizeof(str) - (size_t)_n);    \
@@ -342,8 +342,8 @@ extern char * __attribute__((nonnull)) hex2str(const uint8_t * const src,
 
 
 #define mk_tok_str(lvl, tok, tok_len, str)                                     \
-    char str[DLEVEL >= (lvl) ? hex_str_len(MAX_TOK_LEN) : 1];                  \
-    if (unlikely(DLEVEL >= (lvl)) && likely(tok)) {                            \
+    char str[DLEVEL >= (lvl) ? hex_str_len(MAX_TOK_LEN) : 1] = "";             \
+    if (unlikely(DLEVEL >= (lvl)) && likely(tok_len)) {                        \
         hex2str((tok), (tok_len), str, sizeof(str));                           \
     }
 

@@ -461,6 +461,10 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
 
     // do we need to make more stream IDs available?
     if (likely(c->state == conn_estb)) {
+        if (unlikely(c->tok_len == 0 && c->pns[ep_init].abandoned))
+            // TODO: find a better way to send NEW_TOKEN
+            make_rtry_tok(c);
+
         do_stream_id_fc(c, c->cnt_uni, false, true);
         do_stream_id_fc(c, c->cnt_bidi, true, true);
     }
@@ -794,8 +798,6 @@ rx_crypto(struct q_conn * const c, const struct pkt_meta * const m_cur)
             if (c->is_clnt)
                 maybe_api_return(q_connect, c, 0);
             else {
-                // TODO: find a better way to send NEW_TOKEN
-                make_rtry_tok(c);
                 if (c->needs_accept == false) {
                     sl_insert_head(&accept_queue, c, node_aq);
                     c->needs_accept = true;
