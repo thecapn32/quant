@@ -64,7 +64,6 @@ EXTRA_CFLAGS+= \
 	-DNO_FUZZER_CORPUS_COLLECTION -DNO_TLS_TICKETS -DNO_TLS_LOG -DNO_QLOG \
 	-DNO_ERR_REASONS -DNO_OOO_0RTT -DNO_OOO_DATA -DNO_MIGRATION \
 	-D'ntoh16(x)=__builtin_bswap16(*(uint16_t*)(x))' \
-	-D'ntoh24(x)=__builtin_bswap16(*(uint16_t*)(x)) << 8 | (x)[2]' \
 	-D'ntoh32(x)=__builtin_bswap32(*(uint32_t*)(x))' \
 	-D'ntoh64(x)=__builtin_bswap64(*(uint64_t*)(x))'
 
