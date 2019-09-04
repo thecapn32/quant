@@ -664,23 +664,23 @@ dec_close_frame(const uint8_t type,
 
     const uint16_t act_reas_len =
         (uint16_t)MIN(reas_len, (uint16_t)(end - *pos));
+    ensure(act_reas_len <= c->w->mtu, "scratch insufficient");
 
-    char reas_phr[2048]; // FIXME: should be limited by MTU (or something)
     if (act_reas_len)
-        decb_chk((uint8_t *)reas_phr, pos, end, act_reas_len, c, type);
+        decb_chk(ped(c->w)->scratch, pos, end, act_reas_len, c, type);
 
     if (type == FRM_CLQ)
         warn(INF,
              FRAM_IN "CONNECTION_CLOSE" NRM " 0x%02x=quic err=%s0x%" PRIx NRM
                      " frame=0x%" PRIx " rlen=%" PRIu " reason=%s%.*s" NRM,
              type, err_code ? RED : NRM, err_code, frame_type, reas_len,
-             err_code ? RED : NRM, (int)reas_len, reas_phr);
+             err_code ? RED : NRM, (int)reas_len, ped(c->w)->scratch);
     else
         warn(INF,
              FRAM_IN "CONNECTION_CLOSE" NRM " 0x%02x=app err=%s0x%" PRIx NRM
                      " rlen=%" PRIu " reason=%s%.*s" NRM,
              type, err_code ? RED : NRM, err_code, reas_len,
-             err_code ? RED : NRM, (int)reas_len, reas_phr);
+             err_code ? RED : NRM, (int)reas_len, ped(c->w)->scratch);
 
     if (unlikely(reas_len != act_reas_len))
         err_close_return(c, ERR_FRAME_ENC, type, "illegal reason len");

@@ -409,30 +409,32 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
     });
 
 #if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG))
-    char buf[512];
     int pos = 0;
     struct ival * i = 0;
     diet_foreach (i, diet, &lost) {
-        if ((size_t)pos >= sizeof(buf)) {
-            buf[sizeof(buf) - 2] = buf[sizeof(buf) - 3] = buf[sizeof(buf) - 4] =
-                '.';
-            buf[sizeof(buf) - 1] = 0;
+        if ((size_t)pos >= c->w->mtu) {
+            ped(c->w)->scratch[c->w->mtu - 2] =
+                ped(c->w)->scratch[c->w->mtu - 3] =
+                    ped(c->w)->scratch[c->w->mtu - 4] = '.';
+            ped(c->w)->scratch[c->w->mtu - 1] = 0;
             break;
         }
 
         if (i->lo == i->hi)
-            pos +=
-                snprintf(&buf[pos], sizeof(buf) - (size_t)pos, FMT_PNR_OUT "%s",
-                         i->lo, splay_next(diet, &lost, i) ? ", " : "");
+            pos += snprintf((char *)&ped(c->w)->scratch[pos],
+                            c->w->mtu - (size_t)pos, FMT_PNR_OUT "%s", i->lo,
+                            splay_next(diet, &lost, i) ? ", " : "");
         else
-            pos += snprintf(&buf[pos], sizeof(buf) - (size_t)pos,
+            pos += snprintf((char *)&ped(c->w)->scratch[pos],
+                            c->w->mtu - (size_t)pos,
                             FMT_PNR_OUT ".." FMT_PNR_OUT "%s", i->lo, i->hi,
                             splay_next(diet, &lost, i) ? ", " : "");
     }
     diet_free(&lost);
 
     if (pos)
-        warn(DBG, "%s %s lost: %s", conn_type(c), pn_type_str(pn->type), buf);
+        warn(DBG, "%s %s lost: %s", conn_type(c), pn_type_str(pn->type),
+             ped(c->w)->scratch);
 #endif
 
     // OnPacketsLost
@@ -449,7 +451,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
 
 static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
 {
-    // timeouts_del(ped(c->w)->wheel, &c->rec.ld_alarm);
+    timeouts_del(ped(c->w)->wheel, &c->rec.ld_alarm);
 
     // see OnLossDetectionTimeout pseudo code
     struct pn_space * const pn = earliest_loss_t_pn(c);

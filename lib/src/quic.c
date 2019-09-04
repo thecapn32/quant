@@ -558,7 +558,7 @@ struct w_engine * q_init(const char * const ifname,
         warn(WRN, "only allocated %" PRIu "/%" PRIu32 " warpcore buffers ",
              num_bufs_ok, num_bufs);
 
-    w->data = calloc(1, sizeof(struct per_engine_data));
+    w->data = calloc(1, sizeof(struct per_engine_data) + w->mtu);
     ensure(w->data, "could not calloc");
 
     ped(w)->pkt_meta = calloc(num_bufs, sizeof(*ped(w)->pkt_meta));

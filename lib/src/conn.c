@@ -277,34 +277,33 @@ static void __attribute__((nonnull)) log_sent_pkts(struct q_conn * const c)
         kh_foreach_value(&pn->sent_pkts, m,
                          diet_insert(&unacked, m->hdr.nr, 0));
 
-#ifndef PARTICLE
-        char buf[512];
-#else
-        char buf[64];
-#endif
         int pos = 0;
         struct ival * i = 0;
         diet_foreach (i, diet, &unacked) {
-            if ((size_t)pos >= sizeof(buf)) {
-                buf[sizeof(buf) - 2] = buf[sizeof(buf) - 3] =
-                    buf[sizeof(buf) - 4] = '.';
-                buf[sizeof(buf) - 1] = 0;
+            if ((size_t)pos >= c->w->mtu) {
+                ped(c->w)->scratch[c->w->mtu - 2] =
+                    ped(c->w)->scratch[c->w->mtu - 3] =
+                        ped(c->w)->scratch[c->w->mtu - 4] = '.';
+                ped(c->w)->scratch[c->w->mtu - 1] = 0;
                 break;
             }
 
             if (i->lo == i->hi)
-                pos += snprintf(&buf[pos], sizeof(buf) - (size_t)pos,
-                                FMT_PNR_OUT "%s", i->lo,
-                                splay_next(diet, &unacked, i) ? ", " : "");
+                pos +=
+                    snprintf((char *)&ped(c->w)->scratch[pos],
+                             c->w->mtu - (size_t)pos, FMT_PNR_OUT "%s", i->lo,
+                             splay_next(diet, &unacked, i) ? ", " : "");
             else
-                pos += snprintf(&buf[pos], sizeof(buf) - (size_t)pos,
+                pos += snprintf((char *)&ped(c->w)->scratch[pos],
+                                c->w->mtu - (size_t)pos,
                                 FMT_PNR_OUT ".." FMT_PNR_OUT "%s", i->lo, i->hi,
                                 splay_next(diet, &unacked, i) ? ", " : "");
         }
         diet_free(&unacked);
 
         if (pos)
-            warn(INF, "%s %s unacked: %s", conn_type(c), pn_type_str(t), buf);
+            warn(INF, "%s %s unacked: %s", conn_type(c), pn_type_str(t),
+                 ped(c->w)->scratch);
     }
 }
 #else

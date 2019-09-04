@@ -1167,8 +1167,7 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
     const epoch_t ep_in = strm_epoch(s);
     size_t epoch_off[5] = {0};
     ptls_buffer_t tls_io;
-    uint8_t tls_io_buf[4096];
-    ptls_buffer_init(&tls_io, tls_io_buf, sizeof(tls_io_buf));
+    ptls_buffer_init(&tls_io, ped(s->c->w)->scratch, s->c->w->mtu);
 
     const int ret =
         ptls_handle_message(c->tls.t, &tls_io, epoch_off, ep_in,

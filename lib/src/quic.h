@@ -238,6 +238,7 @@ struct per_engine_data {
     struct q_conn_conf default_conn_conf;
     uint32_t num_bufs;
     uint8_t _unused[4];
+    uint8_t scratch[]; // MTU-sized scratch space to avoid stack alloc
 };
 
 
