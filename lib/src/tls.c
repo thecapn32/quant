@@ -1502,6 +1502,11 @@ void free_tls_ctx(ptls_context_t * const tls_ctx)
     for (size_t i = 0; i < tls_ctx->certificates.count; i++)
         free(tls_ctx->certificates.list[i].base);
     free(tls_ctx->certificates.list);
+
+#ifndef WITH_OPENSSL
+    free(tls_ctx->pkey_buf.base);
+    free(tls_ctx->sign_certificate);
+#endif
 }
 
 
