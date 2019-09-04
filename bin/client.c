@@ -414,8 +414,7 @@ int main(int argc, char * argv[])
             timeout = (uint32_t)MIN(600, strtoul(optarg, 0, 10)); // 10 min
             break;
         case 'b':
-            num_bufs =
-                (uint32_t)MAX(1000, MIN(strtoul(optarg, 0, 10), UINT32_MAX));
+            num_bufs = (uint32_t)MIN(strtoul(optarg, 0, 10), UINT32_MAX);
             break;
         case 'r':
             reps = (uint32_t)MAX(1, MIN(strtoul(optarg, 0, 10), UINT32_MAX));
