@@ -1,12 +1,9 @@
-// #ifndef NDEBUG
-// #define DEBUG_BUILD
-// #endif
-
 #include <Particle.h>
 #include <netdb.h>
 
+extern const void * const stack_start = __builtin_frame_address(0);
+
 #include "quant/quant.h"
-// #include "warpcore/warpcore.h"
 
 SYSTEM_MODE(MANUAL);
 // SYSTEM_THREAD(ENABLED);
@@ -65,14 +62,39 @@ void warpcore_transaction()
 
 void quic_transaction()
 {
-    const struct q_conf qc = {0, 0, 0, 0, 0, 0, 10, false};
+    static const struct q_conf qc = {0, 0, 0, 0, 0, 0, 20, false};
     struct w_engine * const w = q_init("wl3", &qc);
-    const char peername[] = "172.19.235.111";
-    struct addrinfo * const peer = resolve(peername, "4433");
-    struct q_conn * const c = q_connect(w, peer->ai_addr, peername, 0, 0, true,
-                                        "hq-" DRAFT_VERSION_STRING, 0);
-    ensure(c, "could not open connection");
+
+    static const char peername[] = "10.100.25.62";
+    struct addrinfo * peer = 0;
+    do {
+        peer = resolve(peername, "4433");
+        if (peer == 0) {
+            warn(WRN, "unable to resolve %s, retrying", peername);
+            delay(1000);
+        }
+    } while (peer == 0);
+
+    static const char req[] = "GET /5000\r\n";
+    struct w_iov_sq o = w_iov_sq_initializer(o);
+    q_alloc(w, &o, sizeof(req) - 1);
+    struct w_iov * const v = sq_first(&o);
+    memcpy(v->buf, req, sizeof(req) - 1);
+
+    struct q_stream * s;
+    static const struct q_conn_conf qcc = {0, 0, 0, 0,
+                                           0, 0, 0, 0xff000000 + DRAFT_VERSION};
+    struct q_conn * const c = q_connect(w, peer->ai_addr, peername, &o, &s,
+                                        true, "hq-" DRAFT_VERSION_STRING, &qcc);
     freeaddrinfo(peer);
+
+    if (c) {
+        struct w_iov_sq i = w_iov_sq_initializer(i);
+        q_read_stream(s, &i, true);
+        warn(NTE, "retrieved %s, %" PRIu32 " bytes", req, w_iov_sq_len(&i));
+    } else
+        warn(WRN, "could not retrieve %s", req);
+
     q_cleanup(w);
 }
 
