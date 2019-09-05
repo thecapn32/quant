@@ -51,7 +51,7 @@ if("${CMAKE_SYSTEM}" MATCHES "Linux")
   add_definitions(-D_GNU_SOURCE)
 endif()
 
-add_definitions(-DTIMEOUT_DISABLE_INTERVALS)
+add_definitions(-DTIMEOUT_DISABLE_INTERVALS -DWHEEL_NUM=6)
 
 # Build "Debug" type by default
 if(NOT CMAKE_BUILD_TYPE)

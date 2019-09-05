@@ -203,7 +203,7 @@ void set_ld_timer(struct q_conn * const c)
         warn(DBG, "no RTX-able pkts in flight, stopping ld_alarm on %s conn %s",
              conn_type(c), scid_str);
 #endif
-        timeouts_del(ped(c->w)->wheel, &c->rec.ld_alarm);
+        timeout_del(&c->rec.ld_alarm);
         return;
     }
 
@@ -451,8 +451,6 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
 
 static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
 {
-    timeouts_del(ped(c->w)->wheel, &c->rec.ld_alarm);
-
     // see OnLossDetectionTimeout pseudo code
     struct pn_space * const pn = earliest_loss_t_pn(c);
 
@@ -731,8 +729,7 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
 
 void init_rec(struct q_conn * const c)
 {
-    if (timeout_pending(&c->rec.ld_alarm))
-        timeouts_del(ped(c->w)->wheel, &c->rec.ld_alarm);
+    timeout_del(&c->rec.ld_alarm);
 
     c->rec.cur = (struct cc_state){
         .cwnd = kInitialWindow, .ssthresh = UINT_T_MAX, .min_rtt = UINT_T_MAX};

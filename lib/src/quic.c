@@ -437,12 +437,12 @@ struct q_conn * q_bind(struct w_engine * const w, const uint16_t port)
 }
 
 
-static void cancel_api_call(struct w_engine * const w)
+static void cancel_api_call(void)
 {
 #ifdef DEBUG_EXTRA
     warn(DBG, "canceling API call");
 #endif
-    timeouts_del(ped(w)->wheel, &api_alarm);
+    timeout_del(&api_alarm);
     maybe_api_return(q_accept, 0, 0);
     maybe_api_return(q_ready, 0, 0);
 }
@@ -604,7 +604,7 @@ struct w_engine * q_init(const char * const ifname,
     int err;
     ped(w)->wheel = timeouts_open(TIMEOUT_nHZ, &err);
     timeouts_update(ped(w)->wheel, loop_now());
-    timeout_setcb(&api_alarm, cancel_api_call, w);
+    timeout_setcb(&api_alarm, cancel_api_call, 0);
 
     warn(INF, "%s/%s (%s) %s/%s ready", quant_name, w->backend_name,
          w->backend_variant, quant_version, QUANT_COMMIT_HASH_ABBREV_STR);

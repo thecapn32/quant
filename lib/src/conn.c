@@ -591,7 +591,11 @@ tx_ack(struct q_conn * const c, const epoch_t e, const bool tx_ack_eliciting)
 
 void tx(struct q_conn * const c)
 {
-    timeouts_del(ped(c->w)->wheel, &c->tx_w);
+    timeout_del(&c->tx_w);
+#ifdef DEBUG_TIMERS
+    mk_cid_str(DBG, c->scid, scid_str);
+    warn(DBG, "tx timeout on %s conn %s", conn_type(c), scid_str);
+#endif
 
     if (unlikely(c->state == conn_drng))
         return;
@@ -1651,23 +1655,30 @@ err_close_noreason
 }
 
 
-static void __attribute__((nonnull)) key_flip(struct q_conn * const c)
+static void __attribute__((nonnull)) key_flip_alarm(struct q_conn * const c)
 {
-    c->do_key_flip = c->key_flips_enabled;
-#ifndef NO_MIGRATION
-    // XXX we borrow the key flip timer for this
-    c->do_migration = !c->tp_out.disable_migration;
+#ifdef DEBUG_TIMERS
+    mk_cid_str(DBG, c->scid, scid_str);
+    warn(DBG, "key flip timer fired on %s conn %s", conn_type(c), scid_str);
 #endif
+
+    if (c->state == conn_estb) {
+        c->do_key_flip = c->key_flips_enabled;
+#ifndef NO_MIGRATION
+        // XXX we borrow the key flip timer for this
+        c->do_migration = !c->tp_out.disable_migration;
+#endif
+    }
 }
 
 
 static void __attribute__((nonnull)) stop_all_alarms(struct q_conn * const c)
 {
-    timeouts_del(ped(c->w)->wheel, &c->rec.ld_alarm);
-    timeouts_del(ped(c->w)->wheel, &c->idle_alarm);
-    timeouts_del(ped(c->w)->wheel, &c->key_flip_alarm);
-    timeouts_del(ped(c->w)->wheel, &c->ack_alarm);
-    timeouts_del(ped(c->w)->wheel, &c->closing_alarm);
+    timeout_del(&c->rec.ld_alarm);
+    timeout_del(&c->idle_alarm);
+    timeout_del(&c->key_flip_alarm);
+    timeout_del(&c->ack_alarm);
+    timeout_del(&c->closing_alarm);
 }
 
 
@@ -1844,7 +1855,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     timeout_setcb(&c->closing_alarm, enter_closed, c);
 
     // initialize key flip alarm (XXX also abused for migration)
-    timeout_setcb(&c->key_flip_alarm, key_flip, c);
+    timeout_setcb(&c->key_flip_alarm, key_flip_alarm, c);
 
     // initialize ACK timeout
     timeout_setcb(&c->ack_alarm, ack_alarm, c);
@@ -1956,7 +1967,7 @@ void free_conn(struct q_conn * const c)
     for (pn_t t = pn_init; t <= pn_data; t++)
         free_pn(&c->pns[t]);
 
-    timeouts_del(ped(c->w)->wheel, &c->tx_w);
+    timeout_del(&c->tx_w);
 
     diet_free(&c->clsd_strms);
     free(c->peer_name);
