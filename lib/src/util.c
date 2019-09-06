@@ -44,7 +44,7 @@ void q_chunk_str(struct w_engine * const w,
 
     // chunk up string
     const char * i = str;
-    struct w_iov * v = 0;
+    struct w_iov * v;
     sq_foreach (v, o, next) {
         memcpy((char *)v->buf, i, v->len);
         i += v->len;

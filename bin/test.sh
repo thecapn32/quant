@@ -11,7 +11,7 @@ s=${2:-quant}
 # port to run servers on
 addr=127.0.0.1
 port=4433
-path=/40000
+path=/4000
 dir=/Users/lars/Sites/lars/output/papers
 cert=test/dummy.crt
 key=test/dummy.key
@@ -43,7 +43,7 @@ export UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1:suppressions=../misc/gcc
 # commands to run the different clients against $addr:$port
 case $c in
         quant)
-                cc="bin/client -v5 -i $iface -u -t2 \
+                cc="bin/client -v5 -i $iface -u -t2 -b 20 \
                         https://$addr:$port$path
                         #https://$addr:$port$path"
                 ;;
@@ -93,7 +93,7 @@ esac
 # commands to run the different servers on  $addr:$port
 case $s in
         quant)
-                sc="bin/server -v5 -c $cert -k $key -i $iface -t2 \
+                sc="bin/server -v5 -c $cert -k $key -i $iface -t2 -b 20 \
                     -p 4433 -p 4434 -p $port -d $dir"
                 ;;
         wquant)

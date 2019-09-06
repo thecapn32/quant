@@ -162,7 +162,7 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
 
 #ifndef NDEBUG
         // randomize data
-        struct w_iov * v = 0;
+        struct w_iov * v;
         uint8_t c = 'A' + (uint8_t)w_rand_uniform32(26);
         sq_foreach (v, &out, next) {
             memset(v->buf, c, v->len);
@@ -260,7 +260,7 @@ int main(int argc, char * argv[])
                 MIN(600, (uint32_t)strtoul(optarg, 0, 10)); // 10 min = 600 sec
             break;
         case 'b':
-            num_bufs = MAX(1000, (uint32_t)strtoul(optarg, 0, 10));
+            num_bufs = (uint32_t)strtoul(optarg, 0, 10);
             break;
         case 'v':
 #ifndef NDEBUG
@@ -358,7 +358,7 @@ int main(int argc, char * argv[])
 
         } else {
             d.s = s;
-            struct w_iov * v = 0;
+            struct w_iov * v;
             sq_foreach (v, &q, next) {
                 if (v->len == 0)
                     // skip empty bufs (such as pure FINs)

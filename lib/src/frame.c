@@ -325,8 +325,6 @@ dec_stream_or_crypto_frame(const uint8_t type,
                 p->strm = 0;
             p = nxt;
         }
-#else
-        ignore = true;
 #endif
 
         // check if we have delivered a FIN, and act on it if we did

@@ -396,9 +396,9 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
     if (unlikely(sq_empty(&c->txq)))
         return;
 
-    c->i.pkts_out += sq_len(&c->txq);
+    c->i.pkts_out += w_iov_sq_cnt(&c->txq);
 
-    if (sq_len(&c->txq) > 1 && unlikely(is_lh(*sq_first(&c->txq)->buf)))
+    if (w_iov_sq_cnt(&c->txq) > 1 && unlikely(is_lh(*sq_first(&c->txq)->buf)))
         coalesce(&c->txq);
 #ifndef FUZZING
     // transmit encrypted/protected packets
@@ -408,18 +408,8 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
     while (w_tx_pending(&c->txq));
 #endif
 
-#if defined(DEBUG_BUFFERS) && (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG))
-    const uint_t avail = sq_len(&c->w->iov);
-    const uint_t sql = sq_len(&c->txq);
-#endif
-
     // txq was allocated straight from warpcore, no metadata needs to be freed
     w_free(&c->txq);
-
-#ifdef DEBUG_BUFFERS
-    warn(DBG, "w_free %" PRIu " (avail %" PRIu "->%" PRIu ")", sql, avail,
-         sq_len(&c->w->iov));
-#endif
 
     log_sent_pkts(c);
 }
@@ -495,7 +485,8 @@ static bool __attribute__((nonnull)) tx_stream(struct q_stream * const s)
 {
     struct q_conn * const c = s->c;
 
-    const bool has_data = (sq_len(&s->out) && out_fully_acked(s) == false);
+    const bool has_data =
+        (sq_empty(&s->out) == false && out_fully_acked(s) == false);
 
 #ifdef DEBUG_STREAMS
     warn(ERR,
@@ -503,7 +494,7 @@ static bool __attribute__((nonnull)) tx_stream(struct q_stream * const s)
          ", has_data=%u, needs_ctrl=%u, blocked=%u, lost_cnt=%" PRIu
          ", fully_acked=%u, "
          "limit=%" PRIu32,
-         conn_type(c), s->id, sq_len(&s->out), has_data, needs_ctrl(s),
+         conn_type(c), s->id, w_iov_sq_cnt(&s->out), has_data, needs_ctrl(s),
          s->blocked, s->lost_cnt, out_fully_acked(s), c->tx_limit);
 #endif
 
@@ -520,8 +511,8 @@ static bool __attribute__((nonnull)) tx_stream(struct q_stream * const s)
 #ifdef DEBUG_STREAMS
     mk_cid_str(INF, c->scid, scid_str);
     warn(INF, "TX on %s conn %s strm " FMT_SID " w/%" PRIu " pkt%s in queue ",
-         conn_type(c), scid_str, s->id, sq_len(&s->out),
-         plural(sq_len(&s->out)));
+         conn_type(c), scid_str, s->id, w_iov_sq_cnt(&s->out),
+         plural(w_iov_sq_cnt(&s->out)));
 #endif
 
     uint32_t encoded = 0;
@@ -639,7 +630,7 @@ void tx(struct q_conn * const c)
 
 done:;
     // make sure we sent enough packets when we have a TX limit
-    uint_t sent = sq_len(&c->txq);
+    uint_t sent = w_iov_sq_cnt(&c->txq);
     while ((unlikely(c->tx_limit) && sent < c->tx_limit) ||
            (c->needs_tx && sent == 0)) {
         if (likely(tx_ack(c, epoch_in(c), c->tx_limit && sent < c->tx_limit)))
@@ -784,6 +775,7 @@ rx_crypto(struct q_conn * const c, const struct pkt_meta * const m_cur)
         // take the data out of the crypto stream
         struct w_iov * const v = sq_first(&s->in);
         sq_remove_head(&s->in, next);
+        sq_next(v, next) = 0;
 
         // ooo crypto pkts have stream cleared by dec_stream_or_crypto_frame()
         struct pkt_meta * const m = &meta(v);
@@ -1183,11 +1175,7 @@ rx_pkts(struct w_iov_sq * const x,
     while (!sq_empty(x)) {
         struct w_iov * const xv = sq_first(x);
         sq_remove_head(x, next);
-
-#ifdef DEBUG_BUFFERS
-        warn(DBG, "rx idx %" PRIu32 " (avail %" PRIu ") len %u type 0x%02x",
-             w_iov_idx(xv), sq_len(&xv->w->iov), xv->len, *xv->buf);
-#endif
+        sq_next(xv, next) = 0;
 
 #if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) && !defined(FUZZING) &&    \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
@@ -1507,11 +1495,6 @@ rx_pkts(struct w_iov_sq * const x,
             else
                 c->i.pkts_in_invalid++;
         }
-
-#ifdef DEBUG_BUFFERS
-        warn(DBG, "w_free_iov idx %" PRIu32 " (avail %" PRIu ")", w_iov_idx(xv),
-             sq_len(&xv->w->iov) + 1);
-#endif
         w_free_iov(xv);
     }
 }
@@ -1661,6 +1644,7 @@ static void __attribute__((nonnull)) key_flip_alarm(struct q_conn * const c)
     mk_cid_str(DBG, c->scid, scid_str);
     warn(DBG, "key flip timer fired on %s conn %s", conn_type(c), scid_str);
 #endif
+    timeout_del(&c->key_flip_alarm);
 
     if (c->state == conn_estb) {
         c->do_key_flip = c->key_flips_enabled;

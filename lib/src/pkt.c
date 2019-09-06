@@ -203,11 +203,7 @@ void coalesce(struct w_iov_sq * const q)
                 memcpy(v->buf + v->len, next->buf, next->len);
                 v->len += next->len;
                 sq_remove_after(q, prev, next);
-
-#ifdef DEBUG_BUFFERS
-                warn(DBG, "w_free_iov idx %" PRIu32 " (avail %" PRIu ")",
-                     w_iov_idx(next), sq_len(&next->w->iov) + 1);
-#endif
+                sq_next(next, next) = 0; // must unlink
                 w_free_iov(next);
             } else
                 prev = next;
@@ -540,10 +536,6 @@ tx:;
     // alloc directly from warpcore for crypto TX - no need for metadata alloc
     struct w_iov * const xv = w_alloc_iov(c->w, 0, 0);
     ensure(xv, "w_alloc_iov failed");
-#ifdef DEBUG_BUFFERS
-    warn(DBG, "w_alloc_iov idx %" PRIu32 " (avail %" PRIu ") len %u",
-         w_iov_idx(xv), sq_len(&c->w->iov), xv->len);
-#endif
 
     if (unlikely(m->hdr.type == LH_RTRY)) {
         memcpy(xv->buf, v->buf, v->len); // copy data

@@ -98,29 +98,17 @@ void alloc_off(struct w_engine * const w,
                const uint16_t off)
 {
     w_alloc_len(w, q, len, MAX_PKT_LEN - AEAD_LEN - off, off);
-    struct w_iov * v = 0;
+    struct w_iov * v;
     sq_foreach (v, q, next) {
         struct pkt_meta * const m = &meta(v);
         ASAN_UNPOISON_MEMORY_REGION(m, sizeof(*m));
         m->strm_data_pos = off;
-
-#ifdef DEBUG_BUFFERS
-        warn(DBG, "idx %" PRIu32 " (avail %" PRIu ") len %u", w_iov_idx(v),
-             sq_len(&w->iov), v->len);
-#endif
     }
 }
 
 
 void free_iov(struct w_iov * const v, struct pkt_meta * const m)
 {
-#ifdef DEBUG_BUFFERS
-    warn(DBG, "idx %" PRIu32 " (avail %" PRIu ") %cX'ed %s pkt nr=%" PRIu,
-         w_iov_idx(v), sq_len(&v->w->iov) + 1, m->txed ? 'T' : 'R',
-         pkt_type_str(m->hdr.flags, &m->hdr.vers),
-         has_pkt_nr(m->hdr.flags, m->hdr.vers) ? m->hdr.nr : 0);
-#endif
-
     if (m->txed) {
         if (m->acked == false && m->lost == false &&
             m->pn->abandoned == false) {
@@ -133,25 +121,11 @@ void free_iov(struct w_iov * const v, struct pkt_meta * const m)
             // this pkt has prior or later RTXs
             if (m->has_rtx) {
                 // this pkt has an RTX
-#ifdef DEBUG_BUFFERS
-                warn(DBG, "pkt nr=%" PRIu " has RTX %" PRIu,
-                     has_pkt_nr(m->hdr.flags, m->hdr.vers) ? m->hdr.nr : 0,
-                     has_pkt_nr(m_rtx->hdr.flags, m_rtx->hdr.vers)
-                         ? m_rtx->hdr.nr
-                         : 0);
-#endif
                 sl_remove(&m_rtx->rtx, m, pkt_meta, rtx_next);
 
             } else {
                 // this is the last ("real") RTX of a packet
                 while (m_rtx) {
-#ifdef DEBUG_BUFFERS
-                    warn(DBG, "pkt nr=%" PRIu " was also TX'ed as %" PRIu,
-                         has_pkt_nr(m->hdr.flags, m->hdr.vers) ? m->hdr.nr : 0,
-                         has_pkt_nr(m_rtx->hdr.flags, m_rtx->hdr.vers)
-                             ? m_rtx->hdr.nr
-                             : 0);
-#endif
                     m_rtx->strm = 0;
                     ensure(m_rtx->has_rtx, "was RTX'ed");
                     sl_remove_head(&m->rtx, rtx_next);
@@ -178,12 +152,6 @@ struct w_iov * alloc_iov(struct w_engine * const w,
     *m = &meta(v);
     ASAN_UNPOISON_MEMORY_REGION(*m, sizeof(**m));
     (*m)->strm_data_pos = off;
-
-#ifdef DEBUG_BUFFERS
-    warn(DBG, "alloc_iov idx %" PRIu32 " (avail %" PRIu ") len %u off %u",
-         w_iov_idx(v), sq_len(&w->iov), v->len, off);
-#endif
-
     return v;
 }
 
@@ -194,12 +162,6 @@ struct w_iov * w_iov_dup(const struct w_iov * const v,
 {
     struct w_iov * const vdup = w_alloc_iov(v->w, v->len - off, 0);
     ensure(vdup, "w_alloc_iov failed");
-
-#ifdef DEBUG_BUFFERS
-    warn(DBG, "w_alloc_iov idx %" PRIu32 " (avail %" PRIu ") len %u",
-         w_iov_idx(vdup), sq_len(&v->w->iov), vdup->len);
-#endif
-
     if (mdup) {
         *mdup = &meta(vdup);
         ASAN_UNPOISON_MEMORY_REGION(*mdup, sizeof(**mdup));
@@ -225,6 +187,7 @@ void q_free(struct w_iov_sq * const q)
     while (!sq_empty(q)) {
         struct w_iov * const v = sq_first(q);
         sq_remove_head(q, next);
+        sq_next(v, next) = 0;
         free_iov(v, &meta(v));
     }
 }
@@ -553,7 +516,7 @@ struct w_engine * q_init(const char * const ifname,
     // initialize warpcore on the given interface
     const uint32_t num_bufs = conf && conf->num_bufs ? conf->num_bufs : 10000;
     struct w_engine * const w = w_init(ifname, 0, num_bufs);
-    const uint_t num_bufs_ok = sq_len(&w->iov);
+    const uint_t num_bufs_ok = w_iov_sq_cnt(&w->iov);
     if (num_bufs_ok < num_bufs)
         warn(WRN, "only allocated %" PRIu "/%" PRIu32 " warpcore buffers ",
              num_bufs_ok, num_bufs);
@@ -664,6 +627,7 @@ void q_stream_get_written(struct q_stream * const s, struct w_iov_sq * const q)
     struct w_iov * v = sq_first(&s->out);
     while (v != s->out_una) {
         sq_remove_head(&s->out, next);
+        sq_next(v, next) = 0;
         sq_insert_tail(q, v, next);
         v = sq_first(&s->out);
     }

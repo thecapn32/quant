@@ -91,7 +91,7 @@ void quic_transaction()
     if (c) {
         struct w_iov_sq i = w_iov_sq_initializer(i);
         q_read_stream(s, &i, true);
-        warn(NTE, "retrieved %s, %" PRIu32 " bytes", req, w_iov_sq_len(&i));
+        warn(NTE, "retrieved %" PRIu32 " bytes", w_iov_sq_len(&i));
     } else
         warn(WRN, "could not retrieve %s", req);
 

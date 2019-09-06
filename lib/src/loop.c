@@ -85,20 +85,20 @@ void __attribute__((nonnull(1))) loop_run(struct w_engine * const w,
             break;
 
         bool do_rx = w_nic_rx(w, (int64_t)timeouts_timeout(ped(w)->wheel));
+        if (do_rx == false)
+            continue;
+
+        struct w_sock_slist sl = w_sock_slist_initializer(sl);
+        do_rx = w_rx_ready(w, &sl) > 0;
+        if (do_rx == false)
+            continue;
 
         now = w_now();
         timeouts_update(ped(w)->wheel, now);
 
-        while (do_rx) {
-            struct w_sock_slist sl = w_sock_slist_initializer(sl);
-            do_rx = w_rx_ready(w, &sl) > 0;
-            if (do_rx == false)
-                break;
-
-            struct w_sock * ws;
-            sl_foreach (ws, &sl, next_rx)
-                rx(ws);
-        };
+        struct w_sock * ws;
+        sl_foreach (ws, &sl, next_rx)
+            rx(ws);
     }
 
     api_func = 0;

@@ -708,6 +708,7 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
             // if this ACKs a crypto packet, we can free it
             if (unlikely(s->id < 0 && mou->lost == false)) {
                 sq_remove(&s->out, s->out_una, w_iov, next);
+                sq_next(s->out_una, next) = 0;
                 free_iov(s->out_una, mou);
             }
         }
