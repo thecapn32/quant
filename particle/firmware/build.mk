@@ -1,4 +1,4 @@
-INCLUDE_DIRS+=$(SOURCE_PATH)
+INCLUDE_DIRS+=$(SOURCE_PATH) $(SOURCE_PATH)/test
 CPPSRC+=main.cpp
 
 DEPS=lib/deps
@@ -51,6 +51,7 @@ QUANT_SRC+=\
 	lib/src/recovery.c \
 	lib/src/stream.c \
 	lib/src/tls.c \
+	test/minimal_transaction.c \
 	quant/config.c
 
 
@@ -70,6 +71,7 @@ EXTRA_CFLAGS+= \
 
 # TODO: figure out how to do this using make rules
 $(shell	cd $(SOURCE_PATH) && ln -sf ../../lib)
+$(shell	cd $(SOURCE_PATH) && ln -sf ../../test)
 
 WARPCORE_VERSION:=$(shell grep 'warpcore.*VERSION' $(SOURCE_PATH)/../../$(WARPCORE)/../CMakeLists.txt | cut -d' ' -f3)
 $(shell	mkdir -p $(SOURCE_PATH)/warpcore)

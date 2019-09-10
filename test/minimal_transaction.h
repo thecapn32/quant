@@ -25,63 +25,20 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <Particle.h>
+#pragma once
 
-#include "minimal_transaction.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-
-extern const void * const stack_start = __builtin_frame_address(0);
-
-
-SYSTEM_MODE(MANUAL);
-// SYSTEM_THREAD(ENABLED);
-
-static SerialDebugOutput serial;
-static const int led = D7;
+#include <stdlib.h>
 
 
-// don't use entropy from cloud
-void random_seed_from_cloud(unsigned int seed) {}
+extern void __attribute__((nonnull))
+warpcore_transaction(const char * const msg, const size_t msg_len);
 
+extern void quic_transaction();
 
-void button_action()
-{
-    Serial.begin(9600);
-    delay(1000);
-
-    WiFi.on();
-    WiFi.connect(WIFI_CONNECT_SKIP_LISTEN);
-    waitUntil(WiFi.ready);
-    digitalWrite(led, HIGH);
-
-    // char msg[64];
-    // const float voltage = analogRead(BATT) * 0.0011224;
-    // const size_t msg_len = snprintf(
-    //     msg, sizeof(msg), "Hello from Particle! Voltage is %f.", voltage);
-    // warpcore_transaction(msg, msg_len);
-
-    quic_transaction();
-
-    WiFi.off();
-    digitalWrite(led, LOW);
+#ifdef __cplusplus
 }
-
-
-void setup()
-{
-    // let's gather some entropy and seed the RNG
-    const int temp = analogRead(A0);
-    const int volt = analogRead(BATT);
-    randomSeed(((temp << 12) | volt));
-
-    pinMode(led, OUTPUT);
-    button_action();
-}
-
-
-void loop()
-{
-    System.sleep(BTN, FALLING);
-    if (System.sleepResult().reason() == WAKEUP_REASON_PIN)
-        button_action();
-}
+#endif

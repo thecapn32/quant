@@ -1,5 +1,6 @@
 bin/*
 *.bin
 firmware/lib
+firmware/test
 firmware/quant/*
 firmware/warpcore/*
