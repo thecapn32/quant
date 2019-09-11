@@ -37,7 +37,7 @@ extern "C" {
 extern void __attribute__((nonnull))
 warpcore_transaction(const char * const msg, const size_t msg_len);
 
-extern void quic_transaction();
+extern void quic_transaction(void);
 
 #ifdef __cplusplus
 }
