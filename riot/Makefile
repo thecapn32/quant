@@ -16,22 +16,11 @@ DEVELHELP = 1
 QUIET ?= 1
 
 # Modules to include:
+EXTERNAL_MODULE_DIRS += modules/quant
+USEMODULE += quant
 
-USEMODULE += shell
-#USEMODULE += posix_headers
-#USEMODULE += xtimer
+USEMODULE += esp_wifi
 
-# If your application is very simple and doesn't use modules that use
-# messaging, it can be disabled to save some memory:
-
-#DISABLE_MODULE += core_msg
-
-# Specify custom dependencies for your application here ...
-# APPDEPS = app_data.h config.h
+-include Makefile.wifi-credentials
 
 include $(RIOTBASE)/Makefile.include
-
-# ... and define them here (after including Makefile.include,
-# otherwise you modify the standard target):
-#proj_data.h: script.py data.tar.gz
-#	./script.py

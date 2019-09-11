@@ -1,0 +1,7 @@
+USEMODULE += lwip_arp
+USEMODULE += lwip_dhcp
+USEMODULE += lwip_ipv4
+USEMODULE += lwip_netdev
+USEMODULE += lwip_udp
+USEMODULE += posix_headers
+USEMODULE += posix_inet

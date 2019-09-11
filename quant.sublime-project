@@ -8,7 +8,7 @@
                 "*.imp", "*.in", "*.result", "*.yml", "*.md", "*.mk",
                 ".gitignore", ".gitmodules", ".clang-format", ".editorconfig",
                 ".dockerignore", "Vagrantfile", "*.r", "*.py", "*.inc",
-                "*.sublime-project", "Makefile"
+                "*.sublime-project", "Makefile*"
             ],
             "folder_exclude_patterns": [
                 ".git", ".vagrant", "Darwin*", "Linux*",
