@@ -910,10 +910,8 @@ dec_path_response_frame(const uint8_t ** pos,
     }
 
     warn(NTE, "migration from %s:%u to %s:%u complete",
-         w_ntop(&c->peer.addr, (char[IP_STRLEN]){""}, IP_STRLEN),
-         bswap16(c->peer.port),
-         w_ntop(&c->migr_peer.addr, (char[IP_STRLEN]){""}, IP_STRLEN),
-         bswap16(c->migr_peer.port));
+         w_ntop(&c->peer.addr, ip_tmp), bswap16(c->peer.port),
+         w_ntop(&c->migr_peer.addr, ip_tmp), bswap16(c->migr_peer.port));
 
     c->tx_path_chlg = false;
     c->peer = c->migr_peer;

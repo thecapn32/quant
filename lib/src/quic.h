@@ -58,12 +58,6 @@
 #define PATH_CHLG_LEN 8 ///< Length of a path challenge.
 
 #ifdef PARTICLE
-#define IPTOS_ECN_NOTECT 0x00 // not-ECT
-#define IPTOS_ECN_ECT1 0x01   // ECN-capable transport (1)
-#define IPTOS_ECN_ECT0 0x02   // ECN-capable transport (0)
-#define IPTOS_ECN_CE 0x03     // congestion experienced
-#define IPTOS_ECN_MASK 0x03   // ECN field mask
-
 #define NI_MAXHOST 16
 #define NI_MAXSERV 6
 #define O_CLOEXEC 0

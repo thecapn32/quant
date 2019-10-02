@@ -244,9 +244,8 @@ struct q_conn * q_connect(struct w_engine * const w,
 #if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
     mk_cid_str(WRN, c->scid, scid_str);
     warn(WRN, "new %u-RTT %s conn %s to %s:%u, %" PRIu " byte%s queued for TX",
-         c->try_0rtt ? 0 : 1, conn_type(c), scid_str,
-         w_ntop(&p.addr, (char[IP_STRLEN]){""}, IP_STRLEN), p.port,
-         early_data ? w_iov_sq_len(early_data) : 0,
+         c->try_0rtt ? 0 : 1, conn_type(c), scid_str, w_ntop(&p.addr, ip_tmp),
+         p.port, early_data ? w_iov_sq_len(early_data) : 0,
          plural(early_data ? w_iov_sq_len(early_data) : 0));
 #endif
 
@@ -269,7 +268,7 @@ struct q_conn * q_connect(struct w_engine * const w,
     timeouts_add(ped(w)->wheel, &c->tx_w, 0);
 
     warn(DBG, "waiting for connect on %s conn %s to %s:%u", conn_type(c),
-         scid_str, w_ntop(&p.addr, (char[IP_STRLEN]){""}, IP_STRLEN), p.port);
+         scid_str, w_ntop(&p.addr, ip_tmp), p.port);
     conn_to_state(c, conn_opng);
     loop_run(w, (func_ptr)q_connect, c, 0);
 
@@ -414,8 +413,7 @@ q_bind(struct w_engine * const w, const uint16_t addr_idx, const uint16_t port)
         new_conn(w, addr_idx, 0, 0, 0, 0, bswap16(port), 0);
     if (likely(c))
         warn(INF, "bound %s socket to %s:%u", conn_type(c),
-             w_ntop(&c->sock->ws_laddr, (char[IP_STRLEN]){""}, IP_STRLEN),
-             port);
+             w_ntop(&c->sock->ws_laddr, ip_tmp), port);
     return c;
 }
 
@@ -471,8 +469,8 @@ accept:;
     struct pn_data * const pnd = &c->pns[pn_data].data;
     mk_cid_str(WRN, c->scid, scid_str);
     warn(WRN, "%s conn %s accepted from clnt %s:%u%s, cipher %s", conn_type(c),
-         scid_str, w_ntop(&c->peer.addr, (char[IP_STRLEN]){""}, IP_STRLEN),
-         bswap16(c->peer.port), c->did_0rtt ? " after 0-RTT" : "",
+         scid_str, w_ntop(&c->peer.addr, ip_tmp), bswap16(c->peer.port),
+         c->did_0rtt ? " after 0-RTT" : "",
          pnd->out_1rtt[pnd->out_kyph].aead->algo->name);
 #endif
 
@@ -883,7 +881,7 @@ void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
 #if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
     char old_ip[IP_STRLEN];
     const uint16_t old_port = c->sock->ws_lport;
-    w_ntop(&c->sock->ws_laddr, old_ip, IP_STRLEN);
+    w_ntop(&c->sock->ws_laddr, old_ip);
 #endif
 
     // close the current w_sock
@@ -914,8 +912,7 @@ void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
     mk_cid_str(NTE, c->scid, scid_str);
     warn(NTE, "simulated %s for %s conn %s from %s:%u to %s:%u",
          use_new_dcid ? "conn migration" : "NAT rebinding", conn_type(c),
-         scid_str, old_ip, old_port,
-         w_ntop(&c->sock->ws_laddr, (char[IP_STRLEN]){""}, IP_STRLEN),
+         scid_str, old_ip, old_port, w_ntop(&c->sock->ws_laddr, ip_tmp),
          c->sock->ws_lport);
 #endif
 

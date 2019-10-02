@@ -1243,8 +1243,7 @@ rx_pkts(struct w_iov_sq * const x,
 #if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
                 mk_cid_str(NTE, &m->hdr.dcid, dcid_str);
                 warn(NTE, "new serv conn on port %u from %s:%u w/cid=%s",
-                     bswap16(ws->ws_lport),
-                     w_ntop(&v->wv_addr, (char[IP_STRLEN]){""}, IP_STRLEN),
+                     bswap16(ws->ws_lport), w_ntop(&v->wv_addr, ip_tmp),
                      v->saddr.port, dcid_str);
 #endif
                 c = new_conn(w_engine(ws), UINT16_MAX, &m->hdr.scid,
@@ -1385,18 +1384,16 @@ rx_pkts(struct w_iov_sq * const x,
                     warn(NTE,
                          "pkt from new peer %s:%u, nr " FMT_PNR_IN
                          " <= max " FMT_PNR_IN ", ignoring",
-                         w_ntop(&v->wv_addr, (char[IP_STRLEN]){""}, IP_STRLEN),
-                         bswap16(v->saddr.port), m->hdr.nr,
-                         diet_max(&pn->recv_all));
+                         w_ntop(&v->wv_addr, ip_tmp), bswap16(v->saddr.port),
+                         m->hdr.nr, diet_max(&pn->recv_all));
                     goto drop;
                 }
 
                 warn(NTE,
                      "pkt from new peer %s:%u, nr " FMT_PNR_IN
                      " > max " FMT_PNR_IN ", probing",
-                     w_ntop(&v->wv_addr, (char[IP_STRLEN]){""}, IP_STRLEN),
-                     bswap16(v->saddr.port), m->hdr.nr,
-                     diet_max(&pn->recv_all));
+                     w_ntop(&v->wv_addr, ip_tmp), bswap16(v->saddr.port),
+                     m->hdr.nr, diet_max(&pn->recv_all));
 
                 rand_bytes(&c->path_chlg_out, sizeof(c->path_chlg_out));
                 c->migr_peer = v->saddr;

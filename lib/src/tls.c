@@ -636,10 +636,8 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             mk_srt_str(INF, pa->cid.srt, srt_str);
             warn(INF,
                  "\tpreferred_address = IPv4=%s:%u IPv6=[%s]:%u cid=%s srt=%s",
-                 w_ntop(&pa4->addr, (char[IP_STRLEN]){""}, IP_STRLEN),
-                 pa4->port,
-                 w_ntop(&pa6->addr, (char[IP_STRLEN]){""}, IP_STRLEN),
-                 pa6->port, cid_str, srt_str);
+                 w_ntop(&pa4->addr, ip_tmp), pa4->port,
+                 w_ntop(&pa6->addr, ip_tmp), pa6->port, cid_str, srt_str);
 #endif
             break;
 
@@ -1477,7 +1475,6 @@ void free_tls_ctx(ptls_context_t * const tls_ctx)
     free(tls_ctx->certificates.list);
 
 #ifndef WITH_OPENSSL
-    free(tls_ctx->pkey_buf.base);
     free(tls_ctx->sign_certificate);
 #endif
 }

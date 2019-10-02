@@ -19,7 +19,7 @@ void random_seed_from_cloud(unsigned int seed) {}
 struct addrinfo * resolve(const char * const name, const char * const port)
 {
     struct addrinfo hints;
-    hints.ai_family = PF_INET;
+    hints.ai_family = AF_INET;
     hints.ai_protocol = IPPROTO_UDP;
     struct addrinfo * peer;
     ensure(getaddrinfo(name, port, &hints, &peer) == 0, "");
@@ -30,11 +30,11 @@ struct addrinfo * resolve(const char * const name, const char * const port)
 void warpcore_transaction()
 {
     struct w_engine * const w = w_init("wl3", 0, 50);
-    struct w_sock * const s = w_bind(w, 0, 0);
+    struct w_sock * const s = w_bind(w, 0, 0, 0);
     struct addrinfo * const peer = resolve("quant.eggert.org", "4433");
     struct w_iov_sq o = w_iov_sq_initializer(o);
 
-    w_alloc_cnt(w, &o, 1, 0, 0);
+    w_alloc_cnt(w, AF_INET, &o, 1, 0, 0);
     w_connect(s, peer->ai_addr);
     freeaddrinfo(peer);
 
@@ -77,7 +77,7 @@ void quic_transaction()
 
     static const char req[] = "GET /5000\r\n";
     struct w_iov_sq o = w_iov_sq_initializer(o);
-    q_alloc(w, &o, sizeof(req) - 1);
+    q_alloc(w, &o, AF_INET, sizeof(req) - 1);
     struct w_iov * const v = sq_first(&o);
     memcpy(v->buf, req, sizeof(req) - 1);
 

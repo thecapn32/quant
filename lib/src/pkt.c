@@ -73,7 +73,7 @@ void log_pkt(const char * const dir,
              const uint16_t tok_len)
 {
     char ip[IP_STRLEN];
-    w_ntop(&saddr->addr, ip, IP_STRLEN);
+    w_ntop(&saddr->addr, ip);
     const uint16_t port = bswap16(saddr->port);
     const struct pkt_meta * const m = &meta(v);
     const char * const pts = pkt_type_str(m->hdr.flags, &m->hdr.vers);

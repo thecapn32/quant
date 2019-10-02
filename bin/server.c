@@ -297,8 +297,7 @@ int main(int argc, char * argv[])
             const struct q_conn * const c = q_bind(w, idx, port[i]);
             warn(DBG, "%s %s %s %s:%d", basename(argv[0]),
                  c ? "waiting on" : "failed to bind to", ifname,
-                 w_ntop(&w->ifaddr[idx].addr, (char[IP_STRLEN]){""}, IP_STRLEN),
-                 port[i]);
+                 w_ntop(&w->ifaddr[idx].addr, ip_tmp), port[i]);
         }
     }
 
