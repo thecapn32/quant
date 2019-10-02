@@ -32,6 +32,7 @@ foreach(TARGET ${TARGETS})
       lib${PROJECT_NAME}-warp
       ${HTTP_PARSER_LIB}
       picoquic-core
+      picohttp-core
       picotls-minicrypto
       picotls-openssl
     )
@@ -41,6 +42,7 @@ foreach(TARGET ${TARGETS})
       lib${PROJECT_NAME}
       ${HTTP_PARSER_LIB}
       picoquic-core
+      picohttp-core
       picotls-minicrypto
       picotls-openssl
     )

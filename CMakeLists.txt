@@ -2,14 +2,10 @@ cmake_minimum_required(VERSION 3.9)
 
 project(quant VERSION 0.0.22 LANGUAGES C CXX)
 
-# Check for dependencies before mucking with the compiler flags
-include(CMakePushCheckState)
-cmake_reset_check_state()
-include(CheckSymbolExists)
-
-
 # See if we have google benchmark
 include(CheckCXXSymbolExists)
+include(CMakePushCheckState)
+include(CheckIncludeFile)
 set(CMAKE_REQUIRED_LIBRARIES benchmark)
 set(CMAKE_REQUIRED_INCLUDES /usr/local/include)
 set(CMAKE_REQUIRED_LINK_OPTIONS -L/usr/local/lib)
@@ -22,15 +18,11 @@ cmake_reset_check_state()
 
 # See if we have google gperftools
 include(CheckSymbolExists)
-set(CMAKE_REQUIRED_LIBRARIES profiler)
 set(CMAKE_REQUIRED_INCLUDES /usr/local/include)
+set(CMAKE_REQUIRED_LIBRARIES profiler)
 set(CMAKE_REQUIRED_LINK_OPTIONS -L/usr/local/lib)
-check_symbol_exists(ProfilerStart gperftools/profiler.h
-                    HAVE_PROFILER)
+check_symbol_exists(ProfilerStart gperftools/profiler.h HAVE_PROFILER)
 cmake_reset_check_state()
-
-check_symbol_exists(htobe64 endian.h HAVE_ENDIAN_H)
-check_symbol_exists(htobe64 sys/endian.h HAVE_SYS_ENDIAN_H)
 
 include_directories(AFTER SYSTEM /usr/local/include)
 link_directories(AFTER /usr/local/lib)
@@ -72,11 +64,11 @@ include(CheckCXXCompilerFlag)
 foreach(FLAG -pipe -Wextra -Wpedantic -Weverything -Werror
         -fcolor-diagnostics -fdiagnostics-color=always
         -Wno-disabled-macro-expansion # clang on travis needs this
+        -Wno-missing-field-initializers # and this (clang-5)
         -Wno-extra-semi-stmt # the kh_foreach* macros need this
         -fcomment-block-commands=dotfile
-        -Wno-missing-braces -Wno-missing-field-initializers -Wno-unused-value
-        -fsanitize=memory -fsanitize-memory-track-origins
-        -fsanitize-memory-use-after-dtor)
+        #-Wno-missing-braces -Wno-unused-value
+        )
   string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
   check_c_compiler_flag(${FLAG} ${F})
   if(${F})
@@ -121,7 +113,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 
   if(NOT DEFINED ENV{CONTINUOUS_INTEGRATION} AND NOT DOCKER)
     # See if we can use the address sanitizer
-    include(CheckIncludeFile)
     check_include_file(sanitizer/asan_interface.h HAVE_ASAN)
     if(HAVE_ASAN AND NOT CMAKE_GENERATOR STREQUAL Xcode)
       set(CMAKE_REQUIRED_FLAGS -fsanitize=address,undefined)
@@ -139,6 +130,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
           -fno-optimize-sibling-calls -fno-common
           -fsanitize=unsigned-integer-overflow
           -fsanitize=implicit-conversion -fsanitize=nullability
+          -fsanitize=memory -fsanitize-memory-track-origins
+          -fsanitize-memory-use-after-dtor
       )
       foreach(FLAG ${FLAGS})
         string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
@@ -198,6 +191,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
             -hicpp-no-array-decay
             -hicpp-signed-bitwise
             -hicpp-vararg
+            -modernize-use-trailing-return-type
             -readability-braces-around-statements
             -readability-magic-numbers
         )

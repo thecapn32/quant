@@ -57,9 +57,9 @@ static void BM_quic_encryption(benchmark::State & state)
     const auto pne = uint16_t(state.range(1));
 
     struct pkt_meta * m;
-    struct w_iov * v = alloc_iov(w, len, 0, &m);
+    struct w_iov * v = alloc_iov(w, AF_INET, len, 0, &m);
     struct pkt_meta * mx;
-    struct w_iov * x = alloc_iov(w, MAX_PKT_LEN, 0, &mx);
+    struct w_iov * x = alloc_iov(w, AF_INET, MAX_PKT_LEN, 0, &mx);
 
     rand_bytes(v->buf, len);
     m->hdr.type = LH_INIT;
@@ -103,7 +103,7 @@ int main(int argc, char ** argv)
     struct cid cid = {};
     cid.len = 4;
     memcpy(cid.id, "1234", cid.len);
-    c = new_conn(w, &cid, &cid, nullptr, "", bswap16(55555), nullptr);
+    c = new_conn(w, 0, &cid, &cid, nullptr, "", bswap16(55555), nullptr);
     init_tls(c, nullptr);
     benchmark::RunSpecifiedBenchmarks();
 

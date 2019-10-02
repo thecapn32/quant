@@ -72,7 +72,7 @@ int main(int argc
     ensure(fchdir(cwd) == 0, "cannot fchdir");
 
     // bind server socket
-    q_bind(w, 55555);
+    q_bind(w, 0, 55555);
 
     // connect to server
     const struct sockaddr_in sip = {.sin_family = AF_INET,
@@ -91,7 +91,7 @@ int main(int argc
 
     // allocate buffers to transmit a packet
     struct w_iov_sq o = w_iov_sq_initializer(o);
-    q_alloc(w, &o, 65536);
+    q_alloc(w, &o, AF_INET, 65536);
     struct w_iov * const ov = sq_first(&o);
 
     // send the data

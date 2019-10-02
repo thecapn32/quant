@@ -27,13 +27,10 @@
 
 #pragma once
 
-#include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/param.h>
-#include <sys/socket.h>
-#include <sys/types.h>
 
 #include <quant/quant.h>
 #include <timeout.h>
@@ -46,7 +43,13 @@
 
 
 KHASH_MAP_INIT_INT64(strms_by_id, struct q_stream *)
-KHASH_MAP_INIT_INT64(conns_by_ipnp, struct q_conn *)
+
+KHASH_INIT(conns_by_ipnp,
+           struct w_socktuple *,
+           struct q_conn *,
+           1,
+           w_socktuple_hash,
+           w_socktuple_cmp)
 
 
 static inline khint_t __attribute__((nonnull))
@@ -97,9 +100,10 @@ extern khash_t(conns_by_srt) conns_by_srt;
 
 
 struct pref_addr {
-    struct sockaddr_storage addr4;
-    struct sockaddr_storage addr6;
+    struct w_sockaddr addr4;
+    struct w_sockaddr addr6;
     struct cid cid;
+    uint8_t _unused[8];
 };
 
 
@@ -209,16 +213,18 @@ struct q_conn {
     struct timeout key_flip_alarm;
     struct timeout ack_alarm;
 
-    struct sockaddr_storage peer;      ///< Address of our peer.
-    struct sockaddr_storage migr_peer; ///< Peer's desired migration address.
     char * peer_name;
+    struct w_sockaddr peer;      ///< Address of our peer.
+    struct w_sockaddr migr_peer; ///< Peer's desired migration address.
 
     struct q_stream * cstrms[ep_data + 1]; ///< Crypto "streams".
     khash_t(strms_by_id) strms_by_id;      ///< Regular streams.
     struct diet clsd_strms;
-    sl_head(, q_stream) need_ctrl;
+    sl_head(q_stream_head, q_stream) need_ctrl;
 
     struct w_sock * sock; ///< File descriptor (socket) for the connection.
+
+    timeout_t tls_key_update_frequency;
 
     struct transport_params tp_in;  ///< Transport parameters for RX.
     struct transport_params tp_out; ///< Transport parameters for TX.
@@ -270,7 +276,7 @@ struct q_conn {
 
     uint32_t tx_limit;
 
-    timeout_t tls_key_update_frequency;
+    uint8_t _unused2[8];
 };
 
 
@@ -320,9 +326,10 @@ err_close_noreason
 extern void __attribute__((nonnull)) enter_closing(struct q_conn * const c);
 
 extern struct q_conn * new_conn(struct w_engine * const w,
+                                const uint16_t addr_idx,
                                 const struct cid * const dcid,
                                 const struct cid * const scid,
-                                const struct sockaddr * const peer,
+                                const struct w_sockaddr * const peer,
                                 const char * const peer_name,
                                 const uint16_t port,
                                 const struct q_conn_conf * const conf);
@@ -460,14 +467,6 @@ has_wnd(const struct q_conn * const c, const uint16_t len)
 }
 
 
-static inline uint16_t __attribute__((nonnull))
-get_sport(const struct w_sock * const sock)
-{
-    return ((const struct sockaddr_in *)(const void *)w_get_addr(sock, true))
-        ->sin_port;
-}
-
-
 static inline bool __attribute__((
 #ifndef NO_MIGRATION
     nonnull
@@ -492,31 +491,12 @@ static inline bool __attribute__((
 }
 
 
-static inline uint64_t __attribute__((nonnull))
-conns_by_ipnp_key(const struct sockaddr * const src,
-                  const struct sockaddr * const dst)
-{
-    const struct sockaddr_in * const src4 =
-        (const struct sockaddr_in *)(const void *)src;
-    const struct sockaddr_in * const dst4 =
-        (const struct sockaddr_in *)(const void *)dst;
-
-    return ((uint64_t)dst4->sin_addr.s_addr
-            << sizeof(dst4->sin_addr.s_addr) * 8) |
-           ((uint64_t)src4->sin_port << sizeof(src4->sin_port) * 8) |
-           (uint64_t)dst4->sin_port;
-}
-
-
 static inline void __attribute__((nonnull))
 conns_by_ipnp_ins(struct q_conn * const c)
 {
     int ret;
     const khiter_t k =
-        kh_put(conns_by_ipnp, &conns_by_ipnp,
-               (khint64_t)conns_by_ipnp_key(w_get_addr(c->sock, true),
-                                            (struct sockaddr *)&c->peer),
-               &ret);
+        kh_put(conns_by_ipnp, &conns_by_ipnp, &c->sock->tup, &ret);
     ensure(ret >= 1, "inserted returned %d", ret);
     kh_val(&conns_by_ipnp, k) = c;
 }
@@ -525,10 +505,7 @@ conns_by_ipnp_ins(struct q_conn * const c)
 static inline void __attribute__((nonnull))
 conns_by_ipnp_del(const struct q_conn * const c)
 {
-    const khiter_t k =
-        kh_get(conns_by_ipnp, &conns_by_ipnp,
-               (khint64_t)conns_by_ipnp_key(w_get_addr(c->sock, true),
-                                            (const struct sockaddr *)&c->peer));
+    const khiter_t k = kh_get(conns_by_ipnp, &conns_by_ipnp, &c->sock->tup);
     ensure(k != kh_end(&conns_by_ipnp), "found");
     kh_del(conns_by_ipnp, &conns_by_ipnp, k);
 }

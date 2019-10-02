@@ -200,7 +200,7 @@ struct pkt_meta {
     dint_t max_strms_uni;     ///< MAX_STREAM_ID unidir limit, if sent.
     uint_t strm_data_blocked; ///< STREAM_DATA_BLOCKED value, if sent.
     uint_t data_blocked;      ///< DATA_BLOCKED value, if sent.
-    uint_t min_cid_seq; ///< Smallest NEW_CONNECTION_ID seq in pkt, if sent.
+    uint_t min_cid_seq; ///< Smallest NEq_CONNECTION_ID seq in pkt, if sent.
 
 #ifndef HAVE_64BIT
     uint8_t _unused[4];
@@ -253,6 +253,7 @@ extern const uint8_t ok_vers_len;
 
 extern void __attribute__((nonnull)) alloc_off(struct w_engine * const w,
                                                struct w_iov_sq * const q,
+                                               const int af,
                                                const uint32_t len,
                                                const uint16_t off);
 
@@ -262,15 +263,16 @@ free_iov(struct w_iov * const v, struct pkt_meta * const m);
 
 extern struct w_iov * __attribute__((nonnull))
 alloc_iov(struct w_engine * const w,
+          const int af,
           const uint16_t len,
           const uint16_t off,
           struct pkt_meta ** const m);
 
 
 extern struct w_iov * __attribute__((nonnull(1)))
-w_iov_dup(const struct w_iov * const v,
-          struct pkt_meta ** const mdup,
-          const uint16_t off);
+dup_iov(const struct w_iov * const v,
+        struct pkt_meta ** const mdup,
+        const uint16_t off);
 
 
 #if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) && !defined(FUZZING) &&    \

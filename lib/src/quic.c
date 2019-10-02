@@ -26,7 +26,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <inttypes.h>
-#include <netdb.h>
+#include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -94,10 +94,11 @@ int corpus_pkt_dir, corpus_frm_dir;
 
 void alloc_off(struct w_engine * const w,
                struct w_iov_sq * const q,
+               const int af,
                const uint32_t len,
                const uint16_t off)
 {
-    w_alloc_len(w, q, len, MAX_PKT_LEN - AEAD_LEN - off, off);
+    w_alloc_len(w, af, q, len, MAX_PKT_LEN - AEAD_LEN - off, off);
     struct w_iov * v;
     sq_foreach (v, q, next) {
         struct pkt_meta * const m = &meta(v);
@@ -143,11 +144,12 @@ void free_iov(struct w_iov * const v, struct pkt_meta * const m)
 
 
 struct w_iov * alloc_iov(struct w_engine * const w,
+                         const int af,
                          const uint16_t len,
                          const uint16_t off,
                          struct pkt_meta ** const m)
 {
-    struct w_iov * const v = w_alloc_iov(w, len, off);
+    struct w_iov * const v = w_alloc_iov(w, af, len, off);
     ensure(v, "w_alloc_iov failed");
     *m = &meta(v);
     ASAN_UNPOISON_MEMORY_REGION(*m, sizeof(**m));
@@ -156,18 +158,18 @@ struct w_iov * alloc_iov(struct w_engine * const w,
 }
 
 
-struct w_iov * w_iov_dup(const struct w_iov * const v,
-                         struct pkt_meta ** const mdup,
-                         const uint16_t off)
+struct w_iov * dup_iov(const struct w_iov * const v,
+                       struct pkt_meta ** const mdup,
+                       const uint16_t off)
 {
-    struct w_iov * const vdup = w_alloc_iov(v->w, v->len - off, 0);
+    struct w_iov * const vdup = w_alloc_iov(v->w, v->wv_af, v->len - off, 0);
     ensure(vdup, "w_alloc_iov failed");
     if (mdup) {
         *mdup = &meta(vdup);
         ASAN_UNPOISON_MEMORY_REGION(*mdup, sizeof(**mdup));
     }
     memcpy(vdup->buf, v->buf + off, v->len - off);
-    memcpy(&vdup->addr, &v->addr, sizeof(v->addr));
+    memcpy(&vdup->saddr, &v->saddr, sizeof(v->saddr));
     vdup->flags = v->flags;
     return vdup;
 }
@@ -175,10 +177,11 @@ struct w_iov * w_iov_dup(const struct w_iov * const v,
 
 void q_alloc(struct w_engine * const w,
              struct w_iov_sq * const q,
+             const int af,
              const size_t len)
 {
     ensure(len <= UINT32_MAX, "len %zu too long", len);
-    alloc_off(w, q, (uint32_t)len, DATA_OFFSET);
+    alloc_off(w, q, af, (uint32_t)len, DATA_OFFSET);
 }
 
 
@@ -211,7 +214,25 @@ struct q_conn * q_connect(struct w_engine * const w,
                           const struct q_conn_conf * const conf)
 {
     // make new connection
-    struct q_conn * const c = new_conn(w, 0, 0, peer, peer_name, 0, conf);
+    struct w_sockaddr p;
+
+    uint16_t addr_idx = UINT16_MAX;
+    if (peer->sa_family == AF_INET && w->have_ip4) {
+        addr_idx = w->addr4_pos;
+        p.port = ((const struct sockaddr_in *)(const void *)peer)->sin_port;
+    } else if (peer->sa_family == AF_INET6 && w->have_ip6) {
+        addr_idx = 0;
+        p.port = ((const struct sockaddr_in6 *)(const void *)peer)->sin6_port;
+    }
+
+    if (unlikely(addr_idx == UINT16_MAX ||
+                 w_to_waddr(&p.addr, peer) == false)) {
+        warn(CRT, "address family error");
+        return 0;
+    }
+
+    struct q_conn * const c =
+        new_conn(w, addr_idx, 0, 0, &p, peer_name, 0, conf);
 
     // init TLS
     init_tls(c, alpn);
@@ -221,15 +242,10 @@ struct q_conn * q_connect(struct w_engine * const w,
     c->try_0rtt &= early_data && early_data_stream;
 
 #if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
-    char ip[NI_MAXHOST];
-    char port[NI_MAXSERV];
-    const int err = getnameinfo(peer, sizeof(*peer), ip, sizeof(ip), port,
-                                sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
-    ensure(err == 0, "getnameinfo %d", err);
-
     mk_cid_str(WRN, c->scid, scid_str);
-    warn(WRN, "new %u-RTT %s conn %s to %s:%s, %" PRIu " byte%s queued for TX",
-         c->try_0rtt ? 0 : 1, conn_type(c), scid_str, ip, port,
+    warn(WRN, "new %u-RTT %s conn %s to %s:%u, %" PRIu " byte%s queued for TX",
+         c->try_0rtt ? 0 : 1, conn_type(c), scid_str,
+         w_ntop(&p.addr, (char[IP_STRLEN]){""}, IP_STRLEN), p.port,
          early_data ? w_iov_sq_len(early_data) : 0,
          plural(early_data ? w_iov_sq_len(early_data) : 0));
 #endif
@@ -252,8 +268,8 @@ struct q_conn * q_connect(struct w_engine * const w,
 
     timeouts_add(ped(w)->wheel, &c->tx_w, 0);
 
-    warn(DBG, "waiting for connect on %s conn %s to %s:%s", conn_type(c),
-         scid_str, ip, port);
+    warn(DBG, "waiting for connect on %s conn %s to %s:%u", conn_type(c),
+         scid_str, w_ntop(&p.addr, (char[IP_STRLEN]){""}, IP_STRLEN), p.port);
     conn_to_state(c, conn_opng);
     loop_run(w, (func_ptr)q_connect, c, 0);
 
@@ -300,7 +316,7 @@ bool q_write(struct q_stream * const s,
     // add to stream
     if (fin) {
         if (sq_empty(q))
-            alloc_off(c->w, q, 1, DATA_OFFSET);
+            alloc_off(c->w, q, q_conn_af(s->c), 1, DATA_OFFSET);
         mark_fin(q);
         // strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
     }
@@ -390,12 +406,16 @@ bool q_read_stream(struct q_stream * const s,
 }
 
 
-struct q_conn * q_bind(struct w_engine * const w, const uint16_t port)
+struct q_conn *
+q_bind(struct w_engine * const w, const uint16_t addr_idx, const uint16_t port)
 {
     // bind socket and create new embryonic server connection
-    struct q_conn * const c = new_conn(w, 0, 0, 0, 0, bswap16(port), 0);
+    struct q_conn * const c =
+        new_conn(w, addr_idx, 0, 0, 0, 0, bswap16(port), 0);
     if (likely(c))
-        warn(INF, "bound %s socket to port %u", conn_type(c), port);
+        warn(INF, "bound %s socket to %s:%u", conn_type(c),
+             w_ntop(&c->sock->ws_laddr, (char[IP_STRLEN]){""}, IP_STRLEN),
+             port);
     return c;
 }
 
@@ -448,17 +468,11 @@ accept:;
     c->needs_accept = false;
 
 #if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
-    char ip[NI_MAXHOST];
-    char port[NI_MAXSERV];
-    ensure(getnameinfo((struct sockaddr *)&c->peer, sizeof(c->peer), ip,
-                       sizeof(ip), port, sizeof(port),
-                       NI_NUMERICHOST | NI_NUMERICSERV) == 0,
-           "getnameinfo");
-
     struct pn_data * const pnd = &c->pns[pn_data].data;
     mk_cid_str(WRN, c->scid, scid_str);
-    warn(WRN, "%s conn %s accepted from clnt %s:%s%s, cipher %s", conn_type(c),
-         scid_str, ip, port, c->did_0rtt ? " after 0-RTT" : "",
+    warn(WRN, "%s conn %s accepted from clnt %s:%u%s, cipher %s", conn_type(c),
+         scid_str, w_ntop(&c->peer.addr, (char[IP_STRLEN]){""}, IP_STRLEN),
+         bswap16(c->peer.port), c->did_0rtt ? " after 0-RTT" : "",
          pnd->out_1rtt[pnd->out_kyph].aead->algo->name);
 #endif
 
@@ -642,7 +656,7 @@ void q_close(struct q_conn * const c,
     if (c->scid)
         warn(WRN,
              "closing %s conn %s on port %u w/err %s0x%" PRIx64 "%s%s%s" NRM,
-             conn_type(c), scid_str, bswap16(get_sport(c->sock)),
+             conn_type(c), scid_str, bswap16(c->sock->ws_lport),
              code ? RED : NRM, code, reason ? " (" : "", reason ? reason : "",
              reason ? ")" : "");
 
@@ -843,23 +857,33 @@ bool q_is_new_serv_conn(const struct q_conn * const c)
 }
 
 
+int q_conn_af(const struct q_conn * const c)
+{
+    return c->sock->ws_af;
+}
+
+
 #ifndef NO_MIGRATION
 void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
 {
     ensure(c->is_clnt, "can only rebind w_sock on client");
 
-    struct w_sock * const new_sock = w_bind(c->w, 0, &c->sockopt);
+    // find the index of the currently used local address
+    uint16_t idx;
+    for (idx = 0; idx < c->w->addr_cnt; idx++)
+        if (w_addr_cmp(&c->w->ifaddr[idx].addr, &c->sock->ws_laddr))
+            break;
+    ensure(idx < c->w->addr_cnt, "could not find local address index");
+
+    struct w_sock * const new_sock = w_bind(c->w, idx, 0, &c->sockopt);
     if (new_sock == 0)
         // could not open new w_sock, can't rebind
         return;
 
 #if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
-    char old_ip[NI_MAXHOST];
-    char old_port[NI_MAXSERV];
-    const struct sockaddr * src = w_get_addr(c->sock, true);
-    ensure(getnameinfo(src, sizeof(*src), old_ip, sizeof(old_ip), old_port,
-                       sizeof(old_port), NI_NUMERICHOST | NI_NUMERICSERV) == 0,
-           "getnameinfo");
+    char old_ip[IP_STRLEN];
+    const uint16_t old_port = c->sock->ws_lport;
+    w_ntop(&c->sock->ws_laddr, old_ip, IP_STRLEN);
 #endif
 
     // close the current w_sock
@@ -867,7 +891,18 @@ void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
         conns_by_ipnp_del(c);
     w_close(c->sock);
     c->sock = new_sock;
-    w_connect(c->sock, (struct sockaddr *)&c->peer);
+
+    struct sockaddr_storage ss = {.ss_family = c->peer.addr.af};
+    if (c->peer.addr.af == AF_INET) {
+        struct sockaddr_in * const sin4 = (struct sockaddr_in *)&ss;
+        sin4->sin_port = c->peer.port;
+        memcpy(&sin4->sin_addr, &c->peer.addr.ip4, sizeof(sin4->sin_addr));
+    } else {
+        struct sockaddr_in6 * const sin6 = (struct sockaddr_in6 *)&ss;
+        sin6->sin6_port = c->peer.port;
+        memcpy(&sin6->sin6_addr, &c->peer.addr.ip4, sizeof(sin6->sin6_addr));
+    }
+    w_connect(c->sock, (struct sockaddr *)&ss);
     if (c->scid == 0)
         conns_by_ipnp_ins(c);
 
@@ -876,17 +911,12 @@ void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
         use_next_dcid(c);
 
 #if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
-    char new_ip[NI_MAXHOST];
-    char new_port[NI_MAXSERV];
-    src = w_get_addr(c->sock, true);
-    ensure(getnameinfo(src, sizeof(*src), new_ip, sizeof(new_ip), new_port,
-                       sizeof(new_port), NI_NUMERICHOST | NI_NUMERICSERV) == 0,
-           "getnameinfo");
-
     mk_cid_str(NTE, c->scid, scid_str);
-    warn(NTE, "simulated %s for %s conn %s from %s:%s to %s:%s",
+    warn(NTE, "simulated %s for %s conn %s from %s:%u to %s:%u",
          use_new_dcid ? "conn migration" : "NAT rebinding", conn_type(c),
-         scid_str, old_ip, old_port, new_ip, new_port);
+         scid_str, old_ip, old_port,
+         w_ntop(&c->sock->ws_laddr, (char[IP_STRLEN]){""}, IP_STRLEN),
+         c->sock->ws_lport);
 #endif
 
     timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);

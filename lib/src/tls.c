@@ -26,7 +26,6 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <assert.h>
-#include <netinet/in.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -34,7 +33,6 @@
 #include <string.h>
 #include <sys/param.h>
 #include <sys/socket.h>
-#include <sys/types.h>
 
 #ifndef NO_TLS_TICKETS
 #include <unistd.h>
@@ -42,10 +40,6 @@
 
 #ifndef NO_TLS_LOG
 #include <stdarg.h>
-#endif
-
-#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
-#include <netdb.h>
 #endif
 
 #ifdef PARTICLE
@@ -117,14 +111,14 @@ static const ptls_cipher_suite_t * cipher_suite[] = {
 
 #ifndef NO_TLS_TICKETS
 struct tls_ticket {
+    splay_entry(tls_ticket) node;
     char * sni;
     char * alpn;
     uint8_t * ticket;
     size_t ticket_len;
     struct transport_params tp;
     uint32_t vers;
-    uint8_t _unused[4];
-    splay_entry(tls_ticket) node;
+    uint8_t _unused[12];
 };
 
 
@@ -613,22 +607,20 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                 return 1;
 
             struct pref_addr * const pa = &c->tp_out.pref_addr;
-            struct sockaddr_in * const pa4 =
-                (struct sockaddr_in *)&c->tp_out.pref_addr.addr4;
-            struct sockaddr_in6 * const pa6 =
-                (struct sockaddr_in6 *)&c->tp_out.pref_addr.addr6;
+            struct w_sockaddr * const pa4 = &c->tp_out.pref_addr.addr4;
+            struct w_sockaddr * const pa6 = &c->tp_out.pref_addr.addr6;
 
-            pa4->sin_family = AF_INET;
-            memcpy(&pa4->sin_addr, pos, sizeof(pa4->sin_addr));
-            pos += sizeof(pa4->sin_addr);
-            memcpy(&pa4->sin_port, pos, sizeof(pa4->sin_port));
-            pos += sizeof(pa4->sin_port);
+            pa4->addr.af = AF_INET;
+            memcpy(&pa4->addr.ip4, pos, sizeof(pa4->addr.ip4));
+            pos += sizeof(pa4->addr.ip4);
+            memcpy(&pa4->port, pos, sizeof(pa4->port));
+            pos += sizeof(pa4->port);
 
-            pa6->sin6_family = AF_INET6;
-            memcpy(&pa6->sin6_addr, pos, sizeof(pa6->sin6_addr));
-            pos += sizeof(pa6->sin6_addr);
-            memcpy(&pa6->sin6_port, pos, sizeof(pa6->sin6_port));
-            pos += sizeof(pa6->sin6_port);
+            pa6->addr.af = AF_INET6;
+            memcpy(&pa6->addr.ip6, pos, sizeof(pa6->addr.ip6));
+            pos += sizeof(pa6->addr.ip6);
+            memcpy(&pa6->port, pos, sizeof(pa6->port));
+            pos += sizeof(pa6->port);
 
             dec1(&pa->cid.len, &pos, end);
             memcpy(pa->cid.id, pos, pa->cid.len);
@@ -640,33 +632,14 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             pos += sizeof(pa->cid.srt);
 
 #if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
-            char ip4[NI_MAXHOST];
-            char port4[NI_MAXSERV];
-            int err = getnameinfo((struct sockaddr *)pa4, sizeof(*pa4), ip4,
-                                  sizeof(ip4), port4, sizeof(port4),
-                                  NI_NUMERICHOST | NI_NUMERICSERV);
-            if (unlikely(err)) {
-                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY, "%s",
-                          gai_strerror(err));
-                return 1;
-            }
-
-            char ip6[NI_MAXHOST];
-            char port6[NI_MAXSERV];
-            err = getnameinfo((struct sockaddr *)pa6, sizeof(*pa6), ip6,
-                              sizeof(ip6), port6, sizeof(port6),
-                              NI_NUMERICHOST | NI_NUMERICSERV);
-            if (unlikely(err)) {
-                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY, "%s",
-                          gai_strerror(err));
-                return 1;
-            }
-
             mk_cid_str(INF, &pa->cid, cid_str);
             mk_srt_str(INF, pa->cid.srt, srt_str);
             warn(INF,
-                 "\tpreferred_address = IPv4=%s:%s IPv6=[%s]:%s cid=%s srt=%s",
-                 ip4, port4, ip6, port6, cid_str, srt_str);
+                 "\tpreferred_address = IPv4=%s:%u IPv6=[%s]:%u cid=%s srt=%s",
+                 w_ntop(&pa4->addr, (char[IP_STRLEN]){""}, IP_STRLEN),
+                 pa4->port,
+                 w_ntop(&pa6->addr, (char[IP_STRLEN]){""}, IP_STRLEN),
+                 pa6->port, cid_str, srt_str);
 #endif
             break;
 
@@ -1208,7 +1181,7 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
              (unsigned long)out_len);
 #endif
         struct w_iov_sq o = w_iov_sq_initializer(o);
-        alloc_off(w_engine(c->sock), &o, (uint32_t)out_len,
+        alloc_off(w_engine(c->sock), &o, q_conn_af(c), (uint32_t)out_len,
                   DATA_OFFSET + c->tok_len);
         const uint8_t * data = tls_io.base + epoch_off[e];
         struct w_iov * ov;

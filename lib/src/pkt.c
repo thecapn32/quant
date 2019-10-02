@@ -28,14 +28,9 @@
 #include <inttypes.h>
 #include <stdint.h>
 #include <string.h>
-#include <sys/socket.h>
 
 #ifndef PARTICLE
 #include <netinet/ip.h>
-#endif
-
-#ifndef FUZZING
-#include <netdb.h>
 #endif
 
 // IWYU pragma: no_include <picotls/../picotls.h>
@@ -68,7 +63,7 @@
 
 void log_pkt(const char * const dir,
              const struct w_iov * const v,
-             const struct sockaddr * const addr
+             const struct w_sockaddr * const saddr
 #ifdef FUZZING
              __attribute__((unused))
 #endif
@@ -77,17 +72,9 @@ void log_pkt(const char * const dir,
              const uint8_t * const tok,
              const uint16_t tok_len)
 {
-#ifndef FUZZING
-    char ip[NI_MAXHOST];
-    char port[NI_MAXSERV];
-    ensure(getnameinfo(addr, sizeof(*addr), ip, sizeof(ip), port, sizeof(port),
-                       NI_NUMERICHOST | NI_NUMERICSERV) == 0,
-           "getnameinfo");
-#else
-    const char ip[] = "0.0.0.0";
-    const char port[] = "0";
-#endif
-
+    char ip[IP_STRLEN];
+    w_ntop(&saddr->addr, ip, IP_STRLEN);
+    const uint16_t port = bswap16(saddr->port);
     const struct pkt_meta * const m = &meta(v);
     const char * const pts = pkt_type_str(m->hdr.flags, &m->hdr.vers);
 
@@ -100,20 +87,20 @@ void log_pkt(const char * const dir,
         if (is_lh(m->hdr.flags)) {
             if (m->hdr.vers == 0)
                 twarn(NTE,
-                      BLD BLU "RX" NRM " from=%s:%s len=%u 0x%02x=" BLU
+                      BLD BLU "RX" NRM " from=%s:%u len=%u 0x%02x=" BLU
                               "%s " NRM "vers=0x%0" PRIx32 " dcid=%s scid=%s",
                       ip, port, v->len, m->hdr.flags, pts, m->hdr.vers,
                       dcid_str, scid_str);
             else if (m->hdr.type == LH_RTRY)
                 twarn(NTE,
-                      BLD BLU "RX" NRM " from=%s:%s len=%u 0x%02x=" BLU
+                      BLD BLU "RX" NRM " from=%s:%u len=%u 0x%02x=" BLU
                               "%s " NRM "vers=0x%0" PRIx32
                               " dcid=%s scid=%s odcid=%s tok=%s",
                       ip, port, v->len, m->hdr.flags, pts, m->hdr.vers,
                       dcid_str, scid_str, odcid_str, tok_str);
             else if (m->hdr.type == LH_INIT)
                 twarn(NTE,
-                      BLD BLU "RX" NRM " from=%s:%s len=%u 0x%02x=" BLU
+                      BLD BLU "RX" NRM " from=%s:%u len=%u 0x%02x=" BLU
                               "%s " NRM "vers=0x%0" PRIx32
                               " dcid=%s scid=%s tok=%s len=%u nr=" BLU
                               "%" PRIu NRM,
@@ -121,14 +108,14 @@ void log_pkt(const char * const dir,
                       dcid_str, scid_str, tok_str, m->hdr.len, m->hdr.nr);
             else
                 twarn(NTE,
-                      BLD BLU "RX" NRM " from=%s:%s len=%u 0x%02x=" BLU
+                      BLD BLU "RX" NRM " from=%s:%u len=%u 0x%02x=" BLU
                               "%s " NRM "vers=0x%0" PRIx32
                               " dcid=%s scid=%s len=%u nr=" BLU "%" PRIu NRM,
                       ip, port, v->len, m->hdr.flags, pts, m->hdr.vers,
                       dcid_str, scid_str, m->hdr.len, m->hdr.nr);
         } else
             twarn(NTE,
-                  BLD BLU "RX" NRM " from=%s:%s len=%u 0x%02x=" BLU "%s " NRM
+                  BLD BLU "RX" NRM " from=%s:%u len=%u 0x%02x=" BLU "%s " NRM
                           "kyph=%u spin=%u dcid=%s nr=" BLU "%" PRIu NRM,
                   ip, port, v->len, m->hdr.flags, pts,
                   is_set(SH_KYPH, m->hdr.flags), is_set(SH_SPIN, m->hdr.flags),
@@ -139,20 +126,20 @@ void log_pkt(const char * const dir,
         if (is_lh(m->hdr.flags)) {
             if (m->hdr.vers == 0)
                 twarn(NTE,
-                      BLD GRN "TX" NRM " to=%s:%s 0x%02x=" GRN "%s " NRM
+                      BLD GRN "TX" NRM " to=%s:%u 0x%02x=" GRN "%s " NRM
                               "vers=0x%0" PRIx32 " dcid=%s scid=%s",
                       ip, port, m->hdr.flags, pts, m->hdr.vers, dcid_str,
                       scid_str);
             else if (m->hdr.type == LH_RTRY)
                 twarn(NTE,
-                      BLD GRN "TX" NRM " to=%s:%s 0x%02x=" GRN "%s " NRM
+                      BLD GRN "TX" NRM " to=%s:%u 0x%02x=" GRN "%s " NRM
                               "vers=0x%0" PRIx32
                               " dcid=%s scid=%s odcid=%s tok=%s",
                       ip, port, m->hdr.flags, pts, m->hdr.vers, dcid_str,
                       scid_str, odcid_str, tok_str);
             else if (m->hdr.type == LH_INIT)
                 twarn(NTE,
-                      BLD GRN "TX" NRM " to=%s:%s 0x%02x=" GRN "%s " NRM
+                      BLD GRN "TX" NRM " to=%s:%u 0x%02x=" GRN "%s " NRM
                               "vers=0x%0" PRIx32
                               " dcid=%s scid=%s tok=%s len=%u nr=" GRN
                               "%" PRIu NRM,
@@ -160,14 +147,14 @@ void log_pkt(const char * const dir,
                       scid_str, tok_str, m->hdr.len, m->hdr.nr);
             else
                 twarn(NTE,
-                      BLD GRN "TX" NRM " to=%s:%s 0x%02x=" GRN "%s " NRM
+                      BLD GRN "TX" NRM " to=%s:%u 0x%02x=" GRN "%s " NRM
                               "vers=0x%0" PRIx32
                               " dcid=%s scid=%s len=%u nr=" GRN "%" PRIu NRM,
                       ip, port, m->hdr.flags, pts, m->hdr.vers, dcid_str,
                       scid_str, m->hdr.len, m->hdr.nr);
         } else
             twarn(NTE,
-                  BLD GRN "TX" NRM " to=%s:%s 0x%02x=" GRN "%s " NRM
+                  BLD GRN "TX" NRM " to=%s:%u 0x%02x=" GRN "%s " NRM
                           "kyph=%u spin=%u dcid=%s nr=" GRN "%" PRIu NRM,
                   ip, port, m->hdr.flags, pts, is_set(SH_KYPH, m->hdr.flags),
                   is_set(SH_SPIN, m->hdr.flags), dcid_str, m->hdr.nr);
@@ -437,10 +424,10 @@ bool enc_pkt(struct q_stream * const s,
     }
 
     m->hdr.hdr_len = (uint16_t)(pos - v->buf);
-    v->addr = unlikely(c->tx_path_chlg) ? c->migr_peer : c->peer;
+    v->saddr = unlikely(c->tx_path_chlg) ? c->migr_peer : c->peer;
 
-    log_pkt("TX", v, (struct sockaddr *)&v->addr,
-            m->hdr.type == LH_RTRY ? &c->odcid : 0, c->tok, c->tok_len);
+    log_pkt("TX", v, &v->saddr, m->hdr.type == LH_RTRY ? &c->odcid : 0, c->tok,
+            c->tok_len);
 
     // sanity check
     if (unlikely(m->hdr.hdr_len >=
@@ -534,7 +521,7 @@ tx:;
     v->len = (uint16_t)(pos - v->buf);
 
     // alloc directly from warpcore for crypto TX - no need for metadata alloc
-    struct w_iov * const xv = w_alloc_iov(c->w, 0, 0);
+    struct w_iov * const xv = w_alloc_iov(c->w, q_conn_af(c), 0, 0);
     ensure(xv, "w_alloc_iov failed");
 
     if (unlikely(m->hdr.type == LH_RTRY)) {
@@ -550,7 +537,7 @@ tx:;
     }
 
     if (!c->is_clnt)
-        xv->addr = v->addr;
+        xv->saddr = v->saddr;
 
     // track the flags manually, since warpcore sets them on the xv and it'd
     // require another loop to copy them over
@@ -920,7 +907,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
         if (unlikely(pkt_len < xv->len)) {
             *decoal = true;
             // allocate new w_iov for coalesced packet and copy it over
-            struct w_iov * const dup = w_iov_dup(xv, 0, pkt_len);
+            struct w_iov * const dup = dup_iov(xv, 0, pkt_len);
             // adjust length of first packet
             m->udp_len = xv->len = pkt_len;
             // rx() has already removed xv from x, so just insert dup at head

@@ -49,10 +49,10 @@
 
 #include <http_parser.h>
 
-#include <picoquic/h3zero.h>   // IWYU pragma: keep
+#include <picohttp/h3zero.h>   // IWYU pragma: keep
 #include <picoquic/picoquic.h> // IWYU pragma: keep
 
-#include <picoquic/democlient.h>
+#include <picohttp/democlient.h>
 #include <quant/quant.h>
 
 
@@ -215,7 +215,7 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
     set_from_url(path, sizeof(path), url, &u, UF_PATH, "/index.html");
 
     struct addrinfo * peer;
-    const struct addrinfo hints = {.ai_family = PF_INET,
+    const struct addrinfo hints = {.ai_family = AF_UNSPEC,
                                    .ai_socktype = SOCK_DGRAM,
                                    .ai_protocol = IPPROTO_UDP};
     const int err = getaddrinfo(dest, port, &hints, &peer);
@@ -233,7 +233,7 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
 
     sq_init(&se->req);
     if (do_h3) {
-        q_alloc(w, &se->req, 1024);
+        q_alloc(w, &se->req, peer->ai_family, 1024);
         struct w_iov * const v = sq_first(&se->req);
         size_t consumed;
         h3zero_client_create_stream_request(v->buf, v->len, (uint8_t *)path,
@@ -244,7 +244,8 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
         char req_str[MAXPATHLEN + 6];
         const int req_str_len =
             snprintf(req_str, sizeof(req_str), "GET %s\r\n", path);
-        q_chunk_str(w, req_str, (uint32_t)req_str_len, &se->req);
+        q_chunk_str(w, peer->ai_family, req_str, (uint32_t)req_str_len,
+                    &se->req);
     }
 
     // do we have a connection open to this peer?

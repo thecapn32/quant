@@ -25,12 +25,10 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <netdb.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/param.h>
-#include <sys/socket.h>
 
 #ifndef PARTICLE
 #include <netinet/ip.h>
@@ -911,23 +909,12 @@ dec_path_response_frame(const uint8_t ** pos,
         return true;
     }
 
-#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
-    char ip[NI_MAXHOST];
-    char port[NI_MAXSERV];
-    char migr_ip[NI_MAXHOST];
-    char migr_port[NI_MAXSERV];
-    ensure(getnameinfo((struct sockaddr *)&c->peer, sizeof(c->peer), ip,
-                       sizeof(ip), port, sizeof(port),
-                       NI_NUMERICHOST | NI_NUMERICSERV) == 0,
-           "getnameinfo");
-    ensure(getnameinfo((struct sockaddr *)&c->migr_peer, sizeof(c->migr_peer),
-                       migr_ip, sizeof(migr_ip), migr_port, sizeof(migr_port),
-                       NI_NUMERICHOST | NI_NUMERICSERV) == 0,
-           "getnameinfo");
+    warn(NTE, "migration from %s:%u to %s:%u complete",
+         w_ntop(&c->peer.addr, (char[IP_STRLEN]){""}, IP_STRLEN),
+         bswap16(c->peer.port),
+         w_ntop(&c->migr_peer.addr, (char[IP_STRLEN]){""}, IP_STRLEN),
+         bswap16(c->migr_peer.port));
 
-    warn(NTE, "migration from %s:%s to %s:%s complete", ip, port, migr_ip,
-         migr_port);
-#endif
     c->tx_path_chlg = false;
     c->peer = c->migr_peer;
 
@@ -1112,8 +1099,8 @@ bool dec_frames(struct q_conn * const c,
 
 #if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) && !defined(FUZZING) &&    \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
-    // when called from the fuzzer, v->addr.ss_family is zero
-    if (v->addr.ss_family)
+    // when called from the fuzzer, v->wv_af is zero
+    if (v->wv_af)
         write_to_corpus(corpus_frm_dir, pos, (size_t)(end - pos));
 #endif
 
@@ -1167,7 +1154,7 @@ bool dec_frames(struct q_conn * const c,
 #endif
                 const uint16_t off = (uint16_t)(pos - v->buf - 1);
                 struct pkt_meta * mdup;
-                struct w_iov * const vdup = w_iov_dup(v, &mdup, off);
+                struct w_iov * const vdup = dup_iov(v, &mdup, off);
                 pm_cpy(mdup, m, false);
                 // adjust w_iov start and len to stream frame data
                 v->buf += m->strm_data_pos;
