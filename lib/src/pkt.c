@@ -78,10 +78,10 @@ void log_pkt(const char * const dir,
     const struct pkt_meta * const m = &meta(v);
     const char * const pts = pkt_type_str(m->hdr.flags, &m->hdr.vers);
 
-    mk_cid_str(NTE, &m->hdr.dcid, dcid_str);
-    mk_cid_str(NTE, &m->hdr.scid, scid_str);
-    mk_cid_str(NTE, odcid, odcid_str);
-    mk_tok_str(NTE, tok, tok_len, tok_str);
+    const char * const dcid_str = cid_str(&m->hdr.dcid);
+    const char * const scid_str = cid_str(&m->hdr.scid);
+    const char * const odcid_str = odcid ? cid_str(odcid) : "";
+    const char * const tok_str = tok_len ? tok_str(tok, tok_len) : "";
 
     if (*dir == 'R') {
         if (is_lh(m->hdr.flags)) {
@@ -843,8 +843,8 @@ struct q_conn * is_srt(const struct w_iov * const xv, struct pkt_meta * const m)
 
     if (c && c->state != conn_drng) {
         m->is_reset = true;
-        mk_cid_str(DBG, c->scid, scid_str);
-        warn(DBG, "stateless reset for %s conn %s", conn_type(c), scid_str);
+        warn(DBG, "stateless reset for %s conn %s", conn_type(c),
+             cid_str(c->scid));
         conn_to_state(c, conn_drng);
         enter_closing(c);
         return c;

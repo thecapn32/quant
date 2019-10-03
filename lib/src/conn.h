@@ -286,13 +286,10 @@ extern struct q_conn_sl c_ready;
     !defined(FUZZING)
 #define conn_to_state(c, s)                                                    \
     do {                                                                       \
-        if ((c)->scid) {                                                       \
-            mk_cid_str(DBG, (c)->scid, _scid_str);                             \
-            warn(DBG, "%s%s conn %s state %s -> " RED "%s" NRM,                \
-                 (c)->state == (s) ? RED BLD "useless transition: " NRM : "",  \
-                 conn_type(c), _scid_str, conn_state_str[(c)->state],          \
-                 conn_state_str[(s)]);                                         \
-        }                                                                      \
+        warn(DBG, "%s%s conn %s state %s -> " RED "%s" NRM,                    \
+             (c)->state == (s) ? RED BLD "useless transition: " NRM : "",      \
+             conn_type(c), cid_str((c)->scid), conn_state_str[(c)->state],     \
+             conn_state_str[(s)]);                                             \
         (c)->state = (s);                                                      \
     } while (0)
 #else
@@ -436,9 +433,8 @@ static inline bool __attribute__((nonnull))
 has_pval_wnd(const struct q_conn * const c, const uint16_t len)
 {
     if (unlikely(c->out_data + len >= c->path_val_win)) {
-        mk_cid_str(DBG, c->scid, scid_str);
         warn(DBG, "%s conn %s path val lim reached: %" PRIu " + %u >= %" PRIu,
-             conn_type(c), scid_str, c->out_data, len, c->path_val_win);
+             conn_type(c), cid_str(c->scid), c->out_data, len, c->path_val_win);
         return false;
     }
 
@@ -449,16 +445,15 @@ has_pval_wnd(const struct q_conn * const c, const uint16_t len)
 static inline bool __attribute__((nonnull))
 has_wnd(const struct q_conn * const c, const uint16_t len)
 {
-    mk_cid_str(DBG, c->scid, scid_str);
     if (unlikely(c->blocked)) {
-        warn(DBG, "%s conn %s is blocked", conn_type(c), scid_str);
+        warn(DBG, "%s conn %s is blocked", conn_type(c), cid_str(c->scid));
         return false;
     }
 
     if (unlikely(c->rec.cur.in_flight + len >= c->rec.cur.cwnd)) {
         warn(DBG,
              "%s conn %s cwnd lim reached: in_flight %" PRIu " + %u >= %" PRIu,
-             conn_type(c), scid_str, c->rec.cur.in_flight, len,
+             conn_type(c), cid_str(c->scid), c->rec.cur.in_flight, len,
              c->rec.cur.cwnd);
         return false;
     }

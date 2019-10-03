@@ -30,7 +30,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
 #include <sys/param.h>
 
@@ -279,34 +278,28 @@ extern char * __attribute__((nonnull)) hex2str(const uint8_t * const src,
                                                char * const dst,
                                                const size_t len_dst);
 
+
+extern const char * __attribute__((nonnull))
+cid2str(const struct cid * const cid, char * const dst, const size_t len_dst);
+
+
 #define hex_str_len(x) ((x)*2 + 1)
 
-#define mk_cid_str(lvl, cid, str)                                              \
-    char str[DLEVEL >= (lvl)                                                   \
-                 ? hex_str_len(2 * sizeof((cid)->seq) + CID_LEN_MAX)           \
-                 : 1] = "";                                                    \
-    if (unlikely(DLEVEL >= (lvl)) && likely(cid)) {                            \
-        const int _n = snprintf(str, sizeof(str), "%" PRIu ":", (cid)->seq);   \
-        hex2str((cid)->id, (cid)->len, &str[_n], sizeof(str) - (size_t)_n);    \
-    }
 
-#define mk_path_chlg_str(lvl, path_chlg, str)                                  \
-    char str[DLEVEL >= (lvl) ? hex_str_len(PATH_CHLG_LEN) : 1];                \
-    if (unlikely(DLEVEL >= (lvl)))                                             \
-    hex2str((path_chlg), sizeof(path_chlg), str, sizeof(str))
+#define cid_str(cid)                                                           \
+    cid2str((cid),                                                             \
+            (char[hex_str_len(2 * sizeof((cid)->seq) + CID_LEN_MAX)]){""},     \
+            hex_str_len(2 * sizeof((cid)->seq) + CID_LEN_MAX))
 
 
-#define mk_srt_str(lvl, srt, str)                                              \
-    char str[DLEVEL >= (lvl) ? hex_str_len(SRT_LEN) : 1];                      \
-    if (unlikely(DLEVEL >= (lvl)))                                             \
-    hex2str((srt), sizeof(srt), str, sizeof(str))
+#define srt_str(srt)                                                           \
+    hex2str((srt), sizeof(srt), (char[hex_str_len(SRT_LEN)]){""},              \
+            hex_str_len(SRT_LEN))
 
 
-#define mk_tok_str(lvl, tok, tok_len, str)                                     \
-    char str[DLEVEL >= (lvl) ? hex_str_len(MAX_TOK_LEN) : 1] = "";             \
-    if (unlikely(DLEVEL >= (lvl)) && likely(tok_len)) {                        \
-        hex2str((tok), (tok_len), str, sizeof(str));                           \
-    }
+#define tok_str(tok, tok_len)                                                  \
+    hex2str((tok), (tok_len), (char[hex_str_len(MAX_TOK_LEN)]){""},            \
+            hex_str_len(MAX_TOK_LEN))
 
 
 #define has_strm_data(p) (p)->strm_frm_pos

@@ -219,10 +219,8 @@ void use_next_dcid(struct q_conn * const c)
         splay_next(cids_by_seq, &c->dcids_by_seq, c->dcid);
     ensure(dcid, "can't switch from dcid %" PRIu, c->dcid->seq);
 
-    mk_cid_str(NTE, dcid, dcid_str_new);
-    mk_cid_str(NTE, c->dcid, dcid_str_prev);
-    warn(NTE, "migration to dcid %s for %s conn (was %s)", dcid_str_new,
-         conn_type(c), dcid_str_prev);
+    warn(NTE, "migration to dcid %s for %s conn (was %s)", cid_str(dcid),
+         conn_type(c), cid_str(dcid));
 
     if (c->spin_enabled)
         c->spin = 0; // need to reset spin value
@@ -475,9 +473,8 @@ static bool __attribute__((nonnull)) tx_stream(struct q_stream * const s)
     }
 
 #ifdef DEBUG_STREAMS
-    mk_cid_str(INF, c->scid, scid_str);
     warn(INF, "TX on %s conn %s strm " FMT_SID " w/%" PRIu " pkt%s in queue ",
-         conn_type(c), scid_str, s->id, w_iov_sq_cnt(&s->out),
+         conn_type(c), cid_str(c->scid), s->id, w_iov_sq_cnt(&s->out),
          plural(w_iov_sq_cnt(&s->out)));
 #endif
 
@@ -550,8 +547,7 @@ void tx(struct q_conn * const c)
 {
     timeout_del(&c->tx_w);
 #ifdef DEBUG_TIMERS
-    mk_cid_str(DBG, c->scid, scid_str);
-    warn(DBG, "tx timeout on %s conn %s", conn_type(c), scid_str);
+    warn(DBG, "tx timeout on %s conn %s", conn_type(c), cid_str(c->scid));
 #endif
 
     if (unlikely(c->state == conn_drng))
@@ -619,8 +615,7 @@ void conns_by_srt_ins(struct q_conn * const c, uint8_t * const srt)
         if (kh_val(&conns_by_srt, k) != c)
             die("srt already in use by different conn ");
         else {
-            mk_srt_str(WRN, srt, srt_str);
-            warn(WRN, "srt %s already used for conn", srt_str);
+            warn(WRN, "srt %s already used for conn", srt_str(srt));
             return;
         }
     }
@@ -663,10 +658,8 @@ static void __attribute__((nonnull)) update_act_scid(struct q_conn * const c)
     struct cid nscid = {.len = SCID_LEN_SERV, .has_srt = true};
     rand_bytes(nscid.id, sizeof(nscid.id) + sizeof(nscid.srt));
     cid_cpy(&c->odcid, c->scid);
-    mk_cid_str(NTE, &nscid, nscid_str);
-    mk_cid_str(NTE, c->scid, scid_str);
-    warn(NTE, "hshk switch to scid %s for %s %s conn (was %s)", nscid_str,
-         conn_state_str[c->state], conn_type(c), scid_str);
+    warn(NTE, "hshk switch to scid %s for %s %s conn (was %s)", cid_str(&nscid),
+         conn_state_str[c->state], conn_type(c), cid_str(c->scid));
     conns_by_id_del(c->scid);
 #ifndef NO_MIGRATION
     cids_by_id_del(&c->scids_by_id, c->scid);
@@ -714,10 +707,8 @@ void add_dcid(struct q_conn * const c, const struct cid * const id)
         if (c->dcid == 0)
             c->dcid = dcid;
     } else {
-        mk_cid_str(NTE, id, dcid_str_new);
-        mk_cid_str(NTE, c->dcid, dcid_str_prev);
-        warn(NTE, "hshk switch to dcid %s for %s conn (was %s)", dcid_str_new,
-             conn_type(c), dcid_str_prev);
+        warn(NTE, "hshk switch to dcid %s for %s conn (was %s)", cid_str(id),
+             conn_type(c), cid_str(c->dcid));
 #ifndef NO_MIGRATION
         ensure(splay_remove(cids_by_seq, &c->dcids_by_seq, dcid), "removed");
 #endif
@@ -963,9 +954,8 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
         struct ooo_0rtt * const zo =
             splay_find(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, &which);
         if (zo) {
-            mk_cid_str(INF, c->scid, scid_str);
             warn(INF, "have reordered 0-RTT pkt for %s conn %s", conn_type(c),
-                 scid_str);
+                 cid_str(c->scid));
             ensure(splay_remove(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo),
                    "removed");
             sq_insert_head(x, zo->v, next);
@@ -1000,11 +990,10 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
             const bool rxed_dcid_ok =
                 m->hdr.dcid.len == 0 || !cid_cmp(&m->hdr.dcid, c->scid);
             if (rx_scid_ok == false || rxed_dcid_ok == false) {
-                mk_cid_str(INF, rx_scid_ok ? &m->hdr.dcid : &m->hdr.scid,
-                           cid_str1);
-                mk_cid_str(INF, rx_scid_ok ? c->scid : c->dcid, cid_str2);
                 warn(INF, "vneg %ccid mismatch: rx %s != %s",
-                     rx_scid_ok ? 'd' : 's', cid_str1, cid_str2);
+                     rx_scid_ok ? 'd' : 's',
+                     cid_str(rx_scid_ok ? &m->hdr.dcid : &m->hdr.scid),
+                     cid_str(rx_scid_ok ? c->scid : c->dcid));
                 enter_closing(c);
                 goto done;
             }
@@ -1056,8 +1045,8 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
             c->tok_len = tok_len;
             memcpy(c->tok, tok, c->tok_len);
             vneg_or_rtry_resp(c, false);
-            mk_tok_str(INF, c->tok, c->tok_len, tok_str);
-            warn(INF, "handling serv retry w/tok %s", tok_str);
+            warn(INF, "handling serv retry w/tok %s",
+                 tok_str(c->tok, c->tok_len));
             ok = true;
             goto done;
         }
@@ -1195,19 +1184,17 @@ rx_pkts(struct w_iov_sq * const x,
             c = c_ipnp;
         if (likely(is_lh(m->hdr.flags)) && !is_clnt) {
             if (c && m->hdr.type == LH_0RTT) {
-                mk_cid_str(WRN, c->scid, scid_str);
-                mk_cid_str(WRN, &m->hdr.dcid, dcid_str);
                 if (c->did_0rtt)
                     warn(INF,
                          "got 0-RTT pkt for orig cid %s, new is %s, "
                          "accepting",
-                         dcid_str, scid_str);
+                         cid_str(&m->hdr.dcid), cid_str(c->scid));
                 else {
                     log_pkt("RX", v, &v->saddr, &odcid, tok, tok_len);
                     warn(WRN,
                          "got 0-RTT pkt for orig cid %s, new is %s, "
                          "but rejected 0-RTT, ignoring",
-                         dcid_str, scid_str);
+                         cid_str(&m->hdr.dcid), cid_str(c->scid));
                     goto drop;
                 }
             } else if (m->hdr.type == LH_INIT && c == 0) {
@@ -1229,12 +1216,10 @@ rx_pkts(struct w_iov_sq * const x,
                     goto drop;
                 }
 
-#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
-                mk_cid_str(NTE, &m->hdr.dcid, dcid_str);
                 warn(NTE, "new serv conn on port %u from %s:%u w/cid=%s",
                      bswap16(ws->ws_lport), w_ntop(&v->wv_addr, ip_tmp),
-                     v->saddr.port, dcid_str);
-#endif
+                     v->saddr.port, cid_str(&m->hdr.dcid));
+
                 c = new_conn(w_engine(ws), UINT16_MAX, &m->hdr.scid,
                              &m->hdr.dcid, &v->saddr, 0, ws->ws_lport,
                              &(struct q_conn_conf){.version = m->hdr.vers});
@@ -1247,10 +1232,8 @@ rx_pkts(struct w_iov_sq * const x,
                 if (m->hdr.vers && m->hdr.type == LH_RTRY &&
                     cid_cmp(&odcid, c->dcid) != 0) {
                     log_pkt("RX", v, &v->saddr, &odcid, tok, tok_len);
-                    mk_cid_str(ERR, &odcid, odcid_str);
-                    mk_cid_str(ERR, c->dcid, dcid_str);
                     warn(ERR, "retry dcid mismatch %s != %s, ignoring pkt",
-                         odcid_str, dcid_str);
+                         cid_str(&odcid), cid_str(c->dcid));
                     goto drop;
                 }
                 if (c->state == conn_opng)
@@ -1266,18 +1249,16 @@ rx_pkts(struct w_iov_sq * const x,
 #endif
                 if (unlikely(scid == 0)) {
                     log_pkt("RX", v, &v->saddr, &odcid, tok, tok_len);
-                    mk_cid_str(ERR, &m->hdr.dcid, dcid_str);
-                    warn(ERR, "unknown scid %s, ignoring pkt", dcid_str);
+                    warn(ERR, "unknown scid %s, ignoring pkt",
+                         cid_str(&m->hdr.dcid));
                     goto drop;
                 }
 
-                mk_cid_str(DBG, scid, scid_str_new);
                 if (scid->seq <= c->scid->seq)
-                    warn(DBG, "pkt has prev scid %s, accepting", scid_str_new);
+                    warn(DBG, "pkt has prev scid %s, accepting", cid_str(scid));
                 else {
-                    mk_cid_str(NTE, c->scid, scid_str_prev);
                     warn(NTE, "migration to scid %s for %s conn (was %s)",
-                         scid_str_new, conn_type(c), scid_str_prev);
+                         cid_str(scid), conn_type(c), cid_str(c->scid));
                     c->scid = scid;
                 }
             }
@@ -1293,23 +1274,22 @@ rx_pkts(struct w_iov_sq * const x,
                 ensure(splay_insert(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo) == 0,
                        "inserted");
                 log_pkt("RX", v, &v->saddr, &odcid, tok, tok_len);
-                mk_cid_str(INF, &m->hdr.dcid, dcid_str);
-                warn(INF, "caching 0-RTT pkt for unknown conn %s", dcid_str);
+                warn(INF, "caching 0-RTT pkt for unknown conn %s",
+                     cid_str(&m->hdr.dcid));
                 goto next;
             }
 #endif
             log_pkt("RX", v, &v->saddr, &odcid, tok, tok_len);
 
             if (is_srt(xv, m)) {
-                mk_srt_str(INF, &xv->buf[xv->len - SRT_LEN], srt_str);
-                warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s", srt_str);
+                warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
+                     srt_str(&xv->buf[xv->len - SRT_LEN]));
                 goto next;
             }
 
-            mk_cid_str(INF, &m->hdr.dcid, dcid_str);
             warn(INF, "cannot find conn %s for %u-byte %s pkt, ignoring",
-                 dcid_str, v->len, pkt_type_str(m->hdr.flags, &m->hdr.vers));
-            // hexdump(v->buf, v->len);
+                 cid_str(&m->hdr.dcid), v->len,
+                 pkt_type_str(m->hdr.flags, &m->hdr.vers));
             goto drop;
         }
 
@@ -1325,11 +1305,10 @@ rx_pkts(struct w_iov_sq * const x,
                                                       &decoal) == false)) {
                 v->len = xv->len;
                 log_pkt("RX", v, &v->saddr, &odcid, tok, tok_len);
-                if (m->is_reset) {
-                    mk_srt_str(INF, &xv->buf[xv->len - SRT_LEN], srt_str);
+                if (m->is_reset)
                     warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
-                         srt_str);
-                } else
+                         srt_str(&xv->buf[xv->len - SRT_LEN]));
+                else
                     warn(ERR, "%s %u-byte %s pkt, ignoring",
                          pkt_ok_for_epoch(m->hdr.flags, epoch_in(c))
                              ? "crypto fail on"
@@ -1348,12 +1327,10 @@ rx_pkts(struct w_iov_sq * const x,
             if (unlikely(outer_dcid.len) &&
                 cid_cmp(&outer_dcid, &m->hdr.dcid) != 0) {
                 log_pkt("RX", v, &v->saddr, &odcid, tok, tok_len);
-                mk_cid_str(ERR, &m->hdr.dcid, dcid_str);
-                mk_cid_str(ERR, &outer_dcid, outer_dcid_str);
                 warn(ERR,
-                     "outer dcid %s != inner dcid %s during "
-                     "decoalescing, ignoring %s pkt",
-                     outer_dcid_str, dcid_str,
+                     "outer dcid %s != inner dcid %s during decoalescing, "
+                     "ignoring %s pkt",
+                     cid_str(&outer_dcid), cid_str(&m->hdr.dcid),
                      pkt_type_str(m->hdr.flags, &m->hdr.vers));
                 goto drop;
             }
@@ -1578,8 +1555,8 @@ err_close_noreason
 static void __attribute__((nonnull)) key_flip_alarm(struct q_conn * const c)
 {
 #ifdef DEBUG_TIMERS
-    mk_cid_str(DBG, c->scid, scid_str);
-    warn(DBG, "key flip timer fired on %s conn %s", conn_type(c), scid_str);
+    warn(DBG, "key flip timer fired on %s conn %s", conn_type(c),
+         cid_str(c->scid));
 #endif
     timeout_del(&c->key_flip_alarm);
 
@@ -1645,9 +1622,8 @@ void enter_closing(struct q_conn * const c)
             4 * c->rec.cur.rttvar;
         timeouts_add(ped(c->w)->wheel, &c->closing_alarm, dur);
 #ifdef DEBUG_TIMERS
-        mk_cid_str(DBG, c->scid, scid_str);
         warn(DBG, "closing/draining alarm in %f sec on %s conn %s",
-             dur / (double)NS_PER_S, conn_type(c), scid_str);
+             dur / (double)NS_PER_S, conn_type(c), cid_str(c->scid));
 #endif
     }
 #endif
@@ -1663,8 +1639,7 @@ void enter_closing(struct q_conn * const c)
 static void __attribute__((nonnull)) idle_alarm(struct q_conn * const c)
 {
 #ifdef DEBUG_TIMERS
-    mk_cid_str(DBG, c->scid, scid_str);
-    warn(DBG, "idle timeout on %s conn %s", conn_type(c), scid_str);
+    warn(DBG, "idle timeout on %s conn %s", conn_type(c), cid_str(c->scid));
 #endif
     enter_closing(c);
 }
@@ -1673,8 +1648,7 @@ static void __attribute__((nonnull)) idle_alarm(struct q_conn * const c)
 static void __attribute__((nonnull)) ack_alarm(struct q_conn * const c)
 {
 #ifdef DEBUG_TIMERS
-    mk_cid_str(DBG, c->scid, scid_str);
-    warn(DBG, "ACK timer fired on %s conn %s", conn_type(c), scid_str);
+    warn(DBG, "ACK timer fired on %s conn %s", conn_type(c), cid_str(c->scid));
 #endif
     if (needs_ack(&c->pns[pn_data]) != no_ack)
         if (tx_ack(c, ep_data, false))
@@ -1833,9 +1807,8 @@ struct q_conn * new_conn(struct w_engine * const w,
     if (c->scid) {
         // FIXME: first connection sets the type for all future connections
         qlog_init(c);
-        mk_cid_str(DBG, c->scid, scid_str);
-        warn(DBG, "%s conn %s on port %u created", conn_type(c), scid_str,
-             bswap16(c->sock->ws_lport));
+        warn(DBG, "%s conn %s on port %u created", conn_type(c),
+             cid_str(c->scid), bswap16(c->sock->ws_lport));
     }
 
     conn_to_state(c, conn_idle);
