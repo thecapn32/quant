@@ -660,7 +660,7 @@ dec_close_frame(const uint8_t type,
 
     const uint16_t act_reas_len =
         (uint16_t)MIN(reas_len, (uint16_t)(end - *pos));
-    ensure(act_reas_len <= c->w->mtu, "scratch insufficient");
+    ensure(act_reas_len <= ped(c->w)->scratch_len, "scratch insufficient");
 
     if (act_reas_len)
         decb_chk(ped(c->w)->scratch, pos, end, act_reas_len, c, type);

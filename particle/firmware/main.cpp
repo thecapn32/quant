@@ -65,7 +65,7 @@ void quic_transaction()
     static const struct q_conf qc = {0, 0, 0, 0, 0, 0, 20, false};
     struct w_engine * const w = q_init("wl3", &qc);
 
-    static const char peername[] = "10.100.25.62";
+    static const char peername[] = "172.19.235.111";
     struct addrinfo * peer = 0;
     do {
         peer = resolve(peername, "4433");
@@ -108,6 +108,10 @@ void button_action()
     WiFi.connect(WIFI_CONNECT_SKIP_LISTEN);
     waitUntil(WiFi.ready);
     digitalWrite(led, HIGH);
+
+    const uint32_t v = System.versionNumber();
+    warn(DBG, "Particle Device OS: %lu.%lu.%lu", (v & 0xff000000) >> 24,
+         (v & 0x00ff0000) >> 16, (v & 0x0000ff00) >> 8);
 
     // warpcore_transaction();
     quic_transaction();

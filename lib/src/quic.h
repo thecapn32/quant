@@ -57,12 +57,6 @@
 #define SRT_LEN 16      ///< Stateless reset token length allowed by spec.
 #define PATH_CHLG_LEN 8 ///< Length of a path challenge.
 
-#ifdef PARTICLE
-#define NI_MAXHOST 16
-#define NI_MAXSERV 6
-#define O_CLOEXEC 0
-#endif
-
 // Maximum reordering in packets before packet threshold loss detection
 // considers a packet lost. The RECOMMENDED value is 3.
 #define kPacketThreshold 3
@@ -101,34 +95,6 @@
 /// before an RTO in TCP.
 #define kPersistentCongestionThreshold 3
 
-
-#ifndef PARTICLE
-#define NRM "\x1B[0m" ///< ANSI escape sequence: reset all to normal
-#define BLD "\x1B[1m" ///< ANSI escape sequence: bold
-// #define DIM "\x1B[2m"   ///< ANSI escape sequence: dim
-// #define ULN "\x1B[3m"   ///< ANSI escape sequence: underline
-// #define BLN "\x1B[5m"   ///< ANSI escape sequence: blink
-#define REV "\x1B[7m" ///< ANSI escape sequence: reverse
-// #define HID "\x1B[8m"   ///< ANSI escape sequence: hidden
-// #define BLK "\x1B[30m"  ///< ANSI escape sequence: black
-#define RED "\x1B[31m" ///< ANSI escape sequence: red
-#define GRN "\x1B[32m" ///< ANSI escape sequence: green
-#define YEL "\x1B[33m" ///< ANSI escape sequence: yellow
-#define BLU "\x1B[34m" ///< ANSI escape sequence: blue
-#define MAG "\x1B[35m" ///< ANSI escape sequence: magenta
-#define CYN "\x1B[36m" ///< ANSI escape sequence: cyan
-// #define WHT "\x1B[37m"  ///< ANSI escape sequence: white
-#else
-#define NRM ""
-#define BLD ""
-#define REV ""
-#define RED ""
-#define GRN ""
-#define YEL ""
-#define BLU ""
-#define MAG ""
-#define CYN ""
-#endif
 
 #define FMT_PNR_IN BLU "%" PRIu NRM
 #define FMT_PNR_OUT GRN "%" PRIu NRM
@@ -230,8 +196,8 @@ struct per_engine_data {
     ptls_context_t tls_ctx;
     struct q_conn_conf default_conn_conf;
     uint32_t num_bufs;
-    uint8_t _unused[4];
-    uint8_t scratch[]; // MTU-sized scratch space to avoid stack alloc
+    uint32_t scratch_len;
+    uint8_t scratch[]; // packet-sized scratch space to avoid stack alloc
 };
 
 

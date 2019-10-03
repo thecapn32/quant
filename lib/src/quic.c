@@ -535,6 +535,7 @@ struct w_engine * q_init(const char * const ifname,
 
     w->data = calloc(1, sizeof(struct per_engine_data) + w->mtu);
     ensure(w->data, "could not calloc");
+    ped(w)->scratch_len = w->mtu;
 
     ped(w)->pkt_meta = calloc(num_bufs, sizeof(*ped(w)->pkt_meta));
     ensure(ped(w)->pkt_meta, "could not calloc");
@@ -583,9 +584,7 @@ struct w_engine * q_init(const char * const ifname,
 
     warn(INF, "%s/%s (%s) %s/%s ready", quant_name, w->backend_name,
          w->backend_variant, quant_version, QUANT_COMMIT_HASH_ABBREV_STR);
-#ifndef PARTICLE
-    warn(INF, "submit bug reports at https://github.com/NTAP/quant/issues");
-#endif
+    warn(DBG, "submit bug reports at https://github.com/NTAP/quant/issues");
 
     // initialize TLS context
     init_tls_ctx(conf, &ped(w)->tls_ctx);

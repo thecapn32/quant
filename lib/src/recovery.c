@@ -84,15 +84,12 @@ have_keys(struct q_conn * const c, const pn_t t)
                (pn->data.in_1rtt[1].aead && pn->data.out_1rtt[1].aead);
     }
     die("unhandled pn %s", pn_type_str(t));
-#ifdef PARTICLE
-    return false; // old gcc doesn't seem to understand "noreturn" attribute
-#endif
 }
 
 
 static void __attribute__((nonnull)) maybe_tx(struct q_conn * const c)
 {
-    if (has_wnd(c, c->w->mtu) == false)
+    if (has_wnd(c, w_max_udp_payload(c->sock)) == false)
         return;
 
     c->no_wnd = false;
@@ -411,30 +408,28 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
 #if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG))
     int pos = 0;
     struct ival * i = 0;
+    const uint32_t tmp_len = ped(c->w)->scratch_len;
+    uint8_t * const tmp = ped(c->w)->scratch;
     diet_foreach (i, diet, &lost) {
-        if ((size_t)pos >= c->w->mtu) {
-            ped(c->w)->scratch[c->w->mtu - 2] =
-                ped(c->w)->scratch[c->w->mtu - 3] =
-                    ped(c->w)->scratch[c->w->mtu - 4] = '.';
-            ped(c->w)->scratch[c->w->mtu - 1] = 0;
+        if ((size_t)pos >= tmp_len) {
+            tmp[tmp_len - 2] = tmp[tmp_len - 3] = tmp[tmp_len - 4] = '.';
+            tmp[tmp_len - 1] = 0;
             break;
         }
 
         if (i->lo == i->hi)
-            pos += snprintf((char *)&ped(c->w)->scratch[pos],
-                            c->w->mtu - (size_t)pos, FMT_PNR_OUT "%s", i->lo,
+            pos += snprintf((char *)&tmp[pos], tmp_len - (size_t)pos,
+                            FMT_PNR_OUT "%s", i->lo,
                             splay_next(diet, &lost, i) ? ", " : "");
         else
-            pos += snprintf((char *)&ped(c->w)->scratch[pos],
-                            c->w->mtu - (size_t)pos,
+            pos += snprintf((char *)&tmp[pos], tmp_len - (size_t)pos,
                             FMT_PNR_OUT ".." FMT_PNR_OUT "%s", i->lo, i->hi,
                             splay_next(diet, &lost, i) ? ", " : "");
     }
     diet_free(&lost);
 
     if (pos)
-        warn(DBG, "%s %s lost: %s", conn_type(c), pn_type_str(pn->type),
-             ped(c->w)->scratch);
+        warn(DBG, "%s %s lost: %s", conn_type(c), pn_type_str(pn->type), tmp);
 #endif
 
     // OnPacketsLost

@@ -86,13 +86,6 @@ static inline __attribute__((const)) bool is_draft_vers(const uint32_t vers)
 }
 
 
-static inline int __attribute__((nonnull))
-w_sockaddr_cmp(const struct w_sockaddr * const a,
-               const struct w_sockaddr * const b)
-{
-    return a->port == b->port && w_addr_cmp(&a->addr, &b->addr);
-}
-
 #ifndef NO_MIGRATION
 SPLAY_GENERATE(cids_by_seq, cid, node_seq, cids_by_seq_cmp)
 #endif
@@ -253,32 +246,29 @@ static void __attribute__((nonnull)) log_sent_pkts(struct q_conn * const c)
                          diet_insert(&unacked, m->hdr.nr, 0));
 
         int pos = 0;
+        const uint32_t tmp_len = ped(c->w)->scratch_len;
+        uint8_t * const tmp = ped(c->w)->scratch;
         struct ival * i = 0;
         diet_foreach (i, diet, &unacked) {
-            if ((size_t)pos >= c->w->mtu) {
-                ped(c->w)->scratch[c->w->mtu - 2] =
-                    ped(c->w)->scratch[c->w->mtu - 3] =
-                        ped(c->w)->scratch[c->w->mtu - 4] = '.';
-                ped(c->w)->scratch[c->w->mtu - 1] = 0;
+            if ((size_t)pos >= tmp_len) {
+                tmp[tmp_len - 2] = tmp[tmp_len - 3] = tmp[tmp_len - 4] = '.';
+                tmp[tmp_len - 1] = 0;
                 break;
             }
 
             if (i->lo == i->hi)
-                pos +=
-                    snprintf((char *)&ped(c->w)->scratch[pos],
-                             c->w->mtu - (size_t)pos, FMT_PNR_OUT "%s", i->lo,
-                             splay_next(diet, &unacked, i) ? ", " : "");
+                pos += snprintf((char *)&tmp[pos], tmp_len - (size_t)pos,
+                                FMT_PNR_OUT "%s", i->lo,
+                                splay_next(diet, &unacked, i) ? ", " : "");
             else
-                pos += snprintf((char *)&ped(c->w)->scratch[pos],
-                                c->w->mtu - (size_t)pos,
+                pos += snprintf((char *)&tmp[pos], tmp_len - (size_t)pos,
                                 FMT_PNR_OUT ".." FMT_PNR_OUT "%s", i->lo, i->hi,
                                 splay_next(diet, &unacked, i) ? ", " : "");
         }
         diet_free(&unacked);
 
         if (pos)
-            warn(INF, "%s %s unacked: %s", conn_type(c), pn_type_str(t),
-                 ped(c->w)->scratch);
+            warn(INF, "%s %s unacked: %s", conn_type(c), pn_type_str(t), tmp);
     }
 }
 #else
@@ -895,10 +885,9 @@ pkt_ok_for_epoch(const uint8_t flags, const epoch_t epoch)
         return is_lh(flags);
     case ep_data:
         return true;
+    default:
+        return false;
     }
-#ifdef PARTICLE
-    return false; // old gcc doesn't seem to understand "noreturn" attribute
-#endif
 }
 #endif
 
@@ -1818,7 +1807,7 @@ struct q_conn * new_conn(struct w_engine * const w,
         update_conf(c, conf);
 
     // TODO most of these should become configurable via q_conn_conf
-    c->tp_in.max_pkt = w_mtu(c->w);
+    c->tp_in.max_pkt = w_max_udp_payload(c->sock);
     c->tp_in.ack_del_exp = c->tp_out.ack_del_exp = DEF_ACK_DEL_EXP;
     c->tp_in.max_ack_del = c->tp_out.max_ack_del = DEF_MAX_ACK_DEL;
     c->tp_in.max_strm_data_uni = c->is_clnt ? INIT_STRM_DATA_UNI : 0;
