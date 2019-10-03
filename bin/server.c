@@ -294,7 +294,10 @@ int main(int argc, char * argv[])
                                               .tls_key = key});
     for (size_t i = 0; i < num_ports; i++) {
         for (uint16_t idx = 0; idx < w->addr_cnt; idx++) {
-            const struct q_conn * const c = q_bind(w, idx, port[i]);
+#ifndef NDEBUG
+            const struct q_conn * const c =
+#endif
+                q_bind(w, idx, port[i]);
             warn(DBG, "%s %s %s %s:%d", basename(argv[0]),
                  c ? "waiting on" : "failed to bind to", ifname,
                  w_ntop(&w->ifaddr[idx].addr, ip_tmp), port[i]);
