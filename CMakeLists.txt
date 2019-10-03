@@ -66,7 +66,7 @@ foreach(FLAG -pipe -Wextra -Wpedantic -Weverything -Werror
         -Wno-disabled-macro-expansion # clang on travis needs this
         -Wno-missing-field-initializers # and this (clang-5)
         -Wno-extra-semi-stmt # the kh_foreach* macros need this
-        -Wno-covered-switch-default
+        -Wno-covered-switch-default -Wno-missing-braces
         -fcomment-block-commands=dotfile
         )
   string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
