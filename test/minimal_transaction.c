@@ -26,58 +26,89 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #ifdef PARTICLE
+
 #include <arpa/inet.h>
 #include <netdb.h>
+
 #define IF_NAME "wl3"
+
 #elif defined(RIOT_VERSION)
-#define IF_NAME "ET"
+
+#include "net/sock/dns.h"
+
+#define IF_NAME ""
+
 #endif
 
-#include <unistd.h>
 
 #include <stdio.h>
-
+#include <unistd.h>
 
 #include "minimal_transaction.h"
 #include "quant/quant.h"
 
 
 #define to_in4(x) ((struct sockaddr_in *)&(x))
+#define to_in6(x) ((struct sockaddr_in6 *)&(x))
 #define to_in(x) ((struct sockaddr *)&(x))
 
 
 int resolve(const char * const name, struct sockaddr * const peer)
 {
+#ifdef RIOT_VERSION
+    // FIXME this only works locally
+    sock_dns_server.family = AF_INET6;
+    memcpy(sock_dns_server.addr.ipv6,
+           &(uint8_t[]){0xfe, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x42,
+                        0x62, 0x31, 0xff, 0xfe, 0x00, 0xbd, 0x77},
+           IP6_LEN);
+    sock_dns_server.port = SOCK_DNS_PORT;
+#endif
+
+    int ret = 1;
+    do {
 #ifdef PARTICLE
-    struct addrinfo hints;
-    hints.ai_family = peer->sa_family;
-    hints.ai_protocol = IPPROTO_UDP;
-    struct addrinfo * res;
-    const int ret = getaddrinfo(name, 0, &hints, &res);
-    if (ret == 0)
-        memcpy(&to_in4(*peer)->sin_addr, res->ai_addr, res->ai_addrlen);
-    freeaddrinfo(res);
-    return ret;
+        struct addrinfo hints;
+        hints.ai_family = peer->sa_family;
+        hints.ai_protocol = IPPROTO_UDP;
+        struct addrinfo * res;
+        ret = getaddrinfo(name, 0, &hints, &res);
+        if (ret == 0)
+            memcpy(&to_in4(*peer)->sin_addr, res->ai_addr, res->ai_addrlen);
+        freeaddrinfo(res);
 #elif defined(RIOT_VERSION)
-    return 0;
+        ret = sock_dns_query(name, &to_in6(*peer)->sin6_addr, peer->sa_family);
+
+        // FIXME: this will fail, so just override it for the moment
+        peer->sa_family = AF_INET6;
+        memcpy(&to_in6(*peer)->sin6_addr,
+               &(uint8_t[]){0xfe, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                            0x00, 0xb0, 0x42, 0xc6, 0x14, 0x6e, 0xbb, 0xee},
+               IP6_LEN);
+        ret = 0;
+
 #else
 #error unimplemented
 #endif
+        if (ret) {
+            warn(WRN, "unable to resolve %s, retrying", name);
+            w_nanosleep(1 * NS_PER_S);
+        }
+    } while (ret);
+    return ret;
 }
 
 
 void warpcore_transaction(const char * const msg, const size_t msg_len)
 {
     struct w_engine * const w = w_init(IF_NAME, 0, 50);
-    struct w_sock * const s = w_bind(w, 0, 0);
-    struct sockaddr_storage peer = {.ss_family = AF_INET};
+    struct w_sock * const s = w_bind(w, 0, 0, 0);
+    struct sockaddr_storage peer = {.ss_family = AF_UNSPEC};
     ((struct sockaddr_in *)&peer)->sin_port = htons(4433);
-#ifndef RIOT_VERSION
     resolve("quant.eggert.org", to_in(peer));
-#endif
-    struct w_iov_sq o = w_iov_sq_initializer(o);
 
-    w_alloc_cnt(w, &o, 1, 0, 0);
+    struct w_iov_sq o = w_iov_sq_initializer(o);
+    w_alloc_cnt(w, peer.ss_family, &o, 1, 0, 0);
     w_connect(s, to_in(peer));
 
     struct w_iov * const v = sq_first(&o);
@@ -101,43 +132,33 @@ void warpcore_transaction(const char * const msg, const size_t msg_len)
 }
 
 
-// void quic_transaction(void)
-// {
-//     static const struct q_conf qc = {0, 0, 0, 0, 0, 0, 20, false};
-//     struct w_engine * const w = q_init(IF_NAME, &qc);
+void quic_transaction(const char * const req, const size_t req_len)
+{
+    static const struct q_conf qc = {0, 0, 0, 0, 0, 0, 20, false};
+    struct w_engine * const w = q_init(IF_NAME, &qc);
 
-//     static const char peername[] = "10.100.25.62";
-//     struct sockaddr_storage peer = {.ss_family = AF_INET};
-//     ((struct sockaddr_in *)&peer)->sin_port = htons(4433);
-//     int ret;
-//     do {
-//         ret = resolve(peername, to_in(peer));
-//         if (ret) {
-//             warn(WRN, "unable to resolve %s, retrying", peername);
-//             w_nanosleep(1 * NS_PER_S);
-//         }
-//     } while (ret);
+    static const char peername[] = "quant.eggert.org";
+    struct sockaddr_storage peer = {.ss_family = AF_UNSPEC};
+    ((struct sockaddr_in *)&peer)->sin_port = htons(4433);
+    resolve(peername, to_in(peer));
 
-//     static const char req[] = "GET /5000\r\n";
-//     struct w_iov_sq o = w_iov_sq_initializer(o);
-//     q_alloc(w, &o, sizeof(req) - 1);
-//     struct w_iov * const v = sq_first(&o);
-//     memcpy(v->buf, req, sizeof(req) - 1);
+    struct w_iov_sq o = w_iov_sq_initializer(o);
+    q_alloc(w, &o, peer.ss_family, sizeof(req) - 1);
+    struct w_iov * const v = sq_first(&o);
+    memcpy(v->buf, req, req_len - 1);
 
-//     struct q_stream * s;
-//     static const struct q_conn_conf qcc = {0, 0, 0, 0,
-//                                            0, 0, 0, 0xff000000 +
-//                                            DRAFT_VERSION};
-//     struct q_conn * const c = q_connect(w, to_in(peer), peername, &o, &s,
-//     true,
-//                                         "hq-" DRAFT_VERSION_STRING, &qcc);
+    struct q_stream * s;
+    static const struct q_conn_conf qcc = {0, 0, 0, 0,
+                                           0, 0, 0, 0xff000000 + DRAFT_VERSION};
+    struct q_conn * const c = q_connect(w, to_in(peer), peername, &o, &s, true,
+                                        "hq-" DRAFT_VERSION_STRING, &qcc);
 
-//     if (c) {
-//         struct w_iov_sq i = w_iov_sq_initializer(i);
-//         q_read_stream(s, &i, true);
-//         warn(NTE, "retrieved %" PRIu32 " bytes", w_iov_sq_len(&i));
-//     } else
-//         warn(WRN, "could not retrieve %s", req);
+    if (c) {
+        struct w_iov_sq i = w_iov_sq_initializer(i);
+        q_read_stream(s, &i, true);
+        warn(NTE, "retrieved %" PRIu32 " bytes", w_iov_sq_len(&i));
+    } else
+        warn(WRN, "could not retrieve %s", req);
 
-//     q_cleanup(w);
-// }
+    q_cleanup(w);
+}

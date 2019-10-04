@@ -32,12 +32,15 @@
 
 int main(void)
 {
-    char msg[256];
-    const size_t len = snprintf(msg, sizeof(msg),
-                                "Hello World! You are running RIOT on a(n) "
-                                "%s board. This board features a(n) %s MCU.",
-                                RIOT_BOARD, RIOT_MCU);
-    puts(msg);
-    warpcore_transaction(msg, len);
+    // char req[256];
+    // const size_t len = snprintf(req, sizeof(req),
+    //                             "Hello World! You are running RIOT on a(n) "
+    //                             "%s board. This board features a(n) %s MCU.",
+    //                             RIOT_BOARD, RIOT_MCU);
+    // puts(req);
+    // warpcore_transaction(req, len);
+
+    static const char req[] = "GET /5000\r\n";
+    quic_transaction(req, sizeof(req));
     return 0;
 }

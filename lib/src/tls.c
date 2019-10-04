@@ -26,7 +26,6 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <assert.h>
-#include <netinet/in.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -34,7 +33,6 @@
 #include <string.h>
 #include <sys/param.h>
 #include <sys/socket.h>
-#include <sys/types.h>
 
 #ifndef NO_TLS_TICKETS
 #include <unistd.h>
@@ -43,38 +41,6 @@
 #ifndef NO_TLS_LOG
 #include <stdarg.h>
 #endif
-
-#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
-#include <netdb.h>
-#endif
-
-#ifdef PARTICLE
-#include <rng_hal.h>
-#include <uECC.h>
-
-#define gai_strerror(x) ""
-
-void ptls_minicrypto_random_bytes(void * buf, size_t len)
-{
-    while (len >= sizeof(uint32_t)) {
-        *((uint32_t *)buf) = HAL_RNG_GetRandomNumber();
-        buf += sizeof(uint32_t);
-        len -= sizeof(uint32_t);
-    }
-    while (len > 0) {
-        *((uint8_t *)buf) = HAL_RNG_GetRandomNumber();
-        buf += sizeof(uint8_t);
-        len -= sizeof(uint8_t);
-    }
-}
-
-static int uecc_rng(uint8_t * dest, unsigned size)
-{
-    ptls_minicrypto_random_bytes(dest, size);
-    return 1;
-}
-#endif
-
 
 #ifdef WITH_OPENSSL
 #include <openssl/evp.h>
@@ -90,7 +56,7 @@ static int uecc_rng(uint8_t * dest, unsigned size)
 #else
 #include <picotls/minicrypto.h>
 
-#ifndef PARTICLE
+#if !defined(PARTICLE) && !defined(RIOT_VERSION)
 #define cipher_suite ptls_minicrypto_cipher_suites
 #else
 static const ptls_cipher_suite_t * cipher_suite[] = {
@@ -103,6 +69,33 @@ static const ptls_cipher_suite_t * cipher_suite[] = {
 #endif
 
 #include <quant/quant.h>
+
+
+#if defined(PARTICLE) || defined(RIOT_VERSION)
+#include <uECC.h>
+
+void ptls_minicrypto_random_bytes(void * buf, size_t len)
+{
+    while (len >= sizeof(uint32_t)) {
+        *((uint32_t *)buf) = w_rand32();
+        buf += sizeof(uint32_t);
+        len -= sizeof(uint32_t);
+    }
+    while (len > 0) {
+        *((uint8_t *)buf) = w_rand32();
+        buf += sizeof(uint8_t);
+        len -= sizeof(uint8_t);
+    }
+}
+
+
+static int uecc_rng(uint8_t * dest, unsigned size)
+{
+    ptls_minicrypto_random_bytes(dest, size);
+    return 1;
+}
+#endif
+
 
 #include "bitset.h"
 #include "conn.h"
@@ -117,14 +110,14 @@ static const ptls_cipher_suite_t * cipher_suite[] = {
 
 #ifndef NO_TLS_TICKETS
 struct tls_ticket {
+    splay_entry(tls_ticket) node;
     char * sni;
     char * alpn;
     uint8_t * ticket;
     size_t ticket_len;
     struct transport_params tp;
     uint32_t vers;
-    uint8_t _unused[4];
-    splay_entry(tls_ticket) node;
+    uint8_t _unused[12];
 };
 
 
@@ -571,8 +564,8 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                 decb(c->tp_out.orig_cid.id, &pos, end, len);
                 c->tp_out.orig_cid.len = (uint8_t)len;
             }
-            mk_cid_str(INF, &c->tp_out.orig_cid, orig_cid_str);
-            warn(INF, "\toriginal_connection_id = %s", orig_cid_str);
+            warn(INF, "\toriginal_connection_id = %s",
+                 cid_str(&c->tp_out.orig_cid));
             break;
 
         case TP_DMIG:;
@@ -600,10 +593,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             }
             memcpy(dcid->srt, pos, sizeof(dcid->srt));
             dcid->has_srt = true;
-            {
-                mk_srt_str(INF, dcid->srt, srt_str);
-                warn(INF, "\tstateless_reset_token = %s", srt_str);
-            }
+            warn(INF, "\tstateless_reset_token = %s", srt_str(dcid->srt));
             conns_by_srt_ins(c, dcid->srt);
             pos += sizeof(dcid->srt);
             break;
@@ -613,22 +603,20 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                 return 1;
 
             struct pref_addr * const pa = &c->tp_out.pref_addr;
-            struct sockaddr_in * const pa4 =
-                (struct sockaddr_in *)&c->tp_out.pref_addr.addr4;
-            struct sockaddr_in6 * const pa6 =
-                (struct sockaddr_in6 *)&c->tp_out.pref_addr.addr6;
+            struct w_sockaddr * const pa4 = &c->tp_out.pref_addr.addr4;
+            struct w_sockaddr * const pa6 = &c->tp_out.pref_addr.addr6;
 
-            pa4->sin_family = AF_INET;
-            memcpy(&pa4->sin_addr, pos, sizeof(pa4->sin_addr));
-            pos += sizeof(pa4->sin_addr);
-            memcpy(&pa4->sin_port, pos, sizeof(pa4->sin_port));
-            pos += sizeof(pa4->sin_port);
+            pa4->addr.af = AF_INET;
+            memcpy(&pa4->addr.ip4, pos, sizeof(pa4->addr.ip4));
+            pos += sizeof(pa4->addr.ip4);
+            memcpy(&pa4->port, pos, sizeof(pa4->port));
+            pos += sizeof(pa4->port);
 
-            pa6->sin6_family = AF_INET6;
-            memcpy(&pa6->sin6_addr, pos, sizeof(pa6->sin6_addr));
-            pos += sizeof(pa6->sin6_addr);
-            memcpy(&pa6->sin6_port, pos, sizeof(pa6->sin6_port));
-            pos += sizeof(pa6->sin6_port);
+            pa6->addr.af = AF_INET6;
+            memcpy(&pa6->addr.ip6, pos, sizeof(pa6->addr.ip6));
+            pos += sizeof(pa6->addr.ip6);
+            memcpy(&pa6->port, pos, sizeof(pa6->port));
+            pos += sizeof(pa6->port);
 
             dec1(&pa->cid.len, &pos, end);
             memcpy(pa->cid.id, pos, pa->cid.len);
@@ -639,35 +627,11 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
             pos += sizeof(pa->cid.srt);
 
-#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
-            char ip4[NI_MAXHOST];
-            char port4[NI_MAXSERV];
-            int err = getnameinfo((struct sockaddr *)pa4, sizeof(*pa4), ip4,
-                                  sizeof(ip4), port4, sizeof(port4),
-                                  NI_NUMERICHOST | NI_NUMERICSERV);
-            if (unlikely(err)) {
-                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY, "%s",
-                          gai_strerror(err));
-                return 1;
-            }
-
-            char ip6[NI_MAXHOST];
-            char port6[NI_MAXSERV];
-            err = getnameinfo((struct sockaddr *)pa6, sizeof(*pa6), ip6,
-                              sizeof(ip6), port6, sizeof(port6),
-                              NI_NUMERICHOST | NI_NUMERICSERV);
-            if (unlikely(err)) {
-                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY, "%s",
-                          gai_strerror(err));
-                return 1;
-            }
-
-            mk_cid_str(INF, &pa->cid, cid_str);
-            mk_srt_str(INF, pa->cid.srt, srt_str);
             warn(INF,
-                 "\tpreferred_address = IPv4=%s:%s IPv6=[%s]:%s cid=%s srt=%s",
-                 ip4, port4, ip6, port6, cid_str, srt_str);
-#endif
+                 "\tpreferred_address = IPv4=%s:%u IPv6=[%s]:%u cid=%s srt=%s",
+                 w_ntop(&pa4->addr, ip_tmp), pa4->port,
+                 w_ntop(&pa6->addr, ip_tmp), pa6->port, cid_str(&pa->cid),
+                 srt_str(pa->cid.srt));
             break;
 
         case TP_ACIL:
@@ -775,8 +739,8 @@ void init_tp(struct q_conn * const c)
             if (!c->is_clnt) {
                 encb_tp(&pos, end, TP_SRT, c->scid->srt, sizeof(c->scid->srt));
 #ifdef DEBUG_EXTRA
-                mk_srt_str(INF, c->scid->srt, srt_str);
-                warn(INF, "\tstateless_reset_token = %s", srt_str);
+                warn(INF, "\tstateless_reset_token = %s",
+                     srt_str(c->scid->srt));
 #endif
             }
             break;
@@ -784,8 +748,8 @@ void init_tp(struct q_conn * const c)
             if (!c->is_clnt && c->odcid.len) {
                 encb_tp(&pos, end, TP_OCID, c->odcid.id, c->odcid.len);
 #ifdef DEBUG_EXTRA
-                mk_cid_str(INF, &c->tp_in.orig_cid, orig_cid_str);
-                warn(INF, "\toriginal_connection_id = %s", orig_cid_str);
+                warn(INF, "\toriginal_connection_id = %s",
+                     cid_str(&c->tp_in.orig_cid));
 #endif
             }
             break;
@@ -919,10 +883,9 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
                                      enc_tckt.aead->algo->tag_size))
         return -1;
 
-    mk_cid_str(WRN, c->scid, scid_str);
     if (is_encrypt) {
         warn(INF, "creating new 0-RTT session ticket for %s conn %s (%s %s)",
-             conn_type(c), scid_str, ptls_get_server_name(tls),
+             conn_type(c), cid_str(c->scid), ptls_get_server_name(tls),
              ptls_get_negotiated_protocol(tls));
 
         // prepend git commit hash
@@ -945,7 +908,7 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
             warn(WRN,
                  "could not verify 0-RTT session ticket for %s conn %s (%s "
                  "%s)",
-                 conn_type(c), scid_str, ptls_get_server_name(tls),
+                 conn_type(c), cid_str(c->scid), ptls_get_server_name(tls),
                  ptls_get_negotiated_protocol(tls));
             c->did_0rtt = false;
             return -1;
@@ -964,7 +927,7 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
             warn(WRN,
                  "could not decrypt 0-RTT session ticket for %s conn %s "
                  "(%s %s)",
-                 conn_type(c), scid_str, ptls_get_server_name(tls),
+                 conn_type(c), cid_str(c->scid), ptls_get_server_name(tls),
                  ptls_get_negotiated_protocol(tls));
             c->did_0rtt = false;
             return -1;
@@ -972,7 +935,7 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
         dst->off += n;
 
         warn(INF, "verified 0-RTT session ticket for %s conn %s (%s %s)",
-             conn_type(c), scid_str, ptls_get_server_name(tls),
+             conn_type(c), cid_str(c->scid), ptls_get_server_name(tls),
              ptls_get_negotiated_protocol(tls));
         c->did_0rtt = true;
     }
@@ -1032,10 +995,9 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
 
     // write all tickets
     // FIXME this currently dumps the entire cache to file on each connection!
-    mk_cid_str(INF, c->scid, scid_str);
     splay_foreach (t, tickets_by_peer, &tickets) {
         warn(INF, "writing TLS ticket for %s conn %s (%s %s)", conn_type(c),
-             scid_str, t->sni, t->alpn);
+             cid_str(c->scid), t->sni, t->alpn);
 
         size_t len = strlen(t->sni) + 1;
         ensure(fwrite(&len, sizeof(len), 1, fp), "fwrite");
@@ -1167,7 +1129,7 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
     const epoch_t ep_in = strm_epoch(s);
     size_t epoch_off[5] = {0};
     ptls_buffer_t tls_io;
-    ptls_buffer_init(&tls_io, ped(s->c->w)->scratch, s->c->w->mtu);
+    ptls_buffer_init(&tls_io, ped(s->c->w)->scratch, ped(s->c->w)->scratch_len);
 
     const int ret =
         ptls_handle_message(c->tls.t, &tls_io, epoch_off, ep_in,
@@ -1208,7 +1170,7 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
              (unsigned long)out_len);
 #endif
         struct w_iov_sq o = w_iov_sq_initializer(o);
-        alloc_off(w_engine(c->sock), &o, (uint32_t)out_len,
+        alloc_off(w_engine(c->sock), &o, q_conn_af(c), (uint32_t)out_len,
                   DATA_OFFSET + c->tok_len);
         const uint8_t * data = tls_io.base + epoch_off[e];
         struct w_iov * ov;
@@ -1394,7 +1356,7 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
 void init_tls_ctx(const struct q_conf * const conf,
                   ptls_context_t * const tls_ctx)
 {
-#ifdef PARTICLE
+#if defined(PARTICLE) || defined(RIOT_VERSION)
     // the picotls minicrypto backend depends on this
     uECC_set_rng(uecc_rng);
 #endif
@@ -1408,7 +1370,7 @@ void init_tls_ctx(const struct q_conf * const conf,
         ensure(pkey, "failed to load private key");
         ptls_openssl_init_sign_certificate(&sign_cert, pkey);
         EVP_PKEY_free(pkey);
-#elif !defined(PARTICLE)
+#elif !defined(PARTICLE) && !defined(RIOT_VERSION)
         // XXX ptls_minicrypto_load_private_key() only works for ECDSA keys
         const int ret =
             ptls_minicrypto_load_private_key(tls_ctx, conf->tls_key);
@@ -1421,7 +1383,7 @@ void init_tls_ctx(const struct q_conf * const conf,
            "ptls_openssl_init_verify_certificate");
 #endif
 
-#ifndef PARTICLE
+#if !defined(PARTICLE) && !defined(RIOT_VERSION)
     if (conf && conf->tls_cert) {
         const int ret = ptls_load_certificates(tls_ctx, conf->tls_cert);
         ensure(ret == 0, "ptls_load_certificates");
@@ -1455,11 +1417,13 @@ void init_tls_ctx(const struct q_conf * const conf,
         tls_ctx->log_event = &log_event;
 #endif
 
-    static ptls_key_exchange_algorithm_t * key_exchanges[] = {&secp256r1,
-#ifndef PARTICLE
-                                                              &x25519,
+    static ptls_key_exchange_algorithm_t * key_exchanges[] = {
+        &secp256r1,
+#if !defined(PARTICLE) && !defined(RIOT_VERSION)
+        &x25519,
 #endif
-                                                              0};
+        0
+    };
     static ptls_on_client_hello_t on_client_hello = {on_ch};
     static ptls_update_traffic_key_t update_traffic_key = {
         update_traffic_key_cb};
@@ -1504,7 +1468,6 @@ void free_tls_ctx(ptls_context_t * const tls_ctx)
     free(tls_ctx->certificates.list);
 
 #ifndef WITH_OPENSSL
-    free(tls_ctx->pkey_buf.base);
     free(tls_ctx->sign_certificate);
 #endif
 }

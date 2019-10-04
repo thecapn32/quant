@@ -89,8 +89,7 @@ struct cb_data {
     struct q_conn * c;
     struct w_engine * w;
     int dir;
-    // short dlevel;
-    uint32_t _dummy;
+    int af;
 };
 
 
@@ -151,7 +150,7 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
     const uint32_t n = (uint32_t)strtoul(&path[2], 0, 10);
     if (n) {
         struct w_iov_sq out = w_iov_sq_initializer(out);
-        q_alloc(d->w, &out, n);
+        q_alloc(d->w, &out, d->af, n);
         // check whether we managed to allow enough buffers
         if (w_iov_sq_len(&out) != n) {
             warn(ERR, "could only allocate %" PRIu "/%u bytes of buffer",
@@ -293,11 +292,16 @@ int main(int argc, char * argv[])
                                               .num_bufs = num_bufs,
                                               .tls_cert = cert,
                                               .tls_key = key});
-    struct q_conn * conn[MAXPORTS];
     for (size_t i = 0; i < num_ports; i++) {
-        conn[i] = q_bind(w, port[i]);
-        warn(DBG, "%s %s %s port %d", basename(argv[0]),
-             conn[i] ? "waiting on" : "failed to bind to", ifname, port[i]);
+        for (uint16_t idx = 0; idx < w->addr_cnt; idx++) {
+#ifndef NDEBUG
+            const struct q_conn * const c =
+#endif
+                q_bind(w, idx, port[i]);
+            warn(DBG, "%s %s %s %s:%d", basename(argv[0]),
+                 c ? "waiting on" : "failed to bind to", ifname,
+                 w_ntop(&w->ifaddr[idx].addr, ip_tmp), port[i]);
+        }
     }
 
     bool first_conn = true;
@@ -358,6 +362,7 @@ int main(int argc, char * argv[])
 
         } else {
             d.s = s;
+            d.af = sq_first(&q)->wv_af;
             struct w_iov * v;
             sq_foreach (v, &q, next) {
                 if (v->len == 0)

@@ -71,7 +71,7 @@ static inline uint64_t io(const uint64_t len)
 
     // allocate buffers to transmit a packet
     struct w_iov_sq o = w_iov_sq_initializer(o);
-    q_alloc(w, &o, len);
+    q_alloc(w, &o, q_conn_af(cc), len);
 
     // send the data
     q_write(cs, &o, true);
@@ -141,7 +141,7 @@ int main(int argc __attribute__((unused)), char ** argv)
     ensure(fchdir(cwd) == 0, "cannot fchdir");
 
     // bind server socket
-    q_bind(w, 55555);
+    q_bind(w, 0, 55555);
 
     // connect to server
     struct sockaddr_in sip = {};

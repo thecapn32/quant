@@ -28,6 +28,7 @@
 #include <Particle.h>
 
 #include "minimal_transaction.h"
+#include "quant/quant.h"
 
 
 extern const void * const stack_start = __builtin_frame_address(0);
@@ -54,13 +55,18 @@ void button_action()
     waitUntil(WiFi.ready);
     digitalWrite(led, HIGH);
 
+    const uint32_t v = System.versionNumber();
+    warn(DBG, "Particle Device OS: %lu.%lu.%lu", (v & 0xff000000) >> 24,
+         (v & 0x00ff0000) >> 16, (v & 0x0000ff00) >> 8);
+
     // char msg[64];
     // const float voltage = analogRead(BATT) * 0.0011224;
     // const size_t msg_len = snprintf(
     //     msg, sizeof(msg), "Hello from Particle! Voltage is %f.", voltage);
     // warpcore_transaction(msg, msg_len);
 
-    quic_transaction();
+    static const char req[] = "GET /5000\r\n";
+    quic_transaction(req, sizeof(req));
 
     WiFi.off();
     digitalWrite(led, LOW);

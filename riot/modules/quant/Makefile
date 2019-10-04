@@ -1,16 +1,49 @@
 NO_AUTO_SRC = 1
 
-WARP_SRC = lib/deps/warpcore/lib/src
+PTLS_INC = lib/deps/picotls/include
+PTLS_SRC = lib/deps/picotls
+
+QUIC_INC = lib/include
+QUIC_SRC = lib/src
+
+TIMEOUT_INC = lib/deps/timeout
+TIMEOUT_SRC = lib/deps/timeout
+
 WARP_INC = lib/deps/warpcore/lib/include
+WARP_SRC = lib/deps/warpcore/lib/src
 
 SRC += \
-	quant/config.c \
-	warpcore/config.c \
+	$(RIOTPROJECT)/$(PTLS_SRC)/deps/cifra/src/aes.c \
+	$(RIOTPROJECT)/$(PTLS_SRC)/deps/cifra/src/blockwise.c \
+	$(RIOTPROJECT)/$(PTLS_SRC)/deps/cifra/src/drbg.c \
+	$(RIOTPROJECT)/$(PTLS_SRC)/deps/cifra/src/gcm.c \
+	$(RIOTPROJECT)/$(PTLS_SRC)/deps/cifra/src/gf128.c \
+	$(RIOTPROJECT)/$(PTLS_SRC)/deps/cifra/src/modes.c \
+	$(RIOTPROJECT)/$(PTLS_SRC)/deps/cifra/src/sha256.c \
+	$(RIOTPROJECT)/$(PTLS_SRC)/deps/cifra/src/sha512.c \
+	$(RIOTPROJECT)/$(PTLS_SRC)/deps/micro-ecc/uECC.c \
+	$(RIOTPROJECT)/$(PTLS_SRC)/lib/cifra/aes128.c \
+	$(RIOTPROJECT)/$(PTLS_SRC)/lib/picotls.c \
+	$(RIOTPROJECT)/$(PTLS_SRC)/lib/uecc.c \
+	$(RIOTPROJECT)/$(QUIC_SRC)/conn.c \
+	$(RIOTPROJECT)/$(QUIC_SRC)/diet.c \
+	$(RIOTPROJECT)/$(QUIC_SRC)/frame.c \
+	$(RIOTPROJECT)/$(QUIC_SRC)/loop.c \
+	$(RIOTPROJECT)/$(QUIC_SRC)/marshall.c \
+	$(RIOTPROJECT)/$(QUIC_SRC)/pkt.c \
+	$(RIOTPROJECT)/$(QUIC_SRC)/pn.c \
+	$(RIOTPROJECT)/$(QUIC_SRC)/quic.c \
+	$(RIOTPROJECT)/$(QUIC_SRC)/recovery.c \
+	$(RIOTPROJECT)/$(QUIC_SRC)/stream.c \
+	$(RIOTPROJECT)/$(QUIC_SRC)/tls.c \
+	$(RIOTPROJECT)/$(TIMEOUT_SRC)/timeout.c \
 	$(RIOTPROJECT)/$(WARP_SRC)/backend_riot.c \
-	$(RIOTPROJECT)/$(WARP_SRC)/warpcore.c \
 	$(RIOTPROJECT)/$(WARP_SRC)/plat.c \
 	$(RIOTPROJECT)/$(WARP_SRC)/util.c \
-	$(RIOTPROJECT)/test/minimal_transaction.c
+	$(RIOTPROJECT)/$(WARP_SRC)/warpcore.c \
+	$(RIOTPROJECT)/test/minimal_transaction.c \
+	quant/config.c \
+	warpcore/config.c
 
 .PHONY: dirs
 
@@ -18,21 +51,36 @@ all: quant/config.c warpcore/config.c
 
 INCLUDES += \
 	-isystem $(CURDIR) \
+	-isystem $(RIOTPROJECT)/$(PTLS_INC) \
+	-isystem $(RIOTPROJECT)/$(PTLS_SRC)/deps/cifra/src \
+	-isystem $(RIOTPROJECT)/$(PTLS_SRC)/deps/cifra/src/ext \
+	-isystem $(RIOTPROJECT)/$(PTLS_SRC)/deps/micro-ecc \
+	-isystem $(RIOTPROJECT)/$(QUIC_INC) \
+	-isystem $(RIOTPROJECT)/$(TIMEOUT_INC) \
 	-isystem $(RIOTPROJECT)/$(WARP_INC)
 
 CFLAGS += \
-	-Wno-unknown-pragmas \
-	-DDLEVEL=DBG
+	-Wno-unknown-pragmas -Wno-missing-field-initializers \
+	-Wno-strict-prototypes -Wno-sign-compare \
+	-DTIMEOUT_DISABLE_INTERVALS -DWHEEL_NUM=6 \
+	-DDLEVEL=DBG -DNDEBUG -DNDEBUG_WITH_DLOG \
+	-DNO_FUZZER_CORPUS_COLLECTION -DNO_TLS_TICKETS -DNO_TLS_LOG -DNO_QLOG \
+	-DNO_ERR_REASONS -DNO_OOO_0RTT -DNO_OOO_DATA -DNO_MIGRATION
 
 include $(RIOTBASE)/Makefile.base
 
 dirs:
 	@# make a bunch of unusual directories for the out-of-tree dependencies
 	@mkdir -p quant warpcore \
-		$(BINDIR)/$(MODULE)/quant/quant \
-		$(BINDIR)/$(MODULE)/warpcore \
+		$(BINDIR)/$(MODULE)/$(RIOTPROJECT)/$(PTLS_SRC)/deps/cifra/src \
+		$(BINDIR)/$(MODULE)/$(RIOTPROJECT)/$(PTLS_SRC)/deps/micro-ecc \
+		$(BINDIR)/$(MODULE)/$(RIOTPROJECT)/$(PTLS_SRC)/lib/cifra \
+		$(BINDIR)/$(MODULE)/$(RIOTPROJECT)/$(QUIC_SRC) \
+		$(BINDIR)/$(MODULE)/$(RIOTPROJECT)/$(TIMEOUT_SRC) \
 		$(BINDIR)/$(MODULE)/$(RIOTPROJECT)/$(WARP_SRC) \
-		$(BINDIR)/$(MODULE)/$(RIOTPROJECT)/test
+		$(BINDIR)/$(MODULE)/$(RIOTPROJECT)/test \
+		$(BINDIR)/$(MODULE)/quant/quant \
+		$(BINDIR)/$(MODULE)/warpcore
 
 QUANT_VERSION=$(shell grep 'quant.*VERSION' $(RIOTPROJECT)/CMakeLists.txt | cut -d' ' -f3)
 DRAFT_VERSION=$(shell grep 'quant.*VERSION' $(RIOTPROJECT)/CMakeLists.txt | cut -d' ' -f3 | cut -d. -f3)

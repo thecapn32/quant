@@ -63,9 +63,21 @@ qlog_recovery(const qlog_rec_evt_t evt,
 
 #else
 
-#define qlog_close()
-#define qlog_init(...)
-#define qlog_recovery(...)
-#define qlog_transport(...)
+#define qlog_close()                                                           \
+    do {                                                                       \
+    } while (0)
+
+#define qlog_init(...)                                                         \
+    do {                                                                       \
+    } while (0)
+
+#define qlog_recovery(...)                                                     \
+    do {                                                                       \
+    } while (0)
+
+#define qlog_transport(...)                                                    \
+    do {                                                                       \
+    } while (0)
+
 
 #endif

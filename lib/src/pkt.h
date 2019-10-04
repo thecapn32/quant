@@ -29,7 +29,6 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <sys/socket.h>
 
 #include <warpcore/warpcore.h>
 
@@ -194,7 +193,7 @@ enc_lh_cids(uint8_t ** pos,
 extern void __attribute__((nonnull(1, 2, 3)))
 log_pkt(const char * const dir,
         const struct w_iov * const v,
-        const struct sockaddr * const addr,
+        const struct w_sockaddr * const saddr,
         const struct cid * const odcid,
         const uint8_t * const tok,
         const uint16_t tok_len);

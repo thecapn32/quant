@@ -115,17 +115,16 @@ struct q_stream {
 #define strm_to_state(s, new_state)                                            \
     do {                                                                       \
         if ((s)->id >= 0) {                                                    \
-            mk_cid_str(DBG, (s)->c->scid, _scid_str);                          \
-            warn(DBG,                                                          \
-                 "%s%s conn %s strm " FMT_SID " (%s, %s) state %s -> " YEL     \
-                 "%s" NRM,                                                     \
-                 (s)->state == (new_state) ? BLD RED                           \
-                     "useless transition: " NRM                                \
-                                           : "",                               \
-                 conn_type((s)->c), (s)->c->scid ? _scid_str : "?", (s)->id,   \
-                 is_uni((s)->id) ? "uni" : "bi",                               \
-                 is_srv_ini((s)->id) ? "serv" : "clnt",                        \
-                 strm_state_str[(s)->state], strm_state_str[(new_state)]);     \
+            warn(                                                              \
+                DBG,                                                           \
+                "%s%s conn %s strm " FMT_SID " (%s, %s) state %s -> " YEL      \
+                "%s" NRM,                                                      \
+                (s)->state == (new_state) ? BLD RED "useless transition: " NRM \
+                                          : "",                                \
+                conn_type((s)->c), (s)->c->scid ? cid_str((s)->c->scid) : "?", \
+                (s)->id, is_uni((s)->id) ? "uni" : "bi",                       \
+                is_srv_ini((s)->id) ? "serv" : "clnt",                         \
+                strm_state_str[(s)->state], strm_state_str[(new_state)]);      \
         }                                                                      \
         if (likely((s)->state != strm_clsd))                                   \
             (s)->state = (new_state);                                          \
@@ -160,11 +159,9 @@ static inline dint_t __attribute__((const)) crpt_strm_id(const epoch_t epoch)
     case ep_data:
         return -1;
     case ep_0rtt:
+    default:
         die("unhandled epoch %u", epoch);
     }
-#ifdef PARTICLE
-    return 0; // old gcc doesn't seem to understand "noreturn" attribute
-#endif
 }
 
 

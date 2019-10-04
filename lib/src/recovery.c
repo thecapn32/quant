@@ -84,15 +84,12 @@ have_keys(struct q_conn * const c, const pn_t t)
                (pn->data.in_1rtt[1].aead && pn->data.out_1rtt[1].aead);
     }
     die("unhandled pn %s", pn_type_str(t));
-#ifdef PARTICLE
-    return false; // old gcc doesn't seem to understand "noreturn" attribute
-#endif
 }
 
 
 static void __attribute__((nonnull)) maybe_tx(struct q_conn * const c)
 {
-    if (has_wnd(c, c->w->mtu) == false)
+    if (has_wnd(c, w_max_udp_payload(c->sock)) == false)
         return;
 
     c->no_wnd = false;
@@ -141,12 +138,11 @@ void log_cc(struct q_conn * const c)
         (int64_t)c->rec.cur.rttvar - (int64_t)c->rec.prev.rttvar;
     if (delta_in_flight || delta_cwnd || delta_ssthresh || delta_srtt ||
         delta_rttvar) {
-        mk_cid_str(DBG, c->scid, scid_str);
         warn(DBG,
              "%s conn %s: in_flight=%" PRIu " (%s%+" PRId NRM "), cwnd" NRM
              "=%" PRIu " (%s%+" PRId NRM "), ssthresh=%" PRIu " (%s%+" PRId NRM
              "), srtt=%.3f (%s%+.3f" NRM "), rttvar=%.3f (%s%+.3f" NRM ")",
-             conn_type(c), scid_str, c->rec.cur.in_flight,
+             conn_type(c), cid_str(c->scid), c->rec.cur.in_flight,
              delta_in_flight > 0 ? GRN : delta_in_flight < 0 ? RED : "",
              delta_in_flight, c->rec.cur.cwnd,
              delta_cwnd > 0 ? GRN : delta_cwnd < 0 ? RED : "", delta_cwnd,
@@ -173,7 +169,6 @@ void set_ld_timer(struct q_conn * const c)
 
 #ifdef DEBUG_TIMERS
     const char * type = BLD RED "???" NRM;
-    mk_cid_str(DBG, c->scid, scid_str);
 #endif
     const struct pn_space * const pn = earliest_loss_t_pn(c);
 
@@ -201,7 +196,7 @@ void set_ld_timer(struct q_conn * const c)
     if (unlikely(c->rec.ae_in_flight == 0)) {
 #ifdef DEBUG_TIMERS
         warn(DBG, "no RTX-able pkts in flight, stopping ld_alarm on %s conn %s",
-             conn_type(c), scid_str);
+             conn_type(c), cid_str(c->scid));
 #endif
         timeout_del(&c->rec.ld_alarm);
         return;
@@ -228,7 +223,8 @@ set_to:;
 
 #ifdef DEBUG_TIMERS
     warn(DBG, "%s alarm in %f sec on %s conn %s", type,
-         c->rec.ld_alarm_val / (double)NS_PER_S, conn_type(c), scid_str);
+         c->rec.ld_alarm_val / (double)NS_PER_S, conn_type(c),
+         cid_str(c->scid));
 #endif
     timeouts_add(ped(c->w)->wheel, &c->rec.ld_alarm, c->rec.ld_alarm_val);
 }
@@ -411,30 +407,28 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
 #if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG))
     int pos = 0;
     struct ival * i = 0;
+    const uint32_t tmp_len = ped(c->w)->scratch_len;
+    uint8_t * const tmp = ped(c->w)->scratch;
     diet_foreach (i, diet, &lost) {
-        if ((size_t)pos >= c->w->mtu) {
-            ped(c->w)->scratch[c->w->mtu - 2] =
-                ped(c->w)->scratch[c->w->mtu - 3] =
-                    ped(c->w)->scratch[c->w->mtu - 4] = '.';
-            ped(c->w)->scratch[c->w->mtu - 1] = 0;
+        if ((size_t)pos >= tmp_len) {
+            tmp[tmp_len - 2] = tmp[tmp_len - 3] = tmp[tmp_len - 4] = '.';
+            tmp[tmp_len - 1] = 0;
             break;
         }
 
         if (i->lo == i->hi)
-            pos += snprintf((char *)&ped(c->w)->scratch[pos],
-                            c->w->mtu - (size_t)pos, FMT_PNR_OUT "%s", i->lo,
+            pos += snprintf((char *)&tmp[pos], tmp_len - (size_t)pos,
+                            FMT_PNR_OUT "%s", i->lo,
                             splay_next(diet, &lost, i) ? ", " : "");
         else
-            pos += snprintf((char *)&ped(c->w)->scratch[pos],
-                            c->w->mtu - (size_t)pos,
+            pos += snprintf((char *)&tmp[pos], tmp_len - (size_t)pos,
                             FMT_PNR_OUT ".." FMT_PNR_OUT "%s", i->lo, i->hi,
                             splay_next(diet, &lost, i) ? ", " : "");
     }
     diet_free(&lost);
 
     if (pos)
-        warn(DBG, "%s %s lost: %s", conn_type(c), pn_type_str(pn->type),
-             ped(c->w)->scratch);
+        warn(DBG, "%s %s lost: %s", conn_type(c), pn_type_str(pn->type), tmp);
 #endif
 
     // OnPacketsLost
@@ -454,24 +448,24 @@ static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
     // see OnLossDetectionTimeout pseudo code
     struct pn_space * const pn = earliest_loss_t_pn(c);
 
-    mk_cid_str(NTE, c->scid, scid_str);
     if (pn && pn->loss_t) {
 #ifdef DEBUG_TIMERS
         warn(DBG, "%s TT alarm on %s conn %s", pn_type_str(pn->type),
-             conn_type(c), scid_str);
+             conn_type(c), cid_str(c->scid));
 #endif
         detect_lost_pkts(pn, true);
         goto set_timer; // otherwise no PTO will happen
     } else if (have_unacked_crypto_data(c)) {
 #ifdef DEBUG_TIMERS
         warn(DBG, "crypto RTX #%u on %s conn %s", c->rec.crypto_cnt + 1,
-             conn_type(c), scid_str);
+             conn_type(c), cid_str(c->scid));
 #endif
         detect_lost_pkts(&c->pns[pn_init], false);
         detect_lost_pkts(&c->pns[pn_hshk], false);
         detect_lost_pkts(&c->pns[pn_data], false);
         if (c->rec.crypto_cnt++ >= 2 && c->sockopt.enable_ecn) {
-            warn(NTE, "turning off ECN for %s conn %s", conn_type(c), scid_str);
+            warn(NTE, "turning off ECN for %s conn %s", conn_type(c),
+                 cid_str(c->scid));
             c->sockopt.enable_ecn = false;
             w_set_sockopt(c->sock, &c->sockopt);
         }
@@ -482,7 +476,7 @@ static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
     } else if (have_keys(c, pn_data) == false) {
 #ifdef DEBUG_TIMERS
         warn(DBG, "anti-deadlock RTX #%u on %s conn %s", c->rec.crypto_cnt + 1,
-             conn_type(c), scid_str);
+             conn_type(c), cid_str(c->scid));
 #endif
         c->tx_limit = have_keys(c, pn_hshk) ? 1 : 2;
         timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
@@ -491,7 +485,7 @@ static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
     } else {
 #ifdef DEBUG_TIMERS
         warn(DBG, "PTO alarm #%u on %s conn %s", c->rec.pto_cnt, conn_type(c),
-             scid_str);
+             cid_str(c->scid));
 #endif
         c->rec.pto_cnt++;
         c->i.pto_cnt++;

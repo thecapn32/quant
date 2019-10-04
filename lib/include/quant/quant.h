@@ -106,7 +106,7 @@ extern void __attribute__((nonnull(1))) q_close(struct q_conn * const c,
                                                 const char * const reason);
 
 extern struct q_conn * __attribute__((nonnull))
-q_bind(struct w_engine * const w, const uint16_t port);
+q_bind(struct w_engine * const w, const uint16_t addr_idx, const uint16_t port);
 
 extern struct q_conn * q_accept(struct w_engine * const w,
                                 const struct q_conn_conf * const conf);
@@ -127,8 +127,10 @@ extern void __attribute__((nonnull)) q_free_stream(struct q_stream * const s);
 extern void __attribute__((nonnull))
 q_stream_get_written(struct q_stream * const s, struct w_iov_sq * const q);
 
-extern void __attribute__((nonnull))
-q_alloc(struct w_engine * const w, struct w_iov_sq * const q, const size_t len);
+extern void __attribute__((nonnull)) q_alloc(struct w_engine * const w,
+                                             struct w_iov_sq * const q,
+                                             const int af,
+                                             const size_t len);
 
 extern void __attribute__((nonnull)) q_free(struct w_iov_sq * const q);
 
@@ -138,6 +140,7 @@ q_cid(struct q_conn * const c, char * const buf, const size_t buf_len);
 extern uint_t __attribute__((nonnull)) q_sid(const struct q_stream * const s);
 
 extern void __attribute__((nonnull)) q_chunk_str(struct w_engine * const w,
+                                                 const int af,
                                                  const char * const str,
                                                  const size_t len,
                                                  struct w_iov_sq * o);
@@ -184,6 +187,8 @@ q_rebind_sock(struct q_conn * const c, const bool use_new_dcid);
 
 extern void __attribute__((nonnull))
 q_info(struct q_conn * const c, struct q_conn_info * const ci);
+
+extern int __attribute__((nonnull)) q_conn_af(const struct q_conn * const c);
 
 #ifdef __cplusplus
 }

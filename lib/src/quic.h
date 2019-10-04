@@ -30,7 +30,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
 #include <sys/param.h>
 
@@ -56,18 +55,6 @@
 #define SCID_LEN_SERV 8 ///< Default server source CID length.
 #define SRT_LEN 16      ///< Stateless reset token length allowed by spec.
 #define PATH_CHLG_LEN 8 ///< Length of a path challenge.
-
-#ifdef PARTICLE
-#define IPTOS_ECN_NOTECT 0x00 // not-ECT
-#define IPTOS_ECN_ECT1 0x01   // ECN-capable transport (1)
-#define IPTOS_ECN_ECT0 0x02   // ECN-capable transport (0)
-#define IPTOS_ECN_CE 0x03     // congestion experienced
-#define IPTOS_ECN_MASK 0x03   // ECN field mask
-
-#define NI_MAXHOST 16
-#define NI_MAXSERV 6
-#define O_CLOEXEC 0
-#endif
 
 // Maximum reordering in packets before packet threshold loss detection
 // considers a packet lost. The RECOMMENDED value is 3.
@@ -107,34 +94,6 @@
 /// before an RTO in TCP.
 #define kPersistentCongestionThreshold 3
 
-
-#ifndef PARTICLE
-#define NRM "\x1B[0m" ///< ANSI escape sequence: reset all to normal
-#define BLD "\x1B[1m" ///< ANSI escape sequence: bold
-// #define DIM "\x1B[2m"   ///< ANSI escape sequence: dim
-// #define ULN "\x1B[3m"   ///< ANSI escape sequence: underline
-// #define BLN "\x1B[5m"   ///< ANSI escape sequence: blink
-#define REV "\x1B[7m" ///< ANSI escape sequence: reverse
-// #define HID "\x1B[8m"   ///< ANSI escape sequence: hidden
-// #define BLK "\x1B[30m"  ///< ANSI escape sequence: black
-#define RED "\x1B[31m" ///< ANSI escape sequence: red
-#define GRN "\x1B[32m" ///< ANSI escape sequence: green
-#define YEL "\x1B[33m" ///< ANSI escape sequence: yellow
-#define BLU "\x1B[34m" ///< ANSI escape sequence: blue
-#define MAG "\x1B[35m" ///< ANSI escape sequence: magenta
-#define CYN "\x1B[36m" ///< ANSI escape sequence: cyan
-// #define WHT "\x1B[37m"  ///< ANSI escape sequence: white
-#else
-#define NRM ""
-#define BLD ""
-#define REV ""
-#define RED ""
-#define GRN ""
-#define YEL ""
-#define BLU ""
-#define MAG ""
-#define CYN ""
-#endif
 
 #define FMT_PNR_IN BLU "%" PRIu NRM
 #define FMT_PNR_OUT GRN "%" PRIu NRM
@@ -200,7 +159,7 @@ struct pkt_meta {
     dint_t max_strms_uni;     ///< MAX_STREAM_ID unidir limit, if sent.
     uint_t strm_data_blocked; ///< STREAM_DATA_BLOCKED value, if sent.
     uint_t data_blocked;      ///< DATA_BLOCKED value, if sent.
-    uint_t min_cid_seq; ///< Smallest NEW_CONNECTION_ID seq in pkt, if sent.
+    uint_t min_cid_seq; ///< Smallest NEq_CONNECTION_ID seq in pkt, if sent.
 
 #ifndef HAVE_64BIT
     uint8_t _unused[4];
@@ -236,8 +195,8 @@ struct per_engine_data {
     ptls_context_t tls_ctx;
     struct q_conn_conf default_conn_conf;
     uint32_t num_bufs;
-    uint8_t _unused[4];
-    uint8_t scratch[]; // MTU-sized scratch space to avoid stack alloc
+    uint32_t scratch_len;
+    uint8_t scratch[]; // packet-sized scratch space to avoid stack alloc
 };
 
 
@@ -253,6 +212,7 @@ extern const uint8_t ok_vers_len;
 
 extern void __attribute__((nonnull)) alloc_off(struct w_engine * const w,
                                                struct w_iov_sq * const q,
+                                               const int af,
                                                const uint32_t len,
                                                const uint16_t off);
 
@@ -262,15 +222,16 @@ free_iov(struct w_iov * const v, struct pkt_meta * const m);
 
 extern struct w_iov * __attribute__((nonnull))
 alloc_iov(struct w_engine * const w,
+          const int af,
           const uint16_t len,
           const uint16_t off,
           struct pkt_meta ** const m);
 
 
 extern struct w_iov * __attribute__((nonnull(1)))
-w_iov_dup(const struct w_iov * const v,
-          struct pkt_meta ** const mdup,
-          const uint16_t off);
+dup_iov(const struct w_iov * const v,
+        struct pkt_meta ** const mdup,
+        const uint16_t off);
 
 
 #if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) && !defined(FUZZING) &&    \
@@ -317,34 +278,28 @@ extern char * __attribute__((nonnull)) hex2str(const uint8_t * const src,
                                                char * const dst,
                                                const size_t len_dst);
 
+
+extern const char * __attribute__((nonnull))
+cid2str(const struct cid * const cid, char * const dst, const size_t len_dst);
+
+
 #define hex_str_len(x) ((x)*2 + 1)
 
-#define mk_cid_str(lvl, cid, str)                                              \
-    char str[DLEVEL >= (lvl)                                                   \
-                 ? hex_str_len(2 * sizeof((cid)->seq) + CID_LEN_MAX)           \
-                 : 1] = "";                                                    \
-    if (unlikely(DLEVEL >= (lvl)) && likely(cid)) {                            \
-        const int _n = snprintf(str, sizeof(str), "%" PRIu ":", (cid)->seq);   \
-        hex2str((cid)->id, (cid)->len, &str[_n], sizeof(str) - (size_t)_n);    \
-    }
 
-#define mk_path_chlg_str(lvl, path_chlg, str)                                  \
-    char str[DLEVEL >= (lvl) ? hex_str_len(PATH_CHLG_LEN) : 1];                \
-    if (unlikely(DLEVEL >= (lvl)))                                             \
-    hex2str((path_chlg), sizeof(path_chlg), str, sizeof(str))
+#define cid_str(cid)                                                           \
+    cid2str((cid),                                                             \
+            (char[hex_str_len(2 * sizeof((cid)->seq) + CID_LEN_MAX)]){""},     \
+            hex_str_len(2 * sizeof((cid)->seq) + CID_LEN_MAX))
 
 
-#define mk_srt_str(lvl, srt, str)                                              \
-    char str[DLEVEL >= (lvl) ? hex_str_len(SRT_LEN) : 1];                      \
-    if (unlikely(DLEVEL >= (lvl)))                                             \
-    hex2str((srt), sizeof(srt), str, sizeof(str))
+#define srt_str(srt)                                                           \
+    hex2str((srt), sizeof(srt), (char[hex_str_len(SRT_LEN)]){""},              \
+            hex_str_len(SRT_LEN))
 
 
-#define mk_tok_str(lvl, tok, tok_len, str)                                     \
-    char str[DLEVEL >= (lvl) ? hex_str_len(MAX_TOK_LEN) : 1] = "";             \
-    if (unlikely(DLEVEL >= (lvl)) && likely(tok_len)) {                        \
-        hex2str((tok), (tok_len), str, sizeof(str));                           \
-    }
+#define tok_str(tok, tok_len)                                                  \
+    hex2str((tok), (tok_len), (char[hex_str_len(MAX_TOK_LEN)]){""},            \
+            hex_str_len(MAX_TOK_LEN))
 
 
 #define has_strm_data(p) (p)->strm_frm_pos

@@ -25,14 +25,12 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <netdb.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/param.h>
-#include <sys/socket.h>
 
-#ifndef PARTICLE
+#if !defined(PARTICLE) && !defined(RIOT_VERSION)
 #include <netinet/ip.h>
 #endif
 
@@ -57,7 +55,12 @@
 #include "tls.h"
 
 
-// TODO: check error conditions and codes more thoroughly
+#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
+#define pcr_str(chlg_resp)                                                     \
+    hex2str((chlg_resp), sizeof(chlg_resp),                                    \
+            (char[hex_str_len(PATH_CHLG_LEN)]){""},                            \
+            hex_str_len(PATH_CHLG_LEN))
+#endif
 
 #define track_frame(m, ft) bit_set(FRM_MAX, (ft), &(m)->frms)
 
@@ -160,13 +163,12 @@ get_and_validate_strm(struct q_conn * const c,
     else {
         struct q_stream * s = get_stream(c, sid);
         if (unlikely(s == 0)) {
-            if (unlikely(diet_find(&c->clsd_strms, (uint_t)sid))) {
-                mk_cid_str(NTE, c->scid, scid_str);
+            if (unlikely(diet_find(&c->clsd_strms, (uint_t)sid)))
                 warn(NTE,
                      "ignoring 0x%02x frame for closed strm " FMT_SID
                      " on %s conn %s",
-                     type, sid, conn_type(c), scid_str);
-            } else if (type == FRM_MSD || type == FRM_STP)
+                     type, sid, conn_type(c), cid_str(c->scid));
+            else if (type == FRM_MSD || type == FRM_STP)
                 // we are supposed to open closed streams on RX of these frames
                 s = new_stream(c, sid);
             else
@@ -244,14 +246,13 @@ dec_stream_or_crypto_frame(const uint8_t type,
         goto done;
     }
 
-    mk_cid_str(NTE, c->scid, scid_str);
     if (unlikely(m->strm == 0)) {
         if (unlikely(diet_find(&c->clsd_strms, (uint_t)sid))) {
 #ifdef DEBUG_STREAMS
             warn(NTE,
                  "ignoring STREAM frame for closed strm " FMT_SID
                  " on %s conn %s",
-                 sid, conn_type(c), scid_str);
+                 sid, conn_type(c), cid_str(c->scid));
 #endif
             ignore = true;
             kind = "ign";
@@ -277,7 +278,8 @@ dec_stream_or_crypto_frame(const uint8_t type,
                      m->strm->state == strm_clsd)) {
             warn(NTE,
                  "ignoring STREAM frame for %s strm " FMT_SID " on %s conn %s",
-                 strm_state_str[m->strm->state], sid, conn_type(c), scid_str);
+                 strm_state_str[m->strm->state], sid, conn_type(c),
+                 cid_str(c->scid));
             ignore = true;
             goto done;
         }
@@ -364,7 +366,8 @@ dec_stream_or_crypto_frame(const uint8_t type,
     kind = YEL "ooo" NRM;
     if (unlikely(m->strm->state == strm_hcrm || m->strm->state == strm_clsd)) {
         warn(NTE, "ignoring STREAM frame for %s strm " FMT_SID " on %s conn %s",
-             strm_state_str[m->strm->state], sid, conn_type(c), scid_str);
+             strm_state_str[m->strm->state], sid, conn_type(c),
+             cid_str(c->scid));
         ignore = true;
         kind = "ign";
         goto done;
@@ -582,9 +585,8 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
             if (likely(c->sockopt.enable_ecn &&
                        is_set(IPTOS_ECN_ECT0, acked->flags)) &&
                 unlikely(type != FRM_ACE)) {
-                mk_cid_str(NTE, c->scid, scid_str);
                 warn(NTE, "ECN verification failed for %s conn %s",
-                     conn_type(c), scid_str);
+                     conn_type(c), cid_str(c->scid));
                 c->sockopt.enable_ecn = false;
                 w_set_sockopt(c->sock, &c->sockopt);
             }
@@ -662,7 +664,7 @@ dec_close_frame(const uint8_t type,
 
     const uint16_t act_reas_len =
         (uint16_t)MIN(reas_len, (uint16_t)(end - *pos));
-    ensure(act_reas_len <= c->w->mtu, "scratch insufficient");
+    ensure(act_reas_len <= ped(c->w)->scratch_len, "scratch insufficient");
 
     if (act_reas_len)
         decb_chk(ped(c->w)->scratch, pos, end, act_reas_len, c, type);
@@ -879,8 +881,8 @@ dec_path_challenge_frame(const uint8_t ** pos,
     struct q_conn * const c = m->pn->c;
     decb_chk(c->path_chlg_in, pos, end, PATH_CHLG_LEN, c, FRM_PCL);
 
-    mk_path_chlg_str(INF, c->path_chlg_in, pci_str);
-    warn(INF, FRAM_IN "PATH_CHALLENGE" NRM " data=%s", pci_str);
+    warn(INF, FRAM_IN "PATH_CHALLENGE" NRM " data=%s",
+         pcr_str(c->path_chlg_in));
 
     memcpy(c->path_resp_out, c->path_chlg_in, PATH_CHLG_LEN);
     c->needs_tx = c->tx_path_resp = true;
@@ -897,37 +899,24 @@ dec_path_response_frame(const uint8_t ** pos,
     struct q_conn * const c = m->pn->c;
     decb_chk(c->path_resp_in, pos, end, PATH_CHLG_LEN, c, FRM_PRP);
 
-    mk_path_chlg_str(NTE, c->path_resp_in, pri_str);
-    warn(INF, FRAM_IN "PATH_RESPONSE" NRM " data=%s", pri_str);
+    warn(INF, FRAM_IN "PATH_RESPONSE" NRM " data=%s", pcr_str(c->path_resp_in));
 
     if (unlikely(c->tx_path_chlg == false)) {
-        warn(NTE, "unexpected PATH_RESPONSE %s, ignoring", pri_str);
+        warn(NTE, "unexpected PATH_RESPONSE %s, ignoring",
+             pcr_str(c->path_resp_in));
         return true;
     }
 
     if (unlikely(c->path_resp_in != c->path_chlg_out)) {
-        mk_path_chlg_str(NTE, c->path_chlg_out, pco_str);
-        warn(NTE, "PATH_RESPONSE %s != %s, ignoring", pri_str, pco_str);
+        warn(NTE, "PATH_RESPONSE %s != %s, ignoring", pcr_str(c->path_resp_in),
+             pcr_str(c->path_chlg_out));
         return true;
     }
 
-#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
-    char ip[NI_MAXHOST];
-    char port[NI_MAXSERV];
-    char migr_ip[NI_MAXHOST];
-    char migr_port[NI_MAXSERV];
-    ensure(getnameinfo((struct sockaddr *)&c->peer, sizeof(c->peer), ip,
-                       sizeof(ip), port, sizeof(port),
-                       NI_NUMERICHOST | NI_NUMERICSERV) == 0,
-           "getnameinfo");
-    ensure(getnameinfo((struct sockaddr *)&c->migr_peer, sizeof(c->migr_peer),
-                       migr_ip, sizeof(migr_ip), migr_port, sizeof(migr_port),
-                       NI_NUMERICHOST | NI_NUMERICSERV) == 0,
-           "getnameinfo");
+    warn(NTE, "migration from %s:%u to %s:%u complete",
+         w_ntop(&c->peer.addr, ip_tmp), bswap16(c->peer.port),
+         w_ntop(&c->migr_peer.addr, ip_tmp), bswap16(c->migr_peer.port));
 
-    warn(NTE, "migration from %s:%s to %s:%s complete", ip, port, migr_ip,
-         migr_port);
-#endif
     c->tx_path_chlg = false;
     c->peer = c->migr_peer;
 
@@ -959,12 +948,10 @@ dec_new_cid_frame(const uint8_t ** pos,
         false;
 #endif
 
-    mk_srt_str(INF, dcid.srt, srt_str);
-    mk_cid_str(INF, &dcid, dcid_str);
     warn(INF,
          FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu " rpt=%" PRIu
                  " len=%u dcid=%s srt=%s%s",
-         dcid.seq, dcid.rpt, dcid.len, dcid_str, srt_str,
+         dcid.seq, dcid.rpt, dcid.len, cid_str(&dcid), srt_str(dcid.srt),
          dup ? " [" RED "dup" NRM "]" : "");
 
 #ifndef NO_MIGRATION
@@ -1074,9 +1061,8 @@ dec_new_token_frame(const uint8_t ** pos,
     uint8_t tok[MAX_TOK_LEN];
     decb_chk(tok, pos, end, (uint16_t)act_tok_len, c, FRM_TOK);
 
-    mk_tok_str(INF, tok, tok_len, tok_str);
     warn(INF, FRAM_IN "NEW_TOKEN" NRM " len=%" PRIu " tok=%s", tok_len,
-         tok_str);
+         tok_str(tok, tok_len));
 
     if (unlikely(tok_len != act_tok_len))
         err_close_return(c, ERR_FRAME_ENC, FRM_TOK, "illegal tok len");
@@ -1112,8 +1098,8 @@ bool dec_frames(struct q_conn * const c,
 
 #if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) && !defined(FUZZING) &&    \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
-    // when called from the fuzzer, v->addr.ss_family is zero
-    if (v->addr.ss_family)
+    // when called from the fuzzer, v->wv_af is zero
+    if (v->wv_af)
         write_to_corpus(corpus_frm_dir, pos, (size_t)(end - pos));
 #endif
 
@@ -1167,7 +1153,7 @@ bool dec_frames(struct q_conn * const c,
 #endif
                 const uint16_t off = (uint16_t)(pos - v->buf - 1);
                 struct pkt_meta * mdup;
-                struct w_iov * const vdup = w_iov_dup(v, &mdup, off);
+                struct w_iov * const vdup = dup_iov(v, &mdup, off);
                 pm_cpy(mdup, m, false);
                 // adjust w_iov start and len to stream frame data
                 v->buf += m->strm_data_pos;
@@ -1683,8 +1669,8 @@ void enc_path_response_frame(uint8_t ** pos,
     enc1(pos, end, FRM_PRP);
     encb(pos, end, c->path_resp_out, sizeof(c->path_resp_out));
 
-    mk_path_chlg_str(INF, c->path_resp_out, pro_str);
-    warn(INF, FRAM_OUT "PATH_RESPONSE" NRM " data=%s", pro_str);
+    warn(INF, FRAM_OUT "PATH_RESPONSE" NRM " data=%s",
+         pcr_str(c->path_resp_out));
 
     track_frame(m, FRM_PRP);
 }
@@ -1698,8 +1684,8 @@ void enc_path_challenge_frame(uint8_t ** pos,
     enc1(pos, end, FRM_PCL);
     encb(pos, end, c->path_chlg_out, sizeof(c->path_chlg_out));
 
-    mk_path_chlg_str(INF, c->path_resp_out, pco_str);
-    warn(INF, FRAM_OUT "PATH_CHALLENGE" NRM " data=%s", pco_str);
+    warn(INF, FRAM_OUT "PATH_CHALLENGE" NRM " data=%s",
+         pcr_str(c->path_resp_out));
 
     track_frame(m, FRM_PCL);
 }
@@ -1741,12 +1727,11 @@ void enc_new_cid_frame(uint8_t ** pos,
     encb(pos, end, enc_cid->id, enc_cid->len);
     encb(pos, end, enc_cid->srt, sizeof(enc_cid->srt));
 
-    mk_srt_str(INF, enc_cid->srt, srt_str);
-    mk_cid_str(INF, enc_cid, enc_cid_str);
     warn(INF,
          FRAM_OUT "NEW_CONNECTION_ID" NRM " seq=%" PRIu " rpt=%" PRIu
                   " len=%u cid=%s srt=%s %s",
-         enc_cid->seq, enc_cid->rpt, enc_cid->len, enc_cid_str, srt_str,
+         enc_cid->seq, enc_cid->rpt, enc_cid->len, cid_str(enc_cid),
+         srt_str(enc_cid->srt),
          enc_cid == &ncid ? "" : BLD REV GRN "[RTX]" NRM);
 
     track_frame(m, FRM_CID);
@@ -1763,8 +1748,8 @@ void enc_new_token_frame(uint8_t ** pos,
     encv(pos, end, c->tok_len);
     encb(pos, end, c->tok, c->tok_len);
 
-    mk_tok_str(INF, c->tok, c->tok_len, tok_str);
-    warn(INF, FRAM_OUT "NEW_TOKEN" NRM " len=%u tok=%s", c->tok_len, tok_str);
+    warn(INF, FRAM_OUT "NEW_TOKEN" NRM " len=%u tok=%s", c->tok_len,
+         tok_str(c->tok, c->tok_len));
 
     track_frame(m, FRM_TOK);
 }

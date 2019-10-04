@@ -9,7 +9,7 @@ c=${1:-quant}
 s=${2:-quant}
 
 # port to run servers on
-addr=127.0.0.1
+addr=[::1]
 port=4433
 path=/4000
 dir=/Users/lars/Sites/lars/output/papers

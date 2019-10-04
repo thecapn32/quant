@@ -58,6 +58,4 @@ extern const size_t @PROJECT_NAME@_commit_hash_abbrev_len;
 extern const uint8_t @PROJECT_NAME@_commit_hash[];
 extern const size_t @PROJECT_NAME@_commit_hash_len;
 
-#cmakedefine HAVE_ENDIAN_H
-#cmakedefine HAVE_SYS_ENDIAN_H
 #cmakedefine HAVE_ASAN
