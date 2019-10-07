@@ -25,20 +25,21 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <stdint.h>
 #include <stdio.h>
+
+#include <esp_clk.h>
+#include <random.h>
 
 #include "minimal_transaction.h"
 
 
 int main(void)
 {
-    // char req[256];
-    // const size_t len = snprintf(req, sizeof(req),
-    //                             "Hello World! You are running RIOT on a(n) "
-    //                             "%s board. This board features a(n) %s MCU.",
-    //                             RIOT_BOARD, RIOT_MCU);
-    // puts(req);
-    // warpcore_transaction(req, len);
+    puts("TODO: figure out crash without this puts");
+
+    // let's gather some entropy and seed the RNG
+    random_init(esp_clk_slowclk_cal_get());
 
     static const char req[] = "GET /5000\r\n";
     quic_transaction(req, sizeof(req));

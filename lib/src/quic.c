@@ -243,7 +243,7 @@ struct q_conn * q_connect(struct w_engine * const w,
 
     warn(WRN, "new %u-RTT %s conn %s to %s:%u, %" PRIu " byte%s queued for TX",
          c->try_0rtt ? 0 : 1, conn_type(c), cid_str(c->scid),
-         w_ntop(&p.addr, ip_tmp), p.port,
+         w_ntop(&p.addr, ip_tmp), bswap16(p.port),
          early_data ? w_iov_sq_len(early_data) : 0,
          plural(early_data ? w_iov_sq_len(early_data) : 0));
 
@@ -266,7 +266,7 @@ struct q_conn * q_connect(struct w_engine * const w,
     timeouts_add(ped(w)->wheel, &c->tx_w, 0);
 
     warn(DBG, "waiting for connect on %s conn %s to %s:%u", conn_type(c),
-         cid_str(c->scid), w_ntop(&p.addr, ip_tmp), p.port);
+         cid_str(c->scid), w_ntop(&p.addr, ip_tmp), bswap16(p.port));
     conn_to_state(c, conn_opng);
     loop_run(w, (func_ptr)q_connect, c, 0);
 

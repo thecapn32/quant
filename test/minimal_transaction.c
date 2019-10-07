@@ -44,8 +44,9 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#include <quant/quant.h>
+
 #include "minimal_transaction.h"
-#include "quant/quant.h"
 
 
 #define to_in4(x) ((struct sockaddr_in *)&(x))
@@ -83,7 +84,7 @@ int resolve(const char * const name, struct sockaddr * const peer)
         peer->sa_family = AF_INET6;
         memcpy(&to_in6(*peer)->sin6_addr,
                &(uint8_t[]){0xfe, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                            0x00, 0xb0, 0x42, 0xc6, 0x14, 0x6e, 0xbb, 0xee},
+                            0x00, 0x48, 0x56, 0x94, 0xc7, 0x95, 0x16, 0x98},
                IP6_LEN);
         ret = 0;
 
