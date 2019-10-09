@@ -101,7 +101,7 @@ before_install:
     tar xf openssl-1.1.1b.tar.gz
     cd openssl-1.1.1b
     ./config --openssldir=/usr/local
-    sudo make -s install
+    sudo make -s install > /dev/null
     sudo ldconfig /usr/local/lib
 
 script:
