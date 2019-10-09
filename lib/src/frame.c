@@ -410,7 +410,9 @@ done:
                          m->strm->id, m->strm_off + m->strm_data_len - 1,
                          m->strm->in_data_max);
 
+#ifdef NO_OOO_DATA
 reallydone:
+#endif
     if (ignore)
         // this indicates to callers that the w_iov was not placed in a stream
         m->strm = 0;

@@ -62,6 +62,7 @@ INCLUDES += \
 CFLAGS += \
 	-Wno-unknown-pragmas -Wno-missing-field-initializers \
 	-Wno-strict-prototypes -Wno-sign-compare -Wno-maybe-uninitialized \
+	-Wno-unused-variable -Wno-unused-but-set-variable \
 	-DTIMEOUT_DISABLE_INTERVALS -DWHEEL_NUM=6 \
 	-DDLEVEL=DBG -DNDEBUG -DNDEBUG_WITH_DLOG \
 	-DNO_FUZZER_CORPUS_COLLECTION -DNO_TLS_TICKETS -DNO_TLS_LOG -DNO_QLOG \
