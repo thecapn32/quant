@@ -5,16 +5,21 @@
 
 QUANT is a BSD-licensed C11 implementation of the emerging IETF
 [QUIC](https://quicwg.github.io/) standard for a new transport protocol over
-UDP, intending to support the new HTTP/3 standard. QUANT uses the
-[warpcore](https://github.com/NTAP/warpcore) zero-copy userspace UDP/IPv4 stack
-on top of the [netmap](http://info.iet.unipi.it/~luigi/netmap/) packet I/O
-framework. It can also operate over the regular Socket API.
+UDP, intending to support the new HTTP/3 standard.
+
+QUANT uses the [warpcore](https://github.com/NTAP/warpcore) zero-copy userspace
+UDP/IP stack, which in addition to running on on top of the standard **Socket
+API** has support for the **[netmap](http://info.iet.unipi.it/~luigi/netmap/)**
+fast packet I/O framework, as well as the
+**[Particle](https://github.com/particle-iot/device-os)** and
+**[RIOT](http://riot-os.org/)** IoT stacks supporting embedded devices.
 
 The quant repository is [on GitHub](https://github.com/NTAP/quant).
 
 quant uses [picotls](https://github.com/h2o/picotls) for its [TLS
 1.3](https://datatracker.ietf.org/doc/draft-ietf-tls-tls13/) implementation.
-quant also uses [klib](https://github.com/attractivechaos/klib) for some data structures and functions. These dependencies will be built automatically.
+quant also uses [klib](https://github.com/attractivechaos/klib) for some data
+structures and functions. These dependencies will be built automatically.
 
 
 ## Prerequisites
@@ -22,10 +27,8 @@ quant also uses [klib](https://github.com/attractivechaos/klib) for some data st
 quant uses the [cmake](https://cmake.org/) build system and
 [Doxygen](http://www.doxygen.nl/) to generate the documentation.
 
-quant uses [libev](http://software.schmorp.de/pkg/libev.html) as a basis for the
-event loop that underlies this implementation, and
-[http-parser](https://github.com/nodejs/http-parser) for the example HTTP/0.9
-client and server.
+The example HTTP/0.9 client and server use
+[http-parser](https://github.com/nodejs/http-parser).
 
 So you need to install some dependencies. On the Mac, the easiest way is via
 [Homebrew](http://brew.sh/), so install that first. Then, do
@@ -36,15 +39,14 @@ On Debian-based Linux systems, do
 
     apt install libssl-dev libhttp-parser-dev libbsd-dev
 
-On Darwin, you *must* also install the Xcode command line tools first:
+On Darwin, you **must** also install the Xcode command line tools first:
 
     xcode-select --install
 
 
 ## Building
-To do an
-out-of-source build of quant (best practice with `cmake`), do the following
-to build with `make` as a generator:
+To do an out-of-source build of quant (best practice with `cmake`), do the
+following to build with `make` as a generator:
 
     git submodule update --init --recursive
     mkdir Debug
@@ -62,14 +64,45 @@ logging enabled. In order to build an optimized build, do this:
     make
 
 
+## Building for RIOT
+
+The [RIOT](http://riot-os.org/) build is at the moment highly experimental and
+has only been tested with an [ESP32
+devkit](https://docs.espressif.com/projects/esp-idf/en/latest/hw-reference/get-started-devkitc.html).
+You can build a sample client and install it on an ESP32 as follows. You will
+need to have the [riotdocker](https://github.com/RIOT-OS/riotdocker) image
+installed and the `ESP32_SDK_DIR` environment variable needs to point to your
+[ESP-IDF](https://api.riot-os.org/group__cpu__esp32.html) installation:
+
+    cd riot
+    make BUILD_IN_DOCKER=1 flash term
+
+
+## Building for Particle
+
+The [Particle](https://github.com/particle-iot/device-os) build is also highly
+experimental and has only been tested with an [Argon](https://docs.particle.io/datasheets/wi-fi/argon-datasheet/).
+You can build a sample client and install it on an Argon as follows. You will
+need to have the [po](https://github.com/nrobinson2000/po) toolchain
+installed:
+
+    cd particle
+    po argon build
+    po argon flash
+    particle serial monitor
+
+
 ## Docker container
 
-Instead of building quant for yourself, you can also obtain a [pre-built Docker container]
-(https://cloud.docker.com/u/ntap/repository/docker/ntap/quant/). For example,
+Instead of building quant for yourself, you can also obtain a [pre-built Docker
+container](https://cloud.docker.com/u/ntap/repository/docker/ntap/quant/). For
+example,
 
     docker pull ntap/quant:latest
 
-should download the latest build on the `master` branch. The docker container by default exposes a QUIC server on port 4433 that can serve `/index.html` and possibly other resources.
+should download the latest build on the `master` branch. The docker container by
+default exposes a QUIC server on port 4433 that can serve `/index.html` and
+possibly other resources.
 
 To map the UDP port, run the docker container with
 
@@ -84,13 +117,11 @@ examples in `bin`. They explain their usage when called with a `-h` argument.
 The current interop status of quant against [other
 stacks](https://github.com/quicwg/base-drafts/wiki/Implementations) is captured
 in [this
-spreadsheet](https://docs.google.com/spreadsheets/d/1D0tW89vOoaScs3IY9RGC0UesWGAwE6xyLk0l4JtvTVg/edit#gid=11370678).
+spreadsheet](https://docs.google.com/spreadsheets/d/1D0tW89vOoaScs3IY9RGC0UesWGAwE6xyLk0l4JtvTVg/edit#gid=1510984897).
 
-At the moment, development happens in branches other than `master`, which are
-numbered according to the [IETF Internet Drafts](https://quicwg.github.io/) they
-implement. The `master` branch is updated whenever such a per-draft branch is
-stable.
-
+At the moment, development happens in `master`, and branches numbered according
+to the [IETF Internet Drafts](https://quicwg.github.io/) they implement serve as
+archives.
 
 ## Contributing
 
@@ -133,7 +164,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ## Acknowledgement
 
-This software has received funding from the European Union's Horizon 2020
+This software has received past funding from the European Union's Horizon 2020
 research and innovation program 2014-2018 under grant agreement 644866
 (["SSICLOPS"](https://ssiclops.eu/)). The European Commission is not responsible
 for any use that may be made of this software.
