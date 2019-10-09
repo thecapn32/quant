@@ -26,18 +26,11 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #ifdef PARTICLE
-
-#include <arpa/inet.h>
 #include <netdb.h>
-
 #define IF_NAME "wl3"
-
 #elif defined(RIOT_VERSION)
-
 #include "net/sock/dns.h"
-
 #define IF_NAME ""
-
 #endif
 
 
@@ -105,7 +98,7 @@ void warpcore_transaction(const char * const msg, const size_t msg_len)
     struct w_engine * const w = w_init(IF_NAME, 0, 50);
     struct w_sock * const s = w_bind(w, 0, 0, 0);
     struct sockaddr_storage peer = {.ss_family = AF_UNSPEC};
-    ((struct sockaddr_in *)&peer)->sin_port = htons(4433);
+    to_in6(peer)->sin6_port = bswap16(4433);
     resolve("quant.eggert.org", to_in(peer));
 
     struct w_iov_sq o = w_iov_sq_initializer(o);
@@ -140,11 +133,11 @@ void quic_transaction(const char * const req, const size_t req_len)
 
     static const char peername[] = "quant.eggert.org";
     struct sockaddr_storage peer = {.ss_family = AF_UNSPEC};
-    ((struct sockaddr_in *)&peer)->sin_port = htons(4433);
+    to_in6(peer)->sin6_port = bswap16(4433);
     resolve(peername, to_in(peer));
 
     struct w_iov_sq o = w_iov_sq_initializer(o);
-    q_alloc(w, &o, peer.ss_family, sizeof(req) - 1);
+    q_alloc(w, &o, peer.ss_family, req_len - 1);
     struct w_iov * const v = sq_first(&o);
     memcpy(v->buf, req, req_len - 1);
 

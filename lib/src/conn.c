@@ -1377,6 +1377,11 @@ rx_pkts(struct w_iov_sq * const x,
 
             if (likely(has_pkt_nr(m->hdr.flags, m->hdr.vers))) {
                 struct pn_space * const pn = pn_for_pkt_type(c, m->hdr.type);
+#ifdef NO_OOO_DATA
+                if (m->strm_off == UINT_T_MAX)
+                    // don't ACK this ooo packet
+                    goto drop;
+#endif
                 diet_insert(&pn->recv, m->hdr.nr, m->t);
                 diet_insert(&pn->recv_all, m->hdr.nr, 0);
             }

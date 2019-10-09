@@ -21,6 +21,8 @@ USEMODULE += quant
 
 USEMODULE += esp_wifi
 
+CFLAGS += -DTHREAD_STACKSIZE_MAIN=8192
+
 -include Makefile.wifi-credentials
 
 include $(RIOTBASE)/Makefile.include

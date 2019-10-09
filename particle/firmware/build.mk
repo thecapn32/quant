@@ -34,6 +34,7 @@ TIMEOUT_SRC+=\
 
 WARP_SRC+=\
 	$(WARPCORE)/src/backend_sock.c \
+	$(WARPCORE)/src/ifaddr.c \
 	$(WARPCORE)/src/plat.c \
 	$(WARPCORE)/src/util.c \
 	$(WARPCORE)/src/warpcore.c \

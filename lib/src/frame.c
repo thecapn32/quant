@@ -393,6 +393,11 @@ dec_stream_or_crypto_frame(const uint8_t type,
     // this ooo data doesn't overlap with anything
     track_bytes_in(m->strm, m->strm_data_len);
     ensure(splay_insert(ooo_by_off, &m->strm->in_ooo, m) == 0, "inserted");
+#else
+    // signal to the ACK logic to not ACK this packet
+    log_stream_or_crypto_frame(false, m, type, sid, true, "ooo, dropped");
+    m->strm_off = UINT_T_MAX;
+    goto reallydone;
 #endif
 
 done:
@@ -405,6 +410,7 @@ done:
                          m->strm->id, m->strm_off + m->strm_data_len - 1,
                          m->strm->in_data_max);
 
+reallydone:
     if (ignore)
         // this indicates to callers that the w_iov was not placed in a stream
         m->strm = 0;
