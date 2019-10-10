@@ -11,7 +11,7 @@ s=${2:-quant}
 # port to run servers on
 addr=[::1]
 port=4433
-path=/4000
+path=/40000
 dir=/Users/lars/Sites/lars/output/papers
 cert=test/dummy.crt
 key=test/dummy.key
@@ -43,7 +43,7 @@ export UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1:suppressions=../misc/gcc
 # commands to run the different clients against $addr:$port
 case $c in
         quant)
-                cc="bin/client -v5 -i $iface -u -t2 -b 20 \
+                cc="bin/client -v5 -i $iface -u -t2 \
                         https://$addr:$port$path
                         #https://$addr:$port$path"
                 ;;
@@ -65,7 +65,7 @@ case $c in
                 ;;
         picoquic)
                 cc="external/picoquic-prefix/src/picoquic/picoquicdemo \
-                        -1 -n localhost -u 1 $addr $port 0:$path"
+                        -l /dev/stdout -1 -u 1 -a hq-23 localhost $port 0:$path"
                 ;;
 
         quicker)
@@ -93,7 +93,7 @@ esac
 # commands to run the different servers on  $addr:$port
 case $s in
         quant)
-                sc="bin/server -v5 -c $cert -k $key -i $iface -t2 -b 20 \
+                sc="bin/server -v5 -c $cert -k $key -i $iface -t2 \
                     -p 4433 -p 4434 -p $port -d $dir"
                 ;;
         wquant)
@@ -113,7 +113,7 @@ case $s in
                 ;;
         picoquic)
                 sc="external/picoquic-prefix/src/picoquic/picoquicdemo \
-                        -p $port -k $key -c $cert -1"
+                        -l /dev/stdout -p $port -k $key -c $cert -1"
                 ;;
         ats)
                 sed -i"" -e "s/.*proxy.config.http.server_ports.*/CONFIG proxy.config.http.server_ports STRING $port:quic/g" external/etc/trafficserver/records.config

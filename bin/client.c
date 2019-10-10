@@ -211,10 +211,7 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
     set_from_url(path, sizeof(path), url, &u, UF_PATH, "/index.html");
 
     struct addrinfo * peer;
-    const struct addrinfo hints = {.ai_family = AF_UNSPEC,
-                                   .ai_socktype = SOCK_DGRAM,
-                                   .ai_protocol = IPPROTO_UDP};
-    const int err = getaddrinfo(dest, port, &hints, &peer);
+    const int err = getaddrinfo(dest, port, 0, &peer);
     if (err) {
         warn(ERR, "getaddrinfo: %s", gai_strerror(err));
         freeaddrinfo(peer);

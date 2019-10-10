@@ -45,7 +45,7 @@ declare -A servers=(
     [quic-go]=quic.seemann.io:-3:443:443:443:/dynamic/40000
     [quiche]=quic.tech::4433:4433:8443:/random
     [quicker]=quicker.edm.uhasselt.be::4433:4434:4433:/index.html
-    [quicly]=kazuhooku.com::4433:4433:8443:/40000.txt
+    [quicly]=kazuhooku.com::4433:4433:8443:/40000
     [quinn]=ralith.com::4433:4434:4433:/100K
     [winquic]=quic.westus.cloudapp.azure.com::4433:4434:443:/draft-ietf-quic-http-11.txt
     # [local]=localhost::4433:4434:4433:/40000
@@ -78,7 +78,7 @@ export UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1:suppressions=../misc/gcc
 
 function test_server {
     # run quant client and save a log for post-processing
-    local opts="-i $iface -t3 -v5 -l /dev/null"
+    local opts="-i $iface -t3 -v5 -l /dev/null -b 1000"
     local log_base="/tmp/$script.$pid.$1.log"
 
     IFS=':' read -ra info <<< "${servers[$1]}"

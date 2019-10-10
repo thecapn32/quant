@@ -1,18 +1,18 @@
           live fail vneg hshk data clse rsmt zrtt rtry migr bind kyph spin aecn http
-aioquic   *         V    H    D    C    R    Z    S    M    B    U    P         3
+aioquic
 ats       *         V    H    D    C    R    Z    S    M    B                   3
-f5        *         V    H    D    C    R         S              U         E    3
+f5        *         V                                                           3
 google    *         V    H    D    C    R                                       3
 lsquic    *         V    H    D    C    R    Z    S    M    B    U    P    E    3
-mvfst     *    X    V    H    D    C    R    Z                                  3
+mvfst     *         V                                                           3
 ngtcp2    *         V    H    D    C    R    Z    S    M    B    U              3
 ngx_quic  *         V    H    D    C                                            3
 pandora   *         V    H    D    C              S
-picoquic  *         V    H    D    C    R    Z    S    M    B    U    P         3
-quant     *         V    H    D    C    R    Z    S    M    B    U    P    E
+picoquic
+quant     *         v
 quic-go
 quiche    *         V    H    D    C    R         S                             3
 quicker
 quicly    *         V    H    D    C    R    Z
-quinn     *         V    H    D    C    R    Z    S    M    B    U    P    E
-winquic   *         V    H    D    C    R    Z    S              U    P         3
+quinn     *         V    H    D    C    R         S    M    B    U    P    E
+winquic
