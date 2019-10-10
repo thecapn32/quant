@@ -281,7 +281,8 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
             struct q_stream * const ss = q_rsv_stream(c, false);
             if (ss == 0)
                 return 0;
-            static const uint8_t h3_empty_settings[] = {0x04, 0x00};
+            static const uint8_t h3_empty_settings[] = {
+                0x00, h3zero_frame_settings, 0x00};
             // XXX lsquic doesn't like a FIN on this stream
             q_write_str(w, ss, (const char *)h3_empty_settings,
                         sizeof(h3_empty_settings), false);
