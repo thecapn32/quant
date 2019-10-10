@@ -1,31 +1,34 @@
-# QUANT – QUIC Userspace Accelerated Network Transfers
+# Quant
 
 [![Build Status](https://travis-ci.org/NTAP/quant.svg?branch=master)](https://travis-ci.org/NTAP/quant)
 [![Total alerts](https://img.shields.io/lgtm/alerts/g/NTAP/quant.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/NTAP/quant/alerts/)
 
-QUANT is a BSD-licensed C11 implementation of the emerging IETF
+Quant is a BSD-licensed C11 implementation of the emerging IETF
 [QUIC](https://quicwg.github.io/) standard for a new transport protocol over
-UDP, intending to support the new HTTP/3 standard.
+UDP, intending to support the new HTTP/3 standard and other application
+protocols.
 
-QUANT uses the [warpcore](https://github.com/NTAP/warpcore) zero-copy userspace
+Quant uses the [warpcore](https://github.com/NTAP/warpcore) zero-copy userspace
 UDP/IP stack, which in addition to running on on top of the standard **Socket
 API** has support for the **[netmap](http://info.iet.unipi.it/~luigi/netmap/)**
 fast packet I/O framework, as well as the
 **[Particle](https://github.com/particle-iot/device-os)** and
-**[RIOT](http://riot-os.org/)** IoT stacks supporting embedded devices.
+**[RIOT](http://riot-os.org/)** IoT stacks. Quant hence supports traditional
+POSIX platforms (Linux, MacOS, FreeBSD, etc.) as well as embedded systems.
 
 The quant repository is [on GitHub](https://github.com/NTAP/quant).
 
-quant uses [picotls](https://github.com/h2o/picotls) for its [TLS
-1.3](https://datatracker.ietf.org/doc/draft-ietf-tls-tls13/) implementation.
-quant also uses [klib](https://github.com/attractivechaos/klib) for some data
-structures and functions. These dependencies will be built automatically.
+**NOTE:** Quant implements the QUIC transport layer, but does **NOT** implement
+an HTTP/3 binding.
 
 
 ## Prerequisites
 
-quant uses the [cmake](https://cmake.org/) build system and
-[Doxygen](http://www.doxygen.nl/) to generate the documentation.
+Quant uses [picotls](https://github.com/h2o/picotls) for its [TLS
+1.3](https://datatracker.ietf.org/doc/draft-ietf-tls-tls13/) implementation. and
+[klib](https://github.com/attractivechaos/klib) and
+[timeout](http://25thandclement.com/~william/projects/timeout.c.html) for some
+data structures and functions. These dependencies will be built automatically.
 
 The example HTTP/0.9 client and server use
 [http-parser](https://github.com/nodejs/http-parser).
@@ -33,7 +36,7 @@ The example HTTP/0.9 client and server use
 So you need to install some dependencies. On the Mac, the easiest way is via
 [Homebrew](http://brew.sh/), so install that first. Then, do
 
-    brew install cmake http-parser doxygen
+    brew install cmake http-parser
 
 On Debian-based Linux systems, do
 
@@ -42,6 +45,11 @@ On Debian-based Linux systems, do
 On Darwin, you **must** also install the Xcode command line tools first:
 
     xcode-select --install
+
+Quant uses the [cmake](https://cmake.org/) build system and
+[Doxygen](http://www.doxygen.nl/) to generate the documentation. If doxygen is
+available, th documentation can be locally built vi the `doc` target.
+
 
 
 ## Building
@@ -62,6 +70,8 @@ logging enabled. In order to build an optimized build, do this:
     cd Release
     cmake -DCMAKE_BUILD_TYPE=Release ..
     make
+
+(I really recommend [Ninja](https://ninja-build.org/) over `make`.)
 
 
 ## Building for RIOT
@@ -109,7 +119,7 @@ To map the UDP port, run the docker container with
     docker run -p4433:4433/udp ntap/quant
 
 
-## Testing
+## Testing and interop
 
 The `libquant` library will be in `lib`. There are `client` and `server`
 examples in `bin`. They explain their usage when called with a `-h` argument.
@@ -119,11 +129,12 @@ stacks](https://github.com/quicwg/base-drafts/wiki/Implementations) is captured
 in [this
 spreadsheet](https://docs.google.com/spreadsheets/d/1D0tW89vOoaScs3IY9RGC0UesWGAwE6xyLk0l4JtvTVg/edit#gid=1510984897).
 
+
+## Development and contributing
+
 At the moment, development happens in `master`, and branches numbered according
 to the [IETF Internet Drafts](https://quicwg.github.io/) they implement serve as
 archives.
-
-## Contributing
 
 I'm happy to merge contributions that fix
 [bugs](https://github.com/NTAP/quant/issues?q=is%3Aopen+is%3Aissue+label%3Abug)
@@ -162,7 +173,7 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-## Acknowledgement
+## Acknowledgment
 
 This software has received past funding from the European Union's Horizon 2020
 research and innovation program 2014-2018 under grant agreement 644866
