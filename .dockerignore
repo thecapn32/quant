@@ -8,3 +8,5 @@ lib/deps/warpcore/Darwin*
 lib/deps/warpcore/Linux*
 lib/deps/warpcore/lib/include/net
 !misc
+!test
+test/interop.sh
