@@ -12,7 +12,7 @@ FROM alpine:latest
 COPY --from=0 /dst /
 COPY --from=0 /src/Debug/test/dummy.* /tls/
 RUN apk add --no-cache openssl http-parser ethtool
-COPY test/interop.sh /
-RUN chmod a+x /interop.sh
+COPY test/interop.sh /bin
+RUN chmod a+x /bin/interop.sh
 EXPOSE 443/UDP
-ENTRYPOINT ["./interop.sh"]
+ENTRYPOINT ["/bin/interop.sh"]

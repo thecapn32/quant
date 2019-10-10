@@ -262,5 +262,8 @@ add_subdirectory(external)
 add_subdirectory(lib)
 add_subdirectory(misc)
 
-enable_testing()
+
+if(IS_DIRECTORY "test")
+    enable_testing()
 add_subdirectory(test)
+endif()
