@@ -423,7 +423,7 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
     }
 
 #ifndef NO_MIGRATION
-    if (likely(c->tp_out.disable_migration == false) &&
+    if (likely(c->tp_out.disable_active_migration == false) &&
         unlikely(c->do_migration == true) && c->scid) {
         if (splay_count(&c->scids_by_seq) >= 2) {
             // the peer has a CID for us that they can switch to
@@ -1568,7 +1568,7 @@ static void __attribute__((nonnull)) key_flip_alarm(struct q_conn * const c)
         c->do_key_flip = c->key_flips_enabled;
 #ifndef NO_MIGRATION
         // XXX we borrow the key flip timer for this
-        c->do_migration = !c->tp_out.disable_migration;
+        c->do_migration = !c->tp_out.disable_active_migration;
 #endif
     }
 }
@@ -1668,15 +1668,15 @@ void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
     c->tp_in.idle_to = get_conf(c->w, conf, idle_timeout) * MS_PER_S;
     restart_idle_alarm(c);
 
-    c->tp_in.disable_migration =
+    c->tp_in.disable_active_migration =
 #ifndef NO_MIGRATION
-        get_conf_uncond(c->w, conf, disable_migration);
+        get_conf_uncond(c->w, conf, disable_active_migration);
 #else
         true;
 #endif
     c->key_flips_enabled = get_conf_uncond(c->w, conf, enable_tls_key_updates);
 
-    if (c->tp_out.disable_migration == false || c->key_flips_enabled) {
+    if (c->tp_out.disable_active_migration == false || c->key_flips_enabled) {
         c->tls_key_update_frequency =
             get_conf(c->w, conf, tls_key_update_frequency);
         restart_key_flip_alarm(c);
@@ -1690,7 +1690,7 @@ void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
     // XXX for testing, do a key flip and a migration ASAP (if enabled)
     c->do_key_flip = c->key_flips_enabled;
 #ifndef NO_MIGRATION
-    c->do_migration = !c->tp_out.disable_migration;
+    c->do_migration = !c->tp_out.disable_active_migration;
 #endif
 #endif
 }
@@ -1797,7 +1797,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->tp_in.max_data =
         c->tp_in.max_strms_bidi * c->tp_in.max_strm_data_bidi_local;
     c->tp_in.act_cid_lim =
-        c->tp_in.disable_migration ? 0 : (c->is_clnt ? 4 : 2);
+        c->tp_in.disable_active_migration ? 0 : (c->is_clnt ? 4 : 2);
 
     // initialize packet number spaces
     for (pn_t t = pn_init; t <= pn_data; t++)

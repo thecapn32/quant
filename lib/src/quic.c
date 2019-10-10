@@ -555,8 +555,8 @@ struct w_engine * q_init(const char * const ifname,
             get_conf_uncond(w, conf->conn_conf, enable_udp_zero_checksums);
         ped(w)->default_conn_conf.enable_tls_key_updates =
             get_conf_uncond(w, conf->conn_conf, enable_tls_key_updates);
-        ped(w)->default_conn_conf.disable_migration =
-            get_conf_uncond(w, conf->conn_conf, disable_migration);
+        ped(w)->default_conn_conf.disable_active_migration =
+            get_conf_uncond(w, conf->conn_conf, disable_active_migration);
         ped(w)->default_conn_conf.enable_zero_len_cid =
             get_conf_uncond(w, conf->conn_conf, enable_zero_len_cid);
     }

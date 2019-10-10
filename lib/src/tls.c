@@ -181,7 +181,7 @@ static struct cipher_ctx enc_tckt;
 #define TP_IMSU 0x09    ///< initial_max_streams_uni
 #define TP_ADE 0x0a     ///< ack_delay_exponent
 #define TP_MAD 0x0b     ///< max_ack_delay
-#define TP_DMIG 0x0c    ///< disable_migration
+#define TP_DMIG 0x0c    ///< disable_active_migration
 #define TP_PRFA 0x0d    ///< preferred_address
 #define TP_ACIL 0x0e    ///< active_connection_id_limit
 #define TP_MAX (TP_ACIL + 1)
@@ -571,8 +571,8 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             uint_t dmig;
             if (dec_tp(&dmig, &pos, end) == false)
                 return 1;
-            warn(INF, "\tdisable_migration = true");
-            c->tp_out.disable_migration = true;
+            warn(INF, "\tdisable_active_migration = true");
+            c->tp_out.disable_active_migration = true;
             break;
 
         case TP_SRT:
@@ -808,7 +808,7 @@ void init_tp(struct q_conn * const c)
 #endif
             break;
         case TP_ACIL:
-            if (c->tp_in.disable_migration == false) {
+            if (c->tp_in.disable_active_migration == false) {
                 enc_tp(&pos, end, TP_ACIL, c->tp_in.act_cid_lim);
 #ifdef DEBUG_EXTRA
                 warn(INF, "\tactive_connection_id_limit = %" PRIu,
@@ -820,10 +820,10 @@ void init_tp(struct q_conn * const c)
             // TODO: unhandled
             break;
         case TP_DMIG:
-            if (c->tp_in.disable_migration) {
-                enc_tp(&pos, end, TP_DMIG, c->tp_in.disable_migration);
+            if (c->tp_in.disable_active_migration) {
+                enc_tp(&pos, end, TP_DMIG, c->tp_in.disable_active_migration);
 #ifdef DEBUG_EXTRA
-                warn(INF, "\tdisable_migration = true");
+                warn(INF, "\tdisable_active_migration = true");
 #endif
             }
             break;

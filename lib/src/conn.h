@@ -121,7 +121,7 @@ struct transport_params {
     struct pref_addr pref_addr;
     struct cid orig_cid;
     uint8_t ack_del_exp;
-    bool disable_migration;
+    bool disable_active_migration;
     uint8_t _unused[6];
 };
 
