@@ -593,7 +593,9 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             memcpy(dcid->srt, pos, sizeof(dcid->srt));
             dcid->has_srt = true;
             warn(INF, "\tstateless_reset_token = %s", srt_str(dcid->srt));
+#ifndef NO_SRT_MATCHING
             conns_by_srt_ins(c, dcid->srt);
+#endif
             pos += sizeof(dcid->srt);
             break;
 

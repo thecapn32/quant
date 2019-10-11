@@ -691,7 +691,9 @@ void q_cleanup(struct w_engine * const w)
     struct q_conn * c;
     kh_foreach_value(&conns_by_id, c, { q_close(c, 0, 0); });
     kh_foreach_value(&conns_by_ipnp, c, { q_close(c, 0, 0); });
+#ifndef NO_SRT_MATCHING
     kh_foreach_value(&conns_by_srt, c, { q_close(c, 0, 0); });
+#endif
 
     // stop the event loop
     timeouts_close(ped(w)->wheel);
@@ -720,7 +722,9 @@ void q_cleanup(struct w_engine * const w)
 
     kh_release(conns_by_id, &conns_by_id);
     kh_release(conns_by_ipnp, &conns_by_ipnp);
+#ifndef NO_SRT_MATCHING
     kh_release(conns_by_srt, &conns_by_srt);
+#endif
 
     free_tls_ctx(&ped(w)->tls_ctx);
     free(ped(w)->pkt_meta);
@@ -827,7 +831,7 @@ bool q_ready(struct w_engine * const w,
     }
     if (ready)
         *ready = c;
-    return kh_size(&conns_by_srt);
+    return c;
 }
 
 

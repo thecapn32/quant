@@ -6,7 +6,7 @@ google    *         V    H    D    C    R                                       
 lsquic    *         V    H    D    C    R    Z    S    M    B    U    P    E    3
 mvfst     *    X    V    H    D    C    R    Z                                  3
 ngtcp2    *         V    H    D    C    R    Z    S    M    B    U              3
-ngx_quic  *         V    H    D    C                                            3
+ngx_quic  *         V    H    D    C    R                                       3
 pandora   *         V    H    D    C              S
 picoquic  *         V    H    D    C    R    Z    S    M    B    U    P         3
 quant     *         V    H    D    C    R    Z    S    M    B    U    P    E

@@ -71,7 +71,10 @@ struct q_conn_sl c_ready = sl_head_initializer(c_ready);
 
 khash_t(conns_by_ipnp) conns_by_ipnp = {0};
 khash_t(conns_by_id) conns_by_id = {0};
+
+#ifndef NO_SRT_MATCHING
 khash_t(conns_by_srt) conns_by_srt = {0};
+#endif
 
 
 static inline __attribute__((const)) bool is_vneg_vers(const uint32_t vers)
@@ -174,6 +177,7 @@ get_conn_by_cid(struct cid * const scid)
 }
 
 
+#ifndef NO_SRT_MATCHING
 struct q_conn * get_conn_by_srt(uint8_t * const srt)
 {
     const khiter_t k = kh_get(conns_by_srt, &conns_by_srt, srt);
@@ -181,6 +185,7 @@ struct q_conn * get_conn_by_srt(uint8_t * const srt)
         return 0;
     return kh_val(&conns_by_srt, k);
 }
+#endif
 
 
 #ifndef NO_MIGRATION
@@ -606,6 +611,7 @@ done:;
 }
 
 
+#ifndef NO_SRT_MATCHING
 void conns_by_srt_ins(struct q_conn * const c, uint8_t * const srt)
 {
     int ret;
@@ -630,6 +636,7 @@ conns_by_srt_del(uint8_t * const srt)
         // if peer is reusing SRTs w/different CIDs, it may already be deleted
         kh_del(conns_by_srt, &conns_by_srt, k);
 }
+#endif
 
 
 static inline void __attribute__((nonnull))
@@ -711,12 +718,16 @@ void add_dcid(struct q_conn * const c, const struct cid * const id)
 #ifndef NO_MIGRATION
         ensure(splay_remove(cids_by_seq, &c->dcids_by_seq, dcid), "removed");
 #endif
+#ifndef NO_SRT_MATCHING
         if (dcid->has_srt)
             conns_by_srt_del(dcid->srt);
+#endif
     }
     cid_cpy(dcid, id);
+#ifndef NO_SRT_MATCHING
     if (id->has_srt)
         conns_by_srt_ins(c, dcid->srt);
+#endif
 #ifndef NO_MIGRATION
     ensure(splay_insert(cids_by_seq, &c->dcids_by_seq, dcid) == 0, "inserted");
 #endif
@@ -1845,8 +1856,10 @@ void free_dcid(struct q_conn * const c
                ,
                struct cid * const id)
 {
+#ifndef NO_SRT_MATCHING
     if (id->has_srt)
         conns_by_srt_del(id->srt);
+#endif
 #ifndef NO_MIGRATION
     ensure(splay_remove(cids_by_seq, &c->dcids_by_seq, id), "removed");
 #endif

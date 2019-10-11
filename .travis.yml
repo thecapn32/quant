@@ -43,6 +43,7 @@ env:
     - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8   CFLAGS="-DNO_OOO_DATA"
     - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8   CFLAGS="-DNO_MIGRATION"
     - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8   CFLAGS="-DNO_QLOG"
+    - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8   CFLAGS="-DNO_SRT_MATCHING"
 
   global:
     - PROJECT=quant

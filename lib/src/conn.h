@@ -91,12 +91,14 @@ kh_srt_cmp(const uint8_t * const a, const uint8_t * const b)
 }
 
 
+#ifndef NO_SRT_MATCHING
 KHASH_INIT(conns_by_srt, uint8_t *, struct q_conn *, 1, hash_srt, kh_srt_cmp)
 
+extern khash_t(conns_by_srt) conns_by_srt;
+#endif
 
 extern khash_t(conns_by_ipnp) conns_by_ipnp;
 extern khash_t(conns_by_id) conns_by_id;
-extern khash_t(conns_by_srt) conns_by_srt;
 
 
 struct pref_addr {
@@ -350,11 +352,13 @@ free_dcid(struct q_conn * const c, struct cid * const id);
 extern void __attribute__((nonnull(1)))
 update_conf(struct q_conn * const c, const struct q_conn_conf * const conf);
 
+#ifndef NO_SRT_MATCHING
 extern struct q_conn * __attribute__((nonnull))
 get_conn_by_srt(uint8_t * const srt);
 
 extern void __attribute__((nonnull))
 conns_by_srt_ins(struct q_conn * const c, uint8_t * const srt);
+#endif
 
 extern void __attribute__((nonnull)) rx(struct w_sock * const ws);
 

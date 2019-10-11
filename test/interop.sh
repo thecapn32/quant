@@ -11,7 +11,6 @@
 if [ "$ROLE" = "client" ]; then
     # Wait for the simulator to start up.
     /wait-for-it.sh sim:57832 -s -t 30
-    sleep 3
     cd /downloads || exit
     client -i eth0 -w $REQUESTS
 elif [ "$ROLE" = "server" ]; then
