@@ -308,7 +308,10 @@ rtx_pkt(struct w_iov * const v, struct pkt_meta * const m)
 static void __attribute__((nonnull)) mk_rand_cid(struct cid * const cid)
 {
     cid->len = 8 + (uint8_t)w_rand_uniform32(CID_LEN_MAX - 7);
-    rand_bytes(cid->id, sizeof(cid->id) + sizeof(cid->srt));
+    rand_bytes(cid->id, sizeof(cid->id));
+#ifndef NO_SRT_MATCHING
+    rand_bytes(cid->srt, sizeof(cid->srt));
+#endif
 }
 
 
@@ -661,8 +664,16 @@ conns_by_id_del(struct cid * const id)
 static void __attribute__((nonnull)) update_act_scid(struct q_conn * const c)
 {
     // server picks a new random cid
-    struct cid nscid = {.len = SCID_LEN_SERV, .has_srt = true};
-    rand_bytes(nscid.id, sizeof(nscid.id) + sizeof(nscid.srt));
+    struct cid nscid = {.len = SCID_LEN_SERV
+#ifndef NO_SRT_MATCHING
+                        ,
+                        .has_srt = true
+#endif
+    };
+    rand_bytes(nscid.id, sizeof(nscid.id));
+#ifndef NO_SRT_MATCHING
+    rand_bytes(nscid.srt, sizeof(nscid.srt));
+#endif
     cid_cpy(&c->odcid, c->scid);
     warn(NTE, "hshk switch to scid %s for %s %s conn (was %s)", cid_str(&nscid),
          conn_state_str[c->state], conn_type(c), cid_str(c->scid));
@@ -823,14 +834,20 @@ static void __attribute__((nonnull(1))) new_cids(struct q_conn * const c,
     struct cid nscid = {0};
     if (c->is_clnt) {
         nscid.len = zero_len_scid ? 0 : SCID_LEN_CLNT;
-        if (nscid.len)
-            rand_bytes(nscid.id, sizeof(nscid.id) + sizeof(nscid.srt));
+        if (nscid.len) {
+            rand_bytes(nscid.id, sizeof(nscid.id));
+#ifndef NO_SRT_MATCHING
+            rand_bytes(nscid.srt, sizeof(nscid.srt));
+#endif
+        }
     } else if (scid) {
         cid_cpy(&nscid, scid);
+#ifndef NO_SRT_MATCHING
         if (nscid.has_srt == false) {
             rand_bytes(nscid.srt, sizeof(nscid.srt));
             nscid.has_srt = true;
         }
+#endif
     }
     if (nscid.len)
         add_scid(c, &nscid);

@@ -833,7 +833,16 @@ which_cipher_ctx_in(struct q_conn * const c,
 }
 
 
-struct q_conn * is_srt(const struct w_iov * const xv, struct pkt_meta * const m)
+struct q_conn * is_srt(const struct w_iov * const xv
+#ifdef NO_SRT_MATCHING
+                       __attribute__((unused))
+#endif
+                       ,
+                       struct pkt_meta * const m
+#ifdef NO_SRT_MATCHING
+                       __attribute__((unused))
+#endif
+)
 {
 #ifndef NO_SRT_MATCHING
     if ((m->hdr.flags & LH) != HEAD_FIXD || xv->len < MIN_SRT_PKT_LEN)

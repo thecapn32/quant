@@ -938,15 +938,26 @@ dec_new_cid_frame(const uint8_t ** pos,
                   const struct pkt_meta * const m)
 {
     struct q_conn * const c = m->pn->c;
-    struct cid dcid = {.seq = 0, .has_srt = true};
+    struct cid dcid = {.seq = 0
+#ifndef NO_SRT_MATCHING
+                       ,
+                       .has_srt = true
+#endif
+    };
 
     decv_chk(&dcid.seq, pos, end, c, FRM_CID);
     decv_chk(&dcid.rpt, pos, end, c, FRM_CID);
     dec1_chk(&dcid.len, pos, end, c, FRM_CID);
 
+#ifndef NO_SRT_MATCHING
+    uint8_t * const srt = dcid.srt;
+#else
+    uint8_t srt[SRT_LEN];
+#endif
+
     if (likely(dcid.len >= CID_LEN_MIN && dcid.len <= CID_LEN_MAX)) {
         decb_chk(dcid.id, pos, end, dcid.len, c, FRM_CID);
-        decb_chk(dcid.srt, pos, end, sizeof(dcid.srt), c, FRM_CID);
+        decb_chk(srt, pos, end, SRT_LEN, c, FRM_CID);
     }
 
     const bool dup =
@@ -959,7 +970,7 @@ dec_new_cid_frame(const uint8_t ** pos,
     warn(INF,
          FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu " rpt=%" PRIu
                  " len=%u dcid=%s srt=%s%s",
-         dcid.seq, dcid.rpt, dcid.len, cid_str(&dcid), srt_str(dcid.srt),
+         dcid.seq, dcid.rpt, dcid.len, cid_str(&dcid), srt_str(srt),
          dup ? " [" RED "dup" NRM "]" : "");
 
 #ifndef NO_MIGRATION
@@ -1716,13 +1727,26 @@ void enc_new_cid_frame(uint8_t ** pos,
 
     // FIXME: add rpt
 
+#ifndef NO_SRT_MATCHING
+    uint8_t * srt;
+#else
+    uint8_t srt[SRT_LEN];
+#endif
+
     struct cid * enc_cid = &ncid;
     if (max_scid && ncid.seq <= max_scid->seq) {
         enc_cid = splay_find(cids_by_seq, &c->scids_by_seq, &ncid);
         ensure(enc_cid, "max_scid->seq %" PRIu " ncid.seq %" PRIu,
                max_scid->seq, ncid.seq);
+#ifndef NO_SRT_MATCHING
+        srt = enc_cid->srt;
+#endif
     } else {
-        rand_bytes(ncid.id, sizeof(ncid.id) + sizeof(ncid.srt));
+        rand_bytes(ncid.id, sizeof(ncid.id));
+#ifndef NO_SRT_MATCHING
+        srt = ncid.srt;
+#endif
+        rand_bytes(srt, SRT_LEN);
         add_scid(c, &ncid);
     }
 
@@ -1733,14 +1757,13 @@ void enc_new_cid_frame(uint8_t ** pos,
     encv(pos, end, enc_cid->rpt);
     enc1(pos, end, enc_cid->len);
     encb(pos, end, enc_cid->id, enc_cid->len);
-    encb(pos, end, enc_cid->srt, sizeof(enc_cid->srt));
+    encb(pos, end, srt, SRT_LEN);
 
     warn(INF,
          FRAM_OUT "NEW_CONNECTION_ID" NRM " seq=%" PRIu " rpt=%" PRIu
                   " len=%u cid=%s srt=%s %s",
          enc_cid->seq, enc_cid->rpt, enc_cid->len, cid_str(enc_cid),
-         srt_str(enc_cid->srt),
-         enc_cid == &ncid ? "" : BLD REV GRN "[RTX]" NRM);
+         srt_str(srt), enc_cid == &ncid ? "" : BLD REV GRN "[RTX]" NRM);
 
     track_frame(m, FRM_CID);
 }

@@ -108,10 +108,16 @@ struct cid {
     uint8_t len; ///< Connection ID length
     /// XXX id must precede srt for rand_bytes() over both to work
     uint8_t id[CID_LEN_MAX]; ///< Connection ID
-    uint8_t srt[SRT_LEN];    ///< Stateless Reset Token
-    uint8_t retired : 1;     ///< Did we retire this CID?
-    uint8_t has_srt : 1;     ///< Is the SRT field valid?
+#ifndef NO_SRT_MATCHING
+    uint8_t srt[SRT_LEN]; ///< Stateless Reset Token
+    uint8_t has_srt : 1;  ///< Is the SRT field valid?
+#endif
+    uint8_t retired : 1; ///< Did we retire this CID?
+#ifndef NO_SRT_MATCHING
     uint8_t : 6;
+#else
+    uint8_t : 7;
+#endif
     uint8_t _unused[2];
 };
 

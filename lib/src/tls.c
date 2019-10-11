@@ -584,19 +584,24 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             uint16_t l;
             if (dec2(&l, &pos, end) == false)
                 return 1;
+#ifndef NO_SRT_MATCHING
             struct cid * const dcid = c->dcid;
-            if (l != sizeof(dcid->srt)) {
+            uint8_t * const srt = dcid->srt;
+#else
+            uint8_t srt[SRT_LEN];
+#endif
+            if (l != SRT_LEN) {
                 err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
                           "illegal srt len %u", l);
                 return 1;
             }
-            memcpy(dcid->srt, pos, sizeof(dcid->srt));
-            dcid->has_srt = true;
-            warn(INF, "\tstateless_reset_token = %s", srt_str(dcid->srt));
+            memcpy(srt, pos, SRT_LEN);
+            warn(INF, "\tstateless_reset_token = %s", srt_str(srt));
 #ifndef NO_SRT_MATCHING
-            conns_by_srt_ins(c, dcid->srt);
+            dcid->has_srt = true;
+            conns_by_srt_ins(c, srt);
 #endif
-            pos += sizeof(dcid->srt);
+            pos += SRT_LEN;
             break;
 
         case TP_PRFA:
@@ -623,16 +628,19 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             memcpy(pa->cid.id, pos, pa->cid.len);
             pos += pa->cid.len;
             pa->cid.seq = 1;
-            memcpy(pa->cid.srt, pos, sizeof(pa->cid.srt));
-            add_dcid(c, &pa->cid);
 
-            pos += sizeof(pa->cid.srt);
+#ifndef NO_SRT_MATCHING
+            srt = pa->cid.srt;
+#endif
+            memcpy(srt, pos, SRT_LEN);
+            add_dcid(c, &pa->cid);
+            pos += SRT_LEN;
 
             warn(INF,
                  "\tpreferred_address = IPv4=%s:%u IPv6=[%s]:%u cid=%s srt=%s",
                  w_ntop(&pa4->addr, ip_tmp), pa4->port,
                  w_ntop(&pa6->addr, ip_tmp), pa6->port, cid_str(&pa->cid),
-                 srt_str(pa->cid.srt));
+                 srt_str(srt));
             break;
 
         case TP_ACIL:
@@ -736,6 +744,7 @@ void init_tp(struct q_conn * const c)
 #endif
             }
             break;
+#ifndef NO_SRT_MATCHING
         case TP_SRT:
             if (!c->is_clnt) {
                 encb_tp(&pos, end, TP_SRT, c->scid->srt, sizeof(c->scid->srt));
@@ -745,6 +754,7 @@ void init_tp(struct q_conn * const c)
 #endif
             }
             break;
+#endif
         case TP_OCID:
             if (!c->is_clnt && c->odcid.len) {
                 encb_tp(&pos, end, TP_OCID, c->odcid.id, c->odcid.len);
