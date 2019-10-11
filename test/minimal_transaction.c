@@ -60,17 +60,18 @@ int resolve(const char * const name, struct sockaddr * const peer)
 #endif
 
     int ret = 1;
-    do {
+    while (ret) {
+
 #ifdef PARTICLE
-        struct addrinfo hints;
-        hints.ai_family = peer->sa_family;
-        hints.ai_protocol = IPPROTO_UDP;
+        const struct addrinfo hints = {.ai_family = AF_INET}; // no IPv6 support
         struct addrinfo * res;
         ret = getaddrinfo(name, 0, &hints, &res);
         if (ret == 0)
-            memcpy(&to_in4(*peer)->sin_addr, res->ai_addr, res->ai_addrlen);
+            memcpy(peer, res->ai_addr, res->ai_addrlen);
         freeaddrinfo(res);
+
 #elif defined(RIOT_VERSION)
+
         ret = sock_dns_query(name, &to_in6(*peer)->sin6_addr, peer->sa_family);
 
         // FIXME: this will fail, so just override it for the moment
@@ -84,11 +85,12 @@ int resolve(const char * const name, struct sockaddr * const peer)
 #else
 #error unimplemented
 #endif
+
         if (ret) {
-            warn(WRN, "unable to resolve %s, retrying", name);
+            warn(WRN, "unable to resolve %s, retrying (%d)", name, ret);
             w_nanosleep(1 * NS_PER_S);
         }
-    } while (ret);
+    }
     return ret;
 }
 
@@ -98,8 +100,8 @@ void warpcore_transaction(const char * const msg, const size_t msg_len)
     struct w_engine * const w = w_init(IF_NAME, 0, 50);
     struct w_sock * const s = w_bind(w, 0, 0, 0);
     struct sockaddr_storage peer = {.ss_family = AF_UNSPEC};
-    to_in6(peer)->sin6_port = bswap16(4433);
     resolve("quant.eggert.org", to_in(peer));
+    to_in6(peer)->sin6_port = bswap16(4433);
 
     struct w_iov_sq o = w_iov_sq_initializer(o);
     w_alloc_cnt(w, peer.ss_family, &o, 1, 0, 0);
@@ -133,8 +135,8 @@ void quic_transaction(const char * const req, const size_t req_len)
 
     static const char peername[] = "quant.eggert.org";
     struct sockaddr_storage peer = {.ss_family = AF_UNSPEC};
-    to_in6(peer)->sin6_port = bswap16(4433);
     resolve(peername, to_in(peer));
+    to_in6(peer)->sin6_port = bswap16(4433);
 
     struct w_iov_sq o = w_iov_sq_initializer(o);
     q_alloc(w, &o, peer.ss_family, req_len - 1);
