@@ -235,7 +235,7 @@ struct q_conn * q_connect(struct w_engine * const w,
         new_conn(w, addr_idx, 0, 0, &p, peer_name, 0, conf);
 
     // init TLS
-    init_tls(c, alpn);
+    init_tls(c, peer_name, alpn);
     init_tp(c);
 
     // if we have no early data, we're not trying 0-RTT

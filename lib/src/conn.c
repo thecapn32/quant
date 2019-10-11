@@ -857,7 +857,7 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
 
     // reset TLS state and create new CH
     const bool should_try_0rtt = c->try_0rtt;
-    init_tls(c, (char *)c->tls.alpn.base);
+    init_tls(c, 0, (char *)c->tls.alpn.base);
     c->try_0rtt = should_try_0rtt;
     tls_io(c->cstrms[ep_init], 0);
 }
@@ -1222,7 +1222,7 @@ rx_pkts(struct w_iov_sq * const x,
                 c = new_conn(w_engine(ws), UINT16_MAX, &m->hdr.scid,
                              &m->hdr.dcid, &v->saddr, 0, ws->ws_lport,
                              &(struct q_conn_conf){.version = m->hdr.vers});
-                init_tls(c, 0);
+                init_tls(c, 0, 0);
             }
         }
 
@@ -1708,34 +1708,26 @@ struct q_conn * new_conn(struct w_engine * const w,
     struct q_conn * const c = calloc(1, sizeof(*c));
     ensure(c, "could not calloc");
 
-    if (peer)
-        c->peer = *peer;
-
-    if (peer_name) {
-        c->is_clnt = true;
-        ensure(c->peer_name = strdup(peer_name), "could not dup peer_name");
-    }
-
-    // initialize socket
     c->w = w;
+    if (peer_name)
+        c->is_clnt = true;
 
     uint16_t idx = addr_idx;
-    if (addr_idx == UINT16_MAX && peer) {
-        // find a src address of the same family as the peer address
-        for (idx = 0; idx < w->addr_cnt; idx++)
-            if (w->ifaddr[idx].addr.af == peer->addr.af)
-                break;
-        if (idx == w->addr_cnt) {
-            warn(CRT, "peer address family not available locally");
-            goto fail;
+    if (peer) {
+        c->peer = *peer;
+        if (addr_idx == UINT16_MAX) {
+            // find a src address of the same family as the peer address
+            for (idx = 0; idx < w->addr_cnt; idx++)
+                if (w->ifaddr[idx].addr.af == peer->addr.af)
+                    break;
+            if (idx == w->addr_cnt) {
+                warn(CRT, "peer address family not available locally");
+                goto fail;
+            }
         }
     }
 
-    c->sock = w_get_sock(
-        w, &(struct w_sockaddr){.addr = w->ifaddr[idx].addr, .port = port},
-        c->is_clnt ? peer : 0);
-
-    if (c->sock == 0) {
+    if (c->is_clnt || peer == 0) {
         c->sockopt.enable_ecn = true;
         c->sockopt.enable_udp_zero_checksums =
             get_conf_uncond(c->w, conf, enable_udp_zero_checksums);
@@ -1743,8 +1735,14 @@ struct q_conn * new_conn(struct w_engine * const w,
         if (unlikely(c->sock == 0))
             goto fail;
         c->holds_sock = true;
-    } else if (unlikely(peer == 0))
-        goto fail;
+    } else {
+        // find existing server socket
+        struct q_conn * const c_serv = get_conn_by_ipnp(
+            &(struct w_sockaddr){.addr = w->ifaddr[idx].addr, .port = port},
+            &(struct w_sockaddr){0});
+        ensure(c_serv, "got serv conn");
+        c->sock = c_serv->sock;
+    }
 
     // init CIDs
     c->next_sid_bidi = c->is_clnt ? 0 : STRM_FL_SRV;
@@ -1881,7 +1879,6 @@ void free_conn(struct q_conn * const c)
     timeout_del(&c->tx_w);
 
     diet_free(&c->clsd_strms);
-    free(c->peer_name);
 
     // remove connection from global lists and free CIDs
     free_cids(c);

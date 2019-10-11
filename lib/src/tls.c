@@ -1025,8 +1025,15 @@ static ptls_encrypt_ticket_t encrypt_ticket = {.cb = encrypt_ticket_cb};
 #endif
 
 
-void init_tls(struct q_conn * const c, const char * const clnt_alpn)
+void init_tls(struct q_conn * const c,
+              const char * const serv_name,
+              const char * const clnt_alpn)
 {
+    char * const sni = c->is_clnt
+                           ? (c->tls.t ? strdup(ptls_get_server_name(c->tls.t))
+                                       : strdup(serv_name))
+                           : 0;
+
     if (c->tls.t)
         // we are re-initializing during version negotiation
         free_tls(c, true);
@@ -1034,7 +1041,7 @@ void init_tls(struct q_conn * const c, const char * const clnt_alpn)
            "ptls_new");
     *ptls_get_data_ptr(c->tls.t) = c;
     if (c->is_clnt)
-        ensure(ptls_set_server_name(c->tls.t, c->peer_name, 0) == 0,
+        ensure(ptls_set_server_name(c->tls.t, sni, 0) == 0,
                "ptls_set_server_name");
 
     ptls_handshake_properties_t * const hshk_prop = &c->tls.tls_hshk_prop;
@@ -1058,8 +1065,9 @@ void init_tls(struct q_conn * const c, const char * const clnt_alpn)
 
 #ifndef NO_TLS_TICKETS
         // try to find an existing session ticket
-        struct tls_ticket which = {.sni = c->peer_name,
-                                   // this works, because of strdup() allocation
+        ensure(sni, "got SNI");
+        struct tls_ticket which = {// this works, because of strdup() allocation
+                                   .sni = sni,
                                    .alpn = (char *)c->tls.alpn.base};
         struct tls_ticket * t = splay_find(tickets_by_peer, &tickets, &which);
         if (t == 0) {
@@ -1076,6 +1084,8 @@ void init_tls(struct q_conn * const c, const char * const clnt_alpn)
         }
 #endif
     }
+    if (sni)
+        free(sni);
 
     init_prot(c);
 }

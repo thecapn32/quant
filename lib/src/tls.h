@@ -90,8 +90,9 @@ struct pkt_meta;
 
 extern void __attribute__((nonnull)) init_prot(struct q_conn * const c);
 
-extern void __attribute__((nonnull(1)))
-init_tls(struct q_conn * const c, const char * const alpn);
+extern void __attribute__((nonnull(1))) init_tls(struct q_conn * const c,
+                                                 const char * const serv_name,
+                                                 const char * const alpn);
 
 extern void __attribute__((nonnull)) init_tp(struct q_conn * const c);
 

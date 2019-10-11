@@ -97,7 +97,7 @@ void __attribute__((nonnull(1))) loop_run(struct w_engine * const w,
         timeouts_update(ped(w)->wheel, now);
 
         struct w_sock * ws;
-        sl_foreach (ws, &sl, next_rx)
+        sl_foreach (ws, &sl, next)
             rx(ws);
     }
 

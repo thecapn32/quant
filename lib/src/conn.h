@@ -213,7 +213,6 @@ struct q_conn {
     struct timeout key_flip_alarm;
     struct timeout ack_alarm;
 
-    char * peer_name;
     struct w_sockaddr peer;      ///< Address of our peer.
     struct w_sockaddr migr_peer; ///< Peer's desired migration address.
 
