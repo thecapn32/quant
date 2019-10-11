@@ -210,11 +210,12 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
     set_from_url(port, sizeof(port), url, &u, UF_PORT, "4433");
     set_from_url(path, sizeof(path), url, &u, UF_PATH, "/index.html");
 
-    struct addrinfo * peer;
+    struct addrinfo * peer = 0;
     const int err = getaddrinfo(dest, port, 0, &peer);
     if (err) {
         warn(ERR, "getaddrinfo: %s", gai_strerror(err));
-        freeaddrinfo(peer);
+        if (peer)
+            freeaddrinfo(peer);
         return 0;
     }
 

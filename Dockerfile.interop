@@ -1,18 +1,15 @@
-FROM alpine:latest
-RUN apk add --no-cache cmake ninja gcc g++ git musl-dev linux-headers \
-        bsd-compat-headers openssl openssl-dev http-parser-dev
-RUN git config --global user.email "docker@example.com"
+FROM martenseemann/quic-network-simulator-endpoint
+RUN apt-get update -y
+RUN apt-get install -y cmake g++ libssl-dev git pkg-config libhttp-parser-dev
 ADD . /src
 WORKDIR /src/Debug
-RUN cmake -GNinja -DNO_FUZZER_CORPUS_COLLECTION=True -DDOCKER=True \
-        -DCMAKE_INSTALL_PREFIX=/dst ..
-RUN ninja install
+RUN cmake -DNO_FUZZER_CORPUS_COLLECTION=True -DDOCKER=True  ..
+RUN make install
 
-FROM alpine:latest
-COPY --from=0 /dst /
+FROM martenseemann/quic-network-simulator-endpoint
+RUN apt-get install -y libhttp-parser2.8
+COPY --from=0 /usr/local /usr/local
 COPY --from=0 /src/Debug/test/dummy.* /tls/
-RUN apk add --no-cache openssl http-parser ethtool
-COPY test/interop.sh /bin
-RUN chmod a+x /bin/interop.sh
-EXPOSE 443/UDP
-ENTRYPOINT ["/bin/interop.sh"]
+ADD ./test/interop.sh /run_endpoint.sh
+RUN chmod +x run_endpoint.sh
+ENTRYPOINT [ "/run_endpoint.sh" ]

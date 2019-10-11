@@ -11,7 +11,9 @@ RUN ninja install
 FROM alpine:latest
 COPY --from=0 /dst /
 COPY --from=0 /src/Debug/test/dummy.* /tls/
+COPY --from=0 /src/test/interop.sh /bin
 RUN apk add --no-cache openssl http-parser ethtool
+EXPOSE 443/UDP
 EXPOSE 4433/UDP
 EXPOSE 4434/UDP
 CMD ["/bin/server", "-i", "eth0", "-d", "/tmp", \
