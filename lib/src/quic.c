@@ -632,7 +632,11 @@ void q_stream_get_written(struct q_stream * const s, struct w_iov_sq * const q)
 
 void q_close(struct q_conn * const c,
              const uint64_t code,
-             const char * const reason)
+             const char * const reason
+#if defined(NO_ERR_REASONS) && defined(NDEBUG)
+             __attribute__((unused))
+#endif
+)
 {
     if (c->scid)
         warn(WRN,

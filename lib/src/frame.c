@@ -960,11 +960,13 @@ dec_new_cid_frame(const uint8_t ** pos,
         decb_chk(srt, pos, end, SRT_LEN, c, FRM_CID);
     }
 
+#if !defined(NO_MIGRATION) || !defined(NDEBUG)
     const bool dup =
 #ifndef NO_MIGRATION
         splay_find(cids_by_seq, &c->dcids_by_seq, &dcid);
 #else
         false;
+#endif
 #endif
 
     warn(INF,
