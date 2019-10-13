@@ -586,7 +586,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                 return 1;
 #ifndef NO_SRT_MATCHING
             struct cid * const dcid = c->dcid;
-            uint8_t * const srt = dcid->srt;
+            uint8_t * srt = dcid->srt;
 #else
             uint8_t srt[SRT_LEN];
 #endif

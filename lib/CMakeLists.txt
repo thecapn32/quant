@@ -37,6 +37,10 @@ configure_file(src/config.c.in src/config.c)
 
 add_subdirectory(deps)
 
+get_directory_property(DEFS COMPILE_DEFINITIONS)
+# list(APPEND DEFS NO_SRT_MATCHING)
+set_directory_properties(PROPERTIES COMPILE_DEFINITIONS "${DEFS}")
+
 if(HAVE_NETMAP_H)
   set(WARP lib${PROJECT_NAME}-warp)
 endif()
