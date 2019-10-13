@@ -1,3 +1,7 @@
+if(NOT WITH_MINICRYPTO)
+  add_definitions(-DWITH_OPENSSL)
+endif()
+
 configure_file(test_public_servers.sh test_public_servers.sh COPYONLY)
 configure_file(test_public_servers.result test_public_servers.result COPYONLY)
 add_test(test_public_servers.sh test_public_servers.sh)

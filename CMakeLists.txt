@@ -35,15 +35,9 @@ endif()
 find_package(OpenSSL 1.1.0 REQUIRED)
 string(REGEX REPLACE "/include$" "" OPENSSL_ROOT_DIR ${OPENSSL_INCLUDE_DIR})
 
-if(NOT WITH_MINICRYPTO)
-  add_definitions(-DWITH_OPENSSL)
-endif()
-
 if("${CMAKE_SYSTEM}" MATCHES "Linux")
   add_definitions(-D_GNU_SOURCE)
 endif()
-
-add_definitions(-DTIMEOUT_DISABLE_INTERVALS -DWHEEL_NUM=6)
 
 # Build "Debug" type by default
 if(NOT CMAKE_BUILD_TYPE)
@@ -97,19 +91,7 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
 set(IPO NO)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
-  # Default debug logging level
-  if(NOT DEFINED DLEVEL)
-    set(DLEVEL "DBG")
-  endif()
-
-  # Enable debug support in the queue.h macros
-  # add_definitions(-DQUEUE_MACRO_DEBUG_TRASH)
-
   add_definitions("-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2")
-
-  if(NO_FUZZER_CORPUS_COLLECTION)
-    add_definitions(-DNO_FUZZER_CORPUS_COLLECTION)
-  endif()
 
   if(NOT DEFINED ENV{CONTINUOUS_INTEGRATION} AND NOT DOCKER)
     # See if we can use the address sanitizer
@@ -204,11 +186,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     endif()
   endif()
 else()
-  # Default logging level
-  if(NOT DEFINED DLEVEL)
-    set(DLEVEL "NTE")
-  endif()
-
   # check for INTERPROCEDURAL_OPTIMIZATION support
   # (except on older gcc where that breaks)
   if(NOT CMAKE_COMPILER_IS_GNUCC
@@ -252,9 +229,6 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE}")
 # flags for "RelWithDebInfo" builds
 set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELEASE} -g3")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO}")
-
-# set debug level
-add_definitions("-UDLEVEL -DDLEVEL=${DLEVEL}")
 
 add_subdirectory(bin)
 add_subdirectory(doc)

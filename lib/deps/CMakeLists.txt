@@ -14,13 +14,17 @@ set(CMAKE_POLICY_DEFAULT_CMP0048 NEW)
 set(CMAKE_POLICY_DEFAULT_CMP0042 NEW)
 set(CMAKE_POLICY_DEFAULT_CMP0054 NEW)
 
-add_subdirectory(picotls)
+get_directory_property(DEFS COMPILE_DEFINITIONS)
+list(APPEND DEFS NDEBUG)
+set_directory_properties(PROPERTIES COMPILE_DEFINITIONS "${DEFS}")
 
-
-set(DLEVEL "WRN")
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  set(CMAKE_BUILD_TYPE RelWithDebInfo)
+  set(IPO False)
+endif()
 
 add_subdirectory(warpcore)
-
+add_subdirectory(picotls)
 
 set(PTLS_CORE_LIBRARY
   ${CMAKE_CURRENT_BINARY_DIR}/picotls/libpicotls-core.a
