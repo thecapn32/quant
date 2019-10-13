@@ -113,7 +113,7 @@ void qlog_init(const struct q_conn * const c)
                 "\"event_fields\":[\"relative_time\",\"group_id\",\"CATEGORY\","
                 "\"EVENT_TYPE\","
                 "\"TRIGGER\",\"DATA\"],\"events\":[",
-                quant_name, quant_version, c->is_clnt ? "CLIENT" : "SERVER",
+                quant_name, quant_version, is_clnt(c) ? "CLIENT" : "SERVER",
                 to_usec(qlog_ref_t));
     }
 }

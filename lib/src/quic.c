@@ -654,7 +654,7 @@ void q_close(struct q_conn * const c,
 #endif
 
     if (c->state == conn_idle || c->state == conn_clsd ||
-        (!c->is_clnt && c->holds_sock))
+        (!is_clnt(c) && c->holds_sock))
         // we don't need to do the closing dance in these cases
         goto done;
 
@@ -856,7 +856,7 @@ int q_conn_af(const struct q_conn * const c)
 #ifndef NO_MIGRATION
 void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
 {
-    ensure(c->is_clnt, "can only rebind w_sock on client");
+    ensure(is_clnt(c), "can only rebind w_sock on client");
 
     // find the index of the currently used local address
     uint16_t idx;

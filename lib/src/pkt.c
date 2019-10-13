@@ -250,7 +250,7 @@ static void __attribute__((nonnull)) enc_other_frames(uint8_t ** pos,
     struct q_conn * const c = m->pn->c;
 
     // encode connection control frames
-    if (!c->is_clnt && c->tok_len && can_enc(pos, end, m, FRM_TOK, true)) {
+    if (!is_clnt(c) && c->tok_len && can_enc(pos, end, m, FRM_TOK, true)) {
         enc_new_token_frame(pos, end, m);
         c->tok_len = 0;
     }
@@ -348,7 +348,7 @@ bool enc_pkt(struct q_stream * const s,
             (unlikely(c->tx_rtry) ? (uint8_t)w_rand_uniform32(0x0f) : 0);
         break;
     case ep_0rtt:
-        if (c->is_clnt) {
+        if (is_clnt(c)) {
             m->hdr.type = LH_0RTT;
             m->hdr.flags = LH | m->hdr.type;
         } else
@@ -384,9 +384,9 @@ bool enc_pkt(struct q_stream * const s,
         }
 
         if (m->hdr.type == LH_INIT)
-            encv(&pos, end, c->is_clnt ? c->tok_len : 0);
+            encv(&pos, end, is_clnt(c) ? c->tok_len : 0);
 
-        if (((c->is_clnt && m->hdr.type == LH_INIT) ||
+        if (((is_clnt(c) && m->hdr.type == LH_INIT) ||
              m->hdr.type == LH_RTRY) &&
             c->tok_len)
             encb(&pos, end, c->tok, c->tok_len);
@@ -448,7 +448,7 @@ bool enc_pkt(struct q_stream * const s,
 
     if (unlikely(c->state == conn_clsg))
         enc_close_frame(&pos, end, m);
-    else if (epoch == ep_data || (!c->is_clnt && epoch == ep_0rtt))
+    else if (epoch == ep_data || (!is_clnt(c) && epoch == ep_0rtt))
         // TODO calc stream hdr len and subtract
         enc_other_frames(&pos, end, m);
 
@@ -475,11 +475,11 @@ bool enc_pkt(struct q_stream * const s,
     }
 
     if (unlikely((pos - v->buf) < MAX_PKT_LEN - AEAD_LEN && (enc_data || rtx) &&
-                 (epoch == ep_data || (!c->is_clnt && epoch == ep_0rtt))))
+                 (epoch == ep_data || (!is_clnt(c) && epoch == ep_0rtt))))
         // we can try to stick some more frames in after the stream frame
         enc_other_frames(&pos, v->buf + MAX_PKT_LEN - AEAD_LEN, m);
 
-    if (c->is_clnt && enc_data) {
+    if (is_clnt(c) && enc_data) {
         if (unlikely(c->try_0rtt == false && m->hdr.type == LH_INIT)) {
             const uint8_t * const max_end = v->buf + MIN_INI_LEN - AEAD_LEN;
             enc_padding_frame(&pos, max_end, m, (uint16_t)(max_end - pos));
@@ -534,7 +534,7 @@ tx:;
         }
     }
 
-    if (!c->is_clnt)
+    if (!is_clnt(c))
         xv->saddr = v->saddr;
 
     // track the flags manually, since warpcore sets them on the xv and it'd
@@ -545,7 +545,7 @@ tx:;
     m->udp_len = xv->len;
     c->out_data += m->udp_len;
 
-    if (unlikely(m->hdr.type == LH_INIT && c->is_clnt && m->strm_data_len))
+    if (unlikely(m->hdr.type == LH_INIT && is_clnt(c) && m->strm_data_len))
         // adjust v->len to exclude the post-stream padding for CI
         v->len = m->strm_data_pos + m->strm_data_len;
 
@@ -565,7 +565,7 @@ tx:;
     qlog_transport(pkt_tx, "DEFAULT", v, m, &c->odcid);
     bit_or(FRM_MAX, &pn->tx_frames, &m->frms);
 
-    if (c->is_clnt) {
+    if (is_clnt(c)) {
         if (is_lh(m->hdr.flags) == false)
             maybe_flip_keys(c, true);
         if (unlikely(m->hdr.type == LH_HSHK && c->cstrms[ep_init]))
@@ -933,12 +933,12 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
 
         if (c->spin_enabled && m->hdr.nr > diet_max(&pn->recv_all))
             // short header, spin the bit
-            c->spin = (is_set(SH_SPIN, m->hdr.flags) == !c->is_clnt);
+            c->spin = (is_set(SH_SPIN, m->hdr.flags) == !is_clnt(c));
     }
 
     v->len = xv->len - AEAD_LEN;
 
-    if (!c->is_clnt && unlikely(m->hdr.type == LH_HSHK && c->cstrms[ep_init])) {
+    if (!is_clnt(c) && unlikely(m->hdr.type == LH_HSHK && c->cstrms[ep_init])) {
         abandon_pn(&c->pns[pn_init]);
 
         // server can assume path is validated

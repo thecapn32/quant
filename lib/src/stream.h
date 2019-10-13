@@ -179,7 +179,7 @@ strm_epoch(const struct q_stream * const s)
             die("illegal sid %" PRId, s->id);
         }
 
-    if (unlikely(s->c->is_clnt == true && s->c->state == conn_opng))
+    if (unlikely(is_clnt(s->c) == true && s->c->state == conn_opng))
         return ep_0rtt;
 
     return ep_data;

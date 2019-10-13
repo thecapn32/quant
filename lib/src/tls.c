@@ -550,7 +550,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             break;
 
         case TP_OCID:
-            if (c->is_clnt == false) {
+            if (is_clnt(c) == false) {
                 err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
                           "rx original_connection_id tp at serv");
                 return 1;
@@ -576,7 +576,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             break;
 
         case TP_SRT:
-            if (c->is_clnt == false) {
+            if (is_clnt(c) == false) {
                 err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
                           "rx stateless_reset_token tp at serv");
                 return 1;
@@ -658,7 +658,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
     }
 
     // if we did a RETRY, check that we got orig_cid and it matches
-    if (c->is_clnt && c->tok_len) {
+    if (is_clnt(c) && c->tok_len) {
         if (c->tp_out.orig_cid.len == 0) {
             err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
                       "no original_connection_id tp received");
@@ -746,7 +746,7 @@ void init_tp(struct q_conn * const c)
             break;
         case TP_SRT:
 #ifndef NO_SRT_MATCHING
-            if (!c->is_clnt) {
+            if (!is_clnt(c)) {
                 encb_tp(&pos, end, TP_SRT, c->scid->srt, sizeof(c->scid->srt));
 #ifdef DEBUG_EXTRA
                 warn(INF, "\tstateless_reset_token = %s",
@@ -756,7 +756,7 @@ void init_tp(struct q_conn * const c)
 #endif
             break;
         case TP_OCID:
-            if (!c->is_clnt && c->odcid.len) {
+            if (!is_clnt(c) && c->odcid.len) {
                 encb_tp(&pos, end, TP_OCID, c->odcid.id, c->odcid.len);
 #ifdef DEBUG_EXTRA
                 warn(INF, "\toriginal_connection_id = %s",
@@ -1041,7 +1041,7 @@ void init_tls(struct q_conn * const c,
               const char * const serv_name,
               const char * const clnt_alpn)
 {
-    char * const sni = c->is_clnt
+    char * const sni = is_clnt(c)
                            ? (c->tls.t ? strdup(ptls_get_server_name(c->tls.t))
                                        : strdup(serv_name))
                            : 0;
@@ -1049,10 +1049,10 @@ void init_tls(struct q_conn * const c,
     if (c->tls.t)
         // we are re-initializing during version negotiation
         free_tls(c, true);
-    ensure((c->tls.t = ptls_new(&ped(c->w)->tls_ctx, !c->is_clnt)) != 0,
+    ensure((c->tls.t = ptls_new(&ped(c->w)->tls_ctx, !is_clnt(c))) != 0,
            "ptls_new");
     *ptls_get_data_ptr(c->tls.t) = c;
-    if (c->is_clnt)
+    if (is_clnt(c))
         ensure(ptls_set_server_name(c->tls.t, sni, 0) == 0,
                "ptls_set_server_name");
 
@@ -1062,7 +1062,7 @@ void init_tls(struct q_conn * const c,
     hshk_prop->collect_extension = filter_tp;
     hshk_prop->collected_extensions = chk_tp;
 
-    if (c->is_clnt) {
+    if (is_clnt(c)) {
         if (clnt_alpn == 0 || *clnt_alpn == 0) {
             c->tls.alpn = alpn[0];
             warn(NTE, "using default ALPN %.*s", (int)c->tls.alpn.len,
@@ -1134,12 +1134,12 @@ void init_prot(struct q_conn * const c)
     struct cid * const scid = c->scid;
     struct cid * const dcid = c->dcid;
     const ptls_iovec_t cid = {
-        .base = (uint8_t *)(c->is_clnt ? &dcid->id : &scid->id),
-        .len = c->is_clnt ? dcid->len : scid->len};
+        .base = (uint8_t *)(is_clnt(c) ? &dcid->id : &scid->id),
+        .len = is_clnt(c) ? dcid->len : scid->len};
     ptls_cipher_suite_t * cs = &aes128gcmsha256;
     struct pn_space * const pn = &c->pns[pn_init];
     setup_initial_encryption(&pn->early.in, &pn->early.out, &cs, cid,
-                             c->is_clnt);
+                             is_clnt(c));
 }
 
 
@@ -1166,7 +1166,7 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
          (unsigned long)(iv ? iv->len - in_len : 0));
 #endif
     if (ret == 0 && c->state != conn_estb) {
-        if (ptls_is_psk_handshake(c->tls.t) && c->is_clnt)
+        if (ptls_is_psk_handshake(c->tls.t) && is_clnt(c))
             c->did_0rtt = c->try_0rtt &&
                           (c->tls.tls_hshk_prop.client.early_data_acceptance ==
                            PTLS_EARLY_DATA_ACCEPTED);

@@ -62,7 +62,7 @@ struct q_stream * get_stream(struct q_conn * const c, const dint_t id)
 dint_t max_sid(const dint_t sid, const struct q_conn * const c)
 {
     const uint_t max =
-        is_srv_ini(sid) == c->is_clnt
+        is_srv_ini(sid) == is_clnt(c)
             ? (is_uni(sid) ? c->tp_in.max_strms_uni : c->tp_in.max_strms_bidi)
             : (is_uni(sid) ? c->tp_out.max_strms_uni
                            : c->tp_out.max_strms_bidi);
@@ -75,13 +75,13 @@ dint_t max_sid(const dint_t sid, const struct q_conn * const c)
 void apply_stream_limits(struct q_stream * const s)
 {
     struct q_conn * const c = s->c;
-    s->in_data_max = is_srv_ini(s->id) == c->is_clnt
+    s->in_data_max = is_srv_ini(s->id) == is_clnt(c)
                          ? (is_uni(s->id) ? c->tp_in.max_strm_data_uni
                                           : c->tp_in.max_strm_data_bidi_remote)
                          : (is_uni(s->id) ? c->tp_in.max_strm_data_uni
                                           : c->tp_in.max_strm_data_bidi_local);
     s->out_data_max =
-        is_srv_ini(s->id) == c->is_clnt
+        is_srv_ini(s->id) == is_clnt(c)
             ? (is_uni(s->id) ? c->tp_out.max_strm_data_uni
                              : c->tp_out.max_strm_data_bidi_remote)
             : (is_uni(s->id) ? c->tp_out.max_strm_data_uni
@@ -114,7 +114,7 @@ struct q_stream * new_stream(struct q_conn * const c, const dint_t id)
     kh_val(&c->strms_by_id, k) = s;
 
     apply_stream_limits(s);
-    const bool is_local = (is_srv_ini(id) != c->is_clnt);
+    const bool is_local = (is_srv_ini(id) != is_clnt(c));
     const uint_t cnt = (uint_t)((id >> 2) + 1);
     if (is_local) {
         if (is_uni(id)) {

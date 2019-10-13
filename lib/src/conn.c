@@ -578,7 +578,7 @@ void tx(struct q_conn * const c)
         goto done;
     }
 
-    if (unlikely(c->state == conn_opng) && c->is_clnt && c->try_0rtt &&
+    if (unlikely(c->state == conn_opng) && is_clnt(c) && c->try_0rtt &&
         c->pns[pn_data].data.out_0rtt.aead == 0) {
         // if we have no 0-rtt keys here, the ticket didn't have any - disable
         warn(NTE, "TLS ticket w/o 0-RTT keys, disabling 0-RTT");
@@ -776,7 +776,7 @@ rx_crypto(struct q_conn * const c, const struct pkt_meta * const m_cur)
 
         if (c->state == conn_idle || c->state == conn_opng) {
             conn_to_state(c, conn_estb);
-            if (c->is_clnt)
+            if (is_clnt(c))
                 maybe_api_return(q_connect, c, 0);
             else {
                 if (c->needs_accept == false) {
@@ -792,7 +792,7 @@ rx_crypto(struct q_conn * const c, const struct pkt_meta * const m_cur)
 
 static void __attribute__((nonnull)) free_cids(struct q_conn * const c)
 {
-    if (c->is_clnt == false && c->odcid.len) {
+    if (is_clnt(c) == false && c->odcid.len) {
         // TODO: we should stop accepting pkts on the client odcid earlier
 #ifndef NO_MIGRATION
         cids_by_id_del(&c->scids_by_id, &c->odcid);
@@ -829,7 +829,7 @@ static void __attribute__((nonnull(1))) new_cids(struct q_conn * const c,
                                                  const struct cid * const scid)
 {
     // init dcid
-    if (c->is_clnt) {
+    if (is_clnt(c)) {
         struct cid ndcid = {0};
         mk_rand_cid(&ndcid);
         cid_cpy(&c->odcid, &ndcid);
@@ -839,7 +839,7 @@ static void __attribute__((nonnull(1))) new_cids(struct q_conn * const c,
 
     // init scid and add connection to global data structures
     struct cid nscid = {0};
-    if (c->is_clnt) {
+    if (is_clnt(c)) {
         nscid.len = zero_len_scid ? 0 : SCID_LEN_CLNT;
         if (nscid.len) {
             rand_bytes(nscid.id, sizeof(nscid.id));
@@ -1746,8 +1746,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     ensure(c, "could not calloc");
 
     c->w = w;
-    if (peer_name)
-        c->is_clnt = true;
+    c->is_clnt = peer_name != 0;
 
     uint16_t idx = addr_idx;
     if (peer) {
@@ -1764,7 +1763,7 @@ struct q_conn * new_conn(struct w_engine * const w,
         }
     }
 
-    if (c->is_clnt || peer == 0) {
+    if (is_clnt(c) || peer == 0) {
         c->sockopt.enable_ecn = true;
         c->sockopt.enable_udp_zero_checksums =
             get_conf_uncond(c->w, conf, enable_udp_zero_checksums);
@@ -1782,8 +1781,8 @@ struct q_conn * new_conn(struct w_engine * const w,
     }
 
     // init CIDs
-    c->next_sid_bidi = c->is_clnt ? 0 : STRM_FL_SRV;
-    c->next_sid_uni = c->is_clnt ? STRM_FL_UNI : STRM_FL_UNI | STRM_FL_SRV;
+    c->next_sid_bidi = is_clnt(c) ? 0 : STRM_FL_SRV;
+    c->next_sid_uni = is_clnt(c) ? STRM_FL_UNI : STRM_FL_UNI | STRM_FL_SRV;
 #ifndef NO_MIGRATION
     splay_init(&c->dcids_by_seq);
     splay_init(&c->scids_by_seq);
@@ -1809,30 +1808,30 @@ struct q_conn * new_conn(struct w_engine * const w,
 
     // initialize recovery state
     init_rec(c);
-    if (c->is_clnt)
+    if (is_clnt(c))
         c->path_val_win = UINT_T_MAX;
 
     // start a TX watcher
     timeout_init(&c->tx_w, TIMEOUT_ABS);
     timeout_setcb(&c->tx_w, tx, c);
 
-    if (likely(c->is_clnt || c->holds_sock == false))
+    if (likely(is_clnt(c) || c->holds_sock == false))
         update_conf(c, conf);
 
     // TODO most of these should become configurable via q_conn_conf
     c->tp_in.max_pkt = w_max_udp_payload(c->sock);
     c->tp_in.ack_del_exp = c->tp_out.ack_del_exp = DEF_ACK_DEL_EXP;
     c->tp_in.max_ack_del = c->tp_out.max_ack_del = DEF_MAX_ACK_DEL;
-    c->tp_in.max_strm_data_uni = c->is_clnt ? INIT_STRM_DATA_UNI : 0;
-    c->tp_in.max_strms_uni = c->is_clnt ? INIT_MAX_UNI_STREAMS : 0;
+    c->tp_in.max_strm_data_uni = is_clnt(c) ? INIT_STRM_DATA_UNI : 0;
+    c->tp_in.max_strms_uni = is_clnt(c) ? INIT_MAX_UNI_STREAMS : 0;
     c->tp_in.max_strms_bidi =
-        c->is_clnt ? INIT_MAX_BIDI_STREAMS * 2 : INIT_MAX_BIDI_STREAMS;
+        is_clnt(c) ? INIT_MAX_BIDI_STREAMS * 2 : INIT_MAX_BIDI_STREAMS;
     c->tp_in.max_strm_data_bidi_local = c->tp_in.max_strm_data_bidi_remote =
-        c->is_clnt ? INIT_STRM_DATA_BIDI : INIT_STRM_DATA_BIDI / 2;
+        is_clnt(c) ? INIT_STRM_DATA_BIDI : INIT_STRM_DATA_BIDI / 2;
     c->tp_in.max_data =
         c->tp_in.max_strms_bidi * c->tp_in.max_strm_data_bidi_local;
     c->tp_in.act_cid_lim =
-        c->tp_in.disable_active_migration ? 0 : (c->is_clnt ? 4 : 2);
+        c->tp_in.disable_active_migration ? 0 : (is_clnt(c) ? 4 : 2);
 
     // initialize packet number spaces
     for (pn_t t = pn_init; t <= pn_data; t++)

@@ -156,7 +156,7 @@ get_and_validate_strm(struct q_conn * const c,
                       const bool ok_when_writer)
 {
     if (is_uni(sid) && unlikely(is_srv_ini(sid) ==
-                                (ok_when_writer ? c->is_clnt : !c->is_clnt)))
+                                (ok_when_writer ? is_clnt(c) : !is_clnt(c))))
         err_close(c, ERR_STREAM_STATE, type,
                   "got frame 0x%02x for uni sid %" PRId " but am %s", type, sid,
                   conn_type(c));
@@ -259,7 +259,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
             goto done;
         }
 
-        if (unlikely(is_srv_ini(sid) != c->is_clnt)) {
+        if (unlikely(is_srv_ini(sid) != is_clnt(c))) {
             log_stream_or_crypto_frame(false, m, type, sid, true, 0);
             err_close_return(c, ERR_STREAM_STATE, type,
                              "got sid %" PRId " but am %s", sid, conn_type(c));
@@ -696,7 +696,7 @@ dec_close_frame(const uint8_t type,
     if (c->state == conn_drng)
         timeouts_add(ped(c->w)->wheel, &c->closing_alarm, 0);
     else {
-        if (c->is_clnt) {
+        if (is_clnt(c)) {
             conn_to_state(c, conn_drng);
             timeouts_add(ped(c->w)->wheel, &c->closing_alarm, 0);
         } else
@@ -1725,7 +1725,7 @@ void enc_new_cid_frame(uint8_t ** pos,
         splay_min(cids_by_seq, &c->scids_by_seq);
     c->max_cid_seq_out = MAX(min_scid->seq, c->max_cid_seq_out + 1);
     struct cid ncid = {.seq = c->max_cid_seq_out,
-                       .len = c->is_clnt ? SCID_LEN_CLNT : SCID_LEN_SERV};
+                       .len = is_clnt(c) ? SCID_LEN_CLNT : SCID_LEN_SERV};
 
     // FIXME: add rpt
 

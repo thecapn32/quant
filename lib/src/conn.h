@@ -286,6 +286,13 @@ struct q_conn {
 };
 
 
+#ifndef NO_SERVER
+#define is_clnt(c) (c)->is_clnt
+#else
+#define is_clnt(c) 0
+#endif
+
+
 extern struct q_conn_sl c_ready;
 
 #if !defined(NDEBUG) && defined(DEBUG_EXTRA) && !defined(FUZZING)
@@ -432,7 +439,7 @@ SPLAY_PROTOTYPE(ooo_0rtt_by_cid, ooo_0rtt, node, ooo_0rtt_by_cid_cmp)
 static inline __attribute__((nonnull)) const char *
 conn_type(const struct q_conn * const c)
 {
-    return c->is_clnt ? "clnt" : "serv";
+    return is_clnt(c) ? "clnt" : "serv";
 }
 
 
