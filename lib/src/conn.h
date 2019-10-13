@@ -30,7 +30,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+
+#ifndef NO_MIGRATION
 #include <sys/param.h>
+#endif
 
 #include <quant/quant.h>
 #include <timeout.h>

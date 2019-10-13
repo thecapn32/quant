@@ -36,9 +36,7 @@
 // IWYU pragma: no_include <picotls/../picotls.h>
 
 #include <picotls.h> // IWYU pragma: keep
-#ifndef NO_MIGRATION
 #include <quant/quant.h>
-#endif
 #include <timeout.h>
 #include <warpcore/warpcore.h>
 

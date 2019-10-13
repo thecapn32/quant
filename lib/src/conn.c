@@ -47,7 +47,6 @@
 #include <quant/quant.h>
 #include <timeout.h>
 
-#include "bitset.h"
 #include "conn.h"
 #include "diet.h"
 #include "frame.h"
@@ -60,6 +59,10 @@
 #include "recovery.h"
 #include "stream.h"
 #include "tls.h"
+
+#ifndef NO_QLOG
+#include "bitset.h"
+#endif
 
 
 #undef CONN_STATE

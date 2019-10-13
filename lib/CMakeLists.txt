@@ -37,16 +37,7 @@ configure_file(src/config.c.in src/config.c)
 
 add_subdirectory(deps)
 
-get_directory_property(DEFS COMPILE_DEFINITIONS)
-# list(APPEND DEFS NO_SRT_MATCHING)
-if(NO_FUZZER_CORPUS_COLLECTION)
-  list(APPEND DEFS NO_FUZZER_CORPUS_COLLECTION)
-endif()
-if(NOT WITH_MINICRYPTO)
-  list(APPEND DEFS WITH_OPENSSL)
-endif()
-list(APPEND DEFS TIMEOUT_DISABLE_INTERVALS WHEEL_NUM=6)
-set_directory_properties(PROPERTIES COMPILE_DEFINITIONS "${DEFS}")
+set_property(DIRECTORY . APPEND PROPERTY COMPILE_DEFINITIONS ${DEFINES})
 
 if(HAVE_NETMAP_H)
   set(WARP lib${PROJECT_NAME}-warp)

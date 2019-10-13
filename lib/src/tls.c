@@ -744,8 +744,8 @@ void init_tp(struct q_conn * const c)
 #endif
             }
             break;
-#ifndef NO_SRT_MATCHING
         case TP_SRT:
+#ifndef NO_SRT_MATCHING
             if (!c->is_clnt) {
                 encb_tp(&pos, end, TP_SRT, c->scid->srt, sizeof(c->scid->srt));
 #ifdef DEBUG_EXTRA
@@ -753,8 +753,8 @@ void init_tp(struct q_conn * const c)
                      srt_str(c->scid->srt));
 #endif
             }
-            break;
 #endif
+            break;
         case TP_OCID:
             if (!c->is_clnt && c->odcid.len) {
                 encb_tp(&pos, end, TP_OCID, c->odcid.id, c->odcid.len);

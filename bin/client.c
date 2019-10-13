@@ -268,7 +268,7 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
 #ifndef NO_MIGRATION
             rebind ? 0 : &se->req, rebind ? 0 : &se->s,
 #else
-            0, 0,
+            &se->req, &se->s,
 #endif
             true,
             do_h3 ? "h3-" DRAFT_VERSION_STRING : "hq-" DRAFT_VERSION_STRING, 0);
