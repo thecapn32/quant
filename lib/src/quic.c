@@ -666,6 +666,7 @@ void q_close(struct q_conn * const c,
     loop_run(c->w, (func_ptr)q_close, c, 0);
 
 done:
+#ifndef NO_QINFO
     if (c->scid && c->i.pkts_in_valid > 0) {
         conn_info_populate(c);
         warn(INF, "%s conn %s stats:", conn_type(c), cid_str(c->scid));
@@ -682,6 +683,7 @@ done:
         warn(INF, "\tssthresh = %" PRIu, c->i.ssthresh);
         warn(INF, "\tpto_cnt = %" PRIu, c->i.pto_cnt);
     }
+#endif
     free_conn(c);
 #ifndef NO_QLOG
     fflush(qlog);
@@ -908,11 +910,13 @@ void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
 #endif
 
 
+#ifndef NO_QINFO
 void q_info(struct q_conn * const c, struct q_conn_info * const ci)
 {
     conn_info_populate(c);
     memcpy(ci, &c->i, sizeof(*ci));
 }
+#endif
 
 
 char * hex2str(const uint8_t * const src,

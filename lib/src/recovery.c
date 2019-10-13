@@ -337,6 +337,14 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
 #define DEBUG_ensure(...)
 #endif
 
+#ifndef NO_QINFO
+#define incr_out_lost c->i.pkts_out_lost++
+#else
+#define incr_out_lost                                                          \
+    do {                                                                       \
+    } while (0)
+#endif
+
 
 static void __attribute__((nonnull))
 detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
@@ -378,7 +386,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
             pn->lg_acked >= m->hdr.nr + kPacketThreshold) {
             m->lost = true;
             in_flight_lost |= m->in_flight;
-            c->i.pkts_out_lost++;
+            incr_out_lost;
             if (unlikely(lg_lost == UINT_T_MAX) || m->hdr.nr > lg_lost) {
                 // cppcheck-suppress unreadVariable
                 lg_lost = m->hdr.nr;
@@ -467,7 +475,9 @@ static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
         }
         c->tx_limit = 0;
         timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
+#ifndef NO_QINFO
         c->i.pto_cnt++;
+#endif
 
     } else if (have_keys(c, pn_data) == false) {
 #ifdef DEBUG_TIMERS
@@ -484,7 +494,9 @@ static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
              cid_str(c->scid));
 #endif
         c->rec.pto_cnt++;
+#ifndef NO_QINFO
         c->i.pto_cnt++;
+#endif
         c->tx_limit = 2;
         timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
     }

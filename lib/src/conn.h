@@ -264,7 +264,9 @@ struct q_conn {
 
     struct w_iov_sq txq;
 
+#ifndef NO_QINFO
     struct q_conn_info i;
+#endif
 
     uint_t err_code;
     uint8_t err_frm;

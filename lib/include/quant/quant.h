@@ -70,6 +70,7 @@ struct q_conf {
 };
 
 
+#ifndef NO_QINFO
 struct q_conn_info {
     uint_t pkts_in_valid;
     uint_t pkts_in_invalid;
@@ -84,6 +85,7 @@ struct q_conn_info {
     uint_t ssthresh;
     uint_t pto_cnt;
 };
+#endif
 
 
 extern struct w_engine * __attribute__((nonnull(1)))
@@ -185,8 +187,10 @@ extern void __attribute__((nonnull))
 q_rebind_sock(struct q_conn * const c, const bool use_new_dcid);
 #endif
 
+#ifndef NO_QINFO
 extern void __attribute__((nonnull))
 q_info(struct q_conn * const c, struct q_conn_info * const ci);
+#endif
 
 extern int __attribute__((nonnull)) q_conn_af(const struct q_conn * const c);
 

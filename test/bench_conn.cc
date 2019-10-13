@@ -89,11 +89,13 @@ static inline uint64_t io(const uint64_t len)
     q_free(&i);
     q_free(&o);
 
+#ifndef NO_QINFO
     struct q_conn_info cci = {0};
     struct q_conn_info sci = {0};
     q_info(cc, &cci);
     q_info(sc, &sci);
     // log(&cci, &sci);
+#endif
 
     return ilen;
 }

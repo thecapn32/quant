@@ -286,7 +286,9 @@ static void __attribute__((nonnull))
 rtx_pkt(struct w_iov * const v, struct pkt_meta * const m)
 {
     struct q_conn * const c = m->pn->c;
+#ifndef NO_QINFO
     c->i.pkts_out_rtx++;
+#endif
 
     if (m->lost)
         // we don't need to do the steps below if the pkt is lost already
@@ -370,7 +372,9 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
     if (unlikely(sq_empty(&c->txq)))
         return;
 
+#ifndef NO_QINFO
     c->i.pkts_out += w_iov_sq_cnt(&c->txq);
+#endif
 
     if (w_iov_sq_cnt(&c->txq) > 1 && unlikely(is_lh(*sq_first(&c->txq)->buf)))
         coalesce(&c->txq);
@@ -1438,12 +1442,14 @@ rx_pkts(struct w_iov_sq * const x,
             qlog_transport(pkt_dp, "DEFAULT", v, m, &m->hdr.dcid);
         free_iov(v, m);
     next:
+#ifndef NO_QINFO
         if (likely(c)) {
             if (likely(pkt_valid))
                 c->i.pkts_in_valid++;
             else
                 c->i.pkts_in_invalid++;
         }
+#endif
         w_free_iov(xv);
     }
 }
@@ -1933,6 +1939,7 @@ void free_conn(struct q_conn * const c)
 }
 
 
+#ifndef NO_QINFO
 void conn_info_populate(struct q_conn * const c)
 {
     // fill some q_conn_info fields based on other conn fields
@@ -1941,3 +1948,4 @@ void conn_info_populate(struct q_conn * const c)
     c->i.rtt = c->rec.cur.srtt;
     c->i.rttvar = c->rec.cur.rttvar;
 }
+#endif
