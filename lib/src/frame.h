@@ -87,7 +87,7 @@ bitset_define(frames, FRM_MAX);
 
 struct pkt_meta;
 
-#if defined(NDEBUG) && !defined(NDEBUG_WITH_DLOG)
+#ifdef NDEBUG
 #define log_stream_or_crypto_frame(...)
 #else
 extern void __attribute__((nonnull(2)))

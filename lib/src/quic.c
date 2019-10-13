@@ -46,7 +46,7 @@
 #define ASAN_UNPOISON_MEMORY_REGION(x, y)
 #endif
 
-#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) && !defined(FUZZING) &&    \
+#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 #include <errno.h>
 #include <fcntl.h>
@@ -71,7 +71,7 @@
 
 /// QUIC version supported by this implementation in order of preference.
 const uint32_t ok_vers[] = {
-#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
+#ifndef NDEBUG
     0xbabababa, // reserved version to trigger negotiation, TODO: randomize
 #endif
     0x45474700 + DRAFT_VERSION, // quant private version -xx
@@ -86,7 +86,7 @@ struct q_conn_sl accept_queue = sl_head_initializer(accept_queue);
 
 static struct timeout api_alarm = TIMEOUT_INITIALIZER(0);
 
-#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) && !defined(FUZZING) &&    \
+#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 int corpus_pkt_dir, corpus_frm_dir;
 #endif
@@ -494,7 +494,7 @@ struct q_stream * q_rsv_stream(struct q_conn * const c, const bool bidi)
 }
 
 
-#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) && !defined(FUZZING) &&    \
+#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 static int __attribute__((nonnull))
 mk_or_open_dir(const char * const path, mode_t mode)
@@ -529,17 +529,18 @@ struct w_engine * q_init(const char * const ifname,
                               num_bufs * sizeof(*ped(w)->pkt_meta));
     ped(w)->num_bufs = num_bufs;
 
-    ped(w)->default_conn_conf = (struct q_conn_conf)
-    {
-        .idle_timeout = 10, .enable_udp_zero_checksums = true,
-        .tls_key_update_frequency = 3, .version = ok_vers[0],
-        .enable_spinbit =
-#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
-            true
+    ped(w)->default_conn_conf =
+        (struct q_conn_conf){.idle_timeout = 10,
+                             .enable_udp_zero_checksums = true,
+                             .tls_key_update_frequency = 3,
+                             .version = ok_vers[0],
+                             .enable_spinbit =
+#ifndef NDEBUG
+                                 true
 #else
-            false
+                                 false
 #endif
-    };
+        };
 
     if (conf && conf->conn_conf) {
         // update default connection configuration
@@ -575,8 +576,7 @@ struct w_engine * q_init(const char * const ifname,
     // initialize TLS context
     init_tls_ctx(conf, &ped(w)->tls_ctx);
 
-#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) &&                         \
-    !defined(NO_FUZZER_CORPUS_COLLECTION)
+#if !defined(NDEBUG) && !defined(NO_FUZZER_CORPUS_COLLECTION)
 #ifdef FUZZING
     warn(CRT, "%s compiled for fuzzing - will not communicate", quant_name);
 #else
@@ -731,7 +731,7 @@ void q_cleanup(struct w_engine * const w)
     free(w->data);
     w_cleanup(w);
 
-#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) && !defined(FUZZING) &&    \
+#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
     close(corpus_pkt_dir);
     close(corpus_frm_dir);
@@ -778,7 +778,7 @@ bool q_is_conn_closed(const struct q_conn * const c)
 }
 
 
-#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) && !defined(FUZZING) &&    \
+#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
 void write_to_corpus(const int dir, const void * const data, const size_t len)
 {
@@ -818,7 +818,7 @@ bool q_ready(struct w_engine * const w,
     if (c) {
         sl_remove_head(&c_ready, node_rx_ext);
         c->have_new_data = c->in_c_ready = false;
-#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) && defined(DEBUG_EXTRA)
+#if !defined(NDEBUG) && defined(DEBUG_EXTRA)
         char * op = "rx";
         if (c->needs_accept)
             op = "accept";
@@ -864,7 +864,7 @@ void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
         // could not open new w_sock, can't rebind
         return;
 
-#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
+#ifndef NDEBUG
     char old_ip[IP_STRLEN];
     const uint16_t old_port = c->sock->ws_lport;
     w_ntop(&c->sock->ws_laddr, old_ip);

@@ -30,10 +30,6 @@
 #include <stdlib.h>
 #include <sys/param.h>
 
-#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
-#include <stdio.h>
-#endif
-
 #include <quant/quant.h>
 
 #include "bitset.h"
@@ -333,7 +329,7 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
 }
 
 
-#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG))
+#ifdef NDEBUG
 #define DEBUG_diet_insert diet_insert
 #define DEBUG_ensure ensure
 #else
@@ -358,7 +354,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
     // Packets sent before this time are deemed lost.
     const uint64_t lost_send_t = loop_now() - loss_del;
 
-#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG))
+#ifdef NDEBUG
     struct diet lost = diet_initializer(lost);
 #endif
     uint_t lg_lost = UINT_T_MAX;
@@ -404,7 +400,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
         }
     });
 
-#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG))
+#ifdef NDEBUG
     int pos = 0;
     struct ival * i = 0;
     const uint32_t tmp_len = ped(c->w)->scratch_len;
@@ -664,7 +660,7 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
             warn(DBG, "%s %s pkt " FMT_PNR_OUT " was RTX'ed as " FMT_PNR_OUT,
                  conn_type(c), pkt_type_str(m->hdr.flags, &m->hdr.vers),
                  m->hdr.nr, m_rtx->hdr.nr);
-#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG))
+#ifdef NDEBUG
             ensure(sl_next(m_rtx, rtx_next) == 0, "RTX chain corrupt");
 #endif
             if (m_rtx->acked == false) {

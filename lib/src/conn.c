@@ -235,7 +235,7 @@ void use_next_dcid(struct q_conn * const c)
 #endif
 
 
-#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG))
+#ifndef NDEBUG
 static void __attribute__((nonnull)) log_sent_pkts(struct q_conn * const c)
 {
     for (pn_t t = pn_init; t <= pn_data; t++) {
@@ -891,7 +891,7 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
 }
 
 
-#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
+#ifndef NDEBUG
 static bool __attribute__((const))
 pkt_ok_for_epoch(const uint8_t flags, const epoch_t epoch)
 {
@@ -919,7 +919,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
 #endif
                                             ,
                                             const struct cid * const odcid
-#if defined(NDEBUG) && !defined(NDEBUG_WITH_DLOG)
+#ifdef NDEBUG
                                             __attribute__((unused))
 #endif
                                             ,
@@ -1158,7 +1158,7 @@ rx_pkts(struct w_iov_sq * const x,
         sq_remove_head(x, next);
         sq_next(xv, next) = 0;
 
-#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) && !defined(FUZZING) &&    \
+#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
         // when called from the fuzzer, xv->wv_af is zero
         if (xv->wv_af)
@@ -1714,7 +1714,7 @@ void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
         get_conf_uncond(c->w, conf, enable_udp_zero_checksums);
     w_set_sockopt(c->sock, &c->sockopt);
 
-#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
+#ifndef NDEBUG
     // XXX for testing, do a key flip and a migration ASAP (if enabled)
     c->do_key_flip = c->key_flips_enabled;
 #ifndef NO_MIGRATION

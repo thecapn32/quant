@@ -55,7 +55,7 @@
 #include "tls.h"
 
 
-#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
+#ifndef NDEBUG
 #define pcr_str(chlg_resp)                                                     \
     hex2str((chlg_resp), sizeof(chlg_resp),                                    \
             (char[hex_str_len(PATH_CHLG_LEN)]){""},                            \
@@ -96,7 +96,7 @@
     } while (0)
 
 
-#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
+#ifndef NDEBUG
 void log_stream_or_crypto_frame(const bool rtx,
                                 const struct pkt_meta * const m,
                                 const uint8_t fl,
@@ -422,7 +422,7 @@ reallydone:
 }
 
 
-#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
+#ifndef NDEBUG
 static uint_t __attribute__((const))
 shorten_ack_nr(const uint_t ack, const uint_t diff)
 {
@@ -525,7 +525,7 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
             err_close_return(c, ERR_FRAME_ENC, type, "ACK rng len %" PRIu,
                              " > lg_ack %" PRIu, ack_rng, lg_ack);
 
-#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
+#ifndef NDEBUG
         if (ack_rng == 0) {
             if (n == ack_rng_cnt + 1)
                 warn(INF,
@@ -1092,7 +1092,7 @@ dec_new_token_frame(const uint8_t ** pos,
 }
 
 
-#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
+#ifndef NDEBUG
 static void log_pad(const uint16_t len)
 {
     warn(INF, FRAM_IN "PADDING" NRM " len=%u", len);
@@ -1115,7 +1115,7 @@ bool dec_frames(struct q_conn * const c,
     const uint8_t * end = v->buf + v->len;
     const uint8_t * pad_start = 0;
 
-#if (!defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)) && !defined(FUZZING) &&    \
+#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
     !defined(NO_FUZZER_CORPUS_COLLECTION)
     // when called from the fuzzer, v->wv_af is zero
     if (v->wv_af)
@@ -1404,7 +1404,7 @@ void enc_ack_frame(uint8_t ** pos,
             encv(pos, end, gap);
         }
         const uint_t ack_rng = b->hi - b->lo;
-#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
+#ifndef NDEBUG
         if (ack_rng) {
             if (prev_lo)
                 warn(INF,
@@ -1548,7 +1548,7 @@ void enc_close_frame(uint8_t ** pos,
     if (err_reason_len)
         encb(pos, end, (const uint8_t *)err_reason, err_reason_len);
 
-#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
+#ifndef NDEBUG
     if (type == FRM_CLQ)
         warn(INF,
              FRAM_OUT "CONNECTION_CLOSE" NRM " 0x%02x=quic err=%s0x%" PRIx NRM

@@ -59,7 +59,7 @@
 #define MAX_PKT_NR_LEN 4 ///< Maximum packet number length allowed by spec.
 
 
-#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
+#ifndef NDEBUG
 
 void log_pkt(const char * const dir,
              const struct w_iov * const v,

@@ -189,7 +189,7 @@ enc_lh_cids(uint8_t ** pos,
             const struct cid * const dcid,
             const struct cid * const scid);
 
-#if !defined(NDEBUG) || defined(NDEBUG_WITH_DLOG)
+#ifndef NDEBUG
 extern void __attribute__((nonnull(1, 2, 3)))
 log_pkt(const char * const dir,
         const struct w_iov * const v,
