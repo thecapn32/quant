@@ -1049,8 +1049,11 @@ void init_tls(struct q_conn * const c,
     if (c->tls.t)
         // we are re-initializing during version negotiation
         free_tls(c, true);
-    ensure((c->tls.t = ptls_new(&ped(c->w)->tls_ctx, !c->is_clnt)) != 0,
-           "ptls_new");
+    if (c->is_clnt)
+        c->tls.t = ptls_client_new(&ped(c->w)->tls_ctx);
+    // else
+    //     c->tls.t = ptls_server_new(&ped(c->w)->tls_ctx);
+    ensure(c->tls.t, "ptls_new");
     *ptls_get_data_ptr(c->tls.t) = c;
     if (c->is_clnt)
         ensure(ptls_set_server_name(c->tls.t, sni, 0) == 0,
