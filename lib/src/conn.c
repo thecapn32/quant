@@ -481,7 +481,7 @@ static bool __attribute__((nonnull)) tx_stream(struct q_stream * const s)
     // check if we should skip TX on this stream
     if (has_data == false || (s->blocked && s->lost_cnt == 0) ||
         // unless for 0-RTT, is this a regular stream during conn open?
-        unlikely(c->try_0rtt == false && s->id >= 0 && c->state != conn_estb)) {
+        unlikely(c->try_0rtt == false && s->id >= 0 && c->state < conn_estb)) {
 #ifdef DEBUG_STREAMS
         warn(ERR, "skip " FMT_SID, s->id);
 #endif
