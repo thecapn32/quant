@@ -28,7 +28,11 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include <inttypes.h>
+
+#ifdef DEBUG_EXTRA
 #include <timeout.h>
+#endif
 
 #include "conn.h"
 #include "loop.h"
