@@ -30,7 +30,7 @@ IndexOptions FancyIndexing SuppressIcon
 IndexOrderDefault Descending Date
 RewriteRule ^log$ /$(basename "$new") [R]
 Header set Access-Control-Allow-Origin "*"
-Header set Access-Control-Allow-Methods "GET,PUT,POST,DELETE"
+Header set Access-Control-Allow-Methods "*"
 Header set Access-Control-Allow-Headers "Content-Type, Authorization"
 AddType application/octet-stream .qlog
 EOF
