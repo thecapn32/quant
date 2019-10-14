@@ -143,8 +143,9 @@ function bench_server {
     [ "$s" = "quicly" ] && port=8443
     [ "$s" = "ngx_quic" ] && obj=5MB.png
     [ "$s" = "lsquic" ] && host=http3check.net && prefix=test/
+    [ "$s" = "mvfst" ] && port=4433
 
-    h2=$({ time -p curl -k -s -o "$h2_out" --max-time 20 --connect-timeout 2 \
+    h2=$({ time -p curl -k -s -o "$h2_out" --max-time 20 --connect-timeout 3 \
                  "https://$host:$port/$prefix$obj$ext"; } 2>&1)
     h2=$(echo "$h2" | fmt | cut -d' ' -f2)
     h2_size=$(stat -q "$h2_out" | cut -d' ' -f8)
@@ -306,7 +307,7 @@ function analyze {
        $x && /RX.*Short kyph=1/ && exit 1;' "$log_strip"
     [ $? -eq 1 ] && echo U > "$ret_base.kyph"
     [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.kyph" ] && rm -f "$log"
-    rm -f "$log_strip"
+    # rm -f "$log_strip"
 
     # analyze h3
     local log="$log_base.h3"
