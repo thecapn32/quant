@@ -59,11 +59,11 @@ QUANT_SRC+=\
 CSRC+=$(WARP_SRC) $(PICOTLS_SRC) $(TIMEOUT_SRC) $(QUANT_SRC)
 
 EXTRA_CFLAGS+= \
-	-foptimize-strlen -ffast-math \
+	-fstack-usage -foptimize-strlen -ffast-math \
 	-Wno-error -Wno-parentheses -Wno-undef -Wno-unknown-pragmas \
 	-Wno-unused-value -Wno-address \
 	-DTIMEOUT_DISABLE_INTERVALS -DWHEEL_NUM=6 -DWHEEL_BIT=5 \
-	-DDLEVEL=DBG -DNDEBUG \
+	-DDLEVEL=DBG \
 	-DNO_FUZZER_CORPUS_COLLECTION -DNO_TLS_TICKETS -DNO_TLS_LOG -DNO_QLOG \
 	-DNO_ERR_REASONS -DNO_OOO_0RTT -DNO_OOO_DATA -DNO_MIGRATION \
 	-DNO_SRT_MATCHING -DNO_QINFO -DNO_SERVER \
