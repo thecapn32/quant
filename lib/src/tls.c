@@ -1155,9 +1155,9 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
     ptls_buffer_t tls_io;
     ptls_buffer_init(&tls_io, ped(s->c->w)->scratch, ped(s->c->w)->scratch_len);
 
-    const int ret =
-        ptls_handle_message(c->tls.t, &tls_io, epoch_off, ep_in,
-                            iv ? iv->buf : 0, in_len, &c->tls.tls_hshk_prop);
+    const int ret = ptls_client_handle_message(c->tls.t, &tls_io, epoch_off,
+                                               ep_in, iv ? iv->buf : 0, in_len,
+                                               &c->tls.tls_hshk_prop);
 #ifdef DEBUG_PROT
     warn(DBG,
          "epoch %u, in %lu (off %" PRIu
