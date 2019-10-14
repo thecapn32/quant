@@ -239,11 +239,13 @@ static int setup_cipher(ptls_cipher_context_t ** hp_ctx,
     }
 
 #ifdef DEBUG_PROT
-    char secret_str[hex_str_len(PTLS_MAX_DIGEST_SIZE)];
-    char hpkey_str[hex_str_len(PTLS_MAX_DIGEST_SIZE)];
-    hex2str(secret, hash->digest_size, secret_str, sizeof(secret_str));
-    hex2str(hpkey, aead->ctr_cipher->key_size, hpkey_str, sizeof(hpkey_str));
-    warn(NTE, "aead-secret: %s, hp-key: %s", secret_str, hpkey_str);
+    warn(NTE, "aead-secret: %s, hp-key: %s",
+         hex2str(secret, hash->digest_size,
+                 (char[hex_str_len(PTLS_MAX_DIGEST_SIZE)]){""},
+                 hex_str_len(PTLS_MAX_DIGEST_SIZE)),
+         hex2str(hpkey, aead->ctr_cipher->key_size,
+                 (char[hex_str_len(PTLS_MAX_DIGEST_SIZE)]){""},
+                 hex_str_len(PTLS_MAX_DIGEST_SIZE)));
 #endif
 
     ret = 0;
@@ -440,11 +442,12 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             uint16_t unknown_len;
             if (dec2(&unknown_len, &pos, end) == false)
                 return 1;
-            char hex[hex_str_len(sizeof(c->tls.tp_buf))];
-            hex2str(pos, unknown_len, hex, sizeof(hex));
             warn(WRN, "\t" BLD "%s tp" NRM " (0x%04x w/len %u) = %s",
                  (tp & 0xff00) == 0xff00 ? YEL "private" : RED "unknown", tp,
-                 unknown_len, hex);
+                 unknown_len,
+                 hex2str(pos, unknown_len,
+                         (char[hex_str_len(sizeof(c->tls.tp_buf))]){""},
+                         hex_str_len(sizeof(c->tls.tp_buf))));
             pos += unknown_len;
             continue;
         }
@@ -843,12 +846,13 @@ void init_tp(struct q_conn * const c)
             if (tp_order[j] == grease_type) {
                 encb_tp(&pos, end, grease_type, &grease[2], grease_len);
 #ifdef DEBUG_EXTRA
-                char grease_str[hex_str_len(sizeof(c->tls.tp_buf))];
-                hex2str(&grease[2], grease_len, grease_str, sizeof(grease_str));
                 warn(WRN, "\t" BLD "%s tp" NRM " (0x%04x w/len %u) = %s",
                      (grease_type & 0xff00) == 0xff00 ? YEL "private"
                                                       : RED "unknown",
-                     grease_type, grease_len, grease_str);
+                     grease_type, grease_len,
+                     hex2str(&grease[2], grease_len,
+                             (char[hex_str_len(sizeof(c->tls.tp_buf))]){""},
+                             hex_str_len(sizeof(c->tls.tp_buf))));
 #endif
             } else
                 die("unknown tp 0x%04x", tp_order[j]);
@@ -1303,10 +1307,10 @@ log_event_cb(ptls_log_event_t * const self __attribute__((unused)),
              const char * fmt,
              ...)
 {
-    char output[hex_str_len(PTLS_HELLO_RANDOM_SIZE)];
-    hex2str(ptls_get_client_random(tls).base, PTLS_HELLO_RANDOM_SIZE, output,
-            sizeof(output));
-    fprintf(tls_log_file, "%s %s ", type, output);
+    fprintf(tls_log_file, "%s %s ", type,
+            hex2str(ptls_get_client_random(tls).base, PTLS_HELLO_RANDOM_SIZE,
+                    (char[hex_str_len(PTLS_HELLO_RANDOM_SIZE)]){""},
+                    hex_str_len(PTLS_HELLO_RANDOM_SIZE)));
 
     va_list args;
     va_start(args, fmt);
@@ -1361,12 +1365,12 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
             {0, 0, "SERVER_HANDSHAKE_TRAFFIC_SECRET",
              "SERVER_TRAFFIC_SECRET_0"}};
 
-        char secret_str[hex_str_len(PTLS_MAX_DIGEST_SIZE)];
-        hex2str(secret, cipher->hash->digest_size, secret_str,
-                sizeof(secret_str));
         ped(c->w)->tls_ctx.log_event->cb(
             ped(c->w)->tls_ctx.log_event, tls,
-            log_labels[ptls_is_server(tls) == is_enc][epoch], "%s", secret_str);
+            log_labels[ptls_is_server(tls) == is_enc][epoch], "%s",
+            hex2str(secret, cipher->hash->digest_size,
+                    (char[hex_str_len(PTLS_MAX_DIGEST_SIZE)]){""},
+                    hex_str_len(PTLS_MAX_DIGEST_SIZE)));
     }
 
     return setup_cipher(&ctx->header_protection, &ctx->aead, cipher->aead,

@@ -88,10 +88,11 @@ static bool qlog_common(const struct cid * const gid)
 {
     if (qlog_ref_t == 0)
         return false;
-    char cid_str[hex_str_len(CID_LEN_MAX)];
-    hex2str(gid->id, gid->len, cid_str, sizeof(cid_str));
+
     fprintf(qlog, "%s[%" PRIu64 ",\"%s\"", likely(prev_event) ? "," : "",
-            to_usec(loop_now() - qlog_ref_t), cid_str);
+            to_usec(loop_now() - qlog_ref_t),
+            hex2str(gid->id, gid->len, (char[hex_str_len(CID_LEN_MAX)]){""},
+                    hex_str_len(CID_LEN_MAX)));
 
     return true;
 }

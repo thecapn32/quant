@@ -299,8 +299,8 @@ extern struct q_conn_sl c_ready;
     do {                                                                       \
         warn(DBG, "%s%s conn %s state %s -> " RED "%s" NRM,                    \
              (c)->state == (s) ? RED BLD "useless transition: " NRM : "",      \
-             conn_type(c), cid_str((c)->scid), conn_state_str[(c)->state],     \
-             conn_state_str[(s)]);                                             \
+             conn_type(c), (c)->scid ? cid_str((c)->scid) : "?",               \
+             conn_state_str[(c)->state], conn_state_str[(s)]);                 \
         (c)->state = (s);                                                      \
     } while (0)
 #else
