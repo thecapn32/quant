@@ -38,4 +38,4 @@ set(PTLS_OPENSSL_LIBRARY
   ${CMAKE_CURRENT_BINARY_DIR}/picotls/libpicotls-openssl.a
 )
 
-# add_subdirectory(picoquic)
+add_subdirectory(picoquic)

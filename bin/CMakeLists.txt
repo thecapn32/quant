@@ -33,8 +33,8 @@ foreach(TARGET ${TARGETS})
     target_link_libraries(${TARGET}
       lib${PROJECT_NAME}-warp
       ${HTTP_PARSER_LIB}
-      # picohttp-core
-      # picoquic-core
+      picohttp-core
+      picoquic-core
       picotls-minicrypto
       picotls-openssl
     )
@@ -43,8 +43,8 @@ foreach(TARGET ${TARGETS})
     target_link_libraries(${TARGET}
       lib${PROJECT_NAME}
       ${HTTP_PARSER_LIB}
-      # picohttp-core
-      # picoquic-core
+      picohttp-core
+      picoquic-core
       picotls-minicrypto
       picotls-openssl
     )
