@@ -569,7 +569,7 @@ void tx(struct q_conn * const c)
     if (unlikely(c->state == conn_drng))
         return;
 
-    if (unlikely(c->state == conn_qlse)) {
+    if (unlikely(c->state == conn_qlse && kh_size(&c->strms_by_id) == 0)) {
         enter_closing(c);
         tx_ack(c, epoch_in(c), false);
         goto done;
