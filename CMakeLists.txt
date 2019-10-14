@@ -55,7 +55,7 @@ set(CMAKE_C_STANDARD 11)
 # Set general compile flags, if they are supported
 include(CheckCCompilerFlag)
 include(CheckCXXCompilerFlag)
-foreach(FLAG -pipe -Wextra -Wpedantic -Weverything -Werror
+foreach(FLAG -pipe -Wextra -Wpedantic -Weverything -Werror -fstack-usage
         -fcolor-diagnostics -fdiagnostics-color=always
         -Wno-disabled-macro-expansion # clang on travis needs this
         -Wno-missing-field-initializers # and this (clang-5)

@@ -76,8 +76,8 @@ void log_pkt(const char * const dir,
     const struct pkt_meta * const m = &meta(v);
     const char * const pts = pkt_type_str(m->hdr.flags, &m->hdr.vers);
 
-    const char * const dcid_str = cid_str(&m->hdr.dcid);
-    const char * const scid_str = cid_str(&m->hdr.scid);
+    mk_cid_str(NTE, &m->hdr.dcid, dcid_str);
+    mk_cid_str(NTE, &m->hdr.scid, scid_str);
     const char * const odcid_str = odcid ? cid_str(odcid) : "";
     const char * const tok_str = tok_len ? tok_str(tok, tok_len) : "";
 

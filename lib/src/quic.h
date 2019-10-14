@@ -55,6 +55,7 @@
 #define SCID_LEN_SERV 8 ///< Default server source CID length.
 #define SRT_LEN 16      ///< Stateless reset token length allowed by spec.
 #define PATH_CHLG_LEN 8 ///< Length of a path challenge.
+#define MAX_TOK_LEN 160
 
 // Maximum reordering in packets before packet threshold loss detection
 // considers a packet lost. The RECOMMENDED value is 3.
@@ -291,21 +292,23 @@ cid2str(const struct cid * const cid, char * const dst, const size_t len_dst);
 
 #define hex_str_len(x) ((x)*2 + 1)
 
+#define CID_STR_LEN hex_str_len(2 * sizeof(uint_t) + CID_LEN_MAX + 1)
 
-#define cid_str(cid)                                                           \
-    cid2str((cid),                                                             \
-            (char[hex_str_len(2 * sizeof((cid)->seq) + CID_LEN_MAX)]){""},     \
-            hex_str_len(2 * sizeof((cid)->seq) + CID_LEN_MAX))
+extern char __cid_str[CID_STR_LEN];
+extern char __srt_str[hex_str_len(SRT_LEN)];
+extern char __tok_str[hex_str_len(MAX_TOK_LEN)];
 
+#define cid_str(cid) cid2str((cid), __cid_str, sizeof(__cid_str))
 
-#define srt_str(srt)                                                           \
-    hex2str((srt), sizeof(srt), (char[hex_str_len(SRT_LEN)]){""},              \
-            hex_str_len(SRT_LEN))
+#define mk_cid_str(lvl, cid, str)                                              \
+    char str[DLEVEL >= (lvl) ? CID_STR_LEN : 1] = "";                          \
+    if (DLEVEL >= (lvl) && likely(cid))                                        \
+        cid2str((cid), str, sizeof(str));
 
+#define srt_str(srt) hex2str((srt), sizeof(srt), __srt_str, sizeof(__srt_str))
 
 #define tok_str(tok, tok_len)                                                  \
-    hex2str((tok), (tok_len), (char[hex_str_len(MAX_TOK_LEN)]){""},            \
-            hex_str_len(MAX_TOK_LEN))
+    hex2str((tok), (tok_len), __tok_str, sizeof(__tok_str))
 
 
 #define has_strm_data(p) (p)->strm_frm_pos

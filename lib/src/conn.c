@@ -227,8 +227,10 @@ void use_next_dcid(struct q_conn * const c)
         splay_next(cids_by_seq, &c->dcids_by_seq, c->dcid);
     ensure(dcid, "can't switch from dcid %" PRIu, c->dcid->seq);
 
-    warn(NTE, "migration to dcid %s for %s conn (was %s)", cid_str(dcid),
-         conn_type(c), cid_str(dcid));
+    mk_cid_str(NTE, dcid, dcid_str_new);
+    mk_cid_str(NTE, c->dcid, dcid_str_prev);
+    warn(NTE, "migration to dcid %s for %s conn (was %s)", dcid_str_new,
+         conn_type(c), dcid_str_prev);
 
     if (c->spin_enabled)
         c->spin = 0; // need to reset spin value
@@ -682,8 +684,10 @@ static void __attribute__((nonnull)) update_act_scid(struct q_conn * const c)
     rand_bytes(nscid.srt, sizeof(nscid.srt));
 #endif
     cid_cpy(&c->odcid, c->scid);
-    warn(NTE, "hshk switch to scid %s for %s %s conn (was %s)", cid_str(&nscid),
-         conn_state_str[c->state], conn_type(c), cid_str(c->scid));
+    mk_cid_str(NTE, &nscid, scid_str_new);
+    mk_cid_str(NTE, c->scid, scid_str_prev);
+    warn(NTE, "hshk switch to scid %s for %s %s conn (was %s)", scid_str_new,
+         conn_state_str[c->state], conn_type(c), scid_str_prev);
     conns_by_id_del(c->scid);
 #ifndef NO_MIGRATION
     cids_by_id_del(&c->scids_by_id, c->scid);
@@ -731,8 +735,10 @@ void add_dcid(struct q_conn * const c, const struct cid * const id)
         if (c->dcid == 0)
             c->dcid = dcid;
     } else {
-        warn(NTE, "hshk switch to dcid %s for %s conn (was %s)", cid_str(id),
-             conn_type(c), cid_str(c->dcid));
+        mk_cid_str(NTE, id, dcid_str_new);
+        mk_cid_str(NTE, c->dcid, dcid_str_prev);
+        warn(NTE, "hshk switch to dcid %s for %s conn (was %s)", dcid_str_new,
+             conn_type(c), dcid_str_prev);
 #ifndef NO_MIGRATION
         ensure(splay_remove(cids_by_seq, &c->dcids_by_seq, dcid), "removed");
 #endif
@@ -1024,10 +1030,11 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
             const bool rxed_dcid_ok =
                 m->hdr.dcid.len == 0 || !cid_cmp(&m->hdr.dcid, c->scid);
             if (rx_scid_ok == false || rxed_dcid_ok == false) {
+                mk_cid_str(INF, rx_scid_ok ? &m->hdr.dcid : &m->hdr.scid,
+                           cid_str_rx);
+                mk_cid_str(INF, rx_scid_ok ? c->scid : c->dcid, cid_str_tx);
                 warn(INF, "vneg %ccid mismatch: rx %s != %s",
-                     rx_scid_ok ? 'd' : 's',
-                     cid_str(rx_scid_ok ? &m->hdr.dcid : &m->hdr.scid),
-                     cid_str(rx_scid_ok ? c->scid : c->dcid));
+                     rx_scid_ok ? 'd' : 's', cid_str_rx, cid_str_tx);
                 enter_closing(c);
                 goto done;
             }
@@ -1218,17 +1225,19 @@ rx_pkts(struct w_iov_sq * const x,
             c = c_ipnp;
         if (likely(is_lh(m->hdr.flags)) && !is_clnt) {
             if (c && m->hdr.type == LH_0RTT) {
+                mk_cid_str(INF, &m->hdr.dcid, dcid_str_prev);
+                mk_cid_str(INF, c->scid, dcid_str_cur);
                 if (c->did_0rtt)
                     warn(INF,
                          "got 0-RTT pkt for orig cid %s, new is %s, "
                          "accepting",
-                         cid_str(&m->hdr.dcid), cid_str(c->scid));
+                         dcid_str_prev, dcid_str_cur);
                 else {
                     log_pkt("RX", v, &v->saddr, &odcid, tok, tok_len);
                     warn(WRN,
                          "got 0-RTT pkt for orig cid %s, new is %s, "
                          "but rejected 0-RTT, ignoring",
-                         cid_str(&m->hdr.dcid), cid_str(c->scid));
+                         dcid_str_prev, dcid_str_cur);
                     goto drop;
                 }
             } else if (m->hdr.type == LH_INIT && c == 0) {
@@ -1266,8 +1275,10 @@ rx_pkts(struct w_iov_sq * const x,
                 if (m->hdr.vers && m->hdr.type == LH_RTRY &&
                     cid_cmp(&odcid, c->dcid) != 0) {
                     log_pkt("RX", v, &v->saddr, &odcid, tok, tok_len);
+                    mk_cid_str(ERR, &odcid, odcid_str);
+                    mk_cid_str(ERR, c->dcid, dcid_str);
                     warn(ERR, "retry dcid mismatch %s != %s, ignoring pkt",
-                         cid_str(&odcid), cid_str(c->dcid));
+                         odcid_str, dcid_str);
                     goto drop;
                 }
                 if (c->state == conn_opng)
@@ -1291,8 +1302,10 @@ rx_pkts(struct w_iov_sq * const x,
                 if (scid->seq <= c->scid->seq)
                     warn(DBG, "pkt has prev scid %s, accepting", cid_str(scid));
                 else {
+                    mk_cid_str(NTE, scid, scid_str);
+                    mk_cid_str(NTE, c->scid, scid_str_prev);
                     warn(NTE, "migration to scid %s for %s conn (was %s)",
-                         cid_str(scid), conn_type(c), cid_str(c->scid));
+                         scid_str, conn_type(c), scid_str_prev);
                     c->scid = scid;
                 }
             }
@@ -1361,10 +1374,12 @@ rx_pkts(struct w_iov_sq * const x,
             if (unlikely(outer_dcid.len) &&
                 cid_cmp(&outer_dcid, &m->hdr.dcid) != 0) {
                 log_pkt("RX", v, &v->saddr, &odcid, tok, tok_len);
+                mk_cid_str(ERR, &outer_dcid, outer_dcid_str);
+                mk_cid_str(ERR, &m->hdr.dcid, dcid_str);
                 warn(ERR,
                      "outer dcid %s != inner dcid %s during decoalescing, "
                      "ignoring %s pkt",
-                     cid_str(&outer_dcid), cid_str(&m->hdr.dcid),
+                     outer_dcid_str, dcid_str,
                      pkt_type_str(m->hdr.flags, &m->hdr.vers));
                 goto drop;
             }
