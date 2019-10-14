@@ -915,7 +915,7 @@ dec_path_response_frame(const uint8_t ** pos,
         return true;
     }
 
-    if (unlikely(c->path_resp_in != c->path_chlg_out)) {
+    if (unlikely(memcmp(c->path_resp_in, c->path_chlg_out, PATH_CHLG_LEN))) {
         warn(NTE, "PATH_RESPONSE %s != %s, ignoring", pcr_str(c->path_resp_in),
              pcr_str(c->path_chlg_out));
         return true;
@@ -1706,7 +1706,7 @@ void enc_path_challenge_frame(uint8_t ** pos,
     encb(pos, end, c->path_chlg_out, sizeof(c->path_chlg_out));
 
     warn(INF, FRAM_OUT "PATH_CHALLENGE" NRM " data=%s",
-         pcr_str(c->path_resp_out));
+         pcr_str(c->path_chlg_out));
 
     track_frame(m, FRM_PCL);
 }
