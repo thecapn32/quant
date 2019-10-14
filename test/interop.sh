@@ -20,7 +20,8 @@ if [ "$ROLE" == "client" ]; then
     # Wait for the simulator to start up.
     /wait-for-it.sh sim:57832 -s -t 30
     cd /downloads || exit
-    client -i eth0 -w $REQUESTS
+    client -i eth0 -w -q /logs/$ROLE.qlog -l /logs/$ROLE.log $REQUESTS
 elif [ "$ROLE" == "server" ]; then
-    server -i eth0 -d /www -p 443 -t 0 -c /tls/dummy.crt -k /tls/dummy.key
+    server -i eth0 -d /www -p 443 -t 0 -c /tls/dummy.crt -k /tls/dummy.key \
+        -q /logs/$ROLE.qlog -l /logs/$ROLE.log
 fi
