@@ -1708,6 +1708,8 @@ void enc_path_challenge_frame(uint8_t ** pos,
     warn(INF, FRAM_OUT "PATH_CHALLENGE" NRM " data=%s",
          pcr_str(c->path_chlg_out));
 
+    // FIXME: suspend TX until path is verified
+
     track_frame(m, FRM_PCL);
 }
 
