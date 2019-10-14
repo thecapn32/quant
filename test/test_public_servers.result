@@ -2,7 +2,7 @@
 aioquic   *         V    H    D    C    R    Z    S    M    B    U    P         3
 apple     *         V    H    D    C                   M              P
 ats       *         V    H    D    C    R    Z    S    M    B                   3
-f5        *         V                                                           3
+f5        *         V    H    D    C    R         S              U         E    3
 google    *         V    H    D    C    R                                       3
 lsquic    *         V    H    D    C    R    Z    S    M    B    U    P    E    3
 mvfst     *    X    V    H    D    C    R    Z                                  3
@@ -16,4 +16,4 @@ quiche    *         V    H    D    C    R         S                             
 quicker
 quicly    *         V    H    D    C    R    Z    S
 quinn     *         V    H    D    C    R         S    M    B    U    P    E
-winquic
+winquic   *    X    V    H    D    C    R    Z    S              U    P         3
