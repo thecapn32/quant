@@ -1053,8 +1053,13 @@ void init_tls(struct q_conn * const c,
     if (c->tls.t)
         // we are re-initializing during version negotiation
         free_tls(c, true);
-    ensure((c->tls.t = ptls_new(&ped(c->w)->tls_ctx, !is_clnt(c))) != 0,
-           "ptls_new");
+    if (is_clnt(c))
+        c->tls.t = ptls_client_new(&ped(c->w)->tls_ctx);
+#ifndef NO_SERVER
+    else
+        c->tls.t = ptls_server_new(&ped(c->w)->tls_ctx);
+#endif
+    ensure(c->tls.t, "ptls_new");
     *ptls_get_data_ptr(c->tls.t) = c;
     if (is_clnt(c))
         ensure(ptls_set_server_name(c->tls.t, sni, 0) == 0,
@@ -1157,8 +1162,14 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
     ptls_buffer_init(&tls_io, ped(s->c->w)->scratch, ped(s->c->w)->scratch_len);
 
     const int ret =
-        ptls_handle_message(c->tls.t, &tls_io, epoch_off, ep_in,
-                            iv ? iv->buf : 0, in_len, &c->tls.tls_hshk_prop);
+#ifndef NO_SERVER
+        ptls_handle_message
+#else
+        ptls_client_handle_message
+#endif
+        (c->tls.t, &tls_io, epoch_off, ep_in, iv ? iv->buf : 0, in_len,
+         &c->tls.tls_hshk_prop);
+
 #ifdef DEBUG_PROT
     warn(DBG,
          "epoch %u, in %lu (off %" PRIu

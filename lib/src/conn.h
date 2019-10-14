@@ -288,7 +288,7 @@ struct q_conn {
 #ifndef NO_SERVER
 #define is_clnt(c) (c)->is_clnt
 #else
-#define is_clnt(c) 0
+#define is_clnt(c) 1
 #endif
 
 

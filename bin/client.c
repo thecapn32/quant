@@ -48,7 +48,7 @@
 #define klib_unused
 
 #include <http_parser.h>
-#include <picohttp/h3zero.h>
+// #include <picohttp/h3zero.h>
 #include <quant/quant.h>
 
 
@@ -227,24 +227,24 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
 
     sq_init(&se->req);
     if (do_h3) {
-        q_alloc(w, &se->req, peer->ai_family, 1024);
-        struct w_iov * const v = sq_first(&se->req);
-        const uint16_t len =
-            (uint16_t)(h3zero_create_request_header_frame(
-                           &v->buf[3], v->buf + v->len - 3, (uint8_t *)path,
-                           strlen(path), dest) -
-                       &v->buf[3]);
+        // q_alloc(w, &se->req, peer->ai_family, 1024);
+        // struct w_iov * const v = sq_first(&se->req);
+        // const uint16_t len =
+        //     (uint16_t)(h3zero_create_request_header_frame(
+        //                    &v->buf[3], v->buf + v->len - 3, (uint8_t *)path,
+        //                    strlen(path), dest) -
+        //                &v->buf[3]);
 
-        v->buf[0] = h3zero_frame_header;
-        if (len < 64) {
-            v->buf[1] = (uint8_t)len;
-            memmove(&v->buf[2], &v->buf[3], len);
-            v->len = 2 + len;
-        } else {
-            v->buf[1] = (uint8_t)((len >> 8) | 0x40);
-            v->buf[2] = (uint8_t)(len & 0xff);
-            v->len = 3 + len;
-        }
+        // v->buf[0] = h3zero_frame_header;
+        // if (len < 64) {
+        //     v->buf[1] = (uint8_t)len;
+        //     memmove(&v->buf[2], &v->buf[3], len);
+        //     v->len = 2 + len;
+        // } else {
+        //     v->buf[1] = (uint8_t)((len >> 8) | 0x40);
+        //     v->buf[2] = (uint8_t)(len & 0xff);
+        //     v->len = 3 + len;
+        // }
 
     } else {
         // assemble an HTTP/0.9 request
@@ -278,15 +278,15 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
         }
 
         if (do_h3) {
-            // we need to open a uni stream for an empty H/3 SETTINGS frame
-            struct q_stream * const ss = q_rsv_stream(c, false);
-            if (ss == 0)
-                return 0;
-            static const uint8_t h3_empty_settings[] = {
-                0x00, h3zero_frame_settings, 0x00};
-            // XXX lsquic doesn't like a FIN on this stream
-            q_write_str(w, ss, (const char *)h3_empty_settings,
-                        sizeof(h3_empty_settings), false);
+            // // we need to open a uni stream for an empty H/3 SETTINGS frame
+            // struct q_stream * const ss = q_rsv_stream(c, false);
+            // if (ss == 0)
+            //     return 0;
+            // static const uint8_t h3_empty_settings[] = {
+            //     0x00, h3zero_frame_settings, 0x00};
+            // // XXX lsquic doesn't like a FIN on this stream
+            // q_write_str(w, ss, (const char *)h3_empty_settings,
+            //             sizeof(h3_empty_settings), false);
         }
 
         cce = calloc(1, sizeof(*cce));
