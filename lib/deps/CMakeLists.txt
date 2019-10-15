@@ -24,6 +24,13 @@ list(APPEND DEFS NDEBUG)
 set_directory_properties(PROPERTIES COMPILE_DEFINITIONS "${DEFS}")
 
 add_subdirectory(warpcore)
+
+if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
+  set(CC_WARNING_FLAGS "-Wno-unused-variable")
+elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+  set(CC_WARNING_FLAGS "-Wno-unused-but-set-variable -Wno-unused-variable")
+endif()
+
 add_subdirectory(picotls)
 
 set(PTLS_CORE_LIBRARY
