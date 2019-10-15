@@ -15,13 +15,13 @@ set(CMAKE_POLICY_DEFAULT_CMP0042 NEW)
 set(CMAKE_POLICY_DEFAULT_CMP0054 NEW)
 
 get_directory_property(DEFS COMPILE_DEFINITIONS)
-list(APPEND DEFS NDEBUG)
-set_directory_properties(PROPERTIES COMPILE_DEFINITIONS "${DEFS}")
-
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  # list(APPEND DEFS DSTACK)
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
   set(IPO False)
 endif()
+list(APPEND DEFS NDEBUG)
+set_directory_properties(PROPERTIES COMPILE_DEFINITIONS "${DEFS}")
 
 add_subdirectory(warpcore)
 add_subdirectory(picotls)
