@@ -358,9 +358,9 @@ on_ch(ptls_on_client_hello_t * const self __attribute__((unused)),
     size_t j;
     for (j = 0; j < alpn_cnt - 1; j++)
         for (size_t i = 0; i < params->negotiated_protocols.count; i++)
-            if (memcmp(params->negotiated_protocols.list[i].base, alpn[j].base,
-                       MIN(params->negotiated_protocols.list[i].len,
-                           alpn[j].len)) == 0)
+            if (params->negotiated_protocols.list[i].len == alpn[j].len &&
+                memcmp(params->negotiated_protocols.list[i].base, alpn[j].base,
+                       alpn[j].len) == 0)
                 goto done;
 
     if (j == alpn_cnt - 1) {
