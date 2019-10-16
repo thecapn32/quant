@@ -28,11 +28,11 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include <inttypes.h>
+// #ifdef DEBUG_EXTRA
+// #include <inttypes.h>
+// #endif
 
-#ifdef DEBUG_EXTRA
 #include <timeout.h>
-#endif
 
 #include "conn.h"
 #include "loop.h"
@@ -88,9 +88,9 @@ void __attribute__((nonnull(1))) loop_run(struct w_engine * const w,
         if (break_loop)
             break;
 
-#ifdef DEBUG_EXTRA
-        warn(ERR, "w_nic_rx %"PRIu64, timeouts_timeout(ped(w)->wheel));
-#endif
+// #ifdef DEBUG_EXTRA
+//         warn(ERR, "w_nic_rx %" PRIu64, timeouts_timeout(ped(w)->wheel));
+// #endif
         bool do_rx = w_nic_rx(w, (int64_t)timeouts_timeout(ped(w)->wheel));
         if (do_rx == false)
             continue;
