@@ -367,7 +367,8 @@ write_object(struct stream_entry * const se)
 
     const int fd =
         open(*basename(se->url) == 0 ? "index.html" : basename(se->url),
-             O_CREAT | O_WRONLY | O_CLOEXEC, S_IRUSR | S_IWUSR | S_IRGRP);
+             O_CREAT | O_WRONLY | O_CLOEXEC,
+             S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
     ensure(fd != -1, "cannot open %s", basename(se->url));
 
     struct iovec vec[IOV_MAX];
