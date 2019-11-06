@@ -1266,7 +1266,8 @@ rx_pkts(struct w_iov_sq * const x,
                 c = new_conn(w_engine(ws), UINT16_MAX, &m->hdr.scid,
                              &m->hdr.dcid, &v->saddr, 0, ws->ws_lport,
                              &(struct q_conn_conf){.version = m->hdr.vers});
-                init_tls(c, 0, 0);
+                if (likely(c))
+                    init_tls(c, 0, 0);
             }
         }
 

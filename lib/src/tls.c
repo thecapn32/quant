@@ -31,10 +31,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/param.h>
 #include <sys/socket.h>
 
 #ifndef NO_TLS_TICKETS
+#include <sys/param.h>
 #include <unistd.h>
 #endif
 
@@ -1140,7 +1140,7 @@ void free_tls(struct q_conn * const c, const bool keep_alpn)
 
 void init_prot(struct q_conn * const c)
 {
-    struct cid * const scid = c->scid;
+    struct cid * const scid = c->scid; // NOLINT
     struct cid * const dcid = c->dcid;
     const ptls_iovec_t cid = {
         .base = (uint8_t *)(is_clnt(c) ? &dcid->id : &scid->id),

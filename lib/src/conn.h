@@ -436,7 +436,11 @@ SPLAY_PROTOTYPE(ooo_0rtt_by_cid, ooo_0rtt, node, ooo_0rtt_by_cid_cmp)
 #endif
 
 static inline __attribute__((nonnull)) const char *
-conn_type(const struct q_conn * const c)
+conn_type(const struct q_conn * const c
+#ifdef NO_SERVER
+          __attribute__((unused))
+#endif
+)
 {
     return is_clnt(c) ? "clnt" : "serv";
 }
