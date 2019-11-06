@@ -1547,6 +1547,7 @@ void enc_close_frame(uint8_t ** pos,
 #endif
 
     encv(pos, end, err_reason_len);
+    // cppcheck-suppress knownConditionTrueFalse
     if (err_reason_len)
         encb(pos, end, (const uint8_t *)err_reason, err_reason_len);
 

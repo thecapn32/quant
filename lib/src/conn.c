@@ -37,6 +37,10 @@
 #include <stdarg.h>
 #endif
 
+#ifndef NO_MIGRATION
+#include <sys/socket.h>
+#endif
+
 #if !defined(PARTICLE) && !defined(RIOT_VERSION)
 #include <netinet/ip.h>
 #endif
@@ -318,6 +322,7 @@ static void __attribute__((nonnull)) mk_rand_cid(struct cid * const cid)
     rand_bytes(cid->id, sizeof(cid->id));
 #ifndef NO_SRT_MATCHING
     rand_bytes(cid->srt, sizeof(cid->srt));
+    cid->has_srt = true;
 #endif
 }
 
@@ -1162,9 +1167,8 @@ void
 #else
 static void __attribute__((nonnull))
 #endif
-rx_pkts(struct w_iov_sq * const x,
-        struct q_conn_sl * const crx,
-        struct w_sock * const ws)
+    rx_pkts(struct w_iov_sq * const x, struct q_conn_sl * const crx,
+            struct w_sock * const ws)
 {
     struct cid outer_dcid = {0};
     while (!sq_empty(x)) {
@@ -1562,19 +1566,16 @@ void rx(struct w_sock * const ws)
 
 void
 #ifndef NO_ERR_REASONS
-err_close
+    err_close
 #else
-err_close_noreason
+    err_close_noreason
 #endif
-(struct q_conn * const c,
-               const uint_t code,
-               const uint8_t frm
+        (struct q_conn * const c, const uint_t code, const uint8_t frm
 #ifndef NO_ERR_REASONS
-               ,
-               const char * const fmt,
-               ...
+         ,
+         const char * const fmt, ...
 #endif
-)
+        )
 {
 #ifndef FUZZING
     if (unlikely(c->err_code)) {
@@ -1848,6 +1849,37 @@ struct q_conn * new_conn(struct w_engine * const w,
         c->tp_in.max_strms_bidi * c->tp_in.max_strm_data_bidi_local;
     c->tp_in.act_cid_lim =
         c->tp_in.disable_active_migration ? 0 : (is_clnt(c) ? 4 : 2);
+
+#ifndef NO_MIGRATION
+    if (!is_clnt(c) && peer && w->have_ip4 && w->have_ip6) {
+        // populate tp_in.pref_addr
+        const uint16_t other_af_idx =
+            w->ifaddr[idx].addr.af == AF_INET ? 0 : w->addr4_pos;
+        struct q_conn * const other_c = get_conn_by_ipnp(
+            &(struct w_sockaddr){.addr = w->ifaddr[other_af_idx].addr,
+                                 .port = port},
+            &(struct w_sockaddr){0});
+
+        if (other_c) {
+            warn(DBG, "other socket is %s:%u",
+                 w_ntop(&w->ifaddr[other_af_idx].addr, ip_tmp), bswap16(port));
+
+            memcpy(&c->tp_in.pref_addr.addr4,
+                   w->ifaddr[idx].addr.af == AF_INET ? &c->sock->ws_loc
+                                                     : &other_c->sock->ws_loc,
+                   sizeof(c->tp_in.pref_addr.addr4));
+            memcpy(&c->tp_in.pref_addr.addr6,
+                   w->ifaddr[idx].addr.af == AF_INET6 ? &c->sock->ws_loc
+                                                      : &other_c->sock->ws_loc,
+                   sizeof(c->tp_in.pref_addr.addr6));
+
+            mk_rand_cid(&c->tp_in.pref_addr.cid);
+            c->tp_in.pref_addr.cid.len = SCID_LEN_SERV;
+            c->max_cid_seq_out = c->tp_in.pref_addr.cid.seq = 1;
+            add_scid(c, &c->tp_in.pref_addr.cid);
+        }
+    }
+#endif
 
     // initialize packet number spaces
     for (pn_t t = pn_init; t <= pn_data; t++)

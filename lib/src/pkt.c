@@ -502,8 +502,12 @@ bool enc_pkt(struct q_stream * const s,
     }
 
     // gotta send something, anything
-    if (unlikely(pos - v->buf == m->hdr.hdr_len))
-        enc_ack_frame(&pos, v->buf, end, m, pn);
+    if (unlikely(pos - v->buf == m->hdr.hdr_len)) {
+        if (diet_empty(&pn->recv) == false)
+            enc_ack_frame(&pos, v->buf, end, m, pn);
+        else
+            enc_ping_frame(&pos, end, m);
+    }
 
 tx:;
     // make sure we have enough frame bytes for the header protection sample
