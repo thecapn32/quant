@@ -368,6 +368,29 @@ static void __attribute__((nonnull)) tx_vneg_resp(struct w_sock * const ws,
 }
 
 
+static void __attribute__((nonnull)) do_tx_txq(struct q_conn * const c,
+                                               struct w_iov_sq * const q,
+                                               struct w_sock * const ws)
+{
+#ifndef NO_QINFO
+    c->i.pkts_out += w_iov_sq_cnt(q);
+#endif
+
+    if (w_iov_sq_cnt(q) > 1 && unlikely(is_lh(*sq_first(q)->buf)))
+        coalesce(q);
+#ifndef FUZZING
+    // transmit encrypted/protected packets
+    w_tx(ws, q);
+    do
+        w_nic_tx(c->w);
+    while (w_tx_pending(q));
+#endif
+
+    // txq was allocated straight from warpcore, no metadata needs to be freed
+    w_free(q);
+}
+
+
 static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
 {
     // do it here instead of in on_pkt_sent()
@@ -376,25 +399,10 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
 
     c->needs_tx = false;
 
-    if (unlikely(sq_empty(&c->txq)))
-        return;
-
-#ifndef NO_QINFO
-    c->i.pkts_out += w_iov_sq_cnt(&c->txq);
-#endif
-
-    if (w_iov_sq_cnt(&c->txq) > 1 && unlikely(is_lh(*sq_first(&c->txq)->buf)))
-        coalesce(&c->txq);
-#ifndef FUZZING
-    // transmit encrypted/protected packets
-    w_tx(c->sock, &c->txq);
-    do
-        w_nic_tx(c->w);
-    while (w_tx_pending(&c->txq));
-#endif
-
-    // txq was allocated straight from warpcore, no metadata needs to be freed
-    w_free(&c->txq);
+    if (likely(sq_empty(&c->txq) == false))
+        do_tx_txq(c, &c->txq, c->sock);
+    if (likely(sq_empty(&c->migr_txq) == false))
+        do_tx_txq(c, &c->migr_txq, c->migr_sock);
 
     log_sent_pkts(c);
 }
@@ -613,7 +621,7 @@ void tx(struct q_conn * const c)
 
 done:;
     // make sure we sent enough packets when we have a TX limit
-    uint_t sent = w_iov_sq_cnt(&c->txq);
+    uint_t sent = w_iov_sq_cnt(&c->txq) + w_iov_sq_cnt(&c->migr_txq);
     while ((unlikely(c->tx_limit) && sent < c->tx_limit) ||
            (c->needs_tx && sent == 0)) {
         if (likely(tx_ack(c, epoch_in(c), c->tx_limit && sent < c->tx_limit)))
@@ -1417,7 +1425,9 @@ static void __attribute__((nonnull))
 
                 rand_bytes(&c->path_chlg_out, sizeof(c->path_chlg_out));
                 c->migr_peer = v->saddr;
+                c->migr_sock = ws;
                 c->needs_tx = c->tx_path_chlg = true;
+                c->tx_limit = 1;
             }
         } else
             // this is a vneg or rtry pkt, dec_pkt_hdr_remainder not called
@@ -1525,7 +1535,7 @@ void rx(struct w_sock * const ws)
 
         // is a TX needed for this connection?
         if (c->needs_tx) {
-            c->tx_limit = 0;
+            // c->tx_limit = 0;
             tx(c); // clears c->needs_tx if we TX'ed
         }
 
@@ -1810,6 +1820,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->vers = c->vers_initial = get_conf(c->w, conf, version);
     diet_init(&c->clsd_strms);
     sq_init(&c->txq);
+    sq_init(&c->migr_txq);
 
     // initialize idle timeout
     timeout_setcb(&c->idle_alarm, idle_alarm, c);

@@ -927,6 +927,8 @@ dec_path_response_frame(const uint8_t ** pos,
 
     c->tx_path_chlg = false;
     c->peer = c->migr_peer;
+    c->sock = c->migr_sock;
+    c->tx_limit = 0;
 
     return true;
 }

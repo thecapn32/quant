@@ -858,7 +858,7 @@ int q_conn_af(const struct q_conn * const c)
 
 
 #ifndef NO_MIGRATION
-void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
+void q_migrate(struct q_conn * const c, const bool switch_ip)
 {
     ensure(is_clnt(c), "can only rebind w_sock on client");
 
@@ -869,16 +869,35 @@ void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
             break;
     ensure(idx < c->w->addr_cnt, "could not find local address index");
 
-    struct w_sock * const new_sock = w_bind(c->w, idx, 0, &c->sockopt);
-    if (new_sock == 0)
-        // could not open new w_sock, can't rebind
-        return;
+    if (switch_ip) {
+        // try and find an IP address of another AF
+        uint16_t other_idx;
+        for (other_idx = 0; other_idx < c->w->addr_cnt; other_idx++)
+            if (c->w->ifaddr[idx].addr.af != c->w->ifaddr[other_idx].addr.af) {
+                idx = other_idx;
+                break;
+            }
+        // use corresponding preferred_address as peer
+        if (other_idx < c->w->addr_cnt)
+            c->peer = c->w->ifaddr[idx].addr.af == AF_INET
+                          ? c->tp_out.pref_addr.addr4
+                          : c->tp_out.pref_addr.addr6;
+    }
 
 #ifndef NDEBUG
     char old_ip[IP_STRLEN];
-    const uint16_t old_port = c->sock->ws_lport;
+    const uint16_t old_port = bswap16(c->sock->ws_lport);
     w_ntop(&c->sock->ws_laddr, old_ip);
 #endif
+
+    struct w_sock * const new_sock = w_bind(c->w, idx, 0, &c->sockopt);
+    if (new_sock == 0) {
+        // could not open new w_sock, can't rebind
+        warn(ERR, "%s for %s conn %s from %s:%u failed",
+             switch_ip ? "conn migration" : "simulated NAT rebinding",
+             conn_type(c), c->scid ? cid_str(c->scid) : "-", old_ip, old_port);
+        return;
+    }
 
     // close the current w_sock
     if (c->scid == 0)
@@ -900,14 +919,14 @@ void q_rebind_sock(struct q_conn * const c, const bool use_new_dcid)
     if (c->scid == 0)
         conns_by_ipnp_ins(c);
 
-    if (use_new_dcid)
-        // switch to new dcid
+    if (switch_ip)
+        // also switch to new dcid
         use_next_dcid(c);
 
-    warn(NTE, "simulated %s for %s conn %s from %s:%u to %s:%u",
-         use_new_dcid ? "conn migration" : "NAT rebinding", conn_type(c),
+    warn(WRN, "%s for %s conn %s from %s:%u to %s:%u",
+         switch_ip ? "conn migration" : "simulated NAT rebinding", conn_type(c),
          c->scid ? cid_str(c->scid) : "-", old_ip, old_port,
-         w_ntop(&c->sock->ws_laddr, ip_tmp), c->sock->ws_lport);
+         w_ntop(&c->sock->ws_laddr, ip_tmp), bswap16(c->sock->ws_lport));
 
     timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
 }

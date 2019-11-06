@@ -184,7 +184,7 @@ q_is_uni_stream(const struct q_stream * const s);
 
 #ifndef NO_MIGRATION
 extern void __attribute__((nonnull))
-q_rebind_sock(struct q_conn * const c, const bool use_new_dcid);
+q_migrate(struct q_conn * const c, const bool switch_ip);
 #endif
 
 #ifndef NO_QINFO

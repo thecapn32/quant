@@ -612,8 +612,8 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             const uint8_t * const e = pos + l;
 
             struct pref_addr * const pa = &c->tp_out.pref_addr;
-            struct w_sockaddr * const pa4 = &c->tp_out.pref_addr.addr4;
-            struct w_sockaddr * const pa6 = &c->tp_out.pref_addr.addr6;
+            struct w_sockaddr * const pa4 = &pa->addr4;
+            struct w_sockaddr * const pa6 = &pa->addr6;
 
             // use decb, since these need to be in network byte-order
             pa4->addr.af = AF_INET;
@@ -634,12 +634,12 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             decb(srt, &pos, e, SRT_LEN);
             add_dcid(c, &pa->cid);
 
-            warn(
-                INF,
-                "\tpreferred_address = IPv4=%s:%u IPv6=[%s]:%u cid=1:%s srt=%s",
-                w_ntop(&pa4->addr, ip_tmp), bswap16(pa4->port),
-                w_ntop(&pa6->addr, ip_tmp), bswap16(pa6->port),
-                cid_str(&pa->cid), srt_str(srt));
+            warn(INF,
+                 "\tpreferred_address = IPv4=%s:%u IPv6=[%s]:%u cid=%" PRIu
+                 ":%s srt=%s",
+                 w_ntop(&pa4->addr, ip_tmp), bswap16(pa4->port),
+                 w_ntop(&pa6->addr, ip_tmp), bswap16(pa6->port), pa->cid.seq,
+                 cid_str(&pa->cid), srt_str(srt));
             break;
 
         case TP_ACIL:
@@ -827,38 +827,35 @@ void init_tp(struct q_conn * const c)
 #endif
             }
             break;
-        case TP_PRFA:
-            if (!is_clnt(c) && c->tp_in.pref_addr.cid.seq) {
+        case TP_PRFA:;
+            struct pref_addr * const pa = &c->tp_in.pref_addr;
+            if (!is_clnt(c) && pa->cid.seq) {
+                struct w_sockaddr * const pa4 = &pa->addr4;
+                struct w_sockaddr * const pa6 = &pa->addr6;
 #ifndef NO_SRT_MATCHING
-                uint8_t * srt = c->tp_in.pref_addr.cid.srt;
+                uint8_t * srt = pa->cid.srt;
 #else
                 uint8_t srt[SRT_LEN];
 #endif
                 encb_tp(&pos, end, TP_PRFA, 0,
-                        4 + 2 + 16 + 2 + 1 + c->tp_in.pref_addr.cid.len +
-                            SRT_LEN);
+                        4 + 2 + 16 + 2 + 1 + pa->cid.len + SRT_LEN);
                 // use encb, since these are already in network byte-order
-                encb(&pos, end, (uint8_t *)&c->tp_in.pref_addr.addr4.addr.ip4,
-                     sizeof(c->tp_in.pref_addr.addr4.addr.ip4));
-                encb(&pos, end, (uint8_t *)&c->tp_in.pref_addr.addr4.port,
-                     sizeof(c->tp_in.pref_addr.addr4.port));
-                encb(&pos, end, c->tp_in.pref_addr.addr6.addr.ip6,
-                     sizeof(c->tp_in.pref_addr.addr6.addr.ip6));
-                encb(&pos, end, (uint8_t *)&c->tp_in.pref_addr.addr6.port,
-                     sizeof(c->tp_in.pref_addr.addr6.port));
-                enc1(&pos, end, c->tp_in.pref_addr.cid.len);
-                encb(&pos, end, (uint8_t *)c->tp_in.pref_addr.cid.id,
-                     c->tp_in.pref_addr.cid.len);
+                encb(&pos, end, (uint8_t *)&pa4->addr.ip4,
+                     sizeof(pa4->addr.ip4));
+                encb(&pos, end, (uint8_t *)&pa4->port, sizeof(pa4->port));
+                encb(&pos, end, pa6->addr.ip6, sizeof(pa6->addr.ip6));
+                encb(&pos, end, (uint8_t *)&pa6->port, sizeof(pa6->port));
+                enc1(&pos, end, pa->cid.len);
+                encb(&pos, end, (uint8_t *)pa->cid.id, pa->cid.len);
                 encb(&pos, end, srt, SRT_LEN);
 #ifdef DEBUG_EXTRA
                 warn(INF,
-                     "\tpreferred_address = IPv4=%s:%u IPv6=[%s]:%u cid=1:%s "
+                     "\tpreferred_address = IPv4=%s:%u IPv6=[%s]:%u cid=%" PRIu
+                     ":%s "
                      "srt=%s",
-                     w_ntop(&c->tp_in.pref_addr.addr4.addr, ip_tmp),
-                     bswap16(c->tp_in.pref_addr.addr4.port),
-                     w_ntop(&c->tp_in.pref_addr.addr6.addr, ip_tmp),
-                     bswap16(c->tp_in.pref_addr.addr6.port),
-                     cid_str(&c->tp_in.pref_addr.cid), srt_str(srt));
+                     w_ntop(&pa4->addr, ip_tmp), bswap16(pa4->port),
+                     w_ntop(&pa6->addr, ip_tmp), bswap16(pa6->port),
+                     pa->cid.seq, cid_str(&pa->cid), srt_str(srt));
 #endif
             }
             break;

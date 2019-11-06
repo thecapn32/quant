@@ -545,7 +545,10 @@ tx:;
     // require another loop to copy them over
     xv->flags = v->flags |= likely(c->sockopt.enable_ecn) ? IPTOS_ECN_ECT0 : 0;
 
-    sq_insert_tail(&c->txq, xv, next);
+    if (likely(c->tx_path_chlg == false))
+        sq_insert_tail(&c->txq, xv, next);
+    else
+        sq_insert_tail(&c->migr_txq, xv, next);
     m->udp_len = xv->len;
     c->out_data += m->udp_len;
 

@@ -77,7 +77,7 @@ struct conn_cache_entry {
     struct sockaddr_in dst;
     struct q_conn * c;
 #ifndef NO_MIGRATION
-    bool rebound;
+    bool migrated;
     uint8_t _unused[7];
 #endif
 };
@@ -98,7 +98,7 @@ static bool zlen_cids = false;
 static bool write_files = false;
 #ifndef NO_MIGRATION
 static bool rebind = false;
-static bool migrate = false;
+static bool switch_ip = false;
 #endif
 
 
@@ -303,7 +303,7 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
 
     if (opened_new == false
 #ifndef NO_MIGRATION
-        || (rebind && cce->rebound == false)
+        || (rebind && cce->migrated == false)
 #endif
     ) {
         se->s = q_rsv_stream(cce->c, true);
@@ -311,9 +311,9 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
             clock_gettime(CLOCK_MONOTONIC, &se->req_t);
             q_write(se->s, &se->req, true);
 #ifndef NO_MIGRATION
-            if (rebind && cce->rebound == false) {
-                q_rebind_sock(cce->c, migrate);
-                cce->rebound = true; // only rebind once
+            if (rebind && cce->migrated == false) {
+                q_migrate(cce->c, switch_ip);
+                cce->migrated = true; // only rebind once
             }
 #endif
         }
@@ -450,7 +450,7 @@ int main(int argc, char * argv[])
 #ifndef NO_MIGRATION
         case 'n':
             if (rebind)
-                migrate = true;
+                switch_ip = true;
             rebind = true;
             break;
 #endif

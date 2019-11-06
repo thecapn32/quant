@@ -226,6 +226,7 @@ struct q_conn {
     sl_head(q_stream_head, q_stream) need_ctrl;
 
     struct w_sock * sock; ///< File descriptor (socket) for the connection.
+    struct w_sock * migr_sock;
 
     timeout_t tls_key_update_frequency;
 
@@ -262,6 +263,7 @@ struct q_conn {
     struct cid odcid; ///< Original destination CID of first Initial.
 
     struct w_iov_sq txq;
+    struct w_iov_sq migr_txq;
 
 #ifndef NO_QINFO
     struct q_conn_info i;
