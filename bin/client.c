@@ -74,7 +74,6 @@
 
 
 struct conn_cache_entry {
-    struct sockaddr_in dst;
     struct q_conn * c;
 #ifndef NO_MIGRATION
     bool migrated;
@@ -294,7 +293,6 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
         cce->c = c;
 
         // insert into connection cache
-        cce->dst = *(struct sockaddr_in *)&peer->ai_addr;
         int ret;
         k = kh_put(conn_cache, cc, conn_cache_key(peer->ai_addr), &ret);
         ensure(ret >= 1, "inserted returned %d", ret);
@@ -312,7 +310,15 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
             q_write(se->s, &se->req, true);
 #ifndef NO_MIGRATION
             if (rebind && cce->migrated == false) {
-                q_migrate(cce->c, switch_ip);
+                // try and find an IP address of another AF
+                struct addrinfo * other_peer = peer->ai_next;
+                while (other_peer) {
+                    if (other_peer->ai_family != peer->ai_family)
+                        break;
+                    other_peer = other_peer->ai_next;
+                }
+                q_migrate(cce->c, switch_ip,
+                          other_peer ? other_peer->ai_addr : 0);
                 cce->migrated = true; // only rebind once
             }
 #endif

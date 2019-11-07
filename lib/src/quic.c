@@ -858,7 +858,9 @@ int q_conn_af(const struct q_conn * const c)
 
 
 #ifndef NO_MIGRATION
-void q_migrate(struct q_conn * const c, const bool switch_ip)
+void q_migrate(struct q_conn * const c,
+               const bool switch_ip,
+               const struct sockaddr * const alt_peer)
 {
     ensure(is_clnt(c), "can only rebind w_sock on client");
 
@@ -869,6 +871,12 @@ void q_migrate(struct q_conn * const c, const bool switch_ip)
             break;
     ensure(idx < c->w->addr_cnt, "could not find local address index");
 
+#ifndef NDEBUG
+    char old_ip[IP_STRLEN];
+    const uint16_t old_port = bswap16(c->sock->ws_lport);
+    w_ntop(&c->sock->ws_laddr, old_ip);
+#endif
+
     if (switch_ip) {
         // try and find an IP address of another AF
         uint16_t other_idx;
@@ -877,28 +885,27 @@ void q_migrate(struct q_conn * const c, const bool switch_ip)
                 break;
 
         // use corresponding preferred_address as peer
-        if (other_idx < c->w->addr_cnt)
-            if ((c->w->ifaddr[other_idx].addr.af == AF_INET &&
-                 memcmp(&c->tp_out.pref_addr.addr4.addr.ip4,
-                        &(char[IP4_LEN]){0}, IP4_LEN) != 0) ||
-                (c->w->ifaddr[other_idx].addr.af == AF_INET6 &&
-                 memcmp(&c->tp_out.pref_addr.addr6.addr.ip4,
-                        &(char[IP6_LEN]){0}, IP6_LEN) != 0)) {
-                idx = other_idx;
+        if (other_idx < c->w->addr_cnt) {
+            idx = other_idx;
+            if (alt_peer) {
+                w_to_waddr(&c->peer.addr, alt_peer);
+            } else if ((c->w->ifaddr[other_idx].addr.af == AF_INET &&
+                        memcmp(&c->tp_out.pref_addr.addr4.addr.ip4,
+                               &(char[IP4_LEN]){0}, IP4_LEN) != 0) ||
+                       (c->w->ifaddr[other_idx].addr.af == AF_INET6 &&
+                        memcmp(&c->tp_out.pref_addr.addr6.addr.ip4,
+                               &(char[IP6_LEN]){0}, IP6_LEN) != 0)) {
                 c->peer = c->w->ifaddr[other_idx].addr.af == AF_INET
                               ? c->tp_out.pref_addr.addr4
                               : c->tp_out.pref_addr.addr6;
-            }
+            } else
+                goto fail;
+        }
     }
-
-#ifndef NDEBUG
-    char old_ip[IP_STRLEN];
-    const uint16_t old_port = bswap16(c->sock->ws_lport);
-    w_ntop(&c->sock->ws_laddr, old_ip);
-#endif
 
     struct w_sock * const new_sock = w_bind(c->w, idx, 0, &c->sockopt);
     if (new_sock == 0) {
+    fail:
         // could not open new w_sock, can't rebind
         warn(ERR, "%s for %s conn %s from %s:%u failed",
              switch_ip ? "conn migration" : "simulated NAT rebinding",

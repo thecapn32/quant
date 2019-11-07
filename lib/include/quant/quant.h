@@ -183,8 +183,10 @@ extern bool __attribute__((nonnull))
 q_is_uni_stream(const struct q_stream * const s);
 
 #ifndef NO_MIGRATION
-extern void __attribute__((nonnull))
-q_migrate(struct q_conn * const c, const bool switch_ip);
+extern void __attribute__((nonnull(1)))
+q_migrate(struct q_conn * const c,
+          const bool switch_ip,
+          const struct sockaddr * const alt_peer);
 #endif
 
 #ifndef NO_QINFO
