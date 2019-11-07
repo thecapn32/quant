@@ -873,15 +873,22 @@ void q_migrate(struct q_conn * const c, const bool switch_ip)
         // try and find an IP address of another AF
         uint16_t other_idx;
         for (other_idx = 0; other_idx < c->w->addr_cnt; other_idx++)
-            if (c->w->ifaddr[idx].addr.af != c->w->ifaddr[other_idx].addr.af) {
-                idx = other_idx;
+            if (c->w->ifaddr[idx].addr.af != c->w->ifaddr[other_idx].addr.af)
                 break;
-            }
+
         // use corresponding preferred_address as peer
         if (other_idx < c->w->addr_cnt)
-            c->peer = c->w->ifaddr[idx].addr.af == AF_INET
-                          ? c->tp_out.pref_addr.addr4
-                          : c->tp_out.pref_addr.addr6;
+            if ((c->w->ifaddr[other_idx].addr.af == AF_INET &&
+                 memcmp(&c->tp_out.pref_addr.addr4.addr.ip4,
+                        &(char[IP4_LEN]){0}, IP4_LEN) != 0) ||
+                (c->w->ifaddr[other_idx].addr.af == AF_INET6 &&
+                 memcmp(&c->tp_out.pref_addr.addr6.addr.ip4,
+                        &(char[IP6_LEN]){0}, IP6_LEN) != 0)) {
+                idx = other_idx;
+                c->peer = c->w->ifaddr[other_idx].addr.af == AF_INET
+                              ? c->tp_out.pref_addr.addr4
+                              : c->tp_out.pref_addr.addr6;
+            }
     }
 
 #ifndef NDEBUG
