@@ -905,6 +905,8 @@ dec_path_response_frame(const uint8_t ** pos,
                         const struct pkt_meta * const m)
 {
     struct q_conn * const c = m->pn->c;
+
+#ifndef NO_MIGRATION
     decb_chk(c->path_resp_in, pos, end, PATH_CHLG_LEN, c, FRM_PRP);
 
     warn(INF, FRAM_IN "PATH_RESPONSE" NRM " data=%s", pcr_str(c->path_resp_in));
@@ -925,10 +927,17 @@ dec_path_response_frame(const uint8_t ** pos,
          w_ntop(&c->peer.addr, ip_tmp), bswap16(c->peer.port),
          w_ntop(&c->migr_peer.addr, ip_tmp), bswap16(c->migr_peer.port));
 
-    c->tx_path_chlg = false;
     c->peer = c->migr_peer;
     c->sock = c->migr_sock;
+    c->tx_path_chlg = false;
     c->tx_limit = 0;
+
+#else
+    uint8_t pri[PATH_CHLG_LEN];
+    decb_chk(pri, pos, end, PATH_CHLG_LEN, c, FRM_PRP);
+    warn(INF, FRAM_IN "PATH_RESPONSE" NRM " data=%s", pcr_str(pri));
+    warn(NTE, "unexpected PATH_RESPONSE %s, ignoring", pcr_str(pri));
+#endif
 
     return true;
 }
@@ -1700,6 +1709,7 @@ void enc_path_response_frame(uint8_t ** pos,
 }
 
 
+#ifndef NO_MIGRATION
 void enc_path_challenge_frame(uint8_t ** pos,
                               const uint8_t * const end,
                               struct pkt_meta * const m)
@@ -1715,6 +1725,7 @@ void enc_path_challenge_frame(uint8_t ** pos,
 
     track_frame(m, FRM_PCL);
 }
+#endif
 
 
 #ifndef NO_MIGRATION

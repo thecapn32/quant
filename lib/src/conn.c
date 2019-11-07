@@ -401,9 +401,10 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
 
     if (likely(sq_empty(&c->txq) == false))
         do_tx_txq(c, &c->txq, c->sock);
+#ifndef NO_MIGRATION
     if (likely(sq_empty(&c->migr_txq) == false))
         do_tx_txq(c, &c->migr_txq, c->migr_sock);
-
+#endif
     log_sent_pkts(c);
 }
 
@@ -621,7 +622,11 @@ void tx(struct q_conn * const c)
 
 done:;
     // make sure we sent enough packets when we have a TX limit
-    uint_t sent = w_iov_sq_cnt(&c->txq) + w_iov_sq_cnt(&c->migr_txq);
+    uint_t sent = w_iov_sq_cnt(&c->txq)
+#ifndef NO_MIGRATION
+                  + w_iov_sq_cnt(&c->migr_txq)
+#endif
+        ;
     while ((unlikely(c->tx_limit) && sent < c->tx_limit) ||
            (c->needs_tx && sent == 0)) {
         if (likely(tx_ack(c, epoch_in(c), c->tx_limit && sent < c->tx_limit)))
@@ -1402,12 +1407,16 @@ static void __attribute__((nonnull))
                 outer_dcid.len = 0;
 
             // check if this pkt came from a new source IP and/or port
-            if (w_sockaddr_cmp(&c->peer, &v->saddr) == false &&
-                (c->tx_path_chlg == false ||
-                 w_sockaddr_cmp(&c->migr_peer, &v->saddr) == false)) {
-
+            if (w_sockaddr_cmp(&c->peer, &v->saddr) == false
+#ifndef NO_MIGRATION
+                && (c->tx_path_chlg == false ||
+                    w_sockaddr_cmp(&c->migr_peer, &v->saddr) == false)
+#endif
+            ) {
                 struct pn_space * const pn = &c->pns[pn_data];
+#ifndef NO_MIGRATION
                 if (m->hdr.nr <= diet_max(&pn->recv_all)) {
+#endif
                     log_pkt("RX", v, &v->saddr, &odcid, tok, tok_len);
                     warn(NTE,
                          "pkt from new peer %s:%u, nr " FMT_PNR_IN
@@ -1415,6 +1424,7 @@ static void __attribute__((nonnull))
                          w_ntop(&v->wv_addr, ip_tmp), bswap16(v->saddr.port),
                          m->hdr.nr, diet_max(&pn->recv_all));
                     goto drop;
+#ifndef NO_MIGRATION
                 }
 
                 warn(NTE,
@@ -1428,6 +1438,7 @@ static void __attribute__((nonnull))
                 c->migr_sock = ws;
                 c->needs_tx = c->tx_path_chlg = true;
                 c->tx_limit = 1;
+#endif
             }
         } else
             // this is a vneg or rtry pkt, dec_pkt_hdr_remainder not called
@@ -1765,7 +1776,11 @@ struct q_conn * new_conn(struct w_engine * const w,
                          const struct cid * const dcid,
                          const struct cid * const scid,
                          const struct w_sockaddr * const peer,
-                         const char * const peer_name,
+                         const char * const peer_name
+#ifdef NO_SERVER
+                         __attribute__((unused))
+#endif
+                         ,
                          const uint16_t port,
                          const struct q_conn_conf * const conf)
 {
@@ -1773,7 +1788,9 @@ struct q_conn * new_conn(struct w_engine * const w,
     ensure(c, "could not calloc");
 
     c->w = w;
+#ifndef NO_SERVER
     c->is_clnt = peer_name != 0;
+#endif
 
     uint16_t idx = addr_idx;
     if (peer) {
@@ -1810,17 +1827,18 @@ struct q_conn * new_conn(struct w_engine * const w,
     // init CIDs
     c->next_sid_bidi = is_clnt(c) ? 0 : STRM_FL_SRV;
     c->next_sid_uni = is_clnt(c) ? STRM_FL_UNI : STRM_FL_UNI | STRM_FL_SRV;
+    sq_init(&c->txq);
 #ifndef NO_MIGRATION
+    sq_init(&c->migr_txq);
     splay_init(&c->dcids_by_seq);
     splay_init(&c->scids_by_seq);
 #endif
+
     const bool zero_len_scid = get_conf(c->w, conf, enable_zero_len_cid);
     new_cids(c, zero_len_scid, dcid, scid);
 
     c->vers = c->vers_initial = get_conf(c->w, conf, version);
     diet_init(&c->clsd_strms);
-    sq_init(&c->txq);
-    sq_init(&c->migr_txq);
 
     // initialize idle timeout
     timeout_setcb(&c->idle_alarm, idle_alarm, c);

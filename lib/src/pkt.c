@@ -422,7 +422,11 @@ bool enc_pkt(struct q_stream * const s,
     }
 
     m->hdr.hdr_len = (uint16_t)(pos - v->buf);
-    v->saddr = unlikely(c->tx_path_chlg) ? c->migr_peer : c->peer;
+    v->saddr =
+#ifndef NO_MIGRATION
+        unlikely(c->tx_path_chlg) ? c->migr_peer :
+#endif
+                                  c->peer;
 
     log_pkt("TX", v, &v->saddr, m->hdr.type == LH_RTRY ? &c->odcid : 0, c->tok,
             c->tok_len);
@@ -545,10 +549,13 @@ tx:;
     // require another loop to copy them over
     xv->flags = v->flags |= likely(c->sockopt.enable_ecn) ? IPTOS_ECN_ECT0 : 0;
 
-    if (likely(c->tx_path_chlg == false))
-        sq_insert_tail(&c->txq, xv, next);
-    else
+#ifndef NO_MIGRATION
+    if (unlikely(c->tx_path_chlg))
         sq_insert_tail(&c->migr_txq, xv, next);
+    else
+#endif
+        sq_insert_tail(&c->txq, xv, next);
+
     m->udp_len = xv->len;
     c->out_data += m->udp_len;
 

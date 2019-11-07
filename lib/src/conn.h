@@ -169,12 +169,19 @@ struct q_conn {
     struct cids_by_seq dcids_by_seq; ///< Destination CID hash by sequence.
     struct cids_by_seq scids_by_seq; ///< Source CID hash by sequence.
     khash_t(cids_by_id) scids_by_id; ///< Source CID hash by ID.
+    struct w_sockaddr migr_peer;     ///< Peer's desired migration address.
+    struct w_sock * migr_sock;
+    struct w_iov_sq migr_txq;
 #endif
     struct cid * dcid; ///< Active destination CID.
     struct cid * scid; ///< Active source CID.
 
-    uint32_t holds_sock : 1;       ///< Connection manages a warpcore socket.
-    uint32_t is_clnt : 1;          ///< We are the client on this connection.
+    uint32_t holds_sock : 1; ///< Connection manages a warpcore socket.
+#ifndef NO_SERVER
+    uint32_t is_clnt : 1; ///< We are the client on this connection.
+#else
+    uint32_t _unused_is_clnt : 1;
+#endif
     uint32_t had_rx : 1;           ///< We had an RX event on this connection.
     uint32_t needs_tx : 1;         ///< We have a pending TX on this connection.
     uint32_t tx_max_data : 1;      ///< Sent a MAX_DATA frame.
@@ -186,14 +193,18 @@ struct q_conn {
     uint32_t try_0rtt : 1;         ///< Try 0-RTT handshake.
     uint32_t did_0rtt : 1;         ///< 0-RTT handshake succeeded;
     uint32_t tx_path_resp : 1;     ///< Send PATH_RESPONSE.
-    uint32_t tx_path_chlg : 1;     ///< Send PATH_CHALLENGE.
-    uint32_t tx_ncid : 1;          ///< Send NEW_CONNECTION_ID.
-    uint32_t tx_rtry : 1;          ///< We need to send a RETRY.
-    uint32_t have_new_data : 1;    ///< New stream data was enqueued.
-    uint32_t in_c_ready : 1;       ///< Connection is listed in c_ready.
-    uint32_t needs_accept : 1;     ///< Need to call q_accept() for connection.
-    uint32_t tx_retire_cid : 1;    ///< Send RETIRE_CONNECTION_ID.
-    uint32_t do_migration : 1;     ///< Perform a CID migration when possible.
+#ifndef NO_MIGRATION
+    uint32_t tx_path_chlg : 1; ///< Send PATH_CHALLENGE.
+#else
+    uint32_t _unused_tx_path_chlg : 1;
+#endif
+    uint32_t tx_ncid : 1;           ///< Send NEW_CONNECTION_ID.
+    uint32_t tx_rtry : 1;           ///< We need to send a RETRY.
+    uint32_t have_new_data : 1;     ///< New stream data was enqueued.
+    uint32_t in_c_ready : 1;        ///< Connection is listed in c_ready.
+    uint32_t needs_accept : 1;      ///< Need to call q_accept() for connection.
+    uint32_t tx_retire_cid : 1;     ///< Send RETIRE_CONNECTION_ID.
+    uint32_t do_migration : 1;      ///< Perform a CID migration when possible.
     uint32_t key_flips_enabled : 1; ///< Are TLS key updates enabled?
     uint32_t do_key_flip : 1;       ///< Perform a TLS key update.
     uint32_t spin_enabled : 1;      ///< Is the spinbit enabled?
@@ -217,8 +228,7 @@ struct q_conn {
     struct timeout key_flip_alarm;
     struct timeout ack_alarm;
 
-    struct w_sockaddr peer;      ///< Address of our peer.
-    struct w_sockaddr migr_peer; ///< Peer's desired migration address.
+    struct w_sockaddr peer; ///< Address of our peer.
 
     struct q_stream * cstrms[ep_data + 1]; ///< Crypto "streams".
     khash_t(strms_by_id) strms_by_id;      ///< Regular streams.
@@ -226,7 +236,6 @@ struct q_conn {
     sl_head(q_stream_head, q_stream) need_ctrl;
 
     struct w_sock * sock; ///< File descriptor (socket) for the connection.
-    struct w_sock * migr_sock;
 
     timeout_t tls_key_update_frequency;
 
@@ -254,8 +263,10 @@ struct q_conn {
     uint8_t path_chlg_in[PATH_CHLG_LEN];
     uint8_t path_resp_out[PATH_CHLG_LEN];
 
+#ifndef NO_MIGRATION
     uint8_t path_chlg_out[PATH_CHLG_LEN];
     uint8_t path_resp_in[PATH_CHLG_LEN];
+#endif
 
     struct w_sockopt sockopt; ///< Socket options.
     uint_t max_cid_seq_out;
@@ -263,7 +274,6 @@ struct q_conn {
     struct cid odcid; ///< Original destination CID of first Initial.
 
     struct w_iov_sq txq;
-    struct w_iov_sq migr_txq;
 
 #ifndef NO_QINFO
     struct q_conn_info i;

@@ -98,7 +98,11 @@ static bool qlog_common(const struct cid * const gid)
 }
 
 
-void qlog_init(const struct q_conn * const c)
+void qlog_init(const struct q_conn * const c
+#ifdef NO_SERVER
+               __attribute__((unused))
+#endif
+)
 {
     if (qlog && qlog_ref_t == 0) {
         qlog_ref_t = loop_now();
