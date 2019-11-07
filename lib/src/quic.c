@@ -961,15 +961,21 @@ char * hex2str(const uint8_t * const src,
                char * const dst,
                const size_t len_dst)
 {
-    ensure(len_dst >= hex_str_len(len_src), "overflow %lu < %lu",
-           (unsigned long)len_dst, (unsigned long)hex_str_len(len_src));
     static const char hex[] = "0123456789abcdef";
+
     size_t i;
-    for (i = 0; i < len_src; i++) {
+    for (i = 0; i < len_src && i * 2 + 1 < len_dst; i++) {
         dst[i * 2] = hex[(src[i] >> 4) & 0x0f];
         dst[i * 2 + 1] = hex[src[i] & 0x0f];
     }
-    dst[i * 2] = 0;
+
+    if (i == len_src)
+        dst[i * 2] = 0;
+    else {
+        dst[len_dst - 1] = 0;
+        dst[len_dst - 2] = dst[len_dst - 3] = dst[len_dst - 4] = '.';
+    }
+
     return dst;
 }
 
