@@ -969,7 +969,7 @@ char * hex2str(const uint8_t * const src,
         dst[i * 2 + 1] = hex[src[i] & 0x0f];
     }
 
-    if (len_src <= len_dst * 2 + 1)
+    if (i * 2 + 1 <= len_dst)
         dst[i * 2] = 0;
     else {
         size_t l = len_dst;
