@@ -117,6 +117,7 @@ earliest_loss_t_pn(struct q_conn * const c)
 }
 
 
+#if !defined(NDEBUG) || !defined(NO_QLOG)
 void log_cc(struct q_conn * const c)
 {
     const uint_t ssthresh =
@@ -154,6 +155,8 @@ void log_cc(struct q_conn * const c)
     qlog_recovery(rec_mu, "DEFAULT", c, &c->odcid);
     c->rec.prev = c->rec.cur;
 }
+#endif
+
 
 void set_ld_timer(struct q_conn * const c)
 {
@@ -236,7 +239,7 @@ void congestion_event(struct q_conn * const c, const uint64_t sent_t)
     c->rec.rec_start_t = loop_now();
     c->rec.cur.cwnd /= kLossReductionDivisor;
     c->rec.cur.ssthresh = c->rec.cur.cwnd =
-        MAX(c->rec.cur.cwnd, kMinimumWindow);
+        MAX(c->rec.cur.cwnd, kMinimumWindow(c->rec.max_pkt_size));
 }
 
 
@@ -439,7 +442,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
     if (do_cc && in_flight_lost) {
         congestion_event(c, lg_lost_tx_t);
         if (in_persistent_cong(pn, lg_lost))
-            c->rec.cur.cwnd = kMinimumWindow;
+            c->rec.cur.cwnd = kMinimumWindow(c->rec.max_pkt_size);
     }
 
     log_cc(c);
@@ -644,7 +647,7 @@ on_pkt_acked_cc(const struct pkt_meta * const m)
     if (c->rec.cur.cwnd < c->rec.cur.ssthresh)
         c->rec.cur.cwnd += m->udp_len;
     else
-        c->rec.cur.cwnd += (kMaxDatagramSize * m->udp_len) / c->rec.cur.cwnd;
+        c->rec.cur.cwnd += (c->rec.max_pkt_size * m->udp_len) / c->rec.cur.cwnd;
 }
 
 
@@ -733,10 +736,12 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
 void init_rec(struct q_conn * const c)
 {
     timeout_del(&c->rec.ld_alarm);
-
-    c->rec.cur = (struct cc_state){
-        .cwnd = kInitialWindow, .ssthresh = UINT_T_MAX, .min_rtt = UINT_T_MAX};
+    c->rec.max_pkt_size = MIN_INI_LEN;
+    c->rec.cur = (struct cc_state){.cwnd = kInitialWindow(c->rec.max_pkt_size),
+                                   .ssthresh = UINT_T_MAX,
+                                   .min_rtt = UINT_T_MAX};
+#if !defined(NDEBUG) || !defined(NO_QLOG)
     c->rec.prev = c->rec.cur;
-
+#endif
     timeout_setcb(&c->rec.ld_alarm, on_ld_timeout, c);
 }

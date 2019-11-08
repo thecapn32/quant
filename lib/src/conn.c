@@ -377,7 +377,7 @@ static void __attribute__((nonnull)) do_tx_txq(struct q_conn * const c,
 #endif
 
     if (w_iov_sq_cnt(q) > 1 && unlikely(is_lh(*sq_first(q)->buf)))
-        coalesce(q);
+        coalesce(q, c->rec.max_pkt_size);
 #ifndef FUZZING
     // transmit encrypted/protected packets
     w_tx(ws, q);
@@ -1413,16 +1413,18 @@ static void __attribute__((nonnull))
                     w_sockaddr_cmp(&c->migr_peer, &v->saddr) == false)
 #endif
             ) {
-                struct pn_space * const pn = &c->pns[pn_data];
+#if !defined(NO_MIGRATION) || !defined(NDEBUG)
+                const uint_t max_recv_all = diet_max(&c->pns[pn_data].recv_all);
+#endif
 #ifndef NO_MIGRATION
-                if (m->hdr.nr <= diet_max(&pn->recv_all)) {
+                if (m->hdr.nr <= max_recv_all) {
 #endif
                     log_pkt("RX", v, &v->saddr, &odcid, tok, tok_len);
                     warn(NTE,
                          "pkt from new peer %s:%u, nr " FMT_PNR_IN
                          " <= max " FMT_PNR_IN ", ignoring",
                          w_ntop(&v->wv_addr, ip_tmp), bswap16(v->saddr.port),
-                         m->hdr.nr, diet_max(&pn->recv_all));
+                         m->hdr.nr, max_recv_all);
                     goto drop;
 #ifndef NO_MIGRATION
                 }
@@ -1431,7 +1433,7 @@ static void __attribute__((nonnull))
                      "pkt from new peer %s:%u, nr " FMT_PNR_IN
                      " > max " FMT_PNR_IN ", probing",
                      w_ntop(&v->wv_addr, ip_tmp), bswap16(v->saddr.port),
-                     m->hdr.nr, diet_max(&pn->recv_all));
+                     m->hdr.nr, max_recv_all);
 
                 rand_bytes(&c->path_chlg_out, sizeof(c->path_chlg_out));
                 c->migr_peer = v->saddr;

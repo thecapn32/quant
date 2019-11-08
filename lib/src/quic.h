@@ -61,10 +61,6 @@
 // considers a packet lost. The RECOMMENDED value is 3.
 #define kPacketThreshold 3
 
-// Maximum reordering in time before time threshold loss detection considers a
-// packet lost. Specified as an RTT multiplier. The RECOMMENDED value is 9/8.
-// #define kTimeThreshold 1.125
-
 // Timer granularity. This is a system-dependent value. However, implementations
 // SHOULD use a value no smaller than 1ms.
 #define kGranularity 1 * NS_PER_MS
@@ -72,19 +68,14 @@
 // The RTT used before an RTT sample is taken. The RECOMMENDED value is 100ms.
 #define kInitialRtt 500 * NS_PER_MS
 
-/// The sender's maximum payload size. Does not include UDP or IP overhead. The
-/// max packet size is used for calculating initial and minimum congestion
-/// windows.
-#define kMaxDatagramSize 1200
-
 /// Default limit on the initial amount of outstanding data in flight, in bytes.
 /// Taken from [RFC6928]. The RECOMMENDED value is the minimum of 10 *
-/// kMaxDatagramSize and max(2* kMaxDatagramSize, 14720)).
-#define kInitialWindow                                                         \
-    MIN(10 * kMaxDatagramSize, MAX(2 * kMaxDatagramSize, 14720))
+/// max_pkt_size and max(2* max_pkt_size, 14720)).
+#define kInitialWindow(max_pkt_size)                                           \
+    MIN(10 * (max_pkt_size), MAX(2 * (max_pkt_size), 14720))
 
 /// Minimum congestion window in bytes.
-#define kMinimumWindow (2 * kMaxDatagramSize)
+#define kMinimumWindow(max_pkt_size) (2 * (max_pkt_size))
 
 /// Reduction in congestion window when a new loss event is detected.
 #define kLossReductionDivisor 2 // kLossReductionFactor

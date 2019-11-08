@@ -169,7 +169,7 @@ can_coalesce_pkt_types(const uint8_t a, const uint8_t b)
 }
 
 
-void coalesce(struct w_iov_sq * const q)
+void coalesce(struct w_iov_sq * const q, const uint16_t max_pkt_size)
 {
     struct w_iov * v = sq_first(q);
     while (v) {
@@ -178,7 +178,7 @@ void coalesce(struct w_iov_sq * const q)
         while (next) {
             struct w_iov * const next_next = sq_next(next, next);
             // do we have space? do the packet types make sense to coalesce?
-            if (v->len + next->len <= kMaxDatagramSize &&
+            if (v->len + next->len <= max_pkt_size &&
                 can_coalesce_pkt_types(pkt_type(*v->buf),
                                        pkt_type(*next->buf))) {
                 // we can coalesce

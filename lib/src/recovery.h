@@ -61,15 +61,16 @@ struct recovery {
     uint64_t last_sent_ack_elicit_t; // time_of_last_sent_ack_eliciting_packet
     uint64_t last_sent_crypto_t;     // time_of_last_sent_crypto_packet
 
-    uint16_t crypto_cnt; // crypto_count
-    uint16_t pto_cnt;    // pto_count
+    uint16_t crypto_cnt;   // crypto_count
+    uint16_t pto_cnt;      // pto_count
+    uint16_t max_pkt_size; // max_datagram_size
 
     // largest_sent_packet -> pn->lg_sent
     // largest_acked_packet -> pn->lg_acked
     // max_ack_delay -> c->tp_out.max_ack_del
 
 #ifdef HAVE_64BIT
-    uint8_t _unused[4];
+    uint8_t _unused[2];
 #endif
 
     // CC state
@@ -77,7 +78,9 @@ struct recovery {
     uint_t ae_in_flight;  // nr of ACK-eliciting pkts inflight
 
     struct cc_state cur;
+#if !defined(NDEBUG) || !defined(NO_QLOG)
     struct cc_state prev;
+#endif
 
 #ifndef HAVE_64BIT
     uint8_t _unused[4];
@@ -85,7 +88,11 @@ struct recovery {
 };
 
 
+#if !defined(NDEBUG) || !defined(NO_QLOG)
 extern void __attribute__((nonnull)) log_cc(struct q_conn * const c);
+#else
+#define log_cc(...)
+#endif
 
 extern void __attribute__((nonnull)) init_rec(struct q_conn * const c);
 
