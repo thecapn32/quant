@@ -485,16 +485,18 @@ bool enc_pkt(struct q_stream * const s,
 
     if (is_clnt(c) && enc_data) {
         if (unlikely(c->try_0rtt == false && m->hdr.type == LH_INIT)) {
-            const uint8_t * const max_end = v->buf + MIN_INI_LEN - AEAD_LEN;
-            enc_padding_frame(&pos, max_end, m, (uint16_t)(max_end - pos));
+            const uint8_t * const min_len = v->buf + MIN_INI_LEN - AEAD_LEN;
+            if (pos < min_len)
+                enc_padding_frame(&pos, min_len, m, (uint16_t)(min_len - pos));
         }
         if (unlikely(c->try_0rtt == true && m->hdr.type == LH_0RTT &&
                      s->id >= 0)) {
             // if we pad the first 0-RTT pkt, peek at txq to get the CI length
-            const uint8_t * const max_end =
+            const uint8_t * const min_len =
                 v->buf + MIN_INI_LEN - AEAD_LEN -
                 (sq_first(&c->txq) ? sq_first(&c->txq)->len : 0);
-            enc_padding_frame(&pos, max_end, m, (uint16_t)(max_end - pos));
+            if (pos < min_len)
+                enc_padding_frame(&pos, min_len, m, (uint16_t)(min_len - pos));
         }
     }
 
