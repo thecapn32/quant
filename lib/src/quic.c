@@ -969,11 +969,18 @@ char * hex2str(const uint8_t * const src,
         dst[i * 2 + 1] = hex[src[i] & 0x0f];
     }
 
-    if (i == len_src)
+    if (len_src <= len_dst * 2 + 1)
         dst[i * 2] = 0;
     else {
-        dst[len_dst - 1] = 0;
-        dst[len_dst - 2] = dst[len_dst - 3] = dst[len_dst - 4] = '.';
+        size_t l = len_dst;
+        if (l)
+            dst[--l] = 0;
+        if (l)
+            dst[--l] = '.';
+        if (l)
+            dst[--l] = '.';
+        if (l)
+            dst[--l] = '.';
     }
 
     return dst;
