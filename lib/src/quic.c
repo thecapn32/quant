@@ -673,7 +673,7 @@ void q_close(struct q_conn * const c,
     loop_run(c->w, (func_ptr)q_close, c, 0);
 
 done:
-#ifndef NO_QINFO
+#if !defined(NO_QINFO) && !defined(NDEBUG)
     if (c->scid && c->i.pkts_in_valid > 0) {
         static const char * const frm_typ_str[] = {
             [0x00] = "PADDING",
