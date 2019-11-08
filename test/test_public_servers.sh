@@ -51,7 +51,7 @@ declare -A servers=(
     # [local]=localhost::4433:4434:4433:/40000
 )
 
-results=(live fail vneg hshk data clse rsmt zrtt rtry migr bind kyph spin aecn http)
+results=(live fail vneg hshk data clse rsmt zrtt rtry qrdy migr bind adrm kyph spin aecn http)
 
 if [ -n "$1" ]; then
     results+=(perf t_h2 t_hq)
@@ -114,6 +114,14 @@ function test_server {
     # NAT rebinding run
     bin/client $opts ${info[1]} -s /dev/null -n \
         "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.nat" 2>&1 &
+
+    # quantum-readiness run
+    bin/client $opts ${info[1]} -s /dev/null -m \
+        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.qr" 2>&1 &
+
+    # IP address mobility run
+    bin/client $opts ${info[1]} -s /dev/null -n -n \
+        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.adrm" 2>&1 &
 
     wait
     printf "%s " "$s"
@@ -338,6 +346,35 @@ function analyze {
         $x==4 && /enc_close.*err=0x0/ && exit 1;' "$log_strip"
     [ $? -eq 1 ] && echo B > "$ret_base.bind"
     [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.bind" ] && rm -f "$log"
+    rm -f "$log_strip"
+
+    # analyze quantum-readiness
+    local log="$log_base.qr"
+    local log_strip="$log.strip"
+    gsed "$sed_pattern" "$log" > "$log_strip"
+    check_fail "$1" "$log_strip" "$log"
+
+    perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $x=1 : next);
+        /no h3 payload/ and $x=0;
+        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
+        $x && /enc_close.*err=0x0/ && exit 1;' "$log_strip"
+    [ $? -eq 1 ] && echo Q > "$ret_base.qrdy"
+    [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.qrdy" ] && rm -f "$log"
+    rm -f "$log_strip"
+
+    # analyze IP address mobility
+    local log="$log_base.adrm"
+    local log_strip="$log.strip"
+    gsed "$sed_pattern" "$log" > "$log_strip"
+    check_fail "$1" "$log_strip" "$log"
+
+    perl -n -e '/conn migration.*failed/ && exit 0;
+        /read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $x=1 : next);
+        /no h3 payload/ and $x=0;
+        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
+        $x && /enc_close.*err=0x0/ && exit 1;' "$log_strip"
+    [ $? -eq 1 ] && echo A > "$ret_base.adrm"
+    [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.adrm" ] && rm -f "$log"
     rm -f "$log_strip"
 
     printf "%s " "$s"
