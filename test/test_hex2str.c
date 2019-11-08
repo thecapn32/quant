@@ -52,10 +52,9 @@ int main(void)
     while (1) {
         const uint32_t len_src = w_rand_uniform32(MAX_LEN);
         const uint32_t len_dst = w_rand_uniform32(MAX_LEN);
-        warn(ERR, "src %u, dst %u", len_src, len_dst);
 
         rand_bytes(src, len_src);
-        warn(ERR, "src %u, dst %u = %s", len_src, len_dst,
-             hex2str((uint8_t *)src, len_src, dst, len_dst));
+        hex2str((uint8_t *)src, len_src, dst, len_dst);
+        warn(ERR, "src %u, dst %u = %s", len_src, len_dst, dst);
     }
 }
