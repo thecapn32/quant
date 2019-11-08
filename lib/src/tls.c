@@ -1703,7 +1703,7 @@ void flip_keys(struct q_conn * const c, const bool out)
     }
 
     uint8_t new_secret[PTLS_MAX_DIGEST_SIZE];
-    static const char flip_label[] = "traffic upd";
+    static const char flip_label[] = "quic ku";
     if (pnd->in_1rtt[new_kyph].aead)
         ptls_aead_free(pnd->in_1rtt[new_kyph].aead);
     if (setup_initial_key(&pnd->in_1rtt[new_kyph], cs, c->tls.secret[0],
