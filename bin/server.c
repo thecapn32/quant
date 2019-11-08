@@ -67,15 +67,15 @@ static void __attribute__((noreturn)) usage(const char * const name,
                                             const uint32_t num_bufs)
 {
     printf("%s [options]\n", name);
-    printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
-    printf("\t[-p port]\tdestination port; default %d\n", port);
-    printf("\t[-q log]\twrite qlog events to file; default %s\n", qlog);
-    printf("\t[-d dir]\tserver root directory; default %s\n", dir);
-    printf("\t[-c cert]\tTLS certificate; default %s\n", cert);
-    printf("\t[-k key]\tTLS key; default %s\n", key);
-    printf("\t[-t timeout]\tidle timeout in seconds; default %u\n", timeout);
     printf("\t[-b bufs]\tnumber of network buffers to allocate; default %u\n ",
            num_bufs);
+    printf("\t[-c cert]\tTLS certificate; default %s\n", cert);
+    printf("\t[-d dir]\tserver root directory; default %s\n", dir);
+    printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
+    printf("\t[-k key]\tTLS key; default %s\n", key);
+    printf("\t[-p port]\tdestination port; default %d\n", port);
+    printf("\t[-q log]\twrite qlog events to file; default %s\n", qlog);
+    printf("\t[-t timeout]\tidle timeout in seconds; default %u\n", timeout);
 #ifndef NDEBUG
     printf("\t[-v verbosity]\tverbosity level (0-%d, default %d)\n", DLEVEL,
            util_dlevel);

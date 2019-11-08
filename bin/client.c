@@ -82,10 +82,7 @@ struct conn_cache_entry {
 };
 
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-function"
 KHASH_MAP_INIT_INT64(conn_cache, struct conn_cache_entry *)
-#pragma clang diagnostic pop
 
 
 static uint32_t timeout = 10;
@@ -136,33 +133,33 @@ static void __attribute__((noreturn, nonnull)) usage(const char * const name,
                                                      const bool verify_certs)
 {
     printf("%s [options] URL [URL...]\n", name);
-    printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
-    printf("\t[-q log]\twrite qlog events to file; default %s\n", qlog);
-    printf("\t[-s cache]\tTLS 0-RTT state cache; default %s\n", cache);
-    printf("\t[-l log]\tlog file for TLS keys; default %s\n", tls_log);
-    printf("\t[-t timeout]\tidle timeout in seconds; default %u\n", timeout);
-    printf("\t[-c]\t\tverify TLS certificates; default %s\n",
-           verify_certs ? "true" : "false");
-    printf("\t[-u]\t\tupdate TLS keys; default %s\n",
-           flip_keys ? "true" : "false");
     printf("\t[-3]\t\tsend a static H3 request; default %s\n",
            do_h3 ? "true" : "false");
-    printf("\t[-z]\t\tuse zero-length source connection IDs; default %s\n",
-           zlen_cids ? "true" : "false");
-    printf("\t[-w]\t\twrite retrieved objects to disk; default %s\n",
-           write_files ? "true" : "false");
-    printf("\t[-r reps]\trepetitions for all URLs; default %u\n", reps);
     printf("\t[-b bufs]\tnumber of network buffers to allocate; default %u\n",
            num_bufs);
+    printf("\t[-c]\t\tverify TLS certificates; default %s\n",
+           verify_certs ? "true" : "false");
+    printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
+    printf("\t[-l log]\tlog file for TLS keys; default %s\n", tls_log);
 #ifndef NO_MIGRATION
     printf("\t[-n]\t\tsimulate NAT rebind (use twice for \"real\" migration); "
            "default %s\n",
            rebind ? "true" : "false");
 #endif
+    printf("\t[-q log]\twrite qlog events to file; default %s\n", qlog);
+    printf("\t[-r reps]\trepetitions for all URLs; default %u\n", reps);
+    printf("\t[-s cache]\tTLS 0-RTT state cache; default %s\n", cache);
+    printf("\t[-t timeout]\tidle timeout in seconds; default %u\n", timeout);
+    printf("\t[-u]\t\tupdate TLS keys; default %s\n",
+           flip_keys ? "true" : "false");
 #ifndef NDEBUG
     printf("\t[-v verbosity]\tverbosity level (0-%d, default %d)\n", DLEVEL,
            util_dlevel);
 #endif
+    printf("\t[-w]\t\twrite retrieved objects to disk; default %s\n",
+           write_files ? "true" : "false");
+    printf("\t[-z]\t\tuse zero-length source connection IDs; default %s\n",
+           zlen_cids ? "true" : "false");
     exit(0);
 }
 
