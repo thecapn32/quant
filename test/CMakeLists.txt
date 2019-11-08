@@ -4,15 +4,16 @@ configure_file(test_public_servers.sh test_public_servers.sh COPYONLY)
 configure_file(test_public_servers.result test_public_servers.result COPYONLY)
 add_test(test_public_servers.sh test_public_servers.sh)
 
-foreach(TARGET diet conn)
+foreach(TARGET diet conn hex2str)
   add_executable(test_${TARGET} test_${TARGET}.c
     ${CMAKE_CURRENT_BINARY_DIR}/dummy.key ${CMAKE_CURRENT_BINARY_DIR}/dummy.crt)
-  target_link_libraries(test_${TARGET} lib${PROJECT_NAME})
+  target_link_libraries(test_${TARGET} lib${PROJECT_NAME} picotls-minicrypto)
   target_include_directories(test_${TARGET}
     PRIVATE
       ${PROJECT_BINARY_DIR}/external/include
       ${PROJECT_SOURCE_DIR}/lib/src
     SYSTEM PRIVATE
+      $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/picotls/include>
       $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/timeout>
   )
   if(DSYMUTIL)
