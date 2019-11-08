@@ -92,6 +92,7 @@ static bool do_h3 = false;
 static bool flip_keys = false;
 static bool zlen_cids = false;
 static bool write_files = false;
+static bool test_qr = false;
 #ifndef NO_MIGRATION
 static bool rebind = false;
 static bool switch_ip = false;
@@ -141,6 +142,9 @@ static void __attribute__((noreturn, nonnull)) usage(const char * const name,
            verify_certs ? "true" : "false");
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
     printf("\t[-l log]\tlog file for TLS keys; default %s\n", tls_log);
+    printf(
+        "\t[-m]\ttest multi-pkt initial (\"quantum-readiness\"); default %s\n",
+        test_qr ? "true" : "false");
 #ifndef NO_MIGRATION
     printf("\t[-n]\t\tsimulate NAT rebind (use twice for \"real\" migration); "
            "default %s\n",
@@ -408,7 +412,7 @@ int main(int argc, char * argv[])
     int ret = 0;
 
     while ((ch = getopt(argc, argv,
-                        "hi:v:s:t:l:cu3zb:wr:q:"
+                        "hi:v:s:t:l:cu3zb:wr:q:m"
 #ifndef NO_MIGRATION
                         "n"
 #endif
@@ -450,6 +454,9 @@ int main(int argc, char * argv[])
         case 'w':
             write_files = true;
             break;
+        case 'm':
+            test_qr = true;
+            break;
 #ifndef NO_MIGRATION
         case 'n':
             if (rebind)
@@ -471,17 +478,19 @@ int main(int argc, char * argv[])
     }
 
     struct w_engine * const w = q_init(
-        ifname, &(const struct q_conf){
-                    .conn_conf = &(
-                        struct q_conn_conf){.enable_tls_key_updates = flip_keys,
-                                            .enable_spinbit = true,
-                                            .idle_timeout = timeout,
-                                            .enable_zero_len_cid = zlen_cids},
-                    .qlog = qlog,
-                    .num_bufs = num_bufs,
-                    .ticket_store = cache,
-                    .tls_log = tls_log,
-                    .enable_tls_cert_verify = verify_certs});
+        ifname,
+        &(const struct q_conf){
+            .conn_conf =
+                &(struct q_conn_conf){.enable_tls_key_updates = flip_keys,
+                                      .enable_spinbit = true,
+                                      .idle_timeout = timeout,
+                                      .enable_quantum_readiness_test = test_qr,
+                                      .enable_zero_len_cid = zlen_cids},
+            .qlog = qlog,
+            .num_bufs = num_bufs,
+            .ticket_store = cache,
+            .tls_log = tls_log,
+            .enable_tls_cert_verify = verify_certs});
     khash_t(conn_cache) * cc = kh_init(conn_cache);
 
     if (reps > 1)

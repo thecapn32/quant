@@ -1738,6 +1738,7 @@ static void __attribute__((nonnull)) ack_alarm(struct q_conn * const c)
 void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
 {
     c->spin_enabled = get_conf_uncond(c->w, conf, enable_spinbit);
+    c->do_qr_test = get_conf_uncond(c->w, conf, enable_quantum_readiness_test);
 
     // (re)set idle alarm
     c->tp_in.idle_to = get_conf(c->w, conf, idle_timeout) * MS_PER_S;

@@ -538,6 +538,7 @@ struct w_engine * q_init(const char * const ifname,
                              .enable_udp_zero_checksums = true,
                              .tls_key_update_frequency = 3,
                              .version = ok_vers[0],
+                             .enable_quantum_readiness_test = false,
                              .enable_spinbit =
 #ifndef NDEBUG
                                  true
@@ -564,6 +565,8 @@ struct w_engine * q_init(const char * const ifname,
             get_conf_uncond(w, conf->conn_conf, disable_active_migration);
         ped(w)->default_conn_conf.enable_zero_len_cid =
             get_conf_uncond(w, conf->conn_conf, enable_zero_len_cid);
+        ped(w)->default_conn_conf.enable_quantum_readiness_test =
+            get_conf_uncond(w, conf->conn_conf, enable_quantum_readiness_test);
     }
 
     // initialize the event loop

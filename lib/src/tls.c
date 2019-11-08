@@ -186,6 +186,8 @@ static struct cipher_ctx enc_tckt;
 #define TP_ACIL 0x0e    ///< active_connection_id_limit
 #define TP_MAX (TP_ACIL + 1)
 
+#define TP_QR 3127
+
 
 // quicly shim
 #define AEAD_BASE_LABEL PTLS_HKDF_EXPAND_LABEL_PREFIX "quic "
@@ -443,11 +445,12 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             if (dec2(&unknown_len, &pos, end) == false)
                 return 1;
             warn(WRN, "\t" BLD "%s tp" NRM " (0x%04x w/len %u) = %s",
-                 (tp & 0xff00) == 0xff00 ? YEL "private" : RED "unknown", tp,
-                 unknown_len,
-                 hex2str(pos, unknown_len,
-                         (char[hex_str_len(sizeof(c->tls.tp_buf))]){""},
-                         hex_str_len(sizeof(c->tls.tp_buf))));
+                 (tp & 0xff00) == 0xff00
+                     ? YEL "private"
+                     // cppcheck-suppress duplicateExpressionTernary
+                     : (tp == TP_QR ? RED "quantum-ready" : RED "unknown"),
+                 tp, unknown_len,
+                 hex2str(pos, unknown_len, (char[16]){""}, 16));
             pos += unknown_len;
             continue;
         }
@@ -714,21 +717,25 @@ void init_tp(struct q_conn * const c)
     const uint16_t grease_type = 0xff00 + grease[0];
     const uint16_t grease_len = grease[1] & 0x0f;
 
-    uint16_t tp_order[TP_MAX + 1] = {
-        TP_OCID,    TP_IDTO,   TP_SRT,  TP_MPS,     TP_IMD, TP_IMSD_BL,
-        TP_IMSD_BR, TP_IMSD_U, TP_IMSB, TP_IMSU,    TP_ADE, TP_MAD,
-        TP_DMIG,    TP_PRFA,   TP_ACIL, grease_type};
+    // add the quantum-readiness tp
+    memset(ped(c->w)->scratch, 'Q', MIN_INI_LEN);
+
+    uint16_t tp_order[] = {TP_OCID,     TP_IDTO,    TP_SRT,    TP_MPS,  TP_IMD,
+                           TP_IMSD_BL,  TP_IMSD_BR, TP_IMSD_U, TP_IMSB, TP_IMSU,
+                           TP_ADE,      TP_MAD,     TP_DMIG,   TP_PRFA, TP_ACIL,
+                           grease_type, TP_QR};
+    const size_t tp_cnt = sizeof(tp_order) / sizeof(tp_order[0]);
 
     // modern version of Fisher-Yates
     // https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle#The_modern_algorithm
-    for (size_t j = TP_MAX; j >= 1; j--) {
+    for (size_t j = tp_cnt - 1; j >= 1; j--) {
         const size_t r = w_rand_uniform32((uint32_t)j);
         const uint16_t tmp = tp_order[r];
         tp_order[r] = tp_order[j];
         tp_order[j] = tmp;
     }
 
-    for (size_t j = 0; j <= TP_MAX; j++)
+    for (size_t j = 0; j <= tp_cnt - 1; j++)
         switch (tp_order[j]) {
         case TP_IMSU:
             if (c->tp_in.max_strms_uni)
@@ -879,6 +886,16 @@ void init_tp(struct q_conn * const c)
                              (char[hex_str_len(sizeof(c->tls.tp_buf))]){""},
                              hex_str_len(sizeof(c->tls.tp_buf))));
 #endif
+            } else if (tp_order[j] == TP_QR) {
+                if (c->do_qr_test) {
+                    encb_tp(&pos, end, TP_QR, ped(c->w)->scratch, MIN_INI_LEN);
+#ifdef DEBUG_EXTRA
+                    warn(WRN,
+                         "\t" BLD RED "quantum-ready tp" NRM
+                         " (0x%04x w/len %u)",
+                         TP_QR, MIN_INI_LEN);
+#endif
+                }
             } else
                 die("unknown tp 0x%04x", tp_order[j]);
             break;
@@ -1215,11 +1232,11 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
                ret != PTLS_ERROR_STATELESS_RETRY) {
         err_close(c, ERR_TLS(PTLS_ERROR_TO_ALERT(ret)), FRM_CRY, "TLS error %u",
                   ret);
-        return ret;
+        goto done;
     }
 
     if (tls_io.off == 0)
-        return ret;
+        goto done;
 
     // enqueue for TX
     for (epoch_t e = ep_init; e <= ep_data; e++) {
@@ -1242,6 +1259,9 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
         concat_out(c->cstrms[e], &o);
         c->needs_tx = true;
     }
+
+done:
+    ptls_buffer_dispose(&tls_io);
     return ret;
 }
 
