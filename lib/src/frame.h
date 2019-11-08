@@ -30,7 +30,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include <warpcore/warpcore.h>
+#include <quant/quant.h>
 
 #include "bitset.h"
 
@@ -105,16 +105,19 @@ dec_frames(struct q_conn * const c, struct w_iov ** vv, struct pkt_meta ** mm);
 extern uint16_t __attribute__((const)) max_frame_len(const uint8_t type);
 
 extern void __attribute__((nonnull))
-enc_padding_frame(uint8_t ** pos,
+enc_padding_frame(struct q_conn_info * const ci,
+                  uint8_t ** pos,
                   const uint8_t * const end,
                   struct pkt_meta * const m,
                   const uint16_t len);
 
-extern void __attribute__((nonnull)) enc_ack_frame(uint8_t ** pos,
-                                                   const uint8_t * const start,
-                                                   const uint8_t * const end,
-                                                   struct pkt_meta * const m,
-                                                   struct pn_space * const pn);
+extern void __attribute__((nonnull))
+enc_ack_frame(struct q_conn_info * const ci,
+              uint8_t ** pos,
+              const uint8_t * const start,
+              const uint8_t * const end,
+              struct pkt_meta * const m,
+              struct pn_space * const pn);
 
 extern void __attribute__((nonnull))
 calc_lens_of_stream_or_crypto_frame(const struct pkt_meta * const m,
@@ -131,73 +134,88 @@ enc_stream_or_crypto_frame(uint8_t ** pos,
                            struct q_stream * const s,
                            const uint16_t dlen);
 
-extern void __attribute__((nonnull)) enc_close_frame(uint8_t ** pos,
-                                                     const uint8_t * const end,
-                                                     struct pkt_meta * const m);
+extern void __attribute__((nonnull))
+enc_close_frame(struct q_conn_info * const ci,
+                uint8_t ** pos,
+                const uint8_t * const end,
+                struct pkt_meta * const m);
 
 extern void __attribute__((nonnull))
-enc_path_response_frame(uint8_t ** pos,
+enc_path_response_frame(struct q_conn_info * const ci,
+                        uint8_t ** pos,
                         const uint8_t * const end,
                         struct pkt_meta * const m);
 
 extern void __attribute__((nonnull))
-enc_max_strm_data_frame(uint8_t ** pos,
+enc_max_strm_data_frame(struct q_conn_info * const ci,
+                        uint8_t ** pos,
                         const uint8_t * const end,
                         struct pkt_meta * const m,
                         struct q_stream * const s);
 
 extern void __attribute__((nonnull))
-enc_max_data_frame(uint8_t ** pos,
+enc_max_data_frame(struct q_conn_info * const ci,
+                   uint8_t ** pos,
                    const uint8_t * const end,
                    struct pkt_meta * const m);
 
 extern void __attribute__((nonnull))
-enc_max_strms_frame(uint8_t ** pos,
+enc_max_strms_frame(struct q_conn_info * const ci,
+                    uint8_t ** pos,
                     const uint8_t * const end,
                     struct pkt_meta * const m,
                     const bool bidi);
 
 extern void __attribute__((nonnull))
-enc_strm_data_blocked_frame(uint8_t ** pos,
+enc_strm_data_blocked_frame(struct q_conn_info * const ci,
+                            uint8_t ** pos,
                             const uint8_t * const end,
                             struct pkt_meta * const m,
                             struct q_stream * const s);
 
 extern void __attribute__((nonnull))
-enc_data_blocked_frame(uint8_t ** pos,
+enc_data_blocked_frame(struct q_conn_info * const ci,
+                       uint8_t ** pos,
                        const uint8_t * const end,
                        struct pkt_meta * const m);
 
 extern void __attribute__((nonnull))
-enc_streams_blocked_frame(uint8_t ** pos,
+enc_streams_blocked_frame(struct q_conn_info * const ci,
+                          uint8_t ** pos,
                           const uint8_t * const end,
                           struct pkt_meta * const m,
                           const bool bidi);
 
 extern void __attribute__((nonnull))
-enc_path_challenge_frame(uint8_t ** pos,
+enc_path_challenge_frame(struct q_conn_info * const ci,
+                         uint8_t ** pos,
                          const uint8_t * const end,
                          struct pkt_meta * const m);
 
 extern void __attribute__((nonnull))
-enc_new_cid_frame(uint8_t ** pos,
+enc_new_cid_frame(struct q_conn_info * const ci,
+                  uint8_t ** pos,
                   const uint8_t * const end,
                   struct pkt_meta * const m);
 
 extern void __attribute__((nonnull))
-enc_new_token_frame(uint8_t ** pos,
+enc_new_token_frame(struct q_conn_info * const ci,
+                    uint8_t ** pos,
                     const uint8_t * const end,
                     struct pkt_meta * const m);
 
 extern void __attribute__((nonnull))
-enc_retire_cid_frame(uint8_t ** pos,
+enc_retire_cid_frame(struct q_conn_info * const ci,
+                     uint8_t ** pos,
                      const uint8_t * const end,
                      struct pkt_meta * const m,
                      struct cid * const dcid);
 
-extern void __attribute__((nonnull)) enc_ping_frame(uint8_t ** pos,
-                                                    const uint8_t * const end,
-                                                    struct pkt_meta * const m);
+extern void __attribute__((nonnull))
+enc_ping_frame(struct q_conn_info * const ci,
+               uint8_t ** pos,
+               const uint8_t * const end,
+               struct pkt_meta * const m);
 
 static inline bool __attribute__((nonnull))
 is_ack_eliciting(const struct frames * const f)

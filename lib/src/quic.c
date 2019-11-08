@@ -675,20 +675,60 @@ void q_close(struct q_conn * const c,
 done:
 #ifndef NO_QINFO
     if (c->scid && c->i.pkts_in_valid > 0) {
+        static const char * const frm_typ_str[] = {
+            [0x00] = "PADDING",
+            [0x01] = "PING",
+            [0x02] = "ACK",
+            [0x03] = "ACK_ECN",
+            [0x04] = "RESET_STREAM",
+            [0x05] = "STOP_SENDING",
+            [0x06] = "CRYPTO",
+            [0x07] = "NEW_TOKEN",
+            [0x08] = "STREAM",
+            [0x09] = "STREAM_09",
+            [0x0a] = "STREAM_0a",
+            [0x0b] = "STREAM_0b",
+            [0x0c] = "STREAM_0c",
+            [0x0d] = "STREAM_0d",
+            [0x0e] = "STREAM_0e",
+            [0x0f] = "STREAM_0f",
+            [0x10] = "MAX_DATA",
+            [0x11] = "MAX_STREAM_DATA",
+            [0x12] = "MAX_STREAMS_UNDI",
+            [0x13] = "MAX_STREAMS_BIDI",
+            [0x14] = "DATA_BLOCKED",
+            [0x15] = "STREAM_DATA_BLOCKED",
+            [0x16] = "STREAMS_BLOCKED_UNDI",
+            [0x17] = "STREAMS_BLOCKED_BIDI",
+            [0x18] = "NEW_CONNECTION_ID",
+            [0x19] = "RETIRE_CONNECTION_ID",
+            [0x1a] = "PATH_CHALLENGE",
+            [0x1b] = "PATH_RESPONSE",
+            [0x1c] = "CONNECTION_CLOSE_QUIC",
+            [0x1d] = "CONNECTION_CLOSE_APP",
+        };
+
         conn_info_populate(c);
         warn(INF, "%s conn %s stats:", conn_type(c), cid_str(c->scid));
-        warn(INF, "\tpkts_in_valid = %s%" PRIu NRM,
+        warn(INF, "pkts_in_valid = %s%" PRIu NRM,
              c->i.pkts_in_valid ? NRM : BLD RED, c->i.pkts_in_valid);
-        warn(INF, "\tpkts_in_invalid = %s%" PRIu NRM,
+        warn(INF, "pkts_in_invalid = %s%" PRIu NRM,
              c->i.pkts_in_invalid ? BLD RED : NRM, c->i.pkts_in_invalid);
-        warn(INF, "\tpkts_out = %" PRIu, c->i.pkts_out);
-        warn(INF, "\tpkts_out_lost = %" PRIu, c->i.pkts_out_lost);
-        warn(INF, "\tpkts_out_rtx = %" PRIu, c->i.pkts_out_rtx);
-        warn(INF, "\trtt = %.3f", c->i.rtt / (float)NS_PER_S);
-        warn(INF, "\trttvar = %.3f", c->i.rttvar / (float)NS_PER_S);
-        warn(INF, "\tcwnd = %" PRIu, c->i.cwnd);
-        warn(INF, "\tssthresh = %" PRIu, c->i.ssthresh);
-        warn(INF, "\tpto_cnt = %" PRIu, c->i.pto_cnt);
+        warn(INF, "pkts_out = %" PRIu, c->i.pkts_out);
+        warn(INF, "pkts_out_lost = %" PRIu, c->i.pkts_out_lost);
+        warn(INF, "pkts_out_rtx = %" PRIu, c->i.pkts_out_rtx);
+        warn(INF, "rtt = %.3f", c->i.rtt / (float)NS_PER_S);
+        warn(INF, "rttvar = %.3f", c->i.rttvar / (float)NS_PER_S);
+        warn(INF, "cwnd = %" PRIu, c->i.cwnd);
+        warn(INF, "ssthresh = %" PRIu, c->i.ssthresh);
+        warn(INF, "pto_cnt = %" PRIu, c->i.pto_cnt);
+        warn(INF, "%-22s %s %10s %10s", "frame", "code", "out", "in");
+        for (size_t i = 0;
+             i < sizeof(c->i.frm_cnt[0]) / sizeof(c->i.frm_cnt[0][0]); i++) {
+            if (c->i.frm_cnt[0][i] || c->i.frm_cnt[1][i])
+                warn(INF, "%-22s 0x%02lx %10" PRIu " %10" PRIu, frm_typ_str[i],
+                     (unsigned long)i, c->i.frm_cnt[0][i], c->i.frm_cnt[1][i]);
+        }
     }
 #endif
     free_conn(c);

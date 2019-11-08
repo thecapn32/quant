@@ -544,8 +544,6 @@ track_acked_pkts(struct w_iov * const v, struct pkt_meta * const m)
 
 void on_pkt_sent(struct pkt_meta * const m)
 {
-    m->txed = true;
-
     // see OnPacketSent() pseudo code
 
     const uint64_t now = loop_now();

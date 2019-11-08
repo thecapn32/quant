@@ -39,7 +39,6 @@
 #include <picotls.h> // IWYU pragma: keep
 #include <quant/quant.h>
 #include <timeout.h>
-#include <warpcore/warpcore.h>
 
 #include "bitset.h"
 #include "conn.h"
@@ -62,7 +61,16 @@
             hex_str_len(PATH_CHLG_LEN))
 #endif
 
-#define track_frame(m, ft) bit_set(FRM_MAX, (ft), &(m)->frms)
+
+static void track_frame(struct pkt_meta * const m,
+                        struct q_conn_info * const ci,
+                        const uint8_t type,
+                        const uint_t n)
+{
+    bit_set(FRM_MAX, type, &m->frms);
+    ci->frm_cnt[m->txed ? 0 : 1][type] += n;
+}
+
 
 #define err_close_return(c, code, ...)                                         \
     do {                                                                       \
@@ -1141,14 +1149,14 @@ bool dec_frames(struct q_conn * const c,
 
         // special-case for optimized parsing of padding ranges
         if (type == FRM_PAD) {
-            if (unlikely(pad_start == 0)) {
+            if (unlikely(pad_start == 0))
                 pad_start = pos;
-                track_frame(m, FRM_PAD);
-            }
             continue;
         }
         if (pad_start) {
-            log_pad((uint16_t)(pos - pad_start + 1));
+            const uint16_t pad_len = (uint16_t)(pos - pad_start + 1);
+            track_frame(m, &c->i, FRM_PAD, pad_len);
+            log_pad(pad_len);
             pad_start = 0;
         }
 
@@ -1284,7 +1292,7 @@ bool dec_frames(struct q_conn * const c,
                              pos - v->buf);
 
         // record this frame type in the meta data
-        track_frame(m, type);
+        track_frame(m, &c->i, type, 1);
     }
 
     if (pad_start)
@@ -1367,7 +1375,8 @@ uint16_t max_frame_len(const uint8_t type)
 }
 
 
-void enc_padding_frame(uint8_t ** pos,
+void enc_padding_frame(struct q_conn_info * const ci,
+                       uint8_t ** pos,
                        const uint8_t * const end,
                        struct pkt_meta * const m,
                        const uint16_t len)
@@ -1378,11 +1387,12 @@ void enc_padding_frame(uint8_t ** pos,
     memset(*pos, FRM_PAD, len);
     *pos += len;
     warn(INF, FRAM_OUT "PADDING" NRM " len=%u", len);
-    track_frame(m, FRM_PAD);
+    track_frame(m, ci, FRM_PAD, len);
 }
 
 
-void enc_ack_frame(uint8_t ** pos,
+void enc_ack_frame(struct q_conn_info * const ci,
+                   uint8_t ** pos,
                    const uint8_t * const start,
                    const uint8_t * const end,
                    struct pkt_meta * const m,
@@ -1469,7 +1479,7 @@ void enc_ack_frame(uint8_t ** pos,
     bit_zero(FRM_MAX, &pn->rx_frames);
     pn->pkts_rxed_since_last_ack_tx = 0;
     pn->imm_ack = false;
-    track_frame(m, FRM_ACK);
+    track_frame(m, ci, FRM_ACK, 1);
 }
 
 
@@ -1533,11 +1543,12 @@ void enc_stream_or_crypto_frame(uint8_t ** pos,
     log_stream_or_crypto_frame(false, m, type, s->id, false, "");
     track_bytes_out(s, m->strm_data_len);
     ensure(!enc_strm || m->strm_off < s->out_data_max, "exceeded fc window");
-    track_frame(m, type == FRM_CRY ? FRM_CRY : FRM_STR);
+    track_frame(m, &s->c->i, type == FRM_CRY ? FRM_CRY : FRM_STR, 1);
 }
 
 
-void enc_close_frame(uint8_t ** pos,
+void enc_close_frame(struct q_conn_info * const ci,
+                     uint8_t ** pos,
                      const uint8_t * const end,
                      struct pkt_meta * const m)
 {
@@ -1578,11 +1589,12 @@ void enc_close_frame(uint8_t ** pos,
              c->err_code ? RED : NRM, (int)err_reason_len, err_reason);
 #endif
 
-    track_frame(m, type);
+    track_frame(m, ci, type, 1);
 }
 
 
-void enc_max_strm_data_frame(uint8_t ** pos,
+void enc_max_strm_data_frame(struct q_conn_info * const ci,
+                             uint8_t ** pos,
                              const uint8_t * const end,
                              struct pkt_meta * const m,
                              struct q_stream * const s)
@@ -1597,11 +1609,12 @@ void enc_max_strm_data_frame(uint8_t ** pos,
     m->max_strm_data_sid = s->id;
     m->max_strm_data = s->in_data_max;
     s->tx_max_strm_data = false;
-    track_frame(m, FRM_MSD);
+    track_frame(m, ci, FRM_MSD, 1);
 }
 
 
-void enc_max_data_frame(uint8_t ** pos,
+void enc_max_data_frame(struct q_conn_info * const ci,
+                        uint8_t ** pos,
                         const uint8_t * const end,
                         struct pkt_meta * const m)
 {
@@ -1613,11 +1626,12 @@ void enc_max_data_frame(uint8_t ** pos,
 
     m->max_data = c->tp_in.max_data;
     c->tx_max_data = false;
-    track_frame(m, FRM_MCD);
+    track_frame(m, ci, FRM_MCD, 1);
 }
 
 
-void enc_max_strms_frame(uint8_t ** pos,
+void enc_max_strms_frame(struct q_conn_info * const ci,
+                         uint8_t ** pos,
                          const uint8_t * const end,
                          struct pkt_meta * const m,
                          const bool bidi)
@@ -1635,11 +1649,12 @@ void enc_max_strms_frame(uint8_t ** pos,
         c->tx_max_sid_bidi = false;
     else
         c->tx_max_sid_uni = false;
-    track_frame(m, type);
+    track_frame(m, ci, type, 1);
 }
 
 
-void enc_strm_data_blocked_frame(uint8_t ** pos,
+void enc_strm_data_blocked_frame(struct q_conn_info * const ci,
+                                 uint8_t ** pos,
                                  const uint8_t * const end,
                                  struct pkt_meta * const m,
                                  struct q_stream * const s)
@@ -1652,11 +1667,12 @@ void enc_strm_data_blocked_frame(uint8_t ** pos,
     warn(INF, FRAM_OUT "STREAM_DATA_BLOCKED" NRM " id=" FMT_SID " lim=%" PRIu,
          s->id, m->strm_data_blocked);
 
-    track_frame(m, FRM_SDB);
+    track_frame(m, ci, FRM_SDB, 1);
 }
 
 
-void enc_data_blocked_frame(uint8_t ** pos,
+void enc_data_blocked_frame(struct q_conn_info * const ci,
+                            uint8_t ** pos,
                             const uint8_t * const end,
                             struct pkt_meta * const m)
 {
@@ -1667,11 +1683,12 @@ void enc_data_blocked_frame(uint8_t ** pos,
 
     warn(INF, FRAM_OUT "DATA_BLOCKED" NRM " lim=%" PRIu, m->data_blocked);
 
-    track_frame(m, FRM_CDB);
+    track_frame(m, ci, FRM_CDB, 1);
 }
 
 
-void enc_streams_blocked_frame(uint8_t ** pos,
+void enc_streams_blocked_frame(struct q_conn_info * const ci,
+                               uint8_t ** pos,
                                const uint8_t * const end,
                                struct pkt_meta * const m,
                                const bool bidi)
@@ -1690,11 +1707,12 @@ void enc_streams_blocked_frame(uint8_t ** pos,
         c->sid_blocked_bidi = false;
     else
         c->sid_blocked_uni = false;
-    track_frame(m, type);
+    track_frame(m, ci, type, 1);
 }
 
 
-void enc_path_response_frame(uint8_t ** pos,
+void enc_path_response_frame(struct q_conn_info * const ci,
+                             uint8_t ** pos,
                              const uint8_t * const end,
                              struct pkt_meta * const m)
 {
@@ -1705,12 +1723,13 @@ void enc_path_response_frame(uint8_t ** pos,
     warn(INF, FRAM_OUT "PATH_RESPONSE" NRM " data=%s",
          pcr_str(c->path_resp_out));
 
-    track_frame(m, FRM_PRP);
+    track_frame(m, ci, FRM_PRP, 1);
 }
 
 
 #ifndef NO_MIGRATION
-void enc_path_challenge_frame(uint8_t ** pos,
+void enc_path_challenge_frame(struct q_conn_info * const ci,
+                              uint8_t ** pos,
                               const uint8_t * const end,
                               struct pkt_meta * const m)
 {
@@ -1723,13 +1742,14 @@ void enc_path_challenge_frame(uint8_t ** pos,
 
     // FIXME: suspend TX until path is verified
 
-    track_frame(m, FRM_PCL);
+    track_frame(m, ci, FRM_PCL, 1);
 }
 #endif
 
 
 #ifndef NO_MIGRATION
-void enc_new_cid_frame(uint8_t ** pos,
+void enc_new_cid_frame(struct q_conn_info * const ci,
+                       uint8_t ** pos,
                        const uint8_t * const end,
                        struct pkt_meta * const m)
 {
@@ -1783,12 +1803,13 @@ void enc_new_cid_frame(uint8_t ** pos,
          enc_cid->seq, enc_cid->rpt, enc_cid->len, cid_str(enc_cid),
          srt_str(srt), enc_cid == &ncid ? "" : BLD REV GRN "[RTX]" NRM);
 
-    track_frame(m, FRM_CID);
+    track_frame(m, ci, FRM_CID, 1);
 }
 #endif
 
 
-void enc_new_token_frame(uint8_t ** pos,
+void enc_new_token_frame(struct q_conn_info * const ci,
+                         uint8_t ** pos,
                          const uint8_t * const end,
                          struct pkt_meta * const m)
 {
@@ -1800,11 +1821,12 @@ void enc_new_token_frame(uint8_t ** pos,
     warn(INF, FRAM_OUT "NEW_TOKEN" NRM " len=%u tok=%s", c->tok_len,
          tok_str(c->tok, c->tok_len));
 
-    track_frame(m, FRM_TOK);
+    track_frame(m, ci, FRM_TOK, 1);
 }
 
 
-void enc_retire_cid_frame(uint8_t ** pos,
+void enc_retire_cid_frame(struct q_conn_info * const ci,
+                          uint8_t ** pos,
                           const uint8_t * const end,
                           struct pkt_meta * const m,
                           struct cid * const dcid)
@@ -1815,11 +1837,12 @@ void enc_retire_cid_frame(uint8_t ** pos,
     warn(INF, FRAM_OUT "RETIRE_CONNECTION_ID" NRM " seq=%" PRIu, dcid->seq);
 
     m->pn->c->tx_retire_cid = false;
-    track_frame(m, FRM_RTR);
+    track_frame(m, ci, FRM_RTR, 1);
 }
 
 
-void enc_ping_frame(uint8_t ** pos,
+void enc_ping_frame(struct q_conn_info * const ci,
+                    uint8_t ** pos,
                     const uint8_t * const end,
                     struct pkt_meta * const m)
 {
@@ -1827,5 +1850,5 @@ void enc_ping_frame(uint8_t ** pos,
 
     warn(INF, FRAM_OUT "PING" NRM);
 
-    track_frame(m, FRM_PNG);
+    track_frame(m, ci, FRM_PNG, 1);
 }

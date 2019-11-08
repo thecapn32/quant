@@ -85,6 +85,8 @@ struct q_conn_info {
     uint_t cwnd;
     uint_t ssthresh;
     uint_t pto_cnt;
+
+    uint_t frm_cnt[2][0x1d + 1]; // 0 = out (tx), 1 = in (rx)
 };
 #endif
 
