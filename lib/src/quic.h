@@ -296,7 +296,7 @@ extern char __tok_str[hex_str_len(MAX_TOK_LEN)];
     if (DLEVEL >= (lvl) && likely(cid))                                        \
         cid2str((cid), str, sizeof(str));
 
-#define srt_str(srt) hex2str((srt), sizeof(srt), __srt_str, sizeof(__srt_str))
+#define srt_str(srt) hex2str((srt), SRT_LEN, __srt_str, sizeof(__srt_str))
 
 #define tok_str(tok, tok_len)                                                  \
     hex2str((tok), (tok_len), __tok_str, sizeof(__tok_str))
