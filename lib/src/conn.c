@@ -316,17 +316,6 @@ rtx_pkt(struct w_iov * const v, struct pkt_meta * const m)
 }
 
 
-static void __attribute__((nonnull)) mk_rand_cid(struct cid * const cid)
-{
-    cid->len = 8 + (uint8_t)w_rand_uniform32(CID_LEN_MAX - 7);
-    rand_bytes(cid->id, sizeof(cid->id));
-#ifndef NO_SRT_MATCHING
-    rand_bytes(cid->srt, sizeof(cid->srt));
-    cid->has_srt = true;
-#endif
-}
-
-
 static void __attribute__((nonnull)) tx_vneg_resp(struct w_sock * const ws,
                                                   const struct w_iov * const v,
                                                   struct pkt_meta * const m)
@@ -355,7 +344,7 @@ static void __attribute__((nonnull)) tx_vneg_resp(struct w_sock * const ws,
     xv->flags = v->flags;
     log_pkt("TX", xv, &xv->saddr, 0, 0, 0);
     struct cid gid;
-    mk_rand_cid(&gid);
+    mk_rand_cid(&gid, 1, false);
     qlog_transport(pkt_tx, "DEFAULT", xv, mx, &gid);
 
 #ifndef FUZZING
@@ -583,7 +572,7 @@ void tx(struct q_conn * const c)
     if (unlikely(c->state == conn_drng))
         return;
 
-    if (unlikely(c->state == conn_qlse && kh_size(&c->strms_by_id) == 0)) {
+    if (unlikely(c->state == conn_qlse)) {
         enter_closing(c);
         tx_ack(c, epoch_in(c), false);
         goto done;
@@ -691,16 +680,8 @@ conns_by_id_del(struct cid * const id)
 static void __attribute__((nonnull)) update_act_scid(struct q_conn * const c)
 {
     // server picks a new random cid
-    struct cid nscid = {.len = SCID_LEN_SERV
-#ifndef NO_SRT_MATCHING
-                        ,
-                        .has_srt = true
-#endif
-    };
-    rand_bytes(nscid.id, sizeof(nscid.id));
-#ifndef NO_SRT_MATCHING
-    rand_bytes(nscid.srt, sizeof(nscid.srt));
-#endif
+    struct cid nscid;
+    mk_rand_cid(&nscid, SCID_LEN_SERV, true);
     cid_cpy(&c->odcid, c->scid);
     mk_cid_str(NTE, &nscid, scid_str_new);
     mk_cid_str(NTE, c->scid, scid_str_prev);
@@ -855,7 +836,7 @@ static void __attribute__((nonnull(1))) new_cids(struct q_conn * const c,
     // init dcid
     if (is_clnt(c)) {
         struct cid ndcid = {0};
-        mk_rand_cid(&ndcid);
+        mk_rand_cid(&ndcid, 1, false);
         cid_cpy(&c->odcid, &ndcid);
         add_dcid(c, &ndcid);
     } else if (dcid)
@@ -863,22 +844,11 @@ static void __attribute__((nonnull(1))) new_cids(struct q_conn * const c,
 
     // init scid and add connection to global data structures
     struct cid nscid = {0};
-    if (is_clnt(c)) {
-        nscid.len = zero_len_scid ? 0 : SCID_LEN_CLNT;
-        if (nscid.len) {
-            rand_bytes(nscid.id, sizeof(nscid.id));
-#ifndef NO_SRT_MATCHING
-            rand_bytes(nscid.srt, sizeof(nscid.srt));
-#endif
-        }
-    } else if (scid) {
+    if (is_clnt(c))
+        mk_rand_cid(&nscid, zero_len_scid ? 0 : SCID_LEN_CLNT, false);
+    else if (scid) {
         cid_cpy(&nscid, scid);
-#ifndef NO_SRT_MATCHING
-        if (nscid.has_srt == false) {
-            rand_bytes(nscid.srt, sizeof(nscid.srt));
-            nscid.has_srt = true;
-        }
-#endif
+        mk_rand_cid(&nscid, 0, true);
     }
     if (nscid.len)
         add_scid(c, &nscid);
@@ -1905,8 +1875,7 @@ struct q_conn * new_conn(struct w_engine * const w,
                                                       : &other_c->sock->ws_loc,
                    sizeof(c->tp_in.pref_addr.addr6));
 
-            mk_rand_cid(&c->tp_in.pref_addr.cid);
-            c->tp_in.pref_addr.cid.len = SCID_LEN_SERV;
+            mk_rand_cid(&c->tp_in.pref_addr.cid, SCID_LEN_SERV, true);
             c->max_cid_seq_out = c->tp_in.pref_addr.cid.seq = 1;
             add_scid(c, &c->tp_in.pref_addr.cid);
         }

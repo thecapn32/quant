@@ -1036,3 +1036,22 @@ cid2str(const struct cid * const cid, char * const dst, const size_t len_dst)
     const int n = snprintf(dst, len_dst, "%" PRIu ":", (cid)->seq);
     return hex2str((cid)->id, (cid)->len, &dst[n], len_dst - (size_t)n);
 }
+
+
+void mk_rand_cid(struct cid * const cid, const uint8_t len, const bool srt)
+{
+    // len==0 means zero-len cid
+    if (len) {
+        // illegal len means randomize
+        cid->len = len >= CID_LEN_MIN
+                       ? len
+                       : 8 + (uint8_t)w_rand_uniform32(CID_LEN_MAX - 7);
+        rand_bytes(cid->id, cid->len);
+    }
+
+#ifndef NO_SRT_MATCHING
+    cid->has_srt = srt;
+    if (srt)
+        rand_bytes(cid->srt, sizeof(cid->srt));
+#endif
+}

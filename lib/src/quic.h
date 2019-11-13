@@ -313,6 +313,10 @@ extern char __tok_str[hex_str_len(MAX_TOK_LEN)];
     (conf) ? (conf)->val : ped(w)->default_conn_conf.val
 
 
+extern void __attribute__((nonnull))
+mk_rand_cid(struct cid * const cid, const uint8_t len, const bool srt);
+
+
 static inline void __attribute__((nonnull))
 cid_cpy(struct cid * const dst, const struct cid * const src)
 {

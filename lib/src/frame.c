@@ -1760,8 +1760,7 @@ void enc_new_cid_frame(struct q_conn_info * const ci,
     const struct cid * const min_scid =
         splay_min(cids_by_seq, &c->scids_by_seq);
     c->max_cid_seq_out = MAX(min_scid->seq, c->max_cid_seq_out + 1);
-    struct cid ncid = {.seq = c->max_cid_seq_out,
-                       .len = is_clnt(c) ? SCID_LEN_CLNT : SCID_LEN_SERV};
+    struct cid ncid = {.seq = c->max_cid_seq_out};
 
     // FIXME: add rpt
 
@@ -1780,12 +1779,9 @@ void enc_new_cid_frame(struct q_conn_info * const ci,
         srt = enc_cid->srt;
 #endif
     } else {
-        rand_bytes(ncid.id, sizeof(ncid.id));
-#ifndef NO_SRT_MATCHING
-        srt = ncid.srt;
-#endif
-        rand_bytes(srt, SRT_LEN);
+        mk_rand_cid(&ncid, is_clnt(c) ? SCID_LEN_CLNT : SCID_LEN_SERV, true);
         add_scid(c, &ncid);
+        srt = ncid.srt;
     }
 
     m->min_cid_seq = m->min_cid_seq == 0 ? enc_cid->seq : m->min_cid_seq;
