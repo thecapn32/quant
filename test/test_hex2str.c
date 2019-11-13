@@ -26,6 +26,8 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <stdint.h>
+#include <string.h>
+
 #include <warpcore/warpcore.h>
 
 #pragma clang diagnostic push
@@ -56,5 +58,8 @@ int main(void)
         rand_bytes(src, len_src);
         hex2str((uint8_t *)src, len_src, dst, len_dst);
         warn(ERR, "src %u, dst %u = %s", len_src, len_dst, dst);
+        ensure(strlen(dst) == len_src * 2 || strlen(dst) + 1 == len_dst ||
+                   len_dst == 0,
+               "%lu %u", strlen(dst), len_src * 2);
     }
 }
