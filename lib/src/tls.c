@@ -633,6 +633,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
 #ifndef NO_SRT_MATCHING
             srt = pa->cid.srt;
+            pa->cid.has_srt = true;
 #endif
             decb(srt, &pos, e, SRT_LEN);
             add_dcid(c, &pa->cid);

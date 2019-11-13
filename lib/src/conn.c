@@ -343,7 +343,7 @@ static void __attribute__((nonnull)) tx_vneg_resp(struct w_sock * const ws,
     xv->saddr = v->saddr;
     xv->flags = v->flags;
     log_pkt("TX", xv, &xv->saddr, 0, 0, 0);
-    struct cid gid;
+    struct cid gid = {.seq = 0};
     mk_rand_cid(&gid, 1, false);
     qlog_transport(pkt_tx, "DEFAULT", xv, mx, &gid);
 
@@ -835,15 +835,17 @@ static void __attribute__((nonnull(1))) new_cids(struct q_conn * const c,
 {
     // init dcid
     if (is_clnt(c)) {
-        struct cid ndcid = {0};
+        struct cid ndcid = {.seq = 0};
         mk_rand_cid(&ndcid, 1, false);
         cid_cpy(&c->odcid, &ndcid);
         add_dcid(c, &ndcid);
-    } else if (dcid)
+    } else if (dcid) {
+        dcid->seq = 0;
         add_dcid(c, dcid);
+    }
 
     // init scid and add connection to global data structures
-    struct cid nscid = {0};
+    struct cid nscid = {.seq = 0};
     if (is_clnt(c))
         mk_rand_cid(&nscid, zero_len_scid ? 0 : SCID_LEN_CLNT, false);
     else if (scid) {
@@ -1875,8 +1877,8 @@ struct q_conn * new_conn(struct w_engine * const w,
                                                       : &other_c->sock->ws_loc,
                    sizeof(c->tp_in.pref_addr.addr6));
 
-            mk_rand_cid(&c->tp_in.pref_addr.cid, SCID_LEN_SERV, true);
             c->max_cid_seq_out = c->tp_in.pref_addr.cid.seq = 1;
+            mk_rand_cid(&c->tp_in.pref_addr.cid, SCID_LEN_SERV, true);
             add_scid(c, &c->tp_in.pref_addr.cid);
         }
     }
