@@ -82,7 +82,7 @@ struct tls {
     ptls_raw_extension_t tp_ext[2];
     ptls_handshake_properties_t tls_hshk_prop;
     size_t max_early_data;
-    uint8_t tp_buf[4096]; // FIXME: figure out a way to shrink/free this
+    uint8_t * tp_buf;
 };
 
 

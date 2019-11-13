@@ -708,8 +708,17 @@ static void __attribute__((nonnull(1, 2))) encb_tp(uint8_t ** pos,
 
 void init_tp(struct q_conn * const c)
 {
+#if !defined(RIOT_VERSION) && !defined(PARTICLE)
+#define TP_LEN 4096
+#else
+#define TP_LEN 192
+#endif
+
+    c->tls.tp_buf = calloc(1, TP_LEN);
+    ensure(c->tls.tp_buf, "calloc");
+
     uint8_t * pos = c->tls.tp_buf + sizeof(uint16_t);
-    const uint8_t * end = &c->tls.tp_buf[sizeof(c->tls.tp_buf)];
+    const uint8_t * end = c->tls.tp_buf + TP_LEN;
 
     // add a grease tp
     uint8_t grease[18];
@@ -883,8 +892,8 @@ void init_tp(struct q_conn * const c)
                                                       : RED "unknown",
                      grease_type, grease_len,
                      hex2str(&grease[2], grease_len,
-                             (char[hex_str_len(sizeof(c->tls.tp_buf))]){""},
-                             hex_str_len(sizeof(c->tls.tp_buf))));
+                             (char[hex_str_len(TP_LEN)]){""},
+                             hex_str_len(TP_LEN)));
 #endif
             } else if (tp_order[j] == TP_QR) {
                 if (c->do_qr_test) {
@@ -1222,8 +1231,13 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
          (unsigned long)epoch_off[3], (unsigned long)epoch_off[4], ret,
          (unsigned long)(iv ? iv->len - in_len : 0));
 #endif
-    if (ret == 0 && c->state != conn_estb) {
-        if (ptls_is_psk_handshake(c->tls.t) && is_clnt(c))
+    if (ret == 0) {
+        if (c->tls.tp_buf) {
+            free(c->tls.tp_buf);
+            c->tls.tp_buf = 0;
+        }
+        if (c->state != conn_estb && ptls_is_psk_handshake(c->tls.t) &&
+            is_clnt(c))
             c->did_0rtt = c->try_0rtt &&
                           (c->tls.tls_hshk_prop.client.early_data_acceptance ==
                            PTLS_EARLY_DATA_ACCEPTED);
