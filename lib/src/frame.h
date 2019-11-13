@@ -56,7 +56,6 @@ struct cid;
 #define FRM_STR_0d 0x0d
 #define FRM_STR_0e 0x0e
 #define FRM_STR_0f 0x0f
-#define FRM_STR_MAX FRM_STR_0f
 #define FRM_MCD 0x10 ///< MAX_DATA (connection)
 #define FRM_MSD 0x11 ///< MAX_STREAM_DATA
 #define FRM_MSB 0x12 ///< MAX_STREAMS (bidirectional)

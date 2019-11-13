@@ -1161,12 +1161,34 @@ bool dec_frames(struct q_conn * const c,
         }
 
         // check that frame type is allowed in this pkt type
-        static const struct frames lh_ok = bitset_t_initializer(
-            1 << FRM_PNG | 1 << FRM_CRY | 1 << FRM_ACK | 1 << FRM_ACE |
-            1 << FRM_PAD | 1 << FRM_CLQ | 1 << FRM_CLA);
-        if (unlikely((m->hdr.type == LH_INIT || m->hdr.type == LH_HSHK) &&
-                     type < FRM_MAX &&
-                     bit_isset(FRM_MAX, type, &lh_ok) == false))
+        static const struct frames frame_ok[] = {
+            [ep_init] = bitset_t_initializer(
+                1 << FRM_PAD | 1 << FRM_PNG | 1 << FRM_CRY | 1 << FRM_CLQ |
+                1 << FRM_CLA | 1 << FRM_ACK | 1 << FRM_ACE),
+            [ep_0rtt] = bitset_t_initializer(
+                1 << FRM_PAD | 1 << FRM_PNG | 1 << FRM_RST | 1 << FRM_STP |
+                1 << FRM_TOK | 1 << FRM_STR | 1 << FRM_STR_09 |
+                1 << FRM_STR_0a | 1 << FRM_STR_0b | 1 << FRM_STR_0c |
+                1 << FRM_STR_0d | 1 << FRM_STR_0e | 1 << FRM_STR_0f |
+                1 << FRM_MCD | 1 << FRM_MSD | 1 << FRM_MSB | 1 << FRM_MSU |
+                1 << FRM_CDB | 1 << FRM_SDB | 1 << FRM_SBB | 1 << FRM_SBU |
+                1 << FRM_CID | 1 << FRM_RTR | 1 << FRM_PCL | 1 << FRM_PRP),
+            [ep_hshk] = bitset_t_initializer(
+                1 << FRM_PAD | 1 << FRM_PNG | 1 << FRM_CRY | 1 << FRM_CLQ |
+                1 << FRM_CLA | 1 << FRM_ACK | 1 << FRM_ACE),
+            [ep_data] = bitset_t_initializer(
+                1 << FRM_PAD | 1 << FRM_PNG | 1 << FRM_CRY | 1 << FRM_CLQ |
+                1 << FRM_CLA | 1 << FRM_ACK | 1 << FRM_ACE | 1 << FRM_RST |
+                1 << FRM_STP | 1 << FRM_TOK | 1 << FRM_STR | 1 << FRM_STR_09 |
+                1 << FRM_STR_0a | 1 << FRM_STR_0b | 1 << FRM_STR_0c |
+                1 << FRM_STR_0d | 1 << FRM_STR_0e | 1 << FRM_STR_0f |
+                1 << FRM_MCD | 1 << FRM_MSD | 1 << FRM_MSB | 1 << FRM_MSU |
+                1 << FRM_CDB | 1 << FRM_SDB | 1 << FRM_SBB | 1 << FRM_SBU |
+                1 << FRM_CID | 1 << FRM_RTR | 1 << FRM_PCL | 1 << FRM_PRP)};
+        if (likely(type < FRM_MAX) &&
+            unlikely(bit_isset(FRM_MAX, type,
+                               &frame_ok[epoch_for_pkt_type(m->hdr.type)]) ==
+                     false))
             err_close_return(c, ERR_PROTOCOL_VIOLATION, type,
                              "0x%02x frame not OK in %s pkt", type,
                              pkt_type_str(m->hdr.flags, &m->hdr.vers));
