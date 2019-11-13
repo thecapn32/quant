@@ -1161,14 +1161,14 @@ bool dec_frames(struct q_conn * const c,
         }
 
         // check that frame type is allowed in this pkt type
-        static const struct frames lh_ok =
-            bitset_t_initializer(1 << FRM_CRY | 1 << FRM_ACK | 1 << FRM_ACE |
-                                 1 << FRM_PAD | 1 << FRM_CLQ | 1 << FRM_CLA);
+        static const struct frames lh_ok = bitset_t_initializer(
+            1 << FRM_PNG | 1 << FRM_CRY | 1 << FRM_ACK | 1 << FRM_ACE |
+            1 << FRM_PAD | 1 << FRM_CLQ | 1 << FRM_CLA);
         if (unlikely((m->hdr.type == LH_INIT || m->hdr.type == LH_HSHK) &&
                      type < FRM_MAX &&
                      bit_isset(FRM_MAX, type, &lh_ok) == false))
             err_close_return(c, ERR_PROTOCOL_VIOLATION, type,
-                             "0x%02x frame not allowed in %s pkt", type,
+                             "0x%02x frame not OK in %s pkt", type,
                              pkt_type_str(m->hdr.flags, &m->hdr.vers));
 
         bool ok;
