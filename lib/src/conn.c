@@ -1034,8 +1034,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
             // only do vneg for draft and vneg versions
             if (is_vneg_vers(c->vers) == false &&
                 is_draft_vers(c->vers) == false) {
-                err_close(c, ERR_PROTOCOL_VIOLATION, 0,
-                          "must not vneg for tx vers 0x%0" PRIx32, c->vers);
+                enter_closing(c);
                 goto done;
             }
 
