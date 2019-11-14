@@ -1803,7 +1803,9 @@ void enc_new_cid_frame(struct q_conn_info * const ci,
     } else {
         mk_rand_cid(&ncid, is_clnt(c) ? SCID_LEN_CLNT : SCID_LEN_SERV, true);
         add_scid(c, &ncid);
+#ifndef NO_SRT_MATCHING
         srt = ncid.srt;
+#endif
     }
 
     m->min_cid_seq = m->min_cid_seq == 0 ? enc_cid->seq : m->min_cid_seq;
