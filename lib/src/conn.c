@@ -839,10 +839,9 @@ static void __attribute__((nonnull(1))) new_cids(struct q_conn * const c,
         mk_rand_cid(&ndcid, 1, false);
         cid_cpy(&c->odcid, &ndcid);
         add_dcid(c, &ndcid);
-    } else if (dcid) {
-        dcid->seq = 0;
+    } else if (dcid)
+        // dcid->seq is 0 due to calloc allocation
         add_dcid(c, dcid);
-    }
 
     // init scid and add connection to global data structures
     struct cid nscid = {.seq = 0};
