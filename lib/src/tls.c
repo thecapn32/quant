@@ -715,9 +715,6 @@ void init_tp(struct q_conn * const c)
 #define TP_LEN 192
 #endif
 
-    c->tls.tp_buf = calloc(1, TP_LEN);
-    ensure(c->tls.tp_buf, "calloc");
-
     uint8_t * pos = c->tls.tp_buf + sizeof(uint16_t);
     const uint8_t * end = c->tls.tp_buf + TP_LEN;
 
@@ -1105,6 +1102,11 @@ void init_tls(struct q_conn * const c,
     if (c->tls.t)
         // we are re-initializing during version negotiation
         free_tls(c, true);
+    else {
+        c->tls.tp_buf = calloc(1, TP_LEN);
+        ensure(c->tls.tp_buf, "calloc");
+    }
+
     if (is_clnt(c))
         c->tls.t = ptls_client_new(&ped(c->w)->tls_ctx);
 #ifndef NO_SERVER
@@ -1185,8 +1187,12 @@ void free_tls(struct q_conn * const c, const bool keep_alpn)
         ptls_free(c->tls.t);
     ptls_clear_memory(c->tls.secret, sizeof(c->tls.secret));
     free_prot(c);
-    if (keep_alpn == false && c->tls.alpn.base != alpn[0].base)
-        free(c->tls.alpn.base);
+    if (keep_alpn == false) {
+        if (c->tls.alpn.base != alpn[0].base)
+            free(c->tls.alpn.base);
+        if (c->tls.tp_buf)
+            free(c->tls.tp_buf);
+    }
 }
 
 
