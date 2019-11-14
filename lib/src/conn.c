@@ -710,6 +710,7 @@ void add_scid(struct q_conn * const c, struct cid * const id)
     struct cid * const scid = calloc(1, sizeof(*scid));
     ensure(scid, "could not calloc");
     cid_cpy(scid, id);
+    warn(ERR, "add %"PRIu":%s", scid->seq, cid_str(scid));
 #ifndef NO_MIGRATION
     ensure(splay_insert(cids_by_seq, &c->scids_by_seq, scid) == 0, "inserted");
     cids_by_id_ins(&c->scids_by_id, scid);
@@ -1289,12 +1290,16 @@ static void __attribute__((nonnull))
                 }
 
                 if (scid->seq <= c->scid->seq)
-                    warn(DBG, "pkt has prev scid %s, accepting", cid_str(scid));
+                    warn(DBG, "pkt has prev scid %" PRIu ":%s, accepting",
+                         scid->seq, cid_str(scid));
                 else {
                     mk_cid_str(NTE, scid, scid_str);
                     mk_cid_str(NTE, c->scid, scid_str_prev);
-                    warn(NTE, "migration to scid %s for %s conn (was %s)",
-                         scid_str, conn_type(c), scid_str_prev);
+                    warn(NTE,
+                         "migration to scid %" PRIu
+                         ":%s for %s conn (was %" PRIu ":%s)",
+                         scid->seq, scid_str, conn_type(c), c->scid->seq,
+                         scid_str_prev);
                     c->scid = scid;
                 }
             }
