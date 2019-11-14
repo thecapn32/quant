@@ -34,6 +34,9 @@ if [ "$ROLE" == "client" ]; then
     cd /downloads || exit
 
     case "$TESTCASE" in
+    "versionnegotiation")
+        CLIENT_ARGS="-e 12345678 $CLIENT_ARGS"
+        ;;
     "retry")
         REQUESTS=${REQUESTS//443/4434}
         ;;
