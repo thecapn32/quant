@@ -5,9 +5,18 @@
 
 if [ -n "$TESTCASE" ]; then
     case "$TESTCASE" in
-        "handshake"|"transfer"|"retry"|"throughput") ;;
-        "resumption"|"http3") exit 127 ;;
-        *) exit 127 ;;
+    "versionnegotiation"|"handshake"|"transfer"|"retry"|"resumption")
+        ;;
+    "http3")
+        if [ "$ROLE" == "client" ]; then
+            CLIENT_ARGS=-3
+        else
+            exit 127
+        fi
+        ;;
+    *)
+        exit 127
+        ;;
     esac
 fi
 
@@ -16,12 +25,32 @@ fi
 # - SERVER_PARAMS contains user-supplied command line parameters
 # - CLIENT_PARAMS contains user-supplied command line parameters
 
+rm -f /logs/$ROLE.log
 if [ "$ROLE" == "client" ]; then
+    CLIENT_ARGS="-i eth0 -w -q /logs/$ROLE.qlog $CLIENT_ARGS"
+
     # Wait for the simulator to start up.
     /wait-for-it.sh sim:57832 -s -t 30
     cd /downloads || exit
-    client -i eth0 -w -q /logs/$ROLE.qlog $REQUESTS > /logs/$ROLE.log 2>&1
+
+    case "$TESTCASE" in
+    "retry")
+        REQUESTS=${REQUESTS//443/4434}
+        ;;
+    "resumption")
+        REQS=($REQUESTS)
+        REQUESTS=${REQS[0]}
+        client $CLIENT_ARGS $REQUESTS >> /logs/$ROLE.log 2>&1
+        REQUESTS=${REQS[@]:1}
+        ;;
+    *)
+        ;;
+    esac
+
+    client $CLIENT_ARGS $REQUESTS >> /logs/$ROLE.log 2>&1
+
 elif [ "$ROLE" == "server" ]; then
-    server -i eth0 -d /www -p 443 -t 0 -c /tls/dummy.crt -k /tls/dummy.key \
-        -q /logs/$ROLE.qlog > /logs/$ROLE.log 2>&1
+    server -i eth0 -d /www -p 443 -p 4434 -t 0 \
+        -c /tls/dummy.crt -k /tls/dummy.key \
+        -q /logs/$ROLE.qlog >> /logs/$ROLE.log 2>&1
 fi
