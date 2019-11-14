@@ -198,15 +198,17 @@ function bench_server {
 
 function check_fail {
     local log="$2"
-    if ! grep -q -E 'hexdump|STATELESS|_close_frame.*0x1c=quic err=0x[^0] |assertion failed|AddressSanitizer|runtime error|ABORT:' "$log"; then
+    if grep -q -E 'assertion failed|AddressSanitizer|runtime error|ABORT:' "$log"; then
+        ret="X"
+    elif grep -q -E 'hexdump|STATELESS|_close_frame.*0x1c=quic err=0x[^0]' "$log"; then
+        ret="x"
+    else
         return 0
     fi
 
     local ret_base="/tmp/$script.$pid.$1.ret"
-    echo X > "$ret_base.fail"
-    echo "Test with $1 failed (log $3)"
-    # tail -n 10 "$log"
-    # echo
+    echo $ret > "$ret_base.fail"
+    echo "Test with $1 failed with $ret (log $3)"
     return 1
 }
 
