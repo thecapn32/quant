@@ -85,6 +85,7 @@ struct conn_cache_entry {
 KHASH_MAP_INIT_INT64(conn_cache, struct conn_cache_entry *)
 
 
+static uint32_t vers = 0xbabababa;
 static uint32_t timeout = 10;
 static uint32_t num_bufs = 100000;
 static uint32_t reps = 1;
@@ -140,6 +141,7 @@ static void __attribute__((noreturn, nonnull)) usage(const char * const name,
            num_bufs);
     printf("\t[-c]\t\tverify TLS certificates; default %s\n",
            verify_certs ? "true" : "false");
+    printf("\t[-e version]\tQUIC version to use; default 0x%08x\n", vers);
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
     printf("\t[-l log]\tlog file for TLS keys; default %s\n", tls_log);
     printf(
@@ -412,7 +414,7 @@ int main(int argc, char * argv[])
     int ret = 0;
 
     while ((ch = getopt(argc, argv,
-                        "hi:v:s:t:l:cu3zb:wr:q:m"
+                        "hi:v:s:t:l:cu3zb:wr:q:me:"
 #ifndef NO_MIGRATION
                         "n"
 #endif
@@ -435,6 +437,9 @@ int main(int argc, char * argv[])
             break;
         case 'r':
             reps = (uint32_t)MAX(1, MIN(strtoul(optarg, 0, 10), UINT32_MAX));
+            break;
+        case 'e':
+            vers = (uint32_t)MAX(1, MIN(strtoul(optarg, 0, 16), UINT32_MAX));
             break;
         case 'l':
             strncpy(tls_log, optarg, sizeof(tls_log) - 1);
@@ -484,6 +489,7 @@ int main(int argc, char * argv[])
                 &(struct q_conn_conf){.enable_tls_key_updates = flip_keys,
                                       .enable_spinbit = true,
                                       .idle_timeout = timeout,
+                                      .version = vers,
                                       .enable_quantum_readiness_test = test_qr,
                                       .enable_zero_len_cid = zlen_cids},
             .qlog = qlog,
