@@ -1039,7 +1039,13 @@ cid2str(const struct cid * const cid, char * const dst, const size_t len_dst)
 }
 
 
-void mk_rand_cid(struct cid * const cid, const uint8_t len, const bool srt)
+void mk_rand_cid(struct cid * const cid,
+                 const uint8_t len,
+                 const bool srt
+#ifdef NO_SRT_MATCHING
+                 __attribute__((unused))
+#endif
+)
 {
     // len==0 means zero-len cid
     if (len) {
