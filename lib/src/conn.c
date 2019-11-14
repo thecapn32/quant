@@ -542,6 +542,9 @@ static bool __attribute__((nonnull)) tx_stream(struct q_stream * const s)
 #endif
             break;
         }
+
+        if (unlikely(c->state > conn_estb))
+            break;
     }
 
     return (unlikely(c->tx_limit) && encoded == c->tx_limit) ||
@@ -680,7 +683,7 @@ conns_by_id_del(struct cid * const id)
 static void __attribute__((nonnull)) update_act_scid(struct q_conn * const c)
 {
     // server picks a new random cid
-    struct cid nscid;
+    struct cid nscid = {.seq = 0};
     mk_rand_cid(&nscid, SCID_LEN_SERV, true);
     cid_cpy(&c->odcid, c->scid);
     mk_cid_str(NTE, &nscid, scid_str_new);
