@@ -1033,8 +1033,9 @@ char * hex2str(const uint8_t * const src,
 const char *
 cid2str(const struct cid * const cid, char * const dst, const size_t len_dst)
 {
-    const int n = snprintf(dst, len_dst, "%" PRIu ":", (cid)->seq);
-    return hex2str((cid)->id, (cid)->len, &dst[n], len_dst - (size_t)n);
+    const int n = snprintf(dst, len_dst, "%" PRIu ":", cid->seq);
+    hex2str(cid->id, cid->len, &dst[n], len_dst - (size_t)n);
+    return dst;
 }
 
 
