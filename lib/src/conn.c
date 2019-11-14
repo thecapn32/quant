@@ -713,7 +713,6 @@ void add_scid(struct q_conn * const c, struct cid * const id)
     struct cid * const scid = calloc(1, sizeof(*scid));
     ensure(scid, "could not calloc");
     cid_cpy(scid, id);
-    warn(ERR, "add %s", cid_str(scid));
 #ifndef NO_MIGRATION
     ensure(splay_insert(cids_by_seq, &c->scids_by_seq, scid) == 0, "inserted");
     cids_by_id_ins(&c->scids_by_id, scid);
