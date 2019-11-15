@@ -420,9 +420,9 @@ void do_conn_fc(struct q_conn * const c, const uint16_t len)
         c->blocked = true;
 
     // check if we need to do connection-level flow control
-    if (c->in_data_str * 2 > c->tp_in.max_data) {
+    if (c->in_data_str * 4 > c->tp_in.max_data) {
         c->tx_max_data = true;
-        c->tp_in.max_data *= 2;
+        c->tp_in.max_data *= 4;
     }
 }
 
