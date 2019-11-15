@@ -3,7 +3,7 @@ aioquic   *         V    H    D    C    R    Z    S    Q    M    B         U    
 ats       *         v
 f5        *    x    V    H    D    C    R    Z    S                        U              3
 google    *         V    H    D    C    R              Q                                  3
-lsquic    *         V    H    D    C    R    Z         Q    M    B         U    P    E    3
+lsquic    *         V    H    D    C    R    Z    S    Q    M    B         U    P    E    3
 mvfst     *         V    H    D    C    R    Z         Q         B                        3
 ngtcp2    *         V    H    D    C    R    Z    S    Q    M    B         U              3
 ngx_quic  *         v
