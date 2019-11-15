@@ -61,20 +61,20 @@ qlog_pkt_type_str(const uint8_t flags, const void * const vers)
             ((const uint8_t * const)vers)[1] == 0 &&
             ((const uint8_t * const)vers)[2] == 0 &&
             ((const uint8_t * const)vers)[3] == 0)
-            return "VERSION_NEGOTIATION";
+            return "version_negotiation";
         switch (pkt_type(flags)) {
         case LH_INIT:
-            return "INITIAL";
+            return "initial";
         case LH_RTRY:
-            return "RETRY";
+            return "retry";
         case LH_HSHK:
-            return "HANDSHAKE";
+            return "handshake";
         case LH_0RTT:
-            return "ZERORTT";
+            return "zerortt";
         }
     } else if (pkt_type(flags) == SH)
-        return "ONERTT";
-    return "UNKOWN";
+        return "onertt";
+    return "unkown";
 }
 
 
@@ -106,20 +106,16 @@ void qlog_init(const struct q_conn * const c
 {
     if (qlog && qlog_ref_t == 0) {
         qlog_ref_t = loop_now();
-        fprintf(qlog,
-                "{"
-                "\"qlog_version\":\"draft-00\","
-                "\"title\":\"%s %s qlog\","
-                "\"traces\":[{"
-                "\"vantage_point\":{\"type\":\"%s\"},"
-                "\"configuration\":{\"time_units\":\"us\"},\"common_fields\":{"
-                "\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":%" PRIu64
-                "},"
-                "\"event_fields\":[\"relative_time\",\"group_id\",\"CATEGORY\","
-                "\"EVENT_TYPE\","
-                "\"TRIGGER\",\"DATA\"],\"events\":[",
-                quant_name, quant_version, is_clnt(c) ? "CLIENT" : "SERVER",
-                to_usec(qlog_ref_t));
+        fprintf(
+            qlog,
+            "{\"qlog_version\":\"draft-01\",\"title\":\"%s %s "
+            "qlog\",\"traces\":[{\"vantage_point\":{\"type\":\"%s\"},"
+            "\"configuration\":{\"time_units\":\"us\"},\"common_fields\":{"
+            "\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":%" PRIu64
+            "},\"event_fields\":[\"relative_time\",\"group_id\",\"category\","
+            "\"event\",\"trigger\",\"data\"],\"events\":[",
+            quant_name, quant_version, is_clnt(c) ? "client" : "server",
+            to_usec(qlog_ref_t));
     }
 }
 
@@ -142,12 +138,12 @@ void qlog_transport(const qlog_pkt_evt_t evt,
     if (qlog_common(gid) == false)
         return;
 
-    static const char * const evt_str[] = {[pkt_tx] = "PACKET_SENT",
-                                           [pkt_rx] = "PACKET_RECEIVED",
-                                           [pkt_dp] = "PACKET_DROPPED"};
+    static const char * const evt_str[] = {[pkt_tx] = "packet_sent",
+                                           [pkt_rx] = "packet_received",
+                                           [pkt_dp] = "packet_dropped"};
     fprintf(qlog,
-            ",\"TRANSPORT\",\"%s\",\"%s\",{\"packet_type\":\"%"
-            "s\",\"header\":{\"packet_size\":%u",
+            ",\"transport\",\"%s\",\"%s\",{\"packet_type\":\"%s\",\"header\":{"
+            "\"packet_size\":%u",
             evt_str[evt], trg, qlog_pkt_type_str(m->hdr.flags, &m->hdr.vers),
             m->udp_len);
     if (is_lh(m->hdr.flags) == false || (m->hdr.vers && m->hdr.type != LH_RTRY))
@@ -166,7 +162,7 @@ void qlog_transport(const qlog_pkt_evt_t evt,
     int prev_frame = 0;
     if (has_frm(m->frms, FRM_STR)) {
         prev_frame = fprintf(qlog,
-                             "%s{\"frame_type\":\"STREAM\",\"id\":%" PRId
+                             "%s{\"frame_type\":\"stream\",\"stream_id\":%" PRId
                              ",\"length\":%u,\"offset\":%" PRIu,
                              prev_frame ? "," : "", m->strm->id,
                              m->strm_data_len, m->strm_off);
@@ -228,8 +224,8 @@ void qlog_recovery(const qlog_rec_evt_t evt,
         return;
 
     static const char * const evt_str[] = {
-        [rec_mu] = "METRIC_UPDATE", [rec_pl] = "PACKET_LOST"};
-    fprintf(qlog, ",\"RECOVERY\",\"%s\",\"%s\",{", evt_str[evt], trg);
+        [rec_mu] = "metrics_updated", [rec_pl] = "packet_lost"};
+    fprintf(qlog, ",\"recovery\",\"%s\",\"%s\",{", evt_str[evt], trg);
 
     if (evt == rec_pl) {
         fprintf(qlog, "\"packet_number\":%" PRIu, m->hdr.nr);
@@ -243,10 +239,12 @@ void qlog_recovery(const qlog_rec_evt_t evt,
     if (c->rec.cur.cwnd != c->rec.prev.cwnd)
         prev_metric = fprintf(qlog, "%s\"cwnd\":%" PRIu, prev_metric ? "," : "",
                               c->rec.cur.cwnd);
+#if 0
     if (c->rec.cur.ssthresh != UINT_T_MAX &&
         c->rec.cur.ssthresh != c->rec.prev.ssthresh)
         prev_metric = fprintf(qlog, "%s\"ssthresh\":%" PRIu,
                               prev_metric ? "," : "", c->rec.cur.ssthresh);
+#endif
     if (c->rec.cur.srtt != c->rec.prev.srtt)
         prev_metric = fprintf(qlog, "%s\"smoothed_rtt\":%" PRIu64,
                               prev_metric ? "," : "", to_usec(c->rec.cur.srtt));
@@ -256,13 +254,15 @@ void qlog_recovery(const qlog_rec_evt_t evt,
             fprintf(qlog, "%s\"min_rtt\":%" PRIu64, prev_metric ? "," : "",
                     to_usec(c->rec.cur.min_rtt));
     if (c->rec.cur.latest_rtt != c->rec.prev.latest_rtt)
-        prev_metric =
+        // prev_metric =
             fprintf(qlog, "%s\"latest_rtt\":%" PRIu64, prev_metric ? "," : "",
                     to_usec(c->rec.cur.latest_rtt));
+#if 0
     if (c->rec.cur.rttvar != c->rec.prev.rttvar)
         // prev_metric =
         fprintf(qlog, "%s\"rtt_variance\":%" PRIu64, prev_metric ? "," : "",
                 to_usec(c->rec.cur.rttvar));
+#endif
 
 done:
     fputs("}]", qlog);

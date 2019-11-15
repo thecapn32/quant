@@ -345,7 +345,7 @@ static void __attribute__((nonnull)) tx_vneg_resp(struct w_sock * const ws,
     log_pkt("TX", xv, &xv->saddr, 0, 0, 0);
     struct cid gid = {.seq = 0};
     mk_rand_cid(&gid, 1, false);
-    qlog_transport(pkt_tx, "DEFAULT", xv, mx, &gid);
+    qlog_transport(pkt_tx, "default", xv, mx, &gid);
 
 #ifndef FUZZING
     w_tx(ws, &q);
@@ -1142,7 +1142,7 @@ done:
         bitset_t_initializer(1 << FRM_CRY | 1 << FRM_STR);
     const bool dup_strm =
         bit_overlap(FRM_MAX, &m->frms, &qlog_dup_chk) && m->strm == 0;
-    qlog_transport(dup_strm ? pkt_dp : pkt_rx, "DEFAULT", v, m, &c->odcid);
+    qlog_transport(dup_strm ? pkt_dp : pkt_rx, "default", v, m, &c->odcid);
 #endif
     return true;
 }
@@ -1456,7 +1456,7 @@ static void __attribute__((nonnull))
 
     drop:
         if (pkt_valid == false)
-            qlog_transport(pkt_dp, "DEFAULT", v, m, &m->hdr.dcid);
+            qlog_transport(pkt_dp, "default", v, m, &m->hdr.dcid);
         free_iov(v, m);
     next:
 #ifndef NO_QINFO
