@@ -1119,11 +1119,6 @@ done:
     if (unlikely(ok == false))
         return false;
 
-    if (epoch_in(c) == ep_data && needs_ack(m->pn) == imm_ack) {
-        tx_ack(c, epoch_in(c), false);
-        do_tx(c);
-    }
-
     if (likely(m->hdr.nr != UINT_T_MAX)) {
         struct pn_space * const pn = pn_for_pkt_type(c, m->hdr.type);
         // update ECN info
