@@ -166,8 +166,8 @@ void qlog_transport(const qlog_pkt_evt_t evt,
     int prev_frame = 0;
     if (has_frm(m->frms, FRM_STR)) {
         prev_frame = fprintf(qlog,
-                             "%s{\"frame_type\": \"STREAM\",\"id\": %" PRId
-                             ",\"length\": %u,\"offset\": %" PRIu,
+                             "%s{\"frame_type\":\"STREAM\",\"id\":%" PRId
+                             ",\"length\":%u,\"offset\":%" PRIu,
                              prev_frame ? "," : "", m->strm->id,
                              m->strm_data_len, m->strm_off);
         if (m->is_fin)
@@ -189,7 +189,7 @@ void qlog_transport(const qlog_pkt_evt_t evt,
 
         // prev_frame =
         fprintf(qlog,
-                "%s{\"frame_type\": \"ACK\",\"ack_delay\": %" PRIu64
+                "%s{\"frame_type\":\"ACK\",\"ack_delay\":%" PRIu64
                 ",\"acked_ranges\":[",
                 prev_frame ? "," : "", ack_delay);
 
@@ -221,13 +221,21 @@ done:
 void qlog_recovery(const qlog_rec_evt_t evt,
                    const char * const trg,
                    const struct q_conn * const c,
+                   const struct pkt_meta * const m,
                    const struct cid * const gid)
 {
     if (qlog_common(gid) == false)
         return;
 
-    static const char * const evt_str[] = {[rec_mu] = "METRIC_UPDATE"};
+    static const char * const evt_str[] = {
+        [rec_mu] = "METRIC_UPDATE", [rec_pl] = "PACKET_LOST"};
     fprintf(qlog, ",\"RECOVERY\",\"%s\",\"%s\",{", evt_str[evt], trg);
+
+    if (evt == rec_pl) {
+        fprintf(qlog, "\"packet_number\":%" PRIu, m->hdr.nr);
+        goto done;
+    }
+
     int prev_metric = 0;
     if (c->rec.cur.in_flight != c->rec.prev.in_flight)
         prev_metric = fprintf(qlog, "%s\"bytes_in_flight\":%" PRIu,
@@ -255,6 +263,8 @@ void qlog_recovery(const qlog_rec_evt_t evt,
         // prev_metric =
         fprintf(qlog, "%s\"rtt_variance\":%" PRIu64, prev_metric ? "," : "",
                 to_usec(c->rec.cur.rttvar));
+
+done:
     fputs("}]", qlog);
 
     prev_event = true;

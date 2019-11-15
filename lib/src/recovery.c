@@ -152,7 +152,7 @@ void log_cc(struct q_conn * const c)
              delta_rttvar / (double)NS_PER_S);
     }
 
-    qlog_recovery(rec_mu, "DEFAULT", c, &c->odcid);
+    qlog_recovery(rec_mu, "DEFAULT", c, 0, &c->odcid);
     c->rec.prev = c->rec.cur;
 }
 #endif
@@ -285,6 +285,7 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
 
     // rest of function is not from pseudo code
 
+    qlog_recovery(rec_pl, "UNKNOWN", c, m, &c->odcid);
     diet_insert(&pn->acked_or_lost, m->hdr.nr, 0);
 
     if (is_lost) {
