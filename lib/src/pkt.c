@@ -28,7 +28,6 @@
 #include <inttypes.h>
 #include <stdint.h>
 #include <string.h>
-#include <sys/param.h>
 
 #if !defined(PARTICLE) && !defined(RIOT_VERSION)
 #include <netinet/ip.h>
@@ -482,12 +481,11 @@ bool enc_pkt(struct q_stream * const s,
         enc_stream_or_crypto_frame(&pos, end, m, v, s, dlen);
     }
 
-    const uint16_t max_pkt =
-        MAX((uint16_t)c->tp_out.max_pkt, MAX_PKT_LEN) - AEAD_LEN;
-    if (unlikely((pos - v->buf) < max_pkt && (enc_data || rtx) &&
+    // TODO: include more frames when MAX_PKT_LEN < max_pkt_len TP
+    if (unlikely((pos - v->buf) < MAX_PKT_LEN - AEAD_LEN && (enc_data || rtx) &&
                  (epoch == ep_data || (!is_clnt(c) && epoch == ep_0rtt))))
         // we can try to stick some more frames in after the stream frame
-        enc_other_frames(&c->i, &pos, v->buf + max_pkt, m);
+        enc_other_frames(&c->i, &pos, v->buf + MAX_PKT_LEN - AEAD_LEN, m);
 
     if (is_clnt(c) && enc_data) {
         if (unlikely(c->try_0rtt == false && m->hdr.type == LH_INIT)) {
