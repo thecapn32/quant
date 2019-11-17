@@ -185,7 +185,7 @@ void qlog_transport(const qlog_pkt_evt_t evt,
 
         // prev_frame =
         fprintf(qlog,
-                "%s{\"frame_type\":\"ACK\",\"ack_delay\":%" PRIu64
+                "%s{\"frame_type\":\"ack\",\"ack_delay\":%" PRIu64
                 ",\"acked_ranges\":[",
                 prev_frame ? "," : "", ack_delay);
 
