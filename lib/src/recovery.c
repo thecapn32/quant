@@ -611,7 +611,7 @@ void on_ack_received_1(struct pkt_meta * const lg_ack, const uint_t ack_del)
                        ? lg_ack->hdr.nr
                        : MAX(pn->lg_acked, lg_ack->hdr.nr);
 
-    if (is_ack_eliciting(&lg_ack->pn->tx_frames)) {
+    if (is_ack_eliciting(&pn->tx_frames)) {
         c->rec.cur.latest_rtt = loop_now() - lg_ack->t;
         update_rtt(c, likely(pn->type == pn_data) ? ack_del : 0);
     }
