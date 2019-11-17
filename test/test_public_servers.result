@@ -1,6 +1,6 @@
           live fail vneg hshk data clse rsmt zrtt rtry qrdy migr bind adrm kyph spin aecn http
 aioquic   *         V    H    D    C    R    Z    S    Q    M    B         U    P         3
-ats       *         v
+ats       *         V    H    D    C    R    Z    S    Q    M    B                        3
 f5        *    x    V    H    D    C    R    Z    S                        U              3
 google    *         V    H    D    C    R              Q                                  3
 lsquic    *         V    H    D    C    R    Z    S    Q    M    B         U    P    E    3
@@ -11,8 +11,8 @@ pandora   *         v
 picoquic  *         V    H    D    C    R    Z    S    Q    M    B         U    P         3
 quant     *    x    V    H    D    C    R    Z    S    Q    M    B         U    P    E
 quic-go
-quiche    *         v
+quiche    *         V    H    D    C    R    Z    S                                       3
 quicker
-quicly
+quicly    *         V    H    D    C    R    Z    S    Q                                  3
 quinn     *         v
 winquic   *         V    H    D    C    R    Z    S    Q                   U    P         3
