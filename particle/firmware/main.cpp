@@ -55,9 +55,10 @@ void button_action()
     waitUntil(WiFi.ready);
     digitalWrite(led, HIGH);
 
-    const uint32_t v = System.versionNumber();
-    warn(DBG, "Particle Device OS: %lu.%lu.%lu", (v & 0xff000000) >> 24,
-         (v & 0x00ff0000) >> 16, (v & 0x0000ff00) >> 8);
+    warn(DBG, "Particle Device OS: %lu.%lu.%lu",
+         (System.versionNumber() & 0xff000000) >> 24,
+         (System.versionNumber() & 0x00ff0000) >> 16,
+         (System.versionNumber() & 0x0000ff00) >> 8);
 
     // char msg[64];
     // const float voltage = analogRead(BATT) * 0.0011224;

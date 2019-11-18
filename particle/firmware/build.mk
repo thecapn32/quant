@@ -58,16 +58,17 @@ QUANT_SRC+=\
 
 CSRC+=$(WARP_SRC) $(PICOTLS_SRC) $(TIMEOUT_SRC) $(QUANT_SRC)
 
+ifndef BUILD_FLAGS
+BUILD_FLAGS=-DNO_FUZZER_CORPUS_COLLECTION -DNO_TLS_TICKETS -DNO_TLS_LOG -DNO_QLOG -DNO_ERR_REASONS -DNO_OOO_0RTT -DNO_OOO_DATA -DNO_MIGRATION -DNO_SRT_MATCHING -DNO_QINFO -DNO_SERVER
+endif
+
 # -DDSTACK -DNDEBUG
 EXTRA_CFLAGS+= \
 	-fstack-usage -foptimize-strlen -ffast-math \
 	-Wno-error -Wno-parentheses -Wno-undef -Wno-unknown-pragmas \
 	-Wno-unused-value -Wno-address \
 	-DTIMEOUT_DISABLE_INTERVALS -DWHEEL_NUM=6 -DWHEEL_BIT=5 \
-	-DDLEVEL=DBG \
-	-DNO_FUZZER_CORPUS_COLLECTION -DNO_TLS_TICKETS -DNO_TLS_LOG -DNO_QLOG \
-	-DNO_ERR_REASONS -DNO_OOO_0RTT -DNO_OOO_DATA -DNO_MIGRATION \
-	-DNO_SRT_MATCHING -DNO_QINFO -DNO_SERVER \
+	-DDLEVEL=DBG -DNO_TLS_TICKETS -DNO_TLS_LOG -DNO_QLOG ${BUILD_FLAGS} \
 	-D'ntoh16(x)=__builtin_bswap16(*(uint16_t*)(x))' \
 	-D'ntoh32(x)=__builtin_bswap32(*(uint32_t*)(x))' \
 	-D'ntoh64(x)=__builtin_bswap64(*(uint64_t*)(x))'

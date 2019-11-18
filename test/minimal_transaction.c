@@ -144,8 +144,8 @@ void quic_transaction(const char * const req, const size_t req_len)
     memcpy(v->buf, req, req_len - 1);
 
     struct q_stream * s;
-    static const struct q_conn_conf qcc = {0, 0, 0, 0,
-                                           0, 0, 0, 0xff000000 + DRAFT_VERSION};
+    static const struct q_conn_conf qcc = {
+        0, 0, 0, 0, 0, 0, 0, 0, 0xff000000 + DRAFT_VERSION};
     struct q_conn * const c = q_connect(w, to_in(peer), peername, &o, &s, true,
                                         "hq-" DRAFT_VERSION_STRING, &qcc);
 
