@@ -31,13 +31,14 @@
 #include "quant/quant.h"
 
 
-extern const void * const stack_start = __builtin_frame_address(0);
-
-
 SYSTEM_MODE(MANUAL);
 // SYSTEM_THREAD(ENABLED);
 
+#ifndef NDEBUG
 static SerialDebugOutput serial;
+extern const void * const stack_start = __builtin_frame_address(0);
+#endif
+
 static const int led = D7;
 
 
