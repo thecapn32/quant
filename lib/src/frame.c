@@ -63,12 +63,22 @@
 
 
 static void track_frame(struct pkt_meta * const m,
-                        struct q_conn_info * const ci,
+                        struct q_conn_info * const ci
+#ifdef NO_QINFO
+                        __attribute__((unused))
+#endif
+                        ,
                         const uint8_t type,
-                        const uint_t n)
+                        const uint_t n
+#ifdef NO_QINFO
+                        __attribute__((unused))
+#endif
+)
 {
     bit_set(FRM_MAX, type, &m->frms);
+#ifndef NO_QINFO
     ci->frm_cnt[m->txed ? 0 : 1][type] += n;
+#endif
 }
 
 
@@ -1129,6 +1139,11 @@ bool dec_frames(struct q_conn * const c,
                 struct w_iov ** vv,
                 struct pkt_meta ** mm)
 {
+#ifndef NO_QINFO
+    struct q_conn_info * const ci = &c->i;
+#else
+    void * const ci = 0;
+#endif
     struct w_iov * v = *vv;
     struct pkt_meta * m = *mm;
     const uint8_t * pos = v->buf + m->hdr.hdr_len;
@@ -1155,7 +1170,7 @@ bool dec_frames(struct q_conn * const c,
         }
         if (pad_start) {
             const uint16_t pad_len = (uint16_t)(pos - pad_start + 1);
-            track_frame(m, &c->i, FRM_PAD, pad_len);
+            track_frame(m, ci, FRM_PAD, pad_len);
             log_pad(pad_len);
             pad_start = 0;
         }
@@ -1314,7 +1329,7 @@ bool dec_frames(struct q_conn * const c,
                              pos - v->buf);
 
         // record this frame type in the meta data
-        track_frame(m, &c->i, type, 1);
+        track_frame(m, ci, type, 1);
     }
 
     if (pad_start)
@@ -1565,7 +1580,14 @@ void enc_stream_or_crypto_frame(uint8_t ** pos,
     log_stream_or_crypto_frame(false, m, type, s->id, false, "");
     track_bytes_out(s, m->strm_data_len);
     ensure(!enc_strm || m->strm_off < s->out_data_max, "exceeded fc window");
-    track_frame(m, &s->c->i, type == FRM_CRY ? FRM_CRY : FRM_STR, 1);
+    track_frame(m,
+#ifndef NO_QINFO
+                &s->c->i
+#else
+                0
+#endif
+                ,
+                type == FRM_CRY ? FRM_CRY : FRM_STR, 1);
 }
 
 

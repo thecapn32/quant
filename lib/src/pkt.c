@@ -243,11 +243,21 @@ static bool __attribute__((nonnull)) can_enc(uint8_t ** const pos,
 }
 
 
-static void __attribute__((nonnull))
-enc_other_frames(struct q_conn_info * const ci,
-                 uint8_t ** pos,
-                 const uint8_t * const end,
-                 struct pkt_meta * const m)
+static void __attribute__((nonnull
+#ifdef NO_QINFO
+                           (2, 3, 4)
+#endif
+                               ))
+enc_other_frames(
+#ifndef NO_QINFO
+    struct q_conn_info
+#else
+    void
+#endif
+        * const ci,
+    uint8_t ** pos,
+    const uint8_t * const end,
+    struct pkt_meta * const m)
 {
     struct q_conn * const c = m->pn->c;
 
@@ -330,6 +340,11 @@ bool enc_pkt(struct q_stream * const s,
 
     struct q_conn * const c = s->c;
     uint8_t * len_pos = 0;
+#ifndef NO_QINFO
+    struct q_conn_info * const ci = &c->i;
+#else
+    void * const ci = 0;
+#endif
 
     const epoch_t epoch = strm_epoch(s);
     struct pn_space * const pn = m->pn = pn_for_epoch(c, epoch);
@@ -448,20 +463,20 @@ bool enc_pkt(struct q_stream * const s,
     if (needs_ack(pn) != no_ack) {
         // FIXME: 8 is an arbitrary value
         if (enc_data == false || diet_cnt(&pn->recv) <= 8)
-            enc_ack_frame(&c->i, &pos, v->buf, end, m, pn);
+            enc_ack_frame(ci, &pos, v->buf, end, m, pn);
         else
             timeouts_add(ped(c->w)->wheel, &c->ack_alarm, 0);
     }
 
     if (unlikely(c->state == conn_clsg))
-        enc_close_frame(&c->i, &pos, end, m);
+        enc_close_frame(ci, &pos, end, m);
     else if (epoch == ep_data || (!is_clnt(c) && epoch == ep_0rtt))
         // TODO calc stream hdr len and subtract
-        enc_other_frames(&c->i, &pos, end, m);
+        enc_other_frames(ci, &pos, end, m);
 
     if (unlikely(rtx)) {
         // this is a RTX, pad out until beginning of stream header
-        enc_padding_frame(&c->i, &pos, end, m,
+        enc_padding_frame(ci, &pos, end, m,
                           m->strm_frm_pos - (uint16_t)(pos - v->buf));
         pos = v->buf + m->strm_data_pos + m->strm_data_len;
         log_stream_or_crypto_frame(true, m, v->buf[m->strm_frm_pos], s->id,
@@ -476,7 +491,7 @@ bool enc_pkt(struct q_stream * const s,
             // if the stream header would overflow a previous frame, kill *all*
             pos = v->buf + m->hdr.hdr_len;
         // pad out any remaining space before stream header
-        enc_padding_frame(&c->i, &pos, end, m,
+        enc_padding_frame(ci, &pos, end, m,
                           m->strm_data_pos - hlen - (uint16_t)(pos - v->buf));
         enc_stream_or_crypto_frame(&pos, end, m, v, s, dlen);
     }
@@ -485,13 +500,13 @@ bool enc_pkt(struct q_stream * const s,
     if (unlikely((pos - v->buf) < MAX_PKT_LEN - AEAD_LEN && (enc_data || rtx) &&
                  (epoch == ep_data || (!is_clnt(c) && epoch == ep_0rtt))))
         // we can try to stick some more frames in after the stream frame
-        enc_other_frames(&c->i, &pos, v->buf + MAX_PKT_LEN - AEAD_LEN, m);
+        enc_other_frames(ci, &pos, v->buf + MAX_PKT_LEN - AEAD_LEN, m);
 
     if (is_clnt(c) && enc_data) {
         if (unlikely(c->try_0rtt == false && m->hdr.type == LH_INIT)) {
             const uint8_t * const min_len = v->buf + MIN_INI_LEN - AEAD_LEN;
             if (pos < min_len)
-                enc_padding_frame(&c->i, &pos, min_len, m,
+                enc_padding_frame(ci, &pos, min_len, m,
                                   (uint16_t)(min_len - pos));
         }
         if (unlikely(c->try_0rtt == true && m->hdr.type == LH_0RTT &&
@@ -501,7 +516,7 @@ bool enc_pkt(struct q_stream * const s,
                 v->buf + MIN_INI_LEN - AEAD_LEN -
                 (sq_first(&c->txq) ? sq_first(&c->txq)->len : 0);
             if (pos < min_len)
-                enc_padding_frame(&c->i, &pos, min_len, m,
+                enc_padding_frame(ci, &pos, min_len, m,
                                   (uint16_t)(min_len - pos));
         }
     }
@@ -509,23 +524,23 @@ bool enc_pkt(struct q_stream * const s,
     m->ack_eliciting = is_ack_eliciting(&m->frms);
     if (unlikely(tx_ack_eliciting) && m->ack_eliciting == false &&
         m->hdr.type == SH) {
-        enc_ping_frame(&c->i, &pos, end, m);
+        enc_ping_frame(ci, &pos, end, m);
         m->ack_eliciting = true;
     }
 
     // gotta send something, anything
     if (unlikely(pos - v->buf == m->hdr.hdr_len)) {
         if (diet_empty(&pn->recv) == false)
-            enc_ack_frame(&c->i, &pos, v->buf, end, m, pn);
+            enc_ack_frame(ci, &pos, v->buf, end, m, pn);
         else
-            enc_ping_frame(&c->i, &pos, end, m);
+            enc_ping_frame(ci, &pos, end, m);
     }
 
 tx:;
     // make sure we have enough frame bytes for the header protection sample
     const uint16_t pnp_dist = (uint16_t)(pos - pkt_nr_pos);
     if (unlikely(pnp_dist < 4))
-        enc_padding_frame(&c->i, &pos, end, m, 4 - pnp_dist);
+        enc_padding_frame(ci, &pos, end, m, 4 - pnp_dist);
 
     // for LH pkts, now encode the length
     m->hdr.len = (uint16_t)(pos - pkt_nr_pos) + AEAD_LEN;
