@@ -34,7 +34,7 @@ env:
     - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8  CFLAGS="-DDEBUG_EXTRA"
     - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8  CFLAGS="-DDEBUG_STREAMS"
     - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8  CFLAGS="-DDEBUG_TIMERS"
-    - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8  CFLAGS="DDEBUG_PROT"
+    - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8  CFLAGS="-DDEBUG_PROT"
 
     - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8  CFLAGS="-DNO_ERR_REASONS"
     - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8  CFLAGS="-DNO_MIGRATION"
