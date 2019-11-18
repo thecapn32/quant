@@ -1,5 +1,8 @@
 bin/*
 *.bin
+*.pdf
+*.func
+*.ann
 firmware/lib
 firmware/test
 firmware/quant/*

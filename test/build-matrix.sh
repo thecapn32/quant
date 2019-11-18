@@ -25,7 +25,7 @@ function analyze_sizes() {
                         ;;
 
                 *::*|*/.po-util/src/*|*SLEEP_NETWORK_OFF*|*pinAvailable*|*impure*)
-                        comp=OS
+                        comp=os
                         ;;
 
                 */deps/warpcore/*|*w_set_sockopt*|*w_alloc_iov*|*to_sockaddr*|*w_addr_hash*)
@@ -101,7 +101,7 @@ function analyze_sizes() {
                         ;;
 
                 *)
-                        comp=XXX
+                        comp=unknown
                         ;;
                 esac
                 echo "$comp $line" >> "$2".ann
