@@ -104,7 +104,7 @@ function analyze_sizes() {
                         comp=unknown
                         ;;
                 esac
-                echo "$comp $line" >> "$2".ann
+                printf "%s\t%s\n" $comp "$line" >> "$2".ann
         done < "$2"
 }
 
@@ -124,8 +124,9 @@ for flag in "${opts[@]}"; do
                 all="$all -D$flag"
                 bin=$(echo $out | cut -d' ' -f6)
                 echo "$out"
-                arm-none-eabi-nm -C --line-numbers --print-size --size-sort \
-                        "$bin" > "$data"
+                arm-none-eabi-nm -C -l -S --size-sort "$bin" | \
+                        gsed -e 's| |\t|' -e 's| |\t|' -e 's| |\t|' \
+                                > "$data"
         fi
         analyze_sizes "$bin" "$data"
 done
