@@ -281,7 +281,7 @@ bool decv(uint64_t * const val,
     case 0xc0:
         if (unlikely(*pos + 8 > end))
             return false;
-#ifndef HAVE_64BIT
+#if !HAVE_64BIT
         return false;
 #else
         *val =

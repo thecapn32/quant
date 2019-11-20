@@ -102,7 +102,7 @@ struct q_stream {
     uint8_t blocked : 1;          ///< We are receive-window-blocked.
     uint8_t : 5;
 
-#ifdef HAVE_64BIT
+#if HAVE_64BIT
     uint8_t _unused[3];
 #else
     uint8_t _unused[7];

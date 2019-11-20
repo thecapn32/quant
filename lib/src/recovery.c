@@ -591,7 +591,7 @@ update_rtt(struct q_conn * const c, uint_t ack_del)
 
     c->rec.cur.rttvar = 3 * c->rec.cur.rttvar / 4 +
                         (uint_t)
-#ifdef HAVE_64BIT
+#if HAVE_64BIT
                                 llabs
 #else
                                 labs

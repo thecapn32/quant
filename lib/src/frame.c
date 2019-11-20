@@ -457,7 +457,7 @@ shorten_ack_nr(const uint_t ack, const uint_t diff)
         UINT_C(10000000), UINT_C(100000000), UINT_C(100000000),
         UINT_C(100000000), UINT_C(1000000000), UINT_C(1000000000),
         UINT_C(1000000000),
-#ifdef HAVE_64BIT
+#if HAVE_64BIT
         UINT_C(10000000000), UINT_C(10000000000),
         UINT_C(10000000000), UINT_C(10000000000), UINT_C(100000000000),
         UINT_C(100000000000), UINT_C(100000000000), UINT_C(1000000000000),
@@ -478,7 +478,7 @@ shorten_ack_nr(const uint_t ack, const uint_t diff)
     };
 
     return ack % divs[sizeof(divs[0]) * 8 - (size_t)(
-#ifdef HAVE_64BIT
+#if HAVE_64BIT
                                                 __builtin_clzll(diff)
 #else
                                                 __builtin_clzl(diff)

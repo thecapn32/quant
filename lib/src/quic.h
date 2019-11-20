@@ -125,7 +125,7 @@ struct pkt_hdr {
     uint8_t type;     ///< Parsed packet type.
     // we do not store any token of LH packets in the metadata anymore
 
-#ifdef HAVE_64BIT
+#if HAVE_64BIT
     uint8_t _unused[6];
 #else
     uint8_t _unused[2];
@@ -159,7 +159,7 @@ struct pkt_meta {
     uint_t data_blocked;      ///< DATA_BLOCKED value, if sent.
     uint_t min_cid_seq; ///< Smallest NEq_CONNECTION_ID seq in pkt, if sent.
 
-#ifndef HAVE_64BIT
+#if !HAVE_64BIT
     uint8_t _unused[4];
 #endif
 
@@ -179,7 +179,7 @@ struct pkt_meta {
     uint8_t lost : 1;  ///< Have we marked this packet as lost?
     uint8_t txed : 1;  ///< Did we TX this pkt?
 
-#ifdef HAVE_64BIT
+#if HAVE_64BIT
     uint8_t _unused2[5];
 #else
     uint8_t _unused2[1];

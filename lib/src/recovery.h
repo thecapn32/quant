@@ -69,7 +69,7 @@ struct recovery {
     // largest_acked_packet -> pn->lg_acked
     // max_ack_delay -> c->tp_out.max_ack_del
 
-#ifdef HAVE_64BIT
+#if HAVE_64BIT
     uint8_t _unused[2];
 #endif
 
@@ -82,7 +82,7 @@ struct recovery {
     struct cc_state prev;
 #endif
 
-#ifndef HAVE_64BIT
+#if !HAVE_64BIT
     uint8_t _unused[4];
 #endif
 };
