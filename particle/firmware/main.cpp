@@ -36,7 +36,6 @@ SYSTEM_MODE(MANUAL);
 
 #ifndef NDEBUG
 static SerialDebugOutput serial;
-extern const void * const stack_start = __builtin_frame_address(0);
 #endif
 
 static const int led = D7;

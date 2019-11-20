@@ -18,14 +18,21 @@ INCLUDE_DIRS+=\
 PICOTLS_SRC+=\
 	$(PICOTLS)/deps/cifra/src/aes.c \
 	$(PICOTLS)/deps/cifra/src/blockwise.c \
+	$(PICOTLS)/deps/cifra/src/chacha20.c \
+	$(PICOTLS)/deps/cifra/src/curve25519.c \
 	$(PICOTLS)/deps/cifra/src/drbg.c \
 	$(PICOTLS)/deps/cifra/src/gcm.c \
 	$(PICOTLS)/deps/cifra/src/gf128.c \
 	$(PICOTLS)/deps/cifra/src/modes.c \
+	$(PICOTLS)/deps/cifra/src/poly1305.c \
 	$(PICOTLS)/deps/cifra/src/sha256.c \
 	$(PICOTLS)/deps/cifra/src/sha512.c \
 	$(PICOTLS)/deps/micro-ecc/uECC.c \
+	$(PICOTLS)/lib/cifra.c \
+	$(PICOTLS)/lib/cifra//x25519.c \
 	$(PICOTLS)/lib/cifra/aes128.c \
+	$(PICOTLS)/lib/cifra/aes256.c \
+	$(PICOTLS)/lib/cifra/chacha20.c \
 	$(PICOTLS)/lib/picotls.c \
 	$(PICOTLS)/lib/uecc.c
 
@@ -59,7 +66,7 @@ QUANT_SRC+=\
 CSRC+=$(WARP_SRC) $(PICOTLS_SRC) $(TIMEOUT_SRC) $(QUANT_SRC)
 
 ifndef BUILD_FLAGS
-BUILD_FLAGS=-DNDEBUG -DNO_ERR_REASONS -DNO_OOO_0RTT -DNO_OOO_DATA -DNO_MIGRATION -DNO_SRT_MATCHING -DNO_QINFO -DNO_SERVER
+BUILD_FLAGS=-DMINIMAL_CIPHERS -DNO_ERR_REASONS -DNO_OOO_0RTT -DNO_OOO_DATA -DNO_MIGRATION -DNO_SRT_MATCHING -DNO_QINFO -DNO_SERVER
 endif
 
 # -DDSTACK -DNDEBUG
