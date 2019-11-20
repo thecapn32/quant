@@ -7,7 +7,6 @@ QUIC_INC = lib/include
 QUIC_SRC = lib/src
 
 TIMEOUT_INC = lib/deps/timeout
-TIMEOUT_SRC = lib/deps/timeout
 
 WARP_INC = lib/deps/warpcore/lib/include
 WARP_SRC = lib/deps/warpcore/lib/src
@@ -36,7 +35,6 @@ SRC += \
 	$(RIOTPROJECT)/$(QUIC_SRC)/recovery.c \
 	$(RIOTPROJECT)/$(QUIC_SRC)/stream.c \
 	$(RIOTPROJECT)/$(QUIC_SRC)/tls.c \
-	$(RIOTPROJECT)/$(TIMEOUT_SRC)/timeout.c \
 	$(RIOTPROJECT)/$(WARP_SRC)/backend_riot.c \
 	$(RIOTPROJECT)/$(WARP_SRC)/plat.c \
 	$(RIOTPROJECT)/$(WARP_SRC)/util.c \
@@ -65,7 +63,6 @@ CFLAGS += \
 	-Wno-unknown-pragmas -Wno-missing-field-initializers \
 	-Wno-strict-prototypes -Wno-sign-compare -Wno-maybe-uninitialized \
 	-Wno-unused-variable -Wno-unused-but-set-variable \
-	-DTIMEOUT_DISABLE_INTERVALS -DWHEEL_NUM=6 -DWHEEL_BIT=5 \
 	-DDLEVEL=DBG \
 	-DNO_FUZZER_CORPUS_COLLECTION -DNO_TLS_TICKETS -DNO_TLS_LOG -DNO_QLOG \
 	-DNO_ERR_REASONS -DNO_OOO_0RTT -DNO_OOO_DATA -DNO_MIGRATION \
@@ -84,7 +81,6 @@ dirs:
 		$(BINDIR)/$(MODULE)/$(RIOTPROJECT)/$(PTLS_SRC)/deps/micro-ecc \
 		$(BINDIR)/$(MODULE)/$(RIOTPROJECT)/$(PTLS_SRC)/lib/cifra \
 		$(BINDIR)/$(MODULE)/$(RIOTPROJECT)/$(QUIC_SRC) \
-		$(BINDIR)/$(MODULE)/$(RIOTPROJECT)/$(TIMEOUT_SRC) \
 		$(BINDIR)/$(MODULE)/$(RIOTPROJECT)/$(WARP_SRC) \
 		$(BINDIR)/$(MODULE)/$(RIOTPROJECT)/test \
 		$(BINDIR)/$(MODULE)/quant/quant \
