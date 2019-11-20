@@ -56,7 +56,7 @@
 #else
 #include <picotls/minicrypto.h>
 
-#if !defined(PARTICLE) && !defined(RIOT_VERSION)
+#ifndef MINIMAL_CIPHERS
 #define cipher_suite ptls_minicrypto_cipher_suites
 #else
 static const ptls_cipher_suite_t * cipher_suite[] = {
@@ -1519,13 +1519,11 @@ void init_tls_ctx(const struct q_conf * const conf,
         tls_ctx->log_event = &log_event;
 #endif
 
-    static ptls_key_exchange_algorithm_t * key_exchanges[] = {
-        &secp256r1,
-#if !defined(PARTICLE) && !defined(RIOT_VERSION)
-        &x25519,
+    static ptls_key_exchange_algorithm_t * key_exchanges[] = {&secp256r1,
+#ifndef MINIMAL_CIPHERS
+                                                              &x25519,
 #endif
-        0
-    };
+                                                              0};
     static ptls_on_client_hello_t on_client_hello = {on_ch};
     static ptls_update_traffic_key_t update_traffic_key = {
         update_traffic_key_cb};
