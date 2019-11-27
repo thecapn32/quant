@@ -14,14 +14,21 @@ WARP_SRC = lib/deps/warpcore/lib/src
 SRC += \
 	$(RIOTPROJECT)/$(PTLS_SRC)/deps/cifra/src/aes.c \
 	$(RIOTPROJECT)/$(PTLS_SRC)/deps/cifra/src/blockwise.c \
+	$(RIOTPROJECT)/$(PTLS_SRC)/deps/cifra/src/chacha20.c \
+	$(RIOTPROJECT)/$(PTLS_SRC)/deps/cifra/src/curve25519.c \
 	$(RIOTPROJECT)/$(PTLS_SRC)/deps/cifra/src/drbg.c \
 	$(RIOTPROJECT)/$(PTLS_SRC)/deps/cifra/src/gcm.c \
 	$(RIOTPROJECT)/$(PTLS_SRC)/deps/cifra/src/gf128.c \
 	$(RIOTPROJECT)/$(PTLS_SRC)/deps/cifra/src/modes.c \
+	$(RIOTPROJECT)/$(PTLS_SRC)/deps/cifra/src/poly1305.c \
 	$(RIOTPROJECT)/$(PTLS_SRC)/deps/cifra/src/sha256.c \
 	$(RIOTPROJECT)/$(PTLS_SRC)/deps/cifra/src/sha512.c \
 	$(RIOTPROJECT)/$(PTLS_SRC)/deps/micro-ecc/uECC.c \
+	$(RIOTPROJECT)/$(PTLS_SRC)/lib/cifra.c \
+	$(RIOTPROJECT)/$(PTLS_SRC)/lib/cifra/x25519.c \
 	$(RIOTPROJECT)/$(PTLS_SRC)/lib/cifra/aes128.c \
+	$(RIOTPROJECT)/$(PTLS_SRC)/lib/cifra/aes256.c \
+	$(RIOTPROJECT)/$(PTLS_SRC)/lib/cifra/chacha20.c \
 	$(RIOTPROJECT)/$(PTLS_SRC)/lib/picotls.c \
 	$(RIOTPROJECT)/$(PTLS_SRC)/lib/uecc.c \
 	$(RIOTPROJECT)/$(QUIC_SRC)/conn.c \
@@ -57,16 +64,19 @@ INCLUDES += \
 	-isystem $(RIOTPROJECT)/$(TIMEOUT_INC) \
 	-isystem $(RIOTPROJECT)/$(WARP_INC)
 
+ifndef BUILD_FLAGS
+BUILD_FLAGS=-DMINIMAL_CIPHERS -DNO_ERR_REASONS -DNO_OOO_0RTT \
+	-DNO_OOO_DATA -DNO_MIGRATION -DNO_SRT_MATCHING -DNO_QINFO -DNO_SERVER
+endif
+
 # -DDSTACK -Wstack-usage=512
 CFLAGS += \
 	-fstack-usage -foptimize-strlen -ffast-math \
 	-Wno-unknown-pragmas -Wno-missing-field-initializers \
 	-Wno-strict-prototypes -Wno-sign-compare -Wno-maybe-uninitialized \
 	-Wno-unused-variable -Wno-unused-but-set-variable \
-	-DDLEVEL=DBG \
-	-DNO_FUZZER_CORPUS_COLLECTION -DNO_TLS_TICKETS -DNO_TLS_LOG -DNO_QLOG \
-	-DNO_ERR_REASONS -DNO_OOO_0RTT -DNO_OOO_DATA -DNO_MIGRATION \
-	-DNO_SRT_MATCHING -DNO_QINFO -DNO_SERVER \
+	-DDLEVEL=DBG -DNO_FUZZER_CORPUS_COLLECTION \
+	-DNO_TLS_TICKETS -DNO_TLS_LOG -DNO_QLOG ${BUILD_FLAGS} \
 	-D'ntoh16(x)=__builtin_bswap16(*(uint16_t*)(x))' \
 	-D'ntoh32(x)=__builtin_bswap32(*(uint32_t*)(x))' \
 	-D'ntoh64(x)=__builtin_bswap64(*(uint64_t*)(x))'
