@@ -289,6 +289,7 @@ struct q_conn * q_connect(struct w_engine * const w,
          c->pns[pn_data]
              .data.out_1rtt[c->pns[pn_data].data.out_kyph]
              .aead->algo->name);
+    DSTACK_LOG("DSTACK 3" DSTACK_LOG_NEWLINE);
 
     return c;
 }

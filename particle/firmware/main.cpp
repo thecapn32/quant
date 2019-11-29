@@ -34,7 +34,7 @@
 SYSTEM_MODE(MANUAL);
 // SYSTEM_THREAD(ENABLED);
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(DSTACK)
 static SerialDebugOutput serial;
 #endif
 

@@ -63,18 +63,17 @@ QUANT_SRC+=\
 CSRC+=$(WARP_SRC) $(PICOTLS_SRC) $(QUANT_SRC)
 
 ifndef BUILD_FLAGS
-BUILD_FLAGS=-DMINIMAL_CIPHERS -DNO_QINFO -DNO_SERVER -DDSTACK \
-
-#	-DNO_ERR_REASONS -DNO_OOO_0RTT \
-#	-DNO_OOO_DATA -DNO_MIGRATION -DNO_SRT_MATCHING
+BUILD_FLAGS=-DMINIMAL_CIPHERS -DNO_QINFO -DNO_SERVER \
+	-DNO_ERR_REASONS -DNO_OOO_0RTT \
+	-DNO_OOO_DATA -DNO_MIGRATION -DNO_SRT_MATCHING
 endif
 
-# -DDSTACK -DNDEBUG
-EXTRA_CFLAGS+= \
+# -DDSTACK -finstrument-functions -DNDEBUG
+EXTRA_CFLAGS+= -DDSTACK -finstrument-functions \
 	-fstack-usage -foptimize-strlen -ffast-math \
 	-Wno-error -Wno-parentheses -Wno-undef -Wno-unknown-pragmas \
 	-Wno-unused-value -Wno-address \
-	-DDLEVEL=DBG -DNO_FUZZER_CORPUS_COLLECTION \
+	-DDLEVEL=CRT -DNO_FUZZER_CORPUS_COLLECTION \
 	-DNO_TLS_TICKETS -DNO_TLS_LOG -DNO_QLOG ${BUILD_FLAGS} \
 	-D'ntoh16(x)=__builtin_bswap16(*(uint16_t*)(x))' \
 	-D'ntoh32(x)=__builtin_bswap32(*(uint32_t*)(x))' \

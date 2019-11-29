@@ -130,6 +130,8 @@ void warpcore_transaction(const char * const msg, const size_t msg_len)
 
 void quic_transaction(const char * const req, const size_t req_len)
 {
+    DSTACK_LOG("DSTACK 1" DSTACK_LOG_NEWLINE);
+
     static const struct q_conf qc = {0, 0, 0, 0, 0, 0, 20, false};
     struct w_engine * const w = q_init(IF_NAME, &qc);
 
@@ -143,6 +145,7 @@ void quic_transaction(const char * const req, const size_t req_len)
     struct w_iov * const v = sq_first(&o);
     memcpy(v->buf, req, req_len - 1);
 
+    DSTACK_LOG("DSTACK 2" DSTACK_LOG_NEWLINE);
     struct q_stream * s;
     static const struct q_conn_conf qcc = {
         0, 0, 0, 0, 0, 0, 0, 0, 0xff000000 + DRAFT_VERSION};
@@ -152,9 +155,11 @@ void quic_transaction(const char * const req, const size_t req_len)
     if (c) {
         struct w_iov_sq i = w_iov_sq_initializer(i);
         q_read_stream(s, &i, true);
-        warn(NTE, "retrieved %" PRIu32 " bytes", w_iov_sq_len(&i));
+        warn(CRT, "retrieved %" PRIu32 " bytes", w_iov_sq_len(&i));
     } else
-        warn(WRN, "could not retrieve %s", req);
+        warn(CRT, "could not retrieve %s", req);
 
+    DSTACK_LOG("DSTACK 4" DSTACK_LOG_NEWLINE);
     q_cleanup(w);
+    DSTACK_LOG("DSTACK 5" DSTACK_LOG_NEWLINE);
 }
