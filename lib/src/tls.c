@@ -627,7 +627,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             decb((uint8_t *)&pa6->addr.ip6, &pos, e, sizeof(pa6->addr.ip6));
             decb((uint8_t *)&pa6->port, &pos, e, sizeof(pa6->port));
 
-            dec1(&pa->cid.len, &pos, end);
+            dec1(&pa->cid.len, &pos, e);
             decb(pa->cid.id, &pos, e, pa->cid.len);
             pa->cid.seq = 1;
 
@@ -639,10 +639,9 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             add_dcid(c, &pa->cid);
 
             warn(INF,
-                 "\tpreferred_address = IPv4=%s:%u IPv6=[%s]:%u cid=%" PRIu
-                 ":%s srt=%s",
+                 "\tpreferred_address = IPv4=%s:%u IPv6=[%s]:%u cid=%s srt=%s",
                  w_ntop(&pa4->addr, ip_tmp), bswap16(pa4->port),
-                 w_ntop(&pa6->addr, ip_tmp), bswap16(pa6->port), pa->cid.seq,
+                 w_ntop(&pa6->addr, ip_tmp), bswap16(pa6->port),
                  cid_str(&pa->cid), srt_str(srt));
             break;
 
@@ -864,12 +863,11 @@ void init_tp(struct q_conn * const c)
                 encb(&pos, end, srt, SRT_LEN);
 #ifdef DEBUG_EXTRA
                 warn(INF,
-                     "\tpreferred_address = IPv4=%s:%u IPv6=[%s]:%u cid=%" PRIu
-                     ":%s "
+                     "\tpreferred_address = IPv4=%s:%u IPv6=[%s]:%u cid=%s "
                      "srt=%s",
                      w_ntop(&pa4->addr, ip_tmp), bswap16(pa4->port),
                      w_ntop(&pa6->addr, ip_tmp), bswap16(pa6->port),
-                     pa->cid.seq, cid_str(&pa->cid), srt_str(srt));
+                     cid_str(&pa->cid), srt_str(srt));
 #endif
             }
             break;
