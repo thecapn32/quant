@@ -23,12 +23,14 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <arpa/inet.h>
+#include <cstdint>
+#include <cstring>
 #include <net/if.h>
+#include <sys/socket.h>
+#include <utility>
 
 #include <benchmark/benchmark.h>
 #include <quant/quant.h>
-#include <warpcore/warpcore.h>
 
 #ifdef __cplusplus
 extern "C" {
