@@ -21,9 +21,16 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   set(IPO False)
 endif()
 list(APPEND DEFS NDEBUG)
+
+# if (DSTACK AND _finstrument_functions)
+#   string(CONCAT CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -finstrument-functions")
+#   string(CONCAT CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -finstrument-functions")
+#   list(APPEND DEFS DSTACK)
+# endif()
+
 set_directory_properties(PROPERTIES COMPILE_DEFINITIONS "${DEFS}")
 
-add_subdirectory(warpcore)
+add_subdirectory(warpcore EXCLUDE_FROM_ALL)
 
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
   set(CC_WARNING_FLAGS "-Wno-unused-variable")
@@ -31,7 +38,7 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
   set(CC_WARNING_FLAGS "-Wno-unused-but-set-variable -Wno-unused-variable")
 endif()
 
-add_subdirectory(picotls)
+add_subdirectory(picotls EXCLUDE_FROM_ALL)
 
 set(PTLS_CORE_LIBRARY
   ${CMAKE_CURRENT_BINARY_DIR}/picotls/libpicotls-core.a
@@ -45,4 +52,4 @@ set(PTLS_OPENSSL_LIBRARY
   ${CMAKE_CURRENT_BINARY_DIR}/picotls/libpicotls-openssl.a
 )
 
-add_subdirectory(picoquic)
+add_subdirectory(picoquic EXCLUDE_FROM_ALL)
