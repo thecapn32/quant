@@ -78,7 +78,7 @@ int resolve(const char * const name, struct sockaddr * const peer)
         peer->sa_family = AF_INET6;
         memcpy(&to_in6(*peer)->sin6_addr,
                &(uint8_t[]){0xfe, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                            0x00, 0x48, 0x56, 0x94, 0xc7, 0x95, 0x16, 0x98},
+                            0x00, 0x68, 0x49, 0xee, 0x2b, 0x41, 0x75, 0x8d},
                IP6_LEN);
         ret = 0;
 
@@ -132,7 +132,7 @@ void quic_transaction(const char * const req, const size_t req_len)
 {
     DSTACK_LOG("DSTACK 1" DSTACK_LOG_NEWLINE);
 
-    static const struct q_conf qc = {0, 0, 0, 0, 0, 0, 20, false};
+    static const struct q_conf qc = {0, 0, 0, 0, 0, 0, 15, false};
     struct w_engine * const w = q_init(IF_NAME, &qc);
 
     static const char peername[] = "quant.eggert.org";
@@ -156,6 +156,8 @@ void quic_transaction(const char * const req, const size_t req_len)
         struct w_iov_sq i = w_iov_sq_initializer(i);
         q_read_stream(s, &i, true);
         warn(CRT, "retrieved %" PRIu32 " bytes", w_iov_sq_len(&i));
+        DSTACK_LOG("retrieved %" PRIu32 " bytes" DSTACK_LOG_NEWLINE,
+                   w_iov_sq_len(&i));
     } else
         warn(CRT, "could not retrieve %s", req);
 
