@@ -61,11 +61,11 @@
 #else
 static const ptls_cipher_suite_t * cipher_suite[] = {
     &ptls_minicrypto_aes128gcmsha256, 0};
+#define x25519 ptls_minicrypto_x25519
 #endif
 
 #define aes128gcmsha256 ptls_minicrypto_aes128gcmsha256
 #define secp256r1 ptls_minicrypto_secp256r1
-#define x25519 ptls_minicrypto_x25519
 #endif
 
 #include <quant/quant.h>
