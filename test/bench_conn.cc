@@ -26,8 +26,6 @@
 #include <arpa/inet.h>
 #include <cstdint>
 #include <fcntl.h>
-// #include <iomanip>
-// #include <iostream>
 #include <libgen.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -35,7 +33,6 @@
 
 #include <benchmark/benchmark.h>
 #include <quant/quant.h>
-#include <warpcore/warpcore.h>
 
 
 static struct w_engine * w;
