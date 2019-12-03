@@ -31,16 +31,18 @@
 #include <stdint.h>
 
 #include <picotls.h>
-#include <quant/quant.h>
 
-#include "quic.h"
+struct pkt_meta; // IWYU pragma: no_forward_declare pkt_meta
+struct q_conf;   // IWYU pragma: no_forward_declare q_conf
+struct q_conn;   // IWYU pragma: no_forward_declare q_conn
+struct q_stream; // IWYU pragma: no_forward_declare q_stream
+struct w_iov;    // IWYU pragma: no_forward_declare w_iov
 
-
-#define AEAD_LEN 16
+// IWYU pragma: no_include <quant/quant.h>
+// IWYU pragma: no_include "quic.h"
 
 
 #ifdef FUZZING
-
 #include <string.h>
 
 static inline void __attribute__((nonnull))
@@ -52,7 +54,6 @@ nonrandom_bytes(void * const buf, const size_t len)
 #define rand_bytes nonrandom_bytes
 
 #else
-
 #include <stddef.h>
 
 #ifdef WITH_OPENSSL
@@ -62,7 +63,6 @@ nonrandom_bytes(void * const buf, const size_t len)
 #include <picotls/minicrypto.h>
 #define rand_bytes ptls_minicrypto_random_bytes
 #endif
-
 #endif
 
 
@@ -85,8 +85,6 @@ struct tls {
     uint8_t * tp_buf;
 };
 
-
-struct pkt_meta;
 
 extern void __attribute__((nonnull)) init_prot(struct q_conn * const c);
 

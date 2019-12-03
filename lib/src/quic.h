@@ -33,9 +33,7 @@
 #include <string.h>
 #include <sys/param.h>
 
-// IWYU pragma: no_include <picotls/../picotls.h>
-
-#include <picotls.h> // IWYU pragma: keep
+#include <picotls.h>
 
 #include <quant/quant.h>
 
@@ -56,6 +54,7 @@
 #define SRT_LEN 16      ///< Stateless reset token length allowed by spec.
 #define PATH_CHLG_LEN 8 ///< Length of a path challenge.
 #define MAX_TOK_LEN 160
+#define AEAD_LEN 16
 
 // Maximum reordering in packets before packet threshold loss detection
 // considers a packet lost. The RECOMMENDED value is 3.

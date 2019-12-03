@@ -32,6 +32,8 @@
 
 #include "conn.h"
 #include "loop.h"
+#include "quic.h"
+
 
 #if !HAVE_64BIT
 #define WHEEL_NUM 6

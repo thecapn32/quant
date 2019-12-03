@@ -34,13 +34,6 @@
 
 #include "bitset.h"
 
-struct pn_space;
-struct q_conn;
-struct q_stream;
-struct cid;
-#ifdef NO_QINFO
-struct q_conn_info;
-#endif
 
 #define FRM_PAD 0x00 ///< PADDING
 #define FRM_PNG 0x01 ///< PING
@@ -86,7 +79,14 @@ bitset_define(frames, FRM_MAX);
 
 #define has_frm(frames, type) bit_isset(FRM_MAX, (type), &(frames))
 
-struct pkt_meta;
+struct cid;      // IWYU pragma: no_forward_declare cid
+struct pkt_meta; // IWYU pragma: no_forward_declare pkt_meta
+struct pn_space; // IWYU pragma: no_forward_declare pn_space
+struct q_conn;   // IWYU pragma: no_forward_declare q_conn
+struct q_stream; // IWYU pragma: no_forward_declare q_stream
+#ifdef NO_QINFO
+struct q_conn_info; // IWYU pragma: no_forward_declare q_conn_info
+#endif
 
 #ifdef NDEBUG
 #define log_stream_or_crypto_frame(...)

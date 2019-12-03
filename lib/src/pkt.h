@@ -34,8 +34,10 @@
 
 #include "conn.h"
 #include "quic.h"
-#include "stream.h"
 #include "tls.h"
+
+struct q_stream; // IWYU pragma: no_forward_declare q_stream
+                 // IWYU pragma: no_include "stream.h"
 
 
 #define MAX_PKT_LEN 1252

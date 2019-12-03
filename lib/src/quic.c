@@ -33,9 +33,7 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 
-// IWYU pragma: no_include <picotls/../picotls.h>
-
-#include <picotls.h> // IWYU pragma: keep
+#include <picotls.h>
 #include <quant/quant.h>
 #include <timeout.h>
 

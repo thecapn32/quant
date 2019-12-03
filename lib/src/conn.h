@@ -39,7 +39,7 @@
 #include <timeout.h>
 
 #include "diet.h"
-#include "pn.h" // IWYU pragma: keep
+#include "pn.h"
 #include "quic.h"
 #include "recovery.h"
 #include "tls.h"

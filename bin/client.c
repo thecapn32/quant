@@ -39,7 +39,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/param.h>
-#include <sys/socket.h>
+#include <sys/socket.h> // IWYU pragma: no_forward_declare sockaddr
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <time.h>

@@ -30,10 +30,14 @@
 #ifndef NO_QLOG
 #include <stdio.h>
 
-#include <warpcore/warpcore.h>
+struct cid;      // IWYU pragma: no_forward_declare cid
+struct pkt_meta; // IWYU pragma: no_forward_declare pkt_meta
+struct q_conn;   // IWYU pragma: no_forward_declare q_conn
+struct w_iov;    // IWYU pragma: no_forward_declare w_iov
 
-#include "conn.h"
-#include "quic.h"
+// IWYU pragma: no_include <warpcore/warpcore.h>
+// IWYU pragma: no_include "conn.h"
+// IWYU pragma: no_include "quic.h"
 
 
 typedef enum { pkt_tx, pkt_rx, pkt_dp } qlog_pkt_evt_t;

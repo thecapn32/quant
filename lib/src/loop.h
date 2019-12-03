@@ -31,8 +31,10 @@
 
 #include <quant/quant.h>
 
-#include "conn.h"
-#include "quic.h" // IWYU pragma: keep
+struct q_conn;   // IWYU pragma: no_forward_declare q_conn
+struct q_stream; // IWYU pragma: no_forward_declare q_stream
+
+// IWYU pragma: no_include  "conn.h"
 
 
 typedef void (*func_ptr)(void);

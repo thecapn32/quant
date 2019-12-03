@@ -33,7 +33,6 @@
 #include <stdio.h>
 
 #include <quant/quant.h>
-#include <warpcore/warpcore.h>
 
 #include "bitset.h"
 #include "frame.h"
