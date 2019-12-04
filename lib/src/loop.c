@@ -36,9 +36,9 @@
 
 
 #if !HAVE_64BIT
-#define WHEEL_NUM 6
 #define WHEEL_BIT 5
 #endif
+#define WHEEL_NUM 6
 #define TIMEOUT_DISABLE_INTERVALS
 #include <timeout.c>
 
@@ -93,13 +93,16 @@ void __attribute__((nonnull(1))) loop_run(struct w_engine * const w,
         if (break_loop)
             break;
 
-        bool do_rx = w_nic_rx(w, (int64_t)timeouts_timeout(ped(w)->wheel));
-        if (do_rx == false)
+        const uint64_t next = timeouts_timeout(ped(w)->wheel);
+        // warn(CRT, "%" PRIu64, next);
+        if (next == 0)
+            break;
+
+        if (w_nic_rx(w, (int64_t)next) == false)
             continue;
 
         struct w_sock_slist sl = w_sock_slist_initializer(sl);
-        do_rx = w_rx_ready(w, &sl) > 0;
-        if (do_rx == false)
+        if (w_rx_ready(w, &sl) == 0)
             continue;
 
         now = w_now();
