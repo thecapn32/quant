@@ -270,10 +270,11 @@ write_to_corpus(const int dir, const void * const data, const size_t len);
 #define pm_idx(w, m) (uint32_t)((m)-ped(w)->pkt_meta)
 
 
-extern char * __attribute__((nonnull)) hex2str(const uint8_t * const src,
-                                               const size_t len_src,
-                                               char * const dst,
-                                               const size_t len_dst);
+extern char * __attribute__((nonnull, no_instrument_function))
+hex2str(const uint8_t * const src,
+        const size_t len_src,
+        char * const dst,
+        const size_t len_dst);
 
 
 extern const char * __attribute__((nonnull))

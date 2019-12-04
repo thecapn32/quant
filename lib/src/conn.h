@@ -55,14 +55,14 @@ KHASH_INIT(conns_by_ipnp,
            w_socktuple_cmp)
 
 
-static inline khint_t __attribute__((nonnull))
+static inline khint_t __attribute__((nonnull, no_instrument_function))
 hash_cid(const struct cid * const id)
 {
     return fnv1a_32(id->id, id->len);
 }
 
 
-static inline int __attribute__((nonnull))
+static inline int __attribute__((nonnull, no_instrument_function))
 cid_cmp(const struct cid * const a, const struct cid * const b)
 {
     // if the lengths are different, memcmp will fail on the first byte
@@ -70,7 +70,7 @@ cid_cmp(const struct cid * const a, const struct cid * const b)
 }
 
 
-static inline int __attribute__((nonnull))
+static inline int __attribute__((nonnull, no_instrument_function))
 kh_cid_cmp(const struct cid * const a, const struct cid * const b)
 {
     return cid_cmp(a, b) == 0;
@@ -80,14 +80,14 @@ kh_cid_cmp(const struct cid * const a, const struct cid * const b)
 KHASH_INIT(conns_by_id, struct cid *, struct q_conn *, 1, hash_cid, kh_cid_cmp)
 
 
-static inline khint_t __attribute__((nonnull))
+static inline khint_t __attribute__((nonnull, no_instrument_function))
 hash_srt(const uint8_t * const srt)
 {
     return fnv1a_32(srt, SRT_LEN);
 }
 
 
-static inline int __attribute__((nonnull))
+static inline int __attribute__((nonnull, no_instrument_function))
 kh_srt_cmp(const uint8_t * const a, const uint8_t * const b)
 {
     return memcmp(a, b, SRT_LEN) == 0;
@@ -399,7 +399,7 @@ extern void __attribute__((nonnull)) rx_pkts(struct w_iov_sq * const x,
                                              const struct w_sock * const ws);
 #endif
 
-static inline struct pn_space * __attribute__((nonnull))
+static inline struct pn_space * __attribute__((nonnull, no_instrument_function))
 pn_for_epoch(struct q_conn * const c, const epoch_t e)
 {
     switch (e) {
@@ -416,7 +416,7 @@ pn_for_epoch(struct q_conn * const c, const epoch_t e)
 }
 
 
-static inline int __attribute__((nonnull))
+static inline int __attribute__((nonnull, no_instrument_function))
 cids_by_seq_cmp(const struct cid * const a, const struct cid * const b)
 {
     return (a->seq > b->seq) - (a->seq < b->seq);
@@ -437,7 +437,7 @@ struct ooo_0rtt {
 extern splay_head(ooo_0rtt_by_cid, ooo_0rtt) ooo_0rtt_by_cid;
 
 
-static inline int __attribute__((nonnull))
+static inline int __attribute__((nonnull, no_instrument_function))
 ooo_0rtt_by_cid_cmp(const struct ooo_0rtt * const a,
                     const struct ooo_0rtt * const b)
 {
@@ -448,7 +448,7 @@ ooo_0rtt_by_cid_cmp(const struct ooo_0rtt * const a,
 SPLAY_PROTOTYPE(ooo_0rtt_by_cid, ooo_0rtt, node, ooo_0rtt_by_cid_cmp)
 #endif
 
-static inline __attribute__((nonnull)) const char *
+static inline __attribute__((nonnull, no_instrument_function)) const char *
 conn_type(const struct q_conn * const c
 #ifdef NO_SERVER
           __attribute__((unused))
@@ -459,7 +459,7 @@ conn_type(const struct q_conn * const c
 }
 
 
-static inline bool __attribute__((nonnull))
+static inline bool __attribute__((nonnull, no_instrument_function))
 has_pval_wnd(const struct q_conn * const c, const uint16_t len)
 {
     if (unlikely(c->out_data + len >= c->path_val_win)) {
@@ -472,7 +472,7 @@ has_pval_wnd(const struct q_conn * const c, const uint16_t len)
 }
 
 
-static inline bool __attribute__((nonnull))
+static inline bool __attribute__((nonnull, no_instrument_function))
 has_wnd(const struct q_conn * const c, const uint16_t len)
 {
     if (unlikely(c->blocked)) {
@@ -492,15 +492,15 @@ has_wnd(const struct q_conn * const c, const uint16_t len)
 }
 
 
-static inline bool __attribute__((
+static inline bool __attribute__((no_instrument_function,
 #ifndef NO_MIGRATION
-    nonnull
+                                  nonnull
 #else
-    const
+                                  const
 #endif
-    )) needs_more_ncids(struct q_conn * const c
+                                  )) needs_more_ncids(struct q_conn * const c
 #ifdef NO_MIGRATION
-                        __attribute__((unused))
+                                                      __attribute__((unused))
 #endif
 )
 {
@@ -516,7 +516,7 @@ static inline bool __attribute__((
 }
 
 
-static inline void __attribute__((nonnull))
+static inline void __attribute__((nonnull, no_instrument_function))
 conns_by_ipnp_ins(struct q_conn * const c)
 {
     int ret;
@@ -527,7 +527,7 @@ conns_by_ipnp_ins(struct q_conn * const c)
 }
 
 
-static inline void __attribute__((nonnull))
+static inline void __attribute__((nonnull, no_instrument_function))
 conns_by_ipnp_del(const struct q_conn * const c)
 {
     const khiter_t k = kh_get(conns_by_ipnp, &conns_by_ipnp, &c->sock->tup);

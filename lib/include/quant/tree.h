@@ -158,14 +158,18 @@
     _Pragma("clang diagnostic push")                                           \
         _Pragma("clang diagnostic ignored \"-Wunused-function\"")              \
                                                                                \
-            void name##_splay(struct name *, const struct type *);             \
-    void name##_splay_minmax(struct name *, int);                              \
-    struct type * name##_splay_insert(struct name *, struct type *);           \
-    struct type * name##_splay_remove(struct name *, struct type *);           \
+            void __attribute__((no_instrument_function))                       \
+                name##_splay(struct name *, const struct type *);              \
+    void __attribute__((no_instrument_function))                               \
+        name##_splay_minmax(struct name *, int);                               \
+    struct type * __attribute__((no_instrument_function))                      \
+        name##_splay_insert(struct name *, struct type *);                     \
+    struct type * __attribute__((no_instrument_function))                      \
+        name##_splay_remove(struct name *, struct type *);                     \
                                                                                \
     /* Finds the node with the same key as elm */                              \
-    static inline struct type * name##_splay_find(struct name * head,          \
-                                                  const struct type * elm)     \
+    static inline struct type * __attribute__((no_instrument_function))        \
+        name##_splay_find(struct name * head, const struct type * elm)         \
     {                                                                          \
         if (splay_empty(head))                                                 \
             return (NULL);                                                     \
@@ -175,8 +179,8 @@
         return (NULL);                                                         \
     }                                                                          \
                                                                                \
-    static inline struct type * name##_splay_next(struct name * head,          \
-                                                  struct type * elm)           \
+    static inline struct type * __attribute__((no_instrument_function))        \
+        name##_splay_next(struct name * head, struct type * elm)               \
     {                                                                          \
         name##_splay(head, elm);                                               \
         if (splay_right(elm, field) != NULL) {                                 \
@@ -189,8 +193,8 @@
         return (elm);                                                          \
     }                                                                          \
                                                                                \
-    static inline struct type * name##_splay_prev(struct name * head,          \
-                                                  struct type * elm)           \
+    static inline struct type * __attribute__((no_instrument_function))        \
+        name##_splay_prev(struct name * head, struct type * elm)               \
     {                                                                          \
         name##_splay(head, elm);                                               \
         if (splay_left(elm, field) != NULL) {                                  \
@@ -203,8 +207,8 @@
         return (elm);                                                          \
     }                                                                          \
                                                                                \
-    static inline struct type * name##_splay_min_max(struct name * head,       \
-                                                     int val)                  \
+    static inline struct type * __attribute__((no_instrument_function))        \
+        name##_splay_min_max(struct name * head, int val)                      \
     {                                                                          \
         name##_splay_minmax(head, val);                                        \
         return (splay_root(head));                                             \

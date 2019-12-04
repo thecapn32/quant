@@ -74,25 +74,28 @@ struct q_stream; // IWYU pragma: no_forward_declare q_stream
 #define ERR_TLS(type) (0x100 + (type))
 
 
-static inline bool __attribute__((const)) is_lh(const uint8_t flags)
+static inline bool __attribute__((const, no_instrument_function))
+is_lh(const uint8_t flags)
 {
     return is_set(HEAD_FORM, flags);
 }
 
 
-static inline uint8_t __attribute__((const)) pkt_type(const uint8_t flags)
+static inline uint8_t __attribute__((const, no_instrument_function))
+pkt_type(const uint8_t flags)
 {
     return is_lh(flags) ? flags & LH_TYPE_MASK : SH;
 }
 
 
-static inline uint8_t __attribute__((const)) pkt_nr_len(const uint8_t flags)
+static inline uint8_t __attribute__((const, no_instrument_function))
+pkt_nr_len(const uint8_t flags)
 {
     return (flags & HEAD_PNRL_MASK) + 1;
 }
 
 
-static inline epoch_t __attribute__((const))
+static inline epoch_t __attribute__((const, no_instrument_function))
 epoch_for_pkt_type(const uint8_t type)
 {
     switch (type) {
@@ -109,14 +112,16 @@ epoch_for_pkt_type(const uint8_t type)
 }
 
 
-static inline struct pn_space * __attribute__((nonnull))
+static inline struct pn_space * __attribute__((nonnull, no_instrument_function))
 pn_for_pkt_type(struct q_conn * const c, const uint8_t t)
 {
     return pn_for_epoch(c, epoch_for_pkt_type(t));
 }
 
 
-static inline const char * __attribute__((const, nonnull))
+static inline const char * __attribute__((const,
+                                          nonnull,
+                                          no_instrument_function))
 pkt_type_str(const uint8_t flags, const void * const vers)
 {
     if (is_lh(flags)) {
@@ -141,7 +146,7 @@ pkt_type_str(const uint8_t flags, const void * const vers)
 }
 
 
-static inline bool __attribute__((const))
+static inline bool __attribute__((const, no_instrument_function))
 has_pkt_nr(const uint8_t flags, const uint32_t vers)
 {
     return is_lh(flags) == false || (vers && pkt_type(flags) != LH_RTRY);

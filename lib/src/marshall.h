@@ -33,59 +33,68 @@
 
 extern uint8_t __attribute__((const)) varint_size(const uint64_t val);
 
-extern void __attribute__((nonnull))
+extern void __attribute__((nonnull, no_instrument_function))
 enc1(uint8_t ** pos, const uint8_t * const end, const uint8_t val);
 
-extern void __attribute__((nonnull))
+extern void __attribute__((nonnull, no_instrument_function))
 enc2(uint8_t ** pos, const uint8_t * const end, const uint16_t val);
 
-extern void __attribute__((nonnull))
+extern void __attribute__((nonnull, no_instrument_function))
 enc3(uint8_t ** pos, const uint8_t * const end, const uint32_t val);
 
-extern void __attribute__((nonnull))
+extern void __attribute__((nonnull, no_instrument_function))
 enc4(uint8_t ** pos, const uint8_t * const end, const uint32_t val);
 
-extern void __attribute__((nonnull))
+extern void __attribute__((nonnull, no_instrument_function))
 enc8(uint8_t ** pos, const uint8_t * const end, const uint64_t val);
 
-extern void __attribute__((nonnull))
+extern void __attribute__((nonnull, no_instrument_function))
 encv(uint8_t ** pos, const uint8_t * const end, const uint64_t val);
 
-extern void __attribute__((nonnull)) encvl(uint8_t ** pos,
-                                           const uint8_t * const end,
-                                           const uint64_t val,
-                                           const uint8_t len);
+extern void __attribute__((nonnull, no_instrument_function))
+encvl(uint8_t ** pos,
+      const uint8_t * const end,
+      const uint64_t val,
+      const uint8_t len);
 
-extern void __attribute__((nonnull)) encb(uint8_t ** pos,
-                                          const uint8_t * const end,
-                                          const uint8_t * const val,
-                                          const uint16_t len);
+extern void __attribute__((nonnull, no_instrument_function))
+encb(uint8_t ** pos,
+     const uint8_t * const end,
+     const uint8_t * const val,
+     const uint16_t len);
 
-extern bool __attribute__((nonnull)) dec1(uint8_t * const val,
-                                          const uint8_t ** const pos,
-                                          const uint8_t * const end);
+extern bool __attribute__((nonnull, no_instrument_function))
+dec1(uint8_t * const val,
+     const uint8_t ** const pos,
+     const uint8_t * const end);
 
-extern bool __attribute__((nonnull)) dec2(uint16_t * const val,
-                                          const uint8_t ** const pos,
-                                          const uint8_t * const end);
+extern bool __attribute__((nonnull, no_instrument_function))
+dec2(uint16_t * const val,
+     const uint8_t ** const pos,
+     const uint8_t * const end);
 
-extern bool __attribute__((nonnull)) dec3(uint32_t * const val,
-                                          const uint8_t ** const pos,
-                                          const uint8_t * const end);
+extern bool __attribute__((nonnull, no_instrument_function))
+dec3(uint32_t * const val,
+     const uint8_t ** const pos,
+     const uint8_t * const end);
 
-extern bool __attribute__((nonnull)) dec4(uint32_t * const val,
-                                          const uint8_t ** const pos,
-                                          const uint8_t * const end);
+extern bool __attribute__((nonnull, no_instrument_function))
+dec4(uint32_t * const val,
+     const uint8_t ** const pos,
+     const uint8_t * const end);
 
-extern bool __attribute__((nonnull)) dec8(uint64_t * const val,
-                                          const uint8_t ** const pos,
-                                          const uint8_t * const end);
+extern bool __attribute__((nonnull, no_instrument_function))
+dec8(uint64_t * const val,
+     const uint8_t ** const pos,
+     const uint8_t * const end);
 
-extern bool __attribute__((nonnull)) decv(uint64_t * const val,
-                                          const uint8_t ** const pos,
-                                          const uint8_t * const end);
+extern bool __attribute__((nonnull, no_instrument_function))
+decv(uint64_t * const val,
+     const uint8_t ** const pos,
+     const uint8_t * const end);
 
-extern bool __attribute__((nonnull)) decb(uint8_t * const val,
-                                          const uint8_t ** const pos,
-                                          const uint8_t * const end,
-                                          const uint16_t len);
+extern bool __attribute__((nonnull, no_instrument_function))
+decb(uint8_t * const val,
+     const uint8_t ** const pos,
+     const uint8_t * const end,
+     const uint16_t len);
