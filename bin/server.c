@@ -312,7 +312,7 @@ int main(int argc, char * argv[])
         const bool have_active =
             q_ready(w, first_conn ? 0 : timeout * NS_PER_S, &c);
         if (c == 0) {
-            if (have_active == false)
+            if (have_active == false && timeout)
                 break;
             continue;
         }
