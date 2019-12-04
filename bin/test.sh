@@ -30,7 +30,7 @@ if [ "$c" == wquant ] || [ "$s" == wquant ]; then
 else
         delay=.2
         iface=lo0
-        ninja "$c"
+        ninja all "$c"
         [ "$c" != "$s" ] && ninja "$s"
 fi
 
