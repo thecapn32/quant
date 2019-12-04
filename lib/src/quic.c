@@ -866,6 +866,9 @@ bool q_ready(struct w_engine * const w,
         loop_run(w, (func_ptr)q_ready, 0, 0);
     }
 
+    if (ready == 0)
+        goto done;
+
     struct q_conn * const c = sl_first(&c_ready);
     if (c) {
         sl_remove_head(&c_ready, node_rx_ext);
@@ -881,9 +884,9 @@ bool q_ready(struct w_engine * const w,
         warn(WRN, "no conn ready to rx");
 #endif
     }
-    if (ready)
-        *ready = c;
-    return c;
+    *ready = c;
+done:
+    return kh_size(&conns_by_id);
 }
 
 
