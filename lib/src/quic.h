@@ -306,11 +306,11 @@ extern char __tok_str[hex_str_len(MAX_TOK_LEN)];
 
 
 #define get_conf(w, conf, val)                                                 \
-    (conf) && (conf)->val ? (conf)->val : ped(w)->default_conn_conf.val
+    ((conf) && (conf)->val ? (conf)->val : ped(w)->default_conn_conf.val)
 
 
 #define get_conf_uncond(w, conf, val)                                          \
-    (conf) ? (conf)->val : ped(w)->default_conn_conf.val
+    ((conf) ? (conf)->val : ped(w)->default_conn_conf.val)
 
 
 extern void __attribute__((nonnull))
