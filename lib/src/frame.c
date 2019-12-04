@@ -445,43 +445,10 @@ shorten_ack_nr(const uint_t ack, const uint_t diff)
     if (unlikely(diff == 0))
         return ack;
 
-    static const uint_t divs[] = {
-        // clang-format off
-        UINT_C(1), UINT_C(10), UINT_C(10), UINT_C(10), UINT_C(100), UINT_C(100),
-        UINT_C(100), UINT_C(1000), UINT_C(1000), UINT_C(1000), UINT_C(10000),
-        UINT_C(10000), UINT_C(10000), UINT_C(10000), UINT_C(100000),
-        UINT_C(100000), UINT_C(100000), UINT_C(1000000), UINT_C(1000000),
-        UINT_C(1000000), UINT_C(10000000), UINT_C(10000000), UINT_C(10000000),
-        UINT_C(10000000), UINT_C(100000000), UINT_C(100000000),
-        UINT_C(100000000), UINT_C(1000000000), UINT_C(1000000000),
-        UINT_C(1000000000),
-#if HAVE_64BIT
-        UINT_C(10000000000), UINT_C(10000000000),
-        UINT_C(10000000000), UINT_C(10000000000), UINT_C(100000000000),
-        UINT_C(100000000000), UINT_C(100000000000), UINT_C(1000000000000),
-        UINT_C(1000000000000), UINT_C(1000000000000), UINT_C(10000000000000),
-        UINT_C(10000000000000), UINT_C(10000000000000), UINT_C(10000000000000),
-        UINT_C(100000000000000), UINT_C(100000000000000),
-        UINT_C(100000000000000), UINT_C(1000000000000000),
-        UINT_C(1000000000000000), UINT_C(1000000000000000),
-        UINT_C(10000000000000000), UINT_C(10000000000000000),
-        UINT_C(10000000000000000), UINT_C(10000000000000000),
-        UINT_C(100000000000000000), UINT_C(100000000000000000),
-        UINT_C(100000000000000000), UINT_C(1000000000000000000),
-        UINT_C(1000000000000000000), UINT_C(1000000000000000000),
-        UINT_C(10000000000000000000), UINT_C(10000000000000000000),
-        UINT_C(10000000000000000000), UINT_C(10000000000000000000)
-#endif
-        // clang-format on
-    };
-
-    return ack % divs[sizeof(divs[0]) * 8 - (size_t)(
-#if HAVE_64BIT
-                                                __builtin_clzll(diff)
-#else
-                                                __builtin_clzl(diff)
-#endif
-                                                    )];
+    uint_t div = 10;
+    while ((ack - diff) % div + diff >= div)
+        div *= 10;
+    return ack % div;
 }
 #endif
 
