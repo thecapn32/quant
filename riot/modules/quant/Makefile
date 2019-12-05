@@ -66,12 +66,13 @@ INCLUDES += \
 
 ifndef BUILD_FLAGS
 BUILD_FLAGS=-DMINIMAL_CIPHERS -DNO_ERR_REASONS -DNO_OOO_0RTT \
-	-DNO_OOO_DATA -DNO_MIGRATION -DNO_SRT_MATCHING -DNO_QINFO -DNO_SERVER
+	-DNO_MIGRATION -DNO_SRT_MATCHING -DNO_QINFO -DNO_SERVER
 endif
 
-# -DDSTACK -Wstack-usage=512
-CFLAGS += \
-	-fstack-usage -foptimize-strlen -ffast-math \
+# -DDSTACK -finstrument-functions -DNDEBUG
+# -finstrument-functions-exclude-file-list=deps/micro-ecc,deps/cifra
+DEVELHELP=
+CFLAGS +=-fstack-usage -foptimize-strlen -ffast-math \
 	-Wno-unknown-pragmas -Wno-missing-field-initializers \
 	-Wno-strict-prototypes -Wno-sign-compare -Wno-maybe-uninitialized \
 	-Wno-unused-variable -Wno-unused-but-set-variable \
