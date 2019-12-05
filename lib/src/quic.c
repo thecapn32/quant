@@ -716,8 +716,8 @@ done:
         warn(INF, "pkts_out = %" PRIu, c->i.pkts_out);
         warn(INF, "pkts_out_lost = %" PRIu, c->i.pkts_out_lost);
         warn(INF, "pkts_out_rtx = %" PRIu, c->i.pkts_out_rtx);
-        warn(INF, "rtt = %.3f", c->i.rtt / (float)NS_PER_S);
-        warn(INF, "rttvar = %.3f", c->i.rttvar / (float)NS_PER_S);
+        warn(INF, "rtt = %.3f", c->i.rtt);
+        warn(INF, "rttvar = %.3f", c->i.rttvar);
         warn(INF, "cwnd = %" PRIu, c->i.cwnd);
         warn(INF, "ssthresh = %" PRIu, c->i.ssthresh);
         warn(INF, "pto_cnt = %" PRIu, c->i.pto_cnt);

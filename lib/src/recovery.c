@@ -117,10 +117,10 @@ void log_cc(struct q_conn * const c)
     const dint_t delta_ssthresh =
         (dint_t)ssthresh -
         (dint_t)(c->rec.prev.ssthresh == UINT_T_MAX ? 0 : c->rec.prev.ssthresh);
-    const int64_t delta_srtt =
-        (int64_t)c->rec.cur.srtt - (int64_t)c->rec.prev.srtt;
-    const int64_t delta_rttvar =
-        (int64_t)c->rec.cur.rttvar - (int64_t)c->rec.prev.rttvar;
+    const dint_t delta_srtt =
+        (dint_t)c->rec.cur.srtt - (dint_t)c->rec.prev.srtt;
+    const dint_t delta_rttvar =
+        (dint_t)c->rec.cur.rttvar - (dint_t)c->rec.prev.rttvar;
     if (delta_in_flight || delta_cwnd || delta_ssthresh || delta_srtt ||
         delta_rttvar) {
         warn(DBG,
@@ -132,12 +132,11 @@ void log_cc(struct q_conn * const c)
              delta_in_flight, c->rec.cur.cwnd,
              delta_cwnd > 0 ? GRN : delta_cwnd < 0 ? RED : "", delta_cwnd,
              ssthresh, delta_ssthresh > 0 ? GRN : delta_ssthresh < 0 ? RED : "",
-             delta_ssthresh, c->rec.cur.srtt / (double)NS_PER_S,
+             delta_ssthresh, c->rec.cur.srtt / (float)US_PER_S,
              delta_srtt > 0 ? GRN : delta_srtt < 0 ? RED : "",
-             delta_srtt / (double)NS_PER_S,
-             c->rec.cur.rttvar / (double)NS_PER_S,
+             delta_srtt / (float)US_PER_S, c->rec.cur.rttvar / (float)US_PER_S,
              delta_rttvar > 0 ? GRN : delta_rttvar < 0 ? RED : "",
-             delta_rttvar / (double)NS_PER_S);
+             delta_rttvar / (float)US_PER_S);
     }
 
     qlog_recovery(rec_mu, "default", c, 0, &c->odcid);
@@ -180,11 +179,12 @@ void set_ld_timer(struct q_conn * const c)
         return;
     }
 
-    timeout_t to = c->rec.cur.srtt == 0
-                       ? 2 * kInitialRtt
-                       : c->rec.cur.srtt +
-                             MAX(4 * c->rec.cur.rttvar, kGranularity) +
-                             c->tp_out.max_ack_del * NS_PER_MS;
+    timeout_t to =
+        c->rec.cur.srtt == 0
+            ? (2 * kInitialRtt) * (timeout_t)NS_PER_US
+            : ((c->rec.cur.srtt + MAX(4 * c->rec.cur.rttvar, kGranularity)) *
+                   NS_PER_US +
+               c->tp_out.max_ack_del * NS_PER_MS);
     to *= 1 << c->rec.pto_cnt;
     c->rec.ld_alarm_val = c->rec.last_sent_ack_elicit_t + to;
 
@@ -340,7 +340,8 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
 
     // Minimum time of kGranularity before packets are deemed lost.
     const uint64_t loss_del =
-        MAX(kGranularity, 9 * MAX(c->rec.cur.latest_rtt, c->rec.cur.srtt) / 8);
+        MAX(kGranularity,
+            NS_PER_US * 9 * MAX(c->rec.cur.latest_rtt, c->rec.cur.srtt) / 8);
 
     // Packets sent before this time are deemed lost.
     const uint64_t lost_send_t = loop_now() - loss_del;
@@ -570,7 +571,7 @@ void on_ack_received_1(struct pkt_meta * const lg_ack, const uint_t ack_del)
                        : MAX(pn->lg_acked, lg_ack->hdr.nr);
 
     if (is_ack_eliciting(&pn->tx_frames)) {
-        c->rec.cur.latest_rtt = loop_now() - lg_ack->t;
+        c->rec.cur.latest_rtt = (uint_t)NS_TO_US(loop_now() - lg_ack->t);
         update_rtt(c, likely(pn->type == pn_data) ? ack_del : 0);
     }
 

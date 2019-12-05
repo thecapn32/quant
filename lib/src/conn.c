@@ -1673,7 +1673,7 @@ void enter_closing(struct q_conn * const c)
         const timeout_t dur =
             3 * (c->rec.cur.srtt == 0 ? kInitialRtt : c->rec.cur.srtt) +
             4 * c->rec.cur.rttvar;
-        timeouts_add(ped(c->w)->wheel, &c->closing_alarm, dur);
+        timeouts_add(ped(c->w)->wheel, &c->closing_alarm, dur * NS_PER_US);
 #ifdef DEBUG_TIMERS
         warn(DBG, "closing/draining alarm in %f sec on %s conn %s",
              dur / (double)NS_PER_S, conn_type(c), cid_str(c->scid));
@@ -1996,7 +1996,7 @@ void conn_info_populate(struct q_conn * const c)
     // fill some q_conn_info fields based on other conn fields
     c->i.cwnd = c->rec.cur.cwnd;
     c->i.ssthresh = c->rec.cur.ssthresh;
-    c->i.rtt = c->rec.cur.srtt;
-    c->i.rttvar = c->rec.cur.rttvar;
+    c->i.rtt = c->rec.cur.srtt / (float)US_PER_S;
+    c->i.rttvar = c->rec.cur.rttvar / (float)US_PER_S;
 }
 #endif

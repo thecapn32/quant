@@ -42,6 +42,7 @@ struct q_conn;   // IWYU pragma: no_forward_declare q_conn
 
 
 struct cc_state {
+    // these are kept in usec:
     uint_t latest_rtt; // latest_rtt
     uint_t min_rtt;    // min_rtt
     uint_t rttvar;     // rttvar
