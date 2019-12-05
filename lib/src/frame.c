@@ -1415,18 +1415,16 @@ void enc_ack_frame(struct q_conn_info * const ci,
     const uint_t ade = m->hdr.type == LH_INIT || m->hdr.type == LH_HSHK
                            ? DEF_ACK_DEL_EXP
                            : c->tp_out.ack_del_exp;
-    const uint64_t ack_delay_tmp =
+    const uint64_t ack_delay =
         NS_TO_US(loop_now() - diet_timestamp(first_rng)) >> ade;
 
     // TODO: figure out a better way to handle huge ACK delays
-    if (unlikely(ack_delay_tmp > UINT32_MAX / 2)) {
-        err_close(c, ERR_FRAME_ENC, type, "ACK delay raw %" PRIu64,
-                  ack_delay_tmp);
+    if (unlikely(ack_delay > UINT32_MAX / 2)) {
+        err_close(c, ERR_FRAME_ENC, type, "ACK delay raw %" PRIu64, ack_delay);
         return;
     }
-    encv(pos, end, ack_delay_tmp);
+    encv(pos, end, ack_delay);
 
-    const uint_t ack_delay = (uint_t)ack_delay_tmp;
     const uint_t ack_rng_cnt = diet_cnt(&pn->recv) - 1;
     encv(pos, end, ack_rng_cnt);
 
@@ -1452,8 +1450,8 @@ void enc_ack_frame(struct q_conn_info * const ci,
                               " delay=%" PRIu " (%" PRIu " usec) cnt=%" PRIu
                               " rng=%" PRIu " [" FMT_PNR_IN ".." FMT_PNR_IN "]",
                      type, type == FRM_ACE ? "ECN" : "", first_rng->hi,
-                     ack_delay, ack_delay << ade, ack_rng_cnt, ack_rng, b->lo,
-                     shorten_ack_nr(b->hi, ack_rng));
+                     (uint_t)ack_delay, (uint_t)ack_delay << ade, ack_rng_cnt,
+                     ack_rng, b->lo, shorten_ack_nr(b->hi, ack_rng));
 
         } else {
             if (prev_lo)
@@ -1467,8 +1465,8 @@ void enc_ack_frame(struct q_conn_info * const ci,
                               " delay=%" PRIu " (%" PRIu " usec) cnt=%" PRIu
                               " rng=%" PRIu " [" FMT_PNR_IN "]",
                      type, type == FRM_ACE ? "ECN" : "", first_rng->hi,
-                     ack_delay, ack_delay << ade, ack_rng_cnt, ack_rng,
-                     first_rng->hi);
+                     (uint_t)ack_delay, (uint_t)ack_delay << ade, ack_rng_cnt,
+                     ack_rng, first_rng->hi);
         }
 #endif
         encv(pos, end, ack_rng);
