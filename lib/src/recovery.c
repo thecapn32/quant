@@ -47,23 +47,11 @@
 #include "tls.h"
 
 
-#define is_crypto_pkt(m) has_frm((m)->frms, FRM_CRY)
-
-
 static inline bool __attribute__((nonnull))
 in_cong_recovery(const struct q_conn * const c, const uint64_t sent_t)
 {
     // see InRecovery() pseudo code
     return sent_t <= c->rec.rec_start_t;
-}
-
-
-static bool __attribute__((nonnull))
-have_unacked_crypto_data(struct q_conn * const c)
-{
-    return (c->cstrms[ep_init] &&
-            out_fully_acked(c->cstrms[ep_init]) == false) ||
-           out_fully_acked(c->cstrms[ep_hshk]) == false;
 }
 
 
@@ -158,41 +146,32 @@ void log_cc(struct q_conn * const c)
 #endif
 
 
+static bool peer_not_awaiting_addr_val(struct q_conn * const c)
+{
+    if (!is_clnt(c))
+        return true;
+
+    return bit_isset(FRM_MAX, FRM_ACK, &c->pns[pn_init].rx_frames) ||
+           bit_isset(FRM_MAX, FRM_ACK, &c->pns[pn_hshk].rx_frames);
+}
+
+
 void set_ld_timer(struct q_conn * const c)
 {
     if (c->state == conn_idle || c->state == conn_clsg || c->state == conn_drng)
         // don't do LD while idle or draining
         return;
 
-        // see SetLossDetectionTimer() pseudo code
+    // see SetLossDetectionTimer() pseudo code
 
-#ifdef DEBUG_TIMERS
-    const char * type = BLD RED "???" NRM;
-#endif
     const struct pn_space * const pn = earliest_loss_t_pn(c);
 
     if (pn && pn->loss_t) {
-#ifdef DEBUG_TIMERS
-        type = "TT";
-#endif
         c->rec.ld_alarm_val = pn->loss_t;
         goto set_to;
     }
 
-    if (unlikely(have_unacked_crypto_data(c) ||
-                 have_keys(c, pn_data) == false)) {
-#ifdef DEBUG_TIMERS
-        type = "crypto RTX";
-#endif
-        timeout_t to = 2 * (unlikely(c->rec.cur.srtt == 0) ? kInitialRtt
-                                                           : c->rec.cur.srtt);
-        to = MAX(to, kGranularity) * (1 << c->rec.crypto_cnt);
-        c->rec.ld_alarm_val = c->rec.last_sent_crypto_t + to;
-        goto set_to;
-    }
-
-    // don't arm the alarm if there are no ack-eliciting packets in flight
-    if (unlikely(c->rec.ae_in_flight == 0)) {
+    if (unlikely(c->rec.ae_in_flight == 0 && peer_not_awaiting_addr_val(c))) {
 #ifdef DEBUG_TIMERS
         warn(DBG, "no RTX-able pkts in flight, stopping ld_alarm on %s conn %s",
              conn_type(c), cid_str(c->scid));
@@ -201,11 +180,11 @@ void set_ld_timer(struct q_conn * const c)
         return;
     }
 
-#ifdef DEBUG_TIMERS
-    type = "PTO";
-#endif
-    timeout_t to = c->rec.cur.srtt + MAX(4 * c->rec.cur.rttvar, kGranularity) +
-                   c->tp_out.max_ack_del * NS_PER_MS;
+    timeout_t to = c->rec.cur.srtt == 0
+                       ? 2 * kInitialRtt
+                       : c->rec.cur.srtt +
+                             MAX(4 * c->rec.cur.rttvar, kGranularity) +
+                             c->tp_out.max_ack_del * NS_PER_MS;
     to *= 1 << c->rec.pto_cnt;
     c->rec.ld_alarm_val = c->rec.last_sent_ack_elicit_t + to;
 
@@ -213,7 +192,7 @@ set_to:;
     const uint64_t now = loop_now();
     if (unlikely(c->rec.ld_alarm_val < now)) {
 #ifdef DEBUG_TIMERS
-        warn(WRN, "%s alarm expired %f sec ago", type,
+        warn(WRN, "LD alarm expired %f sec ago",
              ((int64_t)c->rec.ld_alarm_val - (int64_t)now) / (double)NS_PER_S);
 #endif
         c->rec.ld_alarm_val = 0;
@@ -221,7 +200,7 @@ set_to:;
         c->rec.ld_alarm_val -= now;
 
 #ifdef DEBUG_TIMERS
-    warn(DBG, "%s alarm in %f sec on %s conn %s", type,
+    warn(DBG, "LD alarm in %f sec on %s conn %s",
          c->rec.ld_alarm_val / (double)NS_PER_S, conn_type(c),
          cid_str(c->scid));
 #endif
@@ -463,48 +442,29 @@ static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
 #endif
         detect_lost_pkts(pn, true);
         goto set_timer; // otherwise no PTO will happen
-    } else if (have_unacked_crypto_data(c)) {
-#ifdef DEBUG_TIMERS
-        warn(DBG, "crypto RTX #%u on %s conn %s", c->rec.crypto_cnt + 1,
-             conn_type(c), cid_str(c->scid));
-#endif
-        detect_lost_pkts(&c->pns[pn_init], false);
-        detect_lost_pkts(&c->pns[pn_hshk], false);
-        detect_lost_pkts(&c->pns[pn_data], false);
-        if (c->rec.crypto_cnt++ >= 2 && c->sockopt.enable_ecn) {
-            warn(NTE, "turning off ECN for %s conn %s", conn_type(c),
-                 cid_str(c->scid));
-            c->sockopt.enable_ecn = false;
-            w_set_sockopt(c->sock, &c->sockopt);
-        }
-        c->tx_limit = 0;
-        timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
-#ifndef NO_QINFO
-        c->i.pto_cnt++;
-#endif
+    }
 
-    } else if (have_keys(c, pn_data) == false) {
+    if (have_keys(c, pn_data) == false) {
 #ifdef DEBUG_TIMERS
-        warn(DBG, "anti-deadlock RTX #%u on %s conn %s", c->rec.crypto_cnt + 1,
-             conn_type(c), cid_str(c->scid));
+        warn(DBG, "anti-deadlock RTX on %s conn %s", conn_type(c),
+             cid_str(c->scid));
 #endif
         c->tx_limit = have_keys(c, pn_hshk) ? 1 : 2;
         timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
-        c->rec.crypto_cnt++;
 
     } else {
 #ifdef DEBUG_TIMERS
         warn(DBG, "PTO alarm #%u on %s conn %s", c->rec.pto_cnt, conn_type(c),
              cid_str(c->scid));
 #endif
-        c->rec.pto_cnt++;
-#ifndef NO_QINFO
-        c->i.pto_cnt++;
-#endif
         c->tx_limit = 2;
         timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
     }
 
+    c->rec.pto_cnt++;
+#ifndef NO_QINFO
+    c->i.pto_cnt++;
+#endif
     if (timeout_expired(&c->rec.ld_alarm))
     set_timer:
         set_ld_timer(c);
@@ -557,8 +517,6 @@ void on_pkt_sent(struct pkt_meta * const m)
 
     struct q_conn * const c = m->pn->c;
     if (likely(m->in_flight)) {
-        if (unlikely(is_crypto_pkt(m)))
-            c->rec.last_sent_crypto_t = now;
         if (likely(m->ack_eliciting)) {
             c->rec.last_sent_ack_elicit_t = now;
             c->rec.ae_in_flight++;
@@ -626,7 +584,7 @@ void on_ack_received_2(struct pn_space * const pn)
 
     struct q_conn * const c = pn->c;
     detect_lost_pkts(pn, true);
-    c->rec.crypto_cnt = c->rec.pto_cnt = 0;
+    c->rec.pto_cnt = 0;
     set_ld_timer(c);
 }
 
