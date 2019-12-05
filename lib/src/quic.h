@@ -62,10 +62,10 @@
 
 // Timer granularity. This is a system-dependent value. However, implementations
 // SHOULD use a value no smaller than 1ms.
-#define kGranularity 1 * NS_PER_MS
+#define kGranularity (1 * NS_PER_MS)
 
 // The RTT used before an RTT sample is taken. The RECOMMENDED value is 100ms.
-#define kInitialRtt 500 * NS_PER_MS
+#define kInitialRtt (500 * NS_PER_MS)
 
 /// Default limit on the initial amount of outstanding data in flight, in bytes.
 /// Taken from [RFC6928]. The RECOMMENDED value is the minimum of 10 *
