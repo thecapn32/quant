@@ -36,6 +36,8 @@ struct q_stream; // IWYU pragma: no_forward_declare q_stream
 
 // IWYU pragma: no_include  "conn.h"
 
+#include "quic.h" // IWYU pragma: keep
+
 
 typedef void (*func_ptr)(void);
 
