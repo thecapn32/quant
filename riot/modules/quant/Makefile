@@ -76,8 +76,7 @@ CFLAGS +=-fstack-usage -foptimize-strlen -ffast-math \
 	-Wno-unknown-pragmas -Wno-missing-field-initializers \
 	-Wno-strict-prototypes -Wno-sign-compare -Wno-maybe-uninitialized \
 	-Wno-unused-variable -Wno-unused-but-set-variable \
-	-DDLEVEL=DBG -DNO_FUZZER_CORPUS_COLLECTION \
-	-DNO_TLS_TICKETS -DNO_TLS_LOG -DNO_QLOG ${BUILD_FLAGS} \
+	-DDLEVEL=DBG -DNO_TLS_TICKETS -DNO_TLS_LOG -DNO_QLOG ${BUILD_FLAGS} \
 	-D'ntoh16(x)=__builtin_bswap16(*(uint16_t*)(x))' \
 	-D'ntoh32(x)=__builtin_bswap32(*(uint32_t*)(x))' \
 	-D'ntoh64(x)=__builtin_bswap64(*(uint64_t*)(x))'

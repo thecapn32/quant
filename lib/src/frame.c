@@ -1118,8 +1118,7 @@ bool dec_frames(struct q_conn * const c,
     const uint8_t * end = v->buf + v->len;
     const uint8_t * pad_start = 0;
 
-#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
-    !defined(NO_FUZZER_CORPUS_COLLECTION)
+#if !defined(NDEBUG) && !defined(FUZZING) && defined(FUZZER_CORPUS_COLLECTION)
     // when called from the fuzzer, v->wv_af is zero
     if (v->wv_af)
         write_to_corpus(corpus_frm_dir, pos, (size_t)(end - pos));

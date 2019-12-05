@@ -1160,8 +1160,7 @@ static void __attribute__((nonnull))
         sq_remove_head(x, next);
         sq_next(xv, next) = 0;
 
-#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
-    !defined(NO_FUZZER_CORPUS_COLLECTION)
+#if !defined(NDEBUG) && !defined(FUZZING) && defined(FUZZER_CORPUS_COLLECTION)
         // when called from the fuzzer, xv->wv_af is zero
         if (xv->wv_af)
             write_to_corpus(corpus_pkt_dir, xv->buf, xv->len);

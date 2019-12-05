@@ -42,7 +42,7 @@ git pull --recurse-submodules
 git submodule sync
 git submodule update --init --recursive
 if [ "$prev" = "$(git rev-list HEAD -n 1)" ]; then
-        cmake -GNinja -DNO_FUZZER_CORPUS_COLLECTION=True ..
+        cmake -GNinja ..
         ninja
         sudo setcap 'cap_net_bind_service=+ep' bin/server
 fi

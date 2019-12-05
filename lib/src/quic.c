@@ -44,8 +44,7 @@
 #define ASAN_UNPOISON_MEMORY_REGION(x, y)
 #endif
 
-#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
-    !defined(NO_FUZZER_CORPUS_COLLECTION)
+#if !defined(NDEBUG) && !defined(FUZZING) && defined(FUZZER_CORPUS_COLLECTION)
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/param.h>
@@ -88,8 +87,7 @@ struct q_conn_sl accept_queue = sl_head_initializer(accept_queue);
 
 static struct timeout api_alarm = TIMEOUT_INITIALIZER(0);
 
-#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
-    !defined(NO_FUZZER_CORPUS_COLLECTION)
+#if !defined(NDEBUG) && !defined(FUZZING) && defined(FUZZER_CORPUS_COLLECTION)
 int corpus_pkt_dir, corpus_frm_dir;
 #endif
 
@@ -497,8 +495,7 @@ struct q_stream * q_rsv_stream(struct q_conn * const c, const bool bidi)
 }
 
 
-#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
-    !defined(NO_FUZZER_CORPUS_COLLECTION)
+#if !defined(NDEBUG) && !defined(FUZZING) && defined(FUZZER_CORPUS_COLLECTION)
 static int __attribute__((nonnull))
 mk_or_open_dir(const char * const path, mode_t mode)
 {
@@ -582,7 +579,7 @@ struct w_engine * q_init(const char * const ifname,
     // initialize TLS context
     init_tls_ctx(conf, &ped(w)->tls_ctx);
 
-#if !defined(NDEBUG) && !defined(NO_FUZZER_CORPUS_COLLECTION)
+#if !defined(NDEBUG) && defined(FUZZER_CORPUS_COLLECTION)
 #ifdef FUZZING
     warn(CRT, "%s compiled for fuzzing - will not communicate", quant_name);
 #else
@@ -783,8 +780,7 @@ void q_cleanup(struct w_engine * const w)
     free(w->data);
     w_cleanup(w);
 
-#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
-    !defined(NO_FUZZER_CORPUS_COLLECTION)
+#if !defined(NDEBUG) && !defined(FUZZING) && defined(FUZZER_CORPUS_COLLECTION)
     close(corpus_pkt_dir);
     close(corpus_frm_dir);
 #endif
@@ -830,8 +826,7 @@ bool q_is_conn_closed(const struct q_conn * const c)
 }
 
 
-#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
-    !defined(NO_FUZZER_CORPUS_COLLECTION)
+#if !defined(NDEBUG) && !defined(FUZZING) && defined(FUZZER_CORPUS_COLLECTION)
 void write_to_corpus(const int dir, const void * const data, const size_t len)
 {
     const uint64_t rand = w_rand64();

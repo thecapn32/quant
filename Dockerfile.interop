@@ -3,7 +3,7 @@ RUN apt-get update -y
 RUN apt-get install -y cmake g++ libssl-dev git pkg-config libhttp-parser-dev
 ADD . /src
 WORKDIR /src/Debug
-RUN cmake -DNO_FUZZER_CORPUS_COLLECTION=True -DDOCKER=True  ..
+RUN cmake -DDOCKER=True  ..
 RUN make install
 
 FROM martenseemann/quic-network-simulator-endpoint

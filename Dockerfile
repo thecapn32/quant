@@ -4,8 +4,7 @@ RUN apk add --no-cache cmake ninja gcc g++ git musl-dev linux-headers \
 RUN git config --global user.email "docker@example.com"
 ADD . /src
 WORKDIR /src/Debug
-RUN cmake -GNinja -DNO_FUZZER_CORPUS_COLLECTION=True -DDOCKER=True \
-        -DCMAKE_INSTALL_PREFIX=/dst ..
+RUN cmake -GNinja -DDOCKER=True -DCMAKE_INSTALL_PREFIX=/dst ..
 RUN ninja install
 
 FROM alpine:latest

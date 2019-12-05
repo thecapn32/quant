@@ -227,8 +227,7 @@ dup_iov(const struct w_iov * const v,
         const uint16_t off);
 
 
-#if !defined(NDEBUG) && !defined(FUZZING) &&                                   \
-    !defined(NO_FUZZER_CORPUS_COLLECTION)
+#if !defined(NDEBUG) && !defined(FUZZING) && defined(FUZZER_CORPUS_COLLECTION)
 extern int corpus_pkt_dir, corpus_frm_dir;
 
 extern void __attribute__((nonnull))
