@@ -144,9 +144,9 @@ static void __attribute__((noreturn, nonnull)) usage(const char * const name,
     printf("\t[-e version]\tQUIC version to use; default 0x%08x\n", vers);
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
     printf("\t[-l log]\tlog file for TLS keys; default %s\n", tls_log);
-    printf(
-        "\t[-m]\ttest multi-pkt initial (\"quantum-readiness\"); default %s\n",
-        test_qr ? "true" : "false");
+    printf("\t[-m]\t\ttest multi-pkt initial (\"quantum-readiness\"); default "
+           "%s\n",
+           test_qr ? "true" : "false");
 #ifndef NO_MIGRATION
     printf("\t[-n]\t\tsimulate NAT rebind (use twice for \"real\" migration); "
            "default %s\n",
