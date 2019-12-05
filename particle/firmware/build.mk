@@ -65,12 +65,12 @@ CSRC+=$(WARP_SRC) $(PICOTLS_SRC) $(QUANT_SRC)
 ifndef BUILD_FLAGS
 BUILD_FLAGS=-DMINIMAL_CIPHERS -DNO_QINFO -DNO_SERVER \
 	-DNO_ERR_REASONS -DNO_OOO_0RTT \
-	-DNO_OOO_DATA -DNO_MIGRATION -DNO_SRT_MATCHING
+	-DNO_MIGRATION -DNO_SRT_MATCHING
 endif
 
-# -DDSTACK -finstrument-functions -DNDEBUG
-EXTRA_CFLAGS+= -DDSTACK -finstrument-functions \
-	-fstack-usage -foptimize-strlen -ffast-math \
+# -DDSTACK -finstrument-functions -DNDEBUG -DRELEASE_BUILD
+# -finstrument-functions-exclude-file-list=deps/micro-ecc,deps/cifra
+EXTRA_CFLAGS+=-fstack-usage -foptimize-strlen -ffast-math \
 	-Wno-error -Wno-parentheses -Wno-undef -Wno-unknown-pragmas \
 	-Wno-unused-value -Wno-address \
 	-DDLEVEL=CRT -DNO_FUZZER_CORPUS_COLLECTION \
