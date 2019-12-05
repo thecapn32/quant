@@ -25,6 +25,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -472,18 +473,19 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
     uint_t lg_ack_in_frm = 0;
     decv_chk(&lg_ack_in_frm, pos, end, c, type);
 
-    uint_t ack_delay_raw = 0;
-    decv_chk(&ack_delay_raw, pos, end, c, type);
+    uint64_t ack_delay_tmp = 0;
+    decv_chk(&ack_delay_tmp, pos, end, c, type);
 
     // TODO: figure out a better way to handle huge ACK delays
-    if (unlikely(ack_delay_raw > UINT32_MAX))
-        err_close_return(c, ERR_FRAME_ENC, type, "ACK delay raw %" PRIu,
-                         ack_delay_raw);
+    if (unlikely(ack_delay_tmp > UINT32_MAX / 2))
+        err_close_return(c, ERR_FRAME_ENC, type, "ACK delay raw %" PRIu64,
+                         ack_delay_tmp);
 
     // handshake pkts always use the default ACK delay exponent
     const uint_t ade = m->hdr.type == LH_INIT || m->hdr.type == LH_HSHK
                            ? DEF_ACK_DEL_EXP
                            : c->tp_in.ack_del_exp;
+    const uint_t ack_delay_raw = (uint_t)ack_delay_tmp;
     const uint_t ack_delay = ack_delay_raw << ade;
 
     uint_t ack_rng_cnt = 0;
@@ -1414,9 +1416,18 @@ void enc_ack_frame(struct q_conn_info * const ci,
     const uint_t ade = m->hdr.type == LH_INIT || m->hdr.type == LH_HSHK
                            ? DEF_ACK_DEL_EXP
                            : c->tp_out.ack_del_exp;
-    const uint_t ack_delay =
-        NS_TO_MS(loop_now() - diet_timestamp(first_rng)) >> ade;
-    encv(pos, end, ack_delay);
+    const uint64_t ack_delay_tmp =
+        NS_TO_US(loop_now() - diet_timestamp(first_rng)) >> ade;
+
+    // TODO: figure out a better way to handle huge ACK delays
+    if (unlikely(ack_delay_tmp > UINT32_MAX / 2)) {
+        err_close(c, ERR_FRAME_ENC, type, "ACK delay raw %" PRIu64,
+                  ack_delay_tmp);
+        return;
+    }
+    encv(pos, end, ack_delay_tmp);
+
+    const uint_t ack_delay = (uint_t)ack_delay_tmp;
     const uint_t ack_rng_cnt = diet_cnt(&pn->recv) - 1;
     encv(pos, end, ack_rng_cnt);
 
