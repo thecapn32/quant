@@ -101,11 +101,15 @@ struct pn_space {
     uint_t ect1_cnt;
     uint_t ce_cnt;
 
+#if !HAVE_64BIT
+    uint8_t _unused[4];
+#endif
+
     uint64_t loss_t; // loss_time
 
     pn_t type;
 
-    uint8_t _unused[3];
+    uint8_t _unused2[3];
 
     uint8_t imm_ack : 1;   ///< Force an immediate ACK.
     uint8_t abandoned : 1; ///< Has this PN space been abandoned?

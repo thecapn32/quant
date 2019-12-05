@@ -294,7 +294,9 @@ struct q_conn {
 
     uint32_t tx_limit;
 
-    uint8_t _unused2[8];
+#if !HAVE_64BIT
+    uint8_t _unused2[4];
+#endif
 };
 
 

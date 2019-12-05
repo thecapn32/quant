@@ -178,11 +178,7 @@ struct pkt_meta {
     uint8_t lost : 1;  ///< Have we marked this packet as lost?
     uint8_t txed : 1;  ///< Did we TX this pkt?
 
-#if HAVE_64BIT
     uint8_t _unused2[5];
-#else
-    uint8_t _unused2[1];
-#endif
 };
 
 

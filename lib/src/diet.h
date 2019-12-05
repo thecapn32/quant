@@ -50,9 +50,6 @@ struct ival {
     uint_t lo;              ///< Lower bound of the interval.
     uint_t hi;              ///< Upper bound of the interval.
     uint64_t t;             ///< Time stamp of last insert into this interval.
-#if !HAVE_64BIT
-    uint8_t _unused[4];
-#endif
 };
 
 
