@@ -181,7 +181,7 @@ void set_ld_timer(struct q_conn * const c)
 
     timeout_t to =
         c->rec.cur.srtt == 0
-            ? (2 * kInitialRtt) * (timeout_t)NS_PER_US
+            ? (2 * kInitialRtt)
             : ((c->rec.cur.srtt + MAX(4 * c->rec.cur.rttvar, kGranularity)) *
                    NS_PER_US +
                c->tp_out.max_ack_del * NS_PER_MS);
