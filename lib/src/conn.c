@@ -545,8 +545,7 @@ static bool __attribute__((nonnull)) tx_stream(struct q_stream * const s)
             break;
     }
 
-    return (unlikely(c->tx_limit) && encoded == c->tx_limit) ||
-           c->no_wnd == false;
+    return c->tx_limit == 0 || encoded < c->tx_limit || c->no_wnd == false;
 }
 
 
@@ -589,6 +588,7 @@ void tx(struct q_conn * const c)
         // if we have no 0-rtt keys here, the ticket didn't have any - disable
         warn(NTE, "TLS ticket w/o 0-RTT keys, disabling 0-RTT");
         c->try_0rtt = false;
+        // TODO: we should also reset tp_out here
     }
 
     if (unlikely(c->blocked))
@@ -1242,7 +1242,9 @@ static void __attribute__((nonnull))
                     warn(WRN,
                          "clnt-requested vers 0x%0" PRIx32 " not supported",
                          m->hdr.vers);
-                    tx_vneg_resp(ws, v, m);
+                    if (m->hdr.vers != 0)
+                        // only reply to non-vneg packets
+                        tx_vneg_resp(ws, v, m);
                     goto drop;
                 }
 
