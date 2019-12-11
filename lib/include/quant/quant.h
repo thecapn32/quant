@@ -36,7 +36,6 @@ extern "C" {
 #include <stdint.h>
 
 #include <quant/config.h>      // IWYU pragma: export
-#include <quant/tree.h>        // IWYU pragma: export
 #include <warpcore/warpcore.h> // IWYU pragma: export
 
 

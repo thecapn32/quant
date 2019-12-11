@@ -33,6 +33,8 @@
 
 #include <quant/quant.h>
 
+#include "tree.h"
+
 
 /// This is a C adaptation of the "discrete interval encoding tree" (DIET) data
 /// structure described in: Martin Erwig, "Diets for fat sets", Journal of

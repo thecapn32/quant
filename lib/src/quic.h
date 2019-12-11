@@ -38,6 +38,7 @@
 #include <quant/quant.h>
 
 #include "frame.h"
+#include "tree.h" // IWYU pragma: keep
 
 
 // #define DEBUG_EXTRA   ///< Set to log various extra details.
@@ -92,7 +93,9 @@
 
 
 struct cid {
+#ifndef NO_MIGRATION
     splay_entry(cid) node_seq;
+#endif
     uint_t seq; ///< Connection ID sequence number
     uint_t rpt; ///< Retire prior to
     /// XXX len must precede id for cid_cmp() over both to work

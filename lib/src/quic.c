@@ -61,6 +61,7 @@
 #include "recovery.h"
 #include "stream.h"
 #include "tls.h"
+#include "tree.h"
 
 
 // TODO: many of these globals should move to a per-engine struct
