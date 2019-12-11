@@ -50,7 +50,6 @@ env:
     - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8  CFLAGS="-DNO_SERVER"
     - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8  CFLAGS="-DNO_SRT_MATCHING"
     - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8  CFLAGS="-DNO_TLS_LOG"
-    - BUILD=Debug    MYCC=clang-8    MYCXX=clang++-8  CFLAGS="-DNO_TLS_TICKETS"
 
   global:
     - PROJECT=quant

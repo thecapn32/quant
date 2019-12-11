@@ -31,12 +31,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-
-#ifndef NO_TLS_TICKETS
 #include <sys/param.h>
+#include <sys/socket.h>
 #include <unistd.h>
-#endif
 
 #ifndef NO_TLS_LOG
 #include <stdarg.h>
@@ -110,9 +107,10 @@ static int uecc_rng(uint8_t * dest, unsigned size)
 #include "tls.h"
 
 
-#ifndef NO_TLS_TICKETS
 struct tls_ticket {
+#if !defined(PARTICLE) && !defined(RIOT_VERSION)
     splay_entry(tls_ticket) node;
+#endif
     char * sni;
     char * alpn;
     uint8_t * ticket;
@@ -123,6 +121,7 @@ struct tls_ticket {
 };
 
 
+#if !defined(PARTICLE) && !defined(RIOT_VERSION)
 struct tickets_by_peer {
     splay_head(, tls_ticket);
     char file_name[MAXPATHLEN];
@@ -163,7 +162,7 @@ static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-" DRAFT_VERSION_STRING, 5},
                                     {(uint8_t *)"h3-" DRAFT_VERSION_STRING, 5}};
 static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 
-#ifndef NO_TLS_TICKETS
+#ifndef NO_SERVER
 static struct cipher_ctx dec_tckt;
 static struct cipher_ctx enc_tckt;
 #endif
@@ -919,7 +918,7 @@ void init_tp(struct q_conn * const c)
 }
 
 
-#ifndef NO_TLS_TICKETS
+#ifndef NO_SERVER
 static void init_ticket_prot(void)
 {
     const ptls_cipher_suite_t * const cs = &aes128gcmsha256;
@@ -1006,8 +1005,10 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
 
     return 0;
 }
+#endif
 
 
+#if !defined(PARTICLE) && !defined(RIOT_VERSION)
 static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
                           ptls_t * tls,
                           ptls_iovec_t src)
@@ -1085,7 +1086,10 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
 
 
 static ptls_save_ticket_t save_ticket = {.cb = save_ticket_cb};
+#endif
 
+
+#ifndef NO_SERVER
 static ptls_encrypt_ticket_t encrypt_ticket = {.cb = encrypt_ticket_cb};
 #endif
 
@@ -1138,9 +1142,9 @@ void init_tls(struct q_conn * const c,
         hshk_prop->client.negotiated_protocols.count = 1;
         hshk_prop->client.max_early_data_size = &c->tls.max_early_data;
 
-#ifndef NO_TLS_TICKETS
         // try to find an existing session ticket
         ensure(sni, "got SNI");
+#if !defined(PARTICLE) && !defined(RIOT_VERSION)
         struct tls_ticket which = {// this works, because of strdup() allocation
                                    .sni = sni,
                                    .alpn = (char *)c->tls.alpn.base};
@@ -1157,6 +1161,8 @@ void init_tls(struct q_conn * const c,
             c->vers_initial = c->vers = t->vers;
             c->try_0rtt = true;
         }
+#else
+        // TODO
 #endif
     }
     if (sni)
@@ -1287,7 +1293,7 @@ done:
 }
 
 
-#ifndef NO_TLS_TICKETS
+#if !defined(PARTICLE) && !defined(RIOT_VERSION)
 static void __attribute__((nonnull)) free_ticket(struct tls_ticket * const t)
 {
     if (t->sni)
@@ -1492,21 +1498,20 @@ void init_tls_ctx(const struct q_conf * const conf,
     }
 #endif
 
+#if !defined(PARTICLE) && !defined(RIOT_VERSION)
     if (conf && conf->ticket_store) {
-#ifndef NO_TLS_TICKETS
         strncpy(tickets.file_name, conf->ticket_store,
                 sizeof(tickets.file_name));
         tls_ctx->save_ticket = &save_ticket;
         read_tickets();
-#endif
-    } else {
-#ifndef NO_TLS_TICKETS
-        tls_ctx->encrypt_ticket = &encrypt_ticket;
-#endif
-        tls_ctx->max_early_data_size = 0xffffffff;
-        tls_ctx->ticket_lifetime = 60 * 60 * 24;
-        tls_ctx->require_dhe_on_psk = 0;
     }
+#endif
+#ifndef NO_SERVER
+    tls_ctx->encrypt_ticket = &encrypt_ticket;
+    tls_ctx->max_early_data_size = 0xffffffff;
+    tls_ctx->ticket_lifetime = 60 * 60 * 24;
+    tls_ctx->require_dhe_on_psk = 0;
+#endif
 
 #ifndef NO_TLS_LOG
     if (conf && conf->tls_log) {
@@ -1541,7 +1546,7 @@ void init_tls_ctx(const struct q_conf * const conf,
         tls_ctx->verify_certificate = &verifier.super;
 #endif
 
-#ifndef NO_TLS_TICKETS
+#ifndef NO_SERVER
     init_ticket_prot();
 #endif
 }
@@ -1549,10 +1554,12 @@ void init_tls_ctx(const struct q_conf * const conf,
 
 void free_tls_ctx(ptls_context_t * const tls_ctx)
 {
-#ifndef NO_TLS_TICKETS
+#ifndef NO_SERVER
     dispose_cipher(&dec_tckt);
     dispose_cipher(&enc_tckt);
+#endif
 
+#if !defined(PARTICLE) && !defined(RIOT_VERSION)
     // free ticket cache
     struct tls_ticket * t;
     struct tls_ticket * tmp;
@@ -1561,6 +1568,8 @@ void free_tls_ctx(ptls_context_t * const tls_ctx)
         ensure(splay_remove(tickets_by_peer, &tickets, t), "removed");
         free_ticket(t);
     }
+#else
+// TODO
 #endif
 
     for (size_t i = 0; i < tls_ctx->certificates.count; i++)
