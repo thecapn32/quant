@@ -47,8 +47,8 @@ func_ptr api_func = 0;
 void * api_conn = 0;
 void * api_strm = 0;
 
-static uint64_t now = 0;
-static bool break_loop = false;
+static uint64_t now;
+static bool break_loop;
 
 
 void loop_break(void)
@@ -62,6 +62,7 @@ void loop_break(void)
 void loop_init(void)
 {
     now = w_now();
+    break_loop = false;
 }
 
 

@@ -86,7 +86,7 @@ const uint8_t ok_vers_len = sizeof(ok_vers) / sizeof(ok_vers[0]);
 
 struct q_conn_sl accept_queue = sl_head_initializer(accept_queue);
 
-static struct timeout api_alarm = TIMEOUT_INITIALIZER(0);
+static struct timeout api_alarm;
 
 #if !defined(NDEBUG) && !defined(FUZZING) && defined(FUZZER_CORPUS_COLLECTION)
 int corpus_pkt_dir, corpus_frm_dir;
@@ -566,7 +566,15 @@ struct w_engine * q_init(const char * const ifname,
             get_conf_uncond(w, conf->conn_conf, enable_quantum_readiness_test);
     }
 
+    // initialize some globals
+    memset(&conns_by_id, 0, sizeof(conns_by_id));
+    memset(&conns_by_ipnp, 0, sizeof(conns_by_ipnp));
+#ifndef NO_SRT_MATCHING
+    memset(&conns_by_srt, 0, sizeof(conns_by_srt));
+#endif
+
     // initialize the event loop
+    timeout_init(&api_alarm, 0);
     loop_init();
     int err;
     ped(w)->wheel = timeouts_open(TIMEOUT_nHZ, &err);

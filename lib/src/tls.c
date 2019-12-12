@@ -132,7 +132,7 @@ struct tickets_by_peer {
     char file_name[MAXPATHLEN];
 };
 
-static struct tickets_by_peer tickets = {splay_initializer(tickets), {"\0"}};
+static struct tickets_by_peer tickets;
 
 
 #if !defined(PARTICLE) && !defined(RIOT_VERSION)
@@ -159,8 +159,8 @@ static FILE * tls_log_file;
 
 
 #ifdef WITH_OPENSSL
-static ptls_openssl_sign_certificate_t sign_cert = {0};
-static ptls_openssl_verify_certificate_t verify_cert = {0};
+static ptls_openssl_sign_certificate_t sign_cert;
+static ptls_openssl_verify_certificate_t verify_cert;
 #endif
 
 // first entry is client default, if not otherwise specified
@@ -1518,6 +1518,9 @@ void init_tls_ctx(const struct q_conf * const conf,
     }
 #endif
 
+#if !defined(PARTICLE) && !defined(RIOT_VERSION)
+    splay_init(&tickets);
+#endif
     if (conf && conf->ticket_store) {
         strncpy(tickets.file_name, conf->ticket_store,
                 sizeof(tickets.file_name));
@@ -1538,9 +1541,10 @@ void init_tls_ctx(const struct q_conf * const conf,
         ensure(tls_log_file, "could not open TLS log %s", conf->tls_log);
     }
 
-    static ptls_log_event_t log_event = {log_event_cb};
-    if (conf && conf->tls_log)
+    if (conf && conf->tls_log) {
+        static ptls_log_event_t log_event = {log_event_cb};
         tls_ctx->log_event = &log_event;
+    }
 #endif
 
     static ptls_key_exchange_algorithm_t * key_exchanges[] = {&secp256r1,
