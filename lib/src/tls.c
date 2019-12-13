@@ -1516,11 +1516,9 @@ void init_tls_ctx(const struct q_conf * const conf,
         const int ret = ptls_load_certificates(tls_ctx, conf->tls_cert);
         ensure(ret == 0, "ptls_load_certificates");
     }
-#endif
-
-#if !defined(PARTICLE) && !defined(RIOT_VERSION)
     splay_init(&tickets);
 #endif
+
     if (conf && conf->ticket_store) {
         strncpy(tickets.file_name, conf->ticket_store,
                 sizeof(tickets.file_name));
