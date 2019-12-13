@@ -182,8 +182,11 @@ set_from_url(char * const var,
         strncpy(var, def, len);
         var[len - 1] = 0;
     } else {
-        strncpy(var, &url[u->field_data[f].off], u->field_data[f].len);
-        var[u->field_data[f].len] = 0;
+        const uint16_t l = f == UF_PATH
+                               ? (uint16_t)strlen(url) - u->field_data[f].off
+                               : u->field_data[f].len;
+        strncpy(var, &url[u->field_data[f].off], l);
+        var[l] = 0;
     }
 }
 
@@ -199,10 +202,8 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
         return 0;
     }
 
-    ensure((u.field_set & (1 << UF_USERINFO)) == 0 &&
-               (u.field_set & (1 << UF_QUERY)) == 0 &&
-               (u.field_set & (1 << UF_FRAGMENT)) == 0,
-           "unsupported URL components");
+    ensure((u.field_set & (1 << UF_USERINFO)) == 0,
+           "userinfo unsupported in URL");
 
     // extract relevant info from URL
     char dest[1024];

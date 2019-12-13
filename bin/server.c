@@ -25,6 +25,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <errno.h>
 #include <fcntl.h>
 #include <libgen.h>
 #include <net/if.h>
@@ -139,11 +140,30 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
     warn(INF, "conn %s str %" PRId " serving URL %.*s", cid_str, q_sid(d->s),
          (int)len, at);
 
+    struct http_parser_url u = {0};
+    if (http_parser_parse_url(at, len, 0, &u)) {
+        warn(ERR, "http_parser_parse_url: %s",
+             http_errno_description((enum http_errno)errno));
+        return send_err(d, 400);
+    }
+
     char path[MAXPATHLEN] = ".";
-    strncpy(&path[*at == '/' ? 1 : 0], at, MIN(len, sizeof(path) - 1));
+    if ((u.field_set & (1 << UF_PATH)) == 0)
+        return send_err(d, 400);
+
+    strncpy(&path[at[u.field_data[UF_PATH].off] == '/' ? 1 : 0],
+            &at[u.field_data[UF_PATH].off], u.field_data[UF_PATH].len);
+
+    if ((u.field_set & (1 << UF_QUERY)))
+        warn(ERR, "ignoring query: %.*s", u.field_data[UF_QUERY].len,
+             &at[u.field_data[UF_QUERY].off]);
+
+    if ((u.field_set & (1 << UF_FRAGMENT)))
+        warn(ERR, "ignoring fragment: %.*s", u.field_data[UF_FRAGMENT].len,
+             &at[u.field_data[UF_FRAGMENT].off]);
 
     // hacky way to prevent directory traversals
-    if (strstr(path, ".."))
+    if (strstr(path, "..") || strstr(path, "//"))
         return send_err(d, 403);
 
     // check if this is a "GET /n" request for random data
