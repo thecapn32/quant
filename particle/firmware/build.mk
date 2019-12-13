@@ -72,7 +72,7 @@ endif
 # -finstrument-functions-exclude-file-list=deps/micro-ecc,deps/cifra
 EXTRA_CFLAGS+=-fstack-usage -foptimize-strlen -ffast-math \
 	-Wno-error -Wno-parentheses -Wno-undef -Wno-unknown-pragmas \
-	-Wno-unused-value -Wno-address \
+	-Wno-unused-value -Wno-address -DNDEBUG -DRELEASE_BUILD \
 	-DDLEVEL=DBG -DNO_TLS_LOG -DNO_QLOG ${BUILD_FLAGS} \
 	-D'ntoh16(x)=__builtin_bswap16(*(uint16_t*)(x))' \
 	-D'ntoh32(x)=__builtin_bswap32(*(uint32_t*)(x))' \
