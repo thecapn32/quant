@@ -45,6 +45,15 @@ static const int led = D7;
 void random_seed_from_cloud(unsigned int seed) {}
 
 
+static ApplicationWatchdog wd(60000, System.reset);
+
+extern "C" void ping(void)
+{
+    wd.checkin();
+}
+
+
+
 void button_action()
 {
     Serial.begin(9600);

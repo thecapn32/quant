@@ -26,6 +26,8 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #ifdef PARTICLE
+#include <core_hal.h>
+
 #include <adc_hal.h>
 #include <netdb.h>
 #define IF_NAME "wl3"
@@ -129,6 +131,8 @@ void warpcore_transaction(const char * const msg, const size_t msg_len)
 }
 
 
+extern void ping(void);
+
 void quic_transaction(const char * const req, const size_t req_len)
 {
     DSTACK_LOG("DSTACK 1" DSTACK_LOG_NEWLINE);
@@ -143,17 +147,19 @@ void quic_transaction(const char * const req, const size_t req_len)
     to_in6(peer)->sin6_port = bswap16(4433);
 
     while (1) {
+        ping();
+
         struct w_iov_sq o = w_iov_sq_initializer(o);
         q_alloc(w, &o, peer.ss_family, 512);
         struct w_iov * const v = sq_first(&o);
 
         const float voltage = HAL_ADC_Read(BATT) * 0.0011224;
-        v->len = sprintf(v->buf, "GET /5000?voltage=%f.\r\n", voltage);
+        v->len = sprintf(v->buf, "GET /5000?voltage=%f\r\n", voltage);
 
         DSTACK_LOG("DSTACK 2" DSTACK_LOG_NEWLINE);
         struct q_stream * s = 0;
         static const struct q_conn_conf qcc = {
-            600, 0, 0, 0, 0, 0, 0, 0, 0xff000000 + DRAFT_VERSION};
+            30, 0, 0, 0, 0, 0, 0, 0, 0xff000000 + DRAFT_VERSION};
         struct q_conn * const c =
             q_connect(w, to_in(peer), peername, &o, &s, true,
                       "hq-" DRAFT_VERSION_STRING, &qcc);
@@ -161,12 +167,16 @@ void quic_transaction(const char * const req, const size_t req_len)
         if (c) {
             struct w_iov_sq i = w_iov_sq_initializer(i);
             q_read_stream(s, &i, true);
-            warn(CRT, "retrieved %" PRIu32 " bytes", w_iov_sq_len(&i));
-            DSTACK_LOG("retrieved %" PRIu32 " bytes" DSTACK_LOG_NEWLINE,
-                       w_iov_sq_len(&i));
+            const uint16_t len = w_iov_sq_len(&i);
+            warn(CRT, "retrieved %" PRIu32 " bytes", len);
+            DSTACK_LOG("retrieved %" PRIu32 " bytes" DSTACK_LOG_NEWLINE, len);
+            if (len != 5000)
+                HAL_Core_System_Reset();
             q_free(&i);
-        } else
+        } else {
             warn(CRT, "could not retrieve %s", v->buf);
+            HAL_Core_System_Reset();
+        }
         q_free(&o);
         q_close(c, 0, 0);
     }
