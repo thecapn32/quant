@@ -1116,10 +1116,10 @@ void init_tls(struct q_conn * const c,
               const char * const serv_name,
               const char * const clnt_alpn)
 {
-    char * const sni = is_clnt(c)
-                           ? (c->tls.t ? strdup(ptls_get_server_name(c->tls.t))
-                                       : strdup(serv_name))
-                           : 0;
+    char * const sni =
+        is_clnt(c)
+            ? strdup(c->tls.t ? ptls_get_server_name(c->tls.t) : serv_name)
+            : 0;
 
     if (c->tls.t)
         // we are re-initializing during version negotiation
@@ -1137,17 +1137,16 @@ void init_tls(struct q_conn * const c,
 #endif
     ensure(c->tls.t, "ptls_new");
     *ptls_get_data_ptr(c->tls.t) = c;
-    if (is_clnt(c))
-        ensure(ptls_set_server_name(c->tls.t, sni, 0) == 0,
-               "ptls_set_server_name");
 
     ptls_handshake_properties_t * const hshk_prop = &c->tls.tls_hshk_prop;
-
     hshk_prop->additional_extensions = c->tls.tp_ext;
     hshk_prop->collect_extension = filter_tp;
     hshk_prop->collected_extensions = chk_tp;
 
-    if (is_clnt(c)) {
+    if (is_clnt(c) && sni) {
+        ensure(ptls_set_server_name(c->tls.t, sni, 0) == 0,
+               "ptls_set_server_name");
+
         if (clnt_alpn == 0 || *clnt_alpn == 0) {
             c->tls.alpn = alpn[0];
             warn(NTE, "using default ALPN %.*s", (int)c->tls.alpn.len,
@@ -1161,7 +1160,6 @@ void init_tls(struct q_conn * const c,
         hshk_prop->client.max_early_data_size = &c->tls.max_early_data;
 
         // try to find an existing session ticket
-        ensure(sni, "got SNI");
 #if !defined(PARTICLE) && !defined(RIOT_VERSION)
         struct tls_ticket which = {// this works, because of strdup() allocation
                                    .sni = sni,
