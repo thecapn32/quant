@@ -129,8 +129,8 @@ int main(int argc __attribute__((unused)), char ** argv)
     const int cwd = open(".", O_CLOEXEC);
     ensure(cwd != -1, "cannot open");
     ensure(chdir(dirname(argv[0])) == 0, "cannot chdir");
-    const struct q_conf conf = {nullptr,     nullptr, nullptr, "dummy.crt",
-                                "dummy.key", nullptr, 1000000};
+    const struct q_conf conf = {nullptr, nullptr, "dummy.crt", "dummy.key",
+                                nullptr, nullptr, 1000000};
     w = q_init("lo"
 #ifndef __linux__
                "0"
@@ -143,10 +143,10 @@ int main(int argc __attribute__((unused)), char ** argv)
     q_bind(w, 0, 55555);
 
     // connect to server
-    struct sockaddr_in sip = {};
-    sip.sin_family = AF_INET;
-    sip.sin_port = bswap16(55555);
-    sip.sin_addr.s_addr = inet_addr("127.0.0.1");
+    struct sockaddr_in6 sip = {};
+    sip.sin6_family = AF_INET6;
+    sip.sin6_port = bswap16(55555);
+    inet_pton(sip.sin6_family, "::1", &sip.sin6_addr);
     cc = q_connect(w, reinterpret_cast<struct sockaddr *>(&sip), // NOLINT
                    "localhost", nullptr, nullptr, true, nullptr, nullptr);
     ensure(cc, "is zero");
