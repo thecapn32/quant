@@ -1689,13 +1689,13 @@ void enter_closing(struct q_conn * const c)
     }
 }
 
-
 static void __attribute__((nonnull)) idle_alarm(struct q_conn * const c)
 {
 #ifdef DEBUG_TIMERS
     warn(DBG, "idle timeout on %s conn %s", conn_type(c), cid_str(c->scid));
 #endif
     enter_closing(c);
+    enter_closed(c);
 }
 
 
