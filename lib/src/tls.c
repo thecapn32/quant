@@ -129,7 +129,6 @@ struct tickets_by_peer {
 #else
     struct tls_ticket last_ticket;
 #endif
-    char file_name[MAXPATHLEN];
 };
 
 static struct tickets_by_peer tickets;
@@ -153,26 +152,12 @@ SPLAY_PROTOTYPE(tickets_by_peer, tls_ticket, node, tls_ticket_cmp)
 SPLAY_GENERATE(tickets_by_peer, tls_ticket, node, tls_ticket_cmp)
 #endif
 
-#ifndef NO_TLS_LOG
-static FILE * tls_log_file;
-#endif
-
-
-#ifdef WITH_OPENSSL
-static ptls_openssl_sign_certificate_t sign_cert;
-static ptls_openssl_verify_certificate_t verify_cert;
-#endif
 
 // first entry is client default, if not otherwise specified
 // last entry should be h3-, since we ignore that in on_ch
 static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-" DRAFT_VERSION_STRING, 5},
                                     {(uint8_t *)"h3-" DRAFT_VERSION_STRING, 5}};
 static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
-
-#ifndef NO_SERVER
-static struct cipher_ctx dec_tckt;
-static struct cipher_ctx enc_tckt;
-#endif
 
 
 #define QUIC_TP 0xffa5
@@ -926,16 +911,16 @@ void init_tp(struct q_conn * const c)
 
 
 #ifndef NO_SERVER
-static void init_ticket_prot(void)
+static void init_ticket_prot(struct per_engine_data * const ped)
 {
     const ptls_cipher_suite_t * const cs = &aes128gcmsha256;
     uint8_t output[PTLS_MAX_SECRET_SIZE] = {0};
     memcpy(output, quant_commit_hash,
            MIN(quant_commit_hash_len, sizeof(output)));
-    setup_cipher(&dec_tckt.header_protection, &dec_tckt.aead, cs->aead,
-                 cs->hash, 0, output);
-    setup_cipher(&enc_tckt.header_protection, &enc_tckt.aead, cs->aead,
-                 cs->hash, 1, output);
+    setup_cipher(&ped->dec_tckt.header_protection, &ped->dec_tckt.aead,
+                 cs->aead, cs->hash, 0, output);
+    setup_cipher(&ped->enc_tckt.header_protection, &ped->enc_tckt.aead,
+                 cs->aead, cs->hash, 1, output);
     ptls_clear_memory(output, sizeof(output));
 }
 
@@ -950,7 +935,7 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
     struct q_conn * const c = *ptls_get_data_ptr(tls);
     uint64_t tid;
     if (ptls_buffer_reserve(dst, src.len + quant_commit_hash_len + sizeof(tid) +
-                                     enc_tckt.aead->algo->tag_size))
+                                     ped(c->w)->enc_tckt.aead->algo->tag_size))
         return -1;
 
     if (is_encrypt) {
@@ -968,12 +953,13 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
         dst->off += sizeof(tid);
 
         // now encrypt ticket
-        dst->off += ptls_aead_encrypt(enc_tckt.aead, dst->base + dst->off,
-                                      src.base, src.len, tid, 0, 0);
+        dst->off +=
+            ptls_aead_encrypt(ped(c->w)->enc_tckt.aead, dst->base + dst->off,
+                              src.base, src.len, tid, 0, 0);
 
     } else {
         if (src.len < quant_commit_hash_len + sizeof(tid) +
-                          dec_tckt.aead->algo->tag_size ||
+                          ped(c->w)->dec_tckt.aead->algo->tag_size ||
             memcmp(src.base, quant_commit_hash, quant_commit_hash_len) != 0) {
             warn(WRN,
                  "could not verify 0-RTT session ticket for %s conn %s (%s "
@@ -990,8 +976,9 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
         src_base += sizeof(tid);
         src_len -= sizeof(tid);
 
-        const size_t n = ptls_aead_decrypt(dec_tckt.aead, dst->base + dst->off,
-                                           src_base, src_len, tid, 0, 0);
+        const size_t n =
+            ptls_aead_decrypt(ped(c->w)->dec_tckt.aead, dst->base + dst->off,
+                              src_base, src_len, tid, 0, 0);
 
         if (n > src_len) {
             warn(WRN,
@@ -1020,11 +1007,12 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
                           ptls_iovec_t src)
 {
     struct q_conn * const c = *ptls_get_data_ptr(tls);
-    warn(NTE, "saving TLS tickets to %s", tickets.file_name);
+    const char * const ticket_store = ped(c->w)->conf.ticket_store;
+    warn(NTE, "saving TLS tickets to %s", ticket_store);
 
 #if !defined(PARTICLE) && !defined(RIOT_VERSION)
-    FILE * const fp = fopen(tickets.file_name, "wbe");
-    ensure(fp, "could not open ticket file %s", tickets.file_name);
+    FILE * const fp = fopen(ticket_store, "wbe");
+    ensure(fp, "could not open ticket file %s", ticket_store);
 
     // write git hash
     ensure(fwrite(&quant_commit_hash_len, sizeof(quant_commit_hash_len), 1, fp),
@@ -1323,14 +1311,14 @@ static void __attribute__((nonnull)) free_ticket(struct tls_ticket * const t)
 #endif
 
 
-static void read_tickets()
+static void read_tickets(const struct q_conf * const conf)
 {
-    warn(INF, "reading TLS tickets from %s", tickets.file_name);
+    warn(INF, "reading TLS tickets from %s", conf->ticket_store);
 
 #if !defined(PARTICLE) && !defined(RIOT_VERSION)
-    FILE * const fp = fopen(tickets.file_name, "rbe");
+    FILE * const fp = fopen(conf->ticket_store, "rbe");
     if (fp == 0) {
-        warn(WRN, "could not read TLS tickets from %s", tickets.file_name);
+        warn(WRN, "could not read TLS tickets from %s", conf->ticket_store);
         return;
     }
 
@@ -1345,7 +1333,7 @@ static void read_tickets()
         memcmp(buf, quant_commit_hash, hash_len) != 0) {
         warn(WRN, "TLS tickets were stored by different %s version, removing",
              quant_name);
-        ensure(unlink(tickets.file_name) == 0, "unlink");
+        ensure(unlink(conf->ticket_store) == 0, "unlink");
         goto done;
     }
 
@@ -1408,18 +1396,21 @@ log_event_cb(ptls_log_event_t * const self __attribute__((unused)),
              const char * fmt,
              ...)
 {
-    fprintf(tls_log_file, "%s %s ", type,
+    struct q_conn * const c = *ptls_get_data_ptr(tls);
+    FILE * const tls_log = ped(c->w)->tls_log;
+
+    fprintf(tls_log, "%s %s ", type,
             hex2str(ptls_get_client_random(tls).base, PTLS_HELLO_RANDOM_SIZE,
                     (char[hex_str_len(PTLS_HELLO_RANDOM_SIZE)]){""},
                     hex_str_len(PTLS_HELLO_RANDOM_SIZE)));
 
     va_list args;
     va_start(args, fmt);
-    vfprintf(tls_log_file, fmt, args);
+    vfprintf(tls_log, fmt, args);
     va_end(args);
 
-    fprintf(tls_log_file, "\n");
-    fflush(tls_log_file);
+    fprintf(tls_log, "\n");
+    fflush(tls_log);
 }
 #endif
 
@@ -1480,8 +1471,10 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
 
 
 void init_tls_ctx(const struct q_conf * const conf,
-                  ptls_context_t * const tls_ctx)
+                  struct per_engine_data * const ped)
 {
+
+    ptls_context_t * const tls_ctx = &ped->tls_ctx;
 #if defined(PARTICLE) || defined(RIOT_VERSION)
     // the picotls minicrypto backend depends on this
     uECC_set_rng(uecc_rng);
@@ -1494,7 +1487,7 @@ void init_tls_ctx(const struct q_conf * const conf,
         EVP_PKEY * const pkey = PEM_read_PrivateKey(fp, 0, 0, 0);
         fclose(fp);
         ensure(pkey, "failed to load private key");
-        ptls_openssl_init_sign_certificate(&sign_cert, pkey);
+        ptls_openssl_init_sign_certificate(&ped->sign_cert, pkey);
         EVP_PKEY_free(pkey);
 #elif !defined(PARTICLE) && !defined(RIOT_VERSION)
         // XXX ptls_minicrypto_load_private_key() only works for ECDSA keys
@@ -1505,7 +1498,7 @@ void init_tls_ctx(const struct q_conf * const conf,
     }
 
 #ifdef WITH_OPENSSL
-    ensure(ptls_openssl_init_verify_certificate(&verify_cert, 0) == 0,
+    ensure(ptls_openssl_init_verify_certificate(&ped->verify_cert, 0) == 0,
            "ptls_openssl_init_verify_certificate");
 #endif
 
@@ -1518,11 +1511,8 @@ void init_tls_ctx(const struct q_conf * const conf,
 #endif
 
     if (conf && conf->ticket_store) {
-        strncpy(tickets.file_name, conf->ticket_store,
-                sizeof(tickets.file_name));
-        tickets.file_name[sizeof(tickets.file_name) - 1] = 0;
         tls_ctx->save_ticket = &save_ticket;
-        read_tickets();
+        read_tickets(conf);
     }
 #ifndef NO_SERVER
     tls_ctx->encrypt_ticket = &encrypt_ticket;
@@ -1533,8 +1523,8 @@ void init_tls_ctx(const struct q_conf * const conf,
 
 #ifndef NO_TLS_LOG
     if (conf && conf->tls_log) {
-        tls_log_file = fopen(conf->tls_log, "abe");
-        ensure(tls_log_file, "could not open TLS log %s", conf->tls_log);
+        ped->tls_log = fopen(conf->tls_log, "abe");
+        ensure(ped->tls_log, "could not open TLS log %s", conf->tls_log);
     }
 
     if (conf && conf->tls_log) {
@@ -1560,22 +1550,22 @@ void init_tls_ctx(const struct q_conf * const conf,
     tls_ctx->update_traffic_key = &update_traffic_key;
     tls_ctx->random_bytes = rand_bytes;
 #ifdef WITH_OPENSSL
-    tls_ctx->sign_certificate = &sign_cert.super;
+    tls_ctx->sign_certificate = &ped->sign_cert.super;
     if (conf && conf->enable_tls_cert_verify)
-        tls_ctx->verify_certificate = &verify_cert.super;
+        tls_ctx->verify_certificate = &ped->verify_cert.super;
 #endif
 
 #ifndef NO_SERVER
-    init_ticket_prot();
+    init_ticket_prot(ped);
 #endif
 }
 
 
-void free_tls_ctx(ptls_context_t * const tls_ctx)
+void free_tls_ctx(struct per_engine_data * const ped)
 {
 #ifndef NO_SERVER
-    dispose_cipher(&dec_tckt);
-    dispose_cipher(&enc_tckt);
+    dispose_cipher(&ped->dec_tckt);
+    dispose_cipher(&ped->enc_tckt);
 #endif
 
 #if !defined(PARTICLE) && !defined(RIOT_VERSION)
@@ -1589,14 +1579,14 @@ void free_tls_ctx(ptls_context_t * const tls_ctx)
     }
 #endif
 
-    for (size_t i = 0; i < tls_ctx->certificates.count; i++)
-        free(tls_ctx->certificates.list[i].base);
-    free(tls_ctx->certificates.list);
+    for (size_t i = 0; i < ped->tls_ctx.certificates.count; i++)
+        free(ped->tls_ctx.certificates.list[i].base);
+    free(ped->tls_ctx.certificates.list);
 
 #ifdef WITH_OPENSSL
-    ptls_openssl_dispose_sign_certificate(&sign_cert);
-    X509_STORE_free(verify_cert.cert_store);
-    // FIXME: ptls_openssl_dispose_verify_certificate(&verify_cert) frees!
+    ptls_openssl_dispose_sign_certificate(&ped->sign_cert);
+    X509_STORE_free(ped->verify_cert.cert_store);
+    // FIXME: ptls_openssl_dispose_verify_certificate(&ped->verify_cert) frees!
 #endif
 }
 

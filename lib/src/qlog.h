@@ -42,12 +42,10 @@ struct w_iov;    // IWYU pragma: no_forward_declare w_iov
 
 typedef enum { pkt_tx, pkt_rx, pkt_dp } qlog_pkt_evt_t;
 
-extern FILE * qlog;
-
 
 extern void qlog_init(const struct q_conn * const c);
 
-extern void qlog_close(void);
+extern void qlog_close(FILE * const qlog);
 
 extern void __attribute__((nonnull))
 qlog_transport(const qlog_pkt_evt_t evt,

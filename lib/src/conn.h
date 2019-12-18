@@ -80,6 +80,7 @@ kh_cid_cmp(const struct cid * const a, const struct cid * const b)
 KHASH_INIT(conns_by_id, struct cid *, struct q_conn *, 1, hash_cid, kh_cid_cmp)
 
 
+#ifndef NO_SRT_MATCHING
 static inline khint_t __attribute__((nonnull, no_instrument_function))
 hash_srt(const uint8_t * const srt)
 {
@@ -94,7 +95,6 @@ kh_srt_cmp(const uint8_t * const a, const uint8_t * const b)
 }
 
 
-#ifndef NO_SRT_MATCHING
 KHASH_INIT(conns_by_srt, uint8_t *, struct q_conn *, 1, hash_srt, kh_srt_cmp)
 
 extern khash_t(conns_by_srt) conns_by_srt;

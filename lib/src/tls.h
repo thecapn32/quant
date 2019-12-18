@@ -32,11 +32,12 @@
 
 #include <picotls.h>
 
-struct pkt_meta; // IWYU pragma: no_forward_declare pkt_meta
-struct q_conf;   // IWYU pragma: no_forward_declare q_conf
-struct q_conn;   // IWYU pragma: no_forward_declare q_conn
-struct q_stream; // IWYU pragma: no_forward_declare q_stream
-struct w_iov;    // IWYU pragma: no_forward_declare w_iov
+struct per_engine_data; // IWYU pragma: no_forward_declare per_engine_data
+struct pkt_meta;        // IWYU pragma: no_forward_declare pkt_meta
+struct q_conf;          // IWYU pragma: no_forward_declare q_conf
+struct q_conn;          // IWYU pragma: no_forward_declare q_conn
+struct q_stream;        // IWYU pragma: no_forward_declare q_stream
+struct w_iov;           // IWYU pragma: no_forward_declare w_iov
 
 // IWYU pragma: no_include <quant/quant.h>
 // IWYU pragma: no_include "quic.h"
@@ -101,10 +102,11 @@ extern int __attribute__((nonnull(1)))
 tls_io(struct q_stream * const s, struct w_iov * const iv);
 
 extern void __attribute__((nonnull(2)))
-init_tls_ctx(const struct q_conf * const conf, ptls_context_t * const tls_ctx);
+init_tls_ctx(const struct q_conf * const conf,
+             struct per_engine_data * const ped);
 
 extern void __attribute__((nonnull))
-free_tls_ctx(ptls_context_t * const tls_ctx);
+free_tls_ctx(struct per_engine_data * const ped);
 
 extern uint16_t __attribute__((nonnull))
 dec_aead(const struct w_iov * const xv,

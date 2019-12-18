@@ -56,15 +56,16 @@
 #include "loop.h"
 #include "pkt.h"
 #include "pn.h"
-#include "qlog.h"
 #include "quic.h"
 #include "recovery.h"
 #include "stream.h"
 #include "tls.h"
 #include "tree.h"
 
+#ifndef NO_QLOG
+#include "qlog.h"
+#endif
 
-// TODO: many of these globals should move to a per-engine struct
 
 char __cid_str[CID_STR_LEN];
 char __srt_str[hex_str_len(SRT_LEN)];
@@ -85,8 +86,6 @@ const uint8_t ok_vers_len = sizeof(ok_vers) / sizeof(ok_vers[0]);
 
 
 struct q_conn_sl accept_queue = sl_head_initializer(accept_queue);
-
-static struct timeout api_alarm;
 
 #if !defined(NDEBUG) && !defined(FUZZING) && defined(FUZZER_CORPUS_COLLECTION)
 int corpus_pkt_dir, corpus_frm_dir;
@@ -408,12 +407,12 @@ q_bind(struct w_engine * const w, const uint16_t addr_idx, const uint16_t port)
 }
 
 
-static void cancel_api_call(void)
+static void cancel_api_call(struct timeout * const api_alarm)
 {
 #ifdef DEBUG_EXTRA
     warn(DBG, "canceling API call");
 #endif
-    timeout_del(&api_alarm);
+    timeout_del(api_alarm);
     maybe_api_return(q_accept, 0, 0);
     maybe_api_return(q_ready, 0, 0);
 }
@@ -426,7 +425,7 @@ restart_api_alarm(struct w_engine * const w, const uint64_t nsec)
     warn(DBG, "next API alarm in %f sec", nsec / (double)NS_PER_S);
 #endif
 
-    timeouts_add(ped(w)->wheel, &api_alarm, nsec);
+    timeouts_add(ped(w)->wheel, &ped(w)->api_alarm, nsec);
 }
 
 
@@ -528,7 +527,11 @@ struct w_engine * q_init(const char * const ifname,
     ensure(ped(w)->pkt_meta, "could not calloc");
     ASAN_POISON_MEMORY_REGION(ped(w)->pkt_meta,
                               num_bufs * sizeof(*ped(w)->pkt_meta));
-    ped(w)->num_bufs = num_bufs;
+
+    if (conf) {
+        memcpy(&ped(w)->conf, conf, sizeof(*conf));
+    }
+    ped(w)->conf.num_bufs = num_bufs;
 
     ped(w)->default_conn_conf =
         (struct q_conn_conf){.idle_timeout = 10,
@@ -574,19 +577,19 @@ struct w_engine * q_init(const char * const ifname,
 #endif
 
     // initialize the event loop
-    timeout_init(&api_alarm, 0);
+    timeout_init(&ped(w)->api_alarm, 0);
     loop_init();
     int err;
     ped(w)->wheel = timeouts_open(TIMEOUT_nHZ, &err);
     timeouts_update(ped(w)->wheel, loop_now());
-    timeout_setcb(&api_alarm, cancel_api_call, 0);
+    timeout_setcb(&ped(w)->api_alarm, cancel_api_call, &ped(w)->api_alarm);
 
     warn(INF, "%s/%s (%s) %s/%s ready", quant_name, w->backend_name,
          w->backend_variant, quant_version, QUANT_COMMIT_HASH_ABBREV_STR);
     warn(DBG, "submit bug reports at https://github.com/NTAP/quant/issues");
 
     // initialize TLS context
-    init_tls_ctx(conf, &ped(w)->tls_ctx);
+    init_tls_ctx(conf, ped(w));
 
 #if !defined(NDEBUG) && defined(FUZZER_CORPUS_COLLECTION)
 #ifdef FUZZING
@@ -601,8 +604,8 @@ struct w_engine * q_init(const char * const ifname,
 
 #ifndef NO_QLOG
     if (conf && conf->qlog && *conf->qlog) {
-        qlog = fopen(conf->qlog, "we");
-        ensure(qlog, "fopen %s", conf->qlog);
+        ped(w)->qlog = fopen(conf->qlog, "we");
+        ensure(ped(w)->qlog, "fopen %s", conf->qlog);
     }
 #endif
 
@@ -736,10 +739,10 @@ done:
         }
     }
 #endif
-    free_conn(c);
 #ifndef NO_QLOG
-    fflush(qlog);
+    fflush(ped(c->w)->qlog);
 #endif
+    free_conn(c);
 }
 
 
@@ -767,7 +770,7 @@ void q_cleanup(struct w_engine * const w)
 #endif
 
 #ifdef HAVE_ASAN
-    for (uint_t i = 0; i < ped(w)->num_bufs; i++) {
+    for (uint_t i = 0; i < ped(w)->conf.num_bufs; i++) {
         struct pkt_meta * const m = &ped(w)->pkt_meta[i];
         if (__asan_address_is_poisoned(m) == false) {
             warn(DBG, "buffer %" PRIu " still in use for %cX'ed %s pkt %" PRIu,
@@ -784,7 +787,11 @@ void q_cleanup(struct w_engine * const w)
     kh_release(conns_by_srt, &conns_by_srt);
 #endif
 
-    free_tls_ctx(&ped(w)->tls_ctx);
+#ifndef NO_QLOG
+    qlog_close(ped(w)->qlog);
+#endif
+
+    free_tls_ctx(ped(w));
     free(ped(w)->pkt_meta);
     free(w->data);
     w_cleanup(w);
@@ -793,7 +800,6 @@ void q_cleanup(struct w_engine * const w)
     close(corpus_pkt_dir);
     close(corpus_frm_dir);
 #endif
-    qlog_close();
 }
 
 

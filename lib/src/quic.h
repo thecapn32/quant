@@ -30,14 +30,21 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/param.h>
 
 #include <picotls.h>
+#include <timeout.h>
+
+#ifdef WITH_OPENSSL
+#include <picotls/openssl.h>
+#endif
 
 #include <quant/quant.h>
 
 #include "frame.h"
+#include "tls.h"
 #include "tree.h" // IWYU pragma: keep
 
 
@@ -188,9 +195,34 @@ struct pkt_meta {
 struct per_engine_data {
     struct timeouts * wheel;
     struct pkt_meta * pkt_meta;
-    ptls_context_t tls_ctx;
     struct q_conn_conf default_conn_conf;
-    uint32_t num_bufs;
+    struct q_conf conf;
+    struct timeout api_alarm;
+
+#ifndef NO_TLS_LOG
+    FILE * tls_log;
+#endif
+
+#ifndef NO_QLOG
+    FILE * qlog;
+    uint64_t qlog_ref_t;
+    bool qlog_prev_event;
+    uint8_t _unused[7];
+#endif
+
+    ptls_context_t tls_ctx;
+
+#ifdef WITH_OPENSSL
+    ptls_openssl_sign_certificate_t sign_cert;
+    ptls_openssl_verify_certificate_t verify_cert;
+#endif
+
+#ifndef NO_SERVER
+    struct cipher_ctx dec_tckt;
+    struct cipher_ctx enc_tckt;
+#endif
+
+    uint8_t _unused2[4];
     uint32_t scratch_len;
     uint8_t scratch[]; // packet-sized scratch space to avoid stack alloc
 };
