@@ -371,9 +371,8 @@ bool enc_pkt(struct q_stream * const s,
 #ifndef NO_SERVER
         if (unlikely(c->tx_rtry))
             m->hdr.type |= (uint8_t)w_rand_uniform32(0x0f);
-        else
 #endif
-            break;
+        break;
     case ep_0rtt:
         if (is_clnt(c)) {
             m->hdr.type = LH_0RTT;
