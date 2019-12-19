@@ -491,12 +491,12 @@ int main(int argc, char * argv[])
                                       .enable_spinbit = true,
                                       .idle_timeout = timeout,
                                       .version = vers,
-                                      .enable_quantum_readiness_test = test_qr,
-                                      .enable_zero_len_cid = zlen_cids},
+                                      .enable_quantum_readiness_test = test_qr},
             .qlog = qlog,
             .num_bufs = num_bufs,
             .ticket_store = cache,
             .tls_log = tls_log,
+            .client_cid_len = zlen_cids ? 0 : 4,
             .enable_tls_cert_verify = verify_certs});
     khash_t(conn_cache) * cc = kh_init(conn_cache);
 

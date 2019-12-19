@@ -138,7 +138,7 @@ void quic_transaction(const char * const req, const size_t req_len)
     DSTACK_LOG("DSTACK 1" DSTACK_LOG_NEWLINE);
 
     // XXX: change "flash" to 0 to disable 0-RTT:
-    static const struct q_conf qc = {0, 0 /*"flash"*/, 0, 0, 0, 0, 15, false};
+    static const struct q_conf qc = {0, "flash", 0, 0, 0, 0, 15, false};
     struct w_engine * const w = q_init(IF_NAME, &qc);
 
     static const char peername[] = "172.19.235.111";
@@ -147,19 +147,26 @@ void quic_transaction(const char * const req, const size_t req_len)
     to_in6(peer)->sin6_port = bswap16(4433);
 
     while (1) {
+#if defined(PARTICLE)
         ping();
+#endif
 
         struct w_iov_sq o = w_iov_sq_initializer(o);
         q_alloc(w, &o, peer.ss_family, 512);
         struct w_iov * const v = sq_first(&o);
 
-        const float voltage = HAL_ADC_Read(BATT) * 0.0011224;
-        v->len = sprintf(v->buf, "GET /5000?voltage=%f\r\n", voltage);
+        const float voltage =
+#if defined(PARTICLE)
+            HAL_ADC_Read(BATT) * 0.0011224;
+#else
+            0;
+#endif
+        v->len = sprintf((char *)v->buf, "GET /5000?voltage=%f\r\n", voltage);
 
         DSTACK_LOG("DSTACK 2" DSTACK_LOG_NEWLINE);
         struct q_stream * s = 0;
         static const struct q_conn_conf qcc = {
-            30, 0, 0, 0, 0, 0, 0, 0, 0xff000000 + DRAFT_VERSION};
+            30, 0, 0, 0, 0, 0, 0, 0xff000000 + DRAFT_VERSION};
         struct q_conn * const c =
             q_connect(w, to_in(peer), peername, &o, &s, true,
                       "hq-" DRAFT_VERSION_STRING, &qcc);
@@ -170,12 +177,16 @@ void quic_transaction(const char * const req, const size_t req_len)
             const uint16_t len = w_iov_sq_len(&i);
             warn(CRT, "retrieved %" PRIu32 " bytes", len);
             DSTACK_LOG("retrieved %" PRIu32 " bytes" DSTACK_LOG_NEWLINE, len);
+#if defined(PARTICLE)
             if (len != 5000)
                 HAL_Core_System_Reset();
+#endif
             q_free(&i);
         } else {
             warn(CRT, "could not retrieve %s", v->buf);
+#if defined(PARTICLE)
             HAL_Core_System_Reset();
+#endif
         }
         q_free(&o);
         q_close(c, 0, 0);

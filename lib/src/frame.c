@@ -1796,7 +1796,10 @@ void enc_new_cid_frame(struct q_conn_info * const ci,
         srt = enc_cid->srt;
 #endif
     } else {
-        mk_rand_cid(&ncid, is_clnt(c) ? SCID_LEN_CLNT : SCID_LEN_SERV, true);
+        mk_rand_cid(&ncid,
+                    is_clnt(c) ? ped(c->w)->conf.client_cid_len
+                               : ped(c->w)->conf.server_cid_len,
+                    true);
         add_scid(c, &ncid);
 #ifndef NO_SRT_MATCHING
         srt = ncid.srt;

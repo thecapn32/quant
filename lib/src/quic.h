@@ -44,6 +44,7 @@
 #include <quant/quant.h>
 
 #include "frame.h"
+#include "kvec.h"
 #include "tls.h"
 #include "tree.h" // IWYU pragma: keep
 
@@ -55,10 +56,10 @@
 
 #define DATA_OFFSET 48 ///< Offsets of stream frame payload data we TX.
 
-#define CID_LEN_MIN 4   ///< Minimum CID length allowed by spec.
-#define CID_LEN_MAX 20  ///< Maximum CID length allowed by spec.
-#define SCID_LEN_CLNT 4 ///< Default client source CID length.
-#define SCID_LEN_SERV 8 ///< Default server source CID length.
+#define CID_LEN_MIN 4  ///< Minimum CID length allowed by spec.
+#define CID_LEN_MAX 20 ///< Maximum CID length allowed by spec.
+// #define SCID_LEN_CLNT 4 ///< Default client source CID length.
+// #define SCID_LEN_SERV 8 ///< Default server source CID length.
 #define SRT_LEN 16      ///< Stateless reset token length allowed by spec.
 #define PATH_CHLG_LEN 8 ///< Length of a path challenge.
 #define MAX_TOK_LEN 160
@@ -220,6 +221,7 @@ struct per_engine_data {
 #ifndef NO_SERVER
     struct cipher_ctx dec_tckt;
     struct cipher_ctx enc_tckt;
+    kvec_t(struct w_sock *) serv_socks;
 #endif
 
     uint8_t _unused2[4];
@@ -307,7 +309,7 @@ hex2str(const uint8_t * const src,
         const size_t len_dst);
 
 
-extern const char * __attribute__((nonnull))
+extern const char * __attribute__((nonnull(2)))
 cid2str(const struct cid * const cid, char * const dst, const size_t len_dst);
 
 

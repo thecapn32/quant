@@ -71,7 +71,9 @@ static const ptls_cipher_suite_t * cipher_suite[] = {
 
 
 #if defined(PARTICLE) || defined(RIOT_VERSION)
+#if defined(PARTICLE)
 #define MAXPATHLEN 8
+#endif
 
 #include <uECC.h>
 

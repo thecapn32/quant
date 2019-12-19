@@ -533,6 +533,15 @@ struct w_engine * q_init(const char * const ifname,
     }
     ped(w)->conf.num_bufs = num_bufs;
 
+    if (ped(w)->conf.client_cid_len)
+        ped(w)->conf.client_cid_len =
+            MAX(MIN(ped(w)->conf.client_cid_len, CID_LEN_MAX), CID_LEN_MIN);
+    if (ped(w)->conf.server_cid_len)
+        ped(w)->conf.server_cid_len =
+            MAX(MIN(ped(w)->conf.server_cid_len, CID_LEN_MAX), CID_LEN_MIN);
+    else
+        ped(w)->conf.server_cid_len = CID_LEN_MIN;
+
     ped(w)->default_conn_conf =
         (struct q_conn_conf){.idle_timeout = 10,
                              .enable_udp_zero_checksums = true,
@@ -563,15 +572,12 @@ struct w_engine * q_init(const char * const ifname,
             get_conf_uncond(w, conf->conn_conf, enable_tls_key_updates);
         ped(w)->default_conn_conf.disable_active_migration =
             get_conf_uncond(w, conf->conn_conf, disable_active_migration);
-        ped(w)->default_conn_conf.enable_zero_len_cid =
-            get_conf_uncond(w, conf->conn_conf, enable_zero_len_cid);
         ped(w)->default_conn_conf.enable_quantum_readiness_test =
             get_conf_uncond(w, conf->conn_conf, enable_quantum_readiness_test);
     }
 
     // initialize some globals
     memset(&conns_by_id, 0, sizeof(conns_by_id));
-    memset(&conns_by_ipnp, 0, sizeof(conns_by_ipnp));
 #ifndef NO_SRT_MATCHING
     memset(&conns_by_srt, 0, sizeof(conns_by_srt));
 #endif
@@ -751,7 +757,6 @@ void q_cleanup(struct w_engine * const w)
     // close all connections
     struct q_conn * c;
     kh_foreach_value(&conns_by_id, c, { q_close(c, 0, 0); });
-    kh_foreach_value(&conns_by_ipnp, c, { q_close(c, 0, 0); });
 #ifndef NO_SRT_MATCHING
     kh_foreach_value(&conns_by_srt, c, { q_close(c, 0, 0); });
 #endif
@@ -782,13 +787,16 @@ void q_cleanup(struct w_engine * const w)
 #endif
 
     kh_release(conns_by_id, &conns_by_id);
-    kh_release(conns_by_ipnp, &conns_by_ipnp);
 #ifndef NO_SRT_MATCHING
     kh_release(conns_by_srt, &conns_by_srt);
 #endif
 
 #ifndef NO_QLOG
     qlog_close(ped(w)->qlog);
+#endif
+
+#ifndef NO_SERVER
+    kv_destroy(ped(w)->serv_socks);
 #endif
 
     free_tls_ctx(ped(w));
@@ -969,8 +977,6 @@ void q_migrate(struct q_conn * const c,
     }
 
     // close the current w_sock
-    if (c->scid == 0)
-        conns_by_ipnp_del(c);
     w_close(c->sock);
     c->sock = new_sock;
 
@@ -985,8 +991,6 @@ void q_migrate(struct q_conn * const c,
         memcpy(&sin6->sin6_addr, &c->peer.addr.ip4, sizeof(sin6->sin6_addr));
     }
     w_connect(c->sock, (struct sockaddr *)&ss);
-    if (c->scid == 0)
-        conns_by_ipnp_ins(c);
 
     if (switch_ip)
         // also switch to new dcid
@@ -1045,8 +1049,9 @@ char * hex2str(const uint8_t * const src,
 const char *
 cid2str(const struct cid * const cid, char * const dst, const size_t len_dst)
 {
-    const int n = snprintf(dst, len_dst, "%" PRIu ":", cid->seq);
-    hex2str(cid->id, cid->len, &dst[n], len_dst - (size_t)n);
+    const int n = snprintf(dst, len_dst, "%" PRIu ":", cid ? cid->seq : 0);
+    if (cid)
+        hex2str(cid->id, cid->len, &dst[n], len_dst - (size_t)n);
     return dst;
 }
 

@@ -30,10 +30,11 @@
 #ifndef NO_QLOG
 #include <stdio.h>
 
-struct cid;      // IWYU pragma: no_forward_declare cid
-struct pkt_meta; // IWYU pragma: no_forward_declare pkt_meta
-struct q_conn;   // IWYU pragma: no_forward_declare q_conn
-struct w_iov;    // IWYU pragma: no_forward_declare w_iov
+struct cid;             // IWYU pragma: no_forward_declare cid
+struct per_engine_data; // IWYU pragma: no_forward_declare per_engine_data
+struct pkt_meta;        // IWYU pragma: no_forward_declare pkt_meta
+struct q_conn;          // IWYU pragma: no_forward_declare q_conn
+struct w_iov;           // IWYU pragma: no_forward_declare w_iov
 
 // IWYU pragma: no_include <warpcore/warpcore.h>
 // IWYU pragma: no_include "conn.h"
@@ -50,6 +51,7 @@ extern void qlog_close(FILE * const qlog);
 extern void __attribute__((nonnull))
 qlog_transport(const qlog_pkt_evt_t evt,
                const char * const trg,
+               struct per_engine_data * const ped,
                struct w_iov * const v,
                const struct pkt_meta * const m,
                const struct cid * const gid);

@@ -39,7 +39,6 @@
 #include "loop.h"
 #include "marshall.h"
 #include "pkt.h"
-#include "pn.h"
 #include "qlog.h"
 #include "quic.h"
 #include "recovery.h"
@@ -120,12 +119,11 @@ void qlog_close(FILE * const qlog)
 
 void qlog_transport(const qlog_pkt_evt_t evt,
                     const char * const trg,
+                    struct per_engine_data * const ped,
                     struct w_iov * const v,
                     const struct pkt_meta * const m,
                     const struct cid * const gid)
 {
-    struct per_engine_data * const ped = ped(m->pn->c->w);
-
     if (qlog_common(gid, ped) == false)
         return;
 

@@ -50,9 +50,8 @@ struct q_conn_conf {
     uint8_t enable_udp_zero_checksums : 1;
     uint8_t enable_tls_key_updates : 1; // TODO default to on eventually
     uint8_t disable_active_migration : 1;
-    uint8_t enable_zero_len_cid : 1;
     uint8_t enable_quantum_readiness_test : 1; // FIXME: is temporary
-    uint8_t : 2;
+    uint8_t : 3;
     uint32_t version;
 };
 
@@ -67,6 +66,8 @@ struct q_conf {
     uint32_t num_bufs;
     uint8_t enable_tls_cert_verify : 1;
     uint8_t : 7;
+    uint8_t client_cid_len;
+    uint8_t server_cid_len;
 };
 
 

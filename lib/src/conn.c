@@ -52,6 +52,7 @@
 #include "conn.h"
 #include "diet.h"
 #include "frame.h"
+#include "kvec.h"
 #include "loop.h"
 #include "marshall.h"
 #include "pkt.h"
@@ -74,7 +75,6 @@ const char * const conn_state_str[] = {CONN_STATES};
 
 struct q_conn_sl c_ready = sl_head_initializer(c_ready);
 
-khash_t(conns_by_ipnp) conns_by_ipnp = {0};
 khash_t(conns_by_id) conns_by_id = {0};
 
 #ifndef NO_SRT_MATCHING
@@ -159,17 +159,19 @@ epoch_in(const struct q_conn * const c)
 }
 
 
-static struct q_conn * __attribute__((nonnull))
-get_conn_by_ipnp(const struct w_sockaddr * const local,
-                 const struct w_sockaddr * const remote)
+#ifndef NO_SERVER
+static struct w_sock * __attribute__((nonnull))
+get_local_sock_by_ipnp(struct per_engine_data * const ped,
+                       const struct w_sockaddr * const local)
 {
-    const khiter_t k =
-        kh_get(conns_by_ipnp, &conns_by_ipnp,
-               (&(struct w_socktuple){.local = *local, .remote = *remote}));
-    if (unlikely(k == kh_end(&conns_by_ipnp)))
-        return 0;
-    return kh_val(&conns_by_ipnp, k);
+    for (size_t i = 0; i < kv_size(ped->serv_socks); i++) {
+        struct w_sock * const ws = kv_A(ped->serv_socks, i);
+        if (w_sockaddr_cmp(local, &ws->ws_loc))
+            return ws;
+    }
+    return 0;
 }
+#endif
 
 
 static struct q_conn * __attribute__((nonnull))
@@ -343,7 +345,7 @@ static void __attribute__((nonnull)) tx_vneg_resp(struct w_sock * const ws,
     log_pkt("TX", xv, &xv->saddr, 0, 0, 0);
     struct cid gid = {.seq = 0};
     mk_rand_cid(&gid, 1, false);
-    qlog_transport(pkt_tx, "default", xv, mx, &gid);
+    qlog_transport(pkt_tx, "default", ped(ws->w), xv, mx, &gid);
 
 #ifndef FUZZING
     w_tx(ws, &q);
@@ -432,7 +434,8 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
 
     // do we need to make more stream IDs available?
     if (likely(c->state == conn_estb)) {
-        if (unlikely(c->tok_len == 0 && c->pns[ep_init].abandoned))
+        if (!is_clnt(c) &&
+            unlikely(c->tok_len == 0 && c->pns[ep_init].abandoned))
             // TODO: find a better way to send NEW_TOKEN
             make_rtry_tok(c);
 
@@ -682,7 +685,7 @@ static void __attribute__((nonnull)) update_act_scid(struct q_conn * const c)
 {
     // server picks a new random cid
     struct cid nscid = {.seq = 0};
-    mk_rand_cid(&nscid, SCID_LEN_SERV, true);
+    mk_rand_cid(&nscid, ped(c->w)->conf.server_cid_len, true);
     cid_cpy(&c->odcid, c->scid);
     mk_cid_str(NTE, &nscid, scid_str_new);
     mk_cid_str(NTE, c->scid, scid_str_prev);
@@ -806,8 +809,6 @@ static void __attribute__((nonnull)) free_cids(struct q_conn * const c)
         conns_by_id_del(&c->odcid);
     }
 
-    if (c->scid == 0)
-        conns_by_ipnp_del(c);
 #ifndef NO_MIGRATION
     while (!splay_empty(&c->scids_by_seq)) {
         struct cid * const id = splay_min(cids_by_seq, &c->scids_by_seq);
@@ -829,10 +830,10 @@ static void __attribute__((nonnull)) free_cids(struct q_conn * const c)
 }
 
 
-static void __attribute__((nonnull(1))) new_cids(struct q_conn * const c,
-                                                 const bool zero_len_scid,
-                                                 const struct cid * const dcid,
-                                                 const struct cid * const scid)
+static void __attribute__((nonnull(1)))
+new_initial_cids(struct q_conn * const c,
+                 const struct cid * const dcid,
+                 const struct cid * const scid)
 {
     // init dcid
     if (is_clnt(c)) {
@@ -847,15 +848,13 @@ static void __attribute__((nonnull(1))) new_cids(struct q_conn * const c,
     // init scid and add connection to global data structures
     struct cid nscid = {.seq = 0};
     if (is_clnt(c))
-        mk_rand_cid(&nscid, zero_len_scid ? 0 : SCID_LEN_CLNT, false);
+        mk_rand_cid(&nscid, ped(c->w)->conf.client_cid_len, false);
     else if (scid) {
         cid_cpy(&nscid, scid);
         mk_rand_cid(&nscid, 0, true);
     }
     if (nscid.len)
         add_scid(c, &nscid);
-    else if (c->scid == 0)
-        conns_by_ipnp_ins(c);
 }
 
 
@@ -878,9 +877,8 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
 
     if (is_vneg) {
         // reset CIDs
-        const bool zero_len_scid = c->scid == 0;
         free_cids(c); // this zeros c->scid
-        new_cids(c, zero_len_scid, 0, 0);
+        new_initial_cids(c, 0, 0);
     }
 
     // reset CC state
@@ -1140,7 +1138,8 @@ done:
         bitset_t_initializer(1 << FRM_CRY | 1 << FRM_STR);
     const bool dup_strm =
         bit_overlap(FRM_MAX, &m->frms, &qlog_dup_chk) && m->strm == 0;
-    qlog_transport(dup_strm ? pkt_dp : pkt_rx, "default", v, m, &c->odcid);
+    qlog_transport(dup_strm ? pkt_dp : pkt_rx, "default", ped(ws->w), v, m,
+                   &c->odcid);
 #endif
     return true;
 }
@@ -1177,14 +1176,13 @@ static void __attribute__((nonnull))
         bool pkt_valid = false;
         const bool is_clnt = w_connected(ws);
         struct q_conn * c = 0;
-        struct q_conn * const c_ipnp = // only our client can use zero-len cids
-            is_clnt ? get_conn_by_ipnp(&ws->tup.local, &v->saddr) : 0;
         struct cid odcid = {.len = 0};
         uint8_t tok[MAX_TOK_LEN];
         uint16_t tok_len = 0;
         if (unlikely(!dec_pkt_hdr_beginning(
                 xv, v, m, is_clnt, &odcid, tok, &tok_len,
-                is_clnt ? (c_ipnp ? 0 : SCID_LEN_CLNT) : SCID_LEN_SERV))) {
+                is_clnt ? (ws->data ? 0 : ped(ws->w)->conf.client_cid_len)
+                        : ped(ws->w)->conf.server_cid_len))) {
             // we might still need to send a vneg packet
             if (w_connected(ws) == false) {
                 if (m->hdr.scid.len == 0 || m->hdr.scid.len >= 4) {
@@ -1209,7 +1207,7 @@ static void __attribute__((nonnull))
 
         c = get_conn_by_cid(&m->hdr.dcid);
         if (c == 0 && m->hdr.dcid.len == 0)
-            c = c_ipnp;
+            c = (struct q_conn *)ws->data;
         if (likely(is_lh(m->hdr.flags)) && !is_clnt) {
             if (c && m->hdr.type == LH_0RTT) {
                 mk_cid_str(INF, &m->hdr.dcid, dcid_str_prev);
@@ -1455,7 +1453,7 @@ static void __attribute__((nonnull))
 
     drop:
         if (pkt_valid == false)
-            qlog_transport(pkt_dp, "default", v, m, &m->hdr.dcid);
+            qlog_transport(pkt_dp, "default", ped(ws->w), v, m, &m->hdr.dcid);
         free_iov(v, m);
     next:
 #ifndef NO_QINFO
@@ -1791,13 +1789,17 @@ struct q_conn * new_conn(struct w_engine * const w,
         if (unlikely(c->sock == 0))
             goto fail;
         c->holds_sock = true;
+#ifndef NO_SERVER
+        if (peer == 0)
+            // remember server socket
+            kv_push(struct w_sock *, ped(w)->serv_socks, c->sock);
     } else {
         // find existing server socket
-        struct q_conn * const c_serv = get_conn_by_ipnp(
-            &(struct w_sockaddr){.addr = w->ifaddr[idx].addr, .port = port},
-            &(struct w_sockaddr){0});
-        ensure(c_serv, "got serv conn");
-        c->sock = c_serv->sock;
+        c->sock = get_local_sock_by_ipnp(
+            ped(w),
+            &(struct w_sockaddr){.addr = w->ifaddr[idx].addr, .port = port});
+        ensure(c->sock, "got serv conn");
+#endif
     }
 
     // init CIDs
@@ -1810,8 +1812,9 @@ struct q_conn * new_conn(struct w_engine * const w,
     splay_init(&c->scids_by_seq);
 #endif
 
-    const bool zero_len_scid = get_conf(c->w, conf, enable_zero_len_cid);
-    new_cids(c, zero_len_scid, dcid, scid);
+    new_initial_cids(c, dcid, scid);
+    if (c->scid == 0)
+        c->sock->data = c;
 
     c->vers = c->vers_initial = get_conf(c->w, conf, version);
     diet_init(&c->clsd_strms);
@@ -1861,26 +1864,26 @@ struct q_conn * new_conn(struct w_engine * const w,
         // populate tp_in.pref_addr
         const uint16_t other_af_idx =
             w->ifaddr[idx].addr.af == AF_INET ? 0 : w->addr4_pos;
-        struct q_conn * const other_c = get_conn_by_ipnp(
-            &(struct w_sockaddr){.addr = w->ifaddr[other_af_idx].addr,
-                                 .port = port},
-            &(struct w_sockaddr){0});
+        struct w_sock * const ws = get_local_sock_by_ipnp(
+            ped(w), &(struct w_sockaddr){.addr = w->ifaddr[other_af_idx].addr,
+                                         .port = port});
 
-        if (other_c) {
+        if (ws) {
             warn(DBG, "other socket is %s:%u",
                  w_ntop(&w->ifaddr[other_af_idx].addr, ip_tmp), bswap16(port));
 
             memcpy(&c->tp_in.pref_addr.addr4,
                    w->ifaddr[idx].addr.af == AF_INET ? &c->sock->ws_loc
-                                                     : &other_c->sock->ws_loc,
+                                                     : &ws->ws_loc,
                    sizeof(c->tp_in.pref_addr.addr4));
             memcpy(&c->tp_in.pref_addr.addr6,
                    w->ifaddr[idx].addr.af == AF_INET6 ? &c->sock->ws_loc
-                                                      : &other_c->sock->ws_loc,
+                                                      : &ws->ws_loc,
                    sizeof(c->tp_in.pref_addr.addr6));
 
             c->max_cid_seq_out = c->tp_in.pref_addr.cid.seq = 1;
-            mk_rand_cid(&c->tp_in.pref_addr.cid, SCID_LEN_SERV, true);
+            mk_rand_cid(&c->tp_in.pref_addr.cid, ped(c->w)->conf.server_cid_len,
+                        true);
             add_scid(c, &c->tp_in.pref_addr.cid);
         }
     }
