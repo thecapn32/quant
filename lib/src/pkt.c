@@ -348,9 +348,12 @@ bool enc_pkt(struct q_stream * const s,
     struct pn_space * const pn = m->pn = pn_for_epoch(c, epoch);
 
     m->txed = true;
+#ifndef NO_SERVER
     if (unlikely(c->tx_rtry))
         m->hdr.nr = 0;
-    else if (unlikely(pn->lg_sent == UINT_T_MAX))
+    else
+#endif
+        if (unlikely(pn->lg_sent == UINT_T_MAX))
         // next pkt nr
         m->hdr.nr = pn->lg_sent = 0;
     else
@@ -358,11 +361,19 @@ bool enc_pkt(struct q_stream * const s,
 
     switch (epoch) {
     case ep_init:
-        m->hdr.type = unlikely(c->tx_rtry) ? LH_RTRY : LH_INIT;
-        m->hdr.flags =
-            LH | m->hdr.type |
-            (unlikely(c->tx_rtry) ? (uint8_t)w_rand_uniform32(0x0f) : 0);
-        break;
+#ifndef NO_SERVER
+        if (unlikely(c->tx_rtry))
+            m->hdr.type = LH_RTRY;
+        else
+#endif
+            m->hdr.type = LH_INIT;
+        m->hdr.flags = LH | m->hdr.type;
+#ifndef NO_SERVER
+        if (unlikely(c->tx_rtry))
+            m->hdr.type |= (uint8_t)w_rand_uniform32(0x0f);
+        else
+#endif
+            break;
     case ep_0rtt:
         if (is_clnt(c)) {
             m->hdr.type = LH_0RTT;

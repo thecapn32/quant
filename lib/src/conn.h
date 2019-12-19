@@ -47,18 +47,20 @@
 
 KHASH_MAP_INIT_INT64(strms_by_id, struct q_stream *)
 
-static inline khint_t __attribute__((nonnull, no_instrument_function))
-hash_cid(const struct cid * const id)
-{
-    return fnv1a_32(id->id, id->len);
-}
-
 
 static inline int __attribute__((nonnull, no_instrument_function))
 cid_cmp(const struct cid * const a, const struct cid * const b)
 {
     // if the lengths are different, memcmp will fail on the first byte
     return memcmp(&a->len, &b->len, a->len + sizeof(a->len));
+}
+
+
+#ifndef NO_MIGRATION
+static inline khint_t __attribute__((nonnull, no_instrument_function))
+hash_cid(const struct cid * const id)
+{
+    return fnv1a_32(id->id, id->len);
 }
 
 
@@ -70,6 +72,9 @@ kh_cid_cmp(const struct cid * const a, const struct cid * const b)
 
 
 KHASH_INIT(conns_by_id, struct cid *, struct q_conn *, 1, hash_cid, kh_cid_cmp)
+
+extern khash_t(conns_by_id) conns_by_id;
+#endif
 
 
 #ifndef NO_SRT_MATCHING
@@ -91,8 +96,6 @@ KHASH_INIT(conns_by_srt, uint8_t *, struct q_conn *, 1, hash_srt, kh_srt_cmp)
 
 extern khash_t(conns_by_srt) conns_by_srt;
 #endif
-
-extern khash_t(conns_by_id) conns_by_id;
 
 
 struct pref_addr {
@@ -154,8 +157,9 @@ KHASH_INIT(cids_by_id, struct cid *, struct cid *, 1, hash_cid, kh_cid_cmp)
 struct q_conn {
     sl_entry(q_conn) node_rx_int; ///< For maintaining the internal RX queue.
     sl_entry(q_conn) node_rx_ext; ///< For maintaining the external RX queue.
-    sl_entry(q_conn) node_aq;     ///< For maintaining the accept queue.
-
+#ifndef NO_SERVER
+    sl_entry(q_conn) node_aq; ///< For maintaining the accept queue.
+#endif
 #ifndef NO_MIGRATION
     struct cids_by_seq dcids_by_seq; ///< Destination CID hash by sequence.
     struct cids_by_seq scids_by_seq; ///< Source CID hash by sequence.
@@ -185,17 +189,25 @@ struct q_conn {
     uint32_t did_0rtt : 1;         ///< 0-RTT handshake succeeded;
     uint32_t tx_path_resp : 1;     ///< Send PATH_RESPONSE.
 #ifndef NO_MIGRATION
-    uint32_t tx_path_chlg : 1; ///< Send PATH_CHALLENGE.
+    uint32_t tx_path_chlg : 1;  ///< Send PATH_CHALLENGE.
+    uint32_t tx_retire_cid : 1; ///< Send RETIRE_CONNECTION_ID.
+    uint32_t do_migration : 1;  ///< Perform a CID migration when possible.
+    uint32_t tx_ncid : 1;       ///< Send NEW_CONNECTION_ID.
 #else
     uint32_t _unused_tx_path_chlg : 1;
+    uint32_t _unused_tx_retire_cid : 1;
+    uint32_t _unused_do_migration : 1;
+    uint32_t _unused_tx_ncid : 1;
 #endif
-    uint32_t tx_ncid : 1;           ///< Send NEW_CONNECTION_ID.
-    uint32_t tx_rtry : 1;           ///< We need to send a RETRY.
-    uint32_t have_new_data : 1;     ///< New stream data was enqueued.
-    uint32_t in_c_ready : 1;        ///< Connection is listed in c_ready.
-    uint32_t needs_accept : 1;      ///< Need to call q_accept() for connection.
-    uint32_t tx_retire_cid : 1;     ///< Send RETIRE_CONNECTION_ID.
-    uint32_t do_migration : 1;      ///< Perform a CID migration when possible.
+    uint32_t have_new_data : 1; ///< New stream data was enqueued.
+    uint32_t in_c_ready : 1;    ///< Connection is listed in c_ready.
+#ifndef NO_SERVER
+    uint32_t tx_rtry : 1;      ///< We need to send a RETRY.
+    uint32_t needs_accept : 1; ///< Need to call q_accept() for connection.
+#else
+    uint32_t _unused_tx_rtry : 1;
+    uint32_t _unused_needs_accept : 1;
+#endif
     uint32_t key_flips_enabled : 1; ///< Are TLS key updates enabled?
     uint32_t do_key_flip : 1;       ///< Perform a TLS key update.
     uint32_t spin_enabled : 1;      ///< Is the spinbit enabled?

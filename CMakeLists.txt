@@ -202,6 +202,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
             -modernize-use-trailing-return-type
             -readability-braces-around-statements
             -readability-magic-numbers
+            -readability-misleading-indentation
         )
         string(REPLACE ";" "," CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS}")
         set(CMAKE_C_CLANG_TIDY ${CLANGTIDY}

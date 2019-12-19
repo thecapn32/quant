@@ -51,7 +51,7 @@ declare -A servers=(
     # [local]=localhost::4433:4434:4433:/40000
 )
 
-results=(live fail vneg hshk data clse rsmt zrtt rtry qrdy migr bind adrm kyph spin aecn http)
+results=(live fail vneg hshk data clse rsmt zrtt rtry qrdy migr bind adrm kyph spin aecn zcid http)
 
 if [ -n "$1" ]; then
     results+=(perf t_h2 t_hq)
@@ -122,6 +122,10 @@ function test_server {
     # IP address mobility run
     bin/client $opts ${info[1]} -s /dev/null -n -n \
         "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.adrm" 2>&1 &
+
+    # zero-len CID run
+    bin/client $opts ${info[1]} -s /dev/null -z \
+        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.zcid" 2>&1 &
 
     wait
     printf "%s " "$s"

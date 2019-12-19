@@ -84,8 +84,9 @@ const uint32_t ok_vers[] = {
 /// Length of the @p ok_vers array.
 const uint8_t ok_vers_len = sizeof(ok_vers) / sizeof(ok_vers[0]);
 
-
+#ifndef NO_SERVER
 struct q_conn_sl accept_queue = sl_head_initializer(accept_queue);
+#endif
 
 #if !defined(NDEBUG) && !defined(FUZZING) && defined(FUZZER_CORPUS_COLLECTION)
 int corpus_pkt_dir, corpus_frm_dir;
@@ -429,9 +430,18 @@ restart_api_alarm(struct w_engine * const w, const uint64_t nsec)
 }
 
 
-struct q_conn * q_accept(struct w_engine * const w,
-                         const struct q_conn_conf * const conf)
+struct q_conn * q_accept(struct w_engine * const w
+#ifdef NO_SERVER
+                         __attribute__((unused))
+#endif
+                         ,
+                         const struct q_conn_conf * const conf
+#ifdef NO_SERVER
+                         __attribute__((unused))
+#endif
+)
 {
+#ifndef NO_SERVER
     if (sl_first(&accept_queue))
         goto accept;
 
@@ -463,6 +473,9 @@ accept:;
 
     update_conf(c, conf);
     return c;
+#else
+    return 0;
+#endif
 }
 
 
@@ -577,7 +590,9 @@ struct w_engine * q_init(const char * const ifname,
     }
 
     // initialize some globals
+#ifndef NO_MIGRATION
     memset(&conns_by_id, 0, sizeof(conns_by_id));
+#endif
 #ifndef NO_SRT_MATCHING
     memset(&conns_by_srt, 0, sizeof(conns_by_srt));
 #endif
@@ -609,7 +624,7 @@ struct w_engine * q_init(const char * const ifname,
 #endif
 
 #ifndef NO_QLOG
-    if (conf && conf->qlog && *conf->qlog) {
+    if (conf && conf->qlog && *conf->qlog != '\n') {
         ped(w)->qlog = fopen(conf->qlog, "we");
         ensure(ped(w)->qlog, "fopen %s", conf->qlog);
     }
@@ -756,7 +771,11 @@ void q_cleanup(struct w_engine * const w)
 {
     // close all connections
     struct q_conn * c;
+#ifndef NO_MIGRATION
     kh_foreach_value(&conns_by_id, c, { q_close(c, 0, 0); });
+#else
+#endif
+
 #ifndef NO_SRT_MATCHING
     kh_foreach_value(&conns_by_srt, c, { q_close(c, 0, 0); });
 #endif
@@ -786,7 +805,9 @@ void q_cleanup(struct w_engine * const w)
     }
 #endif
 
+#ifndef NO_MIGRATION
     kh_release(conns_by_id, &conns_by_id);
+#endif
 #ifndef NO_SRT_MATCHING
     kh_release(conns_by_srt, &conns_by_srt);
 #endif
@@ -904,13 +925,25 @@ bool q_ready(struct w_engine * const w,
     }
     *ready = c;
 done:
+#ifndef NO_MIGRATION
     return kh_size(&conns_by_id);
+#else
+    return sl_empty(&ped(w)->conns);
+#endif
 }
 
 
-bool q_is_new_serv_conn(const struct q_conn * const c)
+bool q_is_new_serv_conn(const struct q_conn * const c
+#ifdef NO_SERVER
+                        __attribute__((unused))
+#endif
+)
 {
+#ifndef NO_SERVER
     return c->needs_accept;
+#else
+    return 0;
+#endif
 }
 
 

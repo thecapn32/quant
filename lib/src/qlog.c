@@ -86,11 +86,7 @@ static bool qlog_common(const struct cid * const gid,
 }
 
 
-void qlog_init(const struct q_conn * const c
-#ifdef NO_SERVER
-               __attribute__((unused))
-#endif
-)
+void qlog_init(const struct q_conn * const c)
 {
     if (ped(c->w)->qlog && ped(c->w)->qlog_ref_t == 0) {
         ped(c->w)->qlog_ref_t = loop_now();

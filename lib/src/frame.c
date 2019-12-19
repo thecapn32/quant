@@ -1843,6 +1843,7 @@ void enc_new_token_frame(struct q_conn_info * const ci,
 }
 
 
+#ifndef NO_MIGRATION
 void enc_retire_cid_frame(struct q_conn_info * const ci,
                           uint8_t ** pos,
                           const uint8_t * const end,
@@ -1857,6 +1858,7 @@ void enc_retire_cid_frame(struct q_conn_info * const ci,
     m->pn->c->tx_retire_cid = false;
     track_frame(m, ci, FRM_RTR, 1);
 }
+#endif
 
 
 void enc_ping_frame(struct q_conn_info * const ci,

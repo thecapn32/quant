@@ -31,12 +31,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/param.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
 #ifndef NO_TLS_LOG
 #include <stdarg.h>
+#endif
+
+#ifndef NO_SERVER
+#include <sys/param.h>
 #endif
 
 #ifdef WITH_OPENSSL
