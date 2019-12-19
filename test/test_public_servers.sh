@@ -383,6 +383,20 @@ function analyze {
     [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.adrm" ] && rm -f "$log"
     rm -f "$log_strip"
 
+    # analyze zero-len source CIDs
+    local log="$log_base.zcid"
+    local log_strip="$log.strip"
+    gsed "$sed_pattern" "$log" > "$log_strip"
+    check_fail "$1" "$log_strip" "$log"
+
+    perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $x=1 : next);
+        /no h3 payload/ and $x=0;
+        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
+        $x && /enc_close.*err=0x0/ && exit 1;' "$log_strip"
+    [ $? -eq 1 ] && echo O > "$ret_base.zcid"
+    [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.zcid" ] && rm -f "$log"
+    rm -f "$log_strip"
+
     printf "%s " "$s"
 }
 
