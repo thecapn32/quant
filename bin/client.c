@@ -608,9 +608,9 @@ int main(int argc, char * argv[])
         }
     }
 
-    q_cleanup(w);
     free_cc(cc);
     free_sl();
+    q_cleanup(w);
     warn(DBG, "%s exiting", basename(argv[0]));
     return ret;
 }
