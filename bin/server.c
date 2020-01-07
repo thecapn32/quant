@@ -66,6 +66,7 @@ static void __attribute__((noreturn)) usage(const char * const name,
                                             const char * const cert,
                                             const char * const key,
                                             const uint32_t timeout,
+                                            const bool retry,
                                             const uint32_t num_bufs)
 {
     printf("%s [options]\n", name);
@@ -77,6 +78,7 @@ static void __attribute__((noreturn)) usage(const char * const name,
     printf("\t[-k key]\tTLS key; default %s\n", key);
     printf("\t[-p port]\tdestination port; default %d\n", port);
     printf("\t[-q log]\twrite qlog events to file; default %s\n", qlog);
+    printf("\t[-r]\t\tforce a Retry; default %s\n", retry ? "true" : "false");
     printf("\t[-t timeout]\tidle timeout in seconds; default %u\n", timeout);
 #ifndef NDEBUG
     printf("\t[-v verbosity]\tverbosity level (0-%d, default %d)\n", DLEVEL,
@@ -251,8 +253,9 @@ int main(int argc, char * argv[])
     uint32_t num_bufs = 100000;
     int ch;
     int ret = 0;
+    bool retry = false;
 
-    while ((ch = getopt(argc, argv, "hi:p:d:v:c:k:t:b:q:")) != -1) {
+    while ((ch = getopt(argc, argv, "hi:p:d:v:c:k:t:b:q:r")) != -1) {
         switch (ch) {
         case 'q':
             strncpy(qlog, optarg, sizeof(qlog) - 1);
@@ -282,6 +285,9 @@ int main(int argc, char * argv[])
         case 'b':
             num_bufs = (uint32_t)strtoul(optarg, 0, 10);
             break;
+        case 'r':
+            retry = true;
+            break;
         case 'v':
 #ifndef NDEBUG
             ini_dlevel = util_dlevel =
@@ -292,7 +298,7 @@ int main(int argc, char * argv[])
         case '?':
         default:
             usage(basename(argv[0]), ifname, qlog, port[0], dir, cert, key,
-                  timeout, num_bufs);
+                  timeout, retry, num_bufs);
         }
     }
 
@@ -310,6 +316,7 @@ int main(int argc, char * argv[])
                                                       .enable_spinbit = true,
                                                   },
                                               .qlog = qlog,
+                                              .force_retry = retry,
                                               .num_bufs = num_bufs,
                                               .tls_cert = cert,
                                               .tls_key = key});

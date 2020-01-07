@@ -370,7 +370,7 @@ bool enc_pkt(struct q_stream * const s,
         m->hdr.flags = LH | m->hdr.type;
 #ifndef NO_SERVER
         if (unlikely(c->tx_rtry))
-            m->hdr.type |= (uint8_t)w_rand_uniform32(0x0f);
+            m->hdr.flags |= (uint8_t)w_rand_uniform32(0x0f);
 #endif
         break;
     case ep_0rtt:
@@ -704,13 +704,6 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
         if (m->hdr.scid.len)
             decb_chk(m->hdr.scid.id, &pos, end, m->hdr.scid.len);
 
-        // if this is a CI, the dcid len must be >= 8 bytes
-        if (is_clnt == false &&
-            unlikely(m->hdr.type == LH_INIT && m->hdr.dcid.len < 8)) {
-            warn(DBG, "dcid len %u too short", m->hdr.dcid.len);
-            return false;
-        }
-
         if (m->hdr.vers == 0) {
             // version negotiation packet - copy raw
             memcpy(v->buf, xv->buf, xv->len);
@@ -745,6 +738,14 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
                 return false;
             }
             decb_chk(tok, &pos, end, *tok_len);
+        }
+
+        // if this is a CI, the dcid len must be >= 8 bytes
+        if (is_clnt == false &&
+            unlikely(*tok_len == 0 && m->hdr.type == LH_INIT &&
+                     m->hdr.dcid.len < 8)) {
+            warn(DBG, "dcid len %u too short", m->hdr.dcid.len);
+            return false;
         }
 
         if (m->hdr.type != LH_RTRY) {

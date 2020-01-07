@@ -65,7 +65,8 @@ struct q_conf {
     const char * const qlog;
     uint32_t num_bufs;
     uint8_t enable_tls_cert_verify : 1;
-    uint8_t : 7;
+    uint8_t force_retry : 1; // ignored on client
+    uint8_t : 6;
     uint8_t client_cid_len;
     uint8_t server_cid_len;
 };

@@ -951,7 +951,7 @@ dec_new_cid_frame(const uint8_t ** pos,
     uint8_t srt[SRT_LEN];
 #endif
 
-    if (likely(dcid.len >= CID_LEN_MIN && dcid.len <= CID_LEN_MAX)) {
+    if (likely(dcid.len <= CID_LEN_MAX)) {
         decb_chk(dcid.id, pos, end, dcid.len, c, FRM_CID);
         decb_chk(srt, pos, end, SRT_LEN, c, FRM_CID);
     }
@@ -984,7 +984,7 @@ dec_new_cid_frame(const uint8_t ** pos,
         err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_CID, "illegal rpt %u",
                          dcid.rpt);
 
-    if (unlikely(dcid.len < CID_LEN_MIN || dcid.len > CID_LEN_MAX))
+    if (unlikely(dcid.len > CID_LEN_MAX))
         err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_CID, "illegal len %u",
                          dcid.len);
 

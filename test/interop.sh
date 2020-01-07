@@ -37,9 +37,6 @@ if [ "$ROLE" == "client" ]; then
     "versionnegotiation")
         CLIENT_ARGS="-e 12345678 $CLIENT_ARGS"
         ;;
-    "retry")
-        REQUESTS=${REQUESTS//443/4434}
-        ;;
     "resumption")
         REQS=($REQUESTS)
         REQUESTS=${REQS[0]}
@@ -53,7 +50,15 @@ if [ "$ROLE" == "client" ]; then
     client $CLIENT_ARGS $REQUESTS >> /logs/$ROLE.log 2>&1
 
 elif [ "$ROLE" == "server" ]; then
-    server -i eth0 -d /www -p 443 -p 4434 -t 0 \
+    case "$TESTCASE" in
+    "retry")
+        SERVER_ARGS="-r $SERVER_ARGS"
+        ;;
+    *)
+        ;;
+    esac
+
+    server $SERVER_ARGS -i eth0 -d /www -p 443 -p 4434 -t 0 \
         -c /tls/dummy.crt -k /tls/dummy.key \
         -q /logs/$ROLE.qlog >> /logs/$ROLE.log 2>&1
 fi

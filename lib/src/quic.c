@@ -541,19 +541,17 @@ struct w_engine * q_init(const char * const ifname,
     ASAN_POISON_MEMORY_REGION(ped(w)->pkt_meta,
                               num_bufs * sizeof(*ped(w)->pkt_meta));
 
-    if (conf) {
+    if (conf)
         memcpy(&ped(w)->conf, conf, sizeof(*conf));
-    }
     ped(w)->conf.num_bufs = num_bufs;
-
     if (ped(w)->conf.client_cid_len)
         ped(w)->conf.client_cid_len =
-            MAX(MIN(ped(w)->conf.client_cid_len, CID_LEN_MAX), CID_LEN_MIN);
+            MIN(ped(w)->conf.client_cid_len, CID_LEN_MAX);
     if (ped(w)->conf.server_cid_len)
         ped(w)->conf.server_cid_len =
-            MAX(MIN(ped(w)->conf.server_cid_len, CID_LEN_MAX), CID_LEN_MIN);
+            MIN(ped(w)->conf.server_cid_len, CID_LEN_MAX);
     else
-        ped(w)->conf.server_cid_len = CID_LEN_MIN;
+        ped(w)->conf.server_cid_len = 4; // could be another value
 
     ped(w)->default_conn_conf =
         (struct q_conn_conf){.idle_timeout = 10,
@@ -1100,7 +1098,7 @@ void mk_rand_cid(struct cid * const cid,
     // len==0 means zero-len cid
     if (len) {
         // illegal len means randomize
-        cid->len = len >= CID_LEN_MIN
+        cid->len = len <= CID_LEN_MAX
                        ? len
                        : 8 + (uint8_t)w_rand_uniform32(CID_LEN_MAX - 7);
         rand_bytes(cid->id, cid->len);

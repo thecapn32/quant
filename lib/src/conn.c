@@ -348,7 +348,7 @@ static void __attribute__((nonnull)) tx_vneg_resp(struct w_sock * const ws,
     xv->flags = v->flags;
     log_pkt("TX", xv, &xv->saddr, 0, 0, 0);
     struct cid gid = {.seq = 0};
-    mk_rand_cid(&gid, 1, false);
+    mk_rand_cid(&gid, CID_LEN_MAX + 1, false); // random len
     qlog_transport(pkt_tx, "default", ped(ws->w), xv, mx, &gid);
 
 #ifndef FUZZING
@@ -848,7 +848,7 @@ new_initial_cids(struct q_conn * const c,
     // init dcid
     if (is_clnt(c)) {
         struct cid ndcid = {.seq = 0};
-        mk_rand_cid(&ndcid, 1, false);
+        mk_rand_cid(&ndcid, CID_LEN_MAX + 1, false); // random len
         cid_cpy(&c->odcid, &ndcid);
         add_dcid(c, &ndcid);
     } else if (dcid)
@@ -952,7 +952,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
         c->vers = m->hdr.vers;
 
         // TODO: remove this interop hack eventually
-        if (bswap16(ws->ws_lport) == 4434) {
+        if (bswap16(ws->ws_lport) == 4434 || ped(c->w)->conf.force_retry) {
             if (m->hdr.type == LH_INIT && tok_len) {
                 if (verify_rtry_tok(c, tok, tok_len) == false) {
                     warn(ERR, "retry token verification failed");

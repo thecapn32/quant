@@ -59,7 +59,6 @@
 
 #define DATA_OFFSET 48 ///< Offsets of stream frame payload data we TX.
 
-#define CID_LEN_MIN 4   ///< Minimum CID length allowed by spec.
 #define CID_LEN_MAX 20  ///< Maximum CID length allowed by spec.
 #define SRT_LEN 16      ///< Stateless reset token length allowed by spec.
 #define PATH_CHLG_LEN 8 ///< Length of a path challenge.
