@@ -700,7 +700,7 @@ void q_close(struct q_conn * const c,
     loop_run(c->w, (func_ptr)q_close, c, 0);
 
 done:
-#if !defined(NO_QINFO) && !defined(NDEBUG)
+#if !defined(NO_QINFO)
     if (c->scid && c->i.pkts_in_valid > 0) {
         static const char * const frm_typ_str[] = {
             [0x00] = "PADDING",
@@ -736,25 +736,37 @@ done:
         };
 
         conn_info_populate(c);
-        warn(INF, "%s conn %s stats:", conn_type(c), cid_str(c->scid));
-        warn(INF, "pkts_in_valid = %s%" PRIu NRM,
-             c->i.pkts_in_valid ? NRM : BLD RED, c->i.pkts_in_valid);
-        warn(INF, "pkts_in_invalid = %s%" PRIu NRM,
-             c->i.pkts_in_invalid ? BLD RED : NRM, c->i.pkts_in_invalid);
-        warn(INF, "pkts_out = %" PRIu, c->i.pkts_out);
-        warn(INF, "pkts_out_lost = %" PRIu, c->i.pkts_out_lost);
-        warn(INF, "pkts_out_rtx = %" PRIu, c->i.pkts_out_rtx);
-        warn(INF, "rtt = %.3f", c->i.rtt);
-        warn(INF, "rttvar = %.3f", c->i.rttvar);
-        warn(INF, "cwnd = %" PRIu, c->i.cwnd);
-        warn(INF, "ssthresh = %" PRIu, c->i.ssthresh);
-        warn(INF, "pto_cnt = %" PRIu, c->i.pto_cnt);
-        warn(INF, "%-22s %s %10s %10s", "frame", "code", "out", "in");
+
+#ifndef NDEBUG
+#define qinfo_log(...) warn(INF, __VA_ARGS__)
+#else
+#define qinfo_log(...)                                                         \
+    do {                                                                       \
+        fprintf(stderr, __VA_ARGS__);                                          \
+        fputc('\n', stderr);                                                   \
+    } while (0)
+#endif
+
+        qinfo_log("%s conn %s stats:", conn_type(c), cid_str(c->scid));
+        qinfo_log("pkts_in_valid = %s%" PRIu NRM,
+                  c->i.pkts_in_valid ? NRM : BLD RED, c->i.pkts_in_valid);
+        qinfo_log("pkts_in_invalid = %s%" PRIu NRM,
+                  c->i.pkts_in_invalid ? BLD RED : NRM, c->i.pkts_in_invalid);
+        qinfo_log("pkts_out = %" PRIu, c->i.pkts_out);
+        qinfo_log("pkts_out_lost = %" PRIu, c->i.pkts_out_lost);
+        qinfo_log("pkts_out_rtx = %" PRIu, c->i.pkts_out_rtx);
+        qinfo_log("rtt = %.3f", (double)c->i.rtt);
+        qinfo_log("rttvar = %.3f", (double)c->i.rttvar);
+        qinfo_log("cwnd = %" PRIu, c->i.cwnd);
+        qinfo_log("ssthresh = %" PRIu, c->i.ssthresh);
+        qinfo_log("pto_cnt = %" PRIu, c->i.pto_cnt);
+        qinfo_log("%-22s %s %10s %10s", "frame", "code", "out", "in");
         for (size_t i = 0;
              i < sizeof(c->i.frm_cnt[0]) / sizeof(c->i.frm_cnt[0][0]); i++) {
             if (c->i.frm_cnt[0][i] || c->i.frm_cnt[1][i])
-                warn(INF, "%-22s 0x%02lx %10" PRIu " %10" PRIu, frm_typ_str[i],
-                     (unsigned long)i, c->i.frm_cnt[0][i], c->i.frm_cnt[1][i]);
+                qinfo_log("%-22s 0x%02lx %10" PRIu " %10" PRIu, frm_typ_str[i],
+                          (unsigned long)i, c->i.frm_cnt[0][i],
+                          c->i.frm_cnt[1][i]);
         }
     }
 #endif
