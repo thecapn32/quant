@@ -755,10 +755,13 @@ done:
         qinfo_log("pkts_out = %" PRIu, c->i.pkts_out);
         qinfo_log("pkts_out_lost = %" PRIu, c->i.pkts_out_lost);
         qinfo_log("pkts_out_rtx = %" PRIu, c->i.pkts_out_rtx);
-        qinfo_log("rtt = %.3f", (double)c->i.rtt);
-        qinfo_log("rttvar = %.3f", (double)c->i.rttvar);
-        qinfo_log("cwnd = %" PRIu, c->i.cwnd);
-        qinfo_log("ssthresh = %" PRIu, c->i.ssthresh);
+        qinfo_log("rtt = %.3f (min = %.3f, max = %.3f, var = %.3f)",
+                  (double)c->i.rtt, (double)c->i.min_rtt, (double)c->i.max_rtt,
+                  (double)c->i.rttvar);
+        qinfo_log("cwnd = %" PRIu " (max = %" PRIu ")", c->i.cwnd,
+                  c->i.max_cwnd);
+        qinfo_log("ssthresh = %" PRIu,
+                  c->i.ssthresh == UINT_T_MAX ? 0 : c->i.ssthresh);
         qinfo_log("pto_cnt = %" PRIu, c->i.pto_cnt);
         qinfo_log("%-22s %s %10s %10s", "frame", "code", "out", "in");
         for (size_t i = 0;

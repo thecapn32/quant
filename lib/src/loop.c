@@ -95,7 +95,6 @@ void __attribute__((nonnull(1))) loop_run(struct w_engine * const w,
             break;
 
         const uint64_t next = timeouts_timeout(ped(w)->wheel);
-        // warn(CRT, "%" PRIu64, next);
         if (next == 0)
             continue;
 

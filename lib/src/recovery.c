@@ -558,6 +558,12 @@ update_rtt(struct q_conn * const c, uint_t ack_del)
                             ((dint_t)c->rec.cur.srtt - (dint_t)adj_rtt) /
                             4;
     c->rec.cur.srtt = (7 * c->rec.cur.srtt / 8) + adj_rtt / 8;
+
+#ifndef NO_QINFO
+    const float latest_rtt = c->rec.cur.latest_rtt / (float)US_PER_S;
+    c->i.min_rtt = MIN(c->i.min_rtt, latest_rtt);
+    c->i.max_rtt = MAX(c->i.max_rtt, latest_rtt);
+#endif
 }
 
 
@@ -606,6 +612,10 @@ on_pkt_acked_cc(const struct pkt_meta * const m)
         c->rec.cur.cwnd += m->udp_len;
     else
         c->rec.cur.cwnd += (c->rec.max_pkt_size * m->udp_len) / c->rec.cur.cwnd;
+
+#ifndef NO_QINFO
+    c->i.max_cwnd = MAX(c->i.max_cwnd, c->rec.cur.cwnd);
+#endif
 }
 
 

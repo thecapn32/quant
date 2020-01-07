@@ -83,7 +83,11 @@ struct q_conn_info {
 
     float rtt;
     float rttvar;
+    float min_rtt;
+    float max_rtt;
+
     uint_t cwnd;
+    uint_t max_cwnd;
     uint_t ssthresh;
     uint_t pto_cnt;
 
