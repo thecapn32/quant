@@ -77,7 +77,8 @@ static void __attribute__((noreturn)) usage(const char * const name,
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
     printf("\t[-k key]\tTLS key; default %s\n", key);
     printf("\t[-p port]\tdestination port; default %d\n", port);
-    printf("\t[-q log]\twrite qlog events to file; default %s\n", qlog);
+    printf("\t[-q log]\twrite qlog events to file; default %s\n",
+           *qlog ? qlog : "false");
     printf("\t[-r]\t\tforce a Retry; default %s\n", retry ? "true" : "false");
     printf("\t[-t timeout]\tidle timeout in seconds; default %u\n", timeout);
 #ifndef NDEBUG
@@ -247,7 +248,7 @@ int main(int argc, char * argv[])
     char dir[MAXPATHLEN] = ".";
     char cert[MAXPATHLEN] = "test/dummy.crt";
     char key[MAXPATHLEN] = "test/dummy.key";
-    char qlog[MAXPATHLEN] = "/tmp/" QUANT "-server.qlog";
+    char qlog[MAXPATHLEN] = "";
     uint16_t port[MAXPORTS] = {4433, 4434};
     size_t num_ports = 0;
     uint32_t num_bufs = 100000;
@@ -315,7 +316,7 @@ int main(int argc, char * argv[])
                                                       .idle_timeout = timeout,
                                                       .enable_spinbit = true,
                                                   },
-                                              .qlog = qlog,
+                                              .qlog = *qlog ? qlog : 0,
                                               .force_retry = retry,
                                               .num_bufs = num_bufs,
                                               .tls_cert = cert,

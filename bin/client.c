@@ -143,7 +143,8 @@ static void __attribute__((noreturn, nonnull)) usage(const char * const name,
            verify_certs ? "true" : "false");
     printf("\t[-e version]\tQUIC version to use; default 0x%08x\n", vers);
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
-    printf("\t[-l log]\tlog file for TLS keys; default %s\n", tls_log);
+    printf("\t[-l log]\tlog file for TLS keys; default %s\n",
+           *tls_log ? tls_log : "false");
     printf("\t[-m]\t\ttest multi-pkt initial (\"quantum-readiness\"); default "
            "%s\n",
            test_qr ? "true" : "false");
@@ -152,7 +153,8 @@ static void __attribute__((noreturn, nonnull)) usage(const char * const name,
            "default %s\n",
            rebind ? "true" : "false");
 #endif
-    printf("\t[-q log]\twrite qlog events to file; default %s\n", qlog);
+    printf("\t[-q log]\twrite qlog events to file; default %s\n",
+           *qlog ? qlog : "false");
     printf("\t[-r reps]\trepetitions for all URLs; default %u\n", reps);
     printf("\t[-s cache]\tTLS 0-RTT state cache; default %s\n", cache);
     printf("\t[-t timeout]\tidle timeout in seconds; default %u\n", timeout);
@@ -409,8 +411,8 @@ int main(int argc, char * argv[])
         ;
     int ch;
     char cache[MAXPATHLEN] = "/tmp/" QUANT "-session";
-    char tls_log[MAXPATHLEN] = "/tmp/" QUANT "-tlslog";
-    char qlog[MAXPATHLEN] = "/tmp/" QUANT "-client.qlog";
+    char tls_log[MAXPATHLEN] = "";
+    char qlog[MAXPATHLEN] = "";
     bool verify_certs = false;
     int ret = 0;
 
@@ -492,10 +494,10 @@ int main(int argc, char * argv[])
                                       .idle_timeout = timeout,
                                       .version = vers,
                                       .enable_quantum_readiness_test = test_qr},
-            .qlog = qlog,
+            .qlog = *qlog ? qlog : 0,
             .num_bufs = num_bufs,
             .ticket_store = cache,
-            .tls_log = tls_log,
+            .tls_log = *tls_log ? tls_log : 0,
             .client_cid_len = zlen_cids ? 0 : 4,
             .enable_tls_cert_verify = verify_certs});
     khash_t(conn_cache) * cc = kh_init(conn_cache);

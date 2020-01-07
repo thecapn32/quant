@@ -622,7 +622,7 @@ struct w_engine * q_init(const char * const ifname,
 #endif
 
 #ifndef NO_QLOG
-    if (conf && conf->qlog && *conf->qlog != '\n') {
+    if (conf && conf->qlog) {
         ped(w)->qlog = fopen(conf->qlog, "we");
         ensure(ped(w)->qlog, "fopen %s", conf->qlog);
     }
@@ -771,7 +771,8 @@ done:
     }
 #endif
 #ifndef NO_QLOG
-    fflush(ped(c->w)->qlog);
+    if (ped(c->w)->qlog)
+        fflush(ped(c->w)->qlog);
 #endif
     free_conn(c);
 }
