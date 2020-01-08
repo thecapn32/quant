@@ -115,11 +115,16 @@ extern void __attribute__((nonnull(1))) q_close(struct q_conn * const c,
                                                 const uint64_t code,
                                                 const char * const reason);
 
+#ifndef NO_SERVER
 extern struct q_conn * __attribute__((nonnull))
 q_bind(struct w_engine * const w, const uint16_t addr_idx, const uint16_t port);
 
 extern struct q_conn * q_accept(struct w_engine * const w,
                                 const struct q_conn_conf * const conf);
+
+extern bool __attribute__((nonnull))
+q_is_new_serv_conn(const struct q_conn * const c);
+#endif
 
 extern bool __attribute__((nonnull))
 q_write(struct q_stream * const s, struct w_iov_sq * const q, const bool fin);
@@ -183,9 +188,6 @@ extern bool __attribute__((nonnull)) q_read_stream(struct q_stream * const s,
 extern bool q_ready(struct w_engine * const w,
                     const uint64_t nsec,
                     struct q_conn ** const ready);
-
-extern bool __attribute__((nonnull))
-q_is_new_serv_conn(const struct q_conn * const c);
 
 extern bool __attribute__((nonnull))
 q_is_uni_stream(const struct q_stream * const s);

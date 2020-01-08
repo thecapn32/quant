@@ -158,7 +158,8 @@ struct q_conn {
     sl_entry(q_conn) node_rx_int; ///< For maintaining the internal RX queue.
     sl_entry(q_conn) node_rx_ext; ///< For maintaining the external RX queue.
 #ifndef NO_SERVER
-    sl_entry(q_conn) node_aq; ///< For maintaining the accept queue.
+    sl_entry(q_conn) node_aq;   ///< For maintaining the accept queue.
+    sl_entry(q_conn) node_embr; ///< For bound but unconnected connections.
 #endif
 #ifndef NO_MIGRATION
     struct cids_by_seq dcids_by_seq; ///< Destination CID hash by sequence.
@@ -305,6 +306,7 @@ struct q_conn {
 
 #ifndef NO_SERVER
 #define is_clnt(c) (c)->is_clnt
+extern struct q_conn_sl c_embr;
 #else
 #define is_clnt(c) 1
 #endif

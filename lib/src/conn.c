@@ -78,6 +78,10 @@ const char * const conn_state_str[] = {CONN_STATES};
 
 struct q_conn_sl c_ready = sl_head_initializer(c_ready);
 
+#ifndef NO_SERVER
+struct q_conn_sl c_embr = sl_head_initializer(c_embr);
+#endif
+
 
 #ifndef NO_SRT_MATCHING
 khash_t(conns_by_srt) conns_by_srt = {0};

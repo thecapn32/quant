@@ -401,9 +401,11 @@ q_bind(struct w_engine * const w, const uint16_t addr_idx, const uint16_t port)
     // bind socket and create new embryonic server connection
     struct q_conn * const c =
         new_conn(w, addr_idx, 0, 0, 0, 0, bswap16(port), 0);
-    if (likely(c))
+    if (likely(c)) {
         warn(INF, "bound %s socket to %s:%u", conn_type(c),
              w_ntop(&c->sock->ws_laddr, ip_tmp), port);
+        sl_insert_head(&c_embr, c, node_embr);
+    }
     return c;
 }
 
@@ -672,12 +674,10 @@ void q_close(struct q_conn * const c,
 #endif
 )
 {
-    if (c->scid)
-        warn(WRN,
-             "closing %s conn %s on port %u w/err %s0x%" PRIx64 "%s%s%s" NRM,
-             conn_type(c), cid_str(c->scid), bswap16(c->sock->ws_lport),
-             code ? RED : NRM, code, reason ? " (" : "", reason ? reason : "",
-             reason ? ")" : "");
+    warn(WRN, "closing %s conn %s on %s:%u w/err %s0x%" PRIx64 "%s%s%s" NRM,
+         conn_type(c), cid_str(c->scid), w_ntop(&c->sock->ws_laddr, ip_tmp),
+         bswap16(c->sock->ws_lport), code ? RED : NRM, code, reason ? " (" : "",
+         reason ? reason : "", reason ? ")" : "");
 
     c->err_code = (uint_t)code;
 #ifndef NO_ERR_REASONS
@@ -777,6 +777,10 @@ done:
     if (ped(c->w)->qlog)
         fflush(ped(c->w)->qlog);
 #endif
+#ifndef NO_SERVER
+    if (c->holds_sock && w_connected(c->sock) == false)
+        sl_remove(&c_embr, c, q_conn, node_embr);
+#endif
     free_conn(c);
 }
 
@@ -792,6 +796,12 @@ void q_cleanup(struct w_engine * const w)
 
 #ifndef NO_SRT_MATCHING
     kh_foreach_value(&conns_by_srt, c, { q_close(c, 0, 0); });
+#endif
+
+#ifndef NO_SERVER
+    struct q_conn * tmp;
+    sl_foreach_safe (c, &c_embr, node_embr, tmp)
+        q_close(c, 0, 0);
 #endif
 
     // stop the event loop

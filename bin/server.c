@@ -411,10 +411,10 @@ int main(int argc, char * argv[])
                         send_err(&d, 505);
                     ret = 1;
                 }
+                q_free(&q);
                 goto again;
             }
         }
-        q_free(&q);
     }
 
     q_cleanup(w);
