@@ -1586,7 +1586,6 @@ void enc_close_frame(struct q_conn_info * const ci,
 #endif
 
     encv(pos, end, err_reason_len);
-    // cppcheck-suppress knownConditionTrueFalse
     if (err_reason_len)
         encb(pos, end, (const uint8_t *)err_reason, err_reason_len);
 

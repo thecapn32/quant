@@ -1866,7 +1866,6 @@ struct q_conn * new_conn(struct w_engine * const w,
     timeout_init(&c->tx_w, TIMEOUT_ABS);
     timeout_setcb(&c->tx_w, tx, c);
 
-    // cppcheck-suppress constArgument
     if (likely(is_clnt(c) || c->holds_sock == false))
         update_conf(c, conf);
 

@@ -445,7 +445,6 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             warn(WRN, "\t" BLD "%s tp" NRM " (0x%04x w/len %u) = %s",
                  (tp & 0xff00) == 0xff00
                      ? YEL "private"
-                     // cppcheck-suppress duplicateExpressionTernary
                      : (tp == TP_QR ? RED "quantum-ready" : RED "unknown"),
                  tp, unknown_len,
                  hex2str(pos, unknown_len, (char[16]){""}, 16));
