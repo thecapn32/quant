@@ -395,6 +395,7 @@ bool q_read_stream(struct q_stream * const s,
 }
 
 
+#ifndef NO_SERVER
 struct q_conn *
 q_bind(struct w_engine * const w, const uint16_t addr_idx, const uint16_t port)
 {
@@ -408,6 +409,7 @@ q_bind(struct w_engine * const w, const uint16_t addr_idx, const uint16_t port)
     }
     return c;
 }
+#endif
 
 
 static void cancel_api_call(struct timeout * const api_alarm)
@@ -432,18 +434,10 @@ restart_api_alarm(struct w_engine * const w, const uint64_t nsec)
 }
 
 
-struct q_conn * q_accept(struct w_engine * const w
-#ifdef NO_SERVER
-                         __attribute__((unused))
-#endif
-                         ,
-                         const struct q_conn_conf * const conf
-#ifdef NO_SERVER
-                         __attribute__((unused))
-#endif
-)
-{
 #ifndef NO_SERVER
+struct q_conn * q_accept(struct w_engine * const w,
+                         const struct q_conn_conf * const conf)
+{
     if (sl_first(&accept_queue))
         goto accept;
 
@@ -475,10 +469,8 @@ accept:;
 
     update_conf(c, conf);
     return c;
-#else
-    return 0;
-#endif
 }
+#endif
 
 
 struct q_stream * q_rsv_stream(struct q_conn * const c, const bool bidi)
@@ -957,18 +949,12 @@ done:
 }
 
 
-bool q_is_new_serv_conn(const struct q_conn * const c
-#ifdef NO_SERVER
-                        __attribute__((unused))
-#endif
-)
-{
 #ifndef NO_SERVER
+bool q_is_new_serv_conn(const struct q_conn * const c)
+{
     return c->needs_accept;
-#else
-    return 0;
-#endif
 }
+#endif
 
 
 int q_conn_af(const struct q_conn * const c)
