@@ -418,7 +418,9 @@ static void cancel_api_call(struct timeout * const api_alarm)
     warn(DBG, "canceling API call");
 #endif
     timeout_del(api_alarm);
+#ifndef NO_SERVER
     maybe_api_return(q_accept, 0, 0);
+#endif
     maybe_api_return(q_ready, 0, 0);
 }
 
