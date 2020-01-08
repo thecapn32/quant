@@ -30,6 +30,10 @@
 #include <stdlib.h>
 #include <sys/param.h>
 
+#ifndef NDEBUG
+#include <stdio.h>
+#endif
+
 #include <quant/quant.h>
 
 #include "bitset.h"
@@ -312,7 +316,7 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
 }
 
 
-#ifdef NDEBUG
+#ifndef NDEBUG
 #define DEBUG_diet_insert diet_insert
 #define DEBUG_ensure ensure
 #else
@@ -346,7 +350,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
     // Packets sent before this time are deemed lost.
     const uint64_t lost_send_t = loop_now() - loss_del;
 
-#ifdef NDEBUG
+#ifndef NDEBUG
     struct diet lost = diet_initializer(lost);
 #endif
     uint_t lg_lost = UINT_T_MAX;
@@ -362,7 +366,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
                      conn_type(c), pkt_type_str(m->hdr.flags, &m->hdr.vers),
                      m->hdr.nr);
 
-        if (m->hdr.nr > pn->lg_acked)
+        if (unlikely(m->hdr.nr > pn->lg_acked))
             continue;
 
         // Mark packet as lost, or set time when it should be marked.
@@ -372,7 +376,6 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
             in_flight_lost |= m->in_flight;
             incr_out_lost;
             if (unlikely(lg_lost == UINT_T_MAX) || m->hdr.nr > lg_lost) {
-                // cppcheck-suppress unreadVariable
                 lg_lost = m->hdr.nr;
                 lg_lost_tx_t = m->t;
             }
@@ -392,7 +395,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
         }
     });
 
-#ifdef NDEBUG
+#ifndef NDEBUG
     int pos = 0;
     struct ival * i = 0;
     const uint32_t tmp_len = ped(c->w)->scratch_len;
@@ -643,7 +646,7 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
             warn(DBG, "%s %s pkt " FMT_PNR_OUT " was RTX'ed as " FMT_PNR_OUT,
                  conn_type(c), pkt_type_str(m->hdr.flags, &m->hdr.vers),
                  m->hdr.nr, m_rtx->hdr.nr);
-#ifdef NDEBUG
+#ifndef NDEBUG
             ensure(sl_next(m_rtx, rtx_next) == 0, "RTX chain corrupt");
 #endif
             if (m_rtx->acked == false) {
