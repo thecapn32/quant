@@ -36,11 +36,11 @@ The example HTTP/0.9 client and server use
 So you need to install some dependencies. On the Mac, the easiest way is via
 [Homebrew](http://brew.sh/), so install that first. Then, do
 
-    brew install cmake http-parser
+    brew install cmake http-parser pkg-config
 
 On Debian-based Linux systems, do
 
-    apt install libssl-dev libhttp-parser-dev libbsd-dev
+    apt install libssl-dev libhttp-parser-dev libbsd-dev pkgconf
 
 On Darwin, you **must** also install the Xcode command line tools first:
 
