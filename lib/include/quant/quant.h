@@ -72,7 +72,6 @@ struct q_conf {
 };
 
 
-#ifndef NO_QINFO
 struct q_conn_info {
     uint_t pkts_in_valid;
     uint_t pkts_in_invalid;
@@ -93,7 +92,6 @@ struct q_conn_info {
 
     uint_t frm_cnt[2][0x1d + 1]; // 0 = out (tx), 1 = in (rx)
 };
-#endif
 
 
 extern struct w_engine * __attribute__((nonnull(1)))
@@ -115,7 +113,6 @@ extern void __attribute__((nonnull(1))) q_close(struct q_conn * const c,
                                                 const uint64_t code,
                                                 const char * const reason);
 
-#ifndef NO_SERVER
 extern struct q_conn * __attribute__((nonnull))
 q_bind(struct w_engine * const w, const uint16_t addr_idx, const uint16_t port);
 
@@ -124,7 +121,6 @@ extern struct q_conn * q_accept(struct w_engine * const w,
 
 extern bool __attribute__((nonnull))
 q_is_new_serv_conn(const struct q_conn * const c);
-#endif
 
 extern bool __attribute__((nonnull))
 q_write(struct q_stream * const s, struct w_iov_sq * const q, const bool fin);
@@ -199,10 +195,8 @@ q_migrate(struct q_conn * const c,
           const struct sockaddr * const alt_peer);
 #endif
 
-#ifndef NO_QINFO
 extern void __attribute__((nonnull))
 q_info(struct q_conn * const c, struct q_conn_info * const ci);
-#endif
 
 extern int __attribute__((nonnull)) q_conn_af(const struct q_conn * const c);
 

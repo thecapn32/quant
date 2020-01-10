@@ -395,10 +395,23 @@ bool q_read_stream(struct q_stream * const s,
 }
 
 
-#ifndef NO_SERVER
-struct q_conn *
-q_bind(struct w_engine * const w, const uint16_t addr_idx, const uint16_t port)
+struct q_conn * q_bind(struct w_engine * const w
+#ifdef NO_SERVER
+                       __attribute__((unused))
+#endif
+                       ,
+                       const uint16_t addr_idx
+#ifdef NO_SERVER
+                       __attribute__((unused))
+#endif
+                       ,
+                       const uint16_t port
+#ifdef NO_SERVER
+                       __attribute__((unused))
+#endif
+)
 {
+#ifndef NO_SERVER
     // bind socket and create new embryonic server connection
     struct q_conn * const c =
         new_conn(w, addr_idx, 0, 0, 0, 0, bswap16(port), 0);
@@ -408,8 +421,10 @@ q_bind(struct w_engine * const w, const uint16_t addr_idx, const uint16_t port)
         sl_insert_head(&c_embr, c, node_embr);
     }
     return c;
-}
+#else
+    return 0;
 #endif
+}
 
 
 static void cancel_api_call(struct timeout * const api_alarm)
@@ -436,10 +451,18 @@ restart_api_alarm(struct w_engine * const w, const uint64_t nsec)
 }
 
 
-#ifndef NO_SERVER
-struct q_conn * q_accept(struct w_engine * const w,
-                         const struct q_conn_conf * const conf)
+struct q_conn * q_accept(struct w_engine * const w
+#ifdef NO_SERVER
+                         __attribute__((unused))
+#endif
+                         ,
+                         const struct q_conn_conf * const conf
+#ifdef NO_SERVER
+                         __attribute__((unused))
+#endif
+)
 {
+#ifndef NO_SERVER
     if (sl_first(&accept_queue))
         goto accept;
 
@@ -471,8 +494,10 @@ accept:;
 
     update_conf(c, conf);
     return c;
-}
+#else
+    return 0;
 #endif
+}
 
 
 struct q_stream * q_rsv_stream(struct q_conn * const c, const bool bidi)
@@ -951,12 +976,18 @@ done:
 }
 
 
-#ifndef NO_SERVER
-bool q_is_new_serv_conn(const struct q_conn * const c)
-{
-    return c->needs_accept;
-}
+bool q_is_new_serv_conn(const struct q_conn * const c
+#ifdef NO_SERVER
+                        __attribute__((unused))
 #endif
+)
+{
+#ifndef NO_SERVER
+    return c->needs_accept;
+#else
+    return 0;
+#endif
+}
 
 
 int q_conn_af(const struct q_conn * const c)
@@ -1051,13 +1082,22 @@ void q_migrate(struct q_conn * const c,
 #endif
 
 
-#ifndef NO_QINFO
-void q_info(struct q_conn * const c, struct q_conn_info * const ci)
+void q_info(struct q_conn * const c
+#ifdef NO_SERVER
+            __attribute__((unused))
+#endif
+            ,
+            struct q_conn_info * const ci
+#ifdef NO_SERVER
+            __attribute__((unused))
+#endif
+)
 {
+#ifndef NO_SERVER
     conn_info_populate(c);
     memcpy(ci, &c->i, sizeof(*ci));
-}
 #endif
+}
 
 
 char * hex2str(const uint8_t * const src,
