@@ -324,6 +324,16 @@ rtx_pkt(struct w_iov * const v, struct pkt_meta * const m)
 }
 
 
+static void do_w_tx(struct w_sock * const ws, struct w_iov_sq * const q) {
+#ifndef FUZZING
+    w_tx(ws, q);
+    do
+        w_nic_tx(ws->w);
+    while (w_tx_pending(q));
+#endif
+}
+
+
 static void __attribute__((nonnull)) tx_vneg_resp(struct w_sock * const ws,
                                                   const struct w_iov * const v,
                                                   struct pkt_meta * const m)
@@ -354,14 +364,8 @@ static void __attribute__((nonnull)) tx_vneg_resp(struct w_sock * const ws,
     struct cid gid = {.seq = 0};
     mk_rand_cid(&gid, CID_LEN_MAX + 1, false); // random len
     qlog_transport(pkt_tx, "default", ped(ws->w), xv, mx, &gid);
-
-#ifndef FUZZING
-    w_tx(ws, &q);
-    while (w_tx_pending(&q))
-        w_nic_tx(ws->w);
-#endif
-
-    q_free(&q);
+    do_w_tx(ws, &q);
+    w_free(&q);
 }
 
 
@@ -375,14 +379,7 @@ static void __attribute__((nonnull)) do_tx_txq(struct q_conn * const c,
 
     if (w_iov_sq_cnt(q) > 1 && unlikely(is_lh(*sq_first(q)->buf)))
         coalesce(q, c->rec.max_pkt_size);
-#ifndef FUZZING
-    // transmit encrypted/protected packets
-    w_tx(ws, q);
-    do
-        w_nic_tx(c->w);
-    while (w_tx_pending(q));
-#endif
-
+    do_w_tx(ws, q);
     // txq was allocated straight from warpcore, no metadata needs to be freed
     w_free(q);
 }

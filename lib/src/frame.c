@@ -1125,8 +1125,7 @@ bool dec_frames(struct q_conn * const c,
 #endif
 
     while (likely(pos < end)) {
-        uint8_t type;
-        dec1_chk(&type, &pos, end, c, 0);
+        uint8_t type = *(pos++); // dec1_chk not needed here, pos is < len
 
         // special-case for optimized parsing of padding ranges
         if (type == FRM_PAD) {
