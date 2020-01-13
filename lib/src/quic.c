@@ -1083,17 +1083,17 @@ void q_migrate(struct q_conn * const c,
 
 
 void q_info(struct q_conn * const c
-#ifdef NO_SERVER
+#ifdef NO_QINFO
             __attribute__((unused))
 #endif
             ,
             struct q_conn_info * const ci
-#ifdef NO_SERVER
+#ifdef NO_QINFO
             __attribute__((unused))
 #endif
 )
 {
-#ifndef NO_SERVER
+#ifndef NO_QINFO
     conn_info_populate(c);
     memcpy(ci, &c->i, sizeof(*ci));
 #endif
