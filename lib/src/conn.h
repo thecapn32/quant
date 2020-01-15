@@ -297,10 +297,7 @@ struct q_conn {
     uint8_t tok[MAX_TOK_LEN]; // some stacks send ungodly large tokens
 
     uint32_t tx_limit;
-
-#if !HAVE_64BIT
-    uint8_t _unused2[4];
-#endif
+    uint_t pmtud_pkt_nr;
 };
 
 

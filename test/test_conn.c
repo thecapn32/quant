@@ -75,9 +75,9 @@ int main(int argc
     q_bind(w, 0, 55555);
 
     // connect to server
-    const struct sockaddr_in sip = {.sin_family = AF_INET,
-                                    .sin_addr.s_addr = inet_addr("127.0.0.1"),
-                                    .sin_port = bswap16(55555)};
+    struct sockaddr_in6 sip = {.sin6_family = AF_INET6,
+                               .sin6_port = bswap16(55555)};
+    inet_pton(AF_INET6, "::1", &sip.sin6_addr);
     struct q_conn * const cc = q_connect(w, (const struct sockaddr *)&sip,
                                          "localhost", 0, 0, true, 0, 0);
     ensure(cc, "is zero");
@@ -91,7 +91,7 @@ int main(int argc
 
     // allocate buffers to transmit a packet
     struct w_iov_sq o = w_iov_sq_initializer(o);
-    q_alloc(w, &o, AF_INET, 65536);
+    q_alloc(w, &o, cc, AF_INET, 65536);
     struct w_iov * const ov = sq_first(&o);
 
     // send the data

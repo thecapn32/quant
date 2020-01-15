@@ -455,6 +455,8 @@ static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
 #endif
         c->tx_limit = have_keys(c, pn_hshk) ? 1 : 2;
         timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
+        if (pn)
+            detect_lost_pkts(pn, false);
 
     } else {
 #ifdef DEBUG_TIMERS
@@ -633,6 +635,14 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
     pm_by_nr_del(&pn->sent_pkts, m);
 
     // rest of function is not from pseudo code
+
+    if (unlikely(c->pmtud_pkt_nr != UINT_T_MAX &&
+                 ((m->hdr.nr != UINT_T_MAX && m->hdr.type == SH) ||
+                  (m->hdr.nr == c->pmtud_pkt_nr && m->hdr.type == LH_HSHK)))) {
+        c->rec.max_pkt_size = w_max_udp_payload(c->sock);
+        warn(NTE, "PMTU %u validated", c->rec.max_pkt_size);
+        c->pmtud_pkt_nr = UINT_T_MAX;
+    }
 
     // stop ACK'ing packets contained in the ACK frame of this packet
     if (has_frm(m->frms, FRM_ACK))

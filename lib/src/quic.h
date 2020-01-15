@@ -51,8 +51,10 @@
 #include "tls.h"
 #endif
 
+struct q_conn; // IWYU pragma: no_forward_declare q_conn
 
-// #define DEBUG_EXTRA   ///< Set to log various extra details.
+
+// #define DEBUG_EXTRA ///< Set to log various extra details.
 // #define DEBUG_STREAMS ///< Set to log stream scheduling details.
 // #define DEBUG_TIMERS  ///< Set to log timer details.
 // #define DEBUG_PROT    ///< Set to log packet protection/encryption details.
@@ -244,11 +246,13 @@ extern const uint32_t ok_vers[];
 extern const uint8_t ok_vers_len;
 
 
-extern void __attribute__((nonnull)) alloc_off(struct w_engine * const w,
-                                               struct w_iov_sq * const q,
-                                               const int af,
-                                               const uint32_t len,
-                                               const uint16_t off);
+extern void __attribute__((nonnull(1, 2)))
+alloc_off(struct w_engine * const w,
+          struct w_iov_sq * const q,
+          const struct q_conn * const c,
+          const int af,
+          const uint32_t len,
+          const uint16_t off);
 
 extern void __attribute__((nonnull))
 free_iov(struct w_iov * const v, struct pkt_meta * const m);

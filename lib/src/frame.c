@@ -347,6 +347,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
 #endif
 
         // check if we have delivered a FIN, and act on it if we did
+        // cppcheck-suppress nullPointer
         struct w_iov * const last = sq_last(&m->strm->in, w_iov, next);
         if (last) {
             const struct pkt_meta * const m_last = &meta(last);
@@ -1047,6 +1048,7 @@ dec_retire_cid_frame(const uint8_t ** pos,
     if (unlikely(scid == 0))
         err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_RTR,
                          "no cid seq %" PRIu, which.seq);
+    // cppcheck-suppress nullPointerRedundantCheck
     else if (c->scid->seq == scid->seq) {
         struct cid * const next_scid =
             splay_next(cids_by_seq, &c->scids_by_seq, scid);
@@ -1506,8 +1508,8 @@ void calc_lens_of_stream_or_crypto_frame(const struct pkt_meta * const m,
         *hlen += varint_size((uint_t)s->id);
     if (likely(s->out_data || !enc_strm))
         *hlen += varint_size(s->out_data);
-    *dlen = likely(enc_strm) &&
-                    strm_data_len == MAX_PKT_LEN - AEAD_LEN - DATA_OFFSET
+    *dlen = likely(enc_strm) && strm_data_len == s->c->rec.max_pkt_size -
+                                                     AEAD_LEN - DATA_OFFSET
                 ? 0
                 : strm_data_len;
     if (*dlen)

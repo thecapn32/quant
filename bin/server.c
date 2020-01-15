@@ -174,7 +174,7 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
     const uint32_t n = (uint32_t)strtoul(&path[2], 0, 10);
     if (n) {
         struct w_iov_sq out = w_iov_sq_initializer(out);
-        q_alloc(d->w, &out, d->af, n);
+        q_alloc(d->w, &out, d->c, d->af, n);
         // check whether we managed to allow enough buffers
         if (w_iov_sq_len(&out) != n) {
             warn(ERR, "could only allocate %" PRIu "/%u bytes of buffer",

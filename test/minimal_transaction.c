@@ -152,7 +152,7 @@ void quic_transaction(const char * const req, const size_t req_len)
 #endif
 
         struct w_iov_sq o = w_iov_sq_initializer(o);
-        q_alloc(w, &o, peer.ss_family, 512);
+        q_alloc(w, &o, 0, peer.ss_family, 512);
         struct w_iov * const v = sq_first(&o);
 
         const float voltage =

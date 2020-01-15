@@ -162,8 +162,9 @@ void log_pkt(const char * const dir,
 static bool __attribute__((const))
 can_coalesce_pkt_types(const uint8_t a, const uint8_t b)
 {
-    return (a == LH_INIT && (b == LH_0RTT || b == LH_HSHK)) ||
-           (a == LH_HSHK && b == SH) || (a == LH_0RTT && b == LH_HSHK);
+    return (a == LH_INIT && (b == LH_0RTT || b == LH_HSHK || b == SH)) ||
+           (a == LH_HSHK && (b == LH_HSHK || b == SH)) ||
+           (a == LH_0RTT && b == LH_HSHK);
 }
 
 
@@ -180,16 +181,24 @@ void coalesce(struct w_iov_sq * const q, const uint16_t max_pkt_size)
                 can_coalesce_pkt_types(pkt_type(*v->buf),
                                        pkt_type(*next->buf))) {
                 // we can coalesce
-                warn(DBG, "coalescing %u-byte %s pkt behind %u-byte %s pkt",
-                     next->len, pkt_type_str(*next->buf, next->buf + 1), v->len,
-                     pkt_type_str(*v->buf, v->buf + 1));
+                warn(
+                    DBG,
+                    "coalescing %u-byte %s pkt behind %u-byte %s pkt, limit %u",
+                    next->len, pkt_type_str(*next->buf, next->buf + 1), v->len,
+                    pkt_type_str(*v->buf, v->buf + 1), max_pkt_size);
                 memcpy(v->buf + v->len, next->buf, next->len);
                 v->len += next->len;
                 sq_remove_after(q, prev, next);
                 sq_next(next, next) = 0; // must unlink
                 w_free_iov(next);
-            } else
+            } else {
+                warn(ERR,
+                     "CANNOT coalesce %u-byte %s pkt behind %u-byte %s pkt, "
+                     "limit %u",
+                     next->len, pkt_type_str(*next->buf, next->buf + 1), v->len,
+                     pkt_type_str(*v->buf, v->buf + 1), max_pkt_size);
                 prev = next;
+            }
             next = next_next;
         }
         v = sq_next(v, next);
@@ -329,6 +338,7 @@ bool enc_pkt(struct q_stream * const s,
              const bool rtx,
              const bool enc_data,
              const bool tx_ack_eliciting,
+             const bool pmtud,
              struct w_iov * const v,
              struct pkt_meta * const m)
 {
@@ -344,7 +354,7 @@ bool enc_pkt(struct q_stream * const s,
     void * const ci = 0;
 #endif
 
-    const epoch_t epoch = strm_epoch(s);
+    const epoch_t epoch = unlikely(pmtud) ? ep_hshk : strm_epoch(s);
     struct pn_space * const pn = m->pn = pn_for_epoch(c, epoch);
 
     m->txed = true;
@@ -457,6 +467,7 @@ bool enc_pkt(struct q_stream * const s,
     log_pkt("TX", v, &v->saddr, m->hdr.type == LH_RTRY ? &c->odcid : 0, c->tok,
             c->tok_len);
 
+#ifndef NDEBUG
     // sanity check
     if (unlikely(m->hdr.hdr_len >=
                  DATA_OFFSET + (is_lh(m->hdr.flags) ? c->tok_len + 16 : 0))) {
@@ -464,9 +475,16 @@ bool enc_pkt(struct q_stream * const s,
              DATA_OFFSET + (is_lh(m->hdr.flags) ? c->tok_len + 16 : 0));
         return false;
     }
+#endif
 
     if (unlikely(m->hdr.type == LH_RTRY))
         goto tx;
+
+    if (unlikely(pmtud)) {
+        enc_ping_frame(ci, &pos, end, m);
+        enc_padding_frame(ci, &pos, end, m, (uint16_t)(end - pos - AEAD_LEN));
+        goto tx;
+    }
 
     if (needs_ack(pn) != no_ack) {
         // FIXME: 8 is an arbitrary value
@@ -504,11 +522,12 @@ bool enc_pkt(struct q_stream * const s,
         enc_stream_or_crypto_frame(&pos, end, m, v, s, dlen);
     }
 
-    // TODO: include more frames when MAX_PKT_LEN < max_pkt_len TP
-    if (unlikely((pos - v->buf) < MAX_PKT_LEN - AEAD_LEN && (enc_data || rtx) &&
+    // TODO: include more frames when c->rec.max_pkt_size < max_pkt_len TP
+    if (unlikely((pos - v->buf) < c->rec.max_pkt_size - AEAD_LEN &&
+                 (enc_data || rtx) &&
                  (epoch == ep_data || (!is_clnt(c) && epoch == ep_0rtt))))
         // we can try to stick some more frames in after the stream frame
-        enc_other_frames(ci, &pos, v->buf + MAX_PKT_LEN - AEAD_LEN, m);
+        enc_other_frames(ci, &pos, v->buf + c->rec.max_pkt_size - AEAD_LEN, m);
 
     if (is_clnt(c) && enc_data) {
         if (unlikely(c->try_0rtt == false && m->hdr.type == LH_INIT)) {

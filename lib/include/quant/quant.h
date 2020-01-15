@@ -138,10 +138,12 @@ extern void __attribute__((nonnull)) q_free_stream(struct q_stream * const s);
 extern void __attribute__((nonnull))
 q_stream_get_written(struct q_stream * const s, struct w_iov_sq * const q);
 
-extern void __attribute__((nonnull)) q_alloc(struct w_engine * const w,
-                                             struct w_iov_sq * const q,
-                                             const int af,
-                                             const size_t len);
+extern void __attribute__((nonnull(1, 2)))
+q_alloc(struct w_engine * const w,
+        struct w_iov_sq * const q,
+        const struct q_conn * const c,
+        const int af,
+        const size_t len);
 
 extern void __attribute__((nonnull)) q_free(struct w_iov_sq * const q);
 
@@ -150,11 +152,13 @@ q_cid(struct q_conn * const c, char * const buf, const size_t buf_len);
 
 extern uint_t __attribute__((nonnull)) q_sid(const struct q_stream * const s);
 
-extern void __attribute__((nonnull)) q_chunk_str(struct w_engine * const w,
-                                                 const int af,
-                                                 const char * const str,
-                                                 const size_t len,
-                                                 struct w_iov_sq * o);
+extern void __attribute__((nonnull(1, 4, 6)))
+q_chunk_str(struct w_engine * const w,
+            const struct q_conn * const c,
+            const int af,
+            const char * const str,
+            const size_t len,
+            struct w_iov_sq * o);
 
 extern void __attribute__((nonnull)) q_write_str(struct w_engine * const w,
                                                  struct q_stream * const s,

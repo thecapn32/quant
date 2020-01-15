@@ -324,7 +324,8 @@ rtx_pkt(struct w_iov * const v, struct pkt_meta * const m)
 }
 
 
-static void do_w_tx(struct w_sock * const ws, struct w_iov_sq * const q) {
+static void do_w_tx(struct w_sock * const ws, struct w_iov_sq * const q)
+{
 #ifndef FUZZING
     w_tx(ws, q);
     do
@@ -377,10 +378,53 @@ static void __attribute__((nonnull)) do_tx_txq(struct q_conn * const c,
     c->i.pkts_out += w_iov_sq_cnt(q);
 #endif
 
+    if (unlikely(c->rec.max_pkt_size == MIN_INI_LEN)) {
+        uint16_t coal_len = 0;
+        struct w_iov * prev = 0;
+        struct w_iov * sh;
+        sq_foreach (sh, q, next) {
+            // FIXME: this may not handle all coalescing cases
+            coal_len += sh->len;
+            if (is_lh(*sh->buf) == false)
+                break;
+            prev = sh;
+        }
+
+        if (sh) {
+            struct pkt_meta * pmtud_m = 0;
+            struct w_iov * const pmtud_v =
+                alloc_iov(ws->w, ws->ws_af, w_max_udp_payload(ws) - coal_len, 0,
+                          &pmtud_m);
+
+            c->rec.max_pkt_size = 0;
+
+            // cppcheck-suppress nullPointer
+            struct w_iov * const prev_last = sq_last(q, w_iov, next);
+            enc_pkt(c->cstrms[ep_hshk], false, false, false, true, pmtud_v,
+                    pmtud_m);
+            c->pmtud_pkt_nr = pmtud_m->hdr.nr;
+            warn(NTE, "testing PMTU %u with %s pkt %" PRIu " %u",
+                 w_max_udp_payload(ws),
+                 pkt_type_str(pmtud_m->hdr.flags, &pmtud_m->hdr.vers),
+                 c->pmtud_pkt_nr, coal_len);
+
+            // enc_pkt has enqueued the encrypted copy of pmtud_v at tail
+            // cppcheck-suppress nullPointer
+            struct w_iov * const pmtud_xv = sq_last(q, w_iov, next);
+            sq_remove_after(q, prev_last, next);
+            if (prev)
+                sq_insert_after(q, prev, pmtud_xv, next);
+            else
+                sq_insert_head(q, pmtud_xv, next);
+        }
+    }
+
     if (w_iov_sq_cnt(q) > 1 && unlikely(is_lh(*sq_first(q)->buf)))
-        coalesce(q, c->rec.max_pkt_size);
+        coalesce(q, unlikely(c->rec.max_pkt_size == 0) ? w_max_udp_payload(ws)
+                                                       : c->rec.max_pkt_size);
     do_w_tx(ws, q);
-    // txq was allocated straight from warpcore, no metadata needs to be freed
+
+    // (rest of) txq was allocated from warpcore, no metadata to be freed
     w_free(q);
 }
 
@@ -421,7 +465,7 @@ void do_conn_fc(struct q_conn * const c, const uint16_t len)
     if (unlikely(c->state == conn_clsg || c->state == conn_drng))
         return;
 
-    if (len && c->out_data_str + len + MAX_PKT_LEN > c->tp_out.max_data)
+    if (len && c->out_data_str + len + c->rec.max_pkt_size > c->tp_out.max_data)
         c->blocked = true;
 
     // check if we need to do connection-level flow control
@@ -535,7 +579,8 @@ static bool __attribute__((nonnull)) tx_stream(struct q_stream * const s)
         if (unlikely(do_rtx))
             rtx_pkt(v, m);
 
-        if (unlikely(enc_pkt(s, do_rtx, true, c->tx_limit > 0, v, m) == false))
+        if (unlikely(enc_pkt(s, do_rtx, true, c->tx_limit > 0, false, v, m) ==
+                     false))
             continue;
         encoded++;
 
@@ -566,7 +611,7 @@ tx_ack(struct q_conn * const c, const epoch_t e, const bool tx_ack_eliciting)
 
     struct pkt_meta * m;
     struct w_iov * const v = alloc_iov(c->w, q_conn_af(c), 0, 0, &m);
-    return enc_pkt(c->cstrms[e], false, false, tx_ack_eliciting, v, m);
+    return enc_pkt(c->cstrms[e], false, false, tx_ack_eliciting, false, v, m);
 }
 
 
@@ -776,7 +821,7 @@ static void __attribute__((nonnull))
 rx_crypto(struct q_conn * const c, const struct pkt_meta * const m_cur)
 {
     struct q_stream * const s = c->cstrms[epoch_in(c)];
-    while (!sq_empty(&s->in)) {
+    while (unlikely(!sq_empty(&s->in))) {
         // take the data out of the crypto stream
         struct w_iov * const v = sq_first(&s->in);
         sq_remove_head(&s->in, next);
@@ -799,13 +844,11 @@ rx_crypto(struct q_conn * const c, const struct pkt_meta * const m_cur)
             if (is_clnt(c))
                 maybe_api_return(q_connect, c, 0);
 #ifndef NO_SERVER
-            else {
-                if (c->needs_accept == false) {
-                    sl_insert_head(&accept_queue, c, node_aq);
-                    c->needs_accept = true;
-                }
-                maybe_api_return(q_accept, 0, 0);
+            else if (c->needs_accept == false) {
+                sl_insert_head(&accept_queue, c, node_aq);
+                c->needs_accept = true;
             }
+
 #endif
         }
     }
@@ -1570,7 +1613,7 @@ void rx(struct w_sock * const ws)
             free_conn(c);
         else
 #endif
-            if (c->have_new_data) {
+            if (c->have_new_data && c->pmtud_pkt_nr == UINT_T_MAX) {
             if (!c->in_c_ready) {
                 sl_insert_head(&c_ready, c, node_rx_ext);
                 c->in_c_ready = true;
@@ -1784,6 +1827,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     struct q_conn * const c = calloc(1, sizeof(*c));
     ensure(c, "could not calloc");
 
+    c->pmtud_pkt_nr = UINT_T_MAX;
     c->w = w;
 #ifndef NO_SERVER
     c->is_clnt = peer_name != 0;

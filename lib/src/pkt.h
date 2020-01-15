@@ -40,7 +40,6 @@ struct q_stream; // IWYU pragma: no_forward_declare q_stream
                  // IWYU pragma: no_include "stream.h"
 
 
-#define MAX_PKT_LEN 1252
 #define MIN_INI_LEN 1200
 #define MIN_SRT_PKT_LEN 5 + SRT_LEN ///< min SRT length, incl. the fixed bits
 
@@ -184,6 +183,7 @@ extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
                                              const bool rtx,
                                              const bool enc_data,
                                              const bool tx_ack_eliciting,
+                                             const bool pmtud,
                                              struct w_iov * const v,
                                              struct pkt_meta * const m);
 

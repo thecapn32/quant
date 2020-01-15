@@ -61,7 +61,7 @@ static void BM_quic_encryption(benchmark::State & state)
     struct pkt_meta * m;
     struct w_iov * v = alloc_iov(w, AF_INET, len, 0, &m);
     struct pkt_meta * mx;
-    struct w_iov * x = alloc_iov(w, AF_INET, MAX_PKT_LEN, 0, &mx);
+    struct w_iov * x = alloc_iov(w, AF_INET, 0, 1500, &mx);
 
     rand_bytes(v->buf, len);
     m->hdr.type = LH_INIT;
@@ -81,7 +81,7 @@ static void BM_quic_encryption(benchmark::State & state)
 
 BENCHMARK(BM_quic_encryption)
     ->RangeMultiplier(2)
-    ->Ranges({{16, MAX_PKT_LEN}, {0, 1}})
+    ->Ranges({{16, 1500}, {0, 1}})
     // ->MinTime(3)
     // ->UseRealTime()
     ;

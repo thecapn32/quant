@@ -31,17 +31,21 @@
 
 #include <quant/quant.h>
 
+#include "conn.h"
 #include "stream.h"
+
+struct q_conn; // IWYU pragma: no_forward_declare q_conn
 
 
 void q_chunk_str(struct w_engine * const w,
+                 const struct q_conn * const c,
                  const int af,
                  const char * const str,
                  const size_t len,
                  struct w_iov_sq * o)
 {
     // allocate tail queue
-    q_alloc(w, o, af, len);
+    q_alloc(w, o, c, af, len);
 
     // chunk up string
     const char * i = str;
@@ -61,7 +65,7 @@ void q_write_str(struct w_engine * const w,
 {
     // allocate tail queue
     struct w_iov_sq o = w_iov_sq_initializer(o);
-    q_chunk_str(w, q_conn_af(s->c), str, len, &o);
+    q_chunk_str(w, s->c, q_conn_af(s->c), str, len, &o);
 
     // write it and free tail queue
     q_write(s, &o, fin);
@@ -77,7 +81,7 @@ void q_write_file(struct w_engine * const w,
 {
     // allocate tail queue
     struct w_iov_sq o = w_iov_sq_initializer(o);
-    q_alloc(w, &o, q_conn_af(s->c), len);
+    q_alloc(w, &o, s->c, q_conn_af(s->c), len);
 
     struct w_iov * v;
     sq_foreach (v, &o, next) {

@@ -224,6 +224,11 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
         return 0;
     }
 
+    // do we have a connection open to this peer?
+    khiter_t k = kh_get(conn_cache, cc, conn_cache_key(peer->ai_addr));
+    struct conn_cache_entry * cce =
+        (k == kh_end(cc) ? 0 : kh_val(cc, k)); // NOLINT
+
     // add to stream list
     struct stream_entry * se = calloc(1, sizeof(*se));
     ensure(se, "calloc failed");
@@ -232,7 +237,7 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
 
     sq_init(&se->req);
     if (do_h3) {
-        q_alloc(w, &se->req, peer->ai_family, 1024);
+        q_alloc(w, &se->req, se->c, peer->ai_family, 1024);
         struct w_iov * const v = sq_first(&se->req);
         const uint16_t len =
             (uint16_t)(h3zero_create_request_header_frame(
@@ -256,14 +261,10 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
         char req_str[MAXPATHLEN + 6];
         const int req_str_len =
             snprintf(req_str, sizeof(req_str), "GET %s\r\n", path);
-        q_chunk_str(w, peer->ai_family, req_str, (uint32_t)req_str_len,
-                    &se->req);
+        q_chunk_str(w, cce ? cce->c : 0, peer->ai_family, req_str,
+                    (uint32_t)req_str_len, &se->req);
     }
 
-    // do we have a connection open to this peer?
-    khiter_t k = kh_get(conn_cache, cc, conn_cache_key(peer->ai_addr));
-    struct conn_cache_entry * cce =
-        (k == kh_end(cc) ? 0 : kh_val(cc, k)); // NOLINT
     const bool opened_new = cce == 0;
     if (cce == 0) {
         clock_gettime(CLOCK_MONOTONIC, &se->req_t);
@@ -575,6 +576,7 @@ int main(int argc, char * argv[])
             struct w_iov * v;
             uint32_t n = 0;
             sq_foreach (v, &se->rep, next) {
+                // cppcheck-suppress nullPointer
                 const bool is_last = v == sq_last(&se->rep, w_iov, next);
                 if (w_iov_sq_cnt(&se->rep) > 100 || reps > 1)
                     // don't print large responses, or repeated ones

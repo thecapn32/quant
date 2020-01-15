@@ -95,11 +95,13 @@ int corpus_pkt_dir, corpus_frm_dir;
 
 void alloc_off(struct w_engine * const w,
                struct w_iov_sq * const q,
+               const struct q_conn * const c,
                const int af,
                const uint32_t len,
                const uint16_t off)
 {
-    w_alloc_len(w, af, q, len, MAX_PKT_LEN - AEAD_LEN - off, off);
+    w_alloc_len(w, af, q, len,
+                (c ? w_max_udp_payload(c->sock) : 1252) - AEAD_LEN - off, off);
     struct w_iov * v;
     sq_foreach (v, q, next) {
         struct pkt_meta * const m = &meta(v);
@@ -178,11 +180,12 @@ struct w_iov * dup_iov(const struct w_iov * const v,
 
 void q_alloc(struct w_engine * const w,
              struct w_iov_sq * const q,
+             const struct q_conn * const c,
              const int af,
              const size_t len)
 {
     ensure(len <= UINT32_MAX, "len %zu too long", len);
-    alloc_off(w, q, af, (uint32_t)len, DATA_OFFSET);
+    alloc_off(w, q, c, af, (uint32_t)len, DATA_OFFSET);
 }
 
 
@@ -199,6 +202,7 @@ void q_free(struct w_iov_sq * const q)
 
 static void __attribute__((nonnull)) mark_fin(struct w_iov_sq * const q)
 {
+    // cppcheck-suppress nullPointer
     struct w_iov * const last = sq_last(q, w_iov, next);
     ensure(last, "got last buffer");
     meta(last).is_fin = true;
@@ -313,7 +317,7 @@ bool q_write(struct q_stream * const s,
     // add to stream
     if (fin) {
         if (sq_empty(q))
-            alloc_off(c->w, q, q_conn_af(s->c), 1, DATA_OFFSET);
+            alloc_off(c->w, q, s->c, q_conn_af(s->c), 1, DATA_OFFSET);
         mark_fin(q);
         // strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
     }
@@ -377,6 +381,7 @@ bool q_read_stream(struct q_stream * const s,
     if (sq_empty(&s->in))
         return false;
 
+    // cppcheck-suppress nullPointer
     struct w_iov * const last = sq_last(&s->in, w_iov, next);
     const struct pkt_meta * const m_last = &meta(last);
 
@@ -957,9 +962,12 @@ bool q_ready(struct w_engine * const w,
         c->have_new_data = c->in_c_ready = false;
 #if !defined(NDEBUG) && defined(DEBUG_EXTRA)
         char * op = "rx";
+#ifndef NO_SERVER
         if (c->needs_accept)
             op = "accept";
-        else if (c->state == conn_clsd)
+        else
+#endif
+            if (c->state == conn_clsd)
             op = "close";
         warn(WRN, "%s conn %s ready to %s", conn_type(c), cid_str(c->scid), op);
     } else {
