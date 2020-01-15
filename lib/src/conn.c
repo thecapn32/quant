@@ -378,6 +378,9 @@ static void __attribute__((nonnull)) do_tx_txq(struct q_conn * const c,
     c->i.pkts_out += w_iov_sq_cnt(q);
 #endif
 
+    const uint16_t pmtu =
+        MIN(w_max_udp_payload(ws), (uint16_t)c->tp_out.max_pkt);
+
     if (unlikely(c->rec.max_pkt_size == MIN_INI_LEN)) {
         uint16_t coal_len = 0;
         struct w_iov * prev = 0;
@@ -393,8 +396,7 @@ static void __attribute__((nonnull)) do_tx_txq(struct q_conn * const c,
         if (sh) {
             struct pkt_meta * pmtud_m = 0;
             struct w_iov * const pmtud_v =
-                alloc_iov(ws->w, ws->ws_af, w_max_udp_payload(ws) - coal_len, 0,
-                          &pmtud_m);
+                alloc_iov(ws->w, ws->ws_af, pmtu - coal_len, 0, &pmtud_m);
 
             c->rec.max_pkt_size = 0;
 
@@ -403,8 +405,7 @@ static void __attribute__((nonnull)) do_tx_txq(struct q_conn * const c,
             enc_pkt(c->cstrms[ep_hshk], false, false, false, true, pmtud_v,
                     pmtud_m);
             c->pmtud_pkt_nr = pmtud_m->hdr.nr;
-            warn(NTE, "testing PMTU %u with %s pkt %" PRIu " %u",
-                 w_max_udp_payload(ws),
+            warn(NTE, "testing PMTU %u with %s pkt %" PRIu " %u", pmtu,
                  pkt_type_str(pmtud_m->hdr.flags, &pmtud_m->hdr.vers),
                  c->pmtud_pkt_nr, coal_len);
 
@@ -420,7 +421,7 @@ static void __attribute__((nonnull)) do_tx_txq(struct q_conn * const c,
     }
 
     if (w_iov_sq_cnt(q) > 1 && unlikely(is_lh(*sq_first(q)->buf)))
-        coalesce(q, unlikely(c->rec.max_pkt_size == 0) ? w_max_udp_payload(ws)
+        coalesce(q, unlikely(c->rec.max_pkt_size == 0) ? pmtu
                                                        : c->rec.max_pkt_size);
     do_w_tx(ws, q);
 
