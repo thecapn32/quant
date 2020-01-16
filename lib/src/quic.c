@@ -101,7 +101,9 @@ void alloc_off(struct w_engine * const w,
                const uint16_t off)
 {
     w_alloc_len(w, af, q, len,
-                (c ? w_max_udp_payload(c->sock) : 1252) - AEAD_LEN - off, off);
+                (c && c->rec.max_pkt_size ? c->rec.max_pkt_size : 1252) -
+                    AEAD_LEN - off,
+                off);
     struct w_iov * v;
     sq_foreach (v, q, next) {
         struct pkt_meta * const m = &meta(v);

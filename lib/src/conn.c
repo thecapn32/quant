@@ -406,9 +406,9 @@ static void __attribute__((nonnull)) do_tx_txq(struct q_conn * const c,
             enc_pkt(c->cstrms[ep_hshk], false, false, false, true, pmtud_v,
                     pmtud_m);
             c->pmtud_pkt_nr = pmtud_m->hdr.nr;
-            warn(NTE, "testing PMTU %u with %s pkt %" PRIu " %u", pmtu,
+            warn(NTE, "testing PMTU %u with %s pkt %" PRIu, pmtu,
                  pkt_type_str(pmtud_m->hdr.flags, &pmtud_m->hdr.vers),
-                 c->pmtud_pkt_nr, coal_len);
+                 c->pmtud_pkt_nr);
 
             // enc_pkt has enqueued the encrypted copy of pmtud_v at tail
             // cppcheck-suppress nullPointer
