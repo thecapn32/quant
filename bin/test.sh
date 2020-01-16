@@ -13,8 +13,8 @@ addr=localhost
 port=4433
 path=/40000 # '/40000?v=1.123'
 dir=/Users/lars/Sites/lars/output/papers
-cert=test/dummy.crt
-key=test/dummy.key
+cert=etc/letsencrypt/archive/quant.eggert.org/fullchain9.pem
+key=etc/letsencrypt/archive/quant.eggert.org/privkey9.pem
 
 # (re-)build the client (and possibly server) to test
 if [ "$c" == wquant ] || [ "$s" == wquant ]; then
@@ -43,7 +43,7 @@ export UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1:suppressions=../misc/gcc
 # commands to run the different clients against $addr:$port
 case $c in
         quant)
-                cc="bin/client -v5 -i $iface -u -t2 \
+                cc="bin/client -v5 -i $iface -u -t2 -m \
                         \"https://$addr:$port$path\""
                 ;;
         wquant)

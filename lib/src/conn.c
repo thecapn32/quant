@@ -388,6 +388,8 @@ static void __attribute__((nonnull)) do_tx_txq(struct q_conn * const c,
         struct w_iov * sh;
         sq_foreach (sh, q, next) {
             // FIXME: this may not handle all coalescing cases
+            if (coal_len + sh->len >= pmtu)
+                continue;
             coal_len += sh->len;
             if (is_lh(*sh->buf) == false)
                 break;
