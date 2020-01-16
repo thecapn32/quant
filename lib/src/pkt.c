@@ -182,7 +182,7 @@ void coalesce(struct w_iov_sq * const q, const uint16_t max_pkt_size)
                                        pkt_type(*next->buf))) {
                 // we can coalesce
                 warn(
-                    DBG,
+                    INF,
                     "coalescing %u-byte %s pkt behind %u-byte %s pkt, limit %u",
                     next->len, pkt_type_str(*next->buf, next->buf + 1), v->len,
                     pkt_type_str(*v->buf, v->buf + 1), max_pkt_size);
@@ -192,8 +192,8 @@ void coalesce(struct w_iov_sq * const q, const uint16_t max_pkt_size)
                 sq_next(next, next) = 0; // must unlink
                 w_free_iov(next);
             } else {
-                warn(ERR,
-                     "CANNOT coalesce %u-byte %s pkt behind %u-byte %s pkt, "
+                warn(DBG,
+                     "cannot coalesce %u-byte %s pkt behind %u-byte %s pkt, "
                      "limit %u",
                      next->len, pkt_type_str(*next->buf, next->buf + 1), v->len,
                      pkt_type_str(*v->buf, v->buf + 1), max_pkt_size);

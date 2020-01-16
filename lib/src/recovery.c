@@ -639,7 +639,8 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
     if (unlikely(c->pmtud_pkt_nr != UINT_T_MAX &&
                  ((m->hdr.nr != UINT_T_MAX && m->hdr.type == SH) ||
                   (m->hdr.nr == c->pmtud_pkt_nr && m->hdr.type == LH_HSHK)))) {
-        c->rec.max_pkt_size = w_max_udp_payload(c->sock);
+        c->rec.max_pkt_size =
+            MIN(w_max_udp_payload(ws), (uint16_t)c->tp_out.max_pkt);
         warn(NTE, "PMTU %u validated", c->rec.max_pkt_size);
         c->pmtud_pkt_nr = UINT_T_MAX;
     }
