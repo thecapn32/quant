@@ -1283,7 +1283,7 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
              (unsigned long)out_len);
 #endif
         struct w_iov_sq o = w_iov_sq_initializer(o);
-        alloc_off(w_engine(c->sock), &o, c, q_conn_af(c), (uint32_t)out_len,
+        alloc_off(w_engine(c->sock), &o, 0, q_conn_af(c), (uint32_t)out_len,
                   DATA_OFFSET + c->tok_len);
         const uint8_t * data = tls_io.base + epoch_off[e];
         struct w_iov * ov;
