@@ -80,6 +80,11 @@ struct q_conn_info {
     uint_t pkts_out_lost;
     uint_t pkts_out_rtx;
 
+    uint_t strm_frms_in_seq;
+    uint_t strm_frms_in_ooo;
+    uint_t strm_frms_in_dup;
+    uint_t strm_frms_in_ign;
+
     float rtt;
     float rttvar;
     float min_rtt;

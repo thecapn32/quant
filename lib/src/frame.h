@@ -88,6 +88,8 @@ struct q_stream; // IWYU pragma: no_forward_declare q_stream
 struct q_conn_info; // IWYU pragma: no_forward_declare q_conn_info
 #endif
 
+typedef enum { sdt_inv, sdt_seq, sdt_ooo, sdt_dup, sdt_ign } strm_data_type_t;
+
 #ifdef NDEBUG
 #define log_stream_or_crypto_frame(...)
 #else
@@ -97,7 +99,7 @@ log_stream_or_crypto_frame(const bool is_rtx,
                            const uint8_t fl,
                            const dint_t sid,
                            const bool in,
-                           const char * const kind);
+                           const strm_data_type_t kind);
 #endif
 
 extern bool __attribute__((nonnull))

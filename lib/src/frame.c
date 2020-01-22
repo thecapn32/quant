@@ -119,21 +119,21 @@ void log_stream_or_crypto_frame(const bool rtx,
                                 const uint8_t fl,
                                 const dint_t sid,
                                 const bool in,
-                                const char * kind)
+                                const strm_data_type_t kind)
 {
-    // if (util_dlevel != INF && util_dlevel != DBG)
-    //     return;
-
     const struct q_conn * const c = m->pn->c;
     const struct q_stream * const s = m->strm;
-    if (kind == 0)
-        kind = BLD RED "invalid" NRM;
+    static const char * const kind_str[sdt_ign + 1] = {
+        [sdt_inv] = BLD RED "invalid" NRM,
+        [sdt_seq] = "seq",
+        [sdt_ooo] = BLD YEL "ooo" NRM,
+        [sdt_dup] = RED "dup" NRM,
+        [sdt_ign] = YEL "ign" NRM};
 
     if (sid >= 0)
         warn(INF,
              "%sSTREAM" NRM " 0x%02x=%s%s%s%s%s id=" FMT_SID "/%" PRIu
-             " off=%" PRIu "/%" PRIu " len=%u coff=%" PRIu "/%" PRIu
-             " %s%s%s%s",
+             " off=%" PRIu "/%" PRIu " len=%u coff=%" PRIu "/%" PRIu " %s[%s]",
              in ? FRAM_IN : FRAM_OUT, fl, is_set(F_STREAM_FIN, fl) ? "FIN" : "",
              is_set(F_STREAM_FIN, fl) &&
                      (is_set(F_STREAM_LEN, fl) || is_set(F_STREAM_OFF, fl))
@@ -146,13 +146,11 @@ void log_stream_or_crypto_frame(const bool rtx,
              in ? (s ? s->in_data_max : 0) : (s ? s->out_data_max : 0),
              m->strm_data_len, in ? c->in_data_str : c->out_data_str,
              in ? c->tp_in.max_data : c->tp_out.max_data,
-             rtx ? REV BLD GRN "[RTX]" NRM " " : "", in ? "[" : "", kind,
-             in ? "]" : "");
+             rtx ? REV BLD GRN "[RTX]" NRM " " : "", kind_str[kind]);
     else
-        warn(INF, "%sCRYPTO" NRM " off=%" PRIu " len=%u %s%s%s%s",
+        warn(INF, "%sCRYPTO" NRM " off=%" PRIu " len=%u %s[%s]",
              in ? FRAM_IN : FRAM_OUT, m->strm_off, m->strm_data_len,
-             rtx ? REV BLD GRN "[RTX]" NRM " " : "", in ? "[" : "", kind,
-             in ? "]" : "");
+             rtx ? REV BLD GRN "[RTX]" NRM " " : "", kind_str[kind]);
 }
 #endif
 
@@ -196,6 +194,24 @@ get_and_validate_strm(struct q_conn * const c,
     }
     return 0;
 }
+
+
+#define concat(q, k) q##k
+
+#ifndef NO_QINFO
+#define incr_q_info(knd) concat(c->i.strm_frms_in_, knd)++
+#else
+#define incr_q_info(knd)                                                       \
+    do {                                                                       \
+    } while (0)
+#endif
+
+#define track_sd_frame(knd, dsp)                                               \
+    do {                                                                       \
+        kind = concat(sdt_, knd);                                              \
+        ignore = (dsp);                                                        \
+        incr_q_info(knd);                                                      \
+    } while (0)
 
 
 static bool __attribute__((nonnull))
@@ -251,15 +267,14 @@ dec_stream_or_crypto_frame(const uint8_t type,
 
     // deliver data into stream
     bool ignore = false;
-    const char * kind = 0;
+    strm_data_type_t kind = sdt_ign;
 
     if (unlikely(m->strm_data_len == 0 && !is_set(F_STREAM_FIN, type))) {
 #ifdef DEBUG_EXTRA
         warn(WRN, "zero-len strm/crypt frame on sid " FMT_SID ", ignoring",
              sid);
 #endif
-        ignore = true;
-        kind = "ign";
+        track_sd_frame(ign, true);
         goto done;
     }
 
@@ -271,8 +286,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
                  " on %s conn %s",
                  sid, conn_type(c), cid_str(c->scid));
 #endif
-            ignore = true;
-            kind = "ign";
+            track_sd_frame(ign, true);
             goto done;
         }
 
@@ -289,7 +303,6 @@ dec_stream_or_crypto_frame(const uint8_t type,
     if (m->strm->in_data_off >= m->strm_off &&
         m->strm->in_data_off <=
             m->strm_off + m->strm_data_len - (m->strm_data_len ? 1 : 0)) {
-        kind = "seq";
 
         if (unlikely(m->strm->state == strm_hcrm ||
                      m->strm->state == strm_clsd)) {
@@ -297,7 +310,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
                  "ignoring STREAM frame for %s strm " FMT_SID " on %s conn %s",
                  strm_state_str[m->strm->state], sid, conn_type(c),
                  cid_str(c->scid));
-            ignore = true;
+            track_sd_frame(ign, true);
             goto done;
         }
 
@@ -308,6 +321,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
         track_bytes_in(m->strm, m->strm_data_len);
         m->strm->in_data_off += m->strm_data_len;
         sq_insert_tail(&m->strm->in, v, next);
+        track_sd_frame(seq, false);
 
 #ifndef NO_OOO_DATA
         // check if a hole has been filled that lets us dequeue ooo data
@@ -374,20 +388,17 @@ dec_stream_or_crypto_frame(const uint8_t type,
 
     // data is a complete duplicate
     if (m->strm_off + m->strm_data_len <= m->strm->in_data_off) {
-        kind = RED "dup" NRM;
-        ignore = true;
+        track_sd_frame(dup, true);
         goto done;
     }
 
 #ifndef NO_OOO_DATA
     // data is out of order - check if it overlaps with already stored ooo data
-    kind = YEL "ooo" NRM;
     if (unlikely(m->strm->state == strm_hcrm || m->strm->state == strm_clsd)) {
         warn(NTE, "ignoring STREAM frame for %s strm " FMT_SID " on %s conn %s",
              strm_state_str[m->strm->state], sid, conn_type(c),
              cid_str(c->scid));
-        ignore = true;
-        kind = "ign";
+        track_sd_frame(ign, true);
         goto done;
     }
 
@@ -403,17 +414,17 @@ dec_stream_or_crypto_frame(const uint8_t type,
              "..%" PRIu "]",
              m->strm_off, m->strm_off + m->strm_data_len, p->strm_off,
              p->strm_off + p->strm_data_len - 1);
-        ignore = true;
-        kind = "ign";
+        track_sd_frame(ign, true);
         goto done;
     }
 
     // this ooo data doesn't overlap with anything
+    track_sd_frame(ooo, false);
     track_bytes_in(m->strm, m->strm_data_len);
     ensure(splay_insert(ooo_by_off, &m->strm->in_ooo, m) == 0, "inserted");
 #else
     // signal to the ACK logic to not ACK this packet
-    log_stream_or_crypto_frame(false, m, type, sid, true, "ooo, dropped");
+    log_stream_or_crypto_frame(false, m, type, sid, true, sdt_ooo);
     m->strm_off = UINT_T_MAX;
     goto reallydone;
 #endif
@@ -1551,7 +1562,7 @@ void enc_stream_or_crypto_frame(uint8_t ** pos,
     enc1(pos, end, type);
 
     *pos = v->buf + m->strm_data_pos + m->strm_data_len;
-    log_stream_or_crypto_frame(false, m, type, s->id, false, "");
+    log_stream_or_crypto_frame(false, m, type, s->id, false, sdt_seq);
     track_bytes_out(s, m->strm_data_len);
     ensure(!enc_strm || m->strm_off < s->out_data_max, "exceeded fc window");
     track_frame(m,

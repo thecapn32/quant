@@ -797,6 +797,10 @@ done:
                           (unsigned long)i, c->i.frm_cnt[0][i],
                           c->i.frm_cnt[1][i]);
         }
+        qinfo_log("strm_frms_in_seq = %" PRIu, c->i.strm_frms_in_seq);
+        qinfo_log("strm_frms_in_ooo = %" PRIu, c->i.strm_frms_in_ooo);
+        qinfo_log("strm_frms_in_dup = %" PRIu, c->i.strm_frms_in_dup);
+        qinfo_log("strm_frms_in_ign = %" PRIu, c->i.strm_frms_in_ign);
     }
 #endif
 #ifndef NO_QLOG
