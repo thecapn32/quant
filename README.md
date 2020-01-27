@@ -148,7 +148,7 @@ stack are also very welcome.)
 
 ## Copyright
 
-Copyright (c) 2016-2019, NetApp, Inc.
+Copyright (c) 2016-2020, NetApp, Inc.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
