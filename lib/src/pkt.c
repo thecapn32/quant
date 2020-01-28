@@ -269,6 +269,12 @@ enc_other_frames(
     struct q_conn * const c = m->pn->c;
 
     // encode connection control frames
+    if (c->tx_hshk_done) {
+        if (c->pns[pn_hshk].abandoned == false)
+            abandon_pn(&c->pns[pn_hshk]);
+        enc_hshk_done_frame(ci, pos, end, m);
+    }
+
     if (!is_clnt(c) && c->tok_len && can_enc(pos, end, m, FRM_TOK, true)) {
         enc_new_token_frame(ci, pos, end, m);
         c->tok_len = 0;

@@ -1257,11 +1257,14 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
             free(c->tls.tp_buf);
             c->tls.tp_buf = 0;
         }
-        if (c->state != conn_estb && ptls_is_psk_handshake(c->tls.t) &&
-            is_clnt(c))
-            c->did_0rtt = c->try_0rtt &&
-                          (c->tls.tls_hshk_prop.client.early_data_acceptance ==
-                           PTLS_EARLY_DATA_ACCEPTED);
+        if (is_clnt(c)) {
+            if (c->state != conn_estb && ptls_is_psk_handshake(c->tls.t))
+                c->did_0rtt =
+                    c->try_0rtt &&
+                    (c->tls.tls_hshk_prop.client.early_data_acceptance ==
+                     PTLS_EARLY_DATA_ACCEPTED);
+        } else
+            c->tx_hshk_done = ptls_handshake_is_complete(c->tls.t) != 0;
 
     } else if (ret != PTLS_ERROR_IN_PROGRESS &&
                ret != PTLS_ERROR_STATELESS_RETRY) {

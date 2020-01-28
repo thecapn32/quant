@@ -76,6 +76,8 @@ static void track_frame(struct pkt_meta * const m,
 {
     bit_set(FRM_MAX, type, &m->frms);
 #ifndef NO_QINFO
+    ensure(type < sizeof(ci->frm_cnt[0]) / sizeof(ci->frm_cnt[0][0]),
+           "unhandled frame type");
     ci->frm_cnt[m->txed ? 0 : 1][type] += n;
 #endif
 }
@@ -1099,7 +1101,7 @@ dec_new_token_frame(const uint8_t ** pos,
 
     // TODO: actually do something with the token
 
-    return true;
+    return is_clnt(c); // only servers may send NEW_TOKEN frames
 }
 
 
@@ -1177,7 +1179,8 @@ bool dec_frames(struct q_conn * const c,
                 1 << FRM_STR_0d | 1 << FRM_STR_0e | 1 << FRM_STR_0f |
                 1 << FRM_MCD | 1 << FRM_MSD | 1 << FRM_MSB | 1 << FRM_MSU |
                 1 << FRM_CDB | 1 << FRM_SDB | 1 << FRM_SBB | 1 << FRM_SBU |
-                1 << FRM_CID | 1 << FRM_RTR | 1 << FRM_PCL | 1 << FRM_PRP)};
+                1 << FRM_CID | 1 << FRM_RTR | 1 << FRM_PCL | 1 << FRM_PRP |
+                1 << FRM_HSD)};
         if (likely(type < FRM_MAX) &&
             unlikely(bit_isset(FRM_MAX, type,
                                &frame_ok[epoch_for_pkt_type(m->hdr.type)]) ==
@@ -1242,6 +1245,13 @@ bool dec_frames(struct q_conn * const c,
         case FRM_PNG:
             warn(INF, FRAM_IN "PING" NRM);
             ok = true;
+            break;
+
+        case FRM_HSD:
+            warn(INF, FRAM_IN "HANDSHAKE_DONE" NRM);
+            ok = is_clnt(c);
+            if (likely(ok) && unlikely(c->pns[pn_hshk].abandoned == false))
+                abandon_pn(&c->pns[pn_hshk]);
             break;
 
         case FRM_MSD:
@@ -1882,4 +1892,17 @@ void enc_ping_frame(struct q_conn_info * const ci,
     warn(INF, FRAM_OUT "PING" NRM);
 
     track_frame(m, ci, FRM_PNG, 1);
+}
+
+
+void enc_hshk_done_frame(struct q_conn_info * const ci,
+                         uint8_t ** pos,
+                         const uint8_t * const end,
+                         struct pkt_meta * const m)
+{
+    enc1(pos, end, FRM_HSD);
+
+    warn(INF, FRAM_OUT "HANDSHAKE_DONE" NRM);
+
+    track_frame(m, ci, FRM_HSD, 1);
 }

@@ -95,7 +95,8 @@ struct q_conn_info {
     uint_t ssthresh;
     uint_t pto_cnt;
 
-    uint_t frm_cnt[2][0x1d + 1]; // 0 = out (tx), 1 = in (rx)
+    // 0x1e = max. frame type
+    uint_t frm_cnt[2][0x1e + 1]; // 0 = out (tx), 1 = in (rx)
 };
 
 

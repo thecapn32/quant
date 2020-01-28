@@ -215,7 +215,8 @@ struct q_conn {
     uint32_t spin : 1;              ///< Spin value to set on next packet sent.
     uint32_t no_wnd : 1;            ///< TX is stalled by lack of window.
     uint32_t do_qr_test : 1;        ///< Perform quantum-readiness test.
-    uint32_t : 5;
+    uint32_t tx_hshk_done : 1;      ///< Send HANDSHAKE_DONE.
+    uint32_t : 4;
 
     conn_state_t state; ///< State of the connection.
 

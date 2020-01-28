@@ -65,8 +65,9 @@
 #define FRM_PRP 0x1b ///< PATH_RESPONSE
 #define FRM_CLQ 0x1c ///< CONNECTION_CLOSE (QUIC layer)
 #define FRM_CLA 0x1d ///< CONNECTION_CLOSE (application)
+#define FRM_HSD 0x1e ///< HANDSHAKE_DONE
 
-#define FRM_MAX (FRM_CLA + 1)
+#define FRM_MAX (FRM_HSD + 1)
 
 bitset_define(frames, FRM_MAX);
 
@@ -278,6 +279,17 @@ extern void __attribute__((nonnull
                                                  uint8_t ** pos,
                                                  const uint8_t * const end,
                                                  struct pkt_meta * const m);
+
+extern void __attribute__((nonnull
+#ifdef NO_QINFO
+                           (2, 3, 4)
+#endif
+                               ))
+enc_hshk_done_frame(struct q_conn_info * const ci,
+                    uint8_t ** pos,
+                    const uint8_t * const end,
+                    struct pkt_meta * const m);
+
 
 static inline bool __attribute__((nonnull))
 is_ack_eliciting(const struct frames * const f)

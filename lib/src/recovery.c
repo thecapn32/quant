@@ -636,6 +636,9 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
 
     // rest of function is not from pseudo code
 
+    if (is_clnt(c) == false && unlikely(has_frm(m->frms, FRM_HSD)))
+        c->tx_hshk_done = false;
+
     if (unlikely(c->pmtud_pkt_nr != UINT_T_MAX &&
                  ((m->hdr.nr != UINT_T_MAX && m->hdr.type == SH) ||
                   (m->hdr.nr == c->pmtud_pkt_nr && m->hdr.type == LH_HSHK)))) {

@@ -759,6 +759,7 @@ done:
             [0x1b] = "PATH_RESPONSE",
             [0x1c] = "CONNECTION_CLOSE_QUIC",
             [0x1d] = "CONNECTION_CLOSE_APP",
+            [0x1e] = "HANDSHAKE_DONE",
         };
 
         conn_info_populate(c);
