@@ -981,7 +981,11 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
                                             ,
                                             const uint8_t * const tok,
                                             const uint16_t tok_len,
-                                            const uint8_t * const rit)
+                                            const uint8_t * const rit
+#ifdef NDEBUG
+                                            __attribute__((unused))
+#endif
+)
 {
     struct q_conn * const c = m->pn->c;
     bool ok = false;
