@@ -335,6 +335,7 @@ Exit:
     return ret;
 }
 
+
 static int __attribute__((nonnull))
 on_ch(ptls_on_client_hello_t * const self __attribute__((unused)),
       ptls_t * const tls,
@@ -1565,6 +1566,14 @@ void init_tls_ctx(const struct q_conf * const conf,
 #ifndef NO_SERVER
     init_ticket_prot(ped);
 #endif
+
+    static const uint8_t retry_secret[] = {
+        0x65, 0x6e, 0x61, 0xe3, 0x36, 0xae, 0x94, 0x17, 0xf7, 0xf0, 0xed,
+        0xd8, 0xd7, 0x8d, 0x46, 0x1e, 0x2a, 0xa7, 0x08, 0x4a, 0xba, 0x7a,
+        0x14, 0xc1, 0xe9, 0xf7, 0x26, 0xd5, 0x57, 0x09, 0x16, 0x9a};
+    const ptls_cipher_suite_t * const cs = &aes128gcmsha256;
+    ped->rid_ctx =
+        ptls_aead_new(cs->aead, cs->hash, 1, retry_secret, AEAD_BASE_LABEL);
 }
 
 
@@ -1574,6 +1583,7 @@ void free_tls_ctx(struct per_engine_data * const ped)
     dispose_cipher(&ped->dec_tckt);
     dispose_cipher(&ped->enc_tckt);
 #endif
+    ptls_aead_free(ped->rid_ctx);
 
 #if !defined(PARTICLE) && !defined(RIOT_VERSION)
     // free ticket cache
@@ -1729,6 +1739,32 @@ bool verify_rtry_tok(struct q_conn * const c,
         return true;
     }
     return false;
+}
+
+
+void make_rit(const struct q_conn * const c,
+              const struct cid * const dcid,
+              const struct cid * const scid,
+              const uint8_t * const tok,
+              const uint16_t tok_len,
+              uint8_t * const rit)
+{
+    uint8_t * pos = ped(c->w)->scratch;
+    uint8_t * end = pos + ped(c->w)->scratch_len;
+
+    // encode the pseudo packet
+    enc1(&pos, end, c->odcid.len);
+    encb(&pos, end, c->odcid.id, c->odcid.len);
+    enc1(&pos, end, 0xf0);
+    enc4(&pos, end, c->vers);
+    enc1(&pos, end, dcid->len);
+    encb(&pos, end, dcid->id, dcid->len);
+    enc1(&pos, end, scid->len);
+    encb(&pos, end, scid->id, scid->len);
+    encb(&pos, end, tok, tok_len);
+
+    ptls_aead_encrypt(ped(c->w)->rid_ctx, rit, "", 0, 0, ped(c->w)->scratch,
+                      (size_t)(pos - ped(c->w)->scratch));
 }
 
 

@@ -64,9 +64,9 @@ void log_pkt(const char * const dir,
              __attribute__((unused))
 #endif
              ,
-             const struct cid * const odcid,
              const uint8_t * const tok,
-             const uint16_t tok_len)
+             const uint16_t tok_len,
+             const uint8_t * const rit)
 {
     char ip[IP_STRLEN];
     w_ntop(&saddr->addr, ip);
@@ -76,8 +76,8 @@ void log_pkt(const char * const dir,
 
     mk_cid_str(NTE, &m->hdr.dcid, dcid_str);
     mk_cid_str(NTE, &m->hdr.scid, scid_str);
-    const char * const odcid_str = odcid ? cid_str(odcid) : "";
     const char * const tok_str = tok_len ? tok_str(tok, tok_len) : "";
+    const char * const rit_str = rit ? rit_str(rit) : "";
 
     if (*dir == 'R') {
         if (is_lh(m->hdr.flags)) {
@@ -91,9 +91,9 @@ void log_pkt(const char * const dir,
                 twarn(NTE,
                       BLD BLU "RX" NRM " from=%s:%u len=%u 0x%02x=" BLU
                               "%s " NRM "vers=0x%0" PRIx32
-                              " dcid=%s scid=%s odcid=%s tok=%s",
+                              " dcid=%s scid=%s tok=%s rit=%s",
                       ip, port, v->len, m->hdr.flags, pts, m->hdr.vers,
-                      dcid_str, scid_str, odcid_str, tok_str);
+                      dcid_str, scid_str, tok_str, rit_str);
             else if (m->hdr.type == LH_INIT)
                 twarn(NTE,
                       BLD BLU "RX" NRM " from=%s:%u len=%u 0x%02x=" BLU
@@ -130,9 +130,9 @@ void log_pkt(const char * const dir,
                 twarn(NTE,
                       BLD GRN "TX" NRM " to=%s:%u 0x%02x=" GRN "%s " NRM
                               "vers=0x%0" PRIx32
-                              " dcid=%s scid=%s odcid=%s tok=%s",
+                              " dcid=%s scid=%s tok=%s rit=%s",
                       ip, port, m->hdr.flags, pts, m->hdr.vers, dcid_str,
-                      scid_str, odcid_str, tok_str);
+                      scid_str, tok_str, rit_str);
             else if (m->hdr.type == LH_INIT)
                 twarn(NTE,
                       BLD GRN "TX" NRM " to=%s:%u 0x%02x=" GRN "%s " NRM
@@ -420,11 +420,6 @@ bool enc_pkt(struct q_stream * const s,
         enc4(&pos, end, m->hdr.vers);
         enc_lh_cids(&pos, end, m, c->dcid, c->scid);
 
-        if (unlikely(m->hdr.type == LH_RTRY)) {
-            enc1(&pos, end, c->odcid.len);
-            encb(&pos, end, c->odcid.id, c->odcid.len);
-        }
-
         if (m->hdr.type == LH_INIT)
             encv(&pos, end, is_clnt(c) ? c->tok_len : 0);
 
@@ -470,9 +465,6 @@ bool enc_pkt(struct q_stream * const s,
 #endif
                                   c->peer;
 
-    log_pkt("TX", v, &v->saddr, m->hdr.type == LH_RTRY ? &c->odcid : 0, c->tok,
-            c->tok_len);
-
 #ifndef NDEBUG
     // sanity check
     if (unlikely(m->hdr.hdr_len >=
@@ -483,8 +475,15 @@ bool enc_pkt(struct q_stream * const s,
     }
 #endif
 
-    if (unlikely(m->hdr.type == LH_RTRY))
+    if (unlikely(m->hdr.type == LH_RTRY)) {
+        uint8_t rit[RIT_LEN];
+        make_rit(c, &m->hdr.dcid, &m->hdr.scid, c->tok, c->tok_len, rit);
+        encb(&pos, end, rit, RIT_LEN);
+        log_pkt("TX", v, &v->saddr, c->tok, c->tok_len, rit);
         goto tx;
+    }
+
+    log_pkt("TX", v, &v->saddr, c->tok, c->tok_len, 0);
 
     if (unlikely(pmtud)) {
         enc_ping_frame(ci, &pos, end, m);
@@ -692,9 +691,9 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
                            struct w_iov * const v,
                            struct pkt_meta * const m,
                            const bool is_clnt,
-                           struct cid * const odcid,
                            uint8_t * const tok,
                            uint16_t * const tok_len,
+                           uint8_t * const rit,
                            const uint8_t dcid_len)
 
 {
@@ -736,12 +735,6 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
             goto done;
         }
 
-        if (m->hdr.type == LH_RTRY) {
-            // decode odcid
-            dec1_chk(&odcid->len, &pos, end);
-            decb_chk(odcid->id, &pos, end, odcid->len);
-        }
-
         if (m->hdr.type == LH_INIT) {
             // decode token
             uint64_t tmp = 0;
@@ -752,8 +745,14 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
                 warn(ERR, "tok (len %u) present in serv initial", *tok_len);
                 return false;
             }
-        } else if (m->hdr.type == LH_RTRY)
+        } else if (m->hdr.type == LH_RTRY) {
             *tok_len = (uint16_t)(end - pos);
+            if (unlikely(*tok_len <= RIT_LEN)) {
+                warn(DBG, "tok_len %u too short", *tok_len);
+                return false;
+            }
+            *tok_len -= RIT_LEN;
+        }
 
         if (*tok_len) {
             if (unlikely(*tok_len >= MAX_TOK_LEN ||
@@ -763,6 +762,8 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
                 return false;
             }
             decb_chk(tok, &pos, end, *tok_len);
+            if (m->hdr.type == LH_RTRY)
+                decb_chk(rit, &pos, end, RIT_LEN);
         }
 
         // if this is a CI, the dcid len must be >= 8 bytes

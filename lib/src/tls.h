@@ -32,6 +32,7 @@
 
 #include <picotls.h>
 
+struct cid;             // IWYU pragma: no_forward_declare cid
 struct per_engine_data; // IWYU pragma: no_forward_declare per_engine_data
 struct pkt_meta;        // IWYU pragma: no_forward_declare pkt_meta
 struct q_conf;          // IWYU pragma: no_forward_declare q_conf
@@ -126,6 +127,13 @@ extern void __attribute__((nonnull)) make_rtry_tok(struct q_conn * const c);
 extern bool __attribute__((nonnull)) verify_rtry_tok(struct q_conn * const c,
                                                      const uint8_t * const tok,
                                                      const uint16_t tok_len);
+
+extern void __attribute__((nonnull)) make_rit(const struct q_conn * const c,
+                                              const struct cid * const dcid,
+                                              const struct cid * const scid,
+                                              const uint8_t * const tok,
+                                              const uint16_t tok_len,
+                                              uint8_t * const rit);
 
 extern void __attribute__((nonnull))
 flip_keys(struct q_conn * const c, const bool out);

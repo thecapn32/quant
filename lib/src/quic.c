@@ -70,6 +70,7 @@
 char __cid_str[CID_STR_LEN];
 char __srt_str[hex_str_len(SRT_LEN)];
 char __tok_str[hex_str_len(MAX_TOK_LEN)];
+char __rit_str[hex_str_len(RIT_LEN)];
 
 
 /// QUIC version supported by this implementation in order of preference.

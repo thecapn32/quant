@@ -163,9 +163,9 @@ dec_pkt_hdr_beginning(struct w_iov * const xv,
                       struct w_iov * const v,
                       struct pkt_meta * const m,
                       const bool is_clnt,
-                      struct cid * const odcid,
                       uint8_t * const tok,
                       uint16_t * const tok_len,
+                      uint8_t * const rit,
                       const uint8_t dcid_len);
 
 extern bool __attribute__((nonnull))
@@ -202,9 +202,9 @@ extern void __attribute__((nonnull(1, 2, 3)))
 log_pkt(const char * const dir,
         const struct w_iov * const v,
         const struct w_sockaddr * const saddr,
-        const struct cid * const odcid,
         const uint8_t * const tok,
-        const uint16_t tok_len);
+        const uint16_t tok_len,
+        const uint8_t * const rit);
 #else
 #define log_pkt(...)                                                           \
     do {                                                                       \

@@ -66,6 +66,7 @@ struct q_conn; // IWYU pragma: no_forward_declare q_conn
 #define PATH_CHLG_LEN 8 ///< Length of a path challenge.
 #define MAX_TOK_LEN 160
 #define AEAD_LEN 16
+#define RIT_LEN 16 ///< Length of Retry integrity tag.
 
 // Maximum reordering in packets before packet threshold loss detection
 // considers a packet lost. The RECOMMENDED value is 3.
@@ -214,6 +215,7 @@ struct per_engine_data {
 #endif
 
     ptls_context_t tls_ctx;
+    ptls_aead_context_t *rid_ctx;
 
 #ifdef WITH_OPENSSL
     ptls_openssl_sign_certificate_t sign_cert;
@@ -328,6 +330,7 @@ cid2str(const struct cid * const cid, char * const dst, const size_t len_dst);
 extern char __cid_str[CID_STR_LEN];
 extern char __srt_str[hex_str_len(SRT_LEN)];
 extern char __tok_str[hex_str_len(MAX_TOK_LEN)];
+extern char __rit_str[hex_str_len(RIT_LEN)];
 
 #define cid_str(cid) cid2str((cid), __cid_str, sizeof(__cid_str))
 
@@ -341,6 +344,7 @@ extern char __tok_str[hex_str_len(MAX_TOK_LEN)];
 #define tok_str(tok, tok_len)                                                  \
     hex2str((tok), (tok_len), __tok_str, sizeof(__tok_str))
 
+#define rit_str(rit) hex2str((rit), RIT_LEN, __rit_str, sizeof(__rit_str))
 
 #define has_strm_data(p) (p)->strm_frm_pos
 

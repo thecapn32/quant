@@ -979,18 +979,14 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
                                             __attribute__((unused))
 #endif
                                             ,
-                                            const struct cid * const odcid
-#ifdef NDEBUG
-                                            __attribute__((unused))
-#endif
-                                            ,
                                             const uint8_t * const tok,
-                                            const uint16_t tok_len)
+                                            const uint16_t tok_len,
+                                            const uint8_t * const rit)
 {
     struct q_conn * const c = m->pn->c;
     bool ok = false;
 
-    log_pkt("RX", v, &v->saddr, odcid, tok, tok_len);
+    log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
     c->in_data += m->udp_len;
 
     switch (c->state) {
@@ -1241,11 +1237,11 @@ static void __attribute__((nonnull))
         bool pkt_valid = false;
         const bool is_clnt = w_connected(ws);
         struct q_conn * c = 0;
-        struct cid odcid = {.len = 0};
         uint8_t tok[MAX_TOK_LEN];
         uint16_t tok_len = 0;
+        uint8_t rit[RIT_LEN];
         if (unlikely(!dec_pkt_hdr_beginning(
-                xv, v, m, is_clnt, &odcid, tok, &tok_len,
+                xv, v, m, is_clnt, tok, &tok_len, rit,
                 is_clnt ? (ws->data ? 0 : ped(ws->w)->conf.client_cid_len)
                         : ped(ws->w)->conf.server_cid_len))) {
             // we might still need to send a vneg packet
@@ -1255,7 +1251,7 @@ static void __attribute__((nonnull))
                          v->len, pkt_type_str(m->hdr.flags, &m->hdr.vers));
                     tx_vneg_resp(ws, v, m);
                 } else {
-                    log_pkt("RX", v, &v->saddr, &odcid, tok, tok_len);
+                    log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
                     warn(ERR,
                          "received invalid %u-byte %s pkt w/invalid scid len "
                          "%u, ignoring",
@@ -1264,7 +1260,7 @@ static void __attribute__((nonnull))
                     goto drop;
                 }
             } else
-                warn(ERR, "received invalid %u-byte %s pkt), ignoring", v->len,
+                warn(ERR, "received invalid %u-byte %s pkt, ignoring", v->len,
                      pkt_type_str(m->hdr.flags, &m->hdr.vers));
             // can't log packet, because it may be too short for log_pkt()
             goto drop;
@@ -1285,7 +1281,7 @@ static void __attribute__((nonnull))
                          "accepting",
                          dcid_str_prev, dcid_str_cur);
                 else {
-                    log_pkt("RX", v, &v->saddr, &odcid, tok, tok_len);
+                    log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
                     warn(WRN,
                          "got 0-RTT pkt for orig cid %s, new is %s, "
                          "but rejected 0-RTT, ignoring",
@@ -1295,7 +1291,7 @@ static void __attribute__((nonnull))
             } else if (m->hdr.type == LH_INIT && c == 0) {
                 // validate minimum packet size
                 if (xv->len < MIN_INI_LEN) {
-                    log_pkt("RX", v, &v->saddr, &odcid, tok, tok_len);
+                    log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
                     warn(ERR, "%u-byte Initial pkt too short (< %u)", xv->len,
                          MIN_INI_LEN);
                     goto drop;
@@ -1303,7 +1299,7 @@ static void __attribute__((nonnull))
 
                 if (vers_supported(m->hdr.vers) == false ||
                     is_vneg_vers(m->hdr.vers)) {
-                    log_pkt("RX", v, &v->saddr, &odcid, tok, tok_len);
+                    log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
                     warn(WRN,
                          "clnt-requested vers 0x%0" PRIx32 " not supported",
                          m->hdr.vers);
@@ -1327,14 +1323,16 @@ static void __attribute__((nonnull))
 
         if (likely(c)) {
             if (m->hdr.scid.len && cid_cmp(&m->hdr.scid, c->dcid) != 0) {
-                if (m->hdr.vers && m->hdr.type == LH_RTRY &&
-                    cid_cmp(&odcid, c->dcid) != 0) {
-                    log_pkt("RX", v, &v->saddr, &odcid, tok, tok_len);
-                    mk_cid_str(ERR, &odcid, odcid_str);
-                    mk_cid_str(ERR, c->dcid, dcid_str);
-                    warn(ERR, "retry dcid mismatch %s != %s, ignoring pkt",
-                         odcid_str, dcid_str);
-                    goto drop;
+                if (m->hdr.vers && m->hdr.type == LH_RTRY) {
+                    uint8_t computed_rit[RIT_LEN];
+                    make_rit(c, &m->hdr.dcid, &m->hdr.scid, tok, tok_len,
+                             computed_rit);
+                    if (memcmp(rit, computed_rit, RIT_LEN) != 0) {
+                        log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
+                        warn(ERR, "rit mismatch, computed %s",
+                             rit_str(computed_rit));
+                        goto drop;
+                    }
                 }
                 if (c->state == conn_opng)
                     add_dcid(c, &m->hdr.scid);
@@ -1348,7 +1346,7 @@ static void __attribute__((nonnull))
                     c->scid;
 #endif
                 if (unlikely(scid == 0)) {
-                    log_pkt("RX", v, &v->saddr, &odcid, tok, tok_len);
+                    log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
                     warn(ERR, "unknown scid %s, ignoring pkt",
                          cid_str(&m->hdr.dcid));
                     goto drop;
@@ -1376,13 +1374,13 @@ static void __attribute__((nonnull))
                 zo->v = v;
                 ensure(splay_insert(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo) == 0,
                        "inserted");
-                log_pkt("RX", v, &v->saddr, &odcid, tok, tok_len);
+                log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
                 warn(INF, "caching 0-RTT pkt for unknown conn %s",
                      cid_str(&m->hdr.dcid));
                 goto next;
             }
 #endif
-            log_pkt("RX", v, &v->saddr, &odcid, tok, tok_len);
+            log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
 
             if (is_srt(xv, m)) {
                 warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
@@ -1400,14 +1398,14 @@ static void __attribute__((nonnull))
             bool decoal;
             if (unlikely(m->hdr.type == LH_INIT && c->cstrms[ep_init] == 0)) {
                 // we already abandoned Initial pkt processing, ignore
-                log_pkt("RX", v, &v->saddr, &odcid, tok, tok_len);
+                log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
                 warn(INF, "ignoring %u-byte %s pkt due to abandoned processing",
                      v->len, pkt_type_str(m->hdr.flags, &m->hdr.vers));
                 goto drop;
             } else if (unlikely(dec_pkt_hdr_remainder(xv, v, m, c, x,
                                                       &decoal) == false)) {
                 v->len = xv->len;
-                log_pkt("RX", v, &v->saddr, &odcid, tok, tok_len);
+                log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
                 if (m->is_reset)
                     warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
                          srt_str(&xv->buf[xv->len - SRT_LEN]));
@@ -1429,7 +1427,7 @@ static void __attribute__((nonnull))
 
             if (unlikely(outer_dcid.len) &&
                 cid_cmp(&outer_dcid, &m->hdr.dcid) != 0) {
-                log_pkt("RX", v, &v->saddr, &odcid, tok, tok_len);
+                log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
                 mk_cid_str(ERR, &outer_dcid, outer_dcid_str);
                 mk_cid_str(ERR, &m->hdr.dcid, dcid_str);
                 warn(ERR,
@@ -1457,7 +1455,7 @@ static void __attribute__((nonnull))
 #ifndef NO_MIGRATION
                 if (m->hdr.nr <= max_recv_all) {
 #endif
-                    log_pkt("RX", v, &v->saddr, &odcid, tok, tok_len);
+                    log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
                     warn(NTE,
                          "pkt from new peer %s:%u, nr " FMT_PNR_IN
                          " <= max " FMT_PNR_IN ", ignoring",
@@ -1485,7 +1483,7 @@ static void __attribute__((nonnull))
             m->pn = &c->pns[pn_init];
 
     decoal_done:
-        if (likely(rx_pkt(ws, v, m, x, &odcid, tok, tok_len))) {
+        if (likely(rx_pkt(ws, v, m, x, tok, tok_len, rit))) {
             rx_crypto(c, m);
             c->min_rx_epoch = c->had_rx ? MIN(c->min_rx_epoch,
                                               epoch_for_pkt_type(m->hdr.type))
