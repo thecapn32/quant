@@ -8,11 +8,11 @@ if [ -n "$TESTCASE" ]; then
     "versionnegotiation"|"handshake"|"transfer"|"retry"|"resumption")
         ;;
     "http3")
-        if [ "$ROLE" == "client" ]; then
-            CLIENT_ARGS=-3
-        else
+        # if [ "$ROLE" == "client" ]; then
+        #     CLIENT_ARGS=-3
+        # else
             exit 127
-        fi
+        # fi
         ;;
     *)
         exit 127
