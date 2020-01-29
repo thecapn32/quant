@@ -233,8 +233,8 @@ dec_stream_or_crypto_frame(const uint8_t type,
     if (unlikely(type == FRM_CRY)) {
         const epoch_t e = epoch_for_pkt_type(m->hdr.type);
         if (unlikely(c->cstrms[e] == 0))
-            err_close_return(c, ERR_STREAM_STATE, type,
-                             "epoch %u pkt processing abandoned", e);
+            err_close_return(c, ERR_STREAM_STATE, type, "epoch %u abandoned",
+                             e);
         sid = crpt_strm_id(e);
         m->strm = c->cstrms[e];
     } else {
@@ -1250,8 +1250,6 @@ bool dec_frames(struct q_conn * const c,
         case FRM_HSD:
             warn(INF, FRAM_IN "HANDSHAKE_DONE" NRM);
             ok = is_clnt(c);
-            if (likely(ok) && unlikely(c->pns[pn_hshk].abandoned == false))
-                abandon_pn(&c->pns[pn_hshk]);
             break;
 
         case FRM_MSD:

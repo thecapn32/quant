@@ -1505,6 +1505,13 @@ static void __attribute__((nonnull))
             }
             pkt_valid = true;
 
+            // FIXME: this doesn't abandon in all cases, i.e., it doesn't when
+            // the peer never ACKs our Handshake packets
+            if (c->rec.max_pkt_size != MIN_INI_LEN &&
+                unlikely(c->pns[pn_hshk].abandoned == false) &&
+                kh_size(&c->pns[pn_hshk].sent_pkts) == 0)
+                abandon_pn(&c->pns[pn_hshk]);
+
             // remember that we had a RX event on this connection
             if (unlikely(!c->had_rx)) {
                 c->had_rx = true;
