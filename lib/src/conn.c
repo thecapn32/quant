@@ -1329,8 +1329,8 @@ static void __attribute__((nonnull))
             if (m->hdr.scid.len && cid_cmp(&m->hdr.scid, c->dcid) != 0) {
                 if (m->hdr.vers && m->hdr.type == LH_RTRY) {
                     uint8_t computed_rit[RIT_LEN];
-                    make_rit(c, &m->hdr.dcid, &m->hdr.scid, tok, tok_len,
-                             computed_rit);
+                    make_rit(c, m->hdr.flags, &m->hdr.dcid, &m->hdr.scid, tok,
+                             tok_len, computed_rit);
                     if (memcmp(rit, computed_rit, RIT_LEN) != 0) {
                         log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
                         warn(ERR, "rit mismatch, computed %s",

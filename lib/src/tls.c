@@ -1574,6 +1574,7 @@ void init_tls_ctx(const struct q_conf * const conf,
     const ptls_cipher_suite_t * const cs = &aes128gcmsha256;
     ped->rid_ctx =
         ptls_aead_new(cs->aead, cs->hash, 1, retry_secret, AEAD_BASE_LABEL);
+    ensure(ped->rid_ctx, "could not make rit ctx");
 }
 
 
@@ -1743,6 +1744,7 @@ bool verify_rtry_tok(struct q_conn * const c,
 
 
 void make_rit(const struct q_conn * const c,
+              const uint8_t flags,
               const struct cid * const dcid,
               const struct cid * const scid,
               const uint8_t * const tok,
@@ -1755,7 +1757,7 @@ void make_rit(const struct q_conn * const c,
     // encode the pseudo packet
     enc1(&pos, end, c->odcid.len);
     encb(&pos, end, c->odcid.id, c->odcid.len);
-    enc1(&pos, end, 0xf0);
+    enc1(&pos, end, flags);
     enc4(&pos, end, c->vers);
     enc1(&pos, end, dcid->len);
     encb(&pos, end, dcid->id, dcid->len);
@@ -1763,7 +1765,7 @@ void make_rit(const struct q_conn * const c,
     encb(&pos, end, scid->id, scid->len);
     encb(&pos, end, tok, tok_len);
 
-    ptls_aead_encrypt(ped(c->w)->rid_ctx, rit, "", 0, 0, ped(c->w)->scratch,
+    ptls_aead_encrypt(ped(c->w)->rid_ctx, rit, 0, 0, 0, ped(c->w)->scratch,
                       (size_t)(pos - ped(c->w)->scratch));
 }
 

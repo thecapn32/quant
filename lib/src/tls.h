@@ -129,6 +129,7 @@ extern bool __attribute__((nonnull)) verify_rtry_tok(struct q_conn * const c,
                                                      const uint16_t tok_len);
 
 extern void __attribute__((nonnull)) make_rit(const struct q_conn * const c,
+                                              const uint8_t flags,
                                               const struct cid * const dcid,
                                               const struct cid * const scid,
                                               const uint8_t * const tok,

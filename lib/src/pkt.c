@@ -474,7 +474,8 @@ bool enc_pkt(struct q_stream * const s,
 
     if (unlikely(m->hdr.type == LH_RTRY)) {
         uint8_t rit[RIT_LEN];
-        make_rit(c, &m->hdr.dcid, &m->hdr.scid, c->tok, c->tok_len, rit);
+        make_rit(c, m->hdr.flags, &m->hdr.dcid, &m->hdr.scid, c->tok,
+                 c->tok_len, rit);
         encb(&pos, end, rit, RIT_LEN);
         log_pkt("TX", v, &v->saddr, c->tok, c->tok_len, rit);
         goto tx;
