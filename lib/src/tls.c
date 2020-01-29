@@ -433,6 +433,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
     bitset_define(tp_list, TP_MAX);
     struct tp_list tp_list = bitset_t_initializer(0);
 
+    c->tp_out.act_cid_lim = UINT_T_MAX;
     while (pos < end) {
         uint16_t tp;
         if (dec2(&tp, &pos, end) == false)
@@ -671,6 +672,16 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             return 1;
         }
     }
+
+    if (c->tp_out.disable_active_migration == false) {
+        if (c->tp_out.act_cid_lim == UINT_T_MAX)
+            c->tp_out.act_cid_lim = 2;
+        else if (c->tp_out.act_cid_lim < 2)
+            err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
+                      "active_connection_id_limit %" PRIu " < 2",
+                      c->tp_out.act_cid_lim);
+    } else
+        c->tp_out.act_cid_lim = 0;
 
     // apply these parameter to all current non-crypto streams
     struct q_stream * s;
