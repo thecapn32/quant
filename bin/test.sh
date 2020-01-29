@@ -64,7 +64,7 @@ case $c in
                 ;;
         picoquic)
                 cc="external/picoquic-prefix/src/picoquic/picoquicdemo \
-                        -l /dev/stdout -1 -u 1 -a hq-23 localhost $port 0:$path"
+                        -l /dev/stdout -1 -u 1 localhost $port 0:$path"
                 ;;
 
         quicker)
