@@ -1509,7 +1509,8 @@ static void __attribute__((nonnull))
             // the peer never ACKs our Handshake packets
             if (c->rec.max_pkt_size != MIN_INI_LEN &&
                 unlikely(c->pns[pn_hshk].abandoned == false) &&
-                kh_size(&c->pns[pn_hshk].sent_pkts) == 0)
+                kh_size(&c->pns[pn_hshk].sent_pkts) == 0 &&
+                has_frm(c->pns[pn_data].rx_frames, FRM_HSD))
                 abandon_pn(&c->pns[pn_hshk]);
 
             // remember that we had a RX event on this connection
