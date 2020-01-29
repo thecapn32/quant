@@ -508,8 +508,9 @@ bool enc_pkt(struct q_stream * const s,
         enc_padding_frame(ci, &pos, end, m,
                           m->strm_frm_pos - (uint16_t)(pos - v->buf));
         pos = v->buf + m->strm_data_pos + m->strm_data_len;
-        log_stream_or_crypto_frame(true, m, v->buf[m->strm_frm_pos], s->id,
-                                   false, sdt_ooo);
+        log_stream_or_crypto_frame(
+            true, m, v->buf[m->strm_frm_pos], s->id, false,
+            m->strm_off + m->strm_data_len < s->out_data ? sdt_ooo : sdt_seq);
 
     } else if (likely(enc_data)) {
         // this is a fresh data/crypto or pure stream FIN packet
