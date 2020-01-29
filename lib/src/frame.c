@@ -990,7 +990,7 @@ dec_new_cid_frame(const uint8_t ** pos,
         c->tp_in.act_cid_lim + (c->tp_out.pref_addr.cid.len ? 1 : 0);
     if (likely(dup == false) &&
         unlikely(splay_count(&c->dcids_by_seq) > max_act_cids))
-        err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_CID,
+        err_close_return(c, ERR_CONNECTION_ID_LIMIT, FRM_CID,
                          "illegal seq %u (have %" PRIu "/%" PRIu ")", dcid.seq,
                          splay_count(&c->dcids_by_seq), max_act_cids);
 
