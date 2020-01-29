@@ -434,6 +434,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
     struct tp_list tp_list = bitset_t_initializer(0);
 
     c->tp_out.act_cid_lim = UINT_T_MAX;
+    c->tp_out.max_pkt = 65527;
     while (pos < end) {
         uint16_t tp;
         if (dec2(&tp, &pos, end) == false)
