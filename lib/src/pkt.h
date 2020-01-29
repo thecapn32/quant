@@ -41,6 +41,7 @@ struct q_stream; // IWYU pragma: no_forward_declare q_stream
 
 
 #define MIN_INI_LEN 1200
+#define MAX_PKT_LEN 65527
 #define MIN_SRT_PKT_LEN 5 + SRT_LEN ///< min SRT length, incl. the fixed bits
 
 #define HEAD_FORM 0x80      ///< header form (1 = long, 0 = short)

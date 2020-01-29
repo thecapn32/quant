@@ -378,9 +378,10 @@ static void __attribute__((nonnull)) do_tx_txq(struct q_conn * const c,
     c->i.pkts_out += w_iov_sq_cnt(q);
 #endif
 
-    const uint16_t pmtu = MIN(
-        w_max_udp_payload(ws),
-        (uint16_t)(c->tp_out.max_pkt == 0 ? MIN_INI_LEN : c->tp_out.max_pkt));
+    const uint16_t pmtu =
+        MIN(w_max_udp_payload(ws),
+            (uint16_t)(c->tp_out.max_pkt == MAX_PKT_LEN ? MIN_INI_LEN
+                                                        : c->tp_out.max_pkt));
 
     if (unlikely(c->rec.max_pkt_size == MIN_INI_LEN)) {
         uint16_t coal_len = 0;
