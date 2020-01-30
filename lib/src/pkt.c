@@ -174,30 +174,35 @@ void coalesce(struct w_iov_sq * const q, const uint16_t max_pkt_size)
     while (v) {
         struct w_iov * next = sq_next(v, next);
         struct w_iov * prev = v;
+        const uint8_t * inner_buf = v->buf;
         while (next) {
             struct w_iov * const next_next = sq_next(next, next);
             // do we have space? do the packet types make sense to coalesce?
-            if (v->len + next->len <= max_pkt_size &&
-                can_coalesce_pkt_types(pkt_type(*v->buf),
-                                       pkt_type(*next->buf))) {
+            if (v->len + next->len > max_pkt_size) {
+                warn(DBG,
+                     "cannot coalesce %u-byte pkt behind %u-byte pkt, limit %u",
+                     next->len, v->len, max_pkt_size);
+                prev = next;
+            } else if (can_coalesce_pkt_types(pkt_type(*inner_buf),
+                                              pkt_type(*next->buf)) == false) {
+                warn(DBG, "cannot coalesce %s pkt behind %s pkt",
+                     pkt_type_str(*next->buf, next->buf + 1),
+                     pkt_type_str(*inner_buf, inner_buf + 1));
+                prev = next;
+            } else {
                 // we can coalesce
-                warn(
-                    INF,
-                    "coalescing %u-byte %s pkt behind %u-byte %s pkt, limit %u",
-                    next->len, pkt_type_str(*next->buf, next->buf + 1), v->len,
-                    pkt_type_str(*v->buf, v->buf + 1), max_pkt_size);
+                warn(INF,
+                     "coalescing %u-byte %s pkt behind %u-byte pkt, outermost "
+                     "%s, innermost %s",
+                     next->len, pkt_type_str(*next->buf, next->buf + 1), v->len,
+                     pkt_type_str(*v->buf, v->buf + 1),
+                     pkt_type_str(*inner_buf, inner_buf + 1));
+                inner_buf = next->buf;
                 memcpy(v->buf + v->len, next->buf, next->len);
                 v->len += next->len;
                 sq_remove_after(q, prev, next);
                 sq_next(next, next) = 0; // must unlink
                 w_free_iov(next);
-            } else {
-                warn(DBG,
-                     "cannot coalesce %u-byte %s pkt behind %u-byte %s pkt, "
-                     "limit %u",
-                     next->len, pkt_type_str(*next->buf, next->buf + 1), v->len,
-                     pkt_type_str(*v->buf, v->buf + 1), max_pkt_size);
-                prev = next;
             }
             next = next_next;
         }
