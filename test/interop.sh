@@ -1,20 +1,13 @@
 #! /usr/bin/env bash
 
+sed_pattern='s,\x1B\[[0-9;]*[a-zA-Z],,g'
+
 # Set up the routing needed for the simulation
 /setup.sh
 
 if [ -n "$TESTCASE" ]; then
     case "$TESTCASE" in
-    "versionnegotiation"|"handshake"|"transfer"|"retry"|"resumption")
-        ;;
     "http3")
-        # if [ "$ROLE" == "client" ]; then
-        #     CLIENT_ARGS=-3
-        # else
-            exit 127
-        # fi
-        ;;
-    *)
         exit 127
         ;;
     esac
@@ -40,14 +33,16 @@ if [ "$ROLE" == "client" ]; then
     "resumption")
         REQS=($REQUESTS)
         REQUESTS=${REQS[0]}
-        client $CLIENT_ARGS $REQUESTS >> /logs/$ROLE.log 2>&1
+        client $CLIENT_ARGS $REQUESTS 2>&1 | \
+            sed "$sed_pattern" >> /logs/$ROLE.log
         REQUESTS=${REQS[@]:1}
         ;;
     *)
         ;;
     esac
 
-    client $CLIENT_ARGS $REQUESTS >> /logs/$ROLE.log 2>&1
+    client $CLIENT_ARGS $REQUESTS  2>&1 | \
+        sed "$sed_pattern" >> /logs/$ROLE.log
 
 elif [ "$ROLE" == "server" ]; then
     case "$TESTCASE" in
@@ -59,6 +54,6 @@ elif [ "$ROLE" == "server" ]; then
     esac
 
     server $SERVER_ARGS -i eth0 -d /www -p 443 -p 4434 -t 0 \
-        -c /tls/dummy.crt -k /tls/dummy.key \
-        -q /logs/$ROLE.qlog >> /logs/$ROLE.log 2>&1
+        -c /tls/dummy.crt -k /tls/dummy.key -q /logs/$ROLE.qlog 2>&1 | \
+            sed "$sed_pattern" >> /logs/$ROLE.log
 fi
