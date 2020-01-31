@@ -875,9 +875,10 @@ static bool undo_hp(struct w_iov * const xv,
     const uint64_t pn_mask = pn_win - 1;
 
     m->hdr.nr |= (expected_pn & ~pn_mask);
-    if (m->hdr.nr + pn_hwin <= expected_pn)
+    if (m->hdr.nr + pn_hwin <= expected_pn &&
+        likely(m->hdr.nr + pn_hwin < (UINT64_C(1) << 62)))
         m->hdr.nr += pn_win;
-    else if (m->hdr.nr > expected_pn + pn_hwin && m->hdr.nr > pn_win)
+    else if (m->hdr.nr > expected_pn + pn_hwin && m->hdr.nr >= pn_win)
         m->hdr.nr -= pn_win;
 
     return true;
