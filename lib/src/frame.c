@@ -1318,8 +1318,11 @@ bool dec_frames(struct q_conn * const c,
         track_frame(m, ci, type, 1);
     }
 
-    if (pad_start)
-        log_pad((uint16_t)(pos - pad_start + 1));
+    if (pad_start) {
+        const uint16_t pad_len = (uint16_t)(pos - pad_start + 1);
+        track_frame(m, ci, FRM_PAD, pad_len);
+        log_pad(pad_len);
+    }
 
     if (m->strm_data_pos) {
         // adjust w_iov start and len to stream frame data
