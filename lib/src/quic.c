@@ -809,6 +809,10 @@ done:
     if (ped(c->w)->qlog)
         fflush(ped(c->w)->qlog);
 #endif
+    if (c->scid == 0) {
+        warn(ERR, "remove");
+        sl_remove(&c_zcid, c, q_conn, node_zcid_int);
+    }
 #ifndef NO_SERVER
     if (c->holds_sock && w_connected(c->sock) == false)
         sl_remove(&c_embr, c, q_conn, node_embr);
@@ -830,8 +834,11 @@ void q_cleanup(struct w_engine * const w)
     kh_foreach_value(&conns_by_srt, c, { q_close(c, 0, 0); });
 #endif
 
-#ifndef NO_SERVER
     struct q_conn * tmp;
+    sl_foreach_safe (c, &c_zcid, node_zcid_int, tmp)
+        q_close(c, 0, 0);
+
+#ifndef NO_SERVER
     sl_foreach_safe (c, &c_embr, node_embr, tmp)
         q_close(c, 0, 0);
 #endif

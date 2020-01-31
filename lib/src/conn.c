@@ -77,6 +77,7 @@
 const char * const conn_state_str[] = {CONN_STATES};
 
 struct q_conn_sl c_ready = sl_head_initializer(c_ready);
+struct q_conn_sl c_zcid = sl_head_initializer(c_zcid);
 
 #ifndef NO_SERVER
 struct q_conn_sl c_embr = sl_head_initializer(c_embr);
@@ -915,7 +916,13 @@ new_initial_cids(struct q_conn * const c,
 #ifndef NO_MIGRATION
     if (nscid.len)
         add_scid(c, &nscid);
+    else
 #endif
+        if (c->in_c_zcid == false) {
+        warn(ERR, "INSERT");
+        sl_insert_head(&c_zcid, c, node_zcid_int);
+        c->in_c_zcid = true;
+    }
 }
 
 

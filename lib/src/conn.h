@@ -155,8 +155,9 @@ KHASH_INIT(cids_by_id, struct cid *, struct cid *, 1, hash_cid, kh_cid_cmp)
 
 /// A QUIC connection.
 struct q_conn {
-    sl_entry(q_conn) node_rx_int; ///< For maintaining the internal RX queue.
-    sl_entry(q_conn) node_rx_ext; ///< For maintaining the external RX queue.
+    sl_entry(q_conn) node_rx_int;   ///< For maintaining the internal RX queue.
+    sl_entry(q_conn) node_rx_ext;   ///< For maintaining the external RX queue.
+    sl_entry(q_conn) node_zcid_int; ///< Zero-CID client connections.
 #ifndef NO_SERVER
     sl_entry(q_conn) node_aq;   ///< For maintaining the accept queue.
     sl_entry(q_conn) node_embr; ///< For bound but unconnected connections.
@@ -216,7 +217,8 @@ struct q_conn {
     uint32_t no_wnd : 1;            ///< TX is stalled by lack of window.
     uint32_t do_qr_test : 1;        ///< Perform quantum-readiness test.
     uint32_t tx_hshk_done : 1;      ///< Send HANDSHAKE_DONE.
-    uint32_t : 4;
+    uint32_t in_c_zcid : 1;
+    uint32_t : 3;
 
     conn_state_t state; ///< State of the connection.
 
@@ -311,6 +313,7 @@ extern struct q_conn_sl c_embr;
 
 
 extern struct q_conn_sl c_ready;
+extern struct q_conn_sl c_zcid;
 
 #if !defined(NDEBUG) && defined(DEBUG_EXTRA) && !defined(FUZZING)
 #define conn_to_state(c, s)                                                    \
