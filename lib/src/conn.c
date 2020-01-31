@@ -919,7 +919,6 @@ new_initial_cids(struct q_conn * const c,
     else
 #endif
         if (c->in_c_zcid == false) {
-        warn(ERR, "INSERT");
         sl_insert_head(&c_zcid, c, node_zcid_int);
         c->in_c_zcid = true;
     }
