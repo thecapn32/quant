@@ -35,6 +35,7 @@ declare -A servers=(
     [ats]=quic.ogre.com::4433:4434:4433:/en/latest/_static/jquery.js
     [f5]=f5quic.com:-3:4433:4433:4433:/50000
     [google]=quic.rocks:-3:4433:4434:4433:/40000
+    [haskell]=mew.org::4433:4433:4433:/40000
     [lsquic]=http3-test.litespeedtech.com:-3:4433:4434:4433:/40000
     [mvfst]=fb.mvfst.net:-3:443:4434:443:/40000
     [ngtcp2]=nghttp2.org:-3:4433:4434:4433:/40000
