@@ -1549,14 +1549,21 @@ static void __attribute__((nonnull))
 
 void restart_idle_alarm(struct q_conn * const c)
 {
-    const timeout_t t =
-        MAX((timeout_t)c->tp_in.idle_to * NS_PER_MS, 3 * c->rec.ld_alarm_val);
-
+    if (c->tp_in.max_idle_to || c->tp_out.max_idle_to) {
+        const timeout_t min_of_max_idle_to =
+            MIN(c->tp_in.max_idle_to ? c->tp_in.max_idle_to : UINT64_MAX,
+                c->tp_out.max_idle_to ? c->tp_out.max_idle_to : UINT64_MAX);
+        const timeout_t t =
+            MAX(min_of_max_idle_to * NS_PER_MS, 3 * c->rec.ld_alarm_val);
 #ifdef DEBUG_TIMERS
-    warn(DBG, "next idle alarm in %f sec", t / (double)NS_PER_S);
+        warn(DBG, "next idle alarm in %f sec", t / (double)NS_PER_S);
 #endif
-
-    timeouts_add(ped(c->w)->wheel, &c->idle_alarm, t);
+        timeouts_add(ped(c->w)->wheel, &c->idle_alarm, t);
+    }
+#ifdef DEBUG_TIMERS
+    else
+        warn(DBG, "disabling idle alarm");
+#endif
 }
 
 
@@ -1795,7 +1802,7 @@ void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
     c->do_qr_test = get_conf_uncond(c->w, conf, enable_quantum_readiness_test);
 
     // (re)set idle alarm
-    c->tp_in.idle_to = get_conf(c->w, conf, idle_timeout) * MS_PER_S;
+    c->tp_in.max_idle_to = get_conf(c->w, conf, idle_timeout) * MS_PER_S;
     restart_idle_alarm(c);
 
     c->tp_in.disable_active_migration =

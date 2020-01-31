@@ -113,7 +113,7 @@ struct transport_params {
     uint_t max_data;
     uint_t max_strms_uni;
     uint_t max_strms_bidi;
-    uint_t idle_to;
+    uint_t max_idle_to;
     uint_t max_ack_del;
     uint_t max_pkt;
     uint_t act_cid_lim;

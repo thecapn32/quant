@@ -511,9 +511,10 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             break;
 
         case TP_IDTO:
-            if (dec_tp(&c->tp_out.idle_to, &pos, end) == false)
+            if (dec_tp(&c->tp_out.max_idle_to, &pos, end) == false)
                 return 1;
-            warn(INF, "\tidle_timeout = %" PRIu " [ms]", c->tp_out.idle_to);
+            warn(INF, "\tmax_idle_timeout = %" PRIu " [ms]",
+                 c->tp_out.max_idle_to);
             break;
 
         case TP_MPS:
@@ -794,9 +795,10 @@ void init_tp(struct q_conn * const c)
 #endif
             break;
         case TP_IDTO:
-            enc_tp(&pos, end, TP_IDTO, c->tp_in.idle_to);
+            enc_tp(&pos, end, TP_IDTO, c->tp_in.max_idle_to);
 #ifdef DEBUG_EXTRA
-            warn(INF, "\tidle_timeout = %" PRIu " [ms]", c->tp_in.idle_to);
+            warn(INF, "\tmax_idle_timeout = %" PRIu " [ms]",
+                 c->tp_in.max_idle_to);
 #endif
             break;
         case TP_IMSD_BR:
