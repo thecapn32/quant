@@ -224,23 +224,31 @@ struct q_conn * q_connect(struct w_engine * const w,
     // make new connection
     struct w_sockaddr p;
 
-    uint16_t addr_idx = UINT16_MAX;
+    uint16_t idx = UINT16_MAX;
     if (peer->sa_family == AF_INET && w->have_ip4) {
-        addr_idx = w->addr4_pos;
+        idx = w->addr4_pos;
         p.port = ((const struct sockaddr_in *)(const void *)peer)->sin_port;
     } else if (peer->sa_family == AF_INET6 && w->have_ip6) {
-        addr_idx = 0;
+        const bool local_peer = IN6_IS_ADDR_LINKLOCAL(
+            &((const struct sockaddr_in6 *)(const void *)peer)->sin6_addr);
+        for (idx = 0;
+             idx < (uint16_t)(w->have_ip4 ? w->addr4_pos : w->addr_cnt); idx++)
+            if (local_peer == w_is_linklocal(&w->ifaddr[idx].addr))
+                break;
+        if (idx == (w->have_ip4 ? w->addr4_pos : w->addr_cnt)) {
+            warn(WRN, "could not find suitable addr to talk to %s peer",
+                 local_peer ? "link-local" : "global");
+            return 0;
+        }
         p.port = ((const struct sockaddr_in6 *)(const void *)peer)->sin6_port;
     }
 
-    if (unlikely(addr_idx == UINT16_MAX ||
-                 w_to_waddr(&p.addr, peer) == false)) {
+    if (unlikely(idx == UINT16_MAX || w_to_waddr(&p.addr, peer) == false)) {
         warn(CRT, "address family error");
         return 0;
     }
 
-    struct q_conn * const c =
-        new_conn(w, addr_idx, 0, 0, &p, peer_name, 0, conf);
+    struct q_conn * const c = new_conn(w, idx, 0, 0, &p, peer_name, 0, conf);
 
     // init TLS
     init_tls(c, peer_name, alpn);
