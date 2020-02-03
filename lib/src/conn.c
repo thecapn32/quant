@@ -1347,7 +1347,8 @@ static void __attribute__((nonnull))
                         goto drop;
                     }
                 }
-                if (c->state == conn_opng)
+                if (c->state == conn_opng &&
+                    (m->hdr.type != LH_RTRY || c->tok_len == 0))
                     add_dcid(c, &m->hdr.scid);
             }
 
