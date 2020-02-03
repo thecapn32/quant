@@ -444,7 +444,10 @@ static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
         warn(DBG, "%s TT alarm on %s conn %s", pn_type_str(pn->type),
              conn_type(c), cid_str(c->scid));
 #endif
-        detect_lost_pkts(pn, true);
+        // detect_lost_pkts(pn, true);
+        for (pn_t p = pn_init; p <= pn_data; p++)
+            if (unlikely(c->pns[p].abandoned == false))
+                detect_lost_pkts(&c->pns[p], true);
         goto set_timer; // otherwise no PTO will happen
     }
 
