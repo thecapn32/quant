@@ -1058,9 +1058,10 @@ dec_retire_cid_frame(const uint8_t ** pos,
 
 #ifndef NO_MIGRATION
     struct cid * const scid = splay_find(cids_by_seq, &c->scids_by_seq, &which);
-    if (unlikely(scid == 0))
-        err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_RTR,
-                         "no cid seq %" PRIu, which.seq);
+    if (unlikely(scid == 0)) {
+        warn(INF, "no cid seq %" PRIu, which.seq);
+        goto done;
+    }
     // cppcheck-suppress nullPointerRedundantCheck
     else if (c->scid->seq == scid->seq) {
         struct cid * const next_scid =
@@ -1075,6 +1076,7 @@ dec_retire_cid_frame(const uint8_t ** pos,
     // rx of RETIRE_CONNECTION_ID means we should send more
     c->tx_ncid = true;
 #endif
+done:
     return true;
 }
 
