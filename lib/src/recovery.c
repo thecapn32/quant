@@ -268,6 +268,16 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
 
     // rest of function is not from pseudo code
 
+    if (unlikely(c->pmtud_pkt_nr != UINT_T_MAX &&
+                 ((m->hdr.nr != UINT_T_MAX && m->hdr.type == SH) ||
+                  (m->hdr.nr == c->pmtud_pkt_nr && m->hdr.type == LH_HSHK)))) {
+        c->rec.max_pkt_size = default_max_pkt_len(c->sock->ws_af);
+        warn(NTE, RED "PMTU %u not validated, using %u" NRM,
+             MIN(w_max_udp_payload(c->sock), (uint16_t)c->tp_out.max_pkt),
+             c->rec.max_pkt_size);
+        c->pmtud_pkt_nr = UINT_T_MAX;
+    }
+
     diet_insert(&pn->acked_or_lost, m->hdr.nr, 0);
 
     if (is_lost) {
@@ -458,8 +468,9 @@ static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
 #endif
         c->tx_limit = have_keys(c, pn_hshk) ? 1 : 2;
         timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
-        if (pn)
-            detect_lost_pkts(pn, false);
+        for (pn_t p = pn_init; p <= pn_data; p++)
+            if (unlikely(c->pns[p].abandoned == false))
+                detect_lost_pkts(&c->pns[p], false);
 
     } else {
 #ifdef DEBUG_TIMERS

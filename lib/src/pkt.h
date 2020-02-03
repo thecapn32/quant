@@ -29,6 +29,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <sys/socket.h>
 
 #include <warpcore/warpcore.h>
 
@@ -74,6 +75,9 @@ struct q_stream; // IWYU pragma: no_forward_declare q_stream
 #define ERR_PROTOCOL_VIOLATION 0xa
 #define ERR_INVALID_TOKEN 0xb
 #define ERR_TLS(type) (0x100 + (type))
+
+
+#define default_max_pkt_len(af) ((af) == AF_INET ? 1252 : 1232)
 
 
 static inline bool __attribute__((const, no_instrument_function))
