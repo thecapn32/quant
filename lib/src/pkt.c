@@ -770,14 +770,6 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
                 decb_chk(rit, &pos, end, RIT_LEN);
         }
 
-        // if this is a CI, the dcid len must be >= 8 bytes
-        if (is_clnt == false &&
-            unlikely(*tok_len == 0 && m->hdr.type == LH_INIT &&
-                     m->hdr.dcid.len < 8)) {
-            warn(DBG, "dcid len %u too short", m->hdr.dcid.len);
-            return false;
-        }
-
         if (m->hdr.type != LH_RTRY) {
             uint64_t tmp = 0;
             decv_chk(&tmp, &pos, end);
