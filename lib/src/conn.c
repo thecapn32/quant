@@ -1333,7 +1333,7 @@ static void __attribute__((nonnull))
         }
 
         if (likely(c)) {
-            // FIXME: validate cid len of non-first Intial packets to >= 8
+            // FIXME: validate cid len of non-first Initial packets to >= 8
 
             if (m->hdr.scid.len && cid_cmp(&m->hdr.scid, c->dcid) != 0) {
                 if (m->hdr.vers && m->hdr.type == LH_RTRY) {
