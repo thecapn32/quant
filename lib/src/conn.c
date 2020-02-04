@@ -1059,7 +1059,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
         conn_to_state(c, conn_opng);
 
         // server limits response to 3x incoming pkt
-        c->path_val_win = 3 * m->udp_len;
+        c->path_val_win += 3 * m->udp_len;
 
         // server picks a new random cid
         update_act_scid(c);
