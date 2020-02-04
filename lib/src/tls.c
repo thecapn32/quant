@@ -289,7 +289,7 @@ static int setup_initial_key(struct st_quicly_cipher_context_t * ctx,
         goto Exit;
 
 Exit:
-    ptls_clear_memory(aead_secret, sizeof(aead_secret));
+    ptls_clear_memory(_aead_secret, sizeof(_aead_secret));
     return ret;
 }
 
