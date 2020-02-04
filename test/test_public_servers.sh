@@ -157,7 +157,7 @@ function bench_server {
     [ "$s" = "quicly" ] && port=8443
     [ "$s" = "ngx_quic" ] && obj=5MB.png
     [ "$s" = "lsquic" ] && host=http3check.net && prefix=test/
-    [ "$s" = "mvfst" ] && port=4433
+    [ "$s" = "mvfst" ] && port=443
 
     h2=$({ time -p curl -k -s -o "$h2_out" --max-time 20 --connect-timeout 3 \
                  "https://$host:$port/$prefix$obj$ext"; } 2>&1)
