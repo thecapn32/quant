@@ -44,6 +44,7 @@ if [ "$ROLE" == "client" ]; then
             client $CLIENT_ARGS $req 2>&1 | \
                 sed "$sed_pattern" >> /logs/$ROLE.log
         done
+        exit 0
         ;;
     *)
         ;;
