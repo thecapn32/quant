@@ -1071,6 +1071,10 @@ void q_migrate(struct q_conn * const c,
             } else
                 goto fail;
         }
+
+        // make sure we have a dcid to migrate to
+        if (splay_next(cids_by_seq, &c->dcids_by_seq, c->dcid) == 0)
+            goto fail;
     }
 
     struct w_sock * const new_sock = w_bind(c->w, idx, 0, &c->sockopt);
