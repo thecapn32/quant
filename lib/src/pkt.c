@@ -83,77 +83,93 @@ void log_pkt(const char * const dir,
         if (is_lh(m->hdr.flags)) {
             if (m->hdr.vers == 0)
                 twarn(NTE,
-                      BLD BLU "RX" NRM " from=%s:%u len=%u 0x%02x=" BLU
+                      BLD BLU "RX" NRM " from=%s%s%s:%u len=%u 0x%02x=" BLU
                               "%s " NRM "vers=0x%0" PRIx32 " dcid=%s scid=%s",
-                      ip, port, v->len, m->hdr.flags, pts, m->hdr.vers,
-                      dcid_str, scid_str);
+                      v->wv_af == AF_INET6 ? "[" : "", ip,
+                      v->wv_af == AF_INET6 ? "]" : "", port, v->len,
+                      m->hdr.flags, pts, m->hdr.vers, dcid_str, scid_str);
             else if (m->hdr.type == LH_RTRY)
                 twarn(NTE,
-                      BLD BLU "RX" NRM " from=%s:%u len=%u 0x%02x=" BLU
+                      BLD BLU "RX" NRM " from=%s%s%s:%u len=%u 0x%02x=" BLU
                               "%s " NRM "vers=0x%0" PRIx32
                               " dcid=%s scid=%s tok=%s rit=%s",
-                      ip, port, v->len, m->hdr.flags, pts, m->hdr.vers,
-                      dcid_str, scid_str, tok_str, rit_str);
+                      v->wv_af == AF_INET6 ? "[" : "", ip,
+                      v->wv_af == AF_INET6 ? "]" : "", port, v->len,
+                      m->hdr.flags, pts, m->hdr.vers, dcid_str, scid_str,
+                      tok_str, rit_str);
             else if (m->hdr.type == LH_INIT)
                 twarn(NTE,
-                      BLD BLU "RX" NRM " from=%s:%u len=%u 0x%02x=" BLU
+                      BLD BLU "RX" NRM " from=%s%s%s:%u len=%u 0x%02x=" BLU
                               "%s " NRM "vers=0x%0" PRIx32
                               " dcid=%s scid=%s tok=%s len=%u nr=" BLU
                               "%" PRIu NRM,
-                      ip, port, v->len, m->hdr.flags, pts, m->hdr.vers,
-                      dcid_str, scid_str, tok_str, m->hdr.len, m->hdr.nr);
+                      v->wv_af == AF_INET6 ? "[" : "", ip,
+                      v->wv_af == AF_INET6 ? "]" : "", port, v->len,
+                      m->hdr.flags, pts, m->hdr.vers, dcid_str, scid_str,
+                      tok_str, m->hdr.len, m->hdr.nr);
             else
                 twarn(NTE,
-                      BLD BLU "RX" NRM " from=%s:%u len=%u 0x%02x=" BLU
+                      BLD BLU "RX" NRM " from=%s%s%s:%u len=%u 0x%02x=" BLU
                               "%s " NRM "vers=0x%0" PRIx32
                               " dcid=%s scid=%s len=%u nr=" BLU "%" PRIu NRM,
-                      ip, port, v->len, m->hdr.flags, pts, m->hdr.vers,
-                      dcid_str, scid_str, m->hdr.len, m->hdr.nr);
+                      v->wv_af == AF_INET6 ? "[" : "", ip,
+                      v->wv_af == AF_INET6 ? "]" : "", port, v->len,
+                      m->hdr.flags, pts, m->hdr.vers, dcid_str, scid_str,
+                      m->hdr.len, m->hdr.nr);
         } else
             twarn(NTE,
-                  BLD BLU "RX" NRM " from=%s:%u len=%u 0x%02x=" BLU "%s " NRM
-                          "kyph=%u spin=%u dcid=%s nr=" BLU "%" PRIu NRM,
-                  ip, port, v->len, m->hdr.flags, pts,
-                  is_set(SH_KYPH, m->hdr.flags), is_set(SH_SPIN, m->hdr.flags),
-                  dcid_str, m->hdr.nr);
+                  BLD BLU "RX" NRM " from=%s%s%s:%u len=%u 0x%02x=" BLU
+                          "%s " NRM "kyph=%u spin=%u dcid=%s nr=" BLU
+                          "%" PRIu NRM,
+                  v->wv_af == AF_INET6 ? "[" : "", ip,
+                  v->wv_af == AF_INET6 ? "]" : "", port, v->len, m->hdr.flags,
+                  pts, is_set(SH_KYPH, m->hdr.flags),
+                  is_set(SH_SPIN, m->hdr.flags), dcid_str, m->hdr.nr);
 
     } else {
         // on TX, v->len is not yet final/correct, so don't print it
         if (is_lh(m->hdr.flags)) {
             if (m->hdr.vers == 0)
                 twarn(NTE,
-                      BLD GRN "TX" NRM " to=%s:%u 0x%02x=" GRN "%s " NRM
+                      BLD GRN "TX" NRM " to=%s%s%s:%u 0x%02x=" GRN "%s " NRM
                               "vers=0x%0" PRIx32 " dcid=%s scid=%s",
-                      ip, port, m->hdr.flags, pts, m->hdr.vers, dcid_str,
-                      scid_str);
+                      v->wv_af == AF_INET6 ? "[" : "", ip,
+                      v->wv_af == AF_INET6 ? "]" : "", port, m->hdr.flags, pts,
+                      m->hdr.vers, dcid_str, scid_str);
             else if (m->hdr.type == LH_RTRY)
                 twarn(NTE,
-                      BLD GRN "TX" NRM " to=%s:%u 0x%02x=" GRN "%s " NRM
+                      BLD GRN "TX" NRM " to=%s%s%s:%u 0x%02x=" GRN "%s " NRM
                               "vers=0x%0" PRIx32
                               " dcid=%s scid=%s tok=%s rit=%s",
-                      ip, port, m->hdr.flags, pts, m->hdr.vers, dcid_str,
-                      scid_str, tok_str, rit_str);
+                      v->wv_af == AF_INET6 ? "[" : "", ip,
+                      v->wv_af == AF_INET6 ? "]" : "", port, m->hdr.flags, pts,
+                      m->hdr.vers, dcid_str, scid_str, tok_str, rit_str);
             else if (m->hdr.type == LH_INIT)
                 twarn(NTE,
-                      BLD GRN "TX" NRM " to=%s:%u 0x%02x=" GRN "%s " NRM
+                      BLD GRN "TX" NRM " to=%s%s%s:%u 0x%02x=" GRN "%s " NRM
                               "vers=0x%0" PRIx32
                               " dcid=%s scid=%s tok=%s len=%u nr=" GRN
                               "%" PRIu NRM,
-                      ip, port, m->hdr.flags, pts, m->hdr.vers, dcid_str,
-                      scid_str, tok_str, m->hdr.len, m->hdr.nr);
+                      v->wv_af == AF_INET6 ? "[" : "", ip,
+                      v->wv_af == AF_INET6 ? "]" : "", port, m->hdr.flags, pts,
+                      m->hdr.vers, dcid_str, scid_str, tok_str, m->hdr.len,
+                      m->hdr.nr);
             else
                 twarn(NTE,
-                      BLD GRN "TX" NRM " to=%s:%u 0x%02x=" GRN "%s " NRM
+                      BLD GRN "TX" NRM " to=%s%s%s:%u 0x%02x=" GRN "%s " NRM
                               "vers=0x%0" PRIx32
                               " dcid=%s scid=%s len=%u nr=" GRN "%" PRIu NRM,
-                      ip, port, m->hdr.flags, pts, m->hdr.vers, dcid_str,
-                      scid_str, m->hdr.len, m->hdr.nr);
+                      v->wv_af == AF_INET6 ? "[" : "", ip,
+                      v->wv_af == AF_INET6 ? "]" : "", port, m->hdr.flags, pts,
+                      m->hdr.vers, dcid_str, scid_str, m->hdr.len, m->hdr.nr);
         } else
             twarn(NTE,
-                  BLD GRN "TX" NRM " to=%s:%u 0x%02x=" GRN "%s " NRM
+                  BLD GRN "TX" NRM " to=%s%s%s:%u 0x%02x=" GRN "%s " NRM
                           "kyph=%u spin=%u dcid=%s nr=" GRN "%" PRIu NRM,
-                  ip, port, m->hdr.flags, pts, is_set(SH_KYPH, m->hdr.flags),
-                  is_set(SH_SPIN, m->hdr.flags), dcid_str, m->hdr.nr);
+                  v->wv_af == AF_INET6 ? "[" : "", ip,
+                  v->wv_af == AF_INET6 ? "]" : "", port, m->hdr.flags, pts,
+                  is_set(SH_KYPH, m->hdr.flags), is_set(SH_SPIN, m->hdr.flags),
+                  dcid_str, m->hdr.nr);
     }
 }
 #endif

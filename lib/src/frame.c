@@ -30,6 +30,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/param.h>
+#include <sys/socket.h>
 
 #if !defined(PARTICLE) && !defined(RIOT_VERSION)
 #include <netinet/ip.h>
@@ -922,9 +923,13 @@ dec_path_response_frame(const uint8_t ** pos,
         return true;
     }
 
-    warn(NTE, "migration from %s:%u to %s:%u complete",
-         w_ntop(&c->peer.addr, ip_tmp), bswap16(c->peer.port),
-         w_ntop(&c->migr_peer.addr, ip_tmp), bswap16(c->migr_peer.port));
+    warn(NTE, "migration from %s%s%s:%u to %s%s%s:%u complete",
+         c->peer.addr.af == AF_INET6 ? "[" : "", w_ntop(&c->peer.addr, ip_tmp),
+         c->peer.addr.af == AF_INET6 ? "]" : "", bswap16(c->peer.port),
+         c->migr_peer.addr.af == AF_INET6 ? "[" : "",
+         w_ntop(&c->migr_peer.addr, ip_tmp),
+         c->migr_peer.addr.af == AF_INET6 ? "]" : "",
+         bswap16(c->migr_peer.port));
 
     c->peer = c->migr_peer;
     c->sock = c->migr_sock;

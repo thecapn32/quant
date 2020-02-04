@@ -1318,9 +1318,11 @@ static void __attribute__((nonnull))
                     goto drop;
                 }
 
-                warn(NTE, "new serv conn on port %u from %s:%u w/cid=%s",
-                     bswap16(ws->ws_lport), w_ntop(&v->wv_addr, ip_tmp),
-                     v->saddr.port, cid_str(&m->hdr.dcid));
+                warn(NTE, "new serv conn on port %u from %s%s%s:%u w/cid=%s",
+                     bswap16(ws->ws_lport), v->wv_af == AF_INET6 ? "[" : "",
+                     w_ntop(&v->wv_addr, ip_tmp),
+                     v->wv_af == AF_INET6 ? "]" : "", v->saddr.port,
+                     cid_str(&m->hdr.dcid));
 
                 c = new_conn(w_engine(ws), UINT16_MAX, &m->hdr.scid,
                              &m->hdr.dcid, &v->saddr, 0, ws->ws_lport,
@@ -1469,18 +1471,22 @@ static void __attribute__((nonnull))
 #endif
                     log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
                     warn(NTE,
-                         "pkt from new peer %s:%u, nr " FMT_PNR_IN
+                         "pkt from new peer %s%s%s:%u, nr " FMT_PNR_IN
                          " <= max " FMT_PNR_IN ", ignoring",
-                         w_ntop(&v->wv_addr, ip_tmp), bswap16(v->saddr.port),
-                         m->hdr.nr, max_recv_all);
+                         v->wv_af == AF_INET6 ? "[" : "",
+                         w_ntop(&v->wv_addr, ip_tmp),
+                         v->wv_af == AF_INET6 ? "]" : "",
+                         bswap16(v->saddr.port), m->hdr.nr, max_recv_all);
                     goto drop;
 #ifndef NO_MIGRATION
                 }
 
                 warn(NTE,
-                     "pkt from new peer %s:%u, nr " FMT_PNR_IN
+                     "pkt from new peer %s%s%s:%u, nr " FMT_PNR_IN
                      " > max " FMT_PNR_IN ", probing",
-                     w_ntop(&v->wv_addr, ip_tmp), bswap16(v->saddr.port),
+                     v->wv_af == AF_INET6 ? "[" : "",
+                     w_ntop(&v->wv_addr, ip_tmp),
+                     v->wv_af == AF_INET6 ? "]" : "", bswap16(v->saddr.port),
                      m->hdr.nr, max_recv_all);
 
                 rand_bytes(&c->path_chlg_out, sizeof(c->path_chlg_out));
@@ -1964,8 +1970,11 @@ struct q_conn * new_conn(struct w_engine * const w,
                                          .port = port});
 
         if (ws) {
-            warn(DBG, "other socket is %s:%u",
-                 w_ntop(&w->ifaddr[other_af_idx].addr, ip_tmp), bswap16(port));
+            warn(DBG, "other socket is %s%s%s:%u",
+                 w->ifaddr[other_af_idx].addr.af == AF_INET6 ? "[" : "",
+                 w_ntop(&w->ifaddr[other_af_idx].addr, ip_tmp),
+                 w->ifaddr[other_af_idx].addr.af == AF_INET6 ? "]" : "",
+                 bswap16(port));
 
             memcpy(&c->tp_in.pref_addr.addr4,
                    w->ifaddr[idx].addr.af == AF_INET ? &c->sock->ws_loc

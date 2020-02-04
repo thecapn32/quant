@@ -258,9 +258,11 @@ struct q_conn * q_connect(struct w_engine * const w,
     // if we have no early data, we're not trying 0-RTT
     c->try_0rtt &= early_data && early_data_stream;
 
-    warn(WRN, "new %u-RTT %s conn %s to %s:%u, %" PRIu " byte%s queued for TX",
+    warn(WRN,
+         "new %u-RTT %s conn %s to %s%s%s:%u, %" PRIu " byte%s queued for TX",
          c->try_0rtt ? 0 : 1, conn_type(c), cid_str(c->scid),
-         w_ntop(&p.addr, ip_tmp), bswap16(p.port),
+         p.addr.af == AF_INET6 ? "[" : "", w_ntop(&p.addr, ip_tmp),
+         p.addr.af == AF_INET6 ? "]" : "", bswap16(p.port),
          early_data ? w_iov_sq_len(early_data) : 0,
          plural(early_data ? w_iov_sq_len(early_data) : 0));
 
@@ -282,8 +284,10 @@ struct q_conn * q_connect(struct w_engine * const w,
 
     timeouts_add(ped(w)->wheel, &c->tx_w, 0);
 
-    warn(DBG, "waiting for connect on %s conn %s to %s:%u", conn_type(c),
-         cid_str(c->scid), w_ntop(&p.addr, ip_tmp), bswap16(p.port));
+    warn(DBG, "waiting for connect on %s conn %s to %s%s%s:%u", conn_type(c),
+         cid_str(c->scid), p.addr.af == AF_INET6 ? "[" : "",
+         w_ntop(&p.addr, ip_tmp), p.addr.af == AF_INET6 ? "]" : "",
+         bswap16(p.port));
     conn_to_state(c, conn_opng);
     loop_run(w, (func_ptr)q_connect, c, 0);
 
@@ -433,8 +437,10 @@ struct q_conn * q_bind(struct w_engine * const w
     struct q_conn * const c =
         new_conn(w, addr_idx, 0, 0, 0, 0, bswap16(port), 0);
     if (likely(c)) {
-        warn(INF, "bound %s socket to %s:%u", conn_type(c),
-             w_ntop(&c->sock->ws_laddr, ip_tmp), port);
+        warn(INF, "bound %s socket to %s%s%s:%u", conn_type(c),
+             c->sock->ws_laddr.af == AF_INET6 ? "[" : "",
+             w_ntop(&c->sock->ws_laddr, ip_tmp),
+             c->sock->ws_laddr.af == AF_INET6 ? "]" : "", port);
         sl_insert_head(&c_embr, c, node_embr);
     }
     return c;
@@ -502,9 +508,10 @@ accept:;
     restart_idle_alarm(c);
     c->needs_accept = false;
 
-    warn(WRN, "%s conn %s accepted from clnt %s:%u%s, cipher %s", conn_type(c),
-         cid_str(c->scid), w_ntop(&c->peer.addr, ip_tmp), bswap16(c->peer.port),
-         c->did_0rtt ? " after 0-RTT" : "",
+    warn(WRN, "%s conn %s accepted from clnt %s%s%s:%u%s, cipher %s",
+         conn_type(c), cid_str(c->scid), c->peer.addr.af == AF_INET6 ? "[" : "",
+         w_ntop(&c->peer.addr, ip_tmp), c->peer.addr.af == AF_INET6 ? "]" : "",
+         bswap16(c->peer.port), c->did_0rtt ? " after 0-RTT" : "",
          c->pns[pn_data]
              .data.out_1rtt[c->pns[pn_data].data.out_kyph]
              .aead->algo->name);
@@ -710,8 +717,11 @@ void q_close(struct q_conn * const c,
 #endif
 )
 {
-    warn(WRN, "closing %s conn %s on %s:%u w/err %s0x%" PRIx64 "%s%s%s" NRM,
-         conn_type(c), cid_str(c->scid), w_ntop(&c->sock->ws_laddr, ip_tmp),
+    warn(WRN, "closing %s conn %s on %s%s%s:%u w/err %s0x%" PRIx64 "%s%s%s" NRM,
+         conn_type(c), cid_str(c->scid),
+         c->sock->ws_laddr.af == AF_INET6 ? "[" : "",
+         w_ntop(&c->sock->ws_laddr, ip_tmp),
+         c->sock->ws_laddr.af == AF_INET6 ? "]" : "",
          bswap16(c->sock->ws_lport), code ? RED : NRM, code, reason ? " (" : "",
          reason ? reason : "", reason ? ")" : "");
 
@@ -1044,6 +1054,7 @@ void q_migrate(struct q_conn * const c,
 #ifndef NDEBUG
     char old_ip[IP_STRLEN];
     const uint16_t old_port = bswap16(c->sock->ws_lport);
+    const int old_af = c->sock->ws_laddr.af;
     w_ntop(&c->sock->ws_laddr, old_ip);
 #endif
 
@@ -1081,9 +1092,11 @@ void q_migrate(struct q_conn * const c,
     if (new_sock == 0) {
     fail:
         // could not open new w_sock, can't rebind
-        warn(ERR, "%s for %s conn %s from %s:%u failed",
+        warn(ERR, "%s for %s conn %s from %s%s%s:%u failed",
              switch_ip ? "conn migration" : "simulated NAT rebinding",
-             conn_type(c), c->scid ? cid_str(c->scid) : "-", old_ip, old_port);
+             conn_type(c), c->scid ? cid_str(c->scid) : "-",
+             old_af == AF_INET6 ? "[" : "", old_ip,
+             old_af == AF_INET6 ? "]" : "", old_port);
         return;
     }
 
@@ -1107,10 +1120,14 @@ void q_migrate(struct q_conn * const c,
         // also switch to new dcid
         use_next_dcid(c);
 
-    warn(WRN, "%s for %s conn %s from %s:%u to %s:%u",
+    warn(WRN, "%s for %s conn %s from %s%s%s:%u to %s%s%s:%u",
          switch_ip ? "conn migration" : "simulated NAT rebinding", conn_type(c),
-         c->scid ? cid_str(c->scid) : "-", old_ip, old_port,
-         w_ntop(&c->sock->ws_laddr, ip_tmp), bswap16(c->sock->ws_lport));
+         c->scid ? cid_str(c->scid) : "-", old_af == AF_INET6 ? "[" : "",
+         old_ip, old_af == AF_INET6 ? "]" : "", old_port,
+         c->sock->ws_laddr.af == AF_INET6 ? "[" : "",
+         w_ntop(&c->sock->ws_laddr, ip_tmp),
+         c->sock->ws_laddr.af == AF_INET6 ? "[" : "",
+         bswap16(c->sock->ws_lport));
 
     timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
 }
