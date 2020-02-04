@@ -1075,8 +1075,8 @@ dec_retire_cid_frame(const uint8_t ** pos,
 
     // rx of RETIRE_CONNECTION_ID means we should send more
     c->tx_ncid = true;
-#endif
 done:
+#endif
     return true;
 }
 
