@@ -7,7 +7,7 @@ sed_pattern='s,\x1B\[[0-9;]*[a-zA-Z],,g'
 
 if [ -n "$TESTCASE" ]; then
     case "$TESTCASE" in
-    "versionnegotiation"|"handshake"|"transfer"|"retry"|"resumption")
+    "versionnegotiation"|"handshake"|"transfer"|"retry"|"resumption"|"multiconnect")
         ;;
     *)
         exit 127
@@ -38,6 +38,12 @@ if [ "$ROLE" == "client" ]; then
         client $CLIENT_ARGS $REQUESTS 2>&1 | \
             sed "$sed_pattern" >> /logs/$ROLE.log
         REQUESTS=${REQS[@]:1}
+        ;;
+    "multiconnect")
+        for req in $REQUESTS; do
+            client $CLIENT_ARGS $req 2>&1 | \
+                sed "$sed_pattern" >> /logs/$ROLE.log
+        done
         ;;
     *)
         ;;
