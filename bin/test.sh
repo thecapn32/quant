@@ -103,7 +103,7 @@ case $s in
                 ;;
         quicly)
                 sc="external/quicly-prefix/src/quicly-build/cli \
-                        -l /tmp/quicly-s.log -v \
+                        -l /tmp/quicly-s.log -v -e /dev/stdout \
                         -k $key -c $cert $addr $port"
                 ;;
         ngtcp2)
