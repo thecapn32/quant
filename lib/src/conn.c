@@ -382,7 +382,7 @@ static void __attribute__((nonnull)) do_tx_txq(struct q_conn * const c,
     const uint16_t pmtu =
         MIN(w_max_udp_payload(ws), (uint16_t)c->tp_out.max_pkt);
 
-    if (unlikely(c->rec.max_pkt_size == MIN_INI_LEN)) {
+    if (unlikely(c->rec.max_pkt_size == MIN_INI_LEN && pmtu > MIN_INI_LEN)) {
         uint16_t coal_len = 0;
         struct w_iov * prev = 0;
         struct w_iov * sh;
