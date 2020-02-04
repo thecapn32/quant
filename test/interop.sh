@@ -7,7 +7,9 @@ sed_pattern='s,\x1B\[[0-9;]*[a-zA-Z],,g'
 
 if [ -n "$TESTCASE" ]; then
     case "$TESTCASE" in
-    "http3")
+    "versionnegotiation"|"handshake"|"transfer"|"retry"|"resumption")
+        ;;
+    *)
         exit 127
         ;;
     esac
