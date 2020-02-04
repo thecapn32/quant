@@ -29,27 +29,27 @@
 
 
 declare -A servers=(
-    # [tag]=name:flags:port:retry-port:h3-port:URL
-    [aioquic]=quic.aiortc.org::443:4434:443:/40000
-    # [apple]=172.16.100.192::4433:4433:4433:/40000
-    [ats]=quic.ogre.com::4433:4434:4433:/en/latest/_static/jquery.js
-    [f5]=f5quic.com:-3:4433:4433:4433:/50000
-    [google]=quic.rocks:-3:4433:4434:4433:/40000
-    [haskell]=mew.org::4433:4433:4433:/40000
-    [lsquic]=http3-test.litespeedtech.com:-3:4433:4434:4433:/40000
-    [mvfst]=fb.mvfst.net:-3:443:4434:443:/40000
-    [ngtcp2]=nghttp2.org:-3:4433:4434:4433:/40000
-    [ngx_quic]=cloudflare-quic.com:-3:443:443:443:/index.html
-    [pandora]=pandora.cm.in.tum.de::4433:4434:4433:/index.html
-    [picoquic]=test.privateoctopus.com::4433:4434:4433:/40000
-    [quant]=quant.eggert.org::4433:4434:4433:/40000
-    [quic-go]=quic.seemann.io:-3:443:443:443:/dynamic/40000
-    [quiche]=quic.tech:-3:8443:8444:8443:/128KB.png
-    [quicker]=quicker.edm.uhasselt.be::4433:4434:4433:/index.html
-    [quicly]=quic.examp1e.net::4433:4434:443:/40000
-    [quinn]=ralith.com::4433:4434:4433:/100K
-    [winquic]=quic.westus.cloudapp.azure.com::4433:4434:443:/draft-ietf-quic-http-11.txt
-    # [local]=localhost::4433:4434:4433:/40000
+    # [tag]="name|flags|port|retry-port|h3-port|URL"
+    [aioquic]="quic.aiortc.org|443|4434|443|/40000"
+    [apple]="2a00:79e1:abc:301:fca8:166e:525f:9b5c|4433|4433|4433|/40000"
+    [ats]="quic.ogre.com|4433|4434|4433|/en/latest/_static/jquery.js"
+    [f5]="f5quic.com|-3|4433|4433|4433|/50000"
+    [google]="quic.rocks|-3|4433|4434|4433|/40000"
+    [haskell]="mew.org|4433|4433|4433|/40000"
+    [lsquic]="http3-test.litespeedtech.com|-3|4433|4434|4433|/40000"
+    [mvfst]="fb.mvfst.net|-3|443|4434|443|/40000"
+    [ngtcp2]="nghttp2.org|-3|4433|4434|4433|/40000"
+    [ngx_quic]="cloudflare-quic.com|-3|443|443|443|/index.html"
+    [pandora]="pandora.cm.in.tum.de|4433|4434|4433|/index.html"
+    [picoquic]="test.privateoctopus.com|4433|4434|4433|/40000"
+    [quant]="quant.eggert.org|4433|4434|4433|/40000"
+    [quic-go]="quic.seemann.io|-3|443|443|443|/dynamic/40000"
+    [quiche]="quic.tech|-3|8443|8444|8443|/128KB.png"
+    [quicker]="quicker.edm.uhasselt.be|4433|4434|4433|/index.html"
+    [quicly]="quic.examp1e.net|4433|4434|443|/40000"
+    [quinn]="ralith.com|4433|4434|4433|/100K"
+    [winquic]="quic.westus.cloudapp.azure.com|4433|4434|443|/draft-ietf-quic-http-11.txt"
+    # [local]="localhost|4433|4434|4433|/40000"
 )
 
 results=(live fail vneg hshk data clse rsmt zrtt rtry qrdy migr bind adrm kyph spin aecn zcid http)
@@ -83,7 +83,7 @@ function test_server {
     local opts="-i $iface -t3 -v5 -l /dev/null"
     local log_base="/tmp/$script.$pid.$1.log"
 
-    IFS=':' read -ra info <<< "${servers[$1]}"
+    IFS='|' read -ra info <<< "${servers[$1]}"
     # 0=name, 1=flags, 2=port, 3=retry-port, 4=h3-port, 5=URL
 
     # initial 1rtt run followed by consecutive rsmt/0rtt run
@@ -134,7 +134,7 @@ function test_server {
 
 
 function bench_server {
-    IFS=':' read -ra info <<< "${servers[$1]}"
+    IFS='|' read -ra info <<< "${servers[$1]}"
     # 0=name, 1=flags, 2=port, 3=retry-port, 4=h3-port, 5=URL
 
     local size=5000000
