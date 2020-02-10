@@ -424,7 +424,11 @@ dec_stream_or_crypto_frame(const uint8_t type,
     // this ooo data doesn't overlap with anything
     track_sd_frame(ooo, false);
     track_bytes_in(m->strm, m->strm_data_len);
-    ensure(splay_insert(ooo_by_off, &m->strm->in_ooo, m) == 0, "inserted");
+    ensure(splay_insert(ooo_by_off, &m->strm->in_ooo, m) == 0,
+           "fail insert ooo off=%" PRIu " len=%u", m->strm_off,
+           m->strm_data_len);
+    warn(DBG, "inserted ooo off=%" PRIu " len=%u", m->strm_off,
+         m->strm_data_len);
 #else
     // signal to the ACK logic to not ACK this packet
     log_stream_or_crypto_frame(false, m, type, sid, true, sdt_ooo);
