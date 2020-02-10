@@ -41,7 +41,7 @@ if [ "$ROLE" == "client" ]; then
         ;;
     "multiconnect")
         for req in $REQUESTS; do
-            client $CLIENT_ARGS $req 2>&1 | \
+            client -t 60 $CLIENT_ARGS $req 2>&1 | \
                 sed "$sed_pattern" >> /logs/$ROLE.log
         done
         exit 0
