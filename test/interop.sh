@@ -37,12 +37,14 @@ if [ "$ROLE" == "client" ]; then
         REQUESTS=${REQS[0]}
         client $CLIENT_ARGS $REQUESTS 2>&1 | \
             sed "$sed_pattern" >> /logs/$ROLE.log
+        echo "XXX $ROLE DONE" >> /logs/$ROLE.log
         REQUESTS=${REQS[@]:1}
         ;;
     "multiconnect")
         for req in $REQUESTS; do
             client -t 120 $CLIENT_ARGS $req 2>&1 | \
                 sed "$sed_pattern" >> /logs/$ROLE.log
+            echo "XXX $ROLE DONE" >> /logs/$ROLE.log
         done
         exit 0
         ;;
@@ -52,6 +54,7 @@ if [ "$ROLE" == "client" ]; then
 
     client $CLIENT_ARGS $REQUESTS  2>&1 | \
         sed "$sed_pattern" >> /logs/$ROLE.log
+    echo "XXX $ROLE DONE" >> /logs/$ROLE.log
 
 elif [ "$ROLE" == "server" ]; then
     case "$TESTCASE" in
@@ -65,4 +68,5 @@ elif [ "$ROLE" == "server" ]; then
     server $SERVER_ARGS -i eth0 -d /www -p 443 -p 4434 -t 0 \
         -c /tls/dummy.crt -k /tls/dummy.key -q /logs/$ROLE.qlog 2>&1 | \
             sed "$sed_pattern" >> /logs/$ROLE.log
+        echo "XXX $ROLE DONE" >> /logs/$ROLE.log
 fi
