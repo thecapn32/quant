@@ -410,7 +410,8 @@ dec_stream_or_crypto_frame(const uint8_t type,
         p = splay_next(ooo_by_off, &m->strm->in_ooo, p);
 
     // right edge of p >= left edge of v
-    if (p && p->strm_off <= m->strm_off + m->strm_data_len - 1) {
+    if (p && p->strm_off <=
+                 m->strm_off + m->strm_data_len - (m->strm_data_len ? 1 : 0)) {
         // left edge of p <= right edge of v
         warn(ERR,
              "[%" PRIu "..%" PRIu "] have existing overlapping ooo data [%" PRIu
