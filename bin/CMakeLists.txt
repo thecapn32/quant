@@ -1,3 +1,5 @@
+find_package (Threads)
+
 set_property(DIRECTORY . APPEND PROPERTY COMPILE_DEFINITIONS ${DEFINES})
 
 # see https://cmake.org/Wiki/CMake_RPATH_handling#Always_full_RPATH
@@ -35,6 +37,7 @@ foreach(TARGET ${TARGETS})
       ${HTTP_PARSER_LIB}
       picohttp-core
       picoquic-core
+      ${CMAKE_THREAD_LIBS_INIT}
       picotls-minicrypto
       picotls-openssl
     )
@@ -45,6 +48,7 @@ foreach(TARGET ${TARGETS})
       ${HTTP_PARSER_LIB}
       picohttp-core
       picoquic-core
+      ${CMAKE_THREAD_LIBS_INIT}
       picotls-minicrypto
       picotls-openssl
     )
