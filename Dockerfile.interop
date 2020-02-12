@@ -7,7 +7,7 @@ RUN cmake -DDOCKER=True  ..
 RUN make install
 
 FROM martenseemann/quic-network-simulator-endpoint
-RUN apt-get install -y libhttp-parser2.8
+RUN apt-get install -y libhttp-parser2.8 binutils
 COPY --from=0 /usr/local /usr/local
 COPY --from=0 /src/Debug/test/dummy.* /tls/
 ADD ./test/interop.sh /run_endpoint.sh
