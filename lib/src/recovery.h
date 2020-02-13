@@ -66,7 +66,7 @@ struct recovery {
 
     // largest_sent_packet -> pn->lg_sent
     // largest_acked_packet -> pn->lg_acked
-    // max_ack_delay -> c->tp_out.max_ack_del
+    // max_ack_delay -> c->tp_peer.max_ack_del
 
     // CC state
 

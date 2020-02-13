@@ -380,7 +380,7 @@ static void __attribute__((nonnull)) do_tx_txq(struct q_conn * const c,
 #endif
 
     const uint16_t pmtu =
-        MIN(w_max_udp_payload(ws), (uint16_t)c->tp_out.max_pkt);
+        MIN(w_max_udp_payload(ws), (uint16_t)c->tp_peer.max_pkt);
 
     if (unlikely(c->rec.max_pkt_size == MIN_INI_LEN && pmtu > MIN_INI_LEN)) {
         uint16_t coal_len = 0;
@@ -469,13 +469,14 @@ void do_conn_fc(struct q_conn * const c, const uint16_t len)
     if (unlikely(c->state == conn_clsg || c->state == conn_drng))
         return;
 
-    if (len && c->out_data_str + len + c->rec.max_pkt_size > c->tp_out.max_data)
+    if (len &&
+        c->out_data_str + len + c->rec.max_pkt_size > c->tp_peer.max_data)
         c->blocked = true;
 
     // check if we need to do connection-level flow control
-    if (c->in_data_str * 4 > c->tp_in.max_data) {
+    if (c->in_data_str * 4 > c->tp_mine.max_data) {
         c->tx_max_data = true;
-        c->tp_in.max_data *= 4;
+        c->tp_mine.max_data *= 4;
     }
 }
 
@@ -497,7 +498,7 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
     }
 
 #ifndef NO_MIGRATION
-    if (likely(c->tp_out.disable_active_migration == false) &&
+    if (likely(c->tp_peer.disable_active_migration == false) &&
         unlikely(c->do_migration == true) && c->scid) {
         if (splay_count(&c->scids_by_seq) >= 2) {
             // the peer has a CID for us that they can switch to
@@ -647,7 +648,7 @@ void tx(struct q_conn * const c)
         // if we have no 0-rtt keys here, the ticket didn't have any - disable
         warn(NTE, "TLS ticket w/o 0-RTT keys, disabling 0-RTT");
         c->try_0rtt = false;
-        // TODO: we should also reset tp_out here
+        // TODO: we should also reset tp_peer here
     }
 
     if (unlikely(c->blocked))
@@ -1562,10 +1563,10 @@ static void __attribute__((nonnull))
 
 void restart_idle_alarm(struct q_conn * const c)
 {
-    if (c->tp_in.max_idle_to || c->tp_out.max_idle_to) {
+    if (c->tp_mine.max_idle_to || c->tp_peer.max_idle_to) {
         const timeout_t min_of_max_idle_to =
-            MIN(c->tp_in.max_idle_to ? c->tp_in.max_idle_to : UINT64_MAX,
-                c->tp_out.max_idle_to ? c->tp_out.max_idle_to : UINT64_MAX);
+            MIN(c->tp_mine.max_idle_to ? c->tp_mine.max_idle_to : UINT64_MAX,
+                c->tp_peer.max_idle_to ? c->tp_peer.max_idle_to : UINT64_MAX);
         const timeout_t t =
             MAX(min_of_max_idle_to * NS_PER_MS, 3 * c->rec.ld_alarm_val);
 #ifdef DEBUG_TIMERS
@@ -1584,7 +1585,7 @@ void restart_idle_alarm(struct q_conn * const c)
 
 static void __attribute__((nonnull)) restart_ack_alarm(struct q_conn * const c)
 {
-    const timeout_t t = c->tp_out.max_ack_del * NS_PER_MS;
+    const timeout_t t = c->tp_mine.max_ack_del * NS_PER_MS;
 
 #ifdef DEBUG_TIMERS
     warn(DBG, "next ACK alarm in %.3f sec", t / (double)NS_PER_S);
@@ -1719,7 +1720,7 @@ static void __attribute__((nonnull)) key_flip_alarm(struct q_conn * const c)
         c->do_key_flip = c->key_flips_enabled;
 #ifndef NO_MIGRATION
         // XXX we borrow the key flip timer for this
-        c->do_migration = !c->tp_out.disable_active_migration;
+        c->do_migration = !c->tp_peer.disable_active_migration;
 #endif
     }
 }
@@ -1817,10 +1818,10 @@ void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
     c->do_qr_test = get_conf_uncond(c->w, conf, enable_quantum_readiness_test);
 
     // (re)set idle alarm
-    c->tp_in.max_idle_to = get_conf(c->w, conf, idle_timeout) * MS_PER_S;
+    c->tp_mine.max_idle_to = get_conf(c->w, conf, idle_timeout) * MS_PER_S;
     restart_idle_alarm(c);
 
-    c->tp_in.disable_active_migration =
+    c->tp_mine.disable_active_migration =
 #ifndef NO_MIGRATION
         get_conf_uncond(c->w, conf, disable_active_migration);
 #else
@@ -1828,7 +1829,7 @@ void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
 #endif
     c->key_flips_enabled = get_conf_uncond(c->w, conf, enable_tls_key_updates);
 
-    if (c->tp_out.disable_active_migration == false || c->key_flips_enabled) {
+    if (c->tp_peer.disable_active_migration == false || c->key_flips_enabled) {
         c->tls_key_update_frequency =
             get_conf(c->w, conf, tls_key_update_frequency);
         restart_key_flip_alarm(c);
@@ -1842,7 +1843,7 @@ void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
     // XXX for testing, do a key flip and a migration ASAP (if enabled)
     c->do_key_flip = c->key_flips_enabled;
 #ifndef NO_MIGRATION
-    c->do_migration = !c->tp_out.disable_active_migration;
+    c->do_migration = !c->tp_peer.disable_active_migration;
 #endif
 #endif
 }
@@ -1948,23 +1949,23 @@ struct q_conn * new_conn(struct w_engine * const w,
         update_conf(c, conf);
 
     // TODO most of these should become configurable via q_conn_conf
-    c->tp_in.max_pkt = w_max_udp_payload(c->sock);
-    c->tp_in.ack_del_exp = c->tp_out.ack_del_exp = DEF_ACK_DEL_EXP;
-    c->tp_in.max_ack_del = c->tp_out.max_ack_del = DEF_MAX_ACK_DEL;
-    c->tp_in.max_strm_data_uni = is_clnt(c) ? INIT_STRM_DATA_UNI : 0;
-    c->tp_in.max_strms_uni = is_clnt(c) ? INIT_MAX_UNI_STREAMS : 0;
-    c->tp_in.max_strms_bidi =
+    c->tp_mine.max_pkt = w_max_udp_payload(c->sock);
+    c->tp_mine.ack_del_exp = c->tp_peer.ack_del_exp = DEF_ACK_DEL_EXP;
+    c->tp_mine.max_ack_del = c->tp_peer.max_ack_del = DEF_MAX_ACK_DEL;
+    c->tp_mine.max_strm_data_uni = is_clnt(c) ? INIT_STRM_DATA_UNI : 0;
+    c->tp_mine.max_strms_uni = is_clnt(c) ? INIT_MAX_UNI_STREAMS : 0;
+    c->tp_mine.max_strms_bidi =
         is_clnt(c) ? INIT_MAX_BIDI_STREAMS * 2 : INIT_MAX_BIDI_STREAMS;
-    c->tp_in.max_strm_data_bidi_local = c->tp_in.max_strm_data_bidi_remote =
+    c->tp_mine.max_strm_data_bidi_local = c->tp_mine.max_strm_data_bidi_remote =
         is_clnt(c) ? INIT_STRM_DATA_BIDI : INIT_STRM_DATA_BIDI / 2;
-    c->tp_in.max_data =
-        c->tp_in.max_strms_bidi * c->tp_in.max_strm_data_bidi_local;
-    c->tp_in.act_cid_lim =
-        c->tp_in.disable_active_migration ? 0 : (is_clnt(c) ? 4 : 2);
+    c->tp_mine.max_data =
+        c->tp_mine.max_strms_bidi * c->tp_mine.max_strm_data_bidi_local;
+    c->tp_mine.act_cid_lim =
+        c->tp_mine.disable_active_migration ? 0 : (is_clnt(c) ? 4 : 2);
 
 #if !defined(NO_MIGRATION) && !defined(NO_SERVER)
     if (!is_clnt(c) && peer && w->have_ip4 && w->have_ip6) {
-        // populate tp_in.pref_addr
+        // populate tp_mine.pref_addr
         const uint16_t other_af_idx =
             w->ifaddr[idx].addr.af == AF_INET ? 0 : w->addr4_pos;
         struct w_sock * const ws = get_local_sock_by_ipnp(
@@ -1978,19 +1979,19 @@ struct q_conn * new_conn(struct w_engine * const w,
                  w->ifaddr[other_af_idx].addr.af == AF_INET6 ? "]" : "",
                  bswap16(port));
 
-            memcpy(&c->tp_in.pref_addr.addr4,
+            memcpy(&c->tp_mine.pref_addr.addr4,
                    w->ifaddr[idx].addr.af == AF_INET ? &c->sock->ws_loc
                                                      : &ws->ws_loc,
-                   sizeof(c->tp_in.pref_addr.addr4));
-            memcpy(&c->tp_in.pref_addr.addr6,
+                   sizeof(c->tp_mine.pref_addr.addr4));
+            memcpy(&c->tp_mine.pref_addr.addr6,
                    w->ifaddr[idx].addr.af == AF_INET6 ? &c->sock->ws_loc
                                                       : &ws->ws_loc,
-                   sizeof(c->tp_in.pref_addr.addr6));
+                   sizeof(c->tp_mine.pref_addr.addr6));
 
-            c->max_cid_seq_out = c->tp_in.pref_addr.cid.seq = 1;
-            mk_rand_cid(&c->tp_in.pref_addr.cid, ped(c->w)->conf.server_cid_len,
-                        true);
-            add_scid(c, &c->tp_in.pref_addr.cid);
+            c->max_cid_seq_out = c->tp_mine.pref_addr.cid.seq = 1;
+            mk_rand_cid(&c->tp_mine.pref_addr.cid,
+                        ped(c->w)->conf.server_cid_len, true);
+            add_scid(c, &c->tp_mine.pref_addr.cid);
         }
     }
 #endif

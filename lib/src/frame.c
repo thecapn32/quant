@@ -148,7 +148,7 @@ void log_stream_or_crypto_frame(const bool rtx,
              m->strm_off,
              in ? (s ? s->in_data_max : 0) : (s ? s->out_data_max : 0),
              m->strm_data_len, in ? c->in_data_str : c->out_data_str,
-             in ? c->tp_in.max_data : c->tp_out.max_data,
+             in ? c->tp_mine.max_data : c->tp_peer.max_data,
              rtx ? REV BLD GRN "[RTX]" NRM " " : "", kind_str[kind]);
     else
         warn(INF, "%sCRYPTO" NRM " off=%" PRIu " len=%u %s[%s]",
@@ -504,7 +504,7 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
     // handshake pkts always use the default ACK delay exponent
     const uint_t ade = m->hdr.type == LH_INIT || m->hdr.type == LH_HSHK
                            ? DEF_ACK_DEL_EXP
-                           : c->tp_in.ack_del_exp;
+                           : c->tp_peer.ack_del_exp;
     const uint_t ack_delay_raw = (uint_t)ack_delay_tmp;
     const uint_t ack_delay = ack_delay_raw << ade;
 
@@ -760,8 +760,8 @@ dec_max_strms_frame(const uint8_t type,
     warn(INF, FRAM_IN "MAX_STREAMS" NRM " 0x%02x=%s max=%" PRIu, type,
          type == FRM_MSU ? "uni" : "bi", max);
 
-    uint_t * const max_streams =
-        type == FRM_MSU ? &c->tp_out.max_strms_uni : &c->tp_out.max_strms_bidi;
+    uint_t * const max_streams = type == FRM_MSU ? &c->tp_peer.max_strms_uni
+                                                 : &c->tp_peer.max_strms_bidi;
 
     if (max > *max_streams) {
         *max_streams = max;
@@ -785,12 +785,12 @@ dec_max_data_frame(const uint8_t ** pos,
 
     warn(INF, FRAM_IN "MAX_DATA" NRM " max=%" PRIu, max);
 
-    if (max > c->tp_out.max_data) {
-        c->tp_out.max_data = max;
+    if (max > c->tp_peer.max_data) {
+        c->tp_peer.max_data = max;
         c->blocked = false;
-    } else if (max < c->tp_out.max_data)
+    } else if (max < c->tp_peer.max_data)
         warn(NTE, "MAX_DATA %" PRIu " < current value %" PRIu, max,
-             c->tp_out.max_data);
+             c->tp_peer.max_data);
 
     return true;
 }
@@ -997,7 +997,7 @@ dec_new_cid_frame(const uint8_t ** pos,
 
 #ifndef NO_MIGRATION
     const uint_t max_act_cids =
-        c->tp_in.act_cid_lim + (c->tp_out.pref_addr.cid.len ? 1 : 0);
+        c->tp_mine.act_cid_lim + (c->tp_peer.pref_addr.cid.len ? 1 : 0);
     if (likely(dup == false) &&
         unlikely(splay_count(&c->dcids_by_seq) > max_act_cids))
         err_close_return(c, ERR_CONNECTION_ID_LIMIT, FRM_CID,
@@ -1449,7 +1449,7 @@ void enc_ack_frame(struct q_conn_info * const ci,
     struct q_conn * const c = pn->c;
     const uint_t ade = m->hdr.type == LH_INIT || m->hdr.type == LH_HSHK
                            ? DEF_ACK_DEL_EXP
-                           : c->tp_out.ack_del_exp;
+                           : c->tp_mine.ack_del_exp;
     const uint64_t ack_delay =
         NS_TO_US(loop_now() - diet_timestamp(first_rng)) >> ade;
 
@@ -1671,11 +1671,11 @@ void enc_max_data_frame(struct q_conn_info * const ci,
 {
     struct q_conn * const c = m->pn->c;
     enc1(pos, end, FRM_MCD);
-    encv(pos, end, c->tp_in.max_data);
+    encv(pos, end, c->tp_mine.max_data);
 
-    warn(INF, FRAM_OUT "MAX_DATA" NRM " max=%" PRIu, c->tp_in.max_data);
+    warn(INF, FRAM_OUT "MAX_DATA" NRM " max=%" PRIu, c->tp_mine.max_data);
 
-    m->max_data = c->tp_in.max_data;
+    m->max_data = c->tp_mine.max_data;
     c->tx_max_data = false;
     track_frame(m, ci, FRM_MCD, 1);
 }
@@ -1690,7 +1690,8 @@ void enc_max_strms_frame(struct q_conn_info * const ci,
     struct q_conn * const c = m->pn->c;
     const uint8_t type = bidi ? FRM_MSB : FRM_MSU;
     enc1(pos, end, type);
-    const uint_t max = bidi ? c->tp_in.max_strms_bidi : c->tp_in.max_strms_uni;
+    const uint_t max =
+        bidi ? c->tp_mine.max_strms_bidi : c->tp_mine.max_strms_uni;
     encv(pos, end, max);
 
     warn(INF, FRAM_OUT "MAX_STREAMS" NRM " 0x%02x=%s max=%" PRIu, type,
@@ -1729,7 +1730,7 @@ void enc_data_blocked_frame(struct q_conn_info * const ci,
 {
     enc1(pos, end, FRM_CDB);
 
-    m->data_blocked = m->pn->c->tp_out.max_data + m->strm_data_len;
+    m->data_blocked = m->pn->c->tp_peer.max_data + m->strm_data_len;
     encv(pos, end, m->data_blocked);
 
     warn(INF, FRAM_OUT "DATA_BLOCKED" NRM " lim=%" PRIu, m->data_blocked);
@@ -1748,7 +1749,7 @@ void enc_streams_blocked_frame(struct q_conn_info * const ci,
     const uint8_t type = bidi ? FRM_SBB : FRM_SBU;
     enc1(pos, end, type);
     const uint_t lim =
-        bidi ? c->tp_out.max_strms_bidi : c->tp_out.max_strms_uni;
+        bidi ? c->tp_peer.max_strms_bidi : c->tp_peer.max_strms_uni;
     encv(pos, end, lim);
 
     warn(INF, FRAM_OUT "STREAMS_BLOCKED" NRM " 0x%02x=%s lim=%" PRIu, type,

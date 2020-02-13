@@ -247,8 +247,8 @@ struct q_conn {
 
     timeout_t tls_key_update_frequency;
 
-    struct transport_params tp_in;  ///< Transport parameters for RX.
-    struct transport_params tp_out; ///< Transport parameters for TX.
+    struct transport_params tp_mine; ///< Local transport parameters.
+    struct transport_params tp_peer; ///< Remote transport parameters.
 
     struct recovery rec; ///< Loss recovery state.
     struct tls tls;      ///< TLS state.
@@ -516,7 +516,7 @@ static inline bool __attribute__((no_instrument_function,
     const struct cid * const max_scid =
         splay_max(cids_by_seq, &c->scids_by_seq);
     return splay_count(&c->scids_by_seq) <
-               MIN(c->tp_out.act_cid_lim, c->tp_in.act_cid_lim) ||
+               MIN(c->tp_peer.act_cid_lim, c->tp_mine.act_cid_lim) ||
            (max_scid && c->max_cid_seq_out < max_scid->seq);
 #else
     return false;

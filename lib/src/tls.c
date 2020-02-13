@@ -433,8 +433,8 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
     bitset_define(tp_list, TP_MAX);
     struct tp_list tp_list = bitset_t_initializer(0);
 
-    c->tp_out.act_cid_lim = UINT_T_MAX;
-    c->tp_out.max_pkt = MAX_PKT_LEN;
+    c->tp_peer.act_cid_lim = UINT_T_MAX;
+    c->tp_peer.max_pkt = MAX_PKT_LEN;
     while (pos < end) {
         uint16_t tp;
         if (dec2(&tp, &pos, end) == false)
@@ -465,67 +465,68 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
         switch (tp) {
         case TP_IMSD_U:
-            if (dec_tp(&c->tp_out.max_strm_data_uni, &pos, end) == false)
+            if (dec_tp(&c->tp_peer.max_strm_data_uni, &pos, end) == false)
                 return 1;
             warn(INF, "\tinitial_max_stream_data_uni = %" PRIu " [bytes]",
-                 c->tp_out.max_strm_data_uni);
+                 c->tp_peer.max_strm_data_uni);
             break;
 
         case TP_IMSD_BL:
-            if (dec_tp(&c->tp_out.max_strm_data_bidi_remote, &pos, end) ==
+            if (dec_tp(&c->tp_peer.max_strm_data_bidi_remote, &pos, end) ==
                 false)
                 return 1;
             warn(INF,
                  "\tinitial_max_stream_data_bidi_local = %" PRIu " [bytes]",
-                 c->tp_out.max_strm_data_bidi_remote);
+                 c->tp_peer.max_strm_data_bidi_remote);
             break;
 
         case TP_IMSD_BR:
             // this is RX'ed as _remote, but applies to streams we open, so:
-            if (dec_tp(&c->tp_out.max_strm_data_bidi_local, &pos, end) == false)
+            if (dec_tp(&c->tp_peer.max_strm_data_bidi_local, &pos, end) ==
+                false)
                 return 1;
             warn(INF,
                  "\tinitial_max_stream_data_bidi_remote = %" PRIu " [bytes]",
-                 c->tp_out.max_strm_data_bidi_local);
+                 c->tp_peer.max_strm_data_bidi_local);
             break;
 
         case TP_IMD:
-            if (dec_tp(&c->tp_out.max_data, &pos, end) == false)
+            if (dec_tp(&c->tp_peer.max_data, &pos, end) == false)
                 return 1;
             warn(INF, "\tinitial_max_data = %" PRIu " [bytes]",
-                 c->tp_out.max_data);
+                 c->tp_peer.max_data);
             break;
 
         case TP_IMSB:
-            if (dec_tp(&c->tp_out.max_strms_bidi, &pos, end) == false)
+            if (dec_tp(&c->tp_peer.max_strms_bidi, &pos, end) == false)
                 return 1;
             warn(INF, "\tinitial_max_streams_bidi = %" PRIu,
-                 c->tp_out.max_strms_bidi);
+                 c->tp_peer.max_strms_bidi);
             break;
 
         case TP_IMSU:
-            if (dec_tp(&c->tp_out.max_strms_uni, &pos, end) == false)
+            if (dec_tp(&c->tp_peer.max_strms_uni, &pos, end) == false)
                 return 1;
             warn(INF, "\tinitial_max_streams_uni = %" PRIu,
-                 c->tp_out.max_strms_uni);
+                 c->tp_peer.max_strms_uni);
             break;
 
         case TP_IDTO:
-            if (dec_tp(&c->tp_out.max_idle_to, &pos, end) == false)
+            if (dec_tp(&c->tp_peer.max_idle_to, &pos, end) == false)
                 return 1;
             warn(INF, "\tmax_idle_timeout = %" PRIu " [ms]",
-                 c->tp_out.max_idle_to);
+                 c->tp_peer.max_idle_to);
             break;
 
         case TP_MPS:
-            if (dec_tp(&c->tp_out.max_pkt, &pos, end) == false)
+            if (dec_tp(&c->tp_peer.max_pkt, &pos, end) == false)
                 return 1;
             warn(INF, "\tmax_packet_size = %" PRIu " [bytes]",
-                 c->tp_out.max_pkt);
-            if (c->tp_out.max_pkt < 1200) {
+                 c->tp_peer.max_pkt);
+            if (c->tp_peer.max_pkt < 1200) {
                 err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
-                          "tp_out.max_pkt %" PRIu " invalid (< 1200)",
-                          c->tp_out.max_pkt);
+                          "tp_peer.max_pkt %" PRIu " invalid (< 1200)",
+                          c->tp_peer.max_pkt);
                 return 1;
             }
             break;
@@ -540,18 +541,18 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                           "ack_delay_exponent %" PRIu " invalid", ade);
                 return 1;
             }
-            c->tp_out.ack_del_exp = (uint8_t)ade;
+            c->tp_peer.ack_del_exp = (uint8_t)ade;
             break;
 
         case TP_MAD:
-            if (dec_tp(&c->tp_out.max_ack_del, &pos, end) == false)
+            if (dec_tp(&c->tp_peer.max_ack_del, &pos, end) == false)
                 return 1;
             warn(INF, "\tmax_ack_delay = %" PRIu " [ms]",
-                 c->tp_out.max_ack_del);
-            if (c->tp_out.max_ack_del > (1 << 14)) {
+                 c->tp_peer.max_ack_del);
+            if (c->tp_peer.max_ack_del > (1 << 14)) {
                 err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
                           "max_ack_delay %" PRIu " invalid",
-                          c->tp_out.max_ack_del);
+                          c->tp_peer.max_ack_del);
                 return 1;
             }
             break;
@@ -567,11 +568,11 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             if (dec2(&len, &pos, end) == false)
                 return 1;
             if (len) {
-                decb(c->tp_out.orig_cid.id, &pos, end, len);
-                c->tp_out.orig_cid.len = (uint8_t)len;
+                decb(c->tp_peer.orig_cid.id, &pos, end, len);
+                c->tp_peer.orig_cid.len = (uint8_t)len;
             }
             warn(INF, "\toriginal_connection_id = %s",
-                 cid_str(&c->tp_out.orig_cid));
+                 cid_str(&c->tp_peer.orig_cid));
             break;
 
         case TP_DMIG:;
@@ -579,7 +580,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             if (dec_tp(&dmig, &pos, end) == false)
                 return 1;
             warn(INF, "\tdisable_active_migration = true");
-            c->tp_out.disable_active_migration = true;
+            c->tp_peer.disable_active_migration = true;
             break;
 
         case TP_SRT:
@@ -615,7 +616,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                 return 1;
             const uint8_t * const e = pos + l;
 
-            struct pref_addr * const pa = &c->tp_out.pref_addr;
+            struct pref_addr * const pa = &c->tp_peer.pref_addr;
             struct w_sockaddr * const pa4 = &pa->addr4;
             struct w_sockaddr * const pa6 = &pa->addr6;
 
@@ -647,10 +648,10 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             break;
 
         case TP_ACIL:
-            if (dec_tp(&c->tp_out.act_cid_lim, &pos, end) == false)
+            if (dec_tp(&c->tp_peer.act_cid_lim, &pos, end) == false)
                 return 1;
             warn(INF, "\tactive_connection_id_limit = %" PRIu,
-                 c->tp_out.act_cid_lim);
+                 c->tp_peer.act_cid_lim);
             break;
 
         default:
@@ -662,28 +663,28 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
     // if we did a RETRY, check that we got orig_cid and it matches
     if (is_clnt(c) && c->tok_len) {
-        if (c->tp_out.orig_cid.len == 0) {
+        if (c->tp_peer.orig_cid.len == 0) {
             err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
                       "no original_connection_id tp received");
             return 1;
         }
 
-        if (cid_cmp(&c->tp_out.orig_cid, &c->odcid)) {
+        if (cid_cmp(&c->tp_peer.orig_cid, &c->odcid)) {
             err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
                       "cid/odcid mismatch");
             return 1;
         }
     }
 
-    if (c->tp_out.disable_active_migration == false) {
-        if (c->tp_out.act_cid_lim == UINT_T_MAX)
-            c->tp_out.act_cid_lim = 2;
-        else if (c->tp_out.act_cid_lim < 2)
+    if (c->tp_peer.disable_active_migration == false) {
+        if (c->tp_peer.act_cid_lim == UINT_T_MAX)
+            c->tp_peer.act_cid_lim = 2;
+        else if (c->tp_peer.act_cid_lim < 2)
             err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
                       "active_connection_id_limit %" PRIu " < 2",
-                      c->tp_out.act_cid_lim);
+                      c->tp_peer.act_cid_lim);
     } else
-        c->tp_out.act_cid_lim = 0;
+        c->tp_peer.act_cid_lim = 0;
 
     // apply these parameter to all current non-crypto streams
     struct q_stream * s;
@@ -755,15 +756,15 @@ void init_tp(struct q_conn * const c)
     for (size_t j = 0; j <= tp_cnt - 1; j++)
         switch (tp_order[j]) {
         case TP_IMSU:
-            if (c->tp_in.max_strms_uni)
-                enc_tp(&pos, end, TP_IMSU, c->tp_in.max_strms_uni);
+            if (c->tp_mine.max_strms_uni)
+                enc_tp(&pos, end, TP_IMSU, c->tp_mine.max_strms_uni);
             break;
         case TP_IMSD_U:
-            if (c->tp_in.max_strm_data_uni) {
-                enc_tp(&pos, end, TP_IMSD_U, c->tp_in.max_strm_data_uni);
+            if (c->tp_mine.max_strm_data_uni) {
+                enc_tp(&pos, end, TP_IMSD_U, c->tp_mine.max_strm_data_uni);
 #ifdef DEBUG_EXTRA
                 warn(INF, "\tinitial_max_stream_data_uni = %" PRIu " [bytes]",
-                     c->tp_in.max_strm_data_uni);
+                     c->tp_mine.max_strm_data_uni);
 #endif
             }
             break;
@@ -783,77 +784,78 @@ void init_tp(struct q_conn * const c)
                 encb_tp(&pos, end, TP_OCID, c->odcid.id, c->odcid.len);
 #ifdef DEBUG_EXTRA
                 warn(INF, "\toriginal_connection_id = %s",
-                     cid_str(&c->tp_in.orig_cid));
+                     cid_str(&c->tp_mine.orig_cid));
 #endif
             }
             break;
         case TP_IMSB:
-            enc_tp(&pos, end, TP_IMSB, c->tp_in.max_strms_bidi);
+            enc_tp(&pos, end, TP_IMSB, c->tp_mine.max_strms_bidi);
 #ifdef DEBUG_EXTRA
             warn(INF, "\tinitial_max_streams_bidi = %" PRIu,
-                 c->tp_in.max_strms_bidi);
+                 c->tp_mine.max_strms_bidi);
 #endif
             break;
         case TP_IDTO:
-            enc_tp(&pos, end, TP_IDTO, c->tp_in.max_idle_to);
+            enc_tp(&pos, end, TP_IDTO, c->tp_mine.max_idle_to);
 #ifdef DEBUG_EXTRA
             warn(INF, "\tmax_idle_timeout = %" PRIu " [ms]",
-                 c->tp_in.max_idle_to);
+                 c->tp_mine.max_idle_to);
 #endif
             break;
         case TP_IMSD_BR:
-            enc_tp(&pos, end, TP_IMSD_BR, c->tp_in.max_strm_data_bidi_remote);
+            enc_tp(&pos, end, TP_IMSD_BR, c->tp_mine.max_strm_data_bidi_remote);
 #ifdef DEBUG_EXTRA
             warn(INF,
                  "\tinitial_max_stream_data_bidi_remote = %" PRIu " [bytes]",
-                 c->tp_in.max_strm_data_bidi_remote);
+                 c->tp_mine.max_strm_data_bidi_remote);
 #endif
             break;
         case TP_IMSD_BL:
-            enc_tp(&pos, end, TP_IMSD_BL, c->tp_in.max_strm_data_bidi_local);
+            enc_tp(&pos, end, TP_IMSD_BL, c->tp_mine.max_strm_data_bidi_local);
 #ifdef DEBUG_EXTRA
             warn(INF,
                  "\tinitial_max_stream_data_bidi_local = %" PRIu " [bytes]",
-                 c->tp_in.max_strm_data_bidi_remote);
+                 c->tp_mine.max_strm_data_bidi_remote);
 #endif
             break;
         case TP_IMD:
-            enc_tp(&pos, end, TP_IMD, c->tp_in.max_data);
+            enc_tp(&pos, end, TP_IMD, c->tp_mine.max_data);
 #ifdef DEBUG_EXTRA
             warn(INF, "\tinitial_max_data = %" PRIu " [bytes]",
-                 c->tp_in.max_data);
+                 c->tp_mine.max_data);
 #endif
             break;
         case TP_ADE:
-            enc_tp(&pos, end, TP_ADE, c->tp_in.ack_del_exp);
+            enc_tp(&pos, end, TP_ADE, c->tp_mine.ack_del_exp);
 #ifdef DEBUG_EXTRA
-            warn(INF, "\tack_delay_exponent = %u", c->tp_in.ack_del_exp);
+            warn(INF, "\tack_delay_exponent = %u", c->tp_mine.ack_del_exp);
 #endif
             break;
         case TP_MAD:
-            enc_tp(&pos, end, TP_MAD, c->tp_in.max_ack_del);
+            enc_tp(&pos, end, TP_MAD, c->tp_mine.max_ack_del);
 #ifdef DEBUG_EXTRA
-            warn(INF, "\tmax_ack_delay = %" PRIu " [ms]", c->tp_in.max_ack_del);
+            warn(INF, "\tmax_ack_delay = %" PRIu " [ms]",
+                 c->tp_mine.max_ack_del);
 #endif
             break;
         case TP_MPS:
-            enc_tp(&pos, end, TP_MPS, c->tp_in.max_pkt);
+            enc_tp(&pos, end, TP_MPS, c->tp_mine.max_pkt);
 #ifdef DEBUG_EXTRA
             warn(INF, "\tmax_packet_size = %" PRIu " [bytes]",
-                 c->tp_in.max_pkt);
+                 c->tp_mine.max_pkt);
 #endif
             break;
         case TP_ACIL:
-            if (c->tp_in.disable_active_migration == false) {
-                enc_tp(&pos, end, TP_ACIL, c->tp_in.act_cid_lim);
+            if (c->tp_mine.disable_active_migration == false) {
+                enc_tp(&pos, end, TP_ACIL, c->tp_mine.act_cid_lim);
 #ifdef DEBUG_EXTRA
                 warn(INF, "\tactive_connection_id_limit = %" PRIu,
-                     c->tp_in.act_cid_lim);
+                     c->tp_mine.act_cid_lim);
 #endif
             }
             break;
         case TP_PRFA:;
-            struct pref_addr * const pa = &c->tp_in.pref_addr;
+            struct pref_addr * const pa = &c->tp_mine.pref_addr;
             if (!is_clnt(c) && pa->cid.seq) {
                 struct w_sockaddr * const pa4 = &pa->addr4;
                 struct w_sockaddr * const pa6 = &pa->addr6;
@@ -884,8 +886,8 @@ void init_tp(struct q_conn * const c)
             }
             break;
         case TP_DMIG:
-            if (c->tp_in.disable_active_migration) {
-                enc_tp(&pos, end, TP_DMIG, c->tp_in.disable_active_migration);
+            if (c->tp_mine.disable_active_migration) {
+                enc_tp(&pos, end, TP_DMIG, c->tp_mine.disable_active_migration);
 #ifdef DEBUG_EXTRA
                 warn(INF, "\tdisable_active_migration = true");
 #endif
@@ -1071,7 +1073,7 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
     t->alpn = a;
 #endif
 
-    memcpy(&t->tp, &c->tp_out, sizeof(t->tp));
+    memcpy(&t->tp, &c->tp_peer, sizeof(t->tp));
     t->vers = c->vers;
 
     t->ticket_len = src.len;
@@ -1183,7 +1185,7 @@ void init_tls(struct q_conn * const c,
         if (t && t->vers != 0) {
             hshk_prop->client.session_ticket =
                 ptls_iovec_init(t->ticket, t->ticket_len);
-            memcpy(&c->tp_out, &t->tp, sizeof(t->tp));
+            memcpy(&c->tp_peer, &t->tp, sizeof(t->tp));
             c->vers_initial = c->vers = t->vers;
             c->try_0rtt = true;
         }

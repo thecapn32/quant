@@ -61,11 +61,11 @@ struct q_stream * get_stream(struct q_conn * const c, const dint_t id)
 
 dint_t max_sid(const dint_t sid, const struct q_conn * const c)
 {
-    const uint_t max =
-        is_srv_ini(sid) == is_clnt(c)
-            ? (is_uni(sid) ? c->tp_in.max_strms_uni : c->tp_in.max_strms_bidi)
-            : (is_uni(sid) ? c->tp_out.max_strms_uni
-                           : c->tp_out.max_strms_bidi);
+    const uint_t max = is_srv_ini(sid) == is_clnt(c)
+                           ? (is_uni(sid) ? c->tp_mine.max_strms_uni
+                                          : c->tp_mine.max_strms_bidi)
+                           : (is_uni(sid) ? c->tp_peer.max_strms_uni
+                                          : c->tp_peer.max_strms_bidi);
     return unlikely(max == 0)
                ? 0
                : (dint_t)((max - 1) << 2) | ((STRM_FL_SRV | STRM_FL_UNI) & sid);
@@ -75,17 +75,18 @@ dint_t max_sid(const dint_t sid, const struct q_conn * const c)
 void apply_stream_limits(struct q_stream * const s)
 {
     struct q_conn * const c = s->c;
-    s->in_data_max = is_srv_ini(s->id) == is_clnt(c)
-                         ? (is_uni(s->id) ? c->tp_in.max_strm_data_uni
-                                          : c->tp_in.max_strm_data_bidi_remote)
-                         : (is_uni(s->id) ? c->tp_in.max_strm_data_uni
-                                          : c->tp_in.max_strm_data_bidi_local);
+    s->in_data_max =
+        is_srv_ini(s->id) == is_clnt(c)
+            ? (is_uni(s->id) ? c->tp_mine.max_strm_data_uni
+                             : c->tp_mine.max_strm_data_bidi_remote)
+            : (is_uni(s->id) ? c->tp_mine.max_strm_data_uni
+                             : c->tp_mine.max_strm_data_bidi_local);
     s->out_data_max =
         is_srv_ini(s->id) == is_clnt(c)
-            ? (is_uni(s->id) ? c->tp_out.max_strm_data_uni
-                             : c->tp_out.max_strm_data_bidi_remote)
-            : (is_uni(s->id) ? c->tp_out.max_strm_data_uni
-                             : c->tp_out.max_strm_data_bidi_local);
+            ? (is_uni(s->id) ? c->tp_peer.max_strm_data_uni
+                             : c->tp_peer.max_strm_data_bidi_remote)
+            : (is_uni(s->id) ? c->tp_peer.max_strm_data_uni
+                             : c->tp_peer.max_strm_data_bidi_local);
 
     if (s->id >= 0)
         do_stream_fc(s, 0);
@@ -237,23 +238,23 @@ void do_stream_id_fc(struct q_conn * const c,
     if (local) {
         // this is a local stream
         if (bidi)
-            c->sid_blocked_bidi = (cnt == c->tp_out.max_strms_bidi);
+            c->sid_blocked_bidi = (cnt == c->tp_peer.max_strms_bidi);
         else
             c->sid_blocked_uni =
-                (c->tp_out.max_strms_uni && cnt == c->tp_out.max_strms_uni);
+                (c->tp_peer.max_strms_uni && cnt == c->tp_peer.max_strms_uni);
         return;
     }
 
     // this is a remote stream
     if (bidi) {
-        if (cnt == c->tp_in.max_strms_bidi) {
+        if (cnt == c->tp_mine.max_strms_bidi) {
             c->tx_max_sid_bidi = true;
-            c->tp_in.max_strms_bidi *= 2;
+            c->tp_mine.max_strms_bidi *= 2;
         }
     } else {
-        if (cnt == c->tp_in.max_strms_uni) {
+        if (cnt == c->tp_mine.max_strms_uni) {
             c->tx_max_sid_uni = true;
-            c->tp_in.max_strms_uni *= 2;
+            c->tp_mine.max_strms_uni *= 2;
         }
     }
 }

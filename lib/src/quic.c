@@ -530,7 +530,7 @@ struct q_stream * q_rsv_stream(struct q_conn * const c, const bool bidi)
         return 0;
 
     const uint_t * const max_streams =
-        bidi ? &c->tp_out.max_strms_bidi : &c->tp_out.max_strms_uni;
+        bidi ? &c->tp_peer.max_strms_bidi : &c->tp_peer.max_strms_uni;
 
     if (unlikely(*max_streams == 0))
         warn(WRN, "peer hasn't allowed %s streams", bidi ? "bi" : "uni");
@@ -1071,14 +1071,14 @@ void q_migrate(struct q_conn * const c,
             if (alt_peer) {
                 w_to_waddr(&c->peer.addr, alt_peer);
             } else if ((c->w->ifaddr[other_idx].addr.af == AF_INET &&
-                        memcmp(&c->tp_out.pref_addr.addr4.addr.ip4,
+                        memcmp(&c->tp_peer.pref_addr.addr4.addr.ip4,
                                &(char[IP4_LEN]){0}, IP4_LEN) != 0) ||
                        (c->w->ifaddr[other_idx].addr.af == AF_INET6 &&
-                        memcmp(&c->tp_out.pref_addr.addr6.addr.ip4,
+                        memcmp(&c->tp_peer.pref_addr.addr6.addr.ip4,
                                &(char[IP6_LEN]){0}, IP6_LEN) != 0)) {
                 c->peer = c->w->ifaddr[other_idx].addr.af == AF_INET
-                              ? c->tp_out.pref_addr.addr4
-                              : c->tp_out.pref_addr.addr6;
+                              ? c->tp_peer.pref_addr.addr4
+                              : c->tp_peer.pref_addr.addr6;
             } else
                 goto fail;
         }

@@ -188,7 +188,7 @@ void set_ld_timer(struct q_conn * const c)
             ? (2 * kInitialRtt)
             : ((c->rec.cur.srtt + MAX(4 * c->rec.cur.rttvar, kGranularity)) *
                    NS_PER_US +
-               c->tp_out.max_ack_del * NS_PER_MS);
+               c->tp_peer.max_ack_del * NS_PER_MS);
     to *= 1 << c->rec.pto_cnt;
     c->rec.ld_alarm_val = c->rec.last_sent_ack_elicit_t + to;
 
@@ -236,7 +236,7 @@ in_persistent_cong(struct pn_space * const pn __attribute__((unused)),
     // const uint64_t cong_period =
     //     kPersistentCongestionThreshold *
     //     (c->rec.cur.srtt + MAX(4 * c->rec.cur.rttvar, kGranularity) +
-    //      c->tp_out.max_ack_del * NS_PER_MS);
+    //      c->tp_mine.max_ack_del * NS_PER_MS);
 
     // const struct ival * const i = diet_find(&pn->lost, lg_lost);
     // warn(DBG,
@@ -273,7 +273,7 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
                   (m->hdr.nr == c->pmtud_pkt_nr && m->hdr.type == LH_HSHK)))) {
         c->rec.max_pkt_size = default_max_pkt_len(c->sock->ws_af);
         warn(NTE, RED "PMTU %u not validated, using %u" NRM,
-             MIN(w_max_udp_payload(c->sock), (uint16_t)c->tp_out.max_pkt),
+             MIN(w_max_udp_payload(c->sock), (uint16_t)c->tp_peer.max_pkt),
              c->rec.max_pkt_size);
         c->pmtud_pkt_nr = UINT_T_MAX;
     }
@@ -561,7 +561,7 @@ update_rtt(struct q_conn * const c, uint_t ack_del)
     }
 
     c->rec.cur.min_rtt = MIN(c->rec.cur.min_rtt, c->rec.cur.latest_rtt);
-    ack_del = MIN(ack_del, c->tp_out.max_ack_del) * NS_PER_MS;
+    ack_del = MIN(ack_del, c->tp_peer.max_ack_del) * NS_PER_MS;
 
     const uint_t adj_rtt = c->rec.cur.latest_rtt > c->rec.cur.min_rtt + ack_del
                                ? c->rec.cur.latest_rtt - ack_del
@@ -660,7 +660,7 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
                  ((m->hdr.nr != UINT_T_MAX && m->hdr.type == SH) ||
                   (m->hdr.nr == c->pmtud_pkt_nr && m->hdr.type == LH_HSHK)))) {
         c->rec.max_pkt_size =
-            MIN(w_max_udp_payload(c->sock), (uint16_t)c->tp_out.max_pkt);
+            MIN(w_max_udp_payload(c->sock), (uint16_t)c->tp_peer.max_pkt);
         warn(NTE, "PMTU %u validated", c->rec.max_pkt_size);
         c->pmtud_pkt_nr = UINT_T_MAX;
     }
