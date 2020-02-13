@@ -1,7 +1,5 @@
 #! /usr/bin/env bash
 
-sed_pattern='s,\x1B\[[0-9;]*[a-zA-Z],,g'
-
 # Set up the routing needed for the simulation
 /setup.sh
 
@@ -20,7 +18,8 @@ fi
 # - SERVER_PARAMS contains user-supplied command line parameters
 # - CLIENT_PARAMS contains user-supplied command line parameters
 
-rm -f /logs/$ROLE.log
+# For quant, call client and server with full path, so addr2line can find them
+
 if [ "$ROLE" == "client" ]; then
     CLIENT_ARGS="-i eth0 -w -q /logs/$ROLE.qlog $CLIENT_ARGS"
 
@@ -28,6 +27,7 @@ if [ "$ROLE" == "client" ]; then
     /wait-for-it.sh sim:57832 -s -t 30
     cd /downloads || exit
 
+    skip=0
     case "$TESTCASE" in
     "versionnegotiation")
         CLIENT_ARGS="-e 12345678 $CLIENT_ARGS"
@@ -35,26 +35,26 @@ if [ "$ROLE" == "client" ]; then
     "resumption")
         REQS=($REQUESTS)
         REQUESTS=${REQS[0]}
-        client $CLIENT_ARGS $REQUESTS 2>&1 | \
-            sed "$sed_pattern" >> /logs/$ROLE.log
-        echo "XXX $ROLE DONE" >> /logs/$ROLE.log
+        /usr/local/bin/client $CLIENT_ARGS $REQUESTS >> "/logs/$ROLE.log" 2>&1
+        echo "XXX $ROLE DONE" >> "/logs/$ROLE.log"
         REQUESTS=${REQS[@]:1}
         ;;
     "multiconnect")
         for req in $REQUESTS; do
-            client -t 120 $CLIENT_ARGS $req 2>&1 | \
-                sed "$sed_pattern" >> /logs/$ROLE.log
-            echo "XXX $ROLE DONE" >> /logs/$ROLE.log
+            ((skip++))
+            /usr/local/bin/client -t 20 $CLIENT_ARGS -q /logs/$ROLE.$skip.qlog \
+                $req >> "/logs/$ROLE.log" 2>&1
+            echo "XXX $ROLE DONE" >> "/logs/$ROLE.log"
         done
-        exit 0
         ;;
     *)
         ;;
     esac
 
-    client $CLIENT_ARGS $REQUESTS  2>&1 | \
-        sed "$sed_pattern" >> /logs/$ROLE.log
-    echo "XXX $ROLE DONE" >> /logs/$ROLE.log
+    if [ $skip -eq 0 ]; then
+        /usr/local/bin/client $CLIENT_ARGS $REQUESTS >> "/logs/$ROLE.log" 2>&1
+        echo "XXX $ROLE DONE" >> "/logs/$ROLE.log"
+    fi
 
 elif [ "$ROLE" == "server" ]; then
     case "$TESTCASE" in
@@ -65,8 +65,10 @@ elif [ "$ROLE" == "server" ]; then
         ;;
     esac
 
-    server $SERVER_ARGS -i eth0 -d /www -p 443 -p 4434 -t 0 \
-        -c /tls/dummy.crt -k /tls/dummy.key -q /logs/$ROLE.qlog 2>&1 | \
-            sed "$sed_pattern" >> /logs/$ROLE.log
-        echo "XXX $ROLE DONE" >> /logs/$ROLE.log
+    /usr/local/bin/server $SERVER_ARGS -i eth0 -d /www -p 443 -p 4434 -t 0 \
+        -c /tls/dummy.crt -k /tls/dummy.key -q "/logs/$ROLE.qlog" \
+            >> "/logs/$ROLE.log" 2>&1
+    echo "XXX $ROLE DONE" >> "/logs/$ROLE.log"
 fi
+
+sed 's,\x1B\[[0-9;]*[a-zA-Z],,g' "/logs/$ROLE.log" > "/logs/$ROLE.log.txt"
