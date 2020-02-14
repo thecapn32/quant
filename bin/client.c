@@ -417,6 +417,13 @@ int main(int argc, char * argv[])
     bool verify_certs = false;
     int ret = 0;
 
+    // set default TLS log file from environment
+    const char * const keylog = getenv("SSLKEYLOGFILE");
+    if (keylog) {
+        strncpy(tls_log, keylog, MAXPATHLEN);
+        tls_log[MAXPATHLEN - 1] = 0;
+    }
+
     while ((ch = getopt(argc, argv,
                         "hi:v:s:t:l:cu3zb:wr:q:me:"
 #ifndef NO_MIGRATION
