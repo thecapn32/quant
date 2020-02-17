@@ -105,7 +105,8 @@ struct pn_space {
     uint8_t _unused[4];
 #endif
 
-    uint64_t loss_t; // loss_time
+    uint64_t loss_t;       // loss_time
+    uint64_t last_ae_tx_t; // time_of_last_sent_ack_eliciting_packet
 
     pn_t type;
 

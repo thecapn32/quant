@@ -531,17 +531,16 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             }
             break;
 
-        case TP_ADE:;
-            uint_t ade = DEF_ACK_DEL_EXP;
-            if (dec_tp(&ade, &pos, end) == false)
+        case TP_ADE:
+            if (dec_tp(&c->tp_peer.ack_del_exp, &pos, end) == false)
                 return 1;
-            warn(INF, "\tack_delay_exponent = %" PRIu, ade);
-            if (ade > 20) {
+            warn(INF, "\tack_delay_exponent = %" PRIu, c->tp_peer.ack_del_exp);
+            if (c->tp_peer.ack_del_exp > 20) {
                 err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
-                          "ack_delay_exponent %" PRIu " invalid", ade);
+                          "ack_delay_exponent %" PRIu " invalid",
+                          c->tp_peer.ack_del_exp);
                 return 1;
             }
-            c->tp_peer.ack_del_exp = (uint8_t)ade;
             break;
 
         case TP_MAD:
@@ -796,11 +795,13 @@ void init_tp(struct q_conn * const c)
 #endif
             break;
         case TP_IDTO:
-            enc_tp(&pos, end, TP_IDTO, c->tp_mine.max_idle_to);
+            if (c->tp_mine.max_idle_to) {
+                enc_tp(&pos, end, TP_IDTO, c->tp_mine.max_idle_to);
 #ifdef DEBUG_EXTRA
-            warn(INF, "\tmax_idle_timeout = %" PRIu " [ms]",
-                 c->tp_mine.max_idle_to);
+                warn(INF, "\tmax_idle_timeout = %" PRIu " [ms]",
+                     c->tp_mine.max_idle_to);
 #endif
+            }
             break;
         case TP_IMSD_BR:
             enc_tp(&pos, end, TP_IMSD_BR, c->tp_mine.max_strm_data_bidi_remote);
@@ -828,7 +829,7 @@ void init_tp(struct q_conn * const c)
         case TP_ADE:
             enc_tp(&pos, end, TP_ADE, c->tp_mine.ack_del_exp);
 #ifdef DEBUG_EXTRA
-            warn(INF, "\tack_delay_exponent = %u", c->tp_mine.ack_del_exp);
+            warn(INF, "\tack_delay_exponent = %" PRIu, c->tp_mine.ack_del_exp);
 #endif
             break;
         case TP_MAD:

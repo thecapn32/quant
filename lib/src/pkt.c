@@ -430,7 +430,10 @@ bool enc_pkt(struct q_stream * const s,
     m->hdr.flags |= (pnl - 1);
 
     uint8_t * pos = v->buf;
-    const uint8_t * const end = v->buf + (enc_data ? m->strm_data_pos : v->len);
+    if (enc_data)
+        calc_lens_of_stream_or_crypto_frame(m, v, s);
+    const uint8_t * const end =
+        v->buf + (enc_data || rtx ? m->strm_frm_pos : v->len);
     enc1(&pos, end, m->hdr.flags);
 
     if (unlikely(is_lh(m->hdr.flags))) {
@@ -510,12 +513,11 @@ bool enc_pkt(struct q_stream * const s,
         goto tx;
     }
 
-    if (needs_ack(pn) != no_ack) {
-        // FIXME: 8 is an arbitrary value
-        if (enc_data == false || diet_cnt(&pn->recv) <= 8)
-            enc_ack_frame(ci, &pos, v->buf, end, m, pn);
-        else
-            timeouts_add(ped(c->w)->wheel, &c->ack_alarm, 0);
+    if (needs_ack(pn) != no_ack &&
+        unlikely(enc_ack_frame(ci, &pos, v->buf, end, m, pn) == false)) {
+        // couldn't encode (all of) the ACK, schedule pure ACK TX
+        warn(DBG, "not enough space for ACK frame, scheduling ACK timeout");
+        timeouts_add(ped(c->w)->wheel, &c->ack_alarm, 0);
     }
 
     if (unlikely(c->state == conn_clsg))
@@ -534,17 +536,10 @@ bool enc_pkt(struct q_stream * const s,
             m->strm_off + m->strm_data_len < s->out_data ? sdt_ooo : sdt_seq);
 
     } else if (likely(enc_data)) {
-        // this is a fresh data/crypto or pure stream FIN packet
-        uint16_t hlen;
-        uint16_t dlen;
-        calc_lens_of_stream_or_crypto_frame(m, v, s, &hlen, &dlen);
-        if (unlikely(pos + hlen >= v->buf + m->strm_data_pos))
-            // if the stream header would overflow a previous frame, kill *all*
-            pos = v->buf + m->hdr.hdr_len;
-        // pad out any remaining space before stream header
-        enc_padding_frame(ci, &pos, end, m,
-                          m->strm_data_pos - hlen - (uint16_t)(pos - v->buf));
-        enc_stream_or_crypto_frame(&pos, end, m, v, s, dlen);
+        // this is a fresh data/crypto or pure stream FIN packet, so pad out any
+        // remaining space before stream header
+        enc_padding_frame(ci, &pos, end, m, (uint16_t)(end - pos));
+        enc_stream_or_crypto_frame(&pos, v->buf + v->len, m, v, s);
     }
 
     // TODO: include more frames when c->rec.max_pkt_size < max_pkt_len TP

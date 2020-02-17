@@ -59,8 +59,6 @@ struct recovery {
     struct timeout ld_alarm; // loss_detection_timer
     timeout_t ld_alarm_val;
 
-    uint64_t last_sent_ack_elicit_t; // time_of_last_sent_ack_eliciting_packet
-
     uint64_t rec_start_t; // recovery_start_time
     uint_t ae_in_flight;  // nr of ACK-eliciting pkts inflight
 

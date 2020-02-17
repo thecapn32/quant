@@ -119,7 +119,7 @@ enc_padding_frame(struct q_conn_info * const ci,
                   struct pkt_meta * const m,
                   const uint16_t len);
 
-extern void __attribute__((nonnull
+extern bool __attribute__((nonnull
 #ifdef NO_QINFO
                            (2, 3, 4, 5, 6)
 #endif
@@ -131,19 +131,16 @@ extern void __attribute__((nonnull
                                                 struct pn_space * const pn);
 
 extern void __attribute__((nonnull))
-calc_lens_of_stream_or_crypto_frame(const struct pkt_meta * const m,
+calc_lens_of_stream_or_crypto_frame(struct pkt_meta * const m,
                                     const struct w_iov * const v,
-                                    const struct q_stream * const s,
-                                    uint16_t * const hlen,
-                                    uint16_t * const dlen);
+                                    const struct q_stream * const s);
 
 extern void __attribute__((nonnull))
 enc_stream_or_crypto_frame(uint8_t ** pos,
                            const uint8_t * const end,
                            struct pkt_meta * const m,
                            struct w_iov * const v,
-                           struct q_stream * const s,
-                           const uint16_t dlen);
+                           struct q_stream * const s);
 
 extern void __attribute__((nonnull
 #ifdef NO_QINFO

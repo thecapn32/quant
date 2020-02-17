@@ -33,7 +33,6 @@
 #include "frame.h"
 #include "pn.h"
 #include "quic.h"
-#include "recovery.h"
 #include "stream.h"
 
 
@@ -125,14 +124,9 @@ void abandon_pn(struct pn_space * const pn)
         e = ep_hshk;
     free_stream(pn->c->cstrms[e]);
     pn->c->cstrms[e] = 0;
-    pn->loss_t = 0; // important for earliest_loss_t_pn
-
     free_pn(pn);
     dispose_cipher(&pn->early.in);
     dispose_cipher(&pn->early.out);
-
-    // we need to kill the timer if there are no pkts outstanding
-    set_ld_timer(pn->c);
 }
 
 

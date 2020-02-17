@@ -217,6 +217,9 @@ get_and_validate_strm(struct q_conn * const c,
     } while (0)
 
 
+#define strm_data_len_adj(sdl) ((sdl) - ((sdl) ? 1 : 0))
+
+
 static bool __attribute__((nonnull))
 dec_stream_or_crypto_frame(const uint8_t type,
                            const uint8_t ** pos,
@@ -305,7 +308,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
     // best case: new in-order data
     if (m->strm->in_data_off >= m->strm_off &&
         m->strm->in_data_off <=
-            m->strm_off + m->strm_data_len - (m->strm_data_len ? 1 : 0)) {
+            m->strm_off + strm_data_len_adj(m->strm_data_len)) {
 
         if (unlikely(m->strm->state == strm_hcrm ||
                      m->strm->state == strm_clsd)) {
@@ -333,11 +336,12 @@ dec_stream_or_crypto_frame(const uint8_t type,
             struct pkt_meta * const nxt =
                 splay_next(ooo_by_off, &m->strm->in_ooo, p);
 
-            if (unlikely(p->strm_off + p->strm_data_len <
+            if (unlikely(p->strm_off + strm_data_len_adj(p->strm_data_len) <
                          m->strm->in_data_off)) {
                 // right edge of p < left edge of stream
                 warn(WRN, "drop stale frame [%" PRIu "..%" PRIu "]",
-                     p->strm_off, p->strm_off + p->strm_data_len);
+                     p->strm_off,
+                     p->strm_off + strm_data_len_adj(p->strm_data_len));
                 ensure(splay_remove(ooo_by_off, &m->strm->in_ooo, p),
                        "removed");
                 p = nxt;
@@ -406,18 +410,21 @@ dec_stream_or_crypto_frame(const uint8_t type,
     }
 
     struct pkt_meta * p = splay_min(ooo_by_off, &m->strm->in_ooo);
-    while (p && p->strm_off + p->strm_data_len - 1 < m->strm_off)
+    while (p &&
+           p->strm_off + strm_data_len_adj(p->strm_data_len) < m->strm_off) {
+        warn(DBG, "check ooo off=%" PRIu " len=%u", p->strm_off,
+             p->strm_data_len);
         p = splay_next(ooo_by_off, &m->strm->in_ooo, p);
+    }
 
     // right edge of p >= left edge of v
-    if (p && p->strm_off <=
-                 m->strm_off + m->strm_data_len - (m->strm_data_len ? 1 : 0)) {
+    if (p && p->strm_off <= m->strm_off + strm_data_len_adj(m->strm_data_len)) {
         // left edge of p <= right edge of v
         warn(ERR,
              "[%" PRIu "..%" PRIu "] have existing overlapping ooo data [%" PRIu
              "..%" PRIu "]",
-             m->strm_off, m->strm_off + m->strm_data_len, p->strm_off,
-             p->strm_off + p->strm_data_len - 1);
+             m->strm_off, m->strm_off + strm_data_len_adj(m->strm_data_len),
+             p->strm_off, p->strm_off + strm_data_len_adj(p->strm_data_len));
         track_sd_frame(ign, true);
         goto done;
     }
@@ -428,8 +435,6 @@ dec_stream_or_crypto_frame(const uint8_t type,
     ensure(splay_insert(ooo_by_off, &m->strm->in_ooo, m) == 0,
            "fail insert ooo off=%" PRIu " len=%u", m->strm_off,
            m->strm_data_len);
-    warn(DBG, "inserted ooo off=%" PRIu " len=%u", m->strm_off,
-         m->strm_data_len);
 #else
     // signal to the ACK logic to not ACK this packet
     log_stream_or_crypto_frame(false, m, type, sid, true, sdt_ooo);
@@ -441,10 +446,12 @@ done:
     log_stream_or_crypto_frame(false, m, type, sid, true, kind);
 
     if (m->strm && type != FRM_CRY &&
-        m->strm_off + m->strm_data_len > m->strm->in_data_max)
+        m->strm_off + strm_data_len_adj(m->strm_data_len) >
+            m->strm->in_data_max)
         err_close_return(c, ERR_FLOW_CONTROL, type,
                          "stream %" PRIu " off %" PRIu " >= in_data_max %" PRIu,
-                         m->strm->id, m->strm_off + m->strm_data_len - 1,
+                         m->strm->id,
+                         m->strm_off + strm_data_len_adj(m->strm_data_len),
                          m->strm->in_data_max);
 
 #ifdef NO_OOO_DATA
@@ -493,20 +500,31 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
     uint_t lg_ack_in_frm = 0;
     decv_chk(&lg_ack_in_frm, pos, end, c, type);
 
-    uint64_t ack_delay_tmp = 0;
-    decv_chk(&ack_delay_tmp, pos, end, c, type);
+    uint64_t ack_delay_raw = 0;
+    decv_chk(&ack_delay_raw, pos, end, c, type);
 
     // TODO: figure out a better way to handle huge ACK delays
-    if (unlikely(ack_delay_tmp > UINT32_MAX / 2))
+    if (sizeof(uint64_t) != sizeof(uint_t) &&
+        unlikely(ack_delay_raw > UINT32_MAX / 2))
         err_close_return(c, ERR_FRAME_ENC, type, "ACK delay raw %" PRIu64,
-                         ack_delay_tmp);
+                         ack_delay_raw);
 
     // handshake pkts always use the default ACK delay exponent
-    const uint_t ade = m->hdr.type == LH_INIT || m->hdr.type == LH_HSHK
+    const uint_t ade = (m->hdr.type == LH_INIT || m->hdr.type == LH_HSHK)
                            ? DEF_ACK_DEL_EXP
                            : c->tp_peer.ack_del_exp;
-    const uint_t ack_delay_raw = (uint_t)ack_delay_tmp;
-    const uint_t ack_delay = ack_delay_raw << ade;
+    uint_t ack_delay = ack_delay_raw << ade;
+
+    if (unlikely(ack_delay_raw &&
+                 (m->hdr.type == LH_INIT || m->hdr.type == LH_HSHK))) {
+        warn(WRN,
+             "ack_delay %" PRIu
+             " usec is not zero in Initial or Handshake ACK; ignoring",
+             ack_delay);
+        ack_delay = 0;
+    } else if (unlikely(ack_delay > 1.5 * c->tp_peer.max_ack_del * US_PER_MS))
+        warn(WRN, "ack_delay %" PRIu " > max_ack_del %" PRIu64, ack_delay,
+             c->tp_peer.max_ack_del * US_PER_MS);
 
     uint_t ack_rng_cnt = 0;
     decv_chk(&ack_rng_cnt, pos, end, c, type);
@@ -535,7 +553,7 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
             if (n == ack_rng_cnt + 1)
                 warn(INF,
                      FRAM_IN "ACK" NRM " 0x%02x=%s lg=" FMT_PNR_OUT
-                             " delay=%" PRIu " (%" PRIu " usec) cnt=%" PRIu
+                             " delay=%" PRIu64 " (%" PRIu " usec) cnt=%" PRIu
                              " rng=%" PRIu " [" FMT_PNR_OUT "]",
                      type, type == FRM_ACE ? "ECN" : "", lg_ack_in_frm,
                      ack_delay_raw, ack_delay, ack_rng_cnt, ack_rng,
@@ -549,7 +567,7 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
             if (n == ack_rng_cnt + 1)
                 warn(INF,
                      FRAM_IN "ACK" NRM " 0x%02x=%s lg=" FMT_PNR_OUT
-                             " delay=%" PRIu " (%" PRIu " usec) cnt=%" PRIu
+                             " delay=%" PRIu64 " (%" PRIu " usec) cnt=%" PRIu
                              " rng=%" PRIu " [" FMT_PNR_OUT ".." FMT_PNR_OUT
                              "]",
                      type, type == FRM_ACE ? "ECN" : "", lg_ack_in_frm,
@@ -1429,7 +1447,17 @@ void enc_padding_frame(struct q_conn_info * const ci,
 }
 
 
-void enc_ack_frame(struct q_conn_info * const ci,
+#define encv_chk(pos, end, val)                                                \
+    do {                                                                       \
+        if (unlikely(*(pos) + varint_size(val) > (end))) {                     \
+            warn(DBG, "out of space, ACK frame not encoded");                  \
+            goto no_ack;                                                       \
+        }                                                                      \
+        encv((pos), (end), (val));                                             \
+    } while (0)
+
+
+bool enc_ack_frame(struct q_conn_info * const ci,
                    uint8_t ** pos,
                    const uint8_t * const start,
                    const uint8_t * const end,
@@ -1438,12 +1466,15 @@ void enc_ack_frame(struct q_conn_info * const ci,
 {
     const uint8_t type =
         likely(pn->ect0_cnt || pn->ect1_cnt || pn->ce_cnt) ? FRM_ACE : FRM_ACK;
+    uint8_t * const init_pos = *pos;
+    if (unlikely(*pos + 1 > end))
+        goto no_ack;
     enc1(pos, end, type);
-    m->ack_frm_pos = (uint16_t)(*pos - start);
 
     const struct ival * const first_rng = diet_max_ival(&pn->recv);
-    ensure(first_rng, "nothing to ACK");
-    encv(pos, end, first_rng->hi);
+    if (unlikely(first_rng == 0))
+        goto no_ack;
+    encv_chk(pos, end, first_rng->hi);
 
     // handshake pkts always use the default ACK delay exponent
     struct q_conn * const c = pn->c;
@@ -1452,16 +1483,10 @@ void enc_ack_frame(struct q_conn_info * const ci,
                            : c->tp_mine.ack_del_exp;
     const uint64_t ack_delay =
         NS_TO_US(loop_now() - diet_timestamp(first_rng)) >> ade;
-
-    // TODO: figure out a better way to handle huge ACK delays
-    if (unlikely(ack_delay > UINT32_MAX / 2)) {
-        err_close(c, ERR_FRAME_ENC, type, "ACK delay raw %" PRIu64, ack_delay);
-        return;
-    }
-    encv(pos, end, ack_delay);
+    encv_chk(pos, end, ack_delay);
 
     const uint_t ack_rng_cnt = diet_cnt(&pn->recv) - 1;
-    encv(pos, end, ack_rng_cnt);
+    encv_chk(pos, end, ack_rng_cnt);
 
     uint_t prev_lo = 0;
     struct ival * b;
@@ -1469,7 +1494,7 @@ void enc_ack_frame(struct q_conn_info * const ci,
         uint_t gap = 0;
         if (prev_lo) {
             gap = prev_lo - b->hi - 2;
-            encv(pos, end, gap);
+            encv_chk(pos, end, gap);
         }
         const uint_t ack_rng = b->hi - b->lo;
 #ifndef NDEBUG
@@ -1504,15 +1529,15 @@ void enc_ack_frame(struct q_conn_info * const ci,
                      ack_rng, first_rng->hi);
         }
 #endif
-        encv(pos, end, ack_rng);
+        encv_chk(pos, end, ack_rng);
         prev_lo = b->lo;
     }
 
     if (type == FRM_ACE) {
         // encode ECN
-        encv(pos, end, pn->ect0_cnt);
-        encv(pos, end, pn->ect1_cnt);
-        encv(pos, end, pn->ce_cnt);
+        encv_chk(pos, end, pn->ect0_cnt);
+        encv_chk(pos, end, pn->ect1_cnt);
+        encv_chk(pos, end, pn->ce_cnt);
         warn(INF,
              FRAM_OUT "ECN" NRM " ect0=%s%" PRIu NRM " ect1=%s%" PRIu NRM
                       " ce=%s%" PRIu NRM,
@@ -1525,29 +1550,35 @@ void enc_ack_frame(struct q_conn_info * const ci,
     pn->pkts_rxed_since_last_ack_tx = 0;
     pn->imm_ack = false;
     track_frame(m, ci, FRM_ACK, 1);
+    m->ack_frm_pos = (uint16_t)(init_pos - start) + 1; // +1 for type byte
+    return true;
+
+no_ack:;
+    *pos = init_pos;
+    return false;
 }
 
 
-void calc_lens_of_stream_or_crypto_frame(const struct pkt_meta * const m,
+void calc_lens_of_stream_or_crypto_frame(struct pkt_meta * const m,
                                          const struct w_iov * const v,
-                                         const struct q_stream * const s,
-                                         uint16_t * const hlen,
-                                         uint16_t * const dlen)
+                                         const struct q_stream * const s)
 {
-    const uint16_t strm_data_len = (uint16_t)(v->len - m->strm_data_pos);
     const bool enc_strm = s->id >= 0;
+    m->strm_data_len = (uint16_t)(v->len - m->strm_data_pos);
+    uint16_t hlen = 1; // type byte
 
-    *hlen = 1; // type byte
-    if (likely(enc_strm))
-        *hlen += varint_size((uint_t)s->id);
-    if (likely(s->out_data || !enc_strm))
-        *hlen += varint_size(s->out_data);
-    *dlen = likely(enc_strm) && strm_data_len == s->c->rec.max_pkt_size -
-                                                     AEAD_LEN - DATA_OFFSET
-                ? 0
-                : strm_data_len;
-    if (*dlen)
-        *hlen += varint_size(*dlen);
+    if (likely(enc_strm)) {
+        hlen += varint_size((uint_t)s->id);
+        if (likely(s->out_data))
+            hlen += varint_size(s->out_data);
+        if (m->strm_data_len != s->c->rec.max_pkt_size - AEAD_LEN - DATA_OFFSET)
+            hlen += varint_size(m->strm_data_len);
+    } else {
+        hlen += varint_size(s->out_data);
+        hlen += varint_size(m->strm_data_len);
+    }
+
+    m->strm_frm_pos = m->strm_data_pos - hlen;
 }
 
 
@@ -1555,16 +1586,13 @@ void enc_stream_or_crypto_frame(uint8_t ** pos,
                                 const uint8_t * const end,
                                 struct pkt_meta * const m,
                                 struct w_iov * const v,
-                                struct q_stream * const s,
-                                const uint16_t dlen)
+                                struct q_stream * const s)
 {
     const bool enc_strm = s->id >= 0;
     uint8_t type = likely(enc_strm) ? FRM_STR : FRM_CRY;
 
     m->strm = s;
-    m->strm_data_len = v->len - m->strm_data_pos;
     m->strm_off = s->out_data;
-    m->strm_frm_pos = (uint16_t)(*pos - v->buf);
 
     (*pos)++;
     if (likely(enc_strm))
@@ -1574,10 +1602,10 @@ void enc_stream_or_crypto_frame(uint8_t ** pos,
             type |= F_STREAM_OFF;
         encv(pos, end, m->strm_off);
     }
-    if (dlen) {
+    if (m->strm_data_len != s->c->rec.max_pkt_size - AEAD_LEN - DATA_OFFSET) {
         if (likely(enc_strm))
             type |= F_STREAM_LEN;
-        encv(pos, end, dlen);
+        encv(pos, end, m->strm_data_len);
     }
     if (likely(enc_strm) && unlikely(m->is_fin))
         type |= F_STREAM_FIN;
@@ -1919,4 +1947,5 @@ void enc_hshk_done_frame(struct q_conn_info * const ci,
     warn(INF, FRAM_OUT "HANDSHAKE_DONE" NRM);
 
     track_frame(m, ci, FRM_HSD, 1);
+    m->pn->c->tx_hshk_done = false;
 }

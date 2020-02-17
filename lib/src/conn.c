@@ -440,6 +440,7 @@ static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
     log_cc(c);
 
     c->needs_tx = false;
+    c->tx_limit = 0;
 
     if (likely(sq_empty(&c->txq) == false))
         do_tx_txq(c, &c->txq, c->sock);
@@ -603,7 +604,7 @@ static bool __attribute__((nonnull)) tx_stream(struct q_stream * const s)
             break;
     }
 
-    return c->tx_limit == 0 || encoded < c->tx_limit || c->no_wnd == false;
+    return (c->tx_limit == 0 || encoded < c->tx_limit) && c->no_wnd == false;
 }
 
 
@@ -622,9 +623,9 @@ tx_ack(struct q_conn * const c, const epoch_t e, const bool tx_ack_eliciting)
 
 void tx(struct q_conn * const c)
 {
-    timeout_del(&c->tx_w);
 #ifdef DEBUG_TIMERS
-    warn(DBG, "tx timeout on %s conn %s", conn_type(c), cid_str(c->scid));
+    warn(DBG, "tx timeout on %s conn %s, lim %u", conn_type(c),
+         cid_str(c->scid), c->tx_limit);
 #endif
 
     if (unlikely(c->state == conn_drng))
@@ -1424,12 +1425,16 @@ static void __attribute__((nonnull))
                 if (m->is_reset)
                     warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
                          srt_str(&xv->buf[xv->len - SRT_LEN]));
-                else
+                else {
                     warn(ERR, "%s %u-byte %s pkt, ignoring",
                          pkt_ok_for_epoch(m->hdr.flags, epoch_in(c))
                              ? "crypto fail on"
                              : "rx invalid",
                          v->len, pkt_type_str(m->hdr.flags, &m->hdr.vers));
+                    // typically happens if we don't have keys yet, shortcut RTX
+                    c->tx_limit = 1;
+                    timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
+                }
                 goto drop;
             }
 
@@ -1524,7 +1529,6 @@ static void __attribute__((nonnull))
             // the peer never ACKs our Handshake packets
             if (c->rec.max_pkt_size != MIN_INI_LEN &&
                 unlikely(c->pns[pn_hshk].abandoned == false) &&
-                kh_size(&c->pns[pn_hshk].sent_pkts) == 0 &&
                 has_frm(c->pns[pn_data].rx_frames, FRM_HSD))
                 abandon_pn(&c->pns[pn_hshk]);
 
@@ -1619,10 +1623,8 @@ void rx(struct w_sock * const ws)
             restart_idle_alarm(c);
 
         // is a TX needed for this connection?
-        if (c->needs_tx) {
-            // c->tx_limit = 0;
+        if (c->needs_tx)
             tx(c); // clears c->needs_tx if we TX'ed
-        }
 
         for (epoch_t e = c->min_rx_epoch; e <= ep_data; e++) {
             if (c->cstrms[e] == 0 || e == ep_0rtt)
@@ -1714,7 +1716,6 @@ static void __attribute__((nonnull)) key_flip_alarm(struct q_conn * const c)
     warn(DBG, "key flip timer fired on %s conn %s", conn_type(c),
          cid_str(c->scid));
 #endif
-    timeout_del(&c->key_flip_alarm);
 
     if (c->state == conn_estb) {
         c->do_key_flip = c->key_flips_enabled;
@@ -1774,9 +1775,10 @@ void enter_closing(struct q_conn * const c)
     if (timeout_pending(&c->closing_alarm) == false) {
         // start closing/draining alarm (3 * RTO)
         const timeout_t dur =
-            3 * (c->rec.cur.srtt == 0 ? kInitialRtt : c->rec.cur.srtt) +
-            4 * c->rec.cur.rttvar;
-        timeouts_add(ped(c->w)->wheel, &c->closing_alarm, dur * NS_PER_US);
+            3 * (c->rec.cur.srtt == 0 ? kInitialRtt
+                                      : c->rec.cur.srtt * NS_PER_US) +
+            4 * c->rec.cur.rttvar * NS_PER_US;
+        timeouts_add(ped(c->w)->wheel, &c->closing_alarm, dur);
 #ifdef DEBUG_TIMERS
         warn(DBG, "closing/draining alarm in %.3f sec on %s conn %s",
              dur / (double)NS_PER_S, conn_type(c), cid_str(c->scid));
@@ -1787,7 +1789,6 @@ void enter_closing(struct q_conn * const c)
     if (c->state != conn_drng) {
         c->needs_tx = true;
         conn_to_state(c, conn_clsg);
-        timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
     }
 }
 
@@ -1818,7 +1819,8 @@ void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
     c->do_qr_test = get_conf_uncond(c->w, conf, enable_quantum_readiness_test);
 
     // (re)set idle alarm
-    c->tp_mine.max_idle_to = get_conf(c->w, conf, idle_timeout) * MS_PER_S;
+    c->tp_mine.max_idle_to =
+        get_conf_uncond(c->w, conf, idle_timeout) * MS_PER_S;
     restart_idle_alarm(c);
 
     c->tp_mine.disable_active_migration =

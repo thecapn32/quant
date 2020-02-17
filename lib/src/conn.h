@@ -117,11 +117,11 @@ struct transport_params {
     uint_t max_ack_del;
     uint_t max_pkt;
     uint_t act_cid_lim;
+    uint_t ack_del_exp;
     struct pref_addr pref_addr;
     struct cid orig_cid;
-    uint8_t ack_del_exp;
     bool disable_active_migration;
-    uint8_t _unused[6];
+    uint8_t _unused[7];
 };
 
 

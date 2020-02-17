@@ -88,8 +88,10 @@ void __attribute__((nonnull(1))) loop_run(struct w_engine * const w,
         timeouts_update(ped(w)->wheel, now);
 
         struct timeout * t;
-        TIMEOUTS_FOREACH (t, ped(w)->wheel, TIMEOUTS_EXPIRED)
+        TIMEOUTS_FOREACH (t, ped(w)->wheel, TIMEOUTS_EXPIRED) {
             (*t->callback.fn)(t->callback.arg);
+            timeout_del(t);
+        }
 
         if (break_loop)
             break;

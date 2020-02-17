@@ -74,7 +74,7 @@ struct q_conn; // IWYU pragma: no_forward_declare q_conn
 
 // Timer granularity. This is a system-dependent value. However, implementations
 // SHOULD use a value no smaller than 1ms.
-#define kGranularity (1 * NS_PER_MS)
+#define kGranularity (1 * US_PER_MS)
 
 // The RTT used before an RTT sample is taken. The RECOMMENDED value is 100ms.
 #define kInitialRtt (500 * NS_PER_MS)
@@ -215,7 +215,7 @@ struct per_engine_data {
 #endif
 
     ptls_context_t tls_ctx;
-    ptls_aead_context_t *rid_ctx;
+    ptls_aead_context_t * rid_ctx;
 
 #ifdef WITH_OPENSSL
     ptls_openssl_sign_certificate_t sign_cert;

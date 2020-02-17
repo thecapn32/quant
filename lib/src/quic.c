@@ -467,7 +467,7 @@ static void __attribute__((nonnull))
 restart_api_alarm(struct w_engine * const w, const uint64_t nsec)
 {
 #ifdef DEBUG_TIMERS
-    warn(DBG, "next API alarm in %f sec", nsec / (double)NS_PER_S);
+    warn(DBG, "next API alarm in %.3f sec", nsec / (double)NS_PER_S);
 #endif
 
     timeouts_add(ped(w)->wheel, &ped(w)->api_alarm, nsec);
@@ -617,7 +617,7 @@ struct w_engine * q_init(const char * const ifname,
         ped(w)->default_conn_conf.version =
             get_conf(w, conf->conn_conf, version);
         ped(w)->default_conn_conf.idle_timeout =
-            get_conf(w, conf->conn_conf, idle_timeout);
+            get_conf_uncond(w, conf->conn_conf, idle_timeout);
         ped(w)->default_conn_conf.tls_key_update_frequency =
             get_conf(w, conf->conn_conf, tls_key_update_frequency);
         ped(w)->default_conn_conf.enable_spinbit =
