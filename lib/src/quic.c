@@ -122,7 +122,7 @@ void alloc_off(struct w_engine * const w,
 void free_iov(struct w_iov * const v, struct pkt_meta * const m)
 {
     if (m->txed) {
-        if (m->acked == false && m->lost == false &&
+        if (m->acked == false && m->lost == false && m->pn &&
             m->pn->abandoned == false) {
             m->strm = 0;
             on_pkt_lost(m, false);

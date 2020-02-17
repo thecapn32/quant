@@ -347,6 +347,7 @@ static void __attribute__((nonnull)) tx_vneg_resp(struct w_sock * const ws,
     sq_insert_head(&q, xv, next);
 
     warn(INF, "sending vneg serv response");
+    mx->txed = 1;
     mx->hdr.flags = HEAD_FORM | (uint8_t)w_rand_uniform32(UINT8_MAX);
 
     uint8_t * pos = xv->buf;
@@ -367,7 +368,7 @@ static void __attribute__((nonnull)) tx_vneg_resp(struct w_sock * const ws,
     mk_rand_cid(&gid, CID_LEN_MAX + 1, false); // random len
     qlog_transport(pkt_tx, "default", ped(ws->w), xv, mx, &gid);
     do_w_tx(ws, &q);
-    w_free(&q);
+    q_free(&q);
 }
 
 
