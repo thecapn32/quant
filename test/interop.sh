@@ -21,7 +21,8 @@ fi
 # For quant, call client and server with full path, so addr2line can find them
 
 if [ "$ROLE" == "client" ]; then
-    CLIENT_ARGS="-i eth0 -w -q /logs/$ROLE.qlog $CLIENT_ARGS"
+    CLIENT_ARGS="-i eth0 -w -q $QLOGDIR/$ROLE.qlog -l $SSLKEYLOGFILE \
+        -e 0xff000019 $CLIENT_ARGS"
 
     # Wait for the simulator to start up.
     /wait-for-it.sh sim:57832 -s -t 30
@@ -42,8 +43,8 @@ if [ "$ROLE" == "client" ]; then
     "multiconnect")
         for req in $REQUESTS; do
             ((skip++))
-            /usr/local/bin/client -t 20 $CLIENT_ARGS -q /logs/$ROLE.$skip.qlog \
-                $req >> "/logs/$ROLE.log" 2>&1
+            /usr/local/bin/client -t 20 $CLIENT_ARGS \
+                -q "$QLOGDIR/$ROLE.$skip.qlog" $req >> "/logs/$ROLE.log" 2>&1
             echo "XXX $ROLE DONE" >> "/logs/$ROLE.log"
         done
         ;;
@@ -66,7 +67,7 @@ elif [ "$ROLE" == "server" ]; then
     esac
 
     /usr/local/bin/server $SERVER_ARGS -i eth0 -d /www -p 443 -p 4434 -t 0 \
-        -c /tls/dummy.crt -k /tls/dummy.key -q "/logs/$ROLE.qlog" \
+        -c /tls/dummy.crt -k /tls/dummy.key -q "$QLOGDIR/$ROLE.qlog" \
             >> "/logs/$ROLE.log" 2>&1
     echo "XXX $ROLE DONE" >> "/logs/$ROLE.log"
 fi
