@@ -190,7 +190,9 @@ void coalesce(struct w_iov_sq * const q, const uint16_t max_pkt_size)
     while (v) {
         struct w_iov * next = sq_next(v, next);
         struct w_iov * prev = v;
-        const uint8_t * inner_buf = v->buf;
+        uint8_t inner_flags = *v->buf;
+        uint32_t inner_vers;
+        memcpy(&inner_vers, v->buf + 1, sizeof(inner_vers));
         while (next) {
             struct w_iov * const next_next = sq_next(next, next);
             // do we have space? do the packet types make sense to coalesce?
@@ -199,11 +201,11 @@ void coalesce(struct w_iov_sq * const q, const uint16_t max_pkt_size)
                      "cannot coalesce %u-byte pkt behind %u-byte pkt, limit %u",
                      next->len, v->len, max_pkt_size);
                 prev = next;
-            } else if (can_coalesce_pkt_types(pkt_type(*inner_buf),
+            } else if (can_coalesce_pkt_types(pkt_type(inner_flags),
                                               pkt_type(*next->buf)) == false) {
                 warn(DBG, "cannot coalesce %s pkt behind %s pkt",
                      pkt_type_str(*next->buf, next->buf + 1),
-                     pkt_type_str(*inner_buf, inner_buf + 1));
+                     pkt_type_str(inner_flags, &inner_vers));
                 prev = next;
             } else {
                 // we can coalesce
@@ -212,8 +214,9 @@ void coalesce(struct w_iov_sq * const q, const uint16_t max_pkt_size)
                      "%s, innermost %s",
                      next->len, pkt_type_str(*next->buf, next->buf + 1), v->len,
                      pkt_type_str(*v->buf, v->buf + 1),
-                     pkt_type_str(*inner_buf, inner_buf + 1));
-                inner_buf = next->buf;
+                     pkt_type_str(inner_flags, &inner_vers));
+                inner_flags = *next->buf;
+                memcpy(&inner_vers, next->buf + 1, sizeof(inner_vers));
                 memcpy(v->buf + v->len, next->buf, next->len);
                 v->len += next->len;
                 sq_remove_after(q, prev, next);
