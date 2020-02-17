@@ -52,6 +52,10 @@
 #include <unistd.h>
 #endif
 
+#ifdef PARTICLE
+#include <arpa/inet.h>
+#endif
+
 #include "conn.h"
 #include "loop.h"
 #include "pkt.h"

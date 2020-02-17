@@ -523,7 +523,7 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
              ack_delay);
         ack_delay = 0;
     } else if (unlikely(ack_delay > 1.5 * c->tp_peer.max_ack_del * US_PER_MS))
-        warn(WRN, "ack_delay %" PRIu " > max_ack_del %" PRIu64, ack_delay,
+        warn(WRN, "ack_delay %" PRIu " > max_ack_del %" PRIu, ack_delay,
              c->tp_peer.max_ack_del * US_PER_MS);
 
     uint_t ack_rng_cnt = 0;
