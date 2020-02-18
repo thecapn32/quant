@@ -1029,10 +1029,10 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
                           ptls_iovec_t src)
 {
     struct q_conn * const c = *ptls_get_data_ptr(tls);
-    const char * const ticket_store = ped(c->w)->conf.ticket_store;
-    warn(NTE, "saving TLS tickets to %s", ticket_store);
 
 #if !defined(PARTICLE) && !defined(RIOT_VERSION)
+    const char * const ticket_store = ped(c->w)->conf.ticket_store;
+    warn(NTE, "saving TLS tickets to %s", ticket_store);
     FILE * const fp = fopen(ticket_store, "wbe");
     ensure(fp, "could not open ticket file %s", ticket_store);
 

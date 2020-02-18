@@ -209,12 +209,21 @@ get_and_validate_strm(struct q_conn * const c,
     } while (0)
 #endif
 
+
+#ifndef NDEBUG
 #define track_sd_frame(knd, dsp)                                               \
     do {                                                                       \
         kind = concat(sdt_, knd);                                              \
         ignore = (dsp);                                                        \
         incr_q_info(knd);                                                      \
     } while (0)
+#else
+#define track_sd_frame(knd, dsp)                                               \
+    do {                                                                       \
+        ignore = (dsp);                                                        \
+        incr_q_info(knd);                                                      \
+    } while (0)
+#endif
 
 
 #define strm_data_len_adj(sdl) ((sdl) - ((sdl) ? 1 : 0))
@@ -273,7 +282,9 @@ dec_stream_or_crypto_frame(const uint8_t type,
 
     // deliver data into stream
     bool ignore = false;
+#ifndef NDEBUG
     strm_data_type_t kind = sdt_ign;
+#endif
 
     if (unlikely(m->strm_data_len == 0 && !is_set(F_STREAM_FIN, type))) {
 #ifdef DEBUG_EXTRA
