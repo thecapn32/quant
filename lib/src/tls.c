@@ -1757,9 +1757,9 @@ bool verify_rtry_tok(struct q_conn * const c,
     hc->final(hc, buf, PTLS_HASH_FINAL_MODE_FREE);
 
     // #ifdef DEBUG_PROT
-    char hexbuf[hex_str_len(MAX_TOK_LEN)];
     warn(DBG, "computed Retry tok %s",
-         hex2str(buf, cs->hash->digest_size, hexbuf,
+         hex2str(buf, cs->hash->digest_size,
+                 (char[hex_str_len(MAX_TOK_LEN)]){""},
                  hex_str_len(cs->hash->digest_size)));
     // #endif
     if (memcmp(buf, tok, cs->hash->digest_size) == 0) {
@@ -1769,7 +1769,8 @@ bool verify_rtry_tok(struct q_conn * const c,
     }
     // #ifdef DEBUG_PROT
     warn(DBG, "rx'ed Retry tok %s",
-         hex2str(tok, cs->hash->digest_size, hexbuf,
+         hex2str(tok, cs->hash->digest_size,
+                 (char[hex_str_len(MAX_TOK_LEN)]){""},
                  hex_str_len(cs->hash->digest_size)));
     // #endif
     return false;
