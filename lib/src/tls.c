@@ -1735,6 +1735,11 @@ void make_rtry_tok(struct q_conn * const c)
     memcpy(&c->tok[cs->hash->digest_size], scid->id, scid->len);
     // update max_frame_len() when this changes:
     c->tok_len = (uint16_t)cs->hash->digest_size + scid->len;
+    // #ifdef DEBUG_PROT
+    warn(DBG, "computed Retry tok %s",
+         hex2str(c->tok, c->tok_len, (char[hex_str_len(MAX_TOK_LEN)]){""},
+                 hex_str_len(c->tok_len)));
+    // #endif
 }
 
 
@@ -1751,11 +1756,22 @@ bool verify_rtry_tok(struct q_conn * const c,
     uint8_t buf[PTLS_MAX_DIGEST_SIZE + CID_LEN_MAX];
     hc->final(hc, buf, PTLS_HASH_FINAL_MODE_FREE);
 
+    // #ifdef DEBUG_PROT
+    char hexbuf[hex_str_len(MAX_TOK_LEN)];
+    warn(DBG, "computed Retry tok %s",
+         hex2str(buf, cs->hash->digest_size, hexbuf,
+                 hex_str_len(cs->hash->digest_size)));
+    // #endif
     if (memcmp(buf, tok, cs->hash->digest_size) == 0) {
         c->odcid.len = (uint8_t)(tok_len - cs->hash->digest_size);
         memcpy(&c->odcid.id, tok + cs->hash->digest_size, c->odcid.len);
         return true;
     }
+    // #ifdef DEBUG_PROT
+    warn(DBG, "rx'ed Retry tok %s",
+         hex2str(tok, cs->hash->digest_size, hexbuf,
+                 hex_str_len(cs->hash->digest_size)));
+    // #endif
     return false;
 }
 
