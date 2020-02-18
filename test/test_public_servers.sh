@@ -31,6 +31,7 @@
 declare -A servers=(
     # [tag]="name|flags|port|retry-port|h3-port|URL"
     [aioquic]="quic.aiortc.org||443|4434|443|/40000"
+    [akamai]="ietf.akaquic.com|-3|443|443|443|/10k"
     # [apple]="[2a00:79e1:abc:301:18c7:dac8:b9c6:f91f]|-3|4433|4433|4433|/40000"
     [ats]="quic.ogre.com||4433|4434|4433|/en/latest/_static/jquery.js"
     [f5]="f5quic.com|-3|4433|4433|4433|/50000"
@@ -80,7 +81,7 @@ export UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1:suppressions=../misc/gcc
 
 function test_server {
     # run quant client and save a log for post-processing
-    local opts="-i $iface -t3 -v5 -l /dev/null"
+    local opts="-i $iface -t5 -v5 -l /dev/null"
     local log_base="/tmp/$script.$pid.$1.log"
 
     IFS='|' read -ra info <<< "${servers[$1]}"
@@ -168,7 +169,7 @@ function bench_server {
         echo "$h2" > "$ret_base.t_h2"
 
         local cache="/tmp/$script.$pid.$1.cache"
-        local opts="-i $iface -t3 -v3 -l /dev/null"
+        local opts="-i $iface -t5 -v3 -l /dev/null"
         local hq_out="$log_base.hq.out"
         local wd hq
         ext=""
