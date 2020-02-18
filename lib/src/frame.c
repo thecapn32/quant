@@ -421,12 +421,8 @@ dec_stream_or_crypto_frame(const uint8_t type,
     }
 
     struct pkt_meta * p = splay_min(ooo_by_off, &m->strm->in_ooo);
-    while (p &&
-           p->strm_off + strm_data_len_adj(p->strm_data_len) < m->strm_off) {
-        warn(DBG, "check ooo off=%" PRIu " len=%u", p->strm_off,
-             p->strm_data_len);
+    while (p && p->strm_off + strm_data_len_adj(p->strm_data_len) < m->strm_off)
         p = splay_next(ooo_by_off, &m->strm->in_ooo, p);
-    }
 
     // right edge of p >= left edge of v
     if (p && p->strm_off <= m->strm_off + strm_data_len_adj(m->strm_data_len)) {
