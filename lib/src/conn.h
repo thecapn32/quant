@@ -496,7 +496,7 @@ has_wnd(const struct q_conn * const c, const uint16_t len)
         return false;
     }
 
-    return has_pval_wnd(c, len);
+    return is_clnt(c) ? true : has_pval_wnd(c, len);
 }
 
 
