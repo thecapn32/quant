@@ -523,13 +523,11 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
     uint_t ack_delay = ack_delay_raw << ade;
 
     if (unlikely(ack_delay_raw &&
-                 (m->hdr.type == LH_INIT || m->hdr.type == LH_HSHK))) {
+                 (m->hdr.type == LH_INIT || m->hdr.type == LH_HSHK)))
         warn(WRN,
-             "ack_delay %" PRIu
-             " usec is not zero in Initial or Handshake ACK; ignoring",
+             "ack_delay %" PRIu " usec is not zero in Initial or Handshake ACK",
              ack_delay);
-        ack_delay = 0;
-    } else if (unlikely(ack_delay > 1.5 * c->tp_peer.max_ack_del * US_PER_MS))
+    else if (unlikely(ack_delay > 1.5 * c->tp_peer.max_ack_del * US_PER_MS))
         warn(WRN, "ack_delay %" PRIu " > max_ack_del %" PRIu, ack_delay,
              c->tp_peer.max_ack_del * US_PER_MS);
 

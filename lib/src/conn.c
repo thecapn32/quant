@@ -1432,7 +1432,8 @@ static void __attribute__((nonnull))
                              ? "crypto fail on"
                              : "rx invalid",
                          v->len, pkt_type_str(m->hdr.flags, &m->hdr.vers));
-                    // typically happens if we don't have keys yet, shortcut RTX
+                    // typically happens if we don't have keys yet or we have
+                    // abandoned the pn space, shortcut RTX
                     c->tx_limit = 1;
                     timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
                 }
