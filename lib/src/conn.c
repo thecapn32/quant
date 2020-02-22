@@ -490,8 +490,8 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
 
     // do we need to make more stream IDs available?
     if (likely(c->state == conn_estb)) {
-        if (!is_clnt(c) &&
-            unlikely(c->tok_len == 0 && c->pns[ep_init].abandoned))
+        if (!is_clnt(c) && unlikely(c->tx_new_tok && c->tok_len == 0 &&
+                                    c->pns[ep_init].abandoned))
             // TODO: find a better way to send NEW_TOKEN
             make_rtry_tok(c);
 
@@ -1944,6 +1944,8 @@ struct q_conn * new_conn(struct w_engine * const w,
     init_rec(c);
     if (is_clnt(c))
         c->path_val_win = UINT_T_MAX;
+    else
+        c->tx_new_tok = true;
 
     // start a TX watcher
     timeout_init(&c->tx_w, TIMEOUT_ABS);

@@ -1899,7 +1899,7 @@ void enc_new_token_frame(struct q_conn_info * const ci,
                          const uint8_t * const end,
                          struct pkt_meta * const m)
 {
-    const struct q_conn * const c = m->pn->c;
+    struct q_conn * const c = m->pn->c;
     enc1(pos, end, FRM_TOK);
     encv(pos, end, c->tok_len);
     encb(pos, end, c->tok, c->tok_len);
@@ -1907,6 +1907,7 @@ void enc_new_token_frame(struct q_conn_info * const ci,
     warn(INF, FRAM_OUT "NEW_TOKEN" NRM " len=%u tok=%s", c->tok_len,
          tok_str(c->tok, c->tok_len));
 
+    c->tx_new_tok = false;
     track_frame(m, ci, FRM_TOK, 1);
 }
 
