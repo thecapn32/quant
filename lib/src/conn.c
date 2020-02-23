@@ -1890,10 +1890,11 @@ struct q_conn * new_conn(struct w_engine * const w,
         }
     }
 
+    c->sockopt.enable_ecn = true;
+    c->sockopt.enable_udp_zero_checksums =
+        get_conf_uncond(c->w, conf, enable_udp_zero_checksums);
+
     if (is_clnt(c) || peer == 0) {
-        c->sockopt.enable_ecn = true;
-        c->sockopt.enable_udp_zero_checksums =
-            get_conf_uncond(c->w, conf, enable_udp_zero_checksums);
         c->sock = w_bind(w, idx, port, &c->sockopt);
         if (unlikely(c->sock == 0))
             goto fail;
