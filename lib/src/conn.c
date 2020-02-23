@@ -1243,6 +1243,7 @@ static void __attribute__((nonnull))
         struct w_iov * const v = alloc_iov(ws->w, ws->ws_af, 0, 0, &m);
         v->saddr = xv->saddr;
         v->flags = xv->flags;
+        v->ttl = xv->ttl;
         v->len = xv->len; // this is just so that log_pkt can show the rx len
         m->t = loop_now();
 

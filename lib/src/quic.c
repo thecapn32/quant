@@ -182,6 +182,7 @@ struct w_iov * dup_iov(const struct w_iov * const v,
     memcpy(vdup->buf, v->buf + off, v->len - off);
     memcpy(&vdup->saddr, &v->saddr, sizeof(v->saddr));
     vdup->flags = v->flags;
+    vdup->ttl = v->ttl;
     return vdup;
 }
 
