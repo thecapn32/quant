@@ -409,13 +409,21 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                   ptls_handshake_properties_t * properties,
                   ptls_raw_extension_t * slots)
 {
-    ensure(slots[0].type == QUIC_TP, "have tp");
-    ensure(slots[1].type == UINT16_MAX, "have end");
-
     // get connection based on properties pointer
     struct q_conn * const c =
         (void *)((char *)properties - offsetof(struct tls, tls_hshk_prop) -
                  offsetof(struct q_conn, tls));
+
+    if (unlikely(slots[0].type != QUIC_TP)) {
+        err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY, "slots[0].type = 0x%04x",
+                  slots[0].type);
+        return 1;
+    }
+    if (unlikely(slots[1].type != UINT16_MAX)) {
+        err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY, "slots[1].type = 0x%04x",
+                  slots[1].type);
+        return 1;
+    }
 
     // set up parsing
     const uint8_t * pos = (const uint8_t *)slots[0].data.base;
@@ -915,8 +923,9 @@ void init_tp(struct q_conn * const c)
         }
 
     c->tls.tp_ext[0] = (ptls_raw_extension_t){
-        QUIC_TP, {c->tls.tp_buf, (uint16_t)(pos - c->tls.tp_buf)}};
-    c->tls.tp_ext[1] = (ptls_raw_extension_t){UINT16_MAX};
+        .type = QUIC_TP,
+        {.base = c->tls.tp_buf, .len = (uint16_t)(pos - c->tls.tp_buf)}};
+    c->tls.tp_ext[1] = (ptls_raw_extension_t){.type = UINT16_MAX};
 }
 
 
