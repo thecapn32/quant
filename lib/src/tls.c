@@ -828,17 +828,22 @@ void init_tp(struct q_conn * const c)
 #endif
             break;
         case TP_ADE:
-            enc_tp(&pos, end, TP_ADE, c->tp_mine.ack_del_exp);
+            if (c->tp_mine.ack_del_exp != DEF_ACK_DEL_EXP) {
+                enc_tp(&pos, end, TP_ADE, c->tp_mine.ack_del_exp);
 #ifdef DEBUG_EXTRA
-            warn(INF, "\tack_delay_exponent = %" PRIu, c->tp_mine.ack_del_exp);
+                warn(INF, "\tack_delay_exponent = %" PRIu,
+                     c->tp_mine.ack_del_exp);
 #endif
+            }
             break;
         case TP_MAD:
-            enc_tp(&pos, end, TP_MAD, c->tp_mine.max_ack_del);
+            if (c->tp_mine.max_ack_del != DEF_MAX_ACK_DEL) {
+                enc_tp(&pos, end, TP_MAD, c->tp_mine.max_ack_del);
 #ifdef DEBUG_EXTRA
-            warn(INF, "\tmax_ack_delay = %" PRIu " [ms]",
-                 c->tp_mine.max_ack_del);
+                warn(INF, "\tmax_ack_delay = %" PRIu " [ms]",
+                     c->tp_mine.max_ack_del);
 #endif
+            }
             break;
         case TP_MPS:
             enc_tp(&pos, end, TP_MPS, c->tp_mine.max_pkt);
