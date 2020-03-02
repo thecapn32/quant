@@ -480,7 +480,8 @@ static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
         warn(DBG, "anti-deadlock RTX on %s conn %s", conn_type(c),
              cid_str(c->scid));
 #endif
-        c->tx_limit = 1;
+        // I-D says always 1, but that breaks RTX of Initial+0-RTT
+        c->tx_limit = (is_clnt(c) && c->try_0rtt) ? 2 : 1;
         detect_all_lost_pkts(c, false);
     } else {
         c->tx_limit = 2;
