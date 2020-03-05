@@ -36,7 +36,7 @@ declare -A servers=(
     [ats]="quic.ogre.com||4433|4434|4433|/en/latest/_static/jquery.js"
     [f5]="f5quic.com|-3|4433|4433|4433|/50000"
     [google]="quic.rocks|-3|4433|4434|4433|/40000"
-    [haskell]="mew.org|-3|4433|4433|4433|/40000"
+    [haskell]="mew.org||4433|4433|4433|/40000"
     [lsquic]="http3-test.litespeedtech.com|-3|4433|4434|4433|/40000"
     [mvfst]="fb.mvfst.net|-3|443|4434|443|/40000"
     [ngtcp2]="nghttp2.org|-3|4433|4434|4433|/40000"
@@ -249,8 +249,9 @@ function analyze {
     [ $? -eq 1 ] && echo H > "$ret_base.hshk"
 
     perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $x=1 : next);
-        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
-        $x && /enc_close.*err=0x0/ && exit 1;' "$log_strip"
+        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0" ? exit 0 : next);
+        /enc_close.*err=0x0/ and $e=1;
+        END{exit ($x + $e == 2)};' "$log_strip"
     [ $? -eq 1 ] && echo D > "$ret_base.data"
 
     perl -n -e 'BEGIN{$x=0};
@@ -288,17 +289,19 @@ function analyze {
     check_fail "$1" "$log_strip" "$log"
 
     perl -n -e '/new 0-RTT clnt conn/ and $x=1;
-        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
-        $x && /enc_close.*err=0x0/ && exit 1;' "$log_strip"
+        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0" ? exit 0 : next);
+        /enc_close.*err=0x0/ and $e=1;
+        END{exit ($x + $e == 2)};' "$log_strip"
     [ $? -eq 1 ] && echo R > "$ret_base.rsmt"
 
     perl -n -e '/connected after 0-RTT/ and $x=1;
-        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
-        $x && /enc_close.*err=0x0/ && exit 1;' "$log_strip"
+        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0" ? exit 0 : next);
+        /enc_close.*err=0x0/ and $e=1;
+        END{exit ($x + $e == 2)};' "$log_strip"
     [ $? -eq 1 ] && echo Z > "$ret_base.zrtt"
     [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.rsmt" ] && \
         [ -s "$ret_base.zrtt" ] && rm -f "$log"
-    # rm -f "$log_strip"
+    rm -f "$log_strip"
 
     # analyze rtry
     local log="$log_base.rtry"
@@ -307,8 +310,9 @@ function analyze {
     check_fail "$1" "$log_strip" "$log"
 
     perl -n -e '/RX.*len=.*Retry/ and $x=1;
-        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
-       $x && /enc_close.*err=0x0/ && exit 1;' "$log_strip"
+        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0" ? exit 0 : next);
+       /enc_close.*err=0x0/ and $e=1;
+       END{exit ($x + $e == 2)};' "$log_strip"
     [ $? -eq 1 ] && echo S > "$ret_base.rtry"
     [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.rtry" ] && rm -f "$log"
     rm -f "$log_strip"
@@ -320,7 +324,7 @@ function analyze {
     check_fail "$1" "$log_strip" "$log"
 
     perl -n -e '/TX.*Short kyph=1/ and $x=1;
-        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
+        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0" ? exit 0 : next);
        $x && /RX.*Short kyph=1/ && exit 1;' "$log_strip"
     [ $? -eq 1 ] && echo U > "$ret_base.kyph"
     [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.kyph" ] && rm -f "$log"
@@ -334,8 +338,9 @@ function analyze {
 
     perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $x=1 : next);
         /no h3 payload/ and $x=0;
-        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
-        $x && /enc_close.*err=0x0/ && exit 1;' "$log_strip"
+        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0" ? exit 0 : next);
+        /enc_close.*err=0x0/ and $e=1;
+        END{exit ($x + $e == 2)};' "$log_strip"
     [ $? -eq 1 ] && echo 3 > "$ret_base.http"
     [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.http" ] && rm -f "$log"
     rm -f "$log_strip"
@@ -350,7 +355,7 @@ function analyze {
         /dec_path.*PATH_CHALLENGE/ and $x==1 and $x=2;
         /enc_path.*PATH_RESPONSE/ and $x==2 and $x=3;
         /read (.*) bytes.*on clnt conn/ and $x==3 and ($1 > 0 ? $x=4 : next);
-        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
+        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0" ? exit 0 : next);
         $x==4 && /enc_close.*err=0x0/ && exit 1;' "$log_strip"
     [ $? -eq 1 ] && echo B > "$ret_base.bind"
     [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.bind" ] && rm -f "$log"
@@ -364,8 +369,9 @@ function analyze {
 
     perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $x=1 : next);
         /no h3 payload/ and $x=0;
-        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
-        $x && /enc_close.*err=0x0/ && exit 1;' "$log_strip"
+        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0" ? exit 0 : next);
+        /enc_close.*err=0x0/ and $e=1;
+        END{exit ($x + $e == 2)};' "$log_strip"
     [ $? -eq 1 ] && echo Q > "$ret_base.qrdy"
     [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.qrdy" ] && rm -f "$log"
     rm -f "$log_strip"
@@ -379,8 +385,9 @@ function analyze {
     perl -n -e '/conn migration.*failed/ && exit 0;
         /read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $x=1 : next);
         /no h3 payload/ and $x=0;
-        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
-        $x && /enc_close.*err=0x0/ && exit 1;' "$log_strip"
+        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0" ? exit 0 : next);
+        /enc_close.*err=0x0/ and $e=1;
+        END{exit ($x + $e == 2)};' "$log_strip"
     [ $? -eq 1 ] && echo A > "$ret_base.adrm"
     [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.adrm" ] && rm -f "$log"
     rm -f "$log_strip"
@@ -393,8 +400,9 @@ function analyze {
 
     perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $x=1 : next);
         /no h3 payload/ and $x=0;
-        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0000" ? $x=0 : next);
-        $x && /enc_close.*err=0x0/ && exit 1;' "$log_strip"
+        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0" ? exit 0 : next);
+        /enc_close.*err=0x0/ and $e=1;
+        END{exit ($x + $e == 2)};' "$log_strip"
     [ $? -eq 1 ] && echo O > "$ret_base.zcid"
     [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.zcid" ] && rm -f "$log"
     rm -f "$log_strip"
