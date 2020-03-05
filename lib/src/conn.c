@@ -945,7 +945,11 @@ pkt_ok_for_epoch(const uint8_t flags, const epoch_t epoch)
 #endif
 
 
-static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws,
+static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
+#ifdef NO_SERVER
+                                            __attribute__((unused))
+#endif
+                                            ,
                                             struct w_iov * v,
                                             struct pkt_meta * m,
                                             struct w_iov_sq * const x
