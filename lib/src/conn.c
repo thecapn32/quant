@@ -383,53 +383,15 @@ static void __attribute__((nonnull)) do_tx_txq(struct q_conn * const c,
     const uint16_t pmtu =
         MIN(w_max_udp_payload(ws), (uint16_t)c->tp_peer.max_pkt);
 
-    if (unlikely(c->rec.max_pkt_size == MIN_INI_LEN && pmtu > MIN_INI_LEN)) {
-        uint16_t coal_len = 0;
-        struct w_iov * prev = 0;
-        struct w_iov * sh;
-        sq_foreach (sh, q, next) {
-            // FIXME: this may not handle all coalescing cases
-            if (coal_len + sh->len >= pmtu)
-                continue;
-            coal_len += sh->len;
-            if (is_lh(*sh->buf) == false)
-                break;
-            prev = sh;
-        }
-
-        if (sh) {
-            struct pkt_meta * pmtud_m = 0;
-            struct w_iov * const pmtud_v =
-                alloc_iov(ws->w, ws->ws_af, pmtu - coal_len, 0, &pmtud_m);
-
-            c->rec.max_pkt_size = 0;
-
-            // cppcheck-suppress nullPointer
-            struct w_iov * const prev_last = sq_last(q, w_iov, next);
-            enc_pkt(c->cstrms[ep_hshk], false, false, false, true, pmtud_v,
-                    pmtud_m);
-            c->pmtud_pkt_nr = pmtud_m->hdr.nr;
-            warn(NTE, "testing PMTU %u with %s pkt %" PRIu, pmtu,
-                 pkt_type_str(pmtud_m->hdr.flags, &pmtud_m->hdr.vers),
-                 c->pmtud_pkt_nr);
-
-            // enc_pkt has enqueued the encrypted copy of pmtud_v at tail
-            // cppcheck-suppress nullPointer
-            struct w_iov * const pmtud_xv = sq_last(q, w_iov, next);
-            sq_remove_after(q, prev_last, next);
-            if (prev)
-                sq_insert_after(q, prev, pmtud_xv, next);
-            else
-                sq_insert_head(q, pmtud_xv, next);
-        }
-    }
-
     if (w_iov_sq_cnt(q) > 1 && unlikely(is_lh(*sq_first(q)->buf)))
-        coalesce(q, unlikely(c->rec.max_pkt_size == 0) ? pmtu
-                                                       : c->rec.max_pkt_size);
+        c->pmtud_pkt =
+            coalesce(q, unlikely(c->rec.max_pkt_size == MIN_INI_LEN &&
+                                 pmtu > MIN_INI_LEN)
+                            ? pmtu
+                            : c->rec.max_pkt_size);
     do_w_tx(ws, q);
 
-    // (rest of) txq was allocated from warpcore, no metadata to be freed
+    // txq was allocated from warpcore, no metadata to be freed
     w_free(q);
 }
 
@@ -1427,17 +1389,12 @@ static void __attribute__((nonnull))
                 if (m->is_reset)
                     warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
                          srt_str(&xv->buf[xv->len - SRT_LEN]));
-                else {
+                else
                     warn(ERR, "%s %u-byte %s pkt, ignoring",
                          pkt_ok_for_epoch(m->hdr.flags, epoch_in(c))
                              ? "crypto fail on"
                              : "rx invalid",
                          v->len, pkt_type_str(m->hdr.flags, &m->hdr.vers));
-                    // typically happens if we don't have keys yet or we have
-                    // abandoned the pn space, shortcut RTX
-                    c->tx_limit = 1;
-                    timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
-                }
                 goto drop;
             }
 
@@ -1528,10 +1485,7 @@ static void __attribute__((nonnull))
             }
             pkt_valid = true;
 
-            // FIXME: this doesn't abandon in all cases, i.e., it doesn't when
-            // the peer never ACKs our Handshake packets
-            if (c->rec.max_pkt_size != MIN_INI_LEN &&
-                unlikely(c->pns[pn_hshk].abandoned == false) &&
+            if (unlikely(c->pns[pn_hshk].abandoned == false) &&
                 has_frm(c->pns[pn_data].rx_frames, FRM_HSD))
                 abandon_pn(&c->pns[pn_hshk]);
 
@@ -1656,12 +1610,10 @@ void rx(struct w_sock * const ws)
             free_conn(c);
         else
 #endif
-            if (c->have_new_data && c->pmtud_pkt_nr == UINT_T_MAX) {
-            if (!c->in_c_ready) {
-                sl_insert_head(&c_ready, c, node_rx_ext);
-                c->in_c_ready = true;
-                maybe_api_return(q_ready, 0, 0);
-            }
+            if (c->have_new_data && !c->in_c_ready) {
+            sl_insert_head(&c_ready, c, node_rx_ext);
+            c->in_c_ready = true;
+            maybe_api_return(q_ready, 0, 0);
         }
     }
 }
@@ -1742,6 +1694,10 @@ static void __attribute__((nonnull)) stop_all_alarms(struct q_conn * const c)
 
 static void __attribute__((nonnull)) enter_closed(struct q_conn * const c)
 {
+#ifdef DEBUG_TIMERS
+    warn(DBG, "closing timeout on %s conn %s", conn_type(c), cid_str(c->scid));
+#endif
+
     conn_to_state(c, conn_clsd);
     stop_all_alarms(c);
 
@@ -1758,38 +1714,31 @@ static void __attribute__((nonnull)) enter_closed(struct q_conn * const c)
 
 void enter_closing(struct q_conn * const c)
 {
-    if (c->state == conn_clsg)
-        return;
-
     stop_all_alarms(c);
 
 #ifndef FUZZING
     if ((c->state == conn_idle || c->state == conn_opng) && c->err_code == 0) {
 #endif
         // no need to go closing->draining in these cases
-        timeouts_add(ped(c->w)->wheel, &c->closing_alarm, 0);
+        enter_closed(c);
         return;
 #ifndef FUZZING
     }
 #endif
 
 #ifndef FUZZING
-    // if we're going closing->draining, don't start the timer again
-    if (timeout_pending(&c->closing_alarm) == false) {
-        // start closing/draining alarm (3 * RTO)
-        const timeout_t dur =
-            3 * (c->rec.cur.srtt == 0 ? kInitialRtt
-                                      : c->rec.cur.srtt * NS_PER_US) +
-            4 * c->rec.cur.rttvar * NS_PER_US;
-        timeouts_add(ped(c->w)->wheel, &c->closing_alarm, dur);
+    // start closing/draining alarm (3 * RTO)
+    const timeout_t dur =
+        3 * (c->rec.cur.srtt == 0 ? kInitialRtt : c->rec.cur.srtt * NS_PER_US) +
+        4 * c->rec.cur.rttvar * NS_PER_US;
+    timeouts_add(ped(c->w)->wheel, &c->closing_alarm, dur);
 #ifdef DEBUG_TIMERS
-        warn(DBG, "closing/draining alarm in %.3f sec on %s conn %s",
-             dur / (double)NS_PER_S, conn_type(c), cid_str(c->scid));
+    warn(DBG, "closing/draining alarm in %.3f sec on %s conn %s",
+         dur / (double)NS_PER_S, conn_type(c), cid_str(c->scid));
 #endif
-    }
 #endif
 
-    if (c->state != conn_drng) {
+    if (c->state != conn_clsg) {
         c->needs_tx = true;
         conn_to_state(c, conn_clsg);
     }
@@ -1870,7 +1819,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     struct q_conn * const c = calloc(1, sizeof(*c));
     ensure(c, "could not calloc");
 
-    c->pmtud_pkt_nr = UINT_T_MAX;
+    c->pmtud_pkt = UINT16_MAX;
     c->w = w;
 #ifndef NO_SERVER
     c->is_clnt = peer_name != 0;

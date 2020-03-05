@@ -64,7 +64,7 @@ struct q_conn; // IWYU pragma: no_forward_declare q_conn
 #define CID_LEN_MAX 20  ///< Maximum CID length allowed by spec.
 #define SRT_LEN 16      ///< Stateless reset token length allowed by spec.
 #define PATH_CHLG_LEN 8 ///< Length of a path challenge.
-#define MAX_TOK_LEN 160
+#define MAX_TOK_LEN 166
 #define AEAD_LEN 16
 #define RIT_LEN 16 ///< Length of Retry integrity tag.
 

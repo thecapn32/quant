@@ -300,8 +300,8 @@ struct q_conn {
     uint16_t tok_len;
     uint8_t tok[MAX_TOK_LEN]; // some stacks send ungodly large tokens
 
+    uint16_t pmtud_pkt;
     uint32_t tx_limit;
-    uint_t pmtud_pkt_nr;
 };
 
 

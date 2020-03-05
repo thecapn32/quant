@@ -296,12 +296,15 @@ struct q_conn * q_connect(struct w_engine * const w,
     conn_to_state(c, conn_opng);
     loop_run(w, (func_ptr)q_connect, c, 0);
 
-    if (fin && early_data_stream && *early_data_stream)
+    if (fin && early_data_stream && *early_data_stream &&
+        (*early_data_stream)->state != strm_clsd)
         strm_to_state(*early_data_stream,
                       (*early_data_stream)->state == strm_hcrm ? strm_clsd
                                                                : strm_hclo);
+    c->try_0rtt = false;
 
-    if (c->state != conn_estb) {
+    if (c->state != conn_estb && c->state != conn_clsg &&
+        c->state != conn_drng) {
         warn(WRN, "%s conn %s not connected", conn_type(c), cid_str(c->scid));
         return 0;
     }
@@ -337,10 +340,14 @@ bool q_write(struct q_stream * const s,
 
     // add to stream
     if (fin) {
-        if (sq_empty(q))
+        if (sq_empty(q)) {
             alloc_off(c->w, q, s->c, q_conn_af(s->c), 1, DATA_OFFSET);
+            // cppcheck-suppress nullPointer
+            struct w_iov * const last = sq_last(q, w_iov, next);
+            ensure(last, "got last buffer");
+            last->len = 0;
+        }
         mark_fin(q);
-        // strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
     }
 
     warn(WRN,
@@ -389,8 +396,6 @@ bool q_read_stream(struct q_stream * const s,
                    const bool all)
 {
     struct q_conn * const c = s->c;
-    if (unlikely(c->state != conn_estb))
-        return 0;
 
     if (q_peer_closed_stream(s) == false && all) {
         warn(WRN, "reading all on %s conn %s strm " FMT_SID, conn_type(c),
@@ -743,7 +748,7 @@ void q_close(struct q_conn * const c,
         // we don't need to do the closing dance in these cases
         goto done;
 
-    if (c->state != conn_drng) {
+    if (c->state != conn_clsg && c->state != conn_drng) {
         conn_to_state(c, conn_qlse);
         timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
     }
@@ -997,7 +1002,7 @@ bool q_ready(struct w_engine * const w,
     struct q_conn * const c = sl_first(&c_ready);
     if (c) {
         sl_remove_head(&c_ready, node_rx_ext);
-        c->have_new_data = c->in_c_ready = false;
+        c->in_c_ready = false;
 #if !defined(NDEBUG) && defined(DEBUG_EXTRA)
         char * op = "rx";
 #ifndef NO_SERVER
@@ -1005,7 +1010,7 @@ bool q_ready(struct w_engine * const w,
             op = "accept";
         else
 #endif
-            if (c->state == conn_clsd)
+            if (c->state == conn_clsd && c->have_new_data == false)
             op = "close";
         warn(WRN, "%s conn %s ready to %s", conn_type(c), cid_str(c->scid), op);
     } else {

@@ -194,7 +194,7 @@ extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
                                              struct w_iov * const v,
                                              struct pkt_meta * const m);
 
-extern void __attribute__((nonnull))
+extern uint16_t __attribute__((nonnull))
 coalesce(struct w_iov_sq * const q, const uint16_t max_pkt_size);
 
 extern void __attribute__((nonnull(1, 2, 3, 4)))
@@ -203,6 +203,8 @@ enc_lh_cids(uint8_t ** pos,
             struct pkt_meta * const m,
             const struct cid * const dcid,
             const struct cid * const scid);
+
+extern void __attribute__((nonnull)) validate_pmtu(struct q_conn * const c);
 
 #ifndef NDEBUG
 extern void __attribute__((nonnull(1, 2, 3)))

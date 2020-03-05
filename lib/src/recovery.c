@@ -268,14 +268,14 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
 
     // rest of function is not from pseudo code
 
-    if (unlikely(c->pmtud_pkt_nr != UINT_T_MAX &&
-                 ((m->hdr.nr != UINT_T_MAX && m->hdr.type == SH) ||
-                  (m->hdr.nr == c->pmtud_pkt_nr && m->hdr.type == LH_HSHK)))) {
+    if (unlikely(c->pmtud_pkt != UINT16_MAX &&
+                 m->hdr.nr == (c->pmtud_pkt & 0x3fff) &&
+                 m->hdr.type == (c->pmtud_pkt >> 14))) {
         c->rec.max_pkt_size = default_max_pkt_len(c->sock->ws_af);
         warn(NTE, RED "PMTU %u not validated, using %u" NRM,
              MIN(w_max_udp_payload(c->sock), (uint16_t)c->tp_peer.max_pkt),
              c->rec.max_pkt_size);
-        c->pmtud_pkt_nr = UINT_T_MAX;
+        c->pmtud_pkt = UINT16_MAX;
     }
 
     diet_insert(&pn->acked_or_lost, m->hdr.nr, 0);
@@ -476,18 +476,18 @@ static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
     }
 
     if (have_keys(c, pn_data) == false) {
-#ifdef DEBUG_TIMERS
-        warn(DBG, "anti-deadlock RTX on %s conn %s", conn_type(c),
-             cid_str(c->scid));
-#endif
         // I-D says always 1, but that breaks RTX of Initial+0-RTT
-        c->tx_limit = (is_clnt(c) && c->try_0rtt) ? 2 : 1;
+        c->tx_limit = is_clnt(c) && c->try_0rtt ? 2 : 1;
+#ifdef DEBUG_TIMERS
+        warn(DBG, "anti-deadlock RTX on %s conn %s, limit %u", conn_type(c),
+             cid_str(c->scid), c->tx_limit);
+#endif
         detect_all_lost_pkts(c, false);
     } else {
         c->tx_limit = 2;
 #ifdef DEBUG_TIMERS
-        warn(DBG, "PTO alarm #%u on %s conn %s", c->rec.pto_cnt, conn_type(c),
-             cid_str(c->scid));
+        warn(DBG, "PTO alarm #%u on %s conn %s, limit %u", c->rec.pto_cnt,
+             conn_type(c), cid_str(c->scid), c->tx_limit);
 #endif
     }
     timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
@@ -657,18 +657,14 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
 
     // rest of function is not from pseudo code
 
-    if (is_clnt(c) == false && unlikely(has_frm(m->frms, FRM_HSD)) &&
+    if (unlikely(has_frm(m->frms, FRM_HSD)) &&
         c->pns[pn_hshk].abandoned == false)
         abandon_pn(&c->pns[pn_hshk]);
 
-    if (unlikely(c->pmtud_pkt_nr != UINT_T_MAX &&
-                 ((m->hdr.nr != UINT_T_MAX && m->hdr.type == SH) ||
-                  (m->hdr.nr == c->pmtud_pkt_nr && m->hdr.type == LH_HSHK)))) {
-        c->rec.max_pkt_size =
-            MIN(w_max_udp_payload(c->sock), (uint16_t)c->tp_peer.max_pkt);
-        warn(NTE, "PMTU %u validated", c->rec.max_pkt_size);
-        c->pmtud_pkt_nr = UINT_T_MAX;
-    }
+    if (unlikely(c->pmtud_pkt != UINT16_MAX &&
+                 m->hdr.nr == (c->pmtud_pkt & 0x3fff) &&
+                 m->hdr.type == (c->pmtud_pkt >> 14)))
+        validate_pmtu(c);
 
     // stop ACK'ing packets contained in the ACK frame of this packet
     if (has_frm(m->frms, FRM_ACK))

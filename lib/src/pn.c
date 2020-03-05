@@ -31,6 +31,7 @@
 #include "bitset.h"
 #include "conn.h"
 #include "frame.h"
+#include "pkt.h"
 #include "pn.h"
 #include "quic.h"
 #include "stream.h"
@@ -119,11 +120,15 @@ void abandon_pn(struct pn_space * const pn)
     warn(DBG, "abandoning %s %s processing", conn_type(pn->c),
          pn_type_str(pn->type));
 
+    struct q_conn * const c = pn->c;
+    if (c->pmtud_pkt != UINT16_MAX && c->pmtud_pkt >> 14 == pn->type)
+        validate_pmtu(c);
+
     epoch_t e = ep_init;
     if (unlikely(pn->type == pn_hshk))
         e = ep_hshk;
-    free_stream(pn->c->cstrms[e]);
-    pn->c->cstrms[e] = 0;
+    free_stream(c->cstrms[e]);
+    c->cstrms[e] = 0;
     free_pn(pn);
     dispose_cipher(&pn->early.in);
     dispose_cipher(&pn->early.out);

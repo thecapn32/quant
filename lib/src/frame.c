@@ -394,7 +394,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
                 adj_iov_to_data(last, m_last);
         }
 
-        if (type != FRM_CRY) {
+        if (likely(type != FRM_CRY)) {
             do_stream_fc(m->strm, 0);
             do_conn_fc(c, 0);
             c->have_new_data = true;
@@ -721,14 +721,13 @@ dec_close_frame(const uint8_t type,
     if (unlikely(reas_len != act_reas_len))
         err_close_return(c, ERR_FRAME_ENC, type, "illegal reason len");
 
-    if (c->state == conn_drng)
+    if (c->state == conn_clsg) {
+        conn_to_state(c, conn_drng);
         timeouts_add(ped(c->w)->wheel, &c->closing_alarm, 0);
-    else {
-        if (is_clnt(c)) {
-            conn_to_state(c, conn_drng);
-            timeouts_add(ped(c->w)->wheel, &c->closing_alarm, 0);
-        } else
-            enter_closing(c);
+    } else {
+        conn_to_state(c, conn_clsg);
+        c->needs_tx = true;
+        enter_closing(c);
     }
 
     return true;

@@ -28,6 +28,7 @@
 #include <inttypes.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/param.h>
 
 #if !defined(PARTICLE) && !defined(RIOT_VERSION)
 #include <netinet/ip.h>
@@ -175,6 +176,15 @@ void log_pkt(const char * const dir,
 #endif
 
 
+void validate_pmtu(struct q_conn * const c)
+{
+    c->rec.max_pkt_size =
+        MIN(w_max_udp_payload(c->sock), (uint16_t)c->tp_peer.max_pkt);
+    warn(NTE, "PMTU %u validated", c->rec.max_pkt_size);
+    c->pmtud_pkt = UINT16_MAX;
+}
+
+
 static bool __attribute__((const))
 can_coalesce_pkt_types(const uint8_t a, const uint8_t b)
 {
@@ -184,39 +194,68 @@ can_coalesce_pkt_types(const uint8_t a, const uint8_t b)
 }
 
 
-void coalesce(struct w_iov_sq * const q, const uint16_t max_pkt_size)
+uint16_t coalesce(struct w_iov_sq * const q, const uint16_t max_pkt_size)
 {
+    uint16_t pmtud_pkt = UINT16_MAX;
     struct w_iov * v = sq_first(q);
     while (v) {
+        uint8_t skipped_types = 0;
         struct w_iov * next = sq_next(v, next);
         struct w_iov * prev = v;
         uint8_t inner_flags = *v->buf;
-        uint32_t inner_vers;
-        memcpy(&inner_vers, v->buf + 1, sizeof(inner_vers));
+#ifndef NDEBUG
+        const char * inner_type_str = pkt_type_str(*v->buf, v->buf + 1);
+        const char * const outer_type_str = inner_type_str;
+#endif
         while (next) {
+#ifndef NDEBUG
+            const char * const next_type_str =
+                pkt_type_str(*next->buf, next->buf + 1);
+#endif
             struct w_iov * const next_next = sq_next(next, next);
             // do we have space? do the packet types make sense to coalesce?
             if (v->len + next->len > max_pkt_size) {
                 warn(DBG,
-                     "cannot coalesce %u-byte pkt behind %u-byte pkt, limit %u",
-                     next->len, v->len, max_pkt_size);
+                     "cannot coalesce %u-byte %s pkt behind %u-byte %s pkt, "
+                     "limit %u",
+                     next->len, next_type_str, v->len, outer_type_str,
+                     max_pkt_size);
+                skipped_types |= pkt_type(*next->buf);
                 prev = next;
             } else if (can_coalesce_pkt_types(pkt_type(inner_flags),
                                               pkt_type(*next->buf)) == false) {
-                warn(DBG, "cannot coalesce %s pkt behind %s pkt",
-                     pkt_type_str(*next->buf, next->buf + 1),
-                     pkt_type_str(inner_flags, &inner_vers));
+                warn(DBG, "cannot coalesce %u-byte %s pkt behind inner %s pkt",
+                     next->len, next_type_str, inner_type_str);
+                prev = next;
+            } else if (skipped_types & pkt_type(*next->buf)) {
+                warn(DBG,
+                     "cannot coalesce %u-byte %s pkt behind inner %s pkt, "
+                     "skipped one already",
+                     next->len, next_type_str, inner_type_str);
+                prev = next;
+            } else if (skipped_types && skipped_types < pkt_type(*next->buf)) {
+                warn(DBG,
+                     "cannot coalesce %u-byte %s pkt behind inner %s pkt, "
+                     "skipped 0x%02x already",
+                     next->len, next_type_str, inner_type_str, skipped_types);
+                prev = next;
+            } else if (pkt_type(*next->buf) == SH && pmtud_pkt == UINT16_MAX) {
+                warn(DBG,
+                     "won't coalesce %u-byte %s pkt behind inner %s pkt, "
+                     "need to do PMTUD",
+                     next->len, next_type_str, inner_type_str);
                 prev = next;
             } else {
                 // we can coalesce
                 warn(INF,
-                     "coalescing %u-byte %s pkt behind %u-byte pkt, outermost "
-                     "%s, innermost %s",
-                     next->len, pkt_type_str(*next->buf, next->buf + 1), v->len,
-                     pkt_type_str(*v->buf, v->buf + 1),
-                     pkt_type_str(inner_flags, &inner_vers));
+                     "coalescing %u-byte %s pkt behind inner %u-byte %s pkt "
+                     "(outermost %s)",
+                     next->len, next_type_str, v->len, inner_type_str,
+                     outer_type_str);
                 inner_flags = *next->buf;
-                memcpy(&inner_vers, next->buf + 1, sizeof(inner_vers));
+#ifndef NDEBUG
+                inner_type_str = next_type_str;
+#endif
                 memcpy(v->buf + v->len, next->buf, next->len);
                 v->len += next->len;
                 sq_remove_after(q, prev, next);
@@ -225,8 +264,24 @@ void coalesce(struct w_iov_sq * const q, const uint16_t max_pkt_size)
             }
             next = next_next;
         }
+
+        if (pmtud_pkt == UINT16_MAX && v->len < max_pkt_size) {
+            warn(NTE,
+                 "testing PMTU %u with %s pkt %u using %u bytes rand padding",
+                 max_pkt_size, pkt_type_str(*v->buf, v->buf + 1),
+                 v->user_data & 0x3fff, max_pkt_size - v->len);
+            rand_bytes(v->buf + v->len, max_pkt_size - v->len);
+            *(v->buf + v->len) &= ~LH;
+            v->len = max_pkt_size;
+            pmtud_pkt = v->user_data;
+        }
+
         v = sq_next(v, next);
+        if (v)
+            warn(DBG, "coalescing txq next");
     }
+
+    return pmtud_pkt;
 }
 
 
@@ -621,6 +676,10 @@ tx:;
     // track the flags manually, since warpcore sets them on the xv and it'd
     // require another loop to copy them over
     xv->flags = v->flags |= likely(c->sockopt.enable_ecn) ? IPTOS_ECN_ECT0 : 0;
+
+    // encode the pn space id and pkt nr to identify PMTUD pkts;
+    // this only works for packets numbered below 0x3fff, but that is plenty
+    xv->user_data = (uint16_t)((m->pn->type << 14) | MIN(0x3fff, m->hdr.nr));
 
 #ifndef NO_MIGRATION
     if (unlikely(c->tx_path_chlg))

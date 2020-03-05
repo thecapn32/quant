@@ -528,7 +528,7 @@ int main(int argc, char * argv[])
             struct stream_entry * se = 0;
             struct stream_entry * tmp = 0;
             sl_foreach_safe (se, &sl, next, tmp) {
-                if (se->c == 0 || se->s == 0 || q_is_conn_closed(se->c)) {
+                if (se->c == 0 || se->s == 0) {
                     sl_remove(&sl, se, stream_entry, next);
                     free_se(se);
                     continue;
