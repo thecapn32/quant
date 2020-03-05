@@ -366,7 +366,7 @@ static void __attribute__((nonnull)) tx_vneg_resp(struct w_sock * const ws,
     log_pkt("TX", xv, &xv->saddr, 0, 0, 0);
     struct cid gid = {.seq = 0};
     mk_rand_cid(&gid, CID_LEN_MAX + 1, false); // random len
-    qlog_transport(pkt_tx, "default", ped(ws->w), xv, mx, &gid);
+    // qlog_transport(pkt_tx, "default", xv, mx);
     do_w_tx(ws, &q);
     q_free(&q);
 }
@@ -919,6 +919,10 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
     init_tls(c, 0, (char *)c->tls.alpn.base);
     c->try_0rtt = should_try_0rtt;
     tls_io(c->cstrms[ep_init], 0);
+
+    // switch to new qlog file
+    if (ped(c->w)->conf.qlog_dir)
+        qlog_init(c);
 }
 
 
@@ -1173,8 +1177,7 @@ done:
         bitset_t_initializer(1 << FRM_CRY | 1 << FRM_STR);
     const bool dup_strm =
         bit_overlap(FRM_MAX, &m->frms, &qlog_dup_chk) && m->strm == 0;
-    qlog_transport(dup_strm ? pkt_dp : pkt_rx, "default", ped(ws->w), v, m,
-                   &c->odcid);
+    qlog_transport(dup_strm ? pkt_dp : pkt_rx, "default", v, m);
 #endif
     return true;
 }
@@ -1506,7 +1509,7 @@ static void __attribute__((nonnull))
 
     drop:
         if (pkt_valid == false)
-            qlog_transport(pkt_dp, "default", ped(ws->w), v, m, &m->hdr.dcid);
+            qlog_transport(pkt_dp, "default", v, m);
         free_iov(v, m);
     next:
 #ifndef NO_QINFO
@@ -1965,9 +1968,10 @@ struct q_conn * new_conn(struct w_engine * const w,
 
     if (c->scid) {
         // FIXME: first connection sets the type for all future connections
-        qlog_init(c);
         warn(DBG, "%s conn %s on port %u created", conn_type(c),
              cid_str(c->scid), bswap16(c->sock->ws_lport));
+        if (ped(w)->conf.qlog_dir)
+            qlog_init(c);
     }
 
     conn_to_state(c, conn_idle);
@@ -2057,6 +2061,7 @@ void free_conn(struct q_conn * const c)
         sl_remove(&accept_queue, c, q_conn, node_aq);
 #endif
 
+    qlog_close(c);
     free(c);
 }
 

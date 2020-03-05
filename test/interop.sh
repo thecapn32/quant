@@ -21,7 +21,7 @@ fi
 # For quant, call client and server with full path, so addr2line can find them
 
 if [ "$ROLE" == "client" ]; then
-    CLIENT_ARGS="-i eth0 -w -q $QLOGDIR/$ROLE.qlog -l $SSLKEYLOGFILE \
+    CLIENT_ARGS="-i eth0 -w -q $QLOGDIR -l $SSLKEYLOGFILE \
         -e 0xff00001b $CLIENT_ARGS"
 
     # Wait for the simulator to start up.
@@ -45,7 +45,7 @@ if [ "$ROLE" == "client" ]; then
         for req in $REQUESTS; do
             ((skip++))
             /usr/local/bin/client -t 20 $CLIENT_ARGS \
-                -q "$QLOGDIR/$ROLE.$skip.qlog" $req 2>&1 | \
+                -q "$QLOGDIR" $req 2>&1 | \
                 tee -i -a "/logs/$ROLE.log"
             echo "XXX $ROLE DONE" | tee -i -a "/logs/$ROLE.log"
         done
@@ -71,7 +71,7 @@ elif [ "$ROLE" == "server" ]; then
     esac
 
     /usr/local/bin/server $SERVER_ARGS -i eth0 -d /www -p 443 -p 4434 -t 0 \
-        -c /tls/dummy.crt -k /tls/dummy.key -q "$QLOGDIR/$ROLE.qlog" 2>&1 \
+        -c /tls/dummy.crt -k /tls/dummy.key -q "$QLOGDIR" 2>&1 \
             | tee -i -a "/logs/$ROLE.log" \
             | sed -u 's,\x1B\[[0-9;]*[a-zA-Z],,g' \
             | tee -i -a "/logs/$ROLE.log.txt"

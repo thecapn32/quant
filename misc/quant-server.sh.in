@@ -12,7 +12,8 @@ function make_name() {
 
 export PATH="$PATH:~/bin"
 
-name=/var/www/html/log
+logdir=/var/www/html
+name="$logdir/log"
 new=$(make_name "$name.html")
 # %N only works on Linux
 [ -f "$new.html" ] && new="$new-"$(date +%N)
@@ -56,5 +57,5 @@ bin/server -v5 -i ens5 -p 443 -p 4433 -p 4434 \
     -d /usr/share/apache2/default-site \
     -c /etc/letsencrypt/live/quant.eggert.org/fullchain.pem \
     -k /etc/letsencrypt/live/quant.eggert.org/privkey.pem \
-    -q "$name.qlog" \
+    -q "$logdir" \
     2>&1 | aha -s > "$name.html"

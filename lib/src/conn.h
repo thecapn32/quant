@@ -35,6 +35,10 @@
 #include <sys/param.h>
 #endif
 
+#ifndef NO_QLOG
+#include <stdio.h>
+#endif
+
 #include <quant/quant.h>
 #include <timeout.h>
 
@@ -302,6 +306,14 @@ struct q_conn {
 
     uint16_t pmtud_pkt;
     uint32_t tx_limit;
+
+#ifndef NO_QLOG
+    FILE * qlog;
+    uint64_t qlog_ref_t;
+    bool qlog_prev_event;
+    char qlog_file[MAXPATHLEN];
+    uint8_t _unused2[7];
+#endif
 };
 
 

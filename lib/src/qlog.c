@@ -27,10 +27,12 @@
 
 #ifndef NO_QLOG
 
+#include <errno.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #include <quant/quant.h>
 
@@ -39,6 +41,7 @@
 #include "loop.h"
 #include "marshall.h"
 #include "pkt.h"
+#include "pn.h"
 #include "qlog.h"
 #include "quic.h"
 #include "recovery.h"
@@ -66,74 +69,93 @@ qlog_pkt_type_str(const uint8_t flags, const void * const vers)
         }
     } else if (pkt_type(flags) == SH)
         return "onertt";
-    return "unkown";
+    return "unknown";
 }
 
 
-static bool qlog_common(const struct cid * const gid,
-                        const struct per_engine_data * const ped)
+static void qlog_common(const struct q_conn * const c)
 {
-    if (ped->qlog_ref_t == 0)
-        return false;
-
-    fprintf(ped->qlog, "%s[%" PRIu64 ",\"%s\"",
-            likely(ped->qlog_prev_event) ? "," : "",
-            NS_TO_US(loop_now() - ped->qlog_ref_t),
-            hex2str(gid->id, gid->len, (char[hex_str_len(CID_LEN_MAX)]){""},
-                    hex_str_len(CID_LEN_MAX)));
-
-    return true;
+    fprintf(c->qlog, "%s[%" PRIu64, likely(c->qlog_prev_event) ? "," : "",
+            NS_TO_US(loop_now() - c->qlog_ref_t));
 }
 
 
-void qlog_init(const struct q_conn * const c)
+void qlog_init(struct q_conn * const c)
 {
-    if (ped(c->w)->qlog && ped(c->w)->qlog_ref_t == 0) {
-        ped(c->w)->qlog_ref_t = loop_now();
-        fprintf(
-            ped(c->w)->qlog,
-            "{\"qlog_version\":\"draft-01\",\"title\":\"%s %s "
-            "qlog\",\"traces\":[{\"vantage_point\":{\"type\":\"%s\"},"
-            "\"configuration\":{\"time_units\":\"us\"},\"common_fields\":{"
-            "\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":%" PRIu64
-            "},\"event_fields\":[\"relative_time\",\"group_id\",\"category\","
-            "\"event\",\"trigger\",\"data\"],\"events\":[",
-            quant_name, quant_version, is_clnt(c) ? "client" : "server",
-            NS_TO_US(ped(c->w)->qlog_ref_t));
+    // remove existing file and create new one; this happens during vneg
+    if (c->qlog) {
+        remove(c->qlog_file);
+        c->qlog = 0;
     }
+
+    snprintf(c->qlog_file, sizeof(c->qlog_file), "%s/%s.%s.qlog",
+             ped(c->w)->conf.qlog_dir,
+             is_clnt(c) ? hex2str(c->odcid.id, c->odcid.len,
+                                  (char[hex_str_len(CID_LEN_MAX)]){""},
+                                  hex_str_len(CID_LEN_MAX))
+                        : hex2str(c->scid->id, c->scid->len,
+                                  (char[hex_str_len(CID_LEN_MAX)]){""},
+                                  hex_str_len(CID_LEN_MAX)),
+             is_clnt(c) ? "clnt" : "serv");
+
+    c->qlog = fopen(c->qlog_file, "we");
+    warn(DBG, "qlog file is %s", c->qlog_file);
+    if (unlikely(c->qlog == 0)) {
+        warn(ERR, "could not fopen %s: %s", c->qlog_file, strerror(errno));
+        return;
+    }
+
+    c->qlog_ref_t = loop_now();
+    fprintf(
+        c->qlog,
+        "{\"qlog_version\":\"draft-01\",\"title\":\"%s %s "
+        "qlog\",\"traces\":[{\"vantage_point\":{\"type\":\"%s\"},"
+        "\"configuration\":{\"time_units\":\"us\"},\"common_fields\":{"
+        "\"group_id\":\"%s\",\"protocol_type\":\"QUIC_HTTP3\",\"reference_"
+        "time\":%" PRIu64 "},\"event_fields\":[\"relative_time\",\"category\","
+        "\"event\",\"trigger\",\"data\"],\"events\":[",
+        quant_name, quant_version, is_clnt(c) ? "client" : "server",
+        hex2str(c->odcid.id, c->odcid.len, (char[hex_str_len(CID_LEN_MAX)]){""},
+                hex_str_len(CID_LEN_MAX)),
+        NS_TO_US(c->qlog_ref_t));
 }
 
 
-void qlog_close(FILE * const qlog)
+void qlog_close(struct q_conn * const c)
 {
-    if (qlog) {
-        fputs("]}]}", qlog);
-        fclose(qlog);
+    if (c->qlog) {
+        fputs("]}]}", c->qlog);
+        fclose(c->qlog);
     }
 }
 
 
 void qlog_transport(const qlog_pkt_evt_t evt,
                     const char * const trg,
-                    struct per_engine_data * const ped,
                     struct w_iov * const v,
-                    const struct pkt_meta * const m,
-                    const struct cid * const gid)
+                    const struct pkt_meta * const m)
 {
-    if (qlog_common(gid, ped) == false)
+    if (m->pn == 0)
         return;
+
+    struct q_conn * const c = m->pn->c;
+
+    if (c->qlog == 0)
+        return;
+
+    qlog_common(c);
 
     static const char * const evt_str[] = {[pkt_tx] = "packet_sent",
                                            [pkt_rx] = "packet_received",
                                            [pkt_dp] = "packet_dropped"};
-    fprintf(ped->qlog,
+    fprintf(c->qlog,
             ",\"transport\",\"%s\",\"%s\",{\"packet_type\":\"%s\",\"header\":{"
             "\"packet_size\":%u",
             evt_str[evt], trg, qlog_pkt_type_str(m->hdr.flags, &m->hdr.vers),
             m->udp_len);
     if (is_lh(m->hdr.flags) == false || (m->hdr.vers && m->hdr.type != LH_RTRY))
-        fprintf(ped->qlog, ",\"packet_number\":%" PRIu, m->hdr.nr);
-    fputs("}", ped->qlog);
+        fprintf(c->qlog, ",\"packet_number\":%" PRIu, m->hdr.nr);
+    fputs("}", c->qlog);
 
     if (evt == pkt_dp)
         goto done;
@@ -143,17 +165,17 @@ void qlog_transport(const qlog_pkt_evt_t evt,
     if (bit_overlap(FRM_MAX, &m->frms, &qlog_frm) == false)
         goto done;
 
-    fputs(",\"frames\":[", ped->qlog);
+    fputs(",\"frames\":[", c->qlog);
     int prev_frame = 0;
     if (has_frm(m->frms, FRM_STR)) {
-        prev_frame = fprintf(ped->qlog,
+        prev_frame = fprintf(c->qlog,
                              "%s{\"frame_type\":\"stream\",\"stream_id\":%" PRId
                              ",\"length\":%u,\"offset\":%" PRIu,
                              prev_frame ? "," : "", m->strm->id,
                              m->strm_data_len, m->strm_off);
         if (m->is_fin)
-            fputs(",\"fin\":true", ped->qlog);
-        fputs("}", ped->qlog);
+            fputs(",\"fin\":true", c->qlog);
+        fputs("}", c->qlog);
     }
 
     if (has_frm(m->frms, FRM_ACK)) {
@@ -169,7 +191,7 @@ void qlog_transport(const qlog_pkt_evt_t evt,
         decv(&ack_rng_cnt, &pos, end);
 
         // prev_frame =
-        fprintf(ped->qlog,
+        fprintf(c->qlog,
                 "%s{\"frame_type\":\"ack\",\"ack_delay\":%" PRIu64
                 ",\"acked_ranges\":[",
                 prev_frame ? "," : "", ack_delay);
@@ -178,7 +200,7 @@ void qlog_transport(const qlog_pkt_evt_t evt,
         for (uint64_t n = ack_rng_cnt + 1; n > 0; n--) {
             uint64_t ack_rng = 0;
             decv(&ack_rng, &pos, end);
-            fprintf(ped->qlog, "%s[%" PRIu64 ",%" PRIu64 "]",
+            fprintf(c->qlog, "%s[%" PRIu64 ",%" PRIu64 "]",
                     (n <= ack_rng_cnt ? "," : ""), lg_ack - ack_rng, lg_ack);
             if (n > 1) {
                 uint64_t gap = 0;
@@ -188,72 +210,71 @@ void qlog_transport(const qlog_pkt_evt_t evt,
         }
 
         adj_iov_to_data(v, m);
-        fputs("]}", ped->qlog);
+        fputs("]}", c->qlog);
     }
-    fputs("]", ped->qlog);
+    fputs("]", c->qlog);
 
 done:
-    fputs("}]", ped->qlog);
+    fputs("}]", c->qlog);
 
-    ped->qlog_prev_event = true;
+    c->qlog_prev_event = true;
 }
 
 
 void qlog_recovery(const qlog_rec_evt_t evt,
                    const char * const trg,
-                   const struct q_conn * const c,
-                   const struct pkt_meta * const m,
-                   const struct cid * const gid)
+                   struct q_conn * const c,
+                   const struct pkt_meta * const m)
 {
-    struct per_engine_data * const ped = ped(c->w);
-
-    if (qlog_common(gid, ped) == false)
+    if (c->qlog == 0)
         return;
+
+    qlog_common(c);
 
     static const char * const evt_str[] = {
         [rec_mu] = "metrics_updated", [rec_pl] = "packet_lost"};
-    fprintf(ped->qlog, ",\"recovery\",\"%s\",\"%s\",{", evt_str[evt], trg);
+    fprintf(c->qlog, ",\"recovery\",\"%s\",\"%s\",{", evt_str[evt], trg);
 
     if (evt == rec_pl) {
-        fprintf(ped->qlog, "\"packet_number\":%" PRIu, m->hdr.nr);
+        fprintf(c->qlog, "\"packet_number\":%" PRIu, m->hdr.nr);
         goto done;
     }
 
     int prev_metric = 0;
     if (c->rec.cur.in_flight != c->rec.prev.in_flight)
-        prev_metric = fprintf(ped->qlog, "%s\"bytes_in_flight\":%" PRIu,
+        prev_metric = fprintf(c->qlog, "%s\"bytes_in_flight\":%" PRIu,
                               prev_metric ? "," : "", c->rec.cur.in_flight);
     if (c->rec.cur.cwnd != c->rec.prev.cwnd)
-        prev_metric = fprintf(ped->qlog, "%s\"cwnd\":%" PRIu,
+        prev_metric = fprintf(c->qlog, "%s\"cwnd\":%" PRIu,
                               prev_metric ? "," : "", c->rec.cur.cwnd);
 #if 0
     if (c->rec.cur.ssthresh != UINT_T_MAX &&
         c->rec.cur.ssthresh != c->rec.prev.ssthresh)
-        prev_metric = fprintf(ped->qlog, "%s\"ssthresh\":%" PRIu,
+        prev_metric = fprintf(c->qlog, "%s\"ssthresh\":%" PRIu,
                               prev_metric ? "," : "", c->rec.cur.ssthresh);
 #endif
     if (c->rec.cur.srtt != c->rec.prev.srtt)
-        prev_metric = fprintf(ped->qlog, "%s\"smoothed_rtt\":%" PRIu,
+        prev_metric = fprintf(c->qlog, "%s\"smoothed_rtt\":%" PRIu,
                               prev_metric ? "," : "", c->rec.cur.srtt);
     if (c->rec.cur.min_rtt < UINT_T_MAX &&
         c->rec.cur.min_rtt != c->rec.prev.min_rtt)
-        prev_metric = fprintf(ped->qlog, "%s\"min_rtt\":%" PRIu,
+        prev_metric = fprintf(c->qlog, "%s\"min_rtt\":%" PRIu,
                               prev_metric ? "," : "", c->rec.cur.min_rtt);
     if (c->rec.cur.latest_rtt != c->rec.prev.latest_rtt)
         // prev_metric =
-        fprintf(ped->qlog, "%s\"latest_rtt\":%" PRIu, prev_metric ? "," : "",
+        fprintf(c->qlog, "%s\"latest_rtt\":%" PRIu, prev_metric ? "," : "",
                 c->rec.cur.latest_rtt);
 #if 0
     if (c->rec.cur.rttvar != c->rec.prev.rttvar)
         // prev_metric =
-        fprintf(ped->qlog, "%s\"rtt_variance\":%" PRIu, prev_metric ? "," : "",
+        fprintf(c->qlog, "%s\"rtt_variance\":%" PRIu, prev_metric ? "," : "",
                 c->rec.cur.rttvar);
 #endif
 
 done:
-    fputs("}]", ped->qlog);
+    fputs("}]", c->qlog);
 
-    ped->qlog_prev_event = true;
+    c->qlog_prev_event = true;
 }
 
 #else

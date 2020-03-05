@@ -60,7 +60,7 @@ static bool __attribute__((const)) is_bench_obj(const uint_t len)
 
 static void __attribute__((noreturn)) usage(const char * const name,
                                             const char * const ifname,
-                                            const char * const qlog,
+                                            const char * const qlog_dir,
                                             const uint16_t port,
                                             const char * const dir,
                                             const char * const cert,
@@ -77,8 +77,8 @@ static void __attribute__((noreturn)) usage(const char * const name,
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
     printf("\t[-k key]\tTLS key; default %s\n", key);
     printf("\t[-p port]\tdestination port; default %d\n", port);
-    printf("\t[-q log]\twrite qlog events to file; default %s\n",
-           *qlog ? qlog : "false");
+    printf("\t[-q log]\twrite qlog events to directory; default %s\n",
+           *qlog_dir ? qlog_dir : "false");
     printf("\t[-r]\t\tforce a Retry; default %s\n", retry ? "true" : "false");
     printf("\t[-t timeout]\tidle timeout in seconds; default %u\n", timeout);
 #ifndef NDEBUG
@@ -248,7 +248,7 @@ int main(int argc, char * argv[])
     char dir[MAXPATHLEN] = ".";
     char cert[MAXPATHLEN] = "test/dummy.crt";
     char key[MAXPATHLEN] = "test/dummy.key";
-    char qlog[MAXPATHLEN] = "";
+    char qlog_dir[MAXPATHLEN] = "";
     uint16_t port[MAXPORTS] = {4433, 4434};
     size_t num_ports = 0;
     uint32_t num_bufs = 100000;
@@ -259,7 +259,7 @@ int main(int argc, char * argv[])
     while ((ch = getopt(argc, argv, "hi:p:d:v:c:k:t:b:q:r")) != -1) {
         switch (ch) {
         case 'q':
-            strncpy(qlog, optarg, sizeof(qlog) - 1);
+            strncpy(qlog_dir, optarg, sizeof(qlog_dir) - 1);
             break;
         case 'i':
             strncpy(ifname, optarg, sizeof(ifname) - 1);
@@ -298,7 +298,7 @@ int main(int argc, char * argv[])
         case 'h':
         case '?':
         default:
-            usage(basename(argv[0]), ifname, qlog, port[0], dir, cert, key,
+            usage(basename(argv[0]), ifname, qlog_dir, port[0], dir, cert, key,
                   timeout, retry, num_bufs);
         }
     }
@@ -310,17 +310,17 @@ int main(int argc, char * argv[])
     const int dir_fd = open(dir, O_RDONLY | O_CLOEXEC);
     ensure(dir_fd != -1, "%s does not exist", dir);
 
-    struct w_engine * const w =
-        q_init(ifname, &(const struct q_conf){.conn_conf =
-                                                  &(struct q_conn_conf){
-                                                      .idle_timeout = timeout,
-                                                      .enable_spinbit = true,
-                                                  },
-                                              .qlog = *qlog ? qlog : 0,
-                                              .force_retry = retry,
-                                              .num_bufs = num_bufs,
-                                              .tls_cert = cert,
-                                              .tls_key = key});
+    struct w_engine * const w = q_init(
+        ifname, &(const struct q_conf){.conn_conf =
+                                           &(struct q_conn_conf){
+                                               .idle_timeout = timeout,
+                                               .enable_spinbit = true,
+                                           },
+                                       .qlog_dir = *qlog_dir ? qlog_dir : 0,
+                                       .force_retry = retry,
+                                       .num_bufs = num_bufs,
+                                       .tls_cert = cert,
+                                       .tls_key = key});
     for (size_t i = 0; i < num_ports; i++) {
         for (uint16_t idx = 0; idx < w->addr_cnt; idx++) {
 #ifndef NDEBUG

@@ -143,7 +143,7 @@ void log_cc(struct q_conn * const c)
              delta_rttvar / (float)US_PER_S);
     }
 
-    qlog_recovery(rec_mu, "default", c, 0, &c->odcid);
+    qlog_recovery(rec_mu, "default", c, 0);
     c->rec.prev = c->rec.cur;
 }
 #endif
@@ -282,7 +282,7 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
 
     if (is_lost) {
         // if we lost connection or stream control frames, possibly RTX them
-        qlog_recovery(rec_pl, "unknown", c, m, &c->odcid);
+        qlog_recovery(rec_pl, "unknown", c, m);
 
         // static const struct frames conn_ctrl =
         //     bitset_t_initializer(1 << FRM_TOK | 1 << FRM_CDB | 1 << FRM_SBB |

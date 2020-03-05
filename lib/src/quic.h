@@ -207,13 +207,6 @@ struct per_engine_data {
     FILE * tls_log;
 #endif
 
-#ifndef NO_QLOG
-    FILE * qlog;
-    uint64_t qlog_ref_t;
-    bool qlog_prev_event;
-    uint8_t _unused[7];
-#endif
-
     ptls_context_t tls_ctx;
     ptls_aead_context_t * rid_ctx;
 

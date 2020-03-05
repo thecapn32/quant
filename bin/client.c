@@ -127,12 +127,13 @@ conn_cache_key(const struct sockaddr * const sock)
 }
 
 
-static void __attribute__((noreturn, nonnull)) usage(const char * const name,
-                                                     const char * const ifname,
-                                                     const char * const cache,
-                                                     const char * const tls_log,
-                                                     const char * const qlog,
-                                                     const bool verify_certs)
+static void __attribute__((noreturn, nonnull))
+usage(const char * const name,
+      const char * const ifname,
+      const char * const cache,
+      const char * const tls_log,
+      const char * const qlog_dir,
+      const bool verify_certs)
 {
     printf("%s [options] URL [URL...]\n", name);
     printf("\t[-3]\t\tsend a static H3 request; default %s\n",
@@ -153,8 +154,8 @@ static void __attribute__((noreturn, nonnull)) usage(const char * const name,
            "default %s\n",
            rebind ? "true" : "false");
 #endif
-    printf("\t[-q log]\twrite qlog events to file; default %s\n",
-           *qlog ? qlog : "false");
+    printf("\t[-q log]\twrite qlog events to directory; default %s\n",
+           *qlog_dir ? qlog_dir : "false");
     printf("\t[-r reps]\trepetitions for all URLs; default %u\n", reps);
     printf("\t[-s cache]\tTLS 0-RTT state cache; default %s\n", cache);
     printf("\t[-t timeout]\tidle timeout in seconds; default %u\n", timeout);
@@ -413,7 +414,7 @@ int main(int argc, char * argv[])
     int ch;
     char cache[MAXPATHLEN] = "/tmp/" QUANT "-session";
     char tls_log[MAXPATHLEN] = "";
-    char qlog[MAXPATHLEN] = "";
+    char qlog_dir[MAXPATHLEN] = "";
     bool verify_certs = false;
     int ret = 0;
 
@@ -438,7 +439,7 @@ int main(int argc, char * argv[])
             strncpy(cache, optarg, sizeof(cache) - 1);
             break;
         case 'q':
-            strncpy(qlog, optarg, sizeof(qlog) - 1);
+            strncpy(qlog_dir, optarg, sizeof(qlog_dir) - 1);
             break;
         case 't':
             timeout = (uint32_t)MIN(600, strtoul(optarg, 0, 10)); // 10 min
@@ -488,7 +489,7 @@ int main(int argc, char * argv[])
         case 'h':
         case '?':
         default:
-            usage(basename(argv[0]), ifname, cache, tls_log, qlog,
+            usage(basename(argv[0]), ifname, cache, tls_log, qlog_dir,
                   verify_certs);
         }
     }
@@ -502,7 +503,7 @@ int main(int argc, char * argv[])
                                       .idle_timeout = timeout,
                                       .version = vers,
                                       .enable_quantum_readiness_test = test_qr},
-            .qlog = *qlog ? qlog : 0,
+            .qlog_dir = *qlog_dir ? qlog_dir : 0,
             .num_bufs = num_bufs,
             .ticket_store = cache,
             .tls_log = *tls_log ? tls_log : 0,

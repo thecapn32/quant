@@ -66,10 +66,6 @@
 #include "tls.h"
 #include "tree.h"
 
-#ifndef NO_QLOG
-#include "qlog.h"
-#endif
-
 
 char __cid_str[CID_STR_LEN];
 char __srt_str[hex_str_len(SRT_LEN)];
@@ -676,13 +672,6 @@ struct w_engine * q_init(const char * const ifname,
 #endif
 #endif
 
-#ifndef NO_QLOG
-    if (conf && conf->qlog) {
-        ped(w)->qlog = fopen(conf->qlog, "we");
-        ensure(ped(w)->qlog, "fopen %s", conf->qlog);
-    }
-#endif
-
     return w;
 }
 
@@ -834,10 +823,7 @@ done:
         qinfo_log("strm_frms_in_ign = %" PRIu, c->i.strm_frms_in_ign);
     }
 #endif
-#ifndef NO_QLOG
-    if (ped(c->w)->qlog)
-        fflush(ped(c->w)->qlog);
-#endif
+
     if (c->scid == 0)
         sl_remove(&c_zcid, c, q_conn, node_zcid_int);
 
@@ -901,10 +887,6 @@ void q_cleanup(struct w_engine * const w)
 #endif
 #ifndef NO_SRT_MATCHING
     kh_release(conns_by_srt, &conns_by_srt);
-#endif
-
-#ifndef NO_QLOG
-    qlog_close(ped(w)->qlog);
 #endif
 
 #ifndef NO_SERVER
