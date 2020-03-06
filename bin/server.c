@@ -65,6 +65,7 @@ static void __attribute__((noreturn)) usage(const char * const name,
                                             const char * const dir,
                                             const char * const cert,
                                             const char * const key,
+                                            const char * const tls_log,
                                             const uint32_t timeout,
                                             const bool retry,
                                             const uint32_t num_bufs)
@@ -76,6 +77,8 @@ static void __attribute__((noreturn)) usage(const char * const name,
     printf("\t[-d dir]\tserver root directory; default %s\n", dir);
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
     printf("\t[-k key]\tTLS key; default %s\n", key);
+    printf("\t[-l log]\tlog file for TLS keys; default %s\n",
+           *tls_log ? tls_log : "false");
     printf("\t[-p port]\tdestination port; default %d\n", port);
     printf("\t[-q log]\twrite qlog events to directory; default %s\n",
            *qlog_dir ? qlog_dir : "false");
@@ -248,6 +251,7 @@ int main(int argc, char * argv[])
     char dir[MAXPATHLEN] = ".";
     char cert[MAXPATHLEN] = "test/dummy.crt";
     char key[MAXPATHLEN] = "test/dummy.key";
+    char tls_log[MAXPATHLEN] = "";
     char qlog_dir[MAXPATHLEN] = "";
     uint16_t port[MAXPORTS] = {4433, 4434};
     size_t num_ports = 0;
@@ -256,7 +260,14 @@ int main(int argc, char * argv[])
     int ret = 0;
     bool retry = false;
 
-    while ((ch = getopt(argc, argv, "hi:p:d:v:c:k:t:b:q:r")) != -1) {
+    // set default TLS log file from environment
+    const char * const keylog = getenv("SSLKEYLOGFILE");
+    if (keylog) {
+        strncpy(tls_log, keylog, MAXPATHLEN);
+        tls_log[MAXPATHLEN - 1] = 0;
+    }
+
+    while ((ch = getopt(argc, argv, "hi:p:d:v:c:k:t:b:q:rl:")) != -1) {
         switch (ch) {
         case 'q':
             strncpy(qlog_dir, optarg, sizeof(qlog_dir) - 1);
@@ -289,6 +300,9 @@ int main(int argc, char * argv[])
         case 'r':
             retry = true;
             break;
+        case 'l':
+            strncpy(tls_log, optarg, sizeof(tls_log) - 1);
+            break;
         case 'v':
 #ifndef NDEBUG
             ini_dlevel = util_dlevel =
@@ -299,7 +313,7 @@ int main(int argc, char * argv[])
         case '?':
         default:
             usage(basename(argv[0]), ifname, qlog_dir, port[0], dir, cert, key,
-                  timeout, retry, num_bufs);
+                  tls_log, timeout, retry, num_bufs);
         }
     }
 
@@ -317,6 +331,7 @@ int main(int argc, char * argv[])
                                                .enable_spinbit = true,
                                            },
                                        .qlog_dir = *qlog_dir ? qlog_dir : 0,
+                                       .tls_log = *tls_log ? tls_log : 0,
                                        .force_retry = retry,
                                        .num_bufs = num_bufs,
                                        .tls_cert = cert,
