@@ -1396,7 +1396,7 @@ static void __attribute__((nonnull))
                 mk_cid_str(NTE, scid, scid_str);
                 mk_cid_str(NTE, c->scid, scid_str_prev);
                 if (scid->seq <= c->scid->seq)
-                    warn(DBG, "pkt has prev scid %s (expected %s, accepting",
+                    warn(DBG, "pkt has prev scid %s (expected %s), accepting",
                          scid_str, scid_str_prev);
                 else {
                     warn(NTE, "migration to scid %s for %s conn (was %s)",
