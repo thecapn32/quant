@@ -279,58 +279,66 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
     }
 
     diet_insert(&pn->acked_or_lost, m->hdr.nr, 0);
+    pm_by_nr_del(&pn->sent_pkts, m);
 
-    if (is_lost) {
-        // if we lost connection or stream control frames, possibly RTX them
-        qlog_recovery(rec_pl, "unknown", c, m);
+    warn(ERR, "lost %s %" PRIu, pkt_type_str(m->hdr.flags, &m->hdr.vers),
+         m->hdr.nr);
 
-        // static const struct frames conn_ctrl =
-        //     bitset_t_initializer(1 << FRM_TOK | 1 << FRM_CDB | 1 << FRM_SBB |
-        //                          1 << FRM_SBU | 1 << FRM_CID | 1 << FRM_RTR);
-        static const struct frames all_ctrl = bitset_t_initializer(
-            1 << FRM_RST | 1 << FRM_STP | 1 << FRM_TOK | 1 << FRM_CDB |
-            1 << FRM_SDB | 1 << FRM_SBB | 1 << FRM_SBU | 1 << FRM_CID |
-            1 << FRM_RTR | 1 << FRM_HSD);
-        if (bit_overlap(FRM_MAX, &all_ctrl, &m->frms))
-            for (uint8_t i = 0; i < FRM_MAX; i++)
-                if (has_frm(m->frms, i) && bit_isset(FRM_MAX, i, &all_ctrl)) {
+    if (is_lost == false)
+        return;
+
+    // if we lost connection or stream control frames, possibly RTX them
+    qlog_recovery(rec_pl, "unknown", c, m);
+
+    // static const struct frames conn_ctrl =
+    //     bitset_t_initializer(1 << FRM_TOK | 1 << FRM_CDB | 1 << FRM_SBB |
+    //                          1 << FRM_SBU | 1 << FRM_CID | 1 << FRM_RTR);
+    static const struct frames all_ctrl = bitset_t_initializer(
+        1 << FRM_RST | 1 << FRM_STP | 1 << FRM_TOK | 1 << FRM_CDB |
+        1 << FRM_SDB | 1 << FRM_SBB | 1 << FRM_SBU | 1 << FRM_CID |
+        1 << FRM_RTR | 1 << FRM_HSD);
+    if (bit_overlap(FRM_MAX, &all_ctrl, &m->frms))
+        for (uint8_t i = 0; i < FRM_MAX; i++)
+            if (has_frm(m->frms, i) && bit_isset(FRM_MAX, i, &all_ctrl)) {
 #ifdef DEBUG_EXTRA
-                    warn(DBG, "%s pkt %" PRIu " ctrl frame: 0x%02x",
-                         pkt_type_str(m->hdr.flags, &m->hdr.vers), m->hdr.nr,
-                         i);
+                warn(DBG, "%s pkt %" PRIu " ctrl frame: 0x%02x",
+                     pkt_type_str(m->hdr.flags, &m->hdr.vers), m->hdr.nr, i);
 #endif
-                    switch (i) {
-                    case FRM_CID:
-                        c->max_cid_seq_out = m->min_cid_seq - 1;
-                        break;
-                    case FRM_CDB:
-                    case FRM_SDB:
-                        // DATA_BLOCKED and STREAM_DATA_BLOCKED RTX'ed
-                        // automatically
-                        break;
-                    case FRM_HSD:
-                        c->tx_hshk_done = true;
-                        break;
-                    case FRM_TOK:
-                        c->tx_new_tok = true;
-                        break;
-                    default:
-                        warn(CRT, "unhandled RTX of 0x%02x frame", i);
-                    }
+                switch (i) {
+                case FRM_CID:
+                    c->max_cid_seq_out = m->min_cid_seq - 1;
+                    break;
+                case FRM_CDB:
+                case FRM_SDB:
+                    // DATA_BLOCKED and STREAM_DATA_BLOCKED RTX'ed
+                    // automatically
+                    break;
+                case FRM_HSD:
+                    c->tx_hshk_done = true;
+                    break;
+                case FRM_TOK:
+                    c->tx_new_tok = true;
+                    break;
+                default:
+                    warn(CRT, "unhandled RTX of 0x%02x frame", i);
                 }
+            }
 
-        static const struct frames strm_ctrl =
-            // FRM_SDB is automatically RTX'ed XXX fix this mess
-            bitset_t_initializer(1 << FRM_RST |
-                                 1 << FRM_STP /*| 1 << FRM_SDB*/);
-        if (bit_overlap(FRM_MAX, &strm_ctrl, &m->frms))
-            need_ctrl_update(m->strm);
-    }
+    static const struct frames strm_ctrl =
+        // FRM_SDB is automatically RTX'ed XXX fix this mess
+        bitset_t_initializer(1 << FRM_RST | 1 << FRM_STP /*| 1 << FRM_SDB*/);
+    if (bit_overlap(FRM_MAX, &strm_ctrl, &m->frms))
+        need_ctrl_update(m->strm);
 
     m->lost = true;
-    if (m->strm)
+    if (m->strm && !m->has_rtx) {
         m->strm->lost_cnt++;
-    pm_by_nr_del(&pn->sent_pkts, m);
+#ifndef NDEBUG
+        ensure(m->strm->lost_cnt <= w_iov_sq_cnt(&m->strm->out),
+               "strm " FMT_SID " cnt %" PRIu " < lost %" PRIu, m->strm->id,
+               w_iov_sq_cnt(&m->strm->out), m->strm->lost_cnt);
+#endif
+    }
 }
 
 

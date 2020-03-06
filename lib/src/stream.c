@@ -219,6 +219,17 @@ void reset_stream(struct q_stream * const s, const bool forget)
 
 void do_stream_fc(struct q_stream * const s, const uint16_t len)
 {
+#ifndef NDEBUG
+    uint_t actual_lost_cnt = 0;
+    struct w_iov * v = 0;
+    sq_foreach_from (v, &s->out, next)
+        if (meta(v).lost)
+            actual_lost_cnt++;
+    ensure(actual_lost_cnt == s->lost_cnt,
+           "stream " FMT_SID ": actual %" PRIu " != cnt %" PRIu, s->id,
+           actual_lost_cnt, s->lost_cnt);
+#endif
+
     s->blocked = (s->out_data + len + s->c->rec.max_pkt_size > s->out_data_max);
 
     if (s->in_data * 4 > s->in_data_max) {
