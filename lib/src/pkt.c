@@ -194,7 +194,9 @@ can_coalesce_pkt_types(const uint8_t a, const uint8_t b)
 }
 
 
-uint16_t coalesce(struct w_iov_sq * const q, const uint16_t max_pkt_size)
+uint16_t coalesce(struct w_iov_sq * const q,
+                  const uint16_t max_pkt_size,
+                  const bool do_pmtud)
 {
     uint16_t pmtud_pkt = UINT16_MAX;
     struct w_iov * v = sq_first(q);
@@ -239,7 +241,7 @@ uint16_t coalesce(struct w_iov_sq * const q, const uint16_t max_pkt_size)
                      "skipped 0x%02x already",
                      next->len, next_type_str, inner_type_str, skipped_types);
                 prev = next;
-            } else if (pkt_type(*next->buf) == SH && pmtud_pkt == UINT16_MAX) {
+            } else if (pkt_type(*next->buf) == SH && do_pmtud) {
                 warn(DBG,
                      "won't coalesce %u-byte %s pkt behind inner %s pkt, "
                      "need to do PMTUD",
@@ -265,7 +267,7 @@ uint16_t coalesce(struct w_iov_sq * const q, const uint16_t max_pkt_size)
             next = next_next;
         }
 
-        if (pmtud_pkt == UINT16_MAX && v->len < max_pkt_size) {
+        if (do_pmtud && pmtud_pkt == UINT16_MAX && v->len < max_pkt_size) {
             warn(NTE,
                  "testing PMTU %u with %s pkt %u using %u bytes rand padding",
                  max_pkt_size, pkt_type_str(*v->buf, v->buf + 1),

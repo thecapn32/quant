@@ -194,8 +194,9 @@ extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
                                              struct w_iov * const v,
                                              struct pkt_meta * const m);
 
-extern uint16_t __attribute__((nonnull))
-coalesce(struct w_iov_sq * const q, const uint16_t max_pkt_size);
+extern uint16_t __attribute__((nonnull)) coalesce(struct w_iov_sq * const q,
+                                                  const uint16_t max_pkt_size,
+                                                  const bool do_pmtud);
 
 extern void __attribute__((nonnull(1, 2, 3, 4)))
 enc_lh_cids(uint8_t ** pos,

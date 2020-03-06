@@ -383,12 +383,12 @@ static void __attribute__((nonnull)) do_tx_txq(struct q_conn * const c,
     const uint16_t pmtu =
         MIN(w_max_udp_payload(ws), (uint16_t)c->tp_peer.max_pkt);
 
-    if (w_iov_sq_cnt(q) > 1 && unlikely(is_lh(*sq_first(q)->buf)))
-        c->pmtud_pkt =
-            coalesce(q, unlikely(c->rec.max_pkt_size == MIN_INI_LEN &&
-                                 pmtu > MIN_INI_LEN)
-                            ? pmtu
-                            : c->rec.max_pkt_size);
+    if (w_iov_sq_cnt(q) > 1 && unlikely(is_lh(*sq_first(q)->buf))) {
+        const bool do_pmtud =
+            c->rec.max_pkt_size == MIN_INI_LEN && pmtu > MIN_INI_LEN;
+        c->pmtud_pkt = coalesce(
+            q, unlikely(do_pmtud) ? pmtu : c->rec.max_pkt_size, do_pmtud);
+    }
     do_w_tx(ws, q);
 
     // txq was allocated from warpcore, no metadata to be freed
@@ -1325,32 +1325,6 @@ static void __attribute__((nonnull))
                     add_dcid(c, &m->hdr.scid);
             }
 
-            if (m->hdr.dcid.len && cid_cmp(&m->hdr.dcid, c->scid) != 0) {
-                struct cid * const scid =
-#ifndef NO_MIGRATION
-                    get_cid_by_id(&c->scids_by_id, &m->hdr.dcid);
-#else
-                    c->scid;
-#endif
-                if (unlikely(scid == 0)) {
-                    log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
-                    warn(ERR, "unknown scid %s, ignoring pkt",
-                         cid_str(&m->hdr.dcid));
-                    goto drop;
-                }
-
-                mk_cid_str(NTE, scid, scid_str);
-                mk_cid_str(NTE, c->scid, scid_str_prev);
-                if (scid->seq <= c->scid->seq)
-                    warn(DBG, "pkt has prev scid %s (expected %s, accepting",
-                         scid_str, scid_str_prev);
-                else {
-                    warn(NTE, "migration to scid %s for %s conn (was %s)",
-                         scid_str, conn_type(c), scid_str_prev);
-                    c->scid = scid;
-                }
-            }
-
         } else {
 #if !defined(FUZZING) && !defined(NO_OOO_0RTT)
             // if this is a 0-RTT pkt, track it (may be reordered)
@@ -1403,6 +1377,32 @@ static void __attribute__((nonnull))
                              : "rx invalid",
                          v->len, pkt_type_str(m->hdr.flags, &m->hdr.vers));
                 goto drop;
+            }
+
+            if (m->hdr.dcid.len && cid_cmp(&m->hdr.dcid, c->scid) != 0) {
+                struct cid * const scid =
+#ifndef NO_MIGRATION
+                    get_cid_by_id(&c->scids_by_id, &m->hdr.dcid);
+#else
+                    c->scid;
+#endif
+                if (unlikely(scid == 0)) {
+                    log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
+                    warn(ERR, "unknown scid %s, ignoring pkt",
+                         cid_str(&m->hdr.dcid));
+                    goto drop;
+                }
+
+                mk_cid_str(NTE, scid, scid_str);
+                mk_cid_str(NTE, c->scid, scid_str_prev);
+                if (scid->seq <= c->scid->seq)
+                    warn(DBG, "pkt has prev scid %s (expected %s, accepting",
+                         scid_str, scid_str_prev);
+                else {
+                    warn(NTE, "migration to scid %s for %s conn (was %s)",
+                         scid_str, conn_type(c), scid_str_prev);
+                    c->scid = scid;
+                }
             }
 
             // that dcid in split-out coalesced pkt matches outer pkt
