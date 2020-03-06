@@ -289,7 +289,8 @@ static void __attribute__((nonnull)) log_sent_pkts(struct q_conn * const c)
         diet_free(&unacked);
 
         if (pos)
-            warn(INF, "%s %s unacked: %s", conn_type(c), pn_type_str(t), tmp);
+            warn(INF, "%s conn %s, %s unacked: %s", conn_type(c),
+                 cid_str(c->scid), pn_type_str(t), tmp);
     }
 }
 #else

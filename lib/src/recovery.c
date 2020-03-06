@@ -281,9 +281,6 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
     diet_insert(&pn->acked_or_lost, m->hdr.nr, 0);
     pm_by_nr_del(&pn->sent_pkts, m);
 
-    warn(ERR, "lost %s %" PRIu, pkt_type_str(m->hdr.flags, &m->hdr.vers),
-         m->hdr.nr);
-
     if (is_lost == false)
         return;
 
