@@ -309,10 +309,8 @@ struct q_conn {
 
 #ifndef NO_QLOG
     FILE * qlog;
-    uint64_t qlog_ref_t;
-    bool qlog_prev_event;
+    uint64_t qlog_last_t;
     char qlog_file[MAXPATHLEN];
-    uint8_t _unused2[7];
 #endif
 };
 

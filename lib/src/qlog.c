@@ -73,10 +73,14 @@ qlog_pkt_type_str(const uint8_t flags, const void * const vers)
 }
 
 
-static void qlog_common(const struct q_conn * const c)
+static void qlog_common(struct q_conn * const c)
 {
-    fprintf(c->qlog, "%s[%" PRIu64, likely(c->qlog_prev_event) ? "," : "",
-            NS_TO_US(loop_now() - c->qlog_ref_t));
+    const uint64_t now = loop_now();
+    fprintf(c->qlog, "%s[%" PRIu64, likely(c->qlog_last_t) ? "," : "",
+            NS_TO_US(now - c->qlog_last_t));
+    // warn(ERR, "%" PRIu64 " -> %" PRIu64 " = %" PRIu64, c->qlog_last_t, now,
+    //      now - c->qlog_last_t);
+    c->qlog_last_t = now;
 }
 
 
@@ -85,6 +89,7 @@ void qlog_init(struct q_conn * const c)
     // remove existing file and create new one; this happens during vneg
     if (c->qlog) {
         remove(c->qlog_file);
+        c->qlog_last_t = 0;
         c->qlog = 0;
     }
 
@@ -105,19 +110,17 @@ void qlog_init(struct q_conn * const c)
         return;
     }
 
-    c->qlog_ref_t = loop_now();
-    fprintf(
-        c->qlog,
-        "{\"qlog_version\":\"draft-01\",\"title\":\"%s %s "
-        "qlog\",\"traces\":[{\"vantage_point\":{\"type\":\"%s\"},"
-        "\"configuration\":{\"time_units\":\"us\"},\"common_fields\":{"
-        "\"group_id\":\"%s\",\"protocol_type\":\"QUIC_HTTP3\",\"reference_"
-        "time\":%" PRIu64 "},\"event_fields\":[\"relative_time\",\"category\","
-        "\"event\",\"trigger\",\"data\"],\"events\":[",
-        quant_name, quant_version, is_clnt(c) ? "client" : "server",
-        hex2str(c->odcid.id, c->odcid.len, (char[hex_str_len(CID_LEN_MAX)]){""},
-                hex_str_len(CID_LEN_MAX)),
-        NS_TO_US(c->qlog_ref_t));
+    fprintf(c->qlog,
+            "{\"qlog_version\":\"draft-01\",\"title\":\"%s %s "
+            "qlog\",\"traces\":[{\"vantage_point\":{\"type\":\"%s\"},"
+            "\"configuration\":{\"time_units\":\"us\"},\"common_fields\":{"
+            "\"group_id\":\"%s\",\"protocol_type\":\"QUIC_HTTP3\"},\"event_"
+            "fields\":[\"delta_time\",\"category\","
+            "\"event\",\"trigger\",\"data\"],\"events\":[",
+            quant_name, quant_version, is_clnt(c) ? "client" : "server",
+            hex2str(c->odcid.id, c->odcid.len,
+                    (char[hex_str_len(CID_LEN_MAX)]){""},
+                    hex_str_len(CID_LEN_MAX)));
 }
 
 
@@ -216,8 +219,6 @@ void qlog_transport(const qlog_pkt_evt_t evt,
 
 done:
     fputs("}]", c->qlog);
-
-    c->qlog_prev_event = true;
 }
 
 
@@ -273,8 +274,6 @@ void qlog_recovery(const qlog_rec_evt_t evt,
 
 done:
     fputs("}]", c->qlog);
-
-    c->qlog_prev_event = true;
 }
 
 #else

@@ -89,8 +89,9 @@ void __attribute__((nonnull(1))) loop_run(struct w_engine * const w,
 
         struct timeout * t;
         TIMEOUTS_FOREACH (t, ped(w)->wheel, TIMEOUTS_EXPIRED) {
-            (*t->callback.fn)(t->callback.arg);
+            now = w_now();
             timeout_del(t);
+            (*t->callback.fn)(t->callback.arg);
         }
 
         if (break_loop)
@@ -107,12 +108,11 @@ void __attribute__((nonnull(1))) loop_run(struct w_engine * const w,
         if (w_rx_ready(w, &sl) == 0)
             continue;
 
-        now = w_now();
-        timeouts_update(ped(w)->wheel, now);
-
         struct w_sock * ws;
-        sl_foreach (ws, &sl, next)
+        sl_foreach (ws, &sl, next) {
+            now = w_now();
             rx(ws);
+        }
     }
 
     api_func = 0;
