@@ -108,3 +108,6 @@ extern void __attribute__((nonnull)) set_ld_timer(struct q_conn * const c);
 
 extern void __attribute__((nonnull))
 on_pkt_lost(struct pkt_meta * const m, const bool is_lost);
+
+extern void __attribute__((nonnull))
+detect_all_lost_pkts(struct q_conn * const c, const bool do_cc);

@@ -456,8 +456,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
 }
 
 
-static void __attribute__((nonnull))
-detect_all_lost_pkts(struct q_conn * const c, const bool do_cc)
+void detect_all_lost_pkts(struct q_conn * const c, const bool do_cc)
 {
     for (pn_t p = pn_init; p <= pn_data; p++)
         if (unlikely(c->pns[p].abandoned == false))
