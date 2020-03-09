@@ -621,7 +621,7 @@ void tx(struct q_conn * const c)
 
     do_conn_mgmt(c);
 
-    if (likely(c->state != conn_clsg))
+    if (likely(c->state != conn_clsg)) {
         for (epoch_t e = ep_init; e <= ep_data; e++) {
             if (c->cstrms[e] == 0)
                 continue;
@@ -629,11 +629,12 @@ void tx(struct q_conn * const c)
                 goto done;
         }
 
-    struct q_stream * s;
-    kh_foreach_value(&c->strms_by_id, s, {
-        if (tx_stream(s) == false)
-            break;
-    });
+        struct q_stream * s;
+        kh_foreach_value(&c->strms_by_id, s, {
+            if (tx_stream(s) == false)
+                break;
+        });
+    }
 
 done:;
     // make sure we sent enough packets when we have a TX limit
@@ -1035,6 +1036,8 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
         }
 #endif
 
+        conn_to_state(c, conn_opng);
+
         // server picks a new random cid
         update_act_scid(c);
 
@@ -1043,7 +1046,8 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
         break;
 
     case conn_opng:
-        // this state is currently only in effect on the client
+        if (is_clnt(c) == false)
+            break;
 
         if (m->hdr.vers == 0) {
             // this is a vneg pkt
