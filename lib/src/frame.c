@@ -33,6 +33,7 @@
 #include <sys/socket.h>
 
 #if !defined(PARTICLE) && !defined(RIOT_VERSION)
+#include <netinet/in.h>
 #include <netinet/ip.h>
 #endif
 
