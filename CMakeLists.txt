@@ -70,6 +70,7 @@ foreach(FLAG -pipe -Wextra -Wpedantic -Weverything -Werror
         -Wno-extra-semi-stmt # the kh_foreach* macros need this
         -Wno-macro-redefined # because we redefine _FORTIFY_SOURCE
         -Wno-covered-switch-default -Wno-missing-braces
+        -Wno-gnu-statement-expression
         -fcomment-block-commands=dotfile
         )
   string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
