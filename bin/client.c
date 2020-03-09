@@ -40,11 +40,14 @@
 #include <string.h>
 #include <sys/param.h>
 #include <sys/socket.h> // IWYU pragma: no_forward_declare sockaddr
-#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <time.h>
 #include <unistd.h>
+
+#ifdef __FreeBSD__
+#include <sys/stat.h>
+#endif
 
 #define klib_unused
 
