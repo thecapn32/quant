@@ -1046,86 +1046,85 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
         break;
 
     case conn_opng:
-        if (is_clnt(c) == false)
-            break;
+        if (is_clnt(c)) {
+            if (m->hdr.vers == 0) {
+                // this is a vneg pkt
+                m->hdr.nr = UINT_T_MAX;
+                if (c->vers != c->vers_initial) {
+                    // we must have already reacted to a prior vneg pkt
+                    warn(INF, "ignoring spurious vneg response");
+                    goto done;
+                }
 
-        if (m->hdr.vers == 0) {
-            // this is a vneg pkt
-            m->hdr.nr = UINT_T_MAX;
-            if (c->vers != c->vers_initial) {
-                // we must have already reacted to a prior vneg pkt
-                warn(INF, "ignoring spurious vneg response");
+                // check that the rx'ed CIDs match our tx'ed CIDs
+                const bool rx_scid_ok = !cid_cmp(&m->hdr.scid, c->dcid);
+                const bool rxed_dcid_ok =
+                    m->hdr.dcid.len == 0 || !cid_cmp(&m->hdr.dcid, c->scid);
+                if (rx_scid_ok == false || rxed_dcid_ok == false) {
+                    mk_cid_str(INF, rx_scid_ok ? &m->hdr.dcid : &m->hdr.scid,
+                               cid_str_rx);
+                    mk_cid_str(INF, rx_scid_ok ? c->scid : c->dcid, cid_str_tx);
+                    warn(INF, "vneg %ccid mismatch: rx %s != %s",
+                         rx_scid_ok ? 'd' : 's', cid_str_rx, cid_str_tx);
+                    enter_closing(c);
+                    goto done;
+                }
+
+                // only do vneg for draft and vneg versions
+                if (is_vneg_vers(c->vers) == false &&
+                    is_draft_vers(c->vers) == false) {
+                    enter_closing(c);
+                    goto done;
+                }
+
+                // handle an incoming vneg packet
+                const uint32_t try_vers =
+                    clnt_vneg(v->buf + m->hdr.hdr_len, v->buf + v->len);
+                if (try_vers == 0) {
+                    // no version in common with serv
+                    enter_closing(c);
+                    goto done;
+                }
+
+                vneg_or_rtry_resp(c, true);
+                c->vers = try_vers;
+                warn(INF,
+                     "serv didn't like vers 0x%0" PRIx32
+                     ", retrying with 0x%0" PRIx32 "",
+                     c->vers_initial, c->vers);
+                ok = true;
                 goto done;
             }
 
-            // check that the rx'ed CIDs match our tx'ed CIDs
-            const bool rx_scid_ok = !cid_cmp(&m->hdr.scid, c->dcid);
-            const bool rxed_dcid_ok =
-                m->hdr.dcid.len == 0 || !cid_cmp(&m->hdr.dcid, c->scid);
-            if (rx_scid_ok == false || rxed_dcid_ok == false) {
-                mk_cid_str(INF, rx_scid_ok ? &m->hdr.dcid : &m->hdr.scid,
-                           cid_str_rx);
-                mk_cid_str(INF, rx_scid_ok ? c->scid : c->dcid, cid_str_tx);
-                warn(INF, "vneg %ccid mismatch: rx %s != %s",
-                     rx_scid_ok ? 'd' : 's', cid_str_rx, cid_str_tx);
-                enter_closing(c);
+            if (unlikely(m->hdr.vers != c->vers)) {
+                warn(ERR,
+                     "serv response w/vers 0x%0" PRIx32
+                     " to CI w/vers 0x%0" PRIx32 ", ignoring",
+                     m->hdr.vers, c->vers);
                 goto done;
             }
 
-            // only do vneg for draft and vneg versions
-            if (is_vneg_vers(c->vers) == false &&
-                is_draft_vers(c->vers) == false) {
-                enter_closing(c);
+            if (m->hdr.type == LH_RTRY) {
+                m->hdr.nr = UINT_T_MAX;
+                if (c->tok_len) {
+                    // we already had an earlier RETRY on this connection
+                    warn(INF, "already handled a retry, ignoring");
+                    goto done;
+                }
+
+                // handle an incoming retry packet
+                c->tok_len = tok_len;
+                memcpy(c->tok, tok, c->tok_len);
+                vneg_or_rtry_resp(c, false);
+                warn(INF, "handling serv retry w/tok %s",
+                     tok_str(c->tok, c->tok_len));
+                ok = true;
                 goto done;
             }
-
-            // handle an incoming vneg packet
-            const uint32_t try_vers =
-                clnt_vneg(v->buf + m->hdr.hdr_len, v->buf + v->len);
-            if (try_vers == 0) {
-                // no version in common with serv
-                enter_closing(c);
-                goto done;
-            }
-
-            vneg_or_rtry_resp(c, true);
-            c->vers = try_vers;
-            warn(INF,
-                 "serv didn't like vers 0x%0" PRIx32
-                 ", retrying with 0x%0" PRIx32 "",
-                 c->vers_initial, c->vers);
-            ok = true;
-            goto done;
+            // server accepted version -
+            // if we get here, this should be a regular server-hello
         }
 
-        if (unlikely(m->hdr.vers != c->vers)) {
-            warn(ERR,
-                 "serv response w/vers 0x%0" PRIx32 " to CI w/vers 0x%0" PRIx32
-                 ", ignoring",
-                 m->hdr.vers, c->vers);
-            goto done;
-        }
-
-        if (m->hdr.type == LH_RTRY) {
-            m->hdr.nr = UINT_T_MAX;
-            if (c->tok_len) {
-                // we already had an earlier RETRY on this connection
-                warn(INF, "already handled a retry, ignoring");
-                goto done;
-            }
-
-            // handle an incoming retry packet
-            c->tok_len = tok_len;
-            memcpy(c->tok, tok, c->tok_len);
-            vneg_or_rtry_resp(c, false);
-            warn(INF, "handling serv retry w/tok %s",
-                 tok_str(c->tok, c->tok_len));
-            ok = true;
-            goto done;
-        }
-
-        // server accepted version -
-        // if we get here, this should be a regular server-hello
         ok = dec_frames(c, &v, &m);
         break;
 
