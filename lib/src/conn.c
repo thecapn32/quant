@@ -972,12 +972,9 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
     log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
     c->in_data += m->udp_len;
 
-    if (is_clnt(c) == false && unlikely(c->path_val_win != UINT_T_MAX)) {
+    if (is_clnt(c) == false && unlikely(c->path_val_win != UINT_T_MAX))
         // server limits response to 3x incoming pkt
-        warn(ERR, "path_val_win %" PRIu " -> %" PRIu, c->path_val_win,
-             c->path_val_win + 3 * m->udp_len);
         c->path_val_win += 3 * m->udp_len;
-    }
 
     switch (c->state) {
     case conn_idle:
