@@ -406,9 +406,11 @@ dec_stream_or_crypto_frame(const uint8_t type,
 
     // data is a complete duplicate
     if (m->strm_off + m->strm_data_len <= m->strm->in_data_off) {
+#ifdef NO_SERVER
         // if this is a dup Initial and we are server, mark server flight lost
         if (unlikely(is_clnt(c) == false && m->hdr.type == LH_INIT))
             detect_all_lost_pkts(c, false);
+#endif
         track_sd_frame(dup, true);
         goto done;
     }
