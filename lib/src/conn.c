@@ -1030,9 +1030,10 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
             free(zo);
         }
 #endif
-        conn_to_state(c, conn_opng);
 
         // server limits response to 3x incoming pkt
+        warn(ERR, "path_val_win %" PRIu " -> %" PRIu, c->path_val_win,
+             c->path_val_win + 3 * m->udp_len);
         c->path_val_win += 3 * m->udp_len;
 
         // server picks a new random cid
