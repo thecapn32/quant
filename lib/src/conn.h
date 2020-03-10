@@ -526,8 +526,7 @@ static inline bool __attribute__((no_instrument_function,
 #ifndef NO_MIGRATION
     const struct cid * const max_scid =
         splay_max(cids_by_seq, &c->scids_by_seq);
-    return splay_count(&c->scids_by_seq) <
-               MIN(c->tp_peer.act_cid_lim, c->tp_mine.act_cid_lim) ||
+    return splay_count(&c->scids_by_seq) < c->tp_peer.act_cid_lim ||
            (max_scid && c->max_cid_seq_out < max_scid->seq);
 #else
     return false;
