@@ -88,18 +88,14 @@ void __attribute__((nonnull(1))) loop_run(struct w_engine * const w,
         timeouts_update(ped(w)->wheel, now);
 
         struct timeout * t;
-        TIMEOUTS_FOREACH (t, ped(w)->wheel, TIMEOUTS_EXPIRED) {
-            now = w_now();
-            timeout_del(t);
+        while ((t = timeouts_get(ped(w)->wheel)) != 0)
             (*t->callback.fn)(t->callback.arg);
-        }
 
-        if (break_loop)
+        if (unlikely(break_loop))
             break;
 
         const uint64_t next = timeouts_timeout(ped(w)->wheel);
-        if (next == 0)
-            continue;
+        ensure(next, "next is null"); // FIXME: remove eventually
 
         if (w_nic_rx(w, (int64_t)next) == false)
             continue;
@@ -108,11 +104,12 @@ void __attribute__((nonnull(1))) loop_run(struct w_engine * const w,
         if (w_rx_ready(w, &sl) == 0)
             continue;
 
+        now = w_now();
+        timeouts_update(ped(w)->wheel, now);
+
         struct w_sock * ws;
-        sl_foreach (ws, &sl, next) {
-            now = w_now();
+        sl_foreach (ws, &sl, next)
             rx(ws);
-        }
     }
 
     api_func = 0;
