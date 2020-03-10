@@ -154,6 +154,9 @@ void free_stream(struct q_stream * const s)
     }
 #endif
 
+    if (s->in_ctrl)
+        sl_remove(&c->need_ctrl, s, q_stream, node_ctrl);
+
     q_free(&s->out);
     q_free(&s->in);
     free(s);
