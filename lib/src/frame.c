@@ -1293,6 +1293,8 @@ bool dec_frames(struct q_conn * const c,
         case FRM_HSD:
             warn(INF, FRAM_IN "HANDSHAKE_DONE" NRM);
             ok = is_clnt(c);
+            if (likely(ok) && unlikely(c->pns[pn_hshk].abandoned == false))
+                abandon_pn(&c->pns[pn_hshk]);
             break;
 
         case FRM_MSD:

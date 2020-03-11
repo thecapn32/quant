@@ -1500,10 +1500,6 @@ static void __attribute__((nonnull))
             }
             pkt_valid = true;
 
-            if (unlikely(c->pns[pn_hshk].abandoned == false) &&
-                has_frm(c->pns[pn_data].rx_frames, FRM_HSD))
-                abandon_pn(&c->pns[pn_hshk]);
-
             // remember that we had a RX event on this connection
             if (unlikely(!c->had_rx)) {
                 c->had_rx = true;
