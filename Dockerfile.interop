@@ -5,8 +5,8 @@ RUN apt-get update -y && apt-get install -y \
         git \
         libhttp-parser-dev \
         libssl-dev \
-        pkg-config
-
+        pkg-config && \
+        apt-get clean
 FROM qns
 ADD . /src
 WORKDIR /src/Debug
@@ -16,7 +16,8 @@ RUN make install
 FROM martenseemann/quic-network-simulator-endpoint
 RUN apt-get update -y && apt-get install -y \
         binutils \
-        libhttp-parser2.8
+        libhttp-parser2.8 && \
+        apt-get clean
 COPY --from=1 /usr/local /usr/local
 COPY --from=1 /src/Debug/test/dummy.* /tls/
 ADD ./test/interop.sh /run_endpoint.sh
