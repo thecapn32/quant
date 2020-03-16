@@ -639,7 +639,8 @@ on_pkt_acked_cc(const struct pkt_meta * const m)
     if (c->rec.cur.cwnd < c->rec.cur.ssthresh)
         c->rec.cur.cwnd += m->udp_len;
     else
-        c->rec.cur.cwnd += (c->rec.max_pkt_size * m->udp_len) / c->rec.cur.cwnd;
+        c->rec.cur.cwnd +=
+            (c->rec.max_pkt_size * (uint_t)m->udp_len) / c->rec.cur.cwnd;
 
 #ifndef NO_QINFO
     c->i.max_cwnd = MAX(c->i.max_cwnd, c->rec.cur.cwnd);
