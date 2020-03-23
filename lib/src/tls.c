@@ -1472,6 +1472,7 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
         die("epoch %lu unknown", (unsigned long)epoch);
     }
 
+#ifndef NO_TLS_LOG
     if (ped(c->w)->tls_ctx.log_event) {
         static const char * const log_labels[2][4] = {
             {0, "CLIENT_EARLY_TRAFFIC_SECRET",
@@ -1486,6 +1487,7 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
                     (char[hex_str_len(PTLS_MAX_DIGEST_SIZE)]){""},
                     hex_str_len(PTLS_MAX_DIGEST_SIZE)));
     }
+#endif
 
     return setup_cipher(&ctx->header_protection, &ctx->aead, cipher->aead,
                         cipher->hash, is_enc, secret);
@@ -1749,26 +1751,25 @@ bool verify_rtry_tok(struct q_conn * const c,
     // hash current cid included in token
     hc->update(hc, tok + cs->hash->digest_size,
                tok_len - cs->hash->digest_size);
-    uint8_t buf[PTLS_MAX_DIGEST_SIZE + CID_LEN_MAX];
-    hc->final(hc, buf, PTLS_HASH_FINAL_MODE_FREE);
+    hc->final(hc, ped(c->w)->scratch, PTLS_HASH_FINAL_MODE_FREE);
 
-    // #ifdef DEBUG_PROT
+#ifdef DEBUG_PROT
     warn(DBG, "computed Retry tok %s",
-         hex2str(buf, cs->hash->digest_size,
+         hex2str(ped(c->w)->scratch, cs->hash->digest_size,
                  (char[hex_str_len(MAX_TOK_LEN)]){""},
                  hex_str_len(cs->hash->digest_size)));
-    // #endif
-    if (memcmp(buf, tok, cs->hash->digest_size) == 0) {
+#endif
+    if (memcmp(ped(c->w)->scratch, tok, cs->hash->digest_size) == 0) {
         c->odcid.len = (uint8_t)(tok_len - cs->hash->digest_size);
         memcpy(&c->odcid.id, tok + cs->hash->digest_size, c->odcid.len);
         return true;
     }
-    // #ifdef DEBUG_PROT
+#ifdef DEBUG_PROT
     warn(DBG, "rx'ed Retry tok %s",
          hex2str(tok, cs->hash->digest_size,
                  (char[hex_str_len(MAX_TOK_LEN)]){""},
                  hex_str_len(cs->hash->digest_size)));
-    // #endif
+#endif
     return false;
 }
 
@@ -1814,20 +1815,19 @@ void flip_keys(struct q_conn * const c, const bool out)
         return;
     }
 
-    uint8_t new_secret[PTLS_MAX_DIGEST_SIZE];
     static const char flip_label[] = "quic ku";
     if (pnd->in_1rtt[new_kyph].aead)
         ptls_aead_free(pnd->in_1rtt[new_kyph].aead);
     if (setup_initial_key(&pnd->in_1rtt[new_kyph], cs, c->tls.secret[0],
-                          flip_label, 0, new_secret))
+                          flip_label, 0, ped(c->w)->scratch))
         return;
-    memcpy(c->tls.secret[0], new_secret, cs->hash->digest_size);
+    memcpy(c->tls.secret[0], ped(c->w)->scratch, cs->hash->digest_size);
     if (pnd->out_1rtt[new_kyph].aead)
         ptls_aead_free(pnd->out_1rtt[new_kyph].aead);
     if (setup_initial_key(&pnd->out_1rtt[new_kyph], cs, c->tls.secret[1],
-                          flip_label, 1, new_secret) != 0)
+                          flip_label, 1, ped(c->w)->scratch) != 0)
         return;
-    memcpy(c->tls.secret[1], new_secret, cs->hash->digest_size);
+    memcpy(c->tls.secret[1], ped(c->w)->scratch, cs->hash->digest_size);
 
     if (out == false)
         pnd->in_kyph = new_kyph;

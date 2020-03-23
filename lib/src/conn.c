@@ -369,8 +369,6 @@ static void __attribute__((nonnull)) tx_vneg_resp(struct w_sock * const ws,
     xv->saddr = v->saddr;
     xv->flags = v->flags;
     log_pkt("TX", xv, &xv->saddr, 0, 0, 0);
-    struct cid gid = {.seq = 0};
-    mk_rand_cid(&gid, CID_LEN_MAX + 1, false); // random len
     // qlog_transport(pkt_tx, "default", xv, mx);
     do_w_tx(ws, &q);
     q_free(&q);
