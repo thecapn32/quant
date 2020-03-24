@@ -271,6 +271,8 @@ struct q_conn {
     uint_t in_data;      ///< Current inbound connection data.
     uint_t out_data;     ///< Current outbound connection data.
 
+    uint_t rpt_max; ///< Largest received "Retire Prior To" field
+
     epoch_t min_rx_epoch;
 
     uint8_t path_chlg_in[PATH_CHLG_LEN];

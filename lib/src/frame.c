@@ -998,9 +998,10 @@ dec_new_cid_frame(const uint8_t ** pos,
                        .has_srt = true
 #endif
     };
+    uint_t rpt = 0;
 
     decv_chk(&dcid.seq, pos, end, c, FRM_CID);
-    decv_chk(&dcid.rpt, pos, end, c, FRM_CID);
+    decv_chk(&rpt, pos, end, c, FRM_CID);
     dec1_chk(&dcid.len, pos, end, c, FRM_CID);
 
 #ifndef NO_SRT_MATCHING
@@ -1026,7 +1027,7 @@ dec_new_cid_frame(const uint8_t ** pos,
     warn(INF,
          FRAM_IN "NEW_CONNECTION_ID" NRM " seq=%" PRIu " rpt=%" PRIu
                  " len=%u dcid=%s srt=%s%s",
-         dcid.seq, dcid.rpt, dcid.len, cid_str(&dcid), srt_str(srt),
+         dcid.seq, rpt, dcid.len, cid_str(&dcid), srt_str(srt),
          dup ? " [" RED "dup" NRM "]" : "");
 
 #ifndef NO_MIGRATION
@@ -1038,18 +1039,30 @@ dec_new_cid_frame(const uint8_t ** pos,
                          "illegal seq %" PRIu " (have %" PRIu "/%" PRIu ")",
                          dcid.seq, splay_count(&c->dcids_by_seq), max_act_cids);
 
-    if (unlikely(dcid.rpt > dcid.seq))
+    if (unlikely(rpt > dcid.seq))
         err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_CID,
-                         "illegal rpt %" PRIu, dcid.rpt);
+                         "illegal rpt %" PRIu, rpt);
 
     if (unlikely(dcid.len > CID_LEN_MAX))
         err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_CID, "illegal len %u",
                          dcid.len);
 
+    if (rpt > c->rpt_max) {
+        struct cid * rcid;
+        splay_foreach (rcid, cids_by_seq, &c->dcids_by_seq)
+            if (rcid->seq < rpt) {
+                warn(DBG, "retiring %s", cid_str(rcid));
+                c->tx_retire_cid = rcid->retired = true;
+            } else
+                break;
+        c->rpt_max = rpt;
+    } else
+        warn(INF, "rpt %" PRIu " <= prev max %" PRIu ", ignoring", rpt,
+             c->rpt_max);
+
     if (dup == false)
         add_dcid(c, &dcid);
 
-        // FIXME: retire cids
 #else
     err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_CID,
                      "migration disabled but got NEW_CONNECTION_ID");
@@ -1860,7 +1873,8 @@ void enc_new_cid_frame(struct q_conn_info * const ci,
     c->max_cid_seq_out = MAX(min_scid->seq, c->max_cid_seq_out + 1);
     struct cid ncid = {.seq = c->max_cid_seq_out};
 
-    // FIXME: add rpt
+    // FIXME: send an actual rpt
+    uint_t rpt = 0;
 
 #ifndef NO_SRT_MATCHING
     uint8_t * srt;
@@ -1891,7 +1905,7 @@ void enc_new_cid_frame(struct q_conn_info * const ci,
 
     enc1(pos, end, FRM_CID);
     encv(pos, end, enc_cid->seq);
-    encv(pos, end, enc_cid->rpt);
+    encv(pos, end, rpt);
     enc1(pos, end, enc_cid->len);
     encb(pos, end, enc_cid->id, enc_cid->len);
     encb(pos, end, srt, SRT_LEN);
@@ -1899,8 +1913,8 @@ void enc_new_cid_frame(struct q_conn_info * const ci,
     warn(INF,
          FRAM_OUT "NEW_CONNECTION_ID" NRM " seq=%" PRIu " rpt=%" PRIu
                   " len=%u cid=%s srt=%s %s",
-         enc_cid->seq, enc_cid->rpt, enc_cid->len, cid_str(enc_cid),
-         srt_str(srt), enc_cid == &ncid ? "" : BLD REV GRN "[RTX]" NRM);
+         enc_cid->seq, rpt, enc_cid->len, cid_str(enc_cid), srt_str(srt),
+         enc_cid == &ncid ? "" : BLD REV GRN "[RTX]" NRM);
 
     track_frame(m, ci, FRM_CID, 1);
 }

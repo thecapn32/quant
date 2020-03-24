@@ -45,6 +45,9 @@
 
 #ifdef HAVE_ASAN
 #include <sanitizer/asan_interface.h>
+#else
+#define ASAN_POISON_MEMORY_REGION(x, y)
+#define ASAN_UNPOISON_MEMORY_REGION(x, y)
 #endif
 
 #include "frame.h"
@@ -112,7 +115,6 @@ struct cid {
     splay_entry(cid) node_seq;
 #endif
     uint_t seq; ///< Connection ID sequence number
-    uint_t rpt; ///< Retire prior to
     /// XXX len must precede id for cid_cmp() over both to work
     uint8_t len; ///< Connection ID length
     /// XXX id must precede srt for rand_bytes() over both to work
