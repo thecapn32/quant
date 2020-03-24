@@ -729,6 +729,7 @@ void init_tp(struct q_conn * const c)
     const uint16_t grease_len = grease[1] & 0x0f;
 
     // add the quantum-readiness tp
+    unpoison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
     memset(ped(c->w)->scratch, 'Q', MIN_INI_LEN);
 
     uint16_t tp_order[] = {TP_OCID,     TP_IDTO,    TP_SRT,    TP_MPS,  TP_IMD,
@@ -919,6 +920,7 @@ void init_tp(struct q_conn * const c)
                 die("unknown tp 0x%04x", tp_order[j]);
             break;
         }
+    poison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
 
     c->tls.tp_ext[0] = (ptls_raw_extension_t){
         .type = QUIC_TP,
@@ -1242,7 +1244,9 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
     const epoch_t ep_in = strm_epoch(s);
     size_t epoch_off[5] = {0};
     ptls_buffer_t tls_io;
-    ptls_buffer_init(&tls_io, ped(s->c->w)->scratch, ped(s->c->w)->scratch_len);
+
+    unpoison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
+    ptls_buffer_init(&tls_io, ped(c->w)->scratch, ped(c->w)->scratch_len);
 
     const int ret =
 #ifndef NO_SERVER
@@ -1311,6 +1315,7 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
 
 done:
     ptls_buffer_dispose(&tls_io);
+    poison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
     return ret;
 }
 
@@ -1749,6 +1754,7 @@ bool verify_rtry_tok(struct q_conn * const c,
     ptls_hash_context_t * const hc = prep_hash_ctx(c, cs);
 
     // hash current cid included in token
+    unpoison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
     hc->update(hc, tok + cs->hash->digest_size,
                tok_len - cs->hash->digest_size);
     hc->final(hc, ped(c->w)->scratch, PTLS_HASH_FINAL_MODE_FREE);
@@ -1762,6 +1768,7 @@ bool verify_rtry_tok(struct q_conn * const c,
     if (memcmp(ped(c->w)->scratch, tok, cs->hash->digest_size) == 0) {
         c->odcid.len = (uint8_t)(tok_len - cs->hash->digest_size);
         memcpy(&c->odcid.id, tok + cs->hash->digest_size, c->odcid.len);
+        poison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
         return true;
     }
 #ifdef DEBUG_PROT
@@ -1770,6 +1777,7 @@ bool verify_rtry_tok(struct q_conn * const c,
                  (char[hex_str_len(MAX_TOK_LEN)]){""},
                  hex_str_len(cs->hash->digest_size)));
 #endif
+    poison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
     return false;
 }
 
@@ -1782,6 +1790,7 @@ void make_rit(const struct q_conn * const c,
               const uint16_t tok_len,
               uint8_t * const rit)
 {
+    unpoison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
     uint8_t * pos = ped(c->w)->scratch;
     uint8_t * end = pos + ped(c->w)->scratch_len;
 
@@ -1798,6 +1807,7 @@ void make_rit(const struct q_conn * const c,
 
     ptls_aead_encrypt(ped(c->w)->rid_ctx, rit, 0, 0, 0, ped(c->w)->scratch,
                       (size_t)(pos - ped(c->w)->scratch));
+    poison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
 }
 
 
@@ -1818,20 +1828,23 @@ void flip_keys(struct q_conn * const c, const bool out)
     static const char flip_label[] = "quic ku";
     if (pnd->in_1rtt[new_kyph].aead)
         ptls_aead_free(pnd->in_1rtt[new_kyph].aead);
+    unpoison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
     if (setup_initial_key(&pnd->in_1rtt[new_kyph], cs, c->tls.secret[0],
                           flip_label, 0, ped(c->w)->scratch))
-        return;
+        goto done;
     memcpy(c->tls.secret[0], ped(c->w)->scratch, cs->hash->digest_size);
     if (pnd->out_1rtt[new_kyph].aead)
         ptls_aead_free(pnd->out_1rtt[new_kyph].aead);
     if (setup_initial_key(&pnd->out_1rtt[new_kyph], cs, c->tls.secret[1],
                           flip_label, 1, ped(c->w)->scratch) != 0)
-        return;
+        goto done;
     memcpy(c->tls.secret[1], ped(c->w)->scratch, cs->hash->digest_size);
 
     if (out == false)
         pnd->in_kyph = new_kyph;
     pnd->out_kyph = new_kyph;
+done:
+    poison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
 }
 
 

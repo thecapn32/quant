@@ -418,6 +418,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
 #ifndef NDEBUG
     int pos = 0;
     struct ival * i = 0;
+    unpoison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
     const uint32_t tmp_len = ped(c->w)->scratch_len;
     uint8_t * const tmp = ped(c->w)->scratch;
     diet_foreach (i, diet, &lost) {
@@ -440,6 +441,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
 
     if (pos)
         warn(DBG, "%s %s lost: %s", conn_type(c), pn_type_str(pn->type), tmp);
+    poison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
 #endif
 
     // OnPacketsLost

@@ -37,13 +37,6 @@
 #include <quant/quant.h>
 #include <timeout.h>
 
-#ifdef HAVE_ASAN
-#include <sanitizer/asan_interface.h>
-#else
-#define ASAN_POISON_MEMORY_REGION(x, y)
-#define ASAN_UNPOISON_MEMORY_REGION(x, y)
-#endif
-
 #if !defined(NDEBUG) && !defined(FUZZING) && defined(FUZZER_CORPUS_COLLECTION)
 #include <errno.h>
 #include <fcntl.h>
@@ -586,6 +579,7 @@ struct w_engine * q_init(const char * const ifname,
     w->data = calloc(1, sizeof(struct per_engine_data) + w->mtu);
     ensure(w->data, "could not calloc");
     ped(w)->scratch_len = w->mtu;
+    poison_scratch(ped(w)->scratch, ped(w)->scratch_len);
 
     ped(w)->pkt_meta = calloc(num_bufs, sizeof(*ped(w)->pkt_meta));
     ensure(ped(w)->pkt_meta, "could not calloc");

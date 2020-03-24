@@ -43,6 +43,10 @@
 
 #include <quant/quant.h>
 
+#ifdef HAVE_ASAN
+#include <sanitizer/asan_interface.h>
+#endif
+
 #include "frame.h"
 #include "tree.h" // IWYU pragma: keep
 
@@ -349,6 +353,24 @@ extern char __rit_str[hex_str_len(RIT_LEN)];
 #define get_conf_uncond(w, conf, val)                                          \
     ((conf) ? (conf)->val : ped(w)->default_conn_conf.val)
 
+
+#ifdef HAVE_ASAN
+#define poison_scratch(s, l)                                                   \
+    do {                                                                       \
+        ensure(!__asan_address_is_poisoned((s)), "scratch already poisoned");  \
+        ASAN_POISON_MEMORY_REGION((s), (l));                                   \
+    } while (0)
+
+
+#define unpoison_scratch(s, l)                                                 \
+    do {                                                                       \
+        ensure(__asan_address_is_poisoned((s)), "scratch already unpoisoned"); \
+        ASAN_UNPOISON_MEMORY_REGION((s), (l));                                 \
+    } while (0)
+#else
+#define poison_scratch(s, l)
+#define unpoison_scratch(s, l)
+#endif
 
 extern void __attribute__((nonnull))
 mk_rand_cid(struct cid * const cid, const uint8_t len, const bool srt);

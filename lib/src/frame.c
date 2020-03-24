@@ -711,6 +711,7 @@ dec_close_frame(const uint8_t type,
     const uint16_t act_reas_len =
         (uint16_t)MIN(reas_len, (uint16_t)(end - *pos));
     ensure(act_reas_len <= ped(c->w)->scratch_len, "scratch insufficient");
+    unpoison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
 
     if (act_reas_len)
         decb_chk(ped(c->w)->scratch, pos, end, act_reas_len, c, type);
@@ -727,6 +728,7 @@ dec_close_frame(const uint8_t type,
                      " rlen=%" PRIu " reason=%s%.*s" NRM,
              type, err_code ? RED : NRM, err_code, reas_len,
              err_code ? RED : NRM, (int)reas_len, ped(c->w)->scratch);
+    poison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
 
     if (unlikely(reas_len != act_reas_len))
         err_close_return(c, ERR_FRAME_ENC, type, "illegal reason len");
