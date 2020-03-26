@@ -358,25 +358,28 @@ struct q_stream *
 q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool all)
 {
     struct q_stream * s = 0;
-    do {
+    bool found = false;
+    while (found == false && q_is_conn_closed(c) == false) {
         kh_foreach_value(&c->strms_by_id, s, {
-            if (!sq_empty(&s->in) || s->state == strm_clsd)
+            if (s->state == strm_clsd ||
+                (!sq_empty(&s->in) && (!all || s->state == strm_hcrm))) {
                 // we found a stream with queued data
+                found = true;
                 break;
+            }
         });
 
-        if (s == 0 && all) {
+        if (found == false) {
             // no data queued on any stream, wait for new data
             warn(WRN, "waiting to read on any strm on %s conn %s", conn_type(c),
                  cid_str(c->scid));
             loop_run(c->w, (func_ptr)q_read, c, 0);
         }
-    } while (s == 0 && all);
+    }
 
-    if (s && s->state != strm_clsd)
+    if (found && !sq_empty(&s->in))
         q_read_stream(s, q, false);
-
-    return s;
+    return found ? s : 0;
 }
 
 

@@ -96,6 +96,8 @@ struct cb_data {
     struct q_stream * s;
     struct q_conn * c;
     struct w_engine * w;
+    char url[8192];
+    size_t url_len;
     int dir;
     int af;
 };
@@ -155,7 +157,7 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
         return send_err(d, 400);
     }
 
-    char path[MAXPATHLEN] = ".";
+    char path[8192] = ".";
     if ((u.field_set & (1 << UF_PATH)) == 0)
         return send_err(d, 400);
 
@@ -364,74 +366,80 @@ int main(int argc, char * argv[])
         first_conn = false;
 
         // do we need to q_accept?
-        if (q_is_new_serv_conn(c))
+        if (q_is_new_serv_conn(c)) {
             q_accept(w, 0);
+            continue;
+        }
 
         if (q_is_conn_closed(c)) {
             q_close(c, 0, 0);
             continue;
         }
 
+    next_req:;
         // do we need to handle a request?
         struct cb_data d = {.c = c, .w = w, .dir = dir_fd};
         http_parser parser = {.data = &d};
 
-    again:
         http_parser_init(&parser, HTTP_REQUEST);
         struct w_iov_sq q = w_iov_sq_initializer(q);
-        struct q_stream * s = q_read(c, &q, false);
+        struct q_stream * s = q_read(c, &q, true);
 
-        if (sq_empty(&q)) {
-            if (s && q_is_stream_closed(s)) {
-                // retrieve the TX'ed request
-                q_stream_get_written(s, &q);
-#ifndef NDEBUG
-                // if we wrote a "benchmark objects", increase logging
-                const uint_t len = w_iov_sq_len(&q);
-                if (is_bench_obj(len) && --bench_cnt == 0) {
-                    util_dlevel = ini_dlevel;
-                    warn(NTE, "increasing log level after benchmark object "
-                              "transfer");
-                }
-#endif
-                q_free_stream(s);
-                q_free(&q);
-                goto again;
-            }
+        if (s == 0)
             continue;
-        }
 
         if (q_is_uni_stream(s)) {
             warn(NTE, "can't serve request on uni stream: %.*s",
                  sq_first(&q)->len, sq_first(&q)->buf);
-
-        } else {
-            d.s = s;
-            d.af = sq_first(&q)->wv_af;
-            struct w_iov * v;
-            sq_foreach (v, &q, next) {
-                if (v->len == 0)
-                    // skip empty bufs (such as pure FINs)
-                    continue;
-
-                const size_t parsed = http_parser_execute(
-                    &parser, &settings, (char *)v->buf, v->len);
-                if (parsed != v->len) {
-                    warn(ERR, "HTTP parser error: %.*s", (int)(v->len - parsed),
-                         &v->buf[parsed]);
-                    hexdump(v->buf, v->len);
-                    // XXX the strnlen() test is super-hacky
-                    if (strnlen((char *)v->buf, v->len) == v->len)
-                        send_err(&d, 400);
-                    else
-                        send_err(&d, 505);
-                    ret = 1;
-                }
-                q_free(&q);
-                goto again;
-            }
+            goto next;
         }
+
+        if (q_is_stream_closed(s))
+            goto next;
+
+        d.s = s;
+        d.af = sq_first(&q)->wv_af;
+
+        struct w_iov * v;
+        sq_foreach (v, &q, next) {
+            memcpy(&d.url[d.url_len], v->buf, v->len);
+            d.url_len += v->len;
+        }
+
+        const size_t parsed =
+            http_parser_execute(&parser, &settings, d.url, d.url_len);
+        if (parsed != d.url_len) {
+            warn(ERR, "HTTP parser error: %.*s", (int)(d.url_len - parsed),
+                 &d.url[parsed]);
+            hexdump(d.url, d.url_len);
+            // XXX the strnlen() test is super-hacky
+            if (strnlen(d.url, d.url_len) == d.url_len)
+                send_err(&d, 400);
+            else
+                send_err(&d, 505);
+            ret = 1;
+        }
+        q_free(&q);
+
+    next:
+        if (q_is_stream_closed(s)) {
+            // retrieve the TX'ed request
+            q_stream_get_written(s, &q);
+#ifndef NDEBUG
+            // if we wrote a "benchmark objects", increase logging
+            const uint_t len = w_iov_sq_len(&q);
+            if (is_bench_obj(len) && --bench_cnt == 0) {
+                util_dlevel = ini_dlevel;
+                warn(NTE, "increasing log level after benchmark object "
+                          "transfer");
+            }
+#endif
+            q_free_stream(s);
+            q_free(&q);
+        }
+        goto next_req;
     }
+
 
     q_cleanup(w);
     warn(DBG, "%s exiting", basename(argv[0]));

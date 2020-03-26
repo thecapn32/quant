@@ -215,7 +215,7 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
     // extract relevant info from URL
     char dest[1024];
     char port[64];
-    char path[2048];
+    char path[8192];
     set_from_url(dest, sizeof(dest), url, &u, UF_HOST, "localhost");
     set_from_url(port, sizeof(port), url, &u, UF_PORT, "4433");
     set_from_url(path, sizeof(path), url, &u, UF_PATH, "/index.html");
@@ -263,7 +263,7 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
 
     } else {
         // assemble an HTTP/0.9 request
-        char req_str[MAXPATHLEN + 6];
+        char req_str[sizeof(path) + 6];
         const int req_str_len =
             snprintf(req_str, sizeof(req_str), "GET %s\r\n", path);
         q_chunk_str(w, cce ? cce->c : 0, peer->ai_family, req_str,
@@ -536,6 +536,7 @@ int main(int argc, char * argv[])
                 if (se->c == 0 || se->s == 0) {
                     sl_remove(&sl, se, stream_entry, next);
                     free_se(se);
+                    warn(ERR, "remove");
                     continue;
                 }
 
