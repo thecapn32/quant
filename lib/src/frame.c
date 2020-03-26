@@ -1056,7 +1056,7 @@ dec_new_cid_frame(const uint8_t ** pos,
             } else
                 break;
         c->rpt_max = rpt;
-    } else
+    } else if (c->rpt_max)
         warn(INF, "rpt %" PRIu " <= prev max %" PRIu ", ignoring", rpt,
              c->rpt_max);
 
