@@ -536,7 +536,6 @@ int main(int argc, char * argv[])
                 if (se->c == 0 || se->s == 0) {
                     sl_remove(&sl, se, stream_entry, next);
                     free_se(se);
-                    warn(ERR, "remove");
                     continue;
                 }
 
