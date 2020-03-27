@@ -1522,8 +1522,7 @@ static void __attribute__((nonnull))
                  cid_str(c->scid));
             free_conn(c);
             c = 0;
-        }
-        if (pkt_valid == false)
+        } else if (pkt_valid == false)
             qlog_transport(pkt_dp, "default", v, m);
         free_iov(v, m);
     next:
