@@ -1516,6 +1516,13 @@ static void __attribute__((nonnull))
         goto next;
 
     drop:
+        if (likely(c) && !is_clnt(c) && unlikely(c->state == conn_idle)) {
+            // drop server connection on invalid clnt Initial
+            warn(DBG, "dropping idle %s conn %s", conn_type(c),
+                 cid_str(c->scid));
+            free_conn(c);
+            c = 0;
+        }
         if (pkt_valid == false)
             qlog_transport(pkt_dp, "default", v, m);
         free_iov(v, m);

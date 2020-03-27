@@ -1017,6 +1017,11 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
                            struct w_iov_sq * const x,
                            bool * const decoal)
 {
+    bool did_key_flip = false;
+    const bool prev_kyph = c->pns[pn_data].data.in_kyph;
+    uint8_t prev_secret[2][PTLS_MAX_DIGEST_SIZE];
+    const ptls_cipher_suite_t * cs = 0;
+
     *decoal = false;
     const struct cipher_ctx * ctx = which_cipher_ctx_in(c, m, false);
     if (unlikely(ctx->header_protection == 0))
@@ -1024,31 +1029,41 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
 
     // we can now undo the packet protection
     if (unlikely(undo_hp(xv, m, ctx) == false))
-        return is_srt(xv, m);
+        goto check_srt;
 
     // we can now try and decrypt the packet
     struct pn_space * const pn = &c->pns[pn_data];
     struct pn_data * const pnd = &pn->data;
     if (likely(is_lh(m->hdr.flags) == false) &&
         unlikely(is_set(SH_KYPH, m->hdr.flags) != pnd->in_kyph)) {
-        if (pnd->out_kyph == pnd->in_kyph)
+        if (pnd->out_kyph == pnd->in_kyph) {
             // this is a peer-initiated key phase flip
-            flip_keys(c, false);
-        else
+            cs = ptls_get_cipher(c->tls.t);
+            if (unlikely(cs == 0)) {
+                warn(ERR, "cannot obtain cipher suite");
+                return false;
+            }
+            // save the old keying material in case we gotta rollback
+            memcpy(prev_secret[0], c->tls.secret[0], cs->hash->digest_size);
+            memcpy(prev_secret[1], c->tls.secret[1], cs->hash->digest_size);
+            // now, flip
+            flip_keys(c, false, cs);
+            did_key_flip = true;
+        } else
             // the peer switched to a key phase that we flipped
             pnd->in_kyph = pnd->out_kyph;
     }
 
     ctx = which_cipher_ctx_in(c, m, true);
     if (unlikely(ctx->aead == 0))
-        return is_srt(xv, m);
+        goto check_srt;
 
     const uint16_t pkt_len = is_lh(m->hdr.flags) ? m->hdr.hdr_len + m->hdr.len -
                                                        pkt_nr_len(m->hdr.flags)
                                                  : xv->len;
     const uint16_t ret = dec_aead(xv, v, m, pkt_len, ctx);
     if (unlikely(ret == 0))
-        return is_srt(xv, m);
+        goto check_srt;
 
     const uint8_t rsvd_bits =
         m->hdr.flags & (is_lh(m->hdr.flags) ? LH_RSVD_MASK : SH_RSVD_MASK);
@@ -1096,7 +1111,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
 
     // packet protection verified OK
     if (diet_find(&pn_for_pkt_type(c, m->hdr.type)->recv_all, m->hdr.nr))
-        return is_srt(xv, m);
+        goto check_srt;
 
     // check if we need to send an immediate ACK
     if ((unlikely(diet_empty(&m->pn->recv_all) == false &&
@@ -1106,4 +1121,13 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
         m->pn->imm_ack = true;
 
     return true;
+
+check_srt:
+    if (unlikely(did_key_flip)) {
+        warn(DBG, "crypto fail, undoing key flip");
+        c->pns[pn_data].data.in_kyph = prev_kyph;
+        memcpy(c->tls.secret[0], prev_secret[0], cs->hash->digest_size);
+        memcpy(c->tls.secret[1], prev_secret[1], cs->hash->digest_size);
+    }
+    return is_srt(xv, m);
 }

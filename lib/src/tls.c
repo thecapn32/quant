@@ -1811,7 +1811,9 @@ void make_rit(const struct q_conn * const c,
 }
 
 
-void flip_keys(struct q_conn * const c, const bool out)
+void flip_keys(struct q_conn * const c,
+               const bool out,
+               const ptls_cipher_suite_t * const cs)
 {
     struct pn_data * const pnd = &c->pns[pn_data].data;
     const bool new_kyph = !(out ? pnd->out_kyph : pnd->in_kyph);
@@ -1819,11 +1821,6 @@ void flip_keys(struct q_conn * const c, const bool out)
     warn(DBG, "flip %s kyph %u -> %u", out ? "out" : "in",
          out ? pnd->out_kyph : pnd->in_kyph, new_kyph);
 #endif
-    const ptls_cipher_suite_t * const cs = ptls_get_cipher(c->tls.t);
-    if (unlikely(cs == 0)) {
-        warn(ERR, "cannot obtain cipher suite");
-        return;
-    }
 
     static const char flip_label[] = "quic ku";
     if (pnd->in_1rtt[new_kyph].aead)
@@ -1857,6 +1854,10 @@ void maybe_flip_keys(struct q_conn * const c, const bool out)
     if (pnd->out_kyph != pnd->in_kyph)
         return;
 
-    flip_keys(c, out);
-    c->do_key_flip = false;
+    const ptls_cipher_suite_t * const cs = ptls_get_cipher(c->tls.t);
+    if (likely(cs)) {
+        flip_keys(c, out, cs);
+        c->do_key_flip = false;
+    } else
+        warn(ERR, "cannot obtain cipher suite");
 }
