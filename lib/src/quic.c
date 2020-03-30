@@ -982,7 +982,6 @@ bool q_ready(struct w_engine * const w,
     struct q_conn * const c = sl_first(&c_ready);
     if (c) {
         bool remove = true;
-#if !defined(NDEBUG) && defined(DEBUG_EXTRA)
         char * op = "rx";
 #ifndef NO_SERVER
         if (c->needs_accept) {
@@ -997,10 +996,8 @@ bool q_ready(struct w_engine * const w,
             sl_remove_head(&c_ready, node_rx_ext);
             c->in_c_ready = false;
         }
-    } else {
+    } else
         warn(WRN, "no conn ready");
-#endif
-    }
     *ready = c;
 done:
 #ifndef NO_MIGRATION

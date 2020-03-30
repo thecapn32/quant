@@ -1520,6 +1520,9 @@ static void __attribute__((nonnull))
             // drop server connection on invalid clnt Initial
             warn(DBG, "dropping idle %s conn %s", conn_type(c),
                  cid_str(c->scid));
+            if (c->had_rx)
+                // we inserted at head above, so can simply take it out again
+                sl_remove_head(crx, node_rx_int);
             free_conn(c);
             c = 0;
         } else if (pkt_valid == false)
@@ -1927,8 +1930,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->tp_mine.max_ack_del = c->tp_peer.max_ack_del = DEF_MAX_ACK_DEL;
     c->tp_mine.max_strm_data_uni = is_clnt(c) ? INIT_STRM_DATA_UNI : 0;
     c->tp_mine.max_strms_uni = is_clnt(c) ? INIT_MAX_UNI_STREAMS : 0;
-    c->tp_mine.max_strms_bidi =
-        is_clnt(c) ? INIT_MAX_BIDI_STREAMS : INIT_MAX_BIDI_STREAMS;
+    c->tp_mine.max_strms_bidi = INIT_MAX_BIDI_STREAMS;
     c->tp_mine.max_strm_data_bidi_local = c->tp_mine.max_strm_data_bidi_remote =
         is_clnt(c) ? INIT_STRM_DATA_BIDI : INIT_STRM_DATA_BIDI / 2;
     c->tp_mine.max_data =
