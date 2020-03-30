@@ -42,8 +42,8 @@
 
 #define INIT_STRM_DATA_BIDI 0xffff
 #define INIT_STRM_DATA_UNI 0x7ff
-#define INIT_MAX_UNI_STREAMS 3
-#define INIT_MAX_BIDI_STREAMS 3
+#define INIT_MAX_UNI_STREAMS 128
+#define INIT_MAX_BIDI_STREAMS 128
 
 #define STRM_STATE(k, v) k = v
 #define STRM_STATES                                                            \

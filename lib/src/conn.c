@@ -1928,7 +1928,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     c->tp_mine.max_strm_data_uni = is_clnt(c) ? INIT_STRM_DATA_UNI : 0;
     c->tp_mine.max_strms_uni = is_clnt(c) ? INIT_MAX_UNI_STREAMS : 0;
     c->tp_mine.max_strms_bidi =
-        is_clnt(c) ? INIT_MAX_BIDI_STREAMS * 2 : INIT_MAX_BIDI_STREAMS;
+        is_clnt(c) ? INIT_MAX_BIDI_STREAMS : INIT_MAX_BIDI_STREAMS;
     c->tp_mine.max_strm_data_bidi_local = c->tp_mine.max_strm_data_bidi_remote =
         is_clnt(c) ? INIT_STRM_DATA_BIDI : INIT_STRM_DATA_BIDI / 2;
     c->tp_mine.max_data =
