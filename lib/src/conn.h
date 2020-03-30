@@ -325,6 +325,9 @@ extern struct q_conn_sl c_embr;
 #endif
 
 
+#define hshk_done(c) (c)->pns[pn_hshk].abandoned
+
+
 extern struct q_conn_sl c_ready;
 extern struct q_conn_sl c_zcid;
 

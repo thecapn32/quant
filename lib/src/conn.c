@@ -456,7 +456,7 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
         return;
 
     // do we need to make more stream IDs available?
-    if (likely(c->state == conn_estb)) {
+    if (likely(hshk_done(c))) {
         if (!is_clnt(c) && unlikely(c->tx_new_tok && c->tok_len == 0 &&
                                     c->pns[ep_init].abandoned))
             // TODO: find a better way to send NEW_TOKEN
@@ -544,7 +544,7 @@ static bool __attribute__((nonnull)) tx_stream(struct q_stream * const s)
             continue;
         }
 
-        if (likely(c->state == conn_estb && s->id >= 0)) {
+        if (likely(hshk_done(c) && s->id >= 0)) {
             do_stream_fc(s, v->len);
             do_conn_fc(c, v->len);
         }
@@ -1692,7 +1692,7 @@ static void __attribute__((nonnull)) key_flip_alarm(struct q_conn * const c)
          cid_str(c->scid));
 #endif
 
-    if (c->state == conn_estb) {
+    if (hshk_done(c)) {
         c->do_key_flip = c->key_flips_enabled;
 #ifndef NO_MIGRATION
         // XXX we borrow the key flip timer for this
