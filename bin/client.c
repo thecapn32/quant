@@ -348,7 +348,7 @@ static void __attribute__((nonnull)) free_cc(khash_t(conn_cache) * cc)
 {
     struct conn_cache_entry * cce;
     kh_foreach_value(cc, cce, { free(cce); });
-    kh_destroy(conn_cache, cc);
+    kh_release(conn_cache, cc);
 }
 
 
@@ -513,7 +513,7 @@ int main(int argc, char * argv[])
             .tls_log = *tls_log ? tls_log : 0,
             .client_cid_len = zlen_cids ? 0 : 4,
             .enable_tls_cert_verify = verify_certs});
-    khash_t(conn_cache) * cc = kh_init(conn_cache);
+    khash_t(conn_cache) cc = {0};
 
     if (reps > 1)
         puts("size\ttime\t\tbps\t\turl");
@@ -522,7 +522,7 @@ int main(int argc, char * argv[])
         while (url_idx < argc) {
             // open a new connection, or get an open one
             warn(INF, "%s retrieving %s", basename(argv[0]), argv[url_idx]);
-            get(argv[url_idx++], w, cc);
+            get(argv[url_idx++], w, &cc);
         }
 
         // collect the replies
@@ -624,7 +624,7 @@ int main(int argc, char * argv[])
         }
     }
 
-    free_cc(cc);
+    free_cc(&cc);
     free_sl();
     q_cleanup(w);
     warn(DBG, "%s exiting", basename(argv[0]));
