@@ -1516,7 +1516,8 @@ static void __attribute__((nonnull))
         goto next;
 
     drop:
-        if (likely(c) && !is_clnt(c) && unlikely(c->state == conn_idle)) {
+        if (likely(c) && !is_clnt(c) &&
+            unlikely(c->state == conn_idle && c->tx_rtry == false)) {
             // drop server connection on invalid clnt Initial
             warn(DBG, "dropping idle %s conn %s", conn_type(c),
                  cid_str(c->scid));
