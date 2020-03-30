@@ -904,7 +904,7 @@ void q_cleanup(struct w_engine * const w)
 
 
 const char *
-q_cid(struct q_conn * const c, char * const buf, const size_t buf_len)
+q_cid(const struct q_conn * const c, char * const buf, const size_t buf_len)
 {
     ensure(buf_len >= hex_str_len(CID_LEN_MAX),
            "buf too short (need at least %lu)",
