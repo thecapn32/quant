@@ -570,7 +570,7 @@ int main(int argc, char * argv[])
                        elapsed, bps(w_iov_sq_len(&se->rep), elapsed), se->url);
 #ifndef NDEBUG
             char cid_str[64];
-            q_cid(se->c, cid_str, sizeof(cid_str));
+            q_cid_str(se->c, cid_str, sizeof(cid_str));
             warn(WRN,
                  "read %" PRIu
                  " byte%s in %.3f sec (%s) on conn %s strm %" PRIu,

@@ -47,7 +47,8 @@
 
 #include <quant/quant.h>
 
-struct q_conn;
+struct q_conn;   // IWYU pragma: no_forward_declare q_conn
+struct q_stream; // IWYU pragma: no_forward_declare q_stream
 
 
 #ifndef NDEBUG
@@ -96,11 +97,12 @@ struct cb_data {
     struct q_stream * s;
     struct q_conn * c;
     struct w_engine * w;
-    char url[8192];
-    size_t url_len;
     int dir;
     int af;
 };
+
+
+KHASH_MAP_INIT_INT(strm_cache, struct w_iov_sq *)
 
 
 static bool send_err(struct cb_data * const d, const uint16_t code)
@@ -146,7 +148,7 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
     (void)parser;
     struct cb_data * const d = parser->data;
     char cid_str[64];
-    q_cid(d->c, cid_str, sizeof(cid_str));
+    q_cid_str(d->c, cid_str, sizeof(cid_str));
     warn(INF, "conn %s str %" PRId " serving URL %.*s", cid_str, q_sid(d->s),
          (int)len, at);
 
@@ -234,6 +236,18 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
     q_write_file(d->w, d->s, f, (uint32_t)info.st_size, true);
 
     return 0;
+}
+
+
+static uint32_t __attribute__((nonnull))
+strm_key(const struct q_conn * const c, const struct q_stream * const s)
+{
+    uint8_t buf[sizeof(uint_t) + 32];
+    const uint_t sid = q_sid(s);
+    memcpy(buf, &sid, sizeof(uint_t));
+    size_t len = sizeof(buf) - sizeof(uint_t);
+    q_cid(c, &buf[sizeof(uint_t)], &len);
+    return fnv1a_32(buf, len + sizeof(uint_t));
 }
 
 
@@ -351,6 +365,7 @@ int main(int argc, char * argv[])
         }
     }
 
+    khash_t(strm_cache) sc = {0};
     bool first_conn = true;
     http_parser_settings settings = {.on_url = serve_cb};
 
@@ -376,14 +391,8 @@ int main(int argc, char * argv[])
             continue;
         }
 
-    next_req:;
-        // do we need to handle a request?
-        struct cb_data d = {.c = c, .w = w, .dir = dir_fd};
-        http_parser parser = {.data = &d};
-
-        http_parser_init(&parser, HTTP_REQUEST);
         struct w_iov_sq q = w_iov_sq_initializer(q);
-        struct q_stream * s = q_read(c, &q, true);
+        struct q_stream * s = q_read(c, &q, false);
 
         if (s == 0)
             continue;
@@ -394,32 +403,55 @@ int main(int argc, char * argv[])
             goto next;
         }
 
-        if (q_is_stream_closed(s))
-            goto next;
+        khiter_t k = kh_get(strm_cache, &sc, strm_key(c, s));
+        struct w_iov_sq * sq =
+            (kh_size(&sc) == 0 || k == kh_end(&sc) ? 0 : kh_val(&sc, k));
 
-        d.s = s;
-        d.af = sq_first(&q)->wv_af;
-
-        struct w_iov * v;
-        sq_foreach (v, &q, next) {
-            memcpy(&d.url[d.url_len], v->buf, v->len);
-            d.url_len += v->len;
+        if (sq == 0) {
+            // this is a new stream, insert into stream cache
+            sq = calloc(1, sizeof(*sq));
+            ensure(sq, "calloc failed");
+            sq_init(sq);
+            int err;
+            k = kh_put(strm_cache, &sc, strm_key(c, s), &err);
+            ensure(err >= 1, "inserted returned %d", err);
+            kh_val(&sc, k) = sq;
         }
+        sq_concat(sq, &q);
 
-        const size_t parsed =
-            http_parser_execute(&parser, &settings, d.url, d.url_len);
-        if (parsed != d.url_len) {
-            warn(ERR, "HTTP parser error: %.*s", (int)(d.url_len - parsed),
-                 &d.url[parsed]);
-            hexdump(d.url, d.url_len);
-            // XXX the strnlen() test is super-hacky
-            if (strnlen(d.url, d.url_len) == d.url_len)
-                send_err(&d, 400);
-            else
-                send_err(&d, 505);
-            ret = 1;
+        if (q_peer_closed_stream(s) && !sq_empty(sq)) {
+            // do we need to handle a request?
+            char url[8192];
+            size_t url_len = 0;
+            struct w_iov * v;
+            sq_foreach (v, sq, next) {
+                hexdump(v->buf, v->len);
+                memcpy(&url[url_len], v->buf, v->len);
+                url_len += v->len;
+            }
+
+            http_parser parser = {
+                .data = &(struct cb_data){.c = c,
+                                          .w = w,
+                                          .dir = dir_fd,
+                                          .s = s,
+                                          .af = sq_first(sq)->wv_af}};
+            http_parser_init(&parser, HTTP_REQUEST);
+
+            const size_t parsed =
+                http_parser_execute(&parser, &settings, url, url_len);
+            if (parsed != url_len) {
+                warn(ERR, "HTTP parser error: %.*s", (int)(url_len - parsed),
+                     &url[parsed]);
+                hexdump(url, url_len);
+                // XXX the strnlen() test is super-hacky
+                if (strnlen(url, url_len) == url_len)
+                    send_err(parser.data, 400);
+                else
+                    send_err(parser.data, 505);
+                ret = 1;
+            }
         }
-        q_free(&q);
 
     next:
         if (q_is_stream_closed(s)) {
@@ -434,14 +466,21 @@ int main(int argc, char * argv[])
                           "transfer");
             }
 #endif
+            k = kh_get(strm_cache, &sc, strm_key(c, s));
+            ensure(kh_size(&sc) && k != kh_end(&sc), "found");
+            sq = kh_val(&sc, k);
+            q_free(sq);
+            free(sq);
+            kh_del(strm_cache, &sc, k);
             q_free_stream(s);
             q_free(&q);
         }
-        goto next_req;
     }
 
-
     q_cleanup(w);
+    struct w_iov_sq * sq;
+    kh_foreach_value(&sc, sq, { free(sq); });
+    kh_release(strm_cache, &sc);
     warn(DBG, "%s exiting", basename(argv[0]));
     return ret;
 }
