@@ -903,12 +903,25 @@ void q_cleanup(struct w_engine * const w)
 }
 
 
+void q_cid(const struct q_conn * const c,
+           uint8_t * const buf,
+           size_t * const buf_len)
+{
+    ensure(*buf_len >= CID_LEN_MAX, "buf too short (need at least %d)",
+           CID_LEN_MAX);
+    if (likely(c->scid)) {
+        memcpy(buf, c->scid->id, c->scid->len);
+        *buf_len = c->scid->len;
+    } else
+        *buf_len = 0;
+}
+
+
 const char *
-q_cid(const struct q_conn * const c, char * const buf, const size_t buf_len)
+q_cid_str(const struct q_conn * const c, char * const buf, const size_t buf_len)
 {
     ensure(buf_len >= hex_str_len(CID_LEN_MAX),
-           "buf too short (need at least %lu)",
-           (unsigned long)hex_str_len(CID_LEN_MAX));
+           "buf too short (need at least %d)", hex_str_len(CID_LEN_MAX));
     if (likely(c->scid))
         hex2str(c->scid->id, c->scid->len, buf, buf_len);
     else
