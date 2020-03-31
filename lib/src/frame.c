@@ -536,7 +536,7 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
         warn(WRN,
              "ack_delay %" PRIu " usec is not zero in Initial or Handshake ACK",
              ack_delay);
-    else if (unlikely(ack_delay > 1.5 * c->tp_peer.max_ack_del * US_PER_MS))
+    else if (unlikely(ack_delay > c->tp_peer.max_ack_del * US_PER_MS))
         warn(WRN, "ack_delay %" PRIu " > max_ack_del %" PRIu, ack_delay,
              c->tp_peer.max_ack_del * US_PER_MS);
 

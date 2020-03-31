@@ -469,7 +469,7 @@ static void __attribute__((nonnull))
 restart_api_alarm(struct w_engine * const w, const uint64_t nsec)
 {
 #ifdef DEBUG_TIMERS
-    warn(DBG, "next API alarm in %.3f sec", nsec / (double)NS_PER_S);
+    warn(DBG, "next API alarm in %.3f sec", (double)nsec / NS_PER_S);
 #endif
 
     timeouts_add(ped(w)->wheel, &ped(w)->api_alarm, nsec);

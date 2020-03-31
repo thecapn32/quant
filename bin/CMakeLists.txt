@@ -52,6 +52,7 @@ foreach(TARGET ${TARGETS})
       picotls-minicrypto
       picotls-openssl
     )
+  target_compile_options(${TARGET} PRIVATE -Wno-poison-system-directories)
   endif()
 
   target_include_directories(${TARGET}

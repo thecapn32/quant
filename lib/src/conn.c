@@ -426,7 +426,7 @@ restart_key_flip_alarm(struct q_conn * const c)
     const timeout_t t = c->tls_key_update_frequency * NS_PER_S;
 
 #ifdef DEBUG_TIMERS
-    warn(DBG, "next key flip alarm in %.3f sec", t / (double)NS_PER_S);
+    warn(DBG, "next key flip alarm in %.3f sec", (double)t / NS_PER_S);
 #endif
 
     timeouts_add(ped(c->w)->wheel, &c->key_flip_alarm, t);
@@ -1553,7 +1553,7 @@ void restart_idle_alarm(struct q_conn * const c)
             MAX(min_of_max_idle_to * NS_PER_MS, 3 * c->rec.ld_alarm_val);
 #ifdef DEBUG_TIMERS
         warn(DBG, "next idle alarm on %s conn %s in %.3f sec", conn_type(c),
-             cid_str(c->scid), t / (double)NS_PER_S);
+             cid_str(c->scid), (double)t / NS_PER_S);
 #endif
         timeouts_add(ped(c->w)->wheel, &c->idle_alarm, t);
     }
@@ -1570,7 +1570,7 @@ static void __attribute__((nonnull)) restart_ack_alarm(struct q_conn * const c)
     const timeout_t t = c->tp_mine.max_ack_del * NS_PER_MS;
 
 #ifdef DEBUG_TIMERS
-    warn(DBG, "next ACK alarm in %.3f sec", t / (double)NS_PER_S);
+    warn(DBG, "next ACK alarm in %.3f sec", (double)t / NS_PER_S);
 #endif
 
     timeouts_add(ped(c->w)->wheel, &c->ack_alarm, t);
@@ -1754,7 +1754,7 @@ void enter_closing(struct q_conn * const c)
     timeouts_add(ped(c->w)->wheel, &c->closing_alarm, dur);
 #ifdef DEBUG_TIMERS
     warn(DBG, "closing/draining alarm in %.3f sec on %s conn %s",
-         dur / (double)NS_PER_S, conn_type(c), cid_str(c->scid));
+         (double)dur / NS_PER_S, conn_type(c), cid_str(c->scid));
 #endif
 #endif
 
@@ -2088,7 +2088,7 @@ void conn_info_populate(struct q_conn * const c)
     // fill some q_conn_info fields based on other conn fields
     c->i.cwnd = c->rec.cur.cwnd;
     c->i.ssthresh = c->rec.cur.ssthresh;
-    c->i.rtt = c->rec.cur.srtt / (float)US_PER_S;
-    c->i.rttvar = c->rec.cur.rttvar / (float)US_PER_S;
+    c->i.rtt = (float)c->rec.cur.srtt / US_PER_S;
+    c->i.rttvar = (float)c->rec.cur.rttvar / US_PER_S;
 }
 #endif

@@ -136,11 +136,11 @@ void log_cc(struct q_conn * const c)
              delta_in_flight, c->rec.cur.cwnd,
              delta_cwnd > 0 ? GRN : delta_cwnd < 0 ? RED : "", delta_cwnd,
              ssthresh, delta_ssthresh > 0 ? GRN : delta_ssthresh < 0 ? RED : "",
-             delta_ssthresh, c->rec.cur.srtt / (float)US_PER_S,
+             delta_ssthresh, (float)c->rec.cur.srtt / US_PER_S,
              delta_srtt > 0 ? GRN : delta_srtt < 0 ? RED : "",
-             delta_srtt / (float)US_PER_S, c->rec.cur.rttvar / (float)US_PER_S,
+             (float)delta_srtt / US_PER_S, (float)c->rec.cur.rttvar / US_PER_S,
              delta_rttvar > 0 ? GRN : delta_rttvar < 0 ? RED : "",
-             delta_rttvar / (float)US_PER_S);
+             (float)delta_rttvar / US_PER_S);
     }
 
     qlog_recovery(rec_mu, "default", c, 0);
@@ -197,7 +197,7 @@ set_to:;
     if (unlikely(c->rec.ld_alarm_val < now)) {
 #ifdef DEBUG_TIMERS
         warn(WRN, "LD alarm expired %.3f sec ago",
-             ((int64_t)c->rec.ld_alarm_val - (int64_t)now) / (double)NS_PER_S);
+             (double)(c->rec.ld_alarm_val - now) / NS_PER_S);
 #endif
         c->rec.ld_alarm_val = 0;
     } else
@@ -205,7 +205,7 @@ set_to:;
 
 #ifdef DEBUG_TIMERS
     warn(DBG, "LD alarm in %.3f sec on %s conn %s",
-         c->rec.ld_alarm_val / (double)NS_PER_S, conn_type(c),
+         (double)c->rec.ld_alarm_val / NS_PER_S, conn_type(c),
          cid_str(c->scid));
 #endif
     timeouts_add(ped(c->w)->wheel, &c->rec.ld_alarm, c->rec.ld_alarm_val);
@@ -591,7 +591,7 @@ update_rtt(struct q_conn * const c, uint_t ack_del)
     c->rec.cur.srtt = (7 * c->rec.cur.srtt / 8) + adj_rtt / 8;
 
 #ifndef NO_QINFO
-    const float latest_rtt = c->rec.cur.latest_rtt / (float)US_PER_S;
+    const float latest_rtt = (float)c->rec.cur.latest_rtt / US_PER_S;
     c->i.min_rtt = MIN(c->i.min_rtt, latest_rtt);
     c->i.max_rtt = MAX(c->i.max_rtt, latest_rtt);
 #endif
