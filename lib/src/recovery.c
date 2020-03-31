@@ -197,7 +197,7 @@ set_to:;
     if (unlikely(c->rec.ld_alarm_val < now)) {
 #ifdef DEBUG_TIMERS
         warn(WRN, "LD alarm expired %.3f sec ago",
-             (double)(c->rec.ld_alarm_val - now) / NS_PER_S);
+             (double)(now - c->rec.ld_alarm_val) / NS_PER_S);
 #endif
         c->rec.ld_alarm_val = 0;
     } else
