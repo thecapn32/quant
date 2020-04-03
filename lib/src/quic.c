@@ -411,6 +411,7 @@ bool q_read_stream(struct q_stream * const s,
          plural(w_iov_sq_cnt(&s->in)), conn_type(c), cid_str(c->scid), s->id);
 
     sq_concat(q, &s->in);
+    c->have_new_data = false;
     if (all && m_last->is_fin == false)
         goto again;
 
@@ -1002,7 +1003,7 @@ bool q_ready(struct w_engine * const w,
             remove = c->have_new_data == false;
         } else
 #endif
-            if (c->state == conn_clsd && c->have_new_data == false)
+            if (c->state == conn_clsd)
             op = "close";
         warn(WRN, "%s conn %s ready to %s", conn_type(c), cid_str(c->scid), op);
         if (remove) {

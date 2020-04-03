@@ -1124,8 +1124,12 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
 
 check_srt:
     if (unlikely(did_key_flip)) {
-        warn(DBG, "crypto fail, undoing key flip");
-        c->pns[pn_data].data.in_kyph = prev_kyph;
+#ifdef DEBUG_PROT
+        warn(DBG, "crypto fail, undoing key flip %u -> %u",
+             c->pns[pn_data].data.in_kyph, prev_kyph);
+#endif
+        c->pns[pn_data].data.out_kyph = c->pns[pn_data].data.in_kyph =
+            prev_kyph;
         memcpy(c->tls.secret[0], prev_secret[0], cs->hash->digest_size);
         memcpy(c->tls.secret[1], prev_secret[1], cs->hash->digest_size);
     }

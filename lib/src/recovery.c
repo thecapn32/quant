@@ -154,7 +154,8 @@ static bool peer_not_awaiting_addr_val(struct q_conn * const c)
     if (!is_clnt(c))
         return true;
 
-    return bit_isset(FRM_MAX, FRM_ACK, &c->pns[pn_init].rx_frames) ||
+    return hshk_done(c) ||
+           bit_isset(FRM_MAX, FRM_ACK, &c->pns[pn_init].rx_frames) ||
            bit_isset(FRM_MAX, FRM_ACK, &c->pns[pn_hshk].rx_frames);
 }
 
@@ -189,7 +190,8 @@ void set_ld_timer(struct q_conn * const c)
             : ((c->rec.cur.srtt + MAX(4 * c->rec.cur.rttvar, kGranularity)) *
                    NS_PER_US +
                c->tp_peer.max_ack_del * NS_PER_MS);
-    to *= 1 << c->rec.pto_cnt;
+    // we cap the exponential backoff at 4 (spec violation)
+    to *= 1 << MIN(c->rec.pto_cnt, 4);
     const uint64_t last_ae_tx_t = earliest_pn(c, false)->last_ae_tx_t;
     c->rec.ld_alarm_val = (last_ae_tx_t ? last_ae_tx_t : now) + to;
 
@@ -250,11 +252,14 @@ in_persistent_cong(struct pn_space * const pn __attribute__((unused)),
 static void remove_from_in_flight(const struct pkt_meta * const m)
 {
     struct q_conn * const c = m->pn->c;
-    ensure(c->rec.cur.in_flight >= m->udp_len, "in_flight underrun %" PRIu,
+    assure(c->rec.cur.in_flight >= m->udp_len, "in_flight underrun %" PRIu,
            m->udp_len - c->rec.cur.in_flight);
     c->rec.cur.in_flight -= m->udp_len;
-    if (m->ack_eliciting)
+    if (m->ack_eliciting) {
         c->rec.ae_in_flight--;
+        if (c->rec.ae_in_flight == 0)
+            m->pn->last_ae_tx_t = 0;
+    }
 }
 
 
@@ -661,10 +666,6 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
     pm_by_nr_del(&pn->sent_pkts, m);
 
     // rest of function is not from pseudo code
-
-    if (unlikely(has_frm(m->frms, FRM_HSD)) &&
-        c->pns[pn_hshk].abandoned == false)
-        abandon_pn(&c->pns[pn_hshk]);
 
     if (unlikely(c->pmtud_pkt != UINT16_MAX &&
                  m->hdr.nr == (c->pmtud_pkt & 0x3fff) &&

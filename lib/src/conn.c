@@ -99,12 +99,6 @@ static inline __attribute__((const)) bool is_vneg_vers(const uint32_t vers)
 }
 
 
-static inline __attribute__((const)) bool is_draft_vers(const uint32_t vers)
-{
-    return (vers & 0xff000000) == 0xff000000;
-}
-
-
 #ifndef NO_MIGRATION
 khash_t(conns_by_id) conns_by_id = {0};
 
@@ -403,8 +397,9 @@ static void __attribute__((nonnull)) do_tx_txq(struct q_conn * const c,
 
 static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
 {
-    // do it here instead of in on_pkt_sent()
-    set_ld_timer(c);
+    if (is_clnt(c) || likely(c->pns[ep_init].abandoned))
+        // do it here instead of in on_pkt_sent()
+        set_ld_timer(c);
     log_cc(c);
 
     c->needs_tx = false;
@@ -823,10 +818,11 @@ rx_crypto(struct q_conn * const c, const struct pkt_meta * const m_cur)
                 sl_insert_head(&accept_queue, c, node_aq);
                 c->needs_accept = true;
             }
-
 #endif
         }
     }
+    if (!is_clnt(c) && c->tx_hshk_done && c->pns[pn_hshk].abandoned == false)
+        abandon_pn(&c->pns[pn_hshk]);
 }
 
 
@@ -1074,29 +1070,33 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
                     goto done;
                 }
 
-                // only do vneg for draft and vneg versions
-                if (is_vneg_vers(c->vers) == false &&
-                    is_draft_vers(c->vers) == false) {
-                    enter_closing(c);
-                    goto done;
-                }
-
                 // handle an incoming vneg packet
-                const uint32_t try_vers =
-                    clnt_vneg(v->buf + m->hdr.hdr_len, v->buf + v->len);
-                if (try_vers == 0) {
-                    // no version in common with serv
-                    enter_closing(c);
-                    goto done;
-                }
+                if (c->vers_initial == ok_vers[0]) {
+                    // the application didn't request a special version, do vneg
 
-                vneg_or_rtry_resp(c, true);
-                c->vers = try_vers;
-                warn(INF,
-                     "serv didn't like vers 0x%0" PRIx32
-                     ", retrying with 0x%0" PRIx32 "",
-                     c->vers_initial, c->vers);
-                ok = true;
+                    const uint32_t try_vers =
+                        clnt_vneg(v->buf + m->hdr.hdr_len, v->buf + v->len);
+                    if (try_vers == 0) {
+                        // no version in common with serv
+                        enter_closing(c);
+                        goto done;
+                    }
+
+                    vneg_or_rtry_resp(c, true);
+                    c->vers = try_vers;
+                    warn(INF,
+                         "serv didn't like vers 0x%0" PRIx32
+                         ", retrying with 0x%0" PRIx32 "",
+                         c->vers_initial, c->vers);
+                    ok = true;
+                } else {
+                    // the application requested a given version for this conn
+                    warn(INF,
+                         "serv didn't like app-requested vers 0x%0" PRIx32
+                         ", aborting",
+                         c->vers);
+                    ok = false;
+                }
                 goto done;
             }
 
@@ -1119,12 +1119,17 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
                 // handle an incoming retry packet
                 c->tok_len = tok_len;
                 memcpy(c->tok, tok, c->tok_len);
+                add_dcid(c, &m->hdr.scid);
                 vneg_or_rtry_resp(c, false);
                 warn(INF, "handling serv retry w/tok %s",
                      tok_str(c->tok, c->tok_len));
                 ok = true;
                 goto done;
             }
+
+            // hshk switch to server-chosen CID
+            add_dcid(c, &m->hdr.scid);
+
             // server accepted version -
             // if we get here, this should be a regular server-hello
         }
@@ -1313,26 +1318,20 @@ static void __attribute__((nonnull))
             }
         }
 
+        // FIXME: validate cid len of non-first Initial packets to >= 8
         if (likely(c)) {
-            // FIXME: validate cid len of non-first Initial packets to >= 8
-
-            if (m->hdr.scid.len && cid_cmp(&m->hdr.scid, c->dcid) != 0) {
-                if (m->hdr.vers && m->hdr.type == LH_RTRY) {
-                    uint8_t computed_rit[RIT_LEN];
-                    make_rit(c, m->hdr.flags, &m->hdr.dcid, &m->hdr.scid, tok,
-                             tok_len, computed_rit);
-                    if (memcmp(rit, computed_rit, RIT_LEN) != 0) {
-                        log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
-                        warn(ERR, "rit mismatch, computed %s",
-                             rit_str(computed_rit));
-                        goto drop;
-                    }
+            if (m->hdr.scid.len && cid_cmp(&m->hdr.scid, c->dcid) != 0 &&
+                m->hdr.vers && m->hdr.type == LH_RTRY) {
+                uint8_t computed_rit[RIT_LEN];
+                make_rit(c, m->hdr.flags, &m->hdr.dcid, &m->hdr.scid, tok,
+                         tok_len, computed_rit);
+                if (memcmp(rit, computed_rit, RIT_LEN) != 0) {
+                    log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
+                    warn(ERR, "rit mismatch, computed %s",
+                         rit_str(computed_rit));
+                    goto drop;
                 }
-                if (c->state == conn_opng &&
-                    (m->hdr.type != LH_RTRY || c->tok_len == 0))
-                    add_dcid(c, &m->hdr.scid);
             }
-
         } else {
 #if !defined(FUZZING) && !defined(NO_OOO_0RTT)
             // if this is a 0-RTT pkt, track it (may be reordered)
@@ -1483,7 +1482,8 @@ static void __attribute__((nonnull))
 
     decoal_done:
         if (likely(rx_pkt(ws, v, m, x, tok, tok_len, rit))) {
-            rx_crypto(c, m);
+            if (unlikely(hshk_done(c) == false))
+                rx_crypto(c, m);
             c->min_rx_epoch = c->had_rx ? MIN(c->min_rx_epoch,
                                               epoch_for_pkt_type(m->hdr.type))
                                         : epoch_for_pkt_type(m->hdr.type);
