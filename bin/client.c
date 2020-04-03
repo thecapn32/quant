@@ -421,7 +421,7 @@ int main(int argc, char * argv[])
     char tls_log[MAXPATHLEN] = "";
     char qlog_dir[MAXPATHLEN] = "";
     bool verify_certs = false;
-    int ret = 0;
+    int ret = -1;
 
     // set default TLS log file from environment
     const char * const keylog = getenv("SSLKEYLOGFILE");
@@ -560,7 +560,10 @@ int main(int argc, char * argv[])
         // print/save the replies
         while (sl_empty(&sl) == false) {
             struct stream_entry * const se = sl_first(&sl);
-            ret |= w_iov_sq_cnt(&se->rep) == 0;
+            if (ret == -1)
+                ret = w_iov_sq_cnt(&se->rep) == 0;
+            else
+                ret |= w_iov_sq_cnt(&se->rep) == 0;
 
             struct timespec diff;
             timespec_sub(&se->rep_t, &se->req_t, &diff);
@@ -628,6 +631,6 @@ int main(int argc, char * argv[])
     free_cc(&cc);
     free_sl();
     q_cleanup(w);
-    warn(DBG, "%s exiting", basename(argv[0]));
+    warn(DBG, "%s exiting with %d", basename(argv[0]), ret);
     return ret;
 }

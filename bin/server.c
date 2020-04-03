@@ -149,7 +149,7 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
     struct cb_data * const d = parser->data;
     char cid_str[64];
     q_cid_str(d->c, cid_str, sizeof(cid_str));
-    warn(INF, "conn %s str %" PRId " serving URL %.*s", cid_str, q_sid(d->s),
+    warn(INF, "conn %s strm %" PRId " serving URL %.*s", cid_str, q_sid(d->s),
          (int)len, at);
 
     struct http_parser_url u = {0};
@@ -425,7 +425,6 @@ int main(int argc, char * argv[])
             size_t url_len = 0;
             struct w_iov * v;
             sq_foreach (v, sq, next) {
-                hexdump(v->buf, v->len);
                 memcpy(&url[url_len], v->buf, v->len);
                 url_len += v->len;
             }
@@ -443,7 +442,6 @@ int main(int argc, char * argv[])
             if (parsed != url_len) {
                 warn(ERR, "HTTP parser error: %.*s", (int)(url_len - parsed),
                      &url[parsed]);
-                hexdump(url, url_len);
                 // XXX the strnlen() test is super-hacky
                 if (strnlen(url, url_len) == url_len)
                     send_err(parser.data, 400);
@@ -481,6 +479,6 @@ int main(int argc, char * argv[])
     struct w_iov_sq * sq;
     kh_foreach_value(&sc, sq, { free(sq); });
     kh_release(strm_cache, &sc);
-    warn(DBG, "%s exiting", basename(argv[0]));
+    warn(DBG, "%s exiting with %d", basename(argv[0]), ret);
     return ret;
 }
