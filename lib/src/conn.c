@@ -1516,11 +1516,13 @@ static void __attribute__((nonnull))
         goto next;
 
     drop:
+#ifndef NO_SERVER
         if (likely(c) && !is_clnt(c) &&
             unlikely(c->state == conn_idle && c->tx_rtry == false)) {
             // drop server connection on invalid clnt Initial
             warn(DBG, "dropping idle %s conn %s", conn_type(c),
                  cid_str(c->scid));
+#endif
             if (c->had_rx)
                 // we inserted at head above, so can simply take it out again
                 sl_remove_head(crx, node_rx_int);
