@@ -1522,13 +1522,14 @@ static void __attribute__((nonnull))
             // drop server connection on invalid clnt Initial
             warn(DBG, "dropping idle %s conn %s", conn_type(c),
                  cid_str(c->scid));
-#endif
             if (c->had_rx)
                 // we inserted at head above, so can simply take it out again
                 sl_remove_head(crx, node_rx_int);
             free_conn(c);
             c = 0;
-        } else if (pkt_valid == false)
+        } else
+#endif
+            if (pkt_valid == false)
             qlog_transport(pkt_dp, "default", v, m);
         free_iov(v, m);
     next:
