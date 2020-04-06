@@ -354,22 +354,31 @@ bool q_write(struct q_stream * const s,
 }
 
 
+static struct q_stream * __attribute__((nonnull))
+find_ready_strm(khash_t(strms_by_id) * const sbi, const bool all)
+{
+    struct q_stream * s = 0;
+    bool found = false;
+    kh_foreach_value(sbi, s, {
+        if (s->state == strm_clsd ||
+            (!sq_empty(&s->in) && (!all || s->state == strm_hcrm))) {
+            found = true;
+            break;
+        }
+    });
+
+    // stream is closed, or has data (and a a FIN, if we're reading all)
+    return found ? s : 0;
+}
+
+
 struct q_stream *
 q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool all)
 {
     struct q_stream * s = 0;
-    bool found = false;
-    while (found == false && q_is_conn_closed(c) == false) {
-        kh_foreach_value(&c->strms_by_id, s, {
-            if (s->state == strm_clsd ||
-                (!sq_empty(&s->in) && (!all || s->state == strm_hcrm))) {
-                // we found a stream with queued data
-                found = true;
-                break;
-            }
-        });
-
-        if (found == false) {
+    while (s == 0 && q_is_conn_closed(c) == false) {
+        s = find_ready_strm(&c->strms_by_id, all);
+        if (s == 0) {
             // no data queued on any stream, wait for new data
             warn(WRN, "waiting to read on any strm on %s conn %s", conn_type(c),
                  cid_str(c->scid));
@@ -377,9 +386,9 @@ q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool all)
         }
     }
 
-    if (found && !sq_empty(&s->in))
+    if (s && !sq_empty(&s->in))
         q_read_stream(s, q, false);
-    return found ? s : 0;
+    return s;
 }
 
 
@@ -411,7 +420,10 @@ bool q_read_stream(struct q_stream * const s,
          plural(w_iov_sq_cnt(&s->in)), conn_type(c), cid_str(c->scid), s->id);
 
     sq_concat(q, &s->in);
-    c->have_new_data = false;
+
+    const struct q_stream * const sr = find_ready_strm(&c->strms_by_id, all);
+    c->have_new_data = sr != 0;
+
     if (all && m_last->is_fin == false)
         goto again;
 
