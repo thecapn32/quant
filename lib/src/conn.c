@@ -1482,7 +1482,7 @@ static void __attribute__((nonnull))
 
     decoal_done:
         if (likely(rx_pkt(ws, v, m, x, tok, tok_len, rit))) {
-            if (unlikely(hshk_done(c) == false))
+            if (unlikely(has_frm(m->frms, FRM_CRY)))
                 rx_crypto(c, m);
             c->min_rx_epoch = c->had_rx ? MIN(c->min_rx_epoch,
                                               epoch_for_pkt_type(m->hdr.type))
