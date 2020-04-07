@@ -402,7 +402,6 @@ dec_stream_or_crypto_frame(const uint8_t type,
             do_stream_fc(m->strm, 0);
             do_conn_fc(c, 0);
             c->have_new_data = true;
-            maybe_api_return(q_read, c, 0);
             maybe_api_return(q_read_stream, c, m->strm);
         }
         goto done;

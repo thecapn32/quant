@@ -240,7 +240,7 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
 
 
 static uint32_t __attribute__((nonnull))
-strm_key(const struct q_conn * const c, const struct q_stream * const s)
+strm_key(struct q_conn * const c, const struct q_stream * const s)
 {
     uint8_t buf[sizeof(uint_t) + 32];
     const uint_t sid = q_sid(s);
@@ -391,6 +391,7 @@ int main(int argc, char * argv[])
             continue;
         }
 
+    again:;
         struct w_iov_sq q = w_iov_sq_initializer(q);
         struct q_stream * s = q_read(c, &q, false);
 
@@ -402,6 +403,9 @@ int main(int argc, char * argv[])
                  sq_first(&q)->len, sq_first(&q)->buf);
             goto next;
         }
+
+        if (q_is_stream_closed(s))
+            goto next;
 
         khiter_t k = kh_get(strm_cache, &sc, strm_key(c, s));
         struct w_iov_sq * sq =
@@ -473,6 +477,7 @@ int main(int argc, char * argv[])
             q_free_stream(s);
             q_free(&q);
         }
+        goto again;
     }
 
     q_cleanup(w);

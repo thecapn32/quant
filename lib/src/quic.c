@@ -375,19 +375,9 @@ find_ready_strm(khash_t(strms_by_id) * const sbi, const bool all)
 struct q_stream *
 q_read(struct q_conn * const c, struct w_iov_sq * const q, const bool all)
 {
-    struct q_stream * s = 0;
-    while (s == 0 && q_is_conn_closed(c) == false) {
-        s = find_ready_strm(&c->strms_by_id, all);
-        if (s == 0) {
-            // no data queued on any stream, wait for new data
-            warn(WRN, "waiting to read on any strm on %s conn %s", conn_type(c),
-                 cid_str(c->scid));
-            loop_run(c->w, (func_ptr)q_read, c, 0);
-        }
-    }
-
-    if (s && !sq_empty(&s->in))
-        q_read_stream(s, q, false);
+    struct q_stream * const s = find_ready_strm(&c->strms_by_id, all);
+    if (s)
+        q_read_stream(s, q, all);
     return s;
 }
 
@@ -916,29 +906,22 @@ void q_cleanup(struct w_engine * const w)
 }
 
 
-void q_cid(const struct q_conn * const c,
-           uint8_t * const buf,
-           size_t * const buf_len)
+void q_cid(struct q_conn * const c, uint8_t * const buf, size_t * const buf_len)
 {
     ensure(*buf_len >= CID_LEN_MAX, "buf too short (need at least %d)",
            CID_LEN_MAX);
-    if (likely(c->scid)) {
-        memcpy(buf, c->scid->id, c->scid->len);
-        *buf_len = c->scid->len;
-    } else
-        *buf_len = 0;
+
+    memcpy(buf, c->oscid.id, c->oscid.len);
+    *buf_len = c->oscid.len;
 }
 
 
 const char *
-q_cid_str(const struct q_conn * const c, char * const buf, const size_t buf_len)
+q_cid_str(struct q_conn * const c, char * const buf, const size_t buf_len)
 {
     ensure(buf_len >= hex_str_len(CID_LEN_MAX),
            "buf too short (need at least %d)", hex_str_len(CID_LEN_MAX));
-    if (likely(c->scid))
-        hex2str(c->scid->id, c->scid->len, buf, buf_len);
-    else
-        *buf = 0;
+    hex2str(c->oscid.id, c->oscid.len, buf, buf_len);
     return buf;
 }
 

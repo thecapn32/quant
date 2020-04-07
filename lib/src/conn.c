@@ -871,16 +871,16 @@ new_initial_cids(struct q_conn * const c,
         add_dcid(c, dcid);
 
     // init scid and add connection to global data structures
-    struct cid nscid = {.seq = 0};
+    c->oscid.seq = 0;
     if (is_clnt(c))
-        mk_rand_cid(&nscid, ped(c->w)->conf.client_cid_len, false);
+        mk_rand_cid(&c->oscid, ped(c->w)->conf.client_cid_len, false);
     else if (scid) {
-        cid_cpy(&nscid, scid);
-        mk_rand_cid(&nscid, 0, true);
+        cid_cpy(&c->oscid, scid);
+        mk_rand_cid(&c->oscid, 0, true);
     }
 #ifndef NO_MIGRATION
-    if (nscid.len)
-        add_scid(c, &nscid);
+    if (c->oscid.len)
+        add_scid(c, &c->oscid);
     else
 #endif
         if (c->in_c_zcid == false) {

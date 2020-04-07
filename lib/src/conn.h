@@ -287,6 +287,7 @@ struct q_conn {
     uint_t max_cid_seq_out;
 
     struct cid odcid; ///< Original destination CID of first Initial.
+    struct cid oscid; ///< Original source CID of first Initial.
 
     struct w_iov_sq txq;
 

@@ -714,11 +714,14 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
     struct q_stream * const s = m->strm;
     if (s && m->has_rtx == false) {
         // if this ACKs its stream's out_una, move that forward
+        bool fin_acked = false;
         struct w_iov * tmp;
         sq_foreach_from_safe (s->out_una, &s->out, next, tmp) {
             struct pkt_meta * const mou = &meta(s->out_una);
             if (mou->acked == false)
                 break;
+            if (mou->is_fin)
+                fin_acked = true;
             // if this ACKs a crypto packet, we can free it
             if (unlikely(s->id < 0 && mou->lost == false)) {
                 sq_remove(&s->out, s->out_una, w_iov, next);
@@ -728,7 +731,7 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
         }
 
         if (s->id >= 0 && s->out_una == 0) {
-            if (unlikely(m->is_fin || c->did_0rtt)) {
+            if (unlikely(fin_acked || c->did_0rtt)) {
                 // this ACKs a FIN
                 c->have_new_data = true;
                 strm_to_state(s, s->state == strm_hcrm ? strm_clsd : strm_hclo);
