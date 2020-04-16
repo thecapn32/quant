@@ -56,12 +56,13 @@ struct cid {
     uint8_t srt[SRT_LEN]; ///< Stateless Reset Token
     uint8_t has_srt : 1;  ///< Is the SRT field valid?
 #endif
+    uint8_t in_cbi : 1;    ///< Is the CID in conns_by_id?
     uint8_t retired : 1;   ///< Did we retire this CID?
     uint8_t available : 1; ///< Is this CID available?
 #ifndef NO_SRT_MATCHING
-    uint8_t : 5;
+    uint8_t : 4;
 #else
-    uint8_t : 6;
+    uint8_t : 5;
 #endif
     uint8_t _unused[2];
 };

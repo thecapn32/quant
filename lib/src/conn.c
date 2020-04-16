@@ -668,18 +668,22 @@ extern void conns_by_srt_del(uint8_t * const srt)
 #ifndef NO_MIGRATION
 void conns_by_id_ins(struct q_conn * const c, struct cid * const id)
 {
+    assure(id->in_cbi == false, "already in cbi");
     int ret;
     const khiter_t k = kh_put(conns_by_id, &conns_by_id, id, &ret);
     ensure(ret >= 1, "inserted returned %d", ret);
     kh_val(&conns_by_id, k) = c;
+    id->in_cbi = true;
 }
 
 
 void conns_by_id_del(struct cid * const id)
 {
+    assure(id->in_cbi, "not in cbi");
     const khiter_t k = kh_get(conns_by_id, &conns_by_id, id);
     ensure(k != kh_end(&conns_by_id), "found");
     kh_del(conns_by_id, &conns_by_id, k);
+    id->in_cbi = false;
 }
 #endif
 
@@ -1958,6 +1962,10 @@ void free_conn(struct q_conn * const c)
 #ifndef NO_MIGRATION
     sl_foreach (id, &c->scids.act, next)
         conns_by_id_del(id);
+    if (c->tp_mine.pref_addr.cid.in_cbi)
+        conns_by_id_del(&c->tp_mine.pref_addr.cid);
+    if (c->oscid.in_cbi)
+        conns_by_id_del(&c->oscid);
 #endif
 
     if (c->holds_sock)
