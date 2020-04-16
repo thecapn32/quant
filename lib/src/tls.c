@@ -680,8 +680,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             c->tp_peer.act_cid_lim = 2;
         else if (c->tp_peer.act_cid_lim < 2)
             err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
-                      "active_connection_id_limit %" PRIu " < 2",
-                      c->tp_peer.act_cid_lim);
+                      "active_cid_limit %" PRIu " < 2", c->tp_peer.act_cid_lim);
     } else
         c->tp_peer.act_cid_lim = 0;
 
