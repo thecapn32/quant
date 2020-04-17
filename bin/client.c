@@ -29,7 +29,6 @@
 #include <fcntl.h>
 #include <libgen.h>
 #include <limits.h>
-#include <math.h>
 #include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -63,9 +62,8 @@
 #define bps(bytes, secs)                                                       \
     __extension__({                                                            \
         static char _str[32];                                                  \
-        const double _bps = (bytes) && (fpclassify(secs) != FP_ZERO)           \
-                                ? (double)(bytes)*8 / (secs)                   \
-                                : 0;                                           \
+        const double _bps =                                                    \
+            (bytes) && ((secs) > 1e-9) ? (double)(bytes)*8 / (secs) : 0;       \
         if (_bps > NS_PER_S)                                                   \
             snprintf(_str, sizeof(_str), "%.3f Gb/s", _bps / NS_PER_S);        \
         else if (_bps > US_PER_S)                                              \
