@@ -633,7 +633,7 @@ int main(int argc, char * argv[])
     }
 
     if (reps > 1)
-        warn(WRN, "TOTAL: %s", bps(sum_len, sum_elapsed));
+        printf("TOTAL: %s\n", bps(sum_len, sum_elapsed));
 
     free_cc(&cc);
     free_sl();
