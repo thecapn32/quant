@@ -310,6 +310,12 @@ static void __attribute__((nonnull)) tx_vneg_resp(struct w_sock * const ws,
                                                   const struct w_iov * const v,
                                                   struct pkt_meta * const m)
 {
+    if (m->hdr.scid.len > CID_LEN_MAX) { // TODO
+        warn(WRN, "should send vneg, but can't deal with cid len %u",
+             m->hdr.scid.len);
+        return;
+    }
+
     struct pkt_meta * mx;
     struct w_iov * const xv = alloc_iov(ws->w, ws->ws_af, 0, 0, &mx);
 
@@ -364,22 +370,8 @@ static void __attribute__((nonnull)) do_tx_txq(struct q_conn * const c,
 }
 
 
-static void __attribute__((nonnull)) maybe_set_ld_timer(struct q_conn * const c)
-{
-    if (likely(c->pns[ep_init].abandoned) || is_clnt(c))
-        // do it here instead of in on_pkt_sent()
-        set_ld_timer(c);
-}
-
-
 static void __attribute__((nonnull)) do_tx(struct q_conn * const c)
 {
-    maybe_set_ld_timer(c);
-    log_cc(c);
-
-    c->needs_tx = false;
-    c->tx_limit = 0;
-
     if (likely(sq_empty(&c->txq) == false))
         do_tx_txq(c, &c->txq, c->sock);
 #ifndef NO_MIGRATION
@@ -627,11 +619,12 @@ done:;
     }
     if (likely(sent))
         do_tx(c);
-    else {
-        // we need to rearm LD alarm
-        maybe_set_ld_timer(c);
-        c->needs_tx = false;
-    }
+    if (is_clnt(c) || likely(has_pval_wnd(c, 0)))
+        // we need to rearm LD alarm, do it here instead of in on_pkt_sent()
+        set_ld_timer(c);
+    log_cc(c);
+    c->needs_tx = false;
+    c->tx_limit = 0;
 }
 
 
@@ -956,8 +949,10 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
             if (m->hdr.vers == 0) {
                 // this is a vneg pkt
                 m->hdr.nr = UINT_T_MAX;
-                if (c->vers != c->vers_initial) {
-                    // we must have already reacted to a prior vneg pkt
+
+                if (c->vers != c->vers_initial || c->pns[ep_init].abandoned) {
+                    // we must have already reacted to a prior vneg pkt,
+                    // or we already RX'ed a server Initial, ignore
                     warn(INF, "ignoring spurious vneg response");
                     goto done;
                 }
@@ -1149,13 +1144,16 @@ static void __attribute__((nonnull))
         uint8_t tok[MAX_TOK_LEN];
         uint16_t tok_len = 0;
         uint8_t rit[RIT_LEN];
+        bool decoal;
         if (unlikely(!dec_pkt_hdr_beginning(
-                xv, v, m, is_clnt, tok, &tok_len, rit,
+                xv, v, m, x, is_clnt, tok, &tok_len, rit,
                 is_clnt ? (ws->data ? 0 : ped(ws->w)->conf.client_cid_len)
-                        : ped(ws->w)->conf.server_cid_len))) {
+                        : ped(ws->w)->conf.server_cid_len,
+                &decoal))) {
             // we might still need to send a vneg packet
             if (w_connected(ws) == false) {
-                if (m->hdr.scid.len == 0 || m->hdr.scid.len >= 4) {
+                if (m->hdr.type == LH_INIT &&
+                    (m->hdr.scid.len == 0 || m->hdr.scid.len > CID_LEN_MAX)) {
                     warn(ERR, "received invalid %u-byte %s pkt, sending vneg",
                          v->len, pkt_type_str(m->hdr.flags, &m->hdr.vers));
                     tx_vneg_resp(ws, v, m);
@@ -1199,10 +1197,10 @@ static void __attribute__((nonnull))
                 }
             } else if (m->hdr.type == LH_INIT && c == 0) {
                 // validate minimum packet size
-                if (xv->len < MIN_INI_LEN) {
+                if (m->udp_len < MIN_INI_LEN) {
                     log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
-                    warn(ERR, "%u-byte Initial pkt too short (< %u)", xv->len,
-                         MIN_INI_LEN);
+                    warn(ERR, "%u-byte Initial pkt too short (< %u)",
+                         m->udp_len, MIN_INI_LEN);
                     goto drop;
                 }
 
@@ -1250,13 +1248,21 @@ static void __attribute__((nonnull))
 #if !defined(FUZZING) && !defined(NO_OOO_0RTT)
             // if this is a 0-RTT pkt, track it (may be reordered)
             if (m->hdr.type == LH_0RTT && m->hdr.vers) {
-                struct ooo_0rtt * const zo = calloc(1, sizeof(*zo));
+                log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
+                const struct ooo_0rtt which = {.cid = m->hdr.dcid};
+                struct ooo_0rtt * zo =
+                    splay_find(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, &which);
+                if (zo) {
+                    warn(INF, "dup 0-RTT pkt for unknown conn %s, ignoring",
+                         cid_str(&m->hdr.dcid));
+                    goto drop;
+                }
+                zo = calloc(1, sizeof(*zo));
                 ensure(zo, "could not calloc");
                 cid_cpy(&zo->cid, &m->hdr.dcid);
                 zo->v = v;
                 ensure(splay_insert(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo) == 0,
                        "inserted");
-                log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
                 warn(INF, "caching 0-RTT pkt for unknown conn %s",
                      cid_str(&m->hdr.dcid));
                 goto next;
@@ -1277,15 +1283,13 @@ static void __attribute__((nonnull))
         }
 
         if (likely(has_pkt_nr(m->hdr.flags, m->hdr.vers))) {
-            bool decoal;
             if (unlikely(m->hdr.type == LH_INIT && c->cstrms[ep_init] == 0)) {
                 // we already abandoned Initial pkt processing, ignore
                 log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
                 warn(INF, "ignoring %u-byte %s pkt due to abandoned processing",
                      v->len, pkt_type_str(m->hdr.flags, &m->hdr.vers));
                 goto drop;
-            } else if (unlikely(dec_pkt_hdr_remainder(xv, v, m, c, x,
-                                                      &decoal) == false)) {
+            } else if (unlikely(dec_pkt_hdr_remainder(xv, v, m, c) == false)) {
                 v->len = xv->len;
                 log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
                 if (m->is_reset)

@@ -106,6 +106,7 @@ static int uecc_rng(uint8_t * dest, unsigned size)
 #include "cid.h"
 #include "conn.h"
 #include "frame.h"
+#include "loop.h"
 #include "marshall.h"
 #include "pkt.h"
 #include "pn.h"
@@ -967,11 +968,11 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
              conn_type(c), cid_str(c->scid), ptls_get_server_name(tls),
              ptls_get_negotiated_protocol(tls));
 
-        // prepend git commit hash
+        // append git commit hash
         memcpy(dst->base + dst->off, quant_commit_hash, quant_commit_hash_len);
         dst->off += quant_commit_hash_len;
 
-        // prepend ticket id
+        // append ticket id
         rand_bytes(&tid, sizeof(tid));
         memcpy(dst->base + dst->off, &tid, sizeof(tid));
         dst->off += sizeof(tid);
@@ -1510,6 +1511,12 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
 }
 
 
+static uint64_t get_time(ptls_get_time_t * self __attribute__((unused)))
+{
+    return NS_TO_MS(loop_now());
+}
+
+
 void init_tls_ctx(const struct q_conf * const conf,
                   struct per_engine_data * const ped)
 {
@@ -1556,8 +1563,8 @@ void init_tls_ctx(const struct q_conf * const conf,
     }
 #ifndef NO_SERVER
     tls_ctx->encrypt_ticket = &encrypt_ticket;
-    tls_ctx->max_early_data_size = 0xffffffff;
-    tls_ctx->ticket_lifetime = 60 * 60 * 24;
+    tls_ctx->max_early_data_size = UINT32_MAX;
+    tls_ctx->ticket_lifetime = UINT32_MAX; // 60 * 60 * 24;
     tls_ctx->require_dhe_on_psk = 0;
 #endif
 
@@ -1582,8 +1589,10 @@ void init_tls_ctx(const struct q_conf * const conf,
     static ptls_update_traffic_key_t update_traffic_key = {
         update_traffic_key_cb};
 
+    static ptls_get_time_t get_time_cb = {get_time};
+    tls_ctx->get_time = &get_time_cb;
+
     tls_ctx->omit_end_of_early_data = true;
-    tls_ctx->get_time = &ptls_get_time; // needs to be absolute time
     tls_ctx->cipher_suites = cipher_suite;
     tls_ctx->key_exchanges = key_exchanges;
     tls_ctx->on_client_hello = &on_client_hello;

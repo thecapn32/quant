@@ -775,11 +775,13 @@ tx:;
 bool dec_pkt_hdr_beginning(struct w_iov * const xv,
                            struct w_iov * const v,
                            struct pkt_meta * const m,
+                           struct w_iov_sq * const x,
                            const bool is_clnt,
                            uint8_t * const tok,
                            uint16_t * const tok_len,
                            uint8_t * const rit,
-                           const uint8_t dcid_len)
+                           const uint8_t dcid_len,
+                           bool * decoal)
 
 {
     const uint8_t * pos = xv->buf;
@@ -870,6 +872,25 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
 
 done:
     m->hdr.hdr_len = (uint16_t)(pos - xv->buf);
+
+    if (unlikely(is_lh(m->hdr.flags))) {
+        // check if we need to decoal
+        const uint16_t pkt_len = m->hdr.hdr_len + m->hdr.len;
+
+        // check for coalesced packet
+        *decoal = pkt_len < xv->len;
+        if (unlikely(*decoal)) {
+            // allocate new w_iov for coalesced packet and copy it over
+            struct w_iov * const dup = dup_iov(xv, 0, pkt_len);
+            // adjust length of first packet
+            xv->len = pkt_len;
+            // rx() has already removed xv from x, so just insert dup at head
+            sq_insert_head(x, dup, next);
+            warn(DBG, "split out coalesced %u-byte %s pkt", dup->len,
+                 pkt_type_str(*dup->buf, &dup->buf[1]));
+        }
+    }
+
     return true;
 }
 
@@ -1015,16 +1036,13 @@ struct q_conn * is_srt(const struct w_iov * const xv
 bool dec_pkt_hdr_remainder(struct w_iov * const xv,
                            struct w_iov * const v,
                            struct pkt_meta * const m,
-                           struct q_conn * const c,
-                           struct w_iov_sq * const x,
-                           bool * const decoal)
+                           struct q_conn * const c)
 {
     bool did_key_flip = false;
     const bool prev_kyph = c->pns[pn_data].data.in_kyph;
     uint8_t prev_secret[2][PTLS_MAX_DIGEST_SIZE];
     const ptls_cipher_suite_t * cs = 0;
 
-    *decoal = false;
     const struct cipher_ctx * ctx = which_cipher_ctx_in(c, m, false);
     if (unlikely(ctx->header_protection == 0))
         return false;
@@ -1060,9 +1078,10 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
     if (unlikely(ctx->aead == 0))
         goto check_srt;
 
-    const uint16_t pkt_len = is_lh(m->hdr.flags) ? m->hdr.hdr_len + m->hdr.len -
-                                                       pkt_nr_len(m->hdr.flags)
-                                                 : xv->len;
+    const uint16_t pkt_len =
+        unlikely(is_lh(m->hdr.flags))
+            ? m->hdr.hdr_len + m->hdr.len - pkt_nr_len(m->hdr.flags)
+            : xv->len;
     const uint16_t ret = dec_aead(xv, v, m, pkt_len, ctx);
     if (unlikely(ret == 0))
         goto check_srt;
@@ -1076,21 +1095,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
         return false;
     }
 
-    if (unlikely(is_lh(m->hdr.flags))) {
-        // check for coalesced packet
-        if (unlikely(pkt_len < xv->len)) {
-            *decoal = true;
-            // allocate new w_iov for coalesced packet and copy it over
-            struct w_iov * const dup = dup_iov(xv, 0, pkt_len);
-            // adjust length of first packet
-            xv->len = pkt_len;
-            // rx() has already removed xv from x, so just insert dup at head
-            sq_insert_head(x, dup, next);
-            warn(DBG, "split out coalesced %u-byte %s pkt", dup->len,
-                 pkt_type_str(*dup->buf, &dup->buf[1]));
-        }
-
-    } else {
+    if (likely(is_lh(m->hdr.flags) == false)) {
         // check if a key phase flip has been verified
         const bool v_kyph = is_set(SH_KYPH, m->hdr.flags);
         if (unlikely(v_kyph != pnd->in_kyph))
@@ -1112,7 +1117,8 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
     }
 
     // packet protection verified OK
-    if (diet_find(&pn_for_pkt_type(c, m->hdr.type)->recv_all, m->hdr.nr))
+    if (unlikely(
+            diet_find(&pn_for_pkt_type(c, m->hdr.type)->recv_all, m->hdr.nr)))
         goto check_srt;
 
     // check if we need to send an immediate ACK
