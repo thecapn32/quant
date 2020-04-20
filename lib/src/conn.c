@@ -1144,7 +1144,7 @@ static void __attribute__((nonnull))
         uint8_t tok[MAX_TOK_LEN];
         uint16_t tok_len = 0;
         uint8_t rit[RIT_LEN];
-        bool decoal;
+        bool decoal = false;
         if (unlikely(!dec_pkt_hdr_beginning(
                 xv, v, m, x, is_clnt, tok, &tok_len, rit,
                 is_clnt ? (ws->data ? 0 : ped(ws->w)->conf.client_cid_len)
