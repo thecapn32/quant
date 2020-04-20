@@ -503,6 +503,7 @@ int main(int argc, char * argv[])
             .conn_conf =
                 &(struct q_conn_conf){.enable_tls_key_updates = flip_keys,
                                       .enable_spinbit = true,
+                                      .enable_udp_zero_checksums = true,
                                       .idle_timeout = timeout,
                                       .version = vers,
                                       .enable_quantum_readiness_test = test_qr},

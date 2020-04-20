@@ -341,18 +341,19 @@ int main(int argc, char * argv[])
     const int dir_fd = open(dir, O_RDONLY | O_CLOEXEC);
     ensure(dir_fd != -1, "%s does not exist", dir);
 
-    struct w_engine * const w = q_init(
-        ifname, &(const struct q_conf){.conn_conf =
-                                           &(struct q_conn_conf){
-                                               .idle_timeout = timeout,
-                                               .enable_spinbit = true,
-                                           },
-                                       .qlog_dir = *qlog_dir ? qlog_dir : 0,
-                                       .tls_log = *tls_log ? tls_log : 0,
-                                       .force_retry = retry,
-                                       .num_bufs = num_bufs,
-                                       .tls_cert = cert,
-                                       .tls_key = key});
+    struct w_engine * const w =
+        q_init(ifname,
+               &(const struct q_conf){
+                   .conn_conf =
+                       &(struct q_conn_conf){.idle_timeout = timeout,
+                                             .enable_spinbit = true,
+                                             .enable_udp_zero_checksums = true},
+                   .qlog_dir = *qlog_dir ? qlog_dir : 0,
+                   .tls_log = *tls_log ? tls_log : 0,
+                   .force_retry = retry,
+                   .num_bufs = num_bufs,
+                   .tls_cert = cert,
+                   .tls_key = key});
     for (size_t i = 0; i < num_ports; i++) {
         for (uint16_t idx = 0; idx < w->addr_cnt; idx++) {
 #ifndef NDEBUG
