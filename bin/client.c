@@ -62,8 +62,7 @@
 #define bps(bytes, secs)                                                       \
     __extension__({                                                            \
         static char _str[32];                                                  \
-        const double _bps =                                                    \
-            (bytes) && ((secs) > 1e-9) ? (double)(bytes)*8 / (secs) : 0;       \
+        const double _bps = ((secs) > 1e-9) ? (double)(bytes)*8 / (secs) : 0;  \
         if (_bps > NS_PER_S)                                                   \
             snprintf(_str, sizeof(_str), "%.3f Gb/s", _bps / NS_PER_S);        \
         else if (_bps > US_PER_S)                                              \
@@ -517,6 +516,8 @@ int main(int argc, char * argv[])
 
     if (reps > 1)
         puts("size\ttime\t\tbps\t\turl");
+    double sum_len = 0;
+    double sum_elapsed = 0;
     for (uint64_t r = 1; r <= reps; r++) {
         int url_idx = optind;
         while (url_idx < argc) {
@@ -569,18 +570,20 @@ int main(int argc, char * argv[])
             struct timespec diff;
             timespec_sub(&se->rep_t, &se->req_t, &diff);
             const double elapsed = timespec_to_double(diff);
+            const uint_t rep_len = w_iov_sq_len(&se->rep);
+            sum_len += (double)rep_len;
+            sum_elapsed += elapsed;
             if (reps > 1)
-                printf("%" PRIu "\t%f\t\"%s\"\t%s\n", w_iov_sq_len(&se->rep),
-                       elapsed, bps(w_iov_sq_len(&se->rep), elapsed), se->url);
+                printf("%" PRIu "\t%f\t\"%s\"\t%s\n", rep_len, elapsed,
+                       bps(rep_len, elapsed), se->url);
 #ifndef NDEBUG
             char cid_str[64];
             q_cid_str(se->c, cid_str, sizeof(cid_str));
             warn(WRN,
                  "read %" PRIu
                  " byte%s in %.3f sec (%s) on conn %s strm %" PRIu,
-                 w_iov_sq_len(&se->rep), plural(w_iov_sq_len(&se->rep)),
-                 elapsed < 0 ? 0 : elapsed,
-                 bps(w_iov_sq_len(&se->rep), elapsed), cid_str, q_sid(se->s));
+                 rep_len, plural(rep_len), elapsed < 0 ? 0 : elapsed,
+                 bps(rep_len, elapsed), cid_str, q_sid(se->s));
 #endif
 
             // retrieve the TX'ed request
@@ -628,6 +631,9 @@ int main(int argc, char * argv[])
             free_sl_head();
         }
     }
+
+    if (reps > 1)
+        warn(WRN, "TOTAL: %s", bps(sum_len, sum_elapsed));
 
     free_cc(&cc);
     free_sl();
