@@ -62,7 +62,7 @@
 struct q_conn; // IWYU pragma: no_forward_declare q_conn
 
 
-// #define DEBUG_EXTRA ///< Set to log various extra details.
+// #define DEBUG_EXTRA   ///< Set to log various extra details.
 // #define DEBUG_STREAMS ///< Set to log stream scheduling details.
 // #define DEBUG_TIMERS  ///< Set to log timer details.
 // #define DEBUG_PROT    ///< Set to log packet protection/encryption details.
@@ -117,9 +117,7 @@ struct pkt_hdr {
     uint16_t hdr_len; ///< Length of entire QUIC header.
     uint32_t vers;    ///< QUIC version in long header.
     uint8_t flags;    ///< First (raw) byte of packet.
-    uint8_t type;     ///< Parsed packet type.
-    // we do not store any token of LH packets in the metadata anymore
-
+    uint8_t type;     ///< Parsed packet type. TODO: remove?
 #if HAVE_64BIT
     uint8_t _unused[6];
 #else

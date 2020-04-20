@@ -191,10 +191,11 @@ void set_ld_timer(struct q_conn * const c)
             : ((c->rec.cur.srtt + MAX(4 * c->rec.cur.rttvar, kGranularity)) *
                    NS_PER_US +
                c->tp_peer.max_ack_del * NS_PER_MS);
-    // we cap the exponential backoff at 4 (spec violation)
-    to *= 1 << MIN(c->rec.pto_cnt, 4);
+    to *= 1 << c->rec.pto_cnt;
     const uint64_t last_ae_tx_t = earliest_pn(c, false)->last_ae_tx_t;
     c->rec.ld_alarm_val = (last_ae_tx_t ? last_ae_tx_t : now) + to;
+    // XXX do an RTX at least every 8 seconds (spec violation)
+    c->rec.ld_alarm_val = MIN(c->rec.ld_alarm_val, now + 8 * NS_PER_S);
 
 set_to:;
     if (unlikely(c->rec.ld_alarm_val < now)) {
