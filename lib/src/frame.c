@@ -1188,7 +1188,6 @@ bool dec_frames(struct q_conn * const c,
     const uint8_t * pos = v->buf + m->hdr.hdr_len;
     const uint8_t * start = v->buf;
     const uint8_t * end = v->buf + v->len;
-    const uint8_t * pad_start = 0;
 
 #if !defined(NDEBUG) && !defined(FUZZING) && defined(FUZZER_CORPUS_COLLECTION)
     // when called from the fuzzer, v->wv_af is zero
@@ -1201,15 +1200,15 @@ bool dec_frames(struct q_conn * const c,
 
         // special-case for optimized parsing of padding ranges
         if (type == FRM_PAD) {
-            if (unlikely(pad_start == 0))
-                pad_start = pos;
-            continue;
-        }
-        if (pad_start) {
+            const uint8_t * const pad_start = pos;
+            do
+                type = *(pos++);
+            while (likely(type == FRM_PAD && pos < end));
             const uint16_t pad_len = (uint16_t)(pos - pad_start + 1);
             track_frame(m, ci, FRM_PAD, pad_len);
             log_pad(pad_len);
-            pad_start = 0;
+            if (pos == end)
+                break;
         }
 
         // check that frame type is allowed in this pkt type
@@ -1262,7 +1261,8 @@ bool dec_frames(struct q_conn * const c,
             if (unlikely(bit_overlap(FRM_MAX, &m->frms, &cry_or_str)) &&
                 m->strm) {
                 // already had at least one stream or crypto frame in this
-                // packet with non-duplicate data, so generate (another) copy
+                // packet with non-duplicate data, so generate (another)
+                // copy
 #ifdef DEBUG_EXTRA
                 warn(DBG, "addtl stream or crypto frame, copy");
 #endif
@@ -1375,12 +1375,6 @@ bool dec_frames(struct q_conn * const c,
 
         // record this frame type in the meta data
         track_frame(m, ci, type, 1);
-    }
-
-    if (pad_start) {
-        const uint16_t pad_len = (uint16_t)(pos - pad_start + 1);
-        track_frame(m, ci, FRM_PAD, pad_len);
-        log_pad(pad_len);
     }
 
     if (m->strm_data_pos) {
