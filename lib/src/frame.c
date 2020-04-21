@@ -1201,9 +1201,8 @@ bool dec_frames(struct q_conn * const c,
         // special-case for optimized parsing of padding ranges
         if (type == FRM_PAD) {
             const uint8_t * const pad_start = pos;
-            do
+            while (likely(type == FRM_PAD && pos < end))
                 type = *(pos++);
-            while (likely(type == FRM_PAD && pos < end));
             const uint16_t pad_len = (uint16_t)(pos - pad_start + 1);
             track_frame(m, ci, FRM_PAD, pad_len);
             log_pad(pad_len);
