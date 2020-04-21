@@ -87,7 +87,7 @@ struct conn_cache_entry {
 KHASH_MAP_INIT_INT64(conn_cache, struct conn_cache_entry *)
 
 
-static uint32_t vers = 0xbabababa;
+static uint32_t vers = 0;
 static uint32_t timeout = 10;
 static uint32_t num_bufs = 100000;
 static uint32_t reps = 1;
