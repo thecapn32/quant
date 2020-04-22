@@ -1564,7 +1564,7 @@ void init_tls_ctx(const struct q_conf * const conf,
 #ifndef NO_SERVER
     tls_ctx->encrypt_ticket = &encrypt_ticket;
     tls_ctx->max_early_data_size = UINT32_MAX;
-    tls_ctx->ticket_lifetime = UINT32_MAX; // 60 * 60 * 24;
+    tls_ctx->ticket_lifetime = 60 * 60 * 24;
     tls_ctx->require_dhe_on_psk = 0;
 #endif
 
