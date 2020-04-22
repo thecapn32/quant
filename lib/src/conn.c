@@ -1011,6 +1011,13 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
 
             if (m->hdr.type == LH_RTRY) {
                 m->hdr.nr = UINT_T_MAX;
+
+                if (c->pns[ep_init].abandoned) {
+                    // we already RX'ed a server Initial, ignore
+                    warn(INF, "spurious retry, ignoring");
+                    goto done;
+                }
+
                 if (c->tok_len) {
                     // we already had an earlier RETRY on this connection
                     warn(INF, "already handled a retry, ignoring");
@@ -1136,7 +1143,7 @@ static void __attribute__((nonnull))
         v->flags = xv->flags;
         v->ttl = xv->ttl;
         v->len = xv->len; // this is just so that log_pkt can show the rx len
-        m->t = loop_now();
+        m->t = w_now();
 
         bool pkt_valid = false;
         const bool is_clnt = w_connected(ws);

@@ -649,7 +649,7 @@ struct w_engine * q_init(const char * const ifname,
     loop_init();
     int err;
     ped(w)->wheel = timeouts_open(TIMEOUT_nHZ, &err);
-    timeouts_update(ped(w)->wheel, loop_now());
+    timeouts_update(ped(w)->wheel, w_now());
     timeout_setcb(&ped(w)->api_alarm, cancel_api_call, &ped(w)->api_alarm);
 
     warn(INF, "%s/%s (%s) %s/%s ready", quant_name, w->backend_name,

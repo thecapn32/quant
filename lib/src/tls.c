@@ -106,7 +106,6 @@ static int uecc_rng(uint8_t * dest, unsigned size)
 #include "cid.h"
 #include "conn.h"
 #include "frame.h"
-#include "loop.h"
 #include "marshall.h"
 #include "pkt.h"
 #include "pn.h"
@@ -1513,7 +1512,7 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
 
 static uint64_t get_time(ptls_get_time_t * self __attribute__((unused)))
 {
-    return NS_TO_MS(loop_now());
+    return NS_TO_MS(w_now());
 }
 
 

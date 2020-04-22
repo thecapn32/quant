@@ -1504,7 +1504,7 @@ bool enc_ack_frame(struct q_conn_info * const ci,
                            ? DEF_ACK_DEL_EXP
                            : c->tp_mine.ack_del_exp;
     const uint64_t ack_delay =
-        NS_TO_US(loop_now() - diet_timestamp(first_rng)) >> ade;
+        NS_TO_US(w_now() - diet_timestamp(first_rng)) >> ade;
     encv_chk(pos, end, ack_delay);
 
     const uint_t ack_rng_cnt = diet_cnt(&pn->recv) - 1;
