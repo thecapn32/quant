@@ -993,7 +993,7 @@ bool q_ready(struct w_engine * const w,
         char * op = "rx";
 #endif
 #ifndef NO_SERVER
-        if (c->needs_accept) {
+        if (c->needs_accept && c->state == conn_clsd) {
 #ifndef NDEBUG
             op = "accept";
 #endif
@@ -1015,6 +1015,7 @@ bool q_ready(struct w_engine * const w,
         struct q_conn * cc;
         kh_foreach_value(&conns_by_id, cc,
                          { warn(ERR, "%s", cid_str(cc->scid)); });
+        warn(WRN, "end");
 #endif
     }
     *ready = c;
