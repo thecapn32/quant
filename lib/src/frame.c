@@ -1624,7 +1624,8 @@ void enc_stream_or_crypto_frame(uint8_t ** pos,
             type |= F_STREAM_OFF;
         encv(pos, end, m->strm_off);
     }
-    if (m->strm_data_len != s->c->rec.max_pkt_size - AEAD_LEN - DATA_OFFSET) {
+    if (m->strm_data_len != s->c->rec.max_pkt_size - AEAD_LEN - DATA_OFFSET ||
+        unlikely(!enc_strm)) {
         if (likely(enc_strm))
             type |= F_STREAM_LEN;
         encv(pos, end, m->strm_data_len);
