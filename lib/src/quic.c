@@ -1009,8 +1009,14 @@ bool q_ready(struct w_engine * const w,
             sl_remove_head(&c_ready, node_rx_ext);
             c->in_c_ready = false;
         }
-    } else
+    } else {
         warn(WRN, "no conn ready");
+#ifndef NO_MIGRATION
+        struct q_conn * cc;
+        kh_foreach_value(&conns_by_id, cc,
+                         { warn(ERR, "%s", cid_str(cc->scid)); });
+#endif
+    }
     *ready = c;
 done:
 #ifndef NO_MIGRATION
