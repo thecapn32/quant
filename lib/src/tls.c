@@ -395,6 +395,7 @@ dec_tp(uint_t * const val, const uint8_t ** pos, const uint8_t * const end)
 }
 
 
+#ifndef NDEBUG
 static bool __attribute__((const)) is_grease_tp(const uint64_t tp)
 {
     if (tp < 27)
@@ -402,6 +403,7 @@ static bool __attribute__((const)) is_grease_tp(const uint64_t tp)
     const uint64_t n = (tp - 27) / 31;
     return n * 31 + 27 == tp;
 }
+#endif
 
 
 static int chk_tp(ptls_t * tls __attribute__((unused)),
