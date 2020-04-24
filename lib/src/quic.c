@@ -993,7 +993,7 @@ bool q_ready(struct w_engine * const w,
         char * op = "rx";
 #endif
 #ifndef NO_SERVER
-        if (c->needs_accept && c->state == conn_clsd) {
+        if (c->needs_accept && c->state != conn_clsd) {
 #ifndef NDEBUG
             op = "accept";
 #endif
