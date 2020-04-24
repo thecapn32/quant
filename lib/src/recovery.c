@@ -323,9 +323,11 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
                 case FRM_TOK:
                     c->tx_new_tok = true;
                     break;
+#ifndef NO_MIGRATION
                 case FRM_RTR:
                     c->tx_retire_cid = true;
                     break;
+#endif
                 case FRM_MSD:;
                     struct q_stream * const s =
                         get_stream(c, m->max_strm_data_sid);
