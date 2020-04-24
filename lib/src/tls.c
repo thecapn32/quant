@@ -395,6 +395,15 @@ dec_tp(uint_t * const val, const uint8_t ** pos, const uint8_t * const end)
 }
 
 
+static bool __attribute__((const)) is_grease_tp(const uint64_t tp)
+{
+    if (tp < 27)
+        return false;
+    const uint64_t n = (tp - 27) / 31;
+    return n * 31 + 27 == tp;
+}
+
+
 static int chk_tp(ptls_t * tls __attribute__((unused)),
                   ptls_handshake_properties_t * properties,
                   ptls_raw_extension_t * slots)
@@ -437,7 +446,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                 return 1;
             warn(WRN,
                  "\t" BLD "%s tp" NRM " (0x%" PRIx64 " w/len %" PRIu64 ") = %s",
-                 (tp & 0xff00) == 0xff00
+                 is_grease_tp(tp)
                      ? YEL "private"
                      : (tp == TP_QR ? RED "quantum-ready" : RED "unknown"),
                  tp, unknown_len,
@@ -705,7 +714,7 @@ static void __attribute__((nonnull)) enc_tp(uint8_t ** pos,
 
 static void __attribute__((nonnull(1, 2))) encb_tp(uint8_t ** pos,
                                                    const uint8_t * const end,
-                                                   const uint16_t tp,
+                                                   const uint64_t tp,
                                                    const uint8_t * const val,
                                                    const uint16_t len)
 {
@@ -728,16 +737,16 @@ void init_tp(struct q_conn * const c)
     const uint8_t * end = c->tls.tp_buf + TP_LEN;
 
     // add a grease tp
-    uint8_t grease[18];
+    uint8_t grease[17];
     rand_bytes(&grease, sizeof(grease));
-    const uint16_t grease_type = 0xff00 + grease[0];
-    const uint16_t grease_len = grease[1] & 0x0f;
+    const uint64_t grease_type = UINT64_C(31) * w_rand32() + 27;
+    const uint16_t grease_len = grease[0] & 0x0f;
 
     // add the quantum-readiness tp
     unpoison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
     memset(ped(c->w)->scratch, 'Q', MIN_INI_LEN);
 
-    uint16_t tp_order[] = {TP_OCID,     TP_IDTO,    TP_SRT,    TP_MPS,  TP_IMD,
+    uint64_t tp_order[] = {TP_OCID,     TP_IDTO,    TP_SRT,    TP_MPS,  TP_IMD,
                            TP_IMSD_BL,  TP_IMSD_BR, TP_IMSD_U, TP_IMSB, TP_IMSU,
                            TP_ADE,      TP_MAD,     TP_DMIG,   TP_PRFA, TP_ACIL,
                            grease_type, TP_QR};
@@ -747,7 +756,7 @@ void init_tp(struct q_conn * const c)
     // https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle#The_modern_algorithm
     for (size_t j = tp_cnt - 1; j >= 1; j--) {
         const size_t r = w_rand_uniform32((uint32_t)j);
-        const uint16_t tmp = tp_order[r];
+        const uint64_t tmp = tp_order[r];
         tp_order[r] = tp_order[j];
         tp_order[j] = tmp;
     }
@@ -901,13 +910,12 @@ void init_tp(struct q_conn * const c)
             break;
         default:
             if (tp_order[j] == grease_type) {
-                encb_tp(&pos, end, grease_type, &grease[2], grease_len);
+                encb_tp(&pos, end, grease_type, &grease[1], grease_len);
 #ifdef DEBUG_EXTRA
-                warn(WRN, "\t" BLD "%s tp" NRM " (0x%04x w/len %u) = %s",
-                     (grease_type & 0xff00) == 0xff00 ? YEL "private"
-                                                      : RED "unknown",
+                warn(WRN, "\t" BLD "%s tp" NRM " (0x%" PRIx64 " w/len %u) = %s",
+                     is_grease_tp(grease_type) ? YEL "private" : RED "unknown",
                      grease_type, grease_len,
-                     hex2str(&grease[2], grease_len,
+                     hex2str(&grease[1], grease_len,
                              (char[hex_str_len(TP_LEN)]){""},
                              hex_str_len(TP_LEN)));
 #endif
@@ -922,7 +930,7 @@ void init_tp(struct q_conn * const c)
 #endif
                 }
             } else
-                die("unknown tp 0x%04x", tp_order[j]);
+                die("unknown tp 0x%" PRIx64, tp_order[j]);
             break;
         }
     poison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
