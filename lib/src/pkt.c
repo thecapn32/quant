@@ -867,7 +867,8 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
 done:
     m->hdr.hdr_len = (uint16_t)(pos - xv->buf);
 
-    if (unlikely(is_lh(m->hdr.flags))) {
+    if (unlikely(is_lh(m->hdr.flags)) && m->hdr.type != LH_RTRY &&
+        m->hdr.vers) {
         // check if we need to decoal
         const uint16_t pkt_len = m->hdr.hdr_len + m->hdr.len;
 
