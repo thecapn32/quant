@@ -373,14 +373,8 @@ enc_other_frames(
         struct cid * id = 0;
         struct cid * tmp = 0;
         sl_foreach_safe (id, &c->dcids.ret, next, tmp)
-            if (id->seq < c->dcid->seq) {
-                enc_retire_cid_frame(ci, pos, end, m, id);
-#ifndef NO_SRT_MATCHING
-                if (id->has_srt)
-                    conns_by_srt_del(id->srt);
-#endif
-                cid_del(&c->dcids, id);
-            }
+            if (id->seq < c->dcid->seq)
+                enc_retire_cid_frame(ci, pos, end, m, id->seq);
     }
 
     if (c->tx_path_chlg && can_enc(pos, end, m, FRM_PCL, true))

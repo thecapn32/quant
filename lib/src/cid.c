@@ -31,6 +31,7 @@
 #include <quant/quant.h>
 
 #include "cid.h"
+#include "conn.h"
 #include "quic.h"
 #include "tls.h"
 
@@ -52,20 +53,20 @@ void init_cids(struct cids * const ids)
 }
 
 
-struct cid * cid_by_seq(struct cids * const ids, const uint_t seq)
+struct cid * cid_by_seq(struct cid_sl * const sl, const uint_t seq)
 {
     struct cid * id;
-    sl_foreach (id, &ids->act, next)
+    sl_foreach (id, sl, next)
         if (id->seq == seq)
             return id;
     return 0;
 }
 
 
-struct cid * cid_by_id(struct cids * const ids, const struct cid * const id)
+struct cid * cid_by_id(struct cid_sl * const sl, const struct cid * const id)
 {
     struct cid * i;
-    sl_foreach (i, &ids->act, next)
+    sl_foreach (i, sl, next)
         if (cid_cmp(i, id) == 0)
             return i;
     return 0;
@@ -127,7 +128,20 @@ bool need_more_cids(const struct cids * const ids, const uint_t act_cid_lim)
 
 struct cid * cid_ins(struct cids * const ids, const struct cid * const id)
 {
-    struct cid * const i = sl_first(&ids->avl);
+    struct cid * i = sl_first(&ids->avl);
+    if (i == 0) {
+        // some stacks don't ACK RETIRE_CONNECTION_ID and just issue a new one
+        i = sl_first(&ids->ret);
+        if (likely(i)) {
+            cid_del(ids, i);
+#ifndef NO_SRT_MATCHING
+            if (i->has_srt)
+                conns_by_srt_del(i->srt);
+#endif
+            i = sl_first(&ids->avl);
+        } else
+            die("got new CID with no room left");
+    }
     sl_remove_head(&ids->avl, next);
     cid_cpy(i, id);
     i->retired = i->available = false;

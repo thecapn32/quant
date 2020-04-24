@@ -150,11 +150,8 @@ struct pkt_meta {
     dint_t max_strms_uni;     ///< MAX_STREAM_ID unidir limit, if sent.
     uint_t strm_data_blocked; ///< STREAM_DATA_BLOCKED value, if sent.
     uint_t data_blocked;      ///< DATA_BLOCKED value, if sent.
-    uint_t min_cid_seq; ///< Smallest NEq_CONNECTION_ID seq in pkt, if sent.
-
-#if !HAVE_64BIT
-    uint8_t _unused[4];
-#endif
+    uint_t min_cid_seq;    ///< Smallest NEW_CONNECTION_ID seq in pkt, if sent.
+    uint_t retire_cid_seq; ///< RETIRE_CONNECTION_ID value, if sent.
 
     // pm_cpy(false) starts copying from here:
     struct pn_space * pn; ///< Packet number space.

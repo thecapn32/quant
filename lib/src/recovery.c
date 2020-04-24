@@ -308,7 +308,9 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
 #endif
                 switch (i) {
                 case FRM_CID:
+                    warn(ERR, "max_cid_seq_out %" PRIu, c->max_cid_seq_out);
                     c->max_cid_seq_out = m->min_cid_seq - 1;
+                    warn(ERR, "max_cid_seq_out %" PRIu, c->max_cid_seq_out);
                     break;
                 case FRM_CDB:
                 case FRM_SDB:
@@ -321,8 +323,16 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
                 case FRM_TOK:
                     c->tx_new_tok = true;
                     break;
+                case FRM_RTR:
+                    c->tx_retire_cid = true;
+                    break;
+                case FRM_MSD:;
+                    struct q_stream * const s =
+                        get_stream(c, m->max_strm_data_sid);
+                    s->tx_max_strm_data = true;
+                    break;
                 default:
-                    warn(CRT, "unhandled RTX of 0x%02x frame", i);
+                    die("unhandled RTX of 0x%02x frame", i);
                 }
             }
 
@@ -712,6 +722,18 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
     }
 
     m->acked = true;
+
+    if (has_frm(m->frms, FRM_RTR)) {
+        struct cid * const id = cid_by_seq(&c->dcids.ret, m->retire_cid_seq);
+        // if it doesn't exist, it's been deleted already by previous ACK
+        if (id) {
+#ifndef NO_SRT_MATCHING
+            if (id->has_srt)
+                conns_by_srt_del(id->srt);
+#endif
+            cid_del(&c->dcids, id);
+        }
+    }
 
     struct q_stream * const s = m->strm;
     if (s && m->has_rtx == false) {

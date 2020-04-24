@@ -45,6 +45,7 @@
 #include <timeout.h>
 
 #include "bitset.h"
+#include "cid.h"
 #include "conn.h"
 #include "diet.h"
 #include "frame.h"
@@ -528,7 +529,7 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
     const uint_t ade = (m->hdr.type == LH_INIT || m->hdr.type == LH_HSHK)
                            ? DEF_ACK_DEL_EXP
                            : c->tp_peer.ack_del_exp;
-    uint_t ack_delay = ack_delay_raw << ade;
+    uint_t ack_delay = (uint_t)(ack_delay_raw << ade);
 
     if (unlikely(ack_delay_raw &&
                  (m->hdr.type == LH_INIT || m->hdr.type == LH_HSHK)))
@@ -1017,7 +1018,7 @@ dec_new_cid_frame(const uint8_t ** pos,
 #if !defined(NO_MIGRATION) || !defined(NDEBUG)
     const bool dup =
 #ifndef NO_MIGRATION
-        cid_by_seq(&c->dcids, dcid.seq) != 0;
+        cid_by_seq(&c->dcids.act, dcid.seq) != 0;
 #else
         false;
 #endif
@@ -1113,7 +1114,7 @@ dec_retire_cid_frame(const uint8_t ** pos,
     warn(INF, FRAM_IN "RETIRE_CONNECTION_ID" NRM " seq=%" PRIu, seq);
 
 #ifndef NO_MIGRATION
-    struct cid * const scid = cid_by_seq(&c->scids, seq);
+    struct cid * const scid = cid_by_seq(&c->scids.act, seq);
     if (unlikely(scid == 0)) {
         warn(INF, "no cid seq %" PRIu, seq);
         goto done;
@@ -1860,6 +1861,8 @@ void enc_new_cid_frame(struct q_conn_info * const ci,
 
     const uint_t max_scid = max_seq(&c->scids);
     const uint_t min_scid = min_seq(&c->scids);
+    warn(ERR, "max_scid %" PRIu " min_scid %" PRIu " max_cid_seq_out %" PRIu,
+         max_scid, min_scid, c->max_cid_seq_out);
     c->max_cid_seq_out = MAX(min_scid, c->max_cid_seq_out + 1);
     struct cid ncid = {.seq = c->max_cid_seq_out};
 
@@ -1874,7 +1877,7 @@ void enc_new_cid_frame(struct q_conn_info * const ci,
 
     struct cid * enc_cid = &ncid;
     if (ncid.seq <= max_scid) {
-        enc_cid = cid_by_seq(&c->scids, ncid.seq);
+        enc_cid = cid_by_seq(&c->scids.act, ncid.seq);
         ensure(enc_cid, "max_scid %" PRIu " ncid.seq %" PRIu, max_scid,
                ncid.seq);
 #ifndef NO_SRT_MATCHING
@@ -1934,14 +1937,15 @@ void enc_retire_cid_frame(struct q_conn_info * const ci,
                           uint8_t ** pos,
                           const uint8_t * const end,
                           struct pkt_meta * const m,
-                          struct cid * const dcid)
+                          const uint_t seq)
 {
     enc1(pos, end, FRM_RTR);
-    encv(pos, end, dcid->seq);
+    encv(pos, end, seq);
 
-    warn(INF, FRAM_OUT "RETIRE_CONNECTION_ID" NRM " seq=%" PRIu, dcid->seq);
+    warn(INF, FRAM_OUT "RETIRE_CONNECTION_ID" NRM " seq=%" PRIu, seq);
 
     m->pn->c->tx_retire_cid = false;
+    m->retire_cid_seq = seq;
     track_frame(m, ci, FRM_RTR, 1);
 }
 #endif

@@ -1314,7 +1314,7 @@ static void __attribute__((nonnull))
             if (m->hdr.dcid.len && cid_cmp(&m->hdr.dcid, c->scid) != 0) {
                 struct cid * scid =
 #ifndef NO_MIGRATION
-                    cid_by_id(&c->scids, &m->hdr.dcid);
+                    cid_by_id(&c->scids.act, &m->hdr.dcid);
 #else
                     c->scid;
 #endif

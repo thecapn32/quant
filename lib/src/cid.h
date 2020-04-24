@@ -64,16 +64,25 @@ struct cid {
 #else
     uint8_t : 5;
 #endif
+#if HAVE_64BIT
     uint8_t _unused[2];
+#else
+    uint8_t _unused[6];
+#endif
 };
 
 
+sl_head(cid_sl, cid);
+
 struct cids {
     struct cid cids[CIDS_MAX];
+    struct cid_sl ret;
+    struct cid_sl act;
+    struct cid_sl avl;
     uint_t act_cnt;
-    sl_head(retired, cid) ret;
-    sl_head(active, cid) act;
-    sl_head(available, cid) avl;
+#if !HAVE_64BIT
+    uint8_t unused[4];
+#endif
 };
 
 
@@ -94,10 +103,10 @@ extern char __cid_str[CID_STR_LEN];
 extern void __attribute__((nonnull)) init_cids(struct cids * const ids);
 
 extern struct cid * __attribute__((nonnull))
-cid_by_seq(struct cids * const ids, const uint_t seq);
+cid_by_seq(struct cid_sl * const sl, const uint_t seq);
 
 extern struct cid * __attribute__((nonnull))
-cid_by_id(struct cids * const ids, const struct cid * const id);
+cid_by_id(struct cid_sl * const sl, const struct cid * const id);
 
 extern uint_t __attribute__((nonnull)) cid_cnt(const struct cids * const ids);
 

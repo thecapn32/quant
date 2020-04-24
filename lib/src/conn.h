@@ -99,11 +99,13 @@ struct pref_addr {
     struct w_sockaddr addr4;
     struct w_sockaddr addr6;
     struct cid cid;
-    uint8_t _unused[8];
+    // uint8_t _unused[8];
 };
 
 
 struct transport_params {
+    struct cid orig_cid;
+    struct pref_addr pref_addr;
     uint_t max_strm_data_uni;
     uint_t max_strm_data_bidi_local;
     uint_t max_strm_data_bidi_remote;
@@ -115,10 +117,12 @@ struct transport_params {
     uint_t max_pkt;
     uint_t act_cid_lim;
     uint_t ack_del_exp;
-    struct pref_addr pref_addr;
-    struct cid orig_cid;
     bool disable_active_migration;
+#if HAVE_64BIT
     uint8_t _unused[7];
+#else
+    uint8_t _unused[3];
+#endif
 };
 
 
@@ -273,6 +277,10 @@ struct q_conn {
     struct w_sockopt sockopt; ///< Socket options.
     uint_t max_cid_seq_out;
 
+#if !HAVE_64BIT
+    uint8_t _unused[4];
+#endif
+
     struct cid odcid; ///< Original destination CID of first Initial.
     struct cid oscid; ///< Original source CID of first Initial.
 
@@ -288,7 +296,7 @@ struct q_conn {
     uint8_t err_reason_len;
     char err_reason[MAX_ERR_REASON_LEN];
 #else
-    uint8_t _unused;
+    uint8_t _unused2;
 #endif
 
     uint16_t tok_len;
