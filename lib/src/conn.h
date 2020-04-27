@@ -99,12 +99,10 @@ struct pref_addr {
     struct w_sockaddr addr4;
     struct w_sockaddr addr6;
     struct cid cid;
-    // uint8_t _unused[8];
 };
 
 
 struct transport_params {
-    struct cid orig_cid;
     struct pref_addr pref_addr;
     uint_t max_strm_data_uni;
     uint_t max_strm_data_bidi_local;

@@ -434,6 +434,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
     bitset_define(tp_list, TP_MAX);
     struct tp_list tp_list = bitset_t_initializer(0);
 
+    struct cid orig_cid = {0};
     c->tp_peer.act_cid_lim = UINT_T_MAX;
     c->tp_peer.max_pkt = MAX_PKT_LEN;
     while (pos < end) {
@@ -569,11 +570,10 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             if (decv(&len, &pos, end) == false)
                 return 1;
             if (len) {
-                decb(c->tp_peer.orig_cid.id, &pos, end, (uint16_t)len);
-                c->tp_peer.orig_cid.len = (uint8_t)len;
+                decb(orig_cid.id, &pos, end, (uint16_t)len);
+                orig_cid.len = (uint8_t)len;
             }
-            warn(INF, "\toriginal_connection_id = %s",
-                 cid_str(&c->tp_peer.orig_cid));
+            warn(INF, "\toriginal_connection_id = %s", cid_str(&orig_cid));
             break;
 
         case TP_DMIG:;
@@ -673,13 +673,13 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
     // if we did a RETRY, check that we got orig_cid and it matches
     if (is_clnt(c) && c->tok_len) {
-        if (c->tp_peer.orig_cid.len == 0) {
+        if (orig_cid.len == 0) {
             err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
                       "no original_connection_id tp received");
             return 1;
         }
 
-        if (cid_cmp(&c->tp_peer.orig_cid, &c->odcid)) {
+        if (cid_cmp(&orig_cid, &c->odcid)) {
             err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
                       "cid/odcid mismatch");
             return 1;
@@ -793,8 +793,7 @@ void init_tp(struct q_conn * const c)
             if (!is_clnt(c) && c->odcid.len) {
                 encb_tp(&pos, end, TP_OCID, c->odcid.id, c->odcid.len);
 #ifdef DEBUG_EXTRA
-                warn(INF, "\toriginal_connection_id = %s",
-                     cid_str(&c->tp_mine.orig_cid));
+                warn(INF, "\toriginal_connection_id = %s", cid_str(&c->odcid));
 #endif
             }
             break;
@@ -1767,11 +1766,11 @@ void make_rtry_tok(struct q_conn * const c)
     memcpy(&c->tok[cs->hash->digest_size], scid->id, scid->len);
     // update max_frame_len() when this changes:
     c->tok_len = (uint16_t)cs->hash->digest_size + scid->len;
-    // #ifdef DEBUG_PROT
+#ifdef DEBUG_PROT
     warn(DBG, "computed Retry tok %s",
          hex2str(c->tok, c->tok_len, (char[hex_str_len(MAX_TOK_LEN)]){""},
                  hex_str_len(c->tok_len)));
-    // #endif
+#endif
 }
 
 
@@ -1794,20 +1793,13 @@ bool verify_rtry_tok(struct q_conn * const c,
                  (char[hex_str_len(MAX_TOK_LEN)]){""},
                  hex_str_len(cs->hash->digest_size)));
 #endif
-    if (memcmp(ped(c->w)->scratch, tok, cs->hash->digest_size) == 0) {
+    const bool ok = memcmp(ped(c->w)->scratch, tok, cs->hash->digest_size) == 0;
+    if (ok) {
         c->odcid.len = (uint8_t)(tok_len - cs->hash->digest_size);
         memcpy(&c->odcid.id, tok + cs->hash->digest_size, c->odcid.len);
-        poison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
-        return true;
     }
-#ifdef DEBUG_PROT
-    warn(DBG, "rx'ed Retry tok %s",
-         hex2str(tok, cs->hash->digest_size,
-                 (char[hex_str_len(MAX_TOK_LEN)]){""},
-                 hex_str_len(cs->hash->digest_size)));
-#endif
     poison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
-    return false;
+    return ok;
 }
 
 

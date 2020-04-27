@@ -757,7 +757,7 @@ new_initial_cids(struct q_conn * const c,
     } else if (dcid) {
         // dcid->seq is 0 due to calloc allocation
         c->dcid = cid_ins(&c->dcids, dcid);
-        cid_cpy(&c->odcid, dcid);
+        // don't cid_cpy(&c->odcid, dcid); serv odcid signals prior retry
     }
 
     // init scid and add connection to global data structures
