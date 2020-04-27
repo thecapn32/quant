@@ -827,7 +827,7 @@ done:
         sl_remove(&c_zcid, c, q_conn, node_zcid_int);
 
 #ifndef NO_SERVER
-    if (c->holds_sock && w_connected(c->sock) == false)
+    if (is_clnt(c) == false && c->holds_sock && w_connected(c->sock) == false)
         sl_remove(&c_embr, c, q_conn, node_embr);
 #endif
     free_conn(c);
