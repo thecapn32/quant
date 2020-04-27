@@ -1654,7 +1654,9 @@ static void __attribute__((nonnull)) enter_closed(struct q_conn * const c)
     conn_to_state(c, conn_clsd);
     stop_all_alarms(c);
 
+#ifndef NO_SERVER
     c->needs_accept = false;
+#endif
     if (!c->in_c_ready) {
         sl_insert_head(&c_ready, c, node_rx_ext);
         c->in_c_ready = true;
