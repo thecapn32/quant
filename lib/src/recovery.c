@@ -323,6 +323,12 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
                 case FRM_TOK:
                     c->tx_new_tok = true;
                     break;
+                case FRM_SBB:
+                    c->sid_blocked_bidi = true;
+                    break;
+                case FRM_SBU:
+                    c->sid_blocked_uni = true;
+                    break;
 #ifndef NO_MIGRATION
                 case FRM_RTR:
                     c->tx_retire_cid = true;
