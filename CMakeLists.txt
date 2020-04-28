@@ -293,7 +293,7 @@ endif()
 
 add_subdirectory(bin)
 add_subdirectory(doc)
-add_subdirectory(external)
+add_subdirectory(external EXCLUDE_FROM_ALL)
 add_subdirectory(lib)
 add_subdirectory(misc)
 
