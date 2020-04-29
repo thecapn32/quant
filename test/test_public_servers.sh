@@ -38,6 +38,7 @@ declare -A servers=(
     [google]="quic.rocks|-3|4433|4434|4433|/40000"
     [haskell]="mew.org||4433|4433|4433|/40000"
     [lsquic]="http3-test.litespeedtech.com|-3|4433|4434|4433|/40000"
+    [msquic]="quic.westus.cloudapp.azure.com||4433|4434|443|/draft-ietf-quic-http-11.txt"
     [mvfst]="fb.mvfst.net|-3|443|4434|443|/40000"
     [ngtcp2]="nghttp2.org|-3|4433|4434|4433|/40000"
     [ngx_quic]="cloudflare-quic.com|-3|443|443|443|/index.html"
@@ -49,7 +50,6 @@ declare -A servers=(
     # [quicker]="quicker.edm.uhasselt.be||4433|4434|4433|/index.html"
     [quicly]="quic.examp1e.net||4433|4434|443|/40000"
     [quinn]="h3.stammw.eu||4433|4434|443|/100K"
-    [winquic]="quic.westus.cloudapp.azure.com||4433|4434|443|/draft-ietf-quic-http-11.txt"
     # [local]="localhost||4433|4434|4433|/40000"
 )
 
