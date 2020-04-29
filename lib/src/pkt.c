@@ -57,6 +57,10 @@
 #include "stream.h"
 #include "tls.h"
 
+#if defined(__linux__)
+#define IPTOS_ECN_NOTECT IPTOS_ECN_NOT_ECT
+#endif
+
 
 #define MAX_PKT_NR_LEN 4 ///< Maximum packet number length allowed by spec.
 
