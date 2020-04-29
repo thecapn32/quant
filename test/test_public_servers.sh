@@ -280,7 +280,7 @@ function analyze {
     [ $? -eq 1 ] && echo E > "$ret_base.aecn"
     [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.hshk" ] && \
         [ -s "$ret_base.data" ] && [ -s "$ret_base.clse" ] && rm -f "$log"
-    # rm -f "$log_strip"
+    rm -f "$log_strip"
 
     # analyze rsmt and 0rtt
     local log="$log_base.0rtt"
