@@ -1861,8 +1861,8 @@ void enc_new_cid_frame(struct q_conn_info * const ci,
 
     const uint_t max_scid = max_seq(&c->scids);
     const uint_t min_scid = min_seq(&c->scids);
-    warn(ERR, "max_scid %" PRIu " min_scid %" PRIu " max_cid_seq_out %" PRIu,
-         max_scid, min_scid, c->max_cid_seq_out);
+    // warn(ERR, "max_scid %" PRIu " min_scid %" PRIu " max_cid_seq_out %" PRIu,
+    //      max_scid, min_scid, c->max_cid_seq_out);
     c->max_cid_seq_out = MAX(min_scid, c->max_cid_seq_out + 1);
     struct cid ncid = {.seq = c->max_cid_seq_out};
 
