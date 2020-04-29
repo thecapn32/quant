@@ -57,7 +57,7 @@
 #include "stream.h"
 #include "tls.h"
 
-#if defined(__linux__)
+#if defined(__linux__) && !defined(NDEBUG)
 #define IPTOS_ECN_NOTECT IPTOS_ECN_NOT_ECT
 #endif
 
