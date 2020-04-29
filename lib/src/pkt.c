@@ -85,52 +85,62 @@ void log_pkt(const char * const dir,
     const char * const tok_str = tok_len ? tok_str(tok, tok_len) : "";
     const char * const rit_str = rit ? rit_str(rit) : "";
 
+    static const char * const ecn_str[] = {[IPTOS_ECN_NOTECT] = "NOTECT",
+                                           [IPTOS_ECN_ECT1] = "ECT1",
+                                           [IPTOS_ECN_ECT0] = "ECT0",
+                                           [IPTOS_ECN_CE] = "CE"};
     if (*dir == 'R') {
         if (is_lh(m->hdr.flags)) {
             if (m->hdr.vers == 0)
                 twarn(NTE,
-                      BLD BLU "RX" NRM " from=%s%s%s:%u len=%u 0x%02x=" BLU
+                      BLD BLU "RX" NRM
+                              " from=%s%s%s:%u len=%u ecn=%s 0x%02x=" BLU
                               "%s " NRM "vers=0x%0" PRIx32 " dcid=%s scid=%s",
                       v->wv_af == AF_INET6 ? "[" : "", ip,
                       v->wv_af == AF_INET6 ? "]" : "", port, v->len,
-                      m->hdr.flags, pts, m->hdr.vers, dcid_str, scid_str);
+                      ecn_str[v->flags & IPTOS_ECN_MASK], m->hdr.flags, pts,
+                      m->hdr.vers, dcid_str, scid_str);
             else if (m->hdr.type == LH_RTRY)
                 twarn(NTE,
-                      BLD BLU "RX" NRM " from=%s%s%s:%u len=%u 0x%02x=" BLU
+                      BLD BLU "RX" NRM
+                              " from=%s%s%s:%u len=%u ecn=%s 0x%02x=" BLU
                               "%s " NRM "vers=0x%0" PRIx32
                               " dcid=%s scid=%s tok=%s rit=%s",
                       v->wv_af == AF_INET6 ? "[" : "", ip,
                       v->wv_af == AF_INET6 ? "]" : "", port, v->len,
-                      m->hdr.flags, pts, m->hdr.vers, dcid_str, scid_str,
-                      tok_str, rit_str);
+                      ecn_str[v->flags & IPTOS_ECN_MASK], m->hdr.flags, pts,
+                      m->hdr.vers, dcid_str, scid_str, tok_str, rit_str);
             else if (m->hdr.type == LH_INIT)
                 twarn(NTE,
-                      BLD BLU "RX" NRM " from=%s%s%s:%u len=%u 0x%02x=" BLU
-                              "%s " NRM "vers=0x%0" PRIx32
-                              " dcid=%s scid=%s tok=%s len=%u nr=" BLU
-                              "%" PRIu NRM,
+                      BLD BLU
+                      "RX" NRM " from=%s%s%s:%u len=%u ecn=%s 0x%02x=" BLU
+                      "%s " NRM "vers=0x%0" PRIx32
+                      " dcid=%s scid=%s tok=%s len=%u nr=" BLU "%" PRIu NRM,
                       v->wv_af == AF_INET6 ? "[" : "", ip,
                       v->wv_af == AF_INET6 ? "]" : "", port, v->len,
-                      m->hdr.flags, pts, m->hdr.vers, dcid_str, scid_str,
-                      tok_str, m->hdr.len, m->hdr.nr);
+                      ecn_str[v->flags & IPTOS_ECN_MASK], m->hdr.flags, pts,
+                      m->hdr.vers, dcid_str, scid_str, tok_str, m->hdr.len,
+                      m->hdr.nr);
             else
                 twarn(NTE,
-                      BLD BLU "RX" NRM " from=%s%s%s:%u len=%u 0x%02x=" BLU
+                      BLD BLU "RX" NRM
+                              " from=%s%s%s:%u len=%u ecn=%s 0x%02x=" BLU
                               "%s " NRM "vers=0x%0" PRIx32
                               " dcid=%s scid=%s len=%u nr=" BLU "%" PRIu NRM,
                       v->wv_af == AF_INET6 ? "[" : "", ip,
                       v->wv_af == AF_INET6 ? "]" : "", port, v->len,
-                      m->hdr.flags, pts, m->hdr.vers, dcid_str, scid_str,
-                      m->hdr.len, m->hdr.nr);
+                      ecn_str[v->flags & IPTOS_ECN_MASK], m->hdr.flags, pts,
+                      m->hdr.vers, dcid_str, scid_str, m->hdr.len, m->hdr.nr);
         } else
             twarn(NTE,
-                  BLD BLU "RX" NRM " from=%s%s%s:%u len=%u 0x%02x=" BLU
+                  BLD BLU "RX" NRM " from=%s%s%s:%u len=%u ecn=%s 0x%02x=" BLU
                           "%s " NRM "kyph=%u spin=%u dcid=%s nr=" BLU
                           "%" PRIu NRM,
                   v->wv_af == AF_INET6 ? "[" : "", ip,
-                  v->wv_af == AF_INET6 ? "]" : "", port, v->len, m->hdr.flags,
-                  pts, is_set(SH_KYPH, m->hdr.flags),
-                  is_set(SH_SPIN, m->hdr.flags), dcid_str, m->hdr.nr);
+                  v->wv_af == AF_INET6 ? "]" : "", port, v->len,
+                  ecn_str[v->flags & IPTOS_ECN_MASK], m->hdr.flags, pts,
+                  is_set(SH_KYPH, m->hdr.flags), is_set(SH_SPIN, m->hdr.flags),
+                  dcid_str, m->hdr.nr);
 
     } else {
         // on TX, v->len is not yet final/correct, so don't print it
@@ -546,6 +556,10 @@ bool enc_pkt(struct q_stream * const s,
 #endif
                                   c->peer;
 
+    // track the flags manually, since warpcore sets them on the xv and it'd
+    // require another loop to copy them over
+    v->flags |= likely(c->sockopt.enable_ecn) ? IPTOS_ECN_ECT0 : 0;
+
 #ifndef NDEBUG
     // sanity check
     if (unlikely(m->hdr.hdr_len >=
@@ -674,10 +688,7 @@ tx:;
 
     if (!is_clnt(c))
         xv->saddr = v->saddr;
-
-    // track the flags manually, since warpcore sets them on the xv and it'd
-    // require another loop to copy them over
-    xv->flags = v->flags |= likely(c->sockopt.enable_ecn) ? IPTOS_ECN_ECT0 : 0;
+    xv->flags = v->flags;
 
     // encode the pn space id and pkt nr to identify PMTUD pkts;
     // this only works for packets numbered below 0x3fff, but that is plenty
