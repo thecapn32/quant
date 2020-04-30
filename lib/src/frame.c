@@ -531,6 +531,7 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
                            : c->tp_peer.ack_del_exp;
     uint_t ack_delay = (uint_t)(ack_delay_raw << ade);
 
+#ifdef DEBUG_EXTRA
     if (unlikely(ack_delay_raw &&
                  (m->hdr.type == LH_INIT || m->hdr.type == LH_HSHK)))
         warn(WRN,
@@ -539,6 +540,7 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
     else if (unlikely(ack_delay > c->tp_peer.max_ack_del * US_PER_MS))
         warn(WRN, "ack_delay %" PRIu " > max_ack_del %" PRIu, ack_delay,
              c->tp_peer.max_ack_del * US_PER_MS);
+#endif
 
     uint_t ack_rng_cnt = 0;
     decv_chk(&ack_rng_cnt, pos, end, c, type);
