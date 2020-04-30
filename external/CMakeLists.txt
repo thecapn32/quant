@@ -168,6 +168,37 @@ externalproject_add(quinn
 )
 
 
+# Use msquic for testing against
+externalproject_add(lttng-ust
+  UPDATE_COMMAND ""
+  GIT_REPOSITORY git://git.lttng.org/lttng-ust.git
+  GIT_SHALLOW 1
+  PATCH_COMMAND ./bootstrap
+  CONFIGURE_COMMAND ./configure CC=gcc-9 CXX=g++-9
+  BUILD_COMMAND make
+  INSTALL_COMMAND ""
+  BUILD_IN_SOURCE 1
+  EXCLUDE_FROM_ALL 1
+)
+
+externalproject_add(msquic
+  # DEPENDS lttng-ust
+  UPDATE_COMMAND ""
+  GIT_REPOSITORY git@github.com:microsoft/msquic.git
+  GIT_SHALLOW 1
+  # GIT_TAG add_quicker_support-tls-d28
+  CONFIGURE_COMMAND
+    cmake -DCMAKE_C_COMPILER=gcc-9
+      -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+      -DQUIC_ENABLE_LOGGING=OFF
+      .
+  BUILD_COMMAND make VERBOSE=1
+  INSTALL_COMMAND ""
+  BUILD_IN_SOURCE 1
+  EXCLUDE_FROM_ALL 1
+)
+
+
 set(TRACKER github.com/QUIC-Tracker/quic-tracker)
 externalproject_add(quic-tracker
   DOWNLOAD_COMMAND
