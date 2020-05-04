@@ -461,9 +461,9 @@ dec_stream_or_crypto_frame(const uint8_t type,
 done:
     log_stream_or_crypto_frame(false, m, type, sid, true, kind);
 
-    if (m->strm && type != FRM_CRY &&
-        m->strm_off + strm_data_len_adj(m->strm_data_len) >
-            m->strm->in_data_max)
+    if (m->strm && likely(type != FRM_CRY) &&
+        unlikely(m->strm_off + strm_data_len_adj(m->strm_data_len) >
+                 m->strm->in_data_max - 1))
         err_close_return(c, ERR_FLOW_CONTROL, type,
                          "stream %" PRIu " off %" PRIu " >= in_data_max %" PRIu,
                          m->strm->id,
