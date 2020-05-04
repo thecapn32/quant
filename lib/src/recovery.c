@@ -307,14 +307,13 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
 #endif
                 switch (i) {
                 case FRM_CID:
-                    warn(ERR, "max_cid_seq_out %" PRIu, c->max_cid_seq_out);
+                    // warn(ERR, "max_cid_seq_out %" PRIu, c->max_cid_seq_out);
                     c->max_cid_seq_out = m->min_cid_seq - 1;
-                    warn(ERR, "max_cid_seq_out %" PRIu, c->max_cid_seq_out);
+                    // warn(ERR, "max_cid_seq_out %" PRIu, c->max_cid_seq_out);
                     break;
                 case FRM_CDB:
                 case FRM_SDB:
-                    // DATA_BLOCKED and STREAM_DATA_BLOCKED RTX'ed
-                    // automatically
+                    // DATA_BLOCKED and STREAM_DATA_BLOCKED RTX'ed automatically
                     break;
                 case FRM_HSD:
                     c->tx_hshk_done = true;
