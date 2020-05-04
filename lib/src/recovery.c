@@ -76,13 +76,12 @@ have_keys(struct q_conn * const c, const pn_t t)
 }
 
 
-static void __attribute__((nonnull)) maybe_tx(struct q_conn * const c)
+static void __attribute__((nonnull)) maybe_open_wnd(struct q_conn * const c)
 {
-    if (has_wnd(c, w_max_udp_payload(c->sock)) == false)
-        return;
-
-    c->no_wnd = false;
-    c->needs_tx = true;
+    const bool prev_no_wnd = c->no_wnd;
+    c->no_wnd = has_wnd(c, w_max_udp_payload(c->sock)) == false;
+    if (c->no_wnd == false && prev_no_wnd)
+        c->needs_tx = true;
 }
 
 
@@ -477,7 +476,9 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
     }
 
     log_cc(c);
-    maybe_tx(c);
+    maybe_open_wnd(c);
+    if (lg_lost != UINT_T_MAX)
+        timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
 }
 
 
@@ -500,7 +501,7 @@ static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
              conn_type(c), cid_str(c->scid));
 #endif
         detect_all_lost_pkts(c, true);
-        timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
+        set_ld_timer(c);
         return;
     }
 
@@ -519,7 +520,7 @@ static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
              conn_type(c), cid_str(c->scid), c->tx_limit);
 #endif
     }
-    timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
+    tx(c);
 
     c->rec.pto_cnt++;
 #ifndef NO_QINFO
@@ -648,6 +649,7 @@ void on_ack_received_2(struct pn_space * const pn)
     struct q_conn * const c = pn->c;
     detect_lost_pkts(pn, true);
     c->rec.pto_cnt = 0;
+    set_ld_timer(c);
 }
 
 

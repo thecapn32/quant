@@ -1294,11 +1294,13 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
                      PTLS_EARLY_DATA_ACCEPTED);
         } else {
             c->tx_hshk_done = ptls_handshake_is_complete(c->tls.t) != 0;
+            if (c->tx_hshk_done) {
+                c->needs_tx = true;
 #ifndef NO_MIGRATION
-            if (c->tx_hshk_done)
                 // also stop caring about oscid now
                 conns_by_id_del(&c->oscid);
 #endif
+            }
         }
 
     } else if (ret != PTLS_ERROR_IN_PROGRESS &&

@@ -587,12 +587,13 @@ void tx(struct q_conn * const c)
     do_conn_mgmt(c);
 
     if (likely(c->state != conn_clsg)) {
-        for (epoch_t e = ep_init; e <= ep_data; e++) {
-            if (c->cstrms[e] == 0)
-                continue;
-            if (tx_stream(c->cstrms[e]) == false)
-                goto done;
-        }
+        if (unlikely(hshk_done(c) == false))
+            for (epoch_t e = ep_init; e <= ep_data; e++) {
+                if (c->cstrms[e] == 0)
+                    continue;
+                if (tx_stream(c->cstrms[e]) == false)
+                    goto done;
+            }
 
         struct q_stream * s;
         kh_foreach_value(&c->strms_by_id, s, {
@@ -1538,14 +1539,13 @@ void rx(struct w_sock * const ws)
             tx(c); // clears c->needs_tx if we TX'ed
 
         for (epoch_t e = c->min_rx_epoch; e <= ep_data; e++) {
-            if (c->cstrms[e] == 0 || e == ep_0rtt)
+            if (unlikely(c->cstrms[e] == 0 || e == ep_0rtt))
                 // don't ACK abandoned and 0rtt pn spaces
                 continue;
-            struct pn_space * const pn = pn_for_epoch(c, e);
-            switch (needs_ack(pn)) {
+            switch (needs_ack(pn_for_epoch(c, e))) {
             case imm_ack:
-                c->needs_tx = true;
-                timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
+                if (likely(tx_ack(c, e, false)))
+                    do_tx(c);
                 break;
             case del_ack:
                 if (likely(c->state != conn_clsg))
