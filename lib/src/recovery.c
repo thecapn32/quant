@@ -335,7 +335,8 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
                 case FRM_MSD:;
                     struct q_stream * const s =
                         get_stream(c, m->max_strm_data_sid);
-                    s->tx_max_strm_data = true;
+                    if (s)
+                        s->tx_max_strm_data = true;
                     break;
                 default:
                     die("unhandled RTX of 0x%02x frame", i);
