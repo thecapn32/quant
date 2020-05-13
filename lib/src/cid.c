@@ -144,6 +144,7 @@ struct cid * cid_ins(struct cids * const ids, const struct cid * const id)
     }
     sl_remove_head(&ids->avl, next);
     cid_cpy(i, id);
+    // cppcheck-suppress nullPointerRedundantCheck
     i->retired = i->available = false;
     sl_insert_head(&ids->act, i, next);
     ids->act_cnt++;
