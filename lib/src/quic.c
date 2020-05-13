@@ -93,8 +93,9 @@ void alloc_off(struct w_engine * const w,
                const uint16_t off)
 {
     w_alloc_len(w, af, q, len,
-                (c && c->rec.max_pkt_size ? c->rec.max_pkt_size
-                                          : default_max_pkt_len(af)) -
+                (c && c->rec.max_pkt_size
+                     ? (c->rec.max_pkt_size - (af == AF_INET ? 20 : 0))
+                     : default_max_pkt_len(af)) -
                     AEAD_LEN - off,
                 off);
     struct w_iov * v;
