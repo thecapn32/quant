@@ -207,6 +207,7 @@ void validate_pmtu(struct q_conn * const c)
     c->rec.max_pkt_size =
         MIN(w_max_udp_payload(c->sock), (uint16_t)c->tp_peer.max_pkt);
     warn(NTE, "PMTU %u validated", c->rec.max_pkt_size);
+    c->rec.max_pkt_af = c->peer.addr.af;
     c->pmtud_pkt = UINT16_MAX;
 }
 

@@ -75,10 +75,7 @@ struct recovery {
 
     uint16_t pto_cnt;      // pto_count
     uint16_t max_pkt_size; // max_datagram_size
-
-#if HAVE_64BIT
-    uint8_t _unused[4];
-#endif
+    int max_pkt_af;        // address family we checked max_pkt_size under
 };
 
 

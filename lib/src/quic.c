@@ -92,12 +92,18 @@ void alloc_off(struct w_engine * const w,
                const uint32_t len,
                const uint16_t off)
 {
-    w_alloc_len(w, af, q, len,
-                (c && c->rec.max_pkt_size
-                     ? (c->rec.max_pkt_size - (af == AF_INET ? 20 : 0))
-                     : default_max_pkt_len(af)) -
-                    AEAD_LEN - off,
-                off);
+    uint16_t pkt_len = default_max_pkt_len(af);
+    if (c && c->rec.max_pkt_af) {
+        pkt_len = c->rec.max_pkt_size;
+        if (c->rec.max_pkt_af != c->peer.addr.af) {
+            if (c->rec.max_pkt_af == AF_INET)
+                pkt_len -= 20;
+            else
+                pkt_len += 20;
+        }
+    }
+
+    w_alloc_len(w, af, q, len, pkt_len - AEAD_LEN - off, off);
     struct w_iov * v;
     sq_foreach (v, q, next) {
         struct pkt_meta * const m = &meta(v);
