@@ -95,7 +95,7 @@ void alloc_off(struct w_engine * const w,
     uint16_t pkt_len = default_max_pkt_len(af);
     if (c && c->rec.max_pkt_af) {
         pkt_len = c->rec.max_pkt_size;
-        if (c->rec.max_pkt_af != c->peer.addr.af) {
+        if (af != c->rec.max_pkt_af) {
             if (c->rec.max_pkt_af == AF_INET)
                 pkt_len -= 20;
             else
