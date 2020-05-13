@@ -1787,12 +1787,21 @@ struct q_conn * new_conn(struct w_engine * const w,
         if (addr_idx == UINT16_MAX) {
             // find a src address of the same family as the peer address
             for (idx = 0; idx < w->addr_cnt; idx++)
-                if (w->ifaddr[idx].addr.af == peer->addr.af)
+                if (w->ifaddr[idx].addr.af == peer->addr.af &&
+                    (peer->addr.af == AF_INET ||
+                     w_is_private(&peer->addr) ==
+                         w_is_private(&w->ifaddr[idx].addr)))
                     break;
             if (idx == w->addr_cnt) {
                 warn(CRT, "peer address family not available locally");
                 goto fail;
             }
+#ifdef DEBUG_EXTRA
+            warn(ERR, "picked local addr %s%s%s",
+                 w->ifaddr[idx].addr.af == AF_INET6 ? "[" : "",
+                 w_ntop(&w->ifaddr[idx].addr, ip_tmp),
+                 w->ifaddr[idx].addr.af == AF_INET6 ? "]" : "");
+#endif
         }
     }
 
@@ -1878,33 +1887,53 @@ struct q_conn * new_conn(struct w_engine * const w,
     // TODO: avoid encoding RFC1918 addresses
     if (!is_clnt(c) && peer && w->have_ip4 && w->have_ip6) {
         // populate tp_mine.pref_addr
-        const uint16_t other_af_idx =
-            w->ifaddr[idx].addr.af == AF_INET ? 0 : w->addr4_pos;
-        struct w_sock * const ws = get_local_sock_by_ipnp(
-            ped(w), &(struct w_sockaddr){.addr = w->ifaddr[other_af_idx].addr,
-                                         .port = port});
-
-        if (ws) {
+        const bool is_private = w_is_private(&w->ifaddr[idx].addr);
+        int other_af_idx;
+        for (other_af_idx =
+                 (w->ifaddr[idx].addr.af == AF_INET ? 0 : w->addr4_pos);
+             other_af_idx <
+             (w->ifaddr[idx].addr.af == AF_INET ? w->addr4_pos : w->addr_cnt);
+             other_af_idx++) {
 #ifdef DEBUG_EXTRA
-            warn(DBG, "other socket is %s%s%s:%u",
+            warn(ERR, "candidate socket is %s%s%s:%u",
                  w->ifaddr[other_af_idx].addr.af == AF_INET6 ? "[" : "",
                  w_ntop(&w->ifaddr[other_af_idx].addr, ip_tmp),
                  w->ifaddr[other_af_idx].addr.af == AF_INET6 ? "]" : "",
                  bswap16(port));
 #endif
-            memcpy(&c->tp_mine.pref_addr.addr4,
-                   w->ifaddr[idx].addr.af == AF_INET ? &c->sock->ws_loc
-                                                     : &ws->ws_loc,
-                   sizeof(c->tp_mine.pref_addr.addr4));
-            memcpy(&c->tp_mine.pref_addr.addr6,
-                   w->ifaddr[idx].addr.af == AF_INET6 ? &c->sock->ws_loc
-                                                      : &ws->ws_loc,
-                   sizeof(c->tp_mine.pref_addr.addr6));
+            if (is_private == w_is_private(&w->ifaddr[other_af_idx].addr))
+                break;
+        }
 
-            c->max_cid_seq_out = c->tp_mine.pref_addr.cid.seq = 1;
-            mk_rand_cid(&c->tp_mine.pref_addr.cid,
-                        ped(c->w)->conf.server_cid_len, true);
-            conns_by_id_ins(c, cid_ins(&c->scids, &c->tp_mine.pref_addr.cid));
+        if (other_af_idx <
+            (w->ifaddr[idx].addr.af == AF_INET ? w->addr4_pos : w->addr_cnt)) {
+            struct w_sock * const ws = get_local_sock_by_ipnp(
+                ped(w),
+                &(struct w_sockaddr){.addr = w->ifaddr[other_af_idx].addr,
+                                     .port = port});
+
+            if (ws) {
+#ifdef DEBUG_EXTRA
+                warn(DBG, "other pref_addr is %s%s%s",
+                     w->ifaddr[other_af_idx].addr.af == AF_INET6 ? "[" : "",
+                     w_ntop(&w->ifaddr[other_af_idx].addr, ip_tmp),
+                     w->ifaddr[other_af_idx].addr.af == AF_INET6 ? "]" : "");
+#endif
+                memcpy(&c->tp_mine.pref_addr.addr4,
+                       w->ifaddr[idx].addr.af == AF_INET ? &c->sock->ws_loc
+                                                         : &ws->ws_loc,
+                       sizeof(c->tp_mine.pref_addr.addr4));
+                memcpy(&c->tp_mine.pref_addr.addr6,
+                       w->ifaddr[idx].addr.af == AF_INET6 ? &c->sock->ws_loc
+                                                          : &ws->ws_loc,
+                       sizeof(c->tp_mine.pref_addr.addr6));
+
+                c->max_cid_seq_out = c->tp_mine.pref_addr.cid.seq = 1;
+                mk_rand_cid(&c->tp_mine.pref_addr.cid,
+                            ped(c->w)->conf.server_cid_len, true);
+                conns_by_id_ins(c,
+                                cid_ins(&c->scids, &c->tp_mine.pref_addr.cid));
+            }
         }
     }
 #endif

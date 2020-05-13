@@ -1011,11 +1011,13 @@ bool q_ready(struct w_engine * const w,
         }
     } else {
         warn(WRN, "no conn ready");
+#ifndef NDEBUG
 #ifndef NO_MIGRATION
         struct q_conn * cc;
         kh_foreach_value(&conns_by_id, cc,
                          { warn(ERR, "%s", cid_str(cc->scid)); });
         warn(WRN, "end");
+#endif
 #endif
     }
     *ready = c;
@@ -1054,13 +1056,14 @@ void q_migrate(struct q_conn * const c,
                const struct sockaddr * const alt_peer)
 {
     ensure(is_clnt(c), "can only rebind w_sock on client");
+    struct w_engine * const w = c->w;
 
     // find the index of the currently used local address
     uint16_t idx;
-    for (idx = 0; idx < c->w->addr_cnt; idx++)
-        if (w_addr_cmp(&c->w->ifaddr[idx].addr, &c->sock->ws_laddr))
+    for (idx = 0; idx < w->addr_cnt; idx++)
+        if (w_addr_cmp(&w->ifaddr[idx].addr, &c->sock->ws_laddr))
             break;
-    ensure(idx < c->w->addr_cnt, "could not find local address index");
+    ensure(idx < w->addr_cnt, "could not find local address index");
 
 #ifndef NDEBUG
     char old_ip[IP_STRLEN];
@@ -1072,22 +1075,24 @@ void q_migrate(struct q_conn * const c,
     if (switch_ip) {
         // try and find an IP address of another AF
         uint16_t other_idx;
-        for (other_idx = 0; other_idx < c->w->addr_cnt; other_idx++)
-            if (c->w->ifaddr[idx].addr.af != c->w->ifaddr[other_idx].addr.af)
+        for (other_idx = 0; other_idx < w->addr_cnt; other_idx++)
+            if (w->ifaddr[idx].addr.af != w->ifaddr[other_idx].addr.af &&
+                (w->ifaddr[other_idx].addr.af == AF_INET6 &&
+                 !w_is_private(&w->ifaddr[other_idx].addr)))
                 break;
 
         // use corresponding preferred_address as peer
-        if (other_idx < c->w->addr_cnt) {
+        if (other_idx < w->addr_cnt) {
             idx = other_idx;
             if (alt_peer) {
                 w_to_waddr(&c->peer.addr, alt_peer);
-            } else if ((c->w->ifaddr[other_idx].addr.af == AF_INET &&
+            } else if ((w->ifaddr[other_idx].addr.af == AF_INET &&
                         memcmp(&c->tp_peer.pref_addr.addr4.addr.ip4,
                                &(char[IP4_LEN]){0}, IP4_LEN) != 0) ||
-                       (c->w->ifaddr[other_idx].addr.af == AF_INET6 &&
+                       (w->ifaddr[other_idx].addr.af == AF_INET6 &&
                         memcmp(&c->tp_peer.pref_addr.addr6.addr.ip4,
                                &(char[IP6_LEN]){0}, IP6_LEN) != 0)) {
-                c->peer = c->w->ifaddr[other_idx].addr.af == AF_INET
+                c->peer = w->ifaddr[other_idx].addr.af == AF_INET
                               ? c->tp_peer.pref_addr.addr4
                               : c->tp_peer.pref_addr.addr6;
             } else
@@ -1099,7 +1104,7 @@ void q_migrate(struct q_conn * const c,
             goto fail;
     }
 
-    struct w_sock * const new_sock = w_bind(c->w, idx, 0, &c->sockopt);
+    struct w_sock * const new_sock = w_bind(w, idx, 0, &c->sockopt);
     if (new_sock == 0) {
     fail:
         // could not open new w_sock, can't rebind
@@ -1140,7 +1145,7 @@ void q_migrate(struct q_conn * const c,
          c->sock->ws_laddr.af == AF_INET6 ? "]" : "",
          bswap16(c->sock->ws_lport));
 
-    timeouts_add(ped(c->w)->wheel, &c->tx_w, 0);
+    timeouts_add(ped(w)->wheel, &c->tx_w, 0);
 }
 #endif
 

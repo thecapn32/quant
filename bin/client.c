@@ -92,6 +92,7 @@ static uint32_t timeout = 10;
 static uint32_t num_bufs = 100000;
 static uint32_t reps = 1;
 static bool do_h3 = false;
+static bool do_v6 = false;
 static bool flip_keys = false;
 static bool zlen_cids = false;
 static bool write_files = false;
@@ -140,6 +141,7 @@ usage(const char * const name,
     printf("%s [options] URL [URL...]\n", name);
     printf("\t[-3]\t\tsend a static H3 request; default %s\n",
            do_h3 ? "true" : "false");
+    printf("\t[-6]\t\tuse IPv6; default %s\n", do_v6 ? "true" : "false");
     printf("\t[-b bufs]\tnumber of network buffers to allocate; default %u\n",
            num_bufs);
     printf("\t[-c]\t\tverify TLS certificates; default %s\n",
@@ -219,7 +221,8 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
     set_from_url(path, sizeof(path), url, &u, UF_PATH, "/index.html");
 
     struct addrinfo * peer = 0;
-    const int err = getaddrinfo(dest, port, 0, &peer);
+    const struct addrinfo hints = {.ai_family = do_v6 ? AF_INET6 : AF_INET};
+    const int err = getaddrinfo(dest, port, &hints, &peer);
     if (err) {
         warn(ERR, "getaddrinfo: %s", gai_strerror(err));
         if (peer)
@@ -428,7 +431,7 @@ int main(int argc, char * argv[])
     }
 
     while ((ch = getopt(argc, argv,
-                        "hi:v:s:t:l:cu3zb:wr:q:me:"
+                        "hi:v:s:t:l:cu36zb:wr:q:me:"
 #ifndef NO_MIGRATION
                         "n"
 #endif
@@ -466,6 +469,9 @@ int main(int argc, char * argv[])
             break;
         case '3':
             do_h3 = true;
+            break;
+        case '6':
+            do_v6 = true;
             break;
         case 'z':
             zlen_cids = true;
