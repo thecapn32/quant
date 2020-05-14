@@ -72,6 +72,7 @@ fi
 
 
 pid=$$
+semopts="--jobs +0 --id $$"
 script=$(basename -s .sh "$0")
 rm -rf /tmp/"$script"*
 
@@ -79,7 +80,7 @@ rm -rf /tmp/"$script"*
 export ASAN_OPTIONS=strict_string_checks=1:strict_init_order=1:detect_stack_use_after_return=1:check_initialization_order=1:sleep_before_dying=30:alloc_dealloc_mismatch=1:detect_invalid_pointer_pairs=1:print_stacktrace=1:halt_on_error=1
 export UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1:suppressions=../misc/gcc-ubsan-suppressions.txt
 
-function test_server {
+function test_server_initial {
     # run quant client and save a log for post-processing
     local opts="-i $iface -t5 -v5 -b 1000 -l /dev/null"
     local log_base="/tmp/$script.$pid.$1.log"
@@ -89,47 +90,59 @@ function test_server {
 
     # initial 1rtt run followed by consecutive rsmt/0rtt run
     local cache="/tmp/$script.$pid.$1.cache"
-    bin/client $opts -s "$cache" ${info[1]} \
-        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.1rtt" 2>&1 ; \
+    sem $semopts "bin/client $opts -s "$cache" ${info[1]} \
+        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.1rtt" 2>&1"
+
+    printf "%s " "$s"
+}
+
+
+function test_server {
+    # run quant client and save a log for post-processing
+    local opts="-i $iface -t5 -v5 -b 1000 -l /dev/null"
+    local log_base="/tmp/$script.$pid.$1.log"
+
+    IFS='|' read -ra info <<< "${servers[$1]}"
+    # 0=name, 1=flags, 2=port, 3=retry-port, 4=h3-port, 5=URL
+
 
     if ! grep -E -q 'RX.*len=' "$log_base.1rtt"; then
         # server seems down, skip the rest of the tests
         return
     fi
 
-    bin/client $opts -s "$cache" ${info[1]} \
-        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.0rtt" 2>&1 ; \
-    [ -z "$benchmarking" ] && rm -f "$cache" &
+    local cache="/tmp/$script.$pid.$1.cache"
+    sem $semopts "bin/client $opts -s "$cache" ${info[1]} \
+        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.0rtt" 2>&1"
 
     # rtry run
-    bin/client $opts ${info[1]} -s /dev/null \
-        "https://${info[0]}:${info[3]}${info[5]}" > "$log_base.rtry" 2>&1 &
+    sem $semopts "bin/client $opts ${info[1]} -s /dev/null \
+        "https://${info[0]}:${info[3]}${info[5]}" > "$log_base.rtry" 2>&1"
 
     # key update run
-    bin/client $opts ${info[1]} -s /dev/null -u \
-        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.kyph" 2>&1 &
+    sem $semopts "bin/client $opts ${info[1]} -s /dev/null -u \
+        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.kyph" 2>&1"
 
     # h3 run
-    bin/client $opts ${info[1]} -s /dev/null -3 \
-        "https://${info[0]}:${info[4]}${info[5]}" > "$log_base.h3" 2>&1 &
+    sem $semopts "bin/client $opts ${info[1]} -s /dev/null -3 \
+        "https://${info[0]}:${info[4]}${info[5]}" > "$log_base.h3" 2>&1"
 
     # NAT rebinding run
-    bin/client $opts ${info[1]} -s /dev/null -n \
-        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.nat" 2>&1 &
+    sem $semopts "bin/client $opts ${info[1]} -s /dev/null -n \
+        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.nat" 2>&1"
 
     # quantum-readiness run
-    bin/client $opts ${info[1]} -s /dev/null -m \
-        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.qr" 2>&1 &
+    sem $semopts "bin/client $opts ${info[1]} -s /dev/null -m \
+        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.qr" 2>&1"
 
     # IP address mobility run
-    bin/client $opts ${info[1]} -s /dev/null -n -n \
-        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.adrm" 2>&1 &
+    sem $semopts "bin/client $opts ${info[1]} -s /dev/null -n -n \
+        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.adrm" 2>&1"
 
     # zero-len CID run
-    bin/client $opts ${info[1]} -s /dev/null -z \
-        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.zcid" 2>&1 &
+    sem $semopts "bin/client $opts ${info[1]} -s /dev/null -z \
+        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.zcid" 2>&1"
 
-    wait
     printf "%s " "$s"
 }
 
@@ -220,6 +233,9 @@ function check_fail {
 
 
 function analyze {
+    local cache="/tmp/$script.$pid.$1.cache"
+    rm -f "$cache"
+
     local ret_base="/tmp/$script.$pid.$1.ret"
     local log_base="/tmp/$script.$pid.$1.log"
     local sed_pattern='s,\x1B\[[0-9;]*[a-zA-Z],,g'
@@ -413,11 +429,17 @@ function analyze {
 }
 
 
-printf "Testing: "
+printf "Initial test: "
 for s in "${!servers[@]}"; do
-    test_server "$s" &
+    test_server_initial "$s"
 done
-wait
+sem --wait
+
+printf "\\nFeature tests: "
+for s in "${!servers[@]}"; do
+    test_server "$s"
+done
+sem --wait
 
 if [ -n "$benchmarking" ]; then
     printf "\\nBenchmarking: "
