@@ -60,11 +60,7 @@
 #ifndef MINIMAL_CIPHERS
 #define cipher_suite ptls_minicrypto_cipher_suites
 #define x25519 ptls_minicrypto_x25519
-#else
-static const ptls_cipher_suite_t * cipher_suite[] = {
-    &ptls_minicrypto_aes128gcmsha256, 0};
 #endif
-
 #define aes128gcmsha256 ptls_minicrypto_aes128gcmsha256
 #define secp256r1 ptls_minicrypto_secp256r1
 #endif
@@ -1590,11 +1586,25 @@ void init_tls_ctx(const struct q_conf * const conf,
     }
 #endif
 
-    static ptls_key_exchange_algorithm_t * key_exchanges[] = {&secp256r1,
+    static const ptls_key_exchange_algorithm_t * key_exchanges[] = {&secp256r1,
 #ifndef MINIMAL_CIPHERS
-                                                              &x25519,
+                                                                    &x25519,
 #endif
-                                                              0};
+                                                                    0};
+
+#ifdef MINIMAL_CIPHERS
+    static const ptls_cipher_suite_t * cipher_suite[] = {
+        &ptls_minicrypto_aes128gcmsha256, 0};
+#endif
+
+    static const ptls_cipher_suite_t * chacha20_cipher_suite[] = {
+#ifdef WITH_OPENSSL
+        &ptls_openssl_chacha20poly1305sha256,
+#else
+        &ptls_minicrypto_chacha20poly1305sha256,
+#endif
+        0};
+
     static ptls_on_client_hello_t on_client_hello = {on_ch};
     static ptls_update_traffic_key_t update_traffic_key = {
         update_traffic_key_cb};
@@ -1603,7 +1613,8 @@ void init_tls_ctx(const struct q_conf * const conf,
     tls_ctx->get_time = &get_time_cb;
 
     tls_ctx->omit_end_of_early_data = true;
-    tls_ctx->cipher_suites = cipher_suite;
+    tls_ctx->cipher_suites =
+        conf && conf->force_chacha20 ? chacha20_cipher_suite : cipher_suite;
     tls_ctx->key_exchanges = key_exchanges;
     tls_ctx->on_client_hello = &on_client_hello;
     tls_ctx->update_traffic_key = &update_traffic_key;

@@ -93,6 +93,7 @@ static uint32_t num_bufs = 100000;
 static uint32_t reps = 1;
 static bool do_h3 = false;
 static bool do_v6 = false;
+static bool do_chacha = false;
 static bool flip_keys = false;
 static bool zlen_cids = false;
 static bool write_files = false;
@@ -142,6 +143,8 @@ usage(const char * const name,
     printf("\t[-3]\t\tsend a static H3 request; default %s\n",
            do_h3 ? "true" : "false");
     printf("\t[-6]\t\tuse IPv6; default %s\n", do_v6 ? "true" : "false");
+    printf("\t[-a]\t\tforce Chacha20; default %s\n",
+           do_chacha ? "true" : "false");
     printf("\t[-b bufs]\tnumber of network buffers to allocate; default %u\n",
            num_bufs);
     printf("\t[-c]\t\tverify TLS certificates; default %s\n",
@@ -446,7 +449,7 @@ int main(int argc, char * argv[])
     }
 
     while ((ch = getopt(argc, argv,
-                        "hi:v:s:t:l:cu36zb:wr:q:me:"
+                        "hi:v:s:t:l:cu36azb:wr:q:me:"
 #ifndef NO_MIGRATION
                         "n"
 #endif
@@ -488,6 +491,9 @@ int main(int argc, char * argv[])
         case '6':
             do_v6 = true;
             break;
+        case 'a':
+            do_chacha = true;
+            break;
         case 'z':
             zlen_cids = true;
             break;
@@ -528,6 +534,7 @@ int main(int argc, char * argv[])
                                       .version = vers,
                                       .enable_quantum_readiness_test = test_qr},
             .qlog_dir = *qlog_dir ? qlog_dir : 0,
+            .force_chacha20 = do_chacha,
             .num_bufs = num_bufs,
             .ticket_store = cache,
             .tls_log = *tls_log ? tls_log : 0,
