@@ -53,7 +53,7 @@ declare -A servers=(
     # [local]="localhost||4433|4434|4433|/40000"
 )
 
-results=(live fail vneg hshk data clse rsmt zrtt rtry qrdy migr bind adrm kyph spin aecn zcid http)
+results=(live fail vneg hshk data clse rsmt zrtt rtry qrdy migr bind adrm kyph spin aecn zcid chch http)
 
 if [ -n "$1" ]; then
     results+=(perf t_h2 t_hq)
@@ -142,6 +142,10 @@ function test_server {
     # zero-len CID run
     sem $semopts "bin/client $opts ${info[1]} -s /dev/null -z \
         "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.zcid" 2>&1"
+
+    # chacha20 run
+    sem $semopts "bin/client $opts ${info[1]} -s /dev/null -a \
+        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.chch" 2>&1"
 
     printf "%s " "$s"
 }
@@ -423,6 +427,20 @@ function analyze {
         END{exit ($x + $e == 2)};' "$log_strip"
     [ $? -eq 1 ] && echo O > "$ret_base.zcid"
     [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.zcid" ] && rm -f "$log"
+    rm -f "$log_strip"
+
+    # analyze chacha20
+    local log="$log_base.chch"
+    local log_strip="$log.strip"
+    gsed "$sed_pattern" "$log" > "$log_strip"
+    check_fail "$1" "$log_strip" "$log"
+
+    perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $x=1 : next);
+        /dec_close.*err=0x([^ ]*)/ and ($1 ne "0" ? exit 0 : next);
+        /enc_close.*err=0x0/ and $e=1;
+        END{exit ($x + $e == 2)};' "$log_strip"
+    [ $? -eq 1 ] && echo 2 > "$ret_base.chch"
+    [ ! -e "$ret_base.fail" ] && [ -s "$ret_base.chch" ] && rm -f "$log"
     rm -f "$log_strip"
 
     printf "%s " "$s"
