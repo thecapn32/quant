@@ -221,8 +221,10 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
     set_from_url(path, sizeof(path), url, &u, UF_PATH, "/index.html");
 
     struct addrinfo * peer = 0;
-    const struct addrinfo hints = {.ai_family = do_v6 ? AF_INET6 : AF_INET};
-    const int err = getaddrinfo(dest, port, &hints, &peer);
+    const int err = getaddrinfo(
+        dest, port,
+        &(const struct addrinfo){.ai_family = do_v6 ? AF_INET6 : AF_INET},
+        &peer);
     if (err) {
         warn(ERR, "getaddrinfo: %s", gai_strerror(err));
         if (peer)
@@ -324,7 +326,19 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
 #ifndef NO_MIGRATION
             if (rebind && cce->migrated == false) {
                 // try and find an IP address of another AF
-                struct addrinfo * other_peer = peer->ai_next;
+                struct addrinfo * other_peer = 0;
+                const int err_other =
+                    getaddrinfo(dest, port,
+                                &(const struct addrinfo){
+                                    .ai_family = do_v6 ? AF_INET : AF_INET6},
+                                &other_peer);
+                if (err_other) {
+                    warn(ERR, "getaddrinfo: %s", gai_strerror(err_other));
+                    if (other_peer)
+                        freeaddrinfo(other_peer);
+                    return 0;
+                }
+
                 while (other_peer) {
                     if (other_peer->ai_family != peer->ai_family)
                         break;
@@ -333,6 +347,7 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
                 q_migrate(cce->c, switch_ip,
                           other_peer ? other_peer->ai_addr : 0);
                 cce->migrated = true; // only rebind once
+                freeaddrinfo(other_peer);
             }
 #endif
         }
