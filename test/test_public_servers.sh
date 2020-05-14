@@ -90,8 +90,8 @@ function test_server_initial {
 
     # initial 1rtt run followed by consecutive rsmt/0rtt run
     local cache="/tmp/$script.$pid.$1.cache"
-    sem $semopts "bin/client $opts -s "$cache" ${info[1]} \
-        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.1rtt" 2>&1"
+    sem $semopts "bin/client $opts -s $cache ${info[1]} \
+        https://${info[0]}:${info[2]}${info[5]} > $log_base.1rtt 2>&1"
 
     printf "%s " "$s"
 }
@@ -112,40 +112,40 @@ function test_server {
     fi
 
     local cache="/tmp/$script.$pid.$1.cache"
-    sem $semopts "bin/client $opts -s "$cache" ${info[1]} \
-        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.0rtt" 2>&1"
+    sem $semopts "bin/client $opts -s $cache ${info[1]} \
+        https://${info[0]}:${info[2]}${info[5]} > $log_base.0rtt 2>&1"
 
     # rtry run
     sem $semopts "bin/client $opts ${info[1]} -s /dev/null \
-        "https://${info[0]}:${info[3]}${info[5]}" > "$log_base.rtry" 2>&1"
+        https://${info[0]}:${info[3]}${info[5]} > $log_base.rtry 2>&1"
 
     # key update run
     sem $semopts "bin/client $opts ${info[1]} -s /dev/null -u \
-        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.kyph" 2>&1"
+        https://${info[0]}:${info[2]}${info[5]} > $log_base.kyph 2>&1"
 
     # h3 run
     sem $semopts "bin/client $opts ${info[1]} -s /dev/null -3 \
-        "https://${info[0]}:${info[4]}${info[5]}" > "$log_base.h3" 2>&1"
+        https://${info[0]}:${info[4]}${info[5]} > $log_base.h3 2>&1"
 
     # NAT rebinding run
     sem $semopts "bin/client $opts ${info[1]} -s /dev/null -n \
-        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.nat" 2>&1"
+        https://${info[0]}:${info[2]}${info[5]} > $log_base.nat 2>&1"
 
     # quantum-readiness run
     sem $semopts "bin/client $opts ${info[1]} -s /dev/null -m \
-        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.qr" 2>&1"
+        https://${info[0]}:${info[2]}${info[5]} > $log_base.qr 2>&1"
 
     # IP address mobility run
     sem $semopts "bin/client $opts ${info[1]} -s /dev/null -n -n \
-        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.adrm" 2>&1"
+        https://${info[0]}:${info[2]}${info[5]} > $log_base.adrm 2>&1"
 
     # zero-len CID run
     sem $semopts "bin/client $opts ${info[1]} -s /dev/null -z \
-        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.zcid" 2>&1"
+        https://${info[0]}:${info[2]}${info[5]} > $log_base.zcid 2>&1"
 
     # chacha20 run
     sem $semopts "bin/client $opts ${info[1]} -s /dev/null -a \
-        "https://${info[0]}:${info[2]}${info[5]}" > "$log_base.chch" 2>&1"
+        https://${info[0]}:${info[2]}${info[5]} > $log_base.chch 2>&1"
 
     printf "%s " "$s"
 }
