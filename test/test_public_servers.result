@@ -12,7 +12,7 @@ ngtcp2    *         V    H    D    C    R    Z    S    Q    M    B    A    U    
 ngx_quic  *         V    H    D    C    R    Z         Q                                  O    3
 picoquic  *         V    H    D    C    R    Z    S    Q    M    B    A    U    P         O    3
 quant     *    x    V    H    D    C    R    Z    S    Q    M    B    A    U    P    E    O
-quic-go
+quic-go   *         V    H    D    C    R    Z    S    Q                   U              O    3
 quiche    *         V    H    D    C    R    Z    S    Q                                  O    3
 quicly    *         V    H    D    C    R    Z    S    Q                   U              O    3
 quinn     *         V    H    D    C    R    Z    S    Q    M    B    A    U    P    E    O    3
