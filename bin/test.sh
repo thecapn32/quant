@@ -43,7 +43,7 @@ export UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1:suppressions=../misc/gcc
 # commands to run the different clients against $addr:$port
 case $c in
         quant)
-                cc="bin/client -v5 -i $iface -u -t2 -q . \
+                cc="bin/client -v5 -i $iface -u -t2 -q . -l /tmp/clnt.tlslog \
                         \"https://$addr:$port$path\""
                 ;;
         wquant)
@@ -93,7 +93,7 @@ esac
 case $s in
         quant)
                 sc="bin/server -v5 -c $cert -k $key -i $iface -t2 -q . \
-                    -p 4433 -p 4434 -p $port -d $dir"
+                    -l /tmp/serv.tlslog -p 4433 -p 4434 -p $port -d $dir"
                 ;;
         wquant)
                 sc="vagrant ssh -c \"\
