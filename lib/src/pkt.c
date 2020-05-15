@@ -306,8 +306,10 @@ uint16_t coalesce(struct w_iov_sq * const q,
         }
 
         v = sq_next(v, next);
+#ifdef DEBUG_EXTRA
         if (v)
             warn(DBG, "coalescing txq next");
+#endif
     }
 
     return pmtud_pkt;
