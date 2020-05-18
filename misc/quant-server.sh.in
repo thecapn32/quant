@@ -17,8 +17,8 @@ name="$logdir/log"
 new=$(make_name "$name.html")
 # %N only works on Linux
 [ -f "$new.html" ] && new="$new-"$(date +%N)
-mv "$name.html" "$new.html"
-mv "$name.qlog" "$new.qlog"
+[ -f "$name.html" ] && mv "$name.html" "$new.html"
+[ -f "$name.qlog" ] && mv "$name.qlog" "$new.qlog"
 
 # send email if we crashed
 if grep -E -i -q 'assertion failed|AddressSanitizer|runtime error|ACK_ECN' "$new"; then
