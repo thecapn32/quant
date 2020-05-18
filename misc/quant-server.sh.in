@@ -12,7 +12,7 @@ function make_name() {
 
 export PATH="$PATH:~/bin"
 
-logdir=/mnt/log
+logdir=/mnt/www
 name="$logdir/log"
 new=$(make_name "$name.html")
 # %N only works on Linux
@@ -26,6 +26,9 @@ if grep -E -i -q 'assertion failed|AddressSanitizer|runtime error|ACK_ECN' "$new
 fi
 
 cat <<-EOF > /var/www/html/.htaccess
+Options Indexes
+DirectoryIndex
+IndexIgnore @eaDir .htaccess
 IndexIgnoreReset ON
 IndexOptions FancyIndexing SuppressIcon
 IndexOrderDefault Descending Date
