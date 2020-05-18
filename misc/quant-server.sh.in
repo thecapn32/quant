@@ -30,7 +30,7 @@ Options Indexes
 DirectoryIndex
 IndexIgnore @eaDir .htaccess
 IndexIgnoreReset ON
-IndexOptions FancyIndexing SuppressIcon NameWidth=30
+IndexOptions FancyIndexing SuppressIcon NameWidth=*
 IndexOrderDefault Descending Date
 RewriteRule ^log$ /$(basename "$new") [R]
 Header set Access-Control-Allow-Origin "*"
@@ -56,7 +56,7 @@ detect_stack_use_after_return=1:detect_leaks=1:check_initialization_order=1:\
 alloc_dealloc_mismatch=1:detect_invalid_pointer_pairs=1 \
 LSAN_OPTIONS=verbosity=1:log_threads=1 \
 UBSAN_OPTIONS=suppressions=misc/gcc-ubsan-suppressions.txt \
-stdbuf -o 0 -e 0 bin/server -v5 -i enx00e04c68199d -p 443 -p 4433 -p 4434 \
+bin/server -v5 -i enx00e04c68199d -p 443 -p 4433 -p 4434 \
     -d "$logdir" \
     -c /etc/letsencrypt/live/quant.eggert.org/fullchain.pem \
     -k /etc/letsencrypt/live/quant.eggert.org/privkey.pem \
