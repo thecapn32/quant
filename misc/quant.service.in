@@ -8,7 +8,6 @@ StartLimitIntervalSec=0
 ExecStart=@CMAKE_CURRENT_BINARY_DIR@/quant-server.sh
 Restart=always
 RestartSec=1s
-User=lars
 
 [Install]
 WantedBy=default.target
