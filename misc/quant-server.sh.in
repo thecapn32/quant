@@ -57,7 +57,7 @@ alloc_dealloc_mismatch=1:detect_invalid_pointer_pairs=1 \
 LSAN_OPTIONS=verbosity=1:log_threads=1 \
 UBSAN_OPTIONS=suppressions=misc/gcc-ubsan-suppressions.txt \
 bin/server -v5 -i enx00e04c68199d -p 443 -p 4433 -p 4434 \
-    -d /usr/share/apache2/default-site \
+    -d "$logdir" \
     -c /etc/letsencrypt/live/quant.eggert.org/fullchain.pem \
     -k /etc/letsencrypt/live/quant.eggert.org/privkey.pem \
     -q "$logdir" \
