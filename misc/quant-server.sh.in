@@ -30,7 +30,7 @@ Options Indexes
 DirectoryIndex
 IndexIgnore @eaDir .htaccess
 IndexIgnoreReset ON
-IndexOptions FancyIndexing SuppressIcon NameWidth=*
+IndexOptions FancyIndexing SuppressIcon NameWidth=30
 IndexOrderDefault Descending Date
 RewriteRule ^log$ /$(basename "$new") [R]
 Header set Access-Control-Allow-Origin "*"
