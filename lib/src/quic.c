@@ -996,39 +996,21 @@ bool q_ready(struct w_engine * const w,
     struct q_conn * const c = sl_first(&c_ready);
     if (c) {
         bool remove = true;
-#if !defined(NDEBUG) && defined(DEBUG_EXTRA)
-        char * op = "rx";
-#endif
 #ifndef NO_SERVER
-        if (c->needs_accept) {
-#if !defined(NDEBUG) && defined(DEBUG_EXTRA)
-            op = "accept";
-#endif
+        if (c->needs_accept)
             remove = c->have_new_data == false;
-        } else {
 #endif
-#if !defined(NDEBUG) && defined(DEBUG_EXTRA)
-            if (c->state == conn_clsd)
-                op = "close";
-            warn(WRN, "%s conn %s ready to %s", conn_type(c), cid_str(c->scid),
-                 op);
+#ifdef DEBUG_EXTRA
+        warn(WRN, "%s conn %s ready to %s", conn_type(c), cid_str(c->scid),
+             c->needs_accept ? "accept"
+                             : (c->state == conn_clsd ? "close" : "rx"));
 #endif
-        }
         if (remove) {
             sl_remove_head(&c_ready, node_rx_ext);
             c->in_c_ready = false;
         }
-    } else {
+    } else
         warn(WRN, "no conn ready");
-#if !defined(NDEBUG) && defined(DEBUG_EXTRA)
-#ifndef NO_MIGRATION
-        struct q_conn * cc;
-        kh_foreach_value(&conns_by_id, cc,
-                         { warn(ERR, "%s", cid_str(cc->scid)); });
-        warn(WRN, "end");
-#endif
-#endif
-    }
     *ready = c;
 done:
 #ifndef NO_MIGRATION

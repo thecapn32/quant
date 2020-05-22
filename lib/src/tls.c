@@ -1594,7 +1594,12 @@ void init_tls_ctx(const struct q_conf * const conf,
 
 #ifdef MINIMAL_CIPHERS
     static const ptls_cipher_suite_t * cipher_suite[] = {
-        &ptls_minicrypto_aes128gcmsha256, 0};
+#ifdef WITH_OPENSSL
+        &ptls_openssl_aes128gcmsha256,
+#else
+        &ptls_minicrypto_aes128gcmsha256,
+#endif
+        0};
 #endif
 
     static const ptls_cipher_suite_t * chacha20_cipher_suite[] = {
