@@ -876,11 +876,13 @@ void init_tp(struct q_conn * const c)
             break;
 
         case TP_DCID_O:
-            if (!is_clnt(c) && odcid.len != UINT8_MAX) {
-                encb_tp(&pos, end, TP_DCID_O, odcid.id, odcid.len);
+            if (!is_clnt(c)) {
+                const struct cid * const id =
+                    odcid.len != UINT8_MAX ? &odcid : c->scid;
+                encb_tp(&pos, end, TP_DCID_O, id->id, id->len);
 #ifdef DEBUG_EXTRA
                 warn(INF, "\toriginal_destination_connection_id = %s",
-                     cid_str(&odcid));
+                     cid_str(id));
 #endif
             }
             break;
