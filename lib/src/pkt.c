@@ -204,10 +204,10 @@ void log_pkt(const char * const dir,
 
 void validate_pmtu(struct q_conn * const c)
 {
-    c->rec.max_pkt_size =
-        MIN(w_max_udp_payload(c->sock), (uint16_t)c->tp_peer.max_pkt);
-    warn(NTE, "PMTU %u validated", c->rec.max_pkt_size);
-    c->rec.max_pkt_af = c->peer.addr.af;
+    c->rec.max_ups =
+        MIN(w_max_udp_payload(c->sock), (uint16_t)c->tp_peer.max_ups);
+    warn(NTE, "PMTU %u validated", c->rec.max_ups);
+    c->rec.max_ups_af = c->peer.addr.af;
     c->pmtud_pkt = UINT16_MAX;
 }
 
@@ -221,9 +221,8 @@ can_coalesce_pkt_types(const uint8_t a, const uint8_t b)
 }
 
 
-uint16_t coalesce(struct w_iov_sq * const q,
-                  const uint16_t max_pkt_size,
-                  const bool do_pmtud)
+uint16_t
+coalesce(struct w_iov_sq * const q, const uint16_t max_ups, const bool do_pmtud)
 {
     uint16_t pmtud_pkt = UINT16_MAX;
     struct w_iov * v = sq_first(q);
@@ -243,12 +242,11 @@ uint16_t coalesce(struct w_iov_sq * const q,
 #endif
             struct w_iov * const next_next = sq_next(next, next);
             // do we have space? do the packet types make sense to coalesce?
-            if (v->len + next->len > max_pkt_size) {
+            if (v->len + next->len > max_ups) {
                 warn(DBG,
                      "cannot coalesce %u-byte %s pkt behind %u-byte %s pkt, "
                      "limit %u",
-                     next->len, next_type_str, v->len, outer_type_str,
-                     max_pkt_size);
+                     next->len, next_type_str, v->len, outer_type_str, max_ups);
                 skipped_types |= pkt_type(*next->buf);
                 prev = next;
             } else if (can_coalesce_pkt_types(pkt_type(inner_flags),
@@ -294,14 +292,14 @@ uint16_t coalesce(struct w_iov_sq * const q,
             next = next_next;
         }
 
-        if (do_pmtud && pmtud_pkt == UINT16_MAX && v->len < max_pkt_size) {
+        if (do_pmtud && pmtud_pkt == UINT16_MAX && v->len < max_ups) {
             warn(NTE,
                  "testing PMTU %u with %s pkt %u using %u bytes rand padding",
-                 max_pkt_size, pkt_type_str(*v->buf, v->buf + 1),
-                 v->user_data & 0x3fff, max_pkt_size - v->len);
-            rand_bytes(v->buf + v->len, max_pkt_size - v->len);
+                 max_ups, pkt_type_str(*v->buf, v->buf + 1),
+                 v->user_data & 0x3fff, max_ups - v->len);
+            rand_bytes(v->buf + v->len, max_ups - v->len);
             *(v->buf + v->len) &= ~LH;
-            v->len = max_pkt_size;
+            v->len = max_ups;
             pmtud_pkt = v->user_data;
         }
 
@@ -466,12 +464,7 @@ bool enc_pkt(struct q_stream * const s,
     struct pn_space * const pn = m->pn = pn_for_epoch(c, epoch);
 
     m->txed = true;
-#ifndef NO_SERVER
-    if (unlikely(c->tx_rtry))
-        m->hdr.nr = 0;
-    else
-#endif
-        if (unlikely(pn->lg_sent == UINT_T_MAX))
+    if (unlikely(pn->lg_sent == UINT_T_MAX))
         // next pkt nr
         m->hdr.nr = pn->lg_sent = 0;
     else
@@ -479,17 +472,8 @@ bool enc_pkt(struct q_stream * const s,
 
     switch (epoch) {
     case ep_init:
-#ifndef NO_SERVER
-        if (unlikely(c->tx_rtry))
-            m->hdr.type = LH_RTRY;
-        else
-#endif
-            m->hdr.type = LH_INIT;
+        m->hdr.type = LH_INIT;
         m->hdr.flags = LH | m->hdr.type;
-#ifndef NO_SERVER
-        if (unlikely(c->tx_rtry))
-            m->hdr.flags |= (uint8_t)w_rand_uniform32(0x0f);
-#endif
         break;
     case ep_0rtt:
         if (is_clnt(c)) {
@@ -528,16 +512,11 @@ bool enc_pkt(struct q_stream * const s,
         if (m->hdr.type == LH_INIT)
             encv(&pos, end, is_clnt(c) ? c->tok_len : 0);
 
-        if (((is_clnt(c) && m->hdr.type == LH_INIT) ||
-             m->hdr.type == LH_RTRY) &&
-            c->tok_len)
+        if (is_clnt(c) && m->hdr.type == LH_INIT && c->tok_len)
             encb(&pos, end, c->tok, c->tok_len);
 
-        if (m->hdr.type != LH_RTRY) {
-            // leave space for length field (2 bytes is enough)
-            len_pos = pos;
-            pos += 2;
-        }
+        len_pos = pos;
+        pos += 2;
 
     } else {
         cid_cpy(&m->hdr.dcid, c->dcid);
@@ -545,22 +524,20 @@ bool enc_pkt(struct q_stream * const s,
     }
 
     uint8_t * pkt_nr_pos = 0;
-    if (likely(m->hdr.type != LH_RTRY)) {
-        pkt_nr_pos = pos;
-        switch ((pnl - 1) & HEAD_PNRL_MASK) {
-        case 0:
-            enc1(&pos, end, m->hdr.nr & UINT64_C(0xff));
-            break;
-        case 1:
-            enc2(&pos, end, m->hdr.nr & UINT64_C(0xffff));
-            break;
-        case 2:
-            enc3(&pos, end, m->hdr.nr & UINT64_C(0xffffff));
-            break;
-        case 3:
-            enc4(&pos, end, m->hdr.nr & UINT64_C(0xffffffff));
-            break;
-        }
+    pkt_nr_pos = pos;
+    switch ((pnl - 1) & HEAD_PNRL_MASK) {
+    case 0:
+        enc1(&pos, end, m->hdr.nr & UINT64_C(0xff));
+        break;
+    case 1:
+        enc2(&pos, end, m->hdr.nr & UINT64_C(0xffff));
+        break;
+    case 2:
+        enc3(&pos, end, m->hdr.nr & UINT64_C(0xffffff));
+        break;
+    case 3:
+        enc4(&pos, end, m->hdr.nr & UINT64_C(0xffffffff));
+        break;
     }
 
     m->hdr.hdr_len = (uint16_t)(pos - v->buf);
@@ -583,15 +560,6 @@ bool enc_pkt(struct q_stream * const s,
         return false;
     }
 #endif
-
-    if (unlikely(m->hdr.type == LH_RTRY)) {
-        uint8_t rit[RIT_LEN];
-        make_rit(c, m->hdr.flags, &m->hdr.dcid, &m->hdr.scid, c->tok,
-                 c->tok_len, rit);
-        encb(&pos, end, rit, RIT_LEN);
-        log_pkt("TX", v, &v->saddr, c->tok, c->tok_len, rit);
-        goto tx;
-    }
 
     log_pkt("TX", v, &v->saddr, c->tok, c->tok_len, 0);
 
@@ -630,12 +598,12 @@ bool enc_pkt(struct q_stream * const s,
         enc_stream_or_crypto_frame(&pos, v->buf + v->len, m, v, s);
     }
 
-    // TODO: include more frames when c->rec.max_pkt_size < max_pkt_len TP
-    if (unlikely((pos - v->buf) < c->rec.max_pkt_size - AEAD_LEN &&
+    // TODO: include more frames when c->rec.max_ups < max_ups TP
+    if (unlikely((pos - v->buf) < c->rec.max_ups - AEAD_LEN &&
                  (enc_data || rtx) &&
                  (epoch == ep_data || (!is_clnt(c) && epoch == ep_0rtt))))
         // we can try to stick some more frames in after the stream frame
-        enc_other_frames(ci, &pos, v->buf + c->rec.max_pkt_size - AEAD_LEN, m);
+        enc_other_frames(ci, &pos, v->buf + c->rec.max_ups - AEAD_LEN, m);
 
     if (is_clnt(c) && enc_data) {
         if (unlikely(c->try_0rtt == false && m->hdr.type == LH_INIT)) {
@@ -688,16 +656,10 @@ tx:;
     struct w_iov * const xv = w_alloc_iov(c->w, q_conn_af(c), 0, 0);
     ensure(xv, "w_alloc_iov failed");
 
-    if (unlikely(m->hdr.type == LH_RTRY)) {
-        memcpy(xv->buf, v->buf, v->len); // copy data
-        xv->len = v->len;
-    } else {
-        const uint16_t ret =
-            enc_aead(v, m, xv, (uint16_t)(pkt_nr_pos - v->buf));
-        if (unlikely(ret == 0)) {
-            adj_iov_to_start(v, m);
-            return false;
-        }
+    const uint16_t ret = enc_aead(v, m, xv, (uint16_t)(pkt_nr_pos - v->buf));
+    if (unlikely(ret == 0)) {
+        adj_iov_to_start(v, m);
+        return false;
     }
 
     if (!is_clnt(c))

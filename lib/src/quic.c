@@ -92,11 +92,11 @@ void alloc_off(struct w_engine * const w,
                const uint32_t len,
                const uint16_t off)
 {
-    uint16_t pkt_len = default_max_pkt_len(af);
-    if (c && c->rec.max_pkt_af) {
-        pkt_len = c->rec.max_pkt_size;
-        if (af != c->rec.max_pkt_af) {
-            if (c->rec.max_pkt_af == AF_INET)
+    uint16_t pkt_len = default_max_ups(af);
+    if (c && c->rec.max_ups_af) {
+        pkt_len = c->rec.max_ups;
+        if (af != c->rec.max_ups_af) {
+            if (c->rec.max_ups_af == AF_INET)
                 pkt_len -= 20;
             else
                 pkt_len += 20;
@@ -911,22 +911,15 @@ void q_cleanup(struct w_engine * const w)
 }
 
 
-void q_cid(struct q_conn * const c, uint8_t * const buf, size_t * const buf_len)
-{
-    ensure(*buf_len >= CID_LEN_MAX, "buf too short (need at least %d)",
-           CID_LEN_MAX);
-
-    memcpy(buf, c->oscid.id, c->oscid.len);
-    *buf_len = c->oscid.len;
-}
-
-
 const char *
 q_cid_str(struct q_conn * const c, char * const buf, const size_t buf_len)
 {
     ensure(buf_len >= hex_str_len(CID_LEN_MAX),
            "buf too short (need at least %d)", hex_str_len(CID_LEN_MAX));
-    hex2str(c->oscid.id, c->oscid.len, buf, buf_len);
+    if (c->scid)
+        hex2str(c->scid->id, c->scid->len, buf, buf_len);
+    else
+        *buf = 0;
     return buf;
 }
 

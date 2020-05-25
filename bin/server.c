@@ -242,12 +242,11 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
 static uint32_t __attribute__((nonnull))
 strm_key(struct q_conn * const c, const struct q_stream * const s)
 {
-    uint8_t buf[sizeof(uint_t) + 32];
+    uint8_t buf[sizeof(uint_t) + sizeof(intptr_t)];
     const uint_t sid = q_sid(s);
     memcpy(buf, &sid, sizeof(uint_t));
-    size_t len = sizeof(buf) - sizeof(uint_t);
-    q_cid(c, &buf[sizeof(uint_t)], &len);
-    return fnv1a_32(buf, len + sizeof(uint_t));
+    memcpy(buf + sizeof(uint_t), c, sizeof(intptr_t));
+    return fnv1a_32(buf, sizeof(buf));
 }
 
 

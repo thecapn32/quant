@@ -1215,20 +1215,20 @@ bool dec_frames(struct q_conn * const c,
 
         // check that frame type is allowed in this pkt type
         static const struct frames frame_ok[] = {
-            [ep_init] = bitset_t_initializer(
-                1 << FRM_PAD | 1 << FRM_PNG | 1 << FRM_CRY | 1 << FRM_CLQ |
-                1 << FRM_CLA | 1 << FRM_ACK | 1 << FRM_ACE),
+            [ep_init] = bitset_t_initializer(1 << FRM_PAD | 1 << FRM_PNG |
+                                             1 << FRM_CRY | 1 << FRM_CLQ |
+                                             1 << FRM_ACK | 1 << FRM_ACE),
             [ep_0rtt] = bitset_t_initializer(
                 1 << FRM_PAD | 1 << FRM_PNG | 1 << FRM_RST | 1 << FRM_STP |
-                1 << FRM_TOK | 1 << FRM_STR | 1 << FRM_STR_09 |
-                1 << FRM_STR_0a | 1 << FRM_STR_0b | 1 << FRM_STR_0c |
-                1 << FRM_STR_0d | 1 << FRM_STR_0e | 1 << FRM_STR_0f |
-                1 << FRM_MCD | 1 << FRM_MSD | 1 << FRM_MSB | 1 << FRM_MSU |
-                1 << FRM_CDB | 1 << FRM_SDB | 1 << FRM_SBB | 1 << FRM_SBU |
-                1 << FRM_CID | 1 << FRM_RTR | 1 << FRM_PCL | 1 << FRM_PRP),
-            [ep_hshk] = bitset_t_initializer(
-                1 << FRM_PAD | 1 << FRM_PNG | 1 << FRM_CRY | 1 << FRM_CLQ |
-                1 << FRM_CLA | 1 << FRM_ACK | 1 << FRM_ACE),
+                1 << FRM_STR | 1 << FRM_STR_09 | 1 << FRM_STR_0a |
+                1 << FRM_STR_0b | 1 << FRM_STR_0c | 1 << FRM_STR_0d |
+                1 << FRM_STR_0e | 1 << FRM_STR_0f | 1 << FRM_MCD |
+                1 << FRM_MSD | 1 << FRM_MSB | 1 << FRM_MSU | 1 << FRM_CDB |
+                1 << FRM_SDB | 1 << FRM_SBB | 1 << FRM_SBU | 1 << FRM_CID |
+                1 << FRM_PCL),
+            [ep_hshk] = bitset_t_initializer(1 << FRM_PAD | 1 << FRM_PNG |
+                                             1 << FRM_CRY | 1 << FRM_CLQ |
+                                             1 << FRM_ACK | 1 << FRM_ACE),
             [ep_data] = bitset_t_initializer(
                 1 << FRM_PAD | 1 << FRM_PNG | 1 << FRM_CRY | 1 << FRM_CLQ |
                 1 << FRM_CLA | 1 << FRM_ACK | 1 << FRM_ACE | 1 << FRM_RST |
@@ -1596,7 +1596,7 @@ void calc_lens_of_stream_or_crypto_frame(struct pkt_meta * const m,
         hlen += varint_size((uint_t)s->id);
         if (likely(s->out_data))
             hlen += varint_size(s->out_data);
-        if (m->strm_data_len != s->c->rec.max_pkt_size - AEAD_LEN - DATA_OFFSET)
+        if (m->strm_data_len != s->c->rec.max_ups - AEAD_LEN - DATA_OFFSET)
             hlen += varint_size(m->strm_data_len);
     } else {
         hlen += varint_size(s->out_data);
@@ -1627,7 +1627,7 @@ void enc_stream_or_crypto_frame(uint8_t ** pos,
             type |= F_STREAM_OFF;
         encv(pos, end, m->strm_off);
     }
-    if (m->strm_data_len != s->c->rec.max_pkt_size - AEAD_LEN - DATA_OFFSET ||
+    if (m->strm_data_len != s->c->rec.max_ups - AEAD_LEN - DATA_OFFSET ||
         unlikely(!enc_strm)) {
         if (likely(enc_strm))
             type |= F_STREAM_LEN;

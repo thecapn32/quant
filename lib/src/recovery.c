@@ -225,7 +225,7 @@ void congestion_event(struct q_conn * const c, const uint64_t sent_t)
     c->rec.rec_start_t = w_now();
     c->rec.cur.cwnd /= kLossReductionDivisor;
     c->rec.cur.ssthresh = c->rec.cur.cwnd =
-        MAX(c->rec.cur.cwnd, kMinimumWindow(c->rec.max_pkt_size));
+        MAX(c->rec.cur.cwnd, kMinimumWindow(c->rec.max_ups));
 }
 
 
@@ -277,10 +277,10 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
     if (unlikely(c->pmtud_pkt != UINT16_MAX &&
                  m->hdr.nr == (c->pmtud_pkt & 0x3fff) &&
                  m->hdr.type == (c->pmtud_pkt >> 14))) {
-        c->rec.max_pkt_size = default_max_pkt_len(c->sock->ws_af);
+        c->rec.max_ups = default_max_ups(c->sock->ws_af);
         warn(NTE, RED "PMTU %u not validated, using %u" NRM,
-             MIN(w_max_udp_payload(c->sock), (uint16_t)c->tp_peer.max_pkt),
-             c->rec.max_pkt_size);
+             MIN(w_max_udp_payload(c->sock), (uint16_t)c->tp_peer.max_ups),
+             c->rec.max_ups);
         c->pmtud_pkt = UINT16_MAX;
     }
 
@@ -472,7 +472,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
     if (do_cc && in_flight_lost) {
         congestion_event(c, lg_lost_tx_t);
         if (in_persistent_cong(pn, lg_lost))
-            c->rec.cur.cwnd = kMinimumWindow(c->rec.max_pkt_size);
+            c->rec.cur.cwnd = kMinimumWindow(c->rec.max_ups);
     }
 
     log_cc(c);
@@ -669,7 +669,7 @@ on_pkt_acked_cc(const struct pkt_meta * const m)
         c->rec.cur.cwnd += m->udp_len;
     else
         c->rec.cur.cwnd +=
-            (c->rec.max_pkt_size * (uint_t)m->udp_len) / c->rec.cur.cwnd;
+            (c->rec.max_ups * (uint_t)m->udp_len) / c->rec.cur.cwnd;
 
 #ifndef NO_QINFO
     c->i.max_cwnd = MAX(c->i.max_cwnd, c->rec.cur.cwnd);
@@ -783,8 +783,8 @@ void init_rec(struct q_conn * const c)
 {
     timeout_del(&c->rec.ld_alarm);
     c->rec.pto_cnt = 0;
-    c->rec.max_pkt_size = MIN_INI_LEN;
-    c->rec.cur = (struct cc_state){.cwnd = kInitialWindow(c->rec.max_pkt_size),
+    c->rec.max_ups = MIN_INI_LEN;
+    c->rec.cur = (struct cc_state){.cwnd = kInitialWindow(c->rec.max_ups),
                                    .ssthresh = UINT_T_MAX,
                                    .min_rtt = UINT_T_MAX};
 #if !defined(NDEBUG) || !defined(NO_QLOG)

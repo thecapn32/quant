@@ -43,7 +43,7 @@ struct q_stream; // IWYU pragma: no_forward_declare q_stream
 
 
 #define MIN_INI_LEN 1200
-#define MAX_PKT_LEN 65527
+#define MAX_UPS 65527
 #define MIN_SRT_PKT_LEN 5 + SRT_LEN ///< min SRT length, incl. the fixed bits
 
 #define HEAD_FORM 0x80      ///< header form (1 = long, 0 = short)
@@ -78,7 +78,7 @@ struct q_stream; // IWYU pragma: no_forward_declare q_stream
 #define ERR_TLS(type) (0x100 + (type))
 
 
-#define default_max_pkt_len(af) ((af) == AF_INET ? 1252 : 1232)
+#define default_max_ups(af) ((af) == AF_INET ? 1252 : 1232)
 
 
 static inline bool __attribute__((const, no_instrument_function))
@@ -196,7 +196,7 @@ extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
                                              struct pkt_meta * const m);
 
 extern uint16_t __attribute__((nonnull)) coalesce(struct w_iov_sq * const q,
-                                                  const uint16_t max_pkt_size,
+                                                  const uint16_t max_ups,
                                                   const bool do_pmtud);
 
 extern void __attribute__((nonnull(1, 2, 3, 4)))

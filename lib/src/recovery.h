@@ -73,9 +73,9 @@ struct recovery {
     struct cc_state prev;
 #endif
 
-    uint16_t pto_cnt;      // pto_count
-    uint16_t max_pkt_size; // max_datagram_size
-    int max_pkt_af;        // address family we checked max_pkt_size under
+    uint16_t pto_cnt; // pto_count
+    uint16_t max_ups; // max_datagram_size
+    int max_ups_af;   // address family we checked max_ups under
 };
 
 

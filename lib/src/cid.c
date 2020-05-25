@@ -122,7 +122,7 @@ struct cid * next_cid(struct cids * const ids, const uint_t seq)
 
 bool need_more_cids(const struct cids * const ids, const uint_t act_cid_lim)
 {
-    return ids->act_cnt < MIN(act_cid_lim, CIDS_MAX);
+    return ids->act_cnt < MIN(4, MIN(act_cid_lim, CIDS_MAX));
 }
 
 
