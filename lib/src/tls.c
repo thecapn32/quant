@@ -970,6 +970,7 @@ void init_tp(struct q_conn * const c)
             break;
 
         case TP_PRFA:;
+#ifndef NO_SERVER
             struct pref_addr * const pa = &c->tp_mine.pref_addr;
             if (!is_clnt(c) && pa->cid.seq) {
                 struct w_sockaddr * const pa4 = &pa->addr4;
@@ -999,6 +1000,7 @@ void init_tp(struct q_conn * const c)
                      cid_str(&pa->cid), srt_str(srt));
 #endif
             }
+#endif
             break;
 
         case TP_DMIG:

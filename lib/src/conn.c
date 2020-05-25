@@ -364,7 +364,6 @@ static void __attribute__((nonnull)) update_act_scid(struct q_conn * const c)
     // if (!is_clnt(c))
     //     cid_cpy(&c->oscid, c->scid);
 }
-#endif
 
 
 static void __attribute__((nonnull)) tx_rtry(struct q_conn * const c)
@@ -409,6 +408,7 @@ static void __attribute__((nonnull)) tx_rtry(struct q_conn * const c)
     do_w_tx(c->sock, &q);
     q_free(&q);
 }
+#endif
 
 
 static void __attribute__((nonnull)) do_tx_txq(struct q_conn * const c,
