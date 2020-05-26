@@ -11,7 +11,7 @@ mvfst
 ngtcp2    *         V    H    D    C    R    Z    S    Q    M    B    A    U              O    2    3
 ngx_quic  *         v
 picoquic  *         V    H    D    C    R    Z    S    Q    M    B    A    U    P         O    2    3
-quant     *    x    V    H    D    C    R    Z    S    Q    M    B    A    U    P    E         2
+quant     *    x    V    H    D    C    R    Z    S    Q    M    B    A    U    P    E    O    2
 quic-go   *         v
 quiche    *         v
 quicly    *         v
