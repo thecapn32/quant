@@ -772,7 +772,7 @@ rx_crypto(struct q_conn * const c, const struct pkt_meta * const m_cur)
 #endif
         }
     }
-    if (!is_clnt(c) && c->tx_hshk_done && c->pns[pn_hshk].abandoned == false)
+    if (!is_clnt(c) && c->tx_hshk_done && hshk_done(c) == false)
         abandon_pn(&c->pns[pn_hshk]);
 }
 

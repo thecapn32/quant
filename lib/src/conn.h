@@ -49,6 +49,8 @@
 #include "recovery.h"
 #include "tls.h"
 
+struct q_stream;        // IWYU pragma: no_forward_declare q_stream
+
 
 KHASH_MAP_INIT_INT64(strms_by_id, struct q_stream *)
 
@@ -316,7 +318,8 @@ extern struct q_conn_sl c_embr;
 #endif
 
 
-#define hshk_done(c) (c)->pns[pn_hshk].abandoned
+#define hshk_done(c)                                                           \
+    ((c)->pns[pn_hshk].abandoned && out_fully_acked((c)->cstrms[ep_data]))
 
 
 extern struct q_conn_sl c_ready;
