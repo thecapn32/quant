@@ -732,12 +732,12 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                 return 1;
             }
 
-            if (cid_cmp(&orig_dcid, &c->rtry_odcid)) {
+            if (cid_cmp(&orig_dcid, &c->odcid)) {
                 mk_cid_str(ERR, &orig_dcid, orig_dcid_str);
-                mk_cid_str(ERR, &c->rtry_odcid, rtry_odcid_str);
+                mk_cid_str(ERR, &c->odcid, odcid_str);
                 warn(ERR,
                      "original_destination_connection_id mismatch, %s != %s",
-                     orig_dcid_str, rtry_odcid_str);
+                     orig_dcid_str, odcid_str);
                 err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
                           "original_destination_connection_id mismatch");
                 return 1;

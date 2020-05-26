@@ -154,6 +154,9 @@ q_alloc(struct w_engine * const w,
 
 extern void __attribute__((nonnull)) q_free(struct w_iov_sq * const q);
 
+extern void __attribute__((nonnull))
+q_cid(struct q_conn * const c, uint8_t * const buf, size_t * const buf_len);
+
 extern const char * __attribute__((nonnull))
 q_cid_str(struct q_conn * const c, char * const buf, const size_t buf_len);
 

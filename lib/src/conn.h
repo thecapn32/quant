@@ -277,7 +277,7 @@ struct q_conn {
     uint8_t _unused[4];
 #endif
 
-    struct cid rtry_odcid;
+    struct cid odcid; ///< Client-chosen destination CID of first Initial.
 
     struct w_iov_sq txq;
 

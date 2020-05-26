@@ -797,17 +797,12 @@ new_initial_cids(struct q_conn * const c,
 
     // init dcid
     if (is_clnt(c)) {
-        struct cid * const i = sl_first(&c->dcids.avl);
-        ensure(i, "no cid");
-        i->seq = 0;
-        mk_rand_cid(i, CID_LEN_MAX + 1, false); // random len
-        c->dcid = cid_ins(&c->dcids, i);
-    } else if (dcid) {
+        c->odcid.seq = 0;
+        mk_rand_cid(&c->odcid, CID_LEN_MAX + 1, false); // random len
+        c->dcid = cid_ins(&c->dcids, &c->odcid);
+    } else if (dcid)
         // dcid->seq is 0 due to calloc allocation
         c->dcid = cid_ins(&c->dcids, dcid);
-        // don't cid_cpy(&c->odcid, dcid); serv odcid signals prior retry
-        // cid_cpy(&c->odcid, dcid);
-    }
 
     // init scid and add connection to global data structures
     struct cid * const i = sl_first(&c->dcids.avl);
@@ -817,6 +812,7 @@ new_initial_cids(struct q_conn * const c,
         mk_rand_cid(i, ped(c->w)->conf.client_cid_len, false);
     else if (scid) {
         cid_cpy(i, scid);
+        cid_cpy(&c->odcid, scid);
         mk_rand_cid(i, 0, true);
     }
 #ifndef NO_MIGRATION
@@ -1064,7 +1060,6 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
                 // handle an incoming retry packet
                 c->tok_len = tok_len;
                 memcpy(c->tok, tok, c->tok_len);
-                cid_cpy(&c->rtry_odcid, c->dcid);
                 cid_cpy(c->dcid, &m->hdr.scid);
                 vneg_or_rtry_resp(c, false);
                 warn(INF, "handling serv retry w/tok %s",
