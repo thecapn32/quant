@@ -800,19 +800,17 @@ new_initial_cids(struct q_conn * const c,
         c->dcid = cid_ins(&c->dcids, dcid);
 
     // init scid and add connection to global data structures
-    struct cid * const i = sl_first(&c->dcids.avl);
-    ensure(i, "no cid");
-    i->seq = 0;
+    struct cid id = {.seq = 0};
     if (is_clnt(c))
-        mk_rand_cid(i, ped(c->w)->conf.client_cid_len, false);
+        mk_rand_cid(&id, ped(c->w)->conf.client_cid_len, false);
     else if (scid) {
-        cid_cpy(i, scid);
+        cid_cpy(&id, scid);
         cid_cpy(&c->odcid, scid);
-        mk_rand_cid(i, 0, true);
+        mk_rand_cid(&id, 0, true);
     }
 #ifndef NO_MIGRATION
-    if (i->len) {
-        c->scid = cid_ins(&c->scids, i);
+    if (id.len) {
+        c->scid = cid_ins(&c->scids, &id);
         conns_by_id_ins(c, c->scid);
     } else
 #endif
