@@ -379,10 +379,9 @@ static void __attribute__((nonnull)) tx_rtry(struct q_conn * const c)
 
     const struct cid odcid = *c->scid;
     update_act_scid(c);
-    make_rtry_tok(c, &odcid);
+    mk_rtry_tok(c, &odcid);
     uint8_t rit[RIT_LEN];
-    make_rit(c, &odcid, mx->hdr.flags, c->dcid, c->scid, c->tok, c->tok_len,
-             rit);
+    mk_rit(c, &odcid, mx->hdr.flags, c->dcid, c->scid, c->tok, c->tok_len, rit);
 
     uint8_t * pos = xv->buf;
     const uint8_t * end = xv->buf + xv->len;
@@ -479,7 +478,7 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
         if (!is_clnt(c) && unlikely(c->tx_new_tok && c->tok_len == 0 &&
                                     c->pns[ep_init].abandoned))
             // TODO: find a better way to send NEW_TOKEN
-            make_rtry_tok(c, c->scid);
+            mk_rtry_tok(c, c->scid);
 
         do_stream_id_fc(c, c->cnt_uni, false, true);
         do_stream_id_fc(c, c->cnt_bidi, true, true);
@@ -1270,8 +1269,8 @@ static void __attribute__((nonnull))
             if (m->hdr.scid.len && cid_cmp(&m->hdr.scid, c->dcid) != 0 &&
                 m->hdr.vers && m->hdr.type == LH_RTRY) {
                 uint8_t computed_rit[RIT_LEN];
-                make_rit(c, c->dcid, m->hdr.flags, &m->hdr.dcid, &m->hdr.scid,
-                         tok, tok_len, computed_rit);
+                mk_rit(c, c->dcid, m->hdr.flags, &m->hdr.dcid, &m->hdr.scid,
+                       tok, tok_len, computed_rit);
                 if (memcmp(rit, computed_rit, RIT_LEN) != 0) {
                     log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
                     warn(ERR, "rit mismatch, computed %s",

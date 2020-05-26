@@ -1899,7 +1899,7 @@ prep_hash_ctx(const struct q_conn * const c,
 }
 
 
-void make_rtry_tok(struct q_conn * const c, const struct cid * const odcid)
+void mk_rtry_tok(struct q_conn * const c, const struct cid * const odcid)
 {
     const ptls_cipher_suite_t * const cs = &aes128gcmsha256;
     ptls_hash_context_t * const hc = prep_hash_ctx(c, cs);
@@ -1965,14 +1965,14 @@ bool verify_rtry_tok(struct q_conn * const c,
 }
 
 
-void make_rit(const struct q_conn * const c,
-              const struct cid * const odcid,
-              const uint8_t flags,
-              const struct cid * const dcid,
-              const struct cid * const scid,
-              const uint8_t * const tok,
-              const uint16_t tok_len,
-              uint8_t * const rit)
+void mk_rit(const struct q_conn * const c,
+            const struct cid * const odcid,
+            const uint8_t flags,
+            const struct cid * const dcid,
+            const struct cid * const scid,
+            const uint8_t * const tok,
+            const uint16_t tok_len,
+            uint8_t * const rit)
 {
     unpoison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
     uint8_t * pos = ped(c->w)->scratch;

@@ -1426,7 +1426,7 @@ uint16_t max_frame_len(const uint8_t type)
         // case FRM_CRY:
 
     case FRM_TOK:
-        // only true on TX; update when make_rtry_tok() changes
+        // only true on TX; update when mk_rtry_tok() changes
         len += sizeof(uint_t) + PTLS_MAX_DIGEST_SIZE + CID_LEN_MAX;
         break;
 
