@@ -361,8 +361,6 @@ static void __attribute__((nonnull)) update_act_scid(struct q_conn * const c)
 #ifndef NO_MIGRATION
     conns_by_id_ins(c, c->scid);
 #endif
-    // if (!is_clnt(c))
-    //     cid_cpy(&c->oscid, c->scid);
 }
 
 
@@ -971,6 +969,8 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
 
         // server picks a new random cid
         update_act_scid(c);
+        // keep listening on odcid for multi-pkt/reordered/dup'ed Initials
+        conns_by_id_ins(c, &c->odcid);
         init_tp(c);
         conn_to_state(c, conn_opng);
         ok = true;
@@ -1353,10 +1353,14 @@ static void __attribute__((nonnull))
 #endif
 
                 if (unlikely(scid == 0)) {
-                    log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
-                    warn(ERR, "unknown scid %s, ignoring pkt",
-                         cid_str(&m->hdr.dcid));
-                    goto drop;
+                    if (cid_cmp(&m->hdr.dcid, &c->odcid) == 0)
+                        scid = &c->odcid;
+                    else {
+                        log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
+                        warn(ERR, "unknown scid %s, ignoring pkt",
+                             cid_str(&m->hdr.dcid));
+                        goto drop;
+                    }
                 }
 
                 mk_cid_str(NTE, scid, scid_str);
@@ -2028,7 +2032,8 @@ void free_conn(struct q_conn * const c)
     if (c->tp_mine.pref_addr.cid.in_cbi)
         conns_by_id_del(&c->tp_mine.pref_addr.cid);
 #endif
-
+    if (c->odcid.in_cbi)
+        conns_by_id_del(&c->odcid);
     if (c->holds_sock)
         // only close the socket for the final server connection
         w_close(c->sock);

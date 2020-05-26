@@ -399,10 +399,9 @@ dec_cid(struct cid * const id, const uint8_t ** pos, const uint8_t * const end)
     uint64_t len = 0;
     if (decv(&len, pos, end) == false)
         return false;
-    if (len) {
-        decb(id->id, pos, end, (uint16_t)len);
-        id->len = (uint8_t)len;
-    }
+    id->len = (uint8_t)len;
+    if (id->len)
+        decb(id->id, pos, end, id->len);
     return true;
 }
 
@@ -878,7 +877,7 @@ void init_tp(struct q_conn * const c)
         case TP_DCID_O:
             if (!is_clnt(c)) {
                 const struct cid * const id =
-                    odcid.len != UINT8_MAX ? &odcid : c->scid;
+                    odcid.len != UINT8_MAX ? &odcid : &c->odcid;
                 encb_tp(&pos, end, TP_DCID_O, id->id, id->len);
 #ifdef DEBUG_EXTRA
                 warn(INF, "\toriginal_destination_connection_id = %s",
@@ -1414,8 +1413,11 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
                      PTLS_EARLY_DATA_ACCEPTED);
         } else {
             c->tx_hshk_done = ptls_handshake_is_complete(c->tls.t) != 0;
-            if (c->tx_hshk_done)
+            if (c->tx_hshk_done) {
                 c->needs_tx = true;
+                // also stop caring about odcid now
+                conns_by_id_del(&c->odcid);
+            }
         }
 
     } else if (ret != PTLS_ERROR_IN_PROGRESS &&
