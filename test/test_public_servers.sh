@@ -114,6 +114,7 @@ function prep {
     fi
 
     local ret_base="$1.ret"
+    >&2 echo -n "($ret in $log) "
     echo $ret > "$ret_base.fail"
     rm -f "$log_strip"
 }
