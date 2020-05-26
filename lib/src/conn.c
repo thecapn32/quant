@@ -373,16 +373,14 @@ static void __attribute__((nonnull)) tx_rtry(struct q_conn * const c)
     struct w_iov_sq q = w_iov_sq_initializer(q);
     sq_insert_head(&q, xv, next);
 
-    struct cid odcid;
-    cid_cpy(&odcid, c->scid);
-
     mx->hdr.type = LH_RTRY;
     mx->hdr.flags = LH | mx->hdr.type | (uint8_t)w_rand_uniform32(0x0f);
     mx->hdr.vers = c->vers;
 
-    uint8_t rit[RIT_LEN];
-    make_rtry_tok(c);
+    const struct cid odcid = *c->scid;
     update_act_scid(c);
+    make_rtry_tok(c, &odcid);
+    uint8_t rit[RIT_LEN];
     make_rit(c, &odcid, mx->hdr.flags, c->dcid, c->scid, c->tok, c->tok_len,
              rit);
 
@@ -481,7 +479,7 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
         if (!is_clnt(c) && unlikely(c->tx_new_tok && c->tok_len == 0 &&
                                     c->pns[ep_init].abandoned))
             // TODO: find a better way to send NEW_TOKEN
-            make_rtry_tok(c);
+            make_rtry_tok(c, c->scid);
 
         do_stream_id_fc(c, c->cnt_uni, false, true);
         do_stream_id_fc(c, c->cnt_bidi, true, true);

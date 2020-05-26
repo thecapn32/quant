@@ -833,8 +833,8 @@ void init_tp(struct q_conn * const c)
     }
 
     // extract data from token, if it exists
-    struct cid oscid = {.len = UINT8_MAX};
     struct cid odcid = {.len = UINT8_MAX};
+    struct cid rtry_scid = {.len = UINT8_MAX};
     static const struct cid zero_len_cid = {.len = 0};
     if (!is_clnt(c) && c->tok_len) {
         size_t p = 0;
@@ -842,9 +842,9 @@ void init_tp(struct q_conn * const c)
         p += sizeof(odcid.len);
         memcpy(odcid.id, &c->tok[p], odcid.len);
         p += odcid.len;
-        memcpy(&oscid.len, &c->tok[p], sizeof(oscid.len));
-        p += sizeof(oscid.len);
-        memcpy(oscid.id, &c->tok[p], oscid.len);
+        memcpy(&rtry_scid.len, &c->tok[p], sizeof(rtry_scid.len));
+        p += sizeof(rtry_scid.len);
+        memcpy(rtry_scid.id, &c->tok[p], rtry_scid.len);
         c->tok_len = 0;
     }
 
@@ -1023,9 +1023,12 @@ void init_tp(struct q_conn * const c)
             break;
 
         case TP_SCID_R:
-            if (!is_clnt(c) && oscid.len != UINT8_MAX) {
-                encb_tp(&pos, end, TP_SCID_R, oscid.id, oscid.len);
-                warn(INF, "\tretry_source_connection_id = %s", cid_str(&oscid));
+            if (!is_clnt(c) && rtry_scid.len != UINT8_MAX) {
+                encb_tp(&pos, end, TP_SCID_R, rtry_scid.id, rtry_scid.len);
+#ifdef DEBUG_EXTRA
+                warn(INF, "\tretry_source_connection_id = %s",
+                     cid_str(&rtry_scid));
+#endif
             }
             break;
 
@@ -1896,31 +1899,31 @@ prep_hash_ctx(const struct q_conn * const c,
 }
 
 
-void make_rtry_tok(struct q_conn * const c)
+void make_rtry_tok(struct q_conn * const c, const struct cid * const odcid)
 {
     const ptls_cipher_suite_t * const cs = &aes128gcmsha256;
     ptls_hash_context_t * const hc = prep_hash_ctx(c, cs);
 
     // hash current CIDs
+    hc->update(hc, &odcid->len, sizeof(odcid->len));
+    hc->update(hc, odcid->id, odcid->len);
     hc->update(hc, &c->scid->len, sizeof(c->scid->len));
     hc->update(hc, c->scid->id, c->scid->len);
-    hc->update(hc, &c->dcid->len, sizeof(c->dcid->len));
-    hc->update(hc, c->dcid->id, c->dcid->len);
     hc->final(hc, c->tok, PTLS_HASH_FINAL_MODE_FREE);
     c->tok_len = (uint16_t)cs->hash->digest_size;
 
     // append CIDs to hashed token
+    memcpy(&c->tok[c->tok_len], &odcid->len, sizeof(odcid->len));
+    c->tok_len += sizeof(odcid->len);
+
+    memcpy(&c->tok[c->tok_len], odcid->id, odcid->len);
+    c->tok_len += odcid->len;
+
     memcpy(&c->tok[c->tok_len], &c->scid->len, sizeof(c->scid->len));
     c->tok_len += sizeof(c->scid->len);
 
     memcpy(&c->tok[c->tok_len], c->scid->id, c->scid->len);
     c->tok_len += c->scid->len;
-
-    memcpy(&c->tok[c->tok_len], &c->dcid->len, sizeof(c->dcid->len));
-    c->tok_len += sizeof(c->dcid->len);
-
-    memcpy(&c->tok[c->tok_len], c->dcid->id, c->dcid->len);
-    c->tok_len += c->dcid->len;
 
     // NOTE: update max_frame_len() when c->tok_len changes
 

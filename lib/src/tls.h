@@ -123,7 +123,8 @@ enc_aead(const struct w_iov * const v,
          struct w_iov * const xv,
          const uint16_t pkt_nr_pos);
 
-extern void __attribute__((nonnull)) make_rtry_tok(struct q_conn * const c);
+extern void __attribute__((nonnull))
+make_rtry_tok(struct q_conn * const c, const struct cid * const odcid);
 
 extern bool __attribute__((nonnull)) verify_rtry_tok(struct q_conn * const c,
                                                      const uint8_t * const tok,
