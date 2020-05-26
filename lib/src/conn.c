@@ -32,13 +32,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/param.h>
+#include <sys/socket.h>
 
 #ifndef NO_ERR_REASONS
 #include <stdarg.h>
-#endif
-
-#ifndef NO_MIGRATION
-#include <sys/socket.h>
 #endif
 
 #ifdef __FreeBSD__
@@ -969,8 +966,10 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
 
         // server picks a new random cid
         update_act_scid(c);
+#ifndef NO_MIGRATION
         // keep listening on odcid for multi-pkt/reordered/dup'ed Initials
         conns_by_id_ins(c, &c->odcid);
+#endif
         init_tp(c);
         conn_to_state(c, conn_opng);
         ok = true;
@@ -2031,9 +2030,9 @@ void free_conn(struct q_conn * const c)
         conns_by_id_del(id);
     if (c->tp_mine.pref_addr.cid.in_cbi)
         conns_by_id_del(&c->tp_mine.pref_addr.cid);
-#endif
     if (c->odcid.in_cbi)
         conns_by_id_del(&c->odcid);
+#endif
     if (c->holds_sock)
         // only close the socket for the final server connection
         w_close(c->sock);

@@ -30,7 +30,10 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/param.h>
+
+#ifndef NO_MIGRATION
 #include <sys/socket.h>
+#endif
 
 #ifdef __FreeBSD__
 #include <netinet/in.h>

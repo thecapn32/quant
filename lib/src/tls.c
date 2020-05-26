@@ -95,6 +95,8 @@ static int uecc_rng(uint8_t * dest, unsigned size)
     ptls_minicrypto_random_bytes(dest, size);
     return 1;
 }
+#else
+#include <errno.h>
 #endif
 
 
@@ -1415,8 +1417,10 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
             c->tx_hshk_done = ptls_handshake_is_complete(c->tls.t) != 0;
             if (c->tx_hshk_done) {
                 c->needs_tx = true;
+#ifndef NO_MIGRATION
                 // also stop caring about odcid now
                 conns_by_id_del(&c->odcid);
+#endif
             }
         }
 
@@ -1480,7 +1484,8 @@ static void read_tickets(const struct q_conf * const conf)
 #if !defined(PARTICLE) && !defined(RIOT_VERSION)
     FILE * const fp = fopen(conf->ticket_store, "rbe");
     if (fp == 0) {
-        warn(WRN, "could not read TLS tickets from %s", conf->ticket_store);
+        warn(WRN, "could not read TLS tickets from %s: %s", conf->ticket_store,
+             strerror(errno));
         return;
     }
 

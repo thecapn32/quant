@@ -31,7 +31,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#ifndef NO_MIGRATION
+#ifndef NO_QLOG
 #include <sys/param.h>
 #endif
 
