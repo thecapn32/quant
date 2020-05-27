@@ -32,7 +32,7 @@ declare -A servers=(
     # [tag]="name|flags|port|retry-port|h3-port|URL"
     [aioquic]="quic.aiortc.org||443|4434|443|/40000"
     [akamai]="ietf.akaquic.com|-3|443|443|443|/100k"
-    # [apple]="[2a00:79e1:abc:301:18c7:dac8:b9c6:f91f]|-3|4433|4433|4433|/40000"
+    [apple]="[2a00:79e1:abc:301:18c7:dac8:b9c6:f91f]|-3|4433|4433|4433|/40000"
     [ats]="quic.ogre.com||4433|4434|4433|/en/latest/_static/jquery.js"
     [f5]="f5quic.com|-3|4433|4433|4433|/50000"
     [google]="quic.rocks|-3|4433|4434|4433|/40000"
@@ -42,12 +42,12 @@ declare -A servers=(
     [mvfst]="fb.mvfst.net|-3|443|4434|443|/40000"
     [ngtcp2]="nghttp2.org|-3|4433|4434|4433|/40000"
     [ngx_quic]="cloudflare-quic.com|-3|443|443|443|/index.html"
-    # [pandora]="pandora.cm.in.tum.de||4433|4434|4433|/index.html"
+    [pandora]="pandora.cm.in.tum.de||4433|4434|4433|/index.html"
     [picoquic]="test.privateoctopus.com||4433|4434|4433|/40000"
     [quant]="quant.eggert.org||4433|4434|4433|/40000"
     [quic-go]="interop.seemann.io|-3|443|443|443|/dynamic/40000"
     [quiche]="quic.tech|-3|8443|8444|8443|/128KB.png"
-    # [quicker]="quicker.edm.uhasselt.be||4433|4434|4433|/index.html"
+    [quicker]="quicker.edm.uhasselt.be||4433|4434|4433|/index.html"
     [quicly]="quic.examp1e.net||4433|4434|443|/40000"
     [quinn]="h3.stammw.eu||4433|4434|443|/100K"
     # [local]="localhost||4433|4434|4433|/40000"
@@ -470,6 +470,10 @@ printf "\\n" >> "$tmp"
 mapfile -d '' sorted < <(printf '%s\0' "${!servers[@]}" | sort -z)
 ret_base="/tmp/$script.$pid"
 for s in "${sorted[@]}"; do
+    if [ ! -s "$ret_base.$s.ret.live" ] ||
+       [ "$(cat "$ret_base.$s.ret.vneg")" = "v" ]; then
+        continue
+    fi
     printf "%-8s\\t" "$s" >> "$tmp"
     for r in "${results[@]}"; do
         ret=$ret_base.$s.ret.$r
