@@ -77,10 +77,9 @@
 
 struct conn_cache_entry {
     struct q_conn * c;
-#ifndef NO_MIGRATION
+    struct addrinfo * migr_peer;
     bool migrated;
     uint8_t _unused[7];
-#endif
 };
 
 
@@ -106,7 +105,7 @@ static bool switch_ip = false;
 
 struct stream_entry {
     sl_entry(stream_entry) next;
-    struct q_conn * c;
+    struct conn_cache_entry * cce;
     struct q_stream * s;
     char * url;
     struct timespec req_t;
@@ -201,6 +200,35 @@ set_from_url(char * const var,
 }
 
 
+#ifndef NO_MIGRATION
+static void __attribute__((nonnull(1)))
+try_migrate(struct conn_cache_entry * const cce)
+{
+    if (rebind && cce->migrated == false)
+        cce->migrated = q_migrate(cce->c, switch_ip,
+                                  cce->migr_peer ? cce->migr_peer->ai_addr : 0);
+}
+#else
+#define try_migrate(...)
+#endif
+
+
+static struct addrinfo * __attribute__((nonnull))
+get_addr(const int af, const char * const dest, const char * const port)
+{
+    struct addrinfo * peer = 0;
+    const int err = getaddrinfo(
+        dest, port, &(const struct addrinfo){.ai_family = af}, &peer);
+    if (err) {
+        warn(ERR, "getaddrinfo: %s", gai_strerror(err));
+        if (peer)
+            freeaddrinfo(peer);
+        return 0;
+    }
+    return peer;
+}
+
+
 static struct q_conn * __attribute__((nonnull))
 get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
 {
@@ -223,22 +251,15 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
     set_from_url(port, sizeof(port), url, &u, UF_PORT, "4433");
     set_from_url(path, sizeof(path), url, &u, UF_PATH, "/index.html");
 
-    struct addrinfo * peer = 0;
-    const int err = getaddrinfo(
-        dest, port,
-        &(const struct addrinfo){.ai_family = do_v6 ? AF_INET6 : AF_INET},
-        &peer);
-    if (err) {
-        warn(ERR, "getaddrinfo: %s", gai_strerror(err));
-        if (peer)
-            freeaddrinfo(peer);
-        return 0;
-    }
+    struct addrinfo * peer = get_addr(do_v6 ? AF_INET6 : AF_INET, dest, port);
+    struct addrinfo * migr_peer =
+        get_addr(do_v6 ? AF_INET : AF_INET6, dest, port);
+    if (peer == 0)
+        goto fail;
 
     // do we have a connection open to this peer?
     khiter_t k = kh_get(conn_cache, cc, conn_cache_key(peer->ai_addr));
-    struct conn_cache_entry * cce =
-        (k == kh_end(cc) ? 0 : kh_val(cc, k)); // NOLINT
+    struct conn_cache_entry * cce = (k == kh_end(cc) ? 0 : kh_val(cc, k));
 
     // add to stream list
     struct stream_entry * se = calloc(1, sizeof(*se));
@@ -248,7 +269,7 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
 
     sq_init(&se->req);
     if (do_h3) {
-        q_alloc(w, &se->req, se->c, peer->ai_family, 1024);
+        q_alloc(w, &se->req, 0, peer->ai_family, 1024);
         struct w_iov * const v = sq_first(&se->req);
         const uint16_t len =
             (uint16_t)(h3zero_create_request_header_frame(
@@ -281,18 +302,10 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
         clock_gettime(CLOCK_MONOTONIC, &se->req_t);
         // no, open a new connection
         struct q_conn * const c = q_connect(
-            w, peer->ai_addr, dest,
-#ifndef NO_MIGRATION
-            rebind ? 0 : &se->req, rebind ? 0 : &se->s,
-#else
-            &se->req, &se->s,
-#endif
-            true,
+            w, peer->ai_addr, dest, &se->req, &se->s, true,
             do_h3 ? "h3-" DRAFT_VERSION_STRING : "hq-" DRAFT_VERSION_STRING, 0);
-        if (c == 0) {
-            freeaddrinfo(peer);
-            return 0;
-        }
+        if (c == 0)
+            goto fail;
 
         if (do_h3) {
             // we need to open a uni stream for an empty H/3 SETTINGS frame
@@ -309,6 +322,7 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
         cce = calloc(1, sizeof(*cce));
         ensure(cce, "calloc failed");
         cce->c = c;
+        cce->migr_peer = migr_peer;
 
         // insert into connection cache
         int ret;
@@ -317,56 +331,34 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
         kh_val(cc, k) = cce;
     }
 
-    if (opened_new == false
-#ifndef NO_MIGRATION
-        || (rebind && cce->migrated == false)
-#endif
-    ) {
+    if (opened_new == false) {
         se->s = q_rsv_stream(cce->c, true);
         if (se->s) {
             clock_gettime(CLOCK_MONOTONIC, &se->req_t);
             q_write(se->s, &se->req, true);
-#ifndef NO_MIGRATION
-            if (rebind && cce->migrated == false) {
-                // try and find an IP address of another AF
-                struct addrinfo * other_peer = 0;
-                const int err_other =
-                    getaddrinfo(dest, port,
-                                &(const struct addrinfo){
-                                    .ai_family = do_v6 ? AF_INET : AF_INET6},
-                                &other_peer);
-                if (err_other) {
-                    warn(ERR, "getaddrinfo: %s", gai_strerror(err_other));
-                    if (other_peer)
-                        freeaddrinfo(other_peer);
-                    return 0;
-                }
-
-                while (other_peer) {
-                    if (other_peer->ai_family != peer->ai_family)
-                        break;
-                    other_peer = other_peer->ai_next;
-                }
-                q_migrate(cce->c, switch_ip,
-                          other_peer ? other_peer->ai_addr : 0);
-                cce->migrated = true; // only rebind once
-                freeaddrinfo(other_peer);
-            }
-#endif
         }
     }
+    try_migrate(cce);
 
-    se->c = cce->c;
+    se->cce = cce;
     se->url = url;
     freeaddrinfo(peer);
-    return cce->c; // NOLINT
+    return cce->c;
+
+fail:
+    freeaddrinfo(peer);
+    freeaddrinfo(migr_peer);
+    return 0;
 }
 
 
 static void __attribute__((nonnull)) free_cc(khash_t(conn_cache) * cc)
 {
     struct conn_cache_entry * cce;
-    kh_foreach_value(cc, cce, { free(cce); });
+    kh_foreach_value(cc, cce, {
+        freeaddrinfo(cce->migr_peer);
+        free(cce);
+    });
     kh_release(conn_cache, cc);
 }
 
@@ -562,12 +554,12 @@ int main(int argc, char * argv[])
             struct stream_entry * se = 0;
             struct stream_entry * tmp = 0;
             sl_foreach_safe (se, &sl, next, tmp) {
-                if (se->c == 0 || se->s == 0) {
+                if (se->cce == 0 || se->cce->c == 0 || se->s == 0) {
                     sl_remove(&sl, se, stream_entry, next);
                     free_se(se);
                     continue;
                 }
-
+                try_migrate(se->cce);
                 rxed_new |= q_read_stream(se->s, &se->rep, false);
 
                 const bool is_closed = q_peer_closed_stream(se->s);
@@ -576,7 +568,7 @@ int main(int argc, char * argv[])
                     clock_gettime(CLOCK_MONOTONIC, &se->rep_t);
             }
 
-            if (rxed_new == false) {
+            if (rxed_new == false && all_closed == false) {
                 struct q_conn * c;
                 q_ready(w, timeout * NS_PER_S, &c);
                 if (c == 0)
@@ -606,7 +598,7 @@ int main(int argc, char * argv[])
                        bps(rep_len, elapsed), se->url);
 #ifndef NDEBUG
             char cid_str[64];
-            q_cid_str(se->c, cid_str, sizeof(cid_str));
+            q_cid_str(se->cce->c, cid_str, sizeof(cid_str));
             warn(WRN,
                  "read %" PRIu
                  " byte%s in %.3f sec (%s) on conn %s strm %" PRIu,

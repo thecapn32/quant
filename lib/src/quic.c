@@ -1053,10 +1053,18 @@ int q_conn_af(const struct q_conn * const c)
 
 
 #ifndef NO_MIGRATION
-void q_migrate(struct q_conn * const c,
+bool q_migrate(struct q_conn * const c,
                const bool switch_ip,
                const struct sockaddr * const alt_peer)
 {
+    // make sure we have a dcid to migrate to
+    if (switch_ip && next_cid(&c->dcids, c->dcid->seq) == 0) {
+#ifdef DEBUG_EXTRA
+        warn(DBG, "no new dcid available, can't migrate");
+#endif
+        return false;
+    }
+
     ensure(is_clnt(c), "can only rebind w_sock on client");
     struct w_engine * const w = c->w;
 
@@ -1100,22 +1108,18 @@ void q_migrate(struct q_conn * const c,
             } else
                 goto fail;
         }
-
-        // make sure we have a dcid to migrate to
-        if (next_cid(&c->dcids, c->dcid->seq) == 0)
-            goto fail;
     }
 
     struct w_sock * const new_sock = w_bind(w, idx, 0, &c->sockopt);
     if (new_sock == 0) {
     fail:
         // could not open new w_sock, can't rebind
-        warn(ERR, "%s for %s conn %s from %s%s%s:%u failed",
+        warn(ERR, "%s failed for %s conn %s from %s%s%s:%u",
              switch_ip ? "conn migration" : "simulated NAT rebinding",
              conn_type(c), c->scid ? cid_str(c->scid) : "-",
              old_af == AF_INET6 ? "[" : "", old_ip,
              old_af == AF_INET6 ? "]" : "", old_port);
-        return;
+        return false;
     }
 
     // close the current w_sock
@@ -1148,6 +1152,7 @@ void q_migrate(struct q_conn * const c,
          bswap16(c->sock->ws_lport));
 
     timeouts_add(ped(w)->wheel, &c->tx_w, 0);
+    return true;
 }
 #endif
 
