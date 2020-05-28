@@ -270,7 +270,7 @@ function analyze {
             /RX.*len=.*Short/ && $x && exit 1;' "$log.strip"
         [ $? -eq 1 ] && echo H > "$base.ret.hshk"
 
-        perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $x=1 : next);
+        perl -n -e '/read (.*) bytes.*on conn/ and ($1 > 0 ? $x=1 : next);
             /dec_close.*err=0x([^ ]*)/ and ($1 ne "0" ? exit 0 : next);
             /enc_close.*err=0x0/ and $e=1;
             END{exit ($x + $e == 2)};' "$log.strip"
@@ -351,7 +351,7 @@ function analyze {
     # analyze h3
     log=$(prep "$base" "h3")
     if [ -s "$log.strip" ]; then
-        perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $x=1 : next);
+        perl -n -e '/read (.*) bytes.*on conn/ and ($1 > 0 ? $x=1 : next);
             /no h3 payload/ and $x=0;
             /dec_close.*err=0x([^ ]*)/ and ($1 ne "0" ? exit 0 : next);
             /enc_close.*err=0x0/ and $e=1;
@@ -367,7 +367,7 @@ function analyze {
         perl -n -e '/NAT rebinding/ and $x=1;
             /dec_path.*PATH_CHALLENGE/ and $x==1 and $x=2;
             /enc_path.*PATH_RESPONSE/ and $x==2 and $x=3;
-            /read (.*) bytes.*on clnt conn/ and $x==3 and ($1 > 0 ? $x++ : next);
+            /read (.*) bytes.*on conn/ and $x==3 and ($1 > 0 ? $x++ : next);
             /dec_close.*err=0x([^ ]*)/ and ($1 ne "0" ? exit 0 : $x++);
             /enc_close.*err=0x0/ and $x++;
             END{exit ($x >= 5)};' "$log.strip"
@@ -380,7 +380,7 @@ function analyze {
     # analyze quantum-readiness
     log=$(prep "$base" "qr")
     if [ -s "$log.strip" ]; then
-        perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $x=1 : next);
+        perl -n -e '/read (.*) bytes.*on conn/ and ($1 > 0 ? $x=1 : next);
             /no h3 payload/ and $x=0;
             /dec_close.*err=0x([^ ]*)/ and ($1 ne "0" ? exit 0 : next);
             /enc_close.*err=0x0/ and $e=1;
@@ -393,12 +393,12 @@ function analyze {
     # analyze IP address mobility
     log=$(prep "$base" "adrm")
     if [ -s "$log.strip" ]; then
-        perl -n -e '/conn migration.*failed/ && exit 0;
-            /read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $x=1 : next);
+        perl -n -e '/conn migration for/ and $x=1;
+            /read (.*) bytes.*on conn/ and ($1 > 0 ? $x++ : next);
             /no h3 payload/ and $x=0;
             /dec_close.*err=0x([^ ]*)/ and ($1 ne "0" ? exit 0 : next);
             /enc_close.*err=0x0/ and $e=1;
-            END{exit ($x + $e == 2)};' "$log.strip"
+            END{printf "x$x e$e"; exit ($x + $e == 3)};' "$log.strip"
         [ $? -eq 1 ] && echo A > "$base.ret.adrm"
         [ ! -e "$base.ret.fail" ] && [ -s "$base.ret.adrm" ] && rm -f "$log"
         rm -f "$log.strip"
@@ -407,7 +407,7 @@ function analyze {
     # analyze zero-len source CIDs
     log=$(prep "$base" "zcid")
     if [ -s "$log.strip" ]; then
-        perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $x=1 : next);
+        perl -n -e '/read (.*) bytes.*on conn/ and ($1 > 0 ? $x=1 : next);
             /no h3 payload/ and $x=0;
             /dec_close.*err=0x([^ ]*)/ and ($1 ne "0" ? exit 0 : next);
             /enc_close.*err=0x0/ and $e=1;
@@ -420,7 +420,7 @@ function analyze {
     # analyze chacha20
     log=$(prep "$base" "chch")
     if [ -s "$log.strip" ]; then
-        perl -n -e '/read (.*) bytes.*on clnt conn/ and ($1 > 0 ? $x=1 : next);
+        perl -n -e '/read (.*) bytes.*on conn/ and ($1 > 0 ? $x=1 : next);
             /dec_close.*err=0x([^ ]*)/ and ($1 ne "0" ? exit 0 : next);
             /enc_close.*err=0x0/ and $e=1;
             END{exit ($x + $e == 2)};' "$log.strip"
