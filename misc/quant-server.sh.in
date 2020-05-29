@@ -21,7 +21,7 @@ new=$(make_name "$name.html")
 [ -f "$name.qlog" ] && mv "$name.qlog" "$new.qlog"
 
 # send email if we crashed
-if grep -E -i -q 'assertion failed|AddressSanitizer|runtime error|ACK_ECN' "$new.html"; then
+if grep -E -i -q 'assertion failed|AddressSanitizer|runtime error|ecn=CE|ecn=ETC1' "$new.html"; then
         mail -s "$new" lars@eggert.org -A "$new" < /dev/null
 fi
 
