@@ -454,6 +454,7 @@ int main(int argc, char * argv[])
                 else
                     send_err(parser.data, 505);
                 ret = 1;
+                continue;
             }
         }
 
