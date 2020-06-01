@@ -120,6 +120,12 @@ function prep {
 }
 
 
+function vneg_ok {
+    grep -E -q 'RX.*len=.*Initial' "$1"
+    return $?
+}
+
+
 function test_server {
     # run quant client and save a log for post-processing
     local opts="-i $iface -t5 -v5 -b 1000 -l /dev/null"
@@ -128,10 +134,7 @@ function test_server {
     IFS='|' read -ra info <<< "${servers[$1]}"
     # 0=name, 1=flags, 2=port, 3=retry-port, 4=h3-port, 5=URL
 
-    local log
-    log=$(prep "$base" "1rtt")
-    if ! grep -E -q 'RX.*len=.*Initial' "$log.strip"; then
-        # server down or vneg failed, skip the rest of the tests
+    if ! vneg_ok "$base.log.1rtt"; then
         return
     fi
 
@@ -176,22 +179,23 @@ function test_server {
 
 
 function bench_server {
+    local base="/tmp/$script.$pid.$1"
+
     IFS='|' read -ra info <<< "${servers[$1]}"
     # 0=name, 1=flags, 2=port, 3=retry-port, 4=h3-port, 5=URL
 
+    if ! vneg_ok "$base.log.1rtt"; then
+        return
+    fi
+
     local size=5000000
     local obj=$size
-    local log_base="/tmp/$script.$pid.$1.bench"
-    local ret_base="/tmp/$script.$pid.$1.ret"
+    local log_base="$base.bench"
+    local ret_base="$base.ret"
     local h2_out="$log_base.h2.out"
     local h2 ext prefix port host
     host=${info[0]}
     port=443
-
-    if ! grep -E -q 'RX.*len=' "/tmp/$script.$pid.$1.log.1rtt"; then
-        # server seems down, skip benchmark
-        return
-    fi
 
     # special cases for some servers
     [ "$s" = "winquic" ] && ext=.txt
@@ -209,7 +213,7 @@ function bench_server {
     if [ -n "$h2_size" ] && [ "$h2_size" -ge $size ]; then
         echo "$h2" > "$ret_base.t_h2"
 
-        local cache="/tmp/$script.$pid.$1.cache"
+        local cache="$base.cache"
         local opts="-i $iface -t5 -v3 -l /dev/null"
         local hq_out="$log_base.hq.out"
         local wd hq
@@ -398,7 +402,7 @@ function analyze {
             /no h3 payload/ and $x=0;
             /dec_close.*err=0x([^ ]*)/ and ($1 ne "0" ? exit 0 : next);
             /enc_close.*err=0x0/ and $e=1;
-            END{printf "x$x e$e"; exit ($x + $e == 3)};' "$log.strip"
+            END{exit ($x + $e == 3)};' "$log.strip"
         [ $? -eq 1 ] && echo A > "$base.ret.adrm"
         [ ! -e "$base.ret.fail" ] && [ -s "$base.ret.adrm" ] && rm -f "$log"
         rm -f "$log.strip"
