@@ -292,15 +292,17 @@ rtx_pkt(struct w_iov * const v, struct pkt_meta * const m)
 }
 
 
+#ifndef FUZZING
 static void do_w_tx(struct w_sock * const ws, struct w_iov_sq * const q)
 {
-#ifndef FUZZING
     w_tx(ws, q);
     do
         w_nic_tx(ws->w);
     while (w_tx_pending(q));
-#endif
 }
+#else
+#define do_w_tx(...)
+#endif
 
 
 static void __attribute__((nonnull)) tx_vneg_resp(struct w_sock * const ws,
@@ -1188,6 +1190,7 @@ static void __attribute__((nonnull))
             if (w_connected(ws) == false) {
                 if (m->hdr.type == LH_INIT &&
                     (m->hdr.scid.len == 0 || m->hdr.scid.len > CID_LEN_MAX)) {
+                    // FIXME: prevent this on client
                     warn(ERR, "received invalid %u-byte %s pkt, sending vneg",
                          v->len, pkt_type_str(m->hdr.flags, &m->hdr.vers));
                     tx_vneg_resp(ws, v, m);
@@ -1695,12 +1698,10 @@ void enter_closing(struct q_conn * const c)
 #endif
         // no need to go closing->draining in these cases
         enter_closed(c);
+#ifndef FUZZING
         return;
-#ifndef FUZZING
     }
-#endif
 
-#ifndef FUZZING
     // start closing/draining alarm (3 * RTO)
     const timeout_t dur =
         3 * (c->rec.cur.srtt == 0 ? kInitialRtt : c->rec.cur.srtt * NS_PER_US) +
@@ -1710,13 +1711,14 @@ void enter_closing(struct q_conn * const c)
     warn(DBG, "closing/draining alarm in %.3f sec on %s conn %s",
          (double)dur / NS_PER_S, conn_type(c), cid_str(c->scid));
 #endif
-#endif
 
     if (c->state != conn_clsg) {
         c->needs_tx = true;
         conn_to_state(c, conn_clsg);
     }
+#endif
 }
+
 
 static void __attribute__((nonnull)) idle_alarm(struct q_conn * const c)
 {

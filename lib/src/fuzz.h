@@ -1,4 +1,6 @@
-// Copyright (c) 2014-2018, NetApp, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+//
+// Copyright (c) 2016-2020, NetApp, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -23,31 +25,36 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#pragma once
+
+#include <netinet/in.h>
 #include <stdint.h>
-#include <string.h>
-#include <sys/param.h>
-#include <sys/socket.h>
 
 #include <quant/quant.h>
 
-#include <conn.h>
 
-#include "fuzz.h"
+extern int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size);
+
+static void * w;
+static struct q_conn * c;
 
 
-int LLVMFuzzerTestOneInput(const uint8_t * data, const size_t size)
+static int init(void)
 {
-    static int needs_init = 1;
-    if (needs_init)
-        needs_init = init();
-    struct w_iov_sq i = w_iov_sq_initializer(i);
-    q_alloc(w, &i, c, AF_INET6, 64); // arbitrary value
-    struct w_iov * const v = sq_first(&i);
-    v->len = (uint16_t)MIN(size, v->len);
-    memcpy(v->buf, data, v->len);
-    memcpy(&v->saddr, &c->peer, sizeof(v->saddr));
+    util_dlevel = DBG;
+    w = q_init("lo"
+#ifndef __linux__
+               "0"
+#endif
+               ,
+               0);
 
-    rx_pkts(&i, &(struct q_conn_sl){0}, c->sock);
-
+    w_init_rand();
+    c = new_conn(w, 0, 0, 0,
+                 &(struct w_sockaddr){
+                     .addr = {.af = AF_INET6, .ip6 = IN6ADDR_LOOPBACK_INIT},
+                     .port = bswap16(5678)},
+                 "fuzzer", 0, 0);
+    init_tls(c, "", 0);
     return 0;
 }

@@ -49,7 +49,7 @@
 #include "recovery.h"
 #include "tls.h"
 
-struct q_stream;        // IWYU pragma: no_forward_declare q_stream
+struct q_stream; // IWYU pragma: no_forward_declare q_stream
 
 
 KHASH_MAP_INIT_INT64(strms_by_id, struct q_stream *)
@@ -404,7 +404,7 @@ restart_idle_alarm(struct q_conn * const c);
 #ifdef FUZZING
 extern void __attribute__((nonnull)) rx_pkts(struct w_iov_sq * const x,
                                              struct q_conn_sl * const crx,
-                                             const struct w_sock * const ws);
+                                             struct w_sock * const ws);
 #endif
 
 static inline struct pn_space * __attribute__((nonnull, no_instrument_function))

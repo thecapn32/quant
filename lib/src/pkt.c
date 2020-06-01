@@ -69,11 +69,7 @@
 
 void log_pkt(const char * const dir,
              const struct w_iov * const v,
-             const struct w_sockaddr * const saddr
-#ifdef FUZZING
-             __attribute__((unused))
-#endif
-             ,
+             const struct w_sockaddr * const saddr,
              const uint8_t * const tok,
              const uint16_t tok_len,
              const uint8_t * const rit)
