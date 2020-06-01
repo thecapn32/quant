@@ -931,11 +931,13 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
                 if (verify_rtry_tok(c, tok, tok_len) == false) {
                     warn(ERR, "retry token verification failed");
                     enter_closing(c);
+                    goto done;
                 }
-            } else
+            } else {
                 // send a RETRY
                 tx_rtry(c);
-            goto done;
+                goto done;
+            }
         }
 
 #ifdef DEBUG_EXTRA
