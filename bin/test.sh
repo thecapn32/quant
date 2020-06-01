@@ -83,6 +83,10 @@ case $c in
                         external/go/src/github.com/lucas-clemente/quic-go/h09/client/main.go \
                         $addr:$port"
                 ;;
+        quic-scanner)
+                cc="external/quic-scanner-prefix/src/quic-scanner/probe_quic_versions.py \
+                    -s $addr:$port"
+                ;;
         quinn)
                 cc="cd external/quinn-prefix/src/quinn; \
                         cargo run --bin main -- $addr"

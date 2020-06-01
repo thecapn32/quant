@@ -918,8 +918,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
     case conn_idle:
 #ifndef NO_SERVER
         if (unlikely(m->hdr.vers == 0)) {
-            warn(ERR, "served RX'ed vneg");
-            ok = false;
+            warn(ERR, "server RX'ed vneg");
             goto done;
         }
 
@@ -932,14 +931,11 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
                 if (verify_rtry_tok(c, tok, tok_len) == false) {
                     warn(ERR, "retry token verification failed");
                     enter_closing(c);
-                    goto done;
                 }
-            } else {
+            } else
                 // send a RETRY
                 tx_rtry(c);
-                ok = false;
-                goto done;
-            }
+            goto done;
         }
 
 #ifdef DEBUG_EXTRA
@@ -1028,14 +1024,12 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
                          ", retrying with 0x%0" PRIx32 "",
                          c->vers_initial, c->vers);
                     ok = true;
-                } else {
+                } else
                     // the application requested a given version for this conn
                     warn(INF,
                          "serv didn't like app-requested vers 0x%0" PRIx32
                          ", aborting",
                          c->vers);
-                    ok = false;
-                }
                 goto done;
             }
 
@@ -1486,7 +1480,8 @@ static void __attribute__((nonnull))
 
     drop:
 #ifndef NO_SERVER
-        if (likely(c) && !is_clnt(c) && unlikely(c->state == conn_idle)) {
+        if (likely(c) && !is_clnt(c) &&
+            unlikely(c->state == conn_idle && c->scid)) {
             // drop server connection on invalid clnt Initial
             warn(DBG, "dropping idle %s conn %s", conn_type(c),
                  cid_str(c->scid));

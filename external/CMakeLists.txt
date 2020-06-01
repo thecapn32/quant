@@ -199,6 +199,17 @@ externalproject_add(msquic
 )
 
 
+# Use quic-scanner for testing against
+externalproject_add(quic-scanner
+  UPDATE_COMMAND ""
+  GIT_REPOSITORY https://github.com/Lekensteyn/quic-scanner.git
+  GIT_SHALLOW 1
+  CONFIGURE_COMMAND ""
+  BUILD_COMMAND ""
+  INSTALL_COMMAND ""
+  EXCLUDE_FROM_ALL 1
+)
+
 set(TRACKER github.com/QUIC-Tracker/quic-tracker)
 externalproject_add(quic-tracker
   DOWNLOAD_COMMAND
