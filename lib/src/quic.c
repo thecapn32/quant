@@ -1108,6 +1108,7 @@ bool q_migrate(struct q_conn * const c,
             } else
                 goto fail;
         }
+        c->needs_tx = true;
     }
 
     struct w_sock * const new_sock = w_bind(w, idx, 0, &c->sockopt);
