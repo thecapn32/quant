@@ -782,8 +782,8 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
         dec4_chk(&m->hdr.vers, &pos, end);
         dec1_chk(&m->hdr.dcid.len, &pos, end);
 
-        if (unlikely(m->hdr.vers && m->hdr.dcid.len > CID_LEN_MAX)) {
-            warn(DBG, "illegal dcid len %u", m->hdr.dcid.len);
+        if (unlikely(m->hdr.dcid.len > CID_LEN_MAX)) {
+            warn(DBG, "illegal v1 dcid len %u", m->hdr.dcid.len);
             m->hdr.dcid.len = 0;
             return false;
         }
@@ -792,8 +792,8 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
             decb_chk(m->hdr.dcid.id, &pos, end, m->hdr.dcid.len);
 
         dec1_chk(&m->hdr.scid.len, &pos, end);
-        if (unlikely(m->hdr.vers && m->hdr.scid.len > CID_LEN_MAX)) {
-            warn(DBG, "illegal scid len %u", m->hdr.scid.len);
+        if (unlikely(m->hdr.scid.len > CID_LEN_MAX)) {
+            warn(DBG, "illegal v1 scid len %u", m->hdr.scid.len);
             m->hdr.dcid.len = 0;
             return false;
         }
