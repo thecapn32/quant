@@ -37,9 +37,15 @@
 
 int LLVMFuzzerTestOneInput(const uint8_t * data, const size_t size)
 {
+    static int loops = 0;
     static int needs_init = 1;
     if (needs_init)
         needs_init = init();
+    else if (loops++ == 10) {
+        mk_conn();
+        loops = 0;
+    }
+
     struct w_iov_sq i = w_iov_sq_initializer(i);
     q_alloc(w, &i, c, AF_INET6, 64); // arbitrary value
     struct w_iov * const v = sq_first(&i);

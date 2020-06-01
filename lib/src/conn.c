@@ -155,6 +155,9 @@ SPLAY_GENERATE(ooo_0rtt_by_cid, ooo_0rtt, node, ooo_0rtt_by_cid_cmp)
 static inline epoch_t __attribute__((nonnull))
 epoch_in(const struct q_conn * const c)
 {
+    if (unlikely(c->tls.t == 0))
+        return ep_init;
+
     const size_t epoch = ptls_get_read_epoch(c->tls.t);
     ensure(epoch <= ep_data, "unhandled epoch %lu", (unsigned long)epoch);
     return (epoch_t)epoch;
@@ -914,6 +917,12 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
     switch (c->state) {
     case conn_idle:
 #ifndef NO_SERVER
+        if (unlikely(m->hdr.vers == 0)) {
+            warn(ERR, "served RX'ed vneg");
+            ok = false;
+            goto done;
+        }
+
         // this is a new connection
         c->vers = m->hdr.vers;
 

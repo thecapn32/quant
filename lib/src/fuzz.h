@@ -36,7 +36,21 @@
 extern int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size);
 
 static void * w;
-static struct q_conn * c;
+static struct q_conn * c = 0;
+
+
+static void mk_conn()
+{
+    if (likely(c))
+        free_conn(c);
+
+    c = new_conn(w, 0, 0, 0,
+                 &(struct w_sockaddr){
+                     .addr = {.af = AF_INET6, .ip6 = IN6ADDR_LOOPBACK_INIT},
+                     .port = bswap16(5678)},
+                 "fuzzer", 0, 0);
+    init_tls(c, "", 0);
+}
 
 
 static int init(void)
@@ -50,11 +64,6 @@ static int init(void)
                0);
 
     w_init_rand();
-    c = new_conn(w, 0, 0, 0,
-                 &(struct w_sockaddr){
-                     .addr = {.af = AF_INET6, .ip6 = IN6ADDR_LOOPBACK_INIT},
-                     .port = bswap16(5678)},
-                 "fuzzer", 0, 0);
-    init_tls(c, "", 0);
+    mk_conn();
     return 0;
 }
