@@ -497,7 +497,7 @@ bool enc_pkt(struct q_stream * const s,
     if (enc_data)
         calc_lens_of_stream_or_crypto_frame(m, v, s, rtx);
     const uint8_t * const end =
-        v->buf + (enc_data || unlikely(rtx) ? m->strm_frm_pos : v->len);
+        v->buf + ((enc_data || rtx) ? m->strm_frm_pos : v->len);
     enc1(&pos, end, m->hdr.flags);
 
     if (unlikely(is_lh(m->hdr.flags))) {
@@ -575,32 +575,20 @@ bool enc_pkt(struct q_stream * const s,
     if (unlikely(c->state == conn_clsg))
         enc_close_frame(ci, &pos, end, m);
     else if (epoch == ep_data || (!is_clnt(c) && epoch == ep_0rtt))
-        // TODO calc stream hdr len and subtract
         enc_other_frames(ci, &pos, end, m);
 
-    if (unlikely(rtx)) {
-        // warn(ERR, "pkt so far:");
-        // hexdump(v->buf, pos - v->buf);
-        // warn(ERR, "pos until strm_data_pos before:");
-        // hexdump(pos, m->strm_data_pos - (pos - v->buf));
-        // const uint8_t * const p = pos;
-        // this is a RTX, pad out until beginning of stream header
+    if (enc_data || rtx) {
+        // pad out until beginning of stream header
         enc_padding_frame(ci, &pos, end, m,
                           m->strm_frm_pos - (uint16_t)(pos - v->buf));
-        // warn(ERR, "oldpos until strm_data_pos after:");
-        // hexdump(p, m->strm_data_pos - (p - v->buf));
-        // warn(ERR, "strm_frm_pos until strm_data_pos:");
-        // hexdump(v->buf + m->strm_frm_pos, m->strm_data_pos - (p - v->buf));
-        pos = v->buf + m->strm_data_pos + m->strm_data_len;
-        log_stream_or_crypto_frame(
-            true, m, v->buf[m->strm_frm_pos], s->id, false,
-            m->strm_off + m->strm_data_len < s->out_data ? sdt_ooo : sdt_seq);
-
-    } else if (likely(enc_data)) {
-        // this is a fresh data/crypto or pure stream FIN packet, so pad out any
-        // remaining space before stream header
-        enc_padding_frame(ci, &pos, end, m, (uint16_t)(end - pos));
-        enc_stream_or_crypto_frame(&pos, v->buf + v->len, m, v, s);
+        if (unlikely(rtx)) {
+            pos = v->buf + m->strm_data_pos + m->strm_data_len;
+            log_stream_or_crypto_frame(
+                true, m, v->buf[m->strm_frm_pos], s->id, false,
+                m->strm_off + m->strm_data_len < s->out_data ? sdt_ooo
+                                                             : sdt_seq);
+        } else
+            enc_stream_or_crypto_frame(&pos, v->buf + v->len, m, v, s);
     }
 
     // TODO: include more frames when c->rec.max_ups < max_ups TP

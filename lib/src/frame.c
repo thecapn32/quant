@@ -1605,7 +1605,8 @@ void calc_lens_of_stream_or_crypto_frame(struct pkt_meta * const m,
             hlen += varint_size(off);
             // warn(ERR, "hlen strm +off %u (%" PRIu ")", hlen, off);
         }
-        if (m->strm_data_len != s->c->rec.max_ups - AEAD_LEN - DATA_OFFSET) {
+        if (unlikely(rtx && is_set(F_STREAM_LEN, v->buf[m->strm_frm_pos])) ||
+            m->strm_data_len != s->c->rec.max_ups - AEAD_LEN - DATA_OFFSET) {
             hlen += varint_size(m->strm_data_len);
             // warn(ERR, "hlen strm +len %u (%u)", hlen, m->strm_data_len);
         }
