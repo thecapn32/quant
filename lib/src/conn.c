@@ -1913,22 +1913,33 @@ struct q_conn * new_conn(struct w_engine * const w,
     // TODO: avoid encoding RFC1918 addresses
     if (!is_clnt(c) && peer && w->have_ip4 && w->have_ip6) {
         // populate tp_mine.pref_addr
-        const bool is_private = w_is_private(&w->ifaddr[idx].addr);
         int other_af_idx;
+        bool private_ok = false;
+    again:
         for (other_af_idx =
                  (w->ifaddr[idx].addr.af == AF_INET ? 0 : w->addr4_pos);
              other_af_idx <
              (w->ifaddr[idx].addr.af == AF_INET ? w->addr4_pos : w->addr_cnt);
              other_af_idx++) {
 #ifdef DEBUG_EXTRA
-            warn(ERR, "candidate socket is %s%s%s:%u",
+            warn(ERR, "%sprivate candidate socket is %s%s%s:%u",
+                 private_ok ? "" : "non-",
                  w->ifaddr[other_af_idx].addr.af == AF_INET6 ? "[" : "",
                  w_ntop(&w->ifaddr[other_af_idx].addr, ip_tmp),
                  w->ifaddr[other_af_idx].addr.af == AF_INET6 ? "]" : "",
                  bswap16(port));
 #endif
-            if (is_private == w_is_private(&w->ifaddr[other_af_idx].addr))
+            if ((!private_ok && !w_is_private(&w->ifaddr[other_af_idx].addr)) ||
+                (private_ok && w_is_private(&w->ifaddr[other_af_idx].addr)))
                 break;
+        }
+
+        if (!private_ok &&
+            other_af_idx >= (w->ifaddr[idx].addr.af == AF_INET ? w->addr4_pos
+                                                               : w->addr_cnt) &&
+            w_is_private(&w->ifaddr[idx].addr)) {
+            private_ok = true;
+            goto again;
         }
 
         if (other_af_idx <
@@ -1960,7 +1971,8 @@ struct q_conn * new_conn(struct w_engine * const w,
                 conns_by_id_ins(c,
                                 cid_ins(&c->scids, &c->tp_mine.pref_addr.cid));
             }
-        }
+        } else
+            warn(INF, "no other address found for preferred_address tp");
     }
 #endif
 
