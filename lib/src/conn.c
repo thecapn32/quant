@@ -1779,7 +1779,8 @@ void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
     // XXX for testing, do a key flip and a migration ASAP (if enabled)
     c->do_key_flip = c->key_flips_enabled;
 #ifndef NO_MIGRATION
-    c->do_migration = !c->tp_peer.disable_active_migration;
+    if (c->dcid->seq == 0)
+        c->do_migration = !c->tp_peer.disable_active_migration;
 #endif
 #endif
 }
