@@ -1911,69 +1911,42 @@ struct q_conn * new_conn(struct w_engine * const w,
                                  : (is_clnt(c) ? CIDS_MAX : CIDS_MAX / 2);
 
 #if !defined(NO_MIGRATION) && !defined(NO_SERVER)
-    // TODO: avoid encoding RFC1918 addresses
     if (!is_clnt(c) && peer && w->have_ip4 && w->have_ip6) {
         // populate tp_mine.pref_addr
-        int other_af_idx;
-        bool private_ok = false;
-    again:
-        for (other_af_idx =
-                 (w->ifaddr[idx].addr.af == AF_INET ? 0 : w->addr4_pos);
-             other_af_idx <
-             (w->ifaddr[idx].addr.af == AF_INET ? w->addr4_pos : w->addr_cnt);
-             other_af_idx++) {
+        const bool private_ok = w_is_private(&peer->addr);
+        for (idx = 0; idx < w->addr_cnt; idx++) {
 #ifdef DEBUG_EXTRA
             warn(ERR, "%sprivate candidate socket is %s%s%s:%u",
-                 private_ok ? "" : "non-",
-                 w->ifaddr[other_af_idx].addr.af == AF_INET6 ? "[" : "",
-                 w_ntop(&w->ifaddr[other_af_idx].addr, ip_tmp),
-                 w->ifaddr[other_af_idx].addr.af == AF_INET6 ? "]" : "",
-                 bswap16(port));
+                 w_is_private(&w->ifaddr[idx].addr) ? "" : "non-",
+                 w->ifaddr[idx].addr.af == AF_INET6 ? "[" : "",
+                 w_ntop(&w->ifaddr[idx].addr, ip_tmp),
+                 w->ifaddr[idx].addr.af == AF_INET6 ? "]" : "", bswap16(port));
 #endif
-            if ((!private_ok && !w_is_private(&w->ifaddr[other_af_idx].addr)) ||
-                (private_ok && w_is_private(&w->ifaddr[other_af_idx].addr)))
-                break;
-        }
-
-        if (!private_ok &&
-            other_af_idx >= (w->ifaddr[idx].addr.af == AF_INET ? w->addr4_pos
-                                                               : w->addr_cnt) &&
-            w_is_private(&w->ifaddr[idx].addr)) {
-            private_ok = true;
-            goto again;
-        }
-
-        if (other_af_idx <
-            (w->ifaddr[idx].addr.af == AF_INET ? w->addr4_pos : w->addr_cnt)) {
-            struct w_sock * const ws = get_local_sock_by_ipnp(
-                ped(w),
-                &(struct w_sockaddr){.addr = w->ifaddr[other_af_idx].addr,
-                                     .port = port});
-
-            if (ws) {
-#ifdef DEBUG_EXTRA
-                warn(DBG, "other pref_addr is %s%s%s",
-                     w->ifaddr[other_af_idx].addr.af == AF_INET6 ? "[" : "",
-                     w_ntop(&w->ifaddr[other_af_idx].addr, ip_tmp),
-                     w->ifaddr[other_af_idx].addr.af == AF_INET6 ? "]" : "");
-#endif
-                memcpy(&c->tp_mine.pref_addr.addr4,
-                       w->ifaddr[idx].addr.af == AF_INET ? &c->sock->ws_loc
-                                                         : &ws->ws_loc,
-                       sizeof(c->tp_mine.pref_addr.addr4));
-                memcpy(&c->tp_mine.pref_addr.addr6,
-                       w->ifaddr[idx].addr.af == AF_INET6 ? &c->sock->ws_loc
-                                                          : &ws->ws_loc,
-                       sizeof(c->tp_mine.pref_addr.addr6));
-
-                c->max_cid_seq_out = c->tp_mine.pref_addr.cid.seq = 1;
-                mk_rand_cid(&c->tp_mine.pref_addr.cid,
-                            ped(c->w)->conf.server_cid_len, true);
-                conns_by_id_ins(c,
-                                cid_ins(&c->scids, &c->tp_mine.pref_addr.cid));
+            if (private_ok == w_is_private(&w->ifaddr[idx].addr) &&
+                ((w->ifaddr[idx].addr.af == AF_INET &&
+                  c->tp_mine.pref_addr.addr4.addr.af == 0) ||
+                 (w->ifaddr[idx].addr.af == AF_INET6 &&
+                  c->tp_mine.pref_addr.addr6.addr.af == 0))) {
+                struct w_sock * const ws = get_local_sock_by_ipnp(
+                    ped(w), &(struct w_sockaddr){.addr = w->ifaddr[idx].addr,
+                                                 .port = port});
+                if (w->ifaddr[idx].addr.af == AF_INET &&
+                    c->tp_mine.pref_addr.addr4.addr.af == 0)
+                    memcpy(&c->tp_mine.pref_addr.addr4, &ws->ws_loc,
+                           sizeof(c->tp_mine.pref_addr.addr4));
+                else
+                    memcpy(&c->tp_mine.pref_addr.addr6, &ws->ws_loc,
+                           sizeof(c->tp_mine.pref_addr.addr6));
             }
-        } else
-            warn(INF, "no other address found for preferred_address tp");
+        }
+
+        if (c->tp_mine.pref_addr.addr4.addr.af ||
+            c->tp_mine.pref_addr.addr6.addr.af) {
+            c->max_cid_seq_out = c->tp_mine.pref_addr.cid.seq = 1;
+            mk_rand_cid(&c->tp_mine.pref_addr.cid,
+                        ped(c->w)->conf.server_cid_len, true);
+            conns_by_id_ins(c, cid_ins(&c->scids, &c->tp_mine.pref_addr.cid));
+        }
     }
 #endif
 
