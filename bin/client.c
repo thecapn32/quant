@@ -251,8 +251,9 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
     set_from_url(port, sizeof(port), url, &u, UF_PORT, "4433");
     set_from_url(path, sizeof(path), url, &u, UF_PATH, "/index.html");
 
-    struct addrinfo * peer = get_addr(do_v6 ? AF_INET6 : AF_INET, dest, port);
-    struct addrinfo * migr_peer =
+    struct addrinfo * const peer =
+        get_addr(do_v6 ? AF_INET6 : AF_INET, dest, port);
+    struct addrinfo * const migr_peer =
         get_addr(do_v6 ? AF_INET : AF_INET6, dest, port);
     if (peer == 0)
         goto fail;
