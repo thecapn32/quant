@@ -947,6 +947,8 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
             if (m->hdr.type == LH_INIT && tok_len) {
                 if (verify_rtry_tok(c, tok, tok_len) == false) {
                     warn(ERR, "retry token verification failed");
+                    err_close(c, ERR_INVL_TOK, 0, "invalid token %s",
+                              tok_str(tok, tok_len));
                     enter_closing(c);
                     goto done;
                 }

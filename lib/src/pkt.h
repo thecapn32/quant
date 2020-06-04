@@ -65,16 +65,18 @@ struct q_stream; // IWYU pragma: no_forward_declare q_stream
 
 
 #define ERR_NONE 0x0
-#define ERR_INTERNAL 0x1
-#define ERR_FLOW_CONTROL 0x3
-#define ERR_STREAM_ID 0x4
-#define ERR_STREAM_STATE 0x5
-// #define ERR_FINAL_SIZE 0x6
-#define ERR_FRAME_ENC 0x7
-#define ERR_TRANSPORT_PARAMETER 0x8
-#define ERR_CONNECTION_ID_LIMIT 0x9
-#define ERR_PROTOCOL_VIOLATION 0xa
-#define ERR_INVALID_TOKEN 0xb
+#define ERR_INTL 0x1
+// #define ERR_SERVER_BUSY 0x2
+#define ERR_FC 0x3
+#define ERR_STRM_LIMT 0x4
+#define ERR_STRM_STAT 0x5
+#define ERR_FINL_SIZE 0x6
+#define ERR_FRAM_ENC 0x7
+#define ERR_TP 0x8
+#define ERR_CID_LIMT 0x9
+#define ERR_PV 0xa
+#define ERR_INVL_TOK 0xb
+// #define ERR_APP_ERROR 0xc
 #define ERR_TLS(type) (0x100 + (type))
 
 

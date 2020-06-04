@@ -102,7 +102,7 @@ static void track_frame(struct pkt_meta * const m,
 #define dec1_chk(val, pos, end, c, type)                                       \
     do {                                                                       \
         if (unlikely(dec1((val), (pos), (end)) == false))                      \
-            err_close_return((c), ERR_FRAME_ENC, (type), "dec1 %s in %s:%u",   \
+            err_close_return((c), ERR_FRAM_ENC, (type), "dec1 %s in %s:%u",    \
                              #val, __FILE__, __LINE__);                        \
     } while (0)
 
@@ -111,7 +111,7 @@ static void track_frame(struct pkt_meta * const m,
     do {                                                                       \
         uint64_t _v;                                                           \
         if (unlikely(decv(&_v, (pos), (end)) == false))                        \
-            err_close_return((c), ERR_FRAME_ENC, (type), "decv %s in %s:%u",   \
+            err_close_return((c), ERR_FRAM_ENC, (type), "decv %s in %s:%u",    \
                              #val, __FILE__, __LINE__);                        \
         *(val) = (uint_t)_v;                                                   \
     } while (0)
@@ -119,8 +119,18 @@ static void track_frame(struct pkt_meta * const m,
 #define decb_chk(val, pos, end, len, c, type)                                  \
     do {                                                                       \
         if (unlikely(decb((val), (pos), (end), (len)) == false))               \
-            err_close_return((c), ERR_FRAME_ENC, (type), "decb %s in %s:%u",   \
+            err_close_return((c), ERR_FRAM_ENC, (type), "decb %s in %s:%u",    \
                              #val, __FILE__, __LINE__);                        \
+    } while (0)
+
+
+#define chk_finl_size(off, s, type)                                            \
+    do {                                                                       \
+        if (unlikely((off) > (s)->in_data_off - 1))                            \
+            err_close_return((s)->c, ERR_FINL_SIZE, (type),                    \
+                             "off %" PRIu " > %" PRIu, (off),                  \
+                             (s)->in_data_off - 1);                            \
+                                                                               \
     } while (0)
 
 
@@ -183,7 +193,7 @@ get_and_validate_strm(struct q_conn * const c,
 {
     if (is_uni(sid) && unlikely(is_srv_ini(sid) ==
                                 (ok_when_writer ? is_clnt(c) : !is_clnt(c))))
-        err_close(c, ERR_STREAM_STATE, type,
+        err_close(c, ERR_STRM_STAT, type,
                   "got frame 0x%02x for uni sid %" PRId " but am %s", type, sid,
                   conn_type(c));
     else {
@@ -198,8 +208,7 @@ get_and_validate_strm(struct q_conn * const c,
                 // we are supposed to open closed streams on RX of these frames
                 s = new_stream(c, sid);
             else
-                err_close(c, ERR_STREAM_STATE, type, "unknown strm %" PRId,
-                          sid);
+                err_close(c, ERR_STRM_STAT, type, "unknown strm %" PRId, sid);
         }
         return s;
     }
@@ -254,8 +263,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
     if (unlikely(type == FRM_CRY)) {
         const epoch_t e = epoch_for_pkt_type(m->hdr.type);
         if (unlikely(c->cstrms[e] == 0))
-            err_close_return(c, ERR_STREAM_STATE, type, "epoch %u abandoned",
-                             e);
+            err_close_return(c, ERR_STRM_STAT, type, "epoch %u abandoned", e);
         sid = crpt_strm_id(e);
         m->strm = c->cstrms[e];
     } else {
@@ -273,7 +281,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
     if (is_set(F_STREAM_LEN, type) || unlikely(type == FRM_CRY)) {
         decv_chk(&l, pos, end, c, type);
         if (unlikely(*pos + l > end))
-            err_close_return(c, ERR_FRAME_ENC, type, "illegal strm len");
+            err_close_return(c, ERR_FRAM_ENC, type, "illegal strm len");
     } else
         // stream data extends to end of packet
         l = (uint16_t)(end - *pos);
@@ -281,7 +289,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
     const dint_t max = max_sid(sid, c);
     if (unlikely(sid > max)) {
         log_stream_or_crypto_frame(false, m, type, sid, true, 0);
-        err_close_return(c, ERR_STREAM_ID, type, "sid %" PRId " > max %" PRId,
+        err_close_return(c, ERR_STRM_LIMT, type, "sid %" PRId " > max %" PRId,
                          sid, max);
     }
 
@@ -317,7 +325,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
 
         if (unlikely(is_srv_ini(sid) != is_clnt(c))) {
             log_stream_or_crypto_frame(false, m, type, sid, true, 0);
-            err_close_return(c, ERR_STREAM_STATE, type,
+            err_close_return(c, ERR_STRM_STAT, type,
                              "got sid %" PRId " but am %s", sid, conn_type(c));
         }
 
@@ -330,14 +338,8 @@ dec_stream_or_crypto_frame(const uint8_t type,
             m->strm_off + strm_data_len_adj(m->strm_data_len)) {
 
         if (unlikely(m->strm->state == strm_hcrm ||
-                     m->strm->state == strm_clsd)) {
-            warn(NTE,
-                 "ignoring STREAM frame for %s strm " FMT_SID " on %s conn %s",
-                 strm_state_str[m->strm->state], sid, conn_type(c),
-                 cid_str(c->scid));
-            track_sd_frame(ign, true);
-            goto done;
-        }
+                     m->strm->state == strm_clsd))
+            chk_finl_size(m->strm_off, m->strm, type);
 
         if (unlikely(m->strm->in_data_off > m->strm_off))
             // already-received data at the beginning of the frame, trim
@@ -467,7 +469,7 @@ done:
     if (m->strm && likely(type != FRM_CRY) &&
         unlikely(m->strm_off + strm_data_len_adj(m->strm_data_len) >
                  m->strm->in_data_max - 1))
-        err_close_return(c, ERR_FLOW_CONTROL, type,
+        err_close_return(c, ERR_FC, type,
                          "stream %" PRIu " off %" PRIu " >= in_data_max %" PRIu,
                          m->strm->id,
                          m->strm_off + strm_data_len_adj(m->strm_data_len),
@@ -525,7 +527,7 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
     // TODO: figure out a better way to handle huge ACK delays
     if (sizeof(uint64_t) != sizeof(uint_t) &&
         unlikely(ack_delay_raw > UINT32_MAX / 2))
-        err_close_return(c, ERR_FRAME_ENC, type, "ACK delay raw %" PRIu64,
+        err_close_return(c, ERR_FRAM_ENC, type, "ACK delay raw %" PRIu64,
                          ack_delay_raw);
 
     // handshake pkts always use the default ACK delay exponent
@@ -560,11 +562,10 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
         decv_chk(&ack_rng, pos, end, c, type);
 
         if (unlikely(ack_rng > (UINT16_MAX << 4)))
-            err_close_return(c, ERR_INTERNAL, type, "ACK rng len %" PRIu,
-                             ack_rng);
+            err_close_return(c, ERR_INTL, type, "ACK rng len %" PRIu, ack_rng);
 
         if (unlikely(ack_rng > lg_ack))
-            err_close_return(c, ERR_FRAME_ENC, type,
+            err_close_return(c, ERR_FRAM_ENC, type,
                              "ACK rng len %" PRIu " > lg_ack %" PRIu, ack_rng,
                              lg_ack);
 
@@ -616,7 +617,7 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
             if (unlikely(acked == 0))
 #ifndef FUZZING
                 // this is just way too noisy when fuzzing
-                err_close_return(c, ERR_PROTOCOL_VIOLATION, type,
+                err_close_return(c, ERR_PV, type,
                                  "got ACK for %s pkt %" PRIu " never sent",
                                  pn_type_str(pn->type), ack);
 #else
@@ -655,8 +656,7 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
             if (unlikely((lg_ack - ack_rng) < gap + 2)) {
                 warn(DBG, "lg_ack=%" PRIu ", ack_rng=%" PRIu ", gap=%" PRIu,
                      lg_ack, ack_rng, -gap);
-                err_close_return(c, ERR_PROTOCOL_VIOLATION, type,
-                                 "illegal ACK frame");
+                err_close_return(c, ERR_PV, type, "illegal ACK frame");
             }
             lg_ack -= ack_rng + gap + 2;
         }
@@ -736,7 +736,7 @@ dec_close_frame(const uint8_t type,
     poison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
 
     if (unlikely(reas_len != act_reas_len))
-        err_close_return(c, ERR_FRAME_ENC, type, "illegal reason len");
+        err_close_return(c, ERR_FRAM_ENC, type, "illegal reason len");
 
     if (c->state == conn_clsg) {
         conn_to_state(c, conn_drng);
@@ -854,6 +854,7 @@ dec_strm_data_blocked_frame(const uint8_t ** pos,
     if (unlikely(s == 0))
         return true;
 
+    chk_finl_size(off, s, FRM_SDB);
     do_stream_fc(s, 0);
     // because do_stream_fc() only sets this when increasing the FC window
     s->tx_max_strm_data = true;
@@ -1039,17 +1040,15 @@ dec_new_cid_frame(const uint8_t ** pos,
     const uint_t max_act_cids =
         c->tp_mine.act_cid_lim + (c->tp_peer.pref_addr.cid.len ? 1 : 0);
     if (likely(dup == false) && unlikely(cid_cnt(&c->dcids) > max_act_cids))
-        err_close_return(c, ERR_CONNECTION_ID_LIMIT, FRM_CID,
+        err_close_return(c, ERR_CID_LIMT, FRM_CID,
                          "illegal seq %" PRIu " (have %" PRIu "/%" PRIu ")",
                          dcid.seq, cid_cnt(&c->dcids), max_act_cids);
 
     if (unlikely(rpt > dcid.seq))
-        err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_CID,
-                         "illegal rpt %" PRIu, rpt);
+        err_close_return(c, ERR_PV, FRM_CID, "illegal rpt %" PRIu, rpt);
 
     if (unlikely(dcid.len > CID_LEN_MAX))
-        err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_CID, "illegal len %u",
-                         dcid.len);
+        err_close_return(c, ERR_PV, FRM_CID, "illegal len %u", dcid.len);
 
     if (rpt > c->rpt_max) {
         retire_prior_to(&c->dcids, rpt);
@@ -1069,7 +1068,7 @@ dec_new_cid_frame(const uint8_t ** pos,
     }
 
 #else
-    err_close_return(c, ERR_PROTOCOL_VIOLATION, FRM_CID,
+    err_close_return(c, ERR_PV, FRM_CID,
                      "migration disabled but got NEW_CONNECTION_ID");
 #endif
 
@@ -1101,6 +1100,7 @@ dec_reset_stream_frame(const uint8_t ** pos,
     if (unlikely(s == 0))
         return true;
 
+    chk_finl_size(off, s, FRM_RST);
     strm_to_state(s, strm_clsd);
 
     return true;
@@ -1128,7 +1128,7 @@ dec_retire_cid_frame(const uint8_t ** pos,
     else if (c->scid->seq == scid->seq) {
         struct cid * const next_scid = next_cid(&c->scids, scid->seq);
         if (unlikely(next_scid == 0))
-            err_close_return(c, ERR_INTERNAL, FRM_RTR, "no next scid");
+            err_close_return(c, ERR_INTL, FRM_RTR, "no next scid");
         c->scid = next_scid;
     }
     conns_by_id_del(scid);
@@ -1160,7 +1160,7 @@ dec_new_token_frame(const uint8_t ** pos,
          tok_str(tok, tok_len));
 
     if (unlikely(tok_len != act_tok_len))
-        err_close_return(c, ERR_FRAME_ENC, FRM_TOK, "illegal tok len");
+        err_close_return(c, ERR_FRAM_ENC, FRM_TOK, "illegal tok len");
 
     // TODO: actually do something with the token
 
@@ -1246,9 +1246,8 @@ bool dec_frames(struct q_conn * const c,
             unlikely(bit_isset(FRM_MAX, type,
                                &frame_ok[epoch_for_pkt_type(m->hdr.type)]) ==
                      false))
-            err_close_return(c, ERR_PROTOCOL_VIOLATION, type,
-                             "0x%02x frame not OK in %s pkt", type,
-                             pkt_type_str(m->hdr.flags, &m->hdr.vers));
+            err_close_return(c, ERR_PV, type, "0x%02x frame not OK in %s pkt",
+                             type, pkt_type_str(m->hdr.flags, &m->hdr.vers));
 
         bool ok;
         switch (type) {
@@ -1367,14 +1366,14 @@ bool dec_frames(struct q_conn * const c,
             break;
 
         default:
-            err_close_return(c, ERR_FRAME_ENC, type,
+            err_close_return(c, ERR_FRAM_ENC, type,
                              "unknown 0x%02x frame at pos %u", type,
                              (uint16_t)(pos - v->buf));
         }
 
         if (unlikely(ok == false))
             // there was an error parsing a frame
-            err_close_return(c, ERR_FRAME_ENC, type,
+            err_close_return(c, ERR_FRAM_ENC, type,
                              "error parsing 0x%02x frame at pos %lu", type,
                              pos - v->buf);
 

@@ -429,13 +429,11 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                  offsetof(struct q_conn, tls));
 
     if (unlikely(slots[0].type != QUIC_TP)) {
-        err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY, "slots[0].type = 0x%04x",
-                  slots[0].type);
+        err_close(c, ERR_TP, FRM_CRY, "slots[0].type = 0x%04x", slots[0].type);
         return 1;
     }
     if (unlikely(slots[1].type != UINT16_MAX)) {
-        err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY, "slots[1].type = 0x%04x",
-                  slots[1].type);
+        err_close(c, ERR_TP, FRM_CRY, "slots[1].type = 0x%04x", slots[1].type);
         return 1;
     }
 
@@ -475,8 +473,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
         // check if this transport parameter is a duplicate
         if (bit_isset(TP_MAX, tp, &tp_list)) {
-            err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
-                      "duplicate tp 0x%04lx", tp);
+            err_close(c, ERR_TP, FRM_CRY, "duplicate tp 0x%04lx", tp);
             return 1;
         }
         bit_set(TP_MAX, tp, &tp_list);
@@ -542,7 +539,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             warn(INF, "\tmax_udp_payload_size = %" PRIu " [bytes]",
                  c->tp_peer.max_ups);
             if (c->tp_peer.max_ups < 1200) {
-                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
+                err_close(c, ERR_TP, FRM_CRY,
                           "tp_peer.max_ups %" PRIu " invalid (< 1200)",
                           c->tp_peer.max_ups);
                 return 1;
@@ -554,7 +551,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                 return 1;
             warn(INF, "\tack_delay_exponent = %" PRIu, c->tp_peer.ack_del_exp);
             if (c->tp_peer.ack_del_exp > 20) {
-                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
+                err_close(c, ERR_TP, FRM_CRY,
                           "ack_delay_exponent %" PRIu " invalid",
                           c->tp_peer.ack_del_exp);
                 return 1;
@@ -567,8 +564,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             warn(INF, "\tmax_ack_delay = %" PRIu " [ms]",
                  c->tp_peer.max_ack_del);
             if (c->tp_peer.max_ack_del > (1 << 14)) {
-                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
-                          "max_ack_delay %" PRIu " invalid",
+                err_close(c, ERR_TP, FRM_CRY, "max_ack_delay %" PRIu " invalid",
                           c->tp_peer.max_ack_del);
                 return 1;
             }
@@ -576,7 +572,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
         case TP_DCID_O:
             if (is_clnt(c) == false) {
-                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
+                err_close(c, ERR_TP, FRM_CRY,
                           "serv got original_destination_connection_id tp");
                 return 1;
             }
@@ -596,7 +592,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
         case TP_SRT:
             if (is_clnt(c) == false) {
-                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
+                err_close(c, ERR_TP, FRM_CRY,
                           "rx stateless_reset_token tp at serv");
                 return 1;
             }
@@ -609,8 +605,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             uint8_t srt[SRT_LEN];
 #endif
             if (l != SRT_LEN) {
-                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
-                          "illegal srt len %" PRIu64, l);
+                err_close(c, ERR_TP, FRM_CRY, "illegal srt len %" PRIu64, l);
                 return 1;
             }
             decb(srt, &pos, end, SRT_LEN);
@@ -640,8 +635,8 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             decb((uint8_t *)&pa6->port, &pos, e, sizeof(pa6->port));
 
             if (unlikely(dec1(&pa->cid.len, &pos, e) == false)) {
-                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
-                          "cannot decode tp 0x%04" PRIx64, tp);
+                err_close(c, ERR_TP, FRM_CRY, "cannot decode tp 0x%04" PRIx64,
+                          tp);
                 return 1;
             }
             decb(pa->cid.id, &pos, e, pa->cid.len);
@@ -688,21 +683,19 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             break;
 
         default:
-            err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
-                      "unsupported tp 0x%04" PRIx64, tp);
+            err_close(c, ERR_TP, FRM_CRY, "unsupported tp 0x%04" PRIx64, tp);
             return 1;
         }
     }
 
     // authenticate CIDs
     if (ini_scid.len == UINT8_MAX) {
-        err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
-                  "no initial_source_connection_id tp");
+        err_close(c, ERR_TP, FRM_CRY, "no initial_source_connection_id tp");
         return 1;
     }
 
     if (is_clnt(c) && orig_dcid.len == UINT8_MAX) {
-        err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
+        err_close(c, ERR_TP, FRM_CRY,
                   "no original_destination_connection_id tp");
         return 1;
     }
@@ -712,8 +705,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         mk_cid_str(ERR, c->dcid, dcid_str);
         warn(ERR, "initial_source_connection_id mismatch, %s != %s",
              ini_scid_str, dcid_str);
-        err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
-                  "initial_source_connection_id mismatch");
+        err_close(c, ERR_TP, FRM_CRY, "initial_source_connection_id mismatch");
         return 1;
     }
 
@@ -722,13 +714,13 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         if (c->tok_len) {
             // we had a Retry
             if (rtry_scid.len == UINT8_MAX) {
-                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
+                err_close(c, ERR_TP, FRM_CRY,
                           "no retry_source_connection_id tp");
                 return 1;
             }
 
             if (orig_dcid.len == UINT8_MAX) {
-                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
+                err_close(c, ERR_TP, FRM_CRY,
                           "no original_destination_connection_id tp");
                 return 1;
             }
@@ -739,14 +731,14 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
                 warn(ERR,
                      "original_destination_connection_id mismatch, %s != %s",
                      orig_dcid_str, odcid_str);
-                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
+                err_close(c, ERR_TP, FRM_CRY,
                           "original_destination_connection_id mismatch");
                 return 1;
             }
         } else {
             // no Retry
             if (rtry_scid.len != UINT8_MAX) {
-                err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
+                err_close(c, ERR_TP, FRM_CRY,
                           "got retry_source_connection_id tp");
                 return 1;
             }
@@ -757,7 +749,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         if (c->tp_peer.act_cid_lim == UINT_T_MAX)
             c->tp_peer.act_cid_lim = 2;
         else if (c->tp_peer.act_cid_lim < 2)
-            err_close(c, ERR_TRANSPORT_PARAMETER, FRM_CRY,
+            err_close(c, ERR_TP, FRM_CRY,
                       "active_connection_id_limit %" PRIu " < 2",
                       c->tp_peer.act_cid_lim);
     } else
