@@ -139,12 +139,12 @@ struct cid * cid_ins(struct cids * const ids, const struct cid * const id)
                 conns_by_srt_del(i->srt);
 #endif
             i = sl_first(&ids->avl);
+            assure(i, "have cid");
         } else
             die("got new CID with no room left");
     }
     sl_remove_head(&ids->avl, next);
     cid_cpy(i, id);
-    // cppcheck-suppress nullPointerRedundantCheck
     i->retired = i->available = false;
     sl_insert_head(&ids->act, i, next);
     ids->act_cnt++;
