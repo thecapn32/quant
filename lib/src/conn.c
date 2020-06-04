@@ -284,6 +284,11 @@ rtx_pkt(struct w_iov * const v, struct pkt_meta * const m)
     struct pkt_meta * m_orig;
     struct w_iov * const v_orig =
         alloc_iov(c->w, q_conn_af(c), 0, data_start, &m_orig);
+    if (unlikely(v_orig == 0)) {
+        warn(WRN, "could not alloc iov");
+        return;
+    }
+
     pm_cpy(m_orig, m, true);
     memcpy(v_orig->buf - data_start, v->buf - data_start, data_start);
     m_orig->has_rtx = true;
@@ -320,6 +325,10 @@ static void __attribute__((nonnull)) tx_vneg_resp(struct w_sock * const ws,
 
     struct pkt_meta * mx;
     struct w_iov * const xv = alloc_iov(ws->w, ws->ws_af, 0, 0, &mx);
+    if (unlikely(xv == 0)) {
+        warn(WRN, "could not alloc iov");
+        return;
+    }
 
     struct w_iov_sq q = w_iov_sq_initializer(q);
     sq_insert_head(&q, xv, next);
@@ -374,6 +383,10 @@ static void __attribute__((nonnull)) tx_rtry(struct q_conn * const c)
 
     struct pkt_meta * mx;
     struct w_iov * const xv = alloc_iov(c->w, q_conn_af(c), 0, 0, &mx);
+    if (unlikely(xv == 0)) {
+        warn(WRN, "could not alloc iov");
+        return;
+    }
 
     struct w_iov_sq q = w_iov_sq_initializer(q);
     sq_insert_head(&q, xv, next);
@@ -607,6 +620,10 @@ tx_ack(struct q_conn * const c, const epoch_t e, const bool tx_ack_eliciting)
 
     struct pkt_meta * m;
     struct w_iov * const v = alloc_iov(c->w, q_conn_af(c), 0, 0, &m);
+    if (unlikely(v == 0)) {
+        warn(WRN, "could not alloc iov");
+        return false;
+    }
     return enc_pkt(c->cstrms[e], false, false, tx_ack_eliciting, false, v, m);
 }
 
@@ -1173,6 +1190,11 @@ static void __attribute__((nonnull))
         // allocate new w_iov for the (eventual) unencrypted data and meta-data
         struct pkt_meta * m;
         struct w_iov * const v = alloc_iov(ws->w, ws->ws_af, 0, 0, &m);
+        if (unlikely(v == 0)) {
+            warn(WRN, "could not alloc iov");
+            return;
+        }
+
         v->saddr = xv->saddr;
         v->flags = xv->flags;
         v->ttl = xv->ttl;

@@ -459,7 +459,6 @@ bool enc_pkt(struct q_stream * const s,
     const epoch_t epoch = unlikely(pmtud) ? ep_hshk : strm_epoch(s);
     struct pn_space * const pn = m->pn = pn_for_epoch(c, epoch);
 
-    m->txed = true;
     if (unlikely(pn->lg_sent == UINT_T_MAX))
         // next pkt nr
         m->hdr.nr = pn->lg_sent = 0;
@@ -647,7 +646,10 @@ tx:;
 
     // alloc directly from warpcore for crypto TX - no need for metadata alloc
     struct w_iov * const xv = w_alloc_iov(c->w, q_conn_af(c), 0, 0);
-    ensure(xv, "w_alloc_iov failed");
+    if (unlikely(xv == 0)) {
+        warn(WRN, "could not alloc iov");
+        return false;
+    }
 
     const uint16_t ret = enc_aead(v, m, xv, (uint16_t)(pkt_nr_pos - v->buf));
     if (unlikely(ret == 0)) {

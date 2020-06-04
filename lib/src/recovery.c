@@ -566,6 +566,7 @@ void on_pkt_sent(struct pkt_meta * const m)
     // see OnPacketSent() pseudo code
 
     const uint64_t now = w_now();
+    m->txed = true;
     pm_by_nr_ins(&m->pn->sent_pkts, m);
     // nr is set in enc_pkt()
     m->t = now;

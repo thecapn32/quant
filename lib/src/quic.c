@@ -155,10 +155,11 @@ struct w_iov * alloc_iov(struct w_engine * const w,
                          struct pkt_meta ** const m)
 {
     struct w_iov * const v = w_alloc_iov(w, af, len, off);
-    ensure(v, "w_alloc_iov failed");
-    *m = &meta(v);
-    ASAN_UNPOISON_MEMORY_REGION(*m, sizeof(**m));
-    (*m)->strm_data_pos = off;
+    if (likely(v)) {
+        *m = &meta(v);
+        ASAN_UNPOISON_MEMORY_REGION(*m, sizeof(**m));
+        (*m)->strm_data_pos = off;
+    }
     return v;
 }
 
@@ -168,15 +169,16 @@ struct w_iov * dup_iov(const struct w_iov * const v,
                        const uint16_t off)
 {
     struct w_iov * const vdup = w_alloc_iov(v->w, v->wv_af, v->len - off, 0);
-    ensure(vdup, "w_alloc_iov failed");
-    if (mdup) {
-        *mdup = &meta(vdup);
-        ASAN_UNPOISON_MEMORY_REGION(*mdup, sizeof(**mdup));
+    if (likely(vdup)) {
+        if (mdup) {
+            *mdup = &meta(vdup);
+            ASAN_UNPOISON_MEMORY_REGION(*mdup, sizeof(**mdup));
+        }
+        memcpy(vdup->buf, v->buf + off, v->len - off);
+        memcpy(&vdup->saddr, &v->saddr, sizeof(v->saddr));
+        vdup->flags = v->flags;
+        vdup->ttl = v->ttl;
     }
-    memcpy(vdup->buf, v->buf + off, v->len - off);
-    memcpy(&vdup->saddr, &v->saddr, sizeof(v->saddr));
-    vdup->flags = v->flags;
-    vdup->ttl = v->ttl;
     return vdup;
 }
 
