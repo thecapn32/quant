@@ -1018,14 +1018,6 @@ bool q_ready(struct w_engine * const w,
         warn(WRN, "no conn ready");
     *ready = c;
 done:
-    // warn(CRT, "q_ready:");
-    // struct q_conn * val;
-    // struct cid * key;
-    // kh_foreach(&conns_by_id, key, val, {
-    //     mk_cid_str(CRT, key, keystr);
-    //     mk_cid_str(CRT, val->scid, valstr);
-    //     warn(CRT, "\t%s -> %s", keystr, valstr);
-    // });
 #ifndef NO_MIGRATION
     return kh_size(&conns_by_id);
 #else

@@ -1592,30 +1592,21 @@ void calc_lens_of_stream_or_crypto_frame(struct pkt_meta * const m,
                                          const bool rtx)
 {
     const bool enc_strm = s->id >= 0;
-    // warn(ERR, "sid %" PRId, s->id);
     m->strm_data_len = (uint16_t)(v->len - m->strm_data_pos);
     uint16_t hlen = 1; // type byte
-    // warn(ERR, "hlen %u", hlen);
+
     const uint_t off = unlikely(rtx) ? m->strm_off : s->out_data;
     if (likely(enc_strm)) {
         hlen += varint_size((uint_t)s->id);
-        // warn(ERR, "hlen strm +sid %u (%" PRIu ")", hlen, (uint_t)s->id);
-        if (likely(off)) {
+        if (likely(off))
             hlen += varint_size(off);
-            // warn(ERR, "hlen strm +off %u (%" PRIu ")", hlen, off);
-        }
         if (unlikely(rtx && is_set(F_STREAM_LEN, v->buf[m->strm_frm_pos])) ||
-            m->strm_data_len != s->c->rec.max_ups - AEAD_LEN - DATA_OFFSET) {
+            m->strm_data_len != s->c->rec.max_ups - AEAD_LEN - DATA_OFFSET)
             hlen += varint_size(m->strm_data_len);
-            // warn(ERR, "hlen strm +len %u (%u)", hlen, m->strm_data_len);
-        }
     } else {
         hlen += varint_size(off);
-        // warn(ERR, "hlen crypt +off %u (%" PRIu ")", hlen, off);
         hlen += varint_size(m->strm_data_len);
-        // warn(ERR, "hlen crypt +len %u (%u)", hlen, m->strm_data_len);
     }
-
     m->strm_frm_pos = m->strm_data_pos - hlen;
 }
 
@@ -1876,8 +1867,6 @@ void enc_new_cid_frame(struct q_conn_info * const ci,
 
     const uint_t max_scid = max_seq(&c->scids);
     const uint_t min_scid = min_seq(&c->scids);
-    // warn(ERR, "max_scid %" PRIu " min_scid %" PRIu " max_cid_seq_out %" PRIu,
-    //      max_scid, min_scid, c->max_cid_seq_out);
     c->max_cid_seq_out = MAX(min_scid, c->max_cid_seq_out + 1);
     struct cid ncid = {.seq = c->max_cid_seq_out};
 

@@ -728,15 +728,6 @@ void conns_by_id_ins(struct q_conn * const c, struct cid * const id)
     ensure(ret >= 1, "inserted returned %d", ret);
     kh_val(&conns_by_id, k) = c;
     id->in_cbi = true;
-
-    // warn(CRT, "CBI ins %s: ", cid_str(id));
-    // struct q_conn * val;
-    // struct cid * key;
-    // kh_foreach(&conns_by_id, key, val, {
-    //     mk_cid_str(CRT, key, keystr);
-    //     mk_cid_str(CRT, val->scid, valstr);
-    //     warn(CRT, "\t%s -> %s", keystr, valstr);
-    // });
 }
 
 
@@ -747,15 +738,6 @@ void conns_by_id_del(struct cid * const id)
     ensure(k != kh_end(&conns_by_id), "found");
     kh_del(conns_by_id, &conns_by_id, k);
     id->in_cbi = false;
-
-    // warn(CRT, "CBI del %s: ", cid_str(id));
-    // struct q_conn * val;
-    // struct cid * key;
-    // kh_foreach(&conns_by_id, key, val, {
-    //     mk_cid_str(CRT, key, keystr);
-    //     mk_cid_str(CRT, val->scid, valstr);
-    //     warn(CRT, "\t%s -> %s", keystr, valstr);
-    // });
 }
 #endif
 
