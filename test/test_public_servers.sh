@@ -302,7 +302,8 @@ function analyze {
 
         # analyze ECN
         perl -n -e '/ECN verification failed/ and $n=-1;
-            $n==0 && /dec_ack_frame.*ECN ect0=/ && exit 1;' "$log.strip"
+            $n >= 0 and /dec_ack_frame.*ECN ect0=/ and $n=1;
+            END{exit $n};' "$log.strip"
         [ $? -eq 1 ] && echo E > "$base.ret.aecn"
 
         [ ! -e "$base.ret.fail" ] && [ -s "$base.ret.hshk" ] && \

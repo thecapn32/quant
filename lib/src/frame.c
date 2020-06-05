@@ -502,6 +502,13 @@ shorten_ack_nr(const uint_t ack, const uint_t diff)
 #endif
 
 
+static void __attribute__((nonnull)) disable_ecn(struct q_conn * const c)
+{
+    c->sockopt.enable_ecn = false;
+    w_set_sockopt(c->sock, &c->sockopt);
+}
+
+
 static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
                                                    const uint8_t ** pos,
                                                    const uint8_t * const start,
@@ -556,6 +563,7 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
     uint_t lg_ack = lg_ack_in_frm;
     uint64_t lg_ack_in_frm_t = 0;
     bool got_new_ack = false;
+    uint_t new_acked_ect0 = 0;
     for (uint_t n = ack_rng_cnt + 1; n > 0; n--) {
         uint_t gap = 0;
         uint_t ack_rng = 0;
@@ -635,12 +643,15 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
 
             // if the ACK'ed pkt was sent with ECT, verify peer and path support
             if (likely(c->sockopt.enable_ecn &&
-                       is_set(IPTOS_ECN_ECT0, acked->flags)) &&
-                unlikely(type != FRM_ACE)) {
-                warn(NTE, "ECN verification failed for %s conn %s",
-                     conn_type(c), cid_str(c->scid));
-                c->sockopt.enable_ecn = false;
-                w_set_sockopt(c->sock, &c->sockopt);
+                       is_set(IPTOS_ECN_ECT0, acked->flags))) {
+                if (unlikely(type != FRM_ACE)) {
+                    warn(WRN,
+                         "ECN verification failed for %s conn %s, no ECN "
+                         "counts rx'ed",
+                         conn_type(c), cid_str(c->scid));
+                    disable_ecn(c);
+                } else
+                    new_acked_ect0++;
             }
 
         next_ack:
@@ -677,8 +688,23 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
              ce_cnt ? GRN : NRM, ce_cnt);
         // TODO: add sanity check whether markings make sense
 
-        // ProcessECN
-        if (ce_cnt > pn->ce_cnt) {
+        if (ect0_cnt + ect1_cnt + ce_cnt < new_acked_ect0) {
+            warn(WRN,
+                 "ECN verification failed for %s conn %s, "
+                 "counts %" PRIu " + %" PRIu " + %" PRIu " < %" PRIu,
+                 conn_type(c), cid_str(c->scid), ect0_cnt, ect1_cnt, ce_cnt,
+                 new_acked_ect0);
+            disable_ecn(c);
+        } else if (ect0_cnt + ce_cnt < new_acked_ect0) {
+            warn(WRN,
+                 "ECN verification failed for %s conn %s, "
+                 "ECT0 counts %" PRIu " + %" PRIu " < %" PRIu,
+                 conn_type(c), cid_str(c->scid), ect0_cnt, ce_cnt,
+                 new_acked_ect0);
+            disable_ecn(c);
+            // NOTE: we don't verify ECT1 since we never send it
+        } else if (ce_cnt > pn->ce_cnt) {
+            // ProcessECN
             pn->ce_cnt = ce_cnt;
             congestion_event(c, lg_ack_in_frm_t);
         }
