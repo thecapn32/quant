@@ -219,13 +219,15 @@ get_addr(const int af, const char * const dest, const char * const port)
     struct addrinfo * peer = 0;
     const int err = getaddrinfo(
         dest, port, &(const struct addrinfo){.ai_family = af}, &peer);
-    if (err) {
+    if (err == 0)
+        return peer;
+
+    if (err != EAI_FAMILY && err != EAI_NONAME)
+        // when looking up migr_peer, these errors are OK to occur
         warn(ERR, "getaddrinfo: %s", gai_strerror(err));
-        if (peer)
-            freeaddrinfo(peer);
-        return 0;
-    }
-    return peer;
+    if (peer)
+        freeaddrinfo(peer);
+    return 0;
 }
 
 
