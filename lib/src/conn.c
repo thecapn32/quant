@@ -1929,6 +1929,7 @@ struct q_conn * new_conn(struct w_engine * const w,
                 else
                     memcpy(&c->tp_mine.pref_addr.addr6, &ws->ws_loc,
                            sizeof(c->tp_mine.pref_addr.addr6));
+                break;
             }
         }
 
