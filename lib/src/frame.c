@@ -897,7 +897,6 @@ dec_strm_data_blocked_frame(const uint8_t ** pos,
     if (unlikely(s == 0))
         return true;
 
-    chk_finl_size(off, s, FRM_SDB);
     do_stream_fc(s, 0);
     // because do_stream_fc() only sets this when increasing the FC window
     s->tx_max_strm_data = true;
