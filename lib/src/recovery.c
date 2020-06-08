@@ -702,9 +702,11 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
         // this ACKs a pkt with prior or later RTXs
         if (m->has_rtx) {
             // this ACKs a pkt that was since (again) RTX'ed
+#ifdef DEBUG_EXTRA
             warn(DBG, "%s %s pkt " FMT_PNR_OUT " was RTX'ed as " FMT_PNR_OUT,
                  conn_type(c), pkt_type_str(m->hdr.flags, &m->hdr.vers),
                  m->hdr.nr, m_rtx->hdr.nr);
+#endif
 #ifndef NDEBUG
             ensure(sl_next(m_rtx, rtx_next) == 0, "RTX chain corrupt");
 #endif
@@ -721,12 +723,14 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
                 m = m_rtx;
                 // XXX caller will not be aware that we mucked around with m!
             }
+#ifdef DEBUG_EXTRA
         } else {
             // this ACKs the last ("real") RTX of a packet
-            warn(CRT, "pkt nr=%" PRIu " was earlier TX'ed as %" PRIu,
+            warn(DBG, "pkt nr=%" PRIu " was earlier TX'ed as %" PRIu,
                  has_pkt_nr(m->hdr.flags, m->hdr.vers) ? m->hdr.nr : 0,
                  has_pkt_nr(m_rtx->hdr.flags, m_rtx->hdr.vers) ? m_rtx->hdr.nr
                                                                : 0);
+#endif
         }
     }
 
