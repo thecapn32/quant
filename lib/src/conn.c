@@ -42,10 +42,6 @@
 #include <netinet/in.h>
 #endif
 
-#if !defined(PARTICLE) && !defined(RIOT_VERSION)
-#include <netinet/ip.h>
-#endif
-
 #include <picotls.h>
 #include <quant/quant.h>
 #include <timeout.h>
@@ -412,7 +408,7 @@ static void __attribute__((nonnull)) tx_rtry(struct q_conn * const c)
     mx->txed = 1;
     mx->udp_len = xv->len = (uint16_t)(pos - xv->buf);
     xv->saddr = c->peer;
-    xv->flags = likely(c->sockopt.enable_ecn) ? IPTOS_ECN_ECT0 : 0;
+    xv->flags = likely(c->sockopt.enable_ecn) ? ECN_ECT0 : ECN_NOT;
     log_pkt("TX", xv, &xv->saddr, c->tok, c->tok_len, rit);
     // qlog_transport(pkt_tx, "default", xv, mx);
     do_w_tx(c->sock, &q);
@@ -1122,17 +1118,7 @@ done:
     if (likely(m->hdr.nr != UINT_T_MAX)) {
         struct pn_space * const pn = pn_for_pkt_type(c, m->hdr.type);
         // update ECN info
-        switch (v->flags & IPTOS_ECN_MASK) {
-        case IPTOS_ECN_ECT1:
-            pn->ect1_cnt++;
-            break;
-        case IPTOS_ECN_ECT0:
-            pn->ect0_cnt++;
-            break;
-        case IPTOS_ECN_CE:
-            pn->ce_cnt++;
-            break;
-        }
+        pn->ecn_rxed[v->flags & ECN_MASK]++;
         pn->pkts_rxed_since_last_ack_tx++;
 
         // if (pn == &c->pns[pn_data] && pn->pkts_rxed_since_last_ack_tx >= 16)

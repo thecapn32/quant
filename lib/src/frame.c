@@ -39,10 +39,6 @@
 #include <netinet/in.h>
 #endif
 
-#if !defined(PARTICLE) && !defined(RIOT_VERSION)
-#include <netinet/ip.h>
-#endif
-
 #include <picotls.h>
 #include <quant/quant.h>
 #include <timeout.h>
@@ -509,6 +505,11 @@ static void __attribute__((nonnull)) disable_ecn(struct q_conn * const c)
 }
 
 
+// #define log_ecn(msg, e)                                                        \
+//     warn(ERR, "%s: not=%" PRIu ", ect0=%" PRIu ", ect1=%" PRIu ", ce=%" PRIu,  \
+//          (msg), (e)[ECN_NOT], (e)[ECN_ECT0], (e)[ECN_ECT1], (e)[ECN_CE])
+
+
 static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
                                                    const uint8_t ** pos,
                                                    const uint8_t * const start,
@@ -643,7 +644,7 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
 
             // if the ACK'ed pkt was sent with ECT, verify peer and path support
             if (likely(c->sockopt.enable_ecn &&
-                       is_set(IPTOS_ECN_ECT0, acked->flags))) {
+                       is_set(ECN_ECT0, acked->flags))) {
                 if (unlikely(type != FRM_ACE)) {
                     warn(WRN,
                          "ECN verification failed for %s conn %s, no ECN "
@@ -675,38 +676,54 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
 
     if (type == FRM_ACE) {
         // decode ECN
-        uint_t ect0_cnt = 0;
-        uint_t ect1_cnt = 0;
-        uint_t ce_cnt = 0;
-        decv_chk(&ect0_cnt, pos, end, c, type);
-        decv_chk(&ect1_cnt, pos, end, c, type);
-        decv_chk(&ce_cnt, pos, end, c, type);
+        uint_t ecn_cnt[ECN_MASK + 1] = {0};
+        decv_chk(&ecn_cnt[ECN_ECT0], pos, end, c, type);
+        decv_chk(&ecn_cnt[ECN_ECT1], pos, end, c, type);
+        decv_chk(&ecn_cnt[ECN_CE], pos, end, c, type);
         warn(INF,
              FRAM_IN "ECN" NRM " ect0=%s%" PRIu NRM " ect1=%s%" PRIu NRM
                      " ce=%s%" PRIu NRM,
-             ect0_cnt ? GRN : NRM, ect0_cnt, ect1_cnt ? GRN : NRM, ect1_cnt,
-             ce_cnt ? GRN : NRM, ce_cnt);
+             ecn_cnt[ECN_ECT0] ? GRN : NRM, ecn_cnt[ECN_ECT0],
+             ecn_cnt[ECN_ECT1] ? GRN : NRM, ecn_cnt[ECN_ECT1],
+             ecn_cnt[ECN_CE] ? GRN : NRM, ecn_cnt[ECN_CE]);
         // TODO: add sanity check whether markings make sense
 
-        if (ect0_cnt + ect1_cnt + ce_cnt < new_acked_ect0) {
-            warn(WRN,
-                 "ECN verification failed for %s conn %s, "
-                 "counts %" PRIu " + %" PRIu " + %" PRIu " < %" PRIu,
-                 conn_type(c), cid_str(c->scid), ect0_cnt, ect1_cnt, ce_cnt,
-                 new_acked_ect0);
-            disable_ecn(c);
-        } else if (ect0_cnt + ce_cnt < new_acked_ect0) {
-            warn(WRN,
-                 "ECN verification failed for %s conn %s, "
-                 "ECT0 counts %" PRIu " + %" PRIu " < %" PRIu,
-                 conn_type(c), cid_str(c->scid), ect0_cnt, ce_cnt,
-                 new_acked_ect0);
-            disable_ecn(c);
-            // NOTE: we don't verify ECT1 since we never send it
-        } else if (ce_cnt > pn->ce_cnt) {
-            // ProcessECN
-            pn->ce_cnt = ce_cnt;
-            congestion_event(c, lg_ack_in_frm_t);
+        if (got_new_ack) {
+            // log_ecn("ref", pn->ecn_ref);
+            const uint_t ecn_inc[ECN_MASK + 1] = {
+                // ECN_NOT is not used
+                // [ECN_NOT] = ecn_cnt[ECN_NOT] - pn->ecn_ref[ECN_NOT],
+                [ECN_ECT0] = ecn_cnt[ECN_ECT0] - pn->ecn_ref[ECN_ECT0],
+                [ECN_ECT1] = ecn_cnt[ECN_ECT1] - pn->ecn_ref[ECN_ECT1],
+                [ECN_CE] = ecn_cnt[ECN_CE] - pn->ecn_ref[ECN_CE]};
+            // log_ecn("inc", ecn_inc);
+
+            if (unlikely(ecn_inc[ECN_ECT0] + ecn_inc[ECN_ECT1] +
+                             ecn_inc[ECN_CE] <
+                         new_acked_ect0)) {
+                warn(WRN,
+                     "ECN verification failed for %s conn %s, "
+                     "inc %" PRIu " + %" PRIu " + %" PRIu " < %" PRIu,
+                     conn_type(c), cid_str(c->scid), ecn_inc[ECN_ECT0],
+                     ecn_inc[ECN_ECT1], ecn_inc[ECN_CE], new_acked_ect0);
+                disable_ecn(c);
+            } else if (unlikely(ecn_inc[ECN_ECT0] + ecn_cnt[ECN_CE] <
+                                new_acked_ect0)) {
+                warn(WRN,
+                     "ECN verification failed for %s conn %s, "
+                     "ECT0 inc %" PRIu " + %" PRIu " < %" PRIu,
+                     conn_type(c), cid_str(c->scid), ecn_inc[ECN_ECT0],
+                     ecn_inc[ECN_CE], new_acked_ect0);
+                disable_ecn(c);
+                // NOTE: we don't verify ect1 since we never send it
+            } else {
+                if (ecn_cnt[ECN_CE] > pn->ecn_ref[ECN_CE])
+                    // ProcessECN
+                    congestion_event(c, lg_ack_in_frm_t);
+
+                // remember ECN counts
+                memcpy(pn->ecn_ref, ecn_cnt, sizeof(pn->ecn_ref));
+            }
         }
     }
 
@@ -1517,8 +1534,10 @@ bool enc_ack_frame(struct q_conn_info * const ci,
                    struct pkt_meta * const m,
                    struct pn_space * const pn)
 {
-    const uint8_t type =
-        likely(pn->ect0_cnt || pn->ect1_cnt || pn->ce_cnt) ? FRM_ACE : FRM_ACK;
+    const uint8_t type = (pn->ecn_rxed[ECN_ECT0] || pn->ecn_rxed[ECN_ECT1] ||
+                          pn->ecn_rxed[ECN_CE])
+                             ? FRM_ACE
+                             : FRM_ACK;
     uint8_t * const init_pos = *pos;
     if (unlikely(*pos + 1 > end))
         goto no_ack;
@@ -1588,14 +1607,15 @@ bool enc_ack_frame(struct q_conn_info * const ci,
 
     if (type == FRM_ACE) {
         // encode ECN
-        encv_chk(pos, end, pn->ect0_cnt);
-        encv_chk(pos, end, pn->ect1_cnt);
-        encv_chk(pos, end, pn->ce_cnt);
+        encv_chk(pos, end, pn->ecn_rxed[ECN_ECT0]);
+        encv_chk(pos, end, pn->ecn_rxed[ECN_ECT1]);
+        encv_chk(pos, end, pn->ecn_rxed[ECN_CE]);
         warn(INF,
              FRAM_OUT "ECN" NRM " ect0=%s%" PRIu NRM " ect1=%s%" PRIu NRM
                       " ce=%s%" PRIu NRM,
-             pn->ect0_cnt ? BLU : NRM, pn->ect0_cnt, pn->ect1_cnt ? BLU : NRM,
-             pn->ect1_cnt, pn->ce_cnt ? BLU : NRM, pn->ce_cnt);
+             pn->ecn_rxed[ECN_ECT0] ? BLU : NRM, pn->ecn_rxed[ECN_ECT0],
+             pn->ecn_rxed[ECN_ECT1] ? BLU : NRM, pn->ecn_rxed[ECN_ECT1],
+             pn->ecn_rxed[ECN_CE] ? BLU : NRM, pn->ecn_rxed[ECN_CE]);
     }
 
     timeouts_del(ped(c->w)->wheel, &c->ack_alarm);
