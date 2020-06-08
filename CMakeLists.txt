@@ -281,6 +281,7 @@ set (DEFINES
     # NO_SERVER
     # NO_SRT_MATCHING
     # NO_TLS_LOG
+    # NO_ECN
 )
 
 if(NOT WITH_MINICRYPTO)

@@ -408,7 +408,9 @@ static void __attribute__((nonnull)) tx_rtry(struct q_conn * const c)
     mx->txed = 1;
     mx->udp_len = xv->len = (uint16_t)(pos - xv->buf);
     xv->saddr = c->peer;
+#ifndef NO_ECN
     xv->flags = likely(c->sockopt.enable_ecn) ? ECN_ECT0 : ECN_NOT;
+#endif
     log_pkt("TX", xv, &xv->saddr, c->tok, c->tok_len, rit);
     // qlog_transport(pkt_tx, "default", xv, mx);
     do_w_tx(c->sock, &q);
@@ -1115,15 +1117,18 @@ done:
     if (unlikely(ok == false))
         return false;
 
+#ifndef NO_ECN
     if (likely(m->hdr.nr != UINT_T_MAX)) {
         struct pn_space * const pn = pn_for_pkt_type(c, m->hdr.type);
         // update ECN info
         pn->ecn_rxed[v->flags & ECN_MASK]++;
         pn->pkts_rxed_since_last_ack_tx++;
 
+        // TODO: if we do this, it needs to move outside of #ifndef NO_ECN
         // if (pn == &c->pns[pn_data] && pn->pkts_rxed_since_last_ack_tx >= 16)
         //     tx_ack(c, ep_data, false);
     }
+#endif
 
 #ifndef NO_QLOG
     // if pkt has STREAM or CRYPTO frame but no strm pointer, it's a dup
@@ -1824,7 +1829,9 @@ struct q_conn * new_conn(struct w_engine * const w,
         }
     }
 
+#ifndef NO_ECN
     c->sockopt.enable_ecn = true;
+#endif
     c->sockopt.enable_udp_zero_checksums =
         get_conf_uncond(c->w, conf, enable_udp_zero_checksums);
 

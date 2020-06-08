@@ -498,6 +498,7 @@ shorten_ack_nr(const uint_t ack, const uint_t diff)
 #endif
 
 
+#ifndef NO_ECN
 static void __attribute__((nonnull)) disable_ecn(struct q_conn * const c)
 {
     c->sockopt.enable_ecn = false;
@@ -505,9 +506,12 @@ static void __attribute__((nonnull)) disable_ecn(struct q_conn * const c)
 }
 
 
-// #define log_ecn(msg, e)                                                        \
-//     warn(ERR, "%s: not=%" PRIu ", ect0=%" PRIu ", ect1=%" PRIu ", ce=%" PRIu,  \
-//          (msg), (e)[ECN_NOT], (e)[ECN_ECT0], (e)[ECN_ECT1], (e)[ECN_CE])
+#if 0
+#define log_ecn(msg, e)                                                        \
+    warn(ERR, "%s: not=%" PRIu ", ect0=%" PRIu ", ect1=%" PRIu ", ce=%" PRIu,  \
+         (msg), (e)[ECN_NOT], (e)[ECN_ECT0], (e)[ECN_ECT1], (e)[ECN_CE])
+#endif
+#endif
 
 
 static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
@@ -562,9 +566,11 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
     const uint_t cum_ack = cum_ack_ival ? cum_ack_ival->hi : UINT_T_MAX;
 
     uint_t lg_ack = lg_ack_in_frm;
-    uint64_t lg_ack_in_frm_t = 0;
     bool got_new_ack = false;
+#ifndef NO_ECN
+    uint64_t lg_ack_in_frm_t = 0;
     uint_t new_acked_ect0 = 0;
+#endif
     for (uint_t n = ack_rng_cnt + 1; n > 0; n--) {
         uint_t gap = 0;
         uint_t ack_rng = 0;
@@ -637,11 +643,14 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
             if (unlikely(ack == lg_ack_in_frm)) {
                 // call this only for the largest ACK in the frame
                 on_ack_received_1(m_acked, ack_delay);
+#ifndef NO_ECN
                 lg_ack_in_frm_t = m_acked->t;
+#endif
             }
 
             on_pkt_acked(acked, m_acked);
 
+#ifndef NO_ECN
             // if the ACK'ed pkt was sent with ECT, verify peer and path support
             if (likely(c->sockopt.enable_ecn &&
                        is_set(ECN_ECT0, acked->flags))) {
@@ -654,6 +663,7 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
                 } else
                     new_acked_ect0++;
             }
+#endif
 
         next_ack:
             if (likely(ack > 0))
@@ -686,8 +696,8 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
              ecn_cnt[ECN_ECT0] ? GRN : NRM, ecn_cnt[ECN_ECT0],
              ecn_cnt[ECN_ECT1] ? GRN : NRM, ecn_cnt[ECN_ECT1],
              ecn_cnt[ECN_CE] ? GRN : NRM, ecn_cnt[ECN_CE]);
-        // TODO: add sanity check whether markings make sense
 
+#ifndef NO_ECN
         if (got_new_ack) {
             // log_ecn("ref", pn->ecn_ref);
             const uint_t ecn_inc[ECN_MASK + 1] = {
@@ -725,6 +735,7 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
                 memcpy(pn->ecn_ref, ecn_cnt, sizeof(pn->ecn_ref));
             }
         }
+#endif
     }
 
     if (got_new_ack)
@@ -1533,10 +1544,14 @@ bool enc_ack_frame(struct q_conn_info * const ci,
                    struct pkt_meta * const m,
                    struct pn_space * const pn)
 {
-    const uint8_t type = (pn->ecn_rxed[ECN_ECT0] || pn->ecn_rxed[ECN_ECT1] ||
-                          pn->ecn_rxed[ECN_CE])
-                             ? FRM_ACE
-                             : FRM_ACK;
+    const uint8_t type =
+#ifndef NO_ECN
+        (pn->ecn_rxed[ECN_ECT0] || pn->ecn_rxed[ECN_ECT1] ||
+         pn->ecn_rxed[ECN_CE])
+            ? FRM_ACE
+            :
+#endif
+            FRM_ACK;
     uint8_t * const init_pos = *pos;
     if (unlikely(*pos + 1 > end))
         goto no_ack;
@@ -1604,6 +1619,7 @@ bool enc_ack_frame(struct q_conn_info * const ci,
         prev_lo = b->lo;
     }
 
+#ifndef NO_ECN
     if (type == FRM_ACE) {
         // encode ECN
         encv_chk(pos, end, pn->ecn_rxed[ECN_ECT0]);
@@ -1616,6 +1632,7 @@ bool enc_ack_frame(struct q_conn_info * const ci,
              pn->ecn_rxed[ECN_ECT1] ? BLU : NRM, pn->ecn_rxed[ECN_ECT1],
              pn->ecn_rxed[ECN_CE] ? BLU : NRM, pn->ecn_rxed[ECN_CE]);
     }
+#endif
 
     timeouts_del(ped(c->w)->wheel, &c->ack_alarm);
     bit_zero(FRM_MAX, &pn->rx_frames);
