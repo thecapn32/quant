@@ -2,6 +2,7 @@
 
 [![Build Status](https://travis-ci.com/NTAP/quant.svg?branch=master)](https://travis-ci.com/github/NTAP/quant)
 [![Total alerts](https://img.shields.io/lgtm/alerts/g/NTAP/quant.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/NTAP/quant/alerts/)
+[![Coverity Badge](https://scan.coverity.com/projects/13161/badge.svg)](https://scan.coverity.com/projects/ntap-quant)
 [![Language grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/NTAP/quant.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/NTAP/quant/context:cpp)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/b01870db4e774aa2b17fc0955cf374b3)](https://www.codacy.com/manual/larseggert/quant?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=NTAP/quant&amp;utm_campaign=Badge_Grade)
 
