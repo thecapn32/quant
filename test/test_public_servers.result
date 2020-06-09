@@ -7,5 +7,5 @@ ngtcp2    *         V    H    D    C    R    Z    S    Q    M    B    A    U    
 picoquic  *         V    H    D    C    R    Z    S    Q    M    B    A    U    P         O    2    3
 quant     *    x    V    H    D    C    R    Z    S    Q    M    B    A    U    P    E    O    2
 quiche    *         V    H    D    C    R    Z    S    Q                                  O    2    3
-quicly    *         V    H    D    C    R    Z    S    Q    M              U              O    2
+quicly    *         V    H    D    C    R    Z    S    Q    M              U              O    2    3
 quinn     *         V    H    D    C    R    Z    S    Q    M    B    A    U    P         O    2    3
