@@ -1008,7 +1008,7 @@ bool q_ready(struct w_engine * const w,
         if (c->needs_accept)
             remove = c->have_new_data == false;
 #endif
-#ifdef DEBUG_EXTRA
+#if defined(DEBUG_EXTRA) && !defined(NO_SERVER)
         warn(WRN, "%s conn %s ready to %s", conn_type(c), cid_str(c->scid),
              c->needs_accept ? "accept"
                              : (c->state == conn_clsd ? "close" : "rx"));
