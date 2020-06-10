@@ -3,6 +3,7 @@ aioquic   *         V    H    D    C    R    Z    S    Q    M    B    A    U    
 google    *         V    H    D    C                   Q                                  O    2    3
 haskell   *    x    V    H    D    C    R    Z    S    Q    M                             O         3
 lsquic    *         V    H    D    C    R    Z    S    Q    M    B    A    U    P    E    O    2    3
+msquic    *    x    V    H    D    C    R    Z    S    Q    M    B         U    P         O
 ngtcp2    *         V    H    D    C    R    Z    S    Q    M    B    A    U              O    2    3
 picoquic  *         V    H    D    C    R    Z    S    Q    M    B    A    U    P         O    2    3
 quant     *    x    V    H    D    C    R    Z    S    Q    M    B    A    U    P    E    O    2

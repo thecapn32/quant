@@ -115,7 +115,9 @@ function prep {
 
     local ret_base="$1.ret"
     >&2 echo -n "($ret in $log) "
-    echo $ret > "$ret_base.fail"
+    if [ ! -e "$ret_base.fail" ] || [ "$(cat "$ret_base.fail")" = "x" ]; then
+        echo $ret > "$ret_base.fail"
+    fi
     rm -f "$log_strip"
 }
 
@@ -308,7 +310,7 @@ function analyze {
 
         [ ! -e "$base.ret.fail" ] && [ -s "$base.ret.hshk" ] && \
             [ -s "$base.ret.data" ] && [ -s "$base.ret.clse" ] && rm -f "$log"
-        rm -f "$log.strip"
+        # rm -f "$log.strip"
     fi
 
     # analyze rsmt and 0rtt
