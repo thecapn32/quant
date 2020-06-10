@@ -298,7 +298,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
     strm_data_type_t kind = sdt_ign;
 #endif
 
-    if (unlikely(m->strm_data_len == 0 && !is_set(F_STREAM_FIN, type))) {
+    if (unlikely(m->strm_data_len == 0 && !m->is_fin)) {
 #ifdef DEBUG_EXTRA
         warn(WRN, "zero-len strm/crypt frame on sid " FMT_SID ", ignoring",
              sid);
@@ -335,7 +335,8 @@ dec_stream_or_crypto_frame(const uint8_t type,
 
         if (unlikely(m->strm->state == strm_hcrm ||
                      m->strm->state == strm_clsd))
-            chk_finl_size(m->strm_off, m->strm, type);
+            chk_finl_size(m->strm_off - (m->strm_data_len == 0 ? 1 : 0),
+                          m->strm, type);
 
         if (unlikely(m->strm->in_data_off > m->strm_off))
             // already-received data at the beginning of the frame, trim
@@ -1077,7 +1078,7 @@ dec_new_cid_frame(const uint8_t ** pos,
 #if !defined(NO_MIGRATION) || !defined(NDEBUG)
     const bool dup =
 #ifndef NO_MIGRATION
-        cid_by_seq(&c->dcids.act, dcid.seq) != 0;
+        cid_by_seq(&c->dcids.act, dcid.seq) != 0 || dcid.seq <= c->dcid->seq;
 #else
         false;
 #endif
