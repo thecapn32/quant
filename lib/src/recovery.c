@@ -186,7 +186,7 @@ void set_ld_timer(struct q_conn * const c)
 
     timeout_t to =
         unlikely(c->rec.cur.srtt == 0)
-            ? (2 * kInitialRtt)
+            ? (2 * c->rec.initial_rtt) * NS_PER_US
             : ((c->rec.cur.srtt + MAX(4 * c->rec.cur.rttvar, kGranularity)) *
                    NS_PER_US +
                c->tp_peer.max_ack_del * NS_PER_MS);

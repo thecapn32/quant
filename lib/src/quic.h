@@ -62,9 +62,9 @@
 struct q_conn; // IWYU pragma: no_forward_declare q_conn
 
 
-// #define DEBUG_EXTRA ///< Set to log various extra details.
+#define DEBUG_EXTRA ///< Set to log various extra details.
 // #define DEBUG_STREAMS ///< Set to log stream scheduling details.
-// #define DEBUG_TIMERS  ///< Set to log timer details.
+#define DEBUG_TIMERS  ///< Set to log timer details.
 // #define DEBUG_PROT    ///< Set to log packet protection/encryption details.
 
 #define DATA_OFFSET 48 ///< Offsets of stream frame payload data we TX.
@@ -81,9 +81,6 @@ struct q_conn; // IWYU pragma: no_forward_declare q_conn
 // Timer granularity. This is a system-dependent value. However, implementations
 // SHOULD use a value no smaller than 1ms.
 #define kGranularity (1 * US_PER_MS)
-
-// The RTT used before an RTT sample is taken. The RECOMMENDED value is 100ms.
-#define kInitialRtt (500 * NS_PER_MS)
 
 /// Default limit on the initial amount of outstanding data in flight, in bytes.
 /// Taken from [RFC6928]. The RECOMMENDED value is the minimum of 10 *

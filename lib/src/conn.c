@@ -1707,7 +1707,8 @@ void enter_closing(struct q_conn * const c)
 
     // start closing/draining alarm (3 * RTO)
     const timeout_t dur =
-        3 * (c->rec.cur.srtt == 0 ? kInitialRtt : c->rec.cur.srtt * NS_PER_US) +
+        3 * (c->rec.cur.srtt == 0 ? c->rec.initial_rtt : c->rec.cur.srtt) *
+            NS_PER_US +
         4 * c->rec.cur.rttvar * NS_PER_US;
     timeouts_add(ped(c->w)->wheel, &c->closing_alarm, dur);
 #ifdef DEBUG_TIMERS
@@ -1746,6 +1747,7 @@ static void __attribute__((nonnull)) ack_alarm(struct q_conn * const c)
 
 void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
 {
+    c->rec.initial_rtt = get_conf(c->w, conf, initial_rtt) * US_PER_MS;
     c->spin_enabled = get_conf_uncond(c->w, conf, enable_spinbit);
     c->do_qr_test = get_conf_uncond(c->w, conf, enable_quantum_readiness_test);
 
