@@ -22,7 +22,7 @@ fi
 
 if [ "$ROLE" == "client" ]; then
     CLIENT_ARGS="-i eth0 -w -q $QLOGDIR -l $SSLKEYLOGFILE -t 150 -x 50 \
-        -e 0xff00001c $CLIENT_ARGS"
+        -e 0xff00001d $CLIENT_ARGS"
 
     # Wait for the simulator to start up.
     /wait-for-it.sh sim:57832 -s -t 30
