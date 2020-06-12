@@ -1171,9 +1171,11 @@ dec_retire_cid_frame(const uint8_t ** pos,
     decv_chk(&seq, pos, end, c, FRM_RTR);
 
     warn(ERR /*INF*/, FRAM_IN "RETIRE_CONNECTION_ID" NRM " seq=%" PRIu, seq);
+#ifndef NO_MIGRATION
     struct cid * id;
     sl_foreach (id, &c->scids.act, next)
         warn(ERR, "%s", cid_str(id));
+#endif
 
 #ifndef NO_MIGRATION
     struct cid * const scid = cid_by_seq(&c->scids.act, seq);
@@ -1938,9 +1940,11 @@ void enc_new_cid_frame(struct q_conn_info * const ci,
 
     warn(ERR, "min_scid=%" PRIu ", max_scid=%" PRIu ", max_cid_seq_out=%" PRIu,
          min_scid, max_scid, c->max_cid_seq_out);
+#ifndef NO_MIGRATION
     struct cid * id;
     sl_foreach (id, &c->scids.act, next)
         warn(ERR, "%s", cid_str(id));
+#endif
 
     // FIXME: send an actual rpt
     uint_t rpt = 0;
