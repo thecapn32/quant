@@ -1,3 +1,6 @@
           live fail vneg hshk data clse rsmt zrtt rtry qrdy migr bind adrm kyph spin aecn zcid chch http
+aioquic   *         V    H    D    C    R    Z    S    Q    M    B    A    U    P         O    2    3
+haskell   *    x    V    H    D    C    R    Z    S    Q    M    B                        O         3
+picoquic  *         V    H    D    C    R    Z    S    Q    M    B    A    U    P         O    2    3
 quant     *    x    V    H    D    C    R    Z    S    Q    M    B    A    U    P    E    O    2
 quiche    *         V    H    D    C    R    Z    S    Q                                  O    2    3
