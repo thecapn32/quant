@@ -1940,11 +1940,9 @@ void enc_new_cid_frame(struct q_conn_info * const ci,
 
     warn(ERR, "min_scid=%" PRIu ", max_scid=%" PRIu ", max_cid_seq_out=%" PRIu,
          min_scid, max_scid, c->max_cid_seq_out);
-#ifndef NO_MIGRATION
     struct cid * id;
     sl_foreach (id, &c->scids.act, next)
         warn(ERR, "%s", cid_str(id));
-#endif
 
     // FIXME: send an actual rpt
     uint_t rpt = 0;
