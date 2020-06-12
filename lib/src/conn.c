@@ -115,6 +115,9 @@ static bool __attribute__((const)) vers_supported(const uint32_t v)
 static uint32_t __attribute__((nonnull))
 clnt_vneg(const uint8_t * const pos, const uint8_t * const end)
 {
+    char vstr[80];
+    int off = 0;
+    uint8_t vstr_prio = UINT8_MAX;
     for (uint8_t i = 0; i < ok_vers_len; i++) {
         if (is_vneg_vers(ok_vers[i]))
             continue;
@@ -123,20 +126,24 @@ clnt_vneg(const uint8_t * const pos, const uint8_t * const end)
         while (p + sizeof(ok_vers[0]) <= end) {
             uint32_t vers = 0;
             dec4(&vers, &p, end);
+
+            if (vstr_prio == UINT8_MAX || vstr_prio == i) {
+                off += snprintf(&vstr[off], sizeof(vstr) - (size_t)off,
+                                "%s0x%0" PRIx32,
+                                vstr_prio == UINT8_MAX ? "" : ", ", vers);
+                if (vstr_prio == UINT8_MAX)
+                    vstr_prio = i;
+            }
+
             if (is_vneg_vers(vers))
                 continue;
-#ifdef DEBUG_EXTRA
-            warn(DBG,
-                 "serv prio %ld = 0x%0" PRIx32 "; our prio %u = 0x%0" PRIx32,
-                 (unsigned long)(p - pos) / sizeof(vers), vers, i, ok_vers[i]);
-#endif
             if (ok_vers[i] == vers)
                 return vers;
         }
     }
 
     // we're out of matching candidates
-    warn(INF, "no vers in common with serv");
+    warn(INF, "no vers in common with serv; offered %s", vstr);
     return 0;
 }
 
