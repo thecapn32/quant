@@ -302,7 +302,7 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
         for (uint8_t i = 0; i < FRM_MAX; i++)
             if (has_frm(m->frms, i) && bit_isset(FRM_MAX, i, &all_ctrl)) {
 #ifdef DEBUG_EXTRA
-                warn(DBG, "%s pkt %" PRIu " ctrl frame: 0x%02x",
+                warn(DBG, "%s pkt %" PRIu " lost ctrl frame: 0x%02x",
                      pkt_type_str(m->hdr.flags, &m->hdr.vers), m->hdr.nr, i);
 #endif
                 switch (i) {
@@ -314,7 +314,7 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
                     // DATA_BLOCKED and STREAM_DATA_BLOCKED RTX'ed automatically
                     break;
                 case FRM_HSD:
-                    c->tx_hshk_done = true;
+                    c->needs_tx = c->tx_hshk_done = true;
                     break;
                 case FRM_TOK:
                     c->tx_new_tok = true;
@@ -350,11 +350,9 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
     m->lost = true;
     if (m->strm && !m->has_rtx) {
         m->strm->lost_cnt++;
-#ifndef NDEBUG
-        ensure(m->strm->lost_cnt <= w_iov_sq_cnt(&m->strm->out),
+        assure(m->strm->lost_cnt <= w_iov_sq_cnt(&m->strm->out),
                "strm " FMT_SID " cnt %" PRIu " < lost %" PRIu, m->strm->id,
                w_iov_sq_cnt(&m->strm->out), m->strm->lost_cnt);
-#endif
     }
 }
 
@@ -707,9 +705,7 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
                  conn_type(c), pkt_type_str(m->hdr.flags, &m->hdr.vers),
                  m->hdr.nr, m_rtx->hdr.nr);
 #endif
-#ifndef NDEBUG
-            ensure(sl_next(m_rtx, rtx_next) == 0, "RTX chain corrupt");
-#endif
+            assure(sl_next(m_rtx, rtx_next) == 0, "RTX chain corrupt");
             if (m_rtx->acked == false) {
                 // treat RTX'ed data as ACK'ed; use stand-in w_iov for RTX info
                 const uint_t acked_nr = m->hdr.nr;
