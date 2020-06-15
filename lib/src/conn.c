@@ -112,39 +112,54 @@ static bool __attribute__((const)) vers_supported(const uint32_t v)
 }
 
 
-static uint32_t __attribute__((nonnull))
-clnt_vneg(const uint8_t * const pos, const uint8_t * const end)
+static uint32_t __attribute__((nonnull)) clnt_vneg(struct q_conn * const c,
+                                                   const uint8_t * const pos,
+                                                   const uint8_t * const end)
 {
-    char vstr[80];
+    unpoison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
     int off = 0;
-    uint8_t vstr_prio = UINT8_MAX;
+    uint8_t prio = UINT8_MAX;
+    uint32_t vers = 0;
     for (uint8_t i = 0; i < ok_vers_len; i++) {
         if (is_vneg_vers(ok_vers[i]))
             continue;
 
         const uint8_t * p = pos;
         while (p + sizeof(ok_vers[0]) <= end) {
-            uint32_t vers = 0;
             dec4(&vers, &p, end);
 
-            if (vstr_prio == UINT8_MAX || vstr_prio == i) {
-                off += snprintf(&vstr[off], sizeof(vstr) - (size_t)off,
-                                "%s0x%0" PRIx32,
-                                vstr_prio == UINT8_MAX ? "" : ", ", vers);
-                if (vstr_prio == UINT8_MAX)
-                    vstr_prio = i;
+            if (prio == UINT8_MAX || prio == i) {
+                if (off + 17 < (int)ped(c->w)->scratch_len)
+                    // 17 = strlen(", 0x12345678") + strlen(", ...")
+                    off += snprintf((char *)&ped(c->w)->scratch[off],
+                                    ped(c->w)->scratch_len - (size_t)off,
+                                    "%s0x%0" PRIx32,
+                                    prio == UINT8_MAX ? "" : ", ", vers);
+                else if (ped(c->w)->scratch[off - 1] != '.') {
+                    strncat((char *)&ped(c->w)->scratch[off], ", ...",
+                            ped(c->w)->scratch_len - (size_t)off);
+                    off += 5; // 5 = strlen(", ...")
+                }
+                if (prio == UINT8_MAX)
+                    prio = i;
             }
 
             if (is_vneg_vers(vers))
                 continue;
             if (ok_vers[i] == vers)
-                return vers;
+                goto done;
         }
     }
 
     // we're out of matching candidates
-    warn(INF, "no vers in common with serv; offered %s", vstr);
-    return 0;
+    warn(INF, "no vers in common with serv; offered %s", ped(c->w)->scratch);
+    vers = 0;
+done:
+    if (vers)
+        warn(INF, "vers 0x%0" PRIx32 " in common with serv; offered %s", vers,
+             ped(c->w)->scratch);
+    poison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
+    return vers;
 }
 
 
@@ -1018,7 +1033,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
                     // the application didn't request a special version, do vneg
 
                     const uint32_t try_vers =
-                        clnt_vneg(v->buf + m->hdr.hdr_len, v->buf + v->len);
+                        clnt_vneg(c, v->buf + m->hdr.hdr_len, v->buf + v->len);
                     if (try_vers == 0) {
                         // no version in common with serv
                         enter_closing(c);
