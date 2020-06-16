@@ -314,7 +314,7 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
                     // DATA_BLOCKED and STREAM_DATA_BLOCKED RTX'ed automatically
                     break;
                 case FRM_HSD:
-                    c->needs_tx = c->tx_hshk_done = true;
+                    c->tx_hshk_done = true;
                     break;
                 case FRM_TOK:
                     c->tx_new_tok = true;
@@ -339,11 +339,12 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
                 default:
                     die("unhandled RTX of 0x%02x frame", i);
                 }
+                c->needs_tx = true;
             }
 
     static const struct frames strm_ctrl =
         // FRM_SDB is automatically RTX'ed XXX fix this mess
-        bitset_t_initializer(1 << FRM_RST | 1 << FRM_STP /*| 1 << FRM_SDB*/);
+        bitset_t_initializer(1 << FRM_RST | 1 << FRM_STP | 1 << FRM_MSD);
     if (bit_overlap(FRM_MAX, &strm_ctrl, &m->frms))
         need_ctrl_update(m->strm);
 
