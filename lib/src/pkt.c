@@ -54,9 +54,6 @@
 #include "tls.h"
 
 
-#define MAX_PKT_NR_LEN 4 ///< Maximum packet number length allowed by spec.
-
-
 #ifndef NDEBUG
 
 void log_pkt(const char * const dir,
@@ -850,27 +847,34 @@ bool xor_hp(struct w_iov * const xv,
             const struct pkt_meta * const m,
             const struct cipher_ctx * const ctx,
             const uint16_t pkt_nr_pos,
-            const bool is_enc)
+            const uint8_t * const enc_mask)
 {
-    const uint16_t off = pkt_nr_pos + MAX_PKT_NR_LEN;
-    const uint16_t len =
-        is_lh(m->hdr.flags) ? pkt_nr_pos + m->hdr.len : xv->len;
-    if (unlikely(off + AEAD_LEN > len))
-        return false;
+    uint8_t dec_mask[MAX_PKT_NR_LEN + 1] = {0};
+    const uint8_t * mask;
 
-    ptls_cipher_init(ctx->header_protection, &xv->buf[off]);
-    uint8_t mask[MAX_PKT_NR_LEN + 1] = {0};
-    ptls_cipher_encrypt(ctx->header_protection, mask, mask, sizeof(mask));
+    if (enc_mask == 0) {
+        const uint16_t off = pkt_nr_pos + MAX_PKT_NR_LEN;
+        const uint16_t len =
+            is_lh(m->hdr.flags) ? pkt_nr_pos + m->hdr.len : xv->len;
+        if (unlikely(off + AEAD_LEN > len))
+            return false;
+
+        ptls_cipher_init(ctx->header_protection, &xv->buf[off]);
+        ptls_cipher_encrypt(ctx->header_protection, dec_mask, dec_mask,
+                            sizeof(dec_mask));
+        mask = dec_mask;
+    } else
+        mask = enc_mask;
 
     const uint8_t orig_flags = xv->buf[0];
     xv->buf[0] ^= mask[0] & (unlikely(is_lh(m->hdr.flags)) ? 0x0f : 0x1f);
-    const uint8_t pnl = pkt_nr_len(is_enc ? orig_flags : xv->buf[0]);
+    const uint8_t pnl = pkt_nr_len(enc_mask ? orig_flags : xv->buf[0]);
     for (uint8_t i = 0; i < pnl; i++)
         xv->buf[pkt_nr_pos + i] ^= mask[1 + i];
 
 #ifdef DEBUG_PROT
-    warn(DBG, "%s HP over [0, %u..%u] w/sample off %u",
-         is_enc ? "apply" : "undo", pkt_nr_pos, pkt_nr_pos + pnl - 1, off);
+    warn(DBG, "%s HP over [0, %u..%u]", enc_mask ? "apply" : "undo", pkt_nr_pos,
+         pkt_nr_pos + pnl - 1);
 #endif
 
     return true;
