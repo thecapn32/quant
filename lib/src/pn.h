@@ -88,8 +88,8 @@ struct pn_space {
     struct diet recv; ///< Received packet numbers still needing to be ACKed.
     struct diet recv_all;      ///< All received packet numbers.
     struct diet acked_or_lost; ///< Sent packet numbers already ACKed (or lost).
-    struct diet sent_pkt_nrs;
 
+    struct diet sent_pkt_nrs;    ///< Packet numbers in sent_packets.
     khash_t(pm_by_nr) sent_pkts; // sent_packets
 
     uint_t lg_sent;            // largest_sent_packet

@@ -391,16 +391,12 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
     uint_t lg_lost = UINT_T_MAX;
     uint64_t lg_lost_tx_t = 0;
     bool in_flight_lost = false;
-    warn(ERR, "pn->lg_acked %" PRIu, pn->lg_acked);
 
     struct ival * i = 0;
     diet_foreach (i, diet, &pn->sent_pkt_nrs) {
-        warn(ERR, "sent_pkt_nrs %" PRIu "..%" PRIu, i->lo, i->hi);
-        if (i->lo > pn->lg_acked) {
-            warn(ERR, "done!");
+        if (i->lo > pn->lg_acked)
             // diet only has higher values
             break;
-        }
 
         for (uint_t ua = i->lo; ua <= MIN(i->hi, pn->lg_acked - 1); ua++) {
             struct pkt_meta * m;
