@@ -361,14 +361,6 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
 }
 
 
-#ifndef NDEBUG
-#define DEBUG_diet_insert diet_insert
-#define DEBUG_ensure ensure
-#else
-#define DEBUG_diet_insert(...)
-#define DEBUG_ensure(...)
-#endif
-
 #ifndef NO_QINFO
 #define incr_out_lost c->i.pkts_out_lost++
 #else
@@ -395,57 +387,60 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
     // Packets sent before this time are deemed lost.
     const uint64_t lost_send_t = w_now() - loss_del;
 
-#ifndef NDEBUG
     struct diet lost = diet_initializer(lost);
-#endif
     uint_t lg_lost = UINT_T_MAX;
     uint64_t lg_lost_tx_t = 0;
     bool in_flight_lost = false;
-    struct pkt_meta * m;
-    kh_foreach_value(&pn->sent_pkts, m, {
-        DEBUG_ensure(m->acked == false,
-                     "%s ACKed %s pkt %" PRIu " in sent_pkts", conn_type(c),
-                     pkt_type_str(m->hdr.flags, &m->hdr.vers), m->hdr.nr);
-        DEBUG_ensure(m->lost == false, "%s lost %s pkt %" PRIu " in sent_pkts",
-                     conn_type(c), pkt_type_str(m->hdr.flags, &m->hdr.vers),
-                     m->hdr.nr);
+    warn(ERR, "pn->lg_acked %" PRIu, pn->lg_acked);
 
-        if (unlikely(m->hdr.nr > pn->lg_acked))
-            continue;
+    struct ival * i = 0;
+    diet_foreach (i, diet, &pn->sent_pkt_nrs) {
+        warn(ERR, "sent_pkt_nrs %" PRIu "..%" PRIu, i->lo, i->hi);
+        if (i->lo > pn->lg_acked) {
+            warn(ERR, "done!");
+            // diet only has higher values
+            break;
+        }
 
-        // Mark packet as lost, or set time when it should be marked.
-        if (m->t <= lost_send_t ||
-            pn->lg_acked >= m->hdr.nr + kPacketThreshold) {
-            m->lost = true;
-            in_flight_lost |= m->in_flight;
-            incr_out_lost;
-            if (unlikely(lg_lost == UINT_T_MAX) || m->hdr.nr > lg_lost) {
-                lg_lost = m->hdr.nr;
-                lg_lost_tx_t = m->t;
+        for (uint_t ua = i->lo; ua <= MIN(i->hi, pn->lg_acked - 1); ua++) {
+            struct pkt_meta * m;
+            find_sent_pkt(pn, ua, &m);
+
+            assure(m->acked == false, "%s ACKed %s pkt %" PRIu " in sent_pkts",
+                   conn_type(c), pkt_type_str(m->hdr.flags, &m->hdr.vers),
+                   m->hdr.nr);
+            assure(m->lost == false, "%s lost %s pkt %" PRIu " in sent_pkts",
+                   conn_type(c), pkt_type_str(m->hdr.flags, &m->hdr.vers),
+                   m->hdr.nr);
+
+            // Mark packet as lost, or set time when it should be marked.
+            if (m->t <= lost_send_t ||
+                pn->lg_acked >= m->hdr.nr + kPacketThreshold) {
+                m->lost = true;
+                in_flight_lost |= m->in_flight;
+                incr_out_lost;
+                if (unlikely(lg_lost == UINT_T_MAX) || m->hdr.nr > lg_lost) {
+                    lg_lost = m->hdr.nr;
+                    lg_lost_tx_t = m->t;
+                }
+                diet_insert(&lost, m->hdr.nr, 0);
+            } else {
+                if (unlikely(!pn->loss_t))
+                    pn->loss_t = m->t + loss_del;
+                else
+                    pn->loss_t = MIN(pn->loss_t, m->t + loss_del);
             }
-        } else {
-            if (unlikely(!pn->loss_t))
-                pn->loss_t = m->t + loss_del;
-            else
-                pn->loss_t = MIN(pn->loss_t, m->t + loss_del);
         }
-
-        // OnPacketsLost
-        if (m->lost) {
-            DEBUG_diet_insert(&lost, m->hdr.nr, 0);
-            on_pkt_lost(m, true);
-            if (m->strm == 0 || m->has_rtx)
-                free_iov(w_iov(c->w, pm_idx(c->w, m)), m);
-        }
-    });
+    }
 
 #ifndef NDEBUG
     int pos = 0;
-    struct ival * i = 0;
     unpoison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
     const uint32_t tmp_len = ped(c->w)->scratch_len;
     uint8_t * const tmp = ped(c->w)->scratch;
+#endif
     diet_foreach (i, diet, &lost) {
+#ifndef NDEBUG
         if ((size_t)pos >= tmp_len) {
             tmp[tmp_len - 2] = tmp[tmp_len - 3] = tmp[tmp_len - 4] = '.';
             tmp[tmp_len - 1] = 0;
@@ -460,9 +455,19 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
             pos += snprintf((char *)&tmp[pos], tmp_len - (size_t)pos,
                             FMT_PNR_OUT ".." FMT_PNR_OUT "%s", i->lo, i->hi,
                             splay_next(diet, &lost, i) ? ", " : "");
+#endif
+        // OnPacketsLost
+        for (uint_t ua = i->lo; ua <= i->hi; ua++) {
+            struct pkt_meta * m;
+            struct w_iov * const v = find_sent_pkt(pn, ua, &m);
+            on_pkt_lost(m, true);
+            if (m->strm == 0 || m->has_rtx)
+                free_iov(v, m);
+        }
     }
     diet_free(&lost);
 
+#ifndef NDEBUG
     if (pos)
         warn(DBG, "%s %s lost: %s", conn_type(c), pn_type_str(pn->type), tmp);
     poison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
