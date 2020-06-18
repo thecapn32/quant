@@ -1154,7 +1154,8 @@ dec_reset_stream_frame(const uint8_t ** pos,
     if (unlikely(s == 0))
         return true;
 
-    chk_finl_size(off, s, FRM_RST);
+    // FIXME: not sure is this is even needed here:
+    // chk_finl_size(off, s, FRM_RST);
     strm_to_state(s, strm_clsd);
 
     return true;
@@ -1171,11 +1172,6 @@ dec_retire_cid_frame(const uint8_t ** pos,
     decv_chk(&seq, pos, end, c, FRM_RTR);
 
     warn(ERR /*INF*/, FRAM_IN "RETIRE_CONNECTION_ID" NRM " seq=%" PRIu, seq);
-#ifndef NO_MIGRATION
-    struct cid * id;
-    sl_foreach (id, &c->scids.act, next)
-        warn(ERR, "%s", cid_str(id));
-#endif
 
 #ifndef NO_MIGRATION
     struct cid * const scid = cid_by_seq(&c->scids.act, seq);
