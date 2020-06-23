@@ -768,7 +768,7 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
             }
         }
 
-        if (s->id >= 0 && s->out_una == 0) {
+        if (s->id >= 0 && out_fully_acked(s)) {
             if (unlikely(fin_acked || c->did_0rtt)) {
                 // this ACKs a FIN
                 c->have_new_data = true;
