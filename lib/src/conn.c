@@ -317,9 +317,7 @@ rtx_pkt(struct w_iov * const v, struct pkt_meta * const m)
 static void do_w_tx(struct w_sock * const ws, struct w_iov_sq * const q)
 {
     w_tx(ws, q);
-    do
-        w_nic_tx(ws->w);
-    while (w_tx_pending(q));
+    w_nic_tx(ws->w);
 }
 #else
 #define do_w_tx(...)
