@@ -298,9 +298,12 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
         1 << FRM_MSD | 1 << FRM_MSB | 1 << FRM_MSU | 1 << FRM_CDB |
         1 << FRM_SDB | 1 << FRM_SBB | 1 << FRM_SBU | 1 << FRM_CID |
         1 << FRM_RTR | 1 << FRM_HSD);
-    if (bit_overlap(FRM_MAX, &all_ctrl, &m->frms))
-        for (uint8_t i = 0; i < FRM_MAX; i++)
-            if (has_frm(m->frms, i) && bit_isset(FRM_MAX, i, &all_ctrl)) {
+    struct frames lost = bitset_t_initializer(0);
+    bit_and2(FRM_MAX, &lost, &all_ctrl, &m->frms);
+    uint8_t i = (uint8_t)bit_ffs(FRM_MAX, &lost);
+    if (i)
+        for (i = i - 1; i < FRM_MAX; i++)
+            if (bit_isset(FRM_MAX, i, &lost)) {
 #ifdef DEBUG_EXTRA
                 warn(DBG, "%s pkt %" PRIu " lost ctrl frame: 0x%02x",
                      pkt_type_str(m->hdr.flags, &m->hdr.vers), m->hdr.nr, i);
@@ -336,20 +339,18 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
                 case FRM_MSD:;
                     struct q_stream * const s =
                         get_stream(c, m->max_strm_data_sid);
-                    if (s)
+                    if (s) {
                         s->tx_max_strm_data = true;
+                        need_ctrl_update(s);
+                    }
                     break;
+                    // NOTE: we never send FRM_RST or FRM_STP, they would need
+                    // to be handled like FRM_MSD, with a new meta field
                 default:
                     die("unhandled RTX of 0x%02x frame", i);
                 }
                 c->needs_tx = true;
             }
-
-    static const struct frames strm_ctrl =
-        // FRM_SDB is automatically RTX'ed XXX fix this mess
-        bitset_t_initializer(1 << FRM_RST | 1 << FRM_STP | 1 << FRM_MSD);
-    if (bit_overlap(FRM_MAX, &strm_ctrl, &m->frms))
-        need_ctrl_update(m->strm);
 
     m->lost = true;
     if (m->strm && !m->has_rtx) {
