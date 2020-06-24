@@ -102,11 +102,11 @@ void log_pkt(const char * const dir,
                 twarn(NTE,
                       BLD BLU "RX" NRM " from=%s%s%s:%u len=%u%s%s 0x%02x=" BLU
                               "%s " NRM "vers=0x%0" PRIx32
-                              " dcid=%s scid=%s tok=%s len=%u nr=" BLU
+                              " dcid=%s scid=%s%s%s len=%u nr=" BLU
                               "%" PRIu NRM,
                       lbr, ip, rbr, port, v->len, ecn, ecn_str[ecn_mark],
                       m->hdr.flags, pts, m->hdr.vers, dcid_str, scid_str,
-                      tok_str, m->hdr.len, m->hdr.nr);
+                      tok_len ? " tok=" : "", tok_str, m->hdr.len, m->hdr.nr);
             else
                 twarn(NTE,
                       BLD BLU "RX" NRM " from=%s%s%s:%u len=%u%s%s 0x%02x=" BLU
@@ -144,10 +144,11 @@ void log_pkt(const char * const dir,
                 twarn(NTE,
                       BLD GRN "TX" NRM " to=%s%s%s:%u 0x%02x=" GRN "%s " NRM
                               "vers=0x%0" PRIx32
-                              " dcid=%s scid=%s tok=%s len=%u nr=" GRN
+                              " dcid=%s scid=%s%s%s len=%u nr=" GRN
                               "%" PRIu NRM,
                       lbr, ip, rbr, port, m->hdr.flags, pts, m->hdr.vers,
-                      dcid_str, scid_str, tok_str, m->hdr.len, m->hdr.nr);
+                      dcid_str, scid_str, tok_len ? " tok=" : "", tok_str,
+                      m->hdr.len, m->hdr.nr);
             else
                 twarn(NTE,
                       BLD GRN "TX" NRM " to=%s%s%s:%u 0x%02x=" GRN "%s " NRM
