@@ -34,6 +34,7 @@
 #include "pkt.h"
 #include "pn.h"
 #include "quic.h"
+#include "recovery.h"
 #include "stream.h"
 
 #ifdef DEBUG_EXTRA
@@ -160,7 +161,8 @@ ack_t needs_ack(const struct pn_space * const pn)
     // don't ACK if we haven't RX'ed or lost anything since the last ACK
     const bool rxed_or_lost =
         pn->pkts_rxed_since_last_ack_tx > 0 ||
-        (pn->pkts_lost_since_last_ack_tx > 0 && !diet_empty(&pn->recv_all));
+        ((pn->pkts_lost_since_last_ack_tx > 0 || pn->c->rec.pto_cnt > 0) &&
+         !diet_empty(&pn->recv_all));
     if (rxed_or_lost == false) {
 #ifdef DEBUG_EXTRA
         warn(DBG, "%s conn %s: %s no_ack: rxed_or_lost == false",
