@@ -133,7 +133,7 @@ void free_iov(struct w_iov * const v, struct pkt_meta * const m)
                 // this is the last ("real") RTX of a packet
                 while (m_rtx) {
                     m_rtx->strm = 0;
-                    ensure(m_rtx->has_rtx, "was RTX'ed");
+                    assure(m_rtx->has_rtx, "was RTX'ed");
                     sl_remove_head(&m->rtx, rtx_next);
                     sl_remove_head(&m_rtx->rtx, rtx_next);
                     m_rtx = sl_next(m_rtx, rtx_next);
@@ -209,7 +209,7 @@ static void __attribute__((nonnull)) mark_fin(struct w_iov_sq * const q)
 {
     // cppcheck-suppress nullPointer
     struct w_iov * const last = sq_last(q, w_iov, next);
-    ensure(last, "got last buffer");
+    assure(last, "got last buffer");
     meta(last).is_fin = true;
 }
 
@@ -274,7 +274,7 @@ struct q_conn * q_connect(struct w_engine * const w,
     tls_io(c->cstrms[ep_init], 0);
 
     if (early_data && !sq_empty(early_data)) {
-        ensure(early_data_stream, "early data without stream pointer");
+        assure(early_data_stream, "early data without stream pointer");
         // queue up early data
         if (fin)
             mark_fin(early_data);
@@ -340,7 +340,7 @@ bool q_write(struct q_stream * const s,
             alloc_off(c->w, q, s->c, q_conn_af(s->c), 1, DATA_OFFSET);
             // cppcheck-suppress nullPointer
             struct w_iov * const last = sq_last(q, w_iov, next);
-            ensure(last, "got last buffer");
+            assure(last, "got last buffer");
             last->len = 0;
         }
         mark_fin(q);
@@ -876,7 +876,7 @@ void q_cleanup(struct w_engine * const w)
     while (!splay_empty(&ooo_0rtt_by_cid)) {
         struct ooo_0rtt * const zo =
             splay_min(ooo_0rtt_by_cid, &ooo_0rtt_by_cid);
-        ensure(splay_remove(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo), "removed");
+        splay_remove(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo);
         free(zo);
     }
 #endif

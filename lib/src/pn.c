@@ -45,7 +45,7 @@ void pm_by_nr_del(khash_t(pm_by_nr) * const pbn,
                   const struct pkt_meta * const p)
 {
     const khiter_t k = kh_get(pm_by_nr, pbn, p->hdr.nr);
-    ensure(k != kh_end(pbn), "found");
+    assure(k != kh_end(pbn), "found");
     kh_del(pm_by_nr, pbn, k);
     diet_remove(&p->pn->sent_pkt_nrs, p->hdr.nr);
 }
@@ -55,7 +55,7 @@ void pm_by_nr_ins(khash_t(pm_by_nr) * const pbn, struct pkt_meta * const p)
 {
     int ret;
     const khiter_t k = kh_put(pm_by_nr, pbn, p->hdr.nr, &ret);
-    ensure(ret >= 1, "inserted");
+    assure(ret >= 1, "inserted");
     kh_val(pbn, k) = p;
     diet_insert(&p->pn->sent_pkt_nrs, p->hdr.nr, 0);
 }
@@ -126,7 +126,7 @@ void reset_pn(struct pn_space * const pn)
 
 void abandon_pn(struct pn_space * const pn)
 {
-    ensure(pn->type != pn_data, "cannot abandon pn_data");
+    assure(pn->type != pn_data, "cannot abandon pn_data");
 
     warn(DBG, "abandoning %s %s processing", conn_type(pn->c),
          pn_type_str(pn->type));

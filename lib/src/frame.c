@@ -81,7 +81,7 @@ static void track_frame(struct pkt_meta * const m,
 {
     bit_set(FRM_MAX, type, &m->frms);
 #ifndef NO_QINFO
-    ensure(type < sizeof(ci->frm_cnt[0]) / sizeof(ci->frm_cnt[0][0]),
+    assure(type < sizeof(ci->frm_cnt[0]) / sizeof(ci->frm_cnt[0][0]),
            "unhandled frame type");
     ci->frm_cnt[m->txed ? 0 : 1][type] += n;
 #endif
@@ -360,8 +360,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
                 warn(WRN, "drop stale frame [%" PRIu "..%" PRIu "]",
                      p->strm_off,
                      p->strm_off + strm_data_len_adj(p->strm_data_len));
-                ensure(splay_remove(ooo_by_off, &m->strm->in_ooo, p),
-                       "removed");
+                splay_remove(ooo_by_off, &m->strm->in_ooo, p);
                 p = nxt;
                 continue;
             }
@@ -376,7 +375,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
                 trim_frame(p);
             sq_insert_tail(&m->strm->in, w_iov(c->w, pm_idx(c->w, p)), next);
             m->strm->in_data_off += p->strm_data_len;
-            ensure(splay_remove(ooo_by_off, &m->strm->in_ooo, p), "removed");
+            splay_remove(ooo_by_off, &m->strm->in_ooo, p);
 
             // mark ooo crypto data for freeing by rx_crypto()
             if (p->strm->id < 0)
@@ -450,9 +449,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
     // this ooo data doesn't overlap with anything
     track_sd_frame(ooo, false);
     track_bytes_in(m->strm, m->strm_data_len);
-    ensure(splay_insert(ooo_by_off, &m->strm->in_ooo, m) == 0,
-           "fail insert ooo off=%" PRIu " len=%u", m->strm_off,
-           m->strm_data_len);
+    splay_insert(ooo_by_off, &m->strm->in_ooo, m);
 #else
     // signal to the ACK logic to not ACK this packet
     log_stream_or_crypto_frame(false, m, type, sid, true, sdt_ooo);
@@ -770,7 +767,7 @@ dec_close_frame(const uint8_t type,
 
     const uint16_t act_reas_len =
         (uint16_t)MIN(reas_len, (uint16_t)(end - *pos));
-    ensure(act_reas_len <= ped(c->w)->scratch_len, "scratch insufficient");
+    assure(act_reas_len <= ped(c->w)->scratch_len, "scratch insufficient");
     unpoison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
 
     if (act_reas_len)
@@ -1702,8 +1699,14 @@ void enc_stream_or_crypto_frame(uint8_t ** pos,
 
     *pos = v->buf + m->strm_data_pos + m->strm_data_len;
     log_stream_or_crypto_frame(false, m, type, s->id, false, sdt_seq);
+
+    ensure(!enc_strm ||
+               ((type & (F_STREAM_OFF | F_STREAM_LEN | F_STREAM_FIN)) !=
+                (F_STREAM_OFF | F_STREAM_LEN | F_STREAM_FIN)),
+           "boom");
+
     track_bytes_out(s, m->strm_data_len);
-    ensure(!enc_strm || m->strm_off < s->out_data_max, "exceeded fc window");
+    assure(!enc_strm || m->strm_off < s->out_data_max, "exceeded fc window");
     track_frame(m,
 #ifndef NO_QINFO
                 &s->c->i
@@ -1937,7 +1940,7 @@ void enc_new_cid_frame(struct q_conn_info * const ci,
     struct cid * enc_cid = &ncid;
     if (ncid.seq <= max_scid) {
         enc_cid = cid_by_seq(&c->scids.act, ncid.seq);
-        ensure(enc_cid, "max_scid %" PRIu " ncid.seq %" PRIu, max_scid,
+        assure(enc_cid, "max_scid %" PRIu " ncid.seq %" PRIu, max_scid,
                ncid.seq);
 #ifndef NO_SRT_MATCHING
         srt = enc_cid->srt;

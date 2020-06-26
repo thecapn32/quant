@@ -177,7 +177,7 @@ epoch_in(const struct q_conn * const c)
         return ep_init;
 
     const size_t epoch = ptls_get_read_epoch(c->tls.t);
-    ensure(epoch <= ep_data, "unhandled epoch %lu", (unsigned long)epoch);
+    assure(epoch <= ep_data, "unhandled epoch %lu", (unsigned long)epoch);
     return (epoch_t)epoch;
 }
 
@@ -718,7 +718,7 @@ void conns_by_srt_ins(struct q_conn * const c, uint8_t * const srt)
 {
     int ret;
     const khiter_t k = kh_put(conns_by_srt, &conns_by_srt, srt, &ret);
-    ensure(ret >= 1, "inserted returned %d", ret);
+    assure(ret >= 1, "inserted returned %d", ret);
     kh_val(&conns_by_srt, k) = c;
 }
 
@@ -726,7 +726,7 @@ void conns_by_srt_ins(struct q_conn * const c, uint8_t * const srt)
 extern void conns_by_srt_del(uint8_t * const srt)
 {
     const khiter_t k = kh_get(conns_by_srt, &conns_by_srt, srt);
-    ensure(k != kh_end(&conns_by_srt), "found");
+    assure(k != kh_end(&conns_by_srt), "found");
     kh_del(conns_by_srt, &conns_by_srt, k);
 }
 #endif
@@ -738,7 +738,7 @@ void conns_by_id_ins(struct q_conn * const c, struct cid * const id)
     assure(id->in_cbi == false, "already in cbi");
     int ret;
     const khiter_t k = kh_put(conns_by_id, &conns_by_id, id, &ret);
-    ensure(ret >= 1, "inserted returned %d", ret);
+    assure(ret >= 1, "inserted returned %d", ret);
     kh_val(&conns_by_id, k) = c;
     id->in_cbi = true;
 }
@@ -748,7 +748,7 @@ void conns_by_id_del(struct cid * const id)
 {
     assure(id->in_cbi, "not in cbi");
     const khiter_t k = kh_get(conns_by_id, &conns_by_id, id);
-    ensure(k != kh_end(&conns_by_id), "found");
+    assure(k != kh_end(&conns_by_id), "found");
     kh_del(conns_by_id, &conns_by_id, k);
     id->in_cbi = false;
 }
@@ -975,8 +975,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
         if (zo) {
             warn(INF, "have reordered 0-RTT pkt for %s conn %s", conn_type(c),
                  cid_str(c->scid));
-            ensure(splay_remove(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo),
-                   "removed");
+            splay_remove(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo);
             sq_insert_head(x, zo->v, next);
             free(zo);
         }
@@ -1315,9 +1314,8 @@ static void __attribute__((nonnull))
                 ensure(zo, "could not calloc");
                 cid_cpy(&zo->cid, &m->hdr.dcid);
                 zo->v = v;
-                ensure(splay_insert(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo) == 0,
-                       "inserted");
-                warn(INF, "caching 0-RTT pkt for unknown conn %s",
+                splay_insert(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, zo);
+                warn(INF, "caching 0-RTT pkt for unknown conn %s", // NOLINT
                      cid_str(&m->hdr.dcid));
                 goto next;
             }
@@ -1643,7 +1641,7 @@ void
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wformat-nonliteral"
     const int ret = vsnprintf(c->err_reason, sizeof(c->err_reason), fmt, ap);
-    ensure(ret >= 0, "vsnprintf() failed");
+    assure(ret >= 0, "vsnprintf() failed");
     va_end(ap);
 
     warn(ERR, "%s", c->err_reason);
@@ -1866,7 +1864,7 @@ struct q_conn * new_conn(struct w_engine * const w,
         c->sock = get_local_sock_by_ipnp(
             ped(w),
             &(struct w_sockaddr){.addr = w->ifaddr[idx].addr, .port = port});
-        ensure(c->sock, "got serv conn");
+        assure(c->sock, "got serv conn");
 #endif
     }
 

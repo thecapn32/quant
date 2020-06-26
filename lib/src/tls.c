@@ -1779,7 +1779,7 @@ void free_tls_ctx(struct per_engine_data * const ped)
     struct tls_ticket * tmp;
     for (t = splay_min(tickets_by_peer, &tickets); t != 0; t = tmp) {
         tmp = splay_next(tickets_by_peer, &tickets, t);
-        ensure(splay_remove(tickets_by_peer, &tickets, t), "removed");
+        splay_remove(tickets_by_peer, &tickets, t);
         free_ticket(t);
     }
 #endif
