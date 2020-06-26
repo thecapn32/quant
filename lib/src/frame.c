@@ -1708,11 +1708,6 @@ void enc_stream_or_crypto_frame(uint8_t ** pos,
     *pos = v->buf + m->strm_data_pos + m->strm_data_len;
     log_stream_or_crypto_frame(false, m, type, s->id, false, sdt_seq);
 
-    ensure(!enc_strm ||
-               ((type & (F_STREAM_OFF | F_STREAM_LEN | F_STREAM_FIN)) !=
-                (F_STREAM_OFF | F_STREAM_LEN | F_STREAM_FIN)),
-           "boom");
-
     track_bytes_out(s, m->strm_data_len);
     assure(!enc_strm || m->strm_off < s->out_data_max, "exceeded fc window");
     track_frame(m,
