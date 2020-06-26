@@ -269,8 +269,11 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
     struct pn_space * const pn = m->pn;
     struct q_conn * const c = pn->c;
 
-    if (m->in_flight)
+    if (m->in_flight) {
         remove_from_in_flight(m);
+        if (m->ack_eliciting)
+            pn->pkts_lost_since_last_ack_tx++;
+    }
 
     // rest of function is not from pseudo code
 

@@ -97,6 +97,7 @@ struct pn_space {
     uint_t lg_sent_before_rto; // largest_sent_before_rto
 
     uint_t pkts_rxed_since_last_ack_tx;
+    uint_t pkts_lost_since_last_ack_tx;
 
 #ifndef NO_ECN
     uint_t ecn_ref[ECN_MASK + 1];

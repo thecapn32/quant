@@ -117,7 +117,7 @@ void reset_pn(struct pn_space * const pn)
     memset(pn->ecn_ref, 0, sizeof(pn->ecn_ref));
     memset(pn->ecn_rxed, 0, sizeof(pn->ecn_rxed));
 #endif
-    pn->pkts_rxed_since_last_ack_tx = 0;
+    pn->pkts_rxed_since_last_ack_tx = pn->pkts_lost_since_last_ack_tx = 0;
     pn->abandoned = false;
     bit_zero(FRM_MAX, &pn->rx_frames);
     bit_zero(FRM_MAX, &pn->tx_frames);
@@ -148,6 +148,7 @@ void abandon_pn(struct pn_space * const pn)
 
 ack_t needs_ack(const struct pn_space * const pn)
 {
+    // send a forced ACK when the flag is set
     if (unlikely(pn->imm_ack)) {
 #ifdef DEBUG_EXTRA
         warn(DBG, "%s conn %s: %s imm_ack: forced", conn_type(pn->c),
@@ -156,15 +157,19 @@ ack_t needs_ack(const struct pn_space * const pn)
         return imm_ack;
     }
 
-    const bool rxed_one_or_more = pn->pkts_rxed_since_last_ack_tx >= 1;
-    if (rxed_one_or_more == false) {
+    // don't ACK if we haven't RX'ed or lost anything since the last ACK
+    const bool rxed_or_lost =
+        pn->pkts_rxed_since_last_ack_tx > 0 ||
+        (pn->pkts_lost_since_last_ack_tx > 0 && !diet_empty(&pn->recv_all));
+    if (rxed_or_lost == false) {
 #ifdef DEBUG_EXTRA
-        warn(DBG, "%s conn %s: %s no_ack: rxed_one_or_more == false",
+        warn(DBG, "%s conn %s: %s no_ack: rxed_or_lost == false",
              conn_type(pn->c), cid_str(pn->c->scid), pn_type_str(pn->type));
 #endif
         return no_ack;
     }
 
+    // if we haven't RX'ed anything ACK-eliciting, maybe send a gratuitous ACK
     const bool rxed_ack_eliciting = is_ack_eliciting(&pn->rx_frames);
     if (rxed_ack_eliciting == false) {
 #ifdef DEBUG_EXTRA
@@ -174,6 +179,7 @@ ack_t needs_ack(const struct pn_space * const pn)
         return grat_ack;
     }
 
+    // if this is a handshake packet, always include an ACK
     const bool in_hshk = pn->type != pn_data || has_frm(pn->rx_frames, FRM_CRY);
     if (in_hshk) {
 #ifdef DEBUG_EXTRA
@@ -183,15 +189,18 @@ ack_t needs_ack(const struct pn_space * const pn)
         return imm_ack;
     }
 
-    const bool rxed_two_or_more = pn->pkts_rxed_since_last_ack_tx >= 2;
-    if (rxed_two_or_more) {
+    // if we have RX'ed two or more packets, or had a loss, send an ACK
+    const bool std_ack = pn->pkts_rxed_since_last_ack_tx >= 2 ||
+                         pn->pkts_lost_since_last_ack_tx > 0;
+    if (std_ack) {
 #ifdef DEBUG_EXTRA
-        warn(DBG, "%s conn %s: %s imm_ack: rxed_two_or_more", conn_type(pn->c),
+        warn(DBG, "%s conn %s: %s imm_ack: std_ack", conn_type(pn->c),
              cid_str(pn->c->scid), pn_type_str(pn->type));
 #endif
         return imm_ack;
     }
 
+    // otherwise, time to arm the ACK timer
 #ifdef DEBUG_EXTRA
     warn(DBG, "%s conn %s: %s del_ack", conn_type(pn->c), cid_str(pn->c->scid),
          pn_type_str(pn->type));

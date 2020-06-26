@@ -1637,7 +1637,7 @@ bool enc_ack_frame(struct q_conn_info * const ci,
 
     timeouts_del(ped(c->w)->wheel, &c->ack_alarm);
     bit_zero(FRM_MAX, &pn->rx_frames);
-    pn->pkts_rxed_since_last_ack_tx = 0;
+    pn->pkts_lost_since_last_ack_tx = pn->pkts_rxed_since_last_ack_tx = 0;
     pn->imm_ack = false;
     track_frame(m, ci, FRM_ACK, 1);
     m->ack_frm_pos = (uint16_t)(init_pos - start) + 1; // +1 for type byte
