@@ -571,9 +571,13 @@ static bool __attribute__((nonnull)) tx_stream(struct q_stream * const s)
 
     uint32_t encoded = 0;
     struct w_iov * v = s->out_una;
+    const bool was_blocked = s->blocked || c->blocked;
     sq_foreach_from (v, &s->out, next) {
         struct pkt_meta * const m = &meta(v);
         if (unlikely(has_wnd(c, v->len) == false && c->tx_limit == 0)) {
+#ifdef DEBUG_EXTRA
+            warn(INF, "no more wnd");
+#endif
             c->no_wnd = true;
             break;
         }
@@ -597,6 +601,20 @@ static bool __attribute__((nonnull)) tx_stream(struct q_stream * const s)
             do_conn_fc(c, v->len);
         }
 
+        if (unlikely(was_blocked)) {
+            if (m->lost && m->strm_off + m->strm_data_len > s->out_data_max) {
+#ifdef DEBUG_EXTRA
+                warn(INF, "RTX for blocked strm done");
+#endif
+                break;
+            }
+        } else if (unlikely(s->blocked || c->blocked)) {
+#ifdef DEBUG_EXTRA
+            warn(INF, "newly blocked");
+#endif
+            break;
+        }
+
         const bool do_rtx = m->lost || (c->tx_limit && m->txed);
         if (unlikely(do_rtx))
             rtx_pkt(v, m);
@@ -605,9 +623,6 @@ static bool __attribute__((nonnull)) tx_stream(struct q_stream * const s)
                      false))
             continue;
         encoded++;
-
-        if (unlikely(s->blocked || c->blocked))
-            break;
 
         if (unlikely(c->tx_limit && encoded == c->tx_limit)) {
 #ifdef DEBUG_STREAMS
