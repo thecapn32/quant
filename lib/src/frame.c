@@ -334,9 +334,17 @@ dec_stream_or_crypto_frame(const uint8_t type,
             m->strm_off + strm_data_len_adj(m->strm_data_len)) {
 
         if (unlikely(m->strm->state == strm_hcrm ||
-                     m->strm->state == strm_clsd))
+                     m->strm->state == strm_clsd)) {
             chk_finl_size(m->strm_off - (m->strm_data_len == 0 ? 1 : 0),
                           m->strm, type);
+            // this can only be a pure FIN, so drop it
+            assure(m->strm_data_len == 0 && m->is_fin, "is pure FIN");
+            warn(NTE, "dup pure FIN for %s strm " FMT_SID " on %s conn %s",
+                 strm_state_str[m->strm->state], sid, conn_type(c),
+                 cid_str(c->scid));
+            track_sd_frame(dup, true);
+            goto done;
+        }
 
         if (unlikely(m->strm->in_data_off > m->strm_off))
             // already-received data at the beginning of the frame, trim
