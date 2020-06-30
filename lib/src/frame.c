@@ -1222,18 +1222,6 @@ dec_new_token_frame(const uint8_t ** pos,
 }
 
 
-#ifndef NDEBUG
-static void log_pad(const uint16_t len)
-{
-    warn(INF, FRAM_IN "PADDING" NRM " len=%u", len);
-}
-#else
-#define log_pad(...)                                                           \
-    do {                                                                       \
-    } while (0)
-#endif
-
-
 bool dec_frames(struct q_conn * const c,
                 struct w_iov ** vv,
                 struct pkt_meta ** mm)
@@ -1257,18 +1245,6 @@ bool dec_frames(struct q_conn * const c,
 
     while (likely(pos < end)) {
         uint8_t type = *(pos++); // dec1_chk not needed here, pos is < len
-
-        // special-case for optimized parsing of padding ranges
-        if (type == FRM_PAD) {
-            const uint8_t * const pad_start = pos;
-            while (likely(type == FRM_PAD && pos < end))
-                type = *(pos++);
-            const uint16_t pad_len = (uint16_t)(pos - pad_start + 1);
-            track_frame(m, ci, FRM_PAD, pad_len);
-            log_pad(pad_len);
-            if (pos == end)
-                break;
-        }
 
         // check that frame type is allowed in this pkt type
         static const struct frames frame_ok[] = {
@@ -1302,6 +1278,28 @@ bool dec_frames(struct q_conn * const c,
                      false))
             err_close_return(c, ERR_PV, type, "0x%02x frame not OK in %s pkt",
                              type, pkt_type_str(m->hdr.flags, &m->hdr.vers));
+
+        // special-case for optimized parsing of padding ranges
+        if (type == FRM_PAD) {
+            const uint8_t * const pad_start = pos;
+
+            while (likely(type == FRM_PAD)) {
+                uint64_t pad = UINT64_MAX;
+                memcpy(&pad, pos, MIN(end - pos, (long)sizeof(uint64_t)));
+                if (pad == 0)
+                    pos += sizeof(pad);
+                else {
+                    pos += __builtin_ctzll(pad) >> 3;
+                    type = *(pos++);
+                    break;
+                }
+            }
+            const uint16_t pad_len = (uint16_t)(pos - pad_start);
+            track_frame(m, ci, FRM_PAD, pad_len);
+            warn(INF, FRAM_IN "PADDING" NRM " len=%u", pad_len);
+            if (pos >= end)
+                break;
+        }
 
         bool ok;
         switch (type) {
