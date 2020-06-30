@@ -345,7 +345,7 @@ static void __attribute__((nonnull)) tx_vneg_resp(struct w_sock * const ws,
     sq_insert_head(&q, xv, next);
 
     warn(INF, "sending vneg serv response");
-    mx->txed = 1;
+    mx->txed = true;
     mx->hdr.flags = HEAD_FORM | (uint8_t)w_rand_uniform32(UINT8_MAX);
 
     uint8_t * pos = xv->buf;
@@ -420,7 +420,7 @@ static void __attribute__((nonnull)) tx_rtry(struct q_conn * const c)
     encb(&pos, end, c->tok, c->tok_len);
     encb(&pos, end, rit, RIT_LEN);
 
-    mx->txed = 1;
+    mx->txed = true;
     mx->udp_len = xv->len = (uint16_t)(pos - xv->buf);
     xv->saddr = c->peer;
 #ifndef NO_ECN
