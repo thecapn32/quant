@@ -36,7 +36,6 @@
 #include "conn.h"
 #include "diet.h"
 #include "quic.h"
-#include "recovery.h"
 #include "stream.h"
 
 
@@ -234,14 +233,17 @@ void do_stream_fc(struct q_stream * const s, const uint16_t len)
            actual_lost_cnt, s->lost_cnt);
 #endif
 
-    s->blocked = (s->out_data + len + s->c->rec.max_ups > s->out_data_max);
+    const bool blocked_orig = s->blocked;
+    s->blocked = (s->out_data + len > s->out_data_max);
 
+    const bool tx_msd_orig = s->tx_max_strm_data;
     if (s->in_data * 4 > s->in_data_max) {
         s->tx_max_strm_data = true;
         s->in_data_max *= 4;
     }
 
-    need_ctrl_update(s);
+    if (blocked_orig != s->blocked || tx_msd_orig != s->tx_max_strm_data)
+        need_ctrl_update(s);
 }
 
 

@@ -571,12 +571,11 @@ static bool __attribute__((nonnull)) tx_stream(struct q_stream * const s)
 
     uint32_t encoded = 0;
     struct w_iov * v = s->out_una;
-    const bool was_blocked = s->blocked || c->blocked;
     sq_foreach_from (v, &s->out, next) {
         struct pkt_meta * const m = &meta(v);
         if (unlikely(has_wnd(c, v->len) == false && c->tx_limit == 0)) {
 #ifdef DEBUG_EXTRA
-            warn(INF, "no more wnd");
+            warn(INF, "no more cwnd");
 #endif
             c->no_wnd = true;
             break;
@@ -599,20 +598,15 @@ static bool __attribute__((nonnull)) tx_stream(struct q_stream * const s)
         if (likely(hshk_done(c) && s->id >= 0)) {
             do_stream_fc(s, v->len);
             do_conn_fc(c, v->len);
-        }
 
-        if (unlikely(was_blocked)) {
-            if (m->lost && m->strm_off + m->strm_data_len > s->out_data_max) {
+            if ((likely(m->lost == false)
+                     ? s->out_data + v->len
+                     : m->strm_off + m->strm_data_len) > s->out_data_max) {
 #ifdef DEBUG_EXTRA
-                warn(INF, "RTX for blocked strm done");
+                warn(INF, "no more fc wnd");
 #endif
                 break;
             }
-        } else if (unlikely(s->blocked || c->blocked)) {
-#ifdef DEBUG_EXTRA
-            warn(INF, "newly blocked");
-#endif
-            break;
         }
 
         const bool do_rtx = m->lost || (c->tx_limit && m->txed);
