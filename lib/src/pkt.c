@@ -488,8 +488,7 @@ bool enc_pkt(struct q_stream * const s,
         encb(&pos, end, m->hdr.dcid.id, m->hdr.dcid.len);
     }
 
-    uint8_t * pkt_nr_pos = 0;
-    pkt_nr_pos = pos;
+    const uint8_t * const pkt_nr_pos = pos;
     switch ((pnl - 1) & HEAD_PNRL_MASK) {
     case 0:
         enc1(&pos, end, m->hdr.nr & UINT64_C(0xff));
@@ -515,7 +514,8 @@ bool enc_pkt(struct q_stream * const s,
 #ifndef NO_ECN
     // track the flags manually, since warpcore sets them on the xv and it'd
     // require another loop to copy them over
-    v->flags |= likely(c->sockopt.enable_ecn) ? ECN_ECT0 : ECN_NOT;
+    if (likely(c->sockopt.enable_ecn))
+        v->flags |= ECN_ECT0;
 #endif
 
 #ifndef NDEBUG
