@@ -1285,7 +1285,8 @@ bool dec_frames(struct q_conn * const c,
 
             while (likely(type == FRM_PAD)) {
                 uint64_t pad = UINT64_MAX;
-                memcpy(&pad, pos, MIN(end - pos, (long)sizeof(uint64_t)));
+                const size_t left = (size_t)(end - pos);
+                memcpy(&pad, pos, MIN(left, sizeof(uint64_t)));
                 if (pad == 0)
                     pos += sizeof(pad);
                 else {
