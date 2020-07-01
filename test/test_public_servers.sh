@@ -119,6 +119,7 @@ function prep {
     if [ ! -e "$ret_base.fail" ] || [ "$(cat "$ret_base.fail")" = "x" ]; then
         echo $ret > "$ret_base.fail"
     fi
+    echo "$log"
     rm -f "$log_strip"
 }
 
@@ -304,14 +305,19 @@ function analyze {
         [ $? -eq 1 ] && echo P > "$base.ret.spin"
 
         # analyze ECN
-        perl -n -e '/ECN verification failed/ and $n=-1;
-            $n >= 0 and /dec_ack_frame.*ECN ect0=/ and $n=1;
+        perl -n -e '$n == 1 and /ECN verification failed/ and $n=2;
+            $n == 0 and /dec_ack_frame.*ECN ect0=/ and $n=1;
             END{exit $n};' "$log.strip"
-        [ $? -eq 1 ] && echo E > "$base.ret.aecn"
+        local r=$?
+        if [ $r -eq 2 ]; then
+            echo e > "$base.ret.aecn"
+        elif [ $r -eq 1 ]; then
+            echo E > "$base.ret.aecn"
+        fi
 
         [ ! -e "$base.ret.fail" ] && [ -s "$base.ret.hshk" ] && \
             [ -s "$base.ret.data" ] && [ -s "$base.ret.clse" ] && rm -f "$log"
-        # rm -f "$log.strip"
+        rm -f "$log.strip"
     fi
 
     # analyze rsmt and 0rtt
