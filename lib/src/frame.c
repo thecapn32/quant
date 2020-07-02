@@ -828,8 +828,8 @@ dec_max_strm_data_frame(const uint8_t ** pos,
         if (s->blocked) {
             s->blocked = false;
             c->needs_tx = true;
+            need_ctrl_update(s);
         }
-        need_ctrl_update(s);
     } else if (max < s->out_data_max)
         warn(NTE, "MAX_STREAM_DATA %" PRIu " < current value %" PRIu, max,
              s->out_data_max);
@@ -908,10 +908,6 @@ dec_strm_data_blocked_frame(const uint8_t ** pos,
         return true;
 
     do_stream_fc(s, 0);
-    // because do_stream_fc() only sets this when increasing the FC window
-    s->tx_max_strm_data = true;
-    need_ctrl_update(s);
-
     return true;
 }
 

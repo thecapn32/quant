@@ -394,17 +394,25 @@ enc_other_frames(
     if (unlikely(c->tx_max_sid_uni) && can_enc(pos, end, m, FRM_MSU, true))
         enc_max_strms_frame(ci, pos, end, m, false);
 
-    while (!sl_empty(&c->need_ctrl)) {
-        // XXX this assumes we can encode all the ctrl frames
-        struct q_stream * const s = sl_first(&c->need_ctrl);
-        sl_remove_head(&c->need_ctrl, node_ctrl);
-        s->in_ctrl = false;
+    struct q_stream * s;
+    struct q_stream * tmp;
+    sl_foreach_safe (s, &c->need_ctrl, node_ctrl, tmp) {
         // encode stream control frames
-        if (unlikely(s->blocked) && can_enc(pos, end, m, FRM_SDB, true))
+        bool enc = false;
+        if (s->blocked && can_enc(pos, end, m, FRM_SDB, true)) {
             enc_strm_data_blocked_frame(ci, pos, end, m, s);
-        if (unlikely(s->tx_max_strm_data) &&
-            can_enc(pos, end, m, FRM_MSD, true))
+            enc = true;
+        }
+        if (s->tx_max_strm_data && can_enc(pos, end, m, FRM_MSD, true)) {
             enc_max_strm_data_frame(ci, pos, end, m, s);
+            enc = true;
+        }
+        if (enc) {
+            sl_remove(&c->need_ctrl, s, q_stream, node_ctrl);
+            s->in_ctrl = false;
+        } else
+            // the skipped frames need to go out in another packet
+            c->needs_tx = true;
     }
 }
 
