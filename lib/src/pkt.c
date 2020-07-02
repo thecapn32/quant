@@ -398,16 +398,17 @@ enc_other_frames(
     struct q_stream * tmp;
     sl_foreach_safe (s, &c->need_ctrl, node_ctrl, tmp) {
         // encode stream control frames
-        bool enc = false;
+        bool enc_strm_data_blocked = false;
         if (s->blocked && can_enc(pos, end, m, FRM_SDB, true)) {
             enc_strm_data_blocked_frame(ci, pos, end, m, s);
-            enc = true;
+            enc_strm_data_blocked = true;
         }
+        bool enc_max_strm_data = false;
         if (s->tx_max_strm_data && can_enc(pos, end, m, FRM_MSD, true)) {
             enc_max_strm_data_frame(ci, pos, end, m, s);
-            enc = true;
+            enc_max_strm_data = true;
         }
-        if (enc) {
+        if (enc_strm_data_blocked && enc_max_strm_data) {
             sl_remove(&c->need_ctrl, s, q_stream, node_ctrl);
             s->in_ctrl = false;
         } else
