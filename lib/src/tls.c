@@ -1556,7 +1556,7 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
 #endif
     struct q_conn * const c = *ptls_get_data_ptr(tls);
     ptls_cipher_suite_t * const cipher = ptls_get_cipher(c->tls.t);
-    struct pn_space * const pn = pn_for_epoch(c, (epoch_t)epoch);
+    struct pn_space * const pn = &c->pns[pn_for_epoch[epoch]];
 
     struct cipher_ctx * ctx = 0;
     switch (epoch) {

@@ -259,7 +259,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
         const epoch_t e = epoch_for_pkt_type(m->hdr.type);
         if (unlikely(c->cstrms[e] == 0))
             err_close_return(c, ERR_STRM_STAT, type, "epoch %u abandoned", e);
-        sid = crpt_strm_id(e);
+        sid = crpt_strm_id[e];
         m->strm = c->cstrms[e];
     } else {
         m->is_fin = is_set(F_STREAM_FIN, type);
@@ -1440,8 +1440,7 @@ bool dec_frames(struct q_conn * const c,
     }
 
     // track outstanding frame types in the pn space
-    struct pn_space * const pn = pn_for_pkt_type(c, m->hdr.type);
-    bit_or(FRM_MAX, &pn->rx_frames, &m->frms);
+    bit_or(FRM_MAX, &m->pn->rx_frames, &m->frms);
 
     return true;
 }

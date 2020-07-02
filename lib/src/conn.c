@@ -1142,13 +1142,13 @@ done:
 
 #ifndef NO_ECN
     if (likely(m->hdr.nr != UINT_T_MAX)) {
-        struct pn_space * const pn = pn_for_pkt_type(c, m->hdr.type);
         // update ECN info
-        pn->ecn_rxed[v->flags & ECN_MASK]++;
-        pn->pkts_rxed_since_last_ack_tx++;
+        m->pn->ecn_rxed[v->flags & ECN_MASK]++;
+        m->pn->pkts_rxed_since_last_ack_tx++;
 
         // TODO: if we do this, it needs to move outside of #ifndef NO_ECN
-        // if (pn == &c->pns[pn_data] && pn->pkts_rxed_since_last_ack_tx >= 16)
+        // if (m->pn == &c->pns[pn_data] &&
+        //     m->pn->pkts_rxed_since_last_ack_tx >= 16)
         //     tx_ack(c, ep_data, false);
     }
 #endif
@@ -1473,14 +1473,13 @@ static void __attribute__((nonnull))
                                         : epoch_for_pkt_type(m->hdr.type);
 
             if (likely(has_pkt_nr(m->hdr.flags, m->hdr.vers))) {
-                struct pn_space * const pn = pn_for_pkt_type(c, m->hdr.type);
 #ifdef NO_OOO_DATA
                 if (m->strm_off == UINT_T_MAX)
                     // don't ACK this ooo packet
                     goto drop;
 #endif
-                diet_insert(&pn->recv, m->hdr.nr, m->t);
-                diet_insert(&pn->recv_all, m->hdr.nr, 0);
+                diet_insert(&m->pn->recv, m->hdr.nr, m->t);
+                diet_insert(&m->pn->recv_all, m->hdr.nr, 0);
             }
             pkt_valid = true;
 
@@ -1595,7 +1594,7 @@ void rx(struct w_sock * const ws)
             if (unlikely(c->cstrms[e] == 0 || e == ep_0rtt))
                 // don't ACK abandoned and 0rtt pn spaces
                 continue;
-            switch (needs_ack(pn_for_epoch(c, e))) {
+            switch (needs_ack(&c->pns[pn_for_epoch[e]])) {
             case imm_ack:
                 if (likely(tx_ack(c, e, false)))
                     do_tx(c);
@@ -1981,7 +1980,7 @@ struct q_conn * new_conn(struct w_engine * const w,
     // create crypto streams
     for (epoch_t e = ep_init; e <= ep_data; e++)
         if (e != ep_0rtt)
-            new_stream(c, crpt_strm_id(e));
+            new_stream(c, crpt_strm_id[e]);
 
     if (c->scid) {
         // FIXME: first connection sets the type for all future connections

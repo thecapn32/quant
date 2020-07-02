@@ -407,23 +407,6 @@ extern void __attribute__((nonnull)) rx_pkts(struct w_iov_sq * const x,
                                              struct w_sock * const ws);
 #endif
 
-static inline struct pn_space * __attribute__((nonnull, no_instrument_function))
-pn_for_epoch(struct q_conn * const c, const epoch_t e)
-{
-    switch (e) {
-    case ep_init:
-        return &c->pns[pn_init];
-    case ep_hshk:
-        return &c->pns[pn_hshk];
-    case ep_0rtt:
-    case ep_data:
-        return &c->pns[pn_data];
-    }
-    die("unhandled epoch %u", e);
-    return 0;
-}
-
-
 #ifndef NO_MIGRATION
 extern void __attribute__((nonnull))
 conns_by_id_ins(struct q_conn * const c, struct cid * const id);

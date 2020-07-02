@@ -199,6 +199,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
             -cppcoreguidelines-macro-usage
             -cppcoreguidelines-owning-memory
             -cppcoreguidelines-pro-bounds-array-to-pointer-decay
+            -cppcoreguidelines-pro-bounds-constant-array-index
             -cppcoreguidelines-pro-bounds-pointer-arithmetic
             -cppcoreguidelines-pro-type-vararg
             -fuchsia-statically-constructed-objects

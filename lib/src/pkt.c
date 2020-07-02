@@ -430,7 +430,7 @@ bool enc_pkt(struct q_stream * const s,
 #endif
 
     const epoch_t epoch = unlikely(pmtud) ? ep_hshk : strm_epoch(s);
-    struct pn_space * const pn = m->pn = pn_for_epoch(c, epoch);
+    struct pn_space * const pn = m->pn = &c->pns[pn_for_epoch[epoch]];
 
     if (unlikely(pn->lg_sent == UINT_T_MAX))
         // next pkt nr
@@ -896,7 +896,6 @@ static bool undo_hp(struct w_iov * const xv,
     m->hdr.flags = xv->buf[0];
     m->hdr.type = pkt_type(xv->buf[0]);
     const uint8_t pnl = pkt_nr_len(xv->buf[0]);
-    struct pn_space * const pn = pn_for_pkt_type(m->pn->c, m->hdr.type);
     const uint8_t * pnp = xv->buf + m->hdr.hdr_len;
 
     switch (xv->buf[0] & HEAD_PNRL_MASK) {
@@ -922,7 +921,7 @@ static bool undo_hp(struct w_iov * const xv,
     }
     m->hdr.hdr_len += pnl;
 
-    const uint64_t expected_pn = diet_max(&pn->recv) + 1;
+    const uint64_t expected_pn = diet_max(&m->pn->recv) + 1;
     const uint64_t pn_win = UINT64_C(1) << (pnl * 8);
     const uint64_t pn_hwin = pn_win / 2;
     const uint64_t pn_mask = pn_win - 1;
@@ -1075,8 +1074,7 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
     }
 
     // packet protection verified OK
-    if (unlikely(
-            diet_find(&pn_for_pkt_type(c, m->hdr.type)->recv_all, m->hdr.nr)))
+    if (unlikely(diet_find(&m->pn->recv_all, m->hdr.nr)))
         goto check_srt;
 
     // check if we need to send an immediate ACK
