@@ -319,7 +319,8 @@ static bool __attribute__((nonnull)) can_enc(uint8_t ** const pos,
                                              const uint8_t type,
                                              const bool one_per_pkt)
 {
-    const bool has_space = *pos + max_frame_len(type) <= end;
+    assure(max_frame_len[type] != UINT8_MAX, "unhandled type 0x%02x", type);
+    const bool has_space = *pos + max_frame_len[type] <= end;
     return (one_per_pkt && has_frm(m->frms, type)) == false && has_space;
 }
 
@@ -343,21 +344,22 @@ enc_other_frames(
     struct q_conn * const c = m->pn->c;
 
     // encode connection control frames
-    if (c->tx_hshk_done)
+    if (unlikely(c->tx_hshk_done) && can_enc(pos, end, m, FRM_HSD, true))
         enc_hshk_done_frame(ci, pos, end, m);
 
-    if (!is_clnt(c) && c->tok_len && can_enc(pos, end, m, FRM_TOK, true)) {
+    if (!is_clnt(c) && unlikely(c->tok_len) &&
+        can_enc(pos, end, m, FRM_TOK, true)) {
         enc_new_token_frame(ci, pos, end, m);
         c->tok_len = 0;
     }
 
 #ifndef NO_MIGRATION
-    if (c->tx_path_resp && can_enc(pos, end, m, FRM_PRP, true)) {
+    if (unlikely(c->tx_path_resp) && can_enc(pos, end, m, FRM_PRP, true)) {
         enc_path_response_frame(ci, pos, end, m);
         c->tx_path_resp = false;
     }
 
-    if (c->tx_retire_cid && can_enc(pos, end, m, FRM_RTR, true)) {
+    if (unlikely(c->tx_retire_cid) && can_enc(pos, end, m, FRM_RTR, true)) {
         struct cid * id = 0;
         struct cid * tmp = 0;
         sl_foreach_safe (id, &c->dcids.ret, next, tmp)
@@ -365,31 +367,31 @@ enc_other_frames(
                 enc_retire_cid_frame(ci, pos, end, m, id->seq);
     }
 
-    if (c->tx_path_chlg && can_enc(pos, end, m, FRM_PCL, true))
+    if (unlikely(c->tx_path_chlg) && can_enc(pos, end, m, FRM_PCL, true))
         enc_path_challenge_frame(ci, pos, end, m);
 
-    while (c->tx_ncid && can_enc(pos, end, m, FRM_CID, false)) {
+    while (unlikely(c->tx_ncid) && can_enc(pos, end, m, FRM_CID, false)) {
         enc_new_cid_frame(ci, pos, end, m);
         c->tx_ncid = need_more_cids(&c->scids, c->tp_peer.act_cid_lim);
     }
 #endif
 
-    if (c->blocked && can_enc(pos, end, m, FRM_CDB, true))
+    if (unlikely(c->blocked) && can_enc(pos, end, m, FRM_CDB, true))
         enc_data_blocked_frame(ci, pos, end, m);
 
-    if (c->tx_max_data && can_enc(pos, end, m, FRM_MCD, true))
+    if (unlikely(c->tx_max_data) && can_enc(pos, end, m, FRM_MCD, true))
         enc_max_data_frame(ci, pos, end, m);
 
-    if (c->sid_blocked_bidi && can_enc(pos, end, m, FRM_SBB, true))
+    if (unlikely(c->sid_blocked_bidi) && can_enc(pos, end, m, FRM_SBB, true))
         enc_streams_blocked_frame(ci, pos, end, m, true);
 
-    if (c->sid_blocked_uni && can_enc(pos, end, m, FRM_SBU, true))
+    if (unlikely(c->sid_blocked_uni) && can_enc(pos, end, m, FRM_SBU, true))
         enc_streams_blocked_frame(ci, pos, end, m, false);
 
-    if (c->tx_max_sid_bidi && can_enc(pos, end, m, FRM_MSB, true))
+    if (unlikely(c->tx_max_sid_bidi) && can_enc(pos, end, m, FRM_MSB, true))
         enc_max_strms_frame(ci, pos, end, m, true);
 
-    if (c->tx_max_sid_uni && can_enc(pos, end, m, FRM_MSU, true))
+    if (unlikely(c->tx_max_sid_uni) && can_enc(pos, end, m, FRM_MSU, true))
         enc_max_strms_frame(ci, pos, end, m, false);
 
     while (!sl_empty(&c->need_ctrl)) {
@@ -398,9 +400,10 @@ enc_other_frames(
         sl_remove_head(&c->need_ctrl, node_ctrl);
         s->in_ctrl = false;
         // encode stream control frames
-        if (s->blocked && can_enc(pos, end, m, FRM_SDB, true))
+        if (unlikely(s->blocked) && can_enc(pos, end, m, FRM_SDB, true))
             enc_strm_data_blocked_frame(ci, pos, end, m, s);
-        if (s->tx_max_strm_data && can_enc(pos, end, m, FRM_MSD, true))
+        if (unlikely(s->tx_max_strm_data) &&
+            can_enc(pos, end, m, FRM_MSD, true))
             enc_max_strm_data_frame(ci, pos, end, m, s);
     }
 }

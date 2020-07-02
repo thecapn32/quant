@@ -39,7 +39,6 @@
 #include <netinet/in.h>
 #endif
 
-#include <picotls.h>
 #include <quant/quant.h>
 #include <timeout.h>
 
@@ -1445,69 +1444,6 @@ bool dec_frames(struct q_conn * const c,
     bit_or(FRM_MAX, &pn->rx_frames, &m->frms);
 
     return true;
-}
-
-
-uint16_t max_frame_len(const uint8_t type)
-{
-    // return max len needed to encode the given frame type
-    uint16_t len = sizeof(uint8_t); // type
-
-    switch (type) {
-    case FRM_PAD:
-    case FRM_PNG:
-        break;
-
-        // these are always first, so assume there is enough space
-        // case FRM_ACE:
-        // case FRM_ACK:
-
-    case FRM_RST:
-        len += sizeof(uint_t) + sizeof(uint16_t) + sizeof(uint_t);
-        break;
-
-        // these two are never combined with stream frames, so no need to
-        // check case FRM_CLQ: case FRM_CLA:
-
-    case FRM_STP:
-        len += sizeof(uint_t) + sizeof(uint16_t);
-        break;
-
-        // these two don't need to be length-checked
-        // case FRM_STR:
-        // case FRM_CRY:
-
-    case FRM_TOK:
-        // only true on TX; update when mk_rtry_tok() changes
-        len += sizeof(uint_t) + PTLS_MAX_DIGEST_SIZE + CID_LEN_MAX;
-        break;
-
-    case FRM_MCD:
-    case FRM_MSB:
-    case FRM_MSU:
-    case FRM_CDB:
-    case FRM_SBB:
-    case FRM_SBU:
-    case FRM_RTR:
-    case FRM_PCL:
-    case FRM_PRP:
-        len += sizeof(uint_t);
-        break;
-
-    case FRM_MSD:
-    case FRM_SDB:
-        len += sizeof(uint_t) + sizeof(uint_t);
-        break;
-
-    case FRM_CID:
-        len += sizeof(uint_t) + sizeof(uint8_t) + CID_LEN_MAX + SRT_LEN;
-        break;
-
-    default:
-        die("unhandled 0x%02x frame", type);
-    }
-
-    return len;
 }
 
 
