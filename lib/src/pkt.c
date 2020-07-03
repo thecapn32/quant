@@ -439,7 +439,14 @@ bool enc_pkt(struct q_stream * const s,
 #endif
 
     const epoch_t epoch = unlikely(pmtud) ? ep_hshk : strm_epoch(s);
+    assure(is_clnt(c) || epoch != ep_0rtt, "serv use of LH_0RTT");
     struct pn_space * const pn = m->pn = &c->pns[pn_for_epoch[epoch]];
+
+    uint8_t * pos = v->buf;
+    if (enc_data)
+        calc_lens_of_stream_or_crypto_frame(m, v, s, rtx);
+    const uint8_t * const end =
+        v->buf + ((enc_data || rtx) ? m->strm_frm_pos : v->len);
 
     if (unlikely(pn->lg_sent == UINT_T_MAX))
         // next pkt nr
@@ -447,41 +454,27 @@ bool enc_pkt(struct q_stream * const s,
     else
         m->hdr.nr = ++pn->lg_sent;
 
-    switch (epoch) {
-    case ep_init:
-        m->hdr.type = LH_INIT;
-        m->hdr.flags = LH | m->hdr.type;
-        break;
-    case ep_0rtt:
-        if (is_clnt(c)) {
-            m->hdr.type = LH_0RTT;
-            m->hdr.flags = LH | m->hdr.type;
-        } else
-            m->hdr.type = m->hdr.flags = SH;
-        break;
-    case ep_hshk:
-        m->hdr.type = LH_HSHK;
-        m->hdr.flags = LH | m->hdr.type;
-        break;
-    case ep_data:
-        m->hdr.type = m->hdr.flags = SH;
-        m->hdr.flags |= pn->data.out_kyph ? SH_KYPH : 0;
-        if (c->spin_enabled && c->spin)
-            m->hdr.flags |= SH_SPIN;
-        break;
-    }
+    static const uint8_t ep_type[] = {[ep_init] = LH_INIT,
+                                      [ep_0rtt] = LH_0RTT,
+                                      [ep_hshk] = LH_HSHK,
+                                      [ep_data] = SH};
+    m->hdr.type = ep_type[epoch];
 
     const uint8_t pnl = needed_pkt_nr_len(pn->lg_acked, m->hdr.nr);
-    m->hdr.flags |= (pnl - 1);
+    m->hdr.flags = (pnl - 1);
 
-    uint8_t * pos = v->buf;
-    if (enc_data)
-        calc_lens_of_stream_or_crypto_frame(m, v, s, rtx);
-    const uint8_t * const end =
-        v->buf + ((enc_data || rtx) ? m->strm_frm_pos : v->len);
+    if (likely(epoch == ep_data))
+        m->hdr.flags |= SH | (pn->data.out_kyph ? SH_KYPH : 0) |
+                        ((c->spin_enabled && c->spin) ? SH_SPIN : 0);
+    else
+        m->hdr.flags |= LH | m->hdr.type;
+
     enc1(&pos, end, m->hdr.flags);
 
-    if (unlikely(is_lh(m->hdr.flags))) {
+    if (likely(epoch == ep_data)) {
+        cid_cpy(&m->hdr.dcid, c->dcid);
+        encb(&pos, end, m->hdr.dcid.id, m->hdr.dcid.len);
+    } else {
         m->hdr.vers = c->vers;
         enc4(&pos, end, m->hdr.vers);
         enc_lh_cids(&pos, end, m, c->dcid, c->scid);
@@ -494,10 +487,6 @@ bool enc_pkt(struct q_stream * const s,
 
         len_pos = pos;
         pos += 2;
-
-    } else {
-        cid_cpy(&m->hdr.dcid, c->dcid);
-        encb(&pos, end, m->hdr.dcid.id, m->hdr.dcid.len);
     }
 
     const uint8_t * const pkt_nr_pos = pos;
@@ -951,21 +940,25 @@ which_cipher_ctx_in(struct q_conn * const c,
                     struct pkt_meta * const m,
                     const bool kyph)
 {
-    switch (m->hdr.type) {
-    case LH_INIT:
-    case LH_RTRY:
-        m->pn = &c->pns[pn_init];
-        return &m->pn->early.in;
-    case LH_0RTT:
-        m->pn = &c->pns[pn_data];
-        return &m->pn->data.in_0rtt;
-    case LH_HSHK:
-        m->pn = &c->pns[pn_hshk];
-        return &m->pn->early.in;
-    default:
+    // common case
+    if (likely(m->hdr.type == SH)) {
         m->pn = &c->pns[pn_data];
         return &m->pn->data.in_1rtt[kyph ? is_set(SH_KYPH, m->hdr.flags) : 0];
     }
+
+    if (m->hdr.type == LH_INIT || LH_INIT == LH_RTRY) {
+        m->pn = &c->pns[pn_init];
+        return &m->pn->early.in;
+    }
+
+    if (m->hdr.type == LH_HSHK) {
+        m->pn = &c->pns[pn_hshk];
+        return &m->pn->early.in;
+    }
+
+    // LH_0RTT
+    m->pn = &c->pns[pn_data];
+    return &m->pn->data.in_0rtt;
 }
 
 

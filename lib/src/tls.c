@@ -1762,16 +1762,16 @@ void free_tls_ctx(struct per_engine_data * const ped)
 static inline const struct cipher_ctx * __attribute__((nonnull))
 which_cipher_ctx_out(const struct pkt_meta * const m, const bool kyph)
 {
-    switch (m->hdr.type) {
-    case LH_INIT:
-    case LH_RTRY:
-    case LH_HSHK:
-        return &m->pn->early.out;
-    case LH_0RTT:
-        return &m->pn->data.out_0rtt;
-    default:
+    // common case
+    if (likely(m->hdr.type == SH))
         return &m->pn->data.out_1rtt[kyph ? is_set(SH_KYPH, m->hdr.flags) : 0];
-    }
+
+    if (m->hdr.type == LH_INIT || m->hdr.type == LH_RTRY ||
+        m->hdr.type == LH_HSHK)
+        return &m->pn->early.out;
+
+    // LH_0RTT
+    return &m->pn->data.out_0rtt;
 }
 
 
