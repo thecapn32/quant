@@ -639,7 +639,7 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
                 // this is just way too noisy when fuzzing
                 err_close_return(c, ERR_PV, type,
                                  "got ACK for %s pkt %" PRIu " never sent",
-                                 pn_type_str(pn->type), ack);
+                                 pn_type_str[pn->type], ack);
 #else
                 goto next_ack;
 #endif

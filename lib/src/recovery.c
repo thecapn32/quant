@@ -60,19 +60,11 @@ in_cong_recovery(const struct q_conn * const c, const uint64_t sent_t)
 }
 
 
-static bool __attribute__((nonnull))
-have_keys(struct q_conn * const c, const pn_t t)
+static bool __attribute__((nonnull)) have_1rtt_keys(struct q_conn * const c)
 {
-    const struct pn_space * const pn = &c->pns[t];
-    switch (t) {
-    case pn_init:
-    case pn_hshk:
-        return pn->early.in.aead && pn->early.out.aead;
-    case pn_data:
-        return (pn->data.in_1rtt[0].aead && pn->data.out_1rtt[0].aead) ||
-               (pn->data.in_1rtt[1].aead && pn->data.out_1rtt[1].aead);
-    }
-    die("unhandled pn %s", pn_type_str(t));
+    const struct pn_space * const pn = &c->pns[pn_data];
+    return (pn->data.in_1rtt[0].aead && pn->data.out_1rtt[0].aead) ||
+           (pn->data.in_1rtt[1].aead && pn->data.out_1rtt[1].aead);
 }
 
 
@@ -469,7 +461,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
 
 #ifndef NDEBUG
     if (pos)
-        warn(DBG, "%s %s lost: %s", conn_type(c), pn_type_str(pn->type), tmp);
+        warn(DBG, "%s %s lost: %s", conn_type(c), pn_type_str[pn->type], tmp);
     poison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
 #endif
 
@@ -502,7 +494,7 @@ static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
 
     if (pn->loss_t) {
 #ifdef DEBUG_TIMERS
-        warn(DBG, "%s TT alarm on %s conn %s", pn_type_str(pn->type),
+        warn(DBG, "%s TT alarm on %s conn %s", pn_type_str[pn->type],
              conn_type(c), cid_str(c->scid));
 #endif
         detect_all_lost_pkts(c, true);
@@ -510,7 +502,7 @@ static void __attribute__((nonnull)) on_ld_timeout(struct q_conn * const c)
         return;
     }
 
-    if (have_keys(c, pn_data) == false) {
+    if (have_1rtt_keys(c) == false) {
         // I-D says always 1, but that breaks RTX of Initial+0-RTT
         c->tx_limit = is_clnt(c) && c->try_0rtt ? 2 : 1;
 #ifdef DEBUG_TIMERS

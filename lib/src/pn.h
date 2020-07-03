@@ -64,25 +64,28 @@ struct pn_data {
 typedef enum { pn_init = 0, pn_hshk = 1, pn_data = 2 } pn_t;
 
 
-static const pn_t pn_for_epoch[] = {[ep_init] = pn_init,
-                                    [ep_hshk] = pn_hshk,
-                                    [ep_0rtt] = pn_data,
-                                    [ep_data] = pn_data};
+// g++ unfortunately cannot deal with "non-trivial designated initializers"
+static const pn_t pn_for_epoch[] = {
+#ifndef __cplusplus
+    [ep_init] =
+#endif
+        pn_init,
+#ifndef __cplusplus
+    [ep_0rtt] =
+#endif
+        pn_data,
+#ifndef __cplusplus
+    [ep_hshk] =
+#endif
+        pn_hshk,
+#ifndef __cplusplus
+    [ep_data] =
+#endif
+        pn_data};
 
 
-static inline const char * __attribute__((const)) pn_type_str(const pn_t type)
-{
-    switch (type) { // lgtm [cpp/missing-return]
-    case pn_init:
-        return "Initial";
-    case pn_hshk:
-        return "Handshake";
-    case pn_data:
-        return "Data";
-    default:
-        die("unhandled pn %u", type);
-    }
-}
+static const char * const pn_type_str[] =
+    {[pn_init] = "Initial", [pn_hshk] = "Handshake", [pn_data] = "Data"};
 
 
 struct pn_space {

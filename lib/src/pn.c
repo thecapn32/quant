@@ -130,7 +130,7 @@ void abandon_pn(struct pn_space * const pn)
     assure(pn->type != pn_data, "cannot abandon pn_data");
 
     warn(DBG, "abandoning %s %s processing", conn_type(pn->c),
-         pn_type_str(pn->type));
+         pn_type_str[pn->type]);
 
     struct q_conn * const c = pn->c;
     if (c->pmtud_pkt != UINT16_MAX && c->pmtud_pkt >> 14 == pn->type)
@@ -153,7 +153,7 @@ ack_t needs_ack(const struct pn_space * const pn)
     if (unlikely(pn->imm_ack)) {
 #ifdef DEBUG_EXTRA
         warn(DBG, "%s conn %s: %s imm_ack: forced", conn_type(pn->c),
-             cid_str(pn->c->scid), pn_type_str(pn->type));
+             cid_str(pn->c->scid), pn_type_str[pn->type]);
 #endif
         return imm_ack;
     }
@@ -166,7 +166,7 @@ ack_t needs_ack(const struct pn_space * const pn)
     if (rxed_or_lost == false) {
 #ifdef DEBUG_EXTRA
         warn(DBG, "%s conn %s: %s no_ack: rxed_or_lost == false",
-             conn_type(pn->c), cid_str(pn->c->scid), pn_type_str(pn->type));
+             conn_type(pn->c), cid_str(pn->c->scid), pn_type_str[pn->type]);
 #endif
         return no_ack;
     }
@@ -176,7 +176,7 @@ ack_t needs_ack(const struct pn_space * const pn)
     if (rxed_ack_eliciting == false) {
 #ifdef DEBUG_EXTRA
         warn(DBG, "%s conn %s: %s grat_ack: rxed_ack_eliciting == false",
-             conn_type(pn->c), cid_str(pn->c->scid), pn_type_str(pn->type));
+             conn_type(pn->c), cid_str(pn->c->scid), pn_type_str[pn->type]);
 #endif
         return grat_ack;
     }
@@ -186,7 +186,7 @@ ack_t needs_ack(const struct pn_space * const pn)
     if (in_hshk) {
 #ifdef DEBUG_EXTRA
         warn(DBG, "%s conn %s: %s imm_ack: in_hshk", conn_type(pn->c),
-             cid_str(pn->c->scid), pn_type_str(pn->type));
+             cid_str(pn->c->scid), pn_type_str[pn->type]);
 #endif
         return imm_ack;
     }
@@ -197,7 +197,7 @@ ack_t needs_ack(const struct pn_space * const pn)
     if (std_ack) {
 #ifdef DEBUG_EXTRA
         warn(DBG, "%s conn %s: %s imm_ack: std_ack", conn_type(pn->c),
-             cid_str(pn->c->scid), pn_type_str(pn->type));
+             cid_str(pn->c->scid), pn_type_str[pn->type]);
 #endif
         return imm_ack;
     }
@@ -205,7 +205,7 @@ ack_t needs_ack(const struct pn_space * const pn)
     // otherwise, time to arm the ACK timer
 #ifdef DEBUG_EXTRA
     warn(DBG, "%s conn %s: %s del_ack", conn_type(pn->c), cid_str(pn->c->scid),
-         pn_type_str(pn->type));
+         pn_type_str[pn->type]);
 #endif
     return del_ack;
 }
