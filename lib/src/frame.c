@@ -1444,7 +1444,11 @@ bool dec_frames(struct q_conn * const c,
 
 void enc_padding_frame(struct q_conn_info * const ci,
                        uint8_t ** pos,
-                       const uint8_t * const end,
+                       const uint8_t * const end
+#ifdef NDEBUG
+                       __attribute__((unused))
+#endif
+                       ,
                        struct pkt_meta * const m,
                        const uint16_t len)
 {
