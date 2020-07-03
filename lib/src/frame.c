@@ -1450,7 +1450,7 @@ void enc_padding_frame(struct q_conn_info * const ci,
 {
     if (unlikely(len == 0))
         return;
-    ensure(*pos + len <= end, "buffer overflow w/len %u", len);
+    assure(*pos + len <= end, "buffer overflow w/len %u", len);
     memset(*pos, FRM_PAD, len);
     *pos += len;
     warn(INF, FRAM_OUT "PADDING" NRM " len=%u", len);

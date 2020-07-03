@@ -733,7 +733,7 @@ void on_pkt_acked(struct w_iov * const v, struct pkt_meta * m)
 
     m->acked = true;
 
-    if (has_frm(m->frms, FRM_RTR)) {
+    if (unlikely(has_frm(m->frms, FRM_RTR))) {
         struct cid * const id = cid_by_seq(&c->dcids.ret, m->retire_cid_seq);
         // if it doesn't exist, it's been deleted already by previous ACK
         if (id) {

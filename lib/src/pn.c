@@ -183,7 +183,7 @@ ack_t needs_ack(const struct pn_space * const pn)
 
     // if this is a handshake packet, always include an ACK
     const bool in_hshk = pn->type != pn_data || has_frm(pn->rx_frames, FRM_CRY);
-    if (in_hshk) {
+    if (unlikely(in_hshk)) {
 #ifdef DEBUG_EXTRA
         warn(DBG, "%s conn %s: %s imm_ack: in_hshk", conn_type(pn->c),
              cid_str(pn->c->scid), pn_type_str[pn->type]);

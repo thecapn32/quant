@@ -321,7 +321,8 @@ static bool __attribute__((nonnull)) can_enc(uint8_t ** const pos,
 {
     assure(max_frame_len[type] != UINT8_MAX, "unhandled type 0x%02x", type);
     const bool has_space = *pos + max_frame_len[type] <= end;
-    return (one_per_pkt && has_frm(m->frms, type)) == false && has_space;
+    return (one_per_pkt && unlikely(has_frm(m->frms, type))) == false &&
+           has_space;
 }
 
 
