@@ -58,6 +58,7 @@
 #include "recovery.h"
 #include "stream.h"
 #include "tls.h"
+#include "tree.h"
 
 #ifndef NO_SERVER
 #include "kvec.h"

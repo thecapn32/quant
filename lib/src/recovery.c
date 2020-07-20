@@ -50,6 +50,7 @@
 #include "recovery.h"
 #include "stream.h"
 #include "tls.h"
+#include "tree.h"
 
 
 static inline bool __attribute__((nonnull))

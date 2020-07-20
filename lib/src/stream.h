@@ -36,6 +36,10 @@
 #include "quic.h"
 #include "tls.h"
 
+#ifndef NO_OOO_DATA
+#include "tree.h"
+#endif
+
 #ifdef DEBUG_STREAMS
 #include "cid.h"
 #endif

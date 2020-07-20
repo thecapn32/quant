@@ -110,6 +110,7 @@ static int uecc_rng(uint8_t * dest, unsigned size)
 #include "quic.h"
 #include "stream.h"
 #include "tls.h"
+#include "tree.h"
 
 
 struct tls_ticket {

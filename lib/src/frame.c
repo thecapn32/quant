@@ -56,6 +56,10 @@
 #include "stream.h"
 #include "tls.h"
 
+#ifndef NO_OOO_DATA
+#include "tree.h"
+#endif
+
 
 #ifndef NDEBUG
 #define pcr_str(chlg_resp)                                                     \

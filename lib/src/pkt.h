@@ -37,12 +37,8 @@
 #include "quic.h"
 #include "tls.h"
 
-struct q_conn; // IWYU pragma: no_forward_declare q_conn
-               // IWYU pragma: no_include "conn.h"
-
-struct q_stream; // IWYU pragma: no_forward_declare q_stream
-                 // IWYU pragma: no_include "stream.h"
-
+struct q_conn;
+struct q_stream;
 
 #define MIN_INI_LEN 1200
 #define MAX_UPS 65527

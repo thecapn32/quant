@@ -29,14 +29,11 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <string.h>
-
-#ifndef NO_QLOG
-#include <sys/param.h>
-#endif
 
 #ifndef NO_QLOG
 #include <stdio.h>
+#include <string.h>
+#include <sys/param.h>
 #endif
 
 #include <quant/quant.h>
@@ -49,7 +46,11 @@
 #include "recovery.h"
 #include "tls.h"
 
-struct q_stream; // IWYU pragma: no_forward_declare q_stream
+#ifndef NO_OOO_0RTT
+#include "tree.h"
+#endif
+
+struct q_stream;
 
 
 KHASH_MAP_INIT_INT64(strms_by_id, struct q_stream *)

@@ -36,6 +36,11 @@
 #include "bitset.h"
 #include "cid.h"
 
+struct pkt_meta;
+struct pn_space;
+struct q_conn;
+struct q_stream;
+
 
 #define FRM_PAD 0x00 ///< PADDING
 #define FRM_PNG 0x01 ///< PING
@@ -120,14 +125,6 @@ static const uint8_t max_frame_len[] = {
 
 #define has_frm(frames, type) bit_isset(FRM_MAX, (type), &(frames))
 
-struct cid;      // IWYU pragma: no_forward_declare cid
-struct pkt_meta; // IWYU pragma: no_forward_declare pkt_meta
-struct pn_space; // IWYU pragma: no_forward_declare pn_space
-struct q_conn;   // IWYU pragma: no_forward_declare q_conn
-struct q_stream; // IWYU pragma: no_forward_declare q_stream
-#ifdef NO_QINFO
-struct q_conn_info; // IWYU pragma: no_forward_declare q_conn_info
-#endif
 
 typedef enum { sdt_inv, sdt_seq, sdt_ooo, sdt_dup, sdt_ign } strm_data_type_t;
 

@@ -31,9 +31,12 @@
 #include <quant/quant.h>
 
 #include "cid.h"
-#include "conn.h"
 #include "quic.h"
 #include "tls.h"
+
+#ifndef NO_SRT_MATCHING
+#include "conn.h"
+#endif
 
 
 char __cid_str[CID_STR_LEN];

@@ -56,7 +56,10 @@
 #include "recovery.h"
 #include "stream.h"
 #include "tls.h"
+
+#ifndef NO_OOO_0RTT
 #include "tree.h"
+#endif
 
 
 char __srt_str[hex_str_len(SRT_LEN)];

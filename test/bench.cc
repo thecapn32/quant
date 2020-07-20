@@ -36,14 +36,12 @@
 extern "C" {
 #endif
 
-#include <picotls/openssl.h> // IWYU pragma: keep
-
 #include "cid.h"
-#include "conn.h" // IWYU pragma: keep
+#include "conn.h"
 #include "pkt.h"
-#include "pn.h" // IWYU pragma: keep
+#include "pn.h"
 #include "quic.h"
-#include "tls.h" // IWYU pragma: keep
+#include "tls.h"
 
 #ifdef __cplusplus
 }

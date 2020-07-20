@@ -48,8 +48,8 @@
 
 #include <quant/quant.h>
 
-struct q_conn;   // IWYU pragma: no_forward_declare q_conn
-struct q_stream; // IWYU pragma: no_forward_declare q_stream
+struct q_conn;
+struct q_stream;
 
 
 #ifndef NDEBUG

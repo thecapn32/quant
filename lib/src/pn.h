@@ -35,9 +35,8 @@
 #include "frame.h"
 #include "tls.h"
 
-struct pkt_meta; // IWYU pragma: no_forward_declare pkt_meta
-struct q_conn;   // IWYU pragma: no_forward_declare q_conn
-// IWYU pragma: no_include "quic.h"
+struct pkt_meta;
+struct q_conn;
 
 
 KHASH_MAP_INIT_INT64(pm_by_nr, struct pkt_meta *)
