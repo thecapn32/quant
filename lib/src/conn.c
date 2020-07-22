@@ -623,6 +623,7 @@ static bool __attribute__((nonnull)) tx_stream(struct q_stream * const s)
             continue;
         if (++encoded == BURST_LEN) {
             warn(DBG, "tx pause for rx after %" PRIu32 " pkts", encoded);
+            c->in_tx_pause = true;
             break;
         }
 
@@ -630,7 +631,6 @@ static bool __attribute__((nonnull)) tx_stream(struct q_stream * const s)
 #ifdef DEBUG_STREAMS
             warn(INF, "tx limit %" PRIu32 " reached", c->tx_limit);
 #endif
-            c->needs_tx = false;
             break;
         }
 
@@ -665,6 +665,7 @@ void tx(struct q_conn * const c)
     warn(DBG, "tx timeout on %s conn %s, lim %u", conn_type(c),
          cid_str(c->scid), c->tx_limit);
 #endif
+    c->in_tx_pause = false;
 
     if (unlikely(c->state == conn_drng))
         return;
@@ -726,6 +727,7 @@ done:;
         // we need to rearm LD alarm, do it here instead of in on_pkt_sent()
         set_ld_timer(c);
     log_cc(c);
+    c->needs_tx = c->in_tx_pause;
     c->tx_limit = 0;
 }
 
