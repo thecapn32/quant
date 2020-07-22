@@ -87,6 +87,9 @@ struct q_conn_sl c_embr = sl_head_initializer(c_embr);
 khash_t(conns_by_srt) conns_by_srt = {0};
 #endif
 
+// force ACK TX and force TX pause for RX after this many packets in burst
+#define BURST_LEN 16
+
 
 static inline __attribute__((const)) bool is_vneg_vers(const uint32_t vers)
 {
@@ -618,12 +621,16 @@ static bool __attribute__((nonnull)) tx_stream(struct q_stream * const s)
         if (unlikely(enc_pkt(s, do_rtx, true, c->tx_limit > 0, false, v, m) ==
                      false))
             continue;
-        encoded++;
+        if (++encoded == BURST_LEN) {
+            warn(DBG, "tx pause for rx after %" PRIu32 " pkts", encoded);
+            break;
+        }
 
         if (unlikely(c->tx_limit && encoded == c->tx_limit)) {
 #ifdef DEBUG_STREAMS
             warn(INF, "tx limit %" PRIu32 " reached", c->tx_limit);
 #endif
+            c->needs_tx = false;
             break;
         }
 
@@ -719,7 +726,6 @@ done:;
         // we need to rearm LD alarm, do it here instead of in on_pkt_sent()
         set_ld_timer(c);
     log_cc(c);
-    c->needs_tx = false;
     c->tx_limit = 0;
 }
 
@@ -1142,18 +1148,19 @@ done:
     if (unlikely(ok == false))
         return false;
 
-#ifndef NO_ECN
     if (likely(m->hdr.nr != UINT_T_MAX)) {
-        // update ECN info
-        m->pn->ecn_rxed[v->flags & ECN_MASK]++;
         m->pn->pkts_rxed_since_last_ack_tx++;
-
-        // TODO: if we do this, it needs to move outside of #ifndef NO_ECN
-        // if (m->pn == &c->pns[pn_data] &&
-        //     m->pn->pkts_rxed_since_last_ack_tx >= 16)
-        //     tx_ack(c, ep_data, false);
-    }
+#ifndef NO_ECN
+        m->pn->ecn_rxed[v->flags & ECN_MASK]++;
 #endif
+
+        if (m->pn == &c->pns[pn_data] &&
+            m->pn->pkts_rxed_since_last_ack_tx >= BURST_LEN) {
+            warn(DBG, "force ACK TX after %" PRIu " pkts",
+                 m->pn->pkts_rxed_since_last_ack_tx);
+            tx_ack(c, ep_data, false);
+        }
+    }
 
 #ifndef NO_QLOG
     // if pkt has STREAM or CRYPTO frame but no strm pointer, it's a dup
