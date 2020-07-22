@@ -27,6 +27,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <time.h>
 
 #include <timeout.h>
 
@@ -76,7 +77,7 @@ void __attribute__((nonnull(1))) loop_run(struct w_engine * const w,
     break_loop = false;
 
     while (likely(break_loop == false)) {
-        timeouts_update(ped(w)->wheel, w_now());
+        timeouts_update(ped(w)->wheel, w_now(CLOCK_MONOTONIC));
 
         struct timeout * t;
         while ((t = timeouts_get(ped(w)->wheel)) != 0)
@@ -96,7 +97,7 @@ void __attribute__((nonnull(1))) loop_run(struct w_engine * const w,
             continue;
 
         // this actually matters
-        timeouts_update(ped(w)->wheel, w_now());
+        timeouts_update(ped(w)->wheel, w_now(CLOCK_MONOTONIC));
 
         struct w_sock * ws;
         sl_foreach (ws, &sl, next)

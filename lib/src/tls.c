@@ -32,6 +32,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <time.h>
 #include <unistd.h>
 
 #ifndef NO_TLS_LOG
@@ -1603,7 +1604,7 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t * const self
 
 static uint64_t get_time(ptls_get_time_t * self __attribute__((unused)))
 {
-    return NS_TO_MS(w_now());
+    return NS_TO_MS(w_now(CLOCK_REALTIME));
 }
 
 

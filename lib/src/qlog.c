@@ -33,6 +33,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include <quant/quant.h>
 
@@ -76,7 +77,7 @@ qlog_pkt_type_str(const uint8_t flags, const void * const vers)
 
 static void qlog_common(struct q_conn * const c)
 {
-    const uint64_t now = w_now();
+    const uint64_t now = w_now(CLOCK_REALTIME);
     fprintf(c->qlog, "%s[%" PRIu64, likely(c->qlog_last_t) ? "," : "",
             NS_TO_US(now - c->qlog_last_t));
     c->qlog_last_t = now;
@@ -117,7 +118,7 @@ void qlog_init(struct q_conn * const c)
             "fields\":[\"delta_time\",\"category\","
             "\"event\",\"trigger\",\"data\"],\"events\":[",
             quant_name, quant_version, is_clnt(c) ? "client" : "server",
-            hex2str(c->dcid->id, c->dcid->len,
+            hex2str(c->odcid.id, c->odcid.len,
                     (char[hex_str_len(CID_LEN_MAX)]){""},
                     hex_str_len(CID_LEN_MAX)));
 }

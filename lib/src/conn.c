@@ -33,6 +33,7 @@
 #include <string.h>
 #include <sys/param.h>
 #include <sys/socket.h>
+#include <time.h>
 
 #ifndef NO_ERR_REASONS
 #include <stdarg.h>
@@ -1198,7 +1199,7 @@ static void __attribute__((nonnull))
         v->flags = xv->flags;
         v->ttl = xv->ttl;
         v->len = xv->len; // this is just so that log_pkt can show the rx len
-        m->t = w_now();
+        m->t = w_now(CLOCK_MONOTONIC);
 
         bool pkt_valid = false;
         const bool is_clnt = w_connected(ws);
