@@ -55,10 +55,6 @@
 #include <quant/quant.h>
 
 
-#define timespec_to_double(diff)                                               \
-    ((double)(diff).tv_sec + (double)(diff).tv_nsec / NS_PER_S)
-
-
 #define bps(bytes, secs)                                                       \
     __extension__({                                                            \
         static char _str[32];                                                  \
@@ -109,8 +105,8 @@ struct stream_entry {
     struct conn_cache_entry * cce;
     struct q_stream * s;
     char * url;
-    struct timespec req_t;
-    struct timespec rep_t;
+    uint64_t req_t;
+    uint64_t rep_t;
     struct w_iov_sq req;
     struct w_iov_sq rep;
 };
@@ -305,7 +301,7 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
 
     const bool opened_new = cce == 0;
     if (cce == 0) {
-        clock_gettime(CLOCK_MONOTONIC, &se->req_t);
+        se->req_t = w_now(CLOCK_MONOTONIC_RAW);
         // no, open a new connection
         struct q_conn * const c = q_connect(
             w, peer->ai_addr, dest, &se->req, &se->s, true,
@@ -340,7 +336,7 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
     if (opened_new == false) {
         se->s = q_rsv_stream(cce->c, true);
         if (se->s) {
-            clock_gettime(CLOCK_MONOTONIC, &se->req_t);
+            se->req_t = w_now(CLOCK_MONOTONIC_RAW);
             q_write(se->s, &se->req, true);
         }
     }
@@ -575,7 +571,7 @@ int main(int argc, char * argv[])
                 const bool is_closed = q_peer_closed_stream(se->s);
                 all_closed &= is_closed;
                 if (is_closed)
-                    clock_gettime(CLOCK_MONOTONIC, &se->rep_t);
+                    se->rep_t = w_now(CLOCK_MONOTONIC_RAW);
             }
 
             if (rxed_new == false && all_closed == false) {
@@ -597,9 +593,7 @@ int main(int argc, char * argv[])
             else
                 ret |= w_iov_sq_cnt(&se->rep) == 0;
 
-            struct timespec diff;
-            timespec_sub(&se->rep_t, &se->req_t, &diff);
-            const double elapsed = timespec_to_double(diff);
+            const double elapsed = (double)(se->rep_t - se->req_t) / NS_PER_S;
             const uint_t rep_len = w_iov_sq_len(&se->rep);
             sum_len += (double)rep_len;
             sum_elapsed += elapsed;
