@@ -549,7 +549,7 @@ static bool __attribute__((nonnull)) tx_stream(struct q_stream * const s)
         (sq_empty(&s->out) == false && out_fully_acked(s) == false);
 
 #ifdef DEBUG_STREAMS
-    warn(ERR,
+    warn(DBG,
          "%s strm id=" FMT_SID ", cnt=%" PRIu
          ", has_data=%u, needs_ctrl=%u, blocked=%u, lost_cnt=%" PRIu
          ", fully_acked=%u, "
@@ -563,7 +563,7 @@ static bool __attribute__((nonnull)) tx_stream(struct q_stream * const s)
         // unless for 0-RTT, is this a regular stream during conn open?
         unlikely(c->try_0rtt == false && s->id >= 0 && c->state < conn_estb)) {
 #ifdef DEBUG_STREAMS
-        warn(ERR, "skip " FMT_SID, s->id);
+        warn(DBG, "skip " FMT_SID, s->id);
 #endif
         return true;
     }
@@ -1206,7 +1206,7 @@ static void __attribute__((nonnull))
         v->flags = xv->flags;
         v->ttl = xv->ttl;
         v->len = xv->len; // this is just so that log_pkt can show the rx len
-        m->t = w_now(CLOCK_MONOTONIC);
+        m->t = w_now(CLOCK_MONOTONIC_RAW);
 
         bool pkt_valid = false;
         const bool is_clnt = w_connected(ws);

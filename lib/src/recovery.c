@@ -162,7 +162,7 @@ void set_ld_timer(struct q_conn * const c)
 
     // see SetLossDetectionTimer() pseudo code
 
-    const uint64_t now = w_now(CLOCK_MONOTONIC);
+    const uint64_t now = w_now(CLOCK_MONOTONIC_RAW);
     const struct pn_space * const pn = earliest_pn(c, true);
     if (pn->loss_t) {
         c->rec.ld_alarm_val = pn->loss_t;
@@ -216,7 +216,7 @@ void congestion_event(struct q_conn * const c, const uint64_t sent_t)
     if (in_cong_recovery(c, sent_t))
         return;
 
-    c->rec.rec_start_t = w_now(CLOCK_MONOTONIC);
+    c->rec.rec_start_t = w_now(CLOCK_MONOTONIC_RAW);
     c->rec.cur.cwnd /= kLossReductionDivisor;
     c->rec.cur.ssthresh = c->rec.cur.cwnd =
         MAX(c->rec.cur.cwnd, kMinimumWindow(c->rec.max_ups));
@@ -383,7 +383,7 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
             NS_PER_US * 9 * MAX(c->rec.cur.latest_rtt, c->rec.cur.srtt) / 8);
 
     // Packets sent before this time are deemed lost.
-    const uint64_t lost_send_t = w_now(CLOCK_MONOTONIC) - loss_del;
+    const uint64_t lost_send_t = w_now(CLOCK_MONOTONIC_RAW) - loss_del;
 
     struct diet lost = diet_initializer(lost);
     uint_t lg_lost = UINT_T_MAX;
@@ -564,7 +564,7 @@ void on_pkt_sent(struct pkt_meta * const m)
 {
     // see OnPacketSent() pseudo code
 
-    const uint64_t now = w_now(CLOCK_MONOTONIC);
+    const uint64_t now = w_now(CLOCK_MONOTONIC_RAW);
     m->txed = true;
     pm_by_nr_ins(&m->pn->sent_pkts, m);
     // nr is set in enc_pkt()
@@ -635,7 +635,7 @@ void on_ack_received_1(struct pkt_meta * const lg_ack, const uint_t ack_del)
 
     if (is_ack_eliciting(&pn->tx_frames)) {
         c->rec.cur.latest_rtt =
-            (uint_t)NS_TO_US(w_now(CLOCK_MONOTONIC) - lg_ack->t);
+            (uint_t)NS_TO_US(w_now(CLOCK_MONOTONIC_RAW) - lg_ack->t);
         update_rtt(c, likely(pn->type == pn_data) ? ack_del : 0);
     }
 
