@@ -109,18 +109,17 @@ function prep {
         ret="X"
     elif grep -q -E 'hexdump|STATELESS|_close_frame.*0x1c=quic err=0x[^0]' "$log_strip"; then
         ret="x"
-    else
-        echo "$log"
-        return
     fi
 
-    local ret_base="$1.ret"
-    >&2 echo -n "($ret in $log) "
-    if [ ! -e "$ret_base.fail" ] || [ "$(cat "$ret_base.fail")" = "x" ]; then
-        echo $ret > "$ret_base.fail"
+    if [ -n "$ret" ]; then
+        local ret_base="$1.ret"
+        >&2 echo -n "($ret in $log) "
+        if [ ! -e "$ret_base.fail" ] || [ "$(cat "$ret_base.fail")" = "x" ]; then
+            echo $ret > "$ret_base.fail"
+        fi
     fi
+
     echo "$log"
-    rm -f "$log_strip"
 }
 
 
