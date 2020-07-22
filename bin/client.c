@@ -593,7 +593,10 @@ int main(int argc, char * argv[])
             else
                 ret |= w_iov_sq_cnt(&se->rep) == 0;
 
-            const double elapsed = (double)(se->rep_t - se->req_t) / NS_PER_S;
+            const double elapsed =
+                se->rep_t >= se->req_t
+                    ? (double)(se->rep_t - se->req_t) / NS_PER_S
+                    : 0;
             const uint_t rep_len = w_iov_sq_len(&se->rep);
             sum_len += (double)rep_len;
             sum_elapsed += elapsed;
