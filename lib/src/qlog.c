@@ -111,13 +111,14 @@ void qlog_init(struct q_conn * const c)
     }
 
     fprintf(c->qlog,
-            "{\"qlog_version\":\"draft-01\",\"title\":\"%s %s "
+            "{\"qlog_version\":\"draft-01\",\"title\":\"%s %s/%s "
             "qlog\",\"traces\":[{\"vantage_point\":{\"type\":\"%s\"},"
             "\"configuration\":{\"time_units\":\"us\"},\"common_fields\":{"
             "\"group_id\":\"%s\",\"protocol_type\":\"QUIC_HTTP3\"},\"event_"
             "fields\":[\"delta_time\",\"category\","
             "\"event\",\"trigger\",\"data\"],\"events\":[",
-            quant_name, quant_version, is_clnt(c) ? "client" : "server",
+            quant_name, quant_version, QUANT_COMMIT_HASH_ABBREV_STR,
+            is_clnt(c) ? "client" : "server",
             hex2str(c->odcid.id, c->odcid.len,
                     (char[hex_str_len(CID_LEN_MAX)]){""},
                     hex_str_len(CID_LEN_MAX)));
