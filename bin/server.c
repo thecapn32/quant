@@ -27,7 +27,6 @@
 
 #include <errno.h>
 #include <fcntl.h>
-#include <inttypes.h>
 #include <libgen.h>
 #include <net/if.h>
 #include <stdbool.h>
@@ -171,12 +170,12 @@ static int serve_cb(http_parser * parser, const char * at, size_t len)
             &at[u.field_data[UF_PATH].off], u.field_data[UF_PATH].len);
 
     if ((u.field_set & (1 << UF_QUERY)))
-        warn(ERR, "%" PRIu64 " ignoring query: %.*s", w_now(),
-             u.field_data[UF_QUERY].len, &at[u.field_data[UF_QUERY].off]);
+        warn(ERR, "ignoring query: %.*s", u.field_data[UF_QUERY].len,
+             &at[u.field_data[UF_QUERY].off]);
 
     if ((u.field_set & (1 << UF_FRAGMENT)))
-        warn(ERR, "%" PRIu64 " ignoring fragment: %.*s", w_now(),
-             u.field_data[UF_FRAGMENT].len, &at[u.field_data[UF_FRAGMENT].off]);
+        warn(ERR, "ignoring fragment: %.*s", u.field_data[UF_FRAGMENT].len,
+             &at[u.field_data[UF_FRAGMENT].off]);
 
     // hacky way to prevent directory traversals
     if (strstr(path, "..") || strstr(path, "//"))
