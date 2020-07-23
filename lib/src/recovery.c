@@ -401,6 +401,8 @@ detect_lost_pkts(struct pn_space * const pn, const bool do_cc)
             struct pkt_meta * m;
             find_sent_pkt(pn, ua, &m);
 
+            assure(m, "%s ACKed pkt %" PRIu " not found in sent_pkts",
+                   conn_type(c), ua);
             assure(m->acked == false, "%s ACKed %s pkt %" PRIu " in sent_pkts",
                    conn_type(c), pkt_type_str(m->hdr.flags, &m->hdr.vers),
                    m->hdr.nr);

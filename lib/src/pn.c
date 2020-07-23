@@ -67,8 +67,10 @@ struct w_iov * find_sent_pkt(const struct pn_space * const pn,
                              struct pkt_meta ** const m)
 {
     const khiter_t k = kh_get(pm_by_nr, &pn->sent_pkts, nr);
-    if (unlikely(k == kh_end(&pn->sent_pkts)))
+    if (unlikely(k == kh_end(&pn->sent_pkts))) {
+        *m = 0;
         return 0;
+    }
     *m = kh_val(&pn->sent_pkts, k);
     return w_iov(pn->c->w, pm_idx(pn->c->w, *m));
 }
