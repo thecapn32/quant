@@ -190,6 +190,7 @@ void reset_stream(struct q_stream * const s, const bool forget)
 
     // reset stream offsets and other data
     s->lost_cnt = s->in_data_off = s->in_data = s->out_data = 0;
+    s->out_last = 0;
 
     if (forget) {
         s->out_una = 0;

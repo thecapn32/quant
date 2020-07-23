@@ -352,6 +352,7 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
     m->lost = true;
     if (m->strm && !m->has_rtx) {
         m->strm->lost_cnt++;
+        m->strm->out_last = 0;
         assure(m->strm->lost_cnt <= w_iov_sq_cnt(&m->strm->out),
                "strm " FMT_SID " cnt %" PRIu " < lost %" PRIu, m->strm->id,
                w_iov_sq_cnt(&m->strm->out), m->strm->lost_cnt);

@@ -575,7 +575,9 @@ static bool __attribute__((nonnull)) tx_stream(struct q_stream * const s)
 #endif
 
     uint32_t encoded = 0;
-    struct w_iov * v = s->out_una;
+    struct w_iov * v = (likely(s->id >= 0) && s->out_last)
+                           ? sq_next(s->out_last, next)
+                           : s->out_una;
     sq_foreach_from (v, &s->out, next) {
         struct pkt_meta * const m = &meta(v);
         if (unlikely(has_wnd(c, v->len) == false && c->tx_limit == 0)) {
@@ -621,6 +623,7 @@ static bool __attribute__((nonnull)) tx_stream(struct q_stream * const s)
         if (unlikely(enc_pkt(s, do_rtx, true, c->tx_limit > 0, false, v, m) ==
                      false))
             continue;
+        s->out_last = v;
         if (++encoded == BURST_LEN) {
             warn(DBG, "tx pause for rx after %" PRIu32 " pkts", encoded);
             c->in_tx_pause = true;

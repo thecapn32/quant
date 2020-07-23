@@ -85,8 +85,9 @@ struct q_stream {
 
     struct q_conn * c; ///< Connection this stream is a part of.
 
-    struct w_iov_sq out;    ///< Tail queue containing outbound data.
-    struct w_iov * out_una; ///< Lowest un-ACK'ed data chunk.
+    struct w_iov_sq out;     ///< Tail queue containing outbound data.
+    struct w_iov * out_una;  ///< Lowest un-ACK'ed data chunk.
+    struct w_iov * out_last; ///< Highest (last sent) un-ACK'ed data chunk.
 
     struct w_iov_sq in; ///< Tail queue containing inbound data.
 #ifndef NO_OOO_DATA
