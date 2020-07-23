@@ -25,11 +25,17 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <inttypes.h>
+#include <stdbool.h>
+#include <stdint.h>
+
 #include <quant/quant.h>
 
 #include "bitset.h"
 #include "diet.h"
 #include "tree.h"
+
+static uint64_t t = 0;
 
 
 static void trace(struct diet * const d,
@@ -50,13 +56,14 @@ static void trace(struct diet * const d,
 )
 {
     char str[8192];
-    diet_to_str(str, sizeof(str), d);
+    diet_to_str(str, sizeof(str), d, true);
 #ifndef NDEBUG
     if (lo == hi)
-        warn(DBG, "cnt %" PRIu ", %s %" PRIu ": %s", diet_cnt(d), op, lo, str);
+        warn(DBG, "t %" PRIu64 ", cnt %" PRIu ", %s %" PRIu ": %s", t,
+             diet_cnt(d), op, lo, str);
     else
-        warn(DBG, "cnt %" PRIu ", %s %" PRIu "-%" PRIu ": %s", diet_cnt(d), op,
-             lo, hi, str);
+        warn(DBG, "t %" PRIu64 ", cnt %" PRIu ", %s %" PRIu "-%" PRIu ": %s", t,
+             diet_cnt(d), op, lo, hi, str);
 #endif
 
     uint_t c = 0;
@@ -98,7 +105,7 @@ int main()
         const uint_t x = w_rand_uniform32(N);
         if (bit_isset(N, x, &v) == 0) {
             bit_set(N, x, &v);
-            diet_insert(&d, x, 0);
+            diet_insert(&d, x, ++t);
             trace(&d, x, x, "ins");
             chk(&d);
         }

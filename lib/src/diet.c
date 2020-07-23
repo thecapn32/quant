@@ -25,8 +25,10 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/param.h>
 
 #include <quant/quant.h>
 
@@ -124,57 +126,61 @@ diet_insert(struct diet * const d, const uint_t n, const uint64_t t)
     diet_find(d, n);
 
     if (n >= splay_root(d)->lo && n <= splay_root(d)->hi) {
-        splay_root(d)->t = t;
+        splay_root(d)->t = MAX(splay_root(d)->t, t);
         return splay_root(d);
     }
 
     if (n < splay_root(d)->lo) {
         struct ival * const max = find_max(splay_left(splay_root(d), node));
 
-        if (n + 1 == splay_root(d)->lo)
+        if (n + 1 == splay_root(d)->lo) {
             // we can expand the root to include n
             splay_root(d)->lo--;
-        else if (max && max->hi + 1 == n)
+            splay_root(d)->t = MAX(splay_root(d)->t, t);
+        } else if (max && max->hi + 1 == n) {
             // we can expand the max child to include n
             max->hi++;
-        else
+            max->t = MAX(max->t, t);
+        } else
             goto new_ival;
 
         // check if we can merge the new root with its max left child
         if (max && max->hi == splay_root(d)->lo - 1) {
             splay_right(max, node) = splay_right(splay_root(d), node);
             max->hi = splay_root(d)->hi;
+            max->t = MAX(max->t, t);
             struct ival * const old_root = splay_root(d);
             splay_root(d) = splay_left(splay_root(d), node);
             free(old_root);
             splay_count(d)--;
         }
-        splay_root(d)->t = t;
         return splay_root(d);
     }
 
     if (n > splay_root(d)->hi) {
         struct ival * const min = find_min(splay_right(splay_root(d), node));
 
-        if (n == splay_root(d)->hi + 1)
+        if (n == splay_root(d)->hi + 1) {
             // we can expand the root to include n
             splay_root(d)->hi++;
-        else if (min && min->lo - 1 == n)
+            splay_root(d)->t = MAX(splay_root(d)->t, t);
+        } else if (min && min->lo - 1 == n) {
             // we can expand the min child to include n
             min->lo--;
-        else
+            min->t = MAX(min->t, t);
+        } else
             goto new_ival;
 
         // check if we can merge the new root with its min right child
         if (min && min->lo == splay_root(d)->hi + 1) {
             splay_left(min, node) = splay_left(splay_root(d), node);
             min->lo = splay_root(d)->lo;
+            min->t = MAX(min->t, t);
             struct ival * const old_root = splay_root(d);
             splay_root(d) = splay_right(splay_root(d), node);
             free(old_root);
             splay_count(d)--;
         }
-        splay_root(d)->t = t;
         return splay_root(d);
     }
 
@@ -314,7 +320,10 @@ void diet_free(struct diet * const d)
 }
 
 
-size_t diet_to_str(char * const str, const size_t len, struct diet * const d)
+size_t diet_to_str(char * const str,
+                   const size_t len,
+                   struct diet * const d,
+                   const bool print_t)
 {
     struct ival * i = 0;
     size_t pos = 0;
@@ -323,6 +332,9 @@ size_t diet_to_str(char * const str, const size_t len, struct diet * const d)
         pos += (size_t)snprintf(&str[pos], len - pos, "%" PRIu, i->lo);
         if (i->lo != i->hi)
             pos += (size_t)snprintf(&str[pos], len - pos, "-%" PRIu, i->hi);
+        if (print_t)
+            pos +=
+                (size_t)snprintf(&str[pos], len - pos, "(%" PRIu64 ")", i->t);
         pos += (size_t)snprintf(&str[pos], len - pos, ", ");
         if (pos >= len)
             break;

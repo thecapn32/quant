@@ -66,8 +66,8 @@ struct ival {
 static inline int __attribute__((nonnull, no_instrument_function))
 ival_cmp(const struct ival * const a, const struct ival * const b)
 {
-    if ((a->lo >= b->lo && a->lo <= b->hi) ||
-        (b->lo >= a->lo && b->lo <= a->hi))
+    if ((a->lo >= b->lo && a->hi <= b->hi) ||
+        (b->lo >= a->lo && b->hi <= a->hi))
         return 0;
     return (a->lo > b->lo) - (a->lo < b->lo);
 }
@@ -101,9 +101,10 @@ diet_remove_ival(struct diet * const d, const struct ival * const i);
 
 extern void __attribute__((nonnull)) diet_free(struct diet * const d);
 
-extern size_t __attribute__((nonnull))
-diet_to_str(char * const str, const size_t len, struct diet * const d);
-
+extern size_t __attribute__((nonnull)) diet_to_str(char * const str,
+                                                   const size_t len,
+                                                   struct diet * const d,
+                                                   const bool print_t);
 
 static inline struct ival * __attribute__((nonnull, no_instrument_function))
 diet_max_ival(struct diet * const d)
