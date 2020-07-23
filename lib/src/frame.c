@@ -1170,7 +1170,7 @@ dec_retire_cid_frame(const uint8_t ** pos,
     uint_t seq = 0;
     decv_chk(&seq, pos, end, c, FRM_RTR);
 
-    warn(ERR /*INF*/, FRAM_IN "RETIRE_CONNECTION_ID" NRM " seq=%" PRIu, seq);
+    warn(INF, FRAM_IN "RETIRE_CONNECTION_ID" NRM " seq=%" PRIu, seq);
 
 #ifndef NO_MIGRATION
     struct cid * const scid = cid_by_seq(&c->scids.act, seq);
