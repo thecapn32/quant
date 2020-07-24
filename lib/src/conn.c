@@ -1158,13 +1158,6 @@ done:
 #ifndef NO_ECN
         m->pn->ecn_rxed[v->flags & ECN_MASK]++;
 #endif
-
-        if (m->pn == &c->pns[pn_data] &&
-            m->pn->pkts_rxed_since_last_ack_tx >= BURST_LEN) {
-            warn(DBG, "force ACK TX after %" PRIu " pkts",
-                 m->pn->pkts_rxed_since_last_ack_tx);
-            tx_ack(c, ep_data, false);
-        }
     }
 
 #ifndef NO_QLOG
@@ -1501,6 +1494,13 @@ static void __attribute__((nonnull))
             if (unlikely(!c->had_rx)) {
                 c->had_rx = true;
                 sl_insert_head(crx, c, node_rx_int);
+            }
+
+            if (m->pn == &c->pns[pn_data] &&
+                m->pn->pkts_rxed_since_last_ack_tx >= BURST_LEN) {
+                warn(DBG, "force ACK TX after %" PRIu " pkts",
+                     m->pn->pkts_rxed_since_last_ack_tx);
+                tx_ack(c, ep_data, false);
             }
         }
 
