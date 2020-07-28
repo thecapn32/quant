@@ -323,9 +323,6 @@ bool decv(uint64_t * const val,
     case 0xc0:
         if (unlikely(*pos + 8 > end))
             return false;
-#if !HAVE_64BIT
-        return false;
-#else
         *val =
             ((uint64_t)(*(*pos + 0) & 0x3f) << 56) +
             ((uint64_t)(*(*pos + 1)) << 48) + ((uint64_t)(*(*pos + 1)) << 48) +
@@ -334,7 +331,7 @@ bool decv(uint64_t * const val,
             ((uint64_t)(*(*pos + 6)) << 8) + ((uint64_t)(*(*pos + 7)) << 0);
         *pos += 8;
         return true;
-#endif
+
     case 0x80:
         if (unlikely(*pos + 4 > end))
             return false;
