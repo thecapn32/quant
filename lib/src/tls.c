@@ -407,7 +407,7 @@ dectp(uint_t * const val, const uint8_t ** pos, const uint8_t * const end)
 #define dec_chk(op, ...)                                                       \
     do {                                                                       \
         if (unlikely(dec##op(__VA_ARGS__) == false))                           \
-            err_close_return(c, ERR_TP, FRM_CRY, "tp dec err");                \
+            err_close_return(c, ERR_TP, FRM_CRY, "tp dec" #op " err");         \
     } while (0)
 
 
@@ -634,13 +634,16 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             pa->cid.has_srt = true;
 #endif
             decb(srt, &pos, e, SRT_LEN);
+            if (c->tp_mine.disable_active_migration == false) {
 #ifndef NO_SRT_MATCHING
-            struct cid * const dcid =
+                struct cid * const dcid =
 #endif
-                cid_ins(&c->dcids, &pa->cid);
+                    cid_ins(&c->dcids, &pa->cid);
 #ifndef NO_SRT_MATCHING
-            conns_by_srt_ins(c, dcid->srt);
+                conns_by_srt_ins(c, dcid->srt);
 #endif
+            }
+
             warn(INF,
                  "\tpreferred_address = IPv4=%s:%u IPv6=[%s]:%u cid=%s srt=%s",
                  w_ntop(&pa4->addr, ip_tmp), bswap16(pa4->port),
