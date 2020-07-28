@@ -36,8 +36,6 @@
 
 int main(void)
 {
-    puts("TODO: figure out crash without this puts");
-
     // let's gather some entropy and seed the RNG
     random_init(esp_clk_slowclk_cal_get());
 
