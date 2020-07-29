@@ -28,7 +28,6 @@
 #ifndef NO_QLOG
 
 #include <errno.h>
-#include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -78,8 +77,8 @@ qlog_pkt_type_str(const uint8_t flags, const void * const vers)
 static void qlog_common(struct q_conn * const c)
 {
     const uint64_t now = w_now(CLOCK_REALTIME);
-    fprintf(c->qlog, "%s[%" PRIu64, likely(c->qlog_last_t) ? "," : "",
-            NS_TO_US(now - c->qlog_last_t));
+    fprintf(c->qlog, "%s[%" PRIu, likely(c->qlog_last_t) ? "," : "",
+            (uint_t)NS_TO_US(now - c->qlog_last_t));
     c->qlog_last_t = now;
 }
 
@@ -196,16 +195,17 @@ void qlog_transport(const qlog_pkt_evt_t evt,
 
         // prev_frame =
         fprintf(c->qlog,
-                "%s{\"frame_type\":\"ack\",\"ack_delay\":%" PRIu64
+                "%s{\"frame_type\":\"ack\",\"ack_delay\":%" PRIu
                 ",\"acked_ranges\":[",
-                prev_frame ? "," : "", ack_delay);
+                prev_frame ? "," : "", (uint_t)ack_delay);
 
         // this is a similar loop as in dec_ack_frame() - keep changes in sync
         for (uint64_t n = ack_rng_cnt + 1; n > 0; n--) {
             uint64_t ack_rng = 0;
             decv(&ack_rng, &pos, end);
-            fprintf(c->qlog, "%s[%" PRIu64 ",%" PRIu64 "]",
-                    (n <= ack_rng_cnt ? "," : ""), lg_ack - ack_rng, lg_ack);
+            fprintf(c->qlog, "%s[%" PRIu ",%" PRIu "]",
+                    (n <= ack_rng_cnt ? "," : ""), (uint_t)lg_ack - ack_rng,
+                    (uint_t)lg_ack);
             if (n > 1) {
                 uint64_t gap = 0;
                 decv(&gap, &pos, end);

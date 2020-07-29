@@ -25,7 +25,6 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <inttypes.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -474,11 +473,11 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             uint64_t unknown_len;
             dec_chk(v, &unknown_len, &pos, end);
             warn(WRN,
-                 "\t" BLD "%s tp" NRM " (0x%" PRIx64 " w/len %" PRIu64 ") = %s",
+                 "\t" BLD "%s tp" NRM " (0x%" PRIx " w/len %" PRIu ") = %s",
                  is_grease_tp(tp)
                      ? YEL "private"
                      : (tp == TP_QR ? RED "quantum-ready" : RED "unknown"),
-                 tp, unknown_len,
+                 (uint_t)tp, (uint_t)unknown_len,
                  hex2str(pos, unknown_len, (char[16]){""}, 16));
             pos += unknown_len;
             continue;
@@ -596,8 +595,8 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             uint8_t srt[SRT_LEN];
 #endif
             if (l != SRT_LEN)
-                err_close_return(c, ERR_TP, FRM_CRY, "illegal srt len %" PRIu64,
-                                 l);
+                err_close_return(c, ERR_TP, FRM_CRY, "illegal srt len %" PRIu,
+                                 (uint_t)l);
             decb(srt, &pos, end, SRT_LEN);
             warn(INF, "\tstateless_reset_token = %s", srt_str(srt));
 #ifndef NO_SRT_MATCHING
@@ -625,7 +624,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 
             if (unlikely(dec1(&pa->cid.len, &pos, e) == false))
                 err_close_return(c, ERR_TP, FRM_CRY,
-                                 "cannot decode tp 0x%04" PRIx64, tp);
+                                 "cannot decode tp 0x%" PRIx, (uint_t)tp);
             decb(pa->cid.id, &pos, e, pa->cid.len);
             pa->cid.seq = 1;
 
@@ -669,8 +668,8 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             break;
 
         default:
-            err_close_return(c, ERR_TP, FRM_CRY, "unsupported tp 0x%04" PRIx64,
-                             tp);
+            err_close_return(c, ERR_TP, FRM_CRY, "unsupported tp 0x%" PRIx,
+                             (uint_t)tp);
         }
     }
 
@@ -997,9 +996,9 @@ void init_tp(struct q_conn * const c)
             if (tp_order[j] == grease_type) {
                 encb_tp(&pos, end, grease_type, &grease[1], grease_len);
 #ifdef DEBUG_EXTRA
-                warn(WRN, "\t" BLD "%s tp" NRM " (0x%" PRIx64 " w/len %u) = %s",
+                warn(WRN, "\t" BLD "%s tp" NRM " (0x%" PRIx " w/len %u) = %s",
                      is_grease_tp(grease_type) ? YEL "private" : RED "unknown",
-                     grease_type, grease_len,
+                     (uint_t)grease_type, grease_len,
                      hex2str(&grease[1], grease_len,
                              (char[hex_str_len(TP_LEN)]){""},
                              hex_str_len(TP_LEN)));
@@ -1015,7 +1014,7 @@ void init_tp(struct q_conn * const c)
 #endif
                 }
             } else
-                die("unknown tp 0x%" PRIx64, tp_order[j]);
+                die("unknown tp 0x%" PRIx, (uint_t)tp_order[j]);
             break;
         }
     poison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);

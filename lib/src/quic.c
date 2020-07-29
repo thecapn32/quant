@@ -723,14 +723,14 @@ void q_stream_get_written(struct q_stream * const s, struct w_iov_sq * const q)
 
 
 void q_close(struct q_conn * const c,
-             const uint64_t code,
+             const uint_t code,
              const char * const reason
 #if defined(NO_ERR_REASONS) && defined(NDEBUG)
              __attribute__((unused))
 #endif
 )
 {
-    warn(WRN, "closing %s conn %s on %s%s%s:%u w/err %s0x%" PRIx64 "%s%s%s" NRM,
+    warn(WRN, "closing %s conn %s on %s%s%s:%u w/err %s0x%" PRIx "%s%s%s" NRM,
          conn_type(c), cid_str(c->scid),
          c->sock->ws_laddr.af == AF_INET6 ? "[" : "",
          w_ntop(&c->sock->ws_laddr, ip_tmp),
@@ -738,7 +738,7 @@ void q_close(struct q_conn * const c,
          bswap16(c->sock->ws_lport), code ? RED : NRM, code, reason ? " (" : "",
          reason ? reason : "", reason ? ")" : "");
 
-    c->err_code = (uint_t)code;
+    c->err_code = code;
 #ifndef NO_ERR_REASONS
     if (reason) {
         strncpy(c->err_reason, reason, MAX_ERR_REASON_LEN);

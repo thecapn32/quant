@@ -25,7 +25,6 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/param.h>
@@ -333,8 +332,8 @@ size_t diet_to_str(char * const str,
         if (i->lo != i->hi)
             pos += (size_t)snprintf(&str[pos], len - pos, "-%" PRIu, i->hi);
         if (print_t)
-            pos +=
-                (size_t)snprintf(&str[pos], len - pos, "(%" PRIu64 ")", i->t);
+            pos += (size_t)snprintf(&str[pos], len - pos, "(%" PRIu ")",
+                                    (uint_t)i->t);
         pos += (size_t)snprintf(&str[pos], len - pos, ", ");
         if (pos >= len)
             break;

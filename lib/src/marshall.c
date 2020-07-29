@@ -25,7 +25,6 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -56,7 +55,7 @@
 ///
 uint8_t varint_size(const uint64_t val)
 {
-    assure((val & VARINT_MASK) == 0, "value overflow: %" PRIu64, val);
+    assure((val & VARINT_MASK) == 0, "value overflow: %" PRIu, (uint_t)val);
 
     if ((val & VARINT_MASK8) != 0)
         return 8;
@@ -155,7 +154,7 @@ void encv(uint8_t ** pos,
           ,
           const uint64_t val)
 {
-    assure((val & VARINT_MASK) == 0, "value overflow: %" PRIu64, val);
+    assure((val & VARINT_MASK) == 0, "value overflow: %" PRIu, (uint_t)val);
 
     if ((val & VARINT_MASK8) != 0) {
         assure(*pos + 8 <= end, "buffer overflow: %lu",

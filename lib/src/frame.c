@@ -25,7 +25,6 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -549,8 +548,8 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
     // TODO: figure out a better way to handle huge ACK delays
     if (sizeof(uint64_t) != sizeof(uint_t) &&
         unlikely(ack_delay_raw > UINT32_MAX / 2))
-        err_close_return(c, ERR_FRAM_ENC, type, "ACK delay raw %" PRIu64,
-                         ack_delay_raw);
+        err_close_return(c, ERR_FRAM_ENC, type, "ACK delay raw %" PRIu,
+                         (uint_t)ack_delay_raw);
 
     // handshake pkts always use the default ACK delay exponent
     const uint_t ade = (m->hdr.type == LH_INIT || m->hdr.type == LH_HSHK)
@@ -599,10 +598,10 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
             if (n == ack_rng_cnt + 1)
                 warn(INF,
                      FRAM_IN "ACK" NRM " 0x%02x%s lg=" FMT_PNR_OUT
-                             " delay=%" PRIu64 " (%" PRIu " usec) cnt=%" PRIu
+                             " delay=%" PRIu " (%" PRIu " usec) cnt=%" PRIu
                              " rng=%" PRIu " [" FMT_PNR_OUT "]",
                      type, type == FRM_ACE ? "=ECN" : "", lg_ack_in_frm,
-                     ack_delay_raw, ack_delay, ack_rng_cnt, ack_rng,
+                     (uint_t)ack_delay_raw, ack_delay, ack_rng_cnt, ack_rng,
                      lg_ack_in_frm);
             else
                 warn(INF,
@@ -613,11 +612,11 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
             if (n == ack_rng_cnt + 1)
                 warn(INF,
                      FRAM_IN "ACK" NRM " 0x%02x%s lg=" FMT_PNR_OUT
-                             " delay=%" PRIu64 " (%" PRIu " usec) cnt=%" PRIu
+                             " delay=%" PRIu " (%" PRIu " usec) cnt=%" PRIu
                              " rng=%" PRIu " [" FMT_PNR_OUT ".." FMT_PNR_OUT
                              "]",
                      type, type == FRM_ACE ? "=ECN" : "", lg_ack_in_frm,
-                     ack_delay_raw, ack_delay, ack_rng_cnt, ack_rng,
+                     (uint_t)ack_delay_raw, ack_delay, ack_rng_cnt, ack_rng,
                      lg_ack - ack_rng, shorten_ack_nr(lg_ack, ack_rng));
             else
                 warn(INF,
