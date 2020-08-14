@@ -185,6 +185,7 @@ static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 #define TP_SCID_R 0x10  ///< retry_source_connection_id
 #define TP_MAX (TP_SCID_R + 1)
 
+#define TP_QBG 0x2ab2 // grease_quic_bit
 #define TP_QR 3127
 
 
@@ -468,17 +469,33 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         uint64_t tp;
         dec_chk(v, &tp, &pos, end);
 
-        // skip unknown TPs
+        // deal with unknown TPs and TPs > TP_MAX
         if (tp >= TP_MAX) {
             uint64_t unknown_len;
             dec_chk(v, &unknown_len, &pos, end);
-            warn(WRN,
-                 "\t" BLD "%s tp" NRM " (0x%" PRIx " w/len %" PRIu ") = %s",
-                 is_grease_tp(tp)
-                     ? YEL "private"
-                     : (tp == TP_QR ? RED "quantum-ready" : RED "unknown"),
-                 (uint_t)tp, (uint_t)unknown_len,
-                 hex2str(pos, unknown_len, (char[16]){""}, 16));
+
+            switch (tp) {
+            case TP_QBG:
+                warn(INF, "\t" BLD YEL "grease_quic_bit" NRM " = true");
+                c->tp_peer.grease_quic_bit = true;
+                break;
+
+            case TP_QR:
+                warn(INF,
+                     "\t" BLD YEL "quantum_ready" NRM " w/len %" PRIu ") = %s",
+                     (uint_t)unknown_len,
+                     hex2str(pos, unknown_len, (char[16]){""}, 16));
+                break;
+
+            default:
+                warn(INF,
+                     "\t" BLD "%s" NRM " (0x%" PRIx " w/len %" PRIu ") = %s",
+                     is_grease_tp(tp) ? YEL "grease" : RED "unknown",
+                     (uint_t)tp, (uint_t)unknown_len,
+                     hex2str(pos, unknown_len, (char[16]){""}, 16));
+                break;
+            }
+
             pos += unknown_len;
             continue;
         }
@@ -742,6 +759,14 @@ static void __attribute__((nonnull)) enc_tp(uint8_t ** pos,
 }
 
 
+static void __attribute__((nonnull))
+enc_tp_empty(uint8_t ** pos, const uint8_t * const end, const uint16_t tp)
+{
+    encv(pos, end, tp);
+    encv(pos, end, 0);
+}
+
+
 static void __attribute__((nonnull(1, 2))) encb_tp(uint8_t ** pos,
                                                    const uint8_t * const end,
                                                    const uint64_t tp,
@@ -780,7 +805,7 @@ void init_tp(struct q_conn * const c)
                            TP_IMD,    TP_IMSD_BL,  TP_IMSD_BR, TP_IMSD_U,
                            TP_IMSB,   TP_IMSU,     TP_ADE,     TP_MAD,
                            TP_DMIG,   TP_PRFA,     TP_ACIL,    TP_SCID_I,
-                           TP_SCID_R, grease_type, TP_QR};
+                           TP_SCID_R, grease_type, TP_QR,      TP_QBG};
     const size_t tp_cnt = sizeof(tp_order) / sizeof(tp_order[0]);
 
     // modern version of Fisher-Yates
@@ -966,7 +991,7 @@ void init_tp(struct q_conn * const c)
 
         case TP_DMIG:
             if (c->tp_mine.disable_active_migration) {
-                enc_tp(&pos, end, TP_DMIG, c->tp_mine.disable_active_migration);
+                enc_tp_empty(&pos, end, TP_DMIG);
 #ifdef DEBUG_EXTRA
                 warn(INF, "\tdisable_active_migration = true");
 #endif
@@ -996,8 +1021,7 @@ void init_tp(struct q_conn * const c)
             if (tp_order[j] == grease_type) {
                 encb_tp(&pos, end, grease_type, &grease[1], grease_len);
 #ifdef DEBUG_EXTRA
-                warn(WRN, "\t" BLD "%s tp" NRM " (0x%" PRIx " w/len %u) = %s",
-                     is_grease_tp(grease_type) ? YEL "private" : RED "unknown",
+                warn(WRN, "\tgrease (0x%" PRIx " w/len %u) = %s",
                      (uint_t)grease_type, grease_len,
                      hex2str(&grease[1], grease_len,
                              (char[hex_str_len(TP_LEN)]){""},
@@ -1008,11 +1032,18 @@ void init_tp(struct q_conn * const c)
                     encb_tp(&pos, end, TP_QR, ped(c->w)->scratch, MIN_INI_LEN);
 #ifdef DEBUG_EXTRA
                     warn(WRN,
-                         "\t" BLD RED "quantum-ready tp" NRM
-                         " (0x%04x w/len %u)",
-                         TP_QR, MIN_INI_LEN);
+                         "\t" BLD YEL "quantum_ready" NRM
+                         " (0x%04x w/len %u) = %s",
+                         TP_QR, MIN_INI_LEN,
+                         hex2str(ped(c->w)->scratch, MIN_INI_LEN,
+                                 (char[16]){""}, 16));
 #endif
                 }
+            } else if (tp_order[j] == TP_QBG) {
+                enc_tp_empty(&pos, end, TP_QBG);
+#ifdef DEBUG_EXTRA
+                warn(WRN, "\t" BLD YEL "grease_quic_bit" NRM " = true");
+#endif
             } else
                 die("unknown tp 0x%" PRIx, (uint_t)tp_order[j]);
             break;

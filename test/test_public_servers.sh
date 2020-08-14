@@ -54,7 +54,8 @@ declare -A servers=(
     # [local]="localhost||4433|4434|4433|/40000"
 )
 
-results=(live fail vneg hshk data clse rsmt zrtt rtry qrdy migr bind adrm kyph spin aecn zcid chch http)
+results=(live fail vneg hshk data clse rsmt zrtt rtry qrdy migr bind adrm kyph
+         spin aecn zcid chch qbgr http)
 
 if [ -n "$1" ]; then
     results+=(perf t_h2 t_hq)
@@ -302,6 +303,10 @@ function analyze {
         perl -n -e '/TX.*spin=1/ and $n=1;
             $n && /RX.*spin=1/ && exit 1;' "$log.strip"
         [ $? -eq 1 ] && echo P > "$base.ret.spin"
+
+        # analyze QUIC bit grease
+        perl -n -e '/chk_tp.*grease_quic_bit/ && exit 1;' "$log.strip"
+        [ $? -eq 1 ] && echo G > "$base.ret.qbgr"
 
         # analyze ECN
         perl -n -e '$n == 1 and /ECN verification failed/ and $n=2;

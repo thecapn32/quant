@@ -470,6 +470,13 @@ bool enc_pkt(struct q_stream * const s,
     else
         m->hdr.flags |= LH | m->hdr.type;
 
+    // draft-thomson-quic-bit-grease
+    if (c->tp_peer.grease_quic_bit) {
+        // TODO: amortize the call to w_rand32 over multiple packets
+        const uint8_t grease_bit = w_rand32() & HEAD_FIXD;
+        m->hdr.flags &= ~grease_bit;
+    }
+
     enc1(&pos, end, m->hdr.flags);
 
     if (likely(epoch == ep_data)) {
@@ -741,6 +748,8 @@ bool dec_pkt_hdr_beginning(struct w_iov * const xv,
 
     dec1_chk(&m->hdr.flags, &pos, end);
     m->hdr.type = pkt_type(m->hdr.flags);
+
+    // NOTE: we don't check whether the "QUIC bit" is set
 
     if (unlikely(is_lh(m->hdr.flags))) {
         dec4_chk(&m->hdr.vers, &pos, end);

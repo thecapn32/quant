@@ -119,10 +119,11 @@ struct transport_params {
     uint_t act_cid_lim;
     uint_t ack_del_exp;
     bool disable_active_migration;
+    bool grease_quic_bit;
 #if HAVE_64BIT
-    uint8_t _unused[7];
+    uint8_t _unused[6];
 #else
-    uint8_t _unused[3];
+    uint8_t _unused[2];
 #endif
 };
 
