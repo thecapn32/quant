@@ -1097,7 +1097,10 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
                 c->tok_len = tok_len;
                 memcpy(c->tok, tok, c->tok_len);
                 cid_cpy(c->dcid, &m->hdr.scid);
+                // remember intial packet number
+                const uint64_t lg_sent = c->pns[pn_init].lg_sent;
                 vneg_or_rtry_resp(c, false);
+                c->pns[pn_init].lg_sent = lg_sent;
                 warn(INF, "handling serv retry w/tok %s",
                      tok_str(c->tok, c->tok_len));
                 ok = true;
