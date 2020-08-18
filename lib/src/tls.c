@@ -823,7 +823,9 @@ void init_tp(struct q_conn * const c)
 
     // extract data from token, if it exists
     struct cid odcid = {.len = UINT8_MAX};
+#ifndef NO_SERVER
     struct cid rtry_scid = {.len = UINT8_MAX};
+#endif
     static const struct cid zero_len_cid = {.len = 0};
     if (!is_clnt(c) && c->tok_len) {
         size_t p = 0;
@@ -831,9 +833,11 @@ void init_tp(struct q_conn * const c)
         p += sizeof(odcid.len);
         memcpy(odcid.id, &c->tok[p], odcid.len);
         p += odcid.len;
+#ifndef NO_SERVER
         memcpy(&rtry_scid.len, &c->tok[p], sizeof(rtry_scid.len));
         p += sizeof(rtry_scid.len);
         memcpy(rtry_scid.id, &c->tok[p], rtry_scid.len);
+#endif
         c->tok_len = 0;
     }
 
@@ -1011,6 +1015,7 @@ void init_tp(struct q_conn * const c)
 
             break;
 
+#ifndef NO_SERVER
         case TP_SCID_R:
             if (!is_clnt(c) && rtry_scid.len != UINT8_MAX) {
                 encb_tp(&pos, end, TP_SCID_R, rtry_scid.id, rtry_scid.len);
@@ -1020,6 +1025,7 @@ void init_tp(struct q_conn * const c)
 #endif
             }
             break;
+#endif
 
         default:
             if (tp_order[j] == grease_type) {
