@@ -388,7 +388,7 @@ update_conf(struct q_conn * const c, const struct q_conn_conf * const conf);
 extern struct q_conn * __attribute__((nonnull))
 get_conn_by_srt(uint8_t * const srt);
 
-extern void __attribute__((nonnull))
+extern bool __attribute__((nonnull, warn_unused_result))
 conns_by_srt_ins(struct q_conn * const c, uint8_t * const srt);
 
 extern void __attribute__((nonnull)) conns_by_srt_del(uint8_t * const srt);

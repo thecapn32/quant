@@ -32,6 +32,7 @@
 
 #include <conn.h>
 #include <frame.h>
+#include <pn.h>
 #include <quic.h>
 #include <stream.h>
 #include <tls.h>
@@ -42,17 +43,25 @@
 int LLVMFuzzerTestOneInput(const uint8_t * data, const size_t size)
 {
     static int needs_init = 1;
+again:
     if (needs_init)
         needs_init = init();
 
     struct w_iov_sq i = w_iov_sq_initializer(i);
     q_alloc(w, &i, c, AF_INET6, 256); // arbitrary value
     struct w_iov * v = sq_first(&i);
+    if (unlikely(v == 0)) {
+        warn(CRT, "using new connection");
+        needs_init = 1;
+        goto again;
+    }
+
     v->len = (uint16_t)MIN(size, v->len);
     memcpy(v->buf, data, v->len);
 
     struct w_iov * const orig_v = v;
     struct pkt_meta * m = &meta(v);
+    m->pn = &c->pns[pn_init];
     struct pkt_meta * orig_m = m;
     dec_frames(c, &v, &m);
     if (m->strm == 0)

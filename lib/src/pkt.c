@@ -842,6 +842,10 @@ done:
         if (unlikely(*decoal)) {
             // allocate new w_iov for coalesced packet and copy it over
             struct w_iov * const dup = dup_iov(xv, 0, pkt_len);
+            if (unlikely(dup == 0)) {
+                warn(WRN, "could not alloc iov");
+                return false;
+            }
             // adjust length of first packet
             xv->len = pkt_len;
             // rx() has already removed xv from x, so just insert dup at head

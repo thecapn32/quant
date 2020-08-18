@@ -618,7 +618,9 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             warn(INF, "\tstateless_reset_token = %s", srt_str(srt));
 #ifndef NO_SRT_MATCHING
             c->dcid->has_srt = true;
-            conns_by_srt_ins(c, c->dcid->srt);
+            if (unlikely(conns_by_srt_ins(c, c->dcid->srt) == false))
+                err_close_return(c, ERR_TP, FRM_CRY, "cannot ins srt %s",
+                                 srt_str(c->dcid->srt));
 #endif
             break;
 
@@ -656,7 +658,9 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
 #endif
                     cid_ins(&c->dcids, &pa->cid);
 #ifndef NO_SRT_MATCHING
-                conns_by_srt_ins(c, dcid->srt);
+                if (unlikely(conns_by_srt_ins(c, dcid->srt) == false))
+                    err_close_return(c, ERR_TP, FRM_CRY, "cannot ins srt %s",
+                                     srt_str(dcid->srt));
 #endif
             }
 

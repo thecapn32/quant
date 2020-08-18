@@ -736,19 +736,24 @@ done:;
 
 
 #ifndef NO_SRT_MATCHING
-void conns_by_srt_ins(struct q_conn * const c, uint8_t * const srt)
+bool conns_by_srt_ins(struct q_conn * const c, uint8_t * const srt)
 {
     int ret;
     const khiter_t k = kh_put(conns_by_srt, &conns_by_srt, srt, &ret);
-    assure(ret >= 1, "inserted returned %d", ret);
+    if (unlikely(ret == 0)) {
+        warn(ERR, "cannot ins srt %s", srt_str(srt));
+        return false;
+    }
     kh_val(&conns_by_srt, k) = c;
+    return true;
 }
 
 
-extern void conns_by_srt_del(uint8_t * const srt)
+void conns_by_srt_del(uint8_t * const srt)
 {
     const khiter_t k = kh_get(conns_by_srt, &conns_by_srt, srt);
-    assure(k != kh_end(&conns_by_srt), "found");
+    if (unlikely(k == kh_end(&conns_by_srt)))
+        warn(ERR, "srt %s not present", srt_str(srt));
     kh_del(conns_by_srt, &conns_by_srt, k);
 }
 #endif

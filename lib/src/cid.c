@@ -143,8 +143,10 @@ struct cid * cid_ins(struct cids * const ids, const struct cid * const id)
 #endif
             i = sl_first(&ids->avl);
             assure(i, "have cid");
-        } else
-            die("got new CID with no room left");
+        } else {
+            warn(ERR, "cannot ins cid %s", cid_str(id));
+            return 0;
+        }
     }
     sl_remove_head(&ids->avl, next);
     cid_cpy(i, id);

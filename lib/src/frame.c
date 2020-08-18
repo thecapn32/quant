@@ -123,12 +123,12 @@ static void track_frame(struct pkt_meta * const m,
     } while (0)
 
 
-#define chk_finl_size(off, s, type)                                            \
+#define chk_finl_size(fs, s, type)                                             \
     do {                                                                       \
-        if (unlikely((off) > (s)->in_data_off - 1))                            \
+        if (unlikely((fs) != (s)->in_data_off))                                \
             err_close_return((s)->c, ERR_FINL_SIZE, (type),                    \
-                             "off %" PRIu " > %" PRIu, (off),                  \
-                             (s)->in_data_off - 1);                            \
+                             "fs %" PRIu " != %" PRIu, (fs),                   \
+                             (s)->in_data_off);                                \
                                                                                \
     } while (0)
 
@@ -338,14 +338,13 @@ dec_stream_or_crypto_frame(const uint8_t type,
 
         if (unlikely(m->strm->state == strm_hcrm ||
                      m->strm->state == strm_clsd)) {
-            chk_finl_size(m->strm_off - (m->strm_data_len == 0 ? 1 : 0),
-                          m->strm, type);
-            // this can only be a pure FIN, so drop it
-            assure(m->strm_data_len == 0 && m->is_fin, "is pure FIN");
-            warn(NTE, "dup pure FIN for %s strm " FMT_SID " on %s conn %s",
+#ifdef DEBUG_STREAMS
+            warn(NTE,
+                 "ignoring STREAM frame for %s strm " FMT_SID " on %s conn %s",
                  strm_state_str[m->strm->state], sid, conn_type(c),
                  cid_str(c->scid));
-            track_sd_frame(dup, true);
+#endif
+            track_sd_frame(ign, true);
             goto done;
         }
 
@@ -403,6 +402,8 @@ dec_stream_or_crypto_frame(const uint8_t type,
             if (unlikely(v != last))
                 adj_iov_to_start(last, m_last);
             if (m_last->is_fin) {
+                chk_finl_size(m_last->strm_off + m_last->strm_data_len,
+                              m_last->strm, type);
                 m->pn->imm_ack = true;
                 strm_to_state(m->strm, m->strm->state <= strm_hcrm ? strm_hcrm
                                                                    : strm_clsd);
@@ -686,7 +687,7 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
             decv_chk(&gap, pos, end, c, type);
             if (unlikely((lg_ack - ack_rng) < gap + 2)) {
                 warn(DBG, "lg_ack=%" PRIu ", ack_rng=%" PRIu ", gap=%" PRIu,
-                     lg_ack, ack_rng, -gap);
+                     lg_ack, ack_rng, gap);
                 err_close_return(c, ERR_PV, type, "illegal ACK frame");
             }
             lg_ack -= ack_rng + gap + 2;
@@ -1110,12 +1111,14 @@ dec_new_cid_frame(const uint8_t ** pos,
              c->rpt_max);
 
     if (dup == false) {
+        struct cid * const ndcid = cid_ins(&c->dcids, &dcid);
+        if (unlikely(ndcid == 0))
+            err_close_return(c, ERR_PV, FRM_CID, "cannot ins cid %s",
+                             cid_str(&dcid));
 #ifndef NO_SRT_MATCHING
-        struct cid * const ndcid =
-#endif
-            cid_ins(&c->dcids, &dcid);
-#ifndef NO_SRT_MATCHING
-        conns_by_srt_ins(c, ndcid->srt);
+        if (unlikely(conns_by_srt_ins(c, ndcid->srt) == false))
+            err_close_return(c, ERR_PV, FRM_CID, "cannot ins srt %s",
+                             srt_str(ndcid->srt));
 #endif
     }
 
@@ -1206,6 +1209,9 @@ dec_new_token_frame(const uint8_t ** pos,
 
     const uint_t act_tok_len = MIN(tok_len, (uint_t)(end - *pos));
 
+    if (unlikely(act_tok_len > MAX_TOK_LEN))
+        err_close_return(c, ERR_FRAM_ENC, FRM_TOK, "tok len > max");
+
     uint8_t tok[MAX_TOK_LEN];
     decb_chk(tok, pos, end, (uint16_t)act_tok_len, c, FRM_TOK);
 
@@ -1235,6 +1241,7 @@ bool dec_frames(struct q_conn * const c,
     const uint8_t * pos = v->buf + m->hdr.hdr_len;
     const uint8_t * start = v->buf;
     const uint8_t * end = v->buf + v->len;
+    bool ok = false;
 
 #if !defined(NDEBUG) && !defined(FUZZING) && defined(FUZZER_CORPUS_COLLECTION)
     // when called from the fuzzer, v->wv_af is zero
@@ -1301,7 +1308,6 @@ bool dec_frames(struct q_conn * const c,
                 break;
         }
 
-        bool ok;
         switch (type) {
         case FRM_CRY:
         case FRM_STR:
@@ -1317,14 +1323,17 @@ bool dec_frames(struct q_conn * const c,
             if (unlikely(bit_overlap(FRM_MAX, &m->frms, &cry_or_str)) &&
                 m->strm) {
                 // already had at least one stream or crypto frame in this
-                // packet with non-duplicate data, so generate (another)
-                // copy
+                // packet with non-duplicate data, so generate (another) copy
 #ifdef DEBUG_EXTRA
                 warn(DBG, "addtl stream or crypto frame, copy");
 #endif
                 const uint16_t off = (uint16_t)(pos - v->buf - 1);
                 struct pkt_meta * mdup;
                 struct w_iov * const vdup = dup_iov(v, &mdup, off);
+                if (unlikely(vdup == 0)) {
+                    warn(WRN, "could not alloc iov");
+                    break;
+                }
                 pm_cpy(mdup, m, false);
                 // adjust w_iov start and len to stream frame data
                 v->buf += m->strm_data_pos;
@@ -1891,7 +1900,12 @@ void enc_new_cid_frame(struct q_conn_info * const ci,
                     is_clnt(c) ? ped(c->w)->conf.client_cid_len
                                : ped(c->w)->conf.server_cid_len,
                     true);
-        conns_by_id_ins(c, cid_ins(&c->scids, &ncid));
+        struct cid * const nscid = cid_ins(&c->scids, &ncid);
+        if (unlikely(nscid == 0)) {
+            err_close(c, ERR_PV, FRM_CID, "cannot ins cid %s", cid_str(&ncid));
+            return;
+        }
+        conns_by_id_ins(c, nscid);
 #ifndef NO_SRT_MATCHING
         srt = ncid.srt;
 #endif

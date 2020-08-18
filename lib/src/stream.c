@@ -143,8 +143,11 @@ void free_stream(struct q_stream * const s)
             kh_get(strms_by_id, &c->strms_by_id, (khint64_t)s->id);
         assure(k != kh_end(&c->strms_by_id), "found");
         kh_del(strms_by_id, &c->strms_by_id, k);
-    } else
+    }
+#ifndef FUZZING
+    else
         s->c->cstrms[strm_epoch(s)] = 0;
+#endif
 
 #ifndef NO_OOO_DATA
     while (!splay_empty(&s->in_ooo)) {
@@ -159,7 +162,9 @@ void free_stream(struct q_stream * const s)
 
     q_free(&s->out);
     q_free(&s->in);
+#ifndef FUZZING
     free(s);
+#endif
 }
 
 

@@ -46,7 +46,10 @@ static void mk_conn()
 
     c = new_conn(w, 0, 0, 0,
                  &(struct w_sockaddr){
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmany-braces-around-scalar-init"
                      .addr = {.af = AF_INET6, .ip6 = IN6ADDR_LOOPBACK_INIT},
+#pragma clang diagnostic pop
                      .port = bswap16(5678)},
                  "fuzzer", 0, 0);
     init_tls(c, "", 0);
@@ -55,7 +58,7 @@ static void mk_conn()
 
 static int init(void)
 {
-    util_dlevel = DBG;
+    util_dlevel = CRT;
     w = q_init("lo"
 #ifndef __linux__
                "0"
