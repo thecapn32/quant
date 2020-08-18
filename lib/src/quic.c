@@ -254,7 +254,7 @@ struct q_conn * q_connect(struct w_engine * const w,
         return 0;
     }
 
-    struct q_conn * const c = new_conn(w, idx, 0, 0, &p, peer_name, 0, conf);
+    struct q_conn * const c = new_conn(w, idx, 0, 0, &p, peer_name, 0, 0, conf);
 
     // init TLS
     init_tls(c, peer_name, alpn);
@@ -451,7 +451,7 @@ struct q_conn * q_bind(struct w_engine * const w
 #ifndef NO_SERVER
     // bind socket and create new embryonic server connection
     struct q_conn * const c =
-        new_conn(w, addr_idx, 0, 0, 0, 0, bswap16(port), 0);
+        new_conn(w, addr_idx, 0, 0, 0, 0, bswap16(port), 0, 0);
     if (likely(c)) {
         warn(INF, "bound %s socket to %s%s%s:%u", conn_type(c),
              c->sock->ws_laddr.af == AF_INET6 ? "[" : "",
@@ -902,10 +902,6 @@ void q_cleanup(struct w_engine * const w)
 #endif
 #ifndef NO_SRT_MATCHING
     kh_release(conns_by_srt, &conns_by_srt);
-#endif
-
-#ifndef NO_SERVER
-    kv_destroy(ped(w)->serv_socks);
 #endif
 
     free_tls_ctx(ped(w));

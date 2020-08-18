@@ -102,7 +102,8 @@ int main(int argc, char ** argv)
     struct cid cid = {};
     cid.len = 4;
     memcpy(cid.id, "1234", cid.len);
-    c = new_conn(w, 0, &cid, &cid, nullptr, "", bswap16(55555), nullptr);
+    c = new_conn(w, 0, &cid, &cid, nullptr, "", bswap16(55555), nullptr,
+                 nullptr);
     init_tls(c, "", nullptr);
     benchmark::RunSpecifiedBenchmarks();
 

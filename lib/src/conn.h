@@ -374,6 +374,7 @@ extern struct q_conn * new_conn(struct w_engine * const w,
                                 const struct w_sockaddr * const peer,
                                 const char * const peer_name,
                                 const uint16_t port,
+                                struct w_sock * const sock,
                                 const struct q_conn_conf * const conf);
 
 extern void __attribute__((nonnull)) free_conn(struct q_conn * const c);

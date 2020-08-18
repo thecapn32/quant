@@ -58,7 +58,6 @@
 #include "tree.h"
 
 #ifndef NO_SERVER
-#include "kvec.h"
 #include "tls.h"
 #endif
 
@@ -193,7 +192,6 @@ struct per_engine_data {
 #ifndef NO_SERVER
     struct cipher_ctx dec_tckt;
     struct cipher_ctx enc_tckt;
-    kvec_t(struct w_sock *) serv_socks;
 #endif
 
 #ifdef NO_MIGRATION

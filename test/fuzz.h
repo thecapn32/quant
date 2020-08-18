@@ -51,7 +51,7 @@ static void mk_conn()
                      .addr = {.af = AF_INET6, .ip6 = IN6ADDR_LOOPBACK_INIT},
 #pragma clang diagnostic pop
                      .port = bswap16(5678)},
-                 "fuzzer", 0, 0);
+                 "fuzzer", 0, 0, 0);
     init_tls(c, "", 0);
 }
 

@@ -61,10 +61,6 @@
 #include "tls.h"
 #include "tree.h"
 
-#ifndef NO_SERVER
-#include "kvec.h"
-#endif
-
 #ifndef NO_QLOG
 #include "bitset.h"
 #endif
@@ -185,21 +181,6 @@ epoch_in(const struct q_conn * const c)
     assure(epoch <= ep_data, "unhandled epoch %lu", (unsigned long)epoch);
     return (epoch_t)epoch;
 }
-
-
-#ifndef NO_SERVER
-static struct w_sock * __attribute__((nonnull))
-get_local_sock_by_ipnp(struct per_engine_data * const ped,
-                       const struct w_sockaddr * const local)
-{
-    for (size_t i = 0; i < kv_size(ped->serv_socks); i++) {
-        struct w_sock * const ws = kv_A(ped->serv_socks, i);
-        if (w_sockaddr_cmp(local, &ws->ws_loc))
-            return ws;
-    }
-    return 0;
-}
-#endif
 
 
 #ifndef NO_SRT_MATCHING
@@ -1300,7 +1281,7 @@ static void __attribute__((nonnull))
                      cid_str(&m->hdr.dcid));
 
                 c = new_conn(w_engine(ws), UINT16_MAX, &m->hdr.scid,
-                             &m->hdr.dcid, &v->saddr, 0, ws->ws_lport,
+                             &m->hdr.dcid, &v->saddr, 0, ws->ws_lport, ws,
                              &(struct q_conn_conf){.version = m->hdr.vers});
                 if (likely(c))
                     init_tls(c, 0, 0);
@@ -1839,6 +1820,7 @@ struct q_conn * new_conn(struct w_engine * const w,
 #endif
                          ,
                          const uint16_t port,
+                         struct w_sock * const sock,
                          const struct q_conn_conf * const conf)
 {
     struct q_conn * const c = calloc(1, sizeof(*c));
@@ -1885,18 +1867,9 @@ struct q_conn * new_conn(struct w_engine * const w,
         if (unlikely(c->sock == 0))
             goto fail;
         c->holds_sock = true;
-#ifndef NO_SERVER
-        if (peer == 0)
-            // remember server socket
-            kv_push(struct w_sock *, ped(w)->serv_socks, c->sock);
-    } else {
-        // find existing server socket
-        c->sock = get_local_sock_by_ipnp(
-            ped(w),
-            &(struct w_sockaddr){.addr = w->ifaddr[idx].addr, .port = port});
-        assure(c->sock, "got serv conn");
-#endif
-    }
+    } else
+        c->sock = sock;
+    assure(c->sock, "got sock");
 
     // init CIDs
     c->next_sid_bidi = is_clnt(c) ? 0 : STRM_FL_SRV;
@@ -1971,15 +1944,12 @@ struct q_conn * new_conn(struct w_engine * const w,
                   c->tp_mine.pref_addr.addr4.addr.af == 0) ||
                  (w->ifaddr[idx].addr.af == AF_INET6 &&
                   c->tp_mine.pref_addr.addr6.addr.af == 0))) {
-                struct w_sock * const ws = get_local_sock_by_ipnp(
-                    ped(w), &(struct w_sockaddr){.addr = w->ifaddr[idx].addr,
-                                                 .port = port});
                 if (w->ifaddr[idx].addr.af == AF_INET &&
                     c->tp_mine.pref_addr.addr4.addr.af == 0)
-                    memcpy(&c->tp_mine.pref_addr.addr4, &ws->ws_loc,
+                    memcpy(&c->tp_mine.pref_addr.addr4, &sock->ws_loc,
                            sizeof(c->tp_mine.pref_addr.addr4));
                 else
-                    memcpy(&c->tp_mine.pref_addr.addr6, &ws->ws_loc,
+                    memcpy(&c->tp_mine.pref_addr.addr6, &sock->ws_loc,
                            sizeof(c->tp_mine.pref_addr.addr6));
                 break;
             }
