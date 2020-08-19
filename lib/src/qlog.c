@@ -223,6 +223,7 @@ void qlog_transport(const qlog_pkt_evt_t evt,
             uint64_t ce;
             decv(&ce, &pos, end);
 
+            // prev_frame =
             fprintf(c->qlog,
                     ",\"ect0\":%" PRIu ",\"ect1\":%" PRIu ",\"ce\":%" PRIu,
                     ect0, ect1, ce);
@@ -265,12 +266,10 @@ void qlog_recovery(const qlog_rec_evt_t evt,
     if (c->rec.cur.cwnd != c->rec.prev.cwnd)
         prev_metric = fprintf(c->qlog, "%s\"cwnd\":%" PRIu,
                               prev_metric ? "," : "", c->rec.cur.cwnd);
-#if 0
     if (c->rec.cur.ssthresh != UINT_T_MAX &&
         c->rec.cur.ssthresh != c->rec.prev.ssthresh)
         prev_metric = fprintf(c->qlog, "%s\"ssthresh\":%" PRIu,
                               prev_metric ? "," : "", c->rec.cur.ssthresh);
-#endif
     if (c->rec.cur.srtt != c->rec.prev.srtt)
         prev_metric = fprintf(c->qlog, "%s\"smoothed_rtt\":%" PRIu,
                               prev_metric ? "," : "", c->rec.cur.srtt);
@@ -279,15 +278,12 @@ void qlog_recovery(const qlog_rec_evt_t evt,
         prev_metric = fprintf(c->qlog, "%s\"min_rtt\":%" PRIu,
                               prev_metric ? "," : "", c->rec.cur.min_rtt);
     if (c->rec.cur.latest_rtt != c->rec.prev.latest_rtt)
-        // prev_metric =
-        fprintf(c->qlog, "%s\"latest_rtt\":%" PRIu, prev_metric ? "," : "",
-                c->rec.cur.latest_rtt);
-#if 0
+        prev_metric = fprintf(c->qlog, "%s\"latest_rtt\":%" PRIu,
+                              prev_metric ? "," : "", c->rec.cur.latest_rtt);
     if (c->rec.cur.rttvar != c->rec.prev.rttvar)
         // prev_metric =
         fprintf(c->qlog, "%s\"rtt_variance\":%" PRIu, prev_metric ? "," : "",
                 c->rec.cur.rttvar);
-#endif
 
 done:
     fputs("}]", c->qlog);
