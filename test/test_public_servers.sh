@@ -45,6 +45,7 @@ declare -A servers=(
     [ngx_quic]="cloudflare-quic.com|-3|443|443|443|/index.html"
     [pandora]="pandora.cm.in.tum.de||4433|4434|4433|/index.html"
     [picoquic]="test.privateoctopus.com||4433|4434|4433|/40000"
+    [pquic]="test.pquic.org||443|443|443|/40000"
     [quant]="quant.eggert.org||4433|4434|4433|/40000"
     [quic-go]="interop.seemann.io|-3|443|443|443|/dynamic/40000"
     [quiche]="quic.tech|-3|8443|8444|8443|/128KB.png"
