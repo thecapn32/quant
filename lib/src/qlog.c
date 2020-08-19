@@ -186,6 +186,7 @@ void qlog_transport(const qlog_pkt_evt_t evt,
         const uint8_t * pos = v->buf + m->ack_frm_pos;
         const uint8_t * const end = v->buf + v->len;
 
+        uint8_t type = *pos++;
         uint64_t lg_ack = 0;
         decv(&lg_ack, &pos, end);
         uint64_t ack_delay = 0;
@@ -212,9 +213,23 @@ void qlog_transport(const qlog_pkt_evt_t evt,
                 lg_ack -= ack_rng + gap + 2;
             }
         }
+        fputs("]", c->qlog);
+
+        if (type == FRM_ACE) {
+            uint64_t ect0;
+            decv(&ect0, &pos, end);
+            uint64_t ect1;
+            decv(&ect1, &pos, end);
+            uint64_t ce;
+            decv(&ce, &pos, end);
+
+            fprintf(c->qlog,
+                    ",\"ect0\":%" PRIu ",\"ect1\":%" PRIu ",\"ce\":%" PRIu,
+                    ect0, ect1, ce);
+        }
 
         adj_iov_to_data(v, m);
-        fputs("]}", c->qlog);
+        fputs("}", c->qlog);
     }
     fputs("]", c->qlog);
 

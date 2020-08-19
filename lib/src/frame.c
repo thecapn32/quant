@@ -533,7 +533,7 @@ static bool __attribute__((nonnull)) dec_ack_frame(const uint8_t type,
     if (unlikely(m->ack_frm_pos))
         warn(WRN, "packet contains multiple ACK frames");
     else
-        m->ack_frm_pos = (uint16_t)(*pos - start);
+        m->ack_frm_pos = (uint16_t)(*pos - start) - 1; // -1 to include type
 
     struct pn_space * const pn = m->pn;
     if (unlikely(pn == 0))
@@ -1587,7 +1587,7 @@ bool enc_ack_frame(struct q_conn_info * const ci,
     pn->pkts_lost_since_last_ack_tx = pn->pkts_rxed_since_last_ack_tx = 0;
     pn->imm_ack = false;
     track_frame(m, ci, FRM_ACK, 1);
-    m->ack_frm_pos = (uint16_t)(init_pos - start) + 1; // +1 for type byte
+    m->ack_frm_pos = (uint16_t)(init_pos - start);
     return true;
 
 no_ack:;

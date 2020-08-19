@@ -138,7 +138,7 @@ struct pkt_meta {
     uint16_t strm_data_pos; ///< Offset of first byte of stream frame data.
     uint16_t strm_data_len; ///< Length of stream frame data.
 
-    uint16_t ack_frm_pos; ///< Offset of (first, on RX) ACK frame (+1 for type).
+    uint16_t ack_frm_pos; ///< Offset of (first, on RX) ACK frame.
 
     dint_t max_strm_data_sid; ///< MAX_STREAM_DATA sid, if sent.
     uint_t max_strm_data;     ///< MAX_STREAM_DATA limit, if sent.

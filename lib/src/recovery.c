@@ -535,7 +535,7 @@ static void __attribute__((nonnull))
 track_acked_pkts(struct w_iov * const v, struct pkt_meta * const m)
 {
     adj_iov_to_start(v, m);
-    const uint8_t * pos = v->buf + m->ack_frm_pos;
+    const uint8_t * pos = v->buf + m->ack_frm_pos + 1; // +1 to skip type
     const uint8_t * const end = v->buf + v->len;
 
     uint64_t lg_ack = 0;
