@@ -35,10 +35,11 @@ jobs:
           languages: cpp
 
       - run: |
+          sudo apt-get install binutils libasan5 libhttp-parser2.9 libubsan1
           mkdir build
           cd build
           cmake ..
-          make
+          cmake --build
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v1
