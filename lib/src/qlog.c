@@ -158,7 +158,7 @@ void qlog_transport(const qlog_pkt_evt_t evt,
             m->udp_len);
     if (is_lh(m->hdr.flags) == false || (m->hdr.vers && m->hdr.type != LH_RTRY))
         fprintf(c->qlog, ",\"packet_number\":%" PRIu, m->hdr.nr);
-    fputs("}", c->qlog);
+    fputc('}', c->qlog);
 
     if (evt == pkt_dp)
         goto done;
@@ -178,7 +178,7 @@ void qlog_transport(const qlog_pkt_evt_t evt,
                              m->strm_data_len, m->strm_off);
         if (m->is_fin)
             fputs(",\"fin\":true", c->qlog);
-        fputs("}", c->qlog);
+        fputc('}', c->qlog);
     }
 
     if (has_frm(m->frms, FRM_ACK)) {
@@ -213,7 +213,7 @@ void qlog_transport(const qlog_pkt_evt_t evt,
                 lg_ack -= ack_rng + gap + 2;
             }
         }
-        fputs("]", c->qlog);
+        fputc(']', c->qlog);
 
         if (type == FRM_ACE) {
             uint64_t ect0;
@@ -229,9 +229,9 @@ void qlog_transport(const qlog_pkt_evt_t evt,
         }
 
         adj_iov_to_data(v, m);
-        fputs("}", c->qlog);
+        fputc('}', c->qlog);
     }
-    fputs("]", c->qlog);
+    fputc(']', c->qlog);
 
 done:
     fputs("}]", c->qlog);
