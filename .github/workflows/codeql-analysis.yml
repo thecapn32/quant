@@ -35,7 +35,7 @@ jobs:
           languages: cpp
 
       - run: |
-          sudo apt-get install binutils libasan5 libhttp-parser2.9 libubsan1
+          sudo apt install libssl-dev libhttp-parser-dev libbsd-dev pkgconf
           mkdir build
           cd build
           cmake ..
