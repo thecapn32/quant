@@ -35,11 +35,11 @@ jobs:
           languages: cpp
 
       - run: |
-        sudo apt install libssl-dev libhttp-parser-dev libbsd-dev
-        mkdir build
-        cd build
-        cmake ..
-        cmake --build
+          sudo apt install libssl-dev libhttp-parser-dev libbsd-dev
+          mkdir build
+          cd build
+          cmake ..
+          cmake --build
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v1
