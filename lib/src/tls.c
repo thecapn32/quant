@@ -28,7 +28,6 @@
 #include <fcntl.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -38,6 +37,7 @@
 
 #ifndef NO_TLS_LOG
 #include <stdarg.h>
+#include <stdio.h>
 #endif
 
 #ifndef NO_SERVER

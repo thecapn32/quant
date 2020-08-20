@@ -192,6 +192,8 @@ struct per_engine_data {
 
 #ifndef NO_TLS_LOG
     int tls_log;
+#else
+    uint8_t _unused[4];
 #endif
 
     uint32_t scratch_len;
