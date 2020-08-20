@@ -31,6 +31,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <time.h>
 
 #include <picotls.h>
@@ -585,6 +587,8 @@ mk_or_open_dir(const char * const path, mode_t mode)
 struct w_engine * q_init(const char * const ifname,
                          const struct q_conf * const conf)
 {
+    umask(S_IWGRP | S_IWOTH);
+
     // initialize warpcore on the given interface
     const uint32_t num_bufs = conf && conf->num_bufs ? conf->num_bufs : 10000;
     struct w_engine * const w = w_init(ifname, 0, num_bufs);

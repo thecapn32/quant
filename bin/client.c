@@ -39,14 +39,11 @@
 #include <string.h>
 #include <sys/param.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <time.h>
 #include <unistd.h>
-
-#ifdef __FreeBSD__
-#include <sys/stat.h>
-#endif
 
 #define klib_unused
 
@@ -434,6 +431,8 @@ int main(int argc, char * argv[])
     char qlog_dir[MAXPATHLEN] = "";
     bool verify_certs = false;
     int ret = -1;
+
+    umask(S_IWGRP | S_IWOTH);
 
     // set default TLS log file from environment
     const char * const keylog = getenv("SSLKEYLOGFILE");
