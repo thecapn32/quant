@@ -31,7 +31,6 @@
 #include <stdint.h>
 
 #ifndef NO_QLOG
-#include <stdio.h>
 #include <string.h>
 #include <sys/param.h>
 #endif
@@ -306,9 +305,9 @@ struct q_conn {
     uint32_t tx_limit;
 
 #ifndef NO_QLOG
-    FILE * qlog;
     uint64_t qlog_last_t;
-    char qlog_file[MAXPATHLEN];
+    int qlog;
+    char qlog_file[MAXPATHLEN + 4]; // +4 for alignment
 #endif
 };
 

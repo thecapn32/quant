@@ -28,11 +28,14 @@
 #ifndef NO_QLOG
 
 #include <errno.h>
+#include <fcntl.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/types.h>
 #include <time.h>
+#include <unistd.h>
 
 #include <quant/quant.h>
 
@@ -77,7 +80,7 @@ qlog_pkt_type_str(const uint8_t flags, const void * const vers)
 static void qlog_common(struct q_conn * const c)
 {
     const uint64_t now = w_now(CLOCK_REALTIME);
-    fprintf(c->qlog, "%s[%" PRIu, likely(c->qlog_last_t) ? "," : "",
+    dprintf(c->qlog, "%s[%" PRIu, likely(c->qlog_last_t) ? "," : "",
             (uint_t)NS_TO_US(now - c->qlog_last_t));
     c->qlog_last_t = now;
 }
@@ -102,14 +105,15 @@ void qlog_init(struct q_conn * const c)
                                   hex_str_len(CID_LEN_MAX)),
              is_clnt(c) ? "clnt" : "serv");
 
-    c->qlog = fopen(c->qlog_file, "we");
+    c->qlog = open(c->qlog_file, O_CREAT | O_WRONLY | O_CLOEXEC,
+                   S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
     warn(DBG, "qlog file is %s", c->qlog_file);
-    if (unlikely(c->qlog == 0)) {
-        warn(ERR, "could not fopen %s: %s", c->qlog_file, strerror(errno));
+    if (unlikely(c->qlog < 0)) {
+        warn(ERR, "could not open %s: %s", c->qlog_file, strerror(errno));
         return;
     }
 
-    fprintf(c->qlog,
+    dprintf(c->qlog,
             "{\"qlog_version\":\"draft-01\",\"title\":\"%s %s/%s "
             "qlog\",\"traces\":[{\"vantage_point\":{\"type\":\"%s\"},"
             "\"configuration\":{\"time_units\":\"us\"},\"common_fields\":{"
@@ -127,8 +131,8 @@ void qlog_init(struct q_conn * const c)
 void qlog_close(struct q_conn * const c)
 {
     if (c->qlog) {
-        fputs("]}]}", c->qlog);
-        fclose(c->qlog);
+        dprintf(c->qlog, "]}]}");
+        close(c->qlog);
     }
 }
 
@@ -151,14 +155,14 @@ void qlog_transport(const qlog_pkt_evt_t evt,
     static const char * const evt_str[] = {[pkt_tx] = "packet_sent",
                                            [pkt_rx] = "packet_received",
                                            [pkt_dp] = "packet_dropped"};
-    fprintf(c->qlog,
+    dprintf(c->qlog,
             ",\"transport\",\"%s\",\"%s\",{\"packet_type\":\"%s\",\"header\":{"
             "\"packet_size\":%u",
             evt_str[evt], trg, qlog_pkt_type_str(m->hdr.flags, &m->hdr.vers),
             m->udp_len);
     if (is_lh(m->hdr.flags) == false || (m->hdr.vers && m->hdr.type != LH_RTRY))
-        fprintf(c->qlog, ",\"packet_number\":%" PRIu, m->hdr.nr);
-    fputc('}', c->qlog);
+        dprintf(c->qlog, ",\"packet_number\":%" PRIu, m->hdr.nr);
+    dprintf(c->qlog, "}");
 
     if (evt == pkt_dp)
         goto done;
@@ -168,17 +172,17 @@ void qlog_transport(const qlog_pkt_evt_t evt,
     if (bit_overlap(FRM_MAX, &m->frms, &qlog_frm) == false)
         goto done;
 
-    fputs(",\"frames\":[", c->qlog);
+    dprintf(c->qlog, ",\"frames\":[");
     int prev_frame = 0;
     if (has_frm(m->frms, FRM_STR)) {
-        prev_frame = fprintf(c->qlog,
+        prev_frame = dprintf(c->qlog,
                              "%s{\"frame_type\":\"stream\",\"stream_id\":%" PRId
                              ",\"length\":%u,\"offset\":%" PRIu,
                              /* prev_frame ? "," : */ "", m->strm->id,
                              m->strm_data_len, m->strm_off);
         if (m->is_fin)
-            fputs(",\"fin\":true", c->qlog);
-        fputc('}', c->qlog);
+            dprintf(c->qlog, ",\"fin\":true");
+        dprintf(c->qlog, "}");
     }
 
     if (has_frm(m->frms, FRM_ACK)) {
@@ -195,7 +199,7 @@ void qlog_transport(const qlog_pkt_evt_t evt,
         decv(&ack_rng_cnt, &pos, end);
 
         // prev_frame =
-        fprintf(c->qlog,
+        dprintf(c->qlog,
                 "%s{\"frame_type\":\"ack\",\"ack_delay\":%" PRIu
                 ",\"acked_ranges\":[",
                 prev_frame ? "," : "", (uint_t)ack_delay);
@@ -204,7 +208,7 @@ void qlog_transport(const qlog_pkt_evt_t evt,
         for (uint64_t n = ack_rng_cnt + 1; n > 0; n--) {
             uint64_t ack_rng = 0;
             decv(&ack_rng, &pos, end);
-            fprintf(c->qlog, "%s[%" PRIu ",%" PRIu "]",
+            dprintf(c->qlog, "%s[%" PRIu ",%" PRIu "]",
                     (n <= ack_rng_cnt ? "," : ""), (uint_t)lg_ack - ack_rng,
                     (uint_t)lg_ack);
             if (n > 1) {
@@ -213,7 +217,7 @@ void qlog_transport(const qlog_pkt_evt_t evt,
                 lg_ack -= ack_rng + gap + 2;
             }
         }
-        fputc(']', c->qlog);
+        dprintf(c->qlog, "]");
 
         if (type == FRM_ACE) {
             uint64_t ect0;
@@ -224,18 +228,18 @@ void qlog_transport(const qlog_pkt_evt_t evt,
             decv(&ce, &pos, end);
 
             // prev_frame =
-            fprintf(c->qlog,
+            dprintf(c->qlog,
                     ",\"ect0\":%" PRIu ",\"ect1\":%" PRIu ",\"ce\":%" PRIu,
                     ect0, ect1, ce);
         }
 
         adj_iov_to_data(v, m);
-        fputc('}', c->qlog);
+        dprintf(c->qlog, "}");
     }
-    fputc(']', c->qlog);
+    dprintf(c->qlog, "]");
 
 done:
-    fputs("}]", c->qlog);
+    dprintf(c->qlog, "}]");
 }
 
 
@@ -251,42 +255,42 @@ void qlog_recovery(const qlog_rec_evt_t evt,
 
     static const char * const evt_str[] = {
         [rec_mu] = "metrics_updated", [rec_pl] = "packet_lost"};
-    fprintf(c->qlog, ",\"recovery\",\"%s\",\"%s\",{", evt_str[evt], trg);
+    dprintf(c->qlog, ",\"recovery\",\"%s\",\"%s\",{", evt_str[evt], trg);
 
     if (evt == rec_pl) {
-        fprintf(c->qlog, "\"packet_number\":%" PRIu, m->hdr.nr);
+        dprintf(c->qlog, "\"packet_number\":%" PRIu, m->hdr.nr);
         goto done;
     }
 
     int prev_metric = 0;
     if (c->rec.cur.in_flight != c->rec.prev.in_flight)
         prev_metric =
-            fprintf(c->qlog, "%s\"bytes_in_flight\":%" PRIu,
+            dprintf(c->qlog, "%s\"bytes_in_flight\":%" PRIu,
                     /* prev_metric ? "," : */ "", c->rec.cur.in_flight);
     if (c->rec.cur.cwnd != c->rec.prev.cwnd)
-        prev_metric = fprintf(c->qlog, "%s\"cwnd\":%" PRIu,
+        prev_metric = dprintf(c->qlog, "%s\"cwnd\":%" PRIu,
                               prev_metric ? "," : "", c->rec.cur.cwnd);
     if (c->rec.cur.ssthresh != UINT_T_MAX &&
         c->rec.cur.ssthresh != c->rec.prev.ssthresh)
-        prev_metric = fprintf(c->qlog, "%s\"ssthresh\":%" PRIu,
+        prev_metric = dprintf(c->qlog, "%s\"ssthresh\":%" PRIu,
                               prev_metric ? "," : "", c->rec.cur.ssthresh);
     if (c->rec.cur.srtt != c->rec.prev.srtt)
-        prev_metric = fprintf(c->qlog, "%s\"smoothed_rtt\":%" PRIu,
+        prev_metric = dprintf(c->qlog, "%s\"smoothed_rtt\":%" PRIu,
                               prev_metric ? "," : "", c->rec.cur.srtt);
     if (c->rec.cur.min_rtt < UINT_T_MAX &&
         c->rec.cur.min_rtt != c->rec.prev.min_rtt)
-        prev_metric = fprintf(c->qlog, "%s\"min_rtt\":%" PRIu,
+        prev_metric = dprintf(c->qlog, "%s\"min_rtt\":%" PRIu,
                               prev_metric ? "," : "", c->rec.cur.min_rtt);
     if (c->rec.cur.latest_rtt != c->rec.prev.latest_rtt)
-        prev_metric = fprintf(c->qlog, "%s\"latest_rtt\":%" PRIu,
+        prev_metric = dprintf(c->qlog, "%s\"latest_rtt\":%" PRIu,
                               prev_metric ? "," : "", c->rec.cur.latest_rtt);
     if (c->rec.cur.rttvar != c->rec.prev.rttvar)
         // prev_metric =
-        fprintf(c->qlog, "%s\"rtt_variance\":%" PRIu, prev_metric ? "," : "",
+        dprintf(c->qlog, "%s\"rtt_variance\":%" PRIu, prev_metric ? "," : "",
                 c->rec.cur.rttvar);
 
 done:
-    fputs("}]", c->qlog);
+    dprintf(c->qlog, "}]");
 }
 
 #else

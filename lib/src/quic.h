@@ -33,10 +33,6 @@
 #include <string.h>
 #include <sys/param.h>
 
-#ifndef NO_TLS_LOG
-#include <stdio.h>
-#endif
-
 #include <picotls.h>
 #include <timeout.h>
 
@@ -177,10 +173,6 @@ struct per_engine_data {
     struct q_conf conf;
     struct timeout api_alarm;
 
-#ifndef NO_TLS_LOG
-    FILE * tls_log;
-#endif
-
     ptls_context_t tls_ctx;
     ptls_aead_context_t * rid_ctx;
 
@@ -198,7 +190,10 @@ struct per_engine_data {
     sl_head(conn_head, q_conn) conns;
 #endif
 
-    uint8_t _unused2[4];
+#ifndef NO_TLS_LOG
+    int tls_log;
+#endif
+
     uint32_t scratch_len;
     uint8_t scratch[]; // packet-sized scratch space to avoid stack alloc
 };

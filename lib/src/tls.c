@@ -25,12 +25,14 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <fcntl.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -43,6 +45,7 @@
 #endif
 
 #ifdef WITH_OPENSSL
+#include <openssl/bio.h>
 #include <openssl/evp.h>
 #include <openssl/ossl_typ.h>
 #include <openssl/pem.h>
@@ -1168,13 +1171,14 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
 #if !defined(PARTICLE) && !defined(RIOT_VERSION)
     const char * const ticket_store = ped(c->w)->conf.ticket_store;
     warn(NTE, "saving TLS tickets to %s", ticket_store);
-    FILE * const fp = fopen(ticket_store, "wbe");
-    ensure(fp, "could not open ticket file %s", ticket_store);
+    const int fp = open(ticket_store, O_CREAT | O_WRONLY | O_CLOEXEC,
+                        S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
+    ensure(fp >= 0, "could not open ticket file %s", ticket_store);
 
     // write git hash
-    ensure(fwrite(&quant_commit_hash_len, sizeof(quant_commit_hash_len), 1, fp),
-           "fwrite");
-    ensure(fwrite(quant_commit_hash, quant_commit_hash_len, 1, fp), "fwrite");
+    ensure(write(fp, &quant_commit_hash_len, sizeof(quant_commit_hash_len)) > 0,
+           "write");
+    ensure(write(fp, quant_commit_hash, quant_commit_hash_len) > 0, "write");
 #endif
 
     char * s = 0;
@@ -1227,22 +1231,20 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
 
 #if !defined(PARTICLE) && !defined(RIOT_VERSION)
         size_t len = strlen(t->sni) + 1;
-        ensure(fwrite(&len, sizeof(len), 1, fp), "fwrite");
-        ensure(fwrite(t->sni, sizeof(*t->sni), len, fp), "fwrite");
+        ensure(write(fp, &len, sizeof(len)) > 0, "write");
+        ensure(write(fp, t->sni, len) > 0, "write");
 
         len = strlen(t->alpn) + 1;
-        ensure(fwrite(&len, sizeof(len), 1, fp), "fwrite");
-        ensure(fwrite(t->alpn, sizeof(*t->alpn), len, fp), "fwrite");
+        ensure(write(fp, &len, sizeof(len)) > 0, "write");
+        ensure(write(fp, t->alpn, len) > 0, "write");
 
-        ensure(fwrite(&t->tp, sizeof(t->tp), 1, fp), "fwrite");
-        ensure(fwrite(&t->vers, sizeof(t->vers), 1, fp), "fwrite");
+        ensure(write(fp, &t->tp, sizeof(t->tp)) > 0, "write");
+        ensure(write(fp, &t->vers, sizeof(t->vers)) > 0, "write");
 
-        ensure(fwrite(&t->ticket_len, sizeof(t->ticket_len), 1, fp), "fwrite");
-        ensure(fwrite(t->ticket, sizeof(*t->ticket), t->ticket_len, fp),
-               "fwrite");
+        ensure(write(fp, &t->ticket_len, sizeof(t->ticket_len)) > 0, "write");
+        ensure(write(fp, t->ticket, t->ticket_len) > 0, "write");
     }
-
-    fclose(fp);
+    close(fp);
 #endif
 
     return 0;
@@ -1484,8 +1486,8 @@ static void read_tickets(const struct q_conf * const conf)
     warn(INF, "reading TLS tickets from %s", conf->ticket_store);
 
 #if !defined(PARTICLE) && !defined(RIOT_VERSION)
-    FILE * const fp = fopen(conf->ticket_store, "rbe");
-    if (fp == 0) {
+    const int fp = open(conf->ticket_store, O_RDONLY | O_CLOEXEC);
+    if (fp < 0) {
         warn(WRN, "could not read TLS tickets from %s: %s", conf->ticket_store,
              strerror(errno));
         return;
@@ -1493,12 +1495,12 @@ static void read_tickets(const struct q_conf * const conf)
 
     // read and verify git hash
     size_t hash_len;
-    if (fread(&hash_len, sizeof(quant_commit_hash_len), 1, fp) != 1)
+    if (read(fp, &hash_len, sizeof(quant_commit_hash_len)) <= 0)
         goto done;
     if (hash_len != quant_commit_hash_len)
         goto remove;
     uint8_t buf[8192];
-    if (fread(buf, sizeof(uint8_t), hash_len, fp) != hash_len)
+    if (read(fp, buf, hash_len) <= 0)
         goto remove;
     if (memcmp(buf, quant_commit_hash, hash_len) != 0) {
     remove:
@@ -1511,7 +1513,7 @@ static void read_tickets(const struct q_conf * const conf)
     for (;;) {
         // try and read the SNI len
         size_t len;
-        if (fread(&len, sizeof(len), 1, fp) != 1)
+        if (read(fp, &len, sizeof(len)) == 0)
             // we read all the tickets
             break;
         ensure(len <= 256, "SNI len %lu too long", len);
@@ -1520,31 +1522,31 @@ static void read_tickets(const struct q_conf * const conf)
         ensure(t, "calloc");
         t->sni = calloc(1, len);
         ensure(t->sni, "calloc");
-        if (fread(t->sni, sizeof(*t->sni), len, fp) != len)
+        if (read(fp, t->sni, len) <= 0)
             goto abort;
         t->sni[len - 1] = 0;
 
-        if (fread(&len, sizeof(len), 1, fp) != 1)
+        if (read(fp, &len, sizeof(len)) <= 0)
             goto abort;
         ensure(len <= 256, "ALPN len %lu too long", len);
         t->alpn = calloc(1, len);
         ensure(t->alpn, "calloc");
-        if (fread(t->alpn, sizeof(*t->alpn), len, fp) != len)
+        if (read(fp, t->alpn, len) <= 0)
             goto abort;
         t->alpn[len - 1] = 0;
 
-        if (fread(&t->tp, sizeof(t->tp), 1, fp) != 1)
+        if (read(fp, &t->tp, sizeof(t->tp)) <= 0)
             goto abort;
-        if (fread(&t->vers, sizeof(t->vers), 1, fp) != 1)
+        if (read(fp, &t->vers, sizeof(t->vers)) <= 0)
             goto abort;
 
-        if (fread(&len, sizeof(len), 1, fp) != 1)
+        if (read(fp, &len, sizeof(len)) <= 0)
             goto abort;
         ensure(len <= 8192, "ticket_len %lu too long", len);
         t->ticket_len = len;
         t->ticket = calloc(len, sizeof(*t->ticket));
         ensure(t->ticket, "calloc");
-        if (fread(t->ticket, sizeof(*t->ticket), len, fp) != len)
+        if (read(fp, t->ticket, len) <= 0)
             goto abort;
 
         ensure(splay_insert(tickets_by_peer, &tickets, t) == 0, "inserted");
@@ -1556,7 +1558,7 @@ static void read_tickets(const struct q_conf * const conf)
     }
 
 done:
-    fclose(fp);
+    close(fp);
 #endif
 }
 
@@ -1570,20 +1572,19 @@ log_event_cb(ptls_log_event_t * const self __attribute__((unused)),
              ...)
 {
     struct q_conn * const c = *ptls_get_data_ptr(tls);
-    FILE * const tls_log = ped(c->w)->tls_log;
+    const int tls_log = ped(c->w)->tls_log;
 
-    fprintf(tls_log, "%s %s ", type,
+    dprintf(tls_log, "%s %s ", type,
             hex2str(ptls_get_client_random(tls).base, PTLS_HELLO_RANDOM_SIZE,
                     (char[hex_str_len(PTLS_HELLO_RANDOM_SIZE)]){""},
                     hex_str_len(PTLS_HELLO_RANDOM_SIZE)));
 
     va_list args;
     va_start(args, fmt);
-    vfprintf(tls_log, fmt, args);
+    vdprintf(tls_log, fmt, args);
     va_end(args);
 
-    fprintf(tls_log, "\n");
-    fflush(tls_log);
+    dprintf(tls_log, "\n");
 }
 #endif
 
@@ -1663,10 +1664,11 @@ void init_tls_ctx(const struct q_conf * const conf,
 
     if (conf && conf->tls_key) {
 #ifdef WITH_OPENSSL
-        FILE * const fp = fopen(conf->tls_key, "rbe");
-        ensure(fp, "could not open key %s", conf->tls_key);
-        EVP_PKEY * const pkey = PEM_read_PrivateKey(fp, 0, 0, 0);
-        fclose(fp);
+        const int fp = open(conf->tls_key, O_RDONLY | O_CLOEXEC);
+        ensure(fp >= 0, "could not open key %s", conf->tls_key);
+        BIO * const bio = BIO_new_fd(fp, true);
+        EVP_PKEY * const pkey = PEM_read_bio_PrivateKey(bio, 0, 0, 0);
+        BIO_free(bio);
         ensure(pkey, "failed to load private key");
         ptls_openssl_init_sign_certificate(&ped->sign_cert, pkey);
         EVP_PKEY_free(pkey);
@@ -1704,11 +1706,10 @@ void init_tls_ctx(const struct q_conf * const conf,
 
 #ifndef NO_TLS_LOG
     if (conf && conf->tls_log) {
-        ped->tls_log = fopen(conf->tls_log, "abe");
-        ensure(ped->tls_log, "could not open TLS log %s", conf->tls_log);
-    }
-
-    if (conf && conf->tls_log) {
+        ped->tls_log =
+            open(conf->tls_log, O_APPEND | O_CREAT | O_WRONLY | O_CLOEXEC,
+                 S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
+        ensure(ped->tls_log >= 0, "could not open TLS log %s", conf->tls_log);
         static ptls_log_event_t log_event = {log_event_cb};
         tls_ctx->log_event = &log_event;
     }
