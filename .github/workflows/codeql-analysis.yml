@@ -34,6 +34,7 @@ jobs:
         uses: github/codeql-action/init@v1
         with:
           languages: cpp
+          config-file: ./.github/codeql/codeql-config.yml
 
       - run: |
           sudo apt-get install -y libssl-dev libhttp-parser-dev libbsd-dev
