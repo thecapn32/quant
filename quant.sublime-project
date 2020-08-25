@@ -5,7 +5,7 @@
             "path": ".",
             "file_include_patterns": [
                 "*.c", "*.cc", "*.cpp", "*.h", "*.sh", "*.txt", "*.dot",
-                "*.imp", "*.in", "*.result", "*.yml", "*.md", "*.mk",
+                "*.imp", "*.in", "*.result", "*.yml", "*.md", "*.mk", "*.sh",
                 ".gitignore", ".gitmodules", ".clang-format", ".editorconfig",
                 ".dockerignore", "Vagrantfile*", "*.r", "*.py", "*.inc",
                 "*.sublime-project", "Makefile*", "Dockerfile*"
