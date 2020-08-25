@@ -50,16 +50,20 @@ foreach(TARGET ${TARGETS})
       picohttp-core
       ${CRYPTOLIBS}
     )
-    if("${CMAKE_C_COMPILER_ID}" STREQUAL "Clang" AND
-       CMAKE_C_COMPILER_VERSION VERSION_GREATER 9)
-      target_compile_options(${TARGET} PRIVATE -Wno-poison-system-directories)
-    endif()
+  endif()
+
+  if("${CMAKE_C_COMPILER_ID}" STREQUAL "Clang" AND
+     CMAKE_C_COMPILER_VERSION VERSION_GREATER 9)
+    target_compile_options(${TARGET} PRIVATE -Wno-poison-system-directories)
   endif()
 
   target_include_directories(${TARGET}
     SYSTEM PRIVATE
-      ${HTTP_PARSER_INCLUDE}
       $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/picoquic>
+  )
+  target_include_directories(${TARGET}
+    PRIVATE
+      ${HTTP_PARSER_INCLUDE}
   )
 
   if(DSYMUTIL)

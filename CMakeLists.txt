@@ -16,14 +16,6 @@ check_cxx_symbol_exists(benchmark::Initialize benchmark/benchmark.h
                         HAVE_BENCHMARK_H)
 cmake_reset_check_state()
 
-# Look for netmap
-set(CMAKE_REQUIRED_INCLUDES
-    /usr/include /usr/local/include ${PROJECT_SOURCE_DIR}/lib/include
-)
-check_include_file(net/netmap_user.h HAVE_NETMAP_H)
-include(CMakePushCheckState)
-cmake_reset_check_state()
-
 # See if we have google gperftools
 include(CheckSymbolExists)
 set(CMAKE_REQUIRED_INCLUDES /usr/local/include)
