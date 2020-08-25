@@ -20,7 +20,10 @@ fi
 
 # For quant, call client and server with full path, so addr2line can find them
 
+STRIP='s,\x1B\[[0-9;]*[a-zA-Z],,g'
+
 if [ "$ROLE" == "client" ]; then
+    [ -n $CRON ] && CLIENT_ARGS="-v4 $CLIENT_ARGS"
     CLIENT_ARGS="-i eth0 -w -q $QLOGDIR -l $SSLKEYLOGFILE -t 150 -x 50 \
         -e 0xff00001d $CLIENT_ARGS"
 
@@ -40,7 +43,7 @@ if [ "$ROLE" == "client" ]; then
         REQS=($REQUESTS)
         REQUESTS=${REQS[0]}
         /usr/local/bin/client $CLIENT_ARGS $REQUESTS 2>&1 | \
-            tee -i -a "/logs/$ROLE.log"
+            sed $STRIP | tee -i -a "/logs/$ROLE.log"
         echo "XXX $ROLE DONE" | tee -i -a "/logs/$ROLE.log"
         REQUESTS=${REQS[@]:1}
         ;;
@@ -49,7 +52,7 @@ if [ "$ROLE" == "client" ]; then
             ((skip++))
             /usr/local/bin/client $CLIENT_ARGS \
                 -q "$QLOGDIR" $req 2>&1 | \
-                tee -i -a "/logs/$ROLE.log"
+                sed $STRIP | tee -i -a "/logs/$ROLE.log"
             echo "XXX $ROLE DONE" | tee -i -a "/logs/$ROLE.log"
         done
         ;;
@@ -59,12 +62,13 @@ if [ "$ROLE" == "client" ]; then
 
     if [ $skip -eq 0 ]; then
         /usr/local/bin/client $CLIENT_ARGS $REQUESTS 2>&1 | \
-            tee -i -a "/logs/$ROLE.log"
+            sed $STRIP | tee -i -a "/logs/$ROLE.log"
         echo "XXX $ROLE DONE" | tee -i -a "/logs/$ROLE.log"
     fi
-    sed 's,\x1B\[[0-9;]*[a-zA-Z],,g' "/logs/$ROLE.log" > "/logs/$ROLE.log.txt"
 
 elif [ "$ROLE" == "server" ]; then
+    [ -n $CRON ] && SERVER_ARGS="-v4 $SERVER_ARGS"
+    SERVER_ARGS="-r $SERVER_ARGS"
     case "$TESTCASE" in
     "retry")
         SERVER_ARGS="-r $SERVER_ARGS"
@@ -75,7 +79,5 @@ elif [ "$ROLE" == "server" ]; then
 
     /usr/local/bin/server $SERVER_ARGS -i eth0 -d /www -p 443 -p 4434 -t 0 \
         -x 50 -c /tls/dummy.crt -k /tls/dummy.key -q "$QLOGDIR" 2>&1 \
-            | tee -i -a "/logs/$ROLE.log" \
-            | sed -u 's,\x1B\[[0-9;]*[a-zA-Z],,g' \
-            | tee -i -a "/logs/$ROLE.log.txt"
+            | sed -u $STRIP | tee -i -a "/logs/$ROLE.log"
 fi
