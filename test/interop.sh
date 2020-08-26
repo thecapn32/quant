@@ -23,7 +23,7 @@ fi
 STRIP='s,\x1B\[[0-9;]*[a-zA-Z],,g'
 
 if [ "$ROLE" == "client" ]; then
-    [ -n $CRON ] && CLIENT_ARGS="-v4 $CLIENT_ARGS"
+    [ -n "$CRON" ] && CLIENT_ARGS="-v4 $CLIENT_ARGS"
     CLIENT_ARGS="-i eth0 -w -q $QLOGDIR -l $SSLKEYLOGFILE -t 150 -x 50 \
         -e 0xff00001d $CLIENT_ARGS"
 
@@ -67,7 +67,7 @@ if [ "$ROLE" == "client" ]; then
     fi
 
 elif [ "$ROLE" == "server" ]; then
-    [ -n $CRON ] && SERVER_ARGS="-v4 $SERVER_ARGS"
+    [ -n "$CRON" ] && SERVER_ARGS="-v4 $SERVER_ARGS"
     SERVER_ARGS="-r $SERVER_ARGS"
     case "$TESTCASE" in
     "retry")
