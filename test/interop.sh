@@ -68,7 +68,6 @@ if [ "$ROLE" == "client" ]; then
 
 elif [ "$ROLE" == "server" ]; then
     [ -n "$CRON" ] && SERVER_ARGS="-v4 $SERVER_ARGS"
-    SERVER_ARGS="-r $SERVER_ARGS"
     case "$TESTCASE" in
     "retry")
         SERVER_ARGS="-r $SERVER_ARGS"
