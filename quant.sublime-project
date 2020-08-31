@@ -11,8 +11,8 @@
                 "*.sublime-project", "Makefile*", "Dockerfile*"
             ],
             "folder_exclude_patterns": [
-                ".git", ".vagrant", "Darwin*", "Linux*",
-                "corpus*", "qvalve-tests"
+                ".git", ".vagrant", ".terraform", "corpus*", "qvalve-tests",
+                "Darwin*", "Linux*", "FreeBSD*"
             ],
         },
     ],
