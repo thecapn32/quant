@@ -411,7 +411,7 @@ extern void __attribute__((nonnull)) rx_pkts(struct w_iov_sq * const x,
 #endif
 
 #ifndef NO_MIGRATION
-extern void __attribute__((nonnull))
+extern bool __attribute__((nonnull, warn_unused_result))
 conns_by_id_ins(struct q_conn * const c, struct cid * const id);
 
 extern void __attribute__((nonnull)) conns_by_id_del(struct cid * const id);

@@ -355,7 +355,8 @@ static void __attribute__((nonnull)) tx_vneg_resp(struct w_sock * const ws,
 
 
 #ifndef NO_SERVER
-static void __attribute__((nonnull)) update_act_scid(struct q_conn * const c)
+static bool __attribute__((nonnull, warn_unused_result))
+update_act_scid(struct q_conn * const c)
 {
 #ifndef NO_MIGRATION
     conns_by_id_del(c->scid);
@@ -367,22 +368,26 @@ static void __attribute__((nonnull)) update_act_scid(struct q_conn * const c)
     warn(INF, "hshk switch to scid %s for %s %s conn (was %s)", scid_str_new,
          conn_state_str[c->state], conn_type(c), scid_str_prev);
 #ifndef NO_MIGRATION
-    conns_by_id_ins(c, c->scid);
+    if (unlikely(conns_by_id_ins(c, c->scid) == false))
+        return false;
 #endif
+    return true;
 }
 
 
-static void __attribute__((nonnull)) tx_rtry(struct q_conn * const c)
+static bool __attribute__((nonnull, warn_unused_result))
+tx_rtry(struct q_conn * const c)
 {
 #ifdef DEBUG_EXTRA
     warn(INF, "sending retry");
 #endif
 
+    bool ret = false;
     struct pkt_meta * mx;
     struct w_iov * const xv = alloc_iov(c->w, q_conn_af(c), 0, 0, &mx);
     if (unlikely(xv == 0)) {
         warn(WRN, "could not alloc iov");
-        return;
+        return false;
     }
 
     struct w_iov_sq q = w_iov_sq_initializer(q);
@@ -393,7 +398,9 @@ static void __attribute__((nonnull)) tx_rtry(struct q_conn * const c)
     mx->hdr.vers = c->vers;
 
     const struct cid odcid = *c->scid;
-    update_act_scid(c);
+    if (unlikely(update_act_scid(c) == false))
+        goto done;
+
     mk_rtry_tok(c, &odcid);
     uint8_t rit[RIT_LEN];
     mk_rit(c, &odcid, mx->hdr.flags, c->dcid, c->scid, c->tok, c->tok_len, rit);
@@ -415,7 +422,11 @@ static void __attribute__((nonnull)) tx_rtry(struct q_conn * const c)
     log_pkt("TX", xv, &xv->saddr, c->tok, c->tok_len, rit);
     // qlog_transport(pkt_tx, "default", xv, mx);
     do_w_tx(c->sock, &q);
+    ret = true;
+
+done:
     q_free(&q);
+    return ret;
 }
 #endif
 
@@ -741,14 +752,18 @@ void conns_by_srt_del(uint8_t * const srt)
 
 
 #ifndef NO_MIGRATION
-void conns_by_id_ins(struct q_conn * const c, struct cid * const id)
+bool conns_by_id_ins(struct q_conn * const c, struct cid * const id)
 {
     assure(id->in_cbi == false, "already in cbi");
     int ret;
     const khiter_t k = kh_put(conns_by_id, &conns_by_id, id, &ret);
-    assure(ret >= 1, "inserted returned %d", ret);
+    if (unlikely(ret == 0)) {
+        warn(ERR, "cannot ins cid %s", cid_str(id));
+        return false;
+    }
     kh_val(&conns_by_id, k) = c;
     id->in_cbi = true;
+    return true;
 }
 
 
@@ -756,7 +771,8 @@ void conns_by_id_del(struct cid * const id)
 {
     assure(id->in_cbi, "not in cbi");
     const khiter_t k = kh_get(conns_by_id, &conns_by_id, id);
-    assure(k != kh_end(&conns_by_id), "found");
+    if (unlikely(k == kh_end(&conns_by_id)))
+        warn(ERR, "cid %s not present", cid_str(id));
     kh_del(conns_by_id, &conns_by_id, k);
     id->in_cbi = false;
 }
@@ -802,7 +818,7 @@ rx_crypto(struct q_conn * const c, const struct pkt_meta * const m_cur)
 }
 
 
-static void __attribute__((nonnull(1)))
+static bool __attribute__((nonnull(1), warn_unused_result))
 new_initial_cids(struct q_conn * const c,
                  const struct cid * const dcid,
                  const struct cid * const scid)
@@ -833,17 +849,19 @@ new_initial_cids(struct q_conn * const c,
 #ifndef NO_MIGRATION
     if (id.len) {
         c->scid = cid_ins(&c->scids, &id);
-        conns_by_id_ins(c, c->scid);
+        if (unlikely(conns_by_id_ins(c, c->scid) == false))
+            return false;
     } else
 #endif
         if (c->in_c_zcid == false) {
         sl_insert_head(&c_zcid, c, node_zcid_int);
         c->in_c_zcid = true;
     }
+    return true;
 }
 
 
-static void __attribute__((nonnull))
+static bool __attribute__((nonnull, warn_unused_result))
 vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
 {
     // reset FC state
@@ -866,7 +884,8 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
         if (c->in_c_zcid == false)
             conns_by_id_del(c->scid);
 #endif
-        new_initial_cids(c, 0, 0);
+        if (unlikely(new_initial_cids(c, 0, 0) == false))
+            return false;
         init_tp(c);
     }
 
@@ -882,6 +901,8 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
     // switch to new qlog file
     if (ped(c->w)->conf.qlog_dir)
         qlog_init(c);
+
+    return true;
 }
 
 
@@ -957,7 +978,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
                 }
             } else {
                 // send a RETRY
-                tx_rtry(c);
+                ok = tx_rtry(c);
                 goto done;
             }
         }
@@ -990,10 +1011,16 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
 #endif
 
         // server picks a new random cid
-        update_act_scid(c);
+        if (unlikely(update_act_scid(c) == false)) {
+            ok = false;
+            break;
+        }
 #ifndef NO_MIGRATION
         // keep listening on odcid for multi-pkt/reordered/dup'ed Initials
-        conns_by_id_ins(c, &c->odcid);
+        if (unlikely(conns_by_id_ins(c, &c->odcid) == false)) {
+            ok = false;
+            break;
+        }
 #endif
         init_tp(c);
         conn_to_state(c, conn_opng);
@@ -1040,13 +1067,12 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
                         goto done;
                     }
 
-                    vneg_or_rtry_resp(c, true);
                     c->vers = try_vers;
                     warn(INF,
                          "serv didn't like vers 0x%0" PRIx32
                          ", retrying with 0x%0" PRIx32 "",
                          c->vers_initial, c->vers);
-                    ok = true;
+                    ok = vneg_or_rtry_resp(c, true);
                 } else
                     // the application requested a given version for this conn
                     warn(INF,
@@ -1085,11 +1111,10 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
                 cid_cpy(c->dcid, &m->hdr.scid);
                 // remember intial packet number
                 const uint64_t lg_sent = c->pns[pn_init].lg_sent;
-                vneg_or_rtry_resp(c, false);
                 c->pns[pn_init].lg_sent = lg_sent;
                 warn(INF, "handling serv retry w/tok %s",
                      tok_str(c->tok, c->tok_len));
-                ok = true;
+                ok = vneg_or_rtry_resp(c, false);
                 goto done;
             }
 
@@ -1879,7 +1904,8 @@ struct q_conn * new_conn(struct w_engine * const w,
     sq_init(&c->migr_txq);
 #endif
 
-    new_initial_cids(c, dcid, scid);
+    if (unlikely(new_initial_cids(c, dcid, scid) == false))
+        goto fail;
     if (c->scid == 0)
         c->sock->data = c;
 
@@ -1960,7 +1986,10 @@ struct q_conn * new_conn(struct w_engine * const w,
             c->max_cid_seq_out = c->tp_mine.pref_addr.cid.seq = 1;
             mk_rand_cid(&c->tp_mine.pref_addr.cid,
                         ped(c->w)->conf.server_cid_len, true);
-            conns_by_id_ins(c, cid_ins(&c->scids, &c->tp_mine.pref_addr.cid));
+            if (unlikely(conns_by_id_ins(
+                             c, cid_ins(&c->scids,
+                                        &c->tp_mine.pref_addr.cid)) == false))
+                goto fail;
         }
     }
 #endif

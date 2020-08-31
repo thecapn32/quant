@@ -1907,7 +1907,11 @@ void enc_new_cid_frame(struct q_conn_info * const ci,
             err_close(c, ERR_PV, FRM_CID, "cannot ins cid %s", cid_str(&ncid));
             return;
         }
-        conns_by_id_ins(c, nscid);
+        if (unlikely(conns_by_id_ins(c, nscid) == false)) {
+            err_close(c, ERR_PV, FRM_CID, "cannot ins cid %s", cid_str(nscid));
+            return;
+        }
+
 #ifndef NO_SRT_MATCHING
         srt = ncid.srt;
 #endif
