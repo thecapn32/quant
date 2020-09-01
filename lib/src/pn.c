@@ -111,11 +111,13 @@ void free_pn(struct pn_space * const pn)
 }
 
 
-void reset_pn(struct pn_space * const pn)
+void reset_pn(struct pn_space * const pn, const bool rst_lg_sent)
 {
     free_pn(pn);
     memset(&pn->sent_pkts, 0, sizeof(pn->sent_pkts));
-    pn->lg_sent = pn->lg_acked = UINT_T_MAX;
+    pn->lg_acked = UINT_T_MAX;
+    if (rst_lg_sent)
+        pn->lg_sent = UINT_T_MAX;
 #ifndef NO_ECN
     memset(pn->ecn_ref, 0, sizeof(pn->ecn_ref));
     memset(pn->ecn_rxed, 0, sizeof(pn->ecn_rxed));

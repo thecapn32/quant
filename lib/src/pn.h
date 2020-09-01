@@ -27,6 +27,7 @@
 
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include <quant/quant.h>
@@ -150,7 +151,8 @@ init_pn(struct pn_space * const pn, struct q_conn * const c, const pn_t type);
 
 extern void __attribute__((nonnull)) free_pn(struct pn_space * const pn);
 
-extern void __attribute__((nonnull)) reset_pn(struct pn_space * const pn);
+extern void __attribute__((nonnull))
+reset_pn(struct pn_space * const pn, const bool rst_lg_sent);
 
 extern void __attribute__((nonnull)) abandon_pn(struct pn_space * const pn);
 
