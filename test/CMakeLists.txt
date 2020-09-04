@@ -38,7 +38,7 @@ add_custom_command(
     ${OPENSSL_ROOT_DIR}/bin/openssl
   ARGS
     ecparam -out ${CMAKE_CURRENT_BINARY_DIR}/dummy.eckey
-    -noout -name secp256r1 -genkey
+    -noout -name prime256v1 -genkey
 )
 
 add_custom_command(
