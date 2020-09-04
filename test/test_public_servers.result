@@ -13,4 +13,5 @@ picoquic  *         V    H    D    C    R    Z    S    Q    M    B    A    U    
 pquic     *         V    H    D    C    R    Z         Q         B              P    E    O    2         3
 quant     *    x    V    H    D    C    R    Z    S    Q    M    B    A    U    P    E    O    2    G
 quiche    *         V    H    D    C    R    Z    S    Q                                  O    2         3
+quic-go   *         V    H    D    C    R    Z    S    Q                   U              O    2         3
 quinn     *         V    H    D    C    R         S    Q    M    B    A    U    P    e    O    2         3
