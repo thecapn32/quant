@@ -175,12 +175,13 @@ void log_stream_or_crypto_frame(const bool rtx,
 #endif
 
 
-static void __attribute__((nonnull)) trim_frame(struct pkt_meta * const p)
+static uint_t __attribute__((nonnull)) trim_frame(struct pkt_meta * const p)
 {
     const uint_t diff = p->strm->in_data_off - p->strm_off;
     p->strm_off += diff;
     p->strm_data_pos += diff;
     p->strm_data_len -= diff;
+    return diff;
 }
 
 
@@ -381,9 +382,14 @@ dec_stream_or_crypto_frame(const uint8_t type,
                 break;
 
             // left edge of p <= left edge of stream: overlap, trim & enqueue
-            if (unlikely(p->strm->in_data_off > p->strm_off))
-                trim_frame(p);
-            sq_insert_tail(&m->strm->in, w_iov(c->w, pm_idx(c->w, p)), next);
+            struct w_iov * const vv = w_iov(c->w, pm_idx(c->w, p));
+            if (unlikely(p->strm->in_data_off > p->strm_off)) {
+                const uint_t diff = trim_frame(p);
+                // adjust w_iov start and len to stream frame data
+                vv->buf += diff;
+                vv->len -= diff;
+            }
+            sq_insert_tail(&m->strm->in, vv, next);
             m->strm->in_data_off += p->strm_data_len;
             splay_remove(ooo_by_off, &m->strm->in_ooo, p);
 
