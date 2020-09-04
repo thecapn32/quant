@@ -587,7 +587,9 @@ mk_or_open_dir(const char * const path, mode_t mode)
 struct w_engine * q_init(const char * const ifname,
                          const struct q_conf * const conf)
 {
+#if !defined(PARTICLE) && !defined(RIOT_VERSION)
     umask(S_IWGRP | S_IWOTH);
+#endif
 
     // initialize warpcore on the given interface
     const uint32_t num_bufs = conf && conf->num_bufs ? conf->num_bufs : 10000;
