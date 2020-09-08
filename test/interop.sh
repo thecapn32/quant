@@ -5,7 +5,7 @@
 
 if [ -n "$TESTCASE" ]; then
     case "$TESTCASE" in
-    "versionnegotiation"|"handshake"|"transfer"|"retry"|"resumption"|"multiconnect"|"zerortt"|"chacha20")
+    "ecn"|"versionnegotiation"|"handshake"|"transfer"|"retry"|"resumption"|"multiconnect"|"zerortt"|"chacha20")
         ;;
     *)
         exit 127
