@@ -5,7 +5,7 @@
 
 if [ -n "$TESTCASE" ]; then
     case "$TESTCASE" in
-    "ecn"|"versionnegotiation"|"handshake"|"transfer"|"retry"|"resumption"|"multiconnect"|"zerortt"|"chacha20")
+    "keyupdate"|"ecn"|"versionnegotiation"|"handshake"|"transfer"|"retry"|"resumption"|"multiconnect"|"zerortt"|"chacha20")
         ;;
     *)
         exit 127
@@ -33,6 +33,9 @@ if [ "$ROLE" == "client" ]; then
 
     skip=0
     case "$TESTCASE" in
+    "keyupdate")
+        CLIENT_ARGS="-u $CLIENT_ARGS"
+        ;;
     "versionnegotiation")
         CLIENT_ARGS="-e 12345678 $CLIENT_ARGS"
         ;;
