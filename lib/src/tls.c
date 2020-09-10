@@ -1171,7 +1171,7 @@ static int save_ticket_cb(ptls_save_ticket_t * self __attribute__((unused)),
 #if !defined(PARTICLE) && !defined(RIOT_VERSION)
     const char * const ticket_store = ped(c->w)->conf.ticket_store;
     warn(NTE, "saving TLS tickets to %s", ticket_store);
-    const int fp = open(ticket_store, O_CREAT | O_WRONLY | O_CLOEXEC,
+    const int fp = open(ticket_store, O_CREAT | O_TRUNC | O_WRONLY | O_CLOEXEC,
                         S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
     ensure(fp >= 0, "could not open ticket file %s", ticket_store);
 
