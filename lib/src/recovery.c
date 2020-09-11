@@ -333,6 +333,12 @@ void on_pkt_lost(struct pkt_meta * const m, const bool is_lost)
                 case FRM_MCD:
                     c->tx_max_data = true;
                     break;
+                case FRM_MSB:
+                    c->tx_max_sid_bidi = true;
+                    break;
+                case FRM_MSU:
+                    c->tx_max_sid_uni = true;
+                    break;
                 case FRM_MSD:;
                     struct q_stream * const s =
                         get_stream(c, m->max_strm_data_sid);
