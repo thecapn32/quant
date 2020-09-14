@@ -195,7 +195,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
             -cert-err58-cpp
             -cppcoreguidelines-avoid-magic-numbers
             -cppcoreguidelines-init-variables
-            -cppcoreguidelines-interfaces-global-init
             -cppcoreguidelines-macro-usage
             -cppcoreguidelines-owning-memory
             -cppcoreguidelines-pro-bounds-array-to-pointer-decay
