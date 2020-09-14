@@ -305,16 +305,24 @@ extern char __rit_str[hex_str_len(RIT_LEN)];
 
 
 #ifdef HAVE_ASAN
+#ifdef HAVE_ASAN_ADDRESS_IS_POISONED
+#define is_poisoned(x) __asan_address_is_poisoned(x)
+#define is_unpoisoned(x) (__asan_address_is_poisoned(x) == fase)
+#else
+#define is_poisoned(x) true
+#define is_unpoisoned(x) true
+#endif
+
 #define poison_scratch(s, l)                                                   \
     do {                                                                       \
-        ensure(!__asan_address_is_poisoned((s)), "scratch already poisoned");  \
+        ensure(is_unpoisoned((s)), "scratch already poisoned");                \
         ASAN_POISON_MEMORY_REGION((s), (l));                                   \
     } while (0)
 
 
 #define unpoison_scratch(s, l)                                                 \
     do {                                                                       \
-        ensure(__asan_address_is_poisoned((s)), "scratch already unpoisoned"); \
+        ensure(is_poisoned((s)), "scratch already unpoisoned");                \
         ASAN_UNPOISON_MEMORY_REGION((s), (l));                                 \
     } while (0)
 #else

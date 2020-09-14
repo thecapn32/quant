@@ -891,7 +891,7 @@ void q_cleanup(struct w_engine * const w)
     }
 #endif
 
-#ifdef HAVE_ASAN
+#if defined(HAVE_ASAN) && defined(HAVE_ASAN_ADDRESS_IS_POISONED)
     for (uint_t i = 0; i < ped(w)->conf.num_bufs; i++) {
         struct pkt_meta * const m = &ped(w)->pkt_meta[i];
         if (__asan_address_is_poisoned(m) == false) {

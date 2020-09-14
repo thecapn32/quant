@@ -60,6 +60,7 @@ foreach(FLAG -pipe -Wextra -Wpedantic -Weverything -Werror
         -Wno-missing-field-initializers # and this (clang-5)
         -Wno-extra-semi-stmt # the kh_foreach* macros need this
         -Wno-macro-redefined # because we redefine _FORTIFY_SOURCE
+        -Wno-poison-system-directories
         -Wno-covered-switch-default -Wno-missing-braces
         -Wno-gnu-statement-expression
         -fcomment-block-commands=dotfile
@@ -113,6 +114,11 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     # See if we can use the address sanitizer
     check_include_file(sanitizer/asan_interface.h HAVE_ASAN)
     if(HAVE_ASAN AND NOT CMAKE_GENERATOR STREQUAL Xcode)
+      set(CMAKE_REQUIRED_FLAGS -fsanitize=address)
+      check_symbol_exists(__asan_address_is_poisoned
+                          "sanitizer/asan_interface.h"
+                          HAVE_ASAN_ADDRESS_IS_POISONED)
+      cmake_reset_check_state()
       set(CMAKE_REQUIRED_FLAGS -fsanitize=address,undefined,leak)
       check_c_compiler_flag("" _fsanitize_address_undefined_leak)
       if(_fsanitize_address_undefined_leak)
