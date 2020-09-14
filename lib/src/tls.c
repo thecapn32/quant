@@ -1721,6 +1721,11 @@ void init_tls_ctx(const struct q_conf * const conf,
 #endif
                                                                     0};
 
+#ifdef WITH_OPENSSL
+    const int fusion = ptls_fusion_is_supported_by_cpu();
+    warn(INF, "picotls fusion is%s supported.",
+         fusion ? "" : RED BLD " not" NRM);
+
     static const ptls_cipher_suite_t fusion_aes128gcmsha256 = {
         PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_fusion_aes128gcm,
         &ptls_openssl_sha256};
@@ -1731,17 +1736,6 @@ void init_tls_ctx(const struct q_conf * const conf,
         &ptls_openssl_sha384};
 #endif
 
-    const int fusion =
-#ifdef WITH_OPENSSL
-        ptls_fusion_is_supported_by_cpu()
-#else
-        0
-#endif
-        ;
-
-#ifdef WITH_OPENSSL
-    warn(INF, "picotls fusion is%s supported.",
-         fusion ? "" : RED BLD " not" NRM);
     static const ptls_cipher_suite_t * cipher_suite[] = {
         &ptls_openssl_aes128gcmsha256,
 #ifndef MINIMAL_CIPHERS
@@ -1772,19 +1766,20 @@ void init_tls_ctx(const struct q_conf * const conf,
 #endif
         0};
 
+    tls_ctx->cipher_suites = (conf && conf->force_chacha20)
+                                 ? chacha20_cipher_suite
+                                 : (
+#ifdef WITH_OPENSSL
+                                       fusion ? cipher_suite_fusion :
+#endif
+                                              cipher_suite);
+
     static ptls_on_client_hello_t on_client_hello = {on_ch};
     static ptls_update_traffic_key_t update_traffic_key = {
         update_traffic_key_cb};
-
     static ptls_get_time_t get_time_cb = {get_time};
     tls_ctx->get_time = &get_time_cb;
-
     tls_ctx->omit_end_of_early_data = true;
-
-    tls_ctx->cipher_suites =
-        (conf && conf->force_chacha20)
-            ? chacha20_cipher_suite
-            : (fusion ? cipher_suite_fusion : cipher_suite);
     tls_ctx->key_exchanges = key_exchanges;
     tls_ctx->on_client_hello = &on_client_hello;
     tls_ctx->update_traffic_key = &update_traffic_key;
