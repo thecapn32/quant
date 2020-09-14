@@ -49,10 +49,17 @@
 #include <openssl/evp.h>
 #include <openssl/ossl_typ.h>
 #include <openssl/pem.h>
+#include <picotls/fusion.h>
 #include <picotls/openssl.h>
 
-#define cipher_suite ptls_openssl_cipher_suites
-#define aes128gcmsha256 ptls_openssl_aes128gcmsha256
+static const ptls_cipher_suite_t
+    fusion_aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256,
+                              &ptls_fusion_aes128gcm, &ptls_openssl_sha256},
+    fusion_aes256gcmsha384 = {PTLS_CIPHER_SUITE_AES_256_GCM_SHA384,
+                              &ptls_fusion_aes256gcm, &ptls_openssl_sha384};
+
+
+#define aes128gcmsha256 fusion_aes128gcmsha256
 #define secp256r1 ptls_openssl_secp256r1
 #ifndef MINIMAL_CIPHERS
 #define x25519 ptls_openssl_x25519
@@ -1721,15 +1728,20 @@ void init_tls_ctx(const struct q_conf * const conf,
 #endif
                                                                     0};
 
-#ifdef MINIMAL_CIPHERS
     static const ptls_cipher_suite_t * cipher_suite[] = {
 #ifdef WITH_OPENSSL
-        &ptls_openssl_aes128gcmsha256,
+        &fusion_aes128gcmsha256,
+#ifndef MINIMAL_CIPHERS
+        &fusion_aes256gcmsha384, &ptls_openssl_chacha20poly1305sha256,
+#endif
 #else
         &ptls_minicrypto_aes128gcmsha256,
+#ifndef MINIMAL_CIPHERS
+#endif
+        &ptls_minicrypto_aes256gcmsha384,
+        &ptls_minicrypto_chacha20poly1305sha256,
 #endif
         0};
-#endif
 
     static const ptls_cipher_suite_t * chacha20_cipher_suite[] = {
 #ifdef WITH_OPENSSL
@@ -1747,6 +1759,7 @@ void init_tls_ctx(const struct q_conf * const conf,
     tls_ctx->get_time = &get_time_cb;
 
     tls_ctx->omit_end_of_early_data = true;
+
     tls_ctx->cipher_suites =
         conf && conf->force_chacha20 ? chacha20_cipher_suite : cipher_suite;
     tls_ctx->key_exchanges = key_exchanges;

@@ -88,7 +88,7 @@ foreach(TARGET ${TARGETS})
     )
 
     if(NOT WITH_MINICRYPTO)
-      set(CRYPTOLIBS picotls-openssl ${OPENSSL_LIBRARIES})
+      set(CRYPTOLIBS picotls-openssl picotls-fusion ${OPENSSL_LIBRARIES})
     else()
       set(CRYPTOLIBS picotls-minicrypto)
     endif()
