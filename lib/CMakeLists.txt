@@ -115,6 +115,9 @@ foreach(TARGET ${TARGETS})
     SYSTEM PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
       $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
+  )
+
+  target_include_directories(${TARGET}
     SYSTEM PRIVATE
       ${OPENSSL_ROOT_DIR}/include
       $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/timeout>
