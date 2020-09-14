@@ -54,17 +54,20 @@ set(CMAKE_C_STANDARD 11)
 # Set general compile flags, if they are supported
 include(CheckCCompilerFlag)
 include(CheckCXXCompilerFlag)
-foreach(FLAG -pipe -Wextra -Wpedantic -Weverything -Werror
+set (FLAGS -pipe -Wextra -Wpedantic -Weverything -Werror
         -fcolor-diagnostics -fdiagnostics-color=always -fstack-usage
         -Wno-disabled-macro-expansion # clang on travis needs this
         -Wno-missing-field-initializers # and this (clang-5)
         -Wno-extra-semi-stmt # the kh_foreach* macros need this
         -Wno-macro-redefined # because we redefine _FORTIFY_SOURCE
-        -Wno-poison-system-directories
         -Wno-covered-switch-default -Wno-missing-braces
         -Wno-gnu-statement-expression
         -fcomment-block-commands=dotfile
         )
+if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+  list(APPEND FLAGS -Wno-poison-system-directories)
+endif()
+foreach(FLAG ${FLAGS})
   string(REGEX REPLACE "[-=+]" "_" F ${FLAG})
   check_c_compiler_flag(${FLAG} ${F})
   if(${F})
