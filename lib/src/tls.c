@@ -1731,20 +1731,38 @@ void init_tls_ctx(const struct q_conf * const conf,
         &ptls_openssl_sha384};
 #endif
 
-    static const ptls_cipher_suite_t * cipher_suite[] = {
+    const int fusion =
 #ifdef WITH_OPENSSL
+        ptls_fusion_is_supported_by_cpu()
+#else
+        0
+#endif
+        ;
+
+#ifdef WITH_OPENSSL
+    warn(INF, "picotls fusion is%s supported.",
+         fusion ? "" : RED BLD " not" NRM);
+    static const ptls_cipher_suite_t * cipher_suite[] = {
+        &ptls_openssl_aes128gcmsha256,
+#ifndef MINIMAL_CIPHERS
+        &ptls_openssl_aes256gcmsha384, &ptls_openssl_chacha20poly1305sha256,
+#endif
+        0};
+    static const ptls_cipher_suite_t * cipher_suite_fusion[] = {
         &fusion_aes128gcmsha256,
 #ifndef MINIMAL_CIPHERS
         &fusion_aes256gcmsha384, &ptls_openssl_chacha20poly1305sha256,
 #endif
+        0};
 #else
+    static const ptls_cipher_suite_t * cipher_suite[] = {
         &ptls_minicrypto_aes128gcmsha256,
 #ifndef MINIMAL_CIPHERS
-#endif
         &ptls_minicrypto_aes256gcmsha384,
         &ptls_minicrypto_chacha20poly1305sha256,
 #endif
         0};
+#endif
 
     static const ptls_cipher_suite_t * chacha20_cipher_suite[] = {
 #ifdef WITH_OPENSSL
@@ -1764,7 +1782,9 @@ void init_tls_ctx(const struct q_conf * const conf,
     tls_ctx->omit_end_of_early_data = true;
 
     tls_ctx->cipher_suites =
-        conf && conf->force_chacha20 ? chacha20_cipher_suite : cipher_suite;
+        (conf && conf->force_chacha20)
+            ? chacha20_cipher_suite
+            : (fusion ? cipher_suite_fusion : cipher_suite);
     tls_ctx->key_exchanges = key_exchanges;
     tls_ctx->on_client_hello = &on_client_hello;
     tls_ctx->update_traffic_key = &update_traffic_key;
