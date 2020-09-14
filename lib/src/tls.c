@@ -52,22 +52,10 @@
 #include <picotls/fusion.h>
 #include <picotls/openssl.h>
 
-#define aes128gcmsha256                                                        \
-    (const ptls_cipher_suite_t)                                                \
-    {                                                                          \
-        PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_fusion_aes128gcm,          \
-            &ptls_openssl_sha256                                               \
-    }
-
+#define aes128gcmsha256 ptls_openssl_aes128gcmsha256
 #define secp256r1 ptls_openssl_secp256r1
 #ifndef MINIMAL_CIPHERS
 #define x25519 ptls_openssl_x25519
-#define aes256gcmsha384                                                        \
-    (const ptls_cipher_suite_t)                                                \
-    {                                                                          \
-        PTLS_CIPHER_SUITE_AES_256_GCM_SHA384, &ptls_fusion_aes256gcm,          \
-            &ptls_openssl_sha384                                               \
-    }
 #endif
 #else
 #include <picotls/minicrypto.h>
@@ -1733,11 +1721,21 @@ void init_tls_ctx(const struct q_conf * const conf,
 #endif
                                                                     0};
 
-    const ptls_cipher_suite_t * cipher_suite[] = {
-#ifdef WITH_OPENSSL
-        &aes128gcmsha256,
+    static const ptls_cipher_suite_t fusion_aes128gcmsha256 = {
+        PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_fusion_aes128gcm,
+        &ptls_openssl_sha256};
+
 #ifndef MINIMAL_CIPHERS
-        &aes256gcmsha384, &ptls_openssl_chacha20poly1305sha256,
+    static const ptls_cipher_suite_t fusion_aes256gcmsha384 = {
+        PTLS_CIPHER_SUITE_AES_256_GCM_SHA384, &ptls_fusion_aes256gcm,
+        &ptls_openssl_sha384};
+#endif
+
+    static const ptls_cipher_suite_t * cipher_suite[] = {
+#ifdef WITH_OPENSSL
+        &fusion_aes128gcmsha256,
+#ifndef MINIMAL_CIPHERS
+        &fusion_aes256gcmsha384, &ptls_openssl_chacha20poly1305sha256,
 #endif
 #else
         &ptls_minicrypto_aes128gcmsha256,
