@@ -106,6 +106,7 @@ static int uecc_rng(uint8_t * dest, unsigned size)
 #include "bitset.h"
 #include "cid.h"
 #include "conn.h"
+#include "diet.h"
 #include "frame.h"
 #include "marshall.h"
 #include "pkt.h"
@@ -831,7 +832,7 @@ void init_tp(struct q_conn * const c)
 #endif
     static const struct cid zero_len_cid = {.len = 0};
     if (!is_clnt(c) && c->tok_len) {
-        size_t p = 0;
+        size_t p = sizeof(uint_t);
         memcpy(&odcid.len, &c->tok[p], sizeof(odcid.len));
         p += sizeof(odcid.len);
         memcpy(odcid.id, &c->tok[p], odcid.len);
@@ -1071,15 +1072,16 @@ void init_tp(struct q_conn * const c)
 
 
 #ifndef NO_SERVER
-static void init_ticket_prot(struct per_engine_data * const ped)
+static void init_tick_tok_prot(struct per_engine_data * const ped)
 {
     const ptls_cipher_suite_t * const cs = &aes128gcmsha256;
     uint8_t output[PTLS_MAX_SECRET_SIZE] = {0};
+    // FIXME: use a proper key and not the commit hash
     memcpy(output, quant_commit_hash,
            MIN(quant_commit_hash_len, sizeof(output)));
-    setup_cipher(&ped->dec_tckt.header_protection, &ped->dec_tckt.aead,
+    setup_cipher(&ped->dec_tick_tok.header_protection, &ped->dec_tick_tok.aead,
                  cs->aead, cs->hash, 0, output);
-    setup_cipher(&ped->enc_tckt.header_protection, &ped->enc_tckt.aead,
+    setup_cipher(&ped->enc_tick_tok.header_protection, &ped->enc_tick_tok.aead,
                  cs->aead, cs->hash, 1, output);
     ptls_clear_memory(output, sizeof(output));
 }
@@ -1094,8 +1096,9 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
 {
     struct q_conn * const c = *ptls_get_data_ptr(tls);
     uint64_t tid;
-    if (ptls_buffer_reserve(dst, src.len + quant_commit_hash_len + sizeof(tid) +
-                                     ped(c->w)->enc_tckt.aead->algo->tag_size))
+    if (ptls_buffer_reserve(dst,
+                            src.len + quant_commit_hash_len + sizeof(tid) +
+                                ped(c->w)->enc_tick_tok.aead->algo->tag_size))
         return -1;
 
     if (is_encrypt) {
@@ -1113,13 +1116,13 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
         dst->off += sizeof(tid);
 
         // now encrypt ticket
-        dst->off +=
-            ptls_aead_encrypt(ped(c->w)->enc_tckt.aead, dst->base + dst->off,
-                              src.base, src.len, tid, 0, 0);
+        dst->off += ptls_aead_encrypt(ped(c->w)->enc_tick_tok.aead,
+                                      dst->base + dst->off, src.base, src.len,
+                                      tid, 0, 0);
 
     } else {
         if (src.len < quant_commit_hash_len + sizeof(tid) +
-                          ped(c->w)->dec_tckt.aead->algo->tag_size ||
+                          ped(c->w)->dec_tick_tok.aead->algo->tag_size ||
             memcmp(src.base, quant_commit_hash, quant_commit_hash_len) != 0) {
             warn(WRN,
                  "could not verify 0-RTT session ticket for %s conn %s (%s "
@@ -1136,9 +1139,9 @@ static int encrypt_ticket_cb(ptls_encrypt_ticket_t * self
         src_base += sizeof(tid);
         src_len -= sizeof(tid);
 
-        const size_t n =
-            ptls_aead_decrypt(ped(c->w)->dec_tckt.aead, dst->base + dst->off,
-                              src_base, src_len, tid, 0, 0);
+        const size_t n = ptls_aead_decrypt(ped(c->w)->dec_tick_tok.aead,
+                                           dst->base + dst->off, src_base,
+                                           src_len, tid, 0, 0);
 
         if (n > src_len) {
             warn(WRN,
@@ -1678,6 +1681,9 @@ void init_tls_ctx(const struct q_conf * const conf,
             ptls_minicrypto_load_private_key(tls_ctx, conf->tls_key);
         ensure(ret == 0, "could not open key %s", conf->tls_key);
 #endif
+#ifndef NO_SERVER
+    init_tick_tok_prot(ped);
+#endif
     }
 
 #ifdef WITH_OPENSSL
@@ -1790,10 +1796,6 @@ void init_tls_ctx(const struct q_conf * const conf,
         tls_ctx->verify_certificate = &ped->verify_cert.super;
 #endif
 
-#ifndef NO_SERVER
-    init_ticket_prot(ped);
-#endif
-
     static const uint8_t retry_secret[] = {
         0x8b, 0x0d, 0x37, 0xeb, 0x85, 0x35, 0x02, 0x2e, 0xbc, 0x8d, 0x76,
         0xa2, 0x07, 0xd8, 0x0d, 0xf2, 0x26, 0x46, 0xec, 0x06, 0xdc, 0x80,
@@ -1809,8 +1811,8 @@ void init_tls_ctx(const struct q_conf * const conf,
 void free_tls_ctx(struct per_engine_data * const ped)
 {
 #ifndef NO_SERVER
-    dispose_cipher(&ped->dec_tckt);
-    dispose_cipher(&ped->enc_tckt);
+    dispose_cipher(&ped->dec_tick_tok);
+    dispose_cipher(&ped->enc_tick_tok);
 #endif
     ptls_aead_free(ped->rid_ctx);
 
@@ -1918,36 +1920,14 @@ uint16_t enc_aead(const struct w_iov * const v,
 }
 
 
-static ptls_hash_context_t * __attribute__((nonnull))
-prep_hash_ctx(const struct q_conn * const c,
-              const ptls_cipher_suite_t * const cs)
-{
-    // create hash context
-    ptls_hash_context_t * const hc = cs->hash->create();
-    ensure(hc, "could not create hash context");
-
-    // hash our git commit hash and the peer IP address
-    hc->update(hc, quant_commit_hash, quant_commit_hash_len);
-    hc->update(hc, &c->peer, sizeof(c->peer));
-
-    return hc;
-}
-
-
 void mk_rtry_tok(struct q_conn * const c, const struct cid * const odcid)
 {
-    const ptls_cipher_suite_t * const cs = &aes128gcmsha256;
-    ptls_hash_context_t * const hc = prep_hash_ctx(c, cs);
+    // append RX'ed pkt nr to token
+    const uint_t lg_rx = diet_max(&c->pns[pn_init].recv_all);
+    memcpy(&c->tok[c->tok_len], &lg_rx, sizeof(lg_rx));
+    c->tok_len += sizeof(lg_rx);
 
-    // hash current CIDs
-    hc->update(hc, &odcid->len, sizeof(odcid->len));
-    hc->update(hc, odcid->id, odcid->len);
-    hc->update(hc, &c->scid->len, sizeof(c->scid->len));
-    hc->update(hc, c->scid->id, c->scid->len);
-    hc->final(hc, c->tok, PTLS_HASH_FINAL_MODE_FREE);
-    c->tok_len = (uint16_t)cs->hash->digest_size;
-
-    // append CIDs to hashed token
+    // append CIDs to token
     memcpy(&c->tok[c->tok_len], &odcid->len, sizeof(odcid->len));
     c->tok_len += sizeof(odcid->len);
 
@@ -1960,12 +1940,15 @@ void mk_rtry_tok(struct q_conn * const c, const struct cid * const odcid)
     memcpy(&c->tok[c->tok_len], c->scid->id, c->scid->len);
     c->tok_len += c->scid->len;
 
+    c->tok_len = (uint16_t)ptls_aead_encrypt(
+        ped(c->w)->enc_tick_tok.aead, c->tok, c->tok, c->tok_len, 0, 0, 0);
+
     // NOTE: update max_frame_len() when c->tok_len changes
 
 #ifdef DEBUG_PROT
-    warn(DBG, "computed Retry tok %s",
+    warn(DBG, "encrypted Retry tok %s",
          hex2str(c->tok, c->tok_len, (char[hex_str_len(MAX_TOK_LEN)]){""},
-                 hex_str_len(c->tok_len)));
+                 hex_str_len(MAX_TOK_LEN)));
 #endif
 }
 
@@ -1974,27 +1957,22 @@ bool verify_rtry_tok(struct q_conn * const c,
                      const uint8_t * const tok,
                      const uint16_t tok_len)
 {
-    const ptls_cipher_suite_t * const cs = &aes128gcmsha256;
-    ptls_hash_context_t * const hc = prep_hash_ctx(c, cs);
-
-    // hash current cid included in token
     unpoison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
-    hc->update(hc, tok + cs->hash->digest_size,
-               tok_len - cs->hash->digest_size);
-    hc->final(hc, ped(c->w)->scratch, PTLS_HASH_FINAL_MODE_FREE);
+    const size_t len =
+        ptls_aead_decrypt(ped(c->w)->dec_tick_tok.aead, ped(c->w)->scratch, tok,
+                          tok_len, 0, 0, 0);
 
-#ifdef DEBUG_PROT
-    warn(DBG, "computed Retry tok %s",
-         hex2str(ped(c->w)->scratch, cs->hash->digest_size,
-                 (char[hex_str_len(MAX_TOK_LEN)]){""},
-                 hex_str_len(cs->hash->digest_size)));
-#endif
-    const bool ok = memcmp(ped(c->w)->scratch, tok, cs->hash->digest_size) == 0;
+    const bool ok = len != SIZE_MAX;
     if (ok) {
-        c->tok_len = tok_len;
-        memcpy(c->tok, tok + cs->hash->digest_size,
-               tok_len - cs->hash->digest_size);
+        c->tok_len = (uint16_t)len;
+        memcpy(c->tok, ped(c->w)->scratch, c->tok_len);
+#ifdef DEBUG_PROT
+        warn(DBG, "decrypted Retry tok %s",
+             hex2str(c->tok, c->tok_len, (char[hex_str_len(MAX_TOK_LEN)]){""},
+                     hex_str_len(MAX_TOK_LEN)));
+#endif
     }
+
     poison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
     return ok;
 }

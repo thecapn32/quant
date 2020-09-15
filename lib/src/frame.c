@@ -1181,6 +1181,9 @@ dec_retire_cid_frame(const uint8_t ** pos,
     warn(INF, FRAM_IN "RETIRE_CONNECTION_ID" NRM " seq=%" PRIu, seq);
 
 #ifndef NO_MIGRATION
+    if (unlikely(c->scid->seq == seq))
+        err_close_return(c, ERR_PV, FRM_RTR, "can't retire current cid");
+
     struct cid * const scid = cid_by_seq(&c->scids.act, seq);
     if (unlikely(scid == 0)) {
         warn(INF, "no cid seq %" PRIu, seq);

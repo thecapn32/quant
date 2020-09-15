@@ -190,6 +190,9 @@ can_coalesce_pkt_types(const uint8_t a, const uint8_t b)
 uint16_t
 coalesce(struct w_iov_sq * const q, const uint16_t max_ups, const bool do_pmtud)
 {
+    // NOTE: since -30, we shouldn't coalesce pkts with different dcids, but
+    // that can't (shouldn't) really be possible here anyway, since we're only
+    // called with LH-pkts queued
     uint16_t pmtud_pkt = UINT16_MAX;
     struct w_iov * v = sq_first(q);
     while (v) {

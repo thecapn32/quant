@@ -182,8 +182,8 @@ struct per_engine_data {
 #endif
 
 #ifndef NO_SERVER
-    struct cipher_ctx dec_tckt;
-    struct cipher_ctx enc_tckt;
+    struct cipher_ctx dec_tick_tok;
+    struct cipher_ctx enc_tick_tok;
 #endif
 
 #ifdef NO_MIGRATION

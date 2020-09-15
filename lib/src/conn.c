@@ -971,8 +971,15 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
             if (m->hdr.type == LH_INIT && tok_len) {
                 if (verify_rtry_tok(c, tok, tok_len) == false) {
                     warn(ERR, "retry token verification failed");
-                    err_close(c, ERR_INVL_TOK, 0, "invalid token %s",
-                              tok_str(tok, tok_len));
+                    enter_closing(c);
+                    goto done;
+                }
+                // the token was verified
+                uint_t lg_rx;
+                memcpy(&lg_rx, c->tok, sizeof(lg_rx));
+                if (m->hdr.nr <= lg_rx) {
+                    warn(ERR, "pkt nr %" PRIu " <= expected %" PRIu, m->hdr.nr,
+                         lg_rx + 1);
                     enter_closing(c);
                     goto done;
                 }

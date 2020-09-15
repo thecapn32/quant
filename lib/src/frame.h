@@ -88,8 +88,8 @@ static const uint8_t max_frame_len[] = {
     [FRM_RST] = UINT8_MAX, // we don't encode this
     [FRM_STP] = UINT8_MAX, // we don't encode this
     [FRM_CRY] = UINT8_MAX, // special case
-    [FRM_TOK] =
-        sizeof(uint8_t) + sizeof(uint_t) + PTLS_MAX_DIGEST_SIZE + CID_LEN_MAX,
+    [FRM_TOK] = sizeof(uint8_t) + 2 * sizeof(uint_t) + PTLS_MAX_DIGEST_SIZE +
+                CID_LEN_MAX,
     [FRM_STR] = UINT8_MAX,    // special case
     [FRM_STR_09] = UINT8_MAX, // special case
     [FRM_STR_0a] = UINT8_MAX, // special case
