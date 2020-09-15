@@ -119,12 +119,14 @@ enc_aead(const struct w_iov * const v,
          struct w_iov * const xv,
          const uint16_t pkt_nr_pos);
 
+#ifndef NO_SERVER
 extern void __attribute__((nonnull))
 mk_rtry_tok(struct q_conn * const c, const struct cid * const odcid);
 
 extern bool __attribute__((nonnull)) verify_rtry_tok(struct q_conn * const c,
                                                      const uint8_t * const tok,
                                                      const uint16_t tok_len);
+#endif
 
 extern void __attribute__((nonnull)) mk_rit(const struct q_conn * const c,
                                             const struct cid * const odcid,

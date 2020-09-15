@@ -503,11 +503,12 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
 
     // do we need to make more stream IDs available?
     if (likely(hshk_done(c))) {
+#ifndef NO_SERVER
         if (!is_clnt(c) && unlikely(c->tx_new_tok && c->tok_len == 0 &&
                                     c->pns[ep_init].abandoned))
             // TODO: find a better way to send NEW_TOKEN
             mk_rtry_tok(c, c->scid);
-
+#endif
         do_stream_id_fc(c, c->cnt_uni, false, true);
         do_stream_id_fc(c, c->cnt_bidi, true, true);
     }

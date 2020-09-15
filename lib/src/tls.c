@@ -230,9 +230,6 @@ static int setup_cipher(ptls_cipher_context_t ** hp_ctx,
     uint8_t hpkey[PTLS_MAX_SECRET_SIZE] = {0};
     int ret;
 
-    // *hp_ctx = NULL;
-    // *aead_ctx = NULL;
-
     if (hp_ctx) {
         if ((ret = ptls_hkdf_expand_label(
                  hash, hpkey, aead->ctr_cipher->key_size,
@@ -1681,9 +1678,6 @@ void init_tls_ctx(const struct q_conf * const conf,
             ptls_minicrypto_load_private_key(tls_ctx, conf->tls_key);
         ensure(ret == 0, "could not open key %s", conf->tls_key);
 #endif
-#ifndef NO_SERVER
-    init_tick_tok_prot(ped);
-#endif
     }
 
 #ifdef WITH_OPENSSL
@@ -1794,6 +1788,10 @@ void init_tls_ctx(const struct q_conf * const conf,
     tls_ctx->sign_certificate = &ped->sign_cert.super;
     if (conf && conf->enable_tls_cert_verify)
         tls_ctx->verify_certificate = &ped->verify_cert.super;
+#endif
+
+#ifndef NO_SERVER
+    init_tick_tok_prot(ped);
 #endif
 
     static const uint8_t retry_secret[] = {
@@ -1920,6 +1918,7 @@ uint16_t enc_aead(const struct w_iov * const v,
 }
 
 
+#ifndef NO_SERVER
 void mk_rtry_tok(struct q_conn * const c, const struct cid * const odcid)
 {
     // append RX'ed pkt nr to token
@@ -1976,6 +1975,7 @@ bool verify_rtry_tok(struct q_conn * const c,
     poison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
     return ok;
 }
+#endif
 
 
 void mk_rit(const struct q_conn * const c,
