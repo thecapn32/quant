@@ -1,5 +1,6 @@
           live fail vneg hshk data clse rsmt zrtt rtry qrdy migr bind adrm kyph spin aecn zcid chch qbgr http
 aioquic   *         V    H    D    C    R    Z    S    Q    M    B    A    U    P         O    2         3
+akamai    *         V    H    D    C    R              Q                                  O    2         3
 ats       *         V    H    D    C    R    Z    S    Q    M    B    A                   O    2         3
 f5        *    x    V    H    D    C    R    Z    S    Q                   U    P    E    O         G    3
 google    *         V    H    D    C    R    Z         Q                                  O    2         3
