@@ -256,7 +256,7 @@ static void __attribute__((nonnull)) log_sent_pkts(struct q_conn * const c)
         }
 
         if (pos)
-            warn(INF, "%s conn %s, %s unacked: %s", conn_type(c),
+            warn(DBG, "%s conn %s, %s unacked: %s", conn_type(c),
                  cid_str(c->scid), pn_type_str[t], tmp);
         poison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
     }
