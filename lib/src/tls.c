@@ -107,7 +107,6 @@ static int uecc_rng(uint8_t * dest, unsigned size)
 #include "bitset.h"
 #include "cid.h"
 #include "conn.h"
-#include "diet.h"
 #include "frame.h"
 #include "marshall.h"
 #include "pkt.h"
@@ -117,7 +116,12 @@ static int uecc_rng(uint8_t * dest, unsigned size)
 #include "tls.h"
 #include "tree.h"
 
+#ifndef NO_SERVER
+#include "diet.h"
+#endif
 
+
+#if !defined(NO_ERR_REASONS) && !defined(NDEBUG)
 static const char * const ptls_err_str[] = {
     [0] = "CLOSE_NOTIFY",
     [10] = "UNEXPECTED_MESSAGE",
@@ -139,6 +143,7 @@ static const char * const ptls_err_str[] = {
     [116] = "CERTIFICATE_REQUIRED",
     [120] = "NO_APPLICATION_PROTOCOL",
 };
+#endif
 
 
 struct tls_ticket {
@@ -266,6 +271,7 @@ static int setup_cipher(ptls_cipher_context_t ** hp_ctx,
             goto Exit;
         }
     }
+    ensure(aead_ctx, "aead_ctx is zero");
     if ((*aead_ctx = ptls_aead_new(aead, hash, is_enc, secret,
                                    AEAD_BASE_LABEL)) == NULL) {
         ret = PTLS_ERROR_NO_MEMORY;
@@ -1831,7 +1837,7 @@ void init_tls_ctx(const struct q_conf * const conf,
                                                 ped->ca_store) == 0,
            "ptls_openssl_init_verify_certificate");
     tls_ctx->verify_certificate = &ped->verify_cert.super;
-done_verify_certs:
+done_verify_certs:;
 
 #endif
 
