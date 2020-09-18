@@ -43,13 +43,14 @@ export UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1:suppressions=../misc/gcc
 # commands to run the different clients against $addr:$port
 case $c in
         quant)
-                cc="bin/client -v5 -i $iface -u -t2 -q . -l /tmp/clnt.tlslog \
+                cc="bin/client -c test/dummy.ca.crt -v5 -i $iface \
+                        -u -t2 -q . -l /tmp/clnt.tlslog \
                         \"https://$addr:$port$path\""
                 ;;
         wquant)
                 cc="vagrant ssh -c \"\
-                        /vagrant/Linux/bin/client -v5 -i enp0s8 \
-                                https://$addr:44433$path\""
+                        /vagrant/Linux/bin/client -c test/dummy.ca.crt \
+                                -v5 -i enp0s8 https://$addr:44433$path\""
                 ;;
         quicly)
                 cc="external/quicly-prefix/src/quicly-build/cli -n \

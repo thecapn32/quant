@@ -141,7 +141,7 @@ int main(int argc __attribute__((unused)), char ** argv)
     ensure(cwd != -1, "cannot open");
     ensure(chdir(dirname(argv[0])) == 0, "cannot chdir");
     const struct q_conf conf = {nullptr, nullptr, "dummy.crt", "dummy.key",
-                                nullptr, nullptr, 1000000};
+                                nullptr, nullptr, nullptr, 1000000};
     w = q_init("lo"
 #ifndef __linux__
                "0"

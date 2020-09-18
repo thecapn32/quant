@@ -49,6 +49,7 @@
 #include <openssl/evp.h>
 #include <openssl/ossl_typ.h>
 #include <openssl/pem.h>
+#include <openssl/x509.h>
 #include <picotls/fusion.h>
 #include <picotls/openssl.h>
 
@@ -115,6 +116,29 @@ static int uecc_rng(uint8_t * dest, unsigned size)
 #include "stream.h"
 #include "tls.h"
 #include "tree.h"
+
+
+static const char * const ptls_err_str[] = {
+    [0] = "CLOSE_NOTIFY",
+    [10] = "UNEXPECTED_MESSAGE",
+    [20] = "BAD_RECORD_MAC",
+    [40] = "HANDSHAKE_FAILURE",
+    [42] = "BAD_CERTIFICATE",
+    [44] = "CERTIFICATE_REVOKED",
+    [45] = "CERTIFICATE_EXPIRED",
+    [46] = "CERTIFICATE_UNKNOWN",
+    [47] = "ILLEGAL_PARAMETER",
+    [48] = "UNKNOWN_CA",
+    [50] = "DECODE_ERROR",
+    [51] = "DECRYPT_ERROR",
+    [70] = "PROTOCOL_VERSION",
+    [80] = "INTERNAL_ERROR",
+    [90] = "USER_CANCELED",
+    [109] = "MISSING_EXTENSION",
+    [112] = "UNRECOGNIZED_NAME",
+    [116] = "CERTIFICATE_REQUIRED",
+    [120] = "NO_APPLICATION_PROTOCOL",
+};
 
 
 struct tls_ticket {
@@ -1430,8 +1454,9 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
 
     } else if (ret != PTLS_ERROR_IN_PROGRESS &&
                ret != PTLS_ERROR_STATELESS_RETRY) {
-        err_close(c, ERR_TLS(PTLS_ERROR_TO_ALERT(ret)), FRM_CRY, "TLS error %u",
-                  ret);
+        err_close(c, ERR_TLS(PTLS_ERROR_TO_ALERT(ret)), FRM_CRY,
+                  "PTLS error %u %s%s%s", ret, ptls_err_str[ret] ? "(" : "",
+                  ptls_err_str[ret], ptls_err_str[ret] ? ")" : "");
         goto done;
     }
 
@@ -1680,11 +1705,6 @@ void init_tls_ctx(const struct q_conf * const conf,
 #endif
     }
 
-#ifdef WITH_OPENSSL
-    ensure(ptls_openssl_init_verify_certificate(&ped->verify_cert, 0) == 0,
-           "ptls_openssl_init_verify_certificate");
-#endif
-
 #if !defined(PARTICLE) && !defined(RIOT_VERSION)
     if (conf && conf->tls_cert) {
         const int ret = ptls_load_certificates(tls_ctx, conf->tls_cert);
@@ -1723,7 +1743,7 @@ void init_tls_ctx(const struct q_conf * const conf,
 
 #ifdef WITH_OPENSSL
     const int fusion = ptls_fusion_is_supported_by_cpu();
-    warn(INF, "picotls fusion is%s supported.",
+    warn(DBG, "picotls fusion is%s supported",
          fusion ? "" : RED BLD " not" NRM);
 
     static const ptls_cipher_suite_t fusion_aes128gcmsha256 = {
@@ -1786,8 +1806,33 @@ void init_tls_ctx(const struct q_conf * const conf,
     tls_ctx->random_bytes = rand_bytes;
 #ifdef WITH_OPENSSL
     tls_ctx->sign_certificate = &ped->sign_cert.super;
-    if (conf && conf->enable_tls_cert_verify)
-        tls_ctx->verify_certificate = &ped->verify_cert.super;
+
+    if (conf && conf->tls_ca_store) {
+        if (strncmp(conf->tls_ca_store, "false", 5) == 0) {
+            warn(CRT, "disabling server cert verification");
+            goto done_verify_certs;
+        }
+
+        ped->ca_store = X509_STORE_new();
+        ensure(ped->ca_store, "cannot alloc X509_STORE");
+        X509_LOOKUP * const lookup =
+            X509_STORE_add_lookup(ped->ca_store, X509_LOOKUP_file());
+        if (X509_LOOKUP_load_file(lookup, conf->tls_ca_store,
+                                  X509_FILETYPE_PEM) != 1) {
+            warn(CRT, "cannot load CA store from %s, using default",
+                 conf->tls_ca_store);
+            X509_STORE_free(ped->ca_store);
+            ped->ca_store = 0;
+        } else
+            warn(DBG, "using CA store %s to verify server certs",
+                 conf->tls_ca_store);
+    }
+    ensure(ptls_openssl_init_verify_certificate(&ped->verify_cert,
+                                                ped->ca_store) == 0,
+           "ptls_openssl_init_verify_certificate");
+    tls_ctx->verify_certificate = &ped->verify_cert.super;
+done_verify_certs:
+
 #endif
 
 #ifndef NO_SERVER
@@ -1832,6 +1877,7 @@ void free_tls_ctx(struct per_engine_data * const ped)
 #ifdef WITH_OPENSSL
     ptls_openssl_dispose_sign_certificate(&ped->sign_cert);
     ptls_openssl_dispose_verify_certificate(&ped->verify_cert);
+    X509_STORE_free(ped->ca_store);
 #endif
 }
 

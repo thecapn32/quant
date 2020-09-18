@@ -84,7 +84,7 @@ export UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1:suppressions=../misc/gcc
 
 function test_server_initial {
     # run quant client and save a log for post-processing
-    local opts="-i $iface -t5 -v5 -b 1000 -l /dev/null"
+    local opts="-c false -i $iface -t5 -v5 -b 1000 -l /dev/null"
     local log_base="/tmp/$script.$pid.$1.log"
 
     IFS='|' read -ra info <<< "${servers[$1]}"
@@ -133,7 +133,7 @@ function vneg_ok {
 
 function test_server {
     # run quant client and save a log for post-processing
-    local opts="-i $iface -t5 -v5 -b 1000 -l /dev/null"
+    local opts="-c false -i $iface -t5 -v5 -b 1000 -l /dev/null"
     local base="/tmp/$script.$pid.$1"
 
     IFS='|' read -ra info <<< "${servers[$1]}"
@@ -219,7 +219,7 @@ function bench_server {
         echo "$h2" > "$ret_base.t_h2"
 
         local cache="$base.cache"
-        local opts="-i $iface -t5 -v3 -l /dev/null"
+        local opts="-c false -i $iface -t5 -v3 -l /dev/null"
         local hq_out="$log_base.hq.out"
         local wd hq
         ext=""

@@ -20,12 +20,25 @@ fi
 
 # For quant, call client and server with full path, so addr2line can find them
 
+if [ -x /certs/cert.pem ]; then
+    echo Using interop runner certs
+    CERT=/certs/cert.pem
+    KEY=/certs/priv.key
+    CA=/certs/ca.pem
+else
+    echo Using dummy certs
+    CERT=/tls/dummy.crt
+    KEY=/tls/dummy.key
+    CA=/tls/dummy.ca.crt
+fi
+
+
 STRIP='s,\x1B\[[0-9;]*[a-zA-Z],,g'
 
 if [ "$ROLE" == "client" ]; then
     [ -n "$CRON" ] && CLIENT_ARGS="-v4 $CLIENT_ARGS"
     CLIENT_ARGS="-i eth0 -w -q $QLOGDIR -l $SSLKEYLOGFILE -t 150 -x 50 \
-        -e 0xff00001d $CLIENT_ARGS"
+        -e 0xff00001d -c $CA $CLIENT_ARGS"
 
     # Wait for the simulator to start up.
     /wait-for-it.sh sim:57832 -s -t 30
@@ -80,6 +93,6 @@ elif [ "$ROLE" == "server" ]; then
     esac
 
     /usr/local/bin/server $SERVER_ARGS -i eth0 -d /www -p 443 -p 4434 -t 0 \
-        -x 50 -c /tls/dummy.crt -k /tls/dummy.key -q "$QLOGDIR" 2>&1 \
+        -x 50 -c $CERT -k $KEY -q "$QLOGDIR" 2>&1 \
             | sed -u $STRIP | tee -i -a "/logs/$ROLE.log"
 fi

@@ -129,7 +129,7 @@ usage(const char * const name,
       const char * const cache,
       const char * const tls_log,
       const char * const qlog_dir,
-      const bool verify_certs)
+      const char * const tls_ca_store)
 {
     printf("%s [options] URL [URL...]\n", name);
     printf("\t[-3]\t\tsend a static H3 request; default %s\n",
@@ -139,8 +139,8 @@ usage(const char * const name,
            do_chacha ? "true" : "false");
     printf("\t[-b bufs]\tnumber of network buffers to allocate; default %u\n",
            num_bufs);
-    printf("\t[-c]\t\tverify TLS certificates; default %s\n",
-           verify_certs ? "true" : "false");
+    printf("\t[-c]\t\tverify TLS certs using this CA cert; default %s\n",
+           *tls_ca_store ? tls_ca_store : "false");
     printf("\t[-e version]\tQUIC version to use; default 0x%08x\n", vers);
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
     printf("\t[-l log]\tlog file for TLS keys; default %s\n",
@@ -428,7 +428,7 @@ int main(int argc, char * argv[])
     char cache[MAXPATHLEN] = "/tmp/" QUANT "-session";
     char tls_log[MAXPATHLEN] = "";
     char qlog_dir[MAXPATHLEN] = "";
-    bool verify_certs = false;
+    char tls_ca_store[MAXPATHLEN] = "";
     int ret = -1;
 
     // set default TLS log file from environment
@@ -439,7 +439,7 @@ int main(int argc, char * argv[])
     }
 
     while ((ch = getopt(argc, argv,
-                        "hi:v:s:t:l:cu36azb:wr:q:me:x:"
+                        "hi:v:s:t:l:c:u36azb:wr:q:me:x:"
 #ifndef NO_MIGRATION
                         "n"
 #endif
@@ -473,7 +473,7 @@ int main(int argc, char * argv[])
             strncpy(tls_log, optarg, sizeof(tls_log) - 1);
             break;
         case 'c':
-            verify_certs = true;
+            strncpy(tls_ca_store, optarg, sizeof(tls_ca_store) - 1);
             break;
         case 'u':
             flip_keys = true;
@@ -512,7 +512,7 @@ int main(int argc, char * argv[])
         case '?':
         default:
             usage(basename(argv[0]), ifname, cache, tls_log, qlog_dir,
-                  verify_certs);
+                  tls_ca_store);
         }
     }
 
@@ -533,7 +533,7 @@ int main(int argc, char * argv[])
             .ticket_store = cache,
             .tls_log = *tls_log ? tls_log : 0,
             .client_cid_len = zlen_cids ? 0 : 4,
-            .enable_tls_cert_verify = verify_certs});
+            .tls_ca_store = *tls_ca_store ? tls_ca_store : 0});
     khash_t(conn_cache) cc = {0};
 
     if (reps > 1)

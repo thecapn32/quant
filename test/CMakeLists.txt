@@ -33,6 +33,19 @@ endforeach()
 
 add_custom_command(
   OUTPUT
+    ${CMAKE_CURRENT_BINARY_DIR}/dummy.ca.crt
+    ${CMAKE_CURRENT_BINARY_DIR}/dummy.ca.key
+  COMMAND
+    ${OPENSSL_ROOT_DIR}/bin/openssl
+  ARGS
+    req -batch -newkey rsa:2048 -sha256
+    -keyout ${CMAKE_CURRENT_BINARY_DIR}/dummy.ca.key -days 9365
+    -nodes -x509 -subj "/O=quant dummy CA/"
+    -out ${CMAKE_CURRENT_BINARY_DIR}/dummy.ca.crt
+)
+
+add_custom_command(
+  OUTPUT
     ${CMAKE_CURRENT_BINARY_DIR}/dummy.eckey
   COMMAND
     ${OPENSSL_ROOT_DIR}/bin/openssl
@@ -50,7 +63,19 @@ add_custom_command(
     ${OPENSSL_ROOT_DIR}/bin/openssl
   ARGS
     pkcs8 -topk8 -inform pem -in ${CMAKE_CURRENT_BINARY_DIR}/dummy.eckey
-    -nocrypt -out ${CMAKE_CURRENT_BINARY_DIR}/dummy.key
+    -nocrypt -out ${CMAKE_CURRENT_BINARY_DIR}/dummy.key)
+
+add_custom_command(
+  OUTPUT
+    ${CMAKE_CURRENT_BINARY_DIR}/dummy.csr
+  DEPENDS
+    ${CMAKE_CURRENT_BINARY_DIR}/dummy.key
+  COMMAND
+    ${OPENSSL_ROOT_DIR}/bin/openssl
+  ARGS
+    req -batch -new -sha256 -key ${CMAKE_CURRENT_BINARY_DIR}/dummy.key
+    -subj "/" -addext "subjectAltName = DNS:localhost"
+    -out ${CMAKE_CURRENT_BINARY_DIR}/dummy.csr
 )
 
 add_custom_command(
@@ -58,12 +83,17 @@ add_custom_command(
     ${CMAKE_CURRENT_BINARY_DIR}/dummy.crt
   DEPENDS
     ${CMAKE_CURRENT_BINARY_DIR}/dummy.key
+    ${CMAKE_CURRENT_BINARY_DIR}/dummy.csr
+    ${CMAKE_CURRENT_BINARY_DIR}/dummy.ca.crt
+    ${CMAKE_CURRENT_BINARY_DIR}/dummy.ca.key
   COMMAND
     ${OPENSSL_ROOT_DIR}/bin/openssl
   ARGS
-    req -batch -new -key ${CMAKE_CURRENT_BINARY_DIR}/dummy.key -days 9365
-    -nodes -x509 -subj "/" -addext "subjectAltName = DNS:example.org"
+    x509 -req -sha256 -days 9365 -in ${CMAKE_CURRENT_BINARY_DIR}/dummy.csr
     -out ${CMAKE_CURRENT_BINARY_DIR}/dummy.crt
+    -CA ${CMAKE_CURRENT_BINARY_DIR}/dummy.ca.crt
+    -CAkey ${CMAKE_CURRENT_BINARY_DIR}/dummy.ca.key -CAcreateserial
+    -extfile ${CMAKE_CURRENT_SOURCE_DIR}/dummy.cnf
 )
 
 if(HAVE_BENCHMARK_H)

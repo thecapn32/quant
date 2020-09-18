@@ -63,12 +63,12 @@ struct q_conf {
     const char * const tls_cert;     // required for server
     const char * const tls_key;      // required for server
     const char * const tls_log;
+    const char * const tls_ca_store; // optional for client, ignored for server
     const char * const qlog_dir;
     uint32_t num_bufs;
-    uint8_t enable_tls_cert_verify : 1;
     uint8_t force_retry : 1;    // ignored on client
     uint8_t force_chacha20 : 1; // TODO: is temporary
-    uint8_t : 5;
+    uint8_t : 6;
     uint8_t client_cid_len;
     uint8_t server_cid_len;
 };

@@ -37,6 +37,7 @@
 #include <timeout.h>
 
 #ifdef WITH_OPENSSL
+#include <openssl/ossl_typ.h>
 #include <picotls/openssl.h>
 #endif
 
@@ -179,6 +180,7 @@ struct per_engine_data {
 #ifdef WITH_OPENSSL
     ptls_openssl_sign_certificate_t sign_cert;
     ptls_openssl_verify_certificate_t verify_cert;
+    X509_STORE * ca_store;
 #endif
 
 #ifndef NO_SERVER
