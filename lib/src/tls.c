@@ -121,7 +121,7 @@ static int uecc_rng(uint8_t * dest, unsigned size)
 #endif
 
 
-#if !defined(NO_ERR_REASONS) && !defined(NDEBUG)
+#ifndef NO_ERR_REASONS
 static const char * const ptls_err_str[] = {
     [0] = "CLOSE_NOTIFY",
     [10] = "UNEXPECTED_MESSAGE",
