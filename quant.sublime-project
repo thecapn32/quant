@@ -52,7 +52,9 @@
             "${project_path}/lib/deps/picotls/include",
             "${project_path}/lib/deps/timeout",
             "${project_path}/lib/deps/warpcore/lib/include/",
-            "${project_path}/lib/include"
+            "${project_path}/lib/include",
+            "/usr/local/opt/openssl@1.1/include"
+
         ],
         "SublimeLinter.linters.clang.I": [
             "${project_path}/lib/src"
@@ -66,7 +68,9 @@
             "-Wpedantic",
 
             "-Wno-pragma-once-outside-header",
-            "-Wno-unused-function"
+            "-Wno-unused-function",
+
+            "-DWITH_OPENSSL"
         ],
         "SublimeLinter.linters.clang++.isystem": [
             "${project_path}/Darwin/lib/deps/warpcore/lib/include/",
@@ -74,7 +78,9 @@
             "${project_path}/lib/deps/picotls/include",
             "${project_path}/lib/deps/timeout",
             "${project_path}/lib/deps/warpcore/lib/include/",
-            "${project_path}/lib/include"
+            "${project_path}/lib/include",
+            "/usr/local/opt/openssl@1.1/include"
+
         ],
         "SublimeLinter.linters.clang++.I": [
             "${project_path}/lib/src"
@@ -88,7 +94,9 @@
             "-Wpedantic",
 
             "-Wno-pragma-once-outside-header",
-            "-Wno-unused-function"
+            "-Wno-unused-function",
+
+            "-DWITH_OPENSSL"
         ],
     }
 }
