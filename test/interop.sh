@@ -20,16 +20,16 @@ fi
 
 # For quant, call client and server with full path, so addr2line can find them
 
-if [ -x /certs/cert.pem ]; then
-    echo Using interop runner certs
+if [ -e /certs/cert.pem ]; then
+    echo Using interop runner certs and enabling cert verification
     CERT=/certs/cert.pem
     KEY=/certs/priv.key
     CA=/certs/ca.pem
 else
-    echo Using dummy certs
+    echo Using dummy certs and turning off cert verification
     CERT=/tls/dummy.crt
     KEY=/tls/dummy.key
-    CA=/tls/dummy.ca.crt
+    CA=false
 fi
 
 
