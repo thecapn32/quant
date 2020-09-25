@@ -251,7 +251,10 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
     struct addrinfo * const peer =
         get_addr(do_v6 ? AF_INET6 : AF_INET, dest, port);
     struct addrinfo * const migr_peer =
-        rebind ? get_addr(do_v6 ? AF_INET : AF_INET6, dest, port) : 0;
+#ifndef NO_MIGRATION
+        rebind ? get_addr(do_v6 ? AF_INET : AF_INET6, dest, port) :
+#endif
+               0;
     if (peer == 0)
         goto fail;
 
