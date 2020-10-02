@@ -1976,12 +1976,17 @@ struct q_conn * new_conn(struct w_engine * const w,
                  (w->ifaddr[idx].addr.af == AF_INET6 &&
                   c->tp_mine.pref_addr.addr6.addr.af == 0))) {
                 if (w->ifaddr[idx].addr.af == AF_INET &&
-                    c->tp_mine.pref_addr.addr4.addr.af == 0)
-                    memcpy(&c->tp_mine.pref_addr.addr4, &sock->ws_loc,
-                           sizeof(c->tp_mine.pref_addr.addr4));
-                else
-                    memcpy(&c->tp_mine.pref_addr.addr6, &sock->ws_loc,
-                           sizeof(c->tp_mine.pref_addr.addr6));
+                    c->tp_mine.pref_addr.addr4.addr.af == 0) {
+                    memcpy(&c->tp_mine.pref_addr.addr4.addr,
+                           &w->ifaddr[idx].addr,
+                           sizeof(c->tp_mine.pref_addr.addr4.addr));
+                    c->tp_mine.pref_addr.addr4.port = port;
+                } else {
+                    memcpy(&c->tp_mine.pref_addr.addr6.addr,
+                           &w->ifaddr[idx].addr,
+                           sizeof(c->tp_mine.pref_addr.addr6.addr));
+                    c->tp_mine.pref_addr.addr6.port = port;
+                }
                 break;
             }
         }
