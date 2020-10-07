@@ -331,6 +331,7 @@ dec_stream_or_crypto_frame(const uint8_t type,
 
         m->strm = new_stream(c, sid);
     }
+    ensure(m->strm, "have a stream");
 
     // best case: new in-order data
     if (m->strm->in_data_off >= m->strm_off &&

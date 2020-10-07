@@ -299,7 +299,7 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
     }
 
     const bool opened_new = cce == 0;
-    if (cce == 0) {
+    if (opened_new) {
         se->req_t = w_now(CLOCK_MONOTONIC_RAW);
         // no, open a new connection
         struct q_conn * const c = q_connect(
