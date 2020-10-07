@@ -1087,9 +1087,10 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
     if (!is_clnt(c) && unlikely(m->hdr.type == LH_HSHK && c->cstrms[ep_init])) {
         abandon_pn(&c->pns[pn_init]);
 
-        // server can assume path is validated
+        // server can assume path is validated on RX of Handshake pkt
         warn(DBG, "clnt path validated");
         c->path_val_win = UINT_T_MAX;
+        c->needs_tx = true; // in case we need to RTX
     }
 
     // packet protection verified OK
