@@ -1382,7 +1382,11 @@ static void __attribute__((nonnull))
                 if (m->is_reset)
                     warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
                          srt_str(&xv->buf[xv->len - SRT_LEN]));
-                else
+                else if (is_clnt(c) == false && m->hdr.type == LH_INIT &&
+                         m->hdr.dcid.len < CID_LEN_MIN_INI_DCID) {
+                    warn(DBG, "illegal v1 dcid len %u", m->hdr.dcid.len);
+                    tx_vneg_resp(ws, v, m);
+                } else
                     warn(ERR, "%s %u-byte %s pkt, ignoring",
                          pkt_ok_for_epoch(m->hdr.flags, epoch_in(c))
                              ? "crypto fail on"

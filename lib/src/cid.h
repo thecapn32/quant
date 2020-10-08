@@ -40,8 +40,10 @@
 #define CIDS_MAX 1
 #endif
 
-#define CID_LEN_MAX 20 ///< Maximum CID length allowed by spec.
-#define SRT_LEN 16     ///< Stateless reset token length allowed by spec.
+#define CID_LEN_MAX 20         ///< Maximum CID length allowed by spec.
+#define CID_LEN_MIN_INI_DCID 8 ///< Minimum DCID length required in an Initial.
+
+#define SRT_LEN 16 ///< Stateless reset token length allowed by spec.
 
 
 struct cid {
