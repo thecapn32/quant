@@ -69,7 +69,9 @@
 
 struct conn_cache_entry {
     struct q_conn * c;
+#ifndef NO_MIGRATION
     struct addrinfo * migr_peer;
+#endif
     bool migrated;
     uint8_t _unused[7];
 };
@@ -266,8 +268,10 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
         (prefer_v6 && peer_v6) ? peer_v6 : (peer_v4 ? peer_v4 : peer_v6);
     if (peer == 0)
         goto fail;
+#ifndef NO_MIGRATION
     struct addrinfo * const migr_peer =
         peer->ai_family == AF_INET ? peer_v6 : peer_v4;
+#endif
 
     // do we have a connection open to this peer?
     khiter_t k = kh_get(conn_cache, cc, conn_cache_key(peer->ai_addr));
@@ -334,7 +338,9 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
         cce = calloc(1, sizeof(*cce));
         ensure(cce, "calloc failed");
         cce->c = c;
+#ifndef NO_MIGRATION
         cce->migr_peer = migr_peer;
+#endif
 
         // insert into connection cache
         int ret;
@@ -354,7 +360,9 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
 
     se->cce = cce;
     se->url = url;
+#ifndef NO_MIGRATION
     if (rebind == false || cce->migrated)
+#endif
         freeaddrinfo(peerinfo);
     return cce->c;
 
