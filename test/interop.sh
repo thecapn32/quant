@@ -60,7 +60,6 @@ if [ "$ROLE" == "client" ]; then
         REQUESTS=${REQS[0]}
         /usr/local/bin/client $CLIENT_ARGS $REQUESTS 2>&1 | \
             sed $STRIP | tee -i -a "/logs/$ROLE.log"
-        echo "XXX $ROLE DONE" | tee -i -a "/logs/$ROLE.log"
         REQUESTS=${REQS[@]:1}
         ;;
     "multiconnect")
@@ -69,7 +68,6 @@ if [ "$ROLE" == "client" ]; then
             /usr/local/bin/client $CLIENT_ARGS \
                 -q "$QLOGDIR" $req 2>&1 | \
                 sed $STRIP | tee -i -a "/logs/$ROLE.log"
-            echo "XXX $ROLE DONE" | tee -i -a "/logs/$ROLE.log"
         done
         ;;
     *)
@@ -79,7 +77,6 @@ if [ "$ROLE" == "client" ]; then
     if [ $skip -eq 0 ]; then
         /usr/local/bin/client $CLIENT_ARGS $REQUESTS 2>&1 | \
             sed $STRIP | tee -i -a "/logs/$ROLE.log"
-        echo "XXX $ROLE DONE" | tee -i -a "/logs/$ROLE.log"
     fi
 
 elif [ "$ROLE" == "server" ]; then
