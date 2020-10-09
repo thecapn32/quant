@@ -1090,7 +1090,7 @@ bool q_migrate(struct q_conn * const c,
         uint16_t other_idx;
         for (other_idx = 0; other_idx < w->addr_cnt; other_idx++)
             if (w->ifaddr[idx].addr.af != w->ifaddr[other_idx].addr.af &&
-                (w->ifaddr[other_idx].addr.af == AF_INET6 &&
+                (w->ifaddr[other_idx].addr.af != AF_INET6 ||
                  !w_is_private(&w->ifaddr[other_idx].addr)))
                 break;
 

@@ -84,7 +84,7 @@ static uint32_t initial_rtt = 500;
 static uint32_t num_bufs = 100000;
 static uint32_t reps = 1;
 static bool do_h3 = false;
-static bool do_v6 = false;
+static bool prefer_v6 = false;
 static bool do_chacha = false;
 static bool flip_keys = false;
 static bool zlen_cids = false;
@@ -134,7 +134,7 @@ usage(const char * const name,
     printf("%s [options] URL [URL...]\n", name);
     printf("\t[-3]\t\tsend a static H3 request; default %s\n",
            do_h3 ? "true" : "false");
-    printf("\t[-6]\t\tuse IPv6; default %s\n", do_v6 ? "true" : "false");
+    printf("\t[-6]\t\tprefer IPv6; default %s\n", prefer_v6 ? "true" : "false");
     printf("\t[-a]\t\tforce Chacha20; default %s\n",
            do_chacha ? "true" : "false");
     printf("\t[-b bufs]\tnumber of network buffers to allocate; default %u\n",
@@ -209,20 +209,29 @@ try_migrate(struct conn_cache_entry * const cce)
 
 
 static struct addrinfo * __attribute__((nonnull))
-get_addr(const int af, const char * const dest, const char * const port)
+get_addr(const char * const dest,
+         const char * const port,
+         struct addrinfo ** peer_v4,
+         struct addrinfo ** peer_v6)
 {
+    *peer_v4 = *peer_v6 = 0;
     struct addrinfo * peer = 0;
-    const int err = getaddrinfo(
-        dest, port, &(const struct addrinfo){.ai_family = af}, &peer);
-    if (err == 0)
-        return peer;
-
-    if (err != EAI_FAMILY && err != EAI_NONAME)
-        // when looking up migr_peer, these errors are OK to occur
+    const int err = getaddrinfo(dest, port, 0, &peer);
+    if (err != 0) {
         warn(ERR, "getaddrinfo: %s", gai_strerror(err));
-    if (peer)
-        freeaddrinfo(peer);
-    return 0;
+        if (peer)
+            freeaddrinfo(peer);
+        return 0;
+    }
+
+    for (struct addrinfo * cand = peer; cand; cand = cand->ai_next) {
+        if (*peer_v4 == 0 && cand->ai_family == AF_INET)
+            *peer_v4 = cand;
+        if (*peer_v6 == 0 && cand->ai_family == AF_INET6)
+            *peer_v6 = cand;
+    }
+
+    return peer;
 }
 
 
@@ -248,15 +257,17 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
     set_from_url(port, sizeof(port), url, &u, UF_PORT, "4433");
     set_from_url(path, sizeof(path), url, &u, UF_PATH, "/index.html");
 
+    struct addrinfo * peer_v4 = 0;
+    struct addrinfo * peer_v6 = 0;
+    struct addrinfo * const peerinfo = get_addr(dest, port, &peer_v4, &peer_v6);
+    if (peerinfo == 0)
+        goto fail;
     struct addrinfo * const peer =
-        get_addr(do_v6 ? AF_INET6 : AF_INET, dest, port);
-    struct addrinfo * const migr_peer =
-#ifndef NO_MIGRATION
-        rebind ? get_addr(do_v6 ? AF_INET : AF_INET6, dest, port) :
-#endif
-               0;
+        (prefer_v6 && peer_v6) ? peer_v6 : (peer_v4 ? peer_v4 : peer_v6);
     if (peer == 0)
         goto fail;
+    struct addrinfo * const migr_peer =
+        peer->ai_family == AF_INET ? peer_v6 : peer_v4;
 
     // do we have a connection open to this peer?
     khiter_t k = kh_get(conn_cache, cc, conn_cache_key(peer->ai_addr));
@@ -343,12 +354,12 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
 
     se->cce = cce;
     se->url = url;
-    freeaddrinfo(peer);
+    if (rebind == false || cce->migrated)
+        freeaddrinfo(peerinfo);
     return cce->c;
 
 fail:
-    freeaddrinfo(peer);
-    freeaddrinfo(migr_peer);
+    freeaddrinfo(peerinfo);
     return 0;
 }
 
@@ -356,10 +367,7 @@ fail:
 static void __attribute__((nonnull)) free_cc(khash_t(conn_cache) * cc)
 {
     struct conn_cache_entry * cce;
-    kh_foreach_value(cc, cce, {
-        freeaddrinfo(cce->migr_peer);
-        free(cce);
-    });
+    kh_foreach_value(cc, cce, free(cce););
     kh_release(conn_cache, cc);
 }
 
@@ -485,7 +493,7 @@ int main(int argc, char * argv[])
             do_h3 = true;
             break;
         case '6':
-            do_v6 = true;
+            prefer_v6 = true;
             break;
         case 'a':
             do_chacha = true;
