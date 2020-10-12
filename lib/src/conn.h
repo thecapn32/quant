@@ -214,7 +214,8 @@ struct q_conn {
     uint32_t in_c_zcid : 1;
     uint32_t tx_new_tok : 1; ///< Send NEW_TOKEN.
     uint32_t in_tx_pause : 1;
-    uint32_t : 2;
+    uint32_t disable_pmtud : 1; ///< Do not perform PMTUD.
+    uint32_t : 1;
 
     conn_state_t state; ///< State of the connection.
 

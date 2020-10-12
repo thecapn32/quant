@@ -92,6 +92,7 @@ static bool flip_keys = false;
 static bool zlen_cids = false;
 static bool write_files = false;
 static bool test_qr = false;
+static bool disable_pmtud = false;
 #ifndef NO_MIGRATION
 static bool rebind = false;
 static bool switch_ip = false;
@@ -155,6 +156,8 @@ usage(const char * const name,
            "default %s\n",
            rebind ? "true" : "false");
 #endif
+    printf("\t[-o]\t\tdisable PMTUD; default %s\n",
+           disable_pmtud ? "true" : "false");
     printf("\t[-q log]\twrite qlog events to directory; default %s\n",
            *qlog_dir ? qlog_dir : "false");
     printf("\t[-r reps]\trepetitions for all URLs; default %u\n", reps);
@@ -458,7 +461,7 @@ int main(int argc, char * argv[])
     }
 
     while ((ch = getopt(argc, argv,
-                        "hi:v:s:t:l:c:u36azb:wr:q:me:x:"
+                        "hi:v:s:t:l:c:u36azb:wr:q:me:x:o"
 #ifndef NO_MIGRATION
                         "n"
 #endif
@@ -515,6 +518,9 @@ int main(int argc, char * argv[])
         case 'm':
             test_qr = true;
             break;
+        case 'o':
+            disable_pmtud = true;
+            break;
 #ifndef NO_MIGRATION
         case 'n':
             if (rebind)
@@ -545,6 +551,7 @@ int main(int argc, char * argv[])
                                       .enable_udp_zero_checksums = true,
                                       .idle_timeout = timeout,
                                       .version = vers,
+                                      .disable_pmtud = disable_pmtud,
                                       .enable_quantum_readiness_test = test_qr},
             .qlog_dir = *qlog_dir ? qlog_dir : 0,
             .force_chacha20 = do_chacha,

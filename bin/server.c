@@ -70,6 +70,7 @@ static void __attribute__((noreturn)) usage(const char * const name,
                                             const uint32_t timeout,
                                             const uint32_t initial_rtt,
                                             const bool retry,
+                                            const bool disable_pmtud,
                                             const uint32_t num_bufs)
 {
     printf("%s [options]\n", name);
@@ -81,6 +82,8 @@ static void __attribute__((noreturn)) usage(const char * const name,
     printf("\t[-k key]\tTLS key; default %s\n", key);
     printf("\t[-l log]\tlog file for TLS keys; default %s\n",
            *tls_log ? tls_log : "false");
+    printf("\t[-o]\t\tdisable PMTUD; default %s\n",
+           disable_pmtud ? "true" : "false");
     printf("\t[-p port]\tdestination port; default %d\n", port);
     printf("\t[-q log]\twrite qlog events to directory; default %s\n",
            *qlog_dir ? qlog_dir : "false");
@@ -280,6 +283,7 @@ int main(int argc, char * argv[])
     int ch;
     int ret = 0;
     bool retry = false;
+    bool disable_pmtud = false;
 
     // set default TLS log file from environment
     const char * const keylog = getenv("SSLKEYLOGFILE");
@@ -288,7 +292,7 @@ int main(int argc, char * argv[])
         tls_log[MAXPATHLEN - 1] = 0;
     }
 
-    while ((ch = getopt(argc, argv, "hi:p:d:v:c:k:t:b:q:rl:x:")) != -1) {
+    while ((ch = getopt(argc, argv, "hi:p:d:v:c:k:t:b:q:rl:x:o")) != -1) {
         switch (ch) {
         case 'q':
             strncpy(qlog_dir, optarg, sizeof(qlog_dir) - 1);
@@ -324,6 +328,9 @@ int main(int argc, char * argv[])
         case 'r':
             retry = true;
             break;
+        case 'o':
+            disable_pmtud = true;
+            break;
         case 'l':
             strncpy(tls_log, optarg, sizeof(tls_log) - 1);
             break;
@@ -337,7 +344,8 @@ int main(int argc, char * argv[])
         case '?':
         default:
             usage(basename(argv[0]), ifname, qlog_dir, port[0], dir, cert, key,
-                  tls_log, timeout, initial_rtt, retry, num_bufs);
+                  tls_log, timeout, initial_rtt, retry, disable_pmtud,
+                  num_bufs);
         }
     }
 
@@ -355,6 +363,7 @@ int main(int argc, char * argv[])
                        &(struct q_conn_conf){.initial_rtt = initial_rtt,
                                              .idle_timeout = timeout,
                                              .enable_spinbit = true,
+                                             .disable_pmtud = disable_pmtud,
                                              .enable_udp_zero_checksums = true},
                    .qlog_dir = *qlog_dir ? qlog_dir : 0,
                    .tls_log = *tls_log ? tls_log : 0,

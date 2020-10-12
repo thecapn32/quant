@@ -438,13 +438,12 @@ static void __attribute__((nonnull)) do_tx_txq(struct q_conn * const c,
 #ifndef NO_QINFO
     c->i.pkts_out += w_iov_sq_cnt(q);
 #endif
-
-    const uint16_t pmtu =
-        MIN(w_max_udp_payload(ws), (uint16_t)c->tp_peer.max_ups);
-
     if (w_iov_sq_cnt(q) > 1 && unlikely(is_lh(*sq_first(q)->buf))) {
-        const bool do_pmtud =
-            c->rec.max_ups == MIN_INI_LEN && pmtu > MIN_INI_LEN;
+        const uint16_t pmtu =
+            MIN(w_max_udp_payload(ws), (uint16_t)c->tp_peer.max_ups);
+        const bool do_pmtud = c->disable_pmtud == false &&
+                              c->rec.max_ups == MIN_INI_LEN &&
+                              pmtu > MIN_INI_LEN;
         c->pmtud_pkt =
             coalesce(q, unlikely(do_pmtud) ? pmtu : c->rec.max_ups, do_pmtud);
     }
@@ -1808,6 +1807,7 @@ void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
     c->rec.initial_rtt = get_conf(c->w, conf, initial_rtt) * US_PER_MS;
     c->spin_enabled = get_conf_uncond(c->w, conf, enable_spinbit);
     c->do_qr_test = get_conf_uncond(c->w, conf, enable_quantum_readiness_test);
+    c->disable_pmtud = get_conf(c->w, conf, disable_pmtud);
 
     // (re)set idle alarm
     c->tp_mine.max_idle_to =

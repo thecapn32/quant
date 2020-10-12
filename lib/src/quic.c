@@ -628,6 +628,7 @@ struct w_engine * q_init(const char * const ifname,
                              .tls_key_update_frequency = 3,
                              .version = ok_vers[0],
                              .enable_quantum_readiness_test = false,
+                             .disable_pmtud = false,
                              .enable_spinbit =
 #ifndef NDEBUG
                                  true
@@ -656,6 +657,8 @@ struct w_engine * q_init(const char * const ifname,
             get_conf_uncond(w, conf->conn_conf, disable_active_migration);
         ped(w)->default_conn_conf.enable_quantum_readiness_test =
             get_conf_uncond(w, conf->conn_conf, enable_quantum_readiness_test);
+        ped(w)->default_conn_conf.disable_pmtud =
+            get_conf_uncond(w, conf->conn_conf, disable_pmtud);
     }
 
     // initialize some globals
