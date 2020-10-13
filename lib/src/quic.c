@@ -1063,12 +1063,21 @@ bool q_migrate(struct q_conn * const c,
                const bool switch_ip,
                const struct sockaddr * const alt_peer)
 {
-    // make sure we have a dcid to migrate to
-    if (switch_ip && next_cid(&c->dcids, c->dcid->seq) == 0) {
+    if (switch_ip) {
+        // make sure we have a dcid to migrate to
+        if (next_cid(&c->dcids, c->dcid->seq) == 0) {
 #ifdef DEBUG_EXTRA
-        warn(DBG, "no new dcid available, can't migrate");
+            warn(DBG, "no new dcid available, can't migrate");
 #endif
-        return false;
+            return false;
+        }
+        // make sure the handshake has completed
+        if (hshk_done(c) == false) {
+#ifdef DEBUG_EXTRA
+            warn(DBG, "handshake not yet complete, can't migrate");
+#endif
+            return false;
+        }
     }
 
     ensure(is_clnt(c), "can only rebind w_sock on client");

@@ -5,7 +5,7 @@
 
 if [ -n "$TESTCASE" ]; then
     case "$TESTCASE" in
-    "keyupdate"|"ecn"|"versionnegotiation"|"handshake"|"transfer"|"retry"|"resumption"|"multiconnect"|"zerortt"|"chacha20")
+    "connectionmigration"|"keyupdate"|"ecn"|"versionnegotiation"|"handshake"|"transfer"|"retry"|"resumption"|"multiconnect"|"zerortt"|"chacha20")
         ;;
     *)
         exit 127
@@ -20,25 +20,12 @@ fi
 
 # For quant, call client and server with full path, so addr2line can find them
 
-if [ -e /certs/cert.pem ]; then
-    echo Using interop runner certs and enabling cert verification
-    CERT=/certs/cert.pem
-    KEY=/certs/priv.key
-    CA=/certs/ca.pem
-else
-    echo Using dummy certs and turning off cert verification
-    CERT=/tls/dummy.crt
-    KEY=/tls/dummy.key
-    CA=false
-fi
-
-
 STRIP='s,\x1B\[[0-9;]*[a-zA-Z],,g'
 
 if [ "$ROLE" == "client" ]; then
     [ -n "$CRON" ] && CLIENT_ARGS="-v4 $CLIENT_ARGS"
     CLIENT_ARGS="-i eth0 -w -o -q $QLOGDIR -l $SSLKEYLOGFILE -t 150 -x 50 \
-        -e 0xff00001d -c $CA $CLIENT_ARGS"
+        -e 0xff00001d -c /certs/ca.pem $CLIENT_ARGS"
 
     # Wait for the simulator to start up.
     /wait-for-it.sh sim:57832 -s -t 30
@@ -46,6 +33,9 @@ if [ "$ROLE" == "client" ]; then
 
     skip=0
     case "$TESTCASE" in
+    "connectionmigration")
+        CLIENT_ARGS="-n -n $CLIENT_ARGS"
+        ;;
     "keyupdate")
         CLIENT_ARGS="-u $CLIENT_ARGS"
         ;;
@@ -90,6 +80,6 @@ elif [ "$ROLE" == "server" ]; then
     esac
 
     /usr/local/bin/server $SERVER_ARGS -i eth0 -o -d /www -p 443 -p 4434 -t 0 \
-        -x 50 -c $CERT -k $KEY -q "$QLOGDIR" 2>&1 \
+        -x 50 -c /certs/cert.pem -k /certs/priv.key -q "$QLOGDIR" 2>&1 \
             | sed -u $STRIP | tee -i -a "/logs/$ROLE.log"
 fi
