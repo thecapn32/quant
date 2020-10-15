@@ -71,6 +71,7 @@ static void __attribute__((noreturn)) usage(const char * const name,
                                             const uint32_t initial_rtt,
                                             const bool retry,
                                             const bool disable_pmtud,
+                                            const bool enable_grease,
                                             const uint32_t num_bufs)
 {
     printf("%s [options]\n", name);
@@ -79,6 +80,8 @@ static void __attribute__((noreturn)) usage(const char * const name,
     printf("\t[-c cert]\tTLS certificate; default %s\n", cert);
     printf("\t[-d dir]\tserver root directory; default %s\n", dir);
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
+    printf("\t[-g]\tenable greasing the QUIC bit; default %s\n",
+           enable_grease ? "true" : "false");
     printf("\t[-k key]\tTLS key; default %s\n", key);
     printf("\t[-l log]\tlog file for TLS keys; default %s\n",
            *tls_log ? tls_log : "false");
@@ -284,6 +287,7 @@ int main(int argc, char * argv[])
     int ret = 0;
     bool retry = false;
     bool disable_pmtud = false;
+    bool enable_grease = false;
 
     // set default TLS log file from environment
     const char * const keylog = getenv("SSLKEYLOGFILE");
@@ -292,7 +296,7 @@ int main(int argc, char * argv[])
         tls_log[MAXPATHLEN - 1] = 0;
     }
 
-    while ((ch = getopt(argc, argv, "hi:p:d:v:c:k:t:b:q:rl:x:o")) != -1) {
+    while ((ch = getopt(argc, argv, "hi:p:d:v:c:k:t:b:q:rl:x:og")) != -1) {
         switch (ch) {
         case 'q':
             strncpy(qlog_dir, optarg, sizeof(qlog_dir) - 1);
@@ -331,6 +335,9 @@ int main(int argc, char * argv[])
         case 'o':
             disable_pmtud = true;
             break;
+        case 'g':
+            enable_grease = true;
+            break;
         case 'l':
             strncpy(tls_log, optarg, sizeof(tls_log) - 1);
             break;
@@ -345,7 +352,7 @@ int main(int argc, char * argv[])
         default:
             usage(basename(argv[0]), ifname, qlog_dir, port[0], dir, cert, key,
                   tls_log, timeout, initial_rtt, retry, disable_pmtud,
-                  num_bufs);
+                  enable_grease, num_bufs);
         }
     }
 
@@ -364,6 +371,7 @@ int main(int argc, char * argv[])
                                              .idle_timeout = timeout,
                                              .enable_spinbit = true,
                                              .disable_pmtud = disable_pmtud,
+                                             .enable_grease = enable_grease,
                                              .enable_udp_zero_checksums = true},
                    .qlog_dir = *qlog_dir ? qlog_dir : 0,
                    .tls_log = *tls_log ? tls_log : 0,

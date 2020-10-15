@@ -629,6 +629,7 @@ struct w_engine * q_init(const char * const ifname,
                              .version = ok_vers[0],
                              .enable_quantum_readiness_test = false,
                              .disable_pmtud = false,
+                             .enable_grease = false,
                              .enable_spinbit =
 #ifndef NDEBUG
                                  true
@@ -659,6 +660,8 @@ struct w_engine * q_init(const char * const ifname,
             get_conf_uncond(w, conf->conn_conf, enable_quantum_readiness_test);
         ped(w)->default_conn_conf.disable_pmtud =
             get_conf_uncond(w, conf->conn_conf, disable_pmtud);
+        ped(w)->default_conn_conf.enable_grease =
+            get_conf_uncond(w, conf->conn_conf, enable_grease);
     }
 
     // initialize some globals

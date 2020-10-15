@@ -93,6 +93,7 @@ static bool zlen_cids = false;
 static bool write_files = false;
 static bool test_qr = false;
 static bool disable_pmtud = false;
+static bool enable_grease = false;
 #ifndef NO_MIGRATION
 static bool rebind = false;
 static bool switch_ip = false;
@@ -145,6 +146,8 @@ usage(const char * const name,
     printf("\t[-c]\t\tverify TLS certs using this CA cert; default %s\n",
            *tls_ca_store ? tls_ca_store : "false");
     printf("\t[-e version]\tQUIC version to use; default 0x%08x\n", vers);
+    printf("\t[-g]\tenable greasing the QUIC bit; default %s\n",
+           enable_grease ? "true" : "false");
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
     printf("\t[-l log]\tlog file for TLS keys; default %s\n",
            *tls_log ? tls_log : "false");
@@ -461,7 +464,7 @@ int main(int argc, char * argv[])
     }
 
     while ((ch = getopt(argc, argv,
-                        "hi:v:s:t:l:c:u36azb:wr:q:me:x:o"
+                        "hi:v:s:t:l:c:u36azb:wr:q:me:x:og"
 #ifndef NO_MIGRATION
                         "n"
 #endif
@@ -521,6 +524,9 @@ int main(int argc, char * argv[])
         case 'o':
             disable_pmtud = true;
             break;
+        case 'g':
+            enable_grease = true;
+            break;
 #ifndef NO_MIGRATION
         case 'n':
             if (rebind)
@@ -552,6 +558,7 @@ int main(int argc, char * argv[])
                                       .idle_timeout = timeout,
                                       .version = vers,
                                       .disable_pmtud = disable_pmtud,
+                                      .enable_grease = enable_grease,
                                       .enable_quantum_readiness_test = test_qr},
             .qlog_dir = *qlog_dir ? qlog_dir : 0,
             .force_chacha20 = do_chacha,

@@ -53,7 +53,8 @@ struct q_conn_conf {
     uint8_t disable_active_migration : 1;
     uint8_t enable_quantum_readiness_test : 1; // TODO: is temporary
     uint8_t disable_pmtud : 1;
-    uint8_t : 2;
+    uint8_t enable_grease : 1; // draft-thomson-quic-bit-grease
+    uint8_t : 1;
     uint32_t version;
 };
 

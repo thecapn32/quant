@@ -1808,6 +1808,7 @@ void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
     c->spin_enabled = get_conf_uncond(c->w, conf, enable_spinbit);
     c->do_qr_test = get_conf_uncond(c->w, conf, enable_quantum_readiness_test);
     c->disable_pmtud = get_conf(c->w, conf, disable_pmtud);
+    c->tp_mine.grease_quic_bit = get_conf(c->w, conf, enable_grease);
 
     // (re)set idle alarm
     c->tp_mine.max_idle_to =

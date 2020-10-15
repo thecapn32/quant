@@ -1081,10 +1081,12 @@ void init_tp(struct q_conn * const c)
 #endif
                 }
             } else if (tp_order[j] == TP_QBG) {
-                enc_tp_empty(&pos, end, TP_QBG);
+                if (c->tp_mine.grease_quic_bit) {
+                    enc_tp_empty(&pos, end, TP_QBG);
 #ifdef DEBUG_EXTRA
-                warn(WRN, "\t" BLD YEL "grease_quic_bit" NRM " = true");
+                    warn(WRN, "\t" BLD YEL "grease_quic_bit" NRM " = true");
 #endif
+                }
             } else
                 die("unknown tp 0x%" PRIx, (uint_t)tp_order[j]);
             break;

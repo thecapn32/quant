@@ -43,14 +43,14 @@ export UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1:suppressions=../misc/gcc
 # commands to run the different clients against $addr:$port
 case $c in
         quant)
-                cc="bin/client -c test/dummy.ca.crt -v5 -i $iface \
+                cc="bin/client -c test/dummy.ca.crt -v5 -g -i $iface \
                         -u -t2 -q . -l /tmp/clnt.tlslog \
                         \"https://$addr:$port$path\""
                 ;;
         wquant)
                 cc="vagrant ssh -c \"\
                         /vagrant/Linux/bin/client -c test/dummy.ca.crt \
-                                -v5 -i enp0s8 https://$addr:44433$path\""
+                                -v5 -g -i enp0s8 https://$addr:44433$path\""
                 ;;
         quicly)
                 cc="external/quicly-prefix/src/quicly-build/cli -n \
@@ -97,12 +97,12 @@ esac
 # commands to run the different servers on  $addr:$port
 case $s in
         quant)
-                sc="bin/server -v5 -c $cert -k $key -i $iface -t2 -q . \
+                sc="bin/server -v5 -g -c $cert -k $key -i $iface -t2 -q . \
                     -l /tmp/serv.tlslog -p 4433 -p 4434 -p $port -d $dir"
                 ;;
         wquant)
                 sc="vagrant ssh -c \"\
-                        /vagrant/Linux/bin/server -i enp0s8 -v5 -p $port \
+                        /vagrant/Linux/bin/server -i enp0s8 -v5 -g -p $port \
                                 -c $cert -k $key \
                                 -d /usr/share/doc/valgrind/html\""
                 ;;
