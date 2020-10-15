@@ -137,7 +137,7 @@ void quic_transaction(const char * const req, const size_t req_len)
     DSTACK_LOG("DSTACK 1" DSTACK_LOG_NEWLINE);
 
     // XXX: change "flash" to 0 to disable 0-RTT:
-    static const struct q_conf qc = {0, "flash", 0, 0, 0, 0, 15, false};
+    static const struct q_conf qc = {0, "flash", 0, 0, 0, 0, 0, 15, false};
     struct w_engine * const w = q_init(IF_NAME, &qc);
 
     static const char peername[] = "172.19.235.111";
@@ -166,7 +166,7 @@ void quic_transaction(const char * const req, const size_t req_len)
         DSTACK_LOG("DSTACK 2" DSTACK_LOG_NEWLINE);
         struct q_stream * s = 0;
         static const struct q_conn_conf qcc = {
-            30, 0, 0, 0, 0, 0, 0, 0, 0xff000000 + DRAFT_VERSION};
+            30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff000000 + DRAFT_VERSION};
         struct q_conn * const c =
             q_connect(w, to_in(peer), peername, &o, &s, true,
                       "hq-" DRAFT_VERSION_STRING, &qcc);
