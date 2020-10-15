@@ -24,6 +24,7 @@ The quant repository is [on GitHub](https://github.com/NTAP/quant).
 **NOTE:** Quant implements the QUIC transport layer, but does **NOT** implement
 an HTTP/3 binding.
 
+**NOTE:** Quant is a research effort and not meant for production use.
 
 ## Prerequisites
 
