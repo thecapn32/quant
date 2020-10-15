@@ -1125,7 +1125,8 @@ bool q_migrate(struct q_conn * const c,
                               : c->tp_peer.pref_addr.addr6;
             } else
                 goto fail;
-        }
+        } else
+            goto fail;
         c->needs_tx = true;
     }
 
