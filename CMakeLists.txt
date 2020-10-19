@@ -197,6 +197,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
         set(CLANG_TIDY_CHECKS *
             -cert-err58-cpp
             -cppcoreguidelines-avoid-magic-numbers
+            -cppcoreguidelines-avoid-non-const-global-variables
             -cppcoreguidelines-init-variables
             -cppcoreguidelines-macro-usage
             -cppcoreguidelines-owning-memory
@@ -213,6 +214,9 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
             -hicpp-no-array-decay
             -hicpp-signed-bitwise
             -hicpp-vararg
+            -llvmlibc-callee-namespace
+            -llvmlibc-implementation-in-namespace
+            -llvmlibc-restrict-system-libc-headers
             -modernize-use-trailing-return-type
             -readability-braces-around-statements
             -readability-magic-numbers

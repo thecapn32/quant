@@ -41,7 +41,7 @@
 #endif
 #define WHEEL_NUM 6
 #define TIMEOUT_DISABLE_INTERVALS
-#include <timeout.c>
+#include <timeout.c> // NOLINT
 
 
 func_ptr api_func = 0;
