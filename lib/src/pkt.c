@@ -212,7 +212,6 @@ coalesce(struct w_iov_sq * const q, const uint16_t max_ups, const bool do_pmtud)
 #ifndef NDEBUG
         const char * inner_type_str = pkt_type_str(*v->buf, v->buf + 1);
         const char * const outer_type_str = inner_type_str;
-        warn(ERR, "coalesce %s", inner_type_str);
 #endif
         while (next) {
 #ifndef NDEBUG
@@ -641,8 +640,8 @@ tx:;
         bitset_t_initializer(1 << FRM_PCL | 1 << FRM_PRP);
     if (unlikely(pos - v->buf < MIN_INI_LEN &&
                  bit_overlap(FRM_MAX, &m->frms, &need_padding))) {
-        warn(ERR, "pos-vbuf=%u padlen %u", (uint16_t)(pos - v->buf),
-             MIN_INI_LEN - (uint16_t)(pos - v->buf));
+        warn(ERR, "pos-vbuf=%u end-vbuf=%u padlen %u", (uint16_t)(pos - v->buf),
+             (uint16_t)(end - v->buf), MIN_INI_LEN - (uint16_t)(pos - v->buf));
         enc_padding_frame(ci, &pos, end, m,
                           MIN_INI_LEN - (uint16_t)(pos - v->buf));
     }
