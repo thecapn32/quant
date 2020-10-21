@@ -997,6 +997,12 @@ dec_path_challenge_frame(const uint8_t ** pos,
     warn(INF, FRAM_IN "PATH_CHALLENGE" NRM " data=%s",
          pcr_str(c->path_chlg_in));
 
+    if (unlikely(m->udp_len < MIN_INI_LEN)) {
+        warn(NTE, "UDP len %u of PATH_CHALLENGE < %u, ignoring", m->udp_len,
+             MIN_INI_LEN);
+        return true;
+    }
+
     memcpy(c->path_resp_out, c->path_chlg_in, PATH_CHLG_LEN);
     c->needs_tx = c->tx_path_resp = true;
 
@@ -1015,6 +1021,12 @@ dec_path_response_frame(const uint8_t ** pos,
     decb_chk(c->path_resp_in, pos, end, PATH_CHLG_LEN, c, FRM_PRP);
 
     warn(INF, FRAM_IN "PATH_RESPONSE" NRM " data=%s", pcr_str(c->path_resp_in));
+
+    if (unlikely(m->udp_len < MIN_INI_LEN)) {
+        warn(NTE, "UDP len %u of PATH_RESPONSE < %u, ignoring", m->udp_len,
+             MIN_INI_LEN);
+        return true;
+    }
 
     if (unlikely(c->tx_path_chlg == false)) {
         warn(NTE, "unexpected PATH_RESPONSE %s, ignoring",

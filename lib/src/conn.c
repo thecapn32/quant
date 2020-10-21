@@ -1265,55 +1265,59 @@ static void __attribute__((nonnull))
         if (c == 0 && m->hdr.dcid.len == 0)
 #endif
             c = (struct q_conn *)ws->data;
-        if (likely(is_lh(m->hdr.flags)) && !is_clnt) {
-            if (c && m->hdr.type == LH_0RTT) {
-                mk_cid_str(INF, &m->hdr.dcid, dcid_str_prev);
-                mk_cid_str(INF, c->scid, dcid_str_cur);
-                if (c->did_0rtt)
-                    warn(INF,
-                         "got 0-RTT pkt for orig cid %s, new is %s, "
-                         "accepting",
-                         dcid_str_prev, dcid_str_cur);
-                else {
-                    log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
-                    warn(WRN,
-                         "got 0-RTT pkt for orig cid %s, new is %s, "
-                         "but rejected 0-RTT, ignoring",
-                         dcid_str_prev, dcid_str_cur);
-                    goto drop;
-                }
-            } else if (m->hdr.type == LH_INIT && c == 0) {
-                // validate minimum packet size
-                if (m->udp_len < MIN_INI_LEN) {
-                    log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
-                    warn(ERR, "%u-byte Initial pkt too short (< %u)",
-                         m->udp_len, MIN_INI_LEN);
-                    goto drop;
-                }
+        if (unlikely(is_lh(m->hdr.flags))) {
+            // validate minimum packet size
+            if (unlikely(m->hdr.type == LH_INIT && m->hdr.vers != 0 &&
+                         m->udp_len < MIN_INI_LEN)) {
+                log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
+                warn(ERR, "%u-byte Initial pkt too short (< %u)", m->udp_len,
+                     MIN_INI_LEN);
+                goto drop;
+            }
 
-                if (vers_supported(m->hdr.vers) == false ||
-                    is_vneg_vers(m->hdr.vers)) {
-                    log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
-                    warn(WRN,
-                         "clnt-requested vers 0x%0" PRIx32 " not supported",
-                         m->hdr.vers);
-                    if (m->hdr.vers != 0)
-                        // only reply to non-vneg packets
-                        tx_vneg_resp(ws, v, m);
-                    goto drop;
+            if (!is_clnt) {
+                if (c && m->hdr.type == LH_0RTT) {
+                    mk_cid_str(INF, &m->hdr.dcid, dcid_str_prev);
+                    mk_cid_str(INF, c->scid, dcid_str_cur);
+                    if (c->did_0rtt)
+                        warn(INF,
+                             "got 0-RTT pkt for orig cid %s, new is %s, "
+                             "accepting",
+                             dcid_str_prev, dcid_str_cur);
+                    else {
+                        log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
+                        warn(WRN,
+                             "got 0-RTT pkt for orig cid %s, new is %s, "
+                             "but rejected 0-RTT, ignoring",
+                             dcid_str_prev, dcid_str_cur);
+                        goto drop;
+                    }
+                } else if (m->hdr.type == LH_INIT && c == 0) {
+                    if (vers_supported(m->hdr.vers) == false ||
+                        is_vneg_vers(m->hdr.vers)) {
+                        log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
+                        warn(WRN,
+                             "clnt-requested vers 0x%0" PRIx32 " not supported",
+                             m->hdr.vers);
+                        if (m->hdr.vers != 0)
+                            // only reply to non-vneg packets
+                            tx_vneg_resp(ws, v, m);
+                        goto drop;
+                    }
+
+                    warn(NTE,
+                         "new serv conn on port %u from %s%s%s:%u w/cid=%s",
+                         bswap16(ws->ws_lport), v->wv_af == AF_INET6 ? "[" : "",
+                         w_ntop(&v->wv_addr, ip_tmp),
+                         v->wv_af == AF_INET6 ? "]" : "", v->saddr.port,
+                         cid_str(&m->hdr.dcid));
+
+                    c = new_conn(w_engine(ws), UINT16_MAX, &m->hdr.scid,
+                                 &m->hdr.dcid, &v->saddr, 0, ws->ws_lport, ws,
+                                 &(struct q_conn_conf){.version = m->hdr.vers});
+                    if (likely(c))
+                        init_tls(c, 0, 0);
                 }
-
-                warn(NTE, "new serv conn on port %u from %s%s%s:%u w/cid=%s",
-                     bswap16(ws->ws_lport), v->wv_af == AF_INET6 ? "[" : "",
-                     w_ntop(&v->wv_addr, ip_tmp),
-                     v->wv_af == AF_INET6 ? "]" : "", v->saddr.port,
-                     cid_str(&m->hdr.dcid));
-
-                c = new_conn(w_engine(ws), UINT16_MAX, &m->hdr.scid,
-                             &m->hdr.dcid, &v->saddr, 0, ws->ws_lport, ws,
-                             &(struct q_conn_conf){.version = m->hdr.vers});
-                if (likely(c))
-                    init_tls(c, 0, 0);
             }
         }
 

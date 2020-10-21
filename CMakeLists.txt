@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.12)
 
-project(quant VERSION 0.0.29 LANGUAGES C CXX)
+project(quant VERSION 0.0.32 LANGUAGES C CXX)
 
 # See if we have google benchmark
 include(CheckCXXSymbolExists)

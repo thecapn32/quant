@@ -51,6 +51,7 @@ void init_cids(struct cids * const ids)
     for (uint8_t i = 0; i < CIDS_MAX; i++) {
         ids->cids[i].available = true;
         ids->cids[i].retired = false;
+        ids->cids[i].local_choice = false;
         sl_insert_head(&ids->avl, &ids->cids[i], next);
     }
 }
@@ -209,6 +210,7 @@ void mk_rand_cid(struct cid * const id,
                       : 8 + (uint8_t)w_rand_uniform32(CID_LEN_MAX - 7);
         rand_bytes(id->id, id->len);
     }
+    id->local_choice = true;
 
 #ifndef NO_SRT_MATCHING
     id->has_srt = srt;

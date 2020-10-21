@@ -241,6 +241,13 @@ coalesce(struct w_iov_sq * const q, const uint16_t max_ups, const bool do_pmtud)
                      "need to do PMTUD",
                      next->len, next_type_str, inner_type_str);
                 prev = next;
+            } else if (pkt_type(*next->buf) == SH &&
+                       pkt_type(*v->buf) == LH_INIT) {
+                warn(DBG,
+                     "won't coalesce %u-byte %s pkt behind inner %s pkt, "
+                     "need to pad Initial",
+                     next->len, next_type_str, inner_type_str);
+                prev = next;
             } else {
                 // we can coalesce
                 warn(INF,
@@ -270,6 +277,13 @@ coalesce(struct w_iov_sq * const q, const uint16_t max_ups, const bool do_pmtud)
             *(v->buf + v->len) &= ~LH;
             v->len = max_ups;
             pmtud_pkt = v->user_data;
+        } else if (pkt_type(*v->buf) == LH_INIT && v->len < MIN_INI_LEN) {
+            warn(NTE, "padding %s to %u by coalescing %u bytes rand data",
+                 pkt_type_str(*v->buf, v->buf + 1), MIN_INI_LEN,
+                 MIN_INI_LEN - v->len);
+            rand_bytes(v->buf + v->len, MIN_INI_LEN - v->len);
+            *(v->buf + v->len) &= ~LH;
+            v->len = MIN_INI_LEN;
         }
 
         v = sq_next(v, next);
@@ -616,6 +630,14 @@ bool enc_pkt(struct q_stream * const s,
     }
 
 tx:;
+    // pad PATH_CHALLENGE and PATH_RESPONSE packets
+    static const struct frames need_padding =
+        bitset_t_initializer(1 << FRM_PCL | 1 << FRM_PRP);
+    if (unlikely(pos - v->buf < MIN_INI_LEN &&
+                 bit_overlap(FRM_MAX, &m->frms, &need_padding)))
+        enc_padding_frame(ci, &pos, end, m,
+                          MIN_INI_LEN - (uint16_t)(pos - v->buf));
+
     // make sure we have enough frame bytes for the header protection sample
     const uint16_t pnp_dist = (uint16_t)(pos - pkt_nr_pos);
     if (unlikely(pnp_dist < 4))
@@ -1084,13 +1106,20 @@ bool dec_pkt_hdr_remainder(struct w_iov * const xv,
 
     v->len = xv->len - AEAD_LEN;
 
-    if (!is_clnt(c) && unlikely(m->hdr.type == LH_HSHK && c->cstrms[ep_init])) {
-        abandon_pn(&c->pns[pn_init]);
-
-        // server can assume path is validated on RX of Handshake pkt
-        warn(DBG, "clnt path validated");
-        c->path_val_win = UINT_T_MAX;
-        c->needs_tx = true; // in case we need to RTX
+    if (!is_clnt(c) && unlikely(c->cstrms[ep_init])) {
+        const struct cid * const id = cid_by_id(&c->scids.act, &m->hdr.dcid);
+        // server can assume path is validated...
+        if (unlikely(
+                // ...on RX of Handshake pkt
+                m->hdr.type == LH_HSHK ||
+                // ...when client uses a CID it chose with > 64bits of entropy
+                id != 0 && cid_cmp(id, &c->odcid) != 0 &&
+                    id->local_choice == true && id->len >= 8)) {
+            warn(DBG, "clnt path validated");
+            abandon_pn(&c->pns[pn_init]);
+            c->path_val_win = UINT_T_MAX;
+            c->needs_tx = true; // in case we need to RTX
+        }
     }
 
     // packet protection verified OK

@@ -199,23 +199,23 @@ static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 
 #define QUIC_TP 0xffa5
 
-#define TP_DCID_O 0x00  ///< original_destination_connection_id
-#define TP_IDTO 0x01    ///< idle_timeout
-#define TP_SRT 0x02     ///< stateless_reset_token
-#define TP_MUPS 0x03    ///< max_udp_payload_size
-#define TP_IMD 0x04     ///< initial_max_data
+#define TP_DCID_O 0x00 ///< original_destination_connection_id
+#define TP_IDTO 0x01 ///< idle_timeout
+#define TP_SRT 0x02 ///< stateless_reset_token
+#define TP_MUPS 0x03 ///< max_udp_payload_size
+#define TP_IMD 0x04 ///< initial_max_data
 #define TP_IMSD_BL 0x05 ///< initial_max_stream_data_bidi_local
 #define TP_IMSD_BR 0x06 ///< initial_max_stream_data_bidi_remote
-#define TP_IMSD_U 0x07  ///< initial_max_stream_data_uni
-#define TP_IMSB 0x08    ///< initial_max_streams_bidi
-#define TP_IMSU 0x09    ///< initial_max_streams_uni
-#define TP_ADE 0x0a     ///< ack_delay_exponent
-#define TP_MAD 0x0b     ///< max_ack_delay
-#define TP_DMIG 0x0c    ///< disable_active_migration
-#define TP_PRFA 0x0d    ///< preferred_address
-#define TP_ACIL 0x0e    ///< active_connection_id_limit
-#define TP_SCID_I 0x0f  ///< initial_source_connection_id
-#define TP_SCID_R 0x10  ///< retry_source_connection_id
+#define TP_IMSD_U 0x07 ///< initial_max_stream_data_uni
+#define TP_IMSB 0x08 ///< initial_max_streams_bidi
+#define TP_IMSU 0x09 ///< initial_max_streams_uni
+#define TP_ADE 0x0a ///< ack_delay_exponent
+#define TP_MAD 0x0b ///< max_ack_delay
+#define TP_DMIG 0x0c ///< disable_active_migration
+#define TP_PRFA 0x0d ///< preferred_address
+#define TP_ACIL 0x0e ///< active_connection_id_limit
+#define TP_SCID_I 0x0f ///< initial_source_connection_id
+#define TP_SCID_R 0x10 ///< retry_source_connection_id
 #define TP_MAX (TP_SCID_R + 1)
 
 #define TP_QBG 0x2ab2 // grease_quic_bit
@@ -589,10 +589,10 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             dec_chk(tp, &c->tp_peer.max_ups, &pos, end);
             warn(INF, "\tmax_udp_payload_size = %" PRIu " [bytes]",
                  c->tp_peer.max_ups);
-            if (c->tp_peer.max_ups < 1200)
+            if (c->tp_peer.max_ups < MIN_INI_LEN)
                 err_close_return(c, ERR_TP, FRM_CRY,
-                                 "tp_peer.max_ups %" PRIu " invalid (< 1200)",
-                                 c->tp_peer.max_ups);
+                                 "tp_peer.max_ups %" PRIu " invalid (< %u)",
+                                 c->tp_peer.max_ups, MIN_INI_LEN);
             break;
 
         case TP_ADE:
