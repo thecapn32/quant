@@ -44,22 +44,22 @@ struct q_stream;
 #define MAX_UPS 65527
 #define MIN_SRT_PKT_LEN 5 + SRT_LEN ///< min SRT length, incl. the fixed bits
 
-#define HEAD_FORM 0x80      ///< header form (1 = long, 0 = short)
-#define HEAD_FIXD 0x40      ///< fixed bit (= 1)
+#define HEAD_FORM 0x80 ///< header form (1 = long, 0 = short)
+#define HEAD_FIXD 0x40 ///< fixed bit (= 1)
 #define HEAD_PNRL_MASK 0x03 ///< packet number length mask
 
 #define LH (HEAD_FORM | HEAD_FIXD)
 #define LH_TYPE_MASK 0x30 ///< long header: packet type mask
-#define LH_INIT 0x00      ///< long header packet type: Initial
-#define LH_0RTT 0x10      ///< long header packet type: 0-RTT Protected
-#define LH_HSHK 0x20      ///< long header packet type: Handshake
-#define LH_RTRY 0x30      ///< long header packet type: Retry
+#define LH_INIT 0x00 ///< long header packet type: Initial
+#define LH_0RTT 0x10 ///< long header packet type: 0-RTT Protected
+#define LH_HSHK 0x20 ///< long header packet type: Handshake
+#define LH_RTRY 0x30 ///< long header packet type: Retry
 #define LH_RSVD_MASK 0x0c ///< long header: reserved bits mask (= 0)
 
 #define SH HEAD_FIXD
-#define SH_SPIN 0x20      ///< short header: spin bit
+#define SH_SPIN 0x20 ///< short header: spin bit
 #define SH_RSVD_MASK 0x18 ///< short header: reserved bits mask (= 0)
-#define SH_KYPH 0x04      ///< short header: key phase bit
+#define SH_KYPH 0x04 ///< short header: key phase bit
 
 #define MAX_PKT_NR_LEN 4 ///< Maximum packet number length allowed by spec.
 
@@ -202,6 +202,9 @@ enc_lh_cids(uint8_t ** pos,
             const struct cid * const scid);
 
 extern void __attribute__((nonnull)) validate_pmtu(struct q_conn * const c);
+
+extern void __attribute__((nonnull))
+pad_with_rand(struct w_iov * const v, const uint16_t len);
 
 #ifndef NDEBUG
 extern void __attribute__((nonnull(1, 2, 3)))

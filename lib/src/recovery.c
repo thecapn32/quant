@@ -126,14 +126,15 @@ void log_cc(struct q_conn * const c)
              "=%" PRIu " (%s%+" PRId NRM "), ssthresh=%" PRIu " (%s%+" PRId NRM
              "), srtt=%.3f (%s%+.3f" NRM "), rttvar=%.3f (%s%+.3f" NRM ")",
              conn_type(c), cid_str(c->scid), c->rec.cur.in_flight,
-             delta_in_flight > 0 ? GRN : delta_in_flight < 0 ? RED : "",
+             delta_in_flight > 0 ? GRN : (delta_in_flight < 0 ? RED : ""),
              delta_in_flight, c->rec.cur.cwnd,
-             delta_cwnd > 0 ? GRN : delta_cwnd < 0 ? RED : "", delta_cwnd,
-             ssthresh, delta_ssthresh > 0 ? GRN : delta_ssthresh < 0 ? RED : "",
+             delta_cwnd > 0 ? GRN : (delta_cwnd < 0 ? RED : ""), delta_cwnd,
+             ssthresh,
+             delta_ssthresh > 0 ? GRN : (delta_ssthresh < 0 ? RED : ""),
              delta_ssthresh, (float)c->rec.cur.srtt / US_PER_S,
-             delta_srtt > 0 ? GRN : delta_srtt < 0 ? RED : "",
+             delta_srtt > 0 ? GRN : (delta_srtt < 0 ? RED : ""),
              (float)delta_srtt / US_PER_S, (float)c->rec.cur.rttvar / US_PER_S,
-             delta_rttvar > 0 ? GRN : delta_rttvar < 0 ? RED : "",
+             delta_rttvar > 0 ? GRN : (delta_rttvar < 0 ? RED : ""),
              (float)delta_rttvar / US_PER_S);
     }
 

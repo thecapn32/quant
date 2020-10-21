@@ -438,7 +438,7 @@ static void __attribute__((nonnull)) do_tx_txq(struct q_conn * const c,
 #ifndef NO_QINFO
     c->i.pkts_out += w_iov_sq_cnt(q);
 #endif
-    if (w_iov_sq_cnt(q) > 1 && unlikely(is_lh(*sq_first(q)->buf))) {
+    if (unlikely(w_iov_sq_cnt(q) > 1 && is_lh(*sq_first(q)->buf))) {
         const uint16_t pmtu =
             MIN(w_max_udp_payload(ws), (uint16_t)c->tp_peer.max_ups);
         const bool do_pmtud = c->disable_pmtud == false &&
@@ -446,6 +446,15 @@ static void __attribute__((nonnull)) do_tx_txq(struct q_conn * const c,
                               pmtu > MIN_INI_LEN;
         c->pmtud_pkt =
             coalesce(q, unlikely(do_pmtud) ? pmtu : c->rec.max_ups, do_pmtud);
+    } else if (unlikely(w_iov_sq_cnt(q) == 1 &&
+                        sq_first(q)->len < MIN_INI_LEN &&
+                        pkt_type(*sq_first(q)->buf) == LH_INIT)) {
+        // need to pad a lone Initial
+        struct w_iov * const v = sq_first(q);
+        warn(NTE, "padding %s to %u by coalescing %u bytes rand data",
+             pkt_type_str(*v->buf, v->buf + 1), MIN_INI_LEN,
+             MIN_INI_LEN - v->len);
+        pad_with_rand(v, MIN_INI_LEN);
     }
     do_w_tx(ws, q);
 
