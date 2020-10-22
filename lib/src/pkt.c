@@ -640,9 +640,9 @@ tx:;
         bitset_t_initializer(1 << FRM_PCL | 1 << FRM_PRP);
     if (unlikely(pos - v->buf < MIN_INI_LEN &&
                  bit_overlap(FRM_MAX, &m->frms, &need_padding))) {
-        warn(ERR, "pos-vbuf=%u end-vbuf=%u padlen %u", (uint16_t)(pos - v->buf),
-             (uint16_t)(end - v->buf), MIN_INI_LEN - (uint16_t)(pos - v->buf));
-        enc_padding_frame(ci, &pos, end, m,
+        warn(ERR, "pos-vbuf=%u padlen %u", (uint16_t)(pos - v->buf),
+             MIN_INI_LEN - (uint16_t)(pos - v->buf));
+        enc_padding_frame(ci, &pos, v->buf + MIN_INI_LEN, m,
                           MIN_INI_LEN - (uint16_t)(pos - v->buf));
     }
 
