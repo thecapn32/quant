@@ -179,7 +179,8 @@ tls_ticket_cmp(const struct tls_ticket * const a,
     int diff = strcmp(a->sni, b->sni);
     if (diff)
         return diff;
-
+    if (*a->alpn == 0 || *b->alpn == 0)
+        return 0;
     diff = strcmp(a->alpn, b->alpn);
     return diff;
 }
@@ -1358,6 +1359,7 @@ void init_tls(struct q_conn * const c,
             // TODO: make sure to not use the tp values we're not supposed to
             memcpy(&c->tp_peer, &t->tp, sizeof(t->tp));
             c->vers_initial = c->vers = t->vers;
+            strncpy((char *)c->tls.alpn.base, t->alpn, c->tls.alpn.len);
             c->try_0rtt = true;
         }
     }

@@ -323,9 +323,11 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
     if (opened_new) {
         se->req_t = w_now(CLOCK_MONOTONIC_RAW);
         // no, open a new connection
-        struct q_conn * const c = q_connect(
-            w, peer->ai_addr, dest, &se->req, &se->s, true,
-            do_h3 ? "h3-" DRAFT_VERSION_STRING : "hq-" DRAFT_VERSION_STRING, 0);
+        char alpn[7];
+        snprintf(alpn, sizeof(alpn), "h%c-%02u", do_h3 ? '3' : 'q',
+                 vers ? vers & 0x000000ff : DRAFT_VERSION);
+        struct q_conn * const c =
+            q_connect(w, peer->ai_addr, dest, &se->req, &se->s, true, alpn, 0);
         if (c == 0)
             goto fail;
 

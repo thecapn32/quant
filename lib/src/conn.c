@@ -903,6 +903,14 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
 
     // reset TLS state and create new CH
     const bool should_try_0rtt = c->try_0rtt;
+    if (is_vneg && c->tls.alpn.len == 5 && c->tls.alpn.base[0] == 'h' &&
+        (c->tls.alpn.base[1] == '3' || c->tls.alpn.base[1] == 'q') &&
+        c->tls.alpn.base[2] == '-') {
+        // the app didn't request a specific version, so transmogrify the alpn
+        snprintf((char *)c->tls.alpn.base + 3, 4, "%02u", c->vers & 0x000000ff);
+        warn(NTE, "changing auto-selected ALPN to %s",
+             (char *)c->tls.alpn.base);
+    }
     init_tls(c, 0, (char *)c->tls.alpn.base);
     c->try_0rtt = should_try_0rtt;
     tls_io(c->cstrms[ep_init], 0);
@@ -1278,10 +1286,14 @@ static void __attribute__((nonnull))
             // validate minimum packet size
             if (unlikely(m->hdr.type == LH_INIT && m->hdr.vers != 0 &&
                          m->udp_len < MIN_INI_LEN)) {
-                log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
-                warn(ERR, "%u-byte Initial pkt too short (< %u)", m->udp_len,
+                const bool drop_it = c && is_clnt(c) == false;
+                if (drop_it)
+                    log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
+                warn(drop_it ? ERR : WRN,
+                     "%u-byte Initial pkt too short (< %u)", m->udp_len,
                      MIN_INI_LEN);
-                goto drop;
+                if (drop_it)
+                    goto drop;
             }
 
             if (!is_clnt) {

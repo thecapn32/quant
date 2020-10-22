@@ -73,10 +73,13 @@ char __rit_str[hex_str_len(RIT_LEN)];
 /// QUIC version supported by this implementation in order of preference.
 const uint32_t ok_vers[] = {
 #ifndef NDEBUG
-    0xbabababa, // reserved version to trigger negotiation, TODO: randomize
+    0xbabababa, // reserved version to trigger negotiation
 #endif
-    0x45474700 + DRAFT_VERSION, // quant private version -xx
-    0xff000000 + DRAFT_VERSION, // draft-ietf-quic-transport-xx
+    0x45474700 + DRAFT_VERSION,     // quant private version -xx
+    0xff000000 + DRAFT_VERSION,     // draft-ietf-quic-transport-xx
+    0xff000000 + DRAFT_VERSION - 1, // draft-ietf-quic-transport-xx - 1
+    0xff000000 + DRAFT_VERSION - 2, // draft-ietf-quic-transport-xx - 2
+    0xff000000 + DRAFT_VERSION - 3, // draft-ietf-quic-transport-xx - 3
 };
 
 /// Length of the @p ok_vers array.
