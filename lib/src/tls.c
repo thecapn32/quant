@@ -194,7 +194,9 @@ SPLAY_GENERATE(tickets_by_peer, tls_ticket, node, tls_ticket_cmp)
 // first entry is client default, if not otherwise specified
 // last entry should be h3-, since we ignore that in on_ch
 static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-" DRAFT_VERSION_STRING, 5},
-                                    {(uint8_t *)"h3-" DRAFT_VERSION_STRING, 5}};
+                                    {(uint8_t *)"hq-31", 5},
+                                    {(uint8_t *)"hq-30", 5},
+                                    {(uint8_t *)"hq-29", 5}}; // FIXME
 static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 
 
@@ -389,14 +391,14 @@ on_ch(ptls_on_client_hello_t * const self __attribute__((unused)),
     }
 
     size_t j;
-    for (j = 0; j < alpn_cnt - 1; j++)
+    for (j = 0; j < alpn_cnt; j++)
         for (size_t i = 0; i < params->negotiated_protocols.count; i++)
             if (params->negotiated_protocols.list[i].len == alpn[j].len &&
                 memcmp(params->negotiated_protocols.list[i].base, alpn[j].base,
                        alpn[j].len) == 0)
                 goto done;
 
-    if (j == alpn_cnt - 1) {
+    if (j == alpn_cnt) {
         warn(WRN, RED "\tALPN = %.*s (and maybe others, none supported)" NRM,
              (int)params->negotiated_protocols.list[0].len,
              params->negotiated_protocols.list[0].base);
