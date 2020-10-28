@@ -9,7 +9,7 @@ nginx     *
 ngtcp2    *              H    D    C    R    Z    S    Q    M    B    A    U         E    O    2         3
 ngx_quic  *
 picoquic  *              H    D    C    R    Z    S    Q    M    B    A    U    P    E    O    2    G    3
-quant     *    x         H    D    C    R    Z    S    Q    M    B    A    U    P    E              G
+quant     *    x         H    D    C    R    Z    S    Q    M    B    A    U    P    E    O    2    G
 quic-go   *
 quiche    *
 quicly    *

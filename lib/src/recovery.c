@@ -72,9 +72,8 @@ static bool __attribute__((nonnull)) have_1rtt_keys(struct q_conn * const c)
 
 static void __attribute__((nonnull)) maybe_open_wnd(struct q_conn * const c)
 {
-    const bool prev_no_wnd = c->no_wnd;
     c->no_wnd = has_wnd(c, w_max_udp_payload(c->sock)) == false;
-    if (c->no_wnd == false && prev_no_wnd)
+    if (c->no_wnd == false)
         c->needs_tx = true;
 }
 
