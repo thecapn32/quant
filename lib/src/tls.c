@@ -112,6 +112,7 @@ static int uecc_rng(uint8_t * dest, unsigned size)
 #include "pkt.h"
 #include "pn.h"
 #include "quic.h"
+#include "recovery.h"
 #include "stream.h"
 #include "tls.h"
 #include "tree.h"
@@ -1476,6 +1477,9 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
         goto done;
 
     // enqueue for TX
+
+    const int pre_af = c->rec.max_ups_af;
+    const uint16_t pre_max_ups = c->rec.max_ups;
     for (epoch_t e = ep_init; e <= ep_data; e++) {
         const size_t out_len = epoch_off[e + 1] - epoch_off[e];
         if (out_len == 0)
@@ -1485,8 +1489,14 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
              (unsigned long)out_len);
 #endif
         struct w_iov_sq o = w_iov_sq_initializer(o);
-        alloc_off(w_engine(c->sock), &o, 0, q_conn_af(c), (uint32_t)out_len,
-                  DATA_OFFSET + c->tok_len);
+
+        if (e == ep_init) {
+            c->rec.max_ups_af = q_conn_af(c);
+            c->rec.max_ups = MIN_INI_LEN - DATA_OFFSET - AEAD_LEN - c->tok_len;
+        }
+
+        alloc_off(w_engine(c->sock), &o, e == ep_init ? c : 0, q_conn_af(c),
+                  (uint32_t)out_len, DATA_OFFSET + c->tok_len);
         const uint8_t * data = tls_io.base + epoch_off[e];
         struct w_iov * ov;
         sq_foreach (ov, &o, next) {
@@ -1496,6 +1506,8 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
         concat_out(c->cstrms[e], &o);
         c->needs_tx = true;
     }
+    c->rec.max_ups_af = pre_af;
+    c->rec.max_ups = pre_max_ups;
 
 done:
     ptls_buffer_dispose(&tls_io);
