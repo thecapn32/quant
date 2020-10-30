@@ -687,7 +687,6 @@ tx:;
         sq_insert_tail(&c->txq, xv, next);
 
     m->udp_len = xv->len;
-    c->out_data += m->udp_len;
 
     if (unlikely(m->hdr.type == LH_INIT && is_clnt(c) && m->strm_data_len))
         // adjust v->len to exclude the post-stream padding for CI

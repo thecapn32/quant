@@ -260,8 +260,6 @@ struct q_conn {
     uint_t out_data_str; ///< Current outbound aggregate stream data.
 
     uint_t path_val_win; ///< Window for path validation.
-    uint_t in_data;      ///< Current inbound connection data.
-    uint_t out_data;     ///< Current outbound connection data.
 
     uint_t rpt_max; ///< Largest received "Retire Prior To" field
 
@@ -455,9 +453,10 @@ conn_type(const struct q_conn * const c
 static inline bool __attribute__((nonnull, no_instrument_function))
 has_pval_wnd(const struct q_conn * const c, const uint16_t len)
 {
-    if (unlikely(c->out_data + len >= c->path_val_win)) {
+    if (unlikely(c->rec.cur.in_flight + len >= c->path_val_win)) {
         warn(DBG, "%s conn %s path val lim reached: %" PRIu " + %u >= %" PRIu,
-             conn_type(c), cid_str(c->scid), c->out_data, len, c->path_val_win);
+             conn_type(c), cid_str(c->scid), c->rec.cur.in_flight, len,
+             c->path_val_win);
         return false;
     }
 

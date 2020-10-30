@@ -143,13 +143,12 @@ void log_cc(struct q_conn * const c)
 #endif
 
 
-static bool peer_not_awaiting_addr_val(struct q_conn * const c)
+static bool peer_completed_addr_val(struct q_conn * const c)
 {
     if (!is_clnt(c))
         return true;
 
     return hshk_done(c) ||
-           bit_isset(FRM_MAX, FRM_ACK, &c->pns[pn_init].rx_frames) ||
            bit_isset(FRM_MAX, FRM_ACK, &c->pns[pn_hshk].rx_frames);
 }
 
@@ -169,7 +168,18 @@ void set_ld_timer(struct q_conn * const c)
         goto set_to;
     }
 
-    if (unlikely(c->rec.ae_in_flight == 0 && peer_not_awaiting_addr_val(c))) {
+    if (is_clnt(c) == false &&
+        unlikely(has_pval_wnd(c, MIN_INI_LEN) == false)) {
+#ifdef DEBUG_TIMERS
+        warn(DBG,
+             "serv at amplification limit, stopping ld_alarm on %s conn %s",
+             conn_type(c), cid_str(c->scid));
+#endif
+        timeout_del(&c->rec.ld_alarm);
+        return;
+    }
+
+    if (unlikely(c->rec.ae_in_flight == 0 && peer_completed_addr_val(c))) {
 #ifdef DEBUG_TIMERS
         warn(DBG, "no RTX-able pkts in flight, stopping ld_alarm on %s conn %s",
              conn_type(c), cid_str(c->scid));
@@ -590,7 +600,9 @@ void on_pkt_sent(struct pkt_meta * const m)
         }
 
         // OnPacketSentCC
-        c->rec.cur.in_flight += m->udp_len;
+        c->rec.cur.in_flight +=
+            // use padded len
+            unlikely(m->pn->type == pn_init) ? MIN_INI_LEN : m->udp_len;
     }
 
     // we call set_ld_timer(c) once for a TX'ed burst in do_tx() instead of here

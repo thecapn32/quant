@@ -581,7 +581,12 @@ static bool __attribute__((nonnull)) tx_stream(struct q_stream * const s)
                            : s->out_una;
     sq_foreach_from (v, &s->out, next) {
         struct pkt_meta * const m = &meta(v);
-        if (unlikely(has_wnd(c, v->len) == false && c->tx_limit == 0)) {
+        if (unlikely(has_wnd(c,
+                             // use padded len
+                             unlikely(s == c->cstrms[ep_init])
+                                 ? MIN_INI_LEN
+                                 : v->len) == false &&
+                     c->tx_limit == 0)) {
 #ifdef DEBUG_EXTRA
             warn(INF, "no more cwnd");
 #endif
@@ -727,9 +732,8 @@ done:;
     }
     if (likely(sent))
         do_tx(c);
-    if (is_clnt(c) || likely(has_pval_wnd(c, 0)))
-        // we need to rearm LD alarm, do it here instead of in on_pkt_sent()
-        set_ld_timer(c);
+    // we need to rearm LD alarm, do it here instead of in on_pkt_sent()
+    set_ld_timer(c);
     log_cc(c);
     c->needs_tx = c->in_tx_pause;
     c->tx_limit = 0;
@@ -966,7 +970,6 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
     bool ok = false;
 
     log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
-    c->in_data += m->udp_len;
 
     if (is_clnt(c) == false && unlikely(c->path_val_win != UINT_T_MAX))
         // server limits response to 3x incoming pkt
