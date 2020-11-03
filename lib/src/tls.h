@@ -43,11 +43,20 @@ struct w_iov;
 
 #ifdef FUZZING
 #include <string.h>
+#include <sys/param.h>
+#include <warpcore/warpcore.h>
 
 static inline void __attribute__((nonnull))
 nonrandom_bytes(void * const buf, const size_t len)
 {
-    memset(buf, 'Q', len);
+    uint8_t * b = (uint8_t *)buf;
+    while (b < (uint8_t *)buf + len) {
+        const uint64_t rand = w_rand64();
+        const size_t l =
+            MIN(sizeof(rand), (size_t)(((uint8_t *)buf + len) - b));
+        memcpy(b, &rand, l);
+        b += l;
+    }
 }
 
 #define rand_bytes nonrandom_bytes
