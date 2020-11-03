@@ -54,6 +54,7 @@
             "${project_path}/lib/deps/timeout",
             "${project_path}/lib/deps/warpcore/lib/include/",
             "${project_path}/lib/include",
+            "${project_path}/test",
             "/usr/local/opt/openssl@1.1/include"
 
         ],
@@ -71,7 +72,8 @@
             "-Wno-pragma-once-outside-header",
             "-Wno-unused-function",
 
-            "-DWITH_OPENSSL"
+            "-DWITH_OPENSSL",
+            "-DFUZZING"
         ],
         "SublimeLinter.linters.clang++.isystem": [
             "${project_path}/Darwin/lib/deps/warpcore/lib/include/",
@@ -80,6 +82,7 @@
             "${project_path}/lib/deps/timeout",
             "${project_path}/lib/deps/warpcore/lib/include/",
             "${project_path}/lib/include",
+            "${project_path}/test",
             "/usr/local/opt/openssl@1.1/include"
 
         ],
