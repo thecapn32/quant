@@ -2027,6 +2027,9 @@ struct q_conn * new_conn(struct w_engine * const w,
         if (c->tp_mine.pref_addr.addr4.addr.af ||
             c->tp_mine.pref_addr.addr6.addr.af) {
             c->max_cid_seq_out = c->tp_mine.pref_addr.cid.seq = 1;
+            // #ifdef DEBUG_EXTRA
+            warn(ERR, "max_cid_seq_out 1");
+            // #endif
             mk_rand_cid(&c->tp_mine.pref_addr.cid,
                         ped(c->w)->conf.server_cid_len, true);
             if (unlikely(conns_by_id_ins(
