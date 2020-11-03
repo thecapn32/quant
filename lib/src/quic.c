@@ -43,7 +43,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/param.h>
-#include <sys/stat.h>
 #include <unistd.h>
 #endif
 

@@ -409,8 +409,8 @@ dec_stream_or_crypto_frame(const uint8_t type,
             if (unlikely(v != last))
                 adj_iov_to_start(last, m_last);
             if (m_last->is_fin) {
-                chk_finl_size(m_last->strm_off + m_last->strm_data_len,
-                              m_last->strm, type);
+                chk_finl_size(m_last->strm_off + m_last->strm_data_len, m->strm,
+                              type);
                 m->pn->imm_ack = true;
                 strm_to_state(m->strm, m->strm->state <= strm_hcrm ? strm_hcrm
                                                                    : strm_clsd);
@@ -1194,7 +1194,7 @@ dec_retire_cid_frame(const uint8_t ** pos,
     warn(INF, FRAM_IN "RETIRE_CONNECTION_ID" NRM " seq=%" PRIu, seq);
 
 #ifndef NO_MIGRATION
-    if (unlikely(c->scid->seq == seq))
+    if (likely(c->scid) && unlikely(c->scid->seq == seq))
         err_close_return(c, ERR_PV, FRM_RTR, "can't retire current cid");
 
     struct cid * const scid = cid_by_seq(&c->scids.act, seq);

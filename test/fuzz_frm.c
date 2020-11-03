@@ -59,15 +59,11 @@ again:
     v->len = (uint16_t)MIN(size, v->len);
     memcpy(v->buf, data, v->len);
 
-    struct w_iov * const orig_v = v;
     struct pkt_meta * m = &meta(v);
     m->pn = &c->pns[pn_init];
-    struct pkt_meta * orig_m = m;
     dec_frames(c, &v, &m);
     if (m->strm == 0)
         free_iov(v, m);
-    if (orig_v != v && orig_m->strm == 0)
-        free_iov(orig_v, orig_m);
 
     struct q_stream * s;
     kh_foreach_value(&c->strms_by_id, s, { free_stream(s); });

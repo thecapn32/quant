@@ -32,6 +32,7 @@
 
 #include <quant/quant.h>
 
+#include "conn.h"
 
 extern int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size);
 

@@ -40,7 +40,7 @@
 #include "tree.h"
 #endif
 
-#ifdef DEBUG_STREAMS
+#if defined (DEBUG_STREAMS) && !defined(FUZZING)
 #include "cid.h"
 #endif
 
