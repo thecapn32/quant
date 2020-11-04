@@ -41,7 +41,7 @@ int LLVMFuzzerTestOneInput(const uint8_t * data, const size_t size)
     static int needs_init = 1;
     if (needs_init)
         needs_init = init();
-    else if (loops++ == 10) {
+    else if (loops++ == 1000) {
         mk_conn();
         loops = 0;
     }
@@ -54,6 +54,6 @@ int LLVMFuzzerTestOneInput(const uint8_t * data, const size_t size)
     memcpy(&v->saddr, &c->peer, sizeof(v->saddr));
 
     rx_pkts(&i, &(struct q_conn_sl){0}, c->sock);
-
+    q_free(&i);
     return 0;
 }

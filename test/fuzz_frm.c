@@ -60,7 +60,7 @@ again:
     memcpy(v->buf, data, v->len);
 
     struct pkt_meta * m = &meta(v);
-    m->pn = &c->pns[pn_init];
+    m->pn = &c->pns[w_rand_uniform32(pn_data + 1)];
     dec_frames(c, &v, &m);
     if (m->strm == 0)
         free_iov(v, m);
