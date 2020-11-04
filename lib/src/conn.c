@@ -1993,34 +1993,41 @@ struct q_conn * new_conn(struct w_engine * const w,
 
 #if !defined(NO_MIGRATION) && !defined(NO_SERVER)
     if (!is_clnt(c) && peer && w->have_ip4 && w->have_ip6) {
+        // see if we can find a different listening port
+        struct q_conn * c_oth_port;
+        sl_foreach (c_oth_port, &c_embr, node_embr)
+            if (c_oth_port->sock->ws_lport != port)
+                break;
+
         // populate tp_mine.pref_addr
         const bool private_ok = w_is_private(&peer->addr);
-        for (idx = 0; idx < w->addr_cnt; idx++) {
+        for (uint16_t i = 0; i < w->addr_cnt; i++) {
 #ifdef DEBUG_EXTRA
             warn(ERR, "%sprivate candidate socket is %s%s%s:%u",
-                 w_is_private(&w->ifaddr[idx].addr) ? "" : "non-",
-                 w->ifaddr[idx].addr.af == AF_INET6 ? "[" : "",
-                 w_ntop(&w->ifaddr[idx].addr, ip_tmp),
-                 w->ifaddr[idx].addr.af == AF_INET6 ? "]" : "", bswap16(port));
+                 w_is_private(&w->ifaddr[i].addr) ? "" : "non-",
+                 w->ifaddr[i].addr.af == AF_INET6 ? "[" : "",
+                 w_ntop(&w->ifaddr[i].addr, ip_tmp),
+                 w->ifaddr[i].addr.af == AF_INET6 ? "]" : "", bswap16(port));
 #endif
-            if (private_ok == w_is_private(&w->ifaddr[idx].addr) &&
-                ((w->ifaddr[idx].addr.af == AF_INET &&
+            if (private_ok == w_is_private(&w->ifaddr[i].addr) &&
+                ((w->ifaddr[i].addr.af == AF_INET &&
                   c->tp_mine.pref_addr.addr4.addr.af == 0) ||
-                 (w->ifaddr[idx].addr.af == AF_INET6 &&
+                 (w->ifaddr[i].addr.af == AF_INET6 &&
                   c->tp_mine.pref_addr.addr6.addr.af == 0))) {
-                if (w->ifaddr[idx].addr.af == AF_INET &&
+                const uint16_t p = (c_oth_port && w->ifaddr[i].addr.af ==
+                                                      w->ifaddr[idx].addr.af)
+                                       ? c_oth_port->sock->ws_lport
+                                       : port;
+                if (w->ifaddr[i].addr.af == AF_INET &&
                     c->tp_mine.pref_addr.addr4.addr.af == 0) {
-                    memcpy(&c->tp_mine.pref_addr.addr4.addr,
-                           &w->ifaddr[idx].addr,
+                    memcpy(&c->tp_mine.pref_addr.addr4.addr, &w->ifaddr[i].addr,
                            sizeof(c->tp_mine.pref_addr.addr4.addr));
-                    c->tp_mine.pref_addr.addr4.port = port;
+                    c->tp_mine.pref_addr.addr4.port = p;
                 } else {
-                    memcpy(&c->tp_mine.pref_addr.addr6.addr,
-                           &w->ifaddr[idx].addr,
+                    memcpy(&c->tp_mine.pref_addr.addr6.addr, &w->ifaddr[i].addr,
                            sizeof(c->tp_mine.pref_addr.addr6.addr));
-                    c->tp_mine.pref_addr.addr6.port = port;
+                    c->tp_mine.pref_addr.addr6.port = p;
                 }
-                break;
             }
         }
 
