@@ -73,7 +73,9 @@
             "-Wno-unused-function",
 
             "-DWITH_OPENSSL",
-            "-DFUZZING"
+            "-DFUZZING",
+            "-DRIOT_VERSION",
+            "-DPARTICLE"
         ],
         "SublimeLinter.linters.clang++.isystem": [
             "${project_path}/Darwin/lib/deps/warpcore/lib/include/",

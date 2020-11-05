@@ -156,7 +156,7 @@ void quic_transaction(const char * const req, const size_t req_len)
 
         const float voltage =
 #if defined(PARTICLE)
-            HAL_ADC_Read(BATT) * 0.0011224f;
+            hal_adc_read(BATT) * 0.0011224f;
 #else
             0;
 #endif

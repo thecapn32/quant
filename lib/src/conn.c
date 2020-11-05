@@ -911,7 +911,8 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
         (c->tls.alpn.base[1] == '3' || c->tls.alpn.base[1] == 'q') &&
         c->tls.alpn.base[2] == '-') {
         // the app didn't request a specific version, so transmogrify the alpn
-        snprintf((char *)c->tls.alpn.base + 3, 4, "%02u", c->vers & 0x000000ff);
+        snprintf((char *)c->tls.alpn.base + 3, 4, "%02" PRIu32,
+                 c->vers & 0x000000ff);
         warn(NTE, "changing auto-selected ALPN to %s",
              (char *)c->tls.alpn.base);
     }
@@ -2114,12 +2115,12 @@ void free_conn(struct q_conn * const c)
         conns_by_id_del(&c->tp_mine.pref_addr.cid);
     if (c->odcid.in_cbi)
         conns_by_id_del(&c->odcid);
+    if (c->migr_sock)
+        w_close(c->migr_sock);
 #endif
     if (c->holds_sock)
         // only close the socket for the final server connection
         w_close(c->sock);
-    if (c->migr_sock)
-        w_close(c->migr_sock);
     if (c->in_c_ready)
         sl_remove(&c_ready, c, q_conn, node_rx_ext);
 
