@@ -347,7 +347,7 @@ static void __attribute__((nonnull)) tx_vneg_resp(struct w_sock * const ws,
     mx->udp_len = xv->len = (uint16_t)(pos - xv->buf);
     xv->saddr = v->saddr;
     xv->flags = v->flags;
-    log_pkt("TX", xv, &xv->saddr, 0, 0, 0);
+    log_pkt("TX", xv, 0, 0, 0);
     // qlog_transport(pkt_tx, "default", xv, mx);
     do_w_tx(ws, &q);
     q_free(&q);
@@ -419,7 +419,7 @@ tx_rtry(struct q_conn * const c)
 #ifndef NO_ECN
     xv->flags = likely(c->sockopt.enable_ecn) ? ECN_ECT0 : ECN_NOT;
 #endif
-    log_pkt("TX", xv, &xv->saddr, c->tok, c->tok_len, rit);
+    log_pkt("TX", xv, c->tok, c->tok_len, rit);
     // qlog_transport(pkt_tx, "default", xv, mx);
     do_w_tx(c->sock, &q);
     ret = true;
@@ -969,7 +969,7 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
     struct q_conn * const c = m->pn->c;
     bool ok = false;
 
-    log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
+    log_pkt("RX", v, tok, tok_len, rit);
 
     if (is_clnt(c) == false && unlikely(c->path_val_win != UINT_T_MAX))
         // server limits response to 3x incoming pkt
@@ -1245,7 +1245,7 @@ static void __attribute__((nonnull))
         m->t = w_now(CLOCK_MONOTONIC_RAW);
 
         bool pkt_valid = false;
-        const bool is_clnt = w_connected(ws);
+        const bool is_clnt = ws->opt.user_1;
         struct q_conn * c = 0;
         uint8_t tok[MAX_TOK_LEN];
         uint16_t tok_len = 0;
@@ -1257,7 +1257,7 @@ static void __attribute__((nonnull))
                         : ped(ws->w)->conf.server_cid_len,
                 &decoal))) {
             // we might still need to send a vneg packet
-            if (w_connected(ws) == false) {
+            if (is_clnt == false) {
                 if (m->hdr.type == LH_INIT &&
                     (m->hdr.scid.len == 0 || m->hdr.scid.len > CID_LEN_MAX)) {
                     // FIXME: prevent this on client
@@ -1265,7 +1265,7 @@ static void __attribute__((nonnull))
                          v->len, pkt_type_str(m->hdr.flags, &m->hdr.vers));
                     tx_vneg_resp(ws, v, m);
                 } else {
-                    log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
+                    log_pkt("RX", v, tok, tok_len, rit);
                     warn(ERR,
                          "received invalid %u-byte %s pkt w/invalid scid len "
                          "%u, ignoring",
@@ -1291,7 +1291,7 @@ static void __attribute__((nonnull))
                          m->udp_len < MIN_INI_LEN)) {
                 const bool drop_it = c && is_clnt(c) == false;
                 if (drop_it)
-                    log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
+                    log_pkt("RX", v, tok, tok_len, rit);
                 warn(drop_it ? ERR : WRN,
                      "%u-byte Initial pkt too short (< %u)", m->udp_len,
                      MIN_INI_LEN);
@@ -1309,7 +1309,7 @@ static void __attribute__((nonnull))
                              "accepting",
                              dcid_str_prev, dcid_str_cur);
                     else {
-                        log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
+                        log_pkt("RX", v, tok, tok_len, rit);
                         warn(WRN,
                              "got 0-RTT pkt for orig cid %s, new is %s, "
                              "but rejected 0-RTT, ignoring",
@@ -1319,7 +1319,7 @@ static void __attribute__((nonnull))
                 } else if (m->hdr.type == LH_INIT && c == 0) {
                     if (vers_supported(m->hdr.vers) == false ||
                         is_vneg_vers(m->hdr.vers)) {
-                        log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
+                        log_pkt("RX", v, tok, tok_len, rit);
                         warn(WRN,
                              "clnt-requested vers 0x%0" PRIx32 " not supported",
                              m->hdr.vers);
@@ -1353,7 +1353,7 @@ static void __attribute__((nonnull))
                 mk_rit(c, c->dcid, m->hdr.flags, &m->hdr.dcid, &m->hdr.scid,
                        tok, tok_len, computed_rit);
                 if (memcmp(rit, computed_rit, RIT_LEN) != 0) {
-                    log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
+                    log_pkt("RX", v, tok, tok_len, rit);
                     warn(ERR, "rit mismatch, computed %s",
                          rit_str(computed_rit));
                     goto drop;
@@ -1363,7 +1363,7 @@ static void __attribute__((nonnull))
 #if !defined(FUZZING) && !defined(NO_OOO_0RTT)
             // if this is a 0-RTT pkt, track it (may be reordered)
             if (m->hdr.type == LH_0RTT && m->hdr.vers) {
-                log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
+                log_pkt("RX", v, tok, tok_len, rit);
                 const struct ooo_0rtt which = {.cid = m->hdr.dcid};
                 struct ooo_0rtt * zo =
                     splay_find(ooo_0rtt_by_cid, &ooo_0rtt_by_cid, &which);
@@ -1382,7 +1382,7 @@ static void __attribute__((nonnull))
                 goto next;
             }
 #endif
-            log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
+            log_pkt("RX", v, tok, tok_len, rit);
 
             if (is_srt(xv, m)) {
                 warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
@@ -1399,13 +1399,13 @@ static void __attribute__((nonnull))
         if (likely(has_pkt_nr(m->hdr.flags, m->hdr.vers))) {
             if (unlikely(m->hdr.type == LH_INIT && c->cstrms[ep_init] == 0)) {
                 // we already abandoned Initial pkt processing, ignore
-                log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
+                log_pkt("RX", v, tok, tok_len, rit);
                 warn(INF, "ignoring %u-byte %s pkt due to abandoned processing",
                      v->len, pkt_type_str(m->hdr.flags, &m->hdr.vers));
                 goto drop;
             } else if (unlikely(dec_pkt_hdr_remainder(xv, v, m, c) == false)) {
                 v->len = xv->len;
-                log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
+                log_pkt("RX", v, tok, tok_len, rit);
                 if (m->is_reset)
                     warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
                          srt_str(&xv->buf[xv->len - SRT_LEN]));
@@ -1434,7 +1434,7 @@ static void __attribute__((nonnull))
                     if (cid_cmp(&m->hdr.dcid, &c->odcid) == 0)
                         scid = &c->odcid;
                     else {
-                        log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
+                        log_pkt("RX", v, tok, tok_len, rit);
                         warn(ERR, "unknown scid %s, ignoring pkt",
                              cid_str(&m->hdr.dcid));
                         goto drop;
@@ -1462,7 +1462,7 @@ static void __attribute__((nonnull))
 
             if (unlikely(outer_dcid.len) &&
                 cid_cmp(&outer_dcid, &m->hdr.dcid) != 0) {
-                log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
+                log_pkt("RX", v, tok, tok_len, rit);
                 mk_cid_str(ERR, &outer_dcid, outer_dcid_str);
                 mk_cid_str(ERR, &m->hdr.dcid, dcid_str);
                 warn(ERR,
@@ -1478,7 +1478,8 @@ static void __attribute__((nonnull))
                 outer_dcid.len = 0;
 
             // check if this pkt came from a new source IP and/or port
-            if (w_sockaddr_cmp(&c->peer, &v->saddr) == false
+            if (unlikely(w_sockaddr_cmp(&c->peer, &v->saddr) == false ||
+                         ws != c->sock)
 #ifndef NO_MIGRATION
                 && (c->tx_path_chlg == false ||
                     w_sockaddr_cmp(&c->migr_peer, &v->saddr) == false)
@@ -1490,24 +1491,18 @@ static void __attribute__((nonnull))
 #ifndef NO_MIGRATION
                 if (m->hdr.nr <= max_recv_all) {
 #endif
-                    log_pkt("RX", v, &v->saddr, tok, tok_len, rit);
+                    log_pkt("RX", v, tok, tok_len, rit);
                     warn(NTE,
-                         "pkt from new peer %s%s%s:%u, nr " FMT_PNR_IN
-                         " <= max " FMT_PNR_IN ", ignoring",
-                         v->wv_af == AF_INET6 ? "[" : "",
-                         w_ntop(&v->wv_addr, ip_tmp),
-                         v->wv_af == AF_INET6 ? "]" : "",
-                         bswap16(v->saddr.port), m->hdr.nr, max_recv_all);
+                         "pkt on new path, nr " FMT_PNR_IN " <= max " FMT_PNR_IN
+                         ", ignoring",
+                         m->hdr.nr, max_recv_all);
                     goto drop;
 #ifndef NO_MIGRATION
                 }
 
                 warn(NTE,
-                     "pkt from new peer %s%s%s:%u, nr " FMT_PNR_IN
-                     " > max " FMT_PNR_IN ", probing",
-                     v->wv_af == AF_INET6 ? "[" : "",
-                     w_ntop(&v->wv_addr, ip_tmp),
-                     v->wv_af == AF_INET6 ? "]" : "", bswap16(v->saddr.port),
+                     "pkt on new path, nr " FMT_PNR_IN " > max " FMT_PNR_IN
+                     ", probing migration",
                      m->hdr.nr, max_recv_all);
 
                 rand_bytes(&c->path_chlg_out, sizeof(c->path_chlg_out));
@@ -1926,6 +1921,7 @@ struct q_conn * new_conn(struct w_engine * const w,
         get_conf_uncond(c->w, conf, enable_udp_zero_checksums);
 
     if (is_clnt(c) || peer == 0) {
+        c->sockopt.user_1 = is_clnt(c);
         c->sock = w_bind(w, idx, port, &c->sockopt);
         if (unlikely(c->sock == 0))
             goto fail;

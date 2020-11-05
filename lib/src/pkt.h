@@ -207,13 +207,11 @@ extern void __attribute__((nonnull))
 pad_with_rand(struct w_iov * const v, const uint16_t len);
 
 #ifndef NDEBUG
-extern void __attribute__((nonnull(1, 2, 3)))
-log_pkt(const char * const dir,
-        const struct w_iov * const v,
-        const struct w_sockaddr * const saddr,
-        const uint8_t * const tok,
-        const uint16_t tok_len,
-        const uint8_t * const rit);
+extern void __attribute__((nonnull(1, 2))) log_pkt(const char * const dir,
+                                                   const struct w_iov * const v,
+                                                   const uint8_t * const tok,
+                                                   const uint16_t tok_len,
+                                                   const uint8_t * const rit);
 #else
 #define log_pkt(...)                                                           \
     do {                                                                       \

@@ -276,7 +276,6 @@ struct q_conn * q_connect(struct w_engine * const w,
          plural(early_data ? w_iov_sq_len(early_data) : 0));
 
     restart_idle_alarm(c);
-    w_connect(c->sock, peer);
 
     // start TLS handshake
     tls_io(c->cstrms[ep_init], 0);
@@ -857,7 +856,7 @@ done:
         sl_remove(&c_zcid, c, q_conn, node_zcid_int);
 
 #ifndef NO_SERVER
-    if (is_clnt(c) == false && c->holds_sock && w_connected(c->sock) == false)
+    if (is_clnt(c) == false && c->holds_sock)
         sl_remove(&c_embr, c, q_conn, node_embr);
 #endif
     free_conn(c);
@@ -1111,58 +1110,51 @@ bool q_migrate(struct q_conn * const c,
                  !w_is_private(&w->ifaddr[other_idx].addr)))
                 break;
 
-        // use corresponding preferred_address as peer
         if (other_idx < w->addr_cnt) {
             idx = other_idx;
-            if (alt_peer) {
-                w_to_waddr(&c->peer.addr, alt_peer);
-            } else if ((w->ifaddr[other_idx].addr.af == AF_INET &&
-                        memcmp(&c->tp_peer.pref_addr.addr4.addr.ip4,
-                               &(char[IP4_LEN]){0}, IP4_LEN) != 0) ||
-                       (w->ifaddr[other_idx].addr.af == AF_INET6 &&
-                        memcmp(&c->tp_peer.pref_addr.addr6.addr.ip4,
-                               &(char[IP6_LEN]){0}, IP6_LEN) != 0)) {
-                c->peer = w->ifaddr[other_idx].addr.af == AF_INET
-                              ? c->tp_peer.pref_addr.addr4
-                              : c->tp_peer.pref_addr.addr6;
+            if ((w->ifaddr[other_idx].addr.af == AF_INET &&
+                 memcmp(&c->tp_peer.pref_addr.addr4.addr.ip4,
+                        &(char[IP4_LEN]){0}, IP4_LEN) != 0) ||
+                (w->ifaddr[other_idx].addr.af == AF_INET6 &&
+                 memcmp(&c->tp_peer.pref_addr.addr6.addr.ip4,
+                        &(char[IP6_LEN]){0}, IP6_LEN) != 0)) {
+                // use corresponding preferred_address as peer
+                c->migr_peer = w->ifaddr[other_idx].addr.af == AF_INET
+                                   ? c->tp_peer.pref_addr.addr4
+                                   : c->tp_peer.pref_addr.addr6;
+            } else if (alt_peer) {
+                // use alt_peer
+                w_to_waddr(&c->migr_peer.addr, alt_peer);
+                c->peer.port =
+                    alt_peer->sa_family == AF_INET
+                        ? ((const struct sockaddr_in *)(const void *)alt_peer)
+                              ->sin_port
+                        : ((const struct sockaddr_in6 *)(const void *)alt_peer)
+                              ->sin6_port;
             } else
                 goto fail;
         } else
             goto fail;
-        c->needs_tx = true;
+
+        rand_bytes(&c->path_chlg_out, sizeof(c->path_chlg_out));
+        c->tx_path_chlg = c->needs_tx = true;
+        c->tx_limit = 1;
+        c->migr_sock = c->sock;
+        // also switch to new dcid
+        use_next_dcid(c);
     }
 
     struct w_sock * const new_sock = w_bind(w, idx, 0, &c->sockopt);
-    if (new_sock == 0) {
-    fail:
-        // could not open new w_sock, can't rebind
-        warn(ERR, "%s failed for %s conn %s from %s%s%s:%u",
-             switch_ip ? "conn migration" : "simulated NAT rebinding",
-             conn_type(c), c->scid ? cid_str(c->scid) : "-",
-             old_af == AF_INET6 ? "[" : "", old_ip,
-             old_af == AF_INET6 ? "]" : "", old_port);
-        return false;
-    }
-
-    // close the current w_sock
-    w_close(c->sock);
-    c->sock = new_sock;
-
-    struct sockaddr_storage ss = {.ss_family = c->peer.addr.af};
-    if (c->peer.addr.af == AF_INET) {
-        struct sockaddr_in * const sin4 = (struct sockaddr_in *)&ss;
-        sin4->sin_port = c->peer.port;
-        memcpy(&sin4->sin_addr, &c->peer.addr.ip4, sizeof(sin4->sin_addr));
-    } else {
-        struct sockaddr_in6 * const sin6 = (struct sockaddr_in6 *)&ss;
-        sin6->sin6_port = c->peer.port;
-        memcpy(&sin6->sin6_addr, &c->peer.addr.ip4, sizeof(sin6->sin6_addr));
-    }
-    w_connect(c->sock, (struct sockaddr *)&ss);
+    if (new_sock == 0)
+        goto fail;
 
     if (switch_ip)
-        // also switch to new dcid
-        use_next_dcid(c);
+        c->migr_sock = new_sock;
+    else {
+        // close the current w_sock
+        w_close(c->sock);
+        c->sock = new_sock;
+    }
 
     warn(WRN, "%s for %s conn %s from %s%s%s:%u to %s%s%s:%u",
          switch_ip ? "conn migration" : "simulated NAT rebinding", conn_type(c),
@@ -1175,6 +1167,13 @@ bool q_migrate(struct q_conn * const c,
 
     timeouts_add(ped(w)->wheel, &c->tx_w, 0);
     return true;
+
+fail:
+    warn(ERR, "%s failed for %s conn %s from %s%s%s:%u",
+         switch_ip ? "conn migration" : "simulated NAT rebinding", conn_type(c),
+         c->scid ? cid_str(c->scid) : "-", old_af == AF_INET6 ? "[" : "",
+         old_ip, old_af == AF_INET6 ? "]" : "", old_port);
+    return false;
 }
 #endif
 

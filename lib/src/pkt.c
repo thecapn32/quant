@@ -58,14 +58,13 @@
 
 void log_pkt(const char * const dir,
              const struct w_iov * const v,
-             const struct w_sockaddr * const saddr,
              const uint8_t * const tok,
              const uint16_t tok_len,
              const uint8_t * const rit)
 {
     char ip[IP_STRLEN];
-    w_ntop(&saddr->addr, ip);
-    const uint16_t port = bswap16(saddr->port);
+    w_ntop(&v->saddr.addr, ip);
+    const uint16_t port = bswap16(v->saddr.port);
     const struct pkt_meta * const m = &meta(v);
     const char * const pts = pkt_type_str(m->hdr.flags, &m->hdr.vers);
 
@@ -559,7 +558,7 @@ bool enc_pkt(struct q_stream * const s,
     }
 #endif
 
-    log_pkt("TX", v, &v->saddr, c->tok, c->tok_len, 0);
+    log_pkt("TX", v, c->tok, c->tok_len, 0);
 
     if (unlikely(pmtud)) {
         enc_ping_frame(ci, &pos, end, m);
@@ -639,12 +638,9 @@ tx:;
     static const struct frames need_padding =
         bitset_t_initializer(1 << FRM_PCL | 1 << FRM_PRP);
     if (unlikely(pos - v->buf < MIN_INI_LEN &&
-                 bit_overlap(FRM_MAX, &m->frms, &need_padding))) {
-        warn(ERR, "pos-vbuf=%u padlen %u", (uint16_t)(pos - v->buf),
-             MIN_INI_LEN - (uint16_t)(pos - v->buf));
+                 bit_overlap(FRM_MAX, &m->frms, &need_padding)))
         enc_padding_frame(ci, &pos, v->buf + MIN_INI_LEN, m,
                           MIN_INI_LEN - (uint16_t)(pos - v->buf));
-    }
 
     // make sure we have enough frame bytes for the header protection sample
     const uint16_t pnp_dist = (uint16_t)(pos - pkt_nr_pos);
@@ -671,8 +667,7 @@ tx:;
         return false;
     }
 
-    if (!is_clnt(c))
-        xv->saddr = v->saddr;
+    xv->saddr = v->saddr;
     xv->flags = v->flags;
 
     // encode the pn space id and pkt nr to identify PMTUD pkts;
