@@ -1049,7 +1049,10 @@ dec_path_response_frame(const uint8_t ** pos,
          bswap16(c->migr_peer.port));
 
     c->peer = c->migr_peer;
+    if (c->holds_sock)
+        w_close(c->sock);
     c->sock = c->migr_sock;
+    c->migr_sock = 0;
     c->tx_path_chlg = false;
     c->tx_limit = 0;
 

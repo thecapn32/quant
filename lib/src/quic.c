@@ -1139,7 +1139,6 @@ bool q_migrate(struct q_conn * const c,
         rand_bytes(&c->path_chlg_out, sizeof(c->path_chlg_out));
         c->tx_path_chlg = c->needs_tx = true;
         c->tx_limit = 1;
-        c->migr_sock = c->sock;
         // also switch to new dcid
         use_next_dcid(c);
     }

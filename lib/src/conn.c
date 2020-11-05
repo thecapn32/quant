@@ -2118,7 +2118,8 @@ void free_conn(struct q_conn * const c)
     if (c->holds_sock)
         // only close the socket for the final server connection
         w_close(c->sock);
-
+    if (c->migr_sock)
+        w_close(c->migr_sock);
     if (c->in_c_ready)
         sl_remove(&c_ready, c, q_conn, node_rx_ext);
 

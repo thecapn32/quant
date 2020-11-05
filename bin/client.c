@@ -69,6 +69,7 @@
 
 struct conn_cache_entry {
     struct q_conn * c;
+    struct addrinfo * peerinfo;
 #ifndef NO_MIGRATION
     struct addrinfo * migr_peer;
 #endif
@@ -346,6 +347,7 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
         cce = calloc(1, sizeof(*cce));
         ensure(cce, "calloc failed");
         cce->c = c;
+        cce->peerinfo = peerinfo;
 #ifndef NO_MIGRATION
         cce->migr_peer = migr_peer;
 #endif
@@ -368,10 +370,6 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
 
     se->cce = cce;
     se->url = url;
-#ifndef NO_MIGRATION
-    if (rebind == false || cce->migrated)
-#endif
-        freeaddrinfo(peerinfo);
     return cce->c;
 
 fail:
@@ -383,7 +381,10 @@ fail:
 static void __attribute__((nonnull)) free_cc(khash_t(conn_cache) * cc)
 {
     struct conn_cache_entry * cce;
-    kh_foreach_value(cc, cce, free(cce););
+    kh_foreach_value(cc, cce, {
+        freeaddrinfo(cce->peerinfo);
+        free(cce);
+    });
     kh_release(conn_cache, cc);
 }
 
