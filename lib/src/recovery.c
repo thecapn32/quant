@@ -254,12 +254,19 @@ in_persistent_cong(struct pn_space * const pn __attribute__((unused)),
 }
 
 
+static uint16_t padded_len(const struct pkt_meta * const m)
+{
+    return unlikely(m->pn->type == pn_init) ? MIN_INI_LEN : m->udp_len;
+}
+
+
 static void remove_from_in_flight(const struct pkt_meta * const m)
 {
     struct q_conn * const c = m->pn->c;
-    assure(c->rec.cur.in_flight >= m->udp_len, "in_flight underrun %" PRIu,
-           m->udp_len - c->rec.cur.in_flight);
-    c->rec.cur.in_flight -= m->udp_len;
+    const uint16_t udp_len = padded_len(m);
+    assure(c->rec.cur.in_flight >= udp_len, "in_flight underrun %" PRIu,
+           udp_len - c->rec.cur.in_flight);
+    c->rec.cur.in_flight -= udp_len;
     if (m->ack_eliciting) {
         c->rec.ae_in_flight--;
         if (c->rec.ae_in_flight == 0)
@@ -604,9 +611,7 @@ void on_pkt_sent(struct pkt_meta * const m)
         }
 
         // OnPacketSentCC
-        c->rec.cur.in_flight +=
-            // use padded len
-            unlikely(m->pn->type == pn_init) ? MIN_INI_LEN : m->udp_len;
+        c->rec.cur.in_flight += padded_len(m);
     }
 
     // we call set_ld_timer(c) once for a TX'ed burst in do_tx() instead of here
