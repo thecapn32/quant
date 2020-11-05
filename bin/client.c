@@ -250,7 +250,7 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
     // parse and verify the URIs passed on the command line
     struct http_parser_url u = {0};
     if (http_parser_parse_url(url, strlen(url), 0, &u)) {
-        warn(ERR, "http_parser_parse_url: %s",
+        warn(ERR, "URL \"%s\" is malformed (%s)", url,
              http_errno_description((enum http_errno)errno));
         return 0;
     }
