@@ -80,7 +80,7 @@ static void __attribute__((noreturn)) usage(const char * const name,
     printf("\t[-c cert]\tTLS certificate; default %s\n", cert);
     printf("\t[-d dir]\tserver root directory; default %s\n", dir);
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
-    printf("\t[-g]\tenable greasing the QUIC bit; default %s\n",
+    printf("\t[-g]\t\tenable greasing the QUIC bit; default %s\n",
            enable_grease ? "true" : "false");
     printf("\t[-k key]\tTLS key; default %s\n", key);
     printf("\t[-l log]\tlog file for TLS keys; default %s\n",

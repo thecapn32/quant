@@ -147,7 +147,7 @@ usage(const char * const name,
     printf("\t[-c]\t\tverify TLS certs using this CA cert; default %s\n",
            *tls_ca_store ? tls_ca_store : "false");
     printf("\t[-e version]\tQUIC version to use; default 0x%08x\n", vers);
-    printf("\t[-g]\tenable greasing the QUIC bit; default %s\n",
+    printf("\t[-g]\t\tenable greasing the QUIC bit; default %s\n",
            enable_grease ? "true" : "false");
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
     printf("\t[-l log]\tlog file for TLS keys; default %s\n",
