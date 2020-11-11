@@ -44,7 +44,7 @@ So you need to install some dependencies. On the Mac, the easiest way is via
 
 On Debian-based Linux systems, do
 
-    apt install libssl-dev libhttp-parser-dev libbsd-dev pkgconf
+    apt install libssl-dev libhttp-parser-dev libbsd-dev pkgconf g++
 
 On Darwin, you **must** also install the Xcode command line tools first:
 
