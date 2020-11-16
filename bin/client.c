@@ -357,9 +357,9 @@ get(char * const url, struct w_engine * const w, khash_t(conn_cache) * cc)
         k = kh_put(conn_cache, cc, conn_cache_key(peer->ai_addr), &ret);
         ensure(ret >= 1, "inserted returned %d", ret);
         kh_val(cc, k) = cce;
-    }
 
-    if (opened_new == false) {
+    } else {
+        freeaddrinfo(peerinfo);
         se->s = q_rsv_stream(cce->c, true);
         if (se->s) {
             se->req_t = w_now(CLOCK_MONOTONIC_RAW);
