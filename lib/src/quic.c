@@ -1002,30 +1002,35 @@ bool q_ready(struct w_engine * const w,
              const uint64_t nsec,
              struct q_conn ** const ready)
 {
+    struct q_conn * c;
+    sl_foreach (c, &c_ready, node_rx_ext) {
+        warn(ERR, "c_ready has %s conn %s", conn_type(c), cid_str(c->scid));
+    }
+
     if (sl_empty(&c_ready)) {
         if (nsec)
             restart_api_alarm(w, nsec);
-#ifdef DEBUG_EXTRA
+        // #ifdef DEBUG_EXTRA
         warn(WRN, "waiting for conn to get ready");
-#endif
+        // #endif
         loop_run(w, (func_ptr)q_ready, 0, 0);
     }
 
     if (ready == 0)
         goto done;
 
-    struct q_conn * const c = sl_first(&c_ready);
+    /*struct q_conn * const*/ c = sl_first(&c_ready);
     if (c) {
         bool remove = true;
 #ifndef NO_SERVER
         if (c->needs_accept)
             remove = c->have_new_data == false;
 #endif
-#if defined(DEBUG_EXTRA) && !defined(NO_SERVER)
+// #if defined(DEBUG_EXTRA) && !defined(NO_SERVER)
         warn(WRN, "%s conn %s ready to %s", conn_type(c), cid_str(c->scid),
              c->needs_accept ? "accept"
                              : (c->state == conn_clsd ? "close" : "rx"));
-#endif
+// #endif
         if (remove) {
             sl_remove_head(&c_ready, node_rx_ext);
             c->in_c_ready = false;
