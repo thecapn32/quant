@@ -7,7 +7,7 @@ google    *
 lsquic    *              H    D    C    R    Z    S    Q    M    B    A    U    P    E    O    2         3
 msquic    *    x         H    D    C    R    Z    S    Q    M              U    P    E    O
 mvfst     *
-nginx     *
+nginx     *    x         H    D    C    R    Z    S    Q    M              U    P         O    2         3
 ngtcp2    *              H    D    C    R    Z    S    Q    M    B    A    U         E    O    2         3
 ngx_quic  *
 picoquic  *              H    D    C    R    Z    S    Q    M    B    A    U    P    E    O    2    G    3
