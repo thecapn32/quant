@@ -972,9 +972,12 @@ static bool __attribute__((nonnull)) rx_pkt(const struct w_sock * const ws
 
     log_pkt("RX", v, tok, tok_len, rit);
 
-    if (is_clnt(c) == false && unlikely(c->path_val_win != UINT_T_MAX))
+    if (is_clnt(c) == false && unlikely(c->path_val_win != UINT_T_MAX)) {
         // server limits response to 3x incoming pkt
         c->path_val_win += 3 * m->udp_len;
+        // try to TX, in case we were at the limit and stopped the LD alarm
+        c->needs_tx = true;
+    }
 
     switch (c->state) {
     case conn_idle:
