@@ -1469,7 +1469,8 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
                ret != PTLS_ERROR_STATELESS_RETRY) {
         err_close(c, ERR_TLS(PTLS_ERROR_TO_ALERT(ret)), FRM_CRY,
                   "PTLS error %u %s%s%s", ret, ptls_err_str[ret] ? "(" : "",
-                  ptls_err_str[ret], ptls_err_str[ret] ? ")" : "");
+                  ptls_err_str[ret] ? ptls_err_str[ret] : "",
+                  ptls_err_str[ret] ? ")" : "");
         goto done;
     }
 
