@@ -1033,11 +1033,15 @@ bool q_ready(struct w_engine * const w,
     } else
         warn(WRN, "no conn ready");
     *ready = c;
-done:
+done:;
 #ifndef NO_MIGRATION
-    kh_foreach_value(&conns_by_id, c,
-                     warn(ERR, "conns_by_id has %s conn %s", conn_type(c),
-                          cid_str(c->scid)));
+    struct cid * id;
+    kh_foreach(&conns_by_id, id, c, {
+        char cs[CID_STR_LEN];
+        cid2str(id, cs, sizeof(cs));
+        warn(ERR, "conns_by_id has %s conn %s -> %s", conn_type(c), cs,
+             cid_str(c->scid));
+    });
     warn(ERR, "conns_by_id size %" PRIu32, kh_size(&conns_by_id));
     return kh_size(&conns_by_id);
 #else
