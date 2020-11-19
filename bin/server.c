@@ -499,6 +499,7 @@ int main(int argc, char * argv[])
             }
 #endif
             k = kh_get(strm_cache, &sc, strm_key(c, s));
+            warn(ERR, "kh_size %u %u", kh_size(&sc), k != kh_end(&sc));
             ensure(kh_size(&sc) && k != kh_end(&sc), "found");
             sq = kh_val(&sc, k);
             q_free(sq);

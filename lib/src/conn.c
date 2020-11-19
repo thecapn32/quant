@@ -1767,7 +1767,10 @@ static void __attribute__((nonnull)) enter_closed(struct q_conn * const c)
     stop_all_alarms(c);
 
 #ifndef NO_SERVER
-    c->needs_accept = false;
+    if (c->needs_accept) {
+        sl_remove(&accept_queue, c, q_conn, node_aq);
+        c->needs_accept = false;
+    }
 #endif
     if (!c->in_c_ready) {
         sl_insert_head(&c_ready, c, node_rx_ext);
@@ -2104,6 +2107,8 @@ void free_conn(struct q_conn * const c)
     diet_free(&c->clsd_strms);
 
     // remove connection from global lists and free CIDs
+    if (c->in_c_zcid)
+        sl_remove(&c_zcid, c, q_conn, node_zcid_int);
 #if !defined(NO_SRT_MATCHING) || !defined(NO_MIGRATION)
     struct cid * id;
 #endif

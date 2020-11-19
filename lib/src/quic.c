@@ -852,9 +852,6 @@ done:
     }
 #endif
 
-    if (c->scid == 0)
-        sl_remove(&c_zcid, c, q_conn, node_zcid_int);
-
 #ifndef NO_SERVER
     if (is_clnt(c) == false && c->holds_sock)
         sl_remove(&c_embr, c, q_conn, node_embr);
