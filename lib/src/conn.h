@@ -169,7 +169,8 @@ struct q_conn {
     struct cid * dcid; ///< Active destination CID.
     struct cid * scid; ///< Active source CID.
 
-    uint32_t holds_sock : 1; ///< Connection manages a warpcore socket.
+    uint32_t holds_sock : 1;      ///< Connection manages a warpcore socket.
+    uint32_t holds_migr_sock : 1;
 #ifndef NO_SERVER
     uint32_t is_clnt : 1; ///< We are the client on this connection.
 #else
@@ -215,7 +216,6 @@ struct q_conn {
     uint32_t tx_new_tok : 1; ///< Send NEW_TOKEN.
     uint32_t in_tx_pause : 1;
     uint32_t disable_pmtud : 1; ///< Do not perform PMTUD.
-    uint32_t : 1;
 
     conn_state_t state; ///< State of the connection.
 

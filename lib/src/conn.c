@@ -2127,7 +2127,7 @@ void free_conn(struct q_conn * const c)
         conns_by_id_del(&c->tp_mine.pref_addr.cid);
     if (c->odcid.in_cbi)
         conns_by_id_del(&c->odcid);
-    if (c->migr_sock)
+    if (c->migr_sock && c->holds_migr_sock)
         w_close(c->migr_sock);
 #endif
     if (c->holds_sock)

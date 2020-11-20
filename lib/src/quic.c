@@ -1152,9 +1152,10 @@ bool q_migrate(struct q_conn * const c,
     if (new_sock == 0)
         goto fail;
 
-    if (switch_ip)
+    if (switch_ip) {
         c->migr_sock = new_sock;
-    else {
+        c->holds_migr_sock = true;
+    } else {
         // close the current w_sock
         w_close(c->sock);
         c->sock = new_sock;

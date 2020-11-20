@@ -1053,7 +1053,7 @@ dec_path_response_frame(const uint8_t ** pos,
         w_close(c->sock);
     c->sock = c->migr_sock;
     c->migr_sock = 0;
-    c->tx_path_chlg = false;
+    c->holds_migr_sock = c->tx_path_chlg = false;
     c->tx_limit = 0;
 
 #else

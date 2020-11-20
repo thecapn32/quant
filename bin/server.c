@@ -27,6 +27,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <libgen.h>
 #include <net/if.h>
 #include <stdbool.h>
@@ -436,6 +437,7 @@ int main(int argc, char * argv[])
         if (q_is_stream_closed(s))
             goto next;
 
+        warn(ERR, "kh_get strm_key %" PRIx32, strm_key(c, s));
         khiter_t k = kh_get(strm_cache, &sc, strm_key(c, s));
         struct w_iov_sq * sq =
             (kh_size(&sc) == 0 || k == kh_end(&sc) ? 0 : kh_val(&sc, k));
@@ -446,6 +448,7 @@ int main(int argc, char * argv[])
             ensure(sq, "calloc failed");
             sq_init(sq);
             int err;
+            warn(ERR, "kh_put strm_key %" PRIx32, strm_key(c, s));
             k = kh_put(strm_cache, &sc, strm_key(c, s), &err);
             ensure(err >= 1, "inserted returned %d", err);
             kh_val(&sc, k) = sq;
@@ -498,6 +501,7 @@ int main(int argc, char * argv[])
                           "transfer");
             }
 #endif
+            warn(ERR, "kh_get strm_key %" PRIx32, strm_key(c, s));
             k = kh_get(strm_cache, &sc, strm_key(c, s));
             warn(ERR, "kh_size %u %u", kh_size(&sc), k != kh_end(&sc));
             ensure(kh_size(&sc) && k != kh_end(&sc), "found");
