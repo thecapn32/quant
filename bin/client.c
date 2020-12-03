@@ -145,8 +145,9 @@ usage(const char * const name,
     printf("\t[-b bufs]\tnumber of network buffers to allocate; default %u\n",
            num_bufs);
     printf("\t[-c]\t\tverify TLS certs using this CA cert; default %s\n",
-           *tls_ca_store ? tls_ca_store : "false");
-    printf("\t[-e version]\tQUIC version to use; default 0x%08x\n", vers);
+           *tls_ca_store ? tls_ca_store : "WebPKI");
+    printf("\t[-e version]\tQUIC version to use; default 0x%08x\n",
+           vers ? vers : DRAFT_VERSION);
     printf("\t[-g]\t\tenable greasing the QUIC bit; default %s\n",
            enable_grease ? "true" : "false");
     printf("\t[-i interface]\tinterface to run over; default %s\n", ifname);
