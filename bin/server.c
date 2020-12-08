@@ -257,6 +257,7 @@ strm_key(struct q_conn * const c, const struct q_stream * const s)
     memcpy(buf, &sid, sizeof(uint_t));
     size_t len = sizeof(buf) - sizeof(uint_t);
     q_cid(c, &buf[sizeof(uint_t)], &len);
+    hexdump(buf, len + sizeof(uint_t));
     return fnv1a_32(buf, len + sizeof(uint_t));
 }
 
@@ -504,11 +505,13 @@ int main(int argc, char * argv[])
             warn(ERR, "kh_get strm_key %" PRIx32, strm_key(c, s));
             k = kh_get(strm_cache, &sc, strm_key(c, s));
             warn(ERR, "kh_size %u %u", kh_size(&sc), k != kh_end(&sc));
-            ensure(kh_size(&sc) && k != kh_end(&sc), "found");
-            sq = kh_val(&sc, k);
-            q_free(sq);
-            free(sq);
-            kh_del(strm_cache, &sc, k);
+            // ensure(kh_size(&sc) && k != kh_end(&sc), "found");
+            if (kh_size(&sc) && k != kh_end(&sc)) {
+                sq = kh_val(&sc, k);
+                q_free(sq);
+                free(sq);
+                kh_del(strm_cache, &sc, k);
+            }
             q_free_stream(s);
             q_free(&q);
         }
