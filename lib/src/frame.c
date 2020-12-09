@@ -997,11 +997,8 @@ dec_path_challenge_frame(const uint8_t ** pos,
     warn(INF, FRAM_IN "PATH_CHALLENGE" NRM " data=%s",
          pcr_str(c->path_chlg_in));
 
-    if (unlikely(m->udp_len < MIN_INI_LEN)) {
-        warn(NTE, "UDP len %u of PATH_CHALLENGE < %u, ignoring", m->udp_len,
-             MIN_INI_LEN);
-        return true;
-    }
+    if (unlikely(m->udp_len < MIN_INI_LEN))
+        warn(NTE, "UDP len %u of PATH_CHALLENGE < %u", m->udp_len, MIN_INI_LEN);
 
     memcpy(c->path_resp_out, c->path_chlg_in, PATH_CHLG_LEN);
     c->needs_tx = c->tx_path_resp = true;
