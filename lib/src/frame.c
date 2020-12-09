@@ -1204,9 +1204,7 @@ dec_retire_cid_frame(const uint8_t ** pos,
     if (unlikely(scid == 0)) {
         warn(INF, "no cid seq %" PRIu, seq);
         goto done;
-    }
-    // cppcheck-suppress nullPointerRedundantCheck
-    else if (c->scid->seq == scid->seq) {
+    } else if (c->scid->seq == scid->seq) {
         struct cid * const next_scid = next_cid(&c->scids, scid->seq);
         if (unlikely(next_scid == 0))
             err_close_return(c, ERR_INTL, FRM_RTR, "no next scid");
