@@ -1015,8 +1015,12 @@ bool q_ready(struct w_engine * const w,
     if (c) {
         bool remove = true;
 #ifndef NO_SERVER
-        if (c->needs_accept)
+        if (c->needs_accept) {
             remove = c->have_new_data == false;
+            if (remove == false)
+                warn(ERR, "not removing %s conn %s from c_ready", conn_type(c),
+                     cid_str(c->scid));
+        }
 #endif
 #if defined(DEBUG_EXTRA) && !defined(NO_SERVER)
         warn(WRN, "%s conn %s ready to %s", conn_type(c), cid_str(c->scid),
