@@ -58,6 +58,5 @@ LSAN_OPTIONS=verbosity=1:log_threads=1 \
 UBSAN_OPTIONS=suppressions=misc/gcc-ubsan-suppressions.txt \
 bin/server -v5 -i enx00e04c68199d -p 443 -p 4433 -p 4434 \
     -d "$logdir" -q "$logdir" -t 30 -g \
-    -c /mnt/certs/eggert.org/fullchain.pem \
-    -k /mnt/certs/eggert.org/privkey.pem \
+    -c /mnt/certs/eggert.org/fullchain.pem -k /mnt/certs/eggert.org/key.pem \
     2>&1 | aha -s > "$name.html"
