@@ -192,16 +192,16 @@ SPLAY_GENERATE(tickets_by_peer, tls_ticket, node, tls_ticket_cmp)
 #endif
 
 
+#define ALPN_LEN 16
+
 // first entry is client default, if not otherwise specified
-// last entry should be h3-, since we ignore that in on_ch
-static const ptls_iovec_t alpn[] = {{(uint8_t *)"hq-" DRAFT_VERSION_STRING, 5},
-                                    {(uint8_t *)"hq-31", 5},
-                                    {(uint8_t *)"hq-30", 5},
-                                    {(uint8_t *)"hq-29", 5}}; // FIXME
+static const ptls_iovec_t alpn[] = {
+    {(uint8_t[ALPN_LEN]){"hq-" DRAFT_VERSION_STRING}, 5},
+    {(uint8_t[ALPN_LEN]){"hq-interop"}, 10}};
 static const size_t alpn_cnt = sizeof(alpn) / sizeof(alpn[0]);
 
 
-#define QUIC_TP 0xffa5
+#define QUIC_TP 0x39
 
 #define TP_DCID_O 0x00 ///< original_destination_connection_id
 #define TP_IDTO 0x01 ///< idle_timeout
@@ -344,9 +344,9 @@ static int setup_initial_encryption(struct st_quicly_cipher_context_t * ingress,
                                     ptls_iovec_t cid,
                                     int is_client)
 {
-    static const uint8_t salt[] = {0xaf, 0xbf, 0xec, 0x28, 0x99, 0x93, 0xd2,
-                                   0x4c, 0x9e, 0x97, 0x86, 0xf1, 0x9c, 0x61,
-                                   0x11, 0xe0, 0x43, 0x90, 0xa8, 0x99};
+    static const uint8_t salt[] = {0x38, 0x76, 0x2c, 0xf7, 0xf5, 0x59, 0x34,
+                                   0xb3, 0x4d, 0x17, 0x9a, 0xe6, 0xa4, 0xc8,
+                                   0x0c, 0xad, 0xcc, 0xbb, 0x7f, 0x0a};
     static const char * labels[2] = {"client in", "server in"};
     ptls_cipher_suite_t * const cs = &aes128gcmsha256;
     uint8_t secret[PTLS_MAX_DIGEST_SIZE];
@@ -1330,17 +1330,14 @@ void init_tls(struct q_conn * const c,
         ensure(ptls_set_server_name(c->tls.t, sni, 0) == 0,
                "ptls_set_server_name");
 
-        if (clnt_alpn == 0 || *clnt_alpn == 0) {
+        if (clnt_alpn == 0 || *clnt_alpn == 0)
             c->tls.alpn = alpn[0];
-            warn(NTE, "using default ALPN %.*s", (int)c->tls.alpn.len,
-                 c->tls.alpn.base);
-        } else if (clnt_alpn != (char *)c->tls.alpn.base) {
+        else if (clnt_alpn != (char *)c->tls.alpn.base) {
             free(c->tls.alpn.base);
-            c->tls.alpn = ptls_iovec_init(strdup(clnt_alpn), strlen(clnt_alpn));
+            c->tls.alpn.base = calloc(1, ALPN_LEN);
+            c->tls.alpn.len = strlen(clnt_alpn);
+            strncpy((char *)c->tls.alpn.base, clnt_alpn, ALPN_LEN);
         }
-        hshk_prop->client.negotiated_protocols.list = &c->tls.alpn;
-        hshk_prop->client.negotiated_protocols.count = 1;
-        hshk_prop->client.max_early_data_size = &c->tls.max_early_data;
 
         // try to find an existing session ticket
 #if !defined(PARTICLE) && !defined(RIOT_VERSION)
@@ -1357,14 +1354,24 @@ void init_tls(struct q_conn * const c,
         struct tls_ticket * const t = &tickets.last_ticket;
 #endif
         if (t && t->vers != 0) {
+            // use the ticket ALPN if it's different than the indicated one
+            if (*which.alpn == 0) {
+                c->tls.alpn.len = strlen(t->alpn);
+                strncpy((char *)c->tls.alpn.base, t->alpn, c->tls.alpn.len);
+            }
             hshk_prop->client.session_ticket =
                 ptls_iovec_init(t->ticket, t->ticket_len);
             // TODO: make sure to not use the tp values we're not supposed to
             memcpy(&c->tp_peer, &t->tp, sizeof(t->tp));
             c->vers_initial = c->vers = t->vers;
-            strncpy((char *)c->tls.alpn.base, t->alpn, c->tls.alpn.len);
+            strncpy((char *)c->tls.alpn.base, t->alpn, ALPN_LEN);
             c->try_0rtt = true;
         }
+
+        warn(DBG, "using ALPN %.*s", (int)c->tls.alpn.len, c->tls.alpn.base);
+        hshk_prop->client.negotiated_protocols.list = &c->tls.alpn;
+        hshk_prop->client.negotiated_protocols.count = 1;
+        hshk_prop->client.max_early_data_size = &c->tls.max_early_data;
     }
     if (sni)
         free(sni);
@@ -1578,7 +1585,7 @@ static void read_tickets(const struct q_conf * const conf)
 
         if (read(fp, &len, sizeof(len)) <= 0)
             goto abort;
-        ensure(len <= 256, "ALPN len %lu too long", len);
+        ensure(len < ALPN_LEN, "ALPN len %lu too long", len);
         t->alpn = calloc(1, len);
         ensure(t->alpn, "calloc");
         if (read(fp, t->alpn, len) <= 0)
@@ -1865,9 +1872,9 @@ done_verify_certs:;
 #endif
 
     static const uint8_t retry_secret[] = {
-        0x8b, 0x0d, 0x37, 0xeb, 0x85, 0x35, 0x02, 0x2e, 0xbc, 0x8d, 0x76,
-        0xa2, 0x07, 0xd8, 0x0d, 0xf2, 0x26, 0x46, 0xec, 0x06, 0xdc, 0x80,
-        0x96, 0x42, 0xc3, 0x0a, 0x8b, 0xaa, 0x2b, 0xaa, 0xff, 0x4c};
+        0xd9, 0xc9, 0x94, 0x3e, 0x61, 0x01, 0xfd, 0x20, 0x00, 0x21, 0x50,
+        0x6b, 0xcc, 0x02, 0x81, 0x4c, 0x73, 0x03, 0x0f, 0x25, 0xc7, 0x9d,
+        0x71, 0xce, 0x87, 0x6e, 0xca, 0x87, 0x6e, 0x6f, 0xca, 0x8e};
 
     const ptls_cipher_suite_t * const cs = &aes128gcmsha256;
     ped->rid_ctx =

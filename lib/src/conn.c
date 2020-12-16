@@ -911,14 +911,23 @@ vneg_or_rtry_resp(struct q_conn * const c, const bool is_vneg)
 
     // reset TLS state and create new CH
     const bool should_try_0rtt = c->try_0rtt;
-    if (is_vneg && c->tls.alpn.len == 5 && c->tls.alpn.base[0] == 'h' &&
+    if (is_vneg && c->tls.alpn.len >= 5 && c->tls.alpn.base[0] == 'h' &&
         (c->tls.alpn.base[1] == '3' || c->tls.alpn.base[1] == 'q') &&
         c->tls.alpn.base[2] == '-') {
         // the app didn't request a specific version, so transmogrify the alpn
-        snprintf((char *)c->tls.alpn.base + 3, 4, "%02" PRIu32,
-                 c->vers & 0x000000ff);
-        warn(NTE, "changing auto-selected ALPN to %s",
-             (char *)c->tls.alpn.base);
+        if (c->vers == 0x1) {
+            if (c->tls.alpn.base[1] == '3') {
+                c->tls.alpn.base[2] = 0;
+                c->tls.alpn.len = 2;
+            } else {
+                snprintf((char *)c->tls.alpn.base + 3, 8, "interop");
+                c->tls.alpn.len = 3 + 7;
+            }
+        } else
+            snprintf((char *)c->tls.alpn.base + 3, 4, "%02" PRIu32,
+                     c->vers & 0x000000ff);
+        warn(NTE, "changing auto-selected ALPN to %.*s", (int)c->tls.alpn.len,
+             c->tls.alpn.base);
     }
     init_tls(c, 0, (char *)c->tls.alpn.base);
     c->try_0rtt = should_try_0rtt;
