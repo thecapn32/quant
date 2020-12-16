@@ -1134,7 +1134,7 @@ bool q_migrate(struct q_conn * const c,
             } else if (alt_peer) {
                 // use alt_peer
                 w_to_waddr(&c->migr_peer.addr, alt_peer);
-                c->peer.port =
+                c->migr_peer.port =
                     alt_peer->sa_family == AF_INET
                         ? ((const struct sockaddr_in *)(const void *)alt_peer)
                               ->sin_port
@@ -1169,10 +1169,10 @@ bool q_migrate(struct q_conn * const c,
          switch_ip ? "conn migration" : "simulated NAT rebinding", conn_type(c),
          c->scid ? cid_str(c->scid) : "-", old_af == AF_INET6 ? "[" : "",
          old_ip, old_af == AF_INET6 ? "]" : "", old_port,
-         c->sock->ws_laddr.af == AF_INET6 ? "[" : "",
-         w_ntop(&c->sock->ws_laddr, ip_tmp),
-         c->sock->ws_laddr.af == AF_INET6 ? "]" : "",
-         bswap16(c->sock->ws_lport));
+         new_sock->ws_laddr.af == AF_INET6 ? "[" : "",
+         w_ntop(&new_sock->ws_laddr, ip_tmp),
+         new_sock->ws_laddr.af == AF_INET6 ? "]" : "",
+         bswap16(new_sock->ws_lport));
 
     timeouts_add(ped(w)->wheel, &c->tx_w, 0);
     return true;
