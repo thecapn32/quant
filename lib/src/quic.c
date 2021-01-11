@@ -1000,9 +1000,9 @@ bool q_ready(struct w_engine * const w,
     if (sl_empty(&c_ready)) {
         if (nsec)
             restart_api_alarm(w, nsec);
-        // #ifdef DEBUG_EXTRA
+#ifdef DEBUG_EXTRA
         warn(WRN, "waiting for conn to get ready");
-        // #endif
+#endif
         loop_run(w, (func_ptr)q_ready, 0, 0);
     }
 
@@ -1015,9 +1015,11 @@ bool q_ready(struct w_engine * const w,
 #ifndef NO_SERVER
         if (c->needs_accept) {
             remove = c->have_new_data == false;
+#ifdef DEBUG_EXTRA
             if (remove == false)
                 warn(ERR, "not removing %s conn %s from c_ready", conn_type(c),
                      cid_str(c->scid));
+#endif
         }
 #endif
 #if defined(DEBUG_EXTRA) && !defined(NO_SERVER)
@@ -1034,6 +1036,7 @@ bool q_ready(struct w_engine * const w,
     *ready = c;
 done:;
 #ifndef NO_MIGRATION
+#ifdef DEBUG_EXTRA
     struct cid * id;
     kh_foreach(&conns_by_id, id, c, {
         char cs[CID_STR_LEN];
@@ -1042,6 +1045,7 @@ done:;
              cid_str(c->scid));
     });
     warn(ERR, "conns_by_id size %" PRIu32, kh_size(&conns_by_id));
+#endif
     return kh_size(&conns_by_id);
 #else
     return sl_empty(&ped(w)->conns);

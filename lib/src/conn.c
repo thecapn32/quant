@@ -732,6 +732,7 @@ done:;
     }
     if (likely(sent))
         do_tx(c);
+    // TODO: we should restart the idle timeout here per Section 10.1
     // we need to rearm LD alarm, do it here instead of in on_pkt_sent()
     set_ld_timer(c);
     log_cc(c);
@@ -767,7 +768,9 @@ void conns_by_srt_del(uint8_t * const srt)
 #ifndef NO_MIGRATION
 bool conns_by_id_ins(struct q_conn * const c, struct cid * const id)
 {
+#ifdef DEBUG_EXTRA
     warn(ERR, "conns_by_id size %" PRIu32, kh_size(&conns_by_id));
+#endif
     assure(id->in_cbi == false, "already in cbi");
     int ret;
     const khiter_t k = kh_put(conns_by_id, &conns_by_id, id, &ret);
@@ -777,21 +780,27 @@ bool conns_by_id_ins(struct q_conn * const c, struct cid * const id)
     }
     kh_val(&conns_by_id, k) = c;
     id->in_cbi = true;
+#ifdef DEBUG_EXTRA
     warn(ERR, "conns_by_id size %" PRIu32, kh_size(&conns_by_id));
+#endif
     return true;
 }
 
 
 void conns_by_id_del(struct cid * const id)
 {
+#ifdef DEBUG_EXTRA
     warn(ERR, "conns_by_id size %" PRIu32, kh_size(&conns_by_id));
+#endif
     assure(id->in_cbi, "not in cbi");
     const khiter_t k = kh_get(conns_by_id, &conns_by_id, id);
     if (unlikely(k == kh_end(&conns_by_id)))
         warn(ERR, "cid %s not present", cid_str(id));
     kh_del(conns_by_id, &conns_by_id, k);
     id->in_cbi = false;
+#ifdef DEBUG_EXTRA
     warn(ERR, "conns_by_id size %" PRIu32, kh_size(&conns_by_id));
+#endif
 }
 #endif
 
@@ -1658,9 +1667,7 @@ void rx(struct w_sock * const ws)
             continue;
 
         // reset idle timeout
-        if (likely(c->pns[pn_data].data.out_kyph ==
-                   c->pns[pn_data].data.in_kyph))
-            restart_idle_alarm(c);
+        restart_idle_alarm(c);
 
         // is a TX needed for this connection?
         if (c->needs_tx)
@@ -2050,9 +2057,9 @@ struct q_conn * new_conn(struct w_engine * const w,
         if (c->tp_mine.pref_addr.addr4.addr.af ||
             c->tp_mine.pref_addr.addr6.addr.af) {
             c->max_cid_seq_out = c->tp_mine.pref_addr.cid.seq = 1;
-            // #ifdef DEBUG_EXTRA
+#ifdef DEBUG_EXTRA
             warn(ERR, "max_cid_seq_out 1");
-            // #endif
+#endif
             mk_rand_cid(&c->tp_mine.pref_addr.cid,
                         ped(c->w)->conf.server_cid_len, true);
             if (unlikely(conns_by_id_ins(
