@@ -1340,10 +1340,10 @@ void init_tls(struct q_conn * const c,
         }
 
         // try to find an existing session ticket
-#if !defined(PARTICLE) && !defined(RIOT_VERSION)
         struct tls_ticket which = {// this works, because of strdup() allocation
                                    .sni = sni,
                                    .alpn = (char *)c->tls.alpn.base};
+#if !defined(PARTICLE) && !defined(RIOT_VERSION)
         struct tls_ticket * t = splay_find(tickets_by_peer, &tickets, &which);
         if (t == 0) {
             // if we couldn't find a ticket, try without an alpn
@@ -1357,7 +1357,7 @@ void init_tls(struct q_conn * const c,
             // use the ticket ALPN if it's different than the indicated one
             if (*which.alpn == 0) {
                 c->tls.alpn.len = strlen(t->alpn);
-                strncpy((char *)c->tls.alpn.base, t->alpn, c->tls.alpn.len);
+                strncpy((char *)c->tls.alpn.base, t->alpn, c->tls.alpn.len + 1);
             }
             hshk_prop->client.session_ticket =
                 ptls_iovec_init(t->ticket, t->ticket_len);
