@@ -113,12 +113,18 @@ static bool __attribute__((const)) vers_supported(const uint32_t v)
 }
 
 
-static uint32_t __attribute__((nonnull)) clnt_vneg(struct q_conn * const c,
+static uint32_t __attribute__((nonnull)) clnt_vneg(struct q_conn * const c
+#ifdef NDEBUG
+                                                   __attribute__((unused))
+#endif
+                                                   ,
                                                    const uint8_t * const pos,
                                                    const uint8_t * const end)
 {
+#ifndef NDEBUG
     unpoison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
     int off = 0;
+#endif
     uint8_t prio = UINT8_MAX;
     uint32_t vers = 0;
     for (uint8_t i = 0; i < ok_vers_len; i++) {
@@ -130,6 +136,7 @@ static uint32_t __attribute__((nonnull)) clnt_vneg(struct q_conn * const c,
             dec4(&vers, &p, end);
 
             if (prio == UINT8_MAX || prio == i) {
+#ifndef NDEBUG
                 if (off + 17 < (int)ped(c->w)->scratch_len)
                     // 17 = strlen(", 0x12345678") + strlen(", ...")
                     off += snprintf((char *)&ped(c->w)->scratch[off],
@@ -143,6 +150,7 @@ static uint32_t __attribute__((nonnull)) clnt_vneg(struct q_conn * const c,
                 }
                 if (prio == UINT8_MAX)
                     prio = i;
+#endif
             }
 
             if (is_vneg_vers(vers))
@@ -159,7 +167,9 @@ done:
     if (vers)
         warn(INF, "vers 0x%0" PRIx32 " in common with serv; offered %s", vers,
              ped(c->w)->scratch);
+#ifndef NDEBUG
     poison_scratch(ped(c->w)->scratch, ped(c->w)->scratch_len);
+#endif
     return vers;
 }
 
@@ -341,8 +351,12 @@ static void __attribute__((nonnull)) tx_vneg_resp(struct w_sock * const ws,
     enc_lh_cids(&pos, end, mx, &m->hdr.scid, &m->hdr.dcid);
 
     for (uint8_t j = 0; j < ok_vers_len; j++)
-        if (!is_vneg_vers(ok_vers[j]))
+        if (!is_vneg_vers(ok_vers[j])) {
+#ifdef DEBUG_EXTRA
+            warn(DBG, "indicating support for vers 0x%0" PRIx32, ok_vers[j]);
+#endif
             enc4(&pos, end, ok_vers[j]);
+        }
 
     mx->udp_len = xv->len = (uint16_t)(pos - xv->buf);
     xv->saddr = v->saddr;
