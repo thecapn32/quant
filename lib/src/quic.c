@@ -74,9 +74,11 @@ const uint32_t ok_vers[] = {
 #ifndef NDEBUG
     0xbabababa, // reserved version to trigger negotiation
 #endif
-    0x1,                        // v1
-    0x45474700 + DRAFT_VERSION, // quant private version -xx
-    0xff000000 + DRAFT_VERSION, // draft-ietf-quic-transport-xx
+    0x1,                            // v1
+    0x45474700 + DRAFT_VERSION,     // quant private version -xx
+    0xff000000 + DRAFT_VERSION,     // draft-ietf-quic-transport-xx
+    0x45474700 + DRAFT_VERSION - 1, // quant private version -xx-1
+    0xff000000 + DRAFT_VERSION - 1, // draft-ietf-quic-transport-xx-1
 };
 
 /// Length of the @p ok_vers array.
