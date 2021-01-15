@@ -1556,8 +1556,9 @@ static void __attribute__((nonnull))
             // this is a vneg or rtry pkt, dec_pkt_hdr_remainder not called
             m->pn = &c->pns[pn_init];
 
-    decoal_done:
-        if (likely(rx_pkt(ws, v, m, x, tok, tok_len, rit))) {
+    decoal_done:;
+        const bool pkt_ok = rx_pkt(ws, v, m, x, tok, tok_len, rit);
+        if (likely(pkt_ok)) {
             if (unlikely(has_frm(m->frms, FRM_CRY)))
                 rx_crypto(c, m);
             c->min_rx_epoch = c->had_rx ? MIN(c->min_rx_epoch,
@@ -1575,18 +1576,18 @@ static void __attribute__((nonnull))
             }
             pkt_valid = true;
 
-            // remember that we had a RX event on this connection
-            if (unlikely(!c->had_rx)) {
-                c->had_rx = true;
-                sl_insert_head(crx, c, node_rx_int);
-            }
-
             if (m->pn == &c->pns[pn_data] &&
                 m->pn->pkts_rxed_since_last_ack_tx >= BURST_LEN) {
                 warn(DBG, "force ACK TX after %" PRIu " pkts",
                      m->pn->pkts_rxed_since_last_ack_tx);
                 tx_ack(c, ep_data, false);
             }
+        }
+
+        if ((likely(pkt_ok) || c->needs_tx) && unlikely(!c->had_rx)) {
+            // remember that we had a RX event on this connection
+            c->had_rx = true;
+            sl_insert_head(crx, c, node_rx_int);
         }
 
         if (m->strm == 0)
@@ -1728,29 +1729,34 @@ void
 #endif
         )
 {
-#ifndef FUZZING
-    if (unlikely(c->err_code)) {
-#ifndef NO_ERR_REASONS
-        warn(WRN,
-             "ignoring new err 0x%" PRIx "; existing err is 0x%" PRIx " (%s) ",
-             code, c->err_code, c->err_reason);
-#endif
-        return;
-    }
-#endif
-
 #ifndef NO_ERR_REASONS
     va_list ap;
     va_start(ap, fmt);
-
+    char err_reason[MAX_ERR_REASON_LEN];
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wformat-nonliteral"
-    const int ret = vsnprintf(c->err_reason, sizeof(c->err_reason), fmt, ap);
+    const int ret = vsnprintf(err_reason, sizeof(err_reason), fmt, ap);
+#pragma clang diagnostic pop
     assure(ret >= 0, "vsnprintf() failed");
     va_end(ap);
+    const uint8_t err_reason_len =
+        (uint8_t)MIN((unsigned long)ret, sizeof(err_reason));
+#endif
 
+    if (unlikely(c->err_code)) {
+#ifndef NO_ERR_REASONS
+        warn(WRN,
+             "ignoring new err 0x%" PRIx " (%s); existing err is 0x%" PRIx
+             " (%s) ",
+             code, err_reason, c->err_code, c->err_reason);
+#endif
+        return;
+    }
+
+#ifndef NO_ERR_REASONS
+    strncpy(c->err_reason, err_reason, sizeof(c->err_reason));
+    c->err_reason_len = err_reason_len;
     warn(ERR, "%s", c->err_reason);
-    c->err_reason_len = (uint8_t)MIN((unsigned long)ret, sizeof(c->err_reason));
 #endif
     conn_to_state(c, conn_qlse);
     c->err_code = code;
