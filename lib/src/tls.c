@@ -479,17 +479,18 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         (void *)((char *)properties - offsetof(struct tls, tls_hshk_prop) -
                  offsetof(struct q_conn, tls));
 
-    if (unlikely(slots[0].type != QUIC_TP))
-        err_close_return(c, ERR_TP, FRM_CRY, "slots[0].type = 0x%04x",
-                         slots[0].type);
+    uint_t i = 0;
+    while (slots[i].type != QUIC_TP && slots[0].type != UINT16_MAX)
+        i++;
 
-    if (unlikely(slots[1].type != UINT16_MAX))
-        err_close_return(c, ERR_TP, FRM_CRY, "slots[1].type = 0x%04x",
-                         slots[1].type);
+    if (unlikely(slots[i].type != QUIC_TP))
+        err_close_return(
+            c, ERR_TLS(PTLS_ERROR_TO_ALERT(PTLS_ALERT_MISSING_EXTENSION)),
+            FRM_CRY, "QUIC TP TLS extension missing");
 
     // set up parsing
-    const uint8_t * pos = (const uint8_t *)slots[0].data.base;
-    const uint8_t * const end = pos + slots[0].data.len;
+    const uint8_t * pos = (const uint8_t *)slots[i].data.base;
+    const uint8_t * const end = pos + slots[i].data.len;
 
     // keep track of which transport parameters we've seen before
     bitset_define(tp_list, TP_MAX);

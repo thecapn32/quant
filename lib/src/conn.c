@@ -1453,12 +1453,18 @@ static void __attribute__((nonnull))
                          m->hdr.dcid.len < CID_LEN_MIN_INI_DCID) {
                     warn(DBG, "illegal v1 dcid len %u", m->hdr.dcid.len);
                     tx_vneg_resp(ws, v, m);
-                } else
+                } else {
                     warn(ERR, "%s %u-byte %s pkt, ignoring",
                          pkt_ok_for_epoch(m->hdr.flags, epoch_in(c))
                              ? "crypto fail on"
                              : "rx invalid",
                          v->len, pkt_type_str(m->hdr.flags, &m->hdr.vers));
+                    if (c->needs_tx && unlikely(!c->had_rx)) {
+                        // we need to send a CONNECTION_CLOSE
+                        c->had_rx = true;
+                        sl_insert_head(crx, c, node_rx_int);
+                    }
+                }
                 goto drop;
             }
 
@@ -1556,9 +1562,9 @@ static void __attribute__((nonnull))
             // this is a vneg or rtry pkt, dec_pkt_hdr_remainder not called
             m->pn = &c->pns[pn_init];
 
-    decoal_done:;
-        const bool pkt_ok = rx_pkt(ws, v, m, x, tok, tok_len, rit);
-        if (likely(pkt_ok)) {
+    decoal_done:
+        pkt_valid = rx_pkt(ws, v, m, x, tok, tok_len, rit);
+        if (likely(pkt_valid)) {
             if (unlikely(has_frm(m->frms, FRM_CRY)))
                 rx_crypto(c, m);
             c->min_rx_epoch = c->had_rx ? MIN(c->min_rx_epoch,
@@ -1574,7 +1580,6 @@ static void __attribute__((nonnull))
                 diet_insert(&m->pn->recv, m->hdr.nr, m->t);
                 diet_insert(&m->pn->recv_all, m->hdr.nr, 0);
             }
-            pkt_valid = true;
 
             if (m->pn == &c->pns[pn_data] &&
                 m->pn->pkts_rxed_since_last_ack_tx >= BURST_LEN) {
@@ -1584,7 +1589,7 @@ static void __attribute__((nonnull))
             }
         }
 
-        if ((likely(pkt_ok) || c->needs_tx) && unlikely(!c->had_rx)) {
+        if ((likely(pkt_valid) || c->needs_tx) && unlikely(!c->had_rx)) {
             // remember that we had a RX event on this connection
             c->had_rx = true;
             sl_insert_head(crx, c, node_rx_int);

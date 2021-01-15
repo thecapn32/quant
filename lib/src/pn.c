@@ -143,7 +143,8 @@ void abandon_pn(struct pn_space * const pn)
     epoch_t e = ep_init;
     if (unlikely(pn->type == pn_hshk))
         e = ep_hshk;
-    free_stream(c->cstrms[e]);
+    if (likely(c->cstrms[e]))
+        free_stream(c->cstrms[e]);
     c->cstrms[e] = 0;
     free_pn(pn);
     dispose_cipher(&pn->early.in);

@@ -204,9 +204,6 @@ get_and_validate_strm(struct q_conn * const c,
                      "ignoring 0x%02x frame for closed strm " FMT_SID
                      " on %s conn %s",
                      type, sid, conn_type(c), cid_str(c->scid));
-            else if (type == FRM_MSD || type == FRM_STP)
-                // we are supposed to open closed streams on RX of these frames
-                s = new_stream(c, sid);
             else
                 err_close(c, ERR_STRM_STAT, type, "unknown strm %" PRId, sid);
         }
@@ -864,6 +861,9 @@ dec_max_strms_frame(const uint8_t type,
     warn(INF, FRAM_IN "MAX_STREAMS" NRM " 0x%02x=%s max=%" PRIu, type,
          type == FRM_MSU ? "uni" : "bi", max);
 
+    if (unlikely(max > UINT64_C(1) << 60))
+        err_close_return(c, ERR_PV, type, "MAX_STREAMS > 2^60");
+
     uint_t * const max_streams = type == FRM_MSU ? &c->tp_peer.max_strms_uni
                                                  : &c->tp_peer.max_strms_bidi;
 
@@ -956,6 +956,9 @@ dec_streams_blocked_frame(const uint8_t type,
 
     warn(INF, FRAM_IN "STREAMS_BLOCKED" NRM " 0x%02x=%s max=%" PRIu, type,
          type == FRM_SBB ? "bi" : "uni", max);
+
+    if (unlikely(max > UINT64_C(1) << 60))
+        err_close_return(c, ERR_PV, type, "STREAMS_BLOCKED > 2^60");
 
     do_stream_id_fc(c, max, type == FRM_SBB, false);
 
@@ -1108,6 +1111,14 @@ dec_new_cid_frame(const uint8_t ** pos,
          dcid.seq, rpt, dcid.len, cid_str(&dcid), srt_str(srt),
          dup ? " [" RED "dup" NRM "]" : "");
 
+    if (unlikely(dcid.len == 0 && c->dcid->len != 0))
+        err_close_return(c, ERR_FRAM_ENC, FRM_CID,
+                         "NEW_CONNECTION_ID len == 0");
+
+    if (unlikely(dcid.len != 0 && c->dcid->len == 0))
+        err_close_return(c, ERR_FRAM_ENC, FRM_CID,
+                         "NEW_CONNECTION_ID len != 0");
+
 #ifndef NO_MIGRATION
     const uint_t max_act_cids =
         c->tp_mine.act_cid_lim + (c->tp_peer.pref_addr.cid.len ? 1 : 0);
@@ -1237,6 +1248,9 @@ dec_new_token_frame(const uint8_t ** pos,
 
     warn(INF, FRAM_IN "NEW_TOKEN" NRM " len=%" PRIu " tok=%s", tok_len,
          tok_str(tok, tok_len));
+
+    if (unlikely(is_clnt(c) == false))
+        err_close_return(c, ERR_PV, FRM_TOK, "serv rx'ed NEW_TOKEN");
 
     if (unlikely(tok_len != act_tok_len))
         err_close_return(c, ERR_FRAM_ENC, FRM_TOK, "illegal tok len");
@@ -1392,8 +1406,12 @@ bool dec_frames(struct q_conn * const c,
         case FRM_HSD:
             warn(INF, FRAM_IN "HANDSHAKE_DONE" NRM);
             ok = is_clnt(c);
-            if (likely(ok) && unlikely(c->pns[pn_hshk].abandoned == false))
-                abandon_pn(&c->pns[pn_hshk]);
+            if (likely(ok)) {
+                if (unlikely(c->pns[pn_hshk].abandoned == false))
+                    abandon_pn(&c->pns[pn_hshk]);
+            } else
+                err_close_return(c, ERR_PV, FRM_HSD,
+                                 "serv rx'ed HANDSHAKE_DONE");
             break;
 
         case FRM_MSD:
@@ -1467,6 +1485,10 @@ bool dec_frames(struct q_conn * const c,
         v->buf += m->strm_data_pos;
         v->len = m->strm_data_len;
     }
+
+    // packets MUST have at least one frame
+    if (unlikely(bit_empty(FRM_MAX, &m->frms)))
+        err_close_return(c, ERR_PV, 0, "rx'ed pkt w/o frames");
 
     // track outstanding frame types in the pn space
     bit_or(FRM_MAX, &m->pn->rx_frames, &m->frms);
@@ -1694,7 +1716,8 @@ void enc_close_frame(struct q_conn_info * const ci,
                      struct pkt_meta * const m)
 {
     const struct q_conn * const c = m->pn->c;
-    const uint8_t type = c->err_frm == 0 ? FRM_CLA : FRM_CLQ;
+    const uint8_t type =
+        (c->err_frm == 0 && c->err_code != ERR_PV) ? FRM_CLA : FRM_CLQ;
 
     enc1(pos, end, type);
     encv(pos, end, c->err_code);
