@@ -622,7 +622,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             if (is_clnt(c) == false)
                 err_close_return(
                     c, ERR_TP, FRM_CRY,
-                    "serv got original_destination_connection_id tp");
+                    "serv rx'ed original_destination_connection_id");
             dec_chk(cid, &orig_dcid, &pos, end);
             warn(INF, "\toriginal_destination_connection_id = %s",
                  cid_str(&orig_dcid));
@@ -638,7 +638,7 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
         case TP_SRT:
             if (is_clnt(c) == false)
                 err_close_return(c, ERR_TP, FRM_CRY,
-                                 "rx stateless_reset_token tp at serv");
+                                 "serv rx'ed stateless_reset_token");
             uint64_t l;
             dec_chk(v, &l, &pos, end);
 #ifndef NO_SRT_MATCHING
@@ -660,6 +660,9 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             break;
 
         case TP_PRFA:
+            if (is_clnt(c) == false)
+                err_close_return(c, ERR_TP, FRM_CRY,
+                                 "serv rx'ed preferred_address");
             dec_chk(v, &l, &pos, end);
             const uint8_t * const e = pos + l;
 
@@ -719,6 +722,9 @@ static int chk_tp(ptls_t * tls __attribute__((unused)),
             break;
 
         case TP_SCID_R:
+            if (is_clnt(c) == false)
+                err_close_return(c, ERR_TP, FRM_CRY,
+                                 "serv rx'ed retry_source_connection_id");
             dec_chk(cid, &rtry_scid, &pos, end);
             warn(INF, "\tretry_source_connection_id = %s", cid_str(&rtry_scid));
             break;
