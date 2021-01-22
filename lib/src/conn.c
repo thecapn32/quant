@@ -1886,8 +1886,7 @@ void update_conf(struct q_conn * const c, const struct q_conn_conf * const conf)
     c->tp_mine.grease_quic_bit = get_conf(c->w, conf, enable_grease);
 
     // (re)set idle alarm
-    c->tp_mine.max_idle_to =
-        get_conf_uncond(c->w, conf, idle_timeout) * MS_PER_S;
+    c->tp_mine.max_idle_to = get_conf(c->w, conf, idle_timeout) * MS_PER_S;
     restart_idle_alarm(c);
 
     c->tp_mine.disable_active_migration =
