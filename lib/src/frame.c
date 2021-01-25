@@ -861,8 +861,10 @@ dec_max_strms_frame(const uint8_t type,
     warn(INF, FRAM_IN "MAX_STREAMS" NRM " 0x%02x=%s max=%" PRIu, type,
          type == FRM_MSU ? "uni" : "bi", max);
 
+#ifdef HAVE_64BIT
     if (unlikely(max > UINT64_C(1) << 60))
         err_close_return(c, ERR_PV, type, "MAX_STREAMS > 2^60");
+#endif
 
     uint_t * const max_streams = type == FRM_MSU ? &c->tp_peer.max_strms_uni
                                                  : &c->tp_peer.max_strms_bidi;
@@ -957,8 +959,10 @@ dec_streams_blocked_frame(const uint8_t type,
     warn(INF, FRAM_IN "STREAMS_BLOCKED" NRM " 0x%02x=%s max=%" PRIu, type,
          type == FRM_SBB ? "bi" : "uni", max);
 
+#ifdef HAVE_64BIT
     if (unlikely(max > UINT64_C(1) << 60))
         err_close_return(c, ERR_PV, type, "STREAMS_BLOCKED > 2^60");
+#endif
 
     do_stream_id_fc(c, max, type == FRM_SBB, false);
 
