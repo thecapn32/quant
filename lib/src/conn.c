@@ -782,9 +782,6 @@ void conns_by_srt_del(uint8_t * const srt)
 #ifndef NO_MIGRATION
 bool conns_by_id_ins(struct q_conn * const c, struct cid * const id)
 {
-#ifdef DEBUG_EXTRA
-    warn(ERR, "conns_by_id size %" PRIu32, kh_size(&conns_by_id));
-#endif
     assure(id->in_cbi == false, "already in cbi");
     int ret;
     const khiter_t k = kh_put(conns_by_id, &conns_by_id, id, &ret);
@@ -794,27 +791,18 @@ bool conns_by_id_ins(struct q_conn * const c, struct cid * const id)
     }
     kh_val(&conns_by_id, k) = c;
     id->in_cbi = true;
-#ifdef DEBUG_EXTRA
-    warn(ERR, "conns_by_id size %" PRIu32, kh_size(&conns_by_id));
-#endif
     return true;
 }
 
 
 void conns_by_id_del(struct cid * const id)
 {
-#ifdef DEBUG_EXTRA
-    warn(ERR, "conns_by_id size %" PRIu32, kh_size(&conns_by_id));
-#endif
     assure(id->in_cbi, "not in cbi");
     const khiter_t k = kh_get(conns_by_id, &conns_by_id, id);
     if (unlikely(k == kh_end(&conns_by_id)))
         warn(ERR, "cid %s not present", cid_str(id));
     kh_del(conns_by_id, &conns_by_id, k);
     id->in_cbi = false;
-#ifdef DEBUG_EXTRA
-    warn(ERR, "conns_by_id size %" PRIu32, kh_size(&conns_by_id));
-#endif
 }
 #endif
 
@@ -845,12 +833,6 @@ rx_crypto(struct q_conn * const c, const struct pkt_meta * const m_cur)
             conn_to_state(c, conn_estb);
             if (is_clnt(c))
                 maybe_api_return(q_connect, c, 0);
-#ifndef NO_SERVER
-            else if (c->needs_accept == false) {
-                sl_insert_head(&accept_queue, c, node_aq);
-                c->needs_accept = true;
-            }
-#endif
         }
     }
     if (!is_clnt(c) && c->tx_hshk_done && hshk_done(c) == false)
@@ -1807,12 +1789,6 @@ static void __attribute__((nonnull)) enter_closed(struct q_conn * const c)
     conn_to_state(c, conn_clsd);
     stop_all_alarms(c);
 
-#ifndef NO_SERVER
-    if (c->needs_accept) {
-        sl_remove(&accept_queue, c, q_conn, node_aq);
-        c->needs_accept = false;
-    }
-#endif
     if (!c->in_c_ready) {
         sl_insert_head(&c_ready, c, node_rx_ext);
         c->in_c_ready = true;
@@ -2175,11 +2151,6 @@ void free_conn(struct q_conn * const c)
         w_close(c->sock);
     if (c->in_c_ready)
         sl_remove(&c_ready, c, q_conn, node_rx_ext);
-
-#ifndef NO_SERVER
-    if (c->needs_accept)
-        sl_remove(&accept_queue, c, q_conn, node_aq);
-#endif
 
     qlog_close(c);
     free(c);

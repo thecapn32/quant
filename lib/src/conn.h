@@ -156,7 +156,6 @@ struct q_conn {
     sl_entry(q_conn) node_rx_ext;   ///< For maintaining the external RX queue.
     sl_entry(q_conn) node_zcid_int; ///< Zero-CID client connections.
 #ifndef NO_SERVER
-    sl_entry(q_conn) node_aq;   ///< For maintaining the accept queue.
     sl_entry(q_conn) node_embr; ///< For bound but unconnected connections.
 #endif
     struct cids dcids; ///< Destination CIDs.
@@ -169,7 +168,7 @@ struct q_conn {
     struct cid * dcid; ///< Active destination CID.
     struct cid * scid; ///< Active source CID.
 
-    uint32_t holds_sock : 1;      ///< Connection manages a warpcore socket.
+    uint32_t holds_sock : 1; ///< Connection manages a warpcore socket.
     uint32_t holds_migr_sock : 1;
 #ifndef NO_SERVER
     uint32_t is_clnt : 1; ///< We are the client on this connection.
@@ -198,13 +197,8 @@ struct q_conn {
     uint32_t _unused_do_migration : 1;
     uint32_t _unused_tx_ncid : 1;
 #endif
-    uint32_t have_new_data : 1; ///< New stream data was enqueued.
-    uint32_t in_c_ready : 1;    ///< Connection is listed in c_ready.
-#ifndef NO_SERVER
-    uint32_t needs_accept : 1; ///< Need to call q_accept() for connection.
-#else
-    uint32_t _unused_needs_accept : 1;
-#endif
+    uint32_t have_new_data : 1;     ///< New stream data was enqueued.
+    uint32_t in_c_ready : 1;        ///< Connection is listed in c_ready.
     uint32_t key_flips_enabled : 1; ///< Are TLS key updates enabled?
     uint32_t do_key_flip : 1;       ///< Perform a TLS key update.
     uint32_t spin_enabled : 1;      ///< Is the spinbit enabled?
@@ -216,6 +210,7 @@ struct q_conn {
     uint32_t tx_new_tok : 1; ///< Send NEW_TOKEN.
     uint32_t in_tx_pause : 1;
     uint32_t disable_pmtud : 1; ///< Do not perform PMTUD.
+    uint32_t : 1;
 
     conn_state_t state; ///< State of the connection.
 

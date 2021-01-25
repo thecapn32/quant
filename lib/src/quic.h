@@ -206,8 +206,6 @@ struct per_engine_data {
 #define ped(w) ((struct per_engine_data *)((w)->data))
 
 
-extern struct q_conn_sl accept_queue;
-
 /// The versions of QUIC supported by this implementation
 extern const uint32_t ok_vers[];
 extern const uint8_t ok_vers_len;

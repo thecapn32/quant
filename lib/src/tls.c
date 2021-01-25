@@ -1472,6 +1472,7 @@ int tls_io(struct q_stream * const s, struct w_iov * const iv)
             c->tx_hshk_done = ptls_handshake_is_complete(c->tls.t) != 0;
             if (c->tx_hshk_done) {
                 c->needs_tx = true;
+                update_conf(c, 0);
 #ifndef NO_MIGRATION
                 // also stop caring about odcid now
                 conns_by_id_del(&c->odcid);

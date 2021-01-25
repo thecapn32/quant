@@ -84,10 +84,6 @@ const uint32_t ok_vers[] = {
 /// Length of the @p ok_vers array.
 const uint8_t ok_vers_len = sizeof(ok_vers) / sizeof(ok_vers[0]);
 
-#ifndef NO_SERVER
-struct q_conn_sl accept_queue = sl_head_initializer(accept_queue);
-#endif
-
 #if !defined(NDEBUG) && !defined(FUZZING) && defined(FUZZER_CORPUS_COLLECTION)
 int corpus_pkt_dir, corpus_frm_dir;
 #endif
@@ -475,9 +471,6 @@ static void cancel_api_call(struct timeout * const api_alarm)
     warn(DBG, "canceling API call");
 #endif
     timeout_del(api_alarm);
-#ifndef NO_SERVER
-    maybe_api_return(q_accept, 0, 0);
-#endif
     maybe_api_return(q_ready, 0, 0);
 }
 
@@ -490,56 +483,6 @@ restart_api_alarm(struct w_engine * const w, const uint64_t nsec)
 #endif
 
     timeouts_add(ped(w)->wheel, &ped(w)->api_alarm, nsec);
-}
-
-
-struct q_conn * q_accept(struct w_engine * const w
-#ifdef NO_SERVER
-                         __attribute__((unused))
-#endif
-                         ,
-                         const struct q_conn_conf * const conf
-#ifdef NO_SERVER
-                         __attribute__((unused))
-#endif
-)
-{
-#ifndef NO_SERVER
-    if (sl_first(&accept_queue))
-        goto accept;
-
-    const uint_t idle_to = get_conf(w, conf, idle_timeout);
-    warn(WRN, "waiting for conn on any serv sock (timeout %" PRIu " ms)",
-         idle_to);
-    if (idle_to)
-        restart_api_alarm(w, idle_to * NS_PER_MS);
-
-    loop_run(w, (func_ptr)q_accept, 0, 0);
-
-    if (sl_empty(&accept_queue)) {
-        warn(ERR, "no conn ready for accept");
-        return 0;
-    }
-
-accept:;
-    struct q_conn * const c = sl_first(&accept_queue);
-    sl_remove_head(&accept_queue, node_aq);
-    restart_idle_alarm(c);
-    c->needs_accept = false;
-
-    warn(WRN, "%s conn %s accepted from clnt %s%s%s:%u%s, cipher %s",
-         conn_type(c), cid_str(c->scid), c->peer.addr.af == AF_INET6 ? "[" : "",
-         w_ntop(&c->peer.addr, ip_tmp), c->peer.addr.af == AF_INET6 ? "]" : "",
-         bswap16(c->peer.port), c->did_0rtt ? " after 0-RTT" : "",
-         c->pns[pn_data]
-             .data.out_1rtt[c->pns[pn_data].data.out_kyph]
-             .aead->algo->name);
-
-    update_conf(c, conf);
-    return c;
-#else
-    return 0;
-#endif
 }
 
 
@@ -1013,26 +956,12 @@ bool q_ready(struct w_engine * const w,
 
     struct q_conn * /*const*/ c = sl_first(&c_ready);
     if (c) {
-        bool remove = true;
-#ifndef NO_SERVER
-        if (c->needs_accept) {
-            remove = c->have_new_data == false;
-#ifdef DEBUG_EXTRA
-            if (remove == false)
-                warn(ERR, "not removing %s conn %s from c_ready", conn_type(c),
-                     cid_str(c->scid));
-#endif
-        }
-#endif
 #if defined(DEBUG_EXTRA) && !defined(NO_SERVER)
         warn(WRN, "%s conn %s ready to %s", conn_type(c), cid_str(c->scid),
-             c->needs_accept ? "accept"
-                             : (c->state == conn_clsd ? "close" : "rx"));
+             c->state == conn_clsd ? "close" : "rx");
 #endif
-        if (remove) {
-            sl_remove_head(&c_ready, node_rx_ext);
-            c->in_c_ready = false;
-        }
+        sl_remove_head(&c_ready, node_rx_ext);
+        c->in_c_ready = false;
     } else
         warn(WRN, "no conn ready");
     *ready = c;
@@ -1051,20 +980,6 @@ done:;
     return kh_size(&conns_by_id);
 #else
     return sl_empty(&ped(w)->conns);
-#endif
-}
-
-
-bool q_is_new_serv_conn(const struct q_conn * const c
-#ifdef NO_SERVER
-                        __attribute__((unused))
-#endif
-)
-{
-#ifndef NO_SERVER
-    return c->needs_accept;
-#else
-    return 0;
 #endif
 }
 

@@ -409,12 +409,6 @@ int main(int argc, char * argv[])
         }
         first_conn = false;
 
-        // do we need to q_accept?
-        if (q_is_new_serv_conn(c)) {
-            q_accept(w, 0);
-            continue;
-        }
-
         if (q_is_conn_closed(c)) {
             q_close(c, 0, 0);
             continue;

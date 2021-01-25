@@ -125,12 +125,6 @@ q_close(struct q_conn * const c, const uint_t code, const char * const reason);
 extern struct q_conn * __attribute__((nonnull))
 q_bind(struct w_engine * const w, const uint16_t addr_idx, const uint16_t port);
 
-extern struct q_conn * q_accept(struct w_engine * const w,
-                                const struct q_conn_conf * const conf);
-
-extern bool __attribute__((nonnull))
-q_is_new_serv_conn(const struct q_conn * const c);
-
 extern bool __attribute__((nonnull))
 q_write(struct q_stream * const s, struct w_iov_sq * const q, const bool fin);
 
