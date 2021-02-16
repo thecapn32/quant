@@ -25,7 +25,7 @@ STRIP='s,\x1B\[[0-9;]*[a-zA-Z],,g'
 if [ "$ROLE" == "client" ]; then
     [ -n "$CRON" ] && CLIENT_ARGS="-v4 $CLIENT_ARGS"
     CLIENT_ARGS="-i eth0 -w -q $QLOGDIR -l $SSLKEYLOGFILE -t 150 -x 50 \
-        -e 0xff00001d -c /certs/ca.pem $CLIENT_ARGS"
+        -e ${VERSION:-0xff00001d} -c /certs/ca.pem $CLIENT_ARGS"
 
     # Wait for the simulator to start up.
     /wait-for-it.sh sim:57832 -s -t 30
