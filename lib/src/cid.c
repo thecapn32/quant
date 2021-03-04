@@ -160,7 +160,7 @@ struct cid * cid_ins(struct cids * const ids, const struct cid * const id)
 
 void cid_del(struct cids * const ids, struct cid * const id)
 {
-    ensure(id->available == false, "cannot del available cid");
+    ensure(id->available == false, "cannot del available cid %s", cid_str(id));
     if (id->retired) {
         sl_remove(&ids->ret, id, cid, next);
         id->retired = false;
@@ -176,7 +176,7 @@ void cid_del(struct cids * const ids, struct cid * const id)
 void cid_retire(struct cids * const ids, struct cid * const id)
 {
     ensure(id->available == false && id->retired == false,
-           "can only retire active cid");
+           "can only retire active cid %s", cid_str(id));
     sl_remove(&ids->act, id, cid, next);
     ids->act_cnt--;
     id->retired = true;
