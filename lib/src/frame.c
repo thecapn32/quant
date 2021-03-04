@@ -1140,6 +1140,11 @@ dec_new_cid_frame(const uint8_t ** pos,
     if (rpt > c->rpt_max) {
         retire_prior_to(&c->dcids, rpt);
         c->rpt_max = rpt;
+        if (c->dcid->seq < rpt) {
+            c->tx_retire_cid = true;
+            use_next_dcid(c, false);
+        }
+
     } else if (c->rpt_max)
         warn(INF, "rpt %" PRIu " <= prev max %" PRIu ", ignoring", rpt,
              c->rpt_max);

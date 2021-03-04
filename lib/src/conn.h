@@ -393,7 +393,8 @@ extern void __attribute__((nonnull)) rx(struct w_sock * const ws);
 extern void __attribute__((nonnull))
 conn_info_populate(struct q_conn * const c);
 
-extern void __attribute__((nonnull)) use_next_dcid(struct q_conn * const c);
+extern void __attribute__((nonnull))
+use_next_dcid(struct q_conn * const c, const bool also_retire);
 
 extern void __attribute__((nonnull))
 restart_idle_alarm(struct q_conn * const c);

@@ -215,7 +215,7 @@ get_conn_by_cid(struct cid * const scid)
 }
 
 
-void use_next_dcid(struct q_conn * const c)
+void use_next_dcid(struct q_conn * const c, const bool also_retire)
 {
     struct cid * const dcid = next_cid(&c->dcids, c->dcid->seq);
     ensure(dcid, "can't switch from dcid %" PRIu, c->dcid->seq);
@@ -227,8 +227,10 @@ void use_next_dcid(struct q_conn * const c)
 
     if (c->spin_enabled)
         c->spin = 0; // need to reset spin value
-    c->tx_retire_cid = true;
-    cid_retire(&c->dcids, c->dcid);
+    if (also_retire) {
+        c->tx_retire_cid = true;
+        cid_retire(&c->dcids, c->dcid);
+    }
     c->dcid = dcid;
 }
 #endif
@@ -543,7 +545,7 @@ static void __attribute__((nonnull)) do_conn_mgmt(struct q_conn * const c)
             const uint_t mseq = max_seq(&c->dcids);
             // if higher-numbered destination CIDs are available, switch to next
             if (mseq > c->dcid->seq) {
-                use_next_dcid(c);
+                use_next_dcid(c, true);
                 // don't migrate again for a while
                 c->do_migration = false;
                 restart_key_flip_alarm(c);

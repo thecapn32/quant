@@ -1068,7 +1068,7 @@ bool q_migrate(struct q_conn * const c,
         c->tx_path_chlg = c->needs_tx = true;
         c->tx_limit = 1;
         // also switch to new dcid
-        use_next_dcid(c);
+        use_next_dcid(c, true);
     }
 
     struct w_sock * const new_sock = w_bind(w, idx, 0, &c->sockopt);
