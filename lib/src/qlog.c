@@ -52,14 +52,11 @@
 #include "stream.h"
 
 
-static const char * __attribute__((const, nonnull))
-qlog_pkt_type_str(const uint8_t flags, const void * const vers)
+static const char * __attribute__((const))
+qlog_pkt_type_str(const uint8_t flags, const uint32_t vers)
 {
     if (is_lh(flags)) {
-        if (((const uint8_t * const)vers)[0] == 0 &&
-            ((const uint8_t * const)vers)[1] == 0 &&
-            ((const uint8_t * const)vers)[2] == 0 &&
-            ((const uint8_t * const)vers)[3] == 0)
+        if (vers == 0)
             return "version_negotiation";
         switch (pkt_type(flags)) {
         case LH_INIT:
@@ -158,7 +155,7 @@ void qlog_transport(const qlog_pkt_evt_t evt,
     dprintf(c->qlog,
             ",\"transport\",\"%s\",\"%s\",{\"packet_type\":\"%s\",\"header\":{"
             "\"packet_size\":%u",
-            evt_str[evt], trg, qlog_pkt_type_str(m->hdr.flags, &m->hdr.vers),
+            evt_str[evt], trg, qlog_pkt_type_str(m->hdr.flags, m->hdr.vers),
             m->udp_len);
     if (is_lh(m->hdr.flags) == false || (m->hdr.vers && m->hdr.type != LH_RTRY))
         dprintf(c->qlog, ",\"packet_number\":%" PRIu, m->hdr.nr);

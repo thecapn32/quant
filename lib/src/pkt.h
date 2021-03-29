@@ -30,6 +30,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <sys/socket.h>
+#include <string.h>
 
 #include <warpcore/warpcore.h>
 
@@ -126,10 +127,9 @@ static inline const char * __attribute__((const,
 pkt_type_str(const uint8_t flags, const void * const vers)
 {
     if (is_lh(flags)) {
-        if (((const uint8_t * const)vers)[0] == 0 &&
-            ((const uint8_t * const)vers)[1] == 0 &&
-            ((const uint8_t * const)vers)[2] == 0 &&
-            ((const uint8_t * const)vers)[3] == 0)
+        uint32_t v;
+        memcpy(&v, vers, sizeof(v));
+        if (v == 0)
             return "Version Negotiation";
         switch (pkt_type(flags)) {
         case LH_INIT:
