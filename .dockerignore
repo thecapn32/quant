@@ -1,5 +1,5 @@
 *
-!.git/refs/heads/master
+!.git/refs/heads
 !CMakeLists.txt
 !bin
 !doc

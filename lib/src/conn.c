@@ -1408,6 +1408,12 @@ static void __attribute__((nonnull))
 #endif
             log_pkt("RX", v, tok, tok_len, rit);
 
+            if (is_srt(xv, m)) {
+                warn(INF, BLU BLD "STATELESS RESET" NRM " token=%s",
+                     srt_str(&xv->buf[xv->len - SRT_LEN]));
+                goto next;
+            }
+
             warn(INF, "cannot find conn %s for %u-byte %s pkt, ignoring",
                  cid_str(&m->hdr.dcid), v->len,
                  pkt_type_str(m->hdr.flags, &m->hdr.vers));

@@ -179,6 +179,9 @@ dec_pkt_hdr_remainder(struct w_iov * const xv,
                       struct pkt_meta * const m,
                       struct q_conn * const c);
 
+extern struct q_conn * __attribute__((nonnull))
+is_srt(const struct w_iov * const xv, struct pkt_meta * const m);
+
 extern bool __attribute__((nonnull)) enc_pkt(struct q_stream * const s,
                                              const bool rtx,
                                              const bool enc_data,

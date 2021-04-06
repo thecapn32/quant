@@ -1003,14 +1003,14 @@ which_cipher_ctx_in(struct q_conn * const c,
 }
 
 
-static struct q_conn * is_srt(const struct w_iov * const xv
+struct q_conn * is_srt(const struct w_iov * const xv
 #ifdef NO_SRT_MATCHING
-                              __attribute__((unused))
+                       __attribute__((unused))
 #endif
-                              ,
-                              struct pkt_meta * const m
+                       ,
+                       struct pkt_meta * const m
 #ifdef NO_SRT_MATCHING
-                              __attribute__((unused))
+                       __attribute__((unused))
 #endif
 )
 {
@@ -1157,5 +1157,5 @@ check_srt:
         memcpy(c->tls.secret[0], prev_secret[0], cs->hash->digest_size);
         memcpy(c->tls.secret[1], prev_secret[1], cs->hash->digest_size);
     }
-    return is_srt(xv, m) == 0;
+    return is_srt(xv, m);
 }
