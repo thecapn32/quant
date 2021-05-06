@@ -1427,7 +1427,8 @@ static void __attribute__((nonnull))
                 warn(INF, "ignoring %u-byte %s pkt due to abandoned processing",
                      v->len, pkt_type_str(m->hdr.flags, &m->hdr.vers));
                 goto drop;
-            } else if (unlikely(dec_pkt_hdr_remainder(xv, v, m, c) == false)) {
+            } else if (unlikely(dec_pkt_hdr_remainder(xv, v, m, c) == false ||
+                                m->is_reset)) {
                 v->len = xv->len;
                 log_pkt("RX", v, tok, tok_len, rit);
                 if (m->is_reset)
