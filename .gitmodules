@@ -10,6 +10,3 @@
 [submodule "lib/deps/timeout"]
 	path = lib/deps/timeout
 	url = https://github.com/larseggert/timeout.git
-[submodule ".github/isb-ietf-config"]
-	path = .github/isb-ietf-config
-	url = https://github.com/NTAP/isb-ietf-config.git
