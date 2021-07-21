@@ -331,7 +331,6 @@ dec_stream_or_crypto_frame(const uint8_t type,
     ensure(m->strm, "have a stream");
 
     // best case: new in-order data
-    // cppcheck-suppress nullPointerRedundantCheck
     if (m->strm->in_data_off >= m->strm_off &&
         m->strm->in_data_off <=
             m->strm_off + strm_data_len_adj(m->strm_data_len)) {
