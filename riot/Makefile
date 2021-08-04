@@ -16,7 +16,7 @@ DEVELHELP ?= 1
 QUIET ?= 1
 
 # Modules to include:
-EXTERNAL_MODULE_DIRS += modules/quant
+EXTERNAL_MODULE_DIRS += modules
 USEMODULE += quant
 
 USEMODULE += esp_wifi
