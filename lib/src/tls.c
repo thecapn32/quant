@@ -73,7 +73,7 @@
 
 
 #if defined(PARTICLE) || defined(RIOT_VERSION)
-#if defined(PARTICLE)
+#ifndef MAXPATHLEN
 #define MAXPATHLEN 8
 #endif
 
