@@ -1707,7 +1707,9 @@ void enc_stream_or_crypto_frame(uint8_t ** pos,
     log_stream_or_crypto_frame(false, m, type, s->id, false, sdt_seq);
 
     track_bytes_out(s, m->strm_data_len);
-    assure(!enc_strm || m->strm_off < s->out_data_max, "exceeded fc window");
+    assure(!enc_strm || m->strm_off < s->out_data_max,
+           "exceeded fc window: %" PRIu " >= %" PRIu, m->strm_off,
+           s->out_data_max);
     track_frame(m,
 #ifndef NO_QINFO
                 &s->c->i
