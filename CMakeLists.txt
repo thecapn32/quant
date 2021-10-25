@@ -61,7 +61,7 @@ set (FLAGS -pipe -Wextra -Wpedantic -Weverything -Werror
         -Wno-extra-semi-stmt # the kh_foreach* macros need this
         -Wno-macro-redefined # because we redefine _FORTIFY_SOURCE
         -Wno-covered-switch-default -Wno-missing-braces
-        -Wno-gnu-statement-expression
+        -Wno-gnu-statement-expression -Wno-reserved-identifier
         -fcomment-block-commands=dotfile
         )
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
@@ -200,7 +200,9 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
       if(CLANGTIDY)
         message(STATUS "Found clang-tidy: ${CLANGTIDY}")
         set(CLANG_TIDY_CHECKS *
-            -altera-struct-pack-align
+            -altera-*
+            -bugprone-easily-swappable-parameters
+            -bugprone-implicit-widening-of-multiplication-result
             -bugprone-narrowing-conversions
             -cert-err58-cpp
             -clang-diagnostic-tautological-value-range-compare
@@ -233,6 +235,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
             -readability-function-cognitive-complexity
             -readability-magic-numbers
             -readability-misleading-indentation
+            -readability-suspicious-call-argument
         )
         string(REPLACE ";" "," CLANG_TIDY_CHECKS "${CLANG_TIDY_CHECKS}")
         set(CMAKE_C_CLANG_TIDY ${CLANGTIDY}
