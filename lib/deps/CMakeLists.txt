@@ -32,11 +32,7 @@ set_directory_properties(PROPERTIES COMPILE_DEFINITIONS "${DEFS}")
 
 add_subdirectory(warpcore EXCLUDE_FROM_ALL)
 
-if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
-  set(CC_WARNING_FLAGS "-Wno-unused-variable")
-elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-  set(CC_WARNING_FLAGS "-Wno-unused-but-set-variable -Wno-unused-variable")
-endif()
+set(CC_WARNING_FLAGS "-Wno-unused-but-set-variable -Wno-unused-variable")
 
 add_subdirectory(picotls EXCLUDE_FROM_ALL)
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
-// Copyright (c) 2016-2020, NetApp, Inc.
+// Copyright (c) 2016-2022, NetApp, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -1474,6 +1474,7 @@ static void __attribute__((nonnull))
 
                 mk_cid_str(NTE, scid, scid_str);
                 mk_cid_str(NTE, c->scid, scid_str_prev);
+                // cppcheck-suppress nullPointerRedundantCheck
                 if (scid->seq <= c->scid->seq)
                     warn(DBG, "pkt has prev scid %s (expected %s), accepting",
                          scid_str, scid_str_prev);

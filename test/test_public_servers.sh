@@ -2,7 +2,7 @@
 
 # SPDX-License-Identifier: BSD-2-Clause
 #
-# Copyright (c) 2016-2020, NetApp, Inc.
+# Copyright (c) 2016-2022, NetApp, Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without

@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2018, NetApp, Inc.
+// Copyright (c) 2014-2022, NetApp, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -25,7 +25,6 @@
 
 #include <arpa/inet.h>
 #include <cinttypes>
-#include <cstdint>
 #include <fcntl.h>
 #include <libgen.h>
 #include <netinet/in.h>

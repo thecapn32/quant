@@ -74,7 +74,7 @@ endif
 # -finstrument-functions-exclude-file-list=deps/micro-ecc,deps/cifra
 DEVELHELP=
 CFLAGS +=-fstack-usage -foptimize-strlen -ffast-math \
-	-Wno-unknown-pragmas -Wno-missing-field-initializers \
+	-Wno-unknown-pragmas -Wno-missing-field-initializers -Wno-cast-align \
 	-Wno-strict-prototypes -Wno-sign-compare -Wno-maybe-uninitialized \
 	-Wno-unused-variable -Wno-unused-but-set-variable \
 	-DDLEVEL=DBG -DNO_TLS_LOG -DNO_QLOG ${BUILD_FLAGS} \

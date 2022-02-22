@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
-// Copyright (c) 2016-2020, NetApp, Inc.
+// Copyright (c) 2016-2022, NetApp, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -1341,7 +1341,7 @@ void init_tls(struct q_conn * const c,
             c->tls.alpn = alpn[0];
         else if (clnt_alpn != (char *)c->tls.alpn.base) {
             free(c->tls.alpn.base);
-            c->tls.alpn.base = calloc(1, ALPN_LEN);
+            c->tls.alpn.base = calloc(1, ALPN_LEN + 1);
             c->tls.alpn.len = strlen(clnt_alpn);
             strncpy((char *)c->tls.alpn.base, clnt_alpn, ALPN_LEN);
         }
