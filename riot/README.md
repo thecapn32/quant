@@ -2,7 +2,7 @@
 # Quant for [RIOT-OS](https://www.riot-os.org/)
 
 This directory has the build scaffolding to compile a simple, minimal Quant
-client for [[RIOT-OS](https://www.riot-os.org/), using the [docker build
+client for [RIOT-OS](https://www.riot-os.org/), using the [docker build
 method](https://github.com/RIOT-OS/RIOT/wiki/Use-Docker-to-build-RIOT).
 
 The source files are in `modules/quant/`, and the resulting binary will appear
