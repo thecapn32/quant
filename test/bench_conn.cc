@@ -110,7 +110,7 @@ static inline uint64_t io(const uint64_t len)
 
 static void BM_conn(benchmark::State & state)
 {
-    const auto len = uint64_t(state.range(0));
+    const auto len = static_cast<uint64_t>(state.range(0));
     for (auto _ : state) {
         const uint64_t ilen = io(len);
         if (ilen != len) {
@@ -118,7 +118,8 @@ static void BM_conn(benchmark::State & state)
             return;
         }
     }
-    state.SetBytesProcessed(int64_t(state.iterations() * len)); // NOLINT
+    state.SetBytesProcessed(
+        static_cast<int64_t>(static_cast<uint64_t>(state.iterations()) * len));
 }
 
 

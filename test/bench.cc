@@ -54,8 +54,8 @@ static struct w_engine * w;
 
 static void BM_quic_encryption(benchmark::State & state)
 {
-    const auto len = uint16_t(state.range(0));
-    const auto pne = uint16_t(state.range(1));
+    const auto len = static_cast<uint16_t>(state.range(0));
+    const auto pne = static_cast<uint16_t>(state.range(1));
 
     struct pkt_meta * m;
     struct w_iov * v = alloc_iov(w, AF_INET, len, 0, &m);

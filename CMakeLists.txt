@@ -62,6 +62,7 @@ set (FLAGS -pipe -Wextra -Wpedantic -Weverything -Werror
         -Wno-macro-redefined # because we redefine _FORTIFY_SOURCE
         -Wno-covered-switch-default -Wno-missing-braces
         -Wno-gnu-statement-expression -Wno-reserved-identifier
+        -Wno-declaration-after-statement
         -fcomment-block-commands=dotfile
         )
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
@@ -204,7 +205,9 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
             -bugprone-easily-swappable-parameters
             -bugprone-implicit-widening-of-multiplication-result
             -bugprone-narrowing-conversions
+            -cert-err33-c
             -cert-err58-cpp
+            -clang-diagnostic-declaration-after-statement
             -clang-diagnostic-tautological-value-range-compare
             -concurrency-mt-unsafe
             -cppcoreguidelines-avoid-magic-numbers
@@ -217,6 +220,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
             -cppcoreguidelines-pro-bounds-constant-array-index
             -cppcoreguidelines-pro-bounds-pointer-arithmetic
             -cppcoreguidelines-pro-type-vararg
+            -fuchsia-default-arguments-calls
             -fuchsia-statically-constructed-objects
             -google-readability-braces-around-statements
             -google-readability-todo
@@ -233,6 +237,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
             -performance-no-int-to-ptr
             -readability-braces-around-statements
             -readability-function-cognitive-complexity
+            -readability-identifier-length
             -readability-magic-numbers
             -readability-misleading-indentation
             -readability-suspicious-call-argument

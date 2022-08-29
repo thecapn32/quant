@@ -157,7 +157,7 @@ struct tls_ticket {
     size_t ticket_len;
     struct transport_params tp;
     uint32_t vers;
-    uint8_t _unused[12];
+    uint8_t _unused[12]; // cppcheck-suppress unusedStructMember
 };
 
 
