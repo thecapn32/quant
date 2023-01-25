@@ -90,7 +90,7 @@ static void chk(struct diet * const d)
 #define N 300
 bitset_define(values, N);
 
-int main()
+int main(void)
 {
     w_init_rand();
 #ifndef NDEBUG

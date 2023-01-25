@@ -63,6 +63,7 @@ set (FLAGS -pipe -Wextra -Wpedantic -Weverything -Werror
         -Wno-covered-switch-default -Wno-missing-braces
         -Wno-gnu-statement-expression -Wno-reserved-identifier
         -Wno-declaration-after-statement
+        -Wno-deprecated-non-prototype
         -fcomment-block-commands=dotfile
         )
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
@@ -203,12 +204,14 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
         set(CLANG_TIDY_CHECKS *
             -altera-*
             -bugprone-easily-swappable-parameters
+            -bugprone-assignment-in-if-condition,-warnings-as-errors
             -bugprone-implicit-widening-of-multiplication-result
             -bugprone-narrowing-conversions
             -cert-err33-c
             -cert-err58-cpp
             -clang-diagnostic-declaration-after-statement
             -clang-diagnostic-tautological-value-range-compare
+            -clang-diagnostic-deprecated-non-prototype
             -concurrency-mt-unsafe
             -cppcoreguidelines-avoid-magic-numbers
             -cppcoreguidelines-avoid-non-const-global-variables
@@ -234,6 +237,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
             -llvmlibc-implementation-in-namespace
             -llvmlibc-restrict-system-libc-headers
             -modernize-use-trailing-return-type
+            -modernize-macro-to-enum
             -performance-no-int-to-ptr
             -readability-braces-around-statements
             -readability-function-cognitive-complexity
