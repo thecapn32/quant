@@ -62,7 +62,8 @@ int main(int argc
     ensure(cwd != -1, "cannot open");
     ensure(chdir(dirname(argv[0])) == 0, "cannot chdir");
     __extension__ const struct q_conf conf = {.tls_cert = "dummy.crt",
-                                              .tls_key = "dummy.key"};
+                                              .tls_key = "dummy.key",
+                                              .tls_ca_store = "dummy.ca.crt"};
     struct w_engine * const w = q_init("lo"
 #ifndef __linux__
                                        "0"
