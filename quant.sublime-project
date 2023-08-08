@@ -55,7 +55,7 @@
             "${project_path}/lib/deps/warpcore/lib/include/",
             "${project_path}/lib/include",
             "${project_path}/test",
-            "/usr/local/opt/openssl@1.1/include"
+            "/opt/homebrew/include"
 
         ],
         "SublimeLinter.linters.clang.I": [
@@ -85,7 +85,7 @@
             "${project_path}/lib/deps/warpcore/lib/include/",
             "${project_path}/lib/include",
             "${project_path}/test",
-            "/usr/local/opt/openssl@1.1/include"
+            "/opt/homebrew/include"
 
         ],
         "SublimeLinter.linters.clang++.I": [

@@ -74,8 +74,8 @@ case $c in
 
         quic-tracker)
                 cc="sudo env GOPATH=$(pwd)/external/go \
-                        CGO_CFLAGS=-I/usr/local/opt/openssl@1.1/include \
-                        CGO_LDFLAGS=-L/usr/local/opt/openssl@1.1/lib \
+                        CGO_CFLAGS=-I/opt/homebrew/openssl@1.1/include \
+                        CGO_LDFLAGS=-L/opt/homebrew/openssl@1.1/lib \
                     go run $(pwd)/external/go/src/github.com/QUIC-Tracker/quic-tracker/bin/test_suite/scenario_runner.go \
                         -interface lo0 -host $addr:$port -path $path -scenario http_get_on_uni_stream"
                 ;;

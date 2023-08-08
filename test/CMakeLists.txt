@@ -128,7 +128,7 @@ if(HAVE_BENCHMARK_H)
         ${PROJECT_BINARY_DIR}/lib/include
         ${PROJECT_SOURCE_DIR}/lib/src
       SYSTEM PRIVATE
-        /usr/local/include
+        ${CMAKE_PREFIX_PATH}/include
         ${OPENSSL_ROOT_DIR}/include
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/timeout>
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/lib/deps/picotls/include>
