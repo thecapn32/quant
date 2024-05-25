@@ -161,6 +161,17 @@ research and innovation program 2014-2018 under grant agreement 644866
 (["SSICLOPS"](https://ssiclops.eu/)). The European Commission is not responsible
 for any use that may be made of this software.
 
+## get started with example
+### Run server
+```sh
+./server -v5 -g -c tmp/dummy.ca.crt -k tmp/dummy.key  -i wlp0s20f3 \ 
+-t2 -q . -l tmp/serv.log -p 4433 -p 4434 -p -d /home/thecapn32/
+```
+### Run client
+```sh
+./client -c tmp/dummy.ca.crt -v5 -g -u -i wlp0s20f3  \
+-t2 -q . -l tmp/clnt.tlslog "https://192.168.102.176:4433/home/thecapn32/"
+```
 
 [//]: # (@example client.c)
 [//]: # (@example server.c)
